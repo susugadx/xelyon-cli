@@ -89,16 +89,7 @@ func (a *Agent) switchProvider(providerName, requestedModel string) error {
 	// 統計情報をリセット（プロバイダー切り替え時）
 	if a.Stats != nil {
 		a.statsMu.Lock()
-		a.Stats.Provider = runtimeProviderName
-		a.Stats.InputTokens = 0
-		a.Stats.CachedInputTokens = 0
-		a.Stats.CacheCreationTokens = 0
-		a.Stats.OutputTokens = 0
-		a.Stats.ThinkingTokens = 0
-		a.Stats.ToolExecutions = make(map[string]int)
-		a.Stats.LastUsage = nil
-		a.Stats.LastTurnUsage = nil
-		a.Stats.LastTurnCost = 0
+		a.Stats.ResetUsageForProvider(runtimeProviderName, newModel)
 		a.statsMu.Unlock()
 	}
 

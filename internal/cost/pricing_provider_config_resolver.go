@@ -1,5 +1,7 @@
 package cost
 
+import "strings"
+
 func resolveProviderPricingFromConfig(provider providerPricingConfig, lm string, promptTokenCount int, allowLongInputTier bool) PricingInfo {
 	if pricing, ok := matchPricingRules(lm, provider, promptTokenCount); ok {
 		return pricing
@@ -19,5 +21,18 @@ func resolveProviderPricingFromLoadedConfig(family string, lm string, promptToke
 	if !ok {
 		return PricingInfo{}, false
 	}
-	return resolveProviderPricingFromConfig(provider, lm, promptTokenCount, allowLongInputTier), true
+	if !provider.hasKnownModel(lm) {
+		return pricingUnavailableInfo(), true
+	}
+	return resolveKnownProviderPricingFromConfig(provider, lm, promptTokenCount, allowLongInputTier)
+}
+
+func resolveKnownProviderPricingFromConfig(provider providerPricingConfig, lm string, promptTokenCount int, allowLongInputTier bool) (PricingInfo, bool) {
+	if pricing, ok := matchPricingRules(lm, provider, promptTokenCount); ok {
+		return pricing, true
+	}
+	if strings.TrimSpace(lm) == "" {
+		return resolveProviderPricingFromConfig(provider, lm, promptTokenCount, allowLongInputTier), true
+	}
+	return PricingInfo{}, false
 }

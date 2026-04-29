@@ -254,3 +254,22 @@ func TestPrintStatusFooter_IncludesSubAgentCost(t *testing.T) {
 		t.Fatalf("PrintStatusFooter() should include sub-agent cost, got:\n%s", output)
 	}
 }
+
+func TestPrintStatusFooter_UnknownPricingUsesNA(t *testing.T) {
+	var out bytes.Buffer
+	agent := &Agent{
+		CurrentModel: "amazon.nova-pro-v1:0",
+		ProviderName: "bedrock",
+		Stats:        NewSessionStats("bedrock", "amazon.nova-pro-v1:0"),
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+	agent.Stats.AddTokens(1000, 200)
+
+	agent.PrintStatusFooter()
+
+	if !strings.Contains(out.String(), "cost N/A") {
+		t.Fatalf("PrintStatusFooter() should show cost N/A for unknown pricing, got:\n%s", out.String())
+	}
+}

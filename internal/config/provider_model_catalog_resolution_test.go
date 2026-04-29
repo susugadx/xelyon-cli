@@ -27,6 +27,86 @@ func TestModelCatalogName_UsesProviderDefaultCatalogModel(t *testing.T) {
 	}
 }
 
+func TestResolveModelCatalog_ProviderCatalogSurvivesDefaultModelOverride(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetProviderModelConfig("openai", ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+		ModelOverrides: map[string]ModelOverride{
+			"corp-gpt-deployment": {MaxOutputTokens: 8192},
+			"other-deployment":    {MaxOutputTokens: 4096},
+		},
+	})
+
+	defaultOverride := cfg.ResolveModelCatalog("openai", "corp-gpt-deployment")
+	if defaultOverride.Model != "gpt-5.4" || defaultOverride.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(default override) = %#v, want provider catalog model", defaultOverride)
+	}
+
+	otherOverride := cfg.ResolveModelCatalog("openai", "other-deployment")
+	if otherOverride.Model != "other-deployment" || !otherOverride.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(non-default override) = %#v, want configured without catalog", otherOverride)
+	}
+}
+
+func TestResolveModelCatalog_DefaultModelOverrideCatalogWinsOverProviderCatalog(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetProviderModelConfig("openai", ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+		ModelOverrides: map[string]ModelOverride{
+			"corp-gpt-deployment": {CatalogModel: "gpt-5.4-mini", MaxOutputTokens: 8192},
+		},
+	})
+
+	got := cfg.ResolveModelCatalog("openai", "corp-gpt-deployment")
+	if got.Model != "gpt-5.4-mini" || got.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(default override catalog) = %#v, want override catalog model", got)
+	}
+}
+
+func TestResolveModelCatalog_ProviderCatalogSurvivesAliasDefaultModelOverride(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetProviderModelConfig("anthropic", ProviderModelConfig{
+		DefaultModel: "corp-claude-deployment",
+		CatalogModel: "claude-sonnet-4-6",
+		ModelOverrides: map[string]ModelOverride{
+			"corp-claude-deployment": {MaxOutputTokens: 8192},
+		},
+	})
+
+	got := cfg.ResolveModelCatalog("claude", "corp-claude-deployment")
+	if got.Model != "claude-sonnet-4-6" || got.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(alias default override) = %#v, want provider catalog model", got)
+	}
+}
+
+func TestResolveModelCatalog_FlagsConfiguredModelWithoutCatalog(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetProviderModelConfig("openai", ProviderModelConfig{
+		DefaultModel: "corp-gpt-5-prod",
+		ModelOverrides: map[string]ModelOverride{
+			"other-deployment": {MaxOutputTokens: 1234},
+			"mini-deployment":  {CatalogModel: "gpt-5.4-mini"},
+		},
+	})
+
+	defaultAlias := cfg.ResolveModelCatalog("openai", "corp-gpt-5-prod")
+	if defaultAlias.Model != "corp-gpt-5-prod" || !defaultAlias.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(default alias) = %#v, want configured without catalog", defaultAlias)
+	}
+
+	overrideAlias := cfg.ResolveModelCatalog("openai", "other-deployment")
+	if overrideAlias.Model != "other-deployment" || !overrideAlias.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(override alias) = %#v, want configured without catalog", overrideAlias)
+	}
+
+	knownOverride := cfg.ResolveModelCatalog("openai", "mini-deployment")
+	if knownOverride.Model != "gpt-5.4-mini" || knownOverride.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(override catalog) = %#v, want catalog model", knownOverride)
+	}
+}
+
 func TestIsProviderResponsesAPIModel_UsesCatalogModel(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SetProviderModelConfig("openai", ProviderModelConfig{

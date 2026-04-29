@@ -7,11 +7,13 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/viewfmt"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-func renderLastRequestTable(provider, model string, usage *api.Usage, costOverride *float64) *ui.Table {
+func renderLastRequestTable(cfg *config.Config, provider, model string, usage *api.Usage, costOverride *cost.CostEstimate) *ui.Table {
 	if usage == nil {
 		return nil
 	}
@@ -31,12 +33,14 @@ func renderLastRequestTable(provider, model string, usage *api.Usage, costOverri
 		table.AddRow("Thinking", formatNumber(usage.ThinkingTokens)+" tokens")
 	}
 
-	cost := requestUsageCost(provider, model, *usage)
+	estimate := requestUsageCost(cfg, provider, model, *usage)
 	if costOverride != nil {
-		cost = *costOverride
+		estimate = *costOverride
 	}
-	if cost > 0 {
-		table.AddRow("Cost", viewfmt.USDWithSuffix(cost))
+	if estimate.PricingUnavailable {
+		table.AddRow("Cost", "N/A (pricing unavailable)")
+	} else if estimate.Cost > 0 {
+		table.AddRow("Cost", viewfmt.USDWithSuffix(estimate.Cost))
 	} else {
 		table.AddRow("Cost", "Free (local)")
 	}
@@ -76,7 +80,7 @@ func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *suba
 		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Context"), fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), contextPct))
 	}
 
-	cost := stats.EstimatedCostForConfig(agent.cfg())
+	parentEstimate := stats.EstimatedCostEstimateForConfig(agent.cfg())
 	if stats.TotalTokens() > 0 {
 		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Input"), formatNumber(stats.InputTokens)+" tokens")
 
@@ -110,11 +114,21 @@ func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *suba
 	}
 
 	if hasSubAgents {
-		tokenTable.AddRow("Parent Cost", formatParentCost(agent.ProviderName, cost)).
-			AddRow("Sub-agent Cost", formatUSDWithSuffix(subSummary.TotalCost)).
-			AddRow("Total Cost", formatUSDWithSuffix(cost+subSummary.TotalCost))
-	} else if cost > 0 {
-		tokenTable.AddRow("Cost", formatUSDWithSuffix(cost))
+		subEstimate := cost.CostEstimate{
+			Cost:               subSummary.TotalCost,
+			PricingUnavailable: subSummary.PricingUnavailable,
+		}
+		totalEstimate := cost.CostEstimate{
+			Cost:               parentEstimate.Cost + subSummary.TotalCost,
+			PricingUnavailable: parentEstimate.PricingUnavailable || subSummary.PricingUnavailable,
+		}
+		tokenTable.AddRow("Parent Cost", formatParentCost(agent.ProviderName, parentEstimate)).
+			AddRow("Sub-agent Cost", formatCostEstimate(subEstimate)).
+			AddRow("Total Cost", formatCostEstimate(totalEstimate))
+	} else if parentEstimate.PricingUnavailable {
+		tokenTable.AddRow("Cost", "N/A (pricing unavailable)")
+	} else if parentEstimate.Cost > 0 {
+		tokenTable.AddRow("Cost", formatUSDWithSuffix(parentEstimate.Cost))
 	} else {
 		tokenTable.AddRow("Cost", "Free (local)")
 	}
@@ -221,7 +235,10 @@ func renderSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 			formatSubAgentNumber(agentStats.CachedTokens, pending),
 			formatSubAgentNumber(agentStats.OutputTokens, pending),
 			formatSubAgentNumber(agentStats.ThinkingTokens, pending),
-			formatSubAgentCost(agentStats.Cost, pending),
+			formatSubAgentCost(cost.CostEstimate{
+				Cost:               agentStats.Cost,
+				PricingUnavailable: agentStats.PricingUnavailable,
+			}, pending),
 			formatSubAgentNumber(agentStats.ToolExecutions, pending),
 			formatSubAgentError(agentStats.Status, agentStats.ErrorMessage),
 		)
@@ -235,7 +252,10 @@ func renderSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 		formatNumber(summary.TotalCached),
 		formatNumber(summary.TotalOutput),
 		formatNumber(summary.TotalThinking),
-		formatUSD(summary.TotalCost),
+		formatSubAgentCost(cost.CostEstimate{
+			Cost:               summary.TotalCost,
+			PricingUnavailable: summary.PricingUnavailable,
+		}, false),
 		formatNumber(summary.TotalTools),
 		"",
 	)

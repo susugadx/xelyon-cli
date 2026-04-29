@@ -132,7 +132,7 @@ func getOpenAIPricing(model string, promptTokenCount int) PricingInfo {
 			CachedInputCostPerM:   0.175, // 90% off
 			CacheCreationCostPerM: 1.75,
 		}
-	default:
+	case lm == "" || strings.Contains(lm, "gpt-5"):
 		// GPT-5 / 5.1 / Codex（デフォルト）: $1.25/$10 per million tokens
 		return PricingInfo{
 			InputCostPerM:         1.25,
@@ -140,5 +140,7 @@ func getOpenAIPricing(model string, promptTokenCount int) PricingInfo {
 			CachedInputCostPerM:   0.125, // 90% off
 			CacheCreationCostPerM: 1.25,
 		}
+	default:
+		return pricingUnavailableInfo()
 	}
 }

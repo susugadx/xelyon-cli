@@ -1,8 +1,6 @@
 package cost
 
 import (
-	"strings"
-
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
@@ -33,6 +31,6 @@ func cachedInputTokensAreInputDetails(cfg *config.Config, provider, model string
 }
 
 func openRouterModelUsesOpenAIPricing(model string) bool {
-	lm := strings.ToLower(model)
-	return containsAny(lm, []string{"gpt", "openai", "codex"})
+	id, ok := parseOpenRouterModelID(model)
+	return ok && id.owner == "openai" && pricingFamilyHasKnownModel("openrouter", model)
 }

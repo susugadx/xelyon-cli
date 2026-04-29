@@ -2,14 +2,14 @@ package cost
 
 import "strings"
 
-type staticFallbackPricingRule struct {
-	contains []string
+type openRouterStaticPricingRule struct {
+	modelIDs []string
 	pricing  PricingInfo
 }
 
-var openRouterStaticFallbackPricingRules = []staticFallbackPricingRule{
+var openRouterStaticPricingRules = []openRouterStaticPricingRule{
 	{
-		contains: []string{"mistral", "codestral"},
+		modelIDs: []string{"mistral-medium"},
 		pricing: PricingInfo{
 			InputCostPerM:         2.00,
 			OutputCostPerM:        6.00,
@@ -18,7 +18,7 @@ var openRouterStaticFallbackPricingRules = []staticFallbackPricingRule{
 		},
 	},
 	{
-		contains: []string{"llama", "meta"},
+		modelIDs: []string{"meta/llama-3.1-70b"},
 		pricing: PricingInfo{
 			InputCostPerM:         0.20,
 			OutputCostPerM:        0.80,
@@ -27,7 +27,7 @@ var openRouterStaticFallbackPricingRules = []staticFallbackPricingRule{
 		},
 	},
 	{
-		contains: []string{"qwen"},
+		modelIDs: []string{"qwen/qwen2.5-coder"},
 		pricing: PricingInfo{
 			InputCostPerM:         0.15,
 			OutputCostPerM:        0.60,
@@ -36,7 +36,7 @@ var openRouterStaticFallbackPricingRules = []staticFallbackPricingRule{
 		},
 	},
 	{
-		contains: []string{"glm-5"},
+		modelIDs: []string{"zhipu/glm-5"},
 		pricing: PricingInfo{
 			InputCostPerM:         0.72,
 			OutputCostPerM:        2.30,
@@ -46,12 +46,24 @@ var openRouterStaticFallbackPricingRules = []staticFallbackPricingRule{
 	},
 }
 
-func resolveOpenRouterStaticFallbackPricing(model string) (PricingInfo, bool) {
-	lm := strings.ToLower(model)
-	for _, rule := range openRouterStaticFallbackPricingRules {
-		if containsAny(lm, rule.contains) {
+func resolveOpenRouterStaticPricing(model string) (PricingInfo, bool) {
+	if !pricingFamilyHasKnownModel("openrouter", model) {
+		return PricingInfo{}, false
+	}
+	lm := strings.ToLower(strings.TrimSpace(model))
+	for _, rule := range openRouterStaticPricingRules {
+		if rule.matchesModel(lm) {
 			return rule.pricing, true
 		}
 	}
 	return PricingInfo{}, false
+}
+
+func (rule openRouterStaticPricingRule) matchesModel(model string) bool {
+	for _, candidate := range rule.modelIDs {
+		if model == candidate {
+			return true
+		}
+	}
+	return false
 }

@@ -463,6 +463,14 @@ xelyon
 
 DeepSeek V4 Pro には 2026-05-05 15:59 UTC までの期間限定 75% off がありますが、`pricing.yaml` は date-aware pricing ではないため通常価格を記録しています。
 
+## 料金表示
+
+`/status`、ステータスバー、headless JSON の `cost` は `internal/cost/pricing.yaml` と組み込みの既知ルールに基づく推定値です。価格表にない provider/model は別モデルの料金で代用せず、UI では `N/A (pricing unavailable)`、ステータスバーでは `cost N/A` と表示します。headless JSON では `pricing_unavailable: true` を返します。
+
+カスタム deployment 名や社内 alias を使う場合は、`provider_models.<provider>.catalog_model` または `model_overrides.<model>.catalog_model` に provider の pricing family で解決できる既知モデル名を指定すると、そのモデルの token limit / pricing / context 判定を使えます。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
+
+Bedrock は Claude family のみ Claude 料金へ委譲します。Amazon Nova や Meta Llama など Converse 経路のモデルは、Bedrock 用の料金表を追加するまで `N/A (pricing unavailable)` です。
+
 ## プロバイダー選択のヒント
 
 ### コード生成・編集

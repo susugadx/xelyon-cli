@@ -99,12 +99,15 @@ func (a *Agent) FormatStatusLine() string {
 	a.statsMu.Lock()
 	tokens := a.Stats.TotalTokens()
 	tokenStr := FormatTokens(tokens)
-	cost := a.Stats.EstimatedCostForConfig(a.cfg())
+	estimate := a.Stats.EstimatedCostEstimateForConfig(a.cfg())
 	a.statsMu.Unlock()
 
 	if manager := a.subAgentManager(); manager != nil {
 		summary := manager.GetSummary()
-		cost += summary.TotalCost
+		estimate.Cost += summary.TotalCost
+		if summary.PricingUnavailable {
+			estimate.PricingUnavailable = true
+		}
 	}
 
 	sep := statusDim.Sprint("│")
@@ -123,7 +126,7 @@ func (a *Agent) FormatStatusLine() string {
 			sep,
 			tokenStr)
 	}
-	return fmt.Sprintf("%s %s %s %s %s %s %s %s %s ~$%.3f",
+	return fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s",
 		indicator,
 		statusCyan.Sprint(a.CurrentModel),
 		sep,
@@ -133,7 +136,7 @@ func (a *Agent) FormatStatusLine() string {
 		sep,
 		tokenStr,
 		sep,
-		cost)
+		formatCompactCostEstimate(estimate))
 }
 
 // PrintStatusFooter prints a status bar with divider lines.
@@ -183,8 +186,9 @@ func handleStatusCommand(agent *Agent) bool {
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "🧾 Last Turn")
 	if agent.Stats != nil {
+		cfg := agent.cfg()
 		usage, costOverride := lastRequestUsageForStatus(agent.Stats)
-		if table := buildLastRequestTable(agent.ProviderName, agent.CurrentModel, usage, costOverride); table != nil {
+		if table := buildLastRequestTable(cfg, agent.activeModelProviderConfigKey(cfg), agent.CurrentModel, usage, costOverride); table != nil {
 			_, _ = fmt.Fprint(out, table.RenderCompact())
 		} else {
 			dim.Fprintln(out, "  No request usage data available")

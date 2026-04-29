@@ -181,6 +181,52 @@ func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {
 	assert.NotContains(t, agent.SystemPrompt, "### Gemini-specific")
 }
 
+func TestAgent_SwitchProvider_ResetsCostUnknownState(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	api.RegisterProvider("openai", func(apiKey string) (api.Provider, error) {
+		return &mockCacheClearableProvider{name: "openai"}, nil
+	})
+
+	cfg := newProjectMapDisabledConfig()
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	stats := NewSessionStats("bedrock", "amazon.nova-pro-v1:0")
+	stats.InputTokens = 1000
+	stats.OutputTokens = 200
+	stats.AccumulatedCost = 0.123
+	stats.CostUnknown = true
+	stats.CostUnknownEvents = 1
+	stats.LastTurnCostUnknown = true
+	stats.LastUsage = &api.Usage{InputTokens: 1000, OutputTokens: 200}
+	stats.LastTurnUsage = &api.Usage{InputTokens: 1000, OutputTokens: 200}
+	stats.ToolExecutions["read_file"] = 2
+
+	agent := &Agent{
+		ProviderName:    "bedrock",
+		CurrentModel:    "amazon.nova-pro-v1:0",
+		CurrentProvider: &mockCacheClearableProvider{name: "bedrock"},
+		Stats:           stats,
+		Runtime:         runtime,
+		agentConversationState: agentConversationState{
+			session: history.NewSession("amazon.nova-pro-v1:0"),
+		},
+	}
+
+	err := agent.SwitchProvider("openai")
+	assert.NoError(t, err)
+	assert.Equal(t, "openai", agent.ProviderName)
+	assert.False(t, agent.Stats.CostUnknown)
+	assert.Equal(t, 0, agent.Stats.CostUnknownEvents)
+	assert.Equal(t, 0.0, agent.Stats.AccumulatedCost)
+	assert.False(t, agent.Stats.LastTurnCostUnknown)
+	assert.Nil(t, agent.Stats.LastUsage)
+	assert.Nil(t, agent.Stats.LastTurnUsage)
+	assert.Equal(t, 0, agent.Stats.InputTokens)
+	assert.Equal(t, 0, len(agent.Stats.ToolExecutions))
+
+	estimate := agent.Stats.EstimatedCostEstimateForConfig(agent.cfg())
+	assert.False(t, estimate.PricingUnavailable)
+}
+
 func TestAgent_SwitchProvider_UsesProviderDefaultWhenOtherProviderHasOverride(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)

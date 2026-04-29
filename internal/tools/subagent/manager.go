@@ -26,18 +26,19 @@ type ToolBreakdownEntry struct {
 
 // RunResult はサブエージェント実行結果の最小表現です。
 type RunResult struct {
-	Status         string
-	Model          string
-	Response       string
-	ErrorMessage   string
-	InputTokens    int
-	CachedTokens   int
-	OutputTokens   int
-	ThinkingTokens int
-	Cost           float64
-	ToolExecutions int
-	ToolBreakdown  []ToolBreakdownEntry
-	DurationMs     int64
+	Status             string
+	Model              string
+	Response           string
+	ErrorMessage       string
+	InputTokens        int
+	CachedTokens       int
+	OutputTokens       int
+	ThinkingTokens     int
+	Cost               float64
+	PricingUnavailable bool
+	ToolExecutions     int
+	ToolBreakdown      []ToolBreakdownEntry
+	DurationMs         int64
 }
 
 // Runner はサブエージェント実行関数です。
@@ -87,34 +88,36 @@ type WaitResponse struct {
 
 // SubAgentStats はサブエージェント 1 件分の統計です。
 type SubAgentStats struct {
-	ID             string               `json:"id"`
-	Model          string               `json:"model"`
-	TaskType       string               `json:"task_type"`
-	Status         string               `json:"status"`
-	ErrorMessage   string               `json:"error_message"`
-	InputTokens    int                  `json:"input_tokens"`
-	CachedTokens   int                  `json:"cached_tokens"`
-	OutputTokens   int                  `json:"output_tokens"`
-	ThinkingTokens int                  `json:"thinking_tokens"`
-	Cost           float64              `json:"cost"`
-	ToolExecutions int                  `json:"tool_executions"`
-	ToolBreakdown  []ToolBreakdownEntry `json:"tool_breakdown,omitempty"`
-	DurationMs     int64                `json:"duration_ms"`
+	ID                 string               `json:"id"`
+	Model              string               `json:"model"`
+	TaskType           string               `json:"task_type"`
+	Status             string               `json:"status"`
+	ErrorMessage       string               `json:"error_message"`
+	InputTokens        int                  `json:"input_tokens"`
+	CachedTokens       int                  `json:"cached_tokens"`
+	OutputTokens       int                  `json:"output_tokens"`
+	ThinkingTokens     int                  `json:"thinking_tokens"`
+	Cost               float64              `json:"cost"`
+	PricingUnavailable bool                 `json:"pricing_unavailable,omitempty"`
+	ToolExecutions     int                  `json:"tool_executions"`
+	ToolBreakdown      []ToolBreakdownEntry `json:"tool_breakdown,omitempty"`
+	DurationMs         int64                `json:"duration_ms"`
 }
 
 // SubAgentSummary は全サブエージェントの集約統計です。
 type SubAgentSummary struct {
-	Agents         []SubAgentStats `json:"agents"`
-	TotalSpawned   int             `json:"total_spawned"`
-	TotalCompleted int             `json:"total_completed"`
-	TotalErrors    int             `json:"total_errors"`
-	TotalRunning   int             `json:"total_running"`
-	TotalInput     int             `json:"total_input"`
-	TotalCached    int             `json:"total_cached"`
-	TotalOutput    int             `json:"total_output"`
-	TotalThinking  int             `json:"total_thinking"`
-	TotalCost      float64         `json:"total_cost"`
-	TotalTools     int             `json:"total_tools"`
+	Agents             []SubAgentStats `json:"agents"`
+	TotalSpawned       int             `json:"total_spawned"`
+	TotalCompleted     int             `json:"total_completed"`
+	TotalErrors        int             `json:"total_errors"`
+	TotalRunning       int             `json:"total_running"`
+	TotalInput         int             `json:"total_input"`
+	TotalCached        int             `json:"total_cached"`
+	TotalOutput        int             `json:"total_output"`
+	TotalThinking      int             `json:"total_thinking"`
+	TotalCost          float64         `json:"total_cost"`
+	PricingUnavailable bool            `json:"pricing_unavailable,omitempty"`
+	TotalTools         int             `json:"total_tools"`
 }
 
 // NewManager は新しい Manager を作成します。
@@ -386,6 +389,7 @@ func (m *Manager) GetSummary() SubAgentSummary {
 			stats.OutputTokens = sub.result.OutputTokens
 			stats.ThinkingTokens = sub.result.ThinkingTokens
 			stats.Cost = sub.result.Cost
+			stats.PricingUnavailable = sub.result.PricingUnavailable
 			stats.ToolExecutions = sub.result.ToolExecutions
 			stats.ToolBreakdown = sub.result.ToolBreakdown
 			stats.DurationMs = sub.result.DurationMs
@@ -395,6 +399,9 @@ func (m *Manager) GetSummary() SubAgentSummary {
 			summary.TotalOutput += stats.OutputTokens
 			summary.TotalThinking += stats.ThinkingTokens
 			summary.TotalCost += stats.Cost
+			if stats.PricingUnavailable {
+				summary.PricingUnavailable = true
+			}
 			summary.TotalTools += stats.ToolExecutions
 		}
 

@@ -23,6 +23,32 @@ func TestKnownMaxOutputTokens_ClaudeOpus47(t *testing.T) {
 	}
 }
 
+func TestIsKnownModelName(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{model: "gpt-5.4", want: true},
+		{model: "gpt-5.5", want: true},
+		{model: "claude-sonnet-4-6", want: true},
+		{model: "claude-sonnet-4.6", want: true},
+		{model: "claude-sonnet-4.5", want: true},
+		{model: "gemini-3.1-pro", want: true},
+		{model: "amazon.nova-pro-v1:0", want: true},
+		{model: "corp-gpt-5-prod", want: false},
+		{model: "claude-sonnet-prod", want: false},
+		{model: "unknown-model", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := IsKnownModelName(tt.model); got != tt.want {
+				t.Fatalf("IsKnownModelName(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestModelContextLimit_ClaudeOpus47(t *testing.T) {
 	for _, model := range []string{
 		"claude-opus-4-7",

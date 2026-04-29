@@ -47,14 +47,33 @@ func GetPricingInfo(provider string, model string, promptTokenCount ...int) Pric
 
 // GetPricingInfoForConfig は catalog_model 設定を考慮して料金情報を返す。
 func GetPricingInfoForConfig(cfg *config.Config, provider string, model string, promptTokenCount ...int) PricingInfo {
-	return GetPricingInfo(provider, pricingModelForConfig(cfg, provider, model), promptTokenCount...)
+	resolution := pricingModelResolutionForConfig(cfg, provider, model)
+	if resolution.ConfiguredWithoutCatalog && !configuredModelCanUseDirectPricing(provider, resolution.Model) {
+		return pricingUnavailableInfo()
+	}
+	return GetPricingInfo(provider, resolution.Model, promptTokenCount...)
 }
 
 func pricingModelForConfig(cfg *config.Config, provider string, model string) string {
+	return pricingModelResolutionForConfig(cfg, provider, model).Model
+}
+
+func pricingModelResolutionForConfig(cfg *config.Config, provider string, model string) config.ModelCatalogResolution {
 	if cfg == nil {
-		return model
+		return config.ModelCatalogResolution{Model: model}
 	}
-	return cfg.ModelCatalogName(provider, model)
+	return cfg.ResolveModelCatalog(provider, model)
+}
+
+func configuredModelCanUseDirectPricing(provider, model string) bool {
+	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
+	if !ok {
+		return false
+	}
+	if entry.PricingFamily == "ollama" {
+		return true
+	}
+	return pricingFamilyHasKnownModel(entry.PricingFamily, model)
 }
 
 func normalizePromptTokenCount(promptTokenCount []int) int {
@@ -67,7 +86,7 @@ func normalizePromptTokenCount(promptTokenCount []int) int {
 func resolvePricingByProvider(provider string, model string, promptTokenCount int) PricingInfo {
 	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
 	if !ok {
-		return getUnknownProviderFallbackPricing()
+		return pricingUnavailableInfo()
 	}
 
 	return resolvePricingByFamily(entry.PricingFamily, pricingRequest{
@@ -79,7 +98,7 @@ func resolvePricingByProvider(provider string, model string, promptTokenCount in
 func resolvePricingByFamily(family string, req pricingRequest) PricingInfo {
 	resolver, ok := pricingResolvers[family]
 	if !ok {
-		return getUnknownProviderFallbackPricing()
+		return pricingUnavailableInfo()
 	}
 	return resolver(req)
 }

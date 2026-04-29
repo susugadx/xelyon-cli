@@ -20,11 +20,14 @@ func getKimiPricing(model string) PricingInfo {
 			CacheCreationCostPerM: 0.60,
 		}
 	}
-	// Kimi K2（デフォルト）: $0.60/$2.50 per million tokens
-	return PricingInfo{
-		InputCostPerM:         0.60,
-		OutputCostPerM:        2.50,
-		CachedInputCostPerM:   0.06,
-		CacheCreationCostPerM: 0.60,
+	if lm == "" || strings.Contains(lm, "k2") {
+		// Kimi K2（デフォルト）: $0.60/$2.50 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.60,
+			OutputCostPerM:        2.50,
+			CachedInputCostPerM:   0.06,
+			CacheCreationCostPerM: 0.60,
+		}
 	}
+	return pricingUnavailableInfo()
 }

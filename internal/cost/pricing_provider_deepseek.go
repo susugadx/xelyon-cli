@@ -30,12 +30,15 @@ func getDeepSeekPricing(model string) PricingInfo {
 		}
 	}
 
-	// DeepSeek V3.2/R1/coder など、V4 alias ではないモデルの既存フォールバック。
-	// $0.28/$0.42 per million tokens, Cache hit: $0.028
-	return PricingInfo{
-		InputCostPerM:         0.28,
-		OutputCostPerM:        0.42,
-		CachedInputCostPerM:   0.028,
-		CacheCreationCostPerM: 0.28,
+	if strings.Contains(lm, "deepseek-v3") ||
+		strings.Contains(lm, "deepseek-r1") ||
+		strings.Contains(lm, "deepseek-coder") {
+		return PricingInfo{
+			InputCostPerM:         0.28,
+			OutputCostPerM:        0.42,
+			CachedInputCostPerM:   0.028,
+			CacheCreationCostPerM: 0.28,
+		}
 	}
+	return pricingUnavailableInfo()
 }

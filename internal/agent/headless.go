@@ -7,16 +7,17 @@ import (
 
 // HeadlessResult はHeadlessモードの実行結果
 type HeadlessResult struct {
-	Status     string           `json:"status"`               // "success" or "error"
-	Provider   string           `json:"provider"`             // LLMプロバイダー名
-	Model      string           `json:"model"`                // モデル名
-	Response   string           `json:"response"`             // AIの最終回答
-	ToolCalls  []ToolCallResult `json:"tool_calls,omitempty"` // 実行されたツール呼び出し
-	Tokens     *TokenUsage      `json:"tokens,omitempty"`     // トークン使用量
-	DurationMs int64            `json:"duration_ms"`          // 実行時間（ミリ秒）
-	Timestamp  string           `json:"timestamp"`            // タイムスタンプ（RFC3339）
-	Error      *ErrorInfo       `json:"error,omitempty"`      // エラー情報
-	Cost       float64          `json:"cost"`                 // 推定コスト（USD）
+	Status             string           `json:"status"`                        // "success" or "error"
+	Provider           string           `json:"provider"`                      // LLMプロバイダー名
+	Model              string           `json:"model"`                         // モデル名
+	Response           string           `json:"response"`                      // AIの最終回答
+	ToolCalls          []ToolCallResult `json:"tool_calls,omitempty"`          // 実行されたツール呼び出し
+	Tokens             *TokenUsage      `json:"tokens,omitempty"`              // トークン使用量
+	DurationMs         int64            `json:"duration_ms"`                   // 実行時間（ミリ秒）
+	Timestamp          string           `json:"timestamp"`                     // タイムスタンプ（RFC3339）
+	Error              *ErrorInfo       `json:"error,omitempty"`               // エラー情報
+	Cost               float64          `json:"cost"`                          // 推定コスト（USD）
+	PricingUnavailable bool             `json:"pricing_unavailable,omitempty"` // 既知の料金表がない場合 true
 }
 
 // ToolCallResult は個別のツール呼び出し結果

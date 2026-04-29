@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -101,9 +102,15 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 		CacheCreationTokens: a.Stats.CacheCreationTokens - startStats.CacheCreationTokens,
 	}
 	cfg := a.cfg()
-	costDiff := a.Stats.EstimatedCostForConfig(cfg) - startStats.EstimatedCostForConfig(cfg)
+	endEstimate := a.Stats.EstimatedCostEstimateForConfig(cfg)
+	startEstimate := startStats.EstimatedCostEstimateForConfig(cfg)
+	turnEstimate := cost.EstimateRequestCostWithCacheForConfig(cfg, a.Stats.Provider, a.Stats.Model, turnUsage)
+	costDiff := endEstimate.Cost - startEstimate.Cost
+	costUnknown := a.Stats.CostUnknownEvents > startStats.CostUnknownEvents ||
+		(usageHasAnyTokens(turnUsage) && turnEstimate.PricingUnavailable)
 	a.Stats.LastTurnUsage = &turnUsage
 	a.Stats.LastTurnCost = costDiff
+	a.Stats.LastTurnCostUnknown = costUnknown
 	inDiff := turnUsage.InputTokens
 	outDiff := turnUsage.OutputTokens
 	a.statsMu.Unlock()
@@ -126,6 +133,18 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 			FormatNumber(inDiff),
 			FormatNumber(outDiff),
 			FormatNumber(total))
-		dim.Fprintf(a.output(), "(~$%.4f)\n", costDiff)
+		if costUnknown {
+			dim.Fprint(a.output(), "(cost N/A)\n")
+		} else {
+			dim.Fprintf(a.output(), "(~$%.4f)\n", costDiff)
+		}
 	}
+}
+
+func usageHasAnyTokens(usage api.Usage) bool {
+	return usage.InputTokens > 0 ||
+		usage.OutputTokens > 0 ||
+		usage.ThinkingTokens > 0 ||
+		usage.CachedInputTokens > 0 ||
+		usage.CacheCreationTokens > 0
 }

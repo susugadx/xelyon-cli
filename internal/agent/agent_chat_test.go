@@ -203,3 +203,73 @@ func TestPrintTaskUsage(t *testing.T) {
 		t.Fatalf("LastTurnCost = %.4f, want about 0.0225", agent.Stats.LastTurnCost)
 	}
 }
+
+func TestPrintTaskUsage_DoesNotLeakPriorUnknownCostToLastTurn(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := newAgentChatTestAgent(t, provider)
+	agent.Stats = NewSessionStats("openai", "gpt-5.4")
+	agent.ProviderName = "openai"
+
+	startStats := SessionStats{
+		InputTokens:       100,
+		OutputTokens:      50,
+		Provider:          "openai",
+		Model:             "gpt-5.4",
+		AccumulatedCost:   0.0100,
+		CostUnknown:       true,
+		CostUnknownEvents: 1,
+	}
+	agent.Stats.InputTokens = 200
+	agent.Stats.OutputTokens = 100
+	agent.Stats.AccumulatedCost = 0.0325
+	agent.Stats.CostUnknown = true
+	agent.Stats.CostUnknownEvents = 1
+
+	var out bytes.Buffer
+	agent.Runtime = &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	}
+
+	agent.printTaskUsage(startStats)
+
+	if agent.Stats.LastTurnCostUnknown {
+		t.Fatal("LastTurnCostUnknown = true, want false when current turn pricing is known")
+	}
+	if strings.Contains(out.String(), "cost N/A") {
+		t.Fatalf("printTaskUsage() leaked prior unknown cost into current turn:\n%s", out.String())
+	}
+}
+
+func TestPrintTaskUsage_MarksCurrentUnknownCostEvenAfterPriorUnknown(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := newAgentChatTestAgent(t, provider)
+	agent.Stats = NewSessionStats("bedrock", "amazon.nova-pro-v1:0")
+	agent.ProviderName = "bedrock"
+
+	startStats := SessionStats{
+		InputTokens:       100,
+		OutputTokens:      50,
+		Provider:          "bedrock",
+		Model:             "amazon.nova-pro-v1:0",
+		CostUnknown:       true,
+		CostUnknownEvents: 1,
+	}
+	agent.Stats.InputTokens = 200
+	agent.Stats.OutputTokens = 100
+	agent.Stats.CostUnknown = true
+	agent.Stats.CostUnknownEvents = 2
+
+	var out bytes.Buffer
+	agent.Runtime = &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	}
+
+	agent.printTaskUsage(startStats)
+
+	if !agent.Stats.LastTurnCostUnknown {
+		t.Fatal("LastTurnCostUnknown = false, want true when current turn pricing is unknown")
+	}
+	if !strings.Contains(out.String(), "cost N/A") {
+		t.Fatalf("printTaskUsage() should show current turn unknown cost:\n%s", out.String())
+	}
+}

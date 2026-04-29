@@ -21,12 +21,11 @@ func TestPricingResolverRegistry_CoversCatalogFamilies(t *testing.T) {
 	}
 }
 
-func TestPricingResolverRegistry_UnknownFamilyFallsBack(t *testing.T) {
+func TestPricingResolverRegistry_UnknownFamilyUnavailable(t *testing.T) {
 	got := resolvePricingByFamily("unknown-family", pricingRequest{
 		Model: "test-model",
 	})
-	want := getUnknownProviderFallbackPricing()
-	if got != want {
-		t.Fatalf("resolvePricingByFamily(unknown) = %#v, want %#v", got, want)
+	if !got.PricingUnavailable {
+		t.Fatalf("resolvePricingByFamily(unknown).PricingUnavailable = false, want true: %#v", got)
 	}
 }

@@ -44,7 +44,7 @@ func getGroqPricing(model string) PricingInfo {
 			CachedInputCostPerM:   0.07,
 			CacheCreationCostPerM: 0.07,
 		}
-	default:
+	case lm == "" || strings.Contains(lm, "llama-4-scout") || strings.Contains(lm, "8b"):
 		// Llama 3/3.1 8B (default): $0.05/$0.10 per million tokens
 		return PricingInfo{
 			InputCostPerM:         0.05,
@@ -52,5 +52,7 @@ func getGroqPricing(model string) PricingInfo {
 			CachedInputCostPerM:   0.05,
 			CacheCreationCostPerM: 0.05,
 		}
+	default:
+		return pricingUnavailableInfo()
 	}
 }

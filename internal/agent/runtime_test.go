@@ -478,12 +478,16 @@ func TestAgentRuntime_SeparatesUIRuntimeAndAuditLogger(t *testing.T) {
 
 func TestHeadlessResultToSubAgentResult_ToolBreakdownEmpty(t *testing.T) {
 	result := &HeadlessResult{
-		Model:    "test-model",
-		Response: "done",
+		Model:              "test-model",
+		Response:           "done",
+		PricingUnavailable: true,
 	}
 	sub := headlessResultToSubAgentResult("completed", result)
 	if sub.ToolBreakdown != nil {
 		t.Errorf("ToolBreakdown should be nil for empty ToolCalls, got %v", sub.ToolBreakdown)
+	}
+	if !sub.PricingUnavailable {
+		t.Fatal("PricingUnavailable should propagate to sub-agent result")
 	}
 }
 

@@ -15,7 +15,9 @@ var knownModelMaxOutputTokens = map[string]int{
 	"deepseek-v4-flash":                     384000,
 	"deepseek-v4-pro":                       384000,
 	"claude-sonnet-4-6":                     64000,
+	"claude-sonnet-4.6":                     64000,
 	"claude-sonnet-4-5":                     64000,
+	"claude-sonnet-4.5":                     64000,
 	"claude-opus-4-7":                       128000,
 	"claude-opus-4.7":                       128000,
 	"global.anthropic.claude-opus-4-7-v1":   128000,
@@ -28,6 +30,7 @@ var knownModelMaxOutputTokens = map[string]int{
 	"gpt-5.5-pro-2026-04-23":                128000,
 	"gpt-5.2":                               16384,
 	"gemini-2.5-flash":                      65536,
+	"gemini-3.1-pro":                        65536,
 	"gemini-3.1-pro-preview":                65536,
 	"gemini-3.1-pro-preview-customtools":    65536,
 }
@@ -36,6 +39,8 @@ var modelContextLimits = map[string]int{
 	"claude-opus-4-7":            1000000,
 	"claude-opus-4.7":            1000000,
 	"claude-sonnet-4-6":          200000,
+	"claude-sonnet-4.6":          200000,
+	"claude-sonnet-4.5":          200000,
 	"claude-opus-4-6":            200000,
 	"claude-sonnet-4-20250514":   200000,
 	"claude-sonnet-4-5-20250514": 200000,
@@ -83,6 +88,7 @@ var modelContextLimits = map[string]int{
 	"gpt-5.2":                400000,
 
 	"gemini-3-pro-preview":               1000000,
+	"gemini-3.1-pro":                     1000000,
 	"gemini-3.1-pro-preview":             1000000,
 	"gemini-3.1-pro-preview-customtools": 1000000,
 	"gemini-2.0-flash":                   1000000,
@@ -207,6 +213,32 @@ func KnownMaxOutputTokens(model string) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+// IsKnownModelName は組み込み catalog が model を直接知っているか返す。
+func IsKnownModelName(model string) bool {
+	model = normalizeModelName(model)
+	if model == "" || model == "default" {
+		return false
+	}
+	if _, ok := knownModelMaxOutputTokens[model]; ok {
+		return true
+	}
+	if _, ok := modelContextLimits[model]; ok {
+		return true
+	}
+	if isClaudeOpus47ModelName(model) {
+		return true
+	}
+	if _, ok := knownBedrockMaxOutputTokens(model); ok {
+		return true
+	}
+	for _, rule := range modelMaxOutputTokenPrefixes {
+		if strings.HasPrefix(model, rule.Pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // ModelContextLimit はモデルのコンテキスト上限を返す。

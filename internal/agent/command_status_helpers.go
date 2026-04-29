@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/viewfmt"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -33,21 +34,26 @@ func requestCacheHitRate(usage api.Usage) float64 {
 	return float64(usage.CachedInputTokens) / float64(usage.InputTokens) * 100.0
 }
 
-func requestUsageCost(provider, model string, usage api.Usage) float64 {
-	return cost.CalculateRequestCostWithCache(provider, model, usage) + usage.StorageCost
+func requestUsageCost(cfg *config.Config, provider, model string, usage api.Usage) cost.CostEstimate {
+	estimate := cost.EstimateRequestCostWithCacheForConfig(cfg, provider, model, usage)
+	estimate.Cost += usage.StorageCost
+	return estimate
 }
 
-func buildLastRequestTable(provider, model string, usage *api.Usage, costOverride *float64) *ui.Table {
-	return renderLastRequestTable(provider, model, usage, costOverride)
+func buildLastRequestTable(cfg *config.Config, provider, model string, usage *api.Usage, costOverride *cost.CostEstimate) *ui.Table {
+	return renderLastRequestTable(cfg, provider, model, usage, costOverride)
 }
 
-func lastRequestUsageForStatus(stats *SessionStats) (*api.Usage, *float64) {
+func lastRequestUsageForStatus(stats *SessionStats) (*api.Usage, *cost.CostEstimate) {
 	if stats == nil {
 		return nil, nil
 	}
 	if stats.LastTurnUsage != nil {
-		cost := stats.LastTurnCost
-		return stats.LastTurnUsage, &cost
+		estimate := cost.CostEstimate{
+			Cost:               stats.LastTurnCost,
+			PricingUnavailable: stats.LastTurnCostUnknown,
+		}
+		return stats.LastTurnUsage, &estimate
 	}
 	return stats.LastUsage, nil
 }
@@ -111,11 +117,28 @@ func formatUSDWithSuffix(value float64) string {
 	return viewfmt.USDWithSuffix(value)
 }
 
-func formatParentCost(providerName string, cost float64) string {
-	if strings.EqualFold(providerName, "ollama") && cost == 0 {
+func formatCostEstimate(estimate cost.CostEstimate) string {
+	if estimate.PricingUnavailable {
+		return "N/A (pricing unavailable)"
+	}
+	return formatUSDWithSuffix(estimate.Cost)
+}
+
+func formatCompactCostEstimate(estimate cost.CostEstimate) string {
+	if estimate.PricingUnavailable {
+		return "cost N/A"
+	}
+	return fmt.Sprintf("~$%.3f", estimate.Cost)
+}
+
+func formatParentCost(providerName string, estimate cost.CostEstimate) string {
+	if estimate.PricingUnavailable {
+		return "N/A (pricing unavailable)"
+	}
+	if strings.EqualFold(providerName, "ollama") && estimate.Cost == 0 {
 		return "Free (local)"
 	}
-	return formatUSDWithSuffix(cost)
+	return formatUSDWithSuffix(estimate.Cost)
 }
 
 func formatSubAgentNumber(value int, pending bool) string {
@@ -125,11 +148,14 @@ func formatSubAgentNumber(value int, pending bool) string {
 	return formatNumber(value)
 }
 
-func formatSubAgentCost(cost float64, pending bool) string {
+func formatSubAgentCost(estimate cost.CostEstimate, pending bool) string {
 	if pending {
 		return "-"
 	}
-	return formatUSD(cost)
+	if estimate.PricingUnavailable {
+		return "N/A"
+	}
+	return formatUSD(estimate.Cost)
 }
 
 func formatSubAgentError(status, message string) string {

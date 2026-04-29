@@ -401,6 +401,25 @@ func TestRunHeadlessWithConfig_CollectsTokenUsageAndCost(t *testing.T) {
 	if result.Cost != expectedCost {
 		t.Fatalf("result.Cost = %f, want %f", result.Cost, expectedCost)
 	}
+	if result.PricingUnavailable {
+		t.Fatal("result.PricingUnavailable = true, want false for known pricing")
+	}
+}
+
+func TestRunHeadlessWithConfig_UnknownPricing(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provider := &headlessUsageProvider{}
+	result := RunHeadlessWithConfig(context.Background(), "probe", "unknown-model", provider, newProjectMapDisabledConfig())
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if !result.PricingUnavailable {
+		t.Fatalf("result.PricingUnavailable = false, want true")
+	}
+	if result.Cost != 0 {
+		t.Fatalf("result.Cost = %f, want 0 for unknown pricing", result.Cost)
+	}
 }
 
 func TestRunHeadlessWithConfig_ProjectMapAddsQueryFocusOverlay(t *testing.T) {

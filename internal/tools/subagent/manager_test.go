@@ -1009,16 +1009,17 @@ func TestManagerGetSummary(t *testing.T) {
 				return &RunResult{Status: "completed", Model: model}
 			}
 			return &RunResult{
-				Status:         "completed",
-				Model:          model,
-				Response:       "done",
-				InputTokens:    120,
-				CachedTokens:   40,
-				OutputTokens:   30,
-				ThinkingTokens: 10,
-				Cost:           0.0123,
-				ToolExecutions: 2,
-				DurationMs:     250,
+				Status:             "completed",
+				Model:              model,
+				Response:           "done",
+				InputTokens:        120,
+				CachedTokens:       40,
+				OutputTokens:       30,
+				ThinkingTokens:     10,
+				Cost:               0.0123,
+				PricingUnavailable: true,
+				ToolExecutions:     2,
+				DurationMs:         250,
 			}
 		},
 		ProviderFactory: func(providerName string) (api.Provider, error) {
@@ -1064,6 +1065,9 @@ func TestManagerGetSummary(t *testing.T) {
 	if summary.TotalCost != 0.0123 {
 		t.Fatalf("summary.TotalCost = %f, want 0.0123", summary.TotalCost)
 	}
+	if !summary.PricingUnavailable {
+		t.Fatal("summary.PricingUnavailable = false, want true")
+	}
 	if summary.TotalTools != 2 {
 		t.Fatalf("summary.TotalTools = %d, want 2", summary.TotalTools)
 	}
@@ -1075,6 +1079,9 @@ func TestManagerGetSummary(t *testing.T) {
 	}
 	if summary.Agents[0].TaskType != TaskTypeEdit {
 		t.Fatalf("summary.Agents[0].TaskType = %q, want %q", summary.Agents[0].TaskType, TaskTypeEdit)
+	}
+	if !summary.Agents[0].PricingUnavailable {
+		t.Fatal("summary.Agents[0].PricingUnavailable = false, want true")
 	}
 	if summary.Agents[1].ID != runningID {
 		t.Fatalf("summary.Agents[1].ID = %q, want %q", summary.Agents[1].ID, runningID)

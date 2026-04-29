@@ -257,12 +257,15 @@ final_checks:
       max_output_tokens: 16384
       # カスタムモデルのみ指定:
       model_overrides:
-        my-custom-model:
+        my-deepseek-deployment:
+          catalog_model: deepseek-v4-flash
           max_output_tokens: 32768
-        corp-gpt-deployment:
-          catalog_model: gpt-5.4
-          max_output_tokens: 16384
+    openai:
+      default_model: corp-gpt-deployment
+      catalog_model: gpt-5.4
   ```
+
+料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 
 DeepSeek の推奨モデル:
 - `deepseek-v4-flash`: 低コスト・高速・普段使い向き

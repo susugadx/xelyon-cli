@@ -1,14 +1,21 @@
 package cost
 
 import (
-	"strings"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 func getBedrockPricing(model string, promptTokenCount int) PricingInfo {
-	if strings.Contains(strings.ToLower(model), "claude") {
+	if bedrockModelCanUseClaudePricing(model) {
 		return getClaudePricing(model, promptTokenCount)
 	}
 
-	// Claude以外のBedrockモデルは一旦汎用料金
-	return getUnknownProviderFallbackPricing()
+	return pricingUnavailableInfo()
+}
+
+func bedrockModelCanUseClaudePricing(model string) bool {
+	if !llmcatalog.IsBedrockClaudeModel(model) {
+		return false
+	}
+	return pricingFamilyHasKnownModel("bedrock", model) ||
+		pricingFamilyHasKnownModel("claude", model)
 }

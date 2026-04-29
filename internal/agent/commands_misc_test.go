@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -143,9 +145,9 @@ func TestBuildLastRequestTable_UsesCostOverride(t *testing.T) {
 		CachedInputTokens: 600,
 		OutputTokens:      200,
 	}
-	cost := 0.1234
+	costEstimate := cost.CostEstimate{Cost: 0.1234}
 
-	table := buildLastRequestTable("openai", "gpt-5.4", usage, &cost)
+	table := buildLastRequestTable(nil, "openai", "gpt-5.4", usage, &costEstimate)
 	if table == nil {
 		t.Fatal("buildLastRequestTable() = nil, want table")
 	}
@@ -155,6 +157,41 @@ func TestBuildLastRequestTable_UsesCostOverride(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("buildLastRequestTable() output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestBuildLastRequestTable_ShowsPricingUnavailable(t *testing.T) {
+	usage := &api.Usage{InputTokens: 1000, OutputTokens: 200}
+	table := buildLastRequestTable(nil, "bedrock", "amazon.nova-pro-v1:0", usage, nil)
+	if table == nil {
+		t.Fatal("buildLastRequestTable() = nil, want table")
+	}
+
+	output := table.RenderCompact()
+	if !strings.Contains(output, "N/A (pricing unavailable)") {
+		t.Fatalf("buildLastRequestTable() output should show unavailable pricing:\n%s", output)
+	}
+}
+
+func TestBuildLastRequestTable_UsesCatalogModelForPricing(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+	})
+	usage := &api.Usage{InputTokens: 1000, OutputTokens: 200}
+
+	table := buildLastRequestTable(cfg, "openai", "corp-gpt-deployment", usage, nil)
+	if table == nil {
+		t.Fatal("buildLastRequestTable() = nil, want table")
+	}
+
+	output := table.RenderCompact()
+	if strings.Contains(output, "N/A (pricing unavailable)") {
+		t.Fatalf("buildLastRequestTable() ignored catalog_model pricing:\n%s", output)
+	}
+	if !strings.Contains(output, "$0.0055 USD") {
+		t.Fatalf("buildLastRequestTable() output missing catalog_model cost:\n%s", output)
 	}
 }
 
@@ -172,7 +209,7 @@ func TestLastRequestUsageForStatus_PrefersLastTurnUsage(t *testing.T) {
 	if usage != stats.LastTurnUsage {
 		t.Fatal("expected last turn usage to be returned")
 	}
-	if cost == nil || *cost != 0.0456 {
+	if cost == nil || cost.Cost != 0.0456 {
 		t.Fatalf("cost override = %v, want 0.0456", cost)
 	}
 }
@@ -301,6 +338,25 @@ func TestBuildSessionTokenTable_WithSubAgentCosts(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("buildSessionTokenTable() output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestBuildSessionTokenTable_UnknownParentCost(t *testing.T) {
+	stats := NewSessionStats("bedrock", "amazon.nova-pro-v1:0")
+	stats.AddTokens(1000, 200)
+
+	agent := &Agent{
+		CurrentModel: "amazon.nova-pro-v1:0",
+		ProviderName: "bedrock",
+	}
+
+	table := buildSessionTokenTable(agent, stats, nil)
+	if table == nil {
+		t.Fatal("buildSessionTokenTable() = nil, want table")
+	}
+	output := table.RenderCompact()
+	if !strings.Contains(output, "N/A (pricing unavailable)") {
+		t.Fatalf("buildSessionTokenTable() output should show unavailable pricing:\n%s", output)
 	}
 }
 

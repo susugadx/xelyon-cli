@@ -38,7 +38,7 @@ func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 			CachedInputCostPerM:   0.10, // 90% off
 			CacheCreationCostPerM: 1.25, // 25% premium
 		}
-	default:
+	case lm == "" || strings.Contains(lm, "sonnet"):
 		if promptTokenCount > 200000 {
 			// Sonnet long context (>200K): $6/$22.50 per million tokens
 			return PricingInfo{
@@ -55,5 +55,7 @@ func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 			CachedInputCostPerM:   0.30, // 90% off
 			CacheCreationCostPerM: 3.75, // 25% premium
 		}
+	default:
+		return pricingUnavailableInfo()
 	}
 }

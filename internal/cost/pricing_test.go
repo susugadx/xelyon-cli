@@ -26,13 +26,12 @@ func TestGetOpenAIPricing_AllModels(t *testing.T) {
 		{name: "gpt-5.4", model: "gpt-5.4", wantInput: 2.50, wantOutput: 15.00, wantCached: 0.25},
 		{name: "gpt-5.4-pro", model: "gpt-5.4-pro", wantInput: 30.00, wantOutput: 180.00, wantCached: 3.00},
 		{name: "gpt-5.2-codex", model: "gpt-5.2-codex", wantInput: 1.75, wantOutput: 14.00, wantCached: 0.175},
-		{name: "gpt-5-mini", model: "gpt-5-mini", wantInput: 0.25, wantOutput: 2.00, wantCached: 0.025},
+		{name: "codex-mini", model: "codex-mini", wantInput: 0.25, wantOutput: 2.00, wantCached: 0.025},
 		{name: "gpt-5.4-mini", model: "gpt-5.4-mini", wantInput: 0.75, wantOutput: 4.50, wantCached: 0.075},
 		{name: "gpt-5.1", model: "gpt-5.1", wantInput: 2.00, wantOutput: 8.00, wantCached: 0.50},
-		{name: "gpt-5.3", model: "gpt-5.3", wantInput: 1.75, wantOutput: 14.00, wantCached: 0.175},
+		{name: "gpt-5.3-codex", model: "gpt-5.3-codex", wantInput: 1.75, wantOutput: 14.00, wantCached: 0.175},
 		{name: "gpt-5.2-pro", model: "gpt-5.2-pro", wantInput: 21.00, wantOutput: 168.00, wantCached: 2.10},
 		{name: "gpt-5 default", model: "gpt-5", wantInput: 1.25, wantOutput: 10.00, wantCached: 0.125},
-		{name: "generic nano", model: "gpt-5-nano", wantInput: 0.05, wantOutput: 0.40, wantCached: 0.005},
 	}
 
 	for _, tt := range tests {
@@ -46,6 +45,23 @@ func TestGetOpenAIPricing_AllModels(t *testing.T) {
 			}
 			if pricing.CachedInputCostPerM != tt.wantCached {
 				t.Errorf("CachedInputCostPerM = %f, want %f", pricing.CachedInputCostPerM, tt.wantCached)
+			}
+		})
+	}
+}
+
+func TestGetOpenAIPricing_RuleMatchWithoutKnownExactUnavailable(t *testing.T) {
+	tests := []string{
+		"gpt-5.3",
+		"gpt-5-nano",
+		"corp-gpt-5.3-codex-prod",
+	}
+
+	for _, model := range tests {
+		t.Run(model, func(t *testing.T) {
+			pricing := getOpenAIPricing(model, 0)
+			if !pricing.PricingUnavailable {
+				t.Fatalf("getOpenAIPricing(%q).PricingUnavailable = false, want true: %#v", model, pricing)
 			}
 		})
 	}
@@ -166,6 +182,9 @@ func TestGetPricingInfo_ProviderRouting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pricing := GetPricingInfo(tt.provider, tt.model)
+			if pricing.PricingUnavailable {
+				t.Fatalf("GetPricingInfo(%q, %q).PricingUnavailable = true, want false", tt.provider, tt.model)
+			}
 			if pricing.InputCostPerM <= 0 {
 				t.Errorf("GetPricingInfo(%q, %q).InputCostPerM = %f, want > 0", tt.provider, tt.model, pricing.InputCostPerM)
 			}
@@ -184,16 +203,18 @@ func TestGetPricingInfo_OllamaIsZero(t *testing.T) {
 	if pricing.OutputCostPerM != 0 {
 		t.Errorf("ollama OutputCostPerM = %f, want 0", pricing.OutputCostPerM)
 	}
+	if pricing.PricingUnavailable {
+		t.Error("ollama PricingUnavailable = true, want false")
+	}
 }
 
-func TestGetPricingInfo_UnknownProviderFallback(t *testing.T) {
+func TestGetPricingInfo_UnknownProviderUnavailable(t *testing.T) {
 	pricing := GetPricingInfo("unknown-provider", "some-model")
-	// Should return DeepSeek V3.2 fallback pricing
-	if pricing.InputCostPerM != 0.28 {
-		t.Errorf("unknown provider InputCostPerM = %f, want 0.28", pricing.InputCostPerM)
+	if !pricing.PricingUnavailable {
+		t.Fatalf("unknown provider PricingUnavailable = false, want true: %#v", pricing)
 	}
-	if pricing.OutputCostPerM != 0.42 {
-		t.Errorf("unknown provider OutputCostPerM = %f, want 0.42", pricing.OutputCostPerM)
+	if pricing.InputCostPerM != 0 || pricing.OutputCostPerM != 0 {
+		t.Fatalf("unknown provider pricing = %#v, want zero rates with PricingUnavailable", pricing)
 	}
 }
 
@@ -209,7 +230,7 @@ func TestGetDeepSeekPricing_V4ModelsAndLegacyAliases(t *testing.T) {
 		{name: "v4 pro", model: "deepseek-v4-pro", wantInput: 1.74, wantOutput: 3.48, wantCached: 0.0145},
 		{name: "legacy chat", model: "deepseek-chat", wantInput: 0.14, wantOutput: 0.28, wantCached: 0.0028},
 		{name: "legacy reasoner", model: "deepseek-reasoner", wantInput: 0.14, wantOutput: 0.28, wantCached: 0.0028},
-		{name: "v3 fallback", model: "deepseek-v3", wantInput: 0.28, wantOutput: 0.42, wantCached: 0.028},
+		{name: "v3 static", model: "deepseek-v3", wantInput: 0.28, wantOutput: 0.42, wantCached: 0.028},
 	}
 
 	for _, tt := range tests {
@@ -233,24 +254,81 @@ func TestGetBedrockPricing_ClaudeDelegation(t *testing.T) {
 	promptTokens := 250000
 
 	got := getBedrockPricing(model, promptTokens)
-	want := getClaudePricing(model, promptTokens)
-
-	if got != want {
-		t.Fatalf("getBedrockPricing() = %#v, want %#v", got, want)
+	if got.PricingUnavailable {
+		t.Fatalf("getBedrockPricing() = %#v, want available Claude pricing", got)
+	}
+	if got.InputCostPerM != 6.00 || got.OutputCostPerM != 22.50 {
+		t.Fatalf("getBedrockPricing() = %#v, want long-context Sonnet pricing", got)
 	}
 }
 
-func TestGetBedrockPricing_NonClaudeFallsBack(t *testing.T) {
-	got := getBedrockPricing("amazon.nova-pro-v1:0", 0)
-	want := getUnknownProviderFallbackPricing()
+func TestGetPricingInfoForConfig_ConfiguredBedrockClaudeWithoutCatalogStillPrices(t *testing.T) {
+	model := "global.anthropic.claude-sonnet-4-6-v1"
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("bedrock", config.ProviderModelConfig{
+		DefaultModel: model,
+	})
 
-	if got != want {
-		t.Fatalf("getBedrockPricing(non-claude) = %#v, want %#v", got, want)
+	got := GetPricingInfoForConfig(cfg, "bedrock", model)
+	if got.PricingUnavailable {
+		t.Fatalf("configured Bedrock Claude pricing = %#v, want available", got)
+	}
+	if got.InputCostPerM != 3.00 || got.OutputCostPerM != 15.00 {
+		t.Fatalf("configured Bedrock Claude pricing = %#v, want Sonnet pricing", got)
+	}
+}
+
+func TestGetPricingInfoForConfig_BedrockAliasWithClaudeCatalogModelPrices(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("bedrock", config.ProviderModelConfig{
+		DefaultModel: "corp-bedrock-sonnet",
+		CatalogModel: "claude-sonnet-4-6",
+	})
+
+	got := GetPricingInfoForConfig(cfg, "bedrock", "corp-bedrock-sonnet")
+	if got.PricingUnavailable {
+		t.Fatalf("Bedrock alias with Claude catalog_model pricing = %#v, want available", got)
+	}
+	if got.InputCostPerM != 3.00 || got.OutputCostPerM != 15.00 {
+		t.Fatalf("Bedrock alias with Claude catalog_model pricing = %#v, want Sonnet pricing", got)
+	}
+}
+
+func TestGetPricingInfoForConfig_ClaudeAliasWithDatedCatalogModelPrices(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("claude", config.ProviderModelConfig{
+		DefaultModel: "corp-sonnet",
+		CatalogModel: "claude-sonnet-4-5-20250514",
+	})
+
+	got := GetPricingInfoForConfig(cfg, "claude", "corp-sonnet")
+	if got.PricingUnavailable {
+		t.Fatalf("Claude alias with dated catalog_model pricing = %#v, want available", got)
+	}
+	if got.InputCostPerM != 3.00 || got.OutputCostPerM != 15.00 {
+		t.Fatalf("Claude alias with dated catalog_model pricing = %#v, want Sonnet pricing", got)
+	}
+}
+
+func TestGetBedrockPricing_ClaudeAliasUnavailable(t *testing.T) {
+	got := getBedrockPricing("corp-claude-prod", 0)
+	if !got.PricingUnavailable {
+		t.Fatalf("getBedrockPricing(alias).PricingUnavailable = false, want true: %#v", got)
+	}
+}
+
+func TestGetBedrockPricing_NonClaudeUnavailable(t *testing.T) {
+	got := getBedrockPricing("amazon.nova-pro-v1:0", 0)
+	if !got.PricingUnavailable {
+		t.Fatalf("getBedrockPricing(non-claude).PricingUnavailable = false, want true: %#v", got)
 	}
 }
 
 func TestGetPricingInfo_OpenRouter_GLM5(t *testing.T) {
 	pricing := GetPricingInfo("openrouter", "zhipu/glm-5")
+	if pricing.PricingUnavailable {
+		t.Fatalf("openrouter glm-5 PricingUnavailable = true, want false")
+	}
 	if pricing.InputCostPerM != 0.72 {
 		t.Errorf("openrouter glm-5 InputCostPerM = %f, want 0.72", pricing.InputCostPerM)
 	}
@@ -280,6 +358,195 @@ func TestGetPricingInfoForConfig_UsesCatalogModel(t *testing.T) {
 	overrideDeployment := GetPricingInfoForConfig(cfg, "openai", "pro-deployment")
 	if overrideDeployment.InputCostPerM != 30.00 || overrideDeployment.OutputCostPerM != 180.00 {
 		t.Fatalf("override deployment pricing = %#v, want gpt-5.4-pro pricing", overrideDeployment)
+	}
+}
+
+func TestGetPricingInfoForConfig_DefaultOverrideInheritsProviderCatalogModel(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+		ModelOverrides: map[string]config.ModelOverride{
+			"corp-gpt-deployment": {MaxOutputTokens: 8192},
+		},
+	})
+
+	got := GetPricingInfoForConfig(cfg, "openai", "corp-gpt-deployment")
+	if got.PricingUnavailable {
+		t.Fatalf("default override inherited catalog pricing = %#v, want available", got)
+	}
+	if got.InputCostPerM != 2.50 || got.OutputCostPerM != 15.00 {
+		t.Fatalf("default override inherited catalog pricing = %#v, want GPT-5.4 pricing", got)
+	}
+}
+
+func TestGetPricingInfoForConfig_CustomModelWithoutCatalogIsUnavailable(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+	})
+
+	got := GetPricingInfoForConfig(cfg, "openai", "corp-gpt-deployment")
+	if !got.PricingUnavailable {
+		t.Fatalf("custom deployment without catalog pricing = %#v, want unavailable", got)
+	}
+}
+
+func TestGetPricingInfoForConfig_ConfiguredAliasWithKnownSubstringIsUnavailable(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		model    string
+	}{
+		{name: "openai deployment contains gpt-5", provider: "openai", model: "corp-gpt-5-prod"},
+		{name: "claude alias contains sonnet", provider: "claude", model: "claude-sonnet-prod"},
+		{name: "deepseek alias contains v4 pro", provider: "deepseek", model: "corp-deepseek-v4-pro"},
+		{name: "gemini alias contains pro", provider: "gemini", model: "gemini-3.1-pro-prod"},
+		{name: "groq alias contains 70b", provider: "groq", model: "corp-llama-3.1-70b-prod"},
+		{name: "bedrock alias contains claude", provider: "bedrock", model: "corp-claude-sonnet-prod"},
+		{name: "openrouter alias contains delegated openai model", provider: "openrouter", model: "openai/gpt-5-prod"},
+		{name: "openrouter alias contains delegated kimi model", provider: "openrouter", model: "moonshotai/kimi-k2-prod"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.SetProviderModelConfig(tt.provider, config.ProviderModelConfig{
+				DefaultModel: tt.model,
+				ModelOverrides: map[string]config.ModelOverride{
+					tt.model + "-override": {MaxOutputTokens: 2048},
+				},
+			})
+
+			defaultAlias := GetPricingInfoForConfig(cfg, tt.provider, tt.model)
+			if !defaultAlias.PricingUnavailable {
+				t.Fatalf("configured default alias pricing = %#v, want unavailable", defaultAlias)
+			}
+
+			overrideAlias := GetPricingInfoForConfig(cfg, tt.provider, tt.model+"-override")
+			if !overrideAlias.PricingUnavailable {
+				t.Fatalf("configured override alias pricing = %#v, want unavailable", overrideAlias)
+			}
+		})
+	}
+}
+
+func TestGetPricingInfoForConfig_ConfiguredKnownExactModelsAcrossProvidersStillPrice(t *testing.T) {
+	tests := []struct {
+		provider  string
+		model     string
+		wantInput float64
+		wantOut   float64
+	}{
+		{provider: "claude", model: "claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
+		{provider: "deepseek", model: "deepseek-v4-pro", wantInput: 1.74, wantOut: 3.48},
+		{provider: "gemini", model: "gemini-3.1-pro", wantInput: 2.00, wantOut: 12.00},
+		{provider: "groq", model: "llama-3.1-70b", wantInput: 0.59, wantOut: 0.79},
+		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1", wantInput: 3.00, wantOut: 15.00},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider+"/"+tt.model, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.SetProviderModelConfig(tt.provider, config.ProviderModelConfig{
+				DefaultModel: tt.model,
+			})
+
+			got := GetPricingInfoForConfig(cfg, tt.provider, tt.model)
+			if got.PricingUnavailable {
+				t.Fatalf("configured known exact pricing = %#v, want available", got)
+			}
+			if got.InputCostPerM != tt.wantInput || got.OutputCostPerM != tt.wantOut {
+				t.Fatalf("configured known exact pricing = %#v, want input=%f output=%f", got, tt.wantInput, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestGetPricingInfoForConfig_ConfiguredPricingKnownExactModelWithoutCatalogStillPrices(t *testing.T) {
+	tests := []struct {
+		model     string
+		wantInput float64
+		wantOut   float64
+	}{
+		{model: "gpt-5.5", wantInput: 5.00, wantOut: 30.00},
+		{model: "gpt-5.3-codex", wantInput: 1.75, wantOut: 14.00},
+		{model: "gpt-5.2-codex", wantInput: 1.75, wantOut: 14.00},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+				DefaultModel: tt.model,
+			})
+
+			got := GetPricingInfoForConfig(cfg, "openai", tt.model)
+			if got.PricingUnavailable {
+				t.Fatalf("configured known model pricing = %#v, want available", got)
+			}
+			if got.InputCostPerM != tt.wantInput || got.OutputCostPerM != tt.wantOut {
+				t.Fatalf("configured known model pricing = %#v, want input=%f output=%f", got, tt.wantInput, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestGetPricingInfoForConfig_ConfiguredPricingRuleMatchWithoutKnownExactIsUnavailable(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "gpt-5.3",
+	})
+
+	got := GetPricingInfoForConfig(cfg, "openai", "gpt-5.3")
+	if !got.PricingUnavailable {
+		t.Fatalf("configured non-exact model pricing = %#v, want unavailable", got)
+	}
+}
+
+func TestGetPricingInfoForConfig_ConfiguredOpenRouterModelIDWithoutCatalogStillPrices(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     string
+		wantInput float64
+		wantOut   float64
+	}{
+		{name: "anthropic id", model: "anthropic/claude-sonnet-4.6", wantInput: 3.00, wantOut: 15.00},
+		{name: "openai id", model: "openai/gpt-5.4", wantInput: 2.50, wantOut: 15.00},
+		{name: "static id", model: "zhipu/glm-5", wantInput: 0.72, wantOut: 2.30},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.SetProviderModelConfig("openrouter", config.ProviderModelConfig{
+				DefaultModel: tt.model,
+			})
+
+			got := GetPricingInfoForConfig(cfg, "openrouter", tt.model)
+			if got.PricingUnavailable {
+				t.Fatalf("configured OpenRouter model ID pricing = %#v, want available", got)
+			}
+			if got.InputCostPerM != tt.wantInput || got.OutputCostPerM != tt.wantOut {
+				t.Fatalf("configured OpenRouter model ID pricing = %#v, want input=%f output=%f", got, tt.wantInput, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestGetPricingInfoForConfig_OpenRouterAliasWithCatalogModelIDPrices(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openrouter", config.ProviderModelConfig{
+		DefaultModel: "corp-openrouter-gpt",
+		CatalogModel: "openai/gpt-5.4",
+	})
+
+	got := GetPricingInfoForConfig(cfg, "openrouter", "corp-openrouter-gpt")
+	if got.PricingUnavailable {
+		t.Fatalf("OpenRouter alias with catalog_model pricing = %#v, want available", got)
+	}
+	if got.InputCostPerM != 2.50 || got.OutputCostPerM != 15.00 {
+		t.Fatalf("OpenRouter alias with catalog_model pricing = %#v, want GPT-5.4 pricing", got)
 	}
 }
 
@@ -420,6 +687,19 @@ func TestCalculateRequestCostWithCache_OllamaZero(t *testing.T) {
 	})
 	if cost != 0.0 {
 		t.Errorf("ollama cost = %f, want 0.0", cost)
+	}
+}
+
+func TestEstimateRequestCostWithCache_UnknownPricing(t *testing.T) {
+	estimate := EstimateRequestCostWithCache("bedrock", "amazon.nova-pro-v1:0", api.Usage{
+		InputTokens:  1000000,
+		OutputTokens: 1000000,
+	})
+	if !estimate.PricingUnavailable {
+		t.Fatalf("PricingUnavailable = false, want true: %#v", estimate)
+	}
+	if estimate.Cost != 0 {
+		t.Fatalf("Cost = %f, want 0 for unavailable pricing", estimate.Cost)
 	}
 }
 

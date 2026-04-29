@@ -63,11 +63,13 @@ func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 			InputCostPerM: 0.10, OutputCostPerM: 0.40,
 			CachedInputCostPerM: 0.025, CacheCreationCostPerM: 0.10,
 		}
-	default:
+	case lm == "" || strings.Contains(lm, "3.1-flash") || strings.Contains(lm, "3-flash"):
 		// Gemini 3 Flash（デフォルト）: $0.50/$3.00 per million tokens
 		return PricingInfo{
 			InputCostPerM: 0.50, OutputCostPerM: 3.00,
 			CachedInputCostPerM: 0.05, CacheCreationCostPerM: 0.50,
 		}
+	default:
+		return pricingUnavailableInfo()
 	}
 }

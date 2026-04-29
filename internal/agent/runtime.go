@@ -138,12 +138,13 @@ func newSubAgentManager() *subagent.Manager {
 
 func headlessResultToSubAgentResult(status string, result *HeadlessResult) *subagent.RunResult {
 	subResult := &subagent.RunResult{
-		Status:         status,
-		Model:          result.Model,
-		Response:       result.Response,
-		Cost:           result.Cost,
-		ToolExecutions: len(result.ToolCalls),
-		DurationMs:     result.DurationMs,
+		Status:             status,
+		Model:              result.Model,
+		Response:           result.Response,
+		Cost:               result.Cost,
+		PricingUnavailable: result.PricingUnavailable,
+		ToolExecutions:     len(result.ToolCalls),
+		DurationMs:         result.DurationMs,
 	}
 	if result.Tokens != nil {
 		subResult.InputTokens = result.Tokens.Input

@@ -92,17 +92,11 @@ func TestSessionStats_AddUsage(t *testing.T) {
 		t.Errorf("AddUsage() LastUsage.InputTokens = %d, want 100", stats.LastUsage.InputTokens)
 	}
 
-	// test プロバイダのデフォルトコスト(0.28+0.42 DeepSeek V3.2)ベースのリクエスト単位コスト計算のうえ、StorageCostが加算される
-	// 100 input, 200 output, 50 cached in, 25 cache creation
-	// unknown provider → DeepSeek V3.2 料金:
-	//   uncachedInput: (100-50-25)/1M * 0.28 = 25 * 0.00000028 = 0.000007
-	//   CachedInput: 50/1M * 0.028 = 0.0000014
-	//   CacheCreation: 25/1M * 0.28 = 0.000007
-	//   Output: 200/1M * 0.42 = 0.000084
-	//   StorageCost: 1.25
-	// 合計: ~0.0000994 + 1.25 ≈ 1.2500994
-	if stats.AccumulatedCost < 1.25 || stats.AccumulatedCost > 1.26 {
-		t.Errorf("AddUsage() AccumulatedCost = %f, expected around 1.25", stats.AccumulatedCost)
+	if stats.AccumulatedCost != 1.25 {
+		t.Errorf("AddUsage() AccumulatedCost = %f, want storage-only cost 1.25", stats.AccumulatedCost)
+	}
+	if !stats.CostUnknown {
+		t.Error("AddUsage() CostUnknown = false, want true for unknown provider")
 	}
 }
 
@@ -294,9 +288,12 @@ func TestSessionStats_EstimatedCost_OpenRouter_Default(t *testing.T) {
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 0.28 + 0.42 // DeepSeek V3.2 fallback
-	if cost < expected-0.001 || cost > expected+0.001 {
-		t.Errorf("EstimatedCost() for openrouter unknown = %f, want %f", cost, expected)
+	if cost != 0 {
+		t.Errorf("EstimatedCost() for openrouter unknown = %f, want 0", cost)
+	}
+	estimate := stats.EstimatedCostEstimateForConfig(nil)
+	if !estimate.PricingUnavailable {
+		t.Fatalf("openrouter unknown PricingUnavailable = false, want true: %#v", estimate)
 	}
 }
 
@@ -305,12 +302,12 @@ func TestSessionStats_EstimatedCost_UnknownProvider(t *testing.T) {
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	// デフォルトはDeepSeek V3.2料金
-	expected := 0.28 + 0.42
-
-	// 浮動小数点の比較は許容誤差で
-	if cost < expected-0.001 || cost > expected+0.001 {
-		t.Errorf("EstimatedCost() for unknown provider = %f, want %f", cost, expected)
+	if cost != 0 {
+		t.Errorf("EstimatedCost() for unknown provider = %f, want 0", cost)
+	}
+	estimate := stats.EstimatedCostEstimateForConfig(nil)
+	if !estimate.PricingUnavailable {
+		t.Fatalf("unknown provider PricingUnavailable = false, want true: %#v", estimate)
 	}
 }
 
@@ -516,8 +513,8 @@ func TestCalculateRequestCost(t *testing.T) {
 		{"ollama", "", 1000000, 1000000, 0.0},
 		// DeepSeek V3.2: $0.28/1M input, $0.42/1M output
 		{"deepseek", "", 1000000, 1000000, 0.70},
-		// Unknown: DeepSeek V3.2料金と同じ
-		{"unknown", "", 1000000, 1000000, 0.70},
+		// Unknown: 料金表未対応なので旧fallbackで概算しない
+		{"unknown", "", 1000000, 1000000, 0.0},
 		// Claude Sonnet（1M input > 200K → long context 料金）
 		{"claude", "claude-sonnet-4-5-20250929", 1000000, 1000000, 6.00 + 22.50},
 		// Claude Opus（1M input > 200K → long context 料金）
@@ -691,8 +688,7 @@ func TestGetClaudePricing(t *testing.T) {
 		{"claude-haiku-4-5-20251001", 0, 1.00, 5.00},
 		{"claude-sonnet-4-5-20250929", 0, 3.00, 15.00},
 		{"claude-sonnet-4-20250514", 0, 3.00, 15.00},
-		{"", 0, 3.00, 15.00},                   // 空文字列はSonnetデフォルト
-		{"some-unknown-model", 0, 3.00, 15.00}, // 不明モデルもSonnetデフォルト
+		{"", 0, 3.00, 15.00}, // 空文字列はSonnetデフォルト
 
 		// Long context (>200K)
 		{"claude-opus-4-6", 250000, 10.00, 37.50},
@@ -711,6 +707,13 @@ func TestGetClaudePricing(t *testing.T) {
 		if pricing.OutputCostPerM != tt.wantOutput {
 			t.Errorf("cost.GetPricingInfo(%q, %q, %d).OutputCostPerM = %f, want %f", "claude", tt.model, tt.ptc, pricing.OutputCostPerM, tt.wantOutput)
 		}
+	}
+}
+
+func TestGetClaudePricing_UnknownModelUnavailable(t *testing.T) {
+	pricing := cost.GetPricingInfo("claude", "some-unknown-model", 0)
+	if !pricing.PricingUnavailable {
+		t.Fatalf("unknown Claude model PricingUnavailable = false, want true: %#v", pricing)
 	}
 }
 

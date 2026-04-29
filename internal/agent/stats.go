@@ -94,7 +94,10 @@ type SessionStats struct {
 	LastUsage           *api.Usage // 直近のリクエストの使用量
 	LastTurnUsage       *api.Usage // 直近のユーザーリクエスト全体の使用量
 	LastTurnCost        float64    // 直近のユーザーリクエスト全体の正確なコスト
+	LastTurnCostUnknown bool       // 直近ターンに既知の料金表がない provider/model が含まれる
 	AccumulatedCost     float64    // リクエスト単位で計算・累積したコスト
+	CostUnknown         bool       // セッション累積に既知の料金表がない provider/model が含まれる
+	CostUnknownEvents   int        // 料金不明のリクエスト累計数
 	Optimizations       OptimizationMetrics
 	ToolObs             ToolObservability // ツール実行・compaction の観測メトリクス
 	Savings             SavingsMetrics    // コスト最適化による推定削減量
@@ -142,8 +145,31 @@ func (s *SessionStats) AddUsageForConfig(cfg *config.Config, usage api.Usage) {
 	s.LastUsage = &usage
 
 	// リクエスト単位のコストを累積（Gemini 200Kティア等に対応）
-	s.AccumulatedCost += cost.CalculateRequestCostWithCacheForConfig(cfg, s.Provider, s.Model, usage)
+	estimate := cost.EstimateRequestCostWithCacheForConfig(cfg, s.Provider, s.Model, usage)
+	s.AccumulatedCost += estimate.Cost
 	s.AccumulatedCost += usage.StorageCost // ストレージ料金を加算
+	if estimate.PricingUnavailable {
+		s.CostUnknown = true
+		s.CostUnknownEvents++
+	}
+}
+
+func (s *SessionStats) ResetUsageForProvider(provider, model string) {
+	s.Provider = provider
+	s.Model = model
+	s.InputTokens = 0
+	s.CachedInputTokens = 0
+	s.CacheCreationTokens = 0
+	s.OutputTokens = 0
+	s.ThinkingTokens = 0
+	s.ToolExecutions = make(map[string]int)
+	s.LastUsage = nil
+	s.LastTurnUsage = nil
+	s.LastTurnCost = 0
+	s.LastTurnCostUnknown = false
+	s.AccumulatedCost = 0
+	s.CostUnknown = false
+	s.CostUnknownEvents = 0
 }
 
 // TotalTokens は合計トークン数を返す
@@ -153,40 +179,38 @@ func (s *SessionStats) TotalTokens() int {
 
 // EstimatedCost は推定コストを計算（USD）
 // AddUsage 経由で累積されたコストがあればそれを使い、
-// AddTokens() のみ使われた場合はフォールバック計算を行う
+// AddTokens() のみ使われた場合は usage 相当の推定計算を行う。
 func (s *SessionStats) EstimatedCost() float64 {
 	return s.EstimatedCostForConfig(nil)
 }
 
 // EstimatedCostForConfig は catalog_model 設定を考慮して推定コストを計算する。
 func (s *SessionStats) EstimatedCostForConfig(cfg *config.Config) float64 {
+	return s.EstimatedCostEstimateForConfig(cfg).Cost
+}
+
+func (s *SessionStats) EstimatedCostEstimateForConfig(cfg *config.Config) cost.CostEstimate {
 	if s.Provider == "ollama" {
-		return 0.0 // ローカル実行
+		return cost.CostEstimate{} // ローカル実行
 	}
 
 	// AddUsage 経由で累積されたコストがあればそれを使う
-	if s.AccumulatedCost > 0 {
-		return s.AccumulatedCost
+	if s.AccumulatedCost > 0 || s.CostUnknown {
+		return cost.CostEstimate{
+			Cost:               s.AccumulatedCost,
+			PricingUnavailable: s.CostUnknown,
+		}
 	}
 
-	// フォールバック: AddTokens() のみ使われた場合（レガシー互換）
+	// AddTokens() のみ使われた場合（レガシー互換）
 	// キャッシュ情報がないので InputTokens でティア判定
-	totalInputForTier := s.InputTokens + s.CachedInputTokens + s.CacheCreationTokens
-	pricing := cost.GetPricingInfoForConfig(cfg, s.Provider, s.Model, totalInputForTier)
-
-	cachedInputCost := float64(s.CachedInputTokens) / 1_000_000.0 * pricing.CachedInputCostPerM
-	cacheCreationCost := float64(s.CacheCreationTokens) / 1_000_000.0 * pricing.CacheCreationCostPerM
-
-	uncachedInput := s.InputTokens - s.CachedInputTokens - s.CacheCreationTokens
-	if uncachedInput < 0 {
-		uncachedInput = 0
-	}
-	uncachedInputCost := float64(uncachedInput) / 1_000_000.0 * pricing.InputCostPerM
-
-	outputCost := float64(s.OutputTokens) / 1_000_000.0 * pricing.OutputCostPerM
-	thinkingCost := float64(s.ThinkingTokens) / 1_000_000.0 * pricing.OutputCostPerM
-
-	return cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost + thinkingCost
+	return cost.EstimateRequestCostWithCacheForConfig(cfg, s.Provider, s.Model, api.Usage{
+		InputTokens:         s.InputTokens,
+		OutputTokens:        s.OutputTokens,
+		ThinkingTokens:      s.ThinkingTokens,
+		CachedInputTokens:   s.CachedInputTokens,
+		CacheCreationTokens: s.CacheCreationTokens,
+	})
 }
 
 // ElapsedTime はセッション開始からの経過時間を返す
