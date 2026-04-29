@@ -78,7 +78,9 @@ func (p *Provider) runResponsesRequest(ctx context.Context, options responsesReq
 		return "", "", fmt.Errorf("responses request builder is nil")
 	}
 
-	for attempt := 0; attempt < 2; attempt++ {
+	previousResponseRetryUsed := false
+	authRetryUsed := false
+	for attempt := 0; attempt < 3; attempt++ {
 		reqBody := options.BuildRequest()
 		payload, err := json.Marshal(reqBody)
 		if err != nil {
@@ -98,10 +100,21 @@ func (p *Provider) runResponsesRequest(ctx context.Context, options responsesReq
 			return "", "", fmt.Errorf("API request failed: %w", err)
 		}
 
-		if shouldRetryResponsesWithoutPreviousResponseID(resp, options, attempt) {
+		if shouldRetryResponsesWithoutPreviousResponseID(resp, options, previousResponseRetryUsed) {
 			spinner.Stop()
 			resp.Body.Close()
 			options.ClearPreviousResponseID()
+			previousResponseRetryUsed = true
+			continue
+		}
+
+		if p.shouldRetryResponsesAfterAuthRefresh(ctx, resp, authRetryUsed) {
+			spinner.Stop()
+			resp.Body.Close()
+			if err := p.refreshAuthToken(ctx); err != nil {
+				return "", "", fmt.Errorf("Azure OpenAI auth token refresh failed: %w", err)
+			}
+			authRetryUsed = true
 			continue
 		}
 		defer resp.Body.Close()
@@ -168,8 +181,8 @@ func writeResponsesDebugRequest(options responsesRequestRunOptions, payload []by
 	fmt.Fprintf(options.DebugWriter, "[DEBUG %s Responses] Request body:\n%s\n", debugName, string(payload))
 }
 
-func shouldRetryResponsesWithoutPreviousResponseID(resp *http.Response, options responsesRequestRunOptions, attempt int) bool {
-	if resp.StatusCode != http.StatusBadRequest || attempt > 0 {
+func shouldRetryResponsesWithoutPreviousResponseID(resp *http.Response, options responsesRequestRunOptions, retryUsed bool) bool {
+	if resp.StatusCode != http.StatusBadRequest || retryUsed {
 		return false
 	}
 	if options.HasPreviousResponseID == nil || options.ClearPreviousResponseID == nil {
@@ -178,16 +191,30 @@ func shouldRetryResponsesWithoutPreviousResponseID(resp *http.Response, options 
 	return options.HasPreviousResponseID()
 }
 
+func (p *Provider) shouldRetryResponsesAfterAuthRefresh(ctx context.Context, resp *http.Response, retryUsed bool) bool {
+	if resp.StatusCode != http.StatusUnauthorized || retryUsed {
+		return false
+	}
+	if !p.canRefreshAuthToken() {
+		return false
+	}
+	return ctx.Err() == nil
+}
+
 func (p *Provider) newAuthJSONRequest(ctx context.Context, url string, payload []byte) (*http.Request, error) {
 	apiKey := strings.TrimSpace(p.APIKey)
 	if apiKey != "" {
 		return openaicompat.NewHeaderJSONBytesRequest(ctx, url, "api-key", apiKey, payload)
 	}
 	authToken := strings.TrimSpace(p.authToken)
-	if authToken != "" {
-		return openaicompat.NewBearerJSONBytesRequest(ctx, url, authToken, payload)
+	if authToken == "" {
+		var err error
+		authToken, err = p.currentAuthToken(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return nil, fmt.Errorf("%s or %s not set", apiKeyEnv, authTokenEnv)
+	return openaicompat.NewBearerJSONBytesRequest(ctx, url, authToken, payload)
 }
 
 func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {

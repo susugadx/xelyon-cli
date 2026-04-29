@@ -6,7 +6,7 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ### `xelyon doctor azure`
 
-Azure OpenAI の base URL、認証、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると、設定済み deployment に最小の Responses API リクエストを送信します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
+Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると、設定済み deployment に最小の Responses API リクエストを送信します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
 
 `--deployment` は Azure 側の deployment 名、`--catalog-model` はその deployment の実モデル名です。`--print-config` を付けると、この 2 つから `~/.xelyon/config.yaml` に貼れる YAML 断片だけを出力します。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 

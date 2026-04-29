@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -15,6 +16,7 @@ func TestDiagnose_FailsForMissingCredentialsAndPlaceholderDeployment(t *testing.
 	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
 	t.Setenv(apiKeyEnv, "")
 	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{Config: config.DefaultConfig()})
 	if !report.HasFailures() {
@@ -25,6 +27,84 @@ func TestDiagnose_FailsForMissingCredentialsAndPlaceholderDeployment(t *testing.
 	}
 	if !hasDiagnosticCheck(report, "deployment", DiagnosticStatusFail) {
 		t.Fatalf("missing deployment failure: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_AuthTokenCommandOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("token command test uses POSIX printf")
+	}
+
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "printf command-token")
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.AuthMode != "entra_id_command" {
+		t.Fatalf("AuthMode = %q, want entra_id_command", report.AuthMode)
+	}
+	if !hasDiagnosticCheck(report, "auth_token_command", DiagnosticStatusOK) {
+		t.Fatalf("missing auth_token_command OK check: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_AuthTokenWithRefreshCommandReportsCommandMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("token command test uses POSIX printf")
+	}
+
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "existing-token")
+	t.Setenv(authTokenCommandEnv, "printf refreshed-token")
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.AuthMode != "entra_id_command" {
+		t.Fatalf("AuthMode = %q, want entra_id_command", report.AuthMode)
+	}
+	if !hasDiagnosticCheck(report, "auth_token_command", DiagnosticStatusOK) {
+		t.Fatalf("missing auth_token_command OK check: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_AuthTokenCommandFailureFailsWhenCommandIsOnlyCredential(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("token command test uses POSIX shell")
+	}
+
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "printf command-failed >&2; exit 2")
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if !hasDiagnosticCheck(report, "auth_token_command", DiagnosticStatusFail) {
+		t.Fatalf("missing auth_token_command failure: %#v", report.Checks)
 	}
 }
 

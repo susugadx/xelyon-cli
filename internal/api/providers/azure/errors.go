@@ -48,7 +48,7 @@ func azureHTTPErrorAdvice(resp *http.Response, detail string, context azureHTTPE
 
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
-		return fmt.Sprintf("authentication failed. Check %s or %s and make sure the credential belongs to this Azure OpenAI resource.", apiKeyEnv, authTokenEnv)
+		return fmt.Sprintf("authentication failed. Check %s, %s, or %s and make sure the credential belongs to this Azure OpenAI resource.", apiKeyEnv, authTokenEnv, authTokenCommandEnv)
 	case http.StatusForbidden:
 		return "authorization failed. Check Azure OpenAI permissions, Entra ID role assignment, subscription access, and deployment access for this resource."
 	case http.StatusNotFound:

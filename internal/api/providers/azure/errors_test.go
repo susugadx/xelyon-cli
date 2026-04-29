@@ -20,7 +20,7 @@ func TestHandleAzureResponsesHTTPErrorExplainsCommonStatuses(t *testing.T) {
 			name:       "unauthorized credentials",
 			statusCode: http.StatusUnauthorized,
 			body:       `{"error":{"message":"invalid key sk-abcdefghijklmnopqrstuvwxyz"}}`,
-			want:       []string{"authentication failed", apiKeyEnv, authTokenEnv, "[REDACTED]"},
+			want:       []string{"authentication failed", apiKeyEnv, authTokenEnv, authTokenCommandEnv, "[REDACTED]"},
 		},
 		{
 			name:       "forbidden authorization",

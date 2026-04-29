@@ -19,7 +19,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 |------------|---------|---------|-----------|
 | DeepSeek | ❌ | `DEEPSEEK_API_KEY` | https://platform.deepseek.com |
 | OpenAI | ✅ | `OPENAI_API_KEY` | https://platform.openai.com |
-| Azure OpenAI | ✅ | `AZURE_OPENAI_BASE_URL` + (`AZURE_OPENAI_API_KEY` または `AZURE_OPENAI_AUTH_TOKEN`) | https://azure.microsoft.com/products/ai-services/openai-service |
+| Azure OpenAI | ✅ | `AZURE_OPENAI_BASE_URL` + (`AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_AUTH_TOKEN` / `AZURE_OPENAI_AUTH_TOKEN_COMMAND` のいずれか) | https://azure.microsoft.com/products/ai-services/openai-service |
 | Gemini | ✅ | `GEMINI_API_KEY` | https://ai.google.dev |
 | Claude | ✅ | `ANTHROPIC_API_KEY` | https://console.anthropic.com |
 | Groq | ❌ | `GROQ_API_KEY` | https://console.groq.com |
@@ -133,6 +133,10 @@ export AZURE_OPENAI_API_KEY=...
 unset AZURE_OPENAI_API_KEY
 export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
 
+# 会社環境などで token refresh したい場合は command を設定
+unset AZURE_OPENAI_AUTH_TOKEN
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv'
+
 # model には Azure 側の deployment 名を指定
 xelyon --provider azure --model my-gpt-5-deployment
 ```
@@ -141,6 +145,7 @@ xelyon --provider azure --model my-gpt-5-deployment
 - Responses API (`/openai/v1/responses`) を使用
 - API key 認証は `api-key` ヘッダー
 - Microsoft Entra ID 認証は `Authorization: Bearer` ヘッダー
+- `AZURE_OPENAI_AUTH_TOKEN_COMMAND` を設定すると、token 未設定時または 401 受信時に bearer token を再取得します
 - 画像入力 / function calling 対応
 - `model` は Azure の deployment 名
 - OpenAI provider 用の `prompt_cache_key` / `prompt_cache_retention` は送信しません
@@ -163,12 +168,21 @@ provider_models:
     catalog_model: gpt-5.4
 ```
 
-Microsoft Entra ID 認証でも YAML は同じです。環境変数だけ API key ではなく bearer token にします。
+Microsoft Entra ID 認証でも YAML は同じです。環境変数だけ API key ではなく bearer token にします。長時間実行や CI では、固定 token より `AZURE_OPENAI_AUTH_TOKEN_COMMAND` を推奨します。取得した token は process memory にだけ保持し、config/session には保存しません。
 
 ```bash
 unset AZURE_OPENAI_API_KEY
 export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
 ```
+
+```bash
+unset AZURE_OPENAI_API_KEY
+unset AZURE_OPENAI_AUTH_TOKEN
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv'
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND_TIMEOUT=10s
+```
+
+`AZURE_OPENAI_AUTH_TOKEN_COMMAND` はローカル shell で実行され、stdout の最初の空でない行を bearer token として扱います。信頼できる command だけを設定してください。command は token 未設定時と 401 応答後の 1 回だけの retry 時に実行されます。
 
 複数 deployment を使う場合は、deployment ごとに `model_overrides` で catalog model を固定できます。
 
@@ -212,11 +226,12 @@ export AZURE_OPENAI_DEPLOYMENT=my-gpt-5-deployment
 export AZURE_OPENAI_CATALOG_MODEL=gpt-5.4
 export AZURE_OPENAI_API_KEY=...
 # または AZURE_OPENAI_AUTH_TOKEN=...
+# または AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv'
 
 make azure-smoke
 ```
 
-GitHub Actions では `Azure Smoke` workflow を手動実行できます。通常 CI では走らず、repository secrets に `AZURE_OPENAI_BASE_URL`、`AZURE_OPENAI_DEPLOYMENT`、`AZURE_OPENAI_API_KEY` または `AZURE_OPENAI_AUTH_TOKEN` がある場合だけ live smoke を実行します。workflow input の `tool_smoke` を有効にすると doctor smoke で dummy tool call も強制します。
+GitHub Actions では `Azure Smoke` workflow を手動実行できます。通常 CI では走らず、repository secrets に `AZURE_OPENAI_BASE_URL`、`AZURE_OPENAI_DEPLOYMENT`、`AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_AUTH_TOKEN` / `AZURE_OPENAI_AUTH_TOKEN_COMMAND` のいずれかがある場合だけ live smoke を実行します。workflow input の `tool_smoke` を有効にすると doctor smoke で dummy tool call も強制します。
 
 ### 4. Gemini
 

@@ -54,8 +54,10 @@ func TestNewProvider_MissingAPIKey(t *testing.T) {
 			originalValue := os.Getenv(tt.envKey)
 			os.Unsetenv(tt.envKey)
 			originalAzureAuthToken := os.Getenv("AZURE_OPENAI_AUTH_TOKEN")
+			originalAzureAuthTokenCommand := os.Getenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 			if tt.providerName == "azure" {
 				os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+				os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 			}
 			defer func() {
 				if originalValue != "" {
@@ -66,6 +68,11 @@ func TestNewProvider_MissingAPIKey(t *testing.T) {
 						os.Setenv("AZURE_OPENAI_AUTH_TOKEN", originalAzureAuthToken)
 					} else {
 						os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+					}
+					if originalAzureAuthTokenCommand != "" {
+						os.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", originalAzureAuthTokenCommand)
+					} else {
+						os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 					}
 				}
 			}()
@@ -92,6 +99,7 @@ func TestNewProvider_UnknownProvider(t *testing.T) {
 func TestNewProvider_AzureRequiresBaseURL(t *testing.T) {
 	t.Setenv("AZURE_OPENAI_API_KEY", "test-azure-key")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
 	t.Setenv("AZURE_OPENAI_BASE_URL", "")
 
 	_, err := api.NewProvider("azure")
@@ -106,11 +114,27 @@ func TestNewProvider_AzureRequiresBaseURL(t *testing.T) {
 func TestNewProvider_AzureWithEntraToken(t *testing.T) {
 	t.Setenv("AZURE_OPENAI_API_KEY", "")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "test-entra-token")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
 
 	provider, err := api.NewProvider("azure")
 	if err != nil {
 		t.Fatalf("NewProvider(\"azure\") with Entra token failed: %v", err)
+	}
+	if provider.Name() != "Azure OpenAI" {
+		t.Fatalf("NewProvider(\"azure\") Name() = %q, want Azure OpenAI", provider.Name())
+	}
+}
+
+func TestNewProvider_AzureWithEntraTokenCommand(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "printf test-entra-token")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	provider, err := api.NewProvider("azure")
+	if err != nil {
+		t.Fatalf("NewProvider(\"azure\") with Entra token command failed: %v", err)
 	}
 	if provider.Name() != "Azure OpenAI" {
 		t.Fatalf("NewProvider(\"azure\") Name() = %q, want Azure OpenAI", provider.Name())

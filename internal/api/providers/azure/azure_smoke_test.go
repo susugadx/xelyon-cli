@@ -134,8 +134,10 @@ func requireAzureSmokeCredentials(t *testing.T) {
 	if strings.TrimSpace(os.Getenv(baseURLEnv)) == "" {
 		t.Fatalf("%s is required when %s=1", baseURLEnv, azureSmokeEnabledEnv)
 	}
-	if strings.TrimSpace(os.Getenv(apiKeyEnv)) == "" && strings.TrimSpace(os.Getenv(authTokenEnv)) == "" {
-		t.Fatalf("%s or %s is required when %s=1", apiKeyEnv, authTokenEnv, azureSmokeEnabledEnv)
+	if strings.TrimSpace(os.Getenv(apiKeyEnv)) == "" &&
+		strings.TrimSpace(os.Getenv(authTokenEnv)) == "" &&
+		strings.TrimSpace(os.Getenv(authTokenCommandEnv)) == "" {
+		t.Fatalf("%s, %s, or %s is required when %s=1", apiKeyEnv, authTokenEnv, authTokenCommandEnv, azureSmokeEnabledEnv)
 	}
 }
 

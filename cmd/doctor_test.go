@@ -15,6 +15,7 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
 	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
 
 	var out bytes.Buffer
 	cmd := newAzureDoctorCommand()
@@ -59,6 +60,7 @@ func TestRunAzureDoctorInvocation_FailsForMissingAzureSetup(t *testing.T) {
 	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
 	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 
 	var out bytes.Buffer
 	cmd := newAzureDoctorCommand()
@@ -84,6 +86,7 @@ func TestRunAzureDoctorInvocation_PrintConfigDoesNotRequireAzureEnv(t *testing.T
 	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
 	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 
 	var out bytes.Buffer
 	cmd := newAzureDoctorCommand()
@@ -149,6 +152,7 @@ func TestRootCommand_AzureDoctorCommandParsesFlags(t *testing.T) {
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
 	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
 
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)
@@ -204,6 +208,7 @@ func TestRootCommand_AzureDoctorFailureDoesNotPrintRootUsage(t *testing.T) {
 	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
 	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)

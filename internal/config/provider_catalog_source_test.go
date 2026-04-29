@@ -41,8 +41,8 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	if got := ProviderCredentialEnvVars("openai"); !reflect.DeepEqual(got, []string{"OPENAI_API_KEY"}) {
 		t.Fatalf("ProviderCredentialEnvVars(openai) = %v, want [OPENAI_API_KEY]", got)
 	}
-	if got := ProviderCredentialEnvVars("azure"); !reflect.DeepEqual(got, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_BASE_URL"}) {
-		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure API key, auth token, and base URL", got)
+	if got := ProviderCredentialEnvVars("azure"); !reflect.DeepEqual(got, []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_AUTH_TOKEN_COMMAND", "AZURE_OPENAI_BASE_URL"}) {
+		t.Fatalf("ProviderCredentialEnvVars(azure) = %v, want Azure API key, auth token, auth token command, and base URL", got)
 	}
 	if got := ProviderCredentialEnvVars("ollama"); len(got) != 0 {
 		t.Fatalf("ProviderCredentialEnvVars(ollama) = %v, want empty", got)
@@ -68,12 +68,18 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	}
 	t.Setenv("AZURE_OPENAI_API_KEY", "")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "entra-token")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
 	if !ProviderHasAvailableCredential("azure") {
 		t.Fatal("ProviderHasAvailableCredential(azure) = false, want true with Entra token and base URL")
 	}
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "printf token")
+	if !ProviderHasAvailableCredential("azure") {
+		t.Fatal("ProviderHasAvailableCredential(azure) = false, want true with Entra token command and base URL")
+	}
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
 	if ProviderHasAvailableCredential("azure") {
-		t.Fatal("ProviderHasAvailableCredential(azure) = true, want false without API key or Entra token")
+		t.Fatal("ProviderHasAvailableCredential(azure) = true, want false without API key, Entra token, or Entra token command")
 	}
 	if !ProviderHasAvailableCredential("ollama") {
 		t.Fatal("ProviderHasAvailableCredential(ollama) = false, want true with default base URL")

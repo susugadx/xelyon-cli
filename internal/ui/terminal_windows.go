@@ -3,7 +3,6 @@
 package ui
 
 import (
-	"fmt"
 	"os"
 
 	"golang.org/x/sys/windows"

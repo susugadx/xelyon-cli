@@ -5,21 +5,26 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 const (
-	apiKeyEnv    = "AZURE_OPENAI_API_KEY"
-	authTokenEnv = "AZURE_OPENAI_AUTH_TOKEN"
-	baseURLEnv   = "AZURE_OPENAI_BASE_URL"
+	apiKeyEnv                  = "AZURE_OPENAI_API_KEY"
+	authTokenEnv               = "AZURE_OPENAI_AUTH_TOKEN"
+	authTokenCommandEnv        = "AZURE_OPENAI_AUTH_TOKEN_COMMAND"
+	authTokenCommandTimeoutEnv = "AZURE_OPENAI_AUTH_TOKEN_COMMAND_TIMEOUT"
+	baseURLEnv                 = "AZURE_OPENAI_BASE_URL"
 )
 
 func init() {
 	api.RegisterProvider("azure", func(apiKey string) (api.Provider, error) {
-		if strings.TrimSpace(apiKey) == "" && strings.TrimSpace(os.Getenv(authTokenEnv)) == "" {
-			return nil, fmt.Errorf("%s or %s not set", apiKeyEnv, authTokenEnv)
+		if strings.TrimSpace(apiKey) == "" &&
+			strings.TrimSpace(os.Getenv(authTokenEnv)) == "" &&
+			strings.TrimSpace(os.Getenv(authTokenCommandEnv)) == "" {
+			return nil, fmt.Errorf("%s, %s, or %s not set", apiKeyEnv, authTokenEnv, authTokenCommandEnv)
 		}
 		if strings.TrimSpace(os.Getenv(baseURLEnv)) == "" {
 			return nil, fmt.Errorf("%s not set", baseURLEnv)
@@ -31,11 +36,13 @@ func init() {
 // Provider は Azure OpenAI Responses API の provider 実装。
 type Provider struct {
 	api.BaseProvider
-	lastResponseID string
-	authToken      string
-	mcpTools       []api.ToolDefinition
-	usageCallback  api.UsageCallback
-	toolChoice     *string
+	lastResponseID          string
+	authToken               string
+	authTokenCommand        string
+	authTokenCommandTimeout time.Duration
+	mcpTools                []api.ToolDefinition
+	usageCallback           api.UsageCallback
+	toolChoice              *string
 }
 
 // New は Azure OpenAI provider を作成する。
@@ -43,8 +50,10 @@ func New(apiKey string) *Provider {
 	base := api.NewBaseProvider("Azure OpenAI", apiKey, "", "")
 	base.APIURL = normalizeBaseURL(os.Getenv(baseURLEnv))
 	return &Provider{
-		BaseProvider: base,
-		authToken:    strings.TrimSpace(os.Getenv(authTokenEnv)),
+		BaseProvider:            base,
+		authToken:               strings.TrimSpace(os.Getenv(authTokenEnv)),
+		authTokenCommand:        strings.TrimSpace(os.Getenv(authTokenCommandEnv)),
+		authTokenCommandTimeout: azureAuthTokenCommandTimeout(),
 	}
 }
 

@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -133,6 +136,7 @@ func TestChatWithTools_UsesAzureResponsesAPI(t *testing.T) {
 
 func TestChatWithTools_UsesBearerTokenWhenAPIKeyMissing(t *testing.T) {
 	t.Setenv(authTokenEnv, "entra-token")
+	t.Setenv(authTokenCommandEnv, "")
 	var received struct {
 		apiKey        string
 		authorization string
@@ -178,6 +182,117 @@ func TestChatWithTools_UsesBearerTokenWhenAPIKeyMissing(t *testing.T) {
 	}
 	if received.authorization != "Bearer entra-token" {
 		t.Fatalf("Authorization = %q, want Bearer entra-token", received.authorization)
+	}
+}
+
+func TestChatWithTools_UsesTokenCommandWhenTokenMissing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("token command test uses POSIX shell")
+	}
+	if testing.Short() {
+		t.Skip("token command test executes a local shell script")
+	}
+
+	var authorization string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_entra_command"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "printf command-token")
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	p := New("")
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	content, err := p.ChatWithTools(azureTestContext(cfg), "system", []api.Message{{Role: "user", Content: "hello"}}, "")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if authorization != "Bearer command-token" {
+		t.Fatalf("Authorization = %q, want Bearer command-token", authorization)
+	}
+}
+
+func TestChatWithTools_RefreshesTokenCommandOnceAfterUnauthorized(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("token command test uses POSIX shell")
+	}
+	if testing.Short() {
+		t.Skip("token command test executes a local shell script")
+	}
+
+	var authorizations []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorizations = append(authorizations, r.Header.Get("Authorization"))
+		if len(authorizations) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":{"message":"expired token"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_refreshed"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	counterPath := filepath.Join(dir, "counter")
+	scriptPath := filepath.Join(dir, "token.sh")
+	script := fmt.Sprintf(`#!/bin/sh
+if [ ! -f %q ]; then
+  echo 1 > %q
+  printf expired-token
+else
+  printf refreshed-token
+fi
+`, counterPath, counterPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write token script: %v", err)
+	}
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, scriptPath)
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	p := New("")
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	content, err := p.ChatWithTools(azureTestContext(cfg), "system", []api.Message{{Role: "user", Content: "hello"}}, "")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if len(authorizations) != 2 {
+		t.Fatalf("request count = %d, want 2", len(authorizations))
+	}
+	if authorizations[0] != "Bearer expired-token" || authorizations[1] != "Bearer refreshed-token" {
+		t.Fatalf("authorizations = %#v, want expired then refreshed tokens", authorizations)
 	}
 }
 

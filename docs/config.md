@@ -564,6 +564,12 @@ export AZURE_OPENAI_API_KEY=...
 # Microsoft Entra ID を使う場合
 unset AZURE_OPENAI_API_KEY
 export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
+# 長時間実行や CI で token を自動更新したい場合
+unset AZURE_OPENAI_AUTH_TOKEN
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv'
+export AZURE_OPENAI_AUTH_TOKEN_COMMAND_TIMEOUT=10s
+# この command はローカル shell で実行され、stdout の最初の空でない行を token として使います
+# 信頼できる command だけを設定してください
 
 # Gemini
 export GEMINI_API_KEY=...

@@ -120,7 +120,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	}
 
 	report.addBaseURLChecks()
-	report.addAuthChecks()
+	report.addAuthChecks(ctx)
 	report.addDeploymentCheck(cfg, options.Deployment)
 	report.addCatalogModelCheck()
 	report.addFunctionCallingCheck()
@@ -212,24 +212,25 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 	r.addCheck(DiagnosticStatusOK, "base_url", "Azure OpenAI base URL is configured", r.NormalizedBaseURL, "")
 }
 
-func (r *DiagnosticReport) addAuthChecks() {
+func (r *DiagnosticReport) addAuthChecks(ctx context.Context) {
 	apiKeySet := strings.TrimSpace(os.Getenv(apiKeyEnv)) != ""
 	authTokenSet := strings.TrimSpace(os.Getenv(authTokenEnv)) != ""
+	authTokenCommandSet := strings.TrimSpace(os.Getenv(authTokenCommandEnv)) != ""
 
 	switch {
-	case !apiKeySet && !authTokenSet:
+	case !apiKeySet && !authTokenSet && !authTokenCommandSet:
 		r.addCheck(
 			DiagnosticStatusFail,
 			"auth",
-			fmt.Sprintf("%s or %s is required", apiKeyEnv, authTokenEnv),
+			fmt.Sprintf("%s, %s, or %s is required", apiKeyEnv, authTokenEnv, authTokenCommandEnv),
 			"",
-			fmt.Sprintf("Set %s for API key auth, or %s for Microsoft Entra ID auth", apiKeyEnv, authTokenEnv),
+			fmt.Sprintf("Set %s for API key auth, or %s / %s for Microsoft Entra ID auth", apiKeyEnv, authTokenEnv, authTokenCommandEnv),
 		)
-	case apiKeySet && authTokenSet:
+	case apiKeySet && (authTokenSet || authTokenCommandSet):
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"auth",
-			fmt.Sprintf("both %s and %s are set; API key auth will be used", apiKeyEnv, authTokenEnv),
+			fmt.Sprintf("%s is set with Microsoft Entra ID auth env; API key auth will be used", apiKeyEnv),
 			"",
 			fmt.Sprintf("Unset %s if you want to test Microsoft Entra ID auth", apiKeyEnv),
 		)
@@ -241,12 +242,53 @@ func (r *DiagnosticReport) addAuthChecks() {
 				"auth_key_shape",
 				fmt.Sprintf("%s looks like a public OpenAI API key", apiKeyEnv),
 				"value starts with sk-",
-				"Use an Azure OpenAI resource key, or unset it and use AZURE_OPENAI_AUTH_TOKEN for Microsoft Entra ID auth",
+				fmt.Sprintf("Use an Azure OpenAI resource key, or unset it and use %s / %s for Microsoft Entra ID auth", authTokenEnv, authTokenCommandEnv),
 			)
 		}
+	case authTokenSet && authTokenCommandSet:
+		r.addCheck(DiagnosticStatusOK, "auth", "Microsoft Entra ID bearer token auth is configured with refresh command", fmt.Sprintf("%s + %s", authTokenEnv, authTokenCommandEnv), "")
+		r.addAuthTokenCommandCheck(ctx, DiagnosticStatusWarn)
 	case authTokenSet:
 		r.addCheck(DiagnosticStatusOK, "auth", "Microsoft Entra ID bearer token auth is configured", authTokenEnv, "")
+	case authTokenCommandSet:
+		if r.addAuthTokenCommandCheck(ctx, DiagnosticStatusFail) {
+			r.addCheck(DiagnosticStatusOK, "auth", "Microsoft Entra ID token command is configured", authTokenCommandEnv, "")
+		}
 	}
+}
+
+func (r *DiagnosticReport) addAuthTokenCommandCheck(ctx context.Context, failureStatus DiagnosticStatus) bool {
+	timeout, timeoutErr := parseAzureAuthTokenCommandTimeout()
+	if timeoutErr != nil {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"auth_token_command_timeout",
+			fmt.Sprintf("invalid %s; using %s", authTokenCommandTimeoutEnv, timeout),
+			timeoutErr.Error(),
+			fmt.Sprintf("Set %s to a positive Go duration such as 10s", authTokenCommandTimeoutEnv),
+		)
+	}
+
+	_, err := runAzureAuthTokenCommand(ctx, os.Getenv(authTokenCommandEnv), timeout)
+	if err != nil {
+		r.addCheck(
+			failureStatus,
+			"auth_token_command",
+			fmt.Sprintf("%s failed", authTokenCommandEnv),
+			err.Error(),
+			"Fix the command, verify Azure CLI login, or set AZURE_OPENAI_AUTH_TOKEN directly",
+		)
+		return false
+	}
+
+	r.addCheck(
+		DiagnosticStatusOK,
+		"auth_token_command",
+		fmt.Sprintf("%s executed successfully", authTokenCommandEnv),
+		"token was returned on stdout",
+		"",
+	)
+	return true
 }
 
 func (r *DiagnosticReport) addDeploymentCheck(cfg *config.Config, explicitDeployment string) {
@@ -466,11 +508,16 @@ func isUnconfiguredPlaceholderDeployment(cfg *config.Config, deployment, explici
 func diagnosticAuthMode() string {
 	apiKeySet := strings.TrimSpace(os.Getenv(apiKeyEnv)) != ""
 	authTokenSet := strings.TrimSpace(os.Getenv(authTokenEnv)) != ""
+	authTokenCommandSet := strings.TrimSpace(os.Getenv(authTokenCommandEnv)) != ""
 	switch {
 	case apiKeySet:
 		return "api_key"
+	case authTokenSet && authTokenCommandSet:
+		return "entra_id_command"
 	case authTokenSet:
 		return "entra_id"
+	case authTokenCommandSet:
+		return "entra_id_command"
 	default:
 		return "missing"
 	}
