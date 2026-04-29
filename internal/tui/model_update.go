@@ -22,6 +22,10 @@ func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		updated, cmd := m.updateConfigScreen(msg)
 		return updated, cmd, true
 	}
+	if m.screen == screenReview {
+		updated, cmd := m.updateReviewScreen(msg)
+		return updated, cmd, true
+	}
 	return m, nil, false
 }
 

@@ -54,6 +54,40 @@ func TestRunREPLLoop_BlankInputAndSpecialCommandThenChat(t *testing.T) {
 	}
 }
 
+func TestRunREPLLoop_BareReviewIsTUIModeOnly(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &scriptedChatProvider{name: "openai", functionCalling: true}
+	agent, mlReader := newREPLLoopTestAgent(t, provider, strings.NewReader("/review\n"), &out)
+
+	runREPLLoop(agent, mlReader)
+
+	if provider.callCount != 0 {
+		t.Fatalf("provider.callCount = %d, want 0", provider.callCount)
+	}
+	if !strings.Contains(out.String(), "/review is available in TUI mode only") {
+		t.Fatalf("runREPLLoop() output = %q, want TUI-only review message", out.String())
+	}
+}
+
+func TestRunREPLLoop_NonBareReviewFallsThroughToChat(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &scriptedChatProvider{name: "openai", functionCalling: true}
+	agent, mlReader := newREPLLoopTestAgent(t, provider, strings.NewReader("/review staged\n"), &out)
+
+	runREPLLoop(agent, mlReader)
+
+	if provider.callCount != 1 {
+		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
+	}
+	if strings.Contains(out.String(), "/review is available in TUI mode only") {
+		t.Fatalf("runREPLLoop() output = %q, should not contain TUI-only review message", out.String())
+	}
+}
+
 func TestRunREPLLoop_ImageInputBranches(t *testing.T) {
 	disableColors(t)
 

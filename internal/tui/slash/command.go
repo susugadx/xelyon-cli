@@ -53,5 +53,5 @@ func (c Command) Matches(name string) bool {
 
 // Suggestions は prefix に一致する slash command 候補を返す。
 func Suggestions(prefix string) []commandcatalog.CommandInfo {
-	return commandcatalog.MatchPrefix(prefix)
+	return commandcatalog.MatchDiscoverablePrefixForSurface(prefix, commandcatalog.CommandSurfaceTUI)
 }

@@ -22,6 +22,7 @@ type screenMode int
 const (
 	screenChat   screenMode = iota // 通常のチャット画面
 	screenConfig                   // /config 設定画面
+	screenReview                   // /review preset 画面
 )
 
 var statusHintsNormal = []string{
@@ -80,6 +81,7 @@ type Model struct {
 	configAgent  ConfigAgent
 	screen       screenMode    // 現在の画面モード
 	configScreen *configScreen // /config 画面の状態（screenConfig 時のみ非 nil）
+	reviewScreen *reviewScreen // /review 画面の状態（screenReview 時のみ非 nil）
 	vp           lightViewport // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
 	textInput    textinput.Model
 	spinner      spinner.Model

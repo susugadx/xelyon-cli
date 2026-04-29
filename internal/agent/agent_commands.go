@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -30,7 +31,11 @@ func promptConfirmWithRuntime(runtime *ui.Runtime, prompt string) bool {
 
 // handleSpecialCommand は特殊コマンドを処理
 func handleSpecialCommand(input string, agent *Agent) bool {
-	return commandruntime.Dispatch(input, commandAliasesFromConfig(agent.cfg()), specialCommandRegistry(agent))
+	return handleSpecialCommandForSurface(input, agent, commandcatalog.CommandSurfaceClassic)
+}
+
+func handleSpecialCommandForSurface(input string, agent *Agent, commandSurface commandcatalog.CommandSurface) bool {
+	return commandruntime.Dispatch(input, commandAliasesFromConfig(agent.cfg()), specialCommandRegistry(agent, commandSurface))
 }
 
 // splitCommand はコマンド文字列を分割

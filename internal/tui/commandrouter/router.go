@@ -14,6 +14,8 @@ const (
 	ActionQuit
 	// ActionOpenConfig は TUI config screen を開く処理を表す。
 	ActionOpenConfig
+	// ActionOpenReview は TUI review preset screen を開く処理を表す。
+	ActionOpenReview
 )
 
 // Context は command routing に必要な TUI 状態を保持する。
@@ -31,6 +33,9 @@ func Route(command slash.Command, ctx Context) Action {
 	}
 	if command.IsBare("/config") {
 		return ActionOpenConfig
+	}
+	if command.IsBare("/review") {
+		return ActionOpenReview
 	}
 	return ActionDispatchAgent
 }

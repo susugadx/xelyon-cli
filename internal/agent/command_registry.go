@@ -1,11 +1,12 @@
 package agent
 
 import (
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/version"
 )
 
-func specialCommandRegistry(agent *Agent) commandruntime.Registry {
+func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandSurface) commandruntime.Registry {
 	return commandruntime.Registry{
 		"/save":      func(_ []string) bool { return handleSaveCommand(agent) },
 		"/load":      func(args []string) bool { return handleLoadCommand(agent, args) },
@@ -22,15 +23,19 @@ func specialCommandRegistry(agent *Agent) commandruntime.Registry {
 		"/q":         func(_ []string) bool { handleExitCommand(agent); return true },
 		"/clear":     func(args []string) bool { return handleClearCommand(agent, args) },
 		"/history":   func(_ []string) bool { handleHistoryCommand(agent); return true },
-		"/help":      func(_ []string) bool { printHelpToWriter(agent.output(), agent); return true },
+		"/help":      func(_ []string) bool { printHelpToWriterForSurface(agent.output(), agent, commandSurface); return true },
 		"/model":     func(args []string) bool { return handleModelCommand(agent, args) },
 		"/version":   func(args []string) bool { return handleVersionCommand(agent, args) },
 		"/plan":      func(args []string) bool { return handlePlanCommand(agent, args) },
-		"/init":      func(_ []string) bool { return handleInitCommand(agent) },
-		"/project":   func(_ []string) bool { return handleProjectCommand(agent) },
-		"/lsp":       func(args []string) bool { return handleLSPCommand(agent, args) },
-		"/tokens":    func(_ []string) bool { return handleTokensCommand(agent) },
-		"/think":     func(args []string) bool { return handleThinkCommand(agent, args) },
+		"/init": func(_ []string) bool {
+			return handleInitCommandWithOptions(agent, initCommandOptions{
+				allowOverwritePrompt: commandSurface != commandcatalog.CommandSurfaceTUI,
+			})
+		},
+		"/project": func(_ []string) bool { return handleProjectCommand(agent) },
+		"/lsp":     func(args []string) bool { return handleLSPCommand(agent, args) },
+		"/tokens":  func(_ []string) bool { return handleTokensCommand(agent) },
+		"/think":   func(args []string) bool { return handleThinkCommand(agent, args) },
 	}
 }
 

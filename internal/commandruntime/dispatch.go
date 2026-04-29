@@ -34,15 +34,3 @@ func IsNonInteractiveConfigSubcommand(args []string) bool {
 		return false
 	}
 }
-
-// TUIBlockHint は TUI で実行できない command の案内を返す。
-func TUIBlockHint(command string) (string, bool) {
-	switch command {
-	case "/project":
-		return "Use --no-tui mode or edit xelyon.yaml directly", true
-	case "/init":
-		return "Use --no-tui mode: xelyon --no-tui then /init", true
-	default:
-		return "", false
-	}
-}

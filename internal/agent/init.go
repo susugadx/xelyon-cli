@@ -46,8 +46,16 @@ rules:
 #   timeout: 600
 `
 
-// handleInitCommand は/initコマンドを処理（xelyon.yaml 生成）
+type initCommandOptions struct {
+	allowOverwritePrompt bool
+}
+
+// handleInitCommand は /init コマンドを処理（xelyon.yaml 生成）。
 func handleInitCommand(agent *Agent) bool {
+	return handleInitCommandWithOptions(agent, initCommandOptions{allowOverwritePrompt: true})
+}
+
+func handleInitCommandWithOptions(agent *Agent, opts initCommandOptions) bool {
 	runtimeUI := agent.ui()
 	promptIO := runtimeUI.PromptIO()
 	out := runtimeUI.Output()
@@ -60,6 +68,10 @@ func handleInitCommand(agent *Agent) bool {
 	// xelyon.yaml が既に存在するか確認
 	if _, err := os.Stat("xelyon.yaml"); err == nil {
 		yellow.Fprintln(out, "⚠️  xelyon.yaml already exists")
+		if !opts.allowOverwritePrompt {
+			yellow.Fprintln(out, "   Not overwriting from TUI mode. Edit or remove xelyon.yaml and run /init again.")
+			return true
+		}
 		_, _ = fmt.Fprint(out, "Overwrite? (y/n): ")
 		input, err := promptIO.ReadSimpleLine()
 		if err != nil {

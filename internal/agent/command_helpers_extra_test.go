@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -80,6 +81,30 @@ func TestPrintHelpToWriter_WritesGeneratedHelp(t *testing.T) {
 	}
 	if !strings.Contains(got, GeneratedHelpTipsText) {
 		t.Fatalf("printHelpToWriter() missing generated tips help:\n%s", got)
+	}
+	if strings.Contains(got, "/review") {
+		t.Fatalf("classic /help should not advertise TUI-only /review:\n%s", got)
+	}
+}
+
+func TestPrintHelpToWriterForSurface_TUICommands(t *testing.T) {
+	var out bytes.Buffer
+	printHelpToWriterForSurface(&out, nil, commandcatalog.CommandSurfaceTUI)
+	got := out.String()
+	if !strings.Contains(got, GeneratedTUIHelpCommandsText) {
+		t.Fatalf("TUI help missing generated TUI commands help:\n%s", got)
+	}
+	if !strings.Contains(got, "/review") {
+		t.Fatalf("TUI /help should advertise TUI-only /review:\n%s", got)
+	}
+	if !strings.Contains(got, "/init") {
+		t.Fatalf("TUI /help should advertise /init:\n%s", got)
+	}
+	if strings.Contains(got, "/project") {
+		t.Fatalf("TUI /help should not advertise classic-only /project:\n%s", got)
+	}
+	if !strings.Contains(got, GeneratedHelpTipsText) {
+		t.Fatalf("TUI help missing generated tips help:\n%s", got)
 	}
 }
 

@@ -99,5 +99,8 @@ func (m Model) View() string {
 	if m.screen == screenConfig {
 		return m.configView()
 	}
+	if m.screen == screenReview {
+		return m.reviewView()
+	}
 	return m.viewportView() + "\n" + m.chromeCache
 }

@@ -9,6 +9,8 @@
 //     chat 入力、composer 状態、submit 判定、command/chat 振り分け
 //   - model_config.go, model_config_render.go, config_screen_*.go:
 //     /config 画面の orchestration、state、input、mutation、save、render
+//   - model_review.go, review_screen_*.go:
+//     /review 画面の orchestration、preset/custom 入力、ReviewRequest 生成、render
 //   - model_navigation*.go:
 //     NAV mode、cursor、vim motion、visual selection、copy、pending state
 //   - model_output.go, model_stream*.go:

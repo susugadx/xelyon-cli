@@ -3,13 +3,28 @@ package agent
 import (
 	"fmt"
 	"io"
+
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 )
 
 func printHelpToWriter(out io.Writer, agent *Agent) {
-	_, _ = fmt.Fprint(out, GeneratedHelpCommandsText)
+	printHelpToWriterForSurface(out, agent, commandcatalog.CommandSurfaceClassic)
+}
+
+func printHelpToWriterForSurface(out io.Writer, agent *Agent, surface commandcatalog.CommandSurface) {
+	_, _ = fmt.Fprint(out, generatedHelpCommandsTextForSurface(surface))
 	printCurrentSurfaceToolsToWriter(out, agent)
 	_, _ = fmt.Fprint(out, "\n")
 	_, _ = fmt.Fprint(out, GeneratedHelpTipsText)
+}
+
+func generatedHelpCommandsTextForSurface(surface commandcatalog.CommandSurface) string {
+	switch surface {
+	case commandcatalog.CommandSurfaceTUI:
+		return GeneratedTUIHelpCommandsText
+	default:
+		return GeneratedHelpCommandsText
+	}
 }
 
 func printCurrentSurfaceToolsToWriter(out io.Writer, agent *Agent) {

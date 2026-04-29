@@ -114,6 +114,15 @@ Azure API error では 401/403/404/429 と tool payload rejected の原因候補
 > /copy
 ```
 
+### `/review`
+
+TUIモードで、現在の変更レビュー用の preset 画面を開きます。
+現時点では review runner は未実装で、ReviewRequest の生成までを行います。
+
+```
+> /review
+```
+
 ### `/tokens`
 
 トークン使用量とコンテキストウィンドウの状態を表示します。

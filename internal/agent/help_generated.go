@@ -2,7 +2,7 @@
 
 package agent
 
-// GeneratedHelpCommandsText は自動生成されたヘルプのコマンド一覧。
+// GeneratedHelpCommandsText は自動生成された Classic ヘルプのコマンド一覧。
 const GeneratedHelpCommandsText = `Commands:
   /exit, /quit, /q          - Exit the CLI
   /clear                    - Clear conversation history
@@ -22,6 +22,33 @@ const GeneratedHelpCommandsText = `Commands:
   /model [name]             - Show current model or switch model without restart
   /init                     - Create xelyon.yaml template (project config)
   /project                  - Edit xelyon.yaml interactively (rules, final checks)
+  /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
+  /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
+  /lsp [status]             - Show LSP server status (running/not started/disabled)
+  /version                  - Show version information
+  /help                     - Show this help
+`
+
+// GeneratedTUIHelpCommandsText は自動生成された TUI ヘルプのコマンド一覧。
+const GeneratedTUIHelpCommandsText = `Commands:
+  /exit, /quit, /q          - Exit the CLI
+  /clear                    - Clear conversation history
+  /history                  - Show conversation history
+  /save                     - Save current session
+  /load [id]                - Load session (or last if no ID)
+  /sessions                 - List recent sessions
+  /status, /stats           - Show current state, last request, and session statistics
+  /tokens                   - Show token usage and context window status
+  /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
+  /review                   - review my current changes and find issues
+  /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
+  /use <provider> [model]   - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
+  /providers                - List available providers and their API key status
+  /config                   - Interactive configuration menu
+                            /config show - Show all settings with diff from defaults
+                            /config model <name> - Change default model
+  /model [name]             - Show current model or switch model without restart
+  /init                     - Create xelyon.yaml template (project config)
   /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
   /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
   /lsp [status]             - Show LSP server status (running/not started/disabled)

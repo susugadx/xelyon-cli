@@ -57,3 +57,48 @@ func TestSuggestionsMatchesCommandAndAlias(t *testing.T) {
 		t.Fatalf("first suggestion = %q, want /exit alias owner", matches[0].Name)
 	}
 }
+
+func TestSuggestionsIncludesReviewCommand(t *testing.T) {
+	matches := Suggestions("/review")
+	if len(matches) == 0 {
+		t.Fatal("Suggestions(/review) returned no matches")
+	}
+	if matches[0].Name != "/review" {
+		t.Fatalf("first suggestion = %q, want /review", matches[0].Name)
+	}
+	if matches[0].Description != "review my current changes and find issues" {
+		t.Fatalf("review description = %q", matches[0].Description)
+	}
+}
+
+func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
+	matches := Suggestions("/")
+	if len(matches) < 4 {
+		t.Fatalf("Suggestions(/) returned %d matches, want at least 4", len(matches))
+	}
+	got := []string{matches[0].Name, matches[1].Name, matches[2].Name, matches[3].Name}
+	want := []string{"/review", "/model", "/config", "/copy"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("leading suggestions = %#v, want prefix %#v", got, want)
+		}
+	}
+}
+
+func TestSuggestionsHidesNonDiscoverableCommands(t *testing.T) {
+	for _, input := range []string{"/project", "/version", "/help"} {
+		if matches := Suggestions(input); len(matches) != 0 {
+			t.Fatalf("Suggestions(%q) = %#v, want no matches", input, matches)
+		}
+	}
+}
+
+func TestSuggestionsIncludesInitCommand(t *testing.T) {
+	matches := Suggestions("/init")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/init) returned %d matches, want 1", len(matches))
+	}
+	if matches[0].Name != "/init" {
+		t.Fatalf("first suggestion = %q, want /init", matches[0].Name)
+	}
+}

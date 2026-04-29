@@ -51,6 +51,11 @@ func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.C
 		m.appendUserMessage(command.Input)
 		updated, cmd := m.openConfigScreen()
 		return updated, cmd
+	case commandrouter.ActionOpenReview:
+		m.resetComposerInput()
+		m.appendUserMessage(command.Input)
+		updated, cmd := m.openReviewScreen()
+		return updated, cmd
 	case commandrouter.ActionDispatchAgent:
 		if m.commands.HandleCommand(command.Input) {
 			m.resetComposerInput()
