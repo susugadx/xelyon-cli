@@ -17,6 +17,7 @@ const (
 	azureSmokeCatalogModelEnv   = "AZURE_OPENAI_CATALOG_MODEL"
 	azureSmokeProDeploymentEnv  = "AZURE_OPENAI_PRO_DEPLOYMENT"
 	azureSmokeProCatalogModel   = "AZURE_OPENAI_PRO_CATALOG_MODEL"
+	azureSmokeToolEnv           = "XELYON_AZURE_TOOL_SMOKE"
 	azureSmokeRequestTimeout    = 120 * time.Second
 	azureSmokeMaxOutputTokens   = 64
 	azureSmokeDefaultCatalog    = "gpt-5.4"
@@ -85,6 +86,42 @@ func TestAzureResponsesSmoke(t *testing.T) {
 	}
 }
 
+func TestAzureDoctorSmoke(t *testing.T) {
+	requireAzureSmokeEnabled(t)
+	requireAzureSmokeCredentials(t)
+
+	deployment := strings.TrimSpace(os.Getenv(azureSmokeDeploymentEnv))
+	if deployment == "" {
+		t.Fatalf("%s is required when %s=1", azureSmokeDeploymentEnv, azureSmokeEnabledEnv)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), azureSmokeRequestTimeout)
+	defer cancel()
+
+	toolSmoke := os.Getenv(azureSmokeToolEnv) == "1"
+	report := Diagnose(ctx, DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   deployment,
+		CatalogModel: envOrDefault(azureSmokeCatalogModelEnv, azureSmokeDefaultCatalog),
+		RunSmoke:     true,
+		ToolSmoke:    toolSmoke,
+		SmokeTimeout: azureSmokeRequestTimeout,
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("Azure doctor smoke failed:\n%s", formatDiagnosticChecks(report.Checks))
+	}
+	if report.Smoke == nil || !report.Smoke.Ran {
+		t.Fatalf("Smoke = %#v, want ran doctor smoke", report.Smoke)
+	}
+	if toolSmoke && !report.Smoke.ToolPayload {
+		t.Fatalf("%s=1 but tool payload smoke did not run; checks:\n%s", azureSmokeToolEnv, formatDiagnosticChecks(report.Checks))
+	}
+	if strings.TrimSpace(report.Smoke.Content) == "" {
+		t.Fatal("doctor smoke returned empty content")
+	}
+}
+
 func requireAzureSmokeEnabled(t *testing.T) {
 	t.Helper()
 	if os.Getenv(azureSmokeEnabledEnv) != "1" {
@@ -122,4 +159,22 @@ func envOrDefault(envName, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func formatDiagnosticChecks(checks []DiagnosticCheck) string {
+	var b strings.Builder
+	for _, check := range checks {
+		b.WriteString(string(check.Status))
+		b.WriteString(" ")
+		b.WriteString(check.Name)
+		b.WriteString(": ")
+		b.WriteString(check.Message)
+		if check.Detail != "" {
+			b.WriteString(" (")
+			b.WriteString(check.Detail)
+			b.WriteString(")")
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
 }

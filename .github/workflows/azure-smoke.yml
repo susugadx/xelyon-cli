@@ -1,0 +1,128 @@
+# Azure OpenAI Smoke Tests
+#
+# 手動実行専用の live smoke。通常 CI では実行しない。
+#
+# 推奨 Secrets:
+# - AZURE_OPENAI_BASE_URL
+# - AZURE_OPENAI_API_KEY または AZURE_OPENAI_AUTH_TOKEN
+# - AZURE_OPENAI_DEPLOYMENT
+# - AZURE_OPENAI_CATALOG_MODEL
+# 任意:
+# - AZURE_OPENAI_PRO_DEPLOYMENT
+# - AZURE_OPENAI_PRO_CATALOG_MODEL
+
+name: Azure Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: Azure OpenAI deployment name. Falls back to AZURE_OPENAI_DEPLOYMENT secret.
+        required: false
+        type: string
+      catalog_model:
+        description: Catalog model for the deployment. Falls back to AZURE_OPENAI_CATALOG_MODEL or gpt-5.4.
+        required: false
+        type: string
+      tool_smoke:
+        description: Also force a dummy tool call through doctor smoke.
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  azure-smoke:
+    name: Azure OpenAI live smoke
+    runs-on: ubuntu-latest
+    if: github.repository == 'susugadx/xelyon-cli'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve Go version
+        id: go-version
+        run: |
+          version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); toolchain = $2 } $1 == "go" && !gover { gover = $2 } END { print toolchain ? toolchain : gover }' go.mod)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go-version.outputs.version }}
+
+      - name: Prepare Azure smoke environment
+        id: azure-env
+        env:
+          INPUT_DEPLOYMENT: ${{ inputs.deployment }}
+          INPUT_CATALOG_MODEL: ${{ inputs.catalog_model }}
+          INPUT_TOOL_SMOKE: ${{ inputs.tool_smoke }}
+          SECRET_AZURE_OPENAI_BASE_URL: ${{ secrets.AZURE_OPENAI_BASE_URL }}
+          SECRET_AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          SECRET_AZURE_OPENAI_AUTH_TOKEN: ${{ secrets.AZURE_OPENAI_AUTH_TOKEN }}
+          SECRET_AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          SECRET_AZURE_OPENAI_CATALOG_MODEL: ${{ secrets.AZURE_OPENAI_CATALOG_MODEL }}
+          SECRET_AZURE_OPENAI_PRO_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_PRO_DEPLOYMENT }}
+          SECRET_AZURE_OPENAI_PRO_CATALOG_MODEL: ${{ secrets.AZURE_OPENAI_PRO_CATALOG_MODEL }}
+        run: |
+          set -euo pipefail
+
+          deployment="${INPUT_DEPLOYMENT:-$SECRET_AZURE_OPENAI_DEPLOYMENT}"
+          catalog_model="${INPUT_CATALOG_MODEL:-$SECRET_AZURE_OPENAI_CATALOG_MODEL}"
+          if [ -z "$catalog_model" ]; then
+            catalog_model="gpt-5.4"
+          fi
+
+          missing=()
+          if [ -z "$SECRET_AZURE_OPENAI_BASE_URL" ]; then
+            missing+=("AZURE_OPENAI_BASE_URL")
+          fi
+          if [ -z "$SECRET_AZURE_OPENAI_API_KEY" ] && [ -z "$SECRET_AZURE_OPENAI_AUTH_TOKEN" ]; then
+            missing+=("AZURE_OPENAI_API_KEY or AZURE_OPENAI_AUTH_TOKEN")
+          fi
+          if [ -z "$deployment" ]; then
+            missing+=("AZURE_OPENAI_DEPLOYMENT or workflow input deployment")
+          fi
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Azure smoke skipped. Missing: %s\n' "$(IFS=', '; echo "${missing[*]}")"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          write_env() {
+            {
+              printf '%s<<__XELYON_AZURE_SMOKE__\n' "$1"
+              printf '%s\n' "$2"
+              printf '__XELYON_AZURE_SMOKE__\n'
+            } >> "$GITHUB_ENV"
+          }
+
+          write_env AZURE_OPENAI_BASE_URL "$SECRET_AZURE_OPENAI_BASE_URL"
+          write_env AZURE_OPENAI_API_KEY "$SECRET_AZURE_OPENAI_API_KEY"
+          write_env AZURE_OPENAI_AUTH_TOKEN "$SECRET_AZURE_OPENAI_AUTH_TOKEN"
+          write_env AZURE_OPENAI_DEPLOYMENT "$deployment"
+          write_env AZURE_OPENAI_CATALOG_MODEL "$catalog_model"
+          write_env AZURE_OPENAI_PRO_DEPLOYMENT "$SECRET_AZURE_OPENAI_PRO_DEPLOYMENT"
+          write_env AZURE_OPENAI_PRO_CATALOG_MODEL "$SECRET_AZURE_OPENAI_PRO_CATALOG_MODEL"
+          if [ "$INPUT_TOOL_SMOKE" = "true" ]; then
+            write_env XELYON_AZURE_TOOL_SMOKE "1"
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run doctor smoke
+        if: steps.azure-env.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          args=(doctor azure --deployment "$AZURE_OPENAI_DEPLOYMENT" --catalog-model "$AZURE_OPENAI_CATALOG_MODEL")
+          if [ "${XELYON_AZURE_TOOL_SMOKE:-}" = "1" ]; then
+            args+=(--tool-smoke)
+          else
+            args+=(--smoke)
+          fi
+          go run . "${args[@]}"
+
+      - name: Run Azure provider smoke tests
+        if: steps.azure-env.outputs.ready == 'true'
+        run: make azure-smoke

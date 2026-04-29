@@ -8,6 +8,8 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 Azure OpenAI の base URL、認証、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると、設定済み deployment に最小の Responses API リクエストを送信します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
 
+`--deployment` は Azure 側の deployment 名、`--catalog-model` はその deployment の実モデル名です。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+
 ```bash
 xelyon doctor azure
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4
@@ -15,6 +17,8 @@ xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --s
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke
 xelyon doctor azure --json
 ```
+
+手元で実 Azure 環境の回帰確認をまとめて走らせる場合は、`AZURE_OPENAI_BASE_URL`、`AZURE_OPENAI_DEPLOYMENT`、`AZURE_OPENAI_CATALOG_MODEL`、認証情報を設定して `make azure-smoke` を実行します。
 
 ## 対話型コマンド
 

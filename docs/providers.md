@@ -129,7 +129,8 @@ xelyon --provider openai --model gpt-5.5-pro
 export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
 export AZURE_OPENAI_API_KEY=...
 
-# Microsoft Entra ID を使う場合
+# Microsoft Entra ID を使う場合は API key の代わりに bearer token を設定
+unset AZURE_OPENAI_API_KEY
 export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
 
 # model には Azure 側の deployment 名を指定
@@ -145,14 +146,46 @@ xelyon --provider azure --model my-gpt-5-deployment
 - OpenAI provider 用の `prompt_cache_key` / `prompt_cache_retention` は送信しません
 - `responses.store` / `responses.persist_response_id` は OpenAI provider と同じ設定を使用します
 
-deployment 名が実モデル名と異なる場合は、token limit / pricing / capability 判定用に `catalog_model` を設定してください。
+`model` / `provider_models.azure.default_model` には Azure 側の **deployment 名**を入れます。deployment 名が実モデル名と異なる場合は、token limit / pricing / capability 判定用に `catalog_model` を設定してください。`catalog_model` は `gpt-5.4` や `gpt-5.5-pro` のような実モデル名で、deployment 名ではありません。
+
+API key 認証の最小設定:
+
+```yaml
+default_provider: azure
+
+provider_models:
+  azure:
+    default_model: my-gpt-5-deployment
+    catalog_model: gpt-5.4
+```
+
+Microsoft Entra ID 認証でも YAML は同じです。環境変数だけ API key ではなく bearer token にします。
+
+```bash
+unset AZURE_OPENAI_API_KEY
+export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
+```
+
+複数 deployment を使う場合は、deployment ごとに `model_overrides` で catalog model を固定できます。
 
 ```yaml
 provider_models:
   azure:
     default_model: my-gpt-5-deployment
     catalog_model: gpt-5.4
+    model_overrides:
+      my-gpt-5-pro-deployment:
+        catalog_model: gpt-5.5-pro
 ```
+
+`responses.store` / `responses.persist_response_id` は通常変更しないでください。既定値は Responses API の `previous_response_id` 継続と session reload を安定させるための推奨設定です。provider 側に response state を残せない運用だけ、[Responses API retention 設定](config.md#responses-api-retention-設定-responses高度な設定) を確認してから変更してください。
+
+よくある設定ミス:
+
+- `AZURE_OPENAI_BASE_URL` に `https://api.openai.com/v1` を入れる。Azure provider では Azure OpenAI resource の URL が必要です。
+- `AZURE_OPENAI_BASE_URL` に `/openai/deployments/<deployment>` まで入れる。XELYON は `/openai/v1/responses` を使うため、base URL は `/openai/v1` で止めます。
+- `AZURE_OPENAI_API_KEY` に OpenAI の `sk-...` key を入れる。Azure OpenAI resource key か Microsoft Entra ID bearer token を使ってください。
+- `default_model` と `catalog_model` を逆にする。`default_model` は deployment 名、`catalog_model` は実モデル名です。
 
 設定の到達性は CLI から診断できます。`doctor azure` は base URL、認証方式、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると `responses.store=false` の最小リクエストを送って、実 deployment への到達性も検証します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
 
@@ -175,6 +208,8 @@ export AZURE_OPENAI_API_KEY=...
 
 make azure-smoke
 ```
+
+GitHub Actions では `Azure Smoke` workflow を手動実行できます。通常 CI では走らず、repository secrets に `AZURE_OPENAI_BASE_URL`、`AZURE_OPENAI_DEPLOYMENT`、`AZURE_OPENAI_API_KEY` または `AZURE_OPENAI_AUTH_TOKEN` がある場合だけ live smoke を実行します。workflow input の `tool_smoke` を有効にすると doctor smoke で dummy tool call も強制します。
 
 ### 4. Gemini
 

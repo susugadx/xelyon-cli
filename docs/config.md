@@ -562,6 +562,7 @@ export OPENAI_API_KEY=sk-...
 export AZURE_OPENAI_BASE_URL=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1
 export AZURE_OPENAI_API_KEY=...
 # Microsoft Entra ID を使う場合
+unset AZURE_OPENAI_API_KEY
 export AZURE_OPENAI_AUTH_TOKEN=$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
 
 # Gemini

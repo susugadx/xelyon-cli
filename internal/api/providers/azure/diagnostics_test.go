@@ -66,6 +66,96 @@ func TestDiagnose_FailsForDeploymentScopedBaseURL(t *testing.T) {
 	}
 }
 
+func TestDiagnose_FailsForPublicOpenAIBaseURL(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://api.openai.com/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if !hasDiagnosticCheck(report, "base_url", DiagnosticStatusFail) {
+		t.Fatalf("missing public OpenAI base URL failure: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsForOpenAIKeyShape(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "sk-public-openai-key")
+	t.Setenv(authTokenEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "auth_key_shape", DiagnosticStatusWarn) {
+		t.Fatalf("missing auth_key_shape warning: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsWhenExplicitDeploymentLooksLikeCatalogModel(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:     config.DefaultConfig(),
+		Deployment: "gpt-5.4",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "deployment_catalog_mixup", DiagnosticStatusWarn) {
+		t.Fatalf("missing deployment/catalog mixup warning: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsWhenCatalogModelLooksLikeDeployment(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55",
+		CatalogModel: "corp-gpt55",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "catalog_model", DiagnosticStatusWarn) {
+		t.Fatalf("missing catalog_model shape warning: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WarnsForAdvancedRetentionOverride(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       cfg,
+		Deployment:   "corp-gpt55",
+		CatalogModel: "gpt-5.5",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if !hasDiagnosticCheck(report, "responses_retention", DiagnosticStatusWarn) {
+		t.Fatalf("missing responses_retention warning: %#v", report.Checks)
+	}
+}
+
 func TestDiagnose_SmokeUsesConfiguredDeploymentAndStoreFalse(t *testing.T) {
 	var received struct {
 		Path   string

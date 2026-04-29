@@ -11,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -165,6 +166,16 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 		)
 		return
 	}
+	if strings.EqualFold(parsed.Hostname(), "api.openai.com") {
+		r.addCheck(
+			DiagnosticStatusFail,
+			"base_url",
+			fmt.Sprintf("%s points to the public OpenAI API, not Azure OpenAI", baseURLEnv),
+			r.BaseURL,
+			fmt.Sprintf("Set %s to your Azure OpenAI resource URL, for example https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1", baseURLEnv),
+		)
+		return
+	}
 
 	normalizedParsed, err := url.Parse(r.NormalizedBaseURL)
 	if err == nil && strings.Contains(strings.ToLower(normalizedParsed.Path), "/deployments/") {
@@ -224,6 +235,15 @@ func (r *DiagnosticReport) addAuthChecks() {
 		)
 	case apiKeySet:
 		r.addCheck(DiagnosticStatusOK, "auth", "API key auth is configured", apiKeyEnv, "")
+		if strings.HasPrefix(strings.TrimSpace(os.Getenv(apiKeyEnv)), "sk-") {
+			r.addCheck(
+				DiagnosticStatusWarn,
+				"auth_key_shape",
+				fmt.Sprintf("%s looks like a public OpenAI API key", apiKeyEnv),
+				"value starts with sk-",
+				"Use an Azure OpenAI resource key, or unset it and use AZURE_OPENAI_AUTH_TOKEN for Microsoft Entra ID auth",
+			)
+		}
 	case authTokenSet:
 		r.addCheck(DiagnosticStatusOK, "auth", "Microsoft Entra ID bearer token auth is configured", authTokenEnv, "")
 	}
@@ -259,6 +279,17 @@ func (r *DiagnosticReport) addDeploymentCheck(cfg *config.Config, explicitDeploy
 		fmt.Sprintf("%s (%s)", r.Deployment, r.DeploymentSource),
 		"",
 	)
+
+	if looksLikeOpenAICatalogModel(r.Deployment) &&
+		r.CatalogModelSource == "deployment name fallback" {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"deployment_catalog_mixup",
+			"deployment name looks like an OpenAI catalog model",
+			r.Deployment,
+			"This is OK only if the Azure deployment is named exactly this way; otherwise pass the Azure deployment name as --deployment and keep this value in --catalog-model",
+		)
+	}
 }
 
 func (r *DiagnosticReport) addCatalogModelCheck() {
@@ -283,6 +314,17 @@ func (r *DiagnosticReport) addCatalogModelCheck() {
 			"catalog_model falls back to the deployment name",
 			r.CatalogModel,
 			"Set provider_models.azure.catalog_model if this deployment is not named exactly like the underlying model",
+		)
+		return
+	}
+
+	if !looksLikeOpenAICatalogModel(r.CatalogModel) {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"catalog_model",
+			"catalog_model does not look like an OpenAI catalog model",
+			r.CatalogModel,
+			"Use the underlying model name such as gpt-5.4; do not put the Azure deployment name here",
 		)
 		return
 	}
@@ -318,6 +360,16 @@ func (r *DiagnosticReport) addFunctionCallingCheck() {
 
 func (r *DiagnosticReport) addResponsesRetentionCheck() {
 	message := fmt.Sprintf("responses.store=%t, responses.persist_response_id=%t", r.ResponsesStore, r.ResponsesPersistID)
+	if !r.ResponsesStore || !r.ResponsesPersistID {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"responses_retention",
+			"advanced Responses retention override is active",
+			message,
+			"Most users should leave these settings enabled; disable them only when your retention policy requires it",
+		)
+		return
+	}
 	r.addCheck(DiagnosticStatusOK, "responses_retention", message, "", "")
 }
 
@@ -422,6 +474,10 @@ func diagnosticAuthMode() string {
 	default:
 		return "missing"
 	}
+}
+
+func looksLikeOpenAICatalogModel(model string) bool {
+	return llmcatalog.InferProviderFromModel(model) == "openai"
 }
 
 func runDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
