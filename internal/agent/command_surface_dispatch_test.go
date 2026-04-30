@@ -191,6 +191,19 @@ func TestHandleSpecialCommandForSurface_Matrix(t *testing.T) {
 			wantText:    "default_provider",
 			rejectText:  "not available in TUI mode",
 		},
+		{
+			name:        "TUI bare lsp warns classic only",
+			surface:     commandcatalog.CommandSurfaceTUI,
+			input:       "/lsp",
+			wantHandled: true,
+			wantText:    "/lsp is available in classic mode only",
+		},
+		{
+			name:        "TUI non-bare lsp falls through",
+			surface:     commandcatalog.CommandSurfaceTUI,
+			input:       "/lsp status",
+			wantHandled: false,
+		},
 	}
 
 	for _, tt := range tests {

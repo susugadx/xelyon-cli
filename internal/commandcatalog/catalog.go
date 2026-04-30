@@ -44,6 +44,11 @@ func legacyFallbackSurfaces() []CommandSurface {
 	return []CommandSurface{CommandSurfaceTUI, CommandSurfaceClassic}
 }
 
+// classicOnlySurfaces は TUI primary では公開しない legacy/debug command に使う。
+func classicOnlySurfaces() []CommandSurface {
+	return []CommandSurface{CommandSurfaceClassic}
+}
+
 // CommandOwner は command 実行責務の owner を表す。
 type CommandOwner string
 
@@ -270,9 +275,8 @@ var Commands = []CommandInfo{
 		Args:          "[status]",
 		Description:   "Show LSP server status (running/not started/disabled)",
 		DescriptionJP: "LSPサーバー状態を表示",
-		Surfaces:      legacyFallbackSurfaces(),
+		Surfaces:      classicOnlySurfaces(),
 		Category:      CommandCategoryDev,
-		Discoverable:  true,
 		SortWeight:    190,
 	},
 	{

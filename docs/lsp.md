@@ -56,12 +56,14 @@ Language Server Protocol (LSP) は、エディタとプログラミング言語�
 
 ## セットアップ
 
+`/lsp` は legacy classic (`--no-tui`) 用の診断コマンドです。TUI では候補と `/help` に表示されません。以下の `/lsp` コマンド例は `xelyon --no-tui` で起動した classic REPL 内で実行します。
+
 ### 1. 言語検出
 
 プロジェクト内の言語を自動検出します。
 
 ```bash
-xelyon
+xelyon --no-tui
 > /lsp detect
 ```
 
@@ -188,7 +190,7 @@ Continue? (y/n/c):
 ### LSPサーバーが起動しない
 
 ```bash
-# サーバーがインストールされているか確認
+# legacy classic (--no-tui) でサーバーがインストールされているか確認
 > /lsp status
 
 # 手動でサーバーを起動して確認

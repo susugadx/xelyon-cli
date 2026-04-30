@@ -362,6 +362,8 @@ Extended Thinking（推論モード）を切り替えます。複雑なタスク
 
 LSPサーバーのステータスを表示・管理します。
 
+`/lsp` は legacy classic (`--no-tui`) 用の診断コマンドです。TUI では候補と `/help` には表示せず、LSP 設定は `/config` から編集します。
+
 ```
 > /lsp              # ステータス表示
 > /lsp status       # 同上

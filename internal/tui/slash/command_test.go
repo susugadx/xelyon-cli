@@ -86,7 +86,7 @@ func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
 }
 
 func TestSuggestionsHidesNonDiscoverableCommands(t *testing.T) {
-	for _, input := range []string{"/version", "/help"} {
+	for _, input := range []string{"/version", "/help", "/lsp"} {
 		if matches := Suggestions(input); len(matches) != 0 {
 			t.Fatalf("Suggestions(%q) = %#v, want no matches", input, matches)
 		}

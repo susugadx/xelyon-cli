@@ -101,9 +101,15 @@ func TestSurfaceFiltering(t *testing.T) {
 	if strings.Contains(classicHelp, "/project") {
 		t.Fatalf("classic help should not include TUI-only /project:\n%s", classicHelp)
 	}
+	if !strings.Contains(classicHelp, "/lsp") {
+		t.Fatalf("classic help should include legacy /lsp:\n%s", classicHelp)
+	}
 	tuiHelp := RenderCommandsTextForSurface(CommandSurfaceTUI)
 	if !strings.Contains(tuiHelp, "/review") {
 		t.Fatalf("TUI help should include /review:\n%s", tuiHelp)
+	}
+	if strings.Contains(tuiHelp, "/lsp") {
+		t.Fatalf("TUI help should not include classic-only /lsp:\n%s", tuiHelp)
 	}
 	if !strings.Contains(tuiHelp, "/init") {
 		t.Fatalf("TUI help should include /init:\n%s", tuiHelp)
@@ -141,6 +147,22 @@ func TestTUILocalCommandOwnership(t *testing.T) {
 	}
 }
 
+func TestLSPCommandIsClassicOnlyLegacyDiagnostic(t *testing.T) {
+	cmd, ok := Find("/lsp")
+	if !ok {
+		t.Fatal("Find(/lsp) ok = false, want true")
+	}
+	if cmd.SupportsSurface(CommandSurfaceTUI) {
+		t.Fatal("/lsp should not support TUI surface")
+	}
+	if !cmd.SupportsSurface(CommandSurfaceClassic) {
+		t.Fatal("/lsp should support classic surface")
+	}
+	if cmd.Discoverable {
+		t.Fatal("/lsp should not be discoverable")
+	}
+}
+
 func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 	commands := DiscoverableCommandsForSurface(CommandSurfaceTUI)
 	if len(commands) < 4 {
@@ -166,7 +188,6 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/clear",
 		"/history",
 		"/init",
-		"/lsp",
 		"/exit",
 	}
 	if len(gotNames) != len(wantNames) {
@@ -178,7 +199,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		}
 	}
 
-	for _, hidden := range []string{"/version", "/help"} {
+	for _, hidden := range []string{"/version", "/help", "/lsp"} {
 		if containsCommandName(commands, hidden) {
 			t.Fatalf("%s should not be TUI-discoverable", hidden)
 		}
@@ -200,6 +221,9 @@ func TestDiscoverablePrefixFiltering(t *testing.T) {
 	}
 	if got := MatchDiscoverablePrefixForSurface("/help", CommandSurfaceTUI); len(got) != 0 {
 		t.Fatalf("TUI discoverable /help = %#v, want no matches", got)
+	}
+	if got := MatchDiscoverablePrefixForSurface("/lsp", CommandSurfaceTUI); len(got) != 0 {
+		t.Fatalf("TUI discoverable /lsp = %#v, want no matches", got)
 	}
 	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/project" {
 		t.Fatalf("TUI discoverable /project = %#v, want /project", got)
@@ -254,7 +278,7 @@ func TestCatalogCommandsDeclareSurfacePolicy(t *testing.T) {
 	}
 }
 
-func TestClassicSurfaceIsExplicitStableFallback(t *testing.T) {
+func TestClassicSurfaceIsExplicitStableFallbackOrClassicOnly(t *testing.T) {
 	for _, cmd := range Commands {
 		if !cmd.SupportsSurface(CommandSurfaceClassic) {
 			continue
@@ -263,7 +287,13 @@ func TestClassicSurfaceIsExplicitStableFallback(t *testing.T) {
 			t.Fatalf("%s supports classic without explicit surface policy", cmd.Name)
 		}
 		if !cmd.SupportsSurface(CommandSurfaceTUI) {
-			t.Fatalf("%s supports classic but not primary TUI surface", cmd.Name)
+			if cmd.Discoverable {
+				t.Fatalf("%s is classic-only and should not be discoverable", cmd.Name)
+			}
+			if cmd.EffectiveOwner() != CommandOwnerAgent {
+				t.Fatalf("%s is classic-only with owner %q, want %q", cmd.Name, cmd.EffectiveOwner(), CommandOwnerAgent)
+			}
+			continue
 		}
 		if cmd.EffectiveOwner() == CommandOwnerTUIRouter {
 			t.Fatalf("%s is TUI-router owned but supports classic fallback", cmd.Name)
