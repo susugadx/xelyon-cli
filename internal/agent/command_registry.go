@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"strings"
+
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -11,7 +13,7 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		"/save":      func(_ []string) bool { return handleSaveCommand(agent) },
 		"/load":      func(args []string) bool { return handleLoadCommand(agent, args) },
 		"/sessions":  func(_ []string) bool { return handleSessionsCommand(agent) },
-		"/config":    func(args []string) bool { return handleConfigCommand(agent, args) },
+		"/config":    func(args []string) bool { return handleConfigCommandForSurface(agent, args, commandSurface) },
 		"/stats":     func(_ []string) bool { return handleStatsCommand(agent) },
 		"/status":    func(_ []string) bool { return handleStatusCommand(agent) },
 		"/copy":      func(args []string) bool { return handleCopyCommand(agent, args) },
@@ -32,11 +34,27 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 				allowOverwritePrompt: commandSurface != commandcatalog.CommandSurfaceTUI,
 			})
 		},
-		"/project": func(_ []string) bool { return handleProjectCommand(agent) },
-		"/lsp":     func(args []string) bool { return handleLSPCommand(agent, args) },
-		"/tokens":  func(_ []string) bool { return handleTokensCommand(agent) },
-		"/think":   func(args []string) bool { return handleThinkCommand(agent, args) },
+		"/lsp":    func(args []string) bool { return handleLSPCommand(agent, args) },
+		"/tokens": func(_ []string) bool { return handleTokensCommand(agent) },
+		"/think":  func(args []string) bool { return handleThinkCommand(agent, args) },
 	}
+}
+
+func handleConfigCommandForSurface(agent *Agent, args []string, commandSurface commandcatalog.CommandSurface) bool {
+	if commandSurface != commandcatalog.CommandSurfaceTUI {
+		return handleConfigCommand(agent, args)
+	}
+	if isNonInteractiveConfigSubcommand(args) {
+		return handleConfigCommand(agent, args)
+	}
+
+	cmd := "/config"
+	if len(args) > 0 {
+		cmd += " " + strings.Join(args, " ")
+	}
+	_, _ = yellow.Fprintf(agent.output(), "⚠️  %s is not available in TUI mode.\n", cmd)
+	_, _ = yellow.Fprintln(agent.output(), "   Use bare /config, /config show, or /config model <name>.")
+	return true
 }
 
 func handleClearCommand(agent *Agent, _ []string) bool {

@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
-	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
@@ -72,30 +71,6 @@ func (a *TUIAdapter) Chat(input string) {
 
 // HandleCommand は特殊コマンドを処理する。処理した場合 true を返す。
 func (a *TUIAdapter) HandleCommand(cmd string) bool {
-	invocation, ok := commandruntime.Parse(cmd, commandAliasesFromConfig(a.agent.cfg()))
-	if !ok {
-		return false
-	}
-	baseCmd := invocation.Command
-	args := invocation.Args
-
-	if cmdInfo, known := commandcatalog.Find(baseCmd); known && !cmdInfo.SupportsSurface(commandcatalog.CommandSurfaceTUI) {
-		_, _ = fmt.Fprintf(a.agent.output(), "⚠️  %s is not available in TUI mode.\n", baseCmd)
-		return true
-	}
-
-	if baseCmd == "/project" {
-		return false
-	}
-
-	if baseCmd == "/config" {
-		if !isNonInteractiveConfigSubcommand(args) {
-			_, _ = fmt.Fprintf(a.agent.output(), "⚠️  %s is not available in TUI mode.\n   Use bare /config, /config show, or /config model <name>.\n", cmd)
-			return true
-		}
-		return handleSpecialCommandForSurface(cmd, a.agent, commandcatalog.CommandSurfaceTUI)
-	}
-
 	return handleSpecialCommandForSurface(cmd, a.agent, commandcatalog.CommandSurfaceTUI)
 }
 

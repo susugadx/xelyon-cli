@@ -31,28 +31,6 @@ func TestConfigMenu_RunWithRuntimeUsesInjectedWriter(t *testing.T) {
 	}
 }
 
-func TestProjectMenu_RunWithRuntimeUsesInjectedWriter(t *testing.T) {
-	runtime := NewRuntime(strings.NewReader("c\n"), &bytes.Buffer{}, &bytes.Buffer{})
-	out := runtime.Output().(*bytes.Buffer)
-
-	menu := NewProjectMenuWithRuntime(&config.ProjectConfig{}, runtime)
-	changed, err := menu.Run()
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if changed {
-		t.Fatal("Run() changed = true, want false")
-	}
-
-	output := out.String()
-	if !strings.Contains(output, "Project Settings") {
-		t.Fatalf("expected injected output to contain project header, got %q", output)
-	}
-	if !strings.Contains(output, "Select:") {
-		t.Fatalf("expected injected output to contain prompt, got %q", output)
-	}
-}
-
 func TestPager_DisplayWithRuntimeUsesInjectedWriter(t *testing.T) {
 	runtime := NewRuntime(strings.NewReader("q\n"), &bytes.Buffer{}, &bytes.Buffer{})
 	out := runtime.Output().(*bytes.Buffer)
