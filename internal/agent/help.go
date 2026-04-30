@@ -12,10 +12,20 @@ func printHelpToWriter(out io.Writer, agent *Agent) {
 }
 
 func printHelpToWriterForSurface(out io.Writer, agent *Agent, surface commandcatalog.CommandSurface) {
+	_, _ = fmt.Fprint(out, helpSurfaceIntro(surface))
 	_, _ = fmt.Fprint(out, generatedHelpCommandsTextForSurface(surface))
 	printCurrentSurfaceToolsToWriter(out, agent)
 	_, _ = fmt.Fprint(out, "\n")
 	_, _ = fmt.Fprint(out, GeneratedHelpTipsText)
+}
+
+func helpSurfaceIntro(surface commandcatalog.CommandSurface) string {
+	switch surface {
+	case commandcatalog.CommandSurfaceTUI:
+		return "Surface: TUI primary interactive surface\nCommand discovery: type / in the input field for candidates; /help is the full reference.\n\n"
+	default:
+		return "Surface: classic legacy fallback (--no-tui)\nNew interactive commands are added to the TUI surface only. Run without --no-tui for the primary UI.\n\n"
+	}
 }
 
 func generatedHelpCommandsTextForSurface(surface commandcatalog.CommandSurface) string {

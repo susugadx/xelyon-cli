@@ -79,6 +79,9 @@ func TestPrintHelpToWriter_WritesGeneratedHelp(t *testing.T) {
 	if !strings.Contains(got, GeneratedHelpCommandsText) {
 		t.Fatalf("printHelpToWriter() missing generated commands help:\n%s", got)
 	}
+	if !strings.Contains(got, "Surface: classic legacy fallback (--no-tui)") {
+		t.Fatalf("classic /help should identify the legacy fallback surface:\n%s", got)
+	}
 	if !strings.Contains(got, GeneratedHelpTipsText) {
 		t.Fatalf("printHelpToWriter() missing generated tips help:\n%s", got)
 	}
@@ -96,6 +99,12 @@ func TestPrintHelpToWriterForSurface_TUICommands(t *testing.T) {
 	got := out.String()
 	if !strings.Contains(got, GeneratedTUIHelpCommandsText) {
 		t.Fatalf("TUI help missing generated TUI commands help:\n%s", got)
+	}
+	if !strings.Contains(got, "Surface: TUI primary interactive surface") {
+		t.Fatalf("TUI /help should identify the primary surface:\n%s", got)
+	}
+	if !strings.Contains(got, "Command discovery: type / in the input field for candidates") {
+		t.Fatalf("TUI /help should point command discovery to slash candidates:\n%s", got)
 	}
 	if !strings.Contains(got, "/review") {
 		t.Fatalf("TUI /help should advertise TUI-only /review:\n%s", got)

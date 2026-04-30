@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/viewfmt"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
@@ -192,6 +193,10 @@ func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
 // handleStatsCommand は /status の互換エイリアス
 func handleStatsCommand(agent *Agent) bool {
 	return handleStatusCommand(agent)
+}
+
+func handleStatsCommandForSurface(agent *Agent, commandSurface commandcatalog.CommandSurface) bool {
+	return handleStatusCommandForSurface(agent, commandSurface)
 }
 
 // formatNumber はカンマ区切りの数値を返す

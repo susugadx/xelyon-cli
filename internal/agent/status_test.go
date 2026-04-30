@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -144,6 +145,61 @@ func TestAgentStatus_AllStates(t *testing.T) {
 			}
 			if status.ReasonEN != tc.reasonEN {
 				t.Errorf("ReasonEN = %q, want %q", status.ReasonEN, tc.reasonEN)
+			}
+		})
+	}
+}
+
+func TestHandleStatusCommandForSurface_ShowsSurfaceBoundary(t *testing.T) {
+	tests := []struct {
+		name    string
+		surface commandcatalog.CommandSurface
+		want    []string
+		reject  []string
+	}{
+		{
+			name:    "TUI primary",
+			surface: commandcatalog.CommandSurfaceTUI,
+			want: []string{
+				"Surface",
+				"TUI primary",
+				"Type your request or / for command candidates",
+			},
+			reject: []string{"classic legacy fallback"},
+		},
+		{
+			name:    "classic fallback",
+			surface: commandcatalog.CommandSurfaceClassic,
+			want: []string{
+				"Surface",
+				"classic legacy fallback (--no-tui)",
+				"Type your request or /help (classic fallback; new UI commands are TUI-only)",
+			},
+			reject: []string{"Type your request or / for command candidates"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			runtime := newIsolatedRuntime()
+			runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+			agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
+			t.Cleanup(agent.Cleanup)
+
+			if !handleStatusCommandForSurface(agent, tt.surface) {
+				t.Fatal("handleStatusCommandForSurface() = false, want true")
+			}
+			got := out.String()
+			for _, fragment := range tt.want {
+				if !strings.Contains(got, fragment) {
+					t.Fatalf("status output missing %q:\n%s", fragment, got)
+				}
+			}
+			for _, fragment := range tt.reject {
+				if strings.Contains(got, fragment) {
+					t.Fatalf("status output should not contain %q:\n%s", fragment, got)
+				}
 			}
 		})
 	}

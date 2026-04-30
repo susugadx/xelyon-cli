@@ -187,6 +187,8 @@ export DEEPSEEK_API_KEY="sk-..."  # または他のプロバイダー
 
 ### 2. 起動
 
+通常の対話セッションは TUI が primary surface です。`--no-tui` は legacy classic REPL の fallback として残していますが、新しい対話型コマンドは TUI 側に追加します。
+
 ```bash
 xelyon
 

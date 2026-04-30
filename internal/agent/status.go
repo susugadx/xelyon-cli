@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -156,6 +157,10 @@ func (a *Agent) PrintStatusFooter() {
 
 // handleStatusCommand は現在の状態、直近リクエスト、セッション統計を表示する。
 func handleStatusCommand(agent *Agent) bool {
+	return handleStatusCommandForSurface(agent, commandcatalog.CommandSurfaceClassic)
+}
+
+func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.CommandSurface) bool {
 	out := agent.output()
 	printCommandHeaderToWriter(out, "Status / 状態")
 	_, _ = fmt.Fprintln(out)
@@ -175,8 +180,9 @@ func handleStatusCommand(agent *Agent) bool {
 
 	statusTable := ui.NewTable().
 		AddRow("State", string(status.State)).
+		AddRow("Surface", statusSurfaceSummary(commandSurface)).
 		AddRow("Reason", status.ReasonEN).
-		AddRow("Next", status.NextEN).
+		AddRow("Next", statusNextForSurface(status, commandSurface)).
 		AddRow("Mode", modeText).
 		AddRow("Provider", agent.ProviderName).
 		AddRow("Model", agent.CurrentModel).
@@ -200,4 +206,25 @@ func handleStatusCommand(agent *Agent) bool {
 	printSessionSections(agent)
 	_, _ = fmt.Fprintln(out)
 	return true
+}
+
+func statusSurfaceSummary(commandSurface commandcatalog.CommandSurface) string {
+	switch commandSurface {
+	case commandcatalog.CommandSurfaceTUI:
+		return "TUI primary"
+	default:
+		return "classic legacy fallback (--no-tui)"
+	}
+}
+
+func statusNextForSurface(status AgentStatus, commandSurface commandcatalog.CommandSurface) string {
+	if status.State != StateWaitingInput {
+		return status.NextEN
+	}
+	switch commandSurface {
+	case commandcatalog.CommandSurfaceTUI:
+		return "Type your request or / for command candidates"
+	default:
+		return "Type your request or /help (classic fallback; new UI commands are TUI-only)"
+	}
 }

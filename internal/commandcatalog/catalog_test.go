@@ -230,6 +230,26 @@ func TestCatalogCommandsDeclareSurfacePolicy(t *testing.T) {
 	}
 }
 
+func TestClassicSurfaceIsExplicitStableFallback(t *testing.T) {
+	for _, cmd := range Commands {
+		if !cmd.SupportsSurface(CommandSurfaceClassic) {
+			continue
+		}
+		if len(cmd.Surfaces) == 0 {
+			t.Fatalf("%s supports classic without explicit surface policy", cmd.Name)
+		}
+		if !cmd.SupportsSurface(CommandSurfaceTUI) {
+			t.Fatalf("%s supports classic but not primary TUI surface", cmd.Name)
+		}
+		if cmd.EffectiveOwner() == CommandOwnerTUIRouter {
+			t.Fatalf("%s is TUI-router owned but supports classic fallback", cmd.Name)
+		}
+		if cmd.EffectiveLifecycle() != CommandLifecycleStable {
+			t.Fatalf("%s supports classic with lifecycle %q, want stable", cmd.Name, cmd.EffectiveLifecycle())
+		}
+	}
+}
+
 func containsCommandName(commands []CommandInfo, name string) bool {
 	for _, cmd := range commands {
 		if cmd.Name == name {
