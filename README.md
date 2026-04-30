@@ -199,7 +199,7 @@ xelyon
 ### 3. 基本コマンド
 
 ```bash
-/help        # ヘルプ
+/           # TUI のコマンド候補を表示
 /use gemini  # プロバイダー切り替え
 /think high  # Extended Thinking 有効化
 /lsp status  # LSPサーバー状態確認

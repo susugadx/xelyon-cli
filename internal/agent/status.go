@@ -60,8 +60,8 @@ func defaultStatus() AgentStatus {
 		State:    StateWaitingInput,
 		ReasonEN: "Ready for input",
 		ReasonJP: "入力待ち",
-		NextEN:   "Type your request or a command like /help",
-		NextJP:   "リクエスト、または /help などのコマンドを入力",
+		NextEN:   "Type your request or / for commands",
+		NextJP:   "リクエスト、または / でコマンド候補を入力",
 	}
 }
 

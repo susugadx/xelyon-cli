@@ -198,5 +198,5 @@ func (a *Agent) printContextSuggestion() {
 }
 
 func (a *Agent) setReadyForInputStatus() {
-	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or /help", "リクエスト、または /help を入力")
+	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or / for commands", "リクエスト、または / でコマンド候補を入力")
 }

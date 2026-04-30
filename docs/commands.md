@@ -27,10 +27,11 @@ Azure API error では 401/403/404/429 と tool payload rejected の原因候補
 
 セッション中に `/` で始まるコマンドを入力できます。
 TUI が primary surface です。`--no-tui` の classic REPL は deprecated legacy fallback として残しており、新しい対話型 UI コマンドは TUI 側だけに追加します。
+TUI では入力欄で `/` または `/r` のような prefix を入力すると command 候補が表示され、Enter で選択中の command を実行し、Tab で入力欄へ補完できます。
 
 ### `/help`
 
-利用可能なコマンド一覧を表示します。
+利用可能なコマンド一覧を表示します。TUI では `/` 候補が primary の command discovery です。
 
 ```
 > /help

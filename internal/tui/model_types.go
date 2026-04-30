@@ -111,4 +111,5 @@ type Model struct {
 	streamState
 	mouseSelectionState
 	startupSubmission *StartupSubmission
+	slashSuggestions  slashSuggestionState
 }

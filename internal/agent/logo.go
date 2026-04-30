@@ -29,5 +29,5 @@ var logoLines = []string{
 func buildGradientHeader() string {
 	return "\n" + strings.Join(logoLines, "\n") + "\n" +
 		fmt.Sprintf("  \033[38;5;245mv%s · AI-powered coding agent\033[0m\n", version.GetVersion()) +
-		"  \033[38;5;228mType /help for commands, /exit to quit\033[0m\n\n"
+		"  \033[38;5;228mType / for commands, /exit to quit\033[0m\n\n"
 }

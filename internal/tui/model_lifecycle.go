@@ -14,7 +14,7 @@ import (
 // footerHeight は下部 chrome（入力欄+ステータスバー）の合計高さを返す。
 // 将来の compact footer や compose mode では動的に切り替えられる。
 func (m Model) footerHeight() int {
-	return statusBarHeight + inputHeight + len(m.visibleComposerRows())
+	return statusBarHeight + inputHeight + len(m.visibleSlashSuggestionRows()) + len(m.visibleComposerRows())
 }
 
 // NewModel は TUI Model を作成する。
@@ -83,8 +83,8 @@ func (m *Model) applyChatWindowSize(width, height int) {
 	m.height = height
 
 	viewportHeight := m.height - m.footerHeight()
-	if viewportHeight < 1 {
-		viewportHeight = 1
+	if viewportHeight < minChatViewportHeight {
+		viewportHeight = minChatViewportHeight
 	}
 
 	if !m.ready {

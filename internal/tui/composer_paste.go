@@ -13,6 +13,7 @@ func (m *Model) handleComposerPaste(content string) {
 		m.insertTextIntoInput(content)
 	}
 	m.syncComposerLayout()
+	m.refreshSlashSuggestions()
 }
 
 func (m *Model) removeLastPasteBlock() bool {
@@ -22,5 +23,6 @@ func (m *Model) removeLastPasteBlock() bool {
 	}
 	m.prependTextToInput(text)
 	m.syncComposerLayout()
+	m.refreshSlashSuggestions()
 	return true
 }

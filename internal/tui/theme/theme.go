@@ -54,28 +54,36 @@ var Viewport = ViewportPalette{
 
 // ChromePalette は input dock と status bar の ANSI color palette。
 type ChromePalette struct {
-	InputBg      string
-	InputTextFg  string
-	InputPasteFg string
-	InputPasteID string
-	InputPrompt  string
-	HintFg       string
-	NavBadge     string
-	NewOutput    string
-	SuccessFg    string
-	Reset        string
+	InputBg              string
+	InputTextFg          string
+	InputPasteFg         string
+	InputPasteID         string
+	InputPrompt          string
+	SuggestionBg         string
+	SuggestionSelectedBg string
+	SuggestionCommandFg  string
+	SuggestionDescFg     string
+	HintFg               string
+	NavBadge             string
+	NewOutput            string
+	SuccessFg            string
+	Reset                string
 }
 
 // Chrome は chat chrome で使う既定 palette。
 var Chrome = ChromePalette{
-	InputBg:      "\033[48;5;236m",
-	InputTextFg:  "\033[38;5;252m",
-	InputPasteFg: "\033[38;5;244m",
-	InputPasteID: "\033[38;5;81m",
-	InputPrompt:  "\033[38;5;46m",
-	HintFg:       "\033[38;5;244m",
-	NavBadge:     "\033[48;5;33;38;5;255m",
-	NewOutput:    "\033[48;5;63;38;5;230m",
-	SuccessFg:    "\033[38;5;82m",
-	Reset:        "\033[0m",
+	InputBg:              "\033[48;5;236m",
+	InputTextFg:          "\033[38;5;252m",
+	InputPasteFg:         "\033[38;5;244m",
+	InputPasteID:         "\033[38;5;81m",
+	InputPrompt:          "\033[38;5;46m",
+	SuggestionBg:         "\033[48;5;236m",
+	SuggestionSelectedBg: "\033[48;5;25m",
+	SuggestionCommandFg:  "\033[38;5;81m",
+	SuggestionDescFg:     "\033[38;5;245m",
+	HintFg:               "\033[38;5;244m",
+	NavBadge:             "\033[48;5;33;38;5;255m",
+	NewOutput:            "\033[48;5;63;38;5;230m",
+	SuccessFg:            "\033[38;5;82m",
+	Reset:                "\033[0m",
 }

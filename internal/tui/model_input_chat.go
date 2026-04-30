@@ -46,6 +46,10 @@ func (m Model) handleClipboardPaste() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleComposerInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if updated, cmd, handled := m.handleSlashSuggestionKey(msg); handled {
+		return updated, cmd
+	}
+
 	switch {
 	case msg.Type == tea.KeyEsc:
 		if m.hasActiveMouseSelection() {
@@ -93,6 +97,7 @@ func (m Model) handleComposerInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// その他のキーは textInput に渡す
 	var cmd tea.Cmd
 	m.textInput, cmd = m.textInput.Update(msg)
+	m.refreshSlashSuggestions()
 	m.chromeDirty = true
 	return m, cmd
 }

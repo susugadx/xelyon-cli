@@ -9,6 +9,7 @@ import (
 func (m *Model) clearComposer() {
 	m.composer.Clear()
 	m.textInput.Reset()
+	m.clearSlashSuggestions()
 	m.syncComposerLayout()
 }
 

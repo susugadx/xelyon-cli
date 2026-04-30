@@ -14,7 +14,7 @@ func (m Model) maxVisibleComposerRows() int {
 	if m.height <= 0 {
 		return len(m.composer.Parts)
 	}
-	return max(0, m.height-statusBarHeight-inputHeight-1)
+	return m.maxFooterExpansionRows()
 }
 
 func (m Model) visibleComposerRows() []tuicomposer.VisibleRow {

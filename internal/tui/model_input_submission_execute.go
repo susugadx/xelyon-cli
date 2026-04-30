@@ -9,6 +9,7 @@ import (
 
 func (m *Model) resetComposerInput() {
 	m.textInput.Reset()
+	m.clearSlashSuggestions()
 	m.chromeDirty = true
 }
 
