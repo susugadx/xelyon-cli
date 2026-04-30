@@ -147,6 +147,59 @@ func TestTUILocalCommandOwnership(t *testing.T) {
 	}
 }
 
+func TestConfigProjectInitCommandBoundaries(t *testing.T) {
+	tests := []struct {
+		name        string
+		wantDesc    string
+		wantTUI     bool
+		wantClassic bool
+		wantOwner   CommandOwner
+	}{
+		{
+			name:        "/config",
+			wantDesc:    "Edit global config.yaml settings",
+			wantTUI:     true,
+			wantClassic: true,
+			wantOwner:   CommandOwnerAgent,
+		},
+		{
+			name:        "/init",
+			wantDesc:    "Create xelyon.yaml project template",
+			wantTUI:     true,
+			wantClassic: true,
+			wantOwner:   CommandOwnerAgent,
+		},
+		{
+			name:        "/project",
+			wantDesc:    "Edit project xelyon.yaml interactively",
+			wantTUI:     true,
+			wantClassic: false,
+			wantOwner:   CommandOwnerTUIRouter,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, ok := Find(tt.name)
+			if !ok {
+				t.Fatalf("Find(%q) ok = false, want true", tt.name)
+			}
+			if cmd.Description != tt.wantDesc {
+				t.Fatalf("%s description = %q, want %q", tt.name, cmd.Description, tt.wantDesc)
+			}
+			if cmd.SupportsSurface(CommandSurfaceTUI) != tt.wantTUI {
+				t.Fatalf("%s TUI support = %v, want %v", tt.name, cmd.SupportsSurface(CommandSurfaceTUI), tt.wantTUI)
+			}
+			if cmd.SupportsSurface(CommandSurfaceClassic) != tt.wantClassic {
+				t.Fatalf("%s classic support = %v, want %v", tt.name, cmd.SupportsSurface(CommandSurfaceClassic), tt.wantClassic)
+			}
+			if cmd.EffectiveOwner() != tt.wantOwner {
+				t.Fatalf("%s owner = %q, want %q", tt.name, cmd.EffectiveOwner(), tt.wantOwner)
+			}
+		})
+	}
+}
+
 func TestLSPCommandIsClassicOnlyLegacyDiagnostic(t *testing.T) {
 	cmd, ok := Find("/lsp")
 	if !ok {

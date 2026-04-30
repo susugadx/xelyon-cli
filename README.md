@@ -102,7 +102,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **完了検証**: AI が「完了」「done」と宣言した際、変更ファイルの LSP 診断を自動実行しエラー残存時は修正を続行
 - **Final Checks**: `completed_with_changes` の完了候補でユーザー定義のシェルコマンド（`go test ./...` 等）を自動実行。失敗時は AI が修正を続行（`final_checks.commands` で設定）
 - **自動検出**: プロジェクト内の言語を自動検出し、未インストールのLSPサーバーを提案
-- **ワンクリックインストール**: `/lsp install <言語>` でLSPサーバーをインストール
+- **サーバー設定**: TUI では `/config` の `lsp.servers` で管理。診断用 `/lsp` は legacy classic (`--no-tui`) 用です
 - **23言語対応**:
   - **メイン**: Go, TypeScript/JavaScript (React/JSX), Python, Rust
   - **バックエンド**: Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua
@@ -202,13 +202,13 @@ xelyon
 
 ```bash
 /           # TUI のコマンド候補を表示
-/use gemini  # プロバイダー切り替え
-/think high  # Extended Thinking 有効化
-/lsp status  # LSPサーバー状態確認
-/lsp detect  # プロジェクト内の言語を検出
-/lsp install # LSPサーバーをインストール
-/project     # xelyon.yaml を対話式で編集
-/exit        # 終了
+/model      # 現在のモデル確認/切り替え
+/use gemini # プロバイダー切り替え
+/think high # Extended Thinking 有効化
+/config     # global config を対話式で編集
+/project    # xelyon.yaml を対話式で編集
+/init       # xelyon.yaml テンプレート作成
+/exit       # 終了
 ```
 
 ### 4. NAVモードでテキストをコピー
@@ -380,8 +380,9 @@ final_checks:
 ### 設定管理
 
 ```bash
-> /config         # 対話式設定メニュー（50+設定項目を編集可能）
-> /config show    # 全設定を表示（デフォルトとの差分を ⚡ で表示）
+> /config         # global config の対話式設定メニュー（50+設定項目を編集可能）
+> /config show    # global config を表示（デフォルトとの差分を ⚡ で表示）
+> /project        # project config (xelyon.yaml) を対話式で編集
 ```
 
 対話式メニューでは20カテゴリ、50以上の設定項目を編集可能:

@@ -29,6 +29,8 @@ Azure API error では 401/403/404/429 と tool payload rejected の原因候補
 TUI が primary surface です。`--no-tui` の classic REPL は deprecated legacy fallback として残しており、新しい対話型 UI コマンドは TUI 側だけに追加します。
 TUI では入力欄で `/` または `/r` のような prefix を入力すると command 候補が表示され、Enter で選択中の command を実行し、Tab で入力欄へ補完できます。
 
+設定系コマンドの責務は分かれています。`/config` は global config (`~/.xelyon/config.yaml`) の編集、`/project` は project config (`xelyon.yaml`) の編集、`/init` は `xelyon.yaml` テンプレート作成だけを担当します。TUI で `xelyon.yaml` を管理する通常導線は `/project` です。
+
 ### `/help`
 
 利用可能なコマンド一覧を表示します。TUI では `/` 候補が primary の command discovery です。
@@ -212,7 +214,7 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 
 ### `/config`
 
-設定を確認・変更します。対話式メニューで50以上の設定項目をカテゴリ別に管理できます。
+global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対話式メニューで50以上の設定項目をカテゴリ別に管理できます。project 固有の `xelyon.yaml` は `/project` で編集します。
 
 ```
 > /config               # 対話式設定メニューを起動
@@ -259,7 +261,7 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 
 ### `/init`
 
-プロジェクトの設定ファイル（xelyon.yaml）のテンプレートを作成します。
+project config (`xelyon.yaml`) のテンプレートを作成します。既存ファイルの編集は `/project` が通常導線です。
 
 ```
 > /init
@@ -279,7 +281,7 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 
 ### `/project`
 
-TUI で `xelyon.yaml` の project config 画面を開きます。
+TUI で project config (`xelyon.yaml`) の編集画面を開きます。global config (`~/.xelyon/config.yaml`) は `/config` で編集します。
 
 ```
 > /project
@@ -365,6 +367,7 @@ LSPサーバーのステータスを表示・管理します。
 `/lsp` は legacy classic (`--no-tui`) 用の診断コマンドです。TUI では候補と `/help` には表示せず、LSP 設定は `/config` から編集します。
 
 ```
+xelyon --no-tui
 > /lsp              # ステータス表示
 > /lsp status       # 同上
 > /lsp detect       # プロジェクト内の言語を検出

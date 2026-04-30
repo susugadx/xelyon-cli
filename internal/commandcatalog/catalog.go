@@ -11,7 +11,7 @@ type CommandInfo struct {
 	Name          string           // "/config"
 	Aliases       []string         // []string{"/quit", "/q"}
 	Args          string           // "[id]", "<provider> [model]"
-	Description   string           // "Interactive configuration menu"
+	Description   string           // "Edit global config.yaml settings"
 	DescriptionJP string           // "対話式設定変更"
 	SubCommands   []SubCommand     // サブコマンド
 	Surfaces      []CommandSurface // 省略時は TUI primary のみ
@@ -210,7 +210,7 @@ var Commands = []CommandInfo{
 	},
 	{
 		Name:          "/config",
-		Description:   "Interactive configuration menu",
+		Description:   "Edit global config.yaml settings",
 		DescriptionJP: "対話式設定変更",
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryConfig,
@@ -233,7 +233,7 @@ var Commands = []CommandInfo{
 	},
 	{
 		Name:          "/init",
-		Description:   "Create xelyon.yaml template (project config)",
+		Description:   "Create xelyon.yaml project template",
 		DescriptionJP: "xelyon.yamlテンプレートを作成",
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryConfig,
@@ -242,7 +242,7 @@ var Commands = []CommandInfo{
 	},
 	{
 		Name:          "/project",
-		Description:   "Edit xelyon.yaml interactively (rules, final checks)",
+		Description:   "Edit project xelyon.yaml interactively",
 		DescriptionJP: "xelyon.yamlを対話式で編集",
 		Surfaces:      []CommandSurface{CommandSurfaceTUI},
 		Owner:         CommandOwnerTUIRouter,

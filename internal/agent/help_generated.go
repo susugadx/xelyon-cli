@@ -16,11 +16,11 @@ const GeneratedHelpCommandsText = `Commands:
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /use <provider> [model]   - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
   /providers                - List available providers and their API key status
-  /config                   - Interactive configuration menu
+  /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
   /model [name]             - Show current model or switch model without restart
-  /init                     - Create xelyon.yaml template (project config)
+  /init                     - Create xelyon.yaml project template
   /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
   /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
   /lsp [status]             - Show LSP server status (running/not started/disabled)
@@ -43,12 +43,12 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /use <provider> [model]   - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
   /providers                - List available providers and their API key status
-  /config                   - Interactive configuration menu
+  /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
   /model [name]             - Show current model or switch model without restart
-  /init                     - Create xelyon.yaml template (project config)
-  /project                  - Edit xelyon.yaml interactively (rules, final checks)
+  /init                     - Create xelyon.yaml project template
+  /project                  - Edit project xelyon.yaml interactively
   /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
   /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
   /version                  - Show version information
