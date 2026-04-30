@@ -13,7 +13,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
-	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -222,10 +221,6 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 			continue
 		}
 
-		if handleREPLReviewCommand(input, agent) {
-			continue
-		}
-
 		// 特殊コマンド
 		if handleSpecialCommand(input, agent) {
 			continue
@@ -243,16 +238,6 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 		// AIに送信
 		agent.chat(input)
 	}
-}
-
-func handleREPLReviewCommand(input string, agent *Agent) bool {
-	invocation, ok := commandruntime.Parse(input, commandAliasesFromConfig(agent.cfg()))
-	if !ok || invocation.Command != "/review" || len(invocation.Args) != 0 {
-		return false
-	}
-	yellow.Fprintln(agent.output(), "⚠️  /review is available in TUI mode only.")
-	yellow.Fprintln(agent.output(), "   Run without --no-tui to use the review preset screen.")
-	return true
 }
 
 // setupSignalHandler はシグナルハンドラーを設定する

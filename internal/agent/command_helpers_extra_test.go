@@ -85,6 +85,9 @@ func TestPrintHelpToWriter_WritesGeneratedHelp(t *testing.T) {
 	if strings.Contains(got, "/review") {
 		t.Fatalf("classic /help should not advertise TUI-only /review:\n%s", got)
 	}
+	if strings.Contains(got, "/project") {
+		t.Fatalf("classic /help should not advertise TUI-only /project:\n%s", got)
+	}
 }
 
 func TestPrintHelpToWriterForSurface_TUICommands(t *testing.T) {

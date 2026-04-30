@@ -170,8 +170,8 @@ func init() {
 	// 新規: -i/--image フラグ（画像入力）
 	rootCmd.Flags().StringVarP(&imageFlag, "image", "i", "", "Image file to include (for multimodal models: gemini, claude, openai)")
 
-	// 新規: --no-tui フラグ（TUI無効化）
-	rootCmd.Flags().BoolVar(&noTUI, "no-tui", false, "Disable alternate screen TUI (use classic REPL)")
+	// --no-tui は legacy REPL 用。新しい interactive command は TUI を primary surface とする。
+	rootCmd.Flags().BoolVar(&noTUI, "no-tui", false, "Use legacy classic REPL instead of the primary TUI")
 
 	rootCmd.AddCommand(newDoctorCommand())
 }

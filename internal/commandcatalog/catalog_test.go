@@ -95,6 +95,9 @@ func TestSurfaceFiltering(t *testing.T) {
 	if strings.Contains(classicHelp, "/review") {
 		t.Fatalf("classic help should not include /review:\n%s", classicHelp)
 	}
+	if strings.Contains(classicHelp, "/project") {
+		t.Fatalf("classic help should not include TUI-only /project:\n%s", classicHelp)
+	}
 	tuiHelp := RenderCommandsTextForSurface(CommandSurfaceTUI)
 	if !strings.Contains(tuiHelp, "/review") {
 		t.Fatalf("TUI help should include /review:\n%s", tuiHelp)
@@ -145,6 +148,9 @@ func TestDiscoverablePrefixFiltering(t *testing.T) {
 	}
 	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/project" {
 		t.Fatalf("TUI discoverable /project = %#v, want /project", got)
+	}
+	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceClassic); len(got) != 0 {
+		t.Fatalf("classic discoverable /project = %#v, want no matches", got)
 	}
 }
 

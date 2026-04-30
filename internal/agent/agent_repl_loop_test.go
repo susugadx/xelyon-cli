@@ -15,6 +15,8 @@ import (
 
 func newREPLLoopTestAgent(t *testing.T, provider api.Provider, input io.Reader, out *bytes.Buffer) (*Agent, *ui.MultilineReader) {
 	t.Helper()
+	withTempWorkdir(t)
+	t.Setenv("HOME", t.TempDir())
 
 	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
 	runtime.UI = ui.NewRuntime(input, out, out)
@@ -85,6 +87,40 @@ func TestRunREPLLoop_NonBareReviewFallsThroughToChat(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "/review is available in TUI mode only") {
 		t.Fatalf("runREPLLoop() output = %q, should not contain TUI-only review message", out.String())
+	}
+}
+
+func TestRunREPLLoop_BareProjectIsTUIModeOnly(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &scriptedChatProvider{name: "openai", functionCalling: true}
+	agent, mlReader := newREPLLoopTestAgent(t, provider, strings.NewReader("/project\n"), &out)
+
+	runREPLLoop(agent, mlReader)
+
+	if provider.callCount != 0 {
+		t.Fatalf("provider.callCount = %d, want 0", provider.callCount)
+	}
+	if !strings.Contains(out.String(), "/project is available in TUI mode only") {
+		t.Fatalf("runREPLLoop() output = %q, want TUI-only project message", out.String())
+	}
+}
+
+func TestRunREPLLoop_NonBareProjectFallsThroughToChat(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &scriptedChatProvider{name: "openai", functionCalling: true}
+	agent, mlReader := newREPLLoopTestAgent(t, provider, strings.NewReader("/project rules\n"), &out)
+
+	runREPLLoop(agent, mlReader)
+
+	if provider.callCount != 1 {
+		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
+	}
+	if strings.Contains(out.String(), "/project is available in TUI mode only") {
+		t.Fatalf("runREPLLoop() output = %q, should not contain TUI-only project message", out.String())
 	}
 }
 

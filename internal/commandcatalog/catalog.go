@@ -14,7 +14,7 @@ type CommandInfo struct {
 	Description   string           // "Interactive configuration menu"
 	DescriptionJP string           // "対話式設定変更"
 	SubCommands   []SubCommand     // サブコマンド
-	Surfaces      []CommandSurface // 省略時は全 surface
+	Surfaces      []CommandSurface // 省略時は TUI primary と classic legacy の両方
 	Lifecycle     CommandLifecycle // 省略時は stable
 	Category      CommandCategory  // 省略時は other
 	Discoverable  bool             // true の command だけを候補表示に出す
@@ -31,7 +31,9 @@ type SubCommand struct {
 type CommandSurface string
 
 const (
-	CommandSurfaceTUI     CommandSurface = "tui"
+	// CommandSurfaceTUI は primary interactive surface。
+	CommandSurfaceTUI CommandSurface = "tui"
+	// CommandSurfaceClassic は --no-tui 用の legacy surface。
 	CommandSurfaceClassic CommandSurface = "classic"
 )
 
@@ -204,6 +206,7 @@ var Commands = []CommandInfo{
 		Name:          "/project",
 		Description:   "Edit xelyon.yaml interactively (rules, final checks)",
 		DescriptionJP: "xelyon.yamlを対話式で編集",
+		Surfaces:      []CommandSurface{CommandSurfaceTUI},
 		Category:      CommandCategoryConfig,
 		Discoverable:  true,
 		SortWeight:    720,
