@@ -155,6 +155,61 @@ func TestProvider_ChatWithTools_UsesConverseStreamForNonClaudeBedrockModel(t *te
 	}
 }
 
+func TestProvider_ChatWithTools_RejectsUnsupportedConverseModelBeforeAPI(t *testing.T) {
+	mockConverse := &mockConverseStreamClient{err: errors.New("should not call converse")}
+	p := &Provider{converseClient: mockConverse}
+
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    "us.meta.llama4-scout-17b-instruct-v1:0",
+		MaxOutputTokens: 64000,
+	}
+	ctx := newBedrockTestContext(cfg)
+
+	_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, "")
+	if err == nil || !strings.Contains(err.Error(), "requires a model with streaming tool use support") {
+		t.Fatalf("ChatWithTools() error = %v, want unsupported Converse tool-use error", err)
+	}
+	if mockConverse.lastInput != nil {
+		t.Fatal("ConverseStream() should not be called for unsupported Converse model")
+	}
+}
+
+func TestProvider_ChatWithTools_AllowsSupportedConverseCatalogAlias(t *testing.T) {
+	output, _ := newClosedConverseStreamOutput(
+		&bedrocktypes.ConverseStreamOutputMemberContentBlockDelta{
+			Value: bedrocktypes.ContentBlockDeltaEvent{
+				ContentBlockIndex: aws.Int32(0),
+				Delta:             &bedrocktypes.ContentBlockDeltaMemberText{Value: "Alias OK"},
+			},
+		},
+	)
+	mockConverse := &mockConverseStreamClient{output: output}
+	p := &Provider{converseClient: mockConverse}
+
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    "corp-nova-pro",
+		CatalogModel:    "amazon.nova-pro-v1:0",
+		MaxOutputTokens: 64000,
+	}
+	ctx := newBedrockTestContext(cfg)
+
+	got, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, "")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if got != "Alias OK" {
+		t.Fatalf("ChatWithTools() = %q, want Alias OK", got)
+	}
+	if mockConverse.lastInput == nil {
+		t.Fatal("ConverseStream() should be called for supported catalog alias")
+	}
+	if gotModel := aws.ToString(mockConverse.lastInput.ModelId); gotModel != "corp-nova-pro" {
+		t.Fatalf("ModelId = %q, want configured alias", gotModel)
+	}
+}
+
 func TestBuildConverseStreamInput_MaxTokensSelection(t *testing.T) {
 	t.Setenv("BEDROCK_FUNCTION_CALLING", "0")
 

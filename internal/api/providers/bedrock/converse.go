@@ -16,6 +16,9 @@ import (
 )
 
 func (p *Provider) chatWithConverseStream(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, req bedrockRequestContext) (string, error) {
+	if err := ensureBedrockConverseToolUseSupported(req); err != nil {
+		return "", err
+	}
 	if image != nil && image.Base64 != "" {
 		return "", fmt.Errorf("bedrock ConverseStream route does not support image input yet: model=%q catalog_model=%q", req.model, req.catalogModel)
 	}

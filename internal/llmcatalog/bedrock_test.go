@@ -70,6 +70,70 @@ func TestIsBedrockModelID(t *testing.T) {
 	}
 }
 
+func TestBedrockConverseToolUseSupported(t *testing.T) {
+	tests := []struct {
+		name         string
+		model        string
+		catalogModel string
+		want         bool
+	}{
+		{
+			name:  "validated nova pro direct model",
+			model: "amazon.nova-pro-v1:0",
+			want:  true,
+		},
+		{
+			name:  "validated nova pro inference profile",
+			model: "us.amazon.nova-pro-v1:0",
+			want:  true,
+		},
+		{
+			name:         "configured alias uses catalog model",
+			model:        "corp-nova-pro",
+			catalogModel: "amazon.nova-pro-v1:0",
+			want:         true,
+		},
+		{
+			name:  "validated kimi converse tool model",
+			model: "moonshotai.kimi-k2.5",
+			want:  true,
+		},
+		{
+			name:  "unverified nova variant is not implicitly supported",
+			model: "amazon.nova-lite-v1:0",
+			want:  false,
+		},
+		{
+			name:  "gemma text-only is not supported",
+			model: "google.gemma-3-4b-it",
+			want:  false,
+		},
+		{
+			name:  "llama streaming tool use unsupported",
+			model: "us.meta.llama4-scout-17b-instruct-v1:0",
+			want:  false,
+		},
+		{
+			name:  "deepseek streaming tool use unsupported",
+			model: "us.deepseek.r1-v1:0",
+			want:  false,
+		},
+		{
+			name:  "unverified kimi variant is not implicitly supported",
+			model: "moonshotai.kimi-k2-thinking",
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BedrockConverseToolUseSupported(tt.model, tt.catalogModel); got != tt.want {
+				t.Fatalf("BedrockConverseToolUseSupported(%q, %q) = %v, want %v", tt.model, tt.catalogModel, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsBedrockClaudeModel_AvoidsSubstringOnlyMatch(t *testing.T) {
 	if IsBedrockClaudeModel("amazon.nova-notclaude-v1:0") {
 		t.Fatal("IsBedrockClaudeModel() should not treat arbitrary claude substring as Claude family")

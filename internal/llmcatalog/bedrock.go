@@ -50,6 +50,24 @@ func IsBedrockConverseModel(model, catalogModel string) bool {
 	return BedrockModelFamilyFor(model, catalogModel) == BedrockModelFamilyConverse
 }
 
+// BedrockConverseToolUseSupported は xelyon の Bedrock Converse 経路で実行対象にできる
+// streaming tool use 対応モデルか返す。
+func BedrockConverseToolUseSupported(model, catalogModel string) bool {
+	return bedrockConverseToolUseSupportedModel(model) || bedrockConverseToolUseSupportedModel(catalogModel)
+}
+
+func bedrockConverseToolUseSupportedModel(model string) bool {
+	model = trimBedrockInferenceProfilePrefix(model)
+	switch {
+	case model == "amazon.nova-pro-v1:0":
+		return true
+	case model == "moonshotai.kimi-k2.5":
+		return true
+	default:
+		return false
+	}
+}
+
 func knownBedrockMaxOutputTokens(model string) (int, bool) {
 	model = trimBedrockInferenceProfilePrefix(model)
 	for _, rule := range bedrockMaxOutputTokenPrefixes {

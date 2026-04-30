@@ -56,3 +56,10 @@ func ensureBedrockClaudeMessagesRoute(req bedrockRequestContext) error {
 	}
 	return fmt.Errorf("bedrock Claude Messages route requires an Anthropic Claude model: model=%q catalog_model=%q route=%q", req.model, req.catalogModel, req.route)
 }
+
+func ensureBedrockConverseToolUseSupported(req bedrockRequestContext) error {
+	if req.route != bedrockRouteConverseStream || llmcatalog.BedrockConverseToolUseSupported(req.model, req.catalogModel) {
+		return nil
+	}
+	return fmt.Errorf("bedrock ConverseStream route requires a model with streaming tool use support: model=%q catalog_model=%q", req.model, req.catalogModel)
+}
