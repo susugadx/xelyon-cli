@@ -58,10 +58,10 @@ func BedrockConverseToolUseSupported(model, catalogModel string) bool {
 
 func bedrockConverseToolUseSupportedModel(model string) bool {
 	model = trimBedrockInferenceProfilePrefix(model)
-	switch {
-	case model == "amazon.nova-pro-v1:0":
+	switch model {
+	case "amazon.nova-pro-v1:0":
 		return true
-	case model == "moonshotai.kimi-k2.5":
+	case "moonshotai.kimi-k2.5":
 		return true
 	default:
 		return false

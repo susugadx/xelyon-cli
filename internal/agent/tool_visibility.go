@@ -33,10 +33,6 @@ const (
 	normalModeRecoveryPromptNoTextPlan      normalModeRecoveryPromptKind = "no_text_plan"
 )
 
-func resolveToolVisibilityPolicy(providerName string, modelName string, phase toolSurfacePhase, opts toolVisibilityOptions) toolVisibilityPolicy {
-	return resolveToolVisibilityPolicyWithConfig(providerName, modelName, nil, phase, opts)
-}
-
 func resolveToolVisibilityPolicyWithConfig(providerName string, modelName string, cfg *config.Config, phase toolSurfacePhase, opts toolVisibilityOptions) toolVisibilityPolicy {
 	editToolMode := string(prompt.ResolveEditToolModeWithConfig(providerName, modelName, cfg))
 	return newToolVisibilityPolicy(editToolMode, phase, opts)
