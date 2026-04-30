@@ -8,16 +8,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	bedrocktypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 const (
-	bedrockSmokeEnabledEnv       = "XELYON_BEDROCK_SMOKE"
-	bedrockSmokeClaudeModelEnv   = "XELYON_BEDROCK_SMOKE_CLAUDE_MODEL"
-	bedrockSmokeConverseModelEnv = "XELYON_BEDROCK_SMOKE_CONVERSE_MODEL"
+	bedrockSmokeEnabledEnv        = "XELYON_BEDROCK_SMOKE"
+	bedrockSmokeClaudeModelEnv    = "XELYON_BEDROCK_SMOKE_CLAUDE_MODEL"
+	bedrockSmokeConverseModelEnv  = "XELYON_BEDROCK_SMOKE_CONVERSE_MODEL"
+	bedrockProbeConverseModelsEnv = "XELYON_BEDROCK_PROBE_CONVERSE_MODELS"
 )
+
+var defaultBedrockProbeConverseModels = []string{
+	"us.meta.llama4-scout-17b-instruct-v1:0",
+	"us.deepseek.r1-v1:0",
+	"google.gemma-3-4b-it",
+}
 
 func TestBedrockLiveSmoke_ClaudeMessagesRoute(t *testing.T) {
 	requireBedrockLiveSmoke(t)
@@ -116,13 +127,13 @@ func TestBedrockLiveSmoke_ConverseRoute(t *testing.T) {
 		defer cancel()
 
 		got, err := p.ChatWithTools(ctx, "You are a Bedrock Converse smoke test.", []api.Message{
-			{Role: "user", Content: "Reply with the exact token bedrock-converse-smoke-ok."},
+			{Role: "user", Content: "Reply with exactly this public test string: xelyon_converse_smoke_ok"},
 		}, model)
 		if err != nil {
 			t.Fatalf("Converse text smoke failed: %v", err)
 		}
-		if !strings.Contains(strings.ToLower(got), "bedrock-converse-smoke-ok") {
-			t.Fatalf("Converse text response = %q, want smoke token", got)
+		if !strings.Contains(strings.ToLower(got), "xelyon_converse_smoke_ok") {
+			t.Fatalf("Converse text response = %q, want smoke string", got)
 		}
 		assertBedrockSmokeUsage(t, usage)
 	})
@@ -143,6 +154,37 @@ func TestBedrockLiveSmoke_ConverseRoute(t *testing.T) {
 	})
 }
 
+func TestBedrockLiveProbe_UnsupportedConverseModels(t *testing.T) {
+	requireBedrockLiveSmoke(t)
+	t.Setenv("BEDROCK_FUNCTION_CALLING", "1")
+
+	for _, model := range bedrockSmokeModels(bedrockProbeConverseModelsEnv, defaultBedrockProbeConverseModels) {
+		t.Run(bedrockSmokeTestName(model), func(t *testing.T) {
+			cfg := bedrockSmokeConfig(model)
+			p := newBedrockLiveSmokeProvider(t, cfg)
+
+			ctx, cancel := bedrockSmokeContext(t, cfg, nil)
+			defer cancel()
+			got, err := bedrockProbeConverseTextOnly(ctx, p, model)
+			if err != nil {
+				t.Fatalf("Converse text-only probe failed: %v", err)
+			}
+			if !strings.Contains(strings.ToLower(got), "xelyon_converse_probe_ok") {
+				t.Fatalf("Converse text-only probe response = %q, want probe string", got)
+			}
+
+			rejectCtx, rejectCancel := bedrockSmokeContext(t, cfg, bedrockSmokeTools())
+			defer rejectCancel()
+			_, err = p.ChatWithTools(rejectCtx, "You are a Bedrock Converse unsupported-model probe.", []api.Message{
+				{Role: "user", Content: `Call smoke_echo exactly once with {"value":"bedrock-converse-probe-tool"} and do not answer in prose.`},
+			}, model)
+			if err == nil || !strings.Contains(err.Error(), "requires a model with streaming tool use support") {
+				t.Fatalf("ChatWithTools() error = %v, want unsupported streaming tool-use error", err)
+			}
+		})
+	}
+}
+
 func requireBedrockLiveSmoke(t *testing.T) {
 	t.Helper()
 	if testing.Short() {
@@ -158,6 +200,31 @@ func bedrockSmokeModel(envName, fallback string) string {
 		return model
 	}
 	return fallback
+}
+
+func bedrockSmokeModels(envName string, fallback []string) []string {
+	raw := strings.TrimSpace(os.Getenv(envName))
+	if raw == "" {
+		return append([]string(nil), fallback...)
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\n' || r == '\t'
+	})
+	models := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if model := strings.TrimSpace(part); model != "" {
+			models = append(models, model)
+		}
+	}
+	if len(models) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return models
+}
+
+func bedrockSmokeTestName(model string) string {
+	replacer := strings.NewReplacer("/", "_", ":", "_")
+	return replacer.Replace(model)
 }
 
 func newBedrockLiveSmokeProvider(t *testing.T, cfg *config.Config) *Provider {
@@ -193,10 +260,28 @@ func bedrockSmokeContext(t *testing.T, cfg *config.Config, tools []api.ToolDefin
 	ctx = config.WithContext(ctx, cfg)
 	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
-	if len(tools) > 0 {
-		ctx = api.WithToolDefinitions(ctx, tools)
-	}
+	ctx = api.WithToolDefinitions(ctx, tools)
 	return ctx, cancel
+}
+
+func bedrockProbeConverseTextOnly(ctx context.Context, p *Provider, model string) (string, error) {
+	input := &bedrockruntime.ConverseStreamInput{
+		ModelId: aws.String(model),
+		Messages: []bedrocktypes.Message{
+			{
+				Role: bedrocktypes.ConversationRoleUser,
+				Content: []bedrocktypes.ContentBlock{
+					&bedrocktypes.ContentBlockMemberText{Value: "Reply with exactly this public test string: xelyon_converse_probe_ok"},
+				},
+			},
+		},
+		InferenceConfig: &bedrocktypes.InferenceConfiguration{MaxTokens: aws.Int32(128)},
+	}
+	output, err := p.converseClient.ConverseStream(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	return p.handleConverseStream(ctx, output, ui.NewSpinnerWithWriter(io.Discard))
 }
 
 func bedrockSmokeTools() []api.ToolDefinition {

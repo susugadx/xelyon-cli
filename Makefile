@@ -1,12 +1,15 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke bedrock-smoke release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke bedrock-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
 CI_COVERAGE_THRESHOLD := 60
 CI_TEST_CMD := go test -p=2 -v -race -coverprofile=$(CI_COVERAGE_FILE) -covermode=atomic -tags grammar_set_core ./...
 RELEASE_TEST_CMD := go test -p=2 -v -race -tags grammar_set_core ./...
+BEDROCK_SMOKE_CLAUDE_MODEL ?= global.anthropic.claude-sonnet-4-6
+BEDROCK_SMOKE_CONVERSE_MODELS ?= amazon.nova-pro-v1:0 moonshotai.kimi-k2.5
+BEDROCK_PROBE_CONVERSE_MODELS ?= us.meta.llama4-scout-17b-instruct-v1:0 us.deepseek.r1-v1:0 google.gemma-3-4b-it
 
 # ビルド
 build:
@@ -170,6 +173,18 @@ azure-doctor-smoke:
 # Bedrock 実 API smoke test（AWS 認証チェーン必須）
 bedrock-smoke:
 	XELYON_BEDROCK_SMOKE=1 go test ./internal/api/providers/bedrock -run TestBedrockLiveSmoke -count=1 -v -timeout 10m
+
+# Bedrock runtime supported モデルの実 API smoke matrix
+bedrock-smoke-matrix:
+	XELYON_BEDROCK_SMOKE=1 XELYON_BEDROCK_SMOKE_CLAUDE_MODEL="$(BEDROCK_SMOKE_CLAUDE_MODEL)" go test ./internal/api/providers/bedrock -run TestBedrockLiveSmoke_ClaudeMessagesRoute -count=1 -v -timeout 10m
+	@for model in $(BEDROCK_SMOKE_CONVERSE_MODELS); do \
+		echo "=== Bedrock Converse smoke: $$model ==="; \
+		XELYON_BEDROCK_SMOKE=1 XELYON_BEDROCK_SMOKE_CONVERSE_MODEL="$$model" go test ./internal/api/providers/bedrock -run TestBedrockLiveSmoke_ConverseRoute -count=1 -v -timeout 10m || exit $$?; \
+	done
+
+# Bedrock text-only Converse モデルを unsupported runtime として検証
+bedrock-smoke-probe:
+	XELYON_BEDROCK_SMOKE=1 XELYON_BEDROCK_PROBE_CONVERSE_MODELS="$(BEDROCK_PROBE_CONVERSE_MODELS)" go test ./internal/api/providers/bedrock -run TestBedrockLiveProbe_UnsupportedConverseModels -count=1 -v -timeout 10m
 
 # リリース前チェック
 release-check: fmt test lint build
