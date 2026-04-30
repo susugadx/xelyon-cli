@@ -377,11 +377,11 @@ make bedrock-smoke
 # runtime supported モデルの matrix smoke
 make bedrock-smoke-matrix
 
-# text-only では動くが runtime unsupported な Converse モデルの probe
+# streaming tool-use unsupported/unverified な Converse モデルの probe
 make bedrock-smoke-probe
 ```
 
-Bedrock smoke test は `XELYON_BEDROCK_SMOKE=1` のときだけ実 API を呼びます。Claude route は text / tool use / image / thinking、Converse route は text + usage / tool use を確認します。既定モデルを変える場合は `XELYON_BEDROCK_SMOKE_CLAUDE_MODEL` または `XELYON_BEDROCK_SMOKE_CONVERSE_MODEL` を指定してください。`XELYON_BEDROCK_SMOKE_CONVERSE_MODEL` には streaming tool use 対応モデルだけを指定してください。複数モデルを継続検証する場合は `BEDROCK_SMOKE_CONVERSE_MODELS` を上書きして `make bedrock-smoke-matrix` を実行します。matrix の Claude route は `BEDROCK_SMOKE_CLAUDE_MODEL` で上書きできます。unsupported probe の対象は `BEDROCK_PROBE_CONVERSE_MODELS` で上書きできます。
+Bedrock smoke test は `XELYON_BEDROCK_SMOKE=1` のときだけ実 API を呼びます。Claude route は text / tool use / image / thinking、Converse route は text + usage / tool use を確認します。既定モデルを変える場合は `XELYON_BEDROCK_SMOKE_CLAUDE_MODEL` または `XELYON_BEDROCK_SMOKE_CONVERSE_MODEL` を指定してください。`XELYON_BEDROCK_SMOKE_CONVERSE_MODEL` には streaming tool use 対応モデルだけを指定してください。複数モデルを継続検証する場合は `BEDROCK_SMOKE_CONVERSE_MODELS` を上書きして `make bedrock-smoke-matrix` を実行します。詳しい運用手順は [Bedrock Provider 運用](bedrock.md) を参照してください。
 
 **特徴:**
 - AWS フルマネージドサービス（中間マージンなし）
@@ -400,14 +400,7 @@ Bedrock smoke test は `XELYON_BEDROCK_SMOKE=1` のときだけ実 API を呼び
 
 Claude Sonnet 4.6 は `global.anthropic.claude-sonnet-4-6` のほか、`us.anthropic.claude-sonnet-4-6` / `eu.anthropic.claude-sonnet-4-6` / `au.anthropic.claude-sonnet-4-6` の Geo Inference Profile ID も利用できます。
 
-料金表にある Bedrock モデルでも、streaming tool use が未確認または非対応の Converse モデルは xelyon runtime では unsupported として扱います。text-only で応答できるモデルを agent 実行対象として自動 fallback することはありません。
-
-**Bedrock supported モデル追加手順:**
-1. AWS 公式価格に基づいて [internal/cost/pricing.yaml](../internal/cost/pricing.yaml) の Bedrock pricing / `known_models.exact` を更新します。
-2. Converse モデルの場合は [internal/llmcatalog/bedrock.go](../internal/llmcatalog/bedrock.go) の最大出力トークン上限を追加します。未知上限のまま runtime supported にしないでください。
-3. 実 API で text + tool use が通った Converse モデルだけ、`BedrockConverseToolUseSupported` の allowlist に追加します。text-only 成功だけでは supported にしません。
-4. `BEDROCK_SMOKE_CONVERSE_MODELS="amazon.nova-pro-v1:0 moonshotai.kimi-k2.5 <model>" make bedrock-smoke-matrix` を実行し、Claude route と supported Converse matrix の live smoke を通します。
-5. docs の利用可能モデル表と、必要なら `BEDROCK_PROBE_CONVERSE_MODELS` の probe 対象を更新します。
+料金表にある Bedrock モデルでも、streaming tool use が未確認または非対応の Converse モデルは xelyon runtime では unsupported として扱います。Text response や non-streaming tool use が可能なだけでは agent 実行対象として自動 fallback しません。
 
 ## モデル指定方法
 

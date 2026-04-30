@@ -703,7 +703,7 @@ export XELYON_STR_REPLACE_BATCH_EXACT_LINE_STATS=1
 
 Bedrock 以外の各プロバイダーでは Function Calling（ツール呼び出し）機能を無効化できます。
 モデルがFunction Callingに対応していない場合や、テキストベースのツール呼び出しに戻したい場合に使用します。
-Bedrock provider は agent 実行で structured tool calling を必須とするため、text-only fallback 用の Bedrock Converse モデルは runtime supported として扱いません。
+Bedrock provider は agent 実行で structured tool calling を必須とするため、streaming tool use が未確認または非対応の Bedrock Converse モデルは runtime supported として扱いません。
 
 ```bash
 # OpenAI Function Calling 無効化

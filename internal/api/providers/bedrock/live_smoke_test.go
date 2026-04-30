@@ -167,10 +167,10 @@ func TestBedrockLiveProbe_UnsupportedConverseModels(t *testing.T) {
 			defer cancel()
 			got, err := bedrockProbeConverseTextOnly(ctx, p, model)
 			if err != nil {
-				t.Fatalf("Converse text-only probe failed: %v", err)
+				t.Fatalf("Converse text-streaming probe failed: %v", err)
 			}
 			if !strings.Contains(strings.ToLower(got), "xelyon_converse_probe_ok") {
-				t.Fatalf("Converse text-only probe response = %q, want probe string", got)
+				t.Fatalf("Converse text-streaming probe response = %q, want probe string", got)
 			}
 
 			rejectCtx, rejectCancel := bedrockSmokeContext(t, cfg, bedrockSmokeTools())

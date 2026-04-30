@@ -182,7 +182,7 @@ bedrock-smoke-matrix:
 		XELYON_BEDROCK_SMOKE=1 XELYON_BEDROCK_SMOKE_CONVERSE_MODEL="$$model" go test ./internal/api/providers/bedrock -run TestBedrockLiveSmoke_ConverseRoute -count=1 -v -timeout 10m || exit $$?; \
 	done
 
-# Bedrock text-only Converse モデルを unsupported runtime として検証
+# Bedrock streaming tool-use unsupported/unverified モデルを検証
 bedrock-smoke-probe:
 	XELYON_BEDROCK_SMOKE=1 XELYON_BEDROCK_PROBE_CONVERSE_MODELS="$(BEDROCK_PROBE_CONVERSE_MODELS)" go test ./internal/api/providers/bedrock -run TestBedrockLiveProbe_UnsupportedConverseModels -count=1 -v -timeout 10m
 
