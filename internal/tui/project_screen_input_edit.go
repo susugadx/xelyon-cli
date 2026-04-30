@@ -14,11 +14,11 @@ func (ps *projectScreen) handleEditKey(msg tea.KeyMsg) (projectCommand, tea.Cmd)
 }
 
 func (ps *projectScreen) handleContextEditKey(msg tea.KeyMsg) (projectCommand, tea.Cmd) {
-	switch {
-	case msg.Type == tea.KeyEsc:
+	switch msg.Type {
+	case tea.KeyEsc:
 		ps.cancelEdit()
 		return projectCommandNone, nil
-	case msg.Type == tea.KeyCtrlS:
+	case tea.KeyCtrlS:
 		ps.applyContextEdit()
 		return projectCommandNone, nil
 	default:

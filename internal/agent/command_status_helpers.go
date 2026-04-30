@@ -190,11 +190,6 @@ func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
 	renderToolObservabilitySection(out, stats)
 }
 
-// handleStatsCommand は /status の互換エイリアス
-func handleStatsCommand(agent *Agent) bool {
-	return handleStatusCommand(agent)
-}
-
 func handleStatsCommandForSurface(agent *Agent, commandSurface commandcatalog.CommandSurface) bool {
 	return handleStatusCommandForSurface(agent, commandSurface)
 }

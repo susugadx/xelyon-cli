@@ -36,7 +36,8 @@ func handleInitCommandWithOptions(agent *Agent, opts initCommandOptions) bool {
 			return true
 		}
 		_, _ = fmt.Fprint(out, "Overwrite? (y/n): ")
-		input, err := promptIO.ReadSimpleLine()
+		var input string
+		input, err = promptIO.ReadSimpleLine()
 		if err != nil {
 			red.Fprintf(out, "Failed to read input: %v\n", err)
 			return true

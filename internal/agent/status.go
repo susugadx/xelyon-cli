@@ -155,11 +155,6 @@ func (a *Agent) PrintStatusFooter() {
 	statusDim.Fprintln(out, dividerLine)
 }
 
-// handleStatusCommand は現在の状態、直近リクエスト、セッション統計を表示する。
-func handleStatusCommand(agent *Agent) bool {
-	return handleStatusCommandForSurface(agent, commandcatalog.CommandSurfaceClassic)
-}
-
 func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.CommandSurface) bool {
 	out := agent.output()
 	printCommandHeaderToWriter(out, "Status / 状態")
