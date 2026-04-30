@@ -433,14 +433,585 @@ bedrock:
       - anthropic.claude-sonnet-4-6
       - global.anthropic.claude-sonnet-4-6-v1
       - global.anthropic.claude-sonnet-4-6-v1:0
+      - anthropic.claude-sonnet-4-5-20250929-v1:0
       - global.anthropic.claude-sonnet-4-5-20250929-v1:0
+      - anthropic.claude-sonnet-4-20250514-v1:0
+      - global.anthropic.claude-sonnet-4-20250514-v1:0
       - us.anthropic.claude-sonnet-4-20250514-v1:0
+      - us.anthropic.claude-sonnet-4-5-20250929-v1:0
+      - anthropic.claude-haiku-4-5-20251001-v1:0
+      - global.anthropic.claude-haiku-4-5-20251001-v1:0
       - us.anthropic.claude-haiku-4-5-20251001-v1:0
+      - anthropic.claude-3-5-haiku-20241022-v1:0
+      - us.anthropic.claude-3-5-haiku-20241022-v1:0
+      - us.anthropic.claude-3-7-sonnet-20250219-v1:0
+      - anthropic.claude-3-haiku-20240307-v1:0
+      - anthropic.claude-3-haiku-20240307-v1:0:48k
+      - anthropic.claude-3-haiku-20240307-v1:0:200k
+      - us.anthropic.claude-3-haiku-20240307-v1:0
+      - us.anthropic.claude-3-opus-20240229-v1:0
+      - anthropic.claude-3-sonnet-20240229-v1:0
+      - anthropic.claude-3-sonnet-20240229-v1:0:28k
+      - anthropic.claude-3-sonnet-20240229-v1:0:200k
+      - us.anthropic.claude-3-sonnet-20240229-v1:0
       - anthropic.claude-opus-4-20250514-v1:0
+      - us.anthropic.claude-opus-4-20250514-v1:0
+      - anthropic.claude-opus-4-1-20250805-v1:0
+      - us.anthropic.claude-opus-4-1-20250805-v1:0
+      - anthropic.claude-opus-4-5-20251101-v1:0
       - global.anthropic.claude-opus-4-5-20251101-v1:0
+      - us.anthropic.claude-opus-4-5-20251101-v1:0
+      - anthropic.claude-opus-4-6-v1
+      - global.anthropic.claude-opus-4-6-v1
+      - us.anthropic.claude-opus-4-6-v1
+      - anthropic.claude-opus-4-7
+      - global.anthropic.claude-opus-4-7
       - global.anthropic.claude-opus-4-7-v1
       - global.anthropic.claude-opus-4-7-v1:0
+      - us.anthropic.claude-opus-4-7
       - us.anthropic.claude-opus-4-7-v1:0
+      - global.amazon.nova-2-lite-v1:0
+      - us.amazon.nova-2-lite-v1:0
+      - amazon.nova-2-lite-v1:0
+      - amazon.nova-2-lite-v1:0:256k
+      - us.amazon.nova-premier-v1:0
+      - amazon.nova-premier-v1:0
+      - amazon.nova-premier-v1:0:8k
+      - amazon.nova-premier-v1:0:20k
+      - amazon.nova-premier-v1:0:1000k
+      - amazon.nova-premier-v1:0:mm
+      - us.amazon.nova-pro-v1:0
+      - amazon.nova-pro-v1:0
+      - amazon.nova-pro-v1:0:24k
+      - amazon.nova-pro-v1:0:300k
+      - us.amazon.nova-lite-v1:0
+      - amazon.nova-lite-v1:0
+      - amazon.nova-lite-v1:0:24k
+      - amazon.nova-lite-v1:0:300k
+      - us.amazon.nova-micro-v1:0
+      - amazon.nova-micro-v1:0
+      - amazon.nova-micro-v1:0:24k
+      - amazon.nova-micro-v1:0:128k
+      - meta.llama4-maverick-17b-instruct-v1:0
+      - us.meta.llama4-maverick-17b-instruct-v1:0
+      - meta.llama4-scout-17b-instruct-v1:0
+      - us.meta.llama4-scout-17b-instruct-v1:0
+      - meta.llama3-3-70b-instruct-v1:0
+      - us.meta.llama3-3-70b-instruct-v1:0
+      - meta.llama3-2-90b-instruct-v1:0
+      - us.meta.llama3-2-90b-instruct-v1:0
+      - meta.llama3-2-11b-instruct-v1:0
+      - us.meta.llama3-2-11b-instruct-v1:0
+      - meta.llama3-2-3b-instruct-v1:0
+      - us.meta.llama3-2-3b-instruct-v1:0
+      - meta.llama3-2-1b-instruct-v1:0
+      - us.meta.llama3-2-1b-instruct-v1:0
+      - meta.llama3-1-70b-instruct-v1:0
+      - us.meta.llama3-1-70b-instruct-v1:0
+      - meta.llama3-1-8b-instruct-v1:0
+      - us.meta.llama3-1-8b-instruct-v1:0
+      - meta.llama3-70b-instruct-v1:0
+      - meta.llama3-8b-instruct-v1:0
+      - mistral.mistral-large-3-675b-instruct
+      - mistral.devstral-2-123b
+      - mistral.magistral-small-2509
+      - mistral.pixtral-large-2502-v1:0
+      - mistral.ministral-3-14b-instruct
+      - mistral.ministral-3-8b-instruct
+      - mistral.ministral-3-3b-instruct
+      - mistral.voxtral-small-24b-2507
+      - mistral.voxtral-mini-3b-2507
+      - us.mistral.pixtral-large-2502-v1:0
+      - mistral.mistral-large-2402-v1:0
+      - mistral.mistral-small-2402-v1:0
+      - mistral.mixtral-8x7b-instruct-v0:1
+      - mistral.mistral-7b-instruct-v0:2
+      - cohere.command-r-plus-v1:0
+      - cohere.command-r-v1:0
+      - ai21.jamba-1-5-large-v1:0
+      - ai21.jamba-1-5-mini-v1:0
+      - writer.palmyra-x5-v1:0
+      - us.writer.palmyra-x5-v1:0
+      - writer.palmyra-x4-v1:0
+      - us.writer.palmyra-x4-v1:0
+      - writer.palmyra-vision-7b
+      - deepseek.r1-v1:0
+      - us.deepseek.r1-v1:0
+      - deepseek.v3.2
+      - qwen.qwen3-coder-next
+      - qwen.qwen3-next-80b-a3b
+      - qwen.qwen3-32b-v1:0
+      - qwen.qwen3-coder-30b-a3b-v1:0
+      - qwen.qwen3-vl-235b-a22b
+      - minimax.minimax-m2
+      - minimax.minimax-m2.1
+      - minimax.minimax-m2.5
+      - nvidia.nemotron-super-3-120b
+      - nvidia.nemotron-nano-12b-v2
+      - nvidia.nemotron-nano-9b-v2
+      - nvidia.nemotron-nano-3-30b
+      - openai.gpt-oss-120b-1:0
+      - openai.gpt-oss-20b-1:0
+      - openai.gpt-oss-safeguard-120b
+      - openai.gpt-oss-safeguard-20b
+      - google.gemma-3-27b-it
+      - google.gemma-3-12b-it
+      - google.gemma-3-4b-it
+      - moonshotai.kimi-k2.5
+      - moonshotai.kimi-k2-thinking
+      - zai.glm-5
+      - zai.glm-4.7-flash
+      - zai.glm-4.7
+  rules:
+    # US East (N. Virginia) text token prices from AWS Price List API.
+    # global.* IDs use the matching Global Cross-region rows when AWS publishes separate rates.
+    - contains: ["global.anthropic.claude-sonnet-4-6", "global.anthropic.claude-sonnet-4-6-v1"]
+      pricing:
+        inputcostperm: 3.00
+        outputcostperm: 15.00
+        cachedinputcostperm: 0.30
+        cachecreationcostperm: 3.75
+    - contains: ["us.anthropic.claude-sonnet-4-6", "eu.anthropic.claude-sonnet-4-6", "au.anthropic.claude-sonnet-4-6", "anthropic.claude-sonnet-4-6"]
+      pricing:
+        inputcostperm: 3.30
+        outputcostperm: 16.50
+        cachedinputcostperm: 0.33
+        cachecreationcostperm: 4.125
+    - contains: ["global.anthropic.claude-sonnet-4-5"]
+      pricing:
+        inputcostperm: 3.00
+        outputcostperm: 15.00
+        cachedinputcostperm: 0.30
+        cachecreationcostperm: 3.75
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 6.00
+          outputcostperm: 22.50
+          cachedinputcostperm: 0.60
+          cachecreationcostperm: 7.50
+    - contains: ["anthropic.claude-sonnet-4-5"]
+      pricing:
+        inputcostperm: 3.30
+        outputcostperm: 16.50
+        cachedinputcostperm: 0.33
+        cachecreationcostperm: 4.125
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 6.60
+          outputcostperm: 24.75
+          cachedinputcostperm: 0.66
+          cachecreationcostperm: 8.25
+    - contains: ["global.anthropic.claude-sonnet-4-20250514", "us.anthropic.claude-sonnet-4-20250514", "anthropic.claude-sonnet-4-20250514"]
+      pricing:
+        inputcostperm: 3.00
+        outputcostperm: 15.00
+        cachedinputcostperm: 0.30
+        cachecreationcostperm: 3.75
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 6.00
+          outputcostperm: 22.50
+          cachedinputcostperm: 0.60
+          cachecreationcostperm: 7.50
+    - contains: ["anthropic.claude-3-7-sonnet"]
+      pricing:
+        inputcostperm: 3.00
+        outputcostperm: 15.00
+        cachedinputcostperm: 0.30
+        cachecreationcostperm: 3.75
+    - contains: ["anthropic.claude-3-sonnet"]
+      pricing:
+        inputcostperm: 3.00
+        outputcostperm: 15.00
+        cachedinputcostperm: 3.00
+        cachecreationcostperm: 3.00
+    - contains: ["global.anthropic.claude-haiku-4-5"]
+      pricing:
+        inputcostperm: 1.00
+        outputcostperm: 5.00
+        cachedinputcostperm: 0.10
+        cachecreationcostperm: 1.25
+    - contains: ["us.anthropic.claude-haiku-4-5", "anthropic.claude-haiku-4-5"]
+      pricing:
+        inputcostperm: 1.10
+        outputcostperm: 5.50
+        cachedinputcostperm: 0.11
+        cachecreationcostperm: 1.375
+    - contains: ["anthropic.claude-3-5-haiku"]
+      pricing:
+        inputcostperm: 0.80
+        outputcostperm: 4.00
+        cachedinputcostperm: 0.08
+        cachecreationcostperm: 1.00
+    - contains: ["anthropic.claude-3-haiku"]
+      pricing:
+        inputcostperm: 0.25
+        outputcostperm: 1.25
+        cachedinputcostperm: 0.25
+        cachecreationcostperm: 0.25
+    - contains: ["anthropic.claude-3-opus"]
+      pricing:
+        inputcostperm: 15.00
+        outputcostperm: 75.00
+        cachedinputcostperm: 15.00
+        cachecreationcostperm: 15.00
+    - contains: ["global.anthropic.claude-opus-4-7", "global.anthropic.claude-opus-4-6", "global.anthropic.claude-opus-4-5"]
+      pricing:
+        inputcostperm: 5.00
+        outputcostperm: 25.00
+        cachedinputcostperm: 0.50
+        cachecreationcostperm: 6.25
+    - contains: ["us.anthropic.claude-opus-4-7", "anthropic.claude-opus-4-7", "anthropic.claude-opus-4-6", "anthropic.claude-opus-4-5"]
+      pricing:
+        inputcostperm: 5.50
+        outputcostperm: 27.50
+        cachedinputcostperm: 0.55
+        cachecreationcostperm: 6.875
+    - contains: ["anthropic.claude-opus-4-1", "anthropic.claude-opus-4-20250514"]
+      pricing:
+        inputcostperm: 15.00
+        outputcostperm: 75.00
+        cachedinputcostperm: 1.50
+        cachecreationcostperm: 18.75
+    - contains: ["global.amazon.nova-2-lite"]
+      pricing:
+        inputcostperm: 0.30
+        outputcostperm: 2.50
+        cachedinputcostperm: 0.075
+        cachecreationcostperm: 0.00
+    - contains: ["amazon.nova-2-lite"]
+      pricing:
+        inputcostperm: 0.33
+        outputcostperm: 2.75
+        cachedinputcostperm: 0.0825
+        cachecreationcostperm: 0.00
+    - contains: ["amazon.nova-premier"]
+      pricing:
+        inputcostperm: 2.50
+        outputcostperm: 12.50
+        cachedinputcostperm: 0.625
+        cachecreationcostperm: 0.00
+    - contains: ["amazon.nova-pro"]
+      pricing:
+        inputcostperm: 0.80
+        outputcostperm: 3.20
+        cachedinputcostperm: 0.20
+        cachecreationcostperm: 0.00
+    - contains: ["amazon.nova-lite"]
+      pricing:
+        inputcostperm: 0.06
+        outputcostperm: 0.24
+        cachedinputcostperm: 0.015
+        cachecreationcostperm: 0.00
+    - contains: ["amazon.nova-micro"]
+      pricing:
+        inputcostperm: 0.035
+        outputcostperm: 0.14
+        cachedinputcostperm: 0.00875
+        cachecreationcostperm: 0.00
+    - contains: ["meta.llama4-maverick"]
+      pricing:
+        inputcostperm: 0.24
+        outputcostperm: 0.97
+        cachedinputcostperm: 0.24
+        cachecreationcostperm: 0.24
+    - contains: ["meta.llama4-scout"]
+      pricing:
+        inputcostperm: 0.17
+        outputcostperm: 0.66
+        cachedinputcostperm: 0.17
+        cachecreationcostperm: 0.17
+    - contains: ["meta.llama3-3-70b", "meta.llama3-2-90b", "meta.llama3-1-70b"]
+      pricing:
+        inputcostperm: 0.72
+        outputcostperm: 0.72
+        cachedinputcostperm: 0.72
+        cachecreationcostperm: 0.72
+    - contains: ["meta.llama3-2-11b"]
+      pricing:
+        inputcostperm: 0.16
+        outputcostperm: 0.16
+        cachedinputcostperm: 0.16
+        cachecreationcostperm: 0.16
+    - contains: ["meta.llama3-2-3b"]
+      pricing:
+        inputcostperm: 0.15
+        outputcostperm: 0.15
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 0.15
+    - contains: ["meta.llama3-2-1b"]
+      pricing:
+        inputcostperm: 0.10
+        outputcostperm: 0.10
+        cachedinputcostperm: 0.10
+        cachecreationcostperm: 0.10
+    - contains: ["meta.llama3-1-8b"]
+      pricing:
+        inputcostperm: 0.22
+        outputcostperm: 0.22
+        cachedinputcostperm: 0.22
+        cachecreationcostperm: 0.22
+    - contains: ["meta.llama3-70b"]
+      pricing:
+        inputcostperm: 2.65
+        outputcostperm: 3.50
+        cachedinputcostperm: 2.65
+        cachecreationcostperm: 2.65
+    - contains: ["meta.llama3-8b"]
+      pricing:
+        inputcostperm: 0.30
+        outputcostperm: 0.60
+        cachedinputcostperm: 0.30
+        cachecreationcostperm: 0.30
+    - contains: ["mistral.mistral-large-3", "mistral.magistral-small"]
+      pricing:
+        inputcostperm: 0.50
+        outputcostperm: 1.50
+        cachedinputcostperm: 0.50
+        cachecreationcostperm: 0.50
+    - contains: ["mistral.devstral"]
+      pricing:
+        inputcostperm: 0.40
+        outputcostperm: 2.00
+        cachedinputcostperm: 0.40
+        cachecreationcostperm: 0.40
+    - contains: ["mistral.pixtral-large"]
+      pricing:
+        inputcostperm: 2.00
+        outputcostperm: 6.00
+        cachedinputcostperm: 2.00
+        cachecreationcostperm: 2.00
+    - contains: ["mistral.ministral-3-14b"]
+      pricing:
+        inputcostperm: 0.20
+        outputcostperm: 0.20
+        cachedinputcostperm: 0.20
+        cachecreationcostperm: 0.20
+    - contains: ["mistral.ministral-3-8b"]
+      pricing:
+        inputcostperm: 0.15
+        outputcostperm: 0.15
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 0.15
+    - contains: ["mistral.ministral-3-3b"]
+      pricing:
+        inputcostperm: 0.10
+        outputcostperm: 0.10
+        cachedinputcostperm: 0.10
+        cachecreationcostperm: 0.10
+    - contains: ["mistral.voxtral-small"]
+      pricing:
+        inputcostperm: 0.10
+        outputcostperm: 0.30
+        cachedinputcostperm: 0.10
+        cachecreationcostperm: 0.10
+    - contains: ["mistral.voxtral-mini"]
+      pricing:
+        inputcostperm: 0.04
+        outputcostperm: 0.04
+        cachedinputcostperm: 0.04
+        cachecreationcostperm: 0.04
+    - contains: ["mistral.mistral-large-2402"]
+      pricing:
+        inputcostperm: 4.00
+        outputcostperm: 12.00
+        cachedinputcostperm: 4.00
+        cachecreationcostperm: 4.00
+    - contains: ["mistral.mistral-small-2402"]
+      pricing:
+        inputcostperm: 1.00
+        outputcostperm: 3.00
+        cachedinputcostperm: 1.00
+        cachecreationcostperm: 1.00
+    - contains: ["mistral.mixtral-8x7b"]
+      pricing:
+        inputcostperm: 0.45
+        outputcostperm: 0.70
+        cachedinputcostperm: 0.45
+        cachecreationcostperm: 0.45
+    - contains: ["mistral.mistral-7b"]
+      pricing:
+        inputcostperm: 0.15
+        outputcostperm: 0.20
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 0.15
+    - contains: ["cohere.command-r-plus"]
+      pricing:
+        inputcostperm: 3.00
+        outputcostperm: 15.00
+        cachedinputcostperm: 3.00
+        cachecreationcostperm: 3.00
+    - contains: ["cohere.command-r"]
+      pricing:
+        inputcostperm: 0.50
+        outputcostperm: 1.50
+        cachedinputcostperm: 0.50
+        cachecreationcostperm: 0.50
+    - contains: ["ai21.jamba-1-5-large"]
+      pricing:
+        inputcostperm: 2.00
+        outputcostperm: 8.00
+        cachedinputcostperm: 2.00
+        cachecreationcostperm: 2.00
+    - contains: ["ai21.jamba-1-5-mini"]
+      pricing:
+        inputcostperm: 0.20
+        outputcostperm: 0.40
+        cachedinputcostperm: 0.20
+        cachecreationcostperm: 0.20
+    - contains: ["writer.palmyra-x5"]
+      pricing:
+        inputcostperm: 0.60
+        outputcostperm: 6.00
+        cachedinputcostperm: 0.60
+        cachecreationcostperm: 0.60
+    - contains: ["writer.palmyra-x4"]
+      pricing:
+        inputcostperm: 2.50
+        outputcostperm: 10.00
+        cachedinputcostperm: 2.50
+        cachecreationcostperm: 2.50
+    - contains: ["writer.palmyra-vision-7b"]
+      pricing:
+        inputcostperm: 0.15
+        outputcostperm: 0.60
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 0.15
+    - contains: ["deepseek.r1"]
+      pricing:
+        inputcostperm: 1.35
+        outputcostperm: 5.40
+        cachedinputcostperm: 1.35
+        cachecreationcostperm: 1.35
+    - contains: ["deepseek.v3.2"]
+      pricing:
+        inputcostperm: 0.62
+        outputcostperm: 1.85
+        cachedinputcostperm: 0.62
+        cachecreationcostperm: 0.62
+    - contains: ["qwen.qwen3-coder-next"]
+      pricing:
+        inputcostperm: 0.50
+        outputcostperm: 1.20
+        cachedinputcostperm: 0.50
+        cachecreationcostperm: 0.50
+    - contains: ["qwen.qwen3-next-80b"]
+      pricing:
+        inputcostperm: 0.14
+        outputcostperm: 1.20
+        cachedinputcostperm: 0.14
+        cachecreationcostperm: 0.14
+    - contains: ["qwen.qwen3-vl-235b"]
+      pricing:
+        inputcostperm: 0.53
+        outputcostperm: 2.66
+        cachedinputcostperm: 0.53
+        cachecreationcostperm: 0.53
+    - contains: ["qwen.qwen3-32b", "qwen.qwen3-coder-30b"]
+      pricing:
+        inputcostperm: 0.15
+        outputcostperm: 0.60
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 0.15
+    - contains: ["minimax.minimax-m2"]
+      pricing:
+        inputcostperm: 0.30
+        outputcostperm: 1.20
+        cachedinputcostperm: 0.30
+        cachecreationcostperm: 0.30
+    - contains: ["nvidia.nemotron-super-3-120b"]
+      pricing:
+        inputcostperm: 0.15
+        outputcostperm: 0.65
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 0.15
+    - contains: ["nvidia.nemotron-nano-12b"]
+      pricing:
+        inputcostperm: 0.20
+        outputcostperm: 0.60
+        cachedinputcostperm: 0.20
+        cachecreationcostperm: 0.20
+    - contains: ["nvidia.nemotron-nano-9b"]
+      pricing:
+        inputcostperm: 0.06
+        outputcostperm: 0.23
+        cachedinputcostperm: 0.06
+        cachecreationcostperm: 0.06
+    - contains: ["nvidia.nemotron-nano-3-30b"]
+      pricing:
+        inputcostperm: 0.06
+        outputcostperm: 0.24
+        cachedinputcostperm: 0.06
+        cachecreationcostperm: 0.06
+    - contains: ["openai.gpt-oss-safeguard-120b", "openai.gpt-oss-120b"]
+      pricing:
+        inputcostperm: 0.15
+        outputcostperm: 0.60
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 0.15
+    - contains: ["openai.gpt-oss-safeguard-20b"]
+      pricing:
+        inputcostperm: 0.07
+        outputcostperm: 0.20
+        cachedinputcostperm: 0.07
+        cachecreationcostperm: 0.07
+    - contains: ["openai.gpt-oss-20b"]
+      pricing:
+        inputcostperm: 0.07
+        outputcostperm: 0.30
+        cachedinputcostperm: 0.07
+        cachecreationcostperm: 0.07
+    - contains: ["google.gemma-3-27b"]
+      pricing:
+        inputcostperm: 0.23
+        outputcostperm: 0.38
+        cachedinputcostperm: 0.23
+        cachecreationcostperm: 0.23
+    - contains: ["google.gemma-3-12b"]
+      pricing:
+        inputcostperm: 0.09
+        outputcostperm: 0.29
+        cachedinputcostperm: 0.09
+        cachecreationcostperm: 0.09
+    - contains: ["google.gemma-3-4b"]
+      pricing:
+        inputcostperm: 0.04
+        outputcostperm: 0.08
+        cachedinputcostperm: 0.04
+        cachecreationcostperm: 0.04
+    - contains: ["moonshotai.kimi-k2.5"]
+      pricing:
+        inputcostperm: 0.60
+        outputcostperm: 3.00
+        cachedinputcostperm: 0.60
+        cachecreationcostperm: 0.60
+    - contains: ["moonshotai.kimi-k2-thinking"]
+      pricing:
+        inputcostperm: 0.60
+        outputcostperm: 2.50
+        cachedinputcostperm: 0.60
+        cachecreationcostperm: 0.60
+    - contains: ["zai.glm-5"]
+      pricing:
+        inputcostperm: 1.00
+        outputcostperm: 3.20
+        cachedinputcostperm: 1.00
+        cachecreationcostperm: 1.00
+    - contains: ["zai.glm-4.7-flash"]
+      pricing:
+        inputcostperm: 0.07
+        outputcostperm: 0.40
+        cachedinputcostperm: 0.07
+        cachecreationcostperm: 0.07
+    - contains: ["zai.glm-4.7"]
+      pricing:
+        inputcostperm: 0.60
+        outputcostperm: 2.20
+        cachedinputcostperm: 0.60
+        cachecreationcostperm: 0.60
 
 openrouter:
   known_models:

@@ -476,7 +476,7 @@ DeepSeek V4 Pro には 2026-05-05 15:59 UTC までの期間限定 75% off があ
 
 カスタム deployment 名や社内 alias を使う場合は、`provider_models.<provider>.catalog_model` または `model_overrides.<model>.catalog_model` に provider の pricing family で解決できる既知モデル名を指定すると、そのモデルの token limit / pricing / context 判定を使えます。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 
-Bedrock は Claude family のみ Claude 料金へ委譲します。Amazon Nova や Meta Llama など Converse 経路のモデルは、Bedrock 用の料金表を追加するまで `N/A (pricing unavailable)` です。
+Bedrock は AWS Price List の US East (N. Virginia) text token 価格が確認できた exact model ID / inference profile ID だけ料金表示します。`global.*` ID は AWS が別料金を出している場合、Global Cross-region の text token 価格を使います。Bedrock の Claude direct / inference profile ID は Bedrock 料金を優先し、`claude-sonnet-4-6` のような抽象 catalog 名だけ Claude 料金へ委譲します。Amazon Nova、Anthropic Claude、Meta Llama、Mistral、Cohere Command R、AI21 Jamba、Writer Palmyra、DeepSeek、Qwen、MiniMax、NVIDIA Nemotron、OpenAI gpt-oss、Google Gemma、Moonshot Kimi、Z.AI GLM の対応済み ID は料金表示されます。embedding / image / video / query 単価の inference profile は text token 料金ではないため `N/A` のままです。リージョン別価格、Batch / Flex / Priority / Provisioned Throughput、画像・音声・動画 token、query/unit ベースの rerank はまだ推定対象外です。
 
 ## プロバイダー選択のヒント
 

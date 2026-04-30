@@ -50,9 +50,17 @@ func TestFindProviderByDefaultModelAndInferenceHelpers(t *testing.T) {
 		{model: "gemini-3.1-pro-preview-customtools", want: "gemini"},
 		{model: "claude-sonnet-4-6", want: "claude"},
 		{model: "deepseek-chat", want: "deepseek"},
+		{model: "deepseek-v4-flash", want: "deepseek"},
 		{model: "global.anthropic.claude-sonnet-4-6", want: "bedrock"},
 		{model: "amazon.nova-pro-v1:0", want: "bedrock"},
+		{model: "deepseek.r1-v1:0", want: "bedrock"},
+		{model: "deepseek.v3.2", want: "bedrock"},
+		{model: "us.writer.palmyra-x5-v1:0", want: "bedrock"},
+		{model: "google.gemma-3-4b-it", want: "bedrock"},
+		{model: "moonshotai.kimi-k2.5", want: "bedrock"},
+		{model: "moonshotai.kimi-k2-thinking", want: "bedrock"},
 		{model: "anthropic/claude-sonnet-4.6", want: "openrouter"},
+		{model: "moonshot.kimi-k2-thinking", want: ""},
 		{model: "unknown-model", want: ""},
 	}
 
@@ -89,6 +97,12 @@ func TestRuntimeProviderConfigKeyAndResolveProviderForModel_Fallbacks(t *testing
 	}
 	if got := cfg.ResolveProviderForModel("openai", "anthropic/claude-sonnet-4.6"); got != "openrouter" {
 		t.Fatalf("ResolveProviderForModel(inferred slash model) = %q, want openrouter", got)
+	}
+	if got := cfg.ResolveProviderForModel("openai", "deepseek.r1-v1:0"); got != "bedrock" {
+		t.Fatalf("ResolveProviderForModel(Bedrock DeepSeek ID) = %q, want bedrock", got)
+	}
+	if got := cfg.ResolveProviderForModel("openai", "deepseek.v3.2"); got != "bedrock" {
+		t.Fatalf("ResolveProviderForModel(Bedrock DeepSeek ID) = %q, want bedrock", got)
 	}
 	if got := cfg.ResolveProviderForModel("openai", "totally-unknown"); got != "openai" {
 		t.Fatalf("ResolveProviderForModel(unknown) = %q, want current provider fallback", got)

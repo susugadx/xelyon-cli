@@ -258,9 +258,9 @@ func TestPrintStatusFooter_IncludesSubAgentCost(t *testing.T) {
 func TestPrintStatusFooter_UnknownPricingUsesNA(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{
-		CurrentModel: "amazon.nova-pro-v1:0",
+		CurrentModel: "amazon.nova-unknown-v1:0",
 		ProviderName: "bedrock",
-		Stats:        NewSessionStats("bedrock", "amazon.nova-pro-v1:0"),
+		Stats:        NewSessionStats("bedrock", "amazon.nova-unknown-v1:0"),
 		Runtime: &AgentRuntime{
 			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
 		},

@@ -3,6 +3,8 @@ package cost
 import (
 	"sync"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 func TestGetPricingInfo_FallbackToHardcodedWhenYAMLUnavailable(t *testing.T) {
@@ -69,6 +71,25 @@ func TestKnownPricingModelsResolveToAvailablePricing(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestBedrockKnownPricingModelsInferBedrockProvider(t *testing.T) {
+	cfg := loadPricingConfig()
+	if cfg == nil {
+		t.Fatal("loadPricingConfig() = nil")
+	}
+	provider, ok := cfg.provider("bedrock")
+	if !ok {
+		t.Fatal("pricing config missing bedrock provider")
+	}
+
+	for _, model := range provider.KnownModels.Exact {
+		t.Run(model, func(t *testing.T) {
+			if got := llmcatalog.InferProviderFromModel(model); got != "bedrock" {
+				t.Fatalf("InferProviderFromModel(%q) = %q, want bedrock", model, got)
+			}
+		})
 	}
 }
 

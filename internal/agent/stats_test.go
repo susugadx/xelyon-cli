@@ -182,14 +182,27 @@ func TestSessionStats_EstimatedCost_Claude_Haiku(t *testing.T) {
 }
 
 func TestSessionStats_EstimatedCost_Bedrock_Opus(t *testing.T) {
-	// 1M input > 200K → long context 料金 ($10/$37.50)
+	// Bedrock Opus 4.5 の global profile は Price List の global standard 料金を使う。
 	stats := NewSessionStats("bedrock", "global.anthropic.claude-opus-4-5-20251101-v1:0")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 10.00 + 37.50 // Opus long context
+	expected := 5.00 + 25.00
 	if cost != expected {
-		t.Errorf("EstimatedCost() for bedrock opus long context = %f, want %f", cost, expected)
+		t.Errorf("EstimatedCost() for bedrock opus global = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_BedrockEmptyModelUnavailable(t *testing.T) {
+	stats := NewSessionStats("bedrock")
+	stats.AddTokens(1000000, 1000000)
+
+	estimate := stats.EstimatedCostEstimateForConfig(nil)
+	if !estimate.PricingUnavailable {
+		t.Fatalf("PricingUnavailable = false, want true: %#v", estimate)
+	}
+	if estimate.Cost != 0 {
+		t.Fatalf("Cost = %f, want 0 for unavailable pricing", estimate.Cost)
 	}
 }
 

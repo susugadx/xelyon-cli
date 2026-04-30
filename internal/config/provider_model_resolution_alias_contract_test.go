@@ -109,6 +109,15 @@ func TestResolveProviderForModel_PreservesConfiguredOwnerBeforeNameInference(t *
 			model:           "moonshotai/kimi-k2-instruct",
 			want:            "groq",
 		},
+		{
+			name:            "bedrock owns dot-form deepseek bedrock id",
+			defaultProvider: "bedrock",
+			defaultModel:    "deepseek.r1-v1:0",
+			state:           providerModelSectionStateAbsent,
+			currentProvider: "openai",
+			model:           "deepseek.r1-v1:0",
+			want:            "bedrock",
+		},
 	}
 
 	for _, tt := range tests {

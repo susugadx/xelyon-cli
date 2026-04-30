@@ -249,8 +249,8 @@ func TestGetDeepSeekPricing_V4ModelsAndLegacyAliases(t *testing.T) {
 	}
 }
 
-func TestGetBedrockPricing_ClaudeDelegation(t *testing.T) {
-	model := "global.anthropic.claude-sonnet-4-6"
+func TestGetBedrockPricing_ClaudeCatalogAliasDelegation(t *testing.T) {
+	model := "claude-sonnet-4-6"
 	promptTokens := 250000
 
 	got := getBedrockPricing(model, promptTokens)
@@ -259,6 +259,142 @@ func TestGetBedrockPricing_ClaudeDelegation(t *testing.T) {
 	}
 	if got.InputCostPerM != 6.00 || got.OutputCostPerM != 22.50 {
 		t.Fatalf("getBedrockPricing() = %#v, want long-context Sonnet pricing", got)
+	}
+}
+
+func TestGetBedrockPricing_BedrockClaudeModelsFromAWSPriceList(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     string
+		prompt    int
+		wantInput float64
+		wantOut   float64
+	}{
+		{name: "global sonnet 4.6", model: "global.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
+		{name: "geo sonnet 4.6", model: "us.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{name: "direct sonnet 4.6", model: "anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{name: "global sonnet 4.5 long context", model: "global.anthropic.claude-sonnet-4-5-20250929-v1:0", prompt: 250000, wantInput: 6.00, wantOut: 22.50},
+		{name: "direct sonnet 4.5 long context", model: "anthropic.claude-sonnet-4-5-20250929-v1:0", prompt: 250000, wantInput: 6.60, wantOut: 24.75},
+		{name: "direct sonnet 4", model: "anthropic.claude-sonnet-4-20250514-v1:0", wantInput: 3.00, wantOut: 15.00},
+		{name: "global sonnet 4 profile", model: "global.anthropic.claude-sonnet-4-20250514-v1:0", wantInput: 3.00, wantOut: 15.00},
+		{name: "direct sonnet 3 keeps standard pricing", model: "anthropic.claude-3-sonnet-20240229-v1:0:200k", prompt: 250000, wantInput: 3.00, wantOut: 15.00},
+		{name: "direct haiku 4.5", model: "anthropic.claude-haiku-4-5-20251001-v1:0", wantInput: 1.10, wantOut: 5.50},
+		{name: "global haiku 4.5 profile", model: "global.anthropic.claude-haiku-4-5-20251001-v1:0", wantInput: 1.00, wantOut: 5.00},
+		{name: "direct haiku 3.5", model: "anthropic.claude-3-5-haiku-20241022-v1:0", wantInput: 0.80, wantOut: 4.00},
+		{name: "us sonnet 3.7 profile", model: "us.anthropic.claude-3-7-sonnet-20250219-v1:0", wantInput: 3.00, wantOut: 15.00},
+		{name: "direct haiku 3", model: "anthropic.claude-3-haiku-20240307-v1:0:200k", wantInput: 0.25, wantOut: 1.25},
+		{name: "us opus 3 profile", model: "us.anthropic.claude-3-opus-20240229-v1:0", wantInput: 15.00, wantOut: 75.00},
+		{name: "direct opus 4", model: "anthropic.claude-opus-4-20250514-v1:0", wantInput: 15.00, wantOut: 75.00},
+		{name: "direct opus 4.5", model: "anthropic.claude-opus-4-5-20251101-v1:0", wantInput: 5.50, wantOut: 27.50},
+		{name: "global opus 4.6 profile", model: "global.anthropic.claude-opus-4-6-v1", wantInput: 5.00, wantOut: 25.00},
+		{name: "us opus 4.6 profile", model: "us.anthropic.claude-opus-4-6-v1", wantInput: 5.50, wantOut: 27.50},
+		{name: "global opus 4.7", model: "global.anthropic.claude-opus-4-7-v1:0", wantInput: 5.00, wantOut: 25.00},
+		{name: "global opus 4.7 profile", model: "global.anthropic.claude-opus-4-7", wantInput: 5.00, wantOut: 25.00},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getBedrockPricing(tt.model, tt.prompt)
+			if got.PricingUnavailable {
+				t.Fatalf("getBedrockPricing(%q) = %#v, want available", tt.model, got)
+			}
+			if got.InputCostPerM != tt.wantInput || got.OutputCostPerM != tt.wantOut {
+				t.Fatalf("getBedrockPricing(%q) = %#v, want input=%f output=%f", tt.model, got, tt.wantInput, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestGetBedrockPricing_ConverseModelsFromAWSPriceList(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     string
+		wantInput float64
+		wantOut   float64
+	}{
+		{name: "nova pro", model: "amazon.nova-pro-v1:0", wantInput: 0.80, wantOut: 3.20},
+		{name: "nova 2 lite", model: "amazon.nova-2-lite-v1:0", wantInput: 0.33, wantOut: 2.75},
+		{name: "global nova 2 lite profile", model: "global.amazon.nova-2-lite-v1:0", wantInput: 0.30, wantOut: 2.50},
+		{name: "us nova pro profile", model: "us.amazon.nova-pro-v1:0", wantInput: 0.80, wantOut: 3.20},
+		{name: "llama 4 scout", model: "meta.llama4-scout-17b-instruct-v1:0", wantInput: 0.17, wantOut: 0.66},
+		{name: "us llama 4 scout profile", model: "us.meta.llama4-scout-17b-instruct-v1:0", wantInput: 0.17, wantOut: 0.66},
+		{name: "mistral large 3", model: "mistral.mistral-large-3-675b-instruct", wantInput: 0.50, wantOut: 1.50},
+		{name: "us pixtral profile", model: "us.mistral.pixtral-large-2502-v1:0", wantInput: 2.00, wantOut: 6.00},
+		{name: "cohere command r plus", model: "cohere.command-r-plus-v1:0", wantInput: 3.00, wantOut: 15.00},
+		{name: "ai21 jamba mini", model: "ai21.jamba-1-5-mini-v1:0", wantInput: 0.20, wantOut: 0.40},
+		{name: "writer palmyra x5", model: "writer.palmyra-x5-v1:0", wantInput: 0.60, wantOut: 6.00},
+		{name: "us writer palmyra x5 profile", model: "us.writer.palmyra-x5-v1:0", wantInput: 0.60, wantOut: 6.00},
+		{name: "writer palmyra x4", model: "writer.palmyra-x4-v1:0", wantInput: 2.50, wantOut: 10.00},
+		{name: "us deepseek r1 profile", model: "us.deepseek.r1-v1:0", wantInput: 1.35, wantOut: 5.40},
+		{name: "deepseek v3.2", model: "deepseek.v3.2", wantInput: 0.62, wantOut: 1.85},
+		{name: "qwen next", model: "qwen.qwen3-next-80b-a3b", wantInput: 0.14, wantOut: 1.20},
+		{name: "minimax m2", model: "minimax.minimax-m2", wantInput: 0.30, wantOut: 1.20},
+		{name: "nvidia nemotron", model: "nvidia.nemotron-nano-3-30b", wantInput: 0.06, wantOut: 0.24},
+		{name: "openai gpt oss", model: "openai.gpt-oss-20b-1:0", wantInput: 0.07, wantOut: 0.30},
+		{name: "google gemma", model: "google.gemma-3-4b-it", wantInput: 0.04, wantOut: 0.08},
+		{name: "moonshot kimi", model: "moonshotai.kimi-k2.5", wantInput: 0.60, wantOut: 3.00},
+		{name: "moonshot kimi thinking", model: "moonshotai.kimi-k2-thinking", wantInput: 0.60, wantOut: 2.50},
+		{name: "zai glm flash", model: "zai.glm-4.7-flash", wantInput: 0.07, wantOut: 0.40},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getBedrockPricing(tt.model, 0)
+			if got.PricingUnavailable {
+				t.Fatalf("getBedrockPricing(%q) = %#v, want available", tt.model, got)
+			}
+			if got.InputCostPerM != tt.wantInput || got.OutputCostPerM != tt.wantOut {
+				t.Fatalf("getBedrockPricing(%q) = %#v, want input=%f output=%f", tt.model, got, tt.wantInput, tt.wantOut)
+			}
+		})
+	}
+}
+
+func TestGetBedrockPricing_NovaPromptCachePrices(t *testing.T) {
+	got := getBedrockPricing("amazon.nova-pro-v1:0", 0)
+	if got.PricingUnavailable {
+		t.Fatalf("getBedrockPricing(nova pro) = %#v, want available", got)
+	}
+	if got.CachedInputCostPerM != 0.20 {
+		t.Fatalf("Nova Pro cached input = %f, want 0.20", got.CachedInputCostPerM)
+	}
+	if got.CacheCreationCostPerM != 0 {
+		t.Fatalf("Nova Pro cache creation = %f, want 0", got.CacheCreationCostPerM)
+	}
+}
+
+func TestGetBedrockPricing_UnknownConverseModelUnavailable(t *testing.T) {
+	for _, model := range []string{
+		"",
+		" \t ",
+		"amazon.nova-pro-v9:0",
+		"global.cohere.embed-v4:0",
+		"global.twelvelabs.pegasus-1-2-v1:0",
+		"us.stability.stable-image-inpaint-v1:0",
+		"us.twelvelabs.marengo-embed-3-0-v1:0",
+		"corp-amazon.nova-pro-v1",
+		"moonshot.kimi-k2-thinking",
+		"qwen.qwen3-next-prod",
+	} {
+		t.Run(model, func(t *testing.T) {
+			got := getBedrockPricing(model, 0)
+			if !got.PricingUnavailable {
+				t.Fatalf("getBedrockPricing(%q) = %#v, want unavailable", model, got)
+			}
+		})
+	}
+}
+
+func TestEstimateRequestCostWithCache_EmptyBedrockModelUnavailable(t *testing.T) {
+	estimate := EstimateRequestCostWithCache("bedrock", "", api.Usage{
+		InputTokens:  1000000,
+		OutputTokens: 1000000,
+	})
+	if !estimate.PricingUnavailable {
+		t.Fatalf("PricingUnavailable = false, want true: %#v", estimate)
+	}
+	if estimate.Cost != 0 {
+		t.Fatalf("Cost = %f, want 0 for unavailable pricing", estimate.Cost)
 	}
 }
 
@@ -317,8 +453,8 @@ func TestGetBedrockPricing_ClaudeAliasUnavailable(t *testing.T) {
 	}
 }
 
-func TestGetBedrockPricing_NonClaudeUnavailable(t *testing.T) {
-	got := getBedrockPricing("amazon.nova-pro-v1:0", 0)
+func TestGetBedrockPricing_UnknownNonClaudeUnavailable(t *testing.T) {
+	got := getBedrockPricing("amazon.nova-unknown-v1:0", 0)
 	if !got.PricingUnavailable {
 		t.Fatalf("getBedrockPricing(non-claude).PricingUnavailable = false, want true: %#v", got)
 	}
@@ -404,6 +540,7 @@ func TestGetPricingInfoForConfig_ConfiguredAliasWithKnownSubstringIsUnavailable(
 		{name: "gemini alias contains pro", provider: "gemini", model: "gemini-3.1-pro-prod"},
 		{name: "groq alias contains 70b", provider: "groq", model: "corp-llama-3.1-70b-prod"},
 		{name: "bedrock alias contains claude", provider: "bedrock", model: "corp-claude-sonnet-prod"},
+		{name: "bedrock alias contains nova", provider: "bedrock", model: "corp-amazon.nova-pro-v1"},
 		{name: "openrouter alias contains delegated openai model", provider: "openrouter", model: "openai/gpt-5-prod"},
 		{name: "openrouter alias contains delegated kimi model", provider: "openrouter", model: "moonshotai/kimi-k2-prod"},
 	}
@@ -443,9 +580,11 @@ func TestGetPricingInfoForConfig_ConfiguredKnownExactModelsAcrossProvidersStillP
 		{provider: "gemini", model: "gemini-3.1-pro", wantInput: 2.00, wantOut: 12.00},
 		{provider: "groq", model: "llama-3.1-70b", wantInput: 0.59, wantOut: 0.79},
 		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
-		{provider: "bedrock", model: "us.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
-		{provider: "bedrock", model: "eu.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
-		{provider: "bedrock", model: "au.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
+		{provider: "bedrock", model: "us.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{provider: "bedrock", model: "eu.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{provider: "bedrock", model: "au.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{provider: "bedrock", model: "amazon.nova-pro-v1:0", wantInput: 0.80, wantOut: 3.20},
+		{provider: "bedrock", model: "meta.llama4-maverick-17b-instruct-v1:0", wantInput: 0.24, wantOut: 0.97},
 		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1", wantInput: 3.00, wantOut: 15.00},
 		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1:0", wantInput: 3.00, wantOut: 15.00},
 	}
@@ -696,7 +835,7 @@ func TestCalculateRequestCostWithCache_OllamaZero(t *testing.T) {
 }
 
 func TestEstimateRequestCostWithCache_UnknownPricing(t *testing.T) {
-	estimate := EstimateRequestCostWithCache("bedrock", "amazon.nova-pro-v1:0", api.Usage{
+	estimate := EstimateRequestCostWithCache("bedrock", "amazon.nova-unknown-v1:0", api.Usage{
 		InputTokens:  1000000,
 		OutputTokens: 1000000,
 	})

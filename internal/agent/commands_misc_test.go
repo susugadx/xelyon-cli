@@ -162,7 +162,7 @@ func TestBuildLastRequestTable_UsesCostOverride(t *testing.T) {
 
 func TestBuildLastRequestTable_ShowsPricingUnavailable(t *testing.T) {
 	usage := &api.Usage{InputTokens: 1000, OutputTokens: 200}
-	table := buildLastRequestTable(nil, "bedrock", "amazon.nova-pro-v1:0", usage, nil)
+	table := buildLastRequestTable(nil, "bedrock", "amazon.nova-unknown-v1:0", usage, nil)
 	if table == nil {
 		t.Fatal("buildLastRequestTable() = nil, want table")
 	}
@@ -342,11 +342,11 @@ func TestBuildSessionTokenTable_WithSubAgentCosts(t *testing.T) {
 }
 
 func TestBuildSessionTokenTable_UnknownParentCost(t *testing.T) {
-	stats := NewSessionStats("bedrock", "amazon.nova-pro-v1:0")
+	stats := NewSessionStats("bedrock", "amazon.nova-unknown-v1:0")
 	stats.AddTokens(1000, 200)
 
 	agent := &Agent{
-		CurrentModel: "amazon.nova-pro-v1:0",
+		CurrentModel: "amazon.nova-unknown-v1:0",
 		ProviderName: "bedrock",
 	}
 

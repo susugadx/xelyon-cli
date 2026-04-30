@@ -193,6 +193,8 @@ func InferProviderFromModel(model string) string {
 		return "gemini"
 	case strings.HasPrefix(normalized, "claude"):
 		return "claude"
+	case strings.HasPrefix(normalized, "deepseek."):
+		return "bedrock"
 	case strings.HasPrefix(normalized, "deepseek"):
 		return "deepseek"
 	case IsBedrockModelID(normalized):
