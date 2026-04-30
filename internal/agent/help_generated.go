@@ -39,7 +39,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /status, /stats           - Show current state, last request, and session statistics
   /tokens                   - Show token usage and context window status
   /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
-  /review                   - review my current changes and find issues
+  /review                   - Review current changes and find issues
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /use <provider> [model]   - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
   /providers                - List available providers and their API key status

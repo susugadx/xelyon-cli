@@ -95,7 +95,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
-		SortWeight:    610,
+		SortWeight:    160,
 	},
 	{
 		Name:          "/history",
@@ -104,7 +104,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
-		SortWeight:    620,
+		SortWeight:    170,
 	},
 	{
 		Name:          "/save",
@@ -113,7 +113,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
-		SortWeight:    630,
+		SortWeight:    130,
 	},
 	{
 		Name:          "/load",
@@ -123,7 +123,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
-		SortWeight:    640,
+		SortWeight:    140,
 	},
 	{
 		Name:          "/sessions",
@@ -132,7 +132,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
-		SortWeight:    650,
+		SortWeight:    150,
 	},
 	{
 		Name:          "/status",
@@ -151,7 +151,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryContext,
 		Discoverable:  true,
-		SortWeight:    80,
+		SortWeight:    60,
 	},
 	{
 		Name:          "/copy",
@@ -161,18 +161,18 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
-		SortWeight:    40,
+		SortWeight:    100,
 	},
 	{
 		Name:          "/review",
-		Description:   "review my current changes and find issues",
+		Description:   "Review current changes and find issues",
 		DescriptionJP: "現在の変更をレビュー",
 		Surfaces:      []CommandSurface{CommandSurfaceTUI},
 		Owner:         CommandOwnerTUIRouter,
 		Lifecycle:     CommandLifecyclePreview,
 		Category:      CommandCategoryReview,
 		Discoverable:  true,
-		SortWeight:    10,
+		SortWeight:    70,
 	},
 	{
 		Name:          "/compress",
@@ -182,7 +182,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryContext,
 		Discoverable:  true,
-		SortWeight:    90,
+		SortWeight:    110,
 	},
 	{
 		Name:          "/use",
@@ -192,7 +192,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryModel,
 		Discoverable:  true,
-		SortWeight:    110,
+		SortWeight:    20,
 	},
 	{
 		Name:          "/providers",
@@ -201,7 +201,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryModel,
 		Discoverable:  true,
-		SortWeight:    120,
+		SortWeight:    30,
 	},
 	{
 		Name:          "/config",
@@ -210,7 +210,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryConfig,
 		Discoverable:  true,
-		SortWeight:    30,
+		SortWeight:    90,
 		SubCommands: []SubCommand{
 			{Name: "/config show", Description: "Show all settings with diff from defaults"},
 			{Name: "/config model <name>", Description: "Change default model"},
@@ -224,7 +224,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryModel,
 		Discoverable:  true,
-		SortWeight:    20,
+		SortWeight:    10,
 	},
 	{
 		Name:          "/init",
@@ -233,7 +233,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryConfig,
 		Discoverable:  true,
-		SortWeight:    710,
+		SortWeight:    180,
 	},
 	{
 		Name:          "/project",
@@ -243,7 +243,7 @@ var Commands = []CommandInfo{
 		Owner:         CommandOwnerTUIRouter,
 		Category:      CommandCategoryConfig,
 		Discoverable:  true,
-		SortWeight:    720,
+		SortWeight:    80,
 	},
 	{
 		Name:          "/plan",
@@ -253,7 +253,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryDev,
 		Discoverable:  true,
-		SortWeight:    130,
+		SortWeight:    120,
 	},
 	{
 		Name:          "/think",
@@ -263,7 +263,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryModel,
 		Discoverable:  true,
-		SortWeight:    140,
+		SortWeight:    40,
 	},
 	{
 		Name:          "/lsp",
@@ -273,7 +273,7 @@ var Commands = []CommandInfo{
 		Surfaces:      legacyFallbackSurfaces(),
 		Category:      CommandCategoryDev,
 		Discoverable:  true,
-		SortWeight:    700,
+		SortWeight:    190,
 	},
 	{
 		Name:          "/version",

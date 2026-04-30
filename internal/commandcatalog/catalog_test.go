@@ -48,7 +48,7 @@ func TestReviewCommandMetadata(t *testing.T) {
 	if matches[0].Name != "/review" {
 		t.Fatalf("MatchPrefix(/review)[0].Name = %q, want /review", matches[0].Name)
 	}
-	if matches[0].Description != "review my current changes and find issues" {
+	if matches[0].Description != "Review current changes and find issues" {
 		t.Fatalf("Description = %q", matches[0].Description)
 	}
 	if !matches[0].SupportsSurface(CommandSurfaceTUI) {
@@ -69,8 +69,8 @@ func TestReviewCommandMetadata(t *testing.T) {
 	if !matches[0].Discoverable {
 		t.Fatal("/review should be discoverable")
 	}
-	if matches[0].EffectiveSortWeight() != 10 {
-		t.Fatalf("SortWeight = %d, want 10", matches[0].EffectiveSortWeight())
+	if matches[0].EffectiveSortWeight() != 70 {
+		t.Fatalf("SortWeight = %d, want 70", matches[0].EffectiveSortWeight())
 	}
 }
 
@@ -146,11 +146,35 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 	if len(commands) < 4 {
 		t.Fatalf("DiscoverableCommandsForSurface(TUI) returned %d commands, want at least 4", len(commands))
 	}
-	gotLeading := []string{commands[0].Name, commands[1].Name, commands[2].Name, commands[3].Name}
-	wantLeading := []string{"/review", "/model", "/config", "/copy"}
-	for i := range wantLeading {
-		if gotLeading[i] != wantLeading[i] {
-			t.Fatalf("leading discoverable commands = %#v, want prefix %#v", gotLeading, wantLeading)
+	gotNames := commandNames(commands)
+	wantNames := []string{
+		"/model",
+		"/use",
+		"/providers",
+		"/think",
+		"/status",
+		"/tokens",
+		"/review",
+		"/project",
+		"/config",
+		"/copy",
+		"/compress",
+		"/plan",
+		"/save",
+		"/load",
+		"/sessions",
+		"/clear",
+		"/history",
+		"/init",
+		"/lsp",
+		"/exit",
+	}
+	if len(gotNames) != len(wantNames) {
+		t.Fatalf("discoverable commands = %#v, want %#v", gotNames, wantNames)
+	}
+	for i := range wantNames {
+		if gotNames[i] != wantNames[i] {
+			t.Fatalf("discoverable commands = %#v, want %#v", gotNames, wantNames)
 		}
 	}
 
@@ -257,4 +281,12 @@ func containsCommandName(commands []CommandInfo, name string) bool {
 		}
 	}
 	return false
+}
+
+func commandNames(commands []CommandInfo) []string {
+	names := make([]string, 0, len(commands))
+	for _, cmd := range commands {
+		names = append(names, cmd.Name)
+	}
+	return names
 }

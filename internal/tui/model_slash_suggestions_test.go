@@ -25,7 +25,7 @@ func TestSlashSuggestions_ShowOnSlashAndRenderDescription(t *testing.T) {
 	}
 
 	rendered := stripANSI(m.chromeCache)
-	for _, fragment := range []string{"/review", "review my current changes and find issues"} {
+	for _, fragment := range []string{"/review", "Review current changes and find issues"} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("chromeCache missing %q:\n%s", fragment, rendered)
 		}
@@ -112,8 +112,8 @@ func TestSlashSuggestions_CanMoveSelectionWithDownAndTab(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("Tab completion should not execute command, got %v", cmd)
 	}
-	if got := m.textInput.Value(); got != "/model " {
-		t.Fatalf("textInput after Down+Tab = %q, want /model with trailing space", got)
+	if got := m.textInput.Value(); got != "/use " {
+		t.Fatalf("textInput after Down+Tab = %q, want /use with trailing space", got)
 	}
 }
 

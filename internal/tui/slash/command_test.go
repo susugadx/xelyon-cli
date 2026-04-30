@@ -66,7 +66,7 @@ func TestSuggestionsIncludesReviewCommand(t *testing.T) {
 	if matches[0].Name != "/review" {
 		t.Fatalf("first suggestion = %q, want /review", matches[0].Name)
 	}
-	if matches[0].Description != "review my current changes and find issues" {
+	if matches[0].Description != "Review current changes and find issues" {
 		t.Fatalf("review description = %q", matches[0].Description)
 	}
 }
@@ -77,7 +77,7 @@ func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
 		t.Fatalf("Suggestions(/) returned %d matches, want at least 4", len(matches))
 	}
 	got := []string{matches[0].Name, matches[1].Name, matches[2].Name, matches[3].Name}
-	want := []string{"/review", "/model", "/config", "/copy"}
+	want := []string{"/model", "/use", "/providers", "/think"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("leading suggestions = %#v, want prefix %#v", got, want)
