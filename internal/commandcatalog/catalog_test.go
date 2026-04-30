@@ -63,6 +63,9 @@ func TestReviewCommandMetadata(t *testing.T) {
 	if matches[0].EffectiveCategory() != CommandCategoryReview {
 		t.Fatalf("Category = %q, want %q", matches[0].EffectiveCategory(), CommandCategoryReview)
 	}
+	if matches[0].EffectiveOwner() != CommandOwnerTUIRouter {
+		t.Fatalf("Owner = %q, want %q", matches[0].EffectiveOwner(), CommandOwnerTUIRouter)
+	}
 	if !matches[0].Discoverable {
 		t.Fatal("/review should be discoverable")
 	}
@@ -107,6 +110,34 @@ func TestSurfaceFiltering(t *testing.T) {
 	}
 	if !strings.Contains(tuiHelp, "/project") {
 		t.Fatalf("TUI help should include /project:\n%s", tuiHelp)
+	}
+}
+
+func TestTUILocalCommandOwnership(t *testing.T) {
+	for _, name := range []string{"/review", "/project"} {
+		t.Run(name, func(t *testing.T) {
+			cmd, ok := Find(name)
+			if !ok {
+				t.Fatalf("Find(%q) ok = false, want true", name)
+			}
+			if cmd.EffectiveOwner() != CommandOwnerTUIRouter {
+				t.Fatalf("%s owner = %q, want %q", name, cmd.EffectiveOwner(), CommandOwnerTUIRouter)
+			}
+			if !cmd.SupportsSurface(CommandSurfaceTUI) {
+				t.Fatalf("%s should support TUI surface", name)
+			}
+			if cmd.SupportsSurface(CommandSurfaceClassic) {
+				t.Fatalf("%s should not support classic surface", name)
+			}
+		})
+	}
+
+	configCmd, ok := Find("/config")
+	if !ok {
+		t.Fatal("Find(/config) ok = false, want true")
+	}
+	if configCmd.EffectiveOwner() != CommandOwnerAgent {
+		t.Fatalf("/config owner = %q, want %q", configCmd.EffectiveOwner(), CommandOwnerAgent)
 	}
 }
 
@@ -168,6 +199,9 @@ func TestDefaultCommandMetadata(t *testing.T) {
 	}
 	if cmd.EffectiveCategory() != CommandCategorySession {
 		t.Fatalf("/copy category = %q, want session", cmd.EffectiveCategory())
+	}
+	if cmd.EffectiveOwner() != CommandOwnerAgent {
+		t.Fatalf("/copy owner = %q, want agent", cmd.EffectiveOwner())
 	}
 
 	empty := CommandInfo{}

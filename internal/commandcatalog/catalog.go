@@ -15,6 +15,7 @@ type CommandInfo struct {
 	DescriptionJP string           // "対話式設定変更"
 	SubCommands   []SubCommand     // サブコマンド
 	Surfaces      []CommandSurface // 省略時は TUI primary と classic legacy の両方
+	Owner         CommandOwner     // 省略時は agent dispatcher
 	Lifecycle     CommandLifecycle // 省略時は stable
 	Category      CommandCategory  // 省略時は other
 	Discoverable  bool             // true の command だけを候補表示に出す
@@ -35,6 +36,16 @@ const (
 	CommandSurfaceTUI CommandSurface = "tui"
 	// CommandSurfaceClassic は --no-tui 用の legacy surface。
 	CommandSurfaceClassic CommandSurface = "classic"
+)
+
+// CommandOwner は command 実行責務の owner を表す。
+type CommandOwner string
+
+const (
+	// CommandOwnerAgent は agent command registry が実行する command。
+	CommandOwnerAgent CommandOwner = "agent"
+	// CommandOwnerTUIRouter は TUI commandrouter が bare command を処理する command。
+	CommandOwnerTUIRouter CommandOwner = "tui_router"
 )
 
 // CommandLifecycle は command の公開段階を表す。
@@ -142,6 +153,7 @@ var Commands = []CommandInfo{
 		Description:   "review my current changes and find issues",
 		DescriptionJP: "現在の変更をレビュー",
 		Surfaces:      []CommandSurface{CommandSurfaceTUI},
+		Owner:         CommandOwnerTUIRouter,
 		Lifecycle:     CommandLifecyclePreview,
 		Category:      CommandCategoryReview,
 		Discoverable:  true,
@@ -207,6 +219,7 @@ var Commands = []CommandInfo{
 		Description:   "Edit xelyon.yaml interactively (rules, final checks)",
 		DescriptionJP: "xelyon.yamlを対話式で編集",
 		Surfaces:      []CommandSurface{CommandSurfaceTUI},
+		Owner:         CommandOwnerTUIRouter,
 		Category:      CommandCategoryConfig,
 		Discoverable:  true,
 		SortWeight:    720,
@@ -395,6 +408,14 @@ func (cmd CommandInfo) SupportsSurface(surface CommandSurface) bool {
 		}
 	}
 	return false
+}
+
+// EffectiveOwner は command 実行責務の owner を返す。
+func (cmd CommandInfo) EffectiveOwner() CommandOwner {
+	if cmd.Owner == "" {
+		return CommandOwnerAgent
+	}
+	return cmd.Owner
 }
 
 // EffectiveLifecycle は command の公開段階を返す。

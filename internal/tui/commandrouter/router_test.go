@@ -3,6 +3,7 @@ package commandrouter
 import (
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
@@ -79,6 +80,27 @@ func TestRoute_TUILocalCommands(t *testing.T) {
 			cmd := slash.NewCommand(tt.input, tt.input, tt.resolve)
 			if got := Route(cmd, tt.ctx); got != tt.want {
 				t.Fatalf("Route() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRoute_CatalogTUILocalOwnerMatrix(t *testing.T) {
+	for _, cmdInfo := range commandcatalog.Commands {
+		if cmdInfo.EffectiveOwner() != commandcatalog.CommandOwnerTUIRouter {
+			continue
+		}
+
+		t.Run(cmdInfo.Name, func(t *testing.T) {
+			bare := slash.NewCommand(cmdInfo.Name, cmdInfo.Name, nil)
+			if got := Route(bare, Context{}); got == ActionDispatchAgent {
+				t.Fatalf("Route(%q) = ActionDispatchAgent, want TUI-local action", cmdInfo.Name)
+			}
+
+			withArgsInput := cmdInfo.Name + " extra"
+			withArgs := slash.NewCommand(withArgsInput, withArgsInput, nil)
+			if got := Route(withArgs, Context{}); got != ActionDispatchAgent {
+				t.Fatalf("Route(%q) = %v, want ActionDispatchAgent", withArgsInput, got)
 			}
 		})
 	}

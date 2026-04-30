@@ -32,6 +32,82 @@ func newSurfaceDispatchTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
 	}, out
 }
 
+func TestResolveConfigCommandSurfacePolicy(t *testing.T) {
+	tests := []struct {
+		name    string
+		surface commandcatalog.CommandSurface
+		args    []string
+		want    configCommandSurfacePolicy
+	}{
+		{
+			name:    "classic bare dispatches",
+			surface: commandcatalog.CommandSurfaceClassic,
+			want:    configCommandSurfacePolicy{dispatch: true},
+		},
+		{
+			name:    "TUI show dispatches",
+			surface: commandcatalog.CommandSurfaceTUI,
+			args:    []string{"show"},
+			want:    configCommandSurfacePolicy{dispatch: true},
+		},
+		{
+			name:    "TUI model with value dispatches",
+			surface: commandcatalog.CommandSurfaceTUI,
+			args:    []string{"model", "gpt-new"},
+			want:    configCommandSurfacePolicy{dispatch: true},
+		},
+		{
+			name:    "TUI bare warns",
+			surface: commandcatalog.CommandSurfaceTUI,
+			want:    configCommandSurfacePolicy{warningCommand: "/config"},
+		},
+		{
+			name:    "TUI unknown subcommand warns",
+			surface: commandcatalog.CommandSurfaceTUI,
+			args:    []string{"foo"},
+			want:    configCommandSurfacePolicy{warningCommand: "/config foo"},
+		},
+		{
+			name:    "TUI incomplete model warns",
+			surface: commandcatalog.CommandSurfaceTUI,
+			args:    []string{"model"},
+			want:    configCommandSurfacePolicy{warningCommand: "/config model"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveConfigCommandSurfacePolicy(tt.args, tt.surface); got != tt.want {
+				t.Fatalf("resolveConfigCommandSurfacePolicy(%v, %s) = %#v, want %#v", tt.args, tt.surface, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpecialCommandRegistryDoesNotRegisterTUILocalOwners(t *testing.T) {
+	agent, _ := newSurfaceDispatchTestAgent(t)
+
+	for _, surface := range []commandcatalog.CommandSurface{
+		commandcatalog.CommandSurfaceClassic,
+		commandcatalog.CommandSurfaceTUI,
+	} {
+		t.Run(string(surface), func(t *testing.T) {
+			registry := specialCommandRegistry(agent, surface)
+			for _, cmd := range commandcatalog.Commands {
+				if cmd.EffectiveOwner() != commandcatalog.CommandOwnerTUIRouter {
+					continue
+				}
+				names := append([]string{cmd.Name}, cmd.Aliases...)
+				for _, name := range names {
+					if _, ok := registry[name]; ok {
+						t.Fatalf("%s command %s should be owned by TUI router, not agent registry", surface, name)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestHandleSpecialCommandForSurface_Matrix(t *testing.T) {
 	disableColors(t)
 

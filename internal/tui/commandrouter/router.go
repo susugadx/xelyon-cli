@@ -1,6 +1,9 @@
 package commandrouter
 
-import "github.com/susugadx/xelyon-cli/internal/tui/slash"
+import (
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/tui/slash"
+)
 
 // Action は TUI が slash command に対して実行する処理種別を表す。
 type Action int
@@ -36,11 +39,27 @@ func Route(command slash.Command, ctx Context) Action {
 	if command.IsBare("/config") {
 		return ActionOpenConfig
 	}
-	if command.IsBare("/review") {
-		return ActionOpenReview
-	}
-	if command.IsBare("/project") {
-		return ActionOpenProject
+	if action, ok := routeCatalogTUILocalCommand(command); ok {
+		return action
 	}
 	return ActionDispatchAgent
+}
+
+func routeCatalogTUILocalCommand(command slash.Command) (Action, bool) {
+	if command.ArgCount != 1 {
+		return ActionDispatchAgent, false
+	}
+	cmdInfo, ok := commandcatalog.Find(command.ResolvedName)
+	if !ok || cmdInfo.EffectiveOwner() != commandcatalog.CommandOwnerTUIRouter {
+		return ActionDispatchAgent, false
+	}
+
+	switch cmdInfo.Name {
+	case "/review":
+		return ActionOpenReview, true
+	case "/project":
+		return ActionOpenProject, true
+	default:
+		return ActionDispatchAgent, false
+	}
 }

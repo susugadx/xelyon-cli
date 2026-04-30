@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"strings"
-
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -38,23 +36,6 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		"/tokens": func(_ []string) bool { return handleTokensCommand(agent) },
 		"/think":  func(args []string) bool { return handleThinkCommand(agent, args) },
 	}
-}
-
-func handleConfigCommandForSurface(agent *Agent, args []string, commandSurface commandcatalog.CommandSurface) bool {
-	if commandSurface != commandcatalog.CommandSurfaceTUI {
-		return handleConfigCommand(agent, args)
-	}
-	if isNonInteractiveConfigSubcommand(args) {
-		return handleConfigCommand(agent, args)
-	}
-
-	cmd := "/config"
-	if len(args) > 0 {
-		cmd += " " + strings.Join(args, " ")
-	}
-	_, _ = yellow.Fprintf(agent.output(), "⚠️  %s is not available in TUI mode.\n", cmd)
-	_, _ = yellow.Fprintln(agent.output(), "   Use bare /config, /config show, or /config model <name>.")
-	return true
 }
 
 func handleClearCommand(agent *Agent, _ []string) bool {
