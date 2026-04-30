@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tui"
@@ -55,15 +56,29 @@ func (a *TUIAdapter) Chat(input string) {
 	if strings.Contains(input, "image:") {
 		textPart, image := parseImageInputWithWriter(a.agent.output(), input)
 		if image != nil {
-			a.agent.chatWithImage(textPart, image)
-			if a.captureWriter != nil {
-				a.captureWriter.Flush()
-			}
+			a.chatWithImage(textPart, image)
 			return
 		}
 	}
 
 	a.agent.chat(input)
+	a.flushCapture()
+}
+
+// ChatWithImage は読み込み済み画像をAIに送信する。goroutine または tea.Cmd で呼ぶこと。
+func (a *TUIAdapter) ChatWithImage(input string, image *api.ImageData) {
+	a.processing.Store(true)
+	defer a.processing.Store(false)
+
+	a.chatWithImage(input, image)
+}
+
+func (a *TUIAdapter) chatWithImage(input string, image *api.ImageData) {
+	a.agent.chatWithImage(input, image)
+	a.flushCapture()
+}
+
+func (a *TUIAdapter) flushCapture() {
 	if a.captureWriter != nil {
 		a.captureWriter.Flush()
 	}

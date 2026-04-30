@@ -64,7 +64,7 @@ func resetRootFlagsForTest() {
 	headless = false
 	noUpdateCheck = false
 	imageFlag = ""
-	noTUI = false
+	legacyNoTUI = false
 	doctorDeploymentFlag = ""
 	doctorCatalogModelFlag = ""
 	doctorSmokeFlag = false
@@ -97,29 +97,67 @@ func resetFlagSetForTest(flags interface {
 	})
 }
 
-func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
-	resetRootFlagsForTest()
+type rootCommandRunners struct {
+	runLegacyInteractive           func(string, api.Provider, *config.Config, bool)
+	runLegacyInteractiveWithResume func(string, api.Provider, *config.Config, bool)
+	runLegacyInteractiveWithImage  func(string, string, api.Provider, string, *config.Config, bool) error
+	runTUI                         func(string, api.Provider, *config.Config, bool)
+	runTUIWithResume               func(string, api.Provider, *config.Config, bool)
+	runTUIWithImage                func(string, string, api.Provider, string, *config.Config, bool) error
+	runHeadless                    func(context.Context, string, string, api.Provider, *config.Config) *agent.HeadlessResult
+	runOnce                        func(string, string, api.Provider, *config.Config, bool, bool) error
+	runOnceWithImage               func(string, string, api.Provider, string, *config.Config, bool, bool) error
+}
 
-	origRunInteractive := runInteractive
-	origRunInteractiveWithResume := runInteractiveWithResume
-	origRunHeadless := runHeadless
-	origRunOnce := runOnce
-	origRunOnceWithImage := runOnceWithImage
+func snapshotRootCommandRunners() rootCommandRunners {
+	return rootCommandRunners{
+		runLegacyInteractive:           runLegacyInteractive,
+		runLegacyInteractiveWithResume: runLegacyInteractiveWithResume,
+		runLegacyInteractiveWithImage:  runLegacyInteractiveWithImage,
+		runTUI:                         runTUI,
+		runTUIWithResume:               runTUIWithResume,
+		runTUIWithImage:                runTUIWithImage,
+		runHeadless:                    runHeadless,
+		runOnce:                        runOnce,
+		runOnceWithImage:               runOnceWithImage,
+	}
+}
+
+func restoreRootCommandRunners(r rootCommandRunners) {
+	runLegacyInteractive = r.runLegacyInteractive
+	runLegacyInteractiveWithResume = r.runLegacyInteractiveWithResume
+	runLegacyInteractiveWithImage = r.runLegacyInteractiveWithImage
+	runTUI = r.runTUI
+	runTUIWithResume = r.runTUIWithResume
+	runTUIWithImage = r.runTUIWithImage
+	runHeadless = r.runHeadless
+	runOnce = r.runOnce
+	runOnceWithImage = r.runOnceWithImage
+}
+
+func withRootCommandTest(t *testing.T) {
+	t.Helper()
+
+	originalRunners := snapshotRootCommandRunners()
+	resetRootFlagsForTest()
+	rootCmd.SetArgs(nil)
+
 	t.Cleanup(func() {
-		runInteractive = origRunInteractive
-		runInteractiveWithResume = origRunInteractiveWithResume
-		runHeadless = origRunHeadless
-		runOnce = origRunOnce
-		runOnceWithImage = origRunOnceWithImage
+		restoreRootCommandRunners(originalRunners)
 		resetRootFlagsForTest()
+		rootCmd.SetArgs(nil)
 	})
+}
+
+func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
+	withRootCommandTest(t)
 
 	interactiveCalled := false
 	onceCalled := false
-	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runLegacyInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
 	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
@@ -152,28 +190,14 @@ func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
 }
 
 func TestRootCommand_OnceExecutesSingleTurn(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunInteractive := runInteractive
-	origRunInteractiveWithResume := runInteractiveWithResume
-	origRunHeadless := runHeadless
-	origRunOnce := runOnce
-	origRunOnceWithImage := runOnceWithImage
-	t.Cleanup(func() {
-		runInteractive = origRunInteractive
-		runInteractiveWithResume = origRunInteractiveWithResume
-		runHeadless = origRunHeadless
-		runOnce = origRunOnce
-		runOnceWithImage = origRunOnceWithImage
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	interactiveCalled := false
 	onceCalled := false
-	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runLegacyInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
 	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
@@ -205,22 +229,12 @@ func TestRootCommand_OnceExecutesSingleTurn(t *testing.T) {
 	}
 }
 
-func TestRootCommand_InteractiveFlagForcesREPLWithPositionalQuery(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunInteractive := runInteractive
-	origRunTUI := runTUI
-	origRunOnce := runOnce
-	t.Cleanup(func() {
-		runInteractive = origRunInteractive
-		runTUI = origRunTUI
-		runOnce = origRunOnce
-		resetRootFlagsForTest()
-	})
+func TestRootCommand_InteractiveFlagForcesTUIWithPositionalQuery(t *testing.T) {
+	withRootCommandTest(t)
 
 	interactiveCalled := false
 	onceCalled := false
-	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runLegacyInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
 	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
@@ -244,8 +258,33 @@ func TestRootCommand_InteractiveFlagForcesREPLWithPositionalQuery(t *testing.T) 
 	}
 }
 
+func TestRootCommand_NoTUIInteractiveUsesLegacyPath(t *testing.T) {
+	withRootCommandTest(t)
+
+	legacyCalled := false
+	tuiCalled := false
+	runLegacyInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		legacyCalled = true
+	}
+	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		tuiCalled = true
+	}
+
+	rootCmd.SetArgs([]string{"--interactive", "--no-tui", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !legacyCalled {
+		t.Fatal("expected --no-tui --interactive to use legacy path")
+	}
+	if tuiCalled {
+		t.Fatal("TUI path must not be executed when --no-tui is set")
+	}
+}
+
 func TestRootCommand_InteractiveWithOnceReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--interactive", "--once", "--provider", "ollama", "--no-update-check", "hello"})
 
 	err := rootCmd.Execute()
@@ -258,7 +297,7 @@ func TestRootCommand_InteractiveWithOnceReturnsError(t *testing.T) {
 }
 
 func TestRootCommand_OnceRequiresQuery(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--once", "--no-update-check"})
 
 	err := rootCmd.Execute()
@@ -268,7 +307,7 @@ func TestRootCommand_OnceRequiresQuery(t *testing.T) {
 }
 
 func TestRootCommand_OnceWithResumeReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--once", "--resume", "--no-update-check", "hello"})
 
 	err := rootCmd.Execute()
@@ -278,7 +317,7 @@ func TestRootCommand_OnceWithResumeReturnsError(t *testing.T) {
 }
 
 func TestRootCommand_ResumeWithPositionalQueryReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--resume", "--provider", "ollama", "--no-update-check", "hello"})
 
 	err := rootCmd.Execute()
@@ -290,8 +329,58 @@ func TestRootCommand_ResumeWithPositionalQueryReturnsError(t *testing.T) {
 	}
 }
 
+func TestRootCommand_ResumeUsesTUIPath(t *testing.T) {
+	withRootCommandTest(t)
+
+	tuiCalled := false
+	legacyCalled := false
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		tuiCalled = true
+	}
+	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		legacyCalled = true
+	}
+
+	rootCmd.SetArgs([]string{"--resume", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !tuiCalled {
+		t.Fatal("expected --resume to use TUI resume path")
+	}
+	if legacyCalled {
+		t.Fatal("legacy resume path must not be executed by default")
+	}
+}
+
+func TestRootCommand_NoTUIResumeUsesLegacyPath(t *testing.T) {
+	withRootCommandTest(t)
+
+	tuiCalled := false
+	legacyCalled := false
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		tuiCalled = true
+	}
+	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		legacyCalled = true
+	}
+
+	rootCmd.SetArgs([]string{"--resume", "--no-tui", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !legacyCalled {
+		t.Fatal("expected --no-tui --resume to use legacy resume path")
+	}
+	if tuiCalled {
+		t.Fatal("TUI resume path must not be executed when --no-tui is set")
+	}
+}
+
 func TestRootCommand_OnceWithHeadlessReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--once", "--headless", "--no-update-check", "hello"})
 
 	err := rootCmd.Execute()
@@ -301,7 +390,7 @@ func TestRootCommand_OnceWithHeadlessReturnsError(t *testing.T) {
 }
 
 func TestRootCommand_QuietWithoutOnceReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--quiet", "--no-update-check"})
 
 	err := rootCmd.Execute()
@@ -314,7 +403,7 @@ func TestRootCommand_QuietWithoutOnceReturnsError(t *testing.T) {
 }
 
 func TestRootCommand_InteractiveWithQuietReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--interactive", "--quiet", "--provider", "ollama", "--no-update-check", "hello"})
 
 	err := rootCmd.Execute()
@@ -327,13 +416,7 @@ func TestRootCommand_InteractiveWithQuietReturnsError(t *testing.T) {
 }
 
 func TestRootCommand_QuietWithPositionalQueryUsesImplicitOnce(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunOnce := runOnce
-	t.Cleanup(func() {
-		runOnce = origRunOnce
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	called := false
 	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
@@ -358,13 +441,7 @@ func TestRootCommand_QuietWithPositionalQueryUsesImplicitOnce(t *testing.T) {
 }
 
 func TestRootCommand_OnceMultiWordQuery(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunOnce := runOnce
-	t.Cleanup(func() {
-		runOnce = origRunOnce
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	var gotQuery string
 	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
@@ -384,13 +461,7 @@ func TestRootCommand_OnceMultiWordQuery(t *testing.T) {
 }
 
 func TestRootCommand_OnceErrorPropagation(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunOnce := runOnce
-	t.Cleanup(func() {
-		runOnce = origRunOnce
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
 		return fmt.Errorf("something went wrong")
@@ -407,17 +478,7 @@ func TestRootCommand_OnceErrorPropagation(t *testing.T) {
 }
 
 func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunHeadless := runHeadless
-	origRunOnce := runOnce
-	origRunInteractive := runInteractive
-	t.Cleanup(func() {
-		runHeadless = origRunHeadless
-		runOnce = origRunOnce
-		runInteractive = origRunInteractive
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	headlessCalled := false
 	onceCalled := false
@@ -433,7 +494,7 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 		onceCalled = true
 		return nil
 	}
-	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runLegacyInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
 
@@ -454,13 +515,7 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 }
 
 func TestRootCommand_OutputFormatIsCaseInsensitive(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunHeadless := runHeadless
-	t.Cleanup(func() {
-		runHeadless = origRunHeadless
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	headlessCalled := false
 	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
@@ -482,7 +537,7 @@ func TestRootCommand_OutputFormatIsCaseInsensitive(t *testing.T) {
 }
 
 func TestRootCommand_InvalidOutputFormatReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--output-format", "yaml", "--no-update-check", "hello"})
 
 	err := rootCmd.Execute()
@@ -495,14 +550,8 @@ func TestRootCommand_InvalidOutputFormatReturnsError(t *testing.T) {
 }
 
 func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	t.Setenv("HOME", t.TempDir())
-
-	origRunHeadless := runHeadless
-	t.Cleanup(func() {
-		runHeadless = origRunHeadless
-		resetRootFlagsForTest()
-	})
 
 	tempDir := t.TempDir()
 	origDir, err := os.Getwd()
@@ -573,17 +622,7 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 }
 
 func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunOnce := runOnce
-	origRunInteractive := runInteractive
-	origRunOnceWithImage := runOnceWithImage
-	t.Cleanup(func() {
-		runOnce = origRunOnce
-		runInteractive = origRunInteractive
-		runOnceWithImage = origRunOnceWithImage
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	imageCalled := false
 	onceCalled := false
@@ -592,7 +631,7 @@ func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
 		onceCalled = true
 		return nil
 	}
-	runInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runLegacyInteractive = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
 	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
@@ -623,15 +662,7 @@ func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
 }
 
 func TestRootCommand_OnceWithImageUsesImageOneShotPath(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunOnce := runOnce
-	origRunOnceWithImage := runOnceWithImage
-	t.Cleanup(func() {
-		runOnce = origRunOnce
-		runOnceWithImage = origRunOnceWithImage
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	imageCalled := false
 	onceCalled := false
@@ -664,15 +695,7 @@ func TestRootCommand_OnceWithImageUsesImageOneShotPath(t *testing.T) {
 }
 
 func TestRootCommand_OnceWithImageWithoutQueryUsesImageOneShotPath(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunOnce := runOnce
-	origRunOnceWithImage := runOnceWithImage
-	t.Cleanup(func() {
-		runOnce = origRunOnce
-		runOnceWithImage = origRunOnceWithImage
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	imageCalled := false
 	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
@@ -701,19 +724,11 @@ func TestRootCommand_OnceWithImageWithoutQueryUsesImageOneShotPath(t *testing.T)
 }
 
 func TestRootCommand_InteractiveWithImageUsesInteractiveImagePath(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunOnceWithImage := runOnceWithImage
-	origRunInteractiveWithImage := runInteractiveWithImage
-	t.Cleanup(func() {
-		runOnceWithImage = origRunOnceWithImage
-		runInteractiveWithImage = origRunInteractiveWithImage
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	imageInteractiveCalled := false
 	imageOnceCalled := false
-	runInteractiveWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+	runTUIWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
 		imageInteractiveCalled = true
 		if query != "describe this screenshot" {
 			t.Fatalf("query = %q, want %q", query, "describe this screenshot")
@@ -741,14 +756,35 @@ func TestRootCommand_InteractiveWithImageUsesInteractiveImagePath(t *testing.T) 
 	}
 }
 
-func TestRootCommand_ImageErrorPropagation(t *testing.T) {
-	resetRootFlagsForTest()
+func TestRootCommand_NoTUIInteractiveImageUsesLegacyPath(t *testing.T) {
+	withRootCommandTest(t)
 
-	origRunOnceWithImage := runOnceWithImage
-	t.Cleanup(func() {
-		runOnceWithImage = origRunOnceWithImage
-		resetRootFlagsForTest()
-	})
+	tuiCalled := false
+	legacyCalled := false
+	runTUIWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+		tuiCalled = true
+		return nil
+	}
+	runLegacyInteractiveWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+		legacyCalled = true
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--interactive", "--no-tui", "--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check", "describe"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !legacyCalled {
+		t.Fatal("expected --no-tui --interactive --image to use legacy image path")
+	}
+	if tuiCalled {
+		t.Fatal("TUI image path must not be executed when --no-tui is set")
+	}
+}
+
+func TestRootCommand_ImageErrorPropagation(t *testing.T) {
+	withRootCommandTest(t)
 
 	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
 		return fmt.Errorf("image failed")
@@ -765,7 +801,7 @@ func TestRootCommand_ImageErrorPropagation(t *testing.T) {
 }
 
 func TestRootCommand_ImageWithJSONReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--image", "/tmp/image.png", "--output-format", "json", "--provider", "ollama", "--no-update-check", "describe"})
 
 	err := rootCmd.Execute()
@@ -778,13 +814,7 @@ func TestRootCommand_ImageWithJSONReturnsError(t *testing.T) {
 }
 
 func TestRootCommand_QuietWithImageUsesOneShotImagePath(t *testing.T) {
-	resetRootFlagsForTest()
-
-	origRunOnceWithImage := runOnceWithImage
-	t.Cleanup(func() {
-		runOnceWithImage = origRunOnceWithImage
-		resetRootFlagsForTest()
-	})
+	withRootCommandTest(t)
 
 	called := false
 	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
@@ -812,7 +842,7 @@ func TestRootCommand_QuietWithImageUsesOneShotImagePath(t *testing.T) {
 }
 
 func TestRootCommand_ResumeWithImageReturnsError(t *testing.T) {
-	resetRootFlagsForTest()
+	withRootCommandTest(t)
 	rootCmd.SetArgs([]string{"--resume", "--image", "/tmp/image.png", "--provider", "ollama", "--no-update-check"})
 
 	err := rootCmd.Execute()

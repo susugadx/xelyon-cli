@@ -10,11 +10,16 @@ import (
 
 // Run は TUI モードでアプリケーションを起動する。
 func Run(agent AgentInterface, initialContent string, onProgram func(*tea.Program)) {
+	RunWithStartupSubmission(agent, initialContent, nil, onProgram)
+}
+
+// RunWithStartupSubmission は TUI 起動後に初回送信を transcript に表示してから実行する。
+func RunWithStartupSubmission(agent AgentInterface, initialContent string, startupSubmission *StartupSubmission, onProgram func(*tea.Program)) {
 	// defer は LIFO: runExitCallbacks (チャネル停止) → RestoreTerminal (画面復旧) の順で実行
 	defer lifecycle.RestoreTerminal()
 	defer lifecycle.RunExitCallbacks()
 
-	m := NewModel(agent, initialContent)
+	m := NewModelWithStartupSubmission(agent, initialContent, startupSubmission)
 
 	// マウスホイールを直接処理（mode 1007 経由のキー変換より低遅延）。
 	// ネイティブのテキスト選択は Shift+ドラッグで可能。

@@ -51,6 +51,10 @@ func (m Model) updateChatScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m, cmd = m.handleSpinnerTickMsg(msg)
 		cmds = appendCmd(cmds, cmd)
+	case startupSubmissionMsg:
+		var cmd tea.Cmd
+		m, cmd = m.handleStartupSubmissionMsg(msg)
+		cmds = appendCmd(cmds, cmd)
 	default:
 		if updated, cmd, handled := m.handleStreamMessage(msg); handled {
 			m = updated

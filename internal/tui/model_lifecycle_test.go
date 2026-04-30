@@ -36,3 +36,39 @@ func TestModel_FooterHeight_UsedInWindowSizeMsg(t *testing.T) {
 		t.Fatalf("vp.height = %d, want %d (height %d - footerHeight %d)", m.vp.height, wantVPHeight, 30, m.footerHeight())
 	}
 }
+
+func TestModel_StartupSubmissionAppendsUserMessageBeforeRunning(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	var ran bool
+	startup := &StartupSubmission{
+		UserMessage: "describe this image",
+		Cmd: func() tea.Msg {
+			ran = true
+			return AgentDoneMsg{}
+		},
+	}
+	m := NewModelWithStartupSubmission(agent, "", startup)
+
+	updated, cmd := m.Update(startupSubmissionMsg{submission: *startup})
+	m = updated.(Model)
+
+	if len(m.messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(m.messages))
+	}
+	if got := m.messages[0].Role; got != "user" {
+		t.Fatalf("message role = %q, want user", got)
+	}
+	if got := m.messages[0].Content; got != startup.UserMessage {
+		t.Fatalf("message content = %q, want %q", got, startup.UserMessage)
+	}
+	if len(m.rawLines) == 0 {
+		t.Fatal("expected startup user message to be rendered into rawLines")
+	}
+	if cmd == nil {
+		t.Fatal("expected startup command to be returned after rendering user message")
+	}
+	cmd()
+	if !ran {
+		t.Fatal("expected startup command to run")
+	}
+}

@@ -96,8 +96,8 @@ func prepareInteractiveREPLEnvironment(cfg *config.Config, autoApprove bool) (*i
 	}, cleanup
 }
 
-// RunInteractiveWithConfig は指定設定でインタラクティブモードを実行する。
-func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+// RunLegacyInteractiveWithConfig は legacy classic REPL を実行する。
+func RunLegacyInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
 
@@ -116,8 +116,15 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 	runREPLLoop(agent, env.mlReader)
 }
 
-// RunInteractiveWithImageWithConfig は指定設定で画像付きのインタラクティブモードを実行する。
-func RunInteractiveWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+// RunInteractiveWithConfig は legacy classic REPL の互換入口。
+//
+// Deprecated: interactive primary surface には RunTUIWithConfig を使う。
+func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
+}
+
+// RunLegacyInteractiveWithImageWithConfig は legacy classic REPL で画像付き初回ターンを実行する。
+func RunLegacyInteractiveWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
 
@@ -148,8 +155,15 @@ func RunInteractiveWithImageWithConfig(query string, model string, provider api.
 	return nil
 }
 
-// RunInteractiveWithResumeWithConfig は指定設定で前回セッションを再開してインタラクティブモードを実行する。
-func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+// RunInteractiveWithImageWithConfig は legacy classic REPL の互換入口。
+//
+// Deprecated: interactive primary surface には RunTUIWithImageWithConfig を使う。
+func RunInteractiveWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+	return RunLegacyInteractiveWithImageWithConfig(query, model, provider, imagePath, cfg, autoApprove)
+}
+
+// RunLegacyInteractiveWithResumeWithConfig は legacy classic REPL で前回セッションを再開する。
+func RunLegacyInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
 
@@ -157,7 +171,7 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 	if err != nil {
 		red.Fprintf(env.runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
 		cleanup()
-		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
+		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 
@@ -165,7 +179,7 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 	if err != nil {
 		yellow.Fprintln(env.runtimeUI.Output(), "No previous session found, starting new session")
 		cleanup()
-		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
+		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 
@@ -173,7 +187,7 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 	if err != nil {
 		red.Fprintf(env.runtimeUI.Output(), "Failed to load session: %v\n", err)
 		cleanup()
-		RunInteractiveWithConfig(model, provider, cfg, autoApprove)
+		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 
@@ -194,7 +208,14 @@ func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg
 	runREPLLoop(agent, env.mlReader)
 }
 
-// runREPLLoop は共通のREPLループを実行（RunInteractive/RunInteractiveWithResumeで共用）
+// RunInteractiveWithResumeWithConfig は legacy classic REPL の互換入口。
+//
+// Deprecated: interactive primary surface には RunTUIWithResumeWithConfig を使う。
+func RunInteractiveWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	RunLegacyInteractiveWithResumeWithConfig(model, provider, cfg, autoApprove)
+}
+
+// runREPLLoop は legacy classic REPL ループを実行する。
 func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 	var lastInterrupt time.Time
 

@@ -41,63 +41,6 @@ func waitForTUIMessageCount(t *testing.T, msgs *[]tea.Msg, mu *sync.Mutex, want 
 	t.Fatalf("message count = %d, want at least %d", got, want)
 }
 
-func TestRunTUIWithConfig_InitializesTUIAgentAndHeader(t *testing.T) {
-	disableColors(t)
-	t.Setenv("HOME", t.TempDir())
-
-	originalRunner := runTUIProgram
-	defer func() { runTUIProgram = originalRunner }()
-
-	var called atomic.Int32
-	var gotAdapter *TUIAdapter
-	var gotInitialContent string
-	runTUIProgram = func(agent tui.AgentInterface, initialContent string, onProgram func(*tea.Program)) {
-		called.Add(1)
-		typed, ok := agent.(*TUIAdapter)
-		if !ok {
-			t.Fatalf("agent type = %T, want *TUIAdapter", agent)
-		}
-		gotAdapter = typed
-		gotInitialContent = initialContent
-		onProgram(nil)
-	}
-
-	var cleanupCount atomic.Int32
-	cleanupHook = func() { cleanupCount.Add(1) }
-	defer func() { cleanupHook = nil }()
-
-	RunTUIWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false)
-
-	if called.Load() != 1 {
-		t.Fatalf("runTUIProgram called %d times, want 1", called.Load())
-	}
-	if gotAdapter == nil {
-		t.Fatal("expected TUI adapter to be passed to runner")
-	}
-	if gotAdapter.agent == nil {
-		t.Fatal("expected adapter.agent to be initialized")
-	}
-	if !gotAdapter.agent.AutoApprove {
-		t.Fatal("expected TUI agent to force auto-approve")
-	}
-	if gotAdapter.agent.exitHook == nil {
-		t.Fatal("expected TUI exit hook to be registered")
-	}
-	if gotAdapter.agent.tuiToolResultCh == nil {
-		t.Fatal("expected TUI tool result channel to be initialized")
-	}
-	if cleanupCount.Load() != 1 {
-		t.Fatalf("cleanup count = %d, want 1", cleanupCount.Load())
-	}
-
-	stripped := stripANSI(gotInitialContent)
-	for _, fragment := range []string{"AI-powered coding agent", "Type /help for commands"} {
-		if !strings.Contains(stripped, fragment) {
-			t.Fatalf("initialContent missing %q:\n%s", fragment, stripped)
-		}
-	}
-}
-
 func TestTUIProgramBridge_StartCapturesAssistantAndToolResults(t *testing.T) {
 	disableColors(t)
 

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -24,10 +25,48 @@ func (tuiAutoApproveReader) Read(p []byte) (int, error) {
 }
 
 var runTUIProgram = tui.Run
+var runTUIProgramWithStartupSubmission = tui.RunWithStartupSubmission
 var registerTUIOnExit = lifecycle.OnExit
+
+type tuiRunOptions struct {
+	resumeLastSession bool
+	initialImageQuery string
+	initialImage      *api.ImageData
+}
 
 // RunTUIWithConfig は TUI モードでインタラクティブセッションを起動する。
 func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runTUIWithOptions(model, provider, cfg, autoApprove, tuiRunOptions{})
+}
+
+// RunTUIWithResumeWithConfig は前回セッションを再開して TUI モードを起動する。
+func RunTUIWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runTUIWithOptions(model, provider, cfg, autoApprove, tuiRunOptions{resumeLastSession: true})
+}
+
+// RunTUIWithImageWithConfig は画像付きの初回ターンを実行して TUI モードを起動する。
+func RunTUIWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+	if !provider.SupportsImages() {
+		return fmt.Errorf("provider %q does not support image input", provider.Name())
+	}
+
+	image, err := api.LoadImage(imagePath)
+	if err != nil {
+		return fmt.Errorf("failed to load image: %w", err)
+	}
+
+	if query == "" {
+		query = "Please analyze this image."
+	}
+
+	runTUIWithOptions(model, provider, cfg, autoApprove, tuiRunOptions{
+		initialImageQuery: query,
+		initialImage:      image,
+	})
+	return nil
+}
+
+func runTUIWithOptions(model string, provider api.Provider, cfg *config.Config, autoApprove bool, opts tuiRunOptions) {
 	// TUI モードでは確認ダイアログが動作しないため、全ツールを auto-approve する。
 	// - autoApprove=true: apply_patch, write_file 等の ConfirmWithAutoApproveDecisionAndOptions 系
 	// - tuiAutoApproveReader: bash の ConfirmWithIO（stdin から直接読む）系
@@ -46,6 +85,13 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 	// SIGTERM 時に Alt Screen を復旧するフックを登録
 	ag.exitHook = lifecycle.RestoreTerminal
 
+	if opts.resumeLastSession {
+		loadLastSessionForTUI(ag)
+	}
+	if opts.initialImage != nil {
+		green.Fprintf(ag.output(), "🖼️  Image loaded: %s (%s)\n", opts.initialImage.Path, api.FormatImageSize(opts.initialImage.Size))
+	}
+
 	// ヘッダー + キャプチャした初期化出力を結合して初期コンテンツにする
 	initialContent := buildTUIHeader() + captureBuf.String()
 
@@ -56,6 +102,13 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 	// TUIAdapter を作成（sendMsg は後で p.Send 経由で接続）
 	adapter := NewTUIAdapter(ag, nil)
 
+	startupSubmission := initialImageStartupSubmission(adapter, opts.initialImageQuery, opts.initialImage)
+	if startupSubmission != nil {
+		runTUIProgramWithStartupSubmission(adapter, initialContent, startupSubmission, func(p *tea.Program) {
+			bindTUIProgram(adapter, ag, toolResultCh, p)
+		})
+		return
+	}
 	runTUIProgram(adapter, initialContent, func(p *tea.Program) {
 		bindTUIProgram(adapter, ag, toolResultCh, p)
 	})

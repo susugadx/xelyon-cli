@@ -14,7 +14,7 @@ type CommandInfo struct {
 	Description   string           // "Interactive configuration menu"
 	DescriptionJP string           // "対話式設定変更"
 	SubCommands   []SubCommand     // サブコマンド
-	Surfaces      []CommandSurface // 省略時は TUI primary と classic legacy の両方
+	Surfaces      []CommandSurface // 省略時は TUI primary のみ
 	Owner         CommandOwner     // 省略時は agent dispatcher
 	Lifecycle     CommandLifecycle // 省略時は stable
 	Category      CommandCategory  // 省略時は other
@@ -37,6 +37,10 @@ const (
 	// CommandSurfaceClassic は --no-tui 用の legacy surface。
 	CommandSurfaceClassic CommandSurface = "classic"
 )
+
+func legacyInteractiveSurfaces() []CommandSurface {
+	return []CommandSurface{CommandSurfaceTUI, CommandSurfaceClassic}
+}
 
 // CommandOwner は command 実行責務の owner を表す。
 type CommandOwner string
@@ -77,6 +81,7 @@ var Commands = []CommandInfo{
 		Aliases:       []string{"/quit", "/q"},
 		Description:   "Exit the CLI",
 		DescriptionJP: "CLIを終了",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySystem,
 		Discoverable:  true,
 		SortWeight:    900,
@@ -85,6 +90,7 @@ var Commands = []CommandInfo{
 		Name:          "/clear",
 		Description:   "Clear conversation history",
 		DescriptionJP: "会話履歴をクリア",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
 		SortWeight:    610,
@@ -93,6 +99,7 @@ var Commands = []CommandInfo{
 		Name:          "/history",
 		Description:   "Show conversation history",
 		DescriptionJP: "会話履歴を表示",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
 		SortWeight:    620,
@@ -101,6 +108,7 @@ var Commands = []CommandInfo{
 		Name:          "/save",
 		Description:   "Save current session",
 		DescriptionJP: "セッションを保存",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
 		SortWeight:    630,
@@ -110,6 +118,7 @@ var Commands = []CommandInfo{
 		Args:          "[id]",
 		Description:   "Load session (or last if no ID)",
 		DescriptionJP: "セッションを読み込み",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
 		SortWeight:    640,
@@ -118,6 +127,7 @@ var Commands = []CommandInfo{
 		Name:          "/sessions",
 		Description:   "List recent sessions",
 		DescriptionJP: "最近のセッション一覧",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
 		SortWeight:    650,
@@ -127,6 +137,7 @@ var Commands = []CommandInfo{
 		Aliases:       []string{"/stats"},
 		Description:   "Show current state, last request, and session statistics",
 		DescriptionJP: "現在状態、直近リクエスト、セッション統計を表示",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySystem,
 		Discoverable:  true,
 		SortWeight:    50,
@@ -135,6 +146,7 @@ var Commands = []CommandInfo{
 		Name:          "/tokens",
 		Description:   "Show token usage and context window status",
 		DescriptionJP: "トークン使用量を表示",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryContext,
 		Discoverable:  true,
 		SortWeight:    80,
@@ -144,6 +156,7 @@ var Commands = []CommandInfo{
 		Args:          "[code] [-n N]",
 		Description:   "Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)",
 		DescriptionJP: "AI出力をクリップボードにコピー",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySession,
 		Discoverable:  true,
 		SortWeight:    40,
@@ -164,6 +177,7 @@ var Commands = []CommandInfo{
 		Args:          "[N] [-c]",
 		Description:   "Compress history (keep recent N, -c: use OpenAI Compact API)",
 		DescriptionJP: "履歴を圧縮",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryContext,
 		Discoverable:  true,
 		SortWeight:    90,
@@ -173,6 +187,7 @@ var Commands = []CommandInfo{
 		Args:          "<provider> [model]",
 		Description:   "Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)",
 		DescriptionJP: "プロバイダーを切り替え",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryModel,
 		Discoverable:  true,
 		SortWeight:    110,
@@ -181,6 +196,7 @@ var Commands = []CommandInfo{
 		Name:          "/providers",
 		Description:   "List available providers and their API key status",
 		DescriptionJP: "利用可能なプロバイダー一覧",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryModel,
 		Discoverable:  true,
 		SortWeight:    120,
@@ -189,6 +205,7 @@ var Commands = []CommandInfo{
 		Name:          "/config",
 		Description:   "Interactive configuration menu",
 		DescriptionJP: "対話式設定変更",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryConfig,
 		Discoverable:  true,
 		SortWeight:    30,
@@ -202,6 +219,7 @@ var Commands = []CommandInfo{
 		Args:          "[name]",
 		Description:   "Show current model or switch model without restart",
 		DescriptionJP: "モデルを表示/切り替え",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryModel,
 		Discoverable:  true,
 		SortWeight:    20,
@@ -210,6 +228,7 @@ var Commands = []CommandInfo{
 		Name:          "/init",
 		Description:   "Create xelyon.yaml template (project config)",
 		DescriptionJP: "xelyon.yamlテンプレートを作成",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryConfig,
 		Discoverable:  true,
 		SortWeight:    710,
@@ -229,6 +248,7 @@ var Commands = []CommandInfo{
 		Args:          "[on|off]",
 		Description:   "Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)",
 		DescriptionJP: "Plan Modeを切り替え",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryDev,
 		Discoverable:  true,
 		SortWeight:    130,
@@ -238,6 +258,7 @@ var Commands = []CommandInfo{
 		Args:          "[on|off|level]",
 		Description:   "Toggle Extended Thinking mode (level: low/medium/high/xhigh)",
 		DescriptionJP: "Extended Thinkingを切り替え",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryModel,
 		Discoverable:  true,
 		SortWeight:    140,
@@ -247,6 +268,7 @@ var Commands = []CommandInfo{
 		Args:          "[status]",
 		Description:   "Show LSP server status (running/not started/disabled)",
 		DescriptionJP: "LSPサーバー状態を表示",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategoryDev,
 		Discoverable:  true,
 		SortWeight:    700,
@@ -255,6 +277,7 @@ var Commands = []CommandInfo{
 		Name:          "/version",
 		Description:   "Show version information",
 		DescriptionJP: "バージョンを表示",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySystem,
 		SortWeight:    920,
 	},
@@ -262,6 +285,7 @@ var Commands = []CommandInfo{
 		Name:          "/help",
 		Description:   "Show this help",
 		DescriptionJP: "ヘルプを表示",
+		Surfaces:      legacyInteractiveSurfaces(),
 		Category:      CommandCategorySystem,
 		SortWeight:    910,
 	},
@@ -444,7 +468,7 @@ func (cmd CommandInfo) EffectiveSortWeight() int {
 
 func (cmd CommandInfo) effectiveSurfaces() []CommandSurface {
 	if len(cmd.Surfaces) == 0 {
-		return []CommandSurface{CommandSurfaceTUI, CommandSurfaceClassic}
+		return []CommandSurface{CommandSurfaceTUI}
 	}
 	return cmd.Surfaces
 }

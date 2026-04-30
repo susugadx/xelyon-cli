@@ -19,6 +19,11 @@ func (m Model) footerHeight() int {
 
 // NewModel は TUI Model を作成する。
 func NewModel(agent AgentInterface, initialContent string) Model {
+	return NewModelWithStartupSubmission(agent, initialContent, nil)
+}
+
+// NewModelWithStartupSubmission は TUI 起動直後に送信する入力を持つ Model を作成する。
+func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, startupSubmission *StartupSubmission) Model {
 	ti := textinput.New()
 	ti.Prompt = ""
 	ti.Placeholder = "Type your message..."
@@ -53,16 +58,21 @@ func NewModel(agent AgentInterface, initialContent string) Model {
 			mouseSelAnchor: visualPosition{line: -1, col: -1},
 			mouseSelEnd:    visualPosition{line: -1, col: -1},
 		},
-		statusLine: agent.GetStatusLine(),
+		statusLine:        agent.GetStatusLine(),
+		startupSubmission: startupSubmission,
 	}
 }
 
 // Init は bubbletea の Init を実装する。
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		textinput.Blink,
 		m.spinner.Tick,
-	)
+	}
+	if cmd := startupSubmissionCmd(m.startupSubmission); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return tea.Batch(cmds...)
 }
 
 // applyChatWindowSize は chat 画面で使う viewport/layout/chrome を最新の端末サイズに同期する。

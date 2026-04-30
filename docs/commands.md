@@ -26,7 +26,7 @@ Azure API error では 401/403/404/429 と tool payload rejected の原因候補
 ## 対話型コマンド
 
 セッション中に `/` で始まるコマンドを入力できます。
-TUI が primary surface です。`--no-tui` の classic REPL は legacy surface として残しており、新しい対話型 UI コマンドは原則 TUI 側だけに追加します。
+TUI が primary surface です。`--no-tui` の classic REPL は deprecated legacy fallback として残しており、新しい対話型 UI コマンドは TUI 側だけに追加します。
 
 ### `/help`
 

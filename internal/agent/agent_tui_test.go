@@ -11,7 +11,7 @@ func TestBuildTUIHeader_ContainsGradientLogoAndSubtext(t *testing.T) {
 	checks := []string{
 		"██╗",                     // ロゴのブロック文字
 		"AI-powered coding agent", // サブテキスト
-		"Type /help for commands", // ヘルプ案内
+		"Type /help for commands", // コマンド発見用の案内
 	}
 	// ANSI コードを除去してテキスト検証
 	stripped := stripANSI(header)

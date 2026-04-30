@@ -191,8 +191,11 @@ func TestDefaultCommandMetadata(t *testing.T) {
 		t.Fatal("MatchPrefix(/copy) returned no matches")
 	}
 	cmd := matches[0]
+	if len(cmd.Surfaces) == 0 {
+		t.Fatal("/copy should explicitly declare legacy classic support")
+	}
 	if !cmd.SupportsSurface(CommandSurfaceTUI) || !cmd.SupportsSurface(CommandSurfaceClassic) {
-		t.Fatalf("/copy default surfaces should include TUI and classic, got %#v", cmd.Surfaces)
+		t.Fatalf("/copy surfaces should include TUI and classic, got %#v", cmd.Surfaces)
 	}
 	if cmd.EffectiveLifecycle() != CommandLifecycleStable {
 		t.Fatalf("/copy lifecycle = %q, want stable", cmd.EffectiveLifecycle())
@@ -205,11 +208,25 @@ func TestDefaultCommandMetadata(t *testing.T) {
 	}
 
 	empty := CommandInfo{}
+	if !empty.SupportsSurface(CommandSurfaceTUI) {
+		t.Fatal("empty/default command should support TUI surface")
+	}
+	if empty.SupportsSurface(CommandSurfaceClassic) {
+		t.Fatal("empty/default command should not support classic surface")
+	}
 	if empty.EffectiveCategory() != CommandCategoryOther {
 		t.Fatalf("empty category = %q, want other", empty.EffectiveCategory())
 	}
 	if empty.EffectiveSortWeight() != 1000 {
 		t.Fatalf("empty sort weight = %d, want 1000", empty.EffectiveSortWeight())
+	}
+}
+
+func TestCatalogCommandsDeclareSurfacePolicy(t *testing.T) {
+	for _, cmd := range Commands {
+		if len(cmd.Surfaces) == 0 {
+			t.Fatalf("%s should explicitly declare its surface policy", cmd.Name)
+		}
 	}
 }
 

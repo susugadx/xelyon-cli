@@ -110,4 +110,5 @@ type Model struct {
 	lastInterrupt        time.Time
 	streamState
 	mouseSelectionState
+	startupSubmission *StartupSubmission
 }

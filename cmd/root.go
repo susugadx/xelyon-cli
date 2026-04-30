@@ -30,15 +30,17 @@ var (
 	headless      bool
 	noUpdateCheck bool
 	imageFlag     string
-	noTUI         bool
+	legacyNoTUI   bool
 
-	runInteractive           = agent.RunInteractiveWithConfig
-	runInteractiveWithResume = agent.RunInteractiveWithResumeWithConfig
-	runInteractiveWithImage  = agent.RunInteractiveWithImageWithConfig
-	runTUI                   = agent.RunTUIWithConfig
-	runHeadless              = agent.RunHeadlessWithConfig
-	runOnce                  = agent.RunOnceWithConfig
-	runOnceWithImage         = agent.RunOnceWithImageWithConfig
+	runLegacyInteractive           = agent.RunLegacyInteractiveWithConfig
+	runLegacyInteractiveWithResume = agent.RunLegacyInteractiveWithResumeWithConfig
+	runLegacyInteractiveWithImage  = agent.RunLegacyInteractiveWithImageWithConfig
+	runTUI                         = agent.RunTUIWithConfig
+	runTUIWithResume               = agent.RunTUIWithResumeWithConfig
+	runTUIWithImage                = agent.RunTUIWithImageWithConfig
+	runHeadless                    = agent.RunHeadlessWithConfig
+	runOnce                        = agent.RunOnceWithConfig
+	runOnceWithImage               = agent.RunOnceWithImageWithConfig
 )
 var rootCmd = &cobra.Command{
 	Use:     "xelyon [query]",
@@ -49,7 +51,7 @@ var rootCmd = &cobra.Command{
 Examples:
   xelyon                                           # Interactive mode (DeepSeek Chat)
   xelyon "explain this project"                    # One-shot query
-  xelyon --interactive "explain this project"      # Force interactive REPL
+  xelyon --interactive "explain this project"      # Force interactive TUI
   xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
   xelyon doctor azure --deployment my-gpt-5-deployment --smoke # Diagnose Azure OpenAI
@@ -118,12 +120,17 @@ Examples:
 		case executionModeOnce:
 			return runOnce(query, model, provider, cfg, autoApprove, quiet)
 		case executionModeResume:
-			// TODO: TUI resume 対応（Phase 2）、現状は従来REPLモードで起動する。
-			runInteractiveWithResume(model, provider, cfg, autoApprove)
+			if legacyNoTUI {
+				printLegacyNoTUIWarning()
+				runLegacyInteractiveWithResume(model, provider, cfg, autoApprove)
+			} else {
+				runTUIWithResume(model, provider, cfg, autoApprove)
+			}
 			return nil
 		case executionModeInteractive:
-			if noTUI {
-				runInteractive(model, provider, cfg, autoApprove)
+			if legacyNoTUI {
+				printLegacyNoTUIWarning()
+				runLegacyInteractive(model, provider, cfg, autoApprove)
 			} else {
 				runTUI(model, provider, cfg, autoApprove)
 			}
@@ -131,7 +138,11 @@ Examples:
 		case executionModeOnceImage:
 			return runOnceWithImage(query, model, provider, imageFlag, cfg, autoApprove, quiet)
 		case executionModeInteractiveImage:
-			return runInteractiveWithImage(query, model, provider, imageFlag, cfg, autoApprove)
+			if legacyNoTUI {
+				printLegacyNoTUIWarning()
+				return runLegacyInteractiveWithImage(query, model, provider, imageFlag, cfg, autoApprove)
+			}
+			return runTUIWithImage(query, model, provider, imageFlag, cfg, autoApprove)
 		default:
 			return fmt.Errorf("unsupported execution mode: %s", mode)
 		}
@@ -150,7 +161,7 @@ func init() {
 	// 新規: --resume / --once / --interactive / --quiet フラグ
 	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")
 	rootCmd.Flags().BoolVar(&once, "once", false, "Execute exactly one query turn and exit (compatibility alias for positional queries)")
-	rootCmd.Flags().BoolVar(&interactive, "interactive", false, "Force interactive REPL even when query arguments are provided")
+	rootCmd.Flags().BoolVar(&interactive, "interactive", false, "Force interactive TUI even when query arguments are provided")
 	rootCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress header and status output for one-shot execution")
 
 	// 新規: 設定カスタマイズフラグ
@@ -171,9 +182,13 @@ func init() {
 	rootCmd.Flags().StringVarP(&imageFlag, "image", "i", "", "Image file to include (for multimodal models: gemini, claude, openai)")
 
 	// --no-tui は legacy REPL 用。新しい interactive command は TUI を primary surface とする。
-	rootCmd.Flags().BoolVar(&noTUI, "no-tui", false, "Use legacy classic REPL instead of the primary TUI")
+	rootCmd.Flags().BoolVar(&legacyNoTUI, "no-tui", false, "Use deprecated legacy classic REPL instead of the primary TUI")
 
 	rootCmd.AddCommand(newDoctorCommand())
+}
+
+func printLegacyNoTUIWarning() {
+	fmt.Fprintln(os.Stderr, "Warning: --no-tui is deprecated; TUI is the primary interactive surface.")
 }
 
 func Execute() {
