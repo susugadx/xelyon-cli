@@ -38,8 +38,10 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 
 	// Compact API 呼び出し
 	compactModel := a.getCompressionModel()
+	finishResponseContext := a.suspendResponseContinuationForLocalCompression(true)
 	result, err := compactProvider.CompactHistory(a.requestContext(ctx), input, compactModel, a.SystemPrompt)
 	if err != nil {
+		finishResponseContext(false, nil)
 		return fmt.Errorf("compact API failed: %w", err)
 	}
 
@@ -47,14 +49,9 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	a.compactedItems = result.Output
 	a.isCompactedMode = true
 
-	// セッションにも保存（永続化用）
-	if a.session != nil {
-		a.session.CompactedItems = convertToHistoryCompactedItems(result.Output)
-		a.session.IsCompactedMode = true
-	}
-
 	// 元の履歴をクリア（圧縮済みデータに置き換え）
 	a.History = nil
+	finishResponseContext(true, nil)
 
 	// 統計情報を表示
 	if result.Usage != nil {
@@ -71,19 +68,21 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 // buildFullInputItems は History から完全な InputItem リストを構築
 // Compact API に送るためのフル会話ウィンドウ
 func (a *Agent) buildFullInputItems() []api.InputItem {
+	history := a.persistableHistoryForCompression()
+
 	// 既に圧縮モードの場合は、圧縮済み state の後ろに現在の履歴を継ぎ足す。
 	if a.isCompactedMode && len(a.compactedItems) > 0 {
 		input := append([]api.InputItem(nil), a.compactedItems...)
-		if len(a.History) == 0 {
+		if len(history) == 0 {
 			return input
 		}
-		pruned, metrics := CompactOldToolResults(a.History, compactAPIPreprocessMaxLines, compactAPIPreprocessHeadLines, compactAPIPreprocessTailLines)
+		pruned, metrics := CompactOldToolResults(history, compactAPIPreprocessMaxLines, compactAPIPreprocessHeadLines, compactAPIPreprocessTailLines)
 		a.addCompactionMetrics(metrics)
 		return append(input, api.ConvertHistoryToInputItems(pruned)...)
 	}
 
 	// 古いツール結果を截断してから InputItem に変換（トークン節約）
-	pruned, metrics := CompactOldToolResults(a.History, compactAPIPreprocessMaxLines, compactAPIPreprocessHeadLines, compactAPIPreprocessTailLines)
+	pruned, metrics := CompactOldToolResults(history, compactAPIPreprocessMaxLines, compactAPIPreprocessHeadLines, compactAPIPreprocessTailLines)
 	a.addCompactionMetrics(metrics)
 	return api.ConvertHistoryToInputItems(pruned)
 }
@@ -107,39 +106,17 @@ func (a *Agent) RestoreCompactedState(session *history.Session) {
 	}
 
 	if session.IsCompactedMode && len(session.CompactedItems) > 0 {
-		a.compactedItems = convertFromHistoryCompactedItems(session.CompactedItems)
+		a.compactedItems = api.CloneInputItems(session.CompactedItems)
 		a.isCompactedMode = true
 	}
 }
 
-// convertToHistoryCompactedItems は api.InputItem を history.CompactedItem に変換
+// convertToHistoryCompactedItems は api.InputItem を保存用に defensive copy する。
 func convertToHistoryCompactedItems(items []api.InputItem) []history.CompactedItem {
-	result := make([]history.CompactedItem, len(items))
-	for i, item := range items {
-		result[i] = history.CompactedItem{
-			Type:    item.Type,
-			Role:    item.Role,
-			Content: item.Content,
-			ID:      item.ID,
-			Status:  item.Status,
-			Data:    item.Data,
-		}
-	}
-	return result
+	return api.CloneInputItems(items)
 }
 
-// convertFromHistoryCompactedItems は history.CompactedItem を api.InputItem に変換
+// convertFromHistoryCompactedItems は保存済み input item を API 用に defensive copy する。
 func convertFromHistoryCompactedItems(items []history.CompactedItem) []api.InputItem {
-	result := make([]api.InputItem, len(items))
-	for i, item := range items {
-		result[i] = api.InputItem{
-			Type:    item.Type,
-			Role:    item.Role,
-			Content: item.Content,
-			ID:      item.ID,
-			Status:  item.Status,
-			Data:    item.Data,
-		}
-	}
-	return result
+	return api.CloneInputItems(items)
 }

@@ -62,10 +62,7 @@ default_model: deepseek-v4-flash
 # プロバイダーごとのモデル設定
 provider_models:
     azure:
-        # default_model は Azure OpenAI の deployment 名です。
-        # catalog_model は token/pricing/capability 判定に使う実モデル名です。
         default_model: azure-gpt-5.4
-        catalog_model: gpt-5.4
         max_output_tokens: 16384
     bedrock:
         default_model: global.anthropic.claude-sonnet-4-6
@@ -77,8 +74,6 @@ provider_models:
         anthropic_version: "2023-06-01"
     deepseek:
         default_model: deepseek-v4-flash
-        # V4 既知モデルは catalog から 384000 を自動解決します。
-        # この値は pass-through/custom モデル向けの保守的な fallback です。
         max_output_tokens: 16384
     gemini:
         default_model: gemini-3.1-pro-preview-customtools
@@ -90,7 +85,6 @@ provider_models:
         default_model: qwen2.5-coder:7b
         max_output_tokens: 4096
     openai:
-        # default_model は gpt-5.4 のままです。GPT-5.5 / GPT-5.5 Pro は明示指定で利用できます。
         default_model: gpt-5.4
         max_output_tokens: 16384
     openrouter:
@@ -190,7 +184,7 @@ web_search:
 sub_agent:
     # サブエージェント機能を有効化
     enabled: true
-    # 既定モデル（空でメイン provider の最安モデルを自動選択。Azure では deployment 名を指定）
+    # 既定モデル（空でメイン provider の最安モデルを自動選択）
     default_model: gpt-5.4-mini
     # 既定推論強度（off / low / medium / high）
     default_effort: ""
@@ -289,7 +283,7 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 - **型**: integer
 - **デフォルト**: `80`
 - **説明**: 自動圧縮を実行する使用率閾値（%）
-- **補足**: モデルのコンテキストウィンドウに対する使用率
+- **補足**: モデルのコンテキストウィンドウに対する使用率。実際の標準閾値は、次リクエストの最大出力トークン分を残すため `context window - max_output_tokens` でも上限をかけます。
 
 #### `keep_recent`
 - **型**: integer
@@ -298,17 +292,22 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 
 #### `provider_thresholds`
 - **型**: map
-- **説明**: provider/model ごとの絶対圧縮閾値
-- **補足**: DeepSeek は V4 の 1M context に合わせ、最大出力 384K の headroom を残す `600000` がデフォルトです。
+- **デフォルト**: 空
+- **説明**: provider/model ごとの絶対圧縮閾値を明示 override するための設定
+- **補足**: 未設定時は provider 汎用の絶対閾値には fallback しません。通常はモデルの context window、`trigger_percent`、最大出力トークンから自動圧縮閾値を計算します。
 
 **自動圧縮の動作:**
-1. API呼び出し成功後に pricing cliff とプロバイダー別閾値を評価
-2. `previous_response_id` や Claude Compaction が使える場合は自動圧縮をスキップ
-3. `trigger_percent`（デフォルト80%）で使用率を評価
-4. 圧縮時に通知を表示し、無効化方法も案内
+1. API呼び出し成功後に OpenAI/Azure Responses API の `previous_response_id` 継続と server compaction が有効な場合は local auto-compress をスキップ
+2. pricing cliff 回避を評価
+3. 明示された `provider_thresholds` を評価
+4. Claude Compaction が使える場合は標準の local auto-compress をスキップ
+5. 明示された汎用絶対閾値（`token_threshold` / `threshold_tokens`）を評価
+6. context window が既知のモデルでは `trigger_percent`（デフォルト80%）と最大出力トークンの headroom で使用率を評価
+7. context window が不明なモデルでは、早すぎる圧縮を避けるため標準の local auto-compress をスキップ
+8. 圧縮時に通知を表示し、無効化方法も案内
 
 ```
-🗜️ Auto-compressing: context 151K exceeds 150K threshold...
+🗜️ Auto-compressing history (162K >= 150K threshold, 81% context used)...
    Before: 162,000 tokens → After: 45,000 tokens
    💡 Disable with: xelyon config set compression.enabled false
 ```
@@ -415,6 +414,8 @@ openai:
 responses:
   store: true
   persist_response_id: true
+  server_compaction:
+    enabled: true
 ```
 
 #### `store`
@@ -428,6 +429,12 @@ responses:
 - **デフォルト**: `true`
 - **説明**: response ID を XELYON の session に保存し、session reload 後も `previous_response_id` 継続を復元します。
 - **`false` にする場合**: 現在のプロセス内では response ID 継続を使いますが、session file には保存しません。`store: false` の場合、この設定は実質的に無効です。
+
+#### `server_compaction.enabled`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: OpenAI / Azure OpenAI の Responses API で `previous_response_id` 継続が有効な場合、provider 側の context 管理を優先し、local auto-compress をスキップします。
+- **`false` にする場合**: `previous_response_id` があっても local auto-compress の通常判定を許可します。
 
 `/clear` はローカル履歴とローカルに保持している response ID を消しますが、provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
 
@@ -793,7 +800,7 @@ compression:
   trigger_percent: 70    # 70%でも圧縮（保険として残す）
   keep_recent: 15        # 最新15件を保持
   provider_thresholds:
-    deepseek: 600000     # DeepSeek V4 1M context 向け
+    deepseek: 600000     # 明示 override が必要な場合だけ指定
 ```
 
 ### 1b. 自動圧縮を無効化

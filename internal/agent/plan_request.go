@@ -182,7 +182,7 @@ func (r *planModeRequest) handleTokenLimit(err error) bool {
 		}
 		return r.rerunPlanMode(r.originalUserRequest)
 	}
-	return r.agent.handleTokenLimitErrorWithRetry(err, retryFunc, true)
+	return r.agent.handleTokenLimitErrorWithRetryOptions(err, retryFunc, tokenLimitRetryOptions{skipCompressionPersistence: true})
 }
 
 func (r *planModeRequest) feedbackRerunRequest(feedback string) string {
@@ -233,13 +233,7 @@ func (r *planModeRequest) clearResponseContext() {
 
 	// Plan Mode は planning-only なので、承認後の通常ターンは
 	// planning チェーン(previous_response_id)を継続せず履歴ベースで開始する。
-	r.agent.restoreProviderResponseID("")
-	if r.agent.session == nil {
-		return
-	}
-
-	clearSavedResponseContext(r.agent.session)
-	r.agent.persistSession()
+	r.agent.clearResponseContinuationContext()
 }
 
 func (r *planModeRequest) shouldRestoreConversationOnExit(p *plan.Plan) bool {

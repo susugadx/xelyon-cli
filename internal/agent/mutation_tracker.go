@@ -3,6 +3,7 @@ package agent
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
 )
@@ -69,7 +70,7 @@ func (m *MutationTracker) RecordFileChangeForTurn(change *tools.FileChange, turn
 	}
 
 	if a.changeStorage != nil && a.session != nil {
-		if err := a.changeStorage.AppendChange(a.session.ID, *change); err != nil {
+		if err := a.changeStorage.AppendChange(a.session.ID, toHistoryChangeRecordInput(*change)); err != nil {
 			yellow.Fprintf(a.output(), "Warning: Failed to persist change: %v\n", err)
 		}
 	}
@@ -139,5 +140,19 @@ func (m *MutationTracker) trackDeferredDiagnostics(tc *tools.ToolCall, result st
 		m.AddPendingLSPFile(tc.Args["path"])
 	case "apply_patch":
 		m.AddPendingLSPFilesFromChange(change)
+	}
+}
+
+func toHistoryChangeRecordInput(change tools.FileChange) history.ChangeRecordInput {
+	details := make([]history.ChangeDetail, 0, len(change.Details))
+	for _, detail := range change.Details {
+		details = append(details, history.ChangeDetail{FilePath: detail.FilePath})
+	}
+	return history.ChangeRecordInput{
+		FilePath:    change.FilePath,
+		Details:     details,
+		Timestamp:   change.Timestamp,
+		Tool:        change.Tool,
+		Description: change.Description,
 	}
 }

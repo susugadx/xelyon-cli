@@ -17,8 +17,17 @@ const (
 	manualCompressTailLines = 5
 )
 
+type compressHistoryOptions struct {
+	// Plan Mode の retry など、呼び出し側が restore 前の一時履歴を保存したくない場合だけ true。
+	skipPersistenceOnSuccess bool
+}
+
 // CompressHistory は会話履歴を圧縮する
 func (a *Agent) CompressHistory(keepRecent int) error {
+	return a.compressHistory(keepRecent, compressHistoryOptions{})
+}
+
+func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) error {
 	out := a.output()
 
 	if len(a.History) <= keepRecent {
@@ -28,10 +37,13 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	// 圧縮前の統計
 	beforeTokens := estimateTokens(a.CurrentModel, a.History)
 
+	persistHistory := a.persistableHistoryForCompression()
+
 	// 圧縮対象のメッセージを抽出（FC ターンペアの分断を防止）
 	splitIdx := adjustSplitForFCPairs(a.History, len(a.History)-keepRecent)
-	toCompress := a.History[:splitIdx]
+	toCompress := persistHistory[:splitIdx]
 	toKeep := a.History[splitIdx:]
+	toKeepPersist := persistHistory[splitIdx:]
 
 	if len(toCompress) == 0 {
 		return fmt.Errorf("圧縮対象のメッセージがありません（FC ターン保護により分割不可）")
@@ -54,24 +66,28 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 	defer cancel()
 
 	compressModel := a.getCompressionModel()
+	finishResponseContext := a.suspendResponseContinuationForLocalCompression(!opts.skipPersistenceOnSuccess)
 	summary, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), "", []api.Message{
 		{Role: "user", Content: summaryPrompt},
 	}, compressModel)
 	if err != nil {
+		finishResponseContext(false, nil)
 		return fmt.Errorf("サマリー生成に失敗しました: %w", err)
 	}
 
 	// 新しい履歴を構築
-	newHistory := []api.Message{
-		{
-			Role:    "system",
-			Content: fmt.Sprintf("[Summary of previous conversation]\n\n%s", summary),
-		},
+	summaryMessage := api.Message{
+		Role:    "system",
+		Content: fmt.Sprintf("[Summary of previous conversation]\n\n%s", summary),
 	}
+	newHistory := []api.Message{summaryMessage}
 	newHistory = append(newHistory, toKeep...)
+	persistedHistory := []api.Message{summaryMessage}
+	persistedHistory = append(persistedHistory, toKeepPersist...)
 
 	// 履歴を置き換え
 	a.History = newHistory
+	finishResponseContext(true, persistedHistory)
 
 	// 圧縮後の統計
 	afterTokens := estimateTokens(a.CurrentModel, a.History)

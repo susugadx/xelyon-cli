@@ -139,7 +139,7 @@ func (a *Agent) handleChatRequestError(req *chatRequest, err error) error {
 		retryFunc := func() error {
 			return a.retryChatRequest(req)
 		}
-		if a.handleTokenLimitErrorWithRetry(err, retryFunc, a.PlanModeEnabled) {
+		if a.handleTokenLimitErrorWithRetry(err, retryFunc) {
 			a.ui().StopSpinner()
 			a.setReadyForInputStatus()
 			return nil

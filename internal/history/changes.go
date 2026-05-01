@@ -1,19 +1,18 @@
 package history
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"strings"
 	"time"
-
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 const (
-	changesDir = ".xelyon/changes"
+	changesDir        = ".xelyon/changes"
+	changeFilePrefix  = "changes_"
+	changeFileSuffix  = ".jsonl"
+	changeFilePattern = changeFilePrefix + "*" + changeFileSuffix
 )
 
 var userHomeDirForChanges = os.UserHomeDir
@@ -27,122 +26,23 @@ type PersistentChange struct {
 	Description string    `json:"description"`
 }
 
+// ChangeDetail は変更対象ファイルの詳細です。
+type ChangeDetail struct {
+	FilePath string
+}
+
+// ChangeRecordInput は変更履歴永続化の入力です。
+type ChangeRecordInput struct {
+	FilePath    string
+	Details     []ChangeDetail
+	Timestamp   time.Time
+	Tool        string
+	Description string
+}
+
 // ChangeStorage は変更履歴のストレージ
 type ChangeStorage struct {
 	changesPath string
-}
-
-// NewChangeStorage は新しいChangeStorageを作成
-func NewChangeStorage() (*ChangeStorage, error) {
-	home, err := userHomeDirForChanges()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	changesPath := filepath.Join(home, changesDir)
-
-	// ディレクトリ作成
-	if err := os.MkdirAll(changesPath, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create changes directory: %w", err)
-	}
-
-	return &ChangeStorage{
-		changesPath: changesPath,
-	}, nil
-}
-
-// AppendChange はセッションの変更履歴にエントリを追加
-func (cs *ChangeStorage) AppendChange(sessionID string, change tools.FileChange) error {
-	// セッション別のJSONLファイルパス
-	filename := fmt.Sprintf("changes_%s.jsonl", sessionID)
-	filepath := filepath.Join(cs.changesPath, filename)
-
-	// ファイルをappendモードでオープン
-	file, err := os.OpenFile(filepath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open changes file: %w", err)
-	}
-	defer file.Close()
-
-	paths := make([]string, 0, len(change.Details))
-	if len(change.Details) > 0 {
-		for _, detail := range change.Details {
-			if detail.FilePath != "" {
-				paths = append(paths, detail.FilePath)
-			}
-		}
-	}
-	if len(paths) == 0 && change.FilePath != "" {
-		paths = append(paths, change.FilePath)
-	}
-	if len(paths) == 0 {
-		return nil
-	}
-
-	for _, path := range paths {
-		pc := PersistentChange{
-			SessionID:   sessionID,
-			Timestamp:   change.Timestamp,
-			Tool:        change.Tool,
-			FilePath:    path,
-			Description: change.Description,
-		}
-
-		data, err := json.Marshal(pc)
-		if err != nil {
-			return fmt.Errorf("failed to marshal change: %w", err)
-		}
-		if _, err := file.Write(data); err != nil {
-			return fmt.Errorf("failed to write change: %w", err)
-		}
-		if _, err := file.WriteString("\n"); err != nil {
-			return fmt.Errorf("failed to write newline: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// LoadSessionChanges は指定セッションの変更履歴を読み込み
-func (cs *ChangeStorage) LoadSessionChanges(sessionID string) ([]PersistentChange, error) {
-	filename := fmt.Sprintf("changes_%s.jsonl", sessionID)
-	filepath := filepath.Join(cs.changesPath, filename)
-
-	// ファイルが存在しない場合は空配列を返す
-	if _, err := os.Stat(filepath); os.IsNotExist(err) {
-		return []PersistentChange{}, nil
-	}
-
-	// ファイルを読み込み
-	file, err := os.Open(filepath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open changes file: %w", err)
-	}
-	defer file.Close()
-
-	changes := []PersistentChange{}
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-
-		var change PersistentChange
-		if err := json.Unmarshal([]byte(line), &change); err != nil {
-			// 破損した行はスキップ
-			continue
-		}
-
-		changes = append(changes, change)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read changes file: %w", err)
-	}
-
-	return changes, nil
 }
 
 // SessionInfo はセッション情報（変更履歴表示用）
@@ -154,95 +54,38 @@ type SessionInfo struct {
 	FilesChanged map[string]int // ファイルパス → 変更回数
 }
 
-// ListSessions は全セッションの変更履歴を取得
-func (cs *ChangeStorage) ListSessions() ([]SessionInfo, error) {
-	// changesディレクトリ内のchanges_*.jsonlファイルを探す
-	pattern := filepath.Join(cs.changesPath, "changes_*.jsonl")
-	files, err := filepath.Glob(pattern)
+// NewChangeStorage は新しいChangeStorageを作成
+func NewChangeStorage() (*ChangeStorage, error) {
+	home, err := userHomeDirForChanges()
 	if err != nil {
-		return nil, fmt.Errorf("failed to glob changes files: %w", err)
+		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	sessions := []SessionInfo{}
-
-	for _, file := range files {
-		// セッションIDを抽出
-		basename := filepath.Base(file)
-		sessionID := basename[8 : len(basename)-6] // "changes_" と ".jsonl" を除去
-
-		// 変更履歴を読み込み
-		changes, err := cs.LoadSessionChanges(sessionID)
-		if err != nil {
-			continue // エラーのあるファイルはスキップ
-		}
-
-		if len(changes) == 0 {
-			continue
-		}
-
-		// SessionInfo作成
-		filesChanged := make(map[string]int)
-		firstChange := changes[0].Timestamp
-		lastChange := changes[len(changes)-1].Timestamp
-
-		for _, change := range changes {
-			filesChanged[change.FilePath]++
-			if change.Timestamp.Before(firstChange) {
-				firstChange = change.Timestamp
-			}
-			if change.Timestamp.After(lastChange) {
-				lastChange = change.Timestamp
-			}
-		}
-
-		sessions = append(sessions, SessionInfo{
-			SessionID:    sessionID,
-			ChangeCount:  len(changes),
-			FirstChange:  firstChange,
-			LastChange:   lastChange,
-			FilesChanged: filesChanged,
-		})
+	changesPath := filepath.Join(home, changesDir)
+	if err := os.MkdirAll(changesPath, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create changes directory: %w", err)
 	}
 
-	// 最終変更日時でソート（新しい順）
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].LastChange.After(sessions[j].LastChange)
-	})
-
-	return sessions, nil
+	return &ChangeStorage{
+		changesPath: changesPath,
+	}, nil
 }
 
-// CleanupOldChanges は古い変更履歴を削除（デフォルト30日以上前）
-func (cs *ChangeStorage) CleanupOldChanges(daysToKeep int) (int, error) {
-	if daysToKeep <= 0 {
-		daysToKeep = 30 // デフォルト30日
+func (cs *ChangeStorage) sessionFilePath(sessionID string) string {
+	return filepath.Join(cs.changesPath, changeFileName(sessionID))
+}
+
+func changeFileName(sessionID string) string {
+	return changeFilePrefix + sessionID + changeFileSuffix
+}
+
+func parseChangeSessionIDFromFileName(name string) (string, bool) {
+	if !strings.HasPrefix(name, changeFilePrefix) || !strings.HasSuffix(name, changeFileSuffix) {
+		return "", false
 	}
-
-	cutoff := time.Now().AddDate(0, 0, -daysToKeep)
-	deletedCount := 0
-
-	// changesディレクトリ内のchanges_*.jsonlファイルを探す
-	pattern := filepath.Join(cs.changesPath, "changes_*.jsonl")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return 0, fmt.Errorf("failed to glob changes files: %w", err)
+	sessionID := strings.TrimSuffix(strings.TrimPrefix(name, changeFilePrefix), changeFileSuffix)
+	if sessionID == "" {
+		return "", false
 	}
-
-	for _, file := range files {
-		// ファイルの最終更新日時を確認
-		info, err := os.Stat(file)
-		if err != nil {
-			continue
-		}
-
-		if info.ModTime().Before(cutoff) {
-			// 削除
-			if err := os.Remove(file); err != nil {
-				continue
-			}
-			deletedCount++
-		}
-	}
-
-	return deletedCount, nil
+	return sessionID, true
 }

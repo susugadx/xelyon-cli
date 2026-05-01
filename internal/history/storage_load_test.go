@@ -2,6 +2,7 @@ package history
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -26,8 +27,8 @@ func TestStorage_Load_MetadataOnlySession(t *testing.T) {
 	session.CompactedItems = []CompactedItem{{Type: "compacted", Data: "summary"}}
 	session.IsCompactedMode = true
 	session.ResponseID = "resp_123"
-	if err := storage.Save(session); err != nil {
-		t.Fatalf("Save failed: %v", err)
+	if err := storage.Rewrite(session); err != nil {
+		t.Fatalf("Rewrite failed: %v", err)
 	}
 
 	loaded, err := storage.Load(session.ID)
@@ -37,14 +38,98 @@ func TestStorage_Load_MetadataOnlySession(t *testing.T) {
 	if len(loaded.Messages) != 0 {
 		t.Fatalf("len(loaded.Messages) = %d, want 0 for metadata-only session", len(loaded.Messages))
 	}
-	if loaded.IsCompactedMode {
-		t.Fatal("loaded.IsCompactedMode = true, want false for metadata-only restore")
+	if !loaded.IsCompactedMode {
+		t.Fatal("loaded.IsCompactedMode = false, want true for persisted compacted state")
 	}
 	if loaded.ResponseID != "resp_123" {
 		t.Fatalf("loaded.ResponseID = %q, want resp_123", loaded.ResponseID)
 	}
-	if len(loaded.CompactedItems) != 0 {
-		t.Fatalf("loaded.CompactedItems = %#v, want empty for metadata-only restore", loaded.CompactedItems)
+	if len(loaded.CompactedItems) != 1 || loaded.CompactedItems[0].Data != "summary" {
+		t.Fatalf("loaded.CompactedItems = %#v, want persisted compacted state", loaded.CompactedItems)
+	}
+}
+
+func TestStorage_Load_CompactedStatePreservesFullInputItemShape(t *testing.T) {
+	storage := newStorageLoadTestStorage(t)
+
+	items := []CompactedItem{
+		{
+			Type:             "function_call",
+			CallID:           "call_1",
+			Name:             "read_file",
+			Arguments:        `{"path":"README.md"}`,
+			ThoughtSignature: "sig_1",
+			ThoughtParts:     []map[string]any{{"type": "thought", "text": "inspect README"}},
+		},
+		{
+			Type:   "function_call_output",
+			CallID: "call_1",
+			Output: "README contents",
+		},
+		{
+			Type:    "message",
+			Role:    "assistant",
+			Content: "done",
+			ID:      "msg_1",
+			Status:  "completed",
+		},
+	}
+	session := NewSession("test-model")
+	session.SetCompactedState(items, true)
+	if err := storage.Rewrite(session); err != nil {
+		t.Fatalf("Rewrite failed: %v", err)
+	}
+
+	loaded, err := storage.Load(session.ID)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if !reflect.DeepEqual(loaded.CompactedItems, items) {
+		t.Fatalf("loaded.CompactedItems = %#v, want %#v", loaded.CompactedItems, items)
+	}
+}
+
+func TestStorage_Load_MissingHistoryFileForCompactedStateReturnsError(t *testing.T) {
+	storage := newStorageLoadTestStorage(t)
+
+	session := NewSession("test-model")
+	session.SetCompactedState([]CompactedItem{{Type: "compacted", Data: "summary"}}, true)
+	if err := storage.Rewrite(session); err != nil {
+		t.Fatalf("Rewrite failed: %v", err)
+	}
+
+	if err := os.Remove(storage.sessionPath(session.ID)); err != nil {
+		t.Fatalf("Remove failed: %v", err)
+	}
+
+	_, err := storage.Load(session.ID)
+	if err == nil {
+		t.Fatal("Load() error = nil, want missing compacted state error")
+	}
+	if !strings.Contains(err.Error(), "metadata expects 0 messages, 1 compacted items") {
+		t.Fatalf("Load() error = %v, want compacted state detail", err)
+	}
+}
+
+func TestStorage_Load_CorruptedCompactedStateReturnsError(t *testing.T) {
+	storage := newStorageLoadTestStorage(t)
+
+	session := NewSession("test-model")
+	session.SetCompactedState([]CompactedItem{{Type: "compacted", Data: "summary"}}, true)
+	if err := storage.Rewrite(session); err != nil {
+		t.Fatalf("Rewrite failed: %v", err)
+	}
+
+	if err := os.WriteFile(storage.sessionPath(session.ID), []byte("CORRUPTED COMPACTED STATE\n"), 0600); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	_, err := storage.Load(session.ID)
+	if err == nil {
+		t.Fatal("Load() error = nil, want corrupted compacted state error")
+	}
+	if !strings.Contains(err.Error(), "metadata expects 1 compacted items, loaded 0") {
+		t.Fatalf("Load() error = %v, want compacted state mismatch", err)
 	}
 }
 

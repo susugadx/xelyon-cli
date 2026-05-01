@@ -26,16 +26,7 @@ func defaultCompressionConfig() CompressionConfig {
 }
 
 func defaultCompressionProviderThresholds() map[string]int {
-	return map[string]int{
-		"gemini":             180000,
-		"claude":             150000,
-		"bedrock":            150000,
-		"deepseek":           600000, // V4 1M window から最大出力 384K の headroom を残す安全側の値
-		"openai":             100000,
-		"openai:gpt-5.4":     260000, // 272K pricing cliff 手前
-		"openai:gpt-5.4-pro": 260000,
-		"openrouter":         120000,
-	}
+	return map[string]int{}
 }
 
 func defaultLoopDetectionConfig() LoopDetectionConfig {
@@ -92,6 +83,9 @@ func defaultResponsesConfig() ResponsesConfig {
 	return ResponsesConfig{
 		Store:             true,
 		PersistResponseID: true,
+		ServerCompaction: ResponsesServerCompactionConfig{
+			Enabled: true,
+		},
 	}
 }
 

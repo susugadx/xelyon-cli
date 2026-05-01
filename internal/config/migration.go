@@ -13,6 +13,7 @@ func migrateOldKeysFromRaw(data []byte, raw map[string]interface{}, cfg *Config)
 	applyGeneralLanguageMigration(raw, cfg)
 	applyExecutionModeMigration(raw, cfg)
 	applyCompressionKeyMigration(raw, cfg)
+	applyLegacyCompressionProviderThresholdsMigration(raw, cfg)
 
 	if finalChecks, err := loadCompatibleFinalChecks(data); err == nil && finalChecks != nil {
 		cfg.FinalChecks = *finalChecks

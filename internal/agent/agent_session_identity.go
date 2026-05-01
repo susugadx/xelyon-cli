@@ -33,26 +33,6 @@ func (a *Agent) reconcileSessionForCurrentRuntime() {
 	a.restoreSessionResponseIDForCurrentContext()
 }
 
-func savedResponseContext(session *history.Session) (model, providerName, providerConfigKey, responseID string) {
-	if session == nil {
-		return "", "", "", ""
-	}
-	model = session.ResponseModel
-	providerName = session.ResponseProviderName
-	providerConfigKey = session.ResponseProviderConfigKey
-	responseID = session.ResponseID
-	if model == "" {
-		model = session.Model
-	}
-	if providerName == "" {
-		providerName = session.ProviderName
-	}
-	if providerConfigKey == "" {
-		providerConfigKey = session.ProviderConfigKey
-	}
-	return model, providerName, providerConfigKey, responseID
-}
-
 func shouldRestoreSessionResponseID(sessionModel, currentModel, sessionProviderName, currentProviderName, sessionProviderConfigKey, currentProviderConfigKey, responseID string) bool {
 	if responseID == "" {
 		return false
@@ -101,21 +81,12 @@ func (a *Agent) syncSavedResponseContextFromProvider() {
 		return
 	}
 
-	a.session.ResponseID = ridProvider.GetResponseID()
-	a.session.ResponseModel = a.CurrentModel
-	a.session.ResponseProviderName = config.CanonicalProviderName(a.ProviderName)
-	a.session.ResponseProviderConfigKey = a.currentProviderConfigKey()
-}
-
-func clearSavedResponseContext(session *history.Session) {
-	if session == nil {
-		return
-	}
-
-	session.ResponseID = ""
-	session.ResponseModel = ""
-	session.ResponseProviderName = ""
-	session.ResponseProviderConfigKey = ""
+	responseContextSnapshotFromRuntime(
+		a.CurrentModel,
+		a.ProviderName,
+		a.currentProviderConfigKey(),
+		ridProvider.GetResponseID(),
+	).applyToSession(a.session)
 }
 
 func (a *Agent) invalidateSavedResponseContextForCurrentRuntime() {
@@ -127,18 +98,14 @@ func (a *Agent) invalidateSavedResponseContextForCurrentRuntime() {
 		return
 	}
 
-	sessionModel, sessionProviderName, sessionProviderConfigKey, responseID := savedResponseContext(a.session)
-	if responseID == "" {
+	snapshot := responseContextSnapshotFromSession(a.session)
+	if !snapshot.hasResponseID() {
 		return
 	}
-	if !shouldRestoreSessionResponseID(
-		sessionModel,
+	if !snapshot.shouldRestoreForRuntime(
 		a.CurrentModel,
-		sessionProviderName,
 		a.ProviderName,
-		sessionProviderConfigKey,
 		a.currentProviderConfigKey(),
-		responseID,
 	) {
 		clearSavedResponseContext(a.session)
 	}
@@ -162,21 +129,17 @@ func (a *Agent) restoreSessionResponseIDForCurrentContext() {
 		return
 	}
 
-	sessionModel, sessionProviderName, sessionProviderConfigKey, responseID := savedResponseContext(a.session)
-	if !shouldRestoreSessionResponseID(
-		sessionModel,
+	snapshot := responseContextSnapshotFromSession(a.session)
+	if !snapshot.shouldRestoreForRuntime(
 		a.CurrentModel,
-		sessionProviderName,
 		a.ProviderName,
-		sessionProviderConfigKey,
 		a.currentProviderConfigKey(),
-		responseID,
 	) {
 		ridProvider.SetResponseID("")
 		return
 	}
 
-	ridProvider.SetResponseID(responseID)
+	snapshot.applyToProvider(ridProvider)
 }
 
 func (a *Agent) applyLoadedSession(session *history.Session) {

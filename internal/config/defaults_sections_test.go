@@ -17,6 +17,9 @@ func TestDefaultConfig_CollectionFieldsAreIndependentPerCall(t *testing.T) {
 	if got := cfg2.ProviderModels["openai"].DefaultModel; got != "gpt-5.4" {
 		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want default %q", got, "gpt-5.4")
 	}
+	if got := len(cfg2.Compression.ProviderThresholds); got != 0 {
+		t.Fatalf("Compression.ProviderThresholds default len = %d, want 0", got)
+	}
 	if _, ok := cfg2.Compression.ProviderThresholds["custom"]; ok {
 		t.Fatal("Compression.ProviderThresholds should not be shared across DefaultConfig() calls")
 	}

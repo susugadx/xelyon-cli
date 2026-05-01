@@ -82,3 +82,34 @@ func TestBuildSummaryPrompt_PreservesAssistantAndUserLabels(t *testing.T) {
 		t.Fatalf("expected assistant label, got: %s", result)
 	}
 }
+
+func TestBuildSummaryPrompt_IncludesConversationAndInstruction(t *testing.T) {
+	result := BuildSummaryPrompt([]Message{
+		{Role: "user", Content: "Hello"},
+		{Role: "assistant", Content: "Hi there!"},
+		{Role: "user", Content: "Can you help me?"},
+	}, 500)
+
+	if result == "" {
+		t.Fatal("BuildSummaryPrompt() returned empty string")
+	}
+	if !strings.Contains(result, "Hello") {
+		t.Fatal("BuildSummaryPrompt() should contain user message")
+	}
+	if !strings.Contains(result, "Hi there!") {
+		t.Fatal("BuildSummaryPrompt() should contain assistant message")
+	}
+	if !strings.Contains(result, "Summarize") {
+		t.Fatal("BuildSummaryPrompt() should contain summary instruction")
+	}
+}
+
+func TestBuildSummaryPrompt_TruncatesLongMessage(t *testing.T) {
+	result := BuildSummaryPrompt([]Message{
+		{Role: "user", Content: strings.Repeat("a", 600)},
+	}, 500)
+
+	if !strings.Contains(result, strings.Repeat("a", 500)+"...") {
+		t.Fatalf("BuildSummaryPrompt() should truncate long messages, got: %s", result)
+	}
+}

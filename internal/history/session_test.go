@@ -131,3 +131,19 @@ func TestSession_ResetConversation(t *testing.T) {
 		t.Fatalf("persistedCount = %d, want 0", session.persistedCount)
 	}
 }
+
+func TestNewSession_GeneratesUniqueIDs(t *testing.T) {
+	const sessionCount = 64
+	seen := make(map[string]struct{}, sessionCount)
+
+	for i := 0; i < sessionCount; i++ {
+		session := NewSession("test-model")
+		if session.ID == "" {
+			t.Fatal("session.ID = empty, want non-empty")
+		}
+		if _, exists := seen[session.ID]; exists {
+			t.Fatalf("duplicate session ID generated: %q", session.ID)
+		}
+		seen[session.ID] = struct{}{}
+	}
+}

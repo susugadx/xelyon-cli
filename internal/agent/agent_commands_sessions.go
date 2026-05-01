@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/history"
 )
 
 // handleSaveCommand はセッション保存を処理
@@ -85,10 +86,7 @@ func handleSessionsCommand(agent *Agent) bool {
 		}
 
 		timeStr := s.LastModified.Format("2006-01-02 15:04")
-		preview := s.Preview
-		if len(preview) > config.SessionPreviewLen {
-			preview = preview[:config.SessionPreviewLen] + "..."
-		}
+		preview := history.TruncateWithEllipsis(s.Preview, config.SessionPreviewLen)
 
 		_, _ = fmt.Fprintf(out, "  [%s] %s - %s (%d msgs)\n",
 			s.ID, timeStr, preview, s.MessageCount)

@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -163,5 +164,26 @@ func TestAgent_RestoreSessionConversation_RestoresCompactionAndResponseID(t *tes
 	}
 	if provider.GetResponseID() != "resp_loaded" {
 		t.Fatalf("provider response ID = %q, want resp_loaded", provider.GetResponseID())
+	}
+}
+
+func TestAgent_RestoreSessionConversation_PreservesRichCompactedInputItems(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+
+	items := []history.CompactedItem{
+		{Type: "function_call", CallID: "call_1", Name: "read_file", Arguments: `{"path":"README.md"}`},
+		{Type: "function_call_output", CallID: "call_1", Output: "README contents"},
+	}
+	session := history.NewSession("test-model")
+	session.SetCompactedState(items, true)
+
+	agent.restoreSessionConversation(session)
+
+	if !reflect.DeepEqual(agent.GetCompactedItems(), []api.InputItem(items)) {
+		t.Fatalf("GetCompactedItems() = %#v, want %#v", agent.GetCompactedItems(), items)
 	}
 }

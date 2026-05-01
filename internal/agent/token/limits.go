@@ -14,12 +14,25 @@ func GetModelTokenLimit(model string) int {
 	return llmcatalog.ModelContextLimit(model)
 }
 
+// GetKnownModelTokenLimit は既知モデルのトークン上限を取得する。
+func GetKnownModelTokenLimit(model string) (int, bool) {
+	return llmcatalog.KnownModelContextLimit(model)
+}
+
 // GetModelTokenLimitForConfig は catalog_model 設定を考慮してモデルのトークン上限を取得する。
 func GetModelTokenLimitForConfig(cfg *config.Config, provider, model string) int {
 	if cfg != nil {
 		model = cfg.ModelCatalogName(provider, model)
 	}
 	return GetModelTokenLimit(model)
+}
+
+// GetKnownModelTokenLimitForConfig は catalog_model 設定を考慮して既知モデルのトークン上限を取得する。
+func GetKnownModelTokenLimitForConfig(cfg *config.Config, provider, model string) (int, bool) {
+	if cfg != nil {
+		model = cfg.ModelCatalogName(provider, model)
+	}
+	return GetKnownModelTokenLimit(model)
 }
 
 // EstimateTokenCount はテキストのトークン数を推定する。

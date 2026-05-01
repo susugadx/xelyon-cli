@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/testutil"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestAppendChange_UsesDetailPaths(t *testing.T) {
@@ -18,12 +17,12 @@ func TestAppendChange_UsesDetailPaths(t *testing.T) {
 		t.Fatalf("NewChangeStorage() error = %v", err)
 	}
 
-	change := tools.FileChange{
+	change := ChangeRecordInput{
 		FilePath:    "/tmp/fallback.txt",
 		Timestamp:   time.Now(),
 		Tool:        "apply_patch",
 		Description: "updated files",
-		Details: []tools.FileChangeDetail{
+		Details: []ChangeDetail{
 			{FilePath: "/tmp/a.txt"},
 			{FilePath: "/tmp/b.txt"},
 		},
@@ -52,7 +51,7 @@ func TestAppendChange_NoPathsLeavesEmptyFile(t *testing.T) {
 		t.Fatalf("NewChangeStorage() error = %v", err)
 	}
 
-	if err := cs.AppendChange("session-empty", tools.FileChange{
+	if err := cs.AppendChange("session-empty", ChangeRecordInput{
 		Timestamp:   time.Now(),
 		Tool:        "apply_patch",
 		Description: "no path change",
@@ -60,7 +59,7 @@ func TestAppendChange_NoPathsLeavesEmptyFile(t *testing.T) {
 		t.Fatalf("AppendChange() error = %v", err)
 	}
 
-	filename := filepath.Join(cs.changesPath, "changes_session-empty.jsonl")
+	filename := filepath.Join(cs.changesPath, changeFileName("session-empty"))
 	info, err := os.Stat(filename)
 	if err != nil {
 		t.Fatalf("changes file should exist as empty file, err = %v", err)

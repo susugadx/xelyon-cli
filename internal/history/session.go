@@ -2,13 +2,19 @@ package history
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
-const toolExecutionEntryType = "tool_execution"
+const (
+	toolExecutionEntryType  = "tool_execution"
+	compactedStateEntryType = "compacted_state"
+)
+
+var sessionIDCounter uint64
 
 // Session は会話セッションを表す
 type Session struct {
@@ -26,18 +32,11 @@ type Session struct {
 	ResponseProviderName      string          `json:"response_provider_name,omitempty"`
 	ResponseProviderConfigKey string          `json:"response_provider_config_key,omitempty"`
 	persistedCount            int
+	rewriteRequired           bool
 }
 
-// CompactedItem は Compact API の圧縮済みアイテム（セッション保存用）
-// api.InputItem と同一構造
-type CompactedItem struct {
-	Type    string      `json:"type"`              // "message" or "compacted"
-	Role    string      `json:"role,omitempty"`    // "user", "assistant"
-	Content interface{} `json:"content,omitempty"` // string or structured content
-	ID      string      `json:"id,omitempty"`      // アシスタント応答のID
-	Status  string      `json:"status,omitempty"`  // "completed"
-	Data    string      `json:"data,omitempty"`    // 暗号化データ（type="compacted"の場合）
-}
+// CompactedItem は Compact API の圧縮済み input item の保存用エイリアス。
+type CompactedItem = api.InputItem
 
 // MessageEntry はタイムスタンプ付きメッセージ
 type MessageEntry struct {
@@ -52,6 +51,8 @@ type MessageEntry struct {
 	ProviderMetadata *MessageProviderMetadata `json:"provider_metadata,omitempty"` // request payload には出さない provider 専用 state
 	EntryType        string                   `json:"entry_type,omitempty"`        // "tool_execution" は監査用
 	ToolExecution    *ToolExecutionEntry      `json:"tool_execution,omitempty"`    // ツール実行の監査情報
+	CompactedItems   []CompactedItem          `json:"compacted_items,omitempty"`   // Compact API 圧縮 state
+	IsCompactedMode  bool                     `json:"is_compacted_mode,omitempty"` // Compact API 圧縮 mode
 }
 
 // MessageProviderMetadata は会話再開時に必要な provider 専用 state を保存する。
@@ -77,6 +78,8 @@ type SessionMetadata struct {
 	StartTime                 time.Time `json:"start_time"`
 	LastModified              time.Time `json:"last_modified"`
 	MessageCount              int       `json:"message_count"`
+	CompactedItemCount        int       `json:"compacted_item_count,omitempty"`
+	IsCompactedMode           bool      `json:"is_compacted_mode,omitempty"`
 	Preview                   string    `json:"preview"`
 	ResponseID                string    `json:"response_id,omitempty"`
 	ResponseContextVersion    int       `json:"response_context_version,omitempty"`
@@ -89,12 +92,17 @@ type SessionMetadata struct {
 func NewSession(model string) *Session {
 	now := time.Now()
 	return &Session{
-		ID:           fmt.Sprintf("%d", now.Unix()),
+		ID:           newSessionID(now),
 		Model:        model,
 		StartTime:    now,
 		LastModified: now,
 		Messages:     []MessageEntry{},
 	}
+}
+
+func newSessionID(now time.Time) string {
+	sequence := atomic.AddUint64(&sessionIDCounter, 1)
+	return fmt.Sprintf("%d-%d", now.UnixNano(), sequence)
 }
 
 // AddMessage はメッセージをセッションに追加
@@ -110,16 +118,36 @@ func (s *Session) AddMessage(role, content, model string) {
 
 // AddMessageFromAPI は api.Message から FC メタデータ付きでセッションに保存
 func (s *Session) AddMessageFromAPI(msg api.Message, model string) {
-	s.Messages = append(s.Messages, MessageEntry{
-		Timestamp:        time.Now(),
-		Role:             msg.Role,
-		Content:          msg.Content,
-		Model:            model,
-		ToolCalls:        msg.ToolCalls,
-		ToolCallID:       msg.ToolCallID,
-		ToolName:         msg.ToolName,
-		ProviderMetadata: providerMetadataFromAPIMessage(msg),
-	})
+	now := time.Now()
+	s.Messages = append(s.Messages, newMessageEntryFromAPI(msg, model, now))
+	s.LastModified = now
+}
+
+// ReplaceMessagesFromAPI は session の会話メッセージを API message 群で置き換える。
+func (s *Session) ReplaceMessagesFromAPI(messages []api.Message, model string) {
+	if s == nil {
+		return
+	}
+
+	now := time.Now()
+	s.Messages = make([]MessageEntry, 0, len(messages))
+	for _, msg := range messages {
+		s.Messages = append(s.Messages, newMessageEntryFromAPI(msg, model, now))
+	}
+	s.persistedCount = 0
+	s.requireRewrite()
+	s.LastModified = now
+}
+
+// SetCompactedState は Compact API の圧縮 state を session に保存する。
+func (s *Session) SetCompactedState(items []CompactedItem, enabled bool) {
+	if s == nil {
+		return
+	}
+
+	s.CompactedItems = cloneCompactedItems(items)
+	s.IsCompactedMode = enabled && len(s.CompactedItems) > 0
+	s.requireRewrite()
 	s.LastModified = time.Now()
 }
 
@@ -140,69 +168,6 @@ func (s *Session) AddToolExecution(toolName string, args map[string]string, resu
 	s.LastModified = time.Now()
 }
 
-// ToAPIMessages はAPI形式に変換
-func (s *Session) ToAPIMessages() []api.Message {
-	msgs := make([]api.Message, 0, len(s.Messages))
-	for _, m := range s.Messages {
-		if m.EntryType == toolExecutionEntryType {
-			continue
-		}
-		msg := api.Message{
-			Role:       m.Role,
-			Content:    m.Content,
-			ToolCalls:  m.ToolCalls,
-			ToolCallID: m.ToolCallID,
-			ToolName:   m.ToolName,
-		}
-		if m.ProviderMetadata != nil {
-			if len(m.ProviderMetadata.AnthropicContentBlocks) > 0 {
-				msg.SetAnthropicContentBlocks(m.ProviderMetadata.AnthropicContentBlocks)
-			} else {
-				msg.SetAnthropicThinkingBlocks(m.ProviderMetadata.AnthropicThinkingBlocks)
-			}
-		}
-		msgs = append(msgs, msg)
-	}
-	return msgs
-}
-
-func providerMetadataFromAPIMessage(msg api.Message) *MessageProviderMetadata {
-	contentBlocks := msg.AnthropicContentBlocks()
-	if len(contentBlocks) > 0 {
-		return &MessageProviderMetadata{
-			AnthropicContentBlocks: contentBlocks,
-		}
-	}
-
-	thinkingBlocks := msg.AnthropicThinkingBlocks()
-	if len(thinkingBlocks) == 0 {
-		return nil
-	}
-	return &MessageProviderMetadata{
-		AnthropicThinkingBlocks: thinkingBlocks,
-	}
-}
-
-func (s *Session) unsavedMessages() []MessageEntry {
-	if s == nil {
-		return nil
-	}
-	if s.persistedCount < 0 {
-		s.persistedCount = 0
-	}
-	if s.persistedCount >= len(s.Messages) {
-		return nil
-	}
-	return s.Messages[s.persistedCount:]
-}
-
-func (s *Session) markPersisted() {
-	if s == nil {
-		return
-	}
-	s.persistedCount = len(s.Messages)
-}
-
 func (s *Session) TruncateMessages(count int) bool {
 	if s == nil {
 		return false
@@ -218,6 +183,7 @@ func (s *Session) TruncateMessages(count int) bool {
 	if s.persistedCount > len(s.Messages) {
 		s.persistedCount = len(s.Messages)
 	}
+	s.requireRewrite()
 	s.LastModified = time.Now()
 	return true
 }
@@ -232,18 +198,8 @@ func (s *Session) ResetConversation() {
 	s.IsCompactedMode = false
 	clearSavedResponseContext(s)
 	s.persistedCount = 0
+	s.requireRewrite()
 	s.LastModified = time.Now()
-}
-
-func (s *Session) conversationMessageCount() int {
-	count := 0
-	for _, msg := range s.Messages {
-		if msg.EntryType == toolExecutionEntryType {
-			continue
-		}
-		count++
-	}
-	return count
 }
 
 func cloneStringMap(src map[string]string) map[string]string {
@@ -255,6 +211,10 @@ func cloneStringMap(src map[string]string) map[string]string {
 		dst[k] = v
 	}
 	return dst
+}
+
+func cloneCompactedItems(src []CompactedItem) []CompactedItem {
+	return api.CloneInputItems(src)
 }
 
 func truncateRunes(s string, max int) string {

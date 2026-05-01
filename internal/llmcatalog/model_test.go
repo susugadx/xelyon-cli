@@ -85,6 +85,65 @@ func TestModelContextLimit_BedrockClaudeProfiles(t *testing.T) {
 	}
 }
 
+func TestKnownModelContextLimit(t *testing.T) {
+	tests := []struct {
+		model string
+		want  int
+		ok    bool
+	}{
+		{model: "gpt-5.4", want: 1000000, ok: true},
+		{model: "claude-sonnet-4-6", want: 200000, ok: true},
+		{model: "deepseek-v4-custom", want: 1000000, ok: true},
+		{model: "corp-gpt-deployment", ok: false},
+		{model: "", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got, ok := KnownModelContextLimit(tt.model)
+			if ok != tt.ok {
+				t.Fatalf("KnownModelContextLimit(%q) ok = %v, want %v", tt.model, ok, tt.ok)
+			}
+			if got != tt.want {
+				t.Fatalf("KnownModelContextLimit(%q) = %d, want %d", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestKnownModelLimits_OpenRouterDelegatedModels(t *testing.T) {
+	tests := []struct {
+		model         string
+		wantContext   int
+		wantMaxOutput int
+	}{
+		{model: "anthropic/claude-sonnet-4.6", wantContext: 200000, wantMaxOutput: 64000},
+		{model: "anthropic/claude-sonnet-4-6", wantContext: 200000, wantMaxOutput: 64000},
+		{model: "google/gemini-3.1-pro", wantContext: 1000000, wantMaxOutput: 65536},
+		{model: "deepseek/deepseek-v4-flash", wantContext: 1000000, wantMaxOutput: 384000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			gotContext, ok := KnownModelContextLimit(tt.model)
+			if !ok {
+				t.Fatalf("KnownModelContextLimit(%q) ok = false, want true", tt.model)
+			}
+			if gotContext != tt.wantContext {
+				t.Fatalf("KnownModelContextLimit(%q) = %d, want %d", tt.model, gotContext, tt.wantContext)
+			}
+
+			gotOutput, ok := KnownMaxOutputTokens(tt.model)
+			if !ok {
+				t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", tt.model)
+			}
+			if gotOutput != tt.wantMaxOutput {
+				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want %d", tt.model, gotOutput, tt.wantMaxOutput)
+			}
+		})
+	}
+}
+
 func TestKnownMaxOutputTokens_DeepSeekV4(t *testing.T) {
 	for _, model := range []string{
 		"deepseek-v4-flash",

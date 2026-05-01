@@ -4,11 +4,9 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
-// GetProviderCompressThresholdWithConfig は設定を考慮して provider/model ごとの圧縮閾値を返す。
+// GetProviderCompressThresholdWithConfig は明示設定された provider/model ごとの圧縮閾値を返す。
 func GetProviderCompressThresholdWithConfig(cfg *config.Config, provider string, model string) int {
 	if cfg == nil {
 		cfg = config.DefaultConfig()
@@ -31,22 +29,13 @@ func GetProviderCompressThresholdWithConfig(cfg *config.Config, provider string,
 		}
 	}
 
-	return defaultProviderCompressThreshold(canonicalProvider, normalizedModel)
+	return 0
 }
 
-// GetProviderCompressThreshold はプロバイダとモデルに基づく
-// コスト最適化のための絶対トークン閾値を返す。
-// 0 を返した場合は絶対値閾値なし（既存の%ベースを使用）。
+// GetProviderCompressThreshold は明示設定された絶対トークン閾値を返す。
+// 0 を返した場合は provider/model override なし。
 func GetProviderCompressThreshold(provider string, model string) int {
 	return GetProviderCompressThresholdWithConfig(config.DefaultConfig(), provider, model)
-}
-
-func defaultProviderCompressThreshold(provider string, model string) int {
-	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
-	if !ok {
-		return 0
-	}
-	return entry.CompressionThreshold
 }
 
 func providerThresholdLookupKeys(normalizedProvider, canonicalProvider string) []string {
@@ -104,34 +93,4 @@ func lookupConfiguredModelThreshold(thresholds map[string]int, provider string, 
 		return bestValue, true
 	}
 	return 0, false
-}
-
-func averageOutputTokens(stats *SessionStats) int {
-	if stats == nil || stats.OutputTokens <= 0 {
-		return 0
-	}
-	assistantMessages := stats.AssistantMessages
-	if assistantMessages < 1 {
-		assistantMessages = 1
-	}
-	return stats.OutputTokens / assistantMessages
-}
-
-func shouldForceCompressForPricingCliff(provider, model string, currentTokens int, stats *SessionStats) (int, bool) {
-	return shouldForceCompressForPricingCliffForConfig(nil, provider, model, currentTokens, stats)
-}
-
-func shouldForceCompressForPricingCliffForConfig(cfg *config.Config, provider, model string, currentTokens int, stats *SessionStats) (int, bool) {
-	if currentTokens <= 0 {
-		return currentTokens, false
-	}
-
-	projectedTokens := currentTokens + averageOutputTokens(stats)
-	currentPricing := cost.GetPricingInfoForConfig(cfg, provider, model, currentTokens)
-	projectedPricing := cost.GetPricingInfoForConfig(cfg, provider, model, projectedTokens)
-	if projectedPricing.InputCostPerM > currentPricing.InputCostPerM {
-		return projectedTokens, true
-	}
-
-	return projectedTokens, false
 }

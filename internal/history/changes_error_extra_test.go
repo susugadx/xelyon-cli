@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func withChangeStorageHooks(t *testing.T) {
@@ -50,7 +48,7 @@ func TestAppendChange_OpenError(t *testing.T) {
 	}
 
 	cs := &ChangeStorage{changesPath: blocker}
-	err := cs.AppendChange("session-open-error", tools.FileChange{
+	err := cs.AppendChange("session-open-error", ChangeRecordInput{
 		FilePath:    "/tmp/test.txt",
 		Timestamp:   time.Now(),
 		Tool:        "write_file",
@@ -64,7 +62,7 @@ func TestAppendChange_OpenError(t *testing.T) {
 func TestLoadSessionChanges_OpenAndScanErrors(t *testing.T) {
 	t.Run("open error is returned", func(t *testing.T) {
 		changesDir := t.TempDir()
-		sessionPath := filepath.Join(changesDir, "changes_session-open.jsonl")
+		sessionPath := filepath.Join(changesDir, changeFileName("session-open"))
 		if err := os.MkdirAll(sessionPath, 0o755); err != nil {
 			t.Fatalf("MkdirAll() error = %v", err)
 		}
@@ -79,7 +77,7 @@ func TestLoadSessionChanges_OpenAndScanErrors(t *testing.T) {
 		changesDir := t.TempDir()
 		cs := &ChangeStorage{changesPath: changesDir}
 		sessionID := "session-scan"
-		filename := filepath.Join(changesDir, "changes_"+sessionID+".jsonl")
+		filename := filepath.Join(changesDir, changeFileName(sessionID))
 		longLine := strings.Repeat("x", 70*1024)
 		if err := os.WriteFile(filename, []byte(longLine), 0o600); err != nil {
 			t.Fatalf("WriteFile() error = %v", err)
@@ -97,7 +95,7 @@ func TestListSessionsAndCleanupOldChanges_ErrorTolerantPaths(t *testing.T) {
 		cs := &ChangeStorage{changesPath: changesDir}
 
 		validSession := "valid"
-		valid := tools.FileChange{
+		valid := ChangeRecordInput{
 			FilePath:    "/tmp/test.txt",
 			Timestamp:   time.Now(),
 			Tool:        "write_file",
@@ -115,6 +113,10 @@ func TestListSessionsAndCleanupOldChanges_ErrorTolerantPaths(t *testing.T) {
 		emptyFile := filepath.Join(changesDir, "changes_empty.jsonl")
 		if err := os.WriteFile(emptyFile, nil, 0o600); err != nil {
 			t.Fatalf("WriteFile(empty) error = %v", err)
+		}
+		longLineFile := filepath.Join(changesDir, "changes_toolong.jsonl")
+		if err := os.WriteFile(longLineFile, []byte(strings.Repeat("x", 70*1024)), 0o600); err != nil {
+			t.Fatalf("WriteFile(longLine) error = %v", err)
 		}
 
 		sessions, err := cs.ListSessions()

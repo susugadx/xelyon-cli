@@ -12,12 +12,7 @@ default_model: deepseek-v4-flash
 # プロバイダーごとのモデル設定
 provider_models:
     azure:
-        # default_model は Azure OpenAI の deployment 名です。
-        # catalog_model は token/pricing/capability 判定に使う実モデル名です。
-        # 認証は AZURE_OPENAI_BASE_URL と、AZURE_OPENAI_API_KEY または
-        # AZURE_OPENAI_AUTH_TOKEN（Microsoft Entra ID bearer token）を設定してください。
         default_model: azure-gpt-5.4
-        catalog_model: gpt-5.4
         max_output_tokens: 16384
     bedrock:
         default_model: global.anthropic.claude-sonnet-4-6
@@ -29,8 +24,6 @@ provider_models:
         anthropic_version: "2023-06-01"
     deepseek:
         default_model: deepseek-v4-flash
-        # V4 既知モデルは catalog から 384000 を自動解決します。
-        # この値は pass-through/custom モデル向けの保守的な fallback です。
         max_output_tokens: 16384
     gemini:
         default_model: gemini-3.1-pro-preview-customtools
@@ -42,7 +35,6 @@ provider_models:
         default_model: qwen2.5-coder:7b
         max_output_tokens: 4096
     openai:
-        # default_model は gpt-5.4 のままです。GPT-5.5 / GPT-5.5 Pro は明示指定で利用できます。
         default_model: gpt-5.4
         max_output_tokens: 16384
     openrouter:
@@ -142,7 +134,7 @@ web_search:
 sub_agent:
     # サブエージェント機能を有効化
     enabled: true
-    # 既定モデル（空でメイン provider の最安モデルを自動選択。Azure では deployment 名を指定）
+    # 既定モデル（空でメイン provider の最安モデルを自動選択）
     default_model: gpt-5.4-mini
     # 既定推論強度（off / low / medium / high）
     default_effort: ""

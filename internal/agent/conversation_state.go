@@ -3,6 +3,7 @@ package agent
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
 )
 
@@ -56,6 +57,64 @@ func (a *Agent) restoreProviderResponseID(responseID string) {
 	}
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
 		ridProvider.SetResponseID(strings.TrimSpace(responseID))
+	}
+}
+
+func (a *Agent) clearResponseContinuationContext() {
+	if a == nil {
+		return
+	}
+
+	a.restoreProviderResponseID("")
+	if a.session == nil {
+		return
+	}
+
+	clearSavedResponseContext(a.session)
+	a.persistSession()
+}
+
+func (a *Agent) persistLocalCompressionSuccess(messages []api.Message) {
+	if a == nil {
+		return
+	}
+
+	a.restoreProviderResponseID("")
+	if a.session == nil {
+		return
+	}
+
+	a.session.ReplaceMessagesFromAPI(messages, a.CurrentModel)
+	a.session.SetCompactedState(convertToHistoryCompactedItems(a.compactedItems), a.isCompactedMode)
+	clearSavedResponseContext(a.session)
+	a.rewriteSessionWithWarning("⚠️  Warning: Failed to save compressed session: %v\n")
+}
+
+func (a *Agent) suspendResponseContinuationForLocalCompression(persistOnSuccess bool) func(success bool, messages []api.Message) {
+	if a == nil {
+		return func(bool, []api.Message) {}
+	}
+
+	var ridProvider ResponseIDCapable
+	previousResponseID := ""
+	if provider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+		ridProvider = provider
+		previousResponseID = provider.GetResponseID()
+		provider.SetResponseID("")
+	}
+
+	return func(success bool, messages []api.Message) {
+		if success {
+			if persistOnSuccess {
+				a.persistLocalCompressionSuccess(messages)
+				return
+			}
+			a.restoreProviderResponseID("")
+			return
+		}
+		if ridProvider != nil {
+			ridProvider.SetResponseID(previousResponseID)
+		}
 	}
 }
 

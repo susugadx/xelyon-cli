@@ -7,13 +7,16 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/crypto"
 )
 
 const (
-	defaultHistoryDir = ".xelyon/history"
+	defaultHistoryDir                = ".xelyon/history"
+	encryptedHistoryLinePrefix       = "enc:"
+	encryptedHistoryLinePrefixLen    = len(encryptedHistoryLinePrefix)
+	maxSessionHistoryPlainLineBytes  = 16 * 1024 * 1024
+	maxSessionHistoryStoredLineBytes = 24 * 1024 * 1024
 )
 
 var (
@@ -64,9 +67,20 @@ func (st *Storage) Save(session *Session) error {
 	if session == nil {
 		return nil
 	}
+	if err := validateSessionID(session.ID); err != nil {
+		return fmt.Errorf("invalid session ID %q: %w", session.ID, err)
+	}
+	if session.needsRewrite() {
+		return st.Rewrite(session)
+	}
 	unsaved := session.unsavedMessages()
 	if len(unsaved) == 0 {
 		return st.saveMetadata(session)
+	}
+
+	lines, err := st.encodeHistoryLines(unsaved)
+	if err != nil {
+		return err
 	}
 
 	filePath := st.sessionPath(session.ID)
@@ -78,21 +92,7 @@ func (st *Storage) Save(session *Session) error {
 	}
 	defer f.Close()
 
-	for _, msg := range unsaved {
-		data, err := json.Marshal(msg)
-		if err != nil {
-			return fmt.Errorf("failed to marshal message: %w", err)
-		}
-
-		// 暗号化が有効な場合は暗号化
-		if st.encryption {
-			encrypted, err := encryptSessionForStorage(data, st.passphrase)
-			if err != nil {
-				return fmt.Errorf("failed to encrypt message: %w", err)
-			}
-			data = encrypted
-		}
-
+	for _, data := range lines {
 		if _, err := f.Write(append(data, '\n')); err != nil {
 			return fmt.Errorf("failed to write message: %w", err)
 		}
@@ -105,38 +105,30 @@ func (st *Storage) Save(session *Session) error {
 
 // Rewrite はセッション全体をJSONLファイルに再書き込みする。
 func (st *Storage) Rewrite(session *Session) error {
-	filePath := st.sessionPath(session.ID)
+	if session == nil {
+		return nil
+	}
+	if err := validateSessionID(session.ID); err != nil {
+		return fmt.Errorf("invalid session ID %q: %w", session.ID, err)
+	}
 
-	if len(session.Messages) == 0 {
+	filePath := st.sessionPath(session.ID)
+	entries := session.storageEntries()
+
+	if len(entries) == 0 {
 		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove history file: %w", err)
 		}
+		session.markPersisted()
 		return st.saveMetadata(session)
 	}
 
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	lines, err := st.encodeHistoryLines(entries)
 	if err != nil {
-		return fmt.Errorf("failed to rewrite history file: %w", err)
+		return err
 	}
-	defer f.Close()
-
-	for _, msg := range session.Messages {
-		data, err := json.Marshal(msg)
-		if err != nil {
-			return fmt.Errorf("failed to marshal message: %w", err)
-		}
-
-		if st.encryption {
-			encrypted, err := encryptSessionForStorage(data, st.passphrase)
-			if err != nil {
-				return fmt.Errorf("failed to encrypt message: %w", err)
-			}
-			data = encrypted
-		}
-
-		if _, err := f.Write(append(data, '\n')); err != nil {
-			return fmt.Errorf("failed to rewrite message: %w", err)
-		}
+	if err := replaceHistoryFile(filePath, lines); err != nil {
+		return err
 	}
 	session.markPersisted()
 
@@ -200,52 +192,15 @@ func (st *Storage) metadataPath(sessionID string) string {
 	return filepath.Join(st.baseDir, "metadata", sessionID+".json")
 }
 
-// saveMetadata はセッションメタデータを保存
-func (st *Storage) saveMetadata(session *Session) error {
-	metaDir := filepath.Join(st.baseDir, "metadata")
-	if err := os.MkdirAll(metaDir, 0755); err != nil {
-		return fmt.Errorf("failed to create metadata dir: %w", err)
-	}
-
-	// 最初のユーザーメッセージをプレビューに使用
-	preview := ""
-	for _, msg := range session.Messages {
-		if msg.Role == "user" {
-			preview = msg.Content
-			if utf8.RuneCountInString(preview) > 80 {
-				preview = truncateRunes(preview, 80) + "..."
+func replaceHistoryFile(filePath string, lines [][]byte) error {
+	return replaceFileAtomically(filePath, func(tmp *os.File) error {
+		for _, data := range lines {
+			if _, err := tmp.Write(append(data, '\n')); err != nil {
+				return fmt.Errorf("failed to rewrite message: %w", err)
 			}
-			break
 		}
-	}
-
-	meta := SessionMetadata{
-		ID:                        session.ID,
-		Model:                     session.Model,
-		ProviderName:              session.ProviderName,
-		ProviderConfigKey:         session.ProviderConfigKey,
-		StartTime:                 session.StartTime,
-		LastModified:              session.LastModified,
-		MessageCount:              session.conversationMessageCount(),
-		Preview:                   preview,
-		ResponseID:                session.ResponseID,
-		ResponseContextVersion:    responseContextMetadataVersionForSession(session),
-		ResponseModel:             session.ResponseModel,
-		ResponseProviderName:      session.ResponseProviderName,
-		ResponseProviderConfigKey: session.ResponseProviderConfigKey,
-	}
-
-	data, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
-	}
-
-	path := st.metadataPath(session.ID)
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("failed to write metadata: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // loadMetadata はセッションメタデータを読み込み

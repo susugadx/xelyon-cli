@@ -12,7 +12,7 @@ func WithCompactedInputItems(ctx context.Context, items []InputItem) context.Con
 	if len(items) == 0 {
 		return ctx
 	}
-	return context.WithValue(ctx, compactedInputItemsContextKey{}, cloneInputItems(items))
+	return context.WithValue(ctx, compactedInputItemsContextKey{}, CloneInputItems(items))
 }
 
 // CompactedInputItemsFromContext は request context に注入された圧縮済み input items を返す。
@@ -24,10 +24,11 @@ func CompactedInputItemsFromContext(ctx context.Context) []InputItem {
 	if !ok {
 		return nil
 	}
-	return cloneInputItems(items)
+	return CloneInputItems(items)
 }
 
-func cloneInputItems(items []InputItem) []InputItem {
+// CloneInputItems は Responses/Compact API input item 群を defensive copy する。
+func CloneInputItems(items []InputItem) []InputItem {
 	if len(items) == 0 {
 		return nil
 	}
@@ -50,7 +51,7 @@ func cloneInputItemContent(content interface{}) interface{} {
 	case []InputContentPart:
 		return append([]InputContentPart(nil), typed...)
 	default:
-		return content
+		return cloneAnyValue(typed)
 	}
 }
 
@@ -63,10 +64,7 @@ func cloneInputItemThoughtParts(parts []map[string]any) []map[string]any {
 		if part == nil {
 			continue
 		}
-		cloned[i] = make(map[string]any, len(part))
-		for key, value := range part {
-			cloned[i][key] = value
-		}
+		cloned[i] = cloneAnyMap(part)
 	}
 	return cloned
 }

@@ -37,20 +37,20 @@ func capturePlanModeCheckpoint(a *Agent, currentRequest string) planModeCheckpoi
 		}
 	}
 	if a.responsesPersistResponseIDEnabled() && a.session != nil {
-		sessionModel, sessionProvider, sessionProviderKey, sessionResponseID := savedResponseContext(a.session)
-		if sessionResponseID != "" {
-			checkpoint.responseID = sessionResponseID
-			checkpoint.responseModel = sessionModel
-			checkpoint.responseProvider = sessionProvider
-			checkpoint.responseProviderKey = sessionProviderKey
+		snapshot := responseContextSnapshotFromSession(a.session)
+		if snapshot.hasResponseID() {
+			checkpoint.applyResponseContextSnapshot(snapshot)
 		}
 	}
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok && a.responsesStoreEnabled() {
 		checkpoint.responseID = ridProvider.GetResponseID()
 		if checkpoint.responseID != "" {
-			checkpoint.responseModel = a.CurrentModel
-			checkpoint.responseProvider = config.CanonicalProviderName(a.ProviderName)
-			checkpoint.responseProviderKey = a.currentProviderConfigKey()
+			checkpoint.applyResponseContextSnapshot(responseContextSnapshotFromRuntime(
+				a.CurrentModel,
+				a.ProviderName,
+				a.currentProviderConfigKey(),
+				checkpoint.responseID,
+			))
 		}
 	}
 	return checkpoint
@@ -111,31 +111,29 @@ func (c *planModeCheckpoint) restoreProviderResponseContext(a *Agent) {
 }
 
 func (c *planModeCheckpoint) restoreSessionResponseContext(session *history.Session) {
-	if session == nil {
+	c.responseContextSnapshot().applyToSession(session)
+}
+
+func (c *planModeCheckpoint) responseContextSnapshot() responseContextSnapshot {
+	if c == nil {
+		return responseContextSnapshot{}
+	}
+	return responseContextSnapshot{
+		responseID:        strings.TrimSpace(c.responseID),
+		model:             strings.TrimSpace(c.responseModel),
+		providerName:      strings.TrimSpace(c.responseProvider),
+		providerConfigKey: strings.TrimSpace(c.responseProviderKey),
+	}
+}
+
+func (c *planModeCheckpoint) applyResponseContextSnapshot(snapshot responseContextSnapshot) {
+	if c == nil {
 		return
 	}
-
-	responseID := strings.TrimSpace(c.responseID)
-	if responseID == "" {
-		clearSavedResponseContext(session)
-		return
-	}
-
-	session.ResponseID = responseID
-	session.ResponseModel = strings.TrimSpace(c.responseModel)
-	if session.ResponseModel == "" {
-		session.ResponseModel = session.Model
-	}
-
-	session.ResponseProviderName = config.CanonicalProviderName(strings.TrimSpace(c.responseProvider))
-	if session.ResponseProviderName == "" {
-		session.ResponseProviderName = config.CanonicalProviderName(session.ProviderName)
-	}
-
-	session.ResponseProviderConfigKey = config.ActiveProviderConfigKey(strings.TrimSpace(c.responseProviderKey))
-	if session.ResponseProviderConfigKey == "" {
-		session.ResponseProviderConfigKey = session.ProviderConfigKey
-	}
+	c.responseID = strings.TrimSpace(snapshot.responseID)
+	c.responseModel = strings.TrimSpace(snapshot.model)
+	c.responseProvider = config.CanonicalProviderName(snapshot.providerName)
+	c.responseProviderKey = config.ActiveProviderConfigKey(snapshot.providerConfigKey)
 }
 
 func shouldExcludeCurrentPlanRequest(session *history.Session, currentRequest string) bool {

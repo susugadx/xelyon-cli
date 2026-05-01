@@ -1,16 +1,53 @@
 package history
 
+import "strings"
+
 const responseContextMetadataVersion = 1
+
+func (s *Session) ClearResponseContext() {
+	if s == nil {
+		return
+	}
+
+	s.ResponseID = ""
+	s.ResponseModel = ""
+	s.ResponseProviderName = ""
+	s.ResponseProviderConfigKey = ""
+}
+
+func (s *Session) ApplyResponseContext(responseID, responseModel, responseProviderName, responseProviderConfigKey string) {
+	if s == nil {
+		return
+	}
+
+	id := strings.TrimSpace(responseID)
+	if id == "" {
+		s.ClearResponseContext()
+		return
+	}
+
+	s.ResponseID = id
+	s.ResponseModel = strings.TrimSpace(responseModel)
+	if s.ResponseModel == "" {
+		s.ResponseModel = s.Model
+	}
+
+	s.ResponseProviderName = strings.TrimSpace(responseProviderName)
+	if s.ResponseProviderName == "" {
+		s.ResponseProviderName = s.ProviderName
+	}
+
+	s.ResponseProviderConfigKey = strings.TrimSpace(responseProviderConfigKey)
+	if s.ResponseProviderConfigKey == "" {
+		s.ResponseProviderConfigKey = s.ProviderConfigKey
+	}
+}
 
 func clearSavedResponseContext(session *Session) {
 	if session == nil {
 		return
 	}
-
-	session.ResponseID = ""
-	session.ResponseModel = ""
-	session.ResponseProviderName = ""
-	session.ResponseProviderConfigKey = ""
+	session.ClearResponseContext()
 }
 
 func responseContextMetadataVersionForSession(session *Session) int {

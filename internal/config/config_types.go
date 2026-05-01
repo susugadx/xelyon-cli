@@ -1,7 +1,5 @@
 package config
 
-import "github.com/susugadx/xelyon-cli/internal/llmcatalog"
-
 type providerModelSectionState int
 
 const (
@@ -90,7 +88,7 @@ type CompressionConfig struct {
 	ClearToolUses        bool           `yaml:"clear_tool_uses"`                        // 内部: server-side tool clearing
 	ClearToolUsesTrigger int            `yaml:"clear_tool_uses_trigger"`                // 内部: clear_tool_uses トリガー閾値
 	ClearToolInputs      bool           `yaml:"clear_tool_inputs"`                      // 内部: tool_use 入力クリア
-	ProviderThresholds   map[string]int `yaml:"provider_thresholds,omitempty"`          // 内部: provider/model 別閾値
+	ProviderThresholds   map[string]int `yaml:"provider_thresholds,omitempty"`          // 内部: provider/model 別の明示圧縮閾値
 }
 
 // LoopDetectionConfig はループ検知の設定
@@ -127,8 +125,14 @@ type PromptCacheConfig struct {
 // ResponsesConfig は Responses API の server-side response state 設定。
 // 通常は変更不要。OpenAI / Azure OpenAI の Responses API 経路でのみ使用する。
 type ResponsesConfig struct {
-	Store             bool `yaml:"store"`               // response を provider 側に保存し previous_response_id 継続を有効化（デフォルト: true）
-	PersistResponseID bool `yaml:"persist_response_id"` // response ID を session に保存して reload 後も継続（デフォルト: true）
+	Store             bool                            `yaml:"store"`               // response を provider 側に保存し previous_response_id 継続を有効化（デフォルト: true）
+	PersistResponseID bool                            `yaml:"persist_response_id"` // response ID を session に保存して reload 後も継続（デフォルト: true）
+	ServerCompaction  ResponsesServerCompactionConfig `yaml:"server_compaction"`   // previous_response_id 継続時に local auto-compress を避ける（デフォルト: true）
+}
+
+// ResponsesServerCompactionConfig は Responses API の server-side context 管理を優先する設定。
+type ResponsesServerCompactionConfig struct {
+	Enabled bool `yaml:"enabled"` // previous_response_id がある場合に local auto-compress をスキップ
 }
 
 // PasteConfig はペーストモードの設定
@@ -256,34 +260,3 @@ type ProviderModelConfig struct {
 // 	UserID  string `yaml:"user_id"`
 // 	Token   string `yaml:"token"`
 // }
-
-// IsResponsesAPIModel はモデルが OpenAI Responses API を使用するか判定
-// 対応モデルは prefix マッチで自動判定し、設定リストをフォールバックとして使用
-func (c *Config) IsResponsesAPIModel(model string) bool {
-	return llmcatalog.IsOpenAIResponsesModel(model, c.OpenAI.ResponsesAPIModels)
-}
-
-// IsProviderResponsesAPIModel は provider/model の実行経路が Responses API か判定する。
-// deployment/alias 名は catalog_model に解決してから判定する。
-func (c *Config) IsProviderResponsesAPIModel(provider, model string) bool {
-	if !ProviderSupportsResponsesAPI(provider) {
-		return false
-	}
-	return c.IsResponsesAPIModel(c.ModelCatalogName(provider, model))
-}
-
-// ResponsesStoreEnabled は Responses API の provider-side response 保存を有効にするか返す。
-func (c *Config) ResponsesStoreEnabled() bool {
-	if c == nil {
-		return true
-	}
-	return c.Responses.Store
-}
-
-// ResponsesPersistResponseIDEnabled は session へ response ID を保存・復元するか返す。
-func (c *Config) ResponsesPersistResponseIDEnabled() bool {
-	if c == nil {
-		return true
-	}
-	return c.Responses.Store && c.Responses.PersistResponseID
-}

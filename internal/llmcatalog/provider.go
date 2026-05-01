@@ -29,7 +29,6 @@ type ProviderDescriptor struct {
 	SupportsResponsesAPI bool
 	PricingFamily        string
 	CompressionModel     string
-	CompressionThreshold int
 	ModelDefaults        ProviderModelDefaults
 }
 
@@ -71,7 +70,6 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		SetupInstructions:    []string{"export DEEPSEEK_API_KEY=your-api-key"},
 		DefaultSubAgentModel: "deepseek-v4-flash",
 		PricingFamily:        "deepseek",
-		CompressionThreshold: 600000,
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "deepseek-v4-flash",
 			MaxOutputTokens: 16384,
@@ -125,7 +123,6 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		NativeWebSearch:      true,
 		PricingFamily:        "gemini",
 		CompressionModel:     "gemini-3.1-flash-lite-preview",
-		CompressionThreshold: 180000,
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "gemini-3.1-pro-preview-customtools",
 			MaxOutputTokens: 65536,
@@ -142,7 +139,6 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		NativeWebSearch:      true,
 		PricingFamily:        "claude",
 		CompressionModel:     "claude-haiku-4-5",
-		CompressionThreshold: 150000,
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:     "claude-sonnet-4-6",
 			MaxOutputTokens:  64000,
@@ -181,21 +177,19 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		DefaultSubAgentModel: "openai/gpt-5.4-mini",
 		SupportsImages:       true,
 		PricingFamily:        "openrouter",
-		CompressionThreshold: 120000,
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "anthropic/claude-sonnet-4.6",
 			MaxOutputTokens: 64000,
 		},
 	},
 	"bedrock": {
-		Key:                  "bedrock",
-		CredentialKind:       "static",
-		StaticCredential:     "aws-credentials",
-		SetupInstructions:    []string{"AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定"},
-		SupportsImages:       true,
-		PricingFamily:        "bedrock",
-		CompressionModel:     "claude-haiku-4-5",
-		CompressionThreshold: 150000,
+		Key:               "bedrock",
+		CredentialKind:    "static",
+		StaticCredential:  "aws-credentials",
+		SetupInstructions: []string{"AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定"},
+		SupportsImages:    true,
+		PricingFamily:     "bedrock",
+		CompressionModel:  "claude-haiku-4-5",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:     "global.anthropic.claude-sonnet-4-6",
 			MaxOutputTokens:  64000,

@@ -208,7 +208,53 @@ func InferProviderFromModel(model string) string {
 
 // KnownMaxOutputTokens は既知モデルの最大出力トークン数を返す。
 func KnownMaxOutputTokens(model string) (int, bool) {
+	for _, candidate := range modelLimitLookupCandidates(model) {
+		tokens, ok := knownMaxOutputTokensForModel(candidate)
+		if ok {
+			return tokens, true
+		}
+	}
+	return 0, false
+}
+
+// IsKnownModelName は組み込み catalog が model を直接知っているか返す。
+func IsKnownModelName(model string) bool {
+	for _, candidate := range modelLimitLookupCandidates(model) {
+		if isKnownModelLimitName(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+// KnownModelContextLimit は既知モデルのコンテキスト上限を返す。
+func KnownModelContextLimit(model string) (int, bool) {
+	for _, candidate := range modelLimitLookupCandidates(model) {
+		limit, ok := knownModelContextLimitForModel(candidate)
+		if ok {
+			return limit, true
+		}
+	}
+	return 0, false
+}
+
+func modelLimitLookupCandidates(model string) []string {
 	model = normalizeModelName(model)
+	if model == "" || model == "default" {
+		return nil
+	}
+
+	candidates := []string{model}
+	if _, delegatedModel, ok := strings.Cut(model, "/"); ok {
+		delegatedModel = strings.TrimSpace(delegatedModel)
+		if delegatedModel != "" && delegatedModel != model {
+			candidates = append(candidates, delegatedModel)
+		}
+	}
+	return candidates
+}
+
+func knownMaxOutputTokensForModel(model string) (int, bool) {
 	tokens, ok := knownModelMaxOutputTokens[model]
 	if ok {
 		return tokens, true
@@ -227,13 +273,28 @@ func KnownMaxOutputTokens(model string) (int, bool) {
 	return 0, false
 }
 
-// IsKnownModelName は組み込み catalog が model を直接知っているか返す。
-func IsKnownModelName(model string) bool {
-	model = normalizeModelName(model)
+func knownModelContextLimitForModel(model string) (int, bool) {
+	if limit, ok := modelContextLimits[model]; ok {
+		return limit, true
+	}
+	if isClaudeOpus47ModelName(model) {
+		return 1000000, true
+	}
+
+	for _, rule := range modelContextLimitPrefixes {
+		if strings.HasPrefix(model, rule.Pattern) {
+			return rule.Limit, true
+		}
+	}
+
+	return 0, false
+}
+
+func isKnownModelLimitName(model string) bool {
 	if model == "" || model == "default" {
 		return false
 	}
-	if _, ok := knownModelMaxOutputTokens[model]; ok {
+	if _, ok := knownMaxOutputTokensForModel(model); ok {
 		return true
 	}
 	if _, ok := modelContextLimits[model]; ok {
@@ -245,30 +306,14 @@ func IsKnownModelName(model string) bool {
 	if _, ok := knownBedrockMaxOutputTokens(model); ok {
 		return true
 	}
-	for _, rule := range modelMaxOutputTokenPrefixes {
-		if strings.HasPrefix(model, rule.Pattern) {
-			return true
-		}
-	}
 	return false
 }
 
 // ModelContextLimit はモデルのコンテキスト上限を返す。
 func ModelContextLimit(model string) int {
-	model = normalizeModelName(model)
-	if limit, ok := modelContextLimits[model]; ok {
+	if limit, ok := KnownModelContextLimit(model); ok {
 		return limit
 	}
-	if isClaudeOpus47ModelName(model) {
-		return 1000000
-	}
-
-	for _, rule := range modelContextLimitPrefixes {
-		if strings.HasPrefix(model, rule.Pattern) {
-			return rule.Limit
-		}
-	}
-
 	return modelContextLimits["default"]
 }
 

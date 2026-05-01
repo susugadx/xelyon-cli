@@ -36,11 +36,12 @@ type agentConversationState struct {
 }
 
 type agentRequestState struct {
-	cancelFunc           context.CancelFunc
-	requestCtx           context.Context
-	lastCancelReason     string
-	strReplaceErrorCount int
-	tokenLimitRetryCount int
+	cancelFunc                           context.CancelFunc
+	requestCtx                           context.Context
+	lastCancelReason                     string
+	strReplaceErrorCount                 int
+	tokenLimitRetryCount                 int
+	autoCompressUnknownContextWarningKey string
 }
 
 type agentWorkspaceState struct {

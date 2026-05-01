@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/testutil"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestNewChangeStorage(t *testing.T) {
@@ -39,7 +38,7 @@ func TestAppendChange_Success(t *testing.T) {
 	}
 
 	sessionID := "test-session-123"
-	change := tools.FileChange{
+	change := ChangeRecordInput{
 		FilePath:    "/tmp/test.txt",
 		Timestamp:   time.Now(),
 		Tool:        "write_file",
@@ -52,7 +51,7 @@ func TestAppendChange_Success(t *testing.T) {
 	}
 
 	// ファイルが作成されたことを確認
-	filename := filepath.Join(cs.changesPath, "changes_"+sessionID+".jsonl")
+	filename := filepath.Join(cs.changesPath, changeFileName(sessionID))
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		t.Error("AppendChange() did not create changes file")
 	}
@@ -70,7 +69,7 @@ func TestAppendChange_Multiple(t *testing.T) {
 
 	// 複数の変更を追加
 	for i := 0; i < 3; i++ {
-		change := tools.FileChange{
+		change := ChangeRecordInput{
 			FilePath:    "/tmp/test.txt",
 			Timestamp:   time.Now(),
 			Tool:        "write_file",
@@ -121,7 +120,7 @@ func TestLoadSessionChanges_Success(t *testing.T) {
 	}
 
 	sessionID := "test-session-load"
-	change := tools.FileChange{
+	change := ChangeRecordInput{
 		FilePath:    "/tmp/test.txt",
 		Timestamp:   time.Now(),
 		Tool:        "write_file",
@@ -167,7 +166,7 @@ func TestLoadSessionChanges_CorruptedLine(t *testing.T) {
 	sessionID := "test-session-corrupt"
 
 	// 手動で破損したJSONLファイルを作成
-	filename := filepath.Join(cs.changesPath, "changes_"+sessionID+".jsonl")
+	filename := filepath.Join(cs.changesPath, changeFileName(sessionID))
 	content := `{"session_id":"test-session-corrupt","timestamp":"2024-01-01T00:00:00Z","tool":"write_file","file_path":"/tmp/test.txt","description":"Valid line"}
 {invalid json line}
 {"session_id":"test-session-corrupt","timestamp":"2024-01-01T00:00:01Z","tool":"str_replace","file_path":"/tmp/test2.txt","description":"Another valid line"}
@@ -199,7 +198,7 @@ func TestListSessions_Multiple(t *testing.T) {
 	// 複数のセッションを作成
 	sessions := []string{"session-1", "session-2", "session-3"}
 	for _, sessionID := range sessions {
-		change := tools.FileChange{
+		change := ChangeRecordInput{
 			FilePath:    "/tmp/test.txt",
 			Timestamp:   time.Now(),
 			Tool:        "write_file",
@@ -257,7 +256,7 @@ func TestCleanupOldChanges_Default(t *testing.T) {
 
 	// 古いファイルを作成（31日前）
 	oldSessionID := "old-session"
-	oldFilename := filepath.Join(cs.changesPath, "changes_"+oldSessionID+".jsonl")
+	oldFilename := filepath.Join(cs.changesPath, changeFileName(oldSessionID))
 	if err := os.WriteFile(oldFilename, []byte("{}\n"), 0600); err != nil {
 		t.Fatalf("Failed to create old file: %v", err)
 	}
@@ -270,7 +269,7 @@ func TestCleanupOldChanges_Default(t *testing.T) {
 
 	// 新しいファイルを作成
 	newSessionID := "new-session"
-	change := tools.FileChange{
+	change := ChangeRecordInput{
 		FilePath:    "/tmp/test.txt",
 		Timestamp:   time.Now(),
 		Tool:        "write_file",
@@ -296,7 +295,7 @@ func TestCleanupOldChanges_Default(t *testing.T) {
 	}
 
 	// 新しいファイルは残っていることを確認
-	newFilename := filepath.Join(cs.changesPath, "changes_"+newSessionID+".jsonl")
+	newFilename := filepath.Join(cs.changesPath, changeFileName(newSessionID))
 	if _, err := os.Stat(newFilename); os.IsNotExist(err) {
 		t.Error("CleanupOldChanges() deleted new file")
 	}
@@ -314,7 +313,7 @@ func TestSessionInfo_FilesChanged(t *testing.T) {
 
 	// 同じファイルへの複数の変更
 	for i := 0; i < 3; i++ {
-		change := tools.FileChange{
+		change := ChangeRecordInput{
 			FilePath:    "/tmp/test.txt",
 			Timestamp:   time.Now(),
 			Tool:        "write_file",
@@ -326,7 +325,7 @@ func TestSessionInfo_FilesChanged(t *testing.T) {
 	}
 
 	// 別のファイルへの変更
-	change2 := tools.FileChange{
+	change2 := ChangeRecordInput{
 		FilePath:    "/tmp/test2.txt",
 		Timestamp:   time.Now(),
 		Tool:        "str_replace",
