@@ -54,13 +54,15 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 		agent.SystemPrompt = prompt.BuildProviderSystemPromptWithConfig(cfg.SubAgentPrompt, agent.ProviderName, model, agent.cfg())
 	}
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc, "")
-		// headless では final checks 解決のみ（UI 表示不要）
-		if resolved := config.ResolveFinalChecks(agent.cfg(), pc); resolved != nil {
-			current := agent.cfg()
-			current.FinalChecks = *resolved
+	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
+	if bundle := loadProjectInstructionBundle(agent.cfg()); bundle != nil {
+		agent.SystemPrompt = injectProjectInstructionBundle(agent.SystemPrompt, bundle, "")
+		// headless では xelyon.yaml があるときだけ final checks 解決（UI 表示不要）
+		if bundle.ProjectConfig != nil {
+			if resolved := config.ResolveFinalChecks(agent.cfg(), bundle.ProjectConfig); resolved != nil {
+				current := agent.cfg()
+				current.FinalChecks = *resolved
+			}
 		}
 	}
 	injectProjectMap(agent, "")

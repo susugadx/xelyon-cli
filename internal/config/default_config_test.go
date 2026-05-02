@@ -98,4 +98,22 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.SubAgent.MaxConcurrent != 1 {
 		t.Errorf("SubAgent.MaxConcurrent = %d, want 1", cfg.SubAgent.MaxConcurrent)
 	}
+	if cfg.AgentInstructions.Project.Mode != "fallback" {
+		t.Errorf("AgentInstructions.Project.Mode = %q, want fallback", cfg.AgentInstructions.Project.Mode)
+	}
+	if cfg.AgentInstructions.Global.Enabled {
+		t.Error("AgentInstructions.Global.Enabled should default to false")
+	}
+	if len(cfg.AgentInstructions.Project.Files) == 0 {
+		t.Error("AgentInstructions.Project.Files should have defaults")
+	}
+	if len(cfg.AgentInstructions.Global.Files) == 0 {
+		t.Error("AgentInstructions.Global.Files should have defaults")
+	}
+	if cfg.AgentInstructions.MaxFileBytes != 20000 {
+		t.Errorf("AgentInstructions.MaxFileBytes = %d, want 20000", cfg.AgentInstructions.MaxFileBytes)
+	}
+	if cfg.AgentInstructions.MaxTotalBytes != 60000 {
+		t.Errorf("AgentInstructions.MaxTotalBytes = %d, want 60000", cfg.AgentInstructions.MaxTotalBytes)
+	}
 }

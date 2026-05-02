@@ -35,6 +35,7 @@ func TestUserFacingSectionsHaveStructNames(t *testing.T) {
 		"execution",
 		"paste",
 		"project_map",
+		"agent_instructions",
 		"lsp",
 		"output",
 		"web_search",

@@ -37,9 +37,14 @@ func resolveProjectMapInjectionSources(agent *Agent) (projectMapInjectionSources
 		return projectMapInjectionSources{}, false
 	}
 
-	pc := loadProjectConfig()
-	rootPath := resolveProjectMapSourceRootPath(cwd, pc)
-	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, pc)
+	bundle := loadProjectInstructionBundle(cfg)
+	rootPath := resolveProjectMapSourceRootPath(cwd, bundle)
+
+	var projectCfg *config.ProjectConfig
+	if bundle != nil {
+		projectCfg = bundle.ProjectConfig
+	}
+	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, projectCfg)
 
 	return projectMapInjectionSources{
 		cfg:            cfg,

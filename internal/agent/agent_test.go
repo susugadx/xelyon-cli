@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -277,7 +278,7 @@ func TestAgent_SwitchProvider_NoAPIKey(t *testing.T) {
 	t.Skip("Requires mock provider setup")
 }
 
-func TestLoadProjectConfig_NoFile(t *testing.T) {
+func TestLoadProjectInstructionBundle_NoFile(t *testing.T) {
 	// xelyon.yaml が存在しないディレクトリで実行
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
@@ -285,13 +286,16 @@ func TestLoadProjectConfig_NoFile(t *testing.T) {
 
 	_ = os.Chdir(tmpDir)
 
-	pc := loadProjectConfig()
-	if pc != nil {
-		t.Errorf("loadProjectConfig() should return nil when no config file, got %+v", pc)
+	bundle := loadProjectInstructionBundle(config.DefaultConfig())
+	if bundle == nil {
+		t.Fatal("loadProjectInstructionBundle() returned nil, want non-nil bundle")
+	}
+	if bundle.ProjectConfig != nil {
+		t.Errorf("ProjectConfig should be nil when no xelyon.yaml, got %+v", bundle.ProjectConfig)
 	}
 }
 
-func TestLoadProjectConfig_WithXelyonYAML(t *testing.T) {
+func TestLoadProjectInstructionBundle_WithXelyonYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
 	defer func() { _ = os.Chdir(originalDir) }()
@@ -301,12 +305,12 @@ func TestLoadProjectConfig_WithXelyonYAML(t *testing.T) {
 
 	_ = os.Chdir(tmpDir)
 
-	pc := loadProjectConfig()
-	if pc == nil {
-		t.Fatal("loadProjectConfig() returned nil, want non-nil")
+	bundle := loadProjectInstructionBundle(config.DefaultConfig())
+	if bundle == nil || bundle.ProjectConfig == nil {
+		t.Fatal("loadProjectInstructionBundle() returned nil project config, want non-nil")
 	}
-	if pc.Context != "test context" {
-		t.Errorf("Context = %q, want %q", pc.Context, "test context")
+	if bundle.ProjectConfig.Context != "test context" {
+		t.Errorf("Context = %q, want %q", bundle.ProjectConfig.Context, "test context")
 	}
 }
 

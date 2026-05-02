@@ -3,11 +3,9 @@ package agent
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -44,8 +42,8 @@ func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
 	}
 	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, a.CurrentModel, a.cfg())
 
-	if pc := loadProjectConfig(); pc != nil {
-		systemPrompt = injectProjectConfig(systemPrompt, pc, "")
+	if bundle := loadProjectInstructionBundle(a.cfg()); bundle != nil {
+		systemPrompt = injectProjectInstructionBundle(systemPrompt, bundle, "")
 	}
 
 	if hadPlanPrompt {
@@ -62,12 +60,8 @@ func (m *PromptManager) RefreshProjectPrompt(input string) {
 		return
 	}
 
-	pc := loadProjectConfig()
-	var newConfigBlock string
-	if pc != nil {
-		selection := config.SelectProjectPromptSelection(pc, input)
-		newConfigBlock = prompt.BuildProjectConfigBlock(selection.Rules, selection.Contexts)
-	}
+	bundle := loadProjectInstructionBundle(a.cfg())
+	newConfigBlock := buildProjectInstructionBlock(bundle, input)
 
 	oldConfigBlock := prompt.ExtractProjectConfigBlock(a.SystemPrompt)
 	if strings.TrimSpace(newConfigBlock) != strings.TrimSpace(oldConfigBlock) {
@@ -108,11 +102,8 @@ func (m *PromptManager) ShouldRefreshProjectPrompt(input string) bool {
 		return false
 	}
 
-	pc := loadProjectConfig()
-	rootPath := cwd
-	if pc != nil && strings.TrimSpace(pc.FilePath) != "" {
-		rootPath = filepath.Dir(pc.FilePath)
-	}
+	bundle := loadProjectInstructionBundle(a.cfg())
+	rootPath := resolveProjectMapSourceRootPath(cwd, bundle)
 
 	if stateKey := currentProjectMapStateKey(a, rootPath); stateKey != "" && stateKey != a.projectMapStateKey {
 		return true

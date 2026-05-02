@@ -55,6 +55,99 @@ func BuildProjectConfigBlock(rules []string, contexts []string) string {
 	return b.String()
 }
 
+// ProjectInstructionEntry は imported guidance の注入用 DTO。
+type ProjectInstructionEntry struct {
+	Label    string
+	Content  string
+	Strength string // project_guidance / advisory
+}
+
+// ProjectInstructionBlockInput は project instruction block 生成入力 DTO。
+type ProjectInstructionBlockInput struct {
+	HasProjectConfig bool
+	MandatoryRules   []string
+	ProjectContexts  []string
+	ProjectGuidance  []ProjectInstructionEntry
+	GlobalGuidance   []ProjectInstructionEntry
+}
+
+// BuildProjectInstructionBlock は xelyon.yaml mandatory rules と imported guidance を
+// 優先順位説明付きで 1 ブロックに組み立てる。
+func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
+	rulesBlock := BuildRulesBlockFromList(input.MandatoryRules)
+
+	var contextParts []string
+	for _, context := range input.ProjectContexts {
+		context = strings.TrimSpace(context)
+		if context == "" {
+			continue
+		}
+		contextParts = append(contextParts, context)
+	}
+
+	hasProjectGuidance := len(input.ProjectGuidance) > 0
+	hasGlobalGuidance := len(input.GlobalGuidance) > 0
+
+	if rulesBlock == "" && len(contextParts) == 0 && !hasProjectGuidance && !hasGlobalGuidance {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\n<!-- PROJECT_CONFIG_START -->\n")
+	b.WriteString("\n## Project Instruction Precedence\n\n")
+	b.WriteString("- XELYON system/tool/safety rules are highest priority.\n")
+	b.WriteString("- The current user request is higher priority than project guidance unless it conflicts with XELYON safety, tool, investigation, or verification invariants.\n")
+	b.WriteString("- xelyon.yaml rules are mandatory project policy.\n")
+	b.WriteString("- Imported AGENTS.md / CLAUDE.md files are project guidance when no xelyon.yaml exists.\n")
+	b.WriteString("- Imported AGENTS.md / CLAUDE.md files are advisory guidance when xelyon.yaml exists and project.mode=always is enabled.\n")
+	b.WriteString("- Global guidance is personal preference and lower priority than repo-local guidance.\n")
+
+	if rulesBlock != "" {
+		b.WriteString(rulesBlock)
+	}
+	if len(contextParts) > 0 {
+		b.WriteString("\n\n## Project Context\n")
+		b.WriteString(strings.Join(contextParts, "\n\n"))
+	}
+	if hasProjectGuidance {
+		b.WriteString("\n\n## Imported Project Guidance\n\n")
+		if input.HasProjectConfig {
+			b.WriteString("xelyon.yaml was found for this workspace.\n")
+			b.WriteString("The following imported files are treated as advisory guidance. Use them when relevant, but do not override xelyon.yaml mandatory rules, XELYON internal rules, or the current user request.\n")
+		} else {
+			b.WriteString("No xelyon.yaml was found for this workspace.\n")
+			b.WriteString("The following files are treated as authoritative project guidance for this workspace.\n")
+			b.WriteString("Follow them when they are clear and relevant, but do not override XELYON internal rules or the current user request.\n")
+		}
+		for _, entry := range input.ProjectGuidance {
+			content := strings.TrimSpace(entry.Content)
+			if content == "" {
+				continue
+			}
+			b.WriteString("\n\n### ")
+			b.WriteString(strings.TrimSpace(entry.Label))
+			b.WriteString("\n")
+			b.WriteString(content)
+		}
+	}
+	if hasGlobalGuidance {
+		b.WriteString("\n\n## Enabled Global Guidance\n\n")
+		b.WriteString("Global guidance is advisory personal preference.\n")
+		for _, entry := range input.GlobalGuidance {
+			content := strings.TrimSpace(entry.Content)
+			if content == "" {
+				continue
+			}
+			b.WriteString("\n\n### ")
+			b.WriteString(strings.TrimSpace(entry.Label))
+			b.WriteString("\n")
+			b.WriteString(content)
+		}
+	}
+	b.WriteString("\n<!-- PROJECT_CONFIG_END -->")
+	return b.String()
+}
+
 // InjectProjectConfigBlock は SystemPrompt の Workflow Rules 内に project config ブロックを埋め込む。
 // Rule #10 (Verification Protocol) の直後に挿入する。
 // projectBlock が空の場合は systemPrompt をそのまま返す。

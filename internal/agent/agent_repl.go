@@ -44,9 +44,9 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
+	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
+	if bundle := loadProjectInstructionBundle(agent.cfg()); bundle != nil {
+		applyProjectInstructionBundle(agent, bundle)
 	}
 	injectProjectMap(agent, "")
 	checkRipgrepAvailability(agent)
@@ -308,7 +308,7 @@ func buildContextSizeBlock(agent *Agent) string {
 	}
 
 	builtinCount, mcpCount := agent.countToolsByType()
-	projectTokens := estimateProjectConfigTokens(loadProjectConfig())
+	projectTokens := estimateProjectInstructionTokens(loadProjectInstructionBundle(agent.cfg()))
 	basePromptTokens -= projectMapTokens + projectTokens
 	if basePromptTokens < 0 {
 		basePromptTokens = 0
@@ -339,7 +339,7 @@ func buildContextSizeBlock(agent *Agent) string {
 		}
 	}
 	if projectTokens > 0 {
-		lines = append(lines, fmt.Sprintf("xelyon.yaml: ~%s", FormatTokens(projectTokens)))
+		lines = append(lines, fmt.Sprintf("Project instructions: ~%s", FormatTokens(projectTokens)))
 	}
 
 	for i, line := range lines {

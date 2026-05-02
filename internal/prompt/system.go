@@ -124,8 +124,10 @@ func buildSystemPromptPrefix(surface investigation.Surface) string {
   - Say explicitly if nothing is wrong.
 ## Workflow Rules
 ### 0. Project Context
-**MANDATORY**: Project config is already loaded in this prompt (see Project Context below). Do NOT inspect xelyon.yaml again.
-- Project-specific context overrides the generic rules below.
+Project instructions may be loaded in this prompt.
+- Do NOT inspect xelyon.yaml, AGENTS.md, or CLAUDE.md again just to discover standing instructions unless the user explicitly asks you to inspect or edit them.
+- xelyon.yaml rules are mandatory project policy.
+- Imported AGENTS.md / CLAUDE.md files are compatibility guidance. They do not override XELYON tool, safety, investigation, or verification invariants.
 ### 1. Investigate Before Editing
 #### Project Map First
 Project Map lists file paths, symbol definitions with line ranges for the project. Large projects may have truncated entries.

@@ -37,6 +37,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	appendValidationIssues(&result, validateProviderIssues(cfg))
 	appendValidationIssues(&result, validateNumericRangeIssues(cfg))
 	appendValidationIssues(&result, validateBashSafetyLevelIssues(cfg))
+	appendValidationIssues(&result, validateAgentInstructionIssues(cfg))
 
 	return result
 }
@@ -130,6 +131,21 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 		case "bash.safety_level":
 			if v, ok := issue.FixedValue.(string); ok {
 				cfg.Bash.SafetyLevel = v
+				fixCount++
+			}
+		case "agent_instructions.project.mode":
+			if v, ok := issue.FixedValue.(string); ok {
+				cfg.AgentInstructions.Project.Mode = v
+				fixCount++
+			}
+		case "agent_instructions.max_file_bytes":
+			if v, ok := issue.FixedValue.(int); ok {
+				cfg.AgentInstructions.MaxFileBytes = v
+				fixCount++
+			}
+		case "agent_instructions.max_total_bytes":
+			if v, ok := issue.FixedValue.(int); ok {
+				cfg.AgentInstructions.MaxTotalBytes = v
 				fixCount++
 			}
 		}

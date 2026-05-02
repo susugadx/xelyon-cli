@@ -5,17 +5,19 @@ import "testing"
 func TestFieldTypeMap(t *testing.T) {
 	// FieldTypeMap に重要なフィールドが含まれていることを確認
 	requiredFields := map[string]ConfigFieldType{
-		"default_provider":            FieldTypeSelect,
-		"default_model":               FieldTypeString,
-		"general.ui_language":         FieldTypeSelect,
-		"compression.enabled":         FieldTypeBool,
-		"compression.trigger_percent": FieldTypeInt,
-		"compression.keep_recent":     FieldTypeInt,
-		"execution.mode":              FieldTypeSelect,
-		"output.assistant_updates":    FieldTypeSelect,
-		"project_map.context_ratio":   FieldTypeFloat,
-		"provider_models":             FieldTypeStructMap,
-		"sub_agent.max_concurrent":    FieldTypeInt,
+		"default_provider":                  FieldTypeSelect,
+		"default_model":                     FieldTypeString,
+		"general.ui_language":               FieldTypeSelect,
+		"compression.enabled":               FieldTypeBool,
+		"compression.trigger_percent":       FieldTypeInt,
+		"compression.keep_recent":           FieldTypeInt,
+		"execution.mode":                    FieldTypeSelect,
+		"output.assistant_updates":          FieldTypeSelect,
+		"project_map.context_ratio":         FieldTypeFloat,
+		"agent_instructions.project.mode":   FieldTypeSelect,
+		"agent_instructions.max_file_bytes": FieldTypeInt,
+		"provider_models":                   FieldTypeStructMap,
+		"sub_agent.max_concurrent":          FieldTypeInt,
 	}
 
 	for path, expectedType := range requiredFields {
@@ -39,6 +41,7 @@ func TestSelectOptions(t *testing.T) {
 		{"default_provider", 6},    // deepseek, claude, openai, gemini, groq, ollama
 		{"web_search.provider", 4}, // openai, gemini, claude, anthropic
 		{"execution.mode", 3},      // balanced, trusted, full_auto
+		{"agent_instructions.project.mode", 3},
 		{"output.assistant_updates", 4},
 	}
 

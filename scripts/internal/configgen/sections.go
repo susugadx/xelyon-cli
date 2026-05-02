@@ -131,6 +131,40 @@ var Sections = map[string]SectionInfo{
 			"additional_ignore_dirs": "[]string",
 		},
 	},
+	"agent_instructions": {
+		StructName: "AgentInstructionsConfig",
+		Title:      "Agent Instructions 設定",
+		Icon:       "📚",
+		Comments: []string{
+			"AGENTS.md / CLAUDE.md 互換ガイダンス読み込み設定",
+			"xelyon.yaml の rules とは別レイヤーで扱われます",
+		},
+		Fields: map[string]string{
+			"project.mode":               "project-local guidance の読み込みモード（off / fallback / always）",
+			"project.files":              "project-local guidance ファイル候補",
+			"project.include_gitignored": "gitignored / untracked guidance を許可",
+			"global.enabled":             "global guidance 読み込みを有効化",
+			"global.files":               "global guidance ファイル候補",
+			"include_local_files":        "CLAUDE.local.md / AGENTS.local.md など local 系 guidance を許可",
+			"expand_imports":             "@AGENTS.md / @path import 展開（現状は将来互換用）",
+			"max_file_bytes":             "1ファイルあたりの最大読み込みバイト数",
+			"max_total_bytes":            "guidance 全体の最大読み込みバイト数",
+		},
+		FieldTypes: map[string]string{
+			"project.mode":               "select",
+			"project.files":              "[]string",
+			"project.include_gitignored": "bool",
+			"global.enabled":             "bool",
+			"global.files":               "[]string",
+			"include_local_files":        "bool",
+			"expand_imports":             "bool",
+			"max_file_bytes":             "int",
+			"max_total_bytes":            "int",
+		},
+		SelectOpts: map[string][]string{
+			"project.mode": {"off", "fallback", "always"},
+		},
+	},
 	"lsp": {
 		StructName: "LSPConfig",
 		Title:      "LSP連携設定",
@@ -261,6 +295,7 @@ var SectionOrder = []string{
 	"compression",
 	"paste",
 	"project_map",
+	"agent_instructions",
 	"lsp",
 	"output",
 	"web_search",
@@ -277,6 +312,7 @@ var CategoryOrder = []string{
 	"compression",
 	"paste",
 	"project_map",
+	"agent_instructions",
 	"lsp",
 	"output",
 	"web_search",
@@ -287,20 +323,21 @@ var CategoryOrder = []string{
 
 // SectionToCategory maps sections to UI categories.
 var SectionToCategory = map[string]string{
-	"default_provider": "provider",
-	"default_model":    "provider",
-	"provider_models":  "provider",
-	"general":          "general",
-	"execution":        "execution",
-	"compression":      "compression",
-	"paste":            "paste",
-	"project_map":      "project_map",
-	"lsp":              "lsp",
-	"output":           "output",
-	"web_search":       "web_search",
-	"sub_agent":        "sub_agent",
-	"mcp":              "mcp",
-	"final_checks":     "final_checks",
+	"default_provider":   "provider",
+	"default_model":      "provider",
+	"provider_models":    "provider",
+	"general":            "general",
+	"execution":          "execution",
+	"compression":        "compression",
+	"paste":              "paste",
+	"project_map":        "project_map",
+	"agent_instructions": "agent_instructions",
+	"lsp":                "lsp",
+	"output":             "output",
+	"web_search":         "web_search",
+	"sub_agent":          "sub_agent",
+	"mcp":                "mcp",
+	"final_checks":       "final_checks",
 }
 
 // Categories contains category display metadata.
@@ -328,6 +365,10 @@ var Categories = map[string]CategoryInfo{
 	"project_map": {
 		DisplayName: "Project Map",
 		Icon:        "🗺️",
+	},
+	"agent_instructions": {
+		DisplayName: "Agent Instructions",
+		Icon:        "📚",
 	},
 	"lsp": {
 		DisplayName: "LSP Servers",

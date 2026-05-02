@@ -95,6 +95,22 @@ func applyNestedSectionDefaults(cfg *Config, defaults *Config, options defaultAp
 	if cfg.FinalChecks.Timeout == 0 {
 		cfg.FinalChecks.Timeout = defaults.FinalChecks.Timeout
 	}
+	// AgentInstructions: fallback mode とサイズ上限のデフォルト適用
+	if strings.TrimSpace(cfg.AgentInstructions.Project.Mode) == "" {
+		cfg.AgentInstructions.Project.Mode = defaults.AgentInstructions.Project.Mode
+	}
+	if len(cfg.AgentInstructions.Project.Files) == 0 {
+		cfg.AgentInstructions.Project.Files = append([]string(nil), defaults.AgentInstructions.Project.Files...)
+	}
+	if len(cfg.AgentInstructions.Global.Files) == 0 {
+		cfg.AgentInstructions.Global.Files = append([]string(nil), defaults.AgentInstructions.Global.Files...)
+	}
+	if cfg.AgentInstructions.MaxFileBytes <= 0 {
+		cfg.AgentInstructions.MaxFileBytes = defaults.AgentInstructions.MaxFileBytes
+	}
+	if cfg.AgentInstructions.MaxTotalBytes <= 0 {
+		cfg.AgentInstructions.MaxTotalBytes = defaults.AgentInstructions.MaxTotalBytes
+	}
 }
 
 func applyOutputAssistantUpdateDefaults(cfg *Config, defaults *Config) {

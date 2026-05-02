@@ -93,6 +93,21 @@ project_map:
     additional_ignore_dirs: []
 
 # ============================================================
+# Agent Instructions 設定
+# ============================================================
+# AGENTS.md / CLAUDE.md 互換ガイダンス読み込み設定
+# xelyon.yaml の rules とは別レイヤーで扱われます
+agent_instructions:
+    # CLAUDE.local.md / AGENTS.local.md など local 系 guidance を許可
+    include_local_files: false
+    # @AGENTS.md / @path import 展開（現状は将来互換用）
+    expand_imports: false
+    # 1ファイルあたりの最大読み込みバイト数
+    max_file_bytes: 20000
+    # guidance 全体の最大読み込みバイト数
+    max_total_bytes: 60000
+
+# ============================================================
 # LSP連携設定
 # ============================================================
 # 23言語のデフォルト設定が内蔵済み。通常は変更不要です。

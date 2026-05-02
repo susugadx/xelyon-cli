@@ -37,9 +37,9 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 		printModeInfoToWriter(runtime.effectiveUI().Output(), autoApprove, false)
 	}
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
+	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
+	if bundle := loadProjectInstructionBundle(agent.cfg()); bundle != nil {
+		applyProjectInstructionBundle(agent, bundle)
 	}
 	injectProjectMap(agent, "")
 
@@ -89,9 +89,9 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 		green.Fprintf(out, "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 	}
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
+	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
+	if bundle := loadProjectInstructionBundle(agent.cfg()); bundle != nil {
+		applyProjectInstructionBundle(agent, bundle)
 	}
 	injectProjectMap(agent, "")
 
