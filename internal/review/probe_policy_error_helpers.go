@@ -1,6 +1,9 @@
 package review
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 func newBlockedCommandErrorf(format string, args ...any) error {
 	return newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: "+format, args...))
@@ -18,4 +21,8 @@ func newOutsideRepoCommandPathError(command, pathArg string) error {
 	return newHostReadOnlyOutsideRepoPathError(
 		fmt.Sprintf("blocked command: %s path %q is outside repository root", command, pathArg),
 	)
+}
+
+func isOutsideRepoPathError(err error) bool {
+	return errors.Is(err, ErrHostReadOnlyOutsideRepoPath)
 }

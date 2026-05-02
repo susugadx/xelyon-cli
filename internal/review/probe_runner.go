@@ -40,7 +40,9 @@ func (r *ProbeRunner) Run(ctx context.Context, req ReviewProbeRequest) (ReviewPr
 	switch req.Mode {
 	case ReviewProbeHostReadOnly:
 		return newHostReadOnlyExecutor(repoRoot).run(ctx, req), nil
-	case ReviewProbeScratchOnly, ReviewProbeRepoSandbox:
+	case ReviewProbeScratchOnly:
+		return newScratchOnlyExecutor(repoRoot).run(ctx, req), nil
+	case ReviewProbeRepoSandbox:
 		result := newBlockedModeResult(req, fmt.Sprintf("probe mode %q is not implemented yet", req.Mode))
 		return result, fmt.Errorf("%w: %s", ErrUnsupportedReviewProbeMode, req.Mode)
 	default:
