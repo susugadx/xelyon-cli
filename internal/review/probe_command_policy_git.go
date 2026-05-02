@@ -53,6 +53,18 @@ func validateAndPrepareGitHostReadOnlyArgs(args []string) (hostReadOnlyCommandPo
 	return newHostReadOnlyPolicyResult(extractArgsAfterDoubleDash(parsed.postSubcommandArg)), nil
 }
 
+func extractArgsAfterDoubleDash(args []string) []string {
+	for i, arg := range args {
+		if arg == "--" {
+			if i+1 >= len(args) {
+				return nil
+			}
+			return append([]string(nil), args[i+1:]...)
+		}
+	}
+	return nil
+}
+
 func parseGitHostReadOnlyArgs(args []string) (parsedGitHostReadOnlyArgs, error) {
 	subcommandIndex, err := findGitHostReadOnlySubcommandIndex(args)
 	if err != nil {

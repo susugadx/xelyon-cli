@@ -26,10 +26,19 @@ func (e *hostReadOnlyPolicyError) Error() string {
 }
 
 func (e *hostReadOnlyPolicyError) Is(target error) bool {
-	if target == ErrHostReadOnlyBlocked {
-		return true
+	switch target {
+	case ErrHostReadOnlyBlocked:
+		// outside_repo_path は blocked の詳細分類として扱う。
+		return e.code == hostReadOnlyPolicyBlocked || e.code == hostReadOnlyPolicyOutsideRepoPath
+	case ErrHostReadOnlyOutsideRepoPath:
+		return e.code == hostReadOnlyPolicyOutsideRepoPath
+	default:
+		return false
 	}
-	return target == ErrHostReadOnlyOutsideRepoPath && e.code == hostReadOnlyPolicyOutsideRepoPath
+}
+
+func (e *hostReadOnlyPolicyError) Code() hostReadOnlyPolicyErrorCode {
+	return e.code
 }
 
 func newHostReadOnlyBlockedError(message string) error {

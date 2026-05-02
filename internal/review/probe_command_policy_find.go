@@ -1,8 +1,6 @@
 package review
 
-import (
-	"strings"
-)
+import "strings"
 
 var blockedFindFlags = []string{
 	"-delete",
@@ -26,6 +24,13 @@ type parsedFindHostReadOnlyArgs struct {
 	pathRoots          []string
 	firstExpressionArg string
 }
+
+type findParsePhase int
+
+const (
+	findParsePhasePathRoots findParsePhase = iota
+	findParsePhaseExpression
+)
 
 func validateAndPrepareFindHostReadOnlyArgs(args []string) (hostReadOnlyCommandPolicyResult, error) {
 	parsed, err := parseFindHostReadOnlyArgs(args)
@@ -65,9 +70,18 @@ func parseFindHostReadOnlyArgs(args []string) (parsedFindHostReadOnlyArgs, error
 		return parsedFindHostReadOnlyArgs{pathRoots: []string{"."}}, nil
 	}
 
-	start, treatFirstExpressionAsPathRoot := resolveFindParseStart(args)
-	pathRoots, firstExpressionArg := collectFindPathRootsAndExpression(args[start:], treatFirstExpressionAsPathRoot)
+	startIndex := 0
+	treatFirstExpressionAsPathRoot := false
+	if args[0] == "--" {
+		startIndex = 1
+		if len(args) > 1 && isFindExpressionStartArg(args[1]) {
+			// `find -- -name ...` のように `--` 直後が式開始トークン風なら、
+			// 先頭1つは path root として解釈して outside path 検証対象に残す。
+			treatFirstExpressionAsPathRoot = true
+		}
+	}
 
+	pathRoots, firstExpressionArg := scanFindPathRoots(args[startIndex:], treatFirstExpressionAsPathRoot)
 	if len(pathRoots) == 0 {
 		pathRoots = append(pathRoots, ".")
 	}
@@ -78,34 +92,31 @@ func parseFindHostReadOnlyArgs(args []string) (parsedFindHostReadOnlyArgs, error
 	}, nil
 }
 
-func resolveFindParseStart(args []string) (start int, treatFirstExpressionAsPathRoot bool) {
-	if len(args) == 0 || args[0] != "--" {
-		return 0, false
-	}
-	if len(args) > 1 && isFindExpressionStartArg(args[1]) {
-		// `find -- -name ...` のように `--` 直後が式開始トークン風なら、
-		// 先頭1つは path root として解釈して outside path 検証対象に残す。
-		return 1, true
-	}
-	return 1, false
-}
-
-func collectFindPathRootsAndExpression(args []string, treatFirstExpressionAsPathRoot bool) (pathRoots []string, firstExpressionArg string) {
+func scanFindPathRoots(args []string, treatFirstExpressionAsPathRoot bool) (pathRoots []string, firstExpressionArg string) {
 	pathRoots = make([]string, 0, len(args))
+	phase := findParsePhasePathRoots
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if isFindExpressionStartArg(arg) {
-			if treatFirstExpressionAsPathRoot && len(pathRoots) == 0 {
-				pathRoots = append(pathRoots, arg)
+	for _, arg := range args {
+		switch phase {
+		case findParsePhasePathRoots:
+			if isFindExpressionStartArg(arg) {
+				if treatFirstExpressionAsPathRoot && len(pathRoots) == 0 {
+					pathRoots = append(pathRoots, arg)
+					treatFirstExpressionAsPathRoot = false
+					continue
+				}
+				firstExpressionArg = arg
+				phase = findParsePhaseExpression
 				continue
 			}
-			return pathRoots, arg
+			pathRoots = append(pathRoots, arg)
+		case findParsePhaseExpression:
+			// path root 収集は式開始まで。以降は評価対象外。
+			continue
 		}
-		pathRoots = append(pathRoots, arg)
 	}
 
-	return pathRoots, ""
+	return pathRoots, firstExpressionArg
 }
 
 func isFindExpressionStartArg(arg string) bool {

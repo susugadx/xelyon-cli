@@ -48,6 +48,16 @@ func TestCollectSearchCommandPathCandidates_RG(t *testing.T) {
 			want: []string{"/etc"},
 		},
 		{
+			name: "ignore-file separated contributes path arg",
+			args: []string{"--ignore-file", "/etc/ignore", "pattern"},
+			want: []string{"/etc/ignore"},
+		},
+		{
+			name: "ignore-file equals contributes path arg",
+			args: []string{"--ignore-file=/etc/ignore", "pattern"},
+			want: []string{"/etc/ignore"},
+		},
+		{
 			name: "files mode treats positional as path",
 			args: []string{"--files", "/etc"},
 			want: []string{"/etc"},
@@ -109,6 +119,16 @@ func TestCollectSearchCommandPathCandidates_Grep(t *testing.T) {
 			name: "directories recurse short attached option infers path before pattern",
 			args: []string{"-drecurse", "/etc", "needle"},
 			want: []string{"/etc"},
+		},
+		{
+			name: "exclude-from separated contributes path arg",
+			args: []string{"--exclude-from", "/etc/patterns", "needle"},
+			want: []string{"/etc/patterns"},
+		},
+		{
+			name: "exclude-from equals contributes path arg",
+			args: []string{"--exclude-from=/etc/patterns", "needle"},
+			want: []string{"/etc/patterns"},
 		},
 		{
 			name: "post-separator short regexp-like token is treated as positional path candidate",

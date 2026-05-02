@@ -72,13 +72,21 @@ func TestProbeRunner_HostReadOnlyBlockedCasesAreNotExecuted(t *testing.T) {
 			args:          []string{"-L", "/etc", "-name", "hosts"},
 			errorContains: "find leading option -L",
 		},
-		{
-			name:          "blocked rg obvious outside path",
-			id:            "probe-blocked-rg-outside-path",
-			command:       "rg",
-			args:          []string{"pattern", "/etc"},
-			errorContains: `rg path "/etc" is outside repository root`,
-		},
+	}
+	for _, sc := range hostReadOnlyRunnerBlockedSearchOutsideScenarios() {
+		tests = append(tests, struct {
+			name          string
+			id            string
+			command       string
+			args          []string
+			errorContains string
+		}{
+			name:          sc.name,
+			id:            sc.id,
+			command:       sc.command,
+			args:          sc.args,
+			errorContains: sc.errorContains,
+		})
 	}
 
 	for _, tt := range tests {

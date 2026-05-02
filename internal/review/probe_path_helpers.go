@@ -7,13 +7,6 @@ import (
 	"strings"
 )
 
-type hostReadOnlyPathResolveOptions struct {
-	repoRoot        string
-	baseDir         string
-	candidate       string
-	evaluateSymlink bool
-}
-
 func resolveLexicalPath(baseDir, candidate string) string {
 	if filepath.IsAbs(candidate) {
 		return filepath.Clean(candidate)
@@ -32,56 +25,67 @@ func isPathWithinRepoRoot(repoRoot, resolvedPath string) (bool, error) {
 	return true, nil
 }
 
-func resolvePathWithinRepoRootWithOptions(opts hostReadOnlyPathResolveOptions) (string, error) {
-	resolved := resolveLexicalPath(opts.baseDir, opts.candidate)
-	ok, err := isPathWithinRepoRoot(opts.repoRoot, resolved)
+func resolvePathWithinRepoRootLexically(repoRoot, baseDir, candidate string) (resolved string, outsideRepo bool, err error) {
+	resolved = resolveLexicalPath(baseDir, candidate)
+	ok, err := isPathWithinRepoRoot(repoRoot, resolved)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve path %q: %w", opts.candidate, err)
+		return "", false, fmt.Errorf("failed to resolve path %q: %w", candidate, err)
 	}
 	if !ok {
-		return "", newHostReadOnlyOutsideRepoPathError(fmt.Sprintf("blocked path %q is outside repository root", opts.candidate))
+		return resolved, true, nil
 	}
+	return resolved, false, nil
+}
 
-	if !opts.evaluateSymlink {
-		return resolved, nil
-	}
-
-	evaluated, err := filepath.EvalSymlinks(resolved)
+func checkSymlinkResolutionWithinRepoRoot(repoRoot, resolvedPath string) (outsideRepo bool, err error) {
+	evaluated, err := filepath.EvalSymlinks(resolvedPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return resolved, nil
+			return false, nil
 		}
 		// 解決不能 path は lexical 判定で許可し、実行時にコマンド側の失敗へ委ねる。
-		return resolved, nil
+		return false, nil
 	}
 
-	ok, err = isPathWithinRepoRoot(opts.repoRoot, filepath.Clean(evaluated))
+	ok, err := isPathWithinRepoRoot(repoRoot, filepath.Clean(evaluated))
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve symlink for %q: %w", opts.candidate, err)
+		return false, fmt.Errorf("failed to resolve symlink for %q: %w", resolvedPath, err)
 	}
 	if !ok {
-		return "", newHostReadOnlyOutsideRepoPathError(fmt.Sprintf("blocked path %q resolves outside repository root", opts.candidate))
+		return true, nil
 	}
-
-	return resolved, nil
+	return false, nil
 }
 
 // resolvePathWithinRepoRoot は lexical 解決と repo root 内判定を行う。
 func resolvePathWithinRepoRoot(repoRoot, baseDir, candidate string) (string, error) {
-	return resolvePathWithinRepoRootWithOptions(hostReadOnlyPathResolveOptions{
-		repoRoot:        repoRoot,
-		baseDir:         baseDir,
-		candidate:       candidate,
-		evaluateSymlink: false,
-	})
+	resolved, outside, err := resolvePathWithinRepoRootLexically(repoRoot, baseDir, candidate)
+	if err != nil {
+		return "", err
+	}
+	if outside {
+		return "", newHostReadOnlyOutsideRepoPathError(fmt.Sprintf("blocked path %q is outside repository root", candidate))
+	}
+	return resolved, nil
 }
 
 // resolvePathWithinRepoRootWithSymlinkCheck は存在する path に対して symlink 解決後も repo root 内を保証する。
 func resolvePathWithinRepoRootWithSymlinkCheck(repoRoot, baseDir, candidate string) (string, error) {
-	return resolvePathWithinRepoRootWithOptions(hostReadOnlyPathResolveOptions{
-		repoRoot:        repoRoot,
-		baseDir:         baseDir,
-		candidate:       candidate,
-		evaluateSymlink: true,
-	})
+	resolved, outside, err := resolvePathWithinRepoRootLexically(repoRoot, baseDir, candidate)
+	if err != nil {
+		return "", err
+	}
+	if outside {
+		return "", newHostReadOnlyOutsideRepoPathError(fmt.Sprintf("blocked path %q is outside repository root", candidate))
+	}
+
+	outside, err = checkSymlinkResolutionWithinRepoRoot(repoRoot, resolved)
+	if err != nil {
+		return "", err
+	}
+	if outside {
+		return "", newHostReadOnlyOutsideRepoPathError(fmt.Sprintf("blocked path %q resolves outside repository root", candidate))
+	}
+
+	return resolved, nil
 }

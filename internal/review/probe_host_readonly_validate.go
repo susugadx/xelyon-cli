@@ -48,7 +48,7 @@ func (e *hostReadOnlyExecutor) buildHostReadOnlyCommandPlan(cmd ReviewProbeComma
 		return hostReadOnlyCommand{}, err
 	}
 
-	if _, err := analyzeAndValidateHostReadOnlyCommandPaths(e.repoRoot, workDir, commandName, cmd.Args); err != nil {
+	if _, err := planHostReadOnlyCommand(e.repoRoot, workDir, commandName, cmd.Args); err != nil {
 		return hostReadOnlyCommand{}, err
 	}
 

@@ -31,7 +31,6 @@ func (r *ProbeRunner) Run(ctx context.Context, req ReviewProbeRequest) (ReviewPr
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	req = normalizeProbeRequestExecutionLimits(req)
 
 	repoRoot, err := r.resolveRepoRoot()
 	if err != nil {

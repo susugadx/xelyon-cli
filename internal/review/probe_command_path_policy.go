@@ -1,41 +1,27 @@
 package review
 
-import (
-	"errors"
-)
+import "errors"
 
 func validateHostReadOnlyCommandPathPolicy(repoRoot, workDir, command string, args []string) error {
-	_, err := analyzeAndValidateHostReadOnlyCommandPaths(repoRoot, workDir, command, args)
+	_, err := planHostReadOnlyCommand(repoRoot, workDir, command, args)
 	return err
 }
 
-func analyzeAndValidateHostReadOnlyCommandPaths(repoRoot, workDir, command string, args []string) ([]string, error) {
+func planHostReadOnlyCommand(repoRoot, workDir, command string, args []string) (analyzedHostReadOnlyCommand, error) {
 	analyzed, err := analyzeHostReadOnlyCommand(command, args)
 	if err != nil {
-		return nil, err
+		return analyzedHostReadOnlyCommand{}, err
 	}
 	if err := validateHostReadOnlyCommandPathArgs(repoRoot, workDir, command, analyzed.pathArgs); err != nil {
-		return nil, err
+		return analyzedHostReadOnlyCommand{}, err
 	}
-	return analyzed.pathArgs, nil
+	return analyzed, nil
 }
 
 func validateHostReadOnlyCommandPathArgs(repoRoot, workDir, command string, pathArgs []string) error {
 	for _, pathArg := range pathArgs {
 		if err := validateHostReadOnlyPathArgWithinRepo(repoRoot, workDir, command, pathArg); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-func extractArgsAfterDoubleDash(args []string) []string {
-	for i, arg := range args {
-		if arg == "--" {
-			if i+1 >= len(args) {
-				return nil
-			}
-			return append([]string(nil), args[i+1:]...)
 		}
 	}
 	return nil

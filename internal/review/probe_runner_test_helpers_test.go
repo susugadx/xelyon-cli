@@ -4,13 +4,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 const (
 	probeTestModulePath = "example.com/reviewprobe"
-	probeTestGoVersion  = "1.26.0"
 )
 
 type probeTestRepoConfig struct {
@@ -70,7 +70,37 @@ func writeProbeTestScaffoldFiles(t *testing.T, repo string, cfg probeTestRepoCon
 func writeProbeTestGoMod(t *testing.T, repo string) {
 	t.Helper()
 
-	writeTestFile(t, filepath.Join(repo, "go.mod"), "module "+probeTestModulePath+"\n\ngo "+probeTestGoVersion+"\n")
+	writeTestFile(t, filepath.Join(repo, "go.mod"), "module "+probeTestModulePath+"\n\ngo "+readRepositoryGoVersionForProbeTests(t)+"\n")
+}
+
+func readRepositoryGoVersionForProbeTests(t *testing.T) string {
+	t.Helper()
+
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
+	goModPath := filepath.Join(repoRoot, "go.mod")
+	content, err := os.ReadFile(goModPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", goModPath, err)
+	}
+
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "go ") {
+			continue
+		}
+		fields := strings.Fields(trimmed)
+		if len(fields) >= 2 && fields[1] != "" {
+			return fields[1]
+		}
+	}
+
+	t.Fatalf("go directive not found in %q", goModPath)
+	return ""
 }
 
 func writeProbeTestPackageFiles(t *testing.T, repo string) {
