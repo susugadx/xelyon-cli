@@ -13,6 +13,8 @@ const (
 	ActionDispatchAgent Action = iota
 	// ActionCopyMouseSelection は mouse selection をコピーする TUI ローカル処理を表す。
 	ActionCopyMouseSelection
+	// ActionManageAttachments は composer 添付を操作する TUI ローカル処理を表す。
+	ActionManageAttachments
 	// ActionQuit は TUI を終了する処理を表す。
 	ActionQuit
 	// ActionOpenConfig は TUI config screen を開く処理を表す。
@@ -39,10 +41,22 @@ func Route(command slash.Command, ctx Context) Action {
 	if command.IsBare("/config") {
 		return ActionOpenConfig
 	}
+	if action, ok := routeAttachmentCommand(command); ok {
+		return action
+	}
 	if action, ok := routeCatalogTUILocalCommand(command); ok {
 		return action
 	}
 	return ActionDispatchAgent
+}
+
+func routeAttachmentCommand(command slash.Command) (Action, bool) {
+	switch command.ResolvedName {
+	case "/attach", "/detach", "/detach-all":
+		return ActionManageAttachments, true
+	default:
+		return ActionDispatchAgent, false
+	}
 }
 
 func routeCatalogTUILocalCommand(command slash.Command) (Action, bool) {

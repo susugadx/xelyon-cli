@@ -267,4 +267,8 @@ func TestComposer_AttachmentRowsRespectFooterBudgetWithComposerRows(t *testing.T
 	if got := len(m.visibleAttachments()); got != 5 {
 		t.Fatalf("visibleAttachments length = %d, want 5 (remaining footer budget)", got)
 	}
+	dock := stripANSI(m.renderInputDock())
+	if !strings.Contains(dock, "#16") || !strings.Contains(dock, "#20") {
+		t.Fatalf("renderInputDock() should keep global attachment numbering, got %q", dock)
+	}
 }

@@ -73,6 +73,26 @@ func TestRoute_TUILocalCommands(t *testing.T) {
 			input: "/project rules",
 			want:  ActionDispatchAgent,
 		},
+		{
+			name:  "attach with args is local",
+			input: "/attach ./notes.txt",
+			want:  ActionManageAttachments,
+		},
+		{
+			name:  "detach with args is local",
+			input: "/detach 2",
+			want:  ActionManageAttachments,
+		},
+		{
+			name:  "detach-all bare is local",
+			input: "/detach-all",
+			want:  ActionManageAttachments,
+		},
+		{
+			name:  "detach-all with args still local",
+			input: "/detach-all now",
+			want:  ActionManageAttachments,
+		},
 	}
 
 	for _, tt := range tests {
@@ -99,8 +119,16 @@ func TestRoute_CatalogTUILocalOwnerMatrix(t *testing.T) {
 
 			withArgsInput := cmdInfo.Name + " extra"
 			withArgs := slash.NewCommand(withArgsInput, withArgsInput, nil)
-			if got := Route(withArgs, Context{}); got != ActionDispatchAgent {
-				t.Fatalf("Route(%q) = %v, want ActionDispatchAgent", withArgsInput, got)
+			gotWithArgs := Route(withArgs, Context{})
+			switch cmdInfo.Name {
+			case "/attach", "/detach", "/detach-all":
+				if gotWithArgs != ActionManageAttachments {
+					t.Fatalf("Route(%q) = %v, want ActionManageAttachments", withArgsInput, gotWithArgs)
+				}
+			default:
+				if gotWithArgs != ActionDispatchAgent {
+					t.Fatalf("Route(%q) = %v, want ActionDispatchAgent", withArgsInput, gotWithArgs)
+				}
 			}
 		})
 	}

@@ -19,6 +19,7 @@ const (
 	composerAttachmentSourceUnknown composerAttachmentSource = iota
 	composerAttachmentSourceDroppedPath
 	composerAttachmentSourceClipboardImage
+	composerAttachmentSourceCommand
 )
 
 type composerAttachment struct {
@@ -82,13 +83,46 @@ func (m *Model) removeLastAttachment() bool {
 	if len(m.attachments) == 0 {
 		return false
 	}
-	removed := m.attachments[len(m.attachments)-1]
-	m.attachments = slices.Delete(m.attachments, len(m.attachments)-1, len(m.attachments))
+	return m.removeAttachmentAt(len(m.attachments) - 1)
+}
+
+func (m *Model) removeAttachmentAt(index int) bool {
+	if index < 0 || index >= len(m.attachments) {
+		return false
+	}
+	removed := m.attachments[index]
+	m.attachments = slices.Delete(m.attachments, index, index+1)
 	cleanupTemporaryAttachment(removed)
 	m.syncComposerLayout()
 	m.refreshSlashSuggestions()
 	m.chromeDirty = true
 	return true
+}
+
+func (m *Model) clearAllAttachments() bool {
+	if len(m.attachments) == 0 {
+		return false
+	}
+	m.clearAttachments()
+	m.syncComposerLayout()
+	m.refreshSlashSuggestions()
+	m.chromeDirty = true
+	return true
+}
+
+func (m Model) visibleAttachmentStartIndex() int {
+	if len(m.attachments) == 0 {
+		return 0
+	}
+	maxVisible := m.maxVisibleAttachmentRows()
+	if maxVisible <= 0 || len(m.attachments) <= maxVisible {
+		return 0
+	}
+	return len(m.attachments) - maxVisible
+}
+
+func (m Model) visibleAttachmentNumber(visibleIndex int) int {
+	return m.visibleAttachmentStartIndex() + visibleIndex + 1
 }
 
 func (m Model) maxVisibleAttachmentRows() int {

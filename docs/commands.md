@@ -119,6 +119,32 @@ TUI では入力欄で `/` または `/r` のような prefix を入力すると
 > /copy
 ```
 
+### `/attach`
+
+TUI で現在の入力ドラフトにファイルまたは画像を 1 件添付します。パスに空白がある場合は引用符で囲みます。
+
+```
+> /attach ./notes.txt
+> /attach "screenshots/error shot.png"
+```
+
+### `/detach`
+
+添付を番号指定で 1 件外します。番号は入力欄上部の添付行に表示される `#<n>` です。
+
+```
+> /detach 2
+> /detach #2
+```
+
+### `/detach-all`
+
+現在の入力ドラフトにある添付をすべて外します。
+
+```
+> /detach-all
+```
+
 ### `/review`
 
 TUIモードで、現在の変更レビュー用の preset 画面を開きます。
@@ -295,6 +321,13 @@ TUI で project config (`xelyon.yaml`) の編集画面を開きます。global c
 - `final_checks.timeout`（`final_checks.commands` がある場合）
 
 `conditional` は現時点では preview のみです。`xelyon.yaml` がない場合は、画面内でテンプレートを作成できます。
+
+## TUI 添付の補足
+
+- ドラッグ&ドロップでファイルパスを貼り付けると自動添付されます（最大 12 件）。
+- `Ctrl+V` は通常テキスト貼り付けですが、クリップボードテキストが空の場合は画像貼り付けを試みます（Windows/WSL）。
+- 送信時、画像はマルチモーダル入力として送信し、ファイルは `Attached context` として本文へ展開されます。
+- クリップボード画像の一時ファイルは、送信・detach・終了時に削除されます。異常終了で残った古い一時ディレクトリは起動時に自動GCされます（24時間超）。
 
 ### `/plan`
 

@@ -101,6 +101,15 @@ func TestSurfaceFiltering(t *testing.T) {
 	if strings.Contains(classicHelp, "/project") {
 		t.Fatalf("classic help should not include TUI-only /project:\n%s", classicHelp)
 	}
+	if strings.Contains(classicHelp, "/attach") {
+		t.Fatalf("classic help should not include TUI-only /attach:\n%s", classicHelp)
+	}
+	if strings.Contains(classicHelp, "/detach") {
+		t.Fatalf("classic help should not include TUI-only /detach:\n%s", classicHelp)
+	}
+	if strings.Contains(classicHelp, "/detach-all") {
+		t.Fatalf("classic help should not include TUI-only /detach-all:\n%s", classicHelp)
+	}
 	if !strings.Contains(classicHelp, "/lsp") {
 		t.Fatalf("classic help should include legacy /lsp:\n%s", classicHelp)
 	}
@@ -117,10 +126,15 @@ func TestSurfaceFiltering(t *testing.T) {
 	if !strings.Contains(tuiHelp, "/project") {
 		t.Fatalf("TUI help should include /project:\n%s", tuiHelp)
 	}
+	for _, cmd := range []string{"/attach", "/detach", "/detach-all"} {
+		if !strings.Contains(tuiHelp, cmd) {
+			t.Fatalf("TUI help should include %s:\n%s", cmd, tuiHelp)
+		}
+	}
 }
 
 func TestTUILocalCommandOwnership(t *testing.T) {
-	for _, name := range []string{"/review", "/project"} {
+	for _, name := range []string{"/review", "/project", "/attach", "/detach", "/detach-all"} {
 		t.Run(name, func(t *testing.T) {
 			cmd, ok := Find(name)
 			if !ok {
@@ -233,6 +247,9 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/project",
 		"/config",
 		"/copy",
+		"/attach",
+		"/detach",
+		"/detach-all",
 		"/compress",
 		"/plan",
 		"/save",

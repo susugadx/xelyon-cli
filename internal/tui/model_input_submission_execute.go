@@ -40,6 +40,8 @@ func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.C
 		m.recordHandledCommand(command.Input)
 		m.copyMouseSelection()
 		return m, nil
+	case commandrouter.ActionManageAttachments:
+		return m.handleAttachmentCommandSubmission(command)
 	case commandrouter.ActionQuit:
 		m.recordHandledCommand(command.Input)
 		return m.beginQuit()

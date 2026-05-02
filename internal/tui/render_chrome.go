@@ -22,7 +22,7 @@ func (m *Model) renderInputDock() string {
 	lines = append(lines, suggestionRows...)
 	for i, att := range attachments {
 		summary := strings.Replace(
-			m.formatAttachmentSummary(att, i+1),
+			m.formatAttachmentSummary(att, m.visibleAttachmentNumber(i)),
 			"#",
 			chrome.InputPasteID+"#",
 			1,
