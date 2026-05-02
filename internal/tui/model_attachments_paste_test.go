@@ -173,6 +173,48 @@ func TestComposer_PasteTooManyPathsShowsLimitWithoutTextFallback(t *testing.T) {
 	assertTransientStatus(t, m, wantStatus)
 }
 
+func TestComposer_PasteTooManyDuplicatePathsShowsLimitWithoutTextFallback(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	dir := t.TempDir()
+
+	path := writeTempFile(t, dir, "same.txt", []byte("a"))
+	lines := make([]string, 0, maxComposerAttachments+1)
+	for i := 0; i < maxComposerAttachments+1; i++ {
+		lines = append(lines, path)
+	}
+
+	updated, _ := m.Update(pasteKey(strings.Join(lines, "\n")))
+	m = updated.(Model)
+
+	if got := len(m.attachments); got != 0 {
+		t.Fatalf("attachments length = %d, want 0", got)
+	}
+	if got := m.textInput.Value(); got != "" {
+		t.Fatalf("textInput.Value() = %q, want empty", got)
+	}
+	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", maxComposerAttachments)
+	assertTransientStatus(t, m, wantStatus)
+}
+
+func TestComposer_PasteMixedExistingPathAndPlainTextFallsBackToText(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "notes.txt", []byte("x"))
+	payload := path + "\nplain text"
+
+	updated, _ := m.Update(pasteKey(payload))
+	m = updated.(Model)
+
+	if got := len(m.attachments); got != 0 {
+		t.Fatalf("attachments length = %d, want 0", got)
+	}
+	if got := m.buildComposerPayload(); got != payload {
+		t.Fatalf("buildComposerPayload() = %q, want %q", got, payload)
+	}
+}
+
 func TestComposer_PasteNonExistentPathFallsBackToText(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)

@@ -2,13 +2,17 @@ package commandcatalog
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var commandTokenPattern = regexp.MustCompile(`^/[a-z0-9][a-z0-9-]*$`)
 
 // ValidateCommands は catalog 定義の整合性を検証する。
 func ValidateCommands(commands []CommandInfo) error {
 	var problems []string
 	seen := make(map[string]string)
+	discoverableWeights := make(map[CommandSurface]map[int]string)
 
 	for i, cmd := range commands {
 		name := strings.TrimSpace(cmd.Name)
@@ -18,6 +22,9 @@ func ValidateCommands(commands []CommandInfo) error {
 		}
 		if !strings.HasPrefix(name, "/") {
 			problems = append(problems, fmt.Sprintf("%s: command name must start with '/'", name))
+		}
+		if !isValidCommandToken(name) {
+			problems = append(problems, fmt.Sprintf("%s: command name must match %s", name, commandTokenPattern.String()))
 		}
 		if len(cmd.Surfaces) == 0 {
 			problems = append(problems, fmt.Sprintf("%s: surfaces must be explicitly declared", name))
@@ -31,6 +38,9 @@ func ValidateCommands(commands []CommandInfo) error {
 			}
 			if !strings.HasPrefix(alias, "/") {
 				problems = append(problems, fmt.Sprintf("%s: alias %q must start with '/'", name, alias))
+			}
+			if !isValidCommandToken(alias) {
+				problems = append(problems, fmt.Sprintf("%s: alias %q must match %s", name, alias, commandTokenPattern.String()))
 			}
 			checkCommandTokenDuplication(alias, cmd.Name, seen, &problems)
 		}
@@ -46,6 +56,9 @@ func ValidateCommands(commands []CommandInfo) error {
 		}
 		if !cmd.SupportsSurface(CommandSurfaceTUI) && cmd.Discoverable {
 			problems = append(problems, fmt.Sprintf("%s: non-TUI command should not be discoverable", name))
+		}
+		if cmd.Discoverable {
+			checkDiscoverableSortWeightUniqueness(cmd, discoverableWeights, &problems)
 		}
 	}
 
@@ -69,5 +82,28 @@ func isValidTUILocalArgPolicy(policy TUILocalArgPolicy) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func isValidCommandToken(token string) bool {
+	return commandTokenPattern.MatchString(token)
+}
+
+func checkDiscoverableSortWeightUniqueness(cmd CommandInfo, discoverableWeights map[CommandSurface]map[int]string, problems *[]string) {
+	weight := cmd.EffectiveSortWeight()
+	for _, surface := range cmd.effectiveSurfaces() {
+		weightsBySurface, ok := discoverableWeights[surface]
+		if !ok {
+			weightsBySurface = make(map[int]string)
+			discoverableWeights[surface] = weightsBySurface
+		}
+		if existing, duplicated := weightsBySurface[weight]; duplicated {
+			*problems = append(*problems, fmt.Sprintf(
+				"%s: duplicate discoverable sort weight %d on surface %s (already used by %s)",
+				cmd.Name, weight, surface, existing,
+			))
+			continue
+		}
+		weightsBySurface[weight] = cmd.Name
 	}
 }

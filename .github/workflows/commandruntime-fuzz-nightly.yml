@@ -1,0 +1,31 @@
+name: Commandruntime Fuzz Nightly
+
+on:
+  schedule:
+    # 毎日 03:35 UTC（JST 12:35）
+    - cron: "35 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  fuzz-split-strict:
+    name: Fuzz SplitStrict
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve Go version
+        id: go-version
+        run: |
+          version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); toolchain = $2 } $1 == "go" && !gover { gover = $2 } END { print toolchain ? toolchain : gover }' go.mod)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go-version.outputs.version }}
+
+      - name: Run SplitStrict fuzz test
+        run: go test ./internal/commandruntime -run '^$' -fuzz=FuzzSplitStrict -fuzztime=10m -count=1

@@ -81,6 +81,22 @@ go test ./...
 golangci-lint run
 ```
 
+### Slash候補順序の更新フロー
+`internal/commandcatalog` の `SortWeight` や discoverable 設定を変更した場合は、slash候補順序のゴールデンテストも確認してください。
+
+```bash
+go test ./internal/tui/slash -run TestSuggestions_GoldenOrderForRootPrefix -count=1
+```
+
+失敗した場合は、`internal/tui/slash/command_suggestions_golden_test.go` の `want` 順序を意図した並びに更新し、変更理由をPR説明に記載してください。
+
+### `SplitStrict` fuzz のローカル確認（任意）
+`commandruntime.SplitStrict` に変更を入れた場合は、短時間でも fuzz を回すことを推奨します。
+
+```bash
+go test ./internal/commandruntime -run '^$' -fuzz=FuzzSplitStrict -fuzztime=30s -count=1
+```
+
 ### 設定を追加・変更した場合
 設定オプションを追加・変更した場合は、以下を実行してドキュメントを更新してください：
 
