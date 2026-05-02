@@ -58,39 +58,24 @@ func SplitStrict(input string) ([]string, SplitStatus) {
 			// token 先頭、または語中でも対応する閉じ quote がある場合は quote セグメントとして扱う。
 			// これにより foo'bar baz' のような shell-style 結合を維持しつつ、
 			// don't のように閉じ quote がない語中 apostrophe は文字として保持できる。
-			if shouldStartQuoteSegment(current.Len(), runes, i+1, r) {
+			if shouldStartQuoteSegment(current.Len(), runes, i, r) {
 				inQuote = true
 				quoteChar = r
 				continue
 			}
 			current.WriteRune(r)
 		case r == '\\' && inQuote:
-			// quoted string では quote だけをエスケープ対象として扱う。
-			// `\\` を縮退させると UNC path 先頭が壊れるため、`\` 自体は保持する。
-			if i+1 < len(runes) {
-				next := runes[i+1]
-				if next == quoteChar {
-					current.WriteRune(next)
-					i++
-					continue
-				}
-			}
-			current.WriteRune('\\')
+			i = consumeQuotedEscapeRune(runes, i, quoteChar, &current)
 		case r == quoteChar && inQuote:
 			inQuote = false
 			quoteChar = 0
-		case unicode.IsSpace(r) && !inQuote:
-			if current.Len() > 0 {
-				parts = append(parts, current.String())
-				current.Reset()
-			}
+		case shouldSplitOnWhitespace(r, inQuote):
+			flushCurrentToken(&parts, &current)
 		default:
 			current.WriteRune(r)
 		}
 	}
-	if current.Len() > 0 {
-		parts = append(parts, current.String())
-	}
+	flushCurrentToken(&parts, &current)
 	if inQuote {
 		return parts, SplitStatusUnterminatedQuote
 	}
@@ -101,17 +86,32 @@ func isQuoteRune(r rune) bool {
 	return r == '"' || r == '\''
 }
 
-func shouldStartQuoteSegment(currentTokenLen int, runes []rune, start int, quote rune) bool {
-	return currentTokenLen == 0 || hasClosingQuoteAhead(runes, start, quote)
+func shouldSplitOnWhitespace(r rune, inQuote bool) bool {
+	return unicode.IsSpace(r) && !inQuote
 }
 
-func hasClosingQuoteAhead(runes []rune, start int, quote rune) bool {
-	for i := start; i < len(runes); i++ {
-		if runes[i] == quote {
-			return true
-		}
+func flushCurrentToken(parts *[]string, current *strings.Builder) {
+	if current.Len() == 0 {
+		return
 	}
-	return false
+	*parts = append(*parts, current.String())
+	current.Reset()
+}
+
+func consumeQuotedEscapeRune(runes []rune, index int, quoteChar rune, current *strings.Builder) int {
+	// quoted string では quote だけをエスケープ対象として扱う。
+	// `\\` を縮退させると UNC path 先頭が壊れるため、`\` 自体は保持する。
+	if index+1 >= len(runes) {
+		current.WriteRune('\\')
+		return index
+	}
+	next := runes[index+1]
+	if next == quoteChar {
+		current.WriteRune(next)
+		return index + 1
+	}
+	current.WriteRune('\\')
+	return index
 }
 
 // Parse は input を分割し、先頭 command を alias 解決した Invocation にする。

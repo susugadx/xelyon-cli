@@ -68,6 +68,36 @@ func TestSplitStrict_QuoteGroupAfterTokenPrefixStaysSingleToken(t *testing.T) {
 	}
 }
 
+func TestSplitStrict_QuoteGroupAfterTokenPrefixWithSuffixStaysSingleToken(t *testing.T) {
+	parts, status := SplitStrict(`/note foo'bar baz'qux`)
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 2 || parts[0] != "/note" || parts[1] != "foobar bazqux" {
+		t.Fatalf("parts = %#v, want [/note foobar bazqux]", parts)
+	}
+}
+
+func TestSplitStrict_QuoteGroupAfterTokenPrefixWithTrailingToken(t *testing.T) {
+	parts, status := SplitStrict(`/note foo'bar baz' qux`)
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 3 || parts[0] != "/note" || parts[1] != "foobar baz" || parts[2] != "qux" {
+		t.Fatalf("parts = %#v, want [/note foobar baz qux]", parts)
+	}
+}
+
+func TestSplitStrict_ApostrophesInMultipleWordsStayLiteral(t *testing.T) {
+	parts, status := SplitStrict(`/note don't it's`)
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 3 || parts[0] != "/note" || parts[1] != "don't" || parts[2] != "it's" {
+		t.Fatalf("parts = %#v, want [/note don't it's]", parts)
+	}
+}
+
 func TestSplitStrict_QuotedWindowsPathKeepsBackslashes(t *testing.T) {
 	input := `/attach "C:\Users\me\file with space.txt"`
 	parts, status := SplitStrict(input)
