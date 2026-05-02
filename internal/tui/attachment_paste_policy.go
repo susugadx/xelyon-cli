@@ -2,6 +2,10 @@ package tui
 
 import "strings"
 
+type pathCandidateContext struct {
+	allowSingleBareRelative bool
+}
+
 // looksLikePastedPathCandidate は paste 文字列を path 解釈するかどうかの policy owner。
 func looksLikePastedPathCandidate(token string) bool {
 	trimmed := trimPathQuotes(strings.TrimSpace(token))
@@ -33,6 +37,28 @@ func looksLikePastedPathCandidate(token string) bool {
 	}
 }
 
+func resolvePathCandidateToken(token string, ctx pathCandidateContext) (string, bool) {
+	normalizedToken := trimPathQuotes(strings.TrimSpace(token))
+	if normalizedToken == "" {
+		return "", false
+	}
+	if looksLikePastedPathCandidate(normalizedToken) {
+		normalized := normalizePastedPathToken(normalizedToken)
+		if !normalized.isOK() {
+			return "", false
+		}
+		return normalized.path, true
+	}
+	if !ctx.allowSingleBareRelative || !looksLikeSingleBareRelativePathCandidate(normalizedToken) {
+		return "", false
+	}
+	normalized := normalizePastedPathToken(normalizedToken)
+	if !normalized.isOK() || !isAttachablePath(normalized.path) {
+		return "", false
+	}
+	return normalized.path, true
+}
+
 func looksLikeBareRelativeFilename(token string) bool {
 	if token == "." || token == ".." {
 		return false
@@ -41,6 +67,22 @@ func looksLikeBareRelativeFilename(token string) bool {
 		return false
 	}
 	return strings.Contains(token, ".")
+}
+
+func looksLikeSingleBareRelativePathCandidate(token string) bool {
+	if token == "." || token == ".." {
+		return false
+	}
+	if strings.ContainsAny(token, `/\`) || strings.Contains(token, ".") {
+		return false
+	}
+	if strings.Contains(token, "://") {
+		return false
+	}
+	if strings.ContainsAny(token, " \t\r\n") {
+		return false
+	}
+	return true
 }
 
 func hasNonFileURIScheme(raw string) bool {

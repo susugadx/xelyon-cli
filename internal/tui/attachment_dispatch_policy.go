@@ -18,14 +18,7 @@ func resolveDispatchBasePrompt(trimmedPayload string, imagePath string, attachme
 	if trimmedPayload != "" {
 		return trimmedPayload
 	}
-	switch {
-	case imagePath != "":
-		return "Please analyze this image."
-	case attachmentCount > 0:
-		return "添付ファイルを確認して、要点をまとめてください。"
-	default:
-		return ""
-	}
+	return fallbackDispatchPrompt(imagePath, attachmentCount)
 }
 
 func buildDispatchInput(basePrompt string, contextBlocks []string) string {
@@ -34,9 +27,9 @@ func buildDispatchInput(basePrompt string, contextBlocks []string) string {
 		return finalInput
 	}
 	if finalInput == "" {
-		finalInput = "以下の添付コンテキストを確認してください。"
+		finalInput = dispatchDefaultContextPromptJP
 	}
-	return finalInput + "\n\nAttached context:\n" + strings.Join(contextBlocks, "\n\n")
+	return finalInput + "\n\n" + dispatchContextSectionTitle + "\n" + strings.Join(contextBlocks, "\n\n")
 }
 
 func buildDispatchDisplay(trimmedPayload string, basePrompt string, attachments []composerAttachment) string {

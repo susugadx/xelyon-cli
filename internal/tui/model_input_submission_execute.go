@@ -35,29 +35,26 @@ func (m Model) submitComposerSubmission(sub composerSubmission) (tea.Model, tea.
 
 func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.Cmd) {
 	command := m.resolveComposerCommand(sub)
-	action := commandrouter.Route(command, commandrouter.Context{HasMouseSelection: m.hasActiveMouseSelection()})
+	decision := decideCommandSubmission(command, m.hasActiveMouseSelection())
 
-	if !command.ParseOK() {
-		if _, isLocal := localCommandActionHandlers[action]; isLocal {
-			m.recordHandledCommand(command.Input)
-			m.setTransientStatus("Invalid command syntax: " + command.ParseStatus.ErrorSummary())
-			return m, nil
-		}
-		return m.commandFallbackToChat(sub, command.Payload)
-	}
-
-	if handler, ok := localCommandActionHandlers[action]; ok {
+	switch decision.kind {
+	case commandSubmissionDecisionLocalSyntaxError:
+		m.recordHandledCommand(command.Input)
+		m.setTransientStatus("Invalid command syntax: " + decision.errorDetail)
+		return m, nil
+	case commandSubmissionDecisionLocalAction:
+		handler := localCommandActionHandlers[decision.action]
 		return handler(m, command, sub)
-	}
-	if action == commandrouter.ActionDispatchAgent {
+	case commandSubmissionDecisionDispatchAgent:
 		if m.commands.HandleCommand(command.Input) {
 			m.recordHandledCommand(command.Input)
 			m.statusLine = m.conversation.GetStatusLine()
 			return m, nil
 		}
+		return m.commandFallbackToChat(sub, command.Payload)
+	default:
+		return m.commandFallbackToChat(sub, command.Payload)
 	}
-
-	return m.commandFallbackToChat(sub, command.Payload)
 }
 
 type localCommandActionHandler func(Model, slash.Command, composerSubmission) (tea.Model, tea.Cmd)

@@ -9,21 +9,44 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
+type attachmentCommandKind int
+
+const (
+	attachmentCommandUnknown attachmentCommandKind = iota
+	attachmentCommandAttach
+	attachmentCommandDetach
+	attachmentCommandDetachAll
+)
+
 func (m Model) handleAttachmentCommandSubmission(command slash.Command) (tea.Model, tea.Cmd) {
 	m.recordHandledCommand(command.Input)
 
-	switch command.ResolvedName {
-	case "/attach":
+	switch classifyAttachmentCommand(command.ResolvedName) {
+	case attachmentCommandAttach:
 		m.handleAttachCommand(command)
-	case "/detach":
+	case attachmentCommandDetach:
 		m.handleDetachCommand(command)
-	case "/detach-all":
+	case attachmentCommandDetachAll:
 		m.handleDetachAllCommand(command)
 	default:
 		m.setTransientStatus("Unsupported attachment command: " + command.Input)
+		return m, nil
 	}
 
 	return m, nil
+}
+
+func classifyAttachmentCommand(name string) attachmentCommandKind {
+	switch name {
+	case "/attach":
+		return attachmentCommandAttach
+	case "/detach":
+		return attachmentCommandDetach
+	case "/detach-all":
+		return attachmentCommandDetachAll
+	default:
+		return attachmentCommandUnknown
+	}
 }
 
 func (m *Model) handleAttachCommand(command slash.Command) {

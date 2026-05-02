@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 )
@@ -103,10 +102,17 @@ func TestParseDroppedPaths_InvalidMalformedFileURI(t *testing.T) {
 	}
 }
 
-func TestParseDroppedPaths_InvalidUnterminatedQuote(t *testing.T) {
+func TestParseDroppedPaths_UnterminatedQuoteFallsBackToText(t *testing.T) {
 	result := parseDroppedPaths(`"/tmp/file.txt`)
-	if result.kind != droppedPathParseInvalid {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseInvalid", result.kind)
+	if result.kind != droppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	}
+}
+
+func TestParseDroppedPaths_ApostropheTextFallsBackToText(t *testing.T) {
+	result := parseDroppedPaths("don't panic")
+	if result.kind != droppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
 	}
 }
 
@@ -121,17 +127,7 @@ func TestDroppedPathLines_TrimsAndSkipsEmptyLines(t *testing.T) {
 }
 
 func TestParseDroppedPaths_BareRelativeFilenameRecognized(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("os.Getwd() error = %v", err)
-	}
-	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("os.Chdir(%q) error = %v", dir, err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(cwd)
-	})
+	dir := withTempWorkingDir(t)
 
 	tests := []struct {
 		name      string
@@ -153,6 +149,38 @@ func TestParseDroppedPaths_BareRelativeFilenameRecognized(t *testing.T) {
 			}
 			if result.paths[0] != path {
 				t.Fatalf("parseDroppedPaths().paths[0] = %q, want %q", result.paths[0], path)
+			}
+		})
+	}
+}
+
+func TestParseDroppedPaths_BareRelativeWordWithoutExistingFileFallsBackToText(t *testing.T) {
+	_ = withTempWorkingDir(t)
+
+	result := parseDroppedPaths("README")
+	if result.kind != droppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	}
+}
+
+func TestDecideDroppedPathHandling(t *testing.T) {
+	dir := withTempWorkingDir(t)
+	existing := writeTempFile(t, dir, "notes.txt", []byte("hello"))
+
+	tests := []struct {
+		name string
+		text string
+		want droppedPathDecisionKind
+	}{
+		{name: "plain text", text: "hello world", want: droppedPathDecisionFallbackText},
+		{name: "existing path", text: existing, want: droppedPathDecisionApplyCandidates},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision := decideDroppedPathHandling(tt.text)
+			if decision.kind != tt.want {
+				t.Fatalf("decision.kind = %v, want %v", decision.kind, tt.want)
 			}
 		})
 	}

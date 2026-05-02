@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
@@ -15,17 +14,11 @@ const (
 	droppedPathParseNotPath droppedPathParseKind = iota
 	droppedPathParseReady
 	droppedPathParseLimit
-	droppedPathParseInvalid
 )
 
 type droppedPathParseResult struct {
 	kind  droppedPathParseKind
 	paths []string
-}
-
-type pastedPathTokenParseResult struct {
-	tokens  []string
-	invalid bool
 }
 
 func parseDroppedPaths(content string) droppedPathParseResult {
@@ -87,54 +80,29 @@ func collectDroppedPathCandidates(lines []string) ([]string, droppedPathParseKin
 }
 
 func parseDroppedPathLine(line string) ([]string, droppedPathParseKind) {
-	tokenResult := parsePastedPathTokens(line)
-	if tokenResult.invalid {
-		return nil, droppedPathParseInvalid
-	}
-	tokens := tokenResult.tokens
+	tokens := parsePastedPathTokens(line)
 	if len(tokens) == 0 {
 		return nil, droppedPathParseNotPath
 	}
 
-	normalizedPaths := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		if !looksLikePastedPathCandidate(token) {
-			if len(tokens) == 1 {
-				if resolved, ok := resolveSingleBareRelativeFilePath(token); ok {
-					normalizedPaths = append(normalizedPaths, resolved)
-					continue
-				}
-			}
-			return nil, droppedPathParseNotPath
-		}
-		normalized := normalizePastedPathToken(token)
-		if !normalized.isOK() {
-			return nil, droppedPathParseNotPath
-		}
-		normalizedPaths = append(normalizedPaths, normalized.path)
+	normalizedPaths, ok := resolveDroppedPathTokens(tokens)
+	if !ok {
+		return nil, droppedPathParseNotPath
 	}
 	return normalizedPaths, droppedPathParseReady
 }
 
-func resolveSingleBareRelativeFilePath(token string) (string, bool) {
-	trimmed := trimPathQuotes(strings.TrimSpace(token))
-	if trimmed == "" || trimmed == "." || trimmed == ".." {
-		return "", false
+func resolveDroppedPathTokens(tokens []string) ([]string, bool) {
+	normalizedPaths := make([]string, 0, len(tokens))
+	ctx := pathCandidateContext{allowSingleBareRelative: len(tokens) == 1}
+	for _, token := range tokens {
+		resolved, ok := resolvePathCandidateToken(token, ctx)
+		if !ok {
+			return nil, false
+		}
+		normalizedPaths = append(normalizedPaths, resolved)
 	}
-	if strings.ContainsAny(trimmed, `/\`) || strings.Contains(trimmed, ".") {
-		return "", false
-	}
-
-	normalized := normalizePastedPathToken(trimmed)
-	if !normalized.isOK() {
-		return "", false
-	}
-
-	info, err := os.Stat(normalized.path)
-	if err != nil || info.IsDir() {
-		return "", false
-	}
-	return normalized.path, true
+	return normalizedPaths, true
 }
 
 func dedupeDroppedPathCandidates(candidates []string) []string {
@@ -150,16 +118,16 @@ func dedupeDroppedPathCandidates(candidates []string) []string {
 	return dedup
 }
 
-func parsePastedPathTokens(line string) pastedPathTokenParseResult {
+func parsePastedPathTokens(line string) []string {
 	if strings.Contains(line, `\ `) {
-		return pastedPathTokenParseResult{tokens: []string{line}}
+		return []string{line}
 	}
 	tokens, status := commandruntime.SplitStrict(line)
 	if !status.IsOK() {
-		return pastedPathTokenParseResult{invalid: true}
+		return []string{line}
 	}
 	if len(tokens) > 0 {
-		return pastedPathTokenParseResult{tokens: tokens}
+		return tokens
 	}
-	return pastedPathTokenParseResult{tokens: []string{line}}
+	return []string{line}
 }

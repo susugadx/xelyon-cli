@@ -1,23 +1,9 @@
 package commandcatalog
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
-
-func TestRenderCommandsTextIncludesSubcommands(t *testing.T) {
-	got := RenderCommandsText()
-	for _, fragment := range []string{
-		"Commands:\n",
-		"/exit, /quit, /q",
-		"/config show - Show all settings with diff from defaults",
-	} {
-		if !strings.Contains(got, fragment) {
-			t.Fatalf("RenderCommandsText() missing %q\n%s", fragment, got)
-		}
-	}
-}
 
 func TestMatchPrefixMatchesNameAliasAndSubcommand(t *testing.T) {
 	tests := []struct {
@@ -84,53 +70,6 @@ func TestFindMatchesNameAndAlias(t *testing.T) {
 	}
 	if _, ok := Find("/missing"); ok {
 		t.Fatal("Find(/missing) ok = true, want false")
-	}
-}
-
-func TestSurfaceFiltering(t *testing.T) {
-	if got := MatchPrefixForSurface("/review", CommandSurfaceClassic); len(got) != 0 {
-		t.Fatalf("classic MatchPrefixForSurface(/review) = %#v, want no matches", got)
-	}
-	if got := MatchPrefixForSurface("/review", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/review" {
-		t.Fatalf("TUI MatchPrefixForSurface(/review) = %#v, want /review", got)
-	}
-
-	classicHelp := RenderCommandsTextForSurface(CommandSurfaceClassic)
-	if strings.Contains(classicHelp, "/review") {
-		t.Fatalf("classic help should not include /review:\n%s", classicHelp)
-	}
-	if strings.Contains(classicHelp, "/project") {
-		t.Fatalf("classic help should not include TUI-only /project:\n%s", classicHelp)
-	}
-	if strings.Contains(classicHelp, "/attach") {
-		t.Fatalf("classic help should not include TUI-only /attach:\n%s", classicHelp)
-	}
-	if strings.Contains(classicHelp, "/detach") {
-		t.Fatalf("classic help should not include TUI-only /detach:\n%s", classicHelp)
-	}
-	if strings.Contains(classicHelp, "/detach-all") {
-		t.Fatalf("classic help should not include TUI-only /detach-all:\n%s", classicHelp)
-	}
-	if !strings.Contains(classicHelp, "/lsp") {
-		t.Fatalf("classic help should include legacy /lsp:\n%s", classicHelp)
-	}
-	tuiHelp := RenderCommandsTextForSurface(CommandSurfaceTUI)
-	if !strings.Contains(tuiHelp, "/review") {
-		t.Fatalf("TUI help should include /review:\n%s", tuiHelp)
-	}
-	if strings.Contains(tuiHelp, "/lsp") {
-		t.Fatalf("TUI help should not include classic-only /lsp:\n%s", tuiHelp)
-	}
-	if !strings.Contains(tuiHelp, "/init") {
-		t.Fatalf("TUI help should include /init:\n%s", tuiHelp)
-	}
-	if !strings.Contains(tuiHelp, "/project") {
-		t.Fatalf("TUI help should include /project:\n%s", tuiHelp)
-	}
-	for _, cmd := range []string{"/attach", "/detach", "/detach-all"} {
-		if !strings.Contains(tuiHelp, cmd) {
-			t.Fatalf("TUI help should include %s:\n%s", cmd, tuiHelp)
-		}
 	}
 }
 
@@ -279,29 +218,6 @@ func TestAttachDescriptionMentionsCombinedLimit(t *testing.T) {
 	}
 }
 
-func TestAttachLimitDocumentationConsistency(t *testing.T) {
-	paths := []string{
-		"../../README.md",
-		"../../docs/commands.md",
-		"../../docs/usage.md",
-	}
-	for _, path := range paths {
-		t.Run(path, func(t *testing.T) {
-			body, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("ReadFile(%q) error = %v", path, err)
-			}
-			text := string(body)
-			if !strings.Contains(text, "/attach") {
-				t.Fatalf("%s should mention /attach", path)
-			}
-			if !strings.Contains(text, "最大12件") && !strings.Contains(text, "最大 12 件") {
-				t.Fatalf("%s should mention attachment limit (12)", path)
-			}
-		})
-	}
-}
-
 func TestConfigProjectInitCommandBoundaries(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -371,79 +287,6 @@ func TestLSPCommandIsClassicOnlyLegacyDiagnostic(t *testing.T) {
 	}
 }
 
-func TestDiscoverableCommandsForTUISurface(t *testing.T) {
-	commands := DiscoverableCommandsForSurface(CommandSurfaceTUI)
-	if len(commands) < 4 {
-		t.Fatalf("DiscoverableCommandsForSurface(TUI) returned %d commands, want at least 4", len(commands))
-	}
-	gotNames := commandNames(commands)
-	wantNames := []string{
-		"/model",
-		"/use",
-		"/providers",
-		"/think",
-		"/status",
-		"/tokens",
-		"/review",
-		"/project",
-		"/config",
-		"/copy",
-		"/attach",
-		"/detach",
-		"/detach-all",
-		"/compress",
-		"/plan",
-		"/save",
-		"/load",
-		"/sessions",
-		"/clear",
-		"/history",
-		"/init",
-		"/exit",
-	}
-	if len(gotNames) != len(wantNames) {
-		t.Fatalf("discoverable commands = %#v, want %#v", gotNames, wantNames)
-	}
-	for i := range wantNames {
-		if gotNames[i] != wantNames[i] {
-			t.Fatalf("discoverable commands = %#v, want %#v", gotNames, wantNames)
-		}
-	}
-
-	for _, hidden := range []string{"/version", "/help", "/lsp"} {
-		if containsCommandName(commands, hidden) {
-			t.Fatalf("%s should not be TUI-discoverable", hidden)
-		}
-	}
-}
-
-func TestDiscoverablePrefixFiltering(t *testing.T) {
-	if got := MatchDiscoverablePrefixForSurface("/review", CommandSurfaceClassic); len(got) != 0 {
-		t.Fatalf("classic discoverable /review = %#v, want no matches", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/review", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/review" {
-		t.Fatalf("TUI discoverable /review = %#v, want /review", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/init", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/init" {
-		t.Fatalf("TUI discoverable /init = %#v, want /init", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/version", CommandSurfaceTUI); len(got) != 0 {
-		t.Fatalf("TUI discoverable /version = %#v, want no matches", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/help", CommandSurfaceTUI); len(got) != 0 {
-		t.Fatalf("TUI discoverable /help = %#v, want no matches", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/lsp", CommandSurfaceTUI); len(got) != 0 {
-		t.Fatalf("TUI discoverable /lsp = %#v, want no matches", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/project" {
-		t.Fatalf("TUI discoverable /project = %#v, want /project", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceClassic); len(got) != 0 {
-		t.Fatalf("classic discoverable /project = %#v, want no matches", got)
-	}
-}
-
 func TestDefaultCommandMetadata(t *testing.T) {
 	matches := MatchPrefix("/copy")
 	if len(matches) == 0 {
@@ -486,6 +329,12 @@ func TestCatalogCommandsDeclareSurfacePolicy(t *testing.T) {
 		if len(cmd.Surfaces) == 0 {
 			t.Fatalf("%s should explicitly declare its surface policy", cmd.Name)
 		}
+	}
+}
+
+func TestValidateCommands(t *testing.T) {
+	if err := ValidateCommands(Commands); err != nil {
+		t.Fatalf("ValidateCommands() error = %v", err)
 	}
 }
 

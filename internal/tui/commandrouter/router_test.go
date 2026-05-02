@@ -138,3 +138,30 @@ func TestRoute_CatalogTUILocalOwnerMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestKnownLocalAction_CoversAllCatalogLocalActions(t *testing.T) {
+	actionsUsedByCatalog := make(map[commandcatalog.TUILocalAction]struct{})
+	for _, cmdInfo := range commandcatalog.Commands {
+		action := cmdInfo.EffectiveTUILocalAction()
+		if action == commandcatalog.TUILocalActionNone {
+			continue
+		}
+		actionsUsedByCatalog[action] = struct{}{}
+		if !isKnownLocalAction(Action(action)) {
+			t.Fatalf("isKnownLocalAction is missing mapping for %q (command: %s)", action, cmdInfo.Name)
+		}
+	}
+
+	for _, action := range []commandcatalog.TUILocalAction{
+		commandcatalog.TUILocalActionCopyMouseSelection,
+		commandcatalog.TUILocalActionManageAttachments,
+		commandcatalog.TUILocalActionQuit,
+		commandcatalog.TUILocalActionOpenConfig,
+		commandcatalog.TUILocalActionOpenReview,
+		commandcatalog.TUILocalActionOpenProject,
+	} {
+		if _, ok := actionsUsedByCatalog[action]; !ok {
+			t.Fatalf("catalogActionToRouterAction has stale mapping %q (no command uses it)", action)
+		}
+	}
+}

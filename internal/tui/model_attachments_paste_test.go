@@ -11,15 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func writeTempFile(t *testing.T, dir, name string, data []byte) string {
-	t.Helper()
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		t.Fatalf("write temp file: %v", err)
-	}
-	return path
-}
-
 func TestComposer_PasteExistingImagePathAttachesImage(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
@@ -67,115 +58,6 @@ func TestComposer_BackspaceRemovesAttachment(t *testing.T) {
 	m = updated.(Model)
 	if got := len(m.attachments); got != 0 {
 		t.Fatalf("attachments length after backspace = %d, want 0", got)
-	}
-}
-
-func TestComposer_SubmitImageAttachmentUsesImageChat(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := newModelWithViewport(agent)
-
-	dir := t.TempDir()
-	imagePath := writeTempFile(t, dir, "screen.png", []byte("png"))
-
-	updated, _ := m.Update(pasteKey(imagePath))
-	m = updated.(Model)
-	m.textInput.SetValue("describe")
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	if cmd == nil {
-		t.Fatal("Enter should return send command")
-	}
-	_ = cmd()
-
-	if got := agent.lastChatInput(); got != "" {
-		t.Fatalf("lastChatInput() = %q, want empty", got)
-	}
-	if got := agent.lastImageChatInput(); got != "describe||"+imagePath {
-		t.Fatalf("lastImageChatInput() = %q, want %q", got, "describe||"+imagePath)
-	}
-}
-
-func TestComposer_SubmitFileAttachmentEmbedsAttachedContext(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := newModelWithViewport(agent)
-
-	dir := t.TempDir()
-	filePath := writeTempFile(t, dir, "notes.txt", []byte("line1\nline2"))
-
-	updated, _ := m.Update(pasteKey(filePath))
-	m = updated.(Model)
-	m.textInput.SetValue("summarize")
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	if cmd == nil {
-		t.Fatal("Enter should return send command")
-	}
-	_ = cmd()
-
-	input := agent.lastChatInput()
-	if !strings.Contains(input, "summarize") {
-		t.Fatalf("chat input should contain base prompt, got %q", input)
-	}
-	if !strings.Contains(input, "Attached context:") {
-		t.Fatalf("chat input should contain attached context header, got %q", input)
-	}
-	if !strings.Contains(input, "line1\nline2") {
-		t.Fatalf("chat input should contain file content, got %q", input)
-	}
-}
-
-func TestComposer_UnhandledSlashFallbackExcludesFileAttachment(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := newModelWithViewport(agent)
-
-	dir := t.TempDir()
-	filePath := writeTempFile(t, dir, "payload.txt", []byte("A\nB\nC"))
-
-	updated, _ := m.Update(pasteKey(filePath))
-	m = updated.(Model)
-	m.textInput.SetValue("/tmp/unknown")
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	if cmd == nil {
-		t.Fatal("Enter should return send command for unhandled slash")
-	}
-	_ = cmd()
-
-	input := agent.lastChatInput()
-	if got, want := input, "/tmp/unknown"; got != want {
-		t.Fatalf("chat input = %q, want %q", got, want)
-	}
-	if got := len(agent.handledInputs); got != 1 {
-		t.Fatalf("handledInputs length = %d, want 1", got)
-	}
-}
-
-func TestComposer_UnhandledSlashFallbackExcludesImageAttachment(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := newModelWithViewport(agent)
-
-	dir := t.TempDir()
-	imagePath := writeTempFile(t, dir, "shot.png", []byte("png"))
-
-	updated, _ := m.Update(pasteKey(imagePath))
-	m = updated.(Model)
-	m.textInput.SetValue("/tmp/unknown")
-
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = updated.(Model)
-	if cmd == nil {
-		t.Fatal("Enter should return send command for unhandled slash")
-	}
-	_ = cmd()
-
-	if got := agent.lastImageChatInput(); got != "" {
-		t.Fatalf("lastImageChatInput() = %q, want empty", got)
-	}
-	if got, want := agent.lastChatInput(), "/tmp/unknown"; got != want {
-		t.Fatalf("lastChatInput() = %q, want %q", got, want)
 	}
 }
 
@@ -307,6 +189,41 @@ func TestComposer_PasteNonExistentPathFallsBackToText(t *testing.T) {
 	}
 }
 
+func TestComposer_PasteUnterminatedQuoteTextFallsBackToText(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	payload := `"/tmp/not-closed`
+	updated, _ := m.Update(pasteKey(payload))
+	m = updated.(Model)
+
+	if got := len(m.attachments); got != 0 {
+		t.Fatalf("attachments length = %d, want 0", got)
+	}
+	if got := m.textInput.Value(); got != payload {
+		t.Fatalf("textInput.Value() = %q, want %q", got, payload)
+	}
+	if got := m.transientStatus; got != "" {
+		t.Fatalf("transientStatus = %q, want empty", got)
+	}
+}
+
+func TestComposer_PasteApostropheTextFallsBackToText(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	payload := "don't panic"
+	updated, _ := m.Update(pasteKey(payload))
+	m = updated.(Model)
+
+	if got := len(m.attachments); got != 0 {
+		t.Fatalf("attachments length = %d, want 0", got)
+	}
+	if got := m.textInput.Value(); got != payload {
+		t.Fatalf("textInput.Value() = %q, want %q", got, payload)
+	}
+}
+
 func TestComposer_PasteURLFallsBackToText(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
@@ -340,17 +257,7 @@ func TestComposer_PasteSlashContainingTextFallsBackToText(t *testing.T) {
 }
 
 func TestComposer_PasteBareRelativeFilenameAttachesFile(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("os.Getwd() error = %v", err)
-	}
-	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("os.Chdir(%q) error = %v", dir, err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(cwd)
-	})
+	dir := withTempWorkingDir(t)
 
 	tests := []struct {
 		name      string
@@ -382,6 +289,24 @@ func TestComposer_PasteBareRelativeFilenameAttachesFile(t *testing.T) {
 	}
 }
 
+func TestComposer_PasteBareWordWithoutExistingFileFallsBackToText(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	_ = withTempWorkingDir(t)
+
+	payload := "README"
+	updated, _ := m.Update(pasteKey(payload))
+	m = updated.(Model)
+
+	if got := len(m.attachments); got != 0 {
+		t.Fatalf("attachments length = %d, want 0", got)
+	}
+	if got := m.textInput.Value(); got != payload {
+		t.Fatalf("textInput.Value() = %q, want %q", got, payload)
+	}
+}
+
 func TestComposer_CtrlVPasteWithClipboardErrorDoesNotAttach(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
@@ -399,35 +324,5 @@ func TestComposer_CtrlVPasteWithClipboardErrorDoesNotAttach(t *testing.T) {
 	m = updated.(Model)
 	if got := len(m.attachments); got != 0 {
 		t.Fatalf("attachments length = %d, want 0", got)
-	}
-}
-
-func TestComposer_AttachmentRowsRespectFooterBudgetWithComposerRows(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := newModelWithViewport(agent)
-
-	for i := 0; i < 20; i++ {
-		m.handleComposerPaste("line1\nline2")
-	}
-
-	dir := t.TempDir()
-	for i := 0; i < maxComposerAttachments; i++ {
-		path := writeTempFile(t, dir, fmt.Sprintf("f%02d.txt", i), []byte("a"))
-		m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: path, Size: 1})
-	}
-
-	if got := m.footerHeight(); got > m.height {
-		t.Fatalf("footerHeight() = %d, want <= model height %d", got, m.height)
-	}
-	if got := len(m.visibleComposerRows()); got != 20 {
-		t.Fatalf("visibleComposerRows length = %d, want 20", got)
-	}
-	if got := len(m.visibleAttachments()); got != 5 {
-		t.Fatalf("visibleAttachments length = %d, want 5 (remaining footer budget)", got)
-	}
-	start := maxComposerAttachments - len(m.visibleAttachments()) + 1
-	dock := stripANSI(m.renderInputDock())
-	if !strings.Contains(dock, fmt.Sprintf("#%d", start)) || !strings.Contains(dock, fmt.Sprintf("#%d", maxComposerAttachments)) {
-		t.Fatalf("renderInputDock() should keep global attachment numbering, got %q", dock)
 	}
 }

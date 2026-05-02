@@ -38,6 +38,36 @@ func TestSplitStrict_UnterminatedQuote(t *testing.T) {
 	}
 }
 
+func TestSplitStrict_DoesNotStartQuoteInsideToken(t *testing.T) {
+	parts, status := SplitStrict(`/note don't stop`)
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 3 || parts[0] != "/note" || parts[1] != "don't" || parts[2] != "stop" {
+		t.Fatalf("parts = %#v, want [/note don't stop]", parts)
+	}
+}
+
+func TestSplitStrict_QuoteInsideTokenIsLiteral(t *testing.T) {
+	parts, status := SplitStrict(`/note abc"def`)
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 2 || parts[0] != "/note" || parts[1] != `abc"def` {
+		t.Fatalf("parts = %#v, want [/note abc\"def]", parts)
+	}
+}
+
+func TestSplitStrict_QuoteGroupAfterTokenPrefixStaysSingleToken(t *testing.T) {
+	parts, status := SplitStrict(`/note foo'bar baz'`)
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 2 || parts[0] != "/note" || parts[1] != "foobar baz" {
+		t.Fatalf("parts = %#v, want [/note foobar baz]", parts)
+	}
+}
+
 func TestSplitStrict_QuotedWindowsPathKeepsBackslashes(t *testing.T) {
 	input := `/attach "C:\Users\me\file with space.txt"`
 	parts, status := SplitStrict(input)

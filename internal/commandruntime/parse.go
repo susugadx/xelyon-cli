@@ -54,9 +54,16 @@ func SplitStrict(input string) ([]string, SplitStatus) {
 		r := runes[i]
 
 		switch {
-		case (r == '"' || r == '\'') && !inQuote:
-			inQuote = true
-			quoteChar = r
+		case isQuoteRune(r) && !inQuote:
+			// token 先頭、または語中でも対応する閉じ quote がある場合は quote セグメントとして扱う。
+			// これにより foo'bar baz' のような shell-style 結合を維持しつつ、
+			// don't のように閉じ quote がない語中 apostrophe は文字として保持できる。
+			if shouldStartQuoteSegment(current.Len(), runes, i+1, r) {
+				inQuote = true
+				quoteChar = r
+				continue
+			}
+			current.WriteRune(r)
 		case r == '\\' && inQuote:
 			// quoted string では quote だけをエスケープ対象として扱う。
 			// `\\` を縮退させると UNC path 先頭が壊れるため、`\` 自体は保持する。
@@ -88,6 +95,23 @@ func SplitStrict(input string) ([]string, SplitStatus) {
 		return parts, SplitStatusUnterminatedQuote
 	}
 	return parts, SplitStatusOK
+}
+
+func isQuoteRune(r rune) bool {
+	return r == '"' || r == '\''
+}
+
+func shouldStartQuoteSegment(currentTokenLen int, runes []rune, start int, quote rune) bool {
+	return currentTokenLen == 0 || hasClosingQuoteAhead(runes, start, quote)
+}
+
+func hasClosingQuoteAhead(runes []rune, start int, quote rune) bool {
+	for i := start; i < len(runes); i++ {
+		if runes[i] == quote {
+			return true
+		}
+	}
+	return false
 }
 
 // Parse は input を分割し、先頭 command を alias 解決した Invocation にする。

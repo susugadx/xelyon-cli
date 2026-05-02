@@ -1,7 +1,5 @@
 package tui
 
-import "os"
-
 type droppedPathAttachKind int
 
 const (
@@ -24,36 +22,16 @@ func (r droppedPathAttachResult) shouldFallbackToText() bool {
 }
 
 func (m *Model) tryAttachDroppedPaths(content string) droppedPathAttachResult {
-	parsed := parseDroppedPaths(content)
-	return m.applyDroppedPathParseResult(parsed)
-}
-
-func (m *Model) applyDroppedPathParseResult(parsed droppedPathParseResult) droppedPathAttachResult {
-	switch parsed.kind {
-	case droppedPathParseNotPath:
+	decision := decideDroppedPathHandling(content)
+	switch decision.kind {
+	case droppedPathDecisionFallbackText:
 		return droppedPathAttachResult{kind: droppedPathAttachNotPath}
-	case droppedPathParseLimit:
+	case droppedPathDecisionLimit:
 		m.setTransientStatus(m.attachmentLimitReachedStatus())
 		return droppedPathAttachResult{kind: droppedPathAttachLimit}
-	case droppedPathParseInvalid:
-		m.setTransientStatus(attachmentStatusInvalidDroppedPath)
-		return droppedPathAttachResult{kind: droppedPathAttachInvalid}
 	default:
-		if !allDroppedPathsAttachable(parsed.paths) {
-			return droppedPathAttachResult{kind: droppedPathAttachNotPath}
-		}
-		return m.applyDroppedPathCandidates(parsed.paths)
+		return m.applyDroppedPathCandidates(decision.paths)
 	}
-}
-
-func allDroppedPathsAttachable(paths []string) bool {
-	for _, path := range paths {
-		info, err := os.Stat(path)
-		if err != nil || info.IsDir() {
-			return false
-		}
-	}
-	return true
 }
 
 func (m *Model) applyDroppedPathCandidates(paths []string) droppedPathAttachResult {
