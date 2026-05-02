@@ -712,6 +712,45 @@ func TestChatWithTools_UnknownContextOmitsCompactionAndKeepsLocalFallbackState(t
 	}
 }
 
+func TestChatWithTools_UnknownContextOmitsCompactionAndSkipsLocalFallbackWhenDisabled(t *testing.T) {
+	var received map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_azure"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	cfg := config.DefaultConfig()
+	cfg.Responses.ServerCompaction.LocalFallback = false
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-unknown-deployment",
+	})
+
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+	content, err := p.ChatWithTools(azureTestContext(cfg), "system", []api.Message{{Role: "user", Content: "hello"}}, "corp-unknown-deployment")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if !p.ShouldSkipLocalAutoCompressionForServerCompaction() {
+		t.Fatal("ShouldSkipLocalAutoCompressionForServerCompaction() = false, want true when local fallback is disabled")
+	}
+	if _, ok := received["context_management"]; ok {
+		t.Fatalf("context_management should be omitted: %#v", received["context_management"])
+	}
+}
+
 func TestBuildImageResponsesRequest_UsesInputImage(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{

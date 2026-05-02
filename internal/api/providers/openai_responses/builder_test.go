@@ -202,6 +202,20 @@ func TestResolveServerCompactionDecision_OmitsOnUnknownContextAndKeepsLocalFallb
 	}
 }
 
+func TestResolveServerCompactionDecision_OmitsOnUnknownContextAndSkipsLocalFallbackWhenDisabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Responses.ServerCompaction.LocalFallback = false
+	ctx := config.WithContext(context.Background(), cfg)
+
+	decision := ResolveServerCompactionDecision(ctx, "openai", NewModelIdentity("corp-gpt-deployment", "corp-gpt-deployment"), "resp_old")
+	if !decision.ShouldSkipLocalAutoCompression {
+		t.Fatal("ShouldSkipLocalAutoCompression = false, want true when local fallback is disabled")
+	}
+	if len(decision.ContextManagement) != 0 {
+		t.Fatalf("ContextManagement = %+v, want omitted on unknown context", decision.ContextManagement)
+	}
+}
+
 func TestResolveServerCompactionDecision_OmitsOnDisabled(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Responses.ServerCompaction.Enabled = false

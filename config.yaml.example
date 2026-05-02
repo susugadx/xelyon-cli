@@ -60,6 +60,26 @@ compression:
     keep_recent: 20
 
 # ============================================================
+# Responses API retention 設定（高度）
+# ============================================================
+# OpenAI / Azure OpenAI の Responses API で provider 側 state を使う設定です。
+# server_compaction は previous_response_id chain request 向けで、
+# /responses/compact や /compress --compact とは別機能です。
+# previous_response_id がない初回 turn、store=false、store=false 前提の
+# stateless input-array chaining は server-side compaction の対象外（未対応）です。
+responses:
+    store: true
+    persist_response_id: true
+    server_compaction:
+        enabled: true
+        # compaction 発火閾値（0=auto）。圧縮後サイズの指定ではありません。
+        # 0 は payload に送信せず、正数指定は 1000 以上のみ有効です。
+        compact_threshold: 0
+        # context_management.compaction を載せられないときの local auto-compress fallback。
+        # false の場合は local auto-compress にフォールバックしません。
+        local_fallback: true
+
+# ============================================================
 # 実行モード設定
 # ============================================================
 # ツール実行の承認モードを制御

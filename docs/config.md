@@ -453,7 +453,19 @@ responses:
 - **`true`**: local auto-compress の既存判定へフォールバック
 - **`false`**: local auto-compress へのフォールバックを行わない
 
-server-side compaction は Compact API（`/responses/compact` や `/compress --compact`）の上位互換ではありません。`previous_response_id` chain を使う OpenAI/Azure Responses request に対して、provider 側の自動圧縮トリガーを設定するための機能です。OpenAI/Azure Responses 以外の provider では local compression fallback を使います。
+#### `responses.server_compaction` の適用範囲と対象外
+
+- `responses.server_compaction` は OpenAI / Azure OpenAI の Responses API における **`previous_response_id` chain request** 向け機能です。
+- 通常の `/responses` request payload に `context_management.compaction` を付与して server-side compaction の発火閾値を渡します。
+- Compact API（`/responses/compact` / `/compress --compact`）とは別機能です。互換レイヤーや上位互換ではありません。
+- 初回 turn のように `previous_response_id` がない request では、server-side compaction は付与されません。
+- `responses.store=false` の場合は `previous_response_id` 自体を送らないため、server-side compaction は適用対象外です。
+- `store=false` 前提の stateless input-array chaining で server-side compaction を使う運用は、現時点では未対応です。
+- `context_management.compaction` を付与できない場合:
+  - `local_fallback=true`: local auto-compress 判定にフォールバックします。
+  - `local_fallback=false`: local auto-compress 判定へフォールバックしません（local auto-compress は skip 扱い）。
+- `compact_threshold=0` は auto 解決を意味し、API payload に `0` は送信しません。
+- `compact_threshold` の正数指定は `1000` 以上のみ有効です（`1..999` は validation error）。
 
 `/clear` はローカル履歴とローカルに保持している response ID を消しますが、provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
 

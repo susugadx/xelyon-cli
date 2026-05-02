@@ -387,6 +387,43 @@ func TestChatWithResponses_UnknownContextOmitsCompactionAndKeepsLocalFallbackSta
 	}
 }
 
+func TestChatWithResponses_UnknownContextOmitsCompactionAndSkipsLocalFallbackWhenDisabled(t *testing.T) {
+	var raw map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_new\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	})
+	t.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.Responses.ServerCompaction.LocalFallback = false
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+	})
+	ctx := config.WithContext(newOpenAITestContext(t, false), cfg)
+
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+	content, err := p.chatWithResponses(ctx, "system", []api.Message{{Role: "user", Content: "hi"}}, "corp-gpt-deployment")
+	if err != nil {
+		t.Fatalf("chatWithResponses() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if !p.ShouldSkipLocalAutoCompressionForServerCompaction() {
+		t.Fatal("ShouldSkipLocalAutoCompressionForServerCompaction() = false, want true when local fallback is disabled")
+	}
+	if _, ok := raw["context_management"]; ok {
+		t.Fatalf("context_management should be omitted for unknown context: %#v", raw["context_management"])
+	}
+}
+
 func newResponsesNonStreamingHTTPResponse(body string) *http.Response {
 	return &http.Response{
 		StatusCode: http.StatusOK,
