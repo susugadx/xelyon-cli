@@ -55,3 +55,21 @@ func (c *Config) ResponsesServerCompactionEnabled() bool {
 	}
 	return c.Responses.Store && c.Responses.ServerCompaction.Enabled
 }
+
+// ResponsesServerCompactionCompactThreshold は server-side compaction の閾値設定を返す。
+// 0 は provider 側で自動解決する。
+func (c *Config) ResponsesServerCompactionCompactThreshold() int {
+	if c == nil {
+		return 0
+	}
+	return c.Responses.ServerCompaction.CompactThreshold
+}
+
+// ResponsesServerCompactionLocalFallbackEnabled は server-side compaction 不可時に
+// local auto-compress へフォールバックするか返す。
+func (c *Config) ResponsesServerCompactionLocalFallbackEnabled() bool {
+	if c == nil {
+		return true
+	}
+	return c.Responses.ServerCompaction.LocalFallback
+}

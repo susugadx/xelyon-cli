@@ -79,6 +79,12 @@ func TestResponsesConfigDefaultsAndOverrides(t *testing.T) {
 	if !cfg.ResponsesServerCompactionEnabled() {
 		t.Fatal("ResponsesServerCompactionEnabled() = false, want default true")
 	}
+	if cfg.ResponsesServerCompactionCompactThreshold() != 0 {
+		t.Fatalf("ResponsesServerCompactionCompactThreshold() = %d, want default 0(auto)", cfg.ResponsesServerCompactionCompactThreshold())
+	}
+	if !cfg.ResponsesServerCompactionLocalFallbackEnabled() {
+		t.Fatal("ResponsesServerCompactionLocalFallbackEnabled() = false, want default true")
+	}
 
 	yamlData := []byte(`
 responses:
@@ -104,6 +110,8 @@ responses:
   persist_response_id: false
   server_compaction:
     enabled: false
+    compact_threshold: 8000
+    local_fallback: false
 `)
 	loaded, err = loadConfigFromData(yamlData)
 	if err != nil {
@@ -117,5 +125,11 @@ responses:
 	}
 	if loaded.ResponsesServerCompactionEnabled() {
 		t.Fatal("ResponsesServerCompactionEnabled() = true, want false from YAML")
+	}
+	if loaded.ResponsesServerCompactionCompactThreshold() != 8000 {
+		t.Fatalf("ResponsesServerCompactionCompactThreshold() = %d, want 8000 from YAML", loaded.ResponsesServerCompactionCompactThreshold())
+	}
+	if loaded.ResponsesServerCompactionLocalFallbackEnabled() {
+		t.Fatal("ResponsesServerCompactionLocalFallbackEnabled() = true, want false from YAML")
 	}
 }

@@ -530,6 +530,188 @@ func TestBuildChatResponsesRequest_StoreFalseSendsFullHistoryWithoutPreviousResp
 	}
 }
 
+func TestBuildChatResponsesRequest_IncludesServerCompactionContextManagementOnPreviousResponseChain(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+
+	req := p.buildChatResponsesRequest(
+		azureTestContext(cfg),
+		"system",
+		[]api.Message{{Role: "user", Content: "hello"}},
+		"corp-gpt55-deployment",
+	)
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	contextManagementRaw, ok := body["context_management"].([]any)
+	if !ok || len(contextManagementRaw) != 1 {
+		t.Fatalf("context_management = %#v, want one compaction item", body["context_management"])
+	}
+	compaction, ok := contextManagementRaw[0].(map[string]any)
+	if !ok {
+		t.Fatalf("context_management[0] type = %T, want map", contextManagementRaw[0])
+	}
+	if compaction["type"] != "compaction" {
+		t.Fatalf("context_management[0].type = %#v, want compaction", compaction["type"])
+	}
+	threshold, ok := compaction["compact_threshold"].(float64)
+	if !ok {
+		t.Fatalf("compact_threshold type = %T, want float64(JSON number)", compaction["compact_threshold"])
+	}
+	if int(threshold) < 1000 {
+		t.Fatalf("compact_threshold = %d, want >= 1000", int(threshold))
+	}
+	if int(threshold) == 0 {
+		t.Fatal("compact_threshold = 0, want resolved non-zero value")
+	}
+}
+
+func TestBuildChatResponsesRequest_OmitsServerCompactionWhenDisabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Responses.ServerCompaction.Enabled = false
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+
+	req := p.buildChatResponsesRequest(
+		azureTestContext(cfg),
+		"system",
+		[]api.Message{{Role: "user", Content: "hello"}},
+		"corp-gpt55-deployment",
+	)
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	if _, ok := body["context_management"]; ok {
+		t.Fatalf("context_management should be omitted when disabled: %#v", body["context_management"])
+	}
+}
+
+func TestBuildChatResponsesRequest_OmitsServerCompactionWhenContextWindowUnknown(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-unknown-deployment",
+	})
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+
+	req := p.buildChatResponsesRequest(
+		azureTestContext(cfg),
+		"system",
+		[]api.Message{{Role: "user", Content: "hello"}},
+		"corp-unknown-deployment",
+	)
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	if _, ok := body["context_management"]; ok {
+		t.Fatalf("context_management should be omitted when context window is unknown: %#v", body["context_management"])
+	}
+}
+
+func TestChatWithTools_ServerCompactionPayloadControlsLocalSkipState(t *testing.T) {
+	var received map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_azure"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+	content, err := p.ChatWithTools(azureTestContext(cfg), "system", []api.Message{{Role: "user", Content: "hello"}}, "corp-gpt55-deployment")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if !p.ShouldSkipLocalAutoCompressionForServerCompaction() {
+		t.Fatal("ShouldSkipLocalAutoCompressionForServerCompaction() = false, want true when context_management.compaction is sent")
+	}
+	if _, ok := received["context_management"]; !ok {
+		t.Fatalf("context_management should be present: %#v", received)
+	}
+}
+
+func TestChatWithTools_UnknownContextOmitsCompactionAndKeepsLocalFallbackState(t *testing.T) {
+	var received map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_azure"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-unknown-deployment",
+	})
+
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+	content, err := p.ChatWithTools(azureTestContext(cfg), "system", []api.Message{{Role: "user", Content: "hello"}}, "corp-unknown-deployment")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if p.ShouldSkipLocalAutoCompressionForServerCompaction() {
+		t.Fatal("ShouldSkipLocalAutoCompressionForServerCompaction() = true, want false when compaction payload is omitted")
+	}
+	if _, ok := received["context_management"]; ok {
+		t.Fatalf("context_management should be omitted: %#v", received["context_management"])
+	}
+}
+
 func TestBuildImageResponsesRequest_UsesInputImage(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{

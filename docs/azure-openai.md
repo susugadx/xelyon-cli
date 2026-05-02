@@ -99,7 +99,7 @@ XELYON は次の順で Azure 認証を使います。
 
 ## 通常いじらない設定
 
-`responses.store` / `responses.persist_response_id` は通常変更しないでください。既定値は Responses API の `previous_response_id` 継続と session reload を安定させるための推奨設定です。
+`responses.store` / `responses.persist_response_id` は通常変更しないでください。既定値は Responses API の `previous_response_id` 継続と session reload を安定させるための推奨設定です。`responses.server_compaction` はこの chain request 向けの自動圧縮トリガー設定で、Compact API（`/responses/compact` / `/compress --compact`）とは別機能です。
 
 会社の data retention 方針で provider 側に response state を残せない場合だけ、[Responses API retention 設定](config.md#responses-api-retention-設定-responses高度な設定) を確認してから変更してください。
 

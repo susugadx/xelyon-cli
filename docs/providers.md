@@ -105,10 +105,13 @@ GPT-5.5 系も OpenAI provider では Responses API を使用します。
 
 **Responses API の特徴:**
 - 会話コンテキストをサーバー側で管理
-- Compact API による効率的な履歴圧縮
+- `previous_response_id` chain request で `context_management.compaction` による server-side compaction を利用可能
+- Compact API（`/responses/compact` / `/compress --compact`）は別機能
 - ZDR（Zero Data Retention）対応
 
 XELYON は既定で Responses API の `store: true` と `previous_response_id` 継続を使います。これは通常の推奨設定です。provider 側に response state を保存したくない運用だけ、`~/.xelyon/config.yaml` で `responses.store: false` を設定してください。詳しくは [Responses API retention 設定](config.md#responses-api-retention-設定-responses高度な設定) を参照してください。
+
+`responses.server_compaction` は Compact API の完全上位互換ではありません。`previous_response_id` を使う OpenAI/Azure Responses request 向けに compaction 発火閾値を設定する機能で、載せられない場合は `local_fallback` 設定に従って local auto-compress へ戻ります。
 
 **GPT-5.5 Pro の注意:**
 - streaming は公式に unsupported のため、XELYON は non-streaming Responses 経路を使用します。

@@ -19,12 +19,14 @@ func resolveResponsesAPIURL() string {
 
 func (p *Provider) buildChatResponsesRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) ResponsesRequest {
 	modelIdentity := newOpenAIResponsesModelIdentity(ctx, model)
+	previousResponseID := previousResponseIDForRequest(ctx, p.lastResponseID)
+	serverCompactionDecision := openairesponses.ResolveServerCompactionDecision(ctx, "openai", modelIdentity, previousResponseID)
 	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
-		Base:               p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity),
+		Base:               p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity, serverCompactionDecision),
 		SystemPrompt:       systemPrompt,
 		CompactedInput:     api.CompactedInputItemsFromContext(ctx),
 		History:            history,
-		PreviousResponseID: previousResponseIDForRequest(ctx, p.lastResponseID),
+		PreviousResponseID: previousResponseID,
 	})
 }
 
@@ -38,7 +40,7 @@ func (p *Provider) buildImageResponsesRequest(
 ) ResponsesRequest {
 	modelIdentity := newOpenAIResponsesModelIdentity(ctx, model)
 	return openairesponses.BuildImageRequest(openairesponses.ImageRequestOptions{
-		Base:           p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity),
+		Base:           p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity, openairesponses.ServerCompactionDecision{}),
 		SystemPrompt:   systemPrompt,
 		CompactedInput: api.CompactedInputItemsFromContext(ctx),
 		History:        history,
@@ -52,17 +54,24 @@ func newOpenAIResponsesModelIdentity(ctx context.Context, model string) openaire
 	return openairesponses.NewModelIdentity(model, cfg.ModelCatalogName("openai", model))
 }
 
-func (p *Provider) newBaseResponsesRequestOptions(ctx context.Context, systemPrompt string, model openairesponses.ModelIdentity) openairesponses.BaseRequestOptions {
+func (p *Provider) newBaseResponsesRequestOptions(
+	ctx context.Context,
+	systemPrompt string,
+	model openairesponses.ModelIdentity,
+	serverCompactionDecision openairesponses.ServerCompactionDecision,
+) openairesponses.BaseRequestOptions {
 	cfg := config.FromContext(ctx)
 	options := openairesponses.BaseRequestOptions{
-		Model:                model,
-		MaxOutputTokens:      api.GetMaxOutputTokens(ctx, "openai", model.RequestName()),
-		Stream:               shouldStreamResponses(model.CatalogName()),
-		Store:                cfg.ResponsesStoreEnabled(),
-		Tools:                GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools),
-		ToolChoice:           openairesponses.BuildFunctionToolChoice(p.toolChoice),
-		PromptCacheKey:       BuildPromptCacheKey(model.RequestName(), systemPrompt),
-		PromptCacheRetention: "24h",
+		Model:                                 model,
+		MaxOutputTokens:                       api.GetMaxOutputTokens(ctx, "openai", model.RequestName()),
+		Stream:                                shouldStreamResponses(model.CatalogName()),
+		Store:                                 cfg.ResponsesStoreEnabled(),
+		Tools:                                 GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools),
+		ToolChoice:                            openairesponses.BuildFunctionToolChoice(p.toolChoice),
+		PromptCacheKey:                        BuildPromptCacheKey(model.RequestName(), systemPrompt),
+		PromptCacheRetention:                  "24h",
+		ContextManagement:                     serverCompactionDecision.ContextManagement,
+		SkipLocalAutoCompressionAfterResponse: serverCompactionDecision.ShouldSkipLocalAutoCompression,
 	}
 
 	options.Reasoning = responsesReasoningConfig(ctx, model)

@@ -56,18 +56,26 @@ type Tool struct {
 
 // Request は Responses API リクエストを表す。
 type Request struct {
-	Model                string           `json:"model"`
-	Input                interface{}      `json:"input,omitempty"`
-	PreviousResponseID   string           `json:"previous_response_id,omitempty"`
-	Instructions         string           `json:"instructions,omitempty"`
-	MaxOutputTokens      int              `json:"max_output_tokens,omitempty"`
-	Stream               bool             `json:"stream,omitempty"`
-	Store                bool             `json:"store"`
-	Reasoning            *ReasoningConfig `json:"reasoning,omitempty"`
-	Tools                []Tool           `json:"tools,omitempty"`
-	ToolChoice           interface{}      `json:"tool_choice,omitempty"`
-	PromptCacheKey       string           `json:"prompt_cache_key,omitempty"`
-	PromptCacheRetention string           `json:"prompt_cache_retention,omitempty"`
+	Model                                 string                     `json:"model"`
+	Input                                 interface{}                `json:"input,omitempty"`
+	PreviousResponseID                    string                     `json:"previous_response_id,omitempty"`
+	ContextManagement                     []ContextManagementSetting `json:"context_management,omitempty"`
+	Instructions                          string                     `json:"instructions,omitempty"`
+	MaxOutputTokens                       int                        `json:"max_output_tokens,omitempty"`
+	Stream                                bool                       `json:"stream,omitempty"`
+	Store                                 bool                       `json:"store"`
+	Reasoning                             *ReasoningConfig           `json:"reasoning,omitempty"`
+	Tools                                 []Tool                     `json:"tools,omitempty"`
+	ToolChoice                            interface{}                `json:"tool_choice,omitempty"`
+	PromptCacheKey                        string                     `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention                  string                     `json:"prompt_cache_retention,omitempty"`
+	SkipLocalAutoCompressionAfterResponse bool                       `json:"-"`
+}
+
+// ContextManagementSetting は Responses API の context_management 設定項目を表す。
+type ContextManagementSetting struct {
+	Type             string `json:"type"`
+	CompactThreshold int    `json:"compact_threshold,omitempty"`
 }
 
 // InputItem は api.InputItem のエイリアス。

@@ -139,6 +139,75 @@ func TestBuildChatResponsesRequest_StoreFalseSendsFullHistoryWithoutPreviousResp
 	}
 }
 
+func TestBuildChatResponsesRequest_IncludesServerCompactionContextManagementOnPreviousResponseChain(t *testing.T) {
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+
+	req := p.buildChatResponsesRequest(ctx, "system", []api.Message{
+		{Role: "user", Content: "hi"},
+	}, "gpt-5.5")
+
+	raw := marshalResponsesRequestMap(t, req)
+	contextManagementRaw, ok := raw["context_management"].([]any)
+	if !ok || len(contextManagementRaw) != 1 {
+		t.Fatalf("context_management = %#v, want one compaction item", raw["context_management"])
+	}
+	compaction, ok := contextManagementRaw[0].(map[string]any)
+	if !ok {
+		t.Fatalf("context_management[0] type = %T, want map", contextManagementRaw[0])
+	}
+	if compaction["type"] != "compaction" {
+		t.Fatalf("context_management[0].type = %#v, want compaction", compaction["type"])
+	}
+	threshold, ok := compaction["compact_threshold"].(float64)
+	if !ok {
+		t.Fatalf("compact_threshold type = %T, want float64(JSON number)", compaction["compact_threshold"])
+	}
+	if int(threshold) < 1000 {
+		t.Fatalf("compact_threshold = %d, want >= 1000", int(threshold))
+	}
+	if int(threshold) == 0 {
+		t.Fatal("compact_threshold = 0, want resolved non-zero value")
+	}
+}
+
+func TestBuildChatResponsesRequest_OmitsServerCompactionWhenDisabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Responses.ServerCompaction.Enabled = false
+	ctx := config.WithContext(context.Background(), cfg)
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+
+	req := p.buildChatResponsesRequest(ctx, "system", []api.Message{
+		{Role: "user", Content: "hi"},
+	}, "gpt-5.5")
+
+	raw := marshalResponsesRequestMap(t, req)
+	if _, ok := raw["context_management"]; ok {
+		t.Fatalf("context_management should be omitted when disabled: %#v", raw["context_management"])
+	}
+}
+
+func TestBuildChatResponsesRequest_OmitsServerCompactionWhenContextWindowUnknown(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+
+	req := p.buildChatResponsesRequest(ctx, "system", []api.Message{
+		{Role: "user", Content: "hi"},
+	}, "corp-gpt-deployment")
+
+	raw := marshalResponsesRequestMap(t, req)
+	if _, ok := raw["context_management"]; ok {
+		t.Fatalf("context_management should be omitted when context window is unknown: %#v", raw["context_management"])
+	}
+}
+
 func TestLongRunningResponsesHTTPClientDisablesHeaderTimeout(t *testing.T) {
 	baseTransport := &http.Transport{ResponseHeaderTimeout: 60 * time.Second}
 	baseClient := &http.Client{

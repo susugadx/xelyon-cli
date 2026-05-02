@@ -170,3 +170,44 @@ func TestHandleChunk_FunctionCallAddedStartsSpinnerViaDisplayState(t *testing.T)
 	}
 	spinner.Stop()
 }
+
+func TestHandleChunk_OutputItemAddedWithCompactionTypeDoesNotBreakStreamingParser(t *testing.T) {
+	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	state := newResponsesStreamState(spinner, io.Discard)
+
+	textDelta, done, err := state.handleChunk(ResponsesStreamChunk{
+		Type: "response.output_item.added",
+		Item: &ResponsesItem{
+			Type: "compaction",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("handleChunk() error = %v, want nil", err)
+	}
+	if done {
+		t.Fatal("handleChunk() done = true, want false")
+	}
+	if textDelta != "" {
+		t.Fatalf("handleChunk() textDelta = %q, want empty", textDelta)
+	}
+	if spinner.IsActive() {
+		t.Fatal("spinner should not start for non-function_call output items")
+	}
+}
+
+func TestHandleChunk_UnknownStreamingEventDoesNotBreakParser(t *testing.T) {
+	state := newResponsesStreamState(nil, io.Discard)
+
+	textDelta, done, err := state.handleChunk(ResponsesStreamChunk{
+		Type: "response.future_event.unknown",
+	}, "")
+	if err != nil {
+		t.Fatalf("handleChunk() error = %v, want nil", err)
+	}
+	if done {
+		t.Fatal("handleChunk() done = true, want false")
+	}
+	if textDelta != "" {
+		t.Fatalf("handleChunk() textDelta = %q, want empty", textDelta)
+	}
+}

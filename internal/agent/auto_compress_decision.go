@@ -116,11 +116,11 @@ func (a *Agent) shouldSkipLocalAutoCompressionForServerCompaction(cfg *config.Co
 	if a == nil || cfg == nil || !cfg.ResponsesServerCompactionEnabled() {
 		return false
 	}
-	ridProvider, ok := a.CurrentProvider.(ResponseIDCapable)
-	if !ok || !ridProvider.HasCachedResponseID() {
+	compactionProvider, ok := a.CurrentProvider.(ResponsesServerCompactionLocalSkipCapable)
+	if !ok {
 		return false
 	}
-	return cfg.IsProviderResponsesAPIRequest(a.ProviderName, a.sessionProviderConfigKey(cfg), a.CurrentModel)
+	return compactionProvider.ShouldSkipLocalAutoCompressionForServerCompaction()
 }
 
 func (a *Agent) shouldSkipLocalAutoCompressionForClaudeCompaction() bool {

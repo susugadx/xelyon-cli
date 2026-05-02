@@ -82,6 +82,7 @@ func (p *Provider) runResponsesRequest(ctx context.Context, options responsesReq
 	authRetryUsed := false
 	for attempt := 0; attempt < 3; attempt++ {
 		reqBody := options.BuildRequest()
+		p.responsesLocalSkip = reqBody.SkipLocalAutoCompressionAfterResponse
 		payload, err := json.Marshal(reqBody)
 		if err != nil {
 			return "", "", fmt.Errorf("failed to marshal request: %w", err)

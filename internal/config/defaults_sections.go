@@ -84,7 +84,9 @@ func defaultResponsesConfig() ResponsesConfig {
 		Store:             true,
 		PersistResponseID: true,
 		ServerCompaction: ResponsesServerCompactionConfig{
-			Enabled: true,
+			Enabled:          true,
+			CompactThreshold: 0,
+			LocalFallback:    true,
 		},
 	}
 }

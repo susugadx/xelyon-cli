@@ -17,6 +17,9 @@ func validateNumericRangeIssues(cfg *Config) []ValidationIssue {
 	if issue, ok := validateProjectMapContextRatioIssue(cfg.ProjectMap.ContextRatio); ok {
 		issues = append(issues, issue)
 	}
+	if issue, ok := validateResponsesServerCompactionCompactThresholdIssue(cfg.Responses.ServerCompaction.CompactThreshold); ok {
+		issues = append(issues, issue)
+	}
 	return issues
 }
 
@@ -50,6 +53,20 @@ func validateProjectMapContextRatioIssue(value float64) (ValidationIssue, bool) 
 		Severity:   "warning",
 		CanAutoFix: true,
 		FixedValue: ProjectMapContextRatioDefault,
+	}, true
+}
+
+func validateResponsesServerCompactionCompactThresholdIssue(value int) (ValidationIssue, bool) {
+	if value <= 0 || value >= 1000 {
+		return ValidationIssue{}, false
+	}
+	return ValidationIssue{
+		Field:      "responses.server_compaction.compact_threshold",
+		Value:      fmt.Sprintf("%d", value),
+		Message:    "compact_threshold は 0（auto）または 1000 以上を指定してください",
+		Suggestion: "0",
+		Severity:   "error",
+		CanAutoFix: false,
 	}, true
 }
 

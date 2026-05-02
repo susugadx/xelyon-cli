@@ -297,7 +297,7 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 - **補足**: 未設定時は provider 汎用の絶対閾値には fallback しません。通常はモデルの context window、`trigger_percent`、最大出力トークンから自動圧縮閾値を計算します。
 
 **自動圧縮の動作:**
-1. API呼び出し成功後に OpenAI/Azure Responses API の `previous_response_id` 継続と server compaction が有効な場合は local auto-compress をスキップ
+1. API呼び出し成功後、OpenAI/Azure Responses API の `previous_response_id` 継続 request に `context_management.compaction` を実際に載せられた場合のみ local auto-compress をスキップ
 2. pricing cliff 回避を評価
 3. 明示された `provider_thresholds` を評価
 4. Claude Compaction が使える場合は標準の local auto-compress をスキップ
@@ -416,6 +416,8 @@ responses:
   persist_response_id: true
   server_compaction:
     enabled: true
+    compact_threshold: 0
+    local_fallback: true
 ```
 
 #### `store`
@@ -433,8 +435,25 @@ responses:
 #### `server_compaction.enabled`
 - **型**: boolean
 - **デフォルト**: `true`
-- **説明**: OpenAI / Azure OpenAI の Responses API で `previous_response_id` 継続が有効な場合、provider 側の context 管理を優先し、local auto-compress をスキップします。
-- **`false` にする場合**: `previous_response_id` があっても local auto-compress の通常判定を許可します。
+- **説明**: OpenAI / Azure OpenAI の Responses API で `previous_response_id` 継続 request に `context_management.compaction` を載せる機能を有効化します。`enabled` だけでは local auto-compress はスキップされず、実際に request payload へ compaction 設定を載せられた場合のみ local auto-compress をスキップします。
+- **`false` にする場合**: `context_management.compaction` を送らず、local auto-compress の通常判定を使います。
+
+#### `server_compaction.compact_threshold`
+- **型**: integer
+- **デフォルト**: `0`
+- **説明**: server-side compaction の**発火閾値**です。圧縮後サイズではありません。
+- **`0` の意味**: auto 解決。`compression.trigger_percent` と出力 headroom cap（`context window - max_output_tokens`）から `min(...)` で閾値を計算し、最低 `1000` へ丸めます。
+- **validation**: `0` 以外を指定する場合、`1000` 未満は validation error です。
+- **補足**: request payload へ `0` は送信しません。auto 解決できない（例: context window 不明）場合は `context_management` 自体を省略します。
+
+#### `server_compaction.local_fallback`
+- **型**: boolean
+- **デフォルト**: `true`
+- **説明**: `context_management.compaction` を request payload に載せられない場合に local auto-compress 判定へ戻すかを制御します。
+- **`true`**: local auto-compress の既存判定へフォールバック
+- **`false`**: local auto-compress へのフォールバックを行わない
+
+server-side compaction は Compact API（`/responses/compact` や `/compress --compact`）の上位互換ではありません。`previous_response_id` chain を使う OpenAI/Azure Responses request に対して、provider 側の自動圧縮トリガーを設定するための機能です。OpenAI/Azure Responses 以外の provider では local compression fallback を使います。
 
 `/clear` はローカル履歴とローカルに保持している response ID を消しますが、provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
 

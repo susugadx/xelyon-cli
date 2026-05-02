@@ -23,10 +23,11 @@ const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
 // Provider はOpenAI APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider
-	lastResponseID string               // Responses API の最新レスポンスID（キャッシュ用）
-	mcpTools       []api.ToolDefinition // MCP ツール定義（Function Calling用）
-	usageCallback  api.UsageCallback    // トークン使用量コールバック
-	toolChoice     *string              // tool_choice 強制用
+	lastResponseID                 string               // Responses API の最新レスポンスID（キャッシュ用）
+	responsesLocalAutoCompressSkip bool                 // 直近 request 後に local auto-compress をスキップするか
+	mcpTools                       []api.ToolDefinition // MCP ツール定義（Function Calling用）
+	usageCallback                  api.UsageCallback    // トークン使用量コールバック
+	toolChoice                     *string              // tool_choice 強制用
 }
 
 // New は新しいProviderを作成
@@ -66,6 +67,7 @@ func LevelToReasoningEffort(level string) string {
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// モデル名を設定（config優先、フォールバックはgpt-4o）
 	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
+	p.responsesLocalAutoCompressSkip = false
 
 	// モデルに応じて API を自動選択
 	cfg := config.FromContext(ctx)
@@ -102,6 +104,7 @@ func (p *Provider) ClearResponseID() {
 // ClearCache はプロバイダーが保持するキャッシュ（リモート/ローカル）をクリアする
 func (p *Provider) ClearCache() {
 	p.ClearResponseID()
+	p.responsesLocalAutoCompressSkip = false
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
@@ -134,6 +137,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	// モデル名を設定（config優先、フォールバックはgpt-4o）
 	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
+	p.responsesLocalAutoCompressSkip = false
 
 	// Responses API モデルの場合は専用の画像処理
 	cfg := config.FromContext(ctx)
@@ -142,4 +146,10 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	return p.chatWithImageCompletions(ctx, systemPrompt, history, userMessage, image, model)
+}
+
+// ShouldSkipLocalAutoCompressionForServerCompaction は
+// 直近の Responses request 判定に基づき local auto-compress を抑止するか返す。
+func (p *Provider) ShouldSkipLocalAutoCompressionForServerCompaction() bool {
+	return p.responsesLocalAutoCompressSkip
 }

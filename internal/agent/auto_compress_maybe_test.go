@@ -316,12 +316,13 @@ func TestMaybeAutoCompress_UsesSessionAnthropicThresholdOverride(t *testing.T) {
 	}
 }
 
-func TestCustomTokenThreshold_RespectsCacheSkip(t *testing.T) {
+func TestCustomTokenThreshold_RespectsResponsesServerCompactionSkip(t *testing.T) {
 	provider := &compressionTestProvider{
-		name:             "openai",
-		summary:          "compressed summary",
-		cachedResponseID: true,
-		responseID:       "resp_cached",
+		name:                      "openai",
+		summary:                   "compressed summary",
+		cachedResponseID:          true,
+		responseID:                "resp_cached",
+		serverCompactionLocalSkip: true,
 	}
 	cfg := config.DefaultConfig()
 	cfg.Compression.TokenThreshold = 100000
@@ -333,7 +334,7 @@ func TestCustomTokenThreshold_RespectsCacheSkip(t *testing.T) {
 	agent.History = hugeCompressionHistory()
 
 	if agent.maybeAutoCompress() {
-		t.Fatal("maybeAutoCompress() = true, want false when response cache is active")
+		t.Fatal("maybeAutoCompress() = true, want false when server compaction skips local compression")
 	}
 	if provider.chatCalls != 0 {
 		t.Fatalf("ChatWithTools call count = %d, want 0", provider.chatCalls)
@@ -342,10 +343,11 @@ func TestCustomTokenThreshold_RespectsCacheSkip(t *testing.T) {
 
 func TestCustomTokenThreshold_AzureResponsesServerCompactionSkipsLocalCompression(t *testing.T) {
 	provider := &compressionTestProvider{
-		name:             "azure",
-		summary:          "compressed summary",
-		cachedResponseID: true,
-		responseID:       "resp_cached",
+		name:                      "azure",
+		summary:                   "compressed summary",
+		cachedResponseID:          true,
+		responseID:                "resp_cached",
+		serverCompactionLocalSkip: true,
 	}
 	cfg := config.DefaultConfig()
 	cfg.Compression.TokenThreshold = 1
@@ -356,7 +358,7 @@ func TestCustomTokenThreshold_AzureResponsesServerCompactionSkipsLocalCompressio
 	agent.History = oversizedCompressionHistory()
 
 	if agent.maybeAutoCompress() {
-		t.Fatal("maybeAutoCompress() = true, want false when Azure response cache is active")
+		t.Fatal("maybeAutoCompress() = true, want false when Azure request includes server compaction")
 	}
 	if provider.chatCalls != 0 {
 		t.Fatalf("ChatWithTools call count = %d, want 0", provider.chatCalls)
@@ -365,10 +367,11 @@ func TestCustomTokenThreshold_AzureResponsesServerCompactionSkipsLocalCompressio
 
 func TestCustomTokenThreshold_ServerCompactionDisabledAllowsLocalCompression(t *testing.T) {
 	provider := &compressionTestProvider{
-		name:             "openai",
-		summary:          "compressed summary",
-		cachedResponseID: true,
-		responseID:       "resp_cached",
+		name:                      "openai",
+		summary:                   "compressed summary",
+		cachedResponseID:          true,
+		responseID:                "resp_cached",
+		serverCompactionLocalSkip: true,
 	}
 	cfg := config.DefaultConfig()
 	cfg.Responses.ServerCompaction.Enabled = false
@@ -384,5 +387,34 @@ func TestCustomTokenThreshold_ServerCompactionDisabledAllowsLocalCompression(t *
 	}
 	if provider.chatCalls != 1 {
 		t.Fatalf("ChatWithTools call count = %d, want 1", provider.chatCalls)
+	}
+}
+
+func TestCustomTokenThreshold_ServerCompactionFallbackKeepsLocalDecisionOnUnknownContext(t *testing.T) {
+	provider := &compressionTestProvider{
+		name:                      "openai",
+		summary:                   "compressed summary",
+		cachedResponseID:          true,
+		responseID:                "resp_cached",
+		serverCompactionLocalSkip: false,
+	}
+	cfg := config.DefaultConfig()
+	cfg.Compression.TokenThreshold = 0
+	cfg.Compression.TriggerPercent = 80
+	cfg.Compression.KeepRecent = 1
+	cfg.Compression.PreferCompactAPI = false
+	cfg.Responses.ServerCompaction.LocalFallback = true
+
+	agent, out := newCompressionTestAgent(t, provider, "corp-gpt-deployment", cfg)
+	agent.History = hugeCompressionHistory()
+
+	if agent.maybeAutoCompress() {
+		t.Fatal("maybeAutoCompress() = true, want false when fallback keeps unknown-context local decision")
+	}
+	if provider.chatCalls != 0 {
+		t.Fatalf("ChatWithTools call count = %d, want 0", provider.chatCalls)
+	}
+	if !strings.Contains(out.String(), "context window is unknown") {
+		t.Fatalf("output %q does not mention unknown context window", out.String())
 	}
 }

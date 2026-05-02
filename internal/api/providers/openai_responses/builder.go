@@ -8,15 +8,17 @@ import (
 
 // BaseRequestOptions は Responses API request の共通設定を表す。
 type BaseRequestOptions struct {
-	Model                ModelIdentity
-	MaxOutputTokens      int
-	Stream               bool
-	Store                bool
-	Tools                []Tool
-	ToolChoice           interface{}
-	Reasoning            *ReasoningConfig
-	PromptCacheKey       string
-	PromptCacheRetention string
+	Model                                 ModelIdentity
+	MaxOutputTokens                       int
+	Stream                                bool
+	Store                                 bool
+	Tools                                 []Tool
+	ToolChoice                            interface{}
+	Reasoning                             *ReasoningConfig
+	PromptCacheKey                        string
+	PromptCacheRetention                  string
+	ContextManagement                     []ContextManagementSetting
+	SkipLocalAutoCompressionAfterResponse bool
 }
 
 // ChatRequestOptions は text chat 用 Responses API request の構築入力を表す。
@@ -101,15 +103,17 @@ func BuildInitialInput(developerMsg InputItem, compactedInput []api.InputItem, h
 // BuildBaseRequest は provider 差分を渡して Responses API request の共通部を構築する。
 func BuildBaseRequest(options BaseRequestOptions) Request {
 	return Request{
-		Model:                options.Model.RequestName(),
-		MaxOutputTokens:      options.MaxOutputTokens,
-		Stream:               options.Stream,
-		Store:                options.Store,
-		Tools:                options.Tools,
-		ToolChoice:           options.ToolChoice,
-		Reasoning:            options.Reasoning,
-		PromptCacheKey:       options.PromptCacheKey,
-		PromptCacheRetention: options.PromptCacheRetention,
+		Model:                                 options.Model.RequestName(),
+		MaxOutputTokens:                       options.MaxOutputTokens,
+		Stream:                                options.Stream,
+		Store:                                 options.Store,
+		Tools:                                 options.Tools,
+		ToolChoice:                            options.ToolChoice,
+		Reasoning:                             options.Reasoning,
+		PromptCacheKey:                        options.PromptCacheKey,
+		PromptCacheRetention:                  options.PromptCacheRetention,
+		ContextManagement:                     options.ContextManagement,
+		SkipLocalAutoCompressionAfterResponse: options.SkipLocalAutoCompressionAfterResponse,
 	}
 }
 

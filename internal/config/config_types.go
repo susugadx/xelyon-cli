@@ -132,7 +132,9 @@ type ResponsesConfig struct {
 
 // ResponsesServerCompactionConfig は Responses API の server-side context 管理を優先する設定。
 type ResponsesServerCompactionConfig struct {
-	Enabled bool `yaml:"enabled"` // previous_response_id がある場合に local auto-compress をスキップ
+	Enabled          bool `yaml:"enabled"`           // previous_response_id がある場合に server-side compaction を有効化
+	CompactThreshold int  `yaml:"compact_threshold"` // compaction 発火閾値（0=auto、payload では 1000 以上に解決）
+	LocalFallback    bool `yaml:"local_fallback"`    // request payload に compaction を載せられない場合に local auto-compress へフォールバック
 }
 
 // PasteConfig はペーストモードの設定

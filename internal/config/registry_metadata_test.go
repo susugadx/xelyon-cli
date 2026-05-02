@@ -111,6 +111,8 @@ func TestInternalSectionsNotInRegistry(t *testing.T) {
 		"responses.store",
 		"responses.persist_response_id",
 		"responses.server_compaction.enabled",
+		"responses.server_compaction.compact_threshold",
+		"responses.server_compaction.local_fallback",
 	}
 
 	for _, path := range internalFields {

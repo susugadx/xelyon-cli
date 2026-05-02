@@ -37,6 +37,7 @@ func init() {
 type Provider struct {
 	api.BaseProvider
 	lastResponseID          string
+	responsesLocalSkip      bool
 	authToken               string
 	authTokenCommand        string
 	authTokenCommandTimeout time.Duration
@@ -80,6 +81,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 // ChatWithTools は Azure OpenAI Responses API でツール対応チャットを実行する。
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	model = api.GetDefaultModelWithContext(ctx, model, "azure", "azure-gpt-5.4")
+	p.responsesLocalSkip = false
 	return p.chatWithResponses(ctx, systemPrompt, history, model)
 }
 
@@ -91,6 +93,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	model = api.GetDefaultModelWithContext(ctx, model, "azure", "azure-gpt-5.4")
+	p.responsesLocalSkip = false
 	return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
 }
 
@@ -137,6 +140,13 @@ func (p *Provider) ClearToolChoice() {
 // ClearCache は provider が保持する Responses API response ID をクリアする。
 func (p *Provider) ClearCache() {
 	p.ClearResponseID()
+	p.responsesLocalSkip = false
+}
+
+// ShouldSkipLocalAutoCompressionForServerCompaction は
+// 直近の Responses request 判定に基づき local auto-compress を抑止するか返す。
+func (p *Provider) ShouldSkipLocalAutoCompressionForServerCompaction() bool {
+	return p.responsesLocalSkip
 }
 
 func (p *Provider) responsesURL() string {

@@ -173,6 +173,38 @@ func TestValidateConfig_RangeValidation(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_ResponsesServerCompactionCompactThresholdValidation(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Responses.ServerCompaction.CompactThreshold = 999
+
+	result := ValidateConfig(cfg)
+	if result.Valid {
+		t.Fatal("ValidateConfig should be invalid when compact_threshold is below 1000")
+	}
+
+	foundError := false
+	for _, issue := range result.Issues {
+		if issue.Field != "responses.server_compaction.compact_threshold" {
+			continue
+		}
+		foundError = true
+		if issue.Severity != "error" {
+			t.Fatalf("severity = %q, want error", issue.Severity)
+		}
+	}
+	if !foundError {
+		t.Fatal("missing validation issue for responses.server_compaction.compact_threshold")
+	}
+
+	cfg.Responses.ServerCompaction.CompactThreshold = 1000
+	result = ValidateConfig(cfg)
+	for _, issue := range result.Issues {
+		if issue.Field == "responses.server_compaction.compact_threshold" {
+			t.Fatalf("unexpected validation issue for compact_threshold=1000: %+v", issue)
+		}
+	}
+}
+
 func TestValidateConfig_DoesNotMutateCfg(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.General.ToolLoopLimit = -1

@@ -84,6 +84,34 @@ func TestHandleResponsesNonStreaming_TextAndFunctionCall(t *testing.T) {
 	}
 }
 
+func TestHandleResponsesNonStreaming_IgnoresCompactionAndUnknownOutputItems(t *testing.T) {
+	p := New("test-key")
+	resp := newResponsesNonStreamingHTTPResponse(`{
+		"id": "resp_unknown_items",
+		"status": "completed",
+		"output": [
+			{"type": "compaction", "content": [{"type":"output_text","text":"ignored"}]},
+			{"type": "unknown_future_item", "foo": "bar"},
+			{
+				"type": "message",
+				"content": [{"type":"output_text","text":"Hello from known message"}]
+			}
+		]
+	}`)
+	defer resp.Body.Close()
+
+	content, responseID, err := p.handleResponsesNonStreaming(newOpenAITestContext(t, false), resp, nil)
+	if err != nil {
+		t.Fatalf("handleResponsesNonStreaming() error = %v", err)
+	}
+	if responseID != "resp_unknown_items" {
+		t.Fatalf("responseID = %q, want resp_unknown_items", responseID)
+	}
+	if content != "Hello from known message" {
+		t.Fatalf("content = %q, want only known message output", content)
+	}
+}
+
 func TestHandleResponsesNonStreaming_ErrorStatusesDoNotReturnContentOrUsage(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -292,6 +320,70 @@ func TestChatWithResponses_StoreFalseOmitsPreviousAndDoesNotCacheResponseID(t *t
 	}
 	if p.GetResponseID() != "" {
 		t.Fatalf("GetResponseID() = %q, want empty when responses.store=false", p.GetResponseID())
+	}
+}
+
+func TestChatWithResponses_ServerCompactionPayloadControlsLocalSkipState(t *testing.T) {
+	var raw map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_new","output_text":"ok"}`))
+	})
+	t.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+	content, err := p.chatWithResponses(newOpenAITestContext(t, false), "system", []api.Message{{Role: "user", Content: "hi"}}, "gpt-5.5-pro")
+	if err != nil {
+		t.Fatalf("chatWithResponses() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if !p.ShouldSkipLocalAutoCompressionForServerCompaction() {
+		t.Fatal("ShouldSkipLocalAutoCompressionForServerCompaction() = false, want true when context_management.compaction is sent")
+	}
+	if _, ok := raw["context_management"]; !ok {
+		t.Fatalf("context_management should be present: %#v", raw)
+	}
+}
+
+func TestChatWithResponses_UnknownContextOmitsCompactionAndKeepsLocalFallbackState(t *testing.T) {
+	var raw map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_new\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	})
+	t.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+	})
+	ctx := config.WithContext(newOpenAITestContext(t, false), cfg)
+
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+	content, err := p.chatWithResponses(ctx, "system", []api.Message{{Role: "user", Content: "hi"}}, "corp-gpt-deployment")
+	if err != nil {
+		t.Fatalf("chatWithResponses() error = %v", err)
+	}
+	if content != "ok" {
+		t.Fatalf("content = %q, want ok", content)
+	}
+	if p.ShouldSkipLocalAutoCompressionForServerCompaction() {
+		t.Fatal("ShouldSkipLocalAutoCompressionForServerCompaction() = true, want false when compaction payload is omitted")
+	}
+	if _, ok := raw["context_management"]; ok {
+		t.Fatalf("context_management should be omitted for unknown context: %#v", raw["context_management"])
 	}
 }
 

@@ -14,6 +14,12 @@ type ResponseIDCapable interface {
 	GetResponseID() string
 }
 
+// ResponsesServerCompactionLocalSkipCapable は
+// 直近 request の server-side compaction 判定に基づく local auto-compress 抑止可否を返す。
+type ResponsesServerCompactionLocalSkipCapable interface {
+	ShouldSkipLocalAutoCompressionForServerCompaction() bool
+}
+
 func (a *Agent) runAutoCompression(costAwareCompress bool) bool {
 	cfg := a.cfg()
 

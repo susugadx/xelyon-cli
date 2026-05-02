@@ -1,9 +1,11 @@
 package openairesponses
 
 import (
+	"context"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestModelIdentity_CatalogNameDefaultsToRequestName(t *testing.T) {
@@ -161,5 +163,70 @@ func TestBuildFunctionToolChoice_UsesResponsesAPIShape(t *testing.T) {
 	}
 	if _, ok := choice["function"]; ok {
 		t.Fatalf("Responses API tool_choice must not use chat-completions function wrapper: %#v", choice)
+	}
+}
+
+func TestResolveServerCompactionDecision_DefaultConfigAutoThreshold(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ctx := config.WithContext(context.Background(), cfg)
+
+	decision := ResolveServerCompactionDecision(ctx, "openai", NewModelIdentity("gpt-5.5", "gpt-5.5"), "resp_old")
+	if !decision.ShouldSkipLocalAutoCompression {
+		t.Fatal("ShouldSkipLocalAutoCompression = false, want true when server compaction is applied")
+	}
+	if len(decision.ContextManagement) != 1 {
+		t.Fatalf("len(ContextManagement) = %d, want 1", len(decision.ContextManagement))
+	}
+	if decision.ContextManagement[0].Type != "compaction" {
+		t.Fatalf("ContextManagement[0].Type = %q, want compaction", decision.ContextManagement[0].Type)
+	}
+	if decision.ContextManagement[0].CompactThreshold < 1000 {
+		t.Fatalf("compact_threshold = %d, want >= 1000", decision.ContextManagement[0].CompactThreshold)
+	}
+	if decision.ContextManagement[0].CompactThreshold == 0 {
+		t.Fatal("compact_threshold = 0, want resolved value")
+	}
+}
+
+func TestResolveServerCompactionDecision_OmitsOnUnknownContextAndKeepsLocalFallback(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Responses.ServerCompaction.LocalFallback = true
+	ctx := config.WithContext(context.Background(), cfg)
+
+	decision := ResolveServerCompactionDecision(ctx, "openai", NewModelIdentity("corp-gpt-deployment", "corp-gpt-deployment"), "resp_old")
+	if decision.ShouldSkipLocalAutoCompression {
+		t.Fatal("ShouldSkipLocalAutoCompression = true, want false when local fallback is enabled")
+	}
+	if len(decision.ContextManagement) != 0 {
+		t.Fatalf("ContextManagement = %+v, want omitted on unknown context", decision.ContextManagement)
+	}
+}
+
+func TestResolveServerCompactionDecision_OmitsOnDisabled(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Responses.ServerCompaction.Enabled = false
+	ctx := config.WithContext(context.Background(), cfg)
+
+	decision := ResolveServerCompactionDecision(ctx, "openai", NewModelIdentity("gpt-5.5", "gpt-5.5"), "resp_old")
+	if decision.ShouldSkipLocalAutoCompression {
+		t.Fatal("ShouldSkipLocalAutoCompression = true, want false when server compaction is disabled")
+	}
+	if len(decision.ContextManagement) != 0 {
+		t.Fatalf("ContextManagement = %+v, want omitted when disabled", decision.ContextManagement)
+	}
+}
+
+func TestResolveServerCompactionDecision_CompactThresholdTooSmallOmitAndFallback(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Responses.ServerCompaction.CompactThreshold = 999
+	cfg.Responses.ServerCompaction.LocalFallback = true
+	ctx := config.WithContext(context.Background(), cfg)
+
+	decision := ResolveServerCompactionDecision(ctx, "openai", NewModelIdentity("gpt-5.5", "gpt-5.5"), "resp_old")
+	if decision.ShouldSkipLocalAutoCompression {
+		t.Fatal("ShouldSkipLocalAutoCompression = true, want false when compact_threshold is invalid and local fallback is enabled")
+	}
+	if len(decision.ContextManagement) != 0 {
+		t.Fatalf("ContextManagement = %+v, want omitted when compact_threshold < 1000", decision.ContextManagement)
 	}
 }

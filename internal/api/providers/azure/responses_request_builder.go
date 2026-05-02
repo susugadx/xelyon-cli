@@ -19,12 +19,14 @@ func newModelIdentity(requestModel, catalogModel string) modelIdentity {
 
 func (p *Provider) buildChatResponsesRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) responsesRequest {
 	modelIdentity := azureModelIdentity(ctx, model)
+	previousResponseID := azurePreviousResponseIDForRequest(ctx, p.GetResponseID())
+	serverCompactionDecision := openairesponses.ResolveServerCompactionDecision(ctx, "azure", modelIdentity, previousResponseID)
 	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
-		Base:               p.newBaseResponsesRequestOptions(ctx, modelIdentity),
+		Base:               p.newBaseResponsesRequestOptions(ctx, modelIdentity, serverCompactionDecision),
 		SystemPrompt:       systemPrompt,
 		CompactedInput:     api.CompactedInputItemsFromContext(ctx),
 		History:            history,
-		PreviousResponseID: azurePreviousResponseIDForRequest(ctx, p.GetResponseID()),
+		PreviousResponseID: previousResponseID,
 	})
 }
 
@@ -38,7 +40,7 @@ func (p *Provider) buildImageResponsesRequest(
 ) responsesRequest {
 	modelIdentity := azureModelIdentity(ctx, model)
 	return openairesponses.BuildImageRequest(openairesponses.ImageRequestOptions{
-		Base:           p.newBaseResponsesRequestOptions(ctx, modelIdentity),
+		Base:           p.newBaseResponsesRequestOptions(ctx, modelIdentity, openairesponses.ServerCompactionDecision{}),
 		SystemPrompt:   systemPrompt,
 		CompactedInput: api.CompactedInputItemsFromContext(ctx),
 		History:        history,
@@ -47,13 +49,19 @@ func (p *Provider) buildImageResponsesRequest(
 	})
 }
 
-func (p *Provider) newBaseResponsesRequestOptions(ctx context.Context, model modelIdentity) openairesponses.BaseRequestOptions {
+func (p *Provider) newBaseResponsesRequestOptions(
+	ctx context.Context,
+	model modelIdentity,
+	serverCompactionDecision openairesponses.ServerCompactionDecision,
+) openairesponses.BaseRequestOptions {
 	cfg := config.FromContext(ctx)
 	options := openairesponses.BaseRequestOptions{
-		Model:           model,
-		MaxOutputTokens: api.GetMaxOutputTokens(ctx, "azure", model.RequestName()),
-		Stream:          openai.ShouldStreamResponses(model.CatalogName()),
-		Store:           cfg.ResponsesStoreEnabled(),
+		Model:                                 model,
+		MaxOutputTokens:                       api.GetMaxOutputTokens(ctx, "azure", model.RequestName()),
+		Stream:                                openai.ShouldStreamResponses(model.CatalogName()),
+		Store:                                 cfg.ResponsesStoreEnabled(),
+		ContextManagement:                     serverCompactionDecision.ContextManagement,
+		SkipLocalAutoCompressionAfterResponse: serverCompactionDecision.ShouldSkipLocalAutoCompression,
 	}
 	if p.IsFunctionCallingEnabled() {
 		options.Tools = openai.GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools)

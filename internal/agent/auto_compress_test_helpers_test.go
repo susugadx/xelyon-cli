@@ -21,6 +21,7 @@ type compressionTestProvider struct {
 	capturedChatResponseID    string
 	cachedResponseID          bool
 	responseID                string
+	serverCompactionLocalSkip bool
 	supportsCompact           bool
 	compactErr                error
 	compactCalls              int
@@ -75,6 +76,10 @@ func (m *compressionTestProvider) SetResponseID(id string) {
 
 func (m *compressionTestProvider) GetResponseID() string {
 	return m.responseID
+}
+
+func (m *compressionTestProvider) ShouldSkipLocalAutoCompressionForServerCompaction() bool {
+	return m.serverCompactionLocalSkip
 }
 
 func (m *compressionTestProvider) SupportsCompact() bool {
