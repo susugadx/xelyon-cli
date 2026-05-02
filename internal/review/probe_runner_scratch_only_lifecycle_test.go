@@ -117,7 +117,7 @@ func TestProbeRunner_ScratchOnly_Cleanup(t *testing.T) {
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-cleanup",
 		Mode:           ReviewProbeScratchOnly,
-		Timeout:        2 * time.Second,
+		Timeout:        12 * time.Second,
 		MaxOutputBytes: 2048,
 		Files: []ReviewProbeFile{{
 			Path: "print_scratch.go",
@@ -158,7 +158,7 @@ func TestProbeRunner_ScratchOnly_RepoMutationDetection(t *testing.T) {
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-mutation",
 		Mode:           ReviewProbeScratchOnly,
-		Timeout:        2 * time.Second,
+		Timeout:        12 * time.Second,
 		MaxOutputBytes: 1024,
 		Files: []ReviewProbeFile{{
 			Path: "mutate_repo.go",

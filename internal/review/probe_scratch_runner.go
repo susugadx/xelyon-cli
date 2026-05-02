@@ -30,6 +30,9 @@ func newScratchOnlyExecutor(repoRoot string) *scratchOnlyExecutor {
 }
 
 func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) (result ReviewProbeResult) {
+	// scratch_only は OS sandbox ではない。
+	// env/cache/tmp/home の隔離と request limits により漏洩・副作用を減らすが、
+	// 実行中の network / 任意 process 起動 / 任意 file access を OS レベルでは防がない。
 	result = newScratchOnlyProbeResult(req)
 
 	scratchDir, err := e.mktemp("", "xelyon-review-scratch-*")
@@ -40,20 +43,15 @@ func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) (
 	defer func() {
 		e.cleanupScratchDir(&result, scratchDir)
 	}()
-	if err := validateScratchDirOutsideRepo(e.repoRoot, scratchDir); err != nil {
-		blockScratchOnlyResult(&result, err.Error())
-		return result
-	}
-
-	normalized, err := e.validateRequest(req, scratchDir)
+	runtime, err := e.prepareRuntime(req, scratchDir)
 	if err != nil {
 		blockScratchOnlyResult(&result, err.Error())
 		return result
 	}
-	result.ID = normalized.id
-	result.Mode = normalized.mode
+	result.ID = runtime.request.id
+	result.Mode = runtime.request.mode
 
-	if err := writeScratchFiles(normalized.files); err != nil {
+	if err := writeScratchFiles(runtime.request.files); err != nil {
 		blockScratchOnlyResult(&result, newBlockedCommandErrorf("failed to write scratch files: %v", err).Error())
 		return result
 	}
@@ -64,8 +62,9 @@ func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) (
 		return result
 	}
 
-	for _, cmd := range normalized.commands {
-		cmdResult := e.executeScratchOnlyCommand(ctx, cmd, normalized.timeout, normalized.maxOutputBytes, normalized.scratchDir)
+	for _, cmd := range runtime.request.commands {
+		// scratch_only は OS sandbox ではない。env/cache/limits で副作用と漏洩を減らす。
+		cmdResult := e.executeScratchOnlyCommand(ctx, cmd, runtime.request.timeout, runtime.request.maxOutputBytes, runtime.env)
 		if applyScratchOnlyCommandTransition(&result, cmd, cmdResult) {
 			break
 		}
@@ -158,12 +157,7 @@ func applyScratchOnlyMutationTransition(result *ReviewProbeResult, mutatedFiles 
 	result.Error = appendError(result.Error, "probe command changed the working tree")
 }
 
-func (e *scratchOnlyExecutor) executeScratchOnlyCommand(ctx context.Context, cmd scratchOnlyCommand, timeout time.Duration, maxOutputBytes int64, scratchDir string) ReviewProbeCommandResult {
-	env := append(append([]string(nil), e.baseEnv...),
-		scratchEnvRepoRoot+"="+e.repoRoot,
-		scratchEnvScratchDir+"="+scratchDir,
-	)
-
+func (e *scratchOnlyExecutor) executeScratchOnlyCommand(ctx context.Context, cmd scratchOnlyCommand, timeout time.Duration, maxOutputBytes int64, env []string) ReviewProbeCommandResult {
 	return executeProbeCommand(ctx, probeExecCommand{
 		command: cmd.command,
 		args:    cmd.args,

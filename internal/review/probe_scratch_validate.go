@@ -18,7 +18,6 @@ type scratchOnlyRequest struct {
 	mode           ReviewProbeMode
 	timeout        time.Duration
 	maxOutputBytes int64
-	scratchDir     string
 	files          []scratchOnlyFile
 	commands       []scratchOnlyCommand
 }
@@ -31,6 +30,9 @@ func (e *scratchOnlyExecutor) validateRequest(req ReviewProbeRequest, scratchDir
 	}
 	if len(req.Commands) == 0 {
 		return scratchOnlyRequest{}, fmt.Errorf("probe commands are required")
+	}
+	if len(req.Commands) > defaultScratchOnlyMaxCommands {
+		return scratchOnlyRequest{}, newBlockedCommandErrorf("scratch_only allows at most %d commands", defaultScratchOnlyMaxCommands)
 	}
 
 	files, err := validateAndBuildScratchFiles(scratchDir, req.Files)
@@ -52,7 +54,6 @@ func (e *scratchOnlyExecutor) validateRequest(req ReviewProbeRequest, scratchDir
 		mode:           req.Mode,
 		timeout:        req.Timeout,
 		maxOutputBytes: req.MaxOutputBytes,
-		scratchDir:     scratchDir,
 		files:          files,
 		commands:       commands,
 	}, nil

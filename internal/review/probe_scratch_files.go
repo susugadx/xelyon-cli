@@ -12,10 +12,24 @@ type scratchOnlyFile struct {
 }
 
 func validateAndBuildScratchFiles(scratchDir string, files []ReviewProbeFile) ([]scratchOnlyFile, error) {
+	if len(files) > defaultScratchOnlyMaxFiles {
+		return nil, newBlockedCommandErrorf("scratch_only allows at most %d files", defaultScratchOnlyMaxFiles)
+	}
+
 	planned := make([]scratchOnlyFile, 0, len(files))
 	seen := make(map[string]struct{}, len(files))
+	var totalBytes int64
 
 	for _, file := range files {
+		contentBytes := int64(len(file.Content))
+		if contentBytes > defaultScratchOnlyMaxFileBytes {
+			return nil, newBlockedCommandErrorf("scratch file %q exceeds max file bytes", file.Path)
+		}
+		totalBytes += contentBytes
+		if totalBytes > defaultScratchOnlyMaxTotalFileBytes {
+			return nil, newBlockedCommandErrorf("scratch files exceed max total bytes")
+		}
+
 		absPath, err := resolveScratchRelativePath(scratchDir, file.Path)
 		if err != nil {
 			return nil, err
