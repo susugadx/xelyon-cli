@@ -14,7 +14,9 @@ func TestHostReadOnlyCommandPolicy_AllowsKnownReadOnlyCommands(t *testing.T) {
 		{name: "git status", command: "git", args: []string{"status", "--short"}},
 		{name: "git global option + status", command: "git", args: []string{"--no-optional-locks", "status", "--short"}},
 		{name: "git diff", command: "git", args: []string{"diff"}},
+		{name: "git diff path separator", command: "git", args: []string{"diff", "--", "path/to/file"}},
 		{name: "rg pattern", command: "rg", args: []string{"pattern"}},
+		{name: "cat file", command: "cat", args: []string{"file.txt"}},
 		{name: "go test", command: "go", args: []string{"test", "./..."}},
 		{name: "go test json", command: "go", args: []string{"test", "-json", "./..."}},
 	}
@@ -60,10 +62,22 @@ func TestHostReadOnlyCommandPolicy_BlocksDangerousCommandsAndArgs(t *testing.T) 
 			errorContains: "git argument --ext-diff",
 		},
 		{
+			name:          "git global separator before subcommand",
+			command:       "git",
+			args:          []string{"--", "diff"},
+			errorContains: "git global separator -- is not allowed before subcommand",
+		},
+		{
 			name:          "git config override",
 			command:       "git",
 			args:          []string{"-c", "core.pager=cat", "diff"},
 			errorContains: "git config override",
+		},
+		{
+			name:          "rg pre",
+			command:       "rg",
+			args:          []string{"--pre", "cat", "pattern"},
+			errorContains: "rg argument --pre",
 		},
 		{
 			name:          "git output equals",
@@ -100,6 +114,18 @@ func TestHostReadOnlyCommandPolicy_BlocksDangerousCommandsAndArgs(t *testing.T) 
 			command:       "./git",
 			args:          []string{"status", "--short"},
 			errorContains: "command path is not allowed",
+		},
+		{
+			name:          "cat option",
+			command:       "cat",
+			args:          []string{"-n", "file.txt"},
+			errorContains: "cat option -n",
+		},
+		{
+			name:          "cat stdin",
+			command:       "cat",
+			args:          []string{"-"},
+			errorContains: "cat argument -",
 		},
 	}
 

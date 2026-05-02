@@ -59,49 +59,60 @@ func (e *hostReadOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) 
 
 	beforeSnapshot, err := captureWorktreeSnapshot(ctx, e.repoRoot)
 	if err != nil {
-		result.Status = ReviewProbeBlocked
-		result.Error = fmt.Sprintf("failed to capture worktree snapshot before probe: %v", err)
+		applyHostReadOnlySnapshotError(&result, "before", err)
 		return result
 	}
 
-	stop := false
 	for _, cmd := range normalized.commands {
 		cmdResult := executeHostReadOnlyCommand(ctx, cmd, normalized.timeout, normalized.maxOutputBytes)
-		result.CommandResults = append(result.CommandResults, cmdResult)
-		result.OutputTruncated = result.OutputTruncated || cmdResult.OutputTruncated
-
-		switch cmdResult.Status {
-		case ReviewProbeTimedOut:
-			result.Status = ReviewProbeTimedOut
-			result.Error = appendError(result.Error, fmt.Sprintf("probe command timed out: %s", formatProbeCommand(cmd.command, cmd.args)))
-			stop = true
-		case ReviewProbeFailed:
-			result.Status = ReviewProbeFailed
-			result.Error = appendError(result.Error, fmt.Sprintf("probe command failed: %s", formatProbeCommand(cmd.command, cmd.args)))
-			stop = true
-		}
-
-		if stop {
+		if applyHostReadOnlyCommandTransition(&result, cmd, cmdResult) {
 			break
 		}
 	}
 
 	afterSnapshot, err := captureWorktreeSnapshot(ctx, e.repoRoot)
 	if err != nil {
-		result.Status = ReviewProbeBlocked
-		result.Error = appendError(result.Error, fmt.Sprintf("failed to capture worktree snapshot after probe: %v", err))
+		applyHostReadOnlySnapshotError(&result, "after", err)
 		return result
 	}
 
-	mutatedFiles := diffWorktreeSnapshots(beforeSnapshot, afterSnapshot)
-	if len(mutatedFiles) > 0 {
-		result.MutatedWorktree = true
-		result.MutatedFiles = mutatedFiles
-		result.Status = ReviewProbeMutatedWorktree
-		result.Error = appendError(result.Error, "probe command changed the working tree")
-	}
+	applyHostReadOnlyMutationTransition(&result, diffWorktreeSnapshots(beforeSnapshot, afterSnapshot))
 
 	return result
+}
+
+func applyHostReadOnlySnapshotError(result *ReviewProbeResult, phase string, err error) {
+	result.Status = ReviewProbeBlocked
+	result.Error = appendError(result.Error, fmt.Sprintf("failed to capture worktree snapshot %s probe: %v", phase, err))
+}
+
+func applyHostReadOnlyCommandTransition(result *ReviewProbeResult, cmd hostReadOnlyCommand, cmdResult ReviewProbeCommandResult) (stop bool) {
+	result.CommandResults = append(result.CommandResults, cmdResult)
+	result.OutputTruncated = result.OutputTruncated || cmdResult.OutputTruncated
+
+	switch cmdResult.Status {
+	case ReviewProbeTimedOut:
+		result.Status = ReviewProbeTimedOut
+		result.Error = appendError(result.Error, fmt.Sprintf("probe command timed out: %s", formatProbeCommand(cmd.command, cmd.args)))
+		return true
+	case ReviewProbeFailed:
+		result.Status = ReviewProbeFailed
+		result.Error = appendError(result.Error, fmt.Sprintf("probe command failed: %s", formatProbeCommand(cmd.command, cmd.args)))
+		return true
+	default:
+		return false
+	}
+}
+
+func applyHostReadOnlyMutationTransition(result *ReviewProbeResult, mutatedFiles []string) {
+	if len(mutatedFiles) == 0 {
+		return
+	}
+
+	result.MutatedWorktree = true
+	result.MutatedFiles = mutatedFiles
+	result.Status = ReviewProbeMutatedWorktree
+	result.Error = appendError(result.Error, "probe command changed the working tree")
 }
 
 func (e *hostReadOnlyExecutor) validateRequest(req ReviewProbeRequest) (hostReadOnlyRequest, error) {

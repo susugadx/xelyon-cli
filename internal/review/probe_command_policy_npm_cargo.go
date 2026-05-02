@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+var allowedNpmRunHostReadOnlyScripts = map[string]struct{}{
+	"test": {},
+	"lint": {},
+}
+
+var allowedCargoHostReadOnlySubcommands = map[string]struct{}{
+	"test":   {},
+	"clippy": {},
+}
+
 func validateNpmHostReadOnlyArgs(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("blocked command: npm subcommand is required")
@@ -13,8 +23,7 @@ func validateNpmHostReadOnlyArgs(args []string) error {
 		return nil
 	}
 	if args[0] == "run" && len(args) >= 2 {
-		switch args[1] {
-		case "test", "lint":
+		if _, ok := allowedNpmRunHostReadOnlyScripts[args[1]]; ok {
 			return nil
 		}
 	}
@@ -25,10 +34,8 @@ func validateCargoHostReadOnlyArgs(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("blocked command: cargo subcommand is required")
 	}
-	switch args[0] {
-	case "test", "clippy":
+	if _, ok := allowedCargoHostReadOnlySubcommands[args[0]]; ok {
 		return nil
-	default:
-		return fmt.Errorf("blocked command: cargo %s is not allowed in host_readonly", args[0])
 	}
+	return fmt.Errorf("blocked command: cargo %s is not allowed in host_readonly", args[0])
 }
