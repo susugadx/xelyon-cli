@@ -2,10 +2,9 @@ package review
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"time"
 )
 
@@ -46,6 +45,11 @@ func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) R
 	defer func() {
 		_ = e.removeAll(scratchDir)
 	}()
+	if err := validateScratchDirOutsideRepo(e.repoRoot, scratchDir); err != nil {
+		result.Status = ReviewProbeBlocked
+		result.Error = err.Error()
+		return result
+	}
 
 	normalized, err := e.validateRequest(req, scratchDir)
 	if err != nil {
@@ -85,6 +89,26 @@ func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) R
 	return result
 }
 
+func validateScratchDirOutsideRepo(repoRoot, scratchDir string) error {
+	resolvedScratchDir := filepath.Clean(scratchDir)
+	if !filepath.IsAbs(resolvedScratchDir) {
+		abs, err := filepath.Abs(resolvedScratchDir)
+		if err != nil {
+			return newBlockedCommandErrorf("failed to resolve scratch directory %q: %v", scratchDir, err)
+		}
+		resolvedScratchDir = filepath.Clean(abs)
+	}
+
+	insideRepo, err := isPathWithinRepoRoot(repoRoot, resolvedScratchDir)
+	if err != nil {
+		return newBlockedCommandErrorf("failed to validate scratch directory %q: %v", scratchDir, err)
+	}
+	if insideRepo {
+		return newBlockedCommandErrorf("scratch directory must be outside repository root: %s", resolvedScratchDir)
+	}
+	return nil
+}
+
 func applyScratchOnlySnapshotError(result *ReviewProbeResult, phase string, err error) {
 	result.Status = ReviewProbeBlocked
 	result.Error = appendError(result.Error, fmt.Sprintf("failed to capture worktree snapshot %s probe: %v", phase, err))
@@ -120,52 +144,15 @@ func applyScratchOnlyMutationTransition(result *ReviewProbeResult, mutatedFiles 
 }
 
 func (e *scratchOnlyExecutor) executeScratchOnlyCommand(ctx context.Context, cmd scratchOnlyCommand, timeout time.Duration, maxOutputBytes int64, scratchDir string) ReviewProbeCommandResult {
-	result := ReviewProbeCommandResult{
-		Command:  cmd.command,
-		Args:     append([]string(nil), cmd.args...),
-		WorkDir:  cmd.workDir,
-		Status:   ReviewProbePassed,
-		ExitCode: -1,
-	}
-
-	cmdCtx := ctx
-	cancel := func() {}
-	if timeout > 0 {
-		cmdCtx, cancel = context.WithTimeout(ctx, timeout)
-	}
-	defer cancel()
-
-	proc := exec.CommandContext(cmdCtx, cmd.command, cmd.args...)
-	proc.Dir = cmd.workDir
-	proc.Env = append(append([]string(nil), e.baseEnv...),
+	env := append(append([]string(nil), e.baseEnv...),
 		scratchEnvRepoRoot+"="+e.repoRoot,
 		scratchEnvScratchDir+"="+scratchDir,
 	)
 
-	output := newCappedOutput(maxOutputBytes)
-	proc.Stdout = output
-	proc.Stderr = output
-
-	start := time.Now()
-	err := proc.Run()
-	result.Duration = time.Since(start)
-	result.Output = output.String()
-	result.OutputTruncated = output.Truncated()
-
-	if proc.ProcessState != nil {
-		result.ExitCode = proc.ProcessState.ExitCode()
-	}
-	if err == nil {
-		return result
-	}
-
-	if errors.Is(cmdCtx.Err(), context.DeadlineExceeded) {
-		result.Status = ReviewProbeTimedOut
-		result.Error = cmdCtx.Err().Error()
-		return result
-	}
-
-	result.Status = ReviewProbeFailed
-	result.Error = err.Error()
-	return result
+	return executeProbeCommand(ctx, probeExecCommand{
+		command: cmd.command,
+		args:    cmd.args,
+		workDir: cmd.workDir,
+		env:     env,
+	}, timeout, maxOutputBytes)
 }

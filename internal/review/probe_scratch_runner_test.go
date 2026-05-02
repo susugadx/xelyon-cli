@@ -300,3 +300,48 @@ func TestProbeRunner_ScratchOnly_RepoMutationDetection(t *testing.T) {
 		t.Fatalf("MutatedFiles = %#v, want to contain keep.txt", result.MutatedFiles)
 	}
 }
+
+func TestScratchOnlyExecutor_BlocksScratchDirInsideRepoAndCleansUp(t *testing.T) {
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	scratchDir := filepath.Join(repo, ".xelyon-review-scratch")
+	removed := make([]string, 0, 1)
+
+	executor := newScratchOnlyExecutor(repo)
+	executor.mktemp = func(dir, pattern string) (string, error) {
+		if err := os.MkdirAll(scratchDir, 0o755); err != nil {
+			return "", err
+		}
+		return scratchDir, nil
+	}
+	executor.removeAll = func(path string) error {
+		removed = append(removed, path)
+		return os.RemoveAll(path)
+	}
+
+	result := executor.run(context.Background(), ReviewProbeRequest{
+		ID:   "scratch-inside-repo",
+		Mode: ReviewProbeScratchOnly,
+		Commands: []ReviewProbeCommand{
+			{Command: "cat", Args: []string{"check.txt"}},
+		},
+	})
+
+	if result.Status != ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	}
+	if len(result.CommandResults) != 0 {
+		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
+	}
+	if !strings.Contains(result.Error, "outside repository root") {
+		t.Fatalf("Error = %q, want to contain outside repository root", result.Error)
+	}
+	if len(removed) != 1 {
+		t.Fatalf("len(removed) = %d, want 1", len(removed))
+	}
+	if filepath.Clean(removed[0]) != filepath.Clean(scratchDir) {
+		t.Fatalf("removed[0] = %q, want %q", removed[0], scratchDir)
+	}
+	if _, err := os.Stat(scratchDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("scratch dir should be removed, stat error = %v", err)
+	}
+}
