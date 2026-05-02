@@ -9,13 +9,6 @@ func (a *Agent) invocationCWD() string {
 	return a.Runtime.effectiveInvocationCWD()
 }
 
-func (a *Agent) refreshInvocationCWD() {
-	if a == nil || a.Runtime == nil {
-		return
-	}
-	a.Runtime.refreshInvocationCWD()
-}
-
 func (a *Agent) projectConfigStore() *ProjectConfigStore {
 	if a == nil || a.Runtime == nil {
 		return defaultProjectConfigStore

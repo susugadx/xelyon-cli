@@ -67,10 +67,7 @@ func (m *PromptManager) refreshProjectPromptWithContext(input string, refreshCtx
 	}))
 
 	a.SystemPrompt = layout.Compose()
-	injectProjectMapWithOverrides(a, input, projectMapInjectionOverrides{
-		invocationCWD: refreshCtx.invocationCWD,
-		projectConfig: refreshCtx.projectConfig,
-	})
+	injectProjectMapWithOverrides(a, input, projectMapInjectionOverrides(refreshCtx))
 }
 
 func (m *PromptManager) RefreshProjectPromptIfDirty(input string) {
@@ -100,10 +97,7 @@ func (m *PromptManager) shouldRefreshProjectPromptWithContext(input string, refr
 		return true
 	}
 
-	sources, ok := resolveProjectMapInjectionSourcesWithOverrides(a, projectMapInjectionOverrides{
-		invocationCWD: refreshCtx.invocationCWD,
-		projectConfig: refreshCtx.projectConfig,
-	})
+	sources, ok := resolveProjectMapInjectionSourcesWithOverrides(a, projectMapInjectionOverrides(refreshCtx))
 	if !ok {
 		return false
 	}

@@ -20,20 +20,12 @@ type projectMapInjectionOverrides struct {
 	projectConfig *config.ProjectConfig
 }
 
-func prepareProjectMapInjection(agent *Agent, input string) (projectMapInjectionContext, bool) {
-	return prepareProjectMapInjectionWithOverrides(agent, input, projectMapInjectionOverrides{})
-}
-
 func prepareProjectMapInjectionWithOverrides(agent *Agent, input string, overrides projectMapInjectionOverrides) (projectMapInjectionContext, bool) {
 	sources, ok := resolveProjectMapInjectionSourcesWithOverrides(agent, overrides)
 	if !ok {
 		return projectMapInjectionContext{}, false
 	}
 	return buildProjectMapInjectionContext(agent, input, sources)
-}
-
-func resolveProjectMapInjectionSources(agent *Agent) (projectMapInjectionSources, bool) {
-	return resolveProjectMapInjectionSourcesWithOverrides(agent, projectMapInjectionOverrides{})
 }
 
 func resolveProjectMapInjectionSourcesWithOverrides(agent *Agent, overrides projectMapInjectionOverrides) (projectMapInjectionSources, bool) {

@@ -52,7 +52,7 @@ func buildRootsStateFingerprint(roots []discoverRoot) string {
 			_, _ = hasher.Write([]byte("|err=" + err.Error() + "\n"))
 			continue
 		}
-		_, _ = hasher.Write([]byte(fmt.Sprintf("|mtime=%d|size=%d\n", info.ModTime().UnixNano(), info.Size())))
+		_, _ = fmt.Fprintf(hasher, "|mtime=%d|size=%d\n", info.ModTime().UnixNano(), info.Size())
 
 		entries, readErr := os.ReadDir(path)
 		if readErr != nil {
@@ -75,7 +75,7 @@ func buildRootsStateFingerprint(roots []discoverRoot) string {
 				_, _ = hasher.Write([]byte("|child:" + child + "|err=" + childErr.Error() + "\n"))
 				continue
 			}
-			_, _ = hasher.Write([]byte(fmt.Sprintf("|child:%s|mtime=%d|size=%d\n", child, childInfo.ModTime().UnixNano(), childInfo.Size())))
+			_, _ = fmt.Fprintf(hasher, "|child:%s|mtime=%d|size=%d\n", child, childInfo.ModTime().UnixNano(), childInfo.Size())
 		}
 	}
 	return hex.EncodeToString(hasher.Sum(nil))

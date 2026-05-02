@@ -27,15 +27,6 @@ The patch may modify multiple files.`
 
 const geminiApplyPatchRepairCacheNamespace = "gemini_apply_patch_repair"
 
-func (a *Agent) maybeRepairGeminiApplyPatch(ctx context.Context, tc *tools.ToolCall, result string, change *tools.FileChange, execCtx tools.ExecutionContext, quiet bool) (string, *tools.FileChange) {
-	execResult := a.maybeRepairGeminiApplyPatchExecution(ctx, tc, tools.ExecutionResult{
-		Result: result,
-		Change: change,
-		Error:  tools.IsErrorResult(result),
-	}, execCtx, quiet)
-	return execResult.Result, execResult.Change
-}
-
 func (a *Agent) maybeRepairGeminiApplyPatchExecution(ctx context.Context, tc *tools.ToolCall, execResult tools.ExecutionResult, execCtx tools.ExecutionContext, quiet bool) tools.ExecutionResult {
 	if !a.shouldRepairGeminiApplyPatch(tc) {
 		return execResult

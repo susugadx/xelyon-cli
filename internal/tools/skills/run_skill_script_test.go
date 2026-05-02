@@ -13,6 +13,33 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+func TestRunSkillScriptTool_ParametersIncludeArgsJSONAndLegacyArgs(t *testing.T) {
+	tool := &RunSkillScriptTool{}
+	params := tool.Parameters()
+	properties, ok := params["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("properties missing: %#v", params)
+	}
+
+	argsProp, ok := properties["args"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("args property missing: %#v", properties)
+	}
+	argsDesc, _ := argsProp["description"].(string)
+	if !strings.Contains(argsDesc, "Legacy simple args") {
+		t.Fatalf("args description should mark legacy usage, got: %q", argsDesc)
+	}
+
+	argsJSONProp, ok := properties["args_json"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("args_json property missing: %#v", properties)
+	}
+	argsJSONDesc, _ := argsJSONProp["description"].(string)
+	if !strings.Contains(argsJSONDesc, "JSON array of string arguments") {
+		t.Fatalf("args_json description should describe JSON argv, got: %q", argsJSONDesc)
+	}
+}
+
 func TestRunSkillScriptTool_Run_UnknownSkill(t *testing.T) {
 	restore := stubRunSkillScriptDependencies(t)
 	defer restore()
@@ -180,7 +207,7 @@ func TestRunSkillScriptTool_Run_SafeScriptPassesToExecutionPath(t *testing.T) {
 	got, change, err := tool.Run(tools.ExecutionContext{}, map[string]string{
 		"skill":  "demo",
 		"script": "scripts/safe.sh",
-		"args":   "--name test",
+		"args":   "--name test --json",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -192,9 +219,173 @@ func TestRunSkillScriptTool_Run_SafeScriptPassesToExecutionPath(t *testing.T) {
 		t.Fatalf("Run() output = %q, want %q", got, "ok")
 	}
 
-	expected := "bash " + shellQuote(filepath.Clean(scriptPath)) + " --name test"
+	expected := "bash " + shellQuote(filepath.Clean(scriptPath)) + " '--name' 'test' '--json'"
 	if gotCommand != expected {
 		t.Fatalf("forwarded command = %q, want %q", gotCommand, expected)
+	}
+}
+
+func TestRunSkillScriptTool_Run_ArgsJSONQuotedAsArgv(t *testing.T) {
+	restore := stubRunSkillScriptDependencies(t)
+	defer restore()
+
+	skill := makeScriptSkill(t, "demo")
+	scriptPath := filepath.Join(skill.Directory, "scripts", "safe.sh")
+	mustWriteRunSkillFile(t, scriptPath, "echo safe\n")
+	loadCatalogForTool = func(_ string) skillcatalog.SkillCatalog {
+		return skillcatalog.SkillCatalog{Skills: []skillcatalog.ParsedSkill{skill}}
+	}
+
+	var gotCommand string
+	executeSkillScriptCommand = func(_ tools.ExecutionContext, command string) string {
+		gotCommand = command
+		return "ok"
+	}
+
+	tool := &RunSkillScriptTool{}
+	got, _, _ := tool.Run(tools.ExecutionContext{}, map[string]string{
+		"skill":     "demo",
+		"script":    "safe.sh",
+		"args_json": `["--name","test user","--json"]`,
+	})
+	if got != "ok" {
+		t.Fatalf("Run() output = %q, want ok", got)
+	}
+	expected := "bash " + shellQuote(filepath.Clean(scriptPath)) + " '--name' 'test user' '--json'"
+	if gotCommand != expected {
+		t.Fatalf("forwarded command = %q, want %q", gotCommand, expected)
+	}
+}
+
+func TestRunSkillScriptTool_Run_ArgsAndArgsJSONMutualExclusive(t *testing.T) {
+	restore := stubRunSkillScriptDependencies(t)
+	defer restore()
+
+	tool := &RunSkillScriptTool{}
+	got, _, _ := tool.Run(tools.ExecutionContext{}, map[string]string{
+		"skill":     "demo",
+		"script":    "safe.sh",
+		"args":      "--name test",
+		"args_json": `["--name","test"]`,
+	})
+	if got != "Error: use either args_json or args, not both" {
+		t.Fatalf("Run() output = %q", got)
+	}
+}
+
+func TestRunSkillScriptTool_Run_InvalidArgsJSONReject(t *testing.T) {
+	restore := stubRunSkillScriptDependencies(t)
+	defer restore()
+
+	skill := makeScriptSkill(t, "demo")
+	loadCatalogForTool = func(_ string) skillcatalog.SkillCatalog {
+		return skillcatalog.SkillCatalog{Skills: []skillcatalog.ParsedSkill{skill}}
+	}
+
+	var executeCalls int
+	executeSkillScriptCommand = func(_ tools.ExecutionContext, command string) string {
+		executeCalls++
+		return command
+	}
+
+	tool := &RunSkillScriptTool{}
+	got, _, _ := tool.Run(tools.ExecutionContext{}, map[string]string{
+		"skill":     "demo",
+		"script":    "safe.sh",
+		"args_json": "{bad",
+	})
+	if got != "Error: invalid args_json: expected JSON array of strings" {
+		t.Fatalf("Run() output = %q", got)
+	}
+	if executeCalls != 0 {
+		t.Fatalf("executeSkillScriptCommand calls = %d, want 0", executeCalls)
+	}
+}
+
+func TestRunSkillScriptTool_Run_ArgsJSONNonStringReject(t *testing.T) {
+	restore := stubRunSkillScriptDependencies(t)
+	defer restore()
+
+	skill := makeScriptSkill(t, "demo")
+	loadCatalogForTool = func(_ string) skillcatalog.SkillCatalog {
+		return skillcatalog.SkillCatalog{Skills: []skillcatalog.ParsedSkill{skill}}
+	}
+
+	var executeCalls int
+	executeSkillScriptCommand = func(_ tools.ExecutionContext, command string) string {
+		executeCalls++
+		return command
+	}
+
+	tool := &RunSkillScriptTool{}
+	got, _, _ := tool.Run(tools.ExecutionContext{}, map[string]string{
+		"skill":     "demo",
+		"script":    "safe.sh",
+		"args_json": `["ok",123]`,
+	})
+	if got != "Error: invalid args_json: expected JSON array of strings" {
+		t.Fatalf("Run() output = %q", got)
+	}
+	if executeCalls != 0 {
+		t.Fatalf("executeSkillScriptCommand calls = %d, want 0", executeCalls)
+	}
+}
+
+func TestRunSkillScriptTool_Run_LegacyShellMetacharReject(t *testing.T) {
+	restore := stubRunSkillScriptDependencies(t)
+	defer restore()
+
+	skill := makeScriptSkill(t, "demo")
+	loadCatalogForTool = func(_ string) skillcatalog.SkillCatalog {
+		return skillcatalog.SkillCatalog{Skills: []skillcatalog.ParsedSkill{skill}}
+	}
+
+	var executeCalls int
+	executeSkillScriptCommand = func(_ tools.ExecutionContext, command string) string {
+		executeCalls++
+		return command
+	}
+
+	tool := &RunSkillScriptTool{}
+	got, _, _ := tool.Run(tools.ExecutionContext{}, map[string]string{
+		"skill":  "demo",
+		"script": "safe.sh",
+		"args":   "; rm -rf /",
+	})
+	if got != "Error: unsafe legacy args; use args_json for quoted values or shell metacharacters" {
+		t.Fatalf("Run() output = %q", got)
+	}
+	if executeCalls != 0 {
+		t.Fatalf("executeSkillScriptCommand calls = %d, want 0", executeCalls)
+	}
+}
+
+func TestRunSkillScriptTool_Run_LegacyQuoteReject(t *testing.T) {
+	restore := stubRunSkillScriptDependencies(t)
+	defer restore()
+
+	skill := makeScriptSkill(t, "demo")
+	loadCatalogForTool = func(_ string) skillcatalog.SkillCatalog {
+		return skillcatalog.SkillCatalog{Skills: []skillcatalog.ParsedSkill{skill}}
+	}
+
+	var executeCalls int
+	executeSkillScriptCommand = func(_ tools.ExecutionContext, command string) string {
+		executeCalls++
+		return command
+	}
+
+	tool := &RunSkillScriptTool{}
+	got, _, _ := tool.Run(tools.ExecutionContext{}, map[string]string{
+		"skill":  "demo",
+		"script": "safe.sh",
+		"args":   "--name 'test user'",
+	})
+	if got != "Error: unsafe legacy args; use args_json for quoted values or shell metacharacters" {
+		t.Fatalf("Run() output = %q", got)
+	}
+	if executeCalls != 0 {
+		t.Fatalf("executeSkillScriptCommand calls = %d, want 0", executeCalls)
 	}
 }
 
@@ -208,22 +399,6 @@ func TestRunSkillScriptTool_Run_DoesNotBypassBashPolicyOrConfirmation(t *testing
 	loadCatalogForTool = func(_ string) skillcatalog.SkillCatalog {
 		return skillcatalog.SkillCatalog{Skills: []skillcatalog.ParsedSkill{skill}}
 	}
-
-	t.Run("dangerous args blocked by bash policy", func(t *testing.T) {
-		var out bytes.Buffer
-		tool := &RunSkillScriptTool{}
-		got, _, _ := tool.Run(tools.ExecutionContext{
-			Stdout: &out,
-			Stderr: &out,
-		}, map[string]string{
-			"skill":  "demo",
-			"script": "safe.sh",
-			"args":   "; rm -rf /",
-		})
-		if !strings.Contains(got, "Error:") || (!strings.Contains(got, "blocked") && !strings.Contains(got, "injection")) {
-			t.Fatalf("Run() output = %q, want bash policy block", got)
-		}
-	})
 
 	t.Run("confirmation rejection is respected", func(t *testing.T) {
 		origSimple := common.SimpleConfirm

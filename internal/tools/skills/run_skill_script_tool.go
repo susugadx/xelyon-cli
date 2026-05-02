@@ -31,7 +31,11 @@ func (t *RunSkillScriptTool) Parameters() map[string]interface{} {
 			},
 			"args": map[string]interface{}{
 				"type":        "string",
-				"description": "Optional raw shell arguments appended after the script path.",
+				"description": "Legacy simple args string (space-delimited tokens only). Prefer args_json for quoted values or shell metacharacters.",
+			},
+			"args_json": map[string]interface{}{
+				"type":        "string",
+				"description": `JSON array of string arguments. Preferred over args. Example: ["--name","test user","--json"].`,
 			},
 		},
 		"required":             []string{"skill", "script"},
@@ -51,12 +55,17 @@ func (t *RunSkillScriptTool) Run(execCtx tools.ExecutionContext, args map[string
 		return runSkillUnknownSkillMessage(catalog, request.skillName), nil, nil
 	}
 
+	normalizedArgs, err := normalizeRunSkillScriptArgs(request.args, request.argsJSON)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil, nil
+	}
+
 	resolvedPath, err := resolveScriptPathForTool(skill, normalizeRequestedScriptPath(request.scriptPath))
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), nil, nil
 	}
 
-	command, err := buildSkillScriptCommand(resolvedPath, request.rawArgs)
+	command, err := buildSkillScriptCommand(resolvedPath, normalizedArgs)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), nil, nil
 	}
@@ -67,7 +76,8 @@ func (t *RunSkillScriptTool) Run(execCtx tools.ExecutionContext, args map[string
 type runSkillScriptRequest struct {
 	skillName  string
 	scriptPath string
-	rawArgs    string
+	args       string
+	argsJSON   string
 }
 
 func parseRunSkillScriptRequest(args map[string]string) (runSkillScriptRequest, error) {
@@ -79,10 +89,17 @@ func parseRunSkillScriptRequest(args map[string]string) (runSkillScriptRequest, 
 	if scriptPath == "" {
 		return runSkillScriptRequest{}, fmt.Errorf("script path is required")
 	}
+	legacyArgs := strings.TrimSpace(args["args"])
+	argsJSON := strings.TrimSpace(args["args_json"])
+	if legacyArgs != "" && argsJSON != "" {
+		return runSkillScriptRequest{}, fmt.Errorf("use either args_json or args, not both")
+	}
+
 	return runSkillScriptRequest{
 		skillName:  skillName,
 		scriptPath: scriptPath,
-		rawArgs:    args["args"],
+		args:       legacyArgs,
+		argsJSON:   argsJSON,
 	}, nil
 }
 

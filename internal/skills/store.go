@@ -75,7 +75,7 @@ func (s *SkillCatalogStore) Load(opts DiscoverOptions) SkillCatalog {
 	}
 
 	discover := DiscoverResult{}
-	cached := catalogCacheEntry{}
+	var cached catalogCacheEntry
 	hit := false
 
 	s.mu.Lock()
