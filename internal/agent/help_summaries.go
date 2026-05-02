@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/investigation"
+	"github.com/susugadx/xelyon-cli/internal/toolmeta"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -22,22 +23,7 @@ type helpSections struct {
 	mcp     []helpToolSummary
 }
 
-var helpToolDisplayOrder = []string{
-	investigation.ToolGatherContext,
-	investigation.ToolSearchCode,
-	investigation.ToolReadFile,
-	investigation.ToolListDir,
-	"web_search",
-	"activate_skill",
-	"ask_user_question",
-	"apply_patch",
-	"str_replace",
-	"write_file",
-	"delete_file",
-	"bash",
-	"spawn_agent",
-	"wait_agent",
-}
+var helpToolDisplayOrder = toolmeta.HelpDisplayOrder()
 
 func buildOrderedBuiltInHelpSummaries(visibleDefs map[string]tools.ToolDefinition, surface investigation.Surface) []helpToolSummary {
 	summaries := make([]helpToolSummary, 0, len(visibleDefs))
@@ -94,34 +80,16 @@ func buildSortedMCPHelpSummaries(visibleDefs map[string]tools.ToolDefinition) []
 }
 
 func helpToolDescription(name string, surface investigation.Surface, description string) string {
+	if name == "apply_patch" {
+		return "Primary edit tool for precise patch-based file changes"
+	}
 	if summary, ok := surface.HelpSummary(name); ok {
 		return summary
 	}
-
-	switch name {
-	case "web_search":
-		return "Search the web and return summarized findings with source URLs"
-	case "activate_skill":
-		return "Load full SKILL.md content for one discovered skill on demand"
-	case "ask_user_question":
-		return "Ask the user a clarification question during plan investigation"
-	case "apply_patch":
-		return "Primary edit tool for precise patch-based file changes"
-	case "str_replace":
-		return "Precise same-file replacements from actual tool output"
-	case "write_file":
-		return "Legacy edit tool to create or overwrite a file"
-	case "delete_file":
-		return "Legacy edit tool to delete a file"
-	case "bash":
-		return "Execute shell commands for build, test, git, and local tooling"
-	case "spawn_agent":
-		return "Spawn a sub-agent for explore/edit/verify tasks"
-	case "wait_agent":
-		return "Wait for sub-agents to complete"
-	default:
-		return fallbackHelpDescription(description)
+	if summary, ok := toolmeta.HelpSummary(name); ok {
+		return summary
 	}
+	return fallbackHelpDescription(description)
 }
 
 func fallbackHelpDescription(description string) string {

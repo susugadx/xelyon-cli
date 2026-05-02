@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 )
 
@@ -31,20 +29,10 @@ func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
 	prevLayout := parseSystemPromptLayout(a.SystemPrompt)
 	hadPlanPrompt := strings.Contains(prevLayout.Static, planningPrompt) || strings.Contains(prevLayout.Dynamic, planningPrompt)
 
-	providerName := a.ProviderName
-	if providerName == "" {
-		providerName = providerRuntimeNameFromProvider(a.CurrentProvider)
-	}
-	systemPrompt := prompt.GetSystemPromptForProviderWithConfig(providerName, a.CurrentModel, a.cfg())
-	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
-		systemPrompt += buildMCPToolsPrompt(a.mcpManager)
-	}
-	systemPrompt = injectSkillCatalogPrompt(systemPrompt, a.invocationCWD())
-	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, a.CurrentModel, a.cfg())
-
-	if pc := a.loadProjectConfig(); pc != nil {
-		systemPrompt = injectProjectConfig(systemPrompt, pc, "")
-	}
+	systemPrompt := m.buildStaticPrompt(promptStaticBuildInput{
+		invocationCWD:      a.invocationCWD(),
+		projectConfigBlock: buildProjectConfigPromptBlock(a.loadProjectConfig(), ""),
+	})
 
 	layout := parseSystemPromptLayout("")
 	layout.SetStatic(systemPrompt)
@@ -70,38 +58,19 @@ func (m *PromptManager) refreshProjectPromptWithContext(input string, refreshCtx
 		return
 	}
 	pc := refreshCtx.projectConfig
-	var newConfigBlock string
-	if pc != nil {
-		selection := config.SelectProjectPromptSelection(pc, input)
-		newConfigBlock = prompt.BuildProjectConfigBlock(selection.Rules, selection.Contexts)
-	}
+	newConfigBlock := buildProjectConfigPromptBlock(pc, input)
 
 	layout := parseSystemPromptLayout(a.SystemPrompt)
-	layout.SetDynamic(stripProjectMapSection(layout.Dynamic))
-
-	staticPrompt := prompt.StripProjectConfigSections(layout.Static)
-	if newConfigBlock != "" {
-		staticPrompt = prompt.InjectProjectConfigBlock(staticPrompt, newConfigBlock)
-	}
-	staticPrompt = injectSkillCatalogPrompt(staticPrompt, refreshCtx.invocationCWD)
-	layout.SetStatic(withProviderPromptWrapper(a, staticPrompt))
+	layout.SetStatic(m.buildStaticPromptForRefresh(layout.Static, promptStaticBuildInput{
+		invocationCWD:      refreshCtx.invocationCWD,
+		projectConfigBlock: newConfigBlock,
+	}))
 
 	a.SystemPrompt = layout.Compose()
 	injectProjectMapWithOverrides(a, input, projectMapInjectionOverrides{
 		invocationCWD: refreshCtx.invocationCWD,
 		projectConfig: refreshCtx.projectConfig,
 	})
-}
-
-func withProviderPromptWrapper(a *Agent, systemPrompt string) string {
-	if a == nil {
-		return systemPrompt
-	}
-	providerName := strings.TrimSpace(a.ProviderName)
-	if providerName == "" && a.CurrentProvider != nil {
-		providerName = providerRuntimeNameFromProvider(a.CurrentProvider)
-	}
-	return prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, a.CurrentModel, a.cfg())
 }
 
 func (m *PromptManager) RefreshProjectPromptIfDirty(input string) {
@@ -167,6 +136,7 @@ func (m *PromptManager) InvalidateProjectMap() {
 		return
 	}
 
+	resetProjectMapRuntimeCounts(a)
 	a.projectMap = nil
 	a.projectMapRootPath = ""
 	a.projectMapIgnoreKey = ""

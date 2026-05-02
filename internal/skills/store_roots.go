@@ -1,0 +1,82 @@
+package skills
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+func buildRootsCacheKey(roots []discoverRoot) string {
+	if len(roots) == 0 {
+		return "(no-roots)"
+	}
+	keys := make([]string, 0, len(roots))
+	for _, root := range roots {
+		keys = append(keys, cleanAbsPathOrFallback(root.Path))
+	}
+	return strings.Join(keys, "\x00")
+}
+
+func resolveDiscoverRootsFromOptions(opts DiscoverOptions) []discoverRoot {
+	cwd := strings.TrimSpace(opts.InvocationCWD)
+	if cwd == "" {
+		if current, err := os.Getwd(); err == nil {
+			cwd = current
+		}
+	}
+	if cwd == "" {
+		cwd = "."
+	}
+
+	home := strings.TrimSpace(opts.HomeDir)
+	if home == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			home = h
+		}
+	}
+
+	return resolveDiscoverRoots(cwd, home)
+}
+
+func buildRootsStateFingerprint(roots []discoverRoot) string {
+	hasher := sha256.New()
+	for _, root := range roots {
+		path := cleanAbsPathOrFallback(root.Path)
+		_, _ = hasher.Write([]byte("root:" + path))
+		info, err := os.Stat(path)
+		if err != nil {
+			_, _ = hasher.Write([]byte("|err=" + err.Error() + "\n"))
+			continue
+		}
+		_, _ = hasher.Write([]byte(fmt.Sprintf("|mtime=%d|size=%d\n", info.ModTime().UnixNano(), info.Size())))
+
+		entries, readErr := os.ReadDir(path)
+		if readErr != nil {
+			_, _ = hasher.Write([]byte("|entries_err=" + readErr.Error() + "\n"))
+			continue
+		}
+
+		childDirs := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			if entry.IsDir() {
+				childDirs = append(childDirs, entry.Name())
+			}
+		}
+		sort.Strings(childDirs)
+		_, _ = hasher.Write([]byte("|child_dirs=" + strings.Join(childDirs, ",") + "\n"))
+		for _, child := range childDirs {
+			childPath := filepath.Join(path, child)
+			childInfo, childErr := os.Stat(childPath)
+			if childErr != nil {
+				_, _ = hasher.Write([]byte("|child:" + child + "|err=" + childErr.Error() + "\n"))
+				continue
+			}
+			_, _ = hasher.Write([]byte(fmt.Sprintf("|child:%s|mtime=%d|size=%d\n", child, childInfo.ModTime().UnixNano(), childInfo.Size())))
+		}
+	}
+	return hex.EncodeToString(hasher.Sum(nil))
+}

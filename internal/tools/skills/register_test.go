@@ -1,6 +1,8 @@
 package skills
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -72,5 +74,45 @@ func TestActivateSkillTool_ParametersAreStaticAndNoEnum(t *testing.T) {
 	}
 	if loadCalls != 0 {
 		t.Fatalf("Parameters() should not load catalog, loadCalls=%d", loadCalls)
+	}
+}
+
+func TestActivateSkillTool_Run_IsReadOnlyAndDoesNotExecuteScripts(t *testing.T) {
+	oldLoader := loadCatalogForTool
+	defer func() { loadCatalogForTool = oldLoader }()
+
+	workspace := t.TempDir()
+	skillDir := filepath.Join(workspace, ".agents", "skills", "demo")
+	if err := os.MkdirAll(filepath.Join(skillDir, "scripts"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "scripts", "run.sh"), []byte("touch ../executed.marker\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(run.sh) error = %v", err)
+	}
+
+	loadCatalogForTool = func(_ string) skillcatalog.SkillCatalog {
+		return skillcatalog.SkillCatalog{Skills: []skillcatalog.ParsedSkill{
+			{
+				Name:        "demo",
+				Description: "desc",
+				Body:        "# body",
+				Directory:   skillDir,
+				Scripts:     []string{"scripts/run.sh"},
+			},
+		}}
+	}
+
+	tool := &ActivateSkillTool{}
+	got, _, err := tool.Run(tools.ExecutionContext{}, map[string]string{"name": "demo"})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !strings.Contains(got, `"scripts": [`) {
+		t.Fatalf("Run() output should include scripts metadata:\n%s", got)
+	}
+
+	marker := filepath.Join(skillDir, "executed.marker")
+	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
+		t.Fatalf("activate_skill should not execute scripts, marker state err=%v", statErr)
 	}
 }

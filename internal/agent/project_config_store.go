@@ -6,8 +6,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/susugadx/xelyon-cli/internal/cacheutil"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
+
+const defaultProjectConfigStoreMaxEntries = 64
 
 type projectConfigCacheEntry struct {
 	path       string
@@ -18,8 +21,9 @@ type projectConfigCacheEntry struct {
 
 // ProjectConfigStore は xelyon.yaml のロード結果を cwd 単位で共有する軽量キャッシュ。
 type ProjectConfigStore struct {
-	mu      sync.Mutex
-	entries map[string]projectConfigCacheEntry
+	mu         sync.Mutex
+	cache      *cacheutil.LRU[string, projectConfigCacheEntry]
+	maxEntries int
 }
 
 var (
@@ -30,8 +34,16 @@ var (
 )
 
 func NewProjectConfigStore() *ProjectConfigStore {
+	return NewProjectConfigStoreWithLimit(defaultProjectConfigStoreMaxEntries)
+}
+
+func NewProjectConfigStoreWithLimit(maxEntries int) *ProjectConfigStore {
+	if maxEntries <= 0 {
+		maxEntries = defaultProjectConfigStoreMaxEntries
+	}
 	return &ProjectConfigStore{
-		entries: make(map[string]projectConfigCacheEntry),
+		cache:      cacheutil.NewLRU[string, projectConfigCacheEntry](maxEntries),
+		maxEntries: maxEntries,
 	}
 }
 
@@ -58,7 +70,7 @@ func (s *ProjectConfigStore) Clear() {
 		return
 	}
 	s.mu.Lock()
-	s.entries = make(map[string]projectConfigCacheEntry)
+	s.cache = cacheutil.NewLRU[string, projectConfigCacheEntry](s.effectiveMaxEntries())
 	s.mu.Unlock()
 }
 
@@ -71,7 +83,8 @@ func (s *ProjectConfigStore) loadForCWD(cwd string) *config.ProjectConfig {
 	path, ok := findProjectConfigPath(cwd)
 	if !ok {
 		s.mu.Lock()
-		delete(s.entries, cwd)
+		s.ensureCacheLocked()
+		s.cache.Delete(cwd)
 		s.mu.Unlock()
 		return nil
 	}
@@ -79,7 +92,8 @@ func (s *ProjectConfigStore) loadForCWD(cwd string) *config.ProjectConfig {
 	modTimeNS, size, statOK := projectConfigFileSignature(path)
 	if statOK {
 		s.mu.Lock()
-		entry, hit := s.entries[cwd]
+		s.ensureCacheLocked()
+		entry, hit := s.cache.Get(cwd)
 		if hit && sameProjectPath(entry.path, path) && entry.modTimeNS == modTimeNS && entry.size == size {
 			cached := cloneProjectConfig(entry.projectCfg)
 			s.mu.Unlock()
@@ -91,7 +105,8 @@ func (s *ProjectConfigStore) loadForCWD(cwd string) *config.ProjectConfig {
 	loaded := loadProjectConfigFromDisk()
 	if loaded == nil {
 		s.mu.Lock()
-		delete(s.entries, cwd)
+		s.ensureCacheLocked()
+		s.cache.Delete(cwd)
 		s.mu.Unlock()
 		return nil
 	}
@@ -102,14 +117,29 @@ func (s *ProjectConfigStore) loadForCWD(cwd string) *config.ProjectConfig {
 	}
 
 	s.mu.Lock()
-	s.entries[cwd] = projectConfigCacheEntry{
+	s.ensureCacheLocked()
+	s.cache.Set(cwd, projectConfigCacheEntry{
 		path:       cleanProjectPath(loaded.FilePath),
 		modTimeNS:  modTimeNS,
 		size:       size,
 		projectCfg: cloneProjectConfig(loaded),
-	}
+	})
 	s.mu.Unlock()
 	return cloneProjectConfig(loaded)
+}
+
+func (s *ProjectConfigStore) ensureCacheLocked() {
+	if s == nil || s.cache != nil {
+		return
+	}
+	s.cache = cacheutil.NewLRU[string, projectConfigCacheEntry](s.effectiveMaxEntries())
+}
+
+func (s *ProjectConfigStore) effectiveMaxEntries() int {
+	if s == nil || s.maxEntries <= 0 {
+		return defaultProjectConfigStoreMaxEntries
+	}
+	return s.maxEntries
 }
 
 func findProjectConfigPath(cwd string) (string, bool) {

@@ -18,75 +18,14 @@ import (
 
 // printToolArgs はツールの引数を簡潔に表示する（Execute/PreviewToolCallで共通使用）
 func printToolArgs(w io.Writer, tc *ToolCall) {
-	switch tc.Tool {
-	case "gather_context":
-		_, _ = fmt.Fprintf(w, "   Query: %s\n", truncate(tc.Args["query"], 60))
-		if tc.Args["path"] != "" {
-			_, _ = fmt.Fprintf(w, "   Path: %s\n", tc.Args["path"])
-		}
-		if tc.Args["file_filter"] != "" {
-			_, _ = fmt.Fprintf(w, "   File filter: %s\n", tc.Args["file_filter"])
-		}
-	case "read_file":
-		_, _ = fmt.Fprintf(w, "   %s\n", formatReadFilePreviewArg(tc.Args))
-	case "write_file":
-		lines := strings.Split(tc.Args["content"], "\n")
-		_, _ = fmt.Fprintf(w, "   File: %s (%d lines)\n", tc.Args["path"], len(lines))
-	case "apply_patch":
-		lines := strings.Split(tc.Args["patch"], "\n")
-		_, _ = fmt.Fprintf(w, "   Patch: %d lines\n", len(lines))
-	case "str_replace":
-		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
-	case "bash":
-		_, _ = fmt.Fprintf(w, "   Command: %s\n", truncate(tc.Args["command"], 60))
-	case "list_dir":
-		path := tc.Args["path"]
-		if path == "" {
-			path = "."
-		}
-		_, _ = fmt.Fprintf(w, "   Directory: %s\n", path)
-	case "git_add", "git_commit", "git_push", "git_status", "git_diff", "git_log",
-		"git_branch", "git_checkout", "git_stash":
-		// Git操作は引数を簡潔に表示
-		for k, v := range tc.Args {
-			if v != "" {
-				_, _ = fmt.Fprintf(w, "   %s: %s\n", k, truncate(v, 60))
-			}
-		}
-	case "copy_file":
-		_, _ = fmt.Fprintf(w, "   Source: %s\n", tc.Args["src"])
-		_, _ = fmt.Fprintf(w, "   Destination: %s\n", tc.Args["dest"])
-	case "delete_file":
-		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
-	case "lint":
-		path := tc.Args["path"]
-		if path == "" {
-			path = "."
-		}
-		_, _ = fmt.Fprintf(w, "   Path: %s\n", path)
-		if tc.Args["auto_fix"] == "true" {
-			_, _ = fmt.Fprintf(w, "   Auto-fix: enabled\n")
-		}
-	case "search_code":
-		_, _ = fmt.Fprintf(w, "   Pattern: %s\n", tc.Args["pattern"])
-		if tc.Args["path"] != "" {
-			_, _ = fmt.Fprintf(w, "   Path: %s\n", tc.Args["path"])
-		}
-		if tc.Args["file_filter"] != "" {
-			_, _ = fmt.Fprintf(w, "   File filter: %s\n", tc.Args["file_filter"])
-		} else if tc.Args["file_pattern"] != "" {
-			_, _ = fmt.Fprintf(w, "   File pattern: %s\n", tc.Args["file_pattern"])
-		}
-	case "web_search":
-		_, _ = fmt.Fprintf(w, "   Query: %s\n", tc.Args["query"])
-	default:
-		// その他のツール（MCPツール等）
-		if len(tc.Args) > 0 {
-			for k, v := range tc.Args {
-				_, _ = fmt.Fprintf(w, "   %s: %s\n", k, truncate(v, 60))
-			}
+	if tc != nil {
+		if printer, ok := toolArgPreviewPrinters[tc.Tool]; ok {
+			printer(w, tc)
+			_, _ = fmt.Fprintln(w)
+			return
 		}
 	}
+	printGenericToolArgs(w, tc)
 	_, _ = fmt.Fprintln(w)
 }
 

@@ -57,7 +57,17 @@ func injectProjectMapWithOverrides(agent *Agent, input string, overrides project
 }
 
 func resetProjectMapPromptSection(agent *Agent) {
+	if agent == nil {
+		return
+	}
 	agent.SystemPrompt = stripProjectMapSection(agent.SystemPrompt)
+	resetProjectMapRuntimeCounts(agent)
+}
+
+func resetProjectMapRuntimeCounts(agent *Agent) {
+	if agent == nil {
+		return
+	}
 	agent.projectMapFileCount = 0
 	agent.projectMapSymbolCount = 0
 }

@@ -35,6 +35,11 @@ type planModeExitPolicy struct {
 	clearResponseContext bool
 }
 
+type planModeInvestigationOutcome struct {
+	plan    *plan.Plan
+	handled bool
+}
+
 func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *planModeRequest {
 	return &planModeRequest{
 		agent:               agent,
@@ -50,26 +55,46 @@ func (r *planModeRequest) Run() error {
 		r.applyExitPolicy(exitPolicy)
 	}()
 
-	p, handled, err := r.runInvestigation()
+	outcome, err := r.executeInvestigationStep()
 	if err != nil {
 		return err
 	}
-	if handled {
-		return err
+	if outcome.handled {
+		return nil
 	}
-	exitPolicy.restoreMode = r.resolveExitRestoreMode(p)
+	exitPolicy = r.transitionExitPolicyAfterInvestigation(exitPolicy, outcome.plan)
 
-	handled, err = r.handleInvestigationResult(p)
-	if r.approved {
-		// Plan 承認後は planning-only。調査フェーズ履歴は通常ターンへ持ち越さない。
-		exitPolicy.restoreMode = planModeRestoreConversation
-		exitPolicy.clearResponseContext = true
-	}
+	handled, err := r.executeApprovalStep(outcome.plan, &exitPolicy)
 	if err != nil || handled {
 		return err
 	}
 
 	return nil
+}
+
+func (r *planModeRequest) executeInvestigationStep() (planModeInvestigationOutcome, error) {
+	p, handled, err := r.runInvestigation()
+	if err != nil {
+		return planModeInvestigationOutcome{}, err
+	}
+	return planModeInvestigationOutcome{plan: p, handled: handled}, nil
+}
+
+func (r *planModeRequest) transitionExitPolicyAfterInvestigation(policy planModeExitPolicy, p *plan.Plan) planModeExitPolicy {
+	policy.restoreMode = r.resolveExitRestoreMode(p)
+	return policy
+}
+
+func (r *planModeRequest) executeApprovalStep(p *plan.Plan, policy *planModeExitPolicy) (bool, error) {
+	handled, err := r.handleInvestigationResult(p)
+	if !r.approved || policy == nil {
+		return handled, err
+	}
+
+	// Plan 承認後は planning-only。調査フェーズ履歴は通常ターンへ持ち越さない。
+	policy.restoreMode = planModeRestoreConversation
+	policy.clearResponseContext = true
+	return handled, err
 }
 
 func (r *planModeRequest) applyExitPolicy(policy planModeExitPolicy) {

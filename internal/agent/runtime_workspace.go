@@ -26,7 +26,6 @@ func (r *AgentRuntime) effectiveInvocationCWD() string {
 	}
 	cwd := strings.TrimSpace(resolveRuntimeInvocationCWD())
 	if cwd != "" {
-		r.InvocationCWD = cwd
 		return cwd
 	}
 	cwd = strings.TrimSpace(r.InvocationCWD)
