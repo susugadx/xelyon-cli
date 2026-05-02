@@ -22,9 +22,9 @@ func attachTemporaryClipboardImage(t *testing.T, m *Model) string {
 		t.Fatalf("WriteFile(%q) error = %v", imagePath, err)
 	}
 	if ok := m.appendAttachment(composerAttachment{
-		Kind:      composerAttachmentImage,
-		Path:      imagePath,
-		Temporary: true,
+		Kind:   composerAttachmentImage,
+		Source: composerAttachmentSourceClipboardImage,
+		Path:   imagePath,
 	}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
 	}

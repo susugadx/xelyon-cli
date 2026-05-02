@@ -28,7 +28,12 @@ func (m *Model) tryAttachDroppedPaths(content string) bool {
 		if isImageAttachmentPath(path) {
 			kind = composerAttachmentImage
 		}
-		if m.appendAttachment(composerAttachment{Kind: kind, Path: path, Size: info.Size()}) {
+		if m.appendAttachment(composerAttachment{
+			Kind:   kind,
+			Source: composerAttachmentSourceDroppedPath,
+			Path:   path,
+			Size:   info.Size(),
+		}) {
 			added++
 		}
 	}

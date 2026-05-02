@@ -5,10 +5,13 @@ import (
 	"path/filepath"
 )
 
-const clipboardAttachmentFileName = "clipboard.png"
+const (
+	clipboardAttachmentTempDirPrefix = "xelyon-clipboard-image-"
+	clipboardAttachmentFileName      = "clipboard.png"
+)
 
 func cleanupTemporaryAttachment(att composerAttachment) {
-	if !att.Temporary || att.Path == "" {
+	if att.Source != composerAttachmentSourceClipboardImage || att.Path == "" {
 		return
 	}
 

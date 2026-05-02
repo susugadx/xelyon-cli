@@ -22,9 +22,9 @@ func TestComposer_ClearComposerRemovesTemporaryClipboardAttachment(t *testing.T)
 	}
 
 	if ok := m.appendAttachment(composerAttachment{
-		Kind:      composerAttachmentImage,
-		Path:      imagePath,
-		Temporary: true,
+		Kind:   composerAttachmentImage,
+		Source: composerAttachmentSourceClipboardImage,
+		Path:   imagePath,
 	}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
 	}
@@ -46,6 +46,28 @@ func TestComposer_ClearComposerKeepsRegularFileAttachment(t *testing.T) {
 	if ok := m.appendAttachment(composerAttachment{
 		Kind: composerAttachmentFile,
 		Path: filePath,
+	}); !ok {
+		t.Fatal("appendAttachment() = false, want true")
+	}
+
+	m.clearComposer()
+
+	if _, err := os.Stat(filePath); err != nil {
+		t.Fatalf("os.Stat(%q) error = %v, want nil", filePath, err)
+	}
+}
+
+func TestComposer_ClearComposerDoesNotRemoveDroppedClipboardNamedFile(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	dir := t.TempDir()
+	filePath := writeTempFile(t, dir, clipboardAttachmentFileName, []byte("hello"))
+
+	if ok := m.appendAttachment(composerAttachment{
+		Kind:   composerAttachmentFile,
+		Source: composerAttachmentSourceDroppedPath,
+		Path:   filePath,
 	}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
 	}

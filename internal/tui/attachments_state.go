@@ -13,11 +13,19 @@ const (
 	composerAttachmentImage
 )
 
+type composerAttachmentSource int
+
+const (
+	composerAttachmentSourceUnknown composerAttachmentSource = iota
+	composerAttachmentSourceDroppedPath
+	composerAttachmentSourceClipboardImage
+)
+
 type composerAttachment struct {
-	Kind      composerAttachmentKind
-	Path      string
-	Size      int64
-	Temporary bool
+	Kind   composerAttachmentKind
+	Source composerAttachmentSource
+	Path   string
+	Size   int64
 }
 
 func (a composerAttachment) basename() string {

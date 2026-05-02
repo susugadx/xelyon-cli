@@ -36,6 +36,9 @@ func TestComposer_PasteExistingImagePathAttachesImage(t *testing.T) {
 	if m.attachments[0].Kind != composerAttachmentImage {
 		t.Fatalf("attachments[0].Kind = %v, want image", m.attachments[0].Kind)
 	}
+	if m.attachments[0].Source != composerAttachmentSourceDroppedPath {
+		t.Fatalf("attachments[0].Source = %v, want dropped path source", m.attachments[0].Source)
+	}
 	if got := m.attachments[0].Path; got != imagePath {
 		t.Fatalf("attachments[0].Path = %q, want %q", got, imagePath)
 	}
@@ -199,6 +202,9 @@ func TestComposer_CtrlVPasteFallsBackToClipboardImage(t *testing.T) {
 	}
 	if got := m.attachments[0].Kind; got != composerAttachmentImage {
 		t.Fatalf("attachments[0].Kind = %v, want image", got)
+	}
+	if got := m.attachments[0].Source; got != composerAttachmentSourceClipboardImage {
+		t.Fatalf("attachments[0].Source = %v, want clipboard image source", got)
 	}
 }
 

@@ -69,9 +69,9 @@ func (m *Model) tryAttachClipboardImage() bool {
 	}
 
 	attachment := composerAttachment{
-		Kind:      composerAttachmentImage,
-		Path:      path,
-		Temporary: true,
+		Kind:   composerAttachmentImage,
+		Source: composerAttachmentSourceClipboardImage,
+		Path:   path,
 	}
 	m.switchToComposerInput()
 	if m.appendAttachment(attachment) {

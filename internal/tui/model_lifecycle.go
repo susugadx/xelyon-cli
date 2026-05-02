@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -65,6 +66,8 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 
 // Init は bubbletea の Init を実装する。
 func (m Model) Init() tea.Cmd {
+	cleanupStaleClipboardAttachmentTemps(time.Now())
+
 	cmds := []tea.Cmd{
 		textinput.Blink,
 		m.spinner.Tick,

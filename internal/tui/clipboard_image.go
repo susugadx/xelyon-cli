@@ -26,7 +26,7 @@ func saveClipboardImageToTemp() (string, error) {
 		return "", fmt.Errorf("clipboard image paste is unsupported on this platform")
 	}
 
-	dir, err := os.MkdirTemp("", "xelyon-clipboard-image-")
+	dir, err := os.MkdirTemp("", clipboardAttachmentTempDirPrefix)
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp dir: %w", err)
 	}
