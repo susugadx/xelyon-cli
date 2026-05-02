@@ -7,6 +7,7 @@ import (
 )
 
 var projectConfigBlockRe = regexp.MustCompile(`(?s)\n?<!-- PROJECT_CONFIG_START -->.*?<!-- PROJECT_CONFIG_END -->\n?`)
+var verificationRuleBlockRe = regexp.MustCompile(`(?s)(### 10\. Verification Protocol \(MANDATORY\).*?)(\n### [0-9]+\.\s|\z)`)
 
 // BuildRulesBlockFromList は []string のルールリストから mandatory rules ブロックを構築する。
 // xelyon.yaml の rules フィールド用。空リストの場合は空文字を返す。
@@ -28,15 +29,7 @@ func BuildRulesBlockFromList(rules []string) string {
 // BuildProjectConfigBlock は project rules/context を system prompt 用の1ブロックにまとめる。
 func BuildProjectConfigBlock(rules []string, contexts []string) string {
 	rulesBlock := BuildRulesBlockFromList(rules)
-
-	var contextParts []string
-	for _, context := range contexts {
-		context = strings.TrimSpace(context)
-		if context == "" {
-			continue
-		}
-		contextParts = append(contextParts, context)
-	}
+	contextParts := normalizeProjectContexts(contexts)
 
 	if rulesBlock == "" && len(contextParts) == 0 {
 		return ""
@@ -55,12 +48,106 @@ func BuildProjectConfigBlock(rules []string, contexts []string) string {
 	return b.String()
 }
 
+// ProjectInstructionEntry は imported guidance の注入用 DTO。
+type ProjectInstructionEntry struct {
+	Label    string
+	Content  string
+	Strength string // project_guidance / advisory
+}
+
+// ProjectInstructionBlockInput は project instruction block 生成入力 DTO。
+type ProjectInstructionBlockInput struct {
+	HasProjectConfig bool
+	MandatoryRules   []string
+	ProjectContexts  []string
+	ProjectGuidance  []ProjectInstructionEntry
+	GlobalGuidance   []ProjectInstructionEntry
+	Warnings         []string
+}
+
+// BuildProjectInstructionBlock は xelyon.yaml mandatory rules と imported guidance を
+// 優先順位説明付きで 1 ブロックに組み立てる。
+func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
+	rulesBlock := BuildRulesBlockFromList(input.MandatoryRules)
+	contextParts := normalizeProjectContexts(input.ProjectContexts)
+
+	hasProjectGuidance := len(input.ProjectGuidance) > 0
+	hasGlobalGuidance := len(input.GlobalGuidance) > 0
+	hasWarnings := len(input.Warnings) > 0
+
+	if rulesBlock == "" && len(contextParts) == 0 && !hasProjectGuidance && !hasGlobalGuidance && !hasWarnings {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\n<!-- PROJECT_CONFIG_START -->\n")
+	b.WriteString("\n## Project Instruction Precedence\n\n")
+	b.WriteString(buildProjectInstructionPrecedenceBlock())
+
+	if rulesBlock != "" {
+		b.WriteString(rulesBlock)
+	}
+	if len(contextParts) > 0 {
+		b.WriteString("\n\n## Project Context\n")
+		b.WriteString(strings.Join(contextParts, "\n\n"))
+	}
+	if hasProjectGuidance {
+		sectionText := projectGuidanceWithoutConfigText
+		if input.HasProjectConfig {
+			sectionText = projectGuidanceWithConfigText
+		}
+		appendGuidanceSection(&b, "## Imported Project Guidance", sectionText, input.ProjectGuidance)
+	}
+	if hasGlobalGuidance {
+		appendGuidanceSection(&b, "## Enabled Global Guidance", globalGuidanceText, input.GlobalGuidance)
+	}
+	if hasWarnings {
+		b.WriteString("\n\n## Guidance Load Notes\n")
+		for _, warning := range input.Warnings {
+			warning = strings.TrimSpace(warning)
+			if warning == "" {
+				continue
+			}
+			b.WriteString("\n- ")
+			b.WriteString(warning)
+		}
+	}
+	b.WriteString("\n<!-- PROJECT_CONFIG_END -->")
+	return b.String()
+}
+
+func appendGuidanceSection(b *strings.Builder, heading string, intro string, entries []ProjectInstructionEntry) {
+	if b == nil || strings.TrimSpace(heading) == "" {
+		return
+	}
+	b.WriteString("\n\n")
+	b.WriteString(heading)
+	b.WriteString("\n\n")
+	b.WriteString(intro)
+	for _, entry := range entries {
+		content := strings.TrimSpace(entry.Content)
+		if content == "" {
+			continue
+		}
+		b.WriteString("\n\n### ")
+		b.WriteString(guidanceHeadingLabel(entry))
+		b.WriteString("\n")
+		b.WriteString(content)
+	}
+}
+
 // InjectProjectConfigBlock は SystemPrompt の Workflow Rules 内に project config ブロックを埋め込む。
 // Rule #10 (Verification Protocol) の直後に挿入する。
 // projectBlock が空の場合は systemPrompt をそのまま返す。
 func InjectProjectConfigBlock(systemPrompt, projectBlock string) string {
 	if projectBlock == "" {
 		return systemPrompt
+	}
+
+	// 優先: Rule #10 ブロック境界を正規表現で見つけて、その直後に挿入する。
+	if match := verificationRuleBlockRe.FindStringSubmatchIndex(systemPrompt); len(match) >= 4 {
+		insertPos := match[3]
+		return systemPrompt[:insertPos] + projectBlock + systemPrompt[insertPos:]
 	}
 
 	// Rule #10 の末尾（"A task is NOT complete until verification passes"）を探す
@@ -93,4 +180,19 @@ func StripProjectConfigSections(systemPrompt string) string {
 func ExtractProjectConfigBlock(systemPrompt string) string {
 	match := projectConfigBlockRe.FindString(systemPrompt)
 	return strings.TrimSpace(match)
+}
+
+func normalizeProjectContexts(contexts []string) []string {
+	if len(contexts) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(contexts))
+	for _, context := range contexts {
+		context = strings.TrimSpace(context)
+		if context == "" {
+			continue
+		}
+		result = append(result, context)
+	}
+	return result
 }

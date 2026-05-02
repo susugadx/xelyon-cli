@@ -18,24 +18,25 @@ type providerModelStore struct {
 
 // Config はXELYON CLIの設定
 type Config struct {
-	DefaultProvider string                         `yaml:"default_provider"`
-	DefaultModel    string                         `yaml:"default_model"`
-	ProviderModels  map[string]ProviderModelConfig `yaml:"provider_models"`
-	General         GeneralConfig                  `yaml:"general"`
-	Compression     CompressionConfig              `yaml:"compression"`
-	LoopDetection   LoopDetectionConfig            `yaml:"loop_detection"`
-	APIRetry        APIRetryConfig                 `yaml:"api_retry"`
-	Diff            DiffConfig                     `yaml:"diff"`
-	Execution       ExecutionConfig                `yaml:"execution"`
-	ToolConfirm     ToolConfirmConfig              `yaml:"tool_confirm"`
-	CommandAliases  map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
-	PromptCache     PromptCacheConfig              `yaml:"prompt_cache"`
-	Paste           PasteConfig                    `yaml:"paste"`
-	Responses       ResponsesConfig                `yaml:"responses"`
-	Streaming       StreamingConfig                `yaml:"streaming"`
-	Bash            BashConfig                     `yaml:"bash"`
-	ListDir         ListDirConfig                  `yaml:"list_dir"`
-	ProjectMap      ProjectMapConfig               `yaml:"project_map"`
+	DefaultProvider   string                         `yaml:"default_provider"`
+	DefaultModel      string                         `yaml:"default_model"`
+	ProviderModels    map[string]ProviderModelConfig `yaml:"provider_models"`
+	General           GeneralConfig                  `yaml:"general"`
+	Compression       CompressionConfig              `yaml:"compression"`
+	LoopDetection     LoopDetectionConfig            `yaml:"loop_detection"`
+	APIRetry          APIRetryConfig                 `yaml:"api_retry"`
+	Diff              DiffConfig                     `yaml:"diff"`
+	Execution         ExecutionConfig                `yaml:"execution"`
+	ToolConfirm       ToolConfirmConfig              `yaml:"tool_confirm"`
+	CommandAliases    map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
+	PromptCache       PromptCacheConfig              `yaml:"prompt_cache"`
+	Paste             PasteConfig                    `yaml:"paste"`
+	Responses         ResponsesConfig                `yaml:"responses"`
+	Streaming         StreamingConfig                `yaml:"streaming"`
+	Bash              BashConfig                     `yaml:"bash"`
+	ListDir           ListDirConfig                  `yaml:"list_dir"`
+	ProjectMap        ProjectMapConfig               `yaml:"project_map"`
+	AgentInstructions AgentInstructionsConfig        `yaml:"agent_instructions"`
 
 	GitStage            GitStageConfig     `yaml:"git_stage"`
 	LSP                 LSPConfig          `yaml:"lsp"`
@@ -175,6 +176,29 @@ type ProjectMapConfig struct {
 	Enabled              bool     `yaml:"enabled"`                // 起動時に Project Map を生成・注入
 	ContextRatio         float64  `yaml:"context_ratio"`          // ProjectMap のベース比率（大規模 repo では自動的に引き上げ）
 	AdditionalIgnoreDirs []string `yaml:"additional_ignore_dirs"` // デフォルト除外に追加するディレクトリ名
+}
+
+// AgentInstructionsConfig は AGENTS.md / CLAUDE.md guidance 読み込み設定。
+type AgentInstructionsConfig struct {
+	Project           AgentInstructionsProjectConfig `yaml:"project"`
+	Global            AgentInstructionsGlobalConfig  `yaml:"global"`
+	IncludeLocalFiles bool                           `yaml:"include_local_files"`
+	ExpandImports     bool                           `yaml:"expand_imports"`
+	MaxFileBytes      int                            `yaml:"max_file_bytes"`
+	MaxTotalBytes     int                            `yaml:"max_total_bytes"`
+}
+
+// AgentInstructionsProjectConfig は project-local guidance 設定。
+type AgentInstructionsProjectConfig struct {
+	Mode              string   `yaml:"mode"` // off | fallback | always
+	Files             []string `yaml:"files"`
+	IncludeGitignored bool     `yaml:"include_gitignored"`
+}
+
+// AgentInstructionsGlobalConfig は global guidance 設定。
+type AgentInstructionsGlobalConfig struct {
+	Enabled bool     `yaml:"enabled"`
+	Files   []string `yaml:"files"`
 }
 
 // GitStageConfig はgit_addツールの設定（user-facing config から削除済み、YAML互換のみ保持）

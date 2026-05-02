@@ -309,13 +309,8 @@ func TestBuildProjectMapBaseKey_ChangesWhenBudgetChanges(t *testing.T) {
 	}
 }
 
-func TestShouldRefreshProjectPrompt_FocusKeyChangeTriggersRefresh(t *testing.T) {
-	common.ResetRipgrepAvailabilityForTest()
-	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
-	if !common.IsRipgrepAvailable() {
-		t.Skip("ripgrep (rg) not available")
-	}
-
+func setupProjectPromptRefreshWorkspace(t *testing.T) (string, string) {
+	t.Helper()
 	root := t.TempDir()
 	oldwd, err := os.Getwd()
 	if err != nil {
@@ -325,32 +320,58 @@ func TestShouldRefreshProjectPrompt_FocusKeyChangeTriggersRefresh(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
-	if err := os.MkdirAll(filepath.Join(root, "internal", "agent"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "internal", "agent"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "internal", "agent", "compress.go"), []byte("package agent\n"), 0644); err != nil {
+	target := filepath.Join(root, "internal", "agent", "compress.go")
+	if err := os.WriteFile(target, []byte("package agent\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stateKey := currentProjectMapStateKey(&Agent{}, root)
+	return root, target
+}
 
-	agent := &Agent{
+func newProjectPromptRefreshTestAgent(stateKey, focusKey, root string) *Agent {
+	fileCount := 1
+	symbolCount := 1
+	baseAgent := &Agent{
+		CurrentModel: "deepseek-chat",
+		agentProjectPromptState: agentProjectPromptState{
+			projectMapStateKey: stateKey,
+		},
+	}
+	baseKey := buildProjectMapBaseKey(baseAgent, config.DefaultConfig(), calcProjectMapBudget(baseAgent, config.DefaultConfig(), fileCount, symbolCount), fileCount, symbolCount)
+
+	return &Agent{
 		Runtime:      NewAgentRuntimeWithConfig(config.DefaultConfig()),
 		CurrentModel: "deepseek-chat",
 		agentProjectPromptState: agentProjectPromptState{
 			projectMap:            &repomap.ProjectMap{},
 			projectMapStateKey:    stateKey,
-			projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", agentProjectPromptState: agentProjectPromptState{projectMapStateKey: stateKey}}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
-			projectMapFocusKey:    "",
+			projectMapBaseKey:     baseKey,
+			projectMapFocusKey:    focusKey,
 			projectMapBaseSection: "cached-base",
 			projectMapSection:     "cached",
 			projectMapDirty:       false,
 			projectMapRootPath:    root,
 			projectMapIgnoreKey:   "",
 			projectMapWatchDirs:   []string{"."},
-			projectMapFileCount:   1,
-			projectMapSymbolCount: 1,
+			projectMapFileCount:   fileCount,
+			projectMapSymbolCount: symbolCount,
 		},
 	}
+}
+
+func TestShouldRefreshProjectPrompt_FocusKeyChangeTriggersRefresh(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root, _ := setupProjectPromptRefreshWorkspace(t)
+	stateKey := currentProjectMapStateKey(&Agent{}, root)
+
+	agent := newProjectPromptRefreshTestAgent(stateKey, "", root)
 
 	if !agent.shouldRefreshProjectPrompt("internal/agent/compress.go を見て") {
 		t.Fatal("expected focus key change to trigger prompt refresh")
@@ -364,39 +385,11 @@ func TestShouldRefreshProjectPrompt_SameQueryReusesPrompt(t *testing.T) {
 		t.Skip("ripgrep (rg) not available")
 	}
 
-	root := t.TempDir()
-	oldwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(oldwd) })
-	if err := os.MkdirAll(filepath.Join(root, "internal", "agent"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "internal", "agent", "compress.go"), []byte("package agent\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	root, _ := setupProjectPromptRefreshWorkspace(t)
 	stateKey := currentProjectMapStateKey(&Agent{}, root)
 
 	focusPaths := []string{"internal/agent/compress.go"}
-	agent := &Agent{
-		Runtime:      NewAgentRuntimeWithConfig(config.DefaultConfig()),
-		CurrentModel: "deepseek-chat",
-		agentProjectPromptState: agentProjectPromptState{
-			projectMap:            &repomap.ProjectMap{},
-			projectMapStateKey:    stateKey,
-			projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", agentProjectPromptState: agentProjectPromptState{projectMapStateKey: stateKey}}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
-			projectMapFocusKey:    buildProjectMapFocusKey(focusPaths),
-			projectMapBaseSection: "cached-base",
-			projectMapSection:     "cached",
-			projectMapDirty:       false,
-			projectMapFileCount:   1,
-			projectMapSymbolCount: 1,
-		},
-	}
+	agent := newProjectPromptRefreshTestAgent(stateKey, buildProjectMapFocusKey(focusPaths), root)
 
 	if agent.shouldRefreshProjectPrompt("internal/agent/compress.go を見て") {
 		t.Fatal("expected same focus key to reuse cached prompt")
@@ -430,27 +423,56 @@ func TestShouldRefreshProjectPrompt_IgnoresRecentToolCacheChurn(t *testing.T) {
 	stateKey := currentProjectMapStateKey(&Agent{}, root)
 
 	cache := NewToolCache()
-	agent := &Agent{
-		Runtime:      NewAgentRuntimeWithConfig(config.DefaultConfig()),
-		ToolCache:    cache,
-		CurrentModel: "deepseek-chat",
-		agentProjectPromptState: agentProjectPromptState{
-			projectMap:            &repomap.ProjectMap{},
-			projectMapStateKey:    stateKey,
-			projectMapBaseKey:     buildProjectMapBaseKey(&Agent{CurrentModel: "deepseek-chat", agentProjectPromptState: agentProjectPromptState{projectMapStateKey: stateKey}}, config.DefaultConfig(), calcProjectMapBudget(&Agent{CurrentModel: "deepseek-chat"}, config.DefaultConfig(), 1, 1), 1, 1),
-			projectMapFocusKey:    buildProjectMapFocusKey([]string{"main.go"}),
-			projectMapBaseSection: "cached-base",
-			projectMapSection:     "cached",
-			projectMapDirty:       false,
-			projectMapFileCount:   1,
-			projectMapSymbolCount: 1,
-		},
-	}
+	agent := newProjectPromptRefreshTestAgent(stateKey, buildProjectMapFocusKey([]string{"main.go"}), root)
+	agent.ToolCache = cache
 
 	cache.SetFile(filePath, "package main\n")
 	cache.SetSearch("recent", root, "result", []string{filePath})
 
 	if agent.shouldRefreshProjectPrompt("main.go を見て") {
 		t.Fatal("expected recent read/search cache churn to be ignored")
+	}
+}
+
+func TestProjectPromptRefreshDecision_FocusKeyChangeReason(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root, _ := setupProjectPromptRefreshWorkspace(t)
+	stateKey := currentProjectMapStateKey(&Agent{}, root)
+
+	agent := newProjectPromptRefreshTestAgent(stateKey, "", root)
+
+	decision := agent.promptManager().ProjectPromptRefreshDecision("internal/agent/compress.go を見て")
+	if !decision.NeedRefresh {
+		t.Fatal("expected decision.NeedRefresh=true")
+	}
+	if decision.Reason != refreshReasonFocusKeyChanged {
+		t.Fatalf("decision.Reason = %q, want %q", decision.Reason, refreshReasonFocusKeyChanged)
+	}
+}
+
+func TestProjectPromptRefreshDecision_NoChangeReason(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root, _ := setupProjectPromptRefreshWorkspace(t)
+	stateKey := currentProjectMapStateKey(&Agent{}, root)
+	focusPaths := []string{"internal/agent/compress.go"}
+
+	agent := newProjectPromptRefreshTestAgent(stateKey, buildProjectMapFocusKey(focusPaths), root)
+
+	decision := agent.promptManager().ProjectPromptRefreshDecision("internal/agent/compress.go を見て")
+	if decision.NeedRefresh {
+		t.Fatal("expected decision.NeedRefresh=false")
+	}
+	if decision.Reason != refreshReasonNoChange {
+		t.Fatalf("decision.Reason = %q, want %q", decision.Reason, refreshReasonNoChange)
 	}
 }

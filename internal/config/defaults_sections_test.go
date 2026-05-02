@@ -10,6 +10,8 @@ func TestDefaultConfig_CollectionFieldsAreIndependentPerCall(t *testing.T) {
 	cfg1.ProviderModels["openai"] = ProviderModelConfig{DefaultModel: "custom-openai"}
 	cfg1.Compression.ProviderThresholds["custom"] = 123
 	cfg1.LSP.Servers["custom"] = LSPServerConfig{Command: "custom-lsp"}
+	cfg1.AgentInstructions.Project.Files[0] = "CUSTOM.md"
+	cfg1.AgentInstructions.Global.Files[0] = "~/custom.md"
 
 	if _, ok := cfg2.CommandAliases["alias-a"]; ok {
 		t.Fatal("CommandAliases should not be shared across DefaultConfig() calls")
@@ -25,6 +27,12 @@ func TestDefaultConfig_CollectionFieldsAreIndependentPerCall(t *testing.T) {
 	}
 	if _, ok := cfg2.LSP.Servers["custom"]; ok {
 		t.Fatal("LSP.Servers should not be shared across DefaultConfig() calls")
+	}
+	if got := cfg2.AgentInstructions.Project.Files[0]; got != "AGENTS.md" {
+		t.Fatalf("AgentInstructions.Project.Files[0] = %q, want %q", got, "AGENTS.md")
+	}
+	if got := cfg2.AgentInstructions.Global.Files[0]; got != "~/.xelyon/AGENTS.md" {
+		t.Fatalf("AgentInstructions.Global.Files[0] = %q, want %q", got, "~/.xelyon/AGENTS.md")
 	}
 }
 

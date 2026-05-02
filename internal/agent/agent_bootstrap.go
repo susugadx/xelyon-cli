@@ -85,6 +85,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 			changeStorage: changeStorage,
 		},
 	}
+	agent.promptMgr = newPromptManager(agent)
 	agent.syncSessionRuntimeIdentity()
 	setUsageReporter(agent, provider)
 

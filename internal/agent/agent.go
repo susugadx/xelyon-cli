@@ -54,19 +54,39 @@ type agentWorkspaceState struct {
 }
 
 type agentProjectPromptState struct {
-	projectMapFileCount    int
-	projectMapSymbolCount  int
-	projectMap             *repomap.ProjectMap
-	projectMapRootPath     string
-	projectMapIgnoreKey    string
-	projectMapStateKey     string
-	projectMapWatchDirs    []string
-	projectMapBaseSection  string
-	projectMapFocusSection string
-	projectMapSection      string
-	projectMapBaseKey      string
-	projectMapFocusKey     string
-	projectMapDirty        bool
+	projectMapFileCount            int
+	projectMapSymbolCount          int
+	projectMap                     *repomap.ProjectMap
+	projectMapRootPath             string
+	projectMapIgnoreKey            string
+	projectMapStateKey             string
+	projectMapWatchDirs            []string
+	projectMapBaseSection          string
+	projectMapFocusSection         string
+	projectMapSection              string
+	projectMapBaseKey              string
+	projectMapFocusKey             string
+	projectMapDirty                bool
+	projectInstructionBundle       *config.ProjectInstructionBundle
+	projectInstructionBundleLoaded bool
+	projectInstructionBundleKey    string
+}
+
+func (s *agentProjectPromptState) resetProjectMapState() {
+	if s == nil {
+		return
+	}
+	s.projectMap = nil
+	s.projectMapRootPath = ""
+	s.projectMapIgnoreKey = ""
+	s.projectMapStateKey = ""
+	s.projectMapWatchDirs = nil
+	s.projectMapBaseSection = ""
+	s.projectMapFocusSection = ""
+	s.projectMapSection = ""
+	s.projectMapBaseKey = ""
+	s.projectMapFocusKey = ""
+	s.projectMapDirty = true
 }
 
 // Agent は CLI エージェントの高レベル owner。
@@ -78,6 +98,7 @@ type Agent struct {
 	CurrentProvider   api.Provider
 	ProviderName      string
 	ProviderConfigKey string
+	promptMgr         *PromptManager
 	Runtime           *AgentRuntime
 	History           []api.Message
 	SystemPrompt      string

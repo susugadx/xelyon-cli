@@ -14,10 +14,18 @@ type ValidationIssue struct {
 	Value      string // 現在の値
 	Message    string // 問題の説明
 	Suggestion string // 修正提案
-	Severity   string // "error" or "warning"
-	CanAutoFix bool   // 自動修正可能か
-	FixedValue any    // 自動修正後の値
+	Severity   ValidationSeverity
+	CanAutoFix bool // 自動修正可能か
+	FixedValue any  // 自動修正後の値
 }
+
+// ValidationSeverity は validation issue の深刻度。
+type ValidationSeverity string
+
+const (
+	ValidationSeverityError   ValidationSeverity = "error"
+	ValidationSeverityWarning ValidationSeverity = "warning"
+)
 
 // ValidationResult はバリデーション結果を表す
 type ValidationResult struct {
@@ -37,6 +45,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	appendValidationIssues(&result, validateProviderIssues(cfg))
 	appendValidationIssues(&result, validateNumericRangeIssues(cfg))
 	appendValidationIssues(&result, validateBashSafetyLevelIssues(cfg))
+	appendValidationIssues(&result, validateAgentInstructionIssues(cfg))
 
 	return result
 }
@@ -47,7 +56,7 @@ func appendValidationIssues(result *ValidationResult, issues []ValidationIssue) 
 	}
 	result.Issues = append(result.Issues, issues...)
 	for _, issue := range issues {
-		if issue.Severity == "error" {
+		if issue.Severity == ValidationSeverityError {
 			result.Valid = false
 		}
 	}
@@ -77,7 +86,7 @@ func PrintValidationWarningsToWriter(w io.Writer, result ValidationResult) {
 
 	for i, issue := range result.Issues {
 		icon := "⚠️"
-		if issue.Severity == "error" {
+		if issue.Severity == ValidationSeverityError {
 			icon = "❌"
 		}
 
@@ -100,48 +109,90 @@ func PrintValidationWarnings(result ValidationResult) {
 // ApplyAutoFixes は自動修正可能な問題を修正
 func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 	fixCount := 0
+	if cfg == nil {
+		return fixCount
+	}
 
 	for _, issue := range result.Issues {
 		if !issue.CanAutoFix || issue.FixedValue == nil {
 			continue
 		}
-
-		switch issue.Field {
-		case "default_provider":
-			if v, ok := issue.FixedValue.(string); ok {
-				cfg.DefaultProvider = v
-				fixCount++
-			}
-		case "compression.trigger_percent":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Compression.TriggerPercent = v
-				fixCount++
-			}
-		case "compression.keep_recent":
-			if v, ok := issue.FixedValue.(int); ok {
-				cfg.Compression.KeepRecent = v
-				fixCount++
-			}
-		case "project_map.context_ratio":
-			if v, ok := issue.FixedValue.(float64); ok {
-				cfg.ProjectMap.ContextRatio = v
-				fixCount++
-			}
-		case "bash.safety_level":
-			if v, ok := issue.FixedValue.(string); ok {
-				cfg.Bash.SafetyLevel = v
-				fixCount++
-			}
+		fixer, ok := configAutoFixers[issue.Field]
+		if !ok {
+			continue
+		}
+		if fixer(cfg, issue.FixedValue) {
+			fixCount++
 		}
 	}
 
 	return fixCount
 }
 
+type configAutoFixer func(*Config, any) bool
+
+var configAutoFixers = map[string]configAutoFixer{
+	"default_provider": stringAutoFixer(func(cfg *Config, v string) { cfg.DefaultProvider = v }),
+	"compression.trigger_percent": intAutoFixer(func(cfg *Config, v int) {
+		cfg.Compression.TriggerPercent = v
+	}),
+	"compression.keep_recent": intAutoFixer(func(cfg *Config, v int) {
+		cfg.Compression.KeepRecent = v
+	}),
+	"project_map.context_ratio": floatAutoFixer(func(cfg *Config, v float64) {
+		cfg.ProjectMap.ContextRatio = v
+	}),
+	"bash.safety_level": stringAutoFixer(func(cfg *Config, v string) {
+		cfg.Bash.SafetyLevel = v
+	}),
+	"agent_instructions.project.mode": stringAutoFixer(func(cfg *Config, v string) {
+		cfg.AgentInstructions.Project.Mode = v
+	}),
+	"agent_instructions.max_file_bytes": intAutoFixer(func(cfg *Config, v int) {
+		cfg.AgentInstructions.MaxFileBytes = v
+	}),
+	"agent_instructions.max_total_bytes": intAutoFixer(func(cfg *Config, v int) {
+		cfg.AgentInstructions.MaxTotalBytes = v
+	}),
+}
+
+func stringAutoFixer(setter func(*Config, string)) configAutoFixer {
+	return func(cfg *Config, value any) bool {
+		typed, ok := value.(string)
+		if !ok {
+			return false
+		}
+		setter(cfg, typed)
+		return true
+	}
+}
+
+func intAutoFixer(setter func(*Config, int)) configAutoFixer {
+	return func(cfg *Config, value any) bool {
+		typed, ok := value.(int)
+		if !ok {
+			return false
+		}
+		setter(cfg, typed)
+		return true
+	}
+}
+
+func floatAutoFixer(setter func(*Config, float64)) configAutoFixer {
+	return func(cfg *Config, value any) bool {
+		typed, ok := value.(float64)
+		if !ok {
+			return false
+		}
+		setter(cfg, typed)
+		return true
+	}
+}
+
 // HasErrors は致命的なエラーがあるかチェック
 func (r ValidationResult) HasErrors() bool {
 	for _, issue := range r.Issues {
-		if issue.Severity == "error" {
+		if issue.Severity == ValidationSeverityError {
 			return true
 		}
 	}
@@ -151,7 +202,7 @@ func (r ValidationResult) HasErrors() bool {
 // HasWarnings は警告があるかチェック
 func (r ValidationResult) HasWarnings() bool {
 	for _, issue := range r.Issues {
-		if issue.Severity == "warning" {
+		if issue.Severity == ValidationSeverityWarning {
 			return true
 		}
 	}

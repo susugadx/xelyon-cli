@@ -45,6 +45,11 @@ type FirstConfig struct {
 // SecondConfig comment
 type SecondConfig struct {
 	Enabled bool ` + "`yaml:\"enabled\"`" + `
+	Nested *ThirdConfig ` + "`yaml:\"nested,omitempty\"`" + `
+}
+
+type ThirdConfig struct {
+	Value string ` + "`yaml:\"value\"`" + `
 }
 `
 	testSource := `package config
@@ -53,13 +58,13 @@ type IgnoredConfig struct {
 }
 `
 
-	if err := os.WriteFile(filepath.Join(dir, "first.go"), []byte(source1), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "first.go"), []byte(source1), 0o644); err != nil {
 		t.Fatalf("write first.go: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "second.go"), []byte(source2), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "second.go"), []byte(source2), 0o644); err != nil {
 		t.Fatalf("write second.go: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "ignored_test.go"), []byte(testSource), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "ignored_test.go"), []byte(testSource), 0o644); err != nil {
 		t.Fatalf("write ignored_test.go: %v", err)
 	}
 
@@ -67,14 +72,84 @@ type IgnoredConfig struct {
 	if err != nil {
 		t.Fatalf("ParseConfigTypes returned error: %v", err)
 	}
-	if len(structs) != 2 {
+	if len(structs) != 3 {
 		t.Fatalf("unexpected struct count: %#v", structs)
 	}
-	if structs[0].Name != "FirstConfig" || structs[1].Name != "SecondConfig" {
+	if structs[0].Name != "FirstConfig" || structs[1].Name != "SecondConfig" || structs[2].Name != "ThirdConfig" {
 		t.Fatalf("unexpected parsed structs: %#v", structs)
 	}
 	if structs[0].Fields[0].YAMLTag != "name" || !structs[0].Fields[0].IsOptional {
 		t.Fatalf("unexpected first field parsing: %#v", structs[0].Fields[0])
+	}
+	if structs[1].Fields[1].Type != "*ThirdConfig" {
+		t.Fatalf("expected pointer type, got %#v", structs[1].Fields[1])
+	}
+}
+
+func TestParseConfigTypesUsesTrailingFieldComment(t *testing.T) {
+	dir := t.TempDir()
+	source := `package config
+
+type CommentConfig struct {
+	Name string ` + "`yaml:\"name\"`" + ` // trailing comment
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "comment.go"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write comment.go: %v", err)
+	}
+
+	structs, err := ParseConfigTypes(dir)
+	if err != nil {
+		t.Fatalf("ParseConfigTypes returned error: %v", err)
+	}
+	if len(structs) != 1 || len(structs[0].Fields) != 1 {
+		t.Fatalf("unexpected parsed structs: %#v", structs)
+	}
+	if structs[0].Fields[0].Comment != "trailing comment" {
+		t.Fatalf("unexpected trailing field comment: %#v", structs[0].Fields[0])
+	}
+}
+
+func TestParseConfigTypesRejectsUnsupportedTypeExpression(t *testing.T) {
+	dir := t.TempDir()
+	source := `package config
+
+type InvalidConfig struct {
+	Value <-chan string ` + "`yaml:\"value\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "invalid.go"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write invalid.go: %v", err)
+	}
+	if _, err := ParseConfigTypes(dir); err == nil {
+		t.Fatal("expected ParseConfigTypes to fail for unsupported type")
+	}
+}
+
+func TestParseConfigTypesExpandsMultiFieldNames(t *testing.T) {
+	dir := t.TempDir()
+	source := `package config
+
+type MultiFieldConfig struct {
+	Primary, Secondary string ` + "`yaml:\"name,omitempty\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "multi.go"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write multi.go: %v", err)
+	}
+
+	structs, err := ParseConfigTypes(dir)
+	if err != nil {
+		t.Fatalf("ParseConfigTypes returned error: %v", err)
+	}
+	if len(structs) != 1 {
+		t.Fatalf("unexpected struct count: %#v", structs)
+	}
+	if len(structs[0].Fields) != 2 {
+		t.Fatalf("unexpected field count: %#v", structs[0].Fields)
+	}
+	if structs[0].Fields[0].Name != "Primary" || structs[0].Fields[1].Name != "Secondary" {
+		t.Fatalf("unexpected field names: %#v", structs[0].Fields)
 	}
 }
 
@@ -150,43 +225,28 @@ func TestGenerateConfigDetailsHandlesMapAndUnknownDefaults(t *testing.T) {
 }
 
 func TestFormatConfigExample(t *testing.T) {
-	input := "# header\n# second\n\ngeneral:\n  ui_language: auto\n"
+	input := configExampleFileHeader + "# ============================================================\n# 一般設定\n# ============================================================\ngeneral:\n  ui_language: auto\n"
 	got := FormatConfigExample(input)
-	if strings.Contains(got, "# header") {
-		t.Fatalf("expected header comments to be removed: %s", got)
+	if strings.Contains(got, "# XELYON CLI 設定例") {
+		t.Fatalf("expected file header comments to be removed: %s", got)
 	}
-	if !strings.Contains(got, "```yaml\ngeneral:\n  ui_language: auto\n```") {
-		t.Fatalf("unexpected formatted example: %s", got)
+	for _, expected := range []string{
+		"```yaml",
+		"# ============================================================",
+		"# 一般設定",
+		"general:",
+		"ui_language: auto",
+		"```",
+	} {
+		if !strings.Contains(got, expected) {
+			t.Fatalf("unexpected formatted example, missing %q in %s", expected, got)
+		}
 	}
 }
 
 func TestParseConfigTypesError(t *testing.T) {
 	if _, err := ParseConfigTypes(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Fatal("expected ParseConfigTypes to return an error for missing dir")
-	}
-}
-
-func TestParseConfigTypesUsesTrailingFieldComment(t *testing.T) {
-	dir := t.TempDir()
-	source := `package config
-
-type CommentConfig struct {
-	Name string ` + "`yaml:\"name\"`" + ` // trailing comment
-}
-`
-	if err := os.WriteFile(filepath.Join(dir, "comment.go"), []byte(source), 0644); err != nil {
-		t.Fatalf("write comment.go: %v", err)
-	}
-
-	structs, err := ParseConfigTypes(dir)
-	if err != nil {
-		t.Fatalf("ParseConfigTypes returned error: %v", err)
-	}
-	if len(structs) != 1 || len(structs[0].Fields) != 1 {
-		t.Fatalf("unexpected parsed structs: %#v", structs)
-	}
-	if structs[0].Fields[0].Comment != "trailing comment" {
-		t.Fatalf("unexpected trailing field comment: %#v", structs[0].Fields[0])
 	}
 }
 
@@ -200,17 +260,20 @@ func TestDocsHelperFunctions(t *testing.T) {
 		return expr
 	}
 
-	if got := getTypeString(typeExpr("[]string")); got != "[]string" {
-		t.Fatalf("unexpected array type: %q", got)
+	if got, err := getTypeString(typeExpr("[]string")); err != nil || got != "[]string" {
+		t.Fatalf("unexpected array type: got=%q err=%v", got, err)
 	}
-	if got := getTypeString(typeExpr("map[string]int")); got != "map[string]int" {
-		t.Fatalf("unexpected map type: %q", got)
+	if got, err := getTypeString(typeExpr("map[string]int")); err != nil || got != "map[string]int" {
+		t.Fatalf("unexpected map type: got=%q err=%v", got, err)
 	}
-	if got := getTypeString(typeExpr("pkg.Type")); got != "pkg.Type" {
-		t.Fatalf("unexpected selector type: %q", got)
+	if got, err := getTypeString(typeExpr("pkg.Type")); err != nil || got != "pkg.Type" {
+		t.Fatalf("unexpected selector type: got=%q err=%v", got, err)
 	}
-	if got := getTypeString(&ast.StarExpr{X: ast.NewIdent("Thing")}); got != "unknown" {
-		t.Fatalf("unexpected fallback type: %q", got)
+	if got, err := getTypeString(typeExpr("*Thing")); err != nil || got != "*Thing" {
+		t.Fatalf("unexpected pointer type: got=%q err=%v", got, err)
+	}
+	if _, err := getTypeString(&ast.ChanType{Value: ast.NewIdent("Thing")}); err == nil {
+		t.Fatal("expected channel type to be unsupported")
 	}
 
 	defaults := map[string]interface{}{"general": map[string]interface{}{"ui_language": "auto"}}
@@ -256,6 +319,7 @@ func TestDocsHelperFunctions(t *testing.T) {
 		{"empty-string", "", `""`},
 		{"empty-slice", []interface{}{}, "[]"},
 		{"slice", []interface{}{"a", 2}, "[a, 2]"},
+		{"string-slice", []string{"a", "b"}, "[a, b]"},
 		{"other", map[string]int{"a": 1}, "map[a:1]"},
 	}
 	for _, tc := range defaultValueCases {

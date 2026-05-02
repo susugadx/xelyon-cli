@@ -9,7 +9,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -19,18 +18,13 @@ import (
 func main() {
 	output, err := configgen.GenerateExampleFile(config.DefaultConfig())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating config example: %v\n", err)
-		os.Exit(1)
+		configgen.ExitWithError("Error generating config example: %v", err)
 	}
 
-	outputPath := "config.yaml.example"
-	if len(os.Args) > 1 {
-		outputPath = os.Args[1]
-	}
+	outputPath := configgen.OutputPathFromArgs(os.Args, "config.yaml.example")
 
 	if err := os.WriteFile(outputPath, output, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
-		os.Exit(1)
+		configgen.ExitWithError("Error writing file: %v", err)
 	}
 
 	fmt.Printf("Generated %s\n", outputPath)

@@ -53,7 +53,7 @@ func injectProjectMap(agent *Agent, input string) {
 }
 
 func resetProjectMapPromptSection(agent *Agent) {
-	agent.SystemPrompt = stripProjectMapSection(agent.SystemPrompt)
+	agent.promptManager().StripProjectMapSection()
 	agent.projectMapFileCount = 0
 	agent.projectMapSymbolCount = 0
 }

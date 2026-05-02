@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"go/format"
 	"os"
-	"sort"
 	"strings"
 
 	configgen "github.com/susugadx/xelyon-cli/scripts/internal/configgen"
@@ -66,45 +65,22 @@ type CategoryDef struct {
 	}
 	sb.WriteString("}\n\n")
 
+	fieldTypeEntries, err := configgen.BuildRegistryFieldTypeEntries()
+	if err != nil {
+		configgen.ExitWithError("Error building FieldTypeMap entries: %v", err)
+	}
 	sb.WriteString("// FieldTypeMap はフィールドパスから型へのマップ\n")
 	sb.WriteString("var FieldTypeMap = map[string]ConfigFieldType{\n")
-	var fieldPaths []string
-	fieldTypeEntries := make(map[string]string)
-	for sectionName, section := range configgen.Sections {
-		for fieldName, fieldType := range section.FieldTypes {
-			path := sectionName + "." + fieldName
-			if fieldName == sectionName {
-				path = fieldName
-			}
-			fieldPaths = append(fieldPaths, path)
-			fieldTypeEntries[path] = configgen.FieldTypeToConst(fieldType)
-		}
-	}
-	sort.Strings(fieldPaths)
-	for _, path := range fieldPaths {
-		sb.WriteString(fmt.Sprintf("\t%q: %s,\n", path, fieldTypeEntries[path]))
+	for _, entry := range fieldTypeEntries {
+		sb.WriteString(fmt.Sprintf("\t%q: %s,\n", entry.Path, entry.FieldType))
 	}
 	sb.WriteString("}\n\n")
 
 	sb.WriteString("// SelectOptions は選択型フィールドの選択肢\n")
 	sb.WriteString("var SelectOptions = map[string][]string{\n")
-	var selectPaths []string
-	selectEntries := make(map[string][]string)
-	for sectionName, section := range configgen.Sections {
-		for fieldName, opts := range section.SelectOpts {
-			path := sectionName + "." + fieldName
-			if fieldName == sectionName {
-				path = fieldName
-			}
-			selectPaths = append(selectPaths, path)
-			selectEntries[path] = opts
-		}
-	}
-	sort.Strings(selectPaths)
-	for _, path := range selectPaths {
-		opts := selectEntries[path]
-		sb.WriteString(fmt.Sprintf("\t%q: {", path))
-		for i, opt := range opts {
+	for _, entry := range configgen.BuildRegistrySelectEntries() {
+		sb.WriteString(fmt.Sprintf("\t%q: {", entry.Path))
+		for i, opt := range entry.Options {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
@@ -116,38 +92,20 @@ type CategoryDef struct {
 
 	sb.WriteString("// FieldDescriptions はフィールドの説明\n")
 	sb.WriteString("var FieldDescriptions = map[string]string{\n")
-	var descPaths []string
-	descEntries := make(map[string]string)
-	for sectionName, section := range configgen.Sections {
-		for fieldName, desc := range section.Fields {
-			path := sectionName + "." + fieldName
-			if fieldName == sectionName {
-				path = fieldName
-			}
-			descPaths = append(descPaths, path)
-			descEntries[path] = desc
-		}
-	}
-	sort.Strings(descPaths)
-	for _, path := range descPaths {
-		sb.WriteString(fmt.Sprintf("\t%q: %q,\n", path, descEntries[path]))
+	for _, entry := range configgen.BuildRegistryDescriptionEntries() {
+		sb.WriteString(fmt.Sprintf("\t%q: %q,\n", entry.Path, entry.Description))
 	}
 	sb.WriteString("}\n\n")
 
 	formatted, err := format.Source([]byte(sb.String()))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error formatting generated code: %v\n", err)
-		os.Exit(1)
+		configgen.ExitWithError("Error formatting generated code: %v", err)
 	}
 
-	outputPath := "internal/config/registry_generated.go"
-	if len(os.Args) > 1 {
-		outputPath = os.Args[1]
-	}
+	outputPath := configgen.OutputPathFromArgs(os.Args, "internal/config/registry_generated.go")
 
 	if err := os.WriteFile(outputPath, formatted, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
-		os.Exit(1)
+		configgen.ExitWithError("Error writing file: %v", err)
 	}
 
 	fmt.Printf("Generated %s\n", outputPath)

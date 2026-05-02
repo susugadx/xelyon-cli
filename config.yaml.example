@@ -60,26 +60,6 @@ compression:
     keep_recent: 20
 
 # ============================================================
-# Responses API retention 設定（高度）
-# ============================================================
-# OpenAI / Azure OpenAI の Responses API で provider 側 state を使う設定です。
-# server_compaction は previous_response_id chain request 向けで、
-# /responses/compact や /compress --compact とは別機能です。
-# previous_response_id がない初回 turn、store=false、store=false 前提の
-# stateless input-array chaining は server-side compaction の対象外（未対応）です。
-responses:
-    store: true
-    persist_response_id: true
-    server_compaction:
-        enabled: true
-        # compaction 発火閾値（0=auto）。圧縮後サイズの指定ではありません。
-        # 0 は payload に送信せず、正数指定は 1000 以上のみ有効です。
-        compact_threshold: 0
-        # context_management.compaction を載せられないときの local auto-compress fallback。
-        # false の場合は local auto-compress にフォールバックしません。
-        local_fallback: true
-
-# ============================================================
 # 実行モード設定
 # ============================================================
 # ツール実行の承認モードを制御
@@ -111,6 +91,38 @@ project_map:
     context_ratio: 0.05
     # 追加除外ディレクトリ（list_dir と共通）
     additional_ignore_dirs: []
+
+# ============================================================
+# Agent Instructions 設定
+# ============================================================
+# AGENTS.md / CLAUDE.md 互換ガイダンス読み込み設定
+# xelyon.yaml の rules とは別レイヤーで扱われます
+agent_instructions:
+    project:
+        # project-local guidance の読み込みモード（off / fallback / always）
+        mode: fallback
+        # project-local guidance ファイル候補
+        files:
+            - AGENTS.md
+            - CLAUDE.md
+            - .claude/CLAUDE.md
+        # gitignored / untracked guidance を許可
+        include_gitignored: false
+    global:
+        # global guidance 読み込みを有効化
+        enabled: false
+        # global guidance ファイル候補
+        files:
+            - ~/.xelyon/AGENTS.md
+            - ~/.xelyon/CLAUDE.md
+    # CLAUDE.local.md / AGENTS.local.md など local 系 guidance を許可
+    include_local_files: false
+    # @path import 行を展開して読み込む（相対パスは当該 guidance file 基準）
+    expand_imports: false
+    # 1ファイルあたりの最大読み込みバイト数
+    max_file_bytes: 20000
+    # guidance 全体の最大読み込みバイト数
+    max_total_bytes: 60000
 
 # ============================================================
 # LSP連携設定

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -16,9 +15,9 @@ func resolveProjectMapSourceCWD() (string, bool) {
 	return cwd, true
 }
 
-func resolveProjectMapSourceRootPath(cwd string, pc *config.ProjectConfig) string {
-	if pc == nil || strings.TrimSpace(pc.FilePath) == "" {
+func resolveProjectMapSourceRootPath(cwd string, bundle *config.ProjectInstructionBundle) string {
+	if bundle == nil || strings.TrimSpace(bundle.RootPath) == "" {
 		return cwd
 	}
-	return filepath.Dir(pc.FilePath)
+	return bundle.RootPath
 }

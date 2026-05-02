@@ -7,12 +7,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-func TestResolveProjectMapSourceRootPath_UsesProjectConfigDir(t *testing.T) {
+func TestResolveProjectMapSourceRootPath_UsesBundleRoot(t *testing.T) {
 	cwd := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "workspace"))
-	configPath := filepath.Join(cwd, "nested", "xelyon.yaml")
+	rootPath := filepath.Join(cwd, "nested")
 
-	got := resolveProjectMapSourceRootPath(cwd, &config.ProjectConfig{FilePath: configPath})
-	want := filepath.Dir(configPath)
+	got := resolveProjectMapSourceRootPath(cwd, &config.ProjectInstructionBundle{RootPath: rootPath})
+	want := rootPath
 	if got != want {
 		t.Fatalf("resolveProjectMapSourceRootPath() = %q, want %q", got, want)
 	}
@@ -23,15 +23,15 @@ func TestResolveProjectMapSourceRootPath_FallsBackToCWD(t *testing.T) {
 
 	tests := []struct {
 		name string
-		pc   *config.ProjectConfig
+		b    *config.ProjectInstructionBundle
 	}{
-		{name: "nil config", pc: nil},
-		{name: "blank filepath", pc: &config.ProjectConfig{FilePath: "   "}},
+		{name: "nil bundle", b: nil},
+		{name: "blank root path", b: &config.ProjectInstructionBundle{RootPath: "   "}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resolveProjectMapSourceRootPath(cwd, tt.pc)
+			got := resolveProjectMapSourceRootPath(cwd, tt.b)
 			if got != cwd {
 				t.Fatalf("resolveProjectMapSourceRootPath() = %q, want %q", got, cwd)
 			}

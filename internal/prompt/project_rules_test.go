@@ -94,6 +94,29 @@ func TestInjectProjectRules_MarkerNotFound(t *testing.T) {
 	}
 }
 
+func TestInjectProjectConfigBlock_UsesVerificationSectionAnchor(t *testing.T) {
+	systemPrompt := `## Workflow Rules
+
+### 10. Verification Protocol (MANDATORY)
+Verification section body changed and no legacy marker exists.
+
+### 11. Impact Analysis
+Check references before changes`
+	projectBlock := "\n\n<!-- PROJECT_CONFIG_START -->\nproject rules\n<!-- PROJECT_CONFIG_END -->"
+
+	result := InjectProjectConfigBlock(systemPrompt, projectBlock)
+	idxRules := strings.Index(result, "PROJECT_CONFIG_START")
+	idxSection10 := strings.Index(result, "### 10. Verification Protocol")
+	idxSection11 := strings.Index(result, "### 11. Impact Analysis")
+
+	if idxRules < 0 {
+		t.Fatal("project block was not injected")
+	}
+	if idxRules < idxSection10 || idxSection11 < idxRules {
+		t.Fatalf("project block should be injected between section #10 and #11: %s", result)
+	}
+}
+
 func TestBuildRulesBlockFromList_Empty(t *testing.T) {
 	result := BuildRulesBlockFromList(nil)
 	if result != "" {
@@ -133,5 +156,93 @@ func TestBuildRulesBlockFromList_Multiple(t *testing.T) {
 	}
 	if !strings.Contains(result, "3. No hardcoded secrets") {
 		t.Error("should contain rule 3")
+	}
+}
+
+func TestBuildProjectInstructionBlock_NoXelyonUsesProjectGuidanceLanguage(t *testing.T) {
+	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
+		HasProjectConfig: false,
+		ProjectGuidance: []ProjectInstructionEntry{
+			{Label: "AGENTS.md", Content: "Follow repo guidance strictly.", Strength: "project_guidance"},
+		},
+	})
+
+	if !strings.Contains(block, "<!-- PROJECT_CONFIG_START -->") || !strings.Contains(block, "<!-- PROJECT_CONFIG_END -->") {
+		t.Fatal("project config markers should exist")
+	}
+	if strings.Contains(block, "PROJECT-SPECIFIC RULES (MANDATORY)") {
+		t.Fatal("mandatory block should not be generated when xelyon.yaml rules are absent")
+	}
+	if !strings.Contains(block, "No xelyon.yaml was found for this workspace.") {
+		t.Fatal("missing no-xelyon guidance explanation")
+	}
+	if !strings.Contains(block, "### AGENTS.md") {
+		t.Fatal("missing guidance heading")
+	}
+}
+
+func TestBuildProjectInstructionBlock_XelyonRulesRemainMandatory(t *testing.T) {
+	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
+		HasProjectConfig: true,
+		MandatoryRules:   []string{"Run go test ./..."},
+		ProjectGuidance: []ProjectInstructionEntry{
+			{Label: "CLAUDE.md", Content: "Advisory style note.", Strength: "advisory"},
+		},
+	})
+
+	if !strings.Contains(block, "PROJECT-SPECIFIC RULES (MANDATORY)") {
+		t.Fatal("mandatory rules header missing")
+	}
+	if !strings.Contains(block, "1. Run go test ./...") {
+		t.Fatal("mandatory rule missing")
+	}
+	if !strings.Contains(block, "advisory guidance") {
+		t.Fatal("advisory explanation missing for project guidance with xelyon")
+	}
+	if strings.Contains(block, "1. Advisory style note.") {
+		t.Fatal("guidance content should not be converted into mandatory numbered rules")
+	}
+	if !strings.Contains(block, "### CLAUDE.md") {
+		t.Fatal("missing CLAUDE.md heading")
+	}
+}
+
+func TestBuildProjectInstructionBlock_GlobalGuidanceIsAdvisory(t *testing.T) {
+	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
+		GlobalGuidance: []ProjectInstructionEntry{
+			{Label: "~/.xelyon/AGENTS.md", Content: "Personal preference.", Strength: "advisory"},
+		},
+	})
+
+	if !strings.Contains(block, "## Enabled Global Guidance") {
+		t.Fatal("global guidance section missing")
+	}
+	if !strings.Contains(block, "Global guidance is advisory personal preference.") {
+		t.Fatal("global advisory explanation missing")
+	}
+	if !strings.Contains(block, "### ~/.xelyon/AGENTS.md (advisory)") {
+		t.Fatal("global guidance file heading missing")
+	}
+}
+
+func TestBuildProjectInstructionBlock_RendersStrengthAndWarnings(t *testing.T) {
+	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
+		HasProjectConfig: false,
+		ProjectGuidance: []ProjectInstructionEntry{
+			{Label: "AGENTS.md", Content: "Follow strict policy.", Strength: "project_guidance"},
+		},
+		Warnings: []string{
+			"Skipped invalid project guidance path: ../outside.md",
+		},
+	})
+
+	if !strings.Contains(block, "### AGENTS.md (project guidance)") {
+		t.Fatal("project guidance strength label missing")
+	}
+	if !strings.Contains(block, "## Guidance Load Notes") {
+		t.Fatal("guidance load notes section missing")
+	}
+	if !strings.Contains(block, "Skipped invalid project guidance path: ../outside.md") {
+		t.Fatal("guidance warning missing")
 	}
 }

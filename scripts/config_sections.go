@@ -1,7 +1,10 @@
 //go:build ignore
 
-// config_sections.go keeps the historical go run entrypoint shape while
-// delegating the canonical metadata to scripts/internal/configgen.
+// config_sections.go は `go run scripts/config_sections.go scripts/gen-*.go`
+// 互換を維持するための薄い shim。
+//
+// 現在の canonical source of truth は scripts/internal/configgen 側であり、
+// この file には alias 以外のロジックを追加しない。
 package main
 
 import configgen "github.com/susugadx/xelyon-cli/scripts/internal/configgen"

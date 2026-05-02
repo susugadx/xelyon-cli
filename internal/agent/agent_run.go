@@ -2,10 +2,8 @@ package agent
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -15,18 +13,7 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 	runtime.AutoApprove = autoApprove
 	out := runtime.effectiveUI().Output()
 
-	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
-	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
-	logger, err := audit.NewDefaultLogger(auditEnabled)
-	if err != nil {
-		yellow.Fprintf(out, "Warning: Failed to initialize audit log: %v\n", err)
-	}
-	if auditEnabled && !quiet {
-		green.Fprintln(out, "📝 Audit logging enabled")
-	}
-	if logger != nil {
-		runtime.AuditLogger = logger
-	}
+	configureRuntimeAuditLoggerFromEnv(runtime, out, !quiet)
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	agent.setAutoApprove(autoApprove)
 	defer agent.Cleanup()
@@ -37,11 +24,11 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 		printModeInfoToWriter(runtime.effectiveUI().Output(), autoApprove, false)
 	}
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
-	}
-	injectProjectMap(agent, "")
+	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
+	initializeProjectInstructions(agent, projectInstructionApplyOptions{
+		showStatus:       !quiet,
+		injectProjectMap: true,
+	})
 
 	// 明示的に1ターンのみ実行（ChatOnce は stdin を読まず、REPL に入らない）
 	return agent.ChatOnce(query)
@@ -53,18 +40,7 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 	runtime.AutoApprove = autoApprove
 	out := runtime.effectiveUI().Output()
 
-	// 監査ログ初期化（環境変数で制御: XELYON_AUDIT_LOG=1 で有効化）
-	auditEnabled := os.Getenv("XELYON_AUDIT_LOG") == "1"
-	logger, err := audit.NewDefaultLogger(auditEnabled)
-	if err != nil {
-		yellow.Fprintf(out, "Warning: Failed to initialize audit log: %v\n", err)
-	}
-	if auditEnabled && !quiet {
-		green.Fprintln(out, "📝 Audit logging enabled")
-	}
-	if logger != nil {
-		runtime.AuditLogger = logger
-	}
+	configureRuntimeAuditLoggerFromEnv(runtime, out, !quiet)
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	agent.setAutoApprove(autoApprove)
 	defer agent.Cleanup()
@@ -89,11 +65,11 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 		green.Fprintf(out, "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 	}
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
-	}
-	injectProjectMap(agent, "")
+	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
+	initializeProjectInstructions(agent, projectInstructionApplyOptions{
+		showStatus:       !quiet,
+		injectProjectMap: true,
+	})
 
 	if !quiet {
 		_, _ = fmt.Fprintln(agent.output())

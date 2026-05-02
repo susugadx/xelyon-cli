@@ -15,9 +15,7 @@
 package main
 
 import (
-	"fmt"
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	configgen "github.com/susugadx/xelyon-cli/scripts/internal/configgen"
@@ -27,56 +25,51 @@ import (
 func main() {
 	defaultCfg := config.DefaultConfig()
 
-	configExample, err := os.ReadFile("config.yaml.example")
+	configExample, found, err := configgen.ReadFileIfExists("config.yaml.example")
 	if err != nil {
+		configgen.ExitWithError("Error reading config.yaml.example: %v", err)
+	}
+	if !found {
 		fmt.Println("config.yaml.example not found, generating...")
 		configExample, err = configgen.GenerateExampleFile(defaultCfg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error generating config example: %v\n", err)
-			os.Exit(1)
+			configgen.ExitWithError("Error generating config example: %v", err)
 		}
 	}
 
 	configMdPath := "docs/config.md"
 	content, err := os.ReadFile(configMdPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", configMdPath, err)
-		os.Exit(1)
+		configgen.ExitWithError("Error reading %s: %v", configMdPath, err)
 	}
 
 	newContent := string(content)
-	var replaced bool
-	newContent, replaced = configgen.ReplaceMarkerContent(newContent,
-		"<!-- CONFIG-EXAMPLE-START -->",
-		"<!-- CONFIG-EXAMPLE-END -->",
-		configgen.FormatConfigExample(string(configExample)))
-	if !replaced {
-		fmt.Fprintf(os.Stderr, "Error: %s is missing CONFIG-EXAMPLE markers\n", configMdPath)
-		os.Exit(1)
+	newContent, err = configgen.ReplaceConfigExampleBlock(newContent, string(configExample))
+	if err != nil {
+		configgen.ExitWithError("Error updating CONFIG-EXAMPLE block: %v", err)
 	}
 
-	if strings.Contains(newContent, "<!-- CONFIG-DETAILS-START -->") &&
-		strings.Contains(newContent, "<!-- CONFIG-DETAILS-END -->") {
+	if configgen.HasConfigDetailsMarkers(newContent) {
 		structs, err := configgen.ParseConfigTypes("internal/config")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing internal/config: %v\n", err)
-			os.Exit(1)
+			configgen.ExitWithError("Error parsing internal/config: %v", err)
 		}
 
-		defaultYAML, _ := yaml.Marshal(defaultCfg)
+		defaultYAML, err := yaml.Marshal(defaultCfg)
+		if err != nil {
+			configgen.ExitWithError("Error marshaling default config: %v", err)
+		}
 		defaults := make(map[string]interface{})
-		yaml.Unmarshal(defaultYAML, &defaults)
+		if err := yaml.Unmarshal(defaultYAML, &defaults); err != nil {
+			configgen.ExitWithError("Error unmarshaling default config map: %v", err)
+		}
 		configDetails := configgen.GenerateConfigDetails(structs, defaults)
 
-		newContent, _ = configgen.ReplaceMarkerContent(newContent,
-			"<!-- CONFIG-DETAILS-START -->",
-			"<!-- CONFIG-DETAILS-END -->",
-			configDetails)
+		newContent = configgen.ReplaceConfigDetailsBlock(newContent, configDetails)
 	}
 
 	if err := os.WriteFile(configMdPath, []byte(newContent), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", configMdPath, err)
-		os.Exit(1)
+		configgen.ExitWithError("Error writing %s: %v", configMdPath, err)
 	}
 
 	fmt.Printf("Updated %s\n", configMdPath)

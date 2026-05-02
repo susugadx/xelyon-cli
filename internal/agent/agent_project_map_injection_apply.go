@@ -13,7 +13,7 @@ func applyProjectMapCachedSection(agent *Agent, injectionCtx projectMapInjection
 		return false
 	}
 
-	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, agent.projectMapSection)
+	agent.promptManager().AppendProjectMapSection(agent.projectMapSection)
 	agent.projectMapFileCount = injectionCtx.fileCount
 	agent.projectMapSymbolCount = injectionCtx.symbolCount
 	agent.projectMapDirty = false
@@ -21,7 +21,7 @@ func applyProjectMapCachedSection(agent *Agent, injectionCtx projectMapInjection
 }
 
 func applyProjectMapBuiltSection(agent *Agent, injectionCtx projectMapInjectionContext, build projectMapSectionBuild) {
-	agent.SystemPrompt = appendProjectMapSection(agent.SystemPrompt, build.projectMapPrompt)
+	agent.promptManager().AppendProjectMapSection(build.projectMapPrompt)
 	agent.projectMapFileCount = injectionCtx.fileCount
 	agent.projectMapSymbolCount = injectionCtx.symbolCount
 	agent.projectMapBaseSection = build.baseSection

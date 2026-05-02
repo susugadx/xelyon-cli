@@ -132,6 +132,32 @@ func defaultProjectMapConfig() ProjectMapConfig {
 	}
 }
 
+func defaultAgentInstructionsConfig() AgentInstructionsConfig {
+	return AgentInstructionsConfig{
+		Project: AgentInstructionsProjectConfig{
+			Mode:              "fallback",
+			Files:             defaultAgentInstructionProjectFiles(),
+			IncludeGitignored: false,
+		},
+		Global: AgentInstructionsGlobalConfig{
+			Enabled: false,
+			Files:   defaultAgentInstructionGlobalFiles(),
+		},
+		IncludeLocalFiles: false,
+		ExpandImports:     false,
+		MaxFileBytes:      20000,
+		MaxTotalBytes:     60000,
+	}
+}
+
+func defaultAgentInstructionProjectFiles() []string {
+	return []string{"AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md"}
+}
+
+func defaultAgentInstructionGlobalFiles() []string {
+	return []string{"~/.xelyon/AGENTS.md", "~/.xelyon/CLAUDE.md"}
+}
+
 func defaultGitStageConfig() GitStageConfig {
 	return GitStageConfig{
 		BatchConfirm: true,

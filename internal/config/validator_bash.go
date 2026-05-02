@@ -17,7 +17,7 @@ func validateBashSafetyLevelIssues(cfg *Config) []ValidationIssue {
 		Value:      level,
 		Message:    fmt.Sprintf("無効な安全性レベルです (有効: %s)", strings.Join(validBashSafetyLevels, ", ")),
 		Suggestion: "moderate",
-		Severity:   "warning",
+		Severity:   ValidationSeverityWarning,
 		CanAutoFix: true,
 		FixedValue: "moderate",
 	}}

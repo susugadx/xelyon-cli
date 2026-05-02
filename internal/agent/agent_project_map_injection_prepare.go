@@ -15,31 +15,51 @@ type projectMapInjectionSources struct {
 	ignoreKey      string
 }
 
+type projectMapSourceResolveOptions struct {
+	allowBundleLoad bool
+}
+
 func prepareProjectMapInjection(agent *Agent, input string) (projectMapInjectionContext, bool) {
-	sources, ok := resolveProjectMapInjectionSources(agent)
+	sources, _, ok := resolveProjectMapInjectionSources(agent, projectMapSourceResolveOptions{
+		allowBundleLoad: true,
+	})
 	if !ok {
 		return projectMapInjectionContext{}, false
 	}
 	return buildProjectMapInjectionContext(agent, input, sources)
 }
 
-func resolveProjectMapInjectionSources(agent *Agent) (projectMapInjectionSources, bool) {
+func resolveProjectMapInjectionSources(agent *Agent, opts projectMapSourceResolveOptions) (projectMapInjectionSources, projectPromptRefreshReason, bool) {
+	if agent == nil {
+		return projectMapInjectionSources{}, refreshReasonNoAgent, false
+	}
 	cfg := agent.cfg()
-	if !cfg.ProjectMap.Enabled {
-		return projectMapInjectionSources{}, false
+	if cfg == nil || !cfg.ProjectMap.Enabled {
+		return projectMapInjectionSources{}, refreshReasonProjectMapDisabled, false
 	}
 	if !common.IsRipgrepAvailable() {
-		return projectMapInjectionSources{}, false
+		return projectMapInjectionSources{}, refreshReasonRipgrepUnavailable, false
 	}
 
 	cwd, ok := resolveProjectMapSourceCWD()
 	if !ok {
-		return projectMapInjectionSources{}, false
+		return projectMapInjectionSources{}, refreshReasonCWDUnavailable, false
 	}
 
-	pc := loadProjectConfig()
-	rootPath := resolveProjectMapSourceRootPath(cwd, pc)
-	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, pc)
+	bundle := agent.projectInstructionBundleIfLoaded()
+	if bundle == nil && opts.allowBundleLoad {
+		bundle = agent.loadProjectInstructionBundleCached(false)
+	}
+	rootPath := resolveProjectMapSourceRootPath(cwd, bundle)
+	if bundle == nil && strings.TrimSpace(agent.projectMapRootPath) != "" {
+		rootPath = agent.projectMapRootPath
+	}
+
+	var projectCfg *config.ProjectConfig
+	if bundle != nil {
+		projectCfg = bundle.ProjectConfig
+	}
+	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, projectCfg)
 
 	return projectMapInjectionSources{
 		cfg:            cfg,
@@ -47,7 +67,7 @@ func resolveProjectMapInjectionSources(agent *Agent) (projectMapInjectionSources
 		rootPath:       rootPath,
 		ignorePatterns: ignorePatterns,
 		ignoreKey:      strings.Join(ignorePatterns, "\x00"),
-	}, true
+	}, refreshReasonNoChange, true
 }
 
 func buildProjectMapInjectionContext(agent *Agent, input string, sources projectMapInjectionSources) (projectMapInjectionContext, bool) {

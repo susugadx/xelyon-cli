@@ -35,7 +35,7 @@ func validateNumericRangeIssue(field string, value, min, max, defaultVal int) (V
 		Value:      fmt.Sprintf("%d", value),
 		Message:    fmt.Sprintf("推奨範囲外です (推奨: %d-%d)", min, max),
 		Suggestion: fmt.Sprintf("%d", defaultVal),
-		Severity:   "warning",
+		Severity:   ValidationSeverityWarning,
 		CanAutoFix: true,
 		FixedValue: defaultVal,
 	}, true
@@ -50,7 +50,7 @@ func validateProjectMapContextRatioIssue(value float64) (ValidationIssue, bool) 
 		Value:      formatFloatValidationValue(value),
 		Message:    fmt.Sprintf("有効範囲外です (有効: %.2f-%.2f)", ProjectMapContextRatioMin, ProjectMapContextRatioMax),
 		Suggestion: fmt.Sprintf("%.2f", ProjectMapContextRatioDefault),
-		Severity:   "warning",
+		Severity:   ValidationSeverityWarning,
 		CanAutoFix: true,
 		FixedValue: ProjectMapContextRatioDefault,
 	}, true
@@ -65,7 +65,7 @@ func validateResponsesServerCompactionCompactThresholdIssue(value int) (Validati
 		Value:      fmt.Sprintf("%d", value),
 		Message:    "compact_threshold は 0（auto）または 1000 以上を指定してください",
 		Suggestion: "0",
-		Severity:   "error",
+		Severity:   ValidationSeverityError,
 		CanAutoFix: false,
 	}, true
 }

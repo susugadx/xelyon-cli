@@ -1,0 +1,340 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+// ProjectInstructionBundle は project instruction 注入用の統合データ。
+// xelyon.yaml の mandatory policy と AGENTS/CLAUDE guidance を分離して保持する。
+type ProjectInstructionBundle struct {
+	RootPath string
+
+	ProjectConfig *ProjectConfig
+
+	ProjectGuidance []InstructionFile
+	GlobalGuidance  []InstructionFile
+
+	WarningEntries []ProjectInstructionWarning
+}
+
+// ProjectInstructionWarningCode は guidance 読み込み時の warning 種別。
+type ProjectInstructionWarningCode string
+
+const (
+	ProjectInstructionWarningInvalidProjectGuidancePath ProjectInstructionWarningCode = "invalid_project_guidance_path"
+	ProjectInstructionWarningLoadSkipped                ProjectInstructionWarningCode = "load_skipped"
+	ProjectInstructionWarningImportLoadSkipped          ProjectInstructionWarningCode = "import_load_skipped"
+)
+
+// ProjectInstructionWarning は guidance 読み込み時の型付き warning。
+type ProjectInstructionWarning struct {
+	Code    ProjectInstructionWarningCode
+	Message string
+}
+
+// InstructionStrength は guidance の優先度カテゴリ。
+type InstructionStrength string
+
+const (
+	InstructionStrengthProjectGuidance InstructionStrength = "project_guidance"
+	InstructionStrengthAdvisory        InstructionStrength = "advisory"
+)
+
+// InstructionFile は読み込んだ guidance ファイルの内容。
+type InstructionFile struct {
+	Path       string
+	Label      string
+	Scope      string
+	Strength   InstructionStrength
+	Content    string
+	Truncated  bool
+	GitTracked bool
+}
+
+// LoadProjectInstructionBundle は現在 cwd を基準に instruction bundle を解決する。
+func LoadProjectInstructionBundle(cfg *Config) (*ProjectInstructionBundle, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	return LoadProjectInstructionBundleForDir(cfg, cwd)
+}
+
+// LoadProjectInstructionBundleForDir は指定ディレクトリを基準に instruction bundle を解決する。
+func LoadProjectInstructionBundleForDir(cfg *Config, cwd string) (*ProjectInstructionBundle, error) {
+	if strings.TrimSpace(cwd) == "" {
+		return nil, fmt.Errorf("cwd is empty")
+	}
+
+	cfgForLoad := cfg
+	if cfgForLoad == nil {
+		cfgForLoad = DefaultConfig()
+	}
+
+	projectCfg, err := loadProjectConfigForDir(cwd)
+	if err != nil {
+		return nil, err
+	}
+
+	gitRoot := findGitRoot(cwd)
+	bundle := &ProjectInstructionBundle{
+		ProjectConfig: projectCfg,
+		RootPath:      resolveBundleRootPath(cwd, projectCfg, gitRoot, cfgForLoad.AgentInstructions),
+	}
+
+	mode := normalizeAgentInstructionProjectMode(cfgForLoad.AgentInstructions.Project.Mode)
+	budget := newInstructionByteBudget(cfgForLoad.AgentInstructions)
+
+	if shouldLoadProjectGuidance(mode, projectCfg != nil) {
+		strength := resolveProjectGuidanceStrength(projectCfg != nil)
+		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, cfgForLoad.AgentInstructions, gitRoot, strength, &budget)
+	}
+
+	if cfgForLoad.AgentInstructions.Global.Enabled {
+		bundle.GlobalGuidance = loadGlobalGuidanceFiles(bundle, cfgForLoad.AgentInstructions, &budget)
+	}
+
+	return bundle, nil
+}
+
+func shouldLoadProjectGuidance(mode string, hasProjectConfig bool) bool {
+	switch mode {
+	case AgentInstructionProjectModeOff:
+		return false
+	case AgentInstructionProjectModeAlways:
+		return true
+	case AgentInstructionProjectModeFallback:
+		return !hasProjectConfig
+	default:
+		return !hasProjectConfig
+	}
+}
+
+func resolveProjectGuidanceStrength(hasProjectConfig bool) InstructionStrength {
+	if hasProjectConfig {
+		return InstructionStrengthAdvisory
+	}
+	return InstructionStrengthProjectGuidance
+}
+
+type guidanceLoadPlan struct {
+	CandidatePath string
+	LoadOptions   instructionFileLoadOptions
+	Valid         bool
+	Warning       *ProjectInstructionWarning
+}
+
+type guidanceLoadPlanResolver func(path string) guidanceLoadPlan
+
+func forEachGuidanceCandidatePath(paths []string, includeLocalFiles bool, visit func(path string) bool) {
+	if len(paths) == 0 || visit == nil {
+		return
+	}
+	for _, raw := range paths {
+		path := strings.TrimSpace(raw)
+		if path == "" {
+			continue
+		}
+		if !includeLocalFiles && isLocalGuidanceFile(path) {
+			continue
+		}
+		if !visit(path) {
+			return
+		}
+	}
+}
+
+func buildGuidanceLoadPlans(paths []string, includeLocalFiles bool, resolver guidanceLoadPlanResolver) []guidanceLoadPlan {
+	if len(paths) == 0 || resolver == nil {
+		return nil
+	}
+	plans := make([]guidanceLoadPlan, 0, len(paths))
+	forEachGuidanceCandidatePath(paths, includeLocalFiles, func(path string) bool {
+		plans = append(plans, resolver(path))
+		return true
+	})
+	return plans
+}
+
+func loadGuidanceFiles(bundle *ProjectInstructionBundle, budget *instructionByteBudget, plans []guidanceLoadPlan) []InstructionFile {
+	var files []InstructionFile
+	for _, plan := range plans {
+		if budget.exhausted() {
+			break
+		}
+		file, loaded, stop := loadGuidanceFileFromPlan(bundle, budget, plan)
+		if stop {
+			break
+		}
+		if !loaded {
+			continue
+		}
+		files = append(files, file)
+	}
+	return files
+}
+
+func loadGuidanceFileFromPlan(bundle *ProjectInstructionBundle, budget *instructionByteBudget, plan guidanceLoadPlan) (file InstructionFile, loaded bool, stop bool) {
+	appendProjectInstructionWarning(bundle, plan.Warning)
+	if !plan.Valid {
+		return InstructionFile{}, false, false
+	}
+
+	loadResult := loadInstructionFile(plan.LoadOptions)
+	appendProjectInstructionWarnings(bundle, loadResult.Warnings)
+	if loadResult.Warning != "" {
+		appendProjectInstructionWarningMessage(bundle, ProjectInstructionWarningLoadSkipped, loadResult.Warning)
+	}
+	if !loadResult.Loaded {
+		if loadResult.SkipReason == instructionLoadSkipNoContentInBudget && budget.exhausted() {
+			return InstructionFile{}, false, true
+		}
+		return InstructionFile{}, false, false
+	}
+	return loadResult.File, true, false
+}
+
+func resolveProjectGuidanceLoadPlan(rootPath, resolvedRootPath, path string, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget, gitTrackedLookup func(fullPath string) (tracked bool, known bool)) guidanceLoadPlan {
+	fullPath, ok := resolveProjectGuidancePath(rootPath, path)
+	if !ok {
+		return guidanceLoadPlan{
+			CandidatePath: path,
+			Valid:         false,
+			Warning: &ProjectInstructionWarning{
+				Code:    ProjectInstructionWarningInvalidProjectGuidancePath,
+				Message: fmt.Sprintf("Skipped invalid project guidance path: %s", path),
+			},
+		}
+	}
+
+	boundary := newInstructionPathBoundary(rootPath, resolvedRootPath)
+	return guidanceLoadPlan{
+		CandidatePath: path,
+		Valid:         true,
+		LoadOptions: instructionFileLoadOptions{
+			FullPath:     fullPath,
+			DisplayLabel: path,
+			Scope:        "project",
+			Strength:     strength,
+			Policy: instructionFileLoadPolicy{
+				RequireGitTracked:    !aiCfg.Project.IncludeGitignored,
+				IncludeGitignored:    aiCfg.Project.IncludeGitignored,
+				GitRoot:              gitRoot,
+				Budget:               budget,
+				AllowReadWhenUnknown: true,
+				RootBoundary:         boundary,
+				ExpandImports:        aiCfg.ExpandImports,
+				GitTrackedLookup:     gitTrackedLookup,
+			},
+		},
+	}
+}
+
+func resolveGlobalGuidanceLoadPlan(path string, budget *instructionByteBudget, expandImports bool) guidanceLoadPlan {
+	expandedPath := expandUserPath(path)
+	return guidanceLoadPlan{
+		CandidatePath: path,
+		Valid:         true,
+		LoadOptions: instructionFileLoadOptions{
+			FullPath:     expandedPath,
+			DisplayLabel: path,
+			Scope:        "global",
+			Strength:     InstructionStrengthAdvisory,
+			Policy: instructionFileLoadPolicy{
+				RequireGitTracked: false,
+				Budget:            budget,
+				ExpandImports:     expandImports,
+			},
+		},
+	}
+}
+
+func buildProjectGuidanceLoadPlans(rootPath string, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget) []guidanceLoadPlan {
+	resolvedRootPath, _ := resolvePathForBoundaryComparison(rootPath)
+	trackedCache := map[string]struct {
+		tracked bool
+		known   bool
+	}{}
+	gitTrackedLookup := func(fullPath string) (tracked bool, known bool) {
+		if cached, ok := trackedCache[fullPath]; ok {
+			return cached.tracked, cached.known
+		}
+		tracked, known = isGitTrackedInstructionFile(gitRoot, fullPath)
+		trackedCache[fullPath] = struct {
+			tracked bool
+			known   bool
+		}{tracked: tracked, known: known}
+		return tracked, known
+	}
+	return buildGuidanceLoadPlans(aiCfg.Project.Files, aiCfg.IncludeLocalFiles, func(path string) guidanceLoadPlan {
+		return resolveProjectGuidanceLoadPlan(rootPath, resolvedRootPath, path, aiCfg, gitRoot, strength, budget, gitTrackedLookup)
+	})
+}
+
+func buildGlobalGuidanceLoadPlans(aiCfg AgentInstructionsConfig, budget *instructionByteBudget) []guidanceLoadPlan {
+	return buildGuidanceLoadPlans(aiCfg.Global.Files, aiCfg.IncludeLocalFiles, func(path string) guidanceLoadPlan {
+		return resolveGlobalGuidanceLoadPlan(path, budget, aiCfg.ExpandImports)
+	})
+}
+
+func loadProjectGuidanceFiles(bundle *ProjectInstructionBundle, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget) []InstructionFile {
+	plans := buildProjectGuidanceLoadPlans(bundle.RootPath, aiCfg, gitRoot, strength, budget)
+	return loadGuidanceFiles(bundle, budget, plans)
+}
+
+func loadGlobalGuidanceFiles(bundle *ProjectInstructionBundle, aiCfg AgentInstructionsConfig, budget *instructionByteBudget) []InstructionFile {
+	plans := buildGlobalGuidanceLoadPlans(aiCfg, budget)
+	return loadGuidanceFiles(bundle, budget, plans)
+}
+
+func appendProjectInstructionWarning(bundle *ProjectInstructionBundle, warning *ProjectInstructionWarning) {
+	if bundle == nil || warning == nil {
+		return
+	}
+	message := strings.TrimSpace(warning.Message)
+	if message == "" {
+		return
+	}
+	warning.Message = message
+	for _, existing := range bundle.WarningEntries {
+		if existing.Code == warning.Code && existing.Message == warning.Message {
+			return
+		}
+	}
+	bundle.WarningEntries = append(bundle.WarningEntries, *warning)
+}
+
+func appendProjectInstructionWarnings(bundle *ProjectInstructionBundle, warnings []ProjectInstructionWarning) {
+	if bundle == nil || len(warnings) == 0 {
+		return
+	}
+	for i := range warnings {
+		warning := warnings[i]
+		appendProjectInstructionWarning(bundle, &warning)
+	}
+}
+
+func appendProjectInstructionWarningMessage(bundle *ProjectInstructionBundle, code ProjectInstructionWarningCode, message string) {
+	appendProjectInstructionWarning(bundle, &ProjectInstructionWarning{Code: code, Message: message})
+}
+
+// WarningMessages は bundle に蓄積された warning メッセージを返す。
+func (b *ProjectInstructionBundle) WarningMessages() []string {
+	if b == nil || len(b.WarningEntries) == 0 {
+		return nil
+	}
+	messages := make([]string, 0, len(b.WarningEntries))
+	for _, warning := range b.WarningEntries {
+		message := strings.TrimSpace(warning.Message)
+		if message == "" {
+			continue
+		}
+		messages = append(messages, message)
+	}
+	if len(messages) == 0 {
+		return nil
+	}
+	return messages
+}

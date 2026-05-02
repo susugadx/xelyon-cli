@@ -4,8 +4,10 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -277,7 +279,7 @@ func TestAgent_SwitchProvider_NoAPIKey(t *testing.T) {
 	t.Skip("Requires mock provider setup")
 }
 
-func TestLoadProjectConfig_NoFile(t *testing.T) {
+func TestLoadProjectInstructionBundle_NoFile(t *testing.T) {
 	// xelyon.yaml が存在しないディレクトリで実行
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
@@ -285,28 +287,91 @@ func TestLoadProjectConfig_NoFile(t *testing.T) {
 
 	_ = os.Chdir(tmpDir)
 
-	pc := loadProjectConfig()
-	if pc != nil {
-		t.Errorf("loadProjectConfig() should return nil when no config file, got %+v", pc)
+	bundle := loadProjectInstructionBundle(config.DefaultConfig())
+	if bundle == nil {
+		t.Fatal("loadProjectInstructionBundle() returned nil, want non-nil bundle")
+	}
+	if bundle.ProjectConfig != nil {
+		t.Errorf("ProjectConfig should be nil when no xelyon.yaml, got %+v", bundle.ProjectConfig)
 	}
 }
 
-func TestLoadProjectConfig_WithXelyonYAML(t *testing.T) {
+func TestLoadProjectInstructionBundle_WithXelyonYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
 	defer func() { _ = os.Chdir(originalDir) }()
 
 	yamlContent := "context: \"test context\"\nrules:\n  - \"rule 1\"\n"
-	_ = os.WriteFile(tmpDir+"/xelyon.yaml", []byte(yamlContent), 0644)
+	writeTestFile(t, tmpDir+"/xelyon.yaml", yamlContent)
 
 	_ = os.Chdir(tmpDir)
 
-	pc := loadProjectConfig()
-	if pc == nil {
-		t.Fatal("loadProjectConfig() returned nil, want non-nil")
+	bundle := loadProjectInstructionBundle(config.DefaultConfig())
+	if bundle == nil || bundle.ProjectConfig == nil {
+		t.Fatal("loadProjectInstructionBundle() returned nil project config, want non-nil")
 	}
-	if pc.Context != "test context" {
-		t.Errorf("Context = %q, want %q", pc.Context, "test context")
+	if bundle.ProjectConfig.Context != "test context" {
+		t.Errorf("Context = %q, want %q", bundle.ProjectConfig.Context, "test context")
+	}
+}
+
+func TestAgent_ProjectInstructionBundleCache(t *testing.T) {
+	tmpDir := t.TempDir()
+	originalDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	writeTestFile(t, tmpDir+"/AGENTS.md", "# guidance")
+	_ = os.Chdir(tmpDir)
+
+	agent := &Agent{Runtime: NewAgentRuntimeWithConfig(config.DefaultConfig())}
+	first := agent.loadProjectInstructionBundleCached(true)
+	second := agent.loadProjectInstructionBundleCached(false)
+	if first == nil || second == nil {
+		t.Fatal("expected non-nil bundles")
+	}
+	if first != second {
+		t.Fatal("expected cached bundle to be reused when forceReload=false")
+	}
+
+	agent.invalidateProjectInstructionBundleCache()
+	third := agent.loadProjectInstructionBundleCached(false)
+	if third == nil {
+		t.Fatal("expected non-nil bundle after cache invalidation")
+	}
+	if third == second {
+		t.Fatal("expected reloaded bundle pointer after cache invalidation")
+	}
+}
+
+func TestAgent_ProjectInstructionBundleCache_ReloadsWhenGuidanceFileChanges(t *testing.T) {
+	tmpDir := t.TempDir()
+	originalDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(originalDir) }()
+
+	guidancePath := tmpDir + "/AGENTS.md"
+	writeTestFile(t, guidancePath, "# guidance v1")
+	_ = os.Chdir(tmpDir)
+
+	agent := &Agent{Runtime: NewAgentRuntimeWithConfig(config.DefaultConfig())}
+	first := agent.loadProjectInstructionBundleCached(true)
+	second := agent.loadProjectInstructionBundleCached(false)
+	if first == nil || second == nil {
+		t.Fatal("expected non-nil bundles")
+	}
+	if first != second {
+		t.Fatal("expected cached bundle pointer before file change")
+	}
+
+	writeTestFile(t, guidancePath, "# guidance v2")
+	nextTime := time.Now().Add(2 * time.Second)
+	touchTestFile(t, guidancePath, nextTime)
+
+	third := agent.loadProjectInstructionBundleCached(false)
+	if third == nil {
+		t.Fatal("expected non-nil bundle after guidance change")
+	}
+	if third == second {
+		t.Fatal("expected cache reload when guidance file changes")
 	}
 }
 

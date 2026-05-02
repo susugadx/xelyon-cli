@@ -11,12 +11,28 @@ type SectionInfo struct {
 	Fields     map[string]string
 	FieldTypes map[string]string
 	SelectOpts map[string][]string
+	Example    ExampleSectionPolicy
 }
 
 // CategoryInfo describes a config category shown in the UI and docs.
 type CategoryInfo struct {
 	DisplayName string
 	Icon        string
+}
+
+// ExampleFilterMode は example 生成時に section 配下をどう扱うかの方針。
+type ExampleFilterMode string
+
+const (
+	ExampleFilterModeFields  ExampleFilterMode = "fields"
+	ExampleFilterModeKeepAll ExampleFilterMode = "keep_all"
+)
+
+// ExampleSectionPolicy は config.yaml.example 生成時の section 別ポリシー。
+type ExampleSectionPolicy struct {
+	FilterMode    ExampleFilterMode
+	OmittedFields map[string]bool
+	Overrides     map[string]any
 }
 
 // Sections is the canonical section metadata shared by config generators.
@@ -50,6 +66,9 @@ var Sections = map[string]SectionInfo{
 		},
 		FieldTypes: map[string]string{
 			"provider_models": "structmap",
+		},
+		Example: ExampleSectionPolicy{
+			FilterMode: ExampleFilterModeKeepAll,
 		},
 	},
 	"general": {
@@ -131,6 +150,40 @@ var Sections = map[string]SectionInfo{
 			"additional_ignore_dirs": "[]string",
 		},
 	},
+	"agent_instructions": {
+		StructName: "AgentInstructionsConfig",
+		Title:      "Agent Instructions 設定",
+		Icon:       "📚",
+		Comments: []string{
+			"AGENTS.md / CLAUDE.md 互換ガイダンス読み込み設定",
+			"xelyon.yaml の rules とは別レイヤーで扱われます",
+		},
+		Fields: map[string]string{
+			"project.mode":               "project-local guidance の読み込みモード（off / fallback / always）",
+			"project.files":              "project-local guidance ファイル候補",
+			"project.include_gitignored": "gitignored / untracked guidance を許可",
+			"global.enabled":             "global guidance 読み込みを有効化",
+			"global.files":               "global guidance ファイル候補",
+			"include_local_files":        "CLAUDE.local.md / AGENTS.local.md など local 系 guidance を許可",
+			"expand_imports":             "@path import 行を展開して読み込む（相対パスは当該 guidance file 基準）",
+			"max_file_bytes":             "1ファイルあたりの最大読み込みバイト数",
+			"max_total_bytes":            "guidance 全体の最大読み込みバイト数",
+		},
+		FieldTypes: map[string]string{
+			"project.mode":               "select",
+			"project.files":              "[]string",
+			"project.include_gitignored": "bool",
+			"global.enabled":             "bool",
+			"global.files":               "[]string",
+			"include_local_files":        "bool",
+			"expand_imports":             "bool",
+			"max_file_bytes":             "int",
+			"max_total_bytes":            "int",
+		},
+		SelectOpts: map[string][]string{
+			"project.mode": {"off", "fallback", "always"},
+		},
+	},
 	"lsp": {
 		StructName: "LSPConfig",
 		Title:      "LSP連携設定",
@@ -148,6 +201,14 @@ var Sections = map[string]SectionInfo{
 			"enabled":             "bool",
 			"skip_install_prompt": "bool",
 			"servers":             "structmap",
+		},
+		Example: ExampleSectionPolicy{
+			OmittedFields: map[string]bool{
+				"servers": true,
+			},
+			Overrides: map[string]any{
+				"servers": nil,
+			},
 		},
 	},
 	"output": {
@@ -189,6 +250,11 @@ var Sections = map[string]SectionInfo{
 		},
 		SelectOpts: map[string][]string{
 			"provider": llmcatalog.NativeWebSearchProviderKeys(true),
+		},
+		Example: ExampleSectionPolicy{
+			Overrides: map[string]any{
+				"provider": "gemini",
+			},
 		},
 	},
 	"sub_agent": {
@@ -251,108 +317,92 @@ var Sections = map[string]SectionInfo{
 	},
 }
 
+type sectionCatalogEntry struct {
+	Name     string
+	Category string
+}
+
+var sectionCatalog = []sectionCatalogEntry{
+	{Name: "default_provider", Category: "provider"},
+	{Name: "default_model", Category: "provider"},
+	{Name: "provider_models", Category: "provider"},
+	{Name: "general", Category: "general"},
+	{Name: "execution", Category: "execution"},
+	{Name: "compression", Category: "compression"},
+	{Name: "paste", Category: "paste"},
+	{Name: "project_map", Category: "project_map"},
+	{Name: "agent_instructions", Category: "agent_instructions"},
+	{Name: "lsp", Category: "lsp"},
+	{Name: "output", Category: "output"},
+	{Name: "web_search", Category: "web_search"},
+	{Name: "sub_agent", Category: "sub_agent"},
+	{Name: "mcp", Category: "mcp"},
+	{Name: "final_checks", Category: "final_checks"},
+}
+
 // SectionOrder is the display order for user-facing sections.
-var SectionOrder = []string{
-	"default_provider",
-	"default_model",
-	"provider_models",
-	"general",
-	"execution",
-	"compression",
-	"paste",
-	"project_map",
-	"lsp",
-	"output",
-	"web_search",
-	"sub_agent",
-	"mcp",
-	"final_checks",
+var SectionOrder = buildSectionOrder(sectionCatalog)
+
+// SectionToCategory maps sections to UI categories.
+var SectionToCategory = buildSectionCategoryMap(sectionCatalog)
+
+type categoryCatalogEntry struct {
+	Name string
+	Info CategoryInfo
+}
+
+var categoryCatalog = []categoryCatalogEntry{
+	{Name: "provider", Info: CategoryInfo{DisplayName: "Provider & Model", Icon: "🤖"}},
+	{Name: "general", Info: CategoryInfo{DisplayName: "General", Icon: "⚙️"}},
+	{Name: "execution", Info: CategoryInfo{DisplayName: "Execution Mode", Icon: "🛡️"}},
+	{Name: "compression", Info: CategoryInfo{DisplayName: "Compression", Icon: "📦"}},
+	{Name: "paste", Info: CategoryInfo{DisplayName: "Paste Mode", Icon: "📋"}},
+	{Name: "project_map", Info: CategoryInfo{DisplayName: "Project Map", Icon: "🗺️"}},
+	{Name: "agent_instructions", Info: CategoryInfo{DisplayName: "Agent Instructions", Icon: "📚"}},
+	{Name: "lsp", Info: CategoryInfo{DisplayName: "LSP Servers", Icon: "🔧"}},
+	{Name: "output", Info: CategoryInfo{DisplayName: "Output", Icon: "📤"}},
+	{Name: "web_search", Info: CategoryInfo{DisplayName: "Web Search", Icon: "🔍"}},
+	{Name: "sub_agent", Info: CategoryInfo{DisplayName: "Sub-agent", Icon: "🚀"}},
+	{Name: "mcp", Info: CategoryInfo{DisplayName: "MCP Servers", Icon: "🔌"}},
+	{Name: "final_checks", Info: CategoryInfo{DisplayName: "Final Checks", Icon: "🧪"}},
 }
 
 // CategoryOrder is the UI grouping order.
-var CategoryOrder = []string{
-	"provider",
-	"general",
-	"execution",
-	"compression",
-	"paste",
-	"project_map",
-	"lsp",
-	"output",
-	"web_search",
-	"sub_agent",
-	"mcp",
-	"final_checks",
-}
-
-// SectionToCategory maps sections to UI categories.
-var SectionToCategory = map[string]string{
-	"default_provider": "provider",
-	"default_model":    "provider",
-	"provider_models":  "provider",
-	"general":          "general",
-	"execution":        "execution",
-	"compression":      "compression",
-	"paste":            "paste",
-	"project_map":      "project_map",
-	"lsp":              "lsp",
-	"output":           "output",
-	"web_search":       "web_search",
-	"sub_agent":        "sub_agent",
-	"mcp":              "mcp",
-	"final_checks":     "final_checks",
-}
+var CategoryOrder = buildCategoryOrder(categoryCatalog)
 
 // Categories contains category display metadata.
-var Categories = map[string]CategoryInfo{
-	"provider": {
-		DisplayName: "Provider & Model",
-		Icon:        "🤖",
-	},
-	"general": {
-		DisplayName: "General",
-		Icon:        "⚙️",
-	},
-	"compression": {
-		DisplayName: "Compression",
-		Icon:        "📦",
-	},
-	"execution": {
-		DisplayName: "Execution Mode",
-		Icon:        "🛡️",
-	},
-	"paste": {
-		DisplayName: "Paste Mode",
-		Icon:        "📋",
-	},
-	"project_map": {
-		DisplayName: "Project Map",
-		Icon:        "🗺️",
-	},
-	"lsp": {
-		DisplayName: "LSP Servers",
-		Icon:        "🔧",
-	},
-	"output": {
-		DisplayName: "Output",
-		Icon:        "📤",
-	},
-	"web_search": {
-		DisplayName: "Web Search",
-		Icon:        "🔍",
-	},
-	"sub_agent": {
-		DisplayName: "Sub-agent",
-		Icon:        "🚀",
-	},
-	"mcp": {
-		DisplayName: "MCP Servers",
-		Icon:        "🔌",
-	},
-	"final_checks": {
-		DisplayName: "Final Checks",
-		Icon:        "🧪",
-	},
+var Categories = buildCategoryMap(categoryCatalog)
+
+func buildSectionOrder(catalog []sectionCatalogEntry) []string {
+	order := make([]string, 0, len(catalog))
+	for _, entry := range catalog {
+		order = append(order, entry.Name)
+	}
+	return order
+}
+
+func buildSectionCategoryMap(catalog []sectionCatalogEntry) map[string]string {
+	mapping := make(map[string]string, len(catalog))
+	for _, entry := range catalog {
+		mapping[entry.Name] = entry.Category
+	}
+	return mapping
+}
+
+func buildCategoryOrder(catalog []categoryCatalogEntry) []string {
+	order := make([]string, 0, len(catalog))
+	for _, entry := range catalog {
+		order = append(order, entry.Name)
+	}
+	return order
+}
+
+func buildCategoryMap(catalog []categoryCatalogEntry) map[string]CategoryInfo {
+	categories := make(map[string]CategoryInfo, len(catalog))
+	for _, entry := range catalog {
+		categories[entry.Name] = entry.Info
+	}
+	return categories
 }
 
 // OrderedSectionsForCategory returns the ordered sections that belong to a category.

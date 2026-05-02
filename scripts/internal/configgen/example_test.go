@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"gopkg.in/yaml.v3"
 )
 
 func TestFilterInternalFields(t *testing.T) {
@@ -19,6 +20,19 @@ lsp:
 output:
   max_lines: 5
   hidden: true
+agent_instructions:
+  include_local_files: false
+  project:
+    mode: fallback
+    files:
+      - AGENTS.md
+    include_gitignored: false
+    hidden: true
+  global:
+    enabled: false
+    files:
+      - ~/.xelyon/AGENTS.md
+    hidden: true
 provider_models:
   openai:
     default_model: gpt-5.4
@@ -37,15 +51,75 @@ thinking:
 			t.Fatalf("unexpected field remained after filtering: %q in %s", unexpected, text)
 		}
 	}
-	for _, expected := range []string{"lsp:", "enabled: true", "provider_models:"} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("expected field missing after filtering: %q in %s", expected, text)
-		}
+
+	var out map[string]interface{}
+	if err := yaml.Unmarshal(filtered, &out); err != nil {
+		t.Fatalf("unmarshal filtered yaml: %v", err)
+	}
+	if _, exists := out["loop_detection"]; exists {
+		t.Fatal("loop_detection should be filtered out")
+	}
+	if _, exists := out["thinking"]; exists {
+		t.Fatal("thinking should be filtered out")
+	}
+
+	lsp, ok := out["lsp"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("lsp section missing or invalid: %#v", out["lsp"])
+	}
+	if _, exists := lsp["servers"]; exists {
+		t.Fatal("lsp.servers should be omitted by example policy")
+	}
+
+	agentInstructions, ok := out["agent_instructions"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("agent_instructions section missing or invalid: %#v", out["agent_instructions"])
+	}
+	project, ok := agentInstructions["project"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("agent_instructions.project missing or invalid: %#v", agentInstructions["project"])
+	}
+	if _, exists := project["hidden"]; exists {
+		t.Fatal("agent_instructions.project.hidden should be filtered")
+	}
+}
+
+func TestFilterInternalFieldsGolden(t *testing.T) {
+	input := []byte(`
+general:
+  ui_language: auto
+  tool_loop_limit: 1
+lsp:
+  enabled: true
+  skip_install_prompt: false
+  servers:
+    gopls:
+      command: gopls
+provider_models:
+  openai:
+    default_model: gpt-5.4
+`)
+	filtered, err := FilterInternalFields(input)
+	if err != nil {
+		t.Fatalf("FilterInternalFields returned error: %v", err)
+	}
+
+	expected := `general:
+    ui_language: auto
+lsp:
+    enabled: true
+    skip_install_prompt: false
+provider_models:
+    openai:
+        default_model: gpt-5.4
+`
+	if string(filtered) != expected {
+		t.Fatalf("unexpected filtered yaml\n--- got ---\n%s--- want ---\n%s", string(filtered), expected)
 	}
 }
 
 func TestAddComments(t *testing.T) {
-	input := "general:\n    ui_language: auto\n"
+	input := "general:\n    ui_language: auto\nagent_instructions:\n    project:\n        mode: fallback\n"
 	output := AddComments(input)
 
 	for _, expected := range []string{
@@ -53,6 +127,10 @@ func TestAddComments(t *testing.T) {
 		"# 表示言語（auto, ja, en）",
 		"general:",
 		"    ui_language: auto",
+		"# Agent Instructions 設定",
+		"    project:",
+		"        # project-local guidance の読み込みモード（off / fallback / always）",
+		"        mode: fallback",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("expected output to contain %q, got %s", expected, output)
@@ -71,6 +149,9 @@ func TestGenerateExampleFile(t *testing.T) {
 		"# XELYON CLI 設定例",
 		"provider: gemini",
 		"lsp:",
+		"agent_instructions:",
+		"project:",
+		"mode: fallback",
 	} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("expected generated example to contain %q", expected)

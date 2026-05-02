@@ -58,7 +58,7 @@ func validateRequiredProviderIssue(cfg *Config) (ValidationIssue, bool) {
 		Value:      "",
 		Message:    "必須項目が未設定です",
 		Suggestion: "deepseek",
-		Severity:   "error",
+		Severity:   ValidationSeverityError,
 		CanAutoFix: true,
 		FixedValue: "deepseek",
 	}, true
@@ -74,7 +74,7 @@ func validateDefaultProviderIssue(cfg *Config) (ValidationIssue, bool) {
 		Value:      cfg.DefaultProvider,
 		Message:    fmt.Sprintf("無効なプロバイダー名です (有効: %s)", strings.Join(ValidProviders, ", ")),
 		Suggestion: suggested,
-		Severity:   "error",
+		Severity:   ValidationSeverityError,
 		CanAutoFix: true,
 		FixedValue: suggested,
 	}, true
@@ -92,7 +92,7 @@ func validateProviderModelsIssues(cfg *Config) []ValidationIssue {
 			Value:      providerName,
 			Message:    "無効なプロバイダー名です",
 			Suggestion: fmt.Sprintf("削除するか、有効なプロバイダー名に変更してください (%s)", validProviders),
-			Severity:   "warning",
+			Severity:   ValidationSeverityWarning,
 			CanAutoFix: false,
 		})
 	}

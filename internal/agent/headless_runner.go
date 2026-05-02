@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
@@ -43,9 +41,7 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = true
 	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
-	if logger, err := audit.NewDefaultLogger(os.Getenv("XELYON_AUDIT_LOG") == "1"); err == nil {
-		runtime.AuditLogger = logger
-	}
+	configureRuntimeAuditLoggerFromEnv(runtime, io.Discard, false)
 
 	agent := NewAgentWithRuntime(model, provider, true, runtime)
 	agent.setAutoApprove(true) // Headlessモードは自動承認（SafetyLow以外）
@@ -54,16 +50,11 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 		agent.SystemPrompt = prompt.BuildProviderSystemPromptWithConfig(cfg.SubAgentPrompt, agent.ProviderName, model, agent.cfg())
 	}
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc, "")
-		// headless では final checks 解決のみ（UI 表示不要）
-		if resolved := config.ResolveFinalChecks(agent.cfg(), pc); resolved != nil {
-			current := agent.cfg()
-			current.FinalChecks = *resolved
-		}
-	}
-	injectProjectMap(agent, "")
+	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
+	initializeProjectInstructions(agent, projectInstructionApplyOptions{
+		showStatus:       false,
+		injectProjectMap: true,
+	})
 
 	// Headless Mode は Normal Mode 相当: 親と同じツール除外
 	allowSubAgents := cfg == nil || cfg.SubAgentPrompt == ""

@@ -102,7 +102,7 @@ func TestValidateConfig_InvalidProvider(t *testing.T) {
 	for _, issue := range result.Issues {
 		if issue.Field == "default_provider" {
 			found = true
-			if issue.Severity != "error" {
+			if issue.Severity != ValidationSeverityError {
 				t.Errorf("Invalid provider should be error, got %s", issue.Severity)
 			}
 		}
@@ -124,7 +124,7 @@ func TestValidateConfig_EmptyProvider(t *testing.T) {
 
 	found := false
 	for _, issue := range result.Issues {
-		if issue.Field == "default_provider" && issue.Severity == "error" {
+		if issue.Field == "default_provider" && issue.Severity == ValidationSeverityError {
 			found = true
 		}
 	}
@@ -163,7 +163,7 @@ func TestValidateConfig_RangeValidation(t *testing.T) {
 	for _, issue := range result.Issues {
 		if issue.Field == "compression.trigger_percent" {
 			found = true
-			if issue.Severity != "warning" {
+			if issue.Severity != ValidationSeverityWarning {
 				t.Errorf("Out of range should be warning, got %s", issue.Severity)
 			}
 		}
@@ -188,7 +188,7 @@ func TestValidateConfig_ResponsesServerCompactionCompactThresholdValidation(t *t
 			continue
 		}
 		foundError = true
-		if issue.Severity != "error" {
+		if issue.Severity != ValidationSeverityError {
 			t.Fatalf("severity = %q, want error", issue.Severity)
 		}
 	}
@@ -271,7 +271,7 @@ func TestValidateConfig_ProjectMapContextRatio(t *testing.T) {
 					continue
 				}
 				found = true
-				if issue.Severity != "warning" {
+				if issue.Severity != ValidationSeverityWarning {
 					t.Errorf("Severity = %s, want warning", issue.Severity)
 				}
 				if issue.Value != tt.want {
@@ -303,11 +303,11 @@ func TestValidateConfig_AggregatesProviderNumericAndBashIssues(t *testing.T) {
 	for _, issue := range result.Issues {
 		switch issue.Field {
 		case "default_provider":
-			hasProviderError = issue.Severity == "error"
+			hasProviderError = issue.Severity == ValidationSeverityError
 		case "compression.trigger_percent":
-			hasNumericWarning = issue.Severity == "warning"
+			hasNumericWarning = issue.Severity == ValidationSeverityWarning
 		case "bash.safety_level":
-			hasBashWarning = issue.Severity == "warning"
+			hasBashWarning = issue.Severity == ValidationSeverityWarning
 		}
 	}
 	if !hasProviderError {
@@ -350,8 +350,8 @@ func TestValidationResult_HasErrors(t *testing.T) {
 	result := ValidationResult{
 		Valid: false,
 		Issues: []ValidationIssue{
-			{Severity: "warning"},
-			{Severity: "error"},
+			{Severity: ValidationSeverityWarning},
+			{Severity: ValidationSeverityError},
 		},
 	}
 
@@ -360,7 +360,7 @@ func TestValidationResult_HasErrors(t *testing.T) {
 	}
 
 	result.Issues = []ValidationIssue{
-		{Severity: "warning"},
+		{Severity: ValidationSeverityWarning},
 	}
 	if result.HasErrors() {
 		t.Error("HasErrors should return false when there are only warnings")
@@ -370,7 +370,7 @@ func TestValidationResult_HasErrors(t *testing.T) {
 func TestValidationResult_HasWarnings(t *testing.T) {
 	result := ValidationResult{
 		Issues: []ValidationIssue{
-			{Severity: "warning"},
+			{Severity: ValidationSeverityWarning},
 		},
 	}
 
@@ -379,7 +379,7 @@ func TestValidationResult_HasWarnings(t *testing.T) {
 	}
 
 	result.Issues = []ValidationIssue{
-		{Severity: "error"},
+		{Severity: ValidationSeverityError},
 	}
 	if result.HasWarnings() {
 		t.Error("HasWarnings should return false when there are only errors")
@@ -398,7 +398,7 @@ func TestValidateConfig_ProviderModelsValidation(t *testing.T) {
 	for _, issue := range result.Issues {
 		if issue.Field == "provider_models.invalid_provider" {
 			found = true
-			if issue.Severity != "warning" {
+			if issue.Severity != ValidationSeverityWarning {
 				t.Errorf("Invalid provider in ProviderModels should be warning, got %s", issue.Severity)
 			}
 		}
