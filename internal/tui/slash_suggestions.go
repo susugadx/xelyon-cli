@@ -116,7 +116,7 @@ func (m Model) visibleSlashSuggestionRows() []commandcatalog.CommandInfo {
 }
 
 func (m Model) maxVisibleSlashSuggestionRows() int {
-	available := m.maxFooterExpansionRows() - len(m.visibleComposerRows())
+	available := m.maxFooterExpansionRows() - len(m.visibleAttachments()) - len(m.visibleComposerRows())
 	if available <= 0 {
 		return 0
 	}

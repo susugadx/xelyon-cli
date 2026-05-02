@@ -91,6 +91,7 @@ type Model struct {
 	spinner          spinner.Model
 	messages         []ChatMessage
 	composer         tuicomposer.State
+	attachments      []composerAttachment
 	rawLines         []string         // 元の行データ。リサイズ時はこれを再レンダリングする
 	layout           *termtext.Layout // 表示幅に応じたvisual rowレイアウト
 	toolBlocks       []toolBlockInfo  // ツール結果ブロック

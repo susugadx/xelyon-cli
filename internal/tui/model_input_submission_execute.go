@@ -37,57 +37,59 @@ func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.C
 
 	switch commandrouter.Route(command, commandrouter.Context{HasMouseSelection: m.hasActiveMouseSelection()}) {
 	case commandrouter.ActionCopyMouseSelection:
-		m.resetComposerInput()
-		m.appendUserMessage(command.Input)
+		m.recordHandledCommand(command.Input)
 		m.copyMouseSelection()
 		return m, nil
 	case commandrouter.ActionQuit:
-		m.resetComposerInput()
-		m.appendUserMessage(command.Input)
-		m.quitting = true
-		m.conversation.Cleanup()
-		return m, tea.Quit
+		m.recordHandledCommand(command.Input)
+		return m.beginQuit()
 	case commandrouter.ActionOpenConfig:
-		m.resetComposerInput()
-		m.appendUserMessage(command.Input)
+		m.recordHandledCommand(command.Input)
 		updated, cmd := m.openConfigScreen()
 		return updated, cmd
 	case commandrouter.ActionOpenReview:
-		m.resetComposerInput()
-		m.appendUserMessage(command.Input)
+		m.recordHandledCommand(command.Input)
 		updated, cmd := m.openReviewScreen()
 		return updated, cmd
 	case commandrouter.ActionOpenProject:
-		m.resetComposerInput()
-		m.appendUserMessage(command.Input)
+		m.recordHandledCommand(command.Input)
 		updated, cmd := m.openProjectScreen()
 		return updated, cmd
 	case commandrouter.ActionDispatchAgent:
 		if m.commands.HandleCommand(command.Input) {
-			m.resetComposerInput()
-			m.appendUserMessage(command.Input)
+			m.recordHandledCommand(command.Input)
 			m.statusLine = m.conversation.GetStatusLine()
 			return m, nil
 		}
 	}
 
-	return m.handleChatSubmission(composerSubmission{
-		kind:    composerSubmissionChat,
-		payload: command.Payload,
-	})
+	return m.handleChatSubmission(sub.fallbackToChat(command.Payload))
 }
 
 func (m Model) handleChatSubmission(sub composerSubmission) (tea.Model, tea.Cmd) {
+	dispatch := buildChatDispatchRequest(sub.payload, sub.attachments)
 	m.clearComposer()
 	m.chromeDirty = true // textInput 状態変更を chrome に反映
-	m.appendUserMessage(sub.payload)
-	return m, m.sendChat(sub.payload)
+	m.appendUserMessage(dispatch.display)
+	return m, m.sendChat(dispatch)
 }
 
 // sendChat は goroutine で agent.Chat を呼び出す tea.Cmd を返す。
-func (m Model) sendChat(input string) tea.Cmd {
+func (m Model) sendChat(req chatDispatchRequest) tea.Cmd {
 	return func() tea.Msg {
-		m.conversation.Chat(input)
+		if req.imagePath != "" {
+			m.conversation.ChatWithImagePath(req.input, req.imagePath)
+		} else {
+			m.conversation.Chat(req.input)
+		}
 		return AgentDoneMsg{}
+	}
+}
+
+func (sub composerSubmission) fallbackToChat(payload string) composerSubmission {
+	return composerSubmission{
+		kind:        composerSubmissionChat,
+		payload:     payload,
+		attachments: sub.attachments,
 	}
 }

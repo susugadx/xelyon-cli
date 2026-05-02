@@ -65,6 +65,21 @@ func (a *TUIAdapter) Chat(input string) {
 	a.flushCapture()
 }
 
+// ChatWithImagePath は画像パス付き入力を AI に送信する。goroutine で呼ぶこと。
+func (a *TUIAdapter) ChatWithImagePath(input string, imagePath string) {
+	a.processing.Store(true)
+	defer a.processing.Store(false)
+
+	image, err := api.LoadImage(imagePath)
+	if err != nil {
+		red.Fprintf(a.agent.output(), "Failed to load image: %v\n", err)
+		a.flushCapture()
+		return
+	}
+
+	a.chatWithImage(input, image)
+}
+
 // ChatWithImage は読み込み済み画像をAIに送信する。goroutine または tea.Cmd で呼ぶこと。
 func (a *TUIAdapter) ChatWithImage(input string, image *api.ImageData) {
 	a.processing.Store(true)

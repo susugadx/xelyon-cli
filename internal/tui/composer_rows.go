@@ -25,6 +25,10 @@ func (m Model) formatPasteBlockSummary(block tuicomposer.VisiblePasteBlock) stri
 	return fmt.Sprintf("[Pasted Content %d chars, %d lines] #%d", block.Block.CharCount, block.Block.LineCount, block.Number)
 }
 
+func (m Model) formatAttachmentSummary(att composerAttachment, number int) string {
+	return fmt.Sprintf("[Attached %s %s] #%d", att.kindLabel(), att.basename(), number)
+}
+
 func (m Model) formatComposerTextRow(text string) string {
 	return termtext.SanitizeSingleLineANSI(text)
 }

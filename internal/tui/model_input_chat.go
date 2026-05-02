@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
 )
+
+var saveClipboardImageForPaste = saveClipboardImageToTemp
 
 func (m *Model) switchToComposerInput() {
 	if !m.navigationMode {
@@ -33,16 +37,54 @@ func (m *Model) tryEnterNavigationMode() bool {
 func (m Model) handleClipboardPaste() (tea.Model, tea.Cmd) {
 	content, err := readClipboardText()
 	if err != nil {
+		if m.tryAttachClipboardImage() {
+			return m, nil
+		}
 		m.setTransientStatus("Paste failed: " + err.Error())
 		m.chromeDirty = true
 		return m, nil
 	}
+
 	if content == "" {
+		_ = m.tryAttachClipboardImage()
 		return m, nil
 	}
+
+	if strings.TrimSpace(content) == "" {
+		// 空白だけのテキスト貼り付けを壊さないよう、画像が無ければ従来通りテキスト扱いに戻す。
+		if m.tryAttachClipboardImage() {
+			return m, nil
+		}
+	}
+
 	m.switchToComposerInput()
 	m.handleComposerPaste(content)
 	return m, nil
+}
+
+func (m *Model) tryAttachClipboardImage() bool {
+	path, err := saveClipboardImageForPaste()
+	if err != nil {
+		return false
+	}
+
+	attachment := composerAttachment{
+		Kind:      composerAttachmentImage,
+		Path:      path,
+		Temporary: true,
+	}
+	m.switchToComposerInput()
+	if m.appendAttachment(attachment) {
+		m.setTransientStatus("Attached screenshot from clipboard")
+	} else {
+		// 追加できなかった場合は temp resource を残さない。
+		cleanupTemporaryAttachment(attachment)
+		m.setTransientStatus("Screenshot already attached")
+	}
+	m.syncComposerLayout()
+	m.refreshSlashSuggestions()
+	m.chromeDirty = true
+	return true
 }
 
 func (m Model) handleComposerInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -65,6 +107,11 @@ func (m Model) handleComposerInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.textInput.Position() == 0 && m.hasFoldedPasteBlocks() {
 			if m.removeLastPasteBlock() {
 				m.chromeDirty = true
+				return m, nil
+			}
+		}
+		if m.textInput.Position() == 0 && m.hasAttachments() {
+			if m.removeLastAttachment() {
 				return m, nil
 			}
 		}

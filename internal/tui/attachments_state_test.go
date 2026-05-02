@@ -1,0 +1,58 @@
+package tui
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestComposer_ClearComposerRemovesTemporaryClipboardAttachment(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	root := t.TempDir()
+	clipDir, err := os.MkdirTemp(root, "clip-")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	imagePath := filepath.Join(clipDir, clipboardAttachmentFileName)
+	if err := os.WriteFile(imagePath, []byte("png"), 0644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", imagePath, err)
+	}
+
+	if ok := m.appendAttachment(composerAttachment{
+		Kind:      composerAttachmentImage,
+		Path:      imagePath,
+		Temporary: true,
+	}); !ok {
+		t.Fatal("appendAttachment() = false, want true")
+	}
+
+	m.clearComposer()
+
+	if _, err := os.Stat(clipDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("os.Stat(%q) error = %v, want os.ErrNotExist", clipDir, err)
+	}
+}
+
+func TestComposer_ClearComposerKeepsRegularFileAttachment(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	dir := t.TempDir()
+	filePath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
+
+	if ok := m.appendAttachment(composerAttachment{
+		Kind: composerAttachmentFile,
+		Path: filePath,
+	}); !ok {
+		t.Fatal("appendAttachment() = false, want true")
+	}
+
+	m.clearComposer()
+
+	if _, err := os.Stat(filePath); err != nil {
+		t.Fatalf("os.Stat(%q) error = %v, want nil", filePath, err)
+	}
+}

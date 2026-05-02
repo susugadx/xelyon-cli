@@ -16,9 +16,19 @@ func (m *Model) renderInputDock() string {
 	tiView := strings.ReplaceAll(m.textInput.View(), chrome.Reset, chrome.Reset+chrome.InputBg)
 	inputLine := termtext.FillANSITextWidth(chrome.InputBg+" "+chrome.InputPrompt+inputPrompt+chrome.InputTextFg+tiView+chrome.Reset, m.width, chrome.InputBg)
 	rows := m.visibleComposerRows()
+	attachments := m.visibleAttachments()
 	suggestionRows := m.renderSlashSuggestionRows()
-	lines := make([]string, 0, len(suggestionRows)+len(rows)+inputHeight)
+	lines := make([]string, 0, len(suggestionRows)+len(attachments)+len(rows)+inputHeight)
 	lines = append(lines, suggestionRows...)
+	for i, att := range attachments {
+		summary := strings.Replace(
+			m.formatAttachmentSummary(att, i+1),
+			"#",
+			chrome.InputPasteID+"#",
+			1,
+		)
+		lines = append(lines, termtext.FillANSITextWidth(chrome.InputBg+" "+chrome.InputPasteFg+summary+chrome.Reset, m.width, chrome.InputBg))
+	}
 	for _, row := range rows {
 		switch row.Kind {
 		case tuicomposer.PartText:
