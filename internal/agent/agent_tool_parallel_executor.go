@@ -76,7 +76,7 @@ func (a *Agent) executeParallelSafeTools(ctx context.Context, state *toolruntime
 	for _, idx := range state.ParallelEntries {
 		if ctx.Err() != nil {
 			mu.Lock()
-			state.Results[idx] = toolruntime.Result{Result: "Error: context cancelled"}
+			state.Results[idx] = toolruntime.Result{Result: "Error: context cancelled", Error: true}
 			mu.Unlock()
 			continue
 		}
@@ -86,9 +86,13 @@ func (a *Agent) executeParallelSafeTools(ctx context.Context, state *toolruntime
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			r, c := a.executeToolForParallel(ctx, state.AllToolCalls[i])
+			execResult := a.executeToolForParallelResult(ctx, state.AllToolCalls[i])
 			mu.Lock()
-			state.Results[i] = toolruntime.Result{Result: r, Change: c}
+			state.Results[i] = toolruntime.Result{
+				Result: execResult.Result,
+				Change: execResult.Change,
+				Error:  execResult.Error,
+			}
 			mu.Unlock()
 		}(idx)
 	}
@@ -107,10 +111,14 @@ func (a *Agent) reportParallelSafeExecution(state *toolruntime.ParallelCallState
 func (a *Agent) executeSequentialTools(ctx context.Context, state *toolruntime.ParallelCallState) {
 	for _, idx := range state.SequentialEntries {
 		if ctx.Err() != nil {
-			state.Results[idx] = toolruntime.Result{Result: "Error: context cancelled"}
+			state.Results[idx] = toolruntime.Result{Result: "Error: context cancelled", Error: true}
 			continue
 		}
-		r, c := a.executeToolWithSpinner(ctx, state.AllToolCalls[idx])
-		state.Results[idx] = toolruntime.Result{Result: r, Change: c}
+		execResult := a.executeToolWithSpinnerResult(ctx, state.AllToolCalls[idx])
+		state.Results[idx] = toolruntime.Result{
+			Result: execResult.Result,
+			Change: execResult.Change,
+			Error:  execResult.Error,
+		}
 	}
 }

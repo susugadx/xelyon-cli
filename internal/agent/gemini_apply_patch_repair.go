@@ -31,6 +31,7 @@ func (a *Agent) maybeRepairGeminiApplyPatch(ctx context.Context, tc *tools.ToolC
 	execResult := a.maybeRepairGeminiApplyPatchExecution(ctx, tc, tools.ExecutionResult{
 		Result: result,
 		Change: change,
+		Error:  tools.IsErrorResult(result),
 	}, execCtx, quiet)
 	return execResult.Result, execResult.Change
 }
@@ -41,7 +42,7 @@ func (a *Agent) maybeRepairGeminiApplyPatchExecution(ctx context.Context, tc *to
 	}
 
 	a.recordGeminiApplyPatchAttempt()
-	if !isToolErrorResult(execResult.Result) {
+	if !execResult.Error {
 		a.recordGeminiApplyPatchSuccess()
 		return execResult
 	}
@@ -69,7 +70,7 @@ func (a *Agent) maybeRepairGeminiApplyPatchExecution(ctx context.Context, tc *to
 	}
 
 	repairedExecResult := executeRepairedApplyPatch(execCtx, repairedTC, quiet)
-	if isToolErrorResult(repairedExecResult.Result) {
+	if repairedExecResult.Error {
 		return execResult
 	}
 
@@ -225,10 +226,6 @@ func extractRepairedApplyPatchMarkerLines(response string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func isToolErrorResult(result string) bool {
-	return strings.HasPrefix(strings.TrimSpace(result), "Error:")
 }
 
 func (a *Agent) recordGeminiApplyPatchAttempt() {

@@ -24,4 +24,7 @@ var ToolDescriptions = map[string]string{
 	// Sub-agent Tools
 	"spawn_agent": "Spawn a sub-agent for a well-scoped task. Set task_type to: explore (default, read-only investigation), edit (targeted file modifications), or verify (run build/test/lint). Sub-agents run in isolated context and return only their final report.",
 	"wait_agent":  "Wait for sub-agents to complete and receive their results.",
+
+	// Skill Tools
+	"activate_skill": "Load one discovered Agent Skill by name and return a JSON payload with name, skill_directory, scripts/references/assets, and skill_md. This is read-only and does not execute scripts automatically.",
 }

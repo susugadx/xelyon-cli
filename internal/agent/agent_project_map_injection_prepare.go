@@ -15,8 +15,17 @@ type projectMapInjectionSources struct {
 	ignoreKey      string
 }
 
+type projectMapInjectionOverrides struct {
+	invocationCWD string
+	projectConfig *config.ProjectConfig
+}
+
 func prepareProjectMapInjection(agent *Agent, input string) (projectMapInjectionContext, bool) {
-	sources, ok := resolveProjectMapInjectionSources(agent)
+	return prepareProjectMapInjectionWithOverrides(agent, input, projectMapInjectionOverrides{})
+}
+
+func prepareProjectMapInjectionWithOverrides(agent *Agent, input string, overrides projectMapInjectionOverrides) (projectMapInjectionContext, bool) {
+	sources, ok := resolveProjectMapInjectionSourcesWithOverrides(agent, overrides)
 	if !ok {
 		return projectMapInjectionContext{}, false
 	}
@@ -24,6 +33,10 @@ func prepareProjectMapInjection(agent *Agent, input string) (projectMapInjection
 }
 
 func resolveProjectMapInjectionSources(agent *Agent) (projectMapInjectionSources, bool) {
+	return resolveProjectMapInjectionSourcesWithOverrides(agent, projectMapInjectionOverrides{})
+}
+
+func resolveProjectMapInjectionSourcesWithOverrides(agent *Agent, overrides projectMapInjectionOverrides) (projectMapInjectionSources, bool) {
 	cfg := agent.cfg()
 	if !cfg.ProjectMap.Enabled {
 		return projectMapInjectionSources{}, false
@@ -32,12 +45,15 @@ func resolveProjectMapInjectionSources(agent *Agent) (projectMapInjectionSources
 		return projectMapInjectionSources{}, false
 	}
 
-	cwd, ok := resolveProjectMapSourceCWD()
+	cwd, ok := resolveProjectMapSourceCWD(agent, overrides.invocationCWD)
 	if !ok {
 		return projectMapInjectionSources{}, false
 	}
 
-	pc := loadProjectConfig()
+	pc := overrides.projectConfig
+	if pc == nil {
+		pc = agent.loadProjectConfig()
+	}
 	rootPath := resolveProjectMapSourceRootPath(cwd, pc)
 	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, pc)
 

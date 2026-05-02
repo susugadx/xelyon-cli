@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -26,9 +27,10 @@ func newNormalModeToolResultHandler(r *TurnRunner, state *normalModeState) *norm
 	}
 }
 
-func (h *normalModeToolResultHandler) Handle(tc *tools.ToolCall, result string, change *tools.FileChange) {
+func (h *normalModeToolResultHandler) Handle(tc *tools.ToolCall, execResult toolruntime.Result) {
 	a := h.runner.agent
-	a.appendSessionToolExecution(tc, result)
+	result := execResult.Result
+	a.appendSessionToolExecution(tc, result, execResult.Error)
 
 	if a.handleStrReplaceErrors(tc, result) {
 		return
@@ -37,7 +39,7 @@ func (h *normalModeToolResultHandler) Handle(tc *tools.ToolCall, result string, 
 		return
 	}
 
-	h.tracker.RecordToolResult(tc, result, change, h.turnMutations)
+	h.tracker.RecordToolResult(tc, result, execResult.Change, h.turnMutations)
 	a.appendToolResultToHistory(tc, result)
 	_, _ = fmt.Fprintln(a.output())
 

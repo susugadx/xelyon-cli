@@ -11,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -397,7 +398,7 @@ func TestNormalModeToolResultHandler_TracksWriteFailure(t *testing.T) {
 		Args: map[string]string{"path": "failure.txt", "content": "x"},
 	}
 
-	handler.Handle(tc, "exit status 1", nil)
+	handler.Handle(tc, toolruntime.Result{Result: "exit status 1", Error: true})
 
 	if got := handler.LastFailedResult(); got != "exit status 1" {
 		t.Fatalf("LastFailedResult() = %q, want %q", got, "exit status 1")

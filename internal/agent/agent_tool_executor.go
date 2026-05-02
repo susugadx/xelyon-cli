@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"io"
-	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -11,7 +10,7 @@ import (
 
 func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
 	runtimeUI := a.ui()
-	invocationCWD, _ := os.Getwd()
+	invocationCWD := a.invocationCWD()
 	if ctx == nil {
 		ctx = a.currentRequestContext()
 	}
@@ -72,6 +71,11 @@ func (a *Agent) currentRequestContext() context.Context {
 }
 
 func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.ToolCall) (string, *tools.FileChange) {
+	execResult := a.executeToolWithSpinnerResult(ctx, toolCall)
+	return execResult.Result, execResult.Change
+}
+
+func (a *Agent) executeToolWithSpinnerResult(ctx context.Context, toolCall *tools.ToolCall) tools.ExecutionResult {
 	if a.ToolCache != nil {
 		if result, hit := a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs); hit {
 			yellow.Fprintf(a.output(), "⚠ Negative cache hit: %s previously returned: %s\n", toolCall.Tool, result)
@@ -80,7 +84,12 @@ func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.Tool
 	}
 
 	if toolCall.Tool == "wait_agent" {
-		return a.executeWaitAgentWithLiveView(ctx, toolCall)
+		output, change := a.executeWaitAgentWithLiveView(ctx, toolCall)
+		return tools.ExecutionResult{
+			Result: output,
+			Change: change,
+			Error:  tools.IsErrorResult(output),
+		}
 	}
 
 	spinner := a.ui().NewSpinner()
@@ -89,23 +98,22 @@ func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.Tool
 	a.ui().SetSpinner(spinner)
 
 	execCtx := a.toolExecutionContext(ctx, nil, nil, nil)
-	var result string
-	var change *tools.FileChange
+	var execResult tools.ExecutionResult
 	if a.shouldRepairGeminiApplyPatch(toolCall) {
-		execResult := tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
+		execResult = tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
 		a.ui().StopSpinner()
 		execResult = a.maybeRepairGeminiApplyPatchExecution(ctx, toolCall, execResult, execCtx, false)
 		tools.PublishResultWithContext(execCtx, toolCall, execResult)
-		result, change = execResult.Result, execResult.Change
 	} else {
-		result, change = tools.ExecuteWithContext(execCtx, toolCall)
+		execResult = tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
+		tools.PublishResultWithContext(execCtx, toolCall, execResult)
 		a.ui().StopSpinner()
 	}
-	a.recordToolResultOptimizations(toolCall, result)
+	a.recordToolResultOptimizations(toolCall, execResult.Result)
 
 	if a.ToolCache != nil {
-		a.ToolCache.SetNegativeCache(toolCall.Tool, toolCall.RawArgs, result)
+		a.ToolCache.SetNegativeCache(toolCall.Tool, toolCall.RawArgs, execResult.Result)
 	}
 
-	return result, change
+	return execResult
 }

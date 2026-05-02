@@ -2,7 +2,6 @@ package agent
 
 import (
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -26,12 +25,12 @@ func (a *Agent) appendSessionMessageFromAPI(msg api.Message, model string) {
 	a.persistSession()
 }
 
-func (a *Agent) appendSessionToolExecution(toolCall *tools.ToolCall, result string) {
+func (a *Agent) appendSessionToolExecution(toolCall *tools.ToolCall, result string, isError bool) {
 	if a == nil || a.session == nil || toolCall == nil {
 		return
 	}
 	a.invalidateSavedResponseContextForCurrentRuntime()
-	success := !strings.HasPrefix(strings.TrimSpace(result), "Error:")
+	success := !isError
 	a.session.AddToolExecution(toolCall.Tool, toolCall.Args, result, success, a.CurrentModel)
 	a.persistSession()
 }

@@ -65,7 +65,7 @@ func TestExecuteCoreWithContext_DefaultsPathAndNormalizesEmptyOutput(t *testing.
 	registry.Register(tool)
 
 	tc := &ToolCall{Tool: "list_dir", Args: map[string]string{}}
-	got, change := executeCoreWithContext(ExecutionContext{
+	got, change, isError := executeCoreWithContext(ExecutionContext{
 		Context:  context.Background(),
 		Registry: registry,
 		Stdout:   io.Discard,
@@ -77,6 +77,9 @@ func TestExecuteCoreWithContext_DefaultsPathAndNormalizesEmptyOutput(t *testing.
 	}
 	if got != "(no output)" {
 		t.Fatalf("executeCoreWithContext() = %q, want %q", got, "(no output)")
+	}
+	if isError {
+		t.Fatalf("executeCoreWithContext() isError = true, want false")
 	}
 	if tc.Args["path"] != "." {
 		t.Fatalf("tc.Args[path] = %q, want %q", tc.Args["path"], ".")

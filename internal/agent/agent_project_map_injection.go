@@ -24,13 +24,17 @@ type projectMapSectionBuild struct {
 
 // injectProjectMap はプロジェクト構造マップをシステムプロンプトに注入する。
 func injectProjectMap(agent *Agent, input string) {
+	injectProjectMapWithOverrides(agent, input, projectMapInjectionOverrides{})
+}
+
+func injectProjectMapWithOverrides(agent *Agent, input string, overrides projectMapInjectionOverrides) {
 	if agent == nil {
 		return
 	}
 
 	resetProjectMapPromptSection(agent)
 
-	injectionCtx, ok := prepareProjectMapInjection(agent, input)
+	injectionCtx, ok := prepareProjectMapInjectionWithOverrides(agent, input, overrides)
 	if !ok {
 		return
 	}

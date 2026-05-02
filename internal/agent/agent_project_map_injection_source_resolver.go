@@ -1,16 +1,22 @@
 package agent
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-func resolveProjectMapSourceCWD() (string, bool) {
-	cwd, err := os.Getwd()
-	if err != nil {
+func resolveProjectMapSourceCWD(agent *Agent, overrideCWD string) (string, bool) {
+	cwd := strings.TrimSpace(overrideCWD)
+	if cwd != "" {
+		return cwd, true
+	}
+	if agent == nil {
+		return "", false
+	}
+	cwd = strings.TrimSpace(agent.invocationCWD())
+	if cwd == "" {
 		return "", false
 	}
 	return cwd, true

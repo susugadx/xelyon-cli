@@ -2,15 +2,11 @@ package agent
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 type PromptManager struct {
@@ -32,7 +28,8 @@ func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
 	}
 
 	planningPrompt := promptplan.BuildPlanningPrompt()
-	hadPlanPrompt := strings.Contains(a.SystemPrompt, planningPrompt)
+	prevLayout := parseSystemPromptLayout(a.SystemPrompt)
+	hadPlanPrompt := strings.Contains(prevLayout.Static, planningPrompt) || strings.Contains(prevLayout.Dynamic, planningPrompt)
 
 	providerName := a.ProviderName
 	if providerName == "" {
@@ -42,17 +39,20 @@ func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
 	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(a.mcpManager)
 	}
+	systemPrompt = injectSkillCatalogPrompt(systemPrompt, a.invocationCWD())
 	systemPrompt = prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, a.CurrentModel, a.cfg())
 
-	if pc := loadProjectConfig(); pc != nil {
+	if pc := a.loadProjectConfig(); pc != nil {
 		systemPrompt = injectProjectConfig(systemPrompt, pc, "")
 	}
 
+	layout := parseSystemPromptLayout("")
+	layout.SetStatic(systemPrompt)
 	if hadPlanPrompt {
-		systemPrompt += api.SystemPromptCacheBoundary + planningPrompt
+		layout.AppendDynamic(planningPrompt)
 	}
 
-	a.SystemPrompt = systemPrompt
+	a.SystemPrompt = layout.Compose()
 	injectProjectMap(a, "")
 }
 
@@ -61,35 +61,68 @@ func (m *PromptManager) RefreshProjectPrompt(input string) {
 	if a == nil {
 		return
 	}
+	m.refreshProjectPromptWithContext(input, newPromptRefreshContext(a))
+}
 
-	pc := loadProjectConfig()
+func (m *PromptManager) refreshProjectPromptWithContext(input string, refreshCtx promptRefreshContext) {
+	a := m.agent
+	if a == nil {
+		return
+	}
+	pc := refreshCtx.projectConfig
 	var newConfigBlock string
 	if pc != nil {
 		selection := config.SelectProjectPromptSelection(pc, input)
 		newConfigBlock = prompt.BuildProjectConfigBlock(selection.Rules, selection.Contexts)
 	}
 
-	oldConfigBlock := prompt.ExtractProjectConfigBlock(a.SystemPrompt)
-	if strings.TrimSpace(newConfigBlock) != strings.TrimSpace(oldConfigBlock) {
-		systemPrompt := stripProjectMapSection(prompt.StripProjectConfigSections(a.SystemPrompt))
-		if newConfigBlock != "" {
-			systemPrompt = prompt.InjectProjectConfigBlock(systemPrompt, newConfigBlock)
-		}
-		a.SystemPrompt = systemPrompt
-	} else {
-		a.SystemPrompt = stripProjectMapSection(a.SystemPrompt)
+	layout := parseSystemPromptLayout(a.SystemPrompt)
+	layout.SetDynamic(stripProjectMapSection(layout.Dynamic))
+
+	staticPrompt := prompt.StripProjectConfigSections(layout.Static)
+	if newConfigBlock != "" {
+		staticPrompt = prompt.InjectProjectConfigBlock(staticPrompt, newConfigBlock)
 	}
-	injectProjectMap(a, input)
+	staticPrompt = injectSkillCatalogPrompt(staticPrompt, refreshCtx.invocationCWD)
+	layout.SetStatic(withProviderPromptWrapper(a, staticPrompt))
+
+	a.SystemPrompt = layout.Compose()
+	injectProjectMapWithOverrides(a, input, projectMapInjectionOverrides{
+		invocationCWD: refreshCtx.invocationCWD,
+		projectConfig: refreshCtx.projectConfig,
+	})
+}
+
+func withProviderPromptWrapper(a *Agent, systemPrompt string) string {
+	if a == nil {
+		return systemPrompt
+	}
+	providerName := strings.TrimSpace(a.ProviderName)
+	if providerName == "" && a.CurrentProvider != nil {
+		providerName = providerRuntimeNameFromProvider(a.CurrentProvider)
+	}
+	return prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, a.CurrentModel, a.cfg())
 }
 
 func (m *PromptManager) RefreshProjectPromptIfDirty(input string) {
-	if m == nil || !m.ShouldRefreshProjectPrompt(input) {
+	if m == nil || m.agent == nil {
 		return
 	}
-	m.RefreshProjectPrompt(input)
+	refreshCtx := newPromptRefreshContext(m.agent)
+	if !m.shouldRefreshProjectPromptWithContext(input, refreshCtx) {
+		return
+	}
+	m.refreshProjectPromptWithContext(input, refreshCtx)
 }
 
 func (m *PromptManager) ShouldRefreshProjectPrompt(input string) bool {
+	if m == nil || m.agent == nil {
+		return false
+	}
+	return m.shouldRefreshProjectPromptWithContext(input, newPromptRefreshContext(m.agent))
+}
+
+func (m *PromptManager) shouldRefreshProjectPromptWithContext(input string, refreshCtx promptRefreshContext) bool {
 	a := m.agent
 	if a == nil {
 		return false
@@ -98,32 +131,29 @@ func (m *PromptManager) ShouldRefreshProjectPrompt(input string) bool {
 		return true
 	}
 
-	cfg := a.cfg()
-	if cfg == nil || !cfg.ProjectMap.Enabled || !common.IsRipgrepAvailable() {
+	sources, ok := resolveProjectMapInjectionSourcesWithOverrides(a, projectMapInjectionOverrides{
+		invocationCWD: refreshCtx.invocationCWD,
+		projectConfig: refreshCtx.projectConfig,
+	})
+	if !ok {
 		return false
 	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return false
-	}
-
-	pc := loadProjectConfig()
-	rootPath := cwd
-	if pc != nil && strings.TrimSpace(pc.FilePath) != "" {
-		rootPath = filepath.Dir(pc.FilePath)
-	}
-
-	if stateKey := currentProjectMapStateKey(a, rootPath); stateKey != "" && stateKey != a.projectMapStateKey {
+	if stateKey := currentProjectMapStateKey(a, sources.rootPath); stateKey != "" && stateKey != a.projectMapStateKey {
 		return true
 	}
 
-	baseKey := buildProjectMapBaseKey(a, cfg, calcProjectMapBudget(a, cfg, a.projectMapFileCount, a.projectMapSymbolCount), a.projectMapFileCount, a.projectMapSymbolCount)
+	baseKey := buildProjectMapBaseKey(
+		a,
+		sources.cfg,
+		calcProjectMapBudget(a, sources.cfg, a.projectMapFileCount, a.projectMapSymbolCount),
+		a.projectMapFileCount,
+		a.projectMapSymbolCount,
+	)
 	if a.projectMapBaseKey != baseKey {
 		return true
 	}
 
-	focusPaths := extractProjectMapFocusPaths(cwd, rootPath, input, projectMapFocusMaxPaths)
+	focusPaths := extractProjectMapFocusPaths(sources.cwd, sources.rootPath, input, projectMapFocusMaxPaths)
 	if a.projectMapFocusKey != buildProjectMapFocusKey(focusPaths) {
 		return true
 	}

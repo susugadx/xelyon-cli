@@ -204,8 +204,8 @@ func TestBuildProviderSystemPrompt_FallbackWhenHeaderMissing(t *testing.T) {
 	base := "You are XELYON, an autonomous AI coding agent."
 	result := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.2", config.DefaultConfig())
 
-	if !strings.HasPrefix(result, "## Provider Notes") {
-		t.Error("when workflow header is missing, provider notes should be prepended")
+	if !strings.HasPrefix(result, "<!-- PROVIDER_NOTES_START:openai -->") {
+		t.Error("when workflow header is missing, provider notes marker block should be prepended")
 	}
 	if !strings.HasSuffix(result, base) {
 		t.Error("fallback behavior should keep the original base prompt")
@@ -285,5 +285,49 @@ func TestBuildProviderSystemPrompt_AzureReusesOpenAINotes(t *testing.T) {
 	displayResult := BuildProviderSystemPromptWithConfig(base, "Azure OpenAI", "azure-gpt-5.4", config.DefaultConfig())
 	if !strings.Contains(displayResult, "### OpenAI-specific") {
 		t.Fatal("Azure OpenAI display name prompt should reuse OpenAI-specific provider notes")
+	}
+}
+
+func TestBuildProviderSystemPromptWithConfig_AddsMissingPrefix(t *testing.T) {
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	got := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", config.DefaultConfig())
+	if !strings.Contains(got, "## Provider Notes") {
+		t.Fatalf("provider notes should be added when missing:\n%s", got)
+	}
+	if !strings.Contains(got, "### OpenAI-specific") {
+		t.Fatalf("openai-specific notes should be added:\n%s", got)
+	}
+}
+
+func TestBuildProviderSystemPromptWithConfig_DoesNotDuplicatePrefix(t *testing.T) {
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	wrapped := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", config.DefaultConfig())
+	got := BuildProviderSystemPromptWithConfig(wrapped, "openai", "gpt-5.4", config.DefaultConfig())
+	if strings.Count(got, "## Provider Notes") != 1 {
+		t.Fatalf("provider notes should not be duplicated:\n%s", got)
+	}
+}
+
+func TestBuildProviderSystemPromptWithConfig_ReplacesProviderNotesByMarker(t *testing.T) {
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	wrapped := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", config.DefaultConfig())
+	got := BuildProviderSystemPromptWithConfig(wrapped, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
+	if strings.Count(got, "## Provider Notes") != 1 {
+		t.Fatalf("provider notes should remain a single block:\n%s", got)
+	}
+	if !strings.Contains(got, "### Gemini-specific") {
+		t.Fatalf("gemini provider notes should replace openai notes:\n%s", got)
+	}
+	if strings.Contains(got, "### OpenAI-specific") {
+		t.Fatalf("openai provider notes should be replaced:\n%s", got)
+	}
+}
+
+func TestBuildProviderSystemPromptWithConfig_EmptyPrefixStripsExistingProviderNotes(t *testing.T) {
+	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
+	wrapped := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", config.DefaultConfig())
+	got := BuildProviderSystemPromptWithConfig(wrapped, "openrouter", "openai/gpt-5.4", config.DefaultConfig())
+	if strings.Contains(got, "## Provider Notes") {
+		t.Fatalf("empty-prefix provider should strip previous provider notes:\n%s", got)
 	}
 }

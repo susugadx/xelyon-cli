@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/signal"
@@ -10,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -44,11 +42,9 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
-	}
-	injectProjectMap(agent, "")
+	bootstrapProjectPromptState(agent, projectPromptBootstrapOptions{
+		showLoadedMessage: true,
+	})
 	checkRipgrepAvailability(agent)
 
 	return agent
@@ -289,109 +285,4 @@ func checkRipgrepAvailability(agent *Agent) {
 	dim.Fprintln(out, "     macOS         : brew install ripgrep")
 	dim.Fprintln(out, "     Windows       : winget install BurntSushi.ripgrep")
 	dim.Fprintln(out, "     Other         : https://github.com/BurntSushi/ripgrep#installation")
-}
-
-// printContextSize はコンテキストサイズをツリー形式で表示
-func printContextSize(agent *Agent) {
-	out := agent.output()
-	dim.Fprint(out, buildContextSizeBlock(agent))
-}
-
-func buildContextSizeBlock(agent *Agent) string {
-	systemPromptTokens := agent.EstimateSystemPromptTokens()
-	basePromptTokens := systemPromptTokens
-	toolsTokens := 0
-	projectMapTokens := estimateProjectMapTokens(agent.SystemPrompt)
-
-	if agent.CurrentProvider != nil && agent.CurrentProvider.IsFunctionCallingEnabled() {
-		toolsTokens = agent.estimateToolDefinitionTokens()
-	}
-
-	builtinCount, mcpCount := agent.countToolsByType()
-	projectTokens := estimateProjectConfigTokens(loadProjectConfig())
-	basePromptTokens -= projectMapTokens + projectTokens
-	if basePromptTokens < 0 {
-		basePromptTokens = 0
-	}
-
-	total := systemPromptTokens + toolsTokens
-
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "📋 Context size: ~%s tok\n", FormatTokens(total))
-
-	lines := []string{
-		fmt.Sprintf("Base prompt: ~%s", FormatTokens(basePromptTokens)),
-	}
-	if mcpCount > 0 {
-		lines = append(lines, fmt.Sprintf("Tools (%d+%d MCP): ~%s",
-			builtinCount, mcpCount, FormatTokens(toolsTokens)))
-	} else {
-		lines = append(lines, fmt.Sprintf("Tools (%d): ~%s",
-			builtinCount, FormatTokens(toolsTokens)))
-	}
-	if projectMapTokens > 0 && agent.projectMapFileCount > 0 {
-		if agent.projectMapSymbolCount > 0 {
-			lines = append(lines, fmt.Sprintf("Project map (%d symbols, %d files): ~%s",
-				agent.projectMapSymbolCount, agent.projectMapFileCount, FormatTokens(projectMapTokens)))
-		} else {
-			lines = append(lines, fmt.Sprintf("Project map (%d files): ~%s",
-				agent.projectMapFileCount, FormatTokens(projectMapTokens)))
-		}
-	}
-	if projectTokens > 0 {
-		lines = append(lines, fmt.Sprintf("xelyon.yaml: ~%s", FormatTokens(projectTokens)))
-	}
-
-	for i, line := range lines {
-		connector := "├──"
-		if i == len(lines)-1 {
-			connector = "└──"
-		}
-		fmt.Fprintf(&buf, "   %s %s\n", connector, line)
-	}
-
-	return buf.String()
-}
-
-func estimateProjectMapTokens(systemPrompt string) int {
-	section := extractProjectMapSection(systemPrompt)
-	if section == "" {
-		return 0
-	}
-	return token.EstimateTokenCount(section)
-}
-
-func extractProjectMapSection(systemPrompt string) string {
-	const marker = "## Project Map\n"
-
-	idx := strings.LastIndex(systemPrompt, marker)
-	if idx < 0 {
-		return ""
-	}
-
-	section := systemPrompt[idx:]
-	nextSection := strings.Index(section[len(marker):], "\n## ")
-	if nextSection >= 0 {
-		section = section[:len(marker)+nextSection]
-	}
-
-	return strings.TrimRight(section, "\n")
-}
-
-func stripProjectMapSection(systemPrompt string) string {
-	section := extractProjectMapSection(systemPrompt)
-	if section == "" {
-		return systemPrompt
-	}
-
-	idx := strings.LastIndex(systemPrompt, section)
-	if idx < 0 {
-		return systemPrompt
-	}
-
-	stripped := strings.TrimRight(systemPrompt[:idx], "\n")
-	if idx+len(section) < len(systemPrompt) {
-		stripped += systemPrompt[idx+len(section):]
-	}
-	return strings.TrimRight(stripped, "\n")
 }

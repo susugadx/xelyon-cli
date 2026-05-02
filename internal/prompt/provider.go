@@ -1,6 +1,8 @@
 package prompt
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -51,6 +53,10 @@ func GetProviderPrefix(provider string) string {
 }
 
 func getProviderPrefixForModel(provider string, model string, cfg *config.Config) string {
+	return providerPrefixes[resolveProviderPromptKey(provider, model, cfg)]
+}
+
+func resolveProviderPromptKey(provider, model string, cfg *config.Config) string {
 	name := config.NormalizeProviderName(provider)
 	if name != "bedrock" {
 		name = config.CanonicalProviderName(name)
@@ -63,7 +69,7 @@ func getProviderPrefixForModel(provider string, model string, cfg *config.Config
 			name = "claude"
 		}
 	}
-	return providerPrefixes[name]
+	return name
 }
 
 func bedrockPromptFamily(model string, cfg *config.Config) llmcatalog.BedrockModelFamily {
@@ -77,18 +83,41 @@ func bedrockPromptFamily(model string, cfg *config.Config) llmcatalog.BedrockMod
 	return llmcatalog.BedrockModelFamilyFor(model, catalogModel)
 }
 
-const workflowRulesHeader = "\n## Workflow Rules\n"
+const (
+	workflowRulesHeader    = "\n## Workflow Rules\n"
+	providerNotesEndMarker = "<!-- PROVIDER_NOTES_END -->"
+)
+
+var providerNotesBlockRe = regexp.MustCompile(`(?s)\n?<!-- PROVIDER_NOTES_START:[^>]+ -->.*?<!-- PROVIDER_NOTES_END -->\n?`)
 
 // BuildProviderSystemPromptWithConfig は明示指定した設定を使ってプロバイダー別ノートを挿入する。
 // シグネチャは呼び出し元との互換性のため model, cfg を維持する。
 func BuildProviderSystemPromptWithConfig(base, providerName, model string, cfg *config.Config) string {
+	base = strings.TrimRight(stripProviderNotesBlocks(base), "\n")
 	prefix := strings.TrimSpace(getProviderPrefixForModel(providerName, model, cfg))
 	if prefix == "" {
 		return base
 	}
+	key := resolveProviderPromptKey(providerName, model, cfg)
+	if key == "" {
+		key = "unknown"
+	}
+	providerBlock := buildProviderNotesBlock(key, prefix)
+
 	idx := strings.Index(base, workflowRulesHeader)
 	if idx < 0 {
-		return prefix + "\n\n" + base
+		if strings.TrimSpace(base) == "" {
+			return providerBlock
+		}
+		return providerBlock + "\n\n" + base
 	}
-	return base[:idx] + "\n\n" + prefix + "\n" + base[idx:]
+	return base[:idx] + "\n\n" + providerBlock + "\n" + base[idx:]
+}
+
+func buildProviderNotesBlock(providerKey, prefix string) string {
+	return fmt.Sprintf("<!-- PROVIDER_NOTES_START:%s -->\n%s\n%s", providerKey, prefix, providerNotesEndMarker)
+}
+
+func stripProviderNotesBlocks(base string) string {
+	return providerNotesBlockRe.ReplaceAllString(base, "")
 }

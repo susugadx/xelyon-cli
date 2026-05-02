@@ -16,6 +16,8 @@ type AgentRuntime struct {
 	Registry        *tools.Registry
 	ToolCache       *ToolCache
 	Config          *config.Config
+	ProjectConfig   *ProjectConfigStore
+	InvocationCWD   string
 	AutoApprove     bool
 	UI              *ui.Runtime
 	AuditLogger     audit.ToolLogger
@@ -48,6 +50,12 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 		runtime.Config = config.CloneConfig(config.DefaultConfig())
 	} else {
 		runtime.Config = config.CloneConfig(runtime.Config)
+	}
+	if runtime.ProjectConfig == nil {
+		runtime.ProjectConfig = NewProjectConfigStore()
+	}
+	if runtime.InvocationCWD == "" {
+		runtime.InvocationCWD = resolveRuntimeInvocationCWD()
 	}
 	if runtime.UI == nil {
 		runtime.UI = ui.NewRuntime(nil, nil, nil)
@@ -89,6 +97,13 @@ func (r *AgentRuntime) effectiveConfig() *config.Config {
 		return config.DefaultConfig()
 	}
 	return r.Config
+}
+
+func (r *AgentRuntime) effectiveProjectConfigStore() *ProjectConfigStore {
+	if r == nil || r.ProjectConfig == nil {
+		return defaultProjectConfigStore
+	}
+	return r.ProjectConfig
 }
 
 func (r *AgentRuntime) effectiveUI() *ui.Runtime {

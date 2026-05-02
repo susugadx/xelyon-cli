@@ -232,6 +232,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/review",
 		"/project",
 		"/config",
+		"/skills",
 		"/copy",
 		"/compress",
 		"/plan",

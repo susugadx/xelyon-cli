@@ -37,11 +37,9 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 		printModeInfoToWriter(runtime.effectiveUI().Output(), autoApprove, false)
 	}
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
-	}
-	injectProjectMap(agent, "")
+	bootstrapProjectPromptState(agent, projectPromptBootstrapOptions{
+		showLoadedMessage: true,
+	})
 
 	// 明示的に1ターンのみ実行（ChatOnce は stdin を読まず、REPL に入らない）
 	return agent.ChatOnce(query)
@@ -89,11 +87,9 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 		green.Fprintf(out, "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 	}
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		applyProjectConfig(agent, pc)
-	}
-	injectProjectMap(agent, "")
+	bootstrapProjectPromptState(agent, projectPromptBootstrapOptions{
+		showLoadedMessage: true,
+	})
 
 	if !quiet {
 		_, _ = fmt.Fprintln(agent.output())

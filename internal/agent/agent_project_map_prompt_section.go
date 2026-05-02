@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
+	promptpkg "github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 func renderProjectMapFocusOverlay(paths []string) string {
@@ -75,14 +75,7 @@ func appendProjectMapSection(systemPrompt, section string) string {
 	if strings.TrimSpace(section) == "" {
 		return systemPrompt
 	}
-
-	// Project Map is the most volatile part of the system prompt.
-	// Put it behind a cache boundary so Claude can reuse the stable prefix
-	// even when the map changes after edits or repo-state updates.
-	if !strings.Contains(systemPrompt, api.SystemPromptCacheBoundary) {
-		return systemPrompt + api.SystemPromptCacheBoundary + section
-	}
-
-	return systemPrompt + "\n\n" + section
-
+	layout := parseSystemPromptLayout(systemPrompt)
+	layout.SetDynamic(promptpkg.InjectProjectMapSection(layout.Dynamic, section))
+	return layout.Compose()
 }

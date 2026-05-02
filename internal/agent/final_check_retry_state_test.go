@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -330,7 +331,7 @@ func TestHandleNormalModeNoToolResponse_MaxChangeStackOverflowStillRunsFinalChec
 		handler.Handle(&tools.ToolCall{
 			Tool: "write_file",
 			Args: map[string]string{"path": path, "content": "x"},
-		}, "ok", change)
+		}, toolruntime.Result{Result: "ok", Change: change})
 	}
 
 	if len(agent.changeStack) != config.MaxChangeStack {

@@ -22,6 +22,19 @@ type planModeRequest struct {
 	approved            bool
 }
 
+type planModeRestoreMode int
+
+const (
+	planModeRestoreConversation planModeRestoreMode = iota
+	planModeRestorePromptOnly
+	planModeRestoreNone
+)
+
+type planModeExitPolicy struct {
+	restoreMode          planModeRestoreMode
+	clearResponseContext bool
+}
+
 func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *planModeRequest {
 	return &planModeRequest{
 		agent:               agent,
@@ -32,21 +45,9 @@ func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *
 
 func (r *planModeRequest) Run() error {
 	r.prepare()
-	restoreConversationOnExit := true
-	restorePromptOnExit := true
-	clearResponseContextOnExit := false
+	exitPolicy := planModeExitPolicy{restoreMode: planModeRestoreConversation}
 	defer func() {
-		if restoreConversationOnExit {
-			err := r.restoreConversationState()
-			if err != nil {
-				red.Fprintf(r.agent.output(), "Failed to restore plan mode state: %v\n", err)
-			}
-		} else if restorePromptOnExit {
-			r.restorePlanningPrompt()
-		}
-		if clearResponseContextOnExit {
-			r.clearResponseContext()
-		}
+		r.applyExitPolicy(exitPolicy)
 	}()
 
 	p, handled, err := r.runInvestigation()
@@ -56,21 +57,39 @@ func (r *planModeRequest) Run() error {
 	if handled {
 		return err
 	}
-	restoreConversationOnExit = r.shouldRestoreConversationOnExit(p)
-	restorePromptOnExit = !restoreConversationOnExit
+	exitPolicy.restoreMode = r.resolveExitRestoreMode(p)
 
 	handled, err = r.handleInvestigationResult(p)
 	if r.approved {
 		// Plan 承認後は planning-only。調査フェーズ履歴は通常ターンへ持ち越さない。
-		restoreConversationOnExit = true
-		restorePromptOnExit = true
-		clearResponseContextOnExit = true
+		exitPolicy.restoreMode = planModeRestoreConversation
+		exitPolicy.clearResponseContext = true
 	}
 	if err != nil || handled {
 		return err
 	}
 
 	return nil
+}
+
+func (r *planModeRequest) applyExitPolicy(policy planModeExitPolicy) {
+	if r == nil || r.agent == nil {
+		return
+	}
+
+	switch policy.restoreMode {
+	case planModeRestoreConversation:
+		if err := r.restoreConversationState(); err != nil {
+			red.Fprintf(r.agent.output(), "Failed to restore plan mode state: %v\n", err)
+		}
+	case planModeRestorePromptOnly:
+		r.restorePlanningPrompt()
+	case planModeRestoreNone:
+	}
+
+	if policy.clearResponseContext {
+		r.clearResponseContext()
+	}
 }
 
 func (r *planModeRequest) prepare() {
@@ -84,10 +103,12 @@ func (r *planModeRequest) prepare() {
 func (r *planModeRequest) ensurePlanningPrompt() {
 	a := r.agent
 	planningPrompt := promptplan.BuildPlanningPrompt()
-	if strings.Contains(a.SystemPrompt, planningPrompt) {
+	layout := parseSystemPromptLayout(a.SystemPrompt)
+	if strings.Contains(layout.Static, planningPrompt) || strings.Contains(layout.Dynamic, planningPrompt) {
 		return
 	}
-	a.SystemPrompt = a.SystemPrompt + api.SystemPromptCacheBoundary + planningPrompt
+	layout.AppendDynamic(planningPrompt)
+	a.SystemPrompt = layout.Compose()
 }
 
 func (r *planModeRequest) prepareUserRequest(userRequest string) string {
@@ -241,4 +262,11 @@ func (r *planModeRequest) shouldRestoreConversationOnExit(p *plan.Plan) bool {
 		return false
 	}
 	return len(p.Steps) > 0
+}
+
+func (r *planModeRequest) resolveExitRestoreMode(p *plan.Plan) planModeRestoreMode {
+	if r.shouldRestoreConversationOnExit(p) {
+		return planModeRestoreConversation
+	}
+	return planModeRestorePromptOnly
 }

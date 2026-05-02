@@ -146,3 +146,22 @@ func TestBuildSystemFieldWithConfig_UsesInjectedConfig(t *testing.T) {
 		t.Fatalf("expected []SystemBlock with injected config, got %T", result)
 	}
 }
+
+func TestSplitSystemPromptLayout_MultipleBoundariesAreNormalizedIntoDynamic(t *testing.T) {
+	input := "base" + SystemPromptCacheBoundary + "dynamic-a" + SystemPromptCacheBoundary + "dynamic-b"
+	layout := SplitSystemPromptLayout(input)
+	if layout.Static != "base" {
+		t.Fatalf("layout.Static = %q, want base", layout.Static)
+	}
+	if layout.Dynamic != "dynamic-a\n\ndynamic-b" {
+		t.Fatalf("layout.Dynamic = %q, want normalized dynamic", layout.Dynamic)
+	}
+}
+
+func TestSystemPromptLayout_ComposeWithoutDynamic(t *testing.T) {
+	layout := SystemPromptLayout{Static: "base", Dynamic: "   "}
+	got := layout.Compose()
+	if got != "base" {
+		t.Fatalf("Compose() = %q, want base", got)
+	}
+}

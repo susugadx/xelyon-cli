@@ -68,9 +68,10 @@ func (a *Agent) assistantToolHistoryContent(explanation, reasoningContent string
 // addToolCallsToHistory でバッチ化済みの場合に使用する。
 func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// ツール実行
-	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
+	execResult := a.executeToolWithSpinnerResult(a.currentRequestContext(), toolCall)
+	result, change := execResult.Result, execResult.Change
 	a.noteProjectMapMutation(toolCall, change)
-	a.appendSessionToolExecution(toolCall, result)
+	a.appendSessionToolExecution(toolCall, result, execResult.Error)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -213,8 +214,9 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	a.addToolCallToHistory(response, toolCall)
 
 	// ツール実行
-	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
-	a.appendSessionToolExecution(toolCall, result)
+	execResult := a.executeToolWithSpinnerResult(a.currentRequestContext(), toolCall)
+	result, change := execResult.Result, execResult.Change
+	a.appendSessionToolExecution(toolCall, result, execResult.Error)
 
 	// str_replace エラー処理
 	if a.handleStrReplaceErrors(toolCall, result) {

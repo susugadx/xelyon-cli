@@ -120,6 +120,7 @@ type ExecutionResult struct {
 	Result   string
 	Change   *FileChange
 	Duration time.Duration
+	Error    bool
 }
 
 // ExecuteWithContext は実行コンテキスト付きでツールを実行し、結果を公開する。
@@ -133,13 +134,14 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 func ExecuteUnpublishedWithContext(execCtx ExecutionContext, tc *ToolCall) ExecutionResult {
 	execCtx = normalizeExecutionContext(execCtx)
 	startTime := time.Now()
-	result, change := executeCoreWithContext(execCtx, tc)
+	result, change, isError := executeCoreWithContext(execCtx, tc)
 	elapsed := time.Since(startTime)
 
 	return ExecutionResult{
 		Result:   result,
 		Change:   change,
 		Duration: elapsed,
+		Error:    isError,
 	}
 }
 
@@ -168,7 +170,7 @@ func PublishResultWithContext(execCtx ExecutionContext, tc *ToolCall, execResult
 	}
 
 	result := execResult.Result
-	isError := strings.HasPrefix(strings.TrimSpace(result), "Error:")
+	isError := execResult.Error || IsErrorResult(result)
 
 	if execCtx.ToolResultCallback != nil {
 		// TUIモード: 構造化データをコールバックで送信
@@ -195,12 +197,12 @@ func PublishResultWithContext(execCtx ExecutionContext, tc *ToolCall, execResult
 	}
 }
 
-func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
+func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange, bool) {
 	if err := execCtx.EffectiveContext().Err(); err != nil {
 		if errors.Is(err, context.Canceled) {
-			return "Error: context cancelled", nil
+			return "Error: context cancelled", nil, true
 		}
-		return fmt.Sprintf("Error: %v", err), nil
+		return fmt.Sprintf("Error: %v", err), nil, true
 	}
 
 	// デフォルト値の設定（Registry実行前）
@@ -223,7 +225,12 @@ func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *Fi
 		result = "(no output)"
 	}
 
-	return result, change
+	return result, change, IsErrorResult(result)
+}
+
+// IsErrorResult はツール結果が失敗メッセージかどうかを判定する。
+func IsErrorResult(result string) bool {
+	return strings.HasPrefix(strings.TrimSpace(result), "Error:")
 }
 
 // invalidateToolCache はファイル変更系ツール実行後にキャッシュを無効化

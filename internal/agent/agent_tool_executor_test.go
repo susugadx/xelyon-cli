@@ -14,6 +14,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -128,7 +129,7 @@ func TestExecuteToolCallsWithParallel_LoopDetection_PreventsExecution(t *testing
 		return false
 	}
 
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		executedTools = append(executedTools, tc.Tool)
 	}
 
@@ -195,7 +196,7 @@ func TestExecuteToolCallsWithParallel_SkipFn_GenericTools(t *testing.T) {
 	}
 
 	var executedTools []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		executedTools = append(executedTools, tc.Tool)
 	}
 
@@ -267,7 +268,7 @@ func TestExecuteToolCallsWithParallel_LoopDetectBeforeSkip(t *testing.T) {
 	}
 
 	var executed []string
-	loopDetected := agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, skipFn, func(_ int, tc *tools.ToolCall, _ string, _ *tools.FileChange) {
+	loopDetected := agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, skipFn, func(_ int, tc *tools.ToolCall, _ toolruntime.Result) {
 		executed = append(executed, tc.ID)
 	})
 
@@ -313,7 +314,7 @@ func TestExecuteToolCallsWithParallel_DeliveryOrder(t *testing.T) {
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	var deliveryOrder []int
-	callback := func(idx int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(idx int, tc *tools.ToolCall, result toolruntime.Result) {
 		deliveryOrder = append(deliveryOrder, idx)
 	}
 
@@ -355,8 +356,8 @@ func TestExecuteToolCallsWithParallel_ContextCancel(t *testing.T) {
 	defer cancel()
 
 	var cancelledCount int32
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		if strings.Contains(result, "cancel") {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
+		if strings.Contains(result.Result, "cancel") {
 			atomic.AddInt32(&cancelledCount, 1)
 		}
 	}
@@ -416,7 +417,7 @@ func TestExecuteToolCallsWithParallel_HistoryMessages(t *testing.T) {
 	}
 
 	var executedIDs []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		executedIDs = append(executedIDs, tc.ID)
 	}
 
@@ -496,7 +497,7 @@ func TestExecuteToolCallsWithParallel_AllParallelConcurrency(t *testing.T) {
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	var callbackCount int32
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		atomic.AddInt32(&callbackCount, 1)
 	}
 
@@ -542,7 +543,7 @@ func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil,
-		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+		func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 	output := out.String()
 
 	for _, want := range []string{
@@ -590,7 +591,7 @@ func TestExecuteToolCallsWithParallel_ShowsSpinnerDuringParallelRun(t *testing.T
 
 	done := make(chan struct{})
 	go func() {
-		agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+		agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 		close(done)
 	}()
 
@@ -651,7 +652,7 @@ func TestExecuteToolCallsWithParallel_StopsSpinnerBeforeNonTUIReport(t *testing.
 		},
 	}
 
-	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 
 	if !checkWriter.sawParallelGroup {
 		t.Fatal("expected non-TUI parallel group output")
@@ -696,7 +697,7 @@ func TestExecuteToolCallsWithParallel_StopsSpinnerBeforeTUIReport(t *testing.T) 
 
 	done := make(chan struct{})
 	go func() {
-		agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+		agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 		close(done)
 	}()
 
@@ -752,7 +753,7 @@ func TestExecuteToolCallsWithParallel_TextBased_Skip(t *testing.T) {
 	}
 
 	var executedTools []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		executedTools = append(executedTools, tc.Tool)
 	}
 
@@ -810,7 +811,7 @@ func TestLoopDetection_FC_MessageConsistency(t *testing.T) {
 	}
 
 	agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, nil,
-		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+		func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 
 	// 旧実装と同じフォーマット: "[SYSTEM] Tool loop detected: read_file was called 2 times. ..."
 	msgs := agent.History[historyBefore:]
@@ -865,7 +866,7 @@ func TestLoopDetection_TextBased_TriggerMessage(t *testing.T) {
 	}
 
 	agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, nil,
-		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+		func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 
 	msgs := agent.History[historyBefore:]
 	// text-based trigger: role="user", "[SYSTEM WARNING] ..."
@@ -918,7 +919,7 @@ func TestLoopDetection_TextBased_SubsequentNoDummy(t *testing.T) {
 	}
 
 	agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, nil,
-		func(_ int, _ *tools.ToolCall, _ string, _ *tools.FileChange) {})
+		func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 
 	msgs := agent.History[historyBefore:]
 	// text-based: trigger(1) のみ。後続(search_code) にはダミーなし = intentional spec。
@@ -946,8 +947,8 @@ func TestExecuteToolCallsWithParallel_CancelBeforeExecution(t *testing.T) {
 	cancel()
 
 	var callbackResults []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		callbackResults = append(callbackResults, result)
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
+		callbackResults = append(callbackResults, result.Result)
 	}
 
 	agent.executeToolCallsWithParallel(ctx, toolCalls, nil, nil, callback)

@@ -319,7 +319,7 @@ func TestExecuteToolCallsWithParallel_ReadFile_RangeNotBatched(t *testing.T) {
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	var executedCount int
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		executedCount++
 	}
 
@@ -344,7 +344,7 @@ func TestExecuteToolCallsWithParallel_ReadFile_MixedNotBroken(t *testing.T) {
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	var executedCount int
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		executedCount++
 	}
 
@@ -369,12 +369,12 @@ func TestExecuteToolCallsWithParallel_ReadFile_BatchResultAndHistory(t *testing.
 	agent.addToolCallsToHistory("test", toolCalls)
 	historyBefore := len(agent.History)
 
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		// Simulate adding result to history (as agent_chat.go does)
 		if tc.ID != "" {
 			agent.History = append(agent.History, api.Message{
 				Role:       "tool",
-				Content:    result,
+				Content:    result.Result,
 				ToolCallID: tc.ID,
 				ToolName:   tc.Tool,
 			})
@@ -518,7 +518,7 @@ func TestExecuteToolCallsWithParallel_DedupDoesNotBreakLoopDetection(t *testing.
 	}
 
 	var executedCount int
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		executedCount++
 	}
 
@@ -556,7 +556,7 @@ func TestExecuteToolCallsWithParallel_SkipDoesNotBreakRepeatedReads(t *testing.T
 	}
 
 	var executedIDs []string
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		executedIDs = append(executedIDs, tc.ID)
 	}
 
@@ -742,7 +742,7 @@ func TestReadFileBatchMerge_CallbackOrderPreserved(t *testing.T) {
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	var callbackOrder []string
-	callback := func(idx int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(idx int, tc *tools.ToolCall, result toolruntime.Result) {
 		callbackOrder = append(callbackOrder, tc.ID)
 	}
 
@@ -772,7 +772,7 @@ func TestReadFileBatchMerge_Observability(t *testing.T) {
 	}
 	agent.addToolCallsToHistory("test", toolCalls)
 
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {}
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {}
 	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
 
 	// ReadFileBatchMerges should be >= 0 (it may or may not fire depending on
@@ -802,7 +802,7 @@ func TestReadFileBatchMerge_SingleReadNotMerged(t *testing.T) {
 	agent.addToolCallsToHistory("test", toolCalls)
 
 	var callbackCount int
-	callback := func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
 		callbackCount++
 	}
 

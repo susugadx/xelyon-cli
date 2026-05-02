@@ -56,6 +56,6 @@ func (d *parallelResultDelivery) deliverExecutedToolResult(idx int, tc *tools.To
 		d.agent.Stats.AddToolExecution(tc.Tool)
 	}
 	if d.callback != nil {
-		d.callback(idx, tc, result.Result, result.Change)
+		d.callback(idx, tc, result)
 	}
 }

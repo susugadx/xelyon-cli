@@ -222,6 +222,20 @@ var Commands = []CommandInfo{
 		},
 	},
 	{
+		Name:          "/skills",
+		Description:   "List and inspect Agent Skills catalog",
+		DescriptionJP: "Agent Skillsの一覧と診断",
+		Surfaces:      legacyFallbackSurfaces(),
+		Category:      CommandCategoryContext,
+		Discoverable:  true,
+		SortWeight:    95,
+		SubCommands: []SubCommand{
+			{Name: "/skills list", Description: "List discovered skills"},
+			{Name: "/skills show <name>", Description: "Show SKILL.md body and resource listings"},
+			{Name: "/skills doctor", Description: "Show parsing/duplicate diagnostics"},
+		},
+	},
+	{
 		Name:          "/model",
 		Args:          "[name]",
 		Description:   "Show current model or switch model without restart",

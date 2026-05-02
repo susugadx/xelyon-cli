@@ -28,6 +28,7 @@ var helpToolDisplayOrder = []string{
 	investigation.ToolReadFile,
 	investigation.ToolListDir,
 	"web_search",
+	"activate_skill",
 	"ask_user_question",
 	"apply_patch",
 	"str_replace",
@@ -100,6 +101,8 @@ func helpToolDescription(name string, surface investigation.Surface, description
 	switch name {
 	case "web_search":
 		return "Search the web and return summarized findings with source URLs"
+	case "activate_skill":
+		return "Load full SKILL.md content for one discovered skill on demand"
 	case "ask_user_question":
 		return "Ask the user a clarification question during plan investigation"
 	case "apply_patch":

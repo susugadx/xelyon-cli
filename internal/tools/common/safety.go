@@ -28,6 +28,7 @@ var ToolSafetyLevels = map[string]ToolSafety{
 	"ask_user_question": SafetyHigh,
 	"spawn_agent":       SafetyHigh,
 	"wait_agent":        SafetyHigh,
+	"activate_skill":    SafetyHigh,
 
 	// SafetyMedium: 外部検索APIコール（確認対象）
 	"web_search": SafetyMedium,

@@ -50,20 +50,11 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 	agent := NewAgentWithRuntime(model, provider, true, runtime)
 	agent.setAutoApprove(true) // Headlessモードは自動承認（SafetyLow以外）
 
-	if cfg != nil && cfg.SubAgentPrompt != "" {
-		agent.SystemPrompt = prompt.BuildProviderSystemPromptWithConfig(cfg.SubAgentPrompt, agent.ProviderName, model, agent.cfg())
-	}
+	applyHeadlessSystemPromptLayout(agent, cfg, model)
 
-	// プロジェクト設定読み込み（xelyon.yaml）
-	if pc := loadProjectConfig(); pc != nil {
-		agent.SystemPrompt = injectProjectConfig(agent.SystemPrompt, pc, "")
-		// headless では final checks 解決のみ（UI 表示不要）
-		if resolved := config.ResolveFinalChecks(agent.cfg(), pc); resolved != nil {
-			current := agent.cfg()
-			current.FinalChecks = *resolved
-		}
-	}
-	injectProjectMap(agent, "")
+	bootstrapProjectPromptState(agent, projectPromptBootstrapOptions{
+		showLoadedMessage: false,
+	})
 
 	// Headless Mode は Normal Mode 相当: 親と同じツール除外
 	allowSubAgents := cfg == nil || cfg.SubAgentPrompt == ""
@@ -84,6 +75,21 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 		model:    model,
 		query:    query,
 	}
+}
+
+func applyHeadlessSystemPromptLayout(agent *Agent, cfg *config.Config, model string) {
+	if agent == nil {
+		return
+	}
+
+	layout := parseSystemPromptLayout(agent.SystemPrompt)
+	staticPrompt := layout.Static
+	if cfg != nil && cfg.SubAgentPrompt != "" {
+		staticPrompt = prompt.BuildProviderSystemPromptWithConfig(cfg.SubAgentPrompt, agent.ProviderName, model, agent.cfg())
+	}
+	staticPrompt = injectSkillCatalogPrompt(staticPrompt, agent.invocationCWD())
+	layout.SetStatic(staticPrompt)
+	agent.SystemPrompt = layout.Compose()
 }
 
 func (r *headlessRunner) run(ctx context.Context) *HeadlessResult {
@@ -157,12 +163,12 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 	})
 
 	execCtx := r.agent.toolExecutionContext(ctx, nil, nil, nil)
-	output, change := tools.ExecuteQuietWithContext(execCtx, tc)
-	output, change = r.agent.maybeRepairGeminiApplyPatch(ctx, tc, output, change, execCtx, true)
+	execResult := tools.ExecuteQuietUnpublishedWithContext(execCtx, tc)
+	execResult = r.agent.maybeRepairGeminiApplyPatchExecution(ctx, tc, execResult, execCtx, true)
+	output, change := execResult.Result, execResult.Change
 	r.agent.noteProjectMapMutation(tc, change)
 
-	// 成功判定（"Error:"を含むかどうかで簡易判定）
-	success := !strings.Contains(output, "Error:")
+	success := !execResult.Error
 	if r.agent.Stats != nil {
 		r.agent.Stats.AddToolExecution(tc.Tool)
 	}

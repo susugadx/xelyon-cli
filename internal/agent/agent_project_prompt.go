@@ -7,7 +7,7 @@ import (
 )
 
 func loadProjectConfig() *config.ProjectConfig {
-	return config.LoadProjectConfig()
+	return defaultProjectConfigStore.Load()
 }
 
 // injectProjectConfig は ProjectConfig を SystemPrompt に注入する。
