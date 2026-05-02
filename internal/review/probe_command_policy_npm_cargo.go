@@ -15,27 +15,27 @@ var allowedCargoHostReadOnlySubcommands = map[string]struct{}{
 	"clippy": {},
 }
 
-func validateAndPrepareNpmHostReadOnlyArgs(args []string) (hostReadOnlyCommandState, error) {
+func validateAndPrepareNpmHostReadOnlyArgs(args []string) (hostReadOnlyCommandAnalysis, error) {
 	if len(args) == 0 {
-		return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError("blocked command: npm subcommand is required")
+		return nil, newHostReadOnlyBlockedError("blocked command: npm subcommand is required")
 	}
 	if args[0] == "test" {
-		return hostReadOnlyCommandState{}, nil
+		return hostReadOnlyNoopAnalysis{}, nil
 	}
 	if args[0] == "run" && len(args) >= 2 {
 		if _, ok := allowedNpmRunHostReadOnlyScripts[args[1]]; ok {
-			return hostReadOnlyCommandState{}, nil
+			return hostReadOnlyNoopAnalysis{}, nil
 		}
 	}
-	return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: npm %s is not allowed in host_readonly", strings.Join(args, " ")))
+	return nil, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: npm %s is not allowed in host_readonly", strings.Join(args, " ")))
 }
 
-func validateAndPrepareCargoHostReadOnlyArgs(args []string) (hostReadOnlyCommandState, error) {
+func validateAndPrepareCargoHostReadOnlyArgs(args []string) (hostReadOnlyCommandAnalysis, error) {
 	if len(args) == 0 {
-		return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError("blocked command: cargo subcommand is required")
+		return nil, newHostReadOnlyBlockedError("blocked command: cargo subcommand is required")
 	}
 	if _, ok := allowedCargoHostReadOnlySubcommands[args[0]]; ok {
-		return hostReadOnlyCommandState{}, nil
+		return hostReadOnlyNoopAnalysis{}, nil
 	}
-	return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: cargo %s is not allowed in host_readonly", args[0]))
+	return nil, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: cargo %s is not allowed in host_readonly", args[0]))
 }

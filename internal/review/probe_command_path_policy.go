@@ -23,11 +23,11 @@ func validateHostReadOnlyCommandPathArgs(repoRoot, workDir, command string, path
 	return nil
 }
 
-func extractCatPathArgsFromCommandArgs(args []string, _ hostReadOnlyCommandState) ([]string, error) {
+func extractCatPathArgsFromCommandArgs(args []string, _ hostReadOnlyCommandAnalysis) ([]string, error) {
 	return append([]string(nil), args...), nil
 }
 
-func extractLSPathArgsFromCommandArgs(args []string, _ hostReadOnlyCommandState) ([]string, error) {
+func extractLSPathArgsFromCommandArgs(args []string, _ hostReadOnlyCommandAnalysis) ([]string, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
@@ -42,35 +42,15 @@ func extractLSPathArgsFromCommandArgs(args []string, _ hostReadOnlyCommandState)
 	return paths, nil
 }
 
-func extractFindPathRootsFromCommandArgs(args []string, _ hostReadOnlyCommandState) ([]string, error) {
-	return extractFindPathRoots(args), nil
+func extractFindPathRootsFromCommandArgs(_ []string, analysis hostReadOnlyCommandAnalysis) ([]string, error) {
+	findAnalysis, ok := analysis.(findHostReadOnlyAnalysis)
+	if !ok {
+		return nil, newHostReadOnlyBlockedError("blocked command: internal policy error for find path analysis")
+	}
+	return append([]string(nil), findAnalysis.parsed.pathRoots...), nil
 }
 
-func extractFindPathRoots(args []string) []string {
-	if len(args) == 0 {
-		return []string{"."}
-	}
-
-	start := 0
-	if args[0] == "--" {
-		start = 1
-	}
-
-	paths := make([]string, 0, len(args)-start)
-	for i := start; i < len(args); i++ {
-		arg := args[i]
-		if strings.HasPrefix(arg, "-") || arg == "!" || arg == "(" {
-			break
-		}
-		paths = append(paths, arg)
-	}
-	if len(paths) == 0 {
-		return []string{"."}
-	}
-	return paths
-}
-
-func extractArgsAfterDoubleDashFromCommandArgs(args []string, _ hostReadOnlyCommandState) ([]string, error) {
+func extractArgsAfterDoubleDashFromCommandArgs(args []string, _ hostReadOnlyCommandAnalysis) ([]string, error) {
 	return extractArgsAfterDoubleDash(args), nil
 }
 

@@ -30,69 +30,76 @@ func TestProbeRunner_HostReadOnlyBlockedCommand(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeBlocked)
-	}
-	if len(result.CommandResults) != 0 {
-		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
-	}
-	if !strings.Contains(result.Error, "blocked command") {
-		t.Fatalf("Error = %q, want to contain %q", result.Error, "blocked command")
-	}
+	assertHostReadOnlyBlockedWithoutExecution(t, err, result, "blocked command")
 	if _, err := os.Stat(keepFile); err != nil {
 		t.Fatalf("blocked command should not remove file, stat error = %v", err)
 	}
 }
 
-func TestProbeRunner_HostReadOnlyBlockedCommandPath(t *testing.T) {
-	repo := newProbeTestRepo(t)
-	runner := NewProbeRunner(repo)
-
-	result, err := runner.Run(context.Background(), ReviewProbeRequest{
-		ID:             "probe-blocked-command-path",
-		Mode:           ReviewProbeHostReadOnly,
-		Timeout:        2 * time.Second,
-		MaxOutputBytes: 1024,
-		Commands: []ReviewProbeCommand{
-			{
-				Command: "./git",
-				Args:    []string{"status", "--short"},
-			},
+func TestProbeRunner_HostReadOnlyBlockedCasesAreNotExecuted(t *testing.T) {
+	tests := []struct {
+		name          string
+		id            string
+		command       string
+		args          []string
+		errorContains string
+	}{
+		{
+			name:          "blocked command path",
+			id:            "probe-blocked-command-path",
+			command:       "./git",
+			args:          []string{"status", "--short"},
+			errorContains: "command path is not allowed",
 		},
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
+		{
+			name:          "blocked dangerous argument",
+			id:            "probe-blocked-arg",
+			command:       "git",
+			args:          []string{"diff", "--ext-diff"},
+			errorContains: "blocked command",
+		},
+		{
+			name:          "blocked outside path",
+			id:            "probe-blocked-outside-path",
+			command:       "cat",
+			args:          []string{"/etc/hosts"},
+			errorContains: "outside repository root",
+		},
+		{
+			name:          "blocked find leading option",
+			id:            "probe-blocked-find-leading-option",
+			command:       "find",
+			args:          []string{"-L", "/etc", "-name", "hosts"},
+			errorContains: "find leading option -L",
+		},
 	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeBlocked)
-	}
-	if len(result.CommandResults) != 0 {
-		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
-	}
-	if !strings.Contains(result.Error, "command path is not allowed") {
-		t.Fatalf("Error = %q, want to contain %q", result.Error, "command path is not allowed")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newProbeTestRepo(t)
+			runner := NewProbeRunner(repo)
+
+			result, err := runner.Run(context.Background(), ReviewProbeRequest{
+				ID:             tt.id,
+				Mode:           ReviewProbeHostReadOnly,
+				Timeout:        2 * time.Second,
+				MaxOutputBytes: 1024,
+				Commands: []ReviewProbeCommand{
+					{
+						Command: tt.command,
+						Args:    tt.args,
+					},
+				},
+			})
+
+			assertHostReadOnlyBlockedWithoutExecution(t, err, result, tt.errorContains)
+		})
 	}
 }
 
-func TestProbeRunner_HostReadOnlyBlockedArgIsNotExecuted(t *testing.T) {
-	repo := newProbeTestRepo(t)
-	runner := NewProbeRunner(repo)
+func assertHostReadOnlyBlockedWithoutExecution(t *testing.T, err error, result ReviewProbeResult, errorContains string) {
+	t.Helper()
 
-	result, err := runner.Run(context.Background(), ReviewProbeRequest{
-		ID:             "probe-blocked-arg",
-		Mode:           ReviewProbeHostReadOnly,
-		Timeout:        2 * time.Second,
-		MaxOutputBytes: 1024,
-		Commands: []ReviewProbeCommand{
-			{
-				Command: "git",
-				Args:    []string{"diff", "--ext-diff"},
-			},
-		},
-	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -102,37 +109,7 @@ func TestProbeRunner_HostReadOnlyBlockedArgIsNotExecuted(t *testing.T) {
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
 	}
-	if !strings.Contains(result.Error, "blocked command") {
-		t.Fatalf("Error = %q, want to contain %q", result.Error, "blocked command")
-	}
-}
-
-func TestProbeRunner_HostReadOnlyBlockedOutsidePathIsNotExecuted(t *testing.T) {
-	repo := newProbeTestRepo(t)
-	runner := NewProbeRunner(repo)
-
-	result, err := runner.Run(context.Background(), ReviewProbeRequest{
-		ID:             "probe-blocked-outside-path",
-		Mode:           ReviewProbeHostReadOnly,
-		Timeout:        2 * time.Second,
-		MaxOutputBytes: 1024,
-		Commands: []ReviewProbeCommand{
-			{
-				Command: "cat",
-				Args:    []string{"/etc/hosts"},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeBlocked)
-	}
-	if len(result.CommandResults) != 0 {
-		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
-	}
-	if !strings.Contains(result.Error, "outside repository root") {
-		t.Fatalf("Error = %q, want to contain %q", result.Error, "outside repository root")
+	if !strings.Contains(result.Error, errorContains) {
+		t.Fatalf("Error = %q, want to contain %q", result.Error, errorContains)
 	}
 }

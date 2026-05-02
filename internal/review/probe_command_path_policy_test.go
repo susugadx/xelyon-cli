@@ -33,6 +33,11 @@ func TestHostReadOnlyCommandPathPolicy_AllowsRepoPaths(t *testing.T) {
 			args:    []string{"internal"},
 		},
 		{
+			name:    "find empty args treated as current dir",
+			command: "find",
+			args:    nil,
+		},
+		{
 			name:    "find current dir",
 			command: "find",
 			args:    []string{".", "-name", "*.go"},

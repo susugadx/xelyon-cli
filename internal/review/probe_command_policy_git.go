@@ -33,26 +33,26 @@ var (
 	}
 )
 
-func validateAndPrepareGitHostReadOnlyArgs(args []string) (hostReadOnlyCommandState, error) {
+func validateAndPrepareGitHostReadOnlyArgs(args []string) (hostReadOnlyCommandAnalysis, error) {
 	if len(args) == 0 {
-		return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError("blocked command: git subcommand is required")
+		return nil, newHostReadOnlyBlockedError("blocked command: git subcommand is required")
 	}
 
 	parsed, err := parseGitHostReadOnlyArgs(args)
 	if err != nil {
-		return hostReadOnlyCommandState{}, err
+		return nil, err
 	}
 
 	if err := validateGitHostReadOnlySubcommand(parsed.subcommand); err != nil {
-		return hostReadOnlyCommandState{}, err
+		return nil, err
 	}
 
 	if err := validateGitHostReadOnlyPostSubcommandArgs(parsed.postSubcommandArg); err != nil {
-		return hostReadOnlyCommandState{}, err
+		return nil, err
 	}
 
-	return hostReadOnlyCommandState{
-		gitParsed: parsed,
+	return gitHostReadOnlyAnalysis{
+		parsed: parsed,
 	}, nil
 }
 
@@ -149,6 +149,10 @@ func isAllowedGitHostReadOnlyGlobalOption(arg string) bool {
 	return ok
 }
 
-func extractGitHostReadOnlyPathArgs(_ []string, state hostReadOnlyCommandState) ([]string, error) {
-	return extractArgsAfterDoubleDash(state.gitParsed.postSubcommandArg), nil
+func extractGitHostReadOnlyPathArgs(_ []string, analysis hostReadOnlyCommandAnalysis) ([]string, error) {
+	gitAnalysis, ok := analysis.(gitHostReadOnlyAnalysis)
+	if !ok {
+		return nil, newHostReadOnlyBlockedError("blocked command: internal policy error for git argument analysis")
+	}
+	return extractArgsAfterDoubleDash(gitAnalysis.parsed.postSubcommandArg), nil
 }

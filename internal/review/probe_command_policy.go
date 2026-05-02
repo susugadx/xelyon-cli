@@ -5,13 +5,29 @@ import (
 	"strings"
 )
 
-type hostReadOnlyCommandState struct {
-	gitParsed parsedGitHostReadOnlyArgs
+type hostReadOnlyCommandAnalysis interface {
+	hostReadOnlyCommandAnalysis()
 }
 
+type hostReadOnlyNoopAnalysis struct{}
+
+func (hostReadOnlyNoopAnalysis) hostReadOnlyCommandAnalysis() {}
+
+type gitHostReadOnlyAnalysis struct {
+	parsed parsedGitHostReadOnlyArgs
+}
+
+func (gitHostReadOnlyAnalysis) hostReadOnlyCommandAnalysis() {}
+
+type findHostReadOnlyAnalysis struct {
+	parsed parsedFindHostReadOnlyArgs
+}
+
+func (findHostReadOnlyAnalysis) hostReadOnlyCommandAnalysis() {}
+
 type hostReadOnlyCommandSpec struct {
-	validateAndPrepare func(args []string) (hostReadOnlyCommandState, error)
-	extractPathArgs    func(args []string, state hostReadOnlyCommandState) ([]string, error)
+	validateAndPrepare func(args []string) (hostReadOnlyCommandAnalysis, error)
+	extractPathArgs    func(args []string, analysis hostReadOnlyCommandAnalysis) ([]string, error)
 }
 
 var hostReadOnlyCommandSpecs = map[string]hostReadOnlyCommandSpec{
@@ -54,7 +70,6 @@ var hostReadOnlyCommandSpecs = map[string]hostReadOnlyCommandSpec{
 }
 
 type analyzedHostReadOnlyCommand struct {
-	state    hostReadOnlyCommandState
 	pathArgs []string
 }
 
@@ -68,21 +83,20 @@ func analyzeHostReadOnlyCommand(command string, args []string) (analyzedHostRead
 		return analyzedHostReadOnlyCommand{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: %s is not allowed in host_readonly", command))
 	}
 
-	state, err := spec.validateAndPrepare(args)
+	analysis, err := spec.validateAndPrepare(args)
 	if err != nil {
 		return analyzedHostReadOnlyCommand{}, err
 	}
 
 	pathArgs := []string(nil)
 	if spec.extractPathArgs != nil {
-		pathArgs, err = spec.extractPathArgs(args, state)
+		pathArgs, err = spec.extractPathArgs(args, analysis)
 		if err != nil {
 			return analyzedHostReadOnlyCommand{}, err
 		}
 	}
 
 	return analyzedHostReadOnlyCommand{
-		state:    state,
 		pathArgs: pathArgs,
 	}, nil
 }
@@ -92,11 +106,11 @@ func validateHostReadOnlyCommandPolicy(command string, args []string) error {
 	return err
 }
 
-func validateAndPrepareSEDHostReadOnlyArgs(args []string) (hostReadOnlyCommandState, error) {
+func validateAndPrepareSEDHostReadOnlyArgs(args []string) (hostReadOnlyCommandAnalysis, error) {
 	if len(args) == 0 || args[0] != "-n" {
-		return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError("blocked command: sed only supports '-n' in host_readonly")
+		return nil, newHostReadOnlyBlockedError("blocked command: sed only supports '-n' in host_readonly")
 	}
-	return hostReadOnlyCommandState{}, nil
+	return hostReadOnlyNoopAnalysis{}, nil
 }
 
 func isBlockedFlagArg(arg string, blocked []string) bool {
