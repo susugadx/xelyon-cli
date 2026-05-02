@@ -41,6 +41,36 @@ func TestProbeRunner_HostReadOnlyPassed(t *testing.T) {
 	}
 }
 
+func TestProbeRunner_HostReadOnlyPassed_GitGlobalOption(t *testing.T) {
+	repo := newProbeTestRepo(t)
+	runner := NewProbeRunner(repo)
+
+	result, err := runner.Run(context.Background(), ReviewProbeRequest{
+		ID:             "probe-pass-git-global-option",
+		Mode:           ReviewProbeHostReadOnly,
+		Timeout:        2 * time.Second,
+		MaxOutputBytes: 1024,
+		Commands: []ReviewProbeCommand{
+			{Command: "git", Args: []string{"--no-optional-locks", "status", "--short"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	}
+	if result.MutatedWorktree {
+		t.Fatalf("MutatedWorktree = true, want false")
+	}
+	if len(result.CommandResults) != 1 {
+		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
+	}
+	if result.CommandResults[0].Status != ReviewProbePassed {
+		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, ReviewProbePassed)
+	}
+}
+
 func TestProbeRunner_HostReadOnlyTimedOut(t *testing.T) {
 	repo := newProbeTestRepo(t)
 	runner := NewProbeRunner(repo)
@@ -269,6 +299,64 @@ func TestProbeRunner_HostReadOnlyBlockedCommandPath(t *testing.T) {
 	}
 	if !strings.Contains(result.Error, "command path is not allowed") {
 		t.Fatalf("Error = %q, want to contain %q", result.Error, "command path is not allowed")
+	}
+}
+
+func TestProbeRunner_HostReadOnlyBlockedArgIsNotExecuted(t *testing.T) {
+	repo := newProbeTestRepo(t)
+	runner := NewProbeRunner(repo)
+
+	result, err := runner.Run(context.Background(), ReviewProbeRequest{
+		ID:             "probe-blocked-arg",
+		Mode:           ReviewProbeHostReadOnly,
+		Timeout:        2 * time.Second,
+		MaxOutputBytes: 1024,
+		Commands: []ReviewProbeCommand{
+			{
+				Command: "git",
+				Args:    []string{"diff", "--ext-diff"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeBlocked)
+	}
+	if len(result.CommandResults) != 0 {
+		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
+	}
+	if !strings.Contains(result.Error, "blocked command") {
+		t.Fatalf("Error = %q, want to contain %q", result.Error, "blocked command")
+	}
+}
+
+func TestProbeRunner_HostReadOnlyArgsDoNotUseShell(t *testing.T) {
+	repo := newProbeTestRepo(t)
+	runner := NewProbeRunner(repo)
+	injectedPath := filepath.Join(repo, "shell_pwned")
+
+	result, err := runner.Run(context.Background(), ReviewProbeRequest{
+		ID:             "probe-no-shell",
+		Mode:           ReviewProbeHostReadOnly,
+		Timeout:        2 * time.Second,
+		MaxOutputBytes: 1024,
+		Commands: []ReviewProbeCommand{
+			{
+				Command: "git",
+				Args:    []string{"status", "--short; touch shell_pwned"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != ReviewProbeFailed {
+		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeFailed)
+	}
+	if _, err := os.Stat(injectedPath); !os.IsNotExist(err) {
+		t.Fatalf("shell-like argument should not create %s, stat error = %v", injectedPath, err)
 	}
 }
 
