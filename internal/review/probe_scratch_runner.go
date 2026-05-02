@@ -29,40 +29,32 @@ func newScratchOnlyExecutor(repoRoot string) *scratchOnlyExecutor {
 	}
 }
 
-func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) ReviewProbeResult {
-	result := ReviewProbeResult{
-		ID:     req.ID,
-		Mode:   req.Mode,
-		Status: ReviewProbePassed,
-	}
+func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) (result ReviewProbeResult) {
+	result = newScratchOnlyProbeResult(req)
 
 	scratchDir, err := e.mktemp("", "xelyon-review-scratch-*")
 	if err != nil {
-		result.Status = ReviewProbeBlocked
-		result.Error = fmt.Sprintf("failed to create scratch directory: %v", err)
+		blockScratchOnlyResult(&result, fmt.Sprintf("failed to create scratch directory: %v", err))
 		return result
 	}
 	defer func() {
-		_ = e.removeAll(scratchDir)
+		e.cleanupScratchDir(&result, scratchDir)
 	}()
 	if err := validateScratchDirOutsideRepo(e.repoRoot, scratchDir); err != nil {
-		result.Status = ReviewProbeBlocked
-		result.Error = err.Error()
+		blockScratchOnlyResult(&result, err.Error())
 		return result
 	}
 
 	normalized, err := e.validateRequest(req, scratchDir)
 	if err != nil {
-		result.Status = ReviewProbeBlocked
-		result.Error = err.Error()
+		blockScratchOnlyResult(&result, err.Error())
 		return result
 	}
 	result.ID = normalized.id
 	result.Mode = normalized.mode
 
 	if err := writeScratchFiles(normalized.files); err != nil {
-		result.Status = ReviewProbeBlocked
-		result.Error = newBlockedCommandErrorf("failed to write scratch files: %v", err).Error()
+		blockScratchOnlyResult(&result, newBlockedCommandErrorf("failed to write scratch files: %v", err).Error())
 		return result
 	}
 
@@ -87,6 +79,29 @@ func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) R
 
 	applyScratchOnlyMutationTransition(&result, diffWorktreeSnapshots(beforeSnapshot, afterSnapshot))
 	return result
+}
+
+func newScratchOnlyProbeResult(req ReviewProbeRequest) ReviewProbeResult {
+	return ReviewProbeResult{
+		ID:     req.ID,
+		Mode:   req.Mode,
+		Status: ReviewProbePassed,
+	}
+}
+
+func blockScratchOnlyResult(result *ReviewProbeResult, message string) {
+	result.Status = ReviewProbeBlocked
+	result.Error = message
+}
+
+func (e *scratchOnlyExecutor) cleanupScratchDir(result *ReviewProbeResult, scratchDir string) {
+	if err := e.removeAll(scratchDir); err != nil {
+		appendScratchCleanupError(result, scratchDir, err)
+	}
+}
+
+func appendScratchCleanupError(result *ReviewProbeResult, scratchDir string, err error) {
+	result.Error = appendError(result.Error, fmt.Sprintf("failed to remove scratch directory %q: %v", scratchDir, err))
 }
 
 func validateScratchDirOutsideRepo(repoRoot, scratchDir string) error {

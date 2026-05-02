@@ -345,3 +345,80 @@ func TestScratchOnlyExecutor_BlocksScratchDirInsideRepoAndCleansUp(t *testing.T)
 		t.Fatalf("scratch dir should be removed, stat error = %v", err)
 	}
 }
+
+func TestScratchOnlyExecutor_AppendsCleanupErrorOnPassedResult(t *testing.T) {
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	scratchDir := filepath.Join(t.TempDir(), "xelyon-review-scratch-passed")
+	if err := os.MkdirAll(scratchDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(scratchDir)
+	})
+
+	executor := newScratchOnlyExecutor(repo)
+	executor.mktemp = func(dir, pattern string) (string, error) {
+		return scratchDir, nil
+	}
+	executor.removeAll = func(path string) error {
+		return errors.New("cleanup failed")
+	}
+
+	result := executor.run(context.Background(), ReviewProbeRequest{
+		ID:   "scratch-cleanup-error-passed",
+		Mode: ReviewProbeScratchOnly,
+		Files: []ReviewProbeFile{
+			{Path: "check.txt", Content: "ok\n"},
+		},
+		Commands: []ReviewProbeCommand{
+			{Command: "cat", Args: []string{"check.txt"}},
+		},
+	})
+
+	if result.Status != ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	}
+	if !strings.Contains(result.Error, "failed to remove scratch directory") {
+		t.Fatalf("Error = %q, want to contain cleanup error", result.Error)
+	}
+}
+
+func TestScratchOnlyExecutor_AppendsCleanupErrorOnBlockedResult(t *testing.T) {
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	scratchDir := filepath.Join(repo, ".xelyon-review-scratch-blocked-cleanup")
+	if err := os.MkdirAll(scratchDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(scratchDir)
+	})
+
+	executor := newScratchOnlyExecutor(repo)
+	executor.mktemp = func(dir, pattern string) (string, error) {
+		return scratchDir, nil
+	}
+	executor.removeAll = func(path string) error {
+		return errors.New("cleanup failed")
+	}
+
+	result := executor.run(context.Background(), ReviewProbeRequest{
+		ID:   "scratch-cleanup-error-blocked",
+		Mode: ReviewProbeScratchOnly,
+		Commands: []ReviewProbeCommand{
+			{Command: "cat", Args: []string{"check.txt"}},
+		},
+	})
+
+	if result.Status != ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	}
+	if len(result.CommandResults) != 0 {
+		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
+	}
+	if !strings.Contains(result.Error, "outside repository root") {
+		t.Fatalf("Error = %q, want to contain blocked reason", result.Error)
+	}
+	if !strings.Contains(result.Error, "failed to remove scratch directory") {
+		t.Fatalf("Error = %q, want to contain cleanup error", result.Error)
+	}
+}
