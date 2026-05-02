@@ -1,59 +1,45 @@
 package review
 
 import (
-	"fmt"
 	"strings"
 )
 
-type hostReadOnlyCommandAnalysis interface {
-	hostReadOnlyCommandAnalysis()
+type hostReadOnlyCommandPolicyResult struct {
+	pathArgs []string
 }
 
-type hostReadOnlyNoopAnalysis struct{}
-
-func (hostReadOnlyNoopAnalysis) hostReadOnlyCommandAnalysis() {}
-
-type gitHostReadOnlyAnalysis struct {
-	parsed parsedGitHostReadOnlyArgs
+func newHostReadOnlyPolicyResult(pathArgs []string) hostReadOnlyCommandPolicyResult {
+	return hostReadOnlyCommandPolicyResult{
+		pathArgs: append([]string(nil), pathArgs...),
+	}
 }
 
-func (gitHostReadOnlyAnalysis) hostReadOnlyCommandAnalysis() {}
-
-type findHostReadOnlyAnalysis struct {
-	parsed parsedFindHostReadOnlyArgs
+func newHostReadOnlyNoPathPolicyResult() hostReadOnlyCommandPolicyResult {
+	return hostReadOnlyCommandPolicyResult{}
 }
-
-func (findHostReadOnlyAnalysis) hostReadOnlyCommandAnalysis() {}
 
 type hostReadOnlyCommandSpec struct {
-	validateAndPrepare func(args []string) (hostReadOnlyCommandAnalysis, error)
-	extractPathArgs    func(args []string, analysis hostReadOnlyCommandAnalysis) ([]string, error)
+	validateAndPrepare func(args []string) (hostReadOnlyCommandPolicyResult, error)
 }
 
 var hostReadOnlyCommandSpecs = map[string]hostReadOnlyCommandSpec{
 	"git": {
 		validateAndPrepare: validateAndPrepareGitHostReadOnlyArgs,
-		extractPathArgs:    extractGitHostReadOnlyPathArgs,
 	},
 	"rg": {
 		validateAndPrepare: validateAndPrepareRGHostReadOnlyArgs,
-		extractPathArgs:    extractArgsAfterDoubleDashFromCommandArgs,
 	},
 	"grep": {
 		validateAndPrepare: validateAndPrepareGrepHostReadOnlyArgs,
-		extractPathArgs:    extractArgsAfterDoubleDashFromCommandArgs,
 	},
 	"ls": {
 		validateAndPrepare: validateAndPrepareLSHostReadOnlyArgs,
-		extractPathArgs:    extractLSPathArgsFromCommandArgs,
 	},
 	"cat": {
 		validateAndPrepare: validateAndPrepareCatHostReadOnlyArgs,
-		extractPathArgs:    extractCatPathArgsFromCommandArgs,
 	},
 	"find": {
 		validateAndPrepare: validateAndPrepareFindHostReadOnlyArgs,
-		extractPathArgs:    extractFindPathRootsFromCommandArgs,
 	},
 	"sed": {
 		validateAndPrepare: validateAndPrepareSEDHostReadOnlyArgs,
@@ -75,29 +61,21 @@ type analyzedHostReadOnlyCommand struct {
 
 func analyzeHostReadOnlyCommand(command string, args []string) (analyzedHostReadOnlyCommand, error) {
 	if strings.ContainsAny(command, `/\`) {
-		return analyzedHostReadOnlyCommand{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: command path is not allowed in host_readonly: %s", command))
+		return analyzedHostReadOnlyCommand{}, newBlockedCommandErrorf("command path is not allowed in host_readonly: %s", command)
 	}
 
 	spec, ok := hostReadOnlyCommandSpecs[command]
 	if !ok {
-		return analyzedHostReadOnlyCommand{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: %s is not allowed in host_readonly", command))
+		return analyzedHostReadOnlyCommand{}, newBlockedCommandErrorf("%s is not allowed in host_readonly", command)
 	}
 
-	analysis, err := spec.validateAndPrepare(args)
+	policyResult, err := spec.validateAndPrepare(args)
 	if err != nil {
 		return analyzedHostReadOnlyCommand{}, err
 	}
 
-	pathArgs := []string(nil)
-	if spec.extractPathArgs != nil {
-		pathArgs, err = spec.extractPathArgs(args, analysis)
-		if err != nil {
-			return analyzedHostReadOnlyCommand{}, err
-		}
-	}
-
 	return analyzedHostReadOnlyCommand{
-		pathArgs: pathArgs,
+		pathArgs: policyResult.pathArgs,
 	}, nil
 }
 
@@ -106,11 +84,11 @@ func validateHostReadOnlyCommandPolicy(command string, args []string) error {
 	return err
 }
 
-func validateAndPrepareSEDHostReadOnlyArgs(args []string) (hostReadOnlyCommandAnalysis, error) {
+func validateAndPrepareSEDHostReadOnlyArgs(args []string) (hostReadOnlyCommandPolicyResult, error) {
 	if len(args) == 0 || args[0] != "-n" {
-		return nil, newHostReadOnlyBlockedError("blocked command: sed only supports '-n' in host_readonly")
+		return hostReadOnlyCommandPolicyResult{}, newBlockedCommandErrorf("sed only supports '-n' in host_readonly")
 	}
-	return hostReadOnlyNoopAnalysis{}, nil
+	return newHostReadOnlyNoPathPolicyResult(), nil
 }
 
 func isBlockedFlagArg(arg string, blocked []string) bool {

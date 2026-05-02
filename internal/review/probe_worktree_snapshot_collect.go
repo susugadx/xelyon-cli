@@ -3,25 +3,11 @@ package review
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"os/exec"
-	"sort"
 	"strings"
 )
-
-type worktreeSnapshot struct {
-	entries map[string]worktreeSnapshotEntry
-}
-
-type worktreeSnapshotEntry struct {
-	statusCode  string
-	fingerprint string
-}
 
 func captureWorktreeSnapshot(ctx context.Context, repoRoot string) (worktreeSnapshot, error) {
 	statusPorcelain, err := gitStatusPorcelainV1Z(ctx, repoRoot)
@@ -49,30 +35,6 @@ func captureWorktreeSnapshot(ctx context.Context, repoRoot string) (worktreeSnap
 	return worktreeSnapshot{
 		entries: entries,
 	}, nil
-}
-
-func diffWorktreeSnapshots(before, after worktreeSnapshot) []string {
-	changed := make(map[string]struct{}, len(before.entries)+len(after.entries))
-
-	for path, afterEntry := range after.entries {
-		beforeEntry, ok := before.entries[path]
-		if !ok || beforeEntry.statusCode != afterEntry.statusCode || beforeEntry.fingerprint != afterEntry.fingerprint {
-			changed[path] = struct{}{}
-		}
-	}
-
-	for path := range before.entries {
-		if _, ok := after.entries[path]; !ok {
-			changed[path] = struct{}{}
-		}
-	}
-
-	paths := make([]string, 0, len(changed))
-	for path := range changed {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	return paths
 }
 
 func gitStatusPorcelainV1Z(ctx context.Context, repoRoot string) ([]byte, error) {
@@ -129,46 +91,4 @@ func resolveSnapshotPath(repoRoot, path string) (string, error) {
 		return "", fmt.Errorf("invalid snapshot path %q: %v", path, err)
 	}
 	return resolved, nil
-}
-
-func buildWorktreeFingerprint(absPath string) (string, error) {
-	info, err := os.Lstat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "missing", nil
-		}
-		return "", err
-	}
-
-	mode := info.Mode()
-	switch {
-	case mode.IsRegular():
-		sum, err := hashFileSHA256(absPath)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("file:%s:%s", mode.String(), sum), nil
-	case mode&os.ModeSymlink != 0:
-		target, err := os.Readlink(absPath)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("symlink:%s:%s", mode.String(), target), nil
-	default:
-		return fmt.Sprintf("other:%s:%d", mode.String(), info.Size()), nil
-	}
-}
-
-func hashFileSHA256(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
 }

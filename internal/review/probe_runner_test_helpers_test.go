@@ -8,16 +8,74 @@ import (
 	"testing"
 )
 
-func newProbeTestRepo(t *testing.T) string {
+const (
+	probeTestModulePath = "example.com/reviewprobe"
+	probeTestGoVersion  = "1.26.0"
+)
+
+type probeTestRepoConfig struct {
+	includeLargeFile bool
+	includeKeepFile  bool
+}
+
+type probeTestRepoOption func(*probeTestRepoConfig)
+
+func withProbeTestRepoNoLargeFile() probeTestRepoOption {
+	return func(cfg *probeTestRepoConfig) {
+		cfg.includeLargeFile = false
+	}
+}
+
+func newProbeTestRepo(t *testing.T, opts ...probeTestRepoOption) string {
 	t.Helper()
 	requireGit(t)
 
+	cfg := probeTestRepoConfig{
+		includeLargeFile: true,
+		includeKeepFile:  true,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	repo := t.TempDir()
+	initProbeTestGitRepo(t, repo)
+	writeProbeTestScaffoldFiles(t, repo, cfg)
+	commitProbeTestRepo(t, repo)
+
+	return repo
+}
+
+func initProbeTestGitRepo(t *testing.T, repo string) {
+	t.Helper()
+
 	runGit(t, repo, "init")
 	runGit(t, repo, "config", "user.name", "Test User")
 	runGit(t, repo, "config", "user.email", "test@example.com")
+}
 
-	writeTestFile(t, filepath.Join(repo, "go.mod"), "module example.com/reviewprobe\n\ngo 1.26.0\n")
+func writeProbeTestScaffoldFiles(t *testing.T, repo string, cfg probeTestRepoConfig) {
+	t.Helper()
+
+	writeProbeTestGoMod(t, repo)
+	writeProbeTestPackageFiles(t, repo)
+	if cfg.includeLargeFile {
+		writeTestFile(t, filepath.Join(repo, "large.txt"), strings.Repeat("large-output-line\n", 128))
+	}
+	if cfg.includeKeepFile {
+		writeTestFile(t, filepath.Join(repo, "keep.txt"), "keep\n")
+	}
+}
+
+func writeProbeTestGoMod(t *testing.T, repo string) {
+	t.Helper()
+
+	writeTestFile(t, filepath.Join(repo, "go.mod"), "module "+probeTestModulePath+"\n\ngo "+probeTestGoVersion+"\n")
+}
+
+func writeProbeTestPackageFiles(t *testing.T, repo string) {
+	t.Helper()
+
 	writeTestFile(t, filepath.Join(repo, "probe", "probe.go"), "package probe\n\nfunc Add(a, b int) int { return a + b }\n")
 	writeTestFile(t, filepath.Join(repo, "probe", "probe_test.go"), `package probe
 
@@ -43,13 +101,13 @@ func TestProbeMutateDirtyExistingPath(t *testing.T) {
 	}
 }
 `)
-	writeTestFile(t, filepath.Join(repo, "large.txt"), strings.Repeat("large-output-line\n", 128))
-	writeTestFile(t, filepath.Join(repo, "keep.txt"), "keep\n")
+}
+
+func commitProbeTestRepo(t *testing.T, repo string) {
+	t.Helper()
 
 	runGit(t, repo, "add", ".")
 	runGit(t, repo, "commit", "-m", "initial")
-
-	return repo
 }
 
 func requireGit(t *testing.T) {

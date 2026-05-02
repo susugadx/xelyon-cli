@@ -1,7 +1,6 @@
 package review
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -33,27 +32,25 @@ var (
 	}
 )
 
-func validateAndPrepareGitHostReadOnlyArgs(args []string) (hostReadOnlyCommandAnalysis, error) {
+func validateAndPrepareGitHostReadOnlyArgs(args []string) (hostReadOnlyCommandPolicyResult, error) {
 	if len(args) == 0 {
-		return nil, newHostReadOnlyBlockedError("blocked command: git subcommand is required")
+		return hostReadOnlyCommandPolicyResult{}, newBlockedCommandErrorf("git subcommand is required")
 	}
 
 	parsed, err := parseGitHostReadOnlyArgs(args)
 	if err != nil {
-		return nil, err
+		return hostReadOnlyCommandPolicyResult{}, err
 	}
 
 	if err := validateGitHostReadOnlySubcommand(parsed.subcommand); err != nil {
-		return nil, err
+		return hostReadOnlyCommandPolicyResult{}, err
 	}
 
 	if err := validateGitHostReadOnlyPostSubcommandArgs(parsed.postSubcommandArg); err != nil {
-		return nil, err
+		return hostReadOnlyCommandPolicyResult{}, err
 	}
 
-	return gitHostReadOnlyAnalysis{
-		parsed: parsed,
-	}, nil
+	return newHostReadOnlyPolicyResult(extractArgsAfterDoubleDash(parsed.postSubcommandArg)), nil
 }
 
 func parseGitHostReadOnlyArgs(args []string) (parsedGitHostReadOnlyArgs, error) {
@@ -74,18 +71,18 @@ func findGitHostReadOnlySubcommandIndex(args []string) (int, error) {
 			return i, nil
 		}
 		if arg == "--" {
-			return -1, newHostReadOnlyBlockedError("blocked command: git global separator -- is not allowed before subcommand in host_readonly")
+			return -1, newBlockedCommandErrorf("git global separator -- is not allowed before subcommand in host_readonly")
 		}
 		if err := validateGitHostReadOnlyGlobalOption(arg); err != nil {
 			return -1, err
 		}
 	}
-	return -1, newHostReadOnlyBlockedError("blocked command: git subcommand is required")
+	return -1, newBlockedCommandErrorf("git subcommand is required")
 }
 
 func validateGitHostReadOnlySubcommand(subcommand string) error {
 	if _, ok := allowedGitHostReadOnlySubcommands[subcommand]; !ok {
-		return newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: git %s is not allowed in host_readonly", subcommand))
+		return newBlockedCommandErrorf("git %s is not allowed in host_readonly", subcommand)
 	}
 	return nil
 }
@@ -93,7 +90,7 @@ func validateGitHostReadOnlySubcommand(subcommand string) error {
 func validateGitHostReadOnlyPostSubcommandArgs(args []string) error {
 	for _, arg := range args {
 		if isBlockedFlagArg(arg, blockedGitHostReadOnlyPostSubcommandFlags) {
-			return newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: git argument %s is not allowed in host_readonly", arg))
+			return newBlockedCommandArgError("git", arg)
 		}
 	}
 	return nil
@@ -102,17 +99,17 @@ func validateGitHostReadOnlyPostSubcommandArgs(args []string) error {
 func validateGitHostReadOnlyGlobalOption(arg string) error {
 	switch {
 	case isGitConfigOverride(arg):
-		return newHostReadOnlyBlockedError("blocked command: git config override is not allowed in host_readonly")
+		return newBlockedCommandErrorf("git config override is not allowed in host_readonly")
 	case arg == "-p" || arg == "-P" || arg == "--paginate" || arg == "--no-pager":
-		return newHostReadOnlyBlockedError("blocked command: git pager option is not allowed in host_readonly")
+		return newBlockedCommandErrorf("git pager option is not allowed in host_readonly")
 	case arg == "--pager" || strings.HasPrefix(arg, "--pager="):
-		return newHostReadOnlyBlockedError("blocked command: git pager option is not allowed in host_readonly")
+		return newBlockedCommandErrorf("git pager option is not allowed in host_readonly")
 	case isGitPathOverride(arg):
-		return newHostReadOnlyBlockedError("blocked command: git path override is not allowed in host_readonly")
+		return newBlockedCommandErrorf("git path override is not allowed in host_readonly")
 	case isAllowedGitHostReadOnlyGlobalOption(arg):
 		return nil
 	default:
-		return newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: git global option %s is not allowed in host_readonly", arg))
+		return newBlockedCommandErrorf("git global option %s is not allowed in host_readonly", arg)
 	}
 }
 
@@ -147,12 +144,4 @@ func isGitPathOverride(arg string) bool {
 func isAllowedGitHostReadOnlyGlobalOption(arg string) bool {
 	_, ok := allowedGitHostReadOnlyGlobalOptions[arg]
 	return ok
-}
-
-func extractGitHostReadOnlyPathArgs(_ []string, analysis hostReadOnlyCommandAnalysis) ([]string, error) {
-	gitAnalysis, ok := analysis.(gitHostReadOnlyAnalysis)
-	if !ok {
-		return nil, newHostReadOnlyBlockedError("blocked command: internal policy error for git argument analysis")
-	}
-	return extractArgsAfterDoubleDash(gitAnalysis.parsed.postSubcommandArg), nil
 }

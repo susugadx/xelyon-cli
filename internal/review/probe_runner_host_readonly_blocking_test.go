@@ -10,7 +10,7 @@ import (
 )
 
 func TestProbeRunner_HostReadOnlyBlockedCommand(t *testing.T) {
-	repo := newProbeTestRepo(t)
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
 	runner := NewProbeRunner(repo)
 
 	keepFile := filepath.Join(repo, "keep.txt")
@@ -72,11 +72,18 @@ func TestProbeRunner_HostReadOnlyBlockedCasesAreNotExecuted(t *testing.T) {
 			args:          []string{"-L", "/etc", "-name", "hosts"},
 			errorContains: "find leading option -L",
 		},
+		{
+			name:          "blocked rg obvious outside path",
+			id:            "probe-blocked-rg-outside-path",
+			command:       "rg",
+			args:          []string{"pattern", "/etc"},
+			errorContains: `rg path "/etc" is outside repository root`,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := newProbeTestRepo(t)
+			repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
 			runner := NewProbeRunner(repo)
 
 			result, err := runner.Run(context.Background(), ReviewProbeRequest{

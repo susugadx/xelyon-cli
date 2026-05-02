@@ -31,6 +31,7 @@ func (r *ProbeRunner) Run(ctx context.Context, req ReviewProbeRequest) (ReviewPr
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	req = normalizeProbeRequestExecutionLimits(req)
 
 	repoRoot, err := r.resolveRepoRoot()
 	if err != nil {
@@ -41,21 +42,20 @@ func (r *ProbeRunner) Run(ctx context.Context, req ReviewProbeRequest) (ReviewPr
 	case ReviewProbeHostReadOnly:
 		return newHostReadOnlyExecutor(repoRoot).run(ctx, req), nil
 	case ReviewProbeScratchOnly, ReviewProbeRepoSandbox:
-		result := ReviewProbeResult{
-			ID:     req.ID,
-			Mode:   req.Mode,
-			Status: ReviewProbeBlocked,
-			Error:  fmt.Sprintf("probe mode %q is not implemented yet", req.Mode),
-		}
+		result := newBlockedModeResult(req, fmt.Sprintf("probe mode %q is not implemented yet", req.Mode))
 		return result, fmt.Errorf("%w: %s", ErrUnsupportedReviewProbeMode, req.Mode)
 	default:
-		result := ReviewProbeResult{
-			ID:     req.ID,
-			Mode:   req.Mode,
-			Status: ReviewProbeBlocked,
-			Error:  fmt.Sprintf("probe mode %q is not supported", req.Mode),
-		}
+		result := newBlockedModeResult(req, fmt.Sprintf("probe mode %q is not supported", req.Mode))
 		return result, fmt.Errorf("%w: %s", ErrUnsupportedReviewProbeMode, req.Mode)
+	}
+}
+
+func newBlockedModeResult(req ReviewProbeRequest, message string) ReviewProbeResult {
+	return ReviewProbeResult{
+		ID:     req.ID,
+		Mode:   req.Mode,
+		Status: ReviewProbeBlocked,
+		Error:  message,
 	}
 }
 

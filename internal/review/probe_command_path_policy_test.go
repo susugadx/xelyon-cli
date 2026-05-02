@@ -53,9 +53,19 @@ func TestHostReadOnlyCommandPathPolicy_AllowsRepoPaths(t *testing.T) {
 			args:    []string{"--", "internal", "-name", "*.go"},
 		},
 		{
+			name:    "find option separator with expression-like first path",
+			command: "find",
+			args:    []string{"--", "-L", "internal", "-name", "*.go"},
+		},
+		{
 			name:    "rg pattern only",
 			command: "rg",
 			args:    []string{"pattern"},
+		},
+		{
+			name:    "rg absolute repo-local path",
+			command: "rg",
+			args:    []string{"pattern", filepath.Join(repoRoot, "internal")},
 		},
 		{
 			name:    "rg with path after separator",
@@ -63,9 +73,49 @@ func TestHostReadOnlyCommandPathPolicy_AllowsRepoPaths(t *testing.T) {
 			args:    []string{"pattern", "--", "internal"},
 		},
 		{
+			name:    "rg with iglob and explicit pattern",
+			command: "rg",
+			args:    []string{"--iglob", "*.go", "-e", "pattern", filepath.Join(repoRoot, "internal")},
+		},
+		{
+			name:    "rg files mode with repo-local absolute path",
+			command: "rg",
+			args:    []string{"--files", filepath.Join(repoRoot, "internal")},
+		},
+		{
+			name:    "rg post-separator regexp-like token with repo-local path",
+			command: "rg",
+			args:    []string{"--", "--regexp", filepath.Join(repoRoot, "internal")},
+		},
+		{
 			name:    "grep with path after separator",
 			command: "grep",
 			args:    []string{"pattern", "--", "internal/file.go"},
+		},
+		{
+			name:    "grep recursive with explicit pattern after path",
+			command: "grep",
+			args:    []string{"-R", filepath.Join(repoRoot, "internal"), "-e", "pattern"},
+		},
+		{
+			name:    "grep directories recurse long option",
+			command: "grep",
+			args:    []string{"--directories=recurse", filepath.Join(repoRoot, "internal"), "pattern"},
+		},
+		{
+			name:    "grep directories recurse short attached option",
+			command: "grep",
+			args:    []string{"-drecurse", filepath.Join(repoRoot, "internal"), "pattern"},
+		},
+		{
+			name:    "grep absolute repo-local path",
+			command: "grep",
+			args:    []string{"pattern", filepath.Join(repoRoot, "internal", "file.go")},
+		},
+		{
+			name:    "grep post-separator short regexp-like token with repo-local path",
+			command: "grep",
+			args:    []string{"--", "-e", filepath.Join(repoRoot, "internal", "file.go")},
 		},
 		{
 			name:    "git diff with path after separator",
@@ -156,6 +206,11 @@ func TestHostReadOnlyCommandPathPolicy_BlocksOutsidePaths(t *testing.T) {
 			args:    []string{"--", "/etc", "-name", "hosts"},
 		},
 		{
+			name:    "find option separator expression-like first path with outside path",
+			command: "find",
+			args:    []string{"--", "-L", "/etc", "-name", "hosts"},
+		},
+		{
 			name:    "find parent outside",
 			command: "find",
 			args:    []string{"../outside", "-name", "*.go"},
@@ -167,9 +222,54 @@ func TestHostReadOnlyCommandPathPolicy_BlocksOutsidePaths(t *testing.T) {
 			args:    []string{"pattern", "--", "/etc"},
 		},
 		{
+			name:    "rg absolute outside without separator",
+			command: "rg",
+			args:    []string{"pattern", "/etc"},
+		},
+		{
+			name:    "rg iglob with explicit pattern outside path",
+			command: "rg",
+			args:    []string{"--iglob", "*.go", "-e", "pattern", "/etc"},
+		},
+		{
+			name:    "rg files mode outside path",
+			command: "rg",
+			args:    []string{"--files", "/etc"},
+		},
+		{
+			name:    "rg post-separator regexp-like token with outside path",
+			command: "rg",
+			args:    []string{"--", "--regexp", "/etc"},
+		},
+		{
 			name:    "grep absolute outside after separator",
 			command: "grep",
 			args:    []string{"pattern", "--", "/etc/passwd"},
+		},
+		{
+			name:    "grep absolute outside without separator",
+			command: "grep",
+			args:    []string{"pattern", "/etc/passwd"},
+		},
+		{
+			name:    "grep recursive with explicit pattern outside path",
+			command: "grep",
+			args:    []string{"-R", "/etc", "-e", "pattern"},
+		},
+		{
+			name:    "grep directories recurse long option outside path",
+			command: "grep",
+			args:    []string{"--directories=recurse", "/etc", "pattern"},
+		},
+		{
+			name:    "grep directories recurse short attached option outside path",
+			command: "grep",
+			args:    []string{"-drecurse", "/etc", "pattern"},
+		},
+		{
+			name:    "grep post-separator short regexp-like token with outside path",
+			command: "grep",
+			args:    []string{"--", "-e", "/etc"},
 		},
 		{
 			name:    "git diff absolute outside after separator",

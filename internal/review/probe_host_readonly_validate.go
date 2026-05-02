@@ -7,6 +7,8 @@ import (
 )
 
 func (e *hostReadOnlyExecutor) validateRequest(req ReviewProbeRequest) (hostReadOnlyRequest, error) {
+	req = normalizeProbeRequestExecutionLimits(req)
+
 	if req.Mode != ReviewProbeHostReadOnly {
 		return hostReadOnlyRequest{}, fmt.Errorf("host_readonly runner received mode %q", req.Mode)
 	}
@@ -15,15 +17,6 @@ func (e *hostReadOnlyExecutor) validateRequest(req ReviewProbeRequest) (hostRead
 	}
 	if len(req.Commands) == 0 {
 		return hostReadOnlyRequest{}, fmt.Errorf("probe commands are required")
-	}
-
-	timeout := req.Timeout
-	if timeout <= 0 {
-		timeout = defaultReviewProbeTimeout
-	}
-	maxOutput := req.MaxOutputBytes
-	if maxOutput <= 0 {
-		maxOutput = defaultReviewProbeMaxOutputBytes
 	}
 
 	commands := make([]hostReadOnlyCommand, 0, len(req.Commands))
@@ -38,8 +31,8 @@ func (e *hostReadOnlyExecutor) validateRequest(req ReviewProbeRequest) (hostRead
 	return hostReadOnlyRequest{
 		id:             req.ID,
 		mode:           req.Mode,
-		timeout:        timeout,
-		maxOutputBytes: maxOutput,
+		timeout:        req.Timeout,
+		maxOutputBytes: req.MaxOutputBytes,
 		commands:       commands,
 	}, nil
 }
@@ -47,7 +40,7 @@ func (e *hostReadOnlyExecutor) validateRequest(req ReviewProbeRequest) (hostRead
 func (e *hostReadOnlyExecutor) buildHostReadOnlyCommandPlan(cmd ReviewProbeCommand) (hostReadOnlyCommand, error) {
 	commandName := strings.TrimSpace(cmd.Command)
 	if commandName == "" {
-		return hostReadOnlyCommand{}, newHostReadOnlyBlockedError("blocked command: command is empty")
+		return hostReadOnlyCommand{}, newBlockedCommandErrorf("command is empty")
 	}
 
 	workDir, err := resolveHostReadOnlyWorkDir(e.repoRoot, cmd.WorkDir)
@@ -55,11 +48,7 @@ func (e *hostReadOnlyExecutor) buildHostReadOnlyCommandPlan(cmd ReviewProbeComma
 		return hostReadOnlyCommand{}, err
 	}
 
-	analyzed, err := analyzeHostReadOnlyCommand(commandName, cmd.Args)
-	if err != nil {
-		return hostReadOnlyCommand{}, err
-	}
-	if err := validateHostReadOnlyCommandPathArgs(e.repoRoot, workDir, commandName, analyzed.pathArgs); err != nil {
+	if _, err := analyzeAndValidateHostReadOnlyCommandPaths(e.repoRoot, workDir, commandName, cmd.Args); err != nil {
 		return hostReadOnlyCommand{}, err
 	}
 
@@ -79,9 +68,9 @@ func resolveHostReadOnlyWorkDir(repoRoot, workDir string) (string, error) {
 	resolved, err := resolvePathWithinRepoRoot(repoRoot, repoRoot, trimmed)
 	if err != nil {
 		if errors.Is(err, ErrHostReadOnlyOutsideRepoPath) {
-			return "", newHostReadOnlyOutsideRepoPathError(fmt.Sprintf("blocked workdir %q: outside repository root", workDir))
+			return "", newHostReadOnlyOutsideRepoPathError(fmt.Sprintf("blocked command: workdir %q is outside repository root", workDir))
 		}
-		return "", newHostReadOnlyBlockedError(fmt.Sprintf("blocked workdir %q: %v", workDir, err))
+		return "", newBlockedCommandErrorf("workdir %q is invalid: %v", workDir, err)
 	}
 	return resolved, nil
 }

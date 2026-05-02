@@ -1,7 +1,5 @@
 package review
 
-import "fmt"
-
 var (
 	allowedGoHostReadOnlySubcommands = map[string]struct{}{
 		"test":  {},
@@ -25,18 +23,18 @@ var (
 	}
 )
 
-func validateAndPrepareGoHostReadOnlyArgs(args []string) (hostReadOnlyCommandAnalysis, error) {
+func validateAndPrepareGoHostReadOnlyArgs(args []string) (hostReadOnlyCommandPolicyResult, error) {
 	if len(args) == 0 {
-		return nil, newHostReadOnlyBlockedError("blocked command: go subcommand is required")
+		return hostReadOnlyCommandPolicyResult{}, newBlockedCommandErrorf("go subcommand is required")
 	}
 	if _, ok := allowedGoHostReadOnlySubcommands[args[0]]; !ok {
-		return nil, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: go %s is not allowed in host_readonly", args[0]))
+		return hostReadOnlyCommandPolicyResult{}, newBlockedCommandErrorf("go %s is not allowed in host_readonly", args[0])
 	}
 
 	for _, arg := range args[1:] {
 		if isBlockedFlagArg(arg, blockedGoHostReadOnlyFlags) {
-			return nil, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: go argument %s is not allowed in host_readonly", arg))
+			return hostReadOnlyCommandPolicyResult{}, newBlockedCommandArgError("go", arg)
 		}
 	}
-	return hostReadOnlyNoopAnalysis{}, nil
+	return newHostReadOnlyNoPathPolicyResult(), nil
 }

@@ -1,7 +1,6 @@
 package review
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -24,23 +23,41 @@ var blockedFindLeadingGlobalOptions = []string{
 }
 
 type parsedFindHostReadOnlyArgs struct {
-	pathRoots []string
+	pathRoots          []string
+	firstExpressionArg string
 }
 
-func validateAndPrepareFindHostReadOnlyArgs(args []string) (hostReadOnlyCommandAnalysis, error) {
+func validateAndPrepareFindHostReadOnlyArgs(args []string) (hostReadOnlyCommandPolicyResult, error) {
 	parsed, err := parseFindHostReadOnlyArgs(args)
 	if err != nil {
-		return nil, err
+		return hostReadOnlyCommandPolicyResult{}, err
 	}
+	if err := validateFindLeadingGlobalOptions(parsed); err != nil {
+		return hostReadOnlyCommandPolicyResult{}, err
+	}
+	if err := validateBlockedFindActionFlags(args); err != nil {
+		return hostReadOnlyCommandPolicyResult{}, err
+	}
+	return newHostReadOnlyPolicyResult(parsed.pathRoots), nil
+}
 
+func validateBlockedFindActionFlags(args []string) error {
 	for _, arg := range args {
 		if isBlockedFlagArg(arg, blockedFindFlags) {
-			return nil, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: find argument %s is not allowed in host_readonly", arg))
+			return newBlockedCommandArgError("find", arg)
 		}
 	}
-	return findHostReadOnlyAnalysis{
-		parsed: parsed,
-	}, nil
+	return nil
+}
+
+func validateFindLeadingGlobalOptions(parsed parsedFindHostReadOnlyArgs) error {
+	if parsed.firstExpressionArg == "" {
+		return nil
+	}
+	if isBlockedFindLeadingGlobalOption(parsed.firstExpressionArg) {
+		return newBlockedCommandErrorf("find leading option %s is not allowed in host_readonly", parsed.firstExpressionArg)
+	}
+	return nil
 }
 
 func parseFindHostReadOnlyArgs(args []string) (parsedFindHostReadOnlyArgs, error) {
@@ -48,32 +65,47 @@ func parseFindHostReadOnlyArgs(args []string) (parsedFindHostReadOnlyArgs, error
 		return parsedFindHostReadOnlyArgs{pathRoots: []string{"."}}, nil
 	}
 
-	start := 0
-	if args[0] == "--" {
-		start = 1
-	}
-
-	pathRoots := make([]string, 0, len(args)-start)
-	for i := start; i < len(args); i++ {
-		arg := args[i]
-
-		if isFindExpressionStartArg(arg) {
-			if isBlockedFindLeadingGlobalOption(arg) {
-				return parsedFindHostReadOnlyArgs{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: find leading option %s is not allowed in host_readonly", arg))
-			}
-			break
-		}
-
-		pathRoots = append(pathRoots, arg)
-	}
+	start, treatFirstExpressionAsPathRoot := resolveFindParseStart(args)
+	pathRoots, firstExpressionArg := collectFindPathRootsAndExpression(args[start:], treatFirstExpressionAsPathRoot)
 
 	if len(pathRoots) == 0 {
 		pathRoots = append(pathRoots, ".")
 	}
 
 	return parsedFindHostReadOnlyArgs{
-		pathRoots: pathRoots,
+		pathRoots:          pathRoots,
+		firstExpressionArg: firstExpressionArg,
 	}, nil
+}
+
+func resolveFindParseStart(args []string) (start int, treatFirstExpressionAsPathRoot bool) {
+	if len(args) == 0 || args[0] != "--" {
+		return 0, false
+	}
+	if len(args) > 1 && isFindExpressionStartArg(args[1]) {
+		// `find -- -name ...` のように `--` 直後が式開始トークン風なら、
+		// 先頭1つは path root として解釈して outside path 検証対象に残す。
+		return 1, true
+	}
+	return 1, false
+}
+
+func collectFindPathRootsAndExpression(args []string, treatFirstExpressionAsPathRoot bool) (pathRoots []string, firstExpressionArg string) {
+	pathRoots = make([]string, 0, len(args))
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if isFindExpressionStartArg(arg) {
+			if treatFirstExpressionAsPathRoot && len(pathRoots) == 0 {
+				pathRoots = append(pathRoots, arg)
+				continue
+			}
+			return pathRoots, arg
+		}
+		pathRoots = append(pathRoots, arg)
+	}
+
+	return pathRoots, ""
 }
 
 func isFindExpressionStartArg(arg string) bool {
