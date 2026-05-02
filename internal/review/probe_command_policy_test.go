@@ -1,6 +1,7 @@
 package review
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -134,6 +135,9 @@ func TestHostReadOnlyCommandPolicy_BlocksDangerousCommandsAndArgs(t *testing.T) 
 			err := validateHostReadOnlyCommandPolicy(tt.command, tt.args)
 			if err == nil {
 				t.Fatalf("validateHostReadOnlyCommandPolicy(%q, %#v) error = nil", tt.command, tt.args)
+			}
+			if !errors.Is(err, ErrHostReadOnlyBlocked) {
+				t.Fatalf("validateHostReadOnlyCommandPolicy(%q, %#v) error = %v, want ErrHostReadOnlyBlocked", tt.command, tt.args, err)
 			}
 			if !strings.Contains(err.Error(), tt.errorContains) {
 				t.Fatalf("validateHostReadOnlyCommandPolicy(%q, %#v) error = %q, want to contain %q", tt.command, tt.args, err.Error(), tt.errorContains)

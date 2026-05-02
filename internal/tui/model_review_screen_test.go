@@ -30,12 +30,12 @@ func TestReviewCommand_OpensPresetScreen(t *testing.T) {
 	}
 }
 
-func TestReviewScreen_UncommittedPresetCreatesRequest(t *testing.T) {
+func TestReviewScreen_CurrentChangesPresetCreatesRequest(t *testing.T) {
 	m := newReviewTestModel()
 
 	m = sendReviewKey(m, "enter")
 
-	assertReviewRequest(t, m, review.TargetUncommitted, "")
+	assertReviewRequest(t, m, review.TargetCurrentChanges, "")
 	if m.reviewScreen.mode != reviewScreenSubmitted {
 		t.Fatalf("review mode = %d, want submitted", m.reviewScreen.mode)
 	}
@@ -56,7 +56,7 @@ func TestReviewScreen_CustomInstructionsCreatesRequest(t *testing.T) {
 	m = sendReviewText(m, "focus on regressions")
 	m = sendReviewKey(m, "enter")
 
-	assertReviewRequest(t, m, review.TargetUncommitted, "focus on regressions")
+	assertReviewRequest(t, m, review.TargetCurrentChanges, "focus on regressions")
 	if m.reviewScreen.mode != reviewScreenSubmitted {
 		t.Fatalf("review mode = %d, want submitted", m.reviewScreen.mode)
 	}

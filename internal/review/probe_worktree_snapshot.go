@@ -5,11 +5,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -121,15 +121,14 @@ func isRenameOrCopyStatus(statusCode string) bool {
 }
 
 func resolveSnapshotPath(repoRoot, path string) (string, error) {
-	candidate := filepath.Clean(filepath.Join(repoRoot, path))
-	rel, err := filepath.Rel(repoRoot, candidate)
+	resolved, err := resolvePathWithinRepoRoot(repoRoot, repoRoot, path)
 	if err != nil {
-		return "", fmt.Errorf("invalid snapshot path %q: %w", path, err)
+		if errors.Is(err, ErrHostReadOnlyOutsideRepoPath) {
+			return "", fmt.Errorf("invalid snapshot path %q: outside repository root", path)
+		}
+		return "", fmt.Errorf("invalid snapshot path %q: %v", path, err)
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("invalid snapshot path %q: outside repository root", path)
-	}
-	return candidate, nil
+	return resolved, nil
 }
 
 func buildWorktreeFingerprint(absPath string) (string, error) {

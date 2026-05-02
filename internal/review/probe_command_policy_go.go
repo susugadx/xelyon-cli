@@ -25,18 +25,18 @@ var (
 	}
 )
 
-func validateGoHostReadOnlyArgs(args []string) error {
+func validateAndPrepareGoHostReadOnlyArgs(args []string) (hostReadOnlyCommandState, error) {
 	if len(args) == 0 {
-		return fmt.Errorf("blocked command: go subcommand is required")
+		return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError("blocked command: go subcommand is required")
 	}
 	if _, ok := allowedGoHostReadOnlySubcommands[args[0]]; !ok {
-		return fmt.Errorf("blocked command: go %s is not allowed in host_readonly", args[0])
+		return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: go %s is not allowed in host_readonly", args[0]))
 	}
 
 	for _, arg := range args[1:] {
 		if isBlockedFlagArg(arg, blockedGoHostReadOnlyFlags) {
-			return fmt.Errorf("blocked command: go argument %s is not allowed in host_readonly", arg)
+			return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: go argument %s is not allowed in host_readonly", arg))
 		}
 	}
-	return nil
+	return hostReadOnlyCommandState{}, nil
 }

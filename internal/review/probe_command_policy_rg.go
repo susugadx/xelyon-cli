@@ -7,11 +7,11 @@ var blockedRGHostReadOnlyFlags = []string{
 	"--pre-glob",
 }
 
-func validateRGHostReadOnlyArgs(args []string) error {
+func validateAndPrepareRGHostReadOnlyArgs(args []string) (hostReadOnlyCommandState, error) {
 	for _, arg := range args {
 		if isBlockedFlagArg(arg, blockedRGHostReadOnlyFlags) {
-			return fmt.Errorf("blocked command: rg argument %s is not allowed in host_readonly", arg)
+			return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: rg argument %s is not allowed in host_readonly", arg))
 		}
 	}
-	return nil
+	return hostReadOnlyCommandState{}, nil
 }

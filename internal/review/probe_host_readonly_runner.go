@@ -5,10 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -115,57 +112,6 @@ func applyHostReadOnlyMutationTransition(result *ReviewProbeResult, mutatedFiles
 	result.Error = appendError(result.Error, "probe command changed the working tree")
 }
 
-func (e *hostReadOnlyExecutor) validateRequest(req ReviewProbeRequest) (hostReadOnlyRequest, error) {
-	if req.Mode != ReviewProbeHostReadOnly {
-		return hostReadOnlyRequest{}, fmt.Errorf("host_readonly runner received mode %q", req.Mode)
-	}
-	if len(req.Files) > 0 {
-		return hostReadOnlyRequest{}, fmt.Errorf("host_readonly does not allow probe files")
-	}
-	if len(req.Commands) == 0 {
-		return hostReadOnlyRequest{}, fmt.Errorf("probe commands are required")
-	}
-
-	timeout := req.Timeout
-	if timeout <= 0 {
-		timeout = defaultReviewProbeTimeout
-	}
-	maxOutput := req.MaxOutputBytes
-	if maxOutput <= 0 {
-		maxOutput = defaultReviewProbeMaxOutputBytes
-	}
-
-	commands := make([]hostReadOnlyCommand, 0, len(req.Commands))
-	for _, cmd := range req.Commands {
-		commandName := strings.TrimSpace(cmd.Command)
-		if commandName == "" {
-			return hostReadOnlyRequest{}, fmt.Errorf("probe command is empty")
-		}
-		if err := validateHostReadOnlyCommandPolicy(commandName, cmd.Args); err != nil {
-			return hostReadOnlyRequest{}, err
-		}
-
-		workDir, err := resolveHostReadOnlyWorkDir(e.repoRoot, cmd.WorkDir)
-		if err != nil {
-			return hostReadOnlyRequest{}, err
-		}
-
-		commands = append(commands, hostReadOnlyCommand{
-			command: commandName,
-			args:    append([]string(nil), cmd.Args...),
-			workDir: workDir,
-		})
-	}
-
-	return hostReadOnlyRequest{
-		id:             req.ID,
-		mode:           req.Mode,
-		timeout:        timeout,
-		maxOutputBytes: maxOutput,
-		commands:       commands,
-	}, nil
-}
-
 func executeHostReadOnlyCommand(ctx context.Context, cmd hostReadOnlyCommand, timeout time.Duration, maxOutputBytes int64) ReviewProbeCommandResult {
 	result := ReviewProbeCommandResult{
 		Command:  cmd.command,
@@ -213,28 +159,6 @@ func executeHostReadOnlyCommand(ctx context.Context, cmd hostReadOnlyCommand, ti
 	result.Status = ReviewProbeFailed
 	result.Error = err.Error()
 	return result
-}
-
-func resolveHostReadOnlyWorkDir(repoRoot, workDir string) (string, error) {
-	base := repoRoot
-	if strings.TrimSpace(workDir) == "" {
-		return base, nil
-	}
-
-	candidate := workDir
-	if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(base, candidate)
-	}
-	candidate = filepath.Clean(candidate)
-
-	rel, err := filepath.Rel(base, candidate)
-	if err != nil {
-		return "", fmt.Errorf("blocked workdir %q: %w", workDir, err)
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("blocked workdir %q: outside repository root", workDir)
-	}
-	return candidate, nil
 }
 
 type cappedOutput struct {

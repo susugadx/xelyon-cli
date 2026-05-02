@@ -39,7 +39,7 @@ func (rs *reviewScreen) handlePresetKey(msg tea.KeyMsg) (reviewCommand, tea.Cmd)
 	case isEnterKey(msg):
 		switch rs.presetIndex {
 		case 0:
-			rs.submitUncommitted("")
+			rs.submitCurrentChanges("")
 			return reviewCommandSubmit, nil
 		case 1:
 			rs.openCustomInput()
@@ -57,7 +57,7 @@ func (rs *reviewScreen) handleCustomKey(msg tea.KeyMsg) (reviewCommand, tea.Cmd)
 		return reviewCommandNone, nil
 
 	case isEnterKey(msg):
-		rs.submitUncommitted(rs.customInput.Value())
+		rs.submitCurrentChanges(rs.customInput.Value())
 		return reviewCommandSubmit, nil
 
 	default:

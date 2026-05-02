@@ -45,8 +45,8 @@ func newReviewScreen() *reviewScreen {
 	}
 }
 
-func (rs *reviewScreen) submitUncommitted(customInstructions string) {
-	req := review.NewUncommittedRequest(customInstructions)
+func (rs *reviewScreen) submitCurrentChanges(customInstructions string) {
+	req := review.NewCurrentChangesRequest(customInstructions)
 	rs.request = &req
 	rs.mode = reviewScreenSubmitted
 	rs.customInput.Blur()
@@ -64,7 +64,7 @@ func (rs *reviewScreen) backToPreset() {
 
 func reviewPresetLabels() []string {
 	return []string{
-		"Review uncommitted changes",
+		"Review current changes",
 		"Custom review instructions",
 	}
 }

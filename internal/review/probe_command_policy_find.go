@@ -14,11 +14,11 @@ var blockedFindFlags = []string{
 	"-fls",
 }
 
-func validateFindHostReadOnlyArgs(args []string) error {
+func validateAndPrepareFindHostReadOnlyArgs(args []string) (hostReadOnlyCommandState, error) {
 	for _, arg := range args {
 		if isBlockedFlagArg(arg, blockedFindFlags) {
-			return fmt.Errorf("blocked command: find argument %s is not allowed in host_readonly", arg)
+			return hostReadOnlyCommandState{}, newHostReadOnlyBlockedError(fmt.Sprintf("blocked command: find argument %s is not allowed in host_readonly", arg))
 		}
 	}
-	return nil
+	return hostReadOnlyCommandState{}, nil
 }
