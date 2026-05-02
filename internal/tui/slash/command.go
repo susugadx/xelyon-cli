@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 )
 
 // AliasResolver は command 名を alias 解決する関数を表す。
@@ -14,7 +15,8 @@ type Command struct {
 	Input        string
 	Payload      string
 	ResolvedName string
-	ArgCount     int
+	Args         []string
+	ParseStatus  commandruntime.SplitStatus
 }
 
 // TrimmedInput は入力を trim し、slash command かどうかを返す。
@@ -25,10 +27,12 @@ func TrimmedInput(value string) (string, bool) {
 
 // NewCommand は command 入力と payload から Command を構築する。
 func NewCommand(input, payload string, resolve AliasResolver) Command {
-	cmdParts := strings.Fields(input)
+	cmdParts, parseStatus := commandruntime.SplitStrict(input)
 	resolvedCommand := input
+	var args []string
 	if len(cmdParts) > 0 {
 		resolvedCommand = cmdParts[0]
+		args = append([]string(nil), cmdParts[1:]...)
 		if resolve != nil {
 			resolvedCommand = resolve(cmdParts[0])
 		}
@@ -37,13 +41,19 @@ func NewCommand(input, payload string, resolve AliasResolver) Command {
 		Input:        input,
 		Payload:      payload,
 		ResolvedName: resolvedCommand,
-		ArgCount:     len(cmdParts),
+		Args:         args,
+		ParseStatus:  parseStatus,
 	}
+}
+
+// ParseOK は command parse が成功したかを返す。
+func (c Command) ParseOK() bool {
+	return c.ParseStatus.IsOK()
 }
 
 // IsBare は command が指定名だけで引数を持たないかを返す。
 func (c Command) IsBare(name string) bool {
-	return c.ResolvedName == name && c.ArgCount == 1
+	return c.ResolvedName == name && len(c.Args) == 0
 }
 
 // Matches は command の alias 解決後の名前が指定名と一致するかを返す。

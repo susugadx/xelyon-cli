@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -34,12 +36,19 @@ func TestNormalizePastedPathToken_FileURIWindowsDriveConvertsInWSL(t *testing.T)
 		runCommandOutputTUI = prevRunOutput
 	})
 
-	got, ok := normalizePastedPathToken("file:///C:/Users/me/file.txt")
-	if !ok {
-		t.Fatal("normalizePastedPathToken() = !ok, want ok")
+	result := normalizePastedPathToken("file:///C:/Users/me/file.txt")
+	if !result.isOK() {
+		t.Fatalf("normalizePastedPathToken() status = %v, want ok", result.status)
 	}
-	if got != "/mnt/c/Users/me/file.txt" {
-		t.Fatalf("normalizePastedPathToken() = %q, want %q", got, "/mnt/c/Users/me/file.txt")
+	if got := result.path; got != "/mnt/c/Users/me/file.txt" {
+		t.Fatalf("normalizePastedPathToken() path = %q, want %q", got, "/mnt/c/Users/me/file.txt")
+	}
+}
+
+func TestNormalizePastedPathToken_InvalidFileURIStatus(t *testing.T) {
+	result := normalizePastedPathToken("file://%zz")
+	if result.status != normalizePastedPathInvalidFileURI {
+		t.Fatalf("normalizePastedPathToken() status = %v, want %v", result.status, normalizePastedPathInvalidFileURI)
 	}
 }
 
@@ -50,5 +59,101 @@ func TestDecodeFileURIPath_FileHostDriveKeepsDrivePrefix(t *testing.T) {
 	}
 	if got != "C:/Users/me/file.txt" {
 		t.Fatalf("decodeFileURIPath() = %q, want %q", got, "C:/Users/me/file.txt")
+	}
+}
+
+func TestParseDroppedPaths_NotPath(t *testing.T) {
+	result := parseDroppedPaths("this is plain text")
+	if result.kind != droppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	}
+}
+
+func TestParseDroppedPaths_URLFallsBackToText(t *testing.T) {
+	result := parseDroppedPaths("https://example.com/docs")
+	if result.kind != droppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	}
+}
+
+func TestParseDroppedPaths_SlashContainingTextFallsBackToText(t *testing.T) {
+	result := parseDroppedPaths("a/b testing")
+	if result.kind != droppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	}
+}
+
+func TestParseDroppedPaths_Limit(t *testing.T) {
+	dir := t.TempDir()
+	paths := make([]string, 0, maxDroppedAttachments+1)
+	for i := 0; i < maxDroppedAttachments+1; i++ {
+		paths = append(paths, writeTempFile(t, dir, fmt.Sprintf("f%02d.txt", i), []byte("x")))
+	}
+
+	result := parseDroppedPaths(strings.Join(paths, "\n"))
+	if result.kind != droppedPathParseLimit {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseLimit", result.kind)
+	}
+}
+
+func TestParseDroppedPaths_InvalidMalformedFileURI(t *testing.T) {
+	result := parseDroppedPaths("file://%zz")
+	if result.kind != droppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	}
+}
+
+func TestParseDroppedPaths_InvalidUnterminatedQuote(t *testing.T) {
+	result := parseDroppedPaths(`"/tmp/file.txt`)
+	if result.kind != droppedPathParseInvalid {
+		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseInvalid", result.kind)
+	}
+}
+
+func TestDroppedPathLines_TrimsAndSkipsEmptyLines(t *testing.T) {
+	lines := droppedPathLines(" \r\n  /tmp/a  \r\n\t\r\n /tmp/b\t\n")
+	if got, want := len(lines), 2; got != want {
+		t.Fatalf("len(droppedPathLines()) = %d, want %d", got, want)
+	}
+	if lines[0] != "/tmp/a" || lines[1] != "/tmp/b" {
+		t.Fatalf("droppedPathLines() = %#v, want [/tmp/a /tmp/b]", lines)
+	}
+}
+
+func TestParseDroppedPaths_BareRelativeFilenameRecognized(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd() error = %v", err)
+	}
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("os.Chdir(%q) error = %v", dir, err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+
+	tests := []struct {
+		name      string
+		fileName  string
+		pasteText string
+	}{
+		{name: "with extension", fileName: "notes.txt", pasteText: "notes.txt"},
+		{name: "without extension", fileName: "Makefile", pasteText: "Makefile"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTempFile(t, dir, tc.fileName, []byte("hello"))
+			result := parseDroppedPaths(tc.pasteText)
+			if result.kind != droppedPathParseReady {
+				t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseReady", result.kind)
+			}
+			if got, want := len(result.paths), 1; got != want {
+				t.Fatalf("len(parseDroppedPaths().paths) = %d, want %d", got, want)
+			}
+			if result.paths[0] != path {
+				t.Fatalf("parseDroppedPaths().paths[0] = %q, want %q", result.paths[0], path)
+			}
+		})
 	}
 }

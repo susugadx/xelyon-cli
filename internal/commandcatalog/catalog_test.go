@@ -1,6 +1,7 @@
 package commandcatalog
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -152,12 +153,152 @@ func TestTUILocalCommandOwnership(t *testing.T) {
 		})
 	}
 
-	configCmd, ok := Find("/config")
-	if !ok {
-		t.Fatal("Find(/config) ok = false, want true")
+	for _, name := range []string{"/config", "/copy", "/exit"} {
+		t.Run(name, func(t *testing.T) {
+			cmd, ok := Find(name)
+			if !ok {
+				t.Fatalf("Find(%q) ok = false, want true", name)
+			}
+			if cmd.EffectiveOwner() != CommandOwnerAgent {
+				t.Fatalf("%s owner = %q, want %q", name, cmd.EffectiveOwner(), CommandOwnerAgent)
+			}
+			if !cmd.SupportsSurface(CommandSurfaceTUI) {
+				t.Fatalf("%s should support TUI surface", name)
+			}
+			if !cmd.SupportsSurface(CommandSurfaceClassic) {
+				t.Fatalf("%s should support classic surface", name)
+			}
+			if cmd.EffectiveTUILocalAction() == TUILocalActionNone {
+				t.Fatalf("%s should declare TUI local action", name)
+			}
+		})
 	}
-	if configCmd.EffectiveOwner() != CommandOwnerAgent {
-		t.Fatalf("/config owner = %q, want %q", configCmd.EffectiveOwner(), CommandOwnerAgent)
+}
+
+func TestTUILocalArgPolicyAndAction(t *testing.T) {
+	tests := []struct {
+		name           string
+		withArgsInput  string
+		wantWithArgsOK bool
+		wantAction     TUILocalAction
+		wantOwner      CommandOwner
+	}{
+		{
+			name:           "/attach",
+			withArgsInput:  "/attach ./notes.txt",
+			wantWithArgsOK: true,
+			wantAction:     TUILocalActionManageAttachments,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/detach",
+			withArgsInput:  "/detach 1",
+			wantWithArgsOK: true,
+			wantAction:     TUILocalActionManageAttachments,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/detach-all",
+			withArgsInput:  "/detach-all now",
+			wantWithArgsOK: true,
+			wantAction:     TUILocalActionManageAttachments,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/review",
+			withArgsInput:  "/review staged",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionOpenReview,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/project",
+			withArgsInput:  "/project rules",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionOpenProject,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/config",
+			withArgsInput:  "/config show",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionOpenConfig,
+			wantOwner:      CommandOwnerAgent,
+		},
+		{
+			name:           "/copy",
+			withArgsInput:  "/copy code",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionCopyMouseSelection,
+			wantOwner:      CommandOwnerAgent,
+		},
+		{
+			name:           "/exit",
+			withArgsInput:  "/exit now",
+			wantWithArgsOK: true,
+			wantAction:     TUILocalActionQuit,
+			wantOwner:      CommandOwnerAgent,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, ok := Find(tt.name)
+			if !ok {
+				t.Fatalf("Find(%q) ok = false, want true", tt.name)
+			}
+			if cmd.EffectiveOwner() != tt.wantOwner {
+				t.Fatalf("%s owner = %q, want %q", tt.name, cmd.EffectiveOwner(), tt.wantOwner)
+			}
+			if cmd.EffectiveTUILocalAction() != tt.wantAction {
+				t.Fatalf("%s local action = %q, want %q", tt.name, cmd.EffectiveTUILocalAction(), tt.wantAction)
+			}
+			withArgs := strings.Fields(tt.withArgsInput)
+			if got := cmd.AcceptsTUILocalArgs(withArgs[1:]); got != tt.wantWithArgsOK {
+				t.Fatalf("%s AcceptsTUILocalArgs(%q) = %v, want %v", tt.name, tt.withArgsInput, got, tt.wantWithArgsOK)
+			}
+			if tt.name == "/copy" {
+				if cmd.AcceptsTUILocalContext(TUILocalContext{HasMouseSelection: false}) {
+					t.Fatalf("%s should require mouse selection", tt.name)
+				}
+				if !cmd.AcceptsTUILocalContext(TUILocalContext{HasMouseSelection: true}) {
+					t.Fatalf("%s should accept context with mouse selection", tt.name)
+				}
+			}
+		})
+	}
+}
+
+func TestAttachDescriptionMentionsCombinedLimit(t *testing.T) {
+	cmd, ok := Find("/attach")
+	if !ok {
+		t.Fatal("Find(/attach) ok = false, want true")
+	}
+	if !strings.Contains(cmd.Description, "up to 12 attachments per draft") {
+		t.Fatalf("/attach description should mention limit, got %q", cmd.Description)
+	}
+}
+
+func TestAttachLimitDocumentationConsistency(t *testing.T) {
+	paths := []string{
+		"../../README.md",
+		"../../docs/commands.md",
+		"../../docs/usage.md",
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile(%q) error = %v", path, err)
+			}
+			text := string(body)
+			if !strings.Contains(text, "/attach") {
+				t.Fatalf("%s should mention /attach", path)
+			}
+			if !strings.Contains(text, "最大12件") && !strings.Contains(text, "最大 12 件") {
+				t.Fatalf("%s should mention attachment limit (12)", path)
+			}
+		})
 	}
 }
 
@@ -322,7 +463,7 @@ func TestDefaultCommandMetadata(t *testing.T) {
 		t.Fatalf("/copy category = %q, want session", cmd.EffectiveCategory())
 	}
 	if cmd.EffectiveOwner() != CommandOwnerAgent {
-		t.Fatalf("/copy owner = %q, want agent", cmd.EffectiveOwner())
+		t.Fatalf("/copy owner = %q, want %q", cmd.EffectiveOwner(), CommandOwnerAgent)
 	}
 
 	empty := CommandInfo{}
@@ -366,7 +507,10 @@ func TestClassicSurfaceIsExplicitStableFallbackOrClassicOnly(t *testing.T) {
 			continue
 		}
 		if cmd.EffectiveOwner() == CommandOwnerTUIRouter {
-			t.Fatalf("%s is TUI-router owned but supports classic fallback", cmd.Name)
+			if cmd.EffectiveTUILocalAction() == TUILocalActionNone {
+				t.Fatalf("%s is TUI-router owned without TUI local action", cmd.Name)
+			}
+			continue
 		}
 		if cmd.EffectiveLifecycle() != CommandLifecycleStable {
 			t.Fatalf("%s supports classic with lifecycle %q, want stable", cmd.Name, cmd.EffectiveLifecycle())

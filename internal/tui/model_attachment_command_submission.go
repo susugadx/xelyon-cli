@@ -2,12 +2,10 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
@@ -29,52 +27,23 @@ func (m Model) handleAttachmentCommandSubmission(command slash.Command) (tea.Mod
 }
 
 func (m *Model) handleAttachCommand(command slash.Command) {
-	args, ok := parseCommandArgs(command)
-	if !ok || len(args) != 1 {
+	if len(command.Args) != 1 {
 		m.setTransientStatus("Usage: /attach <path>")
 		return
 	}
 
-	path, ok := normalizePastedPathToken(args[0])
-	if !ok {
-		m.setTransientStatus("Invalid path: " + args[0])
+	normalized := normalizePastedPathToken(command.Args[0])
+	if !normalized.isOK() {
+		m.setTransientStatus("Invalid path: " + command.Args[0])
 		return
 	}
 
-	info, err := os.Stat(path)
-	if err != nil {
-		m.setTransientStatus("Attach failed: " + err.Error())
-		return
-	}
-	if info.IsDir() {
-		m.setTransientStatus("Attach failed: directories are not supported")
-		return
-	}
-
-	kind := composerAttachmentFile
-	if isImageAttachmentPath(path) {
-		kind = composerAttachmentImage
-	}
-	att := composerAttachment{
-		Kind:   kind,
-		Source: composerAttachmentSourceCommand,
-		Path:   path,
-		Size:   info.Size(),
-	}
-	if !m.appendAttachment(att) {
-		m.setTransientStatus("Already attached: " + att.basename())
-		return
-	}
-
-	m.syncComposerLayout()
-	m.refreshSlashSuggestions()
-	m.chromeDirty = true
-	m.setTransientStatus(fmt.Sprintf("Attached %s %s (#%d)", att.kindLabel(), att.basename(), len(m.attachments)))
+	added := m.addAttachmentFromPath(normalized.path, composerAttachmentSourceCommand)
+	m.presentAttachmentAddResult(added, attachmentAddDisplayCommand, "")
 }
 
 func (m *Model) handleDetachCommand(command slash.Command) {
-	args, ok := parseCommandArgs(command)
-	if !ok || len(args) != 1 {
+	if len(command.Args) != 1 {
 		m.setTransientStatus("Usage: /detach <index>")
 		return
 	}
@@ -83,9 +52,9 @@ func (m *Model) handleDetachCommand(command slash.Command) {
 		return
 	}
 
-	index, ok := parseAttachmentIndex(args[0], len(m.attachments))
+	index, ok := parseAttachmentIndex(command.Args[0], len(m.attachments))
 	if !ok {
-		m.setTransientStatus("Invalid index: " + args[0])
+		m.setTransientStatus("Invalid index: " + command.Args[0])
 		return
 	}
 
@@ -99,8 +68,7 @@ func (m *Model) handleDetachCommand(command slash.Command) {
 }
 
 func (m *Model) handleDetachAllCommand(command slash.Command) {
-	args, ok := parseCommandArgs(command)
-	if !ok || len(args) != 0 {
+	if len(command.Args) != 0 {
 		m.setTransientStatus("Usage: /detach-all")
 		return
 	}
@@ -112,14 +80,6 @@ func (m *Model) handleDetachAllCommand(command slash.Command) {
 	}
 
 	m.setTransientStatus(fmt.Sprintf("Detached %d attachment(s)", count))
-}
-
-func parseCommandArgs(command slash.Command) ([]string, bool) {
-	parts := commandruntime.Split(command.Input)
-	if len(parts) == 0 {
-		return nil, false
-	}
-	return parts[1:], true
 }
 
 func parseAttachmentIndex(raw string, max int) (int, bool) {

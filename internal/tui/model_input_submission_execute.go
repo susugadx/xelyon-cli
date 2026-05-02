@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/tui/commandrouter"
+	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
 func (m *Model) resetComposerInput() {
@@ -34,30 +35,21 @@ func (m Model) submitComposerSubmission(sub composerSubmission) (tea.Model, tea.
 
 func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.Cmd) {
 	command := m.resolveComposerCommand(sub)
+	action := commandrouter.Route(command, commandrouter.Context{HasMouseSelection: m.hasActiveMouseSelection()})
 
-	switch commandrouter.Route(command, commandrouter.Context{HasMouseSelection: m.hasActiveMouseSelection()}) {
-	case commandrouter.ActionCopyMouseSelection:
-		m.recordHandledCommand(command.Input)
-		m.copyMouseSelection()
-		return m, nil
-	case commandrouter.ActionManageAttachments:
-		return m.handleAttachmentCommandSubmission(command)
-	case commandrouter.ActionQuit:
-		m.recordHandledCommand(command.Input)
-		return m.beginQuit()
-	case commandrouter.ActionOpenConfig:
-		m.recordHandledCommand(command.Input)
-		updated, cmd := m.openConfigScreen()
-		return updated, cmd
-	case commandrouter.ActionOpenReview:
-		m.recordHandledCommand(command.Input)
-		updated, cmd := m.openReviewScreen()
-		return updated, cmd
-	case commandrouter.ActionOpenProject:
-		m.recordHandledCommand(command.Input)
-		updated, cmd := m.openProjectScreen()
-		return updated, cmd
-	case commandrouter.ActionDispatchAgent:
+	if !command.ParseOK() {
+		if _, isLocal := localCommandActionHandlers[action]; isLocal {
+			m.recordHandledCommand(command.Input)
+			m.setTransientStatus("Invalid command syntax: " + command.ParseStatus.ErrorSummary())
+			return m, nil
+		}
+		return m.commandFallbackToChat(sub, command.Payload)
+	}
+
+	if handler, ok := localCommandActionHandlers[action]; ok {
+		return handler(m, command, sub)
+	}
+	if action == commandrouter.ActionDispatchAgent {
 		if m.commands.HandleCommand(command.Input) {
 			m.recordHandledCommand(command.Input)
 			m.statusLine = m.conversation.GetStatusLine()
@@ -65,7 +57,39 @@ func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.C
 		}
 	}
 
-	return m.handleChatSubmission(sub.fallbackToChat(command.Payload))
+	return m.commandFallbackToChat(sub, command.Payload)
+}
+
+type localCommandActionHandler func(Model, slash.Command, composerSubmission) (tea.Model, tea.Cmd)
+
+var localCommandActionHandlers = map[commandrouter.Action]localCommandActionHandler{
+	commandrouter.ActionCopyMouseSelection: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		m.copyMouseSelection()
+		return m, nil
+	},
+	commandrouter.ActionManageAttachments: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		return m.handleAttachmentCommandSubmission(command)
+	},
+	commandrouter.ActionQuit: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		return m.beginQuit()
+	},
+	commandrouter.ActionOpenConfig: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		updated, cmd := m.openConfigScreen()
+		return updated, cmd
+	},
+	commandrouter.ActionOpenReview: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		updated, cmd := m.openReviewScreen()
+		return updated, cmd
+	},
+	commandrouter.ActionOpenProject: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		updated, cmd := m.openProjectScreen()
+		return updated, cmd
+	},
 }
 
 func (m Model) handleChatSubmission(sub composerSubmission) (tea.Model, tea.Cmd) {
@@ -88,10 +112,14 @@ func (m Model) sendChat(req chatDispatchRequest) tea.Cmd {
 	}
 }
 
-func (sub composerSubmission) fallbackToChat(payload string) composerSubmission {
+func (m Model) commandFallbackToChat(sub composerSubmission, payload string) (tea.Model, tea.Cmd) {
+	return m.handleChatSubmission(sub.fallbackToChatExcludingAttachments(payload))
+}
+
+func (sub composerSubmission) fallbackToChatExcludingAttachments(payload string) composerSubmission {
 	return composerSubmission{
 		kind:        composerSubmissionChat,
 		payload:     payload,
-		attachments: sub.attachments,
+		attachments: nil,
 	}
 }

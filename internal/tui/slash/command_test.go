@@ -1,6 +1,10 @@
 package slash
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/commandruntime"
+)
 
 func TestTrimmedInput(t *testing.T) {
 	input, ok := TrimmedInput("  /help  ")
@@ -36,6 +40,15 @@ func TestCommandAliasAndBareMatching(t *testing.T) {
 	if cmd.Payload != "payload" {
 		t.Fatalf("Payload = %q, want %q", cmd.Payload, "payload")
 	}
+	if !cmd.ParseOK() {
+		t.Fatal("ParseOK = false, want true")
+	}
+	if got := cmd.ParseStatus; got != commandruntime.SplitStatusOK {
+		t.Fatalf("ParseStatus = %v, want %v", got, commandruntime.SplitStatusOK)
+	}
+	if got := len(cmd.Args); got != 0 {
+		t.Fatalf("len(Args) = %d, want 0", got)
+	}
 }
 
 func TestCommandWithArgsIsNotBare(t *testing.T) {
@@ -45,6 +58,50 @@ func TestCommandWithArgsIsNotBare(t *testing.T) {
 	}
 	if !cmd.Matches("/quit") {
 		t.Fatal("nil resolver should use the command token as resolved name")
+	}
+	if !cmd.ParseOK() {
+		t.Fatal("ParseOK = false, want true")
+	}
+	if got := cmd.ParseStatus; got != commandruntime.SplitStatusOK {
+		t.Fatalf("ParseStatus = %v, want %v", got, commandruntime.SplitStatusOK)
+	}
+	if got := len(cmd.Args); got != 1 || cmd.Args[0] != "now" {
+		t.Fatalf("Args = %#v, want [now]", cmd.Args)
+	}
+}
+
+func TestCommandParsesQuotedArgs(t *testing.T) {
+	cmd := NewCommand(`/attach "screenshots/error shot.png"`, "payload", nil)
+	if !cmd.Matches("/attach") {
+		t.Fatal("quoted arg command should match /attach")
+	}
+	if !cmd.ParseOK() {
+		t.Fatal("ParseOK = false, want true")
+	}
+	if got := cmd.ParseStatus; got != commandruntime.SplitStatusOK {
+		t.Fatalf("ParseStatus = %v, want %v", got, commandruntime.SplitStatusOK)
+	}
+	if got := len(cmd.Args); got != 1 {
+		t.Fatalf("len(Args) = %d, want 1", got)
+	}
+	if got := cmd.Args[0]; got != "screenshots/error shot.png" {
+		t.Fatalf("Args[0] = %q, want %q", got, "screenshots/error shot.png")
+	}
+}
+
+func TestCommandUnterminatedQuoteMarkedInvalid(t *testing.T) {
+	cmd := NewCommand(`/attach "foo`, "payload", nil)
+	if cmd.ParseOK() {
+		t.Fatal("ParseOK = true, want false")
+	}
+	if got := cmd.ParseStatus; got != commandruntime.SplitStatusUnterminatedQuote {
+		t.Fatalf("ParseStatus = %v, want %v", got, commandruntime.SplitStatusUnterminatedQuote)
+	}
+	if !cmd.Matches("/attach") {
+		t.Fatal("unterminated quote should still preserve command token")
+	}
+	if got := len(cmd.Args); got != 1 || cmd.Args[0] != "foo" {
+		t.Fatalf("Args = %#v, want [foo]", cmd.Args)
 	}
 }
 

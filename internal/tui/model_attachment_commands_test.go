@@ -2,8 +2,10 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -62,6 +64,102 @@ func TestComposer_AttachCommandInvalidUsageDoesNotFallbackToChat(t *testing.T) {
 	}
 }
 
+func TestComposer_AttachCommandRespectsAttachmentLimit(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	dir := t.TempDir()
+
+	fillDroppedFileAttachments(t, &m, dir, maxComposerAttachments)
+
+	extra := writeTempFile(t, dir, "extra.txt", []byte("x"))
+	m.textInput.SetValue("/attach " + extra)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("/attach limit error should be handled locally, got cmd=%v", cmd)
+	}
+	if got := len(m.attachments); got != maxComposerAttachments {
+		t.Fatalf("attachments length = %d, want %d", got, maxComposerAttachments)
+	}
+	if got := agent.lastChatInput(); got != "" {
+		t.Fatalf("lastChatInput() = %q, want empty", got)
+	}
+	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", maxComposerAttachments)
+	assertTransientStatus(t, m, wantStatus)
+}
+
+func TestComposer_CommandWithUnterminatedQuoteShowsSyntaxError(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.textInput.SetValue(`/attach "broken`)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("unterminated quote should be handled locally, got cmd=%v", cmd)
+	}
+	if got := len(m.attachments); got != 0 {
+		t.Fatalf("attachments length = %d, want 0", got)
+	}
+	if got := agent.lastChatInput(); got != "" {
+		t.Fatalf("lastChatInput() = %q, want empty", got)
+	}
+	assertTransientStatus(t, m, "Invalid command syntax: unmatched quote")
+}
+
+func TestComposer_UnhandledCommandWithUnterminatedQuoteFallsBackToChat(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.textInput.SetValue(`/note "unfinished`)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd == nil {
+		t.Fatal("unhandled malformed slash input should return chat send command")
+	}
+	_ = cmd()
+
+	if got := agent.lastChatInput(); got != `/note "unfinished` {
+		t.Fatalf("lastChatInput() = %q, want %q", got, `/note "unfinished`)
+	}
+}
+
+func TestComposer_UnhandledMalformedSlashFallbackExcludesAttachments(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	dir := t.TempDir()
+	filePath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
+	if ok := m.appendAttachment(composerAttachment{
+		Kind:   composerAttachmentFile,
+		Source: composerAttachmentSourceDroppedPath,
+		Path:   filePath,
+		Size:   5,
+	}); !ok {
+		t.Fatal("appendAttachment() = false, want true")
+	}
+	m.textInput.SetValue(`/note "unfinished`)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd == nil {
+		t.Fatal("unhandled malformed slash input should return chat send command")
+	}
+	_ = cmd()
+
+	if got := agent.lastChatInput(); got != `/note "unfinished` {
+		t.Fatalf("lastChatInput() = %q, want %q", got, `/note "unfinished`)
+	}
+	if strings.Contains(agent.lastChatInput(), "Attached context:") {
+		t.Fatalf("lastChatInput() should exclude attachment context, got %q", agent.lastChatInput())
+	}
+}
+
 func TestComposer_DetachCommandRemovesAttachmentByIndex(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
@@ -114,9 +212,7 @@ func TestComposer_DetachCommandInvalidUsageDoesNotFallbackToChat(t *testing.T) {
 	if got := agent.lastChatInput(); got != "" {
 		t.Fatalf("lastChatInput() = %q, want empty", got)
 	}
-	if got := m.transientStatus; got != "Usage: /detach <index>" {
-		t.Fatalf("transientStatus = %q, want usage message", got)
-	}
+	assertTransientStatus(t, m, "Usage: /detach <index>")
 }
 
 func TestComposer_DetachAllCommandRemovesClipboardTempAttachment(t *testing.T) {
@@ -186,7 +282,5 @@ func TestComposer_DetachAllCommandInvalidUsageDoesNotFallbackToChat(t *testing.T
 	if got := agent.lastChatInput(); got != "" {
 		t.Fatalf("lastChatInput() = %q, want empty", got)
 	}
-	if got := m.transientStatus; got != "Usage: /detach-all" {
-		t.Fatalf("transientStatus = %q, want usage message", got)
-	}
+	assertTransientStatus(t, m, "Usage: /detach-all")
 }

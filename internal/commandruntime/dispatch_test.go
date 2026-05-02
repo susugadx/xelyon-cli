@@ -15,6 +15,72 @@ func TestParse_ResolvesAliasesAndQuotes(t *testing.T) {
 	}
 }
 
+func TestSplitStrict_SupportsWhitespaceDelimiters(t *testing.T) {
+	parts, status := SplitStrict("/attach\t\"a b\"\nextra")
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 3 {
+		t.Fatalf("len(parts) = %d, want 3", len(parts))
+	}
+	if parts[0] != "/attach" || parts[1] != "a b" || parts[2] != "extra" {
+		t.Fatalf("parts = %#v", parts)
+	}
+}
+
+func TestSplitStrict_UnterminatedQuote(t *testing.T) {
+	parts, status := SplitStrict(`/attach "foo`)
+	if status != SplitStatusUnterminatedQuote {
+		t.Fatalf("SplitStrict() status = %v, want %v", status, SplitStatusUnterminatedQuote)
+	}
+	if len(parts) != 2 || parts[0] != "/attach" || parts[1] != "foo" {
+		t.Fatalf("parts = %#v, want [/attach foo]", parts)
+	}
+}
+
+func TestSplitStrict_QuotedWindowsPathKeepsBackslashes(t *testing.T) {
+	input := `/attach "C:\Users\me\file with space.txt"`
+	parts, status := SplitStrict(input)
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 2 {
+		t.Fatalf("len(parts) = %d, want 2", len(parts))
+	}
+	if parts[1] != `C:\Users\me\file with space.txt` {
+		t.Fatalf("parts[1] = %q, want %q", parts[1], `C:\Users\me\file with space.txt`)
+	}
+}
+
+func TestSplitStrict_QuotedWindowsUNCPathKeepsLeadingDoubleBackslash(t *testing.T) {
+	input := `/attach "\\server\share\file name.txt"`
+	parts, status := SplitStrict(input)
+	if !status.IsOK() {
+		t.Fatalf("SplitStrict() status = %v, want ok", status)
+	}
+	if len(parts) != 2 {
+		t.Fatalf("len(parts) = %d, want 2", len(parts))
+	}
+	if parts[1] != `\\server\share\file name.txt` {
+		t.Fatalf("parts[1] = %q, want %q", parts[1], `\\server\share\file name.txt`)
+	}
+}
+
+func TestParse_UnterminatedQuoteReturnsFalse(t *testing.T) {
+	if _, ok := Parse(`/attach "foo`, nil); ok {
+		t.Fatal("Parse() ok = true, want false")
+	}
+}
+
+func TestSplitStatus_ErrorSummary(t *testing.T) {
+	if got := SplitStatusUnterminatedQuote.ErrorSummary(); got != "unmatched quote" {
+		t.Fatalf("SplitStatusUnterminatedQuote.ErrorSummary() = %q, want %q", got, "unmatched quote")
+	}
+	if got := SplitStatus(999).ErrorSummary(); got != "invalid token" {
+		t.Fatalf("SplitStatus(999).ErrorSummary() = %q, want %q", got, "invalid token")
+	}
+}
+
 func TestIsNonInteractiveConfigSubcommand(t *testing.T) {
 	if !IsNonInteractiveConfigSubcommand([]string{"show"}) {
 		t.Fatal("show should be non-interactive")

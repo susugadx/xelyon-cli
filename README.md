@@ -93,7 +93,7 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 > WSL等で問題がある場合: `XELYON_BRACKETED_PASTE=0` で無効化可能
 
 ### 📎 TUI添付（ファイル/画像）
-- **ドラッグ&ドロップ添付**: ファイルパスの貼り付けを自動判定して添付（最大12件）
+- **添付（ファイル/画像）**: `/attach`・ドラッグ&ドロップ・`Ctrl+V` 画像の全経路で、1ドラフト最大12件
 - **コマンド操作**: `/attach <path>` `/detach <index>` `/detach-all`
 - **Ctrl+V画像貼り付け（Windows/WSL）**: クリップボードテキストが空なら画像貼り付けを試行
 - **安全な一時ファイル管理**: クリップボード画像の一時ファイルは送信/削除/終了でcleanupし、古い残骸は起動時に自動GC
@@ -211,7 +211,7 @@ xelyon
 /model      # 現在のモデル確認/切り替え
 /use gemini # プロバイダー切り替え
 /think high # Extended Thinking 有効化
-/attach ./notes.txt # 現在の入力ドラフトへ添付
+/attach ./notes.txt # 現在の入力ドラフトへ添付（1ドラフト最大12件）
 /detach 1   # 指定添付を外す
 /config     # global config を対話式で編集
 /project    # xelyon.yaml を対話式で編集

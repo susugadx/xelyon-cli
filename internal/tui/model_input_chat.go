@@ -68,22 +68,9 @@ func (m *Model) tryAttachClipboardImage() bool {
 		return false
 	}
 
-	attachment := composerAttachment{
-		Kind:   composerAttachmentImage,
-		Source: composerAttachmentSourceClipboardImage,
-		Path:   path,
-	}
 	m.switchToComposerInput()
-	if m.appendAttachment(attachment) {
-		m.setTransientStatus("Attached screenshot from clipboard")
-	} else {
-		// 追加できなかった場合は temp resource を残さない。
-		cleanupTemporaryAttachment(attachment)
-		m.setTransientStatus("Screenshot already attached")
-	}
-	m.syncComposerLayout()
-	m.refreshSlashSuggestions()
-	m.chromeDirty = true
+	added := m.addAttachmentFromPath(path, composerAttachmentSourceClipboardImage)
+	m.presentAttachmentAddResult(added, attachmentAddDisplayClipboardImage, path)
 	return true
 }
 

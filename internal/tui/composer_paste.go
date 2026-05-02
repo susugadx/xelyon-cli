@@ -7,9 +7,8 @@ func (m *Model) handleComposerPaste(content string) {
 	if content == "" {
 		return
 	}
-	if attached := m.tryAttachDroppedPaths(content); attached {
-		m.syncComposerLayout()
-		m.refreshSlashSuggestions()
+	attachResult := m.tryAttachDroppedPaths(content)
+	if !attachResult.shouldFallbackToText() {
 		return
 	}
 	if tuicomposer.ShouldFoldPasteBlock(content) {

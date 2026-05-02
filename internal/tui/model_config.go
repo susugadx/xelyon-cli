@@ -13,20 +13,15 @@ func (m Model) openConfigScreen() (tea.Model, tea.Cmd) {
 		m.appendSystemInfo("Failed to load config: " + err.Error())
 		return m, nil
 	}
-	m.screen = screenConfig
+	m.activateModalScreen(screenConfig)
 	m.configScreen = newConfigScreen(cfg)
-	m.navigationMode = false
-	m.chromeDirty = true
 	return m, nil
 }
 
 // closeConfigScreen は config screen を閉じて chat に戻る。
 func (m Model) closeConfigScreen() (tea.Model, tea.Cmd) {
-	m.screen = screenChat
 	m.configScreen = nil
-	m.refreshStatusLine()
-	m.applyChatWindowSize(m.width, m.height)
-	m.textInput.Focus()
+	m.deactivateModalScreen(false)
 	return m, nil
 }
 
@@ -72,14 +67,8 @@ func (m Model) updateConfigScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	default:
-		// config screen が関知しないメッセージ（StreamTextMsg, AppendMessageMsg,
-		// AgentDoneMsg, spinner.TickMsg 等）は chat 側の状態更新に通す。
-		// 一時的に screenChat に戻して処理し、screenConfig に復帰する。
-		m.screen = screenChat
-		updated, cmd := m.Update(msg)
-		m = updated.(Model)
-		m.screen = screenConfig
-		return m, cmd
+		// config screen が関知しないメッセージは chat 側更新に通す。
+		return m.forwardMessageToChatFromModal(msg, screenConfig)
 	}
 }
 func (m Model) configLayout() configLayout {

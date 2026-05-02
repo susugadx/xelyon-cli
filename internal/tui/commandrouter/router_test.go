@@ -112,20 +112,25 @@ func TestRoute_CatalogTUILocalOwnerMatrix(t *testing.T) {
 		}
 
 		t.Run(cmdInfo.Name, func(t *testing.T) {
+			ctx := Context{}
+			if cmdInfo.AcceptsTUILocalContext(commandcatalog.TUILocalContext{HasMouseSelection: true}) &&
+				!cmdInfo.AcceptsTUILocalContext(commandcatalog.TUILocalContext{HasMouseSelection: false}) {
+				ctx.HasMouseSelection = true
+			}
+
 			bare := slash.NewCommand(cmdInfo.Name, cmdInfo.Name, nil)
-			if got := Route(bare, Context{}); got == ActionDispatchAgent {
+			if got := Route(bare, ctx); got == ActionDispatchAgent {
 				t.Fatalf("Route(%q) = ActionDispatchAgent, want TUI-local action", cmdInfo.Name)
 			}
 
 			withArgsInput := cmdInfo.Name + " extra"
 			withArgs := slash.NewCommand(withArgsInput, withArgsInput, nil)
-			gotWithArgs := Route(withArgs, Context{})
-			switch cmdInfo.Name {
-			case "/attach", "/detach", "/detach-all":
-				if gotWithArgs != ActionManageAttachments {
-					t.Fatalf("Route(%q) = %v, want ActionManageAttachments", withArgsInput, gotWithArgs)
+			gotWithArgs := Route(withArgs, ctx)
+			if cmdInfo.AcceptsTUILocalArgs(withArgs.Args) {
+				if gotWithArgs == ActionDispatchAgent {
+					t.Fatalf("Route(%q) = ActionDispatchAgent, want TUI-local action", withArgsInput)
 				}
-			default:
+			} else {
 				if gotWithArgs != ActionDispatchAgent {
 					t.Fatalf("Route(%q) = %v, want ActionDispatchAgent", withArgsInput, gotWithArgs)
 				}

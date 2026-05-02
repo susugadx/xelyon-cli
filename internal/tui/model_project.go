@@ -12,23 +12,16 @@ func (m Model) openProjectScreen() (tea.Model, tea.Cmd) {
 		m.appendSystemInfo("Failed to load project config: " + err.Error())
 		return m, nil
 	}
-	m.screen = screenProject
+	m.activateModalScreen(screenProject)
 	m.installProjectScreen(pc)
 	m.projectScreen.normalizeSize(m.width, m.height)
-	m.navigationMode = false
-	m.chromeDirty = true
 	return m, nil
 }
 
 // closeProjectScreen は project screen を閉じて chat に戻る。
 func (m Model) closeProjectScreen() (tea.Model, tea.Cmd) {
-	m.screen = screenChat
 	m.projectScreen = nil
-	m.refreshStatusLine()
-	m.applyChatWindowSize(m.width, m.height)
-	m.textInput.Focus()
-	m.rebuildChrome()
-	m.chromeDirty = false
+	m.deactivateModalScreen(true)
 	return m, nil
 }
 
@@ -91,11 +84,7 @@ func (m Model) updateProjectScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	default:
-		m.screen = screenChat
-		updated, cmd := m.Update(msg)
-		m = updated.(Model)
-		m.screen = screenProject
-		return m, cmd
+		return m.forwardMessageToChatFromModal(msg, screenProject)
 	}
 }
 

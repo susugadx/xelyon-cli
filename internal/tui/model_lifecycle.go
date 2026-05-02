@@ -15,7 +15,7 @@ import (
 // footerHeight は下部 chrome（入力欄+ステータスバー）の合計高さを返す。
 // 将来の compact footer や compose mode では動的に切り替えられる。
 func (m Model) footerHeight() int {
-	return statusBarHeight + inputHeight + len(m.visibleSlashSuggestionRows()) + len(m.visibleAttachments()) + len(m.visibleComposerRows())
+	return statusBarHeight + inputHeight + len(m.visibleSlashSuggestionRows()) + m.visibleAttachmentCount() + len(m.visibleComposerRows())
 }
 
 // NewModel は TUI Model を作成する。

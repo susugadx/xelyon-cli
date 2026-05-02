@@ -78,3 +78,19 @@ func TestComposer_ClearComposerDoesNotRemoveDroppedClipboardNamedFile(t *testing
 		t.Fatalf("os.Stat(%q) error = %v, want nil", filePath, err)
 	}
 }
+
+func TestComposer_AppendAttachmentRejectsWhenLimitReached(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	dir := t.TempDir()
+
+	fillDroppedFileAttachments(t, &m, dir, maxComposerAttachments)
+
+	extra := writeTempFile(t, dir, "extra.txt", []byte("x"))
+	if ok := m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: extra}); ok {
+		t.Fatal("appendAttachment() = true for 13th item, want false")
+	}
+	if got := len(m.attachments); got != maxComposerAttachments {
+		t.Fatalf("attachments length = %d, want %d", got, maxComposerAttachments)
+	}
+}

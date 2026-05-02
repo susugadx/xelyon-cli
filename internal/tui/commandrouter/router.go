@@ -30,50 +30,43 @@ type Context struct {
 	HasMouseSelection bool
 }
 
-// Route は slash command を TUI ローカル処理または agent 委譲に分類する。
+var catalogActionToRouterAction = map[commandcatalog.TUILocalAction]Action{
+	commandcatalog.TUILocalActionCopyMouseSelection: ActionCopyMouseSelection,
+	commandcatalog.TUILocalActionManageAttachments:  ActionManageAttachments,
+	commandcatalog.TUILocalActionQuit:               ActionQuit,
+	commandcatalog.TUILocalActionOpenConfig:         ActionOpenConfig,
+	commandcatalog.TUILocalActionOpenReview:         ActionOpenReview,
+	commandcatalog.TUILocalActionOpenProject:        ActionOpenProject,
+}
+
+// Route は parse 済み slash command を TUI ローカル処理または agent 委譲に分類する。
 func Route(command slash.Command, ctx Context) Action {
-	if command.IsBare("/copy") && ctx.HasMouseSelection {
-		return ActionCopyMouseSelection
-	}
-	if command.Matches("/exit") || command.Matches("/quit") {
-		return ActionQuit
-	}
-	if command.IsBare("/config") {
-		return ActionOpenConfig
-	}
-	if action, ok := routeAttachmentCommand(command); ok {
-		return action
-	}
-	if action, ok := routeCatalogTUILocalCommand(command); ok {
+	if action, ok := routeCatalogTUILocalCommand(command, ctx); ok {
 		return action
 	}
 	return ActionDispatchAgent
 }
 
-func routeAttachmentCommand(command slash.Command) (Action, bool) {
-	switch command.ResolvedName {
-	case "/attach", "/detach", "/detach-all":
-		return ActionManageAttachments, true
-	default:
-		return ActionDispatchAgent, false
-	}
-}
-
-func routeCatalogTUILocalCommand(command slash.Command) (Action, bool) {
-	if command.ArgCount != 1 {
-		return ActionDispatchAgent, false
-	}
+func routeCatalogTUILocalCommand(command slash.Command, ctx Context) (Action, bool) {
 	cmdInfo, ok := commandcatalog.Find(command.ResolvedName)
-	if !ok || cmdInfo.EffectiveOwner() != commandcatalog.CommandOwnerTUIRouter {
+	if !ok || cmdInfo.EffectiveTUILocalAction() == commandcatalog.TUILocalActionNone {
+		return ActionDispatchAgent, false
+	}
+	if !cmdInfo.SupportsSurface(commandcatalog.CommandSurfaceTUI) {
+		return ActionDispatchAgent, false
+	}
+	if !cmdInfo.AcceptsTUILocalArgs(command.Args) {
+		return ActionDispatchAgent, false
+	}
+	if !cmdInfo.AcceptsTUILocalContext(commandcatalog.TUILocalContext{
+		HasMouseSelection: ctx.HasMouseSelection,
+	}) {
 		return ActionDispatchAgent, false
 	}
 
-	switch cmdInfo.Name {
-	case "/review":
-		return ActionOpenReview, true
-	case "/project":
-		return ActionOpenProject, true
-	default:
+	action, ok := catalogActionToRouterAction[cmdInfo.EffectiveTUILocalAction()]
+	if !ok {
 		return ActionDispatchAgent, false
 	}
+	return action, true
 }
