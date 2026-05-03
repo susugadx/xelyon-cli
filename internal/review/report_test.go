@@ -319,13 +319,13 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 		TargetKind:                TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationUnverified,
-		Verdict:                   ReviewVerdictClean,
+		Verdict:                   ReviewVerdictHasFindings,
 		RootCauseGroups: []ReviewRootCauseGroup{
 			{
 				ID:                 "rc-omitempty",
 				Title:              "optional fields の確認",
 				Severity:           ReviewGroupSeverityLow,
-				VerificationStatus: ReviewVerificationNotApplicable,
+				VerificationStatus: ReviewVerificationVerified,
 				Findings: []ReviewFinding{
 					{
 						Title:              "finding-omitempty",
@@ -373,8 +373,8 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 	}
 	if rawVerdict, exists := parsed["verdict"]; !exists {
 		t.Fatal("verdict should be present")
-	} else if rawVerdict != string(ReviewVerdictClean) {
-		t.Fatalf("verdict = %#v, want %q", rawVerdict, ReviewVerdictClean)
+	} else if rawVerdict != string(ReviewVerdictHasFindings) {
+		t.Fatalf("verdict = %#v, want %q", rawVerdict, ReviewVerdictHasFindings)
 	}
 
 	rootGroupsRaw, ok := parsed["root_cause_groups"].([]any)
@@ -423,6 +423,9 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 	}
 	if _, exists := findingMap["residual_risks"]; exists {
 		t.Fatal("finding.residual_risks should be omitted when empty")
+	}
+	if err := ValidateReviewReport(report); err != nil {
+		t.Fatalf("ValidateReviewReport(report) error = %v, want nil", err)
 	}
 }
 
