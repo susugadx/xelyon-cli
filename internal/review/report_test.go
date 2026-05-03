@@ -22,6 +22,15 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 				Summary:            "未検証入力が state 更新へ到達する",
 				Severity:           ReviewGroupSeverityHigh,
 				VerificationStatus: ReviewVerificationVerified,
+				FixStrategy:        "path policy の評価を command 実行前へ統一する",
+				DoNotFixBy: []string{
+					"call site ごとの sanitize 分岐追加",
+					"post-hoc な denylist のみの拡張",
+				},
+				VerificationPlan: []string{
+					"probe_command_exec の regression test 追加",
+					"symlink 経由 path traversal の再現ケース固定",
+				},
 				Findings: []ReviewFinding{
 					{
 						ID:      "finding-1",
@@ -32,7 +41,7 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 								Kind:         "probe_command",
 								Summary:      "cat で想定外ファイルへ到達",
 								ProbeID:      "probe-1",
-								CommandIndex: 0,
+								CommandIndex: ReviewCommandIndex(0),
 								Path:         "internal/review/probe_command_exec.go",
 								Line:         20,
 								Snippet:      "exec.CommandContext(...)",
@@ -135,6 +144,53 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 
 	if !reflect.DeepEqual(got, original) {
 		t.Fatalf("round-trip mismatch:\n got  = %#v\n want = %#v", got, original)
+	}
+}
+
+func TestReviewEvidenceRefJSONCommandIndexZero(t *testing.T) {
+	ref := ReviewEvidenceRef{
+		Kind:         "probe_command",
+		CommandIndex: ReviewCommandIndex(0),
+	}
+
+	data, err := json.Marshal(ref)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	raw, exists := parsed["command_index"]
+	if !exists {
+		t.Fatal("command_index should be present when CommandIndex is ReviewCommandIndex(0)")
+	}
+	index, ok := raw.(float64)
+	if !ok {
+		t.Fatalf("command_index type = %T, want float64", raw)
+	}
+	if index != 0 {
+		t.Fatalf("command_index = %v, want 0", index)
+	}
+}
+
+func TestReviewEvidenceRefJSONCommandIndexOmittedWhenNil(t *testing.T) {
+	ref := ReviewEvidenceRef{Kind: "probe_command"}
+
+	data, err := json.Marshal(ref)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	if _, exists := parsed["command_index"]; exists {
+		t.Fatal("command_index should be omitted when CommandIndex is nil")
 	}
 }
 
@@ -320,6 +376,15 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 	}
 	if _, exists := groupMap["checked_surfaces"]; exists {
 		t.Fatal("group.checked_surfaces should be omitted when empty")
+	}
+	if _, exists := groupMap["fix_strategy"]; exists {
+		t.Fatal("group.fix_strategy should be omitted when empty")
+	}
+	if _, exists := groupMap["do_not_fix_by"]; exists {
+		t.Fatal("group.do_not_fix_by should be omitted when empty")
+	}
+	if _, exists := groupMap["verification_plan"]; exists {
+		t.Fatal("group.verification_plan should be omitted when empty")
 	}
 	if _, exists := groupMap["unverified_surfaces"]; exists {
 		t.Fatal("group.unverified_surfaces should be omitted when empty")
