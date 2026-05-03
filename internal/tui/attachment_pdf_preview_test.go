@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,6 +9,25 @@ import (
 
 	pdf "rsc.io/pdf"
 )
+
+func TestReadAttachedPDFPreview_RealPDFFile(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "sample.pdf", buildMinimalPDFWithSingleText("Hello PDF"))
+
+	preview, err := readAttachedPDFPreview(path)
+	if err != nil {
+		t.Fatalf("readAttachedPDFPreview() error = %v, want nil", err)
+	}
+	if preview.truncated {
+		t.Fatal("preview.truncated = true, want false")
+	}
+	if strings.TrimSpace(preview.text) == "" {
+		t.Fatal("preview.text = empty, want non-empty")
+	}
+	if !strings.Contains(strings.ReplaceAll(preview.text, " ", ""), "HelloPDF") {
+		t.Fatalf("preview.text = %q, want to include HelloPDF", preview.text)
+	}
+}
 
 func TestExtractAttachedPDFPreviewWithPageReader_PageLimitStopsRead(t *testing.T) {
 	calls := 0
@@ -130,4 +150,45 @@ func TestBuildAttachedFileContext_RoutesPDFExtension(t *testing.T) {
 	if !strings.Contains(got, "pdf-body") {
 		t.Fatalf("context = %q, want routed PDF preview body", got)
 	}
+}
+
+func buildMinimalPDFWithSingleText(text string) []byte {
+	stream := fmt.Sprintf("BT\n/F1 24 Tf\n72 72 Td\n(%s) Tj\nET\n", escapePDFLiteralString(text))
+	objects := []string{
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+		fmt.Sprintf("4 0 obj\n<< /Length %d >>\nstream\n%sendstream\nendobj\n", len(stream), stream),
+		"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+	}
+
+	var out bytes.Buffer
+	out.WriteString("%PDF-1.4\n")
+	offsets := make([]int, len(objects)+1)
+	for i, obj := range objects {
+		offsets[i+1] = out.Len()
+		out.WriteString(obj)
+	}
+
+	xrefOffset := out.Len()
+	out.WriteString("xref\n")
+	fmt.Fprintf(&out, "0 %d\n", len(objects)+1)
+	out.WriteString("0000000000 65535 f \n")
+	for i := 1; i <= len(objects); i++ {
+		fmt.Fprintf(&out, "%010d 00000 n \n", offsets[i])
+	}
+	out.WriteString("trailer\n")
+	fmt.Fprintf(&out, "<< /Size %d /Root 1 0 R >>\n", len(objects)+1)
+	out.WriteString("startxref\n")
+	fmt.Fprintf(&out, "%d\n", xrefOffset)
+	out.WriteString("%%EOF\n")
+
+	return out.Bytes()
+}
+
+func escapePDFLiteralString(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "(", "\\(")
+	s = strings.ReplaceAll(s, ")", "\\)")
+	return s
 }
