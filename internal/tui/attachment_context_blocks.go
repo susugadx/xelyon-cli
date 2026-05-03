@@ -10,6 +10,8 @@ import (
 	"unicode/utf8"
 )
 
+var readAttachedPDFPreviewForContext = readAttachedPDFPreview
+
 func buildAttachmentContextBlocks(attachments []composerAttachment, primaryImagePath string) []string {
 	contextBlocks := make([]string, 0, len(attachments))
 	for _, att := range attachments {
@@ -31,6 +33,10 @@ func buildAttachedImagePathContext(path string) string {
 }
 
 func buildAttachedFileContext(path string) string {
+	if isPDFAttachmentPath(path) {
+		return buildAttachedPDFContext(path)
+	}
+
 	displayPath := attachmentDisplayPath(path)
 	preview, truncated, binary, err := readAttachedFilePreview(path)
 	if err != nil {
@@ -43,6 +49,23 @@ func buildAttachedFileContext(path string) string {
 	block := fmt.Sprintf("[Attached file: %s]\n%s", displayPath, preview)
 	if truncated {
 		block += fmt.Sprintf("\n\n<content truncated: first %d bytes shown>", maxAttachedFilePreviewBytes)
+	}
+	return block
+}
+
+func buildAttachedPDFContext(path string) string {
+	displayPath := attachmentDisplayPath(path)
+	preview, err := readAttachedPDFPreviewForContext(path)
+	if err != nil {
+		return fmt.Sprintf("[Attached file: %s]\n<failed to read PDF: %v>", displayPath, err)
+	}
+	if strings.TrimSpace(preview.text) == "" {
+		return fmt.Sprintf("[Attached file: %s]\n<no extractable text in PDF>", displayPath)
+	}
+
+	block := fmt.Sprintf("[Attached file: %s]\n%s", displayPath, preview.text)
+	if preview.truncated {
+		block += fmt.Sprintf("\n\n<PDF content truncated: first %d pages / %d chars shown>", maxAttachedPDFPreviewPages, maxAttachedPDFPreviewChars)
 	}
 	return block
 }

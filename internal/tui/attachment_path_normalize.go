@@ -149,3 +149,7 @@ func isImageAttachmentPath(path string) bool {
 		return false
 	}
 }
+
+func isPDFAttachmentPath(path string) bool {
+	return strings.EqualFold(filepath.Ext(path), ".pdf")
+}

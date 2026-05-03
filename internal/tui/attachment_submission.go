@@ -3,6 +3,8 @@ package tui
 import "strings"
 
 const maxAttachedFilePreviewBytes = 64 * 1024
+const maxAttachedPDFPreviewPages = 20
+const maxAttachedPDFPreviewChars = 30000
 
 type chatDispatchRequest struct {
 	display   string
