@@ -861,3 +861,11 @@ func TestStripProjectMapSection(t *testing.T) {
 		t.Fatalf("stripProjectMapSection() = %q, want %q", stripped, "base prompt")
 	}
 }
+
+func TestStripProjectMapSection_MarkerBlock(t *testing.T) {
+	prompt := "base prompt\n\n<!-- PROJECT_MAP_START -->\n## Project Map\nTop-level files:\n- main.go\n<!-- PROJECT_MAP_END -->"
+	stripped := stripProjectMapSection(prompt)
+	if stripped != "base prompt" {
+		t.Fatalf("stripProjectMapSection() with marker block = %q, want %q", stripped, "base prompt")
+	}
+}

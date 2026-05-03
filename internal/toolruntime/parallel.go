@@ -31,6 +31,7 @@ type ParallelCallEntry struct {
 type Result struct {
 	Result string
 	Change *tools.FileChange
+	Error  bool
 }
 
 // ParallelCallState は 1 turn 内の tool call 実行 plan と結果を保持する。

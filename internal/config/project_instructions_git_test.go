@@ -60,6 +60,9 @@ func TestLoadProjectInstructionBundle_UntrackedGuidanceSkippedByDefault(t *testi
 	if len(bundle.ProjectGuidance) != 0 {
 		t.Fatalf("ProjectGuidance len = %d, want 0", len(bundle.ProjectGuidance))
 	}
+	if len(bundle.WarningMessages()) != 0 {
+		t.Fatalf("WarningMessages len = %d, want 0: %#v", len(bundle.WarningMessages()), bundle.WarningMessages())
+	}
 }
 
 func TestLoadProjectInstructionBundle_GitignoredGuidanceSkippedByDefault(t *testing.T) {
@@ -74,6 +77,9 @@ func TestLoadProjectInstructionBundle_GitignoredGuidanceSkippedByDefault(t *test
 	bundle := loadProjectInstructionBundleForDirOrFatal(t, DefaultConfig(), root)
 	if len(bundle.ProjectGuidance) != 0 {
 		t.Fatalf("ProjectGuidance len = %d, want 0", len(bundle.ProjectGuidance))
+	}
+	if len(bundle.WarningMessages()) != 0 {
+		t.Fatalf("WarningMessages len = %d, want 0: %#v", len(bundle.WarningMessages()), bundle.WarningMessages())
 	}
 }
 

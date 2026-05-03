@@ -24,9 +24,9 @@ func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*t
 			ToolName: allToolCalls[idx].Tool,
 			Args:     allToolCalls[idx].Args,
 			Result:   results[idx].Result,
-			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].Result), "Error:"),
+			Error:    results[idx].Error,
 		}))
-		printParallelCollapsedOutput(out, cfg, allToolCalls[idx].Tool, results[idx].Result)
+		printParallelCollapsedOutput(out, cfg, allToolCalls[idx].Tool, results[idx].Result, results[idx].Error)
 		return
 	}
 
@@ -36,16 +36,15 @@ func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*t
 			ToolName: allToolCalls[idx].Tool,
 			Args:     allToolCalls[idx].Args,
 			Result:   results[idx].Result,
-			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].Result), "Error:"),
+			Error:    results[idx].Error,
 		}))
-		printParallelCollapsedOutputWithPrefix(out, cfg, allToolCalls[idx].Tool, results[idx].Result, "│    ")
+		printParallelCollapsedOutputWithPrefix(out, cfg, allToolCalls[idx].Tool, results[idx].Result, results[idx].Error, "│    ")
 	}
 	ui.PrintParallelGroupEndToWriter(out, formatParallelGroupSummary(allToolCalls, indices, elapsed))
 }
 
-func shouldShowParallelCollapsed(toolName, result string) bool {
-	trimmed := strings.TrimSpace(result)
-	if strings.HasPrefix(trimmed, "Error:") {
+func shouldShowParallelCollapsed(toolName, result string, isError bool) bool {
+	if isError {
 		return true
 	}
 	if toolName == "search_code" && strings.Contains(result, "\n") {
@@ -54,15 +53,15 @@ func shouldShowParallelCollapsed(toolName, result string) bool {
 	return false
 }
 
-func printParallelCollapsedOutput(out io.Writer, cfg *config.Config, toolName, result string) {
-	if !shouldShowParallelCollapsed(toolName, result) {
+func printParallelCollapsedOutput(out io.Writer, cfg *config.Config, toolName, result string, isError bool) {
+	if !shouldShowParallelCollapsed(toolName, result, isError) {
 		return
 	}
 	_, _ = fmt.Fprintln(out, ui.FormatToolOutput(result, ui.GetMaxVisibleLinesWithConfig(cfg)))
 }
 
-func printParallelCollapsedOutputWithPrefix(out io.Writer, cfg *config.Config, toolName, result, prefix string) {
-	if !shouldShowParallelCollapsed(toolName, result) {
+func printParallelCollapsedOutputWithPrefix(out io.Writer, cfg *config.Config, toolName, result string, isError bool, prefix string) {
+	if !shouldShowParallelCollapsed(toolName, result, isError) {
 		return
 	}
 
@@ -129,7 +128,7 @@ func (a *Agent) sendParallelToolResults(allToolCalls []*tools.ToolCall, indices 
 			ToolName: tc.Tool,
 			Args:     tc.Args,
 			Result:   results[idx].Result,
-			Error:    strings.HasPrefix(strings.TrimSpace(results[idx].Result), "Error:"),
+			Error:    results[idx].Error,
 			Duration: elapsed,
 		}:
 		default:

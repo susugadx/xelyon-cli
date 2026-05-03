@@ -18,15 +18,16 @@ func (t *DeleteFileTool) Parameters() map[string]interface{} {
 }
 
 func (t *DeleteFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
-	result, err := executeDeleteFileWithPromptIOAndOptionsAndLSPClient(execCtx.PromptIO(), execCtx.ConfirmOptions(), execCtx.EffectiveLSPClient(), args["path"])
+	details, err := executeDeleteFileWithPromptIOAndOptionsAndLSPClientDetails(execCtx.PromptIO(), execCtx.ConfirmOptions(), execCtx.EffectiveLSPClient(), args["path"])
 	if err != nil {
-		return result.message, nil, err
+		return details.result.message, nil, err
 	}
-	if !result.ShouldRecordChange() {
-		return result.message, nil, nil
+	if !details.result.ShouldRecordChange() {
+		return details.result.message, nil, nil
 	}
-	return result.message, newFileChange(
+	return details.result.message, newFileChange(
 		args["path"],
+		details.resolvedPath,
 		"delete_file",
 		"Deleted file "+args["path"],
 		0,

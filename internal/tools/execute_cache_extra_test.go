@@ -65,7 +65,7 @@ func TestExecuteCoreWithContext_DefaultsPathAndNormalizesEmptyOutput(t *testing.
 	registry.Register(tool)
 
 	tc := &ToolCall{Tool: "list_dir", Args: map[string]string{}}
-	got, change := executeCoreWithContext(ExecutionContext{
+	got, change, isError := executeCoreWithContext(ExecutionContext{
 		Context:  context.Background(),
 		Registry: registry,
 		Stdout:   io.Discard,
@@ -77,6 +77,9 @@ func TestExecuteCoreWithContext_DefaultsPathAndNormalizesEmptyOutput(t *testing.
 	}
 	if got != "(no output)" {
 		t.Fatalf("executeCoreWithContext() = %q, want %q", got, "(no output)")
+	}
+	if isError {
+		t.Fatalf("executeCoreWithContext() isError = true, want false")
 	}
 	if tc.Args["path"] != "." {
 		t.Fatalf("tc.Args[path] = %q, want %q", tc.Args["path"], ".")
@@ -147,6 +150,11 @@ func TestInvalidateToolCache_ByToolKind(t *testing.T) {
 			wantClearCount: 1,
 		},
 		{
+			name:           "run_skill_script clears all caches",
+			tc:             &ToolCall{Tool: "run_skill_script", Args: map[string]string{"skill": "demo", "script": "write.sh"}},
+			wantClearCount: 1,
+		},
+		{
 			name:           "bash write command clears all caches",
 			tc:             &ToolCall{Tool: "bash", Args: map[string]string{"command": "go build ./..."}},
 			wantClearCount: 1,
@@ -160,7 +168,7 @@ func TestInvalidateToolCache_ByToolKind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cache := &recordingToolCache{}
-			invalidateToolCache(ExecutionContext{ToolCache: cache}, tt.tc)
+			invalidateToolCache(ExecutionContext{ToolCache: cache}, tt.tc, nil)
 
 			if got := strings.Join(cache.invalidatedFiles, ","); got != strings.Join(tt.wantFiles, ",") {
 				t.Fatalf("invalidated files = %v, want %v", cache.invalidatedFiles, tt.wantFiles)
@@ -175,6 +183,100 @@ func TestInvalidateToolCache_ByToolKind(t *testing.T) {
 				t.Fatalf("clearCount = %d, want %d", cache.clearCount, tt.wantClearCount)
 			}
 		})
+	}
+}
+
+func TestInvalidateToolCache_ResolvesRelativePathsFromInvocationCWD(t *testing.T) {
+	cache := &recordingToolCache{}
+	invocationCWD := t.TempDir()
+
+	invalidateToolCache(ExecutionContext{
+		ToolCache:     cache,
+		InvocationCWD: invocationCWD,
+	}, &ToolCall{
+		Tool: "write_file",
+		Args: map[string]string{"path": "nested/output.txt"},
+	}, nil)
+
+	want := filepath.Join(invocationCWD, "nested", "output.txt")
+	if got := strings.Join(cache.invalidatedFiles, ","); got != want {
+		t.Fatalf("invalidated files = %v, want [%s]", cache.invalidatedFiles, want)
+	}
+	if got := strings.Join(cache.invalidatedSearch, ","); got != want {
+		t.Fatalf("invalidated search = %v, want [%s]", cache.invalidatedSearch, want)
+	}
+}
+
+func TestInvalidateToolCache_PrefersResolvedPathFromChangeDetails(t *testing.T) {
+	invocationCWD := t.TempDir()
+	resolvedRoot := t.TempDir()
+
+	tests := []struct {
+		name     string
+		toolName string
+		wantDirs bool
+	}{
+		{name: "write_file uses resolved change path", toolName: "write_file"},
+		{name: "str_replace uses resolved change path", toolName: "str_replace"},
+		{name: "delete_file uses resolved change path", toolName: "delete_file", wantDirs: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cache := &recordingToolCache{}
+			resolvedPath := filepath.Join(resolvedRoot, tt.toolName, "actual.txt")
+
+			invalidateToolCache(ExecutionContext{
+				ToolCache:     cache,
+				InvocationCWD: invocationCWD,
+			}, &ToolCall{
+				Tool: tt.toolName,
+				Args: map[string]string{"path": "nested/from-invocation.txt"},
+			}, &FileChange{
+				FilePath: "nested/from-invocation.txt",
+				Details: []FileChangeDetail{
+					{FilePath: resolvedPath},
+				},
+			})
+
+			if got := strings.Join(cache.invalidatedFiles, ","); got != resolvedPath {
+				t.Fatalf("invalidated files = %v, want [%s]", cache.invalidatedFiles, resolvedPath)
+			}
+			if got := strings.Join(cache.invalidatedSearch, ","); got != resolvedPath {
+				t.Fatalf("invalidated search = %v, want [%s]", cache.invalidatedSearch, resolvedPath)
+			}
+			if tt.wantDirs {
+				wantDir := filepath.Dir(resolvedPath)
+				if got := strings.Join(cache.invalidatedDirs, ","); got != wantDir {
+					t.Fatalf("invalidated dirs = %v, want [%s]", cache.invalidatedDirs, wantDir)
+				}
+			} else if len(cache.invalidatedDirs) > 0 {
+				t.Fatalf("invalidated dirs = %v, want none", cache.invalidatedDirs)
+			}
+		})
+	}
+}
+
+func TestInvalidateToolCache_UsesAbsoluteChangeFilePathWhenDetailsMissing(t *testing.T) {
+	cache := &recordingToolCache{}
+	invocationCWD := t.TempDir()
+	resolvedPath := filepath.Join(t.TempDir(), "actual.txt")
+
+	invalidateToolCache(ExecutionContext{
+		ToolCache:     cache,
+		InvocationCWD: invocationCWD,
+	}, &ToolCall{
+		Tool: "write_file",
+		Args: map[string]string{"path": "nested/from-invocation.txt"},
+	}, &FileChange{
+		FilePath: resolvedPath,
+	})
+
+	if got := strings.Join(cache.invalidatedFiles, ","); got != resolvedPath {
+		t.Fatalf("invalidated files = %v, want [%s]", cache.invalidatedFiles, resolvedPath)
+	}
+	if got := strings.Join(cache.invalidatedSearch, ","); got != resolvedPath {
+		t.Fatalf("invalidated search = %v, want [%s]", cache.invalidatedSearch, resolvedPath)
 	}
 }
 

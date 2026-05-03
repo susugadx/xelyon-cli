@@ -12,7 +12,7 @@ import (
 )
 
 // ComputeProjectInstructionBundleFingerprintForDir は guidance bundle の変更検知キーを返す。
-// path / mtime / size / mode を主に使い、expand_imports=true の場合のみ import 依存も追跡する。
+// 実際に bundle/prompt に反映される guidance 結果をベースに算出する。
 func ComputeProjectInstructionBundleFingerprintForDir(cfg *Config, cwd string, previous *ProjectInstructionBundle) string {
 	if strings.TrimSpace(cwd) == "" {
 		return ""
@@ -34,7 +34,10 @@ func ComputeProjectInstructionBundleFingerprintForDir(cfg *Config, cwd string, p
 	builder.Add("max_file_bytes", strconv.Itoa(aiCfg.MaxFileBytes))
 	builder.Add("max_total_bytes", strconv.Itoa(aiCfg.MaxTotalBytes))
 
-	xelyonPath := findFileUpward(cwd, "xelyon.yaml")
+	xelyonPath, hasProjectConfigPath, _ := ResolveProjectConfigPathForDir(cwd)
+	if !hasProjectConfigPath {
+		xelyonPath = ""
+	}
 	builder.Add("xelyon", fileStampForFingerprint(xelyonPath))
 
 	gitRoot := findGitRoot(cwd)
@@ -50,33 +53,61 @@ func ComputeProjectInstructionBundleFingerprintForDir(cfg *Config, cwd string, p
 	}
 	builder.Add("root", normalizedAbsolutePath(rootPath))
 
-	projectPlans := buildProjectGuidanceLoadPlans(rootPath, aiCfg, gitRoot, resolveProjectGuidanceStrength(projectCfg != nil), nil)
-	appendGuidanceLoadPlansToFingerprint(builder, "project", projectPlans)
-	globalPlans := buildGlobalGuidanceLoadPlans(aiCfg, nil)
-	appendGuidanceLoadPlansToFingerprint(builder, "global", globalPlans)
+	fingerprintBundle := loadGuidanceBundleForFingerprint(aiCfg, projectCfg, rootPath, gitRoot)
+	appendLoadedGuidanceToFingerprint(builder, "project", fingerprintBundle.ProjectGuidance)
+	appendLoadedGuidanceToFingerprint(builder, "global", fingerprintBundle.GlobalGuidance)
+	appendGuidanceWarningsToFingerprint(builder, fingerprintBundle.WarningEntries)
 
 	return builder.Sum()
 }
 
-func appendGuidanceLoadPlansToFingerprint(builder *projectInstructionFingerprintBuilder, scope string, plans []guidanceLoadPlan) {
+func loadGuidanceBundleForFingerprint(aiCfg AgentInstructionsConfig, projectCfg *ProjectConfig, rootPath, gitRoot string) *ProjectInstructionBundle {
+	bundle := &ProjectInstructionBundle{
+		ProjectConfig: projectCfg,
+		RootPath:      rootPath,
+	}
+	budget := newInstructionByteBudget(aiCfg)
+	mode := normalizeAgentInstructionProjectMode(aiCfg.Project.Mode)
+	if shouldLoadProjectGuidance(mode, projectCfg != nil) {
+		strength := resolveProjectGuidanceStrength(projectCfg != nil)
+		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, aiCfg, gitRoot, strength, &budget)
+	}
+	if aiCfg.Global.Enabled {
+		bundle.GlobalGuidance = loadGlobalGuidanceFiles(bundle, aiCfg, &budget)
+	}
+	return bundle
+}
+
+func appendLoadedGuidanceToFingerprint(builder *projectInstructionFingerprintBuilder, scope string, files []InstructionFile) {
 	if builder == nil {
 		return
 	}
-	for _, plan := range plans {
-		builder.Add(scope+".file", plan.CandidatePath)
-		if !plan.Valid {
-			builder.Add(scope+".path", "invalid")
-			if plan.Warning != nil {
-				builder.Add(scope+".warning", plan.Warning.Message)
-			}
-			continue
-		}
-
-		builder.Add(scope+".stamp", fileStampForFingerprint(plan.LoadOptions.FullPath))
-		for _, importedPath := range collectInstructionImportDependencies(plan.LoadOptions) {
-			builder.Add(scope+".import.stamp", fileStampForFingerprint(importedPath))
-		}
+	for i, file := range files {
+		appendGuidanceFileToFingerprint(builder, scope+"."+strconv.Itoa(i), file)
 	}
+}
+
+func appendGuidanceWarningsToFingerprint(builder *projectInstructionFingerprintBuilder, warnings []ProjectInstructionWarning) {
+	if builder == nil {
+		return
+	}
+	for i, warning := range warnings {
+		prefix := "warning." + strconv.Itoa(i)
+		builder.Add(prefix+".code", string(warning.Code))
+		builder.Add(prefix+".message", strings.TrimSpace(warning.Message))
+	}
+}
+
+func appendGuidanceFileToFingerprint(builder *projectInstructionFingerprintBuilder, prefix string, file InstructionFile) {
+	if builder == nil {
+		return
+	}
+	builder.Add(prefix+".path", normalizedAbsolutePath(file.Path))
+	builder.Add(prefix+".label", file.Label)
+	builder.Add(prefix+".strength", string(file.Strength))
+	builder.Add(prefix+".git_tracked", strconv.FormatBool(file.GitTracked))
+	builder.Add(prefix+".truncated", strconv.FormatBool(file.Truncated))
+	builder.Add(prefix+".content", file.Content)
 }
 
 type projectInstructionFingerprintBuilder struct {

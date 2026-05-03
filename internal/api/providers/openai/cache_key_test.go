@@ -3,6 +3,8 @@ package openai
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 func TestBuildPromptCacheKey_Format(t *testing.T) {
@@ -66,8 +68,8 @@ func TestBuildPromptCacheKey_SameInputsSameKey(t *testing.T) {
 }
 
 func TestBuildPromptCacheKey_IgnoresProjectMapSection(t *testing.T) {
-	promptA := "base\n\n## Project Map\nTop-level files:\n- main.go"
-	promptB := "base\n\n## Project Map\nTop-level files:\n- other.go"
+	promptA := "base\n\n" + prompt.BuildProjectMapSection("## Project Map\nTop-level files:\n- main.go")
+	promptB := "base\n\n" + prompt.BuildProjectMapSection("## Project Map\nTop-level files:\n- other.go")
 
 	key1 := buildPromptCacheKeyWithCwd("/p", "m", promptA)
 	key2 := buildPromptCacheKeyWithCwd("/p", "m", promptB)

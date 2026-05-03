@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -164,15 +165,10 @@ func TestLoadProjectInstructionBundle_ExpandImportsSkipsUntrackedImportWhenGitig
 	if !strings.Contains(content, "@policy.md") {
 		t.Fatalf("directive line should remain when untracked import is not allowed: %q", content)
 	}
-	foundWarning := false
 	for _, warning := range bundle.WarningMessages() {
 		if strings.Contains(warning, "untracked/gitignored guidance") {
-			foundWarning = true
-			break
+			t.Fatalf("untracked/gitignored skip should not emit warning: %#v", bundle.WarningMessages())
 		}
-	}
-	if !foundWarning {
-		t.Fatalf("expected warning for skipped untracked import, got: %#v", bundle.WarningMessages())
 	}
 }
 
@@ -199,5 +195,30 @@ func TestLoadProjectInstructionBundle_ExpandImportsLoadsUntrackedImportWhenAllow
 	}
 	if !strings.Contains(content, "UNTRACKED_POLICY") {
 		t.Fatalf("expanded untracked import content missing: %q", content)
+	}
+}
+
+func TestLoadProjectInstructionBundle_ReadErrorStillEmitsWarning(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "AGENTS.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+
+	bundle := loadProjectInstructionBundleForDirOrFatal(t, cfg, root)
+	if len(bundle.ProjectGuidance) != 0 {
+		t.Fatalf("ProjectGuidance len = %d, want 0", len(bundle.ProjectGuidance))
+	}
+	found := false
+	for _, warning := range bundle.WarningMessages() {
+		if strings.Contains(warning, "read error") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected read error warning, got: %#v", bundle.WarningMessages())
 	}
 }

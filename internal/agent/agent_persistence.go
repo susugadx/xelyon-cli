@@ -2,37 +2,39 @@ package agent
 
 import (
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func (a *Agent) appendSessionMessage(role, content, model string) {
-	if a == nil || a.session == nil {
-		return
-	}
-	a.invalidateSavedResponseContextForCurrentRuntime()
-	a.session.AddMessage(role, content, model)
-	a.persistSession()
+	a.withSessionMutation(func() {
+		a.session.AddMessage(role, content, model)
+	})
 }
 
 func (a *Agent) appendSessionMessageFromAPI(msg api.Message, model string) {
-	if a == nil || a.session == nil {
-		return
-	}
-	a.invalidateSavedResponseContextForCurrentRuntime()
-	a.session.AddMessageFromAPI(msg, model)
-	a.persistSession()
+	a.withSessionMutation(func() {
+		a.session.AddMessageFromAPI(msg, model)
+	})
 }
 
-func (a *Agent) appendSessionToolExecution(toolCall *tools.ToolCall, result string) {
+func (a *Agent) appendSessionToolExecution(toolCall *tools.ToolCall, result string, isError bool) {
 	if a == nil || a.session == nil || toolCall == nil {
 		return
 	}
+	a.withSessionMutation(func() {
+		success := !isError
+		a.session.AddToolExecution(toolCall.Tool, toolCall.Args, result, success, a.CurrentModel)
+	})
+}
+
+func (a *Agent) withSessionMutation(mutator func()) {
+	if a == nil || a.session == nil || mutator == nil {
+		return
+	}
 	a.invalidateSavedResponseContextForCurrentRuntime()
-	success := !strings.HasPrefix(strings.TrimSpace(result), "Error:")
-	a.session.AddToolExecution(toolCall.Tool, toolCall.Args, result, success, a.CurrentModel)
+	mutator()
 	a.persistSession()
 }
 

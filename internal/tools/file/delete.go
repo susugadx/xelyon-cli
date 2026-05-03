@@ -11,6 +11,11 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+type deleteExecutionDetails struct {
+	result       fileMutationResult
+	resolvedPath string
+}
+
 // ExecuteDeleteFileWithPromptIOAndOptions は確認設定を指定してファイルを削除する。
 func ExecuteDeleteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string) (string, error) {
 	return ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO, options, nil, path)
@@ -18,14 +23,14 @@ func ExecuteDeleteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options commo
 
 // ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient は確認設定と LSP client を指定してファイルを削除する。
 func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string) (string, error) {
-	result, err := executeDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO, options, lspClient, path)
-	return result.message, err
+	details, err := executeDeleteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO, options, lspClient, path)
+	return details.result.message, err
 }
 
-func executeDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string) (fileMutationResult, error) {
+func executeDeleteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string) (deleteExecutionDetails, error) {
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is empty")
 	if result.message != "" || err != nil {
-		return result, err
+		return deleteExecutionDetails{result: result}, err
 	}
 	out := ctx.out
 	absPath := ctx.absPath
@@ -33,7 +38,7 @@ func executeDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, o
 	var lines []string
 	var externalRefs []toolslsp.ReferenceInfo
 
-	return executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
+	workflowResult, workflowErr := executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
 		toolName:       "delete_file",
 		confirmMessage: "Delete this file? / このファイルを削除しますか？",
 		preview: func() fileMutationResult {
@@ -127,4 +132,8 @@ func executeDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, o
 			return newAppliedMutationResult(fmt.Sprintf("✅ Deleted: %s", path)), nil
 		},
 	})
+	return deleteExecutionDetails{
+		result:       workflowResult,
+		resolvedPath: absPath,
+	}, workflowErr
 }

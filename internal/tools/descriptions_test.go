@@ -3,6 +3,8 @@ package tools
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/toolmeta"
 )
 
 func TestToolDescriptions_AllKeysNonEmpty(t *testing.T) {
@@ -13,21 +15,10 @@ func TestToolDescriptions_AllKeysNonEmpty(t *testing.T) {
 	}
 }
 
-func TestToolDescriptions_ExpectedToolCount(t *testing.T) {
-	expected := 12
-	if len(ToolDescriptions) != expected {
-		t.Errorf("ToolDescriptions has %d entries, want %d", len(ToolDescriptions), expected)
-	}
-}
-
 func TestToolDescriptions_KnownToolsExist(t *testing.T) {
-	knownTools := []string{
-		"gather_context",
-		"read_file", "write_file", "str_replace", "delete_file", "list_dir",
-		"search_code", "web_search",
-		"bash",
-		"ask_user_question",
-		"spawn_agent", "wait_agent",
+	knownTools := make([]string, 0, len(toolmeta.BuiltinSpecs()))
+	for _, spec := range toolmeta.BuiltinSpecs() {
+		knownTools = append(knownTools, spec.Name)
 	}
 	for _, name := range knownTools {
 		if _, ok := ToolDescriptions[name]; !ok {

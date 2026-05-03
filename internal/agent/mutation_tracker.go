@@ -137,10 +137,27 @@ func (m *MutationTracker) trackDeferredDiagnostics(tc *tools.ToolCall, result st
 
 	switch tc.Tool {
 	case "str_replace":
-		m.AddPendingLSPFile(tc.Args["path"])
+		m.AddPendingLSPFile(preferredChangedFilePath(change, tc))
 	case "apply_patch":
 		m.AddPendingLSPFilesFromChange(change)
 	}
+}
+
+func preferredChangedFilePath(change *tools.FileChange, tc *tools.ToolCall) string {
+	if change != nil {
+		for _, detail := range change.Details {
+			if strings.TrimSpace(detail.FilePath) != "" {
+				return detail.FilePath
+			}
+		}
+		if strings.TrimSpace(change.FilePath) != "" {
+			return change.FilePath
+		}
+	}
+	if tc == nil {
+		return ""
+	}
+	return tc.Args["path"]
 }
 
 func toHistoryChangeRecordInput(change tools.FileChange) history.ChangeRecordInput {

@@ -41,7 +41,7 @@ func resolveProjectMapInjectionSources(agent *Agent, opts projectMapSourceResolv
 		return projectMapInjectionSources{}, refreshReasonRipgrepUnavailable, false
 	}
 
-	cwd, ok := resolveProjectMapSourceCWD()
+	cwd, ok := resolveProjectMapSourceCWD(agent)
 	if !ok {
 		return projectMapInjectionSources{}, refreshReasonCWDUnavailable, false
 	}
@@ -50,16 +50,8 @@ func resolveProjectMapInjectionSources(agent *Agent, opts projectMapSourceResolv
 	if bundle == nil && opts.allowBundleLoad {
 		bundle = agent.loadProjectInstructionBundleCached(false)
 	}
-	rootPath := resolveProjectMapSourceRootPath(cwd, bundle)
-	if bundle == nil && strings.TrimSpace(agent.projectMapRootPath) != "" {
-		rootPath = agent.projectMapRootPath
-	}
-
-	var projectCfg *config.ProjectConfig
-	if bundle != nil {
-		projectCfg = bundle.ProjectConfig
-	}
-	ignorePatterns := config.ResolveSharedIgnorePatterns(cfg, projectCfg)
+	rootPath := resolveProjectMapSourceRootPathWithFallback(cwd, bundle, agent.projectMapRootPath)
+	ignorePatterns := resolveProjectMapIgnorePatterns(cfg, bundle)
 
 	return projectMapInjectionSources{
 		cfg:            cfg,
@@ -68,6 +60,14 @@ func resolveProjectMapInjectionSources(agent *Agent, opts projectMapSourceResolv
 		ignorePatterns: ignorePatterns,
 		ignoreKey:      strings.Join(ignorePatterns, "\x00"),
 	}, refreshReasonNoChange, true
+}
+
+func resolveProjectMapIgnorePatterns(cfg *config.Config, bundle *config.ProjectInstructionBundle) []string {
+	var projectCfg *config.ProjectConfig
+	if bundle != nil {
+		projectCfg = bundle.ProjectConfig
+	}
+	return config.ResolveSharedIgnorePatterns(cfg, projectCfg)
 }
 
 func buildProjectMapInjectionContext(agent *Agent, input string, sources projectMapInjectionSources) (projectMapInjectionContext, bool) {

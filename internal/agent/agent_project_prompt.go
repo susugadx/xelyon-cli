@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
@@ -15,8 +14,8 @@ type projectInstructionApplyOptions struct {
 	projectMapInput  string
 }
 
-func loadProjectInstructionBundle(cfg *config.Config) *config.ProjectInstructionBundle {
-	bundle, err := config.LoadProjectInstructionBundle(cfg)
+func loadProjectInstructionBundleForCWD(cfg *config.Config, cwd string) *config.ProjectInstructionBundle {
+	bundle, err := config.LoadProjectInstructionBundleForDir(cfg, cwd)
 	if err != nil {
 		return nil
 	}
@@ -27,55 +26,24 @@ func (a *Agent) loadProjectInstructionBundleCached(forceReload bool) *config.Pro
 	if a == nil {
 		return nil
 	}
-	if decision := a.projectInstructionBundleCacheDecision(forceReload); decision.reuse {
+	cache := newProjectInstructionBundleCache(a)
+	if decision := cache.decision(forceReload); decision.reuse {
 		return a.projectInstructionBundle
 	} else {
-		bundle := loadProjectInstructionBundle(a.cfg())
+		bundle := loadProjectInstructionBundleForCWD(a.cfg(), a.invocationCWD())
 		a.projectInstructionBundle = bundle
 		a.projectInstructionBundleLoaded = true
 		if decision.cacheKey != "" {
 			a.projectInstructionBundleKey = decision.cacheKey
 		} else {
-			a.projectInstructionBundleKey = a.currentProjectInstructionBundleCacheKey()
+			a.projectInstructionBundleKey = cache.currentKey()
 		}
 		return bundle
 	}
 }
 
-type projectInstructionBundleCacheDecision struct {
-	reuse    bool
-	cacheKey string
-}
-
-func (a *Agent) projectInstructionBundleCacheDecision(forceReload bool) projectInstructionBundleCacheDecision {
-	if a == nil || forceReload || !a.projectInstructionBundleLoaded {
-		return projectInstructionBundleCacheDecision{}
-	}
-	cacheKey := a.currentProjectInstructionBundleCacheKey()
-	return projectInstructionBundleCacheDecision{
-		reuse:    cacheKey == a.projectInstructionBundleKey,
-		cacheKey: cacheKey,
-	}
-}
-
 func (a *Agent) invalidateProjectInstructionBundleCache() {
-	if a == nil {
-		return
-	}
-	a.projectInstructionBundle = nil
-	a.projectInstructionBundleLoaded = false
-	a.projectInstructionBundleKey = ""
-}
-
-func (a *Agent) currentProjectInstructionBundleCacheKey() string {
-	if a == nil {
-		return ""
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	return config.ComputeProjectInstructionBundleFingerprintForDir(a.cfg(), cwd, a.projectInstructionBundle)
+	newProjectInstructionBundleCache(a).invalidate()
 }
 
 func (a *Agent) projectInstructionBundleIfLoaded() *config.ProjectInstructionBundle {

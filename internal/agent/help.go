@@ -13,10 +13,10 @@ func printHelpToWriter(out io.Writer, agent *Agent) {
 
 func printHelpToWriterForSurface(out io.Writer, agent *Agent, surface commandcatalog.CommandSurface) {
 	_, _ = fmt.Fprint(out, helpSurfaceIntro(surface))
-	_, _ = fmt.Fprint(out, generatedHelpCommandsTextForSurface(surface))
+	_, _ = fmt.Fprint(out, helpCommandsTextForSurface(surface))
 	printCurrentSurfaceToolsToWriter(out, agent)
 	_, _ = fmt.Fprint(out, "\n")
-	_, _ = fmt.Fprint(out, GeneratedHelpTipsText)
+	_, _ = fmt.Fprint(out, helpTipsText())
 }
 
 func helpSurfaceIntro(surface commandcatalog.CommandSurface) string {
@@ -28,6 +28,14 @@ func helpSurfaceIntro(surface commandcatalog.CommandSurface) string {
 	}
 }
 
+func helpCommandsTextForSurface(surface commandcatalog.CommandSurface) string {
+	rendered := commandcatalog.RenderCommandsTextForSurface(surface)
+	if rendered != "" {
+		return rendered
+	}
+	return generatedHelpCommandsTextForSurface(surface)
+}
+
 func generatedHelpCommandsTextForSurface(surface commandcatalog.CommandSurface) string {
 	switch surface {
 	case commandcatalog.CommandSurfaceTUI:
@@ -35,6 +43,13 @@ func generatedHelpCommandsTextForSurface(surface commandcatalog.CommandSurface) 
 	default:
 		return GeneratedHelpCommandsText
 	}
+}
+
+func helpTipsText() string {
+	if rendered := commandcatalog.RenderTipsText(); rendered != "" {
+		return rendered
+	}
+	return GeneratedHelpTipsText
 }
 
 func printCurrentSurfaceToolsToWriter(out io.Writer, agent *Agent) {

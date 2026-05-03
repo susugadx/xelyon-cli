@@ -64,6 +64,16 @@ func TestGetToolSafety(t *testing.T) {
 			want:     SafetyHigh,
 		},
 		{
+			name:     "activate_skill is SafetyHigh",
+			toolName: "activate_skill",
+			want:     SafetyHigh,
+		},
+		{
+			name:     "run_skill_script is SafetyLow",
+			toolName: "run_skill_script",
+			want:     SafetyLow,
+		},
+		{
 			name:     "unknown tool defaults to SafetyMedium",
 			toolName: "unknown_tool",
 			want:     SafetyMedium,

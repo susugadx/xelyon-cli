@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"io"
-	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -11,7 +10,7 @@ import (
 
 func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
 	runtimeUI := a.ui()
-	invocationCWD, _ := os.Getwd()
+	invocationCWD := a.invocationCWD()
 	if ctx == nil {
 		ctx = a.currentRequestContext()
 	}
@@ -71,41 +70,78 @@ func (a *Agent) currentRequestContext() context.Context {
 	return context.Background()
 }
 
+func (a *Agent) executeQuietToolResult(ctx context.Context, toolCall *tools.ToolCall, stdin io.Reader, stdout, stderr io.Writer, repair bool) tools.ExecutionResult {
+	execCtx := a.toolExecutionContext(ctx, stdin, stdout, stderr)
+	execResult := tools.ExecuteQuietUnpublishedWithContext(execCtx, toolCall)
+	if repair {
+		execResult = a.maybeRepairGeminiApplyPatchExecution(ctx, toolCall, execResult, execCtx, true)
+	}
+	return execResult
+}
+
 func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.ToolCall) (string, *tools.FileChange) {
+	execResult := a.executeToolWithSpinnerResult(ctx, toolCall)
+	return execResult.Result, execResult.Change
+}
+
+func (a *Agent) executeToolWithSpinnerResult(ctx context.Context, toolCall *tools.ToolCall) tools.ExecutionResult {
+	a.reportNegativeCacheHit(toolCall)
+
+	if execResult, handled := a.executeImmediateToolResult(ctx, toolCall); handled {
+		return execResult
+	}
+
+	execResult := a.executePublishedToolWithSpinner(ctx, toolCall)
+	a.recordToolResultOptimizations(toolCall, execResult.Result)
+
 	if a.ToolCache != nil {
-		if result, hit := a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs); hit {
-			yellow.Fprintf(a.output(), "⚠ Negative cache hit: %s previously returned: %s\n", toolCall.Tool, result)
-			a.addOptimizationMetrics(OptimizationMetrics{NegativeCacheHits: 1})
-		}
+		a.ToolCache.SetNegativeCache(toolCall.Tool, toolCall.RawArgs, execResult.Result)
 	}
 
-	if toolCall.Tool == "wait_agent" {
-		return a.executeWaitAgentWithLiveView(ctx, toolCall)
-	}
+	return execResult
+}
 
+func (a *Agent) reportNegativeCacheHit(toolCall *tools.ToolCall) {
+	if a == nil || a.ToolCache == nil || toolCall == nil {
+		return
+	}
+	if result, hit := a.ToolCache.CheckNegativeCache(toolCall.Tool, toolCall.RawArgs); hit {
+		yellow.Fprintf(a.output(), "⚠ Negative cache hit: %s previously returned: %s\n", toolCall.Tool, result)
+		a.addOptimizationMetrics(OptimizationMetrics{NegativeCacheHits: 1})
+	}
+}
+
+func (a *Agent) executeImmediateToolResult(ctx context.Context, toolCall *tools.ToolCall) (tools.ExecutionResult, bool) {
+	if a == nil || toolCall == nil {
+		return tools.ExecutionResult{}, false
+	}
+	if toolCall.Tool != "wait_agent" {
+		return tools.ExecutionResult{}, false
+	}
+	output, change := a.executeWaitAgentWithLiveView(ctx, toolCall)
+	return tools.ExecutionResult{
+		Result: output,
+		Change: change,
+		Error:  tools.IsErrorResult(output),
+	}, true
+}
+
+func (a *Agent) executePublishedToolWithSpinner(ctx context.Context, toolCall *tools.ToolCall) tools.ExecutionResult {
 	spinner := a.ui().NewSpinner()
-	spinnerMsg := ui.SpinnerMessageForTool(toolCall.Tool)
-	spinner.Start(spinnerMsg)
+	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
 	a.ui().SetSpinner(spinner)
 
 	execCtx := a.toolExecutionContext(ctx, nil, nil, nil)
-	var result string
-	var change *tools.FileChange
 	if a.shouldRepairGeminiApplyPatch(toolCall) {
 		execResult := tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
 		a.ui().StopSpinner()
 		execResult = a.maybeRepairGeminiApplyPatchExecution(ctx, toolCall, execResult, execCtx, false)
 		tools.PublishResultWithContext(execCtx, toolCall, execResult)
-		result, change = execResult.Result, execResult.Change
-	} else {
-		result, change = tools.ExecuteWithContext(execCtx, toolCall)
-		a.ui().StopSpinner()
-	}
-	a.recordToolResultOptimizations(toolCall, result)
-
-	if a.ToolCache != nil {
-		a.ToolCache.SetNegativeCache(toolCall.Tool, toolCall.RawArgs, result)
+		return execResult
 	}
 
-	return result, change
+	execResult := tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
+	tools.PublishResultWithContext(execCtx, toolCall, execResult)
+	a.ui().StopSpinner()
+	return execResult
 }

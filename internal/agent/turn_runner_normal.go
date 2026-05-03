@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -97,8 +98,8 @@ func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*to
 		a.addToolCallsToHistory(response, toolCalls)
 	}
 
-	toolLoopDetected := r.executeToolCalls(response, toolCalls, nil, func(_ int, tc *tools.ToolCall, result string, change *tools.FileChange) {
-		handler.Handle(tc, result, change)
+	toolLoopDetected := r.executeToolCalls(response, toolCalls, nil, func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
+		handler.Handle(tc, result)
 	})
 	if toolLoopDetected {
 		return fmt.Errorf("tool loop detected")

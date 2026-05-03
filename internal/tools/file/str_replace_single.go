@@ -11,6 +11,7 @@ import (
 
 type strReplaceExecutionDetails struct {
 	result       fileMutationResult
+	resolvedPath string
 	linesAdded   int
 	linesRemoved int
 }
@@ -33,6 +34,7 @@ func executeStrReplaceWithPromptIOAndOptionsDetails(promptIO ui.PromptIO, option
 		details.result = result
 		return details, err
 	}
+	details.resolvedPath = ctx.absPath
 	if ctx.cfg == nil {
 		return strReplaceExecutionDetails{}, fmt.Errorf("missing confirm options config")
 	}

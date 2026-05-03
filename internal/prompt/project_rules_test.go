@@ -246,3 +246,12 @@ func TestBuildProjectInstructionBlock_RendersStrengthAndWarnings(t *testing.T) {
 		t.Fatal("guidance warning missing")
 	}
 }
+
+func TestBuildProjectInstructionBlock_NoSignalsReturnsEmpty(t *testing.T) {
+	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
+		Warnings: []string{"   "},
+	})
+	if block != "" {
+		t.Fatalf("expected empty block, got: %q", block)
+	}
+}

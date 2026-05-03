@@ -25,6 +25,7 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/tools/gathercontext"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/planning"
 	_ "github.com/susugadx/xelyon-cli/internal/tools/search"
+	_ "github.com/susugadx/xelyon-cli/internal/tools/skills"
 )
 
 // NewAgent は新しい Agent を作成する。
@@ -35,6 +36,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 // NewAgentWithRuntime は runtime を指定して新しい Agent を作成する。
 func NewAgentWithRuntime(model string, provider api.Provider, headless bool, runtime *AgentRuntime) *Agent {
 	runtime = normalizeAgentRuntime(runtime)
+	runtime.refreshInvocationCWD()
 	cfg := runtime.effectiveConfig()
 	api.ApplyRuntimeConfig(provider, cfg)
 
@@ -57,7 +59,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	configureMCPTools(provider, mcpManager.GetTools(), errOut)
 	runtime.effectiveRegistry().SetExcludedTools(toolVisibility.excluded())
 
-	systemPrompt := buildAgentSystemPrompt(provider, model, cfg, mcpManager)
+	systemPrompt := buildAgentSystemPrompt(provider, model, cfg, mcpManager, runtime.effectiveInvocationCWD())
 	toolCache := runtime.effectiveToolCache()
 
 	agent := &Agent{
@@ -141,12 +143,13 @@ func setupMCPManager(cfg *config.Config, headless bool, out, errOut io.Writer, r
 	return manager
 }
 
-func buildAgentSystemPrompt(provider api.Provider, model string, cfg *config.Config, manager *mcp.Manager) string {
+func buildAgentSystemPrompt(provider api.Provider, model string, cfg *config.Config, manager *mcp.Manager, invocationCWD string) string {
 	providerName := providerRuntimeNameFromProvider(provider)
 	systemPrompt := prompt.GetSystemPromptForProviderWithConfig(providerName, model, cfg)
 	if manager != nil && len(manager.GetTools()) > 0 {
 		systemPrompt += buildMCPToolsPrompt(manager)
 	}
+	systemPrompt = injectSkillCatalogPrompt(systemPrompt, invocationCWD)
 
 	// プロバイダー別プレフィックスを Workflow Rules の直前に注入
 	return prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, model, cfg)

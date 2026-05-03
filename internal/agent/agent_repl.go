@@ -360,38 +360,3 @@ func estimateProjectMapTokens(systemPrompt string) int {
 	}
 	return token.EstimateTokenCount(section)
 }
-
-func extractProjectMapSection(systemPrompt string) string {
-	const marker = "## Project Map\n"
-
-	idx := strings.LastIndex(systemPrompt, marker)
-	if idx < 0 {
-		return ""
-	}
-
-	section := systemPrompt[idx:]
-	nextSection := strings.Index(section[len(marker):], "\n## ")
-	if nextSection >= 0 {
-		section = section[:len(marker)+nextSection]
-	}
-
-	return strings.TrimRight(section, "\n")
-}
-
-func stripProjectMapSection(systemPrompt string) string {
-	section := extractProjectMapSection(systemPrompt)
-	if section == "" {
-		return systemPrompt
-	}
-
-	idx := strings.LastIndex(systemPrompt, section)
-	if idx < 0 {
-		return systemPrompt
-	}
-
-	stripped := strings.TrimRight(systemPrompt[:idx], "\n")
-	if idx+len(section) < len(systemPrompt) {
-		stripped += systemPrompt[idx+len(section):]
-	}
-	return strings.TrimRight(stripped, "\n")
-}

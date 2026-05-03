@@ -13,6 +13,11 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+type writeExecutionDetails struct {
+	result       fileMutationResult
+	resolvedPath string
+}
+
 // ExecuteWriteFileWithPromptIOAndOptions は確認設定を指定してファイルに書き込む。
 func ExecuteWriteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string, content string) (string, error) {
 	return ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO, options, nil, path, content)
@@ -20,14 +25,14 @@ func ExecuteWriteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common
 
 // ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient は確認設定と LSP client を指定してファイルに書き込む。
 func ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string, content string) (string, error) {
-	result, err := executeWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO, options, lspClient, path, content)
-	return result.message, err
+	details, err := executeWriteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO, options, lspClient, path, content)
+	return details.result.message, err
 }
 
-func executeWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string, content string) (fileMutationResult, error) {
+func executeWriteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string, content string) (writeExecutionDetails, error) {
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is empty")
 	if result.message != "" || err != nil {
-		return result, err
+		return writeExecutionDetails{result: result}, err
 	}
 	out := ctx.out
 	absPath := ctx.absPath
@@ -35,7 +40,7 @@ func executeWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, op
 	exists := false
 	perm := os.FileMode(0644)
 
-	return executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
+	workflowResult, workflowErr := executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
 		toolName:       "write_file",
 		confirmMessage: "Create/overwrite this file? / このファイルを作成・上書きしますか？",
 		preview: func() fileMutationResult {
@@ -149,6 +154,10 @@ func executeWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, op
 			return newAppliedMutationResult(msg), nil
 		},
 	})
+	return writeExecutionDetails{
+		result:       workflowResult,
+		resolvedPath: absPath,
+	}, workflowErr
 }
 
 // detectDerivativeBase は派生パス（file.go_temp, file.go.new 等）のベースパスを返す。

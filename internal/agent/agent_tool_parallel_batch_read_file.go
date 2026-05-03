@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntime.ParallelCallState) {
@@ -17,17 +18,9 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntim
 		for callStart, pathStart := 0, 0; callStart < len(seg.Indices); {
 			chunkCallStart := callStart
 			chunkPathStart := pathStart
-			chunkPathCount := 0
-
-			for callStart < len(seg.Indices) {
-				callPathCount := seg.PathCounts[callStart]
-				if chunkPathCount > 0 && chunkPathCount+callPathCount > toolruntime.MaxReadFileBatchPaths {
-					break
-				}
-				chunkPathCount += callPathCount
-				pathStart += callPathCount
-				callStart++
-			}
+			nextCallStart, chunkPathCount := nextPathBudgetChunk(seg.PathCounts, callStart, toolruntime.MaxReadFileBatchPaths)
+			callStart = nextCallStart
+			pathStart += chunkPathCount
 
 			chunkIndices := seg.Indices[chunkCallStart:callStart]
 			chunkPathCounts := seg.PathCounts[chunkCallStart:callStart]
@@ -37,7 +30,8 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntim
 				continue
 			}
 
-			mergedResult := a.executeReadFileBatch(ctx, chunkPaths)
+			mergedBatchResult := a.executeReadFileBatchResult(ctx, chunkPaths)
+			mergedResult := mergedBatchResult.Result
 			perFile := toolruntime.SplitReadFileBatchResult(mergedResult, chunkPaths)
 			if perFile == nil {
 				continue
@@ -48,9 +42,15 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntim
 				callPaths := chunkPaths[offset : offset+chunkPathCounts[j]]
 				offset += chunkPathCounts[j]
 				if section, ok := toolruntime.JoinReadFileBatchSections(perFile, callPaths); ok {
-					state.Results[idx] = toolruntime.Result{Result: section}
+					state.Results[idx] = toolruntime.Result{
+						Result: section,
+						Error:  tools.IsErrorResult(section),
+					}
 				} else {
-					state.Results[idx] = toolruntime.Result{Result: mergedResult}
+					state.Results[idx] = toolruntime.Result{
+						Result: mergedResult,
+						Error:  mergedBatchResult.Error,
+					}
 				}
 				state.Entries[idx] = toolruntime.ParallelCallEntry{Status: toolruntime.ParallelCallStatusBatched}
 			}

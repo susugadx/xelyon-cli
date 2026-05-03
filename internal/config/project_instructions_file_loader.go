@@ -129,7 +129,6 @@ func resolveInstructionGitTracking(opts instructionFileLoadOptions) (gitTracked 
 		if !tracked {
 			if !opts.Policy.IncludeGitignored {
 				return false, instructionLoadResult{
-					Warning:    "Skipped untracked/gitignored guidance (set project.include_gitignored=true to allow): " + opts.DisplayLabel,
 					SkipReason: instructionLoadSkipUntracked,
 				}, false
 			}

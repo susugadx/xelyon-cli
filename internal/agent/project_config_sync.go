@@ -7,6 +7,7 @@ func (a *Agent) SaveAndSyncProjectConfig(pc *config.ProjectConfig) error {
 	if err := config.SaveProjectConfig(pc); err != nil {
 		return err
 	}
+	a.projectConfigStore().Clear()
 	return a.syncRuntimeProjectConfig(pc)
 }
 

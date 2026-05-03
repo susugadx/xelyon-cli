@@ -10,6 +10,7 @@ import (
 
 type batchEditsExecutionDetails struct {
 	result       fileMutationResult
+	resolvedPath string
 	linesAdded   int
 	linesRemoved int
 }
@@ -49,7 +50,7 @@ func executeBatchEditsWithEntriesAndOptionsDetails(promptIO ui.PromptIO, options
 		return batchEditsExecutionDetails{result: validationErr}, nil
 	}
 
-	details := batchEditsExecutionDetails{}
+	details := batchEditsExecutionDetails{resolvedPath: ctx.absPath}
 
 	var outcome batchStringReplacementOutcome
 	workflowResult, workflowErr := executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{

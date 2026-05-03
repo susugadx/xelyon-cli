@@ -280,16 +280,10 @@ func TestAgent_SwitchProvider_NoAPIKey(t *testing.T) {
 }
 
 func TestLoadProjectInstructionBundle_NoFile(t *testing.T) {
-	// xelyon.yaml が存在しないディレクトリで実行
 	tmpDir := t.TempDir()
-	originalDir, _ := os.Getwd()
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	_ = os.Chdir(tmpDir)
-
-	bundle := loadProjectInstructionBundle(config.DefaultConfig())
+	bundle := loadProjectInstructionBundleForCWD(config.DefaultConfig(), tmpDir)
 	if bundle == nil {
-		t.Fatal("loadProjectInstructionBundle() returned nil, want non-nil bundle")
+		t.Fatal("loadProjectInstructionBundleForCWD() returned nil, want non-nil bundle")
 	}
 	if bundle.ProjectConfig != nil {
 		t.Errorf("ProjectConfig should be nil when no xelyon.yaml, got %+v", bundle.ProjectConfig)
@@ -298,17 +292,13 @@ func TestLoadProjectInstructionBundle_NoFile(t *testing.T) {
 
 func TestLoadProjectInstructionBundle_WithXelyonYAML(t *testing.T) {
 	tmpDir := t.TempDir()
-	originalDir, _ := os.Getwd()
-	defer func() { _ = os.Chdir(originalDir) }()
 
 	yamlContent := "context: \"test context\"\nrules:\n  - \"rule 1\"\n"
 	writeTestFile(t, tmpDir+"/xelyon.yaml", yamlContent)
 
-	_ = os.Chdir(tmpDir)
-
-	bundle := loadProjectInstructionBundle(config.DefaultConfig())
+	bundle := loadProjectInstructionBundleForCWD(config.DefaultConfig(), tmpDir)
 	if bundle == nil || bundle.ProjectConfig == nil {
-		t.Fatal("loadProjectInstructionBundle() returned nil project config, want non-nil")
+		t.Fatal("loadProjectInstructionBundleForCWD() returned nil project config, want non-nil")
 	}
 	if bundle.ProjectConfig.Context != "test context" {
 		t.Errorf("Context = %q, want %q", bundle.ProjectConfig.Context, "test context")

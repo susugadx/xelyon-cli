@@ -1,15 +1,17 @@
 package agent
 
 import (
-	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-func resolveProjectMapSourceCWD() (string, bool) {
-	cwd, err := os.Getwd()
-	if err != nil {
+func resolveProjectMapSourceCWD(agent *Agent) (string, bool) {
+	if agent == nil {
+		return "", false
+	}
+	cwd := strings.TrimSpace(agent.invocationCWD())
+	if cwd == "" {
 		return "", false
 	}
 	return cwd, true
@@ -20,4 +22,12 @@ func resolveProjectMapSourceRootPath(cwd string, bundle *config.ProjectInstructi
 		return cwd
 	}
 	return bundle.RootPath
+}
+
+func resolveProjectMapSourceRootPathWithFallback(cwd string, bundle *config.ProjectInstructionBundle, fallbackRootPath string) string {
+	rootPath := resolveProjectMapSourceRootPath(cwd, bundle)
+	if bundle == nil && strings.TrimSpace(fallbackRootPath) != "" {
+		return fallbackRootPath
+	}
+	return rootPath
 }

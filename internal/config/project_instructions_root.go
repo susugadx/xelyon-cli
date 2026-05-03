@@ -2,7 +2,6 @@ package config
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,14 +16,7 @@ type gitRootResolver struct {
 var defaultGitRootResolver gitRootResolver
 
 func loadProjectConfigForDir(cwd string) (*ProjectConfig, error) {
-	if path := findFileUpward(cwd, "xelyon.yaml"); path != "" {
-		pc, err := loadProjectConfigFromYAML(path)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load %s: %w", path, err)
-		}
-		return pc, nil
-	}
-	return nil, nil
+	return LoadProjectConfigForDirWithError(cwd)
 }
 
 func resolveBundleRootPath(cwd string, projectCfg *ProjectConfig, gitRoot string, aiCfg AgentInstructionsConfig) string {

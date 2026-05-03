@@ -7,6 +7,44 @@ import (
 	"time"
 )
 
+func bumpFileMTime(t *testing.T, path string) {
+	t.Helper()
+	nextTime := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(path, nextTime, nextTime); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func overwriteFileAndBumpMTime(t *testing.T, path, content string) {
+	t.Helper()
+	writeFile(t, path, content)
+	bumpFileMTime(t, path)
+}
+
+func fingerprintBeforeAfter(t *testing.T, cfg *Config, cwd string, mutate func()) (string, string) {
+	t.Helper()
+	before := ComputeProjectInstructionBundleFingerprintForDir(cfg, cwd, nil)
+	if mutate != nil {
+		mutate()
+	}
+	after := ComputeProjectInstructionBundleFingerprintForDir(cfg, cwd, nil)
+	return before, after
+}
+
+func assertFingerprintChanged(t *testing.T, before, after, reason string) {
+	t.Helper()
+	if before == after {
+		t.Fatalf("%s\nbefore=%q\nafter=%q", reason, before, after)
+	}
+}
+
+func assertFingerprintStable(t *testing.T, before, after, reason string) {
+	t.Helper()
+	if before != after {
+		t.Fatalf("%s\nbefore=%q\nafter=%q", reason, before, after)
+	}
+}
+
 func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsTracksImportedFiles(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "AGENTS.md"), "before\n@policy.md\nafter\n")
@@ -17,16 +55,10 @@ func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsTracksImp
 	cfg.AgentInstructions.Project.IncludeGitignored = true
 	cfg.AgentInstructions.ExpandImports = true
 
-	before := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	writeFile(t, policyPath, "POLICY_V2\n")
-	nextTime := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(policyPath, nextTime, nextTime); err != nil {
-		t.Fatal(err)
-	}
-	after := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	if before == after {
-		t.Fatalf("fingerprint should change when imported guidance changes with expand_imports=true\nbefore=%q\nafter=%q", before, after)
-	}
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		overwriteFileAndBumpMTime(t, policyPath, "POLICY_V2\n")
+	})
+	assertFingerprintChanged(t, before, after, "fingerprint should change when imported guidance changes with expand_imports=true")
 }
 
 func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsDisabledIgnoresImportedFiles(t *testing.T) {
@@ -39,16 +71,10 @@ func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsDisabledI
 	cfg.AgentInstructions.Project.IncludeGitignored = true
 	cfg.AgentInstructions.ExpandImports = false
 
-	before := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	writeFile(t, policyPath, "POLICY_V2\n")
-	nextTime := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(policyPath, nextTime, nextTime); err != nil {
-		t.Fatal(err)
-	}
-	after := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	if before != after {
-		t.Fatalf("fingerprint should remain stable when expand_imports=false\nbefore=%q\nafter=%q", before, after)
-	}
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		overwriteFileAndBumpMTime(t, policyPath, "POLICY_V2\n")
+	})
+	assertFingerprintStable(t, before, after, "fingerprint should remain stable when expand_imports=false")
 }
 
 func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsHandlesCyclicImports(t *testing.T) {
@@ -65,15 +91,9 @@ func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsHandlesCy
 	if before == "" {
 		t.Fatal("expected non-empty fingerprint")
 	}
-	writeFile(t, policyPath, "POLICY_V2\n@AGENTS.md\n")
-	nextTime := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(policyPath, nextTime, nextTime); err != nil {
-		t.Fatal(err)
-	}
+	overwriteFileAndBumpMTime(t, policyPath, "POLICY_V2\n@AGENTS.md\n")
 	after := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	if before == after {
-		t.Fatalf("fingerprint should change when cyclic imported file changes\nbefore=%q\nafter=%q", before, after)
-	}
+	assertFingerprintChanged(t, before, after, "fingerprint should change when cyclic imported file changes")
 }
 
 func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsIgnoresOutsideRootImport(t *testing.T) {
@@ -87,16 +107,10 @@ func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsIgnoresOu
 	cfg.AgentInstructions.Project.IncludeGitignored = true
 	cfg.AgentInstructions.ExpandImports = true
 
-	before := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	writeFile(t, outsidePath, "OUTSIDE_V2\n")
-	nextTime := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(outsidePath, nextTime, nextTime); err != nil {
-		t.Fatal(err)
-	}
-	after := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	if before != after {
-		t.Fatalf("fingerprint should not track outside-root imports\nbefore=%q\nafter=%q", before, after)
-	}
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		overwriteFileAndBumpMTime(t, outsidePath, "OUTSIDE_V2\n")
+	})
+	assertFingerprintStable(t, before, after, "fingerprint should not track outside-root imports")
 }
 
 func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsTracksMissingImportState(t *testing.T) {
@@ -108,14 +122,158 @@ func TestComputeProjectInstructionBundleFingerprintForDir_ExpandImportsTracksMis
 	cfg.AgentInstructions.Project.IncludeGitignored = true
 	cfg.AgentInstructions.ExpandImports = true
 
-	before := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	writeFile(t, missingPath, "NOW_EXISTS\n")
-	nextTime := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(missingPath, nextTime, nextTime); err != nil {
-		t.Fatal(err)
-	}
-	after := ComputeProjectInstructionBundleFingerprintForDir(cfg, root, nil)
-	if before == after {
-		t.Fatalf("fingerprint should change when missing import file becomes present\nbefore=%q\nafter=%q", before, after)
-	}
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		overwriteFileAndBumpMTime(t, missingPath, "NOW_EXISTS\n")
+	})
+	assertFingerprintChanged(t, before, after, "fingerprint should change when missing import file becomes present")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_ProjectModeOffIgnoresProjectGuidanceChanges(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V1\n")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeOff
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V2\n")
+	})
+	assertFingerprintStable(t, before, after, "fingerprint should remain stable in project.mode=off")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_FallbackWithXelyonIgnoresProjectGuidanceChanges(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "xelyon.yaml"), "context: test\n")
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V1\n")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeFallback
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V2\n")
+	})
+	assertFingerprintStable(t, before, after, "fingerprint should remain stable in fallback mode when xelyon.yaml exists")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_FallbackWithoutXelyonTracksTrackedProjectGuidance(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V1\n")
+	initGitRepo(t, root)
+	runGit(t, root, "add", "AGENTS.md")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeFallback
+
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V2\n")
+	})
+	assertFingerprintChanged(t, before, after, "fingerprint should change in fallback mode without xelyon.yaml when tracked guidance changes")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_AlwaysModeTracksTrackedProjectGuidance(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V1\n")
+	initGitRepo(t, root)
+	runGit(t, root, "add", "AGENTS.md")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeAlways
+
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V2\n")
+	})
+	assertFingerprintChanged(t, before, after, "fingerprint should change in project.mode=always when tracked guidance changes")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_IncludeGitignoredFalseIgnoresUntrackedGuidanceChanges(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V1\n")
+	initGitRepo(t, root)
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeAlways
+	cfg.AgentInstructions.Project.IncludeGitignored = false
+
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V2\n")
+	})
+	assertFingerprintStable(t, before, after, "fingerprint should remain stable when include_gitignored=false and guidance is untracked")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_IncludeGitignoredFalseIgnoresGitignoredGuidanceChanges(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".gitignore"), "AGENTS.md\n")
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V1\n")
+	initGitRepo(t, root)
+	runGit(t, root, "add", ".gitignore")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeAlways
+	cfg.AgentInstructions.Project.IncludeGitignored = false
+
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V2\n")
+	})
+	assertFingerprintStable(t, before, after, "fingerprint should remain stable when include_gitignored=false and guidance is gitignored")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_IncludeGitignoredTrueTracksUntrackedGuidanceChanges(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V1\n")
+	initGitRepo(t, root)
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeAlways
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+
+	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
+		writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V2\n")
+	})
+	assertFingerprintChanged(t, before, after, "fingerprint should change when include_gitignored=true and guidance is untracked")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_GlobalDisabledIgnoresGlobalGuidanceChanges(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	globalPath := filepath.Join(home, ".xelyon", "AGENTS.md")
+	writeFile(t, globalPath, "GLOBAL_V1\n")
+	workspace := t.TempDir()
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeOff
+	cfg.AgentInstructions.Global.Enabled = false
+
+	before, after := fingerprintBeforeAfter(t, cfg, workspace, func() {
+		writeFile(t, globalPath, "GLOBAL_V2\n")
+	})
+	assertFingerprintStable(t, before, after, "fingerprint should remain stable when global guidance is disabled")
+}
+
+func TestComputeProjectInstructionBundleFingerprintForDir_GlobalEnabledTracksGlobalGuidanceChanges(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	globalPath := filepath.Join(home, ".xelyon", "AGENTS.md")
+	writeFile(t, globalPath, "GLOBAL_V1\n")
+	workspace := t.TempDir()
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeOff
+	cfg.AgentInstructions.Global.Enabled = true
+
+	before, after := fingerprintBeforeAfter(t, cfg, workspace, func() {
+		writeFile(t, globalPath, "GLOBAL_V2\n")
+	})
+	assertFingerprintChanged(t, before, after, "fingerprint should change when global guidance is enabled")
 }

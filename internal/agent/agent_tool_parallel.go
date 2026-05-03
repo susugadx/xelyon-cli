@@ -10,7 +10,7 @@ import (
 	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
 )
 
-type ToolExecCallback func(idx int, tc *tools.ToolCall, result string, change *tools.FileChange)
+type ToolExecCallback func(idx int, tc *tools.ToolCall, result toolruntime.Result)
 
 // executeToolForParallel は並列実行用のツール実行関数。
 // goroutine から安全に呼び出せるよう、以下を省略している:
@@ -27,14 +27,22 @@ type ToolExecCallback func(idx int, tc *tools.ToolCall, result string, change *t
 //	ctx.Err() を実行前にチェックして早期リターンする。
 //	Tool.Run() まで request context を伝播するが、各ツールがそれを使うかは個別実装次第。
 //	現状は bash など context-aware なツールが実行中キャンセルを拾える。
-func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) (string, *tools.FileChange) {
+func (a *Agent) executeToolForParallelResult(ctx context.Context, tc *tools.ToolCall) tools.ExecutionResult {
 	// wait_agent はリアルタイムイベント表示を使用（parallel path でも live view を優先）
 	if tc.Tool == "wait_agent" {
-		return a.executeWaitAgentWithLiveView(ctx, tc)
+		output, change := a.executeWaitAgentWithLiveView(ctx, tc)
+		return tools.ExecutionResult{
+			Result: output,
+			Change: change,
+			Error:  tools.IsErrorResult(output),
+		}
 	}
 
 	if ctx.Err() != nil {
-		return "Error: context cancelled", nil
+		return tools.ExecutionResult{
+			Result: "Error: context cancelled",
+			Error:  true,
+		}
 	}
 
 	// ネガティブキャッシュチェック（ToolCache は thread-safe）
@@ -44,21 +52,21 @@ func (a *Agent) executeToolForParallel(ctx context.Context, tc *tools.ToolCall) 
 		}
 	}
 
-	// ExecuteQuietWithContext: ヘッダー・引数・折りたたみ出力と補助 stdout を抑制（parallel path 用）
-	result, change := tools.ExecuteQuietWithContext(a.toolExecutionContext(ctx, strings.NewReader(""), io.Discard, io.Discard), tc)
-	a.recordToolResultOptimizations(tc, result)
+	// ヘッダー・引数・折りたたみ出力と補助 stdout を抑制（parallel path 用）
+	execResult := a.executeQuietToolResult(ctx, tc, strings.NewReader(""), io.Discard, io.Discard, false)
+	a.recordToolResultOptimizations(tc, execResult.Result)
 
 	if a.ToolCache != nil {
-		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, result)
+		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, execResult.Result)
 	}
 
-	return result, change
+	return execResult
 }
 
-func (a *Agent) executeReadFileBatch(ctx context.Context, paths []string) string {
+func (a *Agent) executeReadFileBatchResult(ctx context.Context, paths []string) toolruntime.Result {
 	tc := toolruntime.BuildReadFileBatchToolCall(paths, true)
 	if ctx.Err() != nil {
-		return "Error: context cancelled"
+		return toolruntime.Result{Result: "Error: context cancelled", Error: true}
 	}
 
 	if a.ToolCache != nil {
@@ -75,5 +83,8 @@ func (a *Agent) executeReadFileBatch(ctx context.Context, paths []string) string
 		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, result)
 	}
 
-	return result
+	return toolruntime.Result{
+		Result: result,
+		Error:  tools.IsErrorResult(result),
+	}
 }

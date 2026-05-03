@@ -34,7 +34,8 @@ func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	}
 
 	return outcome.result.message, newFileChange(
-		outcome.path,
+		outcome.displayPath,
+		outcome.resolvedPath,
 		"str_replace",
 		outcome.fileChangeDescription,
 		outcome.linesAdded,
@@ -44,7 +45,8 @@ func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]str
 
 type strReplaceToolRunOutcome struct {
 	result                fileMutationResult
-	path                  string
+	displayPath           string
+	resolvedPath          string
 	fileChangeDescription string
 	linesAdded            int
 	linesRemoved          int
@@ -62,7 +64,8 @@ func executeBatchStrReplaceToolRun(execCtx tools.ExecutionContext, args map[stri
 
 	return strReplaceToolRunOutcome{
 		result:                details.result,
-		path:                  args["path"],
+		displayPath:           args["path"],
+		resolvedPath:          details.resolvedPath,
 		fileChangeDescription: "Batch replaced in " + args["path"],
 		linesAdded:            details.linesAdded,
 		linesRemoved:          details.linesRemoved,
@@ -81,7 +84,8 @@ func executeSingleStrReplaceToolRun(execCtx tools.ExecutionContext, args map[str
 	)
 	return strReplaceToolRunOutcome{
 		result:                details.result,
-		path:                  args["path"],
+		displayPath:           args["path"],
+		resolvedPath:          details.resolvedPath,
 		fileChangeDescription: "Replaced in " + args["path"],
 		linesAdded:            details.linesAdded,
 		linesRemoved:          details.linesRemoved,

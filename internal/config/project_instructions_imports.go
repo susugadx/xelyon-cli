@@ -15,18 +15,6 @@ func expandInstructionImports(opts instructionFileLoadOptions, data []byte) inst
 	return expandInstructionImportsWithCollector(opts, data, nil)
 }
 
-func collectInstructionImportDependencies(opts instructionFileLoadOptions) []string {
-	if !opts.Policy.ExpandImports {
-		return nil
-	}
-	data, _, _, ok := loadInstructionSource(opts)
-	if !ok {
-		return nil
-	}
-	result := expandInstructionImportsWithCollector(opts, data, nil)
-	return result.ImportedPaths
-}
-
 func expandInstructionImportsWithCollector(opts instructionFileLoadOptions, data []byte, collector []string) instructionImportExpansionResult {
 	if len(data) == 0 {
 		return instructionImportExpansionResult{Content: data, ImportedPaths: collector}

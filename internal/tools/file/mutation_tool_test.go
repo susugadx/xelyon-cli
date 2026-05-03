@@ -320,3 +320,55 @@ func TestWriteDeleteToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {
 		assertHasFileChange(t, change)
 	})
 }
+
+func TestMutationTools_RecordResolvedPathInFileChangeDetails(t *testing.T) {
+	setupTestMocks(t)
+	defer withPermissiveValidatePath(t)()
+	execCtx := newTestToolExecContext()
+	setupTestConfirm(t, true)
+
+	t.Run("write_file", func(t *testing.T) {
+		tool := &WriteFileTool{}
+		tmpDir := t.TempDir()
+		targetPath := filepath.Join(tmpDir, "write.txt")
+
+		_, change, err := tool.Run(execCtx, map[string]string{
+			"path":    targetPath,
+			"content": "hello",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertFileChangeResolvedPath(t, change, targetPath)
+	})
+
+	t.Run("str_replace", func(t *testing.T) {
+		tool := &StrReplaceTool{}
+		tmpDir := t.TempDir()
+		targetPath := filepath.Join(tmpDir, "replace.txt")
+		testutil.CreateTempFile(t, tmpDir, "replace.txt", "before")
+
+		_, change, err := tool.Run(execCtx, map[string]string{
+			"path":    targetPath,
+			"old_str": "before",
+			"new_str": "after",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertFileChangeResolvedPath(t, change, targetPath)
+	})
+
+	t.Run("delete_file", func(t *testing.T) {
+		tool := &DeleteFileTool{}
+		tmpDir := t.TempDir()
+		targetPath := filepath.Join(tmpDir, "delete.txt")
+		testutil.CreateTempFile(t, tmpDir, "delete.txt", "to delete")
+
+		_, change, err := tool.Run(execCtx, map[string]string{"path": targetPath})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertFileChangeResolvedPath(t, change, targetPath)
+	})
+}

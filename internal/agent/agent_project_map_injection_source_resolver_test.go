@@ -38,3 +38,24 @@ func TestResolveProjectMapSourceRootPath_FallsBackToCWD(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveProjectMapSourceRootPathWithFallback_UsesCachedRootPath(t *testing.T) {
+	cwd := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "workspace"))
+	fallbackRootPath := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "workspace-root"))
+
+	got := resolveProjectMapSourceRootPathWithFallback(cwd, nil, fallbackRootPath)
+	if got != fallbackRootPath {
+		t.Fatalf("resolveProjectMapSourceRootPathWithFallback() = %q, want %q", got, fallbackRootPath)
+	}
+}
+
+func TestResolveProjectMapSourceRootPathWithFallback_PrefersBundleRootPath(t *testing.T) {
+	cwd := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "workspace"))
+	bundleRootPath := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "project"))
+	fallbackRootPath := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "workspace-root"))
+
+	got := resolveProjectMapSourceRootPathWithFallback(cwd, &config.ProjectInstructionBundle{RootPath: bundleRootPath}, fallbackRootPath)
+	if got != bundleRootPath {
+		t.Fatalf("resolveProjectMapSourceRootPathWithFallback() = %q, want %q", got, bundleRootPath)
+	}
+}

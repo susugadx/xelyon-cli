@@ -22,33 +22,46 @@ type projectMapSectionBuild struct {
 	effectiveFocusKey string
 }
 
+type projectMapInjector struct {
+	agent *Agent
+	input string
+}
+
 // injectProjectMap はプロジェクト構造マップをシステムプロンプトに注入する。
 func injectProjectMap(agent *Agent, input string) {
-	if agent == nil {
+	injector := projectMapInjector{
+		agent: agent,
+		input: input,
+	}
+	injector.inject()
+}
+
+func (i projectMapInjector) inject() {
+	if i.agent == nil {
 		return
 	}
 
-	resetProjectMapPromptSection(agent)
+	resetProjectMapPromptSection(i.agent)
 
-	injectionCtx, ok := prepareProjectMapInjection(agent, input)
+	injectionCtx, ok := prepareProjectMapInjection(i.agent, i.input)
 	if !ok {
 		return
 	}
 
-	if applyProjectMapCachedSection(agent, injectionCtx) {
+	if applyProjectMapCachedSection(i.agent, injectionCtx) {
 		return
 	}
 
-	build, ok := buildProjectMapSection(agent, injectionCtx)
+	build, ok := buildProjectMapSection(i.agent, injectionCtx)
 	if !ok {
-		resetProjectMapCachedSections(agent)
-		agent.projectMapDirty = false
+		resetProjectMapCachedSections(i.agent)
+		i.agent.projectMapDirty = false
 		return
 	}
 
-	applyProjectMapBuiltSection(agent, injectionCtx, build)
+	applyProjectMapBuiltSection(i.agent, injectionCtx, build)
 	if injectionCtx.rebuilt {
-		green.Fprintf(agent.output(), "🗺️  Project map loaded (%d files, %d symbols)\n", agent.projectMapFileCount, agent.projectMapSymbolCount)
+		green.Fprintf(i.agent.output(), "🗺️  Project map loaded (%d files, %d symbols)\n", i.agent.projectMapFileCount, i.agent.projectMapSymbolCount)
 	}
 }
 

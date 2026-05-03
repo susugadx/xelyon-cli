@@ -19,15 +19,16 @@ func (t *WriteFileTool) Parameters() map[string]interface{} {
 }
 
 func (t *WriteFileTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
-	result, err := executeWriteFileWithPromptIOAndOptionsAndLSPClient(execCtx.PromptIO(), execCtx.ConfirmOptions(), execCtx.EffectiveLSPClient(), args["path"], args["content"])
+	details, err := executeWriteFileWithPromptIOAndOptionsAndLSPClientDetails(execCtx.PromptIO(), execCtx.ConfirmOptions(), execCtx.EffectiveLSPClient(), args["path"], args["content"])
 	if err != nil {
-		return result.message, nil, err
+		return details.result.message, nil, err
 	}
-	if !result.ShouldRecordChange() {
-		return result.message, nil, nil
+	if !details.result.ShouldRecordChange() {
+		return details.result.message, nil, nil
 	}
-	return result.message, newFileChange(
+	return details.result.message, newFileChange(
 		args["path"],
+		details.resolvedPath,
 		"write_file",
 		"Wrote file "+args["path"],
 		countLines(args["content"]),

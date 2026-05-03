@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,75 +17,14 @@ import (
 
 // printToolArgs はツールの引数を簡潔に表示する（Execute/PreviewToolCallで共通使用）
 func printToolArgs(w io.Writer, tc *ToolCall) {
-	switch tc.Tool {
-	case "gather_context":
-		_, _ = fmt.Fprintf(w, "   Query: %s\n", truncate(tc.Args["query"], 60))
-		if tc.Args["path"] != "" {
-			_, _ = fmt.Fprintf(w, "   Path: %s\n", tc.Args["path"])
-		}
-		if tc.Args["file_filter"] != "" {
-			_, _ = fmt.Fprintf(w, "   File filter: %s\n", tc.Args["file_filter"])
-		}
-	case "read_file":
-		_, _ = fmt.Fprintf(w, "   %s\n", formatReadFilePreviewArg(tc.Args))
-	case "write_file":
-		lines := strings.Split(tc.Args["content"], "\n")
-		_, _ = fmt.Fprintf(w, "   File: %s (%d lines)\n", tc.Args["path"], len(lines))
-	case "apply_patch":
-		lines := strings.Split(tc.Args["patch"], "\n")
-		_, _ = fmt.Fprintf(w, "   Patch: %d lines\n", len(lines))
-	case "str_replace":
-		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
-	case "bash":
-		_, _ = fmt.Fprintf(w, "   Command: %s\n", truncate(tc.Args["command"], 60))
-	case "list_dir":
-		path := tc.Args["path"]
-		if path == "" {
-			path = "."
-		}
-		_, _ = fmt.Fprintf(w, "   Directory: %s\n", path)
-	case "git_add", "git_commit", "git_push", "git_status", "git_diff", "git_log",
-		"git_branch", "git_checkout", "git_stash":
-		// Git操作は引数を簡潔に表示
-		for k, v := range tc.Args {
-			if v != "" {
-				_, _ = fmt.Fprintf(w, "   %s: %s\n", k, truncate(v, 60))
-			}
-		}
-	case "copy_file":
-		_, _ = fmt.Fprintf(w, "   Source: %s\n", tc.Args["src"])
-		_, _ = fmt.Fprintf(w, "   Destination: %s\n", tc.Args["dest"])
-	case "delete_file":
-		_, _ = fmt.Fprintf(w, "   File: %s\n", tc.Args["path"])
-	case "lint":
-		path := tc.Args["path"]
-		if path == "" {
-			path = "."
-		}
-		_, _ = fmt.Fprintf(w, "   Path: %s\n", path)
-		if tc.Args["auto_fix"] == "true" {
-			_, _ = fmt.Fprintf(w, "   Auto-fix: enabled\n")
-		}
-	case "search_code":
-		_, _ = fmt.Fprintf(w, "   Pattern: %s\n", tc.Args["pattern"])
-		if tc.Args["path"] != "" {
-			_, _ = fmt.Fprintf(w, "   Path: %s\n", tc.Args["path"])
-		}
-		if tc.Args["file_filter"] != "" {
-			_, _ = fmt.Fprintf(w, "   File filter: %s\n", tc.Args["file_filter"])
-		} else if tc.Args["file_pattern"] != "" {
-			_, _ = fmt.Fprintf(w, "   File pattern: %s\n", tc.Args["file_pattern"])
-		}
-	case "web_search":
-		_, _ = fmt.Fprintf(w, "   Query: %s\n", tc.Args["query"])
-	default:
-		// その他のツール（MCPツール等）
-		if len(tc.Args) > 0 {
-			for k, v := range tc.Args {
-				_, _ = fmt.Fprintf(w, "   %s: %s\n", k, truncate(v, 60))
-			}
+	if tc != nil {
+		if printer, ok := toolArgPreviewPrinters[tc.Tool]; ok {
+			printer(w, tc)
+			_, _ = fmt.Fprintln(w)
+			return
 		}
 	}
+	printGenericToolArgs(w, tc)
 	_, _ = fmt.Fprintln(w)
 }
 
@@ -120,6 +58,7 @@ type ExecutionResult struct {
 	Result   string
 	Change   *FileChange
 	Duration time.Duration
+	Error    bool
 }
 
 // ExecuteWithContext は実行コンテキスト付きでツールを実行し、結果を公開する。
@@ -133,13 +72,14 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 func ExecuteUnpublishedWithContext(execCtx ExecutionContext, tc *ToolCall) ExecutionResult {
 	execCtx = normalizeExecutionContext(execCtx)
 	startTime := time.Now()
-	result, change := executeCoreWithContext(execCtx, tc)
+	result, change, isError := executeCoreWithContext(execCtx, tc)
 	elapsed := time.Since(startTime)
 
 	return ExecutionResult{
 		Result:   result,
 		Change:   change,
 		Duration: elapsed,
+		Error:    isError,
 	}
 }
 
@@ -168,7 +108,7 @@ func PublishResultWithContext(execCtx ExecutionContext, tc *ToolCall, execResult
 	}
 
 	result := execResult.Result
-	isError := strings.HasPrefix(strings.TrimSpace(result), "Error:")
+	isError := execResult.Error || IsErrorResult(result)
 
 	if execCtx.ToolResultCallback != nil {
 		// TUIモード: 構造化データをコールバックで送信
@@ -195,148 +135,53 @@ func PublishResultWithContext(execCtx ExecutionContext, tc *ToolCall, execResult
 	}
 }
 
-func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
+func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange, bool) {
 	if err := execCtx.EffectiveContext().Err(); err != nil {
 		if errors.Is(err, context.Canceled) {
-			return "Error: context cancelled", nil
+			return "Error: context cancelled", nil, true
 		}
-		return fmt.Sprintf("Error: %v", err), nil
+		return fmt.Sprintf("Error: %v", err), nil, true
 	}
 
-	// デフォルト値の設定（Registry実行前）
-	// list_dir, git_addでpathが空の場合"."を設定
-	if tc.Args["path"] == "" {
-		switch tc.Tool {
-		case "list_dir", "git_add":
-			tc.Args["path"] = "."
-		}
-	}
+	applyToolCallDefaults(tc)
+	result, change := executeToolCallCore(execCtx, tc)
+	result = normalizeToolExecutionOutput(result)
 
-	// Registry経由でツール実行
+	return result, change, IsErrorResult(result)
+}
+
+func applyToolCallDefaults(tc *ToolCall) {
+	if tc == nil {
+		return
+	}
+	if tc.Args == nil {
+		tc.Args = make(map[string]string)
+	}
+	if tc.Args["path"] != "" {
+		return
+	}
+	switch tc.Tool {
+	case "list_dir", "git_add":
+		tc.Args["path"] = "."
+	}
+}
+
+func executeToolCallCore(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
 	result, change := execCtx.EffectiveRegistry().ExecuteWithContext(execCtx, tc)
-
-	// ファイル変更系ツールの場合、キャッシュを無効化
-	invalidateToolCache(execCtx, tc)
-
-	// ツール出力が空の場合は補完
-	if strings.TrimSpace(result) == "" {
-		result = "(no output)"
-	}
-
+	invalidateToolCache(execCtx, tc, change)
 	return result, change
 }
 
-// invalidateToolCache はファイル変更系ツール実行後にキャッシュを無効化
-func invalidateToolCache(execCtx ExecutionContext, tc *ToolCall) {
-	cache := execCtx.EffectiveToolCache()
-	if cache == nil {
-		return
+func normalizeToolExecutionOutput(result string) string {
+	if strings.TrimSpace(result) == "" {
+		return "(no output)"
 	}
-
-	switch tc.Tool {
-	// ファイル内容を変更するツール → ファイルキャッシュ＆検索キャッシュ無効化
-	case "apply_patch":
-		cache.Clear()
-
-	case "write_file", "str_replace", "format", "lint":
-		if path := tc.Args["path"]; path != "" {
-			if absPath, err := filepath.Abs(path); err == nil {
-				cache.InvalidateFile(absPath)
-				cache.InvalidateSearchCacheForFile(absPath)
-			}
-		}
-
-	// ファイルを削除するツール → ファイル＆ディレクトリ＆検索キャッシュ無効化
-	case "delete_file":
-		if path := tc.Args["path"]; path != "" {
-			if absPath, err := filepath.Abs(path); err == nil {
-				cache.InvalidateFile(absPath)
-				cache.InvalidateDir(filepath.Dir(absPath))
-				cache.InvalidateSearchCacheForFile(absPath)
-			}
-		}
-
-	// コピーはコピー先のディレクトリキャッシュ＆検索キャッシュを無効化
-	case "copy_file":
-		if dest := tc.Args["dest"]; dest != "" {
-			if absPath, err := filepath.Abs(dest); err == nil {
-				cache.InvalidateDir(filepath.Dir(absPath))
-				cache.InvalidateSearchCacheForFile(absPath)
-			}
-		}
-
-	// ディレクトリ作成は検索結果に影響しないため検索キャッシュはクリアしない
-	case "create_dir":
-		if path := tc.Args["path"]; path != "" {
-			if absPath, err := filepath.Abs(path); err == nil {
-				cache.InvalidateDir(filepath.Dir(absPath))
-			}
-		}
-
-	// git checkout でファイルが復元される可能性
-	case "git_checkout":
-		// 全キャッシュクリア（どのファイルが変更されるか分からない）
-		cache.Clear()
-
-	// bash: read-only コマンドならキャッシュを保持、それ以外は全クリア
-	case "bash":
-		if cmd := tc.Args["command"]; !isBashReadOnly(cmd) {
-			cache.Clear()
-		}
-	}
+	return result
 }
 
-// readOnlyCommands は bash 実行後にキャッシュクリアが不要なコマンドのプレフィックス。
-// ファイルを変更しないコマンドのみ（go mod tidy 等は除外）。
-// NOTE: auto-approve 判定とは独立。discovery 系もキャッシュ判定では read-only 扱い。
-var readOnlyCommands = []string{
-	"ls", "cat", "pwd", "echo", "which",
-	"head", "tail", "wc", "grep", "rg", "find",
-	"sed -n", "diff", "file", "du", "stat",
-	"md5sum", "sha256sum",
-	"git status", "git log", "git diff", "git branch",
-	"git ls-files", "git show", "git remote",
-	"go version", "go test", "go vet", "go env",
-	"node -v", "npm -v", "npm list",
-	"python --version", "pip list",
-	"env", "printenv", "date", "uname", "whoami", "id",
-	"tree", "less", "more", "sort", "uniq", "cut", "tr",
-}
-
-// isBashReadOnly はコマンドが read-only（キャッシュクリア不要）かどうかを判定する。
-// パイプ、リダイレクト、連結演算子を含む場合は安全側に倒して false を返す。
-func isBashReadOnly(command string) bool {
-	trimmed := strings.TrimSpace(command)
-	if trimmed == "" {
-		return true
-	}
-
-	// パイプ・リダイレクト・連結を含む場合は unsafe
-	for _, ch := range []string{"|", ">", ">>", "&&", ";"} {
-		if strings.Contains(trimmed, ch) {
-			return false
-		}
-	}
-
-	// 先頭コマンドが read-only リストにマッチするか
-	for _, prefix := range readOnlyCommands {
-		if trimmed == prefix {
-			return true
-		}
-		if strings.HasPrefix(trimmed, prefix) && len(trimmed) > len(prefix) {
-			next := trimmed[len(prefix)]
-			if next == ' ' || next == '\t' {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-// IsReadOnlyBashCommand は bash コマンドが read-only かどうかを返す。
-func IsReadOnlyBashCommand(command string) bool {
-	return isBashReadOnly(command)
+// IsErrorResult はツール結果が失敗メッセージかどうかを判定する。
+func IsErrorResult(result string) bool {
+	return strings.HasPrefix(strings.TrimSpace(result), "Error:")
 }
 
 // PreviewToolCallWithWriter は指定 writer にツール情報を表示する（実行はしない）。

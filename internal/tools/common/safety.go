@@ -1,6 +1,10 @@
 package common
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/toolmeta"
+)
 
 // ToolSafety はツールの安全性レベル
 type ToolSafety int
@@ -14,42 +18,50 @@ const (
 	SafetyLow
 )
 
-// ToolSafetyLevels は各ツールの安全性レベルを定義
-var ToolSafetyLevels = map[string]ToolSafety{
-	// SafetyHigh: 読み取り専用操作
-	"gather_context":    SafetyHigh,
-	"read_file":         SafetyHigh,
-	"read_files":        SafetyHigh,
-	"search_code":       SafetyHigh,
-	"list_dir":          SafetyHigh,
-	"git_status":        SafetyHigh,
-	"git_log":           SafetyHigh,
-	"git_diff":          SafetyHigh,
-	"ask_user_question": SafetyHigh,
-	"spawn_agent":       SafetyHigh,
-	"wait_agent":        SafetyHigh,
+// ToolSafetyLevels は各ツールの安全性レベルを定義。
+// toolmeta の定義をベースに、ここでは legacy ツール/別名を補完する。
+var ToolSafetyLevels = buildToolSafetyLevels()
 
-	// SafetyMedium: 外部検索APIコール（確認対象）
-	"web_search": SafetyMedium,
+func buildToolSafetyLevels() map[string]ToolSafety {
+	levels := make(map[string]ToolSafety)
+	for _, spec := range toolmeta.BuiltinSpecs() {
+		levels[spec.Name] = mapToolMetaSafety(spec.Safety)
+	}
+	applyLegacyToolSafetyOverrides(levels)
+	return levels
+}
 
-	// SafetyMedium: 書き込み操作（リカバリ可能）
-	"write_file":     SafetyMedium,
-	"str_replace":    SafetyMedium,
+func applyLegacyToolSafetyOverrides(levels map[string]ToolSafety) {
+	for name, safety := range legacyToolSafetyOverrides {
+		levels[name] = safety
+	}
+}
+
+var legacyToolSafetyOverrides = map[string]ToolSafety{
+	// 互換/補助ツール名
+	"read_files":     SafetyHigh,
 	"copy_file":      SafetyMedium,
 	"create_dir":     SafetyMedium,
 	"git_add":        SafetyMedium,
 	"git_reset_soft": SafetyMedium,
-
-	// SafetyLow: 破壊的操作（--auto-approve で自動承認可、通常は確認必須）
 	"apply_patch":    SafetyLow,
-	"delete_file":    SafetyLow,
 	"git_push":       SafetyLow,
 	"git_branch":     SafetyLow,
 	"git_stash":      SafetyLow,
 	"git_reset_hard": SafetyLow,
 	"git_force_push": SafetyLow,
-	"bash":           SafetyLow,
 	"command":        SafetyLow,
+}
+
+func mapToolMetaSafety(level toolmeta.SafetyLevel) ToolSafety {
+	switch level {
+	case toolmeta.SafetyHigh:
+		return SafetyHigh
+	case toolmeta.SafetyLow:
+		return SafetyLow
+	default:
+		return SafetyMedium
+	}
 }
 
 // GetToolSafety は指定されたツールの安全性レベルを返す

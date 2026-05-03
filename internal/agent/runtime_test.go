@@ -165,6 +165,36 @@ func TestAgentRuntime_EffectiveConfigDoesNotUseGlobalFallback(t *testing.T) {
 	}
 }
 
+func TestNewAgentWithRuntime_PreservesExplicitInvocationCWD(t *testing.T) {
+	_ = runtimeTestWorkspace(t)
+	explicitCWD := t.TempDir()
+
+	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
+	runtime.InvocationCWD = explicitCWD
+	agent := newRuntimeTestAgent(t, runtime)
+
+	if got := agent.invocationCWD(); got != explicitCWD {
+		t.Fatalf("agent invocation cwd = %q, want %q", got, explicitCWD)
+	}
+
+	execCtx := agent.toolExecutionContext(context.Background(), nil, nil, nil)
+	if got := execCtx.InvocationCWD; got != explicitCWD {
+		t.Fatalf("tool execution invocation cwd = %q, want %q", got, explicitCWD)
+	}
+}
+
+func TestNewAgentWithRuntime_UsesProcessCWDWhenInvocationCWDUnset(t *testing.T) {
+	processCWD := runtimeTestWorkspace(t)
+
+	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
+	runtime.InvocationCWD = ""
+	agent := newRuntimeTestAgent(t, runtime)
+
+	if got := agent.invocationCWD(); got != processCWD {
+		t.Fatalf("agent invocation cwd = %q, want %q", got, processCWD)
+	}
+}
+
 func TestAgentRuntime_SeparatesRegistryCacheAndAutoApprove(t *testing.T) {
 	root := runtimeTestWorkspace(t)
 

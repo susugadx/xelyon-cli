@@ -18,33 +18,8 @@ func (a *Agent) addToolCallsToHistory(response string, toolCalls []*tools.ToolCa
 	reasoningContent := a.getLastReasoningContent()
 	contentBlocks := a.getLastAnthropicContentBlocks()
 
-	openAIToolCalls := make([]api.OpenAIToolCall, len(toolCalls))
-	for i, tc := range toolCalls {
-		openAIToolCalls[i] = api.OpenAIToolCall{
-			ID:   tc.ID,
-			Type: "function",
-			Function: api.OpenAIToolCallFunction{
-				Name:      tc.Tool,
-				Arguments: toolruntime.ArgsToJSON(tc.RawArgs),
-			},
-		}
-		// ThoughtSignature/ThoughtParts は最初の ToolCall のみ（Gemini 3 仕様）
-		if i == 0 {
-			openAIToolCalls[i].ThoughtSignature = tc.ThoughtSignature
-			openAIToolCalls[i].ThoughtParts = tc.ThoughtParts
-		}
-	}
-
-	historyContent, historyReasoning := a.assistantToolHistoryContent(explanation, reasoningContent)
-
-	msg := api.Message{
-		Role:             "assistant",
-		Content:          historyContent,
-		ReasoningContent: historyReasoning,
-		ToolCalls:        openAIToolCalls,
-	}
-	msg.SetAnthropicContentBlocks(contentBlocks)
-	a.History = append(a.History, msg)
+	openAIToolCalls := buildOpenAIToolCallsForHistory(toolCalls)
+	appendAssistantToolCallsHistoryMessage(a, explanation, reasoningContent, contentBlocks, openAIToolCalls)
 
 	// セッションに保存（1回のみ）
 	if a.session != nil {
@@ -64,32 +39,47 @@ func (a *Agent) assistantToolHistoryContent(explanation, reasoningContent string
 	return explanation, reasoningContent
 }
 
+func buildOpenAIToolCallsForHistory(toolCalls []*tools.ToolCall) []api.OpenAIToolCall {
+	openAIToolCalls := make([]api.OpenAIToolCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		openAIToolCalls[i] = api.OpenAIToolCall{
+			ID:   tc.ID,
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      tc.Tool,
+				Arguments: toolruntime.ArgsToJSON(tc.RawArgs),
+			},
+		}
+		// ThoughtSignature/ThoughtParts は最初の ToolCall のみ（Gemini 3 仕様）
+		if i == 0 {
+			openAIToolCalls[i].ThoughtSignature = tc.ThoughtSignature
+			openAIToolCalls[i].ThoughtParts = tc.ThoughtParts
+		}
+	}
+	return openAIToolCalls
+}
+
+func appendAssistantToolCallsHistoryMessage(agent *Agent, explanation, reasoningContent string, contentBlocks []api.AnthropicContentBlock, toolCalls []api.OpenAIToolCall) {
+	if agent == nil {
+		return
+	}
+	historyContent, historyReasoning := agent.assistantToolHistoryContent(explanation, reasoningContent)
+	msg := api.Message{
+		Role:             "assistant",
+		Content:          historyContent,
+		ReasoningContent: historyReasoning,
+		ToolCalls:        toolCalls,
+	}
+	msg.SetAnthropicContentBlocks(contentBlocks)
+	agent.History = append(agent.History, msg)
+}
+
 // executeToolOnly はツールを実行して結果を履歴に追加する（assistant メッセージは追加しない）。
 // addToolCallsToHistory でバッチ化済みの場合に使用する。
 func (a *Agent) executeToolOnly(toolCall *tools.ToolCall) string {
 	// ツール実行
-	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
-	a.noteProjectMapMutation(toolCall, change)
-	a.appendSessionToolExecution(toolCall, result)
-
-	// str_replace エラー処理
-	if a.handleStrReplaceErrors(toolCall, result) {
-		return result
-	}
-
-	// comment 継続フロー処理
-	if a.handleCommentFlow(toolCall, result) {
-		return result
-	}
-
-	// 変更履歴を保存
-	a.handleFileChange(change)
-
-	// 結果を履歴に追加
-	a.appendToolResultToHistory(toolCall, result)
-
-	_, _ = fmt.Fprintln(a.output())
-	return result
+	execResult := a.executeToolWithSpinnerResult(a.currentRequestContext(), toolCall)
+	return a.finalizeExecutedToolResult(toolCall, execResult, true)
 }
 
 // addToolCallToHistory はツール呼び出しを会話履歴に追加する
@@ -213,25 +203,26 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 	a.addToolCallToHistory(response, toolCall)
 
 	// ツール実行
-	result, change := a.executeToolWithSpinner(a.currentRequestContext(), toolCall)
-	a.appendSessionToolExecution(toolCall, result)
+	execResult := a.executeToolWithSpinnerResult(a.currentRequestContext(), toolCall)
+	return a.finalizeExecutedToolResult(toolCall, execResult, false)
+}
 
-	// str_replace エラー処理
+func (a *Agent) finalizeExecutedToolResult(toolCall *tools.ToolCall, execResult tools.ExecutionResult, trackProjectMapMutation bool) string {
+	result, change := execResult.Result, execResult.Change
+	if trackProjectMapMutation {
+		a.noteProjectMapMutation(toolCall, change)
+	}
+	a.appendSessionToolExecution(toolCall, result, execResult.Error)
+
 	if a.handleStrReplaceErrors(toolCall, result) {
 		return result
 	}
-
-	// comment 継続フロー処理
 	if a.handleCommentFlow(toolCall, result) {
 		return result
 	}
 
-	// 変更履歴を保存
 	a.handleFileChange(change)
-
-	// 結果を履歴に追加
 	a.appendToolResultToHistory(toolCall, result)
-
 	_, _ = fmt.Fprintln(a.output())
 	return result
 }

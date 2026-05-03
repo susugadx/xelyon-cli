@@ -3,6 +3,8 @@ package agent
 import (
 	"strings"
 	"testing"
+
+	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 )
 
 func TestSyncCurrentDerivedRuntimeState_ModelDrivenEditMode(t *testing.T) {
@@ -115,5 +117,36 @@ func TestSyncCurrentDerivedRuntimeState_PreservesRuntimeSpecificExclusions(t *te
 	}
 	if !toolNameInList(excluded, "apply_patch") {
 		t.Fatalf("legacy model-driven mode should still exclude apply_patch, got %v", excluded)
+	}
+}
+
+func TestSyncCurrentDerivedRuntimeState_RebuildKeepsSkillsCatalog(t *testing.T) {
+	withTempWorkdir(t)
+	oldLoader := loadSkillCatalogForAgent
+	defer func() { loadSkillCatalogForAgent = oldLoader }()
+	loadSkillCatalogForAgent = func(_ string) agentskills.SkillCatalog {
+		return agentskills.SkillCatalog{
+			Skills: []agentskills.ParsedSkill{
+				{Name: "demo", Description: "demo skill"},
+			},
+		}
+	}
+
+	cfg := newProjectMapDisabledConfig()
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	agent := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-5.4",
+		CurrentProvider: &mockCacheClearableProviderForModel{name: "openai"},
+		Runtime:         runtime,
+	}
+
+	agent.syncCurrentDerivedRuntimeState()
+
+	if !strings.Contains(agent.SystemPrompt, "SKILLS_CATALOG_START") {
+		t.Fatalf("skills catalog block should remain after base rebuild:\n%s", agent.SystemPrompt)
+	}
+	if !strings.Contains(agent.SystemPrompt, "- demo: demo skill") {
+		t.Fatalf("skills catalog entry missing after base rebuild:\n%s", agent.SystemPrompt)
 	}
 }

@@ -59,6 +59,60 @@ func TestLoadProjectConfigNeitherExists(t *testing.T) {
 	}
 }
 
+func TestLoadProjectConfigForDir_UsesSpecifiedDirectory(t *testing.T) {
+	processDir := t.TempDir()
+	targetDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(processDir, "xelyon.yaml"), []byte("context: process\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, "xelyon.yaml"), []byte("context: target\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(processDir); err != nil {
+		t.Fatal(err)
+	}
+
+	pc := LoadProjectConfigForDir(targetDir)
+	if pc == nil {
+		t.Fatal("LoadProjectConfigForDir() returned nil, want non-nil")
+	}
+	if pc.Context != "target" {
+		t.Fatalf("LoadProjectConfigForDir().Context = %q, want %q", pc.Context, "target")
+	}
+}
+
+func TestResolveProjectConfigPathForDir_UsesSpecifiedDirectory(t *testing.T) {
+	processDir := t.TempDir()
+	targetDir := t.TempDir()
+	configPath := filepath.Join(targetDir, "xelyon.yaml")
+	if err := os.WriteFile(filepath.Join(processDir, "xelyon.yaml"), []byte("context: process\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte("context: target\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(origDir) }()
+	if err := os.Chdir(processDir); err != nil {
+		t.Fatal(err)
+	}
+
+	resolvedPath, ok, err := ResolveProjectConfigPathForDir(targetDir)
+	if err != nil {
+		t.Fatalf("ResolveProjectConfigPathForDir() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("ResolveProjectConfigPathForDir() ok = false, want true")
+	}
+	if resolvedPath != filepath.Clean(configPath) {
+		t.Fatalf("ResolveProjectConfigPathForDir() = %q, want %q", resolvedPath, filepath.Clean(configPath))
+	}
+}
+
 func TestLoadProjectConfigXELYONMDIgnored(t *testing.T) {
 	dir := t.TempDir()
 	// XELYON.md のみ存在 → 無視される

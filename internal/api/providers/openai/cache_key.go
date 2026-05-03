@@ -6,6 +6,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 var projectConfigSectionRe = regexp.MustCompile(`(?s)<!-- PROJECT_CONFIG_START -->.*?<!-- PROJECT_CONFIG_END -->`)
@@ -45,14 +47,7 @@ func normalizePromptSections(systemPrompt string) (string, string) {
 }
 
 func stripProjectMapForCacheKey(systemPrompt string) string {
-	const marker = "## Project Map\n"
-
-	idx := strings.LastIndex(systemPrompt, marker)
-	if idx < 0 {
-		return systemPrompt
-	}
-
-	return strings.TrimRight(systemPrompt[:idx], "\n")
+	return prompt.StripProjectMapSectionCompat(systemPrompt)
 }
 
 func collapseWhitespace(s string) string {

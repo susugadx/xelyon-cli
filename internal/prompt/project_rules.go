@@ -70,10 +70,11 @@ type ProjectInstructionBlockInput struct {
 func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	rulesBlock := BuildRulesBlockFromList(input.MandatoryRules)
 	contextParts := normalizeProjectContexts(input.ProjectContexts)
+	warnings := normalizeProjectWarnings(input.Warnings)
 
 	hasProjectGuidance := len(input.ProjectGuidance) > 0
 	hasGlobalGuidance := len(input.GlobalGuidance) > 0
-	hasWarnings := len(input.Warnings) > 0
+	hasWarnings := len(warnings) > 0
 
 	if rulesBlock == "" && len(contextParts) == 0 && !hasProjectGuidance && !hasGlobalGuidance && !hasWarnings {
 		return ""
@@ -103,11 +104,7 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	}
 	if hasWarnings {
 		b.WriteString("\n\n## Guidance Load Notes\n")
-		for _, warning := range input.Warnings {
-			warning = strings.TrimSpace(warning)
-			if warning == "" {
-				continue
-			}
+		for _, warning := range warnings {
 			b.WriteString("\n- ")
 			b.WriteString(warning)
 		}
@@ -193,6 +190,21 @@ func normalizeProjectContexts(contexts []string) []string {
 			continue
 		}
 		result = append(result, context)
+	}
+	return result
+}
+
+func normalizeProjectWarnings(warnings []string) []string {
+	if len(warnings) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		warning = strings.TrimSpace(warning)
+		if warning == "" {
+			continue
+		}
+		result = append(result, warning)
 	}
 	return result
 }

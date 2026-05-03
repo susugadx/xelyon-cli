@@ -128,3 +128,54 @@ func TestMutationTracker_RecordToolResult_UpdatesTurnMutationState(t *testing.T)
 		t.Fatalf("changeStack len = %d, want 1", len(a.changeStack))
 	}
 }
+
+func TestTrackDeferredDiagnostics_StrReplacePrefersFileChangePath(t *testing.T) {
+	t.Run("prefers detail path", func(t *testing.T) {
+		a := &Agent{}
+		tracker := a.mutationTracker()
+		change := &tools.FileChange{
+			FilePath: "display/path.go",
+			Details: []tools.FileChangeDetail{
+				{FilePath: "/resolved/detail.go"},
+			},
+		}
+
+		tracker.trackDeferredDiagnostics(&tools.ToolCall{
+			Tool: "str_replace",
+			Args: map[string]string{"path": "args/fallback.go"},
+		}, "Successfully replaced", change)
+
+		if len(a.pendingLSPFiles) != 1 || a.pendingLSPFiles[0] != "/resolved/detail.go" {
+			t.Fatalf("pendingLSPFiles = %v, want [/resolved/detail.go]", a.pendingLSPFiles)
+		}
+	})
+
+	t.Run("falls back to change file path", func(t *testing.T) {
+		a := &Agent{}
+		tracker := a.mutationTracker()
+		change := &tools.FileChange{FilePath: "/resolved/from-change.go"}
+
+		tracker.trackDeferredDiagnostics(&tools.ToolCall{
+			Tool: "str_replace",
+			Args: map[string]string{"path": "args/fallback.go"},
+		}, "Successfully replaced", change)
+
+		if len(a.pendingLSPFiles) != 1 || a.pendingLSPFiles[0] != "/resolved/from-change.go" {
+			t.Fatalf("pendingLSPFiles = %v, want [/resolved/from-change.go]", a.pendingLSPFiles)
+		}
+	})
+
+	t.Run("falls back to tool args when change missing", func(t *testing.T) {
+		a := &Agent{}
+		tracker := a.mutationTracker()
+
+		tracker.trackDeferredDiagnostics(&tools.ToolCall{
+			Tool: "str_replace",
+			Args: map[string]string{"path": "args/fallback.go"},
+		}, "Successfully replaced", nil)
+
+		if len(a.pendingLSPFiles) != 1 || a.pendingLSPFiles[0] != "args/fallback.go" {
+			t.Fatalf("pendingLSPFiles = %v, want [args/fallback.go]", a.pendingLSPFiles)
+		}
+	})
+}

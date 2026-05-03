@@ -22,6 +22,24 @@ type planModeRequest struct {
 	approved            bool
 }
 
+type planModeRestoreMode int
+
+const (
+	planModeRestoreConversation planModeRestoreMode = iota
+	planModeRestorePromptOnly
+	planModeRestoreNone
+)
+
+type planModeExitPolicy struct {
+	restoreMode          planModeRestoreMode
+	clearResponseContext bool
+}
+
+type planModeInvestigationOutcome struct {
+	plan    *plan.Plan
+	handled bool
+}
+
 func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *planModeRequest {
 	return &planModeRequest{
 		agent:               agent,
@@ -32,45 +50,71 @@ func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *
 
 func (r *planModeRequest) Run() error {
 	r.prepare()
-	restoreConversationOnExit := true
-	restorePromptOnExit := true
-	clearResponseContextOnExit := false
+	exitPolicy := planModeExitPolicy{restoreMode: planModeRestoreConversation}
 	defer func() {
-		if restoreConversationOnExit {
-			err := r.restoreConversationState()
-			if err != nil {
-				red.Fprintf(r.agent.output(), "Failed to restore plan mode state: %v\n", err)
-			}
-		} else if restorePromptOnExit {
-			r.restorePlanningPrompt()
-		}
-		if clearResponseContextOnExit {
-			r.clearResponseContext()
-		}
+		r.applyExitPolicy(exitPolicy)
 	}()
 
-	p, handled, err := r.runInvestigation()
+	outcome, err := r.executeInvestigationStep()
 	if err != nil {
 		return err
 	}
-	if handled {
-		return err
+	if outcome.handled {
+		return nil
 	}
-	restoreConversationOnExit = r.shouldRestoreConversationOnExit(p)
-	restorePromptOnExit = !restoreConversationOnExit
+	exitPolicy = r.transitionExitPolicyAfterInvestigation(exitPolicy, outcome.plan)
 
-	handled, err = r.handleInvestigationResult(p)
-	if r.approved {
-		// Plan 承認後は planning-only。調査フェーズ履歴は通常ターンへ持ち越さない。
-		restoreConversationOnExit = true
-		restorePromptOnExit = true
-		clearResponseContextOnExit = true
-	}
+	handled, err := r.executeApprovalStep(outcome.plan, &exitPolicy)
 	if err != nil || handled {
 		return err
 	}
 
 	return nil
+}
+
+func (r *planModeRequest) executeInvestigationStep() (planModeInvestigationOutcome, error) {
+	p, handled, err := r.runInvestigation()
+	if err != nil {
+		return planModeInvestigationOutcome{}, err
+	}
+	return planModeInvestigationOutcome{plan: p, handled: handled}, nil
+}
+
+func (r *planModeRequest) transitionExitPolicyAfterInvestigation(policy planModeExitPolicy, p *plan.Plan) planModeExitPolicy {
+	policy.restoreMode = r.resolveExitRestoreMode(p)
+	return policy
+}
+
+func (r *planModeRequest) executeApprovalStep(p *plan.Plan, policy *planModeExitPolicy) (bool, error) {
+	handled, err := r.handleInvestigationResult(p)
+	if !r.approved || policy == nil {
+		return handled, err
+	}
+
+	// Plan 承認後は planning-only。調査フェーズ履歴は通常ターンへ持ち越さない。
+	policy.restoreMode = planModeRestoreConversation
+	policy.clearResponseContext = true
+	return handled, err
+}
+
+func (r *planModeRequest) applyExitPolicy(policy planModeExitPolicy) {
+	if r == nil || r.agent == nil {
+		return
+	}
+
+	switch policy.restoreMode {
+	case planModeRestoreConversation:
+		if err := r.restoreConversationState(); err != nil {
+			red.Fprintf(r.agent.output(), "Failed to restore plan mode state: %v\n", err)
+		}
+	case planModeRestorePromptOnly:
+		r.restorePlanningPrompt()
+	case planModeRestoreNone:
+	}
+
+	if policy.clearResponseContext {
+		r.clearResponseContext()
+	}
 }
 
 func (r *planModeRequest) prepare() {
@@ -84,10 +128,12 @@ func (r *planModeRequest) prepare() {
 func (r *planModeRequest) ensurePlanningPrompt() {
 	a := r.agent
 	planningPrompt := promptplan.BuildPlanningPrompt()
-	if strings.Contains(a.SystemPrompt, planningPrompt) {
+	layout := api.SplitSystemPromptLayout(a.SystemPrompt)
+	if strings.Contains(layout.Static, planningPrompt) || strings.Contains(layout.Dynamic, planningPrompt) {
 		return
 	}
-	a.SystemPrompt = a.SystemPrompt + api.SystemPromptCacheBoundary + planningPrompt
+	layout.AppendDynamic(planningPrompt)
+	a.SystemPrompt = layout.Compose()
 }
 
 func (r *planModeRequest) prepareUserRequest(userRequest string) string {
@@ -241,4 +287,11 @@ func (r *planModeRequest) shouldRestoreConversationOnExit(p *plan.Plan) bool {
 		return false
 	}
 	return len(p.Steps) > 0
+}
+
+func (r *planModeRequest) resolveExitRestoreMode(p *plan.Plan) planModeRestoreMode {
+	if r.shouldRestoreConversationOnExit(p) {
+		return planModeRestoreConversation
+	}
+	return planModeRestorePromptOnly
 }

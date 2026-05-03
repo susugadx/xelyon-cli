@@ -95,6 +95,20 @@ func assertHasFileChange(t *testing.T, change *tools.FileChange) {
 	}
 }
 
+func assertFileChangeResolvedPath(t *testing.T, change *tools.FileChange, want string) {
+	t.Helper()
+	if change == nil {
+		t.Fatal("expected non-nil change")
+	}
+	if len(change.Details) != 1 {
+		t.Fatalf("len(change.Details) = %d, want 1", len(change.Details))
+	}
+	got := filepath.Clean(change.Details[0].FilePath)
+	if got != filepath.Clean(want) {
+		t.Fatalf("change.Details[0].FilePath = %q, want %q", got, filepath.Clean(want))
+	}
+}
+
 func executeWriteFileForTest(path, content string) (string, error) {
 	return ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(testPromptIO(nil, nil), testConfirmOptions(), nil, path, content)
 }

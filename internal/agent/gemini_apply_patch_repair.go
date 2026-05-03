@@ -27,21 +27,13 @@ The patch may modify multiple files.`
 
 const geminiApplyPatchRepairCacheNamespace = "gemini_apply_patch_repair"
 
-func (a *Agent) maybeRepairGeminiApplyPatch(ctx context.Context, tc *tools.ToolCall, result string, change *tools.FileChange, execCtx tools.ExecutionContext, quiet bool) (string, *tools.FileChange) {
-	execResult := a.maybeRepairGeminiApplyPatchExecution(ctx, tc, tools.ExecutionResult{
-		Result: result,
-		Change: change,
-	}, execCtx, quiet)
-	return execResult.Result, execResult.Change
-}
-
 func (a *Agent) maybeRepairGeminiApplyPatchExecution(ctx context.Context, tc *tools.ToolCall, execResult tools.ExecutionResult, execCtx tools.ExecutionContext, quiet bool) tools.ExecutionResult {
 	if !a.shouldRepairGeminiApplyPatch(tc) {
 		return execResult
 	}
 
 	a.recordGeminiApplyPatchAttempt()
-	if !isToolErrorResult(execResult.Result) {
+	if !execResult.Error {
 		a.recordGeminiApplyPatchSuccess()
 		return execResult
 	}
@@ -69,7 +61,7 @@ func (a *Agent) maybeRepairGeminiApplyPatchExecution(ctx context.Context, tc *to
 	}
 
 	repairedExecResult := executeRepairedApplyPatch(execCtx, repairedTC, quiet)
-	if isToolErrorResult(repairedExecResult.Result) {
+	if repairedExecResult.Error {
 		return execResult
 	}
 
@@ -225,10 +217,6 @@ func extractRepairedApplyPatchMarkerLines(response string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func isToolErrorResult(result string) bool {
-	return strings.HasPrefix(strings.TrimSpace(result), "Error:")
 }
 
 func (a *Agent) recordGeminiApplyPatchAttempt() {

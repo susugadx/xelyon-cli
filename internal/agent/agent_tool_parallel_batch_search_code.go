@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *toolruntime.ParallelCallState) {
@@ -42,37 +43,40 @@ func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *toolruntime.P
 		if len(group.indices) < 2 {
 			continue
 		}
-		for chunkStart := 0; chunkStart < len(group.indices); chunkStart += toolruntime.MaxSearchBatchPatterns {
-			chunkEnd := chunkStart + toolruntime.MaxSearchBatchPatterns
-			if chunkEnd > len(group.indices) {
-				chunkEnd = len(group.indices)
-			}
+		forEachIndexChunk(len(group.indices), toolruntime.MaxSearchBatchPatterns, func(chunkStart, chunkEnd int) {
 			chunkIndices := group.indices[chunkStart:chunkEnd]
 			chunkPatterns := group.patterns[chunkStart:chunkEnd]
 
 			if len(chunkIndices) < 2 {
-				continue
+				return
 			}
 
 			leaderTC := state.AllToolCalls[chunkIndices[0]]
 			mergedTC := toolruntime.CloneToolCallWithNewPattern(leaderTC, strings.Join(chunkPatterns, ","))
-			mergedResult, _ := a.executeToolForParallel(ctx, mergedTC)
+			mergedExecResult := a.executeToolForParallelResult(ctx, mergedTC)
+			mergedResult := mergedExecResult.Result
 
 			perPattern := toolruntime.SplitMultiPatternResult(mergedResult, chunkPatterns)
 			if perPattern == nil {
-				continue
+				return
 			}
 
 			for j, idx := range chunkIndices {
 				pattern := chunkPatterns[j]
 				if section, ok := perPattern[pattern]; ok {
-					state.Results[idx] = toolruntime.Result{Result: section}
+					state.Results[idx] = toolruntime.Result{
+						Result: section,
+						Error:  tools.IsErrorResult(section),
+					}
 				} else {
-					state.Results[idx] = toolruntime.Result{Result: mergedResult}
+					state.Results[idx] = toolruntime.Result{
+						Result: mergedResult,
+						Error:  mergedExecResult.Error,
+					}
 				}
 				state.Entries[idx] = toolruntime.ParallelCallEntry{Status: toolruntime.ParallelCallStatusBatched}
 			}
 			a.recordSearchCodeBatchMerge(len(chunkIndices))
-		}
+		})
 	}
 }

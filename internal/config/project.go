@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -45,12 +46,27 @@ func LoadProjectConfig() *ProjectConfig {
 // LoadProjectConfigWithError はプロジェクト設定をロードし、読み込み失敗を返す。
 // cwd から親方向に xelyon.yaml を探索する。見つからない場合は nil, nil を返す。
 func LoadProjectConfigWithError() (*ProjectConfig, error) {
-	dir, err := os.Getwd()
+	return LoadProjectConfigForDirWithError("")
+}
+
+// LoadProjectConfigForDir は指定 cwd から親方向に xelyon.yaml を探索して読み込む。
+// cwd が空の場合は現在の process cwd を使う。見つからない場合は nil を返す。
+func LoadProjectConfigForDir(cwd string) *ProjectConfig {
+	pc, err := LoadProjectConfigForDirWithError(cwd)
+	if err != nil {
+		return nil
+	}
+	return pc
+}
+
+// LoadProjectConfigForDirWithError は指定 cwd から親方向に xelyon.yaml を探索して読み込む。
+// cwd が空の場合は現在の process cwd を使う。見つからない場合は nil, nil を返す。
+func LoadProjectConfigForDirWithError(cwd string) (*ProjectConfig, error) {
+	path, ok, err := ResolveProjectConfigPathForDir(cwd)
 	if err != nil {
 		return nil, err
 	}
-
-	if path := findFileUpward(dir, "xelyon.yaml"); path != "" {
+	if ok {
 		pc, err := loadProjectConfigFromYAML(path)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s: %w", path, err)
@@ -59,6 +75,39 @@ func LoadProjectConfigWithError() (*ProjectConfig, error) {
 	}
 
 	return nil, nil
+}
+
+// ResolveProjectConfigPathForDir は指定 cwd から親方向に xelyon.yaml を探索し、
+// 見つかった設定ファイルの絶対パスを返す。
+func ResolveProjectConfigPathForDir(cwd string) (string, bool, error) {
+	dir, err := resolveProjectSearchDir(cwd)
+	if err != nil {
+		return "", false, err
+	}
+	path := findFileUpward(dir, "xelyon.yaml")
+	if strings.TrimSpace(path) == "" {
+		return "", false, nil
+	}
+	return normalizeProjectConfigPath(path), true, nil
+}
+
+func resolveProjectSearchDir(cwd string) (string, error) {
+	dir := strings.TrimSpace(cwd)
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return "", err
+		}
+	}
+	return normalizeProjectConfigPath(dir), nil
+}
+
+func normalizeProjectConfigPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(path)
 }
 
 // findFileUpward は dir から親方向に filename を探索し、見つかったフルパスを返す。

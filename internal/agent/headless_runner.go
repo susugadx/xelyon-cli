@@ -147,13 +147,11 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 		ToolIndex: toolCount,
 	})
 
-	execCtx := r.agent.toolExecutionContext(ctx, nil, nil, nil)
-	output, change := tools.ExecuteQuietWithContext(execCtx, tc)
-	output, change = r.agent.maybeRepairGeminiApplyPatch(ctx, tc, output, change, execCtx, true)
+	execResult := r.agent.executeQuietToolResult(ctx, tc, strings.NewReader(""), io.Discard, io.Discard, true)
+	output, change := execResult.Result, execResult.Change
 	r.agent.noteProjectMapMutation(tc, change)
 
-	// 成功判定（"Error:"を含むかどうかで簡易判定）
-	success := !strings.Contains(output, "Error:")
+	success := isHeadlessToolCallSuccess(execResult)
 	if r.agent.Stats != nil {
 		r.agent.Stats.AddToolExecution(tc.Tool)
 	}
@@ -184,6 +182,13 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 	if change != nil {
 		r.agent.appendChange(*change)
 	}
+}
+
+// isHeadlessToolCallSuccess は headless 実行におけるツール結果の成功判定を返す。
+// tools 層の共通契約（Error prefix 判定と Error flag）に揃えることで、
+// 先頭空白付きの "Error:" を失敗として扱いつつ、文中の "Error:" は許容する。
+func isHeadlessToolCallSuccess(execResult tools.ExecutionResult) bool {
+	return !execResult.Error && !tools.IsErrorResult(execResult.Result)
 }
 
 func (r *headlessRunner) successResult() *HeadlessResult {
@@ -234,32 +239,8 @@ func appendHeadlessToolCallsToHistory(agent *Agent, response string, toolCalls [
 	explanation, _ := extractExplanationAndTool(response)
 	reasoningContent := agent.getLastReasoningContent()
 	contentBlocks := agent.getLastAnthropicContentBlocks()
-	historyContent, historyReasoning := agent.assistantToolHistoryContent(explanation, reasoningContent)
-
-	openAIToolCalls := make([]api.OpenAIToolCall, len(toolCalls))
-	for i, tc := range toolCalls {
-		openAIToolCalls[i] = api.OpenAIToolCall{
-			ID:   tc.ID,
-			Type: "function",
-			Function: api.OpenAIToolCallFunction{
-				Name:      tc.Tool,
-				Arguments: toolruntime.ArgsToJSON(tc.RawArgs),
-			},
-		}
-		if i == 0 {
-			openAIToolCalls[i].ThoughtSignature = tc.ThoughtSignature
-			openAIToolCalls[i].ThoughtParts = tc.ThoughtParts
-		}
-	}
-
-	msg := api.Message{
-		Role:             "assistant",
-		Content:          historyContent,
-		ReasoningContent: historyReasoning,
-		ToolCalls:        openAIToolCalls,
-	}
-	msg.SetAnthropicContentBlocks(contentBlocks)
-	agent.History = append(agent.History, msg)
+	openAIToolCalls := buildOpenAIToolCallsForHistory(toolCalls)
+	appendAssistantToolCallsHistoryMessage(agent, explanation, reasoningContent, contentBlocks, openAIToolCalls)
 	if agent.Stats != nil {
 		agent.Stats.AssistantMessages++
 	}
