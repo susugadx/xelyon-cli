@@ -1,7 +1,10 @@
 package review
 
-type scratchOnlyDirs struct {
-	ScratchDir     string
+import "path/filepath"
+
+type repoSandboxDirs struct {
+	SandboxRoot    string
+	WorktreeDir    string
 	HomeDir        string
 	TempDir        string
 	CacheDir       string
@@ -14,19 +17,21 @@ type scratchOnlyDirs struct {
 	XDGDataDir     string
 }
 
-func prepareScratchOnlyDirs(scratchDir string) (scratchOnlyDirs, error) {
+func prepareRepoSandboxDirs(sandboxRoot string) (repoSandboxDirs, error) {
+	resolvedSandboxRoot := filepath.Clean(sandboxRoot)
 	prepared, err := prepareIsolatedProbeRuntimeDirs(isolatedProbeRuntimeLayout{
-		rootDir:         scratchDir,
-		workDir:         scratchDir,
-		runtimeBaseDir:  scratchDir,
-		createErrorName: "scratch",
+		rootDir:         resolvedSandboxRoot,
+		workDir:         filepath.Join(resolvedSandboxRoot, "worktree"),
+		runtimeBaseDir:  filepath.Join(resolvedSandboxRoot, "runtime"),
+		createErrorName: "repo sandbox",
 	})
 	if err != nil {
-		return scratchOnlyDirs{}, err
+		return repoSandboxDirs{}, err
 	}
 
-	return scratchOnlyDirs{
-		ScratchDir:     prepared.RootDir,
+	return repoSandboxDirs{
+		SandboxRoot:    prepared.RootDir,
+		WorktreeDir:    prepared.WorkDir,
 		HomeDir:        prepared.HomeDir,
 		TempDir:        prepared.TempDir,
 		CacheDir:       prepared.CacheDir,

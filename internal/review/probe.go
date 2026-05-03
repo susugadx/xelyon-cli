@@ -6,9 +6,13 @@ import "time"
 type ReviewProbeMode string
 
 const (
+	// ReviewProbeHostReadOnly は元 repo 上で read-only policy のコマンドだけを実行する。
 	ReviewProbeHostReadOnly ReviewProbeMode = "host_readonly"
-	ReviewProbeScratchOnly  ReviewProbeMode = "scratch_only"
-	ReviewProbeRepoSandbox  ReviewProbeMode = "repo_sandbox"
+	// ReviewProbeScratchOnly は repo 外 scratch に生成ファイルだけを置いて実行する。
+	ReviewProbeScratchOnly ReviewProbeMode = "scratch_only"
+	// ReviewProbeRepoSandbox は元 repo の現在状態を一時 worktree へコピーして実行する。
+	// OS/network sandbox ではないため、元 repo の mutation は実行前後 snapshot で検出する。
+	ReviewProbeRepoSandbox ReviewProbeMode = "repo_sandbox"
 )
 
 // ReviewProbeStatus は probe 実行結果の状態を表す。

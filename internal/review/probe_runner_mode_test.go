@@ -2,7 +2,7 @@ package review
 
 import (
 	"context"
-	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,21 +34,29 @@ func TestProbeRunner_ScratchOnlyIsExecuted(t *testing.T) {
 	}
 }
 
-func TestProbeRunner_RepoSandboxUnsupportedMode(t *testing.T) {
+func TestProbeRunner_RepoSandboxIsExecuted(t *testing.T) {
 	repo := newProbeTestRepo(t)
 	runner := NewProbeRunner(repo)
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
-		ID:   "probe-unsupported",
-		Mode: ReviewProbeRepoSandbox,
+		ID:             "probe-repo-sandbox-mode",
+		Mode:           ReviewProbeRepoSandbox,
+		Timeout:        10 * time.Second,
+		MaxOutputBytes: 1024,
+		Commands: []ReviewProbeCommand{
+			{Command: "cat", Args: []string{"keep.txt"}},
+		},
 	})
-	if err == nil {
-		t.Fatal("Run() error = nil, want unsupported mode error")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
 	}
-	if !errors.Is(err, ErrUnsupportedReviewProbeMode) {
-		t.Fatalf("Run() error = %v, want ErrUnsupportedReviewProbeMode", err)
+	if result.Status != ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
 	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeBlocked)
+	if len(result.CommandResults) != 1 {
+		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
+	}
+	if !strings.Contains(result.CommandResults[0].Output, "keep") {
+		t.Fatalf("CommandResults[0].Output = %q, want copied repo file output", result.CommandResults[0].Output)
 	}
 }

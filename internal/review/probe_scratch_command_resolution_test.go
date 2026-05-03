@@ -28,15 +28,7 @@ func TestScratchOnlyExecutor_ResolvesCommandFromSafePath(t *testing.T) {
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
-	}
-	if len(result.CommandResults) != 1 {
-		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
-	}
-	if !strings.Contains(result.CommandResults[0].Output, "safe-cat") {
-		t.Fatalf("CommandResults[0].Output = %q, want to contain safe-cat", result.CommandResults[0].Output)
-	}
+	assertCommandResolutionPassed(t, result, "safe-cat")
 }
 
 func TestScratchOnlyExecutor_BlocksCommandResolvedInsideScratchDir(t *testing.T) {
@@ -67,12 +59,7 @@ func TestScratchOnlyExecutor_BlocksCommandResolvedInsideScratchDir(t *testing.T)
 		},
 	})
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
-	}
-	if len(result.CommandResults) != 0 {
-		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
-	}
+	assertCommandResolutionBlocked(t, result)
 }
 
 func TestScratchOnlyExecutor_BlocksCommandResolvedInsideRepoRoot(t *testing.T) {
@@ -99,10 +86,5 @@ func TestScratchOnlyExecutor_BlocksCommandResolvedInsideRepoRoot(t *testing.T) {
 		},
 	})
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
-	}
-	if len(result.CommandResults) != 0 {
-		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
-	}
+	assertCommandResolutionBlocked(t, result)
 }

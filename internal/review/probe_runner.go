@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	// ErrUnsupportedReviewProbeMode は未実装 mode の実行時に返す。
+	// ErrUnsupportedReviewProbeMode は未知または未対応 mode の実行時に返す。
 	ErrUnsupportedReviewProbeMode = errors.New("unsupported review probe mode")
 )
 
@@ -43,8 +43,7 @@ func (r *ProbeRunner) Run(ctx context.Context, req ReviewProbeRequest) (ReviewPr
 	case ReviewProbeScratchOnly:
 		return newScratchOnlyExecutor(repoRoot).run(ctx, req), nil
 	case ReviewProbeRepoSandbox:
-		result := newBlockedModeResult(req, fmt.Sprintf("probe mode %q is not implemented yet", req.Mode))
-		return result, fmt.Errorf("%w: %s", ErrUnsupportedReviewProbeMode, req.Mode)
+		return newRepoSandboxExecutor(repoRoot).run(ctx, req), nil
 	default:
 		result := newBlockedModeResult(req, fmt.Sprintf("probe mode %q is not supported", req.Mode))
 		return result, fmt.Errorf("%w: %s", ErrUnsupportedReviewProbeMode, req.Mode)

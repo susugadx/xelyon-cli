@@ -14,39 +14,25 @@ var scratchOnlyInheritedEnvKeys = []string{
 }
 
 func buildScratchOnlyEnv(baseEnv []string, repoRoot string, dirs scratchOnlyDirs) []string {
-	base := collectEnvMap(baseEnv)
-	env := make([]string, 0, len(scratchOnlyInheritedEnvKeys)+24)
-
-	for _, key := range scratchOnlyInheritedEnvKeys {
-		if value, ok := base[key]; ok {
-			env = append(env, key+"="+value)
-		}
-	}
-
-	env = append(env,
-		scratchEnvRepoRoot+"="+repoRoot,
-		scratchEnvScratchDir+"="+dirs.ScratchDir,
-		"HOME="+dirs.HomeDir,
-		"USERPROFILE="+dirs.HomeDir,
-		"TMPDIR="+dirs.TempDir,
-		"TEMP="+dirs.TempDir,
-		"TMP="+dirs.TempDir,
-		"XDG_CACHE_HOME="+dirs.XDGCacheDir,
-		"XDG_CONFIG_HOME="+dirs.XDGConfigDir,
-		"XDG_DATA_HOME="+dirs.XDGDataDir,
-		"GOCACHE="+dirs.GoCacheDir,
-		"GOMODCACHE="+dirs.GoModCacheDir,
-		"GOTMPDIR="+dirs.GoTempDir,
-		"GOTOOLCHAIN=local",
-		"GOPROXY=off",
-		"GOSUMDB=off",
-		"PYTHONDONTWRITEBYTECODE=1",
-		"PYTHONPYCACHEPREFIX="+dirs.PythonCacheDir,
-		"PYTHONNOUSERSITE=1",
-		"PIP_DISABLE_PIP_VERSION_CHECK=1",
-		"PIP_NO_INDEX=1",
-	)
-	return env
+	return buildIsolatedProbeEnv(baseEnv, isolatedProbeRuntimeDirs{
+		RootDir:        dirs.ScratchDir,
+		WorkDir:        dirs.ScratchDir,
+		HomeDir:        dirs.HomeDir,
+		TempDir:        dirs.TempDir,
+		CacheDir:       dirs.CacheDir,
+		GoCacheDir:     dirs.GoCacheDir,
+		GoModCacheDir:  dirs.GoModCacheDir,
+		PythonCacheDir: dirs.PythonCacheDir,
+		XDGCacheDir:    dirs.XDGCacheDir,
+		GoTempDir:      dirs.GoTempDir,
+		XDGConfigDir:   dirs.XDGConfigDir,
+		XDGDataDir:     dirs.XDGDataDir,
+	}, isolatedProbeEnvSpec{
+		repoRootEnvKey:   scratchEnvRepoRoot,
+		repoRootEnvValue: repoRoot,
+		modeRootEnvKey:   scratchEnvScratchDir,
+		modeRootEnvValue: dirs.ScratchDir,
+	})
 }
 
 func collectEnvMap(baseEnv []string) map[string]string {

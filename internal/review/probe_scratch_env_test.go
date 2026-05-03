@@ -2,7 +2,6 @@ package review
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,7 +102,7 @@ func TestScratchOnlyExecutor_ChildProcessUsesHardenedEnv(t *testing.T) {
 					"\t\"os\"\n" +
 					")\n" +
 					"func main(){\n" +
-					"\tkeys := []string{\"PATH\",\"SECRET_TOKEN\",\"OPENAI_API_KEY\",\"XELYON_REVIEW_REPO_ROOT\",\"XELYON_REVIEW_SCRATCH_DIR\",\"HOME\",\"TMPDIR\",\"GOCACHE\",\"GOTOOLCHAIN\",\"GOPROXY\",\"PYTHONDONTWRITEBYTECODE\"}\n" +
+					"\tkeys := []string{\"PATH\",\"SECRET_TOKEN\",\"OPENAI_API_KEY\",\"XELYON_REVIEW_REPO_ROOT\",\"XELYON_REVIEW_SCRATCH_DIR\",\"HOME\",\"TMPDIR\",\"GOCACHE\",\"GOMODCACHE\",\"GOTMPDIR\",\"GOTOOLCHAIN\",\"GOPROXY\",\"GOSUMDB\",\"PYTHONDONTWRITEBYTECODE\",\"PYTHONNOUSERSITE\",\"PIP_NO_INDEX\"}\n" +
 					"\tm := map[string]string{}\n" +
 					"\tfor _, k := range keys { m[k] = os.Getenv(k) }\n" +
 					"\t_ = json.NewEncoder(os.Stdout).Encode(m)\n" +
@@ -122,42 +121,16 @@ func TestScratchOnlyExecutor_ChildProcessUsesHardenedEnv(t *testing.T) {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
 	}
 
-	var envMap map[string]string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(result.CommandResults[0].Output)), &envMap); err != nil {
-		t.Fatalf("json.Unmarshal(output) error = %v, output=%q", err, result.CommandResults[0].Output)
-	}
+	envMap := decodeEnvMapFromFirstCommandOutput(t, result)
 
 	if !strings.Contains(envMap["PATH"], pathValue) {
 		t.Fatalf("PATH = %q, want to contain %q", envMap["PATH"], pathValue)
 	}
-	if envMap["SECRET_TOKEN"] != "" {
-		t.Fatalf("SECRET_TOKEN = %q, want empty", envMap["SECRET_TOKEN"])
-	}
-	if envMap["OPENAI_API_KEY"] != "" {
-		t.Fatalf("OPENAI_API_KEY = %q, want empty", envMap["OPENAI_API_KEY"])
-	}
-	if envMap["XELYON_REVIEW_REPO_ROOT"] != repo {
-		t.Fatalf("XELYON_REVIEW_REPO_ROOT = %q, want %q", envMap["XELYON_REVIEW_REPO_ROOT"], repo)
-	}
-	if envMap["XELYON_REVIEW_SCRATCH_DIR"] != filepath.Clean(scratchDir) {
-		t.Fatalf("XELYON_REVIEW_SCRATCH_DIR = %q, want %q", envMap["XELYON_REVIEW_SCRATCH_DIR"], filepath.Clean(scratchDir))
-	}
-	if envMap["HOME"] != filepath.Join(filepath.Clean(scratchDir), "home") {
-		t.Fatalf("HOME = %q, want scratch home", envMap["HOME"])
-	}
-	if envMap["TMPDIR"] != filepath.Join(filepath.Clean(scratchDir), "tmp") {
-		t.Fatalf("TMPDIR = %q, want scratch tmp", envMap["TMPDIR"])
-	}
-	if envMap["GOCACHE"] != filepath.Join(filepath.Clean(scratchDir), "cache", "go-build") {
-		t.Fatalf("GOCACHE = %q, want scratch go-build cache", envMap["GOCACHE"])
-	}
-	if envMap["GOTOOLCHAIN"] != "local" {
-		t.Fatalf("GOTOOLCHAIN = %q, want local", envMap["GOTOOLCHAIN"])
-	}
-	if envMap["GOPROXY"] != "off" {
-		t.Fatalf("GOPROXY = %q, want off", envMap["GOPROXY"])
-	}
-	if envMap["PYTHONDONTWRITEBYTECODE"] != "1" {
-		t.Fatalf("PYTHONDONTWRITEBYTECODE = %q, want 1", envMap["PYTHONDONTWRITEBYTECODE"])
-	}
+	assertIsolatedProbeEnv(t, envMap, isolatedProbeEnvExpectation{
+		repoRootKey:   scratchEnvRepoRoot,
+		repoRootValue: repo,
+		modeRootKey:   scratchEnvScratchDir,
+		modeRootValue: filepath.Clean(scratchDir),
+		rootDir:       filepath.Clean(scratchDir),
+	})
 }

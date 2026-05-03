@@ -2,17 +2,10 @@ package review
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 	"time"
 )
 
-type scratchOnlyCommand struct {
-	command     string
-	commandPath string
-	args        []string
-	workDir     string
-}
+type scratchOnlyCommand = probePlannedCommand
 
 type scratchOnlyRequest struct {
 	id             string
@@ -61,71 +54,17 @@ func (e *scratchOnlyExecutor) validateRequest(req ReviewProbeRequest, scratchDir
 }
 
 func (e *scratchOnlyExecutor) buildScratchOnlyCommandPlan(scratchDir string, commandEnv []string, cmd ReviewProbeCommand) (scratchOnlyCommand, error) {
-	commandName := strings.TrimSpace(cmd.Command)
-	if commandName == "" {
-		return scratchOnlyCommand{}, newBlockedCommandErrorf("command is empty")
-	}
-
-	workDir, err := resolveScratchWorkDir(scratchDir, cmd.WorkDir)
-	if err != nil {
-		return scratchOnlyCommand{}, err
-	}
-
-	pathArgs, err := analyzeScratchOnlyCommand(commandName, cmd.Args)
-	if err != nil {
-		return scratchOnlyCommand{}, err
-	}
-	if err := validateScratchPathArgsWithinRoot(scratchDir, workDir, commandName, pathArgs); err != nil {
-		return scratchOnlyCommand{}, err
-	}
-	commandPath, err := resolveProbeCommandPath(commandName, probeCommandResolutionContext{
-		RepoRoot:   e.repoRoot,
-		ScratchDir: scratchDir,
-		WorkDir:    workDir,
-		Env:        commandEnv,
-	})
-	if err != nil {
-		return scratchOnlyCommand{}, err
-	}
-
-	return scratchOnlyCommand{
-		command:     commandName,
-		commandPath: commandPath,
-		args:        append([]string(nil), cmd.Args...),
-		workDir:     workDir,
-	}, nil
-}
-
-func resolveScratchWorkDir(scratchDir, workDir string) (string, error) {
-	trimmed := strings.TrimSpace(workDir)
-	if trimmed == "" {
-		return scratchDir, nil
-	}
-	if filepath.IsAbs(trimmed) {
-		return "", newBlockedCommandErrorf("scratch command workdir %q must be relative", workDir)
-	}
-
-	resolved, err := resolvePathWithinRepoRoot(scratchDir, scratchDir, trimmed)
-	if err != nil {
-		if isOutsideRepoPathError(err) {
-			return "", newBlockedCommandErrorf("scratch command workdir %q escapes scratch directory", workDir)
-		}
-		return "", newBlockedCommandErrorf("scratch command workdir %q is invalid: %v", workDir, err)
-	}
-	return resolved, nil
-}
-
-func validateScratchPathArgsWithinRoot(scratchDir, workDir, command string, pathArgs []string) error {
-	for _, pathArg := range pathArgs {
-		if filepath.IsAbs(pathArg) {
-			return newBlockedCommandErrorf("%s path %q is outside scratch directory", command, pathArg)
-		}
-		if _, err := resolvePathWithinRepoRootWithSymlinkCheck(scratchDir, workDir, pathArg); err != nil {
-			if isOutsideRepoPathError(err) {
-				return newBlockedCommandErrorf("%s path %q is outside scratch directory", command, pathArg)
-			}
-			return newBlockedCommandErrorf("failed to resolve %s path %q: %v", command, pathArg, err)
-		}
-	}
-	return nil
+	return buildProbeCommandPlan(probeCommandPlanSpec{
+		workDirMessageLabel: "scratch command",
+		rootDir:             scratchDir,
+		rootLabel:           "scratch directory",
+		defaultWorkDir:      scratchDir,
+		repoRoot:            e.repoRoot,
+		resolverScratchDir:  scratchDir,
+		commandEnv:          commandEnv,
+		analyzePathArgs:     analyzeScratchOnlyCommand,
+		validateResolved: func(rootDir, resolvedPath, label string) error {
+			return validateScratchExistingAncestorsWithinRoot(rootDir, resolvedPath, label)
+		},
+	}, cmd)
 }

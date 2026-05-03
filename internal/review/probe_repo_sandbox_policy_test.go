@@ -1,0 +1,266 @@
+package review
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
+	tests := []probeModeBlockedCase{
+		{
+			name: "blocked absolute generated file path",
+			request: ReviewProbeRequest{
+				ID: "repo-sandbox-blocked-abs-file",
+				Files: []ReviewProbeFile{{
+					Path:    "/tmp/escape.py",
+					Content: "print('x')\n",
+				}},
+				Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
+			},
+			errorContains: "must be relative",
+		},
+		{
+			name: "blocked existing generated file overwrite",
+			request: ReviewProbeRequest{
+				ID: "repo-sandbox-blocked-overwrite",
+				Files: []ReviewProbeFile{{
+					Path:    "keep.txt",
+					Content: "new\n",
+				}},
+				Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
+			},
+			errorContains: "would overwrite existing file",
+		},
+		{
+			name: "blocked max commands",
+			request: func() ReviewProbeRequest {
+				commands := make([]ReviewProbeCommand, 0, defaultRepoSandboxMaxCommands+1)
+				for i := 0; i < defaultRepoSandboxMaxCommands+1; i++ {
+					commands = append(commands, ReviewProbeCommand{Command: "cat", Args: []string{"keep.txt"}})
+				}
+				return ReviewProbeRequest{
+					ID:       "repo-sandbox-blocked-max-commands",
+					Commands: commands,
+				}
+			}(),
+			errorContains: "allows at most",
+		},
+		{
+			name: "blocked command",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-command",
+				Commands: []ReviewProbeCommand{{Command: "sh", Args: []string{"-c", "echo x"}}},
+			},
+			errorContains: "is not allowed in repo_sandbox",
+		},
+		{
+			name: "blocked command path",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-command-path",
+				Commands: []ReviewProbeCommand{{Command: "./cat", Args: []string{"keep.txt"}}},
+			},
+			errorContains: "command path is not allowed in repo_sandbox",
+		},
+		{
+			name: "blocked workdir escape",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-workdir-escape",
+				Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}, WorkDir: "../outside"}},
+			},
+			errorContains: "escapes sandbox worktree",
+		},
+		{
+			name: "blocked cat outside",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-cat-outside",
+				Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"../keep.txt"}}},
+			},
+			errorContains: "outside sandbox worktree",
+		},
+		{
+			name: "blocked python -c",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-python-c",
+				Commands: []ReviewProbeCommand{{Command: "python3", Args: []string{"-c", "print('x')"}}},
+			},
+			errorContains: "python3 argument -c",
+		},
+		{
+			name: "blocked go get",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-get",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"get", "example.com/nope"}}},
+			},
+			errorContains: "go get is not allowed in repo_sandbox",
+		},
+		{
+			name: "blocked go install",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-install",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"install", "example.com/nope"}}},
+			},
+			errorContains: "go install is not allowed in repo_sandbox",
+		},
+		{
+			name: "blocked go generate",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-generate",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"generate", "./..."}}},
+			},
+			errorContains: "go generate is not allowed in repo_sandbox",
+		},
+		{
+			name: "blocked go env write",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-env-write",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"env", "-w", "GOPROXY=direct"}}},
+			},
+			errorContains: "go env -w is not allowed in repo_sandbox",
+		},
+		{
+			name: "blocked go run outside file",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-run-outside",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"run", "../outside.go"}}},
+			},
+			errorContains: "outside sandbox worktree",
+		},
+		{
+			name: "blocked go build output escape",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-build-output-escape",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"build", "-o", "../probe-bin", "./probe"}}},
+			},
+			errorContains: "outside sandbox worktree",
+		},
+		{
+			name: "blocked go test profile escape attached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-test-profile-escape",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"test", "-coverprofile=../cover.out", "./probe"}}},
+			},
+			errorContains: "outside sandbox worktree",
+		},
+	}
+
+	runProbeModeBlockedCases(t, ReviewProbeRepoSandbox, tests)
+}
+
+func TestProbeRunner_RepoSandbox_BlocksCommandPathUnderSymlinkEscape(t *testing.T) {
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	if err := os.Symlink(t.TempDir(), filepath.Join(repo, "outside-link")); err != nil {
+		t.Skipf("symlink is not supported: %v", err)
+	}
+	runner := NewProbeRunner(repo)
+
+	result, err := runner.Run(context.Background(), ReviewProbeRequest{
+		ID:       "repo-sandbox-blocked-command-symlink-parent",
+		Mode:     ReviewProbeRepoSandbox,
+		Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"build", "-o", "outside-link/probe-bin", "./probe"}}},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	}
+	if len(result.CommandResults) != 0 {
+		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
+	}
+	if !strings.Contains(result.Error, "escapes sandbox worktree") {
+		t.Fatalf("Error = %q, want symlink escape block", result.Error)
+	}
+}
+
+func TestProbeRunner_RepoSandbox_BlocksWhenGeneratedFileLimitsExceeded(t *testing.T) {
+	files := make([]ReviewProbeFile, 0, defaultRepoSandboxMaxGeneratedFiles+1)
+	for i := 0; i < defaultRepoSandboxMaxGeneratedFiles+1; i++ {
+		files = append(files, ReviewProbeFile{
+			Path:    "f-" + strconv.Itoa(i) + ".txt",
+			Content: "ok",
+		})
+	}
+
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	runner := NewProbeRunner(repo)
+	result, err := runner.Run(context.Background(), ReviewProbeRequest{
+		ID:       "repo-sandbox-generated-file-limit",
+		Mode:     ReviewProbeRepoSandbox,
+		Files:    files,
+		Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	}
+	if len(result.CommandResults) != 0 {
+		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
+	}
+	if !strings.Contains(result.Error, "allows at most") {
+		t.Fatalf("Error = %q, want generated file limit", result.Error)
+	}
+}
+
+func TestRepoSandboxExecutor_CommandResolution(t *testing.T) {
+	t.Run("safe external bin allowed", func(t *testing.T) {
+		repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+		safeBin := filepath.Join(t.TempDir(), "safe-bin")
+		createProbeTestScriptCommand(t, safeBin, "cat", "echo safe-cat")
+
+		executor := newRepoSandboxExecutor(repo)
+		executor.baseEnv = []string{"PATH=" + safeBin}
+
+		result := executor.run(context.Background(), ReviewProbeRequest{
+			ID:       "repo-sandbox-resolve-safe",
+			Mode:     ReviewProbeRepoSandbox,
+			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
+		})
+		assertCommandResolutionPassed(t, result, "safe-cat")
+	})
+
+	t.Run("original repo bin blocked", func(t *testing.T) {
+		repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+		repoBin := filepath.Join(repo, "bin")
+		safeBin := filepath.Join(t.TempDir(), "safe-bin")
+		createProbeTestScriptCommand(t, repoBin, "cat", "echo repo-cat")
+		createProbeTestScriptCommand(t, safeBin, "cat", "echo safe-cat")
+
+		executor := newRepoSandboxExecutor(repo)
+		executor.baseEnv = []string{"PATH=" + strings.Join([]string{repoBin, safeBin}, string(filepath.ListSeparator))}
+
+		result := executor.run(context.Background(), ReviewProbeRequest{
+			ID:       "repo-sandbox-resolve-blocked-repo-bin",
+			Mode:     ReviewProbeRepoSandbox,
+			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
+		})
+		assertCommandResolutionBlocked(t, result)
+	})
+
+	t.Run("sandbox root bin blocked", func(t *testing.T) {
+		repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+		sandboxRoot := filepath.Join(t.TempDir(), "xelyon-review-sandbox-resolve")
+		sandboxBin := filepath.Join(sandboxRoot, "bin")
+		safeBin := filepath.Join(t.TempDir(), "safe-bin")
+		createProbeTestScriptCommand(t, sandboxBin, "cat", "echo sandbox-cat")
+		createProbeTestScriptCommand(t, safeBin, "cat", "echo safe-cat")
+
+		executor := newRepoSandboxExecutor(repo)
+		executor.mktemp = func(dir, pattern string) (string, error) {
+			return sandboxRoot, nil
+		}
+		executor.baseEnv = []string{"PATH=" + strings.Join([]string{sandboxBin, safeBin}, string(filepath.ListSeparator))}
+
+		result := executor.run(context.Background(), ReviewProbeRequest{
+			ID:       "repo-sandbox-resolve-blocked-sandbox-bin",
+			Mode:     ReviewProbeRepoSandbox,
+			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
+		})
+		assertCommandResolutionBlocked(t, result)
+	})
+}

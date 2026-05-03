@@ -1,15 +1,12 @@
 package review
 
 import (
-	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
-type scratchOnlyFile struct {
-	absPath string
-	content string
-}
+type scratchOnlyFile = probeGeneratedFile
 
 func validateAndBuildScratchFiles(scratchDir string, files []ReviewProbeFile) ([]scratchOnlyFile, error) {
 	if len(files) > defaultScratchOnlyMaxFiles {
@@ -34,6 +31,14 @@ func validateAndBuildScratchFiles(scratchDir string, files []ReviewProbeFile) ([
 		if err != nil {
 			return nil, err
 		}
+		label := "scratch file " + strconv.Quote(file.Path)
+		if err := validateProbeGeneratedFileTarget(probeGeneratedFileValidationSpec{
+			modeName:  "scratch",
+			rootLabel: "scratch directory",
+			rootDir:   scratchDir,
+		}, absPath, label); err != nil {
+			return nil, err
+		}
 		if _, ok := seen[absPath]; ok {
 			return nil, newBlockedCommandErrorf("duplicate scratch file path %q", file.Path)
 		}
@@ -48,15 +53,7 @@ func validateAndBuildScratchFiles(scratchDir string, files []ReviewProbeFile) ([
 }
 
 func writeScratchFiles(files []scratchOnlyFile) error {
-	for _, file := range files {
-		if err := os.MkdirAll(filepath.Dir(file.absPath), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(file.absPath, []byte(file.content), 0o644); err != nil {
-			return err
-		}
-	}
-	return nil
+	return writeProbeGeneratedFiles(files)
 }
 
 func resolveScratchRelativePath(scratchDir, value string) (string, error) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -81,16 +80,11 @@ func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) (
 }
 
 func newScratchOnlyProbeResult(req ReviewProbeRequest) ReviewProbeResult {
-	return ReviewProbeResult{
-		ID:     req.ID,
-		Mode:   req.Mode,
-		Status: ReviewProbePassed,
-	}
+	return newIsolatedProbeResult(req)
 }
 
 func blockScratchOnlyResult(result *ReviewProbeResult, message string) {
-	result.Status = ReviewProbeBlocked
-	result.Error = message
+	blockIsolatedProbeResult(result, message)
 }
 
 func (e *scratchOnlyExecutor) cleanupScratchDir(result *ReviewProbeResult, scratchDir string) {
@@ -100,56 +94,23 @@ func (e *scratchOnlyExecutor) cleanupScratchDir(result *ReviewProbeResult, scrat
 }
 
 func appendScratchCleanupError(result *ReviewProbeResult, scratchDir string, err error) {
-	result.Error = appendError(result.Error, fmt.Sprintf("failed to remove scratch directory %q: %v", scratchDir, err))
+	appendIsolatedCleanupError(result, "scratch directory", scratchDir, err)
 }
 
 func validateScratchDirOutsideRepo(repoRoot, scratchDir string) error {
-	resolvedScratchDir := filepath.Clean(scratchDir)
-	if !filepath.IsAbs(resolvedScratchDir) {
-		abs, err := filepath.Abs(resolvedScratchDir)
-		if err != nil {
-			return newBlockedCommandErrorf("failed to resolve scratch directory %q: %v", scratchDir, err)
-		}
-		resolvedScratchDir = filepath.Clean(abs)
-	}
-
-	insideRepo, err := isPathWithinRepoRoot(repoRoot, resolvedScratchDir)
-	if err != nil {
-		return newBlockedCommandErrorf("failed to validate scratch directory %q: %v", scratchDir, err)
-	}
-	if insideRepo {
-		return newBlockedCommandErrorf("scratch directory must be outside repository root: %s", resolvedScratchDir)
-	}
-	return nil
+	return validateIsolatedRootOutsideRepo(repoRoot, scratchDir, "scratch")
 }
 
 func applyScratchOnlySnapshotError(result *ReviewProbeResult, phase string, err error) {
-	result.Status = ReviewProbeBlocked
-	result.Error = appendError(result.Error, fmt.Sprintf("failed to capture worktree snapshot %s probe: %v", phase, err))
+	applyIsolatedProbeSnapshotError(result, phase, err)
 }
 
 func applyScratchOnlyCommandTransition(result *ReviewProbeResult, cmd scratchOnlyCommand, cmdResult ReviewProbeCommandResult) (stop bool) {
-	result.CommandResults = append(result.CommandResults, cmdResult)
-	result.OutputTruncated = result.OutputTruncated || cmdResult.OutputTruncated
-
-	nextStatus, message, stop := buildProbeCommandTransition(cmdResult.Status, cmd.command, cmd.args)
-	if !stop {
-		return false
-	}
-	result.Status = nextStatus
-	result.Error = appendError(result.Error, message)
-	return true
+	return applyIsolatedProbeCommandTransition(result, cmd.command, cmd.args, cmdResult)
 }
 
 func applyScratchOnlyMutationTransition(result *ReviewProbeResult, mutatedFiles []string) {
-	if len(mutatedFiles) == 0 {
-		return
-	}
-
-	result.MutatedWorktree = true
-	result.MutatedFiles = mutatedFiles
-	result.Status = ReviewProbeMutatedWorktree
-	result.Error = appendError(result.Error, "probe command changed the working tree")
+	applyIsolatedProbeMutationTransition(result, mutatedFiles)
 }
 
 func (e *scratchOnlyExecutor) executeScratchOnlyCommand(ctx context.Context, cmd scratchOnlyCommand, timeout time.Duration, maxOutputBytes int64, env []string) ReviewProbeCommandResult {
