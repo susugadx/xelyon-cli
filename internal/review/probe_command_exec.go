@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"strings"
 	"time"
 )
 
 type probeExecCommand struct {
-	command string
-	args    []string
-	workDir string
-	env     []string
+	command     string
+	commandPath string
+	args        []string
+	workDir     string
+	env         []string
 }
 
 func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time.Duration, maxOutputBytes int64) ReviewProbeCommandResult {
@@ -30,8 +32,13 @@ func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time
 	}
 	defer cancel()
 
+	execPath := cmd.commandPath
+	if strings.TrimSpace(execPath) == "" {
+		execPath = cmd.command
+	}
+
 	// shell は通さない。mutation につながる tool 固有 args は各 mode の policy で防ぐ。
-	proc := exec.CommandContext(cmdCtx, cmd.command, cmd.args...)
+	proc := exec.CommandContext(cmdCtx, execPath, cmd.args...)
 	proc.Dir = cmd.workDir
 	if len(cmd.env) > 0 {
 		proc.Env = append([]string(nil), cmd.env...)

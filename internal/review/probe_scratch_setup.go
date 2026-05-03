@@ -2,7 +2,6 @@ package review
 
 type scratchOnlyRuntime struct {
 	request scratchOnlyRequest
-	dirs    scratchOnlyDirs
 	env     []string
 }
 
@@ -15,15 +14,15 @@ func (e *scratchOnlyExecutor) prepareRuntime(req ReviewProbeRequest, scratchDir 
 	if err != nil {
 		return scratchOnlyRuntime{}, newBlockedCommandErrorf("failed to prepare scratch directories: %v", err)
 	}
+	env := buildScratchOnlyEnv(e.baseEnv, e.repoRoot, dirs)
 
-	normalized, err := e.validateRequest(req, dirs.ScratchDir)
+	normalized, err := e.validateRequest(req, dirs.ScratchDir, env)
 	if err != nil {
 		return scratchOnlyRuntime{}, err
 	}
 
 	return scratchOnlyRuntime{
 		request: normalized,
-		dirs:    dirs,
-		env:     buildScratchOnlyEnv(e.baseEnv, e.repoRoot, dirs),
+		env:     env,
 	}, nil
 }

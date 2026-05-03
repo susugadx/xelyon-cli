@@ -8,9 +8,10 @@ import (
 )
 
 type scratchOnlyCommand struct {
-	command string
-	args    []string
-	workDir string
+	command     string
+	commandPath string
+	args        []string
+	workDir     string
 }
 
 type scratchOnlyRequest struct {
@@ -22,7 +23,7 @@ type scratchOnlyRequest struct {
 	commands       []scratchOnlyCommand
 }
 
-func (e *scratchOnlyExecutor) validateRequest(req ReviewProbeRequest, scratchDir string) (scratchOnlyRequest, error) {
+func (e *scratchOnlyExecutor) validateRequest(req ReviewProbeRequest, scratchDir string, commandEnv []string) (scratchOnlyRequest, error) {
 	req = normalizeProbeRequestExecutionLimits(req)
 
 	if req.Mode != ReviewProbeScratchOnly {
@@ -42,7 +43,7 @@ func (e *scratchOnlyExecutor) validateRequest(req ReviewProbeRequest, scratchDir
 
 	commands := make([]scratchOnlyCommand, 0, len(req.Commands))
 	for _, cmd := range req.Commands {
-		plannedCommand, err := buildScratchOnlyCommandPlan(scratchDir, cmd)
+		plannedCommand, err := e.buildScratchOnlyCommandPlan(scratchDir, commandEnv, cmd)
 		if err != nil {
 			return scratchOnlyRequest{}, err
 		}
@@ -59,7 +60,7 @@ func (e *scratchOnlyExecutor) validateRequest(req ReviewProbeRequest, scratchDir
 	}, nil
 }
 
-func buildScratchOnlyCommandPlan(scratchDir string, cmd ReviewProbeCommand) (scratchOnlyCommand, error) {
+func (e *scratchOnlyExecutor) buildScratchOnlyCommandPlan(scratchDir string, commandEnv []string, cmd ReviewProbeCommand) (scratchOnlyCommand, error) {
 	commandName := strings.TrimSpace(cmd.Command)
 	if commandName == "" {
 		return scratchOnlyCommand{}, newBlockedCommandErrorf("command is empty")
@@ -77,11 +78,21 @@ func buildScratchOnlyCommandPlan(scratchDir string, cmd ReviewProbeCommand) (scr
 	if err := validateScratchPathArgsWithinRoot(scratchDir, workDir, commandName, pathArgs); err != nil {
 		return scratchOnlyCommand{}, err
 	}
+	commandPath, err := resolveProbeCommandPath(commandName, probeCommandResolutionContext{
+		RepoRoot:   e.repoRoot,
+		ScratchDir: scratchDir,
+		WorkDir:    workDir,
+		Env:        commandEnv,
+	})
+	if err != nil {
+		return scratchOnlyCommand{}, err
+	}
 
 	return scratchOnlyCommand{
-		command: commandName,
-		args:    append([]string(nil), cmd.Args...),
-		workDir: workDir,
+		command:     commandName,
+		commandPath: commandPath,
+		args:        append([]string(nil), cmd.Args...),
+		workDir:     workDir,
 	}, nil
 }
 

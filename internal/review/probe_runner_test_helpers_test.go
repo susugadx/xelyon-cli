@@ -177,3 +177,20 @@ func containsString(items []string, target string) bool {
 	}
 	return false
 }
+
+func createProbeTestScriptCommand(t *testing.T, binDir, name, scriptBody string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("script command helper is unix-only")
+	}
+
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", binDir, err)
+	}
+	path := filepath.Join(binDir, name)
+	content := "#!/bin/sh\nset -eu\n" + scriptBody + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+}

@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -13,16 +14,21 @@ const (
 
 type hostReadOnlyExecutor struct {
 	repoRoot string
+	baseEnv  []string
 }
 
 func newHostReadOnlyExecutor(repoRoot string) *hostReadOnlyExecutor {
-	return &hostReadOnlyExecutor{repoRoot: repoRoot}
+	return &hostReadOnlyExecutor{
+		repoRoot: repoRoot,
+		baseEnv:  os.Environ(),
+	}
 }
 
 type hostReadOnlyCommand struct {
-	command string
-	args    []string
-	workDir string
+	command     string
+	commandPath string
+	args        []string
+	workDir     string
 }
 
 type hostReadOnlyRequest struct {

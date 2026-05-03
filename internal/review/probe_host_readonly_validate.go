@@ -51,11 +51,20 @@ func (e *hostReadOnlyExecutor) buildHostReadOnlyCommandPlan(cmd ReviewProbeComma
 	if _, err := planHostReadOnlyCommand(e.repoRoot, workDir, commandName, cmd.Args); err != nil {
 		return hostReadOnlyCommand{}, err
 	}
+	commandPath, err := resolveProbeCommandPath(commandName, probeCommandResolutionContext{
+		RepoRoot: e.repoRoot,
+		WorkDir:  workDir,
+		Env:      e.baseEnv,
+	})
+	if err != nil {
+		return hostReadOnlyCommand{}, err
+	}
 
 	return hostReadOnlyCommand{
-		command: commandName,
-		args:    append([]string(nil), cmd.Args...),
-		workDir: workDir,
+		command:     commandName,
+		commandPath: commandPath,
+		args:        append([]string(nil), cmd.Args...),
+		workDir:     workDir,
 	}, nil
 }
 

@@ -112,6 +112,34 @@ func TestProbeRunner_HostReadOnlyBlockedCasesAreNotExecuted(t *testing.T) {
 	}
 }
 
+func TestHostReadOnlyExecutor_BlocksCommandResolvedInsideRepoRoot(t *testing.T) {
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	repoBin := filepath.Join(repo, "bin")
+	safeBin := filepath.Join(t.TempDir(), "safe-bin")
+	createProbeTestScriptCommand(t, repoBin, "git", "exit 0")
+	createProbeTestScriptCommand(t, safeBin, "git", "exit 0")
+
+	executor := newHostReadOnlyExecutor(repo)
+	executor.baseEnv = []string{
+		"PATH=" + strings.Join([]string{repoBin, safeBin}, string(filepath.ListSeparator)),
+	}
+
+	result := executor.run(context.Background(), ReviewProbeRequest{
+		ID:   "host-readonly-blocked-repo-bin",
+		Mode: ReviewProbeHostReadOnly,
+		Commands: []ReviewProbeCommand{
+			{Command: "git", Args: []string{"status", "--short"}},
+		},
+	})
+
+	if result.Status != ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	}
+	if len(result.CommandResults) != 0 {
+		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
+	}
+}
+
 func assertHostReadOnlyBlockedWithoutExecution(t *testing.T, err error, result ReviewProbeResult, errorContains string) {
 	t.Helper()
 

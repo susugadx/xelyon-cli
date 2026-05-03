@@ -159,9 +159,10 @@ func applyScratchOnlyMutationTransition(result *ReviewProbeResult, mutatedFiles 
 
 func (e *scratchOnlyExecutor) executeScratchOnlyCommand(ctx context.Context, cmd scratchOnlyCommand, timeout time.Duration, maxOutputBytes int64, env []string) ReviewProbeCommandResult {
 	return executeProbeCommand(ctx, probeExecCommand{
-		command: cmd.command,
-		args:    cmd.args,
-		workDir: cmd.workDir,
-		env:     env,
+		command:     cmd.command,
+		commandPath: cmd.commandPath,
+		args:        cmd.args,
+		workDir:     cmd.workDir,
+		env:         env,
 	}, timeout, maxOutputBytes)
 }
