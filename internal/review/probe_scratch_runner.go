@@ -132,18 +132,13 @@ func applyScratchOnlyCommandTransition(result *ReviewProbeResult, cmd scratchOnl
 	result.CommandResults = append(result.CommandResults, cmdResult)
 	result.OutputTruncated = result.OutputTruncated || cmdResult.OutputTruncated
 
-	switch cmdResult.Status {
-	case ReviewProbeTimedOut:
-		result.Status = ReviewProbeTimedOut
-		result.Error = appendError(result.Error, fmt.Sprintf("probe command timed out: %s", formatProbeCommand(cmd.command, cmd.args)))
-		return true
-	case ReviewProbeFailed:
-		result.Status = ReviewProbeFailed
-		result.Error = appendError(result.Error, fmt.Sprintf("probe command failed: %s", formatProbeCommand(cmd.command, cmd.args)))
-		return true
-	default:
+	nextStatus, message, stop := buildProbeCommandTransition(cmdResult.Status, cmd.command, cmd.args)
+	if !stop {
 		return false
 	}
+	result.Status = nextStatus
+	result.Error = appendError(result.Error, message)
+	return true
 }
 
 func applyScratchOnlyMutationTransition(result *ReviewProbeResult, mutatedFiles []string) {

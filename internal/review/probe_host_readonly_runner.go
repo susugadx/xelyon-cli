@@ -72,18 +72,13 @@ func (r *hostReadOnlyResultReducer) applyCommandResult(cmd hostReadOnlyCommand, 
 	r.result.CommandResults = append(r.result.CommandResults, cmdResult)
 	r.result.OutputTruncated = r.result.OutputTruncated || cmdResult.OutputTruncated
 
-	switch cmdResult.Status {
-	case ReviewProbeTimedOut:
-		r.result.Status = ReviewProbeTimedOut
-		r.result.Error = appendError(r.result.Error, fmt.Sprintf("probe command timed out: %s", formatProbeCommand(cmd.command, cmd.args)))
-		return true
-	case ReviewProbeFailed:
-		r.result.Status = ReviewProbeFailed
-		r.result.Error = appendError(r.result.Error, fmt.Sprintf("probe command failed: %s", formatProbeCommand(cmd.command, cmd.args)))
-		return true
-	default:
+	nextStatus, message, stop := buildProbeCommandTransition(cmdResult.Status, cmd.command, cmd.args)
+	if !stop {
 		return false
 	}
+	r.result.Status = nextStatus
+	r.result.Error = appendError(r.result.Error, message)
+	return true
 }
 
 func (r *hostReadOnlyResultReducer) applyMutation(mutatedFiles []string) {

@@ -25,6 +25,13 @@ func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time
 		ExitCode: -1,
 	}
 
+	execPath := strings.TrimSpace(cmd.commandPath)
+	if execPath == "" {
+		result.Status = ReviewProbeBlocked
+		result.Error = probeExecMissingResolvedPathError
+		return result
+	}
+
 	cmdCtx := ctx
 	cancel := func() {}
 	if timeout > 0 {
@@ -32,12 +39,8 @@ func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time
 	}
 	defer cancel()
 
-	execPath := cmd.commandPath
-	if strings.TrimSpace(execPath) == "" {
-		execPath = cmd.command
-	}
-
-	// shell は通さない。mutation につながる tool 固有 args は各 mode の policy で防ぐ。
+	// executeProbeCommand は解決済み commandPath を必須とする。shell は通さない。
+	// mutation につながる tool 固有 args は各 mode の policy で防ぐ。
 	proc := exec.CommandContext(cmdCtx, execPath, cmd.args...)
 	proc.Dir = cmd.workDir
 	if len(cmd.env) > 0 {
