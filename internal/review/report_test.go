@@ -15,6 +15,8 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 		CustomInstructions:        "correctness を優先",
 		GeneratedAt:               generatedAt,
 		OverallVerificationStatus: ReviewVerificationPartiallyVerified,
+		Verdict:                   ReviewVerdictHasFindings,
+		Summary:                   "review 全体の要約",
 		RootCauseGroups: []ReviewRootCauseGroup{
 			{
 				ID:                 "rc-1",
@@ -317,6 +319,7 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 		TargetKind:                TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationUnverified,
+		Verdict:                   ReviewVerdictClean,
 		RootCauseGroups: []ReviewRootCauseGroup{
 			{
 				ID:                 "rc-omitempty",
@@ -364,6 +367,14 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 	}
 	if _, exists := parsed["residual_risks"]; exists {
 		t.Fatal("residual_risks should be omitted when empty")
+	}
+	if _, exists := parsed["summary"]; exists {
+		t.Fatal("summary should be omitted when empty")
+	}
+	if rawVerdict, exists := parsed["verdict"]; !exists {
+		t.Fatal("verdict should be present")
+	} else if rawVerdict != string(ReviewVerdictClean) {
+		t.Fatalf("verdict = %#v, want %q", rawVerdict, ReviewVerdictClean)
 	}
 
 	rootGroupsRaw, ok := parsed["root_cause_groups"].([]any)
@@ -435,6 +446,12 @@ func TestNewReviewReportSkeleton(t *testing.T) {
 	if got.OverallVerificationStatus != ReviewVerificationUnverified {
 		t.Fatalf("OverallVerificationStatus = %q, want %q", got.OverallVerificationStatus, ReviewVerificationUnverified)
 	}
+	if got.Verdict != ReviewVerdictBlocked {
+		t.Fatalf("Verdict = %q, want %q", got.Verdict, ReviewVerdictBlocked)
+	}
+	if got.Summary != ReviewReportSkeletonBlockedSummary {
+		t.Fatalf("Summary = %q, want %q", got.Summary, ReviewReportSkeletonBlockedSummary)
+	}
 	if got.RootCauseGroups == nil || len(got.RootCauseGroups) != 0 {
 		t.Fatalf("RootCauseGroups = %#v, want non-nil empty slice", got.RootCauseGroups)
 	}
@@ -449,5 +466,8 @@ func TestNewReviewReportSkeleton(t *testing.T) {
 	}
 	if got.ResidualRisks == nil || len(got.ResidualRisks) != 0 {
 		t.Fatalf("ResidualRisks = %#v, want non-nil empty slice", got.ResidualRisks)
+	}
+	if err := ValidateReviewReport(got); err != nil {
+		t.Fatalf("ValidateReviewReport(skeleton) error = %v, want nil", err)
 	}
 }

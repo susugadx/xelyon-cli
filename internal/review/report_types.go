@@ -5,6 +5,17 @@ import "time"
 const (
 	// ReviewReportSchemaVersionV1 は `/review` report schema v1 の識別子。
 	ReviewReportSchemaVersionV1 = "review_report.v1"
+	// ReviewReportSkeletonBlockedSummary は skeleton report の blocked reason 既定文。
+	ReviewReportSkeletonBlockedSummary = "Review report has not been finalized."
+)
+
+// ReviewVerdict は review report の最終判定。
+type ReviewVerdict string
+
+const (
+	ReviewVerdictClean       ReviewVerdict = "clean"
+	ReviewVerdictHasFindings ReviewVerdict = "has_findings"
+	ReviewVerdictBlocked     ReviewVerdict = "blocked"
 )
 
 // ReviewVerificationStatus は検証状態の明示表現。
@@ -36,6 +47,8 @@ type ReviewReport struct {
 	CustomInstructions        string                   `json:"custom_instructions,omitempty"`
 	GeneratedAt               time.Time                `json:"generated_at"`
 	OverallVerificationStatus ReviewVerificationStatus `json:"overall_verification_status"`
+	Verdict                   ReviewVerdict            `json:"verdict"`
+	Summary                   string                   `json:"summary,omitempty"`
 	RootCauseGroups           []ReviewRootCauseGroup   `json:"root_cause_groups,omitempty"`
 	ProbeSummaries            []ReviewProbeSummary     `json:"probe_summaries,omitempty"`
 	CheckedSurfaces           []ReviewSurfaceCoverage  `json:"checked_surfaces,omitempty"`

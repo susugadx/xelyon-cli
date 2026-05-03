@@ -10,6 +10,8 @@ func NewReviewReportSkeleton(req ReviewRequest, generatedAt time.Time) ReviewRep
 		CustomInstructions:        req.CustomInstructions,
 		GeneratedAt:               generatedAt,
 		OverallVerificationStatus: ReviewVerificationUnverified,
+		Verdict:                   ReviewVerdictBlocked,
+		Summary:                   ReviewReportSkeletonBlockedSummary,
 		RootCauseGroups:           make([]ReviewRootCauseGroup, 0),
 		ProbeSummaries:            make([]ReviewProbeSummary, 0),
 		CheckedSurfaces:           make([]ReviewSurfaceCoverage, 0),
