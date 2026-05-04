@@ -13,6 +13,16 @@ func ValidateReviewReport(report ReviewReport) error {
 			return fmt.Errorf("verdict %q requires root_cause_groups to be empty", ReviewVerdictClean)
 		}
 	case ReviewVerdictHasFindings:
+		switch report.OverallVerificationStatus {
+		case ReviewVerificationVerified, ReviewVerificationPartiallyVerified:
+		default:
+			return fmt.Errorf("verdict %q requires overall_verification_status to be %q or %q: got %q",
+				ReviewVerdictHasFindings,
+				ReviewVerificationVerified,
+				ReviewVerificationPartiallyVerified,
+				report.OverallVerificationStatus,
+			)
+		}
 		if len(report.RootCauseGroups) == 0 {
 			return fmt.Errorf("verdict %q requires at least one root_cause_group", ReviewVerdictHasFindings)
 		}

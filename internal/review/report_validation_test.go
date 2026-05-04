@@ -26,8 +26,9 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "has_findings without groups is invalid",
 			report: ReviewReport{
-				Verdict:         ReviewVerdictHasFindings,
-				RootCauseGroups: nil,
+				Verdict:                   ReviewVerdictHasFindings,
+				OverallVerificationStatus: ReviewVerificationVerified,
+				RootCauseGroups:           nil,
 			},
 			wantErr:     true,
 			errContains: "requires at least one root_cause_group",
@@ -35,7 +36,8 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "has_findings with unverified group is invalid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictHasFindings,
+				Verdict:                   ReviewVerdictHasFindings,
+				OverallVerificationStatus: ReviewVerificationVerified,
 				RootCauseGroups: []ReviewRootCauseGroup{
 					newRootCauseGroupForValidationTest(ReviewVerificationUnverified),
 				},
@@ -44,13 +46,60 @@ func TestValidateReviewReport(t *testing.T) {
 			errContains: "verification_status",
 		},
 		{
-			name: "has_findings with partially_verified group is valid",
+			name: "has_findings with overall verified is valid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictHasFindings,
+				Verdict:                   ReviewVerdictHasFindings,
+				OverallVerificationStatus: ReviewVerificationVerified,
+				RootCauseGroups: []ReviewRootCauseGroup{
+					newRootCauseGroupForValidationTest(ReviewVerificationVerified),
+				},
+			},
+		},
+		{
+			name: "has_findings with overall partially_verified is valid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictHasFindings,
+				OverallVerificationStatus: ReviewVerificationPartiallyVerified,
 				RootCauseGroups: []ReviewRootCauseGroup{
 					newRootCauseGroupForValidationTest(ReviewVerificationPartiallyVerified),
 				},
 			},
+		},
+		{
+			name: "has_findings with overall unverified is invalid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictHasFindings,
+				OverallVerificationStatus: ReviewVerificationUnverified,
+				RootCauseGroups: []ReviewRootCauseGroup{
+					newRootCauseGroupForValidationTest(ReviewVerificationVerified),
+				},
+			},
+			wantErr:     true,
+			errContains: "overall_verification_status",
+		},
+		{
+			name: "has_findings with overall not_applicable is invalid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictHasFindings,
+				OverallVerificationStatus: ReviewVerificationNotApplicable,
+				RootCauseGroups: []ReviewRootCauseGroup{
+					newRootCauseGroupForValidationTest(ReviewVerificationVerified),
+				},
+			},
+			wantErr:     true,
+			errContains: "overall_verification_status",
+		},
+		{
+			name: "has_findings with overall blocked_or_inconclusive is invalid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictHasFindings,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
+				RootCauseGroups: []ReviewRootCauseGroup{
+					newRootCauseGroupForValidationTest(ReviewVerificationVerified),
+				},
+			},
+			wantErr:     true,
+			errContains: "overall_verification_status",
 		},
 		{
 			name: "blocked with blocked probe summary is valid",

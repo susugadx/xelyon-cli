@@ -318,7 +318,7 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 		SchemaVersion:             ReviewReportSchemaVersionV1,
 		TargetKind:                TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC),
-		OverallVerificationStatus: ReviewVerificationUnverified,
+		OverallVerificationStatus: ReviewVerificationPartiallyVerified,
 		Verdict:                   ReviewVerdictHasFindings,
 		RootCauseGroups: []ReviewRootCauseGroup{
 			{
