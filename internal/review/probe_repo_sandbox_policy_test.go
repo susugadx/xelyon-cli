@@ -130,6 +130,14 @@ func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
 			errorContains: "go argument -exec",
 		},
 		{
+			name: "blocked go test exec double dash attached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-test-exec-double-dash-attached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"test", "--exec=/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument --exec",
+		},
+		{
 			name: "blocked go test exec detached",
 			request: ReviewProbeRequest{
 				ID:       "repo-sandbox-blocked-go-test-exec-detached",
@@ -144,6 +152,14 @@ func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
 				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"test", "-toolexec=/bin/echo", "./probe"}}},
 			},
 			errorContains: "go argument -toolexec",
+		},
+		{
+			name: "blocked go test toolexec double dash attached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-test-toolexec-double-dash-attached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"test", "--toolexec=/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument --toolexec",
 		},
 		{
 			name: "blocked go test toolexec detached",
@@ -162,12 +178,28 @@ func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
 			errorContains: "go argument -vettool",
 		},
 		{
+			name: "blocked go vet vettool double dash attached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-vet-vettool-double-dash-attached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"vet", "--vettool=/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument --vettool",
+		},
+		{
 			name: "blocked go vet vettool detached",
 			request: ReviewProbeRequest{
 				ID:       "repo-sandbox-blocked-go-vet-vettool-detached",
 				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"vet", "-vettool", "/bin/echo", "./probe"}}},
 			},
 			errorContains: "go argument -vettool",
+		},
+		{
+			name: "blocked go run exec double dash attached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-run-exec-double-dash-attached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"run", "--exec=/bin/echo", "./probe/main.go"}}},
+			},
+			errorContains: "go argument --exec",
 		},
 		{
 			name: "blocked go run outside file",

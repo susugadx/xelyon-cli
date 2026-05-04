@@ -114,8 +114,11 @@ func isAllowedRepoSandboxGoSubcommand(subcommand string) bool {
 
 var blockedRepoSandboxGoWrapperFlags = []string{
 	"-exec",
+	"--exec",
 	"-toolexec",
+	"--toolexec",
 	"-vettool",
+	"--vettool",
 }
 
 func validateRepoSandboxBlockedGoWrapperFlags(args []string) error {
