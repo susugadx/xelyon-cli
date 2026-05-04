@@ -87,13 +87,14 @@ func validateRootCauseGroups(groups []ReviewRootCauseGroup) error {
 	groupIDs := make(map[string]struct{}, len(groups))
 	findingIDs := make(map[string]struct{})
 	for i, group := range groups {
-		if strings.TrimSpace(group.ID) == "" {
-			return fmt.Errorf("root_cause_groups[%d].id must be non-empty", i)
+		groupID, err := validateRequiredReportID(fmt.Sprintf("root_cause_groups[%d].id", i), group.ID)
+		if err != nil {
+			return err
 		}
-		if _, exists := groupIDs[group.ID]; exists {
-			return fmt.Errorf("root_cause_groups[%d].id duplicates %q", i, group.ID)
+		if _, exists := groupIDs[groupID]; exists {
+			return fmt.Errorf("root_cause_groups[%d].id duplicates %q", i, groupID)
 		}
-		groupIDs[group.ID] = struct{}{}
+		groupIDs[groupID] = struct{}{}
 		if strings.TrimSpace(group.Title) == "" {
 			return fmt.Errorf("root_cause_groups[%d].title must be non-empty", i)
 		}
@@ -104,13 +105,17 @@ func validateRootCauseGroups(groups []ReviewRootCauseGroup) error {
 			return fmt.Errorf("root_cause_groups[%d].verification_status must be known enum value: got %q", i, group.VerificationStatus)
 		}
 		for j, finding := range group.Findings {
-			if strings.TrimSpace(finding.ID) == "" {
+			findingID, err := validateOptionalReportID(fmt.Sprintf("root_cause_groups[%d].findings[%d].id", i, j), finding.ID)
+			if err != nil {
+				return err
+			}
+			if findingID == "" {
 				continue
 			}
-			if _, exists := findingIDs[finding.ID]; exists {
-				return fmt.Errorf("root_cause_groups[%d].findings[%d].id duplicates %q", i, j, finding.ID)
+			if _, exists := findingIDs[findingID]; exists {
+				return fmt.Errorf("root_cause_groups[%d].findings[%d].id duplicates %q", i, j, findingID)
 			}
-			findingIDs[finding.ID] = struct{}{}
+			findingIDs[findingID] = struct{}{}
 		}
 	}
 	return nil
@@ -276,6 +281,30 @@ func validateRequiredProbeID(field, candidate string) (string, error) {
 		return "", fmt.Errorf("%s must be non-empty", field)
 	}
 	return validateOptionalProbeID(field, candidate)
+}
+
+func validateRequiredReportID(field, candidate string) (string, error) {
+	if candidate == "" {
+		return "", fmt.Errorf("%s must be non-empty", field)
+	}
+	return validateOptionalReportID(field, candidate)
+}
+
+func validateOptionalReportID(field, candidate string) (string, error) {
+	trimmed := strings.TrimSpace(candidate)
+	if trimmed == "" {
+		if candidate != "" {
+			return "", fmt.Errorf("%s must be canonical report ID without whitespace: got %q", field, candidate)
+		}
+		return "", nil
+	}
+	if trimmed != candidate {
+		return "", fmt.Errorf("%s must be canonical report ID without leading/trailing whitespace: got %q", field, candidate)
+	}
+	if containsAnyWhitespace(candidate) {
+		return "", fmt.Errorf("%s must not include whitespace: got %q", field, candidate)
+	}
+	return candidate, nil
 }
 
 func validateOptionalProbeID(field, candidate string) (string, error) {

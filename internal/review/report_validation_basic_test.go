@@ -94,6 +94,36 @@ func TestValidateReviewReportBasicContract(t *testing.T) {
 			errContains: "root_cause_groups[0].id",
 		},
 		{
+			name: "root_cause_group id with leading whitespace is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].ID = " rc-1"
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].id",
+		},
+		{
+			name: "root_cause_group id with trailing whitespace is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].ID = "rc-1 "
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].id",
+		},
+		{
+			name: "root_cause_group id with internal whitespace is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].ID = "rc 1"
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].id",
+		},
+		{
 			name: "duplicate root_cause_group id",
 			report: func() ReviewReport {
 				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
@@ -102,6 +132,54 @@ func TestValidateReviewReportBasicContract(t *testing.T) {
 			},
 			wantErr:     true,
 			errContains: "root_cause_groups[1].id",
+		},
+		{
+			name: "empty finding id is valid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].Findings[0].ID = ""
+				return report
+			},
+		},
+		{
+			name: "finding id with whitespace-only input is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].Findings[0].ID = " "
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].findings[0].id",
+		},
+		{
+			name: "finding id with leading whitespace is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].Findings[0].ID = " finding-1"
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].findings[0].id",
+		},
+		{
+			name: "finding id with trailing whitespace is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].Findings[0].ID = "finding-1 "
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].findings[0].id",
+		},
+		{
+			name: "finding id with internal whitespace is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].Findings[0].ID = "finding 1"
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].findings[0].id",
 		},
 		{
 			name: "duplicate non-empty finding id across groups",
