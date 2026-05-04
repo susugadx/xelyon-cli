@@ -122,6 +122,54 @@ func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
 			errorContains: "go env -w is not allowed in repo_sandbox",
 		},
 		{
+			name: "blocked go test exec attached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-test-exec-attached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"test", "-exec=/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument -exec",
+		},
+		{
+			name: "blocked go test exec detached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-test-exec-detached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"test", "-exec", "/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument -exec",
+		},
+		{
+			name: "blocked go test toolexec attached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-test-toolexec-attached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"test", "-toolexec=/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument -toolexec",
+		},
+		{
+			name: "blocked go test toolexec detached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-test-toolexec-detached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"test", "-toolexec", "/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument -toolexec",
+		},
+		{
+			name: "blocked go vet vettool attached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-vet-vettool-attached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"vet", "-vettool=/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument -vettool",
+		},
+		{
+			name: "blocked go vet vettool detached",
+			request: ReviewProbeRequest{
+				ID:       "repo-sandbox-blocked-go-vet-vettool-detached",
+				Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"vet", "-vettool", "/bin/echo", "./probe"}}},
+			},
+			errorContains: "go argument -vettool",
+		},
+		{
 			name: "blocked go run outside file",
 			request: ReviewProbeRequest{
 				ID:       "repo-sandbox-blocked-go-run-outside",

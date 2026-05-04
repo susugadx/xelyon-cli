@@ -80,6 +80,9 @@ func validateAndCollectRepoSandboxGoPathArgs(args []string) ([]string, error) {
 	if !isAllowedRepoSandboxGoSubcommand(args[0]) {
 		return nil, newBlockedCommandErrorf("go %s is not allowed in repo_sandbox", args[0])
 	}
+	if err := validateRepoSandboxBlockedGoWrapperFlags(args[1:]); err != nil {
+		return nil, err
+	}
 
 	switch args[0] {
 	case "run":
@@ -107,6 +110,21 @@ func isAllowedRepoSandboxGoSubcommand(subcommand string) bool {
 	default:
 		return false
 	}
+}
+
+var blockedRepoSandboxGoWrapperFlags = []string{
+	"-exec",
+	"-toolexec",
+	"-vettool",
+}
+
+func validateRepoSandboxBlockedGoWrapperFlags(args []string) error {
+	for _, arg := range args {
+		if isBlockedFlagArg(arg, blockedRepoSandboxGoWrapperFlags) {
+			return newBlockedCommandErrorf("go argument %s is not allowed in repo_sandbox", arg)
+		}
+	}
+	return nil
 }
 
 func collectRepoSandboxGoRunPathArgs(args []string) []string {
@@ -218,7 +236,7 @@ func isRepoSandboxGoPathFlag(name string) bool {
 
 func isRepoSandboxGoNonPathValueFlag(name string) bool {
 	switch name {
-	case "-exec", "-p", "-tags", "-toolexec", "-run", "-bench", "-timeout", "-count", "-vettool":
+	case "-p", "-tags", "-run", "-bench", "-timeout", "-count":
 		return true
 	default:
 		return false
