@@ -50,6 +50,17 @@ func ValidateReviewReport(report ReviewReport) error {
 			}
 		}
 	case ReviewVerdictBlocked:
+		switch report.OverallVerificationStatus {
+		case ReviewVerificationUnverified, ReviewVerificationPartiallyVerified, ReviewVerificationBlockedOrInconclusive:
+		default:
+			return fmt.Errorf("verdict %q requires overall_verification_status to be %q, %q, or %q: got %q",
+				ReviewVerdictBlocked,
+				ReviewVerificationUnverified,
+				ReviewVerificationPartiallyVerified,
+				ReviewVerificationBlockedOrInconclusive,
+				report.OverallVerificationStatus,
+			)
+		}
 		if !hasBlockedReason(report) {
 			return fmt.Errorf("verdict %q requires blocked reason in summary, unverified_surfaces, residual_risks, or blocked probe_summaries status", ReviewVerdictBlocked)
 		}

@@ -146,7 +146,8 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "blocked with blocked probe summary is valid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictBlocked,
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
 				ProbeSummaries: []ReviewProbeSummary{
 					{ProbeID: "probe-1", Status: ReviewProbeBlocked},
 				},
@@ -155,7 +156,8 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "blocked with timed_out probe summary is valid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictBlocked,
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
 				ProbeSummaries: []ReviewProbeSummary{
 					{ProbeID: "probe-1", Status: ReviewProbeTimedOut},
 				},
@@ -164,16 +166,62 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "blocked with mutated_worktree probe summary is valid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictBlocked,
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
 				ProbeSummaries: []ReviewProbeSummary{
 					{ProbeID: "probe-1", Status: ReviewProbeMutatedWorktree},
 				},
 			},
 		},
 		{
+			name: "blocked with overall unverified is valid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationUnverified,
+				Summary:                   "review did not complete",
+			},
+		},
+		{
+			name: "blocked with overall partially_verified is valid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationPartiallyVerified,
+				Summary:                   "review did not complete",
+			},
+		},
+		{
+			name: "blocked with overall blocked_or_inconclusive is valid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
+				Summary:                   "review did not complete",
+			},
+		},
+		{
+			name: "blocked with overall verified is invalid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationVerified,
+				Summary:                   "review did not complete",
+			},
+			wantErr:     true,
+			errContains: "overall_verification_status",
+		},
+		{
+			name: "blocked with overall not_applicable is invalid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationNotApplicable,
+				Summary:                   "review did not complete",
+			},
+			wantErr:     true,
+			errContains: "overall_verification_status",
+		},
+		{
 			name: "blocked with failed probe summary only is invalid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictBlocked,
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
 				ProbeSummaries: []ReviewProbeSummary{
 					{ProbeID: "probe-1", Status: ReviewProbeFailed},
 				},
@@ -184,8 +232,9 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "blocked with empty summary and no signals is invalid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictBlocked,
-				Summary: "   ",
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
+				Summary:                   "   ",
 			},
 			wantErr:     true,
 			errContains: "requires blocked reason",
@@ -203,7 +252,8 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "suspected issue in residual risks is valid without findings",
 			report: ReviewReport{
-				Verdict: ReviewVerdictBlocked,
+				Verdict:                   ReviewVerdictBlocked,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
 				ResidualRisks: []ReviewResidualRisk{
 					{Summary: "未検証の境界条件が残る"},
 				},
