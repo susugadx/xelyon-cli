@@ -9,6 +9,16 @@ import (
 func ValidateReviewReport(report ReviewReport) error {
 	switch report.Verdict {
 	case ReviewVerdictClean:
+		switch report.OverallVerificationStatus {
+		case ReviewVerificationVerified, ReviewVerificationPartiallyVerified:
+		default:
+			return fmt.Errorf("verdict %q requires overall_verification_status to be %q or %q: got %q",
+				ReviewVerdictClean,
+				ReviewVerificationVerified,
+				ReviewVerificationPartiallyVerified,
+				report.OverallVerificationStatus,
+			)
+		}
 		if len(report.RootCauseGroups) > 0 {
 			return fmt.Errorf("verdict %q requires root_cause_groups to be empty", ReviewVerdictClean)
 		}

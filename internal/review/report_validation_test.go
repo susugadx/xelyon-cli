@@ -15,13 +15,55 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "clean with findings is invalid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictClean,
+				Verdict:                   ReviewVerdictClean,
+				OverallVerificationStatus: ReviewVerificationVerified,
 				RootCauseGroups: []ReviewRootCauseGroup{
 					newRootCauseGroupForValidationTest(ReviewVerificationVerified),
 				},
 			},
 			wantErr:     true,
 			errContains: "requires root_cause_groups to be empty",
+		},
+		{
+			name: "clean with overall verified and no groups is valid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictClean,
+				OverallVerificationStatus: ReviewVerificationVerified,
+			},
+		},
+		{
+			name: "clean with overall partially_verified and no groups is valid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictClean,
+				OverallVerificationStatus: ReviewVerificationPartiallyVerified,
+			},
+		},
+		{
+			name: "clean with overall unverified is invalid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictClean,
+				OverallVerificationStatus: ReviewVerificationUnverified,
+			},
+			wantErr:     true,
+			errContains: "overall_verification_status",
+		},
+		{
+			name: "clean with overall not_applicable is invalid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictClean,
+				OverallVerificationStatus: ReviewVerificationNotApplicable,
+			},
+			wantErr:     true,
+			errContains: "overall_verification_status",
+		},
+		{
+			name: "clean with overall blocked_or_inconclusive is invalid",
+			report: ReviewReport{
+				Verdict:                   ReviewVerdictClean,
+				OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
+			},
+			wantErr:     true,
+			errContains: "overall_verification_status",
 		},
 		{
 			name: "has_findings without groups is invalid",
@@ -151,7 +193,8 @@ func TestValidateReviewReport(t *testing.T) {
 		{
 			name: "clean with checked surfaces and no groups is valid",
 			report: ReviewReport{
-				Verdict: ReviewVerdictClean,
+				Verdict:                   ReviewVerdictClean,
+				OverallVerificationStatus: ReviewVerificationPartiallyVerified,
 				CheckedSurfaces: []ReviewSurfaceCoverage{
 					{SurfaceID: "surface-1", Summary: "checked"},
 				},
