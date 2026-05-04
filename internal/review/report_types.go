@@ -94,6 +94,15 @@ type ReviewEvidenceRef struct {
 	Snippet      string `json:"snippet,omitempty"`
 }
 
+const (
+	ReviewEvidenceKindProbeCommand = "probe_command"
+	ReviewEvidenceKindProbe        = "probe"
+	ReviewEvidenceKindFile         = "file"
+	ReviewEvidenceKindDiff         = "diff"
+	ReviewEvidenceKindGitStatus    = "git_status"
+	ReviewEvidenceKindRuleFile     = "rule_file"
+)
+
 // ReviewCommandIndex は command index の明示値を返す。
 func ReviewCommandIndex(i int) *int {
 	return &i
