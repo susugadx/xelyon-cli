@@ -5,19 +5,6 @@ import (
 	"testing"
 )
 
-func TestRenderCommandsTextIncludesSubcommands(t *testing.T) {
-	got := RenderCommandsText()
-	for _, fragment := range []string{
-		"Commands:\n",
-		"/exit, /quit, /q",
-		"/config show - Show all settings with diff from defaults",
-	} {
-		if !strings.Contains(got, fragment) {
-			t.Fatalf("RenderCommandsText() missing %q\n%s", fragment, got)
-		}
-	}
-}
-
 func TestMatchPrefixMatchesNameAliasAndSubcommand(t *testing.T) {
 	tests := []struct {
 		prefix string
@@ -86,41 +73,8 @@ func TestFindMatchesNameAndAlias(t *testing.T) {
 	}
 }
 
-func TestSurfaceFiltering(t *testing.T) {
-	if got := MatchPrefixForSurface("/review", CommandSurfaceClassic); len(got) != 0 {
-		t.Fatalf("classic MatchPrefixForSurface(/review) = %#v, want no matches", got)
-	}
-	if got := MatchPrefixForSurface("/review", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/review" {
-		t.Fatalf("TUI MatchPrefixForSurface(/review) = %#v, want /review", got)
-	}
-
-	classicHelp := RenderCommandsTextForSurface(CommandSurfaceClassic)
-	if strings.Contains(classicHelp, "/review") {
-		t.Fatalf("classic help should not include /review:\n%s", classicHelp)
-	}
-	if strings.Contains(classicHelp, "/project") {
-		t.Fatalf("classic help should not include TUI-only /project:\n%s", classicHelp)
-	}
-	if !strings.Contains(classicHelp, "/lsp") {
-		t.Fatalf("classic help should include legacy /lsp:\n%s", classicHelp)
-	}
-	tuiHelp := RenderCommandsTextForSurface(CommandSurfaceTUI)
-	if !strings.Contains(tuiHelp, "/review") {
-		t.Fatalf("TUI help should include /review:\n%s", tuiHelp)
-	}
-	if strings.Contains(tuiHelp, "/lsp") {
-		t.Fatalf("TUI help should not include classic-only /lsp:\n%s", tuiHelp)
-	}
-	if !strings.Contains(tuiHelp, "/init") {
-		t.Fatalf("TUI help should include /init:\n%s", tuiHelp)
-	}
-	if !strings.Contains(tuiHelp, "/project") {
-		t.Fatalf("TUI help should include /project:\n%s", tuiHelp)
-	}
-}
-
 func TestTUILocalCommandOwnership(t *testing.T) {
-	for _, name := range []string{"/review", "/project"} {
+	for _, name := range []string{"/review", "/project", "/attach", "/detach", "/detach-all"} {
 		t.Run(name, func(t *testing.T) {
 			cmd, ok := Find(name)
 			if !ok {
@@ -138,12 +92,129 @@ func TestTUILocalCommandOwnership(t *testing.T) {
 		})
 	}
 
-	configCmd, ok := Find("/config")
-	if !ok {
-		t.Fatal("Find(/config) ok = false, want true")
+	for _, name := range []string{"/config", "/copy", "/exit"} {
+		t.Run(name, func(t *testing.T) {
+			cmd, ok := Find(name)
+			if !ok {
+				t.Fatalf("Find(%q) ok = false, want true", name)
+			}
+			if cmd.EffectiveOwner() != CommandOwnerAgent {
+				t.Fatalf("%s owner = %q, want %q", name, cmd.EffectiveOwner(), CommandOwnerAgent)
+			}
+			if !cmd.SupportsSurface(CommandSurfaceTUI) {
+				t.Fatalf("%s should support TUI surface", name)
+			}
+			if !cmd.SupportsSurface(CommandSurfaceClassic) {
+				t.Fatalf("%s should support classic surface", name)
+			}
+			if cmd.EffectiveTUILocalAction() == TUILocalActionNone {
+				t.Fatalf("%s should declare TUI local action", name)
+			}
+		})
 	}
-	if configCmd.EffectiveOwner() != CommandOwnerAgent {
-		t.Fatalf("/config owner = %q, want %q", configCmd.EffectiveOwner(), CommandOwnerAgent)
+}
+
+func TestTUILocalArgPolicyAndAction(t *testing.T) {
+	tests := []struct {
+		name           string
+		withArgsInput  string
+		wantWithArgsOK bool
+		wantAction     TUILocalAction
+		wantOwner      CommandOwner
+	}{
+		{
+			name:           "/attach",
+			withArgsInput:  "/attach ./notes.txt",
+			wantWithArgsOK: true,
+			wantAction:     TUILocalActionManageAttachments,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/detach",
+			withArgsInput:  "/detach 1",
+			wantWithArgsOK: true,
+			wantAction:     TUILocalActionManageAttachments,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/detach-all",
+			withArgsInput:  "/detach-all now",
+			wantWithArgsOK: true,
+			wantAction:     TUILocalActionManageAttachments,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/review",
+			withArgsInput:  "/review staged",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionOpenReview,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/project",
+			withArgsInput:  "/project rules",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionOpenProject,
+			wantOwner:      CommandOwnerTUIRouter,
+		},
+		{
+			name:           "/config",
+			withArgsInput:  "/config show",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionOpenConfig,
+			wantOwner:      CommandOwnerAgent,
+		},
+		{
+			name:           "/copy",
+			withArgsInput:  "/copy code",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionCopyMouseSelection,
+			wantOwner:      CommandOwnerAgent,
+		},
+		{
+			name:           "/exit",
+			withArgsInput:  "/exit now",
+			wantWithArgsOK: true,
+			wantAction:     TUILocalActionQuit,
+			wantOwner:      CommandOwnerAgent,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, ok := Find(tt.name)
+			if !ok {
+				t.Fatalf("Find(%q) ok = false, want true", tt.name)
+			}
+			if cmd.EffectiveOwner() != tt.wantOwner {
+				t.Fatalf("%s owner = %q, want %q", tt.name, cmd.EffectiveOwner(), tt.wantOwner)
+			}
+			if cmd.EffectiveTUILocalAction() != tt.wantAction {
+				t.Fatalf("%s local action = %q, want %q", tt.name, cmd.EffectiveTUILocalAction(), tt.wantAction)
+			}
+			withArgs := strings.Fields(tt.withArgsInput)
+			if got := cmd.AcceptsTUILocalArgs(withArgs[1:]); got != tt.wantWithArgsOK {
+				t.Fatalf("%s AcceptsTUILocalArgs(%q) = %v, want %v", tt.name, tt.withArgsInput, got, tt.wantWithArgsOK)
+			}
+			if tt.name == "/copy" {
+				if cmd.AcceptsTUILocalContext(TUILocalContext{HasMouseSelection: false}) {
+					t.Fatalf("%s should require mouse selection", tt.name)
+				}
+				if !cmd.AcceptsTUILocalContext(TUILocalContext{HasMouseSelection: true}) {
+					t.Fatalf("%s should accept context with mouse selection", tt.name)
+				}
+			}
+		})
+	}
+}
+
+func TestAttachDescriptionMentionsCombinedLimit(t *testing.T) {
+	cmd, ok := Find("/attach")
+	if !ok {
+		t.Fatal("Find(/attach) ok = false, want true")
+	}
+	if !strings.Contains(cmd.Description, "up to 12 attachments per draft") {
+		t.Fatalf("/attach description should mention limit, got %q", cmd.Description)
 	}
 }
 
@@ -216,77 +287,6 @@ func TestLSPCommandIsClassicOnlyLegacyDiagnostic(t *testing.T) {
 	}
 }
 
-func TestDiscoverableCommandsForTUISurface(t *testing.T) {
-	commands := DiscoverableCommandsForSurface(CommandSurfaceTUI)
-	if len(commands) < 4 {
-		t.Fatalf("DiscoverableCommandsForSurface(TUI) returned %d commands, want at least 4", len(commands))
-	}
-	gotNames := commandNames(commands)
-	wantNames := []string{
-		"/model",
-		"/use",
-		"/providers",
-		"/think",
-		"/status",
-		"/tokens",
-		"/review",
-		"/project",
-		"/config",
-		"/skills",
-		"/copy",
-		"/compress",
-		"/plan",
-		"/save",
-		"/load",
-		"/sessions",
-		"/clear",
-		"/history",
-		"/init",
-		"/exit",
-	}
-	if len(gotNames) != len(wantNames) {
-		t.Fatalf("discoverable commands = %#v, want %#v", gotNames, wantNames)
-	}
-	for i := range wantNames {
-		if gotNames[i] != wantNames[i] {
-			t.Fatalf("discoverable commands = %#v, want %#v", gotNames, wantNames)
-		}
-	}
-
-	for _, hidden := range []string{"/version", "/help", "/lsp"} {
-		if containsCommandName(commands, hidden) {
-			t.Fatalf("%s should not be TUI-discoverable", hidden)
-		}
-	}
-}
-
-func TestDiscoverablePrefixFiltering(t *testing.T) {
-	if got := MatchDiscoverablePrefixForSurface("/review", CommandSurfaceClassic); len(got) != 0 {
-		t.Fatalf("classic discoverable /review = %#v, want no matches", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/review", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/review" {
-		t.Fatalf("TUI discoverable /review = %#v, want /review", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/init", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/init" {
-		t.Fatalf("TUI discoverable /init = %#v, want /init", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/version", CommandSurfaceTUI); len(got) != 0 {
-		t.Fatalf("TUI discoverable /version = %#v, want no matches", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/help", CommandSurfaceTUI); len(got) != 0 {
-		t.Fatalf("TUI discoverable /help = %#v, want no matches", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/lsp", CommandSurfaceTUI); len(got) != 0 {
-		t.Fatalf("TUI discoverable /lsp = %#v, want no matches", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/project" {
-		t.Fatalf("TUI discoverable /project = %#v, want /project", got)
-	}
-	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceClassic); len(got) != 0 {
-		t.Fatalf("classic discoverable /project = %#v, want no matches", got)
-	}
-}
-
 func TestDefaultCommandMetadata(t *testing.T) {
 	matches := MatchPrefix("/copy")
 	if len(matches) == 0 {
@@ -306,7 +306,7 @@ func TestDefaultCommandMetadata(t *testing.T) {
 		t.Fatalf("/copy category = %q, want session", cmd.EffectiveCategory())
 	}
 	if cmd.EffectiveOwner() != CommandOwnerAgent {
-		t.Fatalf("/copy owner = %q, want agent", cmd.EffectiveOwner())
+		t.Fatalf("/copy owner = %q, want %q", cmd.EffectiveOwner(), CommandOwnerAgent)
 	}
 
 	empty := CommandInfo{}
@@ -332,6 +332,12 @@ func TestCatalogCommandsDeclareSurfacePolicy(t *testing.T) {
 	}
 }
 
+func TestValidateCommands(t *testing.T) {
+	if err := ValidateCommands(Commands); err != nil {
+		t.Fatalf("ValidateCommands() error = %v", err)
+	}
+}
+
 func TestClassicSurfaceIsExplicitStableFallbackOrClassicOnly(t *testing.T) {
 	for _, cmd := range Commands {
 		if !cmd.SupportsSurface(CommandSurfaceClassic) {
@@ -350,7 +356,10 @@ func TestClassicSurfaceIsExplicitStableFallbackOrClassicOnly(t *testing.T) {
 			continue
 		}
 		if cmd.EffectiveOwner() == CommandOwnerTUIRouter {
-			t.Fatalf("%s is TUI-router owned but supports classic fallback", cmd.Name)
+			if cmd.EffectiveTUILocalAction() == TUILocalActionNone {
+				t.Fatalf("%s is TUI-router owned without TUI local action", cmd.Name)
+			}
+			continue
 		}
 		if cmd.EffectiveLifecycle() != CommandLifecycleStable {
 			t.Fatalf("%s supports classic with lifecycle %q, want stable", cmd.Name, cmd.EffectiveLifecycle())

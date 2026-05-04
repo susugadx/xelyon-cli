@@ -7,6 +7,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 )
 
+//go:generate go run ../../scripts/gen-help.go
+
 func printHelpToWriter(out io.Writer, agent *Agent) {
 	printHelpToWriterForSurface(out, agent, commandcatalog.CommandSurfaceClassic)
 }

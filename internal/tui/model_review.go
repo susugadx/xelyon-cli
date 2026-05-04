@@ -7,23 +7,16 @@ import (
 
 // openReviewScreen は review preset screen を開く。
 func (m Model) openReviewScreen() (tea.Model, tea.Cmd) {
-	m.screen = screenReview
+	m.activateModalScreen(screenReview)
 	m.reviewScreen = newReviewScreen()
 	m.reviewScreen.customInput.Width = max(0, m.width-4)
-	m.navigationMode = false
-	m.chromeDirty = true
 	return m, nil
 }
 
 // closeReviewScreen は review screen を閉じて chat に戻る。
 func (m Model) closeReviewScreen() (tea.Model, tea.Cmd) {
-	m.screen = screenChat
 	m.reviewScreen = nil
-	m.refreshStatusLine()
-	m.applyChatWindowSize(m.width, m.height)
-	m.textInput.Focus()
-	m.rebuildChrome()
-	m.chromeDirty = false
+	m.deactivateModalScreen(true)
 	return m, nil
 }
 
@@ -59,11 +52,7 @@ func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	default:
-		m.screen = screenChat
-		updated, cmd := m.Update(msg)
-		m = updated.(Model)
-		m.screen = screenReview
-		return m, cmd
+		return m.forwardMessageToChatFromModal(msg, screenReview)
 	}
 }
 

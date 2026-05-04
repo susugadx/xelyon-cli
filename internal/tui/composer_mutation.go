@@ -8,6 +8,14 @@ import (
 
 func (m *Model) clearComposer() {
 	m.composer.Clear()
+	m.clearAttachments()
+	m.textInput.Reset()
+	m.clearSlashSuggestions()
+	m.syncComposerLayout()
+}
+
+func (m *Model) clearComposerDraft() {
+	m.composer.Clear()
 	m.textInput.Reset()
 	m.clearSlashSuggestions()
 	m.syncComposerLayout()

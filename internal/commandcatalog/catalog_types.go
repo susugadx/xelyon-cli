@@ -2,18 +2,21 @@ package commandcatalog
 
 // CommandInfo はコマンド情報
 type CommandInfo struct {
-	Name          string           // "/config"
-	Aliases       []string         // []string{"/quit", "/q"}
-	Args          string           // "[id]", "<provider> [model]"
-	Description   string           // "Edit global config.yaml settings"
-	DescriptionJP string           // "対話式設定変更"
-	SubCommands   []SubCommand     // サブコマンド
-	Surfaces      []CommandSurface // 省略時は TUI primary のみ
-	Owner         CommandOwner     // 省略時は agent dispatcher
-	Lifecycle     CommandLifecycle // 省略時は stable
-	Category      CommandCategory  // 省略時は other
-	Discoverable  bool             // true の command だけを候補表示に出す
-	SortWeight    int              // 小さいほど候補で上に出す
+	Name           string           // "/config"
+	Aliases        []string         // []string{"/quit", "/q"}
+	Args           string           // "[id]", "<provider> [model]"
+	Description    string           // "Edit global config.yaml settings"
+	DescriptionJP  string           // "対話式設定変更"
+	SubCommands    []SubCommand     // サブコマンド
+	Surfaces       []CommandSurface // 省略時は TUI primary のみ
+	Owner          CommandOwner     // 省略時は agent dispatcher
+	TUILocalArgs   TUILocalArgPolicy
+	TUILocalAction TUILocalAction
+	TUILocalWhen   TUILocalWhen
+	Lifecycle      CommandLifecycle // 省略時は stable
+	Category       CommandCategory  // 省略時は other
+	Discoverable   bool             // true の command だけを候補表示に出す
+	SortWeight     int              // 小さいほど候補で上に出す
 }
 
 // SubCommand はサブコマンド情報
@@ -43,6 +46,10 @@ func classicOnlySurfaces() []CommandSurface {
 	return []CommandSurface{CommandSurfaceClassic}
 }
 
+func tuiOnlySurfaces() []CommandSurface {
+	return []CommandSurface{CommandSurfaceTUI}
+}
+
 // CommandOwner は command 実行責務の owner を表す。
 type CommandOwner string
 
@@ -51,6 +58,37 @@ const (
 	CommandOwnerAgent CommandOwner = "agent"
 	// CommandOwnerTUIRouter は TUI commandrouter が bare command を処理する command。
 	CommandOwnerTUIRouter CommandOwner = "tui_router"
+)
+
+// TUILocalArgPolicy は TUI ローカル処理時の引数許可ポリシーを表す。
+type TUILocalArgPolicy string
+
+const (
+	// TUILocalArgBareOnly は引数なし（bare）のみ TUI ローカル処理する。
+	TUILocalArgBareOnly TUILocalArgPolicy = "bare_only"
+	// TUILocalArgAllowAny は引数付きでも TUI ローカル処理する。
+	TUILocalArgAllowAny TUILocalArgPolicy = "allow_any"
+)
+
+// TUILocalAction は TUI ローカル command が引き起こす処理種別を表す。
+type TUILocalAction string
+
+const (
+	TUILocalActionNone               TUILocalAction = ""
+	TUILocalActionCopyMouseSelection TUILocalAction = "copy_mouse_selection"
+	TUILocalActionManageAttachments  TUILocalAction = "manage_attachments"
+	TUILocalActionQuit               TUILocalAction = "quit"
+	TUILocalActionOpenConfig         TUILocalAction = "open_config"
+	TUILocalActionOpenReview         TUILocalAction = "open_review"
+	TUILocalActionOpenProject        TUILocalAction = "open_project"
+)
+
+// TUILocalWhen は TUI ローカル action の実行前提条件を表す。
+type TUILocalWhen string
+
+const (
+	TUILocalWhenNone              TUILocalWhen = ""
+	TUILocalWhenHasMouseSelection TUILocalWhen = "has_mouse_selection"
 )
 
 // CommandLifecycle は command の公開段階を表す。
@@ -74,52 +112,3 @@ const (
 	CommandCategorySystem  CommandCategory = "system"
 	CommandCategoryDev     CommandCategory = "dev"
 )
-
-// SupportsSurface は command が指定 surface で利用可能かを返す。
-func (cmd CommandInfo) SupportsSurface(surface CommandSurface) bool {
-	for _, candidate := range cmd.effectiveSurfaces() {
-		if candidate == surface {
-			return true
-		}
-	}
-	return false
-}
-
-// EffectiveOwner は command 実行責務の owner を返す。
-func (cmd CommandInfo) EffectiveOwner() CommandOwner {
-	if cmd.Owner == "" {
-		return CommandOwnerAgent
-	}
-	return cmd.Owner
-}
-
-// EffectiveLifecycle は command の公開段階を返す。
-func (cmd CommandInfo) EffectiveLifecycle() CommandLifecycle {
-	if cmd.Lifecycle == "" {
-		return CommandLifecycleStable
-	}
-	return cmd.Lifecycle
-}
-
-// EffectiveCategory は command の分類を返す。
-func (cmd CommandInfo) EffectiveCategory() CommandCategory {
-	if cmd.Category == "" {
-		return CommandCategoryOther
-	}
-	return cmd.Category
-}
-
-// EffectiveSortWeight は command 候補の並び順を返す。
-func (cmd CommandInfo) EffectiveSortWeight() int {
-	if cmd.SortWeight == 0 {
-		return 1000
-	}
-	return cmd.SortWeight
-}
-
-func (cmd CommandInfo) effectiveSurfaces() []CommandSurface {
-	if len(cmd.Surfaces) == 0 {
-		return []CommandSurface{CommandSurfaceTUI}
-	}
-	return cmd.Surfaces
-}

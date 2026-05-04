@@ -7,6 +7,10 @@ type ConversationAgent interface {
 	// Chat はユーザー入力をAIに送信する（非同期、goroutineで呼ぶ）
 	Chat(input string)
 
+	// ChatWithImagePath は画像ファイル付きでユーザー入力をAIに送信する（非同期、goroutineで呼ぶ）。
+	// 画像の読み込み/検証は実装側で行う。
+	ChatWithImagePath(input string, imagePath string)
+
 	// GetStatusLine はステータスバーに表示する文字列を返す。
 	GetStatusLine() string
 

@@ -92,6 +92,14 @@ LLMが1回の応答で複数のread-onlyツールを返した場合、並列実�
 
 > WSL等で問題がある場合: `XELYON_BRACKETED_PASTE=0` で無効化可能
 
+### 📎 TUI添付（ファイル/画像）
+- **添付（ファイル/画像）**: `/attach`・ドラッグ&ドロップ・`Ctrl+V` 画像の全経路で、1ドラフト最大12件
+- **コマンド操作**: `/attach <path>` `/detach <index>` `/detach-all`
+- **Ctrl+V画像貼り付け（Windows/WSL）**: クリップボードテキストが空なら画像貼り付けを試行
+- **PDFプレビュー展開**: PDF は送信時に `Attached context` へテキスト抽出して展開（先頭 20 ページ / 30000 文字まで）
+- **PDF抽出の失敗時**: 読み取り失敗時や抽出可能テキストがない場合は、その旨を context に明示
+- **安全な一時ファイル管理**: クリップボード画像の一時ファイルは送信/削除/終了でcleanupし、古い残骸は起動時に自動GC
+
 ### 🖼️ マルチモーダル対応
 画像ファイルを指定してUIデザインからコード生成。
 エラースクリーンショットから原因分析も可能。
@@ -205,6 +213,8 @@ xelyon
 /model      # 現在のモデル確認/切り替え
 /use gemini # プロバイダー切り替え
 /think high # Extended Thinking 有効化
+/attach ./notes.txt # 現在の入力ドラフトへ添付（1ドラフト最大12件）
+/detach 1   # 指定添付を外す
 /config     # global config を対話式で編集
 /project    # xelyon.yaml を対話式で編集
 /init       # xelyon.yaml テンプレート作成

@@ -7,6 +7,10 @@ func (m *Model) handleComposerPaste(content string) {
 	if content == "" {
 		return
 	}
+	attachResult := m.tryAttachDroppedPaths(content)
+	if !attachResult.shouldFallbackToText() {
+		return
+	}
 	if tuicomposer.ShouldFoldPasteBlock(content) {
 		m.appendPasteBlock(content)
 	} else {

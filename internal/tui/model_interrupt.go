@@ -19,9 +19,7 @@ func (m Model) handleCtrlC() (tea.Model, tea.Cmd) {
 
 	now := time.Now()
 	if !m.lastInterrupt.IsZero() && now.Sub(m.lastInterrupt) < 3*time.Second {
-		m.quitting = true
-		m.conversation.Cleanup()
-		return m, tea.Quit
+		return m.beginQuit()
 	}
 
 	m.lastInterrupt = now

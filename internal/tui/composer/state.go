@@ -70,6 +70,7 @@ func (s State) HasSubmittableContent(input string) bool {
 	if strings.TrimSpace(input) != "" {
 		return true
 	}
+	blockLookup := s.pasteBlockLookup()
 	for _, part := range s.Parts {
 		switch part.Kind {
 		case PartText:
@@ -77,7 +78,7 @@ func (s State) HasSubmittableContent(input string) bool {
 				return true
 			}
 		case PartPaste:
-			block, ok := s.FindPasteBlock(part.PasteUID)
+			block, ok := blockLookup[part.PasteUID]
 			if ok && block.Content != "" {
 				return true
 			}
@@ -106,15 +107,27 @@ func (s State) FindPasteBlock(uid int) (PasteBlock, bool) {
 	return PasteBlock{}, false
 }
 
+func (s State) pasteBlockLookup() map[int]PasteBlock {
+	if len(s.PasteBlocks) == 0 {
+		return nil
+	}
+	lookup := make(map[int]PasteBlock, len(s.PasteBlocks))
+	for _, block := range s.PasteBlocks {
+		lookup[block.UID] = block
+	}
+	return lookup
+}
+
 // BuildPayload は folded state と現在の input から送信用 payload を構築する。
 func (s State) BuildPayload(input string) string {
 	var builder strings.Builder
+	blockLookup := s.pasteBlockLookup()
 	for _, part := range s.Parts {
 		switch part.Kind {
 		case PartText:
 			builder.WriteString(part.Text)
 		case PartPaste:
-			block, ok := s.FindPasteBlock(part.PasteUID)
+			block, ok := blockLookup[part.PasteUID]
 			if ok {
 				builder.WriteString(block.Content)
 			}
@@ -198,6 +211,7 @@ func (s State) VisibleRows(maxVisible int) []VisibleRow {
 	if len(s.Parts) == 0 || maxVisible <= 0 {
 		return nil
 	}
+	blockLookup := s.pasteBlockLookup()
 	rows := make([]VisibleRow, 0, len(s.Parts))
 	pasteNumber := 0
 	for _, part := range s.Parts {
@@ -208,7 +222,7 @@ func (s State) VisibleRows(maxVisible int) []VisibleRow {
 			}
 			rows = append(rows, VisibleRow{Kind: PartText, Text: part.Text})
 		case PartPaste:
-			block, ok := s.FindPasteBlock(part.PasteUID)
+			block, ok := blockLookup[part.PasteUID]
 			if !ok {
 				continue
 			}

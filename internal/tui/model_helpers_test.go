@@ -16,6 +16,7 @@ type stubAgent struct {
 	copyCalls         int
 	copyTexts         []string
 	chatInputs        []string
+	chatImageInputs   []string
 	handledInputs     []string
 	handledCommands   map[string]bool
 	statusLine        string
@@ -36,6 +37,11 @@ func (s *stubAgent) Chat(input string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.chatInputs = append(s.chatInputs, input)
+}
+func (s *stubAgent) ChatWithImagePath(input string, imagePath string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.chatImageInputs = append(s.chatImageInputs, input+"||"+imagePath)
 }
 func (s *stubAgent) HandleCommand(cmd string) bool {
 	s.mu.Lock()
@@ -147,6 +153,15 @@ func (s *stubAgent) lastChatInput() string {
 		return ""
 	}
 	return s.chatInputs[len(s.chatInputs)-1]
+}
+
+func (s *stubAgent) lastImageChatInput() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.chatImageInputs) == 0 {
+		return ""
+	}
+	return s.chatImageInputs[len(s.chatImageInputs)-1]
 }
 
 func (s *stubAgent) setProcessing(processing bool) {

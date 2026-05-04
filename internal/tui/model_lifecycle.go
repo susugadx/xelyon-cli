@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -14,7 +15,7 @@ import (
 // footerHeight は下部 chrome（入力欄+ステータスバー）の合計高さを返す。
 // 将来の compact footer や compose mode では動的に切り替えられる。
 func (m Model) footerHeight() int {
-	return statusBarHeight + inputHeight + len(m.visibleSlashSuggestionRows()) + len(m.visibleComposerRows())
+	return statusBarHeight + inputHeight + len(m.visibleSlashSuggestionRows()) + m.visibleAttachmentCount() + len(m.visibleComposerRows())
 }
 
 // NewModel は TUI Model を作成する。
@@ -65,6 +66,8 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 
 // Init は bubbletea の Init を実装する。
 func (m Model) Init() tea.Cmd {
+	cleanupStaleClipboardAttachmentTemps(time.Now())
+
 	cmds := []tea.Cmd{
 		textinput.Blink,
 		m.spinner.Tick,

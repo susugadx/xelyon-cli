@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -118,6 +119,30 @@ func TestComposer_CtrlVPasteCreatesFoldedBlockAndPreservesContent(t *testing.T) 
 	}
 	if !strings.Contains(stripANSI(m.renderInputDock()), "[Pasted Content 17 chars, 2 lines] #1") {
 		t.Fatalf("renderInputDock() should contain folded paste summary, got %q", m.renderInputDock())
+	}
+}
+
+func TestComposer_CtrlVPasteWhitespaceOnlyFallsBackToTextWhenNoImage(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	stubClipboardRead(t, "   \n", nil)
+
+	prevSaver := saveClipboardImageForPaste
+	saveClipboardImageForPaste = func() (string, error) {
+		return "", errors.New("no image")
+	}
+	t.Cleanup(func() {
+		saveClipboardImageForPaste = prevSaver
+	})
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
+	m = updated.(Model)
+
+	if got := m.buildComposerPayload(); got != "   \n" {
+		t.Fatalf("buildComposerPayload() = %q, want %q", got, "   \n")
+	}
+	if got := len(m.attachments); got != 0 {
+		t.Fatalf("attachments length = %d, want 0", got)
 	}
 }
 

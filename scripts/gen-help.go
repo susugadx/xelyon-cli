@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 )
@@ -28,12 +29,34 @@ func main() {
 	buf.WriteString(commandcatalog.RenderTipsText())
 	buf.WriteString("`\n")
 
+	rootDir, err := resolveProjectRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error resolving project root: %v\n", err)
+		os.Exit(1)
+	}
+
 	// ファイル出力
-	outputPath := "internal/agent/help_generated.go"
+	outputPath := filepath.Join(rootDir, "internal", "agent", "help_generated.go")
 	if err := os.WriteFile(outputPath, buf.Bytes(), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("Generated %s\n", outputPath)
+}
+
+func resolveProjectRoot() (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for dir := wd; ; dir = filepath.Dir(dir) {
+		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("go.mod not found from %s", wd)
+		}
+	}
 }
