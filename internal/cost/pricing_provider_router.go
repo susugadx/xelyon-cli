@@ -31,6 +31,9 @@ var pricingResolvers = map[string]pricingResolver{
 	"groq": func(req pricingRequest) PricingInfo {
 		return getGroqPricing(req.Model)
 	},
+	"kimi": func(req pricingRequest) PricingInfo {
+		return getKimiPricing(req.Model)
+	},
 	"openrouter": func(req pricingRequest) PricingInfo {
 		return getOpenRouterPricing(req.Model, req.PromptTokenCount)
 	},

@@ -64,15 +64,94 @@ func TestBuildChatCompletionsRequest_BuildsStandardPayloadWithExtras(t *testing.
 	}
 }
 
-func TestChatCompletionsRequest_RejectsExtraFieldConflict(t *testing.T) {
-	req := ChatCompletionsRequest{
-		Model:       "provider/model",
-		Messages:    []api.Message{{Role: "user", Content: "hello"}},
-		ExtraFields: map[string]any{"model": "override"},
+func TestBuildChatCompletionsRequest_DefaultMaxTokensField(t *testing.T) {
+	req := BuildChatCompletionsRequest(ChatCompletionsRequestOptions{
+		Model:     "provider/model",
+		Messages:  []api.Message{{Role: "user", Content: "hello"}},
+		MaxTokens: 123,
+	})
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
 	}
 
-	if _, err := json.Marshal(req); err == nil {
-		t.Fatal("json.Marshal() error = nil, want conflict error")
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body["max_tokens"] != float64(123) {
+		t.Fatalf("max_tokens = %v, want 123", body["max_tokens"])
+	}
+	if _, ok := body["max_completion_tokens"]; ok {
+		t.Fatalf("max_completion_tokens = %v, want absent", body["max_completion_tokens"])
+	}
+}
+
+func TestBuildChatCompletionsRequest_MaxCompletionTokensField(t *testing.T) {
+	req := BuildChatCompletionsRequest(ChatCompletionsRequestOptions{
+		Model:               "provider/model",
+		Messages:            []api.Message{{Role: "user", Content: "hello"}},
+		MaxTokens:           123,
+		MaxCompletionTokens: 456,
+	})
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body["max_completion_tokens"] != float64(456) {
+		t.Fatalf("max_completion_tokens = %v, want 456", body["max_completion_tokens"])
+	}
+	if _, ok := body["max_tokens"]; ok {
+		t.Fatalf("max_tokens = %v, want absent", body["max_tokens"])
+	}
+}
+
+func TestChatCompletionsRequest_RejectsExtraFieldConflict(t *testing.T) {
+	tests := []struct {
+		name       string
+		extraField string
+	}{
+		{name: "model", extraField: "model"},
+		{name: "max tokens", extraField: "max_tokens"},
+		{name: "max completion tokens", extraField: "max_completion_tokens"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ChatCompletionsRequest{
+				Model:       "provider/model",
+				Messages:    []api.Message{{Role: "user", Content: "hello"}},
+				ExtraFields: map[string]any{tt.extraField: "override"},
+			}
+
+			if _, err := json.Marshal(req); err == nil {
+				t.Fatal("json.Marshal() error = nil, want conflict error")
+			}
+		})
+	}
+}
+
+func TestToolChoicePolicies(t *testing.T) {
+	toolName := "read_file"
+
+	defaultChoice := DefaultToolChoicePolicy(&toolName)
+	defaultBody, ok := defaultChoice.(map[string]interface{})
+	if !ok || defaultBody["type"] != "function" {
+		t.Fatalf("DefaultToolChoicePolicy() = %#v, want forced function", defaultChoice)
+	}
+
+	if got := DefaultToolChoicePolicy(nil); got != "auto" {
+		t.Fatalf("DefaultToolChoicePolicy(nil) = %v, want auto", got)
+	}
+	if got := AutoToolChoicePolicy(&toolName); got != "auto" {
+		t.Fatalf("AutoToolChoicePolicy(toolName) = %v, want auto", got)
 	}
 }
 

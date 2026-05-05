@@ -163,6 +163,32 @@ func TestBuildToolCallJSON(t *testing.T) {
 	}
 }
 
+func TestBuildContentWithToolCalls(t *testing.T) {
+	toolCalls := []api.OpenAIToolCall{{
+		ID:   "call_1",
+		Type: "function",
+		Function: api.OpenAIToolCallFunction{
+			Name:      "read_file",
+			Arguments: `{"path":"a.txt"}`,
+		},
+	}}
+
+	got := BuildContentWithToolCalls("Answer", toolCalls, func(tc *api.OpenAIToolCall) (string, error) {
+		b, err := json.Marshal(tc)
+		if err != nil {
+			return "", err
+		}
+		return string(b), nil
+	})
+
+	if !strings.HasPrefix(got, "Answer") || !strings.Contains(got, `"read_file"`) {
+		t.Fatalf("BuildContentWithToolCalls() = %q, want content followed by tool call JSON", got)
+	}
+	if got := BuildContentWithToolCalls("Answer", nil, nil); got != "Answer" {
+		t.Fatalf("BuildContentWithToolCalls(no tools) = %q, want Answer", got)
+	}
+}
+
 func TestHasUsagePayload(t *testing.T) {
 	tests := []struct {
 		name string
@@ -288,5 +314,38 @@ func TestParseSSEStream_ErrorCallbacksCanContinue(t *testing.T) {
 	}
 	if got.Content != "AB" {
 		t.Fatalf("ParseSSEStream().Content = %q, want %q", got.Content, "AB")
+	}
+}
+
+func TestParseSSEStream_UsesCustomUsageDecoder(t *testing.T) {
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"choices":[{"delta":{"content":"A"}}],"usage":{"input":8,"output":3,"cache_read":2}}`,
+			"data: [DONE]",
+		}, "\n"))),
+	}
+
+	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
+		UsageDecoder: func(raw json.RawMessage) (*api.Usage, error) {
+			var payload struct {
+				Input     int `json:"input"`
+				Output    int `json:"output"`
+				CacheRead int `json:"cache_read"`
+			}
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				return nil, err
+			}
+			return &api.Usage{
+				InputTokens:       payload.Input,
+				OutputTokens:      payload.Output,
+				CachedInputTokens: payload.CacheRead,
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("ParseSSEStream() error = %v", err)
+	}
+	if got.Usage == nil || got.Usage.InputTokens != 8 || got.Usage.OutputTokens != 3 || got.Usage.CachedInputTokens != 2 {
+		t.Fatalf("ParseSSEStream().Usage = %+v, want custom decoded usage", got.Usage)
 	}
 }

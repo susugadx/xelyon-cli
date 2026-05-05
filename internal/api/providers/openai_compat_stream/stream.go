@@ -166,6 +166,15 @@ func BuildToolCallJSON(toolCalls []api.OpenAIToolCall, encode func(tc *api.OpenA
 	return out.String()
 }
 
+// BuildContentWithToolCalls は assistant content の末尾に内部 tool_call JSON を連結する。
+func BuildContentWithToolCalls(content string, toolCalls []api.OpenAIToolCall, encode func(tc *api.OpenAIToolCall) (string, error)) string {
+	toolCallsOutput := BuildToolCallJSON(toolCalls, encode)
+	if toolCallsOutput == "" {
+		return content
+	}
+	return content + toolCallsOutput
+}
+
 // HasUsagePayload は usage が null 以外の有効 payload を持つかを返す。
 func HasUsagePayload(raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)

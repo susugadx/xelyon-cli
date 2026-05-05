@@ -16,6 +16,7 @@ type ChatCompletionsRequest struct {
 	Model                string             `json:"model"`
 	Messages             []api.Message      `json:"messages"`
 	MaxTokens            int                `json:"max_tokens,omitempty"`
+	MaxCompletionTokens  int                `json:"max_completion_tokens,omitempty"`
 	Stream               bool               `json:"stream"`
 	StreamOptions        *api.StreamOptions `json:"stream_options,omitempty"`
 	ReasoningEffort      string             `json:"reasoning_effort,omitempty"`
@@ -40,6 +41,7 @@ type ChatCompletionsRequestOptions struct {
 	SystemPrompt         string
 	History              []api.Message
 	MaxTokens            int
+	MaxCompletionTokens  int
 	Stream               bool
 	StreamOptions        *api.StreamOptions
 	IncludeUsage         bool
@@ -58,6 +60,7 @@ var chatCompletionsStandardFields = map[string]struct{}{
 	"model":                  {},
 	"messages":               {},
 	"max_tokens":             {},
+	"max_completion_tokens":  {},
 	"stream":                 {},
 	"stream_options":         {},
 	"reasoning_effort":       {},
@@ -82,7 +85,6 @@ func BuildChatCompletionsRequest(options ChatCompletionsRequestOptions) ChatComp
 	req := ChatCompletionsRequest{
 		Model:                options.Model,
 		Messages:             messages,
-		MaxTokens:            options.MaxTokens,
 		Stream:               options.Stream,
 		StreamOptions:        streamOptions,
 		ReasoningEffort:      options.ReasoningEffort,
@@ -90,6 +92,11 @@ func BuildChatCompletionsRequest(options ChatCompletionsRequestOptions) ChatComp
 		PromptCacheKey:       options.PromptCacheKey,
 		PromptCacheRetention: options.PromptCacheRetention,
 		ExtraFields:          cloneExtraFields(options.ExtraFields),
+	}
+	if options.MaxCompletionTokens > 0 {
+		req.MaxCompletionTokens = options.MaxCompletionTokens
+	} else {
+		req.MaxTokens = options.MaxTokens
 	}
 
 	if options.FunctionCalling != nil {
@@ -147,7 +154,17 @@ func BuildChatMessages(systemPrompt string, history []api.Message) []api.Message
 
 // DefaultToolChoicePolicy は未指定なら auto、指定ありなら function 強制にする標準方針を返す。
 func DefaultToolChoicePolicy(toolName *string) any {
+	return AllowForcedToolChoicePolicy(toolName)
+}
+
+// AllowForcedToolChoicePolicy は toolName 指定時に function tool_choice を強制する標準方針。
+func AllowForcedToolChoicePolicy(toolName *string) any {
 	return BuildFunctionToolChoice(toolName)
+}
+
+// AutoToolChoicePolicy は provider 制約により forced tool_choice を送れない場合に auto を返す。
+func AutoToolChoicePolicy(*string) any {
+	return "auto"
 }
 
 // BuildFunctionToolChoice は OpenAI 互換 tool_choice を構築する。
