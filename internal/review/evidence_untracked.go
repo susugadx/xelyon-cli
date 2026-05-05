@@ -108,27 +108,3 @@ func buildReviewUntrackedFileEvidence(repoRoot string, paths []string, limits Re
 
 	return evidence, nil
 }
-
-func truncateReviewEvidenceStringPrefix(value string, maxBytes int64) (string, bool) {
-	if maxBytes <= 0 {
-		return "", value != ""
-	}
-	if int64(len(value)) <= maxBytes {
-		return value, false
-	}
-	return value[:int(maxBytes)], true
-}
-
-func minReviewEvidenceInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func minReviewEvidenceInt64(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}

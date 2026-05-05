@@ -74,9 +74,7 @@ func analyzeHostReadOnlyCommand(command string, args []string) (analyzedHostRead
 		return analyzedHostReadOnlyCommand{}, err
 	}
 
-	return analyzedHostReadOnlyCommand{
-		pathArgs: policyResult.pathArgs,
-	}, nil
+	return analyzedHostReadOnlyCommand(policyResult), nil
 }
 
 func validateHostReadOnlyCommandPolicy(command string, args []string) error {

@@ -52,17 +52,6 @@ func resolveReviewEvidenceDir(candidate, fallback string) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
-func resolveExistingReviewEvidenceRepoPath(repoRoot, path string) (string, string, error) {
-	absPath, relPath, err := resolveReviewEvidenceRepoPathLexically(repoRoot, path)
-	if err != nil {
-		return "", "", err
-	}
-	if err := validateReviewEvidenceExistingPath(repoRoot, absPath, relPath); err != nil {
-		return "", "", err
-	}
-	return absPath, relPath, nil
-}
-
 func resolveReviewEvidenceRepoPathLexically(repoRoot, candidate string) (string, string, error) {
 	relPath, err := normalizeReviewEvidenceRelativePath(candidate)
 	if err != nil {

@@ -58,55 +58,40 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 		return ReviewEvidenceBundle{}, err
 	}
 
-	statusShort, statusShortTruncated, err := b.runGit(ctx, repoRoot, cwd, reviewStatusShortGitArgs()...)
+	gitCollector := reviewGitEvidenceCollector{
+		runner: b.runner,
+		limits: b.limits,
+	}
+	gitEvidence, err := gitCollector.collectCurrentChanges(ctx, repoRoot, cwd)
 	if err != nil {
 		return ReviewEvidenceBundle{}, err
 	}
 
-	unstagedDiff, err := b.buildDiffEvidence(ctx, repoRoot, cwd, reviewDiffEvidenceSourceUnstaged, false)
-	if err != nil {
-		return ReviewEvidenceBundle{}, err
+	fileCollector := reviewFileEvidenceCollector{
+		limits: b.limits,
 	}
-	stagedDiff, err := b.buildDiffEvidence(ctx, repoRoot, cwd, reviewDiffEvidenceSourceStaged, true)
-	if err != nil {
-		return ReviewEvidenceBundle{}, err
-	}
-
-	untrackedList, untrackedListTruncated, err := b.runGit(ctx, repoRoot, cwd, reviewUntrackedListGitArgs()...)
-	if err != nil {
-		return ReviewEvidenceBundle{}, err
-	}
-	untrackedPaths := parseReviewEvidenceNULPaths(untrackedList, untrackedListTruncated)
-	if err := validateReviewEvidenceRelativePaths(repoRoot, untrackedPaths, "untracked path"); err != nil {
-		return ReviewEvidenceBundle{}, err
-	}
-
-	changedFiles := buildReviewChangedFiles(
-		unstagedDiff.nameStatusEntries,
-		stagedDiff.nameStatusEntries,
-	)
-	untrackedEvidence, err := buildReviewUntrackedFileEvidence(repoRoot, untrackedPaths, b.limits)
-	if err != nil {
-		return ReviewEvidenceBundle{}, err
-	}
-	ruleFiles, err := buildReviewRuleFileEvidence(repoRoot, b.limits)
+	fileEvidence, err := fileCollector.collectCurrentChanges(repoRoot, gitEvidence.untrackedPaths)
 	if err != nil {
 		return ReviewEvidenceBundle{}, err
 	}
 
+	return buildReviewCurrentChangesBundle(repoRoot, cwd, gitEvidence, fileEvidence, b.limits), nil
+}
+
+func buildReviewCurrentChangesBundle(repoRoot, cwd string, git reviewCurrentChangesGitEvidence, files reviewCurrentChangesFileEvidence, limits ReviewEvidenceLimits) ReviewEvidenceBundle {
 	return ReviewEvidenceBundle{
 		TargetKind:                  TargetCurrentChanges,
 		RepoRoot:                    repoRoot,
 		CWD:                         cwd,
-		StatusShort:                 statusShort,
-		StatusShortTruncated:        statusShortTruncated,
-		Diffs:                       []ReviewDiffEvidence{unstagedDiff.evidence, stagedDiff.evidence},
-		ChangedFiles:                changedFiles,
-		UntrackedFiles:              untrackedEvidence.Files,
-		UntrackedListTruncated:      untrackedListTruncated,
-		UntrackedSnapshotsTruncated: untrackedEvidence.SnapshotsTruncated,
-		RuleFiles:                   ruleFiles,
-		Inventory:                   buildReviewChangeInventory(changedFiles, untrackedPaths),
-		Limits:                      b.limits,
-	}, nil
+		StatusShort:                 git.statusShort,
+		StatusShortTruncated:        git.statusShortTruncated,
+		Diffs:                       git.diffs,
+		ChangedFiles:                git.changedFiles,
+		UntrackedFiles:              files.untrackedFiles,
+		UntrackedListTruncated:      git.untrackedListTruncated,
+		UntrackedSnapshotsTruncated: files.untrackedSnapshotsTruncated,
+		RuleFiles:                   files.ruleFiles,
+		Inventory:                   buildReviewChangeInventory(git.changedFiles, git.untrackedPaths),
+		Limits:                      limits,
+	}
 }

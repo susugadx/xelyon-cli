@@ -2,6 +2,7 @@ package review
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -71,5 +72,95 @@ func TestReviewEvidenceBuilder_CurrentChangesNameStatusQuotesControlPaths(t *tes
 	}
 	if strings.Count(strings.TrimSuffix(unstaged.NameStatus, "\n"), "\t") != 1 {
 		t.Fatalf("NameStatus contains raw tab outside status delimiter: %q", unstaged.NameStatus)
+	}
+}
+
+func TestFormatReviewEvidencePathDisplay(t *testing.T) {
+	repo := filepath.Clean(t.TempDir())
+	insideDir := filepath.Join(repo, "src")
+	if err := os.MkdirAll(insideDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", insideDir, err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+
+	tests := []struct {
+		name      string
+		candidate string
+		want      string
+	}{
+		{
+			name:      "repo relative path",
+			candidate: "src/../src/main.go",
+			want:      "src/main.go",
+		},
+		{
+			name:      "repo root",
+			candidate: repo,
+			want:      ".",
+		},
+		{
+			name:      "absolute path inside repo",
+			candidate: filepath.Join(repo, "src", "main.go"),
+			want:      "src/main.go",
+		},
+		{
+			name:      "outside repo",
+			candidate: outside,
+			want:      reviewEvidenceOutsideRepoPathDisplay,
+		},
+		{
+			name:      "dotdot relative escape",
+			candidate: "../outside.txt",
+			want:      reviewEvidenceOutsideRepoPathDisplay,
+		},
+		{
+			name:      "empty path",
+			candidate: "",
+			want:      reviewEvidenceOutsideRepoPathDisplay,
+		},
+	}
+
+	if runtime.GOOS != "windows" {
+		tests = append(tests, struct {
+			name      string
+			candidate string
+			want      string
+		}{
+			name:      "windows absolute path on non windows",
+			candidate: `C:\repo\src\main.go`,
+			want:      reviewEvidenceOutsideRepoPathDisplay,
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatReviewEvidencePathDisplay(repo, tt.candidate)
+			if got != tt.want {
+				t.Fatalf("formatReviewEvidencePathDisplay(%q, %q) = %q, want %q", repo, tt.candidate, got, tt.want)
+			}
+			if got != reviewEvidenceOutsideRepoPathDisplay && filepath.IsAbs(got) {
+				t.Fatalf("formatReviewEvidencePathDisplay(%q, %q) leaked absolute path %q", repo, tt.candidate, got)
+			}
+		})
+	}
+}
+
+func TestFormatReviewEvidencePathDisplaySymlinkRepoRootCWD(t *testing.T) {
+	repo := filepath.Clean(t.TempDir())
+	nested := filepath.Join(repo, "nested")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", nested, err)
+	}
+
+	linkRoot := filepath.Join(t.TempDir(), "repo-link")
+	createReviewEvidenceSymlink(t, repo, linkRoot)
+	linkCWD := filepath.Join(linkRoot, "nested")
+
+	got := formatReviewEvidencePathDisplay(repo, linkCWD)
+	if got != "nested" {
+		t.Fatalf("formatReviewEvidencePathDisplay(%q, %q) = %q, want %q", repo, linkCWD, got, "nested")
+	}
+	if strings.Contains(got, repo) || strings.Contains(got, linkRoot) || filepath.IsAbs(got) {
+		t.Fatalf("formatReviewEvidencePathDisplay(%q, %q) leaked absolute context %q", repo, linkCWD, got)
 	}
 }

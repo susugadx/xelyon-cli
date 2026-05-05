@@ -13,14 +13,6 @@ type ReviewEvidenceCommandRunner interface {
 	RunGit(ctx context.Context, repoRoot, cwd string, args []string, timeout time.Duration, maxOutputBytes int64) (output string, truncated bool, err error)
 }
 
-func (b *ReviewEvidenceBuilder) runGit(ctx context.Context, repoRoot, cwd string, args ...string) (string, bool, error) {
-	output, truncated, err := b.runner.RunGit(ctx, repoRoot, cwd, args, b.limits.CommandTimeout, b.limits.MaxCommandOutputBytes)
-	if err != nil {
-		return "", false, err
-	}
-	return output, truncated, nil
-}
-
 type reviewEvidenceGitRunner struct{}
 
 func (reviewEvidenceGitRunner) RunGit(ctx context.Context, repoRoot, _ string, args []string, timeout time.Duration, maxOutputBytes int64) (string, bool, error) {

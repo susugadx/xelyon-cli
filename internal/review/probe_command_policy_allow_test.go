@@ -25,7 +25,7 @@ func TestHostReadOnlyCommandPolicy_AllowsKnownReadOnlyCommands(t *testing.T) {
 		{name: "go test json", command: "go", args: []string{"test", "-json", "./..."}},
 	}
 	for _, sc := range hostReadOnlySearchCommandPolicyAllowScenarios() {
-		tests = append(tests, testCase{name: sc.name, command: sc.command, args: sc.args})
+		tests = append(tests, testCase(sc))
 	}
 
 	for _, tt := range tests {

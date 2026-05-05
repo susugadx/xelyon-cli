@@ -1,7 +1,6 @@
 package review
 
 import (
-	"context"
 	"sort"
 	"strings"
 )
@@ -10,44 +9,6 @@ const (
 	reviewDiffEvidenceSourceUnstaged = "unstaged"
 	reviewDiffEvidenceSourceStaged   = "staged"
 )
-
-type reviewDiffEvidenceResult struct {
-	evidence          ReviewDiffEvidence
-	nameStatusEntries []reviewNameStatusEntry
-}
-
-func (b *ReviewEvidenceBuilder) buildDiffEvidence(ctx context.Context, repoRoot, cwd, source string, staged bool) (reviewDiffEvidenceResult, error) {
-	statArgs := reviewDiffMetadataGitArgs(staged, "--stat")
-	nameStatusArgs := reviewDiffMetadataGitArgs(staged, "--name-status", "-z")
-	diffArgs := reviewDiffBodyGitArgs(staged)
-
-	stat, statTruncated, err := b.runGit(ctx, repoRoot, cwd, statArgs...)
-	if err != nil {
-		return reviewDiffEvidenceResult{}, err
-	}
-	nameStatus, nameStatusTruncated, err := b.runGit(ctx, repoRoot, cwd, nameStatusArgs...)
-	if err != nil {
-		return reviewDiffEvidenceResult{}, err
-	}
-	nameStatusEntries := parseReviewNameStatusEntries(nameStatus, nameStatusTruncated)
-	diff, diffTruncated, err := b.runGit(ctx, repoRoot, cwd, diffArgs...)
-	if err != nil {
-		return reviewDiffEvidenceResult{}, err
-	}
-
-	return reviewDiffEvidenceResult{
-		evidence: ReviewDiffEvidence{
-			Source:              source,
-			Stat:                stat,
-			StatTruncated:       statTruncated,
-			NameStatus:          formatReviewNameStatusEntries(nameStatusEntries),
-			NameStatusTruncated: nameStatusTruncated,
-			Diff:                diff,
-			DiffTruncated:       diffTruncated,
-		},
-		nameStatusEntries: nameStatusEntries,
-	}, nil
-}
 
 func buildReviewChangedFiles(unstagedEntries, stagedEntries []reviewNameStatusEntry) []ReviewChangedFile {
 	byPath := make(map[string]*ReviewChangedFile)
