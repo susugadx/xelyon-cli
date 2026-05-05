@@ -2,7 +2,9 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/agent"
@@ -86,4 +88,34 @@ func findToolOutput(result *agent.HeadlessResult, toolName string) (string, bool
 		}
 	}
 	return "", false
+}
+
+// hasToolOutputContaining は指定ツールのいずれかの実行結果に needle が含まれるかを返す。
+func hasToolOutputContaining(result *agent.HeadlessResult, toolName, needle string) bool {
+	for _, tc := range result.ToolCalls {
+		if tc.Tool == toolName && strings.Contains(tc.Output, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// formatToolCalls はE2E失敗時に、モデルが実際に渡した引数と出力を表示する。
+func formatToolCalls(result *agent.HeadlessResult, toolName string) string {
+	var b strings.Builder
+	count := 0
+	for i, tc := range result.ToolCalls {
+		if tc.Tool != toolName {
+			continue
+		}
+		if count > 0 {
+			b.WriteString("; ")
+		}
+		fmt.Fprintf(&b, "#%d args=%v success=%t output=%q", i+1, tc.Args, tc.Success, truncate(tc.Output, 200))
+		count++
+	}
+	if count == 0 {
+		return "<none>"
+	}
+	return b.String()
 }

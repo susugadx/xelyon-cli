@@ -2,6 +2,7 @@ package gathercontext
 
 import (
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,4 +49,43 @@ func TestParseRequestArgs_AllowsEscapedLiteralCommaQuery(t *testing.T) {
 	if req.query != `\,` {
 		t.Fatalf("req.query = %q, want escaped literal comma", req.query)
 	}
+}
+
+func TestParseRequestArgs_NormalizesQuotedPatternInstruction(t *testing.T) {
+	req, errResult := parseRequestArgs(map[string]string{
+		"query": `Search for the exact pattern "func main" and report all file paths that contain it.`,
+	})
+	if errResult != "" {
+		t.Fatalf("unexpected parse error: %q", errResult)
+	}
+	if req.query != "func main" {
+		t.Fatalf("req.query = %q, want quoted pattern", req.query)
+	}
+}
+
+func TestParseRequestArgs_KeepsAmbiguousQuotedPatternInstruction(t *testing.T) {
+	req, errResult := parseRequestArgs(map[string]string{
+		"query": `Search for patterns "func main" and "func init"`,
+	})
+	if errResult != "" {
+		t.Fatalf("unexpected parse error: %q", errResult)
+	}
+	if req.query != `Search for patterns "func main" and "func init"` {
+		t.Fatalf("req.query = %q, want original ambiguous query", req.query)
+	}
+}
+
+func TestGatherContext_SearchRouteNormalizesQuotedPatternInstruction(t *testing.T) {
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "main.go"): "package main\n\nfunc main() {}\n",
+	})
+
+	result, _ := runGatherContext(t, newGatherContextExecCtx(root), map[string]string{
+		"query":       `Search for the exact pattern "func main" and report all file paths that contain it.`,
+		"file_filter": "go",
+	})
+
+	assertGatherContextContainsAll(t, result, "Route: Auto search", "main.go")
 }

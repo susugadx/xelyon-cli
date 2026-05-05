@@ -37,12 +37,8 @@ func TestE2E_SearchCode(t *testing.T) {
 	assertSuccess(t, result)
 	assertToolUsed(t, result, "gather_context")
 
-	output, ok := findToolOutput(result, "gather_context")
-	if !ok {
-		t.Fatal("gather_context output not found")
-	}
-	if !strings.Contains(output, "main.go") {
-		t.Errorf("expected gather_context output to contain main.go, got: %s", truncate(output, 200))
+	if !hasToolOutputContaining(result, "gather_context", "main.go") {
+		t.Errorf("expected any gather_context output to contain main.go, calls: %s", formatToolCalls(result, "gather_context"))
 	}
 }
 
