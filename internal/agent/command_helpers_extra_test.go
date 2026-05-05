@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -17,6 +18,21 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+type promptConfirmTestPrompter struct {
+	called bool
+}
+
+func (p *promptConfirmTestPrompter) Prompt(_ context.Context, _ ui.PromptRequest) (ui.PromptResponse, error) {
+	p.called = true
+	return ui.PromptResponse{Action: ui.PromptActionNo}, nil
+}
+
+type promptConfirmTestTUIPrompter struct {
+	promptConfirmTestPrompter
+}
+
+func (*promptConfirmTestTUIPrompter) isTUIRuntimePrompter() {}
+
 func setManagerToolsForTest(t *testing.T, manager *mcp.Manager, tools []mcp.MCPTool) {
 	t.Helper()
 
@@ -25,6 +41,20 @@ func setManagerToolsForTest(t *testing.T, manager *mcp.Manager, tools []mcp.MCPT
 }
 
 func TestPromptConfirmWithRuntime(t *testing.T) {
+	t.Run("tui prompter returns true without prompting", func(t *testing.T) {
+		var out bytes.Buffer
+		prompter := &promptConfirmTestTUIPrompter{}
+		runtime := ui.NewRuntime(strings.NewReader("n\n"), &out, &out)
+		runtime.SetPrompter(prompter)
+
+		if !promptConfirmWithRuntime(runtime, "Continue?") {
+			t.Fatal("promptConfirmWithRuntime() = false, want true")
+		}
+		if prompter.called {
+			t.Fatal("TUI prompter should not be called for slash command confirmation")
+		}
+	})
+
 	t.Run("yes returns true", func(t *testing.T) {
 		var out bytes.Buffer
 		runtime := ui.NewRuntime(strings.NewReader("\n"), &out, &out)

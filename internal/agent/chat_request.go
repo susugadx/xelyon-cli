@@ -80,17 +80,21 @@ func (a *Agent) beginTaskTracking() {
 func (a *Agent) beginChatRequestContext() (context.Context, func()) {
 	cfg := a.cfg()
 	timeout := time.Duration(cfg.APIRetry.Timeout) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	interruptCtx, cancelInterrupt := context.WithCancel(context.Background())
+	ctx, cancelTimeout := context.WithTimeout(interruptCtx, timeout)
 
 	a.lastCancelReason = ""
-	a.cancelFunc = cancel
+	a.cancelFunc = cancelInterrupt
 	a.requestCtx = ctx
+	a.requestPromptCancelCtx = interruptCtx
 	a.debugCancelf("request started (timeout=%s, model=%s, provider=%s)", timeout, a.CurrentModel, a.ProviderName)
 
 	cleanup := func() {
 		a.debugCancelf("request finished (ctx_err=%v, cancel_reason=%q)", ctx.Err(), a.lastCancelReason)
-		cancel()
+		cancelTimeout()
+		cancelInterrupt()
 		a.requestCtx = nil
+		a.requestPromptCancelCtx = nil
 		a.cancelFunc = nil
 		a.lastCancelReason = ""
 	}

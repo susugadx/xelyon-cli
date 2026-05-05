@@ -30,6 +30,7 @@ type ToolResultInfo struct {
 // 各実行経路が明示的に組み立てて注入し、process-global 状態には依存しない。
 type ExecutionContext struct {
 	Context            context.Context
+	PromptContext      context.Context
 	Provider           api.Provider
 	ProviderName       string
 	ProviderConfigKey  string
@@ -68,10 +69,18 @@ func (ctx ExecutionContext) EffectiveContext() context.Context {
 	return normalized.Context
 }
 
+// EffectivePromptContext は対話 prompt に使う context を返す。
+func (ctx ExecutionContext) EffectivePromptContext() context.Context {
+	normalized := normalizeExecutionContext(ctx)
+	return normalized.PromptContext
+}
+
 // PromptIO は対話 UI 用の入出力コンテキストへ変換する。
 func (ctx ExecutionContext) PromptIO() ui.PromptIO {
 	normalized := normalizeExecutionContext(ctx)
-	return ui.NewPromptIOWithRuntime(normalized.Stdin, normalized.Stdout, normalized.Stderr, normalized.PromptReader, ctx.Runtime)
+	promptIO := ui.NewPromptIOWithRuntime(normalized.Stdin, normalized.Stdout, normalized.Stderr, normalized.PromptReader, ctx.Runtime)
+	promptIO.Context = normalized.PromptContext
+	return promptIO
 }
 
 // ConfirmOptions は確認 UI 用の設定を返す。
@@ -129,6 +138,9 @@ func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
 	runtime := ui.DefaultRuntime()
 	if ctx.Context == nil {
 		ctx.Context = context.Background()
+	}
+	if ctx.PromptContext == nil {
+		ctx.PromptContext = ctx.Context
 	}
 	if ctx.Stdin == nil {
 		ctx.Stdin = runtime.Input()

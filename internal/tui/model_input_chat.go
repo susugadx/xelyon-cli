@@ -10,17 +10,10 @@ import (
 var saveClipboardImageForPaste = saveClipboardImageToTemp
 
 func (m *Model) switchToComposerInput() {
-	if !m.navigationMode {
+	if !m.exitNavigationMode() {
 		return
 	}
-	m.clearVisualSelection()
-	if m.focusedBlock >= 0 {
-		m.clearBlockFocus()
-	}
-	m.navigationMode = false
-	m.resetNavPending()
 	m.textInput.Focus()
-	m.chromeDirty = true
 }
 
 func (m *Model) tryEnterNavigationMode() bool {

@@ -2,19 +2,22 @@ package ui
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"strings"
 )
 
 // PromptIO は対話 UI の入出力先を表す。
 type PromptIO struct {
-	In     io.Reader
-	Out    io.Writer
-	Err    io.Writer
-	Reader *MultilineReader
+	In      io.Reader
+	Out     io.Writer
+	Err     io.Writer
+	Reader  *MultilineReader
+	Context context.Context
 
 	simpleReader *bufio.Reader
 	runtime      *Runtime
+	prompter     Prompter
 }
 
 // NewPromptIO は入出力先を明示した PromptIO を返す。
@@ -78,6 +81,21 @@ func (p *PromptIO) BufioReader() *bufio.Reader {
 	return p.simpleReader
 }
 
+// Prompter は PromptIO に紐づく prompt 実装を返す。
+func (p *PromptIO) Prompter() Prompter {
+	*p = NormalizePromptIO(*p)
+	return p.prompter
+}
+
+// PromptContext は prompt 実行に使う context を返す。
+func (p *PromptIO) PromptContext() context.Context {
+	*p = NormalizePromptIO(*p)
+	if p.Context != nil {
+		return p.Context
+	}
+	return context.Background()
+}
+
 func normalizePromptIO(p PromptIO) PromptIO {
 	defaultRuntime := DefaultRuntime()
 	if p.runtime != nil {
@@ -93,6 +111,9 @@ func normalizePromptIO(p PromptIO) PromptIO {
 		if p.Reader == nil {
 			p.Reader = p.runtime.PromptReader()
 		}
+		if p.prompter == nil {
+			p.prompter = p.runtime.Prompter()
+		}
 	}
 	if p.In == nil {
 		p.In = defaultRuntime.Input()
@@ -105,6 +126,9 @@ func normalizePromptIO(p PromptIO) PromptIO {
 	}
 	if p.Reader == nil && p.simpleReader == nil {
 		p.simpleReader = bufio.NewReader(p.In)
+	}
+	if p.prompter == nil {
+		p.prompter = defaultRuntime.Prompter()
 	}
 	return p
 }

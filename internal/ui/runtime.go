@@ -22,6 +22,7 @@ type Runtime struct {
 	simpleReader *bufio.Reader
 	spinner      *Spinner
 	logLevel     LogLevel
+	prompter     Prompter
 }
 
 // NewRuntime は UI/terminal 用の runtime を作成する。
@@ -140,6 +141,26 @@ func (r *Runtime) LogLevel() LogLevel {
 	return r.logLevel
 }
 
+// SetPrompter は runtime に紐づく prompt 実装を設定する。
+func (r *Runtime) SetPrompter(prompter Prompter) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.prompter = prompter
+}
+
+// Prompter は runtime に紐づく prompt 実装を返す。
+func (r *Runtime) Prompter() Prompter {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.prompter
+}
+
 // SetPromptReader は runtime に紐づく共有 MultilineReader を設定する。
 func (r *Runtime) SetPromptReader(reader *MultilineReader) {
 	if r == nil {
@@ -180,6 +201,7 @@ func (r *Runtime) PromptIO() PromptIO {
 		Reader:       r.promptReader,
 		simpleReader: r.simpleReader,
 		runtime:      r,
+		prompter:     r.prompter,
 	}
 }
 

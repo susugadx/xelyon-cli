@@ -43,6 +43,27 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 
 // ConfirmInteractiveWithIO は入出力先を指定した拡張確認プロンプトを実行する。
 func ConfirmInteractiveWithIO(promptIO ui.PromptIO, message string) ConfirmResult {
+	promptIO = ui.NormalizePromptIO(promptIO)
+	if prompter := promptIO.Prompter(); prompter != nil {
+		resp, err := prompter.Prompt(promptIO.PromptContext(), ui.PromptRequest{
+			Kind:         ui.PromptKindConfirm,
+			Message:      message,
+			AllowComment: true,
+		})
+		if err != nil || resp.Cancelled {
+			return ConfirmResult{Action: "no"}
+		}
+		switch resp.Action {
+		case ui.PromptActionYes:
+			return ConfirmResult{Action: "yes"}
+		case ui.PromptActionComment:
+			comment, image := parseMultiLineCommentText(promptIO, resp.Text)
+			return ConfirmResult{Action: "comment", Comment: comment, Image: image}
+		default:
+			return ConfirmResult{Action: "no"}
+		}
+	}
+
 	// 矢印キー選択UIを使用
 	result, err := ui.ConfirmSelectorWithIO(promptIO, message)
 	if err != nil {
@@ -160,4 +181,47 @@ done:
 	comment := strings.Join(lines, "\n")
 	out.Cyan.Println("--------------------------------------------")
 	return comment, imageData
+}
+
+func parseMultiLineCommentText(promptIO ui.PromptIO, text string) (string, *ImageData) {
+	promptIO = ui.NormalizePromptIO(promptIO)
+	out := NewOutput(promptIO.Out, promptIO.Err)
+	cfg := config.DefaultConfig()
+	maxLines := cfg.Paste.MaxLines
+	maxBytes := cfg.Paste.MaxBytes
+
+	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	inputLines := strings.Split(normalized, "\n")
+	lines := make([]string, 0, len(inputLines))
+	var imageData *ImageData
+	totalBytes := 0
+
+	for _, line := range inputLines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "image:") {
+			imagePath := strings.TrimSpace(strings.TrimPrefix(trimmed, "image:"))
+			img, err := LoadImage(imagePath)
+			if err != nil {
+				out.Red.Printf("Failed to load image: %v\n", err)
+				lines = append(lines, line)
+				totalBytes += len(line) + 1
+			} else {
+				imageData = img
+				out.Green.Printf("Image loaded: %s (%s)\n", img.Path, FormatSize(img.Size))
+			}
+		} else {
+			lines = append(lines, line)
+			totalBytes += len(line) + 1
+		}
+
+		if len(lines) >= maxLines || totalBytes >= maxBytes {
+			break
+		}
+	}
+
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return strings.Join(lines, "\n"), imageData
 }

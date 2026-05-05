@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tui"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 type dummyTeaModel struct{}
@@ -108,6 +110,130 @@ func TestTUIProgramBridge_StartCapturesAssistantAndToolResults(t *testing.T) {
 	bridge.shutdown()
 	if !agent.tuiToolResultClosed.Load() {
 		t.Fatal("expected bridge shutdown to mark tool result channel closed")
+	}
+}
+
+func TestTUIPromptBridge_BlocksUntilResponse(t *testing.T) {
+	agent := newChatRequestTestAgent(t, &scriptedChatProvider{name: "openai", functionCalling: true}, &bytes.Buffer{})
+	toolResultCh := make(chan tools.ToolResultInfo)
+	defer close(toolResultCh)
+
+	openCh := make(chan tui.OpenPromptMsg, 1)
+	bridge := newTUIProgramBridge(NewTUIAdapter(agent, nil), agent, toolResultCh, func(msg tea.Msg) {
+		if open, ok := msg.(tui.OpenPromptMsg); ok {
+			openCh <- open
+		}
+	}, nil)
+	bridge.start()
+	defer close(bridge.messageQueue)
+	defer bridge.shutdown()
+
+	prompter := agent.ui().Prompter()
+	if prompter == nil {
+		t.Fatal("expected runtime prompter")
+	}
+
+	done := make(chan ui.PromptResponse, 1)
+	go func() {
+		resp, _ := prompter.Prompt(context.Background(), ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
+		done <- resp
+	}()
+
+	open := <-openCh
+	open.Respond <- ui.PromptResponse{Action: ui.PromptActionYes}
+
+	select {
+	case resp := <-done:
+		if resp.Action != ui.PromptActionYes {
+			t.Fatalf("response = %#v, want yes", resp)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for prompt response")
+	}
+}
+
+func TestTUIPromptBridge_ContextCancelSendsCancelPrompt(t *testing.T) {
+	agent := newChatRequestTestAgent(t, &scriptedChatProvider{name: "openai", functionCalling: true}, &bytes.Buffer{})
+	toolResultCh := make(chan tools.ToolResultInfo)
+	defer close(toolResultCh)
+
+	msgCh := make(chan tea.Msg, 2)
+	bridge := newTUIProgramBridge(NewTUIAdapter(agent, nil), agent, toolResultCh, func(msg tea.Msg) {
+		msgCh <- msg
+	}, nil)
+	bridge.start()
+	defer close(bridge.messageQueue)
+	defer bridge.shutdown()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan ui.PromptResponse, 1)
+	go func() {
+		resp, _ := agent.ui().Prompter().Prompt(ctx, ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
+		done <- resp
+	}()
+
+	if _, ok := (<-msgCh).(tui.OpenPromptMsg); !ok {
+		t.Fatal("first prompt message should open prompt")
+	}
+	cancel()
+
+	var cancelMsg tui.CancelPromptMsg
+	select {
+	case msg := <-msgCh:
+		var ok bool
+		cancelMsg, ok = msg.(tui.CancelPromptMsg)
+		if !ok {
+			t.Fatalf("cancel message type = %T, want CancelPromptMsg", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for cancel prompt message")
+	}
+	if cancelMsg.ID == 0 {
+		t.Fatal("cancel prompt should carry prompt id")
+	}
+
+	select {
+	case resp := <-done:
+		if resp.Action != ui.PromptActionNo || !resp.Cancelled {
+			t.Fatalf("response = %#v, want cancelled no", resp)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for prompt cancellation")
+	}
+}
+
+func TestTUIPromptBridge_ShutdownReleasesWaiter(t *testing.T) {
+	agent := newChatRequestTestAgent(t, &scriptedChatProvider{name: "openai", functionCalling: true}, &bytes.Buffer{})
+	toolResultCh := make(chan tools.ToolResultInfo)
+	defer close(toolResultCh)
+
+	openCh := make(chan tui.OpenPromptMsg, 1)
+	bridge := newTUIProgramBridge(NewTUIAdapter(agent, nil), agent, toolResultCh, func(msg tea.Msg) {
+		if open, ok := msg.(tui.OpenPromptMsg); ok {
+			openCh <- open
+		}
+	}, nil)
+	bridge.start()
+	defer close(bridge.messageQueue)
+
+	done := make(chan ui.PromptResponse, 1)
+	go func() {
+		resp, _ := agent.ui().Prompter().Prompt(context.Background(), ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
+		done <- resp
+	}()
+	<-openCh
+	bridge.shutdown()
+
+	select {
+	case resp := <-done:
+		if resp.Action != ui.PromptActionNo || !resp.Cancelled {
+			t.Fatalf("response = %#v, want cancelled no", resp)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for shutdown cancellation")
+	}
+	if agent.ui().Prompter() != nil {
+		t.Fatal("shutdown should clear runtime prompter")
 	}
 }
 

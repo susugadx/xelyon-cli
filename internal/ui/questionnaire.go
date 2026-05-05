@@ -32,6 +32,9 @@ func (q *Questionnaire) Ask() (*QuestionnaireAnswer, error) {
 // AskWithIO は入出力先を指定して質問を表示し、回答を収集する。
 func (q *Questionnaire) AskWithIO(promptIO PromptIO) (*QuestionnaireAnswer, error) {
 	promptIO = normalizePromptIO(promptIO)
+	if prompter := promptIO.Prompter(); prompter != nil {
+		return q.askWithPrompter(promptIO, prompter)
+	}
 	stopSpinnerForPromptIO(promptIO)
 	_, _ = fmt.Fprint(promptIO.Out, "\033[?25h") // カーソル表示
 
@@ -42,6 +45,55 @@ func (q *Questionnaire) AskWithIO(promptIO PromptIO) (*QuestionnaireAnswer, erro
 		return q.askMultiChoice(promptIO)
 	case "free_text":
 		return q.askFreeText(promptIO)
+	default:
+		return nil, fmt.Errorf("unknown question type: %s", q.QuestionType)
+	}
+}
+
+func (q *Questionnaire) askWithPrompter(promptIO PromptIO, prompter Prompter) (*QuestionnaireAnswer, error) {
+	options := make([]PromptOption, 0, len(q.Options))
+	for _, option := range q.Options {
+		options = append(options, PromptOption{
+			Label: option,
+			Value: option,
+		})
+	}
+
+	req := PromptRequest{
+		Message:      q.Question,
+		Options:      options,
+		DefaultValue: q.Default,
+	}
+	switch q.QuestionType {
+	case "single_choice":
+		req.Kind = PromptKindSingleChoice
+	case "multi_choice":
+		req.Kind = PromptKindMultiChoice
+	case "free_text":
+		req.Kind = PromptKindText
+	default:
+		return nil, fmt.Errorf("unknown question type: %s", q.QuestionType)
+	}
+
+	resp, err := prompter.Prompt(promptIO.PromptContext(), req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Cancelled {
+		return nil, fmt.Errorf("question cancelled")
+	}
+
+	switch q.QuestionType {
+	case "single_choice":
+		return &QuestionnaireAnswer{Value: resp.Value}, nil
+	case "multi_choice":
+		return &QuestionnaireAnswer{Values: resp.Values, IsMultiple: true}, nil
+	case "free_text":
+		text := resp.Text
+		if text == "" && q.Default != "" {
+			text = q.Default
+		}
+		return &QuestionnaireAnswer{Value: text}, nil
 	default:
 		return nil, fmt.Errorf("unknown question type: %s", q.QuestionType)
 	}

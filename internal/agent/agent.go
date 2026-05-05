@@ -38,6 +38,7 @@ type agentConversationState struct {
 type agentRequestState struct {
 	cancelFunc                           context.CancelFunc
 	requestCtx                           context.Context
+	requestPromptCancelCtx               context.Context
 	lastCancelReason                     string
 	strReplaceErrorCount                 int
 	tokenLimitRetryCount                 int

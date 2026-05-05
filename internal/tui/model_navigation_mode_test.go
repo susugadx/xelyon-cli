@@ -50,6 +50,33 @@ func TestNavMode_QExitsNav(t *testing.T) {
 	}
 }
 
+func TestSwitchToComposerInput_ExitsNavigationState(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.navigationMode = true
+	m.gPressed = true
+	m.pendingCount = 12
+	m.yPressed = true
+	m.visualMode = visualModeLine
+	m.visualStart = visualPosition{line: 3, col: 0}
+	m.textInput.Blur()
+
+	m.switchToComposerInput()
+
+	if m.navigationMode {
+		t.Fatal("switchToComposerInput should exit navigation mode")
+	}
+	if m.visualMode != visualModeOff || m.visualStart.line != -1 || m.visualStart.col != -1 {
+		t.Fatalf("visual selection = mode %d start %#v, want cleared", m.visualMode, m.visualStart)
+	}
+	if m.gPressed || m.pendingCount != 0 || m.yPressed {
+		t.Fatalf("nav pending state = g:%v count:%d y:%v, want reset", m.gPressed, m.pendingCount, m.yPressed)
+	}
+	if !m.textInput.Focused() {
+		t.Fatal("composer input should be focused")
+	}
+}
+
 func TestNavMode_CtrlCWorksInNav(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")

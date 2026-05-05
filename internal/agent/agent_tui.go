@@ -13,17 +13,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// tuiAutoApproveReader は TUI モードで stdin を読む確認ダイアログに対して
-// 常に "y\n" を返す io.Reader。bubbletea が stdin を占有するため、
-// 全ツール確認を自動承認する。
-type tuiAutoApproveReader struct{}
-
-func (tuiAutoApproveReader) Read(p []byte) (int, error) {
-	data := []byte("y\n")
-	n := copy(p, data)
-	return n, nil
-}
-
 var runTUIProgram = tui.Run
 var runTUIProgramWithStartupSubmission = tui.RunWithStartupSubmission
 var registerTUIOnExit = lifecycle.OnExit
@@ -67,19 +56,14 @@ func RunTUIWithImageWithConfig(query string, model string, provider api.Provider
 }
 
 func runTUIWithOptions(model string, provider api.Provider, cfg *config.Config, autoApprove bool, opts tuiRunOptions) {
-	// TUI モードでは確認ダイアログが動作しないため、全ツールを auto-approve する。
-	// - autoApprove=true: apply_patch, write_file 等の ConfirmWithAutoApproveDecisionAndOptions 系
-	// - tuiAutoApproveReader: bash の ConfirmWithIO（stdin から直接読む）系
-	// Phase 2 で確認ダイアログを bubbletea 内に実装した後、bash の確認を復活させる。
-
 	// Agent 初期化中の stdout 出力をキャプチャするバッファ。
 	// Normal Screen に何も残さず、全てを Alt Screen の viewport に表示する。
 	var captureBuf bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(tuiAutoApproveReader{}, &captureBuf, &captureBuf)
-	runtime.AutoApprove = true
+	runtime.UI = ui.NewRuntime(bytes.NewReader(nil), &captureBuf, &captureBuf)
+	runtime.AutoApprove = autoApprove
 
-	ag := initInteractiveAgentWithRuntime(runtime, model, provider, true)
+	ag := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
 	defer ag.Cleanup()
 
 	// SIGTERM 時に Alt Screen を復旧するフックを登録

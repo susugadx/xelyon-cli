@@ -1,7 +1,10 @@
 package common
 
 import (
+	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +12,16 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/stdio"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+type recordingPrompter struct {
+	reqs []ui.PromptRequest
+	resp ui.PromptResponse
+}
+
+func (p *recordingPrompter) Prompt(_ context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+	p.reqs = append(p.reqs, req)
+	return p.resp, nil
+}
 
 func TestConfirmOptions_EffectivePolicy(t *testing.T) {
 	t.Run("explicit policy takes precedence", func(t *testing.T) {
@@ -157,6 +170,111 @@ func TestConfirmToolAction_PolicyPaths(t *testing.T) {
 			t.Fatalf("output = %q, want full auto message", out.String())
 		}
 	})
+}
+
+func TestConfirmToolAction_UsesPrompterWithoutReadingLegacyInput(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+
+	prompter := &recordingPrompter{resp: ui.PromptResponse{Action: ui.PromptActionYes}}
+	runtime := ui.NewRuntime(strings.NewReader("n\n"), io.Discard, io.Discard)
+	runtime.SetPrompter(prompter)
+
+	policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionBalanced)})
+	dec := ConfirmToolAction(
+		runtime.PromptIO(),
+		ConfirmOptions{Policy: &policy},
+		"bash",
+		"Run bash?",
+		ToolConfirmContext{},
+	)
+
+	if dec.Action != ConfirmYes {
+		t.Fatalf("Action = %q, want yes from prompter", dec.Action)
+	}
+	if len(prompter.reqs) != 1 {
+		t.Fatalf("prompt calls = %d, want 1", len(prompter.reqs))
+	}
+	if !prompter.reqs[0].AllowComment {
+		t.Fatal("interactive confirm should allow comments")
+	}
+}
+
+func TestConfirmToolAction_AlwaysConfirmBeatsAutoApproveWithPrompter(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+
+	prompter := &recordingPrompter{resp: ui.PromptResponse{Action: ui.PromptActionNo}}
+	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.SetPrompter(prompter)
+	policy := config.ResolveExecutionPolicy(config.ExecutionConfig{
+		Mode:          string(config.ExecutionFullAuto),
+		AlwaysConfirm: []string{string(config.ConfirmDeleteFile)},
+	})
+
+	dec := ConfirmToolAction(
+		runtime.PromptIO(),
+		ConfirmOptions{AutoApprove: true, Policy: &policy},
+		"delete_file",
+		"Delete?",
+		ToolConfirmContext{},
+	)
+
+	if dec.Action != ConfirmNo {
+		t.Fatalf("Action = %q, want prompted no", dec.Action)
+	}
+	if len(prompter.reqs) != 1 {
+		t.Fatalf("prompt calls = %d, want 1", len(prompter.reqs))
+	}
+}
+
+func TestConfirmWithIO_InteractiveDisabledPrompterOmitsComment(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
+
+	prompter := &recordingPrompter{resp: ui.PromptResponse{Action: ui.PromptActionComment, Text: "feedback"}}
+	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.SetPrompter(prompter)
+
+	dec := ConfirmWithIO(runtime.PromptIO(), "Proceed?")
+	if dec.Action != ConfirmNo {
+		t.Fatalf("Action = %q, want no because comment is not offered", dec.Action)
+	}
+	if len(prompter.reqs) != 1 {
+		t.Fatalf("prompt calls = %d, want 1", len(prompter.reqs))
+	}
+	if prompter.reqs[0].AllowComment {
+		t.Fatal("disabled interactive confirm should not allow comments")
+	}
+	if prompter.reqs[0].ConfirmSubmitPolicy != ui.PromptConfirmSubmitExplicit {
+		t.Fatalf("ConfirmSubmitPolicy = %q, want explicit", prompter.reqs[0].ConfirmSubmitPolicy)
+	}
+}
+
+func TestConfirmWithIO_PrompterCommentParsesImageLine(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+
+	imagePath := filepath.Join(t.TempDir(), "comment.png")
+	if err := os.WriteFile(imagePath, []byte("png"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	prompter := &recordingPrompter{
+		resp: ui.PromptResponse{
+			Action: ui.PromptActionComment,
+			Text:   "needs more context\nimage:" + imagePath,
+		},
+	}
+	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.SetPrompter(prompter)
+
+	dec := ConfirmWithIO(runtime.PromptIO(), "Proceed?")
+	if dec.Action != ConfirmComment {
+		t.Fatalf("Action = %q, want comment", dec.Action)
+	}
+	if dec.Comment != "needs more context" {
+		t.Fatalf("Comment = %q, want feedback without image line", dec.Comment)
+	}
+	if dec.Image == nil || dec.Image.Path != imagePath {
+		t.Fatalf("Image = %#v, want loaded image %q", dec.Image, imagePath)
+	}
 }
 
 func TestAllPathsInsideWorkspace_TargetAndMove(t *testing.T) {

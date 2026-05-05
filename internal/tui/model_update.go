@@ -14,6 +14,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case OpenPromptMsg:
+		updated, cmd := m.handleOpenPromptMsg(msg)
+		return updated, cmd, true
+	case CancelPromptMsg:
+		updated, cmd := m.handleCancelPromptMsg(msg)
+		return updated, cmd, true
+	}
+	if m.prompt != nil {
+		updated, cmd := m.updateWithPromptOpen(msg)
+		return updated, cmd, true
+	}
 	if _, ok := msg.(OpenConfigScreenMsg); ok {
 		updated, cmd := m.openConfigScreen()
 		return updated, cmd, true

@@ -25,6 +25,7 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 	}
 	ec := tools.ExecutionContext{
 		Context:            ctx,
+		PromptContext:      a.requestToolPromptContext(ctx),
 		Provider:           a.CurrentProvider,
 		ProviderName:       a.ProviderName,
 		ProviderConfigKey:  a.activeModelProviderConfigKey(a.cfg()),

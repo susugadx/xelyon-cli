@@ -38,6 +38,25 @@ func TestExecutionContext_PromptIOUsesInjectedRuntime(t *testing.T) {
 	}
 }
 
+func TestExecutionContext_PromptIOUsesPromptContext(t *testing.T) {
+	type promptContextKey struct{}
+	requestCtx := context.WithValue(context.Background(), promptContextKey{}, "request")
+	promptCtx := context.WithValue(context.Background(), promptContextKey{}, "prompt")
+
+	promptIO := ExecutionContext{
+		Context:       requestCtx,
+		PromptContext: promptCtx,
+	}.PromptIO()
+
+	if got := promptIO.PromptContext().Value(promptContextKey{}); got != "prompt" {
+		t.Fatalf("PromptIO().PromptContext() marker = %v, want prompt", got)
+	}
+	fallbackPromptIO := (ExecutionContext{Context: requestCtx}).PromptIO()
+	if got := fallbackPromptIO.PromptContext().Value(promptContextKey{}); got != "request" {
+		t.Fatalf("PromptIO().PromptContext() fallback marker = %v, want request", got)
+	}
+}
+
 func TestExecutionContext_ContextAndLocatorAccessors(t *testing.T) {
 	lspClient := &lsplib.Client{}
 	locators := locator.NewRegistry()

@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"sync"
 	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,8 +19,78 @@ type tuiProgramBridge struct {
 	send          func(tea.Msg)
 	debugLog      func(string, ...any)
 	messageQueue  chan tui.AppendMessageMsg
+	promptBridge  *tuiPromptBridge
 	closed        atomic.Bool
 	droppedEvents atomic.Int64
+}
+
+type tuiPromptBridge struct {
+	send   func(tea.Msg)
+	mu     sync.Mutex
+	closed chan struct{}
+	once   sync.Once
+	nextID atomic.Uint64
+}
+
+func (*tuiPromptBridge) isTUIRuntimePrompter() {}
+
+func newTUIPromptBridge(send func(tea.Msg)) *tuiPromptBridge {
+	return &tuiPromptBridge{
+		send:   send,
+		closed: make(chan struct{}),
+	}
+}
+
+func (b *tuiPromptBridge) Prompt(ctx context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+	if b == nil || b.send == nil {
+		return cancelPromptResponse(req), nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	select {
+	case <-b.closed:
+		return cancelPromptResponse(req), nil
+	default:
+	}
+
+	id := b.nextID.Add(1)
+	respCh := make(chan ui.PromptResponse, 1)
+	b.send(tui.OpenPromptMsg{
+		ID:      id,
+		Request: req,
+		Respond: respCh,
+	})
+
+	select {
+	case resp := <-respCh:
+		return resp, nil
+	case <-ctx.Done():
+		b.send(tui.CancelPromptMsg{ID: id})
+		return cancelPromptResponse(req), nil
+	case <-b.closed:
+		return cancelPromptResponse(req), nil
+	}
+}
+
+func (b *tuiPromptBridge) close() {
+	if b == nil {
+		return
+	}
+	b.once.Do(func() {
+		close(b.closed)
+	})
+}
+
+func cancelPromptResponse(req ui.PromptRequest) ui.PromptResponse {
+	if req.Kind == ui.PromptKindConfirm {
+		return ui.PromptResponse{Action: ui.PromptActionNo, Cancelled: true}
+	}
+	return ui.PromptResponse{Cancelled: true}
 }
 
 func newTUIProgramBridge(
@@ -91,6 +163,10 @@ func (b *tuiProgramBridge) start() {
 		}
 	}
 	b.adapter.SetOutputCapture()
+	if b.agent != nil && b.send != nil {
+		b.promptBridge = newTUIPromptBridge(b.send)
+		b.agent.ui().SetPrompter(b.promptBridge)
+	}
 }
 
 func (b *tuiProgramBridge) shutdown() {
@@ -100,6 +176,10 @@ func (b *tuiProgramBridge) shutdown() {
 	b.closed.Store(true)
 	if b.agent != nil {
 		b.agent.tuiToolResultClosed.Store(true)
+		if b.promptBridge != nil {
+			b.promptBridge.close()
+			b.agent.ui().SetPrompter(nil)
+		}
 	}
 	if n := b.droppedEvents.Load(); n > 0 {
 		b.debugLog("TUI message channel: %d messages dropped", n)
@@ -119,9 +199,13 @@ func registerTUIBridgeOnExit(register func(func()), shutdown func()) {
 }
 
 func bindTUIProgram(adapter *TUIAdapter, ag *Agent, toolResultCh <-chan tools.ToolResultInfo, program *tea.Program) *tuiProgramBridge {
-	bridge := newTUIProgramBridge(adapter, ag, toolResultCh, func(msg tea.Msg) {
-		sendTUIProgramMessage(program, msg)
-	}, lifecycle.DebugLog)
+	var send func(tea.Msg)
+	if program != nil {
+		send = func(msg tea.Msg) {
+			sendTUIProgramMessage(program, msg)
+		}
+	}
+	bridge := newTUIProgramBridge(adapter, ag, toolResultCh, send, lifecycle.DebugLog)
 	bridge.start()
 	registerTUIBridgeOnExit(registerTUIOnExit, bridge.shutdown)
 	return bridge

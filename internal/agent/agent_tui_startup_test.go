@@ -124,8 +124,8 @@ func TestRunTUIWithConfig_InitializesTUIAgentAndHeader(t *testing.T) {
 	if gotAdapter.agent == nil {
 		t.Fatal("expected adapter.agent to be initialized")
 	}
-	if !gotAdapter.agent.AutoApprove {
-		t.Fatal("expected TUI agent to force auto-approve")
+	if gotAdapter.agent.AutoApprove {
+		t.Fatal("expected TUI agent to preserve disabled auto-approve")
 	}
 	if gotAdapter.agent.exitHook == nil {
 		t.Fatal("expected TUI exit hook to be registered")
@@ -142,6 +142,28 @@ func TestRunTUIWithConfig_InitializesTUIAgentAndHeader(t *testing.T) {
 		if !strings.Contains(stripped, fragment) {
 			t.Fatalf("initialContent missing %q:\n%s", fragment, stripped)
 		}
+	}
+}
+
+func TestRunTUIWithConfig_PreservesAutoApproveArgument(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	originalRunner := runTUIProgram
+	defer func() { runTUIProgram = originalRunner }()
+
+	var gotAdapter *TUIAdapter
+	runTUIProgram = func(agent tui.AgentInterface, _ string, onProgram func(*tea.Program)) {
+		gotAdapter = agent.(*TUIAdapter)
+		onProgram(nil)
+	}
+
+	RunTUIWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), true)
+
+	if gotAdapter == nil || gotAdapter.agent == nil {
+		t.Fatal("expected TUI agent")
+	}
+	if !gotAdapter.agent.AutoApprove {
+		t.Fatal("expected TUI agent to preserve enabled auto-approve")
 	}
 }
 

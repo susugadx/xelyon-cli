@@ -113,4 +113,5 @@ type Model struct {
 	mouseSelectionState
 	startupSubmission *StartupSubmission
 	slashSuggestions  slashSuggestionState
+	prompt            *promptModalState
 }

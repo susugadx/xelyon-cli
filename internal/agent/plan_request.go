@@ -182,7 +182,7 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 	r.renderPlan(p)
 
 	a.SetStatus(StateWaitingApproval, "Waiting for plan approval", "計画の承認待ち", "Answer y/n/c", "y/n/c で回答")
-	approved, feedback := a.confirmPlan()
+	approved, feedback := r.confirmPlanApproval()
 	if approved {
 		r.approved = true
 		a.setPlanModeEnabled(false)

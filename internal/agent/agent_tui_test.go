@@ -28,17 +28,6 @@ func TestDefaultToolCollapsed_KeepsApplyPatchExpanded(t *testing.T) {
 	}
 }
 
-func TestTUIAutoApproveReader_ReadReturnsConfirmation(t *testing.T) {
-	var buf [8]byte
-	n, err := (tuiAutoApproveReader{}).Read(buf[:])
-	if err != nil {
-		t.Fatalf("Read() error = %v", err)
-	}
-	if got := string(buf[:n]); got != "y\n" {
-		t.Fatalf("Read() = %q, want %q", got, "y\n")
-	}
-}
-
 func TestDefaultToolCollapsed_OtherBranches(t *testing.T) {
 	cases := []struct {
 		name     string

@@ -1,6 +1,10 @@
 package tui
 
-import "time"
+import (
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/ui"
+)
 
 // ChatMessage は会話ログの1エントリ
 type ChatMessage struct {
@@ -45,4 +49,16 @@ type UpdateStatusMsg struct {
 // AgentDoneMsg はagent.chat()の完了通知
 type AgentDoneMsg struct {
 	Error error
+}
+
+// OpenPromptMsg は TUI prompt modal を開くMsg。
+type OpenPromptMsg struct {
+	ID      uint64
+	Request ui.PromptRequest
+	Respond chan<- ui.PromptResponse
+}
+
+// CancelPromptMsg は待機中の prompt modal をキャンセルするMsg。
+type CancelPromptMsg struct {
+	ID uint64
 }

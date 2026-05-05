@@ -110,6 +110,14 @@ func (m Model) View() string {
 	if !m.ready {
 		return "Initializing..."
 	}
+	base := m.baseView()
+	if m.prompt != nil {
+		return m.renderPromptOverlay(base)
+	}
+	return base
+}
+
+func (m Model) baseView() string {
 	if m.screen == screenConfig {
 		return m.configView()
 	}

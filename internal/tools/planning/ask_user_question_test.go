@@ -2,6 +2,7 @@ package planning
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 type askUserQuestionResponse struct {
@@ -24,6 +26,16 @@ func newTestExecCtx(input string, stdout io.Writer) tools.ExecutionContext {
 		Stdout: stdout,
 		Stderr: io.Discard,
 	}
+}
+
+type askQuestionPrompter struct {
+	reqs []ui.PromptRequest
+	resp ui.PromptResponse
+}
+
+func (p *askQuestionPrompter) Prompt(_ context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+	p.reqs = append(p.reqs, req)
+	return p.resp, nil
 }
 
 func TestAskUserQuestionTool_Run_SingleChoice(t *testing.T) {
@@ -134,5 +146,107 @@ func TestAskUserQuestionTool_Run_DiscardDoesNotLeakProcessStdout(t *testing.T) {
 	}
 	if response.Answer != "No" {
 		t.Fatalf("Answer = %s, want No", response.Answer)
+	}
+}
+
+func TestAskUserQuestionTool_Run_UsesPrompter(t *testing.T) {
+	tool := &AskUserQuestionTool{}
+	prompter := &askQuestionPrompter{resp: ui.PromptResponse{Value: "No"}}
+	runtime := ui.NewRuntime(strings.NewReader("Yes\n"), io.Discard, io.Discard)
+	runtime.SetPrompter(prompter)
+	execCtx := tools.ExecutionContext{
+		Runtime: runtime,
+		Stdin:   runtime.Input(),
+		Stdout:  io.Discard,
+		Stderr:  io.Discard,
+	}
+
+	result, _, err := tool.Run(execCtx, map[string]string{
+		"question":      "Choose",
+		"question_type": "single_choice",
+		"options":       `["Yes","No"]`,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if len(prompter.reqs) != 1 {
+		t.Fatalf("prompt calls = %d, want 1", len(prompter.reqs))
+	}
+	if prompter.reqs[0].Kind != ui.PromptKindSingleChoice {
+		t.Fatalf("Kind = %q, want single_choice", prompter.reqs[0].Kind)
+	}
+
+	var response askUserQuestionResponse
+	if err := json.Unmarshal([]byte(result), &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if response.Answer != "No" {
+		t.Fatalf("Answer = %s, want No", response.Answer)
+	}
+}
+
+func TestAskUserQuestionTool_Run_MultiChoicePrompter(t *testing.T) {
+	tool := &AskUserQuestionTool{}
+	prompter := &askQuestionPrompter{resp: ui.PromptResponse{Values: []string{"A", "C"}}}
+	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.SetPrompter(prompter)
+
+	result, _, err := tool.Run(tools.ExecutionContext{
+		Runtime: runtime,
+		Stdin:   runtime.Input(),
+		Stdout:  io.Discard,
+		Stderr:  io.Discard,
+	}, map[string]string{
+		"question":      "Pick",
+		"question_type": "multi_choice",
+		"options":       `["A","B","C"]`,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if len(prompter.reqs) != 1 || prompter.reqs[0].Kind != ui.PromptKindMultiChoice {
+		t.Fatalf("prompt requests = %#v, want multi_choice", prompter.reqs)
+	}
+
+	var response askUserQuestionResponse
+	if err := json.Unmarshal([]byte(result), &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if len(response.Answers) != 2 || response.Answers[0] != "A" || response.Answers[1] != "C" {
+		t.Fatalf("Answers = %v, want [A C]", response.Answers)
+	}
+}
+
+func TestAskUserQuestionTool_Run_FreeTextPrompter(t *testing.T) {
+	tool := &AskUserQuestionTool{}
+	prompter := &askQuestionPrompter{resp: ui.PromptResponse{Text: "details"}}
+	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.SetPrompter(prompter)
+
+	result, _, err := tool.Run(tools.ExecutionContext{
+		Runtime: runtime,
+		Stdin:   runtime.Input(),
+		Stdout:  io.Discard,
+		Stderr:  io.Discard,
+	}, map[string]string{
+		"question":      "Explain",
+		"question_type": "free_text",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if len(prompter.reqs) != 1 || prompter.reqs[0].Kind != ui.PromptKindText {
+		t.Fatalf("prompt requests = %#v, want text", prompter.reqs)
+	}
+
+	var response askUserQuestionResponse
+	if err := json.Unmarshal([]byte(result), &response); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if response.Answer != "details" {
+		t.Fatalf("Answer = %s, want details", response.Answer)
 	}
 }

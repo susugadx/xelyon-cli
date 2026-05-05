@@ -63,6 +63,16 @@ func (o ConfirmOptions) EffectivePolicy() config.ExecutionPolicy {
 // NOTE: テスト時は setupTestConfirm() でモックされる
 var SimpleConfirmWithIO = func(promptIO ui.PromptIO, message string) bool {
 	promptIO = ui.NormalizePromptIO(promptIO)
+	if prompter := promptIO.Prompter(); prompter != nil {
+		resp, err := prompter.Prompt(promptIO.PromptContext(), ui.PromptRequest{
+			Kind:                ui.PromptKindConfirm,
+			Message:             message,
+			AllowComment:        false,
+			ConfirmSubmitPolicy: ui.PromptConfirmSubmitExplicit,
+		})
+		return err == nil && !resp.Cancelled && resp.Action == ui.PromptActionYes
+	}
+
 	reader := promptIO.BufioReader()
 	out := NewOutput(promptIO.Out, promptIO.Err)
 

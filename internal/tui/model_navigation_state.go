@@ -42,6 +42,21 @@ func (m *Model) resetNavPending() {
 	m.yPressed = false
 }
 
+// exitNavigationMode は navigation mode 固有の状態を破棄して通常状態に戻す。
+func (m *Model) exitNavigationMode() bool {
+	if !m.navigationMode {
+		return false
+	}
+	m.clearVisualSelection()
+	if m.focusedBlock >= 0 {
+		m.clearBlockFocus()
+	}
+	m.navigationMode = false
+	m.resetNavPending()
+	m.chromeDirty = true
+	return true
+}
+
 func (m *Model) afterViewportScroll() {
 	if m.navigationMode && m.focusedBlock < 0 && m.visualMode == visualModeOff {
 		m.clampCursorToViewport()

@@ -3,8 +3,8 @@ package tui
 import tea "github.com/charmbracelet/bubbletea"
 
 func (m *Model) activateModalScreen(mode screenMode) {
+	m.exitNavigationMode()
 	m.screen = mode
-	m.navigationMode = false
 	m.chromeDirty = true
 }
 
