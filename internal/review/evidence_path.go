@@ -9,6 +9,7 @@ import (
 )
 
 func resolveReviewEvidenceDirs(repoRoot, cwd string) (string, string, error) {
+	// repoRoot は Git 実行と path validation の基準、cwd は診断用に保持する起動位置。
 	resolvedRepoRoot, err := resolveReviewEvidenceDir(repoRoot, "")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to resolve repo root: %w", err)

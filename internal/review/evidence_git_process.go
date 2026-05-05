@@ -8,7 +8,6 @@ import (
 
 type reviewEvidenceGitProcessRequest struct {
 	repoRoot       string
-	cwd            string
 	args           []string
 	maxOutputBytes int64
 }
@@ -33,21 +32,21 @@ func runReviewEvidenceGitProcess(ctx context.Context, req reviewEvidenceGitProce
 
 func newReviewEvidenceGitProcess(ctx context.Context, req reviewEvidenceGitProcessRequest) (*exec.Cmd, error) {
 	env := buildReviewEvidenceGitEnv(os.Environ())
-	gitPath, err := resolveReviewEvidenceGitExecutable(req.repoRoot, req.cwd, env)
+	gitPath, err := resolveReviewEvidenceGitExecutable(req.repoRoot, env)
 	if err != nil {
 		return nil, err
 	}
 
 	proc := exec.CommandContext(ctx, gitPath, buildReviewEvidenceGitArgs(req.repoRoot, req.args)...)
-	proc.Dir = req.cwd
+	proc.Dir = req.repoRoot
 	proc.Env = env
 	return proc, nil
 }
 
-func resolveReviewEvidenceGitExecutable(repoRoot, cwd string, env []string) (string, error) {
+func resolveReviewEvidenceGitExecutable(repoRoot string, env []string) (string, error) {
 	return resolveCommandPath("git", commandResolutionContext{
 		RepoRoot: repoRoot,
-		WorkDir:  cwd,
+		WorkDir:  repoRoot,
 		Env:      env,
 	})
 }

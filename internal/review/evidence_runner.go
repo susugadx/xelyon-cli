@@ -23,7 +23,7 @@ func (b *ReviewEvidenceBuilder) runGit(ctx context.Context, repoRoot, cwd string
 
 type reviewEvidenceGitRunner struct{}
 
-func (reviewEvidenceGitRunner) RunGit(ctx context.Context, repoRoot, cwd string, args []string, timeout time.Duration, maxOutputBytes int64) (string, bool, error) {
+func (reviewEvidenceGitRunner) RunGit(ctx context.Context, repoRoot, _ string, args []string, timeout time.Duration, maxOutputBytes int64) (string, bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -37,7 +37,6 @@ func (reviewEvidenceGitRunner) RunGit(ctx context.Context, repoRoot, cwd string,
 
 	result, err := runReviewEvidenceGitProcess(cmdCtx, reviewEvidenceGitProcessRequest{
 		repoRoot:       repoRoot,
-		cwd:            cwd,
 		args:           args,
 		maxOutputBytes: maxOutputBytes,
 	})

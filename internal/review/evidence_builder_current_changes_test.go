@@ -61,6 +61,37 @@ func TestReviewEvidenceBuilder_CurrentChangesMarksUnstagedOnlyChangedFile(t *tes
 	}})
 }
 
+func TestReviewEvidenceBuilder_CurrentChangesKeepsRepoSubdirCWDAsDiagnostics(t *testing.T) {
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	repoSubdir := filepath.Join(repo, "probe")
+	writeTestFile(t, filepath.Join(repo, "keep.txt"), "unstaged from subdir cwd\n")
+
+	bundle, err := NewReviewEvidenceBuilder(repo, repoSubdir).BuildCurrentChanges(context.Background())
+	if err != nil {
+		t.Fatalf("BuildCurrentChanges() error = %v", err)
+	}
+
+	if bundle.CWD != filepath.Clean(repoSubdir) {
+		t.Fatalf("CWD = %q, want repo subdir cwd %q", bundle.CWD, filepath.Clean(repoSubdir))
+	}
+	wantRepoRoot, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q) error = %v", repo, err)
+	}
+	if bundle.RepoRoot != filepath.Clean(wantRepoRoot) {
+		t.Fatalf("RepoRoot = %q, want %q", bundle.RepoRoot, filepath.Clean(wantRepoRoot))
+	}
+	assertChangedFiles(t, bundle.ChangedFiles, []ReviewChangedFile{{
+		Path:     "keep.txt",
+		Status:   "M",
+		Unstaged: true,
+	}})
+	unstaged := diffEvidenceBySource(t, bundle, reviewDiffEvidenceSourceUnstaged)
+	if !strings.Contains(unstaged.Diff, "+unstaged from subdir cwd") {
+		t.Fatalf("unstaged diff = %q, want repo-root change from subdir cwd", unstaged.Diff)
+	}
+}
+
 func TestReviewEvidenceBuilder_CurrentChangesMarksStagedOnlyChangedFile(t *testing.T) {
 	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
 	writeTestFile(t, filepath.Join(repo, "keep.txt"), "staged\n")

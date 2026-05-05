@@ -47,6 +47,51 @@ func TestReviewEvidenceBuilder_BlocksRepoControlledGitExecutableOnPATH(t *testin
 	assertFileAbsent(t, marker)
 }
 
+func TestReviewEvidenceBuilder_GitLookupIgnoresOutsideCWDRelativePATH(t *testing.T) {
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	outsideCwd := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "outside-cwd-git.marker")
+	t.Setenv("REVIEW_EVIDENCE_MARKER", marker)
+	createProbeTestScriptCommand(t, outsideCwd, "git", `printf invoked > "$REVIEW_EVIDENCE_MARKER"`)
+	t.Setenv("PATH", reviewEvidenceTestPathWithGit(t, "."))
+
+	bundle, err := NewReviewEvidenceBuilder(repo, outsideCwd).BuildCurrentChanges(context.Background())
+	if err != nil {
+		t.Fatalf("BuildCurrentChanges() error = %v", err)
+	}
+
+	assertFileAbsent(t, marker)
+	if bundle.CWD != filepath.Clean(outsideCwd) {
+		t.Fatalf("CWD = %q, want outside cwd %q", bundle.CWD, filepath.Clean(outsideCwd))
+	}
+	wantRoot, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q) error = %v", repo, err)
+	}
+	if bundle.RepoRoot != filepath.Clean(wantRoot) {
+		t.Fatalf("RepoRoot = %q, want %q", bundle.RepoRoot, filepath.Clean(wantRoot))
+	}
+}
+
+func TestReviewEvidenceBuilder_RelativePATHEntriesResolveFromRepoRoot(t *testing.T) {
+	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
+	outsideCwd := t.TempDir()
+	repoBin := filepath.Join(repo, "bin")
+	marker := filepath.Join(t.TempDir(), "repo-relative-git.marker")
+	t.Setenv("REVIEW_EVIDENCE_MARKER", marker)
+	createProbeTestScriptCommand(t, repoBin, "git", `printf invoked > "$REVIEW_EVIDENCE_MARKER"`)
+	t.Setenv("PATH", reviewEvidenceTestPathWithGit(t, "bin"))
+
+	_, err := NewReviewEvidenceBuilder(repo, outsideCwd).BuildCurrentChanges(context.Background())
+	if err == nil {
+		t.Fatal("BuildCurrentChanges() error = nil, want repo-relative git to be blocked")
+	}
+	if !errors.Is(err, ErrHostReadOnlyBlocked) {
+		t.Fatalf("BuildCurrentChanges() error = %v, want ErrHostReadOnlyBlocked", err)
+	}
+	assertFileAbsent(t, marker)
+}
+
 func TestBuildReviewEvidenceGitEnvPinsOptionalLocks(t *testing.T) {
 	got := buildReviewEvidenceGitEnv([]string{
 		"PATH=/bin",
@@ -80,6 +125,36 @@ func TestReviewEvidenceGitProcessStreamsSeparateParsedOutputFromDiagnostics(t *t
 	}
 	if !strings.Contains(got.diagnostics, "warning: ignored diagnostic") || !strings.Contains(got.diagnostics, "M\x00keep.txt\x00") {
 		t.Fatalf("diagnostics = %q, want stderr and stdout", got.diagnostics)
+	}
+}
+
+func TestNewReviewEvidenceGitProcessUsesRepoRootWorkingDir(t *testing.T) {
+	repoRoot := filepath.Clean(t.TempDir())
+	safeBin := t.TempDir()
+	createProbeTestExecutable(t, safeBin, "git")
+	t.Setenv("PATH", safeBin)
+
+	proc, err := newReviewEvidenceGitProcess(context.Background(), reviewEvidenceGitProcessRequest{
+		repoRoot:       repoRoot,
+		args:           []string{"status", "--short"},
+		maxOutputBytes: 1024,
+	})
+	if err != nil {
+		t.Fatalf("newReviewEvidenceGitProcess() error = %v", err)
+	}
+	if proc.Dir != repoRoot {
+		t.Fatalf("proc.Dir = %q, want repo root %q", proc.Dir, repoRoot)
+	}
+
+	foundRepoRootArg := false
+	for i := 0; i+1 < len(proc.Args); i++ {
+		if proc.Args[i] == "-C" && proc.Args[i+1] == repoRoot {
+			foundRepoRootArg = true
+			break
+		}
+	}
+	if !foundRepoRootArg {
+		t.Fatalf("proc.Args = %#v, want -C %q", proc.Args, repoRoot)
 	}
 }
 

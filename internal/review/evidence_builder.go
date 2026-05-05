@@ -27,7 +27,8 @@ func WithReviewEvidenceCommandRunner(runner ReviewEvidenceCommandRunner) ReviewE
 	}
 }
 
-// NewReviewEvidenceBuilder は repo root と cwd を基準に EvidenceBuilder を構築する。
+// NewReviewEvidenceBuilder は repo root と /review 起動 cwd を基準に EvidenceBuilder を構築する。
+// cwd は bundle に残す診断 context であり、git 実行境界は repo root を信頼境界にする。
 func NewReviewEvidenceBuilder(repoRoot, cwd string, opts ...ReviewEvidenceBuilderOption) *ReviewEvidenceBuilder {
 	b := &ReviewEvidenceBuilder{
 		repoRoot: repoRoot,
@@ -46,6 +47,7 @@ func NewReviewEvidenceBuilder(repoRoot, cwd string, opts ...ReviewEvidenceBuilde
 }
 
 // BuildCurrentChanges は current_changes review 用の evidence bundle を構築する。
+// repoRoot は review 対象 Git repo、cwd は /review 起動位置として記録する。
 func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (ReviewEvidenceBundle, error) {
 	if ctx == nil {
 		ctx = context.Background()
