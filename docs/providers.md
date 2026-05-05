@@ -481,8 +481,6 @@ xelyon
 3. **Claude（直接）** - プロンプトキャッシュが確実に効く
 4. **OpenAI** - 高コスト + キャッシュ不安定のため、コスト重視なら非推奨
 
-DeepSeek V4 Pro には 2026-05-05 15:59 UTC までの期間限定 75% off がありますが、`pricing.yaml` は date-aware pricing ではないため通常価格を記録しています。
-
 ## 料金表示
 
 `/status`、ステータスバー、headless JSON の `cost` は `internal/cost/pricing.yaml` と組み込みの既知ルールに基づく推定値です。価格表にない provider/model は別モデルの料金で代用せず、UI では `N/A (pricing unavailable)`、ステータスバーでは `cost N/A` と表示します。headless JSON では `pricing_unavailable: true` を返します。

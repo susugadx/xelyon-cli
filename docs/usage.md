@@ -235,8 +235,6 @@ sub_agent:
 
 ---
 
----
-
 ## 確認UI（y/n/c）
 
 すべての確認プロンプトは `y/n/c`（yes/no/comment）をサポートします。

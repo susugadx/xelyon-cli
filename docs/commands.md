@@ -240,7 +240,7 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 
 ### `/config`
 
-global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対話式メニューで50以上の設定項目をカテゴリ別に管理できます。project 固有の `xelyon.yaml` は `/project` で編集します。
+global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対話式メニューで設定項目をカテゴリ別に管理できます。project 固有の `xelyon.yaml` は `/project` で編集します。
 
 ```
 > /config               # 対話式設定メニューを起動
@@ -253,18 +253,15 @@ global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対
 `/config` を引数なしで実行すると、以下のような対話式メニューが表示されます：
 
 ```
-┌─ Configuration (1/2) ─────────────────────┐
+┌─ Configuration ───────────────────────────┐
 │ [1] 🤖 Provider & Model                   │
-│ [2] 📦 Compression                        │
-│ [3] 🔄 Loop Detection                     │
-│ [4] 🌐 API Settings                       │
-│ [5] 📝 Diff Display                       │
-│ [6] ✅ Tool Confirm                       │
-│ [7] 🔗 Command Aliases                    │
-│ [8] 💨 Prompt Cache                       │
-│ [9] 📋 Paste Mode                         │
+│ [2] 🛡️ Execution Mode                     │
+│ [3] 📦 Compression                        │
+│ [4] 🗺️ Project Map                        │
+│ [5] 🔧 LSP Servers                        │
+│ [6] 🔍 Web Search                         │
+│ [7] 🧪 Final Checks                       │
 │                                           │
-│ [n] Next page                             │
 │ [q] Cancel                                │
 └───────────────────────────────────────────┘
 ```
@@ -277,13 +274,22 @@ global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対
 | int | 数値入力 | `api_retry.count` |
 | string | テキスト入力 | `default_model` |
 | select | 番号選択 | `default_provider` (deepseek/claude/openai/...) |
-| []string | 項目追加/削除 | `bash.safe_commands` |
-| map[string]string | エントリ追加/編集/削除 | `command_aliases` |
+| []string | 項目追加/削除 | `execution.safe_shell_commands` |
 | map[string]struct | サブメニューで編集 | `provider_models`, `lsp.servers` |
 
-**20以上のカテゴリ:** Provider & Model, Compression, Loop Detection, API Settings, Diff Display, Tool Confirm, Command Aliases, Prompt Cache, Paste Mode, Streaming, Bash Safety, Project Map, Git Settings, Plan Mode, LSP Servers, OpenAI, Thinking, Output, Web Search, Utility Model など
+**主なカテゴリ:** Provider & Model, Execution Mode, Compression, Paste Mode, Project Map, Agent Instructions, LSP Servers, Output, Web Search, Sub-agent, MCP Servers, Final Checks など
 
 **変更は即座に保存:** `~/.xelyon/config.yaml` に自動保存されます。
+
+### `/skills`
+
+Agent Skills のカタログを一覧・確認・診断します。`/skills list` は検出済み skill 名を一覧表示し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。`/skills doctor` は parse error や重複名などの診断を表示します。
+
+```
+> /skills list
+> /skills show imagegen
+> /skills doctor
+```
 
 ### `/init`
 
@@ -345,9 +351,8 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 **デフォルト:** OFF（通常モード）
 
 **通常モード（OFF）:**
-- ツールを個別に確認しながら実行
+- `execution.mode` に従ってツールを自動実行または確認しながら実行
 - 軽いタスクにはオーバーヘッドなく即座に応答
-- `tool_confirm` 設定に従ってツール確認
 
 **Plan Mode（ON）:**
 1. **調査フェーズ**: SafetyHighツール（read_file, list_dir, search_code等）を自由に実行
@@ -494,7 +499,8 @@ xelyon --image screenshot.png --provider gemini "このUIの問題点を教え�
 ```
 
 **対応フォーマット**: PNG, JPEG, GIF, WebP
-**対応プロバイダー**: Gemini, Claude, OpenAI（DeepSeek, Ollama, Groqは非対応）
+**対応プロバイダー**: Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
+**制限**: `--image` は `--headless` / `--output-format json` と併用できません。`--resume` とも併用できません。
 
 ### その他のオプション
 
@@ -505,23 +511,36 @@ xelyon --version
 # ヘルプ表示
 xelyon --help
 
-# セッション再開
-xelyon --resume <session-id>
+# 1ターンだけ実行して終了（位置引数だけでも one-shot になります）
+xelyon --once "main.goを読んで説明して"
+xelyon "main.goを読んで説明して"
 
-# プロジェクト別セッション
-xelyon --project
+# query 引数があっても対話 TUI を強制
+xelyon --interactive "この続きから相談したい"
 
-# 圧縮せずにセッション開始（デバッグ用）
-xelyon --no-compress
+# one-shot のヘッダー/ステータス表示を抑制
+xelyon --quiet "短く要約して"
 
-# ページャーを無効化
-xelyon --no-pager
+# セッション再開（最後のセッションのみ）
+xelyon --resume
+
+# ツール確認を自動承認
+xelyon --auto-approve "テストを直して"
 
 # Headlessモード（JSON出力、対話なし）
 xelyon --headless "main.goを読んで説明して"
 xelyon --output-format json "バグを修正して"
 
+# バージョンチェックを無効化
+xelyon --no-update-check
+
+# legacy classic REPL を使う（deprecated）
+xelyon --no-tui
 ```
+
+`--resume` は最後のセッションを再開します。session ID は受け取らず、query 引数や `--image` とは併用できません。`--once` とも併用できません。
+
+`--quiet` は one-shot 実行専用です。`--interactive` や通常の対話セッションでは使用できません。
 
 ## 環境変数
 

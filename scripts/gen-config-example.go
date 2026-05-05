@@ -9,6 +9,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/config"

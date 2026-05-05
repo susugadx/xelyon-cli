@@ -26,7 +26,6 @@ XELYON CLIの設定方法と全オプションのリファレンスです。
 - string（テキスト入力）
 - select（番号選択）
 - []string（項目追加/削除）
-- map[string]string（エントリ追加/編集/削除）
 - map[string]struct（サブメニューで編集）
 
 詳細は [コマンド一覧: /config](commands.md#config) を参照してください。
@@ -56,6 +55,9 @@ vi ~/.xelyon/config.yaml
 
 <!-- CONFIG-EXAMPLE-START -->
 ```yaml
+# ============================================================
+# プロバイダー設定
+# ============================================================
 default_provider: deepseek
 # デフォルトで使用するモデル
 default_model: deepseek-v4-flash
@@ -167,7 +169,7 @@ agent_instructions:
             - ~/.xelyon/CLAUDE.md
     # CLAUDE.local.md / AGENTS.local.md など local 系 guidance を許可
     include_local_files: false
-    # @AGENTS.md / @path import 展開（現状は将来互換用）
+    # @path import 行を展開して読み込む（相対パスは当該 guidance file 基準）
     expand_imports: false
     # 1ファイルあたりの最大読み込みバイト数
     max_file_bytes: 20000
@@ -299,8 +301,6 @@ DeepSeek の推奨モデル:
 
 `deepseek-chat` / `deepseek-reasoner` は `deepseek-v4-flash` 相当の legacy alias です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。DeepSeek V4 は 1M context / 最大 384K output です。
 
-DeepSeek V4 Pro には 2026-05-05 15:59 UTC までの期間限定 75% off がありますが、静的な `pricing.yaml` には通常価格を記録しています。
-
 ### 会話履歴圧縮設定 (`compression`)
 
 Context Window（コンテキストウィンドウ）を管理し、トークン上限エラーを防ぎます。
@@ -341,7 +341,7 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 ```
 🗜️ Auto-compressing history (162K >= 150K threshold, 81% context used)...
    Before: 162,000 tokens → After: 45,000 tokens
-   💡 Disable with: xelyon config set compression.enabled false
+   💡 Disable by setting compression.enabled: false in config.yaml
 ```
 
 ### ストリーミング設定 (`streaming`)
@@ -616,9 +616,12 @@ paste:
 
 ```yaml
 command_aliases:
-  c: compress    # /c → /compress
-  u: use         # /u → /use
+  c: config      # /c → /config（デフォルト）
+  u: use         # /u → /use（デフォルト）
+  z: compress    # /z → /compress（custom alias 例）
 ```
+
+`command_aliases` は `/` を除いた alias 名を、既存 command 名へ展開します。デフォルトは `c: config` と `u: use` です。
 
 ## 環境変数
 
@@ -747,15 +750,6 @@ export XELYON_INTERACTIVE_CONFIRM=1
 # ループ検知回数（設定ファイル上書き）
 export XELYON_LOOP_THRESHOLD=5
 
-# APIリトライ回数
-export XELYON_API_RETRY_COUNT=5
-
-# API初回待機秒数
-export XELYON_API_RETRY_INITIAL_DELAY=2
-
-# API最大待機秒数
-export XELYON_API_RETRY_MAX_DELAY=60
-
 # 差分表示行数
 export XELYON_DIFF_CONTEXT_LINES=20
 
@@ -782,6 +776,9 @@ export OPENAI_FUNCTION_CALLING=0
 # DeepSeek Function Calling 無効化
 export DEEPSEEK_FUNCTION_CALLING=0
 
+# Azure OpenAI Function Calling 無効化
+export AZURE_OPENAI_FUNCTION_CALLING=0
+
 # Gemini Function Calling 無効化
 export GEMINI_FUNCTION_CALLING=0
 
@@ -793,16 +790,21 @@ export CLAUDE_FUNCTION_CALLING=0
 
 # Ollama Function Calling 無効化
 export OLLAMA_FUNCTION_CALLING=0
+
+# OpenRouter Function Calling 無効化
+export OPENROUTER_FUNCTION_CALLING=0
 ```
 
 | 環境変数 | デフォルト | 説明 |
 |---------|-----------|------|
 | `OPENAI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `DEEPSEEK_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
+| `AZURE_OPENAI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `GEMINI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `GROQ_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `CLAUDE_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `OLLAMA_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
+| `OPENROUTER_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 
 **使用例:**
 ```bash
@@ -830,6 +832,9 @@ export GEMINI_API_URL=https://your-proxy.com/v1beta/models
 
 # Groq
 export GROQ_API_URL=https://your-proxy.com/openai/v1/chat/completions
+
+# OpenRouter
+export OPENROUTER_API_URL=https://your-proxy.com/v1/chat/completions
 ```
 
 ## 設定ファイルの編集
@@ -871,11 +876,6 @@ compression:
 ```yaml
 compression:
   enabled: false         # 手動で /compress を使用
-```
-
-または:
-```bash
-xelyon config set compression.enabled false
 ```
 
 ### 2. プロバイダーごとにモデルを変更

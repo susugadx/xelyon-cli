@@ -138,6 +138,17 @@ func TestAddComments(t *testing.T) {
 	}
 }
 
+func TestAddCommentsSeparatesTopLevelSections(t *testing.T) {
+	output := AddComments("general:\n    ui_language: auto\ncompression:\n    enabled: true\n")
+
+	if !strings.Contains(output, "ui_language: auto\n\n# ============================================================") {
+		t.Fatalf("expected blank line before next section, got %s", output)
+	}
+	if strings.Contains(output, "# 一般設定\n\n# ============================================================") {
+		t.Fatalf("unexpected blank line inside section header, got %s", output)
+	}
+}
+
 func TestGenerateExampleFile(t *testing.T) {
 	output, err := GenerateExampleFile(config.DefaultConfig())
 	if err != nil {
@@ -147,6 +158,8 @@ func TestGenerateExampleFile(t *testing.T) {
 	text := string(output)
 	for _, expected := range []string{
 		"# XELYON CLI 設定例",
+		"# デフォルトで使用するモデル",
+		"# プロバイダーごとのモデル設定",
 		"provider: gemini",
 		"lsp:",
 		"agent_instructions:",

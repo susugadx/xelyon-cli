@@ -16,12 +16,23 @@ func annotateExampleSectionComments(mapping *yaml.Node) {
 			continue
 		}
 
-		keyNode.HeadComment = mergeNodeHeadComment(keyNode.HeadComment, buildExampleSectionHeaderComment(info))
+		sectionHeader := buildExampleSectionHeaderComment(info)
+		keyNode.HeadComment = mergeNodeHeadComment(keyNode.HeadComment, sectionHeader)
+		if sectionHeader == "" {
+			keyNode.HeadComment = mergeNodeHeadComment(keyNode.HeadComment, topLevelFieldComment(info, keyNode.Value))
+		}
 		if valueNode.Kind != yaml.MappingNode {
 			continue
 		}
 		annotateExampleFieldComments(valueNode, info.Fields, "")
 	}
+}
+
+func topLevelFieldComment(info SectionInfo, key string) string {
+	if len(info.Fields) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(info.Fields[key])
 }
 
 func annotateExampleFieldComments(mapping *yaml.Node, fields map[string]string, prefix string) {

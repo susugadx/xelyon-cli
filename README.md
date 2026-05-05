@@ -35,13 +35,14 @@ DeepSeek, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedroc
 - **コード検索**: `search_code` は language-aware router として動作し、`mode=auto` を既定に symbol-aware / literal / regex の各レーンを内部選択（複数パターン、結果分類、不正regex検出にも対応）
 - **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収
 - **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す
-- **AST基盤（実験的）**: `internal/ast` に Pure Go Tree-sitter（gotreesitter）ベースの共通解析基盤を追加。Phase 1 では Go ファイルのパース、シンボル抽出、行分類を検証段階で提供し、`read_file(symbol=...)` でシンボル範囲の読み出しに利用。legacy `str_replace` では Go ファイル書き込み前に AST 構文検証を行い、問題があれば警告を返す
+- **AST基盤**: `internal/ast` の Pure Go Tree-sitter（gotreesitter）ベース共通解析基盤を、Go の symbol-aware 検索、`read_file(symbol=...)`、legacy `str_replace` の書き込み前構文検証で利用
 - **開発支援**: bash（git, テスト, フォーマット等すべて対応）
 - **LSP連携**: シンボル検索（定義・参照・実装）
 
 ### 📋 確認ベースの安全設計
-- 安全なツール（ファイル読み取り等）は自動実行
-- 危険なツール（ファイル編集、bash、Web検索等）は毎回確認
+- 既定の `execution.mode: balanced` では、読み取り系は自動実行し、編集や通常 bash などは確認します
+- `execution.mode: trusted` は workspace 内の通常編集を自動化し、高影響操作だけ確認します
+- `execution.mode: full_auto` は原則自動実行し、`execution.always_confirm` に指定したカテゴリだけ確認します
 - `--auto-approve`で信頼環境向け全ツール自動承認（SafetyLow含む）
 - **既定編集フロー**: `search_code` / `read_file` で文脈を集めてから `apply_patch` を構築し、差分確認のうえで適用。legacy edit mode では従来どおり `str_replace` / `write_file` / `delete_file` を使用可能
 
@@ -287,8 +288,8 @@ provider_models:
     default_model: gemini-3.1-pro-preview-customtools
     max_output_tokens: 65536   # デフォルト: 65536
   deepseek:
-    default_model: deepseek-chat
-    max_output_tokens: 8192    # デフォルト: 8192
+    default_model: deepseek-v4-flash
+    max_output_tokens: 16384   # デフォルト: 16384
   openai:
     default_model: corp-gpt-deployment
     catalog_model: gpt-5.4     # deployment/alias の料金・context 判定に使う既知モデル
@@ -304,7 +305,7 @@ provider_models:
 | gemini     | 65536                     |
 | openai     | 16384                     |
 | azure      | 16384                     |
-| deepseek   | 8192                      |
+| deepseek   | 16384                     |
 | groq       | 8192                      |
 | ollama     | 4096                      |
 | openrouter | 64000                     |
@@ -313,10 +314,13 @@ provider_models:
 
 ```yaml
 # ~/.xelyon/config.yaml
-tool_confirm:
-  auto_approve_safe: true    # SafetyHigh（読み取り）自動承認（デフォルト: true）
-  auto_approve_medium: true  # SafetyMedium（書き込み）自動承認（デフォルト: false）
+execution:
+  mode: balanced             # balanced / trusted / full_auto
+  always_confirm: []         # どのモードでも確認するカテゴリ
+  safe_shell_commands: []    # verification / env 用に追加で自動許可する shell command
 ```
+
+既存の `tool_confirm` は互換読み込みされますが、新規設定では `execution.mode` を使用してください。
 
 ### 中間出力の表示レベル
 
@@ -327,11 +331,6 @@ output:
 ```
 
 `assistant_updates` は assistant prose の途中表示だけを制御します。`phase` は通常モードの逐次実況を短いフェーズ要約に寄せ、`off` はさらに抑制します。`apply_patch` の diff 表示やツール出力の折りたたみ挙動は変わりません。
-
-| 設定 | 対象ツール | デフォルト |
-|------|-----------|-----------|
-| `auto_approve_safe` | read_file, list_dir, search_code 等 | true |
-| `auto_approve_medium` | str_replace, write_file, web_search 等 | false |
 
 ```bash
 # 全ツール自動承認（信頼できる環境向け、SafetyLow含む）
@@ -390,20 +389,18 @@ final_checks:
 ### 設定管理
 
 ```bash
-> /config         # global config の対話式設定メニュー（50+設定項目を編集可能）
+> /config         # global config の対話式設定メニュー
 > /config show    # global config を表示（デフォルトとの差分を ⚡ で表示）
 > /project        # project config (xelyon.yaml) を対話式で編集
 ```
 
-対話式メニューでは20カテゴリ、50以上の設定項目を編集可能:
-- Provider & Model, Compression, Tool Confirm
-- Bash Safety, LSP Servers, Plan Mode, MCP など
+対話式メニューでは Provider & Model、Execution Mode、Compression、Project Map、LSP Servers、Web Search、MCP、Final Checks などをカテゴリ別に管理できます。
 
 ## ドキュメント
 
 | ドキュメント | 内容 |
 |------------|------|
-| [コマンド一覧](docs/commands.md) | 全コマンド、24ツール、使用例 |
+| [コマンド一覧](docs/commands.md) | 対話型/CLIコマンド、フラグ、使用例 |
 | [プロバイダー設定](docs/providers.md) | 各プロバイダーのAPIキー取得方法 |
 | [設定リファレンス](docs/config.md) | config.yaml と環境変数 |
 | [MCP連携](docs/mcp.md) | 外部ツール追加 |
@@ -417,7 +414,7 @@ xelyon-cli の開発に参加したい方向け：
 ```bash
 git clone https://github.com/susugadx/xelyon-cli.git
 cd xelyon-cli
-go build -o xelyon
+make build
 ./xelyon
 ```
 

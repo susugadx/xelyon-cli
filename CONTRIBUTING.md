@@ -5,7 +5,7 @@ XELYON CLIへの貢献ありがとうございます！
 ## 開発環境セットアップ
 
 ### 必要なもの
-- Go 1.24以上
+- Go 1.26（toolchain go1.26.1）
 - Git
 
 ### セットアップ手順
@@ -18,7 +18,7 @@ cd xelyon-cli
 go mod tidy
 
 # ビルド
-go build -o xelyon
+make build
 
 # 環境変数設定
 export DEEPSEEK_API_KEY="your-api-key"
@@ -59,8 +59,9 @@ feat: Web検索プロバイダー設定を追加
 ```
 
 ### ドキュメント更新ルール（必須）
-機能追加・変更時は**必ず**以下を同時に更新：
-- **README.md**: 使い方、コマンド説明、バージョン履歴
+機能追加・変更時は、影響するユーザー向けドキュメントを同時に更新してください：
+- **README.md**: 主要な使い方、コマンド説明
+- **docs/**: 詳細な設定、プロバイダー、コマンド、運用手順
 
 ドキュメント更新なしのPRは受け付けません。
 
@@ -72,13 +73,13 @@ feat: Web検索プロバイダー設定を追加
 go fmt ./...
 
 # ビルド確認
-go build -o xelyon
+make build
 
 # テスト（追加されている場合）
-go test ./...
+go test -tags grammar_set_core ./...
 
-# Linter（推奨）
-golangci-lint run
+# 主要チェック
+make ci-check
 ```
 
 ### Slash候補順序の更新フロー
@@ -98,7 +99,7 @@ go test ./internal/commandruntime -run '^$' -fuzz=FuzzSplitStrict -fuzztime=30s 
 ```
 
 ### 設定を追加・変更した場合
-設定オプションを追加・変更した場合は、以下を実行してドキュメントを更新してください：
+設定オプション、config docs、generated registry、generated help、コマンド docs の生成元を追加・変更した場合は、以下を実行してください：
 
 ```bash
 make gen-all
@@ -107,6 +108,9 @@ make gen-all
 これにより以下が自動生成されます：
 - `config.yaml.example` - 設定例ファイル（コメント付き）
 - `docs/config.md` 内の設定例セクション
+- `internal/config/registry_generated.go` - `/config` 用 registry
+- `internal/agent/help_generated.go` - `/help` 用テキスト
+- `docs/commands.md` - 未記載コマンドの骨格追記
 
 ### コーディング規約
 - すべてのI/O操作でエラーチェック必須

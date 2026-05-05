@@ -1,6 +1,9 @@
 package configgen
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestReplaceConfigExampleBlock(t *testing.T) {
 	content := "<!-- CONFIG-EXAMPLE-START -->\nold\n<!-- CONFIG-EXAMPLE-END -->"
@@ -13,6 +16,30 @@ func TestReplaceConfigExampleBlock(t *testing.T) {
 	}
 	if contains := HasConfigDetailsMarkers(updated); contains {
 		t.Fatal("unexpected details marker detection")
+	}
+}
+
+func TestReplaceConfigExampleBlockKeepsSectionSpacing(t *testing.T) {
+	example := configExampleFileHeader + `# ============================================================
+# 一般設定
+# ============================================================
+general:
+  ui_language: auto
+# ============================================================
+# 会話履歴圧縮設定
+# ============================================================
+compression:
+  enabled: true
+`
+	content := "<!-- CONFIG-EXAMPLE-START -->\nold\n<!-- CONFIG-EXAMPLE-END -->"
+
+	updated, err := ReplaceConfigExampleBlock(content, example)
+	if err != nil {
+		t.Fatalf("ReplaceConfigExampleBlock returned error: %v", err)
+	}
+
+	if !strings.Contains(updated, "ui_language: auto\n\n# ============================================================") {
+		t.Fatalf("expected blank line before next generated section, got %s", updated)
 	}
 }
 

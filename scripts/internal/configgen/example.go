@@ -73,5 +73,25 @@ func AddComments(yamlStr string) string {
 	if err != nil {
 		return strings.TrimRight(yamlStr, "\n") + "\n"
 	}
-	return string(out)
+	return formatExampleOutput(string(out))
+}
+
+func formatExampleOutput(output string) string {
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	var formatted []string
+	for i, line := range lines {
+		if isExampleSectionHeaderStart(lines, i) && len(formatted) > 0 && formatted[len(formatted)-1] != "" {
+			formatted = append(formatted, "")
+		}
+		formatted = append(formatted, line)
+	}
+	return strings.Join(formatted, "\n") + "\n"
+}
+
+func isExampleSectionHeaderStart(lines []string, index int) bool {
+	const separator = "# ============================================================"
+	return index+2 < len(lines) &&
+		lines[index] == separator &&
+		strings.HasPrefix(lines[index+1], "# ") &&
+		lines[index+2] == separator
 }

@@ -57,7 +57,7 @@ func formatConfigExampleFromYAML(example string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return "```yaml\n" + string(out) + "```", true
+	return "```yaml\n" + formatExampleOutput(string(out)) + "```", true
 }
 
 func stripConfigExampleHeaderComment(comment string) string {
