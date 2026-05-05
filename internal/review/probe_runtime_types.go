@@ -2,19 +2,6 @@ package review
 
 import "time"
 
-// ReviewProbeMode は review probe の実行モードを表す。
-type ReviewProbeMode string
-
-const (
-	// ReviewProbeHostReadOnly は元 repo 上で read-only policy のコマンドだけを実行する。
-	ReviewProbeHostReadOnly ReviewProbeMode = "host_readonly"
-	// ReviewProbeScratchOnly は repo 外 scratch に生成ファイルだけを置いて実行する。
-	ReviewProbeScratchOnly ReviewProbeMode = "scratch_only"
-	// ReviewProbeRepoSandbox は元 repo の現在状態を一時 worktree へコピーして実行する。
-	// OS/network sandbox ではないため、元 repo の mutation は実行前後 snapshot で検出する。
-	ReviewProbeRepoSandbox ReviewProbeMode = "repo_sandbox"
-)
-
 // ReviewProbeStatus は probe 実行結果の状態を表す。
 type ReviewProbeStatus string
 
@@ -26,7 +13,12 @@ const (
 	ReviewProbeMutatedWorktree ReviewProbeStatus = "mutated_worktree"
 )
 
-// ReviewProbeRequest は review 中の検証実行要求を表す。
+// ReviewProbeRequest は ProbeRunner.Run に渡す runtime 内部の検証実行要求を表す。
+// LLM から直接 decode する schema ではなく、将来の validated ReviewProbePlan から
+// 変換された後に runner が扱う契約として維持する。
+//
+// host_readonly、scratch_only、repo_sandbox の filesystem/command 実行境界は
+// この型ではなく、runner 側の validation と policy が扱う。
 type ReviewProbeRequest struct {
 	ID             string
 	Purpose        string
@@ -38,7 +30,7 @@ type ReviewProbeRequest struct {
 }
 
 // ReviewProbeFile は probe 実行時に必要な一時ファイル定義を表す。
-// host_readonly では利用されず、scratch/sandbox 向けの将来拡張として保持する。
+// host_readonly では利用されず、scratch/sandbox 向けの生成ファイルとして扱う。
 type ReviewProbeFile struct {
 	Path    string
 	Content string

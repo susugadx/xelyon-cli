@@ -460,15 +460,6 @@ func isKnownReviewGroupSeverity(severity ReviewGroupSeverity) bool {
 	}
 }
 
-func isKnownReviewProbeMode(mode ReviewProbeMode) bool {
-	switch mode {
-	case ReviewProbeHostReadOnly, ReviewProbeScratchOnly, ReviewProbeRepoSandbox:
-		return true
-	default:
-		return false
-	}
-}
-
 func isKnownReviewProbeStatus(status ReviewProbeStatus) bool {
 	switch status {
 	case ReviewProbePassed, ReviewProbeFailed, ReviewProbeBlocked, ReviewProbeTimedOut, ReviewProbeMutatedWorktree:
