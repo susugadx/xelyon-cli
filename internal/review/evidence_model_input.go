@@ -1,11 +1,6 @@
 package review
 
-import "path/filepath"
-
-const (
-	reviewEvidenceRepoRootPathDisplay        = "<repo_root>"
-	reviewEvidenceTruncatedLinkTargetDisplay = "<truncated-link-target>"
-)
+const reviewEvidenceRepoRootPathDisplay = "<repo_root>"
 
 // ReviewEvidenceModelInput は ReviewEvidenceBundle を LLM 入力向けに正規化した DTO。
 type ReviewEvidenceModelInput struct {
@@ -136,15 +131,15 @@ func BuildReviewEvidenceModelInput(bundle ReviewEvidenceBundle) ReviewEvidenceMo
 
 func buildReviewEvidenceChangeInventoryInput(repoRoot string, inventory ReviewChangeInventory) ReviewEvidenceChangeInventoryInput {
 	return ReviewEvidenceChangeInventoryInput{
-		Generated:    buildReviewEvidencePathDisplays(repoRoot, inventory.Generated),
-		Tests:        buildReviewEvidencePathDisplays(repoRoot, inventory.Tests),
-		Docs:         buildReviewEvidencePathDisplays(repoRoot, inventory.Docs),
-		Config:       buildReviewEvidencePathDisplays(repoRoot, inventory.Config),
-		Production:   buildReviewEvidencePathDisplays(repoRoot, inventory.Production),
-		NewFiles:     buildReviewEvidencePathDisplays(repoRoot, inventory.NewFiles),
-		DeletedFiles: buildReviewEvidencePathDisplays(repoRoot, inventory.DeletedFiles),
-		RenamedFiles: buildReviewEvidencePathDisplays(repoRoot, inventory.RenamedFiles),
-		Untracked:    buildReviewEvidencePathDisplays(repoRoot, inventory.Untracked),
+		Generated:    formatReviewEvidencePathDisplays(repoRoot, inventory.Generated),
+		Tests:        formatReviewEvidencePathDisplays(repoRoot, inventory.Tests),
+		Docs:         formatReviewEvidencePathDisplays(repoRoot, inventory.Docs),
+		Config:       formatReviewEvidencePathDisplays(repoRoot, inventory.Config),
+		Production:   formatReviewEvidencePathDisplays(repoRoot, inventory.Production),
+		NewFiles:     formatReviewEvidencePathDisplays(repoRoot, inventory.NewFiles),
+		DeletedFiles: formatReviewEvidencePathDisplays(repoRoot, inventory.DeletedFiles),
+		RenamedFiles: formatReviewEvidencePathDisplays(repoRoot, inventory.RenamedFiles),
+		Untracked:    formatReviewEvidencePathDisplays(repoRoot, inventory.Untracked),
 	}
 }
 
@@ -214,57 +209,6 @@ func buildReviewEvidenceUntrackedFileInputs(repoRoot string, files []ReviewUntra
 	return result
 }
 
-func formatReviewEvidenceSymlinkTargetDisplay(repoRoot string, file ReviewUntrackedFile) string {
-	if !file.Symlink {
-		return ""
-	}
-	linkTarget := file.LinkTarget
-	if linkTarget == "" {
-		return ""
-	}
-	if file.Truncated {
-		return reviewEvidenceTruncatedLinkTargetDisplay
-	}
-
-	canonicalRepoRoot, ok := reviewEvidenceCanonicalRepoRootDisplayBase(repoRoot)
-	if !ok {
-		return reviewEvidenceOutsideRepoPathDisplay
-	}
-
-	if isReviewEvidenceWindowsAbsolutePath(linkTarget) && !filepath.IsAbs(linkTarget) {
-		return reviewEvidenceOutsideRepoPathDisplay
-	}
-	if filepath.IsAbs(linkTarget) {
-		if display, ok := formatReviewEvidenceAbsolutePathDisplay(canonicalRepoRoot, linkTarget); ok {
-			return display
-		}
-		return reviewEvidenceOutsideRepoPathDisplay
-	}
-
-	symlinkDisplayPath := formatReviewEvidencePathDisplay(canonicalRepoRoot, file.Path)
-	if symlinkDisplayPath == reviewEvidenceOutsideRepoPathDisplay {
-		return reviewEvidenceOutsideRepoPathDisplay
-	}
-	symlinkParent := filepath.Dir(filepath.FromSlash(symlinkDisplayPath))
-	resolvedTarget := filepath.Clean(filepath.Join(canonicalRepoRoot, symlinkParent, filepath.FromSlash(linkTarget)))
-	if display, ok := formatReviewEvidencePathInsideRepoDisplay(canonicalRepoRoot, resolvedTarget); ok {
-		return display
-	}
-	return reviewEvidenceOutsideRepoPathDisplay
-}
-
-func reviewEvidenceCanonicalRepoRootDisplayBase(repoRoot string) (string, bool) {
-	resolvedRepoRoot, err := resolveReviewEvidenceDir(repoRoot, "")
-	if err != nil {
-		return "", false
-	}
-	canonicalRepoRoot, err := canonicalReviewEvidenceRepoRoot(resolvedRepoRoot)
-	if err != nil {
-		return "", false
-	}
-	return canonicalRepoRoot, true
-}
-
 func buildReviewEvidenceLimitsInput(limits ReviewEvidenceLimits) ReviewEvidenceLimitsInput {
 	return ReviewEvidenceLimitsInput{
 		MaxCommandOutputBytes:  limits.MaxCommandOutputBytes,
@@ -320,19 +264,4 @@ func buildReviewEvidenceRuleFileTruncationInputs(repoRoot string, files []Review
 		})
 	}
 	return result
-}
-
-func buildReviewEvidencePathDisplays(repoRoot string, paths []string) []string {
-	result := make([]string, 0, len(paths))
-	for _, path := range paths {
-		result = append(result, formatReviewEvidencePathDisplay(repoRoot, path))
-	}
-	return result
-}
-
-func formatReviewEvidenceOptionalPathDisplay(repoRoot, path string) string {
-	if path == "" {
-		return ""
-	}
-	return formatReviewEvidencePathDisplay(repoRoot, path)
 }
