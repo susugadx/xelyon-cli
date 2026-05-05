@@ -34,6 +34,7 @@ func rejectExecutableInsideBlockedRoots(resolvedPath string, roots ...string) er
 
 func normalizeBlockedRoots(roots []string) ([]string, error) {
 	normalized := make([]string, 0, len(roots))
+	seen := make(map[string]struct{}, len(roots)*2)
 	for _, root := range roots {
 		trimmed := strings.TrimSpace(root)
 		if trimmed == "" {
@@ -44,9 +45,28 @@ func normalizeBlockedRoots(roots []string) ([]string, error) {
 		if err != nil {
 			return nil, newBlockedCommandErrorf("failed to resolve blocked root %q: %v", trimmed, err)
 		}
-		normalized = append(normalized, filepath.Clean(absRoot))
+		addNormalizedBlockedRoot(&normalized, seen, filepath.Clean(absRoot))
+
+		evaluatedRoot, err := filepath.EvalSymlinks(absRoot)
+		if err != nil {
+			return nil, newBlockedCommandErrorf("failed to evaluate blocked root symlink %q: %v", absRoot, err)
+		}
+		evaluatedAbsRoot, err := filepath.Abs(evaluatedRoot)
+		if err != nil {
+			return nil, newBlockedCommandErrorf("failed to resolve blocked root symlink %q: %v", absRoot, err)
+		}
+		addNormalizedBlockedRoot(&normalized, seen, filepath.Clean(evaluatedAbsRoot))
 	}
 	return normalized, nil
+}
+
+func addNormalizedBlockedRoot(normalized *[]string, seen map[string]struct{}, root string) {
+	key := resolverPathKey(root)
+	if _, ok := seen[key]; ok {
+		return
+	}
+	seen[key] = struct{}{}
+	*normalized = append(*normalized, root)
 }
 
 func rejectExecutablePathInsideBlockedRoots(resolvedPath string, blockedRoots []string) error {
@@ -63,8 +83,13 @@ func rejectExecutablePathInsideBlockedRoots(resolvedPath string, blockedRoots []
 }
 
 func samePathForResolver(a, b string) bool {
+	return resolverPathKey(a) == resolverPathKey(b)
+}
+
+func resolverPathKey(path string) string {
+	cleaned := filepath.Clean(path)
 	if runtime.GOOS == "windows" {
-		return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+		return strings.ToLower(cleaned)
 	}
-	return filepath.Clean(a) == filepath.Clean(b)
+	return cleaned
 }

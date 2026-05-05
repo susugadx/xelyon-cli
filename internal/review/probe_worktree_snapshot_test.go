@@ -2,8 +2,11 @@ package review
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -73,4 +76,43 @@ func TestCaptureWorktreeSnapshot_UntrackedDirectoryUsesFileEntries(t *testing.T)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("diffWorktreeSnapshots() = %#v, want %#v", got, want)
 	}
+}
+
+func TestCaptureWorktreeSnapshot_BlocksRepoControlledGitExecutableOnPATH(t *testing.T) {
+	repo := newProbeTestRepo(t)
+	repoBin := filepath.Join(repo, "bin")
+	marker := filepath.Join(t.TempDir(), "repo-git.marker")
+	t.Setenv("REVIEW_PROBE_MARKER", marker)
+	createProbeTestScriptCommand(t, repoBin, "git", `printf invoked > "$REVIEW_PROBE_MARKER"`)
+	t.Setenv("PATH", strings.Join([]string{repoBin, os.Getenv("PATH")}, string(os.PathListSeparator)))
+
+	_, err := captureWorktreeSnapshot(context.Background(), repo)
+	if err == nil {
+		t.Fatal("captureWorktreeSnapshot() error = nil, want repo-controlled git to be blocked")
+	}
+	if !errors.Is(err, ErrHostReadOnlyBlocked) {
+		t.Fatalf("captureWorktreeSnapshot() error = %v, want ErrHostReadOnlyBlocked", err)
+	}
+	assertFileAbsent(t, marker)
+}
+
+func TestCaptureWorktreeSnapshot_BlocksRepoControlledGitExecutableThroughSymlinkedRepoRoot(t *testing.T) {
+	repo := newProbeTestRepo(t)
+	linkRoot := filepath.Join(t.TempDir(), "repo-link")
+	createReviewEvidenceSymlink(t, repo, linkRoot)
+
+	repoBin := filepath.Join(repo, "bin")
+	marker := filepath.Join(t.TempDir(), "repo-git.marker")
+	t.Setenv("REVIEW_PROBE_MARKER", marker)
+	createProbeTestScriptCommand(t, repoBin, "git", `printf invoked > "$REVIEW_PROBE_MARKER"`)
+	t.Setenv("PATH", strings.Join([]string{repoBin, os.Getenv("PATH")}, string(os.PathListSeparator)))
+
+	_, err := captureWorktreeSnapshot(context.Background(), linkRoot)
+	if err == nil {
+		t.Fatal("captureWorktreeSnapshot() error = nil, want repo-controlled git behind symlink root to be blocked")
+	}
+	if !errors.Is(err, ErrHostReadOnlyBlocked) {
+		t.Fatalf("captureWorktreeSnapshot() error = %v, want ErrHostReadOnlyBlocked", err)
+	}
+	assertFileAbsent(t, marker)
 }

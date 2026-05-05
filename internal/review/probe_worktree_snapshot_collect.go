@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -38,8 +39,19 @@ func captureWorktreeSnapshot(ctx context.Context, repoRoot string) (worktreeSnap
 }
 
 func gitStatusPorcelainV1Z(ctx context.Context, repoRoot string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	env := os.Environ()
+	gitPath, err := resolveCommandPath("git", commandResolutionContext{
+		RepoRoot: repoRoot,
+		WorkDir:  repoRoot,
+		Env:      env,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, gitPath, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	cmd.Dir = repoRoot
+	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("git status --porcelain=v1 -z failed: %w: %s", err, strings.TrimSpace(string(out)))
