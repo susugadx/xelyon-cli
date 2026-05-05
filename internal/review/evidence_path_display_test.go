@@ -145,7 +145,7 @@ func TestFormatReviewEvidencePathDisplay(t *testing.T) {
 	}
 }
 
-func TestFormatReviewEvidencePathDisplaySymlinkRepoRootCWD(t *testing.T) {
+func TestFormatReviewEvidencePathDisplayDoesNotResolveSymlinkRepoRootCWD(t *testing.T) {
 	repo := filepath.Clean(t.TempDir())
 	nested := filepath.Join(repo, "nested")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
@@ -157,8 +157,8 @@ func TestFormatReviewEvidencePathDisplaySymlinkRepoRootCWD(t *testing.T) {
 	linkCWD := filepath.Join(linkRoot, "nested")
 
 	got := formatReviewEvidencePathDisplay(repo, linkCWD)
-	if got != "nested" {
-		t.Fatalf("formatReviewEvidencePathDisplay(%q, %q) = %q, want %q", repo, linkCWD, got, "nested")
+	if got != reviewEvidenceOutsideRepoPathDisplay {
+		t.Fatalf("formatReviewEvidencePathDisplay(%q, %q) = %q, want %q", repo, linkCWD, got, reviewEvidenceOutsideRepoPathDisplay)
 	}
 	if strings.Contains(got, repo) || strings.Contains(got, linkRoot) || filepath.IsAbs(got) {
 		t.Fatalf("formatReviewEvidencePathDisplay(%q, %q) leaked absolute context %q", repo, linkCWD, got)

@@ -16,7 +16,7 @@ func formatReviewEvidenceSymlinkTargetDisplay(repoRoot string, file ReviewUntrac
 		return reviewEvidenceTruncatedLinkTargetDisplay
 	}
 
-	canonicalRepoRoot, ok := canonicalReviewEvidencePathDisplayRepoRoot(repoRoot)
+	displayRepoRoot, ok := normalizeReviewEvidencePathDisplayRepoRoot(repoRoot)
 	if !ok {
 		return reviewEvidenceOutsideRepoPathDisplay
 	}
@@ -25,19 +25,19 @@ func formatReviewEvidenceSymlinkTargetDisplay(repoRoot string, file ReviewUntrac
 		return reviewEvidenceOutsideRepoPathDisplay
 	}
 	if filepath.IsAbs(linkTarget) {
-		if display, ok := formatReviewEvidenceAbsolutePathDisplay(canonicalRepoRoot, linkTarget); ok {
+		if display, ok := formatReviewEvidenceAbsolutePathDisplay(displayRepoRoot, linkTarget); ok {
 			return display
 		}
 		return reviewEvidenceOutsideRepoPathDisplay
 	}
 
-	symlinkDisplayPath := formatReviewEvidencePathDisplayWithCanonicalRepoRoot(canonicalRepoRoot, file.Path)
+	symlinkDisplayPath := formatReviewEvidencePathDisplayWithRepoRoot(displayRepoRoot, file.Path)
 	if symlinkDisplayPath == reviewEvidenceOutsideRepoPathDisplay {
 		return reviewEvidenceOutsideRepoPathDisplay
 	}
 	symlinkParent := filepath.Dir(filepath.FromSlash(symlinkDisplayPath))
-	resolvedTarget := filepath.Clean(filepath.Join(canonicalRepoRoot, symlinkParent, filepath.FromSlash(linkTarget)))
-	if display, ok := formatReviewEvidenceRepoRelativePathDisplay(canonicalRepoRoot, resolvedTarget); ok {
+	resolvedTarget := filepath.Clean(filepath.Join(displayRepoRoot, symlinkParent, filepath.FromSlash(linkTarget)))
+	if display, ok := formatReviewEvidenceRepoRelativePathDisplay(displayRepoRoot, resolvedTarget); ok {
 		return display
 	}
 	return reviewEvidenceOutsideRepoPathDisplay

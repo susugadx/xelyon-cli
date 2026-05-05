@@ -2,6 +2,7 @@ package review
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -128,6 +129,47 @@ func TestBuildReviewEvidenceModelInputNormalizesRepoAbsoluteSymlinkTarget(t *tes
 	if got := input.UntrackedFiles[0].LinkTarget; got != "dir/target.txt" {
 		t.Fatalf("LinkTarget = %q, want %q", got, "dir/target.txt")
 	}
+}
+
+func TestBuildReviewEvidenceModelInputSymlinkTargetsDoNotRequireRepoRootExists(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "missing-repo")
+	if _, err := os.Stat(repo); !os.IsNotExist(err) {
+		t.Fatalf("test repo root %q unexpectedly exists or stat failed with non-ENOENT error: %v", repo, err)
+	}
+
+	bundle := ReviewEvidenceBundle{
+		TargetKind: TargetCurrentChanges,
+		RepoRoot:   repo,
+		UntrackedFiles: []ReviewUntrackedFile{
+			{
+				Path:       "dir/absolute-link",
+				Symlink:    true,
+				LinkTarget: filepath.Join(repo, "dir", "target.txt"),
+			},
+			{
+				Path:       "nested/link",
+				Symlink:    true,
+				LinkTarget: "../target.txt",
+			},
+			{
+				Path:       "nested/escape-link",
+				Symlink:    true,
+				LinkTarget: "../../outside.txt",
+			},
+		},
+	}
+
+	input := BuildReviewEvidenceModelInput(bundle)
+
+	got := make([]string, 0, len(input.UntrackedFiles))
+	for _, file := range input.UntrackedFiles {
+		got = append(got, file.LinkTarget)
+	}
+	assertStringSlice(t, got, []string{
+		"dir/target.txt",
+		"target.txt",
+		reviewEvidenceOutsideRepoPathDisplay,
+	})
 }
 
 func TestBuildReviewEvidenceModelInputResolvesRelativeSymlinkTargetFromLinkParent(t *testing.T) {

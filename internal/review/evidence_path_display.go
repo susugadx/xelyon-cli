@@ -8,11 +8,11 @@ import (
 const reviewEvidenceOutsideRepoPathDisplay = "<outside-repo>"
 
 func formatReviewEvidencePathDisplay(repoRoot, candidate string) string {
-	canonicalRepoRoot, ok := canonicalReviewEvidencePathDisplayRepoRoot(repoRoot)
+	displayRepoRoot, ok := normalizeReviewEvidencePathDisplayRepoRoot(repoRoot)
 	if !ok {
 		return reviewEvidenceOutsideRepoPathDisplay
 	}
-	return formatReviewEvidencePathDisplayWithCanonicalRepoRoot(canonicalRepoRoot, candidate)
+	return formatReviewEvidencePathDisplayWithRepoRoot(displayRepoRoot, candidate)
 }
 
 func formatReviewEvidenceOptionalPathDisplay(repoRoot, path string) string {
@@ -30,22 +30,18 @@ func formatReviewEvidencePathDisplays(repoRoot string, paths []string) []string 
 	return result
 }
 
-func canonicalReviewEvidencePathDisplayRepoRoot(repoRoot string) (string, bool) {
+func normalizeReviewEvidencePathDisplayRepoRoot(repoRoot string) (string, bool) {
 	if strings.TrimSpace(repoRoot) == "" {
 		return "", false
 	}
-	resolvedRepoRoot, err := resolveReviewEvidenceDir(repoRoot, "")
-	if err != nil {
+	if isReviewEvidenceWindowsAbsolutePath(repoRoot) && !filepath.IsAbs(repoRoot) {
 		return "", false
 	}
-	canonicalRepoRoot, err := canonicalReviewEvidenceRepoRoot(resolvedRepoRoot)
-	if err != nil {
-		return "", false
-	}
-	return canonicalRepoRoot, true
+	cleaned := filepath.Clean(filepath.FromSlash(repoRoot))
+	return cleaned, cleaned != "."
 }
 
-func formatReviewEvidencePathDisplayWithCanonicalRepoRoot(canonicalRepoRoot, candidate string) string {
+func formatReviewEvidencePathDisplayWithRepoRoot(repoRoot, candidate string) string {
 	if isReviewEvidenceWindowsAbsolutePath(candidate) && !filepath.IsAbs(candidate) {
 		return reviewEvidenceOutsideRepoPathDisplay
 	}
@@ -57,7 +53,7 @@ func formatReviewEvidencePathDisplayWithCanonicalRepoRoot(canonicalRepoRoot, can
 		return display
 	}
 
-	display, ok := formatReviewEvidenceAbsolutePathDisplay(canonicalRepoRoot, candidate)
+	display, ok := formatReviewEvidenceAbsolutePathDisplay(repoRoot, candidate)
 	if !ok {
 		return reviewEvidenceOutsideRepoPathDisplay
 	}
@@ -84,12 +80,7 @@ func formatReviewEvidenceAbsolutePathDisplay(repoRoot, candidate string) (string
 	if display, ok := formatReviewEvidenceRepoRelativePathDisplay(repoRoot, cleaned); ok {
 		return display, true
 	}
-
-	evaluated, err := filepath.EvalSymlinks(cleaned)
-	if err != nil {
-		return "", false
-	}
-	return formatReviewEvidenceRepoRelativePathDisplay(repoRoot, filepath.Clean(evaluated))
+	return "", false
 }
 
 func formatReviewEvidenceRepoRelativePathDisplay(repoRoot, candidate string) (string, bool) {
