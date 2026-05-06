@@ -9,8 +9,8 @@ import (
 func TestSuggestions_GoldenOrderForRootPrefix(t *testing.T) {
 	got := Suggestions("/")
 	gotNames := make([]string, 0, len(got))
-	for _, cmd := range got {
-		gotNames = append(gotNames, cmd.Name)
+	for _, suggestion := range got {
+		gotNames = append(gotNames, suggestion.InsertText)
 	}
 
 	wantCommands := commandcatalog.DiscoverableCommandsForSurface(commandcatalog.CommandSurfaceTUI)

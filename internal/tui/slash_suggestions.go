@@ -6,7 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
@@ -15,7 +14,7 @@ const maxSlashSuggestionRows = 8
 
 type slashSuggestionState struct {
 	prefix      string
-	suggestions []commandcatalog.CommandInfo
+	suggestions []slash.Suggestion
 	selected    int
 }
 
@@ -23,9 +22,9 @@ func (s slashSuggestionState) visible() bool {
 	return len(s.suggestions) > 0
 }
 
-func (s slashSuggestionState) selectedCommand() (commandcatalog.CommandInfo, bool) {
+func (s slashSuggestionState) selectedSuggestion() (slash.Suggestion, bool) {
 	if !s.visible() || s.selected < 0 || s.selected >= len(s.suggestions) {
-		return commandcatalog.CommandInfo{}, false
+		return slash.Suggestion{}, false
 	}
 	return s.suggestions[s.selected], true
 }
@@ -99,7 +98,7 @@ func (m *Model) afterSlashSuggestionChange(oldRows int) {
 	m.chromeDirty = true
 }
 
-func (m Model) visibleSlashSuggestionRows() []commandcatalog.CommandInfo {
+func (m Model) visibleSlashSuggestionRows() []slash.Suggestion {
 	if !m.slashSuggestions.visible() {
 		return nil
 	}
@@ -146,11 +145,8 @@ func (m *Model) moveSlashSuggestion(delta int) {
 	m.chromeDirty = true
 }
 
-func (m *Model) setInputToSlashSuggestion(cmd commandcatalog.CommandInfo, appendArgSpace bool) {
-	value := cmd.Name
-	if appendArgSpace && cmd.Args != "" {
-		value += " "
-	}
+func (m *Model) setInputToSlashSuggestion(suggestion slash.Suggestion, appendArgSpace bool) {
+	value := suggestion.CompletionText(appendArgSpace)
 	m.textInput.SetValue(value)
 	m.textInput.SetCursor(utf8.RuneCountInString(value))
 	m.clearSlashSuggestions()
@@ -173,13 +169,13 @@ func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		m.moveSlashSuggestion(1)
 		return m, nil, true
 	case msg.Type == tea.KeyTab:
-		if cmd, ok := m.slashSuggestions.selectedCommand(); ok {
-			m.setInputToSlashSuggestion(cmd, true)
+		if suggestion, ok := m.slashSuggestions.selectedSuggestion(); ok {
+			m.setInputToSlashSuggestion(suggestion, true)
 		}
 		return m, nil, true
 	case isEnterKey(msg):
-		if cmdInfo, ok := m.slashSuggestions.selectedCommand(); ok {
-			m.setInputToSlashSuggestion(cmdInfo, false)
+		if suggestion, ok := m.slashSuggestions.selectedSuggestion(); ok {
+			m.setInputToSlashSuggestion(suggestion, false)
 			updated, cmd := m.handleComposerSubmit()
 			if typed, ok := updated.(Model); ok {
 				m = typed
@@ -189,13 +185,6 @@ func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 
 	return m, nil, false
-}
-
-func slashSuggestionLabel(cmd commandcatalog.CommandInfo) string {
-	if cmd.Args == "" {
-		return cmd.Name
-	}
-	return cmd.Name + " " + cmd.Args
 }
 
 func paddedPlainText(text string, width int) string {

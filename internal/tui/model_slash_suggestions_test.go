@@ -44,7 +44,7 @@ func TestSlashSuggestions_FilterOnPrefix(t *testing.T) {
 	if got := len(m.slashSuggestions.suggestions); got != 1 {
 		t.Fatalf("suggestions len = %d, want 1", got)
 	}
-	if got := m.slashSuggestions.suggestions[0].Name; got != "/review" {
+	if got := m.slashSuggestions.suggestions[0].InsertText; got != "/review" {
 		t.Fatalf("suggestion = %q, want /review", got)
 	}
 }

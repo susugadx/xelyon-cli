@@ -3,7 +3,6 @@ package slash
 import (
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 )
 
@@ -59,9 +58,4 @@ func (c Command) IsBare(name string) bool {
 // Matches は command の alias 解決後の名前が指定名と一致するかを返す。
 func (c Command) Matches(name string) bool {
 	return c.ResolvedName == name
-}
-
-// Suggestions は prefix に一致する slash command 候補を返す。
-func Suggestions(prefix string) []commandcatalog.CommandInfo {
-	return commandcatalog.MatchDiscoverablePrefixForSurface(prefix, commandcatalog.CommandSurfaceTUI)
 }

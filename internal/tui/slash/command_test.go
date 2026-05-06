@@ -110,8 +110,8 @@ func TestSuggestionsMatchesCommandAndAlias(t *testing.T) {
 	if len(matches) == 0 {
 		t.Fatal("Suggestions(/q) returned no matches")
 	}
-	if matches[0].Name != "/exit" {
-		t.Fatalf("first suggestion = %q, want /exit alias owner", matches[0].Name)
+	if matches[0].InsertText != "/exit" {
+		t.Fatalf("first suggestion InsertText = %q, want /exit alias owner", matches[0].InsertText)
 	}
 }
 
@@ -120,11 +120,28 @@ func TestSuggestionsIncludesReviewCommand(t *testing.T) {
 	if len(matches) == 0 {
 		t.Fatal("Suggestions(/review) returned no matches")
 	}
-	if matches[0].Name != "/review" {
-		t.Fatalf("first suggestion = %q, want /review", matches[0].Name)
+	if matches[0].InsertText != "/review" {
+		t.Fatalf("first suggestion InsertText = %q, want /review", matches[0].InsertText)
 	}
 	if matches[0].Description != "Review current changes and find issues" {
 		t.Fatalf("review description = %q", matches[0].Description)
+	}
+}
+
+func TestSuggestionsExposeDisplayLabelAndCompletionText(t *testing.T) {
+	matches := Suggestions("/think")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/think) returned %d matches, want 1", len(matches))
+	}
+	suggestion := matches[0]
+	if suggestion.Label != "/think [on|off|level]" {
+		t.Fatalf("Label = %q, want %q", suggestion.Label, "/think [on|off|level]")
+	}
+	if got := suggestion.CompletionText(false); got != "/think" {
+		t.Fatalf("CompletionText(false) = %q, want /think", got)
+	}
+	if got := suggestion.CompletionText(true); got != "/think " {
+		t.Fatalf("CompletionText(true) = %q, want '/think '", got)
 	}
 }
 
@@ -133,7 +150,7 @@ func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
 	if len(matches) < 4 {
 		t.Fatalf("Suggestions(/) returned %d matches, want at least 4", len(matches))
 	}
-	got := []string{matches[0].Name, matches[1].Name, matches[2].Name, matches[3].Name}
+	got := []string{matches[0].InsertText, matches[1].InsertText, matches[2].InsertText, matches[3].InsertText}
 	want := []string{"/model", "/use", "/providers", "/think"}
 	for i := range want {
 		if got[i] != want[i] {
@@ -155,8 +172,8 @@ func TestSuggestionsIncludesInitCommand(t *testing.T) {
 	if len(matches) != 1 {
 		t.Fatalf("Suggestions(/init) returned %d matches, want 1", len(matches))
 	}
-	if matches[0].Name != "/init" {
-		t.Fatalf("first suggestion = %q, want /init", matches[0].Name)
+	if matches[0].InsertText != "/init" {
+		t.Fatalf("first suggestion InsertText = %q, want /init", matches[0].InsertText)
 	}
 }
 
@@ -165,7 +182,7 @@ func TestSuggestionsIncludesProjectCommand(t *testing.T) {
 	if len(matches) != 1 {
 		t.Fatalf("Suggestions(/project) returned %d matches, want 1", len(matches))
 	}
-	if matches[0].Name != "/project" {
-		t.Fatalf("first suggestion = %q, want /project", matches[0].Name)
+	if matches[0].InsertText != "/project" {
+		t.Fatalf("first suggestion InsertText = %q, want /project", matches[0].InsertText)
 	}
 }

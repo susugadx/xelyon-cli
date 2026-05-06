@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
@@ -20,7 +20,7 @@ func (m Model) renderSlashSuggestionRows() []string {
 	return lines
 }
 
-func (m Model) renderSlashSuggestionRow(cmd commandcatalog.CommandInfo, selected bool) string {
+func (m Model) renderSlashSuggestionRow(suggestion slash.Suggestion, selected bool) string {
 	chrome := theme.Chrome
 	bg := chrome.SuggestionBg
 	prefix := "  "
@@ -31,8 +31,8 @@ func (m Model) renderSlashSuggestionRow(cmd commandcatalog.CommandInfo, selected
 
 	commandWidth := slashSuggestionCommandWidth(m.width)
 	descriptionWidth := max(0, m.width-commandWidth-4)
-	label := paddedPlainText(slashSuggestionLabel(cmd), commandWidth)
-	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(cmd.Description), descriptionWidth)
+	label := paddedPlainText(suggestion.Label, commandWidth)
+	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(suggestion.Description), descriptionWidth)
 	line := bg + prefix + chrome.SuggestionCommandFg + label + chrome.Reset + bg
 	if descriptionWidth > 0 {
 		line += "  " + chrome.SuggestionDescFg + description + chrome.Reset + bg
