@@ -193,6 +193,11 @@ func (a *TUIAdapter) ModelCandidates(provider string) []providerpicker.ModelCand
 	return a.agent.ModelCandidates(provider)
 }
 
+// AzureCatalogModelCandidates は Azure deployment に紐づける catalog_model 候補を返す。
+func (a *TUIAdapter) AzureCatalogModelCandidates(deployment string) []providerpicker.ModelCandidate {
+	return a.agent.AzureCatalogModelCandidates(deployment)
+}
+
 // SwitchProviderModel は provider と model/deployment を切り替える。
 func (a *TUIAdapter) SwitchProviderModel(provider string, model string) error {
 	if err := switchProviderModelWithOutput(a.agent, provider, model); err != nil {
@@ -206,6 +211,16 @@ func (a *TUIAdapter) SwitchProviderModel(provider string, model string) error {
 // SwitchModelForCurrentProvider は current provider の model/deployment を切り替える。
 func (a *TUIAdapter) SwitchModelForCurrentProvider(model string) error {
 	if err := switchModelForCurrentProviderWithOutput(a.agent, model); err != nil {
+		a.flushCapture()
+		return err
+	}
+	a.flushCapture()
+	return nil
+}
+
+// ConfigureAndSwitchAzureDeployment は Azure deployment setup を保存して provider を切り替える。
+func (a *TUIAdapter) ConfigureAndSwitchAzureDeployment(deployment string, catalogModel string) error {
+	if _, err := a.agent.ConfigureAndSwitchAzureDeployment(deployment, catalogModel); err != nil {
 		a.flushCapture()
 		return err
 	}

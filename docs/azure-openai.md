@@ -7,9 +7,10 @@
 Azure OpenAI では、XELYON の `model` には OpenAI のモデル名ではなく **Azure 側の deployment 名**を指定します。
 
 - `default_model`: Azure OpenAI resource に作成した deployment 名
-- `catalog_model`: deployment の実モデル名。例: `gpt-5.4`, `gpt-5.5`, `gpt-5.5-pro`
+- `catalog_model`: deployment の実モデル名。例: `gpt-5.4`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.3-codex`
 
 deployment 名と実モデル名が同じとは限りません。会社側で `corp-gpt55-prod` のような deployment 名を付けている場合、`default_model` は `corp-gpt55-prod`、`catalog_model` は `gpt-5.5` のように分けます。
+Codex 系 deployment でも同じで、たとえば `default_model` は `corp-codex-prod`、`catalog_model` は `gpt-5.3-codex` のように分けます。
 
 ## 推奨設定
 
@@ -37,7 +38,7 @@ tenant を明示する必要がある環境では、社内の案内に従って 
 `xelyon doctor azure --print-config` で YAML 断片を作れます。
 
 ```bash
-xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --print-config
+xelyon doctor azure --deployment corp-codex-prod --catalog-model gpt-5.3-codex --print-config
 ```
 
 例:
@@ -47,11 +48,11 @@ default_provider: azure
 
 provider_models:
   azure:
-    default_model: corp-gpt55-prod
-    catalog_model: gpt-5.5
+    default_model: corp-codex-prod
+    catalog_model: gpt-5.3-codex
 ```
 
-`default_model` に `gpt-5.5` のような実モデル名を入れるのは、その名前で Azure deployment を作っている場合だけです。
+`default_model` に `gpt-5.3-codex` や `gpt-5.5` のような実モデル名を入れるのは、その名前で Azure deployment を作っている場合だけです。
 
 ## 動作確認
 

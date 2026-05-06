@@ -3,6 +3,7 @@ package azure
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -236,6 +237,114 @@ func TestDiagnose_WarnsForAdvancedRetentionOverride(t *testing.T) {
 	}
 }
 
+func TestDiagnose_CatalogPolicyUsesCodexCatalogModel(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-codex-deployment",
+		CatalogModel: "gpt-5.3-codex",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	check, ok := diagnosticCheckByName(report, "catalog_policy")
+	if !ok {
+		t.Fatalf("missing catalog_policy check: %#v", report.Checks)
+	}
+	if check.Status != DiagnosticStatusOK {
+		t.Fatalf("catalog_policy status = %s, want ok: %#v", check.Status, check)
+	}
+	for _, want := range []string{
+		"catalog_model=gpt-5.3-codex",
+		"context_window=400000",
+		"max_output_tokens=128000",
+		"responses_streaming=true",
+		"input $1.75/M",
+		"cached $0.175/M",
+		"output $14.00/M",
+	} {
+		if !strings.Contains(check.Detail, want) {
+			t.Fatalf("catalog_policy detail = %q, want substring %q", check.Detail, want)
+		}
+	}
+}
+
+func TestDiagnose_CatalogPolicyWarnsWhenMaxOutputFallsBackToProviderDefault(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt52-pro-deployment",
+		CatalogModel: "gpt-5.2-pro",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	check, ok := diagnosticCheckByName(report, "catalog_policy")
+	if !ok {
+		t.Fatalf("missing catalog_policy check: %#v", report.Checks)
+	}
+	if check.Status != DiagnosticStatusWarn {
+		t.Fatalf("catalog_policy status = %s, want warn: %#v", check.Status, check)
+	}
+	if check.Message != "catalog_model is missing max output metadata" {
+		t.Fatalf("catalog_policy message = %q, want max output metadata warning", check.Message)
+	}
+	for _, want := range []string{
+		"catalog_model=gpt-5.2-pro",
+		"context_window=400000",
+		"max_output_tokens=missing",
+		"runtime_fallback=16384",
+		"input $21.00/M",
+		"output $168.00/M",
+	} {
+		if !strings.Contains(check.Detail, want) {
+			t.Fatalf("catalog_policy detail = %q, want substring %q", check.Detail, want)
+		}
+	}
+}
+
+func TestDiagnose_CatalogPolicyAllowsDeploymentMaxOutputOverride(t *testing.T) {
+	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
+	t.Setenv(apiKeyEnv, "azure-key")
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt52-pro-deployment",
+		CatalogModel: "gpt-5.2-pro",
+		ModelOverrides: map[string]config.ModelOverride{
+			"corp-gpt52-pro-deployment": {
+				MaxOutputTokens: 64000,
+			},
+		},
+	})
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       cfg,
+		Deployment:   "corp-gpt52-pro-deployment",
+		CatalogModel: "gpt-5.2-pro",
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	check, ok := diagnosticCheckByName(report, "catalog_policy")
+	if !ok {
+		t.Fatalf("missing catalog_policy check: %#v", report.Checks)
+	}
+	if check.Status != DiagnosticStatusOK {
+		t.Fatalf("catalog_policy status = %s, want ok: %#v", check.Status, check)
+	}
+	if !strings.Contains(check.Detail, "max_output_tokens=64000 (model_overrides)") {
+		t.Fatalf("catalog_policy detail = %q, want model override max output", check.Detail)
+	}
+}
+
 func TestDiagnose_SmokeUsesConfiguredDeploymentAndStoreFalse(t *testing.T) {
 	var received struct {
 		Path   string
@@ -268,6 +377,16 @@ func TestDiagnose_SmokeUsesConfiguredDeploymentAndStoreFalse(t *testing.T) {
 	if report.HasFailures() {
 		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
 	}
+	policyCheck, ok := diagnosticCheckByName(report, "catalog_policy")
+	if !ok {
+		t.Fatalf("missing catalog_policy check: %#v", report.Checks)
+	}
+	if policyCheck.Status != DiagnosticStatusOK {
+		t.Fatalf("catalog_policy status = %s, want ok: %#v", policyCheck.Status, policyCheck)
+	}
+	if !strings.Contains(policyCheck.Detail, "responses_streaming=false") {
+		t.Fatalf("catalog_policy detail = %q, want non-streaming catalog capability", policyCheck.Detail)
+	}
 	if report.Smoke == nil || !report.Smoke.Ran {
 		t.Fatalf("Smoke = %#v, want ran smoke", report.Smoke)
 	}
@@ -294,6 +413,77 @@ func TestDiagnose_SmokeUsesConfiguredDeploymentAndStoreFalse(t *testing.T) {
 	}
 	if _, ok := received.Body["tools"]; ok {
 		t.Fatalf("tools should be omitted in doctor smoke: %#v", received.Body)
+	}
+}
+
+func TestDiagnose_SmokeUsesCodexCatalogModelPolicy(t *testing.T) {
+	var received struct {
+		Path   string
+		APIKey string
+		Body   map[string]any
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received.Path = r.URL.Path
+		received.APIKey = r.Header.Get("api-key")
+		if err := json.NewDecoder(r.Body).Decode(&received.Body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_codex"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"xelyon azure doctor ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.completed","response":{"usage":{"input_tokens":7,"output_tokens":3}}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "azure-key")
+	t.Setenv(authTokenEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:          config.DefaultConfig(),
+		Deployment:      "corp-codex-deployment",
+		CatalogModel:    "gpt-5.3-codex",
+		RunSmoke:        true,
+		MaxOutputTokens: 128000,
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.Ran {
+		t.Fatalf("Smoke = %#v, want ran smoke", report.Smoke)
+	}
+	if !strings.Contains(report.Smoke.Content, "xelyon azure doctor ok") {
+		t.Fatalf("Smoke.Content = %q, want smoke response", report.Smoke.Content)
+	}
+	if received.Path != "/openai/v1/responses" {
+		t.Fatalf("path = %q, want /openai/v1/responses", received.Path)
+	}
+	if received.APIKey != "azure-key" {
+		t.Fatalf("api-key = %q, want azure-key", received.APIKey)
+	}
+	if received.Body["model"] != "corp-codex-deployment" {
+		t.Fatalf("model = %#v, want deployment", received.Body["model"])
+	}
+	if received.Body["store"] != false {
+		t.Fatalf("store = %#v, want false for doctor smoke", received.Body["store"])
+	}
+	if received.Body["stream"] != true {
+		t.Fatalf("stream = %#v, want true for gpt-5.3-codex catalog model", received.Body["stream"])
+	}
+	if got := int(received.Body["max_output_tokens"].(float64)); got != 128000 {
+		t.Fatalf("max_output_tokens = %d, want 128000", got)
+	}
+	reasoning, ok := received.Body["reasoning"].(map[string]any)
+	if !ok {
+		t.Fatalf("reasoning = %#v, want reasoning object", received.Body["reasoning"])
+	}
+	if reasoning["effort"] != "low" {
+		t.Fatalf("reasoning.effort = %#v, want low for codex catalog model", reasoning["effort"])
 	}
 }
 
@@ -420,4 +610,13 @@ func hasDiagnosticCheck(report DiagnosticReport, name string, status DiagnosticS
 		}
 	}
 	return false
+}
+
+func diagnosticCheckByName(report DiagnosticReport, name string) (DiagnosticCheck, bool) {
+	for _, check := range report.Checks {
+		if check.Name == name {
+			return check, true
+		}
+	}
+	return DiagnosticCheck{}, false
 }

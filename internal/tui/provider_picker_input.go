@@ -98,11 +98,15 @@ func (m Model) handleProviderPickerBackspace() (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.providerPicker.mode == providerPickerModels {
+		if m.providerPicker.step == providerPickerStepAzureCatalogModelSelect {
+			return m.returnToAzureDeploymentPicker()
+		}
 		if m.providerPicker.currentOnly {
 			m.closeProviderPicker("Selection cancelled")
 			return m, nil
 		}
 		m.providerPicker.mode = providerPickerProviders
+		m.providerPicker.step = providerPickerStepProviderSelect
 		m.providerPicker.filter = ""
 		m.providerPicker.filtering = false
 		m.providerPicker.selected = initialProviderPickerSelection(m.providerPicker.providerRows())
@@ -119,6 +123,7 @@ func (m Model) submitProviderPickerSelection() (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.providerPicker.mode = providerPickerModels
+		m.providerPicker.step = providerPickerStepModelSelect
 		m.providerPicker.provider = provider.Key
 		m.providerPicker.providerLabel = provider.Label
 		m.providerPicker.models = m.providerModels.ModelCandidates(provider.Key)
@@ -133,9 +138,19 @@ func (m Model) submitProviderPickerSelection() (Model, tea.Cmd) {
 			return m, nil
 		}
 		if model.Custom {
-			m.providerPicker.beginCustomInput()
+			if m.providerPicker.step == providerPickerStepAzureCatalogModelSelect {
+				m.providerPicker.beginCustomInput(providerPickerStepAzureCatalogModelCustom)
+			} else {
+				m.providerPicker.beginCustomInput(providerPickerCustomModelStep(m.providerPicker.provider, m.providerPicker.currentOnly))
+			}
 			m.chromeDirty = true
 			return m, nil
+		}
+		if m.providerPicker.step == providerPickerStepAzureCatalogModelSelect {
+			return m.applyAzureDeploymentSetup(m.providerPicker.azureDeployment, model.Name)
+		}
+		if m.providerPicker.isAzureSetupDeploymentSelection() {
+			return m.beginAzureCatalogModelSelection(model.Name)
 		}
 		return m.applyProviderPickerModel(model.Name)
 	default:
@@ -146,14 +161,18 @@ func (m Model) submitProviderPickerSelection() (Model, tea.Cmd) {
 func (m Model) handleProviderPickerCustomKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch {
 	case msg.Type == tea.KeyEsc || msg.Type == tea.KeyCtrlC:
-		m.providerPicker.mode = providerPickerModels
-		m.chromeDirty = true
-		return m, nil
+		return m.cancelProviderPickerCustomInput()
 	case isEnterKey(msg):
 		value := strings.TrimSpace(m.providerPicker.customInput.Value())
 		if value == "" {
-			m.setTransientStatus("Model is required")
+			m.setTransientStatus(providerPickerRequiredMessage(m.providerPicker.step))
 			return m, nil
+		}
+		switch m.providerPicker.step {
+		case providerPickerStepAzureDeploymentInput:
+			return m.beginAzureCatalogModelSelection(value)
+		case providerPickerStepAzureCatalogModelCustom:
+			return m.applyAzureDeploymentSetup(m.providerPicker.azureDeployment, value)
 		}
 		return m.applyProviderPickerModel(value)
 	default:
@@ -162,6 +181,74 @@ func (m Model) handleProviderPickerCustomKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd)
 		m.chromeDirty = true
 		return m, cmd
 	}
+}
+
+func (m Model) cancelProviderPickerCustomInput() (Model, tea.Cmd) {
+	switch m.providerPicker.step {
+	case providerPickerStepAzureCatalogModelCustom:
+		m.providerPicker.mode = providerPickerModels
+		m.providerPicker.step = providerPickerStepAzureCatalogModelSelect
+	default:
+		m.providerPicker.mode = providerPickerModels
+		m.providerPicker.step = providerPickerStepModelSelect
+	}
+	m.chromeDirty = true
+	return m, nil
+}
+
+func providerPickerRequiredMessage(step providerPickerStep) string {
+	switch step {
+	case providerPickerStepAzureDeploymentInput:
+		return "Deployment is required"
+	case providerPickerStepAzureCatalogModelCustom:
+		return "Catalog model is required"
+	default:
+		return "Model is required"
+	}
+}
+
+func providerPickerCustomModelStep(provider string, currentOnly bool) providerPickerStep {
+	if !currentOnly && strings.TrimSpace(provider) == "azure" {
+		return providerPickerStepAzureDeploymentInput
+	}
+	return providerPickerStepModelCustom
+}
+
+func (p *providerPickerState) isAzureSetupDeploymentSelection() bool {
+	return p != nil &&
+		!p.currentOnly &&
+		p.mode == providerPickerModels &&
+		p.step == providerPickerStepModelSelect &&
+		strings.TrimSpace(p.provider) == "azure"
+}
+
+func (m Model) beginAzureCatalogModelSelection(deployment string) (Model, tea.Cmd) {
+	deployment = strings.TrimSpace(deployment)
+	if deployment == "" {
+		m.setTransientStatus("Deployment is required")
+		return m, nil
+	}
+	m.providerPicker.mode = providerPickerModels
+	m.providerPicker.step = providerPickerStepAzureCatalogModelSelect
+	m.providerPicker.azureDeployment = deployment
+	m.providerPicker.models = m.providerModels.AzureCatalogModelCandidates(deployment)
+	m.providerPicker.filter = ""
+	m.providerPicker.filtering = false
+	m.providerPicker.selected = initialModelPickerSelection(m.providerPicker.modelRows())
+	m.chromeDirty = true
+	return m, nil
+}
+
+func (m Model) returnToAzureDeploymentPicker() (Model, tea.Cmd) {
+	m.providerPicker.mode = providerPickerModels
+	m.providerPicker.step = providerPickerStepModelSelect
+	m.providerPicker.azureDeployment = ""
+	m.providerPicker.models = m.providerModels.ModelCandidates(m.providerPicker.provider)
+	m.providerPicker.filter = ""
+	m.providerPicker.filtering = false
+	m.providerPicker.selected = initialModelPickerSelection(m.providerPicker.modelRows())
+	m.chromeDirty = true
+	return m, nil
 }
 
 func (m Model) applyProviderPickerModel(model string) (Model, tea.Cmd) {
@@ -177,6 +264,21 @@ func (m Model) applyProviderPickerModel(model string) (Model, tea.Cmd) {
 		err = m.providerModels.SwitchProviderModel(provider, model)
 	}
 	if err != nil {
+		m.setTransientStatus(err.Error())
+	} else {
+		m.setTransientStatus("Selection applied")
+	}
+	m.statusLine = m.conversation.GetStatusLine()
+	return m, nil
+}
+
+func (m Model) applyAzureDeploymentSetup(deployment string, catalogModel string) (Model, tea.Cmd) {
+	deployment = strings.TrimSpace(deployment)
+	catalogModel = strings.TrimSpace(catalogModel)
+	m.providerPicker = nil
+	m.chromeDirty = true
+
+	if err := m.providerModels.ConfigureAndSwitchAzureDeployment(deployment, catalogModel); err != nil {
 		m.setTransientStatus(err.Error())
 	} else {
 		m.setTransientStatus("Selection applied")

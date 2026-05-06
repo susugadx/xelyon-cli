@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
+
+var errTestProviderPickerConfigure = errors.New("configure failed")
 
 func TestProviderPicker_CommandOpensProviderThenModelAndSwitches(t *testing.T) {
 	agent := &stubAgent{
@@ -74,7 +77,7 @@ func TestProviderPicker_ModelCommandSwitchesCurrentProviderModel(t *testing.T) {
 	}
 }
 
-func TestProviderPicker_AzureProviderShowsDeploymentRowsAndSwitches(t *testing.T) {
+func TestProviderPicker_AzureProviderConfiguresCatalogModelThenSwitches(t *testing.T) {
 	agent := &stubAgent{
 		statusLine: "ready",
 		providerCandidates: []providerpicker.ProviderCandidate{
@@ -110,9 +113,149 @@ func TestProviderPicker_AzureProviderShowsDeploymentRowsAndSwitches(t *testing.T
 
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+		t.Fatalf("deployment selection should open catalog_model picker, got %#v", m.providerPicker)
+	}
+	if got := agent.azureCatalogModelRequests; len(got) != 1 || got[0] != "default-deployment" {
+		t.Fatalf("AzureCatalogModelCandidates calls = %#v, want default-deployment", got)
+	}
+	catalogView := strings.ToLower(termtext.StripANSI(m.View()))
+	if !strings.Contains(catalogView, "gpt-5.3-codex") || !strings.Contains(catalogView, "custom catalog model") {
+		t.Fatalf("catalog_model picker missing OpenAI catalog candidates:\n%s", catalogView)
+	}
+	if strings.Contains(catalogView, "default-deployment") {
+		t.Fatalf("catalog_model picker should not render deployment as a candidate:\n%s", catalogView)
+	}
+
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	wantSetup := azureDeploymentSetupCall{Deployment: "default-deployment", CatalogModel: "gpt-5.3-codex"}
+	if got := agent.configuredAzure; len(got) != 1 || got[0] != wantSetup {
+		t.Fatalf("configuredAzure = %#v, want %#v", got, wantSetup)
+	}
 	want := providerModelSwitchCall{Provider: "azure", Model: "default-deployment"}
 	if got := agent.switchedProviders; len(got) != 1 || got[0] != want {
 		t.Fatalf("switchedProviders = %#v, want %#v", got, want)
+	}
+}
+
+func TestProviderPicker_AzureProviderCustomDeploymentConfiguresCatalogModel(t *testing.T) {
+	agent := &stubAgent{
+		statusLine: "ready",
+		providerCandidates: []providerpicker.ProviderCandidate{
+			{Key: "openai", Label: "OpenAI", Current: true, CredentialStatus: providerpicker.ProviderCredentialConfigured},
+			{Key: "azure", Label: "Azure OpenAI", CredentialStatus: providerpicker.ProviderCredentialConfigured},
+		},
+		modelCandidates: map[string][]providerpicker.ModelCandidate{
+			"azure": {
+				{Name: "Custom deployment...", Custom: true},
+			},
+		},
+	}
+	m := newSizedPromptTestModel(agent, 80, 24)
+
+	m = submitProviderPickerCommand(t, m, "/provider")
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureDeploymentInput {
+		t.Fatalf("custom deployment row should open deployment input, got %#v", m.providerPicker)
+	}
+
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("corp-deployment")})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+		t.Fatalf("custom deployment should open catalog_model picker, got %#v", m.providerPicker)
+	}
+	if got := agent.azureCatalogModelRequests; len(got) != 1 || got[0] != "corp-deployment" {
+		t.Fatalf("AzureCatalogModelCandidates calls = %#v, want corp-deployment", got)
+	}
+
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	wantSetup := azureDeploymentSetupCall{Deployment: "corp-deployment", CatalogModel: "gpt-5.5-pro"}
+	if got := agent.configuredAzure; len(got) != 1 || got[0] != wantSetup {
+		t.Fatalf("configuredAzure = %#v, want %#v", got, wantSetup)
+	}
+	wantSwitch := providerModelSwitchCall{Provider: "azure", Model: "corp-deployment"}
+	if got := agent.switchedProviders; len(got) != 1 || got[0] != wantSwitch {
+		t.Fatalf("switchedProviders = %#v, want %#v", got, wantSwitch)
+	}
+}
+
+func TestProviderPicker_AzureProviderCustomCatalogModel(t *testing.T) {
+	agent := &stubAgent{
+		statusLine: "ready",
+		providerCandidates: []providerpicker.ProviderCandidate{
+			{Key: "openai", Label: "OpenAI", Current: true, CredentialStatus: providerpicker.ProviderCredentialConfigured},
+			{Key: "azure", Label: "Azure OpenAI", CredentialStatus: providerpicker.ProviderCredentialConfigured},
+		},
+		modelCandidates: map[string][]providerpicker.ModelCandidate{
+			"azure": {
+				{Name: "current-deployment", Current: true},
+			},
+		},
+	}
+	m := newSizedPromptTestModel(agent, 80, 24)
+
+	m = submitProviderPickerCommand(t, m, "/provider")
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+		t.Fatalf("deployment selection should open catalog_model picker, got %#v", m.providerPicker)
+	}
+
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelCustom {
+		t.Fatalf("custom catalog row should open catalog input, got %#v", m.providerPicker)
+	}
+
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("gpt-custom-catalog")})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	wantSetup := azureDeploymentSetupCall{Deployment: "current-deployment", CatalogModel: "gpt-custom-catalog"}
+	if got := agent.configuredAzure; len(got) != 1 || got[0] != wantSetup {
+		t.Fatalf("configuredAzure = %#v, want %#v", got, wantSetup)
+	}
+	wantSwitch := providerModelSwitchCall{Provider: "azure", Model: "current-deployment"}
+	if got := agent.switchedProviders; len(got) != 1 || got[0] != wantSwitch {
+		t.Fatalf("switchedProviders = %#v, want %#v", got, wantSwitch)
+	}
+}
+
+func TestProviderPicker_AzureSetupConfigureFailureDoesNotSwitch(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:        "ready",
+		configureAzureErr: errTestProviderPickerConfigure,
+		providerCandidates: []providerpicker.ProviderCandidate{
+			{Key: "openai", Label: "OpenAI", Current: true, CredentialStatus: providerpicker.ProviderCredentialConfigured},
+			{Key: "azure", Label: "Azure OpenAI", CredentialStatus: providerpicker.ProviderCredentialConfigured},
+		},
+		modelCandidates: map[string][]providerpicker.ModelCandidate{
+			"azure": {
+				{Name: "current-deployment", Current: true},
+			},
+		},
+	}
+	m := newSizedPromptTestModel(agent, 80, 24)
+
+	m = submitProviderPickerCommand(t, m, "/provider")
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.providerPicker != nil {
+		t.Fatalf("configure failure should close picker, got %#v", m.providerPicker)
+	}
+	if got := agent.configuredAzure; len(got) != 1 {
+		t.Fatalf("configuredAzure calls = %#v, want one attempted setup", got)
+	}
+	if len(agent.switchedProviders) != 0 {
+		t.Fatalf("configure failure should not switch provider, got %#v", agent.switchedProviders)
+	}
+	if m.transientStatus != errTestProviderPickerConfigure.Error() {
+		t.Fatalf("transientStatus = %q, want configure error", m.transientStatus)
 	}
 }
 
@@ -149,6 +292,105 @@ func TestProviderPicker_ModelCommandSwitchesCurrentAzureDeployment(t *testing.T)
 	if len(agent.switchedProviders) != 0 {
 		t.Fatalf("/model should not switch provider for Azure current provider, got %#v", agent.switchedProviders)
 	}
+}
+
+func TestProviderPicker_ModelCommandCustomAzureDeploymentSwitchesCurrentProviderOnly(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:        "ready",
+		providerName:      "Azure OpenAI",
+		providerConfigKey: "azure",
+		modelCandidates: map[string][]providerpicker.ModelCandidate{
+			"azure": {
+				{Name: "Custom deployment...", Custom: true},
+			},
+		},
+	}
+	m := submitProviderPickerCommand(t, newSizedPromptTestModel(agent, 80, 24), "/model")
+
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepModelCustom {
+		t.Fatalf("/model custom Azure deployment should use current-provider custom step, got %#v", m.providerPicker)
+	}
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("custom-deployment")})
+	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if got := agent.switchedModels; len(got) != 1 || got[0] != "custom-deployment" {
+		t.Fatalf("switchedModels = %#v, want custom-deployment", got)
+	}
+	if len(agent.configuredAzure) != 0 {
+		t.Fatalf("/model should not configure Azure catalog_model, got %#v", agent.configuredAzure)
+	}
+	if len(agent.switchedProviders) != 0 {
+		t.Fatalf("/model should not switch provider, got %#v", agent.switchedProviders)
+	}
+}
+
+func TestProviderPicker_AzureSetupBackspaceAndEsc(t *testing.T) {
+	agent := &stubAgent{
+		statusLine: "ready",
+		providerCandidates: []providerpicker.ProviderCandidate{
+			{Key: "openai", Label: "OpenAI", Current: true, CredentialStatus: providerpicker.ProviderCredentialConfigured},
+			{Key: "azure", Label: "Azure OpenAI", CredentialStatus: providerpicker.ProviderCredentialConfigured},
+		},
+		modelCandidates: map[string][]providerpicker.ModelCandidate{
+			"azure": {
+				{Name: "current-deployment", Current: true},
+				{Name: "Custom deployment...", Custom: true},
+			},
+		},
+	}
+
+	t.Run("backspace returns from catalog model list to deployments", func(t *testing.T) {
+		m := submitProviderPickerCommand(t, newSizedPromptTestModel(agent, 80, 24), "/provider")
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+			t.Fatalf("deployment selection should open catalog_model picker, got %#v", m.providerPicker)
+		}
+
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyBackspace})
+		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepModelSelect {
+			t.Fatalf("Backspace should return to deployment picker, got %#v", m.providerPicker)
+		}
+		view := strings.ToLower(termtext.StripANSI(m.View()))
+		if !strings.Contains(view, "current-deployment") || strings.Contains(view, "gpt-5.3-codex") {
+			t.Fatalf("deployment picker after Backspace should restore deployments only:\n%s", view)
+		}
+	})
+
+	t.Run("esc returns from custom catalog model input to catalog model list", func(t *testing.T) {
+		m := submitProviderPickerCommand(t, newSizedPromptTestModel(agent, 80, 24), "/provider")
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelCustom {
+			t.Fatalf("custom catalog row should open input, got %#v", m.providerPicker)
+		}
+
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+			t.Fatalf("Esc should return to catalog_model picker, got %#v", m.providerPicker)
+		}
+	})
+
+	t.Run("esc returns from custom deployment input to deployments", func(t *testing.T) {
+		m := submitProviderPickerCommand(t, newSizedPromptTestModel(agent, 80, 24), "/provider")
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureDeploymentInput {
+			t.Fatalf("custom deployment row should open input, got %#v", m.providerPicker)
+		}
+
+		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepModelSelect {
+			t.Fatalf("Esc should return to deployment picker, got %#v", m.providerPicker)
+		}
+	})
 }
 
 func TestProviderPicker_EscBackspaceAndFilter(t *testing.T) {

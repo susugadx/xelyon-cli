@@ -67,6 +67,9 @@ func (m Model) providerPickerPanelLines(width int) []string {
 		rows := m.providerPicker.modelRows()
 		lines = append(lines, m.providerPickerModelLines(rows, width)...)
 		backHint := "  Backspace:providers"
+		if m.providerPicker.step == providerPickerStepAzureCatalogModelSelect {
+			backHint = "  Backspace:deployments"
+		}
 		if m.providerPicker.currentOnly {
 			backHint = "  Backspace:cancel"
 		}
@@ -81,6 +84,9 @@ func (m Model) providerPickerTitle() string {
 	case providerPickerProviders:
 		return "Provider"
 	case providerPickerModels:
+		if m.providerPicker.step == providerPickerStepAzureCatalogModelSelect {
+			return "Catalog model"
+		}
 		label := m.providerPicker.providerLabel
 		if label == "" {
 			label = m.providerPicker.provider
@@ -90,6 +96,12 @@ func (m Model) providerPickerTitle() string {
 		}
 		return "Model - " + label
 	case providerPickerCustom:
+		if m.providerPicker.step == providerPickerStepAzureDeploymentInput {
+			return "Custom deployment"
+		}
+		if m.providerPicker.step == providerPickerStepAzureCatalogModelCustom {
+			return "Custom catalog model"
+		}
 		if m.providerPicker.provider == "azure" {
 			return "Custom deployment"
 		}

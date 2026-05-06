@@ -119,3 +119,57 @@ func TestClearProviderDefaultModelOverride_ClearsOnlyRequestedClaudeEntry(t *tes
 		t.Fatalf("ProviderModelsForSave()[anthropic].DefaultModel = %q, want %q", anthropic.DefaultModel, "anthropic-old")
 	}
 }
+
+func TestClearProviderCatalogModel_PreservesOtherProviderModelFields(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetProviderModelsForEdit(map[string]ProviderModelConfig{
+		"azure": {
+			DefaultModel:    "dep-a",
+			CatalogModel:    "gpt-5.4",
+			MaxOutputTokens: 64000,
+			ModelOverrides: map[string]ModelOverride{
+				"dep-b": {CatalogModel: "gpt-5.5"},
+			},
+		},
+	})
+
+	if ok := cfg.ClearProviderCatalogModel("azure"); !ok {
+		t.Fatal("ClearProviderCatalogModel(azure) should succeed")
+	}
+
+	saved := cfg.ProviderModelsForSave()
+	pm, ok := saved["azure"]
+	if !ok {
+		t.Fatalf("ProviderModelsForSave() = %#v, want azure entry", saved)
+	}
+	if pm.DefaultModel != "dep-a" {
+		t.Fatalf("DefaultModel = %q, want dep-a", pm.DefaultModel)
+	}
+	if pm.CatalogModel != "" {
+		t.Fatalf("CatalogModel = %q, want empty", pm.CatalogModel)
+	}
+	if pm.MaxOutputTokens != 64000 {
+		t.Fatalf("MaxOutputTokens = %d, want 64000", pm.MaxOutputTokens)
+	}
+	if override := pm.ModelOverrides["dep-b"]; override.CatalogModel != "gpt-5.5" {
+		t.Fatalf("ModelOverrides[dep-b] = %#v, want catalog_model gpt-5.5", override)
+	}
+	resolved := cfg.ResolveModelCatalog("azure", "dep-a")
+	if resolved.Model != "dep-a" || !resolved.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(azure, dep-a) = %#v, want configured deployment without catalog", resolved)
+	}
+}
+
+func TestClearProviderCatalogModel_RemovesZeroEntry(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetProviderModelsForEdit(map[string]ProviderModelConfig{
+		"azure": {CatalogModel: "gpt-5.4"},
+	})
+
+	if ok := cfg.ClearProviderCatalogModel("azure"); !ok {
+		t.Fatal("ClearProviderCatalogModel(azure) should succeed")
+	}
+	if got := cfg.ProviderModelsForSave(); got != nil {
+		t.Fatalf("ProviderModelsForSave() = %#v, want nil after clearing zero entry", got)
+	}
+}

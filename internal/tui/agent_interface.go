@@ -70,11 +70,17 @@ type ProviderModelAgent interface {
 	// ModelCandidates は provider に対応する model/deployment picker 候補を返す。
 	ModelCandidates(provider string) []providerpicker.ModelCandidate
 
+	// AzureCatalogModelCandidates は Azure deployment に紐づける catalog_model 候補を返す。
+	AzureCatalogModelCandidates(deployment string) []providerpicker.ModelCandidate
+
 	// SwitchProviderModel は provider と model/deployment を現在セッションに適用する。
 	SwitchProviderModel(provider string, model string) error
 
 	// SwitchModelForCurrentProvider は current provider 内で model/deployment を切り替える。
 	SwitchModelForCurrentProvider(model string) error
+
+	// ConfigureAndSwitchAzureDeployment は Azure deployment setup を保存して provider を切り替える。
+	ConfigureAndSwitchAzureDeployment(deployment string, catalogModel string) error
 }
 
 // ProjectAgent は /project 画面が必要とする xelyon.yaml の load/save を提供する。

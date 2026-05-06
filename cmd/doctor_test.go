@@ -22,8 +22,8 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
-	doctorDeploymentFlag = "corp-gpt55-deployment"
-	doctorCatalogModelFlag = "gpt-5.5"
+	doctorDeploymentFlag = "corp-codex-deployment"
+	doctorCatalogModelFlag = "gpt-5.3-codex"
 	doctorJSONFlag = true
 
 	if err := runAzureDoctorInvocation(cmd, nil); err != nil {
@@ -35,6 +35,11 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 		Deployment        string `json:"deployment"`
 		CatalogModel      string `json:"catalog_model"`
 		NormalizedBaseURL string `json:"normalized_base_url"`
+		Checks            []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+			Detail string `json:"detail"`
+		} `json:"checks"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
 		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
@@ -42,14 +47,29 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 	if report.Provider != "azure" {
 		t.Fatalf("provider = %q, want azure", report.Provider)
 	}
-	if report.Deployment != "corp-gpt55-deployment" {
+	if report.Deployment != "corp-codex-deployment" {
 		t.Fatalf("deployment = %q, want CLI deployment", report.Deployment)
 	}
-	if report.CatalogModel != "gpt-5.5" {
+	if report.CatalogModel != "gpt-5.3-codex" {
 		t.Fatalf("catalog_model = %q, want CLI catalog model", report.CatalogModel)
 	}
 	if report.NormalizedBaseURL != "https://example.openai.azure.com/openai/v1" {
 		t.Fatalf("normalized_base_url = %q, want v1 URL", report.NormalizedBaseURL)
+	}
+	var catalogPolicyDetail string
+	for _, check := range report.Checks {
+		if check.Name == "catalog_policy" {
+			if check.Status != "ok" {
+				t.Fatalf("catalog_policy status = %q, want ok: %#v", check.Status, check)
+			}
+			catalogPolicyDetail = check.Detail
+		}
+	}
+	if catalogPolicyDetail == "" {
+		t.Fatalf("missing catalog_policy detail: %#v", report.Checks)
+	}
+	if !strings.Contains(catalogPolicyDetail, "max_output_tokens=128000") {
+		t.Fatalf("catalog_policy detail = %q, want gpt-5.3-codex max output", catalogPolicyDetail)
 	}
 }
 
@@ -93,8 +113,8 @@ func TestRunAzureDoctorInvocation_PrintConfigDoesNotRequireAzureEnv(t *testing.T
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
-	doctorDeploymentFlag = "corp-gpt55-deployment"
-	doctorCatalogModelFlag = "gpt-5.5"
+	doctorDeploymentFlag = "corp-codex-deployment"
+	doctorCatalogModelFlag = "gpt-5.3-codex"
 	doctorPrintConfigFlag = true
 
 	if err := runAzureDoctorInvocation(cmd, nil); err != nil {
@@ -105,8 +125,8 @@ func TestRunAzureDoctorInvocation_PrintConfigDoesNotRequireAzureEnv(t *testing.T
 	for _, want := range []string{
 		"default_provider: azure",
 		"provider_models:",
-		"default_model: corp-gpt55-deployment",
-		"catalog_model: gpt-5.5",
+		"default_model: corp-codex-deployment",
+		"catalog_model: gpt-5.3-codex",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output = %q, want substring %q", output, want)

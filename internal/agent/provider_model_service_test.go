@@ -70,6 +70,117 @@ func TestSwitchModelForCurrentProvider_ReturnsOutcomeAndPersistsConfig(t *testin
 	}
 }
 
+func TestSwitchModelForCurrentProvider_AzureDeploymentChangeClearsStaleCatalogModel(t *testing.T) {
+	withConfigCommandHooks(t)
+
+	loadConfigForCommand = func() (*config.Config, error) {
+		cfg := newProjectMapDisabledConfig()
+		cfg.DefaultProvider = "azure"
+		cfg.DefaultModel = "dep-a"
+		cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+			DefaultModel:    "dep-a",
+			CatalogModel:    "gpt-5.4",
+			MaxOutputTokens: 64000,
+			ModelOverrides:  map[string]config.ModelOverride{"dep-c": {CatalogModel: "gpt-5.5"}},
+		})
+		return cfg, nil
+	}
+	var saved *config.Config
+	saveConfigForCommand = func(cfg *config.Config) error {
+		saved = config.CloneConfig(cfg)
+		return nil
+	}
+
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "azure",
+		CurrentModel:      "dep-a",
+		CurrentProvider:   &mockProvider{name: "azure"},
+		Runtime: &AgentRuntime{
+			Config: newProjectMapDisabledConfig(),
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("dep-a"),
+		},
+	}
+
+	outcome := agent.SwitchModelForCurrentProvider("dep-b")
+	if outcome.LoadConfigErr != nil || outcome.SaveConfigErr != nil || !outcome.ConfigSaved {
+		t.Fatalf("outcome persistence = saved:%v load:%v save:%v, want saved without errors", outcome.ConfigSaved, outcome.LoadConfigErr, outcome.SaveConfigErr)
+	}
+	if saved == nil {
+		t.Fatal("saveConfigForCommand was not called")
+	}
+	pm := saved.ProviderModelsForSave()["azure"]
+	if pm.DefaultModel != "dep-b" {
+		t.Fatalf("provider_models.azure.default_model = %q, want dep-b", pm.DefaultModel)
+	}
+	if pm.CatalogModel != "" {
+		t.Fatalf("provider_models.azure.catalog_model = %q, want cleared", pm.CatalogModel)
+	}
+	if pm.MaxOutputTokens != 64000 {
+		t.Fatalf("provider_models.azure.max_output_tokens = %d, want preserved", pm.MaxOutputTokens)
+	}
+	if override := pm.ModelOverrides["dep-c"]; override.CatalogModel != "gpt-5.5" {
+		t.Fatalf("provider_models.azure.model_overrides[dep-c] = %#v, want preserved", override)
+	}
+	resolved := saved.ResolveModelCatalog("azure", "dep-b")
+	if resolved.Model != "dep-b" || !resolved.ConfiguredWithoutCatalog {
+		t.Fatalf("ResolveModelCatalog(azure, dep-b) = %#v, want dep-b configured without catalog", resolved)
+	}
+}
+
+func TestSwitchModelForCurrentProvider_AzureSameDeploymentPreservesCatalogModel(t *testing.T) {
+	withConfigCommandHooks(t)
+
+	loadConfigForCommand = func() (*config.Config, error) {
+		cfg := newProjectMapDisabledConfig()
+		cfg.DefaultProvider = "azure"
+		cfg.DefaultModel = "dep-a"
+		cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+			DefaultModel: "dep-a",
+			CatalogModel: "gpt-5.4",
+		})
+		return cfg, nil
+	}
+	var saved *config.Config
+	saveConfigForCommand = func(cfg *config.Config) error {
+		saved = config.CloneConfig(cfg)
+		return nil
+	}
+
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "azure",
+		CurrentModel:      "dep-a",
+		CurrentProvider:   &mockProvider{name: "azure"},
+		Runtime: &AgentRuntime{
+			Config: newProjectMapDisabledConfig(),
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("dep-a"),
+		},
+	}
+
+	outcome := agent.SwitchModelForCurrentProvider("dep-a")
+	if outcome.LoadConfigErr != nil || outcome.SaveConfigErr != nil || !outcome.ConfigSaved {
+		t.Fatalf("outcome persistence = saved:%v load:%v save:%v, want saved without errors", outcome.ConfigSaved, outcome.LoadConfigErr, outcome.SaveConfigErr)
+	}
+	if saved == nil {
+		t.Fatal("saveConfigForCommand was not called")
+	}
+	if got := saved.ProviderModelsForSave()["azure"].CatalogModel; got != "gpt-5.4" {
+		t.Fatalf("provider_models.azure.catalog_model = %q, want preserved", got)
+	}
+	if got := saved.ModelCatalogName("azure", "dep-a"); got != "gpt-5.4" {
+		t.Fatalf("ModelCatalogName(azure, dep-a) = %q, want gpt-5.4", got)
+	}
+}
+
 func TestProviderCandidates_DisplayOrderCurrentAndCredentialStatus(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("AZURE_OPENAI_API_KEY", "")
@@ -217,6 +328,92 @@ func TestModelCandidates_AzureDeploymentOnly(t *testing.T) {
 	}
 }
 
+func TestAzureCatalogModelCandidates_OpenAICatalogOnly(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.3-codex",
+		ModelOverrides: map[string]config.ModelOverride{
+			"session-deployment": {CatalogModel: "gpt-5.5-pro"},
+		},
+	})
+	agent := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "azure",
+		CurrentModel:      "session-deployment",
+		Runtime:           NewAgentRuntimeWithConfig(cfg),
+	}
+
+	got := agent.AzureCatalogModelCandidates("session-deployment")
+	names := modelCandidateNames(got)
+	wantPrefix := []string{"gpt-5.5", "gpt-5.5-pro", "gpt-5.4"}
+	if !reflect.DeepEqual(names[:len(wantPrefix)], wantPrefix) {
+		t.Fatalf("catalog model prefix = %v, want %v; all=%v", names[:len(wantPrefix)], wantPrefix, names)
+	}
+	if countCandidateName(got, "session-deployment") != 0 {
+		t.Fatalf("deployment name should not be displayed as catalog_model candidate: %#v", got)
+	}
+	if c := candidateByName(got, "gpt-5.5-pro"); !c.Current || !c.Default {
+		t.Fatalf("gpt-5.5-pro candidate = %#v, want current/default catalog model", c)
+	}
+	last := got[len(got)-1]
+	if !last.Custom || last.Name != "Custom catalog model..." {
+		t.Fatalf("last candidate = %#v, want custom catalog model row", last)
+	}
+}
+
+func TestAzureCatalogModelCandidates_PreservesExplicitCatalogModelMatchingDeployment(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "gpt-4o",
+		CatalogModel: "gpt-4o",
+	})
+	agent := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "azure",
+		CurrentModel:      "gpt-4o",
+		Runtime:           NewAgentRuntimeWithConfig(cfg),
+	}
+
+	got := agent.AzureCatalogModelCandidates("gpt-4o")
+	if c := candidateByName(got, "gpt-4o"); !c.Current || !c.Default {
+		t.Fatalf("gpt-4o candidate = %#v, want explicit matching catalog_model current/default", c)
+	}
+}
+
+func TestAzureCatalogModelCandidates_PreselectsKnownOpenAIDeploymentWithoutExplicitCatalogModel(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	agent := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "azure",
+		CurrentModel:      "gpt-4o",
+		Runtime:           NewAgentRuntimeWithConfig(cfg),
+	}
+
+	got := agent.AzureCatalogModelCandidates("gpt-4o")
+	if count := countCandidateName(got, "gpt-4o"); count != 1 {
+		t.Fatalf("gpt-4o candidate count = %d, want 1; all=%#v", count, got)
+	}
+	if c := candidateByName(got, "gpt-4o"); !c.Current || !c.Default {
+		t.Fatalf("gpt-4o candidate = %#v, want known deployment preselected as catalog_model", c)
+	}
+}
+
+func TestAzureCatalogModelCandidates_DoesNotPreselectUnknownDeploymentWithoutExplicitCatalogModel(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	agent := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "azure",
+		CurrentModel:      "gpt-corp-deployment",
+		Runtime:           NewAgentRuntimeWithConfig(cfg),
+	}
+
+	got := agent.AzureCatalogModelCandidates("gpt-corp-deployment")
+	if count := countCandidateName(got, "gpt-corp-deployment"); count != 0 {
+		t.Fatalf("unknown deployment candidate count = %d, want 0; all=%#v", count, got)
+	}
+}
+
 func TestModelCandidates_OllamaLiveListSuccessAndFallback(t *testing.T) {
 	old := listOllamaModelsForCandidates
 	t.Cleanup(func() { listOllamaModelsForCandidates = old })
@@ -293,6 +490,171 @@ func TestSwitchModelForCurrentProvider_ConfigLoadFailureKeepsSessionSwitch(t *te
 	}
 	if out.String() != "" {
 		t.Fatalf("SwitchModelForCurrentProvider() wrote output %q, want no warning output", out.String())
+	}
+}
+
+func TestConfigureAzureDeployment_PersistsDeploymentAndCatalogModel(t *testing.T) {
+	withConfigCommandHooks(t)
+
+	loadConfigForCommand = func() (*config.Config, error) {
+		cfg := newProjectMapDisabledConfig()
+		cfg.DefaultProvider = "openai"
+		cfg.DefaultModel = "gpt-5.4"
+		cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+			ModelOverrides: map[string]config.ModelOverride{
+				"corp-codex-deployment": {
+					CatalogModel:    "gpt-5.5-pro",
+					MaxOutputTokens: 64000,
+				},
+			},
+		})
+		return cfg, nil
+	}
+	var saved *config.Config
+	saveConfigForCommand = func(cfg *config.Config) error {
+		saved = config.CloneConfig(cfg)
+		return nil
+	}
+
+	var out bytes.Buffer
+	agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+
+	if err := agent.ConfigureAzureDeployment(" corp-codex-deployment ", " gpt-5.3-codex "); err != nil {
+		t.Fatalf("ConfigureAzureDeployment() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("saveConfigForCommand was not called")
+	}
+	if saved.DefaultProvider != "azure" {
+		t.Fatalf("DefaultProvider = %q, want azure", saved.DefaultProvider)
+	}
+	if saved.DefaultModel != "corp-codex-deployment" {
+		t.Fatalf("DefaultModel = %q, want deployment", saved.DefaultModel)
+	}
+	if got := saved.GetSelectedModelForProvider("azure"); got != "corp-codex-deployment" {
+		t.Fatalf("GetSelectedModelForProvider(azure) = %q, want deployment", got)
+	}
+	if got := saved.ModelCatalogName("azure", "corp-codex-deployment"); got != "gpt-5.3-codex" {
+		t.Fatalf("ModelCatalogName(azure, deployment) = %q, want gpt-5.3-codex", got)
+	}
+	override, ok := saved.ModelOverrideForProvider("azure", "corp-codex-deployment")
+	if !ok {
+		t.Fatal("ModelOverrideForProvider(azure, deployment) ok = false, want existing override preserved")
+	}
+	if override.CatalogModel != "gpt-5.3-codex" || override.MaxOutputTokens != 64000 {
+		t.Fatalf("override = %#v, want catalog_model updated and max_output_tokens preserved", override)
+	}
+	if got := agent.cfg().ModelCatalogName("azure", "corp-codex-deployment"); got != "gpt-5.3-codex" {
+		t.Fatalf("runtime ModelCatalogName(azure, deployment) = %q, want gpt-5.3-codex", got)
+	}
+}
+
+func TestConfigureAndSwitchAzureDeployment_SwitchFailureDoesNotPersistConfig(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "test-key")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "")
+	withConfigCommandHooks(t)
+
+	loadConfigForCommand = func() (*config.Config, error) {
+		cfg := newProjectMapDisabledConfig()
+		cfg.DefaultProvider = "openai"
+		cfg.DefaultModel = "gpt-5.4"
+		return cfg, nil
+	}
+	var saveCalled bool
+	saveConfigForCommand = func(cfg *config.Config) error {
+		saveCalled = true
+		return nil
+	}
+
+	var out bytes.Buffer
+	runtimeCfg := newProjectMapDisabledConfig()
+	runtimeCfg.DefaultProvider = "openai"
+	runtimeCfg.DefaultModel = "gpt-5.4"
+	agent := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "gpt-5.4",
+		CurrentProvider:   &mockProvider{name: "openai"},
+		Runtime: &AgentRuntime{
+			Config: runtimeCfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-5.4"),
+		},
+	}
+
+	if _, err := agent.ConfigureAndSwitchAzureDeployment("corp-deployment", "gpt-5.4"); err == nil {
+		t.Fatal("ConfigureAndSwitchAzureDeployment() error = nil, want Azure credential error")
+	}
+	if saveCalled {
+		t.Fatal("saveConfigForCommand should not be called when provider switch fails")
+	}
+	if agent.ProviderName != "openai" || agent.ProviderConfigKey != "openai" || agent.CurrentModel != "gpt-5.4" {
+		t.Fatalf("agent state = (%q, %q, %q), want unchanged openai/gpt-5.4", agent.ProviderName, agent.ProviderConfigKey, agent.CurrentModel)
+	}
+	if agent.cfg().DefaultProvider != "openai" {
+		t.Fatalf("runtime DefaultProvider = %q, want unchanged openai", agent.cfg().DefaultProvider)
+	}
+}
+
+func TestConfigureAndSwitchAzureDeployment_PersistsAfterSuccessfulSwitch(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_API_KEY", "test-key")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+	withConfigCommandHooks(t)
+
+	loadConfigForCommand = func() (*config.Config, error) {
+		cfg := newProjectMapDisabledConfig()
+		cfg.DefaultProvider = "openai"
+		cfg.DefaultModel = "gpt-5.4"
+		return cfg, nil
+	}
+	var saved *config.Config
+	saveConfigForCommand = func(cfg *config.Config) error {
+		saved = config.CloneConfig(cfg)
+		return nil
+	}
+
+	var out bytes.Buffer
+	runtimeCfg := newProjectMapDisabledConfig()
+	runtimeCfg.DefaultProvider = "openai"
+	runtimeCfg.DefaultModel = "gpt-5.4"
+	agent := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "gpt-5.4",
+		CurrentProvider:   &mockProvider{name: "openai"},
+		Stats:             NewSessionStats("openai", "gpt-5.4"),
+		Runtime: &AgentRuntime{
+			Config: runtimeCfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-5.4"),
+		},
+	}
+
+	if _, err := agent.ConfigureAndSwitchAzureDeployment("corp-deployment", "gpt-5.4"); err != nil {
+		t.Fatalf("ConfigureAndSwitchAzureDeployment() error = %v", err)
+	}
+	if saved == nil {
+		t.Fatal("saveConfigForCommand was not called")
+	}
+	if saved.DefaultProvider != "azure" || saved.DefaultModel != "corp-deployment" {
+		t.Fatalf("saved defaults = (%q, %q), want azure/corp-deployment", saved.DefaultProvider, saved.DefaultModel)
+	}
+	if got := saved.ModelCatalogName("azure", "corp-deployment"); got != "gpt-5.4" {
+		t.Fatalf("saved ModelCatalogName(azure, deployment) = %q, want gpt-5.4", got)
+	}
+	if agent.ProviderName != "azure" || agent.ProviderConfigKey != "azure" || agent.CurrentModel != "corp-deployment" {
+		t.Fatalf("agent state = (%q, %q, %q), want azure/corp-deployment", agent.ProviderName, agent.ProviderConfigKey, agent.CurrentModel)
+	}
+	if got := agent.cfg().ModelCatalogName("azure", "corp-deployment"); got != "gpt-5.4" {
+		t.Fatalf("runtime ModelCatalogName(azure, deployment) = %q, want gpt-5.4", got)
 	}
 }
 

@@ -16,22 +16,36 @@ const (
 	providerPickerCustom
 )
 
+type providerPickerStep int
+
+const (
+	providerPickerStepProviderSelect providerPickerStep = iota
+	providerPickerStepModelSelect
+	providerPickerStepModelCustom
+	providerPickerStepAzureDeploymentInput
+	providerPickerStepAzureCatalogModelSelect
+	providerPickerStepAzureCatalogModelCustom
+)
+
 type providerPickerState struct {
-	mode          providerPickerMode
-	provider      string
-	providerLabel string
-	providers     []providerpicker.ProviderCandidate
-	models        []providerpicker.ModelCandidate
-	selected      int
-	filter        string
-	filtering     bool
-	currentOnly   bool
-	customInput   textinput.Model
+	mode            providerPickerMode
+	step            providerPickerStep
+	provider        string
+	providerLabel   string
+	providers       []providerpicker.ProviderCandidate
+	models          []providerpicker.ModelCandidate
+	selected        int
+	filter          string
+	filtering       bool
+	currentOnly     bool
+	azureDeployment string
+	customInput     textinput.Model
 }
 
 func newProviderPickerState(candidates []providerpicker.ProviderCandidate) *providerPickerState {
 	state := &providerPickerState{
 		mode:      providerPickerProviders,
+		step:      providerPickerStepProviderSelect,
 		providers: append([]providerpicker.ProviderCandidate(nil), candidates...),
 	}
 	state.selected = initialProviderPickerSelection(state.providerRows())
@@ -41,6 +55,7 @@ func newProviderPickerState(candidates []providerpicker.ProviderCandidate) *prov
 func newModelPickerState(provider string, candidates []providerpicker.ModelCandidate, currentOnly bool) *providerPickerState {
 	state := &providerPickerState{
 		mode:        providerPickerModels,
+		step:        providerPickerStepModelSelect,
 		provider:    provider,
 		models:      append([]providerpicker.ModelCandidate(nil), candidates...),
 		currentOnly: currentOnly,
@@ -50,15 +65,27 @@ func newModelPickerState(provider string, candidates []providerpicker.ModelCandi
 	return state
 }
 
-func (p *providerPickerState) beginCustomInput() {
+func (p *providerPickerState) beginCustomInput(step providerPickerStep) {
 	input := textinput.New()
 	input.Prompt = ""
-	input.Placeholder = "model or deployment name"
+	input.Placeholder = providerPickerCustomPlaceholder(step)
 	input.CharLimit = 0
 	input.Width = 80
 	input.Focus()
 	p.mode = providerPickerCustom
+	p.step = step
 	p.customInput = input
+}
+
+func providerPickerCustomPlaceholder(step providerPickerStep) string {
+	switch step {
+	case providerPickerStepAzureDeploymentInput:
+		return "deployment name"
+	case providerPickerStepAzureCatalogModelCustom:
+		return "catalog model"
+	default:
+		return "model or deployment name"
+	}
 }
 
 func (p providerPickerState) providerRows() []providerpicker.ProviderCandidate {
@@ -184,5 +211,24 @@ func (p providerPickerMode) String() string {
 		return "custom"
 	default:
 		return fmt.Sprintf("providerPickerMode(%d)", int(p))
+	}
+}
+
+func (p providerPickerStep) String() string {
+	switch p {
+	case providerPickerStepProviderSelect:
+		return "provider_select"
+	case providerPickerStepModelSelect:
+		return "model_select"
+	case providerPickerStepModelCustom:
+		return "model_custom"
+	case providerPickerStepAzureDeploymentInput:
+		return "azure_deployment_input"
+	case providerPickerStepAzureCatalogModelSelect:
+		return "azure_catalog_model_select"
+	case providerPickerStepAzureCatalogModelCustom:
+		return "azure_catalog_model_custom"
+	default:
+		return fmt.Sprintf("providerPickerStep(%d)", int(p))
 	}
 }
