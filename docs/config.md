@@ -83,6 +83,9 @@ provider_models:
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
         max_output_tokens: 8192
+    kimi:
+        default_model: kimi-k2.6
+        max_output_tokens: 32768
     ollama:
         default_model: qwen2.5-coder:7b
         max_output_tokens: 4096
@@ -257,7 +260,7 @@ final_checks:
 - **型**: string
 - **デフォルト**: `deepseek`
 - **説明**: デフォルトで使用するプロバイダー
-- **選択肢**: `deepseek`, `claude`, `openai`, `gemini`, `groq`, `ollama`, `openrouter`, `bedrock`
+- **選択肢**: `deepseek`, `kimi`, `claude`, `openai`, `azure`, `gemini`, `groq`, `ollama`, `openrouter`, `bedrock`
 
 #### `default_model`
 - **型**: string
@@ -275,7 +278,7 @@ final_checks:
     - **用途**: 既知モデルマップにないモデル、deployment 名、デフォルト値を上書きしたい場合に指定
     - **サブキー**: `max_output_tokens`, `catalog_model`
     - **優先度**: `model_overrides[model].max_output_tokens` > `catalog_model` を含む既知モデルマップ > `max_output_tokens`
-    - **補足**: 既知モデル（`deepseek-v4-flash`, `deepseek-v4-pro`, `gpt-5.2`, `gemini-2.5-flash` 等）は自動解決されるため、通常は設定不要
+    - **補足**: 既知モデル（`deepseek-v4-flash`, `deepseek-v4-pro`, `kimi-k2.6`, `gpt-5.2`, `gemini-2.5-flash` 等）は自動解決されるため、通常は設定不要
 - **例**:
   ```yaml
   provider_models:
@@ -288,18 +291,27 @@ final_checks:
         my-deepseek-deployment:
           catalog_model: deepseek-v4-flash
           max_output_tokens: 32768
+    kimi:
+      default_model: kimi-k2.6
+      max_output_tokens: 32768
     openai:
       default_model: corp-gpt-deployment
       catalog_model: gpt-5.4
   ```
 
-料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
+料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 
 DeepSeek の推奨モデル:
 - `deepseek-v4-flash`: 低コスト・高速・普段使い向き
 - `deepseek-v4-pro`: 高精度・重い設計/レビュー向き
 
 `deepseek-chat` / `deepseek-reasoner` は `deepseek-v4-flash` 相当の legacy alias です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。DeepSeek V4 は 1M context / 最大 384K output です。
+
+Kimi の推奨モデル:
+- `kimi-k2.6`: native Kimi provider の既定モデル。高品質な編集/設計向き
+- `kimi-k2.5`: サブエージェント既定モデル。低コストな軽作業向き
+
+Kimi K2.6 / K2.5 は 256K context / 最大 32K output です。`moonshot` は `kimi` provider の alias として扱われます。
 
 ### 会話履歴圧縮設定 (`compression`)
 
@@ -555,6 +567,7 @@ lsp:
 - **OpenAI**: GPT-5 系（GPT-5.5 / GPT-5.5 Pro を含む）
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
 - **DeepSeek**: V4 の `thinking` field で制御します。`/think off` は `thinking.disabled`、`/think on` は `thinking.enabled` + `reasoning_effort` を送ります。`/think xhigh` は DeepSeek では `max` に変換されます。
+- **Kimi**: K2.6 / K2.5 は `thinking` field で制御します。`/think off` は `thinking.disabled`、`/think on` は K2.6 へ `thinking.enabled` + `keep: all`、K2.5 へ `thinking.enabled` を送ります。`kimi-k2-thinking` には disabled を送信しません。
 
 **コマンドで切り替え（正規ルート）:**
 
@@ -631,6 +644,11 @@ command_aliases:
 # DeepSeek
 export DEEPSEEK_API_KEY=sk-...
 
+# Kimi (Moonshot)
+export MOONSHOT_API_KEY=sk-...
+# Optional full Chat Completions endpoint override:
+export KIMI_API_URL=https://api.moonshot.ai/v1/chat/completions
+
 # OpenAI
 export OPENAI_API_KEY=sk-...
 
@@ -665,7 +683,7 @@ export GROQ_API_KEY=gsk_...
 
 - **`web_search.provider` 未設定**: メインプロバイダーが OpenAI / Gemini / Claude の場合、そのままネイティブ検索を使用
 - **`web_search.provider` 設定あり**: 指定した検索プロバイダーを使用
-- **メインが非対応**: DeepSeek / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
+- **メインが非対応**: DeepSeek / Kimi / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
 
 #### 設定例
 

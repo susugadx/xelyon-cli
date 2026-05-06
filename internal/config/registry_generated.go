@@ -88,7 +88,7 @@ var FieldTypeMap = map[string]ConfigFieldType{
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
 	"agent_instructions.project.mode": {"off", "fallback", "always"},
-	"default_provider":                {"deepseek", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"default_provider":                {"deepseek", "kimi", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 	"execution.mode":                  {"balanced", "trusted", "full_auto"},
 	"general.ui_language":             {"auto", "ja", "en"},
 	"output.assistant_updates":        {"", "verbose", "phase", "off"},

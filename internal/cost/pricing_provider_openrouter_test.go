@@ -17,6 +17,7 @@ func TestResolveOpenRouterDelegatedProviderPricing(t *testing.T) {
 		{name: "deepseek v4 flash delegated", model: "deepseek/deepseek-v4-flash", want: getDeepSeekPricing("deepseek-v4-flash")},
 		{name: "deepseek v4 pro delegated", model: "deepseek/deepseek-v4-pro", want: getDeepSeekPricing("deepseek-v4-pro")},
 		{name: "kimi delegated", model: "moonshotai/kimi-k2.5", want: getKimiPricing("kimi-k2.5")},
+		{name: "kimi k2.6 delegated", model: "moonshotai/kimi-k2.6", want: getKimiPricing("kimi-k2.6")},
 	}
 
 	for _, tt := range tests {

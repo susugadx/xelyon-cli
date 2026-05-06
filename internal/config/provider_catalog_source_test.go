@@ -47,6 +47,12 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	if got := ProviderCredentialEnvVars("ollama"); len(got) != 0 {
 		t.Fatalf("ProviderCredentialEnvVars(ollama) = %v, want empty", got)
 	}
+	if got := ProviderAPIKeyEnv("kimi"); got != "MOONSHOT_API_KEY" {
+		t.Fatalf("ProviderAPIKeyEnv(kimi) = %q, want MOONSHOT_API_KEY", got)
+	}
+	if got := ProviderAPIKeyEnv("moonshot"); got != "MOONSHOT_API_KEY" {
+		t.Fatalf("ProviderAPIKeyEnv(moonshot) = %q, want MOONSHOT_API_KEY", got)
+	}
 
 	t.Setenv("OPENAI_API_KEY", "")
 	if ProviderHasAvailableCredential("openai") {
@@ -96,10 +102,33 @@ func TestProviderSupportsResponsesAPI(t *testing.T) {
 	if ProviderSupportsResponsesAPI("groq") {
 		t.Fatal("ProviderSupportsResponsesAPI(groq) = true, want false")
 	}
+	if ProviderSupportsResponsesAPI("kimi") {
+		t.Fatal("ProviderSupportsResponsesAPI(kimi) = true, want false")
+	}
 }
 
 func TestAzureProviderCatalogDoesNotHardcodeHelperDeployments(t *testing.T) {
 	if got := ProviderDefaultSubAgentModel("azure"); got != "" {
 		t.Fatalf("ProviderDefaultSubAgentModel(azure) = %q, want empty so configured deployment is used", got)
+	}
+}
+
+func TestKimiProviderCatalog(t *testing.T) {
+	if got := ProviderDefaultSubAgentModel("kimi"); got != "kimi-k2.5" {
+		t.Fatalf("ProviderDefaultSubAgentModel(kimi) = %q, want kimi-k2.5", got)
+	}
+	if got := ProviderDefaultSubAgentModel("moonshot"); got != "kimi-k2.5" {
+		t.Fatalf("ProviderDefaultSubAgentModel(moonshot) = %q, want kimi-k2.5", got)
+	}
+	if ProviderSupportsImages("kimi") {
+		t.Fatal("ProviderSupportsImages(kimi) = true, want false")
+	}
+	cfg := DefaultConfig()
+	pm, ok := cfg.ProviderModels["kimi"]
+	if !ok {
+		t.Fatal("DefaultConfig().ProviderModels missing kimi")
+	}
+	if pm.DefaultModel != "kimi-k2.6" || pm.MaxOutputTokens != 32768 {
+		t.Fatalf("ProviderModels[kimi] = %#v, want kimi-k2.6 / 32768", pm)
 	}
 }

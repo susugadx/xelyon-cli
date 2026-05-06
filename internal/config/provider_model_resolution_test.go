@@ -12,6 +12,8 @@ func TestGetModelForProvider(t *testing.T) {
 	}{
 		{name: "deepseek", provider: "deepseek", want: "deepseek-v4-flash"},
 		{name: "openai", provider: "openai", want: "gpt-5.4"},
+		{name: "kimi", provider: "kimi", want: "kimi-k2.6"},
+		{name: "moonshot alias", provider: "moonshot", want: "kimi-k2.6"},
 		{name: "azure", provider: "azure", want: "azure-gpt-5.4"},
 		{name: "claude", provider: "claude", want: "claude-sonnet-4-6"},
 		{name: "anthropic alias", provider: "anthropic", want: "claude-sonnet-4-6"},
@@ -40,6 +42,8 @@ func TestValidateModelForProvider(t *testing.T) {
 		want     bool
 	}{
 		{name: "valid provider", provider: "deepseek", model: "any-model", want: true},
+		{name: "kimi provider", provider: "kimi", model: "kimi-k2.6", want: true},
+		{name: "moonshot alias", provider: "moonshot", model: "kimi-k2.6", want: true},
 		{name: "anthropic alias", provider: "anthropic", model: "any-model", want: true},
 		{name: "invalid provider", provider: "unknown", model: "any-model", want: false},
 	}

@@ -51,6 +51,8 @@ func TestFindProviderByDefaultModelAndInferenceHelpers(t *testing.T) {
 		{model: "claude-sonnet-4-6", want: "claude"},
 		{model: "deepseek-chat", want: "deepseek"},
 		{model: "deepseek-v4-flash", want: "deepseek"},
+		{model: "kimi-k2.6", want: "kimi"},
+		{model: "kimi-k2.5", want: "kimi"},
 		{model: "global.anthropic.claude-sonnet-4-6", want: "bedrock"},
 		{model: "amazon.nova-pro-v1:0", want: "bedrock"},
 		{model: "deepseek.r1-v1:0", want: "bedrock"},
@@ -60,6 +62,7 @@ func TestFindProviderByDefaultModelAndInferenceHelpers(t *testing.T) {
 		{model: "moonshotai.kimi-k2.5", want: "bedrock"},
 		{model: "moonshotai.kimi-k2-thinking", want: "bedrock"},
 		{model: "anthropic/claude-sonnet-4.6", want: "openrouter"},
+		{model: "moonshotai/kimi-k2.6", want: "openrouter"},
 		{model: "moonshot.kimi-k2-thinking", want: ""},
 		{model: "unknown-model", want: ""},
 	}

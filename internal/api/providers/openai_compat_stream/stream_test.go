@@ -255,6 +255,41 @@ func TestParseSSEStream_DefaultFlow(t *testing.T) {
 	}
 }
 
+func TestParseSSEStream_UsesChoiceLevelUsage(t *testing.T) {
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"choices":[{"delta":{"content":"Hello"}}]}`,
+			`data: {"choices":[{"delta":{},"finish_reason":"stop","usage":{"prompt_tokens":11,"completion_tokens":7,"prompt_tokens_details":{"cached_tokens":3}}}]}`,
+			"data: [DONE]",
+		}, "\n"))),
+	}
+
+	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
+	if err != nil {
+		t.Fatalf("ParseSSEStream() error = %v", err)
+	}
+	if got.Usage == nil || got.Usage.InputTokens != 11 || got.Usage.OutputTokens != 7 || got.Usage.CachedInputTokens != 3 {
+		t.Fatalf("ParseSSEStream().Usage = %+v, want choice-level input=11 output=7 cached=3", got.Usage)
+	}
+}
+
+func TestParseSSEStream_PrefersTopLevelUsage(t *testing.T) {
+	resp := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"choices":[{"delta":{},"usage":{"prompt_tokens":99,"completion_tokens":88}}],"usage":{"prompt_tokens":5,"completion_tokens":4}}`,
+			"data: [DONE]",
+		}, "\n"))),
+	}
+
+	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
+	if err != nil {
+		t.Fatalf("ParseSSEStream() error = %v", err)
+	}
+	if got.Usage == nil || got.Usage.InputTokens != 5 || got.Usage.OutputTokens != 4 {
+		t.Fatalf("ParseSSEStream().Usage = %+v, want top-level input=5 output=4", got.Usage)
+	}
+}
+
 func TestParseSSEStream_AccumulatesReasoningContentAndCallbacks(t *testing.T) {
 	resp := &http.Response{
 		Body: io.NopCloser(strings.NewReader(strings.Join([]string{

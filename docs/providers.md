@@ -6,9 +6,9 @@ XELYON CLIは複数のLLMプロバイダーに対応しています。
 
 XELYON は provider/model に応じて編集ツールを自動で切り替えます。
 
-- OpenAI / Azure OpenAI / Gemini 系: `apply_patch`
+- OpenAI / Azure OpenAI / Gemini / Kimi 系: `apply_patch`
 - Claude / Anthropic / DeepSeek 系: `str_replace` / `write_file` / `delete_file`
-- OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` は `apply_patch`
+- OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` / `moonshotai/...` は `apply_patch`
 - Bedrock: Claude family は legacy 編集ツール。runtime supported な非 Claude Converse モデルは `apply_patch`
 
 `XELYON_EDIT_TOOL` を指定した場合は、この自動判定より環境変数の指定が優先されます。
@@ -18,6 +18,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 | プロバイダー | 画像入力 | 環境変数 | 公式サイト |
 |------------|---------|---------|-----------|
 | DeepSeek | ❌ | `DEEPSEEK_API_KEY` | https://platform.deepseek.com |
+| Kimi | ❌ | `MOONSHOT_API_KEY` | https://platform.moonshot.ai |
 | OpenAI | ✅ | `OPENAI_API_KEY` | https://platform.openai.com |
 | Azure OpenAI | ✅ | `AZURE_OPENAI_BASE_URL` + (`AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_AUTH_TOKEN` / `AZURE_OPENAI_AUTH_TOKEN_COMMAND` のいずれか) | https://azure.microsoft.com/products/ai-services/openai-service |
 | Gemini | ✅ | `GEMINI_API_KEY` | https://ai.google.dev |
@@ -51,7 +52,31 @@ xelyon --provider deepseek --model deepseek-v4-pro
 - `deepseek-chat` / `deepseek-reasoner` は legacy alias（`deepseek-v4-flash` 相当）です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。
 - `reasoning_content`（思考内容）はストリーミング表示（💭）され、ツール実行時も保持されます。
 
-### 2. OpenAI
+### 2. Kimi (Moonshot)
+
+```bash
+# API キー取得: https://platform.moonshot.ai
+export MOONSHOT_API_KEY=sk-...
+
+# 使用例
+xelyon --provider kimi --model kimi-k2.6
+xelyon --provider moonshot --model kimi-k2.5
+xelyon --provider kimi --model kimi-k2-thinking
+```
+
+**特徴:**
+- Moonshot Chat Completions API を native provider として使用
+- streaming / tool calls / JSON output / thinking modes 対応
+- 256K context / 最大 32K output（K2.6 / K2.5）
+- 画像入力非対応。画像付き入力では警告を表示し、画像を無視してテキストだけ送信します。
+- `/think off`: K2.6 / K2.5 は `thinking: {"type":"disabled"}` を送信します。`kimi-k2-thinking` には disabled を送信しません。
+- `/think on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信し、forced tool choice は `auto` に丸めます。
+- `reasoning_content`（思考内容）はストリーミング表示され、ツール実行時も保持されます。
+- `KIMI_API_URL` は `/v1/chat/completions` まで含む完全な endpoint override として扱います。
+
+Kimi built-in の web_search / memory / code runner、vision / image / video 入力は現在の native provider では未対応です。
+
+### 3. OpenAI
 
 ```bash
 # API キー取得: https://platform.openai.com/api-keys
@@ -125,7 +150,7 @@ xelyon --provider openai --model gpt-5.5
 xelyon --provider openai --model gpt-5.5-pro
 ```
 
-### 3. Azure OpenAI
+### 4. Azure OpenAI
 
 会社環境向けの最短セットアップと問い合わせ前チェックは [Azure OpenAI 利用メモ](azure-openai.md) も参照してください。
 
@@ -238,7 +263,7 @@ make azure-smoke
 
 GitHub Actions では `Azure Smoke` workflow を手動実行できます。通常 CI では走らず、repository secrets に `AZURE_OPENAI_BASE_URL`、`AZURE_OPENAI_DEPLOYMENT`、`AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_AUTH_TOKEN` / `AZURE_OPENAI_AUTH_TOKEN_COMMAND` のいずれかがある場合だけ live smoke を実行します。workflow input の `tool_smoke` を有効にすると doctor smoke で dummy tool call も強制します。
 
-### 4. Gemini
+### 5. Gemini
 
 ```bash
 # API キー取得: https://aistudio.google.com/app/apikey
@@ -276,7 +301,7 @@ Gemini 3 Pro / Flash は **thinking（推論）が常時 ON** です。XELYON �
 
 **注意:** Gemini 3 Pro の Function Calling には既知のバグ（空レスポンス）が報告されています。問題が発生する場合は `XELYON_DEBUG_GEMINI=1` で詳細ログを確認してください。
 
-### 5. Claude
+### 6. Claude
 
 ```bash
 # API キー取得: https://console.anthropic.com
@@ -299,7 +324,7 @@ xelyon --provider claude --model claude-opus-4-6
 - `xhigh` レベルは Opus 4.7 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
 - Claude Compaction は Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
 
-### 6. Groq
+### 7. Groq
 
 ```bash
 # API キー取得: https://console.groq.com/keys
@@ -315,7 +340,7 @@ xelyon --provider groq --model meta-llama/llama-4-scout-17b-16e-instruct
 - 画像入力非対応
 - プロンプトキャッシュ対応（自動、50% OFF、一部モデルのみ）
 
-### 7. Ollama
+### 8. Ollama
 
 ```bash
 # インストール: https://ollama.com/download
@@ -336,7 +361,7 @@ xelyon --provider ollama --model llama3.1:8b
 - 無料
 - 画像入力非対応
 
-### 8. OpenRouter
+### 9. OpenRouter
 
 ```bash
 # API キー取得: https://openrouter.ai
@@ -351,7 +376,7 @@ xelyon --provider openrouter --model anthropic/claude-sonnet-4.6
 - OpenAI互換API
 - 画像入力対応（モデルによる）
 
-### 9. Bedrock (AWS)
+### 10. Bedrock (AWS)
 
 現在の Bedrock provider は Claude on Bedrock を `InvokeModelWithResponseStream` + Claude Messages 形式で実行します。Claude 以外の Bedrock モデルは `ConverseStream` 経路を使いますが、xelyon の agent 実行では structured tool calling が必須のため、streaming tool use 対応を確認済みのモデルだけを runtime supported として扱います。Converse 経路の画像入力、thinking/reasoning、prompt cache は未対応です。Converse 経路ではモデル上限が catalog で既知の場合のみ `maxTokens` を送信し、未知モデルでは Bedrock 側のデフォルト上限に委ねます。
 
@@ -430,6 +455,8 @@ default_model: deepseek-v4-flash
 provider_models:
   deepseek:
     default_model: deepseek-v4-flash
+  kimi:
+    default_model: kimi-k2.6
   openai:
     default_model: gpt-5.4
   azure:
@@ -467,6 +494,7 @@ xelyon
 | **Bedrock(Claude)** | 明示的（`cache_control`） | 安定 | 読み取り 90% OFF | Claude と同じ仕組み |
 | **OpenAI** | 自動（プレフィックス） | **不安定**（GPT-5系） | モデル依存 | `prompt_cache_key` はルーティングヒントのみ。GPT-5.5 Pro は cached input discount なし |
 | **DeepSeek** | 自動 | 安定 | 読み取り割引あり | 設定不要 |
+| **Kimi** | 自動（`prompt_cache_key`） | 対応 | モデル依存 | usage の `cached_tokens` を表示 |
 | **Gemini** | 自動（暗黙的） | 安定 | - | Gemini 2.5 系で対応 |
 | **OpenRouter** | プロバイダー依存 | - | - | Anthropic モデル: 手動 `cache_control` 必要 |
 | **Groq** | 自動（プレフィックス） | 安定 | 読み取り 50% OFF | 一部モデルのみ（GPT-OSS, Kimi K2） |
@@ -477,15 +505,16 @@ xelyon
 長い会話でのコスト効率を重視する場合:
 
 1. **DeepSeek V4 Flash** - 低コスト + キャッシュ安定
-2. **Bedrock（Claude）** - プロンプトキャッシュが確実に効く + AWS 直接契約で中間マージンなし
-3. **Claude（直接）** - プロンプトキャッシュが確実に効く
-4. **OpenAI** - 高コスト + キャッシュ不安定のため、コスト重視なら非推奨
+2. **Kimi K2.6 / K2.5** - 低コスト + Chat Completions の prompt cache key 対応
+3. **Bedrock（Claude）** - プロンプトキャッシュが確実に効く + AWS 直接契約で中間マージンなし
+4. **Claude（直接）** - プロンプトキャッシュが確実に効く
+5. **OpenAI** - 高コスト + キャッシュ不安定のため、コスト重視なら非推奨
 
 ## 料金表示
 
 `/status`、ステータスバー、headless JSON の `cost` は `internal/cost/pricing.yaml` と組み込みの既知ルールに基づく推定値です。価格表にない provider/model は別モデルの料金で代用せず、UI では `N/A (pricing unavailable)`、ステータスバーでは `cost N/A` と表示します。headless JSON では `pricing_unavailable: true` を返します。
 
-カスタム deployment 名や社内 alias を使う場合は、`provider_models.<provider>.catalog_model` または `model_overrides.<model>.catalog_model` に provider の pricing family で解決できる既知モデル名を指定すると、そのモデルの token limit / pricing / context 判定を使えます。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
+カスタム deployment 名や社内 alias を使う場合は、`provider_models.<provider>.catalog_model` または `model_overrides.<model>.catalog_model` に provider の pricing family で解決できる既知モデル名を指定すると、そのモデルの token limit / pricing / context 判定を使えます。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 
 Bedrock は AWS Price List の US East (N. Virginia) text token 価格が確認できた exact model ID / inference profile ID だけ料金表示します。`global.*` ID は AWS が別料金を出している場合、Global Cross-region の text token 価格を使います。Bedrock の Claude direct / inference profile ID は Bedrock 料金を優先し、`claude-sonnet-4-6` のような抽象 catalog 名だけ Claude 料金へ委譲します。Amazon Nova、Anthropic Claude、Meta Llama、Mistral、Cohere Command R、AI21 Jamba、Writer Palmyra、DeepSeek、Qwen、MiniMax、NVIDIA Nemotron、OpenAI gpt-oss、Google Gemma、Moonshot Kimi、Z.AI GLM の対応済み ID は料金表示されます。embedding / image / video / query 単価の inference profile は text token 料金ではないため `N/A` のままです。リージョン別価格、Batch / Flex / Priority / Provisioned Throughput、画像・音声・動画 token、query/unit ベースの rerank はまだ推定対象外です。
 
@@ -494,6 +523,7 @@ Bedrock は AWS Price List の US East (N. Virginia) text token 価格が確認�
 ### コード生成・編集
 - **DeepSeek V4 Flash**: 高速・低コスト・普段使い
 - **DeepSeek V4 Pro**: 高精度・重い設計/レビュー向き
+- **Kimi K2.6**: 低コストで大きい文脈を扱う編集向き
 - **Qwen2.5-Coder (Ollama)**: ローカル実行
 
 ### 複雑な問題解決
@@ -502,6 +532,7 @@ Bedrock は AWS Price List の US East (N. Virginia) text token 価格が確認�
 
 ### 高速レスポンス
 - **Groq**: 超高速推論
+- **Kimi K2.5**: 低コストなサブエージェント/軽作業向き
 - **Gemini Flash**: バランス良く高速
 
 ### 画像解析
@@ -555,6 +586,7 @@ xelyon --provider openai --model gpt-5.4
 APIプロバイダーのダッシュボードで使用状況とレート制限を確認してください。
 
 - DeepSeek: https://platform.deepseek.com/usage
+- Kimi: https://platform.moonshot.ai
 - OpenAI: https://platform.openai.com/usage
 - Azure OpenAI: Azure Portal の Azure OpenAI resource
 - Gemini: https://aistudio.google.com

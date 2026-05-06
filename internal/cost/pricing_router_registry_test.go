@@ -35,14 +35,28 @@ func TestPricingResolverRegistry_CoversLoadedPricingFamilies(t *testing.T) {
 }
 
 func TestPricingResolverRegistry_KimiFamilyReadyForFutureProviderDescriptor(t *testing.T) {
-	got := resolvePricingByFamily("kimi", pricingRequest{
-		Model: "kimi-k2.5",
-	})
-	if got.PricingUnavailable {
-		t.Fatalf("resolvePricingByFamily(kimi).PricingUnavailable = true, want false: %#v", got)
+	tests := []struct {
+		model      string
+		wantInput  float64
+		wantOutput float64
+		wantCached float64
+	}{
+		{model: "kimi-k2.6", wantInput: 0.95, wantOutput: 4.00, wantCached: 0.16},
+		{model: "kimi-k2.5", wantInput: 0.60, wantOutput: 3.00, wantCached: 0.10},
 	}
-	if got.InputCostPerM != 0.60 || got.OutputCostPerM != 3.00 || got.CachedInputCostPerM != 0.06 {
-		t.Fatalf("resolvePricingByFamily(kimi) = %#v, want Kimi K2.5 pricing", got)
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got := resolvePricingByFamily("kimi", pricingRequest{
+				Model: tt.model,
+			})
+			if got.PricingUnavailable {
+				t.Fatalf("resolvePricingByFamily(kimi).PricingUnavailable = true, want false: %#v", got)
+			}
+			if got.InputCostPerM != tt.wantInput || got.OutputCostPerM != tt.wantOutput || got.CachedInputCostPerM != tt.wantCached {
+				t.Fatalf("resolvePricingByFamily(kimi) = %#v, want input=%f output=%f cached=%f", got, tt.wantInput, tt.wantOutput, tt.wantCached)
+			}
+		})
 	}
 }
 

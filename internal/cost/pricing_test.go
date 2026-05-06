@@ -249,6 +249,41 @@ func TestGetDeepSeekPricing_V4ModelsAndLegacyAliases(t *testing.T) {
 	}
 }
 
+func TestGetKimiPricing_K2Models(t *testing.T) {
+	tests := []struct {
+		name       string
+		model      string
+		wantInput  float64
+		wantOutput float64
+		wantCached float64
+		wantCreate float64
+	}{
+		{name: "k2.6", model: "kimi-k2.6", wantInput: 0.95, wantOutput: 4.00, wantCached: 0.16, wantCreate: 0.95},
+		{name: "k2.5", model: "kimi-k2.5", wantInput: 0.60, wantOutput: 3.00, wantCached: 0.10, wantCreate: 0.60},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pricing := GetPricingInfo("kimi", tt.model)
+			if pricing.PricingUnavailable {
+				t.Fatalf("GetPricingInfo(kimi, %q).PricingUnavailable = true, want false", tt.model)
+			}
+			if pricing.InputCostPerM != tt.wantInput {
+				t.Errorf("InputCostPerM = %f, want %f", pricing.InputCostPerM, tt.wantInput)
+			}
+			if pricing.OutputCostPerM != tt.wantOutput {
+				t.Errorf("OutputCostPerM = %f, want %f", pricing.OutputCostPerM, tt.wantOutput)
+			}
+			if pricing.CachedInputCostPerM != tt.wantCached {
+				t.Errorf("CachedInputCostPerM = %f, want %f", pricing.CachedInputCostPerM, tt.wantCached)
+			}
+			if pricing.CacheCreationCostPerM != tt.wantCreate {
+				t.Errorf("CacheCreationCostPerM = %f, want %f", pricing.CacheCreationCostPerM, tt.wantCreate)
+			}
+		})
+	}
+}
+
 func TestGetBedrockPricing_ClaudeCatalogAliasDelegation(t *testing.T) {
 	model := "claude-sonnet-4-6"
 	promptTokens := 250000

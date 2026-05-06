@@ -21,8 +21,9 @@ type Chunk struct {
 
 // Choice は OpenAI 互換 choice の最小共通構造。
 type Choice struct {
-	Delta        Delta  `json:"delta"`
-	FinishReason string `json:"finish_reason,omitempty"`
+	Delta        Delta           `json:"delta"`
+	FinishReason string          `json:"finish_reason,omitempty"`
+	Usage        json.RawMessage `json:"usage,omitempty"`
 }
 
 // Delta は OpenAI 互換 delta の最小共通構造。
@@ -199,6 +200,19 @@ func DecodeStandardUsage(raw json.RawMessage) (*api.Usage, error) {
 	return &apiUsage, nil
 }
 
+// UsagePayload は top-level usage を優先し、なければ choice-level usage を返す。
+func (c Chunk) UsagePayload() json.RawMessage {
+	if HasUsagePayload(c.Usage) {
+		return c.Usage
+	}
+	for _, choice := range c.Choices {
+		if HasUsagePayload(choice.Usage) {
+			return choice.Usage
+		}
+	}
+	return nil
+}
+
 // ParseSSEOptions は OpenAI 互換 SSE の共通処理オプション。
 type ParseSSEOptions struct {
 	// OnChunkDecodeError は chunk decode 失敗時の処理を上書きする。
@@ -266,7 +280,7 @@ func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *ui.Spinne
 			return "", false, err
 		}
 
-		usage, err := usageDecoder(chunk.Usage)
+		usage, err := usageDecoder(chunk.UsagePayload())
 		if err != nil {
 			if options.OnUsageDecodeError != nil {
 				return "", false, options.OnUsageDecodeError(err)

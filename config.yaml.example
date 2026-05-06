@@ -31,6 +31,9 @@ provider_models:
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
         max_output_tokens: 8192
+    kimi:
+        default_model: kimi-k2.6
+        max_output_tokens: 32768
     ollama:
         default_model: qwen2.5-coder:7b
         max_output_tokens: 4096
