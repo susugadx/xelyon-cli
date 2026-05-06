@@ -159,12 +159,12 @@ xelyon --provider azure --model my-gpt-5-deployment
 - OpenAI provider 用の `prompt_cache_key` / `prompt_cache_retention` は送信しません
 - `responses.store` / `responses.persist_response_id` は OpenAI provider と同じ設定を使用します
 
-`model` / `provider_models.azure.default_model` には Azure 側の **deployment 名**を入れます。deployment 名が実モデル名と異なる場合は、token limit / pricing / capability 判定用に `catalog_model` を設定してください。`catalog_model` は `gpt-5.4` や `gpt-5.5-pro` のような実モデル名で、deployment 名ではありません。
+`model` / `provider_models.azure.default_model` には Azure 側の **deployment 名**を入れます。deployment 名が実モデル名と異なる場合は、token limit / pricing / capability 判定用に `catalog_model` を設定してください。`catalog_model` は `gpt-5.4`、`gpt-5.5-pro`、`gpt-5.3-codex` のような実モデル名で、deployment 名ではありません。
 
 API key 認証の最小設定:
 
 ```bash
-xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --print-config
+xelyon doctor azure --deployment my-codex-deployment --catalog-model gpt-5.3-codex --print-config
 ```
 
 ```yaml
@@ -172,8 +172,8 @@ default_provider: azure
 
 provider_models:
   azure:
-    default_model: my-gpt-5-deployment
-    catalog_model: gpt-5.4
+    default_model: my-codex-deployment
+    catalog_model: gpt-5.3-codex
 ```
 
 Microsoft Entra ID 認証でも YAML は同じです。環境変数だけ API key ではなく bearer token にします。長時間実行や CI では、固定 token より `AZURE_OPENAI_AUTH_TOKEN_COMMAND` を推奨します。取得した token は process memory にだけ保持し、config/session には保存しません。
@@ -213,11 +213,11 @@ provider_models:
 - `AZURE_OPENAI_API_KEY` に OpenAI の `sk-...` key を入れる。Azure OpenAI resource key か Microsoft Entra ID bearer token を使ってください。
 - `default_model` と `catalog_model` を逆にする。`default_model` は deployment 名、`catalog_model` は実モデル名です。
 
-設定の到達性は CLI から診断できます。`doctor azure` は base URL、認証方式、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると `responses.store=false` の最小リクエストを送って、実 deployment への到達性も検証します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
+設定の到達性は CLI から診断できます。`doctor azure` は base URL、認証方式、deployment 解決、`catalog_model` とそれに紐づく token / pricing / capability 判定、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると `responses.store=false` の最小リクエストを送って、実 deployment への到達性も検証します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
 
 ```bash
 xelyon doctor azure
-xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --print-config
+xelyon doctor azure --deployment my-codex-deployment --catalog-model gpt-5.3-codex --print-config
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --smoke
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke

@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -123,6 +125,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addAuthChecks(ctx)
 	report.addDeploymentCheck(cfg, options.Deployment)
 	report.addCatalogModelCheck()
+	report.addCatalogPolicyCheck(cfg)
 	report.addFunctionCallingCheck()
 	report.addResponsesRetentionCheck()
 
@@ -377,6 +380,148 @@ func (r *DiagnosticReport) addCatalogModelCheck() {
 		"catalog_model is resolved",
 		fmt.Sprintf("%s (%s)", r.CatalogModel, r.CatalogModelSource),
 		"",
+	)
+}
+
+func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
+	deployment := strings.TrimSpace(r.Deployment)
+	catalogModel := strings.TrimSpace(r.CatalogModel)
+	if deployment == "" || catalogModel == "" || !looksLikeOpenAICatalogModel(catalogModel) {
+		return
+	}
+
+	policyCfg := diagnosticCatalogPolicyConfig(cfg, deployment, catalogModel)
+	maxOutput := diagnosticMaxOutputPolicy(policyCfg, deployment, catalogModel)
+	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
+	pricing := cost.GetPricingInfoForConfig(policyCfg, "azure", deployment)
+	responsesStreaming := openai.ShouldStreamResponses(catalogModel)
+	detail := diagnosticCatalogPolicyDetail(catalogModel, contextWindow, contextOK, maxOutput, pricing, responsesStreaming)
+
+	switch {
+	case !contextOK:
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"catalog_policy",
+			"catalog_model is missing context window metadata",
+			detail,
+			"Use an OpenAI catalog model known to XELYON, or update the model catalog before relying on token limits",
+		)
+	case !maxOutput.Available:
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"catalog_policy",
+			"catalog_model is missing max output metadata",
+			detail,
+			"Use an OpenAI catalog model known to XELYON, or set max_output_tokens explicitly for this deployment",
+		)
+	case pricing.PricingUnavailable:
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"catalog_policy",
+			"catalog_model is missing pricing metadata",
+			detail,
+			"Use an OpenAI catalog model with pricing metadata before relying on cost estimates",
+		)
+	default:
+		r.addCheck(
+			DiagnosticStatusOK,
+			"catalog_policy",
+			"catalog_model policy is available",
+			detail,
+			"",
+		)
+	}
+}
+
+func diagnosticCatalogPolicyConfig(cfg *config.Config, deployment, catalogModel string) *config.Config {
+	policyCfg := config.CloneConfig(cfg)
+	policyCfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: deployment,
+		CatalogModel: catalogModel,
+	})
+	_ = policyCfg.PatchProviderModelConfig("azure", func(pm *config.ProviderModelConfig) {
+		if pm.ModelOverrides == nil {
+			pm.ModelOverrides = map[string]config.ModelOverride{}
+		}
+		override := pm.ModelOverrides[deployment]
+		override.CatalogModel = catalogModel
+		pm.ModelOverrides[deployment] = override
+	})
+	return policyCfg
+}
+
+type diagnosticMaxOutputPolicyResult struct {
+	Tokens          int
+	Source          string
+	Available       bool
+	RuntimeFallback int
+}
+
+func diagnosticMaxOutputPolicy(cfg *config.Config, deployment, catalogModel string) diagnosticMaxOutputPolicyResult {
+	if override, ok := cfg.ModelOverrideForProvider("azure", deployment); ok && override.MaxOutputTokens > 0 {
+		return diagnosticMaxOutputPolicyResult{
+			Tokens:    override.MaxOutputTokens,
+			Source:    "model_overrides",
+			Available: true,
+		}
+	}
+
+	if tokens, ok := llmcatalog.KnownMaxOutputTokens(catalogModel); ok {
+		return diagnosticMaxOutputPolicyResult{
+			Tokens:    tokens,
+			Source:    "catalog",
+			Available: true,
+		}
+	}
+
+	runtimeFallback := api.GetMaxOutputTokens(config.WithContext(context.Background(), cfg), "azure", deployment)
+	return diagnosticMaxOutputPolicyResult{
+		Source:          "missing",
+		RuntimeFallback: runtimeFallback,
+	}
+}
+
+func diagnosticCatalogPolicyDetail(
+	catalogModel string,
+	contextWindow int,
+	contextOK bool,
+	maxOutput diagnosticMaxOutputPolicyResult,
+	pricing cost.PricingInfo,
+	responsesStreaming bool,
+) string {
+	contextDetail := "unknown"
+	if contextOK {
+		contextDetail = fmt.Sprintf("%d", contextWindow)
+	}
+	return fmt.Sprintf(
+		"catalog_model=%s, context_window=%s, max_output_tokens=%s, responses_streaming=%t, %s",
+		catalogModel,
+		contextDetail,
+		diagnosticMaxOutputDetail(maxOutput),
+		responsesStreaming,
+		diagnosticPricingDetail(pricing),
+	)
+}
+
+func diagnosticMaxOutputDetail(maxOutput diagnosticMaxOutputPolicyResult) string {
+	if maxOutput.Available {
+		return fmt.Sprintf("%d (%s)", maxOutput.Tokens, maxOutput.Source)
+	}
+	if maxOutput.RuntimeFallback > 0 {
+		return fmt.Sprintf("missing (runtime_fallback=%d)", maxOutput.RuntimeFallback)
+	}
+	return "missing"
+}
+
+func diagnosticPricingDetail(pricing cost.PricingInfo) string {
+	if pricing.PricingUnavailable {
+		return "pricing=unavailable"
+	}
+	return fmt.Sprintf(
+		"pricing=input $%.2f/M cached $%.3f/M output $%.2f/M",
+		pricing.InputCostPerM,
+		pricing.CachedInputCostPerM,
+		pricing.OutputCostPerM,
 	)
 }
 
