@@ -85,6 +85,7 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		APIKeyEnv:            "MOONSHOT_API_KEY",
 		SetupInstructions:    []string{"export MOONSHOT_API_KEY=your-api-key"},
 		DefaultSubAgentModel: "kimi-k2.5",
+		SupportsImages:       true,
 		PricingFamily:        "kimi",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "kimi-k2.6",

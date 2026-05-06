@@ -44,12 +44,18 @@ func TestDiagnose_ReportsRegistrationModelUnsupportedAndPromptCacheKey(t *testin
 	if !report.PromptCacheKeyPresent {
 		t.Fatal("PromptCacheKeyPresent = false, want true")
 	}
+	for _, unsupported := range report.UnsupportedFeatures {
+		if unsupported == "image input" {
+			t.Fatalf("UnsupportedFeatures = %v, want image input removed", report.UnsupportedFeatures)
+		}
+	}
 	for _, want := range []struct {
 		name   string
 		status DiagnosticStatus
 	}{
 		{"provider_registration", DiagnosticStatusOK},
 		{"model", DiagnosticStatusOK},
+		{"image_input", DiagnosticStatusOK},
 		{"unsupported_features", DiagnosticStatusInfo},
 		{"prompt_cache_key", DiagnosticStatusOK},
 	} {

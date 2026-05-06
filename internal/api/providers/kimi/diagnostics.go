@@ -141,7 +141,6 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		ContextWindowTokens:    contextWindow,
 		FunctionCallingEnabled: os.Getenv("KIMI_FUNCTION_CALLING") != "0",
 		UnsupportedFeatures: []string{
-			"image input",
 			"video input",
 			"built-in web_search",
 			"memory",
@@ -154,6 +153,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addProviderRegistrationCheck()
 	report.addModelConfigCheck()
 	report.addFunctionCallingCheck()
+	report.addImageInputCheck()
 	report.addUnsupportedFeaturesCheck()
 	report.addPromptCacheKeyCheck(ctx, cfg)
 
@@ -273,11 +273,21 @@ func (r *DiagnosticReport) addFunctionCallingCheck() {
 	r.addCheck(DiagnosticStatusOK, "function_calling", "Kimi function calling payloads are disabled", "KIMI_FUNCTION_CALLING=0", "")
 }
 
+func (r *DiagnosticReport) addImageInputCheck() {
+	r.addCheck(
+		DiagnosticStatusOK,
+		"image_input",
+		"Kimi native provider supports base64 image input",
+		"data:image/{png,jpeg,webp,gif};base64,...",
+		"URL images, video input, and file upload are not implemented in XELYON's Kimi provider",
+	)
+}
+
 func (r *DiagnosticReport) addUnsupportedFeaturesCheck() {
 	r.addCheck(
 		DiagnosticStatusInfo,
 		"unsupported_features",
-		"Kimi image, video, built-in web_search, memory, and code runner are not implemented in the native provider",
+		"Kimi video, built-in web_search, memory, and code runner are not implemented in the native provider",
 		strings.Join(r.UnsupportedFeatures, ", "),
 		"",
 	)

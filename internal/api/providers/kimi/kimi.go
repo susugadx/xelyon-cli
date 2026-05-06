@@ -32,8 +32,6 @@ func init() {
 	})
 }
 
-var yellow = color.New(color.FgYellow)
-
 const (
 	kimiAPIKeyEnv    = "MOONSHOT_API_KEY"
 	kimiAPIURLEnv    = "KIMI_API_URL"
@@ -91,7 +89,7 @@ func (p *Provider) APIURL() string {
 
 // SupportsImages は画像入力対応を返す。
 func (p *Provider) SupportsImages() bool {
-	return false
+	return true
 }
 
 // IsFunctionCallingEnabled は Function Calling が有効かを返す。
@@ -254,13 +252,29 @@ func decodeKimiUsage(raw json.RawMessage) (*api.Usage, error) {
 	}, nil
 }
 
-// ChatWithImage は画像付きメッセージで会話を行う（非対応: テキストのみ送信）。
+// ChatWithImage は Kimi Chat Completions の multimodal message として画像付きメッセージを送信する。
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	if image != nil && image.Base64 != "" {
-		yellow.Fprintln(api.OutputWriterFromContext(ctx), "Warning: Kimi does not support image input. The image will be ignored.")
+	if image == nil || image.Base64 == "" {
+		history = append(history, api.Message{Role: "user", Content: userMessage})
+		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
-	history = append(history, api.Message{Role: "user", Content: userMessage})
-	return p.ChatWithTools(ctx, systemPrompt, history, model)
+
+	built, err := p.buildImageChatCompletionsRequest(ctx, systemPrompt, history, userMessage, image, model)
+	if err != nil {
+		return "", err
+	}
+	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, built.Request)
+	if err != nil {
+		return "", err
+	}
+
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		ImageMode:          true,
+		SpinnerSuffix:      built.SpinnerSuffix,
+		ForceStreaming:     true,
+		RequestErrorPrefix: "Kimi API request failed",
+		StreamHandler:      p.handleStreamingResponse,
+	})
 }
 
 // SetMCPTools は MCP ツール定義を設定する。

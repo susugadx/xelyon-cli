@@ -2,7 +2,7 @@
 
 ## 現状
 
-Kimi native provider は Moonshot Chat Completions API の通常 function tools、streaming、thinking mode、`reasoning_content` の履歴再送を扱う。Kimi built-in の `$web_search`、memory、code runner、vision / image / video 入力はまだ runtime request に混ぜない。
+Kimi native provider は Moonshot Chat Completions API の通常 function tools、streaming、thinking mode、`reasoning_content` の履歴再送、image input を扱う。Kimi built-in の `$web_search`、memory、code runner、video 入力はまだ runtime request に混ぜない。
 
 XELYON の `web_search` ツールは現状 OpenAI / Gemini / Claude のネイティブ検索 provider surface に寄せており、メイン provider が Kimi の場合は `web_search.provider` で対応 provider を明示する。
 

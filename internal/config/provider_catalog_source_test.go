@@ -120,8 +120,11 @@ func TestKimiProviderCatalog(t *testing.T) {
 	if got := ProviderDefaultSubAgentModel("moonshot"); got != "kimi-k2.5" {
 		t.Fatalf("ProviderDefaultSubAgentModel(moonshot) = %q, want kimi-k2.5", got)
 	}
-	if ProviderSupportsImages("kimi") {
-		t.Fatal("ProviderSupportsImages(kimi) = true, want false")
+	if !ProviderSupportsImages("kimi") {
+		t.Fatal("ProviderSupportsImages(kimi) = false, want true")
+	}
+	if !ProviderSupportsImages("moonshot") {
+		t.Fatal("ProviderSupportsImages(moonshot) = false, want true")
 	}
 	cfg := DefaultConfig()
 	pm, ok := cfg.ProviderModels["kimi"]

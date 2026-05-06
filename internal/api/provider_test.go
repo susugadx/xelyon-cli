@@ -267,14 +267,14 @@ func TestSupportsImages(t *testing.T) {
 			want:         false,
 		},
 		{
-			name:         "Kimi does not support images",
+			name:         "Kimi supports images",
 			providerName: "kimi",
-			want:         false,
+			want:         true,
 		},
 		{
-			name:         "Moonshot alias does not support images",
+			name:         "Moonshot alias supports images",
 			providerName: "moonshot",
-			want:         false,
+			want:         true,
 		},
 		{
 			name:         "Ollama does not support images",

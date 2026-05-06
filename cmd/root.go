@@ -180,7 +180,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&noUpdateCheck, "no-update-check", false, "Disable automatic version check")
 
 	// 新規: -i/--image フラグ（画像入力）
-	rootCmd.Flags().StringVarP(&imageFlag, "image", "i", "", "Image file to include (for multimodal models: gemini, claude, openai)")
+	rootCmd.Flags().StringVarP(&imageFlag, "image", "i", "", "Image file to include (for multimodal models: kimi, gemini, claude, openai)")
 
 	// --no-tui は legacy REPL 用。新しい interactive command は TUI を primary surface とする。
 	rootCmd.Flags().BoolVar(&legacyNoTUI, "no-tui", false, "Use deprecated legacy classic REPL instead of the primary TUI")

@@ -20,9 +20,9 @@ func newKimiDoctorCommand() *cobra.Command {
 		Long: `Diagnose Kimi native provider configuration.
 
 Checks MOONSHOT_API_KEY, KIMI_API_URL, provider registration, model config,
-unsupported native features, and prompt_cache_key request shape. Use --smoke
-to send live Kimi Chat Completions requests. Use --tool-smoke to include a
-dummy tool call smoke request.`,
+image capability, unsupported native features, and prompt_cache_key request
+shape. Use --smoke to send live Kimi Chat Completions requests. Use
+--tool-smoke to include a dummy tool call smoke request.`,
 		Args: cobra.NoArgs,
 		RunE: runKimiDoctorInvocation,
 	}

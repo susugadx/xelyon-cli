@@ -135,12 +135,13 @@ xelyon -i wireframe.png "この画面をReactで実装して"
 
 # エラースクリーンショットから原因を分析
 xelyon --image error.png --provider gemini "このエラーを修正して"
+xelyon --image screenshot.png --provider kimi "この画面を説明して"
 
 # 対話モード中にも使用可能（image:プレフィックス）
 > image:screenshot.png このUIの問題点を教えて
 ```
 
-**対応プロバイダー**: Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
+**対応プロバイダー**: Kimi, Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
 
 ---
 

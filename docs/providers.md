@@ -18,7 +18,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 | プロバイダー | 画像入力 | 環境変数 | 公式サイト |
 |------------|---------|---------|-----------|
 | DeepSeek | ❌ | `DEEPSEEK_API_KEY` | https://platform.deepseek.com |
-| Kimi | ❌ | `MOONSHOT_API_KEY` | https://platform.moonshot.ai |
+| Kimi | ✅ | `MOONSHOT_API_KEY` | https://platform.moonshot.ai |
 | OpenAI | ✅ | `OPENAI_API_KEY` | https://platform.openai.com |
 | Azure OpenAI | ✅ | `AZURE_OPENAI_BASE_URL` + (`AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_AUTH_TOKEN` / `AZURE_OPENAI_AUTH_TOKEN_COMMAND` のいずれか) | https://azure.microsoft.com/products/ai-services/openai-service |
 | Gemini | ✅ | `GEMINI_API_KEY` | https://ai.google.dev |
@@ -67,7 +67,7 @@ xelyon --provider moonshot --model kimi-k2.5
 - Moonshot Chat Completions API を native provider として使用
 - streaming / tool calls / JSON output / thinking modes 対応
 - 256K context / 最大 32K output（K2.6 / K2.5）
-- 画像入力非対応。画像付き入力では警告を表示し、画像を無視してテキストだけ送信します。
+- 画像入力対応。`--image` / `image:` から渡された PNG / JPEG / WebP / GIF を `data:image/...;base64,...` の multimodal `image_url` part として送信します。
 - `/think off`: K2.6 / K2.5 は `thinking: {"type":"disabled"}` を送信します。`kimi-k2-thinking` には disabled を送信しません。
 - `/think on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信し、forced tool choice は `auto` に丸めます。
 - `reasoning_content`（思考内容）はストリーミング表示され、ツール実行時も保持されます。
@@ -75,9 +75,9 @@ xelyon --provider moonshot --model kimi-k2.5
 
 `kimi-k2-thinking` は明示指定された場合のみ 256K context / 最大 32K output の legacy/compat thinking model として扱います。新規利用では thinking on/off が可能な `kimi-k2.6` を推奨します。
 
-Kimi built-in の web_search / memory / code runner、vision / image / video 入力は現在の native provider では未対応です。
+Kimi built-in の web_search / memory / code runner、video 入力、file upload / `ms://` 参照は現在の native provider では未対応です。URL 画像は Kimi 公式仕様でも未対応のため、XELYON はローカル画像ファイルを base64 data URL として送ります。
 
-設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
+設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、画像入力対応、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
 
 ```bash
 xelyon doctor kimi
@@ -555,6 +555,7 @@ Bedrock は AWS Price List の US East (N. Virginia) text token 価格が確認�
 - **Gemini Flash**: バランス良く高速
 
 ### 画像解析
+- **Kimi**: Moonshot Chat Completions の native multimodal image input
 - **OpenAI**: 高品質な画像理解
 - **Azure OpenAI**: Azure 上の GPT deployment で画像入力
 - **Gemini**: マルチモーダル対応

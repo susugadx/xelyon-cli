@@ -512,10 +512,11 @@ xelyon --image error.png "このエラーを修正して"
 
 # プロバイダー指定と組み合わせ
 xelyon --image screenshot.png --provider gemini "このUIの問題点を教えて"
+xelyon --image receipt.png --provider kimi "この画像の内容を要約して"
 ```
 
 **対応フォーマット**: PNG, JPEG, GIF, WebP
-**対応プロバイダー**: Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
+**対応プロバイダー**: Kimi, Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
 **制限**: `--image` は `--headless` / `--output-format json` と併用できません。`--resume` とも併用できません。
 
 ### その他のオプション

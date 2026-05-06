@@ -157,6 +157,9 @@ func TestProviderDescriptorFor_Kimi(t *testing.T) {
 	if desc.DefaultSubAgentModel != "kimi-k2.5" {
 		t.Fatalf("DefaultSubAgentModel = %q, want kimi-k2.5", desc.DefaultSubAgentModel)
 	}
+	if !desc.SupportsImages {
+		t.Fatal("SupportsImages = false, want true")
+	}
 	if desc.PricingFamily != "kimi" {
 		t.Fatalf("PricingFamily = %q, want kimi", desc.PricingFamily)
 	}
