@@ -108,7 +108,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		MaxCompletionTokens: api.GetMaxOutputTokens(ctx, providerConfigKey, requestedModel),
 		Stream:              true,
 		IncludeUsage:        true,
-		PromptCacheKey:      openaicompat.BuildPromptCacheKey(requestedModel, systemPrompt),
+		PromptCacheKey:      buildKimiPromptCacheKey(ctx, requestedModel, systemPrompt),
 		ExtraFields:         extraFields,
 	}
 

@@ -407,6 +407,7 @@ func TestChatWithTools_ThinkingToolLoopReplayRequestShape(t *testing.T) {
 	t.Setenv("KIMI_API_URL", server.URL)
 
 	ctx, _, _ := newKimiTestContext(t, true)
+	ctx = api.WithPromptCacheScope(ctx, api.PromptCacheScope{SessionID: "session-loop"})
 	p := New("test-key")
 	p.SetMCPTools([]api.ToolDefinition{{
 		Name:        toolName,
@@ -451,6 +452,9 @@ func TestChatWithTools_ThinkingToolLoopReplayRequestShape(t *testing.T) {
 	secondCacheKey, _ := captured[1]["prompt_cache_key"].(string)
 	if firstCacheKey == "" || secondCacheKey == "" || firstCacheKey != secondCacheKey {
 		t.Fatalf("prompt_cache_key first=%q second=%q, want non-empty equal keys", firstCacheKey, secondCacheKey)
+	}
+	if !strings.HasPrefix(firstCacheKey, "xelyon:kimi:v1:") {
+		t.Fatalf("prompt_cache_key = %q, want session-aware Kimi key", firstCacheKey)
 	}
 
 	assertKimiToolReplayMessages(t, captured[1]["messages"], reasoningText, toolCallID, toolName, toolPath, toolResultText)
