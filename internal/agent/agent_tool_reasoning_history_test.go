@@ -69,6 +69,46 @@ func TestAgentToolLoopHistoryPersistsReasoningForOpenAICompatReplay(t *testing.T
 	}
 }
 
+func TestAgentToolLoopHistoryKeepsReasoningToolCallsAndToolResultInMemory(t *testing.T) {
+	provider := &reasoningMockProvider{
+		mockProvider: mockProvider{name: "test"},
+		reasoning:    "調査します",
+	}
+	agent := &Agent{
+		CurrentProvider: provider,
+	}
+	toolCall := &tools.ToolCall{
+		ID:      "call_1",
+		Tool:    "read_file",
+		Args:    map[string]string{"path": "README.md"},
+		RawArgs: map[string]any{"path": "README.md"},
+	}
+
+	agent.addToolCallsToHistory("README を確認します。", []*tools.ToolCall{toolCall})
+	agent.appendToolResultToHistory(toolCall, "README contents")
+
+	if len(agent.History) != 2 {
+		t.Fatalf("len(agent.History) = %d, want assistant tool_calls + tool result", len(agent.History))
+	}
+	assistant := agent.History[0]
+	if assistant.Role != "assistant" || assistant.ReasoningContent != "調査します" {
+		t.Fatalf("assistant history = %+v, want assistant with reasoning_content", assistant)
+	}
+	if len(assistant.ToolCalls) != 1 {
+		t.Fatalf("assistant ToolCalls len = %d, want 1", len(assistant.ToolCalls))
+	}
+	if assistant.ToolCalls[0].ID != "call_1" ||
+		assistant.ToolCalls[0].Type != "function" ||
+		assistant.ToolCalls[0].Function.Name != "read_file" ||
+		assistant.ToolCalls[0].Function.Arguments != `{"path":"README.md"}` {
+		t.Fatalf("assistant ToolCalls[0] = %+v, want read_file call_1 with arguments", assistant.ToolCalls[0])
+	}
+	toolResult := agent.History[1]
+	if toolResult.Role != "tool" || toolResult.ToolCallID != "call_1" || toolResult.ToolName != "read_file" || toolResult.Content != "README contents" {
+		t.Fatalf("tool result history = %+v, want role=tool with tool_call_id/name/content", toolResult)
+	}
+}
+
 func marshalAgentMessagesPayload(t *testing.T, messages []api.Message) []map[string]any {
 	t.Helper()
 	payload, err := json.Marshal(messages)
