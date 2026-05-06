@@ -50,6 +50,25 @@ func TestHandlePlanCommand_Off(t *testing.T) {
 	}
 }
 
+func TestHandlePlanCommand_Toggle(t *testing.T) {
+	agent := NewAgent("test-model", &mockPlanProvider{}, false)
+	agent.PlanModeEnabled = false
+
+	if !handlePlanCommand(agent, []string{"toggle"}) {
+		t.Fatal("handlePlanCommand(toggle) = false, want true")
+	}
+	if !agent.PlanModeEnabled {
+		t.Fatal("PlanModeEnabled should be true after first /plan toggle")
+	}
+
+	if !handlePlanCommand(agent, []string{"toggle"}) {
+		t.Fatal("handlePlanCommand(toggle) second call = false, want true")
+	}
+	if agent.PlanModeEnabled {
+		t.Fatal("PlanModeEnabled should be false after second /plan toggle")
+	}
+}
+
 func TestHandlePlanCommand_TogglesSurfaceVisibility(t *testing.T) {
 	runtime := newIsolatedRuntime()
 	agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
@@ -221,6 +240,14 @@ func TestHandleSpecialCommand_Plan(t *testing.T) {
 	}
 	if agent.PlanModeEnabled {
 		t.Error("PlanModeEnabled should be false after /plan off")
+	}
+
+	result = handleSpecialCommand("/plan toggle", agent)
+	if !result {
+		t.Error("handleSpecialCommand should return true for /plan toggle")
+	}
+	if !agent.PlanModeEnabled {
+		t.Error("PlanModeEnabled should be true after /plan toggle")
 	}
 }
 

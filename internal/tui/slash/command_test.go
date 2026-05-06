@@ -143,6 +143,42 @@ func TestSuggestionsExposeDisplayLabelAndCompletionText(t *testing.T) {
 	if got := suggestion.CompletionText(true); got != "/thinking " {
 		t.Fatalf("CompletionText(true) = %q, want '/thinking '", got)
 	}
+	if got := suggestion.SubmissionText(); got != "/thinking" {
+		t.Fatalf("SubmissionText() = %q, want /thinking", got)
+	}
+}
+
+func TestSuggestionSubmissionTextCanDifferFromCompletionText(t *testing.T) {
+	suggestion := Suggestion{
+		InsertText:  "/plan",
+		SubmitText:  "/plan toggle",
+		HasArgs:     true,
+		Description: "toggle plan mode",
+	}
+
+	if got := suggestion.CompletionText(true); got != "/plan " {
+		t.Fatalf("CompletionText(true) = %q, want '/plan '", got)
+	}
+	if got := suggestion.SubmissionText(); got != "/plan toggle" {
+		t.Fatalf("SubmissionText() = %q, want '/plan toggle'", got)
+	}
+}
+
+func TestSuggestionsPlanSubmitsToggleWithoutChangingCompletion(t *testing.T) {
+	matches := Suggestions("/plan")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/plan) returned %d matches, want 1", len(matches))
+	}
+	suggestion := matches[0]
+	if got := suggestion.InsertText; got != "/plan" {
+		t.Fatalf("InsertText = %q, want /plan", got)
+	}
+	if got := suggestion.CompletionText(true); got != "/plan " {
+		t.Fatalf("CompletionText(true) = %q, want '/plan '", got)
+	}
+	if got := suggestion.SubmissionText(); got != "/plan toggle" {
+		t.Fatalf("SubmissionText() = %q, want '/plan toggle'", got)
+	}
 }
 
 func TestSuggestionsCanonicalizeThinkAlias(t *testing.T) {
@@ -184,6 +220,52 @@ func TestSuggestionsThinkingAliasArguments(t *testing.T) {
 	}
 	if !matches[0].SubmitOnEnter {
 		t.Fatal("non-empty thinking argument suggestions should submit on Enter")
+	}
+}
+
+func TestSuggestionsSkillsSubcommands(t *testing.T) {
+	matches := Suggestions("/skills ")
+	if len(matches) != 3 {
+		t.Fatalf("Suggestions(/skills ) returned %d matches, want 3", len(matches))
+	}
+
+	wantLabels := []string{"/skills list", "/skills show <name>", "/skills doctor"}
+	for i, want := range wantLabels {
+		if matches[i].Label != want {
+			t.Fatalf("matches[%d].Label = %q, want %q", i, matches[i].Label, want)
+		}
+		if !matches[i].SubmitOnEnter {
+			t.Fatalf("matches[%d].SubmitOnEnter = false, want true", i)
+		}
+	}
+
+	if got := matches[1].InsertText; got != "/skills show" {
+		t.Fatalf("show InsertText = %q, want /skills show", got)
+	}
+	if !matches[1].HasArgs {
+		t.Fatal("show suggestion should keep HasArgs for Tab trailing space")
+	}
+	if got := matches[1].CompletionText(true); got != "/skills show " {
+		t.Fatalf("show CompletionText(true) = %q, want '/skills show '", got)
+	}
+}
+
+func TestSuggestionsSkillsSubcommandPrefix(t *testing.T) {
+	matches := Suggestions("/skills d")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/skills d) returned %d matches, want 1", len(matches))
+	}
+	if got := matches[0].InsertText; got != "/skills doctor" {
+		t.Fatalf("InsertText = %q, want /skills doctor", got)
+	}
+	if got := matches[0].Description; got != "Show parsing/duplicate diagnostics" {
+		t.Fatalf("Description = %q", got)
+	}
+}
+
+func TestSuggestionsDoNotExposeConfigSubcommandsYet(t *testing.T) {
+	if matches := Suggestions("/config "); len(matches) != 0 {
+		t.Fatalf("Suggestions(/config ) = %#v, want no matches", matches)
 	}
 }
 

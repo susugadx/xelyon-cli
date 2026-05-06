@@ -16,6 +16,15 @@ func handlePlanCommand(agent *Agent, args []string) bool {
 			agent.setPlanModeEnabled(false)
 			green.Fprintln(out, "✅ Plan Mode OFF - 通常モード")
 			return true
+		case "toggle":
+			if agent.PlanModeEnabled {
+				agent.setPlanModeEnabled(false)
+				green.Fprintln(out, "✅ Plan Mode OFF - 通常モード")
+			} else {
+				agent.setPlanModeEnabled(true)
+				green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認（planning only）")
+			}
+			return true
 		case "status":
 			if agent.PlanModeEnabled {
 				cyan.Fprintln(out, "📋 Plan Mode: ON")
