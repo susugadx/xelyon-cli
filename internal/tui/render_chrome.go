@@ -87,6 +87,19 @@ func (m *Model) renderStatusBar() string {
 	}
 	statusBar := statusText
 	for _, hint := range hints {
+		pathMaxWidth := m.width - lipgloss.Width(statusText) - lipgloss.Width(hint) - 4
+		workingDir := m.renderWorkingDirStatusSegment(pathMaxWidth)
+		if workingDir == "" {
+			continue
+		}
+		statusWithPath := statusText + "  " + workingDir
+		padding := m.width - lipgloss.Width(statusWithPath) - lipgloss.Width(hint)
+		if padding >= 2 {
+			statusBar = statusWithPath + strings.Repeat(" ", padding) + chrome.HintFg + hint + chrome.Reset
+			return fitANSITextWidth(statusBar, m.width)
+		}
+	}
+	for _, hint := range hints {
 		padding := m.width - lipgloss.Width(statusText) - lipgloss.Width(hint)
 		if padding >= 2 {
 			statusBar = statusText + strings.Repeat(" ", padding) + chrome.HintFg + hint + chrome.Reset
