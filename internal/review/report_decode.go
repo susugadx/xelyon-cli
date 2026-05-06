@@ -9,6 +9,18 @@ import (
 
 // DecodeReviewReportJSON は strict JSON として ReviewReport を decode して検証する。
 func DecodeReviewReportJSON(data []byte) (ReviewReport, error) {
+	report, err := decodeReviewReportStrictJSON(data)
+	if err != nil {
+		return ReviewReport{}, err
+	}
+
+	if err := ValidateReviewReport(report); err != nil {
+		return ReviewReport{}, err
+	}
+	return report, nil
+}
+
+func decodeReviewReportStrictJSON(data []byte) (ReviewReport, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
@@ -25,8 +37,5 @@ func DecodeReviewReportJSON(data []byte) (ReviewReport, error) {
 		return ReviewReport{}, fmt.Errorf("review report must contain a single JSON value")
 	}
 
-	if err := ValidateReviewReport(report); err != nil {
-		return ReviewReport{}, err
-	}
 	return report, nil
 }

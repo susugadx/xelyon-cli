@@ -28,7 +28,7 @@ func (e *repoSandboxExecutor) run(ctx context.Context, req ReviewProbeRequest) (
 	// request policy により元 repo への通常の副作用を避ける。
 	result = newRepoSandboxProbeResult(req)
 
-	sandboxRoot, err := e.mktemp("", "xelyon-review-sandbox-*")
+	sandboxRoot, err := e.mktemp("", reviewProbeSandboxTempPattern)
 	if err != nil {
 		blockRepoSandboxResult(&result, fmt.Sprintf("failed to create repo_sandbox root: %v", err))
 		return result

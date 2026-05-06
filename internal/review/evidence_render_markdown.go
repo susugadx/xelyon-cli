@@ -138,7 +138,7 @@ func appendReviewEvidenceMarkdownSmallHeading(b *strings.Builder, title string) 
 }
 
 func appendReviewEvidenceMarkdownJSONFence(b *strings.Builder, value any) {
-	data, err := marshalReviewEvidenceJSONIndent(value)
+	data, err := marshalReviewJSONIndent(value)
 	if err != nil {
 		appendReviewEvidenceMarkdownFence(b, "json", "null")
 		return

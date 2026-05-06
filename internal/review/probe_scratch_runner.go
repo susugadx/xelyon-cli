@@ -34,7 +34,7 @@ func (e *scratchOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) (
 	// 実行中の network / 任意 process 起動 / 任意 file access を OS レベルでは防がない。
 	result = newScratchOnlyProbeResult(req)
 
-	scratchDir, err := e.mktemp("", "xelyon-review-scratch-*")
+	scratchDir, err := e.mktemp("", reviewProbeScratchTempPattern)
 	if err != nil {
 		blockScratchOnlyResult(&result, fmt.Sprintf("failed to create scratch directory: %v", err))
 		return result
