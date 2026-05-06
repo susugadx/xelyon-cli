@@ -143,6 +143,42 @@ func TestSuggestionsExposeDisplayLabelAndCompletionText(t *testing.T) {
 	if got := suggestion.CompletionText(true); got != "/thinking " {
 		t.Fatalf("CompletionText(true) = %q, want '/thinking '", got)
 	}
+	if got := suggestion.SubmissionText(); got != "/thinking" {
+		t.Fatalf("SubmissionText() = %q, want /thinking", got)
+	}
+}
+
+func TestSuggestionSubmissionTextCanDifferFromCompletionText(t *testing.T) {
+	suggestion := Suggestion{
+		InsertText:  "/plan",
+		SubmitText:  "/plan toggle",
+		HasArgs:     true,
+		Description: "toggle plan mode",
+	}
+
+	if got := suggestion.CompletionText(true); got != "/plan " {
+		t.Fatalf("CompletionText(true) = %q, want '/plan '", got)
+	}
+	if got := suggestion.SubmissionText(); got != "/plan toggle" {
+		t.Fatalf("SubmissionText() = %q, want '/plan toggle'", got)
+	}
+}
+
+func TestSuggestionsPlanSubmitsToggleWithoutChangingCompletion(t *testing.T) {
+	matches := Suggestions("/plan")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/plan) returned %d matches, want 1", len(matches))
+	}
+	suggestion := matches[0]
+	if got := suggestion.InsertText; got != "/plan" {
+		t.Fatalf("InsertText = %q, want /plan", got)
+	}
+	if got := suggestion.CompletionText(true); got != "/plan " {
+		t.Fatalf("CompletionText(true) = %q, want '/plan '", got)
+	}
+	if got := suggestion.SubmissionText(); got != "/plan toggle" {
+		t.Fatalf("SubmissionText() = %q, want '/plan toggle'", got)
+	}
 }
 
 func TestSuggestionsCanonicalizeThinkAlias(t *testing.T) {

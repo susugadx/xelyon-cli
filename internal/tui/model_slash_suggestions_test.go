@@ -261,6 +261,51 @@ func TestSlashSuggestions_CanMoveSelectionWithDownAndTab(t *testing.T) {
 	}
 }
 
+func TestSlashSuggestions_CanMoveSelectionWithShiftTabAndTab(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = updated.(Model)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("Tab completion should not execute command, got %v", cmd)
+	}
+	if got := m.textInput.Value(); got != "/model " {
+		t.Fatalf("textInput after Down+ShiftTab+Tab = %q, want /model with trailing space", got)
+	}
+}
+
+func TestSlashSuggestions_EnterOnPlanSuggestionToggles(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:      "ready",
+		handledCommands: map[string]bool{"/plan toggle": true},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/pl")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("selected /plan should not start chat, got cmd %v", cmd)
+	}
+	if got := len(agent.handledInputs); got != 1 {
+		t.Fatalf("handledInputs length = %d, want 1", got)
+	}
+	if got := agent.handledInputs[0]; got != "/plan toggle" {
+		t.Fatalf("handledInputs[0] = %q, want /plan toggle", got)
+	}
+	if m.textInput.Value() != "" {
+		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
+	}
+}
+
 func TestSlashSuggestions_CapRowsToSmallWindow(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := NewModel(agent, "")

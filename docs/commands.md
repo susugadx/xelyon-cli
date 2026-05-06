@@ -345,6 +345,7 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 > /plan           # 現在のモード表示
 > /plan on        # Plan Mode 有効化
 > /plan off       # 通常モードに戻る
+> /plan toggle    # Plan Mode を切り替え
 > /plan status    # ステータス表示
 ```
 

@@ -153,6 +153,14 @@ func (m *Model) setInputToSlashSuggestion(suggestion slash.Suggestion, appendArg
 	m.chromeDirty = true
 }
 
+func (m *Model) setInputToSlashSuggestionSubmission(suggestion slash.Suggestion) {
+	value := suggestion.SubmissionText()
+	m.textInput.SetValue(value)
+	m.textInput.SetCursor(utf8.RuneCountInString(value))
+	m.clearSlashSuggestions()
+	m.chromeDirty = true
+}
+
 func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	if len(m.visibleSlashSuggestionRows()) == 0 {
 		return m, nil, false
@@ -162,7 +170,7 @@ func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	case msg.Type == tea.KeyEsc:
 		m.clearSlashSuggestions()
 		return m, nil, true
-	case msg.Type == tea.KeyUp || msg.String() == "ctrl+p":
+	case msg.Type == tea.KeyUp || msg.Type == tea.KeyShiftTab || msg.String() == "ctrl+p":
 		m.moveSlashSuggestion(-1)
 		return m, nil, true
 	case msg.Type == tea.KeyDown || msg.String() == "ctrl+n":
@@ -183,7 +191,7 @@ func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 				}
 				return m, cmd, true
 			}
-			m.setInputToSlashSuggestion(suggestion, false)
+			m.setInputToSlashSuggestionSubmission(suggestion)
 			updated, cmd := m.handleComposerSubmit()
 			if typed, ok := updated.(Model); ok {
 				m = typed

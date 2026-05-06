@@ -8,8 +8,10 @@ import (
 
 // Suggestion は TUI の slash 候補表示と入力補完に必要な情報を表す。
 type Suggestion struct {
-	Label       string
-	InsertText  string
+	Label      string
+	InsertText string
+	// SubmitText は Enter 実行時だけ InsertText と異なる command を使いたい場合に指定する。
+	SubmitText  string
 	Description string
 	HasArgs     bool
 	// SubmitOnEnter は候補表示中の Enter で、この候補を確定して実行してよいかを表す。
@@ -20,6 +22,14 @@ type Suggestion struct {
 func (s Suggestion) CompletionText(appendArgSpace bool) string {
 	if appendArgSpace && s.HasArgs && !strings.HasSuffix(s.InsertText, " ") {
 		return s.InsertText + " "
+	}
+	return s.InsertText
+}
+
+// SubmissionText は候補を Enter で実行するときの文字列を返す。
+func (s Suggestion) SubmissionText() string {
+	if s.SubmitText != "" {
+		return s.SubmitText
 	}
 	return s.InsertText
 }
@@ -45,8 +55,18 @@ func newCommandSuggestion(cmd commandcatalog.CommandInfo) Suggestion {
 	return Suggestion{
 		Label:         label,
 		InsertText:    cmd.Name,
+		SubmitText:    commandSuggestionSubmitText(cmd),
 		Description:   cmd.Description,
 		HasArgs:       cmd.Args != "",
 		SubmitOnEnter: true,
+	}
+}
+
+func commandSuggestionSubmitText(cmd commandcatalog.CommandInfo) string {
+	switch cmd.Name {
+	case "/plan":
+		return "/plan toggle"
+	default:
+		return ""
 	}
 }

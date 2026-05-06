@@ -270,7 +270,7 @@ func commandProject() CommandInfo {
 }
 
 func commandPlan() CommandInfo {
-	return legacyDiscoverableCommand("/plan", "[on|off]", "Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)", "Plan Modeを切り替え", CommandCategoryDev, 120)
+	return legacyDiscoverableCommand("/plan", "[on|off|toggle|status]", "Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)", "Plan Modeを切り替え", CommandCategoryDev, 120)
 }
 
 func commandThink() CommandInfo {
