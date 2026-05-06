@@ -21,10 +21,10 @@ func buildKimiPromptCacheKey(ctx context.Context, model, systemPrompt string) st
 		scopeInput += "\x00task:" + scope.TaskID
 	}
 	modelInput := "model:" + strings.TrimSpace(model)
-	return fmt.Sprintf("xelyon:kimi:v1:%s:%s", shortKimiPromptCacheHash(scopeInput), shortKimiPromptCacheHash(modelInput))
+	return fmt.Sprintf("xelyon:kimi:v1:%s:%s", kimiPromptCacheHash(scopeInput), kimiPromptCacheHash(modelInput))
 }
 
-func shortKimiPromptCacheHash(input string) string {
+func kimiPromptCacheHash(input string) string {
 	sum := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("%x", sum[:4])
+	return fmt.Sprintf("%x", sum[:12])
 }
