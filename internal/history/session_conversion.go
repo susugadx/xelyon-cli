@@ -14,11 +14,12 @@ func (s *Session) ToAPIMessages() []api.Message {
 			continue
 		}
 		msg := api.Message{
-			Role:       m.Role,
-			Content:    m.Content,
-			ToolCalls:  m.ToolCalls,
-			ToolCallID: m.ToolCallID,
-			ToolName:   m.ToolName,
+			Role:             m.Role,
+			Content:          m.Content,
+			ReasoningContent: m.ReasoningContent,
+			ToolCalls:        m.ToolCalls,
+			ToolCallID:       m.ToolCallID,
+			ToolName:         m.ToolName,
 		}
 		if m.ProviderMetadata != nil {
 			if len(m.ProviderMetadata.AnthropicContentBlocks) > 0 {
@@ -50,10 +51,15 @@ func providerMetadataFromAPIMessage(msg api.Message) *MessageProviderMetadata {
 }
 
 func newMessageEntryFromAPI(msg api.Message, model string, ts time.Time) MessageEntry {
+	return newMessageEntryFromAPIWithStoredContent(msg, msg.Content, model, ts)
+}
+
+func newMessageEntryFromAPIWithStoredContent(msg api.Message, content, model string, ts time.Time) MessageEntry {
 	return MessageEntry{
 		Timestamp:        ts,
 		Role:             msg.Role,
-		Content:          msg.Content,
+		Content:          content,
+		ReasoningContent: msg.ReasoningContent,
 		Model:            model,
 		ToolCalls:        msg.ToolCalls,
 		ToolCallID:       msg.ToolCallID,

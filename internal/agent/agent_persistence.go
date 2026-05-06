@@ -14,8 +14,12 @@ func (a *Agent) appendSessionMessage(role, content, model string) {
 }
 
 func (a *Agent) appendSessionMessageFromAPI(msg api.Message, model string) {
+	a.appendSessionMessageFromAPIWithStoredContent(msg, msg.Content, model)
+}
+
+func (a *Agent) appendSessionMessageFromAPIWithStoredContent(msg api.Message, content, model string) {
 	a.withSessionMutation(func() {
-		a.session.AddMessageFromAPI(msg, model)
+		a.session.AddMessageFromAPIWithStoredContent(msg, content, model)
 	})
 }
 

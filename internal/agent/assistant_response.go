@@ -85,7 +85,7 @@ func (a *Agent) appendAssistantResponse(prepared assistantResponse, opts assista
 	case assistantSessionRawText:
 		a.appendSessionMessage("assistant", prepared.raw, a.CurrentModel)
 	case assistantSessionDisplayText:
-		a.appendSessionMessage("assistant", prepared.display, a.CurrentModel)
+		a.appendSessionMessageFromAPIWithStoredContent(msg, prepared.display, a.CurrentModel)
 	}
 
 	return msg

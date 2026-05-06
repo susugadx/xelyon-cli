@@ -64,6 +64,83 @@ func TestBuildChatCompletionsRequest_BuildsStandardPayloadWithExtras(t *testing.
 	}
 }
 
+func TestBuildChatMessages_StandardMessagesPayloadUnchanged(t *testing.T) {
+	messages := BuildChatMessages("system", []api.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "hi"},
+	})
+
+	payload := marshalMessagesPayload(t, messages)
+	if len(payload) != 3 {
+		t.Fatalf("len(messages) = %d, want 3", len(payload))
+	}
+	assertPayloadKeys(t, payload[0], "role", "content")
+	assertPayloadKeys(t, payload[1], "role", "content")
+	assertPayloadKeys(t, payload[2], "role", "content")
+	if payload[0]["role"] != "system" || payload[0]["content"] != "system" {
+		t.Fatalf("system payload = %#v, want role/content only", payload[0])
+	}
+	if payload[1]["role"] != "user" || payload[1]["content"] != "hello" {
+		t.Fatalf("user payload = %#v, want role/content only", payload[1])
+	}
+	if payload[2]["role"] != "assistant" || payload[2]["content"] != "hi" {
+		t.Fatalf("assistant payload = %#v, want role/content only", payload[2])
+	}
+}
+
+func TestBuildChatMessages_OmitsEmptyReasoningContent(t *testing.T) {
+	messages := BuildChatMessages("system", []api.Message{
+		{Role: "assistant", Content: "hi", ReasoningContent: ""},
+	})
+
+	payload := marshalMessagesPayload(t, messages)
+	if _, ok := payload[1]["reasoning_content"]; ok {
+		t.Fatalf("reasoning_content = %#v, want omitted when empty", payload[1]["reasoning_content"])
+	}
+}
+
+func TestBuildChatMessages_PreservesReasoningAndToolFields(t *testing.T) {
+	messages := BuildChatMessages("system", []api.Message{
+		{
+			Role:             "assistant",
+			Content:          "I'll inspect it.",
+			ReasoningContent: "Need to inspect the file first.",
+			ToolCalls: []api.OpenAIToolCall{{
+				ID:   "call_1",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"README.md"}`,
+				},
+			}},
+		},
+		{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+	})
+
+	payload := marshalMessagesPayload(t, messages)
+	assistant := payload[1]
+	if assistant["reasoning_content"] != "Need to inspect the file first." {
+		t.Fatalf("assistant reasoning_content = %#v, want preserved", assistant["reasoning_content"])
+	}
+	toolCalls, ok := assistant["tool_calls"].([]any)
+	if !ok || len(toolCalls) != 1 {
+		t.Fatalf("assistant tool_calls = %#v, want one tool call", assistant["tool_calls"])
+	}
+	toolCall, ok := toolCalls[0].(map[string]any)
+	if !ok || toolCall["id"] != "call_1" || toolCall["type"] != "function" {
+		t.Fatalf("tool_call = %#v, want id/type preserved", toolCalls[0])
+	}
+	function, ok := toolCall["function"].(map[string]any)
+	if !ok || function["name"] != "read_file" || function["arguments"] != `{"path":"README.md"}` {
+		t.Fatalf("tool_call function = %#v, want read_file arguments preserved", toolCall["function"])
+	}
+
+	tool := payload[2]
+	if tool["role"] != "tool" || tool["tool_call_id"] != "call_1" || tool["content"] != "README contents" {
+		t.Fatalf("tool payload = %#v, want role/tool_call_id/content preserved", tool)
+	}
+}
+
 func TestBuildChatCompletionsRequest_DefaultMaxTokensField(t *testing.T) {
 	req := BuildChatCompletionsRequest(ChatCompletionsRequestOptions{
 		Model:     "provider/model",
@@ -203,5 +280,30 @@ func assertJSONPostRequest(t *testing.T, req *http.Request) {
 	}
 	if decoded.Model != "deployment" {
 		t.Fatalf("decoded model = %q, want deployment", decoded.Model)
+	}
+}
+
+func marshalMessagesPayload(t *testing.T, messages []api.Message) []map[string]any {
+	t.Helper()
+	payload, err := json.Marshal(messages)
+	if err != nil {
+		t.Fatalf("json.Marshal(messages) error = %v", err)
+	}
+	var decoded []map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal(messages) error = %v", err)
+	}
+	return decoded
+}
+
+func assertPayloadKeys(t *testing.T, payload map[string]any, keys ...string) {
+	t.Helper()
+	if len(payload) != len(keys) {
+		t.Fatalf("payload keys = %#v, want only %v", payload, keys)
+	}
+	for _, key := range keys {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("payload keys = %#v, missing %q", payload, key)
+		}
 	}
 }

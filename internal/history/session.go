@@ -43,6 +43,7 @@ type MessageEntry struct {
 	Timestamp        time.Time                `json:"timestamp"`
 	Role             string                   `json:"role"`
 	Content          string                   `json:"content"`
+	ReasoningContent string                   `json:"reasoning_content,omitempty"` // OpenAI互換 reasoning_content
 	Model            string                   `json:"model,omitempty"`
 	ResponseID       string                   `json:"response_id,omitempty"`       // OpenAI Responses API の ID
 	ToolCalls        []api.OpenAIToolCall     `json:"tool_calls,omitempty"`        // FC: assistant のツール呼び出し
@@ -118,8 +119,13 @@ func (s *Session) AddMessage(role, content, model string) {
 
 // AddMessageFromAPI は api.Message から FC メタデータ付きでセッションに保存
 func (s *Session) AddMessageFromAPI(msg api.Message, model string) {
+	s.AddMessageFromAPIWithStoredContent(msg, msg.Content, model)
+}
+
+// AddMessageFromAPIWithStoredContent は api.Message のメタデータを保持し、保存 content だけ指定値に差し替える。
+func (s *Session) AddMessageFromAPIWithStoredContent(msg api.Message, content, model string) {
 	now := time.Now()
-	s.Messages = append(s.Messages, newMessageEntryFromAPI(msg, model, now))
+	s.Messages = append(s.Messages, newMessageEntryFromAPIWithStoredContent(msg, content, model, now))
 	s.LastModified = now
 }
 
