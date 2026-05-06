@@ -127,6 +127,9 @@ func (m Model) View() string {
 	if m.prompt != nil {
 		return m.renderPromptOverlay(base)
 	}
+	if m.providerPicker != nil {
+		return m.renderProviderPickerOverlay(base)
+	}
 	return base
 }
 

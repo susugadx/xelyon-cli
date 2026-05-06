@@ -34,8 +34,9 @@ func handleModelCommand(agent *Agent, args []string) bool {
 
 	// 引数なし → 現在のモデルとプロバイダーを表示
 	if len(args) == 0 {
-		_, _ = fmt.Fprintf(out, "🤖 Current model: %s\n", agent.CurrentModel)
-		_, _ = fmt.Fprintf(out, "🌐 Provider: %s\n", agent.ProviderName)
+		state := agent.CurrentProviderModelState()
+		_, _ = fmt.Fprintf(out, "🤖 Current model: %s\n", state.CurrentModel)
+		_, _ = fmt.Fprintf(out, "🌐 Provider: %s\n", state.CurrentProvider)
 		yellow.Fprintln(out, "\nUsage: /model <model-name>")
 		yellow.Fprintln(out, "Enter any model name supported by your provider.")
 
@@ -55,45 +56,32 @@ func handleModelCommand(agent *Agent, args []string) bool {
 	}
 
 	// /model <model-name> → モデル切り替え
-	newModel := args[0]
+	_ = switchModelForCurrentProviderWithOutput(agent, args[0])
+	return true
+}
 
-	// 既存プロバイダーのキャッシュをクリア（サポートしている場合）
-	if agent.CurrentProvider != nil {
-		if cacheClearable, ok := agent.CurrentProvider.(api.CacheClearable); ok {
-			cacheClearable.ClearCache()
-		}
-	}
+func switchModelForCurrentProviderWithOutput(agent *Agent, newModel string) error {
+	out := agent.output()
+	outcome := agent.SwitchModelForCurrentProvider(newModel)
 
-	// モデルを切り替え
-	oldModel := agent.CurrentModel
-	agent.setCurrentModelAndSync(newModel)
-
-	green.Fprintf(out, "✅ Model switched: %s → %s\n", oldModel, newModel)
+	green.Fprintf(out, "✅ Model switched: %s → %s\n", outcome.OldModel, outcome.NewModel)
 	if agent.CurrentProvider != nil {
 		printContextSize(agent)
 	}
 
-	// 設定ファイルにも保存
-	cfg, err := loadConfigForCommand()
-	if err != nil {
-		yellow.Fprintf(out, "Warning: Failed to load config: %v\n", err)
-		return true
+	if outcome.LoadConfigErr != nil {
+		yellow.Fprintf(out, "Warning: Failed to load config: %v\n", outcome.LoadConfigErr)
+		return outcome.LoadConfigErr
 	}
 
-	cfg.DefaultModel = newModel
-
-	// プロバイダー別の設定がある場合はそちらも更新（優先されるため）
-	agent.SyncDefaultModelToProvider(cfg)
-
-	if err := saveConfigForCommand(cfg); err != nil {
-		yellow.Fprintf(out, "Warning: Failed to save config: %v\n", err)
+	if outcome.SaveConfigErr != nil {
+		yellow.Fprintf(out, "Warning: Failed to save config: %v\n", outcome.SaveConfigErr)
 		yellow.Fprintln(out, "Model switched for this session only")
-		return true
+		return outcome.SaveConfigErr
 	}
 
-	agent.setRuntimeConfig(cfg)
 	green.Fprintln(out, "💾 Default model saved to config")
-	return true
+	return nil
 }
 
 // handleConfigCommand は設定の表示・変更を処理
@@ -244,15 +232,24 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 	}
 }
 
-// handleUseCommand はプロバイダーを切り替える
+// handleProviderCommand はプロバイダーを切り替える。
+func handleProviderCommand(agent *Agent, args []string) bool {
+	return handleProviderSwitchCommand(agent, args, "/provider")
+}
+
+// handleUseCommand は後方互換のプロバイダー切り替えコマンドを処理する。
 func handleUseCommand(agent *Agent, args []string) bool {
+	return handleProviderSwitchCommand(agent, args, "/use")
+}
+
+func handleProviderSwitchCommand(agent *Agent, args []string, commandName string) bool {
 	providerList := strings.Join(api.ListProviders(), ", ")
 	out := agent.output()
 
 	if len(args) == 0 {
-		yellow.Fprintln(out, "Usage: /use <provider> [model]")
+		yellow.Fprintf(out, "Usage: %s <provider> [model]\n", commandName)
 		yellow.Fprintf(out, "Available providers: %s\n", providerList)
-		yellow.Fprintln(out, "Example: /use gemini gemini-2.0-flash-exp")
+		yellow.Fprintf(out, "Example: %s gemini gemini-2.0-flash-exp\n", commandName)
 		return true
 	}
 
@@ -270,15 +267,30 @@ func handleUseCommand(agent *Agent, args []string) bool {
 	}
 
 	// 既に同じプロバイダーの場合でも、モデルが指定されていれば切り替え
+	state := agent.CurrentProviderModelState()
 	requestedProviderConfigKey := config.ActiveProviderConfigKey(providerName)
-	if len(args) < 2 && requestedProviderConfigKey != "" && requestedProviderConfigKey == agent.currentProviderConfigKey() {
-		yellow.Fprintf(out, "Already using %s (model: %s)\n", providerName, agent.CurrentModel)
-		yellow.Fprintln(out, "Hint: Use '/use <provider> <model>' to change model")
+	if len(args) < 2 && requestedProviderConfigKey != "" && requestedProviderConfigKey == state.ProviderConfigKey {
+		yellow.Fprintf(out, "Already using %s (model: %s)\n", providerName, state.CurrentModel)
+		yellow.Fprintf(out, "Hint: Use '%s <provider> <model>' to change model\n", commandName)
 		return true
 	}
 
-	// プロバイダー切り替え実行
-	if err := agent.switchProvider(providerName, requestedModel); err != nil {
+	_ = switchProviderModelWithOutput(agent, providerName, requestedModel)
+	return true
+}
+
+func switchProviderModelWithOutput(agent *Agent, providerName, requestedModel string) error {
+	providerList := strings.Join(api.ListProviders(), ", ")
+	out := agent.output()
+
+	if !api.IsRegisteredProvider(providerName) {
+		red.Fprintf(out, "Unknown provider: %s\n", providerName)
+		yellow.Fprintf(out, "Available providers: %s\n", providerList)
+		return fmt.Errorf("unknown provider: %s", providerName)
+	}
+
+	outcome, err := agent.SwitchProviderModel(providerName, requestedModel)
+	if err != nil {
 		red.Fprintf(out, "❌ %v\n", err)
 
 		// API キー設定方法を表示
@@ -288,14 +300,15 @@ func handleUseCommand(agent *Agent, args []string) bool {
 				yellow.Fprintf(out, "  %s\n", line)
 			}
 		}
-		return true
+		return err
 	}
 
+	printProviderSwitchOutcome(agent, outcome)
 	if agent.CurrentProvider != nil {
 		printContextSize(agent)
 	}
 
-	return true
+	return nil
 }
 
 // handleProvidersCommand は利用可能なプロバイダー一覧を表示

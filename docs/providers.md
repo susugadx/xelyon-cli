@@ -62,6 +62,7 @@ xelyon --provider openai --model gpt-5.4
 xelyon --provider openai --model gpt-5.5
 xelyon --provider openai --model gpt-5.5-pro
 xelyon --provider openai --model gpt-5.4-mini
+xelyon --provider openai --model gpt-5.3-codex
 xelyon --provider openai --model gpt-5.2
 xelyon --provider openai --model gpt-5.2-codex
 ```
@@ -89,13 +90,14 @@ XELYON は Responses API の `prompt_cache_key`（ルーティングヒント）
 
 #### Responses API / Codex モデル
 
-`gpt-5.2-codex` などの Codex モデルは自動的に Responses API を使用します。
+`gpt-5.3-codex` / `gpt-5.2-codex` などの Codex モデルは自動的に Responses API を使用します。
 
 GPT-5.5 系も OpenAI provider では Responses API を使用します。
 
 **対応モデル:**
 - `gpt-5.5`（Responses API + streaming）
 - `gpt-5.5-pro`（Responses API、streaming unsupported のため non-streaming 経路）
+- `gpt-5.3-codex`
 - `gpt-5.2-codex`
 - `gpt-5.1-codex`
 - `gpt-5.1-codex-max`
@@ -120,6 +122,7 @@ XELYON は既定で Responses API の `store: true` と `previous_response_id` �
 
 **使用例:**
 ```bash
+xelyon --provider openai --model gpt-5.3-codex
 xelyon --provider openai --model gpt-5.2-codex
 xelyon --provider openai --model gpt-5.5
 xelyon --provider openai --model gpt-5.5-pro

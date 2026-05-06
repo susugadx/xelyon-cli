@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
 
@@ -180,6 +181,36 @@ func (a *TUIAdapter) GetProviderName() string {
 // GetProviderConfigKey は現在セッションが代表する provider_models key を返す。
 func (a *TUIAdapter) GetProviderConfigKey() string {
 	return a.agent.GetProviderConfigKey()
+}
+
+// ProviderCandidates は provider picker の候補を返す。
+func (a *TUIAdapter) ProviderCandidates() []providerpicker.ProviderCandidate {
+	return a.agent.ProviderCandidates()
+}
+
+// ModelCandidates は provider に対応する model/deployment picker 候補を返す。
+func (a *TUIAdapter) ModelCandidates(provider string) []providerpicker.ModelCandidate {
+	return a.agent.ModelCandidates(provider)
+}
+
+// SwitchProviderModel は provider と model/deployment を切り替える。
+func (a *TUIAdapter) SwitchProviderModel(provider string, model string) error {
+	if err := switchProviderModelWithOutput(a.agent, provider, model); err != nil {
+		a.flushCapture()
+		return err
+	}
+	a.flushCapture()
+	return nil
+}
+
+// SwitchModelForCurrentProvider は current provider の model/deployment を切り替える。
+func (a *TUIAdapter) SwitchModelForCurrentProvider(model string) error {
+	if err := switchModelForCurrentProviderWithOutput(a.agent, model); err != nil {
+		a.flushCapture()
+		return err
+	}
+	a.flushCapture()
+	return nil
 }
 
 // ResolveAlias はコマンド名を alias 解決する。

@@ -44,6 +44,7 @@ func TestPricingFamilyHasKnownModelUsesExactAllowlist(t *testing.T) {
 		{name: "bedrock legacy versioned exact", family: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1:0", want: true},
 		{name: "bedrock alias contains claude", family: "bedrock", model: "corp-claude-prod", want: false},
 		{name: "openrouter exact", family: "openrouter", model: "openai/gpt-5.4", want: true},
+		{name: "openrouter gpt-5.3-codex exact", family: "openrouter", model: "openai/gpt-5.3-codex", want: true},
 		{name: "openrouter non-existent delegated id", family: "openrouter", model: "openai/gpt-5.3", want: false},
 	}
 

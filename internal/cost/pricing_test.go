@@ -657,6 +657,7 @@ func TestGetPricingInfoForConfig_ConfiguredOpenRouterModelIDWithoutCatalogStillP
 	}{
 		{name: "anthropic id", model: "anthropic/claude-sonnet-4.6", wantInput: 3.00, wantOut: 15.00},
 		{name: "openai id", model: "openai/gpt-5.4", wantInput: 2.50, wantOut: 15.00},
+		{name: "openai gpt-5.3-codex id", model: "openai/gpt-5.3-codex", wantInput: 1.75, wantOut: 14.00},
 		{name: "static id", model: "zhipu/glm-5", wantInput: 0.72, wantOut: 2.30},
 	}
 

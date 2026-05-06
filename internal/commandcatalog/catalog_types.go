@@ -16,6 +16,7 @@ type CommandInfo struct {
 	Lifecycle      CommandLifecycle // 省略時は stable
 	Category       CommandCategory  // 省略時は other
 	Discoverable   bool             // true の command だけを候補表示に出す
+	HiddenFromHelp bool             // true の command は互換実行だけ残し help には出さない
 	SortWeight     int              // 小さいほど候補で上に出す
 }
 
@@ -81,6 +82,8 @@ const (
 	TUILocalActionOpenConfig         TUILocalAction = "open_config"
 	TUILocalActionOpenReview         TUILocalAction = "open_review"
 	TUILocalActionOpenProject        TUILocalAction = "open_project"
+	TUILocalActionOpenProviderPicker TUILocalAction = "open_provider_picker"
+	TUILocalActionOpenModelPicker    TUILocalAction = "open_model_picker"
 )
 
 // TUILocalWhen は TUI ローカル action の実行前提条件を表す。

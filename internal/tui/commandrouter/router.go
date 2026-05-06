@@ -23,6 +23,10 @@ const (
 	ActionOpenReview Action = Action(commandcatalog.TUILocalActionOpenReview)
 	// ActionOpenProject は TUI project config screen を開く処理を表す。
 	ActionOpenProject Action = Action(commandcatalog.TUILocalActionOpenProject)
+	// ActionOpenProviderPicker は provider/model picker を開く処理を表す。
+	ActionOpenProviderPicker Action = Action(commandcatalog.TUILocalActionOpenProviderPicker)
+	// ActionOpenModelPicker は current provider の model picker を開く処理を表す。
+	ActionOpenModelPicker Action = Action(commandcatalog.TUILocalActionOpenModelPicker)
 )
 
 // Context は command routing に必要な TUI 状態を保持する。
@@ -69,7 +73,9 @@ func isKnownLocalAction(action Action) bool {
 		ActionQuit,
 		ActionOpenConfig,
 		ActionOpenReview,
-		ActionOpenProject:
+		ActionOpenProject,
+		ActionOpenProviderPicker,
+		ActionOpenModelPicker:
 		return true
 	default:
 		return false

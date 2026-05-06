@@ -80,6 +80,7 @@ type Model struct {
 	commands         CommandAgent
 	clipboard        ClipboardAgent
 	configAgent      ConfigAgent
+	providerModels   ProviderModelAgent
 	projectAgent     ProjectAgent
 	screen           screenMode     // 現在の画面モード
 	configScreen     *configScreen  // /config 画面の状態（screenConfig 時のみ非 nil）
@@ -115,4 +116,5 @@ type Model struct {
 	startupSubmission *StartupSubmission
 	slashSuggestions  slashSuggestionState
 	prompt            *promptModalState
+	providerPicker    *providerPickerState
 }

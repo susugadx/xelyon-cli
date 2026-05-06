@@ -579,7 +579,7 @@ lsp:
 
 **Codex モデルの制限:**
 
-OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning が必須のため、`/thinking off` → `low` レベルにフォールバックします。
+OpenAI Codex モデル（`gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning が必須のため、`/thinking off` → `low` レベルにフォールバックします。
 GPT-5.5 / GPT-5.5 Pro は `/thinking xhigh` で `reasoning.effort: xhigh` を送信し、`/thinking off` では reasoning を送信しません。
 
 ### ツール確認設定 (`tool_confirm`)（レガシー）

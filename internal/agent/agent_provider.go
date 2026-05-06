@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -16,102 +15,21 @@ func (a *Agent) SwitchProvider(providerName string) error {
 }
 
 func (a *Agent) switchProvider(providerName, requestedModel string) error {
-	out := a.output()
-	errOut := a.errorOutput()
-	requestedProviderName := providerName
-	modelLookupProviderName := config.ActiveProviderConfigKey(providerName)
-	runtimeProviderName := config.CanonicalProviderName(providerName)
-	if runtimeProviderName == "" {
-		return fmt.Errorf("unknown provider: %s", requestedProviderName)
-	}
-	if modelLookupProviderName == "" {
-		modelLookupProviderName = runtimeProviderName
-	}
-
-	// API キー存在チェック
-	if !IsAPIKeyAvailable(runtimeProviderName) {
-		return fmt.Errorf("%s のAPIキーが設定されていません", requestedProviderName)
-	}
-
-	// プロバイダーインスタンス作成
-	provider, err := api.NewProvider(modelLookupProviderName)
+	outcome, err := a.SwitchProviderModel(providerName, requestedModel)
 	if err != nil {
-		return fmt.Errorf("プロバイダーの初期化に失敗しました: %w", err)
-	}
-	api.ApplyRuntimeConfig(provider, a.cfg())
-	api.ApplyUIRuntime(provider, a.ui())
-	nextProviderConfigKey := modelLookupProviderName
-	if aware, ok := provider.(providerConfigKeyAware); ok {
-		if key := config.ActiveProviderConfigKey(aware.ProviderConfigKey()); key != "" {
-			nextProviderConfigKey = key
-		}
-	}
-	if nextProviderConfigKey == "" {
-		nextProviderConfigKey = runtimeProviderName
-	}
-
-	// runtime 設定から新しいプロバイダーのデフォルトモデルを取得
-	cfg := a.cfg()
-	newModel := cfg.GetSelectedModelForProvider(nextProviderConfigKey)
-	requestedModel = strings.TrimSpace(requestedModel)
-	if requestedModel != "" {
-		newModel = requestedModel
-	}
-	if err := validateProviderModelSelection(cfg, runtimeProviderName, nextProviderConfigKey, newModel, requestedModel != ""); err != nil {
 		return err
 	}
-
-	// 既存プロバイダーのキャッシュをクリア（サポートしている場合）
-	if a.CurrentProvider != nil {
-		if cacheClearable, ok := a.CurrentProvider.(api.CacheClearable); ok {
-			cacheClearable.ClearCache()
-		}
-	}
-
-	// プロバイダー切り替え
-	oldProvider := a.ProviderName
-	oldModel := a.CurrentModel
-	if oldProvider != "" && !config.SameProviderRuntimeIdentity(oldProvider, runtimeProviderName) {
-		// プロバイダー切り替え時は tool_calls のフォーマットが互換でない場合があるため、履歴を破棄する
-		hadConversation := a.hasConversationState()
-		if err := a.resetConversationState(); err != nil {
-			return fmt.Errorf("failed to reset conversation state during provider switch: %w", err)
-		}
-		if hadConversation {
-			yellow.Fprintln(out, "🗑️  History cleared after provider switch to avoid incompatible tool-call history")
-		}
-	}
-	a.CurrentProvider = provider
-	a.ProviderName = runtimeProviderName
-	a.ProviderConfigKey = nextProviderConfigKey
-	a.setCurrentModel(newModel)
-
-	// 統計情報をリセット（プロバイダー切り替え時）
-	if a.Stats != nil {
-		a.statsMu.Lock()
-		a.Stats.ResetUsageForProvider(runtimeProviderName, newModel)
-		a.statsMu.Unlock()
-	}
-
-	// Usage callback を設定（プロバイダーがサポートしている場合）
-	if reporter, ok := provider.(api.UsageReporter); ok {
-		reporter.SetUsageCallback(func(u api.Usage) {
-			a.statsMu.Lock()
-			defer a.statsMu.Unlock()
-			a.Stats.AddUsageForConfig(a.cfg(), u)
-		})
-	}
-
-	// MCPToolProviderインターフェースを実装するプロバイダーにMCPツールを設定
-	if a.mcpManager != nil {
-		configureMCPTools(provider, a.mcpManager.GetTools(), errOut)
-	}
-
-	a.syncCurrentDerivedRuntimeState()
-
-	green.Fprintf(out, "✅ Provider: %s → %s\n", oldProvider, runtimeProviderName)
-	green.Fprintf(out, "✅ Model: %s → %s\n", oldModel, newModel)
+	printProviderSwitchOutcome(a, outcome)
 	return nil
+}
+
+func printProviderSwitchOutcome(agent *Agent, outcome ProviderSwitchOutcome) {
+	out := agent.output()
+	if outcome.HistoryCleared {
+		yellow.Fprintln(out, "🗑️  History cleared after provider switch to avoid incompatible tool-call history")
+	}
+	green.Fprintf(out, "✅ Provider: %s → %s\n", outcome.OldProvider, outcome.NewProvider)
+	green.Fprintf(out, "✅ Model: %s → %s\n", outcome.OldModel, outcome.NewModel)
 }
 
 func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, providerConfigKey, model string, explicitModel bool) error {
@@ -121,7 +39,7 @@ func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, pro
 
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or use '/use azure <deployment>'")
+		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or use '/provider azure <deployment>'")
 	}
 	if !strings.EqualFold(model, azureDefaultPlaceholderDeployment) {
 		return nil
@@ -130,7 +48,7 @@ func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, pro
 		return nil
 	}
 	if cfg == nil {
-		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or use '/use azure <deployment>'")
+		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or use '/provider azure <deployment>'")
 	}
 	if explicit := strings.TrimSpace(cfg.GetExplicitProviderDefaultModel(providerConfigKey)); explicit != "" {
 		return nil
@@ -139,7 +57,7 @@ func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, pro
 		return nil
 	}
 	return fmt.Errorf(
-		"azure OpenAI deployment is not configured. Set provider_models.azure.default_model or run '/use azure <deployment>'",
+		"azure OpenAI deployment is not configured. Set provider_models.azure.default_model or run '/provider azure <deployment>'",
 	)
 }
 

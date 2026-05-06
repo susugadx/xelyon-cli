@@ -23,6 +23,7 @@ func TestBuildChatResponsesRequest_StreamCapabilityByModel(t *testing.T) {
 		{model: "gpt-5.5-pro-2026-04-23", wantStream: false},
 		{model: "gpt-5.4", wantStream: true},
 		{model: "gpt-5.4-pro", wantStream: true},
+		{model: "gpt-5.3-codex", wantStream: true},
 		{model: "gpt-5.2-codex", wantStream: true},
 	}
 
@@ -90,17 +91,33 @@ func TestBuildChatResponsesRequest_GPT55ThinkingOffOmitsReasoning(t *testing.T) 
 }
 
 func TestBuildChatResponsesRequest_CodexReasoningFallbackStillLow(t *testing.T) {
-	req := New("test-key").buildChatResponsesRequest(
-		config.WithContext(context.Background(), config.DefaultConfig()),
-		"system",
-		[]api.Message{{Role: "user", Content: "hi"}},
-		"gpt-5.2-codex",
-	)
-	if !req.Stream {
-		t.Fatal("Stream = false, want true for gpt-5.2-codex")
+	tests := []struct {
+		model             string
+		wantMaxOutput     int
+		checkMaxOutputSet bool
+	}{
+		{model: "gpt-5.2-codex"},
+		{model: "gpt-5.3-codex", wantMaxOutput: 128000, checkMaxOutputSet: true},
 	}
-	if req.Reasoning == nil || req.Reasoning.Effort != "low" {
-		t.Fatalf("Reasoning = %#v, want low fallback", req.Reasoning)
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			req := New("test-key").buildChatResponsesRequest(
+				config.WithContext(context.Background(), config.DefaultConfig()),
+				"system",
+				[]api.Message{{Role: "user", Content: "hi"}},
+				tt.model,
+			)
+			if !req.Stream {
+				t.Fatalf("Stream = false, want true for %s", tt.model)
+			}
+			if req.Reasoning == nil || req.Reasoning.Effort != "low" {
+				t.Fatalf("Reasoning = %#v, want low fallback", req.Reasoning)
+			}
+			if tt.checkMaxOutputSet && req.MaxOutputTokens != tt.wantMaxOutput {
+				t.Fatalf("MaxOutputTokens = %d, want %d", req.MaxOutputTokens, tt.wantMaxOutput)
+			}
+		})
 	}
 }
 
