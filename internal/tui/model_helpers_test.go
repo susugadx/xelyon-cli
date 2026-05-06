@@ -15,34 +15,43 @@ type providerModelSwitchCall struct {
 }
 
 type stubAgent struct {
-	mu                 sync.RWMutex
-	processing         bool
-	cancelCalls        int
-	cleanupCalls       int
-	copyCalls          int
-	copyTexts          []string
-	chatInputs         []string
-	chatImageInputs    []string
-	handledInputs      []string
-	handledCommands    map[string]bool
-	statusLine         string
-	saveStatusLine     string
-	providerName       string
-	providerConfigKey  string
-	providerCandidates []providerpicker.ProviderCandidate
-	modelCandidates    map[string][]providerpicker.ModelCandidate
-	switchedProviders  []providerModelSwitchCall
-	switchedModels     []string
-	switchProviderErr  error
-	switchModelErr     error
-	saveErr            error          // non-nil にすると SaveAndSyncConfig が失敗する
-	lastSavedConfig    *config.Config // SaveAndSyncConfig で受け取った最後の Config
-	projectConfig      *config.ProjectConfig
-	projectLoadErr     error
-	projectSaveErr     error
-	projectCreateErr   error
-	lastSavedProject   *config.ProjectConfig
-	savedProjects      []*config.ProjectConfig
+	mu                        sync.RWMutex
+	processing                bool
+	cancelCalls               int
+	cleanupCalls              int
+	copyCalls                 int
+	copyTexts                 []string
+	chatInputs                []string
+	chatImageInputs           []string
+	handledInputs             []string
+	handledCommands           map[string]bool
+	statusLine                string
+	saveStatusLine            string
+	providerName              string
+	providerConfigKey         string
+	providerCandidates        []providerpicker.ProviderCandidate
+	modelCandidates           map[string][]providerpicker.ModelCandidate
+	azureCatalogModels        []providerpicker.ModelCandidate
+	azureCatalogModelRequests []string
+	switchedProviders         []providerModelSwitchCall
+	switchedModels            []string
+	configuredAzure           []azureDeploymentSetupCall
+	switchProviderErr         error
+	switchModelErr            error
+	configureAzureErr         error
+	saveErr                   error          // non-nil にすると SaveAndSyncConfig が失敗する
+	lastSavedConfig           *config.Config // SaveAndSyncConfig で受け取った最後の Config
+	projectConfig             *config.ProjectConfig
+	projectLoadErr            error
+	projectSaveErr            error
+	projectCreateErr          error
+	lastSavedProject          *config.ProjectConfig
+	savedProjects             []*config.ProjectConfig
+}
+
+type azureDeploymentSetupCall struct {
+	Deployment   string
+	CatalogModel string
 }
 
 func (s *stubAgent) Chat(input string) {
@@ -166,6 +175,19 @@ func (s *stubAgent) ModelCandidates(provider string) []providerpicker.ModelCandi
 		{Name: "Custom model...", Custom: true},
 	}
 }
+func (s *stubAgent) AzureCatalogModelCandidates(deployment string) []providerpicker.ModelCandidate {
+	s.mu.Lock()
+	s.azureCatalogModelRequests = append(s.azureCatalogModelRequests, deployment)
+	s.mu.Unlock()
+	if s.azureCatalogModels != nil {
+		return append([]providerpicker.ModelCandidate(nil), s.azureCatalogModels...)
+	}
+	return []providerpicker.ModelCandidate{
+		{Name: "gpt-5.3-codex"},
+		{Name: "gpt-5.5-pro"},
+		{Name: "Custom catalog model...", Custom: true},
+	}
+}
 func (s *stubAgent) SwitchProviderModel(provider string, model string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -180,6 +202,34 @@ func (s *stubAgent) SwitchModelForCurrentProvider(model string) error {
 	defer s.mu.Unlock()
 	s.switchedModels = append(s.switchedModels, model)
 	return s.switchModelErr
+}
+func (s *stubAgent) ConfigureAzureDeployment(deployment string, catalogModel string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.configuredAzure = append(s.configuredAzure, azureDeploymentSetupCall{
+		Deployment:   deployment,
+		CatalogModel: catalogModel,
+	})
+	return s.configureAzureErr
+}
+func (s *stubAgent) ConfigureAndSwitchAzureDeployment(deployment string, catalogModel string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.configuredAzure = append(s.configuredAzure, azureDeploymentSetupCall{
+		Deployment:   deployment,
+		CatalogModel: catalogModel,
+	})
+	if s.configureAzureErr != nil {
+		return s.configureAzureErr
+	}
+	if s.switchProviderErr != nil {
+		return s.switchProviderErr
+	}
+	s.switchedProviders = append(s.switchedProviders, providerModelSwitchCall{
+		Provider: "azure",
+		Model:    deployment,
+	})
+	return nil
 }
 func (s *stubAgent) ResolveAlias(cmd string) string {
 	// テスト用 alias

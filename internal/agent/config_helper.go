@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"strings"
+
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
@@ -113,8 +115,22 @@ func (a *Agent) SaveAndSyncConfig(cfg *config.Config) error {
 // 必要なら保存対象の provider_models entry を新規作成する。
 // CLI /config default_model と /model コマンドから使用する。
 func (a *Agent) SyncDefaultModelToProvider(cfg *config.Config) {
-	if a == nil || a.ProviderName == "" {
+	if a == nil || a.ProviderName == "" || cfg == nil {
 		return
 	}
-	cfg.SyncProviderDefaultModel(a.sessionProviderConfigKey(cfg), cfg.DefaultModel)
+	providerKey := a.sessionProviderConfigKey(cfg)
+	previousDefaultModel := strings.TrimSpace(cfg.GetExplicitProviderDefaultModel(providerKey))
+	nextDefaultModel := strings.TrimSpace(cfg.DefaultModel)
+	cfg.SyncProviderDefaultModel(providerKey, nextDefaultModel)
+	clearAzureCatalogModelAfterDeploymentChange(cfg, providerKey, previousDefaultModel, nextDefaultModel)
+}
+
+func clearAzureCatalogModelAfterDeploymentChange(cfg *config.Config, providerKey, previousDefaultModel, nextDefaultModel string) {
+	if cfg == nil || nextDefaultModel == "" || !config.SameProviderRuntimeIdentity(providerKey, "azure") {
+		return
+	}
+	if previousDefaultModel == nextDefaultModel {
+		return
+	}
+	cfg.ClearProviderCatalogModel(providerKey)
 }

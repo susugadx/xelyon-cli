@@ -127,6 +127,76 @@ func (a *Agent) azureDeploymentCandidates(provider string) []ModelCandidate {
 	return a.modelCandidatesFromNames(provider, nil, "Custom deployment...")
 }
 
+// AzureCatalogModelCandidates は Azure deployment に紐づける OpenAI catalog_model 候補を返す。
+func (a *Agent) AzureCatalogModelCandidates(deployment string) []ModelCandidate {
+	catalogModel := a.azureCatalogModelPreselection(deployment)
+	models := llmcatalog.KnownModelNamesForProvider("openai")
+	builder := modelCandidateBuilder{
+		defaultModel: catalogModel,
+		currentModel: catalogModel,
+	}
+	for _, name := range models {
+		builder.add(name)
+	}
+	builder.add(catalogModel)
+	builder.addCustom("Custom catalog model...")
+	return builder.candidates
+}
+
+func (a *Agent) azureCatalogModelPreselection(deployment string) string {
+	deployment = strings.TrimSpace(deployment)
+	if deployment == "" {
+		deployment = selectedModelForProvider(a.cfg(), "azure")
+	}
+	if deployment == "" {
+		return ""
+	}
+	if catalogModel := azureExplicitCatalogModelForDeployment(a.cfg(), deployment); catalogModel != "" {
+		return catalogModel
+	}
+	if knownOpenAICatalogModel(deployment) {
+		return deployment
+	}
+	return ""
+}
+
+func azureExplicitCatalogModelForDeployment(cfg *config.Config, deployment string) string {
+	if cfg == nil {
+		return ""
+	}
+	if override, ok := cfg.ModelOverrideForProvider("azure", deployment); ok {
+		if catalogModel := openAICatalogModelName(override.CatalogModel); catalogModel != "" {
+			return catalogModel
+		}
+	}
+	pm, ok := cfg.GetExplicitProviderModelConfig("azure")
+	if !ok || strings.TrimSpace(pm.DefaultModel) != deployment {
+		return ""
+	}
+	return openAICatalogModelName(pm.CatalogModel)
+}
+
+func openAICatalogModelName(model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" || llmcatalog.InferProviderFromModel(model) != "openai" {
+		return ""
+	}
+	return model
+}
+
+func knownOpenAICatalogModel(model string) bool {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return false
+	}
+	for _, candidate := range llmcatalog.KnownModelNamesForProvider("openai") {
+		if candidate == model {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *Agent) modelCandidatesFromNames(provider string, names []string, customLabel string) []ModelCandidate {
 	state := a.CurrentProviderModelState()
 	providerConfigKey := config.ActiveProviderConfigKey(provider)

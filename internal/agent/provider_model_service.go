@@ -79,12 +79,106 @@ func (a *Agent) SwitchModelForCurrentProvider(newModel string) ModelSwitchOutcom
 	return outcome
 }
 
+// ConfigureAzureDeployment は Azure deployment と catalog_model を config に保存する。
+// session/provider の切り替えは呼び出し側が SwitchProviderModel で明示する。
+func (a *Agent) ConfigureAzureDeployment(deployment string, catalogModel string) error {
+	cfg, _, _, err := azureDeploymentConfigForCommand(deployment, catalogModel)
+	if err != nil {
+		return err
+	}
+
+	if err := saveConfigForCommand(cfg); err != nil {
+		return err
+	}
+	if a != nil {
+		a.setRuntimeConfig(cfg)
+	}
+	return nil
+}
+
+// ConfigureAndSwitchAzureDeployment は Azure setup を検証し、
+// provider switch が成功した場合だけ config に保存する。
+func (a *Agent) ConfigureAndSwitchAzureDeployment(deployment string, catalogModel string) (ProviderSwitchOutcome, error) {
+	cfg, deployment, _, err := azureDeploymentConfigForCommand(deployment, catalogModel)
+	if err != nil {
+		return ProviderSwitchOutcome{}, err
+	}
+
+	outcome, err := a.switchProviderModelWithConfig("azure", deployment, cfg)
+	if err != nil {
+		return outcome, err
+	}
+
+	if a != nil {
+		a.setRuntimeConfig(cfg)
+	}
+	if err := saveConfigForCommand(cfg); err != nil {
+		return outcome, err
+	}
+	return outcome, nil
+}
+
+func azureDeploymentConfigForCommand(deployment string, catalogModel string) (*config.Config, string, string, error) {
+	deployment = strings.TrimSpace(deployment)
+	catalogModel = strings.TrimSpace(catalogModel)
+	if deployment == "" {
+		return nil, "", "", fmt.Errorf("Azure deployment is required")
+	}
+	if catalogModel == "" {
+		return nil, "", "", fmt.Errorf("Azure catalog_model is required")
+	}
+
+	cfg, err := loadConfigForCommand()
+	if err != nil {
+		return nil, "", "", err
+	}
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	applyAzureDeploymentConfig(cfg, deployment, catalogModel)
+	return cfg, deployment, catalogModel, nil
+}
+
+func applyAzureDeploymentConfig(cfg *config.Config, deployment string, catalogModel string) {
+	cfg.DefaultProvider = "azure"
+	cfg.DefaultModel = deployment
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: deployment,
+		CatalogModel: catalogModel,
+	})
+	syncAzureDeploymentOverrideCatalog(cfg, deployment, catalogModel)
+}
+
+func syncAzureDeploymentOverrideCatalog(cfg *config.Config, deployment string, catalogModel string) {
+	if cfg == nil {
+		return
+	}
+	override, ok := cfg.ModelOverrideForProvider("azure", deployment)
+	if !ok {
+		return
+	}
+	override.CatalogModel = catalogModel
+	_ = cfg.PatchProviderModelConfig("azure", func(pm *config.ProviderModelConfig) {
+		if pm.ModelOverrides == nil {
+			pm.ModelOverrides = map[string]config.ModelOverride{}
+		}
+		pm.ModelOverrides[deployment] = override
+	})
+}
+
 // SwitchProviderModel は provider と optional model を session に適用する。
 // config 保存と user-facing 表示は行わない。
 func (a *Agent) SwitchProviderModel(providerName, requestedModel string) (ProviderSwitchOutcome, error) {
+	return a.switchProviderModelWithConfig(providerName, requestedModel, a.cfg())
+}
+
+func (a *Agent) switchProviderModelWithConfig(providerName, requestedModel string, cfg *config.Config) (ProviderSwitchOutcome, error) {
 	outcome := ProviderSwitchOutcome{RequestedProvider: providerName}
 	if a == nil {
 		return outcome, fmt.Errorf("agent is nil")
+	}
+	if cfg == nil {
+		cfg = config.DefaultConfig()
 	}
 
 	outcome.OldProvider = a.ProviderName
@@ -111,7 +205,7 @@ func (a *Agent) SwitchProviderModel(providerName, requestedModel string) (Provid
 	if err != nil {
 		return outcome, fmt.Errorf("プロバイダーの初期化に失敗しました: %w", err)
 	}
-	api.ApplyRuntimeConfig(provider, a.cfg())
+	api.ApplyRuntimeConfig(provider, cfg)
 	api.ApplyUIRuntime(provider, a.ui())
 	nextProviderConfigKey := modelLookupProviderName
 	if aware, ok := provider.(providerConfigKeyAware); ok {
@@ -124,7 +218,6 @@ func (a *Agent) SwitchProviderModel(providerName, requestedModel string) (Provid
 	}
 
 	// runtime 設定から新しいプロバイダーのデフォルトモデルを取得
-	cfg := a.cfg()
 	newModel := cfg.GetSelectedModelForProvider(nextProviderConfigKey)
 	requestedModel = strings.TrimSpace(requestedModel)
 	if requestedModel != "" {
