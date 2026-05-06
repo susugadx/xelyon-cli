@@ -77,12 +77,13 @@ xelyon --provider moonshot --model kimi-k2.5
 
 Kimi built-in の web_search / memory / code runner、video 入力、file upload / `ms://` 参照は現在の native provider では未対応です。URL 画像は Kimi 公式仕様でも未対応のため、XELYON はローカル画像ファイルを base64 data URL として送ります。
 
-設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、画像入力対応、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
+設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、画像入力対応、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認したい場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
 
 ```bash
 xelyon doctor kimi
 xelyon doctor kimi --model kimi-k2.6
 xelyon doctor kimi --smoke
+xelyon doctor kimi --image-smoke
 xelyon doctor kimi --tool-smoke
 xelyon doctor kimi --json
 ```
@@ -92,6 +93,7 @@ live smoke は `MOONSHOT_API_KEY` が必要で、通常 CI では実行しませ
 ```bash
 export MOONSHOT_API_KEY=sk-...
 make kimi-smoke
+make kimi-image-smoke
 make kimi-tool-smoke
 ```
 

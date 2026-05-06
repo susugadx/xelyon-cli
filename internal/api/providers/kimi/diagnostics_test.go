@@ -117,6 +117,78 @@ func TestDiagnose_SmokeRecordsUsageAndPromptCacheKey(t *testing.T) {
 	}
 }
 
+func TestDiagnose_ImageSmokeBuildsMultimodalPayload(t *testing.T) {
+	var captured []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		captured = append(captured, body)
+		writeKimiDiagnosticSSE(t, w, `{"choices":[{"delta":{"content":"image ok"}}]}`, `{"choices":[{"delta":{},"finish_reason":"stop","usage":{"prompt_tokens":9,"completion_tokens":3,"cached_tokens":1}}]}`)
+	}))
+	defer server.Close()
+
+	t.Setenv(kimiAPIKeyEnv, "moonshot-key")
+	t.Setenv(kimiAPIURLEnv, server.URL+"/v1/chat/completions")
+	t.Setenv("KIMI_FUNCTION_CALLING", "1")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:          config.DefaultConfig(),
+		RunSmoke:        true,
+		ImageSmoke:      true,
+		MaxOutputTokens: 8,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.Ran || !report.Smoke.ImagePayload {
+		t.Fatalf("Smoke = %#v, want image payload smoke", report.Smoke)
+	}
+	if !report.Smoke.UsageObserved || report.Smoke.CachedInputTokens != 1 {
+		t.Fatalf("Smoke usage = observed %t cached %d, want observed cached=1", report.Smoke.UsageObserved, report.Smoke.CachedInputTokens)
+	}
+	if !hasKimiDiagnosticCheck(report, "image_smoke", DiagnosticStatusOK) {
+		t.Fatalf("missing image_smoke OK check: %#v", report.Checks)
+	}
+	if len(captured) != 1 {
+		t.Fatalf("captured request count = %d, want only image smoke request", len(captured))
+	}
+	if _, ok := captured[0]["tools"]; ok {
+		t.Fatalf("tools = %#v, want absent for image smoke", captured[0]["tools"])
+	}
+	if key, _ := captured[0]["prompt_cache_key"].(string); key == "" {
+		t.Fatalf("prompt_cache_key = %#v, want non-empty", captured[0]["prompt_cache_key"])
+	}
+	if captured[0]["max_completion_tokens"] != float64(8) {
+		t.Fatalf("max_completion_tokens = %#v, want 8", captured[0]["max_completion_tokens"])
+	}
+	messages, ok := captured[0]["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("messages = %#v, want system + multimodal user", captured[0]["messages"])
+	}
+	user, ok := messages[1].(map[string]any)
+	if !ok || user["role"] != "user" {
+		t.Fatalf("user message = %#v, want role user", messages[1])
+	}
+	content, ok := user["content"].([]any)
+	if !ok || len(content) != 2 {
+		t.Fatalf("content = %#v, want text + image parts", user["content"])
+	}
+	imagePart, ok := content[1].(map[string]any)
+	if !ok || imagePart["type"] != "image_url" {
+		t.Fatalf("image part = %#v, want image_url", content[1])
+	}
+	imageURL, ok := imagePart["image_url"].(map[string]any)
+	if !ok || imageURL["url"] != "data:image/png;base64,"+kimiDiagnosticPNGBase64 {
+		t.Fatalf("image_url = %#v, want diagnostic PNG data URL", imagePart["image_url"])
+	}
+	if report.Smoke.Requests[0].Content != "image ok" {
+		t.Fatalf("image smoke content = %q, want image ok", report.Smoke.Requests[0].Content)
+	}
+}
+
 func TestDiagnose_SmokeFailsForEmptyNonToolContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeKimiDiagnosticSSE(t, w, `{"choices":[{"delta":{},"finish_reason":"stop","usage":{"prompt_tokens":7,"completion_tokens":0}}]}`)

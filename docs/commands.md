@@ -6,19 +6,20 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ### `xelyon doctor kimi`
 
-Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
+Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
 
-`--smoke` / `--tool-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。
+`--smoke` / `--image-smoke` / `--tool-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。
 
 ```bash
 xelyon doctor kimi
 xelyon doctor kimi --model kimi-k2.6
 xelyon doctor kimi --smoke
+xelyon doctor kimi --image-smoke
 xelyon doctor kimi --tool-smoke
 xelyon doctor kimi --json
 ```
 
-手元で実 Kimi 環境の回帰確認を走らせる場合は、`MOONSHOT_API_KEY` を設定して `make kimi-smoke` を実行します。tool calling も含める場合は `make kimi-tool-smoke` を使います。
+手元で実 Kimi 環境の回帰確認を走らせる場合は、`MOONSHOT_API_KEY` を設定して `make kimi-smoke` を実行します。画像入力だけ確認する場合は `make kimi-image-smoke`、tool calling も含める場合は `make kimi-tool-smoke` を使います。
 
 ### `xelyon doctor azure`
 

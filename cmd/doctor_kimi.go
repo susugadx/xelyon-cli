@@ -21,16 +21,18 @@ func newKimiDoctorCommand() *cobra.Command {
 
 Checks MOONSHOT_API_KEY, KIMI_API_URL, provider registration, model config,
 image capability, unsupported native features, and prompt_cache_key request
-shape. Use --smoke to send live Kimi Chat Completions requests. Use
---tool-smoke to include a dummy tool call smoke request.`,
+shape. Use --smoke to send live Kimi Chat Completions requests, --image-smoke
+to send one tiny image request, or --tool-smoke to include a dummy tool call
+smoke request.`,
 		Args: cobra.NoArgs,
 		RunE: runKimiDoctorInvocation,
 	}
 
 	cmd.Flags().StringVar(&doctorKimiModelFlag, "model", "", fmt.Sprintf("Kimi model for 'doctor kimi' (default: config/XELYON_MODEL, fallback %s)", defaultKimiDoctorModel))
 	cmd.Flags().BoolVar(&doctorSmokeFlag, "smoke", false, "Send live minimal Kimi Chat Completions smoke requests")
+	cmd.Flags().BoolVar(&doctorKimiImageSmokeFlag, "image-smoke", false, "Send one live Kimi image input smoke request")
 	cmd.Flags().BoolVar(&doctorToolSmokeFlag, "tool-smoke", false, "Send a live Kimi smoke request that forces a dummy tool call")
-	cmd.Flags().DurationVar(&doctorTimeoutFlag, "timeout", defaultAzureDoctorTimeout, "Timeout for 'doctor kimi --smoke'")
+	cmd.Flags().DurationVar(&doctorTimeoutFlag, "timeout", defaultAzureDoctorTimeout, "Timeout for 'doctor kimi' live smoke requests")
 	cmd.Flags().BoolVar(&doctorJSONFlag, "json", false, "Print 'doctor kimi' diagnostics as JSON")
 
 	return cmd
@@ -46,8 +48,10 @@ func runKimiDoctorInvocation(cmd *cobra.Command, args []string) error {
 	report := kimiprovider.Diagnose(cmd.Context(), kimiprovider.DiagnosticOptions{
 		Config:       cfg,
 		Model:        kimiDoctorExplicitModel(cmd),
-		RunSmoke:     doctorSmokeFlag || doctorToolSmokeFlag,
+		RunSmoke:     doctorSmokeFlag || doctorToolSmokeFlag || doctorKimiImageSmokeFlag,
+		TextSmoke:    doctorSmokeFlag,
 		ToolSmoke:    doctorToolSmokeFlag,
+		ImageSmoke:   doctorKimiImageSmokeFlag,
 		SmokeTimeout: doctorTimeoutFlag,
 	})
 	if loadErr != nil {

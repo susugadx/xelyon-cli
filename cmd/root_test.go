@@ -70,6 +70,7 @@ func resetRootFlagsForTest() {
 	doctorKimiModelFlag = ""
 	doctorSmokeFlag = false
 	doctorToolSmokeFlag = false
+	doctorKimiImageSmokeFlag = false
 	doctorTimeoutFlag = defaultAzureDoctorTimeout
 	doctorJSONFlag = false
 	doctorPrintConfigFlag = false
