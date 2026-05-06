@@ -61,7 +61,6 @@ export MOONSHOT_API_KEY=sk-...
 # 使用例
 xelyon --provider kimi --model kimi-k2.6
 xelyon --provider moonshot --model kimi-k2.5
-xelyon --provider kimi --model kimi-k2-thinking
 ```
 
 **特徴:**
@@ -73,6 +72,8 @@ xelyon --provider kimi --model kimi-k2-thinking
 - `/think on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信し、forced tool choice は `auto` に丸めます。
 - `reasoning_content`（思考内容）はストリーミング表示され、ツール実行時も保持されます。
 - `KIMI_API_URL` は `/v1/chat/completions` まで含む完全な endpoint override として扱います。
+
+`kimi-k2-thinking` は明示指定された場合のみ 256K context / 最大 32K output の legacy/compat thinking model として扱います。新規利用では thinking on/off が可能な `kimi-k2.6` を推奨します。
 
 Kimi built-in の web_search / memory / code runner、vision / image / video 入力は現在の native provider では未対応です。
 

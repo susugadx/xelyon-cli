@@ -311,7 +311,7 @@ Kimi の推奨モデル:
 - `kimi-k2.6`: native Kimi provider の既定モデル。高品質な編集/設計向き
 - `kimi-k2.5`: サブエージェント既定モデル。低コストな軽作業向き
 
-Kimi K2.6 / K2.5 は 256K context / 最大 32K output です。`moonshot` は `kimi` provider の alias として扱われます。
+Kimi K2.6 / K2.5 は 256K context / 最大 32K output です。`kimi-k2-thinking` は明示指定時のみ同じ上限の legacy/compat thinking model として扱います。`moonshot` は `kimi` provider の alias として扱われます。
 
 ### 会話履歴圧縮設定 (`compression`)
 
@@ -567,7 +567,7 @@ lsp:
 - **OpenAI**: GPT-5 系（GPT-5.5 / GPT-5.5 Pro を含む）
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
 - **DeepSeek**: V4 の `thinking` field で制御します。`/think off` は `thinking.disabled`、`/think on` は `thinking.enabled` + `reasoning_effort` を送ります。`/think xhigh` は DeepSeek では `max` に変換されます。
-- **Kimi**: K2.6 / K2.5 は `thinking` field で制御します。`/think off` は `thinking.disabled`、`/think on` は K2.6 へ `thinking.enabled` + `keep: all`、K2.5 へ `thinking.enabled` を送ります。`kimi-k2-thinking` には disabled を送信しません。
+- **Kimi**: K2.6 / K2.5 は `thinking` field で制御します。`/think off` は `thinking.disabled`、`/think on` は K2.6 へ `thinking.enabled` + `keep: all`、K2.5 へ `thinking.enabled` を送ります。`kimi-k2-thinking` が明示指定された場合は forced thinking model として扱い、`/think off` でも `thinking.disabled` は送信しません。新規利用では `kimi-k2.6` を推奨します。
 
 **コマンドで切り替え（正規ルート）:**
 

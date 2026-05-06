@@ -39,6 +39,7 @@ func TestIsKnownModelName(t *testing.T) {
 		{model: "gemini-3.1-pro", want: true},
 		{model: "kimi-k2.6", want: true},
 		{model: "kimi-k2.5", want: true},
+		{model: "kimi-k2-thinking", want: true},
 		{model: "amazon.nova-pro-v1:0", want: true},
 		{model: "corp-gpt-5-prod", want: false},
 		{model: "claude-sonnet-prod", want: false},
@@ -98,6 +99,7 @@ func TestKnownModelContextLimit(t *testing.T) {
 		{model: "deepseek-v4-custom", want: 1000000, ok: true},
 		{model: "kimi-k2.6", want: 256000, ok: true},
 		{model: "kimi-k2.5", want: 256000, ok: true},
+		{model: "kimi-k2-thinking", want: 256000, ok: true},
 		{model: "corp-gpt-deployment", ok: false},
 		{model: "", ok: false},
 	}
@@ -126,6 +128,7 @@ func TestKnownModelLimits_OpenRouterDelegatedModels(t *testing.T) {
 		{model: "google/gemini-3.1-pro", wantContext: 1000000, wantMaxOutput: 65536},
 		{model: "deepseek/deepseek-v4-flash", wantContext: 1000000, wantMaxOutput: 384000},
 		{model: "moonshotai/kimi-k2.6", wantContext: 256000, wantMaxOutput: 32768},
+		{model: "moonshotai/kimi-k2-thinking", wantContext: 256000, wantMaxOutput: 32768},
 	}
 
 	for _, tt := range tests {
@@ -144,6 +147,25 @@ func TestKnownModelLimits_OpenRouterDelegatedModels(t *testing.T) {
 			}
 			if gotOutput != tt.wantMaxOutput {
 				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want %d", tt.model, gotOutput, tt.wantMaxOutput)
+			}
+		})
+	}
+}
+
+func TestInferProviderFromModel_KimiThinkingCompatibility(t *testing.T) {
+	tests := []struct {
+		model string
+		want  string
+	}{
+		{model: "kimi-k2-thinking", want: "kimi"},
+		{model: "moonshotai/kimi-k2-thinking", want: "openrouter"},
+		{model: "moonshotai.kimi-k2-thinking", want: "bedrock"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := InferProviderFromModel(tt.model); got != tt.want {
+				t.Fatalf("InferProviderFromModel(%q) = %q, want %q", tt.model, got, tt.want)
 			}
 		})
 	}

@@ -120,8 +120,9 @@ var modelContextLimits = map[string]int{
 	"deepseek-v4-flash": 1000000,
 	"deepseek-v4-pro":   1000000,
 
-	"kimi-k2.5": 256000,
-	"kimi-k2.6": 256000,
+	"kimi-k2.5":        256000,
+	"kimi-k2.6":        256000,
+	"kimi-k2-thinking": 256000,
 
 	"llama-3.3-70b-versatile": 128000,
 	"llama-3.1-70b-versatile": 128000,
