@@ -155,6 +155,24 @@ func TestChatWithTools_RequestShape(t *testing.T) {
 	if captured["model"] != "kimi-k2.6" {
 		t.Fatalf("model = %q, want kimi-k2.6", captured["model"])
 	}
+	messages, ok := captured["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("messages = %#v, want system + user", captured["messages"])
+	}
+	systemMessage, ok := messages[0].(map[string]any)
+	if !ok || systemMessage["role"] != "system" || systemMessage["content"] != "System prompt" {
+		t.Fatalf("system message = %#v, want text-only system content", messages[0])
+	}
+	if _, ok := systemMessage["content"].(string); !ok {
+		t.Fatalf("system content type = %T, want string", systemMessage["content"])
+	}
+	userMessage, ok := messages[1].(map[string]any)
+	if !ok || userMessage["role"] != "user" || userMessage["content"] != "hello" {
+		t.Fatalf("user message = %#v, want text-only user content", messages[1])
+	}
+	if _, ok := userMessage["content"].(string); !ok {
+		t.Fatalf("user content type = %T, want string", userMessage["content"])
+	}
 	if captured["max_completion_tokens"] != float64(32768) {
 		t.Fatalf("max_completion_tokens = %#v, want 32768", captured["max_completion_tokens"])
 	}
