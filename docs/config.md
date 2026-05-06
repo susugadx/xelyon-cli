@@ -547,25 +547,25 @@ lsp:
 
 ### Extended Thinking設定 (`thinking`)（内部）
 
-> **注意**: `/config` メニューには表示されません。セッション中の切り替えは `/think` コマンドを使用してください。
+> **注意**: `/config` メニューには表示されません。セッション中の切り替えは `/thinking` コマンドを使用してください。
 > 既存 YAML の `thinking:` セクションは互換読み込みされます（runtime 初期値として機能）。
 
 **対応モデル:**
 - **Claude**: Sonnet 4 以降
 - **OpenAI**: GPT-5 系（GPT-5.5 / GPT-5.5 Pro を含む）
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
-- **DeepSeek**: V4 の `thinking` field で制御します。`/think off` は `thinking.disabled`、`/think on` は `thinking.enabled` + `reasoning_effort` を送ります。`/think xhigh` は DeepSeek では `max` に変換されます。
+- **DeepSeek**: V4 の `thinking` field で制御します。`/thinking off` は `thinking.disabled`、`/thinking on` は `thinking.enabled` + `reasoning_effort` を送ります。`/thinking xhigh` は DeepSeek では `max` に変換されます。
 
 **コマンドで切り替え（正規ルート）:**
 
 ```
-/think          # 現在の状態を表示
-/think on       # 有効化（現在のレベルで）
-/think off      # 無効化
-/think low      # low レベルで有効化
-/think medium   # medium レベルで有効化
-/think high     # high レベルで有効化
-/think xhigh    # xhigh レベルで有効化
+/thinking          # 現在の状態を表示
+/thinking on       # 有効化（現在のレベルで）
+/thinking off      # 無効化
+/thinking low      # low レベルで有効化
+/thinking medium   # medium レベルで有効化
+/thinking high     # high レベルで有効化
+/thinking xhigh    # xhigh(max) レベルで有効化
 ```
 
 **レベル別パラメータ:**
@@ -579,8 +579,8 @@ lsp:
 
 **Codex モデルの制限:**
 
-OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning が必須のため、`/think off` → `low` レベルにフォールバックします。
-GPT-5.5 / GPT-5.5 Pro は `/think xhigh` で `reasoning.effort: xhigh` を送信し、`/think off` では reasoning を送信しません。
+OpenAI Codex モデル（`gpt-5.2-codex`, `gpt-5.1-codex` 等）は reasoning が必須のため、`/thinking off` → `low` レベルにフォールバックします。
+GPT-5.5 / GPT-5.5 Pro は `/thinking xhigh` で `reasoning.effort: xhigh` を送信し、`/thinking off` では reasoning を送信しません。
 
 ### ツール確認設定 (`tool_confirm`)（レガシー）
 

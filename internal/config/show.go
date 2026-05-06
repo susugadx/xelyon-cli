@@ -78,7 +78,7 @@ var hiddenShowSections = map[string]bool{
 	"git_stage":       true,
 	"list_dir":        true,
 	"openai":          true, // 内部ルーティング（YAML 互換は維持）
-	"thinking":        true, // /think コマンドが正規ルート（YAML 互換は維持）
+	"thinking":        true, // /thinking コマンドが正規ルート（YAML 互換は維持）
 }
 
 // compareConfigs はリフレクションで2つの設定を比較

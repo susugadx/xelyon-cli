@@ -213,10 +213,10 @@ type OpenAIConfig struct {
 }
 
 // ThinkingConfig は Extended Thinking の内部設定（user-facing config から削除済み、YAML 互換は維持）
-// 正規の切り替えルートは /think コマンド。config のデフォルト値は runtime 初期値として使用
+// 正規の切り替えルートは /thinking コマンド。config のデフォルト値は runtime 初期値として使用
 type ThinkingConfig struct {
-	Enabled bool   `yaml:"enabled"` // 内部: デフォルト false（/think コマンドで変更）
-	Level   string `yaml:"level"`   // 内部: low/medium/high/xhigh（デフォルト: medium、/think コマンドで変更）
+	Enabled bool   `yaml:"enabled"` // 内部: デフォルト false（/thinking コマンドで変更）
+	Level   string `yaml:"level"`   // 内部: low/medium/high/xhigh（デフォルト: medium、/thinking コマンドで変更）
 }
 
 // WebSearchConfig は Web 検索プロバイダーとキャッシュの設定

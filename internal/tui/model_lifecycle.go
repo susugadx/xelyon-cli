@@ -60,6 +60,7 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 			mouseSelEnd:    visualPosition{line: -1, col: -1},
 		},
 		statusLine:        agent.GetStatusLine(),
+		workingDir:        currentWorkingDirForStatus(),
 		startupSubmission: startupSubmission,
 	}
 }

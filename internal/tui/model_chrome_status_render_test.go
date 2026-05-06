@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +70,38 @@ func TestModel_RenderStatusBar_ContainsHints(t *testing.T) {
 	}
 	if !strings.Contains(bar, "ready") {
 		t.Fatalf("status bar should contain status text, got %q", bar)
+	}
+}
+
+func TestModel_RenderStatusBar_ShowsWorkingDirWhenSpaceAllows(t *testing.T) {
+	t.Setenv("HOME", filepath.Join(string(filepath.Separator), "tmp", "xelyon-test-home"))
+
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.width = 80
+	m.workingDir = filepath.Join(string(filepath.Separator), "opt", "xelyon", "dev", "xelyon-cli")
+
+	bar := stripANSI(m.renderStatusBar())
+	if !strings.Contains(bar, "cwd: /opt/xelyon/dev/xelyon-cli") {
+		t.Fatalf("status bar should contain working dir, got %q", bar)
+	}
+	if !strings.Contains(bar, "Esc:NAV") {
+		t.Fatalf("status bar should preserve hints, got %q", bar)
+	}
+}
+
+func TestModel_RenderStatusBar_HidesWorkingDirWhenNarrow(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.width = 24
+	m.workingDir = filepath.Join(string(filepath.Separator), "opt", "xelyon", "dev", "xelyon-cli")
+
+	bar := stripANSI(m.renderStatusBar())
+	if strings.Contains(bar, "cwd:") {
+		t.Fatalf("status bar should hide working dir when narrow, got %q", bar)
+	}
+	if !strings.Contains(bar, "Esc:NAV") {
+		t.Fatalf("status bar should keep fitting hint, got %q", bar)
 	}
 }
 

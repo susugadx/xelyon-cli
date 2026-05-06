@@ -213,7 +213,7 @@ xelyon
 /           # TUI のコマンド候補を表示
 /model      # 現在のモデル確認/切り替え
 /use gemini # プロバイダー切り替え
-/think high # Extended Thinking 有効化
+/thinking high # Extended Thinking 有効化
 /attach ./notes.txt # 現在の入力ドラフトへ添付（1ドラフト最大12件）
 /detach 1   # 指定添付を外す
 /config     # global config を対話式で編集

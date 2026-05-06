@@ -367,18 +367,19 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 [Status] waiting_input | Mode: 📋 Plan | Ready / 入力待ち
 ```
 
-### `/think`
+### `/thinking`, `/think`
 
 Extended Thinking（推論モード）を切り替えます。複雑なタスクでより深い推論を行う際に使用します。
+`/think` は互換 alias です。
 
 ```
-> /think              # 現在の状態表示
-> /think on           # 有効化（現在のレベルで）
-> /think off          # 無効化
-> /think low          # 低レベルで有効化
-> /think medium       # 中レベルで有効化（デフォルト）
-> /think high         # 高レベルで有効化
-> /think xhigh        # 最高レベルで有効化
+> /thinking              # 現在の状態表示
+> /thinking on           # 有効化（現在のレベルで）
+> /thinking off          # 無効化
+> /thinking low          # 低レベルで有効化
+> /thinking medium       # 中レベルで有効化（デフォルト）
+> /thinking high         # 高レベルで有効化
+> /thinking xhigh        # 最高レベルで有効化（max）
 ```
 
 **対応プロバイダー:**
@@ -393,10 +394,10 @@ Extended Thinking（推論モード）を切り替えます。複雑なタスク
 | Ollama | ⚠️ | モデル依存（R1/QwQ推奨） |
 
 **対応モデル:**
-- **Claude**: Sonnet 4 以降（Opus 4.7 / Opus 4.6 / Sonnet 4.6 は adaptive thinking。Opus 4.7 の `/think xhigh` は `xhigh` effort）
+- **Claude**: Sonnet 4 以降（Opus 4.7 / Opus 4.6 / Sonnet 4.6 は adaptive thinking。Opus 4.7 の `/thinking xhigh` は `xhigh` effort）
 - **OpenAI**: gpt-5.2 系
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
-- **DeepSeek**: モデル名は維持し、`/think off` は `thinking.disabled`、`/think on` は `thinking.enabled` + `reasoning_effort` を送ります。`/think xhigh` は DeepSeek では `max` に変換されます。`reasoning_content` は💭で表示し、ツール実行フローでも保持します。
+- **DeepSeek**: モデル名は維持し、`/thinking off` は `thinking.disabled`、`/thinking on` は `thinking.enabled` + `reasoning_effort` を送ります。`/thinking xhigh` は DeepSeek では `max` に変換されます。`reasoning_content` は💭で表示し、ツール実行フローでも保持します。
 
 **注意**: Extended Thinking はトークン消費量が増加します。
 

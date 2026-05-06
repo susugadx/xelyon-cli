@@ -26,7 +26,7 @@ const GeneratedHelpCommandsText = `Commands:
   /model [name]             - Show current model or switch model without restart
   /init                     - Create xelyon.yaml project template
   /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
-  /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
+  /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
   /lsp [status]             - Show LSP server status (running/not started/disabled)
   /version                  - Show version information
   /help                     - Show this help
@@ -61,7 +61,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /init                     - Create xelyon.yaml project template
   /project                  - Edit project xelyon.yaml interactively
   /plan [on|off]            - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
-  /think [on|off|level]     - Toggle Extended Thinking mode (level: low/medium/high/xhigh)
+  /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
   /help                     - Show this help
 `

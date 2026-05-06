@@ -172,8 +172,8 @@ func defaultOpenAIConfig() OpenAIConfig {
 
 func defaultThinkingConfig() ThinkingConfig {
 	return ThinkingConfig{
-		Enabled: false,    // 内部 runtime 初期値（/think コマンドが正規ルート）
-		Level:   "medium", // 内部 runtime 初期値（/think コマンドが正規ルート）
+		Enabled: false,    // 内部 runtime 初期値（/thinking コマンドが正規ルート）
+		Level:   "medium", // 内部 runtime 初期値（/thinking コマンドが正規ルート）
 	}
 }
 

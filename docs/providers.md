@@ -46,8 +46,8 @@ xelyon --provider deepseek --model deepseek-v4-pro
 - 1M context / 最大 384K output
 - streaming / tool calls / JSON output / thinking modes 対応
 - 画像入力非対応
-- `/think off`: `thinking: {"type":"disabled"}` を明示送信
-- `/think on`: `thinking: {"type":"enabled"}` と `reasoning_effort` を送信（`/think xhigh` は DeepSeek では `max`）
+- `/thinking off`: `thinking: {"type":"disabled"}` を明示送信
+- `/thinking on`: `thinking: {"type":"enabled"}` と `reasoning_effort` を送信（`/thinking xhigh` は DeepSeek では `max`）
 - `deepseek-chat` / `deepseek-reasoner` は legacy alias（`deepseek-v4-flash` 相当）です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。
 - `reasoning_content`（思考内容）はストリーミング表示（💭）され、ツール実行時も保持されます。
 

@@ -12,7 +12,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/model",
 		"/use",
 		"/providers",
-		"/think",
+		"/thinking",
 		"/status",
 		"/tokens",
 		"/review",
