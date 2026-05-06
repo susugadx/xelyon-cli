@@ -56,6 +56,21 @@ func TestBuildKimiPromptCacheKey_ModelAndTaskScopeAffectKey(t *testing.T) {
 	}
 }
 
+func TestBuildKimiPromptCacheKey_DoesNotLeakRawScopeOrModel(t *testing.T) {
+	ctx := api.WithPromptCacheScope(context.Background(), api.PromptCacheScope{
+		SessionID: "session-secret-1",
+		TaskID:    "task-secret-1",
+	})
+
+	key := buildKimiPromptCacheKey(ctx, "kimi-k2.6", "System prompt")
+
+	for _, raw := range []string{"session-secret-1", "task-secret-1", "kimi-k2.6"} {
+		if strings.Contains(key, raw) {
+			t.Fatalf("key = %q leaks raw value %q", key, raw)
+		}
+	}
+}
+
 func TestBuildKimiPromptCacheKey_FallsBackWithoutSessionScope(t *testing.T) {
 	got := buildKimiPromptCacheKey(context.Background(), "kimi-k2.6", "System prompt")
 	want := openaicompat.BuildPromptCacheKey("kimi-k2.6", "System prompt")
