@@ -177,7 +177,14 @@ func TestModelCandidates_KnownDefaultCurrentCustomStableDedupe(t *testing.T) {
 
 func TestModelCandidates_AzureDeploymentOnly(t *testing.T) {
 	cfg := newProjectMapDisabledConfig()
-	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{DefaultModel: "corp-gpt55-deployment"})
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel:    "corp-gpt55-deployment",
+		CatalogModel:    "gpt-5.3-codex",
+		MaxOutputTokens: 128000,
+		ModelOverrides: map[string]config.ModelOverride{
+			"session-deployment": {CatalogModel: "gpt-5.5-pro"},
+		},
+	})
 	agent := &Agent{
 		ProviderName:      "azure",
 		ProviderConfigKey: "azure",
@@ -190,6 +197,17 @@ func TestModelCandidates_AzureDeploymentOnly(t *testing.T) {
 	want := []string{"session-deployment", "corp-gpt55-deployment", "Custom deployment..."}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("azure candidates = %v, want %v; full=%#v", names, want, got)
+	}
+	if got := cfg.ModelCatalogName("azure", "corp-gpt55-deployment"); got != "gpt-5.3-codex" {
+		t.Fatalf("ModelCatalogName(default deployment) = %q, want gpt-5.3-codex", got)
+	}
+	if got := cfg.ModelCatalogName("azure", "session-deployment"); got != "gpt-5.5-pro" {
+		t.Fatalf("ModelCatalogName(model override deployment) = %q, want gpt-5.5-pro", got)
+	}
+	for _, catalogOnly := range []string{"gpt-5.3-codex", "gpt-5.5-pro"} {
+		if countCandidateName(got, catalogOnly) != 0 {
+			t.Fatalf("azure catalog_model %q should not be displayed as a deployment candidate: %#v", catalogOnly, got)
+		}
 	}
 	if c := candidateByName(got, "session-deployment"); !c.Current {
 		t.Fatalf("session deployment candidate = %#v, want current", c)
