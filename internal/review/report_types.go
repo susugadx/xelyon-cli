@@ -40,7 +40,8 @@ const (
 	ReviewGroupSeverityInfo     ReviewGroupSeverity = "info"
 )
 
-// ReviewReport は `/review` の構造化結果を表す。
+// ReviewReport は `/review` Pass2 LLM の最終出力 schema を表す。
+// decode/validate の契約は report 側が owner し、probe 実行や evidence 収集は扱わない。
 type ReviewReport struct {
 	SchemaVersion             string                   `json:"schema_version"`
 	TargetKind                TargetKind               `json:"target_kind"`

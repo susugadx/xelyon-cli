@@ -22,6 +22,10 @@ func ValidateReviewReport(report ReviewReport) error {
 		return err
 	}
 
+	if err := validateReportRequiredContent(report); err != nil {
+		return err
+	}
+
 	if err := validateEvidenceReferences(report, probeSummariesByID); err != nil {
 		return err
 	}
@@ -115,6 +119,73 @@ func validateRootCauseGroups(groups []ReviewRootCauseGroup) error {
 				return fmt.Errorf("root_cause_groups[%d].findings[%d].id duplicates %q", i, j, findingID)
 			}
 			findingIDs[findingID] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func validateReportRequiredContent(report ReviewReport) error {
+	if err := validateSurfaceCoverages("checked_surfaces", report.CheckedSurfaces); err != nil {
+		return err
+	}
+	if err := validateSurfaceCoverages("unverified_surfaces", report.UnverifiedSurfaces); err != nil {
+		return err
+	}
+	if err := validateResidualRisks("residual_risks", report.ResidualRisks); err != nil {
+		return err
+	}
+
+	for i, group := range report.RootCauseGroups {
+		groupField := fmt.Sprintf("root_cause_groups[%d]", i)
+		if err := validateFindings(groupField+".findings", group.Findings); err != nil {
+			return err
+		}
+		if err := validateSurfaceCoverages(groupField+".checked_surfaces", group.CheckedSurfaces); err != nil {
+			return err
+		}
+		if err := validateSurfaceCoverages(groupField+".unverified_surfaces", group.UnverifiedSurfaces); err != nil {
+			return err
+		}
+		if err := validateResidualRisks(groupField+".residual_risks", group.ResidualRisks); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateFindings(field string, findings []ReviewFinding) error {
+	for i, finding := range findings {
+		findingField := fmt.Sprintf("%s[%d]", field, i)
+		if strings.TrimSpace(finding.Title) == "" {
+			return fmt.Errorf("%s.title must be non-empty", findingField)
+		}
+		if err := validateSurfaceCoverages(findingField+".checked_surfaces", finding.CheckedSurfaces); err != nil {
+			return err
+		}
+		if err := validateSurfaceCoverages(findingField+".unverified_surfaces", finding.UnverifiedSurfaces); err != nil {
+			return err
+		}
+		if err := validateResidualRisks(findingField+".residual_risks", finding.ResidualRisks); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateSurfaceCoverages(field string, surfaces []ReviewSurfaceCoverage) error {
+	for i, surface := range surfaces {
+		if _, err := validateRequiredReportID(fmt.Sprintf("%s[%d].surface_id", field, i), surface.SurfaceID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateResidualRisks(field string, risks []ReviewResidualRisk) error {
+	for i, risk := range risks {
+		if strings.TrimSpace(risk.Summary) == "" {
+			return fmt.Errorf("%s[%d].summary must be non-empty", field, i)
 		}
 	}
 	return nil
@@ -473,15 +544,33 @@ func hasBlockedReason(report ReviewReport) bool {
 	if strings.TrimSpace(report.Summary) != "" {
 		return true
 	}
-	if len(report.UnverifiedSurfaces) > 0 {
+	if hasSurfaceCoverageReason(report.UnverifiedSurfaces) {
 		return true
 	}
-	if len(report.ResidualRisks) > 0 {
+	if hasResidualRiskReason(report.ResidualRisks) {
 		return true
 	}
 	for _, summary := range report.ProbeSummaries {
 		switch summary.Status {
 		case ReviewProbeBlocked, ReviewProbeTimedOut, ReviewProbeMutatedWorktree:
+			return true
+		}
+	}
+	return false
+}
+
+func hasSurfaceCoverageReason(surfaces []ReviewSurfaceCoverage) bool {
+	for _, surface := range surfaces {
+		if strings.TrimSpace(surface.SurfaceID) != "" || strings.TrimSpace(surface.Summary) != "" || len(surface.EvidenceRefs) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func hasResidualRiskReason(risks []ReviewResidualRisk) bool {
+	for _, risk := range risks {
+		if strings.TrimSpace(risk.Summary) != "" {
 			return true
 		}
 	}

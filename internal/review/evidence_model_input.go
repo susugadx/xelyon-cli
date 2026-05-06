@@ -3,6 +3,7 @@ package review
 const reviewEvidenceRepoRootPathDisplay = "<repo_root>"
 
 // ReviewEvidenceModelInput は ReviewEvidenceBundle を LLM 入力向けに正規化した DTO。
+// Evidence renderer は収集済み bundle の整形だけを担当し、evidence 収集は行わない。
 type ReviewEvidenceModelInput struct {
 	TargetKind      TargetKind                         `json:"target_kind"`
 	RepoRoot        string                             `json:"repo_root"`
@@ -108,6 +109,7 @@ type ReviewEvidencePathTruncationInput struct {
 }
 
 // BuildReviewEvidenceModelInput は ReviewEvidenceBundle を LLM 入力 DTO に変換する。
+// この変換は LLM 入力 schema の owner であり、evidence の収集方針は扱わない。
 func BuildReviewEvidenceModelInput(bundle ReviewEvidenceBundle) ReviewEvidenceModelInput {
 	repoRoot := bundle.RepoRoot
 

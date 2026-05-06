@@ -8,7 +8,8 @@ const (
 	TargetCurrentChanges TargetKind = "current_changes"
 )
 
-// ReviewRequest は review runner に渡す入力契約を表す。
+// ReviewRequest は次フェーズの ReviewRunner に渡す入力契約を表す。
+// TUI はこの request 生成までを担当し、evidence 収集以降の実行は runner が owner する。
 type ReviewRequest struct {
 	TargetKind         TargetKind
 	CustomInstructions string
