@@ -87,6 +87,16 @@ var localCommandActionHandlers = map[commandrouter.Action]localCommandActionHand
 		updated, cmd := m.openProjectScreen()
 		return updated, cmd
 	},
+	commandrouter.ActionOpenProviderPicker: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		updated, cmd := m.openProviderPicker()
+		return updated, cmd
+	},
+	commandrouter.ActionOpenModelPicker: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		updated, cmd := m.openCurrentProviderModelPicker()
+		return updated, cmd
+	},
 }
 
 func (m Model) handleChatSubmission(sub composerSubmission) (tea.Model, tea.Cmd) {

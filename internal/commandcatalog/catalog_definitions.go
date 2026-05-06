@@ -23,6 +23,12 @@ func legacyHiddenCommand(name, args, description, descriptionJP string, category
 	return newCommandInfo(name, args, description, descriptionJP, legacyFallbackSurfaces(), category, sortWeight, false)
 }
 
+func legacyCompatibilityCommand(name, args, description, descriptionJP string, category CommandCategory, sortWeight int) CommandInfo {
+	cmd := legacyHiddenCommand(name, args, description, descriptionJP, category, sortWeight)
+	cmd.HiddenFromHelp = true
+	return cmd
+}
+
 func classicOnlyHiddenCommand(name, args, description, descriptionJP string, category CommandCategory, sortWeight int) CommandInfo {
 	return newCommandInfo(name, args, description, descriptionJP, classicOnlySurfaces(), category, sortWeight, false)
 }
@@ -80,6 +86,7 @@ var Commands = []CommandInfo{
 	commandDetachAll(),
 	commandReview(),
 	commandCompress(),
+	commandProvider(),
 	commandUse(),
 	commandProviders(),
 	commandConfig(),
@@ -209,7 +216,23 @@ func commandCompress() CommandInfo {
 }
 
 func commandUse() CommandInfo {
-	return legacyDiscoverableCommand("/use", "<provider> [model]", "Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)", "プロバイダーを切り替え", CommandCategoryModel, 20)
+	return legacyCompatibilityCommand("/use", "<provider> [model]", "Switch provider and optionally model (legacy alias for /provider)", "プロバイダーを切り替え（互換）", CommandCategoryModel, 21)
+}
+
+func commandProvider() CommandInfo {
+	return legacyAgentTUILocalCommand(
+		"/provider",
+		"[provider] [model]",
+		"Open provider picker or switch provider and optionally model",
+		"プロバイダーを選択/切り替え",
+		TUILocalActionOpenProviderPicker,
+		TUILocalArgBareOnly,
+		TUILocalWhenNone,
+		CommandCategoryModel,
+		20,
+		nil,
+		nil,
+	)
 }
 
 func commandProviders() CommandInfo {
@@ -250,7 +273,19 @@ func configSubCommands() []SubCommand {
 }
 
 func commandModel() CommandInfo {
-	return legacyDiscoverableCommand("/model", "[name]", "Show current model or switch model without restart", "モデルを表示/切り替え", CommandCategoryModel, 10)
+	return legacyAgentTUILocalCommand(
+		"/model",
+		"[name]",
+		"Open model picker or switch model without restart",
+		"モデルを選択/切り替え",
+		TUILocalActionOpenModelPicker,
+		TUILocalArgBareOnly,
+		TUILocalWhenNone,
+		CommandCategoryModel,
+		10,
+		nil,
+		nil,
+	)
 }
 
 func commandInit() CommandInfo {

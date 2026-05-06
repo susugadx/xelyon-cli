@@ -105,6 +105,7 @@ TUI では入力欄で `/` または `/r` のような prefix を入力すると
 > /model gpt-4o
 > /model gpt-5.5
 > /model gpt-5.5-pro
+> /model gpt-5.3-codex
 > /model claude-sonnet-4-5-20250514
 > /model gemini-2.0-flash-exp
 ```

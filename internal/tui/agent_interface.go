@@ -1,6 +1,9 @@
 package tui
 
-import "github.com/susugadx/xelyon-cli/internal/config"
+import (
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerpicker"
+)
 
 // ConversationAgent は chat 実行と処理状態を TUI に提供する。
 type ConversationAgent interface {
@@ -59,6 +62,21 @@ type ConfigAgent interface {
 	GetProviderConfigKey() string
 }
 
+// ProviderModelAgent は /provider と /model picker が必要とする候補取得と切替を提供する。
+type ProviderModelAgent interface {
+	// ProviderCandidates は provider picker の候補を返す。
+	ProviderCandidates() []providerpicker.ProviderCandidate
+
+	// ModelCandidates は provider に対応する model/deployment picker 候補を返す。
+	ModelCandidates(provider string) []providerpicker.ModelCandidate
+
+	// SwitchProviderModel は provider と model/deployment を現在セッションに適用する。
+	SwitchProviderModel(provider string, model string) error
+
+	// SwitchModelForCurrentProvider は current provider 内で model/deployment を切り替える。
+	SwitchModelForCurrentProvider(model string) error
+}
+
 // ProjectAgent は /project 画面が必要とする xelyon.yaml の load/save を提供する。
 type ProjectAgent interface {
 	// LoadProjectForEdit は xelyon.yaml を読み込み、編集用のコピーを返す。
@@ -79,5 +97,6 @@ type AgentInterface interface {
 	CommandAgent
 	ClipboardAgent
 	ConfigAgent
+	ProviderModelAgent
 	ProjectAgent
 }

@@ -1,6 +1,9 @@
 package llmcatalog
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestKnownMaxOutputTokens_ClaudeOpus47(t *testing.T) {
 	for _, model := range []string{
@@ -47,6 +50,50 @@ func TestIsKnownModelName(t *testing.T) {
 		t.Run(tt.model, func(t *testing.T) {
 			if got := IsKnownModelName(tt.model); got != tt.want {
 				t.Fatalf("IsKnownModelName(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestKnownModelNamesForProvider_ReturnsStableClonedProviderModels(t *testing.T) {
+	models := KnownModelNamesForProvider("openai")
+	if len(models) < 3 {
+		t.Fatalf("KnownModelNamesForProvider(openai) len = %d, want known models", len(models))
+	}
+	wantPrefix := []string{"gpt-5.5", "gpt-5.5-pro", "gpt-5.4"}
+	for i, want := range wantPrefix {
+		if models[i] != want {
+			t.Fatalf("KnownModelNamesForProvider(openai)[%d] = %q, want %q; all=%v", i, models[i], want, models)
+		}
+	}
+
+	models[0] = "mutated"
+	again := KnownModelNamesForProvider("openai")
+	if again[0] != "gpt-5.5" {
+		t.Fatalf("KnownModelNamesForProvider should return a clone, got %q", again[0])
+	}
+}
+
+func TestKnownModelNamesForProvider_AzureDoesNotUseCatalogModels(t *testing.T) {
+	if got := KnownModelNamesForProvider("azure"); len(got) != 0 {
+		t.Fatalf("KnownModelNamesForProvider(azure) = %v, want no deployment catalog", got)
+	}
+}
+
+func TestKnownModelNamesForProvider_IncludesGPT53CodexForOpenAIProviders(t *testing.T) {
+	tests := []struct {
+		provider string
+		model    string
+	}{
+		{provider: "openai", model: "gpt-5.3-codex"},
+		{provider: "openrouter", model: "openai/gpt-5.3-codex"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider, func(t *testing.T) {
+			models := KnownModelNamesForProvider(tt.provider)
+			if !slices.Contains(models, tt.model) {
+				t.Fatalf("KnownModelNamesForProvider(%q) = %v, want %q", tt.provider, models, tt.model)
 			}
 		})
 	}
@@ -328,6 +375,21 @@ func TestGPT55CatalogLimits(t *testing.T) {
 				t.Fatalf("ModelContextLimit(%q) = %d, want %d", tt.model, gotContext, tt.wantContext)
 			}
 		})
+	}
+}
+
+func TestGPT53CodexCatalogLimits(t *testing.T) {
+	const model = "gpt-5.3-codex"
+
+	gotMaxOut, ok := KnownMaxOutputTokens(model)
+	if !ok {
+		t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", model)
+	}
+	if gotMaxOut != 128000 {
+		t.Fatalf("KnownMaxOutputTokens(%q) = %d, want 128000", model, gotMaxOut)
+	}
+	if gotContext := ModelContextLimit(model); gotContext != 400000 {
+		t.Fatalf("ModelContextLimit(%q) = %d, want 400000", model, gotContext)
 	}
 }
 

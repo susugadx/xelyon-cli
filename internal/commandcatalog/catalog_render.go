@@ -19,6 +19,9 @@ func renderCommandsText(commands []CommandInfo) string {
 	var b strings.Builder
 	b.WriteString("Commands:\n")
 	for _, cmd := range commands {
+		if cmd.HiddenFromHelp {
+			continue
+		}
 		name := cmd.Name
 		if len(cmd.Aliases) > 0 {
 			name += ", " + strings.Join(cmd.Aliases, ", ")

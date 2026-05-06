@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -67,6 +68,186 @@ func TestSwitchModelForCurrentProvider_ReturnsOutcomeAndPersistsConfig(t *testin
 	if got := loaded.ProviderModelsForSave()["openai"].DefaultModel; got != "gpt-next" {
 		t.Fatalf("ProviderModelsForSave()[openai].DefaultModel = %q, want gpt-next", got)
 	}
+}
+
+func TestProviderCandidates_DisplayOrderCurrentAndCredentialStatus(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("AZURE_OPENAI_API_KEY", "")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "")
+
+	agent := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "gpt-5.4",
+		Runtime:           NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
+	}
+
+	got := agent.ProviderCandidates()
+	if len(got) < 4 {
+		t.Fatalf("ProviderCandidates len = %d, want provider list", len(got))
+	}
+	wantPrefix := []string{"deepseek", "claude", "openai", "azure", "gemini"}
+	for i, want := range wantPrefix {
+		if got[i].Key != want {
+			t.Fatalf("ProviderCandidates[%d].Key = %q, want %q; all=%#v", i, got[i].Key, want, got)
+		}
+	}
+
+	byKey := map[string]ProviderCandidate{}
+	for _, candidate := range got {
+		byKey[candidate.Key] = candidate
+	}
+	if !byKey["openai"].Current {
+		t.Fatalf("openai candidate should be current: %#v", byKey["openai"])
+	}
+	if byKey["openai"].CredentialStatus != ProviderCredentialConfigured {
+		t.Fatalf("openai status = %q, want configured", byKey["openai"].CredentialStatus)
+	}
+	if byKey["azure"].CredentialStatus != ProviderCredentialMissingKey {
+		t.Fatalf("azure status = %q, want missing key", byKey["azure"].CredentialStatus)
+	}
+	if byKey["ollama"].CredentialStatus != ProviderCredentialLocal {
+		t.Fatalf("ollama status = %q, want local", byKey["ollama"].CredentialStatus)
+	}
+	if byKey["bedrock"].CredentialStatus != ProviderCredentialAWSAuth {
+		t.Fatalf("bedrock status = %q, want aws auth", byKey["bedrock"].CredentialStatus)
+	}
+}
+
+func TestProviderCandidates_AppendsCurrentAliasOwner(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	agent := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "anthropic",
+		CurrentModel:      "anthropic-custom",
+		Runtime:           NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
+	}
+
+	got := agent.ProviderCandidates()
+	byKey := map[string]ProviderCandidate{}
+	for _, candidate := range got {
+		byKey[candidate.Key] = candidate
+	}
+	if byKey["claude"].Current {
+		t.Fatalf("canonical claude candidate should not be current when session owner is anthropic: %#v", byKey["claude"])
+	}
+	if !byKey["anthropic"].Current {
+		t.Fatalf("anthropic alias candidate should be appended as current: %#v", got)
+	}
+	if byKey["anthropic"].CredentialStatus != ProviderCredentialConfigured {
+		t.Fatalf("anthropic status = %q, want configured", byKey["anthropic"].CredentialStatus)
+	}
+}
+
+func TestModelCandidates_KnownDefaultCurrentCustomStableDedupe(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.DefaultModel = "gpt-session-default"
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{DefaultModel: "gpt-custom-default"})
+	agent := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "gpt-current",
+		Runtime:           NewAgentRuntimeWithConfig(cfg),
+	}
+
+	got := agent.ModelCandidates("openai")
+	names := modelCandidateNames(got)
+	wantPrefix := []string{"gpt-5.5", "gpt-5.5-pro", "gpt-5.4"}
+	if !reflect.DeepEqual(names[:len(wantPrefix)], wantPrefix) {
+		t.Fatalf("model prefix = %v, want %v; all=%v", names[:len(wantPrefix)], wantPrefix, names)
+	}
+	if countCandidateName(got, "gpt-current") != 1 {
+		t.Fatalf("current model should be added once, got candidates=%#v", got)
+	}
+	if countCandidateName(got, "gpt-custom-default") != 1 {
+		t.Fatalf("default model should be added once, got candidates=%#v", got)
+	}
+	if c := candidateByName(got, "gpt-current"); !c.Current {
+		t.Fatalf("gpt-current candidate = %#v, want current", c)
+	}
+	if c := candidateByName(got, "gpt-custom-default"); !c.Default {
+		t.Fatalf("gpt-custom-default candidate = %#v, want default", c)
+	}
+	last := got[len(got)-1]
+	if !last.Custom || last.Name != "Custom model..." {
+		t.Fatalf("last candidate = %#v, want custom model row", last)
+	}
+}
+
+func TestModelCandidates_AzureDeploymentOnly(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{DefaultModel: "corp-gpt55-deployment"})
+	agent := &Agent{
+		ProviderName:      "azure",
+		ProviderConfigKey: "azure",
+		CurrentModel:      "session-deployment",
+		Runtime:           NewAgentRuntimeWithConfig(cfg),
+	}
+
+	got := agent.ModelCandidates("azure")
+	names := modelCandidateNames(got)
+	want := []string{"session-deployment", "corp-gpt55-deployment", "Custom deployment..."}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("azure candidates = %v, want %v; full=%#v", names, want, got)
+	}
+	if c := candidateByName(got, "session-deployment"); !c.Current {
+		t.Fatalf("session deployment candidate = %#v, want current", c)
+	}
+	if c := candidateByName(got, "corp-gpt55-deployment"); !c.Default {
+		t.Fatalf("default deployment candidate = %#v, want default", c)
+	}
+}
+
+func TestModelCandidates_OllamaLiveListSuccessAndFallback(t *testing.T) {
+	old := listOllamaModelsForCandidates
+	t.Cleanup(func() { listOllamaModelsForCandidates = old })
+
+	cfg := newProjectMapDisabledConfig()
+	agent := &Agent{Runtime: NewAgentRuntimeWithConfig(cfg)}
+
+	listOllamaModelsForCandidates = func(_ *Agent, _ string) ([]string, error) {
+		return []string{"live-a", "live-b"}, nil
+	}
+	live := modelCandidateNames(agent.ModelCandidates("ollama"))
+	if !reflect.DeepEqual(live[:2], []string{"live-a", "live-b"}) {
+		t.Fatalf("ollama live prefix = %v, want live list; all=%v", live[:2], live)
+	}
+
+	listOllamaModelsForCandidates = func(_ *Agent, _ string) ([]string, error) {
+		return nil, errors.New("list failed")
+	}
+	fallback := modelCandidateNames(agent.ModelCandidates("ollama"))
+	if fallback[0] != "qwen2.5-coder:7b" {
+		t.Fatalf("ollama fallback first = %q, want known/default fallback; all=%v", fallback[0], fallback)
+	}
+}
+
+func modelCandidateNames(candidates []ModelCandidate) []string {
+	names := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		names = append(names, candidate.Name)
+	}
+	return names
+}
+
+func countCandidateName(candidates []ModelCandidate, name string) int {
+	count := 0
+	for _, candidate := range candidates {
+		if candidate.Name == name {
+			count++
+		}
+	}
+	return count
+}
+
+func candidateByName(candidates []ModelCandidate, name string) ModelCandidate {
+	for _, candidate := range candidates {
+		if candidate.Name == name {
+			return candidate
+		}
+	}
+	return ModelCandidate{}
 }
 
 func TestSwitchModelForCurrentProvider_ConfigLoadFailureKeepsSessionSwitch(t *testing.T) {

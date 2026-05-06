@@ -39,7 +39,7 @@ func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, pro
 
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or use '/use azure <deployment>'")
+		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or use '/provider azure <deployment>'")
 	}
 	if !strings.EqualFold(model, azureDefaultPlaceholderDeployment) {
 		return nil
@@ -48,7 +48,7 @@ func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, pro
 		return nil
 	}
 	if cfg == nil {
-		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or use '/use azure <deployment>'")
+		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or use '/provider azure <deployment>'")
 	}
 	if explicit := strings.TrimSpace(cfg.GetExplicitProviderDefaultModel(providerConfigKey)); explicit != "" {
 		return nil
@@ -57,7 +57,7 @@ func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, pro
 		return nil
 	}
 	return fmt.Errorf(
-		"azure OpenAI deployment is not configured. Set provider_models.azure.default_model or run '/use azure <deployment>'",
+		"azure OpenAI deployment is not configured. Set provider_models.azure.default_model or run '/provider azure <deployment>'",
 	)
 }
 

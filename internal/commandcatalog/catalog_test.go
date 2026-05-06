@@ -95,7 +95,7 @@ func TestTUILocalCommandOwnership(t *testing.T) {
 		})
 	}
 
-	for _, name := range []string{"/config", "/copy", "/exit"} {
+	for _, name := range []string{"/config", "/copy", "/exit", "/provider", "/model"} {
 		t.Run(name, func(t *testing.T) {
 			cmd, ok := Find(name)
 			if !ok {
@@ -165,6 +165,20 @@ func TestTUILocalArgPolicyAndAction(t *testing.T) {
 			withArgsInput:  "/config show",
 			wantWithArgsOK: false,
 			wantAction:     TUILocalActionOpenConfig,
+			wantOwner:      CommandOwnerAgent,
+		},
+		{
+			name:           "/provider",
+			withArgsInput:  "/provider openai",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionOpenProviderPicker,
+			wantOwner:      CommandOwnerAgent,
+		},
+		{
+			name:           "/model",
+			withArgsInput:  "/model gpt-5.4",
+			wantWithArgsOK: false,
+			wantAction:     TUILocalActionOpenModelPicker,
 			wantOwner:      CommandOwnerAgent,
 		},
 		{

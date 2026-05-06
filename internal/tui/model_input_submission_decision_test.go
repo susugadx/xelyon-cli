@@ -34,6 +34,30 @@ func TestDecideCommandSubmission(t *testing.T) {
 			wantAction: commandrouter.ActionOpenReview,
 		},
 		{
+			name:       "bare provider picker action",
+			input:      "/provider",
+			wantKind:   commandSubmissionDecisionLocalAction,
+			wantAction: commandrouter.ActionOpenProviderPicker,
+		},
+		{
+			name:       "provider with args dispatches",
+			input:      "/provider openai",
+			wantKind:   commandSubmissionDecisionDispatchAgent,
+			wantAction: commandrouter.ActionDispatchAgent,
+		},
+		{
+			name:       "bare model picker action",
+			input:      "/model",
+			wantKind:   commandSubmissionDecisionLocalAction,
+			wantAction: commandrouter.ActionOpenModelPicker,
+		},
+		{
+			name:       "model with args dispatches",
+			input:      "/model gpt-5.4",
+			wantKind:   commandSubmissionDecisionDispatchAgent,
+			wantAction: commandrouter.ActionDispatchAgent,
+		},
+		{
 			name:       "dispatch agent command",
 			input:      "/clear",
 			wantKind:   commandSubmissionDecisionDispatchAgent,

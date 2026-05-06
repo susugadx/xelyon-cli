@@ -33,6 +33,7 @@ var knownModelMaxOutputTokens = map[string]int{
 	"gpt-5.5-2026-04-23":                    128000,
 	"gpt-5.5-pro":                           128000,
 	"gpt-5.5-pro-2026-04-23":                128000,
+	"gpt-5.3-codex":                         128000,
 	"gpt-5.2":                               16384,
 	"gemini-2.5-flash":                      65536,
 	"gemini-3.1-pro":                        65536,
@@ -92,6 +93,7 @@ var modelContextLimits = map[string]int{
 	"gpt-5.4-pro":            1000000,
 	"gpt-5.4-mini":           400000,
 	"gpt-5.4-nano":           400000,
+	"gpt-5.3-codex":          400000,
 	"gpt-5.1":                400000,
 	"gpt-5.2":                400000,
 

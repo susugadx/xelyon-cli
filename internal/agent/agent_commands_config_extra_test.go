@@ -426,6 +426,76 @@ func TestHandleUseCommand_HelpAndErrorBranches(t *testing.T) {
 	})
 }
 
+func TestHandleProviderCommand_HelpAndAlreadyUsingHintUseProviderName(t *testing.T) {
+	t.Run("usage without args", func(t *testing.T) {
+		var out bytes.Buffer
+		agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+		if !handleProviderCommand(agent, nil) {
+			t.Fatal("handleProviderCommand() = false, want true")
+		}
+		if !strings.Contains(out.String(), "Usage: /provider <provider> [model]") {
+			t.Fatalf("output = %q, want provider usage", out.String())
+		}
+	})
+
+	t.Run("already using provider without model prints provider hint", func(t *testing.T) {
+		var out bytes.Buffer
+		agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+		agent.ProviderName = "openai"
+		agent.ProviderConfigKey = "openai"
+		agent.CurrentModel = "gpt-current"
+		if !handleProviderCommand(agent, []string{"openai"}) {
+			t.Fatal("handleProviderCommand() = false, want true")
+		}
+		if !strings.Contains(out.String(), "Already using openai") || !strings.Contains(out.String(), "Hint: Use '/provider <provider> <model>'") {
+			t.Fatalf("output = %q, want provider already-using hint", out.String())
+		}
+	})
+}
+
+func TestHandleProviderAndUseCommands_ShareSwitchOutcome(t *testing.T) {
+	t.Setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+	newAgent := func(out *bytes.Buffer) *Agent {
+		cfg := newProjectMapDisabledConfig()
+		return &Agent{
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentModel:      "gpt-old",
+			CurrentProvider:   &mockCacheClearableProviderForModel{name: "openai"},
+			Stats:             NewSessionStats("openai", "gpt-old"),
+			Runtime: &AgentRuntime{
+				Config: cfg,
+				UI:     ui.NewRuntime(strings.NewReader(""), out, out),
+			},
+			agentConversationState: agentConversationState{
+				session: history.NewSession("gpt-old"),
+			},
+		}
+	}
+
+	var providerOut bytes.Buffer
+	providerAgent := newAgent(&providerOut)
+	if !handleProviderCommand(providerAgent, []string{"ollama", "qwen2.5-coder:14b"}) {
+		t.Fatal("handleProviderCommand() = false, want true")
+	}
+
+	var useOut bytes.Buffer
+	useAgent := newAgent(&useOut)
+	if !handleUseCommand(useAgent, []string{"ollama", "qwen2.5-coder:14b"}) {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+
+	if providerAgent.ProviderName != useAgent.ProviderName ||
+		providerAgent.ProviderConfigKey != useAgent.ProviderConfigKey ||
+		providerAgent.CurrentModel != useAgent.CurrentModel ||
+		providerAgent.session.Model != useAgent.session.Model {
+		t.Fatalf("provider state = (%q,%q,%q,%q), use state = (%q,%q,%q,%q)",
+			providerAgent.ProviderName, providerAgent.ProviderConfigKey, providerAgent.CurrentModel, providerAgent.session.Model,
+			useAgent.ProviderName, useAgent.ProviderConfigKey, useAgent.CurrentModel, useAgent.session.Model)
+	}
+}
+
 func TestHandleProvidersCommand_ShowsAddedCurrentAliasStatus(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 

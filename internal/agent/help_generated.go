@@ -14,7 +14,7 @@ const GeneratedHelpCommandsText = `Commands:
   /tokens                   - Show token usage and context window status
   /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
-  /use <provider> [model]   - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
+  /provider [provider] [model] - Open provider picker or switch provider and optionally model
   /providers                - List available providers and their API key status
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
@@ -23,7 +23,7 @@ const GeneratedHelpCommandsText = `Commands:
                             /skills list - List discovered skills
                             /skills show <name> - Show SKILL.md body and resource listings
                             /skills doctor - Show parsing/duplicate diagnostics
-  /model [name]             - Show current model or switch model without restart
+  /model [name]             - Open model picker or switch model without restart
   /init                     - Create xelyon.yaml project template
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
   /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
@@ -48,7 +48,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /detach-all               - Detach all attachments from the current draft
   /review                   - Review current changes and find issues
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
-  /use <provider> [model]   - Switch provider and optionally model (e.g., /use gemini gemini-2.0-flash-exp)
+  /provider [provider] [model] - Open provider picker or switch provider and optionally model
   /providers                - List available providers and their API key status
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
@@ -57,7 +57,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
                             /skills list - List discovered skills
                             /skills show <name> - Show SKILL.md body and resource listings
                             /skills doctor - Show parsing/duplicate diagnostics
-  /model [name]             - Show current model or switch model without restart
+  /model [name]             - Open model picker or switch model without restart
   /init                     - Create xelyon.yaml project template
   /project                  - Edit project xelyon.yaml interactively
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)

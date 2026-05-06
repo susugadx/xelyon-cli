@@ -6,31 +6,43 @@ import (
 	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 )
 
+type providerModelSwitchCall struct {
+	Provider string
+	Model    string
+}
+
 type stubAgent struct {
-	mu                sync.RWMutex
-	processing        bool
-	cancelCalls       int
-	cleanupCalls      int
-	copyCalls         int
-	copyTexts         []string
-	chatInputs        []string
-	chatImageInputs   []string
-	handledInputs     []string
-	handledCommands   map[string]bool
-	statusLine        string
-	saveStatusLine    string
-	providerName      string
-	providerConfigKey string
-	saveErr           error          // non-nil にすると SaveAndSyncConfig が失敗する
-	lastSavedConfig   *config.Config // SaveAndSyncConfig で受け取った最後の Config
-	projectConfig     *config.ProjectConfig
-	projectLoadErr    error
-	projectSaveErr    error
-	projectCreateErr  error
-	lastSavedProject  *config.ProjectConfig
-	savedProjects     []*config.ProjectConfig
+	mu                 sync.RWMutex
+	processing         bool
+	cancelCalls        int
+	cleanupCalls       int
+	copyCalls          int
+	copyTexts          []string
+	chatInputs         []string
+	chatImageInputs    []string
+	handledInputs      []string
+	handledCommands    map[string]bool
+	statusLine         string
+	saveStatusLine     string
+	providerName       string
+	providerConfigKey  string
+	providerCandidates []providerpicker.ProviderCandidate
+	modelCandidates    map[string][]providerpicker.ModelCandidate
+	switchedProviders  []providerModelSwitchCall
+	switchedModels     []string
+	switchProviderErr  error
+	switchModelErr     error
+	saveErr            error          // non-nil にすると SaveAndSyncConfig が失敗する
+	lastSavedConfig    *config.Config // SaveAndSyncConfig で受け取った最後の Config
+	projectConfig      *config.ProjectConfig
+	projectLoadErr     error
+	projectSaveErr     error
+	projectCreateErr   error
+	lastSavedProject   *config.ProjectConfig
+	savedProjects      []*config.ProjectConfig
 }
 
 func (s *stubAgent) Chat(input string) {
@@ -132,6 +144,42 @@ func (s *stubAgent) GetProviderConfigKey() string {
 		return s.providerConfigKey
 	}
 	return s.GetProviderName()
+}
+func (s *stubAgent) ProviderCandidates() []providerpicker.ProviderCandidate {
+	if s.providerCandidates != nil {
+		return append([]providerpicker.ProviderCandidate(nil), s.providerCandidates...)
+	}
+	return []providerpicker.ProviderCandidate{
+		{Key: "deepseek", Label: "deepseek", CredentialStatus: providerpicker.ProviderCredentialMissingKey},
+		{Key: "openai", Label: "openai", Current: true, CredentialStatus: providerpicker.ProviderCredentialConfigured},
+	}
+}
+func (s *stubAgent) ModelCandidates(provider string) []providerpicker.ModelCandidate {
+	if s.modelCandidates != nil {
+		if candidates, ok := s.modelCandidates[provider]; ok {
+			return append([]providerpicker.ModelCandidate(nil), candidates...)
+		}
+	}
+	return []providerpicker.ModelCandidate{
+		{Name: "model-a", Current: true},
+		{Name: "model-b", Default: true},
+		{Name: "Custom model...", Custom: true},
+	}
+}
+func (s *stubAgent) SwitchProviderModel(provider string, model string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.switchedProviders = append(s.switchedProviders, providerModelSwitchCall{
+		Provider: provider,
+		Model:    model,
+	})
+	return s.switchProviderErr
+}
+func (s *stubAgent) SwitchModelForCurrentProvider(model string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.switchedModels = append(s.switchedModels, model)
+	return s.switchModelErr
 }
 func (s *stubAgent) ResolveAlias(cmd string) string {
 	// テスト用 alias

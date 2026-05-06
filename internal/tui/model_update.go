@@ -26,6 +26,10 @@ func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		updated, cmd := m.updateWithPromptOpen(msg)
 		return updated, cmd, true
 	}
+	if m.providerPicker != nil {
+		updated, cmd := m.updateWithProviderPickerOpen(msg)
+		return updated, cmd, true
+	}
 	if _, ok := msg.(OpenConfigScreenMsg); ok {
 		updated, cmd := m.openConfigScreen()
 		return updated, cmd, true
