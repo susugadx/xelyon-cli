@@ -13,6 +13,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/toolruntime"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -367,6 +369,159 @@ func TestChatWithTools_MoonshotAliasUsesAliasModelConfig(t *testing.T) {
 	}
 	if captured["max_completion_tokens"] != float64(12345) {
 		t.Fatalf("max_completion_tokens = %#v, want 12345", captured["max_completion_tokens"])
+	}
+}
+
+func TestChatWithTools_ThinkingToolLoopReplayRequestShape(t *testing.T) {
+	t.Setenv("KIMI_FUNCTION_CALLING", "")
+
+	const (
+		toolCallID     = "call_1"
+		toolName       = "read_file"
+		toolPath       = "README.md"
+		reasoningText  = "調査します"
+		toolResultText = "README contents"
+	)
+
+	var captured []map[string]any
+	server := mockKimiAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		captured = append(captured, body)
+
+		switch len(captured) {
+		case 1:
+			kimiStreamingHandler([]string{
+				`{"choices":[{"delta":{"reasoning_content":"` + reasoningText + `"}}]}`,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"` + toolCallID + `","type":"function","function":{"name":"` + toolName + `","arguments":"{\"path\":\"` + toolPath + `\"}"}}]}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+			})(w, r)
+		case 2:
+			kimiStreamingHandler([]string{`{"choices":[{"delta":{"content":"完了しました"}}]}`})(w, r)
+		default:
+			t.Fatalf("unexpected request count %d", len(captured))
+		}
+	})
+	t.Setenv("KIMI_API_URL", server.URL)
+
+	ctx, _, _ := newKimiTestContext(t, true)
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{
+		Name:        toolName,
+		Description: "Read a file",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"path": map[string]any{"type": "string"},
+			},
+			"required": []any{"path"},
+		},
+	}})
+	p.SetToolChoice(toolName)
+
+	history := []api.Message{{Role: "user", Content: "README を確認して"}}
+	response, err := p.ChatWithTools(ctx, "System prompt", history, "kimi-k2.6")
+	if err != nil {
+		t.Fatalf("first ChatWithTools() error = %v", err)
+	}
+	toolCalls := tools.ParseToolCalls(response)
+	if len(toolCalls) != 1 {
+		t.Fatalf("ParseToolCalls(first response) len = %d, want 1; response=%q", len(toolCalls), response)
+	}
+	assertParsedKimiReplayToolCall(t, toolCalls[0], toolCallID, toolName, toolPath)
+
+	history = appendKimiToolReplayHistory(history, p.LastReasoningContent(), toolCalls[0], toolResultText)
+
+	got, err := p.ChatWithTools(ctx, "System prompt", history, "kimi-k2.6")
+	if err != nil {
+		t.Fatalf("second ChatWithTools() error = %v", err)
+	}
+	if got != "完了しました" {
+		t.Fatalf("second ChatWithTools() = %q, want 完了しました", got)
+	}
+
+	if len(captured) != 2 {
+		t.Fatalf("captured request count = %d, want 2", len(captured))
+	}
+	assertKimiThinkingToolLoopRequestFields(t, captured[0], "first")
+	assertKimiThinkingToolLoopRequestFields(t, captured[1], "second")
+	firstCacheKey, _ := captured[0]["prompt_cache_key"].(string)
+	secondCacheKey, _ := captured[1]["prompt_cache_key"].(string)
+	if firstCacheKey == "" || secondCacheKey == "" || firstCacheKey != secondCacheKey {
+		t.Fatalf("prompt_cache_key first=%q second=%q, want non-empty equal keys", firstCacheKey, secondCacheKey)
+	}
+
+	assertKimiToolReplayMessages(t, captured[1]["messages"], reasoningText, toolCallID, toolName, toolPath, toolResultText)
+}
+
+func assertParsedKimiReplayToolCall(t *testing.T, toolCall *tools.ToolCall, wantID, wantTool, wantPath string) {
+	t.Helper()
+	if toolCall.ID != wantID || toolCall.Tool != wantTool || toolCall.Args["path"] != wantPath {
+		t.Fatalf("parsed tool call = %+v, want %s %s %s", toolCall, wantTool, wantID, wantPath)
+	}
+}
+
+func appendKimiToolReplayHistory(history []api.Message, reasoningContent string, toolCall *tools.ToolCall, result string) []api.Message {
+	history = append(history, api.Message{
+		Role:             "assistant",
+		ReasoningContent: reasoningContent,
+		ToolCalls: []api.OpenAIToolCall{{
+			ID:   toolCall.ID,
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      toolCall.Tool,
+				Arguments: toolruntime.ArgsToJSON(toolCall.RawArgs),
+			},
+		}},
+	})
+	return append(history, toolruntime.BuildToolResultMessage(
+		toolCall,
+		result,
+		toolruntime.FormatTextToolResultContent(toolCall.Tool, result),
+	))
+}
+
+func assertKimiToolReplayMessages(t *testing.T, rawMessages any, wantReasoning, wantCallID, wantToolName, wantPath, wantResult string) {
+	t.Helper()
+	messages, ok := rawMessages.([]any)
+	if !ok || len(messages) != 4 {
+		t.Fatalf("second messages = %#v, want system + user + assistant + tool", rawMessages)
+	}
+	assistant, ok := messages[2].(map[string]any)
+	if !ok || assistant["role"] != "assistant" {
+		t.Fatalf("second assistant message = %#v, want role assistant", messages[2])
+	}
+	if assistant["reasoning_content"] != wantReasoning {
+		t.Fatalf("assistant reasoning_content = %#v, want %s", assistant["reasoning_content"], wantReasoning)
+	}
+	toolCallsPayload, ok := assistant["tool_calls"].([]any)
+	if !ok || len(toolCallsPayload) != 1 {
+		t.Fatalf("assistant tool_calls = %#v, want one tool call", assistant["tool_calls"])
+	}
+	toolCall, ok := toolCallsPayload[0].(map[string]any)
+	if !ok || toolCall["id"] != wantCallID || toolCall["type"] != "function" {
+		t.Fatalf("assistant tool_call = %#v, want %s function", toolCallsPayload[0], wantCallID)
+	}
+	function, ok := toolCall["function"].(map[string]any)
+	if !ok || function["name"] != wantToolName || function["arguments"] != `{"path":"`+wantPath+`"}` {
+		t.Fatalf("assistant tool_call.function = %#v, want %s %s arguments", toolCall["function"], wantToolName, wantPath)
+	}
+	toolResult, ok := messages[3].(map[string]any)
+	if !ok || toolResult["role"] != "tool" || toolResult["tool_call_id"] != wantCallID || toolResult["content"] != wantResult {
+		t.Fatalf("second tool result message = %#v, want role/tool_call_id/content preserved", messages[3])
+	}
+}
+
+func assertKimiThinkingToolLoopRequestFields(t *testing.T, body map[string]any, label string) {
+	t.Helper()
+	thinking, ok := body["thinking"].(map[string]any)
+	if !ok || thinking["type"] != "enabled" || thinking["keep"] != "all" {
+		t.Fatalf("%s thinking = %#v, want enabled keep=all", label, body["thinking"])
+	}
+	if body["tool_choice"] != "auto" {
+		t.Fatalf("%s tool_choice = %#v, want auto", label, body["tool_choice"])
 	}
 }
 
