@@ -4,6 +4,7 @@ import "fmt"
 
 func finalizeReviewRunnerReport(report ReviewReport, trustedProbeSummaries []ReviewProbeSummary) (ReviewReport, error) {
 	report.ProbeSummaries = copyReviewRunnerProbeSummaries(trustedProbeSummaries)
+	canonicalizeReviewProbeSummaryMutationOutcomes(report.ProbeSummaries)
 	report = normalizeReviewRunnerReportForTrustedProbeOutcomes(report)
 	if err := ValidateReviewReport(report); err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner finalize report: %w", err)
@@ -34,8 +35,11 @@ func normalizeReviewRunnerReportForTrustedProbeOutcomes(report ReviewReport) Rev
 
 func hasReviewRunnerBlockedProbeSummary(summaries []ReviewProbeSummary) bool {
 	for _, summary := range summaries {
+		if isReviewProbeSummaryMutationOutcome(summary) {
+			return true
+		}
 		switch summary.Status {
-		case ReviewProbeBlocked, ReviewProbeTimedOut, ReviewProbeMutatedWorktree:
+		case ReviewProbeBlocked, ReviewProbeTimedOut:
 			return true
 		}
 	}

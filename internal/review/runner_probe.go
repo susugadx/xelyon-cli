@@ -13,8 +13,9 @@ func (r *ReviewRunner) runReviewProbesSequentially(ctx context.Context, probeReq
 		if err != nil {
 			return nil, fmt.Errorf("review runner run probe %q: %w", probeReq.ID, err)
 		}
+		result = canonicalizeReviewProbeResultMutationOutcome(result)
 		probeResults = append(probeResults, result)
-		if result.Status == ReviewProbeMutatedWorktree {
+		if isReviewProbeResultMutationOutcome(result) {
 			probeResults = append(probeResults, buildReviewRunnerSkippedProbeResultsAfterMutation(probeRequests[i+1:], result.ID)...)
 			break
 		}

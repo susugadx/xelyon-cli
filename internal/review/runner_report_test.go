@@ -4,21 +4,25 @@ import "testing"
 
 func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(t *testing.T) {
 	tests := []struct {
-		name   string
-		status ReviewProbeStatus
+		name            string
+		status          ReviewProbeStatus
+		mutatedWorktree bool
+		wantMutation    bool
 	}{
 		{name: "blocked", status: ReviewProbeBlocked},
 		{name: "timed out", status: ReviewProbeTimedOut},
-		{name: "mutated worktree", status: ReviewProbeMutatedWorktree},
+		{name: "mutated worktree", status: ReviewProbeMutatedWorktree, wantMutation: true},
+		{name: "mutated worktree flag", status: ReviewProbeFailed, mutatedWorktree: true, wantMutation: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), []ReviewProbeSummary{
 				{
-					ProbeID: "probe-1",
-					Mode:    ReviewProbeHostReadOnly,
-					Status:  tt.status,
+					ProbeID:         "probe-1",
+					Mode:            ReviewProbeHostReadOnly,
+					Status:          tt.status,
+					MutatedWorktree: tt.mutatedWorktree,
 				},
 			})
 			if err != nil {
@@ -29,6 +33,12 @@ func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(
 			}
 			if got.OverallVerificationStatus != ReviewVerificationBlockedOrInconclusive {
 				t.Fatalf("OverallVerificationStatus = %q, want %q", got.OverallVerificationStatus, ReviewVerificationBlockedOrInconclusive)
+			}
+			if tt.wantMutation && got.ProbeSummaries[0].Status != ReviewProbeMutatedWorktree {
+				t.Fatalf("ProbeSummaries[0].Status = %q, want %q", got.ProbeSummaries[0].Status, ReviewProbeMutatedWorktree)
+			}
+			if tt.wantMutation && !got.ProbeSummaries[0].MutatedWorktree {
+				t.Fatal("ProbeSummaries[0].MutatedWorktree = false, want true")
 			}
 		})
 	}
