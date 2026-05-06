@@ -3,7 +3,6 @@ package review
 import (
 	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 	"unicode"
 )
@@ -257,7 +256,7 @@ func validateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID
 }
 
 func validateEvidencePath(field, candidate string) error {
-	if isAbsoluteEvidencePath(candidate) {
+	if isReviewAbsolutePathLike(candidate) {
 		return fmt.Errorf("%s must be repo-relative path: got absolute path %q", field, candidate)
 	}
 	if strings.Contains(candidate, `\`) {
@@ -343,19 +342,6 @@ func containsAnyWhitespace(candidate string) bool {
 		if unicode.IsSpace(r) {
 			return true
 		}
-	}
-	return false
-}
-
-func isAbsoluteEvidencePath(candidate string) bool {
-	if path.IsAbs(candidate) || filepath.IsAbs(candidate) {
-		return true
-	}
-	if strings.HasPrefix(candidate, `\\`) || strings.HasPrefix(candidate, `\`) {
-		return true
-	}
-	if len(candidate) >= 2 && ((candidate[0] >= 'a' && candidate[0] <= 'z') || (candidate[0] >= 'A' && candidate[0] <= 'Z')) && candidate[1] == ':' {
-		return true
 	}
 	return false
 }

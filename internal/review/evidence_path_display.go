@@ -100,12 +100,8 @@ func formatReviewEvidenceRepoRelativePathDisplay(repoRoot, candidate string) (st
 }
 
 func isReviewEvidenceWindowsAbsolutePath(candidate string) bool {
-	if len(candidate) >= 3 && isReviewEvidenceASCIILetter(candidate[0]) && candidate[1] == ':' && (candidate[2] == '\\' || candidate[2] == '/') {
+	if len(candidate) >= 3 && isReviewASCIIAlpha(candidate[0]) && candidate[1] == ':' && (candidate[2] == '\\' || candidate[2] == '/') {
 		return true
 	}
 	return strings.HasPrefix(candidate, `\`)
-}
-
-func isReviewEvidenceASCIILetter(value byte) bool {
-	return ('a' <= value && value <= 'z') || ('A' <= value && value <= 'Z')
 }
