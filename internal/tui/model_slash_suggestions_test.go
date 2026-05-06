@@ -157,21 +157,20 @@ func TestSlashSuggestions_EnterExecutesThinkingArgument(t *testing.T) {
 	}
 }
 
-func TestSlashSuggestions_EnterPreservesThinkingStatusWithTrailingWhitespace(t *testing.T) {
+func TestSlashSuggestions_FirstEnterActivatesThinkingArgumentSelection(t *testing.T) {
 	tests := []struct {
-		name       string
-		input      string
-		dispatched string
+		name  string
+		input string
 	}{
-		{name: "canonical", input: "/thinking ", dispatched: "/thinking"},
-		{name: "alias", input: "/think ", dispatched: "/think"},
+		{name: "canonical", input: "/thinking "},
+		{name: "alias", input: "/think "},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			agent := &stubAgent{
 				statusLine:      "ready",
-				handledCommands: map[string]bool{tt.dispatched: true},
+				handledCommands: map[string]bool{"/thinking": true, "/think": true},
 			}
 			m := newModelWithViewport(agent)
 			m = sendComposerRunes(m, tt.input)
@@ -184,18 +183,146 @@ func TestSlashSuggestions_EnterPreservesThinkingStatusWithTrailingWhitespace(t *
 			m = updated.(Model)
 
 			if cmd != nil {
-				t.Fatalf("no-arg thinking status command should not start chat, got cmd %v", cmd)
+				t.Fatalf("first Enter should only activate selection, got cmd %v", cmd)
 			}
-			if got := len(agent.handledInputs); got != 1 {
-				t.Fatalf("handledInputs length = %d, want 1", got)
+			if got := len(agent.handledInputs); got != 0 {
+				t.Fatalf("handledInputs length = %d, want 0", got)
 			}
-			if got := agent.handledInputs[0]; got != tt.dispatched {
-				t.Fatalf("handledInputs[0] = %q, want %q", got, tt.dispatched)
+			if got := m.textInput.Value(); got != tt.input {
+				t.Fatalf("textInput after first Enter = %q, want %q", got, tt.input)
 			}
-			if m.textInput.Value() != "" {
-				t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
+			if !m.slashSuggestions.visible() {
+				t.Fatal("thinking argument suggestions should stay visible after first Enter")
+			}
+			if !m.slashSuggestions.selectionActive {
+				t.Fatal("first Enter should activate thinking argument selection")
 			}
 		})
+	}
+}
+
+func TestSlashSuggestions_SecondEnterExecutesDefaultThinkingArgument(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:      "ready",
+		handledCommands: map[string]bool{"/thinking on": true},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/thinking ")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("first Enter should not submit thinking argument, got cmd %v", cmd)
+	}
+	if got := len(agent.handledInputs); got != 0 {
+		t.Fatalf("handledInputs after first Enter = %d, want 0", got)
+	}
+
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("selected /thinking on should not start chat, got cmd %v", cmd)
+	}
+	if got := len(agent.handledInputs); got != 1 {
+		t.Fatalf("handledInputs length = %d, want 1", got)
+	}
+	if got := agent.handledInputs[0]; got != "/thinking on" {
+		t.Fatalf("handledInputs[0] = %q, want /thinking on", got)
+	}
+	if m.textInput.Value() != "" {
+		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
+	}
+	if m.slashSuggestions.visible() {
+		t.Fatal("slash suggestions should close after thinking argument execution")
+	}
+}
+
+func TestSlashSuggestions_DownEnterExecutesThinkingArgument(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:      "ready",
+		handledCommands: map[string]bool{"/thinking off": true},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/thinking ")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+
+	if got := len(agent.handledInputs); got != 0 {
+		t.Fatalf("handledInputs after Down = %d, want 0", got)
+	}
+	if !m.slashSuggestions.selectionActive {
+		t.Fatal("Down should activate thinking argument selection")
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("selected /thinking off should not start chat, got cmd %v", cmd)
+	}
+	if got := len(agent.handledInputs); got != 1 {
+		t.Fatalf("handledInputs length = %d, want 1", got)
+	}
+	if got := agent.handledInputs[0]; got != "/thinking off" {
+		t.Fatalf("handledInputs[0] = %q, want /thinking off", got)
+	}
+	if m.textInput.Value() != "" {
+		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
+	}
+}
+
+func TestSlashSuggestions_ThinkingAliasSelectionSubmitsCanonicalArgument(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:      "ready",
+		handledCommands: map[string]bool{"/thinking off": true},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/think ")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("selected /thinking off should not start chat, got cmd %v", cmd)
+	}
+	if got := len(agent.handledInputs); got != 1 {
+		t.Fatalf("handledInputs length = %d, want 1", got)
+	}
+	if got := agent.handledInputs[0]; got != "/thinking off" {
+		t.Fatalf("handledInputs[0] = %q, want /thinking off", got)
+	}
+	if m.textInput.Value() != "" {
+		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
+	}
+}
+
+func TestSlashSuggestions_EnterExecutesBareThinkingWithoutTrailingWhitespace(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:      "ready",
+		handledCommands: map[string]bool{"/thinking": true},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/thinking")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("bare /thinking should not start chat, got cmd %v", cmd)
+	}
+	if got := len(agent.handledInputs); got != 1 {
+		t.Fatalf("handledInputs length = %d, want 1", got)
+	}
+	if got := agent.handledInputs[0]; got != "/thinking" {
+		t.Fatalf("handledInputs[0] = %q, want /thinking", got)
+	}
+	if m.textInput.Value() != "" {
+		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
 	}
 }
 

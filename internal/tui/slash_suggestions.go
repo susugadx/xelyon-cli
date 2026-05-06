@@ -13,9 +13,10 @@ import (
 const maxSlashSuggestionRows = 8
 
 type slashSuggestionState struct {
-	prefix      string
-	suggestions []slash.Suggestion
-	selected    int
+	prefix          string
+	suggestions     []slash.Suggestion
+	selected        int
+	selectionActive bool
 }
 
 func (s slashSuggestionState) visible() bool {
@@ -63,8 +64,10 @@ func (m *Model) refreshSlashSuggestions() {
 	}
 
 	selected := m.slashSuggestions.selected
+	selectionActive := m.slashSuggestions.selectionActive
 	if prefix != m.slashSuggestions.prefix {
 		selected = 0
+		selectionActive = false
 	}
 	if selected < 0 {
 		selected = 0
@@ -73,9 +76,10 @@ func (m *Model) refreshSlashSuggestions() {
 		selected = len(suggestions) - 1
 	}
 	m.slashSuggestions = slashSuggestionState{
-		prefix:      prefix,
-		suggestions: suggestions,
-		selected:    selected,
+		prefix:          prefix,
+		suggestions:     suggestions,
+		selected:        selected,
+		selectionActive: selectionActive,
 	}
 	m.afterSlashSuggestionChange(oldRows)
 }
@@ -142,6 +146,15 @@ func (m *Model) moveSlashSuggestion(delta int) {
 	}
 	count := len(m.slashSuggestions.suggestions)
 	m.slashSuggestions.selected = (m.slashSuggestions.selected + delta + count) % count
+	m.slashSuggestions.selectionActive = true
+	m.chromeDirty = true
+}
+
+func (m *Model) activateSlashSuggestionSelection() {
+	if !m.slashSuggestions.visible() {
+		return
+	}
+	m.slashSuggestions.selectionActive = true
 	m.chromeDirty = true
 }
 
@@ -183,13 +196,9 @@ func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	case isEnterKey(msg):
 		if suggestion, ok := m.slashSuggestions.selectedSuggestion(); ok {
-			if !suggestion.SubmitOnEnter {
-				m.clearSlashSuggestions()
-				updated, cmd := m.handleComposerSubmit()
-				if typed, ok := updated.(Model); ok {
-					m = typed
-				}
-				return m, cmd, true
+			if !suggestion.SubmitOnEnter && !m.slashSuggestions.selectionActive {
+				m.activateSlashSuggestionSelection()
+				return m, nil, true
 			}
 			m.setInputToSlashSuggestionSubmission(suggestion)
 			updated, cmd := m.handleComposerSubmit()
