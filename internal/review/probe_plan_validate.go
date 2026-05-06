@@ -54,14 +54,14 @@ func validateReviewPlannedProbe(index int, probe ReviewPlannedProbe, seenIDs map
 	if !isKnownReviewProbeMode(probe.Mode) {
 		return fmt.Errorf("%s.mode must be known enum value: got %q", field, probe.Mode)
 	}
+	if err := validateReviewPlannedProbeFiles(field+".files", probe.Mode, probe.Files); err != nil {
+		return err
+	}
 	if len(probe.Commands) == 0 {
 		return fmt.Errorf("%s.commands must contain at least one command", field)
 	}
 	if len(probe.Commands) > MaxReviewProbePlanCommands {
 		return fmt.Errorf("%s.commands must contain at most %d entries: got %d", field, MaxReviewProbePlanCommands, len(probe.Commands))
-	}
-	if len(probe.Files) > MaxReviewProbePlanFiles {
-		return fmt.Errorf("%s.files must contain at most %d entries: got %d", field, MaxReviewProbePlanFiles, len(probe.Files))
 	}
 	if probe.TimeoutSeconds < 0 {
 		return fmt.Errorf("%s.timeout_seconds must be non-negative: got %d", field, probe.TimeoutSeconds)
@@ -78,11 +78,6 @@ func validateReviewPlannedProbe(index int, probe ReviewPlannedProbe, seenIDs map
 
 	for i, command := range probe.Commands {
 		if err := validateReviewPlannedProbeCommand(fmt.Sprintf("%s.commands[%d]", field, i), command); err != nil {
-			return err
-		}
-	}
-	for i, file := range probe.Files {
-		if err := validateReviewPlannedProbeFile(fmt.Sprintf("%s.files[%d]", field, i), file); err != nil {
 			return err
 		}
 	}
@@ -122,6 +117,12 @@ func validateReviewPlannedProbeCommand(field string, command ReviewPlannedProbeC
 	if strings.TrimSpace(command.Command) != command.Command {
 		return fmt.Errorf("%s.command must be canonical command without leading/trailing whitespace: got %q", field, command.Command)
 	}
+	if strings.ContainsRune(command.Command, '\x00') {
+		return fmt.Errorf("%s.command must not contain null byte", field)
+	}
+	if strings.ContainsAny(command.Command, `/\`) {
+		return fmt.Errorf("%s.command must be a command name without path separators: got %q", field, command.Command)
+	}
 	for i, arg := range command.Args {
 		if strings.ContainsRune(arg, '\x00') {
 			return fmt.Errorf("%s.args[%d] must not contain null byte", field, i)
@@ -131,6 +132,38 @@ func validateReviewPlannedProbeCommand(field string, command ReviewPlannedProbeC
 		return nil
 	}
 	return validateReviewProbePlanRelativePath(field+".work_dir", command.WorkDir)
+}
+
+func validateReviewPlannedProbeFiles(field string, mode ReviewProbeMode, files []ReviewPlannedProbeFile) error {
+	if mode == ReviewProbeHostReadOnly && len(files) > 0 {
+		return fmt.Errorf("%s must be empty when mode is %q", field, ReviewProbeHostReadOnly)
+	}
+	if len(files) > MaxReviewProbePlanFiles {
+		return fmt.Errorf("%s must contain at most %d entries: got %d", field, MaxReviewProbePlanFiles, len(files))
+	}
+
+	seenPaths := make(map[string]struct{}, len(files))
+	totalContentBytes := 0
+	for i, file := range files {
+		fileField := fmt.Sprintf("%s[%d]", field, i)
+		if err := validateReviewPlannedProbeFile(fileField, file); err != nil {
+			return err
+		}
+		if _, exists := seenPaths[file.Path]; exists {
+			return fmt.Errorf("%s.path duplicates %q", fileField, file.Path)
+		}
+		seenPaths[file.Path] = struct{}{}
+
+		contentBytes := len([]byte(file.Content))
+		if contentBytes > MaxReviewProbePlanFileContentBytes {
+			return fmt.Errorf("%s.content must be at most %d bytes", fileField, MaxReviewProbePlanFileContentBytes)
+		}
+		totalContentBytes += contentBytes
+		if totalContentBytes > MaxReviewProbePlanTotalFileContentBytes {
+			return fmt.Errorf("%s content must total at most %d bytes", field, MaxReviewProbePlanTotalFileContentBytes)
+		}
+	}
+	return nil
 }
 
 func validateReviewPlannedProbeFile(field string, file ReviewPlannedProbeFile) error {

@@ -10,6 +10,10 @@ const (
 	MaxReviewProbePlanCommands = 10
 	// MaxReviewProbePlanFiles は 1 probe が持てる generated file 数の上限。
 	MaxReviewProbePlanFiles = 20
+	// MaxReviewProbePlanFileContentBytes は plan schema 上の generated file content の byte 長上限。
+	MaxReviewProbePlanFileContentBytes = 64 * 1024
+	// MaxReviewProbePlanTotalFileContentBytes は 1 probe が持てる generated file content 合計の byte 長上限。
+	MaxReviewProbePlanTotalFileContentBytes = 256 * 1024
 	// MaxReviewProbePlanPurposeBytes は probe purpose の byte 長上限。
 	MaxReviewProbePlanPurposeBytes = 512
 	// MaxReviewProbePlanTimeoutSeconds は timeout_seconds の上限。
