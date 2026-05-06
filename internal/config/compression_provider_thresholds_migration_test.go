@@ -23,6 +23,20 @@ compression:
 	}
 }
 
+func TestLoadConfig_MigratesEarlierDeepSeek80000ProviderThreshold(t *testing.T) {
+	cfg, err := loadConfigFromData([]byte(`
+compression:
+  provider_thresholds:
+    deepseek: 80000
+`))
+	if err != nil {
+		t.Fatalf("loadConfigFromData() error = %v", err)
+	}
+	if got := len(cfg.Compression.ProviderThresholds); got != 0 {
+		t.Fatalf("Compression.ProviderThresholds len = %d, want 0", got)
+	}
+}
+
 func TestLoadConfig_MigratesLegacyProviderThresholdsKeyByKey(t *testing.T) {
 	cfg, err := loadConfigFromData([]byte(`
 compression:
