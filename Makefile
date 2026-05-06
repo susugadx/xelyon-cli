@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke bedrock-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke kimi-smoke kimi-tool-smoke bedrock-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -169,6 +169,16 @@ azure-smoke:
 # Azure doctor 診断経路だけを実環境で確認
 azure-doctor-smoke:
 	XELYON_AZURE_SMOKE=1 go test ./internal/api/providers/azure -run TestAzureDoctorSmoke -v -count=1 -timeout 300s
+
+# Kimi native provider の実 API smoke test（MOONSHOT_API_KEY 必須）
+kimi-smoke:
+	@test -n "$(MOONSHOT_API_KEY)" || { echo "MOONSHOT_API_KEY is required for make kimi-smoke"; exit 1; }
+	go test -tags live ./internal/api/providers/kimi -run KimiLive -v -count=1 -timeout 300s
+
+# Kimi tool calling を含めた実 API smoke test（MOONSHOT_API_KEY 必須）
+kimi-tool-smoke:
+	@test -n "$(MOONSHOT_API_KEY)" || { echo "MOONSHOT_API_KEY is required for make kimi-tool-smoke"; exit 1; }
+	XELYON_KIMI_TOOL_SMOKE=1 go test -tags live ./internal/api/providers/kimi -run KimiLive -v -count=1 -timeout 300s
 
 # Bedrock 実 API smoke test（AWS 認証チェーン必須）
 bedrock-smoke:

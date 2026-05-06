@@ -20,13 +20,13 @@ import (
 func init() {
 	api.RegisterProvider("kimi", func(apiKey string) (api.Provider, error) {
 		if apiKey == "" {
-			return nil, fmt.Errorf("MOONSHOT_API_KEY not set")
+			return nil, fmt.Errorf("%s not set", kimiAPIKeyEnv)
 		}
 		return newProvider(apiKey, "kimi"), nil
 	})
 	api.RegisterProvider("moonshot", func(apiKey string) (api.Provider, error) {
 		if apiKey == "" {
-			return nil, fmt.Errorf("MOONSHOT_API_KEY not set")
+			return nil, fmt.Errorf("%s not set", kimiAPIKeyEnv)
 		}
 		return newProvider(apiKey, "moonshot"), nil
 	})
@@ -35,6 +35,8 @@ func init() {
 var yellow = color.New(color.FgYellow)
 
 const (
+	kimiAPIKeyEnv    = "MOONSHOT_API_KEY"
+	kimiAPIURLEnv    = "KIMI_API_URL"
 	defaultKimiURL   = "https://api.moonshot.ai/v1/chat/completions"
 	defaultKimiModel = "kimi-k2.6"
 )
@@ -46,6 +48,7 @@ type Provider struct {
 	usageCallback        api.UsageCallback
 	lastReasoningContent string
 	toolChoice           *string
+	functionCalling      *bool
 	configKey            string
 }
 
@@ -56,7 +59,7 @@ func New(apiKey string) *Provider {
 
 func newProvider(apiKey, configKey string) *Provider {
 	return &Provider{
-		BaseProvider: api.NewBaseProvider("Kimi", apiKey, defaultKimiURL, "KIMI_API_URL"),
+		BaseProvider: api.NewBaseProvider("Kimi", apiKey, defaultKimiURL, kimiAPIURLEnv),
 		configKey:    config.NormalizeProviderName(configKey),
 	}
 }
@@ -93,45 +96,22 @@ func (p *Provider) SupportsImages() bool {
 
 // IsFunctionCallingEnabled は Function Calling が有効かを返す。
 func (p *Provider) IsFunctionCallingEnabled() bool {
+	if p != nil && p.functionCalling != nil {
+		return *p.functionCalling
+	}
 	return os.Getenv("KIMI_FUNCTION_CALLING") != "0"
 }
 
 // ChatWithTools は Provider interface の実装。
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	providerConfigKey := p.configLookupKey()
-	requestedModel := api.GetDefaultModelWithContext(ctx, model, providerConfigKey, defaultKimiModel)
-	extraFields, thinkingActive, spinnerSuffix := kimiThinkingConfig(ctx, providerConfigKey, requestedModel)
-
-	options := openaicompat.ChatCompletionsRequestOptions{
-		Model:               requestedModel,
-		Messages:            openaicompat.BuildChatMessages(systemPrompt, history),
-		MaxCompletionTokens: api.GetMaxOutputTokens(ctx, providerConfigKey, requestedModel),
-		Stream:              true,
-		IncludeUsage:        true,
-		PromptCacheKey:      buildKimiPromptCacheKey(ctx, requestedModel, systemPrompt),
-		ExtraFields:         extraFields,
-	}
-
-	if p.IsFunctionCallingEnabled() {
-		toolChoicePolicy := openaicompat.AllowForcedToolChoicePolicy
-		if thinkingActive {
-			toolChoicePolicy = openaicompat.AutoToolChoicePolicy
-		}
-		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
-			Tools:            openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
-			ToolName:         p.toolChoice,
-			ToolChoicePolicy: toolChoicePolicy,
-		}
-	}
-
-	reqBody := openaicompat.BuildChatCompletionsRequest(options)
-	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, reqBody)
+	built := p.buildChatCompletionsRequest(ctx, systemPrompt, history, model)
+	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, built.Request)
 	if err != nil {
 		return "", err
 	}
 
 	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
-		SpinnerSuffix:      spinnerSuffix,
+		SpinnerSuffix:      built.SpinnerSuffix,
 		ForceStreaming:     true,
 		RequestErrorPrefix: "Kimi API request failed",
 		StreamHandler:      p.handleStreamingResponse,

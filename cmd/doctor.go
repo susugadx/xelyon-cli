@@ -17,6 +17,7 @@ const defaultAzureDoctorTimeout = 120 * time.Second
 var (
 	doctorDeploymentFlag   string
 	doctorCatalogModelFlag string
+	doctorKimiModelFlag    string
 	doctorSmokeFlag        bool
 	doctorToolSmokeFlag    bool
 	doctorTimeoutFlag      = defaultAzureDoctorTimeout
@@ -34,6 +35,7 @@ func newDoctorCommand() *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newAzureDoctorCommand())
+	cmd.AddCommand(newKimiDoctorCommand())
 	return cmd
 }
 

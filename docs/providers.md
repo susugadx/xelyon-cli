@@ -77,6 +77,24 @@ xelyon --provider moonshot --model kimi-k2.5
 
 Kimi built-in の web_search / memory / code runner、vision / image / video 入力は現在の native provider では未対応です。
 
+設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
+
+```bash
+xelyon doctor kimi
+xelyon doctor kimi --model kimi-k2.6
+xelyon doctor kimi --smoke
+xelyon doctor kimi --tool-smoke
+xelyon doctor kimi --json
+```
+
+live smoke は `MOONSHOT_API_KEY` が必要で、通常 CI では実行しません。手元では以下で実行できます。prompt cache の `cached_tokens` は API が返す場合だけ観測されるため、0 でも smoke は成功扱いです。
+
+```bash
+export MOONSHOT_API_KEY=sk-...
+make kimi-smoke
+make kimi-tool-smoke
+```
+
 ### 3. OpenAI
 
 ```bash

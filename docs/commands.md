@@ -4,6 +4,22 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ## CLI 診断コマンド
 
+### `xelyon doctor kimi`
+
+Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
+
+`--smoke` / `--tool-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。
+
+```bash
+xelyon doctor kimi
+xelyon doctor kimi --model kimi-k2.6
+xelyon doctor kimi --smoke
+xelyon doctor kimi --tool-smoke
+xelyon doctor kimi --json
+```
+
+手元で実 Kimi 環境の回帰確認を走らせる場合は、`MOONSHOT_API_KEY` を設定して `make kimi-smoke` を実行します。tool calling も含める場合は `make kimi-tool-smoke` を使います。
+
 ### `xelyon doctor azure`
 
 Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると、設定済み deployment に最小の Responses API リクエストを送信します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
