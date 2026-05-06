@@ -351,6 +351,20 @@ func TestValidateReviewProbePlanRejectsInvalidCommandContract(t *testing.T) {
 			errContains: "probes[0].commands[0].command",
 		},
 		{
+			name: "command with internal whitespace",
+			mutate: func(plan *ReviewProbePlan) {
+				plan.Probes[0].Commands[0].Command = "go test"
+			},
+			errContains: "probes[0].commands[0].command",
+		},
+		{
+			name: "npm command with internal whitespace",
+			mutate: func(plan *ReviewProbePlan) {
+				plan.Probes[0].Commands[0].Command = "npm run"
+			},
+			errContains: "probes[0].commands[0].command",
+		},
+		{
 			name: "command with null byte",
 			mutate: func(plan *ReviewProbePlan) {
 				plan.Probes[0].Commands[0].Command = "go\x00"
@@ -420,6 +434,11 @@ func TestValidateReviewProbePlanAllowsCommandNamesAndPathArgs(t *testing.T) {
 			name:    "go command with slash arg",
 			command: "go",
 			args:    []string{"test", "./internal/review"},
+		},
+		{
+			name:    "go command with split test args",
+			command: "go",
+			args:    []string{"run", "test"},
 		},
 		{
 			name:    "python command with backslash arg",

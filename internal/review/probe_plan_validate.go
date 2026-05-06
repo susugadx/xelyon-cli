@@ -117,6 +117,9 @@ func validateReviewPlannedProbeCommand(field string, command ReviewPlannedProbeC
 	if strings.TrimSpace(command.Command) != command.Command {
 		return fmt.Errorf("%s.command must be canonical command without leading/trailing whitespace: got %q", field, command.Command)
 	}
+	if containsAnyWhitespace(command.Command) {
+		return fmt.Errorf("%s.command must not include whitespace: got %q", field, command.Command)
+	}
 	if strings.ContainsRune(command.Command, '\x00') {
 		return fmt.Errorf("%s.command must not contain null byte", field)
 	}
