@@ -129,19 +129,61 @@ func TestSuggestionsIncludesReviewCommand(t *testing.T) {
 }
 
 func TestSuggestionsExposeDisplayLabelAndCompletionText(t *testing.T) {
+	matches := Suggestions("/thinking")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/thinking) returned %d matches, want 1", len(matches))
+	}
+	suggestion := matches[0]
+	if suggestion.Label != "/thinking [on|off|level]" {
+		t.Fatalf("Label = %q, want %q", suggestion.Label, "/thinking [on|off|level]")
+	}
+	if got := suggestion.CompletionText(false); got != "/thinking" {
+		t.Fatalf("CompletionText(false) = %q, want /thinking", got)
+	}
+	if got := suggestion.CompletionText(true); got != "/thinking " {
+		t.Fatalf("CompletionText(true) = %q, want '/thinking '", got)
+	}
+}
+
+func TestSuggestionsCanonicalizeThinkAlias(t *testing.T) {
 	matches := Suggestions("/think")
 	if len(matches) != 1 {
 		t.Fatalf("Suggestions(/think) returned %d matches, want 1", len(matches))
 	}
-	suggestion := matches[0]
-	if suggestion.Label != "/think [on|off|level]" {
-		t.Fatalf("Label = %q, want %q", suggestion.Label, "/think [on|off|level]")
+	if got := matches[0].InsertText; got != "/thinking" {
+		t.Fatalf("InsertText = %q, want /thinking", got)
 	}
-	if got := suggestion.CompletionText(false); got != "/think" {
-		t.Fatalf("CompletionText(false) = %q, want /think", got)
+}
+
+func TestSuggestionsThinkingArguments(t *testing.T) {
+	matches := Suggestions("/thinking ")
+	if len(matches) != 6 {
+		t.Fatalf("Suggestions(/thinking ) returned %d matches, want 6", len(matches))
 	}
-	if got := suggestion.CompletionText(true); got != "/think " {
-		t.Fatalf("CompletionText(true) = %q, want '/think '", got)
+	if got := matches[5].Label; got != "/thinking xhigh (max)" {
+		t.Fatalf("xhigh label = %q, want /thinking xhigh (max)", got)
+	}
+	if got := matches[5].InsertText; got != "/thinking xhigh" {
+		t.Fatalf("xhigh InsertText = %q, want /thinking xhigh", got)
+	}
+	if got := matches[5].CompletionText(true); got != "/thinking xhigh" {
+		t.Fatalf("xhigh CompletionText(true) = %q, want /thinking xhigh", got)
+	}
+	if matches[0].SubmitOnEnter {
+		t.Fatal("empty-prefix thinking argument suggestions should not submit on Enter")
+	}
+}
+
+func TestSuggestionsThinkingAliasArguments(t *testing.T) {
+	matches := Suggestions("/think x")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/think x) returned %d matches, want 1", len(matches))
+	}
+	if got := matches[0].InsertText; got != "/thinking xhigh" {
+		t.Fatalf("InsertText = %q, want /thinking xhigh", got)
+	}
+	if !matches[0].SubmitOnEnter {
+		t.Fatal("non-empty thinking argument suggestions should submit on Enter")
 	}
 }
 
@@ -151,7 +193,7 @@ func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
 		t.Fatalf("Suggestions(/) returned %d matches, want at least 4", len(matches))
 	}
 	got := []string{matches[0].InsertText, matches[1].InsertText, matches[2].InsertText, matches[3].InsertText}
-	want := []string{"/model", "/use", "/providers", "/think"}
+	want := []string{"/model", "/use", "/providers", "/thinking"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("leading suggestions = %#v, want prefix %#v", got, want)

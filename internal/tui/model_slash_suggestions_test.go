@@ -99,6 +99,106 @@ func TestSlashSuggestions_TabCompletesSelectedCommand(t *testing.T) {
 	}
 }
 
+func TestSlashSuggestions_ShowThinkingArgumentSuggestions(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/thinking ")
+
+	if !m.slashSuggestions.visible() {
+		t.Fatal("thinking argument suggestions should be visible")
+	}
+	rendered := stripANSI(m.chromeCache)
+	if !strings.Contains(rendered, "/thinking xhigh (max)") {
+		t.Fatalf("chromeCache missing xhigh max suggestion:\n%s", rendered)
+	}
+}
+
+func TestSlashSuggestions_TabCompletesThinkingArgument(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/thinking x")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("Tab completion should not execute command, got %v", cmd)
+	}
+	if got := m.textInput.Value(); got != "/thinking xhigh" {
+		t.Fatalf("textInput after Tab = %q, want /thinking xhigh", got)
+	}
+	if m.slashSuggestions.visible() {
+		t.Fatal("slash suggestions should close after argument completion")
+	}
+}
+
+func TestSlashSuggestions_EnterExecutesThinkingArgument(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:      "ready",
+		handledCommands: map[string]bool{"/thinking xhigh": true},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/thinking x")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("selected /thinking xhigh should not start chat, got cmd %v", cmd)
+	}
+	if got := len(agent.handledInputs); got != 1 {
+		t.Fatalf("handledInputs length = %d, want 1", got)
+	}
+	if got := agent.handledInputs[0]; got != "/thinking xhigh" {
+		t.Fatalf("handledInputs[0] = %q, want /thinking xhigh", got)
+	}
+	if m.textInput.Value() != "" {
+		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
+	}
+}
+
+func TestSlashSuggestions_EnterPreservesThinkingStatusWithTrailingWhitespace(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		dispatched string
+	}{
+		{name: "canonical", input: "/thinking ", dispatched: "/thinking"},
+		{name: "alias", input: "/think ", dispatched: "/think"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &stubAgent{
+				statusLine:      "ready",
+				handledCommands: map[string]bool{tt.dispatched: true},
+			}
+			m := newModelWithViewport(agent)
+			m = sendComposerRunes(m, tt.input)
+
+			if !m.slashSuggestions.visible() {
+				t.Fatal("thinking argument suggestions should be visible before Enter")
+			}
+
+			updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			m = updated.(Model)
+
+			if cmd != nil {
+				t.Fatalf("no-arg thinking status command should not start chat, got cmd %v", cmd)
+			}
+			if got := len(agent.handledInputs); got != 1 {
+				t.Fatalf("handledInputs length = %d, want 1", got)
+			}
+			if got := agent.handledInputs[0]; got != tt.dispatched {
+				t.Fatalf("handledInputs[0] = %q, want %q", got, tt.dispatched)
+			}
+			if m.textInput.Value() != "" {
+				t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
+			}
+		})
+	}
+}
+
 func TestSlashSuggestions_CanMoveSelectionWithDownAndTab(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)

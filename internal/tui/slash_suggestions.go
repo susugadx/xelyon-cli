@@ -37,7 +37,7 @@ func (m Model) currentSlashSuggestionPrefix() (string, bool) {
 	if input == "" || !strings.HasPrefix(input, "/") {
 		return "", false
 	}
-	if strings.ContainsAny(input, " \t\r\n") {
+	if strings.ContainsAny(input, "\r\n") {
 		return "", false
 	}
 	if m.textInput.Position() != utf8.RuneCountInString(input) {
@@ -175,6 +175,14 @@ func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	case isEnterKey(msg):
 		if suggestion, ok := m.slashSuggestions.selectedSuggestion(); ok {
+			if !suggestion.SubmitOnEnter {
+				m.clearSlashSuggestions()
+				updated, cmd := m.handleComposerSubmit()
+				if typed, ok := updated.(Model); ok {
+					m = typed
+				}
+				return m, cmd, true
+			}
 			m.setInputToSlashSuggestion(suggestion, false)
 			updated, cmd := m.handleComposerSubmit()
 			if typed, ok := updated.(Model); ok {

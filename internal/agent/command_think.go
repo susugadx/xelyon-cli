@@ -23,8 +23,8 @@ func isAgentCodexModel(agent *Agent) bool {
 	return isCodexModel(model)
 }
 
-// handleThinkCommand は Extended Thinking モードの切り替え
-func handleThinkCommand(agent *Agent, args []string) bool {
+// handleThinkingCommand は Extended Thinking モードの切り替え
+func handleThinkingCommand(agent *Agent, args []string) bool {
 	cfg := agent.cfg()
 	isCodex := isAgentCodexModel(agent)
 	out := agent.output()
@@ -72,7 +72,7 @@ func handleThinkCommand(agent *Agent, args []string) bool {
 			green.Fprintf(out, "   Model: %s\n", agent.CurrentModel)
 		}
 	default:
-		yellow.Fprintln(out, "Usage: /think [on|off|low|medium|high|xhigh]")
+		yellow.Fprintln(out, "Usage: /thinking [on|off|low|medium|high|xhigh]")
 	}
 	return true
 }

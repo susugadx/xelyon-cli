@@ -274,7 +274,7 @@ func commandPlan() CommandInfo {
 }
 
 func commandThink() CommandInfo {
-	return legacyDiscoverableCommand("/think", "[on|off|level]", "Toggle Extended Thinking mode (level: low/medium/high/xhigh)", "Extended Thinkingを切り替え", CommandCategoryModel, 40)
+	return legacyDiscoverableCommand("/thinking", "[on|off|level]", "Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)", "Extended Thinkingを切り替え", CommandCategoryModel, 40, "/think")
 }
 
 func commandLSP() CommandInfo {

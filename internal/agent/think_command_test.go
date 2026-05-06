@@ -5,20 +5,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-func TestHandleThinkCommand_DeepSeekKeepsModelMirrorsAndSurfaceStable(t *testing.T) {
+func TestHandleThinkingCommand_DeepSeekKeepsModelMirrorsAndSurfaceStable(t *testing.T) {
 	runtime := newIsolatedRuntime()
 	agent := NewAgentWithRuntime("deepseek-v4-pro", &mockProvider{name: "deepseek"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
 
-	if !handleThinkCommand(agent, []string{"on"}) {
-		t.Fatal("handleThinkCommand(on) = false, want true")
+	if !handleThinkingCommand(agent, []string{"on"}) {
+		t.Fatal("handleThinkingCommand(on) = false, want true")
 	}
 	if !agent.cfg().Thinking.Enabled {
-		t.Fatal("Thinking.Enabled = false, want true after /think on")
+		t.Fatal("Thinking.Enabled = false, want true after /thinking on")
 	}
 	if agent.CurrentModel != "deepseek-v4-pro" {
 		t.Fatalf("CurrentModel = %q, want %q", agent.CurrentModel, "deepseek-v4-pro")
@@ -38,11 +39,11 @@ func TestHandleThinkCommand_DeepSeekKeepsModelMirrorsAndSurfaceStable(t *testing
 		t.Fatalf("deepseek thinking mode should expose search_code on legacy surfaces, got %v", excluded)
 	}
 
-	if !handleThinkCommand(agent, []string{"off"}) {
-		t.Fatal("handleThinkCommand(off) = false, want true")
+	if !handleThinkingCommand(agent, []string{"off"}) {
+		t.Fatal("handleThinkingCommand(off) = false, want true")
 	}
 	if agent.cfg().Thinking.Enabled {
-		t.Fatal("Thinking.Enabled = true, want false after /think off")
+		t.Fatal("Thinking.Enabled = true, want false after /thinking off")
 	}
 	if agent.CurrentModel != "deepseek-v4-pro" {
 		t.Fatalf("CurrentModel = %q, want %q", agent.CurrentModel, "deepseek-v4-pro")
@@ -63,14 +64,14 @@ func TestHandleThinkCommand_DeepSeekKeepsModelMirrorsAndSurfaceStable(t *testing
 	}
 }
 
-func TestHandleThinkCommand_DeepSeekOffPreservesNonReasonerModel(t *testing.T) {
+func TestHandleThinkingCommand_DeepSeekOffPreservesNonReasonerModel(t *testing.T) {
 	runtime := newIsolatedRuntime()
 	agent := NewAgentWithRuntime("deepseek-r1:8b", &mockProvider{name: "deepseek"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
 	agent.cfg().Thinking.Enabled = false
 
-	if !handleThinkCommand(agent, []string{"off"}) {
-		t.Fatal("handleThinkCommand(off) = false, want true")
+	if !handleThinkingCommand(agent, []string{"off"}) {
+		t.Fatal("handleThinkingCommand(off) = false, want true")
 	}
 
 	if agent.CurrentModel != "deepseek-r1:8b" {
@@ -84,7 +85,27 @@ func TestHandleThinkCommand_DeepSeekOffPreservesNonReasonerModel(t *testing.T) {
 	}
 }
 
-func TestHandleThinkCommand_UsesCatalogModelForCodexMinimum(t *testing.T) {
+func TestHandleSpecialCommandThinkingNameAndAlias(t *testing.T) {
+	runtime := newIsolatedRuntime()
+	agent := NewAgentWithRuntime("gpt-test", &mockProvider{name: "openai"}, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	if !handleSpecialCommandForSurface("/thinking high", agent, commandcatalog.CommandSurfaceTUI) {
+		t.Fatal("handleSpecialCommandForSurface(/thinking high) = false, want true")
+	}
+	if !agent.cfg().Thinking.Enabled || agent.cfg().Thinking.Level != "high" {
+		t.Fatalf("Thinking = %+v, want enabled high", agent.cfg().Thinking)
+	}
+
+	if !handleSpecialCommandForSurface("/think off", agent, commandcatalog.CommandSurfaceTUI) {
+		t.Fatal("handleSpecialCommandForSurface(/think off) = false, want true")
+	}
+	if agent.cfg().Thinking.Enabled {
+		t.Fatal("Thinking.Enabled = true, want false after /think alias off")
+	}
+}
+
+func TestHandleThinkingCommand_UsesCatalogModelForCodexMinimum(t *testing.T) {
 	var out bytes.Buffer
 	cfg := newProjectMapDisabledConfig()
 	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
@@ -99,11 +120,11 @@ func TestHandleThinkCommand_UsesCatalogModelForCodexMinimum(t *testing.T) {
 	agent := NewAgentWithRuntime("corp-codex-deployment", &mockProvider{name: "openai"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
 
-	if !handleThinkCommand(agent, []string{"off"}) {
-		t.Fatal("handleThinkCommand(off) = false, want true")
+	if !handleThinkingCommand(agent, []string{"off"}) {
+		t.Fatal("handleThinkingCommand(off) = false, want true")
 	}
 	if agent.cfg().Thinking.Enabled {
-		t.Fatal("Thinking.Enabled = true, want false after /think off")
+		t.Fatal("Thinking.Enabled = true, want false after /thinking off")
 	}
 	if agent.cfg().Thinking.Level != "low" {
 		t.Fatalf("Thinking.Level = %q, want low for Codex catalog model", agent.cfg().Thinking.Level)
@@ -113,8 +134,8 @@ func TestHandleThinkCommand_UsesCatalogModelForCodexMinimum(t *testing.T) {
 	}
 
 	out.Reset()
-	if !handleThinkCommand(agent, nil) {
-		t.Fatal("handleThinkCommand(status) = false, want true")
+	if !handleThinkingCommand(agent, nil) {
+		t.Fatal("handleThinkingCommand(status) = false, want true")
 	}
 	if output := out.String(); !strings.Contains(output, "low (Codex minimum)") {
 		t.Fatalf("status output should show Codex minimum, got:\n%s", output)

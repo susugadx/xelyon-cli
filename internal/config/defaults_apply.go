@@ -126,7 +126,7 @@ func applyLSPDefaults(cfg *Config, defaults *Config, options defaultApplyOptions
 
 func applyThinkingDefaults(cfg *Config, defaults *Config) {
 	// Note: Diff.ContextLines は0が有効値なので、デフォルト適用は行わない
-	// Thinking: 内部 runtime 初期値（/think コマンドが正規ルート）
+	// Thinking: 内部 runtime 初期値（/thinking コマンドが正規ルート）
 	if cfg.Thinking.Level == "" {
 		cfg.Thinking.Level = defaults.Thinking.Level
 	}
