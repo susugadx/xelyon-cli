@@ -199,6 +199,50 @@ func TestSlashSuggestions_EnterPreservesThinkingStatusWithTrailingWhitespace(t *
 	}
 }
 
+func TestSlashSuggestions_EnterExecutesSkillsSubcommand(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:      "ready",
+		handledCommands: map[string]bool{"/skills doctor": true},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/skills d")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("selected /skills doctor should not start chat, got cmd %v", cmd)
+	}
+	if got := len(agent.handledInputs); got != 1 {
+		t.Fatalf("handledInputs length = %d, want 1", got)
+	}
+	if got := agent.handledInputs[0]; got != "/skills doctor" {
+		t.Fatalf("handledInputs[0] = %q, want /skills doctor", got)
+	}
+	if m.textInput.Value() != "" {
+		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
+	}
+}
+
+func TestSlashSuggestions_TabCompletesSkillsSubcommandWithRequiredArg(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/skills sh")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("Tab completion should not execute command, got %v", cmd)
+	}
+	if got := m.textInput.Value(); got != "/skills show " {
+		t.Fatalf("textInput after Tab = %q, want '/skills show '", got)
+	}
+	if m.slashSuggestions.visible() {
+		t.Fatal("slash suggestions should close after subcommand completion")
+	}
+}
+
 func TestSlashSuggestions_CanMoveSelectionWithDownAndTab(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)

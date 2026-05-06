@@ -187,6 +187,52 @@ func TestSuggestionsThinkingAliasArguments(t *testing.T) {
 	}
 }
 
+func TestSuggestionsSkillsSubcommands(t *testing.T) {
+	matches := Suggestions("/skills ")
+	if len(matches) != 3 {
+		t.Fatalf("Suggestions(/skills ) returned %d matches, want 3", len(matches))
+	}
+
+	wantLabels := []string{"/skills list", "/skills show <name>", "/skills doctor"}
+	for i, want := range wantLabels {
+		if matches[i].Label != want {
+			t.Fatalf("matches[%d].Label = %q, want %q", i, matches[i].Label, want)
+		}
+		if !matches[i].SubmitOnEnter {
+			t.Fatalf("matches[%d].SubmitOnEnter = false, want true", i)
+		}
+	}
+
+	if got := matches[1].InsertText; got != "/skills show" {
+		t.Fatalf("show InsertText = %q, want /skills show", got)
+	}
+	if !matches[1].HasArgs {
+		t.Fatal("show suggestion should keep HasArgs for Tab trailing space")
+	}
+	if got := matches[1].CompletionText(true); got != "/skills show " {
+		t.Fatalf("show CompletionText(true) = %q, want '/skills show '", got)
+	}
+}
+
+func TestSuggestionsSkillsSubcommandPrefix(t *testing.T) {
+	matches := Suggestions("/skills d")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/skills d) returned %d matches, want 1", len(matches))
+	}
+	if got := matches[0].InsertText; got != "/skills doctor" {
+		t.Fatalf("InsertText = %q, want /skills doctor", got)
+	}
+	if got := matches[0].Description; got != "Show parsing/duplicate diagnostics" {
+		t.Fatalf("Description = %q", got)
+	}
+}
+
+func TestSuggestionsDoNotExposeConfigSubcommandsYet(t *testing.T) {
+	if matches := Suggestions("/config "); len(matches) != 0 {
+		t.Fatalf("Suggestions(/config ) = %#v, want no matches", matches)
+	}
+}
+
 func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
 	matches := Suggestions("/")
 	if len(matches) < 4 {
