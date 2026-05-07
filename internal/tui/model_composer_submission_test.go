@@ -155,7 +155,7 @@ func TestComposer_EnterHandlesQuitWithArgsViaTUI(t *testing.T) {
 	}
 }
 
-func TestComposer_EnterHandlesCopyAliasWithSelection(t *testing.T) {
+func TestComposer_EnterHandlesCopyCommandWithSelection(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
 	m.rawLines = []string{"Hello, World!"}
@@ -163,13 +163,13 @@ func TestComposer_EnterHandlesCopyAliasWithSelection(t *testing.T) {
 	m.vp.setLines(m.getVisualRowContents())
 	m.mouseSelAnchor = visualPosition{line: 0, col: 0}
 	m.mouseSelEnd = visualPosition{line: 0, col: 4}
-	m.textInput.SetValue("/cp")
+	m.textInput.SetValue("/copy")
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
 	if cmd != nil {
-		t.Fatalf("copy alias should not return sendChat cmd, got %v", cmd)
+		t.Fatalf("copy command should not return sendChat cmd, got %v", cmd)
 	}
 	if len(agent.copyTexts) != 1 {
 		t.Fatalf("copyTexts length = %d, want 1", len(agent.copyTexts))

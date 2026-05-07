@@ -12,6 +12,7 @@ func TestCloneConfig(t *testing.T) {
 	original := DefaultConfig()
 	original.DefaultProvider = "claude"
 	original.DefaultModel = "claude-sonnet-4-6"
+	original.CommandAliases = map[string]string{}
 	original.CommandAliases["x"] = "exit"
 	original.SetProviderModelConfig("claude", ProviderModelConfig{DefaultModel: "claude-custom"})
 

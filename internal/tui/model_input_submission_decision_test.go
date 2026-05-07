@@ -81,7 +81,7 @@ func TestDecideCommandSubmission(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			command := slash.NewCommand(tt.input, tt.input, nil)
+			command := slash.NewCommand(tt.input, tt.input)
 			decision := decideCommandSubmission(command, tt.hasMouseSelection)
 			if decision.kind != tt.wantKind {
 				t.Fatalf("decision.kind = %v, want %v", decision.kind, tt.wantKind)

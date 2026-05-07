@@ -13,7 +13,7 @@ func DefaultConfig() *Config {
 		Diff:                defaultDiffConfig(),
 		Execution:           defaultExecutionConfig(),
 		ToolConfirm:         defaultToolConfirmConfig(),
-		CommandAliases:      defaultCommandAliases(),
+		CommandAliases:      map[string]string{},
 		PromptCache:         defaultPromptCacheConfig(),
 		Paste:               defaultPasteConfig(),
 		Responses:           defaultResponsesConfig(),

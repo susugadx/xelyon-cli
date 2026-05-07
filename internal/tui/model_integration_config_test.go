@@ -6,25 +6,25 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func TestTUIIntegration_ConfigAliasToggleSaveAndCloseFlow(t *testing.T) {
+func TestTUIIntegration_ConfigCommandToggleSaveAndCloseFlow(t *testing.T) {
 	agent := &stubAgent{
 		statusLine:     "provider: deepseek model: deepseek-chat",
 		saveStatusLine: "provider: openai model: gpt-5.4",
 	}
 	m := newModelWithViewport(agent)
 	m.statusLine = agent.GetStatusLine()
-	m.textInput.SetValue("/c")
+	m.textInput.SetValue("/config")
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	if cmd != nil {
-		t.Fatalf("/c should open config without async cmd, got %v", cmd)
+		t.Fatalf("/config should open config without async cmd, got %v", cmd)
 	}
 	if m.screen != screenConfig {
 		t.Fatalf("screen = %d, want screenConfig", m.screen)
 	}
-	if len(m.messages) == 0 || m.messages[len(m.messages)-1].Content != "/c" {
-		t.Fatalf("last message = %#v, want original alias command /c", m.messages)
+	if len(m.messages) == 0 || m.messages[len(m.messages)-1].Content != "/config" {
+		t.Fatalf("last message = %#v, want original command /config", m.messages)
 	}
 
 	cs := m.configScreen

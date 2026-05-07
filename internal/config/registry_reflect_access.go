@@ -67,8 +67,7 @@ func yamlTagName(tag string) string {
 
 func assignValueByPathPart(parent reflect.Value, part string, value interface{}) error {
 	if parent.Kind() == reflect.Map {
-		parent.SetMapIndex(reflect.ValueOf(part), reflect.ValueOf(value))
-		return nil
+		return assignMapValueByPathPart(parent, part, value)
 	}
 	if parent.Kind() != reflect.Struct {
 		return fmt.Errorf("not a struct: %s", part)
@@ -82,6 +81,28 @@ func assignValueByPathPart(parent reflect.Value, part string, value interface{})
 		return fmt.Errorf("cannot set field: %s", part)
 	}
 	return assignConvertibleValue(fieldVal, value)
+}
+
+func assignMapValueByPathPart(parent reflect.Value, part string, value interface{}) error {
+	if parent.IsNil() {
+		if !parent.CanSet() {
+			return fmt.Errorf("cannot initialize map for key: %s", part)
+		}
+		parent.Set(reflect.MakeMap(parent.Type()))
+	}
+
+	key := reflect.ValueOf(part)
+	if !key.Type().ConvertibleTo(parent.Type().Key()) {
+		return fmt.Errorf("map key type mismatch: expected %s, got %s", parent.Type().Key(), key.Type())
+	}
+
+	mapValue := reflect.ValueOf(value)
+	if !mapValue.Type().ConvertibleTo(parent.Type().Elem()) {
+		return fmt.Errorf("type mismatch: expected %s, got %s", parent.Type().Elem(), mapValue.Type())
+	}
+
+	parent.SetMapIndex(key.Convert(parent.Type().Key()), mapValue.Convert(parent.Type().Elem()))
+	return nil
 }
 
 func assignConvertibleValue(dst reflect.Value, value interface{}) error {

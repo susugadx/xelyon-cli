@@ -2,8 +2,8 @@ package commandruntime
 
 import "testing"
 
-func TestParse_ResolvesAliasesAndQuotes(t *testing.T) {
-	got, ok := Parse(`/h "hello world"`, map[string]string{"/x": "/status"})
+func TestParse_NormalizesCommandAndQuotes(t *testing.T) {
+	got, ok := Parse(`/HELP "hello world"`)
 	if !ok {
 		t.Fatal("Parse() ok = false, want true")
 	}
@@ -184,7 +184,7 @@ func TestSplitStrict_QuotedWindowsUNCPathKeepsLeadingDoubleBackslash(t *testing.
 }
 
 func TestParse_UnterminatedQuoteReturnsFalse(t *testing.T) {
-	if _, ok := Parse(`/attach "foo`, nil); ok {
+	if _, ok := Parse(`/attach "foo`); ok {
 		t.Fatal("Parse() ok = true, want false")
 	}
 }

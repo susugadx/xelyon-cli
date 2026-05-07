@@ -18,9 +18,6 @@ func TestTUIAdapter_WrapperStateAccessors(t *testing.T) {
 		Stats:             &SessionStats{},
 		Runtime:           NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
 	}
-	agent.Runtime.Config.CommandAliases = map[string]string{
-		"/x": "/help",
-	}
 
 	adapter := NewTUIAdapter(agent, nil)
 
@@ -39,9 +36,6 @@ func TestTUIAdapter_WrapperStateAccessors(t *testing.T) {
 	}
 	if got := adapter.GetProviderConfigKey(); got != "anthropic" {
 		t.Fatalf("GetProviderConfigKey() = %q, want %q", got, "anthropic")
-	}
-	if got := adapter.ResolveAlias("/x"); got != "/help" {
-		t.Fatalf("ResolveAlias() = %q, want %q", got, "/help")
 	}
 }
 

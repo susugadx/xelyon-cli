@@ -50,7 +50,7 @@ func handleSpecialCommand(input string, agent *Agent) bool {
 }
 
 func handleSpecialCommandForSurface(input string, agent *Agent, commandSurface commandcatalog.CommandSurface) bool {
-	invocation, ok := commandruntime.Parse(input, commandAliasesFromConfig(agent.cfg()))
+	invocation, ok := commandruntime.Parse(input)
 	if !ok {
 		return false
 	}

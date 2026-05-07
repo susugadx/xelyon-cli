@@ -321,7 +321,9 @@ func commandVersion() CommandInfo {
 }
 
 func commandHelp() CommandInfo {
-	return legacyHiddenCommand("/help", "", "Show this help", "ヘルプを表示", CommandCategorySystem, 910)
+	cmd := legacyHiddenCommand("/help", "", "Show this help", "ヘルプを表示", CommandCategorySystem, 910)
+	cmd.Aliases = []string{"/h"}
+	return cmd
 }
 
 // Tips はTips一覧

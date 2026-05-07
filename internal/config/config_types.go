@@ -28,7 +28,7 @@ type Config struct {
 	Diff              DiffConfig                     `yaml:"diff"`
 	Execution         ExecutionConfig                `yaml:"execution"`
 	ToolConfirm       ToolConfirmConfig              `yaml:"tool_confirm"`
-	CommandAliases    map[string]string              `yaml:"command_aliases,omitempty"` // コマンドエイリアス
+	CommandAliases    map[string]string              `yaml:"command_aliases,omitempty"` // 互換読み込み用。slash alias は command catalog を source of truth とする。
 	PromptCache       PromptCacheConfig              `yaml:"prompt_cache"`
 	Paste             PasteConfig                    `yaml:"paste"`
 	Responses         ResponsesConfig                `yaml:"responses"`

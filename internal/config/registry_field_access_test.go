@@ -66,6 +66,7 @@ func TestSetFieldValue(t *testing.T) {
 
 func TestGetFieldValue_CommandAliasesMapKeyPath(t *testing.T) {
 	cfg := DefaultConfig()
+	cfg.CommandAliases = map[string]string{}
 	cfg.CommandAliases["custom"] = "config"
 
 	val, err := GetFieldValue(cfg, "command_aliases.custom")
@@ -84,6 +85,19 @@ func TestGetFieldValue_CommandAliasesMapKeyPath(t *testing.T) {
 
 func TestSetFieldValue_CommandAliasesMapKeyPath(t *testing.T) {
 	cfg := DefaultConfig()
+
+	if err := SetFieldValue(cfg, "command_aliases.alias-c", "config"); err != nil {
+		t.Fatalf("SetFieldValue(command_aliases.alias-c) error = %v", err)
+	}
+
+	if got := cfg.CommandAliases["alias-c"]; got != "config" {
+		t.Fatalf("cfg.CommandAliases[alias-c] = %q, want %q", got, "config")
+	}
+}
+
+func TestSetFieldValue_MapKeyPathInitializesNilMap(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.CommandAliases = nil
 
 	if err := SetFieldValue(cfg, "command_aliases.alias-c", "config"); err != nil {
 		t.Fatalf("SetFieldValue(command_aliases.alias-c) error = %v", err)

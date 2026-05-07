@@ -26,6 +26,7 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		"/clear":     func(args []string) bool { return handleClearCommand(agent, args) },
 		"/history":   func(_ []string) bool { handleHistoryCommand(agent); return true },
 		"/help":      func(_ []string) bool { printHelpToWriterForSurface(agent.output(), agent, commandSurface); return true },
+		"/h":         func(_ []string) bool { printHelpToWriterForSurface(agent.output(), agent, commandSurface); return true },
 		"/model":     func(args []string) bool { return handleModelCommand(agent, args) },
 		"/version":   func(args []string) bool { return handleVersionCommand(agent, args) },
 		"/plan":      func(args []string) bool { return handlePlanCommand(agent, args) },

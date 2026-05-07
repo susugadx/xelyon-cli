@@ -20,22 +20,17 @@ func TestTrimmedInput(t *testing.T) {
 	}
 }
 
-func TestCommandAliasAndBareMatching(t *testing.T) {
-	cmd := NewCommand("/c", "payload", func(name string) string {
-		if name == "/c" {
-			return "/config"
-		}
-		return name
-	})
+func TestCommandNormalizesCommandTokenAndBareMatching(t *testing.T) {
+	cmd := NewCommand("/CONFIG", "payload")
 
 	if !cmd.IsBare("/config") {
-		t.Fatal("alias command should be bare /config")
+		t.Fatal("command token should be normalized and bare /config")
 	}
 	if !cmd.Matches("/config") {
-		t.Fatal("alias command should match /config")
+		t.Fatal("command should match normalized /config")
 	}
-	if cmd.Input != "/c" {
-		t.Fatalf("Input = %q, want %q", cmd.Input, "/c")
+	if cmd.Input != "/CONFIG" {
+		t.Fatalf("Input = %q, want %q", cmd.Input, "/CONFIG")
 	}
 	if cmd.Payload != "payload" {
 		t.Fatalf("Payload = %q, want %q", cmd.Payload, "payload")
@@ -52,12 +47,12 @@ func TestCommandAliasAndBareMatching(t *testing.T) {
 }
 
 func TestCommandWithArgsIsNotBare(t *testing.T) {
-	cmd := NewCommand("/quit now", "payload", nil)
+	cmd := NewCommand("/quit now", "payload")
 	if cmd.IsBare("/quit") {
 		t.Fatal("command with args should not be bare")
 	}
 	if !cmd.Matches("/quit") {
-		t.Fatal("nil resolver should use the command token as resolved name")
+		t.Fatal("command token should be used as resolved name")
 	}
 	if !cmd.ParseOK() {
 		t.Fatal("ParseOK = false, want true")
@@ -71,7 +66,7 @@ func TestCommandWithArgsIsNotBare(t *testing.T) {
 }
 
 func TestCommandParsesQuotedArgs(t *testing.T) {
-	cmd := NewCommand(`/attach "screenshots/error shot.png"`, "payload", nil)
+	cmd := NewCommand(`/attach "screenshots/error shot.png"`, "payload")
 	if !cmd.Matches("/attach") {
 		t.Fatal("quoted arg command should match /attach")
 	}
@@ -90,7 +85,7 @@ func TestCommandParsesQuotedArgs(t *testing.T) {
 }
 
 func TestCommandUnterminatedQuoteMarkedInvalid(t *testing.T) {
-	cmd := NewCommand(`/attach "foo`, "payload", nil)
+	cmd := NewCommand(`/attach "foo`, "payload")
 	if cmd.ParseOK() {
 		t.Fatal("ParseOK = true, want false")
 	}

@@ -610,18 +610,9 @@ paste:
 - **デフォルト**: `true`
 - **説明**: Bracketed Paste Mode を有効化。複数行のペーストを一括入力として扱います
 
-### コマンドエイリアス設定 (`command_aliases`)
+### コマンドエイリアス
 
-> **注意**: `/config` メニューには表示されません。YAML 直接編集で変更できます。
-
-```yaml
-command_aliases:
-  c: config      # /c → /config（デフォルト）
-  u: use         # /u → /use（デフォルト）
-  z: compress    # /z → /compress（custom alias 例）
-```
-
-`command_aliases` は `/` を除いた alias 名を、既存 command 名へ展開します。デフォルトは `c: config` と `u: use` です。
+slash command の alias は command catalog で定義されている組み込み alias だけを使用します。`command_aliases` は旧設定ファイルの読み込み互換のために残っていますが、実行時には使用されません。新しい alias は `~/.xelyon/config.yaml` では追加できません。
 
 ## 環境変数
 
