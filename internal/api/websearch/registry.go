@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 // SearchFunc はプロバイダー固有のネイティブ検索実装。
@@ -17,6 +19,8 @@ var (
 	registry   = make(map[string]SearchFuncWithContext)
 	registryMu sync.RWMutex
 )
+
+type usageCallbackContextKey struct{}
 
 // Register registers a provider-native web search implementation.
 func Register(providerName string, fn SearchFunc) {
@@ -47,4 +51,21 @@ func SearchWithContext(ctx context.Context, providerName, query, model string) (
 		return "", fmt.Errorf("native web search is not registered for provider %q", providerName)
 	}
 	return fn(ctx, query, model)
+}
+
+// WithUsageCallback は native web search request context に usage callback を埋め込む。
+func WithUsageCallback(ctx context.Context, callback api.UsageCallback) context.Context {
+	if callback == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, usageCallbackContextKey{}, callback)
+}
+
+// UsageCallbackFromContext は native web search request context から usage callback を取得する。
+func UsageCallbackFromContext(ctx context.Context) api.UsageCallback {
+	if ctx == nil {
+		return nil
+	}
+	callback, _ := ctx.Value(usageCallbackContextKey{}).(api.UsageCallback)
+	return callback
 }

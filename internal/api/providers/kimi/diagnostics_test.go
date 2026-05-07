@@ -48,6 +48,9 @@ func TestDiagnose_ReportsRegistrationModelUnsupportedAndPromptCacheKey(t *testin
 		if unsupported == "image input" {
 			t.Fatalf("UnsupportedFeatures = %v, want image input removed", report.UnsupportedFeatures)
 		}
+		if unsupported == "built-in web_search" {
+			t.Fatalf("UnsupportedFeatures = %v, want built-in web_search removed", report.UnsupportedFeatures)
+		}
 	}
 	for _, want := range []struct {
 		name   string
@@ -186,6 +189,159 @@ func TestDiagnose_ImageSmokeBuildsMultimodalPayload(t *testing.T) {
 	}
 	if report.Smoke.Requests[0].Content != "image ok" {
 		t.Fatalf("image smoke content = %q, want image ok", report.Smoke.Requests[0].Content)
+	}
+}
+
+func TestDiagnose_WebSearchSmokeBuildsBuiltinPayload(t *testing.T) {
+	var captured []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		captured = append(captured, body)
+		switch len(captured) {
+		case 1:
+			writeKimiDiagnosticSSE(
+				t,
+				w,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"{\"query\":\"doctor\"}"}}]}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"cached_tokens":1}}`,
+			)
+		case 2:
+			writeKimiDiagnosticSSE(
+				t,
+				w,
+				`{"choices":[{"delta":{"content":"web search ok"}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":4,"cached_tokens":2}}`,
+			)
+		default:
+			t.Fatalf("unexpected request count %d", len(captured))
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv(kimiAPIKeyEnv, "moonshot-key")
+	t.Setenv(kimiAPIURLEnv, server.URL+"/v1/chat/completions")
+	t.Setenv("KIMI_FUNCTION_CALLING", "0")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:          config.DefaultConfig(),
+		RunSmoke:        true,
+		WebSearchSmoke:  true,
+		MaxOutputTokens: 8,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.Ran || !report.Smoke.WebSearchPayload {
+		t.Fatalf("Smoke = %#v, want web search payload smoke", report.Smoke)
+	}
+	if report.Smoke.Content != "web search ok" {
+		t.Fatalf("Smoke content = %q, want web search ok", report.Smoke.Content)
+	}
+	if !report.Smoke.UsageObserved || report.Smoke.CachedInputTokens != 3 {
+		t.Fatalf("Smoke usage = observed %t cached %d, want observed cached=3", report.Smoke.UsageObserved, report.Smoke.CachedInputTokens)
+	}
+	if !hasKimiDiagnosticCheck(report, "web_search_smoke", DiagnosticStatusOK) {
+		t.Fatalf("missing web_search_smoke OK check: %#v", report.Checks)
+	}
+	if len(captured) != 2 {
+		t.Fatalf("captured request count = %d, want 2", len(captured))
+	}
+	first := captured[0]
+	if first["max_completion_tokens"] != float64(8) {
+		t.Fatalf("max_completion_tokens = %#v, want 8", first["max_completion_tokens"])
+	}
+	thinking, ok := first["thinking"].(map[string]any)
+	if !ok || thinking["type"] != "disabled" {
+		t.Fatalf("thinking = %#v, want disabled", first["thinking"])
+	}
+	tools, ok := first["tools"].([]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("tools = %#v, want one builtin tool", first["tools"])
+	}
+	tool, ok := tools[0].(map[string]any)
+	if !ok || tool["type"] != "builtin_function" {
+		t.Fatalf("tool = %#v, want builtin_function", tools[0])
+	}
+	function, ok := tool["function"].(map[string]any)
+	if !ok || function["name"] != "$web_search" {
+		t.Fatalf("tool.function = %#v, want $web_search", tool["function"])
+	}
+	if _, ok := first["tool_choice"]; ok {
+		t.Fatalf("tool_choice = %#v, want omitted", first["tool_choice"])
+	}
+	if key, _ := first["prompt_cache_key"].(string); key == "" {
+		t.Fatalf("prompt_cache_key = %#v, want non-empty", first["prompt_cache_key"])
+	}
+	secondMessages, ok := captured[1]["messages"].([]any)
+	if !ok || len(secondMessages) != 4 {
+		t.Fatalf("second messages = %#v, want tool loop replay", captured[1]["messages"])
+	}
+	toolMessage, ok := secondMessages[3].(map[string]any)
+	if !ok || toolMessage["role"] != "tool" || toolMessage["name"] != "$web_search" || toolMessage["content"] != `{"query":"doctor"}` {
+		t.Fatalf("tool replay message = %#v, want exact Kimi web_search tool result", secondMessages[3])
+	}
+}
+
+func TestDiagnose_ImageAndWebSearchSmokeDoesNotCompareCrossPayloadCacheKeys(t *testing.T) {
+	var captured []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		captured = append(captured, body)
+		switch len(captured) {
+		case 1:
+			writeKimiDiagnosticSSE(t, w, `{"choices":[{"delta":{"content":"image ok"}}]}`, `{"choices":[{"delta":{},"finish_reason":"stop","usage":{"prompt_tokens":9,"completion_tokens":3,"cached_tokens":1}}]}`)
+		case 2:
+			writeKimiDiagnosticSSE(
+				t,
+				w,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"{\"query\":\"doctor\"}"}}]}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"cached_tokens":1}}`,
+			)
+		case 3:
+			writeKimiDiagnosticSSE(
+				t,
+				w,
+				`{"choices":[{"delta":{"content":"web search ok"}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":4,"cached_tokens":2}}`,
+			)
+		default:
+			t.Fatalf("unexpected request count %d", len(captured))
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv(kimiAPIKeyEnv, "moonshot-key")
+	t.Setenv(kimiAPIURLEnv, server.URL+"/v1/chat/completions")
+	t.Setenv("KIMI_FUNCTION_CALLING", "0")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:          config.DefaultConfig(),
+		RunSmoke:        true,
+		ImageSmoke:      true,
+		WebSearchSmoke:  true,
+		MaxOutputTokens: 8,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false for image+web smoke without text cache pair: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.ImagePayload || !report.Smoke.WebSearchPayload {
+		t.Fatalf("Smoke = %#v, want image and web search payload smoke", report.Smoke)
+	}
+	if len(captured) != 3 {
+		t.Fatalf("captured request count = %d, want image + web search tool loop", len(captured))
+	}
+	imageKey, _ := captured[0]["prompt_cache_key"].(string)
+	webKey, _ := captured[1]["prompt_cache_key"].(string)
+	if imageKey == "" || webKey == "" || imageKey == webKey {
+		t.Fatalf("prompt_cache_key image=%q web=%q, want different non-empty keys", imageKey, webKey)
 	}
 }
 

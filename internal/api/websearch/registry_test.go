@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 func resetRegistry(t *testing.T) {
@@ -53,6 +55,25 @@ func TestRegisterWithContext_BasicSearch(t *testing.T) {
 	}
 	if result != "ctx:q:m" {
 		t.Errorf("got %q, want %q", result, "ctx:q:m")
+	}
+}
+
+func TestUsageCallbackContext(t *testing.T) {
+	var got api.Usage
+	ctx := WithUsageCallback(context.Background(), func(usage api.Usage) {
+		got = usage
+	})
+
+	callback := UsageCallbackFromContext(ctx)
+	if callback == nil {
+		t.Fatal("UsageCallbackFromContext() = nil, want callback")
+	}
+	callback(api.Usage{InputTokens: 12, OutputTokens: 3, CachedInputTokens: 4})
+	if got.InputTokens != 12 || got.OutputTokens != 3 || got.CachedInputTokens != 4 {
+		t.Fatalf("usage = %+v, want callback payload", got)
+	}
+	if UsageCallbackFromContext(context.Background()) != nil {
+		t.Fatal("UsageCallbackFromContext(background) = non-nil, want nil")
 	}
 }
 

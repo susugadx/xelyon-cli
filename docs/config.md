@@ -202,9 +202,9 @@ output:
 # ============================================================
 # ネイティブ Web 検索の実行プロバイダーとキャッシュ設定
 # 未設定の場合はメインプロバイダーの検索を使用
-# メインが非対応の場合は openai / gemini / claude / anthropic のいずれかを設定
+# メインが非対応の場合は kimi / moonshot / openai / gemini / claude / anthropic のいずれかを設定
 web_search:
-    # 検索プロバイダー（openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）
+    # 検索プロバイダー（kimi / moonshot / openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）
     provider: gemini
     # キャッシュを有効化（デフォルト: true）
     cache_enabled: true
@@ -679,17 +679,19 @@ export GROQ_API_KEY=gsk_...
 
 ### Web検索
 
-`web_search` は OpenAI / Gemini / Claude のネイティブ検索を使います。
+`web_search` は Kimi / OpenAI / Gemini / Claude のネイティブ検索を使います。
 
-- **`web_search.provider` 未設定**: メインプロバイダーが OpenAI / Gemini / Claude の場合、そのままネイティブ検索を使用
+- **`web_search.provider` 未設定**: メインプロバイダーが Kimi / OpenAI / Gemini / Claude の場合、そのままネイティブ検索を使用
 - **`web_search.provider` 設定あり**: 指定した検索プロバイダーを使用
-- **メインが非対応**: DeepSeek / Kimi / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
+- **メインが非対応**: DeepSeek / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
+
+Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。Moonshot は `$web_search` call fee と token 使用量を別々に課金し、XELYON の usage/cost 集計は API が返す token usage と `cached_tokens` だけを扱います。
 
 #### 設定例
 
 ```yaml
 web_search:
-  provider: gemini
+  provider: kimi
 ```
 
 #### 必要なAPIキー
@@ -699,6 +701,11 @@ web_search:
 ```bash
 # OpenAI を検索に使う場合
 export OPENAI_API_KEY=sk-...
+
+# Kimi / Moonshot を検索に使う場合
+export MOONSHOT_API_KEY=sk-...
+# 任意: proxy や互換 endpoint を使う場合
+export KIMI_API_URL=https://api.moonshot.ai/v1/chat/completions
 
 # Gemini を検索に使う場合
 export GEMINI_API_KEY=...
@@ -712,9 +719,9 @@ Gemini API キーは無料で取得できます: https://aistudio.google.com/api
 #### 動作例
 
 ```yaml
-# メインが DeepSeek でも、検索だけ Gemini を使う
+# メインが DeepSeek でも、検索だけ Kimi を使う
 web_search:
-  provider: gemini
+  provider: kimi
 ```
 
 ```bash
@@ -722,7 +729,7 @@ xelyon
 > 最新のGo言語の情報を検索して
 ```
 
-メインプロバイダーが OpenAI / Gemini / Claude の場合は、`web_search.provider` を省略するとそのままネイティブ検索を使用します。
+メインプロバイダーが Kimi / OpenAI / Gemini / Claude の場合は、`web_search.provider` を省略するとそのままネイティブ検索を使用します。
 
 ### プロバイダー・モデル指定
 

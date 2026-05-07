@@ -59,6 +59,7 @@ var displayProviderOrder = []string{
 }
 
 var nativeWebSearchProviderOrder = []string{
+	"kimi",
 	"openai",
 	"gemini",
 	"claude",
@@ -86,6 +87,7 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		SetupInstructions:    []string{"export MOONSHOT_API_KEY=your-api-key"},
 		DefaultSubAgentModel: "kimi-k2.5",
 		SupportsImages:       true,
+		NativeWebSearch:      true,
 		PricingFamily:        "kimi",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "kimi-k2.6",

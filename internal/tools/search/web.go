@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/cache"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -54,6 +55,8 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 
 	requestCtx := tools.WithRegistry(context.Background(), execCtx.EffectiveRegistry())
 	requestCtx = tools.WithConfig(requestCtx, cfg)
+	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
+	requestCtx = websearch.WithUsageCallback(requestCtx, webSearchUsageCallback(execCtx, searchProvider, searchModel))
 
 	result, cached, err := searchWithCache(requestCtx, cfg, searchProvider, query, searchModel)
 	if err != nil {
@@ -67,6 +70,15 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	}
 
 	return result
+}
+
+func webSearchUsageCallback(execCtx tools.ExecutionContext, provider, model string) api.UsageCallback {
+	if execCtx.UsageAttribution == nil {
+		return nil
+	}
+	return func(usage api.Usage) {
+		execCtx.UsageAttribution(provider, model, usage)
+	}
 }
 
 func searchWithCache(ctx context.Context, cfg *config.Config, provider, query, model string) (string, bool, error) {

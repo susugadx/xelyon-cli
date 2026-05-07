@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke bedrock-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -184,6 +184,11 @@ kimi-tool-smoke:
 kimi-image-smoke:
 	@test -n "$(MOONSHOT_API_KEY)" || { echo "MOONSHOT_API_KEY is required for make kimi-image-smoke"; exit 1; }
 	go run . doctor kimi --image-smoke
+
+# Kimi built-in web_search の実 API smoke test（MOONSHOT_API_KEY 必須）
+kimi-web-search-smoke:
+	@test -n "$(MOONSHOT_API_KEY)" || { echo "MOONSHOT_API_KEY is required for make kimi-web-search-smoke"; exit 1; }
+	go run . doctor kimi --web-search-smoke
 
 # Bedrock 実 API smoke test（AWS 認証チェーン必須）
 bedrock-smoke:

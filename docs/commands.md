@@ -6,9 +6,9 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ### `xelyon doctor kimi`
 
-Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
+Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。
 
-`--smoke` / `--image-smoke` / `--tool-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。
+`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生します。
 
 ```bash
 xelyon doctor kimi
@@ -16,10 +16,11 @@ xelyon doctor kimi --model kimi-k2.6
 xelyon doctor kimi --smoke
 xelyon doctor kimi --image-smoke
 xelyon doctor kimi --tool-smoke
+xelyon doctor kimi --web-search-smoke
 xelyon doctor kimi --json
 ```
 
-手元で実 Kimi 環境の回帰確認を走らせる場合は、`MOONSHOT_API_KEY` を設定して `make kimi-smoke` を実行します。画像入力だけ確認する場合は `make kimi-image-smoke`、tool calling も含める場合は `make kimi-tool-smoke` を使います。
+手元で実 Kimi 環境の回帰確認を走らせる場合は、`MOONSHOT_API_KEY` を設定して `make kimi-smoke` を実行します。画像入力だけ確認する場合は `make kimi-image-smoke`、tool calling も含める場合は `make kimi-tool-smoke`、built-in web search は `make kimi-web-search-smoke` を使います。
 
 ### `xelyon doctor azure`
 
@@ -640,8 +641,8 @@ bash: git checkout -b feature-branch
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
 | `search_code` | コード検索。`mode=auto` を既定に symbol-aware / literal / regex を language-aware に routing し、複数パターン・結果分類にも対応。対応言語では symbol-like query から定義・caller・参照・テストを自動解決 | `pattern`, `mode`, `path`, `file_filter` 等 |
-| `web_search` | ネイティブWeb検索（`web_search.provider` で OpenAI / Gemini / Claude を選択可能） | `query` |
-**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Kimi / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
+| `web_search` | ネイティブWeb検索（`web_search.provider` で Kimi / OpenAI / Gemini / Claude を選択可能） | `query` |
+**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 
 ### 開発支援
 

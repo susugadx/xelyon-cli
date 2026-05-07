@@ -160,10 +160,21 @@ func TestProviderDescriptorFor_Kimi(t *testing.T) {
 	if !desc.SupportsImages {
 		t.Fatal("SupportsImages = false, want true")
 	}
+	if !desc.NativeWebSearch {
+		t.Fatal("NativeWebSearch = false, want true")
+	}
 	if desc.PricingFamily != "kimi" {
 		t.Fatalf("PricingFamily = %q, want kimi", desc.PricingFamily)
 	}
 	if desc.ModelDefaults.DefaultModel != "kimi-k2.6" || desc.ModelDefaults.MaxOutputTokens != 32768 {
 		t.Fatalf("ModelDefaults = %#v, want kimi-k2.6 / 32768", desc.ModelDefaults)
+	}
+}
+
+func TestNativeWebSearchProviderKeys_IncludesKimiAndMoonshotAlias(t *testing.T) {
+	got := NativeWebSearchProviderKeys(true)
+	want := []string{"kimi", "moonshot", "openai", "gemini", "claude", "anthropic"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("NativeWebSearchProviderKeys(true) = %v, want %v", got, want)
 	}
 }

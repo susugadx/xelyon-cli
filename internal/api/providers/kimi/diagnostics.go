@@ -59,6 +59,7 @@ type DiagnosticSmokeRequestResult struct {
 	PromptCacheKeyPresent bool                       `json:"prompt_cache_key_present"`
 	PromptCacheKey        string                     `json:"prompt_cache_key,omitempty"`
 	ImagePayload          bool                       `json:"image_payload,omitempty"`
+	WebSearchPayload      bool                       `json:"web_search_payload,omitempty"`
 }
 
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
@@ -66,6 +67,7 @@ type DiagnosticSmokeResult struct {
 	Ran               bool                           `json:"ran"`
 	ToolPayload       bool                           `json:"tool_payload"`
 	ImagePayload      bool                           `json:"image_payload"`
+	WebSearchPayload  bool                           `json:"web_search_payload"`
 	Content           string                         `json:"content,omitempty"`
 	Duration          string                         `json:"duration,omitempty"`
 	UsageObserved     bool                           `json:"usage_observed"`
@@ -121,6 +123,7 @@ type DiagnosticOptions struct {
 	TextSmoke       bool
 	ToolSmoke       bool
 	ImageSmoke      bool
+	WebSearchSmoke  bool
 	SmokeTimeout    time.Duration
 	MaxOutputTokens int
 	SmokeOutput     io.Writer
@@ -146,9 +149,9 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		FunctionCallingEnabled: os.Getenv("KIMI_FUNCTION_CALLING") != "0",
 		UnsupportedFeatures: []string{
 			"video input",
-			"built-in web_search",
 			"memory",
 			"code runner",
+			"file upload",
 		},
 	}
 
@@ -291,7 +294,7 @@ func (r *DiagnosticReport) addUnsupportedFeaturesCheck() {
 	r.addCheck(
 		DiagnosticStatusInfo,
 		"unsupported_features",
-		"Kimi video, built-in web_search, memory, and code runner are not implemented in the native provider",
+		"Kimi video, memory, code runner, and file upload are not implemented in the native provider",
 		strings.Join(r.UnsupportedFeatures, ", "),
 		"",
 	)
@@ -369,6 +372,9 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	if smoke.ImagePayload {
 		r.addCheck(DiagnosticStatusOK, "image_smoke", "Kimi endpoint accepted a base64 image payload", smoke.Duration, "")
 	}
+	if smoke.WebSearchPayload {
+		r.addCheck(DiagnosticStatusOK, "web_search_smoke", "Kimi endpoint completed a built-in $web_search request", smoke.Duration, "Kimi charges a separate web search call fee when $web_search is triggered")
+	}
 }
 
 func resolveKimiDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
@@ -412,14 +418,24 @@ func resolveKimiDiagnosticCatalogModel(cfg *config.Config, model string) (string
 }
 
 type kimiDiagnosticSmokeRequest struct {
-	Name         string
-	SystemPrompt string
-	UserContent  string
-	Thinking     bool
-	SessionID    string
-	ToolPayload  bool
-	ImagePayload bool
+	Name             string
+	SystemPrompt     string
+	UserContent      string
+	Thinking         bool
+	SessionID        string
+	ToolPayload      bool
+	ImagePayload     bool
+	WebSearchPayload bool
 }
+
+const (
+	kimiDiagnosticSmokeCacheFirstName  = "thinking_off_cache_first"
+	kimiDiagnosticSmokeCacheSecondName = "thinking_off_cache_second"
+	kimiDiagnosticSmokeThinkingName    = "thinking_on"
+	kimiDiagnosticSmokeImageName       = "image_smoke"
+	kimiDiagnosticSmokeWebSearchName   = "web_search_smoke"
+	kimiDiagnosticSmokeToolName        = "tool_smoke"
+)
 
 func runKimiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
 	timeout := options.SmokeTimeout
@@ -458,53 +474,7 @@ func runKimiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 
 	provider := New(os.Getenv(kimiAPIKeyEnv))
 	result := DiagnosticSmokeResult{Ran: true}
-	var requests []kimiDiagnosticSmokeRequest
-	runTextSmoke := options.TextSmoke || options.ToolSmoke || !options.ImageSmoke
-	if runTextSmoke {
-		requests = append(requests,
-			kimiDiagnosticSmokeRequest{
-				Name:         "thinking_off_cache_first",
-				SystemPrompt: "Reply briefly.",
-				UserContent:  "Reply with: xelyon kimi doctor cache one",
-				Thinking:     false,
-				SessionID:    "xelyon-kimi-doctor-cache",
-			},
-			kimiDiagnosticSmokeRequest{
-				Name:         "thinking_off_cache_second",
-				SystemPrompt: "Reply briefly.",
-				UserContent:  "Reply with: xelyon kimi doctor cache two",
-				Thinking:     false,
-				SessionID:    "xelyon-kimi-doctor-cache",
-			},
-			kimiDiagnosticSmokeRequest{
-				Name:         "thinking_on",
-				SystemPrompt: "Think briefly, then reply briefly.",
-				UserContent:  "Reply with: xelyon kimi doctor thinking ok",
-				Thinking:     true,
-				SessionID:    "xelyon-kimi-doctor-thinking",
-			},
-		)
-	}
-	if options.ImageSmoke {
-		requests = append(requests, kimiDiagnosticSmokeRequest{
-			Name:         "image_smoke",
-			SystemPrompt: "Reply briefly.",
-			UserContent:  "Look at the attached tiny diagnostic image and reply with a short non-empty response.",
-			Thinking:     false,
-			SessionID:    "xelyon-kimi-doctor-image",
-			ImagePayload: true,
-		})
-	}
-	if options.ToolSmoke && report.FunctionCallingEnabled {
-		requests = append(requests, kimiDiagnosticSmokeRequest{
-			Name:         "tool_smoke",
-			SystemPrompt: "Use the diagnostic tool.",
-			UserContent:  `Call xelyon_kimi_doctor_probe exactly once with {"value":"kimi-tool-ok"} and do not answer in prose.`,
-			Thinking:     false,
-			SessionID:    "xelyon-kimi-doctor-tool",
-			ToolPayload:  true,
-		})
-	}
+	requests, runTextSmoke := kimiDiagnosticSmokeRequests(options, report.FunctionCallingEnabled)
 
 	for _, request := range requests {
 		requestResult, err := runKimiDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report.Model, request, output)
@@ -522,6 +492,12 @@ func runKimiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 				return result, fmt.Errorf("image smoke request did not include prompt_cache_key")
 			}
 		}
+		if request.WebSearchPayload {
+			result.WebSearchPayload = true
+			if !requestResult.PromptCacheKeyPresent {
+				return result, fmt.Errorf("web search smoke request did not include prompt_cache_key")
+			}
+		}
 		if request.ToolPayload && err == nil {
 			result.ToolPayload = true
 			if !diagnosticSmokeContentHasToolCall(requestResult.Content) {
@@ -533,15 +509,101 @@ func runKimiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 		}
 	}
 
-	if len(result.Requests) >= 2 {
-		first := result.Requests[0].PromptCacheKey
-		second := result.Requests[1].PromptCacheKey
+	if runTextSmoke {
+		first := diagnosticSmokePromptCacheKey(result.Requests, kimiDiagnosticSmokeCacheFirstName)
+		second := diagnosticSmokePromptCacheKey(result.Requests, kimiDiagnosticSmokeCacheSecondName)
 		if first == "" || second == "" || first != second {
 			return result, fmt.Errorf("session-aware prompt_cache_key mismatch: first=%q second=%q", first, second)
 		}
 	}
 
 	return result, nil
+}
+
+func kimiDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingEnabled bool) ([]kimiDiagnosticSmokeRequest, bool) {
+	runTextSmoke := options.TextSmoke || options.ToolSmoke || (!options.ImageSmoke && !options.WebSearchSmoke)
+	var requests []kimiDiagnosticSmokeRequest
+	if runTextSmoke {
+		requests = append(requests, kimiDiagnosticTextSmokeRequests()...)
+	}
+	if options.ImageSmoke {
+		requests = append(requests, kimiDiagnosticImageSmokeRequest())
+	}
+	if options.WebSearchSmoke {
+		requests = append(requests, kimiDiagnosticWebSearchSmokeRequest())
+	}
+	if options.ToolSmoke && functionCallingEnabled {
+		requests = append(requests, kimiDiagnosticToolSmokeRequest())
+	}
+	return requests, runTextSmoke
+}
+
+func kimiDiagnosticTextSmokeRequests() []kimiDiagnosticSmokeRequest {
+	return []kimiDiagnosticSmokeRequest{
+		{
+			Name:         kimiDiagnosticSmokeCacheFirstName,
+			SystemPrompt: "Reply briefly.",
+			UserContent:  "Reply with: xelyon kimi doctor cache one",
+			Thinking:     false,
+			SessionID:    "xelyon-kimi-doctor-cache",
+		},
+		{
+			Name:         kimiDiagnosticSmokeCacheSecondName,
+			SystemPrompt: "Reply briefly.",
+			UserContent:  "Reply with: xelyon kimi doctor cache two",
+			Thinking:     false,
+			SessionID:    "xelyon-kimi-doctor-cache",
+		},
+		{
+			Name:         kimiDiagnosticSmokeThinkingName,
+			SystemPrompt: "Think briefly, then reply briefly.",
+			UserContent:  "Reply with: xelyon kimi doctor thinking ok",
+			Thinking:     true,
+			SessionID:    "xelyon-kimi-doctor-thinking",
+		},
+	}
+}
+
+func kimiDiagnosticImageSmokeRequest() kimiDiagnosticSmokeRequest {
+	return kimiDiagnosticSmokeRequest{
+		Name:         kimiDiagnosticSmokeImageName,
+		SystemPrompt: "Reply briefly.",
+		UserContent:  "Look at the attached tiny diagnostic image and reply with a short non-empty response.",
+		Thinking:     false,
+		SessionID:    "xelyon-kimi-doctor-image",
+		ImagePayload: true,
+	}
+}
+
+func kimiDiagnosticWebSearchSmokeRequest() kimiDiagnosticSmokeRequest {
+	return kimiDiagnosticSmokeRequest{
+		Name:             kimiDiagnosticSmokeWebSearchName,
+		SystemPrompt:     "Use web search and reply briefly.",
+		UserContent:      "Search the web for Moonshot AI Kimi API web search pricing and reply with one short non-empty summary.",
+		Thinking:         false,
+		SessionID:        "xelyon-kimi-doctor-web-search",
+		WebSearchPayload: true,
+	}
+}
+
+func kimiDiagnosticToolSmokeRequest() kimiDiagnosticSmokeRequest {
+	return kimiDiagnosticSmokeRequest{
+		Name:         kimiDiagnosticSmokeToolName,
+		SystemPrompt: "Use the diagnostic tool.",
+		UserContent:  `Call xelyon_kimi_doctor_probe exactly once with {"value":"kimi-tool-ok"} and do not answer in prose.`,
+		Thinking:     false,
+		SessionID:    "xelyon-kimi-doctor-tool",
+		ToolPayload:  true,
+	}
+}
+
+func diagnosticSmokePromptCacheKey(requests []DiagnosticSmokeRequestResult, name string) string {
+	for _, request := range requests {
+		if request.Name == name {
+			return request.PromptCacheKey
+		}
+	}
+	return ""
 }
 
 func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, provider *Provider, model string, request kimiDiagnosticSmokeRequest, output io.Writer) (DiagnosticSmokeRequestResult, error) {
@@ -564,7 +626,12 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 	var usage api.Usage
 	usageObserved := false
 	provider.SetUsageCallback(func(observed api.Usage) {
-		usage = observed
+		usage.InputTokens += observed.InputTokens
+		usage.OutputTokens += observed.OutputTokens
+		usage.ThinkingTokens += observed.ThinkingTokens
+		usage.CachedInputTokens += observed.CachedInputTokens
+		usage.CacheCreationTokens += observed.CacheCreationTokens
+		usage.StorageCost += observed.StorageCost
 		usageObserved = true
 	})
 
@@ -581,6 +648,10 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 			promptCacheKey = built.PromptCacheKey
 			content, err = provider.ChatWithImage(requestCtx, request.SystemPrompt, nil, request.UserContent, image, model)
 		}
+	} else if request.WebSearchPayload {
+		built := buildKimiWebSearchRequest(requestCtx, initialKimiWebSearchMessages(request.UserContent), model, "kimi")
+		promptCacheKey = built.PromptCacheKey
+		content, err = provider.webSearch(requestCtx, request.UserContent, model, "kimi")
 	} else {
 		history := []api.Message{{Role: "user", Content: request.UserContent}}
 		built := provider.buildChatCompletionsRequest(
@@ -611,6 +682,7 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 		PromptCacheKeyPresent: strings.TrimSpace(promptCacheKey) != "",
 		PromptCacheKey:        promptCacheKey,
 		ImagePayload:          request.ImagePayload,
+		WebSearchPayload:      request.WebSearchPayload,
 	}, err
 }
 

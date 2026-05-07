@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -82,6 +83,36 @@ func TestToolExecutionContext_PrefersActiveModelOwnerForProviderConfigKey(t *tes
 	}
 	if execCtx.ProviderConfigKey != "anthropic" {
 		t.Fatalf("ProviderConfigKey = %q, want %q", execCtx.ProviderConfigKey, "anthropic")
+	}
+}
+
+func TestToolExecutionContext_UsageAttributionAddsRequestOwnerCost(t *testing.T) {
+	agent := NewAgentWithRuntime("llama3", &mockProvider{name: "ollama"}, false, NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()))
+	t.Cleanup(agent.Cleanup)
+
+	execCtx := agent.toolExecutionContext(context.Background(), nil, io.Discard, io.Discard)
+	if execCtx.UsageAttribution == nil {
+		t.Fatal("UsageAttribution = nil, want stats callback")
+	}
+
+	execCtx.UsageAttribution("kimi", "kimi-k2.6", api.Usage{InputTokens: 10, OutputTokens: 4, CachedInputTokens: 2})
+
+	agent.statsMu.Lock()
+	defer agent.statsMu.Unlock()
+	if agent.Stats.InputTokens != 10 || agent.Stats.OutputTokens != 4 || agent.Stats.CachedInputTokens != 2 {
+		t.Fatalf("Stats usage = input %d output %d cached %d, want 10/4/2", agent.Stats.InputTokens, agent.Stats.OutputTokens, agent.Stats.CachedInputTokens)
+	}
+	if agent.Stats.LastUsage == nil || agent.Stats.LastUsage.InputTokens != 10 {
+		t.Fatalf("LastUsage = %+v, want callback usage", agent.Stats.LastUsage)
+	}
+	if agent.Stats.Provider != "ollama" || agent.Stats.Model != "llama3" {
+		t.Fatalf("Stats owner mutated to %s/%s, want ollama/llama3", agent.Stats.Provider, agent.Stats.Model)
+	}
+	if agent.Stats.AccumulatedCost <= 0 || agent.Stats.CostUnknown {
+		t.Fatalf("AccumulatedCost = %f CostUnknown = %t, want known Kimi token cost", agent.Stats.AccumulatedCost, agent.Stats.CostUnknown)
+	}
+	if got := agent.Stats.EstimatedCostForConfig(agent.cfg()); got <= 0 {
+		t.Fatalf("EstimatedCostForConfig = %f, want Kimi cost even when chat provider is Ollama", got)
 	}
 }
 

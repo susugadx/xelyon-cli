@@ -137,6 +137,11 @@ func (s *SessionStats) AddUsage(usage api.Usage) {
 
 // AddUsageForConfig は catalog_model 設定を考慮して api.Usage を累積する。
 func (s *SessionStats) AddUsageForConfig(cfg *config.Config, usage api.Usage) {
+	s.AddUsageForProviderConfig(cfg, s.Provider, s.Model, usage)
+}
+
+// AddUsageForProviderConfig は指定 request owner の料金表で api.Usage を累積する。
+func (s *SessionStats) AddUsageForProviderConfig(cfg *config.Config, provider, model string, usage api.Usage) {
 	s.InputTokens += usage.InputTokens
 	s.OutputTokens += usage.OutputTokens
 	s.ThinkingTokens += usage.ThinkingTokens
@@ -145,7 +150,7 @@ func (s *SessionStats) AddUsageForConfig(cfg *config.Config, usage api.Usage) {
 	s.LastUsage = &usage
 
 	// リクエスト単位のコストを累積（Gemini 200Kティア等に対応）
-	estimate := cost.EstimateRequestCostWithCacheForConfig(cfg, s.Provider, s.Model, usage)
+	estimate := cost.EstimateRequestCostWithCacheForConfig(cfg, provider, model, usage)
 	s.AccumulatedCost += estimate.Cost
 	s.AccumulatedCost += usage.StorageCost // ストレージ料金を加算
 	if estimate.PricingUnavailable {
@@ -190,16 +195,16 @@ func (s *SessionStats) EstimatedCostForConfig(cfg *config.Config) float64 {
 }
 
 func (s *SessionStats) EstimatedCostEstimateForConfig(cfg *config.Config) cost.CostEstimate {
-	if s.Provider == "ollama" {
-		return cost.CostEstimate{} // ローカル実行
-	}
-
 	// AddUsage 経由で累積されたコストがあればそれを使う
 	if s.AccumulatedCost > 0 || s.CostUnknown {
 		return cost.CostEstimate{
 			Cost:               s.AccumulatedCost,
 			PricingUnavailable: s.CostUnknown,
 		}
+	}
+
+	if s.Provider == "ollama" {
+		return cost.CostEstimate{} // ローカル実行
 	}
 
 	// AddTokens() のみ使われた場合（レガシー互換）

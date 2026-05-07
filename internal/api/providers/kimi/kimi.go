@@ -30,6 +30,8 @@ func init() {
 		}
 		return newProvider(apiKey, "moonshot"), nil
 	})
+	registerWebSearch("kimi")
+	registerWebSearch("moonshot")
 }
 
 const (

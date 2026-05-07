@@ -30,15 +30,20 @@ func TestResolveSearchProvider(t *testing.T) {
 		{name: "config gemini wins", configProvider: "gemini", mainProvider: "deepseek", want: "gemini"},
 		{name: "config openai wins", configProvider: "openai", mainProvider: "deepseek", want: "openai"},
 		{name: "config claude wins", configProvider: "claude", mainProvider: "openai", want: "claude"},
+		{name: "config kimi wins", configProvider: "kimi", mainProvider: "deepseek", want: "kimi"},
+		{name: "config moonshot wins", configProvider: "moonshot", mainProvider: "deepseek", want: "moonshot"},
 
 		// config未設定 → exact owner key を優先
 		{name: "session owner anthropic wins over canonical claude runtime", configProvider: "", mainProvider: "claude", mainProviderOwner: "anthropic", want: "anthropic"},
+		{name: "session owner moonshot wins over canonical kimi runtime", configProvider: "", mainProvider: "kimi", mainProviderOwner: "moonshot", want: "moonshot"},
 
 		// config未設定 → main provider
 		{name: "fallback to openai main provider", configProvider: "", mainProvider: "openai", want: "openai"},
 		{name: "fallback to gemini main provider", configProvider: "", mainProvider: "gemini", want: "gemini"},
 		{name: "fallback to claude main provider", configProvider: "", mainProvider: "claude", want: "claude"},
 		{name: "fallback to anthropic main provider", configProvider: "", mainProvider: "anthropic", want: "anthropic"},
+		{name: "fallback to kimi main provider", configProvider: "", mainProvider: "kimi", want: "kimi"},
+		{name: "fallback to moonshot main provider", configProvider: "", mainProvider: "moonshot", want: "moonshot"},
 
 		// config未設定 + ネイティブ非対応 → 空文字
 		{name: "deepseek unsupported", configProvider: "", mainProvider: "deepseek", want: ""},

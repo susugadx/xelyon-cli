@@ -374,6 +374,9 @@ func TestRootCommand_KimiDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if !strings.Contains(out.String(), "--image-smoke") {
 		t.Fatalf("output = %q, want Kimi doctor image smoke flag", out.String())
 	}
+	if !strings.Contains(out.String(), "--web-search-smoke") {
+		t.Fatalf("output = %q, want Kimi doctor web search smoke flag", out.String())
+	}
 	if !strings.Contains(out.String(), "Diagnose Kimi native provider configuration") {
 		t.Fatalf("output = %q, want Kimi doctor help", out.String())
 	}

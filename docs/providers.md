@@ -68,6 +68,7 @@ xelyon --provider moonshot --model kimi-k2.5
 - streaming / tool calls / JSON output / thinking modes 対応
 - 256K context / 最大 32K output（K2.6 / K2.5）
 - 画像入力対応。`--image` / `image:` から渡された PNG / JPEG / WebP / GIF を `data:image/...;base64,...` の multimodal `image_url` part として送信します。
+- `web_search.provider = kimi` / `moonshot`、またはメイン provider が Kimi の場合、Moonshot Chat Completions の built-in `$web_search` を使います。
 - `/think off`: K2.6 / K2.5 は `thinking: {"type":"disabled"}` を送信します。`kimi-k2-thinking` には disabled を送信しません。
 - `/think on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信し、forced tool choice は `auto` に丸めます。
 - `reasoning_content`（思考内容）はストリーミング表示され、ツール実行時も保持されます。
@@ -75,9 +76,11 @@ xelyon --provider moonshot --model kimi-k2.5
 
 `kimi-k2-thinking` は明示指定された場合のみ 256K context / 最大 32K output の legacy/compat thinking model として扱います。新規利用では thinking on/off が可能な `kimi-k2.6` を推奨します。
 
-Kimi built-in の web_search / memory / code runner、video 入力、file upload / `ms://` 参照は現在の native provider では未対応です。URL 画像は Kimi 公式仕様でも未対応のため、XELYON はローカル画像ファイルを base64 data URL として送ります。
+Kimi built-in `$web_search` は通常 function tools とは別の `web_search` 専用 route で使います。request には `tools[].type = "builtin_function"` / `function.name = "$web_search"` を入れ、検索 turn では `thinking: {"type":"disabled"}` を送信します。`tool_choice` は送らず、モデルの自動選択に任せます。Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金し、検索結果トークンも次 request の入力 tokens に含まれます。XELYON の usage/cost 集計は API が返す token usage と `cached_tokens` だけを扱い、検索 call fee は別料金として扱います。
 
-設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、画像入力対応、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認したい場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。
+Memory / code runner、video 入力、file upload / `ms://` 参照は現在の native provider では未対応です。URL 画像は Kimi 公式仕様でも未対応のため、XELYON はローカル画像ファイルを base64 data URL として送ります。
+
+設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、画像入力対応、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認したい場合は `--image-smoke`、function calling は `--tool-smoke`、built-in `$web_search` は `--web-search-smoke` を使います。
 
 ```bash
 xelyon doctor kimi
@@ -85,16 +88,18 @@ xelyon doctor kimi --model kimi-k2.6
 xelyon doctor kimi --smoke
 xelyon doctor kimi --image-smoke
 xelyon doctor kimi --tool-smoke
+xelyon doctor kimi --web-search-smoke
 xelyon doctor kimi --json
 ```
 
-live smoke は `MOONSHOT_API_KEY` が必要で、通常 CI では実行しません。手元では以下で実行できます。prompt cache の `cached_tokens` は API が返す場合だけ観測されるため、0 でも smoke は成功扱いです。
+live smoke は `MOONSHOT_API_KEY` が必要で、通常 CI では実行しません。手元では以下で実行できます。prompt cache の `cached_tokens` は API が返す場合だけ観測されるため、0 でも smoke は成功扱いです。`kimi-web-search-smoke` は実検索 call fee が発生します。
 
 ```bash
 export MOONSHOT_API_KEY=sk-...
 make kimi-smoke
 make kimi-image-smoke
 make kimi-tool-smoke
+make kimi-web-search-smoke
 ```
 
 ### 3. OpenAI

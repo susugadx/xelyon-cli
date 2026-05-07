@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/fatih/color"
@@ -115,8 +114,7 @@ func (a *Agent) FormatStatusLine() string {
 	indicator := statusGreen.Sprint("●")
 
 	providerDisplay := a.ProviderName
-	providerLower := strings.ToLower(providerDisplay)
-	if providerLower == "ollama" {
+	if shouldSuppressLocalCostDisplay(providerDisplay, estimate) {
 		return fmt.Sprintf("%s %s %s %s %s %s %s %s",
 			indicator,
 			statusCyan.Sprint(a.CurrentModel),

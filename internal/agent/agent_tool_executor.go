@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -46,6 +47,13 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 		AutoApprove:        a.autoApprove(),
 		AuditLogger:        a.auditLogger(),
 		LocatorRegistry:    a.LocatorRegistry,
+	}
+	if a.Stats != nil {
+		ec.UsageAttribution = func(provider, model string, u api.Usage) {
+			a.statsMu.Lock()
+			defer a.statsMu.Unlock()
+			a.Stats.AddUsageForProviderConfig(a.cfg(), provider, model, u)
+		}
 	}
 
 	if a.tuiToolResultCh != nil {

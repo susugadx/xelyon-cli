@@ -43,7 +43,8 @@ func TestPromptCacheScopeContext_EmptyScopeClearsExistingScope(t *testing.T) {
 }
 
 func TestPromptCacheScopeContext_NilContext(t *testing.T) {
-	ctx := WithPromptCacheScope(nil, PromptCacheScope{SessionID: "session-1"})
+	var empty context.Context
+	ctx := WithPromptCacheScope(empty, PromptCacheScope{SessionID: "session-1"})
 
 	got, ok := PromptCacheScopeFromContext(ctx)
 	if !ok {

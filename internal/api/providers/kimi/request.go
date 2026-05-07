@@ -248,11 +248,11 @@ func kimiToolChoicePolicy(thinkingActive bool) openaicompat.ToolChoicePolicy {
 
 func kimiImageDataURL(image *api.ImageData) (string, error) {
 	if image == nil {
-		return "", fmt.Errorf("Kimi image input requires non-empty image data")
+		return "", fmt.Errorf("kimi image input requires non-empty image data")
 	}
 	encoded := strings.TrimSpace(image.Base64)
 	if encoded == "" {
-		return "", fmt.Errorf("Kimi image input requires non-empty image data")
+		return "", fmt.Errorf("kimi image input requires non-empty image data")
 	}
 	mediaType := strings.ToLower(strings.TrimSpace(image.MediaType))
 	if !isKimiSupportedImageMediaType(mediaType) {
@@ -263,14 +263,14 @@ func kimiImageDataURL(image *api.ImageData) (string, error) {
 		return "", fmt.Errorf("invalid Kimi image base64 data: %w", err)
 	}
 	if len(decoded) == 0 {
-		return "", fmt.Errorf("Kimi image input requires non-empty decoded image data")
+		return "", fmt.Errorf("kimi image input requires non-empty decoded image data")
 	}
 	if len(decoded) > api.MaxImageSize || image.Size > api.MaxImageSize {
 		size := int64(len(decoded))
 		if image.Size > 0 {
 			size = image.Size
 		}
-		return "", fmt.Errorf("Kimi image input is too large: %d bytes (max: %d bytes)", size, api.MaxImageSize)
+		return "", fmt.Errorf("kimi image input is too large: %d bytes (max: %d bytes)", size, api.MaxImageSize)
 	}
 	if !isKimiImageBytesForMediaType(mediaType, decoded) {
 		return "", fmt.Errorf("invalid Kimi image bytes for media type %q", mediaType)

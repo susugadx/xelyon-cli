@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/cost"
@@ -108,6 +107,10 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 	costDiff := endEstimate.Cost - startEstimate.Cost
 	costUnknown := a.Stats.CostUnknownEvents > startStats.CostUnknownEvents ||
 		(usageHasAnyTokens(turnUsage) && turnEstimate.PricingUnavailable)
+	turnCostEstimate := cost.CostEstimate{
+		Cost:               costDiff,
+		PricingUnavailable: costUnknown,
+	}
 	a.Stats.LastTurnUsage = &turnUsage
 	a.Stats.LastTurnCost = costDiff
 	a.Stats.LastTurnCostUnknown = costUnknown
@@ -122,8 +125,7 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 
 	// ✓ を緑色で表示、残りはdimまたは通常色
 	green.Fprint(a.output(), "✓ ")
-	if strings.ToLower(a.ProviderName) == "ollama" {
-		// Ollama の場合はコスト非表示
+	if shouldSuppressLocalCostDisplay(a.ProviderName, turnCostEstimate) {
 		_, _ = fmt.Fprintf(a.output(), "In: %s + Out: %s = %s tok\n",
 			FormatNumber(inDiff),
 			FormatNumber(outDiff),

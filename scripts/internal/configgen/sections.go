@@ -234,10 +234,10 @@ var Sections = map[string]SectionInfo{
 		Comments: []string{
 			"ネイティブ Web 検索の実行プロバイダーとキャッシュ設定",
 			"未設定の場合はメインプロバイダーの検索を使用",
-			"メインが非対応の場合は openai / gemini / claude / anthropic のいずれかを設定",
+			"メインが非対応の場合は kimi / moonshot / openai / gemini / claude / anthropic のいずれかを設定",
 		},
 		Fields: map[string]string{
-			"provider":      "検索プロバイダー（openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）",
+			"provider":      "検索プロバイダー（kimi / moonshot / openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）",
 			"cache_enabled": "キャッシュを有効化（デフォルト: true）",
 			"cache_ttl":     "キャッシュTTL秒数（デフォルト: 3600 = 1時間）",
 			"cache_size":    "最大キャッシュ数（デフォルト: 50）",

@@ -22,8 +22,8 @@ func newKimiDoctorCommand() *cobra.Command {
 Checks MOONSHOT_API_KEY, KIMI_API_URL, provider registration, model config,
 image capability, unsupported native features, and prompt_cache_key request
 shape. Use --smoke to send live Kimi Chat Completions requests, --image-smoke
-to send one tiny image request, or --tool-smoke to include a dummy tool call
-smoke request.`,
+to send one tiny image request, --tool-smoke to include a dummy tool call,
+or --web-search-smoke to verify the built-in $web_search route.`,
 		Args: cobra.NoArgs,
 		RunE: runKimiDoctorInvocation,
 	}
@@ -32,6 +32,7 @@ smoke request.`,
 	cmd.Flags().BoolVar(&doctorSmokeFlag, "smoke", false, "Send live minimal Kimi Chat Completions smoke requests")
 	cmd.Flags().BoolVar(&doctorKimiImageSmokeFlag, "image-smoke", false, "Send one live Kimi image input smoke request")
 	cmd.Flags().BoolVar(&doctorToolSmokeFlag, "tool-smoke", false, "Send a live Kimi smoke request that forces a dummy tool call")
+	cmd.Flags().BoolVar(&doctorKimiWebSearchSmokeFlag, "web-search-smoke", false, "Send a live Kimi built-in $web_search smoke request")
 	cmd.Flags().DurationVar(&doctorTimeoutFlag, "timeout", defaultAzureDoctorTimeout, "Timeout for 'doctor kimi' live smoke requests")
 	cmd.Flags().BoolVar(&doctorJSONFlag, "json", false, "Print 'doctor kimi' diagnostics as JSON")
 
@@ -46,13 +47,14 @@ func runKimiDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := kimiprovider.Diagnose(cmd.Context(), kimiprovider.DiagnosticOptions{
-		Config:       cfg,
-		Model:        kimiDoctorExplicitModel(cmd),
-		RunSmoke:     doctorSmokeFlag || doctorToolSmokeFlag || doctorKimiImageSmokeFlag,
-		TextSmoke:    doctorSmokeFlag,
-		ToolSmoke:    doctorToolSmokeFlag,
-		ImageSmoke:   doctorKimiImageSmokeFlag,
-		SmokeTimeout: doctorTimeoutFlag,
+		Config:         cfg,
+		Model:          kimiDoctorExplicitModel(cmd),
+		RunSmoke:       doctorSmokeFlag || doctorToolSmokeFlag || doctorKimiImageSmokeFlag || doctorKimiWebSearchSmokeFlag,
+		TextSmoke:      doctorSmokeFlag,
+		ToolSmoke:      doctorToolSmokeFlag,
+		ImageSmoke:     doctorKimiImageSmokeFlag,
+		WebSearchSmoke: doctorKimiWebSearchSmokeFlag,
+		SmokeTimeout:   doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]kimiprovider.DiagnosticCheck{{
@@ -74,7 +76,7 @@ func runKimiDoctorInvocation(cmd *cobra.Command, args []string) error {
 
 	if report.HasFailures() {
 		cmd.SilenceUsage = true
-		return fmt.Errorf("Kimi diagnostics failed")
+		return fmt.Errorf("kimi diagnostics failed")
 	}
 	return nil
 }

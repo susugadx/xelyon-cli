@@ -204,6 +204,60 @@ func TestPrintTaskUsage(t *testing.T) {
 	}
 }
 
+func TestPrintTaskUsage_LocalProviderShowsExternalCost(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := newAgentChatTestAgent(t, provider)
+	agent.Stats = NewSessionStats("ollama", "llama3")
+	agent.ProviderName = "ollama"
+
+	startStats := SessionStats{
+		Provider: "ollama",
+		Model:    "llama3",
+	}
+	agent.Stats.InputTokens = 12
+	agent.Stats.OutputTokens = 3
+	agent.Stats.AccumulatedCost = 0.0012
+
+	var out bytes.Buffer
+	agent.Runtime = &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	}
+
+	agent.printTaskUsage(startStats)
+
+	if !strings.Contains(out.String(), "(~$0.0012)") {
+		t.Fatalf("local provider external cost should be displayed, got:\n%s", out.String())
+	}
+	if agent.Stats.LastTurnCost < 0.0011 || agent.Stats.LastTurnCost > 0.0013 {
+		t.Fatalf("LastTurnCost = %.4f, want about 0.0012", agent.Stats.LastTurnCost)
+	}
+}
+
+func TestPrintTaskUsage_LocalProviderHidesZeroCost(t *testing.T) {
+	provider := &mockProvider{name: "test"}
+	agent := newAgentChatTestAgent(t, provider)
+	agent.Stats = NewSessionStats("ollama", "llama3")
+	agent.ProviderName = "ollama"
+
+	startStats := SessionStats{
+		Provider: "ollama",
+		Model:    "llama3",
+	}
+	agent.Stats.InputTokens = 12
+	agent.Stats.OutputTokens = 3
+
+	var out bytes.Buffer
+	agent.Runtime = &AgentRuntime{
+		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+	}
+
+	agent.printTaskUsage(startStats)
+
+	if strings.Contains(out.String(), "$") || strings.Contains(out.String(), "cost") {
+		t.Fatalf("zero-cost local provider should hide cost, got:\n%s", out.String())
+	}
+}
+
 func TestPrintTaskUsage_DoesNotLeakPriorUnknownCostToLastTurn(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	agent := newAgentChatTestAgent(t, provider)
