@@ -47,6 +47,9 @@ func (m *Model) shiftTrackedBlocksAfter(lineStart int, delta int) {
 			m.toolBlocks[i].block.lineStart += delta
 		}
 	}
+	if m.agentActivity.block.lineCount > 0 && m.agentActivity.block.lineStart > lineStart {
+		m.agentActivity.block.lineStart += delta
+	}
 }
 
 func (m *Model) refreshTranscriptViewport() {

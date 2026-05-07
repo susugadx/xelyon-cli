@@ -47,18 +47,18 @@ func (a *submissionCleanupProbeAgent) chatPathExistedAtSend() bool {
 	return a.chatPathExistsAtSend
 }
 
-func (a *submissionCleanupProbeAgent) Chat(input string) {
+func (a *submissionCleanupProbeAgent) Chat(input string) error {
 	if a.observePath != "" {
 		_, err := os.Stat(a.observePath)
 		a.setChatPathObserved(err == nil)
 	}
-	a.stubAgent.Chat(input)
+	return a.stubAgent.Chat(input)
 }
 
-func (a *submissionCleanupProbeAgent) ChatWithImagePath(input string, imagePath string) {
+func (a *submissionCleanupProbeAgent) ChatWithImagePath(input string, imagePath string) error {
 	_, err := os.Stat(imagePath)
 	a.setImagePathObserved(imagePath, err == nil)
-	a.stubAgent.ChatWithImagePath(input, imagePath)
+	return a.stubAgent.ChatWithImagePath(input, imagePath)
 }
 
 func TestComposer_SubmitImageAttachmentUsesImageChat(t *testing.T) {

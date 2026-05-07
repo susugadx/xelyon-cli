@@ -74,6 +74,29 @@ type toolBlockInfo struct {
 	tool  ToolResult // ツール結果データ
 }
 
+type agentActivityStatus string
+
+const (
+	agentActivityStatusWorking agentActivityStatus = "working"
+	agentActivityStatusDone    agentActivityStatus = "done"
+	agentActivityStatusBlocked agentActivityStatus = "blocked"
+)
+
+// agentActivityState は進行中 turn の agent activity block を追跡する。
+type agentActivityState struct {
+	active     bool
+	block      trackedBlock
+	startedAt  time.Time
+	finishedAt time.Time
+	status     agentActivityStatus
+	tools      []agentActivityTool
+	errorText  string
+}
+
+type agentActivityTool struct {
+	tool ToolResult
+}
+
 type visualPosition struct {
 	line int
 	col  int
@@ -101,7 +124,8 @@ type Model struct {
 	rawLines         []string         // 元の行データ。リサイズ時はこれを再レンダリングする
 	layout           *termtext.Layout // 表示幅に応じたvisual rowレイアウト
 	toolBlocks       []toolBlockInfo  // ツール結果ブロック
-	focusedBlock     int              // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
+	agentActivity    agentActivityState
+	focusedBlock     int // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
 	statusLine       string
 	statusSnapshot   StatusSnapshot
 	workingDir       string

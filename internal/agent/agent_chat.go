@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,8 +13,8 @@ import (
 
 // chat はAIと対話する
 // PlanModeEnabled に応じて Plan Mode または通常モードで処理
-func (a *Agent) chat(input string) {
-	a.chatInternal(input, nil)
+func (a *Agent) chat(input string) error {
+	return a.chatInternal(input, nil)
 }
 
 // ChatOnce は単一クエリを1ターンだけ実行してエラーを返す（--once 用）
@@ -29,8 +30,22 @@ func (a *Agent) ChatOnceWithImage(input string, image *api.ImageData) error {
 
 // chatInternal はAIと対話する内部実装（対話モード用ラッパー）
 // image が nil でない場合は画像付きメッセージとして処理
-func (a *Agent) chatInternal(input string, image *api.ImageData) {
-	_ = a.chatCore(input, image, false)
+func (a *Agent) chatInternal(input string, image *api.ImageData) error {
+	if err := a.chatCore(input, image, false); err != nil {
+		return err
+	}
+	return a.chatErrorFromStatus()
+}
+
+func (a *Agent) chatErrorFromStatus() error {
+	status := a.statusRef().getStatus()
+	if status.State != StateAborted {
+		return nil
+	}
+	if reason := strings.TrimSpace(status.ReasonEN); reason != "" {
+		return errors.New(reason)
+	}
+	return errors.New("request aborted")
 }
 
 // runNormalMode は通常モードでの処理（Plan Mode OFF 時）を実行する。
@@ -72,18 +87,17 @@ func (a *Agent) showTaskSummary() {
 }
 
 // chatWithImage は画像付きメッセージでAIと対話する
-func (a *Agent) chatWithImage(input string, image *api.ImageData) {
+func (a *Agent) chatWithImage(input string, image *api.ImageData) error {
 	// プロバイダーが画像対応かチェック
 	if !a.CurrentProvider.SupportsImages() {
 		yellow.Fprintf(a.output(), "Warning: %s does not support images. The image will be ignored.\n", a.CurrentProvider.Name())
-		a.chat(input)
-		return
+		return a.chat(input)
 	}
 
 	// 画像情報をログ
 	green.Fprintf(a.output(), "🖼️  Sending image: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 
-	a.chatInternal(input, image)
+	return a.chatInternal(input, image)
 }
 
 // printTaskUsage はタスク全体の usage を表示

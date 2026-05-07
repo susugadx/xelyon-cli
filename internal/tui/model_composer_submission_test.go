@@ -67,9 +67,7 @@ func TestComposer_EnterHandlesSlashCommandWithFoldedPaste(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("command Enter should not return sendChat cmd, got %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}

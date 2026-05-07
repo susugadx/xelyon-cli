@@ -46,15 +46,23 @@ func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.C
 		handler := localCommandActionHandlers[decision.action]
 		return handler(m, command, sub)
 	case commandSubmissionDecisionDispatchAgent:
-		if m.commands.HandleCommand(command.Input) {
-			m.recordHandledCommand(command.Input)
-			m.refreshStatusLine()
-			return m, nil
-		}
-		return m.commandFallbackToChat(sub, command.Payload)
+		return m.handleAgentCommandSubmission(sub, command)
 	default:
 		return m.commandFallbackToChat(sub, command.Payload)
 	}
+}
+
+func (m Model) handleAgentCommandSubmission(sub composerSubmission, command slash.Command) (tea.Model, tea.Cmd) {
+	if m.commands.HandleCommand(command.Input) {
+		m.recordHandledCommand(command.Input)
+		m.refreshStatusLine()
+		if m.agentTurnBusy() {
+			return m, nil
+		}
+		m.beginAgentActivity()
+		return m, agentActivityDoneCmd()
+	}
+	return m.commandFallbackToChat(sub, command.Payload)
 }
 
 type localCommandActionHandler func(Model, slash.Command, composerSubmission) (tea.Model, tea.Cmd)
@@ -100,27 +108,30 @@ var localCommandActionHandlers = map[commandrouter.Action]localCommandActionHand
 }
 
 func (m Model) handleChatSubmission(sub composerSubmission) (tea.Model, tea.Cmd) {
+	if m.rejectAgentTurnWhileBusy() {
+		return m, nil
+	}
 	dispatch := buildChatDispatchRequest(sub.payload, sub.attachments)
 	cleanupTargets := m.detachAttachmentsWithoutCleanup()
 	m.clearComposerDraft()
-	m.chromeDirty = true // textInput 状態変更を chrome に反映
 	dispatch.cleanupAttachments = cleanupTargets
-	m.appendUserMessage(dispatch.display)
+	m = m.appendChatAgentTurn(dispatch.display)
 	return m, m.sendChat(dispatch)
 }
 
 // sendChat は goroutine で agent.Chat を呼び出す tea.Cmd を返す。
 func (m Model) sendChat(req chatDispatchRequest) tea.Cmd {
 	return func() tea.Msg {
+		var err error
 		if req.imagePath != "" {
-			m.conversation.ChatWithImagePath(req.input, req.imagePath)
+			err = m.conversation.ChatWithImagePath(req.input, req.imagePath)
 		} else {
-			m.conversation.Chat(req.input)
+			err = m.conversation.Chat(req.input)
 		}
 		for _, att := range req.cleanupAttachments {
 			cleanupTemporaryAttachment(att)
 		}
-		return AgentDoneMsg{}
+		return AgentDoneMsg{Error: err}
 	}
 }
 

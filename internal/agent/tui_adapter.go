@@ -21,6 +21,8 @@ type TUIAdapter struct {
 	sendMsg       func(tui.AppendMessageMsg)
 	captureWriter *tuiCaptureWriter
 	processing    atomic.Bool
+	flushMu       sync.RWMutex
+	tuiEventFlush func()
 }
 
 // NewTUIAdapter は TUIAdapter を作成する。
@@ -50,54 +52,73 @@ func (a *TUIAdapter) SetOutputCapture() {
 }
 
 // Chat はユーザー入力をAIに送信する。goroutine で呼ぶこと。
-func (a *TUIAdapter) Chat(input string) {
+func (a *TUIAdapter) Chat(input string) error {
 	a.processing.Store(true)
 	defer a.processing.Store(false)
+	defer a.finishTUITurnOutput()
 
 	// 画像入力チェック
 	if strings.Contains(input, "image:") {
 		textPart, image := parseImageInputWithWriter(a.agent.output(), input)
 		if image != nil {
-			a.chatWithImage(textPart, image)
-			return
+			return a.chatWithImage(textPart, image)
 		}
 	}
 
-	a.agent.chat(input)
-	a.flushCapture()
+	return a.agent.chat(input)
 }
 
 // ChatWithImagePath は画像パス付き入力を AI に送信する。goroutine で呼ぶこと。
-func (a *TUIAdapter) ChatWithImagePath(input string, imagePath string) {
+func (a *TUIAdapter) ChatWithImagePath(input string, imagePath string) error {
 	a.processing.Store(true)
 	defer a.processing.Store(false)
+	defer a.finishTUITurnOutput()
 
 	image, err := api.LoadImage(imagePath)
 	if err != nil {
 		red.Fprintf(a.agent.output(), "Failed to load image: %v\n", err)
-		a.flushCapture()
-		return
+		return fmt.Errorf("failed to load image: %w", err)
 	}
 
-	a.chatWithImage(input, image)
+	return a.chatWithImage(input, image)
 }
 
 // ChatWithImage は読み込み済み画像をAIに送信する。goroutine または tea.Cmd で呼ぶこと。
-func (a *TUIAdapter) ChatWithImage(input string, image *api.ImageData) {
+func (a *TUIAdapter) ChatWithImage(input string, image *api.ImageData) error {
 	a.processing.Store(true)
 	defer a.processing.Store(false)
+	defer a.finishTUITurnOutput()
 
-	a.chatWithImage(input, image)
+	return a.chatWithImage(input, image)
 }
 
-func (a *TUIAdapter) chatWithImage(input string, image *api.ImageData) {
-	a.agent.chatWithImage(input, image)
+func (a *TUIAdapter) chatWithImage(input string, image *api.ImageData) error {
+	return a.agent.chatWithImage(input, image)
+}
+
+func (a *TUIAdapter) finishTUITurnOutput() {
 	a.flushCapture()
+	a.flushTUIEvents()
 }
 
 func (a *TUIAdapter) flushCapture() {
 	if a.captureWriter != nil {
 		a.captureWriter.Flush()
+	}
+}
+
+func (a *TUIAdapter) setTUIEventFlush(fn func()) {
+	a.flushMu.Lock()
+	defer a.flushMu.Unlock()
+	a.tuiEventFlush = fn
+}
+
+func (a *TUIAdapter) flushTUIEvents() {
+	a.flushMu.RLock()
+	fn := a.tuiEventFlush
+	a.flushMu.RUnlock()
+	if fn != nil {
+		fn()
 	}
 }
 

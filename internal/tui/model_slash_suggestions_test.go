@@ -236,9 +236,7 @@ func TestSlashSuggestions_EnterExecutesThinkingArgument(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /thinking xhigh should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -315,9 +313,7 @@ func TestSlashSuggestions_SecondEnterExecutesDefaultThinkingArgument(t *testing.
 	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /thinking on should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -353,9 +349,7 @@ func TestSlashSuggestions_DownEnterExecutesThinkingArgument(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /thinking off should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -380,9 +374,7 @@ func TestSlashSuggestions_ThinkingAliasSelectionSubmitsCanonicalArgument(t *test
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /thinking off should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -405,9 +397,7 @@ func TestSlashSuggestions_EnterExecutesBareThinkingWithoutTrailingWhitespace(t *
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("bare /thinking should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -430,9 +420,7 @@ func TestSlashSuggestions_EnterExecutesSkillsSubcommand(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /skills doctor should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -512,9 +500,7 @@ func TestSlashSuggestions_EnterOnPlanSuggestionToggles(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /plan should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}

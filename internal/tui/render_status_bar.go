@@ -64,9 +64,6 @@ func (m *Model) statusTextSegments(now time.Time) []statusTextSegment {
 		if providerModel := providerModelStatusText(snapshot, statusLine); providerModel != "" {
 			segments = append(segments, statusTextSegment{text: chrome.StatusFg + providerModel + chrome.Reset, key: statusSegmentProvider})
 		}
-		if running := m.runningToolStatusText(); running != "" {
-			segments = append(segments, statusTextSegment{text: chrome.StatusFg + running + chrome.Reset, key: statusSegmentRunning})
-		}
 		if snapshot.Tokens != "" {
 			segments = append(segments, statusTextSegment{text: chrome.StatusFg + snapshot.Tokens + " tok" + chrome.Reset, key: statusSegmentTokens})
 		}

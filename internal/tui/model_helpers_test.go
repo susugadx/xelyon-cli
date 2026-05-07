@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 )
@@ -23,9 +25,12 @@ type stubAgent struct {
 	copyTexts                 []string
 	chatInputs                []string
 	chatImageInputs           []string
+	chatErr                   error
+	chatImageErr              error
 	handledInputs             []string
 	handledCommands           map[string]bool
 	statusLine                string
+	statusSnapshot            StatusSnapshot
 	saveStatusLine            string
 	providerName              string
 	providerConfigKey         string
@@ -54,15 +59,28 @@ type azureDeploymentSetupCall struct {
 	CatalogModel string
 }
 
-func (s *stubAgent) Chat(input string) {
+func requireAgentDoneCmd(t *testing.T, cmd tea.Cmd) {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected agent completion command")
+	}
+	msg := cmd()
+	if _, ok := msg.(AgentDoneMsg); !ok {
+		t.Fatalf("completion command returned %T, want AgentDoneMsg", msg)
+	}
+}
+
+func (s *stubAgent) Chat(input string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.chatInputs = append(s.chatInputs, input)
+	return s.chatErr
 }
-func (s *stubAgent) ChatWithImagePath(input string, imagePath string) {
+func (s *stubAgent) ChatWithImagePath(input string, imagePath string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.chatImageInputs = append(s.chatImageInputs, input+"||"+imagePath)
+	return s.chatImageErr
 }
 func (s *stubAgent) HandleCommand(cmd string) bool {
 	s.mu.Lock()
@@ -78,6 +96,16 @@ func (s *stubAgent) GetStatusLine() string {
 func (s *stubAgent) StatusSnapshot() StatusSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if s.statusSnapshot != (StatusSnapshot{}) {
+		snapshot := s.statusSnapshot
+		if snapshot.Mode == "" {
+			snapshot.Mode = s.statusLine
+		}
+		if snapshot.LegacyLine == "" {
+			snapshot.LegacyLine = s.statusLine
+		}
+		return snapshot
+	}
 	return StatusSnapshot{
 		Mode:       s.statusLine,
 		LegacyLine: s.statusLine,

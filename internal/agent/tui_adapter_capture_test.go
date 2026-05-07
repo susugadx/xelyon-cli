@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
@@ -39,6 +41,91 @@ func TestTUIAdapter_ChatFlushesCapturedOutput(t *testing.T) {
 		if msg.Message.Role != tui.ChatRoleAssistantChunk {
 			t.Fatalf("messages[%d].Role = %q, want assistant chunk role", i, msg.Message.Role)
 		}
+	}
+}
+
+func TestTUIAdapter_ChatReturnsProviderError(t *testing.T) {
+	disableColors(t)
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &mockErrorProvider{}, &out)
+	t.Cleanup(agent.Cleanup)
+
+	adapter := NewTUIAdapter(agent, nil)
+	err := adapter.Chat("please fail")
+
+	if err == nil || !strings.Contains(err.Error(), "mock error") {
+		t.Fatalf("Chat() error = %v, want mock error", err)
+	}
+	if adapter.IsProcessing() {
+		t.Fatal("Chat() should reset processing flag after error")
+	}
+}
+
+func TestTUIAdapter_ChatWaitsForTUIEventFlushBeforeReturning(t *testing.T) {
+	disableColors(t)
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	provider := &scriptedChatProvider{name: "openai", functionCalling: true}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	t.Cleanup(agent.Cleanup)
+
+	adapter := NewTUIAdapter(agent, nil)
+	flushStarted := make(chan struct{})
+	releaseFlush := make(chan struct{})
+	returned := make(chan struct{})
+
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(releaseFlush) })
+	adapter.setTUIEventFlush(func() {
+		close(flushStarted)
+		<-releaseFlush
+	})
+
+	go func() {
+		adapter.Chat("hello from tui")
+		close(returned)
+	}()
+
+	select {
+	case <-flushStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Chat() did not reach TUI event flush")
+	}
+
+	select {
+	case <-returned:
+		t.Fatal("Chat() returned before TUI event flush completed")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	releaseOnce.Do(func() { close(releaseFlush) })
+
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Chat() did not return after TUI event flush completed")
+	}
+}
+
+func TestTUIAdapter_ChatWithImagePathReturnsLoadError(t *testing.T) {
+	disableColors(t)
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &imageOnceProvider{}, &out)
+	t.Cleanup(agent.Cleanup)
+
+	adapter := NewTUIAdapter(agent, nil)
+	err := adapter.ChatWithImagePath("describe", filepath.Join(t.TempDir(), "missing.png"))
+
+	if err == nil || !strings.Contains(err.Error(), "failed to load image") {
+		t.Fatalf("ChatWithImagePath() error = %v, want image load error", err)
+	}
+	if adapter.IsProcessing() {
+		t.Fatal("ChatWithImagePath() should reset processing flag after load error")
 	}
 }
 

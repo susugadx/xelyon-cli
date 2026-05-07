@@ -16,6 +16,9 @@ func (m *Model) handleAppendMessageMsg(msg AppendMessageMsg) tea.Cmd {
 
 func (m *Model) handleAppendToolResultMsg(msg AppendToolResultMsg) tea.Cmd {
 	m.resetStreamingState()
+	if m.hasActiveAgentActivity() {
+		return m.upsertAgentActivityTool(msg.Tool)
+	}
 	return m.appendToolResult(msg.Tool)
 }
 
@@ -36,9 +39,10 @@ func (m *Model) handleUpdateStatusMsg(msg UpdateStatusMsg) {
 	m.chromeDirty = true
 }
 
-func (m *Model) handleAgentDoneMsg() {
+func (m *Model) handleAgentDoneMsg(msg AgentDoneMsg) {
 	m.resetStreamingState()
 	m.refreshStatusLine()
+	m.finishAgentActivity(msg.Error)
 }
 
 func (m Model) handleStreamMessage(msg tea.Msg) (Model, tea.Cmd, bool) {
@@ -53,7 +57,7 @@ func (m Model) handleStreamMessage(msg tea.Msg) (Model, tea.Cmd, bool) {
 		m.handleUpdateStatusMsg(msg)
 		return m, nil, true
 	case AgentDoneMsg:
-		m.handleAgentDoneMsg()
+		m.handleAgentDoneMsg(msg)
 		return m, nil, true
 	default:
 		return m, nil, false

@@ -15,15 +15,21 @@ import (
 )
 
 type tuiProgramBridge struct {
-	adapter       *TUIAdapter
-	agent         *Agent
-	toolResultCh  <-chan tools.ToolResultInfo
-	send          func(tea.Msg)
-	debugLog      func(string, ...any)
-	messageQueue  chan tui.AppendMessageMsg
-	promptBridge  *tuiPromptBridge
-	closed        atomic.Bool
-	droppedEvents atomic.Int64
+	adapter         *TUIAdapter
+	agent           *Agent
+	toolResultCh    <-chan tools.ToolResultInfo
+	send            func(tea.Msg)
+	debugLog        func(string, ...any)
+	outgoing        chan tea.Msg
+	toolFlush       chan chan struct{}
+	toolForwardDone chan struct{}
+	promptBridge    *tuiPromptBridge
+	closed          atomic.Bool
+	droppedEvents   atomic.Int64
+}
+
+type tuiBridgeFlushMsg struct {
+	done chan struct{}
 }
 
 type tuiPromptBridge struct {
@@ -106,12 +112,14 @@ func newTUIProgramBridge(
 		debugLog = func(string, ...any) {}
 	}
 	return &tuiProgramBridge{
-		adapter:      adapter,
-		agent:        agent,
-		toolResultCh: toolResultCh,
-		send:         send,
-		debugLog:     debugLog,
-		messageQueue: make(chan tui.AppendMessageMsg, 4096),
+		adapter:         adapter,
+		agent:           agent,
+		toolResultCh:    toolResultCh,
+		send:            send,
+		debugLog:        debugLog,
+		outgoing:        make(chan tea.Msg, 4096),
+		toolFlush:       make(chan chan struct{}),
+		toolForwardDone: make(chan struct{}),
 	}
 }
 
@@ -182,38 +190,11 @@ func (b *tuiProgramBridge) start() {
 		return
 	}
 
-	go func() {
-		for msg := range b.messageQueue {
-			if b.send != nil {
-				b.send(msg)
-			}
-		}
-	}()
+	go b.forwardOutgoingMessages()
+	go b.forwardToolResults()
 
-	go func() {
-		for info := range b.toolResultCh {
-			if b.closed.Load() {
-				return
-			}
-			if b.send == nil {
-				continue
-			}
-			b.send(tui.AppendToolResultMsg{
-				Tool: buildTUIToolResult(info),
-			})
-		}
-	}()
-
-	b.adapter.sendMsg = func(msg tui.AppendMessageMsg) {
-		if b.closed.Load() {
-			return
-		}
-		select {
-		case b.messageQueue <- msg:
-		default:
-			b.droppedEvents.Add(1)
-		}
-	}
+	b.adapter.sendMsg = b.enqueueCapturedMessage
+	b.adapter.setTUIEventFlush(b.flushToolResults)
 	b.adapter.SetOutputCapture()
 	if b.agent != nil && b.send != nil {
 		b.promptBridge = newTUIPromptBridge(b.send)
@@ -221,11 +202,118 @@ func (b *tuiProgramBridge) start() {
 	}
 }
 
+func (b *tuiProgramBridge) forwardOutgoingMessages() {
+	for msg := range b.outgoing {
+		if flush, ok := msg.(tuiBridgeFlushMsg); ok {
+			close(flush.done)
+			continue
+		}
+		if b.send != nil {
+			b.send(msg)
+		}
+	}
+}
+
+func (b *tuiProgramBridge) forwardToolResults() {
+	defer close(b.toolForwardDone)
+	for {
+		select {
+		case info, ok := <-b.toolResultCh:
+			if !ok {
+				return
+			}
+			if !b.enqueueToolResultInfo(info) {
+				return
+			}
+		case done := <-b.toolFlush:
+			b.drainToolResults()
+			b.flushOutgoingMessages()
+			close(done)
+		}
+	}
+}
+
+func (b *tuiProgramBridge) enqueueToolResultInfo(info tools.ToolResultInfo) bool {
+	if b.closed.Load() {
+		return false
+	}
+	if b.send == nil {
+		return true
+	}
+	b.enqueueToolResult(tui.AppendToolResultMsg{
+		Tool: buildTUIToolResult(info),
+	})
+	return true
+}
+
+func (b *tuiProgramBridge) drainToolResults() {
+	for {
+		select {
+		case info, ok := <-b.toolResultCh:
+			if !ok {
+				return
+			}
+			if !b.enqueueToolResultInfo(info) {
+				return
+			}
+		default:
+			return
+		}
+	}
+}
+
+func (b *tuiProgramBridge) enqueueCapturedMessage(msg tui.AppendMessageMsg) {
+	if b.closed.Load() {
+		return
+	}
+	select {
+	case b.outgoing <- msg:
+	default:
+		b.droppedEvents.Add(1)
+	}
+}
+
+func (b *tuiProgramBridge) enqueueToolResult(msg tui.AppendToolResultMsg) {
+	if b.closed.Load() {
+		return
+	}
+	b.outgoing <- msg
+}
+
+func (b *tuiProgramBridge) flushToolResults() {
+	if b == nil || b.closed.Load() {
+		return
+	}
+	done := make(chan struct{})
+	select {
+	case b.toolFlush <- done:
+	case <-b.toolForwardDone:
+		b.flushOutgoingMessages()
+		return
+	}
+	select {
+	case <-done:
+	case <-b.toolForwardDone:
+	}
+}
+
+func (b *tuiProgramBridge) flushOutgoingMessages() {
+	if b == nil || b.closed.Load() {
+		return
+	}
+	done := make(chan struct{})
+	b.outgoing <- tuiBridgeFlushMsg{done: done}
+	<-done
+}
+
 func (b *tuiProgramBridge) shutdown() {
 	if b == nil {
 		return
 	}
 	b.closed.Store(true)
+	if b.adapter != nil {
+		b.adapter.setTUIEventFlush(nil)
+	}
 	if b.agent != nil {
 		b.agent.tuiToolResultClosed.Store(true)
 		if b.promptBridge != nil {

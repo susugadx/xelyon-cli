@@ -13,8 +13,7 @@ func initialImageStartupSubmission(adapter *TUIAdapter, query string, image *api
 	return &tui.StartupSubmission{
 		UserMessage: query,
 		Cmd: func() tea.Msg {
-			adapter.ChatWithImage(query, image)
-			return tui.AgentDoneMsg{}
+			return tui.AgentDoneMsg{Error: adapter.ChatWithImage(query, image)}
 		},
 	}
 }
