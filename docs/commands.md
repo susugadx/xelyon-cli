@@ -122,10 +122,11 @@ TUI では入力欄で `/` または `/r` のような prefix を入力すると
 ### `/review`
 
 TUIモードで、現在の変更レビュー用の preset 画面を開きます。
-現時点では review runner は未実装で、ReviewRequest の生成までを行います。
+引数を付けた場合は、そのテキストを追加指示として現在の変更レビューを即時実行します。
 
 ```
 > /review
+> /review focus on regressions
 ```
 
 ### `/tokens`

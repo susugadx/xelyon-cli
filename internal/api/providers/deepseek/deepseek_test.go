@@ -739,6 +739,35 @@ func TestFunctionCalling_Disabled(t *testing.T) {
 	}
 }
 
+func TestFunctionCalling_ToolUseDisabledOmitsToolFields(t *testing.T) {
+	t.Setenv("DEEPSEEK_FUNCTION_CALLING", "1")
+
+	var captured map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		streamingHandler([]string{`{"choices":[{"delta":{"content":"OK"}}]}`})(w, r)
+	})
+	t.Setenv("DEEPSEEK_API_URL", server.URL)
+
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	p.SetToolChoice("custom_lookup")
+
+	ctx := api.WithToolUseDisabled(context.Background())
+	if _, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, "deepseek-chat"); err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if _, ok := captured["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled: %#v", captured["tools"])
+	}
+	if _, ok := captured["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when tool use is disabled: %#v", captured["tool_choice"])
+	}
+}
+
 func TestProvider_ToolChoiceAndReasoningAccessors(t *testing.T) {
 	p := New("test-key")
 

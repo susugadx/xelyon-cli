@@ -14,6 +14,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	if _, ok := msg.(reviewRunFinishedMsg); ok && m.screen != screenReview {
+		return m, nil, true
+	}
 	if _, ok := msg.(OpenConfigScreenMsg); ok {
 		updated, cmd := m.openConfigScreen()
 		return updated, cmd, true

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -75,27 +74,6 @@ func (a *Agent) beginTaskTracking() {
 		_, _ = fmt.Fprintln(a.output(), "💡 Run /commit or git commit to keep changes separate")
 		_, _ = fmt.Fprintln(a.output())
 	}
-}
-
-func (a *Agent) beginChatRequestContext() (context.Context, func()) {
-	cfg := a.cfg()
-	timeout := time.Duration(cfg.APIRetry.Timeout) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-
-	a.lastCancelReason = ""
-	a.cancelFunc = cancel
-	a.requestCtx = ctx
-	a.debugCancelf("request started (timeout=%s, model=%s, provider=%s)", timeout, a.CurrentModel, a.ProviderName)
-
-	cleanup := func() {
-		a.debugCancelf("request finished (ctx_err=%v, cancel_reason=%q)", ctx.Err(), a.lastCancelReason)
-		cancel()
-		a.requestCtx = nil
-		a.cancelFunc = nil
-		a.lastCancelReason = ""
-	}
-
-	return ctx, cleanup
 }
 
 func (a *Agent) executeChatRequest(ctx context.Context, req *chatRequest) error {

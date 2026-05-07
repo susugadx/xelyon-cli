@@ -235,6 +235,35 @@ func TestBuildOpenAITextChatPayload_FixesToolChoiceAndIncludeUsage(t *testing.T)
 	}
 }
 
+func TestBuildOpenAITextChatPayload_ToolUseDisabledOmitsToolFields(t *testing.T) {
+	t.Setenv("OPENROUTER_FUNCTION_CALLING", "1")
+
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["openrouter"] = config.ProviderModelConfig{DefaultModel: "openai/gpt-4o"}
+
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	p.SetToolChoice("custom_lookup")
+
+	ctx, _ := newOpenRouterTestContext(t, cfg)
+	ctx = api.WithToolUseDisabled(ctx)
+	payload, err := p.buildOpenAITextChatPayload(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, "openai/gpt-4o")
+	if err != nil {
+		t.Fatalf("buildOpenAITextChatPayload() error = %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json unmarshal failed: %v", err)
+	}
+	if _, ok := body["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled, got %v", body["tools"])
+	}
+	if _, ok := body["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when tool use is disabled, got %v", body["tool_choice"])
+	}
+}
+
 func TestNewOpenRouterJSONRequest_SetsRequiredHeaders(t *testing.T) {
 	p := New("test-key")
 	payload := []byte(`{"model":"openai/gpt-4o"}`)
@@ -458,5 +487,36 @@ func TestBuildClaudeChatPayload_FunctionCallingDisabledOmitsTools(t *testing.T) 
 
 	if _, ok := body["tools"]; ok {
 		t.Fatalf("tools should be omitted when function calling is disabled, got %v", body["tools"])
+	}
+}
+
+func TestBuildClaudeChatPayload_ToolUseDisabledOmitsTools(t *testing.T) {
+	t.Setenv("OPENROUTER_FUNCTION_CALLING", "1")
+
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+
+	p := New("test-key")
+	ctx, _ := newOpenRouterTestContext(t, cfg)
+	ctx = api.WithToolUseDisabled(ctx)
+
+	payload, err := p.buildClaudeChatPayload(
+		ctx,
+		"System prompt",
+		[]api.Message{{Role: "user", Content: "hello"}},
+		"",
+		"anthropic/claude-3.5-sonnet",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildClaudeChatPayload() error = %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json unmarshal failed: %v", err)
+	}
+	if _, ok := body["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled, got %v", body["tools"])
 	}
 }

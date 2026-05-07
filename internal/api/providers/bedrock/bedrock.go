@@ -234,7 +234,7 @@ func (p *Provider) chatWithClaudeMessages(ctx context.Context, systemPrompt stri
 	}
 
 	// Tool Use: ツール定義を追加
-	if p.IsFunctionCallingEnabled() {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
@@ -321,7 +321,7 @@ func (p *Provider) chatWithClaudeImage(ctx context.Context, systemPrompt string,
 	}
 
 	// Tool Use: ツール定義を追加
-	if p.IsFunctionCallingEnabled() {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 

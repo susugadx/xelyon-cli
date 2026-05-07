@@ -131,7 +131,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
-	if os.Getenv("OLLAMA_FUNCTION_CALLING") != "0" {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		reqBody.Tools = openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
 		reqBody.ToolChoice = "auto"
 

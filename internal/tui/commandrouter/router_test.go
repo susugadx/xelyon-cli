@@ -59,9 +59,9 @@ func TestRoute_TUILocalCommands(t *testing.T) {
 			want:  ActionOpenReview,
 		},
 		{
-			name:  "review with args delegates",
+			name:  "review with args opens review",
 			input: "/review staged",
-			want:  ActionDispatchAgent,
+			want:  ActionOpenReview,
 		},
 		{
 			name:  "project bare",
@@ -99,8 +99,12 @@ func TestRoute_CatalogTUILocalOwnerMatrix(t *testing.T) {
 
 			withArgsInput := cmdInfo.Name + " extra"
 			withArgs := slash.NewCommand(withArgsInput, withArgsInput, nil)
-			if got := Route(withArgs, Context{}); got != ActionDispatchAgent {
-				t.Fatalf("Route(%q) = %v, want ActionDispatchAgent", withArgsInput, got)
+			wantWithArgs := ActionDispatchAgent
+			if cmdInfo.Name == "/review" {
+				wantWithArgs = ActionOpenReview
+			}
+			if got := Route(withArgs, Context{}); got != wantWithArgs {
+				t.Fatalf("Route(%q) = %v, want %v", withArgsInput, got, wantWithArgs)
 			}
 		})
 	}

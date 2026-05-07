@@ -474,6 +474,43 @@ func TestBuildChatResponsesRequest_OmitsToolsWhenFunctionCallingDisabled(t *test
 	}
 }
 
+func TestBuildChatResponsesRequest_OmitsToolsWhenToolUseDisabled(t *testing.T) {
+	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "1")
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	p := New("azure-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "extra_tool", Description: "extra"}})
+	p.SetToolChoice("extra_tool")
+
+	ctx := api.WithToolUseDisabled(azureTestContext(cfg))
+	req := p.buildChatResponsesRequest(
+		ctx,
+		"system",
+		[]api.Message{{Role: "user", Content: "hello"}},
+		"corp-gpt55-deployment",
+	)
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	if _, ok := body["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled: %s", payload)
+	}
+	if _, ok := body["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when tool use is disabled: %s", payload)
+	}
+}
+
 func TestBuildChatResponsesRequest_StoreFalseSendsFullHistoryWithoutPreviousResponseID(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Responses.Store = false

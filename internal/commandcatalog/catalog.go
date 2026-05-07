@@ -170,6 +170,7 @@ var Commands = []CommandInfo{
 	},
 	{
 		Name:          "/review",
+		Args:          "[instructions]",
 		Description:   "Review current changes and find issues",
 		DescriptionJP: "現在の変更をレビュー",
 		Surfaces:      []CommandSurface{CommandSurfaceTUI},

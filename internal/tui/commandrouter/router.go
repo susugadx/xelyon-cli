@@ -17,7 +17,7 @@ const (
 	ActionQuit
 	// ActionOpenConfig は TUI config screen を開く処理を表す。
 	ActionOpenConfig
-	// ActionOpenReview は TUI review preset screen を開く処理を表す。
+	// ActionOpenReview は TUI review screen を開く、または即時 review 実行する処理を表す。
 	ActionOpenReview
 	// ActionOpenProject は TUI project config screen を開く処理を表す。
 	ActionOpenProject
@@ -46,9 +46,6 @@ func Route(command slash.Command, ctx Context) Action {
 }
 
 func routeCatalogTUILocalCommand(command slash.Command) (Action, bool) {
-	if command.ArgCount != 1 {
-		return ActionDispatchAgent, false
-	}
 	cmdInfo, ok := commandcatalog.Find(command.ResolvedName)
 	if !ok || cmdInfo.EffectiveOwner() != commandcatalog.CommandOwnerTUIRouter {
 		return ActionDispatchAgent, false
@@ -58,8 +55,14 @@ func routeCatalogTUILocalCommand(command slash.Command) (Action, bool) {
 	case "/review":
 		return ActionOpenReview, true
 	case "/project":
+		if command.ArgCount != 1 {
+			return ActionDispatchAgent, false
+		}
 		return ActionOpenProject, true
 	default:
+		if command.ArgCount != 1 {
+			return ActionDispatchAgent, false
+		}
 		return ActionDispatchAgent, false
 	}
 }

@@ -13,12 +13,17 @@ func (m Model) reviewView() string {
 		return "Loading..."
 	}
 
-	bodyHeight := max(1, m.height-2)
+	bodyHeight := m.reviewBodyHeight()
+	bodyLines := m.reviewBodyLines()
 	header := m.renderReviewHeader(m.width)
-	body := m.renderReviewBody(bodyHeight)
-	status := m.renderReviewStatus(m.width)
+	body := m.renderReviewBody(bodyLines, bodyHeight)
+	status := m.renderReviewStatus(m.width, reviewBodyScrollBoundsForLines(bodyLines, bodyHeight))
 
 	return header + "\n" + body + "\n" + status
+}
+
+func (m Model) reviewBodyHeight() int {
+	return max(1, m.height-2)
 }
 
 func (m Model) renderReviewHeader(width int) string {
@@ -47,20 +52,8 @@ func reviewHeaderHint(rs *reviewScreen) string {
 	}
 }
 
-func (m Model) renderReviewBody(height int) string {
-	lines := m.reviewBodyLines()
-	body := strings.Builder{}
-	for row := 0; row < height; row++ {
-		if row > 0 {
-			body.WriteByte('\n')
-		}
-		if row < len(lines) {
-			body.WriteString(termtext.FillANSITextWidth(lines[row], m.width, theme.Config.BgNormal))
-			continue
-		}
-		body.WriteString(termtext.FillANSITextWidth("", m.width, theme.Config.BgNormal))
-	}
-	return body.String()
+func (m Model) renderReviewBody(lines []string, height int) string {
+	return m.reviewScreen.bodyViewport.render(lines, height, m.width)
 }
 
 func (m Model) reviewBodyLines() []string {
@@ -103,7 +96,7 @@ func (m Model) reviewCustomLines(rs *reviewScreen) []string {
 
 func reviewSubmittedLines(rs *reviewScreen) []string {
 	lines := []string{
-		theme.Config.BgNormal + theme.Config.FgYellow + " " + rs.message + theme.Config.Reset,
+		reviewStateLine(rs),
 	}
 	if rs.request == nil {
 		return lines
@@ -116,14 +109,33 @@ func reviewSubmittedLines(rs *reviewScreen) []string {
 			theme.Config.BgNormal+theme.Config.FgDim+" Custom instructions: "+termtext.SanitizeSingleLineANSI(rs.request.CustomInstructions)+theme.Config.Reset,
 		)
 	}
+	if rs.runState == reviewRunFailed && rs.errMessage != "" {
+		lines = append(lines,
+			theme.Config.BgNormal+theme.Config.FgRed+" Error: "+termtext.SanitizeSingleLineANSI(rs.errMessage)+theme.Config.Reset,
+		)
+	}
+	if rs.runState == reviewRunSucceeded && rs.report != nil {
+		lines = append(lines, reviewReportLines(*rs.report)...)
+	}
 	return lines
 }
 
-func (m Model) renderReviewStatus(width int) string {
+func reviewStateLine(rs *reviewScreen) string {
+	style := theme.Config.FgYellow
+	switch rs.runState {
+	case reviewRunSucceeded:
+		style = theme.Config.FgGreen
+	case reviewRunFailed:
+		style = theme.Config.FgRed
+	}
+	return theme.Config.BgNormal + style + " " + rs.message + theme.Config.Reset
+}
+
+func (m Model) renderReviewStatus(width int, bodyBounds reviewBodyScrollBounds) string {
 	rs := m.reviewScreen
 	leftText := reviewStatusText(rs)
 	left := " " + theme.Config.FgGreen + leftText + theme.Config.Reset
-	hintText := reviewStatusHint(rs)
+	hintText := reviewStatusHint(rs, bodyBounds)
 	right := theme.Config.FgDim + hintText + theme.Config.Reset + " "
 	padding := width - lipgloss.Width(leftText) - lipgloss.Width(hintText) - 3
 	if padding < 1 {
@@ -137,12 +149,21 @@ func reviewStatusText(rs *reviewScreen) string {
 		return "review"
 	}
 	if rs.mode == reviewScreenSubmitted {
-		return "review pending"
+		switch rs.runState {
+		case reviewRunRunning:
+			return "review running"
+		case reviewRunSucceeded:
+			return "review complete"
+		case reviewRunFailed:
+			return "review failed"
+		default:
+			return "review pending"
+		}
 	}
 	return "review"
 }
 
-func reviewStatusHint(rs *reviewScreen) string {
+func reviewStatusHint(rs *reviewScreen, bodyBounds reviewBodyScrollBounds) string {
 	if rs == nil {
 		return ""
 	}
@@ -150,6 +171,12 @@ func reviewStatusHint(rs *reviewScreen) string {
 	case reviewScreenCustom:
 		return "Enter:confirm  Esc:presets"
 	case reviewScreenSubmitted:
+		if rs.runState == reviewRunRunning {
+			return "Esc:cancel"
+		}
+		if bodyBounds.hasOverflow() {
+			return "j/k:scroll  PgUp/PgDn:page  Esc:back"
+		}
 		return "Esc:back"
 	default:
 		return "j/k:move  Enter:select  Esc:back"

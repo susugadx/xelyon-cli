@@ -7,16 +7,29 @@ import (
 
 // openReviewScreen は review preset screen を開く。
 func (m Model) openReviewScreen() (tea.Model, tea.Cmd) {
+	m.reviewScreenSeq++
 	m.screen = screenReview
-	m.reviewScreen = newReviewScreen()
+	m.reviewScreen = newReviewScreen(m.reviewScreenSeq)
 	m.reviewScreen.customInput.Width = max(0, m.width-4)
 	m.navigationMode = false
 	m.chromeDirty = true
 	return m, nil
 }
 
+// openReviewScreenAndRun は /review <instructions> の即時実行用に画面を開いて request を走らせる。
+func (m Model) openReviewScreenAndRun(customInstructions string) (tea.Model, tea.Cmd) {
+	updated, cmd := m.openReviewScreen()
+	m = updated.(Model)
+	req := review.NewCurrentChangesRequest(customInstructions)
+	updated, reviewCmd := m.handleReviewRequest(req)
+	return updated, tea.Batch(cmd, reviewCmd)
+}
+
 // closeReviewScreen は review screen を閉じて chat に戻る。
 func (m Model) closeReviewScreen() (tea.Model, tea.Cmd) {
+	if m.reviewScreen != nil {
+		m.reviewScreen.cancelActiveReviewRun()
+	}
 	m.screen = screenChat
 	m.reviewScreen = nil
 	m.refreshStatusLine()
@@ -28,7 +41,6 @@ func (m Model) closeReviewScreen() (tea.Model, tea.Cmd) {
 }
 
 // updateReviewScreen は screenReview 中のメッセージ処理。
-// review runner は未実装のため、現時点では ReviewRequest を作るところまでを担当する。
 func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	rs := m.reviewScreen
 	if rs == nil {
@@ -36,13 +48,32 @@ func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case reviewRunFinishedMsg:
+		if !msg.appliesTo(rs) {
+			return m, nil
+		}
+		msg.applyTo(rs)
+		m.chromeDirty = true
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.applyChatWindowSize(msg.Width, msg.Height)
 		rs.customInput.Width = max(0, msg.Width-4)
+		rs.bodyViewport.clamp(m.reviewBodyScrollBounds())
 		return m, nil
 
+	case tea.MouseMsg:
+		if rs.handleMouse(msg, m.reviewBodyScrollBounds()) {
+			return m, nil
+		}
+		m.screen = screenChat
+		updated, cmd := m.Update(msg)
+		m = updated.(Model)
+		m.screen = screenReview
+		return m, cmd
+
 	case tea.KeyMsg:
-		action, cmd := rs.handleKey(msg)
+		action, cmd := rs.handleKey(msg, m.reviewBodyScrollBounds())
 		switch action {
 		case reviewCommandDelegateCtrlC:
 			return m.handleCtrlC()
@@ -67,13 +98,25 @@ func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m Model) reviewBodyScrollBounds() reviewBodyScrollBounds {
+	return newReviewBodyScrollBounds(len(m.reviewBodyLines()), m.reviewBodyHeight())
+}
+
 // handleReviewRequest は生成済み ReviewRequest の runner handoff 境界。
-// runner 未実装の間は request を保持し、未実装メッセージだけを表示する。
 func (m Model) handleReviewRequest(req review.ReviewRequest) (tea.Model, tea.Cmd) {
-	if m.reviewScreen != nil {
-		reqCopy := req
-		m.reviewScreen.request = &reqCopy
-		m.reviewScreen.message = reviewRunnerNotImplementedMessage
+	if m.reviewScreen == nil {
+		return m, nil
 	}
-	return m, nil
+	if m.reviewAgent == nil {
+		m.reviewScreen.markReviewNotImplemented(req)
+		return m, nil
+	}
+	if m.conversation != nil && m.conversation.IsProcessing() {
+		m.reviewScreen.markReviewBlocked(req, reviewRunnerBusyMessage)
+		return m, nil
+	}
+
+	runCtx := m.reviewScreen.startReview(req)
+	agent := m.reviewAgent
+	return m, newReviewRunInvocation(runCtx, agent, req).command()
 }

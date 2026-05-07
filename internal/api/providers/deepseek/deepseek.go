@@ -96,6 +96,11 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	requestedModel := api.GetDefaultModelWithContext(ctx, model, "deepseek", defaultDeepSeekModel)
 	modelSelection := resolveDeepSeekModelSelection(ctx, requestedModel)
 	extraFields, reasoningEffort, spinnerSuffix := deepSeekThinkingConfig(ctx, modelSelection)
+	var initialToolChoice any
+	if !api.IsToolUseDisabled(ctx) {
+		// 既存の DeepSeek request shape との互換性のため、通常の no-FC path では空文字列を維持する。
+		initialToolChoice = ""
+	}
 
 	options := openaicompat.ChatCompletionsRequestOptions{
 		Model:             modelSelection.actualModel,
@@ -104,12 +109,12 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		Stream:            true,
 		IncludeUsage:      true,
 		ReasoningEffort:   reasoningEffort,
-		InitialToolChoice: "", // テスト期待値との整合性のため空文字列で初期化
+		InitialToolChoice: initialToolChoice,
 		ExtraFields:       extraFields,
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
-	if os.Getenv("DEEPSEEK_FUNCTION_CALLING") != "0" {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
 			Tools:    openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
 			ToolName: p.toolChoice,

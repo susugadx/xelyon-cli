@@ -66,12 +66,14 @@ func (p *Provider) newBaseResponsesRequestOptions(
 		MaxOutputTokens:                       api.GetMaxOutputTokens(ctx, "openai", model.RequestName()),
 		Stream:                                shouldStreamResponses(model.CatalogName()),
 		Store:                                 cfg.ResponsesStoreEnabled(),
-		Tools:                                 GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools),
-		ToolChoice:                            openairesponses.BuildFunctionToolChoice(p.toolChoice),
 		PromptCacheKey:                        BuildPromptCacheKey(model.RequestName(), systemPrompt),
 		PromptCacheRetention:                  "24h",
 		ContextManagement:                     serverCompactionDecision.ContextManagement,
 		SkipLocalAutoCompressionAfterResponse: serverCompactionDecision.ShouldSkipLocalAutoCompression,
+	}
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
+		options.Tools = GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools)
+		options.ToolChoice = openairesponses.BuildFunctionToolChoice(p.toolChoice)
 	}
 
 	options.Reasoning = responsesReasoningConfig(ctx, model)

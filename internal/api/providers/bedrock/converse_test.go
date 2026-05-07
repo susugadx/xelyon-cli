@@ -155,6 +155,26 @@ func TestProvider_ChatWithTools_UsesConverseStreamForNonClaudeBedrockModel(t *te
 	}
 }
 
+func TestBuildConverseStreamInput_ToolUseDisabledOmitsToolConfig(t *testing.T) {
+	t.Setenv("BEDROCK_FUNCTION_CALLING", "1")
+
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel: "amazon.nova-pro-v1:0",
+	}
+	p := &Provider{}
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	ctx := api.WithToolUseDisabled(newBedrockTestContext(cfg))
+
+	input, err := p.buildConverseStreamInput(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, p.resolveBedrockRequestContext(ctx, ""))
+	if err != nil {
+		t.Fatalf("buildConverseStreamInput() error = %v", err)
+	}
+	if input.ToolConfig != nil {
+		t.Fatalf("ToolConfig = %#v, want nil when tool use is disabled", input.ToolConfig)
+	}
+}
+
 func TestProvider_ChatWithTools_RejectsUnsupportedConverseModelBeforeAPI(t *testing.T) {
 	mockConverse := &mockConverseStreamClient{err: errors.New("should not call converse")}
 	p := &Provider{converseClient: mockConverse}
@@ -172,6 +192,63 @@ func TestProvider_ChatWithTools_RejectsUnsupportedConverseModelBeforeAPI(t *test
 	}
 	if mockConverse.lastInput != nil {
 		t.Fatal("ConverseStream() should not be called for unsupported Converse model")
+	}
+}
+
+func TestProvider_ChatWithTools_AllowsUnsupportedConverseModelWhenToolPayloadDisabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupCtx func(context.Context) context.Context
+		envValue string
+	}{
+		{
+			name:     "request disables tool use",
+			setupCtx: api.WithToolUseDisabled,
+		},
+		{
+			name:     "env disables function calling",
+			setupCtx: func(ctx context.Context) context.Context { return ctx },
+			envValue: "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("BEDROCK_FUNCTION_CALLING", tt.envValue)
+			}
+			output, _ := newClosedConverseStreamOutput(
+				&bedrocktypes.ConverseStreamOutputMemberContentBlockDelta{
+					Value: bedrocktypes.ContentBlockDeltaEvent{
+						ContentBlockIndex: aws.Int32(0),
+						Delta:             &bedrocktypes.ContentBlockDeltaMemberText{Value: "Text only"},
+					},
+				},
+			)
+			mockConverse := &mockConverseStreamClient{output: output}
+			p := &Provider{converseClient: mockConverse}
+
+			cfg := config.DefaultConfig()
+			cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+				DefaultModel:    "us.meta.llama4-scout-17b-instruct-v1:0",
+				MaxOutputTokens: 64000,
+			}
+			ctx := tt.setupCtx(newBedrockTestContext(cfg))
+
+			got, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, "")
+			if err != nil {
+				t.Fatalf("ChatWithTools() error = %v", err)
+			}
+			if got != "Text only" {
+				t.Fatalf("ChatWithTools() = %q, want Text only", got)
+			}
+			if mockConverse.lastInput == nil {
+				t.Fatal("ConverseStream() should be called when tool payload is disabled")
+			}
+			if mockConverse.lastInput.ToolConfig != nil {
+				t.Fatalf("ToolConfig = %#v, want nil when tool payload is disabled", mockConverse.lastInput.ToolConfig)
+			}
+		})
 	}
 }
 

@@ -59,7 +59,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
-	if os.Getenv("OPENAI_FUNCTION_CALLING") != "0" {
+	if api.ShouldSendToolPayload(ctx, os.Getenv("OPENAI_FUNCTION_CALLING") != "0") {
 		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
 			Tools:    GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
 			ToolName: p.toolChoice,

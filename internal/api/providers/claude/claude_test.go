@@ -1188,6 +1188,33 @@ func TestClaudeProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 	}
 }
 
+func TestClaudeProvider_ChatWithTools_ToolUseDisabledOmitsTools(t *testing.T) {
+	t.Setenv("CLAUDE_FUNCTION_CALLING", "1")
+
+	var requestBody map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		resp := Response{Content: []Content{{Type: "text", Text: "No tools"}}}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	t.Setenv("ANTHROPIC_API_URL", server.URL)
+
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	ctx := api.WithToolUseDisabled(context.Background())
+	if _, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, "claude-sonnet-4-6"); err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if _, ok := requestBody["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled: %#v", requestBody["tools"])
+	}
+}
+
 func TestClaudeProvider_ChatWithTools_FunctionCallingEnabled(t *testing.T) {
 	originalEnv := os.Getenv("CLAUDE_FUNCTION_CALLING")
 	defer os.Setenv("CLAUDE_FUNCTION_CALLING", originalEnv)

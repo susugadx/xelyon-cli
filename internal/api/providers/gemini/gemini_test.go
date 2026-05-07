@@ -396,6 +396,46 @@ func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 	}
 }
 
+func TestProvider_ChatWithTools_ToolUseDisabledUsesTextMode(t *testing.T) {
+	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
+	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+		if _, hasTools := req["tools"]; hasTools {
+			t.Fatalf("tools should be omitted when tool use is disabled: %#v", req["tools"])
+		}
+		if _, hasToolConfig := req["tool_config"]; hasToolConfig {
+			t.Fatalf("tool_config should be omitted when tool use is disabled: %#v", req["tool_config"])
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{
+				{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "Text mode response"}}}},
+			},
+		}
+		jsonBytes, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", string(jsonBytes))
+	})
+	t.Setenv("GEMINI_API_URL", server.URL)
+
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	ctx := api.WithToolUseDisabled(context.Background())
+
+	result, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, "")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if result != "Text mode response" {
+		t.Errorf("ChatWithTools() = %q, want 'Text mode response'", result)
+	}
+}
+
 func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 	// MCPツールが設定されている場合、Function Callingに含まれることを確認
 	requestCount := 0

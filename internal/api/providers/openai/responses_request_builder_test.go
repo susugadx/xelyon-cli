@@ -104,6 +104,22 @@ func TestBuildChatResponsesRequest_CodexReasoningFallbackStillLow(t *testing.T) 
 	}
 }
 
+func TestBuildChatResponsesRequest_ToolUseDisabledOmitsToolFields(t *testing.T) {
+	ctx := api.WithToolUseDisabled(config.WithContext(context.Background(), config.DefaultConfig()))
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	p.SetToolChoice("custom_lookup")
+
+	req := p.buildChatResponsesRequest(ctx, "system", []api.Message{{Role: "user", Content: "hi"}}, "gpt-5.4")
+	raw := marshalResponsesRequestMap(t, req)
+	if _, ok := raw["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled: %#v", raw["tools"])
+	}
+	if _, ok := raw["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when tool use is disabled: %#v", raw["tool_choice"])
+	}
+}
+
 func TestBuildChatResponsesRequest_StoreFalseSendsFullHistoryWithoutPreviousResponseID(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Responses.Store = false

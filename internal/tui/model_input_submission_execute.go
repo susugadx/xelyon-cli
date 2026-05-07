@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -55,6 +56,11 @@ func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.C
 	case commandrouter.ActionOpenReview:
 		m.resetComposerInput()
 		m.appendUserMessage(command.Input)
+		instructions := reviewInstructionsFromCommandInput(command.Input)
+		if instructions != "" {
+			updated, cmd := m.openReviewScreenAndRun(instructions)
+			return updated, cmd
+		}
 		updated, cmd := m.openReviewScreen()
 		return updated, cmd
 	case commandrouter.ActionOpenProject:
@@ -82,6 +88,14 @@ func (m Model) handleChatSubmission(sub composerSubmission) (tea.Model, tea.Cmd)
 	m.chromeDirty = true // textInput 状態変更を chrome に反映
 	m.appendUserMessage(sub.payload)
 	return m, m.sendChat(sub.payload)
+}
+
+func reviewInstructionsFromCommandInput(input string) string {
+	parts := strings.Fields(input)
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(input[len(parts[0]):])
 }
 
 // sendChat は goroutine で agent.Chat を呼び出す tea.Cmd を返す。
