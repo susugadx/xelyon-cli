@@ -1,6 +1,10 @@
 package transcript
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // NormalizeLine は raw transcript line を表示・レイアウト用に正規化する。
 func NormalizeLine(line string) string {
@@ -21,29 +25,65 @@ func NormalizeLines(lines []string) []string {
 	return normalized
 }
 
-// MessageLines は message role と content から transcript に積む行を生成する。
-func MessageLines(role string, content string) []string {
-	return messageRenderer(role)(content)
+// Message は transcript に積む会話本文の表示モデル。
+type Message struct {
+	Role      string
+	Content   string
+	Timestamp time.Time
 }
 
-func messageRenderer(role string) func(string) []string {
-	if role == "user" {
-		return userMessageLines
+// MessageLines は message role と content から transcript に積む行を生成する。
+func MessageLines(role string, content string) []string {
+	return Lines(Message{Role: role, Content: content})
+}
+
+// Lines は Message から transcript 表示行を生成する。
+func Lines(msg Message) []string {
+	spec := turnChromeSpecForRole(msg.Role)
+	if !spec.Enabled {
+		return plainMessageLines(msg.Content)
 	}
-	return plainMessageLines
+
+	timestamp := msg.Timestamp
+	if timestamp.IsZero() {
+		timestamp = time.Now()
+	}
+	lines := strings.Split(msg.Content, "\n")
+	rendered := make([]string, 0, len(lines)+1)
+	rendered = append(rendered, separatorLine(spec, timestamp))
+	for _, line := range lines {
+		rendered = append(rendered, gutteredLine(spec, line))
+	}
+	return rendered
+}
+
+type turnChromeSpec struct {
+	Enabled     bool
+	DisplayRole string
+	LinePrefix  string
+}
+
+func turnChromeSpecForRole(role string) turnChromeSpec {
+	switch role {
+	case "user":
+		return turnChromeSpec{Enabled: true, DisplayRole: "user", LinePrefix: "│ > "}
+	case "assistant":
+		return turnChromeSpec{Enabled: true, DisplayRole: "assistant", LinePrefix: "│ "}
+	case "system_info":
+		return turnChromeSpec{Enabled: true, DisplayRole: "system", LinePrefix: "│ "}
+	default:
+		return turnChromeSpec{}
+	}
+}
+
+func separatorLine(spec turnChromeSpec, timestamp time.Time) string {
+	return fmt.Sprintf("── %s · %s · now ──", spec.DisplayRole, timestamp.Format("15:04"))
+}
+
+func gutteredLine(spec turnChromeSpec, line string) string {
+	return spec.LinePrefix + line
 }
 
 func plainMessageLines(content string) []string {
 	return strings.Split(content, "\n")
-}
-
-func userMessageLines(content string) []string {
-	lines := strings.Split(content, "\n")
-	rendered := make([]string, 0, len(lines)+2)
-	rendered = append(rendered, "")
-	for _, line := range lines {
-		rendered = append(rendered, "> "+line)
-	}
-	rendered = append(rendered, "")
-	return rendered
 }

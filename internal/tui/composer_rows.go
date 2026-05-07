@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	tuicomposer "github.com/susugadx/xelyon-cli/internal/tui/composer"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
@@ -11,7 +12,6 @@ type composerDraftSummaryKind int
 
 const (
 	composerDraftSummaryText composerDraftSummaryKind = iota
-	composerDraftSummaryPaste
 )
 
 type composerDraftSummaryRow struct {
@@ -33,16 +33,28 @@ func (m Model) visibleComposerRows() []tuicomposer.VisibleRow {
 	return m.composer.VisibleRows(m.maxVisibleComposerRows())
 }
 
-func (m Model) visibleAttachmentSummaryRows() []string {
-	start, end := m.visibleAttachmentRange()
-	if start >= end {
-		return nil
+func (m Model) visibleCompactChipRowCount() int {
+	if len(m.visibleCompactChips()) == 0 {
+		return 0
 	}
-	rows := make([]string, 0, end-start)
-	for i := start; i < end; i++ {
-		rows = append(rows, m.formatAttachmentSummary(m.attachments[i], i+1))
+	if m.remainingFooterRowsAfterComposer() <= 0 {
+		return 0
 	}
-	return rows
+	return 1
+}
+
+func (m Model) visibleCompactChips() []string {
+	chips := make([]string, 0, len(m.attachments)+len(m.composer.PasteBlocks))
+	for i, att := range m.attachments {
+		chips = append(chips, m.formatAttachmentChip(att, i+1))
+	}
+	for _, row := range m.composer.VisibleRows(max(1, len(m.composer.Parts))) {
+		if row.Kind != tuicomposer.PartPaste {
+			continue
+		}
+		chips = append(chips, m.formatPasteBlockChip(row.PasteBlock))
+	}
+	return chips
 }
 
 func (m Model) visibleComposerDraftSummaryRows() []composerDraftSummaryRow {
@@ -54,26 +66,28 @@ func (m Model) visibleComposerDraftSummaryRows() []composerDraftSummaryRow {
 	for _, row := range rows {
 		switch row.Kind {
 		case tuicomposer.PartText:
+			text := strings.TrimSpace(m.formatComposerTextRow(row.Text))
+			if text == "" {
+				continue
+			}
 			summaries = append(summaries, composerDraftSummaryRow{
 				Kind: composerDraftSummaryText,
-				Text: m.formatComposerTextRow(row.Text),
-			})
-		case tuicomposer.PartPaste:
-			summaries = append(summaries, composerDraftSummaryRow{
-				Kind: composerDraftSummaryPaste,
-				Text: m.formatPasteBlockSummary(row.PasteBlock),
+				Text: text,
 			})
 		}
+	}
+	if len(summaries) > 1 {
+		return summaries[len(summaries)-1:]
 	}
 	return summaries
 }
 
-func (m Model) formatPasteBlockSummary(block tuicomposer.VisiblePasteBlock) string {
-	return fmt.Sprintf("[Pasted Content %d chars, %d lines] #%d", block.Block.CharCount, block.Block.LineCount, block.Number)
+func (m Model) formatAttachmentChip(att composerAttachment, number int) string {
+	return fmt.Sprintf("[%s %s #%d]", att.kindLabel(), att.basename(), number)
 }
 
-func (m Model) formatAttachmentSummary(att composerAttachment, number int) string {
-	return fmt.Sprintf("[Attached %s %s] #%d", att.kindLabel(), att.basename(), number)
+func (m Model) formatPasteBlockChip(block tuicomposer.VisiblePasteBlock) string {
+	return fmt.Sprintf("[paste %dc/%dl #%d]", block.Block.CharCount, block.Block.LineCount, block.Number)
 }
 
 func (m Model) formatComposerTextRow(text string) string {

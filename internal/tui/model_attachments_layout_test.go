@@ -26,12 +26,32 @@ func TestComposer_AttachmentRowsRespectFooterBudgetWithComposerRows(t *testing.T
 	if got := len(m.visibleComposerRows()); got != 20 {
 		t.Fatalf("visibleComposerRows length = %d, want 20", got)
 	}
-	if got := len(m.visibleAttachments()); got != 5 {
-		t.Fatalf("visibleAttachments length = %d, want 5 (remaining footer budget)", got)
+	if got := m.visibleCompactChipRowCount(); got != 1 {
+		t.Fatalf("visibleCompactChipRowCount() = %d, want 1", got)
 	}
-	start := maxComposerAttachments - len(m.visibleAttachments()) + 1
 	dock := stripANSI(m.renderInputDock())
-	if !strings.Contains(dock, fmt.Sprintf("#%d", start)) || !strings.Contains(dock, fmt.Sprintf("#%d", maxComposerAttachments)) {
-		t.Fatalf("renderInputDock() should keep global attachment numbering, got %q", dock)
+	if !strings.Contains(dock, "#1") {
+		t.Fatalf("renderInputDock() should keep compact attachment numbering, got %q", dock)
+	}
+}
+
+func TestComposer_CompactChipsHiddenWhenNoFooterRowsFit(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := NewModel(agent, "")
+	m.applyChatWindowSize(80, statusBarHeight+inputHeight+minChatViewportHeight)
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "notes.txt", []byte("a"))
+	m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: path, Size: 1})
+
+	if got := m.visibleCompactChipRowCount(); got != 0 {
+		t.Fatalf("visibleCompactChipRowCount() = %d, want 0 with no footer expansion rows", got)
+	}
+	if got := m.footerHeight(); got != statusBarHeight+inputHeight {
+		t.Fatalf("footerHeight() = %d, want fixed footer height %d", got, statusBarHeight+inputHeight)
+	}
+	dock := stripANSI(m.renderInputDock())
+	if strings.Contains(dock, "[file") {
+		t.Fatalf("renderInputDock() should hide compact chips when no rows fit, got %q", dock)
 	}
 }

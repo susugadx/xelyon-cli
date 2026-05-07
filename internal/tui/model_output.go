@@ -9,8 +9,15 @@ import (
 
 // appendMessage は会話ログにメッセージを追加する。
 func (m *Model) appendMessage(msg ChatMessage) tea.Cmd {
+	if msg.Timestamp.IsZero() {
+		msg.Timestamp = time.Now()
+	}
 	m.messages = append(m.messages, msg)
-	return m.appendContentLines(transcript.MessageLines(msg.Role, msg.Content)...)
+	return m.appendContentLines(transcript.Lines(transcript.Message{
+		Role:      msg.Role,
+		Content:   msg.Content,
+		Timestamp: msg.Timestamp,
+	})...)
 }
 
 // appendSystemInfo はシステム情報メッセージを追加する。
@@ -25,12 +32,27 @@ func (m *Model) appendSystemInfo(text string) tea.Cmd {
 // syncViewportContent は viewport の内容を更新し、auto-follow を制御する。
 // 最下部にいる場合のみ追従し、上スクロール中は位置を維持する。
 func (m *Model) syncViewportContent() {
-	if !m.ready {
+	m.syncViewportContentFrom(m.captureViewportFollowState())
+}
+
+type viewportFollowState struct {
+	ready       bool
+	wasAtBottom bool
+}
+
+func (m Model) captureViewportFollowState() viewportFollowState {
+	return viewportFollowState{
+		ready:       m.ready,
+		wasAtBottom: m.ready && m.vp.atBottom(),
+	}
+}
+
+func (m *Model) syncViewportContentFrom(follow viewportFollowState) {
+	if !follow.ready {
 		return
 	}
-	atBottom := m.vp.atBottom()
 	m.vp.setLines(m.getVisualRowContents())
-	if atBottom {
+	if follow.wasAtBottom {
 		m.vp.gotoBottom()
 		m.newOutput = false
 	} else {

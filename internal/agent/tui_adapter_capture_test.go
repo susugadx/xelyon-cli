@@ -35,6 +35,11 @@ func TestTUIAdapter_ChatFlushesCapturedOutput(t *testing.T) {
 	if len(messages) == 0 {
 		t.Fatal("Chat() should relay captured output to TUI")
 	}
+	for i, msg := range messages {
+		if msg.Message.Role != tui.ChatRoleAssistantChunk {
+			t.Fatalf("messages[%d].Role = %q, want assistant chunk role", i, msg.Message.Role)
+		}
+	}
 }
 
 func TestTUIAdapter_ChatWithImageUsesImageProvider(t *testing.T) {

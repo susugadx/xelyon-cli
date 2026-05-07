@@ -111,6 +111,11 @@ func formatToolSummary(info ToolDisplayInfo, trimmed string) string {
 	return firstLine(trimmed)
 }
 
+// ToolTarget は ToolDisplayInfo から表示用 target を返す。
+func ToolTarget(info ToolDisplayInfo) string {
+	return toolTarget(info)
+}
+
 func toolTarget(info ToolDisplayInfo) string {
 	switch {
 	case info.ToolName == "gather_context":

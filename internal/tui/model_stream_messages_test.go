@@ -1,6 +1,10 @@
 package tui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+)
 
 func TestModel_UpdateStatusMsgResetsStreamingState(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
@@ -24,6 +28,29 @@ func TestModel_UpdateStatusMsgResetsStreamingState(t *testing.T) {
 	}
 	if m.statusLine != "done" {
 		t.Fatalf("statusLine = %q, want %q", m.statusLine, "done")
+	}
+}
+
+func TestModel_UpdateStatusMsgUpdatesSnapshotMode(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.statusSnapshot = StatusSnapshot{
+		Mode:       "Plan",
+		LegacyLine: "ready",
+	}
+
+	updated, _, handled := m.handleStreamMessage(UpdateStatusMsg{Line: "running"})
+	if !handled {
+		t.Fatal("UpdateStatusMsg should be handled by stream message handler")
+	}
+	m = updated
+
+	plain := stripANSI(m.buildStatusText(time.Now()))
+	if !strings.Contains(plain, "running") {
+		t.Fatalf("status text should contain updated status, got %q", plain)
+	}
+	if strings.Contains(plain, "Plan") {
+		t.Fatalf("status text should not keep stale mode, got %q", plain)
 	}
 }
 

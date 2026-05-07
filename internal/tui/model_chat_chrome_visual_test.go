@@ -52,9 +52,9 @@ func TestModel_RenderInputDock_VisualRowsKeepOrderAndWidth(t *testing.T) {
 		want string
 	}{
 		{0, "/review"},
-		{1, inputDockMetaPrefix + "[Attached file notes.txt] #1"},
-		{2, inputDockDraftPrefix + "draft summary"},
-		{3, inputDockMetaPrefix + "[Pasted Content 11 chars, 2 lines] #1"},
+		{1, "Review current changes and find issues"},
+		{2, inputDockMetaPrefix + "[file notes.txt #1] [paste 11c/2l #1]"},
+		{3, inputDockDraftPrefix + "draft summary"},
 		{5, inputPrompt + "ask"},
 	}
 	for _, check := range checks {
@@ -68,11 +68,11 @@ func TestModel_RenderInputDock_VisualRowsKeepOrderAndWidth(t *testing.T) {
 	if got := strings.TrimRight(plain[6], " "); got != "" {
 		t.Fatalf("bottom input padding should stay blank, got %q", plain[6])
 	}
-	if !strings.Contains(lines[1], theme.Chrome.InputPasteID+"#1") {
-		t.Fatalf("attachment row should highlight trailing number, got %q", lines[1])
+	if !strings.Contains(lines[2], theme.Chrome.InputPasteID+"#1") {
+		t.Fatalf("chip row should highlight trailing number, got %q", lines[2])
 	}
-	if !strings.Contains(lines[2], theme.Chrome.InputRowMarkerFg+inputDockDraftPrefix) {
-		t.Fatalf("draft row should use draft prefix styling, got %q", lines[2])
+	if !strings.Contains(lines[3], theme.Chrome.InputRowMarkerFg+inputDockDraftPrefix) {
+		t.Fatalf("draft row should use draft prefix styling, got %q", lines[3])
 	}
 }
 
@@ -99,7 +99,8 @@ func TestModel_InputDockRowGroupsKeepSourcesInOrder(t *testing.T) {
 	groups := m.inputDockRowGroups()
 	wantKinds := []inputDockRowGroupKind{
 		inputDockRowGroupSuggestions,
-		inputDockRowGroupAttachments,
+		inputDockRowGroupSelectedDetail,
+		inputDockRowGroupCompactChips,
 		inputDockRowGroupDrafts,
 		inputDockRowGroupTopPadding,
 		inputDockRowGroupInput,
@@ -127,11 +128,14 @@ func TestModel_InputDockRowGroupsKeepSourcesInOrder(t *testing.T) {
 	if !strings.Contains(stripANSI(groups[0].Lines[0]), "/review") {
 		t.Fatalf("suggestion group should render slash row, got %#v", groups[0].Lines)
 	}
-	if !strings.Contains(stripANSI(groups[1].Lines[0]), "[Attached file notes.txt] #1") {
-		t.Fatalf("attachment group should render attachment row, got %#v", groups[1].Lines)
+	if !strings.Contains(stripANSI(groups[1].Lines[0]), "Review current changes and find issues") {
+		t.Fatalf("detail group should render selected detail row, got %#v", groups[1].Lines)
 	}
-	if !strings.Contains(stripANSI(groups[2].Lines[0]), inputDockDraftPrefix+"draft summary") {
-		t.Fatalf("draft group should render draft row, got %#v", groups[2].Lines)
+	if !strings.Contains(stripANSI(groups[2].Lines[0]), "[file notes.txt #1]") {
+		t.Fatalf("chip group should render attachment chip, got %#v", groups[2].Lines)
+	}
+	if !strings.Contains(stripANSI(groups[3].Lines[0]), inputDockDraftPrefix+"draft summary") {
+		t.Fatalf("draft group should render draft row, got %#v", groups[3].Lines)
 	}
 }
 

@@ -125,7 +125,12 @@ func (m Model) handleSpinnerTickMsg(msg spinner.TickMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.spinner, cmd = m.spinner.Update(msg)
 	if m.conversation.IsProcessing() {
-		m.statusLine = m.conversation.GetStatusLine()
+		m.statusSnapshot = m.conversation.StatusSnapshot()
+		m.statusLine = m.statusSnapshot.LegacyLine
+		if m.statusLine == "" {
+			m.statusLine = m.conversation.GetStatusLine()
+			m.statusSnapshot.LegacyLine = m.statusLine
+		}
 	}
 	m.chromeDirty = true
 	return m, cmd

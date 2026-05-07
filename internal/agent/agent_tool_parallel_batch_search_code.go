@@ -51,6 +51,9 @@ func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *toolruntime.P
 				return
 			}
 
+			for _, idx := range chunkIndices {
+				a.emitTUIToolRunning(state.AllToolCalls[idx])
+			}
 			leaderTC := state.AllToolCalls[chunkIndices[0]]
 			mergedTC := toolruntime.CloneToolCallWithNewPattern(leaderTC, strings.Join(chunkPatterns, ","))
 			mergedExecResult := a.executeToolForParallelResult(ctx, mergedTC)

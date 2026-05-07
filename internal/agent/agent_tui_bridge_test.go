@@ -121,21 +121,17 @@ func TestBuildTUIToolResult_PreservesCurrentDisplayContract(t *testing.T) {
 		Args:     map[string]string{"command": "echo ok"},
 		Result:   "ok",
 		Error:    false,
+		ID:       "call-1",
+		Status:   tools.ToolStatusOK,
 		Duration: time.Second,
 	}
 
 	got := buildTUIToolResult(info)
-	wantSummary := ui.FormatToolLine(ui.ToolDisplayInfo{
-		ToolName: info.ToolName,
-		Args:     info.Args,
-		Result:   info.Result,
-		Error:    info.Error,
-	})
 	if got.Name != info.ToolName {
 		t.Fatalf("Name = %q, want %q", got.Name, info.ToolName)
 	}
-	if got.Summary != wantSummary {
-		t.Fatalf("Summary = %q, want %q", got.Summary, wantSummary)
+	if got.Summary != "✓ ok bash echo ok 1.0s" {
+		t.Fatalf("Summary = %q, want timeline summary", got.Summary)
 	}
 	if got.Detail != info.Result {
 		t.Fatalf("Detail = %q, want %q", got.Detail, info.Result)
@@ -146,8 +142,8 @@ func TestBuildTUIToolResult_PreservesCurrentDisplayContract(t *testing.T) {
 	if !got.Collapsed {
 		t.Fatal("bash success should remain collapsed by default")
 	}
-	if strings.Contains(got.Summary, "1s") {
-		t.Fatalf("Duration should not be displayed in this refactor, got %q", got.Summary)
+	if got.ID != "call-1" || got.Status != tui.ToolStatusOK || got.Target != "echo ok" {
+		t.Fatalf("timeline fields = id:%q status:%q target:%q", got.ID, got.Status, got.Target)
 	}
 }
 

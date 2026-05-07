@@ -36,6 +36,12 @@ func (m *Model) refreshToolBlockViewport() {
 	m.chromeDirty = true
 }
 
+func (m *Model) refreshToolBlockViewportFollowing(follow viewportFollowState) {
+	m.rebuildLayout()
+	m.syncViewportContentFrom(follow)
+	m.chromeDirty = true
+}
+
 // updateBlockIndicator はブロックのフォーカスインジケータを更新する。
 func (m *Model) updateBlockIndicator(blockIdx int) {
 	if blockIdx < 0 || blockIdx >= len(m.toolBlocks) {

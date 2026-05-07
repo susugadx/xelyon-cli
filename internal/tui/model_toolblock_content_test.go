@@ -27,6 +27,159 @@ func TestToolBlock_AppendToolResultTracksLineStart(t *testing.T) {
 	}
 }
 
+func TestToolBlock_UpsertsToolResultByID(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{
+		ID:        "tool-1",
+		Name:      "read_file",
+		Summary:   "● running read_file a.go",
+		Target:    "a.go",
+		Status:    ToolStatusRunning,
+		Collapsed: true,
+	})
+	m.appendToolResult(ToolResult{
+		ID:        "tool-1",
+		Name:      "read_file",
+		Summary:   "✓ ok read_file a.go 12ms",
+		Detail:    "file contents",
+		Target:    "a.go",
+		Status:    ToolStatusOK,
+		Collapsed: true,
+	})
+
+	if len(m.toolBlocks) != 1 {
+		t.Fatalf("toolBlocks len = %d, want 1", len(m.toolBlocks))
+	}
+	if got := m.toolBlocks[0].tool.Status; got != ToolStatusOK {
+		t.Fatalf("status = %q, want ok", got)
+	}
+	if got := m.rawLines[m.toolBlocks[0].lineStart]; got != " ▶ ✓ ok read_file a.go 12ms" {
+		t.Fatalf("summary line = %q, want updated ok summary", got)
+	}
+}
+
+func TestToolBlock_ReusedCompletedIDAppendsNewBlock(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{
+		ID:        "call_rescue_001",
+		Name:      "read_file",
+		Summary:   "● running read_file first.go",
+		Status:    ToolStatusRunning,
+		Collapsed: true,
+	})
+	m.appendToolResult(ToolResult{
+		ID:        "call_rescue_001",
+		Name:      "read_file",
+		Summary:   "✓ ok read_file first.go",
+		Status:    ToolStatusOK,
+		Collapsed: true,
+	})
+	m.appendToolResult(ToolResult{
+		ID:        "call_rescue_001",
+		Name:      "read_file",
+		Summary:   "● running read_file second.go",
+		Status:    ToolStatusRunning,
+		Collapsed: true,
+	})
+	m.appendToolResult(ToolResult{
+		ID:        "call_rescue_001",
+		Name:      "read_file",
+		Summary:   "✓ ok read_file second.go",
+		Status:    ToolStatusOK,
+		Collapsed: true,
+	})
+
+	if len(m.toolBlocks) != 2 {
+		t.Fatalf("toolBlocks len = %d, want separate blocks for reused completed ID", len(m.toolBlocks))
+	}
+	if got := m.toolBlocks[0].tool.Summary; got != "✓ ok read_file first.go" {
+		t.Fatalf("first block summary = %q, want first final preserved", got)
+	}
+	if got := m.toolBlocks[1].tool.Summary; got != "✓ ok read_file second.go" {
+		t.Fatalf("second block summary = %q, want second final", got)
+	}
+}
+
+func TestToolBlock_ErrorUpdateUsesExpandedFinalState(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{
+		ID:        "tool-1",
+		Name:      "read_file",
+		Summary:   "● running read_file a.go",
+		Status:    ToolStatusRunning,
+		Collapsed: true,
+	})
+	m.appendToolResult(ToolResult{
+		ID:        "tool-1",
+		Name:      "read_file",
+		Summary:   "✕ error read_file a.go 12ms",
+		Detail:    "Error: missing file",
+		Error:     true,
+		Status:    ToolStatusError,
+		Collapsed: false,
+	})
+
+	if len(m.toolBlocks) != 1 {
+		t.Fatalf("toolBlocks len = %d, want 1", len(m.toolBlocks))
+	}
+	block := m.toolBlocks[0]
+	if block.tool.Collapsed {
+		t.Fatal("error update should use expanded final state")
+	}
+	if block.lineCount != 2 {
+		t.Fatalf("error block lineCount = %d, want summary + detail", block.lineCount)
+	}
+}
+
+func TestToolBlock_UpdatePreservesBottomFollowWhenExpanded(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.vp.height = 2
+	m.appendContentLines("line1", "line2", "line3")
+	m.vp.gotoBottom()
+
+	m.appendToolResult(ToolResult{
+		ID:        "tool-1",
+		Name:      "read_file",
+		Summary:   "● running read_file a.go",
+		Status:    ToolStatusRunning,
+		Collapsed: true,
+	})
+	if !m.vp.atBottom() {
+		t.Fatal("running block append should leave viewport at bottom")
+	}
+
+	m.appendToolResult(ToolResult{
+		ID:        "tool-1",
+		Name:      "read_file",
+		Summary:   "✕ error read_file a.go 12ms",
+		Detail:    "Error: missing file\nline2",
+		Error:     true,
+		Status:    ToolStatusError,
+		Collapsed: false,
+	})
+
+	if !m.vp.atBottom() {
+		t.Fatal("expanded tool update should preserve bottom follow")
+	}
+	if m.newOutput {
+		t.Fatal("newOutput should remain false when expanded update follows bottom")
+	}
+}
+
+func TestToolBlock_CompletionWithoutKnownIDAppends(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{ID: "tool-1", Name: "read_file", Summary: "● running read_file", Status: ToolStatusRunning, Collapsed: true})
+	m.appendToolResult(ToolResult{ID: "tool-2", Name: "read_file", Summary: "✓ ok read_file", Status: ToolStatusOK, Collapsed: true})
+
+	if len(m.toolBlocks) != 2 {
+		t.Fatalf("toolBlocks len = %d, want 2", len(m.toolBlocks))
+	}
+}
+
 func TestToolBlock_ToggleExpandsAndCollapses(t *testing.T) {
 	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
 

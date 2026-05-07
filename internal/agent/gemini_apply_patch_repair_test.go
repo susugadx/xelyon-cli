@@ -81,12 +81,19 @@ func TestGeminiApplyPatchRepairInteractivePublishesOnlyFinalResult(t *testing.T)
 		t.Fatalf("executeToolWithSpinner() result = %q, want repaired success", result)
 	}
 
-	if got := len(toolResultCh); got != 1 {
-		t.Fatalf("published tool results = %d, want 1", got)
+	if got := len(toolResultCh); got != 2 {
+		t.Fatalf("published tool results = %d, want running + final", got)
+	}
+	running := <-toolResultCh
+	if running.Status != tools.ToolStatusRunning || running.ToolName != "apply_patch" {
+		t.Fatalf("first published result = %+v, want running apply_patch", running)
 	}
 	info := <-toolResultCh
 	if info.ToolName != "apply_patch" {
 		t.Fatalf("published tool = %q, want apply_patch", info.ToolName)
+	}
+	if info.Status != tools.ToolStatusOK {
+		t.Fatalf("published status = %q, want ok", info.Status)
 	}
 	if info.Error || strings.HasPrefix(strings.TrimSpace(info.Result), "Error:") {
 		t.Fatalf("published result should be repaired success: %+v", info)

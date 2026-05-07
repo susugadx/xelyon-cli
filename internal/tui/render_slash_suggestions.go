@@ -26,6 +26,7 @@ func (m Model) renderSlashSuggestionRow(suggestion slash.Suggestion, selected bo
 }
 
 type slashSuggestionRowLayout struct {
+	categoryWidth    int
 	commandWidth     int
 	descriptionWidth int
 }
@@ -46,9 +47,14 @@ func (m Model) renderSlashSuggestionRenderRow(row slashSuggestionRenderRow) stri
 	}
 
 	layout := slashSuggestionRowLayoutForWidth(m.width)
+	category := paddedPlainText(row.Category, layout.categoryWidth)
 	label := paddedPlainText(row.CommandLabel, layout.commandWidth)
 	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(row.Description), layout.descriptionWidth)
-	line := bg + prefixFg + prefix + commandFg + label + chrome.Reset + bg
+	line := bg + prefixFg + prefix
+	if layout.categoryWidth > 0 {
+		line += descriptionFg + category + chrome.Reset + bg + prefixFg + "  " + chrome.Reset + bg
+	}
+	line += commandFg + label + chrome.Reset + bg
 	if layout.descriptionWidth > 0 {
 		line += prefixFg + "  " + chrome.Reset + bg + descriptionFg + description + chrome.Reset + bg
 	}
@@ -56,16 +62,28 @@ func (m Model) renderSlashSuggestionRenderRow(row slashSuggestionRenderRow) stri
 }
 
 func slashSuggestionRowLayoutForWidth(width int) slashSuggestionRowLayout {
+	categoryWidth := slashSuggestionCategoryWidth(width)
 	commandWidth := slashSuggestionCommandWidth(width)
 	return slashSuggestionRowLayout{
+		categoryWidth:    categoryWidth,
 		commandWidth:     commandWidth,
-		descriptionWidth: max(0, width-commandWidth-4),
+		descriptionWidth: max(0, width-commandWidth-categoryWidth-6),
 	}
+}
+
+func slashSuggestionCategoryWidth(width int) int {
+	if width <= 36 {
+		return 0
+	}
+	return 9
 }
 
 func slashSuggestionCommandWidth(width int) int {
 	if width <= 24 {
 		return max(8, width-4)
+	}
+	if width <= 44 {
+		return min(24, max(14, width/2))
 	}
 	return min(28, max(14, width/3))
 }

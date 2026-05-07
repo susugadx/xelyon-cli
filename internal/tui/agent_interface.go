@@ -17,6 +17,9 @@ type ConversationAgent interface {
 	// GetStatusLine はステータスバーに表示する文字列を返す。
 	GetStatusLine() string
 
+	// StatusSnapshot は TUI ステータスバー用の構造化状態を返す。
+	StatusSnapshot() StatusSnapshot
+
 	// Cancel は現在のAPI呼び出しをキャンセルする。
 	Cancel()
 

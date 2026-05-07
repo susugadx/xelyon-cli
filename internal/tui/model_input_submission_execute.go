@@ -48,7 +48,7 @@ func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.C
 	case commandSubmissionDecisionDispatchAgent:
 		if m.commands.HandleCommand(command.Input) {
 			m.recordHandledCommand(command.Input)
-			m.statusLine = m.conversation.GetStatusLine()
+			m.refreshStatusLine()
 			return m, nil
 		}
 		return m.commandFallbackToChat(sub, command.Payload)

@@ -3,6 +3,8 @@ package slash
 import (
 	"strings"
 	"unicode"
+
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 )
 
 type argumentSuggestionRequest struct {
@@ -64,6 +66,9 @@ func newArgumentSuggestion(command, value, labelSuffix, description string, subm
 		Label:         insertText + labelSuffix,
 		InsertText:    insertText,
 		Description:   description,
+		Category:      commandcatalog.CommandCategoryModel,
+		ArgHint:       value,
+		Detail:        description,
 		HasArgs:       false,
 		SubmitOnEnter: submitOnEnter,
 	}

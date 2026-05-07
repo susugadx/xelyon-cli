@@ -38,8 +38,10 @@ func (a *Agent) executeToolCallsWithParallel(
 	}
 
 	toolruntime.PlanParallelCalls(state, loopDetectFn, skipFn)
+	batchStartedAt := time.Now()
 	a.executeSearchCodeBatch(ctx, state)
 	a.executeReadFileBatchMerge(ctx, state)
+	a.reportBatchedTUIToolResults(state, time.Since(batchStartedAt))
 	toolruntime.PartitionParallelAndSequential(state)
 	a.runParallelSafeToolsPhase(ctx, state)
 	a.executeSequentialTools(ctx, state)
@@ -80,6 +82,7 @@ func (a *Agent) executeParallelSafeTools(ctx context.Context, state *toolruntime
 			mu.Unlock()
 			continue
 		}
+		a.emitTUIToolRunning(state.AllToolCalls[idx])
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(i int) {

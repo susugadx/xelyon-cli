@@ -98,6 +98,7 @@ type Model struct {
 	toolBlocks       []toolBlockInfo  // ツール結果ブロック
 	focusedBlock     int              // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
 	statusLine       string
+	statusSnapshot   StatusSnapshot
 	workingDir       string
 	padLineCache     string // View() 用の背景パディング行キャッシュ
 	chromeCache      string // View() 用の chrome 部分キャッシュ（入力欄+ステータス）

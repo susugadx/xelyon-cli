@@ -268,7 +268,7 @@ func (m Model) applyProviderPickerModel(model string) (Model, tea.Cmd) {
 	} else {
 		m.setTransientStatus("Selection applied")
 	}
-	m.statusLine = m.conversation.GetStatusLine()
+	m.refreshStatusLine()
 	return m, nil
 }
 
@@ -283,7 +283,7 @@ func (m Model) applyAzureDeploymentSetup(deployment string, catalogModel string)
 	} else {
 		m.setTransientStatus("Selection applied")
 	}
-	m.statusLine = m.conversation.GetStatusLine()
+	m.refreshStatusLine()
 	return m, nil
 }
 

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
@@ -62,8 +64,8 @@ func TestSlashSuggestionRowLayoutForWidthPreservesCurrentWidths(t *testing.T) {
 	}
 
 	wide := slashSuggestionRowLayoutForWidth(80)
-	if wide.commandWidth != 26 || wide.descriptionWidth != 50 {
-		t.Fatalf("wide layout = %#v, want command=26 description=50", wide)
+	if wide.categoryWidth != 9 || wide.commandWidth != 26 || wide.descriptionWidth != 39 {
+		t.Fatalf("wide layout = %#v, want category=9 command=26 description=39", wide)
 	}
 }
 
@@ -145,6 +147,62 @@ func TestSlashSuggestions_ShowThinkingArgumentSuggestions(t *testing.T) {
 	rendered := stripANSI(m.chromeCache)
 	if !strings.Contains(rendered, "/thinking xhigh (max)") {
 		t.Fatalf("chromeCache missing xhigh max suggestion:\n%s", rendered)
+	}
+}
+
+func TestSlashSuggestions_ShowProviderRuntimeCandidates(t *testing.T) {
+	agent := &stubAgent{
+		statusLine: "ready",
+		providerCandidates: []providerpicker.ProviderCandidate{
+			{Key: "openai", Label: "OpenAI", Current: true, CredentialStatus: providerpicker.ProviderCredentialConfigured},
+			{Key: "claude", Label: "Claude", CredentialStatus: providerpicker.ProviderCredentialMissingKey},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/provider o")
+
+	if !m.slashSuggestions.visible() {
+		t.Fatal("provider argument suggestions should be visible")
+	}
+	if got := len(m.slashSuggestions.suggestions); got != 1 {
+		t.Fatalf("provider suggestions len = %d, want 1", got)
+	}
+	suggestion := m.slashSuggestions.suggestions[0]
+	if suggestion.InsertText != "/provider openai" || suggestion.Category != commandcatalog.CommandCategoryModel {
+		t.Fatalf("provider suggestion = %#v", suggestion)
+	}
+	if detail := m.selectedSlashSuggestionDetailText(); !strings.Contains(detail, "Switch provider to OpenAI") {
+		t.Fatalf("selected detail = %q, want provider detail", detail)
+	}
+}
+
+func TestSlashSuggestions_ShowModelRuntimeCandidates(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:        "ready",
+		providerConfigKey: "openai",
+		modelCandidates: map[string][]providerpicker.ModelCandidate{
+			"openai": {
+				{Name: "gpt-5.4", Current: true},
+				{Name: "gpt-5.4-mini", Default: true},
+				{Name: "Custom model...", Custom: true},
+			},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/model gpt-5.4-m")
+
+	if !m.slashSuggestions.visible() {
+		t.Fatal("model argument suggestions should be visible")
+	}
+	if got := len(m.slashSuggestions.suggestions); got != 1 {
+		t.Fatalf("model suggestions len = %d, want 1", got)
+	}
+	suggestion := m.slashSuggestions.suggestions[0]
+	if suggestion.InsertText != "/model gpt-5.4-mini" {
+		t.Fatalf("model suggestion insert = %q, want /model gpt-5.4-mini", suggestion.InsertText)
+	}
+	if strings.Contains(stripANSI(m.chromeCache), "Custom model") {
+		t.Fatalf("custom model candidate should not be inserted as slash argument:\n%s", stripANSI(m.chromeCache))
 	}
 }
 
@@ -476,7 +534,7 @@ func TestSlashSuggestions_CapRowsToSmallWindow(t *testing.T) {
 
 	m = sendComposerRunes(m, "/")
 
-	wantRows := m.height - statusBarHeight - inputHeight - minChatViewportHeight
+	wantRows := m.height - statusBarHeight - inputHeight - minChatViewportHeight - 1
 	if got := len(m.visibleSlashSuggestionRows()); got != wantRows {
 		t.Fatalf("visible slash suggestion rows = %d, want %d", got, wantRows)
 	}

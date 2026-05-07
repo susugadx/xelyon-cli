@@ -75,6 +75,14 @@ func (s *stubAgent) GetStatusLine() string {
 	defer s.mu.RUnlock()
 	return s.statusLine
 }
+func (s *stubAgent) StatusSnapshot() StatusSnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return StatusSnapshot{
+		Mode:       s.statusLine,
+		LegacyLine: s.statusLine,
+	}
+}
 func (s *stubAgent) Cancel() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

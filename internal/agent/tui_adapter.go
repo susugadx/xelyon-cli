@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
@@ -36,7 +37,7 @@ func (a *TUIAdapter) SetOutputCapture() {
 		if a.sendMsg != nil {
 			a.sendMsg(tui.AppendMessageMsg{
 				Message: tui.ChatMessage{
-					Role:    "assistant",
+					Role:    tui.ChatRoleAssistantChunk,
 					Content: text,
 				},
 			})
@@ -108,6 +109,49 @@ func (a *TUIAdapter) HandleCommand(cmd string) bool {
 // GetStatusLine はステータスバーに表示する文字列を返す。
 func (a *TUIAdapter) GetStatusLine() string {
 	return a.agent.FormatStatusLine()
+}
+
+// StatusSnapshot は TUI ステータスバー用の構造化状態を返す。
+func (a *TUIAdapter) StatusSnapshot() tui.StatusSnapshot {
+	if a == nil || a.agent == nil {
+		return tui.StatusSnapshot{}
+	}
+	agent := a.agent
+	modeText := "Normal"
+	if agent.PlanModeEnabled {
+		modeText = "Plan"
+	}
+
+	tokens := "0"
+	var estimate cost.CostEstimate
+	if agent.Stats != nil {
+		agent.statsMu.Lock()
+		tokens = FormatTokens(agent.Stats.TotalTokens())
+		estimate = agent.Stats.EstimatedCostEstimateForConfig(agent.cfg())
+		agent.statsMu.Unlock()
+	}
+
+	if manager := agent.subAgentManager(); manager != nil {
+		summary := manager.GetSummary()
+		estimate.Cost += summary.TotalCost
+		if summary.PricingUnavailable {
+			estimate.PricingUnavailable = true
+		}
+	}
+
+	costText := formatCompactCostEstimate(estimate)
+	if strings.EqualFold(agent.ProviderName, "ollama") && estimate.Cost == 0 && !estimate.PricingUnavailable {
+		costText = ""
+	}
+
+	return tui.StatusSnapshot{
+		Provider:   agent.ProviderName,
+		Model:      agent.CurrentModel,
+		Mode:       modeText,
+		Tokens:     tokens,
+		Cost:       costText,
+		LegacyLine: agent.FormatStatusLine(),
+	}
 }
 
 // Cancel は現在のAPI呼び出しをキャンセルする。

@@ -55,10 +55,11 @@ func previewReadFilePaths(args map[string]string) []string {
 
 // ExecutionResult はツール実行結果と、結果表示に必要な実行メタデータを保持する。
 type ExecutionResult struct {
-	Result   string
-	Change   *FileChange
-	Duration time.Duration
-	Error    bool
+	Result    string
+	Change    *FileChange
+	StartedAt time.Time
+	Duration  time.Duration
+	Error     bool
 }
 
 // ExecuteWithContext は実行コンテキスト付きでツールを実行し、結果を公開する。
@@ -76,10 +77,11 @@ func ExecuteUnpublishedWithContext(execCtx ExecutionContext, tc *ToolCall) Execu
 	elapsed := time.Since(startTime)
 
 	return ExecutionResult{
-		Result:   result,
-		Change:   change,
-		Duration: elapsed,
-		Error:    isError,
+		Result:    result,
+		Change:    change,
+		StartedAt: startTime,
+		Duration:  elapsed,
+		Error:     isError,
 	}
 }
 
@@ -109,15 +111,26 @@ func PublishResultWithContext(execCtx ExecutionContext, tc *ToolCall, execResult
 
 	result := execResult.Result
 	isError := execResult.Error || IsErrorResult(result)
+	status := ToolStatusOK
+	if isError {
+		status = ToolStatusError
+	}
+	startedAt := execResult.StartedAt
+	if startedAt.IsZero() && execResult.Duration > 0 {
+		startedAt = time.Now().Add(-execResult.Duration)
+	}
 
 	if execCtx.ToolResultCallback != nil {
 		// TUIモード: 構造化データをコールバックで送信
 		execCtx.ToolResultCallback(ToolResultInfo{
-			ToolName: tc.Tool,
-			Args:     tc.Args,
-			Result:   result,
-			Error:    isError,
-			Duration: execResult.Duration,
+			ToolName:  tc.Tool,
+			Args:      CloneToolArgs(tc.Args),
+			Result:    result,
+			Error:     isError,
+			ID:        tc.DisplayID(),
+			Status:    status,
+			StartedAt: startedAt,
+			Duration:  execResult.Duration,
 		})
 	} else {
 		// 従来モード: stdoutにテキスト出力

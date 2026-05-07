@@ -16,7 +16,8 @@ type inputDockRowGroupKind int
 
 const (
 	inputDockRowGroupSuggestions inputDockRowGroupKind = iota
-	inputDockRowGroupAttachments
+	inputDockRowGroupSelectedDetail
+	inputDockRowGroupCompactChips
 	inputDockRowGroupDrafts
 	inputDockRowGroupTopPadding
 	inputDockRowGroupInput
@@ -39,7 +40,8 @@ func (m *Model) renderInputDockLines() []string {
 func (m *Model) inputDockRowGroups() []inputDockRowGroup {
 	return []inputDockRowGroup{
 		{Kind: inputDockRowGroupSuggestions, Lines: m.renderSlashSuggestionRows()},
-		{Kind: inputDockRowGroupAttachments, Lines: m.renderAttachmentSummaryRows()},
+		{Kind: inputDockRowGroupSelectedDetail, Lines: m.renderSelectedSlashSuggestionDetailRows()},
+		{Kind: inputDockRowGroupCompactChips, Lines: m.renderCompactChipRows()},
 		{Kind: inputDockRowGroupDrafts, Lines: m.renderComposerDraftSummaryRows()},
 		{Kind: inputDockRowGroupTopPadding, Lines: []string{m.padLineCache}},
 		{Kind: inputDockRowGroupInput, Lines: []string{m.renderInputLine()}},
@@ -65,17 +67,18 @@ func (m *Model) renderInputLine() string {
 	return termtext.FillANSITextWidth(chrome.InputRowMarkerFg+" "+chrome.InputPrompt+inputPrompt+chrome.InputTextFg+tiView+chrome.Reset, m.width, chrome.InputBg)
 }
 
-func (m Model) renderAttachmentSummaryRows() []string {
-	summaries := m.visibleAttachmentSummaryRows()
-	if len(summaries) == 0 {
+func (m Model) renderCompactChipRows() []string {
+	if m.visibleCompactChipRowCount() == 0 {
+		return nil
+	}
+	chips := m.visibleCompactChips()
+	if len(chips) == 0 {
 		return nil
 	}
 	chrome := theme.Chrome
-	rows := make([]string, 0, len(summaries))
-	for _, summary := range summaries {
-		rows = append(rows, m.renderInputMetaStyleRow(highlightSummaryNumber(summary, chrome.InputPasteID, chrome.InputPasteFg)))
-	}
-	return rows
+	row := strings.Join(chips, " ")
+	row = termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(row), max(0, m.width-4))
+	return []string{m.renderInputMetaStyleRow(highlightSummaryNumber(row, chrome.InputPasteID, chrome.InputPasteFg))}
 }
 
 func (m Model) renderComposerDraftSummaryRows() []string {
@@ -83,16 +86,20 @@ func (m Model) renderComposerDraftSummaryRows() []string {
 	if len(summaries) == 0 {
 		return nil
 	}
-	chrome := theme.Chrome
 	rows := make([]string, 0, len(summaries))
 	for _, summary := range summaries {
-		if summary.Kind == composerDraftSummaryPaste {
-			rows = append(rows, m.renderInputMetaStyleRow(highlightSummaryNumber(summary.Text, chrome.InputPasteID, chrome.InputPasteFg)))
-			continue
-		}
 		rows = append(rows, m.renderInputDraftStyleRow(summary.Text))
 	}
 	return rows
+}
+
+func (m Model) renderSelectedSlashSuggestionDetailRows() []string {
+	detail := m.selectedSlashSuggestionDetailText()
+	if detail == "" || m.visibleSlashSuggestionDetailRowCount() == 0 {
+		return nil
+	}
+	chrome := theme.Chrome
+	return []string{termtext.FillANSITextWidth(chrome.SuggestionBg+chrome.SuggestionSelectedDimFg+"  "+detail+chrome.Reset, m.width, chrome.SuggestionBg)}
 }
 
 func highlightSummaryNumber(summary, numberColor, textColor string) string {

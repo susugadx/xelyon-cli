@@ -13,6 +13,9 @@ type Suggestion struct {
 	// SubmitText は Enter 実行時だけ InsertText と異なる command を使いたい場合に指定する。
 	SubmitText  string
 	Description string
+	Category    commandcatalog.CommandCategory
+	ArgHint     string
+	Detail      string
 	HasArgs     bool
 	// SubmitOnEnter は候補表示中の Enter で、この候補を確定して実行してよいかを表す。
 	SubmitOnEnter bool
@@ -57,6 +60,9 @@ func newCommandSuggestion(cmd commandcatalog.CommandInfo) Suggestion {
 		InsertText:    cmd.Name,
 		SubmitText:    commandSuggestionSubmitText(cmd),
 		Description:   cmd.Description,
+		Category:      cmd.Category,
+		ArgHint:       cmd.Args,
+		Detail:        cmd.Description,
 		HasArgs:       cmd.Args != "",
 		SubmitOnEnter: true,
 	}

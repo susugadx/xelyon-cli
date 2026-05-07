@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -114,18 +116,64 @@ func newTUIProgramBridge(
 }
 
 func buildTUIToolResult(info tools.ToolResultInfo) tui.ToolResult {
-	summary := ui.FormatToolLine(ui.ToolDisplayInfo{
+	displayInfo := ui.ToolDisplayInfo{
 		ToolName: info.ToolName,
 		Args:     info.Args,
 		Result:   info.Result,
 		Error:    info.Error,
-	})
+	}
+	status := tuiToolStatus(info)
+	target := ui.ToolTarget(displayInfo)
+	summary := formatTUIToolSummary(status, info.ToolName, target, info.Duration)
 	return tui.ToolResult{
 		Name:      info.ToolName,
 		Summary:   summary,
 		Detail:    info.Result,
 		Collapsed: defaultToolCollapsed(info.ToolName, info.Result, info.Error),
 		Error:     info.Error,
+		ID:        info.ID,
+		Status:    status,
+		Target:    target,
+		StartedAt: info.StartedAt,
+		Duration:  info.Duration,
+	}
+}
+
+func tuiToolStatus(info tools.ToolResultInfo) tui.ToolStatus {
+	switch info.Status {
+	case tools.ToolStatusRunning:
+		return tui.ToolStatusRunning
+	case tools.ToolStatusError:
+		return tui.ToolStatusError
+	case tools.ToolStatusOK:
+		return tui.ToolStatusOK
+	default:
+		if info.Error {
+			return tui.ToolStatusError
+		}
+		return tui.ToolStatusOK
+	}
+}
+
+func formatTUIToolSummary(status tui.ToolStatus, toolName, target string, duration time.Duration) string {
+	parts := []string{toolStatusLabel(status), toolName}
+	if strings.TrimSpace(target) != "" {
+		parts = append(parts, target)
+	}
+	if status != tui.ToolStatusRunning && duration > 0 {
+		parts = append(parts, ui.FormatParallelElapsed(duration))
+	}
+	return strings.Join(parts, " ")
+}
+
+func toolStatusLabel(status tui.ToolStatus) string {
+	switch status {
+	case tui.ToolStatusRunning:
+		return "● running"
+	case tui.ToolStatusError:
+		return "✕ error"
+	default:
+		return "✓ ok"
 	}
 }
 

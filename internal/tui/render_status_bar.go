@@ -10,14 +10,28 @@ import (
 )
 
 func (m *Model) buildStatusBarLine() string {
-	statusText := m.buildStatusText(time.Now())
+	now := time.Now()
+	segments := m.statusTextSegments(now)
 	hints := m.activeStatusHints()
-	return m.composeStatusBarLine(statusText, hints)
+	return m.composeStatusBarLine(segments, hints)
 }
 
 type statusTextSegment struct {
 	text string
+	key  statusTextSegmentKey
 }
+
+type statusTextSegmentKey string
+
+const (
+	statusSegmentPrimary   statusTextSegmentKey = "primary"
+	statusSegmentProvider  statusTextSegmentKey = "provider"
+	statusSegmentRunning   statusTextSegmentKey = "running"
+	statusSegmentTokens    statusTextSegmentKey = "tokens"
+	statusSegmentCost      statusTextSegmentKey = "cost"
+	statusSegmentNewOutput statusTextSegmentKey = "new_output"
+	statusSegmentTransient statusTextSegmentKey = "transient"
+)
 
 type statusBarLayoutRequest struct {
 	width      int
@@ -38,38 +52,119 @@ func (m *Model) buildStatusText(now time.Time) string {
 func (m *Model) statusTextSegments(now time.Time) []statusTextSegment {
 	chrome := theme.Chrome
 	statusLine := termtext.SanitizeSingleLineANSI(m.statusLine)
+	snapshot := sanitizeStatusSnapshot(m.statusSnapshot)
+	if statusLine != "" && statusLine != snapshot.LegacyLine {
+		snapshot.Mode = statusLine
+		snapshot.LegacyLine = statusLine
+	}
 
-	segments := []statusTextSegment{{text: m.primaryStatusTextSegment(statusLine)}}
+	var segments []statusTextSegment
+	if m.conversation.IsProcessing() {
+		segments = append(segments, statusTextSegment{text: m.spinner.View(), key: statusSegmentPrimary})
+		if providerModel := providerModelStatusText(snapshot, statusLine); providerModel != "" {
+			segments = append(segments, statusTextSegment{text: chrome.StatusFg + providerModel + chrome.Reset, key: statusSegmentProvider})
+		}
+		if running := m.runningToolStatusText(); running != "" {
+			segments = append(segments, statusTextSegment{text: chrome.StatusFg + running + chrome.Reset, key: statusSegmentRunning})
+		}
+		if snapshot.Tokens != "" {
+			segments = append(segments, statusTextSegment{text: chrome.StatusFg + snapshot.Tokens + " tok" + chrome.Reset, key: statusSegmentTokens})
+		}
+		if snapshot.Cost != "" {
+			segments = append(segments, statusTextSegment{text: chrome.StatusFg + snapshot.Cost + chrome.Reset, key: statusSegmentCost})
+		}
+		return segments
+	}
+
+	segments = append(segments, statusTextSegment{text: m.primaryStatusTextSegment(snapshot, statusLine), key: statusSegmentPrimary})
 	if m.newOutput && !m.vp.atBottom() {
 		segments = append(segments, statusTextSegment{
-			text: chrome.StatusSepFg + "  " + chrome.Reset + chrome.NewOutput + " ↓ New output " + chrome.Reset,
+			text: chrome.NewOutput + "↓ New output" + chrome.Reset,
+			key:  statusSegmentNewOutput,
 		})
 	}
 	if m.transientStatus != "" && now.Before(m.transientStatusUntil) {
 		segments = append(segments, statusTextSegment{
-			text: chrome.StatusSepFg + "  " + chrome.Reset + chrome.SuccessFg + termtext.SanitizeSingleLineANSI(m.transientStatus) + chrome.Reset,
+			text: chrome.SuccessFg + termtext.SanitizeSingleLineANSI(m.transientStatus) + chrome.Reset,
+			key:  statusSegmentTransient,
 		})
 	}
 	return segments
 }
 
-func (m *Model) primaryStatusTextSegment(statusLine string) string {
+func (m *Model) primaryStatusTextSegment(snapshot StatusSnapshot, statusLine string) string {
 	chrome := theme.Chrome
+	modeText := idlePrimaryStatusText(snapshot, statusLine)
 	if m.navigationMode {
-		return " " + chrome.NavBadge + " NAV " + chrome.Reset + chrome.StatusSepFg + " " + chrome.Reset + chrome.StatusFg + statusLine + chrome.Reset
+		return chrome.NavBadge + " NAV " + chrome.Reset + chrome.StatusFg + modeText + chrome.Reset
 	}
-	if m.conversation.IsProcessing() {
-		return " " + m.spinner.View() + chrome.StatusSepFg + " " + chrome.Reset + chrome.StatusFg + statusLine + chrome.Reset
+	return chrome.StatusFg + modeText + chrome.Reset
+}
+
+func idlePrimaryStatusText(snapshot StatusSnapshot, statusLine string) string {
+	if snapshot.LegacyLine != "" && snapshot.LegacyLine != snapshot.Mode {
+		return snapshot.LegacyLine
 	}
-	return " " + chrome.StatusFg + statusLine + chrome.Reset
+	if statusLine != "" && statusLine != snapshot.Mode {
+		return statusLine
+	}
+	if snapshot.Mode != "" {
+		return snapshot.Mode
+	}
+	return statusLine
 }
 
 func renderStatusTextSegments(segments []statusTextSegment) string {
 	var b strings.Builder
-	for _, segment := range segments {
+	chrome := theme.Chrome
+	for i, segment := range segments {
+		if i == 0 {
+			b.WriteString(" ")
+		} else {
+			b.WriteString(chrome.StatusSepFg)
+			b.WriteString(" | ")
+			b.WriteString(chrome.Reset)
+		}
 		b.WriteString(segment.text)
 	}
 	return b.String()
+}
+
+func sanitizeStatusSnapshot(snapshot StatusSnapshot) StatusSnapshot {
+	snapshot.Provider = termtext.SanitizeSingleLineANSI(snapshot.Provider)
+	snapshot.Model = termtext.SanitizeSingleLineANSI(snapshot.Model)
+	snapshot.Mode = termtext.SanitizeSingleLineANSI(snapshot.Mode)
+	snapshot.Tokens = termtext.SanitizeSingleLineANSI(snapshot.Tokens)
+	snapshot.Cost = termtext.SanitizeSingleLineANSI(snapshot.Cost)
+	snapshot.LegacyLine = termtext.SanitizeSingleLineANSI(snapshot.LegacyLine)
+	return snapshot
+}
+
+func providerModelStatusText(snapshot StatusSnapshot, fallback string) string {
+	switch {
+	case snapshot.Provider != "" && snapshot.Model != "":
+		return snapshot.Provider + "/" + snapshot.Model
+	case snapshot.Model != "":
+		return snapshot.Model
+	case snapshot.Provider != "":
+		return snapshot.Provider
+	default:
+		return fallback
+	}
+}
+
+func (m Model) runningToolStatusText() string {
+	for i := len(m.toolBlocks) - 1; i >= 0; i-- {
+		tool := m.toolBlocks[i].tool
+		if tool.Status != ToolStatusRunning {
+			continue
+		}
+		if tool.Target != "" {
+			return "running " + tool.Name + " " + termtext.SanitizeSingleLineANSI(tool.Target)
+		}
+		return "running " + tool.Name
+	}
+	return ""
 }
 
 func (m Model) activeStatusHints() []string {
@@ -91,15 +186,20 @@ func (m Model) activeStatusHints() []string {
 	return statusHintsNav
 }
 
-func (m Model) composeStatusBarLine(statusText string, hints []string) string {
+func (m Model) composeStatusBarLine(segments []statusTextSegment, hints []string) string {
 	return m.fitStatusBarLine(statusBarLayoutRequest{
 		width:      m.width,
-		statusText: statusText,
+		statusText: renderStatusTextSegments(segments),
 		hints:      hints,
-	})
+	}, segments)
 }
 
-func (m Model) fitStatusBarLine(req statusBarLayoutRequest) string {
+func (m Model) fitStatusBarLine(req statusBarLayoutRequest, segments ...[]statusTextSegment) string {
+	if len(segments) > 0 {
+		if line := m.fitStatusBarSegments(req, segments[0]); line != "" {
+			return line
+		}
+	}
 	statusBar := req.statusText
 	for _, hint := range req.hints {
 		if line, ok := m.composeStatusBarWithWorkingDir(req.statusText, hint); ok {
@@ -113,6 +213,49 @@ func (m Model) fitStatusBarLine(req statusBarLayoutRequest) string {
 		}
 	}
 	return fitANSITextWidth(statusBar, req.width)
+}
+
+func (m Model) fitStatusBarSegments(req statusBarLayoutRequest, segments []statusTextSegment) string {
+	dropOrder := []statusTextSegmentKey{
+		statusSegmentCost,
+		statusSegmentTokens,
+		statusSegmentNewOutput,
+		statusSegmentTransient,
+	}
+	for dropCount := 0; dropCount <= len(dropOrder)+1; dropCount++ {
+		dropped := make(map[statusTextSegmentKey]struct{}, dropCount)
+		for i := 0; i < dropCount && i < len(dropOrder); i++ {
+			dropped[dropOrder[i]] = struct{}{}
+		}
+		dropCWD := dropCount > len(dropOrder)
+		statusText := renderStatusTextSegments(filterStatusSegments(segments, dropped))
+		for _, hint := range req.hints {
+			if !dropCWD {
+				if line, ok := m.composeStatusBarWithWorkingDir(statusText, hint); ok {
+					return line
+				}
+				continue
+			}
+			if line, ok := m.composeStatusBarWithoutWorkingDir(statusText, hint); ok {
+				return line
+			}
+		}
+	}
+	return ""
+}
+
+func filterStatusSegments(segments []statusTextSegment, dropped map[statusTextSegmentKey]struct{}) []statusTextSegment {
+	if len(dropped) == 0 {
+		return segments
+	}
+	out := make([]statusTextSegment, 0, len(segments))
+	for _, segment := range segments {
+		if _, ok := dropped[segment.key]; ok {
+			continue
+		}
+		out = append(out, segment)
+	}
+	return out
 }
 
 func (m Model) composeStatusBarWithWorkingDir(statusText, hint string) (string, bool) {

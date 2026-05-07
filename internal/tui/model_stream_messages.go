@@ -31,6 +31,8 @@ func (m *Model) handleStreamTextMsg(msg StreamTextMsg) tea.Cmd {
 func (m *Model) handleUpdateStatusMsg(msg UpdateStatusMsg) {
 	m.resetStreamingState()
 	m.statusLine = msg.Line
+	m.statusSnapshot.LegacyLine = msg.Line
+	m.statusSnapshot.Mode = msg.Line
 	m.chromeDirty = true
 }
 

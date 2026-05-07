@@ -5,6 +5,8 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
@@ -18,6 +20,7 @@ type slashSuggestionState struct {
 }
 
 type slashSuggestionRenderRow struct {
+	Category     string
 	CommandLabel string
 	Description  string
 	Selected     bool
@@ -52,7 +55,7 @@ func (m Model) currentSlashSuggestionPrefix() (string, bool) {
 }
 
 func (m *Model) refreshSlashSuggestions() {
-	oldRows := len(m.visibleSlashSuggestionRows())
+	oldRows := m.visibleSlashSuggestionChromeRowCount()
 	prefix, ok := m.currentSlashSuggestionPrefix()
 	if !ok {
 		m.slashSuggestions = slashSuggestionState{}
@@ -60,7 +63,7 @@ func (m *Model) refreshSlashSuggestions() {
 		return
 	}
 
-	suggestions := slash.Suggestions(prefix)
+	suggestions := m.suggestionsForSlashPrefix(prefix)
 	if len(suggestions) == 0 {
 		m.slashSuggestions = slashSuggestionState{}
 		m.afterSlashSuggestionChange(oldRows)
@@ -92,18 +95,22 @@ func (m *Model) clearSlashSuggestions() {
 	if !m.slashSuggestions.visible() {
 		return
 	}
-	oldRows := len(m.visibleSlashSuggestionRows())
+	oldRows := m.visibleSlashSuggestionChromeRowCount()
 	m.slashSuggestions = slashSuggestionState{}
 	m.afterSlashSuggestionChange(oldRows)
 }
 
 func (m *Model) afterSlashSuggestionChange(oldRows int) {
-	newRows := len(m.visibleSlashSuggestionRows())
+	newRows := m.visibleSlashSuggestionChromeRowCount()
 	if oldRows != newRows {
 		m.syncComposerLayout()
 		return
 	}
 	m.chromeDirty = true
+}
+
+func (m Model) visibleSlashSuggestionChromeRowCount() int {
+	return len(m.visibleSlashSuggestionRows()) + m.visibleSlashSuggestionDetailRowCount()
 }
 
 func (m Model) visibleSlashSuggestionRows() []slash.Suggestion {
@@ -137,6 +144,7 @@ func (m Model) visibleSlashSuggestionRenderRows() []slashSuggestionRenderRow {
 
 func newSlashSuggestionRenderRow(suggestion slash.Suggestion, selected bool) slashSuggestionRenderRow {
 	return slashSuggestionRenderRow{
+		Category:     string(suggestion.Category),
 		CommandLabel: suggestion.Label,
 		Description:  suggestion.Description,
 		Selected:     selected,
@@ -145,6 +153,9 @@ func newSlashSuggestionRenderRow(suggestion slash.Suggestion, selected bool) sla
 
 func (m Model) maxVisibleSlashSuggestionRows() int {
 	available := m.remainingFooterRowsAfterComposerAndAttachments()
+	if m.selectedSlashSuggestionDetailText() != "" && available > 1 {
+		available--
+	}
 	if available <= 0 {
 		return 0
 	}
@@ -152,6 +163,144 @@ func (m Model) maxVisibleSlashSuggestionRows() int {
 		return maxSlashSuggestionRows
 	}
 	return available
+}
+
+func (m Model) visibleSlashSuggestionDetailRowCount() int {
+	if m.selectedSlashSuggestionDetailText() == "" ||
+		m.remainingFooterRowsAfterComposerAndAttachments() <= 1 ||
+		len(m.visibleSlashSuggestionRows()) == 0 {
+		return 0
+	}
+	return 1
+}
+
+func (m Model) selectedSlashSuggestionDetailText() string {
+	suggestion, ok := m.slashSuggestions.selectedSuggestion()
+	if !ok {
+		return ""
+	}
+	return slashSuggestionDetailText(suggestion)
+}
+
+func slashSuggestionDetailText(suggestion slash.Suggestion) string {
+	detail := strings.TrimSpace(suggestion.Detail)
+	if detail == "" {
+		detail = strings.TrimSpace(suggestion.Description)
+	}
+	argHint := strings.TrimSpace(suggestion.ArgHint)
+	if argHint != "" && detail != "" {
+		return argHint + " · " + detail
+	}
+	if argHint != "" {
+		return argHint
+	}
+	return detail
+}
+
+func (m Model) suggestionsForSlashPrefix(prefix string) []slash.Suggestion {
+	if suggestions, ok := m.runtimeArgumentSuggestions(prefix); ok {
+		return suggestions
+	}
+	return slash.Suggestions(prefix)
+}
+
+func (m Model) runtimeArgumentSuggestions(prefix string) ([]slash.Suggestion, bool) {
+	command, argPrefix, ok := parseSingleSlashArgument(prefix)
+	if !ok {
+		return nil, false
+	}
+	switch command {
+	case "/provider":
+		return providerArgumentSuggestions(m.providerModels.ProviderCandidates(), argPrefix), true
+	case "/model":
+		provider := strings.TrimSpace(m.configAgent.GetProviderConfigKey())
+		if provider == "" {
+			provider = strings.TrimSpace(m.configAgent.GetProviderName())
+		}
+		return modelArgumentSuggestions(m.providerModels.ModelCandidates(provider), argPrefix), true
+	default:
+		return nil, false
+	}
+}
+
+func parseSingleSlashArgument(input string) (command, argPrefix string, ok bool) {
+	input = strings.TrimLeft(input, " \t")
+	idx := strings.IndexAny(input, " \t")
+	if idx < 0 {
+		return "", "", false
+	}
+	command = input[:idx]
+	argPrefix = strings.TrimLeft(input[idx:], " \t")
+	if strings.ContainsAny(argPrefix, " \t") {
+		return command, "", false
+	}
+	return command, argPrefix, true
+}
+
+func providerArgumentSuggestions(candidates []providerpicker.ProviderCandidate, argPrefix string) []slash.Suggestion {
+	argPrefix = strings.ToLower(strings.TrimSpace(argPrefix))
+	submitOnEnter := argPrefix != ""
+	suggestions := make([]slash.Suggestion, 0, len(candidates))
+	for _, candidate := range candidates {
+		if !strings.HasPrefix(strings.ToLower(candidate.Key), argPrefix) {
+			continue
+		}
+		insertText := "/provider " + candidate.Key
+		suggestions = append(suggestions, slash.Suggestion{
+			Label:         insertText,
+			InsertText:    insertText,
+			Description:   providerCandidateDescription(candidate),
+			Category:      commandcatalog.CommandCategoryModel,
+			ArgHint:       candidate.Key,
+			Detail:        "Switch provider to " + candidate.Label,
+			SubmitOnEnter: submitOnEnter,
+		})
+	}
+	return suggestions
+}
+
+func modelArgumentSuggestions(candidates []providerpicker.ModelCandidate, argPrefix string) []slash.Suggestion {
+	argPrefix = strings.ToLower(strings.TrimSpace(argPrefix))
+	submitOnEnter := argPrefix != ""
+	suggestions := make([]slash.Suggestion, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Custom || !strings.HasPrefix(strings.ToLower(candidate.Name), argPrefix) {
+			continue
+		}
+		insertText := "/model " + candidate.Name
+		suggestions = append(suggestions, slash.Suggestion{
+			Label:         insertText,
+			InsertText:    insertText,
+			Description:   modelCandidateDescription(candidate),
+			Category:      commandcatalog.CommandCategoryModel,
+			ArgHint:       candidate.Name,
+			Detail:        "Switch current provider model to " + candidate.Name,
+			SubmitOnEnter: submitOnEnter,
+		})
+	}
+	return suggestions
+}
+
+func providerCandidateDescription(candidate providerpicker.ProviderCandidate) string {
+	var parts []string
+	if candidate.Current {
+		parts = append(parts, "current")
+	}
+	if candidate.CredentialStatus != "" {
+		parts = append(parts, string(candidate.CredentialStatus))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func modelCandidateDescription(candidate providerpicker.ModelCandidate) string {
+	var parts []string
+	if candidate.Current {
+		parts = append(parts, "current")
+	}
+	if candidate.Default {
+		parts = append(parts, "default")
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (m Model) slashSuggestionWindowStart() int {

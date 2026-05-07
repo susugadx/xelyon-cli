@@ -19,18 +19,18 @@ func TestModel_WindowResizeRestoresFullLineFromRawContent(t *testing.T) {
 	})
 	m = updated.(Model)
 
-	if got := m.getVisualRowContents()[len(m.getVisualRowContents())-1]; got != "6789" {
-		t.Fatalf("narrow render last row = %q, want %q", got, "6789")
+	if got := m.getVisualRowContents()[len(m.getVisualRowContents())-1]; got != "9" {
+		t.Fatalf("narrow render last row = %q, want %q", got, "9")
 	}
 
 	updated, _ = m.Update(tea.WindowSizeMsg{Width: 12, Height: 8})
 	m = updated.(Model)
 
-	if got := m.rawLines[len(m.rawLines)-1]; got != "123456789" {
-		t.Fatalf("raw line = %q, want %q", got, "123456789")
+	if got := m.rawLines[len(m.rawLines)-1]; got != "│ 123456789" {
+		t.Fatalf("raw line = %q, want %q", got, "│ 123456789")
 	}
-	if got := m.getVisualRowContents()[len(m.getVisualRowContents())-1]; got != "123456789" {
-		t.Fatalf("wide render = %q, want %q", got, "123456789")
+	if got := m.getVisualRowContents()[len(m.getVisualRowContents())-1]; got != "│ 123456789" {
+		t.Fatalf("wide render = %q, want %q", got, "│ 123456789")
 	}
 }
 
