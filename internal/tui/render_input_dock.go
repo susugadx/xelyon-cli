@@ -12,19 +12,50 @@ const (
 	inputDockMetaPrefix  = "  + "
 )
 
+type inputDockRowGroupKind int
+
+const (
+	inputDockRowGroupSuggestions inputDockRowGroupKind = iota
+	inputDockRowGroupAttachments
+	inputDockRowGroupDrafts
+	inputDockRowGroupTopPadding
+	inputDockRowGroupInput
+	inputDockRowGroupBottomPadding
+)
+
+type inputDockRowGroup struct {
+	Kind  inputDockRowGroupKind
+	Lines []string
+}
+
 func joinChromeLines(lines []string) string {
 	return strings.Join(lines, "\n")
 }
 
 func (m *Model) renderInputDockLines() []string {
-	suggestionRows := m.renderSlashSuggestionRows()
-	attachmentRows := m.renderAttachmentSummaryRows()
-	composerRows := m.renderComposerDraftSummaryRows()
-	lines := make([]string, 0, len(suggestionRows)+len(attachmentRows)+len(composerRows)+inputHeight)
-	lines = append(lines, suggestionRows...)
-	lines = append(lines, attachmentRows...)
-	lines = append(lines, composerRows...)
-	lines = append(lines, m.padLineCache, m.renderInputLine(), m.padLineCache)
+	return flattenInputDockRowGroups(m.inputDockRowGroups())
+}
+
+func (m *Model) inputDockRowGroups() []inputDockRowGroup {
+	return []inputDockRowGroup{
+		{Kind: inputDockRowGroupSuggestions, Lines: m.renderSlashSuggestionRows()},
+		{Kind: inputDockRowGroupAttachments, Lines: m.renderAttachmentSummaryRows()},
+		{Kind: inputDockRowGroupDrafts, Lines: m.renderComposerDraftSummaryRows()},
+		{Kind: inputDockRowGroupTopPadding, Lines: []string{m.padLineCache}},
+		{Kind: inputDockRowGroupInput, Lines: []string{m.renderInputLine()}},
+		{Kind: inputDockRowGroupBottomPadding, Lines: []string{m.padLineCache}},
+	}
+}
+
+func flattenInputDockRowGroups(groups []inputDockRowGroup) []string {
+	lineCount := 0
+	for _, group := range groups {
+		lineCount += len(group.Lines)
+	}
+	lines := make([]string, 0, lineCount)
+	for _, group := range groups {
+		lines = append(lines, group.Lines...)
+	}
 	return lines
 }
 

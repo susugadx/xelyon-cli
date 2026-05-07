@@ -113,6 +113,22 @@ func newTUIProgramBridge(
 	}
 }
 
+func buildTUIToolResult(info tools.ToolResultInfo) tui.ToolResult {
+	summary := ui.FormatToolLine(ui.ToolDisplayInfo{
+		ToolName: info.ToolName,
+		Args:     info.Args,
+		Result:   info.Result,
+		Error:    info.Error,
+	})
+	return tui.ToolResult{
+		Name:      info.ToolName,
+		Summary:   summary,
+		Detail:    info.Result,
+		Collapsed: defaultToolCollapsed(info.ToolName, info.Result, info.Error),
+		Error:     info.Error,
+	}
+}
+
 func (b *tuiProgramBridge) start() {
 	if b == nil || b.adapter == nil {
 		return
@@ -134,20 +150,8 @@ func (b *tuiProgramBridge) start() {
 			if b.send == nil {
 				continue
 			}
-			summary := ui.FormatToolLine(ui.ToolDisplayInfo{
-				ToolName: info.ToolName,
-				Args:     info.Args,
-				Result:   info.Result,
-				Error:    info.Error,
-			})
 			b.send(tui.AppendToolResultMsg{
-				Tool: tui.ToolResult{
-					Name:      info.ToolName,
-					Summary:   summary,
-					Detail:    info.Result,
-					Collapsed: defaultToolCollapsed(info.ToolName, info.Result, info.Error),
-					Error:     info.Error,
-				},
+				Tool: buildTUIToolResult(info),
 			})
 		}
 	}()

@@ -16,19 +16,28 @@ func (m Model) renderSlashSuggestionRows() []string {
 	}
 	lines := make([]string, 0, len(rows))
 	for _, row := range rows {
-		lines = append(lines, m.renderSlashSuggestionRow(row.Suggestion, row.Selected))
+		lines = append(lines, m.renderSlashSuggestionRenderRow(row))
 	}
 	return lines
 }
 
 func (m Model) renderSlashSuggestionRow(suggestion slash.Suggestion, selected bool) string {
+	return m.renderSlashSuggestionRenderRow(newSlashSuggestionRenderRow(suggestion, selected))
+}
+
+type slashSuggestionRowLayout struct {
+	commandWidth     int
+	descriptionWidth int
+}
+
+func (m Model) renderSlashSuggestionRenderRow(row slashSuggestionRenderRow) string {
 	chrome := theme.Chrome
 	bg := chrome.SuggestionBg
 	prefix := "  "
 	prefixFg := chrome.SuggestionPrefixFg
 	commandFg := chrome.SuggestionCommandFg
 	descriptionFg := chrome.SuggestionDescFg
-	if selected {
+	if row.Selected {
 		bg = chrome.SuggestionSelectedBg
 		prefix = "› "
 		prefixFg = chrome.SuggestionSelectedFg
@@ -36,15 +45,22 @@ func (m Model) renderSlashSuggestionRow(suggestion slash.Suggestion, selected bo
 		descriptionFg = chrome.SuggestionSelectedDimFg
 	}
 
-	commandWidth := slashSuggestionCommandWidth(m.width)
-	descriptionWidth := max(0, m.width-commandWidth-4)
-	label := paddedPlainText(suggestion.Label, commandWidth)
-	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(suggestion.Description), descriptionWidth)
+	layout := slashSuggestionRowLayoutForWidth(m.width)
+	label := paddedPlainText(row.CommandLabel, layout.commandWidth)
+	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(row.Description), layout.descriptionWidth)
 	line := bg + prefixFg + prefix + commandFg + label + chrome.Reset + bg
-	if descriptionWidth > 0 {
+	if layout.descriptionWidth > 0 {
 		line += prefixFg + "  " + chrome.Reset + bg + descriptionFg + description + chrome.Reset + bg
 	}
 	return termtext.FillANSITextWidth(line+chrome.Reset, m.width, bg)
+}
+
+func slashSuggestionRowLayoutForWidth(width int) slashSuggestionRowLayout {
+	commandWidth := slashSuggestionCommandWidth(width)
+	return slashSuggestionRowLayout{
+		commandWidth:     commandWidth,
+		descriptionWidth: max(0, width-commandWidth-4),
+	}
 }
 
 func slashSuggestionCommandWidth(width int) int {

@@ -23,11 +23,22 @@ func NormalizeLines(lines []string) []string {
 
 // MessageLines は message role と content から transcript に積む行を生成する。
 func MessageLines(role string, content string) []string {
-	lines := strings.Split(content, "\n")
-	if role != "user" {
-		return lines
-	}
+	return messageRenderer(role)(content)
+}
 
+func messageRenderer(role string) func(string) []string {
+	if role == "user" {
+		return userMessageLines
+	}
+	return plainMessageLines
+}
+
+func plainMessageLines(content string) []string {
+	return strings.Split(content, "\n")
+}
+
+func userMessageLines(content string) []string {
+	lines := strings.Split(content, "\n")
 	rendered := make([]string, 0, len(lines)+2)
 	rendered = append(rendered, "")
 	for _, line := range lines {

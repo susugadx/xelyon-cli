@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
 func TestSlashSuggestions_ShowOnSlashAndRenderDescription(t *testing.T) {
@@ -29,6 +30,40 @@ func TestSlashSuggestions_ShowOnSlashAndRenderDescription(t *testing.T) {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("chromeCache missing %q:\n%s", fragment, rendered)
 		}
+	}
+}
+
+func TestSlashSuggestions_RenderRowsCarryDisplayModel(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.slashSuggestions = slashSuggestionState{
+		suggestions: []slash.Suggestion{
+			{Label: "/model", Description: "Select model"},
+			{Label: "/review", Description: "Review current changes and find issues"},
+		},
+		selected: 1,
+	}
+
+	rows := m.visibleSlashSuggestionRenderRows()
+	if len(rows) != 2 {
+		t.Fatalf("render rows = %d, want 2", len(rows))
+	}
+	if rows[0].CommandLabel != "/model" || rows[0].Description != "Select model" || rows[0].Selected {
+		t.Fatalf("first row = %#v, want non-selected /model", rows[0])
+	}
+	if rows[1].CommandLabel != "/review" || rows[1].Description != "Review current changes and find issues" || !rows[1].Selected {
+		t.Fatalf("second row = %#v, want selected /review", rows[1])
+	}
+}
+
+func TestSlashSuggestionRowLayoutForWidthPreservesCurrentWidths(t *testing.T) {
+	narrow := slashSuggestionRowLayoutForWidth(24)
+	if narrow.commandWidth != 20 || narrow.descriptionWidth != 0 {
+		t.Fatalf("narrow layout = %#v, want command=20 description=0", narrow)
+	}
+
+	wide := slashSuggestionRowLayoutForWidth(80)
+	if wide.commandWidth != 26 || wide.descriptionWidth != 50 {
+		t.Fatalf("wide layout = %#v, want command=26 description=50", wide)
 	}
 }
 

@@ -15,23 +15,61 @@ func (m *Model) buildStatusBarLine() string {
 	return m.composeStatusBarLine(statusText, hints)
 }
 
+type statusTextSegment struct {
+	text string
+}
+
+type statusBarLayoutRequest struct {
+	width      int
+	statusText string
+	hints      []string
+}
+
+type statusBarLineParts struct {
+	statusText string
+	workingDir string
+	hint       string
+}
+
 func (m *Model) buildStatusText(now time.Time) string {
+	return renderStatusTextSegments(m.statusTextSegments(now))
+}
+
+func (m *Model) statusTextSegments(now time.Time) []statusTextSegment {
 	chrome := theme.Chrome
 	statusLine := termtext.SanitizeSingleLineANSI(m.statusLine)
 
-	statusText := " " + chrome.StatusFg + statusLine + chrome.Reset
-	if m.navigationMode {
-		statusText = " " + chrome.NavBadge + " NAV " + chrome.Reset + chrome.StatusSepFg + " " + chrome.Reset + chrome.StatusFg + statusLine + chrome.Reset
-	} else if m.conversation.IsProcessing() {
-		statusText = " " + m.spinner.View() + chrome.StatusSepFg + " " + chrome.Reset + chrome.StatusFg + statusLine + chrome.Reset
-	}
+	segments := []statusTextSegment{{text: m.primaryStatusTextSegment(statusLine)}}
 	if m.newOutput && !m.vp.atBottom() {
-		statusText += chrome.StatusSepFg + "  " + chrome.Reset + chrome.NewOutput + " ↓ New output " + chrome.Reset
+		segments = append(segments, statusTextSegment{
+			text: chrome.StatusSepFg + "  " + chrome.Reset + chrome.NewOutput + " ↓ New output " + chrome.Reset,
+		})
 	}
 	if m.transientStatus != "" && now.Before(m.transientStatusUntil) {
-		statusText += chrome.StatusSepFg + "  " + chrome.Reset + chrome.SuccessFg + termtext.SanitizeSingleLineANSI(m.transientStatus) + chrome.Reset
+		segments = append(segments, statusTextSegment{
+			text: chrome.StatusSepFg + "  " + chrome.Reset + chrome.SuccessFg + termtext.SanitizeSingleLineANSI(m.transientStatus) + chrome.Reset,
+		})
 	}
-	return statusText
+	return segments
+}
+
+func (m *Model) primaryStatusTextSegment(statusLine string) string {
+	chrome := theme.Chrome
+	if m.navigationMode {
+		return " " + chrome.NavBadge + " NAV " + chrome.Reset + chrome.StatusSepFg + " " + chrome.Reset + chrome.StatusFg + statusLine + chrome.Reset
+	}
+	if m.conversation.IsProcessing() {
+		return " " + m.spinner.View() + chrome.StatusSepFg + " " + chrome.Reset + chrome.StatusFg + statusLine + chrome.Reset
+	}
+	return " " + chrome.StatusFg + statusLine + chrome.Reset
+}
+
+func renderStatusTextSegments(segments []statusTextSegment) string {
+	var b strings.Builder
+	for _, segment := range segments {
+		b.WriteString(segment.text)
+	}
+	return b.String()
 }
 
 func (m Model) activeStatusHints() []string {
@@ -54,19 +92,27 @@ func (m Model) activeStatusHints() []string {
 }
 
 func (m Model) composeStatusBarLine(statusText string, hints []string) string {
-	statusBar := statusText
-	for _, hint := range hints {
-		if line, ok := m.composeStatusBarWithWorkingDir(statusText, hint); ok {
+	return m.fitStatusBarLine(statusBarLayoutRequest{
+		width:      m.width,
+		statusText: statusText,
+		hints:      hints,
+	})
+}
+
+func (m Model) fitStatusBarLine(req statusBarLayoutRequest) string {
+	statusBar := req.statusText
+	for _, hint := range req.hints {
+		if line, ok := m.composeStatusBarWithWorkingDir(req.statusText, hint); ok {
 			return line
 		}
 	}
-	for _, hint := range hints {
-		if line, ok := m.composeStatusBarWithoutWorkingDir(statusText, hint); ok {
+	for _, hint := range req.hints {
+		if line, ok := m.composeStatusBarWithoutWorkingDir(req.statusText, hint); ok {
 			statusBar = line
 			break
 		}
 	}
-	return fitANSITextWidth(statusBar, m.width)
+	return fitANSITextWidth(statusBar, req.width)
 }
 
 func (m Model) composeStatusBarWithWorkingDir(statusText, hint string) (string, bool) {
@@ -75,21 +121,33 @@ func (m Model) composeStatusBarWithWorkingDir(statusText, hint string) (string, 
 	if workingDir == "" {
 		return "", false
 	}
-	chrome := theme.Chrome
-	statusWithPath := statusText + chrome.StatusSepFg + "  " + chrome.Reset + workingDir
-	padding := m.width - lipgloss.Width(statusWithPath) - lipgloss.Width(hint)
-	if padding < 2 {
-		return "", false
-	}
-	line := statusWithPath + strings.Repeat(" ", padding) + chrome.HintFg + hint + chrome.Reset
-	return fitANSITextWidth(line, m.width), true
+	return renderStatusBarLineParts(statusBarLineParts{
+		statusText: statusText,
+		workingDir: workingDir,
+		hint:       hint,
+	}, m.width)
 }
 
 func (m Model) composeStatusBarWithoutWorkingDir(statusText, hint string) (string, bool) {
-	padding := m.width - lipgloss.Width(statusText) - lipgloss.Width(hint)
+	return renderStatusBarLineParts(statusBarLineParts{
+		statusText: statusText,
+		hint:       hint,
+	}, m.width)
+}
+
+func renderStatusBarLineParts(parts statusBarLineParts, width int) (string, bool) {
+	chrome := theme.Chrome
+	statusWithPath := parts.statusText
+	if parts.workingDir != "" {
+		statusWithPath += chrome.StatusSepFg + "  " + chrome.Reset + parts.workingDir
+	}
+	padding := width - lipgloss.Width(statusWithPath) - lipgloss.Width(parts.hint)
 	if padding < 2 {
 		return "", false
 	}
-	chrome := theme.Chrome
-	return statusText + strings.Repeat(" ", padding) + chrome.HintFg + hint + chrome.Reset, true
+	line := statusWithPath + strings.Repeat(" ", padding) + chrome.HintFg + parts.hint + chrome.Reset
+	if parts.workingDir != "" {
+		line = fitANSITextWidth(line, width)
+	}
+	return line, true
 }

@@ -26,3 +26,16 @@ func TestLines(t *testing.T) {
 		}
 	}
 }
+
+func TestLines_CollapsedKeepsOnlySummary(t *testing.T) {
+	got := Lines("bash: echo ok", "ok\nextra", true, true)
+	want := []string{"→▶ bash: echo ok"}
+	if len(got) != len(want) {
+		t.Fatalf("Lines() len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Lines()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

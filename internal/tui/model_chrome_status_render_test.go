@@ -73,6 +73,32 @@ func TestModel_RenderStatusBar_ContainsHints(t *testing.T) {
 	}
 }
 
+func TestModel_BuildStatusTextPreservesProcessingAndTransientSegments(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready", processing: true}
+	m := newModelWithViewport(agent)
+	m.statusLine = "phase1\rphase2\nphase3\tok"
+	m.newOutput = true
+	m.transientStatus = "copy\nok\r!"
+	now := time.Now()
+	m.transientStatusUntil = now.Add(time.Minute)
+	m.vp = lightViewport{
+		lines:   []string{"one", "two", "three"},
+		yOffset: 0,
+		width:   m.width,
+		height:  1,
+	}
+
+	plain := stripANSI(m.buildStatusText(now))
+	for _, fragment := range []string{"phase1 phase2 phase3 ok", "New output", "copy ok !"} {
+		if !strings.Contains(plain, fragment) {
+			t.Fatalf("status text missing %q, got %q", fragment, plain)
+		}
+	}
+	if strings.ContainsAny(plain, "\r\n\t") {
+		t.Fatalf("status text should not contain control line-break chars, got %q", plain)
+	}
+}
+
 func TestModel_RenderStatusBar_ShowsWorkingDirWhenSpaceAllows(t *testing.T) {
 	t.Setenv("HOME", filepath.Join(string(filepath.Separator), "tmp", "xelyon-test-home"))
 

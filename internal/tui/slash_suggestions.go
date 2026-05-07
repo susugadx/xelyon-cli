@@ -18,8 +18,9 @@ type slashSuggestionState struct {
 }
 
 type slashSuggestionRenderRow struct {
-	Suggestion slash.Suggestion
-	Selected   bool
+	CommandLabel string
+	Description  string
+	Selected     bool
 }
 
 func (s slashSuggestionState) visible() bool {
@@ -129,12 +130,17 @@ func (m Model) visibleSlashSuggestionRenderRows() []slashSuggestionRenderRow {
 	start := m.slashSuggestionWindowStart()
 	out := make([]slashSuggestionRenderRow, 0, len(rows))
 	for i, suggestion := range rows {
-		out = append(out, slashSuggestionRenderRow{
-			Suggestion: suggestion,
-			Selected:   start+i == m.slashSuggestions.selected,
-		})
+		out = append(out, newSlashSuggestionRenderRow(suggestion, start+i == m.slashSuggestions.selected))
 	}
 	return out
+}
+
+func newSlashSuggestionRenderRow(suggestion slash.Suggestion, selected bool) slashSuggestionRenderRow {
+	return slashSuggestionRenderRow{
+		CommandLabel: suggestion.Label,
+		Description:  suggestion.Description,
+		Selected:     selected,
+	}
 }
 
 func (m Model) maxVisibleSlashSuggestionRows() int {

@@ -76,6 +76,65 @@ func TestModel_RenderInputDock_VisualRowsKeepOrderAndWidth(t *testing.T) {
 	}
 }
 
+func TestModel_InputDockRowGroupsKeepSourcesInOrder(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.width = 44
+	m.textInput.Width = max(0, m.width-inputPromptWidth-1)
+	m.padLineCache = fillANSITextWidth("", m.width, theme.Chrome.InputBg)
+	m.textInput.SetValue("ask")
+	m.appendAttachment(composerAttachment{
+		Kind: composerAttachmentFile,
+		Path: filepath.Join(string(filepath.Separator), "tmp", "notes.txt"),
+		Size: 12,
+	})
+	m.composer.AppendText("draft summary")
+	m.slashSuggestions = slashSuggestionState{
+		suggestions: []slash.Suggestion{{
+			Label:       "/review",
+			Description: "Review current changes and find issues",
+		}},
+		selected: 0,
+	}
+
+	groups := m.inputDockRowGroups()
+	wantKinds := []inputDockRowGroupKind{
+		inputDockRowGroupSuggestions,
+		inputDockRowGroupAttachments,
+		inputDockRowGroupDrafts,
+		inputDockRowGroupTopPadding,
+		inputDockRowGroupInput,
+		inputDockRowGroupBottomPadding,
+	}
+	if len(groups) != len(wantKinds) {
+		t.Fatalf("row groups = %d, want %d", len(groups), len(wantKinds))
+	}
+	for i, want := range wantKinds {
+		if groups[i].Kind != want {
+			t.Fatalf("row group %d kind = %d, want %d", i, groups[i].Kind, want)
+		}
+	}
+
+	flattened := flattenInputDockRowGroups(groups)
+	rendered := m.renderInputDockLines()
+	if len(flattened) != len(rendered) {
+		t.Fatalf("flattened lines = %d, render lines = %d", len(flattened), len(rendered))
+	}
+	for i := range rendered {
+		if flattened[i] != rendered[i] {
+			t.Fatalf("line %d = %q, want %q", i, flattened[i], rendered[i])
+		}
+	}
+	if !strings.Contains(stripANSI(groups[0].Lines[0]), "/review") {
+		t.Fatalf("suggestion group should render slash row, got %#v", groups[0].Lines)
+	}
+	if !strings.Contains(stripANSI(groups[1].Lines[0]), "[Attached file notes.txt] #1") {
+		t.Fatalf("attachment group should render attachment row, got %#v", groups[1].Lines)
+	}
+	if !strings.Contains(stripANSI(groups[2].Lines[0]), inputDockDraftPrefix+"draft summary") {
+		t.Fatalf("draft group should render draft row, got %#v", groups[2].Lines)
+	}
+}
+
 func TestHighlightSummaryNumber_UsesTrailingNumber(t *testing.T) {
 	got := highlightSummaryNumber("[Attached file has#hash.txt] #3", "<num>", "<text>")
 	if strings.Contains(got, "has<num>#hash") {
