@@ -6,9 +6,9 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ### `xelyon doctor kimi`
 
-Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。
+Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。web search smoke は call count、call fee estimate、cached input tokens、検索結果 token 観測値を text / JSON に出します。
 
-`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生します。
+`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生します。call fee は token cost とは別料金で、検索結果 tokens は次 request の `prompt_tokens` に含まれるため二重加算しません。
 
 ```bash
 xelyon doctor kimi
@@ -62,6 +62,7 @@ TUI では入力欄で `/` または `/r` のような prefix を入力すると
 現在状態、直近リクエスト、セッション統計をまとめて表示します。`/stats` は互換エイリアスです。
 表示には現在の command surface も含まれます。TUI では `TUI primary`、`--no-tui` では `classic legacy fallback` として表示し、classic 側では新しい対話型 UI コマンドを追加しない方針を明示します。
 サブエージェントを使ったセッションでは、親とサブのコストを分離表示し、`🤖 Sub-agents` セクションで各サブのトークン使用量・コスト・ツール実行回数も確認できます。
+Kimi `$web_search` を使った直近リクエストでは、token usage とは別に Web Search Calls、Web Search Fee、観測できた Search Result Tokens が表示されます。
 
 ```
 > /status
@@ -642,7 +643,7 @@ bash: git checkout -b feature-branch
 |---------|------|---------|
 | `search_code` | コード検索。`mode=auto` を既定に symbol-aware / literal / regex を language-aware に routing し、複数パターン・結果分類にも対応。対応言語では symbol-like query から定義・caller・参照・テストを自動解決 | `pattern`, `mode`, `path`, `file_filter` 等 |
 | `web_search` | ネイティブWeb検索（`web_search.provider` で Kimi / OpenAI / Gemini / Claude を選択可能） | `query` |
-**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
+**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。Kimi を検索プロバイダーにすると `$web_search` call fee が発生し、XELYON は token usage と別枠で観測します。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 
 ### 開発支援
 
@@ -711,6 +712,7 @@ XELYONはMCP（Model Context Protocol）に対応しており、`~/.xelyon/mcp.j
 ### Headlessモード
 
 対話なしでJSON形式で結果を出力します。他のツールやスクリプトから呼び出す際に便利です。
+Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に call count、fee estimate、検索結果 token 観測値を分けて出します。
 
 ```bash
 # JSON出力

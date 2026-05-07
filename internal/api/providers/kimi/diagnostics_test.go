@@ -205,7 +205,7 @@ func TestDiagnose_WebSearchSmokeBuildsBuiltinPayload(t *testing.T) {
 			writeKimiDiagnosticSSE(
 				t,
 				w,
-				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"{\"query\":\"doctor\"}"}}]}}]}`,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"{\"query\":\"doctor\",\"usage\":{\"total_tokens\":42}}"}}]}}]}`,
 				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"cached_tokens":1}}`,
 			)
 		case 2:
@@ -244,6 +244,14 @@ func TestDiagnose_WebSearchSmokeBuildsBuiltinPayload(t *testing.T) {
 	if !report.Smoke.UsageObserved || report.Smoke.CachedInputTokens != 3 {
 		t.Fatalf("Smoke usage = observed %t cached %d, want observed cached=3", report.Smoke.UsageObserved, report.Smoke.CachedInputTokens)
 	}
+	if report.Smoke.WebSearchCallCount != 1 || report.Smoke.WebSearchCallFeeEstimate != kimiWebSearchCallFeeUSD || !report.Smoke.WebSearchUsageObserved || report.Smoke.SearchResultTotalTokens != 42 {
+		t.Fatalf("Smoke web search observation = calls %d fee %f observed %t tokens %d, want one call fee and 42 tokens",
+			report.Smoke.WebSearchCallCount,
+			report.Smoke.WebSearchCallFeeEstimate,
+			report.Smoke.WebSearchUsageObserved,
+			report.Smoke.SearchResultTotalTokens,
+		)
+	}
 	if !hasKimiDiagnosticCheck(report, "web_search_smoke", DiagnosticStatusOK) {
 		t.Fatalf("missing web_search_smoke OK check: %#v", report.Checks)
 	}
@@ -281,7 +289,7 @@ func TestDiagnose_WebSearchSmokeBuildsBuiltinPayload(t *testing.T) {
 		t.Fatalf("second messages = %#v, want tool loop replay", captured[1]["messages"])
 	}
 	toolMessage, ok := secondMessages[3].(map[string]any)
-	if !ok || toolMessage["role"] != "tool" || toolMessage["name"] != "$web_search" || toolMessage["content"] != `{"query":"doctor"}` {
+	if !ok || toolMessage["role"] != "tool" || toolMessage["name"] != "$web_search" || toolMessage["content"] != `{"query":"doctor","usage":{"total_tokens":42}}` {
 		t.Fatalf("tool replay message = %#v, want exact Kimi web_search tool result", secondMessages[3])
 	}
 }
@@ -342,6 +350,155 @@ func TestDiagnose_ImageAndWebSearchSmokeDoesNotCompareCrossPayloadCacheKeys(t *t
 	webKey, _ := captured[1]["prompt_cache_key"].(string)
 	if imageKey == "" || webKey == "" || imageKey == webKey {
 		t.Fatalf("prompt_cache_key image=%q web=%q, want different non-empty keys", imageKey, webKey)
+	}
+}
+
+func TestDiagnose_WebSearchSmokeUsageObservedWithoutResultTokens(t *testing.T) {
+	var captured int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured++
+		switch captured {
+		case 1:
+			writeKimiDiagnosticSSE(
+				t,
+				w,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"{\"query\":\"doctor\"}"}}]}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"cached_tokens":1}}`,
+			)
+		case 2:
+			writeKimiDiagnosticSSE(
+				t,
+				w,
+				`{"choices":[{"delta":{"content":"web search ok"}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":4,"cached_tokens":2}}`,
+			)
+		default:
+			t.Fatalf("unexpected request count %d", captured)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv(kimiAPIKeyEnv, "moonshot-key")
+	t.Setenv(kimiAPIURLEnv, server.URL+"/v1/chat/completions")
+	t.Setenv("KIMI_FUNCTION_CALLING", "0")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		RunSmoke:       true,
+		WebSearchSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil {
+		t.Fatal("Smoke = nil, want result")
+	}
+	if !report.Smoke.WebSearchUsageObserved {
+		t.Fatalf("WebSearchUsageObserved = false, want true when call fee was observed: %#v", report.Smoke)
+	}
+	if report.Smoke.SearchResultTotalTokens != 0 {
+		t.Fatalf("SearchResultTotalTokens = %d, want 0 without result token field", report.Smoke.SearchResultTotalTokens)
+	}
+	if report.Smoke.WebSearchCallCount != 1 || report.Smoke.WebSearchCallFeeEstimate != kimiWebSearchCallFeeUSD {
+		t.Fatalf("web search observation = calls %d fee %f, want one call fee", report.Smoke.WebSearchCallCount, report.Smoke.WebSearchCallFeeEstimate)
+	}
+}
+
+func TestDiagnose_WebSearchSmokeFailsWhenToolCallIsNotObserved(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeKimiDiagnosticSSE(
+			t,
+			w,
+			`{"choices":[{"delta":{"content":"plain answer without tool call"}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"cached_tokens":1}}`,
+		)
+	}))
+	defer server.Close()
+
+	t.Setenv(kimiAPIKeyEnv, "moonshot-key")
+	t.Setenv(kimiAPIURLEnv, server.URL+"/v1/chat/completions")
+	t.Setenv("KIMI_FUNCTION_CALLING", "0")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		RunSmoke:       true,
+		WebSearchSmoke: true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want true when web search smoke did not trigger $web_search: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.WebSearchPayload {
+		t.Fatalf("Smoke = %#v, want web search payload smoke", report.Smoke)
+	}
+	if report.Smoke.WebSearchCallCount != 0 || report.Smoke.WebSearchUsageObserved {
+		t.Fatalf("web search observation = calls %d observed %t, want no observed tool call", report.Smoke.WebSearchCallCount, report.Smoke.WebSearchUsageObserved)
+	}
+	if !report.Smoke.UsageObserved {
+		t.Fatalf("UsageObserved = false, want endpoint token usage to remain observed: %#v", report.Smoke)
+	}
+	if !hasKimiDiagnosticCheck(report, "web_search_smoke", DiagnosticStatusFail) {
+		t.Fatalf("missing web_search_smoke failure: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_WebSearchSmokeFeeObservationDoesNotSatisfyEndpointUsage(t *testing.T) {
+	var captured int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured++
+		switch captured {
+		case 1:
+			writeKimiDiagnosticSSE(
+				t,
+				w,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"{\"query\":\"doctor\"}"}}]}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+			)
+		case 2:
+			writeKimiDiagnosticSSE(
+				t,
+				w,
+				`{"choices":[{"delta":{"content":"web search ok"}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+			)
+		default:
+			t.Fatalf("unexpected request count %d", captured)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv(kimiAPIKeyEnv, "moonshot-key")
+	t.Setenv(kimiAPIURLEnv, server.URL+"/v1/chat/completions")
+	t.Setenv("KIMI_FUNCTION_CALLING", "0")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		RunSmoke:       true,
+		WebSearchSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false when only endpoint usage is missing: %#v", report.Checks)
+	}
+	if report.Smoke == nil {
+		t.Fatal("Smoke = nil, want result")
+	}
+	if report.Smoke.UsageObserved {
+		t.Fatalf("UsageObserved = true, want false for synthetic web search fee-only callbacks: %#v", report.Smoke)
+	}
+	if !report.Smoke.WebSearchUsageObserved || report.Smoke.WebSearchCallCount != 1 || report.Smoke.WebSearchCallFeeEstimate != kimiWebSearchCallFeeUSD {
+		t.Fatalf("web search observation = calls %d fee %f observed %t, want one synthetic fee observation",
+			report.Smoke.WebSearchCallCount,
+			report.Smoke.WebSearchCallFeeEstimate,
+			report.Smoke.WebSearchUsageObserved,
+		)
+	}
+	if !hasKimiDiagnosticCheck(report, "usage", DiagnosticStatusWarn) {
+		t.Fatalf("missing usage warning for absent endpoint usage: %#v", report.Checks)
+	}
+	if !hasKimiDiagnosticCheck(report, "web_search_smoke", DiagnosticStatusOK) {
+		t.Fatalf("missing web_search_smoke OK for observed $web_search call: %#v", report.Checks)
 	}
 }
 

@@ -121,5 +121,14 @@ func renderKimiDoctorText(w io.Writer, report kimiprovider.DiagnosticReport) {
 			fmt.Fprintf(w, "Smoke content: %s\n", report.Smoke.Content)
 		}
 		fmt.Fprintf(w, "Cached input tokens observed: %d\n", report.Smoke.CachedInputTokens)
+		if report.Smoke.WebSearchPayload {
+			fmt.Fprintf(w, "Web search call count: %d\n", report.Smoke.WebSearchCallCount)
+			fmt.Fprintf(w, "Web search call fee estimate: $%.4f USD\n", report.Smoke.WebSearchCallFeeEstimate)
+			fmt.Fprintf(w, "Web search usage observed: %t\n", report.Smoke.WebSearchUsageObserved)
+			if report.Smoke.SearchResultTotalTokens > 0 {
+				fmt.Fprintf(w, "Search result total tokens observed: %d\n", report.Smoke.SearchResultTotalTokens)
+			}
+			fmt.Fprintln(w, "Note: Kimi $web_search call fee is separate from token cost; search result tokens are included in the next prompt_tokens response and are not added again.")
+		}
 	}
 }

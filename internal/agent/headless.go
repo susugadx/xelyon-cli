@@ -13,6 +13,7 @@ type HeadlessResult struct {
 	Response           string           `json:"response"`                      // AIの最終回答
 	ToolCalls          []ToolCallResult `json:"tool_calls,omitempty"`          // 実行されたツール呼び出し
 	Tokens             *TokenUsage      `json:"tokens,omitempty"`              // トークン使用量
+	WebSearch          *WebSearchUsage  `json:"web_search,omitempty"`          // ネイティブ Web 検索の固定料金観測
 	DurationMs         int64            `json:"duration_ms"`                   // 実行時間（ミリ秒）
 	Timestamp          string           `json:"timestamp"`                     // タイムスタンプ（RFC3339）
 	Error              *ErrorInfo       `json:"error,omitempty"`               // エラー情報
@@ -35,6 +36,13 @@ type TokenUsage struct {
 	Output   int `json:"output"`   // 出力トークン数
 	Thinking int `json:"thinking"` // Thinking トークン数
 	Total    int `json:"total"`    // 合計トークン数
+}
+
+// WebSearchUsage はネイティブ Web 検索の call fee と検索結果 token 観測を表す。
+type WebSearchUsage struct {
+	Calls        int     `json:"calls"`                   // built-in web search 呼び出し回数
+	FeeEstimate  float64 `json:"fee_estimate"`            // 推定 call fee（USD）
+	ResultTokens int     `json:"result_tokens,omitempty"` // provider が返した検索結果 token 観測値
 }
 
 // ErrorInfo はエラー情報

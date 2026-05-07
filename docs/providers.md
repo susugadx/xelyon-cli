@@ -76,7 +76,7 @@ xelyon --provider moonshot --model kimi-k2.5
 
 `kimi-k2-thinking` は明示指定された場合のみ 256K context / 最大 32K output の legacy/compat thinking model として扱います。新規利用では thinking on/off が可能な `kimi-k2.6` を推奨します。
 
-Kimi built-in `$web_search` は通常 function tools とは別の `web_search` 専用 route で使います。request には `tools[].type = "builtin_function"` / `function.name = "$web_search"` を入れ、検索 turn では `thinking: {"type":"disabled"}` を送信します。`tool_choice` は送らず、モデルの自動選択に任せます。Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金し、検索結果トークンも次 request の入力 tokens に含まれます。XELYON の usage/cost 集計は API が返す token usage と `cached_tokens` だけを扱い、検索 call fee は別料金として扱います。
+Kimi built-in `$web_search` は通常 function tools とは別の `web_search` 専用 route で使います。request には `tools[].type = "builtin_function"` / `function.name = "$web_search"` を入れ、検索 turn では `thinking: {"type":"disabled"}` を送信します。`tool_choice` は送らず、モデルの自動選択に任せます。Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金し、検索結果トークンも次 request の入力 tokens に含まれます。XELYON は API が返す token usage / `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。検索結果 tokens は `tool_call.function.arguments` から best-effort で表示用に読むだけで、`InputTokens` へ二重加算しません。
 
 Memory / code runner、video 入力、file upload / `ms://` 参照は現在の native provider では未対応です。URL 画像は Kimi 公式仕様でも未対応のため、XELYON はローカル画像ファイルを base64 data URL として送ります。
 
@@ -92,7 +92,7 @@ xelyon doctor kimi --web-search-smoke
 xelyon doctor kimi --json
 ```
 
-live smoke は `MOONSHOT_API_KEY` が必要で、通常 CI では実行しません。手元では以下で実行できます。prompt cache の `cached_tokens` は API が返す場合だけ観測されるため、0 でも smoke は成功扱いです。`kimi-web-search-smoke` は実検索 call fee が発生します。
+live smoke は `MOONSHOT_API_KEY` が必要で、通常 CI では実行しません。手元では以下で実行できます。prompt cache の `cached_tokens` は API が返す場合だけ観測されるため、0 でも smoke は成功扱いです。`kimi-web-search-smoke` は実検索 call fee が発生し、`web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`search_result_total_tokens`（観測できた場合）を表示します。
 
 ```bash
 export MOONSHOT_API_KEY=sk-...
@@ -538,7 +538,7 @@ xelyon
 
 ## 料金表示
 
-`/status`、ステータスバー、headless JSON の `cost` は `internal/cost/pricing.yaml` と組み込みの既知ルールに基づく推定値です。価格表にない provider/model は別モデルの料金で代用せず、UI では `N/A (pricing unavailable)`、ステータスバーでは `cost N/A` と表示します。headless JSON では `pricing_unavailable: true` を返します。
+`/status`、ステータスバー、headless JSON の `cost` は `internal/cost/pricing.yaml` と組み込みの既知ルールに基づく推定値です。価格表にない provider/model は別モデルの料金で代用せず、UI では `N/A (pricing unavailable)`、ステータスバーでは `cost N/A` と表示します。headless JSON では `pricing_unavailable: true` を返します。Kimi `$web_search` の call fee など token 料金とは別枠の固定費は `cost` に含めますが、検索結果 tokens は token totals に再加算しません。headless JSON では Kimi web search の観測値を `web_search` object にも分けて出します。
 
 カスタム deployment 名や社内 alias を使う場合は、`provider_models.<provider>.catalog_model` または `model_overrides.<model>.catalog_model` に provider の pricing family で解決できる既知モデル名を指定すると、そのモデルの token limit / pricing / context 判定を使えます。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 

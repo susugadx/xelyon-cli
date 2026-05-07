@@ -100,6 +100,38 @@ func TestSessionStats_AddUsage(t *testing.T) {
 	}
 }
 
+func TestSessionStats_AddUsage_WebSearchObservation(t *testing.T) {
+	stats := NewSessionStats("kimi", "kimi-k2.6")
+
+	stats.AddUsage(api.Usage{
+		StorageCost:           0.005,
+		WebSearchCalls:        1,
+		WebSearchResultTokens: 1234,
+	})
+
+	if stats.InputTokens != 0 || stats.OutputTokens != 0 {
+		t.Fatalf("token totals = input %d output %d, want no web search token double count", stats.InputTokens, stats.OutputTokens)
+	}
+	if stats.WebSearchCalls != 1 {
+		t.Fatalf("WebSearchCalls = %d, want 1", stats.WebSearchCalls)
+	}
+	if stats.WebSearchResultTokens != 1234 {
+		t.Fatalf("WebSearchResultTokens = %d, want 1234", stats.WebSearchResultTokens)
+	}
+	if stats.WebSearchCost != 0.005 {
+		t.Fatalf("WebSearchCost = %f, want 0.005", stats.WebSearchCost)
+	}
+	if stats.AccumulatedCost != 0.005 {
+		t.Fatalf("AccumulatedCost = %f, want web search fee 0.005", stats.AccumulatedCost)
+	}
+	if stats.CostUnknown {
+		t.Fatal("CostUnknown = true, want false for fee-only web search observation")
+	}
+	if stats.LastUsage == nil || stats.LastUsage.WebSearchCalls != 1 {
+		t.Fatalf("LastUsage = %+v, want web search usage", stats.LastUsage)
+	}
+}
+
 func TestSessionStats_TotalTokens(t *testing.T) {
 	stats := NewSessionStats("test")
 	stats.AddTokens(100, 200)

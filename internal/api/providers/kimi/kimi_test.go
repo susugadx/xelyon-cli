@@ -395,7 +395,7 @@ func TestChatWithTools_DoesNotIncludeBuiltinWebSearch(t *testing.T) {
 
 func TestWebSearchWithContext_BuiltinToolLoopPayloadAndUsage(t *testing.T) {
 	t.Setenv(kimiAPIKeyEnv, "test-key")
-	const toolArguments = `{"query":"Moonshot AI","tokens":4}`
+	const toolArguments = `{"query":"Moonshot AI","usage":{"total_tokens":4}}`
 
 	var captured []map[string]any
 	server := mockKimiAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -411,7 +411,7 @@ func TestWebSearchWithContext_BuiltinToolLoopPayloadAndUsage(t *testing.T) {
 		switch len(captured) {
 		case 1:
 			kimiStreamingHandler([]string{
-				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"{\"query\":\"Moonshot AI\",\"tokens\":4}"}}]}}]}`,
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"{\"query\":\"Moonshot AI\",\"usage\":{\"total_tokens\":4}}"}}]}}]}`,
 				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":11,"completion_tokens":2,"cached_tokens":3}}`,
 			})(w, r)
 		case 2:
@@ -458,15 +458,92 @@ func TestWebSearchWithContext_BuiltinToolLoopPayloadAndUsage(t *testing.T) {
 	if _, ok := captured[0]["max_tokens"]; ok {
 		t.Fatal("max_tokens should be omitted")
 	}
-	if len(usages) != 2 {
-		t.Fatalf("usage callback count = %d, want 2", len(usages))
+	if len(usages) != 3 {
+		t.Fatalf("usage callback count = %d, want 3", len(usages))
 	}
 	if usages[0].InputTokens != 11 || usages[0].OutputTokens != 2 || usages[0].CachedInputTokens != 3 {
 		t.Fatalf("first usage = %+v, want input=11 output=2 cached=3", usages[0])
 	}
-	if usages[1].InputTokens != 21 || usages[1].OutputTokens != 6 || usages[1].CachedInputTokens != 5 {
-		t.Fatalf("second usage = %+v, want input=21 output=6 cached=5", usages[1])
+	if usages[1].WebSearchCalls != 1 || usages[1].WebSearchResultTokens != 4 || usages[1].StorageCost != kimiWebSearchCallFeeUSD {
+		t.Fatalf("web search usage = %+v, want one call, 4 observed result tokens, fee %.4f", usages[1], kimiWebSearchCallFeeUSD)
 	}
+	if usages[1].InputTokens != 0 || usages[1].OutputTokens != 0 {
+		t.Fatalf("web search usage tokens = input %d output %d, want no token double count", usages[1].InputTokens, usages[1].OutputTokens)
+	}
+	if usages[2].InputTokens != 21 || usages[2].OutputTokens != 6 || usages[2].CachedInputTokens != 5 {
+		t.Fatalf("second token usage = %+v, want input=21 output=6 cached=5", usages[2])
+	}
+}
+
+func TestKimiWebSearchToolCallUsage_ParsesResultTokenObservations(t *testing.T) {
+	usage := kimiWebSearchToolCallUsage([]api.OpenAIToolCall{
+		{Function: api.OpenAIToolCallFunction{Name: kimiWebSearchToolName, Arguments: `{"usage":{"total_tokens":12}}`}},
+		{Function: api.OpenAIToolCallFunction{Name: kimiWebSearchToolName, Arguments: `{"total_tokens":7}`}},
+		{Function: api.OpenAIToolCallFunction{Name: kimiWebSearchToolName, Arguments: `not-json`}},
+		{Function: api.OpenAIToolCallFunction{Name: "other", Arguments: `{"total_tokens":99}`}},
+	})
+
+	if usage == nil {
+		t.Fatal("kimiWebSearchToolCallUsage() = nil, want usage")
+	}
+	if usage.WebSearchCalls != 3 {
+		t.Fatalf("WebSearchCalls = %d, want 3", usage.WebSearchCalls)
+	}
+	if usage.WebSearchResultTokens != 19 {
+		t.Fatalf("WebSearchResultTokens = %d, want 19", usage.WebSearchResultTokens)
+	}
+	if usage.StorageCost != 3*kimiWebSearchCallFeeUSD {
+		t.Fatalf("StorageCost = %f, want %f", usage.StorageCost, 3*kimiWebSearchCallFeeUSD)
+	}
+	if usage.InputTokens != 0 || usage.OutputTokens != 0 {
+		t.Fatalf("token usage = input %d output %d, want no token double count", usage.InputTokens, usage.OutputTokens)
+	}
+}
+
+func TestWebSearchWithContext_InvalidToolArgumentsStillReplayAndReportCallFee(t *testing.T) {
+	t.Setenv(kimiAPIKeyEnv, "test-key")
+	var captured []map[string]any
+	server := mockKimiAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		captured = append(captured, body)
+		switch len(captured) {
+		case 1:
+			kimiStreamingHandler([]string{
+				`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_web","type":"builtin_function","function":{"name":"$web_search","arguments":"not-json"}}]}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+			})(w, r)
+		case 2:
+			kimiStreamingHandler([]string{
+				`{"choices":[{"delta":{"content":"ok after invalid arguments replay"}}]}`,
+				`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+			})(w, r)
+		default:
+			t.Fatalf("unexpected request count %d", len(captured))
+		}
+	})
+	t.Setenv(kimiAPIURLEnv, server.URL)
+
+	ctx, _, _ := newKimiTestContext(t, false)
+	ctx = websearch.WithUsageCallback(ctx, func(usage api.Usage) {
+		if usage.WebSearchCalls != 1 || usage.StorageCost != kimiWebSearchCallFeeUSD {
+			t.Fatalf("web search usage = %+v, want one fee observation", usage)
+		}
+	})
+
+	got, err := WebSearchWithContext(ctx, "invalid arguments", "kimi-k2.6")
+	if err != nil {
+		t.Fatalf("WebSearchWithContext() error = %v", err)
+	}
+	if got != "ok after invalid arguments replay" {
+		t.Fatalf("WebSearchWithContext() = %q, want final content", got)
+	}
+	if len(captured) != 2 {
+		t.Fatalf("captured request count = %d, want 2", len(captured))
+	}
+	assertKimiWebSearchLoopMessages(t, captured[1]["messages"], "not-json")
 }
 
 func TestWebSearchWithContext_MoonshotAliasUsesAliasDefaultModel(t *testing.T) {
@@ -565,6 +642,12 @@ func TestWebSearchWithContext_ErrorsAfterMaxToolLoops(t *testing.T) {
 	t.Setenv(kimiAPIURLEnv, server.URL)
 
 	ctx, _, _ := newKimiTestContext(t, false)
+	var webSearchCalls int
+	var fee float64
+	ctx = websearch.WithUsageCallback(ctx, func(usage api.Usage) {
+		webSearchCalls += usage.WebSearchCalls
+		fee += usage.StorageCost
+	})
 	_, err := WebSearchWithContext(ctx, "loop", "kimi-k2.6")
 	if err == nil {
 		t.Fatal("WebSearchWithContext() error = nil, want max loop error")
@@ -574,6 +657,12 @@ func TestWebSearchWithContext_ErrorsAfterMaxToolLoops(t *testing.T) {
 	}
 	if requests != kimiWebSearchMaxRequests {
 		t.Fatalf("requests = %d, want %d", requests, kimiWebSearchMaxRequests)
+	}
+	if webSearchCalls != kimiWebSearchMaxRequests {
+		t.Fatalf("webSearchCalls = %d, want %d charged tool call observations", webSearchCalls, kimiWebSearchMaxRequests)
+	}
+	if fee != float64(kimiWebSearchMaxRequests)*kimiWebSearchCallFeeUSD {
+		t.Fatalf("fee = %f, want %f", fee, float64(kimiWebSearchMaxRequests)*kimiWebSearchCallFeeUSD)
 	}
 }
 

@@ -80,27 +80,30 @@ type ToolObservability struct {
 
 // SessionStats はセッション統計情報
 type SessionStats struct {
-	StartTime           time.Time
-	UserMessages        int
-	AssistantMessages   int
-	ToolExecutions      map[string]int // ツール名 -> 実行回数
-	InputTokens         int
-	OutputTokens        int
-	ThinkingTokens      int        // Extended Thinking トークン数（累計、出力レート課金）
-	CachedInputTokens   int        // キャッシュヒットトークン数（累計）
-	CacheCreationTokens int        // キャッシュ作成トークン数（累計、Claude用）
-	Provider            string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
-	Model               string     // 現在のモデル名（料金計算に使用）
-	LastUsage           *api.Usage // 直近のリクエストの使用量
-	LastTurnUsage       *api.Usage // 直近のユーザーリクエスト全体の使用量
-	LastTurnCost        float64    // 直近のユーザーリクエスト全体の正確なコスト
-	LastTurnCostUnknown bool       // 直近ターンに既知の料金表がない provider/model が含まれる
-	AccumulatedCost     float64    // リクエスト単位で計算・累積したコスト
-	CostUnknown         bool       // セッション累積に既知の料金表がない provider/model が含まれる
-	CostUnknownEvents   int        // 料金不明のリクエスト累計数
-	Optimizations       OptimizationMetrics
-	ToolObs             ToolObservability // ツール実行・compaction の観測メトリクス
-	Savings             SavingsMetrics    // コスト最適化による推定削減量
+	StartTime             time.Time
+	UserMessages          int
+	AssistantMessages     int
+	ToolExecutions        map[string]int // ツール名 -> 実行回数
+	InputTokens           int
+	OutputTokens          int
+	ThinkingTokens        int        // Extended Thinking トークン数（累計、出力レート課金）
+	CachedInputTokens     int        // キャッシュヒットトークン数（累計）
+	CacheCreationTokens   int        // キャッシュ作成トークン数（累計、Claude用）
+	WebSearchCalls        int        // built-in web search 呼び出し回数（累計）
+	WebSearchResultTokens int        // provider が返した検索結果 token 観測値（累計、入力 tokens には再加算しない）
+	WebSearchCost         float64    // built-in web search 固定料金（USD、累計）
+	Provider              string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
+	Model                 string     // 現在のモデル名（料金計算に使用）
+	LastUsage             *api.Usage // 直近のリクエストの使用量
+	LastTurnUsage         *api.Usage // 直近のユーザーリクエスト全体の使用量
+	LastTurnCost          float64    // 直近のユーザーリクエスト全体の正確なコスト
+	LastTurnCostUnknown   bool       // 直近ターンに既知の料金表がない provider/model が含まれる
+	AccumulatedCost       float64    // リクエスト単位で計算・累積したコスト
+	CostUnknown           bool       // セッション累積に既知の料金表がない provider/model が含まれる
+	CostUnknownEvents     int        // 料金不明のリクエスト累計数
+	Optimizations         OptimizationMetrics
+	ToolObs               ToolObservability // ツール実行・compaction の観測メトリクス
+	Savings               SavingsMetrics    // コスト最適化による推定削減量
 }
 
 // NewSessionStats は新しいSessionStatsを作成
@@ -147,15 +150,37 @@ func (s *SessionStats) AddUsageForProviderConfig(cfg *config.Config, provider, m
 	s.ThinkingTokens += usage.ThinkingTokens
 	s.CachedInputTokens += usage.CachedInputTokens
 	s.CacheCreationTokens += usage.CacheCreationTokens
+	s.WebSearchCalls += usage.WebSearchCalls
+	s.WebSearchResultTokens += usage.WebSearchResultTokens
+	if usage.WebSearchCalls > 0 {
+		s.WebSearchCost += usage.StorageCost
+	}
 	s.LastUsage = &usage
 
 	// リクエスト単位のコストを累積（Gemini 200Kティア等に対応）
 	estimate := cost.EstimateRequestCostWithCacheForConfig(cfg, provider, model, usage)
 	s.AccumulatedCost += estimate.Cost
-	s.AccumulatedCost += usage.StorageCost // ストレージ料金を加算
+	s.AccumulatedCost += usage.StorageCost // トークン料金とは別枠の固定料金を加算
 	if estimate.PricingUnavailable {
 		s.CostUnknown = true
 		s.CostUnknownEvents++
+	}
+}
+
+// UsageDeltaSince は指定時点から現在までの request usage 相当の差分を返す。
+func (s *SessionStats) UsageDeltaSince(start SessionStats) api.Usage {
+	if s == nil {
+		return api.Usage{}
+	}
+	return api.Usage{
+		InputTokens:           s.InputTokens - start.InputTokens,
+		OutputTokens:          s.OutputTokens - start.OutputTokens,
+		ThinkingTokens:        s.ThinkingTokens - start.ThinkingTokens,
+		CachedInputTokens:     s.CachedInputTokens - start.CachedInputTokens,
+		CacheCreationTokens:   s.CacheCreationTokens - start.CacheCreationTokens,
+		StorageCost:           s.WebSearchCost - start.WebSearchCost,
+		WebSearchCalls:        s.WebSearchCalls - start.WebSearchCalls,
+		WebSearchResultTokens: s.WebSearchResultTokens - start.WebSearchResultTokens,
 	}
 }
 
@@ -165,6 +190,9 @@ func (s *SessionStats) ResetUsageForProvider(provider, model string) {
 	s.InputTokens = 0
 	s.CachedInputTokens = 0
 	s.CacheCreationTokens = 0
+	s.WebSearchCalls = 0
+	s.WebSearchResultTokens = 0
+	s.WebSearchCost = 0
 	s.OutputTokens = 0
 	s.ThinkingTokens = 0
 	s.ToolExecutions = make(map[string]int)

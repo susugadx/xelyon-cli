@@ -2,6 +2,7 @@ package kimi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ const (
 	kimiWebSearchToolName     = "$web_search"
 	kimiWebSearchMaxRequests  = 3
 	kimiWebSearchSystemPrompt = "You are Kimi. Use the built-in web search tool to answer with concise findings and source URLs when available."
+	kimiWebSearchCallFeeUSD   = 0.005
 )
 
 type kimiWebSearchRequest struct {
@@ -53,6 +55,11 @@ type kimiWebSearchStreamResult struct {
 	FinishReason string
 	ToolCalls    []api.OpenAIToolCall
 	Usage        *api.Usage
+}
+
+type kimiWebSearchToolObservation struct {
+	Calls        int
+	ResultTokens int
 }
 
 type kimiWebSearchToolCallCollector struct {
@@ -113,11 +120,12 @@ func (p *Provider) webSearch(ctx context.Context, query, model, providerConfigKe
 
 		switch result.FinishReason {
 		case "tool_calls":
-			if requestNumber == kimiWebSearchMaxRequests {
-				return "", fmt.Errorf("kimi %s did not complete within %d requests", kimiWebSearchToolName, kimiWebSearchMaxRequests)
-			}
 			if len(result.ToolCalls) == 0 {
 				return "", fmt.Errorf("kimi %s response finished with tool_calls but returned no tool calls", kimiWebSearchToolName)
+			}
+			p.emitKimiWebSearchToolUsage(result.ToolCalls)
+			if requestNumber == kimiWebSearchMaxRequests {
+				return "", fmt.Errorf("kimi %s did not complete within %d requests", kimiWebSearchToolName, kimiWebSearchMaxRequests)
 			}
 			nextMessages, err := appendKimiWebSearchToolLoopMessages(messages, result)
 			if err != nil {
@@ -216,6 +224,71 @@ func appendKimiWebSearchToolLoopMessages(messages []kimiWebSearchMessage, result
 	}
 
 	return next, nil
+}
+
+func (p *Provider) emitKimiWebSearchToolUsage(toolCalls []api.OpenAIToolCall) {
+	if p == nil || p.usageCallback == nil {
+		return
+	}
+	if usage := kimiWebSearchToolCallUsage(toolCalls); usage != nil {
+		p.usageCallback(*usage)
+	}
+}
+
+func kimiWebSearchToolCallUsage(toolCalls []api.OpenAIToolCall) *api.Usage {
+	observation := observeKimiWebSearchToolCalls(toolCalls)
+	if observation.Calls <= 0 {
+		return nil
+	}
+	return &api.Usage{
+		StorageCost:           float64(observation.Calls) * kimiWebSearchCallFeeUSD,
+		WebSearchCalls:        observation.Calls,
+		WebSearchResultTokens: observation.ResultTokens,
+	}
+}
+
+func observeKimiWebSearchToolCalls(toolCalls []api.OpenAIToolCall) kimiWebSearchToolObservation {
+	var observation kimiWebSearchToolObservation
+	for _, toolCall := range toolCalls {
+		if toolCall.Function.Name != kimiWebSearchToolName {
+			continue
+		}
+		observation.Calls++
+		if tokens, ok := parseKimiWebSearchResultTokens(toolCall.Function.Arguments); ok {
+			observation.ResultTokens += tokens
+		}
+	}
+	return observation
+}
+
+func parseKimiWebSearchResultTokens(arguments string) (int, bool) {
+	arguments = strings.TrimSpace(arguments)
+	if arguments == "" {
+		return 0, false
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(arguments), &payload); err != nil {
+		return 0, false
+	}
+	if tokens, ok := kimiJSONInt(payload["total_tokens"]); ok {
+		return tokens, true
+	}
+	if usage, ok := payload["usage"].(map[string]any); ok {
+		return kimiJSONInt(usage["total_tokens"])
+	}
+	return 0, false
+}
+
+func kimiJSONInt(value any) (int, bool) {
+	switch v := value.(type) {
+	case float64:
+		return int(v), v >= 0
+	case int:
+		return v, v >= 0
+	default:
+		return 0, false
+	}
 }
 
 func (p *Provider) executeWebSearchRequest(ctx context.Context, body kimiWebSearchRequest) (kimiWebSearchStreamResult, error) {

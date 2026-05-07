@@ -34,9 +34,11 @@ Kimi `$web_search` request は Chat Completions streaming payload のまま送�
 
 ## Usage / Cost
 
-Kimi stream usage が返った場合だけ `api.UsageCallback` に流す。`cached_tokens` は `api.Usage.CachedInputTokens` に乗せる。
+Kimi stream usage が返った場合だけ token usage として `api.UsageCallback` に流す。`cached_tokens` は `api.Usage.CachedInputTokens` に乗せる。
 
-Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金する。XELYON の cost 集計は token usage / cached tokens だけを対象にし、検索 call fee は docs と smoke output の注意書きで扱う。
+Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金する。`finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合、XELYON は call count を数え、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を `api.Usage.StorageCost` に載せる。これは token usage とは別の callback として発火し、`api.Usage.WebSearchCalls` と `api.Usage.WebSearchResultTokens` に観測値を載せる。
+
+`tool_call.function.arguments` は replay 用にそのまま保持する。別途 best-effort で JSON parse し、`usage.total_tokens` または top-level `total_tokens` があれば検索結果 token 観測値として記録する。parse 失敗は tool loop の成否に影響させない。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、`InputTokens` へは二重加算しない。
 
 ## Diagnostics
 
@@ -46,6 +48,8 @@ Moonshot は `$web_search` call fee と Chat Completions token 使用量を別�
 - thinking disabled が送られること
 - `prompt_cache_key` があること
 - 最終回答が空でないこと
-- usage が返った場合は観測されること
+- usage が返った場合は token/cached usage が観測されること
+- `$web_search` call count と call fee estimate が観測されること
+- `tool_call.function.arguments` に検索結果 token 使用量が含まれる場合、表示用に観測されること
 
 usage が返らない endpoint でも smoke は warn に留める。`MOONSHOT_API_KEY` がない場合、`make kimi-web-search-smoke` は実行前に失敗する。

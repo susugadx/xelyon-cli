@@ -43,36 +43,47 @@ type DiagnosticCheck struct {
 
 // DiagnosticUsageObservation は smoke request で観測した usage を表す。
 type DiagnosticUsageObservation struct {
-	InputTokens       int `json:"input_tokens,omitempty"`
-	OutputTokens      int `json:"output_tokens,omitempty"`
-	ThinkingTokens    int `json:"thinking_tokens,omitempty"`
-	CachedInputTokens int `json:"cached_input_tokens,omitempty"`
+	InputTokens              int     `json:"input_tokens,omitempty"`
+	OutputTokens             int     `json:"output_tokens,omitempty"`
+	ThinkingTokens           int     `json:"thinking_tokens,omitempty"`
+	CachedInputTokens        int     `json:"cached_input_tokens,omitempty"`
+	WebSearchCallCount       int     `json:"web_search_call_count,omitempty"`
+	WebSearchCallFeeEstimate float64 `json:"web_search_call_fee_estimate,omitempty"`
+	SearchResultTotalTokens  int     `json:"search_result_total_tokens,omitempty"`
 }
 
 // DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
 type DiagnosticSmokeRequestResult struct {
-	Name                  string                     `json:"name"`
-	Content               string                     `json:"content,omitempty"`
-	Duration              string                     `json:"duration,omitempty"`
-	UsageObserved         bool                       `json:"usage_observed"`
-	Usage                 DiagnosticUsageObservation `json:"usage,omitempty"`
-	PromptCacheKeyPresent bool                       `json:"prompt_cache_key_present"`
-	PromptCacheKey        string                     `json:"prompt_cache_key,omitempty"`
-	ImagePayload          bool                       `json:"image_payload,omitempty"`
-	WebSearchPayload      bool                       `json:"web_search_payload,omitempty"`
+	Name                     string                     `json:"name"`
+	Content                  string                     `json:"content,omitempty"`
+	Duration                 string                     `json:"duration,omitempty"`
+	UsageObserved            bool                       `json:"usage_observed"`
+	Usage                    DiagnosticUsageObservation `json:"usage,omitempty"`
+	PromptCacheKeyPresent    bool                       `json:"prompt_cache_key_present"`
+	PromptCacheKey           string                     `json:"prompt_cache_key,omitempty"`
+	ImagePayload             bool                       `json:"image_payload,omitempty"`
+	WebSearchPayload         bool                       `json:"web_search_payload,omitempty"`
+	WebSearchCallCount       int                        `json:"web_search_call_count,omitempty"`
+	WebSearchCallFeeEstimate float64                    `json:"web_search_call_fee_estimate,omitempty"`
+	WebSearchUsageObserved   bool                       `json:"web_search_usage_observed,omitempty"`
+	SearchResultTotalTokens  int                        `json:"search_result_total_tokens,omitempty"`
 }
 
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
 type DiagnosticSmokeResult struct {
-	Ran               bool                           `json:"ran"`
-	ToolPayload       bool                           `json:"tool_payload"`
-	ImagePayload      bool                           `json:"image_payload"`
-	WebSearchPayload  bool                           `json:"web_search_payload"`
-	Content           string                         `json:"content,omitempty"`
-	Duration          string                         `json:"duration,omitempty"`
-	UsageObserved     bool                           `json:"usage_observed"`
-	CachedInputTokens int                            `json:"cached_input_tokens"`
-	Requests          []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
+	Ran                      bool                           `json:"ran"`
+	ToolPayload              bool                           `json:"tool_payload"`
+	ImagePayload             bool                           `json:"image_payload"`
+	WebSearchPayload         bool                           `json:"web_search_payload"`
+	Content                  string                         `json:"content,omitempty"`
+	Duration                 string                         `json:"duration,omitempty"`
+	UsageObserved            bool                           `json:"usage_observed"`
+	CachedInputTokens        int                            `json:"cached_input_tokens"`
+	WebSearchCallCount       int                            `json:"web_search_call_count,omitempty"`
+	WebSearchCallFeeEstimate float64                        `json:"web_search_call_fee_estimate,omitempty"`
+	WebSearchUsageObserved   bool                           `json:"web_search_usage_observed"`
+	SearchResultTotalTokens  int                            `json:"search_result_total_tokens,omitempty"`
+	Requests                 []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
 }
 
 // DiagnosticReport は Kimi の設定診断結果を表す。
@@ -373,7 +384,21 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 		r.addCheck(DiagnosticStatusOK, "image_smoke", "Kimi endpoint accepted a base64 image payload", smoke.Duration, "")
 	}
 	if smoke.WebSearchPayload {
-		r.addCheck(DiagnosticStatusOK, "web_search_smoke", "Kimi endpoint completed a built-in $web_search request", smoke.Duration, "Kimi charges a separate web search call fee when $web_search is triggered")
+		status := DiagnosticStatusOK
+		message := "Kimi endpoint completed a built-in $web_search request"
+		suggestion := "Kimi charges a separate web search call fee when $web_search is triggered; search result tokens are counted in the next prompt_tokens response"
+		if smoke.WebSearchCallCount <= 0 {
+			status = DiagnosticStatusFail
+			message = "Kimi web search smoke did not trigger a built-in $web_search call"
+			suggestion = "Check Kimi model/tool support and rerun --web-search-smoke; the smoke is only valid when $web_search calls are observed"
+		}
+		r.addCheck(
+			status,
+			"web_search_smoke",
+			message,
+			fmt.Sprintf("calls=%d fee_estimate=$%.4f search_result_tokens=%d", smoke.WebSearchCallCount, smoke.WebSearchCallFeeEstimate, smoke.SearchResultTotalTokens),
+			suggestion,
+		)
 	}
 }
 
@@ -479,10 +504,7 @@ func runKimiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 	for _, request := range requests {
 		requestResult, err := runKimiDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report.Model, request, output)
 		result.Requests = append(result.Requests, requestResult)
-		if requestResult.UsageObserved {
-			result.UsageObserved = true
-			result.CachedInputTokens += requestResult.Usage.CachedInputTokens
-		}
+		result.addRequestObservation(requestResult)
 		if requestResult.Content != "" {
 			result.Content = requestResult.Content
 		}
@@ -624,15 +646,10 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 	provider.setDiagnosticFunctionCalling(request.ToolPayload)
 
 	var usage api.Usage
-	usageObserved := false
+	endpointUsageObserved := false
 	provider.SetUsageCallback(func(observed api.Usage) {
-		usage.InputTokens += observed.InputTokens
-		usage.OutputTokens += observed.OutputTokens
-		usage.ThinkingTokens += observed.ThinkingTokens
-		usage.CachedInputTokens += observed.CachedInputTokens
-		usage.CacheCreationTokens += observed.CacheCreationTokens
-		usage.StorageCost += observed.StorageCost
-		usageObserved = true
+		usage.Add(observed)
+		endpointUsageObserved = endpointUsageObserved || observed.HasTokenObservation()
 	})
 
 	started := time.Now()
@@ -673,16 +690,21 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 		err = fmt.Errorf("%s smoke response content is empty", request.Name)
 	}
 
+	usageObservation := diagnosticUsageObservation(usage)
 	return DiagnosticSmokeRequestResult{
-		Name:                  request.Name,
-		Content:               strings.TrimSpace(content),
-		Duration:              elapsed.String(),
-		UsageObserved:         usageObserved,
-		Usage:                 diagnosticUsageObservation(usage),
-		PromptCacheKeyPresent: strings.TrimSpace(promptCacheKey) != "",
-		PromptCacheKey:        promptCacheKey,
-		ImagePayload:          request.ImagePayload,
-		WebSearchPayload:      request.WebSearchPayload,
+		Name:                     request.Name,
+		Content:                  strings.TrimSpace(content),
+		Duration:                 elapsed.String(),
+		UsageObserved:            endpointUsageObserved,
+		Usage:                    usageObservation,
+		PromptCacheKeyPresent:    strings.TrimSpace(promptCacheKey) != "",
+		PromptCacheKey:           promptCacheKey,
+		ImagePayload:             request.ImagePayload,
+		WebSearchPayload:         request.WebSearchPayload,
+		WebSearchCallCount:       usageObservation.WebSearchCallCount,
+		WebSearchCallFeeEstimate: usageObservation.WebSearchCallFeeEstimate,
+		WebSearchUsageObserved:   usageObservation.webSearchUsageObserved(),
+		SearchResultTotalTokens:  usageObservation.SearchResultTotalTokens,
 	}, err
 }
 
@@ -719,11 +741,29 @@ func newKimiDiagnosticContext(ctx context.Context, cfg *config.Config, thinking 
 
 func diagnosticUsageObservation(usage api.Usage) DiagnosticUsageObservation {
 	return DiagnosticUsageObservation{
-		InputTokens:       usage.InputTokens,
-		OutputTokens:      usage.OutputTokens,
-		ThinkingTokens:    usage.ThinkingTokens,
-		CachedInputTokens: usage.CachedInputTokens,
+		InputTokens:              usage.InputTokens,
+		OutputTokens:             usage.OutputTokens,
+		ThinkingTokens:           usage.ThinkingTokens,
+		CachedInputTokens:        usage.CachedInputTokens,
+		WebSearchCallCount:       usage.WebSearchCalls,
+		WebSearchCallFeeEstimate: usage.StorageCost,
+		SearchResultTotalTokens:  usage.WebSearchResultTokens,
 	}
+}
+
+func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
+	if request.UsageObserved {
+		r.UsageObserved = true
+	}
+	r.CachedInputTokens += request.Usage.CachedInputTokens
+	r.WebSearchCallCount += request.Usage.WebSearchCallCount
+	r.WebSearchCallFeeEstimate += request.Usage.WebSearchCallFeeEstimate
+	r.SearchResultTotalTokens += request.Usage.SearchResultTotalTokens
+	r.WebSearchUsageObserved = r.WebSearchUsageObserved || request.WebSearchUsageObserved
+}
+
+func (u DiagnosticUsageObservation) webSearchUsageObserved() bool {
+	return u.WebSearchCallCount > 0
 }
 
 const diagnosticSmokeToolName = "xelyon_kimi_doctor_probe"

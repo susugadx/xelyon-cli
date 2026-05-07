@@ -216,6 +216,13 @@ func attachHeadlessStats(agent *Agent, result *HeadlessResult) *HeadlessResult {
 		Thinking: agent.Stats.ThinkingTokens,
 		Total:    agent.Stats.TotalTokens(),
 	}
+	if agent.Stats.WebSearchCalls > 0 {
+		result.WebSearch = &WebSearchUsage{
+			Calls:        agent.Stats.WebSearchCalls,
+			FeeEstimate:  agent.Stats.WebSearchCost,
+			ResultTokens: agent.Stats.WebSearchResultTokens,
+		}
+	}
 	estimate := agent.Stats.EstimatedCostEstimateForConfig(agent.cfg())
 	result.Cost = estimate.Cost
 	result.PricingUnavailable = estimate.PricingUnavailable
