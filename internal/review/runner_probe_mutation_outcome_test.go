@@ -60,7 +60,7 @@ func TestReviewRunnerRunStopsProbeExecutionAfterMutatedWorktree(t *testing.T) {
 					Error:  reviewRunnerProbeSkippedAfterMutationError("probe-a"),
 				},
 			}
-			expectedSummaries := BuildReviewProbeSummaries(expectedProbeResults)
+			expectedSummaries := newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, expectedProbeResults)
 			model := &runnerFakeModel{
 				responses: []runnerFakeModelResponse{
 					{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},

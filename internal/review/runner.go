@@ -88,10 +88,11 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 		return ReviewReport{}, err
 	}
 	probeSummaries := BuildReviewProbeSummaries(probeResults)
+	redactor := newReviewRunnerPromptRedactor(bundle, probeResults)
 
 	reportResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReport,
-		Prompt: buildReviewReportPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, newReviewRunnerPromptRedactor(bundle, probeResults)),
+		Prompt: buildReviewReportPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor),
 	})
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
@@ -101,7 +102,7 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner decode report: %w", err)
 	}
-	report, err = finalizeReviewRunnerReport(report, probeSummaries)
+	report, err = finalizeReviewRunnerReport(report, probeSummaries, redactor)
 	if err != nil {
 		return ReviewReport{}, err
 	}

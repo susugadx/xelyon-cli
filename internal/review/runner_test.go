@@ -41,7 +41,8 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		events:  &events,
 	}
 	plan := newRunnerProbePlanForTest("probe-1")
-	report := newRunnerCleanReportForTest(BuildReviewProbeSummaries([]ReviewProbeResult{probeResult}))
+	probeResults := []ReviewProbeResult{probeResult}
+	report := newRunnerCleanReportForTest(newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, probeResults))
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
@@ -107,31 +108,39 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 }
 
 func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
-	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	repoRoot := t.TempDir()
+	probeRoot := filepath.Join(t.TempDir(), reviewProbeSandboxTempPrefix+"trusted")
+	probeWorkDir := filepath.Join(probeRoot, "worktree")
+	repoFile := filepath.Join(repoRoot, "internal/review/runner.go")
+	probeFile := filepath.Join(probeWorkDir, "output.txt")
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probeResult := ReviewProbeResult{
 		ID:              "probe-1",
 		Mode:            ReviewProbeHostReadOnly,
 		Status:          ReviewProbeFailed,
+		MutatedFiles:    []string{repoFile, probeFile},
 		OutputTruncated: true,
-		Error:           "probe failed",
+		Error:           "probe failed at " + repoFile + " and " + probeFile,
 		CommandResults: []ReviewProbeCommandResult{
 			{
-				Command:         "go",
-				Args:            []string{"test", "./internal/review"},
+				Command:         "cat " + probeFile,
+				Args:            []string{repoFile, probeFile},
+				WorkDir:         probeWorkDir,
 				Status:          ReviewProbeFailed,
 				ExitCode:        1,
 				OutputTruncated: true,
-				Error:           "exit status 1",
+				Error:           "exit status 1 at " + probeFile,
 				Duration:        1500 * time.Millisecond,
 			},
 		},
 	}
-	trustedSummaries := BuildReviewProbeSummaries([]ReviewProbeResult{probeResult})
 	modelReport := newRunnerCleanReportForTest([]ReviewProbeSummary{
 		{
-			ProbeID: "fake-probe",
-			Mode:    ReviewProbeHostReadOnly,
-			Status:  ReviewProbePassed,
+			ProbeID:      "fake-probe",
+			Mode:         ReviewProbeHostReadOnly,
+			Status:       ReviewProbePassed,
+			MutatedFiles: []string{"/fake/model/path"},
+			Error:        "fake model summary must be ignored",
 		},
 	})
 	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
@@ -147,20 +156,47 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if !reflect.DeepEqual(got.ProbeSummaries, trustedSummaries) {
-		t.Fatalf("Run() probe summaries = %#v, want trusted %#v", got.ProbeSummaries, trustedSummaries)
+	wantSummaries := []ReviewProbeSummary{
+		{
+			ProbeID:         "probe-1",
+			Mode:            ReviewProbeHostReadOnly,
+			Status:          ReviewProbeFailed,
+			MutatedFiles:    []string{"internal/review/runner.go", "<probe_workdir>/output.txt"},
+			OutputTruncated: true,
+			Error:           "probe failed at <repo_root>/internal/review/runner.go and <probe_workdir>/output.txt",
+			Commands: []ReviewProbeCommandSummary{
+				{
+					Command:         "cat <probe_workdir>/output.txt",
+					Args:            []string{"<repo_root>/internal/review/runner.go", "<probe_workdir>/output.txt"},
+					WorkDir:         "<probe_workdir>",
+					Status:          ReviewProbeFailed,
+					ExitCode:        1,
+					OutputTruncated: true,
+					Error:           "exit status 1 at <probe_workdir>/output.txt",
+					DurationMs:      1500,
+				},
+			},
+		},
 	}
+	if !reflect.DeepEqual(got.ProbeSummaries, wantSummaries) {
+		t.Fatalf("Run() probe summaries = %#v, want redacted trusted %#v", got.ProbeSummaries, wantSummaries)
+	}
+	assertReviewReportDoesNotContainForRunnerTest(t, got, repoRoot, probeRoot, "/fake/model/path", "fake model summary")
 }
 
 func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *testing.T) {
-	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	repoRoot := t.TempDir()
+	repoFile := filepath.Join(repoRoot, "internal/review/runner.go")
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probeResult := ReviewProbeResult{
 		ID:     "probe-1",
 		Mode:   ReviewProbeHostReadOnly,
 		Status: ReviewProbePassed,
 		CommandResults: []ReviewProbeCommandResult{
 			{
-				Command: "go",
+				Command: "cat " + repoFile,
+				Args:    []string{repoFile},
+				WorkDir: repoRoot,
 				Status:  ReviewProbePassed,
 			},
 		},
@@ -191,9 +227,32 @@ func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *te
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if !reflect.DeepEqual(got.ProbeSummaries, BuildReviewProbeSummaries([]ReviewProbeResult{probeResult})) {
-		t.Fatalf("Run() probe summaries = %#v, want trusted probe summaries", got.ProbeSummaries)
+	wantSummaries := []ReviewProbeSummary{
+		{
+			ProbeID:      "probe-1",
+			Mode:         ReviewProbeHostReadOnly,
+			Status:       ReviewProbePassed,
+			MutatedFiles: []string{},
+			Commands: []ReviewProbeCommandSummary{
+				{
+					Command: "cat <repo_root>/internal/review/runner.go",
+					Args:    []string{"<repo_root>/internal/review/runner.go"},
+					WorkDir: ".",
+					Status:  ReviewProbePassed,
+				},
+			},
+		},
 	}
+	if !reflect.DeepEqual(got.ProbeSummaries, wantSummaries) {
+		t.Fatalf("Run() probe summaries = %#v, want redacted trusted probe summaries %#v", got.ProbeSummaries, wantSummaries)
+	}
+	if got.CheckedSurfaces[0].EvidenceRefs[0].ProbeID != "probe-1" {
+		t.Fatalf("EvidenceRef probe_id = %q, want probe-1", got.CheckedSurfaces[0].EvidenceRefs[0].ProbeID)
+	}
+	if got.CheckedSurfaces[0].EvidenceRefs[0].CommandIndex == nil || *got.CheckedSurfaces[0].EvidenceRefs[0].CommandIndex != 0 {
+		t.Fatalf("EvidenceRef command_index = %#v, want 0", got.CheckedSurfaces[0].EvidenceRefs[0].CommandIndex)
+	}
+	assertReviewReportDoesNotContainForRunnerTest(t, got, repoRoot)
 }
 
 func TestReviewRunnerRunRevalidatesReportAfterTrustedProbeSummaries(t *testing.T) {
@@ -584,20 +643,22 @@ func TestReviewRunnerPromptRedactsAbsoluteRepoRoot(t *testing.T) {
 	}
 }
 
-func TestReviewRunnerPromptRedactsProbeResultPaths(t *testing.T) {
+func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testing.T) {
 	repoRoot := t.TempDir()
 	probeRoot := filepath.Join(t.TempDir(), reviewProbeSandboxTempPrefix+"abc")
 	probeWorkDir := filepath.Join(probeRoot, "worktree")
+	scratchRoot := filepath.Join(t.TempDir(), reviewProbeScratchTempPrefix+"def")
 	repoFile := filepath.Join(repoRoot, "internal/review/runner.go")
 	probeWorkFile := filepath.Join(probeWorkDir, "output.txt")
 	probeRuntimeFile := filepath.Join(probeRoot, "runtime/home/output.txt")
+	scratchFile := filepath.Join(scratchRoot, "tmp/mutated.txt")
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probeResult := ReviewProbeResult{
 		ID:              "probe-1",
 		Mode:            ReviewProbeHostReadOnly,
 		Status:          ReviewProbeFailed,
 		MutatedWorktree: true,
-		MutatedFiles:    []string{repoFile, filepath.Join(probeWorkDir, "mutated.txt")},
+		MutatedFiles:    []string{repoFile, filepath.Join(probeWorkDir, "mutated.txt"), scratchFile},
 		Error:           "probe failed at " + repoFile + " using " + probeRuntimeFile,
 		CommandResults: []ReviewProbeCommandResult{
 			{
@@ -609,6 +670,7 @@ func TestReviewRunnerPromptRedactsProbeResultPaths(t *testing.T) {
 			},
 			{
 				Command: "cat",
+				Args:    []string{probeWorkFile, scratchFile},
 				WorkDir: probeWorkDir,
 				Status:  ReviewProbeFailed,
 				Output:  "probe path: " + probeWorkFile,
@@ -625,7 +687,7 @@ func TestReviewRunnerPromptRedactsProbeResultPaths(t *testing.T) {
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
 
-	_, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	got, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
@@ -634,7 +696,7 @@ func TestReviewRunnerPromptRedactsProbeResultPaths(t *testing.T) {
 	}
 
 	secondPrompt := model.requests[1].Prompt
-	for _, leaked := range []string{repoRoot, repoFile, probeRoot, probeWorkDir, probeWorkFile, probeRuntimeFile} {
+	for _, leaked := range []string{repoRoot, repoFile, probeRoot, probeWorkDir, probeWorkFile, probeRuntimeFile, scratchRoot, scratchFile} {
 		if strings.Contains(secondPrompt, leaked) {
 			t.Fatalf("Pass2 prompt contains absolute path %q:\n%s", leaked, secondPrompt)
 		}
@@ -649,6 +711,33 @@ func TestReviewRunnerPromptRedactsProbeResultPaths(t *testing.T) {
 		if !strings.Contains(secondPrompt, want) {
 			t.Fatalf("Pass2 prompt missing %q:\n%s", want, secondPrompt)
 		}
+	}
+
+	assertReviewReportDoesNotContainForRunnerTest(t, got, repoRoot, repoFile, probeRoot, probeWorkDir, probeWorkFile, probeRuntimeFile, scratchRoot, scratchFile)
+	if got, want := got.ProbeSummaries[0].MutatedFiles, []string{
+		"internal/review/runner.go",
+		"<probe_workdir>/mutated.txt",
+		"<probe_workdir_2>/tmp/mutated.txt",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("final report MutatedFiles = %#v, want %#v", got, want)
+	}
+	if got, want := got.ProbeSummaries[0].Status, ReviewProbeMutatedWorktree; got != want {
+		t.Fatalf("final report probe status = %q, want %q", got, want)
+	}
+	if !got.ProbeSummaries[0].MutatedWorktree {
+		t.Fatal("final report MutatedWorktree = false, want true")
+	}
+	if got, want := got.ProbeSummaries[0].Error, "probe failed at <repo_root>/internal/review/runner.go using <probe_workdir>/runtime/home/output.txt"; got != want {
+		t.Fatalf("final report probe error = %q, want %q", got, want)
+	}
+	if got, want := got.ProbeSummaries[0].Commands[0].WorkDir, "."; got != want {
+		t.Fatalf("final report command 0 WorkDir = %q, want %q", got, want)
+	}
+	if got, want := got.ProbeSummaries[0].Commands[1].WorkDir, "<probe_workdir>"; got != want {
+		t.Fatalf("final report command 1 WorkDir = %q, want %q", got, want)
+	}
+	if got, want := got.ProbeSummaries[0].Commands[1].Args, []string{"<probe_workdir>/output.txt", "<probe_workdir_2>/tmp/mutated.txt"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("final report command 1 Args = %#v, want %#v", got, want)
 	}
 }
 
@@ -875,6 +964,29 @@ func mustMarshalReviewReportForRunnerTest(t *testing.T, report ReviewReport) []b
 		t.Fatalf("json.Marshal() error = %v, want nil", err)
 	}
 	return data
+}
+
+func newRedactedRunnerProbeSummariesForTest(t *testing.T, bundle ReviewEvidenceBundle, results []ReviewProbeResult) []ReviewProbeSummary {
+	t.Helper()
+
+	return redactReviewProbeSummaries(
+		BuildReviewProbeSummaries(results),
+		newReviewRunnerPromptRedactor(bundle, results),
+	)
+}
+
+func assertReviewReportDoesNotContainForRunnerTest(t *testing.T, report ReviewReport, leakedValues ...string) {
+	t.Helper()
+
+	reportJSON := string(mustMarshalReviewReportForRunnerTest(t, report))
+	for _, leaked := range leakedValues {
+		if leaked == "" {
+			continue
+		}
+		if strings.Contains(reportJSON, leaked) {
+			t.Fatalf("review report leaked %q:\n%s", leaked, reportJSON)
+		}
+	}
 }
 
 func assertStringSliceEqualForRunnerTest(t *testing.T, got, want []string) {

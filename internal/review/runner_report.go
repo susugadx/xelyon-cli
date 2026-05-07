@@ -2,11 +2,16 @@ package review
 
 import "fmt"
 
-func finalizeReviewRunnerReport(report ReviewReport, trustedProbeSummaries []ReviewProbeSummary) (ReviewReport, error) {
-	// 現時点では raw trusted summaries を注入する。次フェーズで同じ core redaction helper を使い、
-	// final report 用 redacted trusted summaries へ切り替える。
-	report.ProbeSummaries = copyReviewRunnerProbeSummaries(trustedProbeSummaries)
-	canonicalizeReviewProbeSummaryMutationOutcomes(report.ProbeSummaries)
+func finalizeReviewRunnerReport(report ReviewReport, trustedProbeSummaries []ReviewProbeSummary, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
+	// LLM が返す probe_summaries は信頼元にしない。runner が probe results から作った
+	// raw trusted summaries を内部 audit/debug 契約として保ち、final report には redacted copy だけを注入する。
+	probeSummaries := copyReviewRunnerProbeSummaries(trustedProbeSummaries)
+	canonicalizeReviewProbeSummaryMutationOutcomes(probeSummaries)
+	if len(probeSummaries) == 0 {
+		report.ProbeSummaries = nil
+	} else {
+		report.ProbeSummaries = redactReviewProbeSummaries(probeSummaries, redactor)
+	}
 	report = normalizeReviewRunnerReportForTrustedProbeOutcomes(report)
 	if err := ValidateReviewReport(report); err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner finalize report: %w", err)

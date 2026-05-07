@@ -1,7 +1,9 @@
 package review
 
 import (
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -27,7 +29,7 @@ func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(
 					Status:          tt.status,
 					MutatedWorktree: tt.mutatedWorktree,
 				},
-			})
+			}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
 			if err != nil {
 				t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 			}
@@ -56,7 +58,7 @@ func TestFinalizeReviewRunnerReportDowngradesVerifiedFindingsWithBlockedTrustedP
 			Mode:    ReviewProbeHostReadOnly,
 			Status:  ReviewProbeBlocked,
 		},
-	})
+	}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -68,35 +70,95 @@ func TestFinalizeReviewRunnerReportDowngradesVerifiedFindingsWithBlockedTrustedP
 	}
 }
 
-func TestFinalizeReviewRunnerReportKeepsTrustedProbeSummariesRawForNow(t *testing.T) {
+func TestFinalizeReviewRunnerReportInjectsRedactedTrustedProbeSummaries(t *testing.T) {
+	repoRoot := t.TempDir()
+	probeRoot := filepath.Join(t.TempDir(), reviewProbeSandboxTempPrefix+"finalizer")
+	probeWorkDir := filepath.Join(probeRoot, "worktree")
+	repoFile := filepath.Join(repoRoot, "internal/review/runner.go")
+	probeFile := filepath.Join(probeWorkDir, "raw-output.txt")
 	trustedSummaries := []ReviewProbeSummary{
 		{
 			ProbeID:         "probe-raw",
 			Mode:            ReviewProbeHostReadOnly,
 			Status:          ReviewProbeFailed,
-			MutatedFiles:    []string{"/tmp/probe-workdir/raw-output.txt"},
+			MutatedFiles:    []string{repoFile, probeFile},
 			OutputTruncated: true,
-			Error:           "raw path /tmp/probe-workdir/raw-output.txt",
+			Error:           "raw paths " + repoFile + " " + probeFile,
 			Commands: []ReviewProbeCommandSummary{
 				{
-					Command:         "cat /tmp/probe-workdir/raw-output.txt",
-					Args:            []string{"/tmp/probe-workdir/raw-output.txt"},
-					WorkDir:         "/tmp/probe-workdir",
+					Command:         "cat " + probeFile,
+					Args:            []string{repoFile, probeFile},
+					WorkDir:         probeWorkDir,
 					Status:          ReviewProbeFailed,
 					ExitCode:        1,
 					OutputTruncated: true,
-					Error:           "failed at /tmp/probe-workdir/raw-output.txt",
+					Error:           "failed at " + probeFile,
 					DurationMs:      25,
 				},
 			},
 		},
 	}
+	original := cloneReviewProbeSummariesForRedactionTest(trustedSummaries)
+	redactor := newRunnerReportRedactorForTest(t, repoRoot, []ReviewProbeResult{
+		{
+			ID:           "probe-raw",
+			Mode:         ReviewProbeHostReadOnly,
+			Status:       ReviewProbeFailed,
+			MutatedFiles: []string{repoFile, probeFile},
+			Error:        "raw paths " + repoFile + " " + probeFile,
+			CommandResults: []ReviewProbeCommandResult{
+				{
+					Command: "cat " + probeFile,
+					Args:    []string{repoFile, probeFile},
+					WorkDir: probeWorkDir,
+					Status:  ReviewProbeFailed,
+					Error:   "failed at " + probeFile,
+				},
+			},
+		},
+	})
 
-	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), trustedSummaries)
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), trustedSummaries, redactor)
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
-	if !reflect.DeepEqual(got.ProbeSummaries, trustedSummaries) {
-		t.Fatalf("ProbeSummaries = %#v, want raw trusted summaries %#v", got.ProbeSummaries, trustedSummaries)
+	if !reflect.DeepEqual(trustedSummaries, original) {
+		t.Fatalf("finalizeReviewRunnerReport() mutated trusted summaries:\ngot  %#v\nwant %#v", trustedSummaries, original)
 	}
+	if strings.Contains(got.ProbeSummaries[0].Error, repoRoot) || strings.Contains(got.ProbeSummaries[0].Error, probeRoot) {
+		t.Fatalf("ProbeSummaries[0].Error leaked raw path: %q", got.ProbeSummaries[0].Error)
+	}
+	wantMutatedFiles := []string{"internal/review/runner.go", "<probe_workdir>/raw-output.txt"}
+	if !reflect.DeepEqual(got.ProbeSummaries[0].MutatedFiles, wantMutatedFiles) {
+		t.Fatalf("MutatedFiles = %#v, want %#v", got.ProbeSummaries[0].MutatedFiles, wantMutatedFiles)
+	}
+	if got.ProbeSummaries[0].Commands[0].Command != "cat <probe_workdir>/raw-output.txt" {
+		t.Fatalf("command Command = %q, want redacted command", got.ProbeSummaries[0].Commands[0].Command)
+	}
+	wantArgs := []string{"<repo_root>/internal/review/runner.go", "<probe_workdir>/raw-output.txt"}
+	if !reflect.DeepEqual(got.ProbeSummaries[0].Commands[0].Args, wantArgs) {
+		t.Fatalf("command Args = %#v, want %#v", got.ProbeSummaries[0].Commands[0].Args, wantArgs)
+	}
+	if got.ProbeSummaries[0].Commands[0].WorkDir != "<probe_workdir>" {
+		t.Fatalf("command WorkDir = %q, want redacted workdir", got.ProbeSummaries[0].Commands[0].WorkDir)
+	}
+	if got.ProbeSummaries[0].Commands[0].Error != "failed at <probe_workdir>/raw-output.txt" {
+		t.Fatalf("command Error = %q, want redacted error", got.ProbeSummaries[0].Commands[0].Error)
+	}
+}
+
+func TestFinalizeReviewRunnerReportKeepsEmptyTrustedProbeSummariesNil(t *testing.T) {
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	if err != nil {
+		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
+	}
+	if got.ProbeSummaries != nil {
+		t.Fatalf("ProbeSummaries = %#v, want nil", got.ProbeSummaries)
+	}
+}
+
+func newRunnerReportRedactorForTest(t *testing.T, repoRoot string, probeResults []ReviewProbeResult) reviewRunnerPromptRedactor {
+	t.Helper()
+
+	return newReviewRunnerPromptRedactor(newRunnerEvidenceBundleForTest(repoRoot), probeResults)
 }

@@ -12,9 +12,8 @@ const (
 	reviewRunnerPromptProbeWorkDirDisplay = "<probe_workdir>"
 )
 
-// reviewRunnerPromptRedactor は Pass2 prompt に渡す probe result/summary を安全な表示 path に置き換える。
-// 次フェーズでは final ReviewReport の trusted summaries redaction でも同じ replacement policy を使う。
-// raw probe results / raw summaries は trace/debug/audit 用の別契約で保持し、user-facing report/prompt には redacted summary を使う。
+// reviewRunnerPromptRedactor は Pass2 prompt と final ReviewReport に渡す probe result/summary を安全な表示 path に置き換える。
+// raw probe results / raw trusted summaries は trace/debug/audit 用の別契約で保持し、LLM が返す summaries は信頼元にしない。
 type reviewRunnerPromptRedactor struct {
 	repoRoot     string
 	replacements []reviewRunnerPromptPathReplacement
