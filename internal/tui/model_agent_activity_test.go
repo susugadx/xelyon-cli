@@ -375,21 +375,45 @@ func TestModel_AgentDoneWithErrorBlocksActivity(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m.beginAgentActivity()
 
-	updated, _, handled := m.handleStreamMessage(AgentDoneMsg{Error: errors.New("network down")})
+	updated, _, handled := m.handleStreamMessage(AgentDoneMsg{
+		Error:     errors.New("network down"),
+		ErrorKind: AgentErrorProvider,
+	})
 	if !handled {
 		t.Fatal("AgentDoneMsg should be handled")
 	}
 	m = updated
 
 	plain := plainRawTranscript(m)
-	for _, fragment := range []string{"── agent · blocked ·", "✕ network down", "! user action may be needed"} {
+	for _, fragment := range []string{"── agent · blocked ·", "✕ [provider error] network down", "! check provider/network and retry"} {
 		if !strings.Contains(plain, fragment) {
 			t.Fatalf("blocked activity missing %q, transcript:\n%s", fragment, plain)
 		}
 	}
 }
 
-func TestModel_ChatSubmissionErrorCompletesActivityAsBlocked(t *testing.T) {
+func TestModel_AgentDoneWithValidationErrorUsesValidationLabel(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.beginAgentActivity()
+
+	updated, _, handled := m.handleStreamMessage(AgentDoneMsg{
+		Error: WrapAgentTurnError(AgentErrorValidation, errors.New("missing image file")),
+	})
+	if !handled {
+		t.Fatal("AgentDoneMsg should be handled")
+	}
+	m = updated
+
+	plain := plainRawTranscript(m)
+	for _, fragment := range []string{"── agent · blocked ·", "✕ [validation error] missing image file", "! fix the input and retry"} {
+		if !strings.Contains(plain, fragment) {
+			t.Fatalf("validation activity missing %q, transcript:\n%s", fragment, plain)
+		}
+	}
+}
+
+func TestModel_ChatSubmissionPlainErrorCompletesActivityAsGenericBlocked(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready", chatErr: errors.New("provider down")}
 	m := newModelWithViewport(agent)
 	m.textInput.SetValue("hello")
@@ -408,6 +432,9 @@ func TestModel_ChatSubmissionErrorCompletesActivityAsBlocked(t *testing.T) {
 	if done.Error == nil || !strings.Contains(done.Error.Error(), "provider down") {
 		t.Fatalf("AgentDoneMsg.Error = %v, want provider down", done.Error)
 	}
+	if done.ErrorKind != AgentErrorUnknown {
+		t.Fatalf("AgentDoneMsg.ErrorKind = %q, want %q", done.ErrorKind, AgentErrorUnknown)
+	}
 
 	updatedModel, _ := m.Update(done)
 	m = updatedModel.(Model)
@@ -416,9 +443,40 @@ func TestModel_ChatSubmissionErrorCompletesActivityAsBlocked(t *testing.T) {
 		t.Fatal("agent activity should close after failed chat submission")
 	}
 	plain := plainRawTranscript(m)
-	for _, fragment := range []string{"── agent · blocked ·", "✕ provider down", "! user action may be needed"} {
+	for _, fragment := range []string{"── agent · blocked ·", "✕ [error] provider down", "! user action may be needed"} {
 		if !strings.Contains(plain, fragment) {
 			t.Fatalf("failed chat activity missing %q, transcript:\n%s", fragment, plain)
+		}
+	}
+}
+
+func TestModel_ChatSubmissionWrappedProviderErrorCompletesActivityAsProviderBlocked(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready", chatErr: WrapAgentTurnError(AgentErrorProvider, errors.New("provider down"))}
+	m := newModelWithViewport(agent)
+	m.textInput.SetValue("hello")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("chat submission should return send command")
+	}
+
+	msg := cmd()
+	done, ok := msg.(AgentDoneMsg)
+	if !ok {
+		t.Fatalf("send command returned %T, want AgentDoneMsg", msg)
+	}
+	if done.ErrorKind != AgentErrorProvider {
+		t.Fatalf("AgentDoneMsg.ErrorKind = %q, want %q", done.ErrorKind, AgentErrorProvider)
+	}
+
+	updatedModel, _ := m.Update(done)
+	m = updatedModel.(Model)
+
+	plain := plainRawTranscript(m)
+	for _, fragment := range []string{"── agent · blocked ·", "✕ [provider error] provider down", "! check provider/network and retry"} {
+		if !strings.Contains(plain, fragment) {
+			t.Fatalf("provider chat activity missing %q, transcript:\n%s", fragment, plain)
 		}
 	}
 }
@@ -437,7 +495,7 @@ func TestModel_RecoveredErrorToolDoesNotBlockActivityOnDone(t *testing.T) {
 	})
 
 	activePlain := plainRawTranscript(m)
-	for _, fragment := range []string{"── agent · blocked ·", "✕ read_file failed · 38ms", "! user action may be needed"} {
+	for _, fragment := range []string{"── agent · blocked ·", "✕ [tool error] read_file failed · 38ms", "! inspect tool output or adjust the request"} {
 		if !strings.Contains(activePlain, fragment) {
 			t.Fatalf("active error tool should render blocked, missing %q, transcript:\n%s", fragment, activePlain)
 		}
@@ -455,7 +513,7 @@ func TestModel_RecoveredErrorToolDoesNotBlockActivityOnDone(t *testing.T) {
 			t.Fatalf("recovered error tool should finish done, missing %q, transcript:\n%s", fragment, plain)
 		}
 	}
-	for _, fragment := range []string{"── agent · blocked ·", "✕ permission denied", "! user action may be needed"} {
+	for _, fragment := range []string{"── agent · blocked ·", "✕ [tool error]", "! inspect tool output or adjust the request"} {
 		if strings.Contains(plain, fragment) {
 			t.Fatalf("recovered error tool should not leave final blocked marker %q, transcript:\n%s", fragment, plain)
 		}
@@ -491,7 +549,7 @@ func TestModel_StartupSubmissionResultWithoutDoneBlocksActivity(t *testing.T) {
 		t.Fatal("startup activity should close when command returns without AgentDoneMsg")
 	}
 	plain := plainRawTranscript(m)
-	for _, fragment := range []string{"partial output", "── agent · blocked ·", "startup command returned tui.AppendMessageMsg without completion"} {
+	for _, fragment := range []string{"partial output", "── agent · blocked ·", "✕ [startup error] startup command returned tui.AppendMessageMsg without completion", "! check startup command output and retry"} {
 		if !strings.Contains(plain, fragment) {
 			t.Fatalf("startup missing-done activity missing %q, transcript:\n%s", fragment, plain)
 		}
@@ -521,8 +579,11 @@ func TestModel_StartupSubmissionPanicBlocksActivity(t *testing.T) {
 	if m.agentActivity.active {
 		t.Fatal("startup activity should close when command panics")
 	}
-	if plain := plainRawTranscript(m); !strings.Contains(plain, "startup command failed: boom") {
-		t.Fatalf("startup panic should block activity with error, transcript:\n%s", plain)
+	plain := plainRawTranscript(m)
+	for _, fragment := range []string{"✕ [startup error] startup command failed: boom", "! check startup command output and retry"} {
+		if !strings.Contains(plain, fragment) {
+			t.Fatalf("startup panic should block activity with %q, transcript:\n%s", fragment, plain)
+		}
 	}
 }
 

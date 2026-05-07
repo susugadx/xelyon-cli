@@ -131,7 +131,7 @@ func (m Model) sendChat(req chatDispatchRequest) tea.Cmd {
 		for _, att := range req.cleanupAttachments {
 			cleanupTemporaryAttachment(att)
 		}
-		return AgentDoneMsg{Error: err}
+		return AgentDoneMsg{Error: err, ErrorKind: AgentErrorKindFromError(err, AgentErrorUnknown)}
 	}
 }
 

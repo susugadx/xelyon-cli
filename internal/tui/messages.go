@@ -74,7 +74,8 @@ type UpdateStatusMsg struct {
 
 // AgentDoneMsg はagent.chat()の完了通知
 type AgentDoneMsg struct {
-	Error error
+	Error     error
+	ErrorKind AgentErrorKind
 }
 
 // OpenPromptMsg は TUI prompt modal を開くMsg。

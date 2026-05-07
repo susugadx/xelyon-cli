@@ -42,6 +42,7 @@ func newAgentActivityState(startedAt time.Time) agentActivityState {
 		status:    agentActivityStatusWorking,
 		tools:     nil,
 		errorText: "",
+		errorKind: AgentErrorUnknown,
 	}
 }
 
@@ -72,6 +73,7 @@ func (m *Model) upsertAgentActivityTool(tool ToolResult) tea.Cmd {
 
 	if tool.Status == ToolStatusError || tool.Error {
 		m.agentActivity.status = agentActivityStatusBlocked
+		m.agentActivity.errorKind = AgentErrorTool
 		if m.agentActivity.errorText == "" {
 			m.agentActivity.errorText = agentActivityToolErrorText(tool)
 		}
@@ -123,7 +125,7 @@ func (m Model) agentActivityToolIndex(id string) int {
 	return -1
 }
 
-func (m *Model) finishAgentActivity(err error) {
+func (m *Model) finishAgentActivity(err error, kind AgentErrorKind) {
 	if !m.hasActiveAgentActivity() {
 		return
 	}
@@ -135,9 +137,11 @@ func (m *Model) finishAgentActivity(err error) {
 	case err != nil:
 		m.agentActivity.status = agentActivityStatusBlocked
 		m.agentActivity.errorText = termtext.SanitizeSingleLineANSI(err.Error())
+		m.agentActivity.errorKind = AgentErrorKindFromError(err, kind)
 	default:
 		m.agentActivity.status = agentActivityStatusDone
 		m.agentActivity.errorText = ""
+		m.agentActivity.errorKind = AgentErrorUnknown
 	}
 
 	m.updateTrackedBlockLinesFollowing(&m.agentActivity.block, m.buildAgentActivityLines(now))
@@ -183,7 +187,7 @@ func (m Model) buildAgentActivityLines(now time.Time) []string {
 		for _, entry := range activity.tools {
 			lines = append(lines, renderAgentActivityToolLine(entry.tool))
 		}
-		lines = append(lines, renderAgentActivityActionNeededLine())
+		lines = append(lines, renderAgentActivityActionNeededLine(activity.errorKind))
 		return lines
 	}
 
@@ -255,15 +259,18 @@ func (m Model) renderAgentActivityBlockedSummary(activity agentActivityState) []
 	if errorText == "" {
 		errorText = "agent blocked"
 	}
+	kind := normalizeAgentErrorKind(activity.errorKind)
+	color := agentActivityErrorColor(kind)
 	return []string{
-		"│ " + theme.Activity.Error + "✕ " + errorText + theme.Activity.Reset,
-		renderAgentActivityActionNeededLine(),
+		"│ " + color + "✕ " + agentActivityErrorLabel(kind) + " " + errorText + theme.Activity.Reset,
+		renderAgentActivityActionNeededLine(kind),
 	}
 }
 
-func renderAgentActivityActionNeededLine() string {
+func renderAgentActivityActionNeededLine(kind AgentErrorKind) string {
 	palette := theme.Activity
-	return "│ " + palette.Error + "! " + palette.Reset + palette.Dim + "user action may be needed" + palette.Reset
+	kind = normalizeAgentErrorKind(kind)
+	return "│ " + agentActivityErrorColor(kind) + "! " + palette.Reset + palette.Dim + agentActivityErrorHint(kind) + palette.Reset
 }
 
 func renderAgentActivityToolLine(tool ToolResult) string {
@@ -273,7 +280,7 @@ func renderAgentActivityToolLine(tool ToolResult) string {
 	case ToolStatusRunning:
 		return "│ " + palette.Running + text + palette.Reset
 	case ToolStatusError:
-		return "│ " + palette.Error + text + palette.Reset
+		return "│ " + palette.ErrorTool + text + palette.Reset
 	default:
 		return "│ " + palette.Success + text + palette.Reset
 	}
@@ -285,7 +292,7 @@ func renderAgentActivityToolText(tool ToolResult) string {
 	case ToolStatusRunning:
 		return strings.Join(nonEmptyStrings("● running", tool.Name, tool.Target), " ")
 	case ToolStatusError:
-		parts := []string{"✕", tool.Name, "failed"}
+		parts := []string{"✕", agentActivityErrorLabel(AgentErrorTool), tool.Name, "failed"}
 		if tool.Duration > 0 {
 			parts = append(parts, "·", ui.FormatParallelElapsed(tool.Duration))
 		}
@@ -296,6 +303,51 @@ func renderAgentActivityToolText(tool ToolResult) string {
 			parts = append(parts, "·", ui.FormatParallelElapsed(tool.Duration))
 		}
 		return strings.Join(parts, " ")
+	}
+}
+
+func agentActivityErrorLabel(kind AgentErrorKind) string {
+	switch normalizeAgentErrorKind(kind) {
+	case AgentErrorProvider:
+		return "[provider error]"
+	case AgentErrorTool:
+		return "[tool error]"
+	case AgentErrorValidation:
+		return "[validation error]"
+	case AgentErrorStartup:
+		return "[startup error]"
+	default:
+		return "[error]"
+	}
+}
+
+func agentActivityErrorHint(kind AgentErrorKind) string {
+	switch normalizeAgentErrorKind(kind) {
+	case AgentErrorProvider:
+		return "check provider/network and retry"
+	case AgentErrorTool:
+		return "inspect tool output or adjust the request"
+	case AgentErrorValidation:
+		return "fix the input and retry"
+	case AgentErrorStartup:
+		return "check startup command output and retry"
+	default:
+		return "user action may be needed"
+	}
+}
+
+func agentActivityErrorColor(kind AgentErrorKind) string {
+	switch normalizeAgentErrorKind(kind) {
+	case AgentErrorTool:
+		return theme.Activity.ErrorTool
+	case AgentErrorValidation:
+		return theme.Activity.ErrorValidation
+	case AgentErrorStartup:
+		return theme.Activity.ErrorStartup
+	case AgentErrorProvider:
+		return theme.Activity.ErrorProvider
+	default:
+		return theme.Activity.Error
 	}
 }
 

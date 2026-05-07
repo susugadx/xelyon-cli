@@ -44,7 +44,10 @@ func wrapStartupSubmissionActivityCmd(cmd tea.Cmd) tea.Cmd {
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				result = startupSubmissionResultMsg{
-					msg: AgentDoneMsg{Error: fmt.Errorf("startup command failed: %v", recovered)},
+					msg: AgentDoneMsg{
+						Error:     fmt.Errorf("startup command failed: %v", recovered),
+						ErrorKind: AgentErrorStartup,
+					},
 				}
 			}
 		}()
@@ -61,7 +64,10 @@ func (m Model) handleStartupSubmissionResultMsg(msg startupSubmissionResultMsg) 
 		}
 	}
 	if m.hasActiveAgentActivity() {
-		m.handleAgentDoneMsg(AgentDoneMsg{Error: startupSubmissionMissingDoneError(msg.msg)})
+		m.handleAgentDoneMsg(AgentDoneMsg{
+			Error:     startupSubmissionMissingDoneError(msg.msg),
+			ErrorKind: AgentErrorStartup,
+		})
 	}
 	return m, cmd
 }

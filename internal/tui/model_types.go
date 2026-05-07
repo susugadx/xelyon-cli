@@ -91,6 +91,7 @@ type agentActivityState struct {
 	status     agentActivityStatus
 	tools      []agentActivityTool
 	errorText  string
+	errorKind  AgentErrorKind
 }
 
 type agentActivityTool struct {

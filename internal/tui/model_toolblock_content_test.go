@@ -134,6 +134,24 @@ func TestToolBlock_ErrorUpdateUsesExpandedFinalState(t *testing.T) {
 	}
 }
 
+func TestToolBlock_ErrorSummaryShowsToolErrorLabel(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+
+	m.appendToolResult(ToolResult{
+		ID:        "tool-1",
+		Name:      "read_file",
+		Summary:   "✕ error read_file a.go 12ms",
+		Detail:    "Error: missing file",
+		Error:     true,
+		Status:    ToolStatusError,
+		Collapsed: true,
+	})
+
+	if got := stripANSI(m.rawLines[m.toolBlocks[0].block.lineStart]); got != " ▶ [tool error] ✕ error read_file a.go 12ms" {
+		t.Fatalf("error summary line = %q, want tool error label", got)
+	}
+}
+
 func TestToolBlock_UpdatePreservesBottomFollowWhenExpanded(t *testing.T) {
 	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
 	m.vp.height = 2

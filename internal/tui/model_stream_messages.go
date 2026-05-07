@@ -42,7 +42,7 @@ func (m *Model) handleUpdateStatusMsg(msg UpdateStatusMsg) {
 func (m *Model) handleAgentDoneMsg(msg AgentDoneMsg) {
 	m.resetStreamingState()
 	m.refreshStatusLine()
-	m.finishAgentActivity(msg.Error)
+	m.finishAgentActivity(msg.Error, msg.ErrorKind)
 }
 
 func (m Model) handleStreamMessage(msg tea.Msg) (Model, tea.Cmd, bool) {

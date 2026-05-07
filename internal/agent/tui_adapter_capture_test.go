@@ -124,6 +124,9 @@ func TestTUIAdapter_ChatWithImagePathReturnsLoadError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "failed to load image") {
 		t.Fatalf("ChatWithImagePath() error = %v, want image load error", err)
 	}
+	if got := tui.AgentErrorKindFromError(err, tui.AgentErrorProvider); got != tui.AgentErrorValidation {
+		t.Fatalf("ChatWithImagePath() error kind = %q, want %q", got, tui.AgentErrorValidation)
+	}
 	if adapter.IsProcessing() {
 		t.Fatal("ChatWithImagePath() should reset processing flag after load error")
 	}

@@ -77,7 +77,7 @@ func (a *TUIAdapter) ChatWithImagePath(input string, imagePath string) error {
 	image, err := api.LoadImage(imagePath)
 	if err != nil {
 		red.Fprintf(a.agent.output(), "Failed to load image: %v\n", err)
-		return fmt.Errorf("failed to load image: %w", err)
+		return tui.WrapAgentTurnError(tui.AgentErrorValidation, fmt.Errorf("failed to load image: %w", err))
 	}
 
 	return a.chatWithImage(input, image)

@@ -108,22 +108,30 @@ var Chrome = ChromePalette{
 
 // ActivityPalette は agent activity block の ANSI color palette。
 type ActivityPalette struct {
-	Header  string
-	Scanner string
-	Dim     string
-	Running string
-	Success string
-	Error   string
-	Reset   string
+	Header          string
+	Scanner         string
+	Dim             string
+	Running         string
+	Success         string
+	Error           string
+	ErrorProvider   string
+	ErrorTool       string
+	ErrorValidation string
+	ErrorStartup    string
+	Reset           string
 }
 
 // Activity は agent activity block で使う既定 palette。
 var Activity = ActivityPalette{
-	Header:  "\033[2;38;5;87m",
-	Scanner: "\033[38;5;87m",
-	Dim:     "\033[38;5;244m",
-	Running: "\033[38;5;87m",
-	Success: "\033[38;5;82m",
-	Error:   "\033[38;5;196m",
-	Reset:   "\033[0m",
+	Header:          "\033[2;38;5;87m",
+	Scanner:         "\033[38;5;87m",
+	Dim:             "\033[38;5;244m",
+	Running:         "\033[38;5;87m",
+	Success:         "\033[38;5;82m",
+	Error:           "\033[38;5;196m",
+	ErrorProvider:   "\033[38;5;203m",
+	ErrorTool:       "\033[38;5;214m",
+	ErrorValidation: "\033[38;5;220m",
+	ErrorStartup:    "\033[38;5;207m",
+	Reset:           "\033[0m",
 }
