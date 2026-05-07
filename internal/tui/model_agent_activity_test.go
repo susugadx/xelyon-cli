@@ -25,7 +25,7 @@ func TestModel_ChatSubmissionAppendsAgentActivityAfterUserMessage(t *testing.T) 
 		t.Fatal("agent activity should be active after chat submission")
 	}
 	plain := plainRawTranscript(m)
-	userIdx := strings.Index(plain, "── user ·")
+	userIdx := strings.Index(plain, "━━ user ·")
 	agentIdx := strings.Index(plain, "── agent · working · 00:00 ──")
 	if userIdx < 0 || agentIdx < 0 || agentIdx <= userIdx {
 		t.Fatalf("agent activity should follow user turn, transcript:\n%s", plain)
@@ -52,7 +52,7 @@ func TestModel_StartupSubmissionAppendsAgentActivityAfterUserMessage(t *testing.
 		t.Fatal("agent activity should be active after startup submission")
 	}
 	plain := plainRawTranscript(m)
-	userIdx := strings.Index(plain, "── user ·")
+	userIdx := strings.Index(plain, "━━ user ·")
 	agentIdx := strings.Index(plain, "── agent · working · 00:00 ──")
 	if userIdx < 0 || agentIdx < 0 || agentIdx <= userIdx {
 		t.Fatalf("agent activity should follow startup user turn, transcript:\n%s", plain)
@@ -187,7 +187,7 @@ func TestModel_AgentCommandSubmissionKeepsToolUpdatesInActivityUntilDone(t *test
 		t.Fatal("agent activity should stay active until completion command is handled")
 	}
 	plain := plainRawTranscript(m)
-	userIdx := strings.Index(plain, "── user ·")
+	userIdx := strings.Index(plain, "━━ user ·")
 	agentIdx := strings.Index(plain, "── agent · working")
 	if userIdx < 0 || agentIdx < 0 || agentIdx <= userIdx {
 		t.Fatalf("handled command activity should follow command user turn, transcript:\n%s", plain)

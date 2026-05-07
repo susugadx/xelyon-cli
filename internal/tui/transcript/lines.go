@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 // NormalizeLine は raw transcript line を表示・レイアウト用に正規化する。
@@ -60,28 +62,56 @@ func Lines(msg Message) []string {
 type turnChromeSpec struct {
 	Enabled     bool
 	DisplayRole string
+	Rule        string
 	LinePrefix  string
+	HeaderStyle string
 }
 
 func turnChromeSpecForRole(role string) turnChromeSpec {
 	switch role {
 	case "user":
-		return turnChromeSpec{Enabled: true, DisplayRole: "user", LinePrefix: "│ > "}
+		return turnChromeSpec{
+			Enabled:     true,
+			DisplayRole: "user",
+			Rule:        "━━",
+			LinePrefix:  "┃ > ",
+			HeaderStyle: theme.Transcript.UserHeader,
+		}
 	case "assistant":
-		return turnChromeSpec{Enabled: true, DisplayRole: "assistant", LinePrefix: "│ "}
+		return turnChromeSpec{
+			Enabled:     true,
+			DisplayRole: "assistant",
+			Rule:        "──",
+			LinePrefix:  "│ ",
+			HeaderStyle: theme.Transcript.AssistantHeader,
+		}
 	case "system_info":
-		return turnChromeSpec{Enabled: true, DisplayRole: "system", LinePrefix: "│ "}
+		return turnChromeSpec{
+			Enabled:     true,
+			DisplayRole: "system",
+			Rule:        "┄┄",
+			LinePrefix:  "┆ · ",
+			HeaderStyle: theme.Transcript.SystemHeader,
+		}
 	default:
 		return turnChromeSpec{}
 	}
 }
 
 func separatorLine(spec turnChromeSpec, timestamp time.Time) string {
-	return fmt.Sprintf("── %s · %s · now ──", spec.DisplayRole, timestamp.Format("15:04"))
+	line := fmt.Sprintf("%s %s · %s · now %s", spec.Rule, spec.DisplayRole, timestamp.Format("15:04"), spec.Rule)
+	return styleTranscriptLine(spec.HeaderStyle, line)
 }
 
 func gutteredLine(spec turnChromeSpec, line string) string {
 	return spec.LinePrefix + line
+}
+
+func styleTranscriptLine(style string, line string) string {
+	if style == "" {
+		return line
+	}
+	return style + line + theme.Transcript.Reset
 }
 
 func plainMessageLines(content string) []string {

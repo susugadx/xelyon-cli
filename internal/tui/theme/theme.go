@@ -106,6 +106,22 @@ var Chrome = ChromePalette{
 	Reset:                   "\033[0m",
 }
 
+// TranscriptPalette は通常 transcript message の role chrome 用 palette。
+type TranscriptPalette struct {
+	UserHeader      string
+	AssistantHeader string
+	SystemHeader    string
+	Reset           string
+}
+
+// Transcript は user / assistant / system message の scan 性を上げる既定 palette。
+var Transcript = TranscriptPalette{
+	UserHeader:      "\033[38;5;117m",
+	AssistantHeader: "\033[38;5;108m",
+	SystemHeader:    "\033[38;5;220m",
+	Reset:           "\033[0m",
+}
+
 // ActivityPalette は agent activity block の ANSI color palette。
 type ActivityPalette struct {
 	Header          string

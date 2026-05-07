@@ -225,9 +225,13 @@ func TestComposer_MultilineUserMessageKeepsViewStructure(t *testing.T) {
 	})
 	m.rebuildChrome()
 
-	wantTail := []string{"── user · " + m.messages[len(m.messages)-1].Timestamp.Format("15:04") + " · now ──", "│ > alpha", "│ > beta", "│ > gamma"}
-	if got := m.rawLines[len(m.rawLines)-len(wantTail):]; !equalStringSlices(got, wantTail) {
-		t.Fatalf("rawLines tail = %#v, want %#v", got, wantTail)
+	wantTail := []string{"━━ user · " + m.messages[len(m.messages)-1].Timestamp.Format("15:04") + " · now ━━", "┃ > alpha", "┃ > beta", "┃ > gamma"}
+	gotTail := make([]string, len(wantTail))
+	for i, line := range m.rawLines[len(m.rawLines)-len(wantTail):] {
+		gotTail[i] = stripANSI(line)
+	}
+	if !equalStringSlices(gotTail, wantTail) {
+		t.Fatalf("rawLines tail = %#v, want %#v", gotTail, wantTail)
 	}
 	for i, line := range m.rawLines {
 		if strings.Contains(line, "\n") {
