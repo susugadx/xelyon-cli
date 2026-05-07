@@ -19,17 +19,17 @@ func (m *Model) buildStatusText(now time.Time) string {
 	chrome := theme.Chrome
 	statusLine := termtext.SanitizeSingleLineANSI(m.statusLine)
 
-	statusText := " " + statusLine
+	statusText := " " + chrome.StatusFg + statusLine + chrome.Reset
 	if m.navigationMode {
-		statusText = " " + chrome.NavBadge + " NAV " + chrome.Reset + " " + statusLine
+		statusText = " " + chrome.NavBadge + " NAV " + chrome.Reset + chrome.StatusSepFg + " " + chrome.Reset + chrome.StatusFg + statusLine + chrome.Reset
 	} else if m.conversation.IsProcessing() {
-		statusText = " " + m.spinner.View() + " " + statusLine
+		statusText = " " + m.spinner.View() + chrome.StatusSepFg + " " + chrome.Reset + chrome.StatusFg + statusLine + chrome.Reset
 	}
 	if m.newOutput && !m.vp.atBottom() {
-		statusText += "  " + chrome.NewOutput + " ↓ New output " + chrome.Reset
+		statusText += chrome.StatusSepFg + "  " + chrome.Reset + chrome.NewOutput + " ↓ New output " + chrome.Reset
 	}
 	if m.transientStatus != "" && now.Before(m.transientStatusUntil) {
-		statusText += "  " + chrome.SuccessFg + termtext.SanitizeSingleLineANSI(m.transientStatus) + chrome.Reset
+		statusText += chrome.StatusSepFg + "  " + chrome.Reset + chrome.SuccessFg + termtext.SanitizeSingleLineANSI(m.transientStatus) + chrome.Reset
 	}
 	return statusText
 }
@@ -75,12 +75,12 @@ func (m Model) composeStatusBarWithWorkingDir(statusText, hint string) (string, 
 	if workingDir == "" {
 		return "", false
 	}
-	statusWithPath := statusText + "  " + workingDir
+	chrome := theme.Chrome
+	statusWithPath := statusText + chrome.StatusSepFg + "  " + chrome.Reset + workingDir
 	padding := m.width - lipgloss.Width(statusWithPath) - lipgloss.Width(hint)
 	if padding < 2 {
 		return "", false
 	}
-	chrome := theme.Chrome
 	line := statusWithPath + strings.Repeat(" ", padding) + chrome.HintFg + hint + chrome.Reset
 	return fitANSITextWidth(line, m.width), true
 }

@@ -25,18 +25,24 @@ func (m Model) renderSlashSuggestionRow(suggestion slash.Suggestion, selected bo
 	chrome := theme.Chrome
 	bg := chrome.SuggestionBg
 	prefix := "  "
+	prefixFg := chrome.SuggestionPrefixFg
+	commandFg := chrome.SuggestionCommandFg
+	descriptionFg := chrome.SuggestionDescFg
 	if selected {
 		bg = chrome.SuggestionSelectedBg
 		prefix = "› "
+		prefixFg = chrome.SuggestionSelectedFg
+		commandFg = chrome.SuggestionSelectedFg
+		descriptionFg = chrome.SuggestionSelectedDimFg
 	}
 
 	commandWidth := slashSuggestionCommandWidth(m.width)
 	descriptionWidth := max(0, m.width-commandWidth-4)
 	label := paddedPlainText(suggestion.Label, commandWidth)
 	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(suggestion.Description), descriptionWidth)
-	line := bg + prefix + chrome.SuggestionCommandFg + label + chrome.Reset + bg
+	line := bg + prefixFg + prefix + commandFg + label + chrome.Reset + bg
 	if descriptionWidth > 0 {
-		line += "  " + chrome.SuggestionDescFg + description + chrome.Reset + bg
+		line += prefixFg + "  " + chrome.Reset + bg + descriptionFg + description + chrome.Reset + bg
 	}
 	return termtext.FillANSITextWidth(line+chrome.Reset, m.width, bg)
 }
