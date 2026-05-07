@@ -39,19 +39,19 @@ func TestToolBlock_FocusIndicatorReflected(t *testing.T) {
 
 	m.appendToolResult(ToolResult{Name: "a", Summary: "test-summary", Detail: "d", Collapsed: true})
 
-	firstLine := m.rawLines[m.toolBlocks[0].lineStart]
+	firstLine := m.rawLines[m.toolBlocks[0].block.lineStart]
 	if firstLine[0] != ' ' {
 		t.Fatalf("unfocused indicator = %q, want space", string(firstLine[0]))
 	}
 
 	m.setBlockFocus(0)
-	firstLine = m.rawLines[m.toolBlocks[0].lineStart]
+	firstLine = m.rawLines[m.toolBlocks[0].block.lineStart]
 	if !strings.HasPrefix(firstLine, "→") {
 		t.Fatalf("focused line = %q, want → prefix", firstLine)
 	}
 
 	m.clearBlockFocus()
-	firstLine = m.rawLines[m.toolBlocks[0].lineStart]
+	firstLine = m.rawLines[m.toolBlocks[0].block.lineStart]
 	if firstLine[0] != ' ' {
 		t.Fatalf("after clear: indicator = %q, want space", string(firstLine[0]))
 	}

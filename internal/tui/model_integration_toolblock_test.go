@@ -38,8 +38,8 @@ func TestTUIIntegration_ToolBlockFocusExpandWheelCollapseSequence(t *testing.T) 
 	if !m.toolBlocks[0].tool.Collapsed {
 		t.Fatal("block should be collapsed again after second Enter")
 	}
-	if m.toolBlocks[0].lineStart <= m.toolBlocks[0].lineCount-1 {
-		t.Fatalf("unexpected tool block lineStart = %d", m.toolBlocks[0].lineStart)
+	if m.toolBlocks[0].block.lineStart <= m.toolBlocks[0].block.lineCount-1 {
+		t.Fatalf("unexpected tool block lineStart = %d", m.toolBlocks[0].block.lineStart)
 	}
 	if m.vp.yOffset < 0 {
 		t.Fatalf("viewport yOffset = %d, want >= 0", m.vp.yOffset)

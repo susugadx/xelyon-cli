@@ -62,11 +62,16 @@ const (
 	visualModeLine
 )
 
+// trackedBlock は rawLines 上で更新可能な transcript block の範囲を追跡する。
+type trackedBlock struct {
+	lineStart int // rawLines でのブロック開始行インデックス
+	lineCount int // ブロックが占める行数
+}
+
 // toolBlockInfo は表示上のツール結果ブロックを追跡する。
 type toolBlockInfo struct {
-	lineStart int        // rawLines でのブロック開始行インデックス
-	lineCount int        // ブロックが占める行数
-	tool      ToolResult // ツール結果データ
+	block trackedBlock
+	tool  ToolResult // ツール結果データ
 }
 
 type visualPosition struct {

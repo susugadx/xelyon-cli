@@ -103,7 +103,7 @@ func TestToolBlock_MouseWheelKeepsFocusedBlockState(t *testing.T) {
 	m.setBlockFocus(1)
 
 	focusedBefore := m.focusedBlock
-	lineBefore := m.toolBlocks[focusedBefore].lineStart
+	lineBefore := m.toolBlocks[focusedBefore].block.lineStart
 
 	updated, _ := m.Update(tea.MouseMsg{
 		Button: tea.MouseButtonWheelUp,
@@ -114,8 +114,8 @@ func TestToolBlock_MouseWheelKeepsFocusedBlockState(t *testing.T) {
 	if m.focusedBlock != focusedBefore {
 		t.Fatalf("focusedBlock changed from %d to %d", focusedBefore, m.focusedBlock)
 	}
-	if m.toolBlocks[m.focusedBlock].lineStart != lineBefore {
-		t.Fatalf("focused block lineStart changed from %d to %d", lineBefore, m.toolBlocks[m.focusedBlock].lineStart)
+	if m.toolBlocks[m.focusedBlock].block.lineStart != lineBefore {
+		t.Fatalf("focused block lineStart changed from %d to %d", lineBefore, m.toolBlocks[m.focusedBlock].block.lineStart)
 	}
 
 	updated, _ = m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyEnter})
@@ -211,7 +211,7 @@ func TestToolBlock_ScrollToBlock(t *testing.T) {
 	}
 
 	m.scrollToBlock(0)
-	blockStart := m.toolBlocks[0].lineStart
+	blockStart := m.toolBlocks[0].block.lineStart
 	target := max(0, blockStart-2)
 	maxY := m.vp.maxYOffset()
 	if target > maxY {

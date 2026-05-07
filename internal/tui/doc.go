@@ -15,8 +15,8 @@
 //     /project 画面の orchestration、xelyon.yaml の structured edit、保存、render
 //   - model_navigation*.go:
 //     NAV mode、cursor、vim motion、visual selection、copy、pending state
-//   - model_output.go, model_stream*.go:
-//     chat 出力、stream 更新、Model への反映
+//   - model_output.go, model_tracked_block.go, model_stream*.go:
+//     chat 出力、更新可能な transcript block、stream 更新、Model への反映
 //   - model_render.go, render_*.go, viewport.go:
 //     viewport/chrome 描画と TUI 固有の表示合成
 //   - model_toolblock*.go:

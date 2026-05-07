@@ -9,7 +9,7 @@ func (m *Model) setBlockFocus(blockIdx int) {
 	m.clearVisualSelection()
 	old := m.focusedBlock
 	m.focusedBlock = blockIdx
-	m.cursorLine = m.toolBlocks[blockIdx].lineStart
+	m.cursorLine = m.toolBlocks[blockIdx].block.lineStart
 	m.updateBlockIndicator(old)
 	m.updateBlockIndicator(m.focusedBlock)
 	m.scrollToBlock(m.focusedBlock)
@@ -40,10 +40,10 @@ func (m *Model) scrollToBlock(blockIdx int) {
 		return
 	}
 
-	block := m.toolBlocks[blockIdx]
+	toolBlock := m.toolBlocks[blockIdx]
 	target := 0
-	if m.layout != nil && block.lineStart < len(m.layout.LineToRowMap) {
-		target = max(0, m.layout.LineToRowMap[block.lineStart]-2)
+	if m.layout != nil && toolBlock.block.lineStart < len(m.layout.LineToRowMap) {
+		target = max(0, m.layout.LineToRowMap[toolBlock.block.lineStart]-2)
 	}
 	maxOffset := m.vp.maxYOffset()
 	if target > maxOffset {
