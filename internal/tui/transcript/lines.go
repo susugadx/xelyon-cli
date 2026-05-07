@@ -43,14 +43,14 @@ func MessageLines(role string, content string) []string {
 func Lines(msg Message) []string {
 	spec := turnChromeSpecForRole(msg.Role)
 	if !spec.Enabled {
-		return plainMessageLines(msg.Content)
+		return renderMessageBodyLines(msg.Role, msg.Content)
 	}
 
 	timestamp := msg.Timestamp
 	if timestamp.IsZero() {
 		timestamp = time.Now()
 	}
-	lines := strings.Split(msg.Content, "\n")
+	lines := renderMessageBodyLines(msg.Role, msg.Content)
 	rendered := make([]string, 0, len(lines)+1)
 	rendered = append(rendered, separatorLine(spec, timestamp))
 	for _, line := range lines {
@@ -112,8 +112,4 @@ func styleTranscriptLine(style string, line string) string {
 		return line
 	}
 	return style + line + theme.Transcript.Reset
-}
-
-func plainMessageLines(content string) []string {
-	return strings.Split(content, "\n")
 }
