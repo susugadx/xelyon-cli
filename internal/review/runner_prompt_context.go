@@ -73,20 +73,7 @@ func buildReviewProbeCommandResultPromptContexts(results []ReviewProbeCommandRes
 }
 
 func redactReviewProbeSummariesForPrompt(summaries []ReviewProbeSummary, redactor reviewRunnerPromptRedactor) []ReviewProbeSummary {
-	sanitized := make([]ReviewProbeSummary, 0, len(summaries))
-	for _, summary := range summaries {
-		sanitized = append(sanitized, ReviewProbeSummary{
-			ProbeID:         summary.ProbeID,
-			Mode:            summary.Mode,
-			Status:          summary.Status,
-			MutatedWorktree: summary.MutatedWorktree,
-			MutatedFiles:    redactor.redactPaths(summary.MutatedFiles),
-			OutputTruncated: summary.OutputTruncated,
-			Error:           redactor.redactText(summary.Error),
-			Commands:        redactReviewProbeCommandSummariesForPrompt(summary.Commands, redactor),
-		})
-	}
-	return sanitized
+	return redactReviewProbeSummaries(summaries, redactor)
 }
 
 type reviewProbeResultPromptOutputLimiter struct {
@@ -136,21 +123,4 @@ func truncateReviewProbeResultPromptOutput(output string, limit int) string {
 		truncated = truncated[:len(truncated)-size]
 	}
 	return truncated
-}
-
-func redactReviewProbeCommandSummariesForPrompt(summaries []ReviewProbeCommandSummary, redactor reviewRunnerPromptRedactor) []ReviewProbeCommandSummary {
-	sanitized := make([]ReviewProbeCommandSummary, 0, len(summaries))
-	for _, summary := range summaries {
-		sanitized = append(sanitized, ReviewProbeCommandSummary{
-			Command:         redactor.redactText(summary.Command),
-			Args:            redactor.redactTexts(summary.Args),
-			WorkDir:         redactor.redactPath(summary.WorkDir),
-			Status:          summary.Status,
-			ExitCode:        summary.ExitCode,
-			OutputTruncated: summary.OutputTruncated,
-			Error:           redactor.redactText(summary.Error),
-			DurationMs:      summary.DurationMs,
-		})
-	}
-	return sanitized
 }

@@ -3,6 +3,8 @@ package review
 import "fmt"
 
 func finalizeReviewRunnerReport(report ReviewReport, trustedProbeSummaries []ReviewProbeSummary) (ReviewReport, error) {
+	// 現時点では raw trusted summaries を注入する。次フェーズで同じ core redaction helper を使い、
+	// final report 用 redacted trusted summaries へ切り替える。
 	report.ProbeSummaries = copyReviewRunnerProbeSummaries(trustedProbeSummaries)
 	canonicalizeReviewProbeSummaryMutationOutcomes(report.ProbeSummaries)
 	report = normalizeReviewRunnerReportForTrustedProbeOutcomes(report)

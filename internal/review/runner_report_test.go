@@ -1,6 +1,9 @@
 package review
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(t *testing.T) {
 	tests := []struct {
@@ -62,5 +65,38 @@ func TestFinalizeReviewRunnerReportDowngradesVerifiedFindingsWithBlockedTrustedP
 	}
 	if got.OverallVerificationStatus != ReviewVerificationPartiallyVerified {
 		t.Fatalf("OverallVerificationStatus = %q, want %q", got.OverallVerificationStatus, ReviewVerificationPartiallyVerified)
+	}
+}
+
+func TestFinalizeReviewRunnerReportKeepsTrustedProbeSummariesRawForNow(t *testing.T) {
+	trustedSummaries := []ReviewProbeSummary{
+		{
+			ProbeID:         "probe-raw",
+			Mode:            ReviewProbeHostReadOnly,
+			Status:          ReviewProbeFailed,
+			MutatedFiles:    []string{"/tmp/probe-workdir/raw-output.txt"},
+			OutputTruncated: true,
+			Error:           "raw path /tmp/probe-workdir/raw-output.txt",
+			Commands: []ReviewProbeCommandSummary{
+				{
+					Command:         "cat /tmp/probe-workdir/raw-output.txt",
+					Args:            []string{"/tmp/probe-workdir/raw-output.txt"},
+					WorkDir:         "/tmp/probe-workdir",
+					Status:          ReviewProbeFailed,
+					ExitCode:        1,
+					OutputTruncated: true,
+					Error:           "failed at /tmp/probe-workdir/raw-output.txt",
+					DurationMs:      25,
+				},
+			},
+		},
+	}
+
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), trustedSummaries)
+	if err != nil {
+		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
+	}
+	if !reflect.DeepEqual(got.ProbeSummaries, trustedSummaries) {
+		t.Fatalf("ProbeSummaries = %#v, want raw trusted summaries %#v", got.ProbeSummaries, trustedSummaries)
 	}
 }
