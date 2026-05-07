@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -111,6 +112,28 @@ func TestReviewScreen_CloseAfterResize_RebuildsChatFooter(t *testing.T) {
 	verifyViewLines(t, m, "review close after resize")
 }
 
+func TestReviewScreen_OptionalReviewAgentIsCapturedButNotCalledYet(t *testing.T) {
+	agent := &reviewCapableStubAgent{stubAgent: stubAgent{statusLine: "ready"}}
+	m := NewModel(agent, "")
+	if m.reviewAgent == nil {
+		t.Fatal("reviewAgent = nil, want optional ReviewAgent to be captured")
+	}
+
+	m.reviewScreen = newReviewScreen()
+	updated, cmd := m.handleReviewRequest(review.NewCurrentChangesRequest(""))
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("handleReviewRequest() cmd = %v, want nil", cmd)
+	}
+	if agent.reviewCalls != 0 {
+		t.Fatalf("RunReview calls = %d, want 0 while /review remains TUI-only preview", agent.reviewCalls)
+	}
+	if m.reviewScreen.message != reviewRunnerNotImplementedMessage {
+		t.Fatalf("review message = %q, want %q", m.reviewScreen.message, reviewRunnerNotImplementedMessage)
+	}
+}
+
 func newReviewTestModel() Model {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
@@ -119,6 +142,16 @@ func newReviewTestModel() Model {
 	m.reviewScreen.customInput.Width = m.width - 4
 	m.rebuildChrome()
 	return m
+}
+
+type reviewCapableStubAgent struct {
+	stubAgent
+	reviewCalls int
+}
+
+func (s *reviewCapableStubAgent) RunReview(context.Context, review.ReviewRequest) (review.ReviewReport, error) {
+	s.reviewCalls++
+	return review.ReviewReport{}, nil
 }
 
 func sendReviewKey(m Model, s string) Model {

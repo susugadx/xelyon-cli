@@ -40,12 +40,15 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 		initLines = strings.Split(initialContent, "\n")
 	}
 
+	reviewAgent, _ := agent.(ReviewAgent)
+
 	return Model{
 		conversation: agent,
 		commands:     agent,
 		clipboard:    agent,
 		configAgent:  agent,
 		projectAgent: agent,
+		reviewAgent:  reviewAgent,
 		textInput:    ti,
 		spinner:      sp,
 		rawLines:     append([]string(nil), initLines...),

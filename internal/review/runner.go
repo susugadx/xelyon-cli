@@ -22,7 +22,9 @@ type ReviewProbeExecutor interface {
 	Run(context.Context, ReviewProbeRequest) (ReviewProbeResult, error)
 }
 
-// ReviewRunnerOptions は ReviewRunner の依存関係を表す。
+// ReviewRunnerOptions は ReviewRunner の必須依存関係を表す。
+// concrete 依存の選択と構築は adapter/factory 側の責務にし、
+// ReviewRunner は注入済みの review domain 境界だけを使う。
 type ReviewRunnerOptions struct {
 	EvidenceBuilder ReviewEvidenceProvider
 	ProbeRunner     ReviewProbeExecutor
