@@ -5,9 +5,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
-	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
 
 const maxSlashSuggestionRows = 8
@@ -17,6 +15,11 @@ type slashSuggestionState struct {
 	suggestions     []slash.Suggestion
 	selected        int
 	selectionActive bool
+}
+
+type slashSuggestionRenderRow struct {
+	Suggestion slash.Suggestion
+	Selected   bool
 }
 
 func (s slashSuggestionState) visible() bool {
@@ -118,6 +121,22 @@ func (m Model) visibleSlashSuggestionRows() []slash.Suggestion {
 	return m.slashSuggestions.suggestions[start:end]
 }
 
+func (m Model) visibleSlashSuggestionRenderRows() []slashSuggestionRenderRow {
+	rows := m.visibleSlashSuggestionRows()
+	if len(rows) == 0 {
+		return nil
+	}
+	start := m.slashSuggestionWindowStart()
+	out := make([]slashSuggestionRenderRow, 0, len(rows))
+	for i, suggestion := range rows {
+		out = append(out, slashSuggestionRenderRow{
+			Suggestion: suggestion,
+			Selected:   start+i == m.slashSuggestions.selected,
+		})
+	}
+	return out
+}
+
 func (m Model) maxVisibleSlashSuggestionRows() int {
 	available := m.remainingFooterRowsAfterComposerAndAttachments()
 	if available <= 0 {
@@ -210,16 +229,4 @@ func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 
 	return m, nil, false
-}
-
-func paddedPlainText(text string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	text = termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(text), width)
-	padding := width - lipgloss.Width(text)
-	if padding > 0 {
-		text += strings.Repeat(" ", padding)
-	}
-	return text
 }
