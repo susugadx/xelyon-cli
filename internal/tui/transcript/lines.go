@@ -108,7 +108,7 @@ func gutteredLine(spec turnChromeSpec, line string) string {
 }
 
 func styleTranscriptLine(style string, line string) string {
-	if style == "" {
+	if style == "" || line == "" {
 		return line
 	}
 	return style + line + theme.Transcript.Reset

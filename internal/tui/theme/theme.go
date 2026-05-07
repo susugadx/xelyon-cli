@@ -108,18 +108,38 @@ var Chrome = ChromePalette{
 
 // TranscriptPalette は通常 transcript message の role chrome 用 palette。
 type TranscriptPalette struct {
-	UserHeader      string
-	AssistantHeader string
-	SystemHeader    string
-	Reset           string
+	UserHeader          string
+	AssistantHeader     string
+	AssistantText       string
+	AssistantHeading    string
+	AssistantListMarker string
+	AssistantInlineCode string
+	AssistantCodeFence  string
+	AssistantCodeBlock  string
+	AssistantQuote      string
+	AssistantNote       string
+	AssistantWarning    string
+	AssistantError      string
+	SystemHeader        string
+	Reset               string
 }
 
 // Transcript は user / assistant / system message の scan 性を上げる既定 palette。
 var Transcript = TranscriptPalette{
-	UserHeader:      "\033[38;5;117m",
-	AssistantHeader: "\033[38;5;108m",
-	SystemHeader:    "\033[38;5;220m",
-	Reset:           "\033[0m",
+	UserHeader:          "\033[38;5;117m",
+	AssistantHeader:     "\033[38;5;108m",
+	AssistantText:       "\033[38;5;252m",
+	AssistantHeading:    "\033[1;38;5;117m",
+	AssistantListMarker: "\033[38;5;108m",
+	AssistantInlineCode: "\033[38;5;221m",
+	AssistantCodeFence:  "\033[38;5;108m",
+	AssistantCodeBlock:  "\033[48;5;236;38;5;250m",
+	AssistantQuote:      "\033[38;5;246m",
+	AssistantNote:       "\033[38;5;117m",
+	AssistantWarning:    "\033[38;5;220m",
+	AssistantError:      "\033[38;5;203m",
+	SystemHeader:        "\033[38;5;220m",
+	Reset:               "\033[0m",
 }
 
 // ActivityPalette は agent activity block の ANSI color palette。

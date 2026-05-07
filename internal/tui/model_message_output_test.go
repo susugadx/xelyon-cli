@@ -43,8 +43,8 @@ func TestModel_AppendMessagePreservesCRLFSeparatedLines(t *testing.T) {
 	}
 	want := []string{"│ first", "│ second", "│ third"}
 	for i, line := range want {
-		if m.rawLines[i+1] != line {
-			t.Fatalf("rawLines[%d] = %q, want %q", i+1, m.rawLines[i+1], line)
+		if got := stripANSI(m.rawLines[i+1]); got != line {
+			t.Fatalf("rawLines[%d] plain = %q, want %q", i+1, got, line)
 		}
 	}
 	if strings.Contains(m.viewportView(), "\r") {
@@ -115,8 +115,8 @@ func TestModel_AppendMessagePreservesTabsInRawLines(t *testing.T) {
 	if len(m.rawLines) != 2 {
 		t.Fatalf("rawLines len = %d, want 2", len(m.rawLines))
 	}
-	if m.rawLines[1] != "│ a\tb" {
-		t.Fatalf("rawLines[1] = %q, want %q", m.rawLines[1], "│ a\tb")
+	if got := stripANSI(m.rawLines[1]); got != "│ a\tb" {
+		t.Fatalf("rawLines[1] plain = %q, want %q", got, "│ a\tb")
 	}
 	if got := stripANSI(m.viewportView()); !strings.Contains(got, "a    b") {
 		t.Fatalf("viewportView should expand tabs for display, got %q", got)
