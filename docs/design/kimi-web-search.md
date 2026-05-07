@@ -36,9 +36,11 @@ Kimi `$web_search` request は Chat Completions streaming payload のまま送�
 
 Kimi stream usage が返った場合だけ token usage として `api.UsageCallback` に流す。`cached_tokens` は `api.Usage.CachedInputTokens` に乗せる。
 
-Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金する。`finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合、XELYON は call count を数え、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を `api.Usage.StorageCost` に載せる。これは token usage とは別の callback として発火し、`api.Usage.WebSearchCalls` と `api.Usage.WebSearchResultTokens` に観測値を載せる。
+Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金する。`finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合、XELYON は call count を数え、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を `api.Usage.StorageCost` に載せる。`finish_reason = "stop"` で `$web_search` tool call がない場合は call fee を載せない。call fee callback は token usage とは別に発火し、`api.Usage.WebSearchCalls` と `api.Usage.WebSearchResultTokens` に観測値を載せる。
 
 `tool_call.function.arguments` は replay 用にそのまま保持する。別途 best-effort で JSON parse し、`usage.total_tokens` または top-level `total_tokens` があれば検索結果 token 観測値として記録する。parse 失敗は tool loop の成否に影響させない。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、`InputTokens` へは二重加算しない。
+
+`api.Usage.HasTokenObservation` は endpoint が返した token / cache usage だけを見る。`api.Usage.HasTokenOrWebSearchObservation` は token usage に加えて Kimi `$web_search` call fee 観測も含める。doctor smoke の `usage` check は前者を使い、web search の fee / call count 観測だけで endpoint token usage を観測済みにはしない。
 
 ## Diagnostics
 
@@ -52,4 +54,4 @@ Moonshot は `$web_search` call fee と Chat Completions token 使用量を別�
 - `$web_search` call count と call fee estimate が観測されること
 - `tool_call.function.arguments` に検索結果 token 使用量が含まれる場合、表示用に観測されること
 
-usage が返らない endpoint でも smoke は warn に留める。`MOONSHOT_API_KEY` がない場合、`make kimi-web-search-smoke` は実行前に失敗する。
+`--web-search-smoke` は `$web_search` call count が 1 以上の場合だけ成功扱いにする。通常の `stop` response で request が返っても、tool call がなければ call fee / search result token 観測の診断にならないため fail する。endpoint の token usage が返らない場合は `usage` check を warn に留め、`web_search_usage_observed` は `$web_search` call fee / call count 側の観測として text / JSON に出す。`cached_input_tokens` は API が返した場合だけ増えるため 0 でも成功条件にはしない。`MOONSHOT_API_KEY` がない場合、`make kimi-web-search-smoke` は実行前に失敗する。

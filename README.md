@@ -253,7 +253,7 @@ xelyon --provider gemini --model gemini-2.5-flash
 
 ### Web検索
 
-`web_search` は OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが DeepSeek / Kimi / Groq / Ollama / OpenRouter / Bedrock の場合は、`web_search.provider` で検索専用プロバイダーを指定できます。
+`web_search` は Kimi / OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが Kimi の場合は Moonshot Chat Completions の built-in `$web_search` をそのまま使えます。DeepSeek / Groq / Ollama / OpenRouter / Bedrock などの検索非対応 provider では、`web_search.provider` で検索専用プロバイダーを指定してください。
 
 ```yaml
 # ~/.xelyon/config.yaml
@@ -261,6 +261,8 @@ web_search:
   provider: gemini
 
 ```
+
+Kimi で `$web_search` が起動すると、Moonshot の call fee（`$0.005 / invocation`）が token cost とは別に発生します。XELYON は call fee を外部固定費として観測し、検索結果 tokens は次の `prompt_tokens` に含まれるため token totals へ二重加算しません。
 
 Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
 

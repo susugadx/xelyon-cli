@@ -685,7 +685,7 @@ export GROQ_API_KEY=gsk_...
 - **`web_search.provider` 設定あり**: 指定した検索プロバイダーを使用
 - **メインが非対応**: DeepSeek / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
 
-Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。Moonshot は `$web_search` call fee と token 使用量を別々に課金します。XELYON は API が返す token usage と `cached_tokens` を token cost の source of truth とし、`$web_search` call fee は `$0.005 / invocation` の外部固定費として別枠で観測します。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、表示用に観測しても token totals へは二重加算しません。
+Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。Moonshot は `$web_search` call fee と token 使用量を別々に課金します。XELYON は API が返す token usage と `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。call fee は `finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合だけ観測し、`finish_reason = "stop"` で tool call がない response には加算しません。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、表示用に観測しても token totals へは二重加算しません。
 
 #### 設定例
 
