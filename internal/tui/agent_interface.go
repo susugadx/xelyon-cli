@@ -27,14 +27,11 @@ type ConversationAgent interface {
 	IsProcessing() bool
 }
 
-// CommandAgent は slash command の実行と alias 解決を TUI に提供する。
+// CommandAgent は slash command の実行を TUI に提供する。
 type CommandAgent interface {
 	// HandleCommand は /status, /use, /clear 等のコマンドを処理する。
 	// 処理した場合 true を返す。
 	HandleCommand(cmd string) bool
-
-	// ResolveAlias はコマンド名を alias 解決する（例: "/c" -> "/config"）。
-	ResolveAlias(cmd string) string
 }
 
 // ClipboardAgent は TUI から利用する clipboard 操作を提供する。

@@ -86,21 +86,13 @@ func TestConfigScreen_CloseAfterResize_SyncsChatViewport(t *testing.T) {
 	}
 }
 
-func TestConfigScreen_ConfigAlias_OpensTUIScreen(t *testing.T) {
+func TestConfigScreen_ConfigCommandWithArgsDoesNotOpenTUIScreen(t *testing.T) {
 	agent := &stubAgent{}
 	m := newModelWithViewport(agent)
 
-	m.textInput.SetValue("/c")
-	m = sendConfigKey(m, "enter")
-	if m.screen != screenConfig {
-		t.Fatalf("screen = %d after /c, want screenConfig(%d)", m.screen, screenConfig)
-	}
-
-	m = sendConfigKey(m, "q")
-
-	m.textInput.SetValue("/c show")
+	m.textInput.SetValue("/config show")
 	m = sendConfigKey(m, "enter")
 	if m.screen == screenConfig {
-		t.Fatal("/c show should not open config screen")
+		t.Fatal("/config show should not open config screen")
 	}
 }

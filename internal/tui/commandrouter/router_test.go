@@ -9,11 +9,10 @@ import (
 
 func TestRoute_TUILocalCommands(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		resolve slash.AliasResolver
-		ctx     Context
-		want    Action
+		name  string
+		input string
+		ctx   Context
+		want  Action
 	}{
 		{
 			name:  "copy selection",
@@ -29,24 +28,7 @@ func TestRoute_TUILocalCommands(t *testing.T) {
 		{
 			name:  "quit alias",
 			input: "/q",
-			resolve: func(name string) string {
-				if name == "/q" {
-					return "/quit"
-				}
-				return name
-			},
-			want: ActionQuit,
-		},
-		{
-			name:  "config alias bare",
-			input: "/c",
-			resolve: func(name string) string {
-				if name == "/c" {
-					return "/config"
-				}
-				return name
-			},
-			want: ActionOpenConfig,
+			want:  ActionQuit,
 		},
 		{
 			name:  "config with args delegates",
@@ -97,7 +79,7 @@ func TestRoute_TUILocalCommands(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := slash.NewCommand(tt.input, tt.input, tt.resolve)
+			cmd := slash.NewCommand(tt.input, tt.input)
 			if got := Route(cmd, tt.ctx); got != tt.want {
 				t.Fatalf("Route() = %v, want %v", got, tt.want)
 			}
@@ -118,13 +100,13 @@ func TestRoute_CatalogTUILocalOwnerMatrix(t *testing.T) {
 				ctx.HasMouseSelection = true
 			}
 
-			bare := slash.NewCommand(cmdInfo.Name, cmdInfo.Name, nil)
+			bare := slash.NewCommand(cmdInfo.Name, cmdInfo.Name)
 			if got := Route(bare, ctx); got == ActionDispatchAgent {
 				t.Fatalf("Route(%q) = ActionDispatchAgent, want TUI-local action", cmdInfo.Name)
 			}
 
 			withArgsInput := cmdInfo.Name + " extra"
-			withArgs := slash.NewCommand(withArgsInput, withArgsInput, nil)
+			withArgs := slash.NewCommand(withArgsInput, withArgsInput)
 			gotWithArgs := Route(withArgs, ctx)
 			if cmdInfo.AcceptsTUILocalArgs(withArgs.Args) {
 				if gotWithArgs == ActionDispatchAgent {

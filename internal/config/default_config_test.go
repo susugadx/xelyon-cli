@@ -22,6 +22,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.ProviderModels == nil {
 		t.Fatal("ProviderModels is nil")
 	}
+	if len(cfg.CommandAliases) != 0 {
+		t.Fatalf("CommandAliases default = %#v, want empty; catalog aliases are the supported source of truth", cfg.CommandAliases)
+	}
 
 	expectedProviders := llmcatalog.ProviderKeys(false)
 	for _, provider := range expectedProviders {

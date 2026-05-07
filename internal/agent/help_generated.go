@@ -29,7 +29,7 @@ const GeneratedHelpCommandsText = `Commands:
   /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
   /lsp [status]             - Show LSP server status (running/not started/disabled)
   /version                  - Show version information
-  /help                     - Show this help
+  /help, /h                 - Show this help
 `
 
 // GeneratedTUIHelpCommandsText は自動生成された TUI ヘルプのコマンド一覧。
@@ -63,7 +63,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
   /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
-  /help                     - Show this help
+  /help, /h                 - Show this help
 `
 
 // GeneratedHelpTipsText は自動生成されたヘルプの Tips 一覧。

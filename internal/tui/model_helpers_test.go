@@ -231,19 +231,6 @@ func (s *stubAgent) ConfigureAndSwitchAzureDeployment(deployment string, catalog
 	})
 	return nil
 }
-func (s *stubAgent) ResolveAlias(cmd string) string {
-	// テスト用 alias
-	switch cmd {
-	case "/c":
-		return "/config"
-	case "/q":
-		return "/quit"
-	case "/cp":
-		return "/copy"
-	}
-	return cmd
-}
-
 func (s *stubAgent) lastChatInput() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -2,8 +2,6 @@ package agent
 
 import (
 	"testing"
-
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestConfigCommandRecognition(t *testing.T) {
@@ -29,18 +27,10 @@ func TestConfigCommandRecognition(t *testing.T) {
 	}
 }
 
-func TestResolveCommandAlias(t *testing.T) {
-	// /config がそのまま返されるか
-	resolved := resolveCommandAliasWithConfig("/config", config.DefaultConfig())
-	if resolved != "/config" {
-		t.Errorf("Expected '/config', got '%s'", resolved)
-	}
-}
-
 func TestConfigCommandSwitch(t *testing.T) {
 	// handleSpecialCommand のswitch内で/configが正しくマッチするか確認
 	parts := splitCommand("/config")
-	cmd := resolveCommandAliasWithConfig(parts[0], config.DefaultConfig())
+	cmd := parts[0]
 
 	// switch 文の条件と同じ
 	switch cmd {

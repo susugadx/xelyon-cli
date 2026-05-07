@@ -32,6 +32,27 @@ func newSurfaceDispatchTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
 	}, out
 }
 
+func TestSpecialCommandDispatch_UsesCatalogAliasesOnly(t *testing.T) {
+	agent, out := newSurfaceDispatchTestAgent(t)
+	agent.Runtime.Config.CommandAliases = map[string]string{
+		"/x": "/help",
+	}
+
+	if handleSpecialCommandForSurface("/x", agent, commandcatalog.CommandSurfaceTUI) {
+		t.Fatal("config command_aliases should not dispatch slash commands")
+	}
+	if out.String() != "" {
+		t.Fatalf("ignored config alias wrote output:\n%s", out.String())
+	}
+
+	if !handleSpecialCommandForSurface("/h", agent, commandcatalog.CommandSurfaceTUI) {
+		t.Fatal("catalog alias /h should dispatch /help")
+	}
+	if !strings.Contains(out.String(), "Commands:") {
+		t.Fatalf("/h output missing help text:\n%s", out.String())
+	}
+}
+
 func TestResolveConfigCommandSurfacePolicy(t *testing.T) {
 	tests := []struct {
 		name    string

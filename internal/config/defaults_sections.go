@@ -65,13 +65,6 @@ func defaultToolConfirmConfig() ToolConfirmConfig {
 	}
 }
 
-func defaultCommandAliases() map[string]string {
-	return map[string]string{
-		"c": "config",
-		"u": "use",
-	}
-}
-
 func defaultPromptCacheConfig() PromptCacheConfig {
 	return PromptCacheConfig{
 		Enabled:  true,

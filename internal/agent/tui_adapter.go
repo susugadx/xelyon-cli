@@ -228,11 +228,6 @@ func (a *TUIAdapter) ConfigureAndSwitchAzureDeployment(deployment string, catalo
 	return nil
 }
 
-// ResolveAlias はコマンド名を alias 解決する。
-func (a *TUIAdapter) ResolveAlias(cmd string) string {
-	return resolveCommandAliasWithConfig(cmd, a.agent.cfg())
-}
-
 // CopyLastOutput は直近のAI出力をクリップボードにコピーする。
 // historyMu でロックし、chat goroutine との data race を防ぐ。
 func (a *TUIAdapter) CopyLastOutput() (string, error) {

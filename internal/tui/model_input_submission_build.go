@@ -59,5 +59,5 @@ func (m Model) buildComposerSubmission() (composerSubmission, bool) {
 }
 
 func (m Model) resolveComposerCommand(sub composerSubmission) slash.Command {
-	return slash.NewCommand(sub.commandInput, sub.payload, m.commands.ResolveAlias)
+	return slash.NewCommand(sub.commandInput, sub.payload)
 }

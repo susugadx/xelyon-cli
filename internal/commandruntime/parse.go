@@ -114,14 +114,15 @@ func consumeQuotedEscapeRune(runes []rune, index int, quoteChar rune, current *s
 	return index
 }
 
-// Parse は input を分割し、先頭 command を alias 解決した Invocation にする。
-func Parse(input string, userAliases map[string]string) (Invocation, bool) {
+// Parse は input を分割し、先頭 command と引数を返す。
+// alias 解決は command catalog 側を source of truth とする。
+func Parse(input string) (Invocation, bool) {
 	parts, status := SplitStrict(input)
 	if !status.IsOK() || len(parts) == 0 {
 		return Invocation{}, false
 	}
 	return Invocation{
-		Command: ResolveAlias(parts[0], userAliases),
+		Command: strings.ToLower(parts[0]),
 		Args:    append([]string(nil), parts[1:]...),
 	}, true
 }

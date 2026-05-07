@@ -6,9 +6,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 )
 
-// AliasResolver は command 名を alias 解決する関数を表す。
-type AliasResolver func(string) string
-
 // Command は composer から抽出した slash command 入力を表す。
 type Command struct {
 	Input        string
@@ -25,16 +22,15 @@ func TrimmedInput(value string) (string, bool) {
 }
 
 // NewCommand は command 入力と payload から Command を構築する。
-func NewCommand(input, payload string, resolve AliasResolver) Command {
+// ResolvedName は command token の小文字正規化だけを行う。
+// alias 解決は command catalog を source of truth とする。
+func NewCommand(input, payload string) Command {
 	cmdParts, parseStatus := commandruntime.SplitStrict(input)
 	resolvedCommand := input
 	var args []string
 	if len(cmdParts) > 0 {
-		resolvedCommand = cmdParts[0]
+		resolvedCommand = strings.ToLower(cmdParts[0])
 		args = append([]string(nil), cmdParts[1:]...)
-		if resolve != nil {
-			resolvedCommand = resolve(cmdParts[0])
-		}
 	}
 	return Command{
 		Input:        input,
