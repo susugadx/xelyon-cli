@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"context"
+
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
+	"github.com/susugadx/xelyon-cli/internal/review"
 )
 
 // ConversationAgent は chat 実行と処理状態を TUI に提供する。
@@ -95,6 +98,11 @@ type ProjectAgent interface {
 
 	// CreateProjectConfigTemplate は xelyon.yaml のテンプレートを作成して読み込む。
 	CreateProjectConfigTemplate() (*config.ProjectConfig, error)
+}
+
+// ReviewAgent は /review 実行を TUI の外側へ渡す optional capability を表す。
+type ReviewAgent interface {
+	RunReview(context.Context, review.ReviewRequest) (review.ReviewReport, error)
 }
 
 // AgentInterface は tui パッケージから agent パッケージへの依存を逆転させる。

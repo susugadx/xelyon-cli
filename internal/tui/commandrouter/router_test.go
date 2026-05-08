@@ -41,9 +41,9 @@ func TestRoute_TUILocalCommands(t *testing.T) {
 			want:  ActionOpenReview,
 		},
 		{
-			name:  "review with args delegates",
+			name:  "review with args opens review",
 			input: "/review staged",
-			want:  ActionDispatchAgent,
+			want:  ActionOpenReview,
 		},
 		{
 			name:  "project bare",
@@ -116,6 +116,27 @@ func TestRoute_CatalogTUILocalOwnerMatrix(t *testing.T) {
 				if gotWithArgs != ActionDispatchAgent {
 					t.Fatalf("Route(%q) = %v, want ActionDispatchAgent", withArgsInput, gotWithArgs)
 				}
+			}
+		})
+	}
+}
+
+func TestUsesRawTUILocalArgs(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{name: "review instructions", input: `/review investigate "quoted`, want: true},
+		{name: "attach parses args", input: `/attach "quoted`, want: false},
+		{name: "unknown command", input: `/unknown "quoted`, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := slash.NewCommand(tt.input, tt.input)
+			if got := UsesRawTUILocalArgs(cmd, Context{}); got != tt.want {
+				t.Fatalf("UsesRawTUILocalArgs() = %v, want %v", got, tt.want)
 			}
 		})
 	}

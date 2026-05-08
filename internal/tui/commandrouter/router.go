@@ -19,7 +19,7 @@ const (
 	ActionQuit Action = Action(commandcatalog.TUILocalActionQuit)
 	// ActionOpenConfig は TUI config screen を開く処理を表す。
 	ActionOpenConfig Action = Action(commandcatalog.TUILocalActionOpenConfig)
-	// ActionOpenReview は TUI review preset screen を開く処理を表す。
+	// ActionOpenReview は TUI review screen を開く、または即時 review 実行する処理を表す。
 	ActionOpenReview Action = Action(commandcatalog.TUILocalActionOpenReview)
 	// ActionOpenProject は TUI project config screen を開く処理を表す。
 	ActionOpenProject Action = Action(commandcatalog.TUILocalActionOpenProject)
@@ -40,6 +40,23 @@ func Route(command slash.Command, ctx Context) Action {
 		return action
 	}
 	return ActionDispatchAgent
+}
+
+// UsesRawTUILocalArgs は command token 後の入力を quote 解析せず処理する TUI local command かを返す。
+func UsesRawTUILocalArgs(command slash.Command, ctx Context) bool {
+	cmdInfo, ok := commandcatalog.Find(command.ResolvedName)
+	if !ok || !cmdInfo.UsesRawTUILocalArgs() {
+		return false
+	}
+	if !cmdInfo.SupportsSurface(commandcatalog.CommandSurfaceTUI) {
+		return false
+	}
+	if !cmdInfo.AcceptsTUILocalContext(commandcatalog.TUILocalContext{
+		HasMouseSelection: ctx.HasMouseSelection,
+	}) {
+		return false
+	}
+	return isKnownLocalAction(Action(cmdInfo.EffectiveTUILocalAction()))
 }
 
 func routeCatalogTUILocalCommand(command slash.Command, ctx Context) (Action, bool) {

@@ -149,9 +149,7 @@ func TestChatWithTools_ThinkingAndToolChoicePolicy(t *testing.T) {
 			t.Setenv("KIMI_API_URL", server.URL)
 			t.Setenv("KIMI_FUNCTION_CALLING", "")
 
-			p := New("test-key")
-			p.SetMCPTools([]api.ToolDefinition{{Name: "read_file", Description: "read", Parameters: map[string]any{"type": "object"}}})
-			p.SetToolChoice("read_file")
+			p := newKimiReadFileToolProviderForTest()
 			ctx, _, _ := newKimiTestContext(t, tt.thinking)
 			if _, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hi"}}, tt.model); err != nil {
 				t.Fatalf("ChatWithTools() error = %v", err)
@@ -227,19 +225,32 @@ func TestChatWithTools_FunctionCallingDisabledOmitsTools(t *testing.T) {
 	})
 	t.Setenv("KIMI_API_URL", server.URL)
 
-	p := New("test-key")
-	p.SetMCPTools([]api.ToolDefinition{{Name: "read_file"}})
-	p.SetToolChoice("read_file")
+	p := newKimiReadFileToolProviderForTest()
 	ctx, _, _ := newKimiTestContext(t, false)
 	if _, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hi"}}, "kimi-k2.6"); err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
-	if _, ok := captured["tools"]; ok {
-		t.Fatalf("tools = %#v, want absent", captured["tools"])
+	assertKimiToolPayloadOmitted(t, captured)
+}
+
+func TestChatWithTools_RequestToolUseDisabledOmitsTools(t *testing.T) {
+	t.Setenv("KIMI_FUNCTION_CALLING", "")
+	var captured map[string]any
+	server := mockKimiAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		kimiStreamingHandler([]string{`{"choices":[{"delta":{"content":"ok"}}]}`})(w, r)
+	})
+	t.Setenv("KIMI_API_URL", server.URL)
+
+	p := newKimiReadFileToolProviderForTest()
+	ctx, _, _ := newKimiTestContext(t, false)
+	ctx = api.WithToolUseDisabled(ctx)
+	if _, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hi"}}, "kimi-k2.6"); err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
 	}
-	if _, ok := captured["tool_choice"]; ok {
-		t.Fatalf("tool_choice = %#v, want absent", captured["tool_choice"])
-	}
+	assertKimiToolPayloadOmitted(t, captured)
 }
 
 func TestChatWithTools_DoesNotIncludeBuiltinWebSearch(t *testing.T) {

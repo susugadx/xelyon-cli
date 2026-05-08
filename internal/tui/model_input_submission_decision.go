@@ -21,8 +21,12 @@ type commandSubmissionDecision struct {
 }
 
 func decideCommandSubmission(command slash.Command, hasMouseSelection bool) commandSubmissionDecision {
-	action := commandrouter.Route(command, commandrouter.Context{HasMouseSelection: hasMouseSelection})
+	ctx := commandrouter.Context{HasMouseSelection: hasMouseSelection}
+	action := commandrouter.Route(command, ctx)
 	if !command.ParseOK() {
+		if commandrouter.UsesRawTUILocalArgs(command, ctx) && isLocalCommandAction(action) {
+			return commandSubmissionDecision{kind: commandSubmissionDecisionLocalAction, action: action}
+		}
 		if isLocalCommandAction(action) {
 			return commandSubmissionDecision{
 				kind:        commandSubmissionDecisionLocalSyntaxError,

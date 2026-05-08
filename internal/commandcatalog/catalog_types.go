@@ -69,6 +69,8 @@ const (
 	TUILocalArgBareOnly TUILocalArgPolicy = "bare_only"
 	// TUILocalArgAllowAny は引数付きでも TUI ローカル処理する。
 	TUILocalArgAllowAny TUILocalArgPolicy = "allow_any"
+	// TUILocalArgRawText は command token 後の入力を quote 解析せず TUI ローカル処理する。
+	TUILocalArgRawText TUILocalArgPolicy = "raw_text"
 )
 
 // TUILocalAction は TUI ローカル command が引き起こす処理種別を表す。

@@ -70,6 +70,21 @@ func tuiRouterBareLocalCommand(name, description, descriptionJP string, action T
 	return cmd
 }
 
+func tuiRouterArgsLocalCommand(name, args, description, descriptionJP string, action TUILocalAction, category CommandCategory, sortWeight int, lifecycle CommandLifecycle) CommandInfo {
+	cmd := newCommandInfo(name, args, description, descriptionJP, tuiOnlySurfaces(), category, sortWeight, true)
+	cmd.Owner = CommandOwnerTUIRouter
+	cmd.TUILocalArgs = TUILocalArgAllowAny
+	cmd.TUILocalAction = action
+	cmd.Lifecycle = lifecycle
+	return cmd
+}
+
+func tuiRouterRawTextLocalCommand(name, args, description, descriptionJP string, action TUILocalAction, category CommandCategory, sortWeight int, lifecycle CommandLifecycle) CommandInfo {
+	cmd := tuiRouterArgsLocalCommand(name, args, description, descriptionJP, action, category, sortWeight, lifecycle)
+	cmd.TUILocalArgs = TUILocalArgRawText
+	return cmd
+}
+
 // Commands はコマンド一覧
 var Commands = []CommandInfo{
 	commandExit(),
@@ -200,8 +215,9 @@ func commandDetachAll() CommandInfo {
 }
 
 func commandReview() CommandInfo {
-	return tuiRouterBareLocalCommand(
+	return tuiRouterRawTextLocalCommand(
 		"/review",
+		"[instructions]",
 		"Review current changes and find issues",
 		"現在の変更をレビュー",
 		TUILocalActionOpenReview,

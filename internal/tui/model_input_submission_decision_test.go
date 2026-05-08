@@ -34,6 +34,12 @@ func TestDecideCommandSubmission(t *testing.T) {
 			wantAction: commandrouter.ActionOpenReview,
 		},
 		{
+			name:       "review raw instructions allow unmatched quote",
+			input:      `/review investigate "quoted`,
+			wantKind:   commandSubmissionDecisionLocalAction,
+			wantAction: commandrouter.ActionOpenReview,
+		},
+		{
 			name:       "bare provider picker action",
 			input:      "/provider",
 			wantKind:   commandSubmissionDecisionLocalAction,

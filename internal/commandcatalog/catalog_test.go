@@ -127,6 +127,7 @@ func TestTUILocalArgPolicyAndAction(t *testing.T) {
 		wantWithArgsOK bool
 		wantAction     TUILocalAction
 		wantOwner      CommandOwner
+		wantRawArgs    bool
 	}{
 		{
 			name:           "/attach",
@@ -152,9 +153,10 @@ func TestTUILocalArgPolicyAndAction(t *testing.T) {
 		{
 			name:           "/review",
 			withArgsInput:  "/review staged",
-			wantWithArgsOK: false,
+			wantWithArgsOK: true,
 			wantAction:     TUILocalActionOpenReview,
 			wantOwner:      CommandOwnerTUIRouter,
+			wantRawArgs:    true,
 		},
 		{
 			name:           "/project",
@@ -215,6 +217,9 @@ func TestTUILocalArgPolicyAndAction(t *testing.T) {
 			withArgs := strings.Fields(tt.withArgsInput)
 			if got := cmd.AcceptsTUILocalArgs(withArgs[1:]); got != tt.wantWithArgsOK {
 				t.Fatalf("%s AcceptsTUILocalArgs(%q) = %v, want %v", tt.name, tt.withArgsInput, got, tt.wantWithArgsOK)
+			}
+			if got := cmd.UsesRawTUILocalArgs(); got != tt.wantRawArgs {
+				t.Fatalf("%s UsesRawTUILocalArgs() = %v, want %v", tt.name, got, tt.wantRawArgs)
 			}
 			if tt.name == "/copy" {
 				if cmd.AcceptsTUILocalContext(TUILocalContext{HasMouseSelection: false}) {

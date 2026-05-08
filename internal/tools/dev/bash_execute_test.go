@@ -266,8 +266,10 @@ func TestExecuteBash_GitSafeCommands(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			output := ExecuteBash(tt.command)
 
-			// エラーでブロックされないことを確認（ただし実行エラーは別）
-			if strings.Contains(output, "blocked") {
+			// 安全性ルールのブロックエラーにならないことを確認（実行時エラーは別扱い）。
+			// git log の出力本文に "blocked" が含まれても誤検知しない。
+			if strings.HasPrefix(output, "Error: This command is blocked for safety") ||
+				strings.HasPrefix(output, "Error: eval is blocked for safety") {
 				t.Errorf("ExecuteBash() should not block safe git command '%s', got %v", tt.command, output)
 			}
 		})

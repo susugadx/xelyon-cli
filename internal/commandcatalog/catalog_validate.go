@@ -78,7 +78,7 @@ func checkCommandTokenDuplication(token, owner string, seen map[string]string, p
 
 func isValidTUILocalArgPolicy(policy TUILocalArgPolicy) bool {
 	switch policy {
-	case "", TUILocalArgBareOnly, TUILocalArgAllowAny:
+	case "", TUILocalArgBareOnly, TUILocalArgAllowAny, TUILocalArgRawText:
 		return true
 	default:
 		return false

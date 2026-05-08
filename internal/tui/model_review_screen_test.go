@@ -1,8 +1,12 @@
 package tui
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/review"
@@ -30,12 +34,12 @@ func TestReviewCommand_OpensPresetScreen(t *testing.T) {
 	}
 }
 
-func TestReviewScreen_UncommittedPresetCreatesRequest(t *testing.T) {
+func TestReviewScreen_CurrentChangesPresetCreatesRequest(t *testing.T) {
 	m := newReviewTestModel()
 
 	m = sendReviewKey(m, "enter")
 
-	assertReviewRequest(t, m, review.TargetUncommitted, "")
+	assertReviewRequest(t, m, review.TargetCurrentChanges, "")
 	if m.reviewScreen.mode != reviewScreenSubmitted {
 		t.Fatalf("review mode = %d, want submitted", m.reviewScreen.mode)
 	}
@@ -56,7 +60,7 @@ func TestReviewScreen_CustomInstructionsCreatesRequest(t *testing.T) {
 	m = sendReviewText(m, "focus on regressions")
 	m = sendReviewKey(m, "enter")
 
-	assertReviewRequest(t, m, review.TargetUncommitted, "focus on regressions")
+	assertReviewRequest(t, m, review.TargetCurrentChanges, "focus on regressions")
 	if m.reviewScreen.mode != reviewScreenSubmitted {
 		t.Fatalf("review mode = %d, want submitted", m.reviewScreen.mode)
 	}
@@ -111,14 +115,553 @@ func TestReviewScreen_CloseAfterResize_RebuildsChatFooter(t *testing.T) {
 	verifyViewLines(t, m, "review close after resize")
 }
 
+func TestReviewScreen_NilReviewAgentShowsNotImplemented(t *testing.T) {
+	m := newReviewTestModel()
+
+	updated, cmd := m.handleReviewRequest(review.NewCurrentChangesRequest(""))
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("handleReviewRequest() cmd = %v, want nil", cmd)
+	}
+	if m.reviewScreen.message != reviewRunnerNotImplementedMessage {
+		t.Fatalf("review message = %q, want %q", m.reviewScreen.message, reviewRunnerNotImplementedMessage)
+	}
+	if view := m.View(); !strings.Contains(view, reviewRunnerNotImplementedMessage) {
+		t.Fatalf("View() missing not implemented message: %q", view)
+	}
+}
+
+func TestReviewScreen_BlocksRunReviewWhileAgentIsProcessing(t *testing.T) {
+	agent := &reviewCapableStubAgent{
+		stubAgent: stubAgent{
+			statusLine: "processing",
+			processing: true,
+		},
+		report: newTUITestReviewReport(),
+	}
+	m := newModelWithViewport(agent)
+	m.screen = screenReview
+	m.reviewScreen = newReviewScreen(1)
+
+	updated, cmd := m.handleReviewRequest(review.NewCurrentChangesRequest("focus on regressions"))
+	m = updated.(Model)
+
+	if cmd != nil {
+		t.Fatalf("handleReviewRequest() cmd = %v, want nil while agent is processing", cmd)
+	}
+	if agent.reviewCalls != 0 {
+		t.Fatalf("RunReview calls = %d, want 0 while agent is processing", agent.reviewCalls)
+	}
+	if m.reviewScreen.activeRun != nil {
+		t.Fatal("active review run should not be created while agent is processing")
+	}
+	if m.reviewScreen.runState != reviewRunFailed {
+		t.Fatalf("review run state = %d, want failed busy state", m.reviewScreen.runState)
+	}
+	if m.reviewScreen.message != reviewRunnerBusyMessage {
+		t.Fatalf("review message = %q, want %q", m.reviewScreen.message, reviewRunnerBusyMessage)
+	}
+	if view := m.View(); !strings.Contains(view, reviewRunnerBusyMessage) {
+		t.Fatalf("View() missing busy message: %q", view)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = updated.(Model)
+	agent.mu.RLock()
+	cancelCalls := agent.cancelCalls
+	agent.mu.RUnlock()
+	if cancelCalls != 1 {
+		t.Fatalf("cancelCalls = %d, want 1 so in-flight chat remains cancellable", cancelCalls)
+	}
+	if m.screen != screenReview {
+		t.Fatalf("screen = %d after ctrl+c, want screenReview", m.screen)
+	}
+}
+
+func TestReviewScreen_RunReviewSuccessIsAsyncAndRendered(t *testing.T) {
+	agent := &reviewCapableStubAgent{stubAgent: stubAgent{statusLine: "ready"}}
+	agent.report = newTUITestReviewReport()
+	m := newModelWithViewport(agent)
+	if m.reviewAgent == nil {
+		t.Fatal("reviewAgent = nil, want optional ReviewAgent to be captured")
+	}
+
+	m.screen = screenReview
+	m.reviewScreen = newReviewScreen(1)
+	req := review.NewCurrentChangesRequest("")
+	updated, cmd := m.handleReviewRequest(req)
+	m = updated.(Model)
+
+	if cmd == nil {
+		t.Fatal("handleReviewRequest() cmd = nil, want async review command")
+	}
+	if agent.reviewCalls != 0 {
+		t.Fatalf("RunReview calls = %d, want 0 before cmd execution", agent.reviewCalls)
+	}
+
+	msg := cmd()
+	if agent.reviewCalls != 1 {
+		t.Fatalf("RunReview calls = %d, want 1 after cmd execution", agent.reviewCalls)
+	}
+	if agent.lastRequest.TargetKind != req.TargetKind {
+		t.Fatalf("last request TargetKind = %q, want %q", agent.lastRequest.TargetKind, req.TargetKind)
+	}
+
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	if m.reviewScreen.runState != reviewRunSucceeded {
+		t.Fatalf("review run state = %d, want succeeded", m.reviewScreen.runState)
+	}
+	view := m.View()
+	for _, want := range []string{"has_findings", "Verification: verified", "Group: request state", "Finding: stale result is ignored"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("View() missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestReviewScreen_EscWhileRunningCancelsReviewBeforeClose(t *testing.T) {
+	agent := newCancellableReviewAgent()
+	m := newModelWithViewport(agent)
+	m.screen = screenReview
+	m.reviewScreen = newReviewScreen(1)
+
+	updated, cmd := m.handleReviewRequest(review.NewCurrentChangesRequest(""))
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("handleReviewRequest() cmd = nil, want async review command")
+	}
+	if m.reviewScreen.activeRun == nil {
+		t.Fatal("review screen should hold active run while review is running")
+	}
+
+	done := make(chan tea.Msg, 1)
+	go func() {
+		done <- cmd()
+	}()
+
+	select {
+	case <-agent.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("RunReview did not start")
+	}
+
+	m = sendReviewKey(m, "esc")
+	if m.screen != screenReview {
+		t.Fatalf("screen after running cancel = %d, want screenReview", m.screen)
+	}
+	if m.reviewScreen == nil {
+		t.Fatal("reviewScreen should remain visible while cancellation is observed")
+	}
+	if m.reviewScreen.activeRun != nil {
+		t.Fatal("active run should be cleared after requesting cancellation")
+	}
+	if m.reviewScreen.runState != reviewRunFailed {
+		t.Fatalf("review run state = %d, want failed after requesting cancellation", m.reviewScreen.runState)
+	}
+	if m.reviewScreen.message != reviewRunnerCancelledMessage {
+		t.Fatalf("review message = %q, want %q", m.reviewScreen.message, reviewRunnerCancelledMessage)
+	}
+
+	var finished reviewRunFinishedMsg
+	select {
+	case msg := <-done:
+		var ok bool
+		finished, ok = msg.(reviewRunFinishedMsg)
+		if !ok {
+			t.Fatalf("review command msg = %T, want reviewRunFinishedMsg", msg)
+		}
+		if !errors.Is(finished.err, context.Canceled) {
+			t.Fatalf("review command err = %v, want context canceled", finished.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("RunReview did not stop after cancelling review")
+	}
+
+	updated, _ = m.Update(finished)
+	m = updated.(Model)
+	if m.reviewScreen == nil {
+		t.Fatal("reviewScreen should still show cancellation result")
+	}
+	if m.reviewScreen.runState != reviewRunFailed {
+		t.Fatalf("review run state = %d, want failed after canceled command result", m.reviewScreen.runState)
+	}
+	if view := m.View(); !strings.Contains(view, reviewRunnerCancelledMessage) || strings.Contains(view, "context canceled") {
+		t.Fatalf("View() should keep local cancellation state and ignore command error: %q", view)
+	}
+
+	m = sendReviewKey(m, "esc")
+	if m.screen != screenChat {
+		t.Fatalf("screen after completed cancel close = %d, want screenChat", m.screen)
+	}
+}
+
+func TestReviewScreen_CancelledRunIgnoresQueuedSuccessResult(t *testing.T) {
+	m := newReviewTestModel()
+	runCtx := m.reviewScreen.startReview(review.NewCurrentChangesRequest(""))
+	stale := reviewRunFinishedMsg{
+		id:     runCtx.id,
+		report: newTUITestReviewReport(),
+	}
+
+	m = sendReviewKey(m, "esc")
+	if m.reviewScreen == nil {
+		t.Fatal("reviewScreen should remain visible after cancellation")
+	}
+	if m.reviewScreen.runState != reviewRunFailed {
+		t.Fatalf("review run state = %d, want failed after cancellation", m.reviewScreen.runState)
+	}
+
+	updated, _ := m.Update(stale)
+	m = updated.(Model)
+	if m.reviewScreen.runState != reviewRunFailed {
+		t.Fatalf("stale success changed run state to %d", m.reviewScreen.runState)
+	}
+	if m.reviewScreen.report != nil {
+		t.Fatal("stale success should not attach report after cancellation")
+	}
+	if m.reviewScreen.message != reviewRunnerCancelledMessage {
+		t.Fatalf("review message = %q, want %q", m.reviewScreen.message, reviewRunnerCancelledMessage)
+	}
+}
+
+func TestReviewScreen_SubmittedReportCanScrollToHiddenFindings(t *testing.T) {
+	m := newReviewTestModel()
+	m.width = 80
+	m.height = 8
+	req := review.NewCurrentChangesRequest("")
+	m.reviewScreen.startReview(req)
+	report := newLongTUITestReviewReport(12)
+	m.reviewScreen.completeReview(report)
+
+	initialView := stripANSI(m.View())
+	if strings.Contains(initialView, "hidden finding 11") {
+		t.Fatalf("initial review view unexpectedly contains tail finding:\n%s", initialView)
+	}
+	if !strings.Contains(initialView, "PgUp/PgDn:page") {
+		t.Fatalf("overflowing review view should advertise paging controls:\n%s", initialView)
+	}
+
+	for i := 0; i < 8; i++ {
+		m = sendReviewKey(m, "pgdown")
+	}
+
+	scrolledView := stripANSI(m.View())
+	if !strings.Contains(scrolledView, "hidden finding 11") {
+		t.Fatalf("paged review view missing tail finding:\n%s", scrolledView)
+	}
+	if !strings.Contains(scrolledView, "Generated at: 2026-01-01T00:00:00Z") {
+		t.Fatalf("paged review view missing report tail:\n%s", scrolledView)
+	}
+
+	m = sendReviewKey(m, "home")
+	if m.reviewScreen.bodyViewport.yOffset != 0 {
+		t.Fatalf("home should reset review body offset, got %d", m.reviewScreen.bodyViewport.yOffset)
+	}
+}
+
+func TestReviewScreen_NewSubmittedResultResetsBodyScroll(t *testing.T) {
+	m := newReviewTestModel()
+	m.width = 80
+	m.height = 8
+	m.reviewScreen.startReview(review.NewCurrentChangesRequest(""))
+	m.reviewScreen.completeReview(newLongTUITestReviewReport(12))
+	m = sendReviewKey(m, "end")
+	if m.reviewScreen.bodyViewport.yOffset == 0 {
+		t.Fatal("expected end key to move review body offset")
+	}
+
+	m.reviewScreen.completeReview(newLongTUITestReviewReport(2))
+	if m.reviewScreen.bodyViewport.yOffset != 0 {
+		t.Fatalf("new review result should reset body offset, got %d", m.reviewScreen.bodyViewport.yOffset)
+	}
+}
+
+func TestReviewReportLines_SanitizesGroupAndFindingTitles(t *testing.T) {
+	report := newTUITestReviewReport()
+	report.RootCauseGroups[0].Title = "request\nstate"
+	report.RootCauseGroups[0].Findings[0].Title = "stale\nresult"
+
+	lines := reviewReportLines(report)
+	for _, line := range lines {
+		plain := stripANSI(line)
+		if strings.Contains(plain, "\n") {
+			t.Fatalf("review report line contains embedded newline: %q", plain)
+		}
+	}
+
+	joined := stripANSI(strings.Join(lines, "\n"))
+	if !strings.Contains(joined, "Group: request state") {
+		t.Fatalf("rendered report missing sanitized group title:\n%s", joined)
+	}
+	if !strings.Contains(joined, "Finding: stale result") {
+		t.Fatalf("rendered report missing sanitized finding title:\n%s", joined)
+	}
+}
+
+func TestReviewReportLines_RendersFindingSummaryAndEvidenceRefs(t *testing.T) {
+	report := newTUITestReviewReport()
+	report.RootCauseGroups[0].Summary = "request state lifecycle is split"
+	report.RootCauseGroups[0].FixStrategy = "centralize request lifecycle"
+	report.RootCauseGroups[0].Findings[0].Summary = "completed review result is discarded after close"
+	report.RootCauseGroups[0].Findings[0].EvidenceRefs = []review.ReviewEvidenceRef{{
+		Kind:         review.ReviewEvidenceKindFile,
+		Summary:      "Esc closes the screen while the request keeps running",
+		Path:         "internal/tui/review_screen_input.go",
+		Line:         87,
+		Snippet:      "return reviewCommandClose",
+		ProbeID:      "probe-1",
+		CommandIndex: review.ReviewCommandIndex(0),
+	}}
+
+	plain := stripANSI(strings.Join(reviewReportLines(report), "\n"))
+	for _, want := range []string{
+		"Group summary: request state lifecycle is split",
+		"Fix strategy: centralize request lifecycle",
+		"Finding summary: completed review result is discarded after close",
+		"Evidence: file - internal/tui/review_screen_input.go:87; probe probe-1 cmd 0; Esc closes the screen while the request keeps running; snippet: return reviewCommandClose",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("review report lines missing %q:\n%s", want, plain)
+		}
+	}
+}
+
+func TestReviewScreen_RunReviewErrorIsRendered(t *testing.T) {
+	agent := &reviewCapableStubAgent{
+		stubAgent: stubAgent{statusLine: "ready"},
+		err:       errors.New("provider failed"),
+	}
+	m := newModelWithViewport(agent)
+	m.screen = screenReview
+	m.reviewScreen = newReviewScreen(1)
+
+	updated, cmd := m.handleReviewRequest(review.NewCurrentChangesRequest(""))
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("handleReviewRequest() cmd = nil, want async review command")
+	}
+
+	updated, _ = m.Update(cmd())
+	m = updated.(Model)
+	if m.reviewScreen.runState != reviewRunFailed {
+		t.Fatalf("review run state = %d, want failed", m.reviewScreen.runState)
+	}
+	if view := m.View(); !strings.Contains(view, "provider failed") {
+		t.Fatalf("View() missing error message: %q", view)
+	}
+}
+
+func TestReviewCommand_WithInstructionsRunsCurrentChangesReview(t *testing.T) {
+	agent := &reviewCapableStubAgent{
+		stubAgent: stubAgent{statusLine: "ready"},
+		report:    newTUITestReviewReport(),
+	}
+	m := newModelWithViewport(agent)
+
+	m.textInput.SetValue("/review focus on regressions")
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.screen != screenReview {
+		t.Fatalf("screen = %d, want screenReview(%d)", m.screen, screenReview)
+	}
+	assertReviewRequest(t, m, review.TargetCurrentChanges, "focus on regressions")
+	if cmd == nil {
+		t.Fatal("/review with instructions cmd = nil, want async review command")
+	}
+	if agent.reviewCalls != 0 {
+		t.Fatalf("RunReview calls = %d, want 0 before cmd execution", agent.reviewCalls)
+	}
+
+	for _, msg := range runReviewCommandForTest(t, cmd) {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
+	if agent.reviewCalls != 1 {
+		t.Fatalf("RunReview calls = %d, want 1 after cmd execution", agent.reviewCalls)
+	}
+	if got := agent.lastRequest.CustomInstructions; got != "focus on regressions" {
+		t.Fatalf("RunReview CustomInstructions = %q, want focus on regressions", got)
+	}
+}
+
+func TestReviewCommand_WithQuotedInstructionsKeepsRawRemainder(t *testing.T) {
+	agent := &reviewCapableStubAgent{
+		stubAgent: stubAgent{statusLine: "ready"},
+		report:    newTUITestReviewReport(),
+	}
+	m := newModelWithViewport(agent)
+
+	m.textInput.SetValue(`/review "focus on regressions"`)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	assertReviewRequest(t, m, review.TargetCurrentChanges, `"focus on regressions"`)
+	if cmd == nil {
+		t.Fatal("/review with quoted instructions cmd = nil, want async review command")
+	}
+
+	for _, msg := range runReviewCommandForTest(t, cmd) {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
+	if got := agent.lastRequest.CustomInstructions; got != `"focus on regressions"` {
+		t.Fatalf("RunReview CustomInstructions = %q, want quoted raw instructions", got)
+	}
+}
+
+func TestReviewCommand_WithUnterminatedQuoteKeepsRawRemainder(t *testing.T) {
+	agent := &reviewCapableStubAgent{
+		stubAgent: stubAgent{statusLine: "ready"},
+		report:    newTUITestReviewReport(),
+	}
+	m := newModelWithViewport(agent)
+
+	m.textInput.SetValue(`/review investigate "quoted`)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	assertReviewRequest(t, m, review.TargetCurrentChanges, `investigate "quoted`)
+	if cmd == nil {
+		t.Fatal("/review with unterminated quote instructions cmd = nil, want async review command")
+	}
+
+	for _, msg := range runReviewCommandForTest(t, cmd) {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
+	if got := agent.lastRequest.CustomInstructions; got != `investigate "quoted` {
+		t.Fatalf("RunReview CustomInstructions = %q, want raw instructions", got)
+	}
+}
+
+func TestReviewScreen_StaleFinishedMessageIsIgnored(t *testing.T) {
+	m := newReviewTestModel()
+	m.reviewScreen.startReview(review.NewCurrentChangesRequest(""))
+	stale := reviewRunFinishedMsg{
+		id:     newReviewRunID(m.reviewScreen.screenID, m.reviewScreen.runSeq),
+		report: newTUITestReviewReport(),
+	}
+
+	updated, _ := m.closeReviewScreen()
+	m = updated.(Model)
+	updated, _ = m.openReviewScreen()
+	m = updated.(Model)
+
+	updated, _ = m.Update(stale)
+	m = updated.(Model)
+	if m.reviewScreen.runState != reviewRunIdle {
+		t.Fatalf("stale review result changed run state to %d", m.reviewScreen.runState)
+	}
+	if m.reviewScreen.report != nil {
+		t.Fatal("stale review result should not attach report to reopened screen")
+	}
+}
+
 func newReviewTestModel() Model {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
 	m.screen = screenReview
-	m.reviewScreen = newReviewScreen()
+	m.reviewScreenSeq = 1
+	m.reviewScreen = newReviewScreen(m.reviewScreenSeq)
 	m.reviewScreen.customInput.Width = m.width - 4
 	m.rebuildChrome()
 	return m
+}
+
+type reviewCapableStubAgent struct {
+	stubAgent
+	reviewCalls int
+	lastRequest review.ReviewRequest
+	report      review.ReviewReport
+	err         error
+}
+
+type cancellableReviewAgent struct {
+	stubAgent
+	started chan struct{}
+}
+
+func newCancellableReviewAgent() *cancellableReviewAgent {
+	return &cancellableReviewAgent{
+		stubAgent: stubAgent{statusLine: "ready"},
+		started:   make(chan struct{}),
+	}
+}
+
+func (s *cancellableReviewAgent) RunReview(ctx context.Context, _ review.ReviewRequest) (review.ReviewReport, error) {
+	close(s.started)
+	<-ctx.Done()
+	return review.ReviewReport{}, ctx.Err()
+}
+
+func (s *reviewCapableStubAgent) RunReview(_ context.Context, req review.ReviewRequest) (review.ReviewReport, error) {
+	s.reviewCalls++
+	s.lastRequest = req
+	return s.report, s.err
+}
+
+func newTUITestReviewReport() review.ReviewReport {
+	return review.ReviewReport{
+		SchemaVersion:             review.ReviewReportSchemaVersionV1,
+		TargetKind:                review.TargetCurrentChanges,
+		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+		OverallVerificationStatus: review.ReviewVerificationVerified,
+		Verdict:                   review.ReviewVerdictHasFindings,
+		Summary:                   "Review found one issue.",
+		RootCauseGroups: []review.ReviewRootCauseGroup{{
+			ID:                 "request-state",
+			Title:              "request state",
+			Severity:           review.ReviewGroupSeverityMedium,
+			VerificationStatus: review.ReviewVerificationVerified,
+			Findings: []review.ReviewFinding{{
+				ID:    "stale-result",
+				Title: "stale result is ignored",
+			}},
+		}},
+	}
+}
+
+func newLongTUITestReviewReport(groupCount int) review.ReviewReport {
+	report := newTUITestReviewReport()
+	report.Summary = "Review found multiple issues."
+	report.RootCauseGroups = make([]review.ReviewRootCauseGroup, 0, groupCount)
+	for i := 0; i < groupCount; i++ {
+		report.RootCauseGroups = append(report.RootCauseGroups, review.ReviewRootCauseGroup{
+			ID:                 fmt.Sprintf("hidden-group-%02d", i),
+			Title:              fmt.Sprintf("hidden group %02d", i),
+			Severity:           review.ReviewGroupSeverityMedium,
+			VerificationStatus: review.ReviewVerificationVerified,
+			Findings: []review.ReviewFinding{{
+				ID:    fmt.Sprintf("hidden-finding-%02d", i),
+				Title: fmt.Sprintf("hidden finding %02d", i),
+			}},
+		})
+	}
+	return report
+}
+
+func runReviewCommandForTest(t *testing.T, cmd tea.Cmd) []tea.Msg {
+	t.Helper()
+	msg := cmd()
+	if msg == nil {
+		return nil
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		msgs := make([]tea.Msg, 0, len(batch))
+		for _, batchCmd := range batch {
+			if batchCmd == nil {
+				continue
+			}
+			if batchMsg := batchCmd(); batchMsg != nil {
+				msgs = append(msgs, batchMsg)
+			}
+		}
+		return msgs
+	}
+	return []tea.Msg{msg}
 }
 
 func sendReviewKey(m Model, s string) Model {
@@ -132,6 +675,14 @@ func sendReviewKey(m Model, s string) Model {
 		msg = tea.KeyMsg{Type: tea.KeyUp}
 	case "down":
 		msg = tea.KeyMsg{Type: tea.KeyDown}
+	case "pgup":
+		msg = tea.KeyMsg{Type: tea.KeyPgUp}
+	case "pgdown":
+		msg = tea.KeyMsg{Type: tea.KeyPgDown}
+	case "home":
+		msg = tea.KeyMsg{Type: tea.KeyHome}
+	case "end":
+		msg = tea.KeyMsg{Type: tea.KeyEnd}
 	default:
 		if len(s) == 1 {
 			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}

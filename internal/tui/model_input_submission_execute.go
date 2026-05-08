@@ -87,6 +87,11 @@ var localCommandActionHandlers = map[commandrouter.Action]localCommandActionHand
 	},
 	commandrouter.ActionOpenReview: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
 		m.recordHandledCommand(command.Input)
+		instructions := command.RawArgText()
+		if instructions != "" {
+			updated, cmd := m.openReviewScreenAndRun(instructions)
+			return updated, cmd
+		}
 		updated, cmd := m.openReviewScreen()
 		return updated, cmd
 	},

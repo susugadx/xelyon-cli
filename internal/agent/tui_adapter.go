@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
+	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
 
@@ -188,6 +190,16 @@ func (a *TUIAdapter) Cleanup() {
 // IsProcessing はAI処理中かどうかを返す。
 func (a *TUIAdapter) IsProcessing() bool {
 	return a.processing.Load()
+}
+
+// RunReview は /review 実行中だけ TUI の処理中状態を立て、Agent の runner へ委譲する。
+func (a *TUIAdapter) RunReview(ctx context.Context, req review.ReviewRequest) (review.ReviewReport, error) {
+	a.processing.Store(true)
+	defer a.processing.Store(false)
+
+	report, err := a.agent.RunReview(ctx, req)
+	a.flushCapture()
+	return report, err
 }
 
 // CopyText は指定テキストをクリップボードにコピーする。

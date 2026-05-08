@@ -100,6 +100,44 @@ func TestCommandUnterminatedQuoteMarkedInvalid(t *testing.T) {
 	}
 }
 
+func TestCommandRawArgTextKeepsCommandRemainder(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "bare command",
+			input: "/review",
+			want:  "",
+		},
+		{
+			name:  "raw instructions",
+			input: "/review focus on regressions",
+			want:  "focus on regressions",
+		},
+		{
+			name:  "quoted remainder keeps quotes",
+			input: `/review "focus on regressions"`,
+			want:  `"focus on regressions"`,
+		},
+		{
+			name:  "extra spacing trims only around remainder",
+			input: "/review   focus on regressions  ",
+			want:  "focus on regressions",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := NewCommand(tt.input, tt.input)
+			if got := cmd.RawArgText(); got != tt.want {
+				t.Fatalf("RawArgText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSuggestionsMatchesCommandAndAlias(t *testing.T) {
 	matches := Suggestions("/q")
 	if len(matches) == 0 {

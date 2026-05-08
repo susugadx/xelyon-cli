@@ -29,11 +29,16 @@ func (cmd CommandInfo) EffectiveTUILocalArgPolicy() TUILocalArgPolicy {
 // AcceptsTUILocalArgs は TUI ローカル処理として受け付ける引数数かを返す。
 func (cmd CommandInfo) AcceptsTUILocalArgs(args []string) bool {
 	switch cmd.EffectiveTUILocalArgPolicy() {
-	case TUILocalArgAllowAny:
+	case TUILocalArgAllowAny, TUILocalArgRawText:
 		return true
 	default:
 		return len(args) == 0
 	}
+}
+
+// UsesRawTUILocalArgs は TUI ローカル処理が raw argument text を消費するかを返す。
+func (cmd CommandInfo) UsesRawTUILocalArgs() bool {
+	return cmd.EffectiveTUILocalArgPolicy() == TUILocalArgRawText
 }
 
 // TUILocalContext は TUI ローカル action 判定に必要な実行時コンテキスト。

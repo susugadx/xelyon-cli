@@ -16,6 +16,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	if _, ok := msg.(reviewRunFinishedMsg); ok && m.screen != screenReview {
+		return m, nil, true
+	}
+
 	switch msg := msg.(type) {
 	case OpenPromptMsg:
 		updated, cmd := m.handleOpenPromptMsg(msg)

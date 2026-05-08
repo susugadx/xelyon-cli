@@ -138,6 +138,36 @@ func TestProvider_ChatWithTools_BuildsRequestFromContext(t *testing.T) {
 	}
 }
 
+func TestProvider_ChatWithTools_ToolUseDisabledOmitsClaudeMessagesTools(t *testing.T) {
+	t.Setenv("BEDROCK_FUNCTION_CALLING", "1")
+
+	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
+	p := &Provider{client: mockClient}
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel: defaultModel,
+	}
+	ctx := api.WithToolUseDisabled(newBedrockTestContext(cfg))
+
+	_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, "")
+	if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
+		t.Fatalf("ChatWithTools() error = %v, want wrapped bedrock API error", err)
+	}
+	if mockClient.lastInput == nil {
+		t.Fatal("InvokeModelWithResponseStream() should be called")
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(mockClient.lastInput.Body, &raw); err != nil {
+		t.Fatalf("json.Unmarshal(request) error = %v", err)
+	}
+	if _, ok := raw["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled: %#v", raw["tools"])
+	}
+}
+
 func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
 	p := &Provider{client: mockClient}

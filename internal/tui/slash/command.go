@@ -2,6 +2,7 @@ package slash
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 )
@@ -54,4 +55,14 @@ func (c Command) IsBare(name string) bool {
 // Matches は command の alias 解決後の名前が指定名と一致するかを返す。
 func (c Command) Matches(name string) bool {
 	return c.ResolvedName == name
+}
+
+// RawArgText は command token 後の入力を quote 解析せずそのまま返す。
+func (c Command) RawArgText() string {
+	input := strings.TrimSpace(c.Input)
+	idx := strings.IndexFunc(input, unicode.IsSpace)
+	if idx < 0 {
+		return ""
+	}
+	return strings.TrimSpace(input[idx:])
 }

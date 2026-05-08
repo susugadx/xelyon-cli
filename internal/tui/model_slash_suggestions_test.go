@@ -125,8 +125,8 @@ func TestSlashSuggestions_TabCompletesSelectedCommand(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("Tab completion should not execute command, got %v", cmd)
 	}
-	if got := m.textInput.Value(); got != "/review" {
-		t.Fatalf("textInput after Tab = %q, want /review", got)
+	if got := m.textInput.Value(); got != "/review " {
+		t.Fatalf("textInput after Tab = %q, want /review with argument space", got)
 	}
 	if m.slashSuggestions.visible() {
 		t.Fatal("slash suggestions should close after Tab completion")

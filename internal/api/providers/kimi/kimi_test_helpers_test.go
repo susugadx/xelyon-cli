@@ -34,6 +34,27 @@ func mockKimiAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server 
 	return httptest.NewServer(handler)
 }
 
+func newKimiReadFileToolProviderForTest() *Provider {
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{
+		Name:        "read_file",
+		Description: "read",
+		Parameters:  map[string]any{"type": "object"},
+	}})
+	p.SetToolChoice("read_file")
+	return p
+}
+
+func assertKimiToolPayloadOmitted(t *testing.T, body map[string]any) {
+	t.Helper()
+	if _, ok := body["tools"]; ok {
+		t.Fatalf("tools = %#v, want absent", body["tools"])
+	}
+	if _, ok := body["tool_choice"]; ok {
+		t.Fatalf("tool_choice = %#v, want absent", body["tool_choice"])
+	}
+}
+
 func kimiStreamingHandler(chunks []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

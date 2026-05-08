@@ -272,6 +272,36 @@ func TestFunctionCalling_Disabled(t *testing.T) {
 	}
 }
 
+func TestFunctionCalling_ToolUseDisabledOmitsToolFields(t *testing.T) {
+	t.Setenv("OLLAMA_FUNCTION_CALLING", "1")
+
+	var receivedRequest map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&receivedRequest); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		resp := OllamaStreamResponse{Done: true}
+		data, _ := json.Marshal(resp)
+		fmt.Fprintln(w, string(data))
+	})
+
+	p := New(server.URL)
+	p.SetToolChoice("read_file")
+
+	ctx := api.WithToolUseDisabled(context.Background())
+	if _, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "Hi"}}, "llama3"); err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if _, ok := receivedRequest["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled: %#v", receivedRequest["tools"])
+	}
+	if _, ok := receivedRequest["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when tool use is disabled: %#v", receivedRequest["tool_choice"])
+	}
+}
+
 // ollamaToolCallsHandler はtool_callsを含むOllama形式のストリーミングハンドラー
 func ollamaToolCallsHandler(toolCalls []api.OpenAIToolCall) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

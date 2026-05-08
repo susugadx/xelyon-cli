@@ -164,3 +164,31 @@ func TestChatWithCompletions_PromptCacheScopeDoesNotChangeOpenAIKey(t *testing.T
 		t.Fatalf("PromptCacheKey = %q, want existing xelyon:v2 format", captured.PromptCacheKey)
 	}
 }
+
+func TestChatWithCompletions_ToolUseDisabledOmitsToolFields(t *testing.T) {
+	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
+
+	var captured map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		streamingHandler([]string{`{"choices":[{"delta":{"content":"ok"}}]}`})(w, r)
+	})
+	t.Setenv("OPENAI_API_URL", server.URL)
+
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	p.SetToolChoice("custom_lookup")
+
+	ctx := api.WithToolUseDisabled(newOpenAITestContext(t, false))
+	if _, err := p.chatWithCompletions(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, "gpt-4-turbo"); err != nil {
+		t.Fatalf("chatWithCompletions() error = %v", err)
+	}
+	if _, ok := captured["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled: %#v", captured["tools"])
+	}
+	if _, ok := captured["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when tool use is disabled: %#v", captured["tool_choice"])
+	}
+}

@@ -168,7 +168,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	// FC有効時はTools/ToolConfigを追加（画像+FC対応）
-	if p.IsFunctionCallingEnabled() {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		reqBody.Tools = GetCombinedToolDefinitionsWithContext(ctx, p.mcpTools)
 		fcMode := os.Getenv("GEMINI_FC_MODE")
 		if fcMode == "" {

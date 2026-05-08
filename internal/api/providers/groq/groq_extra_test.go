@@ -78,3 +78,30 @@ func TestProvider_SettersAffectRequestAndUsageCallback(t *testing.T) {
 		t.Fatal("ClearToolChoice() should clear toolChoice")
 	}
 }
+
+func TestProvider_ChatWithTools_ToolUseDisabledOmitsToolFields(t *testing.T) {
+	t.Setenv("GROQ_FUNCTION_CALLING", "1")
+
+	var requestBody map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+		streamingHandler([]string{`{"choices":[{"delta":{"content":"done"}}]}`})(w, r)
+	})
+	t.Setenv("GROQ_API_URL", server.URL)
+
+	p := New("test-key")
+	p.SetToolChoice("read_file")
+
+	ctx := api.WithToolUseDisabled(context.Background())
+	if _, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "llama3-70b-8192"); err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if _, ok := requestBody["tools"]; ok {
+		t.Fatalf("tools should be omitted when tool use is disabled: %#v", requestBody["tools"])
+	}
+	if _, ok := requestBody["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when tool use is disabled: %#v", requestBody["tool_choice"])
+	}
+}

@@ -63,7 +63,7 @@ func (p *Provider) newBaseResponsesRequestOptions(
 		ContextManagement:                     serverCompactionDecision.ContextManagement,
 		SkipLocalAutoCompressionAfterResponse: serverCompactionDecision.ShouldSkipLocalAutoCompression,
 	}
-	if p.IsFunctionCallingEnabled() {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		options.Tools = openai.GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools)
 		options.ToolChoice = openairesponses.BuildFunctionToolChoice(p.toolChoice)
 	}

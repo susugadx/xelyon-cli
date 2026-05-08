@@ -4,20 +4,21 @@ package review
 type TargetKind string
 
 const (
-	// TargetUncommitted は未コミット変更を review 対象にする。
-	TargetUncommitted TargetKind = "uncommitted"
+	// TargetCurrentChanges は現在の作業ツリー差分を review 対象にする。
+	TargetCurrentChanges TargetKind = "current_changes"
 )
 
-// ReviewRequest は review runner に渡す入力契約を表す。
+// ReviewRequest は次フェーズの ReviewRunner に渡す入力契約を表す。
+// TUI はこの request 生成までを担当し、evidence 収集以降の実行は runner が owner する。
 type ReviewRequest struct {
 	TargetKind         TargetKind
 	CustomInstructions string
 }
 
-// NewUncommittedRequest は未コミット変更向けの ReviewRequest を構築する。
-func NewUncommittedRequest(customInstructions string) ReviewRequest {
+// NewCurrentChangesRequest は current_changes 向けの ReviewRequest を構築する。
+func NewCurrentChangesRequest(customInstructions string) ReviewRequest {
 	return ReviewRequest{
-		TargetKind:         TargetUncommitted,
+		TargetKind:         TargetCurrentChanges,
 		CustomInstructions: customInstructions,
 	}
 }

@@ -220,6 +220,7 @@ xelyon
 /config     # global config を対話式で編集
 /project    # xelyon.yaml を対話式で編集
 /init       # xelyon.yaml テンプレート作成
+/review [instructions] # 現在の変更レビューを開く（引数ありは即時実行）
 /exit       # 終了
 ```
 

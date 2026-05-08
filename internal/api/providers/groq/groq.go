@@ -73,7 +73,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
-	if os.Getenv("GROQ_FUNCTION_CALLING") != "0" {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
 			Tools:    openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
 			ToolName: p.toolChoice,

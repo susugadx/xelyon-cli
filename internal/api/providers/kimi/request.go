@@ -268,7 +268,7 @@ func (r kimiMultimodalChatCompletionsRequest) MarshalJSON() ([]byte, error) {
 }
 
 func (p *Provider) buildFunctionCallingOptions(ctx context.Context, thinkingActive bool) *openaicompat.FunctionCallingOptions {
-	if !p.IsFunctionCallingEnabled() {
+	if !api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		return nil
 	}
 	return &openaicompat.FunctionCallingOptions{

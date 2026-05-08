@@ -25,7 +25,7 @@ func (p *Provider) buildOpenAITextChatPayload(ctx context.Context, systemPrompt 
 		IncludeUsage: true,
 	}
 
-	if p.IsFunctionCallingEnabled() {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		options.FunctionCalling = &openaicompat.FunctionCallingOptions{
 			Tools:    openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools),
 			ToolName: p.toolChoice,
@@ -122,7 +122,7 @@ func (p *Provider) buildClaudeChatPayload(ctx context.Context, systemPrompt stri
 	if cfg != nil && cfg.PromptCache.Enabled {
 		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
-	if p.IsFunctionCallingEnabled() {
+	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 	reqBody.ContextManagement, reqBody.AnthropicBeta = buildOpenRouterClaudeContextManagement(model, cfg.Compression, reqBody.AnthropicBeta)

@@ -111,9 +111,11 @@ type Model struct {
 	configAgent      ConfigAgent
 	providerModels   ProviderModelAgent
 	projectAgent     ProjectAgent
+	reviewAgent      ReviewAgent
 	screen           screenMode     // 現在の画面モード
 	configScreen     *configScreen  // /config 画面の状態（screenConfig 時のみ非 nil）
 	reviewScreen     *reviewScreen  // /review 画面の状態（screenReview 時のみ非 nil）
+	reviewScreenSeq  int            // /review 非同期メッセージの画面識別子
 	projectScreen    *projectScreen // /project 画面の状態（screenProject 時のみ非 nil）
 	projectScreenSeq int            // /project 非同期メッセージの画面識別子
 	vp               lightViewport  // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）

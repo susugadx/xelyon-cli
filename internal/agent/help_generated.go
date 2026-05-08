@@ -46,7 +46,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /attach <path>            - Attach a file or image to the current composer draft (combined limit: up to 12 attachments per draft)
   /detach <index>           - Detach one attachment by index
   /detach-all               - Detach all attachments from the current draft
-  /review                   - Review current changes and find issues
+  /review [instructions]    - Review current changes and find issues
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider picker or switch provider and optionally model
   /providers                - List available providers and their API key status

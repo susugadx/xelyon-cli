@@ -101,9 +101,7 @@ func TestChatWithImage_IncludesToolsWhenFunctionCallingEnabled(t *testing.T) {
 	})
 	t.Setenv("KIMI_API_URL", server.URL)
 
-	p := New("test-key")
-	p.SetMCPTools([]api.ToolDefinition{{Name: "read_file", Description: "read", Parameters: map[string]any{"type": "object"}}})
-	p.SetToolChoice("read_file")
+	p := newKimiReadFileToolProviderForTest()
 	ctx, _, _ := newKimiTestContext(t, false)
 	if _, err := p.ChatWithImage(ctx, "System", nil, "describe image", &api.ImageData{
 		Base64:    kimiTestPNGBase64,
@@ -124,6 +122,29 @@ func TestChatWithImage_IncludesToolsWhenFunctionCallingEnabled(t *testing.T) {
 	if !ok || function["name"] != "read_file" {
 		t.Fatalf("tool_choice.function = %#v, want read_file", toolChoice["function"])
 	}
+}
+
+func TestChatWithImage_RequestToolUseDisabledOmitsTools(t *testing.T) {
+	t.Setenv("KIMI_FUNCTION_CALLING", "")
+	var captured map[string]any
+	server := mockKimiAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		kimiStreamingHandler([]string{`{"choices":[{"delta":{"content":"ok"}}]}`})(w, r)
+	})
+	t.Setenv("KIMI_API_URL", server.URL)
+
+	p := newKimiReadFileToolProviderForTest()
+	ctx, _, _ := newKimiTestContext(t, false)
+	ctx = api.WithToolUseDisabled(ctx)
+	if _, err := p.ChatWithImage(ctx, "System", nil, "describe image", &api.ImageData{
+		Base64:    kimiTestPNGBase64,
+		MediaType: "image/png",
+	}, "kimi-k2.6"); err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	assertKimiToolPayloadOmitted(t, captured)
 }
 
 func TestChatWithImage_StripsToolNameFromHistoryToolResults(t *testing.T) {
