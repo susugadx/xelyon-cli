@@ -113,6 +113,73 @@ func TestTUIProgramBridge_StartCapturesAssistantAndToolResults(t *testing.T) {
 	}
 }
 
+func TestTUIProgramBridge_FlushToolResultsDeliversBufferedToolBeforeReturning(t *testing.T) {
+	disableColors(t)
+
+	agent := newChatRequestTestAgent(t, &scriptedChatProvider{name: "openai", functionCalling: true}, &bytes.Buffer{})
+	adapter := NewTUIAdapter(agent, nil)
+	toolResultCh := make(chan tools.ToolResultInfo, 4)
+	msgCh := make(chan tea.Msg, 4)
+	bridge := newTUIProgramBridge(adapter, agent, toolResultCh, func(msg tea.Msg) {
+		msgCh <- msg
+	}, nil)
+	bridge.start()
+	defer close(toolResultCh)
+	defer close(bridge.outgoing)
+	defer bridge.shutdown()
+
+	toolResultCh <- tools.ToolResultInfo{ToolName: "bash", Result: "ok", Error: false}
+
+	bridge.flushToolResults()
+
+	select {
+	case msg := <-msgCh:
+		toolMsg, ok := msg.(tui.AppendToolResultMsg)
+		if !ok {
+			t.Fatalf("flushed message = %T, want AppendToolResultMsg", msg)
+		}
+		if toolMsg.Tool.Name != "bash" || toolMsg.Tool.Detail != "ok" {
+			t.Fatalf("tool message = %#v, want bash ok", toolMsg.Tool)
+		}
+	default:
+		t.Fatal("flushToolResults returned before buffered tool result was delivered")
+	}
+}
+
+func TestBuildTUIToolResult_PreservesCurrentDisplayContract(t *testing.T) {
+	disableColors(t)
+
+	info := tools.ToolResultInfo{
+		ToolName: "bash",
+		Args:     map[string]string{"command": "echo ok"},
+		Result:   "ok",
+		Error:    false,
+		ID:       "call-1",
+		Status:   tools.ToolStatusOK,
+		Duration: time.Second,
+	}
+
+	got := buildTUIToolResult(info)
+	if got.Name != info.ToolName {
+		t.Fatalf("Name = %q, want %q", got.Name, info.ToolName)
+	}
+	if got.Summary != "✓ ok bash echo ok 1.0s" {
+		t.Fatalf("Summary = %q, want timeline summary", got.Summary)
+	}
+	if got.Detail != info.Result {
+		t.Fatalf("Detail = %q, want %q", got.Detail, info.Result)
+	}
+	if got.Error != info.Error {
+		t.Fatalf("Error = %v, want %v", got.Error, info.Error)
+	}
+	if !got.Collapsed {
+		t.Fatal("bash success should remain collapsed by default")
+	}
+	if got.ID != "call-1" || got.Status != tui.ToolStatusOK || got.Target != "echo ok" {
+		t.Fatalf("timeline fields = id:%q status:%q target:%q", got.ID, got.Status, got.Target)
+	}
+}
+
 func TestTUIPromptBridge_BlocksUntilResponse(t *testing.T) {
 	agent := newChatRequestTestAgent(t, &scriptedChatProvider{name: "openai", functionCalling: true}, &bytes.Buffer{})
 	toolResultCh := make(chan tools.ToolResultInfo)
@@ -125,7 +192,7 @@ func TestTUIPromptBridge_BlocksUntilResponse(t *testing.T) {
 		}
 	}, nil)
 	bridge.start()
-	defer close(bridge.messageQueue)
+	defer close(bridge.outgoing)
 	defer bridge.shutdown()
 
 	prompter := agent.ui().Prompter()
@@ -162,7 +229,7 @@ func TestTUIPromptBridge_ContextCancelSendsCancelPrompt(t *testing.T) {
 		msgCh <- msg
 	}, nil)
 	bridge.start()
-	defer close(bridge.messageQueue)
+	defer close(bridge.outgoing)
 	defer bridge.shutdown()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -214,7 +281,7 @@ func TestTUIPromptBridge_ShutdownReleasesWaiter(t *testing.T) {
 		}
 	}, nil)
 	bridge.start()
-	defer close(bridge.messageQueue)
+	defer close(bridge.outgoing)
 
 	done := make(chan ui.PromptResponse, 1)
 	go func() {
@@ -272,7 +339,7 @@ func TestTUIProgramBridge_SendMsgDropsWhenQueueIsFullAndIgnoresAfterShutdown(t *
 		}
 		<-releaseSend
 	}, nil)
-	bridge.messageQueue = make(chan tui.AppendMessageMsg, 1)
+	bridge.outgoing = make(chan tea.Msg, 1)
 	bridge.start()
 
 	adapter.sendMsg(tui.AppendMessageMsg{Message: tui.ChatMessage{Role: "assistant", Content: "first"}})
@@ -292,7 +359,7 @@ func TestTUIProgramBridge_SendMsgDropsWhenQueueIsFullAndIgnoresAfterShutdown(t *
 
 	close(toolResultCh)
 	close(releaseSend)
-	close(bridge.messageQueue)
+	close(bridge.outgoing)
 }
 
 func TestTUIProgramBridge_StartHandlesNilReceiverAndNilSend(t *testing.T) {
@@ -310,7 +377,7 @@ func TestTUIProgramBridge_StartHandlesNilReceiverAndNilSend(t *testing.T) {
 
 	toolResultCh <- tools.ToolResultInfo{ToolName: "bash", Result: "ok", Error: false}
 	close(toolResultCh)
-	close(bridge.messageQueue)
+	close(bridge.outgoing)
 	bridge.shutdown()
 }
 
@@ -415,7 +482,7 @@ func TestBindTUIProgram_ReturnsBridgeAndRegistersShutdown(t *testing.T) {
 
 	registered()
 	close(toolResultCh)
-	close(bridge.messageQueue)
+	close(bridge.outgoing)
 
 	if !agent.tuiToolResultClosed.Load() {
 		t.Fatal("expected registered shutdown callback to mark tool result channel closed")

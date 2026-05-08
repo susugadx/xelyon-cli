@@ -62,11 +62,40 @@ const (
 	visualModeLine
 )
 
+// trackedBlock は rawLines 上で更新可能な transcript block の範囲を追跡する。
+type trackedBlock struct {
+	lineStart int // rawLines でのブロック開始行インデックス
+	lineCount int // ブロックが占める行数
+}
+
 // toolBlockInfo は表示上のツール結果ブロックを追跡する。
 type toolBlockInfo struct {
-	lineStart int        // rawLines でのブロック開始行インデックス
-	lineCount int        // ブロックが占める行数
-	tool      ToolResult // ツール結果データ
+	block trackedBlock
+	tool  ToolResult // ツール結果データ
+}
+
+type agentActivityStatus string
+
+const (
+	agentActivityStatusWorking agentActivityStatus = "working"
+	agentActivityStatusDone    agentActivityStatus = "done"
+	agentActivityStatusBlocked agentActivityStatus = "blocked"
+)
+
+// agentActivityState は進行中 turn の agent activity block を追跡する。
+type agentActivityState struct {
+	active     bool
+	block      trackedBlock
+	startedAt  time.Time
+	finishedAt time.Time
+	status     agentActivityStatus
+	tools      []agentActivityTool
+	errorText  string
+	errorKind  AgentErrorKind
+}
+
+type agentActivityTool struct {
+	tool ToolResult
 }
 
 type visualPosition struct {
@@ -96,8 +125,10 @@ type Model struct {
 	rawLines         []string         // 元の行データ。リサイズ時はこれを再レンダリングする
 	layout           *termtext.Layout // 表示幅に応じたvisual rowレイアウト
 	toolBlocks       []toolBlockInfo  // ツール結果ブロック
-	focusedBlock     int              // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
+	agentActivity    agentActivityState
+	focusedBlock     int // NAVモードでフォーカス中のツールブロックインデックス（-1=なし）
 	statusLine       string
+	statusSnapshot   StatusSnapshot
 	workingDir       string
 	padLineCache     string // View() 用の背景パディング行キャッシュ
 	chromeCache      string // View() 用の chrome 部分キャッシュ（入力欄+ステータス）

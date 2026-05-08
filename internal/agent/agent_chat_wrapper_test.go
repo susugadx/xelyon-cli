@@ -51,7 +51,9 @@ func TestChatWrapper_UsesTextPath(t *testing.T) {
 	provider := &scriptedChatProvider{name: "openai", functionCalling: true}
 	agent := newChatRequestTestAgent(t, provider, &out)
 
-	agent.chat("hello")
+	if err := agent.chat("hello"); err != nil {
+		t.Fatalf("chat() error = %v", err)
+	}
 
 	if provider.callCount != 1 {
 		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
@@ -66,7 +68,9 @@ func TestChatInternal_WithImageUsesImageProviderPath(t *testing.T) {
 	agent := newChatRequestTestAgent(t, provider, &out)
 	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png", Path: "test.png", Size: 4}
 
-	agent.chatInternal("describe image", image)
+	if err := agent.chatInternal("describe image", image); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
 
 	if provider.imageCalls != 1 {
 		t.Fatalf("provider.imageCalls = %d, want 1", provider.imageCalls)
@@ -88,7 +92,9 @@ func TestChatWithImage_FallbackAndSupported(t *testing.T) {
 		agent := newChatRequestTestAgent(t, provider, &out)
 		image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png", Path: "test.png", Size: 4}
 
-		agent.chatWithImage("fallback request", image)
+		if err := agent.chatWithImage("fallback request", image); err != nil {
+			t.Fatalf("chatWithImage() error = %v", err)
+		}
 
 		got := out.String()
 		if !strings.Contains(got, "does not support images") {
@@ -102,7 +108,9 @@ func TestChatWithImage_FallbackAndSupported(t *testing.T) {
 		agent := newChatRequestTestAgent(t, provider, &out)
 		image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png", Path: "test.png", Size: 4}
 
-		agent.chatWithImage("describe", image)
+		if err := agent.chatWithImage("describe", image); err != nil {
+			t.Fatalf("chatWithImage() error = %v", err)
+		}
 
 		if provider.imageCalls != 1 {
 			t.Fatalf("provider.imageCalls = %d, want 1", provider.imageCalls)

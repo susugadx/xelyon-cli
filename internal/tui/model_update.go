@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -71,6 +73,10 @@ func (m Model) updateChatScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m, cmd = m.handleStartupSubmissionMsg(msg)
 		cmds = appendCmd(cmds, cmd)
+	case startupSubmissionResultMsg:
+		var cmd tea.Cmd
+		m, cmd = m.handleStartupSubmissionResultMsg(msg)
+		cmds = appendCmd(cmds, cmd)
 	default:
 		if updated, cmd, handled := m.handleStreamMessage(msg); handled {
 			m = updated
@@ -125,8 +131,14 @@ func (m Model) handleSpinnerTickMsg(msg spinner.TickMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.spinner, cmd = m.spinner.Update(msg)
 	if m.conversation.IsProcessing() {
-		m.statusLine = m.conversation.GetStatusLine()
+		m.statusSnapshot = m.conversation.StatusSnapshot()
+		m.statusLine = m.statusSnapshot.LegacyLine
+		if m.statusLine == "" {
+			m.statusLine = m.conversation.GetStatusLine()
+			m.statusSnapshot.LegacyLine = m.statusLine
+		}
 	}
+	m.updateAgentActivitySnapshot(time.Now())
 	m.chromeDirty = true
 	return m, cmd
 }

@@ -18,6 +18,29 @@ type ToolCall struct {
 	Args             map[string]string
 }
 
+// CloneToolArgs は非同期表示へ渡す tool args のスナップショットを作る。
+func CloneToolArgs(args map[string]string) map[string]string {
+	if args == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(args))
+	for k, v := range args {
+		cloned[k] = v
+	}
+	return cloned
+}
+
+// DisplayID は永続化しない TUI 表示用 ID を返す。
+func (tc *ToolCall) DisplayID() string {
+	if tc == nil {
+		return ""
+	}
+	if tc.ID != "" {
+		return tc.ID
+	}
+	return fmt.Sprintf("%s:%p", tc.Tool, tc)
+}
+
 // NormalizeArgs はRawArgsをArgsに変換（数値→文字列）
 // 末尾の制御文字・ゼロ幅文字をトリミングし、path引数のサニタイズも実施
 func (tc *ToolCall) NormalizeArgs() {

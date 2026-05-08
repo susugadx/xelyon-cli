@@ -59,7 +59,7 @@ func TestTUIProgramE2E_MultiToolBlockNavigation(t *testing.T) {
 	if final.toolBlocks[1].tool.Collapsed != true {
 		t.Fatal("second block should remain collapsed")
 	}
-	if final.cursorLine != final.toolBlocks[0].lineStart {
-		t.Fatalf("cursorLine = %d, want %d", final.cursorLine, final.toolBlocks[0].lineStart)
+	if final.cursorLine != final.toolBlocks[0].block.lineStart {
+		t.Fatalf("cursorLine = %d, want %d", final.cursorLine, final.toolBlocks[0].block.lineStart)
 	}
 }

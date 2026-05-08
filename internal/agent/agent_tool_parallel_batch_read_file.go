@@ -30,6 +30,9 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntim
 				continue
 			}
 
+			for _, idx := range chunkIndices {
+				a.emitTUIToolRunning(state.AllToolCalls[idx])
+			}
 			mergedBatchResult := a.executeReadFileBatchResult(ctx, chunkPaths)
 			mergedResult := mergedBatchResult.Result
 			perFile := toolruntime.SplitReadFileBatchResult(mergedResult, chunkPaths)

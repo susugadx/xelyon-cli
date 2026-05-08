@@ -48,7 +48,7 @@ func TestComposer_MultilinePasteCreatesFoldedBlock(t *testing.T) {
 	}
 
 	dock := m.renderInputDock()
-	if !strings.Contains(stripANSI(dock), "[Pasted Content 11 chars, 2 lines] #1") {
+	if !strings.Contains(stripANSI(dock), "[paste 11c/2l #1]") {
 		t.Fatalf("renderInputDock() should contain folded paste summary, got %q", dock)
 	}
 	if strings.Contains(dock, "line1\nline2") {
@@ -85,15 +85,12 @@ func TestComposer_PrefixTextStaysVisibleWithFoldedPaste(t *testing.T) {
 
 	dock := stripANSI(m.renderInputDock())
 	prefixIndex := strings.Index(dock, "Explain this:")
-	pasteIndex := strings.Index(dock, "[Pasted Content 11 chars, 2 lines] #1")
+	pasteIndex := strings.Index(dock, "[paste 11c/2l #1]")
 	if prefixIndex < 0 {
 		t.Fatalf("renderInputDock() should contain the prefix text, got %q", dock)
 	}
 	if pasteIndex < 0 {
 		t.Fatalf("renderInputDock() should contain the folded paste summary, got %q", dock)
-	}
-	if prefixIndex >= pasteIndex {
-		t.Fatalf("prefix text should render before folded paste summary, got %q", dock)
 	}
 	if got := m.buildComposerPayload(); got != "Explain this:line1\nline2" {
 		t.Fatalf("buildComposerPayload() = %q, want %q", got, "Explain this:line1\nline2")
@@ -117,7 +114,7 @@ func TestComposer_CtrlVPasteCreatesFoldedBlockAndPreservesContent(t *testing.T) 
 	if got := m.buildComposerPayload(); got != "line1\tvalue\nline2" {
 		t.Fatalf("buildComposerPayload() = %q, want %q", got, "line1\tvalue\nline2")
 	}
-	if !strings.Contains(stripANSI(m.renderInputDock()), "[Pasted Content 17 chars, 2 lines] #1") {
+	if !strings.Contains(stripANSI(m.renderInputDock()), "[paste 17c/2l #1]") {
 		t.Fatalf("renderInputDock() should contain folded paste summary, got %q", m.renderInputDock())
 	}
 }

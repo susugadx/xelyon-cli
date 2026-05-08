@@ -43,7 +43,7 @@ func (m Model) renderWorkingDirStatusSegment(maxWidth int) string {
 	if displayPath == "" {
 		return ""
 	}
-	return theme.Chrome.HintFg + workingDirStatusPrefix + displayPath + theme.Chrome.Reset
+	return theme.Chrome.StatusPathFg + workingDirStatusPrefix + displayPath + theme.Chrome.Reset
 }
 
 func sanitizeWorkingDirStatusPath(path string) string {

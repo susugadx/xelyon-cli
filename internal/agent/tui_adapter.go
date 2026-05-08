@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
@@ -20,6 +21,8 @@ type TUIAdapter struct {
 	sendMsg       func(tui.AppendMessageMsg)
 	captureWriter *tuiCaptureWriter
 	processing    atomic.Bool
+	flushMu       sync.RWMutex
+	tuiEventFlush func()
 }
 
 // NewTUIAdapter は TUIAdapter を作成する。
@@ -36,7 +39,7 @@ func (a *TUIAdapter) SetOutputCapture() {
 		if a.sendMsg != nil {
 			a.sendMsg(tui.AppendMessageMsg{
 				Message: tui.ChatMessage{
-					Role:    "assistant",
+					Role:    tui.ChatRoleAssistantChunk,
 					Content: text,
 				},
 			})
@@ -49,54 +52,73 @@ func (a *TUIAdapter) SetOutputCapture() {
 }
 
 // Chat はユーザー入力をAIに送信する。goroutine で呼ぶこと。
-func (a *TUIAdapter) Chat(input string) {
+func (a *TUIAdapter) Chat(input string) error {
 	a.processing.Store(true)
 	defer a.processing.Store(false)
+	defer a.finishTUITurnOutput()
 
 	// 画像入力チェック
 	if strings.Contains(input, "image:") {
 		textPart, image := parseImageInputWithWriter(a.agent.output(), input)
 		if image != nil {
-			a.chatWithImage(textPart, image)
-			return
+			return a.chatWithImage(textPart, image)
 		}
 	}
 
-	a.agent.chat(input)
-	a.flushCapture()
+	return a.agent.chat(input)
 }
 
 // ChatWithImagePath は画像パス付き入力を AI に送信する。goroutine で呼ぶこと。
-func (a *TUIAdapter) ChatWithImagePath(input string, imagePath string) {
+func (a *TUIAdapter) ChatWithImagePath(input string, imagePath string) error {
 	a.processing.Store(true)
 	defer a.processing.Store(false)
+	defer a.finishTUITurnOutput()
 
 	image, err := api.LoadImage(imagePath)
 	if err != nil {
 		red.Fprintf(a.agent.output(), "Failed to load image: %v\n", err)
-		a.flushCapture()
-		return
+		return tui.WrapAgentTurnError(tui.AgentErrorValidation, fmt.Errorf("failed to load image: %w", err))
 	}
 
-	a.chatWithImage(input, image)
+	return a.chatWithImage(input, image)
 }
 
 // ChatWithImage は読み込み済み画像をAIに送信する。goroutine または tea.Cmd で呼ぶこと。
-func (a *TUIAdapter) ChatWithImage(input string, image *api.ImageData) {
+func (a *TUIAdapter) ChatWithImage(input string, image *api.ImageData) error {
 	a.processing.Store(true)
 	defer a.processing.Store(false)
+	defer a.finishTUITurnOutput()
 
-	a.chatWithImage(input, image)
+	return a.chatWithImage(input, image)
 }
 
-func (a *TUIAdapter) chatWithImage(input string, image *api.ImageData) {
-	a.agent.chatWithImage(input, image)
+func (a *TUIAdapter) chatWithImage(input string, image *api.ImageData) error {
+	return a.agent.chatWithImage(input, image)
+}
+
+func (a *TUIAdapter) finishTUITurnOutput() {
 	a.flushCapture()
+	a.flushTUIEvents()
 }
 
 func (a *TUIAdapter) flushCapture() {
 	if a.captureWriter != nil {
 		a.captureWriter.Flush()
+	}
+}
+
+func (a *TUIAdapter) setTUIEventFlush(fn func()) {
+	a.flushMu.Lock()
+	defer a.flushMu.Unlock()
+	a.tuiEventFlush = fn
+}
+
+func (a *TUIAdapter) flushTUIEvents() {
+	a.flushMu.RLock()
+	fn := a.tuiEventFlush
+	a.flushMu.RUnlock()
+	if fn != nil {
+		fn()
 	}
 }
 
@@ -108,6 +130,49 @@ func (a *TUIAdapter) HandleCommand(cmd string) bool {
 // GetStatusLine はステータスバーに表示する文字列を返す。
 func (a *TUIAdapter) GetStatusLine() string {
 	return a.agent.FormatStatusLine()
+}
+
+// StatusSnapshot は TUI ステータスバー用の構造化状態を返す。
+func (a *TUIAdapter) StatusSnapshot() tui.StatusSnapshot {
+	if a == nil || a.agent == nil {
+		return tui.StatusSnapshot{}
+	}
+	agent := a.agent
+	modeText := "Normal"
+	if agent.PlanModeEnabled {
+		modeText = "Plan"
+	}
+
+	tokens := "0"
+	var estimate cost.CostEstimate
+	if agent.Stats != nil {
+		agent.statsMu.Lock()
+		tokens = FormatTokens(agent.Stats.TotalTokens())
+		estimate = agent.Stats.EstimatedCostEstimateForConfig(agent.cfg())
+		agent.statsMu.Unlock()
+	}
+
+	if manager := agent.subAgentManager(); manager != nil {
+		summary := manager.GetSummary()
+		estimate.Cost += summary.TotalCost
+		if summary.PricingUnavailable {
+			estimate.PricingUnavailable = true
+		}
+	}
+
+	costText := formatCompactCostEstimate(estimate)
+	if strings.EqualFold(agent.ProviderName, "ollama") && estimate.Cost == 0 && !estimate.PricingUnavailable {
+		costText = ""
+	}
+
+	return tui.StatusSnapshot{
+		Provider:   agent.ProviderName,
+		Model:      agent.CurrentModel,
+		Mode:       modeText,
+		Tokens:     tokens,
+		Cost:       costText,
+		LegacyLine: agent.FormatStatusLine(),
+	}
 }
 
 // Cancel は現在のAPI呼び出しをキャンセルする。

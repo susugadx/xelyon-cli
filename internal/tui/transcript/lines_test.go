@@ -1,6 +1,11 @@
 package transcript
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
+)
 
 func TestNormalizeLine(t *testing.T) {
 	if got := NormalizeLine("ok\r"); got != "ok" {
@@ -12,8 +17,75 @@ func TestNormalizeLine(t *testing.T) {
 }
 
 func TestMessageLines_User(t *testing.T) {
-	got := MessageLines("user", "alpha\nbeta")
-	want := []string{"", "> alpha", "> beta", ""}
+	got := Lines(Message{
+		Role:      "user",
+		Content:   "alpha\nbeta",
+		Timestamp: time.Date(2026, 5, 7, 15, 4, 0, 0, time.UTC),
+	})
+	want := []string{"━━ user · 15:04 · now ━━", "┃ > alpha", "┃ > beta"}
+	got = stripTranscriptANSI(got)
+	if len(got) != len(want) {
+		t.Fatalf("MessageLines() len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("MessageLines()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestMessageLines_ConversationRolesUseSeparatorAndGutter(t *testing.T) {
+	tests := []struct {
+		role      string
+		separator string
+		gutter    string
+	}{
+		{role: "assistant", separator: "── assistant · 15:04 · now ──", gutter: "│ "},
+		{role: "system_info", separator: "┄┄ system · 15:04 · now ┄┄", gutter: "┆ · "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.role, func(t *testing.T) {
+			got := Lines(Message{
+				Role:      tt.role,
+				Content:   "alpha\nbeta",
+				Timestamp: time.Date(2026, 5, 7, 15, 4, 0, 0, time.UTC),
+			})
+			got = stripTranscriptANSI(got)
+			want := []string{tt.separator, tt.gutter + "alpha", tt.gutter + "beta"}
+			if len(got) != len(want) {
+				t.Fatalf("MessageLines() len = %d, want %d", len(got), len(want))
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Fatalf("MessageLines()[%d] = %q, want %q", i, got[i], want[i])
+				}
+			}
+		})
+	}
+}
+
+func stripTranscriptANSI(lines []string) []string {
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = termtext.StripANSI(line)
+	}
+	return out
+}
+
+func TestMessageLines_NonConversationRoleKeepsRawLines(t *testing.T) {
+	got := MessageLines("tool_header", "alpha\nbeta")
+	want := []string{"alpha", "beta"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("MessageLines()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestMessageLines_AssistantChunkKeepsRawLines(t *testing.T) {
+	got := MessageLines("assistant_chunk", "alpha\nbeta")
+	want := []string{"alpha", "beta"}
 	if len(got) != len(want) {
 		t.Fatalf("MessageLines() len = %d, want %d", len(got), len(want))
 	}

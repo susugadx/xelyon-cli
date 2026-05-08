@@ -241,6 +241,95 @@ func TestExecuteToolCallsWithParallel_StopsSpinnerBeforeTUIReport(t *testing.T) 
 	}
 }
 
+func TestExecuteToolCallsWithParallel_PublishesRunningAndFinalTUIResults(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
+	provider := &mockProvider{name: "test"}
+	runtime := NewAgentRuntime()
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+
+	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	toolResultCh := make(chan tools.ToolResultInfo, 4)
+	agent.tuiToolResultCh = toolResultCh
+
+	toolCalls := []*tools.ToolCall{{
+		ID:      "c1",
+		Tool:    "read_file",
+		Args:    testReadFileArgs("auto_compress.go"),
+		RawArgs: testReadFileRawArgs("auto_compress.go"),
+	}}
+
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
+
+	if got := len(toolResultCh); got != 2 {
+		t.Fatalf("tool result events = %d, want running + final", got)
+	}
+	running := <-toolResultCh
+	final := <-toolResultCh
+	if running.Status != tools.ToolStatusRunning || running.ID != "c1" {
+		t.Fatalf("running event = %+v, want c1 running", running)
+	}
+	if final.Status != tools.ToolStatusOK || final.ID != "c1" || final.Duration <= 0 {
+		t.Fatalf("final event = %+v, want c1 ok with duration", final)
+	}
+}
+
+func TestEmitTUIToolRunningCopiesArgs(t *testing.T) {
+	toolResultCh := make(chan tools.ToolResultInfo, 1)
+	agent := &Agent{tuiToolResultCh: toolResultCh}
+	args := map[string]string{"path": "before"}
+
+	agent.emitTUIToolRunning(&tools.ToolCall{
+		ID:   "c1",
+		Tool: "list_dir",
+		Args: args,
+	})
+	args["path"] = "after"
+
+	info := <-toolResultCh
+	if got := info.Args["path"]; got != "before" {
+		t.Fatalf("running event args path = %q, want copied value before mutation", got)
+	}
+}
+
+func TestReportBatchedTUIToolResults_PublishesFinalTUIResults(t *testing.T) {
+	toolResultCh := make(chan tools.ToolResultInfo, 4)
+	agent := &Agent{tuiToolResultCh: toolResultCh}
+	toolCalls := []*tools.ToolCall{
+		{
+			ID:      "c1",
+			Tool:    "read_file",
+			Args:    testReadFileArgs("auto_compress.go"),
+			RawArgs: testReadFileRawArgs("auto_compress.go"),
+		},
+		{
+			ID:      "c2",
+			Tool:    "read_file",
+			Args:    testReadFileArgs("agent_tool_executor.go"),
+			RawArgs: testReadFileRawArgs("agent_tool_executor.go"),
+		},
+	}
+	state := toolruntime.NewParallelCallState(toolCalls)
+	state.Entries[0] = toolruntime.ParallelCallEntry{Status: toolruntime.ParallelCallStatusBatched}
+	state.Entries[1] = toolruntime.ParallelCallEntry{Status: toolruntime.ParallelCallStatusBatched}
+	state.Results[0] = toolruntime.Result{Result: "file 1"}
+	state.Results[1] = toolruntime.Result{Result: "file 2"}
+
+	agent.reportBatchedTUIToolResults(state, 12*time.Millisecond)
+
+	if got := len(toolResultCh); got != 2 {
+		t.Fatalf("tool result events = %d, want final for each batched call", got)
+	}
+	for _, wantID := range []string{"c1", "c2"} {
+		event := <-toolResultCh
+		if event.ID != wantID || event.Status != tools.ToolStatusOK || event.Duration <= 0 {
+			t.Fatalf("final event = %+v, want %s ok with duration", event, wantID)
+		}
+	}
+}
+
 // --- Test: Text-based (non-FC) tool calls also handled correctly ---
 
 func TestExecuteToolWithSpinner_WaitAgentLiveView(t *testing.T) {

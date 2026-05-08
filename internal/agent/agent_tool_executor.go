@@ -54,6 +54,7 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 			if a.tuiToolResultClosed.Load() {
 				return
 			}
+			info.Args = tools.CloneToolArgs(info.Args)
 			select {
 			case ch <- info:
 			default:
@@ -87,6 +88,7 @@ func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.Tool
 
 func (a *Agent) executeToolWithSpinnerResult(ctx context.Context, toolCall *tools.ToolCall) tools.ExecutionResult {
 	a.reportNegativeCacheHit(toolCall)
+	a.emitTUIToolRunning(toolCall)
 
 	if execResult, handled := a.executeImmediateToolResult(ctx, toolCall); handled {
 		return execResult

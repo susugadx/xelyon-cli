@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerpicker"
+	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
 func TestSlashSuggestions_ShowOnSlashAndRenderDescription(t *testing.T) {
@@ -29,6 +32,40 @@ func TestSlashSuggestions_ShowOnSlashAndRenderDescription(t *testing.T) {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("chromeCache missing %q:\n%s", fragment, rendered)
 		}
+	}
+}
+
+func TestSlashSuggestions_RenderRowsCarryDisplayModel(t *testing.T) {
+	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
+	m.slashSuggestions = slashSuggestionState{
+		suggestions: []slash.Suggestion{
+			{Label: "/model", Description: "Select model"},
+			{Label: "/review", Description: "Review current changes and find issues"},
+		},
+		selected: 1,
+	}
+
+	rows := m.visibleSlashSuggestionRenderRows()
+	if len(rows) != 2 {
+		t.Fatalf("render rows = %d, want 2", len(rows))
+	}
+	if rows[0].CommandLabel != "/model" || rows[0].Description != "Select model" || rows[0].Selected {
+		t.Fatalf("first row = %#v, want non-selected /model", rows[0])
+	}
+	if rows[1].CommandLabel != "/review" || rows[1].Description != "Review current changes and find issues" || !rows[1].Selected {
+		t.Fatalf("second row = %#v, want selected /review", rows[1])
+	}
+}
+
+func TestSlashSuggestionRowLayoutForWidthPreservesCurrentWidths(t *testing.T) {
+	narrow := slashSuggestionRowLayoutForWidth(24)
+	if narrow.commandWidth != 20 || narrow.descriptionWidth != 0 {
+		t.Fatalf("narrow layout = %#v, want command=20 description=0", narrow)
+	}
+
+	wide := slashSuggestionRowLayoutForWidth(80)
+	if wide.categoryWidth != 9 || wide.commandWidth != 26 || wide.descriptionWidth != 39 {
+		t.Fatalf("wide layout = %#v, want category=9 command=26 description=39", wide)
 	}
 }
 
@@ -113,6 +150,62 @@ func TestSlashSuggestions_ShowThinkingArgumentSuggestions(t *testing.T) {
 	}
 }
 
+func TestSlashSuggestions_ShowProviderRuntimeCandidates(t *testing.T) {
+	agent := &stubAgent{
+		statusLine: "ready",
+		providerCandidates: []providerpicker.ProviderCandidate{
+			{Key: "openai", Label: "OpenAI", Current: true, CredentialStatus: providerpicker.ProviderCredentialConfigured},
+			{Key: "claude", Label: "Claude", CredentialStatus: providerpicker.ProviderCredentialMissingKey},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/provider o")
+
+	if !m.slashSuggestions.visible() {
+		t.Fatal("provider argument suggestions should be visible")
+	}
+	if got := len(m.slashSuggestions.suggestions); got != 1 {
+		t.Fatalf("provider suggestions len = %d, want 1", got)
+	}
+	suggestion := m.slashSuggestions.suggestions[0]
+	if suggestion.InsertText != "/provider openai" || suggestion.Category != commandcatalog.CommandCategoryModel {
+		t.Fatalf("provider suggestion = %#v", suggestion)
+	}
+	if detail := m.selectedSlashSuggestionDetailText(); !strings.Contains(detail, "Switch provider to OpenAI") {
+		t.Fatalf("selected detail = %q, want provider detail", detail)
+	}
+}
+
+func TestSlashSuggestions_ShowModelRuntimeCandidates(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:        "ready",
+		providerConfigKey: "openai",
+		modelCandidates: map[string][]providerpicker.ModelCandidate{
+			"openai": {
+				{Name: "gpt-5.4", Current: true},
+				{Name: "gpt-5.4-mini", Default: true},
+				{Name: "Custom model...", Custom: true},
+			},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/model gpt-5.4-m")
+
+	if !m.slashSuggestions.visible() {
+		t.Fatal("model argument suggestions should be visible")
+	}
+	if got := len(m.slashSuggestions.suggestions); got != 1 {
+		t.Fatalf("model suggestions len = %d, want 1", got)
+	}
+	suggestion := m.slashSuggestions.suggestions[0]
+	if suggestion.InsertText != "/model gpt-5.4-mini" {
+		t.Fatalf("model suggestion insert = %q, want /model gpt-5.4-mini", suggestion.InsertText)
+	}
+	if strings.Contains(stripANSI(m.chromeCache), "Custom model") {
+		t.Fatalf("custom model candidate should not be inserted as slash argument:\n%s", stripANSI(m.chromeCache))
+	}
+}
+
 func TestSlashSuggestions_TabCompletesThinkingArgument(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
@@ -143,9 +236,7 @@ func TestSlashSuggestions_EnterExecutesThinkingArgument(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /thinking xhigh should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -222,9 +313,7 @@ func TestSlashSuggestions_SecondEnterExecutesDefaultThinkingArgument(t *testing.
 	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /thinking on should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -260,9 +349,7 @@ func TestSlashSuggestions_DownEnterExecutesThinkingArgument(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /thinking off should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -287,9 +374,7 @@ func TestSlashSuggestions_ThinkingAliasSelectionSubmitsCanonicalArgument(t *test
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /thinking off should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -312,9 +397,7 @@ func TestSlashSuggestions_EnterExecutesBareThinkingWithoutTrailingWhitespace(t *
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("bare /thinking should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -337,9 +420,7 @@ func TestSlashSuggestions_EnterExecutesSkillsSubcommand(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /skills doctor should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -419,9 +500,7 @@ func TestSlashSuggestions_EnterOnPlanSuggestionToggles(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("selected /plan should not start chat, got cmd %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -441,7 +520,7 @@ func TestSlashSuggestions_CapRowsToSmallWindow(t *testing.T) {
 
 	m = sendComposerRunes(m, "/")
 
-	wantRows := m.height - statusBarHeight - inputHeight - minChatViewportHeight
+	wantRows := m.height - statusBarHeight - inputHeight - minChatViewportHeight - 1
 	if got := len(m.visibleSlashSuggestionRows()); got != wantRows {
 		t.Fatalf("visible slash suggestion rows = %d, want %d", got, wantRows)
 	}

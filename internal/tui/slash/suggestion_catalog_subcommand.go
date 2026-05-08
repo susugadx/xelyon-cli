@@ -28,6 +28,9 @@ func catalogSubcommandArgumentSuggestions(req argumentSuggestionRequest) ([]Sugg
 			Label:         sub.Name,
 			InsertText:    insertText,
 			Description:   sub.Description,
+			Category:      cmd.Category,
+			ArgHint:       value,
+			Detail:        sub.Description,
 			HasArgs:       hasArgs,
 			SubmitOnEnter: true,
 		})

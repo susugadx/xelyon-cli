@@ -114,26 +114,47 @@ func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, e
 	return fmt.Sprintf("Done: %s (%s)", strings.Join(parts, ", "), ui.FormatParallelElapsed(elapsed))
 }
 
-// sendParallelToolResults は TUI モードで並列実行結果を個別にチャネルへ送信する。
+// sendParallelToolResults は TUI モードで実行済み結果を個別にチャネルへ送信する。
 // ToolResultCallback と同じ二重保護（closed チェック + select default）を適用する。
 func (a *Agent) sendParallelToolResults(allToolCalls []*tools.ToolCall, indices []int, results []toolruntime.Result, elapsed time.Duration) {
-	ch := a.tuiToolResultCh
+	startedAt := time.Now().Add(-elapsed)
 	for _, idx := range indices {
-		if a.tuiToolResultClosed.Load() {
-			return
-		}
 		tc := allToolCalls[idx]
-		select {
-		case ch <- tools.ToolResultInfo{
-			ToolName: tc.Tool,
-			Args:     tc.Args,
-			Result:   results[idx].Result,
-			Error:    results[idx].Error,
-			Duration: elapsed,
-		}:
-		default:
+		status := tools.ToolStatusOK
+		if results[idx].Error {
+			status = tools.ToolStatusError
+		}
+		a.emitTUIToolInfo(tools.ToolResultInfo{
+			ToolName:  tc.Tool,
+			Args:      tc.Args,
+			Result:    results[idx].Result,
+			Error:     results[idx].Error,
+			ID:        tc.DisplayID(),
+			Status:    status,
+			StartedAt: startedAt,
+			Duration:  elapsed,
+		})
+	}
+}
+
+func (a *Agent) reportBatchedTUIToolResults(state *toolruntime.ParallelCallState, elapsed time.Duration) {
+	if a == nil || a.tuiToolResultCh == nil || state == nil {
+		return
+	}
+	a.sendParallelToolResults(state.AllToolCalls, batchedToolResultIndices(state), state.Results, elapsed)
+}
+
+func batchedToolResultIndices(state *toolruntime.ParallelCallState) []int {
+	if state == nil {
+		return nil
+	}
+	indices := make([]int, 0)
+	for i, entry := range state.Entries {
+		if entry.Status == toolruntime.ParallelCallStatusBatched {
+			indices = append(indices, i)
 		}
 	}
+	return indices
 }
 
 func parallelGroupSpinnerMessage(allToolCalls []*tools.ToolCall, indices []int) string {

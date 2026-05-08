@@ -15,7 +15,12 @@ import (
 // footerHeight は下部 chrome（入力欄+ステータスバー）の合計高さを返す。
 // 将来の compact footer や compose mode では動的に切り替えられる。
 func (m Model) footerHeight() int {
-	return statusBarHeight + inputHeight + len(m.visibleSlashSuggestionRows()) + m.visibleAttachmentCount() + len(m.visibleComposerRows())
+	return statusBarHeight +
+		inputHeight +
+		len(m.visibleSlashSuggestionRows()) +
+		m.visibleSlashSuggestionDetailRowCount() +
+		m.visibleCompactChipRowCount() +
+		len(m.visibleComposerDraftSummaryRows())
 }
 
 // NewModel は TUI Model を作成する。
@@ -41,6 +46,11 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 		initLines = strings.Split(initialContent, "\n")
 	}
 
+	statusSnapshot := agent.StatusSnapshot()
+	if statusSnapshot.LegacyLine == "" {
+		statusSnapshot.LegacyLine = agent.GetStatusLine()
+	}
+
 	return Model{
 		conversation:   agent,
 		commands:       agent,
@@ -60,7 +70,8 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 			mouseSelAnchor: visualPosition{line: -1, col: -1},
 			mouseSelEnd:    visualPosition{line: -1, col: -1},
 		},
-		statusLine:        agent.GetStatusLine(),
+		statusLine:        statusSnapshot.LegacyLine,
+		statusSnapshot:    statusSnapshot,
 		workingDir:        currentWorkingDirForStatus(),
 		startupSubmission: startupSubmission,
 	}
@@ -117,6 +128,11 @@ func (m *Model) applyChatWindowSize(width, height int) {
 
 // refreshStatusLine は agent の最新 runtime state から footer 用の statusLine を再取得する。
 func (m *Model) refreshStatusLine() {
-	m.statusLine = m.conversation.GetStatusLine()
+	m.statusSnapshot = m.conversation.StatusSnapshot()
+	m.statusLine = m.statusSnapshot.LegacyLine
+	if m.statusLine == "" {
+		m.statusLine = m.conversation.GetStatusLine()
+		m.statusSnapshot.LegacyLine = m.statusLine
+	}
 	m.chromeDirty = true
 }

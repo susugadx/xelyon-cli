@@ -54,36 +54,120 @@ var Viewport = ViewportPalette{
 
 // ChromePalette は input dock と status bar の ANSI color palette。
 type ChromePalette struct {
-	InputBg              string
-	InputTextFg          string
-	InputPasteFg         string
-	InputPasteID         string
-	InputPrompt          string
-	SuggestionBg         string
-	SuggestionSelectedBg string
-	SuggestionCommandFg  string
-	SuggestionDescFg     string
-	HintFg               string
-	NavBadge             string
-	NewOutput            string
-	SuccessFg            string
-	Reset                string
+	InputBg                 string
+	InputTextFg             string
+	InputDraftFg            string
+	InputPasteFg            string
+	InputPasteID            string
+	InputPrompt             string
+	InputRowMarkerFg        string
+	InputMetaMarkerFg       string
+	SuggestionBg            string
+	SuggestionSelectedBg    string
+	SuggestionPrefixFg      string
+	SuggestionCommandFg     string
+	SuggestionDescFg        string
+	SuggestionSelectedFg    string
+	SuggestionSelectedDimFg string
+	StatusFg                string
+	StatusSepFg             string
+	StatusPathFg            string
+	HintFg                  string
+	NavBadge                string
+	NewOutput               string
+	SuccessFg               string
+	Reset                   string
 }
 
 // Chrome は chat chrome で使う既定 palette。
 var Chrome = ChromePalette{
-	InputBg:              "\033[48;5;236m",
-	InputTextFg:          "\033[38;5;252m",
-	InputPasteFg:         "\033[38;5;244m",
-	InputPasteID:         "\033[38;5;81m",
-	InputPrompt:          "\033[38;5;46m",
-	SuggestionBg:         "\033[48;5;236m",
-	SuggestionSelectedBg: "\033[48;5;25m",
-	SuggestionCommandFg:  "\033[38;5;81m",
-	SuggestionDescFg:     "\033[38;5;245m",
-	HintFg:               "\033[38;5;244m",
-	NavBadge:             "\033[48;5;33;38;5;255m",
-	NewOutput:            "\033[48;5;63;38;5;230m",
-	SuccessFg:            "\033[38;5;82m",
-	Reset:                "\033[0m",
+	InputBg:                 "\033[48;5;236m",
+	InputTextFg:             "\033[38;5;252m",
+	InputDraftFg:            "\033[38;5;252m",
+	InputPasteFg:            "\033[38;5;250m",
+	InputPasteID:            "\033[38;5;117m",
+	InputPrompt:             "\033[38;5;46m",
+	InputRowMarkerFg:        "\033[38;5;108m",
+	InputMetaMarkerFg:       "\033[38;5;81m",
+	SuggestionBg:            "\033[48;5;235m",
+	SuggestionSelectedBg:    "\033[48;5;24m",
+	SuggestionPrefixFg:      "\033[38;5;244m",
+	SuggestionCommandFg:     "\033[38;5;117m",
+	SuggestionDescFg:        "\033[38;5;250m",
+	SuggestionSelectedFg:    "\033[38;5;255m",
+	SuggestionSelectedDimFg: "\033[38;5;254m",
+	StatusFg:                "\033[38;5;252m",
+	StatusSepFg:             "\033[38;5;240m",
+	StatusPathFg:            "\033[38;5;246m",
+	HintFg:                  "\033[38;5;244m",
+	NavBadge:                "\033[48;5;33;38;5;255m",
+	NewOutput:               "\033[48;5;63;38;5;230m",
+	SuccessFg:               "\033[38;5;82m",
+	Reset:                   "\033[0m",
+}
+
+// TranscriptPalette は通常 transcript message の role chrome 用 palette。
+type TranscriptPalette struct {
+	UserHeader          string
+	AssistantHeader     string
+	AssistantText       string
+	AssistantHeading    string
+	AssistantListMarker string
+	AssistantInlineCode string
+	AssistantCodeFence  string
+	AssistantCodeBlock  string
+	AssistantQuote      string
+	AssistantNote       string
+	AssistantWarning    string
+	AssistantError      string
+	SystemHeader        string
+	Reset               string
+}
+
+// Transcript は user / assistant / system message の scan 性を上げる既定 palette。
+var Transcript = TranscriptPalette{
+	UserHeader:          "\033[38;5;117m",
+	AssistantHeader:     "\033[38;5;108m",
+	AssistantText:       "\033[38;5;252m",
+	AssistantHeading:    "\033[1;38;5;117m",
+	AssistantListMarker: "\033[38;5;108m",
+	AssistantInlineCode: "\033[38;5;221m",
+	AssistantCodeFence:  "\033[38;5;108m",
+	AssistantCodeBlock:  "\033[48;5;236;38;5;250m",
+	AssistantQuote:      "\033[38;5;246m",
+	AssistantNote:       "\033[38;5;117m",
+	AssistantWarning:    "\033[38;5;220m",
+	AssistantError:      "\033[38;5;203m",
+	SystemHeader:        "\033[38;5;220m",
+	Reset:               "\033[0m",
+}
+
+// ActivityPalette は agent activity block の ANSI color palette。
+type ActivityPalette struct {
+	Header          string
+	Scanner         string
+	Dim             string
+	Running         string
+	Success         string
+	Error           string
+	ErrorProvider   string
+	ErrorTool       string
+	ErrorValidation string
+	ErrorStartup    string
+	Reset           string
+}
+
+// Activity は agent activity block で使う既定 palette。
+var Activity = ActivityPalette{
+	Header:          "\033[2;38;5;87m",
+	Scanner:         "\033[38;5;87m",
+	Dim:             "\033[38;5;244m",
+	Running:         "\033[38;5;87m",
+	Success:         "\033[38;5;82m",
+	Error:           "\033[38;5;196m",
+	ErrorProvider:   "\033[38;5;203m",
+	ErrorTool:       "\033[38;5;214m",
+	ErrorValidation: "\033[38;5;220m",
+	ErrorStartup:    "\033[38;5;207m",
+	Reset:           "\033[0m",
 }

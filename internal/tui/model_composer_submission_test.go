@@ -67,9 +67,7 @@ func TestComposer_EnterHandlesSlashCommandWithFoldedPaste(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	if cmd != nil {
-		t.Fatalf("command Enter should not return sendChat cmd, got %v", cmd)
-	}
+	requireAgentDoneCmd(t, cmd)
 	if got := len(agent.handledInputs); got != 1 {
 		t.Fatalf("handledInputs length = %d, want 1", got)
 	}
@@ -227,9 +225,13 @@ func TestComposer_MultilineUserMessageKeepsViewStructure(t *testing.T) {
 	})
 	m.rebuildChrome()
 
-	wantTail := []string{"", "> alpha", "> beta", "> gamma", ""}
-	if got := m.rawLines[len(m.rawLines)-len(wantTail):]; !equalStringSlices(got, wantTail) {
-		t.Fatalf("rawLines tail = %#v, want %#v", got, wantTail)
+	wantTail := []string{"━━ user · " + m.messages[len(m.messages)-1].Timestamp.Format("15:04") + " · now ━━", "┃ > alpha", "┃ > beta", "┃ > gamma"}
+	gotTail := make([]string, len(wantTail))
+	for i, line := range m.rawLines[len(m.rawLines)-len(wantTail):] {
+		gotTail[i] = stripANSI(line)
+	}
+	if !equalStringSlices(gotTail, wantTail) {
+		t.Fatalf("rawLines tail = %#v, want %#v", gotTail, wantTail)
 	}
 	for i, line := range m.rawLines {
 		if strings.Contains(line, "\n") {

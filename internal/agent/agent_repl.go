@@ -150,7 +150,7 @@ func RunLegacyInteractiveWithImageWithConfig(query string, model string, provide
 	}
 
 	agent.setPromptReader(env.mlReader)
-	agent.chatWithImage(query, image)
+	_ = agent.chatWithImage(query, image)
 	runREPLLoop(agent, env.mlReader)
 	return nil
 }
@@ -251,13 +251,13 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 		if strings.Contains(input, "image:") {
 			textPart, image := parseImageInputWithWriter(agent.output(), input)
 			if image != nil {
-				agent.chatWithImage(textPart, image)
+				_ = agent.chatWithImage(textPart, image)
 				continue
 			}
 		}
 
 		// AIに送信
-		agent.chat(input)
+		_ = agent.chat(input)
 	}
 }
 

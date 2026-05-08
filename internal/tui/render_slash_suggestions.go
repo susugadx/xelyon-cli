@@ -1,48 +1,101 @@
 package tui
 
 import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 func (m Model) renderSlashSuggestionRows() []string {
-	rows := m.visibleSlashSuggestionRows()
+	rows := m.visibleSlashSuggestionRenderRows()
 	if len(rows) == 0 {
 		return nil
 	}
 	lines := make([]string, 0, len(rows))
-	start := m.slashSuggestionWindowStart()
-	for i, cmd := range rows {
-		selected := start+i == m.slashSuggestions.selected
-		lines = append(lines, m.renderSlashSuggestionRow(cmd, selected))
+	for _, row := range rows {
+		lines = append(lines, m.renderSlashSuggestionRenderRow(row))
 	}
 	return lines
 }
 
 func (m Model) renderSlashSuggestionRow(suggestion slash.Suggestion, selected bool) string {
+	return m.renderSlashSuggestionRenderRow(newSlashSuggestionRenderRow(suggestion, selected))
+}
+
+type slashSuggestionRowLayout struct {
+	categoryWidth    int
+	commandWidth     int
+	descriptionWidth int
+}
+
+func (m Model) renderSlashSuggestionRenderRow(row slashSuggestionRenderRow) string {
 	chrome := theme.Chrome
 	bg := chrome.SuggestionBg
 	prefix := "  "
-	if selected {
+	prefixFg := chrome.SuggestionPrefixFg
+	commandFg := chrome.SuggestionCommandFg
+	descriptionFg := chrome.SuggestionDescFg
+	if row.Selected {
 		bg = chrome.SuggestionSelectedBg
 		prefix = "› "
+		prefixFg = chrome.SuggestionSelectedFg
+		commandFg = chrome.SuggestionSelectedFg
+		descriptionFg = chrome.SuggestionSelectedDimFg
 	}
 
-	commandWidth := slashSuggestionCommandWidth(m.width)
-	descriptionWidth := max(0, m.width-commandWidth-4)
-	label := paddedPlainText(suggestion.Label, commandWidth)
-	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(suggestion.Description), descriptionWidth)
-	line := bg + prefix + chrome.SuggestionCommandFg + label + chrome.Reset + bg
-	if descriptionWidth > 0 {
-		line += "  " + chrome.SuggestionDescFg + description + chrome.Reset + bg
+	layout := slashSuggestionRowLayoutForWidth(m.width)
+	category := paddedPlainText(row.Category, layout.categoryWidth)
+	label := paddedPlainText(row.CommandLabel, layout.commandWidth)
+	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(row.Description), layout.descriptionWidth)
+	line := bg + prefixFg + prefix
+	if layout.categoryWidth > 0 {
+		line += descriptionFg + category + chrome.Reset + bg + prefixFg + "  " + chrome.Reset + bg
+	}
+	line += commandFg + label + chrome.Reset + bg
+	if layout.descriptionWidth > 0 {
+		line += prefixFg + "  " + chrome.Reset + bg + descriptionFg + description + chrome.Reset + bg
 	}
 	return termtext.FillANSITextWidth(line+chrome.Reset, m.width, bg)
+}
+
+func slashSuggestionRowLayoutForWidth(width int) slashSuggestionRowLayout {
+	categoryWidth := slashSuggestionCategoryWidth(width)
+	commandWidth := slashSuggestionCommandWidth(width)
+	return slashSuggestionRowLayout{
+		categoryWidth:    categoryWidth,
+		commandWidth:     commandWidth,
+		descriptionWidth: max(0, width-commandWidth-categoryWidth-6),
+	}
+}
+
+func slashSuggestionCategoryWidth(width int) int {
+	if width <= 36 {
+		return 0
+	}
+	return 9
 }
 
 func slashSuggestionCommandWidth(width int) int {
 	if width <= 24 {
 		return max(8, width-4)
 	}
+	if width <= 44 {
+		return min(24, max(14, width/2))
+	}
 	return min(28, max(14, width/3))
+}
+
+func paddedPlainText(text string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	text = termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(text), width)
+	padding := width - lipgloss.Width(text)
+	if padding > 0 {
+		text += strings.Repeat(" ", padding)
+	}
+	return text
 }

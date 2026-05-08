@@ -6,13 +6,24 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+const ChatRoleAssistantChunk = "assistant_chunk"
+
 // ChatMessage は会話ログの1エントリ
 type ChatMessage struct {
-	Role      string       // "user", "assistant", "tool_header", "system_info"
+	Role      string       // "user", "assistant", "assistant_chunk", "tool_header", "system_info"
 	Content   string       // テキスト内容（ANSIカラー付き可）
 	Tools     []ToolResult // Phase 2 以降: ツール結果の折りたたみ/展開表示用
 	Timestamp time.Time
 }
+
+// ToolStatus は TUI tool timeline の表示状態。
+type ToolStatus string
+
+const (
+	ToolStatusRunning ToolStatus = "running"
+	ToolStatusOK      ToolStatus = "ok"
+	ToolStatusError   ToolStatus = "error"
+)
 
 // ToolResult は1つのツール実行結果
 type ToolResult struct {
@@ -21,6 +32,21 @@ type ToolResult struct {
 	Detail    string // 展開時に表示する全文
 	Collapsed bool   // true=折りたたみ、false=展開
 	Error     bool   // エラーかどうか
+	ID        string
+	Status    ToolStatus
+	Target    string
+	StartedAt time.Time
+	Duration  time.Duration
+}
+
+// StatusSnapshot は TUI のステータスバー用に構造化した内部 runtime 状態。
+type StatusSnapshot struct {
+	Provider   string
+	Model      string
+	Mode       string
+	Tokens     string
+	Cost       string
+	LegacyLine string
 }
 
 // tea.Msg として使うメッセージ型
@@ -48,7 +74,8 @@ type UpdateStatusMsg struct {
 
 // AgentDoneMsg はagent.chat()の完了通知
 type AgentDoneMsg struct {
-	Error error
+	Error     error
+	ErrorKind AgentErrorKind
 }
 
 // OpenPromptMsg は TUI prompt modal を開くMsg。

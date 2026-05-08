@@ -18,12 +18,24 @@ import (
 // ToolResultInfo はツール実行結果の構造化データ。
 // TUIモードで ToolResultCallback 経由で通知される。
 type ToolResultInfo struct {
-	ToolName string
-	Args     map[string]string
-	Result   string        // ツール出力全文
-	Error    bool          // エラーかどうか
-	Duration time.Duration // 実行時間
+	ToolName  string
+	Args      map[string]string
+	Result    string        // ツール出力全文
+	Error     bool          // エラーかどうか
+	ID        string        // TUI 表示内で同じツールブロックを更新するための内部ID
+	Status    ToolStatus    // TUI 表示用の実行状態
+	StartedAt time.Time     // 実行開始時刻
+	Duration  time.Duration // 実行時間
 }
+
+// ToolStatus は TUI の tool timeline で表示する内部実行状態。
+type ToolStatus string
+
+const (
+	ToolStatusRunning ToolStatus = "running"
+	ToolStatusOK      ToolStatus = "ok"
+	ToolStatusError   ToolStatus = "error"
+)
 
 // ExecutionContext はツール実行時の周辺コンテキストを保持する。
 // web_search などが現在のプロバイダー/モデルや対話 I/O を参照するために使用する。
