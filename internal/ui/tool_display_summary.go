@@ -14,7 +14,8 @@ func isToolDisplayError(info ToolDisplayInfo, trimmed string) bool {
 		strings.HasPrefix(trimmed, "Cancelled")
 }
 
-func toolIcon(toolName string) string {
+// ToolDisplayIcon は tool line summary で使う tool 種別 icon を返す。
+func ToolDisplayIcon(toolName string) string {
 	switch {
 	case strings.HasPrefix(toolName, "git_"):
 		return "📦"
@@ -54,6 +55,37 @@ func toolIcon(toolName string) string {
 	default:
 		return "🔧"
 	}
+}
+
+// StripToolDisplayIconPrefix は FormatToolLine 由来の summary 先頭 icon だけを除去する。
+func StripToolDisplayIconPrefix(summary string) string {
+	summary = strings.TrimSpace(summary)
+	for _, icon := range toolDisplayIcons {
+		if rest, ok := strings.CutPrefix(summary, icon+" "); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return summary
+}
+
+var toolDisplayIcons = []string{
+	"📦",
+	"🔌",
+	"🧭",
+	"📄",
+	"📝",
+	"✏️",
+	"⚙️",
+	"🔍",
+	"🗂️",
+	"🗑️",
+	"📋",
+	"🌐",
+	"🚀",
+	"⏳",
+	"🔎",
+	"🎨",
+	"🔧",
 }
 
 func formatToolSummary(info ToolDisplayInfo, trimmed string) string {

@@ -161,7 +161,7 @@ func TestModel_AppendToolResultMsgWithoutActiveAgentActivityUsesFallbackToolBloc
 	if len(m.toolBlocks) != 1 {
 		t.Fatalf("fallback toolBlocks len = %d, want 1", len(m.toolBlocks))
 	}
-	if plain := plainRawTranscript(m); !strings.Contains(plain, "▶ ✓ read_file internal/tui/model.go") {
+	if plain := plainRawTranscript(m); !strings.Contains(plain, "  ✓ read_file internal/tui/model.go") {
 		t.Fatalf("fallback tool block should render, transcript:\n%s", plain)
 	}
 }

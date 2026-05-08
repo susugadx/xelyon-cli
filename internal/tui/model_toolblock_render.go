@@ -1,8 +1,12 @@
 package tui
 
 import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 	"github.com/susugadx/xelyon-cli/internal/tui/toolblock"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func (m Model) toolBlockSummaryLine(blockIdx int) string {
@@ -17,8 +21,46 @@ func (m *Model) buildToolBlockLines(blockIdx int) []string {
 }
 
 func toolBlockDisplaySummary(tool ToolResult) string {
-	if tool.Status != ToolStatusError && !tool.Error {
-		return tool.Summary
+	summary := normalizeToolBlockSummary(tool.Summary)
+	if summary == "" {
+		summary = normalizeToolBlockSummary(tool.Name)
 	}
-	return theme.Activity.ErrorTool + agentActivityErrorLabel(AgentErrorTool) + theme.Activity.Reset + " " + tool.Summary
+	if summary == "" {
+		summary = "tool"
+	}
+
+	if tool.Status != ToolStatusError && !tool.Error {
+		return summary
+	}
+	errorSummary := normalizeToolBlockErrorSummary(summary)
+	if errorSummary == "" {
+		errorSummary = normalizeToolBlockSummary(tool.Name)
+	}
+	if errorSummary == "" {
+		errorSummary = "tool failed"
+	}
+	return theme.Activity.ErrorTool + agentActivityErrorLabel(AgentErrorTool) + theme.Activity.Reset + " " + errorSummary
+}
+
+func normalizeToolBlockSummary(summary string) string {
+	summary = termtext.SanitizeSingleLineANSI(strings.TrimSpace(summary))
+	return ui.StripToolDisplayIconPrefix(summary)
+}
+
+func normalizeToolBlockErrorSummary(summary string) string {
+	summary = ui.StripToolDisplayIconPrefix(summary)
+	for {
+		next := strings.TrimSpace(summary)
+		lower := strings.ToLower(next)
+		switch {
+		case strings.HasPrefix(next, "✕ "):
+			summary = strings.TrimSpace(strings.TrimPrefix(next, "✕ "))
+		case strings.HasPrefix(lower, "error "):
+			summary = strings.TrimSpace(next[len("error "):])
+		case strings.HasPrefix(lower, "[tool error]"):
+			summary = strings.TrimSpace(next[len("[tool error]"):])
+		default:
+			return next
+		}
+	}
 }

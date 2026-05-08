@@ -46,8 +46,8 @@ func TestToolBlock_FocusIndicatorReflected(t *testing.T) {
 
 	m.setBlockFocus(0)
 	firstLine = m.rawLines[m.toolBlocks[0].block.lineStart]
-	if !strings.HasPrefix(firstLine, "→") {
-		t.Fatalf("focused line = %q, want → prefix", firstLine)
+	if !strings.HasPrefix(firstLine, "▶") {
+		t.Fatalf("focused line = %q, want ▶ prefix", firstLine)
 	}
 
 	m.clearBlockFocus()

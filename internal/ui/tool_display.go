@@ -43,9 +43,9 @@ func FormatToolLine(info ToolDisplayInfo) string {
 
 	summary := formatToolSummary(info, trimmed)
 	if summary == "" {
-		return fmt.Sprintf("%s %s", toolIcon(info.ToolName), blueName)
+		return fmt.Sprintf("%s %s", ToolDisplayIcon(info.ToolName), blueName)
 	}
-	return fmt.Sprintf("%s %s: %s", toolIcon(info.ToolName), blueName, summary)
+	return fmt.Sprintf("%s %s: %s", ToolDisplayIcon(info.ToolName), blueName, summary)
 }
 
 // PrintParallelGroupStartToWriter は並列実行グループの開始行を指定 writer に表示する。

@@ -191,7 +191,7 @@ func TestToolBlock_MouseWheelKeepsExpandedANSIDetailStable(t *testing.T) {
 	}
 
 	view := m.View()
-	if !strings.Contains(view, "▼ bash") {
+	if !strings.Contains(view, "▶ bash") {
 		t.Fatalf("view should still show expanded block summary, got %q", view)
 	}
 }

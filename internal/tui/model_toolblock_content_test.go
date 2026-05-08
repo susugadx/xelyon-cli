@@ -54,7 +54,7 @@ func TestToolBlock_UpsertsToolResultByID(t *testing.T) {
 	if got := m.toolBlocks[0].tool.Status; got != ToolStatusOK {
 		t.Fatalf("status = %q, want ok", got)
 	}
-	if got := m.rawLines[m.toolBlocks[0].block.lineStart]; got != " ▶ ✓ ok read_file a.go 12ms" {
+	if got := m.rawLines[m.toolBlocks[0].block.lineStart]; got != "  ✓ ok read_file a.go 12ms" {
 		t.Fatalf("summary line = %q, want updated ok summary", got)
 	}
 }
@@ -147,7 +147,7 @@ func TestToolBlock_ErrorSummaryShowsToolErrorLabel(t *testing.T) {
 		Collapsed: true,
 	})
 
-	if got := stripANSI(m.rawLines[m.toolBlocks[0].block.lineStart]); got != " ▶ [tool error] ✕ error read_file a.go 12ms" {
+	if got := stripANSI(m.rawLines[m.toolBlocks[0].block.lineStart]); got != "  [tool error] read_file a.go 12ms" {
 		t.Fatalf("error summary line = %q, want tool error label", got)
 	}
 }
@@ -227,7 +227,7 @@ func TestToolBlock_UpdateMarksNewOutputAndShiftsFollowingBlocksWhenNotFollowing(
 	if got, want := m.toolBlocks[1].block.lineStart, secondStart+2; got != want {
 		t.Fatalf("second block lineStart = %d, want %d", got, want)
 	}
-	if got := m.rawLines[m.toolBlocks[1].block.lineStart]; got != " ▶ second block" {
+	if got := m.rawLines[m.toolBlocks[1].block.lineStart]; got != "  second block" {
 		t.Fatalf("second block summary line = %q, want shifted summary", got)
 	}
 }

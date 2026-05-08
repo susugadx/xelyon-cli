@@ -24,17 +24,12 @@ func SummaryLine(summary string, collapsed bool, focused bool) string {
 }
 
 func (s renderState) summaryLine() string {
-	indicator := " "
+	indicator := "  "
 	if s.focused {
-		indicator = "→"
+		indicator = "▶ "
 	}
 
-	prefix := "▶"
-	if !s.collapsed {
-		prefix = "▼"
-	}
-
-	return indicator + prefix + " " + s.summary
+	return indicator + s.summary
 }
 
 // Lines は tool result block の表示行を生成する。
