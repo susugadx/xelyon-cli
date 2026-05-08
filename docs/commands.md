@@ -4,6 +4,24 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ## CLI 診断コマンド
 
+### `xelyon doctor kimi`
+
+Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。web search smoke は `web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`cached_input_tokens`、検索結果 token 観測値を text / JSON に出します。
+
+`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生し、`$web_search` tool call が 1 件以上観測された場合だけ成功扱いになります。通常の `stop` response で tool call がない場合、request 自体が返っていても smoke は fail します。call fee は token cost とは別料金で、検索結果 tokens は次 request の `prompt_tokens` に含まれるため二重加算しません。endpoint の token usage が返らない場合は `usage` check が warn になり、web search の fee / call count 観測だけでは token usage 観測済みとは扱いません。
+
+```bash
+xelyon doctor kimi
+xelyon doctor kimi --model kimi-k2.6
+xelyon doctor kimi --smoke
+xelyon doctor kimi --image-smoke
+xelyon doctor kimi --tool-smoke
+xelyon doctor kimi --web-search-smoke
+xelyon doctor kimi --json
+```
+
+手元で実 Kimi 環境の回帰確認を走らせる場合は、`MOONSHOT_API_KEY` を設定して `make kimi-smoke` を実行します。画像入力だけ確認する場合は `make kimi-image-smoke`、tool calling も含める場合は `make kimi-tool-smoke`、built-in web search は `make kimi-web-search-smoke` を使います。
+
 ### `xelyon doctor azure`
 
 Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると、設定済み deployment に最小の Responses API リクエストを送信します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
@@ -44,6 +62,7 @@ TUI では入力欄で `/` または `/r` のような prefix を入力すると
 現在状態、直近リクエスト、セッション統計をまとめて表示します。`/stats` は互換エイリアスです。
 表示には現在の command surface も含まれます。TUI では `TUI primary`、`--no-tui` では `classic legacy fallback` として表示し、classic 側では新しい対話型 UI コマンドを追加しない方針を明示します。
 サブエージェントを使ったセッションでは、親とサブのコストを分離表示し、`🤖 Sub-agents` セクションで各サブのトークン使用量・コスト・ツール実行回数も確認できます。
+Kimi `$web_search` を使った直近リクエストでは、`WebSearchCalls > 0` の場合だけ、token usage とは別に Web Search Calls、Web Search Fee、観測できた Search Result Tokens が表示されます。
 
 ```
 > /status
@@ -218,17 +237,20 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 - `prefer_compact_api: true` の場合、Compact API を優先使用
 - `model: ""` の場合、圧縮時はプロバイダー別の低コストモデルを自動選択
 
-### `/use <provider> [model]`
+### `/provider <provider> [model]`, `/use <provider> [model]`
 
-プロバイダーとモデルを動的に切り替えます。
+プロバイダーとモデルを動的に切り替えます。TUI で引数なしの `/provider` を実行すると provider picker を開きます。`/use` は legacy alias です。
 
 ```
-> /use deepseek
-> /use openai gpt-4
-> /use gemini gemini-2.0-flash-exp
-> /use claude claude-sonnet-4-5-20250514
-> /use ollama qwen2.5-coder:7b
-> /use groq meta-llama/llama-4-scout-17b-16e-instruct
+> /provider
+> /provider deepseek
+> /provider openai gpt-5.4
+> /provider kimi kimi-k2.6
+> /provider gemini gemini-2.0-flash-exp
+> /provider claude claude-sonnet-4-5-20250514
+> /provider ollama qwen2.5-coder:7b
+> /provider groq meta-llama/llama-4-scout-17b-16e-instruct
+> /use openai gpt-5.4   # legacy alias
 ```
 
 ### `/providers`
@@ -499,10 +521,11 @@ xelyon --image error.png "このエラーを修正して"
 
 # プロバイダー指定と組み合わせ
 xelyon --image screenshot.png --provider gemini "このUIの問題点を教えて"
+xelyon --image receipt.png --provider kimi "この画像の内容を要約して"
 ```
 
 **対応フォーマット**: PNG, JPEG, GIF, WebP
-**対応プロバイダー**: Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
+**対応プロバイダー**: Kimi, Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
 **制限**: `--image` は `--headless` / `--output-format json` と併用できません。`--resume` とも併用できません。
 
 ### その他のオプション
@@ -625,8 +648,8 @@ bash: git checkout -b feature-branch
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
 | `search_code` | コード検索。`mode=auto` を既定に symbol-aware / literal / regex を language-aware に routing し、複数パターン・結果分類にも対応。対応言語では symbol-like query から定義・caller・参照・テストを自動解決 | `pattern`, `mode`, `path`, `file_filter` 等 |
-| `web_search` | ネイティブWeb検索（`web_search.provider` で OpenAI / Gemini / Claude を選択可能） | `query` |
-**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
+| `web_search` | ネイティブWeb検索（`web_search.provider` で Kimi / OpenAI / Gemini / Claude を選択可能） | `query` |
+**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。メインプロバイダーが Kimi の場合は provider 指定なしで Moonshot built-in `$web_search` を使います。Kimi で `$web_search` が起動すると call fee が発生し、XELYON は token usage と別枠で観測します。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 
 ### 開発支援
 
@@ -695,6 +718,7 @@ XELYONはMCP（Model Context Protocol）に対応しており、`~/.xelyon/mcp.j
 ### Headlessモード
 
 対話なしでJSON形式で結果を出力します。他のツールやスクリプトから呼び出す際に便利です。
+Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に `calls`、`fee_estimate`、`result_tokens` を分けて出します。検索結果 tokens は次 request の `prompt_tokens` に含まれる前提の表示用観測値で、headless JSON の token totals には再加算しません。
 
 ```bash
 # JSON出力

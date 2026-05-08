@@ -64,15 +64,171 @@ func TestBuildChatCompletionsRequest_BuildsStandardPayloadWithExtras(t *testing.
 	}
 }
 
-func TestChatCompletionsRequest_RejectsExtraFieldConflict(t *testing.T) {
-	req := ChatCompletionsRequest{
-		Model:       "provider/model",
-		Messages:    []api.Message{{Role: "user", Content: "hello"}},
-		ExtraFields: map[string]any{"model": "override"},
+func TestBuildChatMessages_StandardMessagesPayloadUnchanged(t *testing.T) {
+	messages := BuildChatMessages("system", []api.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "hi"},
+	})
+
+	payload := marshalMessagesPayload(t, messages)
+	if len(payload) != 3 {
+		t.Fatalf("len(messages) = %d, want 3", len(payload))
+	}
+	assertPayloadKeys(t, payload[0], "role", "content")
+	assertPayloadKeys(t, payload[1], "role", "content")
+	assertPayloadKeys(t, payload[2], "role", "content")
+	if payload[0]["role"] != "system" || payload[0]["content"] != "system" {
+		t.Fatalf("system payload = %#v, want role/content only", payload[0])
+	}
+	if payload[1]["role"] != "user" || payload[1]["content"] != "hello" {
+		t.Fatalf("user payload = %#v, want role/content only", payload[1])
+	}
+	if payload[2]["role"] != "assistant" || payload[2]["content"] != "hi" {
+		t.Fatalf("assistant payload = %#v, want role/content only", payload[2])
+	}
+}
+
+func TestBuildChatMessages_OmitsEmptyReasoningContent(t *testing.T) {
+	messages := BuildChatMessages("system", []api.Message{
+		{Role: "assistant", Content: "hi", ReasoningContent: ""},
+	})
+
+	payload := marshalMessagesPayload(t, messages)
+	if _, ok := payload[1]["reasoning_content"]; ok {
+		t.Fatalf("reasoning_content = %#v, want omitted when empty", payload[1]["reasoning_content"])
+	}
+}
+
+func TestBuildChatMessages_PreservesReasoningAndToolFields(t *testing.T) {
+	messages := BuildChatMessages("system", []api.Message{
+		{
+			Role:             "assistant",
+			Content:          "I'll inspect it.",
+			ReasoningContent: "Need to inspect the file first.",
+			ToolCalls: []api.OpenAIToolCall{{
+				ID:   "call_1",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"README.md"}`,
+				},
+			}},
+		},
+		{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+	})
+
+	payload := marshalMessagesPayload(t, messages)
+	assistant := payload[1]
+	if assistant["reasoning_content"] != "Need to inspect the file first." {
+		t.Fatalf("assistant reasoning_content = %#v, want preserved", assistant["reasoning_content"])
+	}
+	toolCalls, ok := assistant["tool_calls"].([]any)
+	if !ok || len(toolCalls) != 1 {
+		t.Fatalf("assistant tool_calls = %#v, want one tool call", assistant["tool_calls"])
+	}
+	toolCall, ok := toolCalls[0].(map[string]any)
+	if !ok || toolCall["id"] != "call_1" || toolCall["type"] != "function" {
+		t.Fatalf("tool_call = %#v, want id/type preserved", toolCalls[0])
+	}
+	function, ok := toolCall["function"].(map[string]any)
+	if !ok || function["name"] != "read_file" || function["arguments"] != `{"path":"README.md"}` {
+		t.Fatalf("tool_call function = %#v, want read_file arguments preserved", toolCall["function"])
 	}
 
-	if _, err := json.Marshal(req); err == nil {
-		t.Fatal("json.Marshal() error = nil, want conflict error")
+	tool := payload[2]
+	if tool["role"] != "tool" || tool["tool_call_id"] != "call_1" || tool["content"] != "README contents" {
+		t.Fatalf("tool payload = %#v, want role/tool_call_id/content preserved", tool)
+	}
+}
+
+func TestBuildChatCompletionsRequest_DefaultMaxTokensField(t *testing.T) {
+	req := BuildChatCompletionsRequest(ChatCompletionsRequestOptions{
+		Model:     "provider/model",
+		Messages:  []api.Message{{Role: "user", Content: "hello"}},
+		MaxTokens: 123,
+	})
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body["max_tokens"] != float64(123) {
+		t.Fatalf("max_tokens = %v, want 123", body["max_tokens"])
+	}
+	if _, ok := body["max_completion_tokens"]; ok {
+		t.Fatalf("max_completion_tokens = %v, want absent", body["max_completion_tokens"])
+	}
+}
+
+func TestBuildChatCompletionsRequest_MaxCompletionTokensField(t *testing.T) {
+	req := BuildChatCompletionsRequest(ChatCompletionsRequestOptions{
+		Model:               "provider/model",
+		Messages:            []api.Message{{Role: "user", Content: "hello"}},
+		MaxTokens:           123,
+		MaxCompletionTokens: 456,
+	})
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body["max_completion_tokens"] != float64(456) {
+		t.Fatalf("max_completion_tokens = %v, want 456", body["max_completion_tokens"])
+	}
+	if _, ok := body["max_tokens"]; ok {
+		t.Fatalf("max_tokens = %v, want absent", body["max_tokens"])
+	}
+}
+
+func TestChatCompletionsRequest_RejectsExtraFieldConflict(t *testing.T) {
+	tests := []struct {
+		name       string
+		extraField string
+	}{
+		{name: "model", extraField: "model"},
+		{name: "max tokens", extraField: "max_tokens"},
+		{name: "max completion tokens", extraField: "max_completion_tokens"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ChatCompletionsRequest{
+				Model:       "provider/model",
+				Messages:    []api.Message{{Role: "user", Content: "hello"}},
+				ExtraFields: map[string]any{tt.extraField: "override"},
+			}
+
+			if _, err := json.Marshal(req); err == nil {
+				t.Fatal("json.Marshal() error = nil, want conflict error")
+			}
+		})
+	}
+}
+
+func TestToolChoicePolicies(t *testing.T) {
+	toolName := "read_file"
+
+	defaultChoice := DefaultToolChoicePolicy(&toolName)
+	defaultBody, ok := defaultChoice.(map[string]interface{})
+	if !ok || defaultBody["type"] != "function" {
+		t.Fatalf("DefaultToolChoicePolicy() = %#v, want forced function", defaultChoice)
+	}
+
+	if got := DefaultToolChoicePolicy(nil); got != "auto" {
+		t.Fatalf("DefaultToolChoicePolicy(nil) = %v, want auto", got)
+	}
+	if got := AutoToolChoicePolicy(&toolName); got != "auto" {
+		t.Fatalf("AutoToolChoicePolicy(toolName) = %v, want auto", got)
 	}
 }
 
@@ -124,5 +280,30 @@ func assertJSONPostRequest(t *testing.T, req *http.Request) {
 	}
 	if decoded.Model != "deployment" {
 		t.Fatalf("decoded model = %q, want deployment", decoded.Model)
+	}
+}
+
+func marshalMessagesPayload(t *testing.T, messages []api.Message) []map[string]any {
+	t.Helper()
+	payload, err := json.Marshal(messages)
+	if err != nil {
+		t.Fatalf("json.Marshal(messages) error = %v", err)
+	}
+	var decoded []map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal(messages) error = %v", err)
+	}
+	return decoded
+}
+
+func assertPayloadKeys(t *testing.T, payload map[string]any, keys ...string) {
+	t.Helper()
+	if len(payload) != len(keys) {
+		t.Fatalf("payload keys = %#v, want only %v", payload, keys)
+	}
+	for _, key := range keys {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("payload keys = %#v, missing %q", payload, key)
+		}
 	}
 }

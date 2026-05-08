@@ -183,6 +183,7 @@ func TestSwitchModelForCurrentProvider_AzureSameDeploymentPreservesCatalogModel(
 
 func TestProviderCandidates_DisplayOrderCurrentAndCredentialStatus(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("MOONSHOT_API_KEY", "")
 	t.Setenv("AZURE_OPENAI_API_KEY", "")
 	t.Setenv("AZURE_OPENAI_BASE_URL", "")
 
@@ -197,7 +198,7 @@ func TestProviderCandidates_DisplayOrderCurrentAndCredentialStatus(t *testing.T)
 	if len(got) < 4 {
 		t.Fatalf("ProviderCandidates len = %d, want provider list", len(got))
 	}
-	wantPrefix := []string{"deepseek", "claude", "openai", "azure", "gemini"}
+	wantPrefix := []string{"deepseek", "kimi", "claude", "openai", "azure", "gemini"}
 	for i, want := range wantPrefix {
 		if got[i].Key != want {
 			t.Fatalf("ProviderCandidates[%d].Key = %q, want %q; all=%#v", i, got[i].Key, want, got)

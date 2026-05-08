@@ -94,6 +94,35 @@ func (p *headlessUsageProvider) ChatWithImage(ctx context.Context, systemPrompt 
 	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
+type headlessWebSearchUsageProvider struct {
+	usageCallback api.UsageCallback
+}
+
+func (p *headlessWebSearchUsageProvider) Name() string { return "kimi" }
+
+func (p *headlessWebSearchUsageProvider) SupportsImages() bool { return false }
+
+func (p *headlessWebSearchUsageProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *headlessWebSearchUsageProvider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
+}
+
+func (p *headlessWebSearchUsageProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	if p.usageCallback != nil {
+		p.usageCallback(api.Usage{
+			StorageCost:           0.005,
+			WebSearchCalls:        1,
+			WebSearchResultTokens: 222,
+		})
+	}
+	return "done", nil
+}
+
+func (p *headlessWebSearchUsageProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
+}
+
 type headlessHistoryProbeProvider struct {
 	responses []string
 	histories [][]api.Message
@@ -403,6 +432,34 @@ func TestRunHeadlessWithConfig_CollectsTokenUsageAndCost(t *testing.T) {
 	}
 	if result.PricingUnavailable {
 		t.Fatal("result.PricingUnavailable = true, want false for known pricing")
+	}
+}
+
+func TestRunHeadlessWithConfig_CollectsWebSearchObservation(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provider := &headlessWebSearchUsageProvider{}
+	result := RunHeadlessWithConfig(context.Background(), "probe", "kimi-k2.6", provider, newProjectMapDisabledConfig())
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if result.WebSearch == nil {
+		t.Fatal("result.WebSearch = nil, want web search observation")
+	}
+	if result.WebSearch.Calls != 1 {
+		t.Fatalf("result.WebSearch.Calls = %d, want 1", result.WebSearch.Calls)
+	}
+	if result.WebSearch.FeeEstimate != 0.005 {
+		t.Fatalf("result.WebSearch.FeeEstimate = %f, want 0.005", result.WebSearch.FeeEstimate)
+	}
+	if result.WebSearch.ResultTokens != 222 {
+		t.Fatalf("result.WebSearch.ResultTokens = %d, want 222", result.WebSearch.ResultTokens)
+	}
+	if result.Tokens == nil || result.Tokens.Total != 0 {
+		t.Fatalf("result.Tokens = %+v, want no token double count", result.Tokens)
+	}
+	if result.Cost != 0.005 {
+		t.Fatalf("result.Cost = %f, want web search fee 0.005", result.Cost)
 	}
 }
 

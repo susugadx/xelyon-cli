@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/kimi"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -83,6 +84,36 @@ func TestCurrentProviderConfigKey_CanonicalizesAzureDisplayName(t *testing.T) {
 
 	if got := a.currentProviderConfigKey(); got != "azure" {
 		t.Fatalf("currentProviderConfigKey() = %q, want azure", got)
+	}
+}
+
+func TestNewAgentWithRuntime_PreservesMoonshotProviderConfigKey(t *testing.T) {
+	t.Setenv("MOONSHOT_API_KEY", "test-key")
+
+	provider, err := api.NewProvider("moonshot")
+	if err != nil {
+		t.Fatalf("NewProvider(moonshot) error = %v", err)
+	}
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "moonshot"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"moonshot": {DefaultModel: "moonshot-custom"},
+		"kimi":     {DefaultModel: "kimi-custom"},
+	})
+
+	agent := NewAgentWithRuntime("moonshot-custom", provider, false, NewAgentRuntimeWithConfig(cfg))
+	if agent.ProviderName != "kimi" {
+		t.Fatalf("ProviderName = %q, want kimi", agent.ProviderName)
+	}
+	if agent.ProviderConfigKey != "moonshot" {
+		t.Fatalf("ProviderConfigKey = %q, want moonshot", agent.ProviderConfigKey)
+	}
+	if got := providerConfigKeyFromProvider(agent.CurrentProvider); got != "moonshot" {
+		t.Fatalf("provider config key = %q, want moonshot", got)
+	}
+	if agent.session == nil || agent.session.ProviderConfigKey != "moonshot" {
+		t.Fatalf("session.ProviderConfigKey = %q, want moonshot", agent.session.ProviderConfigKey)
 	}
 }
 

@@ -15,6 +15,9 @@ func (a *Agent) requestContext(ctx context.Context) context.Context {
 	ctx = tools.WithConfig(ctx, a.cfg())
 	ctx = ui.WithRuntime(ctx, a.ui())
 	ctx = api.WithAssistantUpdateMode(ctx, a.assistantUpdateMode())
+	if a != nil && a.session != nil && strings.TrimSpace(a.session.ID) != "" {
+		ctx = api.WithPromptCacheScope(ctx, api.PromptCacheScope{SessionID: a.session.ID})
+	}
 	if a != nil && a.isCompactedMode && len(a.compactedItems) > 0 {
 		ctx = api.WithCompactedInputItems(ctx, a.compactedItems)
 	}

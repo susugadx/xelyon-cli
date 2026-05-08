@@ -8,6 +8,7 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/gemini"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/groq"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/kimi"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openrouter"

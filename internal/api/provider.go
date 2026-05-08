@@ -62,8 +62,8 @@ func ListProviders() []string {
 	providerRegistryMu.RLock()
 	defer providerRegistryMu.RUnlock()
 
-	// エイリアス（anthropic → claude）を除外
-	aliases := map[string]bool{"anthropic": true}
+	// エイリアス（anthropic → claude, moonshot → kimi）を除外
+	aliases := map[string]bool{"anthropic": true, "moonshot": true}
 
 	var names []string
 	for name := range providerRegistry {

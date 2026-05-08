@@ -14,6 +14,10 @@ var knownModelMaxOutputTokens = map[string]int{
 	"deepseek-reasoner":                     384000,
 	"deepseek-v4-flash":                     384000,
 	"deepseek-v4-pro":                       384000,
+	"kimi-k2":                               32768,
+	"kimi-k2.5":                             32768,
+	"kimi-k2.6":                             32768,
+	"kimi-k2-thinking":                      32768,
 	"claude-sonnet-4-6":                     64000,
 	"claude-sonnet-4.6":                     64000,
 	"anthropic.claude-sonnet-4-6":           64000,
@@ -118,6 +122,10 @@ var modelContextLimits = map[string]int{
 	"deepseek-v4-flash": 1000000,
 	"deepseek-v4-pro":   1000000,
 
+	"kimi-k2.5":        256000,
+	"kimi-k2.6":        256000,
+	"kimi-k2-thinking": 256000,
+
 	"llama-3.3-70b-versatile": 128000,
 	"llama-3.1-70b-versatile": 128000,
 	"llama-3.1-8b-instant":    128000,
@@ -199,6 +207,8 @@ func InferProviderFromModel(model string) string {
 		return "bedrock"
 	case strings.HasPrefix(normalized, "deepseek"):
 		return "deepseek"
+	case strings.HasPrefix(normalized, "kimi-"):
+		return "kimi"
 	case IsBedrockModelID(normalized):
 		return "bedrock"
 	case strings.Contains(normalized, "/"):

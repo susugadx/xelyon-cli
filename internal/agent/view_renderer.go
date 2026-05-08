@@ -32,6 +32,7 @@ func renderLastRequestTable(cfg *config.Config, provider, model string, usage *a
 	if usage.ThinkingTokens > 0 {
 		table.AddRow("Thinking", formatNumber(usage.ThinkingTokens)+" tokens")
 	}
+	addWebSearchUsageRows(table, func(label string) string { return label }, usage.WebSearchCalls, usage.WebSearchResultTokens, usage.StorageCost)
 
 	estimate := requestUsageCost(cfg, provider, model, *usage)
 	if costOverride != nil {
@@ -68,7 +69,7 @@ func renderSessionOverviewTable(agent *Agent, stats *SessionStats) *ui.Table {
 
 func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *ui.Table {
 	hasSubAgents := subSummary != nil && subSummary.TotalSpawned > 0
-	if stats.TotalTokens() <= 0 && !hasSubAgents {
+	if stats.TotalTokens() <= 0 && stats.WebSearchCalls <= 0 && !hasSubAgents {
 		return nil
 	}
 
@@ -97,6 +98,10 @@ func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *suba
 
 		tokenTable.AddRow(tokenRowLabel(hasSubAgents, "Parent", "Total"), formatNumber(stats.TotalTokens())+" tokens")
 	}
+
+	addWebSearchUsageRows(tokenTable, func(label string) string {
+		return tokenRowLabel(hasSubAgents, "Parent", label)
+	}, stats.WebSearchCalls, stats.WebSearchResultTokens, stats.WebSearchCost)
 
 	if hasSubAgents {
 		tokenTable.AddRow("Sub-agent Input", formatNumber(subSummary.TotalInput)+" tokens")
@@ -133,6 +138,19 @@ func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *suba
 		tokenTable.AddRow("Cost", "Free (local)")
 	}
 	return tokenTable
+}
+
+func addWebSearchUsageRows(table *ui.Table, label func(string) string, calls, resultTokens int, fee float64) {
+	if table == nil || calls <= 0 {
+		return
+	}
+	table.AddRow(label("Web Search Calls"), formatNumber(calls))
+	if resultTokens > 0 {
+		table.AddRow(label("Search Result Tokens"), formatNumber(resultTokens)+" tokens observed")
+	}
+	if fee > 0 {
+		table.AddRow(label("Web Search Fee"), formatUSDWithSuffix(fee))
+	}
 }
 
 func renderSessionSections(agent *Agent) {

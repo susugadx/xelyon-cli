@@ -55,6 +55,7 @@ Examples:
   xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
   xelyon doctor azure --deployment my-gpt-5-deployment --smoke # Diagnose Azure OpenAI
+  xelyon doctor kimi --smoke                       # Diagnose Kimi native provider
   xelyon -p deepseek -m deepseek-chat             # Short flags`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -179,7 +180,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&noUpdateCheck, "no-update-check", false, "Disable automatic version check")
 
 	// 新規: -i/--image フラグ（画像入力）
-	rootCmd.Flags().StringVarP(&imageFlag, "image", "i", "", "Image file to include (for multimodal models: gemini, claude, openai)")
+	rootCmd.Flags().StringVarP(&imageFlag, "image", "i", "", "Image file to include (for multimodal models: kimi, gemini, claude, openai)")
 
 	// --no-tui は legacy REPL 用。新しい interactive command は TUI を primary surface とする。
 	rootCmd.Flags().BoolVar(&legacyNoTUI, "no-tui", false, "Use deprecated legacy classic REPL instead of the primary TUI")

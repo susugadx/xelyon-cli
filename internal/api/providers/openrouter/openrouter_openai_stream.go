@@ -37,14 +37,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		p.usageCallback(*streamResult.Usage)
 	}
 
-	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
+	return openaicompatstream.BuildContentWithToolCalls(
+		streamResult.Content,
 		streamResult.ToolCalls,
 		openai.ConvertToolCallToToolJSON,
-	)
-	if toolCallsOutput != "" {
-		return streamResult.Content + toolCallsOutput, nil
-	}
-	return streamResult.Content, nil
+	), nil
 }
 
 // handleNonStreamingResponse は OpenRouter の OpenAI 互換非ストリーミング処理を担う。

@@ -21,8 +21,9 @@ type Chunk struct {
 
 // Choice は OpenAI 互換 choice の最小共通構造。
 type Choice struct {
-	Delta        Delta  `json:"delta"`
-	FinishReason string `json:"finish_reason,omitempty"`
+	Delta        Delta           `json:"delta"`
+	FinishReason string          `json:"finish_reason,omitempty"`
+	Usage        json.RawMessage `json:"usage,omitempty"`
 }
 
 // Delta は OpenAI 互換 delta の最小共通構造。
@@ -166,6 +167,15 @@ func BuildToolCallJSON(toolCalls []api.OpenAIToolCall, encode func(tc *api.OpenA
 	return out.String()
 }
 
+// BuildContentWithToolCalls は assistant content の末尾に内部 tool_call JSON を連結する。
+func BuildContentWithToolCalls(content string, toolCalls []api.OpenAIToolCall, encode func(tc *api.OpenAIToolCall) (string, error)) string {
+	toolCallsOutput := BuildToolCallJSON(toolCalls, encode)
+	if toolCallsOutput == "" {
+		return content
+	}
+	return content + toolCallsOutput
+}
+
 // HasUsagePayload は usage が null 以外の有効 payload を持つかを返す。
 func HasUsagePayload(raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)
@@ -188,6 +198,19 @@ func DecodeStandardUsage(raw json.RawMessage) (*api.Usage, error) {
 
 	apiUsage := usage.ToUsage()
 	return &apiUsage, nil
+}
+
+// UsagePayload は top-level usage を優先し、なければ choice-level usage を返す。
+func (c Chunk) UsagePayload() json.RawMessage {
+	if HasUsagePayload(c.Usage) {
+		return c.Usage
+	}
+	for _, choice := range c.Choices {
+		if HasUsagePayload(choice.Usage) {
+			return choice.Usage
+		}
+	}
+	return nil
 }
 
 // ParseSSEOptions は OpenAI 互換 SSE の共通処理オプション。
@@ -257,7 +280,7 @@ func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *ui.Spinne
 			return "", false, err
 		}
 
-		usage, err := usageDecoder(chunk.Usage)
+		usage, err := usageDecoder(chunk.UsagePayload())
 		if err != nil {
 			if options.OnUsageDecodeError != nil {
 				return "", false, options.OnUsageDecodeError(err)

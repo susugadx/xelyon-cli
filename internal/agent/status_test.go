@@ -311,6 +311,45 @@ func TestPrintStatusFooter_IncludesSubAgentCost(t *testing.T) {
 	}
 }
 
+func TestPrintStatusFooter_LocalProviderShowsExternalCost(t *testing.T) {
+	var out bytes.Buffer
+	agent := &Agent{
+		CurrentModel: "llama3",
+		ProviderName: "ollama",
+		Stats:        NewSessionStats("ollama", "llama3"),
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+	agent.Stats.AddTokens(1000, 200)
+	agent.Stats.AccumulatedCost = 0.012
+
+	agent.PrintStatusFooter()
+
+	if !strings.Contains(out.String(), "~$0.012") {
+		t.Fatalf("PrintStatusFooter() should show external cost for local session, got:\n%s", out.String())
+	}
+}
+
+func TestPrintStatusFooter_LocalProviderOmitsZeroCost(t *testing.T) {
+	var out bytes.Buffer
+	agent := &Agent{
+		CurrentModel: "llama3",
+		ProviderName: "ollama",
+		Stats:        NewSessionStats("ollama", "llama3"),
+		Runtime: &AgentRuntime{
+			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+	agent.Stats.AddTokens(1000, 200)
+
+	agent.PrintStatusFooter()
+
+	if strings.Contains(out.String(), "$") || strings.Contains(out.String(), "cost") {
+		t.Fatalf("PrintStatusFooter() should omit zero local cost, got:\n%s", out.String())
+	}
+}
+
 func TestPrintStatusFooter_UnknownPricingUsesNA(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{

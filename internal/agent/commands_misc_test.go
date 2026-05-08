@@ -160,6 +160,29 @@ func TestBuildLastRequestTable_UsesCostOverride(t *testing.T) {
 	}
 }
 
+func TestBuildLastRequestTable_ShowsWebSearchObservation(t *testing.T) {
+	usage := &api.Usage{
+		InputTokens:           1000,
+		OutputTokens:          200,
+		StorageCost:           0.005,
+		WebSearchCalls:        1,
+		WebSearchResultTokens: 321,
+	}
+	costEstimate := cost.CostEstimate{Cost: 0.0105}
+
+	table := buildLastRequestTable(nil, "kimi", "kimi-k2.6", usage, &costEstimate)
+	if table == nil {
+		t.Fatal("buildLastRequestTable() = nil, want table")
+	}
+
+	output := table.RenderCompact()
+	for _, want := range []string{"Web Search Calls", "1", "Search Result Tokens", "321 tokens observed", "Web Search Fee", "$0.0050 USD", "$0.0105 USD"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("buildLastRequestTable() output missing %q:\n%s", want, output)
+		}
+	}
+}
+
 func TestBuildLastRequestTable_ShowsPricingUnavailable(t *testing.T) {
 	usage := &api.Usage{InputTokens: 1000, OutputTokens: 200}
 	table := buildLastRequestTable(nil, "bedrock", "amazon.nova-unknown-v1:0", usage, nil)

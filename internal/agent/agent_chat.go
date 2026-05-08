@@ -108,20 +108,18 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 		return
 	}
 
-	turnUsage := api.Usage{
-		InputTokens:         a.Stats.InputTokens - startStats.InputTokens,
-		OutputTokens:        a.Stats.OutputTokens - startStats.OutputTokens,
-		ThinkingTokens:      a.Stats.ThinkingTokens - startStats.ThinkingTokens,
-		CachedInputTokens:   a.Stats.CachedInputTokens - startStats.CachedInputTokens,
-		CacheCreationTokens: a.Stats.CacheCreationTokens - startStats.CacheCreationTokens,
-	}
+	turnUsage := a.Stats.UsageDeltaSince(startStats)
 	cfg := a.cfg()
 	endEstimate := a.Stats.EstimatedCostEstimateForConfig(cfg)
 	startEstimate := startStats.EstimatedCostEstimateForConfig(cfg)
 	turnEstimate := cost.EstimateRequestCostWithCacheForConfig(cfg, a.Stats.Provider, a.Stats.Model, turnUsage)
 	costDiff := endEstimate.Cost - startEstimate.Cost
 	costUnknown := a.Stats.CostUnknownEvents > startStats.CostUnknownEvents ||
-		(usageHasAnyTokens(turnUsage) && turnEstimate.PricingUnavailable)
+		(turnUsage.HasTokenOrWebSearchObservation() && turnEstimate.PricingUnavailable)
+	turnCostEstimate := cost.CostEstimate{
+		Cost:               costDiff,
+		PricingUnavailable: costUnknown,
+	}
 	a.Stats.LastTurnUsage = &turnUsage
 	a.Stats.LastTurnCost = costDiff
 	a.Stats.LastTurnCostUnknown = costUnknown
@@ -136,8 +134,7 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 
 	// ✓ を緑色で表示、残りはdimまたは通常色
 	green.Fprint(a.output(), "✓ ")
-	if strings.ToLower(a.ProviderName) == "ollama" {
-		// Ollama の場合はコスト非表示
+	if shouldSuppressLocalCostDisplay(a.ProviderName, turnCostEstimate) {
 		_, _ = fmt.Fprintf(a.output(), "In: %s + Out: %s = %s tok\n",
 			FormatNumber(inDiff),
 			FormatNumber(outDiff),
@@ -153,12 +150,4 @@ func (a *Agent) printTaskUsage(startStats SessionStats) {
 			dim.Fprintf(a.output(), "(~$%.4f)\n", costDiff)
 		}
 	}
-}
-
-func usageHasAnyTokens(usage api.Usage) bool {
-	return usage.InputTokens > 0 ||
-		usage.OutputTokens > 0 ||
-		usage.ThinkingTokens > 0 ||
-		usage.CachedInputTokens > 0 ||
-		usage.CacheCreationTokens > 0
 }

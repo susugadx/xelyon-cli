@@ -34,6 +34,7 @@ type ProviderDescriptor struct {
 
 var providerOrder = []string{
 	"deepseek",
+	"kimi",
 	"openai",
 	"azure",
 	"gemini",
@@ -46,6 +47,7 @@ var providerOrder = []string{
 
 var displayProviderOrder = []string{
 	"deepseek",
+	"kimi",
 	"claude",
 	"openai",
 	"azure",
@@ -57,6 +59,7 @@ var displayProviderOrder = []string{
 }
 
 var nativeWebSearchProviderOrder = []string{
+	"kimi",
 	"openai",
 	"gemini",
 	"claude",
@@ -73,6 +76,22 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "deepseek-v4-flash",
 			MaxOutputTokens: 16384,
+		},
+	},
+	"kimi": {
+		Key:                  "kimi",
+		DisplayName:          "Kimi",
+		Aliases:              []string{"moonshot"},
+		CredentialKind:       "api_key",
+		APIKeyEnv:            "MOONSHOT_API_KEY",
+		SetupInstructions:    []string{"export MOONSHOT_API_KEY=your-api-key"},
+		DefaultSubAgentModel: "kimi-k2.5",
+		SupportsImages:       true,
+		NativeWebSearch:      true,
+		PricingFamily:        "kimi",
+		ModelDefaults: ProviderModelDefaults{
+			DefaultModel:    "kimi-k2.6",
+			MaxOutputTokens: 32768,
 		},
 	},
 	"openai": {

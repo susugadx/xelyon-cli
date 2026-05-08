@@ -37,6 +37,10 @@ const (
 	ToolStatusError   ToolStatus = "error"
 )
 
+// UsageAttributionCallback はツールが実行した外部 API request の使用量を通知する。
+// provider/model は現在のチャット provider ではなく、その request の実行 owner を表す。
+type UsageAttributionCallback func(provider, model string, usage api.Usage)
+
 // ExecutionContext はツール実行時の周辺コンテキストを保持する。
 // web_search などが現在のプロバイダー/モデルや対話 I/O を参照するために使用する。
 // 各実行経路が明示的に組み立てて注入し、process-global 状態には依存しない。
@@ -63,6 +67,7 @@ type ExecutionContext struct {
 	AutoApprove        bool
 	AuditLogger        audit.ToolLogger
 	LocatorRegistry    *locator.Registry
+	UsageAttribution   UsageAttributionCallback
 
 	// ToolResultCallback はツール実行結果を構造化データとして通知するコールバック。
 	// TUIモードで設定される。nilの場合はstdoutに従来形式で出力する。

@@ -140,13 +140,22 @@ func TestAgentCancelFuncField(t *testing.T) {
 }
 
 func TestToolExecutionContext_UsesRequestContextFallback(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	type requestContextFallbackKey struct{}
+
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), requestContextFallbackKey{}, "request"))
 	defer cancel()
 
 	agent := &Agent{agentRequestState: agentRequestState{requestCtx: ctx}}
 	execCtx := agent.toolExecutionContext(agent.currentRequestContext(), nil, nil, nil)
 
-	if execCtx.EffectiveContext() != ctx {
-		t.Fatal("expected tool execution context to inherit request context")
+	if got := execCtx.EffectiveContext().Value(requestContextFallbackKey{}); got != "request" {
+		t.Fatalf("request context marker = %v, want request", got)
+	}
+
+	cancel()
+	select {
+	case <-execCtx.EffectiveContext().Done():
+	case <-time.After(time.Second):
+		t.Fatal("expected tool execution context to inherit request cancellation")
 	}
 }

@@ -46,6 +46,12 @@ func TestGetMaxOutputTokens(t *testing.T) {
 			expected: 16384,
 		},
 		{
+			name:     "Kimi known model uses catalog limit",
+			provider: "kimi",
+			model:    "kimi-k2.6",
+			expected: 32768,
+		},
+		{
 			name:     "Works even if provider config is missing",
 			provider: "unknown-provider",
 			model:    "claude-sonnet-4-6",
@@ -67,6 +73,23 @@ func TestGetMaxOutputTokens(t *testing.T) {
 				t.Errorf("GetMaxOutputTokens() = %v, want %v", got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestGetMaxOutputTokens_KimiAliasConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("moonshot", config.ProviderModelConfig{
+		DefaultModel:    "corp-kimi",
+		CatalogModel:    "kimi-k2.6",
+		MaxOutputTokens: 12345,
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	if got := GetMaxOutputTokens(ctx, "kimi", "corp-kimi"); got != 32768 {
+		t.Fatalf("GetMaxOutputTokens(kimi, corp-kimi) = %d, want catalog kimi-k2.6 limit", got)
+	}
+	if got := GetMaxOutputTokens(ctx, "moonshot", "unknown-kimi"); got != 12345 {
+		t.Fatalf("GetMaxOutputTokens(moonshot, unknown-kimi) = %d, want alias provider default", got)
 	}
 }
 

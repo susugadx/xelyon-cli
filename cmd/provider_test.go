@@ -22,6 +22,20 @@ func TestCreateProvider_ValidProviders(t *testing.T) {
 			wantErr:      false,
 		},
 		{
+			name:         "kimi with API key",
+			providerName: "kimi",
+			envKey:       "MOONSHOT_API_KEY",
+			envValue:     "test-key",
+			wantErr:      false,
+		},
+		{
+			name:         "moonshot alias with API key",
+			providerName: "moonshot",
+			envKey:       "MOONSHOT_API_KEY",
+			envValue:     "test-key",
+			wantErr:      false,
+		},
+		{
 			name:         "openai with API key",
 			providerName: "openai",
 			envKey:       "OPENAI_API_KEY",
@@ -102,6 +116,16 @@ func TestCreateProvider_MissingAPIKey(t *testing.T) {
 			wantErrMsg:   "DEEPSEEK_API_KEY not set",
 		},
 		{
+			name:         "kimi missing API key",
+			providerName: "kimi",
+			wantErrMsg:   "MOONSHOT_API_KEY not set",
+		},
+		{
+			name:         "moonshot alias missing API key",
+			providerName: "moonshot",
+			wantErrMsg:   "MOONSHOT_API_KEY not set",
+		},
+		{
 			name:         "openai missing API key",
 			providerName: "openai",
 			wantErrMsg:   "OPENAI_API_KEY not set",
@@ -131,6 +155,7 @@ func TestCreateProvider_MissingAPIKey(t *testing.T) {
 			t.Setenv("GEMINI_API_KEY", "")
 			t.Setenv("ANTHROPIC_API_KEY", "")
 			t.Setenv("GROQ_API_KEY", "")
+			t.Setenv("MOONSHOT_API_KEY", "")
 
 			_, err := createProvider(tt.providerName)
 
@@ -174,6 +199,11 @@ func TestCreateProvider_CaseInsensitive(t *testing.T) {
 		{"DEEPSEEK", "DEEPSEEK_API_KEY"},
 		{"DeepSeek", "DEEPSEEK_API_KEY"},
 		{"deepseek", "DEEPSEEK_API_KEY"},
+		{"KIMI", "MOONSHOT_API_KEY"},
+		{"Kimi", "MOONSHOT_API_KEY"},
+		{"kimi", "MOONSHOT_API_KEY"},
+		{"MOONSHOT", "MOONSHOT_API_KEY"},
+		{"Moonshot", "MOONSHOT_API_KEY"},
 		{"OPENAI", "OPENAI_API_KEY"},
 		{"OpenAI", "OPENAI_API_KEY"},
 		{"GEMINI", "GEMINI_API_KEY"},
@@ -309,6 +339,16 @@ func TestProviderModelLookupKeys_PreservesAliasBeforeCanonicalFallback(t *testin
 	}
 }
 
+func TestProviderModelLookupKeys_MoonshotAliasBeforeCanonicalFallback(t *testing.T) {
+	keys := config.ProviderModelLookupKeys(" Moonshot ")
+	if len(keys) != 2 {
+		t.Fatalf("len(ProviderModelLookupKeys()) = %d, want 2", len(keys))
+	}
+	if keys[0] != "moonshot" || keys[1] != "kimi" {
+		t.Fatalf("ProviderModelLookupKeys() = %v, want [moonshot kimi]", keys)
+	}
+}
+
 func TestProviderConfig(t *testing.T) {
 	// 全プロバイダーが createProvider で生成可能かテスト
 	tests := []struct {
@@ -316,6 +356,8 @@ func TestProviderConfig(t *testing.T) {
 		envKey string
 	}{
 		{"deepseek", "DEEPSEEK_API_KEY"},
+		{"kimi", "MOONSHOT_API_KEY"},
+		{"moonshot", "MOONSHOT_API_KEY"},
 		{"openai", "OPENAI_API_KEY"},
 		{"gemini", "GEMINI_API_KEY"},
 		{"claude", "ANTHROPIC_API_KEY"},

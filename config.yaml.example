@@ -31,6 +31,9 @@ provider_models:
     groq:
         default_model: meta-llama/llama-4-scout-17b-16e-instruct
         max_output_tokens: 8192
+    kimi:
+        default_model: kimi-k2.6
+        max_output_tokens: 32768
     ollama:
         default_model: qwen2.5-coder:7b
         max_output_tokens: 4096
@@ -147,9 +150,9 @@ output:
 # ============================================================
 # ネイティブ Web 検索の実行プロバイダーとキャッシュ設定
 # 未設定の場合はメインプロバイダーの検索を使用
-# メインが非対応の場合は openai / gemini / claude / anthropic のいずれかを設定
+# メインが非対応の場合は kimi / moonshot / openai / gemini / claude / anthropic のいずれかを設定
 web_search:
-    # 検索プロバイダー（openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）
+    # 検索プロバイダー（kimi / moonshot / openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）
     provider: gemini
     # キャッシュを有効化（デフォルト: true）
     cache_enabled: true

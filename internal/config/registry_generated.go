@@ -88,12 +88,12 @@ var FieldTypeMap = map[string]ConfigFieldType{
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
 	"agent_instructions.project.mode": {"off", "fallback", "always"},
-	"default_provider":                {"deepseek", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"default_provider":                {"deepseek", "kimi", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 	"execution.mode":                  {"balanced", "trusted", "full_auto"},
 	"general.ui_language":             {"auto", "ja", "en"},
 	"output.assistant_updates":        {"", "verbose", "phase", "off"},
 	"sub_agent.default_effort":        {"off", "low", "medium", "high"},
-	"web_search.provider":             {"openai", "gemini", "claude", "anthropic"},
+	"web_search.provider":             {"kimi", "moonshot", "openai", "gemini", "claude", "anthropic"},
 }
 
 // FieldDescriptions はフィールドの説明
@@ -137,5 +137,5 @@ var FieldDescriptions = map[string]string{
 	"web_search.cache_enabled":                      "キャッシュを有効化（デフォルト: true）",
 	"web_search.cache_size":                         "最大キャッシュ数（デフォルト: 50）",
 	"web_search.cache_ttl":                          "キャッシュTTL秒数（デフォルト: 3600 = 1時間）",
-	"web_search.provider":                           "検索プロバイダー（openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）",
+	"web_search.provider":                           "検索プロバイダー（kimi / moonshot / openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）",
 }

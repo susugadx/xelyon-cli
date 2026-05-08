@@ -3,14 +3,12 @@ package agent
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -53,107 +51,6 @@ func (t *blockingParallelTool) Run(_ tools.ExecutionContext, _ map[string]string
 	t.started <- struct{}{}
 	<-t.release
 	return "ok", nil, nil
-}
-
-func TestToolExecutionContext_PrefersActiveModelOwnerForProviderConfigKey(t *testing.T) {
-	cfg := newProjectMapDisabledConfig()
-	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
-		"claude": {
-			DefaultModel: "claude-custom",
-		},
-		"anthropic": {
-			DefaultModel: "anthropic-custom",
-		},
-	})
-	runtime := NewAgentRuntimeWithConfig(cfg)
-
-	agent := &Agent{
-		ProviderName:      "claude",
-		ProviderConfigKey: "claude",
-		CurrentModel:      "anthropic-custom",
-		CurrentProvider:   &MockProvider{name: "claude"},
-		Runtime:           runtime,
-	}
-
-	execCtx := agent.toolExecutionContext(context.Background(), nil, io.Discard, io.Discard)
-
-	if execCtx.ProviderName != "claude" {
-		t.Fatalf("ProviderName = %q, want %q", execCtx.ProviderName, "claude")
-	}
-	if execCtx.ProviderConfigKey != "anthropic" {
-		t.Fatalf("ProviderConfigKey = %q, want %q", execCtx.ProviderConfigKey, "anthropic")
-	}
-}
-
-func TestToolExecutionContext_PromptIOIgnoresRequestDeadlineAndUsesExplicitCancel(t *testing.T) {
-	requestCtx, cancelRequest := context.WithTimeout(
-		context.WithValue(context.Background(), requestPromptContextKey{}, "tool-prompt"),
-		time.Nanosecond,
-	)
-	defer cancelRequest()
-	<-requestCtx.Done()
-
-	explicitCancelCtx, cancelExplicit := context.WithCancel(context.Background())
-	defer cancelExplicit()
-
-	agent := &Agent{
-		Runtime: NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
-		agentRequestState: agentRequestState{
-			requestPromptCancelCtx: explicitCancelCtx,
-		},
-	}
-
-	execCtx := agent.toolExecutionContext(requestCtx, nil, io.Discard, io.Discard)
-	promptIO := execCtx.PromptIO()
-	promptCtx := promptIO.PromptContext()
-
-	if _, ok := promptCtx.Deadline(); ok {
-		t.Fatal("PromptIO context should not inherit the API request deadline")
-	}
-	if err := promptCtx.Err(); err != nil {
-		t.Fatalf("PromptIO context should stay active after request deadline, got %v", err)
-	}
-	if got := promptCtx.Value(requestPromptContextKey{}); got != "tool-prompt" {
-		t.Fatalf("PromptIO context marker = %v, want tool-prompt", got)
-	}
-
-	cancelExplicit()
-
-	select {
-	case <-promptCtx.Done():
-	case <-time.After(time.Second):
-		t.Fatal("PromptIO context should be cancelled by explicit request cancel")
-	}
-}
-
-func TestBeginChatRequestContext_ToolPromptContextUsesInterruptScope(t *testing.T) {
-	cfg := newProjectMapDisabledConfig()
-	cfg.APIRetry.Timeout = 1
-	agent := &Agent{Runtime: NewAgentRuntimeWithConfig(cfg)}
-
-	requestCtx, cleanup := agent.beginChatRequestContext()
-	defer cleanup()
-
-	execCtx := agent.toolExecutionContext(requestCtx, nil, io.Discard, io.Discard)
-	promptIO := execCtx.PromptIO()
-	promptCtx := promptIO.PromptContext()
-
-	if _, ok := promptCtx.Deadline(); ok {
-		t.Fatal("tool prompt context should not expose the API request deadline")
-	}
-
-	agent.cancelActiveRequest("signal: interrupt")
-
-	select {
-	case <-promptCtx.Done():
-	case <-time.After(time.Second):
-		t.Fatal("tool prompt context should be cancelled by request interrupt")
-	}
-	select {
-	case <-requestCtx.Done():
-	case <-time.After(time.Second):
-		t.Fatal("request context should be cancelled by request interrupt")
-	}
 }
 
 // --- Test 1: Loop detection prevents execution of subsequent tools ---

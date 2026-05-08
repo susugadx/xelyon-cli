@@ -404,17 +404,25 @@ kimi:
     exact:
       - kimi-k2
       - kimi-k2.5
+      - kimi-k2.6
+      - kimi-k2-thinking
   default:
-    inputcostperm: 0.60
-    outputcostperm: 2.50
-    cachedinputcostperm: 0.06
-    cachecreationcostperm: 0.60
+    inputcostperm: 0.95
+    outputcostperm: 4.00
+    cachedinputcostperm: 0.16
+    cachecreationcostperm: 0.95
   rules:
+    - contains: ["k2.6"]
+      pricing:
+        inputcostperm: 0.95
+        outputcostperm: 4.00
+        cachedinputcostperm: 0.16
+        cachecreationcostperm: 0.95
     - contains: ["k2.5"]
       pricing:
         inputcostperm: 0.60
         outputcostperm: 3.00
-        cachedinputcostperm: 0.06
+        cachedinputcostperm: 0.10
         cachecreationcostperm: 0.60
     - contains: ["k2"]
       pricing:
@@ -1031,6 +1039,7 @@ openrouter:
       - deepseek/deepseek-v4-pro
       - moonshotai/kimi-k2
       - moonshotai/kimi-k2.5
+      - moonshotai/kimi-k2.6
       - meta/llama-3.1-70b
       - qwen/qwen2.5-coder
       - zhipu/glm-5

@@ -46,6 +46,11 @@ func TestNewProvider_MissingAPIKey(t *testing.T) {
 			providerName: "groq",
 			envKey:       "GROQ_API_KEY",
 		},
+		{
+			name:         "Kimi without API key",
+			providerName: "kimi",
+			envKey:       "MOONSHOT_API_KEY",
+		},
 	}
 
 	for _, tt := range tests {
@@ -253,6 +258,20 @@ func TestNewProvider_SuccessPaths(t *testing.T) {
 			envValue:     "test-groq-key",
 			wantName:     "Groq",
 		},
+		{
+			name:         "Kimi with API key",
+			providerName: "kimi",
+			envKey:       "MOONSHOT_API_KEY",
+			envValue:     "test-kimi-key",
+			wantName:     "Kimi",
+		},
+		{
+			name:         "Moonshot alias",
+			providerName: "moonshot",
+			envKey:       "MOONSHOT_API_KEY",
+			envValue:     "test-kimi-key",
+			wantName:     "Kimi",
+		},
 	}
 
 	for _, tt := range tests {
@@ -295,7 +314,7 @@ func TestNewProvider_SuccessPaths(t *testing.T) {
 
 func TestIsRegisteredProvider(t *testing.T) {
 	// 全 LLM プロバイダーが登録されていること
-	registered := []string{"deepseek", "claude", "anthropic", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"}
+	registered := []string{"deepseek", "kimi", "moonshot", "claude", "anthropic", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"}
 	for _, name := range registered {
 		if !api.IsRegisteredProvider(name) {
 			t.Errorf("IsRegisteredProvider(%q) = false, want true", name)
@@ -329,7 +348,7 @@ func TestListProviders(t *testing.T) {
 	providers := api.ListProviders()
 
 	// 全 LLM プロバイダーが含まれること
-	required := []string{"azure", "bedrock", "claude", "deepseek", "gemini", "groq", "ollama", "openai", "openrouter"}
+	required := []string{"azure", "bedrock", "claude", "deepseek", "gemini", "groq", "kimi", "ollama", "openai", "openrouter"}
 	for _, name := range required {
 		found := false
 		for _, p := range providers {
@@ -347,6 +366,9 @@ func TestListProviders(t *testing.T) {
 	for _, p := range providers {
 		if p == "anthropic" {
 			t.Error("ListProviders() should exclude 'anthropic' alias")
+		}
+		if p == "moonshot" {
+			t.Error("ListProviders() should exclude 'moonshot' alias")
 		}
 	}
 

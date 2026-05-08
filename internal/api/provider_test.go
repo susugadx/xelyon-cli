@@ -267,6 +267,16 @@ func TestSupportsImages(t *testing.T) {
 			want:         false,
 		},
 		{
+			name:         "Kimi supports images",
+			providerName: "kimi",
+			want:         true,
+		},
+		{
+			name:         "Moonshot alias supports images",
+			providerName: "moonshot",
+			want:         true,
+		},
+		{
 			name:         "Ollama does not support images",
 			providerName: "ollama",
 			want:         false,
@@ -333,6 +343,11 @@ func TestNewProvider_MissingAPIKey(t *testing.T) {
 			name:         "Groq without API key",
 			providerName: "groq",
 			envKey:       "GROQ_API_KEY",
+		},
+		{
+			name:         "Kimi without API key",
+			providerName: "kimi",
+			envKey:       "MOONSHOT_API_KEY",
 		},
 	}
 
@@ -456,6 +471,20 @@ func TestNewProvider_SuccessPaths(t *testing.T) {
 			envKey:       "GROQ_API_KEY",
 			envValue:     "test-groq-key",
 			wantName:     "Groq",
+		},
+		{
+			name:         "Kimi with API key",
+			providerName: "kimi",
+			envKey:       "MOONSHOT_API_KEY",
+			envValue:     "test-kimi-key",
+			wantName:     "Kimi",
+		},
+		{
+			name:         "Moonshot alias",
+			providerName: "moonshot",
+			envKey:       "MOONSHOT_API_KEY",
+			envValue:     "test-kimi-key",
+			wantName:     "Kimi",
 		},
 	}
 

@@ -209,19 +209,11 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		p.usageCallback(*streamResult.Usage)
 	}
 
-	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
+	return openaicompatstream.BuildContentWithToolCalls(
+		streamResult.Content,
 		streamResult.ToolCalls,
 		openai.ConvertToolCallToToolJSON,
-	)
-
-	// tool_calls がある場合はそれを返す
-	if toolCallsOutput != "" {
-		if streamResult.Content != "" {
-			return streamResult.Content + toolCallsOutput, nil
-		}
-		return toolCallsOutput, nil
-	}
-	return streamResult.Content, nil
+	), nil
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う（非対応：テキストのみ送信）

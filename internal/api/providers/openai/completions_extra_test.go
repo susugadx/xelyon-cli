@@ -138,3 +138,29 @@ func TestChatWithCompletions_RequestIncludesThinkingAndForcedToolChoice(t *testi
 		t.Fatalf("ToolChoice function = %#v, want custom_lookup", toolChoice["function"])
 	}
 }
+
+func TestChatWithCompletions_PromptCacheScopeDoesNotChangeOpenAIKey(t *testing.T) {
+	var captured openaicompat.ChatCompletionsRequest
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		streamingHandler([]string{`{"choices":[{"delta":{"content":"ok"}}]}`})(w, r)
+	})
+	t.Setenv("OPENAI_API_URL", server.URL)
+	t.Setenv("OPENAI_FUNCTION_CALLING", "0")
+
+	ctx := api.WithPromptCacheScope(newOpenAITestContext(t, false), api.PromptCacheScope{SessionID: "session-1"})
+	_, err := New("test-key").chatWithCompletions(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, "gpt-4-turbo")
+	if err != nil {
+		t.Fatalf("chatWithCompletions() error = %v", err)
+	}
+
+	want := BuildPromptCacheKey("gpt-4-turbo", "System")
+	if captured.PromptCacheKey != want {
+		t.Fatalf("PromptCacheKey = %q, want %q", captured.PromptCacheKey, want)
+	}
+	if !strings.HasPrefix(captured.PromptCacheKey, "xelyon:v2:") {
+		t.Fatalf("PromptCacheKey = %q, want existing xelyon:v2 format", captured.PromptCacheKey)
+	}
+}

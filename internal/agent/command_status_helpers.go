@@ -132,11 +132,15 @@ func formatCompactCostEstimate(estimate cost.CostEstimate) string {
 	return fmt.Sprintf("~$%.3f", estimate.Cost)
 }
 
+func shouldSuppressLocalCostDisplay(providerName string, estimate cost.CostEstimate) bool {
+	return strings.EqualFold(providerName, "ollama") && estimate.Cost == 0 && !estimate.PricingUnavailable
+}
+
 func formatParentCost(providerName string, estimate cost.CostEstimate) string {
 	if estimate.PricingUnavailable {
 		return "N/A (pricing unavailable)"
 	}
-	if strings.EqualFold(providerName, "ollama") && estimate.Cost == 0 {
+	if shouldSuppressLocalCostDisplay(providerName, estimate) {
 		return "Free (local)"
 	}
 	return formatUSDWithSuffix(estimate.Cost)

@@ -95,6 +95,7 @@ func TestProviderConfigKey_CanonicalizesDisplayNameButPreservesAlias(t *testing.
 		{name: "azure display name", provider: "Azure OpenAI", want: "azure"},
 		{name: "azure display name normalized", provider: " azure openai ", want: "azure"},
 		{name: "anthropic alias is an owner key", provider: "anthropic", want: "anthropic"},
+		{name: "moonshot alias is an owner key", provider: "moonshot", want: "moonshot"},
 		{name: "canonical key", provider: "claude", want: "claude"},
 	}
 
@@ -117,6 +118,11 @@ func TestProviderModelLookupKeys_CanonicalizesDisplayNameButPreservesAlias(t *te
 	if !reflect.DeepEqual(anthropicKeys, []string{"anthropic", "claude"}) {
 		t.Fatalf("ProviderModelLookupKeys(anthropic) = %v, want [anthropic claude]", anthropicKeys)
 	}
+
+	moonshotKeys := ProviderModelLookupKeys("moonshot")
+	if !reflect.DeepEqual(moonshotKeys, []string{"moonshot", "kimi"}) {
+		t.Fatalf("ProviderModelLookupKeys(moonshot) = %v, want [moonshot kimi]", moonshotKeys)
+	}
 }
 
 func TestProviderSupportsResponsesAPI(t *testing.T) {
@@ -128,5 +134,47 @@ func TestProviderSupportsResponsesAPI(t *testing.T) {
 	}
 	if ProviderSupportsResponsesAPI("openrouter") {
 		t.Fatal("ProviderSupportsResponsesAPI(openrouter) = true, want false")
+	}
+	if ProviderSupportsResponsesAPI("kimi") {
+		t.Fatal("ProviderSupportsResponsesAPI(kimi) = true, want false")
+	}
+}
+
+func TestProviderDescriptorFor_Kimi(t *testing.T) {
+	desc, ok := ProviderDescriptorFor("moonshot")
+	if !ok {
+		t.Fatal("ProviderDescriptorFor(moonshot) ok = false, want true")
+	}
+	if desc.Key != "kimi" {
+		t.Fatalf("Key = %q, want kimi", desc.Key)
+	}
+	if desc.DisplayName != "Kimi" {
+		t.Fatalf("DisplayName = %q, want Kimi", desc.DisplayName)
+	}
+	if desc.APIKeyEnv != "MOONSHOT_API_KEY" {
+		t.Fatalf("APIKeyEnv = %q, want MOONSHOT_API_KEY", desc.APIKeyEnv)
+	}
+	if desc.DefaultSubAgentModel != "kimi-k2.5" {
+		t.Fatalf("DefaultSubAgentModel = %q, want kimi-k2.5", desc.DefaultSubAgentModel)
+	}
+	if !desc.SupportsImages {
+		t.Fatal("SupportsImages = false, want true")
+	}
+	if !desc.NativeWebSearch {
+		t.Fatal("NativeWebSearch = false, want true")
+	}
+	if desc.PricingFamily != "kimi" {
+		t.Fatalf("PricingFamily = %q, want kimi", desc.PricingFamily)
+	}
+	if desc.ModelDefaults.DefaultModel != "kimi-k2.6" || desc.ModelDefaults.MaxOutputTokens != 32768 {
+		t.Fatalf("ModelDefaults = %#v, want kimi-k2.6 / 32768", desc.ModelDefaults)
+	}
+}
+
+func TestNativeWebSearchProviderKeys_IncludesKimiAndMoonshotAlias(t *testing.T) {
+	got := NativeWebSearchProviderKeys(true)
+	want := []string{"kimi", "moonshot", "openai", "gemini", "claude", "anthropic"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("NativeWebSearchProviderKeys(true) = %v, want %v", got, want)
 	}
 }

@@ -153,6 +153,36 @@ func TestProvider_ChatWithTools_NonStreaming(t *testing.T) {
 	}
 }
 
+func TestProvider_ChatWithTools_OmitsPromptCacheKeyWithScope(t *testing.T) {
+	var requestBody map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("Failed to decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		resp := api.ChatResponse{
+			Choices: []api.Choice{
+				{Message: api.Message{Content: "No cache key"}},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	originalURL := os.Getenv("GROQ_API_URL")
+	defer os.Setenv("GROQ_API_URL", originalURL)
+	os.Setenv("GROQ_API_URL", server.URL)
+	t.Setenv("GROQ_FUNCTION_CALLING", "0")
+
+	ctx := api.WithPromptCacheScope(context.Background(), api.PromptCacheScope{SessionID: "session-1"})
+	_, err := New("test-key").ChatWithTools(ctx, "System prompt", []api.Message{{Role: "user", Content: "Hello"}}, "llama3-70b-8192")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if _, ok := requestBody["prompt_cache_key"]; ok {
+		t.Fatalf("prompt_cache_key should be omitted for Groq request: %#v", requestBody)
+	}
+}
+
 func TestProvider_ChatWithTools_Streaming(t *testing.T) {
 	chunks := []string{
 		`{"choices":[{"delta":{"content":"Hello"}}]}`,

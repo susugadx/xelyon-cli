@@ -20,18 +20,19 @@ AI搭載のコーディングアシスタントCLI
 
 **差分を見せて確認してから実行（編集・bash・gitなど）**
 
-### 🌐 9種類のLLMプロバイダー
-DeepSeek, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシームレスに切り替え。
+### 🌐 10種類のLLMプロバイダー
+DeepSeek, Kimi, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, Bedrock をシームレスに切り替え。
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
 **OpenAI / Azure OpenAI Responses API 対応**: `gpt-5.3-codex` などの Codex モデルを自動検出し、Azure OpenAI は API key と Microsoft Entra ID bearer token の両方に対応。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
+**Kimi Native Provider 対応**: Moonshot の Chat Completions API で `kimi-k2.6` / `kimi-k2.5` の streaming、tool calls、thinking、`reasoning_content` に対応。
 **プロバイダー別プロンプト最適化**: OpenAI / Gemini では短い実況を促し、Gemini など特定モデルのルール遵守を強化するプレフィックスを自動注入。
 **Gemini FCリトライ**: FC失敗時にテキストモードではなくFCモードでリトライ（キャッシュ汚染防止）。idle timeout / thinking timeout / 一般エラーそれぞれで上限付きリトライ。
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
 ### 🛠️ 組み込みツール
-- **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini 系は Codex 互換の `apply_patch`、Claude / Bedrock(Claude) / DeepSeek 系は旧 `str_replace` / `write_file` / `delete_file` を使います。OpenRouter は model family を見て判定し、`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
+- **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini / Kimi 系は Codex 互換の `apply_patch`、Claude / Bedrock(Claude) / DeepSeek 系は旧 `str_replace` / `write_file` / `delete_file` を使います。OpenRouter は model family を見て判定し、`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
 - **コード検索**: `search_code` は language-aware router として動作し、`mode=auto` を既定に symbol-aware / literal / regex の各レーンを内部選択（複数パターン、結果分類、不正regex検出にも対応）
 - **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収
 - **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す
@@ -252,7 +253,7 @@ xelyon --provider gemini --model gemini-2.5-flash
 
 ### Web検索
 
-`web_search` は OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが DeepSeek / Groq / Ollama / OpenRouter / Bedrock の場合は、`web_search.provider` で検索専用プロバイダーを指定できます。
+`web_search` は Kimi / OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが Kimi の場合は Moonshot Chat Completions の built-in `$web_search` をそのまま使えます。DeepSeek / Groq / Ollama / OpenRouter / Bedrock などの検索非対応 provider では、`web_search.provider` で検索専用プロバイダーを指定してください。
 
 ```yaml
 # ~/.xelyon/config.yaml
@@ -260,6 +261,8 @@ web_search:
   provider: gemini
 
 ```
+
+Kimi で `$web_search` が起動すると、Moonshot の call fee（`$0.005 / invocation`）が token cost とは別に発生します。XELYON は call fee を外部固定費として観測し、検索結果 tokens は次の `prompt_tokens` に含まれるため token totals へ二重加算しません。
 
 Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
 
@@ -274,7 +277,7 @@ sub_agent:
   max_concurrent: 5
 ```
 
-`sub_agent.default_model` が空の場合は、メイン provider に応じて OpenAI は `gpt-5.4-mini`、Claude は `claude-haiku-4-5-20251001`、Gemini は `gemini-3.1-flash-lite-preview` などの低コストモデルを自動選択します。Azure OpenAI では hard-coded モデル名ではなく `provider_models.azure.default_model` の deployment 名を使います。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
+`sub_agent.default_model` が空の場合は、メイン provider に応じて OpenAI は `gpt-5.4-mini`、Claude は `claude-haiku-4-5-20251001`、Gemini は `gemini-3.1-flash-lite-preview`、Kimi は `kimi-k2.5` などの低コストモデルを自動選択します。Azure OpenAI では hard-coded モデル名ではなく `provider_models.azure.default_model` の deployment 名を使います。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
 
 ### 最大出力トークン数の設定
 
@@ -290,6 +293,9 @@ provider_models:
   deepseek:
     default_model: deepseek-v4-flash
     max_output_tokens: 16384   # デフォルト: 16384
+  kimi:
+    default_model: kimi-k2.6
+    max_output_tokens: 32768   # デフォルト: 32768
   openai:
     default_model: corp-gpt-deployment
     catalog_model: gpt-5.4     # deployment/alias の料金・context 判定に使う既知モデル
@@ -306,6 +312,7 @@ provider_models:
 | openai     | 16384                     |
 | azure      | 16384                     |
 | deepseek   | 16384                     |
+| kimi       | 32768                     |
 | groq       | 8192                      |
 | ollama     | 4096                      |
 | openrouter | 64000                     |
