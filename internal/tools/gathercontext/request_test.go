@@ -75,6 +75,35 @@ func TestParseRequestArgs_KeepsAmbiguousQuotedPatternInstruction(t *testing.T) {
 	}
 }
 
+func TestParseRequestArgs_PreservesUnwrappedQuotedOrPatternAcrossNormalization(t *testing.T) {
+	req, errResult := parseRequestArgs(map[string]string{
+		"query": `Search for the exact pattern "foo or bar" and report all file paths that contain it.`,
+	})
+	if errResult != "" {
+		t.Fatalf("unexpected parse error: %q", errResult)
+	}
+	if req.query != "foo or bar" {
+		t.Fatalf("req.query = %q, want quoted pattern", req.query)
+	}
+	if !req.quotedPattern {
+		t.Fatal("expected quoted pattern metadata")
+	}
+	if req.searchQuery != "foo or bar" {
+		t.Fatalf("req.searchQuery = %q, want quoted pattern", req.searchQuery)
+	}
+
+	again := normalizeRequest(req)
+	if again.query != "foo or bar" {
+		t.Fatalf("renormalized query = %q, want exact quoted pattern", again.query)
+	}
+	if again.searchQuery != "foo or bar" {
+		t.Fatalf("renormalized searchQuery = %q, want exact quoted pattern", again.searchQuery)
+	}
+	if !again.quotedPattern {
+		t.Fatal("expected quoted pattern metadata to survive renormalization")
+	}
+}
+
 func TestGatherContext_SearchRouteNormalizesQuotedPatternInstruction(t *testing.T) {
 	root := t.TempDir()
 	withGatherContextWorkingDir(t, root)

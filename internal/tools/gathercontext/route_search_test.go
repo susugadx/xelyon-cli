@@ -156,6 +156,152 @@ func TestPlanRoute_SearchAndLocatorContracts(t *testing.T) {
 	}
 }
 
+func TestBuildRoutePlan_NaturalLanguageSearchScope(t *testing.T) {
+	root := setupRoutePlanFixtures(t)
+
+	tests := []struct {
+		name      string
+		query     string
+		path      string
+		wantQuery string
+		wantPath  string
+	}{
+		{
+			name:      "or list in docs becomes scoped multi pattern search",
+			query:     "gather_context docs or review harness or review-harness or review command in docs/",
+			wantQuery: "gather_context docs,review harness,review-harness,review command",
+			wantPath:  "docs",
+		},
+		{
+			name:      "under scope becomes scoped search",
+			query:     "A or B under docs/",
+			wantQuery: "A,B",
+			wantPath:  "docs",
+		},
+		{
+			name:      "and list in docs becomes scoped search",
+			query:     "A and B in docs/",
+			wantQuery: "A and B",
+			wantPath:  "docs",
+		},
+		{
+			name:      "search for prefix is not part of scoped search pattern",
+			query:     "search for foo or quux in docs/",
+			wantQuery: "foo,quux",
+			wantPath:  "docs",
+		},
+		{
+			name:      "find prefix is not part of scoped search pattern",
+			query:     "find foo or quux under docs/",
+			wantQuery: "foo,quux",
+			wantPath:  "docs",
+		},
+		{
+			name:      "look for prefix is not part of scoped search pattern",
+			query:     "look for foo or quux in docs/",
+			wantQuery: "foo,quux",
+			wantPath:  "docs",
+		},
+		{
+			name:      "searching prefix is not part of scoped search pattern",
+			query:     "searching foo or quux under docs/",
+			wantQuery: "foo,quux",
+			wantPath:  "docs",
+		},
+		{
+			name:      "finding prefix is not part of scoped search pattern",
+			query:     "finding foo or quux in docs/",
+			wantQuery: "foo,quux",
+			wantPath:  "docs",
+		},
+		{
+			name:      "looking for prefix is not part of scoped search pattern",
+			query:     "looking for foo or quux in docs/",
+			wantQuery: "foo,quux",
+			wantPath:  "docs",
+		},
+		{
+			name:      "plain prepositional search is not treated as path scope",
+			query:     "search for timeout in handler",
+			wantQuery: "timeout in handler",
+			wantPath:  "",
+		},
+		{
+			name:      "bare file name is treated as scoped search path",
+			query:     "search for timeout in handler.go",
+			wantQuery: "timeout",
+			wantPath:  "handler.go",
+		},
+		{
+			name:      "explicit path argument wins over inline scope",
+			query:     "A or B in docs/",
+			path:      "pkg",
+			wantQuery: "A,B",
+			wantPath:  "pkg",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := buildRoutePlan(newRoutePlanExecCtx(root), request{
+				query: tt.query,
+				path:  tt.path,
+			})
+			if plan.kind != routeSearch {
+				t.Fatalf("plan.kind = %q, want %q", plan.kind, routeSearch)
+			}
+			if plan.search.query != tt.wantQuery {
+				t.Fatalf("plan.search.query = %q, want %q", plan.search.query, tt.wantQuery)
+			}
+			if plan.search.path != tt.wantPath {
+				t.Fatalf("plan.search.path = %q, want %q", plan.search.path, tt.wantPath)
+			}
+		})
+	}
+}
+
+func TestBuildRoutePlan_PreservesQuotedOrPattern(t *testing.T) {
+	req, errResult := parseRequestArgs(map[string]string{
+		"query": `Search for the exact pattern "foo or bar" and report all file paths that contain it.`,
+	})
+	if errResult != "" {
+		t.Fatalf("unexpected parse error: %q", errResult)
+	}
+
+	plan := buildRoutePlan(tools.ExecutionContext{}, req)
+	if plan.kind != routeSearch {
+		t.Fatalf("plan.kind = %q, want %q", plan.kind, routeSearch)
+	}
+	if plan.search.query != "foo or bar" {
+		t.Fatalf("plan.search.query = %q, want exact quoted pattern", plan.search.query)
+	}
+}
+
+func TestBuildRoutePlan_PreservesPunctuationDelimitedOrLiteral(t *testing.T) {
+	for _, query := range []string{"error-or-warning", "foo/or/bar"} {
+		t.Run(query, func(t *testing.T) {
+			plan := buildRoutePlan(tools.ExecutionContext{}, request{query: query})
+			if plan.kind != routeSearch {
+				t.Fatalf("plan.kind = %q, want %q", plan.kind, routeSearch)
+			}
+			if plan.search.query != query {
+				t.Fatalf("plan.search.query = %q, want literal query", plan.search.query)
+			}
+		})
+	}
+}
+
+func TestBuildRoutePlan_PreservesCommaSeparatedSearchPatternsBeforeOrNormalization(t *testing.T) {
+	query := "foo or bar,baz"
+	plan := buildRoutePlan(tools.ExecutionContext{}, request{query: query})
+	if plan.kind != routeSearch {
+		t.Fatalf("plan.kind = %q, want %q", plan.kind, routeSearch)
+	}
+	if plan.search.query != query {
+		t.Fatalf("plan.search.query = %q, want comma-separated search patterns unchanged", plan.search.query)
+	}
+}
+
 func TestBuildRoutePlan_BracketedLocatorQueriesAlwaysUseLocatorRoute(t *testing.T) {
 	tests := []string{
 		"[L1]",

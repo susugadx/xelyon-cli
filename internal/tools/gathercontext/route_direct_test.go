@@ -208,6 +208,109 @@ func TestBuildRoutePlan_TrimsScopedDirectInputs(t *testing.T) {
 	}
 }
 
+func TestBuildRoutePlan_PreservesExplicitPathsContainingSearchWords(t *testing.T) {
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "README.md"):                          "# root\n",
+		filepath.Join(root, "red or blue.md"):                     "red or blue\n",
+		filepath.Join(root, "red or blue in docs.md"):             "red or blue in docs\n",
+		filepath.Join(root, "release notes in docs.md"):           "release notes\n",
+		filepath.Join(root, "files in docs", "summary.md"):        "files\n",
+		filepath.Join(root, "files under docs", "summary.md"):     "files under\n",
+		filepath.Join(root, "red or blue", "summary.md"):          "red or blue\n",
+		filepath.Join(root, "search results", "summary.md"):       "results\n",
+		filepath.Join(root, "terms and conditions", "terms.md"):   "terms\n",
+		filepath.Join(root, "A or B in docs", "notes.md"):         "explicit relative directory\n",
+		filepath.Join(root, "error-or-warning in docs", "log.md"): "literal\n",
+	})
+
+	filePlan := buildRoutePlan(newRoutePlanExecCtx(root), request{
+		query: "./release notes in docs.md",
+	})
+	if filePlan.kind != routeDirect {
+		t.Fatalf("filePlan.kind = %q, want %q", filePlan.kind, routeDirect)
+	}
+	if filePlan.direct.route.Kind != filetool.GatherContextDirectRouteRead {
+		t.Fatalf("filePlan.direct.route.Kind = %q, want %q", filePlan.direct.route.Kind, filetool.GatherContextDirectRouteRead)
+	}
+	if got := filePlan.direct.route.RawEntries(); len(got) != 1 || got[0] != "release notes in docs.md" {
+		t.Fatalf("unexpected explicit path entries: %+v", got)
+	}
+
+	explicitRelativeDirPlan := buildRoutePlan(newRoutePlanExecCtx(root), request{
+		query: "./A or B in docs/",
+	})
+	if explicitRelativeDirPlan.kind != routeDirect {
+		t.Fatalf("explicitRelativeDirPlan.kind = %q, want %q", explicitRelativeDirPlan.kind, routeDirect)
+	}
+	if explicitRelativeDirPlan.direct.route.Kind != filetool.GatherContextDirectRouteDirectory {
+		t.Fatalf("explicitRelativeDirPlan.direct.route.Kind = %q, want %q", explicitRelativeDirPlan.direct.route.Kind, filetool.GatherContextDirectRouteDirectory)
+	}
+
+	batchPlan := buildRoutePlan(newRoutePlanExecCtx(root), request{
+		query: "./red or blue.md,README.md",
+	})
+	if batchPlan.kind != routeDirect {
+		t.Fatalf("batchPlan.kind = %q, want %q", batchPlan.kind, routeDirect)
+	}
+	if batchPlan.direct.route.Kind != filetool.GatherContextDirectRouteRead {
+		t.Fatalf("batchPlan.direct.route.Kind = %q, want %q", batchPlan.direct.route.Kind, filetool.GatherContextDirectRouteRead)
+	}
+	if got := batchPlan.direct.route.RawEntries(); len(got) != 2 || got[0] != "red or blue.md" || got[1] != "README.md" {
+		t.Fatalf("unexpected direct batch entries: %+v", got)
+	}
+
+	for _, tt := range []struct {
+		query string
+		want  []string
+	}{
+		{
+			query: "README.md,./red or blue in docs.md",
+			want:  []string{"README.md", "red or blue in docs.md"},
+		},
+		{
+			query: "./red or blue in docs.md,README.md",
+			want:  []string{"red or blue in docs.md", "README.md"},
+		},
+	} {
+		t.Run(tt.query, func(t *testing.T) {
+			inlineScopeBatchPlan := buildRoutePlan(newRoutePlanExecCtx(root), request{
+				query: tt.query,
+			})
+			if inlineScopeBatchPlan.kind != routeDirect {
+				t.Fatalf("inlineScopeBatchPlan.kind = %q, want %q", inlineScopeBatchPlan.kind, routeDirect)
+			}
+			if inlineScopeBatchPlan.direct.route.Kind != filetool.GatherContextDirectRouteRead {
+				t.Fatalf("inlineScopeBatchPlan.direct.route.Kind = %q, want %q", inlineScopeBatchPlan.direct.route.Kind, filetool.GatherContextDirectRouteRead)
+			}
+			got := inlineScopeBatchPlan.direct.route.RawEntries()
+			if len(got) != len(tt.want) {
+				t.Fatalf("direct inline-scope batch entries = %+v, want %+v", got, tt.want)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Fatalf("direct inline-scope batch entries = %+v, want %+v", got, tt.want)
+				}
+			}
+		})
+	}
+
+	for _, query := range []string{"files in docs/", "files under docs/", "red or blue/", "search results/", "terms and conditions/", "error-or-warning in docs/"} {
+		t.Run(query, func(t *testing.T) {
+			dirPlan := buildRoutePlan(newRoutePlanExecCtx(root), request{
+				query: query,
+			})
+			if dirPlan.kind != routeDirect {
+				t.Fatalf("dirPlan.kind = %q, want %q", dirPlan.kind, routeDirect)
+			}
+			if dirPlan.direct.route.Kind != filetool.GatherContextDirectRouteDirectory {
+				t.Fatalf("dirPlan.direct.route.Kind = %q, want %q", dirPlan.direct.route.Kind, filetool.GatherContextDirectRouteDirectory)
+			}
+		})
+	}
+}
+
 func TestPlanRoute_UsesImplicitDirectFileRouteOnlyWithoutSearchScope(t *testing.T) {
 	root := t.TempDir()
 	withGatherContextWorkingDir(t, root)

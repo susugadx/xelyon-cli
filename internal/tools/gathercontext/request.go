@@ -3,28 +3,53 @@ package gathercontext
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/filequery"
 	"github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
 type request struct {
-	query      string
-	path       string
-	fileFilter string
+	query               string
+	path                string
+	fileFilter          string
+	searchQuery         string
+	searchPath          string
+	naturalSearchIntent bool
+	quotedPattern       bool
 }
 
 func normalizeRequest(req request) request {
-	return request{
-		query:      normalizeQueryText(strings.TrimSpace(req.query)),
-		path:       strings.TrimSpace(req.path),
-		fileFilter: strings.TrimSpace(req.fileFilter),
+	rawQuery := strings.TrimSpace(req.query)
+	normalizedQuery := normalizeQueryTextWithMetadata(rawQuery)
+	path := strings.TrimSpace(req.path)
+
+	normalized := request{
+		query:               normalizedQuery.text,
+		path:                path,
+		fileFilter:          strings.TrimSpace(req.fileFilter),
+		searchQuery:         strings.TrimSpace(req.searchQuery),
+		searchPath:          strings.TrimSpace(req.searchPath),
+		naturalSearchIntent: req.naturalSearchIntent || filequery.LooksLikeNaturalLanguageSearchIntent(rawQuery),
+		quotedPattern:       req.quotedPattern || normalizedQuery.quoted,
 	}
+	if normalized.searchQuery == "" {
+		normalized.searchQuery = normalized.query
+	}
+	if normalized.searchPath == "" {
+		normalized.searchPath = normalized.path
+	}
+	return normalizeSearchRouteFields(normalized)
 }
 
-func normalizeQueryText(query string) string {
+type normalizedQueryText struct {
+	text   string
+	quoted bool
+}
+
+func normalizeQueryTextWithMetadata(query string) normalizedQueryText {
 	if pattern, ok := extractQuotedSearchPattern(query); ok {
-		return pattern
+		return normalizedQueryText{text: pattern, quoted: true}
 	}
-	return query
+	return normalizedQueryText{text: query}
 }
 
 func extractQuotedSearchPattern(query string) (string, bool) {
@@ -109,7 +134,7 @@ func parseRequestArgs(args map[string]string) (request, string) {
 	if req.query == "" {
 		return request{}, "Error: query is required"
 	}
-	if !search.HasEffectivePatternList(req.query) {
+	if !search.HasEffectivePatternList(req.searchQuery) {
 		return request{}, "Error: query must include at least one non-empty term"
 	}
 	return req, ""

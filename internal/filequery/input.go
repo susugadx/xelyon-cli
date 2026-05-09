@@ -152,6 +152,8 @@ func HasExplicitRelativePrefix(path string) bool {
 // ClassifyEntrySyntax は entry の direct query 構文種別を返す。
 func ClassifyEntrySyntax(entry Entry) SyntaxKind {
 	switch {
+	case entryLooksLikeNaturalLanguageSearchIntent(entry):
+		return SyntaxNone
 	case LooksLikeExplicitDirectPath(entry):
 		return SyntaxExplicitPath
 	case LooksLikeDirectPathCandidate(entry):

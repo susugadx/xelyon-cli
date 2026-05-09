@@ -23,7 +23,7 @@ type Spec struct {
 var builtinSpecs = []Spec{
 	{
 		Name:        "gather_context",
-		Description: "Primary investigation tool. Pass what code context you need in query; the runtime routes to direct reads, directory listing, auto search, structured impact, reranked recommended reads, and bounded compact evidence prefetch. Use this by default unless you need exact low-level control.",
+		Description: "Primary investigation tool. Pass what code context you need in query; the runtime routes to direct reads, directory listing, auto search, structured impact, reranked recommended reads, and bounded compact evidence prefetch. Natural-language searches like A or B in docs/ stay search queries; only exact files, ranges, and directory paths use direct routing. Use this by default unless you need exact low-level control.",
 		Safety:      SafetyHigh,
 		HelpOrder:   10,
 	},

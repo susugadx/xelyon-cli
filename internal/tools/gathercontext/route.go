@@ -13,25 +13,27 @@ func buildRoutePlan(execCtx tools.ExecutionContext, req request) routePlan {
 		search: newSearchPlan(req),
 	}
 
-	if locatorPriority := classifyLocatorQuery(req.query, execCtx.EffectiveLocatorRegistry()); locatorPriority.ShouldRouteLocator() {
-		plan.kind = routeLocatorRead
-		plan.locatorQuery = req.query
-		return plan
-	}
+	if !req.naturalSearchIntent {
+		if locatorPriority := classifyLocatorQuery(req.query, execCtx.EffectiveLocatorRegistry()); locatorPriority.ShouldRouteLocator() {
+			plan.kind = routeLocatorRead
+			plan.locatorQuery = req.query
+			return plan
+		}
 
-	switch directOutcome := filetool.PlanGatherContextDirectRoute(execCtx, req.query, filetool.GatherContextDirectRoutePolicy{
-		AllowImplicitBareFile: allowImplicitBareFile(req),
-		ScopedPath:            req.path,
-		FileFilter:            req.fileFilter,
-	}); directOutcome.Kind {
-	case filetool.GatherContextDirectRouteOutcomeResolved:
-		plan.kind = routeDirect
-		plan.direct.route = directOutcome.Route
-		return plan
-	case filetool.GatherContextDirectRouteOutcomeError:
-		plan.kind = routeDirectError
-		plan.direct.err = directOutcome.Error
-		return plan
+		switch directOutcome := filetool.PlanGatherContextDirectRoute(execCtx, req.query, filetool.GatherContextDirectRoutePolicy{
+			AllowImplicitBareFile: allowImplicitBareFile(req),
+			ScopedPath:            req.path,
+			FileFilter:            req.fileFilter,
+		}); directOutcome.Kind {
+		case filetool.GatherContextDirectRouteOutcomeResolved:
+			plan.kind = routeDirect
+			plan.direct.route = directOutcome.Route
+			return plan
+		case filetool.GatherContextDirectRouteOutcomeError:
+			plan.kind = routeDirectError
+			plan.direct.err = directOutcome.Error
+			return plan
+		}
 	}
 
 	plan.search.preferImpact = search.ShouldPreferImpactIntent(plan.search.query)
@@ -40,8 +42,8 @@ func buildRoutePlan(execCtx tools.ExecutionContext, req request) routePlan {
 
 func newSearchPlan(req request) searchPlan {
 	return searchPlan{
-		query:      req.query,
-		path:       req.path,
+		query:      req.searchQuery,
+		path:       req.searchPath,
 		fileFilter: req.fileFilter,
 	}
 }

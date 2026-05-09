@@ -40,7 +40,7 @@ func ReviewInvestigationSentence(surface investigation.Surface) string {
 
 // GatherContextDirectMultiReadLine returns the shared direct multi-read guidance.
 func GatherContextDirectMultiReadLine() string {
-	return promptBullet("If every comma-separated gather_context item is an exact file or range, the runtime treats it as one direct multi-read instead of search.")
+	return promptBullet(`If every comma-separated gather_context item is an exact file or range, the runtime treats it as one direct multi-read instead of search. Natural-language searches like gather_context(query="A or B in docs/") stay search queries.`)
 }
 
 // GatherContextPathDisambiguationLine returns the shared path-vs-search precedence guidance.

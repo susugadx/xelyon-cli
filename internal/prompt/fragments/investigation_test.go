@@ -13,6 +13,7 @@ func TestBuildInvestigationToolingBlock_DefaultLines(t *testing.T) {
 	for _, want := range []string{
 		"gather_context: default investigation tool",
 		"comma-separated gather_context item is an exact file or range",
+		`gather_context(query="A or B in docs/")`,
 		`gather_context(query="Makefile")`,
 		`gather_context(query="./Makefile")`,
 	} {

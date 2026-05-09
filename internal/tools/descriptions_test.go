@@ -44,6 +44,9 @@ func TestToolDescriptions_GatherContextIsPrimaryInvestigationTool(t *testing.T) 
 	if !strings.Contains(desc, "bounded compact evidence prefetch") {
 		t.Error("gather_context description should mention compact evidence prefetch")
 	}
+	if !strings.Contains(desc, "Natural-language searches like A or B in docs/ stay search queries") {
+		t.Error("gather_context description should describe natural-language search routing")
+	}
 }
 
 func TestToolDescriptions_ListDirMentionsCompactSummaryAndOverrideUsage(t *testing.T) {
