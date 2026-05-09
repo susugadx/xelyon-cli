@@ -113,7 +113,7 @@ func buildProbeProcessSandboxExec(cmd probeExecCommand) (probeExecCommand, error
 }
 
 func (s probeProcessSandbox) buildBubblewrapArgs(cmd probeExecCommand) ([]string, error) {
-	binds, err := s.bubblewrapBindArgs(cmd.commandPath)
+	binds, err := s.bubblewrapBindArgs(cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -140,12 +140,16 @@ func (s probeProcessSandbox) buildBubblewrapArgs(cmd probeExecCommand) ([]string
 	return args, nil
 }
 
-func (s probeProcessSandbox) bubblewrapBindArgs(commandPath string) ([]string, error) {
+func (s probeProcessSandbox) bubblewrapBindArgs(cmd probeExecCommand) ([]string, error) {
 	binds := make([]probeProcessSandboxBind, 0, 16)
 
 	for _, root := range defaultProbeProcessSandboxSystemRoots() {
 		binds = append(binds, probeProcessSandboxBind{source: root, target: root})
 	}
+	if goRootBind, ok := probeGoRootReadOnlyBind(cmd.env); ok {
+		binds = append(binds, goRootBind)
+	}
+	commandPath := cmd.commandPath
 	if commandRoot := probeProcessSandboxCommandRoot(commandPath); commandRoot != "" {
 		binds = append(binds, probeProcessSandboxBind{source: commandRoot, target: commandRoot})
 	}

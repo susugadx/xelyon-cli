@@ -92,6 +92,7 @@ func buildIsolatedProbeEnv(baseEnv []string, dirs isolatedProbeRuntimeDirs, spec
 	env := make([]string, 0, len(scratchOnlyInheritedEnvKeys)+24)
 
 	env = append(env, collectIsolatedProbeInheritedEnv(baseEnv)...)
+	env = append(env, probeHostGoRootEnv(baseEnv, spec.repoRootEnvValue)...)
 
 	if spec.repoRootEnvKey != "" {
 		env = append(env, spec.repoRootEnvKey+"="+spec.repoRootEnvValue)

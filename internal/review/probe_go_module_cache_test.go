@@ -142,6 +142,44 @@ func TestProbeProcessSandbox_SharesNetworkNamespaceForCICompatibility(t *testing
 	}
 }
 
+func TestProbeProcessSandbox_BindsGoRootBeforeGoCommandBin(t *testing.T) {
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime")
+	goRoot := filepath.Join(t.TempDir(), "go")
+	goBin := filepath.Join(goRoot, "bin")
+	if err := os.MkdirAll(goBin, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", goBin, err)
+	}
+	goPath := filepath.Join(goBin, "go")
+	if err := os.WriteFile(goPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", goPath, err)
+	}
+	sandbox := probeProcessSandbox{
+		enabled:    true,
+		runnerPath: "/usr/bin/bwrap",
+		readWriteBinds: []probeProcessSandboxBind{
+			{source: runtimeRoot, target: runtimeRoot},
+		},
+	}
+
+	args, err := sandbox.buildBubblewrapArgs(probeExecCommand{
+		commandPath: goPath,
+		workDir:     runtimeRoot,
+		env:         []string{probeGoRootEnvKey + "=" + goRoot},
+	})
+	if err != nil {
+		t.Fatalf("buildBubblewrapArgs() error = %v", err)
+	}
+
+	goRootIndex := indexProbeSandboxArgTriple(args, "--ro-bind", filepath.Clean(goRoot), filepath.Clean(goRoot))
+	goBinIndex := indexProbeSandboxArgTriple(args, "--ro-bind", filepath.Clean(goBin), filepath.Clean(goBin))
+	if goRootIndex < 0 {
+		t.Fatalf("bubblewrap args missing GOROOT bind: %s", strings.Join(args, " "))
+	}
+	if goBinIndex >= 0 {
+		t.Fatalf("go bin bind index = %d, want covered by GOROOT bind only: %s", goBinIndex, strings.Join(args, " "))
+	}
+}
+
 func indexProbeSandboxArg(args []string, want string) int {
 	for i, arg := range args {
 		if arg == want {

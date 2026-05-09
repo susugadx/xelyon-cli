@@ -65,6 +65,36 @@ func TestBuildScratchOnlyEnv_AllowlistAndOverrides(t *testing.T) {
 	}
 }
 
+func TestBuildScratchOnlyEnv_InheritsSafeGoRootOnly(t *testing.T) {
+	repoRoot := t.TempDir()
+	safeGoRoot := filepath.Join(t.TempDir(), "go")
+	if err := os.MkdirAll(safeGoRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", safeGoRoot, err)
+	}
+	repoGoRoot := filepath.Join(repoRoot, "go")
+	if err := os.MkdirAll(repoGoRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", repoGoRoot, err)
+	}
+
+	scratchDir := t.TempDir()
+	dirs, err := prepareScratchOnlyDirs(scratchDir)
+	if err != nil {
+		t.Fatalf("prepareScratchOnlyDirs() error = %v", err)
+	}
+
+	env := buildScratchOnlyEnv([]string{probeGoRootEnvKey + "=" + safeGoRoot}, repoRoot, dirs)
+	envMap := collectEnvMap(env)
+	if envMap[probeGoRootEnvKey] != filepath.Clean(safeGoRoot) {
+		t.Fatalf("GOROOT = %q, want %q", envMap[probeGoRootEnvKey], filepath.Clean(safeGoRoot))
+	}
+
+	env = buildScratchOnlyEnv([]string{probeGoRootEnvKey + "=" + repoGoRoot}, repoRoot, dirs)
+	envMap = collectEnvMap(env)
+	if _, ok := envMap[probeGoRootEnvKey]; ok {
+		t.Fatalf("repo-contained GOROOT should not be inherited, env = %#v", env)
+	}
+}
+
 func TestScratchOnlyExecutor_ChildProcessUsesHardenedEnv(t *testing.T) {
 	pathValue := os.Getenv("PATH")
 	if strings.TrimSpace(pathValue) == "" {
