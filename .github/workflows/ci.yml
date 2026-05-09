@@ -38,11 +38,13 @@ jobs:
         with:
           go-version: ${{ steps.go-version.outputs.version }}
 
-      # テストで使用する ripgrep と probe sandbox 用 bubblewrap をインストール
+      # テストで使用する ripgrep と probe sandbox 用 bubblewrap を準備
       - name: Install test dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ripgrep bubblewrap
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       # 依存関係の整合性を確認
       - name: Verify dependencies
