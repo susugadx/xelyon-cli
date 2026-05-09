@@ -114,6 +114,43 @@ func TestProbeProcessSandbox_BindsWritableRootsBeforeReadOnlyModuleCache(t *test
 	}
 }
 
+func TestProbeProcessSandbox_SharesNetworkNamespaceForCICompatibility(t *testing.T) {
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime")
+	sandbox := probeProcessSandbox{
+		enabled:    true,
+		runnerPath: "/usr/bin/bwrap",
+		readWriteBinds: []probeProcessSandboxBind{
+			{source: runtimeRoot, target: runtimeRoot},
+		},
+	}
+
+	args, err := sandbox.buildBubblewrapArgs(probeExecCommand{
+		commandPath: "/bin/sh",
+		workDir:     runtimeRoot,
+	})
+	if err != nil {
+		t.Fatalf("buildBubblewrapArgs() error = %v", err)
+	}
+
+	unshareIndex := indexProbeSandboxArg(args, "--unshare-all")
+	shareNetIndex := indexProbeSandboxArg(args, "--share-net")
+	if unshareIndex < 0 || shareNetIndex < 0 {
+		t.Fatalf("bubblewrap args missing network namespace markers: %s", strings.Join(args, " "))
+	}
+	if shareNetIndex < unshareIndex {
+		t.Fatalf("--share-net index = %d, --unshare-all index = %d; want share-net after unshare-all", shareNetIndex, unshareIndex)
+	}
+}
+
+func indexProbeSandboxArg(args []string, want string) int {
+	for i, arg := range args {
+		if arg == want {
+			return i
+		}
+	}
+	return -1
+}
+
 func indexProbeSandboxArgTriple(args []string, flag, source, target string) int {
 	for i := 0; i+2 < len(args); i++ {
 		if args[i] == flag && args[i+1] == source && args[i+2] == target {

@@ -120,6 +120,9 @@ func (s probeProcessSandbox) buildBubblewrapArgs(cmd probeExecCommand) ([]string
 
 	args := []string{
 		"--unshare-all",
+		// 一部 CI では network namespace 内の loopback 設定が拒否される。
+		// probe の安全境界は filesystem sandbox なので、network は host と共有する。
+		"--share-net",
 		"--die-with-parent",
 		"--new-session",
 		"--proc", "/proc",
