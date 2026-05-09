@@ -430,8 +430,15 @@ xelyon --provider bedrock --model us.anthropic.claude-haiku-4-5-20251001-v1:0
 xelyon --provider bedrock --model amazon.nova-pro-v1:0
 xelyon --provider bedrock --model moonshotai.kimi-k2.5
 
+# 設定診断
+xelyon doctor bedrock
+xelyon doctor bedrock --model global.anthropic.claude-sonnet-4-6 --smoke
+xelyon doctor bedrock --model amazon.nova-pro-v1:0 --smoke --tool-smoke
+xelyon doctor bedrock --json
+
 # 実 API smoke test
 make bedrock-smoke
+make bedrock-doctor-smoke
 
 # runtime supported モデルの matrix smoke
 make bedrock-smoke-matrix
@@ -439,6 +446,8 @@ make bedrock-smoke-matrix
 # streaming tool-use unsupported/unverified な Converse モデルの probe
 make bedrock-smoke-probe
 ```
+
+`xelyon doctor bedrock` は AWS region / 認証チェーン、model / `catalog_model` 解決、Claude Messages / ConverseStream route、function calling 設定、token / pricing metadata を確認します。`--smoke` は text smoke、`--tool-smoke` は dummy tool call、`--image-smoke` は tiny PNG 画像入力、`--thinking-smoke` は Extended Thinking request を明示実行します。Smoke 結果は AWS SDK `ResultMetadata` 由来の `request_id`、usage、pricing catalog に基づく概算 cost を request 単位で text / JSON に出します。request ID、usage、pricing が返らない場合は warn ですが、API smoke 成功自体は fail にしません。複数 request のうち 1 件でも usage が返らない場合、summary cost は部分値を確定値として表示せず usage unavailable とします。`BEDROCK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip します。Converse route の image / thinking smoke は未対応 request shape として warn skip します。
 
 Bedrock smoke test は `XELYON_BEDROCK_SMOKE=1` のときだけ実 API を呼びます。Claude route は text / tool use / image / thinking、Converse route は text + usage / tool use を確認します。既定モデルを変える場合は `XELYON_BEDROCK_SMOKE_CLAUDE_MODEL` または `XELYON_BEDROCK_SMOKE_CONVERSE_MODEL` を指定してください。`XELYON_BEDROCK_SMOKE_CONVERSE_MODEL` には streaming tool use 対応モデルだけを指定してください。複数モデルを継続検証する場合は `BEDROCK_SMOKE_CONVERSE_MODELS` を上書きして `make bedrock-smoke-matrix` を実行します。詳しい運用手順は [Bedrock Provider 運用](bedrock.md) を参照してください。
 

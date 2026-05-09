@@ -15,16 +15,19 @@ import (
 const defaultAzureDoctorTimeout = 120 * time.Second
 
 var (
-	doctorDeploymentFlag         string
-	doctorCatalogModelFlag       string
-	doctorKimiModelFlag          string
-	doctorSmokeFlag              bool
-	doctorToolSmokeFlag          bool
-	doctorKimiImageSmokeFlag     bool
-	doctorKimiWebSearchSmokeFlag bool
-	doctorTimeoutFlag            = defaultAzureDoctorTimeout
-	doctorJSONFlag               bool
-	doctorPrintConfigFlag        bool
+	doctorDeploymentFlag           string
+	doctorCatalogModelFlag         string
+	doctorBedrockModelFlag         string
+	doctorKimiModelFlag            string
+	doctorSmokeFlag                bool
+	doctorToolSmokeFlag            bool
+	doctorBedrockImageSmokeFlag    bool
+	doctorBedrockThinkingSmokeFlag bool
+	doctorKimiImageSmokeFlag       bool
+	doctorKimiWebSearchSmokeFlag   bool
+	doctorTimeoutFlag              = defaultAzureDoctorTimeout
+	doctorJSONFlag                 bool
+	doctorPrintConfigFlag          bool
 )
 
 func newDoctorCommand() *cobra.Command {
@@ -37,6 +40,7 @@ func newDoctorCommand() *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newAzureDoctorCommand())
+	cmd.AddCommand(newBedrockDoctorCommand())
 	cmd.AddCommand(newKimiDoctorCommand())
 	return cmd
 }

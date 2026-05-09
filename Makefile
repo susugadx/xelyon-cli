@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -193,6 +193,10 @@ kimi-web-search-smoke:
 # Bedrock 実 API smoke test（AWS 認証チェーン必須）
 bedrock-smoke:
 	XELYON_BEDROCK_SMOKE=1 go test ./internal/api/providers/bedrock -run TestBedrockLiveSmoke -count=1 -v -timeout 10m
+
+# Bedrock doctor 診断経路を実環境で確認
+bedrock-doctor-smoke:
+	go run . doctor bedrock --model "$(BEDROCK_SMOKE_CLAUDE_MODEL)" --smoke --tool-smoke --image-smoke --thinking-smoke
 
 # Bedrock runtime supported モデルの実 API smoke matrix
 bedrock-smoke-matrix:

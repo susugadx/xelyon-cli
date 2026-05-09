@@ -20,6 +20,7 @@ import (
 type mockInvokeModelWithResponseStreamClient struct {
 	lastInput *bedrockruntime.InvokeModelWithResponseStreamInput
 	output    *bedrockruntime.InvokeModelWithResponseStreamOutput
+	outputs   []*bedrockruntime.InvokeModelWithResponseStreamOutput
 	err       error
 }
 
@@ -31,6 +32,11 @@ func (m *mockInvokeModelWithResponseStreamClient) InvokeModelWithResponseStream(
 	}
 	if m.err != nil {
 		return nil, m.err
+	}
+	if len(m.outputs) > 0 {
+		output := m.outputs[0]
+		m.outputs = m.outputs[1:]
+		return output, nil
 	}
 	return m.output, nil
 }

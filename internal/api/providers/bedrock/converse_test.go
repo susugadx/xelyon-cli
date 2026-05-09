@@ -20,6 +20,7 @@ import (
 type mockConverseStreamClient struct {
 	lastInput *bedrockruntime.ConverseStreamInput
 	output    *bedrockruntime.ConverseStreamOutput
+	outputs   []*bedrockruntime.ConverseStreamOutput
 	err       error
 }
 
@@ -27,6 +28,11 @@ func (m *mockConverseStreamClient) ConverseStream(_ context.Context, input *bedr
 	m.lastInput = input
 	if m.err != nil {
 		return nil, m.err
+	}
+	if len(m.outputs) > 0 {
+		output := m.outputs[0]
+		m.outputs = m.outputs[1:]
+		return output, nil
 	}
 	return m.output, nil
 }

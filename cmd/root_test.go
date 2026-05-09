@@ -67,9 +67,12 @@ func resetRootFlagsForTest() {
 	legacyNoTUI = false
 	doctorDeploymentFlag = ""
 	doctorCatalogModelFlag = ""
+	doctorBedrockModelFlag = ""
 	doctorKimiModelFlag = ""
 	doctorSmokeFlag = false
 	doctorToolSmokeFlag = false
+	doctorBedrockImageSmokeFlag = false
+	doctorBedrockThinkingSmokeFlag = false
 	doctorKimiImageSmokeFlag = false
 	doctorKimiWebSearchSmokeFlag = false
 	doctorTimeoutFlag = defaultAzureDoctorTimeout

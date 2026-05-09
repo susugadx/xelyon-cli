@@ -38,6 +38,7 @@ type Provider struct {
 	mcpTools          []api.ToolDefinition // MCP ツール定義
 	usageCallback     api.UsageCallback
 	runtimeConfig     *config.Config
+	lastRequestID     string
 	lastContentBlocks []api.AnthropicContentBlock
 }
 
@@ -51,17 +52,9 @@ type converseStreamClient interface {
 
 // New は新しい Bedrock Provider を作成
 func New() (*Provider, error) {
-	loadOptions := []func(*awsconfig.LoadOptions) error{}
-	if region := explicitAWSRegionFromEnv(); region != "" {
-		loadOptions = append(loadOptions, awsconfig.WithRegion(region))
-	}
-
-	cfg, err := awsconfig.LoadDefaultConfig(context.Background(), loadOptions...)
+	cfg, err := loadBedrockAWSConfig(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("AWS config load failed: %w", err)
-	}
-	if strings.TrimSpace(cfg.Region) == "" {
-		cfg.Region = defaultRegion
+		return nil, err
 	}
 
 	client := bedrockruntime.NewFromConfig(cfg)
@@ -71,6 +64,25 @@ func New() (*Provider, error) {
 		converseClient: client,
 		region:         cfg.Region,
 	}, nil
+}
+
+func loadBedrockAWSConfig(ctx context.Context) (aws.Config, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	loadOptions := []func(*awsconfig.LoadOptions) error{}
+	if region := explicitAWSRegionFromEnv(); region != "" {
+		loadOptions = append(loadOptions, awsconfig.WithRegion(region))
+	}
+
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, loadOptions...)
+	if err != nil {
+		return aws.Config{}, fmt.Errorf("AWS config load failed: %w", err)
+	}
+	if strings.TrimSpace(cfg.Region) == "" {
+		cfg.Region = defaultRegion
+	}
+	return cfg, nil
 }
 
 func explicitAWSRegionFromEnv() string {
@@ -360,6 +372,7 @@ func (p *Provider) invokeClaudeMessagesStream(ctx context.Context, model string,
 
 	spinner := api.StartThinkingSpinner(ctx, false, "")
 
+	p.clearLastRequestID()
 	output, err := p.client.InvokeModelWithResponseStream(ctx, &bedrockruntime.InvokeModelWithResponseStreamInput{
 		ModelId:     aws.String(model),
 		ContentType: aws.String("application/json"),
@@ -370,6 +383,7 @@ func (p *Provider) invokeClaudeMessagesStream(ctx context.Context, model string,
 		spinner.Stop()
 		return "", fmt.Errorf("bedrock API error: %w", err)
 	}
+	p.captureRequestIDFromInvokeOutput(output)
 
 	return p.handleEventStream(ctx, output, spinner)
 }

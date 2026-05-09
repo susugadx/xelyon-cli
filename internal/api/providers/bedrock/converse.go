@@ -37,11 +37,13 @@ func (p *Provider) chatWithConverseStream(ctx context.Context, systemPrompt stri
 	}
 
 	spinner := api.StartThinkingSpinner(ctx, false, "")
+	p.clearLastRequestID()
 	output, err := p.converseClient.ConverseStream(ctx, input)
 	if err != nil {
 		spinner.Stop()
 		return "", fmt.Errorf("bedrock converse API error: %w", err)
 	}
+	p.captureRequestIDFromConverseOutput(output)
 
 	return p.handleConverseStream(ctx, output, spinner)
 }

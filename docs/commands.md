@@ -41,6 +41,25 @@ xelyon doctor azure --json
 
 Azure API error では 401/403/404/429 と tool payload rejected の原因候補を補足します。
 
+### `xelyon doctor bedrock`
+
+AWS Bedrock の region、AWS 認証チェーン、provider 登録、model / `catalog_model` 解決、Claude Messages / ConverseStream route、function calling 設定、token / pricing metadata を確認します。`--smoke` は text smoke、`--tool-smoke` は dummy tool call、`--image-smoke` は tiny PNG 画像入力、`--thinking-smoke` は Extended Thinking request を明示実行します。
+
+Smoke の JSON では AWS SDK `ResultMetadata` 由来の `request_id`、request 単位の usage、概算 cost を `smoke.requests[]` に出します。summary usage / cost は request 単位の観測値を合算します。request ID、usage、pricing が返らない場合は warn ですが、API smoke 自体が成功していれば fail にはしません。複数 request のうち 1 件でも usage が返らない場合、summary cost は部分値を確定値として表示せず usage unavailable とします。Bedrock では Azure の `response_id` alias は出しません。`BEDROCK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip します。ConverseStream route で `--image-smoke` / `--thinking-smoke` を指定した場合は、未対応 request shape として warn skip します。
+
+```bash
+xelyon doctor bedrock
+xelyon doctor bedrock --model global.anthropic.claude-sonnet-4-6
+xelyon doctor bedrock --model corp-bedrock-sonnet --catalog-model global.anthropic.claude-sonnet-4-6
+xelyon doctor bedrock --smoke
+xelyon doctor bedrock --tool-smoke
+xelyon doctor bedrock --image-smoke
+xelyon doctor bedrock --thinking-smoke
+xelyon doctor bedrock --json
+```
+
+手元で doctor 経路だけを実 AWS 環境で確認する場合は、AWS 認証チェーンを設定して `make bedrock-doctor-smoke` を実行します。runtime supported モデル全体の継続確認には `make bedrock-smoke` / `make bedrock-smoke-matrix` を使います。
+
 ## 対話型コマンド
 
 セッション中に `/` で始まるコマンドを入力できます。
