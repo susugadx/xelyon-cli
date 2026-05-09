@@ -144,15 +144,9 @@ func TestProbeProcessSandbox_SharesNetworkNamespaceForCICompatibility(t *testing
 
 func TestProbeProcessSandbox_BindsGoRootBeforeGoCommandBin(t *testing.T) {
 	runtimeRoot := filepath.Join(t.TempDir(), "runtime")
-	goRoot := filepath.Join(t.TempDir(), "go")
+	goRoot := createProbeTestGoRoot(t, filepath.Join(t.TempDir(), "go"))
 	goBin := filepath.Join(goRoot, "bin")
-	if err := os.MkdirAll(goBin, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q) error = %v", goBin, err)
-	}
 	goPath := filepath.Join(goBin, "go")
-	if err := os.WriteFile(goPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", goPath, err)
-	}
 	sandbox := probeProcessSandbox{
 		enabled:    true,
 		runnerPath: "/usr/bin/bwrap",

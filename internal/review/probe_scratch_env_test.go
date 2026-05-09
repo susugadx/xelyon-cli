@@ -67,14 +67,8 @@ func TestBuildScratchOnlyEnv_AllowlistAndOverrides(t *testing.T) {
 
 func TestBuildScratchOnlyEnv_InheritsSafeGoRootOnly(t *testing.T) {
 	repoRoot := t.TempDir()
-	safeGoRoot := filepath.Join(t.TempDir(), "go")
-	if err := os.MkdirAll(safeGoRoot, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q) error = %v", safeGoRoot, err)
-	}
-	repoGoRoot := filepath.Join(repoRoot, "go")
-	if err := os.MkdirAll(repoGoRoot, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q) error = %v", repoGoRoot, err)
-	}
+	safeGoRoot := createProbeTestGoRoot(t, filepath.Join(t.TempDir(), "go"))
+	repoGoRoot := createProbeTestGoRoot(t, filepath.Join(repoRoot, "go"))
 
 	scratchDir := t.TempDir()
 	dirs, err := prepareScratchOnlyDirs(scratchDir)

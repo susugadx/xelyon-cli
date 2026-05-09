@@ -33,6 +33,7 @@ func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time
 		return result
 	}
 
+	cmd = withProbeGoRootEnvForCommand(cmd)
 	execCmd, sandboxErr := buildProbeProcessSandboxExec(cmd)
 	if sandboxErr != nil {
 		result.Status = ReviewProbeBlocked
