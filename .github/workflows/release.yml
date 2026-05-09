@@ -38,6 +38,12 @@ jobs:
       with:
         go-version: ${{ steps.go-version.outputs.version }}
 
+    # テストで使用する ripgrep と probe sandbox 用 bubblewrap をインストール
+    - name: Install test dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ripgrep bubblewrap
+
     # リリース前にテスト実行
     - name: Run tests
       run: make release-test

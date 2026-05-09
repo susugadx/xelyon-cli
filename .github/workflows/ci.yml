@@ -38,9 +38,11 @@ jobs:
         with:
           go-version: ${{ steps.go-version.outputs.version }}
 
-      # テストで使用する ripgrep をインストール
-      - name: Install ripgrep
-        run: sudo apt-get install -y ripgrep
+      # テストで使用する ripgrep と probe sandbox 用 bubblewrap をインストール
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep bubblewrap
 
       # 依存関係の整合性を確認
       - name: Verify dependencies
