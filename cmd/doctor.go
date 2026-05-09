@@ -149,8 +149,37 @@ func renderAzureDoctorText(w io.Writer, report azureprovider.DiagnosticReport) {
 	if report.Smoke != nil && report.Smoke.Ran {
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "Smoke duration: %s\n", report.Smoke.Duration)
+		fmt.Fprintf(w, "Smoke response ID: %s\n", azureDoctorSmokeResponseIDText(report.Smoke.ResponseID))
 		if strings.TrimSpace(report.Smoke.Content) != "" {
 			fmt.Fprintf(w, "Smoke content: %s\n", report.Smoke.Content)
 		}
+		fmt.Fprintf(
+			w,
+			"Smoke usage: input=%d cached=%d output=%d reasoning=%d cache_creation=%d\n",
+			report.Smoke.Usage.InputTokens,
+			report.Smoke.Usage.CachedInputTokens,
+			report.Smoke.Usage.OutputTokens,
+			report.Smoke.Usage.ThinkingTokens,
+			report.Smoke.Usage.CacheCreationTokens,
+		)
+		fmt.Fprintf(w, "Smoke cost estimate: %s\n", azureDoctorSmokeCostText(*report.Smoke))
 	}
+}
+
+func azureDoctorSmokeResponseIDText(responseID string) string {
+	responseID = strings.TrimSpace(responseID)
+	if responseID == "" {
+		return "(not returned)"
+	}
+	return responseID
+}
+
+func azureDoctorSmokeCostText(smoke azureprovider.DiagnosticSmokeResult) string {
+	if !smoke.UsageObserved {
+		return "N/A (usage unavailable)"
+	}
+	if smoke.Cost.PricingUnavailable {
+		return "N/A (pricing unavailable)"
+	}
+	return fmt.Sprintf("$%.8f USD", smoke.Cost.USD)
 }

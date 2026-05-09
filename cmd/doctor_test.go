@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	azureprovider "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 )
 
 func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) {
@@ -244,5 +246,106 @@ func TestRootCommand_AzureDoctorFailureDoesNotPrintRootUsage(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "Usage:\n  xelyon [query]") {
 		t.Fatalf("output = %q, should not append root usage", out.String())
+	}
+}
+
+func TestRenderAzureDoctorTextIncludesSmokeObservability(t *testing.T) {
+	report := azureprovider.DiagnosticReport{
+		Provider: "azure",
+		Checks: []azureprovider.DiagnosticCheck{
+			{Name: "smoke", Status: azureprovider.DiagnosticStatusOK, Message: "live Azure OpenAI smoke request succeeded"},
+		},
+		Smoke: &azureprovider.DiagnosticSmokeResult{
+			Ran:           true,
+			Content:       "xelyon azure doctor ok",
+			ResponseID:    "resp_text",
+			Duration:      "1ms",
+			UsageObserved: true,
+			Usage: azureprovider.DiagnosticSmokeUsage{
+				InputTokens:         10,
+				OutputTokens:        4,
+				ThinkingTokens:      2,
+				CachedInputTokens:   3,
+				CacheCreationTokens: 1,
+			},
+			Cost: azureprovider.DiagnosticSmokeCost{
+				USD: 0.00012345,
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	renderAzureDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Smoke response ID: resp_text",
+		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
+		"Smoke cost estimate: $0.00012345 USD",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}
+
+func TestRenderAzureDoctorJSONIncludesSmokeObservability(t *testing.T) {
+	report := azureprovider.DiagnosticReport{
+		Provider: "azure",
+		Smoke: &azureprovider.DiagnosticSmokeResult{
+			Ran:           true,
+			ResponseID:    "resp_json",
+			Duration:      "1ms",
+			UsageObserved: true,
+			Usage: azureprovider.DiagnosticSmokeUsage{
+				InputTokens:         10,
+				OutputTokens:        4,
+				ThinkingTokens:      2,
+				CachedInputTokens:   3,
+				CacheCreationTokens: 1,
+			},
+			Cost: azureprovider.DiagnosticSmokeCost{
+				USD:                0.00012345,
+				PricingUnavailable: false,
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := renderAzureDoctorJSON(&out, report); err != nil {
+		t.Fatalf("renderAzureDoctorJSON() error = %v", err)
+	}
+
+	var got struct {
+		Smoke struct {
+			ResponseID    string `json:"response_id"`
+			UsageObserved bool   `json:"usage_observed"`
+			Usage         struct {
+				InputTokens         int `json:"input_tokens"`
+				OutputTokens        int `json:"output_tokens"`
+				ThinkingTokens      int `json:"thinking_tokens"`
+				CachedInputTokens   int `json:"cached_input_tokens"`
+				CacheCreationTokens int `json:"cache_creation_tokens"`
+			} `json:"usage"`
+			Cost struct {
+				USD                float64 `json:"usd"`
+				PricingUnavailable bool    `json:"pricing_unavailable"`
+			} `json:"cost"`
+		} `json:"smoke"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
+	}
+	if got.Smoke.ResponseID != "resp_json" || !got.Smoke.UsageObserved {
+		t.Fatalf("smoke metadata = %#v, want response_id and usage_observed", got.Smoke)
+	}
+	if got.Smoke.Usage.InputTokens != 10 ||
+		got.Smoke.Usage.OutputTokens != 4 ||
+		got.Smoke.Usage.ThinkingTokens != 2 ||
+		got.Smoke.Usage.CachedInputTokens != 3 ||
+		got.Smoke.Usage.CacheCreationTokens != 1 {
+		t.Fatalf("smoke usage = %+v, want nested usage fields", got.Smoke.Usage)
+	}
+	if got.Smoke.Cost.USD != 0.00012345 || got.Smoke.Cost.PricingUnavailable {
+		t.Fatalf("smoke cost = %+v, want nested cost fields", got.Smoke.Cost)
 	}
 }

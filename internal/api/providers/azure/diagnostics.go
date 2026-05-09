@@ -40,13 +40,31 @@ type DiagnosticCheck struct {
 	Suggestion string           `json:"suggestion,omitempty"`
 }
 
+// DiagnosticSmokeUsage は Azure smoke request で観測した usage を表す。
+type DiagnosticSmokeUsage struct {
+	InputTokens         int `json:"input_tokens"`
+	OutputTokens        int `json:"output_tokens"`
+	ThinkingTokens      int `json:"thinking_tokens"`
+	CachedInputTokens   int `json:"cached_input_tokens"`
+	CacheCreationTokens int `json:"cache_creation_tokens"`
+}
+
+// DiagnosticSmokeCost は Azure smoke request の cost estimate を表す。
+type DiagnosticSmokeCost struct {
+	USD                float64 `json:"usd"`
+	PricingUnavailable bool    `json:"pricing_unavailable"`
+}
+
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
 type DiagnosticSmokeResult struct {
-	Ran         bool   `json:"ran"`
-	ToolPayload bool   `json:"tool_payload"`
-	Content     string `json:"content,omitempty"`
-	ResponseID  string `json:"response_id,omitempty"`
-	Duration    string `json:"duration,omitempty"`
+	Ran           bool                 `json:"ran"`
+	ToolPayload   bool                 `json:"tool_payload"`
+	Content       string               `json:"content,omitempty"`
+	ResponseID    string               `json:"response_id"`
+	Duration      string               `json:"duration,omitempty"`
+	UsageObserved bool                 `json:"usage_observed"`
+	Usage         DiagnosticSmokeUsage `json:"usage"`
+	Cost          DiagnosticSmokeCost  `json:"cost"`
 }
 
 // DiagnosticReport は Azure OpenAI の設定診断結果を表す。
@@ -588,9 +606,68 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live Azure OpenAI smoke request succeeded", smoke.Duration, "")
+	r.addSmokeObservationChecks(smoke)
 	if smoke.ToolPayload {
 		r.addCheck(DiagnosticStatusOK, "tool_smoke", "Azure OpenAI deployment accepted a tool payload", smoke.Duration, "")
 	}
+}
+
+func (r *DiagnosticReport) addSmokeObservationChecks(smoke DiagnosticSmokeResult) {
+	if strings.TrimSpace(smoke.ResponseID) != "" {
+		r.addCheck(DiagnosticStatusOK, "response_id", "Azure OpenAI smoke returned a response ID", smoke.ResponseID, "")
+	} else {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"response_id",
+			"Azure OpenAI smoke succeeded but response ID was not returned",
+			"",
+			"Check whether the endpoint returns Responses API response.created/id metadata",
+		)
+	}
+
+	if smoke.UsageObserved {
+		r.addCheck(DiagnosticStatusOK, "usage", "Azure OpenAI smoke usage was observed", diagnosticSmokeUsageDetail(smoke.Usage), "")
+	} else {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"usage",
+			"Azure OpenAI smoke succeeded but usage was not observed",
+			"",
+			"Check whether the endpoint returns Responses API usage metadata",
+		)
+	}
+
+	switch {
+	case !smoke.UsageObserved:
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"cost",
+			"Azure OpenAI smoke cost estimate was skipped because usage was not observed",
+			"",
+			"Rerun smoke after usage metadata is available",
+		)
+	case smoke.Cost.PricingUnavailable:
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"cost",
+			"Azure OpenAI smoke cost pricing is unavailable",
+			"",
+			"Use an OpenAI catalog model with pricing metadata before relying on smoke cost estimates",
+		)
+	default:
+		r.addCheck(DiagnosticStatusOK, "cost", "Azure OpenAI smoke cost estimate is available", fmt.Sprintf("$%.8f USD", smoke.Cost.USD), "")
+	}
+}
+
+func diagnosticSmokeUsageDetail(usage DiagnosticSmokeUsage) string {
+	return fmt.Sprintf(
+		"input_tokens=%d, cached_input_tokens=%d, output_tokens=%d, thinking_tokens=%d, cache_creation_tokens=%d",
+		usage.InputTokens,
+		usage.CachedInputTokens,
+		usage.OutputTokens,
+		usage.ThinkingTokens,
+		usage.CacheCreationTokens,
+	)
 }
 
 func resolveDiagnosticDeployment(cfg *config.Config, explicitDeployment string) (string, string) {
@@ -715,26 +792,39 @@ func runDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diagnost
 	smokeCtx = config.WithContext(smokeCtx, smokeCfg)
 
 	provider := New(os.Getenv(apiKeyEnv))
+	var usage api.Usage
+	usageObserved := false
+	provider.SetUsageCallback(func(observed api.Usage) {
+		usage.Add(observed)
+		usageObserved = usageObserved || observed.HasTokenObservation()
+	})
+
 	systemPrompt := "Reply briefly."
 	if toolPayload {
 		systemPrompt = "Use the diagnostic tool."
 		provider.SetToolChoice(diagnosticSmokeToolName)
 	}
 	started := time.Now()
-	content, err := provider.ChatWithTools(
+	content, responseID, err := runDiagnosticSmokeResponsesRequest(
 		smokeCtx,
+		provider,
 		systemPrompt,
 		[]api.Message{{Role: "user", Content: "Reply with: xelyon azure doctor ok"}},
 		report.Deployment,
 	)
 	elapsed := time.Since(started).Round(time.Millisecond)
+	provider.ClearResponseID()
+	costEstimate := cost.EstimateRequestCostWithCacheForConfig(smokeCfg, "azure", report.Deployment, usage)
 
 	result := DiagnosticSmokeResult{
-		Ran:         true,
-		ToolPayload: toolPayload,
-		Content:     strings.TrimSpace(content),
-		ResponseID:  provider.GetResponseID(),
-		Duration:    elapsed.String(),
+		Ran:           true,
+		ToolPayload:   toolPayload,
+		Content:       strings.TrimSpace(content),
+		ResponseID:    strings.TrimSpace(responseID),
+		Duration:      elapsed.String(),
+		UsageObserved: usageObserved,
+		Usage:         diagnosticSmokeUsage(usage),
+		Cost:          diagnosticSmokeCost(costEstimate),
 	}
 	if err != nil {
 		return result, err
@@ -749,6 +839,45 @@ func runDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diagnost
 		return result, fmt.Errorf("smoke response content is empty")
 	}
 	return result, nil
+}
+
+func runDiagnosticSmokeResponsesRequest(
+	ctx context.Context,
+	provider *Provider,
+	systemPrompt string,
+	history []api.Message,
+	model string,
+) (string, string, error) {
+	if provider == nil {
+		return "", "", fmt.Errorf("azure diagnostic smoke provider is nil")
+	}
+	provider.responsesLocalSkip = false
+	return provider.runResponsesRequest(ctx, responsesRequestRunOptions{
+		URL: provider.responsesURL(),
+		BuildRequest: func() responsesRequest {
+			return provider.buildChatResponsesRequest(ctx, systemPrompt, history, model)
+		},
+		DebugName:   "Azure",
+		Debug:       os.Getenv("XELYON_DEBUG_AZURE") == "1",
+		DebugWriter: api.ErrorWriterFromContext(ctx),
+	})
+}
+
+func diagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
+	return DiagnosticSmokeUsage{
+		InputTokens:         usage.InputTokens,
+		OutputTokens:        usage.OutputTokens,
+		ThinkingTokens:      usage.ThinkingTokens,
+		CachedInputTokens:   usage.CachedInputTokens,
+		CacheCreationTokens: usage.CacheCreationTokens,
+	}
+}
+
+func diagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
+	return DiagnosticSmokeCost{
+		USD:                estimate.Cost,
+		PricingUnavailable: estimate.PricingUnavailable,
+	}
 }
 
 const diagnosticSmokeToolName = "xelyon_azure_doctor_probe"

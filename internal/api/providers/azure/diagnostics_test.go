@@ -358,7 +358,7 @@ func TestDiagnose_SmokeUsesConfiguredDeploymentAndStoreFalse(t *testing.T) {
 			t.Fatalf("decode request body: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"resp_doctor","output_text":"xelyon azure doctor ok","usage":{"input_tokens":5,"output_tokens":4}}`))
+		_, _ = w.Write([]byte(`{"id":"resp_doctor","output_text":"xelyon azure doctor ok","usage":{"input_tokens":10,"output_tokens":6,"input_tokens_details":{"cached_tokens":4},"output_tokens_details":{"reasoning_tokens":2}}}`))
 	}))
 	defer server.Close()
 
@@ -389,6 +389,34 @@ func TestDiagnose_SmokeUsesConfiguredDeploymentAndStoreFalse(t *testing.T) {
 	}
 	if report.Smoke == nil || !report.Smoke.Ran {
 		t.Fatalf("Smoke = %#v, want ran smoke", report.Smoke)
+	}
+	if report.Smoke.ResponseID != "resp_doctor" {
+		t.Fatalf("Smoke.ResponseID = %q, want resp_doctor", report.Smoke.ResponseID)
+	}
+	if !report.Smoke.UsageObserved {
+		t.Fatalf("Smoke.UsageObserved = false, want true: %#v", report.Smoke)
+	}
+	if report.Smoke.Usage.InputTokens != 10 ||
+		report.Smoke.Usage.OutputTokens != 4 ||
+		report.Smoke.Usage.CachedInputTokens != 4 ||
+		report.Smoke.Usage.ThinkingTokens != 2 ||
+		report.Smoke.Usage.CacheCreationTokens != 0 {
+		t.Fatalf("Smoke.Usage = %+v, want input=10 output=4 cached=4 thinking=2 cache_creation=0", report.Smoke.Usage)
+	}
+	if report.Smoke.Cost.PricingUnavailable || report.Smoke.Cost.USD <= 0 {
+		t.Fatalf("Smoke.Cost = %+v, want positive priced estimate", report.Smoke.Cost)
+	}
+	for _, want := range []struct {
+		name   string
+		status DiagnosticStatus
+	}{
+		{name: "response_id", status: DiagnosticStatusOK},
+		{name: "usage", status: DiagnosticStatusOK},
+		{name: "cost", status: DiagnosticStatusOK},
+	} {
+		if !hasDiagnosticCheck(report, want.name, want.status) {
+			t.Fatalf("missing %s %s check: %#v", want.name, want.status, report.Checks)
+		}
 	}
 	if !strings.Contains(report.Smoke.Content, "xelyon azure doctor ok") {
 		t.Fatalf("Smoke.Content = %q, want smoke response", report.Smoke.Content)
@@ -433,7 +461,7 @@ func TestDiagnose_SmokeUsesCodexCatalogModelPolicy(t *testing.T) {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"xelyon azure doctor ok"}`)
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, `data: {"type":"response.completed","response":{"usage":{"input_tokens":7,"output_tokens":3}}}`)
+		fmt.Fprintln(w, `data: {"type":"response.completed","response":{"usage":{"input_tokens":13,"output_tokens":9,"input_tokens_details":{"cached_tokens":7},"output_tokens_details":{"reasoning_tokens":5}}}}`)
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, `data: [DONE]`)
 	}))
@@ -456,6 +484,21 @@ func TestDiagnose_SmokeUsesCodexCatalogModelPolicy(t *testing.T) {
 	}
 	if report.Smoke == nil || !report.Smoke.Ran {
 		t.Fatalf("Smoke = %#v, want ran smoke", report.Smoke)
+	}
+	if report.Smoke.ResponseID != "resp_codex" {
+		t.Fatalf("Smoke.ResponseID = %q, want resp_codex", report.Smoke.ResponseID)
+	}
+	if !report.Smoke.UsageObserved {
+		t.Fatalf("Smoke.UsageObserved = false, want true: %#v", report.Smoke)
+	}
+	if report.Smoke.Usage.InputTokens != 13 ||
+		report.Smoke.Usage.OutputTokens != 4 ||
+		report.Smoke.Usage.CachedInputTokens != 7 ||
+		report.Smoke.Usage.ThinkingTokens != 5 {
+		t.Fatalf("Smoke.Usage = %+v, want input=13 output=4 cached=7 thinking=5", report.Smoke.Usage)
+	}
+	if report.Smoke.Cost.PricingUnavailable || report.Smoke.Cost.USD <= 0 {
+		t.Fatalf("Smoke.Cost = %+v, want positive priced estimate", report.Smoke.Cost)
 	}
 	if !strings.Contains(report.Smoke.Content, "xelyon azure doctor ok") {
 		t.Fatalf("Smoke.Content = %q, want smoke response", report.Smoke.Content)
@@ -494,7 +537,7 @@ func TestDiagnose_ToolSmokeIncludesToolPayloadWhenEnabled(t *testing.T) {
 			t.Fatalf("decode request body: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"resp_tool_doctor","output":[{"type":"function_call","call_id":"call_probe","name":"xelyon_azure_doctor_probe","arguments":"{}"}]}`))
+		_, _ = w.Write([]byte(`{"id":"resp_tool_doctor","output":[{"type":"function_call","call_id":"call_probe","name":"xelyon_azure_doctor_probe","arguments":"{}"}],"usage":{"input_tokens":8,"output_tokens":4,"output_tokens_details":{"reasoning_tokens":1}}}`))
 	}))
 	defer server.Close()
 
@@ -517,6 +560,20 @@ func TestDiagnose_ToolSmokeIncludesToolPayloadWhenEnabled(t *testing.T) {
 	if report.Smoke == nil || !report.Smoke.ToolPayload {
 		t.Fatalf("Smoke = %#v, want tool payload smoke", report.Smoke)
 	}
+	if report.Smoke.ResponseID != "resp_tool_doctor" {
+		t.Fatalf("Smoke.ResponseID = %q, want resp_tool_doctor", report.Smoke.ResponseID)
+	}
+	if !report.Smoke.UsageObserved {
+		t.Fatalf("Smoke.UsageObserved = false, want true: %#v", report.Smoke)
+	}
+	if report.Smoke.Usage.InputTokens != 8 ||
+		report.Smoke.Usage.OutputTokens != 3 ||
+		report.Smoke.Usage.ThinkingTokens != 1 {
+		t.Fatalf("Smoke.Usage = %+v, want input=8 output=3 thinking=1", report.Smoke.Usage)
+	}
+	if report.Smoke.Cost.PricingUnavailable || report.Smoke.Cost.USD <= 0 {
+		t.Fatalf("Smoke.Cost = %+v, want positive priced estimate", report.Smoke.Cost)
+	}
 	if !strings.Contains(report.Smoke.Content, `"tool":"xelyon_azure_doctor_probe"`) {
 		t.Fatalf("Smoke.Content = %q, want diagnostic tool call JSON", report.Smoke.Content)
 	}
@@ -537,6 +594,81 @@ func TestDiagnose_ToolSmokeIncludesToolPayloadWhenEnabled(t *testing.T) {
 	}
 	if !hasDiagnosticCheck(report, "tool_smoke", DiagnosticStatusOK) {
 		t.Fatalf("missing tool_smoke OK check: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_SmokeWarnsForMissingResponseIDAndUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"output_text":"xelyon azure doctor ok"}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "azure-key")
+	t.Setenv(authTokenEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt55-pro-deployment",
+		CatalogModel: "gpt-5.5-pro",
+		RunSmoke:     true,
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false for smoke observability warnings: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.Ran {
+		t.Fatalf("Smoke = %#v, want ran smoke", report.Smoke)
+	}
+	if report.Smoke.ResponseID != "" {
+		t.Fatalf("Smoke.ResponseID = %q, want empty when endpoint omits id", report.Smoke.ResponseID)
+	}
+	if report.Smoke.UsageObserved {
+		t.Fatalf("Smoke.UsageObserved = true, want false: %#v", report.Smoke)
+	}
+	for _, name := range []string{"response_id", "usage", "cost"} {
+		if !hasDiagnosticCheck(report, name, DiagnosticStatusWarn) {
+			t.Fatalf("missing %s warn check: %#v", name, report.Checks)
+		}
+	}
+}
+
+func TestDiagnose_SmokeWarnsWhenPricingUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"type":"response.created","response":{"id":"resp_unknown_pricing"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.output_text.delta","delta":"xelyon azure doctor ok"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: {"type":"response.completed","response":{"usage":{"input_tokens":5,"output_tokens":2}}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "azure-key")
+	t.Setenv(authTokenEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-unknown-deployment",
+		CatalogModel: "gpt-unknown-model",
+		RunSmoke:     true,
+	})
+
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false when only pricing is unavailable: %#v", report.Checks)
+	}
+	if report.Smoke == nil || !report.Smoke.UsageObserved {
+		t.Fatalf("Smoke = %#v, want usage observed", report.Smoke)
+	}
+	if !report.Smoke.Cost.PricingUnavailable {
+		t.Fatalf("Smoke.Cost = %+v, want pricing unavailable", report.Smoke.Cost)
+	}
+	if !hasDiagnosticCheck(report, "cost", DiagnosticStatusWarn) {
+		t.Fatalf("missing cost warning: %#v", report.Checks)
 	}
 }
 
