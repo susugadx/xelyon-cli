@@ -69,8 +69,10 @@ func isInTestsDir(path string) bool {
 	normalized := filepath.ToSlash(path)
 	return strings.HasPrefix(normalized, "tests/") ||
 		strings.HasPrefix(normalized, "test/") ||
+		strings.HasPrefix(normalized, "__tests__/") ||
 		strings.Contains(normalized, "/tests/") ||
-		strings.Contains(normalized, "/test/")
+		strings.Contains(normalized, "/test/") ||
+		strings.Contains(normalized, "/__tests__/")
 }
 
 // IsTestFile はテストファイルかどうかを返す。

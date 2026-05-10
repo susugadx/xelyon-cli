@@ -23,6 +23,7 @@ type structuredImpactExecutionResult struct {
 	Bundle        *SymbolBundle
 	AffectedFiles []string
 	Ambiguous     bool
+	MultiPattern  bool
 }
 
 type structuredImpactResolver func(symbol string, opts SearchOptions) symbolResolveResult
@@ -47,6 +48,16 @@ func newStructuredImpactSearchContext(opts SearchOptions, routeTag string) (stru
 
 func buildStructuredImpactCacheKey(opts SearchOptions, route searchRouteTrace, routeTag string) string {
 	return buildSearchCacheKeyWithRoute(opts, route.cacheSignature()+"|"+routeTag)
+}
+
+func shouldAttemptSinglePatternImpactSearch(opts SearchOptions, pattern string) bool {
+	if !strings.EqualFold(strings.TrimSpace(opts.Intent), "impact") {
+		return false
+	}
+	if len(splitPatterns(opts.Pattern)) != 1 {
+		return false
+	}
+	return strings.TrimSpace(pattern) != ""
 }
 
 func tryStructuredImpactSearchResult(cache tools.ToolCacheInterface, ctx structuredImpactSearchContext, opts SearchOptions, resolver structuredImpactResolver) (structuredImpactExecutionResult, bool) {
@@ -154,6 +165,7 @@ func newStructuredImpactSearchArtifact(result structuredImpactExecutionResult) S
 			AffectedFiles:    result.AffectedFiles,
 			StructuredImpact: true,
 			Ambiguous:        result.Ambiguous,
+			MultiPattern:     result.MultiPattern,
 		},
 	}
 }

@@ -80,6 +80,9 @@ func executeImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOpti
 	if artifact, ok := tryStructuredGoImpactSearchArtifact(cache, opts); ok {
 		return artifact
 	}
+	if artifact, ok := tryStructuredTypeScriptImpactSearchArtifact(cache, opts); ok {
+		return artifact
+	}
 
 	basePatterns := expandImpactPatterns(strings.TrimSpace(opts.Pattern), opts)
 	if len(basePatterns) == 0 {

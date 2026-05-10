@@ -6,6 +6,7 @@ func TestTestFileHelpersAndWrappers(t *testing.T) {
 	testFiles := []string{
 		"service_test.go",
 		"tests/api/test_builder.py",
+		"src/__tests__/builder.test.ts",
 		"pkg/user.spec.ts",
 		"pkg/UserServiceTest.java",
 		"pkg/user_service_test.php",

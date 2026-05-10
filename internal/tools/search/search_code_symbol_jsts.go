@@ -28,9 +28,33 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	def := defs[0]
 	refs := findGenericReferences(symbol, opts)
 	filteredRefs := filterGenericRefs(refs, def)
+	classifiedRefs := classifyJSFamilySymbolRefs(filteredRefs, symbol)
+	bundle := buildGenericSymbolBundle("js", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "imports", Title: "Imports", Items: classifiedRefs.imports, Limit: jsImportLimit},
+		{Kind: "callers", Title: "Callers", Items: classifiedRefs.callers, Limit: jsCallerLimit},
+		{Kind: "type_refs", Title: "Type References", Items: classifiedRefs.typeRefs, Limit: jsTypeRefLimit},
+		{Kind: "references", Title: "References", Items: classifiedRefs.others, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: classifiedRefs.tests, Limit: genericTestLimit, IsTest: true},
+	})
+	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
+	return genericResolveResult{Output: formatJSSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+}
 
+type jsFamilySymbolRefs struct {
+	imports  []genericSymbolRef
+	callers  []genericSymbolRef
+	typeRefs []genericSymbolRef
+	others   []genericSymbolRef
+	tests    []genericSymbolRef
+}
+
+// classifyJSFamilySymbolRefs は TS/JS 共通の参照分類 owner。
+// structured impact と通常 symbol search が同じテスト分離・参照分類を使うための入口。
+func classifyJSFamilySymbolRefs(refs []genericSymbolRef, symbol string) jsFamilySymbolRefs {
 	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
+	for _, ref := range refs {
 		if ref.IsTest {
 			testRefs = append(testRefs, ref)
 		} else {
@@ -39,17 +63,13 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	}
 
 	imports, callers, typeRefs, otherRefs := classifyJSRefs(normalRefs, symbol)
-	bundle := buildGenericSymbolBundle("js", symbol, def, []string{
-		fmt.Sprintf("%d: %s", def.Line, def.Signature),
-	}, []symbolBundleSectionInput{
-		{Kind: "imports", Title: "Imports", Items: imports, Limit: jsImportLimit},
-		{Kind: "callers", Title: "Callers", Items: callers, Limit: jsCallerLimit},
-		{Kind: "type_refs", Title: "Type References", Items: typeRefs, Limit: jsTypeRefLimit},
-		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
-		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
-	})
-	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatJSSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	return jsFamilySymbolRefs{
+		imports:  imports,
+		callers:  callers,
+		typeRefs: typeRefs,
+		others:   otherRefs,
+		tests:    testRefs,
+	}
 }
 
 // classifyJSRefs は TS/JS の参照を import / caller / type ref / other に分類する。

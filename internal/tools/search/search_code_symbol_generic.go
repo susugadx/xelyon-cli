@@ -214,7 +214,7 @@ func buildGenericRgArgs(symbol string, opts SearchOptions) ([]string, string) {
 	basis := resolveSearchPathBasisForOptions(opts)
 
 	args := []string{
-		"-n", "--no-heading", "--color", "never",
+		"-n", "--no-heading", "--with-filename", "--color", "never",
 		"-w",
 	}
 	args = append(args, filefilter.RipgrepArgs(opts.FileType, opts.FilePattern)...)
