@@ -12,17 +12,29 @@ func defaultLanguagePatternGo() languagePattern {
 	}
 }
 
+const jsDeclareLanguageKindPattern = `(async\s+function|function|abstract\s+class|class|const|interface|type|enum)`
+
+func jsDeclareLanguagePatterns(prefix string) []string {
+	return []string{
+		`^` + prefix + `\s+` + jsDeclareLanguageKindPattern + `\s+`,
+	}
+}
+
 func defaultLanguagePatternJavaScript() languagePattern {
+	patterns := jsDeclareLanguagePatterns(`export\s+declare`)
+	patterns = append(patterns, jsDeclareLanguagePatterns(`declare`)...)
+	patterns = append(patterns, []string{
+		`^export\s+(function|class|const|interface|type|enum|abstract\s+class)\s+`,
+		`^export\s+default\s+(function|class)\s+`,
+		`^(async\s+)?function\s+[A-Za-z0-9_]+`,
+		`^class\s+[A-Za-z0-9_]+`,
+		`^(const|let)\s+[A-Za-z0-9_]+\s*=`,
+		`^interface\s+[A-Za-z0-9_]+`,
+	}...)
+
 	return languagePattern{
 		Extensions: []string{".ts", ".tsx", ".js", ".jsx", ".mjs"},
-		Patterns: []string{
-			`^export\s+(function|class|const|interface|type|enum|abstract\s+class)\s+`,
-			`^export\s+default\s+(function|class)\s+`,
-			`^(async\s+)?function\s+[A-Za-z0-9_]+`,
-			`^class\s+[A-Za-z0-9_]+`,
-			`^(const|let)\s+[A-Za-z0-9_]+\s*=`,
-			`^interface\s+[A-Za-z0-9_]+`,
-		},
+		Patterns:   patterns,
 	}
 }
 

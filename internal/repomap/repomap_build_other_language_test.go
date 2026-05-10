@@ -36,6 +36,7 @@ func TestBuild_TypeScriptProject(t *testing.T) {
 
 	root := t.TempDir()
 	writeProjectMapTestFile(t, root, "src/app.ts", "export interface Config {}\nexport class Builder {}\nexport function buildMap() {}\nexport  const buildUser = <T>(value: T): T => value\nexport\tfunction buildTeam() {}\nexport default function buildOrg() {}\nexport default class UserBuilder {}\n")
+	writeProjectMapTestFile(t, root, "src/types.d.ts", "export declare function buildDeclared(): string;\ndeclare class DeclaredBuilder {}\n")
 
 	pm := buildProjectMapForTest(t, root, 4000)
 	file := findFileEntry(t, pm, "src/app.ts")
@@ -51,6 +52,17 @@ func TestBuild_TypeScriptProject(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("TypeScript signatures missing %q from:\n%s", want, got)
+		}
+	}
+
+	declarationFile := findFileEntry(t, pm, "src/types.d.ts")
+	declarationSignatures := strings.Join(signatures(declarationFile), "\n")
+	for _, want := range []string{
+		"export declare function buildDeclared(): string;",
+		"declare class DeclaredBuilder",
+	} {
+		if !strings.Contains(declarationSignatures, want) {
+			t.Fatalf("TypeScript declaration signatures missing %q from:\n%s", want, declarationSignatures)
 		}
 	}
 }

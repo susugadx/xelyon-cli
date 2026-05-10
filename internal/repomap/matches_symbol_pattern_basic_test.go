@@ -18,6 +18,12 @@ func TestPatterns_TypeScript(t *testing.T) {
 	if !matchesSymbolPattern("app.ts", "export function buildMap() {") {
 		t.Fatal("TypeScript export function pattern did not match")
 	}
+	if !matchesSymbolPattern("types.d.ts", "export declare function buildMap(): string;") {
+		t.Fatal("TypeScript export declare function pattern did not match")
+	}
+	if !matchesSymbolPattern("types.d.ts", "declare class Builder {}") {
+		t.Fatal("TypeScript declare class pattern did not match")
+	}
 	if !matchesSymbolPattern("app.ts", "const buildArrow = () => {") {
 		t.Fatal("TypeScript arrow function pattern did not match")
 	}

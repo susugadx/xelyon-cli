@@ -1,20 +1,12 @@
 package search
 
 import (
-	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-const (
-	structuredTypeScriptImpactRouteTag            = "impact-structured-typescript-v1"
-	typeScriptImpactRecommendedReadLimit          = 5
-	typeScriptImpactRecommendedReadPerGroupLimit  = 1
-	typeScriptImpactHighNonTestReferenceThreshold = 8
-	typeScriptImpactMediumReferenceThreshold      = 4
-)
+const structuredTypeScriptImpactRouteTag = "impact-structured-typescript-v1"
 
 func tryStructuredTypeScriptImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) (string, bool) {
 	result, ok := tryExpandedStructuredTypeScriptImpactSearchResult(cache, opts)
@@ -101,7 +93,7 @@ func structuredTypeScriptImpactRoute(pattern string, opts SearchOptions) (search
 
 func normalizeStructuredTypeScriptImpactOptions(opts SearchOptions) (SearchOptions, bool) {
 	fileType := strings.ToLower(strings.TrimSpace(opts.FileType))
-	filePattern := filepath.ToSlash(strings.TrimSpace(opts.FilePattern))
+	filePattern := cleanStructuredTypeScriptFilePattern(opts.FilePattern)
 
 	switch fileType {
 	case "ts":
@@ -133,21 +125,10 @@ func normalizeStructuredTypeScriptImpactOptions(opts SearchOptions) (SearchOptio
 	}
 }
 
-func isTypeScriptSourceFilePath(path string) bool {
-	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(path)))
-	return ext == ".ts"
-}
-
-func isTypeScriptOnlyFilePattern(pattern string) bool {
-	pattern = strings.ToLower(filepath.ToSlash(strings.TrimSpace(pattern)))
-	if pattern == "" || strings.Contains(pattern, ".tsx") {
-		return false
-	}
-	return strings.HasSuffix(pattern, ".ts")
-}
-
 func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) symbolResolveResult {
 	defs := normalizeStructuredTypeScriptDefs(findGenericDefinitions(symbol, opts))
+	preferredDefs := preferStructuredTypeScriptImplementationDefs(defs)
+	defs = preferredDefs.defs
 	if len(defs) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
@@ -161,6 +142,7 @@ func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) 
 
 	def := defs[0]
 	refs := normalizeStructuredTypeScriptRefs(findGenericReferences(symbol, opts))
+	refs = filterStructuredTypeScriptSuppressedDeclarationRefs(refs, preferredDefs.suppressedDeclarationDefs)
 	filteredRefs := filterGenericRefs(refs, def)
 	classifiedRefs := typeScriptImpactRefsForDef(def, filteredRefs, opts, symbol)
 	bundle := buildTypeScriptImpactBundle(symbol, def, opts, classifiedRefs)
@@ -173,257 +155,4 @@ func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) 
 		Status: symbolResolveSingle,
 		Bundle: bundle,
 	}
-}
-
-func normalizeStructuredTypeScriptDefs(defs []genericSymbolDef) []genericSymbolDef {
-	normalized := make([]genericSymbolDef, len(defs))
-	for i, def := range defs {
-		normalized[i] = def
-		normalized[i].File = cleanStructuredTypeScriptDisplayPath(def.File)
-	}
-	return normalized
-}
-
-func normalizeStructuredTypeScriptRefs(refs []genericSymbolRef) []genericSymbolRef {
-	normalized := make([]genericSymbolRef, len(refs))
-	for i, ref := range refs {
-		normalized[i] = ref
-		normalized[i].File = cleanStructuredTypeScriptDisplayPath(ref.File)
-	}
-	return normalized
-}
-
-func cleanStructuredTypeScriptDisplayPath(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	clean := filepath.ToSlash(filepath.Clean(path))
-	if clean == "." {
-		return ""
-	}
-	return clean
-}
-
-func buildTypeScriptImpactBundle(symbol string, def genericSymbolDef, opts SearchOptions, refs typeScriptImpactRefs) *SymbolBundle {
-	rootPath := structuredTypeScriptImpactFileRoot(opts)
-	impact := buildTypeScriptImpactMetadata(def, refs, rootPath)
-	if impact == nil || len(impact.RecommendedReads) == 0 {
-		return nil
-	}
-
-	displayName := def.Name
-	if displayName == "" {
-		displayName = symbol
-	}
-	bundle := &SymbolBundle{
-		Identity: SymbolBundleIdentity{
-			Language:    "typescript",
-			Query:       symbol,
-			Canonical:   canonicalSymbolBundleKey("typescript", def.File, def.Line, displayName),
-			DisplayName: displayName,
-			Kind:        def.Kind,
-			File:        def.File,
-			Line:        def.Line,
-			EndLine:     def.Line,
-		},
-		Definition: SymbolBundleDefinition{
-			File:      def.File,
-			Line:      def.Line,
-			EndLine:   def.Line,
-			Signature: def.Signature,
-			Body:      []string{fmt.Sprintf("%d: %s", def.Line, def.Signature)},
-		},
-		Impact: impact,
-		Debug: SymbolBundleDebug{
-			Source:       "typescript-impact-structured",
-			FileRootPath: rootPath,
-		},
-	}
-
-	appendTypeScriptImpactSection(bundle, def, "imports", "Imports", refs.imports, jsImportLimit, false, rootPath, symbol)
-	appendTypeScriptImpactSection(bundle, def, "callers", "Callers", refs.callers, jsCallerLimit, false, rootPath, symbol)
-	appendTypeScriptImpactSection(bundle, def, "type_refs", "Type References", refs.typeRefs, jsTypeRefLimit, false, rootPath, symbol)
-	appendTypeScriptImpactSection(bundle, def, "references", "References", refs.others, genericRefLimit, false, rootPath, symbol)
-	appendTypeScriptImpactSection(bundle, def, "tests", "Related Tests", refs.allTests(), genericTestLimit, true, rootPath, symbol)
-
-	return bundle
-}
-
-func appendTypeScriptImpactSection(bundle *SymbolBundle, def genericSymbolDef, kind, title string, refs []genericSymbolRef, limit int, isTest bool, rootPath string, symbol string) {
-	items := typeScriptImpactItemsFromRefs(def, refs, kind, limit, isTest, rootPath, symbol)
-	if len(items) == 0 {
-		return
-	}
-
-	total := len(dedupeGenericRefs(refs))
-	bundle.Sections = append(bundle.Sections, SymbolBundleSection{
-		Kind:  kind,
-		Title: title,
-		Items: items,
-		Total: total,
-		More:  total > len(items),
-	})
-}
-
-func buildTypeScriptImpactMetadata(def genericSymbolDef, refs typeScriptImpactRefs, rootPath string) *SymbolBundleImpact {
-	impact := &SymbolBundleImpact{
-		RiskLevel:        classifyTypeScriptImpactRisk(def, refs),
-		RecommendedReads: make([]SymbolBundleItem, 0, typeScriptImpactRecommendedReadLimit),
-	}
-
-	seen := make(map[string]struct{}, typeScriptImpactRecommendedReadLimit)
-	add := func(item SymbolBundleItem) {
-		if item.File == "" || item.Line <= 0 || len(impact.RecommendedReads) >= typeScriptImpactRecommendedReadLimit {
-			return
-		}
-		key := fmt.Sprintf("%s:%d", item.File, item.Line)
-		if _, ok := seen[key]; ok {
-			return
-		}
-		seen[key] = struct{}{}
-		impact.RecommendedReads = append(impact.RecommendedReads, item)
-	}
-
-	add(typeScriptImpactDefinitionItem(def, rootPath))
-	for _, group := range typeScriptImpactRecommendedReadGroups(def, refs) {
-		for _, item := range typeScriptImpactItemsFromRefs(def, group.refs, group.kind, group.limit, group.isTest, rootPath, def.Name) {
-			add(item)
-		}
-	}
-
-	if len(impact.RecommendedReads) == 0 {
-		return nil
-	}
-	return impact
-}
-
-type typeScriptImpactReadGroup struct {
-	kind   string
-	refs   []genericSymbolRef
-	limit  int
-	isTest bool
-}
-
-func typeScriptImpactRecommendedReadGroups(def genericSymbolDef, refs typeScriptImpactRefs) []typeScriptImpactReadGroup {
-	importReferenceGroups := []typeScriptImpactReadGroup{
-		{kind: "imports", refs: refs.imports, limit: typeScriptImpactRecommendedReadPerGroupLimit},
-		{kind: "references", refs: refs.others, limit: typeScriptImpactRecommendedReadPerGroupLimit},
-	}
-	callerGroup := typeScriptImpactReadGroup{kind: "callers", refs: refs.callers, limit: typeScriptImpactRecommendedReadPerGroupLimit}
-	typeRefGroup := typeScriptImpactReadGroup{kind: "type_refs", refs: refs.typeRefs, limit: typeScriptImpactRecommendedReadPerGroupLimit}
-	directTestGroup := typeScriptImpactReadGroup{kind: "tests", refs: refs.directTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true}
-	nearbyTestGroup := typeScriptImpactReadGroup{kind: "tests", refs: refs.nearbyTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true}
-
-	if typeScriptImpactPrefersTypeRefs(def.Kind) {
-		groups := []typeScriptImpactReadGroup{typeRefGroup, directTestGroup}
-		groups = append(groups, importReferenceGroups...)
-		groups = append(groups, nearbyTestGroup)
-		return groups
-	}
-
-	groups := []typeScriptImpactReadGroup{callerGroup, directTestGroup}
-	groups = append(groups, importReferenceGroups...)
-	groups = append(groups, nearbyTestGroup)
-	return groups
-}
-
-func typeScriptImpactPrefersTypeRefs(kind string) bool {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "interface", "type":
-		return true
-	default:
-		return false
-	}
-}
-
-func typeScriptImpactItemsFromRefs(def genericSymbolDef, refs []genericSymbolRef, kind string, limit int, isTest bool, rootPath string, symbol string) []SymbolBundleItem {
-	selected := prioritizeGenericRefs(def, refs, limit, isTest)
-	if len(selected) == 0 {
-		return nil
-	}
-
-	items := make([]SymbolBundleItem, 0, len(selected))
-	for _, ref := range selected {
-		items = append(items, typeScriptImpactItemFromRef(kind, ref, rootPath, symbol, isTest))
-	}
-	return items
-}
-
-func typeScriptImpactDefinitionItem(def genericSymbolDef, rootPath string) SymbolBundleItem {
-	return SymbolBundleItem{
-		Kind:         "definition",
-		File:         def.File,
-		ResolvedPath: absoluteAffectedFilePathWithBase(def.File, rootPath),
-		Line:         def.Line,
-		EndLine:      def.Line,
-		Snippet:      strings.TrimSpace(def.Signature),
-		Name:         def.Name,
-	}
-}
-
-func typeScriptImpactItemFromRef(kind string, ref genericSymbolRef, rootPath string, symbol string, forceTest bool) SymbolBundleItem {
-	isTest := forceTest || ref.IsTest
-	name := strings.TrimSpace(symbol)
-	if isTest {
-		name = ""
-	}
-	return SymbolBundleItem{
-		Kind:         kind,
-		File:         ref.File,
-		ResolvedPath: absoluteAffectedFilePathWithBase(ref.File, rootPath),
-		Line:         ref.Line,
-		EndLine:      ref.Line,
-		Snippet:      strings.TrimSpace(ref.Snippet),
-		Name:         name,
-		IsTest:       isTest,
-	}
-}
-
-func classifyTypeScriptImpactRisk(def genericSymbolDef, refs typeScriptImpactRefs) string {
-	nonTestRefCount := len(dedupeGenericRefs(append(append(append(append([]genericSymbolRef(nil), refs.imports...), refs.callers...), refs.typeRefs...), refs.others...)))
-	hasTests := len(dedupeGenericRefs(refs.allTests())) > 0
-	exported := typeScriptDefinitionIsExported(def)
-	primaryRefCount := nonTestRefCount
-	if typeScriptImpactPrefersTypeRefs(def.Kind) {
-		primaryRefCount = len(dedupeGenericRefs(refs.typeRefs))
-	}
-
-	switch {
-	case !hasTests && nonTestRefCount >= typeScriptImpactHighNonTestReferenceThreshold:
-		return goImpactRiskHigh
-	case exported && !hasTests && primaryRefCount >= typeScriptImpactMediumReferenceThreshold:
-		return goImpactRiskHigh
-	case exported || !hasTests || nonTestRefCount >= typeScriptImpactMediumReferenceThreshold || primaryRefCount >= typeScriptImpactMediumReferenceThreshold:
-		return goImpactRiskMedium
-	default:
-		return goImpactRiskLow
-	}
-}
-
-func typeScriptDefinitionIsExported(def genericSymbolDef) bool {
-	fields := strings.Fields(def.Signature)
-	return len(fields) > 0 && fields[0] == "export"
-}
-
-func structuredTypeScriptImpactFileRoot(opts SearchOptions) string {
-	basis := resolveSearchPathBasisForOptions(opts)
-	if strings.TrimSpace(basis.MatchRoot) != "" {
-		return basis.MatchRoot
-	}
-	if strings.TrimSpace(basis.Workdir) != "" {
-		return basis.Workdir
-	}
-	return invocationCWDOrGetwd(opts)
-}
-
-func collectStructuredTypeScriptDefAffectedFiles(defs []genericSymbolDef, opts SearchOptions) []string {
-	rootPath := structuredTypeScriptImpactFileRoot(opts)
-	paths := make([]string, 0, len(defs))
-	for _, def := range defs {
-		if absPath := absoluteAffectedFilePathWithBase(def.File, rootPath); absPath != "" {
-			paths = append(paths, absPath)
-		}
-	}
-	return dedupePaths(paths)
 }

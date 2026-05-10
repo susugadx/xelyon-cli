@@ -15,6 +15,15 @@ func TestExtractSignatureMetadataForLang_RespectsLanguageFilter(t *testing.T) {
 	if name, kind, ok := ExtractSignatureMetadataForLang("const\tbuildMap = () => {}", "js"); !ok || name != "buildMap" || kind != "function" {
 		t.Fatalf("ExtractSignatureMetadataForLang(js tabbed arrow) = (%q, %q, %v), want buildMap/function/true", name, kind, ok)
 	}
+	if name, kind, ok := ExtractSignatureMetadataForLang("export declare function buildMap(id: string): string;", "js"); !ok || name != "buildMap" || kind != "function" {
+		t.Fatalf("ExtractSignatureMetadataForLang(js export declare function) = (%q, %q, %v), want buildMap/function/true", name, kind, ok)
+	}
+	if name, kind, ok := ExtractSignatureMetadataForLang("declare class Builder {}", "js"); !ok || name != "Builder" || kind != "class" {
+		t.Fatalf("ExtractSignatureMetadataForLang(js declare class) = (%q, %q, %v), want Builder/class/true", name, kind, ok)
+	}
+	if name, kind, ok := ExtractSignatureMetadataForLang("export declare interface BuildOptions { id: string }", "js"); !ok || name != "BuildOptions" || kind != "interface" {
+		t.Fatalf("ExtractSignatureMetadataForLang(js export declare interface) = (%q, %q, %v), want BuildOptions/interface/true", name, kind, ok)
+	}
 	if _, _, ok := ExtractSignatureMetadataForLang("export function buildMap() {}", "go"); ok {
 		t.Fatal("ExtractSignatureMetadataForLang(go) unexpectedly matched JS signature")
 	}

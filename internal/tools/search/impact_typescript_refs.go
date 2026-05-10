@@ -38,7 +38,7 @@ func (refs typeScriptImpactRefs) allTests() []genericSymbolRef {
 
 func findNearbyTypeScriptTests(def genericSymbolDef, opts SearchOptions, directTests []genericSymbolRef) []genericSymbolRef {
 	rootPath := structuredTypeScriptImpactFileRoot(opts)
-	if rootPath == "" || !isTypeScriptSourceFilePath(def.File) {
+	if rootPath == "" || !isTypeScriptImplementationFilePath(def.File) {
 		return nil
 	}
 

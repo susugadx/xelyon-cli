@@ -48,21 +48,25 @@ func extractJSArrowFunctionMetadata(sig string) (string, string, bool) {
 	}
 
 	rest = strings.TrimSpace(strings.TrimPrefix(rest, "="))
-	if next, ok := consumeJSKeyword(rest, "async"); ok {
+	if next, ok := consumeJSAsyncArrowModifier(rest); ok {
 		rest = next
 	}
 	if next, ok := consumeJSTypeParameters(rest); ok {
 		rest = next
 	}
-	if !strings.HasPrefix(rest, "(") {
-		return "", "", false
+
+	if strings.HasPrefix(rest, "(") {
+		closeIdx := strings.Index(rest, ")")
+		if closeIdx < 0 {
+			return "", "", false
+		}
+		if !strings.Contains(rest[closeIdx+1:], "=>") {
+			return "", "", false
+		}
+		return name, "function", true
 	}
 
-	closeIdx := strings.Index(rest, ")")
-	if closeIdx < 0 {
-		return "", "", false
-	}
-	if !strings.Contains(rest[closeIdx+1:], "=>") {
+	if !isJSSingleParamArrow(rest) {
 		return "", "", false
 	}
 
@@ -140,6 +144,52 @@ func indexJSAssignmentAfterTypeAnnotation(s string) int {
 		}
 	}
 	return -1
+}
+
+func isJSSingleParamArrow(s string) bool {
+	_, rest, ok := consumeJSIdentifierToken(strings.TrimSpace(s))
+	if !ok {
+		return false
+	}
+	rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
+	return strings.HasPrefix(rest, "=>")
+}
+
+func consumeJSAsyncArrowModifier(s string) (string, bool) {
+	next, ok := consumeJSKeyword(s, "async")
+	if !ok || strings.HasPrefix(next, "=>") {
+		return "", false
+	}
+	return next, true
+}
+
+func consumeJSIdentifierToken(s string) (string, string, bool) {
+	if s == "" {
+		return "", "", false
+	}
+
+	r, size := utf8.DecodeRuneInString(s)
+	if !isJSIdentifierStart(r) {
+		return "", "", false
+	}
+
+	end := size
+	for end < len(s) {
+		r, size = utf8.DecodeRuneInString(s[end:])
+		if !isJSIdentifierPart(r) {
+			break
+		}
+		end += size
+	}
+	return s[:end], s[end:], true
+}
+
+func isJSIdentifierStart(r rune) bool {
+	return r == '_' || r == '$' || unicode.IsLetter(r)
+}
+
+func isJSIdentifierPart(r rune) bool {
+	return isJSIdentifierStart(r) || unicode.IsDigit(r)
 }
 
 func consumeJSKeyword(s, keyword string) (string, bool) {
