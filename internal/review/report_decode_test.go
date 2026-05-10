@@ -86,13 +86,8 @@ func TestDecodeReviewReportJSONRejectsIncompleteNestedReportEntries(t *testing.T
 			errContains: "residual_risks[0].summary",
 		},
 		{
-			name: "has_findings report with empty finding",
-			data: replaceReviewReportJSONForDecodeTest(
-				t,
-				mustMarshalReviewReportForDecodeTest(t, newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)),
-				`"findings":[{"id":"finding-1","title":"finding"}]`,
-				`"findings":[{}]`,
-			),
+			name:        "has_findings report with empty finding",
+			data:        mustMarshalReviewReportForDecodeTest(t, newHasFindingsReportWithEmptyFindingForDecodeTest()),
 			errContains: "root_cause_groups[0].findings[0].title",
 		},
 		{
@@ -140,6 +135,12 @@ func newBlockedReportWithResidualRiskForDecodeTest() ReviewReport {
 func newCleanReportWithCheckedSurfaceForDecodeTest() ReviewReport {
 	report := newCleanReportForValidationTest(ReviewVerificationPartiallyVerified)
 	report.CheckedSurfaces = []ReviewSurfaceCoverage{{SurfaceID: "surface-1", Summary: "checked"}}
+	return report
+}
+
+func newHasFindingsReportWithEmptyFindingForDecodeTest() ReviewReport {
+	report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+	report.RootCauseGroups[0].Findings[0] = ReviewFinding{}
 	return report
 }
 

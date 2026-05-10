@@ -95,14 +95,14 @@ func reviewReportPromptContract() string {
 - "overall_verification_status" and group "verification_status" must be one of %q, %q, %q, %q, %q.
 - Root cause groups use: {"id","title","summary","severity","verification_status","fix_strategy","do_not_fix_by","verification_plan","findings","checked_surfaces","unverified_surfaces","residual_risks"}. "id" and "title" are required. Group IDs must be unique and contain no whitespace. Severity must be one of %q, %q, %q, %q, %q.
 - Findings use: {"id","title","summary","evidence_refs","checked_surfaces","unverified_surfaces","residual_risks"}. "title" is required. Finding IDs are optional but must be unique when provided and contain no whitespace.
-- Evidence refs use: {"kind","summary","probe_id","command_index","path","line","snippet"}. "kind" must be one of %q, %q, %q, %q, %q, %q. "probe_command" refs require both "probe_id" and zero-based "command_index". "line" must be non-negative; line > 0 requires "path". Paths must be canonical repo-relative evidence paths.
+- Evidence refs use: {"kind","summary","probe_id","command_index","path","line","snippet"}. "kind" must be one of %q, %q, %q, %q, %q, %q. "probe_command" refs require both "probe_id" and zero-based "command_index". "file", "diff", and "rule_file" refs require "path". "line" must be non-negative; line > 0 requires "path". Paths must be canonical repo-relative evidence paths.
 - Surface coverage entries use: {"surface_id","summary","evidence_refs"}. "surface_id" is required and must contain no whitespace.
 - Residual risks use: {"id","summary","suggested_mitigation","evidence_refs"}. "summary" is required.
 - Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries. Do not invent probe IDs. Probe summary modes must be one of %q, %q, %q. Probe and command statuses must be one of %q, %q, %q, %q, %q.
 
 Verdict contract:
 - %q: "overall_verification_status" must be %q or %q, and "root_cause_groups" must be empty.
-- %q: "overall_verification_status" must be %q or %q, at least one root cause group is required, and each group "verification_status" must be %q or %q.
+- %q: "overall_verification_status" must be %q or %q, at least one root cause group is required, and each group "verification_status" must be %q or %q. Each root cause group must include at least one "findings" item, non-empty "fix_strategy", and at least one "verification_plan" item. Each finding must include at least one "evidence_refs" item.
 - %q: "overall_verification_status" must be %q, %q, or %q, and the report must include a blocked reason in "summary", "unverified_surfaces", "residual_risks", or a blocked/timed-out/mutated probe summary.
 `,
 		ReviewReportSchemaVersionV1,

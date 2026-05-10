@@ -6,27 +6,9 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 const structuredGoImpactRouteTag = "impact-structured-go-v1"
-
-func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) (string, bool) {
-	ctx, ok := newStructuredGoImpactSearchContext(opts)
-	if !ok {
-		return "", false
-	}
-
-	if cached, ok := loadStructuredGoImpactCachedResult(cache, ctx, opts); ok {
-		return cached.Output, true
-	}
-
-	resolved, ok := resolveStructuredGoImpactWithContext(cache, ctx, opts)
-	if !ok {
-		return "", false
-	}
-	return resolved.Rendered, true
-}
 
 func shouldAttemptStructuredGoImpactSearch(opts SearchOptions, pattern string) bool {
 	if !strings.EqualFold(strings.TrimSpace(opts.Intent), "impact") {

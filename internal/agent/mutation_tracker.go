@@ -68,6 +68,9 @@ func (m *MutationTracker) RecordFileChangeForTurn(change *tools.FileChange, turn
 	if turnMutations != nil {
 		turnMutations.recordFileChange(*change)
 	}
+	if a.Runtime != nil && a.Runtime.TaskLedger != nil {
+		a.Runtime.TaskLedger.Recorder().RecordToolObservation(change)
+	}
 
 	if a.changeStorage != nil && a.session != nil {
 		if err := a.changeStorage.AppendChange(a.session.ID, toHistoryChangeRecordInput(*change)); err != nil {

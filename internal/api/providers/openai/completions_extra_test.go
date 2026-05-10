@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -41,10 +42,44 @@ func newOpenAISSEResponse(chunks ...string) *http.Response {
 	}
 }
 
-func TestProvider_IsFunctionCallingEnabledAlwaysTrue(t *testing.T) {
-	if !New("test-key").IsFunctionCallingEnabled() {
-		t.Fatal("IsFunctionCallingEnabled() should always be true for OpenAI provider")
+func TestProvider_IsFunctionCallingEnabled(t *testing.T) {
+	t.Run("env unset", func(t *testing.T) {
+		unsetOpenAIFunctionCallingEnv(t)
+		if !New("test-key").IsFunctionCallingEnabled() {
+			t.Fatal("IsFunctionCallingEnabled() = false, want true when OPENAI_FUNCTION_CALLING is unset")
+		}
+	})
+	t.Run("enabled", func(t *testing.T) {
+		t.Setenv("OPENAI_FUNCTION_CALLING", "1")
+		if !New("test-key").IsFunctionCallingEnabled() {
+			t.Fatal("IsFunctionCallingEnabled() = false, want true when OPENAI_FUNCTION_CALLING=1")
+		}
+	})
+	t.Run("disabled", func(t *testing.T) {
+		t.Setenv("OPENAI_FUNCTION_CALLING", "0")
+		if New("test-key").IsFunctionCallingEnabled() {
+			t.Fatal("IsFunctionCallingEnabled() = true, want false when OPENAI_FUNCTION_CALLING=0")
+		}
+	})
+}
+
+func unsetOpenAIFunctionCallingEnv(t *testing.T) {
+	t.Helper()
+	oldValue, hadValue := os.LookupEnv("OPENAI_FUNCTION_CALLING")
+	if err := os.Unsetenv("OPENAI_FUNCTION_CALLING"); err != nil {
+		t.Fatalf("unset OPENAI_FUNCTION_CALLING: %v", err)
 	}
+	t.Cleanup(func() {
+		if hadValue {
+			if err := os.Setenv("OPENAI_FUNCTION_CALLING", oldValue); err != nil {
+				t.Fatalf("restore OPENAI_FUNCTION_CALLING: %v", err)
+			}
+			return
+		}
+		if err := os.Unsetenv("OPENAI_FUNCTION_CALLING"); err != nil {
+			t.Fatalf("restore OPENAI_FUNCTION_CALLING: %v", err)
+		}
+	})
 }
 
 func TestHandleStreamingResponse_CombinesToolCallsAndUsage(t *testing.T) {
@@ -102,6 +137,8 @@ func TestHandleStreamingResponse_NullUsageDoesNotEmitZeroUsageOnToolCallsFinish(
 }
 
 func TestChatWithCompletions_RequestIncludesThinkingAndForcedToolChoice(t *testing.T) {
+	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
+
 	var captured openaicompat.ChatCompletionsRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
@@ -136,6 +173,33 @@ func TestChatWithCompletions_RequestIncludesThinkingAndForcedToolChoice(t *testi
 	function, ok := toolChoice["function"].(map[string]any)
 	if !ok || function["name"] != "custom_lookup" {
 		t.Fatalf("ToolChoice function = %#v, want custom_lookup", toolChoice["function"])
+	}
+}
+
+func TestChatWithCompletions_FunctionCallingDisabledOmitsToolFields(t *testing.T) {
+	t.Setenv("OPENAI_FUNCTION_CALLING", "0")
+
+	var captured map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		streamingHandler([]string{`{"choices":[{"delta":{"content":"ok"}}]}`})(w, r)
+	})
+	t.Setenv("OPENAI_API_URL", server.URL)
+
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	p.SetToolChoice("custom_lookup")
+
+	if _, err := p.chatWithCompletions(newOpenAITestContext(t, false), "System", []api.Message{{Role: "user", Content: "Hello"}}, "gpt-4-turbo"); err != nil {
+		t.Fatalf("chatWithCompletions() error = %v", err)
+	}
+	if _, ok := captured["tools"]; ok {
+		t.Fatalf("tools should be omitted when function calling is disabled: %#v", captured["tools"])
+	}
+	if _, ok := captured["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when function calling is disabled: %#v", captured["tool_choice"])
 	}
 }
 
