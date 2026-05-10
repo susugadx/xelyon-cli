@@ -17,6 +17,9 @@ func RenderReviewEvidenceMarkdown(bundle ReviewEvidenceBundle) string {
 	appendReviewEvidenceMarkdownGitStatus(&b, input)
 	appendReviewEvidenceMarkdownChangeInventory(&b, input)
 	appendReviewEvidenceMarkdownChangedFiles(&b, input)
+	appendReviewEvidenceMarkdownChangedFileContext(&b, input)
+	appendReviewEvidenceMarkdownRelatedContextFiles(&b, input)
+	appendReviewEvidenceMarkdownRelatedSearchHits(&b, input)
 	appendReviewEvidenceMarkdownRuleFiles(&b, input)
 	appendReviewEvidenceMarkdownDiffs(&b, input)
 	appendReviewEvidenceMarkdownUntrackedFiles(&b, input)
@@ -58,6 +61,31 @@ func appendReviewEvidenceMarkdownChangeInventory(b *strings.Builder, input Revie
 func appendReviewEvidenceMarkdownChangedFiles(b *strings.Builder, input ReviewEvidenceModelInput) {
 	appendReviewEvidenceMarkdownSection(b, "changed files")
 	appendReviewEvidenceMarkdownJSONFence(b, input.ChangedFiles)
+}
+
+func appendReviewEvidenceMarkdownChangedFileContext(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownContextFiles(b, "changed file context", "changed context file: ", input.ChangedFileContext)
+}
+
+func appendReviewEvidenceMarkdownRelatedContextFiles(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownContextFiles(b, "related tests/context files", "related context file: ", input.RelatedContextFiles)
+}
+
+func appendReviewEvidenceMarkdownContextFiles(b *strings.Builder, sectionTitle, subsectionPrefix string, files []ReviewEvidenceContextFileInput) {
+	appendReviewEvidenceMarkdownSection(b, sectionTitle)
+	appendReviewEvidenceMarkdownJSONFence(b, reviewEvidenceContextFileMetadataInputs(files))
+	for _, file := range files {
+		if file.Skipped {
+			continue
+		}
+		appendReviewEvidenceMarkdownSubsection(b, subsectionPrefix+file.Path)
+		appendReviewEvidenceMarkdownFence(b, "text", file.Content)
+	}
+}
+
+func appendReviewEvidenceMarkdownRelatedSearchHits(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "related search hits")
+	appendReviewEvidenceMarkdownJSONFence(b, input.RelatedSearchHits)
 }
 
 func appendReviewEvidenceMarkdownRuleFiles(b *strings.Builder, input ReviewEvidenceModelInput) {
@@ -117,6 +145,22 @@ func reviewEvidenceRuleFileMetadataInputs(files []ReviewEvidenceRuleFileInput) [
 	return result
 }
 
+func reviewEvidenceContextFileMetadataInputs(files []ReviewEvidenceContextFileInput) []reviewEvidenceContextFileMetadataInput {
+	result := make([]reviewEvidenceContextFileMetadataInput, 0, len(files))
+	for _, file := range files {
+		result = append(result, reviewEvidenceContextFileMetadataInput{
+			Path:       file.Path,
+			Role:       file.Role,
+			Truncated:  file.Truncated,
+			Skipped:    file.Skipped,
+			SkipReason: file.SkipReason,
+			SizeBytes:  file.SizeBytes,
+			ReadBytes:  file.ReadBytes,
+		})
+	}
+	return result
+}
+
 func reviewEvidenceUntrackedFileMetadataInputs(files []ReviewEvidenceUntrackedFileInput) []reviewEvidenceUntrackedFileMetadataInput {
 	result := make([]reviewEvidenceUntrackedFileMetadataInput, 0, len(files))
 	for _, file := range files {
@@ -136,6 +180,16 @@ type reviewEvidenceRuleFileMetadataInput struct {
 	Path      string `json:"path"`
 	Truncated bool   `json:"truncated"`
 	SizeBytes int64  `json:"size_bytes"`
+}
+
+type reviewEvidenceContextFileMetadataInput struct {
+	Path       string `json:"path"`
+	Role       string `json:"role"`
+	Truncated  bool   `json:"truncated"`
+	Skipped    bool   `json:"skipped"`
+	SkipReason string `json:"skip_reason"`
+	SizeBytes  int64  `json:"size_bytes"`
+	ReadBytes  int64  `json:"read_bytes"`
 }
 
 type reviewEvidenceUntrackedFileMetadataInput struct {

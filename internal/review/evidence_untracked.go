@@ -1,7 +1,6 @@
 package review
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 )
@@ -28,14 +27,6 @@ func buildReviewUntrackedFileEvidence(repoRoot string, paths []string, limits Re
 			return reviewUntrackedEvidence{}, err
 		}
 
-		lstatInfo, err := os.Lstat(absPath)
-		if err != nil {
-			return reviewUntrackedEvidence{}, fmt.Errorf("failed to stat untracked path %q: %w", relPath, err)
-		}
-		if lstatInfo.IsDir() {
-			continue
-		}
-
 		remainingTotal := limits.MaxTotalUntrackedBytes - totalRead
 		maxBytes := minReviewEvidenceInt64(limits.MaxUntrackedFileBytes, remainingTotal)
 		if maxBytes <= 0 {
@@ -43,7 +34,23 @@ func buildReviewUntrackedFileEvidence(repoRoot string, paths []string, limits Re
 			break
 		}
 
-		if lstatInfo.Mode()&os.ModeSymlink != 0 {
+		file := readReviewEvidenceRegularFile(reviewEvidenceRegularFileReadInput{
+			repoRoot: repoRoot,
+			absPath:  absPath,
+			relPath:  relPath,
+			maxBytes: maxBytes,
+		})
+		switch file.status {
+		case reviewEvidenceRegularFileReadMissing, reviewEvidenceRegularFileReadStatFailed:
+			if file.stage == reviewEvidenceRegularFileReadStageStat {
+				return reviewUntrackedEvidence{}, fmt.Errorf("failed to stat untracked file %q: %w", relPath, file.err)
+			}
+			return reviewUntrackedEvidence{}, fmt.Errorf("failed to stat untracked path %q: %w", relPath, file.err)
+		case reviewEvidenceRegularFileReadInvalidPath:
+			return reviewUntrackedEvidence{}, file.err
+		case reviewEvidenceRegularFileReadDir, reviewEvidenceRegularFileReadNonRegular:
+			continue
+		case reviewEvidenceRegularFileReadSymlink:
 			linkTarget, err := os.Readlink(absPath)
 			if err != nil {
 				return reviewUntrackedEvidence{}, fmt.Errorf("failed to read untracked symlink %q: %w", relPath, err)
@@ -64,45 +71,30 @@ func buildReviewUntrackedFileEvidence(repoRoot string, paths []string, limits Re
 				ReadBytes:  int64(len(snapshot)),
 			})
 			continue
-		}
-		if !lstatInfo.Mode().IsRegular() {
-			continue
-		}
-		if err := validateReviewEvidenceExistingPath(repoRoot, absPath, relPath); err != nil {
-			return reviewUntrackedEvidence{}, err
-		}
-
-		statInfo, err := os.Stat(absPath)
-		if err != nil {
-			return reviewUntrackedEvidence{}, fmt.Errorf("failed to stat untracked file %q: %w", relPath, err)
-		}
-		if statInfo.IsDir() || !statInfo.Mode().IsRegular() {
+		case reviewEvidenceRegularFileReadFailed:
+			return reviewUntrackedEvidence{}, fmt.Errorf("failed to read untracked file %q: %w", relPath, file.err)
+		case reviewEvidenceRegularFileReadOK:
+		default:
 			continue
 		}
 
-		data, truncated, err := readReviewEvidenceFilePrefix(absPath, maxBytes)
-		if err != nil {
-			return reviewUntrackedEvidence{}, fmt.Errorf("failed to read untracked file %q: %w", relPath, err)
-		}
 		totalBudgetLimited := maxBytes == remainingTotal
-		truncated = truncated || statInfo.Size() > maxBytes
-		if totalBudgetLimited && statInfo.Size() > maxBytes {
+		if totalBudgetLimited && file.sizeBytes > maxBytes {
 			evidence.SnapshotsTruncated = true
 		}
-		totalRead += int64(len(data))
+		totalRead += file.readBytes
 
-		binary := bytes.IndexByte(data, 0) >= 0
 		snapshot := ""
-		if !binary {
-			snapshot = string(data)
+		if !file.binary {
+			snapshot = string(file.data)
 		}
 		evidence.Files = append(evidence.Files, ReviewUntrackedFile{
 			Path:      relPath,
 			Snapshot:  snapshot,
-			Binary:    binary,
-			Truncated: truncated,
-			SizeBytes: statInfo.Size(),
-			ReadBytes: int64(len(data)),
+			Binary:    file.binary,
+			Truncated: file.truncated,
+			SizeBytes: file.sizeBytes,
+			ReadBytes: file.readBytes,
 		})
 	}
 

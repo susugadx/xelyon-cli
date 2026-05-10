@@ -70,9 +70,11 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 	fileCollector := reviewFileEvidenceCollector{
 		limits: b.limits,
 	}
-	fileEvidence, err := fileCollector.collectCurrentChanges(reviewFileEvidenceCollectionInput{
-		repoRoot:       repoRoot,
-		untrackedPaths: gitEvidence.untrackedPaths,
+	fileEvidence, err := fileCollector.collectCurrentChanges(ctx, reviewFileEvidenceCollectionInput{
+		repoRoot:              repoRoot,
+		changedFiles:          gitEvidence.changedFiles,
+		untrackedPaths:        gitEvidence.untrackedPaths,
+		relatedCandidatePaths: gitEvidence.relatedCandidatePaths,
 	})
 	if err != nil {
 		return ReviewEvidenceBundle{}, err
@@ -83,18 +85,23 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 
 func buildReviewCurrentChangesBundle(repoRoot, cwd string, git reviewCurrentChangesGitEvidence, files reviewCurrentChangesFileEvidence, limits ReviewEvidenceLimits) ReviewEvidenceBundle {
 	return ReviewEvidenceBundle{
-		TargetKind:                  TargetCurrentChanges,
-		RepoRoot:                    repoRoot,
-		CWD:                         cwd,
-		StatusShort:                 git.statusShort,
-		StatusShortTruncated:        git.statusShortTruncated,
-		Diffs:                       git.diffs,
-		ChangedFiles:                git.changedFiles,
-		UntrackedFiles:              files.untrackedFiles,
-		UntrackedListTruncated:      git.untrackedListTruncated,
-		UntrackedSnapshotsTruncated: files.untrackedSnapshotsTruncated,
-		RuleFiles:                   files.ruleFiles,
-		Inventory:                   buildReviewChangeInventory(git.changedFiles, git.untrackedPaths),
-		Limits:                      limits,
+		TargetKind:                    TargetCurrentChanges,
+		RepoRoot:                      repoRoot,
+		CWD:                           cwd,
+		StatusShort:                   git.statusShort,
+		StatusShortTruncated:          git.statusShortTruncated,
+		Diffs:                         git.diffs,
+		ChangedFiles:                  git.changedFiles,
+		ChangedFileContext:            files.changedFileContext,
+		RelatedContextFiles:           files.relatedContextFiles,
+		RelatedSearchHits:             files.relatedSearchHits,
+		UntrackedFiles:                files.untrackedFiles,
+		RelatedCandidateListTruncated: git.relatedCandidateListTruncated,
+		RelatedSearchTruncated:        files.relatedSearchTruncated,
+		UntrackedListTruncated:        git.untrackedListTruncated,
+		UntrackedSnapshotsTruncated:   files.untrackedSnapshotsTruncated,
+		RuleFiles:                     files.ruleFiles,
+		Inventory:                     buildReviewChangeInventory(git.changedFiles, git.untrackedPaths),
+		Limits:                        limits,
 	}
 }

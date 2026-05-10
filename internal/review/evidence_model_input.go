@@ -5,17 +5,20 @@ const reviewEvidenceRepoRootPathDisplay = "<repo_root>"
 // ReviewEvidenceModelInput は ReviewEvidenceBundle を LLM 入力向けに正規化した DTO。
 // Evidence renderer は収集済み bundle の整形だけを担当し、evidence 収集は行わない。
 type ReviewEvidenceModelInput struct {
-	TargetKind      TargetKind                         `json:"target_kind"`
-	RepoRoot        string                             `json:"repo_root"`
-	CWDDisplay      string                             `json:"cwd_display"`
-	GitStatusShort  ReviewEvidenceTextBlock            `json:"git_status_short"`
-	ChangeInventory ReviewEvidenceChangeInventoryInput `json:"change_inventory"`
-	ChangedFiles    []ReviewEvidenceChangedFileInput   `json:"changed_files"`
-	RuleFiles       []ReviewEvidenceRuleFileInput      `json:"rule_files"`
-	Diffs           []ReviewEvidenceDiffInput          `json:"diffs"`
-	UntrackedFiles  []ReviewEvidenceUntrackedFileInput `json:"untracked_files"`
-	Limits          ReviewEvidenceLimitsInput          `json:"limits"`
-	TruncationFlags ReviewEvidenceTruncationFlagsInput `json:"truncation_flags"`
+	TargetKind          TargetKind                            `json:"target_kind"`
+	RepoRoot            string                                `json:"repo_root"`
+	CWDDisplay          string                                `json:"cwd_display"`
+	GitStatusShort      ReviewEvidenceTextBlock               `json:"git_status_short"`
+	ChangeInventory     ReviewEvidenceChangeInventoryInput    `json:"change_inventory"`
+	ChangedFiles        []ReviewEvidenceChangedFileInput      `json:"changed_files"`
+	ChangedFileContext  []ReviewEvidenceContextFileInput      `json:"changed_file_context"`
+	RelatedContextFiles []ReviewEvidenceContextFileInput      `json:"related_context_files"`
+	RelatedSearchHits   []ReviewEvidenceRelatedSearchHitInput `json:"related_search_hits"`
+	RuleFiles           []ReviewEvidenceRuleFileInput         `json:"rule_files"`
+	Diffs               []ReviewEvidenceDiffInput             `json:"diffs"`
+	UntrackedFiles      []ReviewEvidenceUntrackedFileInput    `json:"untracked_files"`
+	Limits              ReviewEvidenceLimitsInput             `json:"limits"`
+	TruncationFlags     ReviewEvidenceTruncationFlagsInput    `json:"truncation_flags"`
 }
 
 // ReviewEvidenceTextBlock は本文と truncation flag を組にした DTO。
@@ -31,6 +34,26 @@ type ReviewEvidenceChangedFileInput struct {
 	Status   string `json:"status"`
 	Staged   bool   `json:"staged"`
 	Unstaged bool   `json:"unstaged"`
+}
+
+// ReviewEvidenceContextFileInput は context file evidence を LLM 入力向けに表す。
+type ReviewEvidenceContextFileInput struct {
+	Path       string `json:"path"`
+	Role       string `json:"role"`
+	Content    string `json:"content"`
+	Truncated  bool   `json:"truncated"`
+	Skipped    bool   `json:"skipped"`
+	SkipReason string `json:"skip_reason"`
+	SizeBytes  int64  `json:"size_bytes"`
+	ReadBytes  int64  `json:"read_bytes"`
+}
+
+// ReviewEvidenceRelatedSearchHitInput は search hit evidence を LLM 入力向けに表す。
+type ReviewEvidenceRelatedSearchHitInput struct {
+	Path    string `json:"path"`
+	Line    int    `json:"line"`
+	Snippet string `json:"snippet"`
+	Reason  string `json:"reason"`
 }
 
 // ReviewEvidenceChangeInventoryInput は変更 surface の一覧を LLM 入力向けに表す。
@@ -76,22 +99,35 @@ type ReviewEvidenceUntrackedFileInput struct {
 
 // ReviewEvidenceLimitsInput は resource budget を JSON 安定表現にした DTO。
 type ReviewEvidenceLimitsInput struct {
-	MaxCommandOutputBytes  int64 `json:"max_command_output_bytes"`
-	MaxUntrackedFileBytes  int64 `json:"max_untracked_file_bytes"`
-	MaxRuleFileBytes       int64 `json:"max_rule_file_bytes"`
-	MaxTotalUntrackedBytes int64 `json:"max_total_untracked_bytes"`
-	MaxUntrackedFiles      int   `json:"max_untracked_files"`
-	CommandTimeoutMS       int64 `json:"command_timeout_ms"`
+	MaxCommandOutputBytes      int64 `json:"max_command_output_bytes"`
+	MaxUntrackedFileBytes      int64 `json:"max_untracked_file_bytes"`
+	MaxRuleFileBytes           int64 `json:"max_rule_file_bytes"`
+	MaxTotalUntrackedBytes     int64 `json:"max_total_untracked_bytes"`
+	MaxUntrackedFiles          int   `json:"max_untracked_files"`
+	MaxContextFileBytes        int64 `json:"max_context_file_bytes"`
+	MaxTotalContextBytes       int64 `json:"max_total_context_bytes"`
+	MaxContextFiles            int   `json:"max_context_files"`
+	MaxRelatedSearchTerms      int   `json:"max_related_search_terms"`
+	MaxRelatedSearchFiles      int   `json:"max_related_search_files"`
+	MaxTotalRelatedSearchBytes int64 `json:"max_total_related_search_bytes"`
+	MaxRelatedSearchFileBytes  int64 `json:"max_related_search_file_bytes"`
+	MaxRelatedSearchHits       int   `json:"max_related_search_hits"`
+	MaxSearchSnippetBytes      int64 `json:"max_search_snippet_bytes"`
+	CommandTimeoutMS           int64 `json:"command_timeout_ms"`
 }
 
 // ReviewEvidenceTruncationFlagsInput は bundle 全体の truncation 状態を固定順序で表す。
 type ReviewEvidenceTruncationFlagsInput struct {
-	StatusShort        bool                                `json:"status_short"`
-	Diffs              []ReviewEvidenceDiffTruncationInput `json:"diffs"`
-	UntrackedList      bool                                `json:"untracked_list"`
-	UntrackedSnapshots bool                                `json:"untracked_snapshots"`
-	UntrackedFiles     []ReviewEvidencePathTruncationInput `json:"untracked_files"`
-	RuleFiles          []ReviewEvidencePathTruncationInput `json:"rule_files"`
+	StatusShort         bool                                `json:"status_short"`
+	Diffs               []ReviewEvidenceDiffTruncationInput `json:"diffs"`
+	UntrackedList       bool                                `json:"untracked_list"`
+	RelatedCandidates   bool                                `json:"related_candidates"`
+	RelatedSearch       bool                                `json:"related_search"`
+	UntrackedSnapshots  bool                                `json:"untracked_snapshots"`
+	UntrackedFiles      []ReviewEvidencePathTruncationInput `json:"untracked_files"`
+	RuleFiles           []ReviewEvidencePathTruncationInput `json:"rule_files"`
+	ChangedFileContext  []ReviewEvidencePathTruncationInput `json:"changed_file_context"`
+	RelatedContextFiles []ReviewEvidencePathTruncationInput `json:"related_context_files"`
 }
 
 // ReviewEvidenceDiffTruncationInput は diff ごとの truncation 状態を表す。
@@ -121,13 +157,16 @@ func BuildReviewEvidenceModelInput(bundle ReviewEvidenceBundle) ReviewEvidenceMo
 			Content:   bundle.StatusShort,
 			Truncated: bundle.StatusShortTruncated,
 		},
-		ChangeInventory: buildReviewEvidenceChangeInventoryInput(repoRoot, bundle.Inventory),
-		ChangedFiles:    buildReviewEvidenceChangedFileInputs(repoRoot, bundle.ChangedFiles),
-		RuleFiles:       buildReviewEvidenceRuleFileInputs(repoRoot, bundle.RuleFiles),
-		Diffs:           buildReviewEvidenceDiffInputs(bundle.Diffs),
-		UntrackedFiles:  buildReviewEvidenceUntrackedFileInputs(repoRoot, bundle.UntrackedFiles),
-		Limits:          buildReviewEvidenceLimitsInput(bundle.Limits),
-		TruncationFlags: buildReviewEvidenceTruncationFlagsInput(repoRoot, bundle),
+		ChangeInventory:     buildReviewEvidenceChangeInventoryInput(repoRoot, bundle.Inventory),
+		ChangedFiles:        buildReviewEvidenceChangedFileInputs(repoRoot, bundle.ChangedFiles),
+		ChangedFileContext:  buildReviewEvidenceContextFileInputs(repoRoot, bundle.ChangedFileContext),
+		RelatedContextFiles: buildReviewEvidenceContextFileInputs(repoRoot, bundle.RelatedContextFiles),
+		RelatedSearchHits:   buildReviewEvidenceRelatedSearchHitInputs(repoRoot, bundle.RelatedSearchHits),
+		RuleFiles:           buildReviewEvidenceRuleFileInputs(repoRoot, bundle.RuleFiles),
+		Diffs:               buildReviewEvidenceDiffInputs(bundle.Diffs),
+		UntrackedFiles:      buildReviewEvidenceUntrackedFileInputs(repoRoot, bundle.UntrackedFiles),
+		Limits:              buildReviewEvidenceLimitsInput(bundle.Limits),
+		TruncationFlags:     buildReviewEvidenceTruncationFlagsInput(repoRoot, bundle),
 	}
 }
 
@@ -154,6 +193,36 @@ func buildReviewEvidenceChangedFileInputs(repoRoot string, files []ReviewChanged
 			Status:   file.Status,
 			Staged:   file.Staged,
 			Unstaged: file.Unstaged,
+		})
+	}
+	return result
+}
+
+func buildReviewEvidenceContextFileInputs(repoRoot string, files []ReviewContextFileEvidence) []ReviewEvidenceContextFileInput {
+	result := make([]ReviewEvidenceContextFileInput, 0, len(files))
+	for _, file := range files {
+		result = append(result, ReviewEvidenceContextFileInput{
+			Path:       formatReviewEvidencePathDisplay(repoRoot, file.Path),
+			Role:       file.Role,
+			Content:    file.Content,
+			Truncated:  file.Truncated,
+			Skipped:    file.Skipped,
+			SkipReason: file.SkipReason,
+			SizeBytes:  file.SizeBytes,
+			ReadBytes:  file.ReadBytes,
+		})
+	}
+	return result
+}
+
+func buildReviewEvidenceRelatedSearchHitInputs(repoRoot string, hits []ReviewRelatedSearchHit) []ReviewEvidenceRelatedSearchHitInput {
+	result := make([]ReviewEvidenceRelatedSearchHitInput, 0, len(hits))
+	for _, hit := range hits {
+		result = append(result, ReviewEvidenceRelatedSearchHitInput{
+			Path:    formatReviewEvidencePathDisplay(repoRoot, hit.Path),
+			Line:    hit.Line,
+			Snippet: hit.Snippet,
+			Reason:  hit.Reason,
 		})
 	}
 	return result
@@ -213,12 +282,21 @@ func buildReviewEvidenceUntrackedFileInputs(repoRoot string, files []ReviewUntra
 
 func buildReviewEvidenceLimitsInput(limits ReviewEvidenceLimits) ReviewEvidenceLimitsInput {
 	return ReviewEvidenceLimitsInput{
-		MaxCommandOutputBytes:  limits.MaxCommandOutputBytes,
-		MaxUntrackedFileBytes:  limits.MaxUntrackedFileBytes,
-		MaxRuleFileBytes:       limits.MaxRuleFileBytes,
-		MaxTotalUntrackedBytes: limits.MaxTotalUntrackedBytes,
-		MaxUntrackedFiles:      limits.MaxUntrackedFiles,
-		CommandTimeoutMS:       limits.CommandTimeout.Milliseconds(),
+		MaxCommandOutputBytes:      limits.MaxCommandOutputBytes,
+		MaxUntrackedFileBytes:      limits.MaxUntrackedFileBytes,
+		MaxRuleFileBytes:           limits.MaxRuleFileBytes,
+		MaxTotalUntrackedBytes:     limits.MaxTotalUntrackedBytes,
+		MaxUntrackedFiles:          limits.MaxUntrackedFiles,
+		MaxContextFileBytes:        limits.MaxContextFileBytes,
+		MaxTotalContextBytes:       limits.MaxTotalContextBytes,
+		MaxContextFiles:            limits.MaxContextFiles,
+		MaxRelatedSearchTerms:      limits.MaxRelatedSearchTerms,
+		MaxRelatedSearchFiles:      limits.MaxRelatedSearchFiles,
+		MaxTotalRelatedSearchBytes: limits.MaxTotalRelatedSearchBytes,
+		MaxRelatedSearchFileBytes:  limits.MaxRelatedSearchFileBytes,
+		MaxRelatedSearchHits:       limits.MaxRelatedSearchHits,
+		MaxSearchSnippetBytes:      limits.MaxSearchSnippetBytes,
+		CommandTimeoutMS:           limits.CommandTimeout.Milliseconds(),
 	}
 }
 
@@ -227,9 +305,21 @@ func buildReviewEvidenceTruncationFlagsInput(repoRoot string, bundle ReviewEvide
 		StatusShort:        bundle.StatusShortTruncated,
 		Diffs:              buildReviewEvidenceDiffTruncationInputs(bundle.Diffs),
 		UntrackedList:      bundle.UntrackedListTruncated,
+		RelatedCandidates:  bundle.RelatedCandidateListTruncated,
+		RelatedSearch:      bundle.RelatedSearchTruncated,
 		UntrackedSnapshots: bundle.UntrackedSnapshotsTruncated,
-		UntrackedFiles:     buildReviewEvidenceUntrackedTruncationInputs(repoRoot, bundle.UntrackedFiles),
-		RuleFiles:          buildReviewEvidenceRuleFileTruncationInputs(repoRoot, bundle.RuleFiles),
+		UntrackedFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.UntrackedFiles, func(file ReviewUntrackedFile) (string, bool) {
+			return file.Path, file.Truncated
+		}),
+		RuleFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.RuleFiles, func(file ReviewRuleFileEvidence) (string, bool) {
+			return file.Path, file.Truncated
+		}),
+		ChangedFileContext: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.ChangedFileContext, func(file ReviewContextFileEvidence) (string, bool) {
+			return file.Path, file.Truncated
+		}),
+		RelatedContextFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.RelatedContextFiles, func(file ReviewContextFileEvidence) (string, bool) {
+			return file.Path, file.Truncated
+		}),
 	}
 }
 
@@ -246,23 +336,13 @@ func buildReviewEvidenceDiffTruncationInputs(diffs []ReviewDiffEvidence) []Revie
 	return result
 }
 
-func buildReviewEvidenceUntrackedTruncationInputs(repoRoot string, files []ReviewUntrackedFile) []ReviewEvidencePathTruncationInput {
+func buildReviewEvidencePathTruncationInputs[T any](repoRoot string, files []T, mapper func(T) (string, bool)) []ReviewEvidencePathTruncationInput {
 	result := make([]ReviewEvidencePathTruncationInput, 0, len(files))
 	for _, file := range files {
+		path, truncated := mapper(file)
 		result = append(result, ReviewEvidencePathTruncationInput{
-			Path:      formatReviewEvidencePathDisplay(repoRoot, file.Path),
-			Truncated: file.Truncated,
-		})
-	}
-	return result
-}
-
-func buildReviewEvidenceRuleFileTruncationInputs(repoRoot string, files []ReviewRuleFileEvidence) []ReviewEvidencePathTruncationInput {
-	result := make([]ReviewEvidencePathTruncationInput, 0, len(files))
-	for _, file := range files {
-		result = append(result, ReviewEvidencePathTruncationInput{
-			Path:      formatReviewEvidencePathDisplay(repoRoot, file.Path),
-			Truncated: file.Truncated,
+			Path:      formatReviewEvidencePathDisplay(repoRoot, path),
+			Truncated: truncated,
 		})
 	}
 	return result

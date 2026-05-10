@@ -21,6 +21,9 @@ func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) 
 		"## git status --short\n",
 		"## change inventory\n",
 		"## changed files\n",
+		"## changed file context\n",
+		"## related tests/context files\n",
+		"## related search hits\n",
 		"## rule files\n",
 		"## diffs\n",
 		"## untracked files\n",
@@ -44,6 +47,8 @@ func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) 
 	for _, want := range []string{
 		`"status_short": true`,
 		`"untracked_list": true`,
+		`"related_candidates": true`,
+		`"related_search": true`,
 		`"untracked_snapshots": true`,
 		`"diff": true`,
 		`"path": "AGENTS.md"`,
@@ -371,6 +376,15 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	if input.ChangedFiles == nil {
 		t.Fatal("ChangedFiles = nil, want empty slice")
 	}
+	if input.ChangedFileContext == nil {
+		t.Fatal("ChangedFileContext = nil, want empty slice")
+	}
+	if input.RelatedContextFiles == nil {
+		t.Fatal("RelatedContextFiles = nil, want empty slice")
+	}
+	if input.RelatedSearchHits == nil {
+		t.Fatal("RelatedSearchHits = nil, want empty slice")
+	}
 	if input.RuleFiles == nil {
 		t.Fatal("RuleFiles = nil, want empty slice")
 	}
@@ -389,6 +403,12 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	if input.TruncationFlags.RuleFiles == nil {
 		t.Fatal("TruncationFlags.RuleFiles = nil, want empty slice")
 	}
+	if input.TruncationFlags.ChangedFileContext == nil {
+		t.Fatal("TruncationFlags.ChangedFileContext = nil, want empty slice")
+	}
+	if input.TruncationFlags.RelatedContextFiles == nil {
+		t.Fatal("TruncationFlags.RelatedContextFiles = nil, want empty slice")
+	}
 
 	data, err := RenderReviewEvidenceJSON(ReviewEvidenceBundle{})
 	if err != nil {
@@ -397,6 +417,9 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	payload := string(data)
 	for _, want := range []string{
 		`"changed_files": []`,
+		`"changed_file_context": []`,
+		`"related_context_files": []`,
+		`"related_search_hits": []`,
 		`"rule_files": []`,
 		`"diffs": []`,
 		`"untracked_files": []`,
@@ -409,6 +432,9 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	markdown := RenderReviewEvidenceMarkdown(ReviewEvidenceBundle{})
 	for _, want := range []string{
 		"## git status --short\n```text\n",
+		"## changed file context\n```json\n[]\n```",
+		"## related tests/context files\n```json\n[]\n```",
+		"## related search hits\n```json\n[]\n```",
 		"## diffs\n```json\n[]\n```",
 		"## untracked files\n```json\n[]\n```",
 	} {
@@ -456,6 +482,33 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 				Unstaged: true,
 			},
 		},
+		ChangedFileContext: []ReviewContextFileEvidence{
+			{
+				Path:      filepath.Join(repo, "src", "main.go"),
+				Role:      reviewContextFileRoleChanged,
+				Content:   "package src\n\nfunc Run() {}\n",
+				Truncated: true,
+				SizeBytes: 256,
+				ReadBytes: 128,
+			},
+		},
+		RelatedContextFiles: []ReviewContextFileEvidence{
+			{
+				Path:      filepath.Join(repo, "src", "main_test.go"),
+				Role:      reviewContextFileRoleRelatedTest,
+				Content:   "package src\n\nfunc TestRun(t *testing.T) {}\n",
+				SizeBytes: 96,
+				ReadBytes: 96,
+			},
+		},
+		RelatedSearchHits: []ReviewRelatedSearchHit{
+			{
+				Path:    filepath.Join(repo, "src", "helper.go"),
+				Line:    7,
+				Snippet: "func helper() { Run() }",
+				Reason:  "symbol:Run",
+			},
+		},
 		UntrackedFiles: []ReviewUntrackedFile{
 			{
 				Path:      filepath.Join(repo, "notes.md"),
@@ -465,8 +518,10 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 				ReadBytes: 32,
 			},
 		},
-		UntrackedListTruncated:      true,
-		UntrackedSnapshotsTruncated: true,
+		RelatedCandidateListTruncated: true,
+		RelatedSearchTruncated:        true,
+		UntrackedListTruncated:        true,
+		UntrackedSnapshotsTruncated:   true,
 		RuleFiles: []ReviewRuleFileEvidence{
 			{
 				Path:      filepath.Join(repo, "AGENTS.md"),
@@ -484,12 +539,21 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 			Untracked: []string{filepath.Join(repo, "notes.md")},
 		},
 		Limits: ReviewEvidenceLimits{
-			MaxCommandOutputBytes:  1024,
-			MaxUntrackedFileBytes:  64,
-			MaxRuleFileBytes:       128,
-			MaxTotalUntrackedBytes: 256,
-			MaxUntrackedFiles:      3,
-			CommandTimeout:         1500 * time.Millisecond,
+			MaxCommandOutputBytes:      1024,
+			MaxUntrackedFileBytes:      64,
+			MaxRuleFileBytes:           128,
+			MaxTotalUntrackedBytes:     256,
+			MaxUntrackedFiles:          3,
+			MaxContextFileBytes:        512,
+			MaxTotalContextBytes:       1024,
+			MaxContextFiles:            4,
+			MaxRelatedSearchTerms:      5,
+			MaxRelatedSearchFiles:      6,
+			MaxTotalRelatedSearchBytes: 2048,
+			MaxRelatedSearchFileBytes:  256,
+			MaxRelatedSearchHits:       6,
+			MaxSearchSnippetBytes:      120,
+			CommandTimeout:             1500 * time.Millisecond,
 		},
 	}
 }
