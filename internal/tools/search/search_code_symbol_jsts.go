@@ -76,9 +76,10 @@ func classifyJSFamilySymbolRefs(refs []genericSymbolRef, symbol string) jsFamily
 // 判定順: import → caller → type ref → other（最初にマッチした分類に入る）。
 func classifyJSRefs(refs []genericSymbolRef, symbol string) (imports, callers, typeRefs, others []genericSymbolRef) {
 	escaped := regexp.QuoteMeta(symbol)
-	importPat := regexp.MustCompile(`(?:^|\s)(?:import\s|from\s|require\s*\(|export\s+.*\sfrom\s)`)
-	callerPat := regexp.MustCompile(`(?:\b` + escaped + `\s*\(|\bnew\s+` + escaped + `\b)`)
-	typePat := regexp.MustCompile(`(?::\s*` + escaped + `\b|<` + escaped + `\b|extends\s+` + escaped + `\b|implements\s+` + escaped + `\b)`)
+	importPat := regexp.MustCompile(`(?:^|\s)(?:import\s|from\s|require\s*\(|export\s+(?:type\s+)?\{|export\s+.*\sfrom\s)`)
+	callerPat := regexp.MustCompile(`(?:\b` + escaped + `\s*(?:\?\.)?\s*\(|\bnew\s+` + escaped + `\b)`)
+	typePat := regexp.MustCompile(`(?::\s*` + escaped + `\b|\bas\s+` + escaped + `\b|\bsatisfies\s+` + escaped + `\b|extends\s+` + escaped + `\b|implements\s+` + escaped + `\b|<\s*` + escaped + `\b|\b` + escaped + `\s*\[\])`)
+	genericTypeArgPat := regexp.MustCompile(`<[^>\n]*,\s*` + escaped + `\b[^>\n]*>`)
 
 	for _, ref := range refs {
 		s := ref.Snippet
@@ -87,7 +88,7 @@ func classifyJSRefs(refs []genericSymbolRef, symbol string) (imports, callers, t
 			imports = append(imports, ref)
 		case callerPat.MatchString(s):
 			callers = append(callers, ref)
-		case typePat.MatchString(s):
+		case typePat.MatchString(s) || genericTypeArgPat.MatchString(s):
 			typeRefs = append(typeRefs, ref)
 		default:
 			others = append(others, ref)

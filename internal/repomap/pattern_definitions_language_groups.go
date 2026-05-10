@@ -16,12 +16,12 @@ func defaultLanguagePatternJavaScript() languagePattern {
 	return languagePattern{
 		Extensions: []string{".ts", ".tsx", ".js", ".jsx", ".mjs"},
 		Patterns: []string{
-			`^export (function|class|const|interface|type|enum|abstract class) `,
-			`^export default (function|class) `,
-			`^(async )?function [A-Za-z0-9_]+`,
-			`^class [A-Za-z0-9_]+`,
-			`^(const|let) [A-Za-z0-9_]+ = `,
-			`^interface [A-Za-z0-9_]+`,
+			`^export\s+(function|class|const|interface|type|enum|abstract\s+class)\s+`,
+			`^export\s+default\s+(function|class)\s+`,
+			`^(async\s+)?function\s+[A-Za-z0-9_]+`,
+			`^class\s+[A-Za-z0-9_]+`,
+			`^(const|let)\s+[A-Za-z0-9_]+\s*=`,
+			`^interface\s+[A-Za-z0-9_]+`,
 		},
 	}
 }

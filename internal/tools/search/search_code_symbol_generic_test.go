@@ -222,21 +222,30 @@ func TestClassifyJSRefs(t *testing.T) {
 		{File: "handler.ts", Line: 3, Snippet: "UserService()"},
 		{File: "types.ts", Line: 1, Snippet: "class Admin extends UserService {"},
 		{File: "types.ts", Line: 2, Snippet: "interface Foo<UserService> {"},
+		{File: "types.ts", Line: 3, Snippet: "const maybe = UserService?.(db)"},
+		{File: "types.ts", Line: 4, Snippet: "const typed = value as UserService"},
+		{File: "types.ts", Line: 5, Snippet: "const checked = value satisfies UserService"},
+		{File: "types.ts", Line: 6, Snippet: "const list: UserService[] = []"},
+		{File: "types.ts", Line: 7, Snippet: "const array: Array<UserService> = []"},
+		{File: "types.ts", Line: 8, Snippet: "const record: Record<string, UserService> = {}"},
+		{File: "types.ts", Line: 9, Snippet: "export type { UserService } from './service'"},
+		{File: "types.ts", Line: 10, Snippet: "export { UserService }"},
+		{File: "callbacks.ts", Line: 1, Snippet: `register("service", UserService)`},
 	}
 
 	imports, callers, typeRefs, others := classifyJSRefs(refs, "UserService")
 
-	if len(imports) != 2 {
-		t.Errorf("expected 2 imports, got %d: %+v", len(imports), imports)
+	if len(imports) != 4 {
+		t.Errorf("expected 4 imports, got %d: %+v", len(imports), imports)
 	}
-	if len(callers) != 2 {
-		t.Errorf("expected 2 callers (new + direct call), got %d: %+v", len(callers), callers)
+	if len(callers) != 3 {
+		t.Errorf("expected 3 callers (new + direct + optional call), got %d: %+v", len(callers), callers)
 	}
-	if len(typeRefs) != 3 {
-		t.Errorf("expected 3 type refs (: annotation + extends + generic), got %d: %+v", len(typeRefs), typeRefs)
+	if len(typeRefs) != 8 {
+		t.Errorf("expected 8 type refs (: annotation + extends + generic + TS operators), got %d: %+v", len(typeRefs), typeRefs)
 	}
-	if len(others) != 1 {
-		t.Errorf("expected 1 other (comment), got %d: %+v", len(others), others)
+	if len(others) != 2 {
+		t.Errorf("expected 2 others (comment + comma-separated value ref), got %d: %+v", len(others), others)
 	}
 }
 

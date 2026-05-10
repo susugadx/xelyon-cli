@@ -51,6 +51,9 @@ func extractJSArrowFunctionMetadata(sig string) (string, string, bool) {
 	if next, ok := consumeJSKeyword(rest, "async"); ok {
 		rest = next
 	}
+	if next, ok := consumeJSTypeParameters(rest); ok {
+		rest = next
+	}
 	if !strings.HasPrefix(rest, "(") {
 		return "", "", false
 	}
@@ -64,6 +67,32 @@ func extractJSArrowFunctionMetadata(sig string) (string, string, bool) {
 	}
 
 	return name, "function", true
+}
+
+func consumeJSTypeParameters(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "<") {
+		return "", false
+	}
+
+	depth := 0
+	for i, r := range s {
+		switch r {
+		case '<':
+			depth++
+		case '>':
+			if i > 0 && s[i-1] == '=' {
+				continue
+			}
+			if depth > 0 {
+				depth--
+			}
+			if depth == 0 {
+				return strings.TrimSpace(s[i+1:]), true
+			}
+		}
+	}
+	return "", false
 }
 
 func indexJSAssignmentAfterTypeAnnotation(s string) int {

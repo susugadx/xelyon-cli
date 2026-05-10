@@ -35,12 +35,20 @@ func TestBuild_TypeScriptProject(t *testing.T) {
 	requireRipgrep(t)
 
 	root := t.TempDir()
-	writeProjectMapTestFile(t, root, "src/app.ts", "export interface Config {}\nexport class Builder {}\nexport function buildMap() {}\n")
+	writeProjectMapTestFile(t, root, "src/app.ts", "export interface Config {}\nexport class Builder {}\nexport function buildMap() {}\nexport  const buildUser = <T>(value: T): T => value\nexport\tfunction buildTeam() {}\nexport default function buildOrg() {}\nexport default class UserBuilder {}\n")
 
 	pm := buildProjectMapForTest(t, root, 4000)
 	file := findFileEntry(t, pm, "src/app.ts")
 	got := strings.Join(signatures(file), "\n")
-	for _, want := range []string{"export interface Config", "export class Builder", "export function buildMap()"} {
+	for _, want := range []string{
+		"export interface Config",
+		"export class Builder",
+		"export function buildMap()",
+		"export  const buildUser = <T>(value: T): T => value",
+		"export\tfunction buildTeam()",
+		"export default function buildOrg()",
+		"export default class UserBuilder",
+	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("TypeScript signatures missing %q from:\n%s", want, got)
 		}
