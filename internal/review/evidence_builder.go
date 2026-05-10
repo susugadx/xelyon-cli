@@ -70,7 +70,10 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 	fileCollector := reviewFileEvidenceCollector{
 		limits: b.limits,
 	}
-	fileEvidence, err := fileCollector.collectCurrentChanges(repoRoot, gitEvidence.untrackedPaths)
+	fileEvidence, err := fileCollector.collectCurrentChanges(reviewFileEvidenceCollectionInput{
+		repoRoot:       repoRoot,
+		untrackedPaths: gitEvidence.untrackedPaths,
+	})
 	if err != nil {
 		return ReviewEvidenceBundle{}, err
 	}
