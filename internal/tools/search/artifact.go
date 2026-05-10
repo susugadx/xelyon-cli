@@ -126,34 +126,9 @@ func executeImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOpti
 }
 
 func tryStructuredGoImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOptions) (SearchExecutionArtifact, bool) {
-	ctx, ok := newStructuredGoImpactSearchContext(opts)
+	result, ok := tryStructuredGoImpactSearchResult(cache, opts)
 	if !ok {
 		return SearchExecutionArtifact{}, false
 	}
-
-	if cached, ok := loadStructuredGoImpactCachedResult(cache, ctx, opts); ok {
-		return SearchExecutionArtifact{
-			Rendered: cached.Output,
-			Metadata: SearchExecutionMetadata{
-				Bundle:           cached.Bundle,
-				AffectedFiles:    cached.AffectedFiles,
-				StructuredImpact: true,
-				Ambiguous:        cached.Bundle == nil,
-			},
-		}, true
-	}
-
-	resolved, ok := resolveStructuredGoImpactWithContext(cache, ctx, opts)
-	if !ok {
-		return SearchExecutionArtifact{}, false
-	}
-	return SearchExecutionArtifact{
-		Rendered: resolved.Rendered,
-		Metadata: SearchExecutionMetadata{
-			Bundle:           resolved.Bundle,
-			AffectedFiles:    resolved.AffectedFiles,
-			StructuredImpact: true,
-			Ambiguous:        resolved.Ambiguous,
-		},
-	}, true
+	return newStructuredImpactSearchArtifact(result), true
 }
