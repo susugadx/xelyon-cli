@@ -6,6 +6,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -22,6 +23,7 @@ type AgentRuntime struct {
 	UI              *ui.Runtime
 	AuditLogger     audit.ToolLogger
 	SubAgentManager *subagent.Manager
+	TaskLedger      *ledger.Store
 }
 
 // NewAgentRuntime は CLI 互換の初期値を持つ runtime を返す。
@@ -65,6 +67,9 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 	}
 	if runtime.SubAgentManager == nil {
 		runtime.SubAgentManager = newSubAgentManager()
+	}
+	if runtime.TaskLedger == nil {
+		runtime.TaskLedger = ledger.NewStore()
 	}
 	registerRuntimeSubAgentTools(runtime)
 	return runtime

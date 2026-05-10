@@ -165,6 +165,18 @@ func TestAgentRuntime_EffectiveConfigDoesNotUseGlobalFallback(t *testing.T) {
 	}
 }
 
+func TestAgentRuntime_InitializesTaskLedger(t *testing.T) {
+	runtime := normalizeAgentRuntime(&AgentRuntime{})
+	if runtime.TaskLedger == nil {
+		t.Fatal("TaskLedger is nil")
+	}
+
+	runtime.TaskLedger.Recorder().RecordToolObservation(&tools.FileChange{FilePath: "/src/main.go"})
+	if got := runtime.TaskLedger.Snapshot().ChangedFiles.Paths(); len(got) != 1 || got[0] != "/src/main.go" {
+		t.Fatalf("TaskLedger changed paths = %v, want [/src/main.go]", got)
+	}
+}
+
 func TestNewAgentWithRuntime_PreservesExplicitInvocationCWD(t *testing.T) {
 	_ = runtimeTestWorkspace(t)
 	explicitCWD := t.TempDir()

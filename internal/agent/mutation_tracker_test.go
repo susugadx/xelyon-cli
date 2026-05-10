@@ -3,6 +3,8 @@ package agent
 import (
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -126,6 +128,57 @@ func TestMutationTracker_RecordToolResult_UpdatesTurnMutationState(t *testing.T)
 	}
 	if len(a.changeStack) != 1 {
 		t.Fatalf("changeStack len = %d, want 1", len(a.changeStack))
+	}
+}
+
+func TestMutationTracker_RecordToolResult_RecordsTaskLedgerWithoutChangingHistory(t *testing.T) {
+	taskLedger := ledger.NewStore()
+	a := &Agent{
+		Runtime: &AgentRuntime{TaskLedger: taskLedger},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("test-model"),
+		},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{},
+		},
+	}
+	tracker := a.mutationTracker()
+	state := newTurnMutationState()
+
+	change := &tools.FileChange{
+		FilePath: "/src/main.go",
+		Tool:     "apply_patch",
+		Details: []tools.FileChangeDetail{
+			{FilePath: "/src/main.go", Action: "modified"},
+			{FilePath: "/src/util.go", Action: "created"},
+			{FilePath: "/src/main.go", Action: "modified"},
+		},
+	}
+
+	tracker.RecordToolResult(&tools.ToolCall{Tool: "apply_patch"}, "ok", change, &state)
+
+	if len(a.changeStack) != 1 {
+		t.Fatalf("changeStack len = %d, want 1", len(a.changeStack))
+	}
+	if !state.hasMutations() {
+		t.Fatal("expected turn-local mutation state to keep recording file changes")
+	}
+	if len(a.History) != 0 {
+		t.Fatalf("History len = %d, want 0", len(a.History))
+	}
+	if got := len(a.session.Messages); got != 0 {
+		t.Fatalf("session messages len = %d, want 0", got)
+	}
+
+	paths := taskLedger.Snapshot().ChangedFiles.Paths()
+	want := []string{"/src/main.go", "/src/util.go"}
+	if len(paths) != len(want) {
+		t.Fatalf("ledger changed paths = %v, want %v", paths, want)
+	}
+	for i := range want {
+		if paths[i] != want[i] {
+			t.Fatalf("ledger changed paths = %v, want %v", paths, want)
+		}
 	}
 }
 
