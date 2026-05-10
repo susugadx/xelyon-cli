@@ -101,6 +101,71 @@ func TestValidateReviewReportEvidenceContract(t *testing.T) {
 			errContains: "checked_surfaces[0].evidence_refs[0].path",
 		},
 		{
+			name: "file evidence requires path",
+			report: func() ReviewReport {
+				report := newValidReviewReportForValidationTest()
+				ref := ReviewEvidenceRef{Kind: ReviewEvidenceKindFile}
+				setCheckedSurfaceEvidenceRefForValidationTest(&report, ref)
+				return report
+			},
+			wantErr:     true,
+			errContains: "checked_surfaces[0].evidence_refs[0].path",
+		},
+		{
+			name: "diff evidence requires path",
+			report: func() ReviewReport {
+				report := newValidReviewReportForValidationTest()
+				ref := ReviewEvidenceRef{Kind: ReviewEvidenceKindDiff}
+				setCheckedSurfaceEvidenceRefForValidationTest(&report, ref)
+				return report
+			},
+			wantErr:     true,
+			errContains: "checked_surfaces[0].evidence_refs[0].path",
+		},
+		{
+			name: "rule_file evidence requires path",
+			report: func() ReviewReport {
+				report := newValidReviewReportForValidationTest()
+				ref := ReviewEvidenceRef{Kind: ReviewEvidenceKindRuleFile}
+				setCheckedSurfaceEvidenceRefForValidationTest(&report, ref)
+				return report
+			},
+			wantErr:     true,
+			errContains: "checked_surfaces[0].evidence_refs[0].path",
+		},
+		{
+			name: "git_status evidence without path is valid",
+			report: func() ReviewReport {
+				report := newValidReviewReportForValidationTest()
+				ref := ReviewEvidenceRef{Kind: ReviewEvidenceKindGitStatus}
+				setCheckedSurfaceEvidenceRefForValidationTest(&report, ref)
+				return report
+			},
+		},
+		{
+			name: "probe evidence without path is valid",
+			report: func() ReviewReport {
+				report := newValidReviewReportForValidationTest()
+				ref := ReviewEvidenceRef{
+					Kind:    ReviewEvidenceKindProbe,
+					ProbeID: "probe-1",
+				}
+				setCheckedSurfaceEvidenceRefForValidationTest(&report, ref)
+				return report
+			},
+		},
+		{
+			name: "probe_command evidence without path is valid",
+			report: func() ReviewReport {
+				report := newValidReviewReportForValidationTest()
+				ref := newValidEvidenceRefForValidationTest()
+				ref.Path = ""
+				ref.Line = 0
+				setCheckedSurfaceEvidenceRefForValidationTest(&report, ref)
+				return report
+			},
+		},
+		{
 			name: "absolute evidence path is invalid",
 			report: func() ReviewReport {
 				report := newValidReviewReportForValidationTest()

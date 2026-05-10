@@ -92,9 +92,25 @@ func newRootCauseGroupForValidationTest(id, findingID string, status ReviewVerif
 		Title:              "test group",
 		Severity:           ReviewGroupSeverityLow,
 		VerificationStatus: status,
+		FixStrategy:        "fix root cause",
+		VerificationPlan:   []string{"run focused validation"},
 		Findings: []ReviewFinding{
-			{ID: findingID, Title: "finding"},
+			{
+				ID:    findingID,
+				Title: "finding",
+				EvidenceRefs: []ReviewEvidenceRef{
+					newFileEvidenceRefForValidationTest(),
+				},
+			},
 		},
+	}
+}
+
+func newFileEvidenceRefForValidationTest() ReviewEvidenceRef {
+	return ReviewEvidenceRef{
+		Kind: ReviewEvidenceKindFile,
+		Path: "internal/review/report_validation.go",
+		Line: 1,
 	}
 }
 

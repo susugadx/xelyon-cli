@@ -320,8 +320,20 @@ func validateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID
 			return err
 		}
 	}
+	if reviewEvidenceKindRequiresPath(ref.Kind) && evidencePath == "" {
+		return fmt.Errorf("%s.path is required when kind=%q", field, ref.Kind)
+	}
 
 	return nil
+}
+
+func reviewEvidenceKindRequiresPath(kind string) bool {
+	switch kind {
+	case ReviewEvidenceKindFile, ReviewEvidenceKindDiff, ReviewEvidenceKindRuleFile:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateEvidencePath(field, candidate string) error {
@@ -452,6 +464,23 @@ func validateHasFindingsRootCauseGroupsVerdictContract(groups []ReviewRootCauseG
 				ReviewVerificationPartiallyVerified,
 				group.VerificationStatus,
 			)
+		}
+	}
+	for i, group := range groups {
+		groupField := fmt.Sprintf("root_cause_groups[%d]", i)
+		if len(group.Findings) == 0 {
+			return fmt.Errorf("%s.findings must contain at least one finding", groupField)
+		}
+		for j, finding := range group.Findings {
+			if len(finding.EvidenceRefs) == 0 {
+				return fmt.Errorf("%s.findings[%d].evidence_refs must contain at least one evidence ref", groupField, j)
+			}
+		}
+		if strings.TrimSpace(group.FixStrategy) == "" {
+			return fmt.Errorf("%s.fix_strategy must be non-empty", groupField)
+		}
+		if len(group.VerificationPlan) == 0 {
+			return fmt.Errorf("%s.verification_plan must contain at least one item", groupField)
 		}
 	}
 	return nil

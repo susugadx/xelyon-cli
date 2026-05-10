@@ -59,9 +59,12 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 		`"overall_verification_status" and group "verification_status" must be one of`,
 		`Severity must be one of "critical", "high", "medium", "low", "info"`,
 		`"kind" must be one of "probe_command", "probe", "file", "diff", "git_status", "rule_file"`,
+		`"file", "diff", and "rule_file" refs require "path"`,
 		`Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries`,
 		`Verdict contract`,
 		`"has_findings": "overall_verification_status" must be "verified" or "partially_verified"`,
+		`Each root cause group must include at least one "findings" item, non-empty "fix_strategy", and at least one "verification_plan" item`,
+		`Each finding must include at least one "evidence_refs" item`,
 	}
 	for _, want := range wants {
 		if !strings.Contains(prompt, want) {

@@ -63,6 +63,16 @@ func TestValidateReviewReportVerdictContract(t *testing.T) {
 			errContains: "requires at least one root_cause_group",
 		},
 		{
+			name: "has_findings with empty groups is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups = []ReviewRootCauseGroup{}
+				return report
+			},
+			wantErr:     true,
+			errContains: "requires at least one root_cause_group",
+		},
+		{
 			name: "has_findings with unverified group is invalid",
 			report: func() ReviewReport {
 				return newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationUnverified)
@@ -71,7 +81,57 @@ func TestValidateReviewReportVerdictContract(t *testing.T) {
 			errContains: "verification_status",
 		},
 		{
-			name: "has_findings with overall verified is valid",
+			name: "has_findings with group without findings is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].Findings = nil
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].findings",
+		},
+		{
+			name: "has_findings with finding without evidence_refs is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].Findings[0].EvidenceRefs = nil
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].findings[0].evidence_refs",
+		},
+		{
+			name: "has_findings with empty fix_strategy is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].FixStrategy = ""
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].fix_strategy",
+		},
+		{
+			name: "has_findings with whitespace fix_strategy is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].FixStrategy = " \t\n"
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].fix_strategy",
+		},
+		{
+			name: "has_findings with empty verification_plan is invalid",
+			report: func() ReviewReport {
+				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+				report.RootCauseGroups[0].VerificationPlan = nil
+				return report
+			},
+			wantErr:     true,
+			errContains: "root_cause_groups[0].verification_plan",
+		},
+		{
+			name: "has_findings with evidence-backed group and overall verified is valid",
 			report: func() ReviewReport {
 				return newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
 			},

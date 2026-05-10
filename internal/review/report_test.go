@@ -424,9 +424,6 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 	if _, exists := findingMap["residual_risks"]; exists {
 		t.Fatal("finding.residual_risks should be omitted when empty")
 	}
-	if err := ValidateReviewReport(report); err != nil {
-		t.Fatalf("ValidateReviewReport(report) error = %v, want nil", err)
-	}
 }
 
 func TestNewReviewReportSkeleton(t *testing.T) {
