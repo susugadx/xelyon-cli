@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/history"
@@ -132,7 +135,8 @@ func TestMutationTracker_RecordToolResult_UpdatesTurnMutationState(t *testing.T)
 }
 
 func TestMutationTracker_RecordToolResult_RecordsTaskLedgerWithoutChangingHistory(t *testing.T) {
-	taskLedger := ledger.NewStore()
+	root := t.TempDir()
+	taskLedger := ledger.NewStoreWithRoot(root)
 	a := &Agent{
 		Runtime: &AgentRuntime{TaskLedger: taskLedger},
 		agentConversationState: agentConversationState{
@@ -146,12 +150,12 @@ func TestMutationTracker_RecordToolResult_RecordsTaskLedgerWithoutChangingHistor
 	state := newTurnMutationState()
 
 	change := &tools.FileChange{
-		FilePath: "/src/main.go",
+		FilePath: filepath.Join(root, "src/main.go"),
 		Tool:     "apply_patch",
 		Details: []tools.FileChangeDetail{
-			{FilePath: "/src/main.go", Action: "modified"},
-			{FilePath: "/src/util.go", Action: "created"},
-			{FilePath: "/src/main.go", Action: "modified"},
+			{FilePath: filepath.Join(root, "src/main.go"), Action: "modified"},
+			{FilePath: filepath.Join(root, "src/util.go"), Action: "created"},
+			{FilePath: filepath.Join(root, "src/main.go"), Action: "modified"},
 		},
 	}
 
@@ -171,7 +175,7 @@ func TestMutationTracker_RecordToolResult_RecordsTaskLedgerWithoutChangingHistor
 	}
 
 	paths := taskLedger.Snapshot().ChangedFiles.Paths()
-	want := []string{"/src/main.go", "/src/util.go"}
+	want := []string{"src/main.go", "src/util.go"}
 	if len(paths) != len(want) {
 		t.Fatalf("ledger changed paths = %v, want %v", paths, want)
 	}
@@ -179,6 +183,148 @@ func TestMutationTracker_RecordToolResult_RecordsTaskLedgerWithoutChangingHistor
 		if paths[i] != want[i] {
 			t.Fatalf("ledger changed paths = %v, want %v", paths, want)
 		}
+	}
+}
+
+func TestMutationTracker_RecordToolResultHelper_TracksLegacyPathWithoutChangingHistory(t *testing.T) {
+	root := t.TempDir()
+	taskLedger := ledger.NewStoreWithRoot(root)
+	a := &Agent{
+		Runtime: &AgentRuntime{TaskLedger: taskLedger},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("test-model"),
+		},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{},
+		},
+	}
+	tracker := a.mutationTracker()
+	state := newTurnMutationState()
+
+	change := &tools.FileChange{
+		FilePath: filepath.Join(root, "src/main.go"),
+		Tool:     "write_file",
+	}
+
+	tracker.recordToolResult(toolResultRecord{
+		toolCall:                &tools.ToolCall{Tool: "write_file"},
+		result:                  "ok",
+		change:                  change,
+		turnMutations:           &state,
+		trackProjectMapMutation: false,
+	})
+
+	if len(a.changeStack) != 1 {
+		t.Fatalf("changeStack len = %d, want 1", len(a.changeStack))
+	}
+	if !state.hasMutations() {
+		t.Fatal("expected turn-local mutation state to keep recording file changes")
+	}
+	if len(a.History) != 0 {
+		t.Fatalf("History len = %d, want 0", len(a.History))
+	}
+	if got := len(a.session.Messages); got != 0 {
+		t.Fatalf("session messages len = %d, want 0", got)
+	}
+
+	paths := taskLedger.Snapshot().ChangedFiles.Paths()
+	if !reflect.DeepEqual(paths, []string{"src/main.go"}) {
+		t.Fatalf("ledger changed paths = %v, want [src/main.go]", paths)
+	}
+}
+
+func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHistory(t *testing.T) {
+	root := t.TempDir()
+	taskLedger := ledger.NewStoreWithRoot(root)
+	a := &Agent{
+		Runtime: &AgentRuntime{TaskLedger: taskLedger},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("test-model"),
+		},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{},
+		},
+	}
+	tracker := a.mutationTracker()
+	state := newTurnMutationState()
+
+	tracker.RecordToolResult(&tools.ToolCall{
+		ID:   "read-1",
+		Tool: "read_file",
+	}, "📄 File: internal/ledger/ledger.go\n7: type RuntimeTaskState struct {}", nil, &state)
+	tracker.RecordToolResult(&tools.ToolCall{
+		ID:   "search-1",
+		Tool: "search_code",
+	}, strings.Join([]string{
+		"Found 1 match(es) in 1 file(s)",
+		"",
+		"📄 internal/agent/agent.go (1 match(es)) [L1]",
+		"  [ref]     >   12 │ RuntimeTaskState",
+		"",
+		"Recommended reads:",
+		"  - internal/agent/runtime.go:26 | runtime owner",
+	}, "\n"), nil, &state)
+	tracker.RecordToolResult(&tools.ToolCall{
+		Tool: "bash",
+		Args: map[string]string{"command": "go test ./internal/ledger"},
+	}, "ok\ninternal/ledger/ledger_test.go:10: pass", nil, &state)
+
+	if state.hasMutations() {
+		t.Fatal("read/search/bash observations without FileChange must not update turn mutation state")
+	}
+	if len(a.changeStack) != 0 {
+		t.Fatalf("changeStack len = %d, want 0", len(a.changeStack))
+	}
+	if len(a.History) != 0 {
+		t.Fatalf("History len = %d, want 0", len(a.History))
+	}
+	if got := len(a.session.Messages); got != 0 {
+		t.Fatalf("session messages len = %d, want 0", got)
+	}
+
+	snapshot := taskLedger.Snapshot()
+	wantTouched := []string{"internal/ledger/ledger.go", "internal/agent/agent.go", "internal/ledger/ledger_test.go"}
+	if got := snapshot.TouchedFiles.Paths(); !reflect.DeepEqual(got, wantTouched) {
+		t.Fatalf("ledger touched paths = %v, want %v", got, wantTouched)
+	}
+	if got := snapshot.Evidence.Items(); len(got) != 2 || got[0].ToolCallID() != "read-1" || got[1].Source() != "search_code" {
+		t.Fatalf("ledger evidence = %#v", got)
+	}
+	if got := snapshot.RecommendedReads.Items(); len(got) != 1 || got[0].Path() != "internal/agent/runtime.go" {
+		t.Fatalf("ledger recommended reads = %#v", got)
+	}
+	if got := snapshot.LastPassedTests.Results(); len(got) != 1 || got[0].Command() != "go test ./internal/ledger" {
+		t.Fatalf("ledger passed tests = %#v", got)
+	}
+}
+
+func TestMutationTracker_RecordToolResult_UsesInvocationCWDForRelativeLedgerPaths(t *testing.T) {
+	root := t.TempDir()
+	invocationCWD := filepath.Join(root, "pkg")
+	taskLedger := ledger.NewStoreWithRoot(root)
+	a := &Agent{
+		Runtime: &AgentRuntime{
+			InvocationCWD: invocationCWD,
+			TaskLedger:    taskLedger,
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("test-model"),
+		},
+	}
+	tracker := a.mutationTracker()
+	state := newTurnMutationState()
+
+	tracker.RecordToolResult(&tools.ToolCall{
+		ID:   "read-1",
+		Tool: "read_file",
+	}, "📄 File: foo.go\n7: type RuntimeTaskState struct {}", nil, &state)
+
+	snapshot := taskLedger.Snapshot()
+	if got := snapshot.TouchedFiles.Paths(); !reflect.DeepEqual(got, []string{"pkg/foo.go"}) {
+		t.Fatalf("ledger touched paths = %v, want [pkg/foo.go]", got)
+	}
+	if got := snapshot.Evidence.Items(); len(got) != 1 || got[0].Path() != "pkg/foo.go" {
+		t.Fatalf("ledger evidence = %#v, want one item for pkg/foo.go", got)
 	}
 }
 

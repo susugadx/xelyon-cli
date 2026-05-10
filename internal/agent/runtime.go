@@ -24,6 +24,9 @@ type AgentRuntime struct {
 	AuditLogger     audit.ToolLogger
 	SubAgentManager *subagent.Manager
 	TaskLedger      *ledger.Store
+
+	managedTaskLedger       *ledger.Store
+	taskLedgerInvocationCWD string
 }
 
 // NewAgentRuntime は CLI 互換の初期値を持つ runtime を返す。
@@ -68,9 +71,7 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 	if runtime.SubAgentManager == nil {
 		runtime.SubAgentManager = newSubAgentManager()
 	}
-	if runtime.TaskLedger == nil {
-		runtime.TaskLedger = ledger.NewStore()
-	}
+	runtime.ensureTaskLedger()
 	registerRuntimeSubAgentTools(runtime)
 	return runtime
 }

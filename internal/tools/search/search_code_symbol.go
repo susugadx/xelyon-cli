@@ -1,6 +1,9 @@
 package search
 
-import "github.com/susugadx/xelyon-cli/internal/navigation"
+import (
+	"github.com/susugadx/xelyon-cli/internal/navigation"
+	"github.com/susugadx/xelyon-cli/internal/tools"
+)
 
 type symbolResolveStatus string
 
@@ -15,6 +18,7 @@ type symbolResolveResult struct {
 	Status        symbolResolveStatus
 	Bundle        *SymbolBundle
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 }
 
 type symbolResolver interface {
@@ -46,6 +50,7 @@ func (goSymbolResolver) Resolve(symbol string, opts SearchOptions) symbolResolve
 		}
 	case navigation.SymbolAutoMultiple:
 		affectedFiles := collectNavigationCandidatesAffectedFiles(result.Candidates, opts)
+		observation := observationForNavigationCandidates(result.Candidates, opts)
 		if opts.LocatorRegistry != nil {
 			_, output, _ = navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
 				Budget:             searchCodeGoSymbolBudget,
@@ -57,7 +62,7 @@ func (goSymbolResolver) Resolve(symbol string, opts SearchOptions) symbolResolve
 				InvocationCWD:      opts.InvocationCWD,
 			})
 		}
-		return symbolResolveResult{Output: output, Status: symbolResolveMultiple, AffectedFiles: affectedFiles}
+		return symbolResolveResult{Output: output, Status: symbolResolveMultiple, AffectedFiles: affectedFiles, Observation: observation}
 	default:
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
@@ -100,9 +105,9 @@ func (r genericLanguageResolver) Resolve(symbol string, opts SearchOptions) symb
 
 	switch result.Status {
 	case genericSymbolSingle:
-		return symbolResolveResult{Output: result.Output, Status: symbolResolveSingle, Bundle: result.Bundle}
+		return symbolResolveResult{Output: result.Output, Status: symbolResolveSingle, Bundle: result.Bundle, Observation: result.Observation}
 	case genericSymbolMultiple:
-		return symbolResolveResult{Output: result.Output, Status: symbolResolveMultiple, AffectedFiles: result.AffectedFiles}
+		return symbolResolveResult{Output: result.Output, Status: symbolResolveMultiple, AffectedFiles: result.AffectedFiles, Observation: result.Observation}
 	default:
 		return symbolResolveResult{Status: symbolResolveNone}
 	}

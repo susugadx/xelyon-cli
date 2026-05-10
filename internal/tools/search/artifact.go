@@ -15,11 +15,13 @@ type SearchExecutionArtifact struct {
 
 // SearchExecutionMetadata は orchestration が参照する検索実行 metadata を表す。
 type SearchExecutionMetadata struct {
-	Bundle           *SymbolBundle
-	AffectedFiles    []string
-	StructuredImpact bool
-	Ambiguous        bool
-	MultiPattern     bool
+	Bundle              *SymbolBundle
+	AffectedFiles       []string
+	Observation         *tools.RuntimeObservation
+	PatternObservations map[string]*tools.RuntimeObservation
+	StructuredImpact    bool
+	Ambiguous           bool
+	MultiPattern        bool
 }
 
 // AnalyzeQuery は search_code と同じクエリ解析を返す。
@@ -57,23 +59,12 @@ func ExecuteSearchCodeArtifactWithConfig(cfg *config.Config, cache tools.ToolCac
 
 	patterns := effectiveSearchPatterns(opts)
 	if len(patterns) > 1 {
-		return SearchExecutionArtifact{
-			Rendered: executeSearchPatterns(cache, patterns, opts),
-			Metadata: SearchExecutionMetadata{
-				MultiPattern: true,
-			},
-		}
+		result := executeSearchPatternsDetailed(cache, patterns, opts)
+		return searchPatternsArtifact(result, true)
 	}
 
 	result := executeSinglePatternDetailed(cache, patterns[0], opts)
-	return SearchExecutionArtifact{
-		Rendered: result.Output,
-		Metadata: SearchExecutionMetadata{
-			Bundle:        result.Bundle,
-			AffectedFiles: append([]string(nil), result.AffectedFiles...),
-			Ambiguous:     result.Route.SymbolResolved && result.Bundle == nil && result.Route.FinalLane == searchLaneSymbol,
-		},
-	}
+	return singlePatternArtifact(patterns[0], result)
 }
 
 func executeImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOptions) SearchExecutionArtifact {
@@ -86,43 +77,24 @@ func executeImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOpti
 		return SearchExecutionArtifact{Rendered: "Error: pattern is required"}
 	}
 
-	baseOutput := executeSearchPatterns(cache, basePatterns, opts)
-	if impactOutputHasTestCoverage(baseOutput) || len(basePatterns) >= impactPatternExpansionCap {
-		return SearchExecutionArtifact{
-			Rendered: baseOutput,
-			Metadata: SearchExecutionMetadata{
-				MultiPattern: len(basePatterns) > 1,
-			},
-		}
+	baseResult := executeSearchPatternsDetailed(cache, basePatterns, opts)
+	if impactOutputHasTestCoverage(baseResult.Output) || len(basePatterns) >= impactPatternExpansionCap {
+		return searchPatternsArtifact(baseResult, len(basePatterns) > 1)
 	}
 
 	testProbe := impactTestProbePattern(opts.Pattern)
 	if testProbe == "" {
-		return SearchExecutionArtifact{
-			Rendered: baseOutput,
-			Metadata: SearchExecutionMetadata{
-				MultiPattern: len(basePatterns) > 1,
-			},
-		}
+		return searchPatternsArtifact(baseResult, len(basePatterns) > 1)
 	}
 	for _, existing := range basePatterns {
 		if existing == testProbe {
-			return SearchExecutionArtifact{
-				Rendered: baseOutput,
-				Metadata: SearchExecutionMetadata{
-					MultiPattern: len(basePatterns) > 1,
-				},
-			}
+			return searchPatternsArtifact(baseResult, len(basePatterns) > 1)
 		}
 	}
 
 	finalPatterns := append(append([]string(nil), basePatterns...), testProbe)
-	return SearchExecutionArtifact{
-		Rendered: executeSearchPatterns(cache, finalPatterns, opts),
-		Metadata: SearchExecutionMetadata{
-			MultiPattern: len(finalPatterns) > 1,
-		},
-	}
+	finalResult := executeSearchPatternsDetailed(cache, finalPatterns, opts)
+	return searchPatternsArtifact(finalResult, len(finalPatterns) > 1)
 }
 
 func tryStructuredGoImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOptions) (SearchExecutionArtifact, bool) {
@@ -132,28 +104,50 @@ func tryStructuredGoImpactSearchArtifact(cache tools.ToolCacheInterface, opts Se
 	}
 
 	if cached, ok := loadStructuredGoImpactCachedResult(cache, ctx, opts); ok {
-		return SearchExecutionArtifact{
-			Rendered: cached.Output,
-			Metadata: SearchExecutionMetadata{
-				Bundle:           cached.Bundle,
-				AffectedFiles:    cached.AffectedFiles,
-				StructuredImpact: true,
-				Ambiguous:        cached.Bundle == nil,
-			},
-		}, true
+		return structuredImpactArtifact(cached.Output, cached.Bundle, cached.AffectedFiles, cached.Observation, cached.Bundle == nil), true
 	}
 
 	resolved, ok := resolveStructuredGoImpactWithContext(cache, ctx, opts)
 	if !ok {
 		return SearchExecutionArtifact{}, false
 	}
+	return structuredImpactArtifact(resolved.Rendered, resolved.Bundle, resolved.AffectedFiles, resolved.Observation, resolved.Ambiguous), true
+}
+
+func searchPatternsArtifact(result searchPatternsExecution, multiPattern bool) SearchExecutionArtifact {
 	return SearchExecutionArtifact{
-		Rendered: resolved.Rendered,
+		Rendered: result.Output,
 		Metadata: SearchExecutionMetadata{
-			Bundle:           resolved.Bundle,
-			AffectedFiles:    resolved.AffectedFiles,
-			StructuredImpact: true,
-			Ambiguous:        resolved.Ambiguous,
+			AffectedFiles:       result.AffectedFiles,
+			Observation:         result.Observation,
+			PatternObservations: result.PatternObservations,
+			MultiPattern:        multiPattern,
 		},
-	}, true
+	}
+}
+
+func singlePatternArtifact(pattern string, result singlePatternExecution) SearchExecutionArtifact {
+	return SearchExecutionArtifact{
+		Rendered: result.Output,
+		Metadata: SearchExecutionMetadata{
+			Bundle:              result.Bundle,
+			AffectedFiles:       append([]string(nil), result.AffectedFiles...),
+			Observation:         tools.CloneRuntimeObservation(result.Observation),
+			PatternObservations: singlePatternObservationMap(pattern, result.Observation),
+			Ambiguous:           result.Route.SymbolResolved && result.Bundle == nil && result.Route.FinalLane == searchLaneSymbol,
+		},
+	}
+}
+
+func structuredImpactArtifact(rendered string, bundle *SymbolBundle, affectedFiles []string, observation *tools.RuntimeObservation, ambiguous bool) SearchExecutionArtifact {
+	return SearchExecutionArtifact{
+		Rendered: rendered,
+		Metadata: SearchExecutionMetadata{
+			Bundle:           bundle,
+			AffectedFiles:    affectedFiles,
+			Observation:      observation,
+			StructuredImpact: true,
+			Ambiguous:        ambiguous,
+		},
+	}
 }

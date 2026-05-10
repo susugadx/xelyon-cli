@@ -23,9 +23,11 @@ func renderReadFilesSections(results []readFileBatchResult, reg *locator.Registr
 		}
 		fmt.Fprintf(&sb, "%s\n", header)
 		sb.WriteString(result.result)
+		failed := isRenderedReadFailure(result.result)
 		sections = append(sections, ReadExecutionSection{
-			Output: sb.String(),
-			Failed: isRenderedReadFailure(result.result),
+			Output:      sb.String(),
+			Failed:      failed,
+			Observation: readObservationForBatchResult(result, failed),
 		})
 	}
 	return sections

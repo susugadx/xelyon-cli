@@ -92,9 +92,10 @@ func (a *Agent) executeParallelSafeTools(ctx context.Context, state *toolruntime
 			execResult := a.executeToolForParallelResult(ctx, state.AllToolCalls[i])
 			mu.Lock()
 			state.Results[i] = toolruntime.Result{
-				Result: execResult.Result,
-				Change: execResult.Change,
-				Error:  execResult.Error,
+				Result:      execResult.Result,
+				Change:      execResult.Change,
+				Observation: execResult.Observation,
+				Error:       execResult.Error,
 			}
 			mu.Unlock()
 		}(idx)
@@ -119,9 +120,10 @@ func (a *Agent) executeSequentialTools(ctx context.Context, state *toolruntime.P
 		}
 		execResult := a.executeToolWithSpinnerResult(ctx, state.AllToolCalls[idx])
 		state.Results[idx] = toolruntime.Result{
-			Result: execResult.Result,
-			Change: execResult.Change,
-			Error:  execResult.Error,
+			Result:      execResult.Result,
+			Change:      execResult.Change,
+			Observation: execResult.Observation,
+			Error:       execResult.Error,
 		}
 	}
 }

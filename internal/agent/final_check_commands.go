@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
 type finalCheckRunResult struct {
@@ -85,6 +87,12 @@ func (a *Agent) runFinalCheckCommands(changedFiles []string) finalCheckRunResult
 				exitCode = exitErr.ExitCode()
 			}
 
+			a.recordFinalCheckObservation(ledger.TestObservation{
+				Command:  cmd,
+				ExitCode: exitCode,
+				Status:   "failed",
+				Output:   outputStr,
+			})
 			red.Fprintf(out, "  Final check failed (exit code %d): %s\n", exitCode, cmd)
 
 			feedback := fmt.Sprintf(`[SYSTEM] Final check failed. Command %q failed (exit code %d):
@@ -104,12 +112,25 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 			}
 		}
 
+		a.recordFinalCheckObservation(ledger.TestObservation{
+			Command:  cmd,
+			ExitCode: 0,
+			Status:   "passed",
+			Output:   string(output),
+		})
 		green.Fprintf(out, "  Final check passed: %s\n", cmd)
 	}
 	passed := true
 	a.taskTestResult = &passed
 
 	return finalCheckRunResult{}
+}
+
+func (a *Agent) recordFinalCheckObservation(observation ledger.TestObservation) {
+	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
+		return
+	}
+	a.Runtime.TaskLedger.Recorder().RecordTestObservation(observation)
 }
 
 func finalCheckFailureFingerprint(command string, exitCode int, output string) string {

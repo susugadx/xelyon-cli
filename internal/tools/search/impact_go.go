@@ -125,6 +125,7 @@ func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.
 
 func resolveStructuredGoImpactMultipleSymbol(symbol string, result navigation.InspectResult, output string, opts SearchOptions, budget navigation.Budget) symbolResolveResult {
 	affectedFiles := collectNavigationCandidatesAffectedFiles(result.Candidates, opts)
+	observation := observationForNavigationCandidates(result.Candidates, opts)
 	if opts.LocatorRegistry != nil {
 		_, output, _ = navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
 			Budget:             budget,
@@ -136,7 +137,7 @@ func resolveStructuredGoImpactMultipleSymbol(symbol string, result navigation.In
 			InvocationCWD:      opts.InvocationCWD,
 		})
 	}
-	return symbolResolveResult{Output: output, Status: symbolResolveMultiple, AffectedFiles: affectedFiles}
+	return symbolResolveResult{Output: output, Status: symbolResolveMultiple, AffectedFiles: affectedFiles, Observation: observation}
 }
 
 func navigationStatusToSymbolResolveStatus(status navigation.SymbolAutoStatus) symbolResolveStatus {

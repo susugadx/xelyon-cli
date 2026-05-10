@@ -16,12 +16,14 @@ type structuredGoImpactCachedResult struct {
 	Output        string
 	Bundle        *SymbolBundle
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 }
 
 type structuredGoImpactExecutionResult struct {
 	Rendered      string
 	Bundle        *SymbolBundle
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 	Ambiguous     bool
 }
 
@@ -67,7 +69,18 @@ func loadStructuredGoImpactCachedResult(cache tools.ToolCacheInterface, ctx stru
 		Output:        cached,
 		Bundle:        bundle,
 		AffectedFiles: affectedFiles,
+		Observation:   loadCachedStructuredGoImpactObservation(ctx, bundle, opts),
 	}, true
+}
+
+func loadCachedStructuredGoImpactObservation(ctx structuredGoImpactSearchContext, bundle *SymbolBundle, opts SearchOptions) *tools.RuntimeObservation {
+	if observation := loadSinglePatternObservation(ctx.Pattern, ctx.CacheKey); observation != nil {
+		return observation
+	}
+	if bundle != nil {
+		return observationForSymbolBundle(bundle, opts)
+	}
+	return nil
 }
 
 func resolveStructuredGoImpactWithContext(cache tools.ToolCacheInterface, ctx structuredGoImpactSearchContext, opts SearchOptions) (structuredGoImpactExecutionResult, bool) {
@@ -95,17 +108,20 @@ func resolveStructuredGoImpactSingleResult(cache tools.ToolCacheInterface, ctx s
 	resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
 	affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
 	outputBundle, output := formatImpactBundleForRuntime(resolved.Bundle, resolved.Output, opts, cache)
+	observation := observationForSymbolBundle(outputBundle, opts)
 
 	if cache != nil {
 		cache.SetSearch(ctx.Pattern, ctx.CacheKey, resolved.Output, affectedFiles)
 		storeSinglePatternBundle(ctx.Pattern, ctx.CacheKey, resolved.Bundle)
 		storeSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
+		storeSinglePatternObservation(ctx.Pattern, ctx.CacheKey, observation)
 	}
 
 	return structuredGoImpactExecutionResult{
 		Rendered:      output,
 		Bundle:        outputBundle,
 		AffectedFiles: affectedFiles,
+		Observation:   observation,
 	}, true
 }
 
@@ -118,11 +134,13 @@ func resolveStructuredGoImpactMultipleResult(cache tools.ToolCacheInterface, ctx
 	if cache != nil {
 		cache.SetSearch(ctx.Pattern, ctx.CacheKey, resolved.Output, affectedFiles)
 		storeSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
+		storeSinglePatternObservation(ctx.Pattern, ctx.CacheKey, resolved.Observation)
 	}
 
 	return structuredGoImpactExecutionResult{
 		Rendered:      resolved.Output,
 		AffectedFiles: affectedFiles,
+		Observation:   resolved.Observation,
 		Ambiguous:     true,
 	}
 }

@@ -68,13 +68,15 @@ func (a *Agent) executeSearchCodeBatch(ctx context.Context, state *toolruntime.P
 				pattern := chunkPatterns[j]
 				if section, ok := perPattern[pattern]; ok {
 					state.Results[idx] = toolruntime.Result{
-						Result: section,
-						Error:  tools.IsErrorResult(section),
+						Result:      section,
+						Observation: mergedExecResult.ObservationGroups[pattern],
+						Error:       tools.IsErrorResult(section),
 					}
 				} else {
 					state.Results[idx] = toolruntime.Result{
-						Result: mergedResult,
-						Error:  mergedExecResult.Error,
+						Result:      mergedResult,
+						Observation: mergedExecResult.Observation,
+						Error:       mergedExecResult.Error,
 					}
 				}
 				state.Entries[idx] = toolruntime.ParallelCallEntry{Status: toolruntime.ParallelCallStatusBatched}

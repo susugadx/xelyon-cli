@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/searchcache"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 type singlePatternExecution struct {
@@ -13,10 +14,13 @@ type singlePatternExecution struct {
 	Route         searchRouteTrace
 	Bundle        *SymbolBundle
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 }
 
 var singlePatternBundleCache sync.Map
 var singlePatternAffectedFilesCache sync.Map
+var singlePatternObservationCache sync.Map
+var multiPatternObservationCache sync.Map
 
 func init() {
 	searchcache.RegisterSearchCacheLifecycleHooks(clearSinglePatternBundleCache, invalidateSinglePatternBundleCacheKeys, invalidateSinglePatternBundleCacheKeys)
@@ -35,6 +39,14 @@ func clearSinglePatternBundleCache() {
 		singlePatternAffectedFilesCache.Delete(key)
 		return true
 	})
+	singlePatternObservationCache.Range(func(key, value any) bool {
+		singlePatternObservationCache.Delete(key)
+		return true
+	})
+	multiPatternObservationCache.Range(func(key, value any) bool {
+		multiPatternObservationCache.Delete(key)
+		return true
+	})
 }
 
 func invalidateSinglePatternBundleCacheKeys(keys []string) {
@@ -44,6 +56,8 @@ func invalidateSinglePatternBundleCacheKeys(keys []string) {
 		}
 		singlePatternBundleCache.Delete(key)
 		singlePatternAffectedFilesCache.Delete(key)
+		singlePatternObservationCache.Delete(key)
+		multiPatternObservationCache.Delete(key)
 	}
 }
 
@@ -77,6 +91,38 @@ func storeSinglePatternAffectedFiles(pattern, cacheKey string, affectedFiles []s
 		return
 	}
 	singlePatternAffectedFilesCache.Store(singlePatternBundleCacheKey(pattern, cacheKey), append([]string(nil), affectedFiles...))
+}
+
+func loadSinglePatternObservation(pattern, cacheKey string) *tools.RuntimeObservation {
+	value, ok := singlePatternObservationCache.Load(singlePatternBundleCacheKey(pattern, cacheKey))
+	if !ok {
+		return nil
+	}
+	observation, _ := value.(*tools.RuntimeObservation)
+	return tools.CloneRuntimeObservation(observation)
+}
+
+func storeSinglePatternObservation(pattern, cacheKey string, observation *tools.RuntimeObservation) {
+	if observation == nil || observation.Empty() {
+		return
+	}
+	singlePatternObservationCache.Store(singlePatternBundleCacheKey(pattern, cacheKey), tools.CloneRuntimeObservation(observation))
+}
+
+func loadMultiPatternObservation(patternKey, cacheKey string) *tools.RuntimeObservation {
+	value, ok := multiPatternObservationCache.Load(singlePatternBundleCacheKey(patternKey, cacheKey))
+	if !ok {
+		return nil
+	}
+	observation, _ := value.(*tools.RuntimeObservation)
+	return tools.CloneRuntimeObservation(observation)
+}
+
+func storeMultiPatternObservation(patternKey, cacheKey string, observation *tools.RuntimeObservation) {
+	if observation == nil || observation.Empty() {
+		return
+	}
+	multiPatternObservationCache.Store(singlePatternBundleCacheKey(patternKey, cacheKey), tools.CloneRuntimeObservation(observation))
 }
 
 func cloneSymbolBundle(bundle *SymbolBundle) *SymbolBundle {

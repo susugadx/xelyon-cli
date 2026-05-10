@@ -37,6 +37,7 @@ func NewAgent(model string, provider api.Provider, headless bool) *Agent {
 func NewAgentWithRuntime(model string, provider api.Provider, headless bool, runtime *AgentRuntime) *Agent {
 	runtime = normalizeAgentRuntime(runtime)
 	runtime.refreshInvocationCWD()
+	runtime.ensureTaskLedger()
 	cfg := runtime.effectiveConfig()
 	api.ApplyRuntimeConfig(provider, cfg)
 

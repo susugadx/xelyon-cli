@@ -76,6 +76,11 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 }
 
 func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	result, err := t.RunResult(execCtx, args)
+	return result.Output, result.Change, err
+}
+
+func (t *SearchCodeTool) RunResult(execCtx tools.ExecutionContext, args map[string]string) (tools.ToolRunResult, error) {
 	opts := SearchOptions{
 		Pattern: args["pattern"],
 		Intent:  args["intent"],
@@ -109,8 +114,12 @@ func (t *SearchCodeTool) Run(execCtx tools.ExecutionContext, args map[string]str
 			opts.LSPClient = navigation.NewLSPAdapter(lspClient, cwd)
 		}
 	}
-	result := ExecuteSearchCodeWithConfig(execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), opts)
-	return result, nil, nil
+	artifact := ExecuteSearchCodeArtifactWithConfig(execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), opts)
+	return tools.ToolRunResult{
+		Output:            artifact.Rendered,
+		Observation:       artifact.Metadata.Observation,
+		ObservationGroups: artifact.Metadata.PatternObservations,
+	}, nil
 }
 
 // containsGlobChar は文字列に glob 文字（*, ?, [）が含まれるかを返す。

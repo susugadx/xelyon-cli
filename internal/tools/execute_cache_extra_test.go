@@ -65,20 +65,20 @@ func TestExecuteCoreWithContext_DefaultsPathAndNormalizesEmptyOutput(t *testing.
 	registry.Register(tool)
 
 	tc := &ToolCall{Tool: "list_dir", Args: map[string]string{}}
-	got, change, isError := executeCoreWithContext(ExecutionContext{
+	execResult := executeCoreWithContext(ExecutionContext{
 		Context:  context.Background(),
 		Registry: registry,
 		Stdout:   io.Discard,
 		Stderr:   io.Discard,
 	}, tc)
 
-	if change != nil {
-		t.Fatalf("executeCoreWithContext() returned unexpected change: %+v", change)
+	if execResult.Change != nil {
+		t.Fatalf("executeCoreWithContext() returned unexpected change: %+v", execResult.Change)
 	}
-	if got != "(no output)" {
-		t.Fatalf("executeCoreWithContext() = %q, want %q", got, "(no output)")
+	if execResult.Result != "(no output)" {
+		t.Fatalf("executeCoreWithContext() = %q, want %q", execResult.Result, "(no output)")
 	}
-	if isError {
+	if execResult.Error {
 		t.Fatalf("executeCoreWithContext() isError = true, want false")
 	}
 	if tc.Args["path"] != "." {

@@ -14,6 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -30,6 +31,7 @@ type genericResolveResult struct {
 	Status        genericSymbolStatus
 	Bundle        *SymbolBundle
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 }
 
 // genericSymbolDef は多言語のシンボル定義候補。
@@ -67,6 +69,7 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 			Output:        formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts),
 			Status:        genericSymbolMultiple,
 			AffectedFiles: collectGenericDefAffectedFiles(defs, opts),
+			Observation:   observationForGenericDefinitions(defs, opts),
 		}
 	}
 
@@ -91,9 +94,10 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 	})
 	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
 	return genericResolveResult{
-		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
-		Status: genericSymbolSingle,
-		Bundle: bundle,
+		Output:      formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
+		Status:      genericSymbolSingle,
+		Bundle:      bundle,
+		Observation: observationForSymbolBundle(bundle, opts),
 	}
 }
 

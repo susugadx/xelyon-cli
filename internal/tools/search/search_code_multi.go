@@ -26,15 +26,21 @@ type multiPatternCacheWrite struct {
 	PatternKey    string
 	CacheKey      string
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 }
 
-// executeMultiplePatterns は複数パターンを goroutine 並列で検索する。
-// 各パターンは executeSinglePattern に委譲し、symbol fast path + キャッシュが自動で効く。
-func executeMultiplePatterns(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) string {
+// executeMultiplePatternsDetailed は複数パターンを goroutine 並列で検索する。
+// 各パターンは single pattern execution に委譲し、symbol fast path + キャッシュが自動で効く。
+func executeMultiplePatternsDetailed(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) searchPatternsExecution {
 	collected := collectMultiPatternExecutions(cache, contexts)
 	output := renderMultiPatternOutput(collected, len(contexts), opts)
 	writeMultiPatternCache(cache, contexts, opts, output, collected)
-	return output
+	return searchPatternsExecution{
+		Output:              output,
+		AffectedFiles:       collectAffectedFilesFromExecutions(collected, opts),
+		Observation:         collectObservationFromExecutions(collected),
+		PatternObservations: collectObservationByPatternFromExecutions(collected),
+	}
 }
 
 func collectMultiPatternExecutions(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext) []formattedPatternExecution {
@@ -70,6 +76,7 @@ func writeMultiPatternCache(cache tools.ToolCacheInterface, contexts []singlePat
 	}
 	write := prepareMultiPatternCacheWrite(contexts, opts, collected)
 	cache.SetSearch(write.PatternKey, write.CacheKey, output, write.AffectedFiles)
+	storeMultiPatternObservation(write.PatternKey, write.CacheKey, write.Observation)
 }
 
 func prepareMultiPatternCacheWrite(contexts []singlePatternExecutionContext, opts SearchOptions, collected []formattedPatternExecution) multiPatternCacheWrite {
@@ -77,5 +84,27 @@ func prepareMultiPatternCacheWrite(contexts []singlePatternExecutionContext, opt
 		PatternKey:    buildMultiCacheKeyFromContexts(contexts),
 		CacheKey:      buildMultiSearchCacheKeyFromContexts(opts, contexts),
 		AffectedFiles: collectAffectedFilesFromExecutions(collected, opts),
+		Observation:   collectObservationFromExecutions(collected),
 	}
+}
+
+func collectObservationFromExecutions(collected []formattedPatternExecution) *tools.RuntimeObservation {
+	observations := make([]*tools.RuntimeObservation, 0, len(collected))
+	for _, execution := range collected {
+		observations = append(observations, execution.Observation)
+	}
+	return tools.MergeRuntimeObservations(observations...)
+}
+
+func collectObservationByPatternFromExecutions(collected []formattedPatternExecution) map[string]*tools.RuntimeObservation {
+	groups := make(map[string]*tools.RuntimeObservation)
+	for _, execution := range collected {
+		if observation := tools.CloneRuntimeObservation(execution.Observation); observation != nil {
+			groups[execution.Pattern] = observation
+		}
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+	return groups
 }

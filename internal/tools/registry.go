@@ -57,30 +57,52 @@ func (r *Registry) Register(tool Tool) {
 
 // ExecuteWithContext は実行コンテキスト付きでツール呼び出しを実行する。
 func (r *Registry) ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
+	execResult := r.ExecuteDetailedWithContext(execCtx, tc)
+	return execResult.Result, execResult.Change
+}
+
+// ExecuteDetailedWithContext は実行結果と structured observation を保持したまま返す。
+func (r *Registry) ExecuteDetailedWithContext(execCtx ExecutionContext, tc *ToolCall) ExecutionResult {
 	r.mu.RLock()
 	tool, ok := r.tools[tc.Tool]
 	excluded := r.excludedTools[tc.Tool]
 	r.mu.RUnlock()
 
 	if !ok {
-		return fmt.Sprintf("Unknown tool: %s", tc.Tool), nil
+		return ExecutionResult{Result: fmt.Sprintf("Unknown tool: %s", tc.Tool), Error: true}
 	}
 	if excluded {
-		return fmt.Sprintf("Error: tool not available in current mode: %s", tc.Tool), nil
+		return ExecutionResult{Result: fmt.Sprintf("Error: tool not available in current mode: %s", tc.Tool), Error: true}
 	}
 
-	output, change, err := tool.Run(normalizeExecutionContext(execCtx), tc.Args)
+	normalized := normalizeExecutionContext(execCtx)
+	execResult, err := runRegisteredTool(normalized, tool, tc.Args)
 
 	// 監査ログ記録（失敗しても処理続行）
-	if logger := normalizeExecutionContext(execCtx).EffectiveAuditLogger(); logger != nil {
-		logger.LogToolExecution(tc.Tool, tc.Args, output, err, change != nil)
+	if logger := normalized.EffectiveAuditLogger(); logger != nil {
+		logger.LogToolExecution(tc.Tool, tc.Args, execResult.Result, err, execResult.Change != nil)
 	}
 
 	if err != nil {
-		return fmt.Sprintf("Error: %v", err), change
+		execResult.Result = fmt.Sprintf("Error: %v", err)
+		execResult.Error = true
 	}
 
-	return output, change
+	return execResult
+}
+
+func runRegisteredTool(execCtx ExecutionContext, tool Tool, args map[string]string) (ExecutionResult, error) {
+	if structured, ok := tool.(StructuredResultTool); ok {
+		result, err := structured.RunResult(execCtx, args)
+		return ExecutionResult{
+			Result:            result.Output,
+			Change:            result.Change,
+			Observation:       result.Observation,
+			ObservationGroups: result.ObservationGroups,
+		}, err
+	}
+	output, change, err := tool.Run(execCtx, args)
+	return ExecutionResult{Result: output, Change: change}, err
 }
 
 // GetTool は登録されたツールを取得（スレッドセーフ）

@@ -70,8 +70,9 @@ func formatSinglePatternManifestTextStage(cache tools.ToolCacheInterface, ctx si
 	detectBlocksWithCache(cache, results, textOpts)
 	finalOutput := withSearchWarnings(formatManifestResultsWithOptions(results, ctx.Opts.LocatorRegistry, ctx.Opts), stage.Warnings)
 	affectedFiles := collectFilePaths(results, ctx.Opts)
-	writeSinglePatternSearchCache(cache, ctx, finalOutput, affectedFiles)
-	return newSinglePatternTextExecution(ctx.Pattern, route, finalOutput, affectedFiles)
+	observation := observationForSearchResults(results, ctx.Opts)
+	writeSinglePatternSearchCache(cache, ctx, finalOutput, affectedFiles, observation)
+	return newSinglePatternTextExecution(ctx.Pattern, route, finalOutput, affectedFiles, observation)
 }
 
 func formatSinglePatternStandardTextStage(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, route searchRouteTrace, textOpts SearchOptions, stage textSearchStageResult, results []SearchResult) singlePatternExecution {
@@ -83,16 +84,18 @@ func formatSinglePatternStandardTextStage(cache tools.ToolCacheInterface, ctx si
 	formatted := formatSearchResultsWithOptions(results, truncated, ctx.Opts.TokenBudget, ctx.Opts.LocatorRegistry, ctx.Opts)
 	finalOutput := withSearchWarnings(formatted, stage.Warnings) + lineRangeHint
 	affectedFiles := collectFilePaths(results, ctx.Opts)
-	writeSinglePatternSearchCache(cache, ctx, finalOutput, affectedFiles)
-	return newSinglePatternTextExecution(ctx.Pattern, route, finalOutput, affectedFiles)
+	observation := observationForSearchResults(results, ctx.Opts)
+	writeSinglePatternSearchCache(cache, ctx, finalOutput, affectedFiles, observation)
+	return newSinglePatternTextExecution(ctx.Pattern, route, finalOutput, affectedFiles, observation)
 }
 
-func newSinglePatternTextExecution(pattern string, route searchRouteTrace, output string, affectedFiles []string) singlePatternExecution {
+func newSinglePatternTextExecution(pattern string, route searchRouteTrace, output string, affectedFiles []string, observation *tools.RuntimeObservation) singlePatternExecution {
 	return singlePatternExecution{
 		Pattern:       pattern,
 		Output:        output,
 		Route:         route,
 		AffectedFiles: affectedFiles,
+		Observation:   observation,
 	}
 }
 

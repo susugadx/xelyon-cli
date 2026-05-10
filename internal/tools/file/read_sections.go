@@ -12,8 +12,9 @@ import (
 
 // ReadExecutionSection は単一 read request の描画結果と成否を表す。
 type ReadExecutionSection struct {
-	Output string
-	Failed bool
+	Output      string
+	Failed      bool
+	Observation *tools.RuntimeObservation
 }
 
 // ExecuteReadPathsWithDetailSections は path-based read を構造化 section で返す。

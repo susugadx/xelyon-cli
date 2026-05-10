@@ -88,6 +88,37 @@ func TestRunFinalCheckCommands_MultipleCommands_StopsOnFirstFailure(t *testing.T
 	}
 }
 
+func TestRunFinalCheckCommands_RecordsLedgerWithoutHistory(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.FinalChecks.Commands = []string{
+		"printf 'first ok'",
+		"printf 'second fail' && exit 3",
+	}
+	cfg.FinalChecks.Timeout = 10
+
+	a := newCompletionTestAgent(cfg)
+	result := a.runFinalCheckCommands([]string{"src/main.go"})
+	if !result.needsContinue {
+		t.Fatal("expected failed final check to request continuation")
+	}
+	if len(a.History) != 0 {
+		t.Fatalf("History len = %d, want 0", len(a.History))
+	}
+
+	snapshot := a.Runtime.TaskLedger.Snapshot()
+	passed := snapshot.LastPassedTests.Results()
+	if len(passed) != 1 || passed[0].Command() != "printf 'first ok'" || passed[0].Status() != "passed" {
+		t.Fatalf("LastPassedTests = %#v", passed)
+	}
+	failed := snapshot.LastFailedTests.Results()
+	if len(failed) != 1 || failed[0].Command() != "printf 'second fail' && exit 3" || failed[0].ExitCode() != 3 {
+		t.Fatalf("LastFailedTests = %#v", failed)
+	}
+	if !strings.Contains(failed[0].Output(), "second fail") {
+		t.Fatalf("failed excerpt = %q, want command output", failed[0].Output())
+	}
+}
+
 func TestRunFinalCheckCommands_Timeout(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.FinalChecks.Commands = []string{"sleep 30"}
