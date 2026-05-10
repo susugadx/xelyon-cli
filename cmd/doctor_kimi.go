@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -29,12 +28,12 @@ or --web-search-smoke to verify the built-in $web_search route.`,
 	}
 
 	cmd.Flags().StringVar(&doctorKimiModelFlag, "model", "", fmt.Sprintf("Kimi model for 'doctor kimi' (default: config/XELYON_MODEL, fallback %s)", defaultKimiDoctorModel))
-	cmd.Flags().BoolVar(&doctorSmokeFlag, "smoke", false, "Send live minimal Kimi Chat Completions smoke requests")
+	addDoctorSmokeFlag(cmd, "Send live minimal Kimi Chat Completions smoke requests")
 	cmd.Flags().BoolVar(&doctorKimiImageSmokeFlag, "image-smoke", false, "Send one live Kimi image input smoke request")
-	cmd.Flags().BoolVar(&doctorToolSmokeFlag, "tool-smoke", false, "Send a live Kimi smoke request that forces a dummy tool call")
+	addDoctorToolSmokeFlag(cmd, "Send a live Kimi smoke request that forces a dummy tool call")
 	cmd.Flags().BoolVar(&doctorKimiWebSearchSmokeFlag, "web-search-smoke", false, "Send a live Kimi built-in $web_search smoke request")
-	cmd.Flags().DurationVar(&doctorTimeoutFlag, "timeout", defaultAzureDoctorTimeout, "Timeout for 'doctor kimi' live smoke requests")
-	cmd.Flags().BoolVar(&doctorJSONFlag, "json", false, "Print 'doctor kimi' diagnostics as JSON")
+	addDoctorTimeoutFlag(cmd, "kimi", "")
+	addDoctorJSONFlag(cmd, "kimi")
 
 	return cmd
 }
@@ -89,12 +88,7 @@ func kimiDoctorExplicitModel(cmd *cobra.Command) string {
 }
 
 func renderKimiDoctorJSON(w io.Writer, report kimiprovider.DiagnosticReport) error {
-	payload, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(w, string(payload))
-	return err
+	return renderDoctorJSON(w, report)
 }
 
 func renderKimiDoctorText(w io.Writer, report kimiprovider.DiagnosticReport) {
@@ -104,15 +98,7 @@ func renderKimiDoctorText(w io.Writer, report kimiprovider.DiagnosticReport) {
 	fmt.Fprintf(w, "API URL: %s\n", report.APIURL)
 	fmt.Fprintln(w)
 
-	for _, check := range report.Checks {
-		fmt.Fprintf(w, "%-4s %s: %s\n", strings.ToUpper(string(check.Status)), check.Name, check.Message)
-		if strings.TrimSpace(check.Detail) != "" {
-			fmt.Fprintf(w, "     detail: %s\n", check.Detail)
-		}
-		if strings.TrimSpace(check.Suggestion) != "" {
-			fmt.Fprintf(w, "     suggestion: %s\n", check.Suggestion)
-		}
-	}
+	renderDoctorChecks(w, kimiDoctorCheckLines(report.Checks))
 
 	if report.Smoke != nil && report.Smoke.Ran {
 		fmt.Fprintln(w)
@@ -131,4 +117,18 @@ func renderKimiDoctorText(w io.Writer, report kimiprovider.DiagnosticReport) {
 			fmt.Fprintln(w, "Note: Kimi $web_search call fee is separate from token cost; search result tokens are included in the next prompt_tokens response and are not added again.")
 		}
 	}
+}
+
+func kimiDoctorCheckLines(checks []kimiprovider.DiagnosticCheck) []doctorCheckLine {
+	lines := make([]doctorCheckLine, 0, len(checks))
+	for _, check := range checks {
+		lines = append(lines, doctorCheckLine{
+			Status:     string(check.Status),
+			Name:       check.Name,
+			Message:    check.Message,
+			Detail:     check.Detail,
+			Suggestion: check.Suggestion,
+		})
+	}
+	return lines
 }

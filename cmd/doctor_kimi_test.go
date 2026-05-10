@@ -10,17 +10,12 @@ import (
 )
 
 func TestRunKimiDoctorInvocation_JSONReportsExplicitModel(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(resetRootFlagsForTest)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MOONSHOT_API_KEY", "moonshot-key")
 	t.Setenv("KIMI_API_URL", "")
 	t.Setenv("XELYON_MODEL", "kimi-k2.6")
 
-	var out bytes.Buffer
-	cmd := newKimiDoctorCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
 
 	if err := cmd.Flags().Set("model", "kimi-k2.5"); err != nil {
 		t.Fatalf("set model flag: %v", err)
@@ -125,17 +120,12 @@ func TestRenderKimiDoctorJSON_WebSearchSmokeObservation(t *testing.T) {
 }
 
 func TestRunKimiDoctorInvocation_UsesConfiguredModelWhenFlagOmitted(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(resetRootFlagsForTest)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MOONSHOT_API_KEY", "moonshot-key")
 	t.Setenv("KIMI_API_URL", "")
 	t.Setenv("XELYON_MODEL", "kimi-k2.5")
 
-	var out bytes.Buffer
-	cmd := newKimiDoctorCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
 
 	doctorJSONFlag = true
 
@@ -159,17 +149,12 @@ func TestRunKimiDoctorInvocation_UsesConfiguredModelWhenFlagOmitted(t *testing.T
 }
 
 func TestRunKimiDoctorInvocation_FailsForMissingKey(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(resetRootFlagsForTest)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MOONSHOT_API_KEY", "")
 	t.Setenv("KIMI_API_URL", "")
 	t.Setenv("XELYON_MODEL", "")
 
-	var out bytes.Buffer
-	cmd := newKimiDoctorCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
 
 	err := runKimiDoctorInvocation(cmd, nil)
 	if err == nil {
@@ -181,20 +166,12 @@ func TestRunKimiDoctorInvocation_FailsForMissingKey(t *testing.T) {
 }
 
 func TestRootCommand_KimiDoctorCommandParsesFlags(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		resetRootFlagsForTest()
-	})
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MOONSHOT_API_KEY", "moonshot-key")
 	t.Setenv("KIMI_API_URL", "")
 	t.Setenv("XELYON_MODEL", "")
 
-	var out bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
+	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "kimi", "--model", "kimi-k2.5", "--json"})
 
 	if err := rootCmd.Execute(); err != nil {
@@ -206,16 +183,7 @@ func TestRootCommand_KimiDoctorCommandParsesFlags(t *testing.T) {
 }
 
 func TestRootCommand_KimiDoctorHelpShowsDoctorFlags(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		resetRootFlagsForTest()
-	})
-
-	var out bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
+	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "kimi", "--help"})
 
 	if err := rootCmd.Execute(); err != nil {

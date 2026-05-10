@@ -11,18 +11,13 @@ import (
 )
 
 func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(resetRootFlagsForTest)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
 	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
 
-	var out bytes.Buffer
-	cmd := newAzureDoctorCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
 
 	doctorDeploymentFlag = "corp-codex-deployment"
 	doctorCatalogModelFlag = "gpt-5.3-codex"
@@ -76,18 +71,13 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 }
 
 func TestRunAzureDoctorInvocation_FailsForMissingAzureSetup(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(resetRootFlagsForTest)
 	t.Setenv("HOME", t.TempDir())
 	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
 	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 
-	var out bytes.Buffer
-	cmd := newAzureDoctorCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
 
 	err := runAzureDoctorInvocation(cmd, nil)
 	if err == nil {
@@ -102,18 +92,13 @@ func TestRunAzureDoctorInvocation_FailsForMissingAzureSetup(t *testing.T) {
 }
 
 func TestRunAzureDoctorInvocation_PrintConfigDoesNotRequireAzureEnv(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(resetRootFlagsForTest)
 	t.Setenv("HOME", t.TempDir())
 	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
 	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 
-	var out bytes.Buffer
-	cmd := newAzureDoctorCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
 
 	doctorDeploymentFlag = "corp-codex-deployment"
 	doctorCatalogModelFlag = "gpt-5.3-codex"
@@ -140,13 +125,7 @@ func TestRunAzureDoctorInvocation_PrintConfigDoesNotRequireAzureEnv(t *testing.T
 }
 
 func TestRunAzureDoctorInvocation_PrintConfigRequiresDeploymentAndCatalogModel(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(resetRootFlagsForTest)
-
-	var out bytes.Buffer
-	cmd := newAzureDoctorCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd, _ := newDoctorSubcommandTest(t, newAzureDoctorCommand)
 
 	doctorPrintConfigFlag = true
 	doctorDeploymentFlag = "corp-gpt55-deployment"
@@ -164,21 +143,13 @@ func TestRunAzureDoctorInvocation_PrintConfigRequiresDeploymentAndCatalogModel(t
 }
 
 func TestRootCommand_AzureDoctorCommandParsesFlags(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		resetRootFlagsForTest()
-	})
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
 	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
 
-	var out bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
+	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "azure", "--deployment", "corp-gpt55-deployment", "--catalog-model", "gpt-5.5", "--json"})
 
 	if err := rootCmd.Execute(); err != nil {
@@ -190,16 +161,7 @@ func TestRootCommand_AzureDoctorCommandParsesFlags(t *testing.T) {
 }
 
 func TestRootCommand_AzureDoctorHelpShowsDoctorFlags(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		resetRootFlagsForTest()
-	})
-
-	var out bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
+	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "azure", "--help"})
 
 	if err := rootCmd.Execute(); err != nil {
@@ -220,21 +182,13 @@ func TestRootCommand_AzureDoctorHelpShowsDoctorFlags(t *testing.T) {
 }
 
 func TestRootCommand_AzureDoctorFailureDoesNotPrintRootUsage(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		resetRootFlagsForTest()
-	})
 	t.Setenv("HOME", t.TempDir())
 	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
 	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
 	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
 
-	var out bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
+	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "azure"})
 
 	err := rootCmd.Execute()

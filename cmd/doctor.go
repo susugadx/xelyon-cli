@@ -1,18 +1,14 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	azureprovider "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
-
-const defaultAzureDoctorTimeout = 120 * time.Second
 
 var (
 	doctorDeploymentFlag           string
@@ -25,7 +21,7 @@ var (
 	doctorBedrockThinkingSmokeFlag bool
 	doctorKimiImageSmokeFlag       bool
 	doctorKimiWebSearchSmokeFlag   bool
-	doctorTimeoutFlag              = defaultAzureDoctorTimeout
+	doctorTimeoutFlag              = defaultDoctorTimeout
 	doctorJSONFlag                 bool
 	doctorPrintConfigFlag          bool
 )
@@ -62,11 +58,11 @@ snippet without running diagnostics.`,
 	}
 
 	cmd.Flags().StringVar(&doctorDeploymentFlag, "deployment", "", "Azure OpenAI deployment name for 'doctor azure'")
-	cmd.Flags().StringVar(&doctorCatalogModelFlag, "catalog-model", "", "Catalog model for 'doctor azure' capability/token policy")
-	cmd.Flags().BoolVar(&doctorSmokeFlag, "smoke", false, "Send a live minimal Responses API request for 'doctor azure'")
-	cmd.Flags().BoolVar(&doctorToolSmokeFlag, "tool-smoke", false, "Send a live Azure OpenAI smoke request that forces a dummy tool call")
-	cmd.Flags().DurationVar(&doctorTimeoutFlag, "timeout", defaultAzureDoctorTimeout, "Timeout for 'doctor azure --smoke'")
-	cmd.Flags().BoolVar(&doctorJSONFlag, "json", false, "Print 'doctor azure' diagnostics as JSON")
+	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor azure' capability/token policy")
+	addDoctorSmokeFlag(cmd, "Send a live minimal Responses API request for 'doctor azure'")
+	addDoctorToolSmokeFlag(cmd, "Send a live Azure OpenAI smoke request that forces a dummy tool call")
+	addDoctorTimeoutFlag(cmd, "azure", "Timeout for 'doctor azure --smoke'")
+	addDoctorJSONFlag(cmd, "azure")
 	cmd.Flags().BoolVar(&doctorPrintConfigFlag, "print-config", false, "Print Azure OpenAI config YAML for the given deployment/catalog model")
 
 	return cmd
@@ -127,12 +123,7 @@ func runAzureDoctorInvocation(cmd *cobra.Command, args []string) error {
 }
 
 func renderAzureDoctorJSON(w io.Writer, report azureprovider.DiagnosticReport) error {
-	payload, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(w, string(payload))
-	return err
+	return renderDoctorJSON(w, report)
 }
 
 func renderAzureDoctorText(w io.Writer, report azureprovider.DiagnosticReport) {
@@ -140,50 +131,40 @@ func renderAzureDoctorText(w io.Writer, report azureprovider.DiagnosticReport) {
 	fmt.Fprintf(w, "Status: %s\n", strings.ToUpper(string(report.SummaryStatus())))
 	fmt.Fprintln(w)
 
-	for _, check := range report.Checks {
-		fmt.Fprintf(w, "%-4s %s: %s\n", strings.ToUpper(string(check.Status)), check.Name, check.Message)
-		if strings.TrimSpace(check.Detail) != "" {
-			fmt.Fprintf(w, "     detail: %s\n", check.Detail)
-		}
-		if strings.TrimSpace(check.Suggestion) != "" {
-			fmt.Fprintf(w, "     suggestion: %s\n", check.Suggestion)
-		}
-	}
+	renderDoctorChecks(w, azureDoctorCheckLines(report.Checks))
 
 	if report.Smoke != nil && report.Smoke.Ran {
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "Smoke duration: %s\n", report.Smoke.Duration)
-		fmt.Fprintf(w, "Smoke response ID: %s\n", azureDoctorSmokeResponseIDText(report.Smoke.ResponseID))
+		fmt.Fprintf(w, "Smoke response ID: %s\n", doctorOptionalIDText(report.Smoke.ResponseID))
 		if strings.TrimSpace(report.Smoke.Content) != "" {
 			fmt.Fprintf(w, "Smoke content: %s\n", report.Smoke.Content)
 		}
-		fmt.Fprintf(
-			w,
-			"Smoke usage: input=%d cached=%d output=%d reasoning=%d cache_creation=%d\n",
-			report.Smoke.Usage.InputTokens,
-			report.Smoke.Usage.CachedInputTokens,
-			report.Smoke.Usage.OutputTokens,
-			report.Smoke.Usage.ThinkingTokens,
-			report.Smoke.Usage.CacheCreationTokens,
-		)
-		fmt.Fprintf(w, "Smoke cost estimate: %s\n", azureDoctorSmokeCostText(*report.Smoke))
+		fmt.Fprintf(w, "Smoke usage: %s\n", formatDoctorSmokeUsage(azureDoctorSmokeUsage(report.Smoke.Usage)))
+		fmt.Fprintf(w, "Smoke cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
 	}
 }
 
-func azureDoctorSmokeResponseIDText(responseID string) string {
-	responseID = strings.TrimSpace(responseID)
-	if responseID == "" {
-		return "(not returned)"
+func azureDoctorCheckLines(checks []azureprovider.DiagnosticCheck) []doctorCheckLine {
+	lines := make([]doctorCheckLine, 0, len(checks))
+	for _, check := range checks {
+		lines = append(lines, doctorCheckLine{
+			Status:     string(check.Status),
+			Name:       check.Name,
+			Message:    check.Message,
+			Detail:     check.Detail,
+			Suggestion: check.Suggestion,
+		})
 	}
-	return responseID
+	return lines
 }
 
-func azureDoctorSmokeCostText(smoke azureprovider.DiagnosticSmokeResult) string {
-	if !smoke.UsageObserved {
-		return "N/A (usage unavailable)"
+func azureDoctorSmokeUsage(usage azureprovider.DiagnosticSmokeUsage) doctorSmokeUsageLine {
+	return doctorSmokeUsageLine{
+		InputTokens:         usage.InputTokens,
+		CachedInputTokens:   usage.CachedInputTokens,
+		OutputTokens:        usage.OutputTokens,
+		ThinkingTokens:      usage.ThinkingTokens,
+		CacheCreationTokens: usage.CacheCreationTokens,
 	}
-	if smoke.Cost.PricingUnavailable {
-		return "N/A (pricing unavailable)"
-	}
-	return fmt.Sprintf("$%.8f USD", smoke.Cost.USD)
 }

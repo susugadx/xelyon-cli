@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -29,13 +28,13 @@ support those request shapes yet.`,
 	}
 
 	cmd.Flags().StringVar(&doctorBedrockModelFlag, "model", "", "Bedrock model ID or configured alias for 'doctor bedrock'")
-	cmd.Flags().StringVar(&doctorCatalogModelFlag, "catalog-model", "", "Catalog model for 'doctor bedrock' capability/token/pricing policy")
-	cmd.Flags().BoolVar(&doctorSmokeFlag, "smoke", false, "Send a live minimal Bedrock text smoke request")
-	cmd.Flags().BoolVar(&doctorToolSmokeFlag, "tool-smoke", false, "Send a live Bedrock smoke request that forces a dummy tool call")
+	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor bedrock' capability/token/pricing policy")
+	addDoctorSmokeFlag(cmd, "Send a live minimal Bedrock text smoke request")
+	addDoctorToolSmokeFlag(cmd, "Send a live Bedrock smoke request that forces a dummy tool call")
 	cmd.Flags().BoolVar(&doctorBedrockImageSmokeFlag, "image-smoke", false, "Send a live Bedrock image input smoke request")
 	cmd.Flags().BoolVar(&doctorBedrockThinkingSmokeFlag, "thinking-smoke", false, "Send a live Bedrock extended-thinking smoke request")
-	cmd.Flags().DurationVar(&doctorTimeoutFlag, "timeout", defaultAzureDoctorTimeout, "Timeout for 'doctor bedrock' live smoke requests")
-	cmd.Flags().BoolVar(&doctorJSONFlag, "json", false, "Print 'doctor bedrock' diagnostics as JSON")
+	addDoctorTimeoutFlag(cmd, "bedrock", "")
+	addDoctorJSONFlag(cmd, "bedrock")
 
 	return cmd
 }
@@ -84,12 +83,7 @@ func runBedrockDoctorInvocation(cmd *cobra.Command, args []string) error {
 }
 
 func renderBedrockDoctorJSON(w io.Writer, report bedrockprovider.DiagnosticReport) error {
-	payload, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(w, string(payload))
-	return err
+	return renderDoctorJSON(w, report)
 }
 
 func renderBedrockDoctorText(w io.Writer, report bedrockprovider.DiagnosticReport) {
@@ -101,15 +95,7 @@ func renderBedrockDoctorText(w io.Writer, report bedrockprovider.DiagnosticRepor
 	fmt.Fprintf(w, "Route: %s\n", report.Route)
 	fmt.Fprintln(w)
 
-	for _, check := range report.Checks {
-		fmt.Fprintf(w, "%-4s %s: %s\n", strings.ToUpper(string(check.Status)), check.Name, check.Message)
-		if strings.TrimSpace(check.Detail) != "" {
-			fmt.Fprintf(w, "     detail: %s\n", check.Detail)
-		}
-		if strings.TrimSpace(check.Suggestion) != "" {
-			fmt.Fprintf(w, "     suggestion: %s\n", check.Suggestion)
-		}
-	}
+	renderDoctorChecks(w, bedrockDoctorCheckLines(report.Checks))
 
 	if report.Smoke == nil || !report.Smoke.Ran {
 		return
@@ -119,16 +105,8 @@ func renderBedrockDoctorText(w io.Writer, report bedrockprovider.DiagnosticRepor
 		renderBedrockDoctorSmokeRequest(w, request)
 	}
 	if len(report.Smoke.Requests) > 1 {
-		fmt.Fprintf(
-			w,
-			"Smoke total usage: input=%d cached=%d output=%d reasoning=%d cache_creation=%d\n",
-			report.Smoke.Usage.InputTokens,
-			report.Smoke.Usage.CachedInputTokens,
-			report.Smoke.Usage.OutputTokens,
-			report.Smoke.Usage.ThinkingTokens,
-			report.Smoke.Usage.CacheCreationTokens,
-		)
-		fmt.Fprintf(w, "Smoke total cost estimate: %s\n", bedrockDoctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost))
+		fmt.Fprintf(w, "Smoke total usage: %s\n", formatDoctorSmokeUsage(bedrockDoctorSmokeUsage(report.Smoke.Usage)))
+		fmt.Fprintf(w, "Smoke total cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
 	}
 }
 
@@ -148,38 +126,35 @@ func renderBedrockDoctorSmokeRequest(w io.Writer, request bedrockprovider.Diagno
 		request.Name,
 		status,
 		request.Duration,
-		bedrockDoctorSmokeRequestIDText(request.RequestID),
+		doctorOptionalIDText(request.RequestID),
 	)
 	if strings.TrimSpace(request.Content) != "" {
 		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
 	}
-	fmt.Fprintf(
-		w,
-		"Smoke usage %s: input=%d cached=%d output=%d reasoning=%d cache_creation=%d\n",
-		request.Name,
-		request.Usage.InputTokens,
-		request.Usage.CachedInputTokens,
-		request.Usage.OutputTokens,
-		request.Usage.ThinkingTokens,
-		request.Usage.CacheCreationTokens,
-	)
-	fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, bedrockDoctorSmokeCostText(request.UsageObserved, request.Cost))
+	fmt.Fprintf(w, "Smoke usage %s: %s\n", request.Name, formatDoctorSmokeUsage(bedrockDoctorSmokeUsage(request.Usage)))
+	fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, doctorSmokeCostText(request.UsageObserved, request.Cost.PricingUnavailable, request.Cost.USD))
 }
 
-func bedrockDoctorSmokeRequestIDText(requestID string) string {
-	requestID = strings.TrimSpace(requestID)
-	if requestID == "" {
-		return "(not returned)"
+func bedrockDoctorCheckLines(checks []bedrockprovider.DiagnosticCheck) []doctorCheckLine {
+	lines := make([]doctorCheckLine, 0, len(checks))
+	for _, check := range checks {
+		lines = append(lines, doctorCheckLine{
+			Status:     string(check.Status),
+			Name:       check.Name,
+			Message:    check.Message,
+			Detail:     check.Detail,
+			Suggestion: check.Suggestion,
+		})
 	}
-	return requestID
+	return lines
 }
 
-func bedrockDoctorSmokeCostText(usageObserved bool, smokeCost bedrockprovider.DiagnosticSmokeCost) string {
-	if !usageObserved {
-		return "N/A (usage unavailable)"
+func bedrockDoctorSmokeUsage(usage bedrockprovider.DiagnosticSmokeUsage) doctorSmokeUsageLine {
+	return doctorSmokeUsageLine{
+		InputTokens:         usage.InputTokens,
+		CachedInputTokens:   usage.CachedInputTokens,
+		OutputTokens:        usage.OutputTokens,
+		ThinkingTokens:      usage.ThinkingTokens,
+		CacheCreationTokens: usage.CacheCreationTokens,
 	}
-	if smokeCost.PricingUnavailable {
-		return "N/A (pricing unavailable)"
-	}
-	return fmt.Sprintf("$%.8f USD", smokeCost.USD)
 }

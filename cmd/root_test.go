@@ -75,10 +75,38 @@ func resetRootFlagsForTest() {
 	doctorBedrockThinkingSmokeFlag = false
 	doctorKimiImageSmokeFlag = false
 	doctorKimiWebSearchSmokeFlag = false
-	doctorTimeoutFlag = defaultAzureDoctorTimeout
+	doctorTimeoutFlag = defaultDoctorTimeout
 	doctorJSONFlag = false
 	doctorPrintConfigFlag = false
 	resetCommandFlagsForTest(rootCmd)
+}
+
+func newDoctorSubcommandTest(t *testing.T, newCommand func() *cobra.Command) (*cobra.Command, *bytes.Buffer) {
+	t.Helper()
+	resetRootFlagsForTest()
+	t.Cleanup(resetRootFlagsForTest)
+
+	var out bytes.Buffer
+	cmd := newCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	return cmd, &out
+}
+
+func newRootCommandExecutionTest(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	resetRootFlagsForTest()
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+		resetRootFlagsForTest()
+	})
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	return &out
 }
 
 func resetCommandFlagsForTest(cmd *cobra.Command) {

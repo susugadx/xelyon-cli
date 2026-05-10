@@ -10,14 +10,9 @@ import (
 )
 
 func TestRunBedrockDoctorInvocation_JSONReportsExplicitModel(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(resetRootFlagsForTest)
 	setBedrockDoctorCommandTestEnv(t)
 
-	var out bytes.Buffer
-	cmd := newBedrockDoctorCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
+	cmd, out := newDoctorSubcommandTest(t, newBedrockDoctorCommand)
 
 	doctorBedrockModelFlag = "corp-bedrock-sonnet"
 	doctorCatalogModelFlag = "global.anthropic.claude-sonnet-4-6"
@@ -52,17 +47,9 @@ func TestRunBedrockDoctorInvocation_JSONReportsExplicitModel(t *testing.T) {
 }
 
 func TestRootCommand_BedrockDoctorCommandParsesFlags(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		resetRootFlagsForTest()
-	})
 	setBedrockDoctorCommandTestEnv(t)
 
-	var out bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
+	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "bedrock", "--model", "amazon.nova-pro-v1:0", "--catalog-model", "amazon.nova-pro-v1:0", "--json"})
 
 	if err := rootCmd.Execute(); err != nil {
@@ -74,16 +61,7 @@ func TestRootCommand_BedrockDoctorCommandParsesFlags(t *testing.T) {
 }
 
 func TestRootCommand_BedrockDoctorHelpShowsDoctorFlags(t *testing.T) {
-	resetRootFlagsForTest()
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		resetRootFlagsForTest()
-	})
-
-	var out bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
+	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "bedrock", "--help"})
 
 	if err := rootCmd.Execute(); err != nil {
