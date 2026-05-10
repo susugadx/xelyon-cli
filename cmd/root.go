@@ -54,6 +54,7 @@ Examples:
   xelyon --interactive "explain this project"      # Force interactive TUI
   xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
+  xelyon doctor openai --smoke                     # Diagnose OpenAI provider
   xelyon doctor azure --deployment my-gpt-5-deployment --smoke # Diagnose Azure OpenAI
   xelyon doctor bedrock --smoke                    # Diagnose AWS Bedrock
   xelyon doctor kimi --smoke                       # Diagnose Kimi native provider
