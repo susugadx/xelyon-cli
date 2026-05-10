@@ -28,6 +28,7 @@ type Provider struct {
 	mcpTools                       []api.ToolDefinition // MCP ツール定義（Function Calling用）
 	usageCallback                  api.UsageCallback    // トークン使用量コールバック
 	toolChoice                     *string              // tool_choice 強制用
+	responsesRequestObserver       func(ResponsesRequest)
 }
 
 // New は新しいProviderを作成

@@ -51,33 +51,36 @@ type DiagnosticSmokeCost struct {
 
 // DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
 type DiagnosticSmokeRequestResult struct {
-	Name          string               `json:"name"`
-	Ran           bool                 `json:"ran"`
-	Skipped       bool                 `json:"skipped,omitempty"`
-	SkipReason    string               `json:"skip_reason,omitempty"`
-	ToolPayload   bool                 `json:"tool_payload"`
-	Route         string               `json:"route"`
-	Content       string               `json:"content,omitempty"`
-	ResponseID    string               `json:"response_id"`
-	Duration      string               `json:"duration,omitempty"`
-	UsageObserved bool                 `json:"usage_observed"`
-	Usage         DiagnosticSmokeUsage `json:"usage"`
-	Cost          DiagnosticSmokeCost  `json:"cost"`
-	Error         string               `json:"error,omitempty"`
+	Name               string               `json:"name"`
+	Ran                bool                 `json:"ran"`
+	Skipped            bool                 `json:"skipped,omitempty"`
+	SkipReason         string               `json:"skip_reason,omitempty"`
+	ToolPayload        bool                 `json:"tool_payload"`
+	RetentionPayload   bool                 `json:"retention_payload"`
+	Route              string               `json:"route"`
+	Content            string               `json:"content,omitempty"`
+	ResponseID         string               `json:"response_id"`
+	PreviousResponseID string               `json:"previous_response_id"`
+	Duration           string               `json:"duration,omitempty"`
+	UsageObserved      bool                 `json:"usage_observed"`
+	Usage              DiagnosticSmokeUsage `json:"usage"`
+	Cost               DiagnosticSmokeCost  `json:"cost"`
+	Error              string               `json:"error,omitempty"`
 }
 
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
 type DiagnosticSmokeResult struct {
-	Ran           bool                           `json:"ran"`
-	ToolPayload   bool                           `json:"tool_payload"`
-	Route         string                         `json:"route"`
-	Content       string                         `json:"content,omitempty"`
-	ResponseID    string                         `json:"response_id"`
-	Duration      string                         `json:"duration,omitempty"`
-	UsageObserved bool                           `json:"usage_observed"`
-	Usage         DiagnosticSmokeUsage           `json:"usage"`
-	Cost          DiagnosticSmokeCost            `json:"cost"`
-	Requests      []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
+	Ran              bool                           `json:"ran"`
+	ToolPayload      bool                           `json:"tool_payload"`
+	RetentionPayload bool                           `json:"retention_payload"`
+	Route            string                         `json:"route"`
+	Content          string                         `json:"content,omitempty"`
+	ResponseID       string                         `json:"response_id"`
+	Duration         string                         `json:"duration,omitempty"`
+	UsageObserved    bool                           `json:"usage_observed"`
+	Usage            DiagnosticSmokeUsage           `json:"usage"`
+	Cost             DiagnosticSmokeCost            `json:"cost"`
+	Requests         []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
 }
 
 // DiagnosticReport は OpenAI の設定診断結果を表す。
@@ -130,6 +133,7 @@ type DiagnosticOptions struct {
 	RunSmoke        bool
 	TextSmoke       bool
 	ToolSmoke       bool
+	RetentionSmoke  bool
 	SmokeTimeout    time.Duration
 	MaxOutputTokens int
 	SmokeOutput     io.Writer

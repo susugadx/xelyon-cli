@@ -24,9 +24,9 @@ xelyon doctor kimi --json
 
 ### `xelyon doctor openai`
 
-OpenAI provider の `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--smoke` を付けると live text request を送信し、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。両方を指定した場合は text request と tool request を別々に実行し、JSON では `smoke.requests[]` に request 単位の結果を出します。
+OpenAI provider の `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--smoke` を付けると live text request を送信し、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。複数 smoke を指定した場合は request を別々に実行し、JSON では `smoke.requests[]` に request 単位の結果を出します。
 
-`OPENAI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、tool payload / `tool_choice` は送信しません。`--model` は実 request に送るモデル名または alias、`--catalog-model` は alias の underlying OpenAI model として token / pricing / route 判定に使います。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+`OPENAI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、tool payload / `tool_choice` は送信しません。`--retention-smoke` は Responses API route 専用で、Chat Completions route では live request を送らず fail します。`--model` は実 request に送るモデル名または alias、`--catalog-model` は alias の underlying OpenAI model として token / pricing / route 判定に使います。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
 ```bash
 xelyon doctor openai
@@ -34,11 +34,13 @@ xelyon doctor openai --model gpt-5.4
 xelyon doctor openai --model corp-openai-deployment --catalog-model gpt-5.4
 xelyon doctor openai --smoke
 xelyon doctor openai --tool-smoke
+xelyon doctor openai --retention-smoke
 xelyon doctor openai --smoke --tool-smoke
+xelyon doctor openai --smoke --tool-smoke --retention-smoke
 xelyon doctor openai --json
 ```
 
-手元で doctor 経路だけを実 OpenAI 環境で確認する場合は、`OPENAI_API_KEY` を設定して `make openai-doctor-smoke` を実行します。既定では `gpt-5.4` を使い、必要なら `OPENAI_DOCTOR_SMOKE_MODEL` で変更できます。
+手元で doctor 経路だけを実 OpenAI 環境で確認する場合は、`OPENAI_API_KEY` を設定して `make openai-doctor-smoke` を実行します。既定では `gpt-5.4` で text / tool / retention smoke をまとめて実行し、必要なら `OPENAI_DOCTOR_SMOKE_MODEL` で変更できます。
 
 ### `xelyon doctor azure`
 

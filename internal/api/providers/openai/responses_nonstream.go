@@ -59,6 +59,9 @@ func (p *Provider) runResponsesRequest(ctx context.Context, options responsesReq
 
 	for attempt := 0; attempt < 2; attempt++ {
 		reqBody := options.BuildRequest()
+		if p.responsesRequestObserver != nil {
+			p.responsesRequestObserver(reqBody)
+		}
 		p.responsesLocalAutoCompressSkip = reqBody.SkipLocalAutoCompressionAfterResponse
 		payload, err := json.Marshal(reqBody)
 		if err != nil {

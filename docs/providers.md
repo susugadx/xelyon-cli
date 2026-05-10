@@ -179,7 +179,7 @@ xelyon --provider openai --model gpt-5.5
 xelyon --provider openai --model gpt-5.5-pro
 ```
 
-設定の到達性は CLI から診断できます。`doctor openai` は `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--smoke` を付けると live text request を送って、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。両方を指定した場合は text request と tool request を別々に実行し、JSON では `smoke.requests[]` に request 単位の結果を出します。
+設定の到達性は CLI から診断できます。`doctor openai` は `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--smoke` を付けると live text request を送って、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認したい場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。複数 smoke を指定した場合は request を別々に実行し、JSON では `smoke.requests[]` に request 単位の結果を出します。
 
 ```bash
 xelyon doctor openai
@@ -187,11 +187,13 @@ xelyon doctor openai --model gpt-5.4
 xelyon doctor openai --model corp-openai-deployment --catalog-model gpt-5.4
 xelyon doctor openai --smoke
 xelyon doctor openai --tool-smoke
+xelyon doctor openai --retention-smoke
 xelyon doctor openai --smoke --tool-smoke
+xelyon doctor openai --smoke --tool-smoke --retention-smoke
 xelyon doctor openai --json
 ```
 
-`OPENAI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip し、tool payload / `tool_choice` は送信しません。`--smoke` / `--tool-smoke` は live API request を送るため、通常 CI では実行しません。手元では `OPENAI_API_KEY` を設定して `make openai-doctor-smoke` を実行します。既定モデルは `OPENAI_DOCTOR_SMOKE_MODEL ?= gpt-5.4` です。
+`OPENAI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip し、tool payload / `tool_choice` は送信しません。`--retention-smoke` は Responses API route 専用で、Chat Completions route では live request を送らず fail します。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、通常 CI では実行しません。手元では `OPENAI_API_KEY` を設定して `make openai-doctor-smoke` を実行します。既定モデルは `OPENAI_DOCTOR_SMOKE_MODEL ?= gpt-5.4` です。
 
 ### 4. Azure OpenAI
 

@@ -20,8 +20,8 @@ Checks OPENAI_API_KEY, OpenAI Chat Completions and Responses endpoints,
 provider registration, model/catalog model resolution, route selection,
 function calling settings, token/cost metadata, and Responses API retention
 settings. Use --smoke to send a minimal live request. Use --tool-smoke to
-force a dummy tool call when function calling is enabled. Use both flags to
-run separate text and tool smoke requests.`,
+force a dummy tool call when function calling is enabled. Use
+--retention-smoke to verify a Responses API previous_response_id chain.`,
 		Args: cobra.NoArgs,
 		RunE: runOpenAIDoctorInvocation,
 	}
@@ -30,6 +30,7 @@ run separate text and tool smoke requests.`,
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor openai' capability/token/pricing policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal OpenAI text smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live OpenAI smoke request that forces a dummy tool call")
+	cmd.Flags().BoolVar(&doctorOpenAIRetentionSmokeFlag, "retention-smoke", false, "Send live OpenAI Responses API requests that verify previous_response_id retention")
 	addDoctorTimeoutFlag(cmd, "openai", "")
 	addDoctorJSONFlag(cmd, "openai")
 
@@ -44,13 +45,14 @@ func runOpenAIDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := openaiprovider.Diagnose(cmd.Context(), openaiprovider.DiagnosticOptions{
-		Config:       cfg,
-		Model:        doctorOpenAIModelFlag,
-		CatalogModel: doctorCatalogModelFlag,
-		RunSmoke:     doctorSmokeFlag || doctorToolSmokeFlag,
-		TextSmoke:    doctorSmokeFlag,
-		ToolSmoke:    doctorToolSmokeFlag,
-		SmokeTimeout: doctorTimeoutFlag,
+		Config:         cfg,
+		Model:          doctorOpenAIModelFlag,
+		CatalogModel:   doctorCatalogModelFlag,
+		RunSmoke:       doctorSmokeFlag || doctorToolSmokeFlag || doctorOpenAIRetentionSmokeFlag,
+		TextSmoke:      doctorSmokeFlag,
+		ToolSmoke:      doctorToolSmokeFlag,
+		RetentionSmoke: doctorOpenAIRetentionSmokeFlag,
+		SmokeTimeout:   doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]openaiprovider.DiagnosticCheck{{
@@ -124,15 +126,18 @@ func renderOpenAIDoctorSmokeRequest(w io.Writer, request openaiprovider.Diagnost
 	if strings.TrimSpace(request.Error) != "" {
 		status = "fail"
 	}
-	fmt.Fprintf(
-		w,
-		"Smoke request %s: %s route=%s duration=%s response_id=%s\n",
+	line := fmt.Sprintf(
+		"Smoke request %s: %s route=%s duration=%s response_id=%s",
 		request.Name,
 		status,
 		request.Route,
 		request.Duration,
 		doctorOptionalIDText(request.ResponseID),
 	)
+	if request.RetentionPayload {
+		line += fmt.Sprintf(" previous_response_id=%s", doctorOptionalIDText(request.PreviousResponseID))
+	}
+	fmt.Fprintln(w, line)
 	if strings.TrimSpace(request.Content) != "" {
 		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
 	}

@@ -223,6 +223,16 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 			"Unset OPENAI_FUNCTION_CALLING or set it to 1 before rerunning --tool-smoke",
 		)
 	}
+	if options.RetentionSmoke && r.Route == DiagnosticRouteChatCompletions {
+		r.addCheck(
+			DiagnosticStatusFail,
+			"retention_smoke",
+			"OpenAI Responses retention smoke is not supported on the Chat Completions route",
+			r.Route,
+			"Use a Responses API model before rerunning --retention-smoke",
+		)
+		return
+	}
 
 	smoke, err := runOpenAIDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
@@ -234,6 +244,9 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	r.addSmokeObservationChecks(smoke)
 	if smoke.ToolPayload {
 		r.addCheck(DiagnosticStatusOK, "tool_smoke", "OpenAI endpoint accepted a tool payload", smoke.Duration, "")
+	}
+	if smoke.RetentionPayload {
+		r.addCheck(DiagnosticStatusOK, "retention_smoke", "OpenAI endpoint accepted a previous_response_id chain", smoke.Duration, "")
 	}
 }
 

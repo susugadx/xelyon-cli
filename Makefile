@@ -174,7 +174,7 @@ azure-doctor-smoke:
 # OpenAI doctor 診断経路を実環境で確認（OPENAI_API_KEY 必須）
 openai-doctor-smoke:
 	@test -n "$(OPENAI_API_KEY)" || { echo "OPENAI_API_KEY is required for make openai-doctor-smoke"; exit 1; }
-	go run . doctor openai --model "$(OPENAI_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke
+	go run . doctor openai --model "$(OPENAI_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke --retention-smoke
 
 # Kimi native provider の実 API smoke test（MOONSHOT_API_KEY 必須）
 kimi-smoke:

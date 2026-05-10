@@ -22,10 +22,11 @@ const (
 )
 
 type openAIDiagnosticSmokeRequest struct {
-	Name         string
-	SystemPrompt string
-	UserContent  string
-	ToolPayload  bool
+	Name             string
+	SystemPrompt     string
+	UserContent      string
+	ToolPayload      bool
+	RetentionPayload bool
 }
 
 func runOpenAIDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
@@ -41,9 +42,9 @@ func runOpenAIDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 	smokeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	smokeCfg := openAIDiagnosticConfigWithModelPolicy(cfg, report.Model, report.CatalogModel, maxOutputTokens)
-	smokeCfg.Responses.Store = false
-	smokeCfg.Responses.PersistResponseID = false
+	baseSmokeCfg := openAIDiagnosticConfigWithModelPolicy(cfg, report.Model, report.CatalogModel, maxOutputTokens)
+	baseSmokeCfg.Responses.Store = false
+	baseSmokeCfg.Responses.PersistResponseID = false
 	output := options.SmokeOutput
 	if output == nil {
 		output = io.Discard
@@ -67,7 +68,8 @@ func runOpenAIDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 			continue
 		}
 
-		requestResult, err := runOpenAIDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
+		requestCfg := openAIDiagnosticSmokeRequestConfig(baseSmokeCfg, request)
+		requestResult, err := runOpenAIDiagnosticSmokeRequest(smokeCtx, requestCfg, provider, report, request, output)
 		result.Requests = append(result.Requests, requestResult)
 		result.addRequestObservation(requestResult)
 		if err != nil {
@@ -80,7 +82,7 @@ func runOpenAIDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 }
 
 func openAIDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingEnabled bool) []openAIDiagnosticSmokeRequest {
-	textSmoke := options.TextSmoke || !options.ToolSmoke
+	textSmoke := options.TextSmoke || (!options.ToolSmoke && !options.RetentionSmoke)
 	if options.ToolSmoke && !functionCallingEnabled {
 		textSmoke = true
 	}
@@ -101,7 +103,31 @@ func openAIDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingEna
 			ToolPayload:  true,
 		})
 	}
+	if options.RetentionSmoke {
+		requests = append(requests,
+			openAIDiagnosticSmokeRequest{
+				Name:             "retention_initial",
+				SystemPrompt:     "Reply briefly.",
+				UserContent:      "Reply with: xelyon openai retention initial ok",
+				RetentionPayload: true,
+			},
+			openAIDiagnosticSmokeRequest{
+				Name:             "retention_followup",
+				SystemPrompt:     "Reply briefly.",
+				UserContent:      "Reply with: xelyon openai retention followup ok",
+				RetentionPayload: true,
+			},
+		)
+	}
 	return requests
+}
+
+func openAIDiagnosticSmokeRequestConfig(base *config.Config, request openAIDiagnosticSmokeRequest) *config.Config {
+	cfg := config.CloneConfig(base)
+	if request.RetentionPayload {
+		cfg.Responses.Store = true
+	}
+	return cfg
 }
 
 func runOpenAIDiagnosticSmokeRequest(
@@ -126,6 +152,9 @@ func runOpenAIDiagnosticSmokeRequest(
 		usageObserved = usageObserved || observed.HasTokenObservation()
 	})
 
+	observedRequests, restoreObserver := observeOpenAIDiagnosticResponsesRequests(provider)
+	defer restoreObserver()
+
 	started := time.Now()
 	content, responseID, err := runOpenAIDiagnosticProviderSmokeRequest(
 		requestCtx,
@@ -134,26 +163,44 @@ func runOpenAIDiagnosticSmokeRequest(
 		request.SystemPrompt,
 		[]api.Message{{Role: "user", Content: request.UserContent}},
 		report.Model,
+		request.RetentionPayload,
 	)
 	elapsed := time.Since(started).Round(time.Millisecond)
-	provider.ClearResponseID()
+	if !request.RetentionPayload {
+		provider.ClearResponseID()
+	}
 	costEstimate := cost.EstimateRequestCostWithCacheForConfig(cfg, "openai", report.Model, usage)
+	observed := observedRequests()
+	previousResponseID := openAIDiagnosticObservedPreviousResponseID(observed)
 
 	result := DiagnosticSmokeRequestResult{
-		Name:          request.Name,
-		Ran:           true,
-		ToolPayload:   request.ToolPayload,
-		Route:         report.Route,
-		Content:       strings.TrimSpace(content),
-		ResponseID:    strings.TrimSpace(responseID),
-		Duration:      elapsed.String(),
-		UsageObserved: usageObserved,
-		Usage:         openAIDiagnosticSmokeUsage(usage),
-		Cost:          openAIDiagnosticSmokeCost(costEstimate),
+		Name:               request.Name,
+		Ran:                true,
+		ToolPayload:        request.ToolPayload,
+		RetentionPayload:   request.RetentionPayload,
+		Route:              report.Route,
+		Content:            strings.TrimSpace(content),
+		ResponseID:         strings.TrimSpace(responseID),
+		PreviousResponseID: previousResponseID,
+		Duration:           elapsed.String(),
+		UsageObserved:      usageObserved,
+		Usage:              openAIDiagnosticSmokeUsage(usage),
+		Cost:               openAIDiagnosticSmokeCost(costEstimate),
 	}
 	if err != nil {
 		result.Error = err.Error()
 		return result, err
+	}
+	if request.RetentionPayload {
+		if err := validateOpenAIDiagnosticRetentionSmokeRequest(request, observed, result); err != nil {
+			result.Error = err.Error()
+			return result, err
+		}
+		if strings.TrimSpace(content) == "" {
+			result.Error = fmt.Sprintf("%s smoke response content is empty", request.Name)
+			return result, errors.New(result.Error)
+		}
+		return result, nil
 	}
 	if request.ToolPayload {
 		if !openAIDiagnosticSmokeContentHasToolCall(content) {
@@ -167,6 +214,53 @@ func runOpenAIDiagnosticSmokeRequest(
 		return result, errors.New(result.Error)
 	}
 	return result, nil
+}
+
+func observeOpenAIDiagnosticResponsesRequests(provider *Provider) (func() []ResponsesRequest, func()) {
+	if provider == nil {
+		return func() []ResponsesRequest { return nil }, func() {}
+	}
+	previousObserver := provider.responsesRequestObserver
+	observed := make([]ResponsesRequest, 0, 1)
+	provider.responsesRequestObserver = func(request ResponsesRequest) {
+		observed = append(observed, request)
+		if previousObserver != nil {
+			previousObserver(request)
+		}
+	}
+	snapshot := func() []ResponsesRequest {
+		return append([]ResponsesRequest(nil), observed...)
+	}
+	restore := func() {
+		provider.responsesRequestObserver = previousObserver
+	}
+	return snapshot, restore
+}
+
+func openAIDiagnosticObservedPreviousResponseID(requests []ResponsesRequest) string {
+	if len(requests) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(requests[0].PreviousResponseID)
+}
+
+func validateOpenAIDiagnosticRetentionSmokeRequest(request openAIDiagnosticSmokeRequest, observed []ResponsesRequest, result DiagnosticSmokeRequestResult) error {
+	if len(observed) == 0 {
+		return fmt.Errorf("%s smoke did not build a Responses request", request.Name)
+	}
+	if !observed[0].Store {
+		return fmt.Errorf("%s smoke request did not set responses.store=true", request.Name)
+	}
+	if request.Name != "retention_followup" {
+		return nil
+	}
+	if strings.TrimSpace(result.PreviousResponseID) == "" {
+		return fmt.Errorf("retention followup did not send previous_response_id")
+	}
+	if len(observed) > 1 {
+		return fmt.Errorf("retention followup retried without proving previous_response_id was accepted")
+	}
+	return nil
 }
 
 func newOpenAIDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request openAIDiagnosticSmokeRequest, output io.Writer) context.Context {
@@ -194,6 +288,7 @@ func runOpenAIDiagnosticProviderSmokeRequest(
 	systemPrompt string,
 	history []api.Message,
 	model string,
+	retentionPayload bool,
 ) (string, string, error) {
 	if provider == nil {
 		return "", "", fmt.Errorf("openai diagnostic smoke provider is nil")
@@ -201,6 +296,10 @@ func runOpenAIDiagnosticProviderSmokeRequest(
 	if route == DiagnosticRouteChatCompletions {
 		content, err := provider.chatWithCompletions(ctx, systemPrompt, history, model)
 		return content, "", err
+	}
+	if retentionPayload {
+		content, err := provider.chatWithResponses(ctx, systemPrompt, history, model)
+		return content, provider.GetResponseID(), err
 	}
 	provider.responsesLocalAutoCompressSkip = false
 	return provider.runResponsesRequest(ctx, responsesRequestRunOptions{
@@ -220,6 +319,9 @@ func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeReq
 	}
 	if request.ToolPayload {
 		r.ToolPayload = true
+	}
+	if request.RetentionPayload {
+		r.RetentionPayload = true
 	}
 	if r.Route == "" {
 		r.Route = request.Route

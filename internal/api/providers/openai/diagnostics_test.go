@@ -279,6 +279,134 @@ func TestDiagnoseOpenAI_TextAndToolSmokeRunSeparateRequests(t *testing.T) {
 	}
 }
 
+func TestDiagnoseOpenAI_RetentionSmokeChainsPreviousResponseIDAndForcesStore(t *testing.T) {
+	var received []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		received = append(received, body)
+		w.Header().Set("Content-Type", "application/json")
+		switch len(received) {
+		case 1:
+			_, _ = w.Write([]byte(`{"id":"resp_retention_initial","output_text":"xelyon openai retention initial ok","usage":{"input_tokens":5,"output_tokens":2}}`))
+		case 2:
+			_, _ = w.Write([]byte(`{"id":"resp_retention_followup","output_text":"xelyon openai retention followup ok","usage":{"input_tokens":4,"output_tokens":2,"input_tokens_details":{"cached_tokens":1}}}`))
+		default:
+			t.Fatalf("unexpected smoke request count %d", len(received))
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv(openAIAPIKeyEnv, "sk-test")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         cfg,
+		Model:          "gpt-5.5-pro",
+		CatalogModel:   "gpt-5.5-pro",
+		RunSmoke:       true,
+		RetentionSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("Diagnose() has failures: %#v", report.Checks)
+	}
+	if report.ResponsesStore {
+		t.Fatal("ResponsesStore = true, want diagnostic report to preserve user config responses.store=false")
+	}
+	retentionCheck, ok := openAIDiagnosticCheckByName(report, "retention_smoke")
+	if !ok || retentionCheck.Status != DiagnosticStatusOK {
+		t.Fatalf("retention_smoke check = %#v, %v; want ok", retentionCheck, ok)
+	}
+	retentionConfigCheck, ok := openAIDiagnosticCheckByName(report, "responses_retention")
+	if !ok || retentionConfigCheck.Status != DiagnosticStatusWarn {
+		t.Fatalf("responses_retention check = %#v, %v; want warn from user config", retentionConfigCheck, ok)
+	}
+	if len(received) != 2 {
+		t.Fatalf("received %d smoke requests, want retention initial and followup", len(received))
+	}
+	if received[0]["store"] != true || received[1]["store"] != true {
+		t.Fatalf("store values = %#v/%#v, want true for retention smoke", received[0]["store"], received[1]["store"])
+	}
+	if _, ok := received[0]["previous_response_id"]; ok {
+		t.Fatalf("initial previous_response_id should be omitted: %#v", received[0])
+	}
+	if received[1]["previous_response_id"] != "resp_retention_initial" {
+		t.Fatalf("followup previous_response_id = %#v, want resp_retention_initial", received[1]["previous_response_id"])
+	}
+	if report.Smoke == nil || !report.Smoke.RetentionPayload || len(report.Smoke.Requests) != 2 {
+		t.Fatalf("Smoke = %#v, want two retention request results", report.Smoke)
+	}
+	if report.Smoke.Requests[0].Name != "retention_initial" || !report.Smoke.Requests[0].RetentionPayload || report.Smoke.Requests[0].PreviousResponseID != "" {
+		t.Fatalf("initial request result = %#v, want retention initial without previous_response_id", report.Smoke.Requests[0])
+	}
+	if report.Smoke.Requests[1].Name != "retention_followup" || report.Smoke.Requests[1].PreviousResponseID != "resp_retention_initial" {
+		t.Fatalf("followup request result = %#v, want chained previous_response_id", report.Smoke.Requests[1])
+	}
+	if !report.Smoke.UsageObserved || report.Smoke.Usage.InputTokens != 9 || report.Smoke.Usage.OutputTokens != 4 || report.Smoke.Usage.CachedInputTokens != 1 {
+		t.Fatalf("Smoke usage = %+v observed=%t, want aggregate retention usage", report.Smoke.Usage, report.Smoke.UsageObserved)
+	}
+}
+
+func TestDiagnoseOpenAI_RetentionSmokeFailsWhenFollowupRetriesWithoutPreviousResponseID(t *testing.T) {
+	var received []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		received = append(received, body)
+		w.Header().Set("Content-Type", "application/json")
+		switch len(received) {
+		case 1:
+			_, _ = w.Write([]byte(`{"id":"resp_retention_initial","output_text":"xelyon openai retention initial ok","usage":{"input_tokens":5,"output_tokens":2}}`))
+		case 2:
+			if body["previous_response_id"] != "resp_retention_initial" {
+				t.Fatalf("second previous_response_id = %#v, want resp_retention_initial", body["previous_response_id"])
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"invalid previous_response_id"}}`))
+		case 3:
+			if _, ok := body["previous_response_id"]; ok {
+				t.Fatalf("retry request should omit previous_response_id after runtime recovery: %#v", body)
+			}
+			_, _ = w.Write([]byte(`{"id":"resp_retry","output_text":"retry without retention","usage":{"input_tokens":4,"output_tokens":2}}`))
+		default:
+			t.Fatalf("unexpected smoke request count %d", len(received))
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv(openAIAPIKeyEnv, "sk-test")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, server.URL)
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		Model:          "gpt-5.5-pro",
+		CatalogModel:   "gpt-5.5-pro",
+		RunSmoke:       true,
+		RetentionSmoke: true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("Diagnose() has no failures, want retention smoke failure: %#v", report.Checks)
+	}
+	if len(received) != 3 {
+		t.Fatalf("received %d smoke requests, want retry path to be observed", len(received))
+	}
+	smokeCheck, ok := openAIDiagnosticCheckByName(report, "smoke")
+	if !ok || smokeCheck.Status != DiagnosticStatusFail || !strings.Contains(smokeCheck.Detail, "retried without proving previous_response_id") {
+		t.Fatalf("smoke check = %#v, %v; want retry failure detail", smokeCheck, ok)
+	}
+	if report.Smoke == nil || len(report.Smoke.Requests) != 2 || !strings.Contains(report.Smoke.Requests[1].Error, "retried without proving previous_response_id") {
+		t.Fatalf("Smoke = %#v, want followup retry failure", report.Smoke)
+	}
+}
+
 func TestDiagnoseOpenAI_ToolSmokeSkippedWhenFunctionCallingDisabled(t *testing.T) {
 	var received map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -370,6 +498,45 @@ func TestDiagnoseOpenAI_ChatCompletionsSmokeUsesCompatRouteWithoutResponseID(t *
 	}
 	if _, ok := received["tool_choice"]; ok {
 		t.Fatalf("tool_choice should be omitted in text smoke: %#v", received["tool_choice"])
+	}
+}
+
+func TestDiagnoseOpenAI_RetentionSmokeUnsupportedOnChatCompletionsDoesNotSendRequest(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintln(w, `data: {"choices":[{"delta":{"content":"unexpected"}}]}`)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, `data: [DONE]`)
+		fmt.Fprintln(w)
+	}))
+	defer server.Close()
+
+	t.Setenv(openAIAPIKeyEnv, "sk-test")
+	t.Setenv(openAIAPIURLEnv, server.URL)
+	t.Setenv(openAIResponsesURLEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		Model:          "gpt-4",
+		CatalogModel:   "gpt-4",
+		RunSmoke:       true,
+		TextSmoke:      true,
+		RetentionSmoke: true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("Diagnose() has no failures, want retention smoke unsupported failure: %#v", report.Checks)
+	}
+	if requestCount != 0 {
+		t.Fatalf("requestCount = %d, want no live request for unsupported retention smoke", requestCount)
+	}
+	if report.Smoke != nil {
+		t.Fatalf("Smoke = %#v, want nil when retention smoke is unsupported on Chat Completions", report.Smoke)
+	}
+	check, ok := openAIDiagnosticCheckByName(report, "retention_smoke")
+	if !ok || check.Status != DiagnosticStatusFail {
+		t.Fatalf("retention_smoke check = %#v, %v; want fail", check, ok)
 	}
 }
 

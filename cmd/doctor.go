@@ -18,6 +18,7 @@ var (
 	doctorOpenAIModelFlag          string
 	doctorSmokeFlag                bool
 	doctorToolSmokeFlag            bool
+	doctorOpenAIRetentionSmokeFlag bool
 	doctorBedrockImageSmokeFlag    bool
 	doctorBedrockThinkingSmokeFlag bool
 	doctorKimiImageSmokeFlag       bool

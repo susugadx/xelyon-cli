@@ -77,7 +77,7 @@ func TestRootCommand_OpenAIDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--timeout", "--json", "Diagnose OpenAI provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--retention-smoke", "--timeout", "--json", "Diagnose OpenAI provider configuration"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want OpenAI doctor help substring %q", out.String(), want)
 		}
@@ -198,15 +198,68 @@ func TestRenderOpenAIDoctorTextIncludesSmokeRequests(t *testing.T) {
 	}
 }
 
+func TestRenderOpenAIDoctorTextIncludesRetentionSmokePreviousResponseID(t *testing.T) {
+	report := openaiprovider.DiagnosticReport{
+		Provider:           "openai",
+		APIURL:             "https://api.openai.com/v1/chat/completions",
+		ResponsesURL:       "https://api.openai.com/v1/responses",
+		Model:              "gpt-5.5-pro",
+		ModelSource:        "test",
+		CatalogModel:       "gpt-5.5-pro",
+		CatalogModelSource: "test",
+		Route:              openaiprovider.DiagnosticRouteResponsesNonStreaming,
+		Smoke: &openaiprovider.DiagnosticSmokeResult{
+			Ran:              true,
+			Route:            openaiprovider.DiagnosticRouteResponsesNonStreaming,
+			RetentionPayload: true,
+			UsageObserved:    true,
+			Requests: []openaiprovider.DiagnosticSmokeRequestResult{
+				{
+					Name:             "retention_initial",
+					Ran:              true,
+					RetentionPayload: true,
+					Route:            openaiprovider.DiagnosticRouteResponsesNonStreaming,
+					ResponseID:       "resp_retention_initial",
+					Duration:         "1ms",
+					UsageObserved:    true,
+				},
+				{
+					Name:               "retention_followup",
+					Ran:                true,
+					RetentionPayload:   true,
+					Route:              openaiprovider.DiagnosticRouteResponsesNonStreaming,
+					ResponseID:         "resp_retention_followup",
+					PreviousResponseID: "resp_retention_initial",
+					Duration:           "2ms",
+					UsageObserved:      true,
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	renderOpenAIDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Smoke request retention_initial: ok route=responses_non_streaming duration=1ms response_id=resp_retention_initial previous_response_id=(not returned)",
+		"Smoke request retention_followup: ok route=responses_non_streaming duration=2ms response_id=resp_retention_followup previous_response_id=resp_retention_initial",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}
+
 func TestRenderOpenAIDoctorJSONIncludesSmokeObservability(t *testing.T) {
 	report := openaiprovider.DiagnosticReport{
 		Provider: "openai",
 		Smoke: &openaiprovider.DiagnosticSmokeResult{
-			Ran:           true,
-			Route:         openaiprovider.DiagnosticRouteResponsesNonStreaming,
-			ResponseID:    "resp_json",
-			Duration:      "1ms",
-			UsageObserved: true,
+			Ran:              true,
+			Route:            openaiprovider.DiagnosticRouteResponsesNonStreaming,
+			ResponseID:       "resp_json",
+			Duration:         "1ms",
+			RetentionPayload: true,
+			UsageObserved:    true,
 			Usage: openaiprovider.DiagnosticSmokeUsage{
 				InputTokens:         10,
 				OutputTokens:        4,
@@ -218,13 +271,24 @@ func TestRenderOpenAIDoctorJSONIncludesSmokeObservability(t *testing.T) {
 				USD:                0.00012345,
 				PricingUnavailable: false,
 			},
-			Requests: []openaiprovider.DiagnosticSmokeRequestResult{{
-				Name:          "text",
-				Ran:           true,
-				Route:         openaiprovider.DiagnosticRouteResponsesNonStreaming,
-				ResponseID:    "resp_json",
-				UsageObserved: true,
-			}},
+			Requests: []openaiprovider.DiagnosticSmokeRequestResult{
+				{
+					Name:          "text",
+					Ran:           true,
+					Route:         openaiprovider.DiagnosticRouteResponsesNonStreaming,
+					ResponseID:    "resp_json",
+					UsageObserved: true,
+				},
+				{
+					Name:               "retention_followup",
+					Ran:                true,
+					RetentionPayload:   true,
+					Route:              openaiprovider.DiagnosticRouteResponsesNonStreaming,
+					ResponseID:         "resp_retention_followup",
+					PreviousResponseID: "resp_json",
+					UsageObserved:      true,
+				},
+			},
 		},
 	}
 
@@ -250,10 +314,12 @@ func TestRenderOpenAIDoctorJSONIncludesSmokeObservability(t *testing.T) {
 				PricingUnavailable bool    `json:"pricing_unavailable"`
 			} `json:"cost"`
 			Requests []struct {
-				Name       string `json:"name"`
-				Ran        bool   `json:"ran"`
-				Route      string `json:"route"`
-				ResponseID string `json:"response_id"`
+				Name               string `json:"name"`
+				Ran                bool   `json:"ran"`
+				RetentionPayload   bool   `json:"retention_payload"`
+				Route              string `json:"route"`
+				ResponseID         string `json:"response_id"`
+				PreviousResponseID string `json:"previous_response_id"`
 			} `json:"requests"`
 		} `json:"smoke"`
 	}
@@ -273,7 +339,12 @@ func TestRenderOpenAIDoctorJSONIncludesSmokeObservability(t *testing.T) {
 	if got.Smoke.Cost.USD != 0.00012345 || got.Smoke.Cost.PricingUnavailable {
 		t.Fatalf("smoke cost = %+v, want nested cost fields", got.Smoke.Cost)
 	}
-	if len(got.Smoke.Requests) != 1 || got.Smoke.Requests[0].Name != "text" || got.Smoke.Requests[0].ResponseID != "resp_json" {
-		t.Fatalf("smoke requests = %+v, want text request metadata", got.Smoke.Requests)
+	if len(got.Smoke.Requests) != 2 || got.Smoke.Requests[0].Name != "text" || got.Smoke.Requests[0].ResponseID != "resp_json" {
+		t.Fatalf("smoke requests = %+v, want text and retention request metadata", got.Smoke.Requests)
+	}
+	if got.Smoke.Requests[1].Name != "retention_followup" ||
+		!got.Smoke.Requests[1].RetentionPayload ||
+		got.Smoke.Requests[1].PreviousResponseID != "resp_json" {
+		t.Fatalf("retention request = %+v, want retention payload and previous_response_id", got.Smoke.Requests[1])
 	}
 }
