@@ -186,6 +186,9 @@ func TestResolveServerCompactionDecision_DefaultConfigAutoThreshold(t *testing.T
 	if decision.ContextManagement[0].CompactThreshold == 0 {
 		t.Fatal("compact_threshold = 0, want resolved value")
 	}
+	if decision.CompactThreshold() != decision.ContextManagement[0].CompactThreshold {
+		t.Fatalf("CompactThreshold() = %d, want %d", decision.CompactThreshold(), decision.ContextManagement[0].CompactThreshold)
+	}
 }
 
 func TestResolveServerCompactionDecision_OmitsOnUnknownContextAndKeepsLocalFallback(t *testing.T) {
@@ -242,5 +245,8 @@ func TestResolveServerCompactionDecision_CompactThresholdTooSmallOmitAndFallback
 	}
 	if len(decision.ContextManagement) != 0 {
 		t.Fatalf("ContextManagement = %+v, want omitted when compact_threshold < 1000", decision.ContextManagement)
+	}
+	if decision.CompactThreshold() != 0 {
+		t.Fatalf("CompactThreshold() = %d, want 0", decision.CompactThreshold())
 	}
 }

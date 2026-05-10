@@ -132,15 +132,29 @@ func (r *DiagnosticReport) addModelConfigCheck() {
 }
 
 func (r *DiagnosticReport) addRouteCheck() {
+	detail := r.routeCheckDetail()
 	switch r.Route {
 	case DiagnosticRouteResponsesStreaming:
-		r.addCheck(DiagnosticStatusOK, "route", "OpenAI Responses streaming route is selected", r.Route, "")
+		r.addCheck(DiagnosticStatusOK, "route", "OpenAI Responses streaming route is selected", detail, "")
 	case DiagnosticRouteResponsesNonStreaming:
-		r.addCheck(DiagnosticStatusOK, "route", "OpenAI Responses non-streaming route is selected", r.Route, "")
+		r.addCheck(DiagnosticStatusOK, "route", "OpenAI Responses non-streaming route is selected", detail, "")
 	case DiagnosticRouteChatCompletions:
-		r.addCheck(DiagnosticStatusOK, "route", "OpenAI Chat Completions route is selected", r.Route, "")
+		r.addCheck(DiagnosticStatusOK, "route", "OpenAI Chat Completions route is selected", detail, "")
 	default:
-		r.addCheck(DiagnosticStatusFail, "route", "OpenAI route could not be resolved", r.Route, "")
+		r.addCheck(DiagnosticStatusFail, "route", "OpenAI route could not be resolved", detail, "")
+	}
+}
+
+func (r DiagnosticReport) routeCheckDetail() string {
+	route := strings.TrimSpace(r.Route)
+	reason := strings.TrimSpace(r.RouteReason)
+	switch {
+	case route == "":
+		return reason
+	case reason == "":
+		return route
+	default:
+		return fmt.Sprintf("%s; %s", route, reason)
 	}
 }
 

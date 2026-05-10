@@ -66,19 +66,46 @@ func resolveOpenAIDiagnosticCatalogModel(cfg *config.Config, model, explicitCata
 	return resolution.Model, "model"
 }
 
-func resolveOpenAIDiagnosticRoute(cfg *config.Config, model, catalogModel string) string {
+type openAIDiagnosticRouteResolution struct {
+	Route  string
+	Reason string
+}
+
+func resolveOpenAIDiagnosticRouteResolution(cfg *config.Config, model, catalogModel string) openAIDiagnosticRouteResolution {
 	model = strings.TrimSpace(model)
 	catalogModel = strings.TrimSpace(catalogModel)
 	if model == "" {
-		return ""
+		return openAIDiagnosticRouteResolution{
+			Reason: "model is not resolved",
+		}
 	}
 	if cfg.IsProviderResponsesAPIModel("openai", model) {
 		if ShouldStreamResponses(catalogModel) {
-			return DiagnosticRouteResponsesStreaming
+			return openAIDiagnosticRouteResolution{
+				Route:  DiagnosticRouteResponsesStreaming,
+				Reason: fmt.Sprintf("model=%s uses Responses API; %s", model, openAIDiagnosticResponsesStreamingReason(catalogModel, true)),
+			}
 		}
-		return DiagnosticRouteResponsesNonStreaming
+		return openAIDiagnosticRouteResolution{
+			Route:  DiagnosticRouteResponsesNonStreaming,
+			Reason: fmt.Sprintf("model=%s uses Responses API; %s", model, openAIDiagnosticResponsesStreamingReason(catalogModel, false)),
+		}
 	}
-	return DiagnosticRouteChatCompletions
+	return openAIDiagnosticRouteResolution{
+		Route:  DiagnosticRouteChatCompletions,
+		Reason: fmt.Sprintf("model=%s is not configured for Responses API", model),
+	}
+}
+
+func openAIDiagnosticResponsesStreamingReason(catalogModel string, streaming bool) string {
+	catalogModel = strings.TrimSpace(catalogModel)
+	if catalogModel == "" {
+		return "catalog_model is not resolved; Responses streaming defaults to enabled"
+	}
+	if streaming {
+		return fmt.Sprintf("catalog_model=%s supports Responses streaming", catalogModel)
+	}
+	return fmt.Sprintf("catalog_model=%s disables Responses streaming", catalogModel)
 }
 
 func openAIDiagnosticPolicyConfig(cfg *config.Config, model, catalogModel string) *config.Config {
@@ -112,16 +139,42 @@ func openAIDiagnosticConfigWithModelPolicy(cfg *config.Config, model, catalogMod
 	return policyCfg
 }
 
-func openAIDiagnosticMaxOutputTokens(cfg *config.Config, model, catalogModel string) (int, bool) {
+type openAIDiagnosticMaxOutputPolicyResult struct {
+	Tokens    int
+	Source    string
+	Available bool
+}
+
+func openAIDiagnosticMaxOutputPolicy(cfg *config.Config, model, catalogModel string) openAIDiagnosticMaxOutputPolicyResult {
 	if override, ok := cfg.ModelOverrideForProvider("openai", model); ok && override.MaxOutputTokens > 0 {
-		return override.MaxOutputTokens, true
+		return openAIDiagnosticMaxOutputPolicyResult{
+			Tokens:    override.MaxOutputTokens,
+			Source:    "model_overrides",
+			Available: true,
+		}
 	}
 	if tokens, ok := llmcatalog.KnownMaxOutputTokens(catalogModel); ok {
-		return tokens, true
+		return openAIDiagnosticMaxOutputPolicyResult{
+			Tokens:    tokens,
+			Source:    "catalog",
+			Available: true,
+		}
 	}
 	ctx := config.WithContext(context.Background(), cfg)
 	tokens := api.GetMaxOutputTokens(ctx, "openai", model)
-	return tokens, tokens > 0
+	if tokens <= 0 {
+		return openAIDiagnosticMaxOutputPolicyResult{Source: "missing"}
+	}
+	return openAIDiagnosticMaxOutputPolicyResult{
+		Tokens:    tokens,
+		Source:    "provider_default",
+		Available: true,
+	}
+}
+
+func openAIDiagnosticMaxOutputTokens(cfg *config.Config, model, catalogModel string) (int, bool) {
+	result := openAIDiagnosticMaxOutputPolicy(cfg, model, catalogModel)
+	return result.Tokens, result.Available
 }
 
 func openAIDiagnosticIntDetail(value int, ok bool) string {

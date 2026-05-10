@@ -18,6 +18,7 @@ var (
 	doctorOpenAIModelFlag          string
 	doctorSmokeFlag                bool
 	doctorToolSmokeFlag            bool
+	doctorCapabilitiesFlag         bool
 	doctorAzureRetentionSmokeFlag  bool
 	doctorOpenAIRetentionSmokeFlag bool
 	doctorBedrockImageSmokeFlag    bool
@@ -27,6 +28,7 @@ var (
 	doctorTimeoutFlag              = defaultDoctorTimeout
 	doctorJSONFlag                 bool
 	doctorPrintConfigFlag          bool
+	doctorPrintRequestFlag         bool
 )
 
 func newDoctorCommand() *cobra.Command {
@@ -55,9 +57,11 @@ Checks base URL, authentication, deployment resolution, catalog model,
 function calling settings, and Responses API retention settings. Use --smoke
 to send a minimal live Responses API request. Use --tool-smoke to force a
 dummy tool call and verify function calling support for the deployment. Use
---retention-smoke to verify a previous_response_id chain. Use
---print-config with --deployment and --catalog-model to print a config YAML
-snippet without running diagnostics.`,
+--retention-smoke to verify a previous_response_id chain. Use --capabilities
+to print resolved model/deployment capabilities without sending a live request.
+Use --print-request to print the sanitized smoke request JSON without sending
+it. Use --print-config with --deployment and --catalog-model to print a config
+YAML snippet without running diagnostics.`,
 		Args: cobra.NoArgs,
 		RunE: runAzureDoctorInvocation,
 	}
@@ -66,9 +70,11 @@ snippet without running diagnostics.`,
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor azure' capability/token policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal Responses API request for 'doctor azure'")
 	addDoctorToolSmokeFlag(cmd, "Send a live Azure OpenAI smoke request that forces a dummy tool call")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved Azure OpenAI deployment capabilities without sending a live request")
 	cmd.Flags().BoolVar(&doctorAzureRetentionSmokeFlag, "retention-smoke", false, "Send live Azure OpenAI Responses API requests that verify previous_response_id retention")
 	addDoctorTimeoutFlag(cmd, "azure", "Timeout for 'doctor azure --smoke'")
 	addDoctorJSONFlag(cmd, "azure")
+	addDoctorPrintRequestFlag(cmd, "azure")
 	cmd.Flags().BoolVar(&doctorPrintConfigFlag, "print-config", false, "Print Azure OpenAI config YAML for the given deployment/catalog model")
 
 	return cmd
@@ -82,7 +88,9 @@ func runAzureDoctorInvocation(cmd *cobra.Command, args []string) error {
 			JSON:           doctorJSONFlag,
 			Smoke:          doctorSmokeFlag,
 			ToolSmoke:      doctorToolSmokeFlag,
+			Capabilities:   doctorCapabilitiesFlag,
 			RetentionSmoke: doctorAzureRetentionSmokeFlag,
+			PrintRequest:   doctorPrintRequestFlag,
 		}); err != nil {
 			cmd.SilenceUsage = true
 			return err
@@ -100,10 +108,12 @@ func runAzureDoctorInvocation(cmd *cobra.Command, args []string) error {
 		Config:         cfg,
 		Deployment:     doctorDeploymentFlag,
 		CatalogModel:   doctorCatalogModelFlag,
-		RunSmoke:       doctorSmokeFlag || doctorToolSmokeFlag || doctorAzureRetentionSmokeFlag,
+		RunSmoke:       !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorAzureRetentionSmokeFlag),
 		TextSmoke:      doctorSmokeFlag,
 		ToolSmoke:      doctorToolSmokeFlag,
+		Capabilities:   doctorCapabilitiesFlag,
 		RetentionSmoke: doctorAzureRetentionSmokeFlag,
+		PrintRequest:   doctorPrintRequestFlag,
 		SmokeTimeout:   doctorTimeoutFlag,
 	})
 	if loadErr != nil {
@@ -138,9 +148,25 @@ func renderAzureDoctorJSON(w io.Writer, report azureprovider.DiagnosticReport) e
 func renderAzureDoctorText(w io.Writer, report azureprovider.DiagnosticReport) {
 	fmt.Fprintln(w, "Azure OpenAI doctor")
 	fmt.Fprintf(w, "Status: %s\n", strings.ToUpper(string(report.SummaryStatus())))
+	if strings.TrimSpace(report.Route) != "" {
+		fmt.Fprintf(w, "Route: %s\n", report.Route)
+	}
+	if strings.TrimSpace(report.RouteReason) != "" {
+		fmt.Fprintf(w, "Route reason: %s\n", report.RouteReason)
+	}
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, azureDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
+
+	if report.RequestPreview != nil {
+		fmt.Fprintln(w)
+		renderDoctorRequestPreview(w, report.RequestPreview)
+	}
 
 	if report.Smoke != nil && report.Smoke.Ran {
 		fmt.Fprintln(w)

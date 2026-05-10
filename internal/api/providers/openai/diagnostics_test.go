@@ -66,6 +66,9 @@ func TestDiagnoseOpenAI_ModelPolicyRouteAndFunctionCalling(t *testing.T) {
 	if report.Route != DiagnosticRouteResponsesStreaming {
 		t.Fatalf("Route = %q, want responses streaming", report.Route)
 	}
+	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.4 supports Responses streaming") {
+		t.Fatalf("RouteReason = %q, want catalog streaming reason", report.RouteReason)
+	}
 	if report.MaxOutputTokens != 16384 {
 		t.Fatalf("MaxOutputTokens = %d, want OpenAI provider default max output", report.MaxOutputTokens)
 	}
@@ -80,6 +83,89 @@ func TestDiagnoseOpenAI_ModelPolicyRouteAndFunctionCalling(t *testing.T) {
 		if !ok || check.Status != DiagnosticStatusOK {
 			t.Fatalf("%s check = %#v, %v; want ok", name, check, ok)
 		}
+	}
+	routeCheck, _ := openAIDiagnosticCheckByName(report, "route")
+	if !strings.Contains(routeCheck.Detail, report.RouteReason) {
+		t.Fatalf("route check detail = %q, want route reason", routeCheck.Detail)
+	}
+}
+
+func TestDiagnoseOpenAI_CapabilitiesDoNotRequireAPIKey(t *testing.T) {
+	t.Setenv(openAIAPIKeyEnv, "")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, "")
+	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "corp-openai-deployment",
+		CatalogModel: "gpt-5.4",
+		Capabilities: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want capabilities without API key to succeed: %#v", report.Checks)
+	}
+	if _, ok := openAIDiagnosticCheckByName(report, "auth"); ok {
+		t.Fatalf("auth check was added for capabilities-only report: %#v", report.Checks)
+	}
+	if report.Capabilities == nil {
+		t.Fatal("Capabilities = nil, want resolved capabilities")
+	}
+	capabilities := report.Capabilities
+	if !capabilities.ResponsesAPI || !capabilities.ResponsesStreaming || capabilities.ChatCompletions {
+		t.Fatalf("route capabilities = %+v, want Responses streaming only", capabilities)
+	}
+	if !capabilities.FunctionCalling || !capabilities.ImageInput {
+		t.Fatalf("tool/image capabilities = %+v, want enabled", capabilities)
+	}
+	if !capabilities.Retention.PreviousResponseID || !capabilities.Retention.SessionPersistence {
+		t.Fatalf("retention capabilities = %+v, want previous_response_id and session persistence", capabilities.Retention)
+	}
+	if !capabilities.ServerCompaction.Enabled || !capabilities.ServerCompaction.RequestPayload || capabilities.ServerCompaction.CompactThreshold <= 0 {
+		t.Fatalf("server compaction capabilities = %+v, want request payload with compact_threshold", capabilities.ServerCompaction)
+	}
+	if capabilities.ContextWindowTokens != 1000000 || !capabilities.ContextWindowKnown {
+		t.Fatalf("context capability = %+v, want gpt-5.4 context window", capabilities)
+	}
+	if capabilities.MaxOutputTokens != 16384 || !capabilities.MaxOutputTokensKnown || capabilities.MaxOutputTokensSource != "provider_default" {
+		t.Fatalf("max output capability = %+v, want provider default max output", capabilities)
+	}
+	if !capabilities.Pricing.Available {
+		t.Fatalf("pricing capability = %+v, want available pricing", capabilities.Pricing)
+	}
+	if !hasOpenAIDiagnosticCheck(report, "capabilities", DiagnosticStatusOK) {
+		t.Fatalf("missing capabilities OK check: %#v", report.Checks)
+	}
+}
+
+func TestDiagnoseOpenAI_CapabilitiesShowChatCompletionsLimitations(t *testing.T) {
+	t.Setenv(openAIAPIKeyEnv, "")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gpt-4",
+		CatalogModel: "gpt-4",
+		Capabilities: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want capabilities without API key to succeed: %#v", report.Checks)
+	}
+	if report.Capabilities == nil {
+		t.Fatal("Capabilities = nil, want resolved capabilities")
+	}
+	if report.Capabilities.ResponsesAPI || !report.Capabilities.ChatCompletions {
+		t.Fatalf("route capabilities = %+v, want Chat Completions route", report.Capabilities)
+	}
+	if report.Capabilities.Retention.PreviousResponseID {
+		t.Fatalf("retention capabilities = %+v, want no previous_response_id on Chat Completions", report.Capabilities.Retention)
+	}
+	if report.Capabilities.Retention.SessionPersistence {
+		t.Fatalf("retention capabilities = %+v, want no session persistence on Chat Completions", report.Capabilities.Retention)
+	}
+	if report.Capabilities.ServerCompaction.RequestPayload {
+		t.Fatalf("server compaction capabilities = %+v, want no request payload on Chat Completions", report.Capabilities.ServerCompaction)
 	}
 }
 
@@ -132,6 +218,9 @@ func TestDiagnoseOpenAI_ResponsesNonStreamingSmokeObservesResponseIDUsageCostAnd
 	}
 	if report.Route != DiagnosticRouteResponsesNonStreaming {
 		t.Fatalf("Route = %q, want non-streaming Responses", report.Route)
+	}
+	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.5-pro disables Responses streaming") {
+		t.Fatalf("RouteReason = %q, want non-streaming catalog reason", report.RouteReason)
 	}
 	if report.Smoke == nil || report.Smoke.ResponseID != "resp_doctor" {
 		t.Fatalf("Smoke = %#v, want response ID", report.Smoke)
@@ -352,6 +441,131 @@ func TestDiagnoseOpenAI_RetentionSmokeChainsPreviousResponseIDAndForcesStore(t *
 	}
 }
 
+func TestDiagnoseOpenAI_PrintRequestBuildsRetentionPreviewWithoutLiveRequest(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	t.Setenv(openAIAPIKeyEnv, "")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         cfg,
+		Model:          "gpt-5.5-pro",
+		CatalogModel:   "gpt-5.5-pro",
+		PrintRequest:   true,
+		RetentionSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("Diagnose() has failures: %#v", report.Checks)
+	}
+	if requestCount != 0 {
+		t.Fatalf("requestCount = %d, want no live request for --print-request", requestCount)
+	}
+	if report.Smoke != nil {
+		t.Fatalf("Smoke = %#v, want nil for --print-request", report.Smoke)
+	}
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 2 {
+		t.Fatalf("RequestPreview = %#v, want retention initial and followup previews", report.RequestPreview)
+	}
+
+	initial := report.RequestPreview.Requests[0]
+	initialBody, ok := initial.Body.(ResponsesRequest)
+	if !ok {
+		t.Fatalf("initial body type = %T, want ResponsesRequest", initial.Body)
+	}
+	if initial.Name != "retention_initial" || !initial.RetentionPayload || initial.Route != DiagnosticRouteResponsesNonStreaming {
+		t.Fatalf("initial preview = %#v, want non-streaming retention initial", initial)
+	}
+	if initial.URL != server.URL || initial.Method != "POST" {
+		t.Fatalf("initial endpoint = %s %s, want POST %s", initial.Method, initial.URL, server.URL)
+	}
+	if _, ok := initial.Headers["Authorization"]; ok {
+		t.Fatalf("initial headers = %#v, want no Authorization without API key", initial.Headers)
+	}
+	if !initialBody.Store || initialBody.PreviousResponseID != "" {
+		t.Fatalf("initial body store/previous = %t/%q, want store true without previous_response_id", initialBody.Store, initialBody.PreviousResponseID)
+	}
+
+	followup := report.RequestPreview.Requests[1]
+	followupBody, ok := followup.Body.(ResponsesRequest)
+	if !ok {
+		t.Fatalf("followup body type = %T, want ResponsesRequest", followup.Body)
+	}
+	if followup.Name != "retention_followup" || followup.PreviousResponseID != openAIDiagnosticPreviewRetentionResponseID {
+		t.Fatalf("followup preview = %#v, want placeholder previous_response_id", followup)
+	}
+	if followupBody.PreviousResponseID != openAIDiagnosticPreviewRetentionResponseID || !followupBody.Store {
+		t.Fatalf("followup body store/previous = %t/%q, want store true and placeholder", followupBody.Store, followupBody.PreviousResponseID)
+	}
+	check, ok := openAIDiagnosticCheckByName(report, "request_preview")
+	if !ok || check.Status != DiagnosticStatusOK {
+		t.Fatalf("request_preview check = %#v, %v; want ok", check, ok)
+	}
+}
+
+func TestDiagnoseOpenAI_PrintRequestBuildsChatCompletionsToolPreview(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	t.Setenv(openAIAPIKeyEnv, "sk-test")
+	t.Setenv(openAIAPIURLEnv, server.URL)
+	t.Setenv(openAIResponsesURLEnv, "")
+	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gpt-4",
+		CatalogModel: "gpt-4",
+		PrintRequest: true,
+		ToolSmoke:    true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("Diagnose() has failures: %#v", report.Checks)
+	}
+	if requestCount != 0 {
+		t.Fatalf("requestCount = %d, want no live request for --print-request", requestCount)
+	}
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 1 {
+		t.Fatalf("RequestPreview = %#v, want one tool request preview", report.RequestPreview)
+	}
+	request := report.RequestPreview.Requests[0]
+	if request.Route != DiagnosticRouteChatCompletions || request.URL != server.URL {
+		t.Fatalf("request preview route/url = %s/%s, want chat completions route and test URL", request.Route, request.URL)
+	}
+	if request.Headers["Authorization"] != "Bearer <redacted>" {
+		t.Fatalf("headers = %#v, want redacted Authorization", request.Headers)
+	}
+
+	payload, err := json.Marshal(request.Body)
+	if err != nil {
+		t.Fatalf("marshal preview body: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal preview body: %v", err)
+	}
+	if body["model"] != "gpt-4" || body["stream"] != true {
+		t.Fatalf("body model/stream = %#v/%#v, want gpt-4 streaming", body["model"], body["stream"])
+	}
+	if _, ok := body["tools"].([]any); !ok {
+		t.Fatalf("body tools = %#v, want diagnostic tool payload", body["tools"])
+	}
+	if _, ok := body["tool_choice"].(map[string]any); !ok {
+		t.Fatalf("body tool_choice = %#v, want forced diagnostic tool choice", body["tool_choice"])
+	}
+}
+
 func TestDiagnoseOpenAI_RetentionSmokeFailsWhenFollowupRetriesWithoutPreviousResponseID(t *testing.T) {
 	var received []map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -481,6 +695,9 @@ func TestDiagnoseOpenAI_ChatCompletionsSmokeUsesCompatRouteWithoutResponseID(t *
 	if report.Route != DiagnosticRouteChatCompletions {
 		t.Fatalf("Route = %q, want Chat Completions", report.Route)
 	}
+	if !strings.Contains(report.RouteReason, "model=gpt-4 is not configured for Responses API") {
+		t.Fatalf("RouteReason = %q, want Chat Completions route reason", report.RouteReason)
+	}
 	if report.Smoke == nil || report.Smoke.ResponseID != "" {
 		t.Fatalf("Smoke = %#v, want no response ID for Chat Completions", report.Smoke)
 	}
@@ -547,4 +764,9 @@ func openAIDiagnosticCheckByName(report DiagnosticReport, name string) (Diagnost
 		}
 	}
 	return DiagnosticCheck{}, false
+}
+
+func hasOpenAIDiagnosticCheck(report DiagnosticReport, name string, status DiagnosticStatus) bool {
+	check, ok := openAIDiagnosticCheckByName(report, name)
+	return ok && check.Status == status
 }

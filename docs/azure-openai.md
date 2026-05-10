@@ -62,6 +62,12 @@ provider_models:
 xelyon doctor azure
 ```
 
+deployment 能力だけを live request なしで確認する場合:
+
+```bash
+xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --capabilities
+```
+
 実 deployment へ最小リクエストを送る場合:
 
 ```bash
@@ -74,7 +80,7 @@ tool payload まで確認する場合:
 xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --tool-smoke
 ```
 
-`--smoke` / `--tool-smoke` は live API request を送ります。単なる設定確認では付けないでください。
+`--capabilities` は live API request を送りません。`--smoke` / `--tool-smoke` は live API request を送ります。単なる設定確認では付けないでください。
 
 ## 認証方式の優先順位
 

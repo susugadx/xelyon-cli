@@ -72,6 +72,7 @@ func resetRootFlagsForTest() {
 	doctorOpenAIModelFlag = ""
 	doctorSmokeFlag = false
 	doctorToolSmokeFlag = false
+	doctorCapabilitiesFlag = false
 	doctorAzureRetentionSmokeFlag = false
 	doctorOpenAIRetentionSmokeFlag = false
 	doctorBedrockImageSmokeFlag = false
@@ -81,6 +82,7 @@ func resetRootFlagsForTest() {
 	doctorTimeoutFlag = defaultDoctorTimeout
 	doctorJSONFlag = false
 	doctorPrintConfigFlag = false
+	doctorPrintRequestFlag = false
 	resetCommandFlagsForTest(rootCmd)
 }
 

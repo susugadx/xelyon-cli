@@ -83,23 +83,46 @@ type DiagnosticSmokeResult struct {
 	Requests         []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
 }
 
+// DiagnosticRequestPreview は live request を送らずに構築した request shape を表す。
+type DiagnosticRequestPreview struct {
+	Requests []DiagnosticRequestPreviewRequest `json:"requests"`
+}
+
+// DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
+type DiagnosticRequestPreviewRequest struct {
+	Name               string            `json:"name"`
+	Skipped            bool              `json:"skipped,omitempty"`
+	SkipReason         string            `json:"skip_reason,omitempty"`
+	ToolPayload        bool              `json:"tool_payload"`
+	RetentionPayload   bool              `json:"retention_payload"`
+	Route              string            `json:"route"`
+	Method             string            `json:"method,omitempty"`
+	URL                string            `json:"url,omitempty"`
+	Headers            map[string]string `json:"headers,omitempty"`
+	PreviousResponseID string            `json:"previous_response_id,omitempty"`
+	Body               any               `json:"body,omitempty"`
+}
+
 // DiagnosticReport は OpenAI の設定診断結果を表す。
 type DiagnosticReport struct {
-	Provider                   string                 `json:"provider"`
-	APIURL                     string                 `json:"api_url"`
-	ResponsesURL               string                 `json:"responses_url"`
-	Model                      string                 `json:"model"`
-	ModelSource                string                 `json:"model_source"`
-	CatalogModel               string                 `json:"catalog_model"`
-	CatalogModelSource         string                 `json:"catalog_model_source"`
-	Route                      string                 `json:"route"`
-	MaxOutputTokens            int                    `json:"max_output_tokens"`
-	ContextWindowTokens        int                    `json:"context_window_tokens,omitempty"`
-	FunctionCallingEnabled     bool                   `json:"function_calling_enabled"`
-	ResponsesStore             bool                   `json:"responses_store"`
-	ResponsesPersistResponseID bool                   `json:"responses_persist_response_id"`
-	Checks                     []DiagnosticCheck      `json:"checks"`
-	Smoke                      *DiagnosticSmokeResult `json:"smoke,omitempty"`
+	Provider                   string                    `json:"provider"`
+	APIURL                     string                    `json:"api_url"`
+	ResponsesURL               string                    `json:"responses_url"`
+	Model                      string                    `json:"model"`
+	ModelSource                string                    `json:"model_source"`
+	CatalogModel               string                    `json:"catalog_model"`
+	CatalogModelSource         string                    `json:"catalog_model_source"`
+	Route                      string                    `json:"route"`
+	RouteReason                string                    `json:"route_reason,omitempty"`
+	MaxOutputTokens            int                       `json:"max_output_tokens"`
+	ContextWindowTokens        int                       `json:"context_window_tokens,omitempty"`
+	FunctionCallingEnabled     bool                      `json:"function_calling_enabled"`
+	ResponsesStore             bool                      `json:"responses_store"`
+	ResponsesPersistResponseID bool                      `json:"responses_persist_response_id"`
+	Checks                     []DiagnosticCheck         `json:"checks"`
+	Capabilities               *DiagnosticCapabilities   `json:"capabilities,omitempty"`
+	RequestPreview             *DiagnosticRequestPreview `json:"request_preview,omitempty"`
+	Smoke                      *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
 
 // HasFailures は診断に fail 項目が含まれるか返す。
@@ -133,10 +156,16 @@ type DiagnosticOptions struct {
 	RunSmoke        bool
 	TextSmoke       bool
 	ToolSmoke       bool
+	Capabilities    bool
 	RetentionSmoke  bool
+	PrintRequest    bool
 	SmokeTimeout    time.Duration
 	MaxOutputTokens int
 	SmokeOutput     io.Writer
+}
+
+func (o DiagnosticOptions) requiresAuthCheck() bool {
+	return !o.PrintRequest && (!o.Capabilities || o.RunSmoke)
 }
 
 // Diagnose は OpenAI のローカル設定と、必要に応じて live smoke を検証する。
@@ -145,6 +174,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	model, modelSource := resolveOpenAIDiagnosticModel(cfg, options.Model)
 	catalogModel, catalogSource := resolveOpenAIDiagnosticCatalogModel(cfg, model, options.CatalogModel)
 	policyCfg := openAIDiagnosticPolicyConfig(cfg, model, catalogModel)
+	routeResolution := resolveOpenAIDiagnosticRouteResolution(policyCfg, model, catalogModel)
 	contextWindow, _ := llmcatalog.KnownModelContextLimit(catalogModel)
 	configCtx := config.WithContext(context.Background(), policyCfg)
 
@@ -156,7 +186,8 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		ModelSource:                modelSource,
 		CatalogModel:               catalogModel,
 		CatalogModelSource:         catalogSource,
-		Route:                      resolveOpenAIDiagnosticRoute(policyCfg, model, catalogModel),
+		Route:                      routeResolution.Route,
+		RouteReason:                routeResolution.Reason,
 		MaxOutputTokens:            api.GetMaxOutputTokens(configCtx, "openai", model),
 		ContextWindowTokens:        contextWindow,
 		FunctionCallingEnabled:     New("diagnostic-key").IsFunctionCallingEnabled(),
@@ -164,7 +195,9 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		ResponsesPersistResponseID: cfg.ResponsesPersistResponseIDEnabled(),
 	}
 
-	report.addAuthCheck()
+	if options.requiresAuthCheck() {
+		report.addAuthCheck()
+	}
 	report.addAPIURLCheck()
 	report.addResponsesURLCheck()
 	report.addProviderRegistrationCheck()
@@ -174,7 +207,13 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addFunctionCallingCheck()
 	report.addResponsesRetentionCheck()
 
-	if options.RunSmoke {
+	if options.Capabilities {
+		report.addCapabilities(configCtx, policyCfg)
+	}
+	if options.PrintRequest {
+		report.addRequestPreview(ctx, policyCfg, options)
+	}
+	if options.RunSmoke && !options.PrintRequest {
 		report.runSmokeIfReady(ctx, policyCfg, options)
 	}
 

@@ -14,7 +14,9 @@ type azureDoctorConfigSnippetOptions struct {
 	JSON           bool
 	Smoke          bool
 	ToolSmoke      bool
+	Capabilities   bool
 	RetentionSmoke bool
+	PrintRequest   bool
 }
 
 type azureDoctorConfigSnippet struct {
@@ -31,8 +33,11 @@ func renderAzureDoctorConfigSnippet(w io.Writer, options azureDoctorConfigSnippe
 	if options.JSON {
 		return fmt.Errorf("--print-config cannot be combined with --json")
 	}
-	if options.Smoke || options.ToolSmoke || options.RetentionSmoke {
-		return fmt.Errorf("--print-config cannot be combined with --smoke, --tool-smoke, or --retention-smoke")
+	if options.PrintRequest {
+		return fmt.Errorf("--print-config cannot be combined with --print-request")
+	}
+	if options.Smoke || options.ToolSmoke || options.Capabilities || options.RetentionSmoke {
+		return fmt.Errorf("--print-config cannot be combined with --smoke, --tool-smoke, --capabilities, or --retention-smoke")
 	}
 
 	deployment := strings.TrimSpace(options.Deployment)

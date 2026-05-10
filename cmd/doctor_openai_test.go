@@ -32,6 +32,7 @@ func TestRunOpenAIDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *te
 		CatalogModel       string `json:"catalog_model"`
 		CatalogModelSource string `json:"catalog_model_source"`
 		Route              string `json:"route"`
+		RouteReason        string `json:"route_reason"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
 		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
@@ -47,6 +48,113 @@ func TestRunOpenAIDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *te
 	}
 	if report.Route != "responses_streaming" {
 		t.Fatalf("route = %q, want responses_streaming", report.Route)
+	}
+	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.4 supports Responses streaming") {
+		t.Fatalf("route_reason = %q, want catalog streaming reason", report.RouteReason)
+	}
+}
+
+func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", "")
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
+
+	doctorOpenAIModelFlag = "gpt-5.5-pro"
+	doctorCatalogModelFlag = "gpt-5.5-pro"
+	doctorOpenAIRetentionSmokeFlag = true
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runOpenAIDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	var report struct {
+		Smoke          any `json:"smoke"`
+		RequestPreview struct {
+			Requests []struct {
+				Name               string `json:"name"`
+				RetentionPayload   bool   `json:"retention_payload"`
+				PreviousResponseID string `json:"previous_response_id"`
+				Body               struct {
+					Store              bool   `json:"store"`
+					PreviousResponseID string `json:"previous_response_id"`
+				} `json:"body"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
+	}
+	if report.Smoke != nil {
+		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
+	}
+	if len(report.RequestPreview.Requests) != 2 {
+		t.Fatalf("request_preview = %#v, want two retention requests", report.RequestPreview)
+	}
+	followup := report.RequestPreview.Requests[1]
+	if followup.Name != "retention_followup" || !followup.RetentionPayload {
+		t.Fatalf("followup preview = %#v, want retention followup", followup)
+	}
+	if followup.PreviousResponseID == "" || followup.Body.PreviousResponseID != followup.PreviousResponseID || !followup.Body.Store {
+		t.Fatalf("followup previous/store = %#v, want placeholder previous_response_id and store true", followup)
+	}
+}
+
+func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", "")
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
+
+	doctorOpenAIModelFlag = "corp-openai-deployment"
+	doctorCatalogModelFlag = "gpt-5.4"
+	doctorCapabilitiesFlag = true
+	doctorJSONFlag = true
+
+	if err := runOpenAIDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	var report struct {
+		Capabilities struct {
+			Model              string `json:"model"`
+			CatalogModel       string `json:"catalog_model"`
+			ResponsesAPI       bool   `json:"responses_api"`
+			ResponsesStreaming bool   `json:"responses_streaming"`
+			Retention          struct {
+				PreviousResponseID bool `json:"previous_response_id"`
+			} `json:"retention"`
+			ServerCompaction struct {
+				RequestPayload   bool `json:"request_payload"`
+				CompactThreshold int  `json:"compact_threshold"`
+			} `json:"server_compaction"`
+		} `json:"capabilities"`
+		Checks []struct {
+			Name string `json:"name"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
+	}
+	if report.Capabilities.Model != "corp-openai-deployment" ||
+		report.Capabilities.CatalogModel != "gpt-5.4" ||
+		!report.Capabilities.ResponsesAPI ||
+		!report.Capabilities.ResponsesStreaming ||
+		!report.Capabilities.Retention.PreviousResponseID ||
+		!report.Capabilities.ServerCompaction.RequestPayload ||
+		report.Capabilities.ServerCompaction.CompactThreshold <= 0 {
+		t.Fatalf("capabilities = %+v, want resolved OpenAI capabilities", report.Capabilities)
+	}
+	for _, check := range report.Checks {
+		if check.Name == "auth" {
+			t.Fatalf("auth check should be skipped for capabilities-only report: %#v", report.Checks)
+		}
 	}
 }
 
@@ -77,7 +185,7 @@ func TestRootCommand_OpenAIDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--retention-smoke", "--timeout", "--json", "Diagnose OpenAI provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--retention-smoke", "--capabilities", "--print-request", "--timeout", "--json", "Diagnose OpenAI provider configuration"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want OpenAI doctor help substring %q", out.String(), want)
 		}
@@ -99,6 +207,7 @@ func TestRenderOpenAIDoctorTextIncludesSmokeObservability(t *testing.T) {
 		CatalogModel:       "gpt-5.4",
 		CatalogModelSource: "test",
 		Route:              openaiprovider.DiagnosticRouteResponsesStreaming,
+		RouteReason:        "model=gpt-5.4 uses Responses API; catalog_model=gpt-5.4 supports Responses streaming",
 		Checks: []openaiprovider.DiagnosticCheck{
 			{Name: "smoke", Status: openaiprovider.DiagnosticStatusOK, Message: "live OpenAI smoke request succeeded"},
 		},
@@ -126,10 +235,89 @@ func TestRenderOpenAIDoctorTextIncludesSmokeObservability(t *testing.T) {
 	renderOpenAIDoctorText(&out, report)
 	output := out.String()
 	for _, want := range []string{
+		"Route reason: model=gpt-5.4 uses Responses API; catalog_model=gpt-5.4 supports Responses streaming",
 		"Smoke route: responses_streaming",
 		"Smoke response ID: resp_text",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}
+
+func TestRenderOpenAIDoctorTextIncludesRequestPreview(t *testing.T) {
+	report := openaiprovider.DiagnosticReport{
+		Provider:           "openai",
+		APIURL:             "https://api.openai.com/v1/chat/completions",
+		ResponsesURL:       "https://api.openai.com/v1/responses",
+		Model:              "gpt-5.4",
+		ModelSource:        "test",
+		CatalogModel:       "gpt-5.4",
+		CatalogModelSource: "test",
+		Route:              openaiprovider.DiagnosticRouteResponsesStreaming,
+		RequestPreview: &openaiprovider.DiagnosticRequestPreview{
+			Requests: []openaiprovider.DiagnosticRequestPreviewRequest{{
+				Name:    "text",
+				Route:   openaiprovider.DiagnosticRouteResponsesStreaming,
+				Method:  "POST",
+				URL:     "https://api.openai.com/v1/responses",
+				Headers: map[string]string{"Authorization": "Bearer <redacted>"},
+				Body:    map[string]any{"model": "gpt-5.4", "store": false},
+			}},
+		},
+	}
+
+	var out bytes.Buffer
+	renderOpenAIDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Request preview:",
+		`"Authorization": "Bearer <redacted>"`,
+		`"model": "gpt-5.4"`,
+		`"store": false`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}
+
+func TestRenderOpenAIDoctorTextIncludesCapabilities(t *testing.T) {
+	report := openaiprovider.DiagnosticReport{
+		Provider:           "openai",
+		APIURL:             "https://api.openai.com/v1/chat/completions",
+		ResponsesURL:       "https://api.openai.com/v1/responses",
+		Model:              "gpt-5.4",
+		ModelSource:        "test",
+		CatalogModel:       "gpt-5.4",
+		CatalogModelSource: "test",
+		Route:              openaiprovider.DiagnosticRouteResponsesStreaming,
+		Capabilities: &openaiprovider.DiagnosticCapabilities{
+			Model:              "gpt-5.4",
+			CatalogModel:       "gpt-5.4",
+			Route:              openaiprovider.DiagnosticRouteResponsesStreaming,
+			ResponsesAPI:       true,
+			ResponsesStreaming: true,
+			Retention: openaiprovider.DiagnosticRetentionCapability{
+				PreviousResponseID: true,
+			},
+			ServerCompaction: openaiprovider.DiagnosticServerCompactionCapability{
+				RequestPayload:   true,
+				CompactThreshold: 800000,
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	renderOpenAIDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Capabilities:",
+		`"responses_api": true`,
+		`"previous_response_id": true`,
+		`"compact_threshold": 800000`,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output = %q, want substring %q", output, want)

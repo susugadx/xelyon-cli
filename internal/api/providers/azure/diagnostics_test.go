@@ -250,6 +250,16 @@ func TestDiagnose_CatalogPolicyUsesCodexCatalogModel(t *testing.T) {
 	if report.HasFailures() {
 		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
 	}
+	if report.Route != DiagnosticRouteResponsesStreaming {
+		t.Fatalf("Route = %q, want responses streaming", report.Route)
+	}
+	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.3-codex supports Responses streaming") {
+		t.Fatalf("RouteReason = %q, want catalog streaming reason", report.RouteReason)
+	}
+	routeCheck, ok := diagnosticCheckByName(report, "route")
+	if !ok || routeCheck.Status != DiagnosticStatusOK || !strings.Contains(routeCheck.Detail, report.RouteReason) {
+		t.Fatalf("route check = %#v, %v; want ok detail with route reason", routeCheck, ok)
+	}
 	check, ok := diagnosticCheckByName(report, "catalog_policy")
 	if !ok {
 		t.Fatalf("missing catalog_policy check: %#v", report.Checks)
@@ -269,6 +279,79 @@ func TestDiagnose_CatalogPolicyUsesCodexCatalogModel(t *testing.T) {
 		if !strings.Contains(check.Detail, want) {
 			t.Fatalf("catalog_policy detail = %q, want substring %q", check.Detail, want)
 		}
+	}
+}
+
+func TestDiagnose_CapabilitiesDoNotRequireAzureEndpointOrAuth(t *testing.T) {
+	t.Setenv(baseURLEnv, "")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "")
+	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "1")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-codex-deployment",
+		CatalogModel: "gpt-5.3-codex",
+		Capabilities: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want capabilities without endpoint/auth to succeed: %#v", report.Checks)
+	}
+	if _, ok := diagnosticCheckByName(report, "base_url"); ok {
+		t.Fatalf("base_url check was added for capabilities-only report: %#v", report.Checks)
+	}
+	if _, ok := diagnosticCheckByName(report, "auth"); ok {
+		t.Fatalf("auth check was added for capabilities-only report: %#v", report.Checks)
+	}
+	if report.Capabilities == nil {
+		t.Fatal("Capabilities = nil, want resolved capabilities")
+	}
+	capabilities := report.Capabilities
+	if !capabilities.ResponsesAPI || !capabilities.ResponsesStreaming {
+		t.Fatalf("route capabilities = %+v, want Responses streaming", capabilities)
+	}
+	if !capabilities.FunctionCalling || !capabilities.ImageInput {
+		t.Fatalf("tool/image capabilities = %+v, want enabled", capabilities)
+	}
+	if !capabilities.Retention.PreviousResponseID || !capabilities.Retention.SessionPersistence {
+		t.Fatalf("retention capabilities = %+v, want previous_response_id and session persistence", capabilities.Retention)
+	}
+	if !capabilities.ServerCompaction.Enabled || !capabilities.ServerCompaction.RequestPayload || capabilities.ServerCompaction.CompactThreshold <= 0 {
+		t.Fatalf("server compaction capabilities = %+v, want request payload with compact_threshold", capabilities.ServerCompaction)
+	}
+	if capabilities.ContextWindowTokens != 400000 || !capabilities.ContextWindowKnown {
+		t.Fatalf("context capability = %+v, want gpt-5.3-codex context window", capabilities)
+	}
+	if capabilities.MaxOutputTokens != 128000 || !capabilities.MaxOutputTokensKnown || capabilities.MaxOutputTokensSource != "catalog" {
+		t.Fatalf("max output capability = %+v, want catalog max output", capabilities)
+	}
+	if !capabilities.Pricing.Available {
+		t.Fatalf("pricing capability = %+v, want available pricing", capabilities.Pricing)
+	}
+	if !hasDiagnosticCheck(report, "capabilities", DiagnosticStatusOK) {
+		t.Fatalf("missing capabilities OK check: %#v", report.Checks)
+	}
+}
+
+func TestDiagnose_CapabilitiesDoNotReportRetentionWhenRouteUnresolved(t *testing.T) {
+	t.Setenv(baseURLEnv, "")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       &config.Config{},
+		Capabilities: true,
+	})
+	if report.Capabilities == nil {
+		t.Fatal("Capabilities = nil, want resolved capabilities")
+	}
+	if report.Capabilities.ResponsesAPI {
+		t.Fatalf("ResponsesAPI = true, want false when deployment route is unresolved: %+v", report.Capabilities)
+	}
+	if report.Capabilities.Retention.PreviousResponseID || report.Capabilities.Retention.SessionPersistence {
+		t.Fatalf("retention capabilities = %+v, want no previous_response_id or session persistence without a resolved route", report.Capabilities.Retention)
 	}
 }
 
@@ -376,6 +459,12 @@ func TestDiagnose_SmokeUsesConfiguredDeploymentAndStoreFalse(t *testing.T) {
 
 	if report.HasFailures() {
 		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Route != DiagnosticRouteResponsesNonStreaming {
+		t.Fatalf("Route = %q, want non-streaming Responses", report.Route)
+	}
+	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.5-pro disables Responses streaming") {
+		t.Fatalf("RouteReason = %q, want non-streaming catalog reason", report.RouteReason)
 	}
 	policyCheck, ok := diagnosticCheckByName(report, "catalog_policy")
 	if !ok {
@@ -734,6 +823,78 @@ func TestDiagnose_RetentionSmokeDoesNotReportCachedInitialIDWhenFollowupOmitsID(
 	}
 	if report.Smoke.Requests[1].PreviousResponseID != "resp_retention_initial" {
 		t.Fatalf("followup previous_response_id result = %q, want resp_retention_initial", report.Smoke.Requests[1].PreviousResponseID)
+	}
+}
+
+func TestDiagnose_PrintRequestBuildsRetentionPreviewWithoutLiveRequestOrAuthCommand(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "definitely-not-executed-token-command")
+	t.Setenv(authTokenCommandTimeoutEnv, "")
+
+	cfg := config.DefaultConfig()
+	cfg.Responses.Store = false
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         cfg,
+		Deployment:     "corp-gpt55-pro-deployment",
+		CatalogModel:   "gpt-5.5-pro",
+		PrintRequest:   true,
+		RetentionSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false for request preview without auth command execution: %#v", report.Checks)
+	}
+	if requestCount != 0 {
+		t.Fatalf("requestCount = %d, want no live request for --print-request", requestCount)
+	}
+	if report.Smoke != nil {
+		t.Fatalf("Smoke = %#v, want nil for --print-request", report.Smoke)
+	}
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 2 {
+		t.Fatalf("RequestPreview = %#v, want retention initial and followup previews", report.RequestPreview)
+	}
+
+	initial := report.RequestPreview.Requests[0]
+	initialBody, ok := initial.Body.(responsesRequest)
+	if !ok {
+		t.Fatalf("initial body type = %T, want responsesRequest", initial.Body)
+	}
+	if initial.Name != "retention_initial" || !initial.RetentionPayload || initial.Route != DiagnosticRouteResponsesNonStreaming {
+		t.Fatalf("initial preview = %#v, want non-streaming retention initial", initial)
+	}
+	wantURL := server.URL + "/openai/v1/responses"
+	if initial.URL != wantURL || initial.Method != "POST" {
+		t.Fatalf("initial endpoint = %s %s, want POST %s", initial.Method, initial.URL, wantURL)
+	}
+	if initial.Headers["Authorization"] != "Bearer <redacted>" {
+		t.Fatalf("headers = %#v, want redacted Authorization from token command auth mode", initial.Headers)
+	}
+	if !initialBody.Store || initialBody.PreviousResponseID != "" {
+		t.Fatalf("initial body store/previous = %t/%q, want store true without previous_response_id", initialBody.Store, initialBody.PreviousResponseID)
+	}
+
+	followup := report.RequestPreview.Requests[1]
+	followupBody, ok := followup.Body.(responsesRequest)
+	if !ok {
+		t.Fatalf("followup body type = %T, want responsesRequest", followup.Body)
+	}
+	if followup.Name != "retention_followup" || followup.PreviousResponseID != diagnosticPreviewRetentionResponseID {
+		t.Fatalf("followup preview = %#v, want placeholder previous_response_id", followup)
+	}
+	if followupBody.PreviousResponseID != diagnosticPreviewRetentionResponseID || !followupBody.Store {
+		t.Fatalf("followup body store/previous = %t/%q, want store true and placeholder", followupBody.Store, followupBody.PreviousResponseID)
+	}
+	check, ok := diagnosticCheckByName(report, "request_preview")
+	if !ok || check.Status != DiagnosticStatusOK {
+		t.Fatalf("request_preview check = %#v, %v; want ok", check, ok)
 	}
 }
 

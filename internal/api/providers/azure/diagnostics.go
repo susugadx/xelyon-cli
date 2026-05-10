@@ -31,6 +31,11 @@ const (
 	DiagnosticStatusFail DiagnosticStatus = "fail"
 )
 
+const (
+	DiagnosticRouteResponsesStreaming    = "responses_streaming"
+	DiagnosticRouteResponsesNonStreaming = "responses_non_streaming"
+)
+
 // DiagnosticCheck は Azure 設定診断の 1 項目を表す。
 type DiagnosticCheck struct {
 	Name       string           `json:"name"`
@@ -87,21 +92,45 @@ type DiagnosticSmokeResult struct {
 	Requests         []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
 }
 
+// DiagnosticRequestPreview は live request を送らずに構築した request shape を表す。
+type DiagnosticRequestPreview struct {
+	Requests []DiagnosticRequestPreviewRequest `json:"requests"`
+}
+
+// DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
+type DiagnosticRequestPreviewRequest struct {
+	Name               string            `json:"name"`
+	Skipped            bool              `json:"skipped,omitempty"`
+	SkipReason         string            `json:"skip_reason,omitempty"`
+	ToolPayload        bool              `json:"tool_payload"`
+	RetentionPayload   bool              `json:"retention_payload"`
+	Route              string            `json:"route,omitempty"`
+	Method             string            `json:"method,omitempty"`
+	URL                string            `json:"url,omitempty"`
+	Headers            map[string]string `json:"headers,omitempty"`
+	PreviousResponseID string            `json:"previous_response_id,omitempty"`
+	Body               any               `json:"body,omitempty"`
+}
+
 // DiagnosticReport は Azure OpenAI の設定診断結果を表す。
 type DiagnosticReport struct {
-	Provider               string                 `json:"provider"`
-	BaseURL                string                 `json:"base_url,omitempty"`
-	NormalizedBaseURL      string                 `json:"normalized_base_url,omitempty"`
-	AuthMode               string                 `json:"auth_mode,omitempty"`
-	Deployment             string                 `json:"deployment,omitempty"`
-	DeploymentSource       string                 `json:"deployment_source,omitempty"`
-	CatalogModel           string                 `json:"catalog_model,omitempty"`
-	CatalogModelSource     string                 `json:"catalog_model_source,omitempty"`
-	FunctionCallingEnabled bool                   `json:"function_calling_enabled"`
-	ResponsesStore         bool                   `json:"responses_store"`
-	ResponsesPersistID     bool                   `json:"responses_persist_response_id"`
-	Checks                 []DiagnosticCheck      `json:"checks"`
-	Smoke                  *DiagnosticSmokeResult `json:"smoke,omitempty"`
+	Provider               string                    `json:"provider"`
+	BaseURL                string                    `json:"base_url,omitempty"`
+	NormalizedBaseURL      string                    `json:"normalized_base_url,omitempty"`
+	AuthMode               string                    `json:"auth_mode,omitempty"`
+	Deployment             string                    `json:"deployment,omitempty"`
+	DeploymentSource       string                    `json:"deployment_source,omitempty"`
+	CatalogModel           string                    `json:"catalog_model,omitempty"`
+	CatalogModelSource     string                    `json:"catalog_model_source,omitempty"`
+	Route                  string                    `json:"route,omitempty"`
+	RouteReason            string                    `json:"route_reason,omitempty"`
+	FunctionCallingEnabled bool                      `json:"function_calling_enabled"`
+	ResponsesStore         bool                      `json:"responses_store"`
+	ResponsesPersistID     bool                      `json:"responses_persist_response_id"`
+	Checks                 []DiagnosticCheck         `json:"checks"`
+	Capabilities           *DiagnosticCapabilities   `json:"capabilities,omitempty"`
+	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
+	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
 
 // HasFailures は診断に fail 項目が含まれるか返す。
@@ -135,10 +164,20 @@ type DiagnosticOptions struct {
 	RunSmoke        bool
 	TextSmoke       bool
 	ToolSmoke       bool
+	Capabilities    bool
 	RetentionSmoke  bool
+	PrintRequest    bool
 	SmokeTimeout    time.Duration
 	MaxOutputTokens int
 	SmokeOutput     io.Writer
+}
+
+func (o DiagnosticOptions) requiresBaseURLCheck() bool {
+	return !o.Capabilities || o.RunSmoke || o.PrintRequest
+}
+
+func (o DiagnosticOptions) requiresAuthCheck() bool {
+	return !o.PrintRequest && (!o.Capabilities || o.RunSmoke)
 }
 
 // Diagnose は Azure OpenAI のローカル設定と、必要に応じて live smoke を検証する。
@@ -146,6 +185,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	cfg := config.CloneConfig(options.Config)
 	deployment, deploymentSource := resolveDiagnosticDeployment(cfg, options.Deployment)
 	catalogModel, catalogSource := resolveDiagnosticCatalogModel(cfg, deployment, options.CatalogModel)
+	route, routeReason := resolveDiagnosticRoute(deployment, catalogModel)
 
 	report := DiagnosticReport{
 		Provider:               "azure",
@@ -156,20 +196,33 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		DeploymentSource:       deploymentSource,
 		CatalogModel:           catalogModel,
 		CatalogModelSource:     catalogSource,
+		Route:                  route,
+		RouteReason:            routeReason,
 		FunctionCallingEnabled: os.Getenv("AZURE_OPENAI_FUNCTION_CALLING") != "0",
 		ResponsesStore:         cfg.ResponsesStoreEnabled(),
 		ResponsesPersistID:     cfg.ResponsesPersistResponseIDEnabled(),
 	}
 
-	report.addBaseURLChecks()
-	report.addAuthChecks(ctx)
+	if options.requiresBaseURLCheck() {
+		report.addBaseURLChecks()
+	}
+	if options.requiresAuthCheck() {
+		report.addAuthChecks(ctx)
+	}
 	report.addDeploymentCheck(cfg, options.Deployment)
 	report.addCatalogModelCheck()
+	report.addRouteCheck()
 	report.addCatalogPolicyCheck(cfg)
 	report.addFunctionCallingCheck()
 	report.addResponsesRetentionCheck()
 
-	if options.RunSmoke {
+	if options.Capabilities {
+		report.addCapabilities(ctx, cfg)
+	}
+	if options.PrintRequest {
+		report.addRequestPreview(ctx, cfg, options)
+	}
+	if options.RunSmoke && !options.PrintRequest {
 		report.runSmokeIfReady(ctx, cfg, options)
 	}
 
@@ -421,6 +474,31 @@ func (r *DiagnosticReport) addCatalogModelCheck() {
 		fmt.Sprintf("%s (%s)", r.CatalogModel, r.CatalogModelSource),
 		"",
 	)
+}
+
+func (r *DiagnosticReport) addRouteCheck() {
+	detail := r.routeCheckDetail()
+	switch r.Route {
+	case DiagnosticRouteResponsesStreaming:
+		r.addCheck(DiagnosticStatusOK, "route", "Azure OpenAI Responses streaming route is selected", detail, "")
+	case DiagnosticRouteResponsesNonStreaming:
+		r.addCheck(DiagnosticStatusOK, "route", "Azure OpenAI Responses non-streaming route is selected", detail, "")
+	default:
+		r.addCheck(DiagnosticStatusFail, "route", "Azure OpenAI route could not be resolved", detail, "")
+	}
+}
+
+func (r DiagnosticReport) routeCheckDetail() string {
+	route := strings.TrimSpace(r.Route)
+	reason := strings.TrimSpace(r.RouteReason)
+	switch {
+	case route == "":
+		return reason
+	case reason == "":
+		return route
+	default:
+		return fmt.Sprintf("%s; %s", route, reason)
+	}
 }
 
 func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
@@ -739,6 +817,30 @@ func resolveDiagnosticCatalogModel(cfg *config.Config, deployment, explicitCatal
 	}
 
 	return cfg.ModelCatalogName("azure", deployment), "deployment name fallback"
+}
+
+func resolveDiagnosticRoute(deployment, catalogModel string) (string, string) {
+	deployment = strings.TrimSpace(deployment)
+	catalogModel = strings.TrimSpace(catalogModel)
+	if deployment == "" {
+		return "", "deployment is not resolved"
+	}
+
+	if openai.ShouldStreamResponses(catalogModel) {
+		return DiagnosticRouteResponsesStreaming, fmt.Sprintf("deployment=%s uses Responses API; %s", deployment, diagnosticResponsesStreamingReason(catalogModel, true))
+	}
+	return DiagnosticRouteResponsesNonStreaming, fmt.Sprintf("deployment=%s uses Responses API; %s", deployment, diagnosticResponsesStreamingReason(catalogModel, false))
+}
+
+func diagnosticResponsesStreamingReason(catalogModel string, streaming bool) string {
+	catalogModel = strings.TrimSpace(catalogModel)
+	if catalogModel == "" {
+		return "catalog_model is not resolved; Responses streaming defaults to enabled"
+	}
+	if streaming {
+		return fmt.Sprintf("catalog_model=%s supports Responses streaming", catalogModel)
+	}
+	return fmt.Sprintf("catalog_model=%s disables Responses streaming", catalogModel)
 }
 
 func isUnconfiguredPlaceholderDeployment(cfg *config.Config, deployment, explicitDeployment string) bool {

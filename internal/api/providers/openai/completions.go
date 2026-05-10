@@ -45,6 +45,19 @@ type MultimodalRequest struct {
 
 // chatWithCompletions は Chat Completions API でチャット
 func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	reqBody := p.buildChatCompletionsRequest(ctx, systemPrompt, history, model)
+	req, err := openaicompat.NewBearerJSONRequest(ctx, p.APIURL, p.APIKey, reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		StreamHandler:    p.handleStreamingResponse,
+		NonStreamHandler: p.handleNonStreamingResponse,
+	})
+}
+
+func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) openaicompat.ChatCompletionsRequest {
 	cfg := config.FromContext(ctx)
 
 	options := openaicompat.ChatCompletionsRequestOptions{
@@ -71,16 +84,7 @@ func (p *Provider) chatWithCompletions(ctx context.Context, systemPrompt string,
 		options.ReasoningEffort = LevelToReasoningEffort(cfg.Thinking.Level)
 	}
 
-	reqBody := openaicompat.BuildChatCompletionsRequest(options)
-	req, err := openaicompat.NewBearerJSONRequest(ctx, p.APIURL, p.APIKey, reqBody)
-	if err != nil {
-		return "", err
-	}
-
-	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
-		StreamHandler:    p.handleStreamingResponse,
-		NonStreamHandler: p.handleNonStreamingResponse,
-	})
+	return openaicompat.BuildChatCompletionsRequest(options)
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）

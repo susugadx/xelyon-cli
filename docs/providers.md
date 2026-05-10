@@ -179,7 +179,7 @@ xelyon --provider openai --model gpt-5.5
 xelyon --provider openai --model gpt-5.5-pro
 ```
 
-設定の到達性は CLI から診断できます。`doctor openai` は `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--smoke` を付けると live text request を送って、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認したい場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。複数 smoke を指定した場合は request を別々に実行し、JSON では `smoke.requests[]` に request 単位の結果を出します。
+設定の到達性は CLI から診断できます。`doctor openai` は `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route と判定理由、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--smoke` を付けると live text request を送って、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認したい場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。複数 smoke を指定した場合は request を別々に実行または preview し、JSON では `smoke.requests[]` / `request_preview.requests[]` に request 単位の結果を出します。
 
 ```bash
 xelyon doctor openai
@@ -188,6 +188,10 @@ xelyon doctor openai --model corp-openai-deployment --catalog-model gpt-5.4
 xelyon doctor openai --smoke
 xelyon doctor openai --tool-smoke
 xelyon doctor openai --retention-smoke
+xelyon doctor openai --capabilities
+xelyon doctor openai --print-request
+xelyon doctor openai --tool-smoke --print-request
+xelyon doctor openai --retention-smoke --print-request
 xelyon doctor openai --smoke --tool-smoke
 xelyon doctor openai --smoke --tool-smoke --retention-smoke
 xelyon doctor openai --json
@@ -280,7 +284,7 @@ provider_models:
 - `AZURE_OPENAI_API_KEY` に OpenAI の `sk-...` key を入れる。Azure OpenAI resource key か Microsoft Entra ID bearer token を使ってください。
 - `default_model` と `catalog_model` を逆にする。`default_model` は deployment 名、`catalog_model` は実モデル名です。
 
-設定の到達性は CLI から診断できます。`doctor azure` は base URL、認証方式、deployment 解決、`catalog_model` とそれに紐づく token / pricing / capability 判定、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると `responses.store=false` の最小リクエストを送って、実 deployment への到達性、Responses API の response ID、usage、概算 cost を検証します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認したい場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。
+設定の到達性は CLI から診断できます。`doctor azure` は base URL、認証方式、deployment 解決、`catalog_model` とそれに紐づく token / pricing / capability 判定、Responses route と判定理由、function calling 設定、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--smoke` を付けると `responses.store=false` の最小リクエストを送って、実 deployment への到達性、Responses API の response ID、usage、概算 cost を検証します。function calling まで確認したい場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認したい場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
 
 ```bash
 xelyon doctor azure
@@ -289,10 +293,13 @@ xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --smoke
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --retention-smoke
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --capabilities
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --print-request
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --retention-smoke --print-request
 xelyon doctor azure --json
 ```
 
-smoke の text / JSON report には `response_id`、`usage_observed`、`usage.input_tokens` / `usage.output_tokens` / `usage.thinking_tokens` / `usage.cached_input_tokens` / `usage.cache_creation_tokens`、`cost.usd`、`cost.pricing_unavailable` が含まれます。`--retention-smoke` では request 単位の `retention_payload` と `previous_response_id` も出します。response ID や usage が返らない場合、または pricing catalog に該当モデルがない場合は warn になりますが、到達性の smoke 成功自体は維持します。cost は `internal/cost/pricing.yaml` と `catalog_model` を source of truth にした概算です。
+smoke の text / JSON report には `response_id`、`usage_observed`、`usage.input_tokens` / `usage.output_tokens` / `usage.thinking_tokens` / `usage.cached_input_tokens` / `usage.cache_creation_tokens`、`cost.usd`、`cost.pricing_unavailable` が含まれます。`--retention-smoke` では request 単位の `retention_payload` と `previous_response_id` も出します。`--print-request` では `request_preview.requests[]` に request 単位の `body`、redacted `headers`、endpoint、`previous_response_id` placeholder を出します。response ID や usage が返らない場合、または pricing catalog に該当モデルがない場合は warn になりますが、到達性の smoke 成功自体は維持します。cost は `internal/cost/pricing.yaml` と `catalog_model` を source of truth にした概算です。
 
 Azure OpenAI の API error は、HTTP status に応じて原因候補を補足します。401/403 は認証・権限、404 は base URL または deployment 名、429 は quota / rate limit / capacity、tool payload rejected は `AZURE_OPENAI_FUNCTION_CALLING=0` の案内を表示します。
 

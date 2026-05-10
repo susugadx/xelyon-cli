@@ -31,6 +31,8 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 		Provider          string `json:"provider"`
 		Deployment        string `json:"deployment"`
 		CatalogModel      string `json:"catalog_model"`
+		Route             string `json:"route"`
+		RouteReason       string `json:"route_reason"`
 		NormalizedBaseURL string `json:"normalized_base_url"`
 		Checks            []struct {
 			Name   string `json:"name"`
@@ -50,6 +52,12 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 	if report.CatalogModel != "gpt-5.3-codex" {
 		t.Fatalf("catalog_model = %q, want CLI catalog model", report.CatalogModel)
 	}
+	if report.Route != "responses_streaming" {
+		t.Fatalf("route = %q, want responses_streaming", report.Route)
+	}
+	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.3-codex supports Responses streaming") {
+		t.Fatalf("route_reason = %q, want catalog streaming reason", report.RouteReason)
+	}
 	if report.NormalizedBaseURL != "https://example.openai.azure.com/openai/v1" {
 		t.Fatalf("normalized_base_url = %q, want v1 URL", report.NormalizedBaseURL)
 	}
@@ -67,6 +75,113 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 	}
 	if !strings.Contains(catalogPolicyDetail, "max_output_tokens=128000") {
 		t.Fatalf("catalog_policy detail = %q, want gpt-5.3-codex max output", catalogPolicyDetail)
+	}
+}
+
+func TestRunAzureDoctorInvocation_PrintRequestJSONDoesNotRequireAuth(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+	t.Setenv("AZURE_OPENAI_API_KEY", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
+
+	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
+
+	doctorDeploymentFlag = "corp-gpt55-pro-deployment"
+	doctorCatalogModelFlag = "gpt-5.5-pro"
+	doctorAzureRetentionSmokeFlag = true
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runAzureDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	var report struct {
+		Smoke          any `json:"smoke"`
+		RequestPreview struct {
+			Requests []struct {
+				Name               string `json:"name"`
+				RetentionPayload   bool   `json:"retention_payload"`
+				PreviousResponseID string `json:"previous_response_id"`
+				URL                string `json:"url"`
+				Body               struct {
+					Model              string `json:"model"`
+					Store              bool   `json:"store"`
+					PreviousResponseID string `json:"previous_response_id"`
+				} `json:"body"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
+	}
+	if report.Smoke != nil {
+		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
+	}
+	if len(report.RequestPreview.Requests) != 2 {
+		t.Fatalf("request_preview = %#v, want two retention requests", report.RequestPreview)
+	}
+	followup := report.RequestPreview.Requests[1]
+	if followup.Name != "retention_followup" || !followup.RetentionPayload {
+		t.Fatalf("followup preview = %#v, want retention followup", followup)
+	}
+	if followup.URL != "https://example.openai.azure.com/openai/v1/responses" {
+		t.Fatalf("followup URL = %q, want Azure Responses endpoint", followup.URL)
+	}
+	if followup.Body.Model != "corp-gpt55-pro-deployment" || !followup.Body.Store || followup.Body.PreviousResponseID != followup.PreviousResponseID {
+		t.Fatalf("followup body = %#v, want deployment, store true, and placeholder previous_response_id", followup.Body)
+	}
+}
+
+func TestRunAzureDoctorInvocation_CapabilitiesJSONDoesNotRequireEndpointOrAuth(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
+	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
+
+	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
+
+	doctorDeploymentFlag = "corp-codex-deployment"
+	doctorCatalogModelFlag = "gpt-5.3-codex"
+	doctorCapabilitiesFlag = true
+	doctorJSONFlag = true
+
+	if err := runAzureDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	var report struct {
+		Capabilities struct {
+			Deployment         string `json:"deployment"`
+			CatalogModel       string `json:"catalog_model"`
+			ResponsesAPI       bool   `json:"responses_api"`
+			ResponsesStreaming bool   `json:"responses_streaming"`
+			ServerCompaction   struct {
+				RequestPayload   bool `json:"request_payload"`
+				CompactThreshold int  `json:"compact_threshold"`
+			} `json:"server_compaction"`
+		} `json:"capabilities"`
+		Checks []struct {
+			Name string `json:"name"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
+	}
+	if report.Capabilities.Deployment != "corp-codex-deployment" ||
+		report.Capabilities.CatalogModel != "gpt-5.3-codex" ||
+		!report.Capabilities.ResponsesAPI ||
+		!report.Capabilities.ResponsesStreaming ||
+		!report.Capabilities.ServerCompaction.RequestPayload ||
+		report.Capabilities.ServerCompaction.CompactThreshold <= 0 {
+		t.Fatalf("capabilities = %+v, want resolved Azure capabilities", report.Capabilities)
+	}
+	for _, check := range report.Checks {
+		if check.Name == "base_url" || check.Name == "auth" {
+			t.Fatalf("%s check should be skipped for capabilities-only report: %#v", check.Name, report.Checks)
+		}
 	}
 }
 
@@ -142,6 +257,26 @@ func TestRunAzureDoctorInvocation_PrintConfigRequiresDeploymentAndCatalogModel(t
 	}
 }
 
+func TestRunAzureDoctorInvocation_PrintConfigRejectsCapabilities(t *testing.T) {
+	cmd, _ := newDoctorSubcommandTest(t, newAzureDoctorCommand)
+
+	doctorPrintConfigFlag = true
+	doctorCapabilitiesFlag = true
+	doctorDeploymentFlag = "corp-gpt55-deployment"
+	doctorCatalogModelFlag = "gpt-5.5"
+
+	err := runAzureDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatal("runAzureDoctorInvocation() error = nil, want print-config capabilities conflict")
+	}
+	if !strings.Contains(err.Error(), "--capabilities") {
+		t.Fatalf("error = %v, want --capabilities conflict guidance", err)
+	}
+	if !cmd.SilenceUsage {
+		t.Fatal("cmd.SilenceUsage = false, want true for print-config validation error")
+	}
+}
+
 func TestRootCommand_AzureDoctorCommandParsesFlags(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
@@ -176,6 +311,12 @@ func TestRootCommand_AzureDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if !strings.Contains(out.String(), "--retention-smoke") {
 		t.Fatalf("output = %q, want retention smoke flag", out.String())
 	}
+	if !strings.Contains(out.String(), "--capabilities") {
+		t.Fatalf("output = %q, want capabilities flag", out.String())
+	}
+	if !strings.Contains(out.String(), "--print-request") {
+		t.Fatalf("output = %q, want print-request flag", out.String())
+	}
 	if !strings.Contains(out.String(), "Diagnose Azure OpenAI configuration") {
 		t.Fatalf("output = %q, want Azure doctor help", out.String())
 	}
@@ -208,7 +349,9 @@ func TestRootCommand_AzureDoctorFailureDoesNotPrintRootUsage(t *testing.T) {
 
 func TestRenderAzureDoctorTextIncludesSmokeObservability(t *testing.T) {
 	report := azureprovider.DiagnosticReport{
-		Provider: "azure",
+		Provider:    "azure",
+		Route:       azureprovider.DiagnosticRouteResponsesStreaming,
+		RouteReason: "deployment=corp-codex uses Responses API; catalog_model=gpt-5.3-codex supports Responses streaming",
 		Checks: []azureprovider.DiagnosticCheck{
 			{Name: "smoke", Status: azureprovider.DiagnosticStatusOK, Message: "live Azure OpenAI smoke request succeeded"},
 		},
@@ -235,9 +378,78 @@ func TestRenderAzureDoctorTextIncludesSmokeObservability(t *testing.T) {
 	renderAzureDoctorText(&out, report)
 	output := out.String()
 	for _, want := range []string{
+		"Route: responses_streaming",
+		"Route reason: deployment=corp-codex uses Responses API; catalog_model=gpt-5.3-codex supports Responses streaming",
 		"Smoke response ID: resp_text",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}
+
+func TestRenderAzureDoctorTextIncludesRequestPreview(t *testing.T) {
+	report := azureprovider.DiagnosticReport{
+		Provider:    "azure",
+		Route:       azureprovider.DiagnosticRouteResponsesNonStreaming,
+		RouteReason: "deployment=corp-gpt55-pro uses Responses API; catalog_model=gpt-5.5-pro disables Responses streaming",
+		RequestPreview: &azureprovider.DiagnosticRequestPreview{
+			Requests: []azureprovider.DiagnosticRequestPreviewRequest{{
+				Name:    "text",
+				Route:   azureprovider.DiagnosticRouteResponsesNonStreaming,
+				Method:  "POST",
+				URL:     "https://example.openai.azure.com/openai/v1/responses",
+				Headers: map[string]string{"api-key": "<redacted>"},
+				Body:    map[string]any{"model": "corp-gpt55-pro", "store": false},
+			}},
+		},
+	}
+
+	var out bytes.Buffer
+	renderAzureDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Request preview:",
+		`"api-key": "<redacted>"`,
+		`"model": "corp-gpt55-pro"`,
+		`"store": false`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}
+
+func TestRenderAzureDoctorTextIncludesCapabilities(t *testing.T) {
+	report := azureprovider.DiagnosticReport{
+		Provider: "azure",
+		Route:    azureprovider.DiagnosticRouteResponsesStreaming,
+		Capabilities: &azureprovider.DiagnosticCapabilities{
+			Deployment:         "corp-codex-deployment",
+			CatalogModel:       "gpt-5.3-codex",
+			Route:              azureprovider.DiagnosticRouteResponsesStreaming,
+			ResponsesAPI:       true,
+			ResponsesStreaming: true,
+			Retention: azureprovider.DiagnosticRetentionCapability{
+				PreviousResponseID: true,
+			},
+			ServerCompaction: azureprovider.DiagnosticServerCompactionCapability{
+				RequestPayload:   true,
+				CompactThreshold: 272000,
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	renderAzureDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Capabilities:",
+		`"responses_api": true`,
+		`"previous_response_id": true`,
+		`"compact_threshold": 272000`,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output = %q, want substring %q", output, want)

@@ -21,7 +21,10 @@ provider registration, model/catalog model resolution, route selection,
 function calling settings, token/cost metadata, and Responses API retention
 settings. Use --smoke to send a minimal live request. Use --tool-smoke to
 force a dummy tool call when function calling is enabled. Use
---retention-smoke to verify a Responses API previous_response_id chain.`,
+--retention-smoke to verify a Responses API previous_response_id chain. Use
+--capabilities to print resolved model capabilities without sending a live
+request. Use --print-request to print the sanitized smoke request JSON without
+sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runOpenAIDoctorInvocation,
 	}
@@ -30,9 +33,11 @@ force a dummy tool call when function calling is enabled. Use
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor openai' capability/token/pricing policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal OpenAI text smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live OpenAI smoke request that forces a dummy tool call")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved OpenAI model capabilities without sending a live request")
 	cmd.Flags().BoolVar(&doctorOpenAIRetentionSmokeFlag, "retention-smoke", false, "Send live OpenAI Responses API requests that verify previous_response_id retention")
 	addDoctorTimeoutFlag(cmd, "openai", "")
 	addDoctorJSONFlag(cmd, "openai")
+	addDoctorPrintRequestFlag(cmd, "openai")
 
 	return cmd
 }
@@ -48,10 +53,12 @@ func runOpenAIDoctorInvocation(cmd *cobra.Command, args []string) error {
 		Config:         cfg,
 		Model:          doctorOpenAIModelFlag,
 		CatalogModel:   doctorCatalogModelFlag,
-		RunSmoke:       doctorSmokeFlag || doctorToolSmokeFlag || doctorOpenAIRetentionSmokeFlag,
+		RunSmoke:       !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorOpenAIRetentionSmokeFlag),
 		TextSmoke:      doctorSmokeFlag,
 		ToolSmoke:      doctorToolSmokeFlag,
+		Capabilities:   doctorCapabilitiesFlag,
 		RetentionSmoke: doctorOpenAIRetentionSmokeFlag,
+		PrintRequest:   doctorPrintRequestFlag,
 		SmokeTimeout:   doctorTimeoutFlag,
 	})
 	if loadErr != nil {
@@ -89,11 +96,24 @@ func renderOpenAIDoctorText(w io.Writer, report openaiprovider.DiagnosticReport)
 	fmt.Fprintf(w, "Model: %s (%s)\n", report.Model, report.ModelSource)
 	fmt.Fprintf(w, "Catalog model: %s (%s)\n", report.CatalogModel, report.CatalogModelSource)
 	fmt.Fprintf(w, "Route: %s\n", report.Route)
+	if strings.TrimSpace(report.RouteReason) != "" {
+		fmt.Fprintf(w, "Route reason: %s\n", report.RouteReason)
+	}
 	fmt.Fprintf(w, "API URL: %s\n", report.APIURL)
 	fmt.Fprintf(w, "Responses URL: %s\n", report.ResponsesURL)
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, openAIDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
+
+	if report.RequestPreview != nil {
+		fmt.Fprintln(w)
+		renderDoctorRequestPreview(w, report.RequestPreview)
+	}
 
 	if report.Smoke != nil && report.Smoke.Ran {
 		fmt.Fprintln(w)

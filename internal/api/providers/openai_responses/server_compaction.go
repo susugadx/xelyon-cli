@@ -22,6 +22,16 @@ type ServerCompactionDecision struct {
 	ShouldSkipLocalAutoCompression bool
 }
 
+// CompactThreshold は compaction payload に設定される compact_threshold を返す。
+func (d ServerCompactionDecision) CompactThreshold() int {
+	for _, setting := range d.ContextManagement {
+		if setting.Type == "compaction" && setting.CompactThreshold > 0 {
+			return setting.CompactThreshold
+		}
+	}
+	return 0
+}
+
 // ResolveServerCompactionDecision は Responses API request 用の server compaction 判定を解決する。
 func ResolveServerCompactionDecision(ctx context.Context, provider string, model ModelIdentity, previousResponseID string) ServerCompactionDecision {
 	cfg := config.FromContext(ctx)

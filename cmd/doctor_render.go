@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,6 +43,26 @@ func renderDoctorChecks(w io.Writer, checks []doctorCheckLine) {
 			fmt.Fprintf(w, "     suggestion: %s\n", check.Suggestion)
 		}
 	}
+}
+
+func renderDoctorRequestPreview(w io.Writer, preview any) {
+	renderDoctorJSONBlock(w, "Request preview", preview)
+}
+
+func renderDoctorCapabilities(w io.Writer, capabilities any) {
+	renderDoctorJSONBlock(w, "Capabilities", capabilities)
+}
+
+func renderDoctorJSONBlock(w io.Writer, title string, payloadValue any) {
+	var payload bytes.Buffer
+	encoder := json.NewEncoder(&payload)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(payloadValue); err != nil {
+		fmt.Fprintf(w, "%s: (failed to render: %v)\n", title, err)
+		return
+	}
+	fmt.Fprintf(w, "%s:\n%s", title, payload.String())
 }
 
 func formatDoctorSmokeUsage(usage doctorSmokeUsageLine) string {
