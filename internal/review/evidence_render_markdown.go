@@ -10,55 +10,99 @@ func RenderReviewEvidenceMarkdown(bundle ReviewEvidenceBundle) string {
 	input := BuildReviewEvidenceModelInput(bundle)
 	var b strings.Builder
 
-	b.WriteString("# Review Evidence\n\n")
-	appendReviewEvidenceMarkdownSection(&b, "target kind")
-	appendReviewEvidenceMarkdownFence(&b, "text", string(input.TargetKind))
-	appendReviewEvidenceMarkdownSection(&b, "repo root display")
-	appendReviewEvidenceMarkdownFence(&b, "text", input.RepoRoot)
-	appendReviewEvidenceMarkdownSection(&b, "cwd display")
-	appendReviewEvidenceMarkdownFence(&b, "text", input.CWDDisplay)
-	appendReviewEvidenceMarkdownSection(&b, "git status --short")
-	appendReviewEvidenceMarkdownFence(&b, "text", input.GitStatusShort.Content)
-	appendReviewEvidenceMarkdownSection(&b, "change inventory")
-	appendReviewEvidenceMarkdownJSONFence(&b, input.ChangeInventory)
-	appendReviewEvidenceMarkdownSection(&b, "changed files")
-	appendReviewEvidenceMarkdownJSONFence(&b, input.ChangedFiles)
-
-	appendReviewEvidenceMarkdownSection(&b, "rule files")
-	appendReviewEvidenceMarkdownJSONFence(&b, reviewEvidenceRuleFileMetadataInputs(input.RuleFiles))
-	for _, file := range input.RuleFiles {
-		appendReviewEvidenceMarkdownSubsection(&b, "rule file: "+file.Path)
-		appendReviewEvidenceMarkdownFence(&b, "text", file.Content)
-	}
-
-	appendReviewEvidenceMarkdownSection(&b, "diffs")
-	if len(input.Diffs) == 0 {
-		appendReviewEvidenceMarkdownJSONFence(&b, input.Diffs)
-	} else {
-		for _, diff := range input.Diffs {
-			appendReviewEvidenceMarkdownSubsection(&b, "diff: "+diff.Source)
-			appendReviewEvidenceMarkdownSmallHeading(&b, "stat")
-			appendReviewEvidenceMarkdownFence(&b, "text", diff.Stat.Content)
-			appendReviewEvidenceMarkdownSmallHeading(&b, "name-status")
-			appendReviewEvidenceMarkdownFence(&b, "text", diff.NameStatus.Content)
-			appendReviewEvidenceMarkdownSmallHeading(&b, "diff body")
-			appendReviewEvidenceMarkdownFence(&b, "diff", diff.Diff.Content)
-		}
-	}
-
-	appendReviewEvidenceMarkdownSection(&b, "untracked files")
-	appendReviewEvidenceMarkdownJSONFence(&b, reviewEvidenceUntrackedFileMetadataInputs(input.UntrackedFiles))
-	for _, file := range input.UntrackedFiles {
-		appendReviewEvidenceMarkdownSubsection(&b, "untracked file: "+file.Path)
-		appendReviewEvidenceMarkdownFence(&b, "text", reviewEvidenceUntrackedFileBody(file))
-	}
-
-	appendReviewEvidenceMarkdownSection(&b, "limits")
-	appendReviewEvidenceMarkdownJSONFence(&b, input.Limits)
-	appendReviewEvidenceMarkdownSection(&b, "truncation flags")
-	appendReviewEvidenceMarkdownJSONFence(&b, input.TruncationFlags)
+	appendReviewEvidenceMarkdownHeader(&b)
+	appendReviewEvidenceMarkdownTargetKind(&b, input)
+	appendReviewEvidenceMarkdownRepoRootDisplay(&b, input)
+	appendReviewEvidenceMarkdownCWDDisplay(&b, input)
+	appendReviewEvidenceMarkdownGitStatus(&b, input)
+	appendReviewEvidenceMarkdownChangeInventory(&b, input)
+	appendReviewEvidenceMarkdownChangedFiles(&b, input)
+	appendReviewEvidenceMarkdownRuleFiles(&b, input)
+	appendReviewEvidenceMarkdownDiffs(&b, input)
+	appendReviewEvidenceMarkdownUntrackedFiles(&b, input)
+	appendReviewEvidenceMarkdownLimits(&b, input)
+	appendReviewEvidenceMarkdownTruncationFlags(&b, input)
 
 	return b.String()
+}
+
+func appendReviewEvidenceMarkdownHeader(b *strings.Builder) {
+	b.WriteString("# Review Evidence\n\n")
+}
+
+func appendReviewEvidenceMarkdownTargetKind(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "target kind")
+	appendReviewEvidenceMarkdownFence(b, "text", string(input.TargetKind))
+}
+
+func appendReviewEvidenceMarkdownRepoRootDisplay(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "repo root display")
+	appendReviewEvidenceMarkdownFence(b, "text", input.RepoRoot)
+}
+
+func appendReviewEvidenceMarkdownCWDDisplay(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "cwd display")
+	appendReviewEvidenceMarkdownFence(b, "text", input.CWDDisplay)
+}
+
+func appendReviewEvidenceMarkdownGitStatus(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "git status --short")
+	appendReviewEvidenceMarkdownFence(b, "text", input.GitStatusShort.Content)
+}
+
+func appendReviewEvidenceMarkdownChangeInventory(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "change inventory")
+	appendReviewEvidenceMarkdownJSONFence(b, input.ChangeInventory)
+}
+
+func appendReviewEvidenceMarkdownChangedFiles(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "changed files")
+	appendReviewEvidenceMarkdownJSONFence(b, input.ChangedFiles)
+}
+
+func appendReviewEvidenceMarkdownRuleFiles(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "rule files")
+	appendReviewEvidenceMarkdownJSONFence(b, reviewEvidenceRuleFileMetadataInputs(input.RuleFiles))
+	for _, file := range input.RuleFiles {
+		appendReviewEvidenceMarkdownSubsection(b, "rule file: "+file.Path)
+		appendReviewEvidenceMarkdownFence(b, "text", file.Content)
+	}
+}
+
+func appendReviewEvidenceMarkdownDiffs(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "diffs")
+	if len(input.Diffs) == 0 {
+		appendReviewEvidenceMarkdownJSONFence(b, input.Diffs)
+	} else {
+		for _, diff := range input.Diffs {
+			appendReviewEvidenceMarkdownSubsection(b, "diff: "+diff.Source)
+			appendReviewEvidenceMarkdownSmallHeading(b, "stat")
+			appendReviewEvidenceMarkdownFence(b, "text", diff.Stat.Content)
+			appendReviewEvidenceMarkdownSmallHeading(b, "name-status")
+			appendReviewEvidenceMarkdownFence(b, "text", diff.NameStatus.Content)
+			appendReviewEvidenceMarkdownSmallHeading(b, "diff body")
+			appendReviewEvidenceMarkdownFence(b, "diff", diff.Diff.Content)
+		}
+	}
+}
+
+func appendReviewEvidenceMarkdownUntrackedFiles(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "untracked files")
+	appendReviewEvidenceMarkdownJSONFence(b, reviewEvidenceUntrackedFileMetadataInputs(input.UntrackedFiles))
+	for _, file := range input.UntrackedFiles {
+		appendReviewEvidenceMarkdownSubsection(b, "untracked file: "+file.Path)
+		appendReviewEvidenceMarkdownFence(b, "text", reviewEvidenceUntrackedFileBody(file))
+	}
+}
+
+func appendReviewEvidenceMarkdownLimits(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "limits")
+	appendReviewEvidenceMarkdownJSONFence(b, input.Limits)
+}
+
+func appendReviewEvidenceMarkdownTruncationFlags(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "truncation flags")
+	appendReviewEvidenceMarkdownJSONFence(b, input.TruncationFlags)
 }
 
 func reviewEvidenceRuleFileMetadataInputs(files []ReviewEvidenceRuleFileInput) []reviewEvidenceRuleFileMetadataInput {
