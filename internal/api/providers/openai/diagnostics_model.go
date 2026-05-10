@@ -1,15 +1,13 @@
 package openai
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func resolveOpenAIDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
@@ -66,46 +64,36 @@ func resolveOpenAIDiagnosticCatalogModel(cfg *config.Config, model, explicitCata
 	return resolution.Model, "model"
 }
 
-type openAIDiagnosticRouteResolution struct {
-	Route  string
-	Reason string
-}
-
-func resolveOpenAIDiagnosticRouteResolution(cfg *config.Config, model, catalogModel string) openAIDiagnosticRouteResolution {
+func resolveOpenAIDiagnosticRouteResolution(cfg *config.Config, model, catalogModel string) providerdiag.RouteDecision {
 	model = strings.TrimSpace(model)
 	catalogModel = strings.TrimSpace(catalogModel)
 	if model == "" {
-		return openAIDiagnosticRouteResolution{
-			Reason: "model is not resolved",
+		return providerdiag.RouteDecision{
+			Reasons: []string{"model is not resolved"},
 		}
 	}
 	if cfg.IsProviderResponsesAPIModel("openai", model) {
-		if ShouldStreamResponses(catalogModel) {
-			return openAIDiagnosticRouteResolution{
-				Route:  DiagnosticRouteResponsesStreaming,
-				Reason: fmt.Sprintf("model=%s uses Responses API; %s", model, openAIDiagnosticResponsesStreamingReason(catalogModel, true)),
+		if providerdiag.ShouldStreamResponsesCatalogModel(catalogModel) {
+			return providerdiag.RouteDecision{
+				Route: DiagnosticRouteResponsesStreaming,
+				Reasons: []string{
+					fmt.Sprintf("model=%s uses Responses API", model),
+					providerdiag.ResponsesStreamingReason(catalogModel, true),
+				},
 			}
 		}
-		return openAIDiagnosticRouteResolution{
-			Route:  DiagnosticRouteResponsesNonStreaming,
-			Reason: fmt.Sprintf("model=%s uses Responses API; %s", model, openAIDiagnosticResponsesStreamingReason(catalogModel, false)),
+		return providerdiag.RouteDecision{
+			Route: DiagnosticRouteResponsesNonStreaming,
+			Reasons: []string{
+				fmt.Sprintf("model=%s uses Responses API", model),
+				providerdiag.ResponsesStreamingReason(catalogModel, false),
+			},
 		}
 	}
-	return openAIDiagnosticRouteResolution{
-		Route:  DiagnosticRouteChatCompletions,
-		Reason: fmt.Sprintf("model=%s is not configured for Responses API", model),
+	return providerdiag.RouteDecision{
+		Route:   DiagnosticRouteChatCompletions,
+		Reasons: []string{fmt.Sprintf("model=%s is not configured for Responses API", model)},
 	}
-}
-
-func openAIDiagnosticResponsesStreamingReason(catalogModel string, streaming bool) string {
-	catalogModel = strings.TrimSpace(catalogModel)
-	if catalogModel == "" {
-		return "catalog_model is not resolved; Responses streaming defaults to enabled"
-	}
-	if streaming {
-		return fmt.Sprintf("catalog_model=%s supports Responses streaming", catalogModel)
-	}
-	return fmt.Sprintf("catalog_model=%s disables Responses streaming", catalogModel)
 }
 
 func openAIDiagnosticPolicyConfig(cfg *config.Config, model, catalogModel string) *config.Config {
@@ -137,63 +125,6 @@ func openAIDiagnosticConfigWithModelPolicy(cfg *config.Config, model, catalogMod
 		pm.ModelOverrides[model] = override
 	})
 	return policyCfg
-}
-
-type openAIDiagnosticMaxOutputPolicyResult struct {
-	Tokens    int
-	Source    string
-	Available bool
-}
-
-func openAIDiagnosticMaxOutputPolicy(cfg *config.Config, model, catalogModel string) openAIDiagnosticMaxOutputPolicyResult {
-	if override, ok := cfg.ModelOverrideForProvider("openai", model); ok && override.MaxOutputTokens > 0 {
-		return openAIDiagnosticMaxOutputPolicyResult{
-			Tokens:    override.MaxOutputTokens,
-			Source:    "model_overrides",
-			Available: true,
-		}
-	}
-	if tokens, ok := llmcatalog.KnownMaxOutputTokens(catalogModel); ok {
-		return openAIDiagnosticMaxOutputPolicyResult{
-			Tokens:    tokens,
-			Source:    "catalog",
-			Available: true,
-		}
-	}
-	ctx := config.WithContext(context.Background(), cfg)
-	tokens := api.GetMaxOutputTokens(ctx, "openai", model)
-	if tokens <= 0 {
-		return openAIDiagnosticMaxOutputPolicyResult{Source: "missing"}
-	}
-	return openAIDiagnosticMaxOutputPolicyResult{
-		Tokens:    tokens,
-		Source:    "provider_default",
-		Available: true,
-	}
-}
-
-func openAIDiagnosticMaxOutputTokens(cfg *config.Config, model, catalogModel string) (int, bool) {
-	result := openAIDiagnosticMaxOutputPolicy(cfg, model, catalogModel)
-	return result.Tokens, result.Available
-}
-
-func openAIDiagnosticIntDetail(value int, ok bool) string {
-	if !ok {
-		return "unknown"
-	}
-	return fmt.Sprintf("%d", value)
-}
-
-func openAIDiagnosticPricingDetail(pricing cost.PricingInfo) string {
-	if pricing.PricingUnavailable {
-		return "pricing=unavailable"
-	}
-	return fmt.Sprintf(
-		"pricing=input $%.2f/M cached $%.3f/M output $%.2f/M",
-		pricing.InputCostPerM,
-		pricing.CachedInputCostPerM,
-		pricing.OutputCostPerM,
-	)
 }
 
 func looksLikeOpenAICatalogModel(model string) bool {

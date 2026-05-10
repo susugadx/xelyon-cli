@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -185,7 +185,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	cfg := config.CloneConfig(options.Config)
 	deployment, deploymentSource := resolveDiagnosticDeployment(cfg, options.Deployment)
 	catalogModel, catalogSource := resolveDiagnosticCatalogModel(cfg, deployment, options.CatalogModel)
-	route, routeReason := resolveDiagnosticRoute(deployment, catalogModel)
+	routeDecision := resolveDiagnosticRoute(deployment, catalogModel)
 
 	report := DiagnosticReport{
 		Provider:               "azure",
@@ -196,8 +196,8 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		DeploymentSource:       deploymentSource,
 		CatalogModel:           catalogModel,
 		CatalogModelSource:     catalogSource,
-		Route:                  route,
-		RouteReason:            routeReason,
+		Route:                  routeDecision.Route,
+		RouteReason:            routeDecision.ReasonString(),
 		FunctionCallingEnabled: os.Getenv("AZURE_OPENAI_FUNCTION_CALLING") != "0",
 		ResponsesStore:         cfg.ResponsesStoreEnabled(),
 		ResponsesPersistID:     cfg.ResponsesPersistResponseIDEnabled(),
@@ -509,14 +509,11 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 	}
 
 	policyCfg := diagnosticCatalogPolicyConfig(cfg, deployment, catalogModel)
-	maxOutput := diagnosticMaxOutputPolicy(policyCfg, deployment, catalogModel)
-	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
-	pricing := cost.GetPricingInfoForConfig(policyCfg, "azure", deployment)
-	responsesStreaming := openai.ShouldStreamResponses(catalogModel)
-	detail := diagnosticCatalogPolicyDetail(catalogModel, contextWindow, contextOK, maxOutput, pricing, responsesStreaming)
+	policy := providerdiag.AzureCatalogPolicy(policyCfg, deployment, catalogModel)
+	detail := policy.AzureDetail()
 
 	switch {
-	case !contextOK:
+	case !policy.ContextWindowKnown:
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
@@ -524,7 +521,7 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 			detail,
 			"Use an OpenAI catalog model known to XELYON, or update the model catalog before relying on token limits",
 		)
-	case !maxOutput.Available:
+	case !policy.MaxOutput.Available:
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
@@ -532,7 +529,7 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 			detail,
 			"Use an OpenAI catalog model known to XELYON, or set max_output_tokens explicitly for this deployment",
 		)
-	case pricing.PricingUnavailable:
+	case policy.Pricing.PricingUnavailable:
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
@@ -566,81 +563,6 @@ func diagnosticCatalogPolicyConfig(cfg *config.Config, deployment, catalogModel 
 		pm.ModelOverrides[deployment] = override
 	})
 	return policyCfg
-}
-
-type diagnosticMaxOutputPolicyResult struct {
-	Tokens          int
-	Source          string
-	Available       bool
-	RuntimeFallback int
-}
-
-func diagnosticMaxOutputPolicy(cfg *config.Config, deployment, catalogModel string) diagnosticMaxOutputPolicyResult {
-	if override, ok := cfg.ModelOverrideForProvider("azure", deployment); ok && override.MaxOutputTokens > 0 {
-		return diagnosticMaxOutputPolicyResult{
-			Tokens:    override.MaxOutputTokens,
-			Source:    "model_overrides",
-			Available: true,
-		}
-	}
-
-	if tokens, ok := llmcatalog.KnownMaxOutputTokens(catalogModel); ok {
-		return diagnosticMaxOutputPolicyResult{
-			Tokens:    tokens,
-			Source:    "catalog",
-			Available: true,
-		}
-	}
-
-	runtimeFallback := api.GetMaxOutputTokens(config.WithContext(context.Background(), cfg), "azure", deployment)
-	return diagnosticMaxOutputPolicyResult{
-		Source:          "missing",
-		RuntimeFallback: runtimeFallback,
-	}
-}
-
-func diagnosticCatalogPolicyDetail(
-	catalogModel string,
-	contextWindow int,
-	contextOK bool,
-	maxOutput diagnosticMaxOutputPolicyResult,
-	pricing cost.PricingInfo,
-	responsesStreaming bool,
-) string {
-	contextDetail := "unknown"
-	if contextOK {
-		contextDetail = fmt.Sprintf("%d", contextWindow)
-	}
-	return fmt.Sprintf(
-		"catalog_model=%s, context_window=%s, max_output_tokens=%s, responses_streaming=%t, %s",
-		catalogModel,
-		contextDetail,
-		diagnosticMaxOutputDetail(maxOutput),
-		responsesStreaming,
-		diagnosticPricingDetail(pricing),
-	)
-}
-
-func diagnosticMaxOutputDetail(maxOutput diagnosticMaxOutputPolicyResult) string {
-	if maxOutput.Available {
-		return fmt.Sprintf("%d (%s)", maxOutput.Tokens, maxOutput.Source)
-	}
-	if maxOutput.RuntimeFallback > 0 {
-		return fmt.Sprintf("missing (runtime_fallback=%d)", maxOutput.RuntimeFallback)
-	}
-	return "missing"
-}
-
-func diagnosticPricingDetail(pricing cost.PricingInfo) string {
-	if pricing.PricingUnavailable {
-		return "pricing=unavailable"
-	}
-	return fmt.Sprintf(
-		"pricing=input $%.2f/M cached $%.3f/M output $%.2f/M",
-		pricing.InputCostPerM,
-		pricing.CachedInputCostPerM,
-		pricing.OutputCostPerM,
-	)
 }
 
 func (r *DiagnosticReport) addFunctionCallingCheck() {
@@ -819,28 +741,29 @@ func resolveDiagnosticCatalogModel(cfg *config.Config, deployment, explicitCatal
 	return cfg.ModelCatalogName("azure", deployment), "deployment name fallback"
 }
 
-func resolveDiagnosticRoute(deployment, catalogModel string) (string, string) {
+func resolveDiagnosticRoute(deployment, catalogModel string) providerdiag.RouteDecision {
 	deployment = strings.TrimSpace(deployment)
 	catalogModel = strings.TrimSpace(catalogModel)
 	if deployment == "" {
-		return "", "deployment is not resolved"
+		return providerdiag.RouteDecision{Reasons: []string{"deployment is not resolved"}}
 	}
 
-	if openai.ShouldStreamResponses(catalogModel) {
-		return DiagnosticRouteResponsesStreaming, fmt.Sprintf("deployment=%s uses Responses API; %s", deployment, diagnosticResponsesStreamingReason(catalogModel, true))
+	if providerdiag.ShouldStreamResponsesCatalogModel(catalogModel) {
+		return providerdiag.RouteDecision{
+			Route: DiagnosticRouteResponsesStreaming,
+			Reasons: []string{
+				fmt.Sprintf("deployment=%s uses Responses API", deployment),
+				providerdiag.ResponsesStreamingReason(catalogModel, true),
+			},
+		}
 	}
-	return DiagnosticRouteResponsesNonStreaming, fmt.Sprintf("deployment=%s uses Responses API; %s", deployment, diagnosticResponsesStreamingReason(catalogModel, false))
-}
-
-func diagnosticResponsesStreamingReason(catalogModel string, streaming bool) string {
-	catalogModel = strings.TrimSpace(catalogModel)
-	if catalogModel == "" {
-		return "catalog_model is not resolved; Responses streaming defaults to enabled"
+	return providerdiag.RouteDecision{
+		Route: DiagnosticRouteResponsesNonStreaming,
+		Reasons: []string{
+			fmt.Sprintf("deployment=%s uses Responses API", deployment),
+			providerdiag.ResponsesStreamingReason(catalogModel, false),
+		},
 	}
-	if streaming {
-		return fmt.Sprintf("catalog_model=%s supports Responses streaming", catalogModel)
-	}
-	return fmt.Sprintf("catalog_model=%s disables Responses streaming", catalogModel)
 }
 
 func isUnconfiguredPlaceholderDeployment(cfg *config.Config, deployment, explicitDeployment string) bool {

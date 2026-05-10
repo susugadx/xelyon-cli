@@ -187,7 +187,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModel:               catalogModel,
 		CatalogModelSource:         catalogSource,
 		Route:                      routeResolution.Route,
-		RouteReason:                routeResolution.Reason,
+		RouteReason:                routeResolution.ReasonString(),
 		MaxOutputTokens:            api.GetMaxOutputTokens(configCtx, "openai", model),
 		ContextWindowTokens:        contextWindow,
 		FunctionCallingEnabled:     New("diagnostic-key").IsFunctionCallingEnabled(),

@@ -9,8 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const (
@@ -165,23 +164,15 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 		return
 	}
 
-	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
-	maxOutput, maxOutputOK := openAIDiagnosticMaxOutputTokens(cfg, model, catalogModel)
-	pricing := cost.GetPricingInfoForConfig(cfg, "openai", model)
-	detail := fmt.Sprintf(
-		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
-		catalogModel,
-		openAIDiagnosticIntDetail(contextWindow, contextOK),
-		openAIDiagnosticIntDetail(maxOutput, maxOutputOK),
-		openAIDiagnosticPricingDetail(pricing),
-	)
+	policy := providerdiag.OpenAICatalogPolicy(cfg, model, catalogModel)
+	detail := policy.OpenAIDetail()
 
 	switch {
-	case !contextOK:
+	case !policy.ContextWindowKnown:
 		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing context window metadata", detail, "Use an OpenAI model known to XELYON before relying on token-limit diagnostics")
-	case !maxOutputOK:
+	case !policy.MaxOutput.Available:
 		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing max output metadata", detail, "Use an OpenAI model known to XELYON, or set max_output_tokens explicitly for this model")
-	case pricing.PricingUnavailable:
+	case policy.Pricing.PricingUnavailable:
 		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing pricing metadata", detail, "Use an OpenAI model with pricing metadata before relying on cost estimates")
 	default:
 		r.addCheck(DiagnosticStatusOK, "catalog_policy", "catalog_model policy is available", detail, "")
