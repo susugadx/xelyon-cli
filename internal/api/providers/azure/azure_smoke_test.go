@@ -100,12 +100,13 @@ func TestAzureDoctorSmoke(t *testing.T) {
 
 	toolSmoke := os.Getenv(azureSmokeToolEnv) == "1"
 	report := Diagnose(ctx, DiagnosticOptions{
-		Config:       config.DefaultConfig(),
-		Deployment:   deployment,
-		CatalogModel: envOrDefault(azureSmokeCatalogModelEnv, azureSmokeDefaultCatalog),
-		RunSmoke:     true,
-		ToolSmoke:    toolSmoke,
-		SmokeTimeout: azureSmokeRequestTimeout,
+		Config:         config.DefaultConfig(),
+		Deployment:     deployment,
+		CatalogModel:   envOrDefault(azureSmokeCatalogModelEnv, azureSmokeDefaultCatalog),
+		RunSmoke:       true,
+		ToolSmoke:      toolSmoke,
+		RetentionSmoke: true,
+		SmokeTimeout:   azureSmokeRequestTimeout,
 	})
 
 	if report.HasFailures() {
@@ -116,6 +117,9 @@ func TestAzureDoctorSmoke(t *testing.T) {
 	}
 	if toolSmoke && !report.Smoke.ToolPayload {
 		t.Fatalf("%s=1 but tool payload smoke did not run; checks:\n%s", azureSmokeToolEnv, formatDiagnosticChecks(report.Checks))
+	}
+	if !report.Smoke.RetentionPayload {
+		t.Fatalf("retention smoke did not run; checks:\n%s", formatDiagnosticChecks(report.Checks))
 	}
 	if strings.TrimSpace(report.Smoke.Content) == "" {
 		t.Fatal("doctor smoke returned empty content")

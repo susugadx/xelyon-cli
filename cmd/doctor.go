@@ -18,6 +18,7 @@ var (
 	doctorOpenAIModelFlag          string
 	doctorSmokeFlag                bool
 	doctorToolSmokeFlag            bool
+	doctorAzureRetentionSmokeFlag  bool
 	doctorOpenAIRetentionSmokeFlag bool
 	doctorBedrockImageSmokeFlag    bool
 	doctorBedrockThinkingSmokeFlag bool
@@ -54,6 +55,7 @@ Checks base URL, authentication, deployment resolution, catalog model,
 function calling settings, and Responses API retention settings. Use --smoke
 to send a minimal live Responses API request. Use --tool-smoke to force a
 dummy tool call and verify function calling support for the deployment. Use
+--retention-smoke to verify a previous_response_id chain. Use
 --print-config with --deployment and --catalog-model to print a config YAML
 snippet without running diagnostics.`,
 		Args: cobra.NoArgs,
@@ -64,6 +66,7 @@ snippet without running diagnostics.`,
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor azure' capability/token policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal Responses API request for 'doctor azure'")
 	addDoctorToolSmokeFlag(cmd, "Send a live Azure OpenAI smoke request that forces a dummy tool call")
+	cmd.Flags().BoolVar(&doctorAzureRetentionSmokeFlag, "retention-smoke", false, "Send live Azure OpenAI Responses API requests that verify previous_response_id retention")
 	addDoctorTimeoutFlag(cmd, "azure", "Timeout for 'doctor azure --smoke'")
 	addDoctorJSONFlag(cmd, "azure")
 	cmd.Flags().BoolVar(&doctorPrintConfigFlag, "print-config", false, "Print Azure OpenAI config YAML for the given deployment/catalog model")
@@ -74,11 +77,12 @@ snippet without running diagnostics.`,
 func runAzureDoctorInvocation(cmd *cobra.Command, args []string) error {
 	if doctorPrintConfigFlag {
 		if err := renderAzureDoctorConfigSnippet(cmd.OutOrStdout(), azureDoctorConfigSnippetOptions{
-			Deployment:   doctorDeploymentFlag,
-			CatalogModel: doctorCatalogModelFlag,
-			JSON:         doctorJSONFlag,
-			Smoke:        doctorSmokeFlag,
-			ToolSmoke:    doctorToolSmokeFlag,
+			Deployment:     doctorDeploymentFlag,
+			CatalogModel:   doctorCatalogModelFlag,
+			JSON:           doctorJSONFlag,
+			Smoke:          doctorSmokeFlag,
+			ToolSmoke:      doctorToolSmokeFlag,
+			RetentionSmoke: doctorAzureRetentionSmokeFlag,
 		}); err != nil {
 			cmd.SilenceUsage = true
 			return err
@@ -93,12 +97,14 @@ func runAzureDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := azureprovider.Diagnose(cmd.Context(), azureprovider.DiagnosticOptions{
-		Config:       cfg,
-		Deployment:   doctorDeploymentFlag,
-		CatalogModel: doctorCatalogModelFlag,
-		RunSmoke:     doctorSmokeFlag || doctorToolSmokeFlag,
-		ToolSmoke:    doctorToolSmokeFlag,
-		SmokeTimeout: doctorTimeoutFlag,
+		Config:         cfg,
+		Deployment:     doctorDeploymentFlag,
+		CatalogModel:   doctorCatalogModelFlag,
+		RunSmoke:       doctorSmokeFlag || doctorToolSmokeFlag || doctorAzureRetentionSmokeFlag,
+		TextSmoke:      doctorSmokeFlag,
+		ToolSmoke:      doctorToolSmokeFlag,
+		RetentionSmoke: doctorAzureRetentionSmokeFlag,
+		SmokeTimeout:   doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]azureprovider.DiagnosticCheck{{
@@ -138,6 +144,14 @@ func renderAzureDoctorText(w io.Writer, report azureprovider.DiagnosticReport) {
 
 	if report.Smoke != nil && report.Smoke.Ran {
 		fmt.Fprintln(w)
+		if len(report.Smoke.Requests) > 1 {
+			for _, request := range report.Smoke.Requests {
+				renderAzureDoctorSmokeRequest(w, request)
+			}
+			fmt.Fprintf(w, "Smoke total usage: %s\n", formatDoctorSmokeUsage(azureDoctorSmokeUsage(report.Smoke.Usage)))
+			fmt.Fprintf(w, "Smoke total cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
+			return
+		}
 		fmt.Fprintf(w, "Smoke duration: %s\n", report.Smoke.Duration)
 		fmt.Fprintf(w, "Smoke response ID: %s\n", doctorOptionalIDText(report.Smoke.ResponseID))
 		if strings.TrimSpace(report.Smoke.Content) != "" {
@@ -146,6 +160,34 @@ func renderAzureDoctorText(w io.Writer, report azureprovider.DiagnosticReport) {
 		fmt.Fprintf(w, "Smoke usage: %s\n", formatDoctorSmokeUsage(azureDoctorSmokeUsage(report.Smoke.Usage)))
 		fmt.Fprintf(w, "Smoke cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
 	}
+}
+
+func renderAzureDoctorSmokeRequest(w io.Writer, request azureprovider.DiagnosticSmokeRequestResult) {
+	if request.Skipped {
+		fmt.Fprintf(w, "Smoke request %s: skipped (%s)\n", request.Name, request.SkipReason)
+		return
+	}
+
+	status := "ok"
+	if strings.TrimSpace(request.Error) != "" {
+		status = "fail"
+	}
+	line := fmt.Sprintf(
+		"Smoke request %s: %s duration=%s response_id=%s",
+		request.Name,
+		status,
+		request.Duration,
+		doctorOptionalIDText(request.ResponseID),
+	)
+	if request.RetentionPayload {
+		line += fmt.Sprintf(" previous_response_id=%s", doctorOptionalIDText(request.PreviousResponseID))
+	}
+	fmt.Fprintln(w, line)
+	if strings.TrimSpace(request.Content) != "" {
+		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
+	}
+	fmt.Fprintf(w, "Smoke usage %s: %s\n", request.Name, formatDoctorSmokeUsage(azureDoctorSmokeUsage(request.Usage)))
+	fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, doctorSmokeCostText(request.UsageObserved, request.Cost.PricingUnavailable, request.Cost.USD))
 }
 
 func azureDoctorCheckLines(checks []azureprovider.DiagnosticCheck) []doctorCheckLine {

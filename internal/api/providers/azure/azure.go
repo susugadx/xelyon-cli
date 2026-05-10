@@ -36,14 +36,15 @@ func init() {
 // Provider は Azure OpenAI Responses API の provider 実装。
 type Provider struct {
 	api.BaseProvider
-	lastResponseID          string
-	responsesLocalSkip      bool
-	authToken               string
-	authTokenCommand        string
-	authTokenCommandTimeout time.Duration
-	mcpTools                []api.ToolDefinition
-	usageCallback           api.UsageCallback
-	toolChoice              *string
+	lastResponseID           string
+	responsesLocalSkip       bool
+	authToken                string
+	authTokenCommand         string
+	authTokenCommandTimeout  time.Duration
+	mcpTools                 []api.ToolDefinition
+	usageCallback            api.UsageCallback
+	toolChoice               *string
+	responsesRequestObserver func(responsesRequest)
 }
 
 // New は Azure OpenAI provider を作成する。

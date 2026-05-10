@@ -28,6 +28,11 @@ type responsesRequestRunOptions struct {
 }
 
 func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	content, _, err := p.chatWithResponsesResult(ctx, systemPrompt, history, model)
+	return content, err
+}
+
+func (p *Provider) chatWithResponsesResult(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, string, error) {
 	storeResponses := config.FromContext(ctx).ResponsesStoreEnabled()
 	content, responseID, err := p.runResponsesRequest(ctx, responsesRequestRunOptions{
 		URL:          p.responsesURL(),
@@ -44,12 +49,12 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 	})
 	if !storeResponses {
 		p.ClearResponseID()
-		return content, err
+		return content, responseID, err
 	}
 	if err == nil && responseID != "" {
 		p.SetResponseID(responseID)
 	}
-	return content, err
+	return content, responseID, err
 }
 
 func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
@@ -82,6 +87,9 @@ func (p *Provider) runResponsesRequest(ctx context.Context, options responsesReq
 	authRetryUsed := false
 	for attempt := 0; attempt < 3; attempt++ {
 		reqBody := options.BuildRequest()
+		if p.responsesRequestObserver != nil {
+			p.responsesRequestObserver(reqBody)
+		}
 		p.responsesLocalSkip = reqBody.SkipLocalAutoCompressionAfterResponse
 		payload, err := json.Marshal(reqBody)
 		if err != nil {

@@ -55,16 +55,36 @@ type DiagnosticSmokeCost struct {
 	PricingUnavailable bool    `json:"pricing_unavailable"`
 }
 
+// DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
+type DiagnosticSmokeRequestResult struct {
+	Name               string               `json:"name"`
+	Ran                bool                 `json:"ran"`
+	Skipped            bool                 `json:"skipped,omitempty"`
+	SkipReason         string               `json:"skip_reason,omitempty"`
+	ToolPayload        bool                 `json:"tool_payload"`
+	RetentionPayload   bool                 `json:"retention_payload"`
+	Content            string               `json:"content,omitempty"`
+	ResponseID         string               `json:"response_id"`
+	PreviousResponseID string               `json:"previous_response_id"`
+	Duration           string               `json:"duration,omitempty"`
+	UsageObserved      bool                 `json:"usage_observed"`
+	Usage              DiagnosticSmokeUsage `json:"usage"`
+	Cost               DiagnosticSmokeCost  `json:"cost"`
+	Error              string               `json:"error,omitempty"`
+}
+
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
 type DiagnosticSmokeResult struct {
-	Ran           bool                 `json:"ran"`
-	ToolPayload   bool                 `json:"tool_payload"`
-	Content       string               `json:"content,omitempty"`
-	ResponseID    string               `json:"response_id"`
-	Duration      string               `json:"duration,omitempty"`
-	UsageObserved bool                 `json:"usage_observed"`
-	Usage         DiagnosticSmokeUsage `json:"usage"`
-	Cost          DiagnosticSmokeCost  `json:"cost"`
+	Ran              bool                           `json:"ran"`
+	ToolPayload      bool                           `json:"tool_payload"`
+	RetentionPayload bool                           `json:"retention_payload"`
+	Content          string                         `json:"content,omitempty"`
+	ResponseID       string                         `json:"response_id"`
+	Duration         string                         `json:"duration,omitempty"`
+	UsageObserved    bool                           `json:"usage_observed"`
+	Usage            DiagnosticSmokeUsage           `json:"usage"`
+	Cost             DiagnosticSmokeCost            `json:"cost"`
+	Requests         []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
 }
 
 // DiagnosticReport は Azure OpenAI の設定診断結果を表す。
@@ -113,7 +133,9 @@ type DiagnosticOptions struct {
 	Deployment      string
 	CatalogModel    string
 	RunSmoke        bool
+	TextSmoke       bool
 	ToolSmoke       bool
+	RetentionSmoke  bool
 	SmokeTimeout    time.Duration
 	MaxOutputTokens int
 	SmokeOutput     io.Writer
@@ -610,6 +632,9 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	if smoke.ToolPayload {
 		r.addCheck(DiagnosticStatusOK, "tool_smoke", "Azure OpenAI deployment accepted a tool payload", smoke.Duration, "")
 	}
+	if smoke.RetentionPayload {
+		r.addCheck(DiagnosticStatusOK, "retention_smoke", "Azure OpenAI deployment accepted a previous_response_id chain", smoke.Duration, "")
+	}
 }
 
 func (r *DiagnosticReport) addSmokeObservationChecks(smoke DiagnosticSmokeResult) {
@@ -762,10 +787,10 @@ func runDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diagnost
 	smokeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	smokeCfg := config.CloneConfig(cfg)
-	smokeCfg.Responses.Store = false
-	smokeCfg.Responses.PersistResponseID = false
-	smokeCfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+	baseSmokeCfg := config.CloneConfig(cfg)
+	baseSmokeCfg.Responses.Store = false
+	baseSmokeCfg.Responses.PersistResponseID = false
+	baseSmokeCfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
 		DefaultModel: report.Deployment,
 		CatalogModel: report.CatalogModel,
 		ModelOverrides: map[string]config.ModelOverride{
@@ -780,18 +805,109 @@ func runDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diagnost
 	if output == nil {
 		output = io.Discard
 	}
-	runtime := ui.NewRuntime(strings.NewReader(""), output, output)
-	smokeCtx = ui.WithRuntime(smokeCtx, runtime)
-	smokeCtx = api.WithAssistantUpdateMode(smokeCtx, api.AssistantUpdatesOff)
-	toolPayload := options.ToolSmoke && report.FunctionCallingEnabled
-	if toolPayload {
-		smokeCtx = api.WithToolDefinitions(smokeCtx, diagnosticSmokeToolDefinitions())
-	} else {
-		smokeCtx = api.WithToolDefinitions(smokeCtx, nil)
-	}
-	smokeCtx = config.WithContext(smokeCtx, smokeCfg)
 
 	provider := New(os.Getenv(apiKeyEnv))
+	defer provider.ClearToolChoice()
+	defer provider.ClearResponseID()
+	result := DiagnosticSmokeResult{Ran: true}
+	started := time.Now()
+
+	for _, request := range diagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
+		if request.ToolPayload && !report.FunctionCallingEnabled {
+			result.Requests = append(result.Requests, DiagnosticSmokeRequestResult{
+				Name:        request.Name,
+				Skipped:     true,
+				SkipReason:  "Azure OpenAI function calling payloads are disabled (AZURE_OPENAI_FUNCTION_CALLING=0)",
+				ToolPayload: true,
+			})
+			continue
+		}
+
+		requestCfg := diagnosticSmokeRequestConfig(baseSmokeCfg, request)
+		requestResult, err := runDiagnosticSmokeRequest(smokeCtx, requestCfg, provider, report, request, output)
+		result.Requests = append(result.Requests, requestResult)
+		result.addRequestObservation(requestResult)
+		if err != nil {
+			result.Duration = time.Since(started).Round(time.Millisecond).String()
+			return result, err
+		}
+	}
+	result.Duration = time.Since(started).Round(time.Millisecond).String()
+	return result, nil
+}
+
+type diagnosticSmokeRequest struct {
+	Name             string
+	SystemPrompt     string
+	UserContent      string
+	ToolPayload      bool
+	RetentionPayload bool
+}
+
+func diagnosticSmokeRequests(options DiagnosticOptions, functionCallingEnabled bool) []diagnosticSmokeRequest {
+	textSmoke := options.TextSmoke || (!options.ToolSmoke && !options.RetentionSmoke)
+	if options.ToolSmoke && !functionCallingEnabled {
+		textSmoke = true
+	}
+
+	var requests []diagnosticSmokeRequest
+	if textSmoke {
+		requests = append(requests, diagnosticSmokeRequest{
+			Name:         "text",
+			SystemPrompt: "Reply briefly.",
+			UserContent:  "Reply with: xelyon azure doctor ok",
+		})
+	}
+	if options.ToolSmoke {
+		requests = append(requests, diagnosticSmokeRequest{
+			Name:         "tool",
+			SystemPrompt: "Use the diagnostic tool.",
+			UserContent:  `Call xelyon_azure_doctor_probe exactly once with {} and do not answer in prose.`,
+			ToolPayload:  true,
+		})
+	}
+	if options.RetentionSmoke {
+		requests = append(requests,
+			diagnosticSmokeRequest{
+				Name:             "retention_initial",
+				SystemPrompt:     "Reply briefly.",
+				UserContent:      "Reply with: xelyon azure retention initial ok",
+				RetentionPayload: true,
+			},
+			diagnosticSmokeRequest{
+				Name:             "retention_followup",
+				SystemPrompt:     "Reply briefly.",
+				UserContent:      "Reply with: xelyon azure retention followup ok",
+				RetentionPayload: true,
+			},
+		)
+	}
+	return requests
+}
+
+func diagnosticSmokeRequestConfig(base *config.Config, request diagnosticSmokeRequest) *config.Config {
+	cfg := config.CloneConfig(base)
+	if request.RetentionPayload {
+		cfg.Responses.Store = true
+	}
+	return cfg
+}
+
+func runDiagnosticSmokeRequest(
+	ctx context.Context,
+	cfg *config.Config,
+	provider *Provider,
+	report DiagnosticReport,
+	request diagnosticSmokeRequest,
+	output io.Writer,
+) (DiagnosticSmokeRequestResult, error) {
+	requestCtx := newDiagnosticSmokeRequestContext(ctx, cfg, request, output)
+	if request.ToolPayload {
+		provider.SetToolChoice(diagnosticSmokeToolName)
+	} else {
+		provider.ClearToolChoice()
+	}
+
 	var usage api.Usage
 	usageObserved := false
 	provider.SetUsageCallback(func(observed api.Usage) {
@@ -799,46 +915,133 @@ func runDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diagnost
 		usageObserved = usageObserved || observed.HasTokenObservation()
 	})
 
-	systemPrompt := "Reply briefly."
-	if toolPayload {
-		systemPrompt = "Use the diagnostic tool."
-		provider.SetToolChoice(diagnosticSmokeToolName)
-	}
+	observedRequests, restoreObserver := observeDiagnosticResponsesRequests(provider)
+	defer restoreObserver()
+
 	started := time.Now()
 	content, responseID, err := runDiagnosticSmokeResponsesRequest(
-		smokeCtx,
+		requestCtx,
 		provider,
-		systemPrompt,
-		[]api.Message{{Role: "user", Content: "Reply with: xelyon azure doctor ok"}},
+		request.SystemPrompt,
+		[]api.Message{{Role: "user", Content: request.UserContent}},
 		report.Deployment,
+		request.RetentionPayload,
 	)
 	elapsed := time.Since(started).Round(time.Millisecond)
-	provider.ClearResponseID()
-	costEstimate := cost.EstimateRequestCostWithCacheForConfig(smokeCfg, "azure", report.Deployment, usage)
+	if !request.RetentionPayload {
+		provider.ClearResponseID()
+	}
+	costEstimate := cost.EstimateRequestCostWithCacheForConfig(cfg, "azure", report.Deployment, usage)
+	observed := observedRequests()
+	previousResponseID := diagnosticObservedPreviousResponseID(observed)
 
-	result := DiagnosticSmokeResult{
-		Ran:           true,
-		ToolPayload:   toolPayload,
-		Content:       strings.TrimSpace(content),
-		ResponseID:    strings.TrimSpace(responseID),
-		Duration:      elapsed.String(),
-		UsageObserved: usageObserved,
-		Usage:         diagnosticSmokeUsage(usage),
-		Cost:          diagnosticSmokeCost(costEstimate),
+	result := DiagnosticSmokeRequestResult{
+		Name:               request.Name,
+		Ran:                true,
+		ToolPayload:        request.ToolPayload,
+		RetentionPayload:   request.RetentionPayload,
+		Content:            strings.TrimSpace(content),
+		ResponseID:         strings.TrimSpace(responseID),
+		PreviousResponseID: previousResponseID,
+		Duration:           elapsed.String(),
+		UsageObserved:      usageObserved,
+		Usage:              diagnosticSmokeUsage(usage),
+		Cost:               diagnosticSmokeCost(costEstimate),
 	}
 	if err != nil {
+		result.Error = err.Error()
 		return result, err
 	}
-	if toolPayload {
+	if request.RetentionPayload {
+		if err := validateDiagnosticRetentionSmokeRequest(request, observed, result); err != nil {
+			result.Error = err.Error()
+			return result, err
+		}
+		if strings.TrimSpace(content) == "" {
+			result.Error = fmt.Sprintf("%s smoke response content is empty", request.Name)
+			return result, fmt.Errorf("%s", result.Error)
+		}
+		return result, nil
+	}
+	if request.ToolPayload {
 		if !diagnosticSmokeContentHasToolCall(content) {
-			return result, fmt.Errorf("tool smoke response did not include %s function_call", diagnosticSmokeToolName)
+			result.Error = fmt.Sprintf("tool smoke response did not include %s function_call", diagnosticSmokeToolName)
+			return result, fmt.Errorf("%s", result.Error)
 		}
 		return result, nil
 	}
 	if strings.TrimSpace(content) == "" {
-		return result, fmt.Errorf("smoke response content is empty")
+		result.Error = fmt.Sprintf("%s smoke response content is empty", request.Name)
+		return result, fmt.Errorf("%s", result.Error)
 	}
 	return result, nil
+}
+
+func newDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request diagnosticSmokeRequest, output io.Writer) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if output == nil {
+		output = io.Discard
+	}
+	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
+	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
+	if request.ToolPayload {
+		requestCtx = api.WithToolDefinitions(requestCtx, diagnosticSmokeToolDefinitions())
+	} else {
+		requestCtx = api.WithToolDefinitions(requestCtx, nil)
+		requestCtx = api.WithToolUseDisabled(requestCtx)
+	}
+	return config.WithContext(requestCtx, cfg)
+}
+
+func observeDiagnosticResponsesRequests(provider *Provider) (func() []responsesRequest, func()) {
+	if provider == nil {
+		return func() []responsesRequest { return nil }, func() {}
+	}
+	previousObserver := provider.responsesRequestObserver
+	observed := make([]responsesRequest, 0, 1)
+	provider.responsesRequestObserver = func(request responsesRequest) {
+		observed = append(observed, request)
+		if previousObserver != nil {
+			previousObserver(request)
+		}
+	}
+	snapshot := func() []responsesRequest {
+		return append([]responsesRequest(nil), observed...)
+	}
+	restore := func() {
+		provider.responsesRequestObserver = previousObserver
+	}
+	return snapshot, restore
+}
+
+func diagnosticObservedPreviousResponseID(requests []responsesRequest) string {
+	if len(requests) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(requests[0].PreviousResponseID)
+}
+
+func validateDiagnosticRetentionSmokeRequest(request diagnosticSmokeRequest, observed []responsesRequest, result DiagnosticSmokeRequestResult) error {
+	if len(observed) == 0 {
+		return fmt.Errorf("%s smoke did not build a Responses request", request.Name)
+	}
+	if !observed[0].Store {
+		return fmt.Errorf("%s smoke request did not set responses.store=true", request.Name)
+	}
+	if request.Name != "retention_followup" {
+		return nil
+	}
+	if strings.TrimSpace(result.PreviousResponseID) == "" {
+		return fmt.Errorf("retention followup did not send previous_response_id")
+	}
+	for _, req := range observed {
+		if strings.TrimSpace(req.PreviousResponseID) != result.PreviousResponseID {
+			return fmt.Errorf("retention followup retry changed previous_response_id")
+		}
+	}
+	return nil
 }
 
 func runDiagnosticSmokeResponsesRequest(
@@ -847,9 +1050,13 @@ func runDiagnosticSmokeResponsesRequest(
 	systemPrompt string,
 	history []api.Message,
 	model string,
+	retentionPayload bool,
 ) (string, string, error) {
 	if provider == nil {
 		return "", "", fmt.Errorf("azure diagnostic smoke provider is nil")
+	}
+	if retentionPayload {
+		return provider.chatWithResponsesResult(ctx, systemPrompt, history, model)
 	}
 	provider.responsesLocalSkip = false
 	return provider.runResponsesRequest(ctx, responsesRequestRunOptions{
@@ -861,6 +1068,60 @@ func runDiagnosticSmokeResponsesRequest(
 		Debug:       os.Getenv("XELYON_DEBUG_AZURE") == "1",
 		DebugWriter: api.ErrorWriterFromContext(ctx),
 	})
+}
+
+func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
+	if request.Skipped {
+		return
+	}
+	if request.ToolPayload {
+		r.ToolPayload = true
+	}
+	if request.RetentionPayload {
+		r.RetentionPayload = true
+	}
+	if strings.TrimSpace(r.Content) == "" {
+		r.Content = request.Content
+	}
+	if strings.TrimSpace(r.ResponseID) == "" {
+		r.ResponseID = request.ResponseID
+	}
+
+	var usage api.Usage
+	usage.InputTokens = request.Usage.InputTokens
+	usage.OutputTokens = request.Usage.OutputTokens
+	usage.ThinkingTokens = request.Usage.ThinkingTokens
+	usage.CachedInputTokens = request.Usage.CachedInputTokens
+	usage.CacheCreationTokens = request.Usage.CacheCreationTokens
+
+	var current api.Usage
+	current.InputTokens = r.Usage.InputTokens
+	current.OutputTokens = r.Usage.OutputTokens
+	current.ThinkingTokens = r.Usage.ThinkingTokens
+	current.CachedInputTokens = r.Usage.CachedInputTokens
+	current.CacheCreationTokens = r.Usage.CacheCreationTokens
+	current.Add(usage)
+	r.Usage = diagnosticSmokeUsage(current)
+	if request.Cost.PricingUnavailable {
+		r.Cost.PricingUnavailable = true
+	} else {
+		r.Cost.USD += request.Cost.USD
+	}
+	r.UsageObserved = r.allRanRequestsObservedUsage()
+}
+
+func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
+	observedAnyRequest := false
+	for _, request := range r.Requests {
+		if request.Skipped || !request.Ran {
+			continue
+		}
+		observedAnyRequest = true
+		if !request.UsageObserved {
+			return false
+		}
+	}
+	return observedAnyRequest
 }
 
 func diagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {

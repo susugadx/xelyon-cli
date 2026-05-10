@@ -9,11 +9,12 @@ import (
 )
 
 type azureDoctorConfigSnippetOptions struct {
-	Deployment   string
-	CatalogModel string
-	JSON         bool
-	Smoke        bool
-	ToolSmoke    bool
+	Deployment     string
+	CatalogModel   string
+	JSON           bool
+	Smoke          bool
+	ToolSmoke      bool
+	RetentionSmoke bool
 }
 
 type azureDoctorConfigSnippet struct {
@@ -30,8 +31,8 @@ func renderAzureDoctorConfigSnippet(w io.Writer, options azureDoctorConfigSnippe
 	if options.JSON {
 		return fmt.Errorf("--print-config cannot be combined with --json")
 	}
-	if options.Smoke || options.ToolSmoke {
-		return fmt.Errorf("--print-config cannot be combined with --smoke or --tool-smoke")
+	if options.Smoke || options.ToolSmoke || options.RetentionSmoke {
+		return fmt.Errorf("--print-config cannot be combined with --smoke, --tool-smoke, or --retention-smoke")
 	}
 
 	deployment := strings.TrimSpace(options.Deployment)

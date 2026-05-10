@@ -72,6 +72,7 @@ func resetRootFlagsForTest() {
 	doctorOpenAIModelFlag = ""
 	doctorSmokeFlag = false
 	doctorToolSmokeFlag = false
+	doctorAzureRetentionSmokeFlag = false
 	doctorOpenAIRetentionSmokeFlag = false
 	doctorBedrockImageSmokeFlag = false
 	doctorBedrockThinkingSmokeFlag = false

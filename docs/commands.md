@@ -44,9 +44,9 @@ xelyon doctor openai --json
 
 ### `xelyon doctor azure`
 
-Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると、設定済み deployment に `responses.store=false` の最小 Responses API リクエストを送信し、response ID、usage、概算 cost も表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。
+Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、function calling 設定、Responses retention 設定を確認します。`--smoke` を付けると、設定済み deployment に `responses.store=false` の最小 Responses API リクエストを送信し、response ID、usage、概算 cost も表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。
 
-`--deployment` は Azure 側の deployment 名、`--catalog-model` はその deployment の実モデル名です。`--print-config` を付けると、この 2 つから `~/.xelyon/config.yaml` に貼れる YAML 断片だけを出力します。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。response ID や usage が返らない場合、または pricing catalog に該当モデルがない場合は warn になりますが、smoke 成功自体は失敗にしません。
+`--deployment` は Azure 側の deployment 名、`--catalog-model` はその deployment の実モデル名です。`--print-config` を付けると、この 2 つから `~/.xelyon/config.yaml` に貼れる YAML 断片だけを出力します。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、設定確認だけなら付けないでください。response ID や usage が返らない場合、または pricing catalog に該当モデルがない場合は warn になりますが、smoke 成功自体は失敗にしません。
 
 ```bash
 xelyon doctor azure
@@ -54,6 +54,7 @@ xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --p
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --smoke
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --retention-smoke
 xelyon doctor azure --json
 ```
 

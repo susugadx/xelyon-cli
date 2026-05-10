@@ -173,6 +173,9 @@ func TestRootCommand_AzureDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if !strings.Contains(out.String(), "--print-config") {
 		t.Fatalf("output = %q, want print-config flag", out.String())
 	}
+	if !strings.Contains(out.String(), "--retention-smoke") {
+		t.Fatalf("output = %q, want retention smoke flag", out.String())
+	}
 	if !strings.Contains(out.String(), "Diagnose Azure OpenAI configuration") {
 		t.Fatalf("output = %q, want Azure doctor help", out.String())
 	}
@@ -242,14 +245,57 @@ func TestRenderAzureDoctorTextIncludesSmokeObservability(t *testing.T) {
 	}
 }
 
+func TestRenderAzureDoctorTextIncludesRetentionSmokeRequests(t *testing.T) {
+	report := azureprovider.DiagnosticReport{
+		Provider: "azure",
+		Smoke: &azureprovider.DiagnosticSmokeResult{
+			Ran:              true,
+			RetentionPayload: true,
+			UsageObserved:    true,
+			Requests: []azureprovider.DiagnosticSmokeRequestResult{
+				{
+					Name:             "retention_initial",
+					Ran:              true,
+					RetentionPayload: true,
+					ResponseID:       "resp_retention_initial",
+					Duration:         "1ms",
+					UsageObserved:    true,
+				},
+				{
+					Name:               "retention_followup",
+					Ran:                true,
+					RetentionPayload:   true,
+					ResponseID:         "resp_retention_followup",
+					PreviousResponseID: "resp_retention_initial",
+					Duration:           "2ms",
+					UsageObserved:      true,
+				},
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	renderAzureDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Smoke request retention_initial: ok duration=1ms response_id=resp_retention_initial previous_response_id=(not returned)",
+		"Smoke request retention_followup: ok duration=2ms response_id=resp_retention_followup previous_response_id=resp_retention_initial",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}
+
 func TestRenderAzureDoctorJSONIncludesSmokeObservability(t *testing.T) {
 	report := azureprovider.DiagnosticReport{
 		Provider: "azure",
 		Smoke: &azureprovider.DiagnosticSmokeResult{
-			Ran:           true,
-			ResponseID:    "resp_json",
-			Duration:      "1ms",
-			UsageObserved: true,
+			Ran:              true,
+			ResponseID:       "resp_json",
+			Duration:         "1ms",
+			RetentionPayload: true,
+			UsageObserved:    true,
 			Usage: azureprovider.DiagnosticSmokeUsage{
 				InputTokens:         10,
 				OutputTokens:        4,
@@ -261,6 +307,14 @@ func TestRenderAzureDoctorJSONIncludesSmokeObservability(t *testing.T) {
 				USD:                0.00012345,
 				PricingUnavailable: false,
 			},
+			Requests: []azureprovider.DiagnosticSmokeRequestResult{{
+				Name:               "retention_followup",
+				Ran:                true,
+				RetentionPayload:   true,
+				ResponseID:         "resp_retention_followup",
+				PreviousResponseID: "resp_json",
+				UsageObserved:      true,
+			}},
 		},
 	}
 
@@ -271,9 +325,10 @@ func TestRenderAzureDoctorJSONIncludesSmokeObservability(t *testing.T) {
 
 	var got struct {
 		Smoke struct {
-			ResponseID    string `json:"response_id"`
-			UsageObserved bool   `json:"usage_observed"`
-			Usage         struct {
+			ResponseID       string `json:"response_id"`
+			RetentionPayload bool   `json:"retention_payload"`
+			UsageObserved    bool   `json:"usage_observed"`
+			Usage            struct {
 				InputTokens         int `json:"input_tokens"`
 				OutputTokens        int `json:"output_tokens"`
 				ThinkingTokens      int `json:"thinking_tokens"`
@@ -284,6 +339,13 @@ func TestRenderAzureDoctorJSONIncludesSmokeObservability(t *testing.T) {
 				USD                float64 `json:"usd"`
 				PricingUnavailable bool    `json:"pricing_unavailable"`
 			} `json:"cost"`
+			Requests []struct {
+				Name               string `json:"name"`
+				Ran                bool   `json:"ran"`
+				RetentionPayload   bool   `json:"retention_payload"`
+				ResponseID         string `json:"response_id"`
+				PreviousResponseID string `json:"previous_response_id"`
+			} `json:"requests"`
 		} `json:"smoke"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
@@ -301,5 +363,8 @@ func TestRenderAzureDoctorJSONIncludesSmokeObservability(t *testing.T) {
 	}
 	if got.Smoke.Cost.USD != 0.00012345 || got.Smoke.Cost.PricingUnavailable {
 		t.Fatalf("smoke cost = %+v, want nested cost fields", got.Smoke.Cost)
+	}
+	if !got.Smoke.RetentionPayload || len(got.Smoke.Requests) != 1 || got.Smoke.Requests[0].PreviousResponseID != "resp_json" {
+		t.Fatalf("smoke retention JSON = %+v, want retention request metadata", got.Smoke)
 	}
 }
