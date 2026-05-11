@@ -1,0 +1,352 @@
+# Doctor Surface Inventory and Contract v1
+
+この文書は provider doctor / live smoke を全 provider に広げる前の Phase 0 inventory と contract v1 の設計メモです。
+
+目的は「全 provider に同じ高度機能を無理に載せる」ことではなく、OSS として予測できる診断 surface をそろえることです。Provider 固有の機能差は残しつつ、共通の flag、JSON 形、status 意味、test 境界を先に決めます。
+
+## Scope
+
+対象:
+
+- CLI doctor surface: `xelyon doctor <provider>`
+- live smoke / request preview / JSON output
+- provider model / endpoint / auth / route / usage / cost / capability diagnostics
+- docs と tests に固定すべき user-visible contract
+
+対象外:
+
+- この Phase 0 では runtime request path は変更しない
+- `doctor all`、support bundle export、policy engine、enterprise dashboard は別 phase
+- live provider credentials を必要とする smoke の通常 CI 化はしない
+
+## Current Inventory
+
+### Command Surface
+
+| Provider | Doctor | `--json` | `--smoke` | `--tool-smoke` | `--image-smoke` | `--thinking-smoke` | `--web-search-smoke` | `--retention-smoke` | `--capabilities` | `--require-capability` | `--print-request` | Provider-only |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | none |
+| Azure OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | `--deployment`, `--print-config` |
+| Kimi | yes | yes | yes | yes | yes | no | yes | no | no | no | no | none |
+| Bedrock | yes | yes | yes | yes | yes | yes | no | no | no | no | no | none |
+| DeepSeek | no | no | no | no | no | no | no | no | no | no | no | none |
+| Gemini | no | no | no | no | no | no | no | no | no | no | no | none |
+| Claude / Anthropic | no | no | no | no | no | no | no | no | no | no | no | none |
+| Groq | no | no | no | no | no | no | no | no | no | no | no | none |
+| Ollama | no | no | no | no | no | no | no | no | no | no | no | none |
+| OpenRouter | no | no | no | no | no | no | no | no | no | no | no | none |
+
+### Current Behavior Notes
+
+OpenAI:
+
+- Checks `OPENAI_API_KEY`, `OPENAI_API_URL`, `OPENAI_RESPONSES_URL`, provider registration, model / `catalog_model`, route, function calling, catalog policy, retention settings.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
+- Live smoke supports text, tool, and Responses retention chain.
+- Main owner packages: `cmd/doctor_openai.go`, `internal/api/providers/openai/diagnostics*.go`, `internal/providerdiag`.
+
+Azure OpenAI:
+
+- Checks `AZURE_OPENAI_BASE_URL`, API key / Entra ID auth, deployment, `catalog_model`, route, function calling, catalog policy, retention settings.
+- Supports local `--capabilities`, `--require-capability`, `--print-request`, and Azure-specific `--print-config`.
+- Live smoke supports text, tool, and Responses retention chain.
+- Main owner packages: `cmd/doctor.go`, `cmd/doctor_azure_config.go`, `internal/api/providers/azure/diagnostics*.go`, `internal/providerdiag`.
+
+Kimi:
+
+- Checks `MOONSHOT_API_KEY`, `KIMI_API_URL`, provider registration, model config, image capability, unsupported native features, and prompt cache request shape.
+- Live smoke supports text, image, tool, and built-in `$web_search`.
+- Does not yet support `--capabilities`, `--require-capability`, or `--print-request`.
+- Main owner packages: `cmd/doctor_kimi.go`, `internal/api/providers/kimi/diagnostics*.go`.
+
+Bedrock:
+
+- Checks AWS region / credentials, provider registration, model / `catalog_model`, route, function calling, catalog policy.
+- Live smoke supports text, tool, image, and thinking request types. Unsupported request shapes are reported as skipped.
+- Does not yet support `--capabilities`, `--require-capability`, or `--print-request`.
+- Main owner packages: `cmd/doctor_bedrock.go`, `internal/api/providers/bedrock/diagnostics.go`.
+
+Missing doctor providers:
+
+- `deepseek`: OpenAI-compatible Chat Completions, `DEEPSEEK_API_KEY`, `DEEPSEEK_API_URL`, function calling toggle, thinking config.
+- `groq`: OpenAI-compatible Chat Completions, `GROQ_API_KEY`, `GROQ_API_URL`, function calling toggle.
+- `openrouter`: OpenAI-compatible plus Anthropic-skin routes, `OPENROUTER_API_KEY`, `OPENROUTER_API_URL`, image support, function calling toggle, Claude compaction route.
+- `gemini`: Gemini SSE route, `GEMINI_API_KEY`, `GEMINI_API_URL`, image support, function calling toggle, thinking / caching / web search details.
+- `claude` / `anthropic`: Anthropic Messages, `ANTHROPIC_API_KEY`, context management, image support, tool use, web search.
+- `ollama`: local endpoint, default `http://localhost:11434`, installed model availability, local usage counts, no API key.
+
+## Contract v1
+
+### Shared CLI Contract
+
+Every canonical provider doctor should eventually support:
+
+- `xelyon doctor <provider>`
+- `--json`
+- `--model <model>` where provider uses model IDs directly
+- `--deployment <deployment>` only where provider has a deployment abstraction, currently Azure
+- `--catalog-model <model>` when runtime model identity may differ from local catalog identity
+- `--smoke`
+- `--timeout`
+- `--print-request`
+
+Specialized flags stay provider-specific:
+
+- OpenAI / Azure: `--retention-smoke`
+- Kimi: `--web-search-smoke`
+- Bedrock: `--thinking-smoke`
+- Providers with image input: `--image-smoke`
+- Providers with tool calling: `--tool-smoke`
+- Azure: `--print-config`
+
+`--capabilities` and `--require-capability` should become shared v1.1 after the common capability DTO is stable across non-OpenAI-family providers.
+
+### Shared JSON Envelope
+
+Provider reports should keep provider-specific fields when needed, but expose a common envelope shape:
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-5.4",
+  "model_source": "--model",
+  "catalog_model": "gpt-5.4",
+  "catalog_model_source": "--catalog-model",
+  "route": "responses_streaming",
+  "route_reason": "catalog_model=gpt-5.4 supports Responses streaming",
+  "checks": [],
+  "request_preview": {},
+  "smoke": {},
+  "capabilities": {}
+}
+```
+
+Provider-specific aliases:
+
+- Azure may use `deployment` / `deployment_source` as the request target, but should also conceptually map it to the shared "request target" role.
+- Bedrock uses AWS request IDs, not OpenAI response IDs.
+- Ollama has no auth key and should report local endpoint / model availability instead.
+
+### Shared Check Names
+
+Use these names where applicable:
+
+- `auth`: credential availability or explicit no-auth local provider status
+- `endpoint`: endpoint URL / base URL reachability or syntax
+- `provider_registration`: provider is registered in the runtime registry
+- `model`: request model / deployment is resolved
+- `catalog_model`: catalog identity is resolved when needed
+- `route`: request route is selected
+- `catalog_policy`: context window / max output / pricing metadata
+- `function_calling`: tool payload setting and support
+- `image_input`: image input setting and support
+- `request_preview`: sanitized request shape was built without sending
+- `smoke`: live smoke summary
+- `<name>_smoke`: specialized live smoke request, for example `tool_smoke`, `image_smoke`, `retention_smoke`
+- `capabilities`: local capability snapshot
+- `required_capability`: CI gate result
+
+Do not invent provider-specific names for a shared concept unless the provider has a real extra concept. For example, Azure can keep `deployment`, but a generic endpoint check should not be named `base_url` in one provider and `api_url` in another after v1 migration. Existing names can be preserved until the migration phase to avoid breaking users.
+
+### Status Semantics
+
+| Status | Meaning | Exit behavior |
+| --- | --- | --- |
+| `ok` | The check passed or the capability is available. | no failure |
+| `warn` | The command can continue, but the result is incomplete, fallback-based, skipped, or not suitable for strict automation. | no failure |
+| `fail` | The requested diagnostic, smoke, or required capability cannot be satisfied. | command exits non-zero |
+| `unknown` | Use inside capability details when local metadata cannot determine availability. | `required_capability` check should fail |
+| `skipped` | Use inside request-level smoke / preview objects when a requested specialized path cannot be sent by this route/provider. | check status depends on whether the skip violates the requested smoke contract |
+| `unsupported` | Use for stable provider limitations. | usually warn unless the user explicitly required that capability |
+
+### Live Smoke Contract
+
+`--smoke` means "send the provider's minimal representative text request through the same runtime request path users use".
+
+Each smoke result should include when available:
+
+- request name
+- route
+- duration
+- response content excerpt or normalized content
+- provider request ID or response ID
+- usage observed boolean
+- input / output / cached / reasoning / cache creation token fields
+- cost estimate and pricing-unavailable flag
+- request-level error
+
+Live smoke should fail when:
+
+- prerequisites fail
+- the live request errors
+- a requested specialized smoke does not prove the requested behavior, such as missing tool call for `--tool-smoke`
+- a required route-specific smoke cannot run, such as retention smoke on a non-Responses route
+
+Live smoke should warn, not fail, when:
+
+- the live request succeeds but usage is unavailable
+- pricing metadata is unavailable
+- provider request ID is unavailable
+- a non-required observation is missing
+
+### Request Preview Contract
+
+`--print-request` means "build the same request shape as smoke would send, but do not send it".
+
+Request preview should:
+
+- be safe to run without credentials where possible
+- redact auth headers
+- show endpoint, method, headers, route, request name, and body
+- support multi-request smoke previews
+- record skipped request entries instead of silently omitting unsupported paths
+
+Request preview must not:
+
+- send network requests
+- require live credentials unless the provider cannot build endpoint/auth-independent request shape
+- mutate runtime session state
+
+### Capability Contract
+
+`--capabilities` should be local-only and should not require auth or endpoint unless the provider cannot determine capability locally.
+
+Capability availability should use tri-state semantics:
+
+- `ok` / available
+- `missing` / known unavailable
+- `unknown` / metadata unresolved
+
+The owner for availability policy should be a provider-neutral diagnostic package where possible. Provider packages should own provider-specific resolution, such as Azure deployment to catalog model mapping or Ollama installed model discovery.
+
+Initial shared capability names:
+
+- `chat_completions`
+- `responses_api`
+- `responses_streaming`
+- `function_calling`
+- `image_input`
+- `web_search`
+- `thinking`
+- `previous_response_id`
+- `session_persistence`
+- `server_compaction`
+- `local_model_available`
+
+Do not require every provider to implement every capability. Unsupported or inapplicable capabilities should be explicit.
+
+## Owner Map
+
+| Path | Current owner | Boundary notes |
+| --- | --- | --- |
+| `cmd/doctor*.go` | CLI flags, config loading, text / JSON rendering handoff | Flag names and user-visible command surface live here. Avoid provider policy here. |
+| `cmd/doctor_render.go` | Shared text rendering helpers | Good owner for common smoke usage/cost rendering. Not a provider policy owner. |
+| `internal/api/providers/<provider>/diagnostics*.go` | Provider-specific diagnostic orchestration and smoke execution | Correct owner for auth, endpoint, model resolution, request preview, and smoke request construction. Some providers do not have this package yet. |
+| `internal/providerdiag` | Provider-neutral doctor policy DTOs and required capability evaluation | Correct owner for shared capability names, status semantics, catalog policy, and route decision DTOs. Do not put provider credentials or request I/O here. |
+| `internal/api/providers/openai_compat*` | Shared OpenAI-compatible request/stream helpers | Good candidate for future DeepSeek/Groq/OpenRouter doctor request preview and smoke helpers, but should not own CLI contract. |
+| `docs/commands.md` / `docs/providers.md` | User-facing command reference | Should link to this contract once provider doctor v1 starts migrating. |
+
+## Impact Map for Future Implementation
+
+When adding or migrating a provider doctor, check these surfaces:
+
+- CLI: new `cmd/doctor_<provider>.go` or shared command builder
+- Provider diagnostics: `internal/api/providers/<provider>/diagnostics*.go`
+- Shared helpers: `cmd/doctor_render.go`, `internal/providerdiag`
+- Tests: cmd invocation tests, provider diagnostics tests, request preview tests, smoke fake-server tests
+- Docs: `docs/commands.md`, `docs/providers.md`, provider-specific docs if present
+- Makefile: live smoke target only when useful and credentials are well-defined
+- Runtime source of truth: model defaults, endpoint env vars, function calling toggles, image support, usage/cost calculation
+
+## Recommended Phases
+
+### Phase 1: OpenAI-compatible doctor template
+
+Target: `groq` first, then `deepseek`.
+
+Reason:
+
+- Both are Chat Completions style providers.
+- Both already use `openai_compat` helpers.
+- Auth, endpoint, model, function calling, usage, cost, `--smoke`, `--tool-smoke`, and `--print-request` can validate the v1 contract without Responses retention complexity.
+
+Expected scope:
+
+- Add `doctor groq`
+- Add provider diagnostics package files
+- Add `--json`, `--model`, `--catalog-model`, `--smoke`, `--tool-smoke`, `--print-request`, `--timeout`
+- Add fake-server tests for smoke and request preview
+- Add docs matrix row updates
+
+Do not include:
+
+- `--capabilities` / `--require-capability` for every provider in this first migration
+- `doctor all`
+- OpenRouter route split
+
+### Phase 2: DeepSeek doctor
+
+Target: `deepseek`.
+
+Focus:
+
+- OpenAI-compatible request shape
+- thinking config visibility
+- function calling toggle
+- usage and cache token normalization
+
+### Phase 3: OpenRouter doctor
+
+Target: `openrouter`.
+
+Focus:
+
+- OpenAI-compatible vs Anthropic-skin route explanation
+- upstream model identity
+- image support
+- Claude compaction route warnings
+
+### Phase 4: Native provider doctors
+
+Targets: `gemini`, `claude` / `anthropic`, `ollama`.
+
+Focus:
+
+- Gemini: model URL, function calling, image, thinking, caching, web search
+- Claude: Messages endpoint, tool use, image, context management, web search
+- Ollama: local endpoint reachability, installed model check, local usage counts, no-auth semantics
+
+## Refactor Decision
+
+MUST before broad implementation:
+
+- Define v1 contract in this document and use it as the source of truth for subsequent provider doctor work.
+- For each new doctor, keep provider-specific diagnostics in that provider package and shared status/capability semantics in `internal/providerdiag`.
+
+SHOULD during implementation:
+
+- Extract a small OpenAI-compatible diagnostic helper only after `groq` and `deepseek` both show duplicated request preview / smoke code.
+- Add shared cmd assertion helpers for new doctor JSON tests instead of copying provider-specific JSON parsing.
+
+NO for Phase 0:
+
+- Do not rename existing check names yet. That is a user-visible JSON contract migration and should be handled separately.
+- Do not add `--capabilities` / `--require-capability` to all providers in one change.
+- Do not introduce a generic `doctor` interface before two non-OpenAI-family providers have been migrated; it would likely hard-code the wrong abstraction.
+
+## Verification Strategy
+
+For each future provider doctor:
+
+- Focused provider diagnostics tests with no live credentials
+- Cmd invocation tests for flag parsing and JSON output
+- Fake-server smoke tests where the provider uses HTTP
+- `--print-request` tests proving no network call and redacted auth
+- Failure tests for missing auth / invalid endpoint / missing model
+- Live smoke Makefile target only when the provider has a stable credential story
+
+For contract migration:
+
+- Keep old provider-specific JSON fields unless explicitly versioning a breaking change
+- Add common fields without removing existing fields
+- Update docs before adding broad provider support
