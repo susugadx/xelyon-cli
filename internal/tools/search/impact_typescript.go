@@ -95,16 +95,13 @@ func normalizeStructuredTypeScriptImpactOptions(opts SearchOptions) (SearchOptio
 	fileType := strings.ToLower(strings.TrimSpace(opts.FileType))
 	filePattern := cleanStructuredTypeScriptFilePattern(opts.FilePattern)
 
-	switch fileType {
-	case "ts":
+	if fileType != "" {
+		if !structuredTypeScriptImpactAllowsFileType(fileType) {
+			return SearchOptions{}, false
+		}
 		opts.FileType = "ts"
 		opts.FilePattern = ""
 		return opts, true
-	case "typescript", "tsx", "js", "jsx", "mjs", "cjs", "javascript":
-		return SearchOptions{}, false
-	case "":
-	default:
-		return SearchOptions{}, false
 	}
 
 	switch {

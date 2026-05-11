@@ -38,7 +38,8 @@ func (refs typeScriptImpactRefs) allTests() []genericSymbolRef {
 
 func findNearbyTypeScriptTests(def genericSymbolDef, opts SearchOptions, directTests []genericSymbolRef) []genericSymbolRef {
 	rootPath := structuredTypeScriptImpactFileRoot(opts)
-	if rootPath == "" || !isTypeScriptImplementationFilePath(def.File) {
+	target, ok := structuredTypeScriptImplementationTargetForPath(def.File)
+	if rootPath == "" || !ok {
 		return nil
 	}
 
@@ -59,7 +60,7 @@ func findNearbyTypeScriptTests(def genericSymbolDef, opts SearchOptions, directT
 		}
 
 		absPath := filepath.Join(rootPath, filepath.FromSlash(candidate))
-		if !isUsableNearbyTypeScriptTest(absPath, candidate, opts) {
+		if !isUsableNearbyTypeScriptTest(absPath, candidate, opts, target) {
 			continue
 		}
 		line, snippet := firstNearbyTypeScriptTestSnippet(absPath)
@@ -74,21 +75,15 @@ func findNearbyTypeScriptTests(def genericSymbolDef, opts SearchOptions, directT
 }
 
 func typeScriptNearbyTestCandidatePaths(defFile string) []string {
-	cleanFile := filepath.ToSlash(filepath.Clean(defFile))
-	dir := filepath.ToSlash(filepath.Dir(cleanFile))
-	base := strings.TrimSuffix(filepath.Base(cleanFile), filepath.Ext(cleanFile))
-
-	candidates := []string{
-		filepath.ToSlash(filepath.Join(dir, base+".test.ts")),
-		filepath.ToSlash(filepath.Join(dir, base+".spec.ts")),
-		filepath.ToSlash(filepath.Join(dir, "__tests__", base+".test.ts")),
-		filepath.ToSlash(filepath.Join("tests", base+".test.ts")),
+	target, ok := structuredTypeScriptImplementationTargetForPath(defFile)
+	if !ok {
+		return nil
 	}
-	return dedupeStringList(candidates)
+	return target.nearbyTestCandidatePaths(defFile)
 }
 
-func isUsableNearbyTypeScriptTest(absPath, displayPath string, opts SearchOptions) bool {
-	if strings.ToLower(filepath.Ext(absPath)) != ".ts" {
+func isUsableNearbyTypeScriptTest(absPath, displayPath string, opts SearchOptions, target structuredTypeScriptImpactTarget) bool {
+	if !target.matchesNearbyTestPath(displayPath) {
 		return false
 	}
 	info, err := os.Stat(absPath)

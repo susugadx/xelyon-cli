@@ -11,29 +11,22 @@ func cleanStructuredTypeScriptFilePattern(pattern string) string {
 }
 
 func isTypeScriptSourceFilePath(path string) bool {
-	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(path)))
-	return ext == ".ts"
+	_, ok := structuredTypeScriptSourceTargetForPath(path)
+	return ok
 }
 
 func isTypeScriptDeclarationFilePath(path string) bool {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return false
-	}
-	clean := strings.ToLower(filepath.ToSlash(filepath.Clean(path)))
-	return strings.HasSuffix(clean, ".d.ts")
+	_, ok := structuredTypeScriptDeclarationTargetForPath(path)
+	return ok
 }
 
 func isTypeScriptImplementationFilePath(path string) bool {
-	return isTypeScriptSourceFilePath(path) && !isTypeScriptDeclarationFilePath(path)
+	_, ok := structuredTypeScriptImplementationTargetForPath(path)
+	return ok
 }
 
 func isTypeScriptOnlyFilePattern(pattern string) bool {
-	pattern = strings.ToLower(cleanStructuredTypeScriptFilePattern(pattern))
-	if pattern == "" || strings.Contains(pattern, ".tsx") {
-		return false
-	}
-	return strings.HasSuffix(pattern, ".ts")
+	return structuredTypeScriptImpactAllowsFilePattern(pattern)
 }
 
 func normalizeStructuredTypeScriptDefs(defs []genericSymbolDef) []genericSymbolDef {
