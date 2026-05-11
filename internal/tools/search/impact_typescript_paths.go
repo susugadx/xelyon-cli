@@ -34,6 +34,7 @@ func normalizeStructuredTypeScriptDefs(defs []genericSymbolDef) []genericSymbolD
 	for i, def := range defs {
 		normalized[i] = def
 		normalized[i].File = cleanStructuredTypeScriptDisplayPath(def.File)
+		normalized[i] = normalizeStructuredTypeScriptDefForImpact(normalized[i])
 	}
 	return normalized
 }

@@ -99,7 +99,7 @@ func normalizeStructuredTypeScriptImpactOptions(opts SearchOptions) (SearchOptio
 		if !structuredTypeScriptImpactAllowsFileType(fileType) {
 			return SearchOptions{}, false
 		}
-		opts.FileType = "ts"
+		opts.FileType = fileType
 		opts.FilePattern = ""
 		return opts, true
 	}

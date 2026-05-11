@@ -206,6 +206,120 @@ func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousTypeScriptSymbol(t *t
 	}
 }
 
+func TestGatherContext_SearchRouteUsesTSXStructuredImpactAndPrefetch(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "src", "Button.tsx"):      "export function Button() { return <button /> }\n",
+		filepath.Join(root, "src", "App.tsx"):         "import { Button } from './Button'\nexport function App() { return <Button /> }\n",
+		filepath.Join(root, "src", "Button.test.tsx"): "import { Button } from './Button'\nit('renders', () => <Button />)\n",
+	})
+
+	result, _, err := (&Tool{}).Run(tools.ExecutionContext{
+		Stdout:             io.Discard,
+		Stderr:             io.Discard,
+		LocatorRegistry:    locator.NewRegistry(),
+		ProjectMapRootPath: root,
+		InvocationCWD:      root,
+	}, map[string]string{
+		"query":       "Button",
+		"path":        root,
+		"file_filter": "tsx",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "Route: Structured impact + prefetched evidence") {
+		t.Fatalf("expected TSX structured impact prefetch route, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Recommended reads:") || !strings.Contains(result, "Prefetched Evidence") {
+		t.Fatalf("expected TSX structured impact with prefetched evidence, got:\n%s", result)
+	}
+	if !strings.Contains(result, "export function Button") || !strings.Contains(result, "<Button />") {
+		t.Fatalf("expected prefetched TSX evidence, got:\n%s", result)
+	}
+}
+
+func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousTSXSymbol(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "src", "Button.tsx"): "export function Button() { return <button /> }\n",
+		filepath.Join(root, "src", "Panel.tsx"):  "export function Button() { return <section /> }\n",
+	})
+
+	result, _, err := (&Tool{}).Run(tools.ExecutionContext{
+		Stdout:             io.Discard,
+		Stderr:             io.Discard,
+		LocatorRegistry:    locator.NewRegistry(),
+		ProjectMapRootPath: root,
+		InvocationCWD:      root,
+	}, map[string]string{
+		"query":       "Button",
+		"path":        root,
+		"file_filter": "tsx",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, `Multiple definitions found for "Button":`) {
+		t.Fatalf("expected ambiguous TSX candidate list, got:\n%s", result)
+	}
+	if strings.Contains(result, "Prefetched Evidence") {
+		t.Fatalf("expected ambiguous TSX search to avoid speculative prefetch, got:\n%s", result)
+	}
+}
+
+func TestGatherContext_SearchRouteKeepsTypeScriptFilterOnFallback(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "src", "Button.tsx"): "export function Button() { return <button /> }\n",
+	})
+
+	result, _, err := (&Tool{}).Run(tools.ExecutionContext{
+		Stdout:             io.Discard,
+		Stderr:             io.Discard,
+		LocatorRegistry:    locator.NewRegistry(),
+		ProjectMapRootPath: root,
+		InvocationCWD:      root,
+	}, map[string]string{
+		"query":       "Button",
+		"path":        root,
+		"file_filter": "typescript",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(result, "Route: Structured impact") || strings.Contains(result, "Recommended reads:") {
+		t.Fatalf("file_filter=typescript should stay on fallback route, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Route: Impact search") || !strings.Contains(result, "src/Button.tsx") {
+		t.Fatalf("expected fallback impact search to retain TSX file, got:\n%s", result)
+	}
+}
+
 func TestGatherContext_BarePathLikeCollisionFallsBackToSearch(t *testing.T) {
 	if !common.IsRipgrepAvailable() {
 		t.Skip("ripgrep not available")

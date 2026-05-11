@@ -19,6 +19,12 @@ func newTypeScriptImpactFilePatternSearchOptions(dir string, symbol string, patt
 	return opts
 }
 
+func newTSXImpactSearchOptions(dir string, symbol string) SearchOptions {
+	opts := newTypeScriptImpactSearchOptions(dir, symbol)
+	opts.FileType = "tsx"
+	return opts
+}
+
 func assertTypeScriptStructuredImpactArtifact(t *testing.T, artifact SearchExecutionArtifact, symbol string, kind string) {
 	t.Helper()
 	if !artifact.Metadata.StructuredImpact {

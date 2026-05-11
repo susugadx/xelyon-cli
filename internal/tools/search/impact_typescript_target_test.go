@@ -36,11 +36,14 @@ func TestStructuredTypeScriptImpactTargetPathPolicy(t *testing.T) {
 			wantSourceDecl: true,
 		},
 		{
-			name:       "tsx policy exists but structured impact disabled",
-			path:       "src/view.tsx",
-			wantTarget: true,
-			wantSuffix: ".tsx",
-			wantImpl:   true,
+			name:           "tsx implementation",
+			path:           "src/view.tsx",
+			wantTarget:     true,
+			wantSuffix:     ".tsx",
+			wantStructured: true,
+			wantImpl:       true,
+			wantSource:     true,
+			wantSourceImpl: true,
 		},
 		{
 			name: "cts is outside TypeScript structured impact targets",
@@ -97,8 +100,10 @@ func TestNormalizeStructuredTypeScriptImpactOptionsUsesTargetPolicy(t *testing.T
 			wantFileType: "ts",
 		},
 		{
-			name: "tsx file filter stays fallback",
-			opts: SearchOptions{FileType: "tsx"},
+			name:         "tsx file filter is structured",
+			opts:         SearchOptions{FileType: "tsx"},
+			wantOK:       true,
+			wantFileType: "tsx",
 		},
 		{
 			name: "typescript file filter stays fallback",
@@ -117,8 +122,10 @@ func TestNormalizeStructuredTypeScriptImpactOptionsUsesTargetPolicy(t *testing.T
 			wantFilePattern: "**/*.d.ts",
 		},
 		{
-			name: "tsx file pattern stays fallback",
-			opts: SearchOptions{FilePattern: "*.tsx"},
+			name:            "tsx file pattern is structured",
+			opts:            SearchOptions{FilePattern: "*.tsx"},
+			wantOK:          true,
+			wantFilePattern: "*.tsx",
 		},
 		{
 			name:   "ts path is structured",
@@ -126,8 +133,9 @@ func TestNormalizeStructuredTypeScriptImpactOptionsUsesTargetPolicy(t *testing.T
 			wantOK: true,
 		},
 		{
-			name: "tsx path stays fallback",
-			opts: SearchOptions{Path: "src/view.tsx"},
+			name:   "tsx path is structured",
+			opts:   SearchOptions{Path: "src/view.tsx"},
+			wantOK: true,
 		},
 		{
 			name:   "declaration path is structured",
@@ -163,6 +171,10 @@ func TestStructuredTypeScriptImpactTargetPairedDeclarationPolicy(t *testing.T) {
 	if implementationPath != "src/build.ts" {
 		t.Fatalf("implementation path = %q, want src/build.ts", implementationPath)
 	}
+	implementationPaths := structuredTypeScriptDeclarationImplementationPaths("src/build.d.ts")
+	if len(implementationPaths) != 2 || implementationPaths[0] != "src/build.ts" || implementationPaths[1] != "src/build.tsx" {
+		t.Fatalf("implementation paths = %v, want src/build.ts and src/build.tsx", implementationPaths)
+	}
 
 	preferred := preferStructuredTypeScriptImplementationDefs([]genericSymbolDef{
 		{Name: "buildUser", File: "src/build.ts", Line: 1},
@@ -173,6 +185,17 @@ func TestStructuredTypeScriptImpactTargetPairedDeclarationPolicy(t *testing.T) {
 	}
 	if len(preferred.suppressedDeclarationDefs) != 1 || preferred.suppressedDeclarationDefs[0].File != "src/build.d.ts" {
 		t.Fatalf("suppressed declarations = %+v, want src/build.d.ts", preferred.suppressedDeclarationDefs)
+	}
+
+	tsxPreferred := preferStructuredTypeScriptImplementationDefs([]genericSymbolDef{
+		{Name: "Button", File: "src/Button.tsx", Line: 1},
+		{Name: "Button", File: "src/Button.d.ts", Line: 1},
+	})
+	if len(tsxPreferred.defs) != 1 || tsxPreferred.defs[0].File != "src/Button.tsx" {
+		t.Fatalf("tsx preferred defs = %+v, want only src/Button.tsx", tsxPreferred.defs)
+	}
+	if len(tsxPreferred.suppressedDeclarationDefs) != 1 || tsxPreferred.suppressedDeclarationDefs[0].File != "src/Button.d.ts" {
+		t.Fatalf("tsx suppressed declarations = %+v, want src/Button.d.ts", tsxPreferred.suppressedDeclarationDefs)
 	}
 }
 
@@ -203,9 +226,11 @@ func TestStructuredTypeScriptImpactTargetNearbyTestPolicy(t *testing.T) {
 		t.Fatalf("declaration nearby tests = %+v, want none", declarationTests)
 	}
 
-	tsxTests := findNearbyTypeScriptTests(genericSymbolDef{File: "src/view.tsx"}, opts, nil)
-	if len(tsxTests) != 0 {
-		t.Fatalf("tsx nearby tests = %+v, want none until TSX structured impact is enabled", tsxTests)
+	tsxOpts := opts
+	tsxOpts.FileType = "tsx"
+	tsxTests := findNearbyTypeScriptTests(genericSymbolDef{File: "src/view.tsx"}, tsxOpts, nil)
+	if len(tsxTests) != 1 || tsxTests[0].File != "src/view.test.tsx" {
+		t.Fatalf("tsx nearby tests = %+v, want src/view.test.tsx", tsxTests)
 	}
 }
 

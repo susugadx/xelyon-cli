@@ -247,7 +247,6 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactUnsupport
 		filePath string
 		source   string
 	}{
-		{name: "tsx filter", fileType: "tsx", filePath: "src/widget.tsx", source: "export function buildUser() { return <></> }\n"},
 		{name: "js filter", fileType: "js", filePath: "src/build.js", source: "export function buildUser() { return '1' }\n"},
 		{name: "jsx filter", fileType: "jsx", filePath: "src/widget.jsx", source: "export function buildUser() { return <></> }\n"},
 		{name: "mjs filter", fileType: "mjs", filePath: "src/build.mjs", source: "export function buildUser() { return '1' }\n"},
@@ -271,26 +270,6 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactUnsupport
 				t.Fatalf("expected fallback output to keep searching %s, got:\n%s", tt.filePath, artifact.Rendered)
 			}
 		})
-	}
-}
-
-func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactTSXPatternFallback(t *testing.T) {
-	dir := setupMultiLangDir(t, map[string]string{
-		"src/widget.tsx": "export function buildUser() { return <></> }\n",
-	})
-
-	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, SearchOptions{
-		Pattern:     "buildUser",
-		Intent:      "impact",
-		Path:        dir,
-		FilePattern: "*.tsx",
-	})
-
-	if artifact.Metadata.StructuredImpact {
-		t.Fatal("StructuredImpact = true, want fallback for .tsx file pattern")
-	}
-	if !strings.Contains(artifact.Rendered, "src/widget.tsx") {
-		t.Fatalf("expected fallback .tsx pattern to include widget.tsx, got:\n%s", artifact.Rendered)
 	}
 }
 

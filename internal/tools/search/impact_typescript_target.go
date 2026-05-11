@@ -33,13 +33,13 @@ var (
 		suffix:                       ".d.ts",
 		structuredImpact:             true,
 		declaration:                  true,
-		pairedImplementationSuffixes: []string{".ts"},
+		pairedImplementationSuffixes: []string{".ts", ".tsx"},
 	}
 	structuredTypeScriptTSXImpactTarget = structuredTypeScriptImpactTarget{
 		suffix:           ".tsx",
 		fileType:         "tsx",
 		implementation:   true,
-		structuredImpact: false,
+		structuredImpact: true,
 		nearbyTestCandidateDefinitions: []structuredTypeScriptNearbyTestCandidate{
 			{location: structuredTypeScriptNearbyTestSibling, suffix: ".test.tsx"},
 			{location: structuredTypeScriptNearbyTestSibling, suffix: ".spec.tsx"},
@@ -86,9 +86,6 @@ func structuredTypeScriptImpactTargetForFilePattern(pattern string) (structuredT
 	pattern = strings.ToLower(cleanStructuredTypeScriptFilePattern(pattern))
 	if pattern == "" {
 		return structuredTypeScriptImpactTarget{}, false
-	}
-	if strings.Contains(pattern, structuredTypeScriptTSXImpactTarget.suffix) {
-		return structuredTypeScriptTSXImpactTarget, true
 	}
 	return structuredTypeScriptImpactTargetForCleanPath(pattern)
 }

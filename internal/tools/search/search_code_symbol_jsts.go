@@ -86,7 +86,7 @@ func classifyJSRefs(refs []genericSymbolRef, symbol string) (imports, callers, t
 		switch {
 		case importPat.MatchString(s):
 			imports = append(imports, ref)
-		case callerPat.MatchString(s):
+		case callerPat.MatchString(s) || isJSXElementUsageRef(ref, symbol):
 			callers = append(callers, ref)
 		case typePat.MatchString(s) || genericTypeArgPat.MatchString(s):
 			typeRefs = append(typeRefs, ref)

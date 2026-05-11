@@ -56,7 +56,7 @@ func (t *SearchCodeTool) Parameters() map[string]interface{} {
 			"intent": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"impact"},
-				"description": "Optional high-level intent. intent=impact prefers a structured Go or TypeScript .ts single-symbol impact path when available; otherwise it falls back to a conservative related multi-pattern search. Already comma-separated patterns are used as-is.",
+				"description": "Optional high-level intent. intent=impact prefers a structured Go, TypeScript .ts, or targeted TSX .tsx single-symbol impact path when available; use file_filter=tsx, *.tsx, or direct .tsx paths for TSX. file_filter=typescript remains a broad fallback scope. Otherwise it falls back to a conservative related multi-pattern search. Already comma-separated patterns are used as-is.",
 			},
 			"path":        map[string]interface{}{"type": "string", "description": "Directory or file to search in (default: current directory)"},
 			"file_filter": map[string]interface{}{"type": "string", "description": "Filter by language type (e.g. go, py, ts) or glob pattern (e.g. *_test.go, Dockerfile*). Glob characters (*, ?, [) trigger glob mode; otherwise uses the built-in ripgrep-like file type mapping defined by the tool."},

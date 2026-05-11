@@ -230,6 +230,7 @@ func TestClassifyJSRefs(t *testing.T) {
 		{File: "types.ts", Line: 8, Snippet: "const record: Record<string, UserService> = {}"},
 		{File: "types.ts", Line: 9, Snippet: "export type { UserService } from './service'"},
 		{File: "types.ts", Line: 10, Snippet: "export { UserService }"},
+		{File: "types.ts", Line: 11, Snippet: "const asserted = <UserService>raw"},
 		{File: "callbacks.ts", Line: 1, Snippet: `register("service", UserService)`},
 	}
 
@@ -241,8 +242,8 @@ func TestClassifyJSRefs(t *testing.T) {
 	if len(callers) != 3 {
 		t.Errorf("expected 3 callers (new + direct + optional call), got %d: %+v", len(callers), callers)
 	}
-	if len(typeRefs) != 8 {
-		t.Errorf("expected 8 type refs (: annotation + extends + generic + TS operators), got %d: %+v", len(typeRefs), typeRefs)
+	if len(typeRefs) != 9 {
+		t.Errorf("expected 9 type refs (: annotation + extends + generic + TS operators + angle assertion), got %d: %+v", len(typeRefs), typeRefs)
 	}
 	if len(others) != 2 {
 		t.Errorf("expected 2 others (comment + comma-separated value ref), got %d: %+v", len(others), others)

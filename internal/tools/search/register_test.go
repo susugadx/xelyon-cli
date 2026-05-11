@@ -169,7 +169,14 @@ func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredLanguageBeha
 		t.Fatalf("intent.description should be string, got %T", intentProp["description"])
 	}
 
-	for _, want := range []string{"structured Go or TypeScript .ts single-symbol impact path", "conservative related multi-pattern search"} {
+	for _, want := range []string{
+		"structured Go, TypeScript .ts, or targeted TSX .tsx single-symbol impact path",
+		"file_filter=tsx",
+		"*.tsx",
+		"direct .tsx paths",
+		"file_filter=typescript remains a broad fallback scope",
+		"conservative related multi-pattern search",
+	} {
 		if !strings.Contains(description, want) {
 			t.Fatalf("expected intent description to mention %q, got %q", want, description)
 		}
