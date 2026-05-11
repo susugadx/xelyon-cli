@@ -67,6 +67,105 @@ func Add(a, b int) int { return a + b }
 	}
 }
 
+func TestReviewContextEvidenceRelatedFilesPrioritizeTestsBeforeGoWhenBudgetLimited(t *testing.T) {
+	repo := t.TempDir()
+	writeTestFile(t, filepath.Join(repo, "pkg", "feature.go"), "package pkg\n\nfunc Feature() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "a.go"), "package pkg\n\nfunc A() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "b.go"), "package pkg\n\nfunc B() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "z_test.go"), "package pkg\n\nfunc TestZ() {}\n")
+
+	evidence, err := buildReviewContextEvidence(context.Background(), repo,
+		[]ReviewChangedFile{{Path: "pkg/feature.go", Status: "M"}},
+		[]string{"pkg/a.go", "pkg/b.go", "pkg/z_test.go"},
+		ReviewEvidenceLimits{MaxContextFiles: 2},
+	)
+	if err != nil {
+		t.Fatalf("buildReviewContextEvidence() error = %v", err)
+	}
+
+	assertReviewContextFilePaths(t, evidence.relatedContextFiles, []string{"pkg/z_test.go", "pkg/a.go"})
+	first := evidence.relatedContextFiles[0]
+	if first.Role != reviewContextFileRoleRelatedTest || first.Skipped {
+		t.Fatalf("first related context = %#v, want readable related test", first)
+	}
+	limited := evidence.relatedContextFiles[1]
+	if !limited.Skipped || limited.SkipReason != reviewContextSkipMaxFilesExceeded {
+		t.Fatalf("budget-limited related context = %#v, want max_files_exceeded skip", limited)
+	}
+}
+
+func TestReviewContextEvidenceRelatedFilesPrioritizeSameStemTest(t *testing.T) {
+	repo := t.TempDir()
+	writeTestFile(t, filepath.Join(repo, "pkg", "foo.go"), "package pkg\n\nfunc Foo() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "a_test.go"), "package pkg\n\nfunc TestA() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "foo_test.go"), "package pkg\n\nfunc TestFoo() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "z_test.go"), "package pkg\n\nfunc TestZ() {}\n")
+
+	evidence, err := buildReviewContextEvidence(context.Background(), repo,
+		[]ReviewChangedFile{{Path: "pkg/foo.go", Status: "M"}},
+		[]string{"pkg/a_test.go", "pkg/foo_test.go", "pkg/z_test.go"},
+		ReviewEvidenceLimits{MaxContextFiles: 10},
+	)
+	if err != nil {
+		t.Fatalf("buildReviewContextEvidence() error = %v", err)
+	}
+
+	assertReviewContextFilePaths(t, evidence.relatedContextFiles, []string{
+		"pkg/foo_test.go",
+		"pkg/a_test.go",
+		"pkg/z_test.go",
+	})
+}
+
+func TestReviewContextEvidenceRelatedFilesPrioritizeSameStemGoForChangedTest(t *testing.T) {
+	repo := t.TempDir()
+	writeTestFile(t, filepath.Join(repo, "pkg", "foo_test.go"), "package pkg\n\nfunc TestFoo() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "a.go"), "package pkg\n\nfunc A() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "foo.go"), "package pkg\n\nfunc Foo() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "z.go"), "package pkg\n\nfunc Z() {}\n")
+
+	evidence, err := buildReviewContextEvidence(context.Background(), repo,
+		[]ReviewChangedFile{{Path: "pkg/foo_test.go", Status: "M"}},
+		[]string{"pkg/a.go", "pkg/foo.go", "pkg/z.go"},
+		ReviewEvidenceLimits{MaxContextFiles: 10},
+	)
+	if err != nil {
+		t.Fatalf("buildReviewContextEvidence() error = %v", err)
+	}
+
+	assertReviewContextFilePaths(t, evidence.relatedContextFiles, []string{
+		"pkg/foo.go",
+		"pkg/a.go",
+		"pkg/z.go",
+	})
+}
+
+func TestReviewContextEvidenceRelatedFilesPrioritizeSameStemGoBeforeUnrelatedTestWhenBudgetLimited(t *testing.T) {
+	repo := t.TempDir()
+	writeTestFile(t, filepath.Join(repo, "pkg", "foo_test.go"), "package pkg\n\nfunc TestFoo() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "foo.go"), "package pkg\n\nfunc Foo() {}\n")
+	writeTestFile(t, filepath.Join(repo, "pkg", "z_test.go"), "package pkg\n\nfunc TestZ() {}\n")
+
+	evidence, err := buildReviewContextEvidence(context.Background(), repo,
+		[]ReviewChangedFile{{Path: "pkg/foo_test.go", Status: "M"}},
+		[]string{"pkg/foo.go", "pkg/z_test.go"},
+		ReviewEvidenceLimits{MaxContextFiles: 2},
+	)
+	if err != nil {
+		t.Fatalf("buildReviewContextEvidence() error = %v", err)
+	}
+
+	assertReviewContextFilePaths(t, evidence.relatedContextFiles, []string{"pkg/foo.go", "pkg/z_test.go"})
+	first := evidence.relatedContextFiles[0]
+	if first.Role != reviewContextFileRoleRelatedGo || first.Skipped {
+		t.Fatalf("first related context = %#v, want readable same-stem implementation", first)
+	}
+	limited := evidence.relatedContextFiles[1]
+	if !limited.Skipped || limited.SkipReason != reviewContextSkipMaxFilesExceeded {
+		t.Fatalf("budget-limited related context = %#v, want max_files_exceeded skip", limited)
+	}
+}
+
 func TestReviewEvidenceBuilder_CurrentChangesUsesUntrackedGoFileAsContextSeed(t *testing.T) {
 	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
 	writeTestFile(t, filepath.Join(repo, "probe", "new_feature_test.go"), `package probe
@@ -336,12 +435,12 @@ func TestCurrentService() {
 		t.Fatalf("current related context for renamed path = %#v, want readable related test", currentRelated)
 	}
 
-	dirs := (&reviewContextEvidenceCollector{repoRoot: repo}).changedGoFileDirs([]ReviewChangedFile{
+	scope := (&reviewContextEvidenceCollector{repoRoot: repo}).changedGoScope([]ReviewChangedFile{
 		{Path: "notes/generated.txt", OldPath: "legacy/service.gen.go", Status: "R100"},
 		{Path: "notes/vendor.txt", OldPath: "vendor/example.com/pkg/pkg.go", Status: "R100"},
 	})
-	if len(dirs) != 0 {
-		t.Fatalf("changedGoFileDirs() = %#v, want generated/vendor old paths excluded", dirs)
+	if len(scope.stemsByDir) != 0 {
+		t.Fatalf("changedGoScope() = %#v, want generated/vendor old paths excluded", scope.stemsByDir)
 	}
 }
 
@@ -389,4 +488,17 @@ func TestReviewFileEvidenceCollector_ContextStatFailureDoesNotFailBuild(t *testi
 	if !got.Skipped || got.SkipReason != reviewContextSkipStatFailed {
 		t.Fatalf("missing changed context = %#v, want stat_failed skip", got)
 	}
+}
+
+func assertReviewContextFilePaths(t *testing.T, files []ReviewContextFileEvidence, want []string) {
+	t.Helper()
+	assertStringSlice(t, reviewContextFilePaths(files), want)
+}
+
+func reviewContextFilePaths(files []ReviewContextFileEvidence) []string {
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, filepath.ToSlash(file.Path))
+	}
+	return paths
 }

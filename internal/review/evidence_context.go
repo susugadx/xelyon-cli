@@ -45,6 +45,21 @@ type reviewContextEvidenceCollector struct {
 	relatedCandidatePaths []string
 }
 
+type reviewContextRelatedCandidate struct {
+	path     string
+	role     string
+	priority int
+}
+
+type reviewContextChangedGoStem struct {
+	source bool
+	test   bool
+}
+
+type reviewContextChangedGoScope struct {
+	stemsByDir map[string]map[string]reviewContextChangedGoStem
+}
+
 func buildReviewContextEvidence(ctx context.Context, repoRoot string, changedFiles []ReviewChangedFile, relatedCandidatePaths []string, limits ReviewEvidenceLimits) (reviewContextEvidence, error) {
 	collector := newReviewContextEvidenceCollector(ctx, repoRoot, limits, changedFiles, relatedCandidatePaths)
 	changedFileContext := collector.collectChangedFileContext(changedFiles)
@@ -145,13 +160,10 @@ func (c *reviewContextEvidenceCollector) collectChangedFile(file ReviewChangedFi
 }
 
 func (c *reviewContextEvidenceCollector) collectRelatedContextFiles(changedFiles []ReviewChangedFile) []ReviewContextFileEvidence {
-	dirs := c.changedGoFileDirs(changedFiles)
-	dirSet := make(map[string]struct{}, len(dirs))
-	for _, dir := range dirs {
-		dirSet[dir] = struct{}{}
-	}
+	scope := c.changedGoScope(changedFiles)
 
 	files := make([]ReviewContextFileEvidence, 0)
+	candidates := make([]reviewContextRelatedCandidate, 0)
 
 	for _, relPath := range c.relatedCandidatePaths {
 		if c.maxContextFilesExceededLogged || c.contextErr() != nil {
@@ -160,7 +172,7 @@ func (c *reviewContextEvidenceCollector) collectRelatedContextFiles(changedFiles
 		if !isReviewContextRelatedGoPath(relPath) {
 			continue
 		}
-		if _, ok := dirSet[pathpkg.Dir(relPath)]; !ok {
+		if !scope.hasDir(pathpkg.Dir(relPath)) {
 			continue
 		}
 		if _, changed := c.changedPaths[relPath]; changed {
@@ -168,10 +180,29 @@ func (c *reviewContextEvidenceCollector) collectRelatedContextFiles(changedFiles
 		}
 
 		role := reviewContextFileRoleRelatedGo
-		if strings.HasSuffix(strings.ToLower(pathpkg.Base(relPath)), "_test.go") {
+		isTest := isReviewContextTestGoPath(relPath)
+		if isTest {
 			role = reviewContextFileRoleRelatedTest
 		}
-		evidence, ok := c.collectContextFile(relPath, role)
+		candidates = append(candidates, reviewContextRelatedCandidate{
+			path:     relPath,
+			role:     role,
+			priority: scope.relatedCandidatePriority(relPath, isTest),
+		})
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].priority != candidates[j].priority {
+			return candidates[i].priority < candidates[j].priority
+		}
+		return candidates[i].path < candidates[j].path
+	})
+
+	for _, candidate := range candidates {
+		if c.maxContextFilesExceededLogged || c.contextErr() != nil {
+			break
+		}
+		evidence, ok := c.collectContextFile(candidate.path, candidate.role)
 		if ok {
 			files = append(files, evidence)
 		}
@@ -180,34 +211,89 @@ func (c *reviewContextEvidenceCollector) collectRelatedContextFiles(changedFiles
 	return files
 }
 
-func (c *reviewContextEvidenceCollector) changedGoFileDirs(changedFiles []ReviewChangedFile) []string {
-	dirSet := make(map[string]struct{})
-	for _, file := range changedFiles {
-		if dir, ok := relatedContextDirForChangedGoPath(c.repoRoot, file.Path); ok {
-			dirSet[dir] = struct{}{}
-		}
-		if dir, ok := relatedContextDirForChangedGoPath(c.repoRoot, file.OldPath); ok {
-			dirSet[dir] = struct{}{}
-		}
+func (s reviewContextChangedGoScope) relatedCandidatePriority(relPath string, isTest bool) int {
+	dir := pathpkg.Dir(relPath)
+	stem := reviewContextGoStem(relPath)
+	sameSourceStem := s.hasSourceStem(dir, stem)
+	sameTestStem := s.hasTestStem(dir, stem)
+	switch {
+	case isTest && sameSourceStem:
+		return 0
+	case !isTest && sameTestStem:
+		return 0
+	case isTest:
+		return 1
+	case sameSourceStem || sameTestStem:
+		return 2
+	default:
+		return 3
 	}
-
-	dirs := make([]string, 0, len(dirSet))
-	for dir := range dirSet {
-		dirs = append(dirs, dir)
-	}
-	sort.Strings(dirs)
-	return dirs
 }
 
-func relatedContextDirForChangedGoPath(repoRoot, path string) (string, bool) {
+func (c *reviewContextEvidenceCollector) changedGoScope(changedFiles []ReviewChangedFile) reviewContextChangedGoScope {
+	scope := reviewContextChangedGoScope{
+		stemsByDir: make(map[string]map[string]reviewContextChangedGoStem),
+	}
+	for _, file := range changedFiles {
+		scope.addPath(c.repoRoot, file.Path)
+		scope.addPath(c.repoRoot, file.OldPath)
+	}
+	return scope
+}
+
+func (s reviewContextChangedGoScope) hasDir(dir string) bool {
+	_, ok := s.stemsByDir[dir]
+	return ok
+}
+
+func (s reviewContextChangedGoScope) hasSourceStem(dir, stem string) bool {
+	changed, ok := s.changedStem(dir, stem)
+	return ok && changed.source
+}
+
+func (s reviewContextChangedGoScope) hasTestStem(dir, stem string) bool {
+	changed, ok := s.changedStem(dir, stem)
+	return ok && changed.test
+}
+
+func (s reviewContextChangedGoScope) changedStem(dir, stem string) (reviewContextChangedGoStem, bool) {
+	stems, ok := s.stemsByDir[dir]
+	if !ok {
+		return reviewContextChangedGoStem{}, false
+	}
+	changed, ok := stems[stem]
+	return changed, ok
+}
+
+func (s *reviewContextChangedGoScope) addPath(repoRoot, path string) {
+	dir, stem, isTest, ok := relatedContextChangedGoPath(repoRoot, path)
+	if !ok {
+		return
+	}
+	if s.stemsByDir == nil {
+		s.stemsByDir = make(map[string]map[string]reviewContextChangedGoStem)
+	}
+	if _, ok := s.stemsByDir[dir]; !ok {
+		s.stemsByDir[dir] = make(map[string]reviewContextChangedGoStem)
+	}
+	changed := s.stemsByDir[dir][stem]
+	if isTest {
+		changed.test = true
+	} else {
+		changed.source = true
+	}
+	s.stemsByDir[dir][stem] = changed
+}
+
+func relatedContextChangedGoPath(repoRoot, path string) (string, string, bool, bool) {
 	_, relPath, err := resolveReviewEvidenceRepoPathLexically(repoRoot, path)
 	if err != nil {
-		return "", false
+		return "", "", false, false
 	}
 	if !isReviewContextRelatedGoPath(relPath) {
-		return "", false
+		return "", "", false, false
 	}
-	return pathpkg.Dir(relPath), true
+	return pathpkg.Dir(relPath), reviewContextGoStem(relPath), isReviewContextTestGoPath(relPath), true
 }
 
 func (c *reviewContextEvidenceCollector) collectContextFile(path, role string) (ReviewContextFileEvidence, bool) {
@@ -319,4 +405,16 @@ func isReviewContextRelatedGoPath(relPath string) bool {
 	return pathpkg.Ext(relPath) == ".go" &&
 		!isReviewContextGeneratedPath(relPath) &&
 		!isReviewContextVendorPath(relPath)
+}
+
+func isReviewContextTestGoPath(relPath string) bool {
+	return strings.HasSuffix(strings.ToLower(pathpkg.Base(relPath)), "_test.go")
+}
+
+func reviewContextGoStem(relPath string) string {
+	base := pathpkg.Base(relPath)
+	if isReviewContextTestGoPath(relPath) {
+		return base[:len(base)-len("_test.go")]
+	}
+	return strings.TrimSuffix(base, pathpkg.Ext(base))
 }
