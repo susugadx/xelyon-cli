@@ -24,7 +24,7 @@ xelyon doctor kimi --json
 
 ### `xelyon doctor openai`
 
-OpenAI provider の `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route と判定理由、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--smoke` を付けると live text request を送信し、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。複数 smoke を指定した場合は request を別々に実行または preview し、JSON では `smoke.requests[]` / `request_preview.requests[]` に request 単位の結果を出します。
+OpenAI provider の `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route と判定理由、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--require-capability` を付けると、解決済みのローカル capability が要求を満たすかを live request なしの `required_capability` check として検証します。対応する名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`previous_response_id`、`session_persistence`、`server_compaction` です。OpenAI の `responses_streaming` gate は実 `catalog_model` が既知 catalog model として解決できない場合 `unknown` として fail します。`--smoke` を付けると live text request を送信し、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。複数 smoke を指定した場合は request を別々に実行または preview し、JSON では `smoke.requests[]` / `request_preview.requests[]` に request 単位の結果を出します。
 
 `OPENAI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、tool payload / `tool_choice` は送信しません。`--retention-smoke` は Responses API route 専用で、Chat Completions route では live request を送らず fail します。`--model` は実 request に送るモデル名または alias、`--catalog-model` は alias の underlying OpenAI model として token / pricing / route 判定に使います。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
@@ -36,6 +36,7 @@ xelyon doctor openai --smoke
 xelyon doctor openai --tool-smoke
 xelyon doctor openai --retention-smoke
 xelyon doctor openai --capabilities
+xelyon doctor openai --model corp-openai-deployment --catalog-model gpt-5.4 --require-capability responses_api --require-capability previous_response_id
 xelyon doctor openai --print-request
 xelyon doctor openai --tool-smoke --print-request
 xelyon doctor openai --retention-smoke --print-request
@@ -48,7 +49,7 @@ xelyon doctor openai --json
 
 ### `xelyon doctor azure`
 
-Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、Responses route と判定理由、function calling 設定、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--smoke` を付けると、設定済み deployment に `responses.store=false` の最小 Responses API リクエストを送信し、response ID、usage、概算 cost も表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
+Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、Responses route と判定理由、function calling 設定、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--require-capability` を付けると、解決済みのローカル capability が要求を満たすかを live request なしの `required_capability` check として検証します。対応する名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`previous_response_id`、`session_persistence`、`server_compaction` です。Azure の `responses_streaming` gate は実 `catalog_model` が未解決の場合 `unknown` として fail します。`--smoke` を付けると、設定済み deployment に `responses.store=false` の最小 Responses API リクエストを送信し、response ID、usage、概算 cost も表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
 
 `--deployment` は Azure 側の deployment 名、`--catalog-model` はその deployment の実モデル名です。`--print-config` を付けると、この 2 つから `~/.xelyon/config.yaml` に貼れる YAML 断片だけを出力します。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、設定確認だけなら付けないでください。response ID や usage が返らない場合、または pricing catalog に該当モデルがない場合は warn になりますが、smoke 成功自体は失敗にしません。
 
@@ -60,6 +61,7 @@ xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --s
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --tool-smoke
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --retention-smoke
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --capabilities
+xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --require-capability responses_api
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --print-request
 xelyon doctor azure --deployment my-gpt-5-deployment --catalog-model gpt-5.4 --retention-smoke --print-request
 xelyon doctor azure --json

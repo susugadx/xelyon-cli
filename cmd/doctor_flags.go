@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const defaultDoctorTimeout = 120 * time.Second
@@ -22,6 +23,15 @@ func addDoctorToolSmokeFlag(cmd *cobra.Command, usage string) {
 
 func addDoctorCapabilitiesFlag(cmd *cobra.Command, usage string) {
 	cmd.Flags().BoolVar(&doctorCapabilitiesFlag, "capabilities", false, usage)
+}
+
+func addDoctorRequiredCapabilityFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSliceVar(
+		&doctorRequiredCapabilityFlags,
+		"require-capability",
+		nil,
+		"Fail if a resolved local capability is missing; supported: "+providerdiag.SupportedRequiredCapabilitiesText(),
+	)
 }
 
 func addDoctorTimeoutFlag(cmd *cobra.Command, provider, usage string) {

@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -25,7 +27,7 @@ func TestRunOpenAIDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *te
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
+	report := unmarshalDoctorJSON[struct {
 		Provider           string `json:"provider"`
 		Model              string `json:"model"`
 		ModelSource        string `json:"model_source"`
@@ -33,10 +35,7 @@ func TestRunOpenAIDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *te
 		CatalogModelSource string `json:"catalog_model_source"`
 		Route              string `json:"route"`
 		RouteReason        string `json:"route_reason"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
+	}](t, out)
 	if report.Provider != "openai" {
 		t.Fatalf("provider = %q, want openai", report.Provider)
 	}
@@ -72,7 +71,7 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testi
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
+	report := unmarshalDoctorJSON[struct {
 		Smoke          any `json:"smoke"`
 		RequestPreview struct {
 			Requests []struct {
@@ -85,10 +84,7 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testi
 				} `json:"body"`
 			} `json:"requests"`
 		} `json:"request_preview"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
+	}](t, out)
 	if report.Smoke != nil {
 		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
 	}
@@ -121,7 +117,7 @@ func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testi
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
+	report := unmarshalDoctorJSON[struct {
 		Capabilities struct {
 			Model              string `json:"model"`
 			CatalogModel       string `json:"catalog_model"`
@@ -135,13 +131,8 @@ func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testi
 				CompactThreshold int  `json:"compact_threshold"`
 			} `json:"server_compaction"`
 		} `json:"capabilities"`
-		Checks []struct {
-			Name string `json:"name"`
-		} `json:"checks"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
 	if report.Capabilities.Model != "corp-openai-deployment" ||
 		report.Capabilities.CatalogModel != "gpt-5.4" ||
 		!report.Capabilities.ResponsesAPI ||
@@ -151,11 +142,70 @@ func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testi
 		report.Capabilities.ServerCompaction.CompactThreshold <= 0 {
 		t.Fatalf("capabilities = %+v, want resolved OpenAI capabilities", report.Capabilities)
 	}
-	for _, check := range report.Checks {
-		if check.Name == "auth" {
-			t.Fatalf("auth check should be skipped for capabilities-only report: %#v", report.Checks)
-		}
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+}
+
+func TestRunOpenAIDoctorInvocation_RequireCapabilityFailsWithoutAPIKeyCheck(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", "")
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
+
+	doctorOpenAIModelFlag = "gpt-5.5-pro"
+	doctorCatalogModelFlag = "gpt-5.5-pro"
+	doctorRequiredCapabilityFlags = []string{"responses_streaming"}
+	doctorJSONFlag = true
+
+	err := runOpenAIDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatalf("runOpenAIDoctorInvocation() error = nil, want required capability failure\noutput:\n%s", out.String())
 	}
+
+	report := unmarshalDoctorJSON[struct {
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	check := requireDoctorJSONCheck(t, report.Checks, "required_capability")
+	requireDoctorJSONCheckStatus(t, check, "fail")
+	requireDoctorJSONCheckDetailContains(t, check, "responses_streaming=missing")
+}
+
+func TestRunOpenAIDoctorInvocation_RequireStreamingCapabilityFailsWithoutCatalogModel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", "")
+	configDir := filepath.Join(home, ".xelyon")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("openai:\n  responses_api_models:\n    - corp-gpt55-pro-alias\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
+
+	doctorOpenAIModelFlag = "corp-gpt55-pro-alias"
+	doctorRequiredCapabilityFlags = []string{"responses_streaming"}
+	doctorJSONFlag = true
+
+	err := runOpenAIDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatalf("runOpenAIDoctorInvocation() error = nil, want unknown required capability failure\noutput:\n%s", out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	check := requireDoctorJSONCheck(t, report.Checks, "required_capability")
+	requireDoctorJSONCheckStatus(t, check, "fail")
+	requireDoctorJSONCheckDetailContains(t, check, "responses_streaming=unknown")
+	requireDoctorJSONCheckSuggestionContains(t, check, "--catalog-model")
 }
 
 func TestRootCommand_OpenAIDoctorCommandParsesFlags(t *testing.T) {
@@ -185,7 +235,7 @@ func TestRootCommand_OpenAIDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--retention-smoke", "--capabilities", "--print-request", "--timeout", "--json", "Diagnose OpenAI provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--retention-smoke", "--capabilities", "--require-capability", "--print-request", "--timeout", "--json", "Diagnose OpenAI provider configuration"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want OpenAI doctor help substring %q", out.String(), want)
 		}

@@ -208,6 +208,26 @@ func (r *DiagnosticReport) addResponsesRetentionCheck() {
 	r.addCheck(DiagnosticStatusOK, "responses_retention", message, "", "")
 }
 
+func (r *DiagnosticReport) addRequiredCapabilities(ctx context.Context, cfg *config.Config, required []string) {
+	if !providerdiag.HasRequiredCapabilityRequest(required) {
+		return
+	}
+
+	snapshot := openAIDiagnosticCapabilitySnapshot(ctx, cfg, *r)
+	check := providerdiag.EvaluateRequiredCapabilities(snapshot, required)
+	if check.Satisfied() {
+		r.addCheck(DiagnosticStatusOK, providerdiag.RequiredCapabilityCheckName, "required OpenAI capabilities are available", check.Detail(), "")
+		return
+	}
+
+	suggestion := providerdiag.RequiredCapabilityFailureSuggestion(
+		check,
+		"model/configuration",
+		"Set --catalog-model or provider_models.openai.catalog_model to the underlying OpenAI model before requiring catalog-dependent capabilities",
+	)
+	r.addCheck(DiagnosticStatusFail, providerdiag.RequiredCapabilityCheckName, "required OpenAI capabilities are missing", check.Detail(), suggestion)
+}
+
 func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
 	if r.HasFailures() {
 		r.addCheck(

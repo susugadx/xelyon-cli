@@ -34,6 +34,8 @@ const (
 const (
 	DiagnosticRouteResponsesStreaming    = "responses_streaming"
 	DiagnosticRouteResponsesNonStreaming = "responses_non_streaming"
+
+	diagnosticCatalogModelSourceDeploymentFallback = "deployment name fallback"
 )
 
 // DiagnosticCheck は Azure 設定診断の 1 項目を表す。
@@ -158,26 +160,31 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は Azure 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Deployment      string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	Capabilities    bool
-	RetentionSmoke  bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Deployment           string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	Capabilities         bool
+	RetentionSmoke       bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresBaseURLCheck() bool {
-	return !o.Capabilities || o.RunSmoke || o.PrintRequest
+	return !o.hasLocalCapabilityRequest() || o.RunSmoke || o.PrintRequest
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest && (!o.Capabilities || o.RunSmoke)
+	return !o.PrintRequest && (!o.hasLocalCapabilityRequest() || o.RunSmoke)
+}
+
+func (o DiagnosticOptions) hasLocalCapabilityRequest() bool {
+	return o.Capabilities || providerdiag.HasRequiredCapabilityRequest(o.RequiredCapabilities)
 }
 
 // Diagnose は Azure OpenAI のローカル設定と、必要に応じて live smoke を検証する。
@@ -219,6 +226,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.Capabilities {
 		report.addCapabilities(ctx, cfg)
 	}
+	report.addRequiredCapabilities(ctx, cfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, cfg, options)
 	}
@@ -418,8 +426,7 @@ func (r *DiagnosticReport) addDeploymentCheck(cfg *config.Config, explicitDeploy
 		"",
 	)
 
-	if looksLikeOpenAICatalogModel(r.Deployment) &&
-		r.CatalogModelSource == "deployment name fallback" {
+	if looksLikeOpenAICatalogModel(r.Deployment) && r.catalogModelUsesDeploymentFallback() {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"deployment_catalog_mixup",
@@ -445,7 +452,7 @@ func (r *DiagnosticReport) addCatalogModelCheck() {
 		return
 	}
 
-	if r.CatalogModel == r.Deployment && r.CatalogModelSource == "deployment name fallback" {
+	if r.CatalogModel == r.Deployment && r.catalogModelUsesDeploymentFallback() {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_model",
@@ -600,6 +607,27 @@ func (r *DiagnosticReport) addResponsesRetentionCheck() {
 	r.addCheck(DiagnosticStatusOK, "responses_retention", message, "", "")
 }
 
+func (r *DiagnosticReport) addRequiredCapabilities(ctx context.Context, cfg *config.Config, required []string) {
+	if !providerdiag.HasRequiredCapabilityRequest(required) {
+		return
+	}
+
+	policyCfg := diagnosticCatalogPolicyConfig(cfg, r.Deployment, r.CatalogModel)
+	snapshot := diagnosticCapabilitySnapshot(ctx, policyCfg, *r)
+	check := providerdiag.EvaluateRequiredCapabilities(snapshot, required)
+	if check.Satisfied() {
+		r.addCheck(DiagnosticStatusOK, providerdiag.RequiredCapabilityCheckName, "required Azure OpenAI capabilities are available", check.Detail(), "")
+		return
+	}
+
+	suggestion := providerdiag.RequiredCapabilityFailureSuggestion(
+		check,
+		"deployment/configuration",
+		"Set --catalog-model or provider_models.azure.catalog_model to the underlying model before requiring catalog-dependent capabilities",
+	)
+	r.addCheck(DiagnosticStatusFail, providerdiag.RequiredCapabilityCheckName, "required Azure OpenAI capabilities are missing", check.Detail(), suggestion)
+}
+
 func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
 	if r.HasFailures() {
 		r.addCheck(
@@ -738,7 +766,11 @@ func resolveDiagnosticCatalogModel(cfg *config.Config, deployment, explicitCatal
 		}
 	}
 
-	return cfg.ModelCatalogName("azure", deployment), "deployment name fallback"
+	return cfg.ModelCatalogName("azure", deployment), diagnosticCatalogModelSourceDeploymentFallback
+}
+
+func (r DiagnosticReport) catalogModelUsesDeploymentFallback() bool {
+	return r.CatalogModelSource == diagnosticCatalogModelSourceDeploymentFallback
 }
 
 func resolveDiagnosticRoute(deployment, catalogModel string) providerdiag.RouteDecision {

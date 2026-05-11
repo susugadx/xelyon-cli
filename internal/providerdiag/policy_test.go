@@ -79,3 +79,137 @@ func TestRouteDecisionReasonString(t *testing.T) {
 		t.Fatalf("ReasonString() = %q, want %q", got, want)
 	}
 }
+
+func TestEvaluateRequiredCapabilities(t *testing.T) {
+	snapshot := CapabilitySnapshot{
+		ResponsesAPI:                   true,
+		ResponsesStreaming:             false,
+		ResponsesStreamingAvailability: KnownCapabilityAvailability(false),
+		FunctionCalling:                true,
+		ImageInput:                     true,
+		Retention:                      NewRetentionSnapshot(true, true, true),
+		ServerCompaction: ServerCompactionSnapshot{
+			RequestPayload: true,
+		},
+	}
+
+	check := EvaluateRequiredCapabilities(snapshot, []string{
+		"responses-api",
+		"function_calling",
+		"responses_api",
+		"responses_streaming",
+		"unknown_capability",
+	})
+	if check.Satisfied() {
+		t.Fatalf("Satisfied() = true, want false for missing/unknown capability: %+v", check.Results)
+	}
+	if !check.HasUnknown() {
+		t.Fatalf("HasUnknown() = false, want true: %+v", check.Results)
+	}
+	if got, want := check.Detail(), "responses_api=ok, function_calling=ok, responses_streaming=missing, unknown_capability=unknown"; got != want {
+		t.Fatalf("Detail() = %q, want %q", got, want)
+	}
+}
+
+func TestEvaluateRequiredCapabilitiesSatisfied(t *testing.T) {
+	snapshot := CapabilitySnapshot{
+		ResponsesAPI:                   true,
+		ResponsesStreaming:             true,
+		ResponsesStreamingAvailability: KnownCapabilityAvailability(true),
+		ChatCompletions:                true,
+		FunctionCalling:                true,
+		ImageInput:                     true,
+		Retention:                      NewRetentionSnapshot(true, true, true),
+		ServerCompaction: ServerCompactionSnapshot{
+			RequestPayload: true,
+		},
+	}
+
+	check := EvaluateRequiredCapabilities(snapshot, SupportedRequiredCapabilities())
+	if !check.Satisfied() {
+		t.Fatalf("Satisfied() = false, want true: detail=%q results=%+v", check.Detail(), check.Results)
+	}
+}
+
+func TestEvaluateRequiredCapabilitiesUnknownAvailability(t *testing.T) {
+	snapshot := CapabilitySnapshot{
+		ResponsesAPI:                   true,
+		ResponsesStreaming:             true,
+		ResponsesStreamingAvailability: UnknownCapabilityAvailability(),
+	}
+
+	check := EvaluateRequiredCapabilities(snapshot, []string{RequiredCapabilityResponsesStreaming})
+	if check.Satisfied() {
+		t.Fatalf("Satisfied() = true, want false for unknown availability: %+v", check.Results)
+	}
+	if !check.HasUnknownAvailability() {
+		t.Fatalf("HasUnknownAvailability() = false, want true: %+v", check.Results)
+	}
+	if got, want := check.Detail(), "responses_streaming=unknown"; got != want {
+		t.Fatalf("Detail() = %q, want %q", got, want)
+	}
+}
+
+func TestResponsesStreamingCapabilityAvailability(t *testing.T) {
+	knownPolicy := CatalogPolicy{ContextWindowKnown: true}
+	unknownPolicy := CatalogPolicy{ContextWindowKnown: false}
+
+	for _, tt := range []struct {
+		name               string
+		responsesStreaming bool
+		policy             CatalogPolicy
+		want               CapabilityAvailability
+	}{
+		{
+			name:               "streaming route with known catalog",
+			responsesStreaming: true,
+			policy:             knownPolicy,
+			want:               KnownCapabilityAvailability(true),
+		},
+		{
+			name:               "streaming route with unknown catalog",
+			responsesStreaming: true,
+			policy:             unknownPolicy,
+			want:               UnknownCapabilityAvailability(),
+		},
+		{
+			name:               "non streaming route with unknown catalog",
+			responsesStreaming: false,
+			policy:             unknownPolicy,
+			want:               KnownCapabilityAvailability(false),
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResponsesStreamingCapabilityAvailability(tt.responsesStreaming, tt.policy)
+			if got != tt.want {
+				t.Fatalf("ResponsesStreamingCapabilityAvailability() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequiredCapabilityFailureSuggestion(t *testing.T) {
+	missing := RequiredCapabilityCheck{Results: []RequiredCapabilityResult{{
+		Name:   RequiredCapabilityResponsesStreaming,
+		Status: RequiredCapabilityStatusMissing,
+	}}}
+	if got, want := RequiredCapabilityFailureSuggestion(missing, "model/configuration", ""), "Choose a model/configuration that provides the missing capability, or remove --require-capability"; got != want {
+		t.Fatalf("RequiredCapabilityFailureSuggestion() = %q, want %q", got, want)
+	}
+
+	unknown := RequiredCapabilityCheck{Results: []RequiredCapabilityResult{{
+		Name:   "unknown_capability",
+		Status: RequiredCapabilityStatusUnknownName,
+	}}}
+	if got, want := RequiredCapabilityFailureSuggestion(unknown, "model/configuration", ""), "Use one of: "+SupportedRequiredCapabilitiesText(); got != want {
+		t.Fatalf("RequiredCapabilityFailureSuggestion() = %q, want %q", got, want)
+	}
+
+	unknownAvailability := RequiredCapabilityCheck{Results: []RequiredCapabilityResult{{
+		Name:   RequiredCapabilityResponsesStreaming,
+		Status: RequiredCapabilityStatusUnknownAvailability,
+	}}}
+	if got, want := RequiredCapabilityFailureSuggestion(unknownAvailability, "model/configuration", "Set --catalog-model"), "Set --catalog-model"; got != want {
+		t.Fatalf("RequiredCapabilityFailureSuggestion() = %q, want %q", got, want)
+	}
+}

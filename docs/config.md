@@ -437,7 +437,7 @@ echo password | sudo -S ...
 ### OpenAI設定 (`openai`)（内部）
 
 > **注意**: `/config` メニューには表示されません。Responses API ルーティングはプレフィックスマッチで自動判定されるため、通常は設定不要です。
-> カスタムモデルを Responses API で使いたい場合のみ、YAML 直接編集で `responses_api_models` にモデル名を追加してください。
+> カスタムモデルを Responses API で使いたい場合のみ、YAML 直接編集で `responses_api_models` にモデル名を追加してください。`doctor openai --require-capability responses_streaming` で gate する場合は、streaming 可否を判定できるよう `provider_models.openai.catalog_model` または `model_overrides.<model>.catalog_model` に実モデル名も設定してください。
 
 `gpt-5.5` は Responses API の streaming 経路で動作します。`gpt-5.5-pro` は Responses API 対応ですが streaming unsupported のため、XELYON は non-streaming 経路を使用します。GPT-5.5 Pro は cached input discount がなく、応答に数分かかる場合があります。background mode は未対応です。
 

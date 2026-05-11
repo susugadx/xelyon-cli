@@ -19,6 +19,7 @@ var (
 	doctorSmokeFlag                bool
 	doctorToolSmokeFlag            bool
 	doctorCapabilitiesFlag         bool
+	doctorRequiredCapabilityFlags  []string
 	doctorAzureRetentionSmokeFlag  bool
 	doctorOpenAIRetentionSmokeFlag bool
 	doctorBedrockImageSmokeFlag    bool
@@ -60,8 +61,9 @@ dummy tool call and verify function calling support for the deployment. Use
 --retention-smoke to verify a previous_response_id chain. Use --capabilities
 to print resolved model/deployment capabilities without sending a live request.
 Use --print-request to print the sanitized smoke request JSON without sending
-it. Use --print-config with --deployment and --catalog-model to print a config
-YAML snippet without running diagnostics.`,
+it. Use --require-capability to fail when a resolved local capability is
+missing. Use --print-config with --deployment and --catalog-model to print a
+config YAML snippet without running diagnostics.`,
 		Args: cobra.NoArgs,
 		RunE: runAzureDoctorInvocation,
 	}
@@ -71,6 +73,7 @@ YAML snippet without running diagnostics.`,
 	addDoctorSmokeFlag(cmd, "Send a live minimal Responses API request for 'doctor azure'")
 	addDoctorToolSmokeFlag(cmd, "Send a live Azure OpenAI smoke request that forces a dummy tool call")
 	addDoctorCapabilitiesFlag(cmd, "Print resolved Azure OpenAI deployment capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	cmd.Flags().BoolVar(&doctorAzureRetentionSmokeFlag, "retention-smoke", false, "Send live Azure OpenAI Responses API requests that verify previous_response_id retention")
 	addDoctorTimeoutFlag(cmd, "azure", "Timeout for 'doctor azure --smoke'")
 	addDoctorJSONFlag(cmd, "azure")
@@ -83,14 +86,15 @@ YAML snippet without running diagnostics.`,
 func runAzureDoctorInvocation(cmd *cobra.Command, args []string) error {
 	if doctorPrintConfigFlag {
 		if err := renderAzureDoctorConfigSnippet(cmd.OutOrStdout(), azureDoctorConfigSnippetOptions{
-			Deployment:     doctorDeploymentFlag,
-			CatalogModel:   doctorCatalogModelFlag,
-			JSON:           doctorJSONFlag,
-			Smoke:          doctorSmokeFlag,
-			ToolSmoke:      doctorToolSmokeFlag,
-			Capabilities:   doctorCapabilitiesFlag,
-			RetentionSmoke: doctorAzureRetentionSmokeFlag,
-			PrintRequest:   doctorPrintRequestFlag,
+			Deployment:           doctorDeploymentFlag,
+			CatalogModel:         doctorCatalogModelFlag,
+			JSON:                 doctorJSONFlag,
+			Smoke:                doctorSmokeFlag,
+			ToolSmoke:            doctorToolSmokeFlag,
+			Capabilities:         doctorCapabilitiesFlag,
+			RequiredCapabilities: doctorRequiredCapabilityFlags,
+			RetentionSmoke:       doctorAzureRetentionSmokeFlag,
+			PrintRequest:         doctorPrintRequestFlag,
 		}); err != nil {
 			cmd.SilenceUsage = true
 			return err
@@ -105,16 +109,17 @@ func runAzureDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := azureprovider.Diagnose(cmd.Context(), azureprovider.DiagnosticOptions{
-		Config:         cfg,
-		Deployment:     doctorDeploymentFlag,
-		CatalogModel:   doctorCatalogModelFlag,
-		RunSmoke:       !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorAzureRetentionSmokeFlag),
-		TextSmoke:      doctorSmokeFlag,
-		ToolSmoke:      doctorToolSmokeFlag,
-		Capabilities:   doctorCapabilitiesFlag,
-		RetentionSmoke: doctorAzureRetentionSmokeFlag,
-		PrintRequest:   doctorPrintRequestFlag,
-		SmokeTimeout:   doctorTimeoutFlag,
+		Config:               cfg,
+		Deployment:           doctorDeploymentFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorAzureRetentionSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		RetentionSmoke:       doctorAzureRetentionSmokeFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]azureprovider.DiagnosticCheck{{

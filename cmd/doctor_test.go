@@ -27,22 +27,15 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
-		Provider          string `json:"provider"`
-		Deployment        string `json:"deployment"`
-		CatalogModel      string `json:"catalog_model"`
-		Route             string `json:"route"`
-		RouteReason       string `json:"route_reason"`
-		NormalizedBaseURL string `json:"normalized_base_url"`
-		Checks            []struct {
-			Name   string `json:"name"`
-			Status string `json:"status"`
-			Detail string `json:"detail"`
-		} `json:"checks"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
+	report := unmarshalDoctorJSON[struct {
+		Provider          string            `json:"provider"`
+		Deployment        string            `json:"deployment"`
+		CatalogModel      string            `json:"catalog_model"`
+		Route             string            `json:"route"`
+		RouteReason       string            `json:"route_reason"`
+		NormalizedBaseURL string            `json:"normalized_base_url"`
+		Checks            []doctorJSONCheck `json:"checks"`
+	}](t, out)
 	if report.Provider != "azure" {
 		t.Fatalf("provider = %q, want azure", report.Provider)
 	}
@@ -61,21 +54,9 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 	if report.NormalizedBaseURL != "https://example.openai.azure.com/openai/v1" {
 		t.Fatalf("normalized_base_url = %q, want v1 URL", report.NormalizedBaseURL)
 	}
-	var catalogPolicyDetail string
-	for _, check := range report.Checks {
-		if check.Name == "catalog_policy" {
-			if check.Status != "ok" {
-				t.Fatalf("catalog_policy status = %q, want ok: %#v", check.Status, check)
-			}
-			catalogPolicyDetail = check.Detail
-		}
-	}
-	if catalogPolicyDetail == "" {
-		t.Fatalf("missing catalog_policy detail: %#v", report.Checks)
-	}
-	if !strings.Contains(catalogPolicyDetail, "max_output_tokens=128000") {
-		t.Fatalf("catalog_policy detail = %q, want gpt-5.3-codex max output", catalogPolicyDetail)
-	}
+	catalogPolicy := requireDoctorJSONCheck(t, report.Checks, "catalog_policy")
+	requireDoctorJSONCheckStatus(t, catalogPolicy, "ok")
+	requireDoctorJSONCheckDetailContains(t, catalogPolicy, "max_output_tokens=128000")
 }
 
 func TestRunAzureDoctorInvocation_PrintRequestJSONDoesNotRequireAuth(t *testing.T) {
@@ -97,7 +78,7 @@ func TestRunAzureDoctorInvocation_PrintRequestJSONDoesNotRequireAuth(t *testing.
 		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
+	report := unmarshalDoctorJSON[struct {
 		Smoke          any `json:"smoke"`
 		RequestPreview struct {
 			Requests []struct {
@@ -112,10 +93,7 @@ func TestRunAzureDoctorInvocation_PrintRequestJSONDoesNotRequireAuth(t *testing.
 				} `json:"body"`
 			} `json:"requests"`
 		} `json:"request_preview"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
+	}](t, out)
 	if report.Smoke != nil {
 		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
 	}
@@ -152,7 +130,7 @@ func TestRunAzureDoctorInvocation_CapabilitiesJSONDoesNotRequireEndpointOrAuth(t
 		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
+	report := unmarshalDoctorJSON[struct {
 		Capabilities struct {
 			Deployment         string `json:"deployment"`
 			CatalogModel       string `json:"catalog_model"`
@@ -163,13 +141,8 @@ func TestRunAzureDoctorInvocation_CapabilitiesJSONDoesNotRequireEndpointOrAuth(t
 				CompactThreshold int  `json:"compact_threshold"`
 			} `json:"server_compaction"`
 		} `json:"capabilities"`
-		Checks []struct {
-			Name string `json:"name"`
-		} `json:"checks"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
 	if report.Capabilities.Deployment != "corp-codex-deployment" ||
 		report.Capabilities.CatalogModel != "gpt-5.3-codex" ||
 		!report.Capabilities.ResponsesAPI ||
@@ -178,11 +151,90 @@ func TestRunAzureDoctorInvocation_CapabilitiesJSONDoesNotRequireEndpointOrAuth(t
 		report.Capabilities.ServerCompaction.CompactThreshold <= 0 {
 		t.Fatalf("capabilities = %+v, want resolved Azure capabilities", report.Capabilities)
 	}
-	for _, check := range report.Checks {
-		if check.Name == "base_url" || check.Name == "auth" {
-			t.Fatalf("%s check should be skipped for capabilities-only report: %#v", check.Name, report.Checks)
-		}
+	requireNoDoctorJSONChecks(t, report.Checks, "base_url", "auth")
+}
+
+func TestRunAzureDoctorInvocation_RequireCapabilityFailsWithoutEndpointOrAuthCheck(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
+	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
+
+	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
+
+	doctorDeploymentFlag = "corp-gpt55-pro-deployment"
+	doctorCatalogModelFlag = "gpt-5.5-pro"
+	doctorRequiredCapabilityFlags = []string{"responses_streaming"}
+	doctorJSONFlag = true
+
+	err := runAzureDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatalf("runAzureDoctorInvocation() error = nil, want required capability failure\noutput:\n%s", out.String())
 	}
+
+	report := unmarshalDoctorJSON[struct {
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	requireNoDoctorJSONChecks(t, report.Checks, "base_url", "auth")
+	check := requireDoctorJSONCheck(t, report.Checks, "required_capability")
+	requireDoctorJSONCheckStatus(t, check, "fail")
+	requireDoctorJSONCheckDetailContains(t, check, "responses_streaming=missing")
+}
+
+func TestRunAzureDoctorInvocation_RequireStreamingCapabilityFailsWithoutCatalogModel(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
+	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
+
+	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
+
+	doctorDeploymentFlag = "corp-gpt55-pro-deployment"
+	doctorRequiredCapabilityFlags = []string{"responses_streaming"}
+	doctorJSONFlag = true
+
+	err := runAzureDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatalf("runAzureDoctorInvocation() error = nil, want unknown required capability failure\noutput:\n%s", out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	requireNoDoctorJSONChecks(t, report.Checks, "base_url", "auth")
+	check := requireDoctorJSONCheck(t, report.Checks, "required_capability")
+	requireDoctorJSONCheckStatus(t, check, "fail")
+	requireDoctorJSONCheckDetailContains(t, check, "responses_streaming=unknown")
+	requireDoctorJSONCheckSuggestionContains(t, check, "--catalog-model")
+}
+
+func TestRunAzureDoctorInvocation_RequireStreamingCapabilityPassesWithKnownFallbackCatalogModel(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")
+	_ = os.Unsetenv("AZURE_OPENAI_API_KEY")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN")
+	_ = os.Unsetenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND")
+
+	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
+
+	doctorDeploymentFlag = "gpt-5.4"
+	doctorRequiredCapabilityFlags = []string{"responses_streaming"}
+	doctorJSONFlag = true
+
+	err := runAzureDoctorInvocation(cmd, nil)
+	if err != nil {
+		t.Fatalf("runAzureDoctorInvocation() error = %v, want nil for known fallback catalog model\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	requireNoDoctorJSONChecks(t, report.Checks, "base_url", "auth")
+	check := requireDoctorJSONCheck(t, report.Checks, "required_capability")
+	requireDoctorJSONCheckStatus(t, check, "ok")
+	requireDoctorJSONCheckDetailContains(t, check, "responses_streaming=ok")
 }
 
 func TestRunAzureDoctorInvocation_FailsForMissingAzureSetup(t *testing.T) {
@@ -277,6 +329,26 @@ func TestRunAzureDoctorInvocation_PrintConfigRejectsCapabilities(t *testing.T) {
 	}
 }
 
+func TestRunAzureDoctorInvocation_PrintConfigRejectsRequiredCapability(t *testing.T) {
+	cmd, _ := newDoctorSubcommandTest(t, newAzureDoctorCommand)
+
+	doctorPrintConfigFlag = true
+	doctorRequiredCapabilityFlags = []string{"responses_api"}
+	doctorDeploymentFlag = "corp-gpt55-deployment"
+	doctorCatalogModelFlag = "gpt-5.5"
+
+	err := runAzureDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatal("runAzureDoctorInvocation() error = nil, want print-config required capability conflict")
+	}
+	if !strings.Contains(err.Error(), "--require-capability") {
+		t.Fatalf("error = %v, want --require-capability conflict guidance", err)
+	}
+	if !cmd.SilenceUsage {
+		t.Fatal("cmd.SilenceUsage = false, want true for print-config validation error")
+	}
+}
+
 func TestRootCommand_AzureDoctorCommandParsesFlags(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
@@ -313,6 +385,9 @@ func TestRootCommand_AzureDoctorHelpShowsDoctorFlags(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "--capabilities") {
 		t.Fatalf("output = %q, want capabilities flag", out.String())
+	}
+	if !strings.Contains(out.String(), "--require-capability") {
+		t.Fatalf("output = %q, want require capability flag", out.String())
 	}
 	if !strings.Contains(out.String(), "--print-request") {
 		t.Fatalf("output = %q, want print-request flag", out.String())

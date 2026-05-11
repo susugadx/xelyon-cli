@@ -23,7 +23,8 @@ settings. Use --smoke to send a minimal live request. Use --tool-smoke to
 force a dummy tool call when function calling is enabled. Use
 --retention-smoke to verify a Responses API previous_response_id chain. Use
 --capabilities to print resolved model capabilities without sending a live
-request. Use --print-request to print the sanitized smoke request JSON without
+request. Use --require-capability to fail when a resolved local capability is
+missing. Use --print-request to print the sanitized smoke request JSON without
 sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runOpenAIDoctorInvocation,
@@ -34,6 +35,7 @@ sending it.`,
 	addDoctorSmokeFlag(cmd, "Send a live minimal OpenAI text smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live OpenAI smoke request that forces a dummy tool call")
 	addDoctorCapabilitiesFlag(cmd, "Print resolved OpenAI model capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	cmd.Flags().BoolVar(&doctorOpenAIRetentionSmokeFlag, "retention-smoke", false, "Send live OpenAI Responses API requests that verify previous_response_id retention")
 	addDoctorTimeoutFlag(cmd, "openai", "")
 	addDoctorJSONFlag(cmd, "openai")
@@ -50,16 +52,17 @@ func runOpenAIDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := openaiprovider.Diagnose(cmd.Context(), openaiprovider.DiagnosticOptions{
-		Config:         cfg,
-		Model:          doctorOpenAIModelFlag,
-		CatalogModel:   doctorCatalogModelFlag,
-		RunSmoke:       !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorOpenAIRetentionSmokeFlag),
-		TextSmoke:      doctorSmokeFlag,
-		ToolSmoke:      doctorToolSmokeFlag,
-		Capabilities:   doctorCapabilitiesFlag,
-		RetentionSmoke: doctorOpenAIRetentionSmokeFlag,
-		PrintRequest:   doctorPrintRequestFlag,
-		SmokeTimeout:   doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                doctorOpenAIModelFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorOpenAIRetentionSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		RetentionSmoke:       doctorOpenAIRetentionSmokeFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]openaiprovider.DiagnosticCheck{{

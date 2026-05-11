@@ -77,9 +77,13 @@ func (r *DiagnosticReport) addCapabilities(ctx context.Context, cfg *config.Conf
 
 func buildDiagnosticCapabilities(ctx context.Context, cfg *config.Config, report DiagnosticReport) DiagnosticCapabilities {
 	policyCfg := diagnosticCatalogPolicyConfig(cfg, report.Deployment, report.CatalogModel)
-	policy := providerdiag.AzureCatalogPolicy(policyCfg, report.Deployment, report.CatalogModel)
-	snapshot := buildDiagnosticCapabilitySnapshot(ctx, policyCfg, report, policy)
+	snapshot := diagnosticCapabilitySnapshot(ctx, policyCfg, report)
 	return diagnosticCapabilitiesFromSnapshot(snapshot)
+}
+
+func diagnosticCapabilitySnapshot(ctx context.Context, cfg *config.Config, report DiagnosticReport) providerdiag.CapabilitySnapshot {
+	policy := providerdiag.AzureCatalogPolicy(cfg, report.Deployment, report.CatalogModel)
+	return buildDiagnosticCapabilitySnapshot(ctx, cfg, report, policy)
 }
 
 func buildDiagnosticCapabilitySnapshot(
@@ -89,21 +93,23 @@ func buildDiagnosticCapabilitySnapshot(
 	policy providerdiag.CatalogPolicy,
 ) providerdiag.CapabilitySnapshot {
 	responsesAPI := report.Route != ""
+	responsesStreaming := report.Route == DiagnosticRouteResponsesStreaming
 	return providerdiag.CapabilitySnapshot{
-		RequestModel:        report.Deployment,
-		CatalogModel:        report.CatalogModel,
-		Route:               report.Route,
-		RouteReason:         report.RouteReason,
-		ResponsesAPI:        responsesAPI,
-		ResponsesStreaming:  report.Route == DiagnosticRouteResponsesStreaming,
-		FunctionCalling:     report.FunctionCallingEnabled,
-		ImageInput:          New("diagnostic-key").SupportsImages(),
-		Retention:           providerdiag.NewRetentionSnapshot(responsesAPI, report.ResponsesStore, report.ResponsesPersistID),
-		ServerCompaction:    diagnosticServerCompactionSnapshot(ctx, cfg, report, responsesAPI),
-		ContextWindowTokens: policy.ContextWindowTokens,
-		ContextWindowKnown:  policy.ContextWindowKnown,
-		MaxOutput:           policy.MaxOutput,
-		Pricing:             policy.Pricing,
+		RequestModel:                   report.Deployment,
+		CatalogModel:                   report.CatalogModel,
+		Route:                          report.Route,
+		RouteReason:                    report.RouteReason,
+		ResponsesAPI:                   responsesAPI,
+		ResponsesStreaming:             responsesStreaming,
+		ResponsesStreamingAvailability: providerdiag.ResponsesStreamingCapabilityAvailability(responsesStreaming, policy),
+		FunctionCalling:                report.FunctionCallingEnabled,
+		ImageInput:                     New("diagnostic-key").SupportsImages(),
+		Retention:                      providerdiag.NewRetentionSnapshot(responsesAPI, report.ResponsesStore, report.ResponsesPersistID),
+		ServerCompaction:               diagnosticServerCompactionSnapshot(ctx, cfg, report, responsesAPI),
+		ContextWindowTokens:            policy.ContextWindowTokens,
+		ContextWindowKnown:             policy.ContextWindowKnown,
+		MaxOutput:                      policy.MaxOutput,
+		Pricing:                        policy.Pricing,
 	}
 }
 

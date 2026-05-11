@@ -73,6 +73,7 @@ func resetRootFlagsForTest() {
 	doctorSmokeFlag = false
 	doctorToolSmokeFlag = false
 	doctorCapabilitiesFlag = false
+	doctorRequiredCapabilityFlags = nil
 	doctorAzureRetentionSmokeFlag = false
 	doctorOpenAIRetentionSmokeFlag = false
 	doctorBedrockImageSmokeFlag = false
@@ -84,6 +85,7 @@ func resetRootFlagsForTest() {
 	doctorPrintConfigFlag = false
 	doctorPrintRequestFlag = false
 	resetCommandFlagsForTest(rootCmd)
+	doctorRequiredCapabilityFlags = nil
 }
 
 func newDoctorSubcommandTest(t *testing.T, newCommand func() *cobra.Command) (*cobra.Command, *bytes.Buffer) {

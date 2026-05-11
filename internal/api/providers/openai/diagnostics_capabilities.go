@@ -76,10 +76,14 @@ func (r *DiagnosticReport) addCapabilities(ctx context.Context, cfg *config.Conf
 }
 
 func buildOpenAIDiagnosticCapabilities(ctx context.Context, cfg *config.Config, report DiagnosticReport) DiagnosticCapabilities {
+	snapshot := openAIDiagnosticCapabilitySnapshot(ctx, cfg, report)
+	return openAIDiagnosticCapabilitiesFromSnapshot(snapshot)
+}
+
+func openAIDiagnosticCapabilitySnapshot(ctx context.Context, cfg *config.Config, report DiagnosticReport) providerdiag.CapabilitySnapshot {
 	responsesAPI := report.Route != "" && report.Route != DiagnosticRouteChatCompletions
 	policy := providerdiag.OpenAICatalogPolicy(cfg, report.Model, report.CatalogModel)
-	snapshot := buildOpenAIDiagnosticCapabilitySnapshot(ctx, cfg, report, responsesAPI, policy)
-	return openAIDiagnosticCapabilitiesFromSnapshot(snapshot)
+	return buildOpenAIDiagnosticCapabilitySnapshot(ctx, cfg, report, responsesAPI, policy)
 }
 
 func buildOpenAIDiagnosticCapabilitySnapshot(
@@ -89,22 +93,24 @@ func buildOpenAIDiagnosticCapabilitySnapshot(
 	responsesAPI bool,
 	policy providerdiag.CatalogPolicy,
 ) providerdiag.CapabilitySnapshot {
+	responsesStreaming := report.Route == DiagnosticRouteResponsesStreaming
 	return providerdiag.CapabilitySnapshot{
-		RequestModel:        report.Model,
-		CatalogModel:        report.CatalogModel,
-		Route:               report.Route,
-		RouteReason:         report.RouteReason,
-		ResponsesAPI:        responsesAPI,
-		ResponsesStreaming:  report.Route == DiagnosticRouteResponsesStreaming,
-		ChatCompletions:     report.Route == DiagnosticRouteChatCompletions,
-		FunctionCalling:     report.FunctionCallingEnabled,
-		ImageInput:          New("diagnostic-key").SupportsImages(),
-		Retention:           providerdiag.NewRetentionSnapshot(responsesAPI, report.ResponsesStore, report.ResponsesPersistResponseID),
-		ServerCompaction:    openAIDiagnosticServerCompactionSnapshot(ctx, cfg, report, responsesAPI),
-		ContextWindowTokens: policy.ContextWindowTokens,
-		ContextWindowKnown:  policy.ContextWindowKnown,
-		MaxOutput:           policy.MaxOutput,
-		Pricing:             policy.Pricing,
+		RequestModel:                   report.Model,
+		CatalogModel:                   report.CatalogModel,
+		Route:                          report.Route,
+		RouteReason:                    report.RouteReason,
+		ResponsesAPI:                   responsesAPI,
+		ResponsesStreaming:             responsesStreaming,
+		ResponsesStreamingAvailability: providerdiag.ResponsesStreamingCapabilityAvailability(responsesStreaming, policy),
+		ChatCompletions:                report.Route == DiagnosticRouteChatCompletions,
+		FunctionCalling:                report.FunctionCallingEnabled,
+		ImageInput:                     New("diagnostic-key").SupportsImages(),
+		Retention:                      providerdiag.NewRetentionSnapshot(responsesAPI, report.ResponsesStore, report.ResponsesPersistResponseID),
+		ServerCompaction:               openAIDiagnosticServerCompactionSnapshot(ctx, cfg, report, responsesAPI),
+		ContextWindowTokens:            policy.ContextWindowTokens,
+		ContextWindowKnown:             policy.ContextWindowKnown,
+		MaxOutput:                      policy.MaxOutput,
+		Pricing:                        policy.Pricing,
 	}
 }
 

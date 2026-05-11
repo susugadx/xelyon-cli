@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 // DiagnosticStatus は OpenAI 診断チェックの結果を表す。
@@ -150,22 +151,27 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は OpenAI 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	Capabilities    bool
-	RetentionSmoke  bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	Capabilities         bool
+	RetentionSmoke       bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest && (!o.Capabilities || o.RunSmoke)
+	return !o.PrintRequest && (!o.hasLocalCapabilityRequest() || o.RunSmoke)
+}
+
+func (o DiagnosticOptions) hasLocalCapabilityRequest() bool {
+	return o.Capabilities || providerdiag.HasRequiredCapabilityRequest(o.RequiredCapabilities)
 }
 
 // Diagnose は OpenAI のローカル設定と、必要に応じて live smoke を検証する。
@@ -210,6 +216,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.Capabilities {
 		report.addCapabilities(configCtx, policyCfg)
 	}
+	report.addRequiredCapabilities(configCtx, policyCfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

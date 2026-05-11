@@ -5,18 +5,20 @@ import (
 	"io"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"gopkg.in/yaml.v3"
 )
 
 type azureDoctorConfigSnippetOptions struct {
-	Deployment     string
-	CatalogModel   string
-	JSON           bool
-	Smoke          bool
-	ToolSmoke      bool
-	Capabilities   bool
-	RetentionSmoke bool
-	PrintRequest   bool
+	Deployment           string
+	CatalogModel         string
+	JSON                 bool
+	Smoke                bool
+	ToolSmoke            bool
+	Capabilities         bool
+	RequiredCapabilities []string
+	RetentionSmoke       bool
+	PrintRequest         bool
 }
 
 type azureDoctorConfigSnippet struct {
@@ -36,8 +38,8 @@ func renderAzureDoctorConfigSnippet(w io.Writer, options azureDoctorConfigSnippe
 	if options.PrintRequest {
 		return fmt.Errorf("--print-config cannot be combined with --print-request")
 	}
-	if options.Smoke || options.ToolSmoke || options.Capabilities || options.RetentionSmoke {
-		return fmt.Errorf("--print-config cannot be combined with --smoke, --tool-smoke, --capabilities, or --retention-smoke")
+	if options.Smoke || options.ToolSmoke || options.Capabilities || providerdiag.HasRequiredCapabilityRequest(options.RequiredCapabilities) || options.RetentionSmoke {
+		return fmt.Errorf("--print-config cannot be combined with --smoke, --tool-smoke, --capabilities, --require-capability, or --retention-smoke")
 	}
 
 	deployment := strings.TrimSpace(options.Deployment)

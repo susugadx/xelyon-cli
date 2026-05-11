@@ -255,21 +255,22 @@ func PricingDetail(pricing cost.PricingInfo) string {
 
 // CapabilitySnapshot は provider-specific public capabilities DTO へ投影する内部 snapshot。
 type CapabilitySnapshot struct {
-	RequestModel        string
-	CatalogModel        string
-	Route               string
-	RouteReason         string
-	ResponsesAPI        bool
-	ResponsesStreaming  bool
-	ChatCompletions     bool
-	FunctionCalling     bool
-	ImageInput          bool
-	Retention           RetentionSnapshot
-	ServerCompaction    ServerCompactionSnapshot
-	ContextWindowTokens int
-	ContextWindowKnown  bool
-	MaxOutput           MaxOutputPolicy
-	Pricing             cost.PricingInfo
+	RequestModel                   string
+	CatalogModel                   string
+	Route                          string
+	RouteReason                    string
+	ResponsesAPI                   bool
+	ResponsesStreaming             bool
+	ResponsesStreamingAvailability CapabilityAvailability
+	ChatCompletions                bool
+	FunctionCalling                bool
+	ImageInput                     bool
+	Retention                      RetentionSnapshot
+	ServerCompaction               ServerCompactionSnapshot
+	ContextWindowTokens            int
+	ContextWindowKnown             bool
+	MaxOutput                      MaxOutputPolicy
+	Pricing                        cost.PricingInfo
 }
 
 // RetentionSnapshot は Responses retention の内部 snapshot。

@@ -68,6 +68,12 @@ deployment 能力だけを live request なしで確認する場合:
 xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --capabilities
 ```
 
+必要な deployment 能力を CI などで gate する場合:
+
+```bash
+xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --require-capability responses_api --require-capability previous_response_id
+```
+
 実 deployment へ最小リクエストを送る場合:
 
 ```bash
@@ -80,7 +86,7 @@ tool payload まで確認する場合:
 xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --tool-smoke
 ```
 
-`--capabilities` は live API request を送りません。`--smoke` / `--tool-smoke` は live API request を送ります。単なる設定確認では付けないでください。
+`--capabilities` と `--require-capability` は live API request を送りません。`--require-capability` で指定できる名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`previous_response_id`、`session_persistence`、`server_compaction` です。`responses_streaming` は `catalog_model` が未解決の場合 `unknown` として fail するため、`--catalog-model` か config の `catalog_model` を指定してください。`--smoke` / `--tool-smoke` は live API request を送ります。単なる設定確認では付けないでください。
 
 ## 認証方式の優先順位
 

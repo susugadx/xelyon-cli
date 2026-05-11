@@ -2,10 +2,6 @@ package openai
 
 import "github.com/susugadx/xelyon-cli/internal/providerdiag"
 
-func isGPT55ProModel(model string) bool {
-	return !providerdiag.ShouldStreamResponsesCatalogModel(model)
-}
-
 func supportsResponsesStreaming(model string) bool {
 	return providerdiag.ShouldStreamResponsesCatalogModel(model)
 }
