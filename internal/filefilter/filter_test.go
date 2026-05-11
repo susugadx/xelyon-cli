@@ -40,6 +40,14 @@ func TestMatches(t *testing.T) {
 		{name: "alias matches expanded glob", path: "pkg/types.pyi", filter: "python", want: true},
 		{name: "glob matches basename", path: "pkg/target_test.go", filter: "*_test.go", want: true},
 		{name: "glob matches path", path: "pkg/generated/mock.go", filter: "pkg/generated/*.go", want: true},
+		{name: "double star matches root file", path: "target.ts", filter: "**/*.ts", want: true},
+		{name: "double star matches nested file", path: "src/pkg/target.ts", filter: "**/*.ts", want: true},
+		{name: "double star matches declaration file", path: "src/pkg/target.d.ts", filter: "**/*.d.ts", want: true},
+		{name: "double star matches direct child", path: "src/target.ts", filter: "src/**/*.ts", want: true},
+		{name: "double star matches deep child", path: "src/pkg/target.ts", filter: "src/**/*.ts", want: true},
+		{name: "double star rejects different root", path: "test/pkg/target.ts", filter: "src/**/*.ts", want: false},
+		{name: "mixed star double star matches package source", path: "packages/app/src/lib/target.ts", filter: "packages/*/src/**/*.ts", want: true},
+		{name: "mixed star double star rejects package test", path: "packages/app/test/target.ts", filter: "packages/*/src/**/*.ts", want: false},
 	}
 
 	for _, tt := range tests {

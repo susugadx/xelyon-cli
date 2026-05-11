@@ -11,13 +11,7 @@ import (
 const structuredGoImpactRouteTag = "impact-structured-go-v1"
 
 func shouldAttemptStructuredGoImpactSearch(opts SearchOptions, pattern string) bool {
-	if !strings.EqualFold(strings.TrimSpace(opts.Intent), "impact") {
-		return false
-	}
-	if len(splitPatterns(opts.Pattern)) != 1 {
-		return false
-	}
-	if strings.TrimSpace(pattern) == "" {
+	if !shouldAttemptSinglePatternImpactSearch(opts, pattern) {
 		return false
 	}
 	return resolveLanguage(opts) == "go"

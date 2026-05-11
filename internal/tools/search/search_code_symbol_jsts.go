@@ -28,9 +28,33 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	def := defs[0]
 	refs := findGenericReferences(symbol, opts)
 	filteredRefs := filterGenericRefs(refs, def)
+	classifiedRefs := classifyJSFamilySymbolRefs(filteredRefs, symbol)
+	bundle := buildGenericSymbolBundle("js", symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, []symbolBundleSectionInput{
+		{Kind: "imports", Title: "Imports", Items: classifiedRefs.imports, Limit: jsImportLimit},
+		{Kind: "callers", Title: "Callers", Items: classifiedRefs.callers, Limit: jsCallerLimit},
+		{Kind: "type_refs", Title: "Type References", Items: classifiedRefs.typeRefs, Limit: jsTypeRefLimit},
+		{Kind: "references", Title: "References", Items: classifiedRefs.others, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: classifiedRefs.tests, Limit: genericTestLimit, IsTest: true},
+	})
+	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
+	return genericResolveResult{Output: formatJSSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+}
 
+type jsFamilySymbolRefs struct {
+	imports  []genericSymbolRef
+	callers  []genericSymbolRef
+	typeRefs []genericSymbolRef
+	others   []genericSymbolRef
+	tests    []genericSymbolRef
+}
+
+// classifyJSFamilySymbolRefs は TS/JS 共通の参照分類 owner。
+// structured impact と通常 symbol search が同じテスト分離・参照分類を使うための入口。
+func classifyJSFamilySymbolRefs(refs []genericSymbolRef, symbol string) jsFamilySymbolRefs {
 	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
+	for _, ref := range refs {
 		if ref.IsTest {
 			testRefs = append(testRefs, ref)
 		} else {
@@ -39,26 +63,23 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	}
 
 	imports, callers, typeRefs, otherRefs := classifyJSRefs(normalRefs, symbol)
-	bundle := buildGenericSymbolBundle("js", symbol, def, []string{
-		fmt.Sprintf("%d: %s", def.Line, def.Signature),
-	}, []symbolBundleSectionInput{
-		{Kind: "imports", Title: "Imports", Items: imports, Limit: jsImportLimit},
-		{Kind: "callers", Title: "Callers", Items: callers, Limit: jsCallerLimit},
-		{Kind: "type_refs", Title: "Type References", Items: typeRefs, Limit: jsTypeRefLimit},
-		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
-		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
-	})
-	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatJSSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	return jsFamilySymbolRefs{
+		imports:  imports,
+		callers:  callers,
+		typeRefs: typeRefs,
+		others:   otherRefs,
+		tests:    testRefs,
+	}
 }
 
 // classifyJSRefs は TS/JS の参照を import / caller / type ref / other に分類する。
 // 判定順: import → caller → type ref → other（最初にマッチした分類に入る）。
 func classifyJSRefs(refs []genericSymbolRef, symbol string) (imports, callers, typeRefs, others []genericSymbolRef) {
 	escaped := regexp.QuoteMeta(symbol)
-	importPat := regexp.MustCompile(`(?:^|\s)(?:import\s|from\s|require\s*\(|export\s+.*\sfrom\s)`)
-	callerPat := regexp.MustCompile(`(?:\b` + escaped + `\s*\(|\bnew\s+` + escaped + `\b)`)
-	typePat := regexp.MustCompile(`(?::\s*` + escaped + `\b|<` + escaped + `\b|extends\s+` + escaped + `\b|implements\s+` + escaped + `\b)`)
+	importPat := regexp.MustCompile(`(?:^|\s)(?:import\s|from\s|require\s*\(|export\s+(?:type\s+)?\{|export\s+.*\sfrom\s)`)
+	callerPat := regexp.MustCompile(`(?:\b` + escaped + `\s*(?:\?\.)?\s*\(|\bnew\s+` + escaped + `\b)`)
+	typePat := regexp.MustCompile(`(?::\s*` + escaped + `\b|\bas\s+` + escaped + `\b|\bsatisfies\s+` + escaped + `\b|extends\s+` + escaped + `\b|implements\s+` + escaped + `\b|<\s*` + escaped + `\b|\b` + escaped + `\s*\[\])`)
+	genericTypeArgPat := regexp.MustCompile(`<[^>\n]*,\s*` + escaped + `\b[^>\n]*>`)
 
 	for _, ref := range refs {
 		s := ref.Snippet
@@ -67,7 +88,7 @@ func classifyJSRefs(refs []genericSymbolRef, symbol string) (imports, callers, t
 			imports = append(imports, ref)
 		case callerPat.MatchString(s):
 			callers = append(callers, ref)
-		case typePat.MatchString(s):
+		case typePat.MatchString(s) || genericTypeArgPat.MatchString(s):
 			typeRefs = append(typeRefs, ref)
 		default:
 			others = append(others, ref)

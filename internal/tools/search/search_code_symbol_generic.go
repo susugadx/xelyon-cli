@@ -195,6 +195,9 @@ func parseGenericSymbolMatchLine(line string, opts SearchOptions) (genericSymbol
 	}
 
 	file := parts[0]
+	if matchesSearchIgnoreFilter(file, opts) {
+		return genericSymbolMatch{}, false
+	}
 	if !matchesSearchFileFilter(file, opts) {
 		return genericSymbolMatch{}, false
 	}
@@ -214,10 +217,11 @@ func buildGenericRgArgs(symbol string, opts SearchOptions) ([]string, string) {
 	basis := resolveSearchPathBasisForOptions(opts)
 
 	args := []string{
-		"-n", "--no-heading", "--color", "never",
+		"-n", "--no-heading", "--with-filename", "--color", "never",
 		"-w",
 	}
-	args = append(args, filefilter.RipgrepArgs(opts.FileType, opts.FilePattern)...)
+	args = appendRipgrepFileFilterArgs(args, opts)
+	args = appendRipgrepVisibilityFilterArgs(args, opts)
 	args = append(args, symbol, basis.Target)
 	return args, basis.Workdir
 }

@@ -105,6 +105,9 @@ func executeImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) str
 	if structured, ok := tryStructuredGoImpactSearch(cache, opts); ok {
 		return structured
 	}
+	if structured, ok := tryStructuredTypeScriptImpactSearch(cache, opts); ok {
+		return structured
+	}
 
 	basePatterns := impactBasePatterns(opts)
 	if len(basePatterns) == 0 {
@@ -142,6 +145,85 @@ func appendImpactTestProbePattern(basePatterns []string, pattern string) []strin
 		}
 	}
 	return append(append([]string(nil), basePatterns...), testProbe)
+}
+
+func expandStructuredImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions, result structuredImpactExecutionResult) structuredImpactExecutionResult {
+	basePatterns := impactBasePatterns(opts)
+	if len(basePatterns) == 0 || result.Ambiguous {
+		return result
+	}
+
+	executions := []formattedPatternExecution{
+		structuredImpactFormattedExecution(strings.TrimSpace(opts.Pattern), result),
+	}
+	for _, pattern := range supplementalImpactPatterns(basePatterns, opts.Pattern) {
+		executions = append(executions, executeSupplementalImpactPattern(cache, len(executions), pattern, opts))
+	}
+
+	if shouldAppendImpactTestProbe(combinedImpactExecutionOutput(executions), basePatterns) {
+		for _, pattern := range supplementalImpactPatterns(appendImpactTestProbePattern(basePatterns, opts.Pattern), opts.Pattern) {
+			if impactPatternAlreadyExecuted(executions, pattern) {
+				continue
+			}
+			executions = append(executions, executeSupplementalImpactPattern(cache, len(executions), pattern, opts))
+		}
+	}
+
+	if len(executions) <= 1 {
+		return result
+	}
+
+	result.Rendered = renderMultiPatternOutput(executions, len(executions), opts)
+	result.AffectedFiles = collectAffectedFilesFromExecutions(executions, opts)
+	result.MultiPattern = true
+	return result
+}
+
+func structuredImpactFormattedExecution(pattern string, result structuredImpactExecutionResult) formattedPatternExecution {
+	return buildFormattedPatternExecution(0, singlePatternExecution{
+		Pattern:       pattern,
+		Output:        result.Rendered,
+		Bundle:        result.Bundle,
+		AffectedFiles: result.AffectedFiles,
+	})
+}
+
+func supplementalImpactPatterns(patterns []string, primaryPattern string) []string {
+	primaryPattern = strings.TrimSpace(primaryPattern)
+	supplemental := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" || pattern == primaryPattern {
+			continue
+		}
+		supplemental = append(supplemental, pattern)
+	}
+	return supplemental
+}
+
+func executeSupplementalImpactPattern(cache tools.ToolCacheInterface, index int, pattern string, opts SearchOptions) formattedPatternExecution {
+	return buildFormattedPatternExecution(index, executeSinglePatternDetailed(cache, pattern, opts))
+}
+
+func combinedImpactExecutionOutput(executions []formattedPatternExecution) string {
+	var b strings.Builder
+	for _, execution := range executions {
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(execution.Output)
+	}
+	return b.String()
+}
+
+func impactPatternAlreadyExecuted(executions []formattedPatternExecution, pattern string) bool {
+	pattern = strings.TrimSpace(pattern)
+	for _, execution := range executions {
+		if execution.Pattern == pattern {
+			return true
+		}
+	}
+	return false
 }
 
 func executeSearchPatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {

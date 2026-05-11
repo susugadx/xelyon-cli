@@ -35,7 +35,7 @@ DeepSeek, Kimi, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, 
 ### 🛠️ 組み込みツール
 - **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini / Kimi 系は Codex 互換の `apply_patch`、Claude / Bedrock(Claude) / DeepSeek 系は旧 `str_replace` / `write_file` / `delete_file` を使います。OpenRouter は model family を見て判定し、`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
 - **コード検索**: `search_code` は language-aware router として動作し、`mode=auto` を既定に symbol-aware / literal / regex の各レーンを内部選択（複数パターン、結果分類、不正regex検出にも対応）
-- **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収
+- **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収し、`intent=impact` は Go と TypeScript `.ts` で構造化 impact を返却
 - **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す
 - **AST基盤**: `internal/ast` の Pure Go Tree-sitter（gotreesitter）ベース共通解析基盤を、Go の symbol-aware 検索、`read_file(symbol=...)`、legacy `str_replace` の書き込み前構文検証で利用
 - **開発支援**: bash（git, テスト, フォーマット等すべて対応）
@@ -140,7 +140,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 API実測値に基づくトークン使用量とコストをリアルタイム表示。
 - **ステータスバー**: プロンプト直前に `● model │ Mode │ tokens/limit │ ~$cost` を表示
 - **起動時コンテキスト表示**: ツリー形式で初期コンテキストの内訳を表示
-- **ナビゲーション削減**: Project Map + `search_code` の symbol-aware routing により `read_file` の往復を減らし、編集に集中
+- **ナビゲーション削減**: Project Map + `search_code` の symbol-aware / structured impact routing により `read_file` の往復を減らし、編集に集中
 - **リクエスト完了時**: `✓ In: 1,234 + Out: 567 = 1,801 tok (~$0.002)` で使用量を表示
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
 - **圧縮閾値**: `compression.trigger_percent`（デフォルト80%）超過時に自動圧縮/警告

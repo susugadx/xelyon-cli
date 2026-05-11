@@ -125,6 +125,87 @@ func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousSymbol(t *testing.T) 
 	}
 }
 
+func TestGatherContext_SearchRouteUsesTypeScriptStructuredImpactAndPrefetch(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "src", "build.ts"):      "export function buildUser(id: string) { return id }\n",
+		filepath.Join(root, "src", "app.ts"):        "import { buildUser } from './build'\nbuildUser('1')\n",
+		filepath.Join(root, "src", "build.test.ts"): "import { buildUser } from './build'\nbuildUser('test')\n",
+	})
+
+	result, _, err := (&Tool{}).Run(tools.ExecutionContext{
+		Stdout:             io.Discard,
+		Stderr:             io.Discard,
+		LocatorRegistry:    locator.NewRegistry(),
+		ProjectMapRootPath: root,
+		InvocationCWD:      root,
+	}, map[string]string{
+		"query":       "buildUser",
+		"path":        root,
+		"file_filter": "ts",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "Route: Structured impact + prefetched evidence") {
+		t.Fatalf("expected TypeScript structured impact prefetch route, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Search / Discovery") || !strings.Contains(result, "Prefetched Evidence") {
+		t.Fatalf("expected merged TypeScript investigation sections, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Recommended reads:") {
+		t.Fatalf("expected TypeScript structured impact output, got:\n%s", result)
+	}
+	if !strings.Contains(result, "export function buildUser") {
+		t.Fatalf("expected prefetched TypeScript definition evidence, got:\n%s", result)
+	}
+}
+
+func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousTypeScriptSymbol(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "src", "a.ts"): "export function buildUser(id: string) { return id }\n",
+		filepath.Join(root, "src", "b.ts"): "export function buildUser(id: string) { return id }\n",
+	})
+
+	result, _, err := (&Tool{}).Run(tools.ExecutionContext{
+		Stdout:             io.Discard,
+		Stderr:             io.Discard,
+		LocatorRegistry:    locator.NewRegistry(),
+		ProjectMapRootPath: root,
+		InvocationCWD:      root,
+	}, map[string]string{
+		"query":       "buildUser",
+		"path":        root,
+		"file_filter": "ts",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, `Multiple definitions found for "buildUser":`) {
+		t.Fatalf("expected ambiguous TypeScript candidate list, got:\n%s", result)
+	}
+	if strings.Contains(result, "Prefetched Evidence") {
+		t.Fatalf("expected ambiguous TypeScript search to avoid speculative prefetch, got:\n%s", result)
+	}
+}
+
 func TestGatherContext_BarePathLikeCollisionFallsBackToSearch(t *testing.T) {
 	if !common.IsRipgrepAvailable() {
 		t.Skip("ripgrep not available")

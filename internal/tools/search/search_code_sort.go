@@ -14,7 +14,7 @@ func filterResultsByOptions(results []SearchResult, opts SearchOptions) []Search
 
 	var filtered []SearchResult
 	for _, result := range results {
-		if opts.ignoreMatcher != nil && opts.ignoreMatcher.Match(result.FilePath, false) {
+		if matchesSearchIgnoreFilter(result.FilePath, opts) {
 			continue
 		}
 		if matchesSearchFileFilter(result.FilePath, opts) {
@@ -24,12 +24,23 @@ func filterResultsByOptions(results []SearchResult, opts SearchOptions) []Search
 	return filtered
 }
 
+func matchesSearchIgnoreFilter(filePath string, opts SearchOptions) bool {
+	if opts.ignoreMatcher == nil {
+		return false
+	}
+	return opts.ignoreMatcher.Match(searchFilterDisplayPath(filePath, opts), false)
+}
+
 func matchesSearchFileFilter(filePath string, opts SearchOptions) bool {
 	return filefilter.MatchesParts(
-		filefilter.MatchPathWithWorkspace(filePath, opts.Path, resolveSearchWorkspaceRoot(opts)),
+		searchFilterDisplayPath(filePath, opts),
 		opts.FileType,
 		opts.FilePattern,
 	)
+}
+
+func searchFilterDisplayPath(filePath string, opts SearchOptions) string {
+	return filefilter.MatchPathWithWorkspace(filePath, opts.Path, resolveSearchWorkspaceRoot(opts))
 }
 
 func mergeContextLines(results []SearchResult) []SearchResult {

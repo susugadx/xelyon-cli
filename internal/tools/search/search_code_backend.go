@@ -75,13 +75,22 @@ func buildRipgrepSearchArgs(pattern string, opts SearchOptions, target string) [
 	if opts.CtxLines > 0 {
 		args = append(args, "--context", fmt.Sprintf("%d", opts.CtxLines))
 	}
-	args = append(args, filefilter.RipgrepArgs(opts.FileType, opts.FilePattern)...)
+	args = appendRipgrepFileFilterArgs(args, opts)
 	if !opts.IsRegex {
 		args = append(args, "--fixed-strings")
 	}
 	if opts.Multiline {
 		args = append(args, "--multiline")
 	}
+	args = appendRipgrepVisibilityFilterArgs(args, opts)
+	return append(args, pattern, target)
+}
+
+func appendRipgrepFileFilterArgs(args []string, opts SearchOptions) []string {
+	return append(args, filefilter.RipgrepArgs(opts.FileType, opts.FilePattern)...)
+}
+
+func appendRipgrepVisibilityFilterArgs(args []string, opts SearchOptions) []string {
 	if opts.IncludeHidden {
 		args = append(args, "--hidden")
 	}
@@ -91,7 +100,7 @@ func buildRipgrepSearchArgs(pattern string, opts SearchOptions, target string) [
 	for _, glob := range opts.ignoreGlobs {
 		args = append(args, "--glob", glob)
 	}
-	return append(args, pattern, target)
+	return args
 }
 
 func buildGrepSearchArgs(pattern string, opts SearchOptions, target string, gnuGrep bool) ([]string, []string) {

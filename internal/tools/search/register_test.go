@@ -160,7 +160,7 @@ func TestFileFilterParse(t *testing.T) {
 	}
 }
 
-func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredGoBehavior(t *testing.T) {
+func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredLanguageBehavior(t *testing.T) {
 	params := (&SearchCodeTool{}).Parameters()
 	properties := params["properties"].(map[string]interface{})
 	intentProp := properties["intent"].(map[string]interface{})
@@ -169,7 +169,7 @@ func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredGoBehavior(t
 		t.Fatalf("intent.description should be string, got %T", intentProp["description"])
 	}
 
-	for _, want := range []string{"structured Go single-symbol impact path", "conservative related multi-pattern search"} {
+	for _, want := range []string{"structured Go or TypeScript .ts single-symbol impact path", "conservative related multi-pattern search"} {
 		if !strings.Contains(description, want) {
 			t.Fatalf("expected intent description to mention %q, got %q", want, description)
 		}

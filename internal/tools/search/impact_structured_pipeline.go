@@ -23,6 +23,7 @@ type structuredImpactExecutionResult struct {
 	Bundle        *SymbolBundle
 	AffectedFiles []string
 	Ambiguous     bool
+	MultiPattern  bool
 }
 
 type structuredImpactResolver func(symbol string, opts SearchOptions) symbolResolveResult
@@ -49,6 +50,16 @@ func buildStructuredImpactCacheKey(opts SearchOptions, route searchRouteTrace, r
 	return buildSearchCacheKeyWithRoute(opts, route.cacheSignature()+"|"+routeTag)
 }
 
+func shouldAttemptSinglePatternImpactSearch(opts SearchOptions, pattern string) bool {
+	if !strings.EqualFold(strings.TrimSpace(opts.Intent), "impact") {
+		return false
+	}
+	if len(splitPatterns(opts.Pattern)) != 1 {
+		return false
+	}
+	return strings.TrimSpace(pattern) != ""
+}
+
 func tryStructuredImpactSearchResult(cache tools.ToolCacheInterface, ctx structuredImpactSearchContext, opts SearchOptions, resolver structuredImpactResolver) (structuredImpactExecutionResult, bool) {
 	if cached, ok := loadStructuredImpactCachedResult(cache, ctx, opts); ok {
 		return structuredImpactExecutionResult{
@@ -73,6 +84,12 @@ func loadStructuredImpactCachedResult(cache tools.ToolCacheInterface, ctx struct
 
 	bundle := loadSinglePatternBundle(ctx.Pattern, ctx.CacheKey)
 	bundle, cached = formatImpactBundleForRuntimeWithContext(bundle, cached, opts, cache, currentSearchImpactRuntimeRankContext(ctx.Pattern, ctx.CacheKey))
+	if bundle == nil && !isStructuredImpactAmbiguousOutput(cached) {
+		return structuredImpactCachedResult{}, false
+	}
+	if bundle != nil && !isValidStructuredImpactSingleBundle(bundle) {
+		return structuredImpactCachedResult{}, false
+	}
 	affectedFiles := loadSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey)
 	if len(affectedFiles) == 0 {
 		affectedFiles = deriveAffectedFilesFromCachedResult(bundle, cached, opts)
@@ -105,7 +122,7 @@ func resolveStructuredImpactWithContext(cache tools.ToolCacheInterface, ctx stru
 }
 
 func resolveStructuredImpactSingleResult(cache tools.ToolCacheInterface, ctx structuredImpactSearchContext, opts SearchOptions, route searchRouteTrace, resolved symbolResolveResult) (structuredImpactExecutionResult, bool) {
-	if resolved.Bundle == nil {
+	if !isValidStructuredImpactSingleBundle(resolved.Bundle) {
 		return structuredImpactExecutionResult{}, false
 	}
 
@@ -126,6 +143,15 @@ func resolveStructuredImpactSingleResult(cache tools.ToolCacheInterface, ctx str
 		Bundle:        outputBundle,
 		AffectedFiles: affectedFiles,
 	}, true
+}
+
+func isValidStructuredImpactSingleBundle(bundle *SymbolBundle) bool {
+	return bundle != nil && bundle.Impact != nil && len(bundle.Impact.RecommendedReads) > 0
+}
+
+func isStructuredImpactAmbiguousOutput(output string) bool {
+	output = strings.TrimSpace(output)
+	return strings.HasPrefix(output, "Multiple symbols matched ") || strings.HasPrefix(output, "Multiple definitions found ")
 }
 
 func resolveStructuredImpactMultipleResult(cache tools.ToolCacheInterface, ctx structuredImpactSearchContext, opts SearchOptions, resolved symbolResolveResult) structuredImpactExecutionResult {
@@ -154,6 +180,7 @@ func newStructuredImpactSearchArtifact(result structuredImpactExecutionResult) S
 			AffectedFiles:    result.AffectedFiles,
 			StructuredImpact: true,
 			Ambiguous:        result.Ambiguous,
+			MultiPattern:     result.MultiPattern,
 		},
 	}
 }

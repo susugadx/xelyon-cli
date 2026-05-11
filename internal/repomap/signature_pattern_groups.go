@@ -14,23 +14,48 @@ func signaturePatternsForGo() []signaturePattern {
 	}
 }
 
-func signaturePatternsForJavaScript() []signaturePattern {
+const jsSignatureIdentifierPattern = `([A-Za-z_][A-Za-z0-9_]*)`
+
+func jsSignaturePattern(prefix, kind string) signaturePattern {
+	return signaturePattern{
+		re:   regexp.MustCompile(`^` + prefix + jsSignatureIdentifierPattern + `\b`),
+		kind: kind,
+		lang: "js",
+	}
+}
+
+func jsDeclareSignaturePatterns(declarePrefix string) []signaturePattern {
 	return []signaturePattern{
+		jsSignaturePattern(declarePrefix+`\s+(?:abstract\s+class|class)\s+`, "class"),
+		jsSignaturePattern(declarePrefix+`\s+(?:async\s+)?function\s+`, "function"),
+		jsSignaturePattern(declarePrefix+`\s+const\s+`, "const"),
+		jsSignaturePattern(declarePrefix+`\s+interface\s+`, "interface"),
+		jsSignaturePattern(declarePrefix+`\s+type\s+`, "type"),
+		jsSignaturePattern(declarePrefix+`\s+enum\s+`, "enum"),
+	}
+}
+
+func signaturePatternsForJavaScript() []signaturePattern {
+	patterns := jsDeclareSignaturePatterns(`export\s+declare`)
+	patterns = append(patterns, []signaturePattern{
 		{re: regexp.MustCompile(`^export\s+default\s+(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
 		{re: regexp.MustCompile(`^export\s+default\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
 		{re: regexp.MustCompile(`^export\s+(?:abstract\s+class|class)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
 		{re: regexp.MustCompile(`^export\s+(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
-		{re: regexp.MustCompile(`^export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*.+)?\s*=>`), kind: "function", lang: "js"},
 		{re: regexp.MustCompile(`^export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "const", lang: "js"},
 		{re: regexp.MustCompile(`^export\s+interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "js"},
 		{re: regexp.MustCompile(`^export\s+type\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type", lang: "js"},
 		{re: regexp.MustCompile(`^export\s+enum\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "enum", lang: "js"},
+	}...)
+	patterns = append(patterns, jsDeclareSignaturePatterns(`declare`)...)
+	patterns = append(patterns, []signaturePattern{
 		{re: regexp.MustCompile(`^(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "function", lang: "js"},
 		{re: regexp.MustCompile(`^class\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "class", lang: "js"},
-		{re: regexp.MustCompile(`^(?:const|let)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*.+)?\s*=>`), kind: "function", lang: "js"},
 		{re: regexp.MustCompile(`^(?:const|let)\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "var", lang: "js"},
 		{re: regexp.MustCompile(`^interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "interface", lang: "js"},
-	}
+		{re: regexp.MustCompile(`^type\s+([A-Za-z_][A-Za-z0-9_]*)\b`), kind: "type", lang: "js"},
+	}...)
+	return patterns
 }
 
 func signaturePatternsForPython() []signaturePattern {

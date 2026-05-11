@@ -18,14 +18,29 @@ func TestPatterns_TypeScript(t *testing.T) {
 	if !matchesSymbolPattern("app.ts", "export function buildMap() {") {
 		t.Fatal("TypeScript export function pattern did not match")
 	}
+	if !matchesSymbolPattern("types.d.ts", "export declare function buildMap(): string;") {
+		t.Fatal("TypeScript export declare function pattern did not match")
+	}
+	if !matchesSymbolPattern("types.d.ts", "declare class Builder {}") {
+		t.Fatal("TypeScript declare class pattern did not match")
+	}
 	if !matchesSymbolPattern("app.ts", "const buildArrow = () => {") {
 		t.Fatal("TypeScript arrow function pattern did not match")
 	}
 	if !matchesSymbolPattern("app.ts", "const buildAsyncArrow = async () => {") {
 		t.Fatal("TypeScript async arrow function pattern did not match")
 	}
+	if !matchesSymbolPattern("app.ts", "const buildMap: BuilderFactory = (input) => input") {
+		t.Fatal("TypeScript typed const pattern did not match")
+	}
+	if !matchesSymbolPattern("app.ts", "let buildMap: <T = string>(input: T) => T = (input) => input") {
+		t.Fatal("TypeScript typed let pattern did not match")
+	}
 	if !matchesSymbolPattern("app.ts", "interface Config {") {
 		t.Fatal("TypeScript interface pattern did not match")
+	}
+	if !matchesSymbolPattern("app.ts", "type BuildOptions = { id: string }") {
+		t.Fatal("TypeScript type alias pattern did not match")
 	}
 	if matchesSymbolPattern("app.ts", "console.log(value)") {
 		t.Fatal("non-definition TypeScript line should not match")

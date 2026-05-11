@@ -185,7 +185,7 @@ func shouldIncludeStructuredGoImpactProbeFile(absPath, rootPath string, opts Sea
 	if !opts.IncludeHidden && structuredGoImpactProbePathHasHiddenSegment(file) {
 		return false
 	}
-	if opts.ignoreMatcher != nil && opts.ignoreMatcher.Match(file, false) {
+	if matchesSearchIgnoreFilter(file, opts) {
 		return false
 	}
 	return matchesSearchFileFilter(file, opts)

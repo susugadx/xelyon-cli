@@ -35,14 +35,37 @@ func TestBuild_TypeScriptProject(t *testing.T) {
 	requireRipgrep(t)
 
 	root := t.TempDir()
-	writeProjectMapTestFile(t, root, "src/app.ts", "export interface Config {}\nexport class Builder {}\nexport function buildMap() {}\n")
+	writeProjectMapTestFile(t, root, "src/app.ts", "export interface Config {}\nexport class Builder {}\nexport function buildMap() {}\nexport  const buildUser = <T>(value: T): T => value\nconst buildTyped: BuilderFactory = (input: string) => ({ input })\nlet buildGeneric: <T = string>(input: T) => T = (input) => input\ntype BuildOptions = { id: string }\nexport\tfunction buildTeam() {}\nexport default function buildOrg() {}\nexport default class UserBuilder {}\n")
+	writeProjectMapTestFile(t, root, "src/types.d.ts", "export declare function buildDeclared(): string;\ndeclare class DeclaredBuilder {}\n")
 
 	pm := buildProjectMapForTest(t, root, 4000)
 	file := findFileEntry(t, pm, "src/app.ts")
 	got := strings.Join(signatures(file), "\n")
-	for _, want := range []string{"export interface Config", "export class Builder", "export function buildMap()"} {
+	for _, want := range []string{
+		"export interface Config",
+		"export class Builder",
+		"export function buildMap()",
+		"export  const buildUser = <T>(value: T): T => value",
+		"const buildTyped: BuilderFactory = (input: string) => ({ input })",
+		"let buildGeneric: <T = string>(input: T) => T = (input) => input",
+		"type BuildOptions = { id: string }",
+		"export\tfunction buildTeam()",
+		"export default function buildOrg()",
+		"export default class UserBuilder",
+	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("TypeScript signatures missing %q from:\n%s", want, got)
+		}
+	}
+
+	declarationFile := findFileEntry(t, pm, "src/types.d.ts")
+	declarationSignatures := strings.Join(signatures(declarationFile), "\n")
+	for _, want := range []string{
+		"export declare function buildDeclared(): string;",
+		"declare class DeclaredBuilder",
+	} {
+		if !strings.Contains(declarationSignatures, want) {
+			t.Fatalf("TypeScript declaration signatures missing %q from:\n%s", want, declarationSignatures)
 		}
 	}
 }
