@@ -61,6 +61,10 @@ var reviewEvidenceGitConcreteEnvPolicy = reviewEvidenceGitEnvPolicy{
 	},
 	outputDeterminismDenylist: []string{
 		"GIT_DIFF_OPTS",
+		"GIT_LITERAL_PATHSPECS",
+		"GIT_GLOB_PATHSPECS",
+		"GIT_NOGLOB_PATHSPECS",
+		"GIT_ICASE_PATHSPECS",
 	},
 }
 

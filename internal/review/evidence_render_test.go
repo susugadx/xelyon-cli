@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) {
@@ -21,6 +20,9 @@ func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) 
 		"## git status --short\n",
 		"## change inventory\n",
 		"## changed files\n",
+		"## changed file context\n",
+		"## related tests/context files\n",
+		"## related search hits\n",
 		"## rule files\n",
 		"## diffs\n",
 		"## untracked files\n",
@@ -44,6 +46,8 @@ func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) 
 	for _, want := range []string{
 		`"status_short": true`,
 		`"untracked_list": true`,
+		`"related_candidates": true`,
+		`"related_search": true`,
 		`"untracked_snapshots": true`,
 		`"diff": true`,
 		`"path": "AGENTS.md"`,
@@ -371,6 +375,15 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	if input.ChangedFiles == nil {
 		t.Fatal("ChangedFiles = nil, want empty slice")
 	}
+	if input.ChangedFileContext == nil {
+		t.Fatal("ChangedFileContext = nil, want empty slice")
+	}
+	if input.RelatedContextFiles == nil {
+		t.Fatal("RelatedContextFiles = nil, want empty slice")
+	}
+	if input.RelatedSearchHits == nil {
+		t.Fatal("RelatedSearchHits = nil, want empty slice")
+	}
 	if input.RuleFiles == nil {
 		t.Fatal("RuleFiles = nil, want empty slice")
 	}
@@ -389,6 +402,12 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	if input.TruncationFlags.RuleFiles == nil {
 		t.Fatal("TruncationFlags.RuleFiles = nil, want empty slice")
 	}
+	if input.TruncationFlags.ChangedFileContext == nil {
+		t.Fatal("TruncationFlags.ChangedFileContext = nil, want empty slice")
+	}
+	if input.TruncationFlags.RelatedContextFiles == nil {
+		t.Fatal("TruncationFlags.RelatedContextFiles = nil, want empty slice")
+	}
 
 	data, err := RenderReviewEvidenceJSON(ReviewEvidenceBundle{})
 	if err != nil {
@@ -397,6 +416,9 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	payload := string(data)
 	for _, want := range []string{
 		`"changed_files": []`,
+		`"changed_file_context": []`,
+		`"related_context_files": []`,
+		`"related_search_hits": []`,
 		`"rule_files": []`,
 		`"diffs": []`,
 		`"untracked_files": []`,
@@ -409,100 +431,14 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	markdown := RenderReviewEvidenceMarkdown(ReviewEvidenceBundle{})
 	for _, want := range []string{
 		"## git status --short\n```text\n",
+		"## changed file context\n```json\n[]\n```",
+		"## related tests/context files\n```json\n[]\n```",
+		"## related search hits\n```json\n[]\n```",
 		"## diffs\n```json\n[]\n```",
 		"## untracked files\n```json\n[]\n```",
 	} {
 		if !strings.Contains(markdown, want) {
 			t.Fatalf("markdown = %q, want empty section fragment %q", markdown, want)
 		}
-	}
-}
-
-func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
-	t.Helper()
-
-	repo := filepath.Clean(t.TempDir())
-	cwd := filepath.Join(repo, "src", "work")
-
-	return ReviewEvidenceBundle{
-		TargetKind:           TargetCurrentChanges,
-		RepoRoot:             repo,
-		CWD:                  cwd,
-		StatusShort:          " M src/main.go\n?? notes.md\n",
-		StatusShortTruncated: true,
-		Diffs: []ReviewDiffEvidence{
-			{
-				Source:              reviewDiffEvidenceSourceUnstaged,
-				Stat:                " src/main.go | 2 +-\n",
-				StatTruncated:       true,
-				NameStatus:          "M\tsrc/main.go\n",
-				NameStatusTruncated: true,
-				Diff:                "diff --git a/src/main.go b/src/main.go\n+changed\n",
-				DiffTruncated:       true,
-			},
-			{
-				Source:     reviewDiffEvidenceSourceStaged,
-				Stat:       " README.md | 1 +\n",
-				NameStatus: "M\tREADME.md\n",
-				Diff:       "diff --git a/README.md b/README.md\n+docs\n",
-			},
-		},
-		ChangedFiles: []ReviewChangedFile{
-			{
-				Path:     filepath.Join(repo, "src", "main.go"),
-				OldPath:  filepath.Join(repo, "src", "old.go"),
-				Status:   "R100",
-				Staged:   true,
-				Unstaged: true,
-			},
-		},
-		UntrackedFiles: []ReviewUntrackedFile{
-			{
-				Path:      filepath.Join(repo, "notes.md"),
-				Snapshot:  "draft notes\n",
-				Truncated: true,
-				SizeBytes: 64,
-				ReadBytes: 32,
-			},
-		},
-		UntrackedListTruncated:      true,
-		UntrackedSnapshotsTruncated: true,
-		RuleFiles: []ReviewRuleFileEvidence{
-			{
-				Path:      filepath.Join(repo, "AGENTS.md"),
-				Content:   "rule text\n",
-				Truncated: true,
-				SizeBytes: 128,
-			},
-		},
-		Inventory: ReviewChangeInventory{
-			Production: []string{filepath.Join(repo, "src", "main.go")},
-			Docs:       []string{"README.md"},
-			RenamedFiles: []string{
-				filepath.Join(repo, "src", "main.go"),
-			},
-			Untracked: []string{filepath.Join(repo, "notes.md")},
-		},
-		Limits: ReviewEvidenceLimits{
-			MaxCommandOutputBytes:  1024,
-			MaxUntrackedFileBytes:  64,
-			MaxRuleFileBytes:       128,
-			MaxTotalUntrackedBytes: 256,
-			MaxUntrackedFiles:      3,
-			CommandTimeout:         1500 * time.Millisecond,
-		},
-	}
-}
-
-func assertReviewEvidenceSubstringsInOrder(t *testing.T, text string, wants []string) {
-	t.Helper()
-
-	offset := 0
-	for _, want := range wants {
-		index := strings.Index(text[offset:], want)
-		if index < 0 {
-			t.Fatalf("text after offset %d does not contain %q:\n%s", offset, want, text)
-		}
-		offset += index + len(want)
 	}
 }

@@ -2,6 +2,7 @@ package review
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,4 +74,53 @@ func requireReviewUntrackedFile(t *testing.T, bundle ReviewEvidenceBundle, path 
 	}
 	t.Fatalf("UntrackedFiles = %#v, want %q", bundle.UntrackedFiles, path)
 	return ReviewUntrackedFile{}
+}
+
+func requireReviewContextFile(t *testing.T, files []ReviewContextFileEvidence, path string) ReviewContextFileEvidence {
+	t.Helper()
+	for _, file := range files {
+		if filepath.ToSlash(file.Path) == filepath.ToSlash(path) {
+			return file
+		}
+	}
+	t.Fatalf("context files = %#v, want %q", files, path)
+	return ReviewContextFileEvidence{}
+}
+
+func hasReviewContextFile(files []ReviewContextFileEvidence, path string) bool {
+	for _, file := range files {
+		if filepath.ToSlash(file.Path) == filepath.ToSlash(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasReviewSearchHit(hits []ReviewRelatedSearchHit, path string) bool {
+	for _, hit := range hits {
+		if filepath.ToSlash(hit.Path) == filepath.ToSlash(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasReviewSearchHitWithReason(hits []ReviewRelatedSearchHit, path, reason string) bool {
+	for _, hit := range hits {
+		if filepath.ToSlash(hit.Path) == filepath.ToSlash(path) && hit.Reason == reason {
+			return true
+		}
+	}
+	return false
+}
+
+func requireReviewSearchHit(t *testing.T, hits []ReviewRelatedSearchHit, path string) ReviewRelatedSearchHit {
+	t.Helper()
+	for _, hit := range hits {
+		if filepath.ToSlash(hit.Path) == filepath.ToSlash(path) {
+			return hit
+		}
+	}
+	t.Fatalf("search hits = %#v, want path %q", hits, path)
+	return ReviewRelatedSearchHit{}
 }

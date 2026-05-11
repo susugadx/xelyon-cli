@@ -102,6 +102,10 @@ func TestBuildReviewEvidenceGitEnvPinsOptionalLocks(t *testing.T) {
 		"git_trace2_event=/tmp/review-trace.json",
 		"GIT_TRACE_PACKET=1",
 		"GIT_DIFF_OPTS=--unified=0",
+		"GIT_LITERAL_PATHSPECS=1",
+		"GIT_GLOB_PATHSPECS=1",
+		"GIT_NOGLOB_PATHSPECS=1",
+		"GIT_ICASE_PATHSPECS=1",
 	})
 
 	assertStringSlice(t, got, []string{

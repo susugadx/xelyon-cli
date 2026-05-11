@@ -8,12 +8,14 @@ type reviewGitEvidenceCollector struct {
 }
 
 type reviewCurrentChangesGitEvidence struct {
-	statusShort            string
-	statusShortTruncated   bool
-	diffs                  []ReviewDiffEvidence
-	changedFiles           []ReviewChangedFile
-	untrackedPaths         []string
-	untrackedListTruncated bool
+	statusShort                   string
+	statusShortTruncated          bool
+	diffs                         []ReviewDiffEvidence
+	changedFiles                  []ReviewChangedFile
+	untrackedPaths                []string
+	relatedCandidatePaths         []string
+	relatedCandidateListTruncated bool
+	untrackedListTruncated        bool
 }
 
 type reviewDiffEvidenceResult struct {
@@ -36,12 +38,13 @@ func (c reviewGitEvidenceCollector) collectCurrentChanges(ctx context.Context, r
 		return reviewCurrentChangesGitEvidence{}, err
 	}
 
-	untrackedList, untrackedListTruncated, err := c.runGit(ctx, repoRoot, cwd, reviewUntrackedListGitArgs()...)
+	untrackedPaths, untrackedListTruncated, err := c.collectPathList(ctx, repoRoot, cwd, reviewUntrackedListGitArgs(), "untracked path")
 	if err != nil {
 		return reviewCurrentChangesGitEvidence{}, err
 	}
-	untrackedPaths := parseReviewEvidenceNULPaths(untrackedList, untrackedListTruncated)
-	if err := validateReviewEvidenceRelativePaths(repoRoot, untrackedPaths, "untracked path"); err != nil {
+
+	relatedCandidatePaths, relatedCandidateListTruncated, err := c.collectPathList(ctx, repoRoot, cwd, reviewRelatedCandidateListGitArgs(), "related candidate path")
+	if err != nil {
 		return reviewCurrentChangesGitEvidence{}, err
 	}
 
@@ -51,13 +54,27 @@ func (c reviewGitEvidenceCollector) collectCurrentChanges(ctx context.Context, r
 	)
 
 	return reviewCurrentChangesGitEvidence{
-		statusShort:            statusShort,
-		statusShortTruncated:   statusShortTruncated,
-		diffs:                  []ReviewDiffEvidence{unstagedDiff.evidence, stagedDiff.evidence},
-		changedFiles:           changedFiles,
-		untrackedPaths:         untrackedPaths,
-		untrackedListTruncated: untrackedListTruncated,
+		statusShort:                   statusShort,
+		statusShortTruncated:          statusShortTruncated,
+		diffs:                         []ReviewDiffEvidence{unstagedDiff.evidence, stagedDiff.evidence},
+		changedFiles:                  changedFiles,
+		untrackedPaths:                untrackedPaths,
+		relatedCandidatePaths:         relatedCandidatePaths,
+		relatedCandidateListTruncated: relatedCandidateListTruncated,
+		untrackedListTruncated:        untrackedListTruncated,
 	}, nil
+}
+
+func (c reviewGitEvidenceCollector) collectPathList(ctx context.Context, repoRoot, cwd string, args []string, label string) ([]string, bool, error) {
+	output, truncated, err := c.runGit(ctx, repoRoot, cwd, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	paths := parseReviewEvidenceNULPaths(output, truncated)
+	if err := validateReviewEvidenceRelativePaths(repoRoot, paths, label); err != nil {
+		return nil, false, err
+	}
+	return paths, truncated, nil
 }
 
 func (c reviewGitEvidenceCollector) buildDiffEvidence(ctx context.Context, repoRoot, cwd, source string, staged bool) (reviewDiffEvidenceResult, error) {

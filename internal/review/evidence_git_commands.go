@@ -8,6 +8,10 @@ func reviewUntrackedListGitArgs() []string {
 	return []string{"ls-files", "-z", "--others", "--exclude-standard"}
 }
 
+func reviewRelatedCandidateListGitArgs() []string {
+	return []string{"ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.go"}
+}
+
 func reviewDiffBaseGitArgs(staged bool) []string {
 	args := []string{"diff"}
 	if staged {

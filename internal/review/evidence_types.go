@@ -13,9 +13,14 @@ type ReviewEvidenceBundle struct {
 	StatusShortTruncated bool
 	Diffs                []ReviewDiffEvidence
 
-	ChangedFiles           []ReviewChangedFile
-	UntrackedFiles         []ReviewUntrackedFile
-	UntrackedListTruncated bool
+	ChangedFiles                  []ReviewChangedFile
+	ChangedFileContext            []ReviewContextFileEvidence
+	RelatedContextFiles           []ReviewContextFileEvidence
+	RelatedSearchHits             []ReviewRelatedSearchHit
+	UntrackedFiles                []ReviewUntrackedFile
+	RelatedCandidateListTruncated bool
+	RelatedSearchTruncated        bool
+	UntrackedListTruncated        bool
 	// UntrackedSnapshotsTruncated は snapshot 読み取りの file count / total bytes budget 到達を表す。
 	UntrackedSnapshotsTruncated bool
 	RuleFiles                   []ReviewRuleFileEvidence
@@ -44,6 +49,26 @@ type ReviewChangedFile struct {
 	Status   string
 	Staged   bool
 	Unstaged bool
+}
+
+// ReviewContextFileEvidence は changed file と近傍 context file の安全に制限された snapshot を表す。
+type ReviewContextFileEvidence struct {
+	Path       string
+	Role       string
+	Content    string
+	Truncated  bool
+	Skipped    bool
+	SkipReason string
+	SizeBytes  int64
+	ReadBytes  int64
+}
+
+// ReviewRelatedSearchHit は changed file 由来の軽量 search term に一致した repo-local 行を表す。
+type ReviewRelatedSearchHit struct {
+	Path    string
+	Line    int
+	Snippet string
+	Reason  string
 }
 
 // ReviewUntrackedFile は untracked path の安全に制限された snapshot または symlink metadata を表す。
@@ -82,10 +107,19 @@ type ReviewChangeInventory struct {
 
 // ReviewEvidenceLimits は EvidenceBuilder の resource budget を表す。
 type ReviewEvidenceLimits struct {
-	MaxCommandOutputBytes  int64
-	MaxUntrackedFileBytes  int64
-	MaxRuleFileBytes       int64
-	MaxTotalUntrackedBytes int64
-	MaxUntrackedFiles      int
-	CommandTimeout         time.Duration
+	MaxCommandOutputBytes      int64
+	MaxUntrackedFileBytes      int64
+	MaxRuleFileBytes           int64
+	MaxTotalUntrackedBytes     int64
+	MaxUntrackedFiles          int
+	MaxContextFileBytes        int64
+	MaxTotalContextBytes       int64
+	MaxContextFiles            int
+	MaxRelatedSearchTerms      int
+	MaxRelatedSearchFiles      int
+	MaxTotalRelatedSearchBytes int64
+	MaxRelatedSearchFileBytes  int64
+	MaxRelatedSearchHits       int
+	MaxSearchSnippetBytes      int64
+	CommandTimeout             time.Duration
 }
