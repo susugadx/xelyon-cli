@@ -333,21 +333,80 @@ func buildReviewRelatedSearchTerms(changedFileContext []ReviewContextFileEvidenc
 func reviewRelatedSearchTermsFromDecl(decl ast.Decl) []string {
 	switch typed := decl.(type) {
 	case *ast.FuncDecl:
-		if typed.Recv != nil || typed.Name == nil {
-			return nil
-		}
-		return []string{typed.Name.Name}
+		return reviewRelatedSearchTermsFromFuncDecl(typed)
 	case *ast.GenDecl:
-		terms := make([]string, 0, len(typed.Specs))
-		for _, spec := range typed.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok || typeSpec.Name == nil {
-				continue
-			}
-			terms = append(terms, typeSpec.Name.Name)
-		}
-		return terms
+		return reviewRelatedSearchTermsFromGenDecl(typed)
 	default:
 		return nil
 	}
+}
+
+func reviewRelatedSearchTermsFromFuncDecl(decl *ast.FuncDecl) []string {
+	if decl == nil {
+		return nil
+	}
+	if isReviewRelatedSearchPackageInitFunc(decl) {
+		return nil
+	}
+	term, ok := reviewRelatedSearchTermFromIdent(decl.Name)
+	if !ok {
+		return nil
+	}
+	return []string{term}
+}
+
+func isReviewRelatedSearchPackageInitFunc(decl *ast.FuncDecl) bool {
+	return decl != nil && decl.Recv == nil && decl.Name != nil && decl.Name.Name == "init"
+}
+
+func reviewRelatedSearchTermsFromGenDecl(decl *ast.GenDecl) []string {
+	if decl == nil {
+		return nil
+	}
+
+	terms := make([]string, 0, len(decl.Specs))
+	for _, spec := range decl.Specs {
+		switch decl.Tok {
+		case token.TYPE:
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			if term, ok := reviewRelatedSearchTermFromIdent(typeSpec.Name); ok {
+				terms = append(terms, term)
+			}
+		case token.CONST, token.VAR:
+			valueSpec, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			terms = append(terms, reviewRelatedSearchTermsFromValueSpec(valueSpec)...)
+		}
+	}
+	return terms
+}
+
+func reviewRelatedSearchTermsFromValueSpec(spec *ast.ValueSpec) []string {
+	if spec == nil {
+		return nil
+	}
+
+	terms := make([]string, 0, len(spec.Names))
+	for _, name := range spec.Names {
+		if term, ok := reviewRelatedSearchTermFromIdent(name); ok {
+			terms = append(terms, term)
+		}
+	}
+	return terms
+}
+
+func reviewRelatedSearchTermFromIdent(ident *ast.Ident) (string, bool) {
+	if ident == nil || !isReviewRelatedSearchNamedIdentifier(ident.Name) {
+		return "", false
+	}
+	return ident.Name, true
+}
+
+func isReviewRelatedSearchNamedIdentifier(name string) bool {
+	return name != "" && name != "_"
 }
