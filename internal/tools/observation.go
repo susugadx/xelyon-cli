@@ -18,12 +18,32 @@ type ObservationPath struct {
 }
 
 // ObservationEvidence は tool が提示した根拠箇所を表す。
+// EndLine が 0 の場合、記録側は StartLine と同じ 1 行根拠として扱う。
 type ObservationEvidence struct {
 	Path         string
 	ResolvedPath string
 	StartLine    int
 	EndLine      int
 	Excerpt      string
+}
+
+// Normalize は ObservationEvidence contract に沿って line range を正規化する。
+func (e ObservationEvidence) Normalize() ObservationEvidence {
+	e.StartLine, e.EndLine = NormalizeObservationLineRange(e.StartLine, e.EndLine)
+	return e
+}
+
+// NormalizeObservationLineRange は runtime observation の line-only evidence を正規化する。
+func NormalizeObservationLineRange(startLine, endLine int) (int, int) {
+	if endLine == 0 && startLine > 0 {
+		endLine = startLine
+	}
+	return startLine, endLine
+}
+
+func (e ObservationEvidence) mergeKey() string {
+	e = e.Normalize()
+	return fmt.Sprintf("%s\x00%s\x00%d\x00%d\x00%s", e.Path, e.ResolvedPath, e.StartLine, e.EndLine, e.Excerpt)
 }
 
 // ObservationRecommendedRead は tool が追加で読むべき箇所として提示した file を表す。
@@ -69,7 +89,8 @@ func MergeRuntimeObservations(items ...*RuntimeObservation) *RuntimeObservation 
 			merged.TouchedFiles = append(merged.TouchedFiles, touched)
 		}
 		for _, evidence := range item.Evidence {
-			key := fmt.Sprintf("%s\x00%s\x00%d\x00%d\x00%s", evidence.Path, evidence.ResolvedPath, evidence.StartLine, evidence.EndLine, evidence.Excerpt)
+			evidence = evidence.Normalize()
+			key := evidence.mergeKey()
 			if seenEvidence[key] {
 				continue
 			}

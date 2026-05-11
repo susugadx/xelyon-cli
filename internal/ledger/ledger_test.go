@@ -77,3 +77,13 @@ func TestStore_SnapshotReturnsDefensiveCopy(t *testing.T) {
 		t.Fatalf("ChangedFiles after Paths mutation = %v, want [src/main.go]", got)
 	}
 }
+
+func TestRecorder_RecordEvidence_PathlessEvidenceIsNoop(t *testing.T) {
+	store := NewStoreWithRoot(t.TempDir())
+
+	store.Recorder().RecordEvidence("pathless fact", "manual")
+
+	if got := store.Snapshot().Evidence.Items(); len(got) != 0 {
+		t.Fatalf("Evidence = %#v, want empty", got)
+	}
+}

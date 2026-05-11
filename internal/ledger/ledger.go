@@ -174,13 +174,32 @@ func (g Evidence) Len() int {
 }
 
 func (g *Evidence) record(fact evidenceFact) {
-	if g == nil || fact.excerpt == "" || g.contains(fact) {
+	fact, ok := prepareEvidenceFact(fact)
+	if g == nil || !ok || g.contains(fact) {
 		return
 	}
 	if len(g.items) >= maxEvidenceItems {
 		return
 	}
 	g.items = append(g.items, fact)
+}
+
+func prepareEvidenceFact(fact evidenceFact) (evidenceFact, bool) {
+	fact = normalizeEvidenceFact(fact)
+	return fact, validEvidenceFact(fact)
+}
+
+func normalizeEvidenceFact(fact evidenceFact) evidenceFact {
+	fact.startLine, fact.endLine = tools.NormalizeObservationLineRange(fact.startLine, fact.endLine)
+	return fact
+}
+
+func validEvidenceFact(fact evidenceFact) bool {
+	return fact.path != "" &&
+		fact.startLine > 0 &&
+		fact.endLine > 0 &&
+		fact.endLine >= fact.startLine &&
+		strings.TrimSpace(fact.excerpt) != ""
 }
 
 func (g Evidence) contains(fact evidenceFact) bool {

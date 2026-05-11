@@ -36,27 +36,27 @@ type toolObservationFacts struct {
 	passedTests      []TestResult
 }
 
+type structuredObservationRecordResult struct {
+	touchedFiles     bool
+	evidence         bool
+	recommendedReads bool
+}
+
 func collectToolObservationFacts(repoRoot, invocationCWD string, observation ToolObservation) toolObservationFacts {
 	var facts toolObservationFacts
 	facts.recordChangedFiles(repoRoot, invocationCWD, observation.Change)
-	structuredRecorded := facts.recordStructuredObservation(repoRoot, invocationCWD, observation.Structured, observation)
+	structuredResult := facts.recordStructuredObservation(repoRoot, invocationCWD, observation.Structured, observation)
 
 	toolName := strings.TrimSpace(observation.ToolName)
 	switch toolName {
 	case "read_file":
-		if !structuredRecorded {
+		if !structuredResult.evidence {
 			facts.recordFormattedEvidence(repoRoot, invocationCWD, observation.Result, observation, true, false)
 		}
 	case "search_code":
-		if !structuredRecorded {
-			facts.recordFormattedEvidence(repoRoot, invocationCWD, observation.Result, observation, false, true)
-			facts.recordRecommendedReads(repoRoot, invocationCWD, observation.Result, observation)
-		}
+		facts.recordSearchLikeRenderedObservation(repoRoot, invocationCWD, observation, structuredResult, false)
 	case "gather_context":
-		if !structuredRecorded {
-			facts.recordFormattedEvidence(repoRoot, invocationCWD, observation.Result, observation, true, true)
-			facts.recordRecommendedReads(repoRoot, invocationCWD, observation.Result, observation)
-		}
+		facts.recordSearchLikeRenderedObservation(repoRoot, invocationCWD, observation, structuredResult, true)
 	case "bash":
 		facts.recordBashObservation(repoRoot, invocationCWD, observation)
 	}
@@ -78,36 +78,46 @@ func (f *toolObservationFacts) recordChangedFiles(repoRoot, invocationCWD string
 	}
 }
 
-func (f *toolObservationFacts) recordStructuredObservation(repoRoot, invocationCWD string, structured *tools.RuntimeObservation, observation ToolObservation) bool {
+func (f *toolObservationFacts) recordStructuredObservation(repoRoot, invocationCWD string, structured *tools.RuntimeObservation, observation ToolObservation) structuredObservationRecordResult {
+	var result structuredObservationRecordResult
 	if f == nil || structured == nil || structured.Empty() {
-		return false
+		return result
 	}
 	for _, file := range structured.TouchedFiles {
 		if normalized, ok := normalizeStructuredObservationPath(repoRoot, invocationCWD, file.Path, file.ResolvedPath); ok {
 			f.touchedFiles = appendUniqueString(f.touchedFiles, normalized, maxRecordedFiles)
+			result.touchedFiles = true
 		}
 	}
 	for _, evidence := range structured.Evidence {
+		evidence = evidence.Normalize()
 		normalized, ok := normalizeStructuredObservationPath(repoRoot, invocationCWD, evidence.Path, evidence.ResolvedPath)
 		if !ok {
 			continue
 		}
 		f.touchedFiles = appendUniqueString(f.touchedFiles, normalized, maxRecordedFiles)
-		f.evidence = append(f.evidence, newEvidenceFact(normalized, evidence.StartLine, evidence.EndLine, observation, evidence.Excerpt))
+		result.touchedFiles = true
+		if f.recordEvidence(normalized, evidence.StartLine, evidence.EndLine, observation, evidence.Excerpt) {
+			result.evidence = true
+		}
 	}
 	for _, read := range structured.RecommendedReads {
 		normalized, ok := normalizeStructuredObservationPath(repoRoot, invocationCWD, read.Path, read.ResolvedPath)
 		if !ok {
 			continue
 		}
-		f.recommendedReads = append(f.recommendedReads, recommendedReadFact{
-			path:       normalized,
-			reason:     truncateBytes(strings.TrimSpace(read.Reason), maxFactExcerptBytes),
-			source:     observation.ToolName,
-			toolCallID: observation.ToolCallID,
-		})
+		if f.recordRecommendedRead(normalized, read.Reason, observation) {
+			result.recommendedReads = true
+		}
 	}
-	return true
+	return result
+}
+
+func (f *toolObservationFacts) recordSearchLikeRenderedObservation(repoRoot, invocationCWD string, observation ToolObservation, structuredResult structuredObservationRecordResult, readHeaders bool) {
+	if !structuredResult.evidence {
+		f.recordFormattedEvidence(repoRoot, invocationCWD, observation.Result, observation, readHeaders, true)
+	}
+	f.recordRecommendedReads(repoRoot, invocationCWD, observation.Result, observation)
 }
 
 func normalizeStructuredObservationPath(repoRoot, invocationCWD, path, resolvedPath string) (string, bool) {
@@ -171,7 +181,7 @@ func (f *toolObservationFacts) recordFormattedEvidence(repoRoot, invocationCWD, 
 			if normalized, pathOK := normalizeSymbolObservationLedgerPath(repoRoot, invocationCWD, path); pathOK {
 				currentPath = normalized
 				f.touchedFiles = appendUniqueString(f.touchedFiles, normalized, maxRecordedFiles)
-				f.evidence = append(f.evidence, newEvidenceFact(normalized, startLine, endLine, observation, line))
+				f.recordEvidence(normalized, startLine, endLine, observation, line)
 			} else {
 				currentPath = ""
 			}
@@ -181,7 +191,7 @@ func (f *toolObservationFacts) recordFormattedEvidence(repoRoot, invocationCWD, 
 			if location, ok := parseRenderedPathLocationBullet(line); ok {
 				if normalized, pathOK := normalizeSymbolObservationLedgerPath(repoRoot, invocationCWD, location.path); pathOK {
 					f.touchedFiles = appendUniqueString(f.touchedFiles, normalized, maxRecordedFiles)
-					f.evidence = append(f.evidence, newEvidenceFact(normalized, location.startLine, location.endLine, observation, locationEvidenceExcerpt(location, line)))
+					f.recordEvidence(normalized, location.startLine, location.endLine, observation, locationEvidenceExcerpt(location, line))
 				}
 				continue
 			}
@@ -190,7 +200,7 @@ func (f *toolObservationFacts) recordFormattedEvidence(repoRoot, invocationCWD, 
 			if candidate, ok := parseNumberedSymbolCandidateLine(line); ok {
 				if normalized, pathOK := normalizeNumberedSymbolCandidateLedgerPath(repoRoot, invocationCWD, candidate); pathOK {
 					f.touchedFiles = appendUniqueString(f.touchedFiles, normalized, maxRecordedFiles)
-					f.evidence = append(f.evidence, newEvidenceFact(normalized, candidate.startLine, candidate.endLine, observation, line))
+					f.recordEvidence(normalized, candidate.startLine, candidate.endLine, observation, line)
 				}
 				continue
 			}
@@ -199,7 +209,7 @@ func (f *toolObservationFacts) recordFormattedEvidence(repoRoot, invocationCWD, 
 			continue
 		}
 		if lineNo, excerpt, ok := parseFormattedEvidenceLine(line); ok {
-			f.evidence = append(f.evidence, newEvidenceFact(currentPath, lineNo, lineNo, observation, excerpt))
+			f.recordEvidence(currentPath, lineNo, lineNo, observation, excerpt)
 		}
 	}
 }
@@ -301,12 +311,7 @@ func (f *toolObservationFacts) recordRecommendedReads(repoRoot, invocationCWD, o
 		if !pathOK {
 			continue
 		}
-		f.recommendedReads = append(f.recommendedReads, recommendedReadFact{
-			path:       normalized,
-			reason:     truncateBytes(strings.TrimSpace(reason), maxFactExcerptBytes),
-			source:     observation.ToolName,
-			toolCallID: observation.ToolCallID,
-		})
+		f.recordRecommendedRead(normalized, reason, observation)
 	}
 }
 
@@ -346,9 +351,6 @@ func (f *toolObservationFacts) recordBashObservation(repoRoot, invocationCWD str
 }
 
 func newEvidenceFact(path string, startLine, endLine int, observation ToolObservation, excerpt string) evidenceFact {
-	if endLine == 0 {
-		endLine = startLine
-	}
 	return evidenceFact{
 		path:       path,
 		startLine:  startLine,
@@ -357,6 +359,31 @@ func newEvidenceFact(path string, startLine, endLine int, observation ToolObserv
 		toolCallID: observation.ToolCallID,
 		excerpt:    truncateBytes(strings.TrimSpace(excerpt), maxFactExcerptBytes),
 	}
+}
+
+func (f *toolObservationFacts) recordEvidence(path string, startLine, endLine int, observation ToolObservation, excerpt string) bool {
+	if f == nil {
+		return false
+	}
+	fact, ok := prepareEvidenceFact(newEvidenceFact(path, startLine, endLine, observation, excerpt))
+	if !ok {
+		return false
+	}
+	f.evidence = append(f.evidence, fact)
+	return true
+}
+
+func (f *toolObservationFacts) recordRecommendedRead(path, reason string, observation ToolObservation) bool {
+	if f == nil || path == "" {
+		return false
+	}
+	f.recommendedReads = append(f.recommendedReads, recommendedReadFact{
+		path:       path,
+		reason:     truncateBytes(strings.TrimSpace(reason), maxFactExcerptBytes),
+		source:     observation.ToolName,
+		toolCallID: observation.ToolCallID,
+	})
+	return true
 }
 
 func truncateBytes(s string, limit int) string {

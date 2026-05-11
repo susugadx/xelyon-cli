@@ -11,6 +11,49 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
+type ledgerMutationTrackerFixture struct {
+	root       string
+	taskLedger *ledger.Store
+	agent      *Agent
+	tracker    *MutationTracker
+	state      turnMutationState
+}
+
+func newLedgerMutationTrackerFixture(t *testing.T) *ledgerMutationTrackerFixture {
+	t.Helper()
+
+	root := t.TempDir()
+	taskLedger := ledger.NewStoreWithRoot(root)
+	agent := &Agent{
+		Runtime: &AgentRuntime{TaskLedger: taskLedger},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("test-model"),
+		},
+		agentWorkspaceState: agentWorkspaceState{
+			changeStack: []tools.FileChange{},
+		},
+	}
+
+	return &ledgerMutationTrackerFixture{
+		root:       root,
+		taskLedger: taskLedger,
+		agent:      agent,
+		tracker:    agent.mutationTracker(),
+		state:      newTurnMutationState(),
+	}
+}
+
+func assertAgentHistoryUnchanged(t *testing.T, agent *Agent) {
+	t.Helper()
+
+	if len(agent.History) != 0 {
+		t.Fatalf("History len = %d, want 0", len(agent.History))
+	}
+	if got := len(agent.session.Messages); got != 0 {
+		t.Fatalf("session messages len = %d, want 0", got)
+	}
+}
+
 func TestAddPendingLSPFile(t *testing.T) {
 	a := &Agent{}
 
@@ -135,46 +178,29 @@ func TestMutationTracker_RecordToolResult_UpdatesTurnMutationState(t *testing.T)
 }
 
 func TestMutationTracker_RecordToolResult_RecordsTaskLedgerWithoutChangingHistory(t *testing.T) {
-	root := t.TempDir()
-	taskLedger := ledger.NewStoreWithRoot(root)
-	a := &Agent{
-		Runtime: &AgentRuntime{TaskLedger: taskLedger},
-		agentConversationState: agentConversationState{
-			session: history.NewSession("test-model"),
-		},
-		agentWorkspaceState: agentWorkspaceState{
-			changeStack: []tools.FileChange{},
-		},
-	}
-	tracker := a.mutationTracker()
-	state := newTurnMutationState()
+	fixture := newLedgerMutationTrackerFixture(t)
 
 	change := &tools.FileChange{
-		FilePath: filepath.Join(root, "src/main.go"),
+		FilePath: filepath.Join(fixture.root, "src/main.go"),
 		Tool:     "apply_patch",
 		Details: []tools.FileChangeDetail{
-			{FilePath: filepath.Join(root, "src/main.go"), Action: "modified"},
-			{FilePath: filepath.Join(root, "src/util.go"), Action: "created"},
-			{FilePath: filepath.Join(root, "src/main.go"), Action: "modified"},
+			{FilePath: filepath.Join(fixture.root, "src/main.go"), Action: "modified"},
+			{FilePath: filepath.Join(fixture.root, "src/util.go"), Action: "created"},
+			{FilePath: filepath.Join(fixture.root, "src/main.go"), Action: "modified"},
 		},
 	}
 
-	tracker.RecordToolResult(&tools.ToolCall{Tool: "apply_patch"}, "ok", change, &state)
+	fixture.tracker.RecordToolResult(&tools.ToolCall{Tool: "apply_patch"}, "ok", change, &fixture.state)
 
-	if len(a.changeStack) != 1 {
-		t.Fatalf("changeStack len = %d, want 1", len(a.changeStack))
+	if len(fixture.agent.changeStack) != 1 {
+		t.Fatalf("changeStack len = %d, want 1", len(fixture.agent.changeStack))
 	}
-	if !state.hasMutations() {
+	if !fixture.state.hasMutations() {
 		t.Fatal("expected turn-local mutation state to keep recording file changes")
 	}
-	if len(a.History) != 0 {
-		t.Fatalf("History len = %d, want 0", len(a.History))
-	}
-	if got := len(a.session.Messages); got != 0 {
-		t.Fatalf("session messages len = %d, want 0", got)
-	}
+	assertAgentHistoryUnchanged(t, fixture.agent)
 
-	paths := taskLedger.Snapshot().ChangedFiles.Paths()
+	paths := fixture.taskLedger.Snapshot().ChangedFiles.Paths()
 	want := []string{"src/main.go", "src/util.go"}
 	if len(paths) != len(want) {
 		t.Fatalf("ledger changed paths = %v, want %v", paths, want)
@@ -187,72 +213,43 @@ func TestMutationTracker_RecordToolResult_RecordsTaskLedgerWithoutChangingHistor
 }
 
 func TestMutationTracker_RecordToolResultHelper_TracksLegacyPathWithoutChangingHistory(t *testing.T) {
-	root := t.TempDir()
-	taskLedger := ledger.NewStoreWithRoot(root)
-	a := &Agent{
-		Runtime: &AgentRuntime{TaskLedger: taskLedger},
-		agentConversationState: agentConversationState{
-			session: history.NewSession("test-model"),
-		},
-		agentWorkspaceState: agentWorkspaceState{
-			changeStack: []tools.FileChange{},
-		},
-	}
-	tracker := a.mutationTracker()
-	state := newTurnMutationState()
+	fixture := newLedgerMutationTrackerFixture(t)
 
 	change := &tools.FileChange{
-		FilePath: filepath.Join(root, "src/main.go"),
+		FilePath: filepath.Join(fixture.root, "src/main.go"),
 		Tool:     "write_file",
 	}
 
-	tracker.recordToolResult(toolResultRecord{
+	fixture.tracker.recordToolResult(toolResultRecord{
 		toolCall:                &tools.ToolCall{Tool: "write_file"},
 		result:                  "ok",
 		change:                  change,
-		turnMutations:           &state,
+		turnMutations:           &fixture.state,
 		trackProjectMapMutation: false,
 	})
 
-	if len(a.changeStack) != 1 {
-		t.Fatalf("changeStack len = %d, want 1", len(a.changeStack))
+	if len(fixture.agent.changeStack) != 1 {
+		t.Fatalf("changeStack len = %d, want 1", len(fixture.agent.changeStack))
 	}
-	if !state.hasMutations() {
+	if !fixture.state.hasMutations() {
 		t.Fatal("expected turn-local mutation state to keep recording file changes")
 	}
-	if len(a.History) != 0 {
-		t.Fatalf("History len = %d, want 0", len(a.History))
-	}
-	if got := len(a.session.Messages); got != 0 {
-		t.Fatalf("session messages len = %d, want 0", got)
-	}
+	assertAgentHistoryUnchanged(t, fixture.agent)
 
-	paths := taskLedger.Snapshot().ChangedFiles.Paths()
+	paths := fixture.taskLedger.Snapshot().ChangedFiles.Paths()
 	if !reflect.DeepEqual(paths, []string{"src/main.go"}) {
 		t.Fatalf("ledger changed paths = %v, want [src/main.go]", paths)
 	}
 }
 
 func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHistory(t *testing.T) {
-	root := t.TempDir()
-	taskLedger := ledger.NewStoreWithRoot(root)
-	a := &Agent{
-		Runtime: &AgentRuntime{TaskLedger: taskLedger},
-		agentConversationState: agentConversationState{
-			session: history.NewSession("test-model"),
-		},
-		agentWorkspaceState: agentWorkspaceState{
-			changeStack: []tools.FileChange{},
-		},
-	}
-	tracker := a.mutationTracker()
-	state := newTurnMutationState()
+	fixture := newLedgerMutationTrackerFixture(t)
 
-	tracker.RecordToolResult(&tools.ToolCall{
+	fixture.tracker.RecordToolResult(&tools.ToolCall{
 		ID:   "read-1",
 		Tool: "read_file",
-	}, "📄 File: internal/ledger/ledger.go\n7: type RuntimeTaskState struct {}", nil, &state)
-	tracker.RecordToolResult(&tools.ToolCall{
+	}, "📄 File: internal/ledger/ledger.go\n7: type RuntimeTaskState struct {}", nil, &fixture.state)
+	fixture.tracker.RecordToolResult(&tools.ToolCall{
 		ID:   "search-1",
 		Tool: "search_code",
 	}, strings.Join([]string{
@@ -263,26 +260,21 @@ func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHisto
 		"",
 		"Recommended reads:",
 		"  - internal/agent/runtime.go:26 | runtime owner",
-	}, "\n"), nil, &state)
-	tracker.RecordToolResult(&tools.ToolCall{
+	}, "\n"), nil, &fixture.state)
+	fixture.tracker.RecordToolResult(&tools.ToolCall{
 		Tool: "bash",
 		Args: map[string]string{"command": "go test ./internal/ledger"},
-	}, "ok\ninternal/ledger/ledger_test.go:10: pass", nil, &state)
+	}, "ok\ninternal/ledger/ledger_test.go:10: pass", nil, &fixture.state)
 
-	if state.hasMutations() {
+	if fixture.state.hasMutations() {
 		t.Fatal("read/search/bash observations without FileChange must not update turn mutation state")
 	}
-	if len(a.changeStack) != 0 {
-		t.Fatalf("changeStack len = %d, want 0", len(a.changeStack))
+	if len(fixture.agent.changeStack) != 0 {
+		t.Fatalf("changeStack len = %d, want 0", len(fixture.agent.changeStack))
 	}
-	if len(a.History) != 0 {
-		t.Fatalf("History len = %d, want 0", len(a.History))
-	}
-	if got := len(a.session.Messages); got != 0 {
-		t.Fatalf("session messages len = %d, want 0", got)
-	}
+	assertAgentHistoryUnchanged(t, fixture.agent)
 
-	snapshot := taskLedger.Snapshot()
+	snapshot := fixture.taskLedger.Snapshot()
 	wantTouched := []string{"internal/ledger/ledger.go", "internal/agent/agent.go", "internal/ledger/ledger_test.go"}
 	if got := snapshot.TouchedFiles.Paths(); !reflect.DeepEqual(got, wantTouched) {
 		t.Fatalf("ledger touched paths = %v, want %v", got, wantTouched)
@@ -295,6 +287,44 @@ func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHisto
 	}
 	if got := snapshot.LastPassedTests.Results(); len(got) != 1 || got[0].Command() != "go test ./internal/ledger" {
 		t.Fatalf("ledger passed tests = %#v", got)
+	}
+}
+
+func TestMutationTracker_RecordToolExecutionResult_RecordsStructuredObservationWithoutHistory(t *testing.T) {
+	fixture := newLedgerMutationTrackerFixture(t)
+
+	fixture.tracker.RecordToolExecutionResult(&tools.ToolCall{
+		ID:   "structured-search",
+		Tool: "search_code",
+	}, "rendered output is not history", nil, &tools.RuntimeObservation{
+		TouchedFiles: []tools.ObservationPath{{
+			Path: "internal/ledger/ledger.go",
+		}},
+		Evidence: []tools.ObservationEvidence{{
+			Path:      "internal/ledger/ledger.go",
+			StartLine: 22,
+			EndLine:   22,
+			Excerpt:   "type RuntimeTaskState struct {",
+		}},
+	}, &fixture.state)
+
+	if fixture.state.hasMutations() {
+		t.Fatal("structured observation without FileChange must not update turn mutation state")
+	}
+	if len(fixture.agent.changeStack) != 0 {
+		t.Fatalf("changeStack len = %d, want 0", len(fixture.agent.changeStack))
+	}
+	assertAgentHistoryUnchanged(t, fixture.agent)
+
+	snapshot := fixture.taskLedger.Snapshot()
+	if got := snapshot.TouchedFiles.Paths(); !reflect.DeepEqual(got, []string{"internal/ledger/ledger.go"}) {
+		t.Fatalf("ledger touched paths = %v, want [internal/ledger/ledger.go]", got)
+	}
+	evidence := snapshot.Evidence.Items()
+	if len(evidence) != 1 ||
+		evidence[0].Path() != "internal/ledger/ledger.go" ||
+		evidence[0].ToolCallID() != "structured-search" {
+		t.Fatalf("ledger evidence = %#v", evidence)
 	}
 }
 
