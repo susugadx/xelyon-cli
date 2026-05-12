@@ -1,7 +1,6 @@
 package search
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -50,13 +49,6 @@ func normalizeStructuredTypeScriptRefs(refs []genericSymbolRef) []genericSymbolR
 
 func structuredTypeScriptDefPathKey(path string) string {
 	return cleanStructuredTypeScriptDisplayPath(path)
-}
-
-func structuredTypeScriptLocationKey(file string, line int) string {
-	if file == "" || line <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("%s:%d", file, line)
 }
 
 func cleanStructuredTypeScriptDisplayPath(path string) string {

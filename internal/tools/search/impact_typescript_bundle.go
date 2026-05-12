@@ -6,7 +6,6 @@ import (
 )
 
 const (
-	typeScriptImpactRecommendedReadLimit          = 5
 	typeScriptImpactRecommendedReadPerGroupLimit  = 1
 	typeScriptImpactHighNonTestReferenceThreshold = 8
 	typeScriptImpactMediumReferenceThreshold      = 4
@@ -48,11 +47,11 @@ func buildTypeScriptImpactBundle(symbol string, def genericSymbolDef, opts Searc
 		},
 	}
 
-	appendTypeScriptImpactSection(bundle, def, "imports", "Imports", refs.imports, jsImportLimit, false, rootPath, symbol)
-	appendTypeScriptImpactSection(bundle, def, "callers", "Callers", refs.callers, jsCallerLimit, false, rootPath, symbol)
-	appendTypeScriptImpactSection(bundle, def, "type_refs", "Type References", refs.typeRefs, jsTypeRefLimit, false, rootPath, symbol)
-	appendTypeScriptImpactSection(bundle, def, "references", "References", refs.others, genericRefLimit, false, rootPath, symbol)
-	appendTypeScriptImpactSection(bundle, def, "tests", "Related Tests", refs.allTests(), genericTestLimit, true, rootPath, symbol)
+	appendJSFamilyImpactSection(bundle, def, "imports", "Imports", refs.imports, jsImportLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSection(bundle, def, "callers", "Callers", refs.callers, jsCallerLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSection(bundle, def, "type_refs", "Type References", refs.typeRefs, jsTypeRefLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSection(bundle, def, "references", "References", refs.others, genericRefLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSection(bundle, def, "tests", "Related Tests", refs.allTests(), genericTestLimit, true, rootPath, symbol)
 
 	return bundle
 }
@@ -64,90 +63,39 @@ func typeScriptImpactDebugSource(def genericSymbolDef) string {
 	return "typescript-impact-structured"
 }
 
-func appendTypeScriptImpactSection(bundle *SymbolBundle, def genericSymbolDef, kind, title string, refs []genericSymbolRef, limit int, isTest bool, rootPath string, symbol string) {
-	items := typeScriptImpactItemsFromRefs(def, refs, kind, limit, isTest, rootPath, symbol)
-	if len(items) == 0 {
-		return
-	}
-
-	total := len(dedupeGenericRefs(refs))
-	bundle.Sections = append(bundle.Sections, SymbolBundleSection{
-		Kind:  kind,
-		Title: title,
-		Items: items,
-		Total: total,
-		More:  total > len(items),
-	})
-}
-
 func buildTypeScriptImpactMetadata(def genericSymbolDef, refs typeScriptImpactRefs, rootPath string) *SymbolBundleImpact {
-	impact := &SymbolBundleImpact{
-		RiskLevel:        classifyTypeScriptImpactRisk(def, refs),
-		RecommendedReads: make([]SymbolBundleItem, 0, typeScriptImpactRecommendedReadLimit),
-	}
-
-	seen := make(map[string]struct{}, typeScriptImpactRecommendedReadLimit)
-	add := func(item SymbolBundleItem) {
-		if item.File == "" || item.Line <= 0 || len(impact.RecommendedReads) >= typeScriptImpactRecommendedReadLimit {
-			return
-		}
-		key := structuredTypeScriptLocationKey(item.File, item.Line)
-		if _, ok := seen[key]; ok {
-			return
-		}
-		seen[key] = struct{}{}
-		impact.RecommendedReads = append(impact.RecommendedReads, item)
-	}
-
-	add(typeScriptImpactDefinitionItem(def, rootPath))
-	for _, group := range typeScriptImpactRecommendedReadGroups(def, refs) {
-		for _, item := range typeScriptImpactItemsFromRefs(def, group.refs, group.kind, group.limit, group.isTest, rootPath, def.Name) {
-			add(item)
-		}
-	}
-
-	if len(impact.RecommendedReads) == 0 {
-		return nil
-	}
-	return impact
+	return buildJSFamilyImpactMetadata(def, rootPath, classifyTypeScriptImpactRisk(def, refs), typeScriptImpactRecommendedReadGroups(def, refs))
 }
 
-type typeScriptImpactReadGroup struct {
-	kind   string
-	refs   []genericSymbolRef
-	limit  int
-	isTest bool
-}
-
-func typeScriptImpactRecommendedReadGroups(def genericSymbolDef, refs typeScriptImpactRefs) []typeScriptImpactReadGroup {
+func typeScriptImpactRecommendedReadGroups(def genericSymbolDef, refs typeScriptImpactRefs) []jsFamilyImpactReadGroup {
 	if isTypeScriptDeclarationFilePath(def.File) {
 		return typeScriptDeclarationImpactRecommendedReadGroups(refs)
 	}
 
-	importReferenceGroups := []typeScriptImpactReadGroup{
+	importReferenceGroups := []jsFamilyImpactReadGroup{
 		{kind: "imports", refs: refs.imports, limit: typeScriptImpactRecommendedReadPerGroupLimit},
 		{kind: "references", refs: refs.others, limit: typeScriptImpactRecommendedReadPerGroupLimit},
 	}
-	callerGroup := typeScriptImpactReadGroup{kind: "callers", refs: refs.callers, limit: typeScriptImpactRecommendedReadPerGroupLimit}
-	typeRefGroup := typeScriptImpactReadGroup{kind: "type_refs", refs: refs.typeRefs, limit: typeScriptImpactRecommendedReadPerGroupLimit}
-	directTestGroup := typeScriptImpactReadGroup{kind: "tests", refs: refs.directTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true}
-	nearbyTestGroup := typeScriptImpactReadGroup{kind: "tests", refs: refs.nearbyTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true}
+	callerGroup := jsFamilyImpactReadGroup{kind: "callers", refs: refs.callers, limit: typeScriptImpactRecommendedReadPerGroupLimit}
+	typeRefGroup := jsFamilyImpactReadGroup{kind: "type_refs", refs: refs.typeRefs, limit: typeScriptImpactRecommendedReadPerGroupLimit}
+	directTestGroup := jsFamilyImpactReadGroup{kind: "tests", refs: refs.directTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true}
+	nearbyTestGroup := jsFamilyImpactReadGroup{kind: "tests", refs: refs.nearbyTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true}
 
 	if typeScriptImpactPrefersTypeRefs(def.Kind) {
-		groups := []typeScriptImpactReadGroup{typeRefGroup, directTestGroup}
+		groups := []jsFamilyImpactReadGroup{typeRefGroup, directTestGroup}
 		groups = append(groups, importReferenceGroups...)
 		groups = append(groups, nearbyTestGroup)
 		return groups
 	}
 
-	groups := []typeScriptImpactReadGroup{callerGroup, directTestGroup}
+	groups := []jsFamilyImpactReadGroup{callerGroup, directTestGroup}
 	groups = append(groups, importReferenceGroups...)
 	groups = append(groups, nearbyTestGroup)
 	return groups
 }
 
-func typeScriptDeclarationImpactRecommendedReadGroups(refs typeScriptImpactRefs) []typeScriptImpactReadGroup {
-	return []typeScriptImpactReadGroup{
+func typeScriptDeclarationImpactRecommendedReadGroups(refs typeScriptImpactRefs) []jsFamilyImpactReadGroup {
+	return []jsFamilyImpactReadGroup{
 		{kind: "type_refs", refs: refs.typeRefs, limit: typeScriptImpactRecommendedReadPerGroupLimit},
 		{kind: "imports", refs: refs.imports, limit: typeScriptImpactRecommendedReadPerGroupLimit},
 		{kind: "references", refs: refs.others, limit: typeScriptImpactRecommendedReadPerGroupLimit},
@@ -162,49 +110,6 @@ func typeScriptImpactPrefersTypeRefs(kind string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func typeScriptImpactItemsFromRefs(def genericSymbolDef, refs []genericSymbolRef, kind string, limit int, isTest bool, rootPath string, symbol string) []SymbolBundleItem {
-	selected := prioritizeGenericRefs(def, refs, limit, isTest)
-	if len(selected) == 0 {
-		return nil
-	}
-
-	items := make([]SymbolBundleItem, 0, len(selected))
-	for _, ref := range selected {
-		items = append(items, typeScriptImpactItemFromRef(kind, ref, rootPath, symbol, isTest))
-	}
-	return items
-}
-
-func typeScriptImpactDefinitionItem(def genericSymbolDef, rootPath string) SymbolBundleItem {
-	return SymbolBundleItem{
-		Kind:         "definition",
-		File:         def.File,
-		ResolvedPath: absoluteAffectedFilePathWithBase(def.File, rootPath),
-		Line:         def.Line,
-		EndLine:      def.Line,
-		Snippet:      strings.TrimSpace(def.Signature),
-		Name:         def.Name,
-	}
-}
-
-func typeScriptImpactItemFromRef(kind string, ref genericSymbolRef, rootPath string, symbol string, forceTest bool) SymbolBundleItem {
-	isTest := forceTest || ref.IsTest
-	name := strings.TrimSpace(symbol)
-	if isTest {
-		name = ""
-	}
-	return SymbolBundleItem{
-		Kind:         kind,
-		File:         ref.File,
-		ResolvedPath: absoluteAffectedFilePathWithBase(ref.File, rootPath),
-		Line:         ref.Line,
-		EndLine:      ref.Line,
-		Snippet:      strings.TrimSpace(ref.Snippet),
-		Name:         name,
-		IsTest:       isTest,
 	}
 }
 
