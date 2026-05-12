@@ -527,30 +527,21 @@ func isKnownReviewVerificationStatus(status ReviewVerificationStatus) bool {
 }
 
 func isKnownReviewGroupSeverity(severity ReviewGroupSeverity) bool {
-	switch severity {
-	case ReviewGroupSeverityCritical,
-		ReviewGroupSeverityHigh,
-		ReviewGroupSeverityMedium,
-		ReviewGroupSeverityLow,
-		ReviewGroupSeverityInfo:
-		return true
-	default:
-		return false
+	for _, known := range reviewGroupSeverities {
+		if severity == known {
+			return true
+		}
 	}
+	return false
 }
 
 func isKnownReviewEvidenceKind(kind string) bool {
-	switch kind {
-	case ReviewEvidenceKindProbeCommand,
-		ReviewEvidenceKindProbe,
-		ReviewEvidenceKindFile,
-		ReviewEvidenceKindDiff,
-		ReviewEvidenceKindGitStatus,
-		ReviewEvidenceKindRuleFile:
-		return true
-	default:
-		return false
+	for _, known := range reviewEvidenceKinds {
+		if kind == known {
+			return true
+		}
 	}
+	return false
 }
 
 func hasBlockedReason(report ReviewReport) bool {

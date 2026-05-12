@@ -11,9 +11,9 @@ func buildReviewProbePlanPrompt(req ReviewRequest, evidenceMarkdown string) stri
 	var b strings.Builder
 	b.WriteString("# Review Pass 1: Probe Plan\n\n")
 	b.WriteString("Return exactly one JSON object for schema ")
-	b.WriteString(ReviewProbePlanSchemaVersionV1)
+	b.WriteString(ReviewProbePlanSchemaVersionV2)
 	b.WriteString(". Do not include markdown or explanatory text outside the JSON.\n\n")
-	b.WriteString("Plan only bounded verification probes that materially reduce uncertainty for the provided evidence. Use plan order as execution order. If no probe is useful, return an empty probes array and a non-empty no_probe_reason.\n\n")
+	b.WriteString("First enumerate material impact surfaces from the provided evidence, then candidate risks, then only bounded probes that confirm or falsify those risks or unverified material surfaces. Use plan order as execution order. If no probe is useful, return an empty probes array and a no_probe_reason that names the checked surface and risk IDs.\n\n")
 
 	appendReviewRunnerPromptTextSection(&b, "Probe Plan JSON Contract", reviewProbePlanPromptContract())
 	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)

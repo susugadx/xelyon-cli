@@ -5,22 +5,27 @@ import (
 	"strings"
 )
 
-// ValidateReviewProbePlan は LLM probe plan schema v1 の構造契約を検証する。
+// ValidateReviewProbePlan は LLM probe plan schema v2 の構造契約を検証する。
 func ValidateReviewProbePlan(plan ReviewProbePlan) error {
-	if plan.SchemaVersion != ReviewProbePlanSchemaVersionV1 {
-		return fmt.Errorf("schema_version must be %q: got %q", ReviewProbePlanSchemaVersionV1, plan.SchemaVersion)
+	if plan.SchemaVersion != ReviewProbePlanSchemaVersionV2 {
+		return fmt.Errorf("schema_version must be %q: got %q", ReviewProbePlanSchemaVersionV2, plan.SchemaVersion)
 	}
 	if plan.TargetKind != TargetCurrentChanges {
 		return fmt.Errorf("target_kind must be %q: got %q", TargetCurrentChanges, plan.TargetKind)
+	}
+	surfaceIDs, err := validateReviewProbeImpactSurfaces(plan.ImpactSurfaces)
+	if err != nil {
+		return err
+	}
+	riskIDs, err := validateReviewProbeCandidateRisks(plan.CandidateRisks, surfaceIDs)
+	if err != nil {
+		return err
 	}
 	if len(plan.Probes) > MaxReviewProbePlanProbes {
 		return fmt.Errorf("probes must contain at most %d entries: got %d", MaxReviewProbePlanProbes, len(plan.Probes))
 	}
 	if len(plan.Probes) == 0 {
-		if strings.TrimSpace(plan.NoProbeReason) == "" {
-			return fmt.Errorf("no_probe_reason must be non-empty when probes is empty")
-		}
-		return nil
+		return validateReviewProbePlanNoProbeCompletion(plan, surfaceIDs, riskIDs)
 	}
 	if plan.NoProbeReason != "" {
 		return fmt.Errorf("no_probe_reason must be empty when probes is non-empty")
@@ -30,6 +35,129 @@ func ValidateReviewProbePlan(plan ReviewProbePlan) error {
 	for i, probe := range plan.Probes {
 		if err := validateReviewPlannedProbe(i, probe, seenIDs); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateReviewProbeImpactSurfaces(surfaces []ReviewProbeImpactSurface) (map[string]struct{}, error) {
+	if len(surfaces) == 0 {
+		return nil, fmt.Errorf("impact_surfaces must contain at least one entry")
+	}
+
+	seenIDs := make(map[string]struct{}, len(surfaces))
+	for i, surface := range surfaces {
+		field := fmt.Sprintf("impact_surfaces[%d]", i)
+		id, err := validateReviewProbePlanID(field+".id", surface.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := seenIDs[id]; exists {
+			return nil, fmt.Errorf("%s.id duplicates %q", field, id)
+		}
+		seenIDs[id] = struct{}{}
+
+		if !isKnownReviewProbeImpactSurfaceCategory(surface.Category) {
+			return nil, fmt.Errorf("%s.category must be known enum value: got %q", field, surface.Category)
+		}
+		if !isKnownReviewProbeImpactSurfaceStatus(surface.Status) {
+			return nil, fmt.Errorf("%s.status must be known enum value: got %q", field, surface.Status)
+		}
+		if err := validateReviewProbePlanPreProbeEvidence(field, surface.EvidenceSummary, surface.EvidenceRefs); err != nil {
+			return nil, err
+		}
+	}
+	return seenIDs, nil
+}
+
+func validateReviewProbeCandidateRisks(risks []ReviewProbeCandidateRisk, surfaceIDs map[string]struct{}) (map[string]struct{}, error) {
+	seenIDs := make(map[string]struct{}, len(risks))
+	for i, risk := range risks {
+		field := fmt.Sprintf("candidate_risks[%d]", i)
+		id, err := validateReviewProbePlanID(field+".id", risk.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := seenIDs[id]; exists {
+			return nil, fmt.Errorf("%s.id duplicates %q", field, id)
+		}
+		seenIDs[id] = struct{}{}
+
+		if !isKnownReviewGroupSeverity(risk.Severity) {
+			return nil, fmt.Errorf("%s.severity must be known enum value: got %q", field, risk.Severity)
+		}
+		if !isKnownReviewProbeCandidateRiskStatus(risk.Status) {
+			return nil, fmt.Errorf("%s.status must be known enum value: got %q", field, risk.Status)
+		}
+		if len(risk.SurfaceIDs) == 0 {
+			return nil, fmt.Errorf("%s.surface_ids must contain at least one impact surface ID", field)
+		}
+		for j, surfaceID := range risk.SurfaceIDs {
+			refField := fmt.Sprintf("%s.surface_ids[%d]", field, j)
+			canonicalSurfaceID, err := validateReviewProbePlanID(refField, surfaceID)
+			if err != nil {
+				return nil, err
+			}
+			if _, exists := surfaceIDs[canonicalSurfaceID]; !exists {
+				return nil, fmt.Errorf("%s references unknown impact surface ID %q", refField, canonicalSurfaceID)
+			}
+		}
+		if err := validateReviewProbePlanPreProbeEvidence(field, risk.EvidenceSummary, risk.EvidenceRefs); err != nil {
+			return nil, err
+		}
+	}
+	return seenIDs, nil
+}
+
+func validateReviewProbePlanPreProbeEvidence(field, evidenceSummary string, refs []ReviewEvidenceRef) error {
+	if strings.TrimSpace(evidenceSummary) == "" && len(refs) == 0 {
+		return fmt.Errorf("%s requires evidence_summary or evidence_refs", field)
+	}
+	return validateReviewProbePlanPreProbeEvidenceRefs(field+".evidence_refs", refs)
+}
+
+func validateReviewProbePlanPreProbeEvidenceRefs(field string, refs []ReviewEvidenceRef) error {
+	for i, ref := range refs {
+		refField := fmt.Sprintf("%s[%d]", field, i)
+		if !isReviewProbePlanPreProbeEvidenceKind(ref.Kind) {
+			if !isKnownReviewEvidenceKind(ref.Kind) {
+				return validateEvidenceRef(refField, ref, nil)
+			}
+			return fmt.Errorf("%s.kind must reference pre-probe evidence, got %q", refField, ref.Kind)
+		}
+		if ref.ProbeID != "" {
+			return fmt.Errorf("%s.probe_id is not allowed in probe plan pre-probe evidence", refField)
+		}
+		if ref.CommandIndex != nil {
+			return fmt.Errorf("%s.command_index is not allowed in probe plan pre-probe evidence", refField)
+		}
+		if err := validateEvidenceRef(refField, ref, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateReviewProbePlanNoProbeCompletion(plan ReviewProbePlan, surfaceIDs, riskIDs map[string]struct{}) error {
+	if strings.TrimSpace(plan.NoProbeReason) == "" {
+		return fmt.Errorf("no_probe_reason must be non-empty when probes is empty")
+	}
+	for i, surface := range plan.ImpactSurfaces {
+		field := fmt.Sprintf("impact_surfaces[%d]", i)
+		if surface.Status != ReviewProbeImpactSurfaceChecked {
+			return fmt.Errorf("%s.status must be %q when probes is empty: got %q", field, ReviewProbeImpactSurfaceChecked, surface.Status)
+		}
+		if _, exists := surfaceIDs[surface.ID]; exists && !strings.Contains(plan.NoProbeReason, surface.ID) {
+			return fmt.Errorf("no_probe_reason must mention checked impact surface ID %q when probes is empty", surface.ID)
+		}
+	}
+	for i, risk := range plan.CandidateRisks {
+		field := fmt.Sprintf("candidate_risks[%d]", i)
+		if risk.Status != ReviewProbeCandidateRiskCheckedByEvidence {
+			return fmt.Errorf("%s.status must be %q when probes is empty: got %q", field, ReviewProbeCandidateRiskCheckedByEvidence, risk.Status)
+		}
+		if _, exists := riskIDs[risk.ID]; exists && !strings.Contains(plan.NoProbeReason, risk.ID) {
+			return fmt.Errorf("no_probe_reason must mention checked candidate risk ID %q when probes is empty", risk.ID)
 		}
 	}
 	return nil
@@ -177,4 +305,43 @@ func validateReviewProbePlanRelativePath(field, candidate string) error {
 		pathKind:       "relative path",
 		rejectNullByte: true,
 	})
+}
+
+func isKnownReviewProbeImpactSurfaceCategory(category ReviewProbeImpactSurfaceCategory) bool {
+	for _, known := range reviewProbeImpactSurfaceCategories {
+		if category == known {
+			return true
+		}
+	}
+	return false
+}
+
+func isReviewProbePlanPreProbeEvidenceKind(kind string) bool {
+	if !isKnownReviewEvidenceKind(kind) {
+		return false
+	}
+	switch kind {
+	case ReviewEvidenceKindProbe, ReviewEvidenceKindProbeCommand:
+		return false
+	default:
+		return true
+	}
+}
+
+func isKnownReviewProbeImpactSurfaceStatus(status ReviewProbeImpactSurfaceStatus) bool {
+	for _, known := range reviewProbeImpactSurfaceStatuses {
+		if status == known {
+			return true
+		}
+	}
+	return false
+}
+
+func isKnownReviewProbeCandidateRiskStatus(status ReviewProbeCandidateRiskStatus) bool {
+	for _, known := range reviewProbeCandidateRiskStatuses {
+		if status == known {
+			return true
+		}
+	}
+	return false
 }

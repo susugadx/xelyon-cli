@@ -18,7 +18,7 @@ func TestDecodeReviewProbePlanJSONValidPlan(t *testing.T) {
 	if err := ValidateReviewProbePlan(plan); err != nil {
 		t.Fatalf("ValidateReviewProbePlan() error = %v, want nil", err)
 	}
-	if got, want := plan.SchemaVersion, ReviewProbePlanSchemaVersionV1; got != want {
+	if got, want := plan.SchemaVersion, ReviewProbePlanSchemaVersionV2; got != want {
 		t.Fatalf("SchemaVersion = %q, want %q", got, want)
 	}
 	if got, want := len(plan.Probes), 1; got != want {
@@ -34,8 +34,16 @@ func TestDecodeReviewProbePlanJSONRejectsUnknownFieldsAndTrailingToken(t *testin
 		{
 			name: "unknown top-level field",
 			json: `{
-				"schema_version": "review_probe_plan.v1",
+				"schema_version": "review_probe_plan.v2",
 				"target_kind": "current_changes",
+				"impact_surfaces": [{
+					"id": "surface-1",
+					"summary": "Changed validation path",
+					"category": "validator",
+					"evidence_summary": "diff evidence",
+					"status": "needs_probe"
+				}],
+				"candidate_risks": [],
 				"probes": [{
 					"id": "probe-1",
 					"purpose": "Run focused tests",
@@ -48,8 +56,16 @@ func TestDecodeReviewProbePlanJSONRejectsUnknownFieldsAndTrailingToken(t *testin
 		{
 			name: "unknown nested probe field",
 			json: `{
-				"schema_version": "review_probe_plan.v1",
+				"schema_version": "review_probe_plan.v2",
 				"target_kind": "current_changes",
+				"impact_surfaces": [{
+					"id": "surface-1",
+					"summary": "Changed validation path",
+					"category": "validator",
+					"evidence_summary": "diff evidence",
+					"status": "needs_probe"
+				}],
+				"candidate_risks": [],
 				"probes": [{
 					"id": "probe-1",
 					"purpose": "Run focused tests",
@@ -62,8 +78,16 @@ func TestDecodeReviewProbePlanJSONRejectsUnknownFieldsAndTrailingToken(t *testin
 		{
 			name: "unknown nested command field",
 			json: `{
-				"schema_version": "review_probe_plan.v1",
+				"schema_version": "review_probe_plan.v2",
 				"target_kind": "current_changes",
+				"impact_surfaces": [{
+					"id": "surface-1",
+					"summary": "Changed validation path",
+					"category": "validator",
+					"evidence_summary": "diff evidence",
+					"status": "needs_probe"
+				}],
+				"candidate_risks": [],
 				"probes": [{
 					"id": "probe-1",
 					"purpose": "Run focused tests",
@@ -102,7 +126,7 @@ func TestValidateReviewProbePlanBasicContract(t *testing.T) {
 			name: "invalid schema_version",
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
-				plan.SchemaVersion = "review_probe_plan.v2"
+				plan.SchemaVersion = ReviewProbePlanSchemaVersionV1
 				return plan
 			},
 			errContains: "schema_version",
@@ -219,6 +243,225 @@ func TestValidateReviewProbePlanBasicContract(t *testing.T) {
 				return plan
 			},
 			errContains: "max_output_bytes",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateReviewProbePlan(tt.plan())
+			if tt.errContains == "" {
+				if err != nil {
+					t.Fatalf("ValidateReviewProbePlan() error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("ValidateReviewProbePlan() error = nil, want error")
+			}
+			if !strings.Contains(err.Error(), tt.errContains) {
+				t.Fatalf("ValidateReviewProbePlan() error = %q, want substring %q", err.Error(), tt.errContains)
+			}
+		})
+	}
+}
+
+func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
+	tests := []struct {
+		name        string
+		plan        func() ReviewProbePlan
+		errContains string
+	}{
+		{
+			name: "missing impact_surfaces",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces = nil
+				return plan
+			},
+			errContains: "impact_surfaces",
+		},
+		{
+			name: "duplicate surface id",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces = append(plan.ImpactSurfaces, plan.ImpactSurfaces[0])
+				return plan
+			},
+			errContains: "impact_surfaces[1].id",
+		},
+		{
+			name: "duplicate risk id",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.CandidateRisks = append(plan.CandidateRisks, plan.CandidateRisks[0])
+				return plan
+			},
+			errContains: "candidate_risks[1].id",
+		},
+		{
+			name: "risk references unknown surface id",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.CandidateRisks[0].SurfaceIDs = []string{"missing-surface"}
+				return plan
+			},
+			errContains: "candidate_risks[0].surface_ids[0]",
+		},
+		{
+			name: "risk requires at least one surface id",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.CandidateRisks[0].SurfaceIDs = nil
+				return plan
+			},
+			errContains: "candidate_risks[0].surface_ids",
+		},
+		{
+			name: "unknown surface category",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces[0].Category = ReviewProbeImpactSurfaceCategory("unknown")
+				return plan
+			},
+			errContains: "impact_surfaces[0].category",
+		},
+		{
+			name: "unknown surface status",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces[0].Status = ReviewProbeImpactSurfaceStatus("unknown")
+				return plan
+			},
+			errContains: "impact_surfaces[0].status",
+		},
+		{
+			name: "unknown risk severity",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.CandidateRisks[0].Severity = ReviewGroupSeverity("unknown")
+				return plan
+			},
+			errContains: "candidate_risks[0].severity",
+		},
+		{
+			name: "unknown risk status",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.CandidateRisks[0].Status = ReviewProbeCandidateRiskStatus("unknown")
+				return plan
+			},
+			errContains: "candidate_risks[0].status",
+		},
+		{
+			name: "surface requires evidence summary or refs",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces[0].EvidenceSummary = ""
+				plan.ImpactSurfaces[0].EvidenceRefs = nil
+				return plan
+			},
+			errContains: "impact_surfaces[0] requires evidence_summary or evidence_refs",
+		},
+		{
+			name: "risk requires evidence summary or refs",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.CandidateRisks[0].EvidenceSummary = ""
+				plan.CandidateRisks[0].EvidenceRefs = nil
+				return plan
+			},
+			errContains: "candidate_risks[0] requires evidence_summary or evidence_refs",
+		},
+		{
+			name: "scope evidence rejects probe kind",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces[0].EvidenceSummary = ""
+				plan.ImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{{Kind: ReviewEvidenceKindProbe}}
+				return plan
+			},
+			errContains: "impact_surfaces[0].evidence_refs[0].kind",
+		},
+		{
+			name: "scope evidence rejects probe_id",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces[0].EvidenceSummary = ""
+				plan.ImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{{Kind: ReviewEvidenceKindGitStatus, ProbeID: "probe-1"}}
+				return plan
+			},
+			errContains: "impact_surfaces[0].evidence_refs[0].probe_id",
+		},
+		{
+			name: "scope evidence rejects command_index",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces[0].EvidenceSummary = ""
+				plan.ImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{{Kind: ReviewEvidenceKindGitStatus, CommandIndex: ReviewCommandIndex(0)}}
+				return plan
+			},
+			errContains: "impact_surfaces[0].evidence_refs[0].command_index",
+		},
+		{
+			name: "scope evidence accepts file ref",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.ImpactSurfaces[0].EvidenceSummary = ""
+				plan.ImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{{
+					Kind: ReviewEvidenceKindFile,
+					Path: "internal/review/probe_plan.go",
+					Line: 12,
+				}}
+				return plan
+			},
+		},
+		{
+			name: "candidate risks may be empty",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.CandidateRisks = nil
+				return plan
+			},
+		},
+		{
+			name: "no-probe rejects needs_probe surface",
+			plan: func() ReviewProbePlan {
+				plan := newNoProbeReviewProbePlanForTest()
+				plan.ImpactSurfaces[0].Status = ReviewProbeImpactSurfaceNeedsProbe
+				return plan
+			},
+			errContains: "impact_surfaces[0].status",
+		},
+		{
+			name: "no-probe rejects unverified risk",
+			plan: func() ReviewProbePlan {
+				plan := newNoProbeReviewProbePlanForTest()
+				plan.CandidateRisks[0].Status = ReviewProbeCandidateRiskUnverified
+				return plan
+			},
+			errContains: "candidate_risks[0].status",
+		},
+		{
+			name: "no-probe rejects reason missing surface id",
+			plan: func() ReviewProbePlan {
+				plan := newNoProbeReviewProbePlanForTest()
+				plan.NoProbeReason = "risk-1 is checked by existing evidence."
+				return plan
+			},
+			errContains: "no_probe_reason",
+		},
+		{
+			name: "no-probe rejects reason missing risk id",
+			plan: func() ReviewProbePlan {
+				plan := newNoProbeReviewProbePlanForTest()
+				plan.NoProbeReason = "surface-1 is checked by existing evidence."
+				return plan
+			},
+			errContains: "no_probe_reason",
+		},
+		{
+			name: "no-probe accepts fully checked scope",
+			plan: newNoProbeReviewProbePlanForTest,
 		},
 	}
 
@@ -578,11 +821,7 @@ func TestBuildReviewProbeRequestsFromPlanConvertsValidPlan(t *testing.T) {
 }
 
 func TestBuildReviewProbeRequestsFromPlanNoProbePlanReturnsEmptySlice(t *testing.T) {
-	plan := ReviewProbePlan{
-		SchemaVersion: ReviewProbePlanSchemaVersionV1,
-		TargetKind:    TargetCurrentChanges,
-		NoProbeReason: "No additional probe is needed.",
-	}
+	plan := newNoProbeReviewProbePlanForTest()
 
 	requests, err := BuildReviewProbeRequestsFromPlan(plan)
 	if err != nil {
@@ -652,9 +891,30 @@ func TestReviewProbePlanDecodeValidateConvertIsDeterministic(t *testing.T) {
 
 func newValidReviewProbePlanForTest() ReviewProbePlan {
 	return ReviewProbePlan{
-		SchemaVersion: ReviewProbePlanSchemaVersionV1,
+		SchemaVersion: ReviewProbePlanSchemaVersionV2,
 		TargetKind:    TargetCurrentChanges,
 		Summary:       "Probe current changes.",
+		ImpactSurfaces: []ReviewProbeImpactSurface{
+			{
+				ID:              "surface-1",
+				Summary:         "Probe plan validation changed.",
+				Category:        ReviewProbeImpactSurfaceValidator,
+				EvidenceSummary: "Diff touches probe plan validation.",
+				Status:          ReviewProbeImpactSurfaceNeedsProbe,
+				Reason:          "Focused tests should verify the contract.",
+			},
+		},
+		CandidateRisks: []ReviewProbeCandidateRisk{
+			{
+				ID:                   "risk-1",
+				Summary:              "Validation could accept an invalid probe plan.",
+				Severity:             ReviewGroupSeverityMedium,
+				SurfaceIDs:           []string{"surface-1"},
+				EvidenceSummary:      "Validation code owns the probe plan contract.",
+				VerificationStrategy: "Run focused review tests.",
+				Status:               ReviewProbeCandidateRiskNeedsProbe,
+			},
+		},
 		Probes: []ReviewPlannedProbe{
 			{
 				ID:             "probe-1",
@@ -683,6 +943,20 @@ func newValidReviewProbePlanForTest() ReviewProbePlan {
 			},
 		},
 	}
+}
+
+func newNoProbeReviewProbePlanForTest() ReviewProbePlan {
+	return markReviewProbePlanCheckedWithoutProbesForTest(newValidReviewProbePlanForTest())
+}
+
+func markReviewProbePlanCheckedWithoutProbesForTest(plan ReviewProbePlan) ReviewProbePlan {
+	plan.ImpactSurfaces[0].Status = ReviewProbeImpactSurfaceChecked
+	plan.ImpactSurfaces[0].Reason = "Existing evidence covers surface-1."
+	plan.CandidateRisks[0].Status = ReviewProbeCandidateRiskCheckedByEvidence
+	plan.CandidateRisks[0].VerificationStrategy = "No probe is needed."
+	plan.Probes = []ReviewPlannedProbe{}
+	plan.NoProbeReason = "surface-1 and risk-1 are checked by existing evidence."
+	return plan
 }
 
 func mustMarshalReviewProbePlanForTest(t *testing.T, plan ReviewProbePlan) []byte {

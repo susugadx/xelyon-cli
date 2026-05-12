@@ -12,8 +12,17 @@ func TestBuildReviewProbePlanPromptIncludesStrictSchemaContract(t *testing.T) {
 	wants := []string{
 		"## Probe Plan JSON Contract",
 		"The decoder rejects unknown fields",
-		`"schema_version": "review_probe_plan.v1"`,
+		`"schema_version": "review_probe_plan.v2"`,
 		`"target_kind": "current_changes"`,
+		`"impact_surfaces"`,
+		`"candidate_risks"`,
+		`"category": "changed_file"`,
+		`"status": "needs_probe"`,
+		`"severity": "medium"`,
+		`"checked_by_evidence"`,
+		`no_probe_reason" must name every checked surface ID and checked risk ID`,
+		`Scope evidence refs are pre-probe only`,
+		`Do not plan broad speculative test suites`,
 		`"mode": "host_readonly"`,
 		`"host_readonly"`,
 		`"scratch_only"`,
@@ -39,7 +48,7 @@ func TestBuildReviewProbePlanRepairPromptIncludesRepairContract(t *testing.T) {
 		NewCurrentChangesRequest("focus repair"),
 		"diff evidence",
 		`{"schema_version":"wrong"}`,
-		errors.New("schema_version must be review_probe_plan.v1"),
+		errors.New("schema_version must be review_probe_plan.v2"),
 	)
 
 	wants := []string{
@@ -49,13 +58,15 @@ func TestBuildReviewProbePlanRepairPromptIncludesRepairContract(t *testing.T) {
 		"Do not change schema_version from the contract value.",
 		"Do not request or rely on tools.",
 		"## Probe Plan JSON Contract",
-		`"schema_version": "review_probe_plan.v1"`,
+		`"schema_version": "review_probe_plan.v2"`,
+		`"impact_surfaces"`,
+		`"candidate_risks"`,
 		"focus repair",
 		"diff evidence",
 		"## Invalid Model Output",
 		`{"schema_version":"wrong"}`,
 		"## Decode Or Validation Error",
-		"schema_version must be review_probe_plan.v1",
+		"schema_version must be review_probe_plan.v2",
 	}
 	for _, want := range wants {
 		if !strings.Contains(prompt, want) {
@@ -68,12 +79,7 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 	prompt := buildReviewReportPrompt(
 		NewCurrentChangesRequest(""),
 		"diff evidence",
-		ReviewProbePlan{
-			SchemaVersion: ReviewProbePlanSchemaVersionV1,
-			TargetKind:    TargetCurrentChanges,
-			NoProbeReason: "not needed",
-			Probes:        []ReviewPlannedProbe{},
-		},
+		newNoProbeReviewProbePlanForTest(),
 		nil,
 		nil,
 		reviewRunnerPromptRedactor{},
@@ -108,12 +114,7 @@ func TestBuildReviewReportRepairPromptIncludesRepairContract(t *testing.T) {
 	prompt := buildReviewReportRepairPrompt(
 		NewCurrentChangesRequest("focus repair"),
 		"diff evidence",
-		ReviewProbePlan{
-			SchemaVersion: ReviewProbePlanSchemaVersionV1,
-			TargetKind:    TargetCurrentChanges,
-			NoProbeReason: "not needed",
-			Probes:        []ReviewPlannedProbe{},
-		},
+		newNoProbeReviewProbePlanForTest(),
 		[]ReviewProbeSummary{
 			{
 				ProbeID: "probe-1",

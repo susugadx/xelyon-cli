@@ -85,7 +85,7 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		t.Fatalf("second model phase = %q, want %q", got, want)
 	}
 	firstPrompt := model.requests[0].Prompt
-	for _, want := range []string{"Review Pass 1", "focus on runner orchestration", "# Review Evidence", ReviewProbePlanSchemaVersionV1} {
+	for _, want := range []string{"Review Pass 1", "focus on runner orchestration", "# Review Evidence", ReviewProbePlanSchemaVersionV2} {
 		if !strings.Contains(firstPrompt, want) {
 			t.Fatalf("Pass1 prompt missing %q:\n%s", want, firstPrompt)
 		}
@@ -320,13 +320,7 @@ func TestReviewRunnerRunRevalidatesReportAfterTrustedProbeSummaries(t *testing.T
 func TestReviewRunnerRunNoProbeReasonSkipsProbeRunner(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
-	plan := ReviewProbePlan{
-		SchemaVersion: ReviewProbePlanSchemaVersionV1,
-		TargetKind:    TargetCurrentChanges,
-		Summary:       "No external probe is useful.",
-		Probes:        []ReviewPlannedProbe{},
-		NoProbeReason: "Evidence is sufficient for a clean report.",
-	}
+	plan := newRunnerNoProbePlanForTest()
 	report := newRunnerCleanReportForTest([]ReviewProbeSummary{})
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
@@ -349,7 +343,7 @@ func TestReviewRunnerRunNoProbeReasonSkipsProbeRunner(t *testing.T) {
 	if got, want := len(model.requests), 2; got != want {
 		t.Fatalf("model requests = %d, want %d", got, want)
 	}
-	if !strings.Contains(model.requests[1].Prompt, `"no_probe_reason": "Evidence is sufficient for a clean report."`) {
+	if !strings.Contains(model.requests[1].Prompt, `"no_probe_reason": "surface-1 and risk-1 are checked by existing evidence."`) {
 		t.Fatalf("Pass2 prompt missing no_probe_reason:\n%s", model.requests[1].Prompt)
 	}
 }
@@ -394,8 +388,16 @@ func TestReviewRunnerRunRepairsInvalidProbePlanValidation(t *testing.T) {
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: `{
-				"schema_version": "review_probe_plan.v1",
+				"schema_version": "review_probe_plan.v2",
 				"target_kind": "current_changes",
+				"impact_surfaces": [{
+					"id": "surface-1",
+					"summary": "Validation path",
+					"category": "validator",
+					"evidence_summary": "diff evidence",
+					"status": "checked"
+				}],
+				"candidate_risks": [],
 				"probes": []
 			}`},
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -503,8 +505,16 @@ func TestReviewRunnerRunInvalidPass1PlanStopsBeforeProbesAndPass2(t *testing.T) 
 		{
 			name: "invalid validated plan",
 			content: `{
-				"schema_version": "review_probe_plan.v1",
+				"schema_version": "review_probe_plan.v2",
 				"target_kind": "current_changes",
+				"impact_surfaces": [{
+					"id": "surface-1",
+					"summary": "Validation path",
+					"category": "validator",
+					"evidence_summary": "diff evidence",
+					"status": "checked"
+				}],
+				"candidate_risks": [],
 				"probes": []
 			}`,
 		},
@@ -833,12 +843,7 @@ func TestReviewRunnerPromptRedactsAbsoluteRepoRoot(t *testing.T) {
 	repoRoot := t.TempDir()
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probes := &runnerFakeProbeRunner{}
-	plan := ReviewProbePlan{
-		SchemaVersion: ReviewProbePlanSchemaVersionV1,
-		TargetKind:    TargetCurrentChanges,
-		Probes:        []ReviewPlannedProbe{},
-		NoProbeReason: "No probes needed.",
-	}
+	plan := newRunnerNoProbePlanForTest()
 	report := newRunnerCleanReportForTest([]ReviewProbeSummary{})
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
@@ -1138,11 +1143,36 @@ func newRunnerProbePlanForTest(ids ...string) ReviewProbePlan {
 		})
 	}
 	return ReviewProbePlan{
-		SchemaVersion: ReviewProbePlanSchemaVersionV1,
+		SchemaVersion: ReviewProbePlanSchemaVersionV2,
 		TargetKind:    TargetCurrentChanges,
 		Summary:       "Probe current changes.",
-		Probes:        probes,
+		ImpactSurfaces: []ReviewProbeImpactSurface{
+			{
+				ID:              "surface-1",
+				Summary:         "Runner orchestration may need verification.",
+				Category:        ReviewProbeImpactSurfaceChangedFile,
+				EvidenceSummary: "Evidence references current review changes.",
+				Status:          ReviewProbeImpactSurfaceNeedsProbe,
+				Reason:          "Run the planned probes in order.",
+			},
+		},
+		CandidateRisks: []ReviewProbeCandidateRisk{
+			{
+				ID:                   "risk-1",
+				Summary:              "A runner contract could regress.",
+				Severity:             ReviewGroupSeverityMedium,
+				SurfaceIDs:           []string{"surface-1"},
+				EvidenceSummary:      "Runner tests cover probe orchestration.",
+				VerificationStrategy: "Execute the focused runner probe.",
+				Status:               ReviewProbeCandidateRiskNeedsProbe,
+			},
+		},
+		Probes: probes,
 	}
+}
+
+func newRunnerNoProbePlanForTest() ReviewProbePlan {
+	return markReviewProbePlanCheckedWithoutProbesForTest(newRunnerProbePlanForTest())
 }
 
 func newRunnerCleanReportForTest(probeSummaries []ReviewProbeSummary) ReviewReport {

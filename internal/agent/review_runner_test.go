@@ -150,12 +150,10 @@ func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 		}
 		switch call {
 		case 0:
-			return mustMarshalReviewValueForAgentTest(t, review.ReviewProbePlan{
-				SchemaVersion: review.ReviewProbePlanSchemaVersionV1,
-				TargetKind:    review.TargetCurrentChanges,
-				Probes:        []review.ReviewPlannedProbe{},
-				NoProbeReason: "No additional probe is needed.",
-			}), nil
+			return mustMarshalReviewValueForAgentTest(t, newAgentNoProbeReviewPlanForTest(
+				"Agent review runner path.",
+				"Agent runner could mutate conversation state.",
+			)), nil
 		case 1:
 			return mustMarshalReviewValueForAgentTest(t, review.ReviewReport{
 				SchemaVersion:             review.ReviewReportSchemaVersionV1,
@@ -221,12 +219,10 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 		case 0:
 			return `{not-json`, nil
 		case 1:
-			return mustMarshalReviewValueForAgentTest(t, review.ReviewProbePlan{
-				SchemaVersion: review.ReviewProbePlanSchemaVersionV1,
-				TargetKind:    review.TargetCurrentChanges,
-				Probes:        []review.ReviewPlannedProbe{},
-				NoProbeReason: "No additional probe is needed.",
-			}), nil
+			return mustMarshalReviewValueForAgentTest(t, newAgentNoProbeReviewPlanForTest(
+				"Agent repair path.",
+				"Repair path could lose context.",
+			)), nil
 		case 2:
 			return `{"schema_version":"review_report.v1"`, nil
 		case 3:
@@ -384,6 +380,36 @@ func runGitForReviewTest(t *testing.T, repo string, args ...string) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review.ReviewProbePlan {
+	return review.ReviewProbePlan{
+		SchemaVersion: review.ReviewProbePlanSchemaVersionV2,
+		TargetKind:    review.TargetCurrentChanges,
+		ImpactSurfaces: []review.ReviewProbeImpactSurface{
+			{
+				ID:              "surface-1",
+				Summary:         surfaceSummary,
+				Category:        review.ReviewProbeImpactSurfaceChangedFile,
+				EvidenceSummary: "Git evidence is sufficient.",
+				Status:          review.ReviewProbeImpactSurfaceChecked,
+				Reason:          "Existing evidence covers surface-1.",
+			},
+		},
+		CandidateRisks: []review.ReviewProbeCandidateRisk{
+			{
+				ID:                   "risk-1",
+				Summary:              riskSummary,
+				Severity:             review.ReviewGroupSeverityMedium,
+				SurfaceIDs:           []string{"surface-1"},
+				EvidenceSummary:      "Existing evidence covers the path.",
+				VerificationStrategy: "No additional probe is needed.",
+				Status:               review.ReviewProbeCandidateRiskCheckedByEvidence,
+			},
+		},
+		Probes:        []review.ReviewPlannedProbe{},
+		NoProbeReason: "surface-1 and risk-1 are checked by existing evidence.",
 	}
 }
 

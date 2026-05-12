@@ -40,6 +40,14 @@ const (
 	ReviewGroupSeverityInfo     ReviewGroupSeverity = "info"
 )
 
+var reviewGroupSeverities = []ReviewGroupSeverity{
+	ReviewGroupSeverityCritical,
+	ReviewGroupSeverityHigh,
+	ReviewGroupSeverityMedium,
+	ReviewGroupSeverityLow,
+	ReviewGroupSeverityInfo,
+}
+
 // ReviewReport は `/review` Pass2 LLM の最終出力 schema を表す。
 // decode/validate の契約は report 側が owner し、probe 実行や evidence 収集は扱わない。
 type ReviewReport struct {
@@ -103,6 +111,15 @@ const (
 	ReviewEvidenceKindGitStatus    = "git_status"
 	ReviewEvidenceKindRuleFile     = "rule_file"
 )
+
+var reviewEvidenceKinds = []string{
+	ReviewEvidenceKindProbeCommand,
+	ReviewEvidenceKindProbe,
+	ReviewEvidenceKindFile,
+	ReviewEvidenceKindDiff,
+	ReviewEvidenceKindGitStatus,
+	ReviewEvidenceKindRuleFile,
+}
 
 // ReviewCommandIndex は command index の明示値を返す。
 func ReviewCommandIndex(i int) *int {

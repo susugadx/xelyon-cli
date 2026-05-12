@@ -14,6 +14,33 @@ func reviewProbePlanPromptContract() string {
     "schema_version": %q,
     "target_kind": %q,
     "summary": "optional short string",
+    "impact_surfaces": [
+      {
+        "id": "surface-1",
+        "summary": "material surface summary",
+        "category": %q,
+        "evidence_summary": "pre-probe evidence summary",
+        "evidence_refs": [
+          {"kind": %q, "path": "internal/review/probe_plan.go", "line": 1, "summary": "optional evidence summary"}
+        ],
+        "status": %q,
+        "reason": "why this surface is checked, needs a probe, or remains unverified"
+      }
+    ],
+    "candidate_risks": [
+      {
+        "id": "risk-1",
+        "summary": "candidate risk summary",
+        "severity": %q,
+        "surface_ids": ["surface-1"],
+        "evidence_summary": "pre-probe evidence summary",
+        "evidence_refs": [
+          {"kind": %q, "path": "internal/review/probe_plan.go"}
+        ],
+        "verification_strategy": "how a bounded probe would confirm or falsify the risk",
+        "status": %q
+      }
+    ],
     "probes": [
       {
         "id": "probe-1",
@@ -31,8 +58,15 @@ func reviewProbePlanPromptContract() string {
     ],
     "no_probe_reason": "required non-empty only when probes is empty"
   }
-- "target_kind" must be %q. "probes" must contain at most %d entries.
-- If "probes" is empty, "no_probe_reason" must be non-empty. If "probes" is non-empty, omit "no_probe_reason" or set it to "".
+- "target_kind" must be %q. "impact_surfaces" must contain at least one entry. "candidate_risks" may be empty. "probes" must contain at most %d entries.
+- Scope analysis order: first enumerate material "impact_surfaces"; then derive "candidate_risks" from those surfaces; then create probes only for evidence-backed risks or unverified material surfaces.
+- Consider changed files, callers, tests, related search hits, related tests/context files, CLI, TUI, config, validator, prompt contract, JSON schema, sandbox, timeout, path validation, error handling, persistence, and compatibility as material surfaces when the evidence makes them relevant.
+- Impact surface IDs and risk IDs must be unique, non-empty canonical IDs without whitespace. Risk "surface_ids" must reference existing impact surface IDs.
+- Impact surface category must be one of %s. Impact surface status must be one of %s.
+- Candidate risk severity must be one of %s. Candidate risk status must be one of %s.
+- Each impact surface and candidate risk requires either non-empty "evidence_summary" or at least one "evidence_refs" entry.
+- Scope evidence refs are pre-probe only: "kind" must be one of %s, and "probe", "probe_command", "probe_id", and "command_index" are forbidden in the probe plan.
+- If "probes" is empty, "no_probe_reason" must be non-empty, every impact surface status must be %q, every candidate risk status must be %q, and "no_probe_reason" must name every checked surface ID and checked risk ID. If "probes" is non-empty, omit "no_probe_reason" or set it to "".
 - Probe IDs must be unique, non-empty, canonical IDs without whitespace.
 - "mode" must be one of %q, %q, %q.
 - Each probe must contain 1 to %d commands. Each command "command" is an executable name only: no whitespace, no null byte, no slash, no backslash.
@@ -42,16 +76,30 @@ func reviewProbePlanPromptContract() string {
 - "timeout_seconds" and "max_output_bytes" are optional non-negative integers. Their maximums are %d seconds and %d bytes.
 
 Mode command contract:
-- %q runs against the original repository in a read-only hardened environment. It allows commands: %s. Prefer focused read-only inspection and normal test commands only.
-- %q runs only against generated scratch files. It allows commands: %s. Python commands must name a single script path; "go" is limited to "go run" of one .go file.
-- %q runs against an isolated copy of the repository plus generated files. It allows commands: %s. Path-like args must stay inside the sandbox/repo copy.
+- %q runs against the original repository in a read-only hardened environment. It allows commands: %s. Use it for additional reads and lightweight confirmation that must not mutate the worktree.
+- %q runs only against generated scratch files. It allows commands: %s. Use it for repo-clean reproductions or small experiments that do not require the real worktree. Python commands must name a single script path; "go" is limited to "go run" of one .go file.
+- %q runs against an isolated copy of the repository plus generated files. It allows commands: %s. Use it for real tests or change-impact verification where writes/build artifacts are expected inside the sandbox. Path-like args must stay inside the sandbox/repo copy.
+- Do not plan broad speculative test suites. Each probe purpose must name the candidate risk or unverified surface it will confirm or falsify.
 `,
-		ReviewProbePlanSchemaVersionV1,
+		ReviewProbePlanSchemaVersionV2,
 		TargetCurrentChanges,
+		ReviewProbeImpactSurfaceChangedFile,
+		ReviewEvidenceKindDiff,
+		ReviewProbeImpactSurfaceNeedsProbe,
+		ReviewGroupSeverityMedium,
+		ReviewEvidenceKindDiff,
+		ReviewProbeCandidateRiskNeedsProbe,
 		MaxReviewProbePlanPurposeBytes,
 		ReviewProbeHostReadOnly,
 		TargetCurrentChanges,
 		MaxReviewProbePlanProbes,
+		quoteAndJoinSortedReviewPromptValues(reviewProbeImpactSurfaceCategoryPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewProbeImpactSurfaceStatusPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewGroupSeverityPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewProbeCandidateRiskStatusPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewProbePlanPreProbeEvidenceKindPromptValues()),
+		ReviewProbeImpactSurfaceChecked,
+		ReviewProbeCandidateRiskCheckedByEvidence,
 		ReviewProbeHostReadOnly,
 		ReviewProbeScratchOnly,
 		ReviewProbeRepoSandbox,
@@ -175,6 +223,48 @@ func sortedQuotedRepoSandboxCommandNames() string {
 		names = append(names, name)
 	}
 	return quoteAndJoinSortedReviewPromptValues(names)
+}
+
+func reviewProbeImpactSurfaceCategoryPromptValues() []string {
+	values := make([]string, 0, len(reviewProbeImpactSurfaceCategories))
+	for _, category := range reviewProbeImpactSurfaceCategories {
+		values = append(values, string(category))
+	}
+	return values
+}
+
+func reviewProbeImpactSurfaceStatusPromptValues() []string {
+	values := make([]string, 0, len(reviewProbeImpactSurfaceStatuses))
+	for _, status := range reviewProbeImpactSurfaceStatuses {
+		values = append(values, string(status))
+	}
+	return values
+}
+
+func reviewProbeCandidateRiskStatusPromptValues() []string {
+	values := make([]string, 0, len(reviewProbeCandidateRiskStatuses))
+	for _, status := range reviewProbeCandidateRiskStatuses {
+		values = append(values, string(status))
+	}
+	return values
+}
+
+func reviewGroupSeverityPromptValues() []string {
+	values := make([]string, 0, len(reviewGroupSeverities))
+	for _, severity := range reviewGroupSeverities {
+		values = append(values, string(severity))
+	}
+	return values
+}
+
+func reviewProbePlanPreProbeEvidenceKindPromptValues() []string {
+	values := make([]string, 0, len(reviewEvidenceKinds))
+	for _, kind := range reviewEvidenceKinds {
+		if isReviewProbePlanPreProbeEvidenceKind(kind) {
+			values = append(values, kind)
+		}
+	}
+	return values
 }
 
 func quoteAndJoinSortedReviewPromptValues(values []string) string {
