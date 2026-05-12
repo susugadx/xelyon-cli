@@ -48,12 +48,5 @@ func executeReadFilesCore(out common.Output, cfg *config.Config, cache tools.Too
 }
 
 func executeReadFilesRequestsCore(out common.Output, cfg *config.Config, cache tools.ToolCacheInterface, requests []readRequest, budgetOverride int, reg *locator.Registry) string {
-	prepared := prepareReadRequests(out, cfg, cache, requests)
-	if errResult := validateReadRequests(prepared); errResult != "" {
-		return errResult
-	}
-	results := readRequestsInParallel(out, cfg, cache, prepared, resolveReadFilesBudget(budgetOverride))
-	result := renderReadFilesResults(results, reg)
-	printReadStatus(out, "📄 Read: %d files\n", len(results))
-	return result
+	return renderReadExecutionSections(executeReadFilesRequestsSections(out, cfg, cache, requests, budgetOverride, reg))
 }

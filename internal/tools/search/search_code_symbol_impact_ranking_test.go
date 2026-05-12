@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 type recentActivitySearchCache struct {
@@ -207,8 +209,8 @@ func TestRankImpactBundleForRuntime_ExcludeCurrentSearchWithoutExactProviderKeep
 }
 
 func TestExecuteSinglePatternDetailed_CacheHitReRanksImpactBundle(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	root, bundle, paths := setupImpactRankingFixture(t)
 	opts := normalizedImpactSearchOptionsForTest(t, root)
@@ -219,6 +221,7 @@ func TestExecuteSinglePatternDetailed_CacheHitReRanksImpactBundle(t *testing.T) 
 
 	cacheKey := buildSearchCacheKeyWithRoute(opts, planSearchRoute("Run", opts).cacheSignature())
 	storeSinglePatternBundle("Run", cacheKey, bundle)
+	storeSinglePatternObservation("Run", cacheKey, observationForSymbolBundle(bundle, opts))
 	cache.SetSearch("Run", cacheKey, "stale cached output", collectSymbolBundleAffectedFiles(bundle, opts))
 
 	first := executeSinglePatternDetailed(cache, "Run", opts)
@@ -231,20 +234,22 @@ func TestExecuteSinglePatternDetailed_CacheHitReRanksImpactBundle(t *testing.T) 
 	if got := first.Bundle.Impact.RecommendedReads[1].File; got != "pkg/other.go" {
 		t.Fatalf("expected runtime-ranked bundle to surface pkg/other.go first after definition, got %s", got)
 	}
+	assertObservationRecommendedReadsMatchBundle(t, first.Observation, first.Bundle)
 
 	cache.recentFilePaths = []string{paths["caller"]}
 	second := executeSinglePatternDetailed(cache, "Run", opts)
 	if got := second.Bundle.Impact.RecommendedReads[1].File; got != "pkg/caller.go" {
 		t.Fatalf("expected cache hit reranking to reflect updated recent activity, got %s", got)
 	}
+	assertObservationRecommendedReadsMatchBundle(t, second.Observation, second.Bundle)
 	if cache.setCalls != 1 {
 		t.Fatalf("expected cache hit reranking to reuse the same cache entry without rewriting it, setCalls=%d", cache.setCalls)
 	}
 }
 
 func TestTryStructuredGoImpactSearch_CacheHitReRanksRecommendedReads(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	root, bundle, paths := setupImpactRankingFixture(t)
 	opts := normalizedImpactSearchOptionsForTest(t, root)
@@ -255,20 +260,23 @@ func TestTryStructuredGoImpactSearch_CacheHitReRanksRecommendedReads(t *testing.
 
 	cacheKey := buildSearchCacheKeyWithRoute(opts, planSearchRoute("Run", opts).cacheSignature()+"|"+structuredGoImpactRouteTag)
 	storeSinglePatternBundle("Run", cacheKey, bundle)
+	storeSinglePatternObservation("Run", cacheKey, observationForSymbolBundle(bundle, opts))
 	cache.SetSearch("Run", cacheKey, "stale cached output", collectSymbolBundleAffectedFiles(bundle, opts))
 
-	first, ok := tryStructuredGoImpactSearch(cache, opts)
+	firstResult, ok := tryStructuredGoImpactSearchResult(cache, opts)
 	if !ok {
 		t.Fatal("expected structured impact cache hit")
 	}
-	assertRecommendedReadOrder(t, first, bundle.Impact.RecommendedReads[0], bundle.Impact.RecommendedReads[4], bundle.Impact.RecommendedReads[1])
+	assertRecommendedReadOrder(t, firstResult.Rendered, bundle.Impact.RecommendedReads[0], bundle.Impact.RecommendedReads[4], bundle.Impact.RecommendedReads[1])
+	assertObservationRecommendedReadsMatchBundle(t, firstResult.Observation, firstResult.Bundle)
 
 	cache.recentFilePaths = []string{paths["caller"]}
-	second, ok := tryStructuredGoImpactSearch(cache, opts)
+	secondResult, ok := tryStructuredGoImpactSearchResult(cache, opts)
 	if !ok {
 		t.Fatal("expected structured impact cache hit on second lookup")
 	}
-	assertRecommendedReadOrder(t, second, bundle.Impact.RecommendedReads[0], bundle.Impact.RecommendedReads[1], bundle.Impact.RecommendedReads[4])
+	assertRecommendedReadOrder(t, secondResult.Rendered, bundle.Impact.RecommendedReads[0], bundle.Impact.RecommendedReads[1], bundle.Impact.RecommendedReads[4])
+	assertObservationRecommendedReadsMatchBundle(t, secondResult.Observation, secondResult.Bundle)
 
 	if cache.setCalls != 1 {
 		t.Fatalf("expected structured impact cache hit reranking to reuse the same cache entry, setCalls=%d", cache.setCalls)
@@ -276,8 +284,8 @@ func TestTryStructuredGoImpactSearch_CacheHitReRanksRecommendedReads(t *testing.
 }
 
 func TestExecuteSinglePatternDetailed_CacheHitRecentSearchExcludesCurrentEntry(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	root, bundle, paths := setupImpactRankingFixture(t)
 	opts := normalizedImpactSearchOptionsForTest(t, root)
@@ -427,5 +435,21 @@ func assertRecommendedReadOrder(t *testing.T, output string, items ...SymbolBund
 			t.Fatalf("expected recommended read line %q to appear after previous line, got:\n%s", fragment, output)
 		}
 		lastIdx = idx
+	}
+}
+
+func assertObservationRecommendedReadsMatchBundle(t *testing.T, observation *tools.RuntimeObservation, bundle *SymbolBundle) {
+	t.Helper()
+
+	if observation == nil {
+		t.Fatal("Observation = nil, want recommended reads")
+	}
+	want := recommendedReadFiles(bundle)
+	got := make([]string, 0, len(observation.RecommendedReads))
+	for _, read := range observation.RecommendedReads {
+		got = append(got, read.Path)
+	}
+	if !equalStrings(got, want) {
+		t.Fatalf("RecommendedReads = %v, want bundle order %v; all reads: %#v", got, want, observation.RecommendedReads)
 	}
 }

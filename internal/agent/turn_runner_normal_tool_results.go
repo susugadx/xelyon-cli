@@ -39,7 +39,7 @@ func (h *normalModeToolResultHandler) Handle(tc *tools.ToolCall, execResult tool
 		return
 	}
 
-	h.tracker.RecordToolResult(tc, result, execResult.Change, h.turnMutations)
+	h.tracker.RecordToolExecutionResult(tc, execResult, h.turnMutations)
 	a.appendToolResultToHistory(tc, result)
 	_, _ = fmt.Fprintln(a.output())
 

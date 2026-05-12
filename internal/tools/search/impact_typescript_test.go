@@ -190,8 +190,8 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactPathArtif
 }
 
 func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactCacheKeepsRecommendedReads(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	dir := setupMultiLangDir(t, map[string]string{
 		"src/build.ts": "export function buildUser(id: string) { return id }\n",

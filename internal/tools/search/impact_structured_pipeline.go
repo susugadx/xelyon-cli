@@ -16,12 +16,14 @@ type structuredImpactCachedResult struct {
 	Output        string
 	Bundle        *SymbolBundle
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 }
 
 type structuredImpactExecutionResult struct {
 	Rendered      string
 	Bundle        *SymbolBundle
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 	Ambiguous     bool
 	MultiPattern  bool
 }
@@ -66,6 +68,7 @@ func tryStructuredImpactSearchResult(cache tools.ToolCacheInterface, ctx structu
 			Rendered:      cached.Output,
 			Bundle:        cached.Bundle,
 			AffectedFiles: cached.AffectedFiles,
+			Observation:   cached.Observation,
 			Ambiguous:     cached.Bundle == nil,
 		}, true
 	}
@@ -90,7 +93,7 @@ func loadStructuredImpactCachedResult(cache tools.ToolCacheInterface, ctx struct
 	if bundle != nil && !isValidStructuredImpactSingleBundle(bundle) {
 		return structuredImpactCachedResult{}, false
 	}
-	affectedFiles := loadSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey)
+	affectedFiles := loadSearchAffectedFiles(ctx.Pattern, ctx.CacheKey)
 	if len(affectedFiles) == 0 {
 		affectedFiles = deriveAffectedFilesFromCachedResult(bundle, cached, opts)
 	}
@@ -99,7 +102,18 @@ func loadStructuredImpactCachedResult(cache tools.ToolCacheInterface, ctx struct
 		Output:        cached,
 		Bundle:        bundle,
 		AffectedFiles: affectedFiles,
+		Observation:   loadCachedStructuredImpactObservation(ctx, bundle, opts),
 	}, true
+}
+
+func loadCachedStructuredImpactObservation(ctx structuredImpactSearchContext, bundle *SymbolBundle, opts SearchOptions) *tools.RuntimeObservation {
+	if bundle != nil {
+		return observationForSymbolBundle(bundle, opts)
+	}
+	if observation := loadSinglePatternObservation(ctx.Pattern, ctx.CacheKey); observation != nil {
+		return observation
+	}
+	return nil
 }
 
 func resolveStructuredImpactWithContext(cache tools.ToolCacheInterface, ctx structuredImpactSearchContext, opts SearchOptions, resolver structuredImpactResolver) (structuredImpactExecutionResult, bool) {
@@ -131,17 +145,20 @@ func resolveStructuredImpactSingleResult(cache tools.ToolCacheInterface, ctx str
 	resolved.Bundle = attachBundleRoute(resolved.Bundle, route)
 	affectedFiles := collectSymbolBundleAffectedFiles(resolved.Bundle, opts)
 	outputBundle, output := formatImpactBundleForRuntime(resolved.Bundle, resolved.Output, opts, cache)
+	observation := observationForSymbolBundle(outputBundle, opts)
 
 	if cache != nil {
 		cache.SetSearch(ctx.Pattern, ctx.CacheKey, resolved.Output, affectedFiles)
 		storeSinglePatternBundle(ctx.Pattern, ctx.CacheKey, resolved.Bundle)
-		storeSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
+		storeSearchAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
+		storeSinglePatternObservation(ctx.Pattern, ctx.CacheKey, observation)
 	}
 
 	return structuredImpactExecutionResult{
 		Rendered:      output,
 		Bundle:        outputBundle,
 		AffectedFiles: affectedFiles,
+		Observation:   observation,
 	}, true
 }
 
@@ -162,12 +179,15 @@ func resolveStructuredImpactMultipleResult(cache tools.ToolCacheInterface, ctx s
 
 	if cache != nil {
 		cache.SetSearch(ctx.Pattern, ctx.CacheKey, resolved.Output, affectedFiles)
-		storeSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
+		storeSearchAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
+		storeSinglePatternBundle(ctx.Pattern, ctx.CacheKey, nil)
+		storeSinglePatternObservation(ctx.Pattern, ctx.CacheKey, resolved.Observation)
 	}
 
 	return structuredImpactExecutionResult{
 		Rendered:      resolved.Output,
 		AffectedFiles: affectedFiles,
+		Observation:   resolved.Observation,
 		Ambiguous:     true,
 	}
 }
@@ -178,6 +198,7 @@ func newStructuredImpactSearchArtifact(result structuredImpactExecutionResult) S
 		Metadata: SearchExecutionMetadata{
 			Bundle:           result.Bundle,
 			AffectedFiles:    result.AffectedFiles,
+			Observation:      tools.CloneRuntimeObservation(result.Observation),
 			StructuredImpact: true,
 			Ambiguous:        result.Ambiguous,
 			MultiPattern:     result.MultiPattern,

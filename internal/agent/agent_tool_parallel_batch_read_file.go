@@ -5,6 +5,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
 )
 
 func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntime.ParallelCallState) {
@@ -34,25 +35,28 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntim
 				a.emitTUIToolRunning(state.AllToolCalls[idx])
 			}
 			mergedBatchResult := a.executeReadFileBatchResult(ctx, chunkPaths)
-			mergedResult := mergedBatchResult.Result
-			perFile := toolruntime.SplitReadFileBatchResult(mergedResult, chunkPaths)
-			if perFile == nil {
+			mergedResult := mergedBatchResult.Execution.Result
+			if len(mergedBatchResult.Sections) != len(chunkPaths) {
 				continue
 			}
 
 			offset := 0
 			for j, idx := range chunkIndices {
 				callPaths := chunkPaths[offset : offset+chunkPathCounts[j]]
+				callSections := readFileBatchCallSections(mergedBatchResult.Sections, offset, chunkPathCounts[j])
 				offset += chunkPathCounts[j]
-				if section, ok := toolruntime.JoinReadFileBatchSections(perFile, callPaths); ok {
+				if len(callSections) == len(callPaths) {
+					section := filetool.RenderReadExecutionSections(callSections)
 					state.Results[idx] = toolruntime.Result{
-						Result: section,
-						Error:  tools.IsErrorResult(section),
+						Result:      section,
+						Observation: filetool.MergeReadExecutionSectionObservations(callSections),
+						Error:       tools.IsErrorResult(section),
 					}
 				} else {
 					state.Results[idx] = toolruntime.Result{
-						Result: mergedResult,
-						Error:  mergedBatchResult.Error,
+						Result:      mergedResult,
+						Observation: mergedBatchResult.Execution.Observation,
+						Error:       mergedBatchResult.Execution.Error,
 					}
 				}
 				state.Entries[idx] = toolruntime.ParallelCallEntry{Status: toolruntime.ParallelCallStatusBatched}
@@ -60,4 +64,11 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntim
 			a.recordReadFileBatchMerge(len(chunkIndices))
 		}
 	}
+}
+
+func readFileBatchCallSections(sections []filetool.ReadExecutionSection, offset, count int) []filetool.ReadExecutionSection {
+	if count <= 0 || offset < 0 || offset+count > len(sections) {
+		return nil
+	}
+	return sections[offset : offset+count]
 }

@@ -196,23 +196,28 @@ func TestAppendImpactTestProbePattern(t *testing.T) {
 	}
 }
 
-func TestLoadCachedMultiPatternSearch(t *testing.T) {
+func TestLoadCachedMultiPatternExecution(t *testing.T) {
 	opts := SearchOptions{Pattern: "Run,Build", Path: t.TempDir()}
 	contexts := newSinglePatternExecutionContexts([]string{"Run", "Build"}, opts)
 
-	if got, ok := loadCachedMultiPatternSearch(nil, contexts, opts); ok || got != "" {
-		t.Fatalf("expected nil cache miss, got hit=%v output=%q", ok, got)
+	if got, ok := loadCachedMultiPatternExecution(nil, contexts, opts); ok || got.Output != "" {
+		t.Fatalf("expected nil cache miss, got hit=%v output=%q", ok, got.Output)
 	}
 
 	cache := &testSearchCache{data: make(map[string]string)}
-	cache.SetSearch(buildMultiCacheKeyFromContexts(contexts), buildMultiSearchCacheKeyFromContexts(opts, contexts), "cached-multi", nil)
+	patternKey, cacheKey := multiPatternSearchCacheIdentity(contexts, opts)
+	cache.SetSearch(patternKey, cacheKey, "cached-multi", nil)
+	storeSearchAffectedFiles(patternKey, cacheKey, []string{"/tmp/run.go"})
 
-	got, ok := loadCachedMultiPatternSearch(cache, contexts, opts)
+	got, ok := loadCachedMultiPatternExecution(cache, contexts, opts)
 	if !ok {
 		t.Fatal("expected cached multi-pattern hit")
 	}
-	if got != "cached-multi" {
-		t.Fatalf("unexpected cached multi output: %q", got)
+	if got.Output != "cached-multi" {
+		t.Fatalf("unexpected cached multi output: %q", got.Output)
+	}
+	if !containsAffectedFile(got.AffectedFiles, "/tmp/run.go") {
+		t.Fatalf("unexpected cached affected files: %v", got.AffectedFiles)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/searchcache"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 type singlePatternExecution struct {
@@ -13,42 +14,59 @@ type singlePatternExecution struct {
 	Route         searchRouteTrace
 	Bundle        *SymbolBundle
 	AffectedFiles []string
+	Observation   *tools.RuntimeObservation
 }
 
 var singlePatternBundleCache sync.Map
-var singlePatternAffectedFilesCache sync.Map
+var searchAffectedFilesCache sync.Map
+var singlePatternObservationCache sync.Map
+var multiPatternObservationCache sync.Map
 
 func init() {
-	searchcache.RegisterSearchCacheLifecycleHooks(clearSinglePatternBundleCache, invalidateSinglePatternBundleCacheKeys, invalidateSinglePatternBundleCacheKeys)
+	searchcache.RegisterSearchCacheLifecycleHooks(clearSearchSidecarCaches, invalidateSearchSidecarCacheKeys, invalidateSearchSidecarCacheKeys)
 }
 
 func singlePatternBundleCacheKey(pattern, cacheKey string) string {
+	return searchCacheSidecarKey(pattern, cacheKey)
+}
+
+func searchCacheSidecarKey(pattern, cacheKey string) string {
 	return pattern + "::" + cacheKey
 }
 
-func clearSinglePatternBundleCache() {
+func clearSearchSidecarCaches() {
 	singlePatternBundleCache.Range(func(key, value any) bool {
 		singlePatternBundleCache.Delete(key)
 		return true
 	})
-	singlePatternAffectedFilesCache.Range(func(key, value any) bool {
-		singlePatternAffectedFilesCache.Delete(key)
+	searchAffectedFilesCache.Range(func(key, value any) bool {
+		searchAffectedFilesCache.Delete(key)
+		return true
+	})
+	singlePatternObservationCache.Range(func(key, value any) bool {
+		singlePatternObservationCache.Delete(key)
+		return true
+	})
+	multiPatternObservationCache.Range(func(key, value any) bool {
+		multiPatternObservationCache.Delete(key)
 		return true
 	})
 }
 
-func invalidateSinglePatternBundleCacheKeys(keys []string) {
+func invalidateSearchSidecarCacheKeys(keys []string) {
 	for _, key := range keys {
 		if strings.TrimSpace(key) == "" {
 			continue
 		}
 		singlePatternBundleCache.Delete(key)
-		singlePatternAffectedFilesCache.Delete(key)
+		searchAffectedFilesCache.Delete(key)
+		singlePatternObservationCache.Delete(key)
+		multiPatternObservationCache.Delete(key)
 	}
 }
 
 func loadSinglePatternBundle(pattern, cacheKey string) *SymbolBundle {
-	value, ok := singlePatternBundleCache.Load(singlePatternBundleCacheKey(pattern, cacheKey))
+	value, ok := singlePatternBundleCache.Load(searchCacheSidecarKey(pattern, cacheKey))
 	if !ok {
 		return nil
 	}
@@ -57,14 +75,24 @@ func loadSinglePatternBundle(pattern, cacheKey string) *SymbolBundle {
 }
 
 func storeSinglePatternBundle(pattern, cacheKey string, bundle *SymbolBundle) {
+	key := searchCacheSidecarKey(pattern, cacheKey)
 	if bundle == nil {
+		singlePatternBundleCache.Delete(key)
 		return
 	}
-	singlePatternBundleCache.Store(singlePatternBundleCacheKey(pattern, cacheKey), cloneSymbolBundle(bundle))
+	singlePatternBundleCache.Store(key, cloneSymbolBundle(bundle))
 }
 
 func loadSinglePatternAffectedFiles(pattern, cacheKey string) []string {
-	value, ok := singlePatternAffectedFilesCache.Load(singlePatternBundleCacheKey(pattern, cacheKey))
+	return loadSearchAffectedFiles(pattern, cacheKey)
+}
+
+func storeSinglePatternAffectedFiles(pattern, cacheKey string, affectedFiles []string) {
+	storeSearchAffectedFiles(pattern, cacheKey, affectedFiles)
+}
+
+func loadSearchAffectedFiles(pattern, cacheKey string) []string {
+	value, ok := searchAffectedFilesCache.Load(searchCacheSidecarKey(pattern, cacheKey))
 	if !ok {
 		return nil
 	}
@@ -72,11 +100,49 @@ func loadSinglePatternAffectedFiles(pattern, cacheKey string) []string {
 	return append([]string(nil), paths...)
 }
 
-func storeSinglePatternAffectedFiles(pattern, cacheKey string, affectedFiles []string) {
+func storeSearchAffectedFiles(pattern, cacheKey string, affectedFiles []string) {
+	key := searchCacheSidecarKey(pattern, cacheKey)
 	if len(affectedFiles) == 0 {
+		searchAffectedFilesCache.Delete(key)
 		return
 	}
-	singlePatternAffectedFilesCache.Store(singlePatternBundleCacheKey(pattern, cacheKey), append([]string(nil), affectedFiles...))
+	searchAffectedFilesCache.Store(key, append([]string(nil), affectedFiles...))
+}
+
+func loadSinglePatternObservation(pattern, cacheKey string) *tools.RuntimeObservation {
+	value, ok := singlePatternObservationCache.Load(searchCacheSidecarKey(pattern, cacheKey))
+	if !ok {
+		return nil
+	}
+	observation, _ := value.(*tools.RuntimeObservation)
+	return tools.CloneRuntimeObservation(observation)
+}
+
+func storeSinglePatternObservation(pattern, cacheKey string, observation *tools.RuntimeObservation) {
+	key := searchCacheSidecarKey(pattern, cacheKey)
+	if observation == nil || observation.Empty() {
+		singlePatternObservationCache.Delete(key)
+		return
+	}
+	singlePatternObservationCache.Store(key, tools.CloneRuntimeObservation(observation))
+}
+
+func loadMultiPatternObservation(patternKey, cacheKey string) *tools.RuntimeObservation {
+	value, ok := multiPatternObservationCache.Load(searchCacheSidecarKey(patternKey, cacheKey))
+	if !ok {
+		return nil
+	}
+	observation, _ := value.(*tools.RuntimeObservation)
+	return tools.CloneRuntimeObservation(observation)
+}
+
+func storeMultiPatternObservation(patternKey, cacheKey string, observation *tools.RuntimeObservation) {
+	key := searchCacheSidecarKey(patternKey, cacheKey)
+	if observation == nil || observation.Empty() {
+		multiPatternObservationCache.Delete(key)
+		return
+	}
+	multiPatternObservationCache.Store(key, tools.CloneRuntimeObservation(observation))
 }
 
 func cloneSymbolBundle(bundle *SymbolBundle) *SymbolBundle {

@@ -28,14 +28,16 @@ func executeSearchArtifact(execCtx tools.ExecutionContext, plan searchPlan) sear
 
 func buildSearchExecutionResult(execCtx tools.ExecutionContext, plan searchPlan, artifact search.SearchExecutionArtifact) executionResult {
 	result := executionResult{
-		routeHint: searchRouteHint(plan, artifact),
+		routeHint:   searchRouteHint(plan, artifact),
+		observation: tools.CloneRuntimeObservation(artifact.Metadata.Observation),
 		search: &searchExecution{
 			discovery: artifact.Rendered,
 		},
 	}
-	if prefetch := prefetchRecommendedEvidence(execCtx, artifact); prefetch != "" {
+	if prefetch := prefetchRecommendedEvidence(execCtx, artifact); prefetch.output != "" {
 		result.routeHint = "Structured impact + prefetched evidence"
-		result.search.prefetchedEvidence = prefetch
+		result.search.prefetchedEvidence = prefetch.output
+		result.observation = tools.MergeRuntimeObservations(result.observation, prefetch.observation)
 	}
 	return result
 }

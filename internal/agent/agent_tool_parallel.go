@@ -12,6 +12,11 @@ import (
 
 type ToolExecCallback func(idx int, tc *tools.ToolCall, result toolruntime.Result)
 
+type readFileBatchExecution struct {
+	Execution toolruntime.Result
+	Sections  []filetool.ReadExecutionSection
+}
+
 // executeToolForParallel は並列実行用のツール実行関数。
 // goroutine から安全に呼び出せるよう、以下を省略している:
 //   - spinner / SetGlobalSpinner: goroutine 内で global spinner を操作すると競合する
@@ -63,10 +68,10 @@ func (a *Agent) executeToolForParallelResult(ctx context.Context, tc *tools.Tool
 	return execResult
 }
 
-func (a *Agent) executeReadFileBatchResult(ctx context.Context, paths []string) toolruntime.Result {
+func (a *Agent) executeReadFileBatchResult(ctx context.Context, paths []string) readFileBatchExecution {
 	tc := toolruntime.BuildReadFileBatchToolCall(paths, true)
 	if ctx.Err() != nil {
-		return toolruntime.Result{Result: "Error: context cancelled", Error: true}
+		return readFileBatchExecution{Execution: toolruntime.Result{Result: "Error: context cancelled", Error: true}}
 	}
 
 	if a.ToolCache != nil {
@@ -76,15 +81,20 @@ func (a *Agent) executeReadFileBatchResult(ctx context.Context, paths []string) 
 	}
 
 	execCtx := a.toolExecutionContext(ctx, strings.NewReader(""), io.Discard, io.Discard)
-	result := filetool.ExecuteReadFilesWithLocator(execCtx.Output(), execCtx.EffectiveConfig(), execCtx.EffectiveToolCache(), paths, filetool.DefaultFullLines, execCtx.EffectiveLocatorRegistry())
+	sections := filetool.ExecuteReadPathsWithDetailSections(execCtx, paths, "")
+	result := filetool.RenderReadExecutionSections(sections)
 	a.recordToolResultOptimizations(tc, result)
 
 	if a.ToolCache != nil {
 		a.ToolCache.SetNegativeCache(tc.Tool, tc.RawArgs, result)
 	}
 
-	return toolruntime.Result{
-		Result: result,
-		Error:  tools.IsErrorResult(result),
+	return readFileBatchExecution{
+		Execution: toolruntime.Result{
+			Result:      result,
+			Observation: filetool.MergeReadExecutionSectionObservations(sections),
+			Error:       tools.IsErrorResult(result),
+		},
+		Sections: sections,
 	}
 }

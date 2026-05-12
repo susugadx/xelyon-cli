@@ -55,11 +55,14 @@ func previewReadFilePaths(args map[string]string) []string {
 
 // ExecutionResult はツール実行結果と、結果表示に必要な実行メタデータを保持する。
 type ExecutionResult struct {
-	Result    string
-	Change    *FileChange
-	StartedAt time.Time
-	Duration  time.Duration
-	Error     bool
+	Result      string
+	Change      *FileChange
+	Observation *RuntimeObservation
+	// ObservationGroups は batched result を元の tool call へ分配するための任意グループ。
+	ObservationGroups map[string]*RuntimeObservation
+	StartedAt         time.Time
+	Duration          time.Duration
+	Error             bool
 }
 
 // ExecuteWithContext は実行コンテキスト付きでツールを実行し、結果を公開する。
@@ -73,16 +76,12 @@ func ExecuteWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileCh
 func ExecuteUnpublishedWithContext(execCtx ExecutionContext, tc *ToolCall) ExecutionResult {
 	execCtx = normalizeExecutionContext(execCtx)
 	startTime := time.Now()
-	result, change, isError := executeCoreWithContext(execCtx, tc)
+	execResult := executeCoreWithContext(execCtx, tc)
 	elapsed := time.Since(startTime)
 
-	return ExecutionResult{
-		Result:    result,
-		Change:    change,
-		StartedAt: startTime,
-		Duration:  elapsed,
-		Error:     isError,
-	}
+	execResult.StartedAt = startTime
+	execResult.Duration = elapsed
+	return execResult
 }
 
 // ExecuteQuietWithContext は実行コンテキスト付きでツールを実行するが、wrapper 出力を抑制する。
@@ -148,19 +147,20 @@ func PublishResultWithContext(execCtx ExecutionContext, tc *ToolCall, execResult
 	}
 }
 
-func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange, bool) {
+func executeCoreWithContext(execCtx ExecutionContext, tc *ToolCall) ExecutionResult {
 	if err := execCtx.EffectiveContext().Err(); err != nil {
 		if errors.Is(err, context.Canceled) {
-			return "Error: context cancelled", nil, true
+			return ExecutionResult{Result: "Error: context cancelled", Error: true}
 		}
-		return fmt.Sprintf("Error: %v", err), nil, true
+		return ExecutionResult{Result: fmt.Sprintf("Error: %v", err), Error: true}
 	}
 
 	applyToolCallDefaults(tc)
-	result, change := executeToolCallCore(execCtx, tc)
-	result = normalizeToolExecutionOutput(result)
+	execResult := executeToolCallCore(execCtx, tc)
+	execResult.Result = normalizeToolExecutionOutput(execResult.Result)
+	execResult.Error = execResult.Error || IsErrorResult(execResult.Result)
 
-	return result, change, IsErrorResult(result)
+	return execResult
 }
 
 func applyToolCallDefaults(tc *ToolCall) {
@@ -179,10 +179,10 @@ func applyToolCallDefaults(tc *ToolCall) {
 	}
 }
 
-func executeToolCallCore(execCtx ExecutionContext, tc *ToolCall) (string, *FileChange) {
-	result, change := execCtx.EffectiveRegistry().ExecuteWithContext(execCtx, tc)
-	invalidateToolCache(execCtx, tc, change)
-	return result, change
+func executeToolCallCore(execCtx ExecutionContext, tc *ToolCall) ExecutionResult {
+	execResult := execCtx.EffectiveRegistry().ExecuteDetailedWithContext(execCtx, tc)
+	invalidateToolCache(execCtx, tc, execResult.Change)
+	return execResult
 }
 
 func normalizeToolExecutionOutput(result string) string {

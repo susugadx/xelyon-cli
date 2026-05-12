@@ -44,8 +44,8 @@ func TestResolvedSinglePatternSymbolRoute(t *testing.T) {
 }
 
 func TestWriteSingleSymbolPatternCache_StoresBundleAndAffectedFiles(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	cache := &testSearchCache{data: make(map[string]string)}
 	ctx := newSinglePatternExecutionContext("Run", SearchOptions{Path: t.TempDir()})
@@ -76,8 +76,8 @@ func TestWriteSingleSymbolPatternCache_StoresBundleAndAffectedFiles(t *testing.T
 }
 
 func TestWriteSingleSymbolPatternCache_SkipsNilBundleStore(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	cache := &testSearchCache{data: make(map[string]string)}
 	ctx := newSinglePatternExecutionContext("Run", SearchOptions{Path: t.TempDir()})

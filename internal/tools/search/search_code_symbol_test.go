@@ -190,9 +190,9 @@ func countSinglePatternBundleCacheEntries() int {
 	return count
 }
 
-func countSinglePatternAffectedFilesCacheEntries() int {
+func countSearchAffectedFilesCacheEntries() int {
 	count := 0
-	singlePatternAffectedFilesCache.Range(func(key, value any) bool {
+	searchAffectedFilesCache.Range(func(key, value any) bool {
 		count++
 		return true
 	})

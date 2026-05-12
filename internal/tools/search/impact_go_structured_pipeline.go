@@ -6,14 +6,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) (string, bool) {
-	result, ok := tryStructuredGoImpactSearchResult(cache, opts)
-	if !ok {
-		return "", false
-	}
-	return result.Rendered, true
-}
-
 func tryStructuredGoImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
 	ctx, ok := newStructuredGoImpactSearchContext(opts)
 	if !ok {

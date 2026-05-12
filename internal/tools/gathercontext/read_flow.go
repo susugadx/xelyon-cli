@@ -9,18 +9,18 @@ import (
 func executeDirectRoute(execCtx tools.ExecutionContext, plan routePlan) executionResult {
 	switch plan.kind {
 	case routeLocatorRead:
+		sections := filetool.ExecuteReadTargetsWithDetailSections(execCtx, plan.locatorQuery, "compact")
 		return executionResult{
-			routeHint: "Direct read",
-			direct: &directExecution{
-				body: filetool.ExecuteReadTargetsWithDetail(execCtx, plan.locatorQuery, "compact"),
-			},
+			routeHint:   "Direct read",
+			direct:      &directExecution{body: filetool.RenderReadExecutionSections(sections)},
+			observation: filetool.MergeReadExecutionSectionObservations(sections),
 		}
 	case routeDirect:
+		body, observation := filetool.ExecuteGatherContextDirectRouteWithObservation(execCtx, plan.direct.route, preferredDirectReadDetail(execCtx, plan.direct.route), 1)
 		return executionResult{
-			routeHint: directRouteHint(plan.direct.route),
-			direct: &directExecution{
-				body: filetool.ExecuteGatherContextDirectRoute(execCtx, plan.direct.route, preferredDirectReadDetail(execCtx, plan.direct.route), 1),
-			},
+			routeHint:   directRouteHint(plan.direct.route),
+			direct:      &directExecution{body: body},
+			observation: observation,
 		}
 	case routeDirectError:
 		return executionResult{

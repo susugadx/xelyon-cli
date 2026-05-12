@@ -13,6 +13,13 @@ const escapedCommaPlaceholder = "\x00COMMA\x00"
 // the existing search_code batch-merge size used by the agent optimizer.
 const impactPatternExpansionCap = 5
 
+type searchPatternsExecution struct {
+	Output              string
+	AffectedFiles       []string
+	Observation         *tools.RuntimeObservation
+	PatternObservations map[string]*tools.RuntimeObservation
+}
+
 // splitPatterns はカンマ区切りのパターン文字列を分割する。
 // \, はリテラルカンマとして扱う。空文字除外、TrimSpace、最大 10 パターン。
 func splitPatterns(pattern string) []string {
@@ -102,28 +109,7 @@ func shouldExecuteImpactSearch(opts SearchOptions) bool {
 }
 
 func executeImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) string {
-	if structured, ok := tryStructuredGoImpactSearch(cache, opts); ok {
-		return structured
-	}
-	if structured, ok := tryStructuredTypeScriptImpactSearch(cache, opts); ok {
-		return structured
-	}
-
-	basePatterns := impactBasePatterns(opts)
-	if len(basePatterns) == 0 {
-		return "Error: pattern is required"
-	}
-
-	baseOutput := executeSearchPatterns(cache, basePatterns, opts)
-	if !shouldAppendImpactTestProbe(baseOutput, basePatterns) {
-		return baseOutput
-	}
-
-	finalPatterns := appendImpactTestProbePattern(basePatterns, opts.Pattern)
-	if len(finalPatterns) == len(basePatterns) {
-		return baseOutput
-	}
-	return executeSearchPatterns(cache, finalPatterns, opts)
+	return executeImpactSearchArtifact(cache, opts).Rendered
 }
 
 func impactBasePatterns(opts SearchOptions) []string {
@@ -175,6 +161,7 @@ func expandStructuredImpactSearchResult(cache tools.ToolCacheInterface, opts Sea
 
 	result.Rendered = renderMultiPatternOutput(executions, len(executions), opts)
 	result.AffectedFiles = collectAffectedFilesFromExecutions(executions, opts)
+	result.Observation = collectObservationFromExecutions(executions)
 	result.MultiPattern = true
 	return result
 }
@@ -185,6 +172,7 @@ func structuredImpactFormattedExecution(pattern string, result structuredImpactE
 		Output:        result.Rendered,
 		Bundle:        result.Bundle,
 		AffectedFiles: result.AffectedFiles,
+		Observation:   result.Observation,
 	})
 }
 
@@ -227,7 +215,11 @@ func impactPatternAlreadyExecuted(executions []formattedPatternExecution, patter
 }
 
 func executeSearchPatterns(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) string {
-	return newSearchPatternDispatch(patterns, opts).execute(cache, opts)
+	return executeSearchPatternsDetailed(cache, patterns, opts).Output
+}
+
+func executeSearchPatternsDetailed(cache tools.ToolCacheInterface, patterns []string, opts SearchOptions) searchPatternsExecution {
+	return newSearchPatternDispatch(patterns, opts).executeDetailed(cache, opts)
 }
 
 type searchPatternDispatch struct {
@@ -245,25 +237,49 @@ func newSearchPatternDispatch(patterns []string, opts SearchOptions) searchPatte
 	return dispatch
 }
 
-func (dispatch searchPatternDispatch) execute(cache tools.ToolCacheInterface, opts SearchOptions) string {
+func (dispatch searchPatternDispatch) executeDetailed(cache tools.ToolCacheInterface, opts SearchOptions) searchPatternsExecution {
 	if len(dispatch.patterns) <= 1 {
-		return executeSinglePattern(cache, dispatch.patterns[0], opts)
+		result := executeSinglePatternDetailed(cache, dispatch.patterns[0], opts)
+		return searchPatternsExecution{
+			Output:              result.Output,
+			AffectedFiles:       append([]string(nil), result.AffectedFiles...),
+			Observation:         tools.CloneRuntimeObservation(result.Observation),
+			PatternObservations: singlePatternObservationMap(dispatch.patterns[0], result.Observation),
+		}
 	}
-	return executeMultipleSearchPatterns(cache, dispatch.contexts, opts)
+	return executeMultipleSearchPatternsDetailed(cache, dispatch.contexts, opts)
 }
 
 func executeMultipleSearchPatterns(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) string {
-	if cached, ok := loadCachedMultiPatternSearch(cache, contexts, opts); ok {
-		return cached
-	}
-	return executeMultiplePatterns(cache, contexts, opts)
+	return executeMultipleSearchPatternsDetailed(cache, contexts, opts).Output
 }
 
-func loadCachedMultiPatternSearch(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) (string, bool) {
-	if cache == nil {
-		return "", false
+func executeMultipleSearchPatternsDetailed(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) searchPatternsExecution {
+	if cached, ok := loadCachedMultiPatternExecution(cache, contexts, opts); ok {
+		return cached
 	}
-	return cache.GetSearch(buildMultiCacheKeyFromContexts(contexts), buildMultiSearchCacheKeyFromContexts(opts, contexts))
+	return executeMultiplePatternsDetailed(cache, contexts, opts)
+}
+
+func loadCachedMultiPatternExecution(cache tools.ToolCacheInterface, contexts []singlePatternExecutionContext, opts SearchOptions) (searchPatternsExecution, bool) {
+	if cache == nil {
+		return searchPatternsExecution{}, false
+	}
+	patternKey, cacheKey := multiPatternSearchCacheIdentity(contexts, opts)
+	cached, ok := cache.GetSearch(patternKey, cacheKey)
+	if !ok {
+		return searchPatternsExecution{}, false
+	}
+	return searchPatternsExecution{
+		Output:              cached,
+		AffectedFiles:       loadSearchAffectedFiles(patternKey, cacheKey),
+		Observation:         loadMultiPatternObservation(patternKey, cacheKey),
+		PatternObservations: loadCachedPatternObservations(contexts),
+	}, true
+}
+
+func multiPatternSearchCacheIdentity(contexts []singlePatternExecutionContext, opts SearchOptions) (string, string) {
+	return buildMultiCacheKeyFromContexts(contexts), buildMultiSearchCacheKeyFromContexts(opts, contexts)
 }
 
 func impactOutputHasTestCoverage(output string) bool {

@@ -11,10 +11,6 @@ type singlePatternExecutionContext struct {
 	CacheKey string
 }
 
-func executeSinglePattern(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) string {
-	return executeSinglePatternDetailed(cache, pattern, opts).Output
-}
-
 func executeSinglePatternWithTrace(cache tools.ToolCacheInterface, pattern string, opts SearchOptions) (string, searchRouteTrace) {
 	result := executeSinglePatternDetailed(cache, pattern, opts)
 	return result.Output, result.Route
@@ -59,7 +55,8 @@ func loadCachedSinglePatternExecution(cache tools.ToolCacheInterface, ctx single
 	}
 	bundle, formatted := loadCachedSinglePatternBundleOutput(ctx, cache, cached)
 	affectedFiles := loadCachedSinglePatternAffectedFiles(ctx, bundle, formatted)
-	return newCachedSinglePatternExecution(ctx, formatted, bundle, affectedFiles), true
+	observation := loadCachedSinglePatternObservation(ctx, bundle)
+	return newCachedSinglePatternExecution(ctx, formatted, bundle, affectedFiles, observation), true
 }
 
 func loadCachedSinglePatternOutput(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext) (string, bool) {
@@ -75,26 +72,39 @@ func loadCachedSinglePatternBundleOutput(ctx singlePatternExecutionContext, cach
 }
 
 func loadCachedSinglePatternAffectedFiles(ctx singlePatternExecutionContext, bundle *SymbolBundle, output string) []string {
-	if affectedFiles := loadSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey); len(affectedFiles) > 0 {
+	if affectedFiles := loadSearchAffectedFiles(ctx.Pattern, ctx.CacheKey); len(affectedFiles) > 0 {
 		return affectedFiles
 	}
 	return deriveAffectedFilesFromCachedResult(bundle, output, ctx.Opts)
 }
 
-func newCachedSinglePatternExecution(ctx singlePatternExecutionContext, output string, bundle *SymbolBundle, affectedFiles []string) singlePatternExecution {
+func loadCachedSinglePatternObservation(ctx singlePatternExecutionContext, bundle *SymbolBundle) *tools.RuntimeObservation {
+	if bundle != nil {
+		return observationForSymbolBundle(bundle, ctx.Opts)
+	}
+	if observation := loadSinglePatternObservation(ctx.Pattern, ctx.CacheKey); observation != nil {
+		return observation
+	}
+	return nil
+}
+
+func newCachedSinglePatternExecution(ctx singlePatternExecutionContext, output string, bundle *SymbolBundle, affectedFiles []string, observation *tools.RuntimeObservation) singlePatternExecution {
 	return singlePatternExecution{
 		Pattern:       ctx.Pattern,
 		Output:        output,
 		Route:         ctx.Route,
 		Bundle:        bundle,
 		AffectedFiles: affectedFiles,
+		Observation:   tools.CloneRuntimeObservation(observation),
 	}
 }
 
-func writeSinglePatternSearchCache(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, output string, affectedFiles []string) {
+func writeSinglePatternSearchCache(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, output string, affectedFiles []string, observation *tools.RuntimeObservation) {
 	if cache == nil {
 		return
 	}
 	cache.SetSearch(ctx.Pattern, ctx.CacheKey, output, affectedFiles)
-	storeSinglePatternAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
+	storeSinglePatternBundle(ctx.Pattern, ctx.CacheKey, nil)
+	storeSearchAffectedFiles(ctx.Pattern, ctx.CacheKey, affectedFiles)
+	storeSinglePatternObservation(ctx.Pattern, ctx.CacheKey, observation)
 }

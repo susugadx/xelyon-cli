@@ -14,8 +14,8 @@ func TestLoadCachedSinglePatternExecution_Miss(t *testing.T) {
 }
 
 func TestLoadCachedSinglePatternExecution_HitUsesStoredAffectedFiles(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	dir := setupMultiLangDir(t, map[string]string{
 		"run.go": "package example\n\nfunc Run() {}\n",
@@ -40,8 +40,8 @@ func TestLoadCachedSinglePatternExecution_HitUsesStoredAffectedFiles(t *testing.
 }
 
 func TestLoadCachedSinglePatternExecution_HitDerivesAffectedFilesFromBundle(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	dir := setupMultiLangDir(t, map[string]string{
 		"pkg/run.go": "package example\n\nfunc Run() {}\n",

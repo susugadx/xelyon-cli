@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/searchcache"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestSinglePatternBundleCacheClearedWithSearchCache(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	dir := setupMultiLangDir(t, map[string]string{
 		"agent.go": `package example
@@ -29,7 +30,7 @@ func (a *Agent) Close() error {
 	if got := countSinglePatternBundleCacheEntries(); got == 0 {
 		t.Fatal("expected bundle cache entry before clear")
 	}
-	if got := countSinglePatternAffectedFilesCacheEntries(); got == 0 {
+	if got := countSearchAffectedFilesCacheEntries(); got == 0 {
 		t.Fatal("expected affected-files cache entry before clear")
 	}
 
@@ -38,14 +39,14 @@ func (a *Agent) Close() error {
 	if got := countSinglePatternBundleCacheEntries(); got != 0 {
 		t.Fatalf("expected bundle cache to be cleared, got %d entries", got)
 	}
-	if got := countSinglePatternAffectedFilesCacheEntries(); got != 0 {
+	if got := countSearchAffectedFilesCacheEntries(); got != 0 {
 		t.Fatalf("expected affected-files cache to be cleared, got %d entries", got)
 	}
 }
 
 func TestSinglePatternBundleCacheInvalidatedWithFileInvalidation(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	dir := setupMultiLangDir(t, map[string]string{
 		"agent.go": `package example
@@ -83,7 +84,7 @@ func (a *Agent) Close() error {
 	if got := countSinglePatternBundleCacheEntries(); got != 2 {
 		t.Fatalf("expected 2 bundle cache entries before invalidate, got %d", got)
 	}
-	if got := countSinglePatternAffectedFilesCacheEntries(); got != 2 {
+	if got := countSearchAffectedFilesCacheEntries(); got != 2 {
 		t.Fatalf("expected 2 affected-files cache entries before invalidate, got %d", got)
 	}
 
@@ -104,8 +105,8 @@ func (a *Agent) Close() error {
 }
 
 func TestSinglePatternBundleCacheClearedOnSearchCacheEviction(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	storeSinglePatternBundle("keep", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "keep"}})
 	storeSinglePatternBundle("drop", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "drop"}})
@@ -125,8 +126,8 @@ func TestSinglePatternBundleCacheClearedOnSearchCacheEviction(t *testing.T) {
 }
 
 func TestSinglePatternBundleCachePreservesUnrelatedKeysOnTargetedInvalidation(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	storeSinglePatternBundle("keep", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "keep"}})
 	storeSinglePatternBundle("drop", "key", &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "drop"}})
@@ -138,5 +139,26 @@ func TestSinglePatternBundleCachePreservesUnrelatedKeysOnTargetedInvalidation(t 
 	}
 	if loadSinglePatternBundle("drop", "key") != nil {
 		t.Fatal("expected targeted bundle cache entry to be removed")
+	}
+}
+
+func TestWriteSinglePatternSearchCacheClearsStaleBundleAndObservation(t *testing.T) {
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	ctx := singlePatternExecutionContext{Pattern: "Run", CacheKey: "cache-key"}
+	storeSinglePatternBundle(ctx.Pattern, ctx.CacheKey, &SymbolBundle{Identity: SymbolBundleIdentity{Canonical: "stale"}})
+	storeSinglePatternObservation(ctx.Pattern, ctx.CacheKey, &tools.RuntimeObservation{
+		TouchedFiles: []tools.ObservationPath{{Path: "stale.go"}},
+	})
+
+	writeSinglePatternSearchCache(cache, ctx, "No matches found", nil, nil)
+
+	if bundle := loadSinglePatternBundle(ctx.Pattern, ctx.CacheKey); bundle != nil {
+		t.Fatalf("bundle = %#v, want cleared stale bundle", bundle)
+	}
+	if observation := loadSinglePatternObservation(ctx.Pattern, ctx.CacheKey); observation != nil {
+		t.Fatalf("observation = %#v, want cleared stale observation", observation)
 	}
 }

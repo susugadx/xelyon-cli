@@ -36,15 +36,16 @@ func completeSingleSymbolPattern(cache tools.ToolCacheInterface, ctx singlePatte
 
 	writeSingleSymbolPatternCache(cache, ctx, resolved, affectedFiles)
 
-	return newSinglePatternSymbolExecution(ctx.Pattern, output, route, outputBundle, affectedFiles)
+	observation := observationForSymbolBundle(outputBundle, ctx.Opts)
+	return newSinglePatternSymbolExecution(ctx.Pattern, output, route, outputBundle, affectedFiles, observation)
 }
 
 func completeMultiSymbolPattern(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, resolved symbolResolveResult) singlePatternExecution {
 	route := resolvedSinglePatternSymbolRoute(ctx.Route)
 	affectedFiles := resolveMultiSymbolAffectedFiles(resolved, ctx.Opts)
-	writeSinglePatternSearchCache(cache, ctx, resolved.Output, affectedFiles)
+	writeSinglePatternSearchCache(cache, ctx, resolved.Output, affectedFiles, resolved.Observation)
 
-	return newSinglePatternSymbolExecution(ctx.Pattern, resolved.Output, route, nil, affectedFiles)
+	return newSinglePatternSymbolExecution(ctx.Pattern, resolved.Output, route, nil, affectedFiles, resolved.Observation)
 }
 
 func resolvedSinglePatternSymbolRoute(route searchRouteTrace) searchRouteTrace {
@@ -63,18 +64,23 @@ func resolveMultiSymbolAffectedFiles(resolved symbolResolveResult, opts SearchOp
 	return deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
 }
 
-func newSinglePatternSymbolExecution(pattern string, output string, route searchRouteTrace, bundle *SymbolBundle, affectedFiles []string) singlePatternExecution {
+func newSinglePatternSymbolExecution(pattern string, output string, route searchRouteTrace, bundle *SymbolBundle, affectedFiles []string, observation *tools.RuntimeObservation) singlePatternExecution {
 	return singlePatternExecution{
 		Pattern:       pattern,
 		Output:        output,
 		Route:         route,
 		Bundle:        bundle,
 		AffectedFiles: affectedFiles,
+		Observation:   tools.CloneRuntimeObservation(observation),
 	}
 }
 
 func writeSingleSymbolPatternCache(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, resolved symbolResolveResult, affectedFiles []string) {
-	writeSinglePatternSearchCache(cache, ctx, resolved.Output, affectedFiles)
+	observation := resolved.Observation
+	if observation == nil {
+		observation = observationForSymbolBundle(resolved.Bundle, ctx.Opts)
+	}
+	writeSinglePatternSearchCache(cache, ctx, resolved.Output, affectedFiles, observation)
 	if cache == nil || resolved.Bundle == nil {
 		return
 	}

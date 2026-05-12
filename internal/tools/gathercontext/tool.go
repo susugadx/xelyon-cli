@@ -25,9 +25,18 @@ func (t *Tool) Parameters() map[string]interface{} {
 }
 
 func (t *Tool) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
+	result, err := t.RunResult(execCtx, args)
+	return result.Output, result.Change, err
+}
+
+func (t *Tool) RunResult(execCtx tools.ExecutionContext, args map[string]string) (tools.ToolRunResult, error) {
 	req, errResult := parseRequestArgs(args)
 	if errResult != "" {
-		return errResult, nil, nil
+		return tools.ToolRunResult{Output: errResult}, nil
 	}
-	return executeRequest(execCtx, req), nil, nil
+	result := executeRequestResult(execCtx, req)
+	return tools.ToolRunResult{
+		Output:      formatExecutionResult(result),
+		Observation: result.observation,
+	}, nil
 }

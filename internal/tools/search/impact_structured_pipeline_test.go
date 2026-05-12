@@ -7,8 +7,8 @@ import (
 )
 
 func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	root := t.TempDir()
 	writeStructuredImpactPipelineTestFile(t, filepath.Join(root, "run.go"), "package example\n\nfunc Run() {}\n")
@@ -80,8 +80,8 @@ func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles
 }
 
 func TestTryStructuredImpactSearchResult_AmbiguousStoresAffectedFilesWithoutBundle(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	root := t.TempDir()
 	buildPath := filepath.Join(root, "build.go")
@@ -143,8 +143,8 @@ func TestTryStructuredImpactSearchResult_AmbiguousStoresAffectedFilesWithoutBund
 }
 
 func TestTryStructuredImpactSearchResult_RejectsMalformedSingleBundle(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	root := t.TempDir()
 	opts := SearchOptions{
@@ -182,8 +182,8 @@ func TestTryStructuredImpactSearchResult_RejectsMalformedSingleBundle(t *testing
 }
 
 func TestTryStructuredImpactSearchResult_CacheHitRejectsMalformedSingleBundle(t *testing.T) {
-	clearSinglePatternBundleCache()
-	t.Cleanup(clearSinglePatternBundleCache)
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
 
 	root := t.TempDir()
 	opts := SearchOptions{

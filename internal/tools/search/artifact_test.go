@@ -56,6 +56,58 @@ func TestExecuteSearchCodeArtifactWithConfig_MultiPattern(t *testing.T) {
 	if !strings.Contains(artifact.Rendered, "Pattern 1/2") {
 		t.Fatalf("expected multi-pattern rendered output, got:\n%s", artifact.Rendered)
 	}
+	if artifact.Metadata.Observation == nil {
+		t.Fatal("Observation = nil, want multi-pattern observation")
+	}
+	foundTarget := false
+	for _, touched := range artifact.Metadata.Observation.TouchedFiles {
+		if touched.ResolvedPath == path {
+			foundTarget = true
+			break
+		}
+	}
+	if !foundTarget {
+		t.Fatalf("TouchedFiles = %#v, want target file %q", artifact.Metadata.Observation.TouchedFiles, path)
+	}
+	for _, pattern := range []string{"Builder", "Runner"} {
+		observation := artifact.Metadata.PatternObservations[pattern]
+		if observation == nil {
+			t.Fatalf("PatternObservations[%q] = nil", pattern)
+		}
+	}
+}
+
+func TestExecuteSearchCodeArtifactWithConfig_TextObservation(t *testing.T) {
+	setupSearchTestMocks(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "target.go")
+	if err := writeSearchArtifactTestFile(path, "package main\n\nfunc target_text() {}\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, SearchOptions{
+		Pattern: "target_text",
+		Path:    dir,
+		Mode:    string(SearchModeLiteral),
+	})
+	observation := artifact.Metadata.Observation
+	if observation == nil {
+		t.Fatal("Observation = nil, want text search observation")
+	}
+	if len(observation.TouchedFiles) != 1 || observation.TouchedFiles[0].ResolvedPath != path {
+		t.Fatalf("TouchedFiles = %#v, want resolved target.go", observation.TouchedFiles)
+	}
+	foundEvidence := false
+	for _, evidence := range observation.Evidence {
+		if evidence.ResolvedPath == path && evidence.StartLine == 3 && strings.Contains(evidence.Excerpt, "target_text") {
+			foundEvidence = true
+			break
+		}
+	}
+	if !foundEvidence {
+		t.Fatalf("Evidence = %#v, want target_text evidence at line 3", observation.Evidence)
+	}
 }
 
 func TestExecuteSearchCodeArtifactWithConfig_StructuredImpactMetadata(t *testing.T) {
@@ -163,6 +215,9 @@ func (Config) Build() string { return "" }
 	}
 	if len(artifact.Metadata.AffectedFiles) != 2 {
 		t.Fatalf("AffectedFiles = %v, want two ambiguous candidates", artifact.Metadata.AffectedFiles)
+	}
+	if artifact.Metadata.Observation == nil || len(artifact.Metadata.Observation.Evidence) != 2 {
+		t.Fatalf("Observation = %#v, want two ambiguous candidate evidence items", artifact.Metadata.Observation)
 	}
 	if !strings.Contains(artifact.Rendered, `Multiple symbols matched "Build":`) {
 		t.Fatalf("expected ambiguous structured output, got:\n%s", artifact.Rendered)

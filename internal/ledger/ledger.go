@@ -1,9 +1,20 @@
 package ledger
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
+)
+
+const (
+	maxRecordedFiles     = 200
+	maxEvidenceItems     = 200
+	maxRecommendedReads  = 50
+	maxFailedTestResults = 5
+	maxPassedTestResults = 5
+	maxTestExcerptBytes  = 2000
+	maxFactExcerptBytes  = maxTestExcerptBytes
 )
 
 // RuntimeTaskState はセッション中だけ保持するタスク台帳のスナップショット。
@@ -51,6 +62,9 @@ func (g *ChangedFiles) recordPath(path string) {
 	if g == nil || path == "" || g.contains(path) {
 		return
 	}
+	if len(g.files) >= maxRecordedFiles {
+		return
+	}
 	g.files = append(g.files, fileFact{path: path})
 }
 
@@ -84,6 +98,9 @@ func (g TouchedFiles) Len() int {
 
 func (g *TouchedFiles) recordPath(path string) {
 	if g == nil || path == "" || g.contains(path) {
+		return
+	}
+	if len(g.files) >= maxRecordedFiles {
 		return
 	}
 	g.files = append(g.files, fileFact{path: path})
@@ -156,26 +173,103 @@ func (g Evidence) Len() int {
 	return len(g.items)
 }
 
-func (g *Evidence) record(text, source string) {
-	if g == nil || text == "" {
+func (g *Evidence) record(fact evidenceFact) {
+	fact, ok := prepareEvidenceFact(fact)
+	if g == nil || !ok || g.contains(fact) {
 		return
 	}
-	g.items = append(g.items, evidenceFact{text: text, source: source})
+	if len(g.items) >= maxEvidenceItems {
+		return
+	}
+	g.items = append(g.items, fact)
+}
+
+func prepareEvidenceFact(fact evidenceFact) (evidenceFact, bool) {
+	fact = normalizeEvidenceFact(fact)
+	return fact, validEvidenceFact(fact)
+}
+
+func normalizeEvidenceFact(fact evidenceFact) evidenceFact {
+	fact.startLine, fact.endLine = tools.NormalizeObservationLineRange(fact.startLine, fact.endLine)
+	return fact
+}
+
+func validEvidenceFact(fact evidenceFact) bool {
+	return fact.path != "" &&
+		fact.startLine > 0 &&
+		fact.endLine > 0 &&
+		fact.endLine >= fact.startLine &&
+		strings.TrimSpace(fact.excerpt) != ""
+}
+
+func (g Evidence) contains(fact evidenceFact) bool {
+	for _, item := range g.items {
+		if item.path == fact.path &&
+			item.startLine == fact.startLine &&
+			item.endLine == fact.endLine &&
+			item.source == fact.source &&
+			item.toolCallID == fact.toolCallID &&
+			item.excerpt == fact.excerpt {
+			return true
+		}
+	}
+	return false
 }
 
 type evidenceFact struct {
-	text   string
-	source string
+	path       string
+	startLine  int
+	endLine    int
+	source     string
+	toolCallID string
+	fileHash   string
+	stale      bool
+	excerpt    string
+}
+
+// Path は evidence の対象ファイルパスを返す。
+func (f evidenceFact) Path() string {
+	return f.path
+}
+
+// StartLine は evidence の開始行を返す。
+func (f evidenceFact) StartLine() int {
+	return f.startLine
+}
+
+// EndLine は evidence の終了行を返す。
+func (f evidenceFact) EndLine() int {
+	return f.endLine
 }
 
 // Text は evidence の本文を返す。
 func (f evidenceFact) Text() string {
-	return f.text
+	return f.excerpt
+}
+
+// Excerpt は evidence の短い抜粋を返す。
+func (f evidenceFact) Excerpt() string {
+	return f.excerpt
 }
 
 // Source は evidence の出所を返す。
 func (f evidenceFact) Source() string {
 	return f.source
+}
+
+// ToolCallID は evidence の元 tool call id を返す。
+func (f evidenceFact) ToolCallID() string {
+	return f.toolCallID
+}
+
+// FileHash は evidence の対象ファイル hash を返す。P0a では空値のまま保持する。
+func (f evidenceFact) FileHash() string {
+	return f.fileHash
+}
+
+// Stale は evidence が古い可能性を返す。P0a では常に false。
+func (f evidenceFact) Stale() bool {
+	return f.stale
 }
 
 // RecommendedReads は後続で読むべきファイルを初出順で保持する。
@@ -208,10 +302,17 @@ func (g RecommendedReads) Len() int {
 }
 
 func (g *RecommendedReads) record(path, reason string) {
-	if g == nil || path == "" || g.contains(path) {
+	g.recordFact(recommendedReadFact{path: path, reason: reason})
+}
+
+func (g *RecommendedReads) recordFact(fact recommendedReadFact) {
+	if g == nil || fact.path == "" || g.contains(fact.path) {
 		return
 	}
-	g.items = append(g.items, recommendedReadFact{path: path, reason: reason})
+	if len(g.items) >= maxRecommendedReads {
+		return
+	}
+	g.items = append(g.items, fact)
 }
 
 func (g RecommendedReads) contains(path string) bool {
@@ -224,8 +325,10 @@ func (g RecommendedReads) contains(path string) bool {
 }
 
 type recommendedReadFact struct {
-	path   string
-	reason string
+	path       string
+	reason     string
+	source     string
+	toolCallID string
 }
 
 // Path は推奨されたファイルパスを返す。
@@ -236,6 +339,16 @@ func (f recommendedReadFact) Path() string {
 // Reason は推奨理由を返す。
 func (f recommendedReadFact) Reason() string {
 	return f.reason
+}
+
+// Source は推奨 read の出所を返す。
+func (f recommendedReadFact) Source() string {
+	return f.source
+}
+
+// ToolCallID は推奨 read の元 tool call id を返す。
+func (f recommendedReadFact) ToolCallID() string {
+	return f.toolCallID
 }
 
 // LastFailedTests は最後に失敗したテスト結果を保持する。
@@ -261,7 +374,15 @@ func (g *LastFailedTests) replace(results []TestResult) {
 	if g == nil {
 		return
 	}
-	g.results = cloneTestResults(results)
+	g.results = capTestResults(cloneTestResults(results), maxFailedTestResults)
+}
+
+func (g *LastFailedTests) append(result TestResult) {
+	if g == nil || result.command == "" {
+		return
+	}
+	g.results = append(g.results, result)
+	g.results = capTestResults(g.results, maxFailedTestResults)
 }
 
 // LastPassedTests は最後に成功したテスト結果を保持する。
@@ -287,19 +408,43 @@ func (g *LastPassedTests) replace(results []TestResult) {
 	if g == nil {
 		return
 	}
-	g.results = cloneTestResults(results)
+	g.results = capTestResults(cloneTestResults(results), maxPassedTestResults)
+}
+
+func (g *LastPassedTests) append(result TestResult) {
+	if g == nil || result.command == "" {
+		return
+	}
+	g.results = append(g.results, result)
+	g.results = capTestResults(g.results, maxPassedTestResults)
 }
 
 // TestResult はテスト実行結果の最小 fact。
 type TestResult struct {
-	command string
-	output  string
-	status  string
+	command  string
+	exitCode int
+	status   string
+	excerpt  string
 }
 
 // NewTestResult はテスト実行結果 fact を作る。
 func NewTestResult(command, output, status string) TestResult {
-	return TestResult{command: command, output: output, status: status}
+	exitCode := 0
+	if normalizeTestStatus(status, 0) == "failed" {
+		exitCode = -1
+	}
+	return NewTestResultWithExitCode(command, exitCode, status, output)
+}
+
+// NewTestResultWithExitCode は exit code 付きのテスト結果 fact を作る。
+func NewTestResultWithExitCode(command string, exitCode int, status string, excerpt string) TestResult {
+	status = normalizeTestStatus(status, exitCode)
+	return TestResult{
+		command:  command,
+		exitCode: exitCode,
+		status:   status,
+		excerpt:  truncateBytes(excerpt, maxTestExcerptBytes),
+	}
 }
 
 // Command は実行コマンドを返す。
@@ -307,9 +452,19 @@ func (r TestResult) Command() string {
 	return r.command
 }
 
-// Output はテスト出力を返す。
+// ExitCode はテストコマンドの exit code を返す。
+func (r TestResult) ExitCode() int {
+	return r.exitCode
+}
+
+// Output はテスト出力の短い抜粋を返す。
 func (r TestResult) Output() string {
-	return r.output
+	return r.excerpt
+}
+
+// Excerpt はテスト出力の短い抜粋を返す。
+func (r TestResult) Excerpt() string {
+	return r.excerpt
 }
 
 // Status はテスト状態を返す。
@@ -326,15 +481,56 @@ func cloneTestResults(results []TestResult) []TestResult {
 	return cloned
 }
 
+func capTestResults(results []TestResult, limit int) []TestResult {
+	if limit <= 0 || len(results) <= limit {
+		return results
+	}
+	capped := make([]TestResult, limit)
+	copy(capped, results[len(results)-limit:])
+	return capped
+}
+
 // Store は RuntimeTaskState を mutex 付きで保持する。
 type Store struct {
-	mu    sync.Mutex
-	state RuntimeTaskState
+	mu            sync.Mutex
+	state         RuntimeTaskState
+	repoRoot      string
+	invocationCWD string
 }
 
 // NewStore は空の runtime task ledger を返す。
 func NewStore() *Store {
-	return &Store{}
+	return NewStoreForInvocationCWD(defaultInvocationCWD())
+}
+
+// NewStoreWithRoot は repo root を明示した runtime task ledger を返す。
+func NewStoreWithRoot(root string) *Store {
+	return NewStoreWithWorkspace(root, root)
+}
+
+// NewStoreForInvocationCWD は起動 cwd から repo root を推定した runtime task ledger を返す。
+func NewStoreForInvocationCWD(cwd string) *Store {
+	cwd = normalizeRepoRoot(cwd)
+	if cwd == "" {
+		cwd = normalizeRepoRoot(defaultInvocationCWD())
+	}
+	if cwd == "" {
+		return NewStoreWithWorkspace("", "")
+	}
+	return NewStoreWithWorkspace(repoRootForInvocationCWD(cwd), cwd)
+}
+
+// NewStoreWithWorkspace は repo root と起動 cwd を明示した runtime task ledger を返す。
+func NewStoreWithWorkspace(root, invocationCWD string) *Store {
+	root = normalizeRepoRoot(root)
+	invocationCWD = normalizeRepoRoot(invocationCWD)
+	if invocationCWD == "" {
+		invocationCWD = root
+	}
+	if root == "" {
+		root = invocationCWD
+	}
+	return &Store{repoRoot: root, invocationCWD: invocationCWD}
 }
 
 // Snapshot は現在の RuntimeTaskState を防御コピーで返す。
@@ -371,44 +567,94 @@ type Recorder struct {
 }
 
 // RecordToolObservation はツール観測から台帳 fact を更新する。
-// この段階では FileChange 由来の ChangedFiles だけを記録する。
-func (r *Recorder) RecordToolObservation(change *tools.FileChange) {
-	if r == nil || r.store == nil || change == nil {
+func (r *Recorder) RecordToolObservation(observation ToolObservation) {
+	if r == nil || r.store == nil {
 		return
 	}
-	paths := changedPathsFromFileChange(*change)
+	invocationCWD := r.store.invocationCWD
+	if strings.TrimSpace(observation.InvocationCWD) != "" {
+		invocationCWD = observation.InvocationCWD
+	}
+	facts := collectToolObservationFacts(r.store.repoRoot, invocationCWD, observation)
 	r.mutate(func(state *RuntimeTaskState) {
-		for _, path := range paths {
+		for _, path := range facts.changedFiles {
 			state.ChangedFiles.recordPath(path)
+		}
+		for _, path := range facts.touchedFiles {
+			state.TouchedFiles.recordPath(path)
+		}
+		for _, fact := range facts.evidence {
+			state.Evidence.record(fact)
+		}
+		for _, fact := range facts.recommendedReads {
+			state.RecommendedReads.recordFact(fact)
+		}
+		for _, result := range facts.failedTests {
+			state.LastFailedTests.append(result)
+		}
+		for _, result := range facts.passedTests {
+			state.LastPassedTests.append(result)
 		}
 	})
 }
 
 // RecordChangedFile は ChangedFiles へファイルパスを記録する。
 func (r *Recorder) RecordChangedFile(path string) {
+	normalized, ok := normalizeLedgerPath(r.repoRoot(), r.invocationCWD(), path)
+	if !ok {
+		return
+	}
 	r.mutate(func(state *RuntimeTaskState) {
-		state.ChangedFiles.recordPath(path)
+		state.ChangedFiles.recordPath(normalized)
 	})
 }
 
 // RecordTouchedFile は TouchedFiles へファイルパスを記録する。
 func (r *Recorder) RecordTouchedFile(path string) {
+	normalized, ok := normalizeLedgerPath(r.repoRoot(), r.invocationCWD(), path)
+	if !ok {
+		return
+	}
 	r.mutate(func(state *RuntimeTaskState) {
-		state.TouchedFiles.recordPath(path)
+		state.TouchedFiles.recordPath(normalized)
 	})
 }
 
 // RecordEvidence は Evidence へ根拠を記録する。
 func (r *Recorder) RecordEvidence(text, source string) {
+	excerpt := strings.TrimSpace(truncateBytes(text, maxFactExcerptBytes))
+	if excerpt == "" {
+		return
+	}
 	r.mutate(func(state *RuntimeTaskState) {
-		state.Evidence.record(text, source)
+		state.Evidence.record(evidenceFact{excerpt: excerpt, source: source})
 	})
 }
 
 // RecordRecommendedRead は RecommendedReads へファイルパスと理由を記録する。
 func (r *Recorder) RecordRecommendedRead(path, reason string) {
+	normalized, ok := normalizeLedgerPath(r.repoRoot(), r.invocationCWD(), path)
+	if !ok {
+		return
+	}
 	r.mutate(func(state *RuntimeTaskState) {
-		state.RecommendedReads.record(path, reason)
+		state.RecommendedReads.record(normalized, strings.TrimSpace(reason))
+	})
+}
+
+// RecordTestObservation はテスト実行観測から LastPassedTests / LastFailedTests を更新する。
+func (r *Recorder) RecordTestObservation(observation TestObservation) {
+	result, ok := testResultFromObservation(observation)
+	if !ok {
+		return
+	}
+	r.mutate(func(state *RuntimeTaskState) {
+		switch result.status {
+		case "passed":
+			state.LastPassedTests.append(result)
+		case "failed":
+			state.LastFailedTests.append(result)
+		}
 	})
 }
 
@@ -433,6 +679,20 @@ func (r *Recorder) mutate(fn func(*RuntimeTaskState)) {
 	r.store.mu.Lock()
 	defer r.store.mu.Unlock()
 	fn(&r.store.state)
+}
+
+func (r *Recorder) repoRoot() string {
+	if r == nil || r.store == nil {
+		return ""
+	}
+	return r.store.repoRoot
+}
+
+func (r *Recorder) invocationCWD() string {
+	if r == nil || r.store == nil {
+		return ""
+	}
+	return r.store.invocationCWD
 }
 
 func changedPathsFromFileChange(change tools.FileChange) []string {

@@ -208,10 +208,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 }
 
 func (a *Agent) finalizeExecutedToolResult(toolCall *tools.ToolCall, execResult tools.ExecutionResult, trackProjectMapMutation bool) string {
-	result, change := execResult.Result, execResult.Change
-	if trackProjectMapMutation {
-		a.noteProjectMapMutation(toolCall, change)
-	}
+	result := execResult.Result
 	a.appendSessionToolExecution(toolCall, result, execResult.Error)
 
 	if a.handleStrReplaceErrors(toolCall, result) {
@@ -221,7 +218,7 @@ func (a *Agent) finalizeExecutedToolResult(toolCall *tools.ToolCall, execResult 
 		return result
 	}
 
-	a.handleFileChange(change)
+	a.mutationTracker().recordExecutedToolResult(toolCall, execResult, trackProjectMapMutation)
 	a.appendToolResultToHistory(toolCall, result)
 	_, _ = fmt.Fprintln(a.output())
 	return result
@@ -327,11 +324,6 @@ IMPORTANT:
 	// 次ループで callAPIWithRetry() が走るようにする
 	_, _ = fmt.Fprintln(a.output())
 	return true
-}
-
-// handleFileChange は変更履歴を保存
-func (a *Agent) handleFileChange(change *tools.FileChange) {
-	a.mutationTracker().RecordFileChange(change)
 }
 
 func (a *Agent) noteProjectMapMutation(tc *tools.ToolCall, change *tools.FileChange) {

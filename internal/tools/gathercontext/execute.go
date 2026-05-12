@@ -2,9 +2,9 @@ package gathercontext
 
 import "github.com/susugadx/xelyon-cli/internal/tools"
 
-func executeRequest(execCtx tools.ExecutionContext, req request) string {
+func executeRequestResult(execCtx tools.ExecutionContext, req request) executionResult {
 	plan := buildRoutePlan(execCtx, req)
-	return formatExecutionResult(executePlan(execCtx, plan))
+	return executePlan(execCtx, plan)
 }
 
 func executePlan(execCtx tools.ExecutionContext, plan routePlan) executionResult {

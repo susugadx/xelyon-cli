@@ -85,6 +85,43 @@ func TestSearchCode_MultiPatternCacheTracksBundleAndTextAffectedFiles(t *testing
 	}
 }
 
+func TestSearchCode_MultiPatternCachedArtifactRestoresAffectedFiles(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"run.go": "package example\n\nfunc Run() {\n\thelper()\n}\n\nfunc helper() {}\n",
+	})
+
+	cache := &testSearchCache{data: make(map[string]string)}
+	opts := SearchOptions{
+		Pattern:  "Run,helper()",
+		Path:     dir,
+		FileType: "go",
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: dir,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "run.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Run", Kind: "function", Line: 3, EndLine: 5, Signature: "func Run()", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: dir,
+		ProjectMapStateKey: "affected-multi-artifact-cache-hit",
+	}
+
+	first := ExecuteSearchCodeArtifactWithConfig(nil, cache, opts)
+	want := filepath.Join(dir, "run.go")
+	if !containsAffectedFile(first.Metadata.AffectedFiles, want) {
+		t.Fatalf("first AffectedFiles = %v, want %s", first.Metadata.AffectedFiles, want)
+	}
+
+	second := ExecuteSearchCodeArtifactWithConfig(nil, cache, opts)
+	if !containsAffectedFile(second.Metadata.AffectedFiles, want) {
+		t.Fatalf("cached AffectedFiles = %v, want %s", second.Metadata.AffectedFiles, want)
+	}
+}
+
 func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"pkg/helper.go":     "package pkg\n\nfunc helper() {}\n",

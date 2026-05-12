@@ -2,7 +2,6 @@ package toolruntime
 
 import (
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -99,79 +98,6 @@ func SegmentReadFileBatches(allToolCalls []*tools.ToolCall, execFlags []bool) []
 		segments = append(segments, current)
 	}
 	return segments
-}
-
-// readFileBatchHeaderPrefix は internal batch read の結果でファイル区切りに使われるプレフィックス。
-const readFileBatchHeaderPrefix = "📄 File: "
-
-// SplitReadFileBatchResult は internal batch read の結果をファイルパスごとに分割する。
-// paths は merge 時の順序と一致していなければならない。
-// 分割に失敗した場合は nil を返す。
-func SplitReadFileBatchResult(result string, paths []string) map[string]string {
-	// "📄 File: <path>\n" ヘッダーの位置を検出
-	type headerLoc struct {
-		path       string
-		contentIdx int // ヘッダー行末（コンテンツ開始）の位置
-		headerIdx  int // ヘッダー行先頭の位置
-	}
-
-	var locs []headerLoc
-	searchFrom := 0
-	for _, p := range paths {
-		header := readFileBatchHeaderPrefix + p + "\n"
-		idx := strings.Index(result[searchFrom:], header)
-		if idx < 0 {
-			// ヘッダーが見つからない → 安全に分割できない
-			return nil
-		}
-		absIdx := searchFrom + idx
-		locs = append(locs, headerLoc{
-			path:       p,
-			headerIdx:  absIdx,
-			contentIdx: absIdx + len(header),
-		})
-		searchFrom = absIdx + len(header)
-	}
-
-	if len(locs) != len(paths) {
-		return nil
-	}
-
-	sections := make(map[string]string, len(paths))
-	for i, loc := range locs {
-		var contentEnd int
-		if i+1 < len(locs) {
-			// 次のヘッダーの前の空行を除去
-			contentEnd = locs[i+1].headerIdx
-			// ファイル間の区切り改行を除去
-			for contentEnd > loc.contentIdx && result[contentEnd-1] == '\n' {
-				contentEnd--
-			}
-		} else {
-			contentEnd = len(result)
-		}
-		section := strings.TrimRight(result[loc.contentIdx:contentEnd], "\n ")
-		sections[loc.path] = section
-	}
-
-	return sections
-}
-
-// JoinReadFileBatchSections は分割済み batch 結果を単一 read_file call の表示形式へ戻す。
-func JoinReadFileBatchSections(perFile map[string]string, paths []string) (string, bool) {
-	var sb strings.Builder
-	for i, path := range paths {
-		section, ok := perFile[path]
-		if !ok {
-			return "", false
-		}
-		if i > 0 {
-			sb.WriteString("\n")
-		}
-		fmt.Fprintf(&sb, "%s%s\n", readFileBatchHeaderPrefix, path)
-		sb.WriteString(section)
-	}
-	return sb.String(), true
 }
 
 // ── search_code multi-pattern batching ──

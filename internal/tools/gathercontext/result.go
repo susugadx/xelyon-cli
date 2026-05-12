@@ -1,6 +1,9 @@
 package gathercontext
 
-import filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+import (
+	"github.com/susugadx/xelyon-cli/internal/tools"
+	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+)
 
 type routeKind string
 
@@ -19,9 +22,10 @@ type routePlan struct {
 }
 
 type executionResult struct {
-	routeHint string
-	direct    *directExecution
-	search    *searchExecution
+	routeHint   string
+	direct      *directExecution
+	search      *searchExecution
+	observation *tools.RuntimeObservation
 }
 
 type directPlan struct {

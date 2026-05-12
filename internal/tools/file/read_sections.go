@@ -12,8 +12,9 @@ import (
 
 // ReadExecutionSection は単一 read request の描画結果と成否を表す。
 type ReadExecutionSection struct {
-	Output string
-	Failed bool
+	Output      string
+	Failed      bool
+	Observation *tools.RuntimeObservation
 }
 
 // ExecuteReadPathsWithDetailSections は path-based read を構造化 section で返す。
@@ -78,4 +79,21 @@ func renderReadExecutionSections(sections []ReadExecutionSection) string {
 		rendered = append(rendered, section.Output)
 	}
 	return strings.Join(rendered, "\n\n")
+}
+
+// RenderReadExecutionSections は read section 群を read_file と同じ形式で描画する。
+func RenderReadExecutionSections(sections []ReadExecutionSection) string {
+	return renderReadExecutionSections(sections)
+}
+
+// MergeReadExecutionSectionObservations は read section 群の observation を順序保持で統合する。
+func MergeReadExecutionSectionObservations(sections []ReadExecutionSection) *tools.RuntimeObservation {
+	if len(sections) == 0 {
+		return nil
+	}
+	observations := make([]*tools.RuntimeObservation, 0, len(sections))
+	for _, section := range sections {
+		observations = append(observations, section.Observation)
+	}
+	return tools.MergeRuntimeObservations(observations...)
 }

@@ -8,14 +8,6 @@ import (
 
 const structuredTypeScriptImpactRouteTag = "impact-structured-typescript-v1"
 
-func tryStructuredTypeScriptImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) (string, bool) {
-	result, ok := tryExpandedStructuredTypeScriptImpactSearchResult(cache, opts)
-	if !ok {
-		return "", false
-	}
-	return result.Rendered, true
-}
-
 func tryExpandedStructuredTypeScriptImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
 	result, ok := tryStructuredTypeScriptImpactSearchResult(cache, opts)
 	if !ok {

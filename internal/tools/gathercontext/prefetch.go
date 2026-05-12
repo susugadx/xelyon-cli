@@ -12,16 +12,22 @@ import (
 
 const maxPrefetchedReads = 3
 
-func prefetchRecommendedEvidence(execCtx tools.ExecutionContext, artifact search.SearchExecutionArtifact) string {
+type prefetchResult struct {
+	output      string
+	observation *tools.RuntimeObservation
+}
+
+func prefetchRecommendedEvidence(execCtx tools.ExecutionContext, artifact search.SearchExecutionArtifact) prefetchResult {
 	if !artifact.Metadata.StructuredImpact || artifact.Metadata.Ambiguous || artifact.Metadata.Bundle == nil || artifact.Metadata.Bundle.Impact == nil {
-		return ""
+		return prefetchResult{}
 	}
 	items := boundedRecommendedReads(artifact.Metadata.Bundle.Impact.RecommendedReads, maxPrefetchedReads)
 	if len(items) == 0 {
-		return ""
+		return prefetchResult{}
 	}
 
 	var sections []string
+	var observations []*tools.RuntimeObservation
 	reg := execCtx.EffectiveLocatorRegistry()
 	for _, item := range items {
 		target := registerPrefetchLocator(reg, item)
@@ -33,9 +39,13 @@ func prefetchRecommendedEvidence(execCtx tools.ExecutionContext, artifact search
 				continue
 			}
 			sections = append(sections, section.Output)
+			observations = append(observations, section.Observation)
 		}
 	}
-	return strings.Join(sections, "\n\n")
+	return prefetchResult{
+		output:      strings.Join(sections, "\n\n"),
+		observation: tools.MergeRuntimeObservations(observations...),
+	}
 }
 
 func boundedRecommendedReads(items []search.SymbolBundleItem, limit int) []search.SymbolBundleItem {
