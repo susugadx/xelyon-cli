@@ -1,6 +1,7 @@
 package review
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -29,6 +30,36 @@ func TestBuildReviewProbePlanPromptIncludesStrictSchemaContract(t *testing.T) {
 	for _, want := range wants {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("probe plan prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+func TestBuildReviewProbePlanRepairPromptIncludesRepairContract(t *testing.T) {
+	prompt := buildReviewProbePlanRepairPrompt(
+		NewCurrentChangesRequest("focus repair"),
+		"diff evidence",
+		`{"schema_version":"wrong"}`,
+		errors.New("schema_version must be review_probe_plan.v1"),
+	)
+
+	wants := []string{
+		"Review Pass 1: Probe Plan JSON Repair",
+		"Return corrected JSON only.",
+		"Do not add markdown fences.",
+		"Do not change schema_version from the contract value.",
+		"Do not request or rely on tools.",
+		"## Probe Plan JSON Contract",
+		`"schema_version": "review_probe_plan.v1"`,
+		"focus repair",
+		"diff evidence",
+		"## Invalid Model Output",
+		`{"schema_version":"wrong"}`,
+		"## Decode Or Validation Error",
+		"schema_version must be review_probe_plan.v1",
+	}
+	for _, want := range wants {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("probe plan repair prompt missing %q:\n%s", want, prompt)
 		}
 	}
 }
@@ -69,6 +100,55 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 	for _, want := range wants {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("report prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+func TestBuildReviewReportRepairPromptIncludesRepairContract(t *testing.T) {
+	prompt := buildReviewReportRepairPrompt(
+		NewCurrentChangesRequest("focus repair"),
+		"diff evidence",
+		ReviewProbePlan{
+			SchemaVersion: ReviewProbePlanSchemaVersionV1,
+			TargetKind:    TargetCurrentChanges,
+			NoProbeReason: "not needed",
+			Probes:        []ReviewPlannedProbe{},
+		},
+		[]ReviewProbeSummary{
+			{
+				ProbeID: "probe-1",
+				Mode:    ReviewProbeHostReadOnly,
+				Status:  ReviewProbePassed,
+			},
+		},
+		nil,
+		reviewRunnerPromptRedactor{},
+		`{"schema_version":"wrong"}`,
+		errors.New("generated_at must be non-zero"),
+	)
+
+	wants := []string{
+		"Review Pass 2: Report JSON Repair",
+		"Return corrected JSON only.",
+		"Do not add markdown fences.",
+		"Do not change schema_version from the contract value.",
+		"Do not request or rely on tools.",
+		"Preserve trusted probe summary IDs; do not invent probe IDs.",
+		"## Review Report JSON Contract",
+		`"schema_version": "review_report.v1"`,
+		"focus repair",
+		"diff evidence",
+		"## Decoded Probe Plan",
+		"## Probe Summaries For Report Schema",
+		`"probe_id": "probe-1"`,
+		"## Invalid Model Output",
+		`{"schema_version":"wrong"}`,
+		"## Decode Or Validation Error",
+		"generated_at must be non-zero",
+	}
+	for _, want := range wants {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("report repair prompt missing %q:\n%s", want, prompt)
 		}
 	}
 }

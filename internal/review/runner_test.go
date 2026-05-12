@@ -298,6 +298,7 @@ func TestReviewRunnerRunRevalidatesReportAfterTrustedProbeSummaries(t *testing.T
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, modelReport))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, modelReport))},
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -310,6 +311,9 @@ func TestReviewRunnerRunRevalidatesReportAfterTrustedProbeSummaries(t *testing.T
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("Run() error = %q, want substring %q", err.Error(), want)
 		}
+	}
+	if got, want := len(model.requests), 3; got != want {
+		t.Fatalf("model requests = %d, want %d", got, want)
 	}
 }
 
@@ -350,6 +354,143 @@ func TestReviewRunnerRunNoProbeReasonSkipsProbeRunner(t *testing.T) {
 	}
 }
 
+func TestReviewRunnerRunRepairsInvalidProbePlanJSON(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: `{not-json`},
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	got, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got.Verdict != ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	}
+	if got, want := len(probes.calls), 1; got != want {
+		t.Fatalf("probe calls = %d, want %d", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+	})
+	for _, want := range []string{"Probe Plan JSON Repair", "Return corrected JSON only.", "{not-json", "decode review probe plan"} {
+		if !strings.Contains(model.requests[1].Prompt, want) {
+			t.Fatalf("probe plan repair prompt missing %q:\n%s", want, model.requests[1].Prompt)
+		}
+	}
+}
+
+func TestReviewRunnerRunRepairsInvalidProbePlanValidation(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: `{
+				"schema_version": "review_probe_plan.v1",
+				"target_kind": "current_changes",
+				"probes": []
+			}`},
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	_, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got, want := len(probes.calls), 1; got != want {
+		t.Fatalf("probe calls = %d, want %d", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+	})
+	for _, want := range []string{"Probe Plan JSON Repair", "no_probe_reason must be non-empty"} {
+		if !strings.Contains(model.requests[1].Prompt, want) {
+			t.Fatalf("probe plan repair prompt missing %q:\n%s", want, model.requests[1].Prompt)
+		}
+	}
+}
+
+func TestReviewRunnerRunRepairsInvalidReportJSON(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
+			{content: `{not-json`},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	got, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got.Verdict != ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	}
+	if got, want := len(probes.calls), 1; got != want {
+		t.Fatalf("probe calls = %d, want %d", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseReport,
+	})
+	for _, want := range []string{"Report JSON Repair", "Return corrected JSON only.", "Preserve trusted probe summary IDs", "{not-json", "decode review report"} {
+		if !strings.Contains(model.requests[2].Prompt, want) {
+			t.Fatalf("report repair prompt missing %q:\n%s", want, model.requests[2].Prompt)
+		}
+	}
+}
+
+func TestReviewRunnerRunRepairsInvalidReportValidation(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
+			{content: `{"schema_version":"review_report.v1","target_kind":"current_changes"}`},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	got, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got.Verdict != ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	}
+	if got, want := len(probes.calls), 1; got != want {
+		t.Fatalf("probe calls = %d, want %d", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseReport,
+	})
+	for _, want := range []string{"Report JSON Repair", "finalize report", "generated_at must be non-zero"} {
+		if !strings.Contains(model.requests[2].Prompt, want) {
+			t.Fatalf("report repair prompt missing %q:\n%s", want, model.requests[2].Prompt)
+		}
+	}
+}
+
 func TestReviewRunnerRunInvalidPass1PlanStopsBeforeProbesAndPass2(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -373,7 +514,14 @@ func TestReviewRunnerRunInvalidPass1PlanStopsBeforeProbesAndPass2(t *testing.T) 
 		t.Run(tt.name, func(t *testing.T) {
 			evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 			probes := &runnerFakeProbeRunner{}
-			model := &runnerFakeModel{responses: []runnerFakeModelResponse{{content: tt.content}}}
+			model := &runnerFakeModel{
+				responses: []runnerFakeModelResponse{
+					{content: tt.content},
+					{content: tt.content},
+					{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
+					{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+				},
+			}
 			runner := newReviewRunnerForTest(t, evidence, probes, model)
 
 			_, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
@@ -386,8 +534,11 @@ func TestReviewRunnerRunInvalidPass1PlanStopsBeforeProbesAndPass2(t *testing.T) 
 			if got, want := len(probes.calls), 0; got != want {
 				t.Fatalf("probe calls = %d, want %d", got, want)
 			}
-			if got, want := len(model.requests), 1; got != want {
+			if got, want := len(model.requests), 2; got != want {
 				t.Fatalf("model requests = %d, want %d", got, want)
+			}
+			if got, want := model.requests[1].Phase, ReviewModelPhaseProbePlan; got != want {
+				t.Fatalf("repair model phase = %q, want %q", got, want)
 			}
 		})
 	}
@@ -400,6 +551,8 @@ func TestReviewRunnerRunInvalidPass2ReportReturnsAfterProbeExecution(t *testing.
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: `{"schema_version":"review_report.v1"}`},
+			{content: `{"schema_version":"review_report.v1"}`},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -414,8 +567,11 @@ func TestReviewRunnerRunInvalidPass2ReportReturnsAfterProbeExecution(t *testing.
 	if got, want := len(probes.calls), 1; got != want {
 		t.Fatalf("probe calls = %d, want %d", got, want)
 	}
-	if got, want := len(model.requests), 2; got != want {
+	if got, want := len(model.requests), 3; got != want {
 		t.Fatalf("model requests = %d, want %d", got, want)
+	}
+	if got, want := model.requests[2].Phase, ReviewModelPhaseReport; got != want {
+		t.Fatalf("repair model phase = %q, want %q", got, want)
 	}
 }
 
@@ -458,6 +614,38 @@ func TestReviewRunnerRunPass1ModelErrorStopsBeforeProbesAndPass2(t *testing.T) {
 	}
 }
 
+func TestReviewRunnerRunPass1RepairModelErrorUsesPass1ModelContract(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: `{not-json`},
+			{err: errors.New("repair model unavailable")},
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	_, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err == nil {
+		t.Fatal("Run() error = nil, want error")
+	}
+	for _, want := range []string{"pass1 model", "repair model unavailable"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Run() error = %q, want substring %q", err.Error(), want)
+		}
+	}
+	if strings.Contains(err.Error(), "pass1 repair model") {
+		t.Fatalf("Run() error = %q, should not introduce a repair model error prefix", err.Error())
+	}
+	if got, want := len(probes.calls), 0; got != want {
+		t.Fatalf("probe calls = %d, want %d", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseProbePlan,
+	})
+}
+
 func TestReviewRunnerRunPass2ModelErrorReturnsAfterProbeExecution(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
@@ -482,6 +670,40 @@ func TestReviewRunnerRunPass2ModelErrorReturnsAfterProbeExecution(t *testing.T) 
 	if got, want := len(model.requests), 2; got != want {
 		t.Fatalf("model requests = %d, want %d", got, want)
 	}
+}
+
+func TestReviewRunnerRunPass2RepairModelErrorUsesPass2ModelContract(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
+			{content: `{not-json`},
+			{err: errors.New("repair model unavailable")},
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	_, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err == nil {
+		t.Fatal("Run() error = nil, want error")
+	}
+	for _, want := range []string{"pass2 model", "repair model unavailable"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Run() error = %q, want substring %q", err.Error(), want)
+		}
+	}
+	if strings.Contains(err.Error(), "pass2 repair model") {
+		t.Fatalf("Run() error = %q, should not introduce a repair model error prefix", err.Error())
+	}
+	if got, want := len(probes.calls), 1; got != want {
+		t.Fatalf("probe calls = %d, want %d", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseReport,
+	})
 }
 
 func TestReviewRunnerRunProbeExecutorErrorStopsBeforePass2(t *testing.T) {
@@ -994,5 +1216,17 @@ func assertStringSliceEqualForRunnerTest(t *testing.T, got, want []string) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("slice = %#v, want %#v", got, want)
+	}
+}
+
+func assertReviewRunnerRequestPhasesForTest(t *testing.T, requests []ReviewModelRequest, want []ReviewModelPhase) {
+	t.Helper()
+
+	got := make([]ReviewModelPhase, 0, len(requests))
+	for _, req := range requests {
+		got = append(got, req.Phase)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("model request phases = %#v, want %#v", got, want)
 	}
 }

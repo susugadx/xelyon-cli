@@ -2,6 +2,11 @@ package review
 
 import "strings"
 
+const (
+	reviewRunnerJSONRepairOutputInstructions = "Return corrected JSON only. Do not add markdown fences. Do not change schema_version from the contract value. Do not request or rely on tools."
+	reviewRunnerJSONRepairScopeInstruction   = "Repair only the JSON shape and values needed to satisfy the contract."
+)
+
 func buildReviewProbePlanPrompt(req ReviewRequest, evidenceMarkdown string) string {
 	var b strings.Builder
 	b.WriteString("# Review Pass 1: Probe Plan\n\n")
@@ -13,6 +18,24 @@ func buildReviewProbePlanPrompt(req ReviewRequest, evidenceMarkdown string) stri
 	appendReviewRunnerPromptTextSection(&b, "Probe Plan JSON Contract", reviewProbePlanPromptContract())
 	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)
 	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", evidenceMarkdown)
+	return b.String()
+}
+
+func buildReviewProbePlanRepairPrompt(req ReviewRequest, evidenceMarkdown, invalidOutput string, decodeOrValidationErr error) string {
+	var b strings.Builder
+	b.WriteString("# Review Pass 1: Probe Plan JSON Repair\n\n")
+	b.WriteString("The previous probe plan response failed strict JSON decode or validation. ")
+	b.WriteString(reviewRunnerJSONRepairOutputInstructions)
+	b.WriteString("\n\n")
+	b.WriteString("Keep the same target and task context. ")
+	b.WriteString(reviewRunnerJSONRepairScopeInstruction)
+	b.WriteString("\n\n")
+
+	appendReviewRunnerPromptTextSection(&b, "Probe Plan JSON Contract", reviewProbePlanPromptContract())
+	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)
+	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", evidenceMarkdown)
+	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", invalidOutput)
+	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", reviewRunnerPromptErrorText(decodeOrValidationErr))
 	return b.String()
 }
 
@@ -31,6 +54,34 @@ func buildReviewReportPrompt(req ReviewRequest, evidenceMarkdown string, plan Re
 	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(probeSummaries, redactor))
 	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", buildReviewProbeResultPromptContexts(results, redactor))
 	return b.String()
+}
+
+func buildReviewReportRepairPrompt(req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, results []ReviewProbeResult, redactor reviewRunnerPromptRedactor, invalidOutput string, decodeOrValidationErr error) string {
+	var b strings.Builder
+	b.WriteString("# Review Pass 2: Report JSON Repair\n\n")
+	b.WriteString("The previous report response failed strict JSON decode or validation. ")
+	b.WriteString(reviewRunnerJSONRepairOutputInstructions)
+	b.WriteString(" Preserve trusted probe summary IDs; do not invent probe IDs.\n\n")
+	b.WriteString("Use the same evidence, decoded probe plan, probe summaries, and probe result context. ")
+	b.WriteString(reviewRunnerJSONRepairScopeInstruction)
+	b.WriteString("\n\n")
+
+	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
+	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)
+	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", evidenceMarkdown)
+	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", plan)
+	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(probeSummaries, redactor))
+	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", buildReviewProbeResultPromptContexts(results, redactor))
+	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", redactor.redactText(invalidOutput))
+	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", redactor.redactText(reviewRunnerPromptErrorText(decodeOrValidationErr)))
+	return b.String()
+}
+
+func reviewRunnerPromptErrorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func appendReviewRunnerPromptTextSection(b *strings.Builder, title, content string) {
