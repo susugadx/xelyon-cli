@@ -12,7 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const (
@@ -21,12 +21,7 @@ const (
 	groqDiagnosticSmokeToolName               = "xelyon_groq_doctor_probe"
 )
 
-type groqDiagnosticSmokeRequest struct {
-	Name         string
-	SystemPrompt string
-	UserContent  string
-	ToolPayload  bool
-}
+type groqDiagnosticSmokeRequest = providerdiag.ChatCompletionsSmokeRequest
 
 func runGroqDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
 	timeout := options.SmokeTimeout
@@ -78,28 +73,14 @@ func runGroqDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 }
 
 func groqDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingEnabled bool) []groqDiagnosticSmokeRequest {
-	textSmoke := options.TextSmoke || !options.ToolSmoke
-	if options.ToolSmoke && !functionCallingEnabled {
-		textSmoke = true
-	}
-
-	var requests []groqDiagnosticSmokeRequest
-	if textSmoke {
-		requests = append(requests, groqDiagnosticSmokeRequest{
-			Name:         "text",
-			SystemPrompt: "Reply briefly.",
-			UserContent:  "Reply with: xelyon groq doctor ok",
-		})
-	}
-	if options.ToolSmoke {
-		requests = append(requests, groqDiagnosticSmokeRequest{
-			Name:         "tool",
-			SystemPrompt: "Use the diagnostic tool.",
-			UserContent:  `Call xelyon_groq_doctor_probe exactly once with {"value":"groq-tool-ok"} and do not answer in prose.`,
-			ToolPayload:  true,
-		})
-	}
-	return requests
+	return providerdiag.TextToolSmokeRequests(providerdiag.TextToolSmokeRequestOptions{
+		TextSmoke:              options.TextSmoke,
+		ToolSmoke:              options.ToolSmoke,
+		FunctionCallingEnabled: functionCallingEnabled,
+		ProviderSlug:           "groq",
+		ToolName:               groqDiagnosticSmokeToolName,
+		ToolExpectedValue:      "groq-tool-ok",
+	})
 }
 
 func runGroqDiagnosticSmokeRequest(
@@ -164,21 +145,7 @@ func runGroqDiagnosticSmokeRequest(
 }
 
 func newGroqDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request groqDiagnosticSmokeRequest, output io.Writer) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if output == nil {
-		output = io.Discard
-	}
-	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
-	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
-	if request.ToolPayload {
-		requestCtx = api.WithToolDefinitions(requestCtx, groqDiagnosticSmokeToolDefinitions())
-	} else {
-		requestCtx = api.WithToolDefinitions(requestCtx, nil)
-		requestCtx = api.WithToolUseDisabled(requestCtx)
-	}
-	return config.WithContext(requestCtx, cfg)
+	return providerdiag.NewChatCompletionsSmokeRequestContext(ctx, cfg, request, groqDiagnosticSmokeToolDefinitions(), output)
 }
 
 func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
@@ -195,26 +162,8 @@ func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeReq
 		r.Content = request.Content
 	}
 
-	var usage api.Usage
-	usage.InputTokens = request.Usage.InputTokens
-	usage.OutputTokens = request.Usage.OutputTokens
-	usage.ThinkingTokens = request.Usage.ThinkingTokens
-	usage.CachedInputTokens = request.Usage.CachedInputTokens
-	usage.CacheCreationTokens = request.Usage.CacheCreationTokens
-
-	var current api.Usage
-	current.InputTokens = r.Usage.InputTokens
-	current.OutputTokens = r.Usage.OutputTokens
-	current.ThinkingTokens = r.Usage.ThinkingTokens
-	current.CachedInputTokens = r.Usage.CachedInputTokens
-	current.CacheCreationTokens = r.Usage.CacheCreationTokens
-	current.Add(usage)
-	r.Usage = groqDiagnosticSmokeUsage(current)
-	if request.Cost.PricingUnavailable {
-		r.Cost.PricingUnavailable = true
-	} else {
-		r.Cost.USD += request.Cost.USD
-	}
+	r.Usage = providerdiag.AddSmokeUsage(r.Usage, request.Usage)
+	r.Cost = providerdiag.AddSmokeCost(r.Cost, request.Cost)
 	r.UsageObserved = r.allRanRequestsObservedUsage()
 }
 
@@ -242,37 +191,17 @@ func groqSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 }
 
 func groqDiagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return DiagnosticSmokeUsage{
-		InputTokens:         usage.InputTokens,
-		OutputTokens:        usage.OutputTokens,
-		ThinkingTokens:      usage.ThinkingTokens,
-		CachedInputTokens:   usage.CachedInputTokens,
-		CacheCreationTokens: usage.CacheCreationTokens,
-	}
+	return providerdiag.SmokeUsageFromAPIUsage(usage)
 }
 
 func groqDiagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return DiagnosticSmokeCost{
-		USD:                estimate.Cost,
-		PricingUnavailable: estimate.PricingUnavailable,
-	}
+	return providerdiag.SmokeCostFromEstimate(estimate)
 }
 
 func groqDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
-	return []api.ToolDefinition{{
-		Name:        groqDiagnosticSmokeToolName,
-		Description: "No-op diagnostic probe used to verify Groq tool calling.",
-		Parameters: map[string]interface{}{
-			"type":                 "object",
-			"additionalProperties": false,
-			"properties": map[string]interface{}{
-				"value": map[string]interface{}{"type": "string"},
-			},
-			"required": []string{"value"},
-		},
-	}}
+	return providerdiag.NoopDiagnosticToolDefinitions(groqDiagnosticSmokeToolName, "Groq")
 }
 
 func groqDiagnosticSmokeContentHasToolCall(content string) bool {
-	return strings.Contains(content, `"tool":"`+groqDiagnosticSmokeToolName+`"`)
+	return providerdiag.ContentHasToolCall(content, groqDiagnosticSmokeToolName)
 }

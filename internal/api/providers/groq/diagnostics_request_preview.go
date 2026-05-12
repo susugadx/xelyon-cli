@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func (r *DiagnosticReport) addRequestPreview(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -78,19 +79,12 @@ func buildGroqDiagnosticRequestPreviewRequest(
 		Route:       report.Route,
 		Method:      "POST",
 		URL:         report.APIURL,
-		Headers:     groqDiagnosticRequestPreviewHeaders(),
+		Headers:     providerdiag.RedactedBearerHeaders(),
 		Body: provider.buildChatCompletionsRequest(
 			ctx,
 			request.SystemPrompt,
 			[]api.Message{{Role: "user", Content: request.UserContent}},
 			report.Model,
 		),
-	}
-}
-
-func groqDiagnosticRequestPreviewHeaders() map[string]string {
-	return map[string]string{
-		"Content-Type":  "application/json",
-		"Authorization": "Bearer <redacted>",
 	}
 }

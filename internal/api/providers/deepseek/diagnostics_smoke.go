@@ -12,7 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const (
@@ -21,12 +21,7 @@ const (
 	deepSeekDiagnosticSmokeToolName               = "xelyon_deepseek_doctor_probe"
 )
 
-type deepSeekDiagnosticSmokeRequest struct {
-	Name         string
-	SystemPrompt string
-	UserContent  string
-	ToolPayload  bool
-}
+type deepSeekDiagnosticSmokeRequest = providerdiag.ChatCompletionsSmokeRequest
 
 func runDeepSeekDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
 	timeout := options.SmokeTimeout
@@ -78,28 +73,14 @@ func runDeepSeekDiagnosticSmoke(ctx context.Context, cfg *config.Config, report 
 }
 
 func deepSeekDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingEnabled bool) []deepSeekDiagnosticSmokeRequest {
-	textSmoke := options.TextSmoke || !options.ToolSmoke
-	if options.ToolSmoke && !functionCallingEnabled {
-		textSmoke = true
-	}
-
-	var requests []deepSeekDiagnosticSmokeRequest
-	if textSmoke {
-		requests = append(requests, deepSeekDiagnosticSmokeRequest{
-			Name:         "text",
-			SystemPrompt: "Reply briefly.",
-			UserContent:  "Reply with: xelyon deepseek doctor ok",
-		})
-	}
-	if options.ToolSmoke {
-		requests = append(requests, deepSeekDiagnosticSmokeRequest{
-			Name:         "tool",
-			SystemPrompt: "Use the diagnostic tool.",
-			UserContent:  `Call xelyon_deepseek_doctor_probe exactly once with {"value":"deepseek-tool-ok"} and do not answer in prose.`,
-			ToolPayload:  true,
-		})
-	}
-	return requests
+	return providerdiag.TextToolSmokeRequests(providerdiag.TextToolSmokeRequestOptions{
+		TextSmoke:              options.TextSmoke,
+		ToolSmoke:              options.ToolSmoke,
+		FunctionCallingEnabled: functionCallingEnabled,
+		ProviderSlug:           "deepseek",
+		ToolName:               deepSeekDiagnosticSmokeToolName,
+		ToolExpectedValue:      "deepseek-tool-ok",
+	})
 }
 
 func runDeepSeekDiagnosticSmokeRequest(
@@ -164,21 +145,7 @@ func runDeepSeekDiagnosticSmokeRequest(
 }
 
 func newDeepSeekDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request deepSeekDiagnosticSmokeRequest, output io.Writer) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if output == nil {
-		output = io.Discard
-	}
-	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
-	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
-	if request.ToolPayload {
-		requestCtx = api.WithToolDefinitions(requestCtx, deepSeekDiagnosticSmokeToolDefinitions())
-	} else {
-		requestCtx = api.WithToolDefinitions(requestCtx, nil)
-		requestCtx = api.WithToolUseDisabled(requestCtx)
-	}
-	return config.WithContext(requestCtx, cfg)
+	return providerdiag.NewChatCompletionsSmokeRequestContext(ctx, cfg, request, deepSeekDiagnosticSmokeToolDefinitions(), output)
 }
 
 func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
@@ -195,26 +162,8 @@ func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeReq
 		r.Content = request.Content
 	}
 
-	var usage api.Usage
-	usage.InputTokens = request.Usage.InputTokens
-	usage.OutputTokens = request.Usage.OutputTokens
-	usage.ThinkingTokens = request.Usage.ThinkingTokens
-	usage.CachedInputTokens = request.Usage.CachedInputTokens
-	usage.CacheCreationTokens = request.Usage.CacheCreationTokens
-
-	var current api.Usage
-	current.InputTokens = r.Usage.InputTokens
-	current.OutputTokens = r.Usage.OutputTokens
-	current.ThinkingTokens = r.Usage.ThinkingTokens
-	current.CachedInputTokens = r.Usage.CachedInputTokens
-	current.CacheCreationTokens = r.Usage.CacheCreationTokens
-	current.Add(usage)
-	r.Usage = deepSeekDiagnosticSmokeUsage(current)
-	if request.Cost.PricingUnavailable {
-		r.Cost.PricingUnavailable = true
-	} else {
-		r.Cost.USD += request.Cost.USD
-	}
+	r.Usage = providerdiag.AddSmokeUsage(r.Usage, request.Usage)
+	r.Cost = providerdiag.AddSmokeCost(r.Cost, request.Cost)
 	r.UsageObserved = r.allRanRequestsObservedUsage()
 }
 
@@ -242,37 +191,17 @@ func deepSeekSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 }
 
 func deepSeekDiagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return DiagnosticSmokeUsage{
-		InputTokens:         usage.InputTokens,
-		OutputTokens:        usage.OutputTokens,
-		ThinkingTokens:      usage.ThinkingTokens,
-		CachedInputTokens:   usage.CachedInputTokens,
-		CacheCreationTokens: usage.CacheCreationTokens,
-	}
+	return providerdiag.SmokeUsageFromAPIUsage(usage)
 }
 
 func deepSeekDiagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return DiagnosticSmokeCost{
-		USD:                estimate.Cost,
-		PricingUnavailable: estimate.PricingUnavailable,
-	}
+	return providerdiag.SmokeCostFromEstimate(estimate)
 }
 
 func deepSeekDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
-	return []api.ToolDefinition{{
-		Name:        deepSeekDiagnosticSmokeToolName,
-		Description: "No-op diagnostic probe used to verify DeepSeek tool calling.",
-		Parameters: map[string]interface{}{
-			"type":                 "object",
-			"additionalProperties": false,
-			"properties": map[string]interface{}{
-				"value": map[string]interface{}{"type": "string"},
-			},
-			"required": []string{"value"},
-		},
-	}}
+	return providerdiag.NoopDiagnosticToolDefinitions(deepSeekDiagnosticSmokeToolName, "DeepSeek")
 }
 
 func deepSeekDiagnosticSmokeContentHasToolCall(content string) bool {
-	return strings.Contains(content, `"tool":"`+deepSeekDiagnosticSmokeToolName+`"`)
+	return providerdiag.ContentHasToolCall(content, deepSeekDiagnosticSmokeToolName)
 }

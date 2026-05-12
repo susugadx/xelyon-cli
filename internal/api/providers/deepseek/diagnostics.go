@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 // DiagnosticStatus は DeepSeek 診断チェックの結果を表す。
@@ -31,19 +32,10 @@ type DiagnosticCheck struct {
 }
 
 // DiagnosticSmokeUsage は DeepSeek smoke request で観測した usage を表す。
-type DiagnosticSmokeUsage struct {
-	InputTokens         int `json:"input_tokens"`
-	OutputTokens        int `json:"output_tokens"`
-	ThinkingTokens      int `json:"thinking_tokens"`
-	CachedInputTokens   int `json:"cached_input_tokens"`
-	CacheCreationTokens int `json:"cache_creation_tokens"`
-}
+type DiagnosticSmokeUsage = providerdiag.SmokeUsage
 
 // DiagnosticSmokeCost は DeepSeek smoke request の cost estimate を表す。
-type DiagnosticSmokeCost struct {
-	USD                float64 `json:"usd"`
-	PricingUnavailable bool    `json:"pricing_unavailable"`
-}
+type DiagnosticSmokeCost = providerdiag.SmokeCost
 
 // DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
 type DiagnosticSmokeRequestResult struct {

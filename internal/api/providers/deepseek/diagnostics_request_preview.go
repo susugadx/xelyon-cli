@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func (r *DiagnosticReport) addRequestPreview(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -84,14 +85,7 @@ func buildDeepSeekDiagnosticRequestPreviewRequest(
 		Route:       report.Route,
 		Method:      "POST",
 		URL:         report.APIURL,
-		Headers:     deepSeekDiagnosticRequestPreviewHeaders(),
+		Headers:     providerdiag.RedactedBearerHeaders(),
 		Body:        body,
-	}
-}
-
-func deepSeekDiagnosticRequestPreviewHeaders() map[string]string {
-	return map[string]string{
-		"Content-Type":  "application/json",
-		"Authorization": "Bearer <redacted>",
 	}
 }
