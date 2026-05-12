@@ -29,7 +29,7 @@
 | Azure OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | `--deployment`, `--print-config` |
 | Kimi | yes | yes | yes | yes | yes | no | yes | no | no | no | no | none |
 | Bedrock | yes | yes | yes | yes | yes | yes | no | no | no | no | no | none |
-| DeepSeek | no | no | no | no | no | no | no | no | no | no | no | none |
+| DeepSeek | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | Gemini | no | no | no | no | no | no | no | no | no | no | no | none |
 | Claude / Anthropic | no | no | no | no | no | no | no | no | no | no | no | none |
 | Groq | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
@@ -74,9 +74,16 @@ Groq:
 - Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1.
 - Main owner packages: `cmd/doctor_groq.go`, `internal/api/providers/groq/diagnostics*.go`, `internal/providerdiag`.
 
+DeepSeek:
+
+- Checks `DEEPSEEK_API_KEY`, `DEEPSEEK_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, thinking request config, function calling, catalog policy.
+- Supports `--print-request`.
+- Live smoke supports text and tool request types. `DEEPSEEK_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
+- Does not support `--capabilities`, `--require-capability`, image, web search, or retention smoke in v1. Thinking is reported from normal request config rather than a separate `--thinking-smoke`.
+- Main owner packages: `cmd/doctor_deepseek.go`, `internal/api/providers/deepseek/diagnostics*.go`, `internal/providerdiag`.
+
 Missing doctor providers:
 
-- `deepseek`: OpenAI-compatible Chat Completions, `DEEPSEEK_API_KEY`, `DEEPSEEK_API_URL`, function calling toggle, thinking config.
 - `openrouter`: OpenAI-compatible plus Anthropic-skin routes, `OPENROUTER_API_KEY`, `OPENROUTER_API_URL`, image support, function calling toggle, Claude compaction route.
 - `gemini`: Gemini SSE route, `GEMINI_API_KEY`, `GEMINI_API_URL`, image support, function calling toggle, thinking / caching / web search details.
 - `claude` / `anthropic`: Anthropic Messages, `ANTHROPIC_API_KEY`, context management, image support, tool use, web search.
@@ -269,7 +276,7 @@ When adding or migrating a provider doctor, check these surfaces:
 
 ### Phase 1: OpenAI-compatible doctor template
 
-Target: `deepseek` next. `groq` is the first implemented provider in this phase.
+Target: OpenAI-compatible Chat Completions providers. `groq` is the first implemented provider in this phase; `deepseek` followed in Phase 2.
 
 Reason:
 
@@ -287,7 +294,7 @@ Completed for Groq:
 
 Remaining expected scope:
 
-- Add `doctor deepseek`
+- Use Groq / DeepSeek implementation experience before extracting any shared OpenAI-compatible doctor helper
 
 Do not include:
 
@@ -298,6 +305,8 @@ Do not include:
 ### Phase 2: DeepSeek doctor
 
 Target: `deepseek`.
+
+Status: completed.
 
 Focus:
 

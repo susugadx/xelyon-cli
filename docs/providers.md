@@ -52,6 +52,20 @@ xelyon --provider deepseek --model deepseek-v4-pro
 - `deepseek-chat` / `deepseek-reasoner` は legacy alias（`deepseek-v4-flash` 相当）です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。
 - `reasoning_content`（思考内容）はストリーミング表示（💭）され、ツール実行時も保持されます。
 
+設定の到達性は CLI から診断できます。`doctor deepseek` は `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、thinking request config、function calling 設定、token / pricing metadata を確認します。`--smoke` を付けると live text request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。`--print-request` は live request を送らずに redacted request body を表示します。
+
+```bash
+xelyon doctor deepseek
+xelyon doctor deepseek --model deepseek-v4-flash
+xelyon doctor deepseek --model corp-deepseek-model --catalog-model deepseek-v4-flash
+xelyon doctor deepseek --smoke
+xelyon doctor deepseek --tool-smoke
+xelyon doctor deepseek --print-request
+xelyon doctor deepseek --json
+```
+
+`DEEPSEEK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--smoke` / `--tool-smoke` は live API request を送るため、通常 CI では実行しません。手元では `DEEPSEEK_API_KEY` を設定して `make deepseek-doctor-smoke` を実行します。既定モデルは `DEEPSEEK_DOCTOR_SMOKE_MODEL ?= deepseek-v4-flash` です。
+
 ### 2. Kimi (Moonshot)
 
 ```bash

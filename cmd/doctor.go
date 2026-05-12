@@ -14,6 +14,7 @@ var (
 	doctorDeploymentFlag           string
 	doctorCatalogModelFlag         string
 	doctorBedrockModelFlag         string
+	doctorDeepSeekModelFlag        string
 	doctorGroqModelFlag            string
 	doctorKimiModelFlag            string
 	doctorOpenAIModelFlag          string
@@ -44,6 +45,7 @@ func newDoctorCommand() *cobra.Command {
 	}
 	cmd.AddCommand(newAzureDoctorCommand())
 	cmd.AddCommand(newBedrockDoctorCommand())
+	cmd.AddCommand(newDeepSeekDoctorCommand())
 	cmd.AddCommand(newGroqDoctorCommand())
 	cmd.AddCommand(newKimiDoctorCommand())
 	cmd.AddCommand(newOpenAIDoctorCommand())

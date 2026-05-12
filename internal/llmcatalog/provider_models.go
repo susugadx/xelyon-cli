@@ -106,6 +106,12 @@ var knownProviderModels = map[string][]string{
 }
 
 var knownProviderModelPrefixes = map[string][]string{
+	"deepseek": {
+		"deepseek-v4",
+		"deepseek-v3",
+		"deepseek-r1",
+		"deepseek-coder",
+	},
 	"groq": {
 		"meta-llama/llama-4-scout",
 		"llama-4-scout",

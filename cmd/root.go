@@ -57,6 +57,7 @@ Examples:
   xelyon doctor openai --smoke                     # Diagnose OpenAI provider
   xelyon doctor azure --deployment my-gpt-5-deployment --smoke # Diagnose Azure OpenAI
   xelyon doctor bedrock --smoke                    # Diagnose AWS Bedrock
+  xelyon doctor deepseek --smoke                   # Diagnose DeepSeek provider
   xelyon doctor groq --smoke                       # Diagnose Groq provider
   xelyon doctor kimi --smoke                       # Diagnose Kimi native provider
   xelyon -p deepseek -m deepseek-chat             # Short flags`,

@@ -111,6 +111,8 @@ func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
 		{provider: "groq", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: true},
 		{provider: "groq", model: "llama-3.2-11b-vision-preview", want: true},
 		{provider: "groq", model: "gpt-5.4", want: false},
+		{provider: "deepseek", model: "deepseek-v4-custom", want: true},
+		{provider: "deepseek", model: "gpt-5.4", want: false},
 		{provider: "openai", model: "gpt-5.4", want: true},
 		{provider: "openai", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: false},
 		{provider: "azure", model: "gpt-5.4", want: false},

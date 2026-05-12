@@ -4,6 +4,26 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ## CLI 診断コマンド
 
+### `xelyon doctor deepseek`
+
+DeepSeek provider の `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、thinking request config、function calling 設定、token / pricing metadata を確認します。route は常に `chat_completions` です。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
+
+`--model` は実 request に送る DeepSeek model ID または alias、`--catalog-model` は alias の underlying DeepSeek model として token / pricing / thinking 判定に使います。`DEEPSEEK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities`、`--require-capability`、`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は DeepSeek doctor v1 では提供しません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+
+```bash
+xelyon doctor deepseek
+xelyon doctor deepseek --model deepseek-v4-flash
+xelyon doctor deepseek --model corp-deepseek-model --catalog-model deepseek-v4-flash
+xelyon doctor deepseek --smoke
+xelyon doctor deepseek --tool-smoke
+xelyon doctor deepseek --print-request
+xelyon doctor deepseek --tool-smoke --print-request
+xelyon doctor deepseek --smoke --tool-smoke
+xelyon doctor deepseek --json
+```
+
+手元で doctor 経路だけを実 DeepSeek 環境で確認する場合は、`DEEPSEEK_API_KEY` を設定して `make deepseek-doctor-smoke` を実行します。既定では `deepseek-v4-flash` で text / tool smoke をまとめて実行し、必要なら `DEEPSEEK_DOCTOR_SMOKE_MODEL` で変更できます。
+
 ### `xelyon doctor kimi`
 
 Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。web search smoke は `web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`cached_input_tokens`、検索結果 token 観測値を text / JSON に出します。

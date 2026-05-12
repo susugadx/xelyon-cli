@@ -90,6 +90,16 @@ func GroqMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutp
 	})
 }
 
+// DeepSeekMaxOutputPolicy は DeepSeek doctor の max output 解決規則を返す。
+func DeepSeekMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
+		Provider:             "deepseek",
+		RequestModel:         model,
+		CatalogModel:         catalogModel,
+		ProviderDefaultKnown: true,
+	})
+}
+
 type maxOutputPolicyOptions struct {
 	Provider               string
 	RequestModel           string
@@ -216,6 +226,16 @@ func GroqCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPo
 	)
 }
 
+// DeepSeekCatalogPolicy は DeepSeek doctor 用の catalog policy snapshot を返す。
+func DeepSeekCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	return NewCatalogPolicy(
+		catalogModel,
+		DeepSeekMaxOutputPolicy(cfg, model, catalogModel),
+		cost.GetPricingInfoForConfig(cfg, "deepseek", model),
+		false,
+	)
+}
+
 // NewCatalogPolicy は providerごとの解決結果から共通 snapshot を作る。
 func NewCatalogPolicy(catalogModel string, maxOutput MaxOutputPolicy, pricing cost.PricingInfo, responsesStreaming bool) CatalogPolicy {
 	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
@@ -254,6 +274,17 @@ func (p CatalogPolicy) AzureDetail() string {
 
 // GroqDetail は Groq doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) GroqDetail() string {
+	return fmt.Sprintf(
+		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
+		p.CatalogModel,
+		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
+		p.MaxOutput.PlainDetail("unknown"),
+		PricingDetail(p.Pricing),
+	)
+}
+
+// DeepSeekDetail は DeepSeek doctor の catalog_policy detail を返す。
+func (p CatalogPolicy) DeepSeekDetail() string {
 	return fmt.Sprintf(
 		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
 		p.CatalogModel,

@@ -15,6 +15,15 @@ type deepSeekModelSelection struct {
 	catalogModel string
 }
 
+type deepSeekThinkingPolicy struct {
+	Supported       bool
+	Enabled         bool
+	Type            string
+	ReasoningEffort string
+	SpinnerSuffix   string
+	ExtraFields     map[string]any
+}
+
 func normalizeDeepSeekModel(model string) string {
 	trimmed := strings.TrimSpace(model)
 	switch strings.ToLower(trimmed) {
@@ -48,22 +57,33 @@ func isDeepSeekV4Model(model string) bool {
 }
 
 func deepSeekThinkingConfig(ctx context.Context, model deepSeekModelSelection) (extraFields map[string]any, reasoningEffort string, spinnerSuffix string) {
+	policy := resolveDeepSeekThinkingPolicy(ctx, model)
+	return policy.ExtraFields, policy.ReasoningEffort, policy.SpinnerSuffix
+}
+
+func resolveDeepSeekThinkingPolicy(ctx context.Context, model deepSeekModelSelection) deepSeekThinkingPolicy {
 	if !model.supportsV4Thinking() {
-		return nil, "", ""
+		return deepSeekThinkingPolicy{}
 	}
 
-	thinkingType := "disabled"
+	policy := deepSeekThinkingPolicy{
+		Supported: true,
+		Type:      "disabled",
+		ExtraFields: map[string]any{
+			"thinking": map[string]any{"type": "disabled"},
+		},
+	}
 	if api.IsThinkingEnabled(ctx) {
-		thinkingType = "enabled"
 		cfg := config.FromContext(ctx)
-		reasoningEffort = deepSeekReasoningEffort(cfg.Thinking.Level)
-		spinnerSuffix = "Reasoner"
+		policy.Enabled = true
+		policy.Type = "enabled"
+		policy.ReasoningEffort = deepSeekReasoningEffort(cfg.Thinking.Level)
+		policy.SpinnerSuffix = "Reasoner"
+		policy.ExtraFields = map[string]any{
+			"thinking": map[string]any{"type": "enabled"},
+		}
 	}
-
-	extraFields = map[string]any{
-		"thinking": map[string]any{"type": thinkingType},
-	}
-	return extraFields, reasoningEffort, spinnerSuffix
+	return policy
 }
 
 func deepSeekReasoningEffort(level string) string {

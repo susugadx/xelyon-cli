@@ -33,6 +33,11 @@ func TestCatalogPolicyDetailsPreserveProviderFormatting(t *testing.T) {
 	if got, want := groqPolicy.GroqDetail(), "catalog_model=meta-llama/llama-4-scout-17b-16e-instruct, context_window=131072, max_output_tokens=8192, pricing=input $0.11/M cached $0.110/M output $0.34/M"; got != want {
 		t.Fatalf("GroqDetail() = %q, want %q", got, want)
 	}
+
+	deepSeekPolicy := DeepSeekCatalogPolicy(cfg, "deepseek-v4-flash", "deepseek-v4-flash")
+	if got, want := deepSeekPolicy.DeepSeekDetail(), "catalog_model=deepseek-v4-flash, context_window=1000000, max_output_tokens=384000, pricing=input $0.14/M cached $0.003/M output $0.28/M"; got != want {
+		t.Fatalf("DeepSeekDetail() = %q, want %q", got, want)
+	}
 }
 
 func TestMaxOutputPolicyPreservesOpenAIAndAzureFallbackDifference(t *testing.T) {
