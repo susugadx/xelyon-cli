@@ -161,6 +161,62 @@ func TestExecuteSearchCodeArtifactWithConfig_TSXStructuredImpactJSXUsageCallers(
 	}
 }
 
+func TestExecuteSearchCodeArtifactWithConfig_TSXStructuredImpactPrefersImplementationOverPairedDeclaration(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/Button.tsx":  "export function Button() { return <button /> }\n",
+		"src/Button.d.ts": "export declare function Button(): JSX.Element\n",
+		"src/App.tsx":     "import { Button } from './Button'\nexport function App() { return <Button /> }\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newTSXImpactSearchOptions(dir, "Button"))
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "Button", "function")
+	if got := artifact.Metadata.Bundle.Definition.File; got != "src/Button.tsx" {
+		t.Fatalf("definition file = %q, want src/Button.tsx", got)
+	}
+	if strings.Contains(artifact.Rendered, `Multiple definitions found for "Button"`) {
+		t.Fatalf("paired declaration should not force ambiguity when TSX implementation exists, got:\n%s", artifact.Rendered)
+	}
+
+	reads := artifact.Metadata.Bundle.Impact.RecommendedReads
+	assertRecommendedReadAt(t, reads, 0, "definition", "src/Button.tsx")
+	if !slices.ContainsFunc(reads, func(item SymbolBundleItem) bool {
+		return item.Kind == "callers" && item.File == "src/App.tsx"
+	}) {
+		t.Fatalf("RecommendedReads = %+v, want src/App.tsx JSX usage caller", reads)
+	}
+	assertTypeScriptImpactBundleExcludesEvidenceFile(t, artifact.Metadata.Bundle, "src/Button.d.ts")
+
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainFile(callers, "src/App.tsx") {
+		t.Fatalf("callers = %+v, want src/App.tsx JSX usage", callers)
+	}
+	for _, want := range []string{filepath.Join(dir, "src/Button.tsx"), filepath.Join(dir, "src/App.tsx")} {
+		if !slices.Contains(artifact.Metadata.AffectedFiles, want) {
+			t.Fatalf("AffectedFiles = %v, want %s", artifact.Metadata.AffectedFiles, want)
+		}
+	}
+}
+
+func TestExecuteSearchCodeArtifactWithConfig_TSXStructuredImpactScopesOutUnrelatedDeclaration(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/Button.tsx":    "export function Button() { return <button /> }\n",
+		"src/App.tsx":       "import { Button } from './Button'\nexport function App() { return <Button /> }\n",
+		"types/Button.d.ts": "export interface Button { id: string }\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newTSXImpactSearchOptions(dir, "Button"))
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "Button", "function")
+	if got := artifact.Metadata.Bundle.Definition.File; got != "src/Button.tsx" {
+		t.Fatalf("definition file = %q, want src/Button.tsx", got)
+	}
+	if strings.Contains(artifact.Rendered, `Multiple definitions found for "Button"`) {
+		t.Fatalf("unrelated declaration should remain outside file_filter=tsx impact scope, got:\n%s", artifact.Rendered)
+	}
+	assertTypeScriptImpactBundleExcludesEvidenceFile(t, artifact.Metadata.Bundle, "types/Button.d.ts")
+}
+
 func TestExecuteSearchCodeArtifactWithConfig_TSXStructuredImpactRelatedTestsOrder(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"src/Button.tsx":                "export function Button() { return <button /> }\n",

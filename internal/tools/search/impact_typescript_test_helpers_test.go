@@ -79,6 +79,16 @@ func bundleSectionsContainFile(bundle *SymbolBundle, file string) bool {
 	return false
 }
 
+func assertTypeScriptImpactBundleExcludesEvidenceFile(t *testing.T, bundle *SymbolBundle, file string) {
+	t.Helper()
+	if recommendedReadsContainFile(bundle, file) {
+		t.Fatalf("%s should not be recommended as impact evidence, got %v", file, recommendedReadFiles(bundle))
+	}
+	if bundleSectionsContainFile(bundle, file) {
+		t.Fatalf("%s should not be emitted in impact sections, got %+v", file, bundle.Sections)
+	}
+}
+
 func assertRecommendedReadAt(t *testing.T, reads []SymbolBundleItem, index int, kind string, file string) {
 	t.Helper()
 	if len(reads) <= index {

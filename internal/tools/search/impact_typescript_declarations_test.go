@@ -28,12 +28,7 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactPrefersIm
 	}
 	reads := artifact.Metadata.Bundle.Impact.RecommendedReads
 	assertRecommendedReadAt(t, reads, 1, "callers", "src/app.ts")
-	if recommendedReadsContainFile(artifact.Metadata.Bundle, "src/build.d.ts") {
-		t.Fatalf("paired declaration should not be recommended as impact evidence, got %v", recommendedReadFiles(artifact.Metadata.Bundle))
-	}
-	if bundleSectionsContainFile(artifact.Metadata.Bundle, "src/build.d.ts") {
-		t.Fatalf("paired declaration should not be emitted in impact sections, got %+v", artifact.Metadata.Bundle.Sections)
-	}
+	assertTypeScriptImpactBundleExcludesEvidenceFile(t, artifact.Metadata.Bundle, "src/build.d.ts")
 }
 
 func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactKeepsUnrelatedDeclarationAmbiguous(t *testing.T) {
