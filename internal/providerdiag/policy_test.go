@@ -28,6 +28,11 @@ func TestCatalogPolicyDetailsPreserveProviderFormatting(t *testing.T) {
 	if got, want := azurePolicy.AzureDetail(), "catalog_model=gpt-5.3-codex, context_window=400000, max_output_tokens=128000 (catalog), responses_streaming=true, pricing=input $1.75/M cached $0.175/M output $14.00/M"; got != want {
 		t.Fatalf("AzureDetail() = %q, want %q", got, want)
 	}
+
+	groqPolicy := GroqCatalogPolicy(cfg, "meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-scout-17b-16e-instruct")
+	if got, want := groqPolicy.GroqDetail(), "catalog_model=meta-llama/llama-4-scout-17b-16e-instruct, context_window=131072, max_output_tokens=8192, pricing=input $0.11/M cached $0.110/M output $0.34/M"; got != want {
+		t.Fatalf("GroqDetail() = %q, want %q", got, want)
+	}
 }
 
 func TestMaxOutputPolicyPreservesOpenAIAndAzureFallbackDifference(t *testing.T) {

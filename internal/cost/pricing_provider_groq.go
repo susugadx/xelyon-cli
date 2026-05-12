@@ -12,6 +12,14 @@ func getGroqPricing(model string) PricingInfo {
 	}
 
 	switch {
+	case strings.Contains(lm, "llama-4-scout"):
+		// Llama 4 Scout 17B 16E: $0.11/$0.34 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.11,
+			OutputCostPerM:        0.34,
+			CachedInputCostPerM:   0.11,
+			CacheCreationCostPerM: 0.11,
+		}
 	case strings.Contains(lm, "70b"):
 		// Llama 3/3.1 70B: $0.59/$0.79 per million tokens
 		return PricingInfo{
@@ -44,7 +52,7 @@ func getGroqPricing(model string) PricingInfo {
 			CachedInputCostPerM:   0.07,
 			CacheCreationCostPerM: 0.07,
 		}
-	case lm == "" || strings.Contains(lm, "llama-4-scout") || strings.Contains(lm, "8b"):
+	case lm == "" || strings.Contains(lm, "8b"):
 		// Llama 3/3.1 8B (default): $0.05/$0.10 per million tokens
 		return PricingInfo{
 			InputCostPerM:         0.05,

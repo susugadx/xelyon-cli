@@ -68,6 +68,7 @@ func resetRootFlagsForTest() {
 	doctorDeploymentFlag = ""
 	doctorCatalogModelFlag = ""
 	doctorBedrockModelFlag = ""
+	doctorGroqModelFlag = ""
 	doctorKimiModelFlag = ""
 	doctorOpenAIModelFlag = ""
 	doctorSmokeFlag = false

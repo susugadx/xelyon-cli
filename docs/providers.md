@@ -397,6 +397,20 @@ xelyon --provider groq --model meta-llama/llama-4-scout-17b-16e-instruct
 - 画像入力非対応
 - プロンプトキャッシュ対応（自動、50% OFF、一部モデルのみ）
 
+設定の到達性は CLI から診断できます。`doctor groq` は `GROQ_API_KEY`、`GROQ_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、function calling 設定、token / pricing metadata を確認します。`--smoke` を付けると live text request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。`--print-request` は live request を送らずに redacted request body を表示します。
+
+```bash
+xelyon doctor groq
+xelyon doctor groq --model meta-llama/llama-4-scout-17b-16e-instruct
+xelyon doctor groq --model corp-groq-model --catalog-model meta-llama/llama-4-scout-17b-16e-instruct
+xelyon doctor groq --smoke
+xelyon doctor groq --tool-smoke
+xelyon doctor groq --print-request
+xelyon doctor groq --json
+```
+
+`GROQ_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--smoke` / `--tool-smoke` は live API request を送るため、通常 CI では実行しません。手元では `GROQ_API_KEY` を設定して `make groq-doctor-smoke` を実行します。既定モデルは `GROQ_DOCTOR_SMOKE_MODEL ?= meta-llama/llama-4-scout-17b-16e-instruct` です。
+
 ### 8. Ollama
 
 ```bash

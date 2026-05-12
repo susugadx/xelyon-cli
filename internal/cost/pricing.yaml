@@ -362,6 +362,7 @@ groq:
       - llama-3.1-70b-versatile
       - llama-3.1-8b-instant
       - meta-llama/llama-4-scout-17b-16e-instruct
+      - llama-4-scout-17b-16e-instruct
   default:
     inputcostperm: 0.05
     outputcostperm: 0.10
@@ -392,7 +393,13 @@ groq:
         outputcostperm: 0.07
         cachedinputcostperm: 0.07
         cachecreationcostperm: 0.07
-    - contains: ["llama-4-scout", "8b"]
+    - contains: ["llama-4-scout"]
+      pricing:
+        inputcostperm: 0.11
+        outputcostperm: 0.34
+        cachedinputcostperm: 0.11
+        cachecreationcostperm: 0.11
+    - contains: ["8b"]
       pricing:
         inputcostperm: 0.05
         outputcostperm: 0.10

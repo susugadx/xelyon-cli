@@ -80,6 +80,16 @@ func AzureMaxOutputPolicy(cfg *config.Config, deployment, catalogModel string) M
 	})
 }
 
+// GroqMaxOutputPolicy は Groq doctor の既存 max output 解決規則を返す。
+func GroqMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
+		Provider:             "groq",
+		RequestModel:         model,
+		CatalogModel:         catalogModel,
+		ProviderDefaultKnown: true,
+	})
+}
+
 type maxOutputPolicyOptions struct {
 	Provider               string
 	RequestModel           string
@@ -196,6 +206,16 @@ func AzureCatalogPolicy(cfg *config.Config, deployment, catalogModel string) Cat
 	)
 }
 
+// GroqCatalogPolicy は Groq doctor 用の catalog policy snapshot を返す。
+func GroqCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	return NewCatalogPolicy(
+		catalogModel,
+		GroqMaxOutputPolicy(cfg, model, catalogModel),
+		cost.GetPricingInfoForConfig(cfg, "groq", model),
+		false,
+	)
+}
+
 // NewCatalogPolicy は providerごとの解決結果から共通 snapshot を作る。
 func NewCatalogPolicy(catalogModel string, maxOutput MaxOutputPolicy, pricing cost.PricingInfo, responsesStreaming bool) CatalogPolicy {
 	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
@@ -228,6 +248,17 @@ func (p CatalogPolicy) AzureDetail() string {
 		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
 		p.MaxOutput.SourceDetail(),
 		p.ResponsesStreaming,
+		PricingDetail(p.Pricing),
+	)
+}
+
+// GroqDetail は Groq doctor の catalog_policy detail を返す。
+func (p CatalogPolicy) GroqDetail() string {
+	return fmt.Sprintf(
+		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
+		p.CatalogModel,
+		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
+		p.MaxOutput.PlainDetail("unknown"),
 		PricingDetail(p.Pricing),
 	)
 }

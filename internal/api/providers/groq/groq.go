@@ -60,9 +60,21 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		yellow.Fprintln(api.OutputWriterFromContext(ctx), "⚠️  Warning: Groq does not support Extended Thinking. Proceeding without it.")
 	}
 
+	reqBody := p.buildChatCompletionsRequest(ctx, systemPrompt, history, model)
+	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		StreamHandler:    p.handleStreamingResponse,
+		NonStreamHandler: p.handleNonStreamingResponse,
+	})
+}
+
+func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) openaicompat.ChatCompletionsRequest {
 	// モデル名を設定（config優先、フォールバックはkimi-k2-instruct）
 	model = api.GetDefaultModelWithContext(ctx, model, "groq", "moonshotai/kimi-k2-instruct")
-
 	options := openaicompat.ChatCompletionsRequestOptions{
 		Model:        model,
 		SystemPrompt: systemPrompt,
@@ -80,16 +92,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 	}
 
-	reqBody := openaicompat.BuildChatCompletionsRequest(options)
-	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, reqBody)
-	if err != nil {
-		return "", err
-	}
-
-	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
-		StreamHandler:    p.handleStreamingResponse,
-		NonStreamHandler: p.handleNonStreamingResponse,
-	})
+	return openaicompat.BuildChatCompletionsRequest(options)
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理

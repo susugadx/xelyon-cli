@@ -1,0 +1,201 @@
+package cmd
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	groqprovider "github.com/susugadx/xelyon-cli/internal/api/providers/groq"
+)
+
+func TestRunGroqDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GROQ_API_KEY", "gsk-test")
+	t.Setenv("GROQ_API_URL", "")
+
+	cmd, out := newDoctorSubcommandTest(t, newGroqDoctorCommand)
+
+	doctorGroqModelFlag = "corp-groq-model"
+	doctorCatalogModelFlag = "meta-llama/llama-4-scout-17b-16e-instruct"
+	doctorJSONFlag = true
+
+	if err := runGroqDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runGroqDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		Provider           string            `json:"provider"`
+		Model              string            `json:"model"`
+		ModelSource        string            `json:"model_source"`
+		CatalogModel       string            `json:"catalog_model"`
+		CatalogModelSource string            `json:"catalog_model_source"`
+		Route              string            `json:"route"`
+		Checks             []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.Provider != "groq" {
+		t.Fatalf("provider = %q, want groq", report.Provider)
+	}
+	if report.Model != "corp-groq-model" || report.ModelSource != "--model" {
+		t.Fatalf("model = %q (%s), want explicit model", report.Model, report.ModelSource)
+	}
+	if report.CatalogModel != "meta-llama/llama-4-scout-17b-16e-instruct" || report.CatalogModelSource != "--catalog-model" {
+		t.Fatalf("catalog_model = %q (%s), want explicit catalog model", report.CatalogModel, report.CatalogModelSource)
+	}
+	if report.Route != "chat_completions" {
+		t.Fatalf("route = %q, want chat_completions", report.Route)
+	}
+	catalogPolicy := requireDoctorJSONCheck(t, report.Checks, "catalog_policy")
+	requireDoctorJSONCheckStatus(t, catalogPolicy, "ok")
+	requireDoctorJSONCheckDetailContains(t, catalogPolicy, "max_output_tokens=8192")
+}
+
+func TestRunGroqDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GROQ_API_KEY", "")
+	t.Setenv("GROQ_API_URL", "")
+
+	cmd, out := newDoctorSubcommandTest(t, newGroqDoctorCommand)
+
+	doctorGroqModelFlag = "meta-llama/llama-4-scout-17b-16e-instruct"
+	doctorCatalogModelFlag = "meta-llama/llama-4-scout-17b-16e-instruct"
+	doctorToolSmokeFlag = true
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runGroqDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runGroqDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		Smoke          any `json:"smoke"`
+		RequestPreview struct {
+			Requests []struct {
+				Name        string            `json:"name"`
+				ToolPayload bool              `json:"tool_payload"`
+				URL         string            `json:"url"`
+				Headers     map[string]string `json:"headers"`
+				Body        struct {
+					Model      string `json:"model"`
+					MaxTokens  int    `json:"max_tokens"`
+					Tools      []any  `json:"tools"`
+					ToolChoice any    `json:"tool_choice"`
+				} `json:"body"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.Smoke != nil {
+		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
+	}
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	if len(report.RequestPreview.Requests) != 1 {
+		t.Fatalf("request_preview = %#v, want one tool request", report.RequestPreview)
+	}
+	request := report.RequestPreview.Requests[0]
+	if request.Name != "tool" || !request.ToolPayload {
+		t.Fatalf("preview request = %#v, want tool payload", request)
+	}
+	if request.Headers["Authorization"] != "Bearer <redacted>" {
+		t.Fatalf("Authorization preview = %q, want redacted bearer", request.Headers["Authorization"])
+	}
+	if request.Body.Model != "meta-llama/llama-4-scout-17b-16e-instruct" || request.Body.MaxTokens != 64 || len(request.Body.Tools) != 1 || request.Body.ToolChoice == nil {
+		t.Fatalf("preview body = %#v, want diagnostic tool body", request.Body)
+	}
+}
+
+func TestRootCommand_GroqDoctorCommandParsesFlags(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GROQ_API_KEY", "gsk-test")
+	t.Setenv("GROQ_API_URL", "")
+
+	out := newRootCommandExecutionTest(t)
+	rootCmd.SetArgs([]string{"doctor", "groq", "--model", "corp-groq-model", "--catalog-model", "meta-llama/llama-4-scout-17b-16e-instruct", "--json"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), `"model": "corp-groq-model"`) {
+		t.Fatalf("output = %q, want parsed Groq model", out.String())
+	}
+	if !strings.Contains(out.String(), `"catalog_model": "meta-llama/llama-4-scout-17b-16e-instruct"`) {
+		t.Fatalf("output = %q, want parsed Groq catalog model", out.String())
+	}
+}
+
+func TestRootCommand_GroqDoctorHelpShowsMinimalFlags(t *testing.T) {
+	out := newRootCommandExecutionTest(t)
+	rootCmd.SetArgs([]string{"doctor", "groq", "--help"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--print-request", "--timeout", "--json", "Diagnose Groq provider configuration"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("output = %q, want Groq doctor help substring %q", out.String(), want)
+		}
+	}
+	for _, unwanted := range []string{"--capabilities", "--require-capability", "--retention-smoke", "--image-smoke", "--web-search-smoke", "--thinking-smoke", "--print-config"} {
+		if strings.Contains(out.String(), unwanted) {
+			t.Fatalf("output = %q, should not contain %s", out.String(), unwanted)
+		}
+	}
+}
+
+func TestRenderGroqDoctorTextIncludesRequestPreviewAndSmokeObservability(t *testing.T) {
+	report := groqprovider.DiagnosticReport{
+		Provider:           "groq",
+		APIURL:             "https://api.groq.com/openai/v1/chat/completions",
+		Model:              "meta-llama/llama-4-scout-17b-16e-instruct",
+		ModelSource:        "test",
+		CatalogModel:       "meta-llama/llama-4-scout-17b-16e-instruct",
+		CatalogModelSource: "test",
+		Route:              groqprovider.DiagnosticRouteChatCompletions,
+		RouteReason:        "Groq provider uses OpenAI-compatible Chat Completions",
+		Checks: []groqprovider.DiagnosticCheck{
+			{Name: "smoke", Status: groqprovider.DiagnosticStatusOK, Message: "live Groq smoke request succeeded"},
+		},
+		RequestPreview: &groqprovider.DiagnosticRequestPreview{
+			Requests: []groqprovider.DiagnosticRequestPreviewRequest{{
+				Name:    "text",
+				Route:   groqprovider.DiagnosticRouteChatCompletions,
+				Method:  "POST",
+				URL:     "https://api.groq.com/openai/v1/chat/completions",
+				Headers: map[string]string{"Authorization": "Bearer <redacted>"},
+				Body:    map[string]any{"model": "meta-llama/llama-4-scout-17b-16e-instruct", "max_tokens": 64},
+			}},
+		},
+		Smoke: &groqprovider.DiagnosticSmokeResult{
+			Ran:           true,
+			Route:         groqprovider.DiagnosticRouteChatCompletions,
+			Content:       "xelyon groq doctor ok",
+			Duration:      "1ms",
+			UsageObserved: true,
+			Usage: groqprovider.DiagnosticSmokeUsage{
+				InputTokens:         10,
+				OutputTokens:        4,
+				ThinkingTokens:      2,
+				CachedInputTokens:   3,
+				CacheCreationTokens: 1,
+			},
+			Cost: groqprovider.DiagnosticSmokeCost{
+				USD: 0.00012345,
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	renderGroqDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Route reason: Groq provider uses OpenAI-compatible Chat Completions",
+		"Request preview:",
+		`"Authorization": "Bearer <redacted>"`,
+		"Smoke route: chat_completions",
+		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
+		"Smoke cost estimate: $0.00012345 USD",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}

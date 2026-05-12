@@ -1,5 +1,7 @@
 package llmcatalog
 
+import "strings"
+
 var knownProviderModels = map[string][]string{
 	"deepseek": {
 		"deepseek-v4-flash",
@@ -103,6 +105,17 @@ var knownProviderModels = map[string][]string{
 	},
 }
 
+var knownProviderModelPrefixes = map[string][]string{
+	"groq": {
+		"meta-llama/llama-4-scout",
+		"llama-4-scout",
+		"llama-3.",
+		"llama-3-",
+		"mixtral-",
+		"gemma2-",
+	},
+}
+
 // KnownModelNamesForProvider は picker 表示用の既知 model 名を provider ごとの安定順で返す。
 // Azure は deployment 名をユーザー環境が所有するため、ここでは候補を返さない。
 func KnownModelNamesForProvider(provider string) []string {
@@ -112,4 +125,27 @@ func KnownModelNamesForProvider(provider string) []string {
 	}
 	models := knownProviderModels[key]
 	return cloneStrings(models)
+}
+
+// IsKnownModelNameForProvider は model が provider 所有の既知 catalog 名または既知 prefix か返す。
+func IsKnownModelNameForProvider(provider, model string) bool {
+	key := CanonicalProviderKey(provider)
+	model = strings.TrimSpace(model)
+	if key == "" || model == "" {
+		return false
+	}
+
+	for _, known := range KnownModelNamesForProvider(key) {
+		if strings.EqualFold(model, known) {
+			return true
+		}
+	}
+
+	normalized := strings.ToLower(model)
+	for _, prefix := range knownProviderModelPrefixes[key] {
+		if strings.HasPrefix(normalized, strings.ToLower(strings.TrimSpace(prefix))) {
+			return true
+		}
+	}
+	return false
 }

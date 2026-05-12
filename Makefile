@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke groq-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -11,6 +11,7 @@ BEDROCK_SMOKE_CLAUDE_MODEL ?= global.anthropic.claude-sonnet-4-6
 BEDROCK_SMOKE_CONVERSE_MODELS ?= amazon.nova-pro-v1:0 moonshotai.kimi-k2.5
 BEDROCK_PROBE_CONVERSE_MODELS ?= us.meta.llama4-scout-17b-instruct-v1:0 us.deepseek.r1-v1:0 google.gemma-3-4b-it
 OPENAI_DOCTOR_SMOKE_MODEL ?= gpt-5.4
+GROQ_DOCTOR_SMOKE_MODEL ?= meta-llama/llama-4-scout-17b-16e-instruct
 
 # ビルド
 build:
@@ -175,6 +176,11 @@ azure-doctor-smoke:
 openai-doctor-smoke:
 	@test -n "$(OPENAI_API_KEY)" || { echo "OPENAI_API_KEY is required for make openai-doctor-smoke"; exit 1; }
 	go run . doctor openai --model "$(OPENAI_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke --retention-smoke
+
+# Groq doctor 診断経路を実環境で確認（GROQ_API_KEY 必須）
+groq-doctor-smoke:
+	@test -n "$(GROQ_API_KEY)" || { echo "GROQ_API_KEY is required for make groq-doctor-smoke"; exit 1; }
+	go run . doctor groq --model "$(GROQ_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke
 
 # Kimi native provider の実 API smoke test（MOONSHOT_API_KEY 必須）
 kimi-smoke:

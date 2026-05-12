@@ -32,7 +32,7 @@
 | DeepSeek | no | no | no | no | no | no | no | no | no | no | no | none |
 | Gemini | no | no | no | no | no | no | no | no | no | no | no | none |
 | Claude / Anthropic | no | no | no | no | no | no | no | no | no | no | no | none |
-| Groq | no | no | no | no | no | no | no | no | no | no | no | none |
+| Groq | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | Ollama | no | no | no | no | no | no | no | no | no | no | no | none |
 | OpenRouter | no | no | no | no | no | no | no | no | no | no | no | none |
 
@@ -66,10 +66,17 @@ Bedrock:
 - Does not yet support `--capabilities`, `--require-capability`, or `--print-request`.
 - Main owner packages: `cmd/doctor_bedrock.go`, `internal/api/providers/bedrock/diagnostics.go`.
 
+Groq:
+
+- Checks `GROQ_API_KEY`, `GROQ_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, function calling, catalog policy.
+- Supports `--print-request`.
+- Live smoke supports text and tool request types. `GROQ_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
+- Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1.
+- Main owner packages: `cmd/doctor_groq.go`, `internal/api/providers/groq/diagnostics*.go`, `internal/providerdiag`.
+
 Missing doctor providers:
 
 - `deepseek`: OpenAI-compatible Chat Completions, `DEEPSEEK_API_KEY`, `DEEPSEEK_API_URL`, function calling toggle, thinking config.
-- `groq`: OpenAI-compatible Chat Completions, `GROQ_API_KEY`, `GROQ_API_URL`, function calling toggle.
 - `openrouter`: OpenAI-compatible plus Anthropic-skin routes, `OPENROUTER_API_KEY`, `OPENROUTER_API_URL`, image support, function calling toggle, Claude compaction route.
 - `gemini`: Gemini SSE route, `GEMINI_API_KEY`, `GEMINI_API_URL`, image support, function calling toggle, thinking / caching / web search details.
 - `claude` / `anthropic`: Anthropic Messages, `ANTHROPIC_API_KEY`, context management, image support, tool use, web search.
@@ -262,7 +269,7 @@ When adding or migrating a provider doctor, check these surfaces:
 
 ### Phase 1: OpenAI-compatible doctor template
 
-Target: `groq` first, then `deepseek`.
+Target: `deepseek` next. `groq` is the first implemented provider in this phase.
 
 Reason:
 
@@ -270,13 +277,17 @@ Reason:
 - Both already use `openai_compat` helpers.
 - Auth, endpoint, model, function calling, usage, cost, `--smoke`, `--tool-smoke`, and `--print-request` can validate the v1 contract without Responses retention complexity.
 
-Expected scope:
+Completed for Groq:
 
 - Add `doctor groq`
 - Add provider diagnostics package files
 - Add `--json`, `--model`, `--catalog-model`, `--smoke`, `--tool-smoke`, `--print-request`, `--timeout`
 - Add fake-server tests for smoke and request preview
 - Add docs matrix row updates
+
+Remaining expected scope:
+
+- Add `doctor deepseek`
 
 Do not include:
 

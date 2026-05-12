@@ -147,6 +147,7 @@ func TestGetGroqPricing_AllModels(t *testing.T) {
 		{name: "mixtral-8x7b", model: "mixtral-8x7b", wantInput: 0.24, wantOutput: 0.24},
 		{name: "llama-3.1-405b", model: "llama-3.1-405b", wantInput: 2.00, wantOutput: 2.00},
 		{name: "gemma-7b", model: "gemma-7b", wantInput: 0.07, wantOutput: 0.07},
+		{name: "llama-4-scout", model: "meta-llama/llama-4-scout-17b-16e-instruct", wantInput: 0.11, wantOutput: 0.34},
 		{name: "default (llama 8b)", model: "llama-3-8b", wantInput: 0.05, wantOutput: 0.10},
 	}
 
@@ -615,6 +616,7 @@ func TestGetPricingInfoForConfig_ConfiguredKnownExactModelsAcrossProvidersStillP
 		{provider: "deepseek", model: "deepseek-v4-pro", wantInput: 1.74, wantOut: 3.48},
 		{provider: "gemini", model: "gemini-3.1-pro", wantInput: 2.00, wantOut: 12.00},
 		{provider: "groq", model: "llama-3.1-70b", wantInput: 0.59, wantOut: 0.79},
+		{provider: "groq", model: "meta-llama/llama-4-scout-17b-16e-instruct", wantInput: 0.11, wantOut: 0.34},
 		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
 		{provider: "bedrock", model: "us.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
 		{provider: "bedrock", model: "eu.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
