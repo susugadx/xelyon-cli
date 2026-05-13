@@ -93,7 +93,7 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	secondPrompt := model.requests[1].Prompt
 	for _, want := range []string{
 		"Review Pass 2",
-		ReviewReportSchemaVersionV1,
+		ReviewReportSchemaVersionV2,
 		"Probe Result Context",
 		`"output": "FAIL runner"`,
 		`"status": "failed"`,
@@ -453,7 +453,7 @@ func TestReviewRunnerRunRepairsInvalidReportValidation(t *testing.T) {
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
-			{content: `{"schema_version":"review_report.v1","target_kind":"current_changes"}`},
+			{content: `{"schema_version":"review_report.v2","target_kind":"current_changes"}`},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
 		},
 	}
@@ -475,6 +475,39 @@ func TestReviewRunnerRunRepairsInvalidReportValidation(t *testing.T) {
 		ReviewModelPhaseReport,
 	})
 	for _, want := range []string{"Report JSON Repair", "finalize report", "generated_at must be non-zero"} {
+		if !strings.Contains(model.requests[2].Prompt, want) {
+			t.Fatalf("report repair prompt missing %q:\n%s", want, model.requests[2].Prompt)
+		}
+	}
+}
+
+func TestReviewRunnerRunRepairsReportScopeCoverageValidation(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	invalidReport := newRunnerCleanReportForTest(nil)
+	invalidReport.ScopeCoverage = nil
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, invalidReport))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	got, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got.Verdict != ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseReport,
+	})
+	for _, want := range []string{"Report JSON Repair", "finalize report", "scope_coverage is required"} {
 		if !strings.Contains(model.requests[2].Prompt, want) {
 			t.Fatalf("report repair prompt missing %q:\n%s", want, model.requests[2].Prompt)
 		}
@@ -536,8 +569,8 @@ func TestReviewRunnerRunInvalidPass2ReportReturnsAfterProbeExecution(t *testing.
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
-			{content: `{"schema_version":"review_report.v1"}`},
-			{content: `{"schema_version":"review_report.v1"}`},
+			{content: `{"schema_version":"review_report.v2"}`},
+			{content: `{"schema_version":"review_report.v2"}`},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
 		},
 	}
@@ -1159,12 +1192,13 @@ func newRunnerCleanReportForTest(probeSummaries []ReviewProbeSummary) ReviewRepo
 		reportProbeSummaries = probeSummaries
 	}
 	return ReviewReport{
-		SchemaVersion:             ReviewReportSchemaVersionV1,
+		SchemaVersion:             ReviewReportSchemaVersionV2,
 		TargetKind:                TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationVerified,
 		Verdict:                   ReviewVerdictClean,
 		ProbeSummaries:            reportProbeSummaries,
+		ScopeCoverage:             newCleanScopeCoverageForTest(),
 	}
 }
 

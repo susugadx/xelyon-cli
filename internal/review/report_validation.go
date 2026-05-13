@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// ValidateReviewReport は schema v1 の review report 契約を検証する。
+// ValidateReviewReport は schema v2 の review report 契約を検証する。
 func ValidateReviewReport(report ReviewReport) error {
 	if err := validateReportBasicFields(report); err != nil {
 		return err
@@ -32,12 +32,16 @@ func ValidateReviewReport(report ReviewReport) error {
 		return err
 	}
 
+	if err := validateReviewReportScopeCoverageSemanticContract(report); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func validateReportBasicFields(report ReviewReport) error {
-	if report.SchemaVersion != ReviewReportSchemaVersionV1 {
-		return fmt.Errorf("schema_version must be %q: got %q", ReviewReportSchemaVersionV1, report.SchemaVersion)
+	if report.SchemaVersion != ReviewReportSchemaVersionV2 {
+		return fmt.Errorf("schema_version must be %q: got %q", ReviewReportSchemaVersionV2, report.SchemaVersion)
 	}
 	if report.TargetKind != TargetCurrentChanges {
 		return fmt.Errorf("target_kind must be %q: got %q", TargetCurrentChanges, report.TargetKind)
@@ -132,6 +136,9 @@ func validateReportRequiredContent(report ReviewReport) error {
 	if err := validateResidualRisks("residual_risks", report.ResidualRisks); err != nil {
 		return err
 	}
+	if err := validateReviewReportScopeCoverageShape("scope_coverage", report.ScopeCoverage); err != nil {
+		return err
+	}
 
 	for i, group := range report.RootCauseGroups {
 		groupField := fmt.Sprintf("root_cause_groups[%d]", i)
@@ -197,6 +204,9 @@ func validateEvidenceReferences(report ReviewReport, probeSummariesByID map[stri
 		return err
 	}
 	if err := validateResidualRiskEvidenceRefs("residual_risks", report.ResidualRisks, probeSummariesByID); err != nil {
+		return err
+	}
+	if err := validateReviewReportScopeCoverageEvidenceRefs("scope_coverage", report.ScopeCoverage, probeSummariesByID); err != nil {
 		return err
 	}
 
@@ -545,6 +555,10 @@ func isKnownReviewEvidenceKind(kind string) bool {
 }
 
 func hasBlockedReason(report ReviewReport) bool {
+	return hasLegacyBlockedReason(report) || hasScopeCoverageUnverified(report.ScopeCoverage)
+}
+
+func hasLegacyBlockedReason(report ReviewReport) bool {
 	if strings.TrimSpace(report.Summary) != "" {
 		return true
 	}

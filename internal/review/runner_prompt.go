@@ -43,9 +43,9 @@ func buildReviewReportPrompt(req ReviewRequest, evidenceMarkdown string, plan Re
 	var b strings.Builder
 	b.WriteString("# Review Pass 2: Report\n\n")
 	b.WriteString("Return exactly one JSON object for schema ")
-	b.WriteString(ReviewReportSchemaVersionV1)
+	b.WriteString(ReviewReportSchemaVersionV2)
 	b.WriteString(". Do not include markdown or explanatory text outside the JSON.\n\n")
-	b.WriteString("Use the evidence, decoded probe plan, probe summaries, and probe result context to produce the final report. Preserve probe_summaries using the supplied summaries. Reference only repo-relative paths or displayed evidence paths.\n\n")
+	b.WriteString("Use the evidence, decoded probe plan, probe summaries, and probe result context to produce the final report. Preserve probe_summaries using the supplied summaries. The final report must classify every decoded probe plan impact surface and candidate risk in scope_coverage exactly once. Reference only repo-relative paths or displayed evidence paths.\n\n")
 
 	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
 	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)

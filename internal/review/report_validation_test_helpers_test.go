@@ -37,7 +37,7 @@ func runReviewReportValidationCases(t *testing.T, tests []reviewReportValidation
 
 func newValidReviewReportForValidationTest() ReviewReport {
 	return ReviewReport{
-		SchemaVersion:             ReviewReportSchemaVersionV1,
+		SchemaVersion:             ReviewReportSchemaVersionV2,
 		TargetKind:                TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,

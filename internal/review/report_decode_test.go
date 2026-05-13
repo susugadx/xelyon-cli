@@ -16,7 +16,7 @@ func TestDecodeReviewReportJSONValidReport(t *testing.T) {
 	if err := ValidateReviewReport(report); err != nil {
 		t.Fatalf("ValidateReviewReport() error = %v, want nil", err)
 	}
-	if got, want := report.SchemaVersion, ReviewReportSchemaVersionV1; got != want {
+	if got, want := report.SchemaVersion, ReviewReportSchemaVersionV2; got != want {
 		t.Fatalf("SchemaVersion = %q, want %q", got, want)
 	}
 	if got, want := len(report.RootCauseGroups), 1; got != want {
@@ -57,7 +57,7 @@ func TestDecodeReviewReportJSONRejectsUnknownFieldsAndTrailingToken(t *testing.T
 
 func TestDecodeReviewReportJSONRejectsInvalidValidatedReport(t *testing.T) {
 	report := newValidReviewReportForValidationTest()
-	report.SchemaVersion = "review_report.v2"
+	report.SchemaVersion = ReviewReportSchemaVersionV1
 	data := mustMarshalReviewReportForDecodeTest(t, report)
 
 	_, err := DecodeReviewReportJSON(data)
@@ -66,6 +66,21 @@ func TestDecodeReviewReportJSONRejectsInvalidValidatedReport(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "schema_version") {
 		t.Fatalf("DecodeReviewReportJSON() error = %q, want schema_version", err.Error())
+	}
+}
+
+func TestDecodeReviewReportJSONRejectsScopeCoverageSemanticContract(t *testing.T) {
+	report := newCleanReportForValidationTest(ReviewVerificationVerified)
+	report.ScopeCoverage = newCleanScopeCoverageForTest()
+	report.ScopeCoverage.ReviewedCandidateRisks[0].Status = ReviewReportCandidateRiskFinding
+	data := mustMarshalReviewReportForDecodeTest(t, report)
+
+	_, err := DecodeReviewReportJSON(data)
+	if err == nil {
+		t.Fatal("DecodeReviewReportJSON() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), `verdict "clean" requires scope_coverage.reviewed_candidate_risks[0].status`) {
+		t.Fatalf("DecodeReviewReportJSON() error = %q, want scope coverage verdict error", err.Error())
 	}
 }
 

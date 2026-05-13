@@ -109,13 +109,26 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 	wants := []string{
 		"## Review Report JSON Contract",
 		"The decoder rejects unknown fields",
-		`"schema_version": "review_report.v1"`,
+		`"schema_version": "review_report.v2"`,
 		`"target_kind": "current_changes"`,
+		`"scope_coverage"`,
+		`"reviewed_impact_surfaces"`,
+		`"reviewed_candidate_risks"`,
+		`"new_findings_from_report_pass"`,
+		`"new_findings_from_report_pass": []`,
+		`must classify every ID from the Decoded Probe Plan exactly once`,
+		`Candidate risks must be classified as "finding", "dismissed", "residual_risk", or "unverified"`,
+		`"finding_ids" in reviewed impact surfaces and reviewed candidate risks must be empty unless that scope entry status is "finding"`,
+		`A "clean" verdict is allowed only when every impact surface status is "checked" and every candidate risk status is "dismissed"`,
+		`candidate risk status "finding" must include non-empty "finding_ids"`,
+		`Findings discovered during Pass2 that were not Pass1 candidate risks`,
 		`There is no top-level "findings" or "has_findings" field`,
 		`"root_cause_groups[].findings"`,
 		`"verdict" must be one of "clean", "has_findings", "blocked"`,
 		`"overall_verification_status" and group "verification_status" must be one of`,
 		`Severity must be one of "critical", "high", "medium", "low", "info"`,
+		`finding IDs are required, must be unique`,
+		`Every root cause finding ID must be connected from "scope_coverage"`,
 		`"kind" must be one of "probe_command", "probe", "file", "diff", "git_status", "rule_file"`,
 		`"file", "diff", and "rule_file" refs require "path"`,
 		`Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries`,
@@ -127,6 +140,15 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 	for _, want := range wants {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("report prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	forbids := []string{
+		`"probe_id": "probe-1"`,
+		`"finding_ids": ["finding-2"]`,
+	}
+	for _, forbid := range forbids {
+		if strings.Contains(prompt, forbid) {
+			t.Fatalf("report prompt contains dangling sample reference %q:\n%s", forbid, prompt)
 		}
 	}
 }
@@ -157,7 +179,9 @@ func TestBuildReviewReportRepairPromptIncludesRepairContract(t *testing.T) {
 		"Do not request or rely on tools.",
 		"Preserve trusted probe summary IDs; do not invent probe IDs.",
 		"## Review Report JSON Contract",
-		`"schema_version": "review_report.v1"`,
+		`"schema_version": "review_report.v2"`,
+		`"scope_coverage"`,
+		`must classify every ID from the Decoded Probe Plan exactly once`,
 		"focus repair",
 		"diff evidence",
 		"## Decoded Probe Plan",

@@ -155,14 +155,7 @@ func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 				"Agent runner could mutate conversation state.",
 			)), nil
 		case 1:
-			return mustMarshalReviewValueForAgentTest(t, review.ReviewReport{
-				SchemaVersion:             review.ReviewReportSchemaVersionV1,
-				TargetKind:                review.TargetCurrentChanges,
-				GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-				OverallVerificationStatus: review.ReviewVerificationVerified,
-				Verdict:                   review.ReviewVerdictClean,
-				Summary:                   "No findings.",
-			}), nil
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
 		default:
 			t.Fatalf("unexpected provider call %d", call)
 			return "", nil
@@ -224,16 +217,9 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 				"Repair path could lose context.",
 			)), nil
 		case 2:
-			return `{"schema_version":"review_report.v1"`, nil
+			return `{"schema_version":"review_report.v2"`, nil
 		case 3:
-			return mustMarshalReviewValueForAgentTest(t, review.ReviewReport{
-				SchemaVersion:             review.ReviewReportSchemaVersionV1,
-				TargetKind:                review.TargetCurrentChanges,
-				GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-				OverallVerificationStatus: review.ReviewVerificationVerified,
-				Verdict:                   review.ReviewVerdictClean,
-				Summary:                   "No findings.",
-			}), nil
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
 		default:
 			t.Fatalf("unexpected provider call %d", call)
 			return "", nil
@@ -262,7 +248,7 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 			t.Fatalf("probe plan repair prompt missing %q:\n%s", want, prompts[1])
 		}
 	}
-	for _, want := range []string{"Report JSON Repair", `{"schema_version":"review_report.v1"`} {
+	for _, want := range []string{"Report JSON Repair", `{"schema_version":"review_report.v2"`} {
 		if !strings.Contains(prompts[3], want) {
 			t.Fatalf("report repair prompt missing %q:\n%s", want, prompts[3])
 		}
@@ -410,6 +396,33 @@ func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review
 		},
 		Probes:        []review.ReviewPlannedProbe{},
 		NoProbeReason: "surface-1 and risk-1 are checked by existing evidence.",
+	}
+}
+
+func newAgentCleanReviewReportForTest() review.ReviewReport {
+	return review.ReviewReport{
+		SchemaVersion:             review.ReviewReportSchemaVersionV2,
+		TargetKind:                review.TargetCurrentChanges,
+		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+		OverallVerificationStatus: review.ReviewVerificationVerified,
+		Verdict:                   review.ReviewVerdictClean,
+		Summary:                   "No findings.",
+		ScopeCoverage: &review.ReviewReportScopeCoverage{
+			ReviewedImpactSurfaces: []review.ReviewReportImpactSurfaceCoverage{
+				{
+					SurfaceID: "surface-1",
+					Status:    review.ReviewReportImpactSurfaceChecked,
+					Summary:   "surface-1 was checked.",
+				},
+			},
+			ReviewedCandidateRisks: []review.ReviewReportCandidateRiskCoverage{
+				{
+					RiskID:  "risk-1",
+					Status:  review.ReviewReportCandidateRiskDismissed,
+					Summary: "risk-1 was dismissed.",
+				},
+			},
+		},
 	}
 }
 

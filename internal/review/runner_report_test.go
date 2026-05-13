@@ -22,7 +22,7 @@ func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), []ReviewProbeSummary{
+			got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), []ReviewProbeSummary{
 				{
 					ProbeID:         "probe-1",
 					Mode:            ReviewProbeHostReadOnly,
@@ -51,8 +51,16 @@ func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(
 
 func TestFinalizeReviewRunnerReportDowngradesVerifiedFindingsWithBlockedTrustedProbe(t *testing.T) {
 	report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+	report.ScopeCoverage = &ReviewReportScopeCoverage{
+		ReviewedImpactSurfaces: []ReviewReportImpactSurfaceCoverage{
+			{SurfaceID: "surface-1", Status: ReviewReportImpactSurfaceChecked},
+		},
+		ReviewedCandidateRisks: []ReviewReportCandidateRiskCoverage{
+			{RiskID: "risk-1", Status: ReviewReportCandidateRiskFinding, FindingIDs: []string{"finding-1"}},
+		},
+	}
 
-	got, err := finalizeReviewRunnerReport(report, []ReviewProbeSummary{
+	got, err := finalizeReviewRunnerReport(report, newRunnerProbePlanForTest("probe-1"), []ReviewProbeSummary{
 		{
 			ProbeID: "probe-1",
 			Mode:    ReviewProbeHostReadOnly,
@@ -118,7 +126,7 @@ func TestFinalizeReviewRunnerReportInjectsRedactedTrustedProbeSummaries(t *testi
 		},
 	})
 
-	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), trustedSummaries, redactor)
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), trustedSummaries, redactor)
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -148,7 +156,7 @@ func TestFinalizeReviewRunnerReportInjectsRedactedTrustedProbeSummaries(t *testi
 }
 
 func TestFinalizeReviewRunnerReportKeepsEmptyTrustedProbeSummariesNil(t *testing.T) {
-	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}

@@ -131,7 +131,7 @@ func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewReque
 		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}
 
-	report, reportErr := finalizeReviewRunnerReportModelOutput(reportResp.Content, probeSummaries, redactor)
+	report, reportErr := finalizeReviewRunnerReportModelOutput(reportResp.Content, plan, probeSummaries, redactor)
 	if reportErr == nil {
 		return report, nil
 	}
@@ -153,15 +153,15 @@ func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewReque
 		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}
 
-	return finalizeReviewRunnerReportModelOutput(repairResp.Content, probeSummaries, redactor)
+	return finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor)
 }
 
-func finalizeReviewRunnerReportModelOutput(content string, trustedProbeSummaries []ReviewProbeSummary, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
+func finalizeReviewRunnerReportModelOutput(content string, plan ReviewProbePlan, trustedProbeSummaries []ReviewProbeSummary, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
 	report, err := decodeReviewReportStrictJSON([]byte(content))
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner decode report: %w", err)
 	}
-	report, err = finalizeReviewRunnerReport(report, trustedProbeSummaries, redactor)
+	report, err = finalizeReviewRunnerReport(report, plan, trustedProbeSummaries, redactor)
 	if err != nil {
 		return ReviewReport{}, err
 	}

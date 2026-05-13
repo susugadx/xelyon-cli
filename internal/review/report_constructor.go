@@ -2,10 +2,10 @@ package review
 
 import "time"
 
-// NewReviewReportSkeleton は schema v1 の最小 report 枠を構築する。
+// NewReviewReportSkeleton は schema v2 の最小 report 枠を構築する。
 func NewReviewReportSkeleton(req ReviewRequest, generatedAt time.Time) ReviewReport {
 	return ReviewReport{
-		SchemaVersion:             ReviewReportSchemaVersionV1,
+		SchemaVersion:             ReviewReportSchemaVersionV2,
 		TargetKind:                req.TargetKind,
 		CustomInstructions:        req.CustomInstructions,
 		GeneratedAt:               generatedAt,

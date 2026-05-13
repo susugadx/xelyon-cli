@@ -605,7 +605,7 @@ func (s *reviewCapableStubAgent) RunReview(_ context.Context, req review.ReviewR
 
 func newTUITestReviewReport() review.ReviewReport {
 	return review.ReviewReport{
-		SchemaVersion:             review.ReviewReportSchemaVersionV1,
+		SchemaVersion:             review.ReviewReportSchemaVersionV2,
 		TargetKind:                review.TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: review.ReviewVerificationVerified,
