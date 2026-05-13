@@ -264,7 +264,7 @@ web_search:
 
 ```
 
-Kimi で `$web_search` が起動すると、Moonshot の call fee（`$0.005 / invocation`）が token cost とは別に発生します。XELYON は call fee を外部固定費として観測し、検索結果 tokens は次の `prompt_tokens` に含まれるため token totals へ二重加算しません。
+Gemini native web search は API の `usageMetadata` が返る場合、通常の token usage / cost として表示します。Kimi で `$web_search` が起動すると、Moonshot の call fee（`$0.005 / invocation`）が token cost とは別に発生します。XELYON は call fee を外部固定費として観測し、検索結果 tokens は次の `prompt_tokens` に含まれるため token totals へ二重加算しません。
 
 Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
 

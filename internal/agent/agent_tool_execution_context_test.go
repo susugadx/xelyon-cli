@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/history"
 )
 
@@ -92,6 +93,43 @@ func TestToolExecutionContext_UsageAttributionAddsRequestOwnerCost(t *testing.T)
 	}
 	if got := agent.Stats.EstimatedCostForConfig(agent.cfg()); got <= 0 {
 		t.Fatalf("EstimatedCostForConfig = %f, want Kimi cost even when chat provider is Ollama", got)
+	}
+}
+
+func TestToolExecutionContext_GeminiWebSearchUsageCountsAsTokenUsage(t *testing.T) {
+	agent := NewAgentWithRuntime("llama3", &mockProvider{name: "ollama"}, false, NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()))
+	t.Cleanup(agent.Cleanup)
+
+	execCtx := agent.toolExecutionContext(context.Background(), nil, io.Discard, io.Discard)
+	if execCtx.UsageAttribution == nil {
+		t.Fatal("UsageAttribution = nil, want stats callback")
+	}
+
+	usage := api.Usage{
+		InputTokens:       17,
+		OutputTokens:      5,
+		ThinkingTokens:    3,
+		CachedInputTokens: 4,
+	}
+	execCtx.UsageAttribution("gemini", "gemini-3.1-pro-preview-customtools", usage)
+
+	agent.statsMu.Lock()
+	defer agent.statsMu.Unlock()
+	if agent.Stats.InputTokens != 17 || agent.Stats.OutputTokens != 5 || agent.Stats.ThinkingTokens != 3 || agent.Stats.CachedInputTokens != 4 {
+		t.Fatalf("Stats usage = input %d output %d thinking %d cached %d, want 17/5/3/4", agent.Stats.InputTokens, agent.Stats.OutputTokens, agent.Stats.ThinkingTokens, agent.Stats.CachedInputTokens)
+	}
+	if agent.Stats.WebSearchCalls != 0 || agent.Stats.WebSearchCost != 0 || agent.Stats.WebSearchResultTokens != 0 {
+		t.Fatalf("Web search fee fields = calls %d cost %f result_tokens %d, want zero for Gemini token usage", agent.Stats.WebSearchCalls, agent.Stats.WebSearchCost, agent.Stats.WebSearchResultTokens)
+	}
+	if agent.Stats.Provider != "ollama" || agent.Stats.Model != "llama3" {
+		t.Fatalf("Stats owner mutated to %s/%s, want ollama/llama3", agent.Stats.Provider, agent.Stats.Model)
+	}
+	expectedCost := cost.CalculateRequestCostWithCacheForConfig(agent.cfg(), "gemini", "gemini-3.1-pro-preview-customtools", usage)
+	if agent.Stats.AccumulatedCost != expectedCost {
+		t.Fatalf("AccumulatedCost = %f, want Gemini request cost %f", agent.Stats.AccumulatedCost, expectedCost)
+	}
+	if agent.Stats.CostUnknown {
+		t.Fatal("CostUnknown = true, want known Gemini pricing")
 	}
 }
 

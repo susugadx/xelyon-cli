@@ -123,6 +123,36 @@ func (p *headlessWebSearchUsageProvider) ChatWithImage(ctx context.Context, syst
 	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
+type headlessGeminiWebSearchUsageProvider struct {
+	usageCallback api.UsageCallback
+}
+
+func (p *headlessGeminiWebSearchUsageProvider) Name() string { return "gemini" }
+
+func (p *headlessGeminiWebSearchUsageProvider) SupportsImages() bool { return false }
+
+func (p *headlessGeminiWebSearchUsageProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *headlessGeminiWebSearchUsageProvider) SetUsageCallback(callback api.UsageCallback) {
+	p.usageCallback = callback
+}
+
+func (p *headlessGeminiWebSearchUsageProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	if p.usageCallback != nil {
+		p.usageCallback(api.Usage{
+			InputTokens:       17,
+			OutputTokens:      5,
+			ThinkingTokens:    3,
+			CachedInputTokens: 4,
+		})
+	}
+	return "done", nil
+}
+
+func (p *headlessGeminiWebSearchUsageProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
+}
+
 type headlessHistoryProbeProvider struct {
 	responses []string
 	histories [][]api.Message
@@ -460,6 +490,39 @@ func TestRunHeadlessWithConfig_CollectsWebSearchObservation(t *testing.T) {
 	}
 	if result.Cost != 0.005 {
 		t.Fatalf("result.Cost = %f, want web search fee 0.005", result.Cost)
+	}
+}
+
+func TestRunHeadlessWithConfig_GeminiWebSearchUsageIsTokenUsage(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	cfg := newProjectMapDisabledConfig()
+	provider := &headlessGeminiWebSearchUsageProvider{}
+	model := "gemini-3.1-pro-preview-customtools"
+	result := RunHeadlessWithConfig(context.Background(), "probe", model, provider, cfg)
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if result.Tokens == nil {
+		t.Fatal("result.Tokens = nil, want Gemini usage summary")
+	}
+	if result.Tokens.Input != 17 || result.Tokens.Output != 5 || result.Tokens.Thinking != 3 || result.Tokens.Cached != 4 || result.Tokens.Total != 25 {
+		t.Fatalf("result.Tokens = %+v, want input=17 cached=4 output=5 thinking=3 total=25", result.Tokens)
+	}
+	if result.WebSearch != nil {
+		t.Fatalf("result.WebSearch = %+v, want nil because Gemini native web search reports token usage, not call-fee usage", result.WebSearch)
+	}
+	expectedCost := cost.CalculateRequestCostWithCacheForConfig(cfg, "gemini", model, api.Usage{
+		InputTokens:       17,
+		OutputTokens:      5,
+		ThinkingTokens:    3,
+		CachedInputTokens: 4,
+	})
+	if result.Cost != expectedCost {
+		t.Fatalf("result.Cost = %f, want Gemini token cost %f", result.Cost, expectedCost)
+	}
+	if result.PricingUnavailable {
+		t.Fatal("result.PricingUnavailable = true, want false for known Gemini pricing")
 	}
 }
 
