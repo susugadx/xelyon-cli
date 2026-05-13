@@ -49,6 +49,7 @@ type SymbolBundleImpact struct {
 // SymbolBundleDiagnostics は bundle の注意喚起メタデータ。
 type SymbolBundleDiagnostics struct {
 	ResolvedViaLSP     bool
+	LSPSource          string
 	UpstreamTruncated  bool
 	UpstreamIncomplete bool
 }

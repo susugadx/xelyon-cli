@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
@@ -54,6 +55,12 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactUsesLSPRe
 	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
 		t.Fatal("ResolvedViaLSP = false, want true")
 	}
+	if !strings.Contains(artifact.Rendered, "Note: resolved via TypeScript/JavaScript LSP.") {
+		t.Fatalf("expected JS family LSP source note, got:\n%s", artifact.Rendered)
+	}
+	if strings.Contains(artifact.Rendered, "resolved via gopls") {
+		t.Fatalf("TypeScript LSP output must not claim gopls, got:\n%s", artifact.Rendered)
+	}
 	if lspClient.requestedLine != 1 || lspClient.requestedChar <= 1 {
 		t.Fatalf("LSP request position = line %d char %d, want definition identifier position", lspClient.requestedLine, lspClient.requestedChar)
 	}
@@ -86,6 +93,12 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactClassifie
 	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
 		t.Fatal("ResolvedViaLSP = false, want true")
 	}
+	if !strings.Contains(artifact.Rendered, "Note: resolved via TypeScript/JavaScript LSP.") {
+		t.Fatalf("expected JS family LSP source note, got:\n%s", artifact.Rendered)
+	}
+	if strings.Contains(artifact.Rendered, "resolved via gopls") {
+		t.Fatalf("TypeScript LSP output must not claim gopls, got:\n%s", artifact.Rendered)
+	}
 	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
 	if !symbolBundleItemsContainSnippet(callers, "createUser('semantic')") {
 		t.Fatalf("callers = %+v, want alias caller from LSP range", callers)
@@ -115,6 +128,12 @@ func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactFiltersLS
 	assertJavaScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
 	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
 		t.Fatal("ResolvedViaLSP = false, want true")
+	}
+	if !strings.Contains(artifact.Rendered, "Note: resolved via TypeScript/JavaScript LSP.") {
+		t.Fatalf("expected JS family LSP source note, got:\n%s", artifact.Rendered)
+	}
+	if strings.Contains(artifact.Rendered, "resolved via gopls") {
+		t.Fatalf("JavaScript LSP output must not claim gopls, got:\n%s", artifact.Rendered)
 	}
 	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
 	if !symbolBundleItemsContainFile(callers, "src/app.js") {

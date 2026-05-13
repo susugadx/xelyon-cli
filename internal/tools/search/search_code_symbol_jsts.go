@@ -45,7 +45,7 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 		{Kind: "references", Title: "References", Items: classifiedRefs.others, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: classifiedRefs.tests, Limit: genericTestLimit, IsTest: true},
 	})
-	bundle.Diagnostics.ResolvedViaLSP = refResult.resolvedViaLSP
+	setJSFamilyBundleLSPDiagnostics(bundle, refResult.resolvedViaLSP)
 	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
 	return genericResolveResult{Output: formatJSSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }

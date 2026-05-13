@@ -134,7 +134,7 @@ func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) 
 	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
-	bundle.Diagnostics.ResolvedViaLSP = refResult.resolvedViaLSP
+	setJSFamilyBundleLSPDiagnostics(bundle, refResult.resolvedViaLSP)
 
 	return symbolResolveResult{
 		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),

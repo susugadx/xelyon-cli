@@ -15,10 +15,21 @@ import (
 )
 
 const jsFamilyLSPReferenceTimeout = 5 * time.Second
+const jsFamilyBundleLSPSource = "TypeScript/JavaScript LSP"
 
 type jsFamilyReferenceResult struct {
 	refs           []genericSymbolRef
 	resolvedViaLSP bool
+}
+
+func setJSFamilyBundleLSPDiagnostics(bundle *SymbolBundle, resolved bool) {
+	if bundle == nil {
+		return
+	}
+	bundle.Diagnostics.ResolvedViaLSP = resolved
+	if resolved {
+		bundle.Diagnostics.LSPSource = jsFamilyBundleLSPSource
+	}
 }
 
 func findJSFamilyDefinitionsWithAST(symbol string, opts SearchOptions) []genericSymbolDef {
