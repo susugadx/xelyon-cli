@@ -522,6 +522,7 @@ Language Server Protocol (LSP) を使用したコード解析の設定を行い�
 ```yaml
 lsp:
   enabled: true
+  skip_install_prompt: false
   servers:
     go:
       command: gopls
@@ -540,6 +541,11 @@ lsp:
 - **型**: boolean
 - **デフォルト**: `true`
 - **説明**: LSP連携の有効/無効
+
+#### `skip_install_prompt`
+- **型**: boolean
+- **デフォルト**: `false`
+- **説明**: 起動時に検出言語の未インストール LSP サーバー案内を表示しない
 
 #### `servers`
 - **型**: map

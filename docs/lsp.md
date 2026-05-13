@@ -148,6 +148,7 @@ lsp:
 | 項目 | 型 | デフォルト | 説明 |
 |-----|---|---------|------|
 | `lsp.enabled` | boolean | `true` | LSP連携の有効/無効 |
+| `lsp.skip_install_prompt` | boolean | `false` | 起動時に検出言語の未インストール LSP サーバー案内を表示しない |
 | `lsp.servers.<lang>.command` | string | - | LSPサーバーのコマンド |
 | `lsp.servers.<lang>.args` | string[] | `[]` | コマンドに渡す引数 |
 | `lsp.servers.<lang>.disabled` | boolean | `false` | 個別サーバーの無効化 |

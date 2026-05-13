@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tui"
@@ -63,7 +64,7 @@ func runTUIWithOptions(model string, provider api.Provider, cfg *config.Config, 
 	runtime.UI = ui.NewRuntime(bytes.NewReader(nil), &captureBuf, &captureBuf)
 	runtime.AutoApprove = autoApprove
 
-	ag := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove)
+	ag := initInteractiveAgentWithRuntime(runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceTUI)
 	defer ag.Cleanup()
 
 	// SIGTERM 時に Alt Screen を復旧するフックを登録

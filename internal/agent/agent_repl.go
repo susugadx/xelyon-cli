@@ -13,6 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -20,7 +21,7 @@ import (
 )
 
 // initInteractiveAgentWithRuntime は、事前に用意した runtime を使ってインタラクティブ用 Agent を初期化する。
-func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provider api.Provider, autoApprove bool) *Agent {
+func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provider api.Provider, autoApprove bool, commandSurface commandcatalog.CommandSurface) *Agent {
 	// normalizeAgentRuntime は NewAgentWithRuntime 内部で呼ばれるためここでは不要。
 	// ただし AutoApprove は normalize 前に設定する必要がある。
 	runtime.AutoApprove = autoApprove
@@ -50,6 +51,7 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 		injectProjectMap: true,
 	})
 	checkRipgrepAvailability(agent)
+	checkLSPInstallPrompt(agent, commandSurface)
 
 	return agent
 }
@@ -101,7 +103,7 @@ func RunLegacyInteractiveWithConfig(model string, provider api.Provider, cfg *co
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
 
-	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove)
+	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
 	defer agent.Cleanup() // グレースフルシャットダウン
 
 	// ヘッダー表示
@@ -137,7 +139,7 @@ func RunLegacyInteractiveWithImageWithConfig(query string, model string, provide
 		return fmt.Errorf("failed to load image: %w", err)
 	}
 
-	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove)
+	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
 	defer agent.Cleanup()
 
 	printHeaderToWriter(env.runtimeUI.Output(), agent.Model, provider)
@@ -192,7 +194,7 @@ func RunLegacyInteractiveWithResumeWithConfig(model string, provider api.Provide
 	}
 
 	// ロード済みセッションでAgent作成
-	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove)
+	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
 	agent.applyLoadedSession(session)
 	defer agent.Cleanup() // グレースフルシャットダウン
 
