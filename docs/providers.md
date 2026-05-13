@@ -458,8 +458,23 @@ xelyon --provider openrouter --model anthropic/claude-sonnet-4.6
 
 **特徴:**
 - 複数プロバイダーのモデルを1つのAPIキーで利用可能
-- OpenAI互換API
+- OpenAI互換API。Claude 系 model は context management 有効時に Anthropic Skin `/v1/messages` route を使用
 - 画像入力対応（モデルによる）
+
+設定の到達性は CLI から診断できます。`doctor openrouter` は `OPENROUTER_API_KEY`、`OPENROUTER_API_URL`、provider 登録、model / `catalog_model` 解決、OpenAI-compatible Chat Completions と Anthropic Skin Messages の route 判定、image input support、function calling 設定、token / pricing metadata を確認します。Claude 系 request model で context management が有効な場合は `/v1/messages` の `anthropic_messages` route、それ以外は Chat Completions route を表示します。`catalog_model` は alias の token / pricing / upstream model 表示に使います。実 request model が既知の routed OpenRouter ID、または別 owner の routed ID である場合、mismatch した `catalog_model` は warn になり、token / pricing は実 request model 側へ戻します。route 判定は runtime と同じく実 request model で行います。
+
+```bash
+xelyon doctor openrouter
+xelyon doctor openrouter --model anthropic/claude-sonnet-4.6
+xelyon doctor openrouter --model openai/gpt-5.4
+xelyon doctor openrouter --model corp-openrouter-model --catalog-model openai/gpt-5.4
+xelyon doctor openrouter --smoke
+xelyon doctor openrouter --tool-smoke
+xelyon doctor openrouter --print-request
+xelyon doctor openrouter --json
+```
+
+`--tool-smoke` は選択 route の形式で dummy tool call を強制します。`OPENROUTER_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--print-request` は live request を送らず、OpenRouter 固有の `HTTP-Referer` / `X-Title` と redacted bearer header、選択 route の request body を表示します。`image_input` は provider-level support のローカル check で、OpenRouter doctor v1 は画像 live smoke を送りません。`--smoke` / `--tool-smoke` は live API request を送るため、通常 CI では実行しません。手元では `OPENROUTER_API_KEY` を設定して `make openrouter-doctor-smoke` を実行します。既定モデルは `OPENROUTER_DOCTOR_SMOKE_MODEL ?= openai/gpt-5.4-mini` です。
 
 ### 10. Bedrock (AWS)
 

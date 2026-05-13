@@ -62,6 +62,27 @@ xelyon doctor groq --json
 
 手元で doctor 経路だけを実 Groq 環境で確認する場合は、`GROQ_API_KEY` を設定して `make groq-doctor-smoke` を実行します。既定では `meta-llama/llama-4-scout-17b-16e-instruct` で text / tool smoke をまとめて実行し、必要なら `GROQ_DOCTOR_SMOKE_MODEL` で変更できます。
 
+### `xelyon doctor openrouter`
+
+OpenRouter provider の `OPENROUTER_API_KEY`、`OPENROUTER_API_URL`、provider 登録、model / `catalog_model` 解決、OpenAI-compatible Chat Completions と Anthropic Skin Messages の route 判定、image input support、function calling 設定、token / pricing metadata を確認します。Claude 系 request model で context management が有効な場合は `anthropic_messages` route を選び、それ以外は `chat_completions` route を選びます。`--smoke` を付けると選択された route に live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、選択 route の形式で dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
+
+`--model` は実 request に送る OpenRouter model ID または alias、`--catalog-model` は alias の underlying OpenRouter model ID として token / pricing / upstream model 表示に使います。`--model` が `anthropic/...` や `openai/...` の routed OpenRouter ID の場合、別 owner の `catalog_model` や既知 routed model への別 ID 上書きは warn になり、token / pricing は実 request model 側へ戻します。route 判定は runtime と同じく実 request model で行うため、`catalog_model` だけが `anthropic/claude-*` の alias は Chat Completions route として warn になります。`OPENROUTER_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities`、`--require-capability`、`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は OpenRouter doctor v1 では提供しません。`image_input` は provider-level support のローカル check で、画像 live smoke は送りません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+
+```bash
+xelyon doctor openrouter
+xelyon doctor openrouter --model anthropic/claude-sonnet-4.6
+xelyon doctor openrouter --model openai/gpt-5.4
+xelyon doctor openrouter --model corp-openrouter-model --catalog-model openai/gpt-5.4
+xelyon doctor openrouter --smoke
+xelyon doctor openrouter --tool-smoke
+xelyon doctor openrouter --print-request
+xelyon doctor openrouter --tool-smoke --print-request
+xelyon doctor openrouter --smoke --tool-smoke
+xelyon doctor openrouter --json
+```
+
+手元で doctor 経路だけを実 OpenRouter 環境で確認する場合は、`OPENROUTER_API_KEY` を設定して `make openrouter-doctor-smoke` を実行します。既定では `openai/gpt-5.4-mini` で text / tool smoke をまとめて実行し、必要なら `OPENROUTER_DOCTOR_SMOKE_MODEL` で変更できます。
+
 ### `xelyon doctor openai`
 
 OpenAI provider の `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route と判定理由、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--require-capability` を付けると、解決済みのローカル capability が要求を満たすかを live request なしの `required_capability` check として検証します。対応する名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`previous_response_id`、`session_persistence`、`server_compaction` です。OpenAI の `responses_streaming` gate は実 `catalog_model` が既知 catalog model として解決できない場合 `unknown` として fail します。`--smoke` を付けると live text request を送信し、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。複数 smoke を指定した場合は request を別々に実行または preview し、JSON では `smoke.requests[]` / `request_preview.requests[]` に request 単位の結果を出します。

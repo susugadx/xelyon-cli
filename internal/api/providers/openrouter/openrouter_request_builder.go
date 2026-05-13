@@ -15,6 +15,11 @@ import (
 // request builder 層: provider の I/O や streaming 分岐を持たず、
 // OpenRouter 向け request payload 構築だけを担当する。
 
+type openRouterClaudeToolChoice struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
+}
+
 func (p *Provider) buildOpenAITextChatPayload(ctx context.Context, systemPrompt string, history []api.Message, model string) ([]byte, error) {
 	options := openaicompat.ChatCompletionsRequestOptions{
 		Model:        model,
@@ -100,16 +105,17 @@ func (p *Provider) buildClaudeChatPayload(ctx context.Context, systemPrompt stri
 	}
 
 	reqBody := struct {
-		Model             string                    `json:"model"`
-		AnthropicVersion  string                    `json:"anthropic_version"`
-		AnthropicBeta     []string                  `json:"anthropic_beta,omitempty"`
-		CacheControl      *api.CacheControl         `json:"cache_control,omitempty"`
-		MaxTokens         int                       `json:"max_tokens"`
-		System            interface{}               `json:"system,omitempty"`
-		Messages          []interface{}             `json:"messages"`
-		Tools             []claude.ClaudeTool       `json:"tools,omitempty"`
-		Stream            bool                      `json:"stream"`
-		ContextManagement *claude.ContextManagement `json:"context_management,omitempty"`
+		Model             string                      `json:"model"`
+		AnthropicVersion  string                      `json:"anthropic_version"`
+		AnthropicBeta     []string                    `json:"anthropic_beta,omitempty"`
+		CacheControl      *api.CacheControl           `json:"cache_control,omitempty"`
+		MaxTokens         int                         `json:"max_tokens"`
+		System            interface{}                 `json:"system,omitempty"`
+		Messages          []interface{}               `json:"messages"`
+		Tools             []claude.ClaudeTool         `json:"tools,omitempty"`
+		ToolChoice        *openRouterClaudeToolChoice `json:"tool_choice,omitempty"`
+		Stream            bool                        `json:"stream"`
+		ContextManagement *claude.ContextManagement   `json:"context_management,omitempty"`
 	}{
 		Model:            model,
 		AnthropicVersion: "2023-06-01",
@@ -124,8 +130,19 @@ func (p *Provider) buildClaudeChatPayload(ctx context.Context, systemPrompt stri
 	}
 	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
+		reqBody.ToolChoice = buildOpenRouterClaudeToolChoice(p.toolChoice)
 	}
 	reqBody.ContextManagement, reqBody.AnthropicBeta = buildOpenRouterClaudeContextManagement(model, cfg.Compression, reqBody.AnthropicBeta)
 
 	return json.Marshal(reqBody)
+}
+
+func buildOpenRouterClaudeToolChoice(toolChoice *string) *openRouterClaudeToolChoice {
+	if toolChoice == nil || *toolChoice == "" {
+		return nil
+	}
+	return &openRouterClaudeToolChoice{
+		Type: "tool",
+		Name: *toolChoice,
+	}
 }

@@ -34,7 +34,7 @@
 | Claude / Anthropic | no | no | no | no | no | no | no | no | no | no | no | none |
 | Groq | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | Ollama | no | no | no | no | no | no | no | no | no | no | no | none |
-| OpenRouter | no | no | no | no | no | no | no | no | no | no | no | none |
+| OpenRouter | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 
 ### Current Behavior Notes
 
@@ -82,9 +82,18 @@ DeepSeek:
 - Does not support `--capabilities`, `--require-capability`, image, web search, or retention smoke in v1. Thinking is reported from normal request config rather than a separate `--thinking-smoke`.
 - Main owner packages: `cmd/doctor_deepseek.go`, `internal/api/providers/deepseek/diagnostics*.go`, `internal/providerdiag`.
 
+OpenRouter:
+
+- Checks `OPENROUTER_API_KEY`, `OPENROUTER_API_URL`, provider registration, model / `catalog_model`, OpenAI-compatible Chat Completions vs Anthropic Skin route, function calling, image input support, and catalog policy.
+- Supports `--print-request`.
+- Live smoke supports text and tool request types on the selected runtime route. `OPENROUTER_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
+- Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1. `image_input` is a local provider-level check only.
+- Route selection follows the runtime request model. A configured alias whose `catalog_model` is Claude still reports Chat Completions unless the request model itself is `anthropic/claude-*`.
+- A direct routed OpenRouter request model cannot be re-described by a different known routed `catalog_model`; mismatch is warn and token / pricing policy falls back to the request model when local metadata is available.
+- Main owner packages: `cmd/doctor_openrouter.go`, `internal/api/providers/openrouter/diagnostics*.go`, `internal/providerdiag`.
+
 Missing doctor providers:
 
-- `openrouter`: OpenAI-compatible plus Anthropic-skin routes, `OPENROUTER_API_KEY`, `OPENROUTER_API_URL`, image support, function calling toggle, Claude compaction route.
 - `gemini`: Gemini SSE route, `GEMINI_API_KEY`, `GEMINI_API_URL`, image support, function calling toggle, thinking / caching / web search details.
 - `claude` / `anthropic`: Anthropic Messages, `ANTHROPIC_API_KEY`, context management, image support, tool use, web search.
 - `ollama`: local endpoint, default `http://localhost:11434`, installed model availability, local usage counts, no API key.
@@ -318,6 +327,8 @@ Focus:
 ### Phase 3: OpenRouter doctor
 
 Target: `openrouter`.
+
+Status: completed.
 
 Focus:
 

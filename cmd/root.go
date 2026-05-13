@@ -60,6 +60,7 @@ Examples:
   xelyon doctor deepseek --smoke                   # Diagnose DeepSeek provider
   xelyon doctor groq --smoke                       # Diagnose Groq provider
   xelyon doctor kimi --smoke                       # Diagnose Kimi native provider
+  xelyon doctor openrouter --smoke                 # Diagnose OpenRouter provider
   xelyon -p deepseek -m deepseek-chat             # Short flags`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

@@ -100,6 +100,16 @@ func DeepSeekMaxOutputPolicy(cfg *config.Config, model, catalogModel string) Max
 	})
 }
 
+// OpenRouterMaxOutputPolicy は OpenRouter doctor の max output 解決規則を返す。
+func OpenRouterMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
+		Provider:             "openrouter",
+		RequestModel:         model,
+		CatalogModel:         catalogModel,
+		ProviderDefaultKnown: true,
+	})
+}
+
 type maxOutputPolicyOptions struct {
 	Provider               string
 	RequestModel           string
@@ -236,6 +246,16 @@ func DeepSeekCatalogPolicy(cfg *config.Config, model, catalogModel string) Catal
 	)
 }
 
+// OpenRouterCatalogPolicy は OpenRouter doctor 用の catalog policy snapshot を返す。
+func OpenRouterCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	return NewCatalogPolicy(
+		catalogModel,
+		OpenRouterMaxOutputPolicy(cfg, model, catalogModel),
+		cost.GetPricingInfoForConfig(cfg, "openrouter", model),
+		false,
+	)
+}
+
 // NewCatalogPolicy は providerごとの解決結果から共通 snapshot を作る。
 func NewCatalogPolicy(catalogModel string, maxOutput MaxOutputPolicy, pricing cost.PricingInfo, responsesStreaming bool) CatalogPolicy {
 	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
@@ -285,6 +305,17 @@ func (p CatalogPolicy) GroqDetail() string {
 
 // DeepSeekDetail は DeepSeek doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) DeepSeekDetail() string {
+	return fmt.Sprintf(
+		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
+		p.CatalogModel,
+		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
+		p.MaxOutput.PlainDetail("unknown"),
+		PricingDetail(p.Pricing),
+	)
+}
+
+// OpenRouterDetail は OpenRouter doctor の catalog_policy detail を返す。
+func (p CatalogPolicy) OpenRouterDetail() string {
 	return fmt.Sprintf(
 		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
 		p.CatalogModel,

@@ -18,6 +18,7 @@ var (
 	doctorGroqModelFlag            string
 	doctorKimiModelFlag            string
 	doctorOpenAIModelFlag          string
+	doctorOpenRouterModelFlag      string
 	doctorSmokeFlag                bool
 	doctorToolSmokeFlag            bool
 	doctorCapabilitiesFlag         bool
@@ -49,6 +50,7 @@ func newDoctorCommand() *cobra.Command {
 	cmd.AddCommand(newGroqDoctorCommand())
 	cmd.AddCommand(newKimiDoctorCommand())
 	cmd.AddCommand(newOpenAIDoctorCommand())
+	cmd.AddCommand(newOpenRouterDoctorCommand())
 	return cmd
 }
 

@@ -488,6 +488,9 @@ func TestBuildClaudeChatPayload_FunctionCallingDisabledOmitsTools(t *testing.T) 
 	if _, ok := body["tools"]; ok {
 		t.Fatalf("tools should be omitted when function calling is disabled, got %v", body["tools"])
 	}
+	if _, ok := body["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when function calling is disabled, got %v", body["tool_choice"])
+	}
 }
 
 func TestBuildClaudeChatPayload_ToolUseDisabledOmitsTools(t *testing.T) {
@@ -518,5 +521,47 @@ func TestBuildClaudeChatPayload_ToolUseDisabledOmitsTools(t *testing.T) {
 	}
 	if _, ok := body["tools"]; ok {
 		t.Fatalf("tools should be omitted when tool use is disabled, got %v", body["tools"])
+	}
+	if _, ok := body["tool_choice"]; ok {
+		t.Fatalf("tool_choice should be omitted when tool use is disabled, got %v", body["tool_choice"])
+	}
+}
+
+func TestBuildClaudeChatPayload_UsesForcedToolChoice(t *testing.T) {
+	t.Setenv("OPENROUTER_FUNCTION_CALLING", "1")
+
+	cfg := config.DefaultConfig()
+	cfg.Compression.ClaudeCompaction = false
+
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{Name: "custom_lookup", Description: "custom lookup"}})
+	p.SetToolChoice("custom_lookup")
+	ctx, _ := newOpenRouterTestContext(t, cfg)
+
+	payload, err := p.buildClaudeChatPayload(
+		ctx,
+		"System prompt",
+		[]api.Message{{Role: "user", Content: "hello"}},
+		"",
+		"anthropic/claude-3.5-sonnet",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildClaudeChatPayload() error = %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json unmarshal failed: %v", err)
+	}
+	if tools, ok := body["tools"].([]any); !ok || len(tools) == 0 {
+		t.Fatalf("tools = %v, want at least one tool", body["tools"])
+	}
+	toolChoice, ok := body["tool_choice"].(map[string]any)
+	if !ok {
+		t.Fatalf("tool_choice = %T, want map", body["tool_choice"])
+	}
+	if toolChoice["type"] != "tool" || toolChoice["name"] != "custom_lookup" {
+		t.Fatalf("tool_choice = %#v, want forced Claude tool choice", toolChoice)
 	}
 }
