@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/jsast"
 )
 
 func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactRelatedTests(t *testing.T) {
@@ -157,7 +158,7 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 			name: "exported with direct tests is not high",
 			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "export  function buildUser() {}"},
 			refs: typeScriptImpactRefs{
-				callers:     typeScriptGenericRefs("src/app", 8),
+				callers:     genericSymbolRefsForTest("src/app", ".ts", 8),
 				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
 			},
 			want: goImpactRiskMedium,
@@ -166,7 +167,7 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 			name: "exported many refs without tests is high",
 			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "export\tfunction buildUser() {}"},
 			refs: typeScriptImpactRefs{
-				callers: typeScriptGenericRefs("src/app", 8),
+				callers: genericSymbolRefsForTest("src/app", ".ts", 8),
 			},
 			want: goImpactRiskHigh,
 		},
@@ -174,16 +175,33 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 			name: "local few refs with nearby tests is low",
 			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "function buildUser() {}"},
 			refs: typeScriptImpactRefs{
-				callers:     typeScriptGenericRefs("src/app", 1),
+				callers:     genericSymbolRefsForTest("src/app", ".ts", 1),
 				nearbyTests: []genericSymbolRef{{File: "src/build.spec.ts", Line: 1, IsTest: true}},
 			},
 			want: goImpactRiskLow,
 		},
 		{
+			name: "local declaration exported later with direct tests is medium",
+			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "function buildUser() {}"},
+			refs: typeScriptImpactRefs{
+				imports:     []genericSymbolRef{{File: "src/index.ts", Line: 2, Snippet: "export { buildUser }", Class: jsast.ClassExport}},
+				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
+			},
+			want: goImpactRiskMedium,
+		},
+		{
+			name: "ast exported definition with direct tests is medium",
+			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "function buildUser() {}", Exported: true},
+			refs: typeScriptImpactRefs{
+				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
+			},
+			want: goImpactRiskMedium,
+		},
+		{
 			name: "export default class is exported",
 			def:  genericSymbolDef{Name: "UserBuilder", Kind: "class", Signature: "export default class UserBuilder {}"},
 			refs: typeScriptImpactRefs{
-				callers: typeScriptGenericRefs("src/app", 4),
+				callers: genericSymbolRefsForTest("src/app", ".ts", 4),
 			},
 			want: goImpactRiskHigh,
 		},

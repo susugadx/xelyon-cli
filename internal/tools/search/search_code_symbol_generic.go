@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
@@ -38,7 +39,9 @@ type genericSymbolDef struct {
 	Kind      string
 	File      string
 	Line      int
+	Character int
 	Signature string
+	Exported  bool
 }
 
 // genericSymbolRef は参照箇所。
@@ -47,6 +50,7 @@ type genericSymbolRef struct {
 	Line    int
 	Snippet string
 	IsTest  bool
+	Class   codeast.MatchClass
 }
 
 type genericSymbolMatch struct {

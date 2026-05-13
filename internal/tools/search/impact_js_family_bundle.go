@@ -3,15 +3,65 @@ package search
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/jsast"
 )
 
-const jsFamilyImpactRecommendedReadLimit = 5
+const (
+	jsFamilyImpactRecommendedReadLimit            = 5
+	jsFamilyImpactRecommendedReadPerGroupLimit    = 1
+	jsFamilyImpactHighNonTestReferenceThreshold   = 8
+	jsFamilyImpactMediumNonTestReferenceThreshold = 4
+)
 
 type jsFamilyImpactReadGroup struct {
 	kind   string
 	refs   []genericSymbolRef
 	limit  int
 	isTest bool
+}
+
+type jsFamilyImpactBundleSpec struct {
+	language    string
+	debugSource string
+	symbol      string
+	def         genericSymbolDef
+	rootPath    string
+	impact      *SymbolBundleImpact
+}
+
+func newJSFamilyImpactBundle(spec jsFamilyImpactBundleSpec) *SymbolBundle {
+	if spec.impact == nil {
+		return nil
+	}
+	displayName := spec.def.Name
+	if displayName == "" {
+		displayName = spec.symbol
+	}
+	return &SymbolBundle{
+		Identity: SymbolBundleIdentity{
+			Language:    spec.language,
+			Query:       spec.symbol,
+			Canonical:   canonicalSymbolBundleKey(spec.language, spec.def.File, spec.def.Line, displayName),
+			DisplayName: displayName,
+			Kind:        spec.def.Kind,
+			File:        spec.def.File,
+			Line:        spec.def.Line,
+			EndLine:     spec.def.Line,
+		},
+		Definition: SymbolBundleDefinition{
+			File:      spec.def.File,
+			Line:      spec.def.Line,
+			EndLine:   spec.def.Line,
+			Signature: spec.def.Signature,
+			Body:      []string{fmt.Sprintf("%d: %s", spec.def.Line, spec.def.Signature)},
+		},
+		Impact: spec.impact,
+		Debug: SymbolBundleDebug{
+			Source:       spec.debugSource,
+			FileRootPath: spec.rootPath,
+		},
+	}
 }
 
 func buildJSFamilyImpactMetadata(def genericSymbolDef, rootPath string, riskLevel string, groups []jsFamilyImpactReadGroup) *SymbolBundleImpact {
@@ -110,4 +160,18 @@ func jsFamilyImpactLocationKey(file string, line int) string {
 		return ""
 	}
 	return fmt.Sprintf("%s:%d", file, line)
+}
+
+func jsFamilySignatureStartsWithExport(signature string) bool {
+	fields := strings.Fields(signature)
+	return len(fields) > 0 && fields[0] == "export"
+}
+
+func jsFamilyRefsContainExport(refs []genericSymbolRef) bool {
+	for _, ref := range refs {
+		if ref.Class == jsast.ClassExport {
+			return true
+		}
+	}
+	return false
 }

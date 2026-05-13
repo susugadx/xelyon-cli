@@ -1,14 +1,7 @@
 package search
 
 import (
-	"fmt"
 	"strings"
-)
-
-const (
-	typeScriptImpactRecommendedReadPerGroupLimit  = 1
-	typeScriptImpactHighNonTestReferenceThreshold = 8
-	typeScriptImpactMediumReferenceThreshold      = 4
 )
 
 func buildTypeScriptImpactBundle(symbol string, def genericSymbolDef, opts SearchOptions, refs typeScriptImpactRefs) *SymbolBundle {
@@ -18,34 +11,14 @@ func buildTypeScriptImpactBundle(symbol string, def genericSymbolDef, opts Searc
 		return nil
 	}
 
-	displayName := def.Name
-	if displayName == "" {
-		displayName = symbol
-	}
-	bundle := &SymbolBundle{
-		Identity: SymbolBundleIdentity{
-			Language:    "typescript",
-			Query:       symbol,
-			Canonical:   canonicalSymbolBundleKey("typescript", def.File, def.Line, displayName),
-			DisplayName: displayName,
-			Kind:        def.Kind,
-			File:        def.File,
-			Line:        def.Line,
-			EndLine:     def.Line,
-		},
-		Definition: SymbolBundleDefinition{
-			File:      def.File,
-			Line:      def.Line,
-			EndLine:   def.Line,
-			Signature: def.Signature,
-			Body:      []string{fmt.Sprintf("%d: %s", def.Line, def.Signature)},
-		},
-		Impact: impact,
-		Debug: SymbolBundleDebug{
-			Source:       typeScriptImpactDebugSource(def),
-			FileRootPath: rootPath,
-		},
-	}
+	bundle := newJSFamilyImpactBundle(jsFamilyImpactBundleSpec{
+		language:    "typescript",
+		debugSource: typeScriptImpactDebugSource(def),
+		symbol:      symbol,
+		def:         def,
+		rootPath:    rootPath,
+		impact:      impact,
+	})
 
 	appendJSFamilyImpactSection(bundle, def, "imports", "Imports", refs.imports, jsImportLimit, false, rootPath, symbol)
 	appendJSFamilyImpactSection(bundle, def, "callers", "Callers", refs.callers, jsCallerLimit, false, rootPath, symbol)
@@ -73,13 +46,13 @@ func typeScriptImpactRecommendedReadGroups(def genericSymbolDef, refs typeScript
 	}
 
 	importReferenceGroups := []jsFamilyImpactReadGroup{
-		{kind: "imports", refs: refs.imports, limit: typeScriptImpactRecommendedReadPerGroupLimit},
-		{kind: "references", refs: refs.others, limit: typeScriptImpactRecommendedReadPerGroupLimit},
+		{kind: "imports", refs: refs.imports, limit: jsFamilyImpactRecommendedReadPerGroupLimit},
+		{kind: "references", refs: refs.others, limit: jsFamilyImpactRecommendedReadPerGroupLimit},
 	}
-	callerGroup := jsFamilyImpactReadGroup{kind: "callers", refs: refs.callers, limit: typeScriptImpactRecommendedReadPerGroupLimit}
-	typeRefGroup := jsFamilyImpactReadGroup{kind: "type_refs", refs: refs.typeRefs, limit: typeScriptImpactRecommendedReadPerGroupLimit}
-	directTestGroup := jsFamilyImpactReadGroup{kind: "tests", refs: refs.directTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true}
-	nearbyTestGroup := jsFamilyImpactReadGroup{kind: "tests", refs: refs.nearbyTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true}
+	callerGroup := jsFamilyImpactReadGroup{kind: "callers", refs: refs.callers, limit: jsFamilyImpactRecommendedReadPerGroupLimit}
+	typeRefGroup := jsFamilyImpactReadGroup{kind: "type_refs", refs: refs.typeRefs, limit: jsFamilyImpactRecommendedReadPerGroupLimit}
+	directTestGroup := jsFamilyImpactReadGroup{kind: "tests", refs: refs.directTests, limit: jsFamilyImpactRecommendedReadPerGroupLimit, isTest: true}
+	nearbyTestGroup := jsFamilyImpactReadGroup{kind: "tests", refs: refs.nearbyTests, limit: jsFamilyImpactRecommendedReadPerGroupLimit, isTest: true}
 
 	if typeScriptImpactPrefersTypeRefs(def.Kind) {
 		groups := []jsFamilyImpactReadGroup{typeRefGroup, directTestGroup}
@@ -96,11 +69,11 @@ func typeScriptImpactRecommendedReadGroups(def genericSymbolDef, refs typeScript
 
 func typeScriptDeclarationImpactRecommendedReadGroups(refs typeScriptImpactRefs) []jsFamilyImpactReadGroup {
 	return []jsFamilyImpactReadGroup{
-		{kind: "type_refs", refs: refs.typeRefs, limit: typeScriptImpactRecommendedReadPerGroupLimit},
-		{kind: "imports", refs: refs.imports, limit: typeScriptImpactRecommendedReadPerGroupLimit},
-		{kind: "references", refs: refs.others, limit: typeScriptImpactRecommendedReadPerGroupLimit},
-		{kind: "callers", refs: refs.callers, limit: typeScriptImpactRecommendedReadPerGroupLimit},
-		{kind: "tests", refs: refs.directTests, limit: typeScriptImpactRecommendedReadPerGroupLimit, isTest: true},
+		{kind: "type_refs", refs: refs.typeRefs, limit: jsFamilyImpactRecommendedReadPerGroupLimit},
+		{kind: "imports", refs: refs.imports, limit: jsFamilyImpactRecommendedReadPerGroupLimit},
+		{kind: "references", refs: refs.others, limit: jsFamilyImpactRecommendedReadPerGroupLimit},
+		{kind: "callers", refs: refs.callers, limit: jsFamilyImpactRecommendedReadPerGroupLimit},
+		{kind: "tests", refs: refs.directTests, limit: jsFamilyImpactRecommendedReadPerGroupLimit, isTest: true},
 	}
 }
 
@@ -116,25 +89,30 @@ func typeScriptImpactPrefersTypeRefs(kind string) bool {
 func classifyTypeScriptImpactRisk(def genericSymbolDef, refs typeScriptImpactRefs) string {
 	nonTestRefCount := len(dedupeGenericRefs(append(append(append(append([]genericSymbolRef(nil), refs.imports...), refs.callers...), refs.typeRefs...), refs.others...)))
 	hasTests := len(dedupeGenericRefs(refs.allTests())) > 0
-	exported := typeScriptDefinitionIsExported(def)
+	exported := typeScriptDefinitionIsExported(def, refs)
 	primaryRefCount := nonTestRefCount
 	if typeScriptImpactPrefersTypeRefs(def.Kind) {
 		primaryRefCount = len(dedupeGenericRefs(refs.typeRefs))
 	}
 
 	switch {
-	case !hasTests && nonTestRefCount >= typeScriptImpactHighNonTestReferenceThreshold:
+	case !hasTests && nonTestRefCount >= jsFamilyImpactHighNonTestReferenceThreshold:
 		return goImpactRiskHigh
-	case exported && !hasTests && primaryRefCount >= typeScriptImpactMediumReferenceThreshold:
+	case exported && !hasTests && primaryRefCount >= jsFamilyImpactMediumNonTestReferenceThreshold:
 		return goImpactRiskHigh
-	case exported || !hasTests || nonTestRefCount >= typeScriptImpactMediumReferenceThreshold || primaryRefCount >= typeScriptImpactMediumReferenceThreshold:
+	case exported || !hasTests || nonTestRefCount >= jsFamilyImpactMediumNonTestReferenceThreshold || primaryRefCount >= jsFamilyImpactMediumNonTestReferenceThreshold:
 		return goImpactRiskMedium
 	default:
 		return goImpactRiskLow
 	}
 }
 
-func typeScriptDefinitionIsExported(def genericSymbolDef) bool {
-	fields := strings.Fields(def.Signature)
-	return len(fields) > 0 && fields[0] == "export"
+func typeScriptDefinitionIsExported(def genericSymbolDef, refs typeScriptImpactRefs) bool {
+	if def.Exported {
+		return true
+	}
+	if jsFamilySignatureStartsWithExport(def.Signature) {
+		return true
+	}
+	return jsFamilyRefsContainExport(refs.imports)
 }

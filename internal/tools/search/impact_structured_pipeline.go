@@ -60,6 +60,19 @@ func shouldAttemptSinglePatternImpactSearch(opts SearchOptions, pattern string) 
 	return strings.TrimSpace(pattern) != ""
 }
 
+func tryStructuredImpactSearchResultForIntent(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
+	if result, ok := tryStructuredGoImpactSearchResult(cache, opts); ok {
+		return result, true
+	}
+	if result, ok := tryExpandedStructuredTypeScriptImpactSearchResult(cache, opts); ok {
+		return result, true
+	}
+	if result, ok := tryExpandedStructuredJavaScriptImpactSearchResult(cache, opts); ok {
+		return result, true
+	}
+	return structuredImpactExecutionResult{}, false
+}
+
 func tryStructuredImpactSearchResult(cache tools.ToolCacheInterface, ctx structuredImpactSearchContext, opts SearchOptions, resolver structuredImpactResolver) (structuredImpactExecutionResult, bool) {
 	if cached, ok := loadStructuredImpactCachedResult(cache, ctx, opts); ok {
 		return structuredImpactExecutionResult{

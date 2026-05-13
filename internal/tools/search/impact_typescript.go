@@ -8,14 +8,6 @@ import (
 
 const structuredTypeScriptImpactRouteTag = "impact-structured-typescript-v1"
 
-func tryStructuredTypeScriptImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) (string, bool) {
-	result, ok := tryExpandedStructuredTypeScriptImpactSearchResult(cache, opts)
-	if !ok {
-		return "", false
-	}
-	return result.Rendered, true
-}
-
 func tryExpandedStructuredTypeScriptImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
 	result, ok := tryStructuredTypeScriptImpactSearchResult(cache, opts)
 	if !ok {
@@ -30,14 +22,6 @@ func tryStructuredTypeScriptImpactSearchResult(cache tools.ToolCacheInterface, o
 		return structuredImpactExecutionResult{}, false
 	}
 	return tryStructuredImpactSearchResult(cache, ctx, resolverOpts, resolveStructuredTypeScriptImpactSymbol)
-}
-
-func tryStructuredTypeScriptImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOptions) (SearchExecutionArtifact, bool) {
-	result, ok := tryExpandedStructuredTypeScriptImpactSearchResult(cache, opts)
-	if !ok {
-		return SearchExecutionArtifact{}, false
-	}
-	return newStructuredImpactSearchArtifact(result), true
 }
 
 func newStructuredTypeScriptImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, SearchOptions, bool) {
@@ -123,7 +107,10 @@ func normalizeStructuredTypeScriptImpactOptions(opts SearchOptions) (SearchOptio
 }
 
 func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) symbolResolveResult {
-	defs := normalizeStructuredTypeScriptDefs(findGenericDefinitions(symbol, opts))
+	defs := normalizeStructuredTypeScriptDefs(findJSFamilyDefinitionsWithAST(symbol, opts))
+	if len(defs) == 0 {
+		defs = normalizeStructuredTypeScriptDefs(findGenericDefinitions(symbol, opts))
+	}
 	preferredDefs := preferStructuredTypeScriptImplementationDefs(defs)
 	defs = preferredDefs.defs
 	if len(defs) == 0 {
@@ -138,14 +125,16 @@ func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) 
 	}
 
 	def := defs[0]
-	refs := normalizeStructuredTypeScriptRefs(findGenericReferences(symbol, opts))
+	refResult := findJSFamilyReferencesWithSemantic(symbol, def, opts)
+	refs := normalizeStructuredTypeScriptRefs(refResult.refs)
 	refs = filterStructuredTypeScriptSuppressedDeclarationRefs(refs, preferredDefs.suppressedDeclarationDefs)
 	filteredRefs := filterGenericRefs(refs, def)
-	classifiedRefs := typeScriptImpactRefsForDef(def, filteredRefs, opts, symbol)
+	classifiedRefs := typeScriptImpactRefsForDef(def, filteredRefs, opts)
 	bundle := buildTypeScriptImpactBundle(symbol, def, opts, classifiedRefs)
 	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
+	bundle.Diagnostics.ResolvedViaLSP = refResult.resolvedViaLSP
 
 	return symbolResolveResult{
 		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),

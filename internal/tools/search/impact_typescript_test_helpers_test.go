@@ -27,30 +27,7 @@ func newTSXImpactSearchOptions(dir string, symbol string) SearchOptions {
 
 func assertTypeScriptStructuredImpactArtifact(t *testing.T, artifact SearchExecutionArtifact, symbol string, kind string) {
 	t.Helper()
-	if !artifact.Metadata.StructuredImpact {
-		t.Fatalf("StructuredImpact = false, want true; output:\n%s", artifact.Rendered)
-	}
-	if artifact.Metadata.Ambiguous {
-		t.Fatalf("Ambiguous = true, want false; output:\n%s", artifact.Rendered)
-	}
-	if artifact.Metadata.Bundle == nil {
-		t.Fatalf("Bundle = nil, want TypeScript structured bundle; output:\n%s", artifact.Rendered)
-	}
-	if artifact.Metadata.Bundle.Identity.Language != "typescript" {
-		t.Fatalf("bundle language = %q, want typescript", artifact.Metadata.Bundle.Identity.Language)
-	}
-	if artifact.Metadata.Bundle.Identity.DisplayName != symbol {
-		t.Fatalf("bundle display name = %q, want %q", artifact.Metadata.Bundle.Identity.DisplayName, symbol)
-	}
-	if artifact.Metadata.Bundle.Identity.Kind != kind {
-		t.Fatalf("bundle kind = %q, want %q", artifact.Metadata.Bundle.Identity.Kind, kind)
-	}
-	if artifact.Metadata.Bundle.Impact == nil {
-		t.Fatal("Bundle.Impact = nil, want TypeScript impact metadata")
-	}
-	if len(artifact.Metadata.Bundle.Impact.RecommendedReads) == 0 {
-		t.Fatal("RecommendedReads is empty, want definition read")
-	}
+	assertJSFamilyStructuredImpactArtifact(t, artifact, "typescript", symbol, kind)
 }
 
 func recommendedReadsContainFile(bundle *SymbolBundle, file string) bool {
@@ -99,11 +76,11 @@ func assertRecommendedReadAt(t *testing.T, reads []SymbolBundleItem, index int, 
 	}
 }
 
-func typeScriptGenericRefs(prefix string, count int) []genericSymbolRef {
+func genericSymbolRefsForTest(prefix string, extension string, count int) []genericSymbolRef {
 	refs := make([]genericSymbolRef, 0, count)
 	for i := 0; i < count; i++ {
 		refs = append(refs, genericSymbolRef{
-			File:    prefix + string(rune('a'+i)) + ".ts",
+			File:    prefix + string(rune('a'+i)) + extension,
 			Line:    i + 1,
 			Snippet: "buildUser()",
 		})

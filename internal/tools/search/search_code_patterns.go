@@ -102,11 +102,8 @@ func shouldExecuteImpactSearch(opts SearchOptions) bool {
 }
 
 func executeImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) string {
-	if structured, ok := tryStructuredGoImpactSearch(cache, opts); ok {
-		return structured
-	}
-	if structured, ok := tryStructuredTypeScriptImpactSearch(cache, opts); ok {
-		return structured
+	if result, ok := tryStructuredImpactSearchResultForIntent(cache, opts); ok {
+		return result.Rendered
 	}
 
 	basePatterns := impactBasePatterns(opts)

@@ -99,11 +99,14 @@ func TestToolDescriptions_ReadFileAndSearchCodeDescribeLowLevelUsage(t *testing.
 	if !strings.Contains(ToolDescriptions["search_code"], "intent=impact") {
 		t.Error("search_code description should mention intent=impact")
 	}
-	if !strings.Contains(ToolDescriptions["search_code"], "targeted TSX .tsx symbols") {
-		t.Error("search_code description should mention targeted TSX structured impact")
+	if !strings.Contains(ToolDescriptions["search_code"], "targeted TSX .tsx, and JavaScript .js symbols") {
+		t.Error("search_code description should mention targeted TSX and JavaScript structured impact")
 	}
-	if !strings.Contains(ToolDescriptions["search_code"], "file_filter=typescript remains a broad fallback scope") {
-		t.Error("search_code description should preserve the broad TypeScript fallback contract")
+	if !strings.Contains(ToolDescriptions["search_code"], "file_filter=typescript and file_filter=javascript remain broad fallback scopes") {
+		t.Error("search_code description should preserve the broad TypeScript and JavaScript fallback contracts")
+	}
+	if !strings.Contains(ToolDescriptions["search_code"], ".jsx/.mjs/.cjs are not JavaScript structured impact targets") {
+		t.Error("search_code description should mention unsupported JavaScript structured impact extensions")
 	}
 	if !strings.Contains(ToolDescriptions["search_code"], "ripgrep-like built-in language aliases") {
 		t.Error("search_code description should mention the shared built-in file filter contract")

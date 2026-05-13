@@ -247,7 +247,6 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactUnsupport
 		filePath string
 		source   string
 	}{
-		{name: "js filter", fileType: "js", filePath: "src/build.js", source: "export function buildUser() { return '1' }\n"},
 		{name: "jsx filter", fileType: "jsx", filePath: "src/widget.jsx", source: "export function buildUser() { return <></> }\n"},
 		{name: "mjs filter", fileType: "mjs", filePath: "src/build.mjs", source: "export function buildUser() { return '1' }\n"},
 		{name: "cjs filter", fileType: "cjs", filePath: "src/build.cjs", source: "function buildUser() { return '1' }\n"},
