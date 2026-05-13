@@ -34,7 +34,6 @@ func TestDiagnoseGemini_TextSmokeObservesUsageAndCost(t *testing.T) {
 
 	t.Setenv(geminiAPIKeyEnv, "gemini-key")
 	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv(geminiFunctionCallingEnv, "1")
 	t.Setenv("XELYON_MODEL", "")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
@@ -85,7 +84,6 @@ func TestDiagnoseGemini_ToolSmokeRequiresToolCallAndUsesAnyMode(t *testing.T) {
 
 	t.Setenv(geminiAPIKeyEnv, "gemini-key")
 	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv(geminiFunctionCallingEnv, "1")
 	t.Setenv("XELYON_MODEL", "")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
@@ -124,7 +122,6 @@ func TestDiagnoseGemini_ToolSmokeFailsWithoutToolCall(t *testing.T) {
 
 	t.Setenv(geminiAPIKeyEnv, "gemini-key")
 	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv(geminiFunctionCallingEnv, "1")
 	t.Setenv("XELYON_MODEL", "")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
@@ -138,50 +135,6 @@ func TestDiagnoseGemini_ToolSmokeFailsWithoutToolCall(t *testing.T) {
 		t.Fatalf("HasFailures() = false, want tool smoke failure: %#v", report.Checks)
 	}
 	requireGeminiDiagnosticCheckStatus(t, report, "tool_smoke", DiagnosticStatusFail)
-}
-
-func TestDiagnoseGemini_FunctionCallingDisabledSkipsToolAndRunsTextFallback(t *testing.T) {
-	var captured []map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode request body: %v", err)
-		}
-		captured = append(captured, body)
-		writeGeminiDiagnosticSSE(t, w, GeminiFunctionResponse{
-			Candidates: []GeminiFunctionCandidate{{
-				Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "text fallback ok"}}},
-			}},
-			UsageMetadata: &GeminiUsageMetadata{PromptTokenCount: 5, CandidatesTokenCount: 2},
-		})
-	}))
-	defer server.Close()
-
-	t.Setenv(geminiAPIKeyEnv, "gemini-key")
-	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv(geminiFunctionCallingEnv, "0")
-	t.Setenv("XELYON_MODEL", "")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:       config.DefaultConfig(),
-		Model:        defaultGeminiDiagnosticModel,
-		CatalogModel: defaultGeminiDiagnosticModel,
-		RunSmoke:     true,
-		ToolSmoke:    true,
-	})
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want false for disabled tool skip: %#v", report.Checks)
-	}
-	requireGeminiDiagnosticCheckStatus(t, report, "tool_smoke", DiagnosticStatusWarn)
-	if len(captured) != 1 {
-		t.Fatalf("captured request count = %d, want text fallback only", len(captured))
-	}
-	if _, ok := captured[0]["tools"]; ok {
-		t.Fatalf("tools = %#v, want absent for text fallback", captured[0]["tools"])
-	}
-	if report.Smoke == nil || len(report.Smoke.Requests) != 2 || !report.Smoke.Requests[1].Skipped {
-		t.Fatalf("Smoke requests = %#v, want text fallback plus skipped tool", report.Smoke)
-	}
 }
 
 func TestDiagnoseGemini_ImageSmokeBuildsInlineDataPayload(t *testing.T) {
@@ -201,7 +154,6 @@ func TestDiagnoseGemini_ImageSmokeBuildsInlineDataPayload(t *testing.T) {
 
 	t.Setenv(geminiAPIKeyEnv, "gemini-key")
 	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv(geminiFunctionCallingEnv, "1")
 	t.Setenv("XELYON_MODEL", "")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
@@ -256,7 +208,6 @@ func TestDiagnoseGemini_WebSearchSmokeUsesGenerateContentJSON(t *testing.T) {
 
 	t.Setenv(geminiAPIKeyEnv, "gemini-key")
 	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv(geminiFunctionCallingEnv, "1")
 	t.Setenv("XELYON_MODEL", "")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{

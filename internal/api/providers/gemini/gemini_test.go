@@ -330,13 +330,8 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
-	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
-	defer func() {
-		os.Setenv("GEMINI_API_URL", originalURL)
-		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
-	}()
+	defer os.Setenv("GEMINI_API_URL", originalURL)
 	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Unsetenv("GEMINI_FUNCTION_CALLING") // デフォルト: 有効
 
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Read /test/file.txt"}}
@@ -352,17 +347,15 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 	}
 }
 
-func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
-	// GEMINI_FUNCTION_CALLING=0 でテキストモードを使用
+func TestProvider_ChatWithTools_ToolUseDisabledUsesTextMode(t *testing.T) {
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
-		// テキストモードでは tools が含まれない
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("Failed to decode request: %v", err)
 		}
 
 		if _, hasTools := req["tools"]; hasTools {
-			t.Error("Request should NOT include tools when Function Calling is disabled")
+			t.Error("Request should NOT include tools when tool use is disabled")
 		}
 
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -376,18 +369,14 @@ func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
-	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
-	defer func() {
-		os.Setenv("GEMINI_API_URL", originalURL)
-		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
-	}()
+	defer os.Setenv("GEMINI_API_URL", originalURL)
 	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Setenv("GEMINI_FUNCTION_CALLING", "0") // 無効化
 
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Hello"}}
 
-	result, err := p.ChatWithTools(context.Background(), "System", history, "")
+	ctx := api.WithToolUseDisabled(context.Background())
+	result, err := p.ChatWithTools(ctx, "System", history, "")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -396,8 +385,7 @@ func TestProvider_ChatWithTools_FunctionCallingDisabled(t *testing.T) {
 	}
 }
 
-func TestProvider_ChatWithTools_ToolUseDisabledUsesTextMode(t *testing.T) {
-	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
+func TestProvider_ChatWithTools_ToolUseDisabledOmitsToolConfig(t *testing.T) {
 	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
 
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -489,13 +477,8 @@ func TestProvider_ChatWithTools_WithMCPTools(t *testing.T) {
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
-	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
-	defer func() {
-		os.Setenv("GEMINI_API_URL", originalURL)
-		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
-	}()
+	defer os.Setenv("GEMINI_API_URL", originalURL)
 	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Unsetenv("GEMINI_FUNCTION_CALLING") // デフォルト: 有効
 
 	p := New("test-key")
 
@@ -584,13 +567,8 @@ func TestChatWithTools_ThinkingTimeoutRetryThenSuccess(t *testing.T) {
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
-	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
-	defer func() {
-		os.Setenv("GEMINI_API_URL", originalURL)
-		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
-	}()
+	defer os.Setenv("GEMINI_API_URL", originalURL)
 	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Unsetenv("GEMINI_FUNCTION_CALLING")
 
 	// thinking timeout のリトライロジックを直接テスト
 	p := New("test-key")
@@ -626,13 +604,8 @@ func TestChatWithTools_ThinkingTimeoutNoFallbackToTextMode(t *testing.T) {
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
-	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
-	defer func() {
-		os.Setenv("GEMINI_API_URL", originalURL)
-		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
-	}()
+	defer os.Setenv("GEMINI_API_URL", originalURL)
 	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Unsetenv("GEMINI_FUNCTION_CALLING")
 
 	p := New("test-key")
 
@@ -669,13 +642,8 @@ func TestChatWithTools_NonThinkingTimeoutFallsBackToTextMode(t *testing.T) {
 	})
 
 	originalURL := os.Getenv("GEMINI_API_URL")
-	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
-	defer func() {
-		os.Setenv("GEMINI_API_URL", originalURL)
-		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
-	}()
+	defer os.Setenv("GEMINI_API_URL", originalURL)
 	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Unsetenv("GEMINI_FUNCTION_CALLING")
 
 	p := New("test-key")
 	history := []api.Message{{Role: "user", Content: "Test"}}
@@ -817,13 +785,8 @@ func TestChatWithTools_ResponseStartTimeoutRetry(t *testing.T) {
 	defer server.Close()
 
 	originalURL := os.Getenv("GEMINI_API_URL")
-	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
-	defer func() {
-		os.Setenv("GEMINI_API_URL", originalURL)
-		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
-	}()
+	defer os.Setenv("GEMINI_API_URL", originalURL)
 	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Unsetenv("GEMINI_FUNCTION_CALLING")
 
 	p := New("test-key")
 	// テスト用に短いタイムアウトを設定
@@ -853,13 +816,8 @@ func TestChatWithTools_ResponseStartTimeoutExceedsMaxRetries(t *testing.T) {
 	defer server.Close()
 
 	originalURL := os.Getenv("GEMINI_API_URL")
-	originalFC := os.Getenv("GEMINI_FUNCTION_CALLING")
-	defer func() {
-		os.Setenv("GEMINI_API_URL", originalURL)
-		os.Setenv("GEMINI_FUNCTION_CALLING", originalFC)
-	}()
+	defer os.Setenv("GEMINI_API_URL", originalURL)
 	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Unsetenv("GEMINI_FUNCTION_CALLING")
 
 	p := New("test-key")
 	// テスト用に短いタイムアウトを設定

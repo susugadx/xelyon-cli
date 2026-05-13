@@ -45,18 +45,7 @@ func runGeminiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 
 	result := DiagnosticSmokeResult{Ran: true}
 	started := time.Now()
-	for _, request := range geminiDiagnosticRequests(options, report.FunctionCallingEnabled) {
-		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, DiagnosticSmokeRequestResult{
-				Name:        request.Name,
-				Skipped:     true,
-				SkipReason:  geminiDiagnosticToolSkipReason(),
-				ToolPayload: true,
-				Route:       DiagnosticRouteStreamGenerateContentSSE,
-			})
-			continue
-		}
-
+	for _, request := range geminiDiagnosticRequests(options) {
 		requestResult, err := runGeminiDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
 		result.Requests = append(result.Requests, requestResult)
 		result.addRequestObservation(requestResult)
@@ -141,9 +130,6 @@ func runGeminiDiagnosticSmokePayload(ctx context.Context, provider *Provider, re
 }
 
 func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
 	if request.ToolPayload {
 		r.ToolPayload = true
 	}

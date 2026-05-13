@@ -113,7 +113,6 @@ func TestDiagnoseGemini_NonGeminiCatalogModelDoesNotUseGlobalMetadata(t *testing
 
 func TestDiagnoseGemini_EndpointCheckMatchesSelectedRoutes(t *testing.T) {
 	t.Setenv(geminiAPIKeyEnv, "gemini-key")
-	t.Setenv(geminiFunctionCallingEnv, "1")
 	t.Setenv("XELYON_MODEL", "")
 
 	model := defaultGeminiDiagnosticModel

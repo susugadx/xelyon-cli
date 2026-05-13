@@ -781,8 +781,9 @@ export XELYON_STR_REPLACE_BATCH_EXACT_LINE_STATS=1
 
 ### Function Calling（ツール呼び出し）
 
-Bedrock 以外の各プロバイダーでは Function Calling（ツール呼び出し）機能を無効化できます。
+Gemini と Bedrock 以外の各プロバイダーでは Function Calling（ツール呼び出し）機能を無効化できます。
 モデルがFunction Callingに対応していない場合や、テキストベースのツール呼び出しに戻したい場合に使用します。
+Gemini provider は native function calling を前提にし、内部の text-only request だけ request-scoped tool disable を使います。
 Bedrock provider は agent 実行で structured tool calling を必須とするため、streaming tool use が未確認または非対応の Bedrock Converse モデルは runtime supported として扱いません。
 
 ```bash
@@ -794,9 +795,6 @@ export DEEPSEEK_FUNCTION_CALLING=0
 
 # Azure OpenAI Function Calling 無効化
 export AZURE_OPENAI_FUNCTION_CALLING=0
-
-# Gemini Function Calling 無効化
-export GEMINI_FUNCTION_CALLING=0
 
 # Groq Function Calling 無効化
 export GROQ_FUNCTION_CALLING=0
@@ -816,7 +814,6 @@ export OPENROUTER_FUNCTION_CALLING=0
 | `OPENAI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `DEEPSEEK_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `AZURE_OPENAI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
-| `GEMINI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `GROQ_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `CLAUDE_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `OLLAMA_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |

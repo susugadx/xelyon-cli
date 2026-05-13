@@ -13,10 +13,9 @@ import (
 )
 
 const (
-	geminiAPIKeyEnv          = "GEMINI_API_KEY"
-	geminiAPIURLEnv          = "GEMINI_API_URL"
-	geminiFunctionCallingEnv = "GEMINI_FUNCTION_CALLING"
-	geminiContextCachingEnv  = "GEMINI_CONTEXT_CACHING"
+	geminiAPIKeyEnv         = "GEMINI_API_KEY"
+	geminiAPIURLEnv         = "GEMINI_API_URL"
+	geminiContextCachingEnv = "GEMINI_CONTEXT_CACHING"
 )
 
 func (r *DiagnosticReport) addCheck(status DiagnosticStatus, name, message, detail, suggestion string) {
@@ -45,7 +44,7 @@ func (r *DiagnosticReport) addAuthCheck() {
 
 func (r *DiagnosticReport) addEndpointCheck(options DiagnosticOptions) {
 	raw := strings.TrimSpace(os.Getenv(geminiAPIURLEnv))
-	expectStream, expectGenerate := geminiDiagnosticEndpointExpectations(options, r.FunctionCallingEnabled)
+	expectStream, expectGenerate := geminiDiagnosticEndpointExpectations(options)
 	if raw == "" {
 		r.addCheck(DiagnosticStatusOK, "endpoint", fmt.Sprintf("%s uses the built-in endpoint", geminiAPIURLEnv), geminiDiagnosticEndpointDetail(r.Model, expectStream, expectGenerate), "")
 		return
@@ -87,13 +86,10 @@ func (r *DiagnosticReport) addEndpointCheck(options DiagnosticOptions) {
 	r.addCheck(DiagnosticStatusOK, "endpoint", fmt.Sprintf("%s is configured", geminiAPIURLEnv), geminiDiagnosticEndpointDetail(r.Model, expectStream, expectGenerate), "")
 }
 
-func geminiDiagnosticEndpointExpectations(options DiagnosticOptions, functionCallingEnabled bool) (bool, bool) {
+func geminiDiagnosticEndpointExpectations(options DiagnosticOptions) (bool, bool) {
 	if options.RunSmoke || options.PrintRequest {
 		var expectStream, expectGenerate bool
-		for _, request := range geminiDiagnosticRequests(options, functionCallingEnabled) {
-			if request.ToolPayload && !functionCallingEnabled {
-				continue
-			}
+		for _, request := range geminiDiagnosticRequests(options) {
 			if request.WebSearchPayload {
 				expectGenerate = true
 			} else {
@@ -212,17 +208,13 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 }
 
 func (r *DiagnosticReport) addFunctionCallingCheck() {
-	if r.FunctionCallingEnabled {
-		r.addCheck(
-			DiagnosticStatusOK,
-			"function_calling",
-			"Gemini function calling payloads are enabled",
-			"",
-			fmt.Sprintf("Set %s=0 only if the selected endpoint rejects tool payloads", geminiFunctionCallingEnv),
-		)
-		return
-	}
-	r.addCheck(DiagnosticStatusOK, "function_calling", "Gemini function calling payloads are disabled", fmt.Sprintf("%s=0", geminiFunctionCallingEnv), "")
+	r.addCheck(
+		DiagnosticStatusOK,
+		"function_calling",
+		"Gemini function calling payloads are enabled",
+		"",
+		"Use request-scoped tool disable only for internal text-only paths",
+	)
 }
 
 func (r *DiagnosticReport) addImageInputCheck() {
@@ -276,16 +268,6 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 		)
 		return
 	}
-	if options.ToolSmoke && !r.FunctionCallingEnabled {
-		r.addCheck(
-			DiagnosticStatusWarn,
-			"tool_smoke",
-			"tool payload smoke was skipped because function calling is disabled",
-			fmt.Sprintf("%s=0", geminiFunctionCallingEnv),
-			fmt.Sprintf("Unset %s or set it to 1 before rerunning --tool-smoke", geminiFunctionCallingEnv),
-		)
-	}
-
 	smoke, err := runGeminiDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {

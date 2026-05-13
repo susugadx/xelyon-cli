@@ -47,8 +47,6 @@ type DiagnosticSmokeCost = providerdiag.SmokeCost
 type DiagnosticSmokeRequestResult struct {
 	Name             string               `json:"name"`
 	Ran              bool                 `json:"ran"`
-	Skipped          bool                 `json:"skipped,omitempty"`
-	SkipReason       string               `json:"skip_reason,omitempty"`
 	ToolPayload      bool                 `json:"tool_payload,omitempty"`
 	ImagePayload     bool                 `json:"image_payload,omitempty"`
 	WebSearchPayload bool                 `json:"web_search_payload,omitempty"`
@@ -84,8 +82,6 @@ type DiagnosticRequestPreview struct {
 // DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
 type DiagnosticRequestPreviewRequest struct {
 	Name             string            `json:"name"`
-	Skipped          bool              `json:"skipped,omitempty"`
-	SkipReason       string            `json:"skip_reason,omitempty"`
 	ToolPayload      bool              `json:"tool_payload,omitempty"`
 	ImagePayload     bool              `json:"image_payload,omitempty"`
 	WebSearchPayload bool              `json:"web_search_payload,omitempty"`

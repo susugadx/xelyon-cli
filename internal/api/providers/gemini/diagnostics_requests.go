@@ -2,7 +2,6 @@ package gemini
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
@@ -21,11 +20,8 @@ type geminiDiagnosticRequest struct {
 	WebSearchPayload bool
 }
 
-func geminiDiagnosticRequests(options DiagnosticOptions, functionCallingEnabled bool) []geminiDiagnosticRequest {
+func geminiDiagnosticRequests(options DiagnosticOptions) []geminiDiagnosticRequest {
 	includeText := options.TextSmoke || (!options.ToolSmoke && !options.ImageSmoke && !options.WebSearchSmoke)
-	if options.ToolSmoke && !functionCallingEnabled {
-		includeText = true
-	}
 
 	var requests []geminiDiagnosticRequest
 	if includeText {
@@ -115,10 +111,6 @@ func geminiDiagnosticRequestURL(model string, request geminiDiagnosticRequest) s
 		return getGeminiFunctionCallingURL(model)
 	}
 	return getGeminiURL(model)
-}
-
-func geminiDiagnosticToolSkipReason() string {
-	return fmt.Sprintf("Gemini function calling payloads are disabled (%s=0)", geminiFunctionCallingEnv)
 }
 
 func geminiDiagnosticSmokeToolDefinitions() []api.ToolDefinition {

@@ -137,7 +137,6 @@ func setGeminiDoctorCommandTestEnv(t *testing.T, apiKey string) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GEMINI_API_KEY", apiKey)
 	t.Setenv("GEMINI_API_URL", "")
-	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
 	t.Setenv("XELYON_MODEL", "")
 }
 

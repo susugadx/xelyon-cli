@@ -135,11 +135,6 @@ func renderGeminiDoctorText(w io.Writer, report geminiprovider.DiagnosticReport)
 }
 
 func renderGeminiDoctorSmokeRequest(w io.Writer, request geminiprovider.DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		fmt.Fprintf(w, "Smoke request %s: skipped (%s)\n", request.Name, request.SkipReason)
-		return
-	}
-
 	status := "ok"
 	if strings.TrimSpace(request.Error) != "" {
 		status = "fail"

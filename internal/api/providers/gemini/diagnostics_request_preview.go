@@ -41,18 +41,7 @@ func buildGeminiDiagnosticRequestPreview(
 	provider.SetMCPTools(nil)
 
 	preview := DiagnosticRequestPreview{}
-	for _, request := range geminiDiagnosticRequests(options, report.FunctionCallingEnabled) {
-		if request.ToolPayload && !report.FunctionCallingEnabled {
-			preview.Requests = append(preview.Requests, DiagnosticRequestPreviewRequest{
-				Name:        request.Name,
-				Skipped:     true,
-				SkipReason:  geminiDiagnosticToolSkipReason(),
-				ToolPayload: true,
-				Route:       DiagnosticRouteStreamGenerateContentSSE,
-			})
-			continue
-		}
-
+	for _, request := range geminiDiagnosticRequests(options) {
 		requestCtx := newGeminiDiagnosticRequestContext(ctx, previewCfg, request, io.Discard)
 		preview.Requests = append(preview.Requests, buildGeminiDiagnosticRequestPreviewRequest(requestCtx, provider, report, request))
 	}

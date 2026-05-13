@@ -70,7 +70,6 @@ func TestGetThinkingSpinnerMessage_Gemini25ImageWithThinking(t *testing.T) {
 
 func TestChatWithTools_FCErrorRetryThenSuccess_Debug(t *testing.T) {
 	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
-	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
 	t.Setenv("XELYON_DEBUG_GEMINI", "1")
 
 	p := New("test-key")
@@ -127,7 +126,6 @@ func TestChatWithTools_FCErrorRetryThenSuccess_Debug(t *testing.T) {
 
 func TestChatWithTools_FCErrorExceedsMaxRetries(t *testing.T) {
 	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
-	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
 
 	p := New("test-key")
 	p.httpClient = &http.Client{
@@ -154,7 +152,6 @@ func TestChatWithTools_FCErrorExceedsMaxRetries(t *testing.T) {
 
 func TestChatWithTools_IdleTimeoutRetryThenSuccess(t *testing.T) {
 	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
-	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
 
 	p := New("test-key")
 	var attempts atomic.Int32
@@ -204,7 +201,6 @@ func TestChatWithTools_IdleTimeoutRetryThenSuccess(t *testing.T) {
 
 func TestChatWithTools_IdleTimeoutExceedsMaxRetries(t *testing.T) {
 	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
-	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
 
 	p := New("test-key")
 	p.httpClient = &http.Client{
@@ -231,9 +227,8 @@ func TestChatWithTools_IdleTimeoutExceedsMaxRetries(t *testing.T) {
 	}
 }
 
-func TestChatWithTools_TextModeDebugLogging(t *testing.T) {
+func TestChatWithTools_ToolUseDisabledDebugLogging(t *testing.T) {
 	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
-	t.Setenv("GEMINI_FUNCTION_CALLING", "0")
 	t.Setenv("XELYON_DEBUG_GEMINI", "1")
 
 	p := New("test-key")
@@ -252,6 +247,7 @@ func TestChatWithTools_TextModeDebugLogging(t *testing.T) {
 	}
 
 	ctx, _, errOut := newGeminiOrchestrationContext(1, 1)
+	ctx = api.WithToolUseDisabled(ctx)
 	got, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
@@ -259,7 +255,7 @@ func TestChatWithTools_TextModeDebugLogging(t *testing.T) {
 	if got != "text mode ok" {
 		t.Fatalf("ChatWithTools() = %q, want %q", got, "text mode ok")
 	}
-	if !strings.Contains(errOut.String(), "Mode: TextMode (GEMINI_FUNCTION_CALLING=0)") {
+	if !strings.Contains(errOut.String(), "Mode: TextMode (tool use disabled for request)") {
 		t.Fatalf("errOut = %q, want text mode debug log", errOut.String())
 	}
 }
@@ -278,7 +274,6 @@ func TestChatWithImage_RequestIncludesHistoryAndToolConfigWhenFCEnabled(t *testi
 		}))
 	})
 	t.Setenv("GEMINI_API_URL", server.URL)
-	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
 
 	p := New("test-key")
 	p.SetMCPTools([]api.ToolDefinition{{

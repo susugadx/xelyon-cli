@@ -19,7 +19,6 @@ func TestDiagnoseGemini_PrintRequestBuildsTextToolImageAndWebBodies(t *testing.T
 
 	t.Setenv(geminiAPIKeyEnv, "")
 	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv(geminiFunctionCallingEnv, "1")
 	t.Setenv("XELYON_MODEL", "")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
