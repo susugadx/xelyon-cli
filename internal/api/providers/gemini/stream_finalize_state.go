@@ -1,10 +1,6 @@
 package gemini
 
-import (
-	"fmt"
-
-	"github.com/susugadx/xelyon-cli/internal/api"
-)
+import "fmt"
 
 type sseFinalizeState struct {
 	interpret *sseInterpretState
@@ -82,16 +78,7 @@ func (s *sseFinalizeState) appendUniqueFunctionCalls() {
 }
 
 func (s *sseFinalizeState) emitUsage(p *Provider) {
-	if s.interpret.usage == nil || p.usageCallback == nil {
-		return
-	}
-
-	p.usageCallback(api.Usage{
-		InputTokens:       s.interpret.usage.PromptTokenCount,
-		OutputTokens:      s.interpret.usage.CandidatesTokenCount,
-		ThinkingTokens:    s.interpret.usage.ThoughtsTokenCount,
-		CachedInputTokens: s.interpret.usage.CachedContentTokenCount,
-	})
+	p.emitUsageMetadata(s.interpret.usage)
 }
 
 func (s *sseFinalizeState) emitFinalizeEffects(p *Provider, rescuedToolCallCount int) {

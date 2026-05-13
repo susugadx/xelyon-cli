@@ -37,7 +37,8 @@ type dynamicRetrievalConfig struct {
 }
 
 type webSearchResponse struct {
-	Candidates []webSearchCandidate `json:"candidates"`
+	Candidates    []webSearchCandidate `json:"candidates"`
+	UsageMetadata *GeminiUsageMetadata `json:"usageMetadata,omitempty"`
 }
 
 type webSearchCandidate struct {
@@ -76,6 +77,7 @@ func WebSearchWithContext(ctx context.Context, query, model string) (string, err
 
 	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
 	provider := New(apiKey)
+	provider.SetUsageCallback(websearch.UsageCallbackFromContext(ctx))
 	return provider.webSearch(ctx, query, model)
 }
 
@@ -120,6 +122,7 @@ func (p *Provider) webSearch(ctx context.Context, query, model string) (string, 
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
+	p.emitUsageMetadata(parsed.UsageMetadata)
 
 	summary, sources := parseWebSearchResponse(parsed)
 	return formatWebSearchResult(summary, sources), nil

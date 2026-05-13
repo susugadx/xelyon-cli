@@ -202,7 +202,7 @@ func TestDiagnoseGemini_WebSearchSmokeUsesGenerateContentJSON(t *testing.T) {
 			t.Fatalf("decode request body: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"web search ok"}]},"groundingMetadata":{"groundingChunks":[{"web":{"uri":"https://example.com","title":"Example"}}]}}]}`))
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"web search ok"}]},"groundingMetadata":{"groundingChunks":[{"web":{"uri":"https://example.com","title":"Example"}}]}}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":6,"thoughtsTokenCount":2,"cachedContentTokenCount":4}}`))
 	}))
 	defer server.Close()
 
@@ -224,8 +224,11 @@ func TestDiagnoseGemini_WebSearchSmokeUsesGenerateContentJSON(t *testing.T) {
 	if report.Smoke == nil || report.Smoke.Route != DiagnosticRouteGenerateContent || !report.Smoke.WebSearchPayload || !strings.Contains(report.Smoke.Content, "Summary:") || !strings.Contains(report.Smoke.Content, "Sources:") {
 		t.Fatalf("Smoke = %#v, want web search summary and sources", report.Smoke)
 	}
-	if report.Smoke.UsageObserved {
-		t.Fatalf("UsageObserved = true, want false for Gemini web search JSON path without usage callback")
+	if !report.Smoke.UsageObserved || report.Smoke.Usage.InputTokens != 12 || report.Smoke.Usage.OutputTokens != 6 || report.Smoke.Usage.ThinkingTokens != 2 || report.Smoke.Usage.CachedInputTokens != 4 {
+		t.Fatalf("Smoke usage = %#v, want observed Gemini web search usageMetadata", report.Smoke)
+	}
+	if report.Smoke.Cost.PricingUnavailable || report.Smoke.Cost.USD <= 0 {
+		t.Fatalf("Smoke cost = %+v, want available positive estimate", report.Smoke.Cost)
 	}
 	tools, ok := captured["tools"].([]any)
 	if !ok || len(tools) != 1 {
@@ -234,6 +237,34 @@ func TestDiagnoseGemini_WebSearchSmokeUsesGenerateContentJSON(t *testing.T) {
 	tool, ok := tools[0].(map[string]any)
 	if !ok || tool["google_search"] == nil {
 		t.Fatalf("tool = %#v, want google_search", tools[0])
+	}
+}
+
+func TestDiagnoseGemini_WebSearchSmokeSucceedsWithoutUsageMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"web search ok"}]}}]}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(geminiAPIKeyEnv, "gemini-key")
+	t.Setenv(geminiAPIURLEnv, server.URL)
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		Model:          defaultGeminiDiagnosticModel,
+		CatalogModel:   defaultGeminiDiagnosticModel,
+		RunSmoke:       true,
+		WebSearchSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false without web search usageMetadata: %#v", report.Checks)
+	}
+	requireGeminiDiagnosticCheckStatus(t, report, "web_search_smoke", DiagnosticStatusOK)
+	requireGeminiDiagnosticCheckStatus(t, report, "usage", DiagnosticStatusWarn)
+	if report.Smoke == nil || report.Smoke.UsageObserved {
+		t.Fatalf("Smoke = %#v, want web search success without usage observation", report.Smoke)
 	}
 }
 

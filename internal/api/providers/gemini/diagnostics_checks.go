@@ -302,7 +302,7 @@ func (r *DiagnosticReport) addSmokeObservationChecks(smoke DiagnosticSmokeResult
 			"usage",
 			"Gemini smoke succeeded but token usage was not observed",
 			"",
-			"Check whether the endpoint returns usageMetadata in streamGenerateContent responses",
+			"Check whether the endpoint returns usageMetadata in Gemini responses",
 		)
 	}
 

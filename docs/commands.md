@@ -62,7 +62,7 @@ xelyon doctor gemini --smoke --tool-smoke --image-smoke --web-search-smoke
 xelyon doctor gemini --json
 ```
 
-手元で doctor 経路だけを実 Gemini 環境で確認する場合は、`GEMINI_API_KEY` を設定して `make gemini-doctor-smoke` を実行します。既定では `gemini-3.1-pro-preview-customtools` で text / tool / image / web search smoke をまとめて実行し、必要なら `GEMINI_DOCTOR_SMOKE_MODEL` で変更できます。web search smoke は token usage / cost を必須にせず、summary または source が返れば成功扱いです。
+手元で doctor 経路だけを実 Gemini 環境で確認する場合は、`GEMINI_API_KEY` を設定して `make gemini-doctor-smoke` を実行します。既定では `gemini-3.1-pro-preview-customtools` で text / tool / image / web search smoke をまとめて実行し、必要なら `GEMINI_DOCTOR_SMOKE_MODEL` で変更できます。web search smoke は native `generateContent` の `usageMetadata` が返れば usage / cost を表示し、返らない場合は usage / cost を warn に留めます。summary または source が返れば smoke は成功扱いです。
 
 ### `xelyon doctor groq`
 

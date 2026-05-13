@@ -97,6 +97,7 @@ Gemini:
 - Checks `GEMINI_API_KEY`, `GEMINI_API_URL`, provider registration, model / `catalog_model`, `streamGenerateContent?alt=sse` route, function calling, image input, thinking, context caching, native web search, and catalog policy.
 - Supports `--print-request`.
 - Live smoke supports text, tool, image, and native web search request types. Text / tool / image use `streamGenerateContent?alt=sse`; web search uses native `generateContent`.
+- Native web search smoke observes usage / cost from `generateContent` `usageMetadata` when available, but usage is not required for the smoke success condition.
 - `GEMINI_API_URL` is an exact endpoint / proxy override. Endpoint diagnostics are route-aware: selected text / tool / image requests expect `streamGenerateContent?alt=sse`, while selected native web search requests expect `generateContent`.
 - Tool smoke / preview forces request-scoped Gemini function calling mode `ANY` for the diagnostic tool only. Normal runtime still uses `GEMINI_FC_MODE` fallback.
 - Non-Gemini `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token or cost policy.
