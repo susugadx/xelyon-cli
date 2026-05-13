@@ -844,7 +844,7 @@ export OPENAI_API_URL=https://your-proxy.com/v1/chat/completions
 export ANTHROPIC_API_URL=https://your-proxy.com/v1/messages
 
 # Gemini
-export GEMINI_API_URL=https://your-proxy.com/v1beta/models
+export GEMINI_API_URL=https://your-proxy.com/v1beta/models/YOUR_MODEL:streamGenerateContent?alt=sse
 
 # Groq
 export GROQ_API_URL=https://your-proxy.com/openai/v1/chat/completions

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -40,7 +41,7 @@ func buildGeminiMultimodalRequest(
 
 	if api.ShouldSendToolPayload(ctx, functionCallingEnabled) {
 		reqBody.Tools = GetCombinedToolDefinitionsWithContext(ctx, mcpTools)
-		reqBody.ToolConfig = newGeminiToolConfig(geminiFunctionCallingMode())
+		reqBody.ToolConfig = newGeminiToolConfig(geminiFunctionCallingMode(ctx))
 	}
 
 	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfg)
@@ -213,7 +214,25 @@ func geminiContentRole(role string) string {
 	return "user"
 }
 
-func geminiFunctionCallingMode() string {
+type geminiFunctionCallingModeContextKey struct{}
+
+func withGeminiFunctionCallingMode(ctx context.Context, mode string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, geminiFunctionCallingModeContextKey{}, mode)
+}
+
+func geminiFunctionCallingMode(ctx context.Context) string {
+	if ctx != nil {
+		if mode, _ := ctx.Value(geminiFunctionCallingModeContextKey{}).(string); strings.TrimSpace(mode) != "" {
+			return strings.TrimSpace(mode)
+		}
+	}
 	if mode := os.Getenv("GEMINI_FC_MODE"); mode != "" {
 		return mode
 	}

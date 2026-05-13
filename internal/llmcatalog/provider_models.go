@@ -120,6 +120,9 @@ var knownProviderModelPrefixes = map[string][]string{
 		"mixtral-",
 		"gemma2-",
 	},
+	"gemini": {
+		"gemini-",
+	},
 }
 
 // KnownModelNamesForProvider は picker 表示用の既知 model 名を provider ごとの安定順で返す。

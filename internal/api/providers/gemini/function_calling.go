@@ -33,7 +33,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	// ツール定義を事前に取得（キャッシュにも含めるため）
 	toolDefs := GetCombinedToolDefinitionsWithContext(ctx, p.mcpTools)
-	toolCfg := newGeminiToolConfig(geminiFunctionCallingMode())
+	toolCfg := newGeminiToolConfig(geminiFunctionCallingMode(ctx))
 
 	// キャッシュ管理（ツール定義もキャッシュに含める）
 	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model, toolDefs, toolCfg)

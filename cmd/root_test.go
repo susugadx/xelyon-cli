@@ -69,6 +69,7 @@ func resetRootFlagsForTest() {
 	doctorCatalogModelFlag = ""
 	doctorBedrockModelFlag = ""
 	doctorDeepSeekModelFlag = ""
+	doctorGeminiModelFlag = ""
 	doctorGroqModelFlag = ""
 	doctorKimiModelFlag = ""
 	doctorOpenAIModelFlag = ""
@@ -81,6 +82,8 @@ func resetRootFlagsForTest() {
 	doctorOpenAIRetentionSmokeFlag = false
 	doctorBedrockImageSmokeFlag = false
 	doctorBedrockThinkingSmokeFlag = false
+	doctorGeminiImageSmokeFlag = false
+	doctorGeminiWebSearchSmokeFlag = false
 	doctorKimiImageSmokeFlag = false
 	doctorKimiWebSearchSmokeFlag = false
 	doctorTimeoutFlag = defaultDoctorTimeout

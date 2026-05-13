@@ -30,7 +30,7 @@
 | Kimi | yes | yes | yes | yes | yes | no | yes | no | no | no | no | none |
 | Bedrock | yes | yes | yes | yes | yes | yes | no | no | no | no | no | none |
 | DeepSeek | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
-| Gemini | no | no | no | no | no | no | no | no | no | no | no | none |
+| Gemini | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
 | Claude / Anthropic | no | no | no | no | no | no | no | no | no | no | no | none |
 | Groq | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | Ollama | no | no | no | no | no | no | no | no | no | no | no | none |
@@ -92,9 +92,20 @@ OpenRouter:
 - A direct routed OpenRouter request model cannot be re-described by a different known routed `catalog_model`; mismatch is warn and token / pricing policy falls back to the request model when local metadata is available.
 - Main owner packages: `cmd/doctor_openrouter.go`, `internal/api/providers/openrouter/diagnostics*.go`, `internal/providerdiag`.
 
+Gemini:
+
+- Checks `GEMINI_API_KEY`, `GEMINI_API_URL`, provider registration, model / `catalog_model`, `streamGenerateContent?alt=sse` route, function calling, image input, thinking, context caching, native web search, and catalog policy.
+- Supports `--print-request`.
+- Live smoke supports text, tool, image, and native web search request types. Text / tool / image use `streamGenerateContent?alt=sse`; web search uses native `generateContent`.
+- `GEMINI_API_URL` is an exact endpoint / proxy override. Endpoint diagnostics are route-aware: selected text / tool / image requests expect `streamGenerateContent?alt=sse`, while selected native web search requests expect `generateContent`.
+- `GEMINI_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
+- Tool smoke / preview forces request-scoped Gemini function calling mode `ANY` for the diagnostic tool only. Normal runtime still uses `GEMINI_FC_MODE` fallback.
+- Non-Gemini `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token or cost policy.
+- Does not support `--capabilities`, `--require-capability`, retention smoke, or separate thinking smoke in v1.
+- Main owner packages: `cmd/doctor_gemini.go`, `internal/api/providers/gemini/diagnostics*.go`, `internal/providerdiag`.
+
 Missing doctor providers:
 
-- `gemini`: Gemini SSE route, `GEMINI_API_KEY`, `GEMINI_API_URL`, image support, function calling toggle, thinking / caching / web search details.
 - `claude` / `anthropic`: Anthropic Messages, `ANTHROPIC_API_KEY`, context management, image support, tool use, web search.
 - `ollama`: local endpoint, default `http://localhost:11434`, installed model availability, local usage counts, no API key.
 

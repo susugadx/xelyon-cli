@@ -81,14 +81,7 @@ func WebSearchWithContext(ctx context.Context, query, model string) (string, err
 
 func (p *Provider) webSearch(ctx context.Context, query, model string) (string, error) {
 	cfg := config.FromContext(ctx)
-	reqBody := webSearchRequest{
-		Contents: []GeminiContent{{
-			Role:  "user",
-			Parts: []GeminiPart{{Text: buildWebSearchPrompt(query)}},
-		}},
-		Tools:            []webSearchTool{buildWebSearchTool(model)},
-		GenerationConfig: getThinkingConfigForModel(ctx, model, cfg),
-	}
+	reqBody := buildGeminiWebSearchRequest(ctx, query, model, cfg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -130,6 +123,17 @@ func (p *Provider) webSearch(ctx context.Context, query, model string) (string, 
 
 	summary, sources := parseWebSearchResponse(parsed)
 	return formatWebSearchResult(summary, sources), nil
+}
+
+func buildGeminiWebSearchRequest(ctx context.Context, query, model string, cfg *config.Config) webSearchRequest {
+	return webSearchRequest{
+		Contents: []GeminiContent{{
+			Role:  "user",
+			Parts: []GeminiPart{{Text: buildWebSearchPrompt(query)}},
+		}},
+		Tools:            []webSearchTool{buildWebSearchTool(model)},
+		GenerationConfig: getThinkingConfigForModel(ctx, model, cfg),
+	}
 }
 
 func buildWebSearchPrompt(query string) string {

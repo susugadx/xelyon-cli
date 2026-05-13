@@ -42,6 +42,28 @@ xelyon doctor kimi --json
 
 手元で実 Kimi 環境の回帰確認を走らせる場合は、`MOONSHOT_API_KEY` を設定して `make kimi-smoke` を実行します。画像入力だけ確認する場合は `make kimi-image-smoke`、tool calling も含める場合は `make kimi-tool-smoke`、built-in web search は `make kimi-web-search-smoke` を使います。
 
+### `xelyon doctor gemini`
+
+Gemini provider の `GEMINI_API_KEY`、`GEMINI_API_URL`、provider 登録、model / `catalog_model` 解決、`streamGenerateContent?alt=sse` route、function calling、画像入力、thinking、context caching、native web search、token / pricing metadata を確認します。`--smoke` を付けると live text SSE request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、request-scoped `ANY` mode で dummy tool call を強制します。画像入力は `--image-smoke`、native web search は `--web-search-smoke` で確認します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted `x-goog-api-key` header、request body を `request_preview` に表示します。
+
+`--model` は実 request に送る Gemini model ID または alias、`--catalog-model` は alias の underlying Gemini model として token / pricing 判定に使います。non-Gemini `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Gemini doctor の token / cost policy に使いません。`GEMINI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`GEMINI_API_URL` は runtime と同じ exact endpoint / proxy override で、`--print-request` の `request_preview.requests[].url` が実際の送信先です。text / tool / image は `streamGenerateContent?alt=sse`、native web search は `generateContent` の request shape を同じ URL に送るため、`--web-search-smoke` では `generateContent` を受ける endpoint または両方の shape を受ける proxy を使います。`--capabilities`、`--require-capability`、`--retention-smoke`、`--thinking-smoke` は Gemini doctor v1 では提供しません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--web-search-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+
+```bash
+xelyon doctor gemini
+xelyon doctor gemini --model gemini-3.1-pro-preview-customtools
+xelyon doctor gemini --model corp-gemini-model --catalog-model gemini-3.1-pro-preview-customtools
+xelyon doctor gemini --smoke
+xelyon doctor gemini --tool-smoke
+xelyon doctor gemini --image-smoke
+xelyon doctor gemini --web-search-smoke
+xelyon doctor gemini --print-request
+xelyon doctor gemini --tool-smoke --print-request
+xelyon doctor gemini --smoke --tool-smoke --image-smoke --web-search-smoke
+xelyon doctor gemini --json
+```
+
+手元で doctor 経路だけを実 Gemini 環境で確認する場合は、`GEMINI_API_KEY` を設定して `make gemini-doctor-smoke` を実行します。既定では `gemini-3.1-pro-preview-customtools` で text / tool / image / web search smoke をまとめて実行し、必要なら `GEMINI_DOCTOR_SMOKE_MODEL` で変更できます。web search smoke は token usage / cost を必須にせず、summary または source が返れば成功扱いです。
+
 ### `xelyon doctor groq`
 
 Groq provider の `GROQ_API_KEY`、`GROQ_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、function calling 設定、token / pricing metadata を確認します。route は常に `chat_completions` です。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。

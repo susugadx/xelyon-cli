@@ -39,6 +39,11 @@ func TestCatalogPolicyDetailsPreserveProviderFormatting(t *testing.T) {
 		t.Fatalf("DeepSeekDetail() = %q, want %q", got, want)
 	}
 
+	geminiPolicy := GeminiCatalogPolicy(cfg, "gemini-3.1-pro-preview-customtools", "gemini-3.1-pro-preview-customtools")
+	if got, want := geminiPolicy.GeminiDetail(), "catalog_model=gemini-3.1-pro-preview-customtools, context_window=1000000, max_output_tokens=65536, pricing=input $2.00/M cached $0.200/M output $12.00/M"; got != want {
+		t.Fatalf("GeminiDetail() = %q, want %q", got, want)
+	}
+
 	openRouterPolicy := OpenRouterCatalogPolicy(cfg, "openai/gpt-5.4", "openai/gpt-5.4")
 	if got, want := openRouterPolicy.OpenRouterDetail(), "catalog_model=openai/gpt-5.4, context_window=1000000, max_output_tokens=64000, pricing=input $2.50/M cached $0.250/M output $15.00/M"; got != want {
 		t.Fatalf("OpenRouterDetail() = %q, want %q", got, want)

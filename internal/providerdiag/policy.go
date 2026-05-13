@@ -110,6 +110,16 @@ func OpenRouterMaxOutputPolicy(cfg *config.Config, model, catalogModel string) M
 	})
 }
 
+// GeminiMaxOutputPolicy は Gemini doctor の max output 解決規則を返す。
+func GeminiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
+		Provider:             "gemini",
+		RequestModel:         model,
+		CatalogModel:         catalogModel,
+		ProviderDefaultKnown: true,
+	})
+}
+
 type maxOutputPolicyOptions struct {
 	Provider               string
 	RequestModel           string
@@ -256,6 +266,16 @@ func OpenRouterCatalogPolicy(cfg *config.Config, model, catalogModel string) Cat
 	)
 }
 
+// GeminiCatalogPolicy は Gemini doctor 用の catalog policy snapshot を返す。
+func GeminiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	return NewCatalogPolicy(
+		catalogModel,
+		GeminiMaxOutputPolicy(cfg, model, catalogModel),
+		cost.GetPricingInfoForConfig(cfg, "gemini", model),
+		false,
+	)
+}
+
 // NewCatalogPolicy は providerごとの解決結果から共通 snapshot を作る。
 func NewCatalogPolicy(catalogModel string, maxOutput MaxOutputPolicy, pricing cost.PricingInfo, responsesStreaming bool) CatalogPolicy {
 	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
@@ -316,6 +336,17 @@ func (p CatalogPolicy) DeepSeekDetail() string {
 
 // OpenRouterDetail は OpenRouter doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) OpenRouterDetail() string {
+	return fmt.Sprintf(
+		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
+		p.CatalogModel,
+		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
+		p.MaxOutput.PlainDetail("unknown"),
+		PricingDetail(p.Pricing),
+	)
+}
+
+// GeminiDetail は Gemini doctor の catalog_policy detail を返す。
+func (p CatalogPolicy) GeminiDetail() string {
 	return fmt.Sprintf(
 		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
 		p.CatalogModel,
