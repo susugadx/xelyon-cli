@@ -33,74 +33,21 @@ func TestDecodeReviewProbePlanJSONRejectsUnknownFieldsAndTrailingToken(t *testin
 	}{
 		{
 			name: "unknown top-level field",
-			json: `{
-				"schema_version": "review_probe_plan.v2",
-				"target_kind": "current_changes",
-				"impact_surfaces": [{
-					"id": "surface-1",
-					"summary": "Changed validation path",
-					"category": "validator",
-					"evidence_summary": "diff evidence",
-					"status": "needs_probe",
-					"reason": "Focused tests should verify surface-1."
-				}],
-				"candidate_risks": [],
-				"probes": [{
-					"id": "probe-1",
-					"surface_ids": ["surface-1"],
-					"purpose": "Confirm or falsify surface-1 with focused tests",
-					"mode": "host_readonly",
-					"commands": [{"command": "go", "args": ["test", "./internal/review"]}]
-				}],
-				"unexpected": true
-			}`,
+			json: mustMarshalMutatedReviewProbePlanJSONForTest(t, func(plan map[string]any) {
+				plan["unexpected"] = true
+			}),
 		},
 		{
 			name: "unknown nested probe field",
-			json: `{
-				"schema_version": "review_probe_plan.v2",
-				"target_kind": "current_changes",
-				"impact_surfaces": [{
-					"id": "surface-1",
-					"summary": "Changed validation path",
-					"category": "validator",
-					"evidence_summary": "diff evidence",
-					"status": "needs_probe",
-					"reason": "Focused tests should verify surface-1."
-				}],
-				"candidate_risks": [],
-				"probes": [{
-					"id": "probe-1",
-					"surface_ids": ["surface-1"],
-					"purpose": "Confirm or falsify surface-1 with focused tests",
-					"mode": "host_readonly",
-					"commands": [{"command": "go", "args": ["test", "./internal/review"]}],
-					"unexpected": true
-				}]
-			}`,
+			json: mustMarshalMutatedReviewProbePlanJSONForTest(t, func(plan map[string]any) {
+				mustFirstReviewProbePlanProbeJSONForTest(t, plan)["unexpected"] = true
+			}),
 		},
 		{
 			name: "unknown nested command field",
-			json: `{
-				"schema_version": "review_probe_plan.v2",
-				"target_kind": "current_changes",
-				"impact_surfaces": [{
-					"id": "surface-1",
-					"summary": "Changed validation path",
-					"category": "validator",
-					"evidence_summary": "diff evidence",
-					"status": "needs_probe",
-					"reason": "Focused tests should verify surface-1."
-				}],
-				"candidate_risks": [],
-				"probes": [{
-					"id": "probe-1",
-					"surface_ids": ["surface-1"],
-					"purpose": "Confirm or falsify surface-1 with focused tests",
-					"mode": "host_readonly",
-					"commands": [{"command": "go", "unexpected": true}]
-				}]
-			}`,
+			json: mustMarshalMutatedReviewProbePlanJSONForTest(t, func(plan map[string]any) {
+				mustFirstReviewProbePlanCommandJSONForTest(t, plan)["unexpected"] = true
+			}),
 		},
 		{
 			name: "trailing JSON token",
@@ -424,11 +371,38 @@ func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
 		{
 			name: "candidate risks may be empty",
 			plan: func() ReviewProbePlan {
+				return markReviewProbePlanRisklessForTest(newValidReviewProbePlanForTest())
+			},
+		},
+		{
+			name: "candidate risks empty requires reason",
+			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
 				plan.CandidateRisks = nil
 				plan.Probes[0].RiskIDs = nil
 				return plan
 			},
+			errContains: "no_candidate_risk_reason",
+		},
+		{
+			name: "candidate risks empty rejects reason missing surface id",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.CandidateRisks = nil
+				plan.Probes[0].RiskIDs = nil
+				plan.NoCandidateRiskReason = "The diff evidence leaves no material candidate risk."
+				return plan
+			},
+			errContains: "no_candidate_risk_reason",
+		},
+		{
+			name: "candidate risks non-empty rejects no_candidate_risk_reason",
+			plan: func() ReviewProbePlan {
+				plan := newValidReviewProbePlanForTest()
+				plan.NoCandidateRiskReason = "surface-1 has no material candidate risk."
+				return plan
+			},
+			errContains: "no_candidate_risk_reason",
 		},
 		{
 			name: "no-probe rejects needs_probe surface",
@@ -469,6 +443,10 @@ func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
 		{
 			name: "no-probe accepts fully checked scope",
 			plan: newNoProbeReviewProbePlanForTest,
+		},
+		{
+			name: "no-probe accepts riskless fully checked scope",
+			plan: newNoProbeRisklessReviewProbePlanForTest,
 		},
 	}
 
@@ -958,6 +936,30 @@ func newNoProbeReviewProbePlanForTest() ReviewProbePlan {
 	return markReviewProbePlanCheckedWithoutProbesForTest(newValidReviewProbePlanForTest())
 }
 
+func newNoProbeRisklessReviewProbePlanForTest() ReviewProbePlan {
+	plan := markReviewProbePlanCheckedWithoutProbesForTest(newValidReviewProbePlanForTest())
+	plan = markReviewProbePlanRisklessForTest(plan)
+	plan.NoProbeReason = "surface-1 is checked by existing evidence."
+	return plan
+}
+
+func markReviewProbePlanRisklessForTest(plan ReviewProbePlan) ReviewProbePlan {
+	plan.CandidateRisks = nil
+	for i := range plan.Probes {
+		plan.Probes[i].RiskIDs = nil
+	}
+	plan.NoCandidateRiskReason = noCandidateRiskReasonForReviewProbePlanForTest(plan)
+	return plan
+}
+
+func noCandidateRiskReasonForReviewProbePlanForTest(plan ReviewProbePlan) string {
+	surfaceIDs := make([]string, 0, len(plan.ImpactSurfaces))
+	for _, surface := range plan.ImpactSurfaces {
+		surfaceIDs = append(surfaceIDs, surface.ID)
+	}
+	return "impact surfaces " + strings.Join(surfaceIDs, ", ") + " were reviewed from available evidence and leave no material candidate risk."
+}
+
 func markReviewProbePlanCheckedWithoutProbesForTest(plan ReviewProbePlan) ReviewProbePlan {
 	plan.ImpactSurfaces[0].Status = ReviewProbeImpactSurfaceChecked
 	plan.ImpactSurfaces[0].Reason = "Existing evidence covers surface-1."
@@ -976,6 +978,57 @@ func mustMarshalReviewProbePlanForTest(t *testing.T, plan ReviewProbePlan) []byt
 		t.Fatalf("json.Marshal() error = %v, want nil", err)
 	}
 	return data
+}
+
+func mustMarshalMutatedReviewProbePlanJSONForTest(t *testing.T, mutate func(map[string]any)) string {
+	t.Helper()
+
+	var rawPlan map[string]any
+	if err := json.Unmarshal(mustMarshalReviewProbePlanForTest(t, newValidReviewProbePlanForTest()), &rawPlan); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	mutate(rawPlan)
+
+	data, err := json.Marshal(rawPlan)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v, want nil", err)
+	}
+	return string(data)
+}
+
+func mustFirstReviewProbePlanProbeJSONForTest(t *testing.T, plan map[string]any) map[string]any {
+	t.Helper()
+
+	probes, ok := plan["probes"].([]any)
+	if !ok {
+		t.Fatalf("probes expected array, got %T", plan["probes"])
+	}
+	if len(probes) == 0 {
+		t.Fatal("probes expected at least one entry")
+	}
+	probe, ok := probes[0].(map[string]any)
+	if !ok {
+		t.Fatalf("probes[0] expected object, got %T", probes[0])
+	}
+	return probe
+}
+
+func mustFirstReviewProbePlanCommandJSONForTest(t *testing.T, plan map[string]any) map[string]any {
+	t.Helper()
+
+	probe := mustFirstReviewProbePlanProbeJSONForTest(t, plan)
+	commands, ok := probe["commands"].([]any)
+	if !ok {
+		t.Fatalf("probes[0].commands expected array, got %T", probe["commands"])
+	}
+	if len(commands) == 0 {
+		t.Fatal("probes[0].commands expected at least one entry")
+	}
+	command, ok := commands[0].(map[string]any)
+	if !ok {
+		t.Fatalf("probes[0].commands[0] expected object, got %T", commands[0])
+	}
+	return command
 }
 
 func newReviewPlannedProbeFilesForTest(count, contentBytes int) []ReviewPlannedProbeFile {

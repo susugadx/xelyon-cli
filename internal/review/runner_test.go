@@ -387,20 +387,7 @@ func TestReviewRunnerRunRepairsInvalidProbePlanValidation(t *testing.T) {
 	probes := &runnerFakeProbeRunner{}
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
-			{content: `{
-				"schema_version": "review_probe_plan.v2",
-				"target_kind": "current_changes",
-				"impact_surfaces": [{
-					"id": "surface-1",
-					"summary": "Validation path",
-					"category": "validator",
-					"evidence_summary": "diff evidence",
-					"status": "checked",
-					"reason": "Existing evidence covers surface-1."
-				}],
-				"candidate_risks": [],
-				"probes": []
-			}`},
+			{content: string(mustMarshalReviewProbePlanWithMissingNoProbeReasonForRunnerTest(t))},
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
 		},
@@ -504,21 +491,8 @@ func TestReviewRunnerRunInvalidPass1PlanStopsBeforeProbesAndPass2(t *testing.T) 
 			content: `{not-json`,
 		},
 		{
-			name: "invalid validated plan",
-			content: `{
-				"schema_version": "review_probe_plan.v2",
-				"target_kind": "current_changes",
-				"impact_surfaces": [{
-					"id": "surface-1",
-					"summary": "Validation path",
-					"category": "validator",
-					"evidence_summary": "diff evidence",
-					"status": "checked",
-					"reason": "Existing evidence covers surface-1."
-				}],
-				"candidate_risks": [],
-				"probes": []
-			}`,
+			name:    "invalid validated plan",
+			content: string(mustMarshalReviewProbePlanWithMissingNoProbeReasonForRunnerTest(t)),
 		},
 	}
 
@@ -1210,6 +1184,14 @@ func mustMarshalReviewProbePlanForRunnerTest(t *testing.T, plan ReviewProbePlan)
 		t.Fatalf("json.Marshal() error = %v, want nil", err)
 	}
 	return data
+}
+
+func mustMarshalReviewProbePlanWithMissingNoProbeReasonForRunnerTest(t *testing.T) []byte {
+	t.Helper()
+
+	plan := newRunnerNoProbePlanForTest()
+	plan.NoProbeReason = ""
+	return mustMarshalReviewProbePlanForRunnerTest(t, plan)
 }
 
 func mustMarshalReviewReportForRunnerTest(t *testing.T, report ReviewReport) []byte {

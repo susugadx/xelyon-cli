@@ -3,6 +3,7 @@ package review
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // ValidateReviewProbePlan は LLM probe plan schema v2 の構造契約を検証する。
@@ -19,6 +20,9 @@ func ValidateReviewProbePlan(plan ReviewProbePlan) error {
 	}
 	riskIDs, err := validateReviewProbeCandidateRisks(plan.CandidateRisks, surfaceIDs)
 	if err != nil {
+		return err
+	}
+	if err := validateReviewProbePlanNoCandidateRiskReason(plan, surfaceIDs); err != nil {
 		return err
 	}
 	if len(plan.Probes) > MaxReviewProbePlanProbes {
@@ -122,6 +126,24 @@ func validateReviewProbeCandidateRisks(risks []ReviewProbeCandidateRisk, surface
 	return seenIDs, nil
 }
 
+func validateReviewProbePlanNoCandidateRiskReason(plan ReviewProbePlan, surfaceIDs map[string]struct{}) error {
+	if len(plan.CandidateRisks) > 0 {
+		if plan.NoCandidateRiskReason != "" {
+			return fmt.Errorf("no_candidate_risk_reason must be empty when candidate_risks is non-empty")
+		}
+		return nil
+	}
+	if strings.TrimSpace(plan.NoCandidateRiskReason) == "" {
+		return fmt.Errorf("no_candidate_risk_reason must be non-empty when candidate_risks is empty")
+	}
+	for _, surface := range plan.ImpactSurfaces {
+		if _, exists := surfaceIDs[surface.ID]; exists && !reviewProbePlanReasonMentionsID(plan.NoCandidateRiskReason, surface.ID) {
+			return fmt.Errorf("no_candidate_risk_reason must mention impact surface ID %q when candidate_risks is empty", surface.ID)
+		}
+	}
+	return nil
+}
+
 func validateReviewProbePlanPreProbeEvidence(field, evidenceSummary string, refs []ReviewEvidenceRef) error {
 	if strings.TrimSpace(evidenceSummary) == "" && len(refs) == 0 {
 		return fmt.Errorf("%s requires evidence_summary or evidence_refs", field)
@@ -160,7 +182,7 @@ func validateReviewProbePlanNoProbeCompletion(plan ReviewProbePlan, surfaceIDs, 
 		if surface.Status != ReviewProbeImpactSurfaceChecked {
 			return fmt.Errorf("%s.status must be %q when probes is empty: got %q", field, ReviewProbeImpactSurfaceChecked, surface.Status)
 		}
-		if _, exists := surfaceIDs[surface.ID]; exists && !strings.Contains(plan.NoProbeReason, surface.ID) {
+		if _, exists := surfaceIDs[surface.ID]; exists && !reviewProbePlanReasonMentionsID(plan.NoProbeReason, surface.ID) {
 			return fmt.Errorf("no_probe_reason must mention checked impact surface ID %q when probes is empty", surface.ID)
 		}
 	}
@@ -169,11 +191,54 @@ func validateReviewProbePlanNoProbeCompletion(plan ReviewProbePlan, surfaceIDs, 
 		if risk.Status != ReviewProbeCandidateRiskCheckedByEvidence {
 			return fmt.Errorf("%s.status must be %q when probes is empty: got %q", field, ReviewProbeCandidateRiskCheckedByEvidence, risk.Status)
 		}
-		if _, exists := riskIDs[risk.ID]; exists && !strings.Contains(plan.NoProbeReason, risk.ID) {
+		if _, exists := riskIDs[risk.ID]; exists && !reviewProbePlanReasonMentionsID(plan.NoProbeReason, risk.ID) {
 			return fmt.Errorf("no_probe_reason must mention checked candidate risk ID %q when probes is empty", risk.ID)
 		}
 	}
 	return nil
+}
+
+func reviewProbePlanReasonMentionsID(reason, id string) bool {
+	if id == "" {
+		return false
+	}
+
+	searchFrom := 0
+	for searchFrom <= len(reason) {
+		relativeIndex := strings.Index(reason[searchFrom:], id)
+		if relativeIndex < 0 {
+			return false
+		}
+		start := searchFrom + relativeIndex
+		end := start + len(id)
+		if isReviewProbePlanReasonIDBoundaryBefore(reason, start) && isReviewProbePlanReasonIDBoundaryAfter(reason, end) {
+			return true
+		}
+		searchFrom = start + 1
+	}
+	return false
+}
+
+func isReviewProbePlanReasonIDBoundaryBefore(reason string, index int) bool {
+	if index <= 0 {
+		return true
+	}
+	r, _ := utf8.DecodeLastRuneInString(reason[:index])
+	return !isReviewProbePlanReasonIDContinuationRune(r)
+}
+
+func isReviewProbePlanReasonIDBoundaryAfter(reason string, index int) bool {
+	if index >= len(reason) {
+		return true
+	}
+	r, _ := utf8.DecodeRuneInString(reason[index:])
+	return !isReviewProbePlanReasonIDContinuationRune(r)
+}
+
+func isReviewProbePlanReasonIDContinuationRune(r rune) bool {
+	// reason 内の ID は文章中のトークンとして扱う。句読点の囲みは許容しつつ、
+	// 英数字、ハイフン、アンダースコアは prefix 関係の別 ID として区別する。
+	return isReviewProbePlanIDRune(r)
 }
 
 type reviewProbePlanProbeLinkageValidator struct {
@@ -302,7 +367,20 @@ func validateReviewProbePlanID(field, candidate string) (string, error) {
 	if containsAnyWhitespace(candidate) {
 		return "", fmt.Errorf("%s must not include whitespace: got %q", field, candidate)
 	}
+	for _, r := range candidate {
+		if !isReviewProbePlanIDRune(r) {
+			return "", fmt.Errorf("%s must contain only ASCII letters, digits, hyphen, or underscore: got %q", field, candidate)
+		}
+	}
 	return candidate, nil
+}
+
+func isReviewProbePlanIDRune(r rune) bool {
+	return ('a' <= r && r <= 'z') ||
+		('A' <= r && r <= 'Z') ||
+		('0' <= r && r <= '9') ||
+		r == '-' ||
+		r == '_'
 }
 
 func validateReviewProbePlanRequiredText(field, candidate string) error {

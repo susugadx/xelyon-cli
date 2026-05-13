@@ -27,13 +27,14 @@ const (
 // ReviewProbePlan は LLM 出力 JSON として decode する probe 計画 DTO。
 // ProbeRunner が直接扱う runtime 契約ではなく、検証後に ReviewProbeRequest へ変換する。
 type ReviewProbePlan struct {
-	SchemaVersion  string                     `json:"schema_version"`
-	TargetKind     TargetKind                 `json:"target_kind"`
-	Summary        string                     `json:"summary,omitempty"`
-	ImpactSurfaces []ReviewProbeImpactSurface `json:"impact_surfaces"`
-	CandidateRisks []ReviewProbeCandidateRisk `json:"candidate_risks"`
-	Probes         []ReviewPlannedProbe       `json:"probes"`
-	NoProbeReason  string                     `json:"no_probe_reason,omitempty"`
+	SchemaVersion         string                     `json:"schema_version"`
+	TargetKind            TargetKind                 `json:"target_kind"`
+	Summary               string                     `json:"summary,omitempty"`
+	ImpactSurfaces        []ReviewProbeImpactSurface `json:"impact_surfaces"`
+	CandidateRisks        []ReviewProbeCandidateRisk `json:"candidate_risks"`
+	Probes                []ReviewPlannedProbe       `json:"probes"`
+	NoCandidateRiskReason string                     `json:"no_candidate_risk_reason,omitempty"`
+	NoProbeReason         string                     `json:"no_probe_reason,omitempty"`
 }
 
 // ReviewProbeImpactSurface は Pass1 で material と判断した影響面を表す。

@@ -41,6 +41,7 @@ func reviewProbePlanPromptContract() string {
         "status": %q
       }
     ],
+    "no_candidate_risk_reason": "",
     "probes": [
       {
         "id": "probe-1",
@@ -60,17 +61,18 @@ func reviewProbePlanPromptContract() string {
     ],
     "no_probe_reason": "required non-empty only when probes is empty"
   }
-- "target_kind" must be %q. "impact_surfaces" must contain at least one entry. "candidate_risks" may be empty. "probes" must contain at most %d entries.
-- Scope analysis order: first enumerate material "impact_surfaces"; then derive "candidate_risks" from those surfaces; then create probes only for evidence-backed risks or unverified material surfaces.
+- "target_kind" must be %q. "impact_surfaces" must contain at least one entry. "candidate_risks" may be empty only when no material candidate risk remains after evaluating every impact surface. "probes" must contain at most %d entries.
+- Scope analysis order: first enumerate material "impact_surfaces"; then derive "candidate_risks" for material risks from those surfaces; then create probes only for evidence-backed risks or unverified material surfaces.
 - Consider changed files, callers, tests, related search hits, related tests/context files, CLI, TUI, config, validator, prompt contract, JSON schema, sandbox, timeout, path validation, error handling, persistence, and compatibility as material surfaces when the evidence makes them relevant.
-- Impact surface IDs and risk IDs must be unique, non-empty canonical IDs without whitespace. Risk "surface_ids" must reference existing impact surface IDs.
+- Impact surface IDs and risk IDs must be unique, non-empty canonical IDs using only ASCII letters, digits, hyphen, or underscore. Risk "surface_ids" must reference existing impact surface IDs.
 - Impact surface "summary" and "reason" must be non-empty. Candidate risk "summary" and "verification_strategy" must be non-empty.
 - Impact surface category must be one of %s. Impact surface status must be one of %s.
 - Candidate risk severity must be one of %s. Candidate risk status must be one of %s.
 - Each impact surface and candidate risk requires either non-empty "evidence_summary" or at least one "evidence_refs" entry.
 - Scope evidence refs are pre-probe only: "kind" must be one of %s, and "probe", "probe_command", "probe_id", and "command_index" are forbidden in the probe plan.
+- If "candidate_risks" is empty, "no_candidate_risk_reason" must be non-empty, must mention every impact surface ID, and must explain why no material candidate risk remains for each named surface. Do not use generic "No risk" wording. If "candidate_risks" is non-empty, omit "no_candidate_risk_reason" or set it to "".
 - If "probes" is empty, "no_probe_reason" must be non-empty, every impact surface status must be %q, every candidate risk status must be %q, and "no_probe_reason" must name every checked surface ID and checked risk ID. If "probes" is non-empty, omit "no_probe_reason" or set it to "".
-- Probe IDs must be unique, non-empty, canonical IDs without whitespace.
+- Probe IDs must be unique, non-empty canonical IDs using only ASCII letters, digits, hyphen, or underscore.
 - Each probe must include "surface_ids" or "risk_ids" with at least one referenced ID. Probe "surface_ids" must reference existing impact surface IDs. Probe "risk_ids" must reference existing candidate risk IDs.
 - Every impact surface with status "needs_probe" or "unverified" must be referenced directly by at least one probe "surface_ids" entry. Every candidate risk with status "needs_probe" or "unverified" must be referenced directly by at least one probe "risk_ids" entry. Checked surfaces and "checked_by_evidence" risks may remain unreferenced by probes.
 - Each probe purpose must explain how the referenced surface or risk IDs will be confirmed or falsified.
