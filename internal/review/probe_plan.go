@@ -44,7 +44,7 @@ type ReviewProbeImpactSurface struct {
 	EvidenceSummary string                           `json:"evidence_summary,omitempty"`
 	EvidenceRefs    []ReviewEvidenceRef              `json:"evidence_refs,omitempty"`
 	Status          ReviewProbeImpactSurfaceStatus   `json:"status"`
-	Reason          string                           `json:"reason,omitempty"`
+	Reason          string                           `json:"reason"`
 }
 
 // ReviewProbeCandidateRisk は impact surface に紐づく候補リスクを表す。
@@ -55,7 +55,7 @@ type ReviewProbeCandidateRisk struct {
 	SurfaceIDs           []string                       `json:"surface_ids"`
 	EvidenceSummary      string                         `json:"evidence_summary,omitempty"`
 	EvidenceRefs         []ReviewEvidenceRef            `json:"evidence_refs,omitempty"`
-	VerificationStrategy string                         `json:"verification_strategy,omitempty"`
+	VerificationStrategy string                         `json:"verification_strategy"`
 	Status               ReviewProbeCandidateRiskStatus `json:"status"`
 }
 
@@ -131,6 +131,8 @@ var reviewProbeCandidateRiskStatuses = []ReviewProbeCandidateRiskStatus{
 // ReviewPlannedProbe は LLM plan 内の 1 probe 定義を表す。
 type ReviewPlannedProbe struct {
 	ID             string                      `json:"id"`
+	SurfaceIDs     []string                    `json:"surface_ids,omitempty"`
+	RiskIDs        []string                    `json:"risk_ids,omitempty"`
 	Purpose        string                      `json:"purpose"`
 	Mode           ReviewProbeMode             `json:"mode"`
 	Commands       []ReviewPlannedProbeCommand `json:"commands,omitempty"`

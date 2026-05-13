@@ -395,7 +395,8 @@ func TestReviewRunnerRunRepairsInvalidProbePlanValidation(t *testing.T) {
 					"summary": "Validation path",
 					"category": "validator",
 					"evidence_summary": "diff evidence",
-					"status": "checked"
+					"status": "checked",
+					"reason": "Existing evidence covers surface-1."
 				}],
 				"candidate_risks": [],
 				"probes": []
@@ -512,7 +513,8 @@ func TestReviewRunnerRunInvalidPass1PlanStopsBeforeProbesAndPass2(t *testing.T) 
 					"summary": "Validation path",
 					"category": "validator",
 					"evidence_summary": "diff evidence",
-					"status": "checked"
+					"status": "checked",
+					"reason": "Existing evidence covers surface-1."
 				}],
 				"candidate_risks": [],
 				"probes": []
@@ -1128,9 +1130,11 @@ func newRunnerProbePlanForTest(ids ...string) ReviewProbePlan {
 	probes := make([]ReviewPlannedProbe, 0, len(ids))
 	for _, id := range ids {
 		probes = append(probes, ReviewPlannedProbe{
-			ID:      id,
-			Purpose: "Run focused review checks.",
-			Mode:    ReviewProbeHostReadOnly,
+			ID:         id,
+			SurfaceIDs: []string{"surface-1"},
+			RiskIDs:    []string{"risk-1"},
+			Purpose:    "Confirm or falsify risk-1 for surface-1 with focused review checks.",
+			Mode:       ReviewProbeHostReadOnly,
 			Commands: []ReviewPlannedProbeCommand{
 				{
 					Command: "go",

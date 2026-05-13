@@ -41,12 +41,14 @@ func TestDecodeReviewProbePlanJSONRejectsUnknownFieldsAndTrailingToken(t *testin
 					"summary": "Changed validation path",
 					"category": "validator",
 					"evidence_summary": "diff evidence",
-					"status": "needs_probe"
+					"status": "needs_probe",
+					"reason": "Focused tests should verify surface-1."
 				}],
 				"candidate_risks": [],
 				"probes": [{
 					"id": "probe-1",
-					"purpose": "Run focused tests",
+					"surface_ids": ["surface-1"],
+					"purpose": "Confirm or falsify surface-1 with focused tests",
 					"mode": "host_readonly",
 					"commands": [{"command": "go", "args": ["test", "./internal/review"]}]
 				}],
@@ -63,12 +65,14 @@ func TestDecodeReviewProbePlanJSONRejectsUnknownFieldsAndTrailingToken(t *testin
 					"summary": "Changed validation path",
 					"category": "validator",
 					"evidence_summary": "diff evidence",
-					"status": "needs_probe"
+					"status": "needs_probe",
+					"reason": "Focused tests should verify surface-1."
 				}],
 				"candidate_risks": [],
 				"probes": [{
 					"id": "probe-1",
-					"purpose": "Run focused tests",
+					"surface_ids": ["surface-1"],
+					"purpose": "Confirm or falsify surface-1 with focused tests",
 					"mode": "host_readonly",
 					"commands": [{"command": "go", "args": ["test", "./internal/review"]}],
 					"unexpected": true
@@ -85,12 +89,14 @@ func TestDecodeReviewProbePlanJSONRejectsUnknownFieldsAndTrailingToken(t *testin
 					"summary": "Changed validation path",
 					"category": "validator",
 					"evidence_summary": "diff evidence",
-					"status": "needs_probe"
+					"status": "needs_probe",
+					"reason": "Focused tests should verify surface-1."
 				}],
 				"candidate_risks": [],
 				"probes": [{
 					"id": "probe-1",
-					"purpose": "Run focused tests",
+					"surface_ids": ["surface-1"],
+					"purpose": "Confirm or falsify surface-1 with focused tests",
 					"mode": "host_readonly",
 					"commands": [{"command": "go", "unexpected": true}]
 				}]
@@ -420,6 +426,7 @@ func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
 				plan.CandidateRisks = nil
+				plan.Probes[0].RiskIDs = nil
 				return plan
 			},
 		},
@@ -918,7 +925,9 @@ func newValidReviewProbePlanForTest() ReviewProbePlan {
 		Probes: []ReviewPlannedProbe{
 			{
 				ID:             "probe-1",
-				Purpose:        "Run focused review tests.",
+				SurfaceIDs:     []string{"surface-1"},
+				RiskIDs:        []string{"risk-1"},
+				Purpose:        "Confirm or falsify risk-1 for surface-1 by running focused review tests.",
 				Mode:           ReviewProbeRepoSandbox,
 				TimeoutSeconds: 30,
 				MaxOutputBytes: 4096,

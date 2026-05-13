@@ -44,7 +44,9 @@ func reviewProbePlanPromptContract() string {
     "probes": [
       {
         "id": "probe-1",
-        "purpose": "non-empty purpose, at most %d bytes",
+        "surface_ids": ["surface-1"],
+        "risk_ids": ["risk-1"],
+        "purpose": "confirm or falsify risk-1 on surface-1 with a bounded check, at most %d bytes",
         "mode": %q,
         "commands": [
           {"command": "go", "args": ["test", "./internal/review"], "work_dir": "."}
@@ -62,12 +64,16 @@ func reviewProbePlanPromptContract() string {
 - Scope analysis order: first enumerate material "impact_surfaces"; then derive "candidate_risks" from those surfaces; then create probes only for evidence-backed risks or unverified material surfaces.
 - Consider changed files, callers, tests, related search hits, related tests/context files, CLI, TUI, config, validator, prompt contract, JSON schema, sandbox, timeout, path validation, error handling, persistence, and compatibility as material surfaces when the evidence makes them relevant.
 - Impact surface IDs and risk IDs must be unique, non-empty canonical IDs without whitespace. Risk "surface_ids" must reference existing impact surface IDs.
+- Impact surface "summary" and "reason" must be non-empty. Candidate risk "summary" and "verification_strategy" must be non-empty.
 - Impact surface category must be one of %s. Impact surface status must be one of %s.
 - Candidate risk severity must be one of %s. Candidate risk status must be one of %s.
 - Each impact surface and candidate risk requires either non-empty "evidence_summary" or at least one "evidence_refs" entry.
 - Scope evidence refs are pre-probe only: "kind" must be one of %s, and "probe", "probe_command", "probe_id", and "command_index" are forbidden in the probe plan.
 - If "probes" is empty, "no_probe_reason" must be non-empty, every impact surface status must be %q, every candidate risk status must be %q, and "no_probe_reason" must name every checked surface ID and checked risk ID. If "probes" is non-empty, omit "no_probe_reason" or set it to "".
 - Probe IDs must be unique, non-empty, canonical IDs without whitespace.
+- Each probe must include "surface_ids" or "risk_ids" with at least one referenced ID. Probe "surface_ids" must reference existing impact surface IDs. Probe "risk_ids" must reference existing candidate risk IDs.
+- Every impact surface with status "needs_probe" or "unverified" must be referenced directly by at least one probe "surface_ids" entry. Every candidate risk with status "needs_probe" or "unverified" must be referenced directly by at least one probe "risk_ids" entry. Checked surfaces and "checked_by_evidence" risks may remain unreferenced by probes.
+- Each probe purpose must explain how the referenced surface or risk IDs will be confirmed or falsified.
 - "mode" must be one of %q, %q, %q.
 - Each probe must contain 1 to %d commands. Each command "command" is an executable name only: no whitespace, no null byte, no slash, no backslash.
 - "args" is a JSON array of already-split arguments. Do not output shell pipelines, redirects, env assignments, command strings, or quoted command lines.
@@ -79,7 +85,7 @@ Mode command contract:
 - %q runs against the original repository in a read-only hardened environment. It allows commands: %s. Use it for additional reads and lightweight confirmation that must not mutate the worktree.
 - %q runs only against generated scratch files. It allows commands: %s. Use it for repo-clean reproductions or small experiments that do not require the real worktree. Python commands must name a single script path; "go" is limited to "go run" of one .go file.
 - %q runs against an isolated copy of the repository plus generated files. It allows commands: %s. Use it for real tests or change-impact verification where writes/build artifacts are expected inside the sandbox. Path-like args must stay inside the sandbox/repo copy.
-- Do not plan broad speculative test suites. Each probe purpose must name the candidate risk or unverified surface it will confirm or falsify.
+- Do not plan broad speculative test suites. The validator requires each probe to be linked to the candidate risks or unverified material surfaces it will confirm or falsify.
 `,
 		ReviewProbePlanSchemaVersionV2,
 		TargetCurrentChanges,
