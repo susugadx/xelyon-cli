@@ -120,7 +120,6 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 		`Candidate risks must be classified as "finding", "dismissed", "residual_risk", or "unverified"`,
 		`"finding_ids" in reviewed impact surfaces and reviewed candidate risks must be empty unless that scope entry status is "finding"`,
 		`A "clean" verdict is allowed only when every impact surface status is "checked" and every candidate risk status is "dismissed"`,
-		`candidate risk status "finding" must include non-empty "finding_ids"`,
 		`Findings discovered during Pass2 that were not Pass1 candidate risks`,
 		`There is no top-level "findings" or "has_findings" field`,
 		`"root_cause_groups[].findings"`,
@@ -142,6 +141,7 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 			t.Fatalf("report prompt missing %q:\n%s", want, prompt)
 		}
 	}
+	assertReviewReportPromptContainsScopeFindingLinkageContract(t, prompt)
 	forbids := []string{
 		`"probe_id": "probe-1"`,
 		`"finding_ids": ["finding-2"]`,
@@ -195,6 +195,22 @@ func TestBuildReviewReportRepairPromptIncludesRepairContract(t *testing.T) {
 	for _, want := range wants {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("report repair prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	assertReviewReportPromptContainsScopeFindingLinkageContract(t, prompt)
+}
+
+func assertReviewReportPromptContainsScopeFindingLinkageContract(t *testing.T, prompt string) {
+	t.Helper()
+
+	wants := []string{
+		`impact surface status "finding" must include non-empty "finding_ids"`,
+		`candidate risk status "finding" must include non-empty "finding_ids"`,
+		`each referenced finding must exist under "root_cause_groups" and include evidence_refs`,
+	}
+	for _, want := range wants {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("report prompt missing scope finding linkage contract %q:\n%s", want, prompt)
 		}
 	}
 }

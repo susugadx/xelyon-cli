@@ -71,6 +71,9 @@ func validateReviewReportScopeCoverageSemanticContract(report ReviewReport) erro
 	if err := validateCandidateRiskFindingCoverage(report.ScopeCoverage, findingIndex); err != nil {
 		return err
 	}
+	if err := validateImpactSurfaceFindingCoverage(report.ScopeCoverage, findingIndex); err != nil {
+		return err
+	}
 	if err := validateRootCauseFindingScopeCoverageContract(report, findingIndex); err != nil {
 		return err
 	}
@@ -314,20 +317,44 @@ func validateRootCauseFindingScopeCoverageContract(report ReviewReport, findingI
 	return validateRootCauseFindingsLinkedFromScopeCoverage(report, findingIndex)
 }
 
+func validateImpactSurfaceFindingCoverage(coverage *ReviewReportScopeCoverage, findingIndex map[string]reviewReportFindingInfo) error {
+	for i, surface := range coverage.ReviewedImpactSurfaces {
+		if surface.Status != ReviewReportImpactSurfaceFinding {
+			continue
+		}
+		field := fmt.Sprintf("scope_coverage.reviewed_impact_surfaces[%d]", i)
+		if err := validateRequiredEvidenceBackedScopeCoverageFindingIDs(field, string(ReviewReportImpactSurfaceFinding), surface.FindingIDs, findingIndex); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateCandidateRiskFindingCoverage(coverage *ReviewReportScopeCoverage, findingIndex map[string]reviewReportFindingInfo) error {
 	for i, risk := range coverage.ReviewedCandidateRisks {
 		if risk.Status != ReviewReportCandidateRiskFinding {
 			continue
 		}
 		field := fmt.Sprintf("scope_coverage.reviewed_candidate_risks[%d]", i)
-		if len(risk.FindingIDs) == 0 {
-			return fmt.Errorf("%s.finding_ids must contain at least one root cause finding ID when status is %q", field, ReviewReportCandidateRiskFinding)
+		if err := validateRequiredEvidenceBackedScopeCoverageFindingIDs(field, string(ReviewReportCandidateRiskFinding), risk.FindingIDs, findingIndex); err != nil {
+			return err
 		}
-		for j, findingID := range risk.FindingIDs {
-			info := findingIndex[findingID]
-			if !info.evidenceBacked {
-				return fmt.Errorf("%s.finding_ids[%d] references root cause finding ID %q without evidence_refs", field, j, findingID)
-			}
+	}
+	return nil
+}
+
+func validateRequiredEvidenceBackedScopeCoverageFindingIDs(field, status string, findingIDs []string, findingIndex map[string]reviewReportFindingInfo) error {
+	if len(findingIDs) == 0 {
+		return fmt.Errorf("%s.finding_ids must contain at least one root cause finding ID when status is %q", field, status)
+	}
+	for i, findingID := range findingIDs {
+		info, exists := findingIndex[findingID]
+		if !exists {
+			// 不明な finding ID は validateReviewReportScopeCoverageFindingReferences が責務を持つ。
+			continue
+		}
+		if !info.evidenceBacked {
+			return fmt.Errorf("%s.finding_ids[%d] references root cause finding ID %q without evidence_refs", field, i, findingID)
 		}
 	}
 	return nil

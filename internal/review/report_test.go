@@ -9,6 +9,10 @@ import (
 
 func TestReviewReportJSONRoundTrip(t *testing.T) {
 	generatedAt := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	const (
+		primaryFindingID    = "finding-1"
+		reportPassFindingID = "finding-2"
+	)
 	original := ReviewReport{
 		SchemaVersion:             ReviewReportSchemaVersionV2,
 		TargetKind:                TargetCurrentChanges,
@@ -35,7 +39,7 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 				},
 				Findings: []ReviewFinding{
 					{
-						ID:      "finding-1",
+						ID:      primaryFindingID,
 						Title:   "path traversal の可能性",
 						Summary: "relative path が sanitize されない",
 						EvidenceRefs: []ReviewEvidenceRef{
@@ -66,6 +70,19 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 								ID:                  "risk-1",
 								Summary:             "symlink 経由の迂回余地",
 								SuggestedMitigation: "path policy を inode ベースへ強化",
+							},
+						},
+					},
+					{
+						ID:      reportPassFindingID,
+						Title:   "Pass2 追加 finding",
+						Summary: "report pass で追加確認した finding",
+						EvidenceRefs: []ReviewEvidenceRef{
+							{
+								Kind:    ReviewEvidenceKindFile,
+								Path:    "internal/review/report_validation.go",
+								Line:    1,
+								Summary: "Pass2 追加 finding の証跡",
 							},
 						},
 					},
@@ -139,7 +156,7 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 					Status:       ReviewReportImpactSurfaceFinding,
 					Summary:      "surface-1 は finding-1 に接続",
 					EvidenceRefs: []ReviewEvidenceRef{{Kind: ReviewEvidenceKindDiff, Path: "internal/review/report_types.go"}},
-					FindingIDs:   []string{"finding-1"},
+					FindingIDs:   []string{primaryFindingID},
 				},
 			},
 			ReviewedCandidateRisks: []ReviewReportCandidateRiskCoverage{
@@ -148,17 +165,21 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 					Status:       ReviewReportCandidateRiskFinding,
 					Summary:      "risk-1 は finding-1 として確認",
 					EvidenceRefs: []ReviewEvidenceRef{{Kind: ReviewEvidenceKindProbe, ProbeID: "probe-1"}},
-					FindingIDs:   []string{"finding-1"},
+					FindingIDs:   []string{primaryFindingID},
 				},
 			},
 			NewFindingsFromReportPass: []ReviewReportPassFindingCoverage{
 				{
-					FindingIDs:   []string{"finding-2"},
+					FindingIDs:   []string{reportPassFindingID},
 					Summary:      "Pass2 で追加確認した finding",
 					EvidenceRefs: []ReviewEvidenceRef{{Kind: ReviewEvidenceKindFile, Path: "internal/review/report_validation.go"}},
 				},
 			},
 		},
+	}
+
+	if err := ValidateReviewReport(original); err != nil {
+		t.Fatalf("ValidateReviewReport(original) error = %v, want nil", err)
 	}
 
 	data, err := json.Marshal(original)
@@ -169,6 +190,9 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 	var got ReviewReport
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if err := ValidateReviewReport(got); err != nil {
+		t.Fatalf("ValidateReviewReport(got) error = %v, want nil", err)
 	}
 
 	if !reflect.DeepEqual(got, original) {

@@ -80,10 +80,14 @@ func newHasFindingsReportForValidationTest(overallStatus ReviewVerificationStatu
 	report.Verdict = ReviewVerdictHasFindings
 	report.OverallVerificationStatus = overallStatus
 	report.Summary = ""
-	report.RootCauseGroups = []ReviewRootCauseGroup{
-		newRootCauseGroupForValidationTest("rc-1", "finding-1", groupStatus),
-	}
+	report.RootCauseGroups = newRootCauseGroupsForValidationTest(groupStatus)
 	return report
+}
+
+func newRootCauseGroupsForValidationTest(status ReviewVerificationStatus) []ReviewRootCauseGroup {
+	return []ReviewRootCauseGroup{
+		newRootCauseGroupForValidationTest("rc-1", "finding-1", status),
+	}
 }
 
 func newRootCauseGroupForValidationTest(id, findingID string, status ReviewVerificationStatus) ReviewRootCauseGroup {

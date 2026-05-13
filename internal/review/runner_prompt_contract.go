@@ -181,7 +181,8 @@ func reviewReportPromptContract() string {
 - "finding_ids" in reviewed impact surfaces and reviewed candidate risks must be empty unless that scope entry status is "finding".
 - Every root cause finding ID must be connected from "scope_coverage" via an impact surface "finding_ids", candidate risk "finding_ids", or "new_findings_from_report_pass[].finding_ids".
 - A "clean" verdict is allowed only when every impact surface status is %q and every candidate risk status is %q.
-- A "has_findings" verdict with a candidate risk status %q must include non-empty "finding_ids"; each referenced finding must exist under "root_cause_groups" and include evidence_refs.
+- Reviewed impact surface status %q must include non-empty "finding_ids"; each referenced finding must exist under "root_cause_groups" and include evidence_refs.
+- Reviewed candidate risk status %q must include non-empty "finding_ids"; each referenced finding must exist under "root_cause_groups" and include evidence_refs.
 - A "blocked" verdict must have unverified scope coverage or an existing blocked reason.
 - Findings discovered during Pass2 that were not Pass1 candidate risks are allowed only as root cause findings connected through "scope_coverage.new_findings_from_report_pass[].finding_ids".
 - Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries. Do not invent probe IDs. Probe summary modes must be one of %q, %q, %q. Probe and command statuses must be one of %q, %q, %q, %q, %q.
@@ -222,6 +223,7 @@ Verdict contract:
 		quoteAndJoinSortedReviewPromptValues(reviewReportCandidateRiskStatusPromptValues()),
 		ReviewReportImpactSurfaceChecked,
 		ReviewReportCandidateRiskDismissed,
+		ReviewReportImpactSurfaceFinding,
 		ReviewReportCandidateRiskFinding,
 		ReviewProbeHostReadOnly,
 		ReviewProbeScratchOnly,

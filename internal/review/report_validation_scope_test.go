@@ -120,6 +120,38 @@ func TestValidateReviewReportScopeCoverageSemanticContract(t *testing.T) {
 			errContains: "finding_ids must be empty when status is",
 		},
 		{
+			name: "impact surface finding requires finding IDs",
+			report: func() ReviewReport {
+				return newImpactSurfaceFindingReportForValidationTest()
+			},
+			wantErr:     true,
+			errContains: "scope_coverage.reviewed_impact_surfaces[0].finding_ids must contain at least one root cause finding ID",
+		},
+		{
+			name: "impact surface finding rejects unknown finding ID",
+			report: func() ReviewReport {
+				return newImpactSurfaceFindingReportForValidationTest("finding-unknown")
+			},
+			wantErr:     true,
+			errContains: "scope_coverage.reviewed_impact_surfaces[0].finding_ids[0] references unknown root cause finding ID",
+		},
+		{
+			name: "impact surface finding requires evidence-backed root cause finding",
+			report: func() ReviewReport {
+				report := newBlockedImpactSurfaceFindingReportForValidationTest("finding-1")
+				report.RootCauseGroups[0].Findings[0].EvidenceRefs = nil
+				return report
+			},
+			wantErr:     true,
+			errContains: `scope_coverage.reviewed_impact_surfaces[0].finding_ids[0] references root cause finding ID "finding-1" without evidence_refs`,
+		},
+		{
+			name: "impact surface finding with evidence-backed root cause finding is valid",
+			report: func() ReviewReport {
+				return newImpactSurfaceFindingReportForValidationTest("finding-1")
+			},
+		},
+		{
 			name: "candidate risk finding requires finding IDs",
 			report: func() ReviewReport {
 				report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
@@ -423,8 +455,7 @@ func TestValidateReviewReportAgainstProbePlanRejectsFindingLinksOnNonFindingScop
 
 	t.Run("impact surface finding link can satisfy root cause linkage", func(t *testing.T) {
 		report := newPlanAwareHasFindingsReportForValidationTest()
-		report.ScopeCoverage.ReviewedImpactSurfaces[0].Status = ReviewReportImpactSurfaceFinding
-		report.ScopeCoverage.ReviewedImpactSurfaces[0].FindingIDs = []string{"finding-1"}
+		setImpactSurfaceFindingCoverageForValidationTest(&report, "finding-1")
 		report.ScopeCoverage.ReviewedCandidateRisks[0].Status = ReviewReportCandidateRiskDismissed
 		report.ScopeCoverage.ReviewedCandidateRisks[0].FindingIDs = nil
 
@@ -529,6 +560,26 @@ func TestValidateReviewReportAgainstProbePlanAllowsNewReportPassFinding(t *testi
 	}
 }
 
+func newImpactSurfaceFindingReportForValidationTest(findingIDs ...string) ReviewReport {
+	report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+	report.ScopeCoverage = newCleanScopeCoverageForTest()
+	setImpactSurfaceFindingCoverageForValidationTest(&report, findingIDs...)
+	return report
+}
+
+func newBlockedImpactSurfaceFindingReportForValidationTest(findingIDs ...string) ReviewReport {
+	report := newBlockedReportForValidationTest(ReviewVerificationPartiallyVerified)
+	report.RootCauseGroups = newRootCauseGroupsForValidationTest(ReviewVerificationVerified)
+	report.ScopeCoverage = newCleanScopeCoverageForTest()
+	setImpactSurfaceFindingCoverageForValidationTest(&report, findingIDs...)
+	return report
+}
+
+func setImpactSurfaceFindingCoverageForValidationTest(report *ReviewReport, findingIDs ...string) {
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].Status = ReviewReportImpactSurfaceFinding
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].FindingIDs = append([]string(nil), findingIDs...)
+}
+
 func newPlanAwareProbePlanForValidationTest() ReviewProbePlan {
 	return newNoProbeReviewProbePlanForTest()
 }
@@ -547,7 +598,7 @@ func newPlanAwareBlockedReportForValidationTest() ReviewReport {
 
 func newPlanAwareBlockedReportWithRootCauseFindingForValidationTest() ReviewReport {
 	report := newPlanAwareBlockedReportForValidationTest()
-	report.RootCauseGroups = newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified).RootCauseGroups
+	report.RootCauseGroups = newRootCauseGroupsForValidationTest(ReviewVerificationVerified)
 	return report
 }
 
