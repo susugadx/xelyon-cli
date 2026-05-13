@@ -347,6 +347,12 @@ Focus:
 - Claude: Messages endpoint, tool use, image, context management, web search
 - Ollama: local endpoint reachability, installed model check, local usage counts, no-auth semantics
 
+Preparatory boundary for native providers:
+
+- Keep shared doctor status names, JSON projection rules, and generic catalog/pricing checks in `cmd` / `internal/providerdiag`.
+- Keep native request payload construction, endpoint shape, tool/image/thinking/cache/web-search payload policy, and stream/response interpretation in each provider package.
+- For Gemini doctor, reuse pure request builders in `internal/api/providers/gemini/request_builder.go` for request preview and smoke construction instead of duplicating runtime payload assembly.
+
 ## Refactor Decision
 
 MUST before broad implementation:
