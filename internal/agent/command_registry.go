@@ -37,6 +37,7 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		},
 		"/lsp":      func(args []string) bool { return handleLSPCommand(agent, args) },
 		"/tokens":   func(_ []string) bool { return handleTokensCommand(agent) },
+		"/ledger":   func(_ []string) bool { return handleLedgerCommand(agent) },
 		"/thinking": func(args []string) bool { return handleThinkingCommand(agent, args) },
 		"/think":    func(args []string) bool { return handleThinkingCommand(agent, args) },
 	}

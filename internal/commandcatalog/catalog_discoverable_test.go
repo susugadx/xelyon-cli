@@ -15,6 +15,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/thinking",
 		"/status",
 		"/tokens",
+		"/ledger",
 		"/review",
 		"/project",
 		"/config",

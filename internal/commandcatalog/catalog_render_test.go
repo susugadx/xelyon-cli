@@ -51,6 +51,9 @@ func TestSurfaceFiltering(t *testing.T) {
 	if !strings.Contains(classicHelp, "/provider") {
 		t.Fatalf("classic help should include /provider:\n%s", classicHelp)
 	}
+	if !strings.Contains(classicHelp, "/ledger") {
+		t.Fatalf("classic help should include /ledger:\n%s", classicHelp)
+	}
 	tuiHelp := RenderCommandsTextForSurface(CommandSurfaceTUI)
 	if !strings.Contains(tuiHelp, "/review") {
 		t.Fatalf("TUI help should include /review:\n%s", tuiHelp)
@@ -69,6 +72,9 @@ func TestSurfaceFiltering(t *testing.T) {
 	}
 	if !strings.Contains(tuiHelp, "/provider") {
 		t.Fatalf("TUI help should include /provider:\n%s", tuiHelp)
+	}
+	if !strings.Contains(tuiHelp, "/ledger") {
+		t.Fatalf("TUI help should include /ledger:\n%s", tuiHelp)
 	}
 	for _, cmd := range []string{"/attach", "/detach", "/detach-all"} {
 		if !strings.Contains(tuiHelp, cmd) {
