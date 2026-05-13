@@ -12,8 +12,14 @@ import (
 const ledgerCommandExcerptLimit = 180
 
 // handleLedgerCommand は runtime task ledger の現在値を表示する。
-func handleLedgerCommand(agent *Agent) bool {
-	renderLedgerCommandOutput(agent.output(), ledgerCommandSnapshot(agent))
+func handleLedgerCommand(agent *Agent, args []string) bool {
+	out := agent.output()
+	if len(args) != 0 {
+		yellow.Fprintln(out, "Usage: /ledger")
+		return true
+	}
+
+	renderLedgerCommandOutput(out, ledgerCommandSnapshot(agent))
 	return true
 }
 

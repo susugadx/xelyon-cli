@@ -261,7 +261,7 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 
 ### `/ledger`
 
-現在の runtime task ledger を表示します。TUI と `--no-tui` の classic REPL で利用できます。表示は確認用のコマンド出力だけで、会話履歴、保存済みセッション、prompt、圧縮、provider request には追加されません。
+現在の runtime task ledger を表示します。引数なし専用です。TUI と `--no-tui` の classic REPL で利用できます。表示は確認用のコマンド出力だけで、会話履歴、保存済みセッション、prompt、圧縮、provider request には追加されません。
 
 ```
 > /ledger

@@ -82,9 +82,27 @@ func TestLedgerCommand_EmptyLedgerPrintsAllSections(t *testing.T) {
 	}
 }
 
+func TestLedgerCommand_WithArgumentsPrintsUsage(t *testing.T) {
+	for _, surface := range []commandcatalog.CommandSurface{
+		commandcatalog.CommandSurfaceClassic,
+		commandcatalog.CommandSurfaceTUI,
+	} {
+		t.Run(string(surface), func(t *testing.T) {
+			agent, out := newLedgerCommandTestAgent(newLedgerCommandStore(t))
+			if !handleSpecialCommandForSurface("/ledger foo", agent, surface) {
+				t.Fatalf("/ledger foo was not handled for surface=%s", surface)
+			}
+
+			output := out.String()
+			assertLedgerOutputContains(t, output, "Usage: /ledger")
+			assertLedgerOutputOmits(t, output, "Runtime task ledger")
+		})
+	}
+}
+
 func TestLedgerCommand_NilLedgerPrintsEmptyLedger(t *testing.T) {
 	agent, out := newLedgerCommandTestAgent(nil)
-	if !handleLedgerCommand(agent) {
+	if !handleLedgerCommand(agent, nil) {
 		t.Fatal("handleLedgerCommand returned false")
 	}
 	assertLedgerOutputContains(t, out.String(), "No evidence recorded.")
@@ -95,7 +113,7 @@ func TestLedgerCommand_NilRuntimePrintsEmptyLedger(t *testing.T) {
 	stdio.SetDefaults(strings.NewReader(""), &out, &out)
 	t.Cleanup(func() { stdio.SetDefaults(nil, nil, nil) })
 
-	if !handleLedgerCommand(&Agent{}) {
+	if !handleLedgerCommand(&Agent{}, nil) {
 		t.Fatal("handleLedgerCommand returned false")
 	}
 	assertLedgerOutputContains(t, out.String(), "No changed files recorded.")
@@ -184,22 +202,26 @@ func TestLedgerCommand_ShortensLongExcerpts(t *testing.T) {
 }
 
 func TestLedgerCommand_DoesNotMutateConversationState(t *testing.T) {
-	store := newLedgerCommandStore(t)
-	store.Recorder().RecordChangedFile("src/main.go")
-	agent, _ := newLedgerCommandTestAgent(store)
-	agent.History = []api.Message{{Role: "user", Content: "hello"}}
-	agent.session.Messages = []history.MessageEntry{{Role: "assistant", Content: "persisted"}}
-	beforeHistory := append([]api.Message(nil), agent.History...)
-	beforeMessages := append([]history.MessageEntry(nil), agent.session.Messages...)
+	for _, input := range []string{"/ledger", "/ledger foo"} {
+		t.Run(input, func(t *testing.T) {
+			store := newLedgerCommandStore(t)
+			store.Recorder().RecordChangedFile("src/main.go")
+			agent, _ := newLedgerCommandTestAgent(store)
+			agent.History = []api.Message{{Role: "user", Content: "hello"}}
+			agent.session.Messages = []history.MessageEntry{{Role: "assistant", Content: "persisted"}}
+			beforeHistory := append([]api.Message(nil), agent.History...)
+			beforeMessages := append([]history.MessageEntry(nil), agent.session.Messages...)
 
-	if !handleSpecialCommandForSurface("/ledger", agent, commandcatalog.CommandSurfaceClassic) {
-		t.Fatal("/ledger was not handled")
-	}
+			if !handleSpecialCommandForSurface(input, agent, commandcatalog.CommandSurfaceClassic) {
+				t.Fatalf("%s was not handled", input)
+			}
 
-	if !reflect.DeepEqual(agent.History, beforeHistory) {
-		t.Fatalf("History mutated: got %#v, want %#v", agent.History, beforeHistory)
-	}
-	if !reflect.DeepEqual(agent.session.Messages, beforeMessages) {
-		t.Fatalf("session.Messages mutated: got %#v, want %#v", agent.session.Messages, beforeMessages)
+			if !reflect.DeepEqual(agent.History, beforeHistory) {
+				t.Fatalf("History mutated: got %#v, want %#v", agent.History, beforeHistory)
+			}
+			if !reflect.DeepEqual(agent.session.Messages, beforeMessages) {
+				t.Fatalf("session.Messages mutated: got %#v, want %#v", agent.session.Messages, beforeMessages)
+			}
+		})
 	}
 }
