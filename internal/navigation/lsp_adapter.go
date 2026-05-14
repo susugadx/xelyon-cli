@@ -56,11 +56,16 @@ func (a *LSPAdapter) toAbsPath(path string) string {
 }
 
 func (a *LSPAdapter) convertLocations(locations []lsp.Location) []LSPLocation {
+	return ProtocolLocationsToLSPLocations(locations, a.RootDir)
+}
+
+// ProtocolLocationsToLSPLocations は raw LSP protocol location を navigation の LSPLocation に変換する。
+func ProtocolLocationsToLSPLocations(locations []lsp.Location, rootDir string) []LSPLocation {
 	result := make([]LSPLocation, 0, len(locations))
 	for _, loc := range locations {
 		file := lsp.URIToFile(loc.URI)
-		if a.RootDir != "" {
-			if rel, err := filepath.Rel(a.RootDir, file); err == nil {
+		if rootDir != "" {
+			if rel, err := filepath.Rel(rootDir, file); err == nil {
 				file = rel
 			}
 		}
