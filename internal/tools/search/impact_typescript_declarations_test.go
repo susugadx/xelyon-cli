@@ -31,6 +31,34 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactPrefersIm
 	assertTypeScriptImpactBundleExcludesEvidenceFile(t, artifact.Metadata.Bundle, "src/build.d.ts")
 }
 
+func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactDirectPathSuppressesPairedDeclarationRefs(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/build.ts":   "export function buildUser(id: string) { return id }\n",
+		"src/build.d.ts": "export function buildUser(id: string): string\ntype BuildUserFactory = () => buildUser\n",
+		"src/app.ts":     "import { buildUser } from './build'\nbuildUser('1')\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, SearchOptions{
+		Pattern:       "buildUser",
+		Intent:        "impact",
+		Path:          filepath.Join(dir, "src", "build.ts"),
+		InvocationCWD: dir,
+	})
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if got := artifact.Metadata.Bundle.Definition.File; got != "src/build.ts" {
+		t.Fatalf("definition file = %q, want src/build.ts", got)
+	}
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainFile(callers, "src/app.ts") {
+		t.Fatalf("callers = %+v, want workspace caller after direct definition path", callers)
+	}
+	assertTypeScriptImpactBundleExcludesEvidenceFile(t, artifact.Metadata.Bundle, "src/build.d.ts")
+	if strings.Contains(artifact.Rendered, "src/build.d.ts") {
+		t.Fatalf("paired declaration should stay suppressed after widened refs, got:\n%s", artifact.Rendered)
+	}
+}
+
 func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactKeepsUnrelatedDeclarationAmbiguous(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"src/user.ts":       "export function User(id: string) { return id }\n",

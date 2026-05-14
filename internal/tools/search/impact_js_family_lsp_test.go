@@ -1,41 +1,13 @@
 package search
 
 import (
-	"context"
 	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
-	"github.com/susugadx/xelyon-cli/internal/pathmatch"
 )
-
-type mockJSFamilyLSPClient struct {
-	refs          []navigation.LSPLocation
-	err           error
-	requestedFile string
-	requestedLine int
-	requestedChar int
-}
-
-func (m *mockJSFamilyLSPClient) FindReferences(_ context.Context, filePath string, line, character int, _ bool) ([]navigation.LSPLocation, error) {
-	m.requestedFile = filePath
-	m.requestedLine = line
-	m.requestedChar = character
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.refs, nil
-}
-
-func (m *mockJSFamilyLSPClient) GotoDefinition(context.Context, string, int, int) ([]navigation.LSPLocation, error) {
-	return nil, nil
-}
-
-func (m *mockJSFamilyLSPClient) GotoImplementation(context.Context, string, int, int) ([]navigation.LSPLocation, error) {
-	return nil, nil
-}
 
 func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactUsesLSPReferences(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
@@ -73,6 +45,33 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactUsesLSPRe
 	}
 }
 
+func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactUsesLSPWorkspaceRefsFromDirectPath(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"packages/app/src/build.ts": "export function buildUser(id: string) { return id }\n",
+		"packages/other/src/app.ts": "import { buildUser } from '../../app/src/build'\nbuildUser('semantic workspace')\n",
+	})
+	subdir := filepath.Join(dir, "packages", "app")
+	lspClient := &mockJSFamilyLSPClient{
+		refs: []navigation.LSPLocation{{File: "../other/src/app.ts", Line: 2, Character: 1}},
+	}
+	opts := SearchOptions{
+		Pattern:            "buildUser",
+		Intent:             "impact",
+		Path:               filepath.Join(dir, "packages", "app", "src", "build.ts"),
+		ProjectMapRootPath: dir,
+		InvocationCWD:      subdir,
+		LSPClient:          lspClient,
+	}
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, opts)
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
+		t.Fatal("ResolvedViaLSP = false, want true")
+	}
+	assertJSFamilyImpactSectionContainsFile(t, artifact, "callers", "packages/other/src/app.ts")
+}
+
 func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactClassifiesLSPAliasReference(t *testing.T) {
 	appLine := "const result = createUser('semantic')"
 	dir := setupMultiLangDir(t, map[string]string{
@@ -105,6 +104,70 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactClassifie
 	}
 	if symbolBundleItemsContainSnippet(callers, "fallback-only") {
 		t.Fatalf("callers = %+v, did not want ripgrep fallback caller when LSP resolved refs", callers)
+	}
+}
+
+func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactUsesLSPWorkspaceRefsFromDirectPath(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"packages/app/src/build.js": "export function buildUser(id) { return id }\n",
+		"packages/other/src/app.js": "import { buildUser } from '../../app/src/build.js'\nbuildUser('semantic workspace')\n",
+	})
+	subdir := filepath.Join(dir, "packages", "app")
+	lspClient := &mockJSFamilyLSPClient{
+		refs: []navigation.LSPLocation{{File: "../other/src/app.js", Line: 2, Character: 1}},
+	}
+	opts := SearchOptions{
+		Pattern:            "buildUser",
+		Intent:             "impact",
+		Path:               filepath.Join(dir, "packages", "app", "src", "build.js"),
+		ProjectMapRootPath: dir,
+		InvocationCWD:      subdir,
+		LSPClient:          lspClient,
+	}
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, opts)
+
+	assertJavaScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
+		t.Fatal("ResolvedViaLSP = false, want true")
+	}
+	assertJSFamilyImpactSectionContainsFile(t, artifact, "callers", "packages/other/src/app.js")
+}
+
+func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactFiltersLSPReferencesByPathScope(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/build.ts":  "function buildUser(id: string) { return id }\n",
+		"src/app.ts":    "buildUser('src')\n",
+		"other/app.ts":  "buildUser('other')\n",
+		"vendor/app.ts": "buildUser('vendor')\n",
+	})
+	lspClient := &mockJSFamilyLSPClient{
+		refs: []navigation.LSPLocation{
+			{File: "src/app.ts", Line: 1, Character: 1},
+			{File: "other/app.ts", Line: 1, Character: 1},
+			{File: "vendor/app.ts", Line: 1, Character: 1},
+		},
+	}
+	opts := newTypeScriptImpactSearchOptions(dir, "buildUser")
+	opts.Path = filepath.Join(dir, "src")
+	opts.InvocationCWD = dir
+	opts.LSPClient = lspClient
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, opts)
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
+		t.Fatal("ResolvedViaLSP = false, want true")
+	}
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainFile(callers, "src/app.ts") {
+		t.Fatalf("callers = %+v, want in-scope LSP caller", callers)
+	}
+	if symbolBundleItemsContainFile(callers, "other/app.ts") || symbolBundleItemsContainSnippet(callers, "other") {
+		t.Fatalf("callers = %+v, did not want sibling out-of-scope LSP caller", callers)
+	}
+	if symbolBundleItemsContainFile(callers, "vendor/app.ts") || symbolBundleItemsContainSnippet(callers, "vendor") {
+		t.Fatalf("callers = %+v, did not want vendor out-of-scope LSP caller", callers)
 	}
 }
 
@@ -164,34 +227,15 @@ func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactFiltersLS
 	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, opts)
 
 	assertJavaScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
+		t.Fatal("ResolvedViaLSP = false, want true")
+	}
 	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
 	if !symbolBundleItemsContainFile(callers, "src/app.js") {
 		t.Fatalf("callers = %+v, want in-scope LSP caller", callers)
 	}
 	if symbolBundleItemsContainFile(callers, "vendor/app.js") || symbolBundleItemsContainSnippet(callers, "vendor") {
 		t.Fatalf("callers = %+v, did not want out-of-scope LSP caller", callers)
-	}
-}
-
-func TestJSFamilyRefFromLSPLocationRejectsIgnoredPath(t *testing.T) {
-	dir := setupMultiLangDir(t, map[string]string{
-		"src/generated.js": "buildUser('generated')\n",
-	})
-	opts := SearchOptions{
-		Path:          dir,
-		FileType:      "js",
-		InvocationCWD: dir,
-		ignoreMatcher: pathmatch.NewMatcher([]string{"src/generated.js"}),
-	}
-
-	_, ok := jsFamilyRefFromLSPLocation("buildUser", navigation.LSPLocation{
-		File:      "src/generated.js",
-		Line:      1,
-		Character: 1,
-	}, opts)
-
-	if ok {
-		t.Fatal("jsFamilyRefFromLSPLocation accepted ignored path, want reject")
 	}
 }
 

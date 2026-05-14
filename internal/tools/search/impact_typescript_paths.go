@@ -73,3 +73,22 @@ func structuredTypeScriptImpactFileRoot(opts SearchOptions) string {
 	}
 	return invocationCWDOrGetwd(opts)
 }
+
+func structuredTypeScriptImpactReferenceOptions(def genericSymbolDef, opts SearchOptions) jsFamilyReferenceOptions {
+	fileType, _ := structuredTypeScriptImpactReferenceFileType(def)
+	return newJSFamilyStructuredImpactReferenceOptions(def, opts, fileType)
+}
+
+func structuredTypeScriptImpactReferenceFileType(def genericSymbolDef) (string, bool) {
+	target, ok := structuredTypeScriptImpactTargetForPath(def.File)
+	if !ok {
+		return "", false
+	}
+	if target.fileType != "" {
+		return target.fileType, true
+	}
+	if target.declaration {
+		return "ts", true
+	}
+	return "", false
+}

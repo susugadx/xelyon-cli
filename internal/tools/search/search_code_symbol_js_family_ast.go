@@ -1,36 +1,12 @@
 package search
 
 import (
-	"context"
 	"os"
-	"path/filepath"
 	"sort"
-	"strings"
-	"time"
 
 	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/jsast"
-	"github.com/susugadx/xelyon-cli/internal/navigation"
-	"github.com/susugadx/xelyon-cli/internal/repomap"
 )
-
-const jsFamilyLSPReferenceTimeout = 5 * time.Second
-const jsFamilyBundleLSPSource = "TypeScript/JavaScript LSP"
-
-type jsFamilyReferenceResult struct {
-	refs           []genericSymbolRef
-	resolvedViaLSP bool
-}
-
-func setJSFamilyBundleLSPDiagnostics(bundle *SymbolBundle, resolved bool) {
-	if bundle == nil {
-		return
-	}
-	bundle.Diagnostics.ResolvedViaLSP = resolved
-	if resolved {
-		bundle.Diagnostics.LSPSource = jsFamilyBundleLSPSource
-	}
-}
 
 func findJSFamilyDefinitionsWithAST(symbol string, opts SearchOptions) []genericSymbolDef {
 	matches := findGenericSymbolMatches(symbol, opts, 0)
@@ -59,112 +35,6 @@ func findJSFamilyDefinitionsWithAST(symbol string, opts SearchOptions) []generic
 		}
 	}
 	return defs
-}
-
-func findJSFamilyReferencesWithSemantic(symbol string, def genericSymbolDef, opts SearchOptions) jsFamilyReferenceResult {
-	if opts.LSPClient != nil && def.Character > 0 {
-		refs, err := findJSFamilyReferencesWithLSP(symbol, def, opts)
-		if err == nil && len(refs) > 0 {
-			return jsFamilyReferenceResult{refs: refs, resolvedViaLSP: true}
-		}
-	}
-	return jsFamilyReferenceResult{refs: findJSFamilyReferencesWithAST(symbol, opts)}
-}
-
-func findJSFamilyReferencesWithLSP(symbol string, def genericSymbolDef, opts SearchOptions) ([]genericSymbolRef, error) {
-	defPath := absoluteAffectedFilePath(def.File, opts, affectedFileSourceText)
-	if defPath == "" {
-		defPath = absoluteAffectedFilePathWithBase(def.File, invocationCWDOrGetwd(opts))
-	}
-	if defPath == "" {
-		return nil, os.ErrNotExist
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), jsFamilyLSPReferenceTimeout)
-	defer cancel()
-	locations, err := opts.LSPClient.FindReferences(ctx, defPath, def.Line, def.Character, false)
-	if err != nil {
-		return nil, err
-	}
-
-	refs := make([]genericSymbolRef, 0, len(locations))
-	for _, loc := range locations {
-		ref, ok := jsFamilyRefFromLSPLocation(symbol, loc, opts)
-		if ok {
-			refs = append(refs, ref)
-		}
-	}
-	return refs, nil
-}
-
-func jsFamilyRefFromLSPLocation(symbol string, loc navigation.LSPLocation, opts SearchOptions) (genericSymbolRef, bool) {
-	displayPath, absPath := jsFamilyLSPPaths(loc.File, opts)
-	if displayPath == "" || absPath == "" || loc.Line <= 0 {
-		return genericSymbolRef{}, false
-	}
-	if !jsFamilyLSPReferenceAllowed(absPath, displayPath, opts) {
-		return genericSymbolRef{}, false
-	}
-
-	ref := genericSymbolRef{
-		File:    displayPath,
-		Line:    loc.Line,
-		Snippet: jsFamilyLineSnippet(absPath, loc.Line),
-		IsTest:  repomap.IsTestFile(displayPath),
-	}
-	if parsed, ok := parseJSFamilyFileForSearch(absPath); ok {
-		if info, err := jsast.ClassifyRangeWithParsed(parsed, loc.Line, loc.Character, loc.EndLine, loc.EndChar, symbol); err == nil && info != nil {
-			ref.Class = info.Class
-		}
-		parsed.Close()
-	}
-	return ref, true
-}
-
-func jsFamilyLSPReferenceAllowed(absPath string, displayPath string, opts SearchOptions) bool {
-	if !jsast.Supports(absPath) {
-		return false
-	}
-	return jsFamilySearchCandidateAllowed(absPath, displayPath, opts)
-}
-
-func jsFamilyLSPPaths(file string, opts SearchOptions) (string, string) {
-	file = strings.TrimSpace(file)
-	if file == "" {
-		return "", ""
-	}
-	root := invocationCWDOrGetwd(opts)
-	cleanFile := filepath.Clean(file)
-	absPath := cleanFile
-	displayPath := cleanFile
-	if filepath.IsAbs(cleanFile) {
-		if root != "" {
-			if rel, err := filepath.Rel(root, cleanFile); err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				displayPath = rel
-			}
-		}
-	} else {
-		absPath = absoluteAffectedFilePathWithBase(cleanFile, root)
-		if absPath == "" {
-			absPath = absoluteAffectedFilePath(cleanFile, opts, affectedFileSourceText)
-		}
-	}
-	if absPath == "" {
-		return "", ""
-	}
-	return filepath.ToSlash(filepath.Clean(displayPath)), absPath
-}
-
-func jsFamilyLineSnippet(absPath string, line int) string {
-	src, err := os.ReadFile(absPath)
-	if err != nil || line <= 0 {
-		return ""
-	}
-	lines := strings.Split(string(src), "\n")
-	if line > len(lines) {
-		return ""
-	}
-	return strings.TrimSpace(lines[line-1])
 }
 
 func findJSFamilyReferencesWithAST(symbol string, opts SearchOptions) []genericSymbolRef {

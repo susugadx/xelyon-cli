@@ -125,12 +125,13 @@ func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) 
 	}
 
 	def := defs[0]
-	refResult := findJSFamilyReferencesWithSemantic(symbol, def, opts)
+	refOpts := structuredTypeScriptImpactReferenceOptions(def, opts)
+	refResult := findJSFamilyReferencesWithSemantic(symbol, def, refOpts)
 	refs := normalizeStructuredTypeScriptRefs(refResult.refs)
-	refs = filterStructuredTypeScriptSuppressedDeclarationRefs(refs, preferredDefs.suppressedDeclarationDefs)
+	refs = filterStructuredTypeScriptSuppressedDeclarationRefs(refs, structuredTypeScriptSuppressedDeclarationDefsForImpact(def, preferredDefs))
 	filteredRefs := filterGenericRefs(refs, def)
-	classifiedRefs := typeScriptImpactRefsForDef(def, filteredRefs, opts)
-	bundle := buildTypeScriptImpactBundle(symbol, def, opts, classifiedRefs)
+	classifiedRefs := typeScriptImpactRefsForDef(def, filteredRefs, refOpts.nameOnly)
+	bundle := buildTypeScriptImpactBundle(symbol, def, refOpts.nameOnly, classifiedRefs)
 	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}

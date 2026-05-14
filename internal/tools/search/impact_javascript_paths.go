@@ -60,3 +60,7 @@ func structuredJavaScriptImpactFileRoot(opts SearchOptions) string {
 	}
 	return invocationCWDOrGetwd(opts)
 }
+
+func structuredJavaScriptImpactReferenceOptions(def genericSymbolDef, opts SearchOptions) jsFamilyReferenceOptions {
+	return newJSFamilyStructuredImpactReferenceOptions(def, opts, "js")
+}

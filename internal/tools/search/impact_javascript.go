@@ -120,11 +120,12 @@ func resolveStructuredJavaScriptImpactSymbol(symbol string, opts SearchOptions) 
 	}
 
 	def := defs[0]
-	refResult := findJSFamilyReferencesWithSemantic(symbol, def, opts)
+	refOpts := structuredJavaScriptImpactReferenceOptions(def, opts)
+	refResult := findJSFamilyReferencesWithSemantic(symbol, def, refOpts)
 	refs := normalizeStructuredJavaScriptRefs(refResult.refs)
 	refs = filterGenericRefs(refs, def)
-	classifiedRefs := javaScriptImpactRefsForDef(def, refs, opts)
-	bundle := buildJavaScriptImpactBundle(symbol, def, opts, classifiedRefs)
+	classifiedRefs := javaScriptImpactRefsForDef(def, refs, refOpts.nameOnly)
+	bundle := buildJavaScriptImpactBundle(symbol, def, refOpts.nameOnly, classifiedRefs)
 	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}

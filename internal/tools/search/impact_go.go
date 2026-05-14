@@ -81,7 +81,11 @@ func nextStructuredGoImpactPlan(current goImpactPlan, result navigation.InspectR
 
 func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.InspectResult, opts SearchOptions, plan goImpactPlan) symbolResolveResult {
 	var probeDependencies []string
-	result, probeDependencies = supplementGoImpactTestsFromProbe(symbol, result, opts, plan.budget.TestLimit)
+	impactOpts := opts
+	if result.Symbol != nil {
+		impactOpts = structuredImpactNameOnlyEvidenceOptions(result.Symbol.File, opts)
+	}
+	result, probeDependencies = supplementGoImpactTestsFromProbe(symbol, result, impactOpts, plan.budget.TestLimit)
 	impact := buildGoImpactMetadata(result, plan.riskLevel)
 	bundle := buildGoSymbolBundleWithOptions(symbol, result, goSymbolBundleBuildOptions{
 		implementationLimit: plan.implementationLimit,

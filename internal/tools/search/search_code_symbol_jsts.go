@@ -32,7 +32,7 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	}
 
 	def := defs[0]
-	refResult := findJSFamilyReferencesWithSemantic(symbol, def, opts)
+	refResult := findJSFamilyReferencesWithSemantic(symbol, def, newJSFamilyReferenceOptions(opts))
 	refs := refResult.refs
 	filteredRefs := filterGenericRefs(refs, def)
 	classifiedRefs := classifyJSFamilySymbolRefsFromAST(filteredRefs)

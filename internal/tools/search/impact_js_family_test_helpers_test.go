@@ -63,6 +63,14 @@ func symbolBundleItemsContainFile(items []SymbolBundleItem, file string) bool {
 	return false
 }
 
+func assertJSFamilyImpactSectionContainsFile(t *testing.T, artifact SearchExecutionArtifact, sectionKind string, file string) {
+	t.Helper()
+	items := symbolBundleSectionItems(artifact.Metadata.Bundle, sectionKind)
+	if !symbolBundleItemsContainFile(items, file) {
+		t.Fatalf("%s section = %+v, want %s", sectionKind, items, file)
+	}
+}
+
 func testLSPRangeForSearchToken(line, token string) (int, int) {
 	idx := strings.Index(line, token)
 	if idx < 0 {

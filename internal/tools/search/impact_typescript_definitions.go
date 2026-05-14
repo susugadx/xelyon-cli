@@ -37,6 +37,30 @@ func preferStructuredTypeScriptImplementationDefs(defs []genericSymbolDef) struc
 	}
 }
 
+func structuredTypeScriptSuppressedDeclarationDefsForImpact(def genericSymbolDef, preferredDefs structuredTypeScriptPreferredDefs) []genericSymbolDef {
+	suppressed := append([]genericSymbolDef{}, preferredDefs.suppressedDeclarationDefs...)
+	suppressed = append(suppressed, structuredTypeScriptPairedDeclarationDefsForImplementation(def)...)
+	return suppressed
+}
+
+func structuredTypeScriptPairedDeclarationDefsForImplementation(def genericSymbolDef) []genericSymbolDef {
+	target, ok := structuredTypeScriptImplementationTargetForPath(def.File)
+	if !ok {
+		return nil
+	}
+
+	key := structuredTypeScriptDefPathKey(def.File)
+	if key == "" || len(key) <= len(target.suffix) {
+		return nil
+	}
+
+	declarationPath := key[:len(key)-len(target.suffix)] + structuredTypeScriptDeclarationImpactTarget.suffix
+	return []genericSymbolDef{{
+		Name: def.Name,
+		File: declarationPath,
+	}}
+}
+
 func filterStructuredTypeScriptSuppressedDeclarationRefs(refs []genericSymbolRef, suppressed []genericSymbolDef) []genericSymbolRef {
 	if len(refs) == 0 || len(suppressed) == 0 {
 		return refs
