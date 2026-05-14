@@ -2,18 +2,10 @@ package agent
 
 import (
 	"io"
-	"os"
-	"os/exec"
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
-)
-
-var (
-	lspCommandGetwd                  = os.Getwd
-	lspCommandDetectProjectLanguages = lsp.DetectProjectLanguages
-	lspCommandGetInstallInfo         = lsp.GetInstallInfo
 )
 
 type lspInstallPromptItem struct {
@@ -32,11 +24,11 @@ func checkLSPInstallPrompt(agent *Agent, commandSurface commandcatalog.CommandSu
 		return
 	}
 
-	cwd, err := lspCommandGetwd()
+	cwd, err := lspStartupGetwd()
 	if err != nil {
 		return
 	}
-	languages, err := lspCommandDetectProjectLanguages(cwd)
+	languages, err := lspDetectProjectLanguages(cwd)
 	if err != nil || len(languages) == 0 {
 		return
 	}
@@ -72,11 +64,11 @@ func missingDetectedLSPServers(configs map[string]config.LSPServerConfig, langua
 		if !ok || serverConfig.Disabled || serverConfig.Command == "" {
 			continue
 		}
-		if _, err := exec.LookPath(serverConfig.Command); err == nil {
+		if _, err := lspLookPath(serverConfig.Command); err == nil {
 			continue
 		}
 
-		info, ok := lspCommandGetInstallInfo(language.ServerKey)
+		info, ok := lspGetInstallInfo(language.ServerKey)
 		if !ok || len(info.Commands) == 0 {
 			continue
 		}

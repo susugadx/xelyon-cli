@@ -56,7 +56,7 @@ Language Server Protocol (LSP) は、エディタとプログラミング言語�
 
 ## セットアップ
 
-XELYON は起動時にプロジェクト内の対応言語を検出し、未導入の LSP サーバーがあれば shell で実行するインストールコマンドを案内します。不要な場合は `lsp.skip_install_prompt: true` で非表示にできます。
+XELYON は起動時にプロジェクト内の対応言語を検出し、`lsp.enabled: true` なら導入済みの LSP サーバーを起動準備します。未導入の LSP サーバーがあれば shell で実行するインストールコマンドを案内します。不要な場合は `lsp.skip_install_prompt: true` で非表示にできます。
 
 ### 1. LSPサーバーのインストール
 
@@ -79,7 +79,7 @@ pip install pyright
 
 ```yaml
 lsp:
-  enabled: true           # LSP連携の有効/無効（デフォルト: true）
+  enabled: true           # 有効時は検出言語の導入済み LSP サーバーを起動準備
 ```
 
 ### サーバーのカスタマイズ
@@ -106,7 +106,7 @@ lsp:
 
 | 項目 | 型 | デフォルト | 説明 |
 |-----|---|---------|------|
-| `lsp.enabled` | boolean | `true` | LSP連携の有効/無効 |
+| `lsp.enabled` | boolean | `true` | LSP連携の有効/無効。有効時は検出言語の導入済み LSP サーバーを起動準備 |
 | `lsp.skip_install_prompt` | boolean | `false` | 起動時に検出言語の未インストール LSP サーバー案内を表示しない |
 | `lsp.servers.<lang>.command` | string | - | LSPサーバーのコマンド |
 | `lsp.servers.<lang>.args` | string[] | `[]` | コマンドに渡す引数 |
@@ -185,15 +185,16 @@ lsp:
       disabled: true    # Rustのみ無効化
 ```
 
-## 遅延起動
+## 起動準備と遅延起動
 
-LSPサーバーは初回使用時に起動します（XELYON起動時には起動しません）。
+`lsp.enabled: true` の場合、XELYON は起動時にプロジェクト内の対応言語を検出し、導入済みの LSP サーバーをバックグラウンドで起動準備します。
 
-- `GetServerForFile()` 呼び出し時に言語を検出
-- 該当言語のサーバーがなければ起動
+- 起動時に検出された言語のうち、導入済みかつ無効化されていないサーバーを起動準備
+- 未導入サーバーは起動時案内でインストールコマンドを表示
+- 起動時に検出されなかった言語は、`GetServerForFile()` 呼び出し時に必要に応じて起動
 - 起動済みサーバーは再利用
 
-これにより、起動時間を短縮し、必要なサーバーのみを起動します。
+これにより、通常の操作前に主要な LSP を準備しつつ、未導入サーバーや未使用言語の起動は避けます。
 
 ## 関連ドキュメント
 

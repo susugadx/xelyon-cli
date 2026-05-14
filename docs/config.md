@@ -185,7 +185,7 @@ agent_instructions:
 # 23言語のデフォルト設定が内蔵済み。通常は変更不要です。
 # 詳細: docs/config.md の「LSP連携設定」セクション
 lsp:
-    # LSP連携の有効/無効
+    # LSP連携の有効/無効（有効時は検出言語の導入済みサーバーを起動準備）
     enabled: true
 
 # ============================================================
@@ -540,7 +540,7 @@ lsp:
 #### `enabled`
 - **型**: boolean
 - **デフォルト**: `true`
-- **説明**: LSP連携の有効/無効
+- **説明**: LSP連携の有効/無効。有効時は起動時にプロジェクト内の対応言語を検出し、導入済みの LSP サーバーを起動準備します
 
 #### `skip_install_prompt`
 - **型**: boolean
@@ -561,7 +561,7 @@ lsp:
 
 **対応言語:** Go, TypeScript/JavaScript, Python, Rust, Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua, CSS/SCSS, HTML, Vue, Svelte, YAML, TOML, SQL, Bash, Markdown（23言語）
 
-**遅延起動:** LSPサーバーは初回使用時に起動します（XELYON起動時には起動しません）。
+**起動準備:** `lsp.enabled: true` の場合、XELYON はプロジェクト内の対応言語を検出し、導入済みの LSP サーバーを起動準備します。起動時に検出されなかったサーバーは初回使用時に必要に応じて起動します。
 
 ### Extended Thinking設定 (`thinking`)（内部）
 

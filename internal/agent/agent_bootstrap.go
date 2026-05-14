@@ -2,10 +2,8 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -181,18 +179,10 @@ func newAgentLSPClient(cfg *config.Config, errOut io.Writer) *lsp.Client {
 	client.SetConfigs(servers)
 
 	if !shouldSkipLSPWarmup() {
-		go warmupLSPClient(client, errOut)
+		go warmupLSPClient(client, cwd, servers, errOut)
 	}
 
 	return client
-}
-
-func warmupLSPClient(client *lsp.Client, errOut io.Writer) {
-	warmCtx, warmCancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer warmCancel()
-	if _, err := client.GetServer(warmCtx, "go"); err != nil {
-		fmt.Fprintf(errOut, "LSP warm-up: gopls not available (%v)\n", err)
-	}
 }
 
 func setUsageReporter(agent *Agent, provider api.Provider) {

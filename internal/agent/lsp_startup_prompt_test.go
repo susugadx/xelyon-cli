@@ -140,10 +140,14 @@ func TestCheckLSPInstallPrompt_DoesNotRequireLSPClientStatus(t *testing.T) {
 }
 
 func TestMissingDetectedLSPServers_UsesConfigAndInstallInfo(t *testing.T) {
+	withLSPCommandAvailability(t, map[string]bool{
+		"xelyon-installed-vtsls": true,
+	})
+
 	items := missingDetectedLSPServers(
 		map[string]config.LSPServerConfig{
 			"go":         {Command: "xelyon-missing-gopls"},
-			"typescript": {Command: "go"},
+			"typescript": {Command: "xelyon-installed-vtsls"},
 			"swift":      {Command: "xelyon-missing-sourcekit-lsp"},
 			"rust":       {Command: "xelyon-missing-rust-analyzer", Disabled: true},
 		},

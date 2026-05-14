@@ -112,7 +112,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **削除時参照チェック**: ファイル削除前に外部参照を自動検出し警告
 - **完了検証**: AI が「完了」「done」と宣言した際、変更ファイルの LSP 診断を自動実行しエラー残存時は修正を続行
 - **Final Checks**: `completed_with_changes` の完了候補でユーザー定義のシェルコマンド（`go test ./...` 等）を自動実行。失敗時は AI が修正を続行（`final_checks.commands` で設定）
-- **自動検出**: プロジェクト内の言語を起動時に自動検出し、未インストールのLSPサーバーを提案（`lsp.skip_install_prompt` で非表示化）
+- **自動検出**: プロジェクト内の言語を起動時に自動検出し、導入済み LSP サーバーを起動準備。未インストールのLSPサーバーは導入コマンドを提案（`lsp.skip_install_prompt` で非表示化）
 - **サーバー設定**: TUI では `/config` の `lsp.servers` で管理。未導入サーバーは起動時案内の shell command で導入します
 - **23言語対応**:
   - **メイン**: Go, TypeScript/JavaScript (React/JSX), Python, Rust

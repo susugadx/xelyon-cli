@@ -118,7 +118,7 @@ var FieldDescriptions = map[string]string{
 	"final_checks.commands":                         "completed_with_changes 時に実行する final checks コマンド（例: go test ./...）",
 	"final_checks.timeout":                          "final checks コマンドタイムアウト（秒）（デフォルト: 600）",
 	"general.ui_language":                           "表示言語（auto, ja, en）",
-	"lsp.enabled":                                   "LSP連携の有効/無効",
+	"lsp.enabled":                                   "LSP連携の有効/無効（有効時は検出言語の導入済みサーバーを起動準備）",
 	"lsp.servers":                                   "LSPサーバー個別設定（コマンド・引数・有効無効）",
 	"lsp.skip_install_prompt":                       "インストール提案をスキップ",
 	"mcp.enabled":                                   "MCP接続を有効化（デフォルト: true）",

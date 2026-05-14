@@ -193,7 +193,7 @@ var Sections = map[string]SectionInfo{
 			"詳細: docs/config.md の「LSP連携設定」セクション",
 		},
 		Fields: map[string]string{
-			"enabled":             "LSP連携の有効/無効",
+			"enabled":             "LSP連携の有効/無効（有効時は検出言語の導入済みサーバーを起動準備）",
 			"skip_install_prompt": "インストール提案をスキップ",
 			"servers":             "LSPサーバー個別設定（コマンド・引数・有効無効）",
 		},
