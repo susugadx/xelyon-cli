@@ -153,24 +153,6 @@ func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeReq
 	r.UsageObserved = r.UsageObserved || request.UsageObserved
 }
 
-func geminiSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
-	for _, request := range smoke.Requests {
-		if request.ToolPayload && request.Ran && strings.TrimSpace(request.Error) != "" {
-			return true
-		}
-	}
-	return false
-}
-
-func geminiSmokeErrorIsWebSearchFailure(smoke DiagnosticSmokeResult) bool {
-	for _, request := range smoke.Requests {
-		if request.WebSearchPayload && request.Ran && strings.TrimSpace(request.Error) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func geminiDiagnosticSmokeContentHasToolCall(content string) bool {
 	return providerdiag.ContentHasToolCall(content, geminiDiagnosticToolName)
 }

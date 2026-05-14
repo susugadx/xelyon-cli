@@ -101,6 +101,8 @@ Gemini:
 - `GEMINI_API_URL` is an exact endpoint / proxy override. Endpoint diagnostics are route-aware: selected text / tool / image requests expect `streamGenerateContent?alt=sse`, while selected native web search requests expect `generateContent`.
 - Tool smoke / preview forces request-scoped Gemini function calling mode `ANY` for the diagnostic tool only. Normal runtime still uses `GEMINI_FC_MODE` fallback.
 - Non-Gemini `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token or cost policy.
+- Live smoke failures classify auth / authorization, quota / rate limit / capacity, model unavailable, empty SSE response, endpoint route mismatch, tool unsupported, image unsupported, and native web search unsupported in the `smoke` check suggestion. Request-level errors stay in `smoke.requests[].error`.
+- Pricing metadata unavailable is a `cost` warn after successful usage observation, not a smoke failure.
 - Does not support `--capabilities`, `--require-capability`, retention smoke, or separate thinking smoke in v1.
 - Main owner packages: `cmd/doctor_gemini.go`, `internal/api/providers/gemini/diagnostics*.go`, `internal/providerdiag`.
 

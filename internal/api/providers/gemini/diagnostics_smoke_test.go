@@ -32,9 +32,7 @@ func TestDiagnoseGemini_TextSmokeObservesUsageAndCost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	t.Setenv(geminiAPIKeyEnv, "gemini-key")
-	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv("XELYON_MODEL", "")
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:          config.DefaultConfig(),
@@ -82,9 +80,7 @@ func TestDiagnoseGemini_ToolSmokeRequiresToolCallAndUsesAnyMode(t *testing.T) {
 	}))
 	defer server.Close()
 
-	t.Setenv(geminiAPIKeyEnv, "gemini-key")
-	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv("XELYON_MODEL", "")
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),
@@ -120,9 +116,7 @@ func TestDiagnoseGemini_ToolSmokeFailsWithoutToolCall(t *testing.T) {
 	}))
 	defer server.Close()
 
-	t.Setenv(geminiAPIKeyEnv, "gemini-key")
-	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv("XELYON_MODEL", "")
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),
@@ -134,7 +128,150 @@ func TestDiagnoseGemini_ToolSmokeFailsWithoutToolCall(t *testing.T) {
 	if !report.HasFailures() {
 		t.Fatalf("HasFailures() = false, want tool smoke failure: %#v", report.Checks)
 	}
-	requireGeminiDiagnosticCheckStatus(t, report, "tool_smoke", DiagnosticStatusFail)
+	toolSmoke := requireGeminiDiagnosticCheckStatus(t, report, "tool_smoke", DiagnosticStatusFail)
+	if !strings.Contains(toolSmoke.Suggestion, "function calling") {
+		t.Fatalf("tool_smoke suggestion = %q, want function calling guidance", toolSmoke.Suggestion)
+	}
+	smoke := requireGeminiDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "tool smoke was not accepted") || !strings.Contains(smoke.Detail, "request=tool") {
+		t.Fatalf("smoke check = %#v, want classified tool failure with request detail", smoke)
+	}
+}
+
+func TestDiagnoseGemini_TextSmokeClassifiesAuthFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"API key not valid"}}`))
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "bad-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        defaultGeminiDiagnosticModel,
+		CatalogModel: defaultGeminiDiagnosticModel,
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want auth-classified smoke failure: %#v", report.Checks)
+	}
+	smoke := requireGeminiDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "authentication or authorization") || !strings.Contains(smoke.Suggestion, geminiAPIKeyEnv) {
+		t.Fatalf("smoke check = %#v, want auth failure guidance", smoke)
+	}
+	if report.Smoke == nil || len(report.Smoke.Requests) != 1 || !strings.Contains(report.Smoke.Requests[0].Error, "API key not valid") {
+		t.Fatalf("Smoke = %#v, want request-level sanitized error", report.Smoke)
+	}
+}
+
+func TestDiagnoseGemini_TextSmokeClassifiesCapacityFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":{"message":"Service Unavailable: backend overloaded"}}`))
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        defaultGeminiDiagnosticModel,
+		CatalogModel: defaultGeminiDiagnosticModel,
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want capacity-classified smoke failure: %#v", report.Checks)
+	}
+	smoke := requireGeminiDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "quota, rate limit, or capacity") || !strings.Contains(smoke.Suggestion, "quota") {
+		t.Fatalf("smoke check = %#v, want capacity guidance", smoke)
+	}
+}
+
+func TestDiagnoseGemini_WebSearchSmokeClassifiesUnsupportedSearch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"google_search is unsupported for this model"}}`))
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		Model:          defaultGeminiDiagnosticModel,
+		CatalogModel:   defaultGeminiDiagnosticModel,
+		RunSmoke:       true,
+		WebSearchSmoke: true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want web search smoke failure: %#v", report.Checks)
+	}
+	webSearch := requireGeminiDiagnosticCheckStatus(t, report, "web_search_smoke", DiagnosticStatusFail)
+	if !strings.Contains(webSearch.Suggestion, "google_search") {
+		t.Fatalf("web_search_smoke suggestion = %q, want google_search guidance", webSearch.Suggestion)
+	}
+	smoke := requireGeminiDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "web search smoke was not accepted") || !strings.Contains(smoke.Detail, "request=web_search") {
+		t.Fatalf("smoke check = %#v, want classified web search failure with request detail", smoke)
+	}
+}
+
+func TestDiagnoseGemini_WebSearchSmokeClassifiesModelUnavailableBeforeWebSearchSupport(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"models/missing is not found for API version v1beta, or is not supported for generateContent"}}`))
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		Model:          "models/missing",
+		CatalogModel:   defaultGeminiDiagnosticModel,
+		RunSmoke:       true,
+		WebSearchSmoke: true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want model-classified web search smoke failure: %#v", report.Checks)
+	}
+	smoke := requireGeminiDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "model is unavailable") || !strings.Contains(smoke.Suggestion, "--model") {
+		t.Fatalf("smoke check = %#v, want model guidance before web search guidance", smoke)
+	}
+}
+
+func TestDiagnoseGemini_ImageSmokeClassifiesImageUnsupportedBeforeEndpointHint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"GenerateContentRequest.contents[0].parts[0].inline_data is unsupported"}}`))
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        defaultGeminiDiagnosticModel,
+		CatalogModel: defaultGeminiDiagnosticModel,
+		RunSmoke:     true,
+		ImageSmoke:   true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want image-classified smoke failure: %#v", report.Checks)
+	}
+	smoke := requireGeminiDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "image smoke was not accepted") || !strings.Contains(smoke.Suggestion, "inline_data") {
+		t.Fatalf("smoke check = %#v, want image guidance before endpoint guidance", smoke)
+	}
+	image := requireGeminiDiagnosticCheckStatus(t, report, "image_smoke", DiagnosticStatusFail)
+	if !strings.Contains(image.Message, "image smoke failed before proving image input") {
+		t.Fatalf("image_smoke check = %#v, want image-specific request failure", image)
+	}
 }
 
 func TestDiagnoseGemini_ImageSmokeBuildsInlineDataPayload(t *testing.T) {
@@ -152,9 +289,7 @@ func TestDiagnoseGemini_ImageSmokeBuildsInlineDataPayload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	t.Setenv(geminiAPIKeyEnv, "gemini-key")
-	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv("XELYON_MODEL", "")
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),
@@ -206,9 +341,7 @@ func TestDiagnoseGemini_WebSearchSmokeUsesGenerateContentJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	t.Setenv(geminiAPIKeyEnv, "gemini-key")
-	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv("XELYON_MODEL", "")
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:         config.DefaultConfig(),
@@ -247,9 +380,7 @@ func TestDiagnoseGemini_WebSearchSmokeSucceedsWithoutUsageMetadata(t *testing.T)
 	}))
 	defer server.Close()
 
-	t.Setenv(geminiAPIKeyEnv, "gemini-key")
-	t.Setenv(geminiAPIURLEnv, server.URL)
-	t.Setenv("XELYON_MODEL", "")
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:         config.DefaultConfig(),
@@ -272,4 +403,11 @@ func writeGeminiDiagnosticSSE(t *testing.T, w http.ResponseWriter, chunk GeminiF
 	t.Helper()
 	w.Header().Set("Content-Type", "text/event-stream")
 	_, _ = w.Write([]byte(geminiSSEPayload(t, chunk)))
+}
+
+func setGeminiDiagnosticSmokeTestEnv(t *testing.T, apiURL, apiKey string) {
+	t.Helper()
+	t.Setenv(geminiAPIKeyEnv, apiKey)
+	t.Setenv(geminiAPIURLEnv, apiURL)
+	t.Setenv("XELYON_MODEL", "")
 }

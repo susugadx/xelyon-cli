@@ -230,6 +230,51 @@ func TestRenderGeminiDoctorTextContractWithMultipleSmokeRequests(t *testing.T) {
 	})
 }
 
+func TestRenderGeminiDoctorTextContractWithSmokeFailure(t *testing.T) {
+	report := geminiprovider.DiagnosticReport{
+		Provider:               "gemini",
+		APIURL:                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview-customtools:streamGenerateContent?alt=sse",
+		Model:                  "gemini-3.1-pro-preview-customtools",
+		ModelSource:            "test",
+		CatalogModel:           "gemini-3.1-pro-preview-customtools",
+		CatalogModelSource:     "test",
+		Route:                  geminiprovider.DiagnosticRouteStreamGenerateContentSSE,
+		FunctionCallingEnabled: true,
+		ImageInputSupported:    true,
+		WebSearchSupported:     true,
+		ContextCachingEnabled:  true,
+		Checks: []geminiprovider.DiagnosticCheck{{
+			Name:       "smoke",
+			Status:     geminiprovider.DiagnosticStatusFail,
+			Message:    "live Gemini smoke authentication or authorization failed",
+			Detail:     "request=text route=stream_generate_content_sse error=API error (401): bad key",
+			Suggestion: "Check GEMINI_API_KEY",
+		}},
+		Smoke: &geminiprovider.DiagnosticSmokeResult{
+			Ran:      true,
+			Route:    geminiprovider.DiagnosticRouteStreamGenerateContentSSE,
+			Duration: "2ms",
+			Requests: []geminiprovider.DiagnosticSmokeRequestResult{{
+				Name:     "text",
+				Ran:      true,
+				Route:    geminiprovider.DiagnosticRouteStreamGenerateContentSSE,
+				Duration: "2ms",
+				Error:    "API error (401): bad key",
+			}},
+		},
+	}
+
+	var out bytes.Buffer
+	renderGeminiDoctorText(&out, report)
+	requireGeminiDoctorTextContainsAll(t, out.String(), []string{
+		"Status: FAIL",
+		"FAIL smoke: live Gemini smoke authentication or authorization failed",
+		"detail: request=text route=stream_generate_content_sse error=API error (401): bad key",
+		"suggestion: Check GEMINI_API_KEY",
+		"Smoke error: API error (401): bad key",
+	})
+}
+
 func requireGeminiDoctorJSONPreviewRequest(t *testing.T, report geminiDoctorJSONContractReport, index int, name, route string) geminiDoctorJSONPreviewRequest {
 	t.Helper()
 	if index >= len(report.RequestPreview.Requests) {

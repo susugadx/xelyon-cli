@@ -13,6 +13,7 @@ BEDROCK_PROBE_CONVERSE_MODELS ?= us.meta.llama4-scout-17b-instruct-v1:0 us.deeps
 OPENAI_DOCTOR_SMOKE_MODEL ?= gpt-5.4
 DEEPSEEK_DOCTOR_SMOKE_MODEL ?= deepseek-v4-flash
 GEMINI_DOCTOR_SMOKE_MODEL ?= gemini-3.1-pro-preview-customtools
+GEMINI_DOCTOR_SMOKE_TIMEOUT ?= 180s
 GROQ_DOCTOR_SMOKE_MODEL ?= meta-llama/llama-4-scout-17b-16e-instruct
 OPENROUTER_DOCTOR_SMOKE_MODEL ?= openai/gpt-5.4-mini
 
@@ -188,7 +189,7 @@ deepseek-doctor-smoke:
 # Gemini doctor 診断経路を実環境で確認（GEMINI_API_KEY 必須）
 gemini-doctor-smoke:
 	@test -n "$(GEMINI_API_KEY)" || { echo "GEMINI_API_KEY is required for make gemini-doctor-smoke"; exit 1; }
-	go run . doctor gemini --model "$(GEMINI_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke --image-smoke --web-search-smoke
+	go run . doctor gemini --model "$(GEMINI_DOCTOR_SMOKE_MODEL)" --timeout "$(GEMINI_DOCTOR_SMOKE_TIMEOUT)" --smoke --tool-smoke --image-smoke --web-search-smoke
 
 # Groq doctor 診断経路を実環境で確認（GROQ_API_KEY 必須）
 groq-doctor-smoke:

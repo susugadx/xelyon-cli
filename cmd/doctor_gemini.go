@@ -129,6 +129,9 @@ func renderGeminiDoctorText(w io.Writer, report geminiprovider.DiagnosticReport)
 		if strings.TrimSpace(report.Smoke.Content) != "" {
 			fmt.Fprintf(w, "Smoke content: %s\n", report.Smoke.Content)
 		}
+		if errText := geminiDoctorSmokeFirstError(report.Smoke.Requests); errText != "" {
+			fmt.Fprintf(w, "Smoke error: %s\n", errText)
+		}
 		fmt.Fprintf(w, "Smoke usage: %s\n", formatDoctorSmokeUsage(geminiDoctorSmokeUsage(report.Smoke.Usage)))
 		fmt.Fprintf(w, "Smoke cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
 	}
@@ -150,8 +153,20 @@ func renderGeminiDoctorSmokeRequest(w io.Writer, request geminiprovider.Diagnost
 	if strings.TrimSpace(request.Content) != "" {
 		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
 	}
+	if strings.TrimSpace(request.Error) != "" {
+		fmt.Fprintf(w, "Smoke error %s: %s\n", request.Name, request.Error)
+	}
 	fmt.Fprintf(w, "Smoke usage %s: %s\n", request.Name, formatDoctorSmokeUsage(geminiDoctorSmokeUsage(request.Usage)))
 	fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, doctorSmokeCostText(request.UsageObserved, request.Cost.PricingUnavailable, request.Cost.USD))
+}
+
+func geminiDoctorSmokeFirstError(requests []geminiprovider.DiagnosticSmokeRequestResult) string {
+	for _, request := range requests {
+		if errText := strings.TrimSpace(request.Error); errText != "" {
+			return errText
+		}
+	}
+	return ""
 }
 
 func geminiDoctorCheckLines(checks []geminiprovider.DiagnosticCheck) []doctorCheckLine {

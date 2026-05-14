@@ -271,13 +271,9 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke, err := runGeminiDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {
-		if geminiSmokeErrorIsToolFailure(smoke) {
-			r.addCheck(DiagnosticStatusFail, "tool_smoke", "Gemini tool smoke response did not include the diagnostic tool call", err.Error(), "")
-		}
-		if geminiSmokeErrorIsWebSearchFailure(smoke) {
-			r.addCheck(DiagnosticStatusFail, "web_search_smoke", "Gemini web search smoke did not return summary or sources", err.Error(), "")
-		}
-		r.addCheck(DiagnosticStatusFail, "smoke", "live Gemini smoke request failed", err.Error(), "")
+		failure := classifyGeminiDiagnosticSmokeFailure(smoke, err)
+		r.addGeminiDiagnosticSmokeFailureChecks(smoke, failure)
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live Gemini smoke request succeeded", smoke.Duration, "")

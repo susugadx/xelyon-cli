@@ -62,7 +62,9 @@ xelyon doctor gemini --smoke --tool-smoke --image-smoke --web-search-smoke
 xelyon doctor gemini --json
 ```
 
-手元で doctor 経路だけを実 Gemini 環境で確認する場合は、`GEMINI_API_KEY` を設定して `make gemini-doctor-smoke` を実行します。既定では `gemini-3.1-pro-preview-customtools` で text / tool / image / web search smoke をまとめて実行し、必要なら `GEMINI_DOCTOR_SMOKE_MODEL` で変更できます。web search smoke は native `generateContent` の `usageMetadata` が返れば usage / cost を表示し、返らない場合は usage / cost を warn に留めます。summary または source が返れば smoke は成功扱いです。
+手元で doctor 経路だけを実 Gemini 環境で確認する場合は、`GEMINI_API_KEY` を設定して `make gemini-doctor-smoke` を実行します。既定では `gemini-3.1-pro-preview-customtools` で text / tool / image / web search smoke をまとめて実行し、必要なら `GEMINI_DOCTOR_SMOKE_MODEL` で変更できます。timeout は `GEMINI_DOCTOR_SMOKE_TIMEOUT ?= 180s` で変更できます。web search smoke は native `generateContent` の `usageMetadata` が返れば usage / cost を表示し、返らない場合は usage / cost を warn に留めます。summary または source が返れば smoke は成功扱いです。
+
+Gemini live smoke の失敗時は `smoke` check の message / suggestion と `smoke.requests[].error` を見ます。doctor は認証・権限、quota / rate limit / capacity、model unavailable、empty SSE response、`GEMINI_API_URL` route mismatch、tool unsupported、image unsupported、native web search unsupported を分類します。text / tool / image は `streamGenerateContent?alt=sse`、web search は `generateContent` のため、proxy や endpoint override を使う場合は `xelyon doctor gemini --smoke --tool-smoke --image-smoke --web-search-smoke --print-request` で request preview を確認してから live smoke を実行してください。pricing metadata がない場合は smoke 自体は fail せず、`cost` check が warn になります。
 
 ### `xelyon doctor groq`
 
