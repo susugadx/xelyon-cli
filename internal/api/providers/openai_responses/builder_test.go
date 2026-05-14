@@ -127,6 +127,46 @@ func TestBuildChatRequest_ActiveContextForcesFullHistoryWithoutPreviousResponseI
 	assertInputMessage(t, input[2], "user", "next turn")
 }
 
+func TestBuildChatRequest_ActiveContextToolContinuationForcesFullInput(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		SystemPrompt:       "system",
+		PreviousResponseID: "resp_123",
+		ActiveContext:      activeContextBlocks(responsesTestActiveContextSnapshot),
+		History: []api.Message{
+			{Role: "user", Content: "read README"},
+			{
+				Role: "assistant",
+				ToolCalls: []api.OpenAIToolCall{{
+					ID:   "call_1",
+					Type: "function",
+					Function: api.OpenAIToolCallFunction{
+						Name:      "read_file",
+						Arguments: `{"path":"README.md"}`,
+					},
+				}},
+			},
+			{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+		},
+	})
+
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty when active context is present", req.PreviousResponseID)
+	}
+	input := requestInputItems(t, req)
+	if len(input) != 5 {
+		t.Fatalf("len(Input) = %d, want developer + active context + full tool history", len(input))
+	}
+	assertInputMessage(t, input[0], "developer", "system")
+	assertInputMessage(t, input[1], "developer", responsesTestActiveContextSnapshot)
+	assertInputMessage(t, input[2], "user", "read README")
+	assertInputFunctionCall(t, input[3], "call_1", "read_file", `{"path":"README.md"}`)
+	assertInputFunctionCallOutput(t, input[4], "call_1", "README contents")
+}
+
 func TestBuildChatRequest_BlankActiveContextKeepsPreviousResponseID(t *testing.T) {
 	req := BuildChatRequest(ChatRequestOptions{
 		Base: BaseRequestOptions{
@@ -377,5 +417,19 @@ func assertInputMessage(t *testing.T, item InputItem, role, content string) {
 	t.Helper()
 	if item.Type != "message" || item.Role != role || item.Content != content {
 		t.Fatalf("Input item = %#v, want %s message with content %q", item, role, content)
+	}
+}
+
+func assertInputFunctionCall(t *testing.T, item InputItem, callID, name, arguments string) {
+	t.Helper()
+	if item.Type != "function_call" || item.CallID != callID || item.Name != name || item.Arguments != arguments {
+		t.Fatalf("Input item = %#v, want function_call %s %s %s", item, callID, name, arguments)
+	}
+}
+
+func assertInputFunctionCallOutput(t *testing.T, item InputItem, callID, output string) {
+	t.Helper()
+	if item.Type != "function_call_output" || item.CallID != callID || item.Output != output {
+		t.Fatalf("Input item = %#v, want function_call_output %s %q", item, callID, output)
 	}
 }

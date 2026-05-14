@@ -42,17 +42,21 @@ func (a *Agent) buildCurrentTaskStateBlock() (api.ActiveContextBlock, bool) {
 }
 
 func (a *Agent) estimateActiveContextTokens() int {
-	if !a.shouldCountActiveContextTokens() {
-		return 0
-	}
 	total := 0
-	for _, block := range a.buildActiveContextBlocks() {
+	for _, block := range a.providerFacingActiveContextBlocks() {
 		total += token.EstimateTokenCountForModel(a.CurrentModel, block.Content)
 	}
 	return total
 }
 
-func (a *Agent) shouldCountActiveContextTokens() bool {
+func (a *Agent) providerFacingActiveContextBlocks() []api.ActiveContextBlock {
+	if !a.shouldSendActiveContextToProvider() {
+		return nil
+	}
+	return a.buildActiveContextBlocks()
+}
+
+func (a *Agent) shouldSendActiveContextToProvider() bool {
 	if a == nil || a.Runtime == nil || !a.Runtime.Options.EnableCurrentTaskStateContext {
 		return false
 	}
@@ -68,14 +72,17 @@ func (a *Agent) shouldCountActiveContextTokens() bool {
 }
 
 func (a *Agent) resetModelFacingTaskLedger() {
-	if a == nil || a.Runtime == nil || !a.Runtime.Options.EnableCurrentTaskStateContext || a.Runtime.TaskLedger == nil {
+	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
+		return
+	}
+	if !a.shouldSendActiveContextToProvider() {
 		return
 	}
 	a.Runtime.TaskLedger.Reset()
 }
 
 func (a *Agent) clearResponseContextForActiveContextRequest() {
-	if len(a.buildActiveContextBlocks()) == 0 {
+	if len(a.providerFacingActiveContextBlocks()) == 0 {
 		return
 	}
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {

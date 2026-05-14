@@ -20,6 +20,7 @@ func TestRequestContext_CurrentTaskStateContextDefaultOff(t *testing.T) {
 			TaskLedger: newTaskLedgerWithPassedTest(t),
 		},
 	}
+	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(context.Background()))
 	if got != nil {
@@ -33,6 +34,7 @@ func TestRequestContext_CurrentTaskStateContextClearsInheritedBlocksWhenDefaultO
 			TaskLedger: newTaskLedgerWithPassedTest(t),
 		},
 	}
+	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(contextWithInheritedActiveContext()))
 	if got != nil {
@@ -46,6 +48,7 @@ func TestRequestContext_CurrentTaskStateContextNilLedgerNoop(t *testing.T) {
 			Options: RuntimeOptions{EnableCurrentTaskStateContext: true},
 		},
 	}
+	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(contextWithInheritedActiveContext()))
 	if got != nil {
@@ -60,6 +63,7 @@ func TestRequestContext_CurrentTaskStateContextEmptyLedgerNoop(t *testing.T) {
 			TaskLedger: ledger.NewStoreWithRoot(t.TempDir()),
 		},
 	}
+	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(context.Background()))
 	if got != nil {
@@ -74,6 +78,7 @@ func TestRequestContext_CurrentTaskStateContextClearsInheritedBlocksWhenLedgerIs
 			TaskLedger: ledger.NewStoreWithRoot(t.TempDir()),
 		},
 	}
+	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(contextWithInheritedActiveContext()))
 	if got != nil {
@@ -94,6 +99,7 @@ func TestRequestContext_CurrentTaskStateContextIncludesSnapshotWithoutMutatingHi
 			session: session,
 		},
 	}
+	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
 	beforeHistory := append([]api.Message(nil), agent.History...)
 	beforeSessionMessages := append([]history.MessageEntry(nil), session.Messages...)
 
@@ -123,6 +129,25 @@ func TestRequestContext_CurrentTaskStateContextIncludesSnapshotWithoutMutatingHi
 	}
 }
 
+func TestRequestContext_CurrentTaskStateContextClearsBlocksWhenProviderDoesNotConsumeIt(t *testing.T) {
+	agent := &Agent{
+		Runtime: &AgentRuntime{
+			Options:    RuntimeOptions{EnableCurrentTaskStateContext: true},
+			TaskLedger: newTaskLedgerWithPassedTest(t),
+		},
+	}
+	applyCurrentTaskStateProviderFixture(agent, currentTaskStateDeepSeek)
+
+	if len(agent.buildActiveContextBlocks()) == 0 {
+		t.Fatal("test setup produced empty active context")
+	}
+
+	got := api.ActiveContextBlocksFromContext(agent.requestContext(contextWithInheritedActiveContext()))
+	if got != nil {
+		t.Fatalf("ActiveContextBlocksFromContext() = %#v, want nil for provider that does not consume active context", got)
+	}
+}
+
 func TestRequestContextWithoutActiveContextClearsOwnedAndInheritedBlocks(t *testing.T) {
 	agent := &Agent{
 		Runtime: &AgentRuntime{
@@ -130,10 +155,81 @@ func TestRequestContextWithoutActiveContextClearsOwnedAndInheritedBlocks(t *test
 			TaskLedger: newTaskLedgerWithPassedTest(t),
 		},
 	}
+	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	if len(agent.providerFacingActiveContextBlocks()) == 0 {
+		t.Fatal("test setup produced empty provider-facing active context")
+	}
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContextWithoutActiveContext(contextWithInheritedActiveContext()))
 	if got != nil {
 		t.Fatalf("ActiveContextBlocksFromContext() = %#v, want nil for internal model request context", got)
+	}
+}
+
+func TestShouldSendActiveContextToProvider(t *testing.T) {
+	tests := []struct {
+		name    string
+		enabled bool
+		fixture currentTaskStateProviderFixture
+		want    bool
+	}{
+		{
+			name:    "disabled",
+			enabled: false,
+			fixture: currentTaskStateOpenAIResponses,
+			want:    false,
+		},
+		{
+			name:    "openai responses",
+			enabled: true,
+			fixture: currentTaskStateOpenAIResponses,
+			want:    true,
+		},
+		{
+			name:    "azure responses",
+			enabled: true,
+			fixture: currentTaskStateAzureResponses,
+			want:    true,
+		},
+		{
+			name:    "openai chat completions",
+			enabled: true,
+			fixture: currentTaskStateOpenAIChatCompletions,
+			want:    false,
+		},
+		{
+			name:    "deepseek",
+			enabled: true,
+			fixture: currentTaskStateDeepSeek,
+			want:    false,
+		},
+		{
+			name:    "gemini",
+			enabled: true,
+			fixture: currentTaskStateGemini,
+			want:    false,
+		},
+		{
+			name:    "claude",
+			enabled: true,
+			fixture: currentTaskStateClaude,
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &Agent{
+				Runtime: &AgentRuntime{
+					Options: RuntimeOptions{EnableCurrentTaskStateContext: tt.enabled},
+				},
+			}
+			applyCurrentTaskStateProviderFixture(agent, tt.fixture)
+
+			if got := agent.shouldSendActiveContextToProvider(); got != tt.want {
+				t.Fatalf("shouldSendActiveContextToProvider() = %t, want %t", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -215,11 +311,7 @@ func TestPrepareChatRequest_CurrentTaskStateContextClearsResponseContextBeforeSe
 	disableColors(t)
 
 	var out bytes.Buffer
-	provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "resp_old"}
-	agent := newChatRequestTestAgent(t, provider, &out)
-	agent.Runtime.Options.EnableCurrentTaskStateContext = true
-	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
-	agent.session.ApplyResponseContext("resp_old", agent.CurrentModel, agent.ProviderName, agent.ProviderConfigKey)
+	agent, provider := newCurrentTaskStateResponseIDAgent(t, currentTaskStateOpenAIResponses, "resp_old", &out)
 
 	agent.prepareChatRequest(&chatRequest{input: "hello"})
 
@@ -231,6 +323,58 @@ func TestPrepareChatRequest_CurrentTaskStateContextClearsResponseContextBeforeSe
 	}
 	if len(agent.session.Messages) == 0 || agent.session.Messages[len(agent.session.Messages)-1].Content != "hello" {
 		t.Fatalf("session messages = %#v, want appended user message", agent.session.Messages)
+	}
+}
+
+func TestPrepareChatRequest_CurrentTaskStateContextKeepsResponseContextForProvidersThatDoNotConsumeIt(t *testing.T) {
+	disableColors(t)
+
+	tests := []struct {
+		name    string
+		fixture currentTaskStateProviderFixture
+	}{
+		{
+			name:    "deepseek",
+			fixture: currentTaskStateDeepSeek,
+		},
+		{
+			name:    "gemini",
+			fixture: currentTaskStateGemini,
+		},
+		{
+			name:    "claude",
+			fixture: currentTaskStateClaude,
+		},
+		{
+			name:    "openai chat completions",
+			fixture: currentTaskStateOpenAIChatCompletions,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			agent, provider := newCurrentTaskStateResponseIDAgent(t, tt.fixture, "resp_old", &out)
+
+			if len(agent.buildActiveContextBlocks()) == 0 {
+				t.Fatal("test setup produced empty active context")
+			}
+			if agent.shouldSendActiveContextToProvider() {
+				t.Fatalf("test setup provider/model %s/%s consumes active context", tt.fixture.providerName, tt.fixture.model)
+			}
+
+			agent.prepareChatRequest(&chatRequest{input: "hello"})
+
+			if provider.GetResponseID() != "resp_old" {
+				t.Fatalf("provider response ID = %q, want preserved for provider that does not consume active context", provider.GetResponseID())
+			}
+			if agent.session.ResponseID != "resp_old" {
+				t.Fatalf("session.ResponseID = %q, want preserved for provider that does not consume active context", agent.session.ResponseID)
+			}
+			if len(agent.session.Messages) == 0 || agent.session.Messages[len(agent.session.Messages)-1].Content != "hello" {
+				t.Fatalf("session messages = %#v, want appended user message", agent.session.Messages)
+			}
+		})
 	}
 }
 

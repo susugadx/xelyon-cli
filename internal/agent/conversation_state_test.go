@@ -105,20 +105,25 @@ func TestAgent_ResetConversationState_ClearsModelFacingTaskLedger(t *testing.T) 
 	disableColors(t)
 
 	var out bytes.Buffer
-	provider := &conversationStateTestProvider{}
-	agent := newChatRequestTestAgent(t, provider, &out)
-	agent.Runtime.Options.EnableCurrentTaskStateContext = true
-	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
-	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
-		t.Fatal("test setup produced empty task ledger")
-	}
+	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "openai"}, currentTaskStateOpenAIResponses, &out)
+	assertCurrentTaskLedgerPreserved(t, agent, "test setup")
 
 	if err := agent.resetConversationState(); err != nil {
 		t.Fatalf("resetConversationState() error = %v", err)
 	}
-	if !agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
-		t.Fatalf("task ledger should be reset when current task state is model-facing: %#v", agent.Runtime.TaskLedger.Snapshot())
+	assertCurrentTaskLedgerReset(t, agent, "resetConversationState with provider-facing current task state")
+}
+
+func TestAgent_ResetConversationState_PreservesTaskLedgerWhenCurrentTaskStateProviderDoesNotConsumeIt(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "deepseek"}, currentTaskStateDeepSeek, &out)
+
+	if err := agent.resetConversationState(); err != nil {
+		t.Fatalf("resetConversationState() error = %v", err)
 	}
+	assertCurrentTaskLedgerPreserved(t, agent, "resetConversationState with non-consuming provider")
 }
 
 func TestAgent_ResetConversationState_PreservesTaskLedgerWhenCurrentTaskStateContextDisabled(t *testing.T) {
@@ -141,22 +146,31 @@ func TestAgent_ApplyLoadedSession_ClearsModelFacingTaskLedger(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
-	provider := &conversationStateTestProvider{}
-	agent := newChatRequestTestAgent(t, provider, &out)
-	agent.Runtime.Options.EnableCurrentTaskStateContext = true
-	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
+	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "openai"}, currentTaskStateOpenAIResponses, &out)
 
 	session := history.NewSession("test-model")
 	session.AddMessage("user", "loaded request", "test-model")
 
 	agent.applyLoadedSession(session)
 
-	if !agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
-		t.Fatalf("task ledger should be reset when loading a session with model-facing task state: %#v", agent.Runtime.TaskLedger.Snapshot())
-	}
+	assertCurrentTaskLedgerReset(t, agent, "applyLoadedSession with provider-facing current task state")
 	if got := api.ActiveContextBlocksFromContext(agent.requestContext(context.Background())); got != nil {
 		t.Fatalf("ActiveContextBlocksFromContext() = %#v, want nil after session load resets task ledger", got)
 	}
+}
+
+func TestAgent_ApplyLoadedSession_PreservesTaskLedgerWhenCurrentTaskStateProviderDoesNotConsumeIt(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "deepseek"}, currentTaskStateDeepSeek, &out)
+
+	session := history.NewSession("test-model")
+	session.AddMessage("user", "loaded request", "test-model")
+
+	agent.applyLoadedSession(session)
+
+	assertCurrentTaskLedgerPreserved(t, agent, "applyLoadedSession with non-consuming provider")
 }
 
 func TestAgent_ApplyLoadedSession_PreservesTaskLedgerWhenCurrentTaskStateContextDisabled(t *testing.T) {
