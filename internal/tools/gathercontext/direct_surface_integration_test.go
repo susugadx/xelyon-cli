@@ -122,7 +122,7 @@ func TestGatherContext_SlashDelimitedExplicitDirectSurfaceContracts(t *testing.T
 	})
 }
 
-func TestGatherContext_ApplyPatchSurfacePrefersFullExactRead(t *testing.T) {
+func TestGatherContext_EditToolSurfaceControlsFullExactRead(t *testing.T) {
 	root := t.TempDir()
 	withGatherContextWorkingDir(t, root)
 
@@ -142,26 +142,37 @@ func TestGatherContext_ApplyPatchSurfacePrefersFullExactRead(t *testing.T) {
 		Name:     "line100",
 	})
 
-	execCtx := newGatherContextExecCtx(
+	applyPatchExecCtx := newGatherContextExecCtx(
 		root,
 		withGatherContextLocatorRegistry(reg),
 		withGatherContextModel("openai", "gpt-5.4"),
 	)
+	legacyExecCtx := newGatherContextExecCtx(
+		root,
+		withGatherContextLocatorRegistry(reg),
+		withGatherContextModel("kimi", "kimi-k2.6"),
+	)
 
 	t.Run("single exact file prefers full read", func(t *testing.T) {
-		result, _ := runGatherContext(t, execCtx, map[string]string{"query": "./big.go"})
+		result, _ := runGatherContext(t, applyPatchExecCtx, map[string]string{"query": "./big.go"})
 		assertGatherContextContainsAll(t, result, "Route: Direct read", "1: line1", "1001: line1001", "2205: line2205")
 		assertGatherContextExcludesAll(t, result, "lines total")
 	})
 
+	t.Run("legacy provider keeps auto read", func(t *testing.T) {
+		result, _ := runGatherContext(t, legacyExecCtx, map[string]string{"query": "./big.go"})
+		assertGatherContextContainsAll(t, result, "Route: Direct read", "lines total")
+		assertGatherContextExcludesAll(t, result, "1001: line1001")
+	})
+
 	t.Run("locator read stays compact", func(t *testing.T) {
-		result, _ := runGatherContext(t, execCtx, map[string]string{"query": "[L1]"})
+		result, _ := runGatherContext(t, applyPatchExecCtx, map[string]string{"query": "[L1]"})
 		assertGatherContextContainsAll(t, result, "Route: Direct read", "📄 File: big.go:100-100 [")
 		assertGatherContextExcludesAll(t, result, "2205: line2205")
 	})
 
 	t.Run("explicit range read stays exact", func(t *testing.T) {
-		result, _ := runGatherContext(t, execCtx, map[string]string{"query": "./big.go:100-101"})
+		result, _ := runGatherContext(t, applyPatchExecCtx, map[string]string{"query": "./big.go:100-101"})
 		assertGatherContextContainsAll(t, result, "100: line100", "101: line101")
 		assertGatherContextExcludesAll(t, result, "99: line99", "102: line102", "2205: line2205", "lines total")
 	})

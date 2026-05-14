@@ -6,10 +6,9 @@ XELYON CLIは複数のLLMプロバイダーに対応しています。
 
 XELYON は provider/model に応じて編集ツールを自動で切り替えます。
 
-- OpenAI / Azure OpenAI / Gemini / Kimi 系: `apply_patch`
-- Claude / Anthropic / DeepSeek 系: `str_replace` / `write_file` / `delete_file`
-- OpenRouter: `anthropic/...` / `deepseek/...` は legacy、`openai/...` / `google/...` / `gemini/...` / `moonshotai/...` は `apply_patch`
-- Bedrock: Claude family は legacy 編集ツール。runtime supported な非 Claude Converse モデルは `apply_patch`
+- OpenAI / Azure OpenAI / Gemini / Google 系: `apply_patch`
+- Kimi / Moonshot / Claude / Anthropic / DeepSeek / Groq / Ollama / Bedrock / unknown 系: `str_replace` / `write_file` / `delete_file`
+- OpenRouter: `openai/...` / `google/...` / `gemini/...` は `apply_patch`、それ以外の family は legacy 編集ツール
 
 `XELYON_EDIT_TOOL` を指定した場合は、この自動判定より環境変数の指定が優先されます。
 

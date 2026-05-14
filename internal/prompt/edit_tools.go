@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 // EditToolMode は編集ツール露出と編集ガイドの切り替えモードです。
@@ -35,8 +34,11 @@ func ResolveEditToolMode(providerName string, modelName string) EditToolMode {
 	return ResolveEditToolModeWithConfig(providerName, modelName, nil)
 }
 
-// ResolveEditToolModeWithConfig は provider/model/config に基づいて編集ツールモードを解決します。
+// ResolveEditToolModeWithConfig は provider/model と環境変数に基づいて編集ツールモードを解決します。
 func ResolveEditToolModeWithConfig(providerName string, modelName string, cfg *config.Config) EditToolMode {
+	// cfg は呼び出し契約維持用。編集ツール判定では provider/model の実行時 identity だけを見る。
+	_ = cfg
+
 	if env := strings.TrimSpace(os.Getenv("XELYON_EDIT_TOOL")); env != "" {
 		return NormalizeEditToolMode(env)
 	}
@@ -44,44 +46,39 @@ func ResolveEditToolModeWithConfig(providerName string, modelName string, cfg *c
 	provider := config.CanonicalProviderName(providerName)
 	model := strings.ToLower(strings.TrimSpace(modelName))
 
+	return resolveProviderEditToolMode(provider, model)
+}
+
+func resolveProviderEditToolMode(provider string, model string) EditToolMode {
 	if provider == "openrouter" {
-		switch {
-		case strings.HasPrefix(model, "anthropic/"),
-			strings.HasPrefix(model, "deepseek/"):
-			return EditToolModeLegacy
-		case strings.HasPrefix(model, "openai/"),
-			strings.HasPrefix(model, "google/"),
-			strings.HasPrefix(model, "gemini/"):
-			return EditToolModeApplyPatch
-		default:
+		if openRouterModelUsesApplyPatch(model) {
 			return EditToolModeApplyPatch
 		}
-	}
-
-	if provider == "bedrock" {
-		catalogModel := bedrockCatalogModel(modelName, cfg)
-		if llmcatalog.BedrockModelFamilyFor(modelName, catalogModel) == llmcatalog.BedrockModelFamilyClaude {
-			return EditToolModeLegacy
-		}
-		return EditToolModeApplyPatch
-	}
-
-	switch provider {
-	case "openai", "gemini", "google":
-		return EditToolModeApplyPatch
-	case "claude", "deepseek":
 		return EditToolModeLegacy
-	default:
+	}
+
+	if providerUsesApplyPatch(provider) {
 		return EditToolModeApplyPatch
+	}
+	return EditToolModeLegacy
+}
+
+func providerUsesApplyPatch(provider string) bool {
+	switch provider {
+	case "openai", "azure", "gemini", "google":
+		return true
+	default:
+		return false
 	}
 }
 
-func bedrockCatalogModel(modelName string, cfg *config.Config) string {
-	if cfg == nil {
-		return modelName
+func openRouterModelUsesApplyPatch(model string) bool {
+	switch {
+	case strings.HasPrefix(model, "openai/"),
+		strings.HasPrefix(model, "google/"),
+		strings.HasPrefix(model, "gemini/"):
+		return true
+	default:
+		return false
 	}
-	if strings.TrimSpace(modelName) == "" {
-		modelName = cfg.GetEffectiveModelForProvider("bedrock")
-	}
-	return cfg.ModelCatalogName("bedrock", modelName)
 }

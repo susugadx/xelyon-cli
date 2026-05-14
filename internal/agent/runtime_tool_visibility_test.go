@@ -10,7 +10,8 @@ import (
 
 func TestNewAgentWithRuntime_DefaultEditToolVisibility(t *testing.T) {
 	runtime := newIsolatedRuntime()
-	agent := newRuntimeTestAgent(t, runtime)
+	agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
+	t.Cleanup(agent.Cleanup)
 
 	defs := agent.registry().GetToolDefinitions()
 	if !toolDefinitionNamed(defs, "gather_context") {

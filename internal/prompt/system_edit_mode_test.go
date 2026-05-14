@@ -3,9 +3,19 @@ package prompt
 import (
 	"strings"
 	"testing"
-
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
+
+func TestCurrentSystemPrompt_DefaultEditToolMode(t *testing.T) {
+	t.Setenv("XELYON_EDIT_TOOL", "")
+
+	prompt := CurrentSystemPrompt()
+	if !strings.Contains(prompt, "### apply_patch (edit tool)") {
+		t.Error("default current prompt should keep generic apply_patch guidance")
+	}
+	if strings.Contains(prompt, "### Legacy edit tools") {
+		t.Error("default current prompt should not fall through to provider-unknown legacy mode")
+	}
+}
 
 func TestCurrentSystemPrompt_LegacyEditToolMode(t *testing.T) {
 	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
@@ -38,30 +48,5 @@ func TestCurrentSystemPrompt_LegacyEditToolMode(t *testing.T) {
 		if strings.Contains(prompt, forbidden) {
 			t.Fatalf("legacy mode prompt should not contain old str_replace guidance %q", forbidden)
 		}
-	}
-}
-
-func TestResolveEditToolMode_BedrockFamily(t *testing.T) {
-	t.Setenv("XELYON_EDIT_TOOL", "")
-
-	if got := ResolveEditToolMode("bedrock", "global.anthropic.claude-sonnet-4-6"); got != EditToolModeLegacy {
-		t.Fatalf("ResolveEditToolMode(bedrock, Claude) = %q, want %q", got, EditToolModeLegacy)
-	}
-	if got := ResolveEditToolMode("bedrock", "amazon.nova-pro-v1:0"); got != EditToolModeApplyPatch {
-		t.Fatalf("ResolveEditToolMode(bedrock, non-Claude) = %q, want %q", got, EditToolModeApplyPatch)
-	}
-}
-
-func TestResolveEditToolModeWithConfig_BedrockCatalogClaudeAlias(t *testing.T) {
-	t.Setenv("XELYON_EDIT_TOOL", "")
-
-	cfg := config.DefaultConfig()
-	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
-		DefaultModel: "corp-bedrock-sonnet46",
-		CatalogModel: "global.anthropic.claude-sonnet-4-6",
-	}
-
-	if got := ResolveEditToolModeWithConfig("bedrock", "corp-bedrock-sonnet46", cfg); got != EditToolModeLegacy {
-		t.Fatalf("ResolveEditToolModeWithConfig(bedrock alias) = %q, want %q", got, EditToolModeLegacy)
 	}
 }

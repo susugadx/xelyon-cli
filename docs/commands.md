@@ -617,14 +617,14 @@ xelyon
 
 AIが自動で以下のツールを使用します。ユーザーが直接呼び出す必要はありません。
 
-デフォルトでは編集系ツールとして `apply_patch` のみを公開します。
-開発デバッグ用に `XELYON_EDIT_TOOL=str_replace xelyon` で起動すると、legacy `str_replace` / `write_file` / `delete_file` を再度公開できます。
+編集系ツールは provider/model に応じて自動で切り替わります。OpenAI / Azure OpenAI / Gemini 系では `apply_patch` を公開し、Kimi / Claude / DeepSeek / Groq / Ollama / Bedrock / unknown 系では legacy `str_replace` / `write_file` / `delete_file` を公開します。OpenRouter は model family を見て、`openai/...` / `google/...` / `gemini/...` だけを `apply_patch` にします。
+開発デバッグ用に `XELYON_EDIT_TOOL=str_replace xelyon` または `XELYON_EDIT_TOOL=apply_patch xelyon` で明示 override できます。
 
 ### ファイル操作
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
-| `apply_patch` | Codex 互換の差分パッチでファイルを作成・更新・削除する既定編集ツール。1回で複数ファイルを扱える | `patch` |
+| `apply_patch` | apply_patch mode 用。Codex 互換の差分パッチでファイルを作成・更新・削除する。1回で複数ファイルを扱える | `patch` |
 | `read_file` | ファイル内容を読み込む。Go ファイルは `symbol` で関数/型/メソッド単位の読み出しも可能 | `path`, `symbol`, `start_line`, `end_line`, `paths` |
 | `write_file` | legacy edit mode 用。ファイルを新規作成・上書き | `path`, `content` |
 | `str_replace` | legacy edit mode 用。文字列置換でファイル編集（old_str優先。old_str空+start_line/end_line指定で行レンジ置換も可。Go ファイルは書き込み前に AST 構文チェックを実施） | `path`, `old_str`, `new_str`, `start_line`, `end_line` |
@@ -689,10 +689,10 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 # → read_file が実行される
 
 > バグを修正して
-# → read_file / search_code → apply_patch が実行される
+# → read_file / search_code → active edit mode の編集ツールが実行される
 
 > 複数ファイルをまとめて編集して
-# → apply_patch が1回で複数ファイルに適用される
+# → apply_patch mode では apply_patch、legacy edit mode ではファイル単位の編集ツールが実行される
 
 > git statusを見せて
 # → bash で git status が実行される

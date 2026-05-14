@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"os"
 	"regexp"
 	"strings"
 
@@ -55,7 +56,7 @@ func GetSystemPromptForProvider(providerName string, modelName string) string {
 	return GetSystemPromptForProviderWithConfig(providerName, modelName, nil)
 }
 
-// GetSystemPromptForProviderWithConfig は provider/model/config に応じた編集モードのシステムプロンプトを返す。
+// GetSystemPromptForProviderWithConfig は provider/model に応じた編集モードのシステムプロンプトを返す。
 func GetSystemPromptForProviderWithConfig(providerName string, modelName string, cfg *config.Config) string {
 	return buildSystemPromptForEditTool(string(ResolveEditToolModeWithConfig(providerName, modelName, cfg)))
 }
@@ -278,7 +279,10 @@ var SystemPrompt = buildSystemPromptForEditTool("")
 // CurrentSystemPrompt は環境変数 XELYON_EDIT_TOOL に応じたシステムプロンプトを返す。
 // 通常は GetSystemPromptByMode を使用する。
 func CurrentSystemPrompt() string {
-	return GetSystemPromptForProvider("", "")
+	if editTool := strings.TrimSpace(os.Getenv("XELYON_EDIT_TOOL")); editTool != "" {
+		return GetSystemPromptByMode(editTool)
+	}
+	return SystemPrompt
 }
 
 func buildSystemPromptForEditTool(editTool string) string {

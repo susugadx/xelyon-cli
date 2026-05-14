@@ -42,4 +42,12 @@ func TestPromptForTaskType_EditUsesProviderResolvedMode(t *testing.T) {
 	if !strings.Contains(openAIPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
 		t.Fatal("openai edit prompt should keep read_file exact-control guidance when it stays visible")
 	}
+
+	kimiPrompt := PromptForTaskType(TaskTypeEdit, "kimi", "kimi-k2.6")
+	if strings.Contains(kimiPrompt, "apply_patch") {
+		t.Fatal("kimi edit prompt should not mention apply_patch")
+	}
+	if !strings.Contains(kimiPrompt, "str_replace") {
+		t.Fatal("kimi edit prompt should mention str_replace")
+	}
 }

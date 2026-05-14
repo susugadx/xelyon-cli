@@ -33,7 +33,7 @@ DeepSeek, Kimi, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, 
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
 
 ### 🛠️ 組み込みツール
-- **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini / Kimi 系は Codex 互換の `apply_patch`、Claude / Bedrock(Claude) / DeepSeek 系は旧 `str_replace` / `write_file` / `delete_file` を使います。OpenRouter は model family を見て判定し、`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
+- **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini 系と OpenRouter の OpenAI/Gemini family は Codex 互換の `apply_patch`、Kimi / Claude / Bedrock / DeepSeek / Groq / Ollama / unknown 系は旧 `str_replace` / `write_file` / `delete_file` を使います。`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
 - **コード検索**: `search_code` は language-aware router として動作し、`mode=auto` を既定に symbol-aware / literal / regex の各レーンを内部選択（複数パターン、結果分類、不正regex検出にも対応）
 - **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収し、`intent=impact` は Go と TypeScript `.ts` で構造化 impact を返却
 - **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す
@@ -46,7 +46,7 @@ DeepSeek, Kimi, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, 
 - `execution.mode: trusted` は workspace 内の通常編集を自動化し、高影響操作だけ確認します
 - `execution.mode: full_auto` は原則自動実行し、`execution.always_confirm` に指定したカテゴリだけ確認します
 - `--auto-approve`で信頼環境向け全ツール自動承認（SafetyLow含む）
-- **既定編集フロー**: `search_code` / `read_file` で文脈を集めてから `apply_patch` を構築し、差分確認のうえで適用。legacy edit mode では従来どおり `str_replace` / `write_file` / `delete_file` を使用可能
+- **既定編集フロー**: `search_code` / `read_file` で文脈を集め、active edit mode に応じて `apply_patch` または `str_replace` / `write_file` / `delete_file` で差分確認のうえ適用
 
 ### 📋 Plan Mode（オプショナル）
 `/plan on` で有効化するとPlan Mode経由で処理されます。

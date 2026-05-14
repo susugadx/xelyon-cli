@@ -55,24 +55,8 @@ func TestRunHeadlessWithConfig_NormalHeadlessKeepsSubAgentTools(t *testing.T) {
 func TestRunHeadlessWithConfig_DefaultEditToolVisibility(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	cfg := newProjectMapDisabledConfig()
-	provider := &headlessToolSetProbeProvider{}
-
-	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4", provider, cfg)
-	if result.Status != "success" {
-		t.Fatalf("result.Status = %q, want success", result.Status)
-	}
-	if !toolNameInList(provider.toolNames, "apply_patch") {
-		t.Fatal("default headless mode should expose apply_patch")
-	}
-	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
-		if toolNameInList(provider.toolNames, name) {
-			t.Fatalf("default headless mode should exclude %s", name)
-		}
-	}
-	if !strings.Contains(provider.systemPrompt, "### apply_patch (edit tool)") {
-		t.Fatal("default headless system prompt should use apply_patch guidance")
-	}
+	provider := runHeadlessToolSetProbe(t, "", "gpt-5.4")
+	assertHeadlessApplyPatchEditSurface(t, provider, "default headless mode")
 	if strings.Contains(provider.systemPrompt, "search_code: code discovery tool") {
 		t.Fatal("default headless system prompt should not advertise hidden search_code")
 	}
@@ -84,46 +68,85 @@ func TestRunHeadlessWithConfig_DefaultEditToolVisibility(t *testing.T) {
 func TestRunHeadlessWithConfig_ProviderResolvedLegacyEditToolVisibility(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	cfg := newProjectMapDisabledConfig()
-	provider := &headlessToolSetProbeProvider{name: "claude"}
+	tests := []struct {
+		name     string
+		provider string
+		model    string
+	}{
+		{name: "claude", provider: "claude", model: "claude-sonnet-4-6"},
+		{name: "kimi", provider: "kimi", model: "kimi-k2.6"},
+	}
 
-	result := RunHeadlessWithConfig(context.Background(), "probe", "claude-sonnet-4-6", provider, cfg)
-	if result.Status != "success" {
-		t.Fatalf("result.Status = %q, want success", result.Status)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := runHeadlessToolSetProbe(t, tt.provider, tt.model)
+			assertHeadlessLegacyEditSurface(t, provider, tt.provider+" headless mode")
+		})
 	}
-	if toolNameInList(provider.toolNames, "apply_patch") {
-		t.Fatal("claude headless mode should exclude apply_patch")
-	}
-	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
-		if !toolNameInList(provider.toolNames, name) {
-			t.Fatalf("claude headless mode should expose %s", name)
-		}
-	}
-	if !strings.Contains(provider.systemPrompt, "### Legacy edit tools") {
-		t.Fatal("claude headless system prompt should use legacy edit tool guidance")
-	}
+}
+
+func TestRunHeadlessWithConfig_OpenRouterKnownApplyPatchFamilyVisibility(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provider := runHeadlessToolSetProbe(t, "openrouter", "google/gemini-2.5-pro")
+	assertHeadlessApplyPatchEditSurface(t, provider, "openrouter google family")
 }
 
 func TestRunHeadlessWithConfig_EnvResolvedLegacyEditToolVisibility(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
 
-	cfg := newProjectMapDisabledConfig()
-	provider := &headlessToolSetProbeProvider{}
-
-	result := RunHeadlessWithConfig(context.Background(), "probe", "gpt-5.4", provider, cfg)
-	if result.Status != "success" {
-		t.Fatalf("result.Status = %q, want success", result.Status)
-	}
-	if toolNameInList(provider.toolNames, "apply_patch") {
-		t.Fatal("legacy headless mode should exclude apply_patch")
-	}
-	for _, name := range []string{"str_replace", "write_file", "delete_file", "search_code", "read_file"} {
+	provider := runHeadlessToolSetProbe(t, "", "gpt-5.4")
+	assertHeadlessLegacyEditSurface(t, provider, "legacy headless mode")
+	for _, name := range []string{"search_code", "read_file"} {
 		if !toolNameInList(provider.toolNames, name) {
 			t.Fatalf("legacy headless mode should expose %s", name)
 		}
 	}
 	if toolNameInList(provider.toolNames, "list_dir") {
 		t.Fatal("legacy headless mode should keep list_dir hidden")
+	}
+}
+
+func runHeadlessToolSetProbe(t *testing.T, providerName string, model string) *headlessToolSetProbeProvider {
+	t.Helper()
+
+	provider := &headlessToolSetProbeProvider{name: providerName}
+	result := RunHeadlessWithConfig(context.Background(), "probe", model, provider, newProjectMapDisabledConfig())
+	if result.Status != "success" {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	return provider
+}
+
+func assertHeadlessApplyPatchEditSurface(t *testing.T, provider *headlessToolSetProbeProvider, label string) {
+	t.Helper()
+
+	if !toolNameInList(provider.toolNames, "apply_patch") {
+		t.Fatalf("%s should expose apply_patch", label)
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
+		if toolNameInList(provider.toolNames, name) {
+			t.Fatalf("%s should exclude %s", label, name)
+		}
+	}
+	if !strings.Contains(provider.systemPrompt, "### apply_patch (edit tool)") {
+		t.Fatalf("%s system prompt should use apply_patch guidance", label)
+	}
+}
+
+func assertHeadlessLegacyEditSurface(t *testing.T, provider *headlessToolSetProbeProvider, label string) {
+	t.Helper()
+
+	if toolNameInList(provider.toolNames, "apply_patch") {
+		t.Fatalf("%s should exclude apply_patch", label)
+	}
+	for _, name := range []string{"str_replace", "write_file", "delete_file"} {
+		if !toolNameInList(provider.toolNames, name) {
+			t.Fatalf("%s should expose %s", label, name)
+		}
+	}
+	if !strings.Contains(provider.systemPrompt, "### Legacy edit tools") {
+		t.Fatalf("%s system prompt should use legacy edit tool guidance", label)
 	}
 }

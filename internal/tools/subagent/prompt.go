@@ -31,7 +31,7 @@ func PromptForTaskType(taskType string, providerName string, modelName string) s
 	return PromptForTaskTypeWithConfig(taskType, providerName, modelName, nil)
 }
 
-// PromptForTaskTypeWithConfig はタスクタイプと provider/model/config に応じたシステムプロンプトを返します。
+// PromptForTaskTypeWithConfig はタスクタイプと provider/model に応じたシステムプロンプトを返します。
 func PromptForTaskTypeWithConfig(taskType string, providerName string, modelName string, cfg *config.Config) string {
 	editToolMode := string(prompt.ResolveEditToolModeWithConfig(providerName, modelName, cfg))
 	switch taskType {
