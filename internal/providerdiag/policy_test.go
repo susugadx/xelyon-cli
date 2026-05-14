@@ -67,6 +67,35 @@ func TestMaxOutputPolicyPreservesOpenAIAndAzureFallbackDifference(t *testing.T) 
 	}
 }
 
+func TestGeminiCatalogPolicyIgnoresNonGeminiGlobalMetadata(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	policy := GeminiCatalogPolicy(cfg, "corp-gemini-model", "gpt-5.5")
+	if policy.ContextWindowKnown || policy.ContextWindowTokens != 0 {
+		t.Fatalf("Gemini context window = %d known=%t, want unknown for non-Gemini catalog", policy.ContextWindowTokens, policy.ContextWindowKnown)
+	}
+	if policy.MaxOutput.Available || policy.MaxOutput.Tokens != 0 || policy.MaxOutput.Source != "missing" {
+		t.Fatalf("Gemini max output = %+v, want missing for non-Gemini catalog", policy.MaxOutput)
+	}
+	if !policy.Pricing.PricingUnavailable {
+		t.Fatalf("Gemini pricing = %+v, want unavailable for non-Gemini catalog", policy.Pricing)
+	}
+	detail := policy.GeminiDetail()
+	for _, unwanted := range []string{"128000", "1050000", "gpt-5.5-pro"} {
+		if strings.Contains(detail, unwanted) {
+			t.Fatalf("GeminiDetail() = %q, should not contain non-Gemini metadata %q", detail, unwanted)
+		}
+	}
+	if got, want := detail, "catalog_model=gpt-5.5, context_window=unknown, max_output_tokens=unknown, pricing=unavailable"; got != want {
+		t.Fatalf("GeminiDetail() = %q, want %q", got, want)
+	}
+
+	maxOutput := GeminiMaxOutputPolicy(cfg, "corp-gemini-model", "gpt-5.5")
+	if maxOutput.Available || maxOutput.Source != "missing" {
+		t.Fatalf("GeminiMaxOutputPolicy(non-Gemini) = %+v, want missing", maxOutput)
+	}
+}
+
 func TestShouldStreamResponsesCatalogModelAndReason(t *testing.T) {
 	for _, tt := range []struct {
 		model string

@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -78,4 +79,54 @@ func TestDiagnoseGemini_PrintRequestBuildsTextToolImageAndWebBodies(t *testing.T
 	if web.Route != DiagnosticRouteGenerateContent || len(webBody.Tools) != 1 || webBody.Tools[0].GoogleSearch == nil {
 		t.Fatalf("web preview = %#v body=%#v, want generateContent google_search body", web, webBody)
 	}
+}
+
+func TestGeminiDiagnosticRequestPreviewBodiesMatchBodyBuilder(t *testing.T) {
+	cfg := config.DefaultConfig()
+	report := DiagnosticReport{
+		Model:        defaultGeminiDiagnosticModel,
+		CatalogModel: defaultGeminiDiagnosticModel,
+	}
+	options := DiagnosticOptions{
+		TextSmoke:       true,
+		ToolSmoke:       true,
+		ImageSmoke:      true,
+		WebSearchSmoke:  true,
+		MaxOutputTokens: 8,
+	}
+
+	preview, err := buildGeminiDiagnosticRequestPreview(context.Background(), cfg, report, options)
+	if err != nil {
+		t.Fatalf("buildGeminiDiagnosticRequestPreview() error = %v", err)
+	}
+	requests := geminiDiagnosticRequests(options)
+	if len(preview.Requests) != len(requests) {
+		t.Fatalf("preview requests = %d, want %d", len(preview.Requests), len(requests))
+	}
+
+	previewCfg := geminiDiagnosticPolicyConfig(cfg, report.Model, report.CatalogModel, options.MaxOutputTokens)
+	provider := New("diagnostic-key")
+	provider.SetMCPTools(nil)
+	for i, request := range requests {
+		requestCtx := newGeminiDiagnosticRequestContext(context.Background(), previewCfg, request, nil)
+		wantBody := buildGeminiDiagnosticRequestBody(requestCtx, provider, report, request, previewCfg)
+		if got, want := canonicalGeminiDiagnosticJSON(t, preview.Requests[i].Body), canonicalGeminiDiagnosticJSON(t, wantBody); got != want {
+			t.Fatalf("%s preview body drifted from diagnostic body builder:\ngot:  %s\nwant: %s", request.Name, got, want)
+		}
+		if got, want := preview.Requests[i].Route, geminiDiagnosticRequestRoute(request); got != want {
+			t.Fatalf("%s route = %q, want %q", request.Name, got, want)
+		}
+		if got, want := preview.Requests[i].URL, geminiDiagnosticRequestURL(report.Model, request); got != want {
+			t.Fatalf("%s url = %q, want %q", request.Name, got, want)
+		}
+	}
+}
+
+func canonicalGeminiDiagnosticJSON(t *testing.T, value any) string {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("json.Marshal(%T) error = %v", value, err)
+	}
+	return string(payload)
 }

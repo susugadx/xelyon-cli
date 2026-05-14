@@ -112,12 +112,20 @@ func OpenRouterMaxOutputPolicy(cfg *config.Config, model, catalogModel string) M
 
 // GeminiMaxOutputPolicy は Gemini doctor の max output 解決規則を返す。
 func GeminiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	if nonProviderCatalogModel("gemini", catalogModel) {
+		return MaxOutputPolicy{Source: "missing"}
+	}
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
 		Provider:             "gemini",
 		RequestModel:         model,
 		CatalogModel:         catalogModel,
 		ProviderDefaultKnown: true,
 	})
+}
+
+func nonProviderCatalogModel(provider, catalogModel string) bool {
+	catalogModel = strings.TrimSpace(catalogModel)
+	return catalogModel != "" && !IsProviderCatalogModelKnown(provider, catalogModel)
 }
 
 type maxOutputPolicyOptions struct {
@@ -268,12 +276,23 @@ func OpenRouterCatalogPolicy(cfg *config.Config, model, catalogModel string) Cat
 
 // GeminiCatalogPolicy は Gemini doctor 用の catalog policy snapshot を返す。
 func GeminiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	if nonProviderCatalogModel("gemini", catalogModel) {
+		return unknownProviderCatalogPolicy(catalogModel)
+	}
 	return NewCatalogPolicy(
 		catalogModel,
 		GeminiMaxOutputPolicy(cfg, model, catalogModel),
 		cost.GetPricingInfoForConfig(cfg, "gemini", model),
 		false,
 	)
+}
+
+func unknownProviderCatalogPolicy(catalogModel string) CatalogPolicy {
+	return CatalogPolicy{
+		CatalogModel: strings.TrimSpace(catalogModel),
+		MaxOutput:    MaxOutputPolicy{Source: "missing"},
+		Pricing:      cost.PricingInfo{PricingUnavailable: true},
+	}
 }
 
 // NewCatalogPolicy は providerごとの解決結果から共通 snapshot を作る。
