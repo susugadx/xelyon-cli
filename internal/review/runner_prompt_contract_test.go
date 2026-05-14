@@ -130,6 +130,7 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 		`Every root cause finding ID must be connected from "scope_coverage"`,
 		`"kind" must be one of "probe_command", "probe", "file", "diff", "git_status", "rule_file"`,
 		`"file", "diff", and "rule_file" refs require "path"`,
+		`Do not output top-level "computed_summary"; runner computes it after validation`,
 		`Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries`,
 		`Verdict contract`,
 		`"has_findings": "overall_verification_status" must be "verified" or "partially_verified"`,
@@ -150,6 +151,25 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 		if strings.Contains(prompt, forbid) {
 			t.Fatalf("report prompt contains dangling sample reference %q:\n%s", forbid, prompt)
 		}
+	}
+}
+
+func TestBuildReviewReportPromptDoesNotIncludeComputedSummaryInTopLevelSample(t *testing.T) {
+	prompt := buildReviewReportPrompt(
+		NewCurrentChangesRequest(""),
+		"diff evidence",
+		newNoProbeReviewProbePlanForTest(),
+		nil,
+		nil,
+		reviewRunnerPromptRedactor{},
+	)
+
+	if !strings.Contains(prompt, `Do not output top-level "computed_summary"; runner computes it after validation`) {
+		t.Fatalf("report prompt missing computed_summary prohibition:\n%s", prompt)
+	}
+	sample := extractReviewReportPromptTopLevelSampleForTest(t, prompt)
+	if strings.Contains(sample, `"computed_summary"`) {
+		t.Fatalf("report prompt top-level sample contains computed_summary:\n%s", sample)
 	}
 }
 
@@ -198,6 +218,21 @@ func TestBuildReviewReportRepairPromptIncludesRepairContract(t *testing.T) {
 		}
 	}
 	assertReviewReportPromptContainsScopeFindingLinkageContract(t, prompt)
+}
+
+func extractReviewReportPromptTopLevelSampleForTest(t *testing.T, prompt string) string {
+	t.Helper()
+
+	start := strings.Index(prompt, "- Top-level object:")
+	if start < 0 {
+		t.Fatalf("report prompt missing top-level object sample:\n%s", prompt)
+	}
+	endMarker := "\n- There is no top-level"
+	end := strings.Index(prompt[start:], endMarker)
+	if end < 0 {
+		t.Fatalf("report prompt missing top-level object sample end marker:\n%s", prompt)
+	}
+	return prompt[start : start+end]
 }
 
 func assertReviewReportPromptContainsScopeFindingLinkageContract(t *testing.T, prompt string) {

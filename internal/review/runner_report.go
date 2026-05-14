@@ -16,6 +16,8 @@ func finalizeReviewRunnerReport(report ReviewReport, plan ReviewProbePlan, trust
 	if err := ValidateReviewReportAgainstProbePlan(report, plan, trustedProbeSummaries); err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner finalize report: %w", err)
 	}
+	computedSummary := ComputeReviewReportComputedSummary(report, probeSummaries)
+	report.ComputedSummary = &computedSummary
 	return report, nil
 }
 

@@ -69,6 +69,26 @@ func TestDecodeReviewReportJSONRejectsInvalidValidatedReport(t *testing.T) {
 	}
 }
 
+func TestDecodeReviewReportJSONAcceptsComputedSummaryInFinalReport(t *testing.T) {
+	report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
+	report.ComputedSummary = &ReviewReportComputedSummary{
+		RootCauseGroupCount: 1,
+		FindingCount:        1,
+	}
+	data := mustMarshalReviewReportForDecodeTest(t, report)
+
+	got, err := DecodeReviewReportJSON(data)
+	if err != nil {
+		t.Fatalf("DecodeReviewReportJSON() error = %v, want nil", err)
+	}
+	if got.ComputedSummary == nil {
+		t.Fatal("ComputedSummary = nil, want decoded final report computed_summary")
+	}
+	if got.ComputedSummary.FindingCount != 1 {
+		t.Fatalf("ComputedSummary.FindingCount = %d, want 1", got.ComputedSummary.FindingCount)
+	}
+}
+
 func TestDecodeReviewReportJSONRejectsScopeCoverageSemanticContract(t *testing.T) {
 	report := newCleanReportForValidationTest(ReviewVerificationVerified)
 	report.ScopeCoverage = newCleanScopeCoverageForTest()

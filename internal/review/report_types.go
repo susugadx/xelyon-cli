@@ -50,22 +50,46 @@ var reviewGroupSeverities = []ReviewGroupSeverity{
 	ReviewGroupSeverityInfo,
 }
 
-// ReviewReport は `/review` Pass2 LLM の最終出力 schema を表す。
+// ReviewReport は `/review` の最終 report schema を表す。
 // decode/validate の契約は report 側が owner し、probe 実行や evidence 収集は扱わない。
 type ReviewReport struct {
-	SchemaVersion             string                     `json:"schema_version"`
-	TargetKind                TargetKind                 `json:"target_kind"`
-	CustomInstructions        string                     `json:"custom_instructions,omitempty"`
-	GeneratedAt               time.Time                  `json:"generated_at"`
-	OverallVerificationStatus ReviewVerificationStatus   `json:"overall_verification_status"`
-	Verdict                   ReviewVerdict              `json:"verdict"`
-	Summary                   string                     `json:"summary,omitempty"`
-	RootCauseGroups           []ReviewRootCauseGroup     `json:"root_cause_groups,omitempty"`
-	ProbeSummaries            []ReviewProbeSummary       `json:"probe_summaries,omitempty"`
-	CheckedSurfaces           []ReviewSurfaceCoverage    `json:"checked_surfaces,omitempty"`
-	UnverifiedSurfaces        []ReviewSurfaceCoverage    `json:"unverified_surfaces,omitempty"`
-	ResidualRisks             []ReviewResidualRisk       `json:"residual_risks,omitempty"`
-	ScopeCoverage             *ReviewReportScopeCoverage `json:"scope_coverage,omitempty"`
+	SchemaVersion             string                       `json:"schema_version"`
+	TargetKind                TargetKind                   `json:"target_kind"`
+	CustomInstructions        string                       `json:"custom_instructions,omitempty"`
+	GeneratedAt               time.Time                    `json:"generated_at"`
+	OverallVerificationStatus ReviewVerificationStatus     `json:"overall_verification_status"`
+	Verdict                   ReviewVerdict                `json:"verdict"`
+	Summary                   string                       `json:"summary,omitempty"`
+	RootCauseGroups           []ReviewRootCauseGroup       `json:"root_cause_groups,omitempty"`
+	ProbeSummaries            []ReviewProbeSummary         `json:"probe_summaries,omitempty"`
+	CheckedSurfaces           []ReviewSurfaceCoverage      `json:"checked_surfaces,omitempty"`
+	UnverifiedSurfaces        []ReviewSurfaceCoverage      `json:"unverified_surfaces,omitempty"`
+	ResidualRisks             []ReviewResidualRisk         `json:"residual_risks,omitempty"`
+	ScopeCoverage             *ReviewReportScopeCoverage   `json:"scope_coverage,omitempty"`
+	ComputedSummary           *ReviewReportComputedSummary `json:"computed_summary,omitempty"`
+}
+
+// ReviewReportComputedSummary は runner が validation 後に算出する派生 count を表す。
+// LLM/model 出力の入力 schema ではない。
+type ReviewReportComputedSummary struct {
+	RootCauseGroupCount       int `json:"root_cause_group_count"`
+	FindingCount              int `json:"finding_count"`
+	CheckedSurfaceCount       int `json:"checked_surface_count"`
+	FindingSurfaceCount       int `json:"finding_surface_count"`
+	UnverifiedSurfaceCount    int `json:"unverified_surface_count"`
+	ResidualSurfaceCount      int `json:"residual_surface_count"`
+	CandidateRiskCount        int `json:"candidate_risk_count"`
+	DismissedRiskCount        int `json:"dismissed_risk_count"`
+	FindingRiskCount          int `json:"finding_risk_count"`
+	UnverifiedRiskCount       int `json:"unverified_risk_count"`
+	ResidualRiskCount         int `json:"residual_risk_count"`
+	NewReportPassFindingCount int `json:"new_report_pass_finding_count"`
+	ProbeCount                int `json:"probe_count"`
+	PassedProbeCount          int `json:"passed_probe_count"`
+	FailedProbeCount          int `json:"failed_probe_count"`
+	TimedOutProbeCount        int `json:"timed_out_probe_count"`
+	BlockedProbeCount         int `json:"blocked_probe_count"`
+	MutatedWorktreeProbeCount int `json:"mutated_worktree_probe_count"`
 }
 
 // ReviewRootCauseGroup は同一根本原因に紐づく finding 群をまとめる。

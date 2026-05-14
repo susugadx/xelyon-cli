@@ -157,7 +157,7 @@ func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewReque
 }
 
 func finalizeReviewRunnerReportModelOutput(content string, plan ReviewProbePlan, trustedProbeSummaries []ReviewProbeSummary, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
-	report, err := decodeReviewReportStrictJSON([]byte(content))
+	report, err := decodeReviewReportModelStrictJSON([]byte(content))
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner decode report: %w", err)
 	}

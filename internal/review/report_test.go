@@ -176,6 +176,26 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 				},
 			},
 		},
+		ComputedSummary: &ReviewReportComputedSummary{
+			RootCauseGroupCount:       1,
+			FindingCount:              2,
+			CheckedSurfaceCount:       0,
+			FindingSurfaceCount:       1,
+			UnverifiedSurfaceCount:    0,
+			ResidualSurfaceCount:      0,
+			CandidateRiskCount:        1,
+			DismissedRiskCount:        0,
+			FindingRiskCount:          1,
+			UnverifiedRiskCount:       0,
+			ResidualRiskCount:         0,
+			NewReportPassFindingCount: 1,
+			ProbeCount:                1,
+			PassedProbeCount:          0,
+			FailedProbeCount:          0,
+			TimedOutProbeCount:        0,
+			BlockedProbeCount:         0,
+			MutatedWorktreeProbeCount: 1,
+		},
 	}
 
 	if err := ValidateReviewReport(original); err != nil {
@@ -424,6 +444,9 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 	}
 	if _, exists := parsed["scope_coverage"]; exists {
 		t.Fatal("scope_coverage should be omitted when nil")
+	}
+	if _, exists := parsed["computed_summary"]; exists {
+		t.Fatal("computed_summary should be omitted when nil")
 	}
 	if rawVerdict, exists := parsed["verdict"]; !exists {
 		t.Fatal("verdict should be present")

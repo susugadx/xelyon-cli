@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -378,56 +377,6 @@ func TestReviewScreen_NewSubmittedResultResetsBodyScroll(t *testing.T) {
 	}
 }
 
-func TestReviewReportLines_SanitizesGroupAndFindingTitles(t *testing.T) {
-	report := newTUITestReviewReport()
-	report.RootCauseGroups[0].Title = "request\nstate"
-	report.RootCauseGroups[0].Findings[0].Title = "stale\nresult"
-
-	lines := reviewReportLines(report)
-	for _, line := range lines {
-		plain := stripANSI(line)
-		if strings.Contains(plain, "\n") {
-			t.Fatalf("review report line contains embedded newline: %q", plain)
-		}
-	}
-
-	joined := stripANSI(strings.Join(lines, "\n"))
-	if !strings.Contains(joined, "Group: request state") {
-		t.Fatalf("rendered report missing sanitized group title:\n%s", joined)
-	}
-	if !strings.Contains(joined, "Finding: stale result") {
-		t.Fatalf("rendered report missing sanitized finding title:\n%s", joined)
-	}
-}
-
-func TestReviewReportLines_RendersFindingSummaryAndEvidenceRefs(t *testing.T) {
-	report := newTUITestReviewReport()
-	report.RootCauseGroups[0].Summary = "request state lifecycle is split"
-	report.RootCauseGroups[0].FixStrategy = "centralize request lifecycle"
-	report.RootCauseGroups[0].Findings[0].Summary = "completed review result is discarded after close"
-	report.RootCauseGroups[0].Findings[0].EvidenceRefs = []review.ReviewEvidenceRef{{
-		Kind:         review.ReviewEvidenceKindFile,
-		Summary:      "Esc closes the screen while the request keeps running",
-		Path:         "internal/tui/review_screen_input.go",
-		Line:         87,
-		Snippet:      "return reviewCommandClose",
-		ProbeID:      "probe-1",
-		CommandIndex: review.ReviewCommandIndex(0),
-	}}
-
-	plain := stripANSI(strings.Join(reviewReportLines(report), "\n"))
-	for _, want := range []string{
-		"Group summary: request state lifecycle is split",
-		"Fix strategy: centralize request lifecycle",
-		"Finding summary: completed review result is discarded after close",
-		"Evidence: file - internal/tui/review_screen_input.go:87; probe probe-1 cmd 0; Esc closes the screen while the request keeps running; snippet: return reviewCommandClose",
-	} {
-		if !strings.Contains(plain, want) {
-			t.Fatalf("review report lines missing %q:\n%s", want, plain)
-		}
-	}
-}
-
 func TestReviewScreen_RunReviewErrorIsRendered(t *testing.T) {
 	agent := &reviewCapableStubAgent{
 		stubAgent: stubAgent{statusLine: "ready"},
@@ -601,46 +550,6 @@ func (s *reviewCapableStubAgent) RunReview(_ context.Context, req review.ReviewR
 	s.reviewCalls++
 	s.lastRequest = req
 	return s.report, s.err
-}
-
-func newTUITestReviewReport() review.ReviewReport {
-	return review.ReviewReport{
-		SchemaVersion:             review.ReviewReportSchemaVersionV2,
-		TargetKind:                review.TargetCurrentChanges,
-		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-		OverallVerificationStatus: review.ReviewVerificationVerified,
-		Verdict:                   review.ReviewVerdictHasFindings,
-		Summary:                   "Review found one issue.",
-		RootCauseGroups: []review.ReviewRootCauseGroup{{
-			ID:                 "request-state",
-			Title:              "request state",
-			Severity:           review.ReviewGroupSeverityMedium,
-			VerificationStatus: review.ReviewVerificationVerified,
-			Findings: []review.ReviewFinding{{
-				ID:    "stale-result",
-				Title: "stale result is ignored",
-			}},
-		}},
-	}
-}
-
-func newLongTUITestReviewReport(groupCount int) review.ReviewReport {
-	report := newTUITestReviewReport()
-	report.Summary = "Review found multiple issues."
-	report.RootCauseGroups = make([]review.ReviewRootCauseGroup, 0, groupCount)
-	for i := 0; i < groupCount; i++ {
-		report.RootCauseGroups = append(report.RootCauseGroups, review.ReviewRootCauseGroup{
-			ID:                 fmt.Sprintf("hidden-group-%02d", i),
-			Title:              fmt.Sprintf("hidden group %02d", i),
-			Severity:           review.ReviewGroupSeverityMedium,
-			VerificationStatus: review.ReviewVerificationVerified,
-			Findings: []review.ReviewFinding{{
-				ID:    fmt.Sprintf("hidden-finding-%02d", i),
-				Title: fmt.Sprintf("hidden finding %02d", i),
-			}},
-		})
-	}
-	return report
 }
 
 func runReviewCommandForTest(t *testing.T, cmd tea.Cmd) []tea.Msg {

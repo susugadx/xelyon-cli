@@ -165,6 +165,84 @@ func TestFinalizeReviewRunnerReportKeepsEmptyTrustedProbeSummariesNil(t *testing
 	}
 }
 
+func TestFinalizeReviewRunnerReportModelOutputRejectsComputedSummary(t *testing.T) {
+	report := newRunnerCleanReportForTest(nil)
+	report.ComputedSummary = &ReviewReportComputedSummary{FindingCount: 99}
+	data := mustMarshalReviewReportForRunnerTest(t, report)
+
+	_, err := finalizeReviewRunnerReportModelOutput(string(data), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	if err == nil {
+		t.Fatal("finalizeReviewRunnerReportModelOutput() error = nil, want computed_summary rejection")
+	}
+	if !strings.Contains(err.Error(), "computed_summary") {
+		t.Fatalf("finalizeReviewRunnerReportModelOutput() error = %q, want computed_summary", err.Error())
+	}
+}
+
+func TestFinalizeReviewRunnerReportComputesSummaryForCleanReport(t *testing.T) {
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	if err != nil {
+		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
+	}
+	assertReviewReportComputedSummaryPointerForTest(t, got.ComputedSummary, ReviewReportComputedSummary{
+		CheckedSurfaceCount: 1,
+		CandidateRiskCount:  1,
+		DismissedRiskCount:  1,
+	})
+}
+
+func TestFinalizeReviewRunnerReportComputesSummaryForFindingRisk(t *testing.T) {
+	got, err := finalizeReviewRunnerReport(newPlanAwareHasFindingsReportForValidationTest(), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	if err != nil {
+		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
+	}
+	assertReviewReportComputedSummaryPointerForTest(t, got.ComputedSummary, ReviewReportComputedSummary{
+		RootCauseGroupCount: 1,
+		FindingCount:        1,
+		CheckedSurfaceCount: 1,
+		CandidateRiskCount:  1,
+		FindingRiskCount:    1,
+	})
+}
+
+func TestFinalizeReviewRunnerReportComputesBlockedProbeCount(t *testing.T) {
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), []ReviewProbeSummary{
+		{
+			ProbeID: "probe-1",
+			Mode:    ReviewProbeHostReadOnly,
+			Status:  ReviewProbeBlocked,
+		},
+	}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	if err != nil {
+		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
+	}
+	assertReviewReportComputedSummaryPointerForTest(t, got.ComputedSummary, ReviewReportComputedSummary{
+		CheckedSurfaceCount: 1,
+		CandidateRiskCount:  1,
+		DismissedRiskCount:  1,
+		ProbeCount:          1,
+		BlockedProbeCount:   1,
+	})
+}
+
+func TestFinalizeReviewRunnerReportOverwritesPreexistingComputedSummary(t *testing.T) {
+	report := newRunnerCleanReportForTest(nil)
+	report.ComputedSummary = &ReviewReportComputedSummary{
+		FindingCount:              99,
+		MutatedWorktreeProbeCount: 99,
+	}
+
+	got, err := finalizeReviewRunnerReport(report, newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	if err != nil {
+		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
+	}
+	assertReviewReportComputedSummaryPointerForTest(t, got.ComputedSummary, ReviewReportComputedSummary{
+		CheckedSurfaceCount: 1,
+		CandidateRiskCount:  1,
+		DismissedRiskCount:  1,
+	})
+}
+
 func newRunnerReportRedactorForTest(t *testing.T, repoRoot string, probeResults []ReviewProbeResult) reviewRunnerPromptRedactor {
 	t.Helper()
 

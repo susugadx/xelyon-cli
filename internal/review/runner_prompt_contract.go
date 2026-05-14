@@ -167,6 +167,7 @@ func reviewReportPromptContract() string {
     }
   }
 - There is no top-level "findings" or "has_findings" field. Findings must be nested under "root_cause_groups[].findings".
+- Do not output top-level "computed_summary"; runner computes it after validation from the validated report and trusted probe summaries.
 - "schema_version" must be %q and "target_kind" must be %q.
 - "verdict" must be one of %q, %q, %q.
 - "overall_verification_status" and group "verification_status" must be one of %q, %q, %q, %q, %q.

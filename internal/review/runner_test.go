@@ -42,11 +42,11 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	}
 	plan := newRunnerProbePlanForTest("probe-1")
 	probeResults := []ReviewProbeResult{probeResult}
-	report := newRunnerCleanReportForTest(newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, probeResults))
+	modelReport := newRunnerCleanReportForTest(newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, probeResults))
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, report))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, modelReport))},
 		},
 		events: &events,
 	}
@@ -57,8 +57,9 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 
-	if !reflect.DeepEqual(got, report) {
-		t.Fatalf("Run() report = %#v, want %#v", got, report)
+	wantReport := withComputedSummaryForRunnerTest(modelReport, BuildReviewProbeSummaries(probeResults))
+	if !reflect.DeepEqual(got, wantReport) {
+		t.Fatalf("Run() report = %#v, want %#v", got, wantReport)
 	}
 	assertStringSliceEqualForRunnerTest(t, events, []string{
 		"evidence",
@@ -321,11 +322,11 @@ func TestReviewRunnerRunNoProbeReasonSkipsProbeRunner(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
 	plan := newRunnerNoProbePlanForTest()
-	report := newRunnerCleanReportForTest([]ReviewProbeSummary{})
+	modelReport := newRunnerCleanReportForTest([]ReviewProbeSummary{})
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, report))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, modelReport))},
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -334,8 +335,9 @@ func TestReviewRunnerRunNoProbeReasonSkipsProbeRunner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if !reflect.DeepEqual(got, report) {
-		t.Fatalf("Run() report = %#v, want %#v", got, report)
+	wantReport := withComputedSummaryForRunnerTest(modelReport, nil)
+	if !reflect.DeepEqual(got, wantReport) {
+		t.Fatalf("Run() report = %#v, want %#v", got, wantReport)
 	}
 	if got, want := len(probes.calls), 0; got != want {
 		t.Fatalf("probe calls = %d, want %d", got, want)
@@ -1207,6 +1209,12 @@ func newRunnerBlockedReportForTest(probeSummaries []ReviewProbeSummary) ReviewRe
 	report.OverallVerificationStatus = ReviewVerificationBlockedOrInconclusive
 	report.Verdict = ReviewVerdictBlocked
 	report.Summary = "Review blocked by probe execution."
+	return report
+}
+
+func withComputedSummaryForRunnerTest(report ReviewReport, probeSummaries []ReviewProbeSummary) ReviewReport {
+	computedSummary := ComputeReviewReportComputedSummary(report, probeSummaries)
+	report.ComputedSummary = &computedSummary
 	return report
 }
 
