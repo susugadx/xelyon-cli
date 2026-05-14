@@ -21,7 +21,16 @@ func (a *Agent) requestContext(ctx context.Context) context.Context {
 	if a != nil && a.isCompactedMode && len(a.compactedItems) > 0 {
 		ctx = api.WithCompactedInputItems(ctx, a.compactedItems)
 	}
+	if blocks := a.buildActiveContextBlocks(); len(blocks) > 0 {
+		ctx = api.WithActiveContextBlocks(ctx, blocks)
+	} else {
+		ctx = api.WithoutActiveContextBlocks(ctx)
+	}
 	return ctx
+}
+
+func (a *Agent) requestContextWithoutActiveContext(ctx context.Context) context.Context {
+	return api.WithoutActiveContextBlocks(a.requestContext(ctx))
 }
 
 func (a *Agent) parseToolCalls(response string) []*tools.ToolCall {

@@ -28,6 +28,16 @@ type RuntimeTaskState struct {
 	LastPassedTests  LastPassedTests
 }
 
+// IsEmpty は model-facing snapshot に載せる runtime task fact が未記録かを返す。
+func (s RuntimeTaskState) IsEmpty() bool {
+	return s.ChangedFiles.Len() == 0 &&
+		s.TouchedFiles.Len() == 0 &&
+		s.Evidence.Len() == 0 &&
+		s.RecommendedReads.Len() == 0 &&
+		s.LastFailedTests.Len() == 0 &&
+		s.LastPassedTests.Len() == 0
+}
+
 func (s RuntimeTaskState) clone() RuntimeTaskState {
 	return RuntimeTaskState{
 		ChangedFiles:     s.ChangedFiles.clone(),

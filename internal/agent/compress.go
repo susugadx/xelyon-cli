@@ -67,7 +67,7 @@ func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) err
 
 	compressModel := a.getCompressionModel()
 	finishResponseContext := a.suspendResponseContinuationForLocalCompression(!opts.skipPersistenceOnSuccess)
-	summary, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), "", []api.Message{
+	summary, err := a.CurrentProvider.ChatWithTools(a.requestContextWithoutActiveContext(ctx), "", []api.Message{
 		{Role: "user", Content: summaryPrompt},
 	}, compressModel)
 	if err != nil {

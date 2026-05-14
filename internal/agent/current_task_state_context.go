@@ -1,0 +1,85 @@
+package agent
+
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
+)
+
+const currentTaskStateActiveContextName = "current_task_state"
+
+func (a *Agent) buildActiveContextBlocks() []api.ActiveContextBlock {
+	block, ok := a.buildCurrentTaskStateBlock()
+	if !ok {
+		return nil
+	}
+	return []api.ActiveContextBlock{block}
+}
+
+func (a *Agent) buildCurrentTaskStateBlock() (api.ActiveContextBlock, bool) {
+	if a == nil || a.Runtime == nil {
+		return api.ActiveContextBlock{}, false
+	}
+	if !a.Runtime.Options.EnableCurrentTaskStateContext || a.Runtime.TaskLedger == nil {
+		return api.ActiveContextBlock{}, false
+	}
+
+	state := a.Runtime.TaskLedger.Snapshot()
+	if state.IsEmpty() {
+		return api.ActiveContextBlock{}, false
+	}
+
+	content := ledger.RenderCurrentTaskStateSnapshot(state, ledger.DefaultSnapshotRenderOptions())
+	if strings.TrimSpace(content) == "" {
+		return api.ActiveContextBlock{}, false
+	}
+	return api.ActiveContextBlock{
+		Name:    currentTaskStateActiveContextName,
+		Content: content,
+	}, true
+}
+
+func (a *Agent) estimateActiveContextTokens() int {
+	if !a.shouldCountActiveContextTokens() {
+		return 0
+	}
+	total := 0
+	for _, block := range a.buildActiveContextBlocks() {
+		total += token.EstimateTokenCountForModel(a.CurrentModel, block.Content)
+	}
+	return total
+}
+
+func (a *Agent) shouldCountActiveContextTokens() bool {
+	if a == nil || a.Runtime == nil || !a.Runtime.Options.EnableCurrentTaskStateContext {
+		return false
+	}
+	cfg := a.cfg()
+	switch a.activeModelProviderConfigKey(cfg) {
+	case "azure":
+		return true
+	case "openai":
+		return cfg.IsProviderResponsesAPIModel("openai", a.CurrentModel)
+	default:
+		return false
+	}
+}
+
+func (a *Agent) resetModelFacingTaskLedger() {
+	if a == nil || a.Runtime == nil || !a.Runtime.Options.EnableCurrentTaskStateContext || a.Runtime.TaskLedger == nil {
+		return
+	}
+	a.Runtime.TaskLedger.Reset()
+}
+
+func (a *Agent) clearResponseContextForActiveContextRequest() {
+	if len(a.buildActiveContextBlocks()) == 0 {
+		return
+	}
+	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+		ridProvider.SetResponseID("")
+	}
+	clearSavedResponseContext(a.session)
+}

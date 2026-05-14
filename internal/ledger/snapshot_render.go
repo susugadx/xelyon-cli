@@ -53,7 +53,7 @@ func RenderCurrentTaskStateSnapshot(state RuntimeTaskState, opts SnapshotRenderO
 	b.WriteByte('\n')
 	b.WriteString("CurrentTaskState:\n")
 
-	if runtimeTaskStateEmpty(state) {
+	if state.IsEmpty() {
 		b.WriteString("- No runtime task facts recorded yet.\n")
 		b.WriteString(CurrentTaskStateEndMarker)
 		return b.String()
@@ -87,15 +87,6 @@ func snapshotDefaultLimit(value, fallback int) int {
 		return fallback
 	}
 	return value
-}
-
-func runtimeTaskStateEmpty(state RuntimeTaskState) bool {
-	return state.ChangedFiles.Len() == 0 &&
-		state.TouchedFiles.Len() == 0 &&
-		state.Evidence.Len() == 0 &&
-		state.RecommendedReads.Len() == 0 &&
-		state.LastFailedTests.Len() == 0 &&
-		state.LastPassedTests.Len() == 0
 }
 
 func renderSnapshotPathSection(b *strings.Builder, title string, paths []string, limit int) {

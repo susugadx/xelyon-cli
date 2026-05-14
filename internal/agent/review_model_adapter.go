@@ -47,6 +47,7 @@ func (a *Agent) reviewModelRequestContext(ctx context.Context) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	ctx = api.WithoutActiveContextBlocks(ctx)
 	ctx = tools.WithRegistry(ctx, a.registry())
 	ctx = tools.WithConfig(ctx, a.cfg())
 	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))

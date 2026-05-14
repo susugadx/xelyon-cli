@@ -14,6 +14,7 @@ func handleTokensCommand(agent *Agent) bool {
 	totalTokens := agent.EstimateTokens()
 	systemTokens := agent.EstimateSystemPromptTokens()
 	historyTokens := agent.EstimateHistoryTokens()
+	activeContextTokens := agent.EstimateActiveContextTokens()
 	limit := agent.currentModelTokenLimit(cfg)
 	percentage := float64(totalTokens) / float64(limit) * 100
 
@@ -61,6 +62,10 @@ func handleTokensCommand(agent *Agent) bool {
 
 	_, _ = fmt.Fprintf(out, "    History:       %s tokens (%.1f%%)  [%d messages]\n",
 		formatNumber(historyTokens), float64(historyTokens)/float64(limit)*100, len(agent.History))
+	if activeContextTokens > 0 {
+		_, _ = fmt.Fprintf(out, "    Active Context: %s tokens (%.1f%%)\n",
+			formatNumber(activeContextTokens), float64(activeContextTokens)/float64(limit)*100)
+	}
 
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "🤖 Model:")

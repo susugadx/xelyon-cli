@@ -101,6 +101,82 @@ func TestAgent_ResetConversationState_ClearsRuntimeAndSessionState(t *testing.T)
 	}
 }
 
+func TestAgent_ResetConversationState_ClearsModelFacingTaskLedger(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.Runtime.Options.EnableCurrentTaskStateContext = true
+	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
+	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
+		t.Fatal("test setup produced empty task ledger")
+	}
+
+	if err := agent.resetConversationState(); err != nil {
+		t.Fatalf("resetConversationState() error = %v", err)
+	}
+	if !agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
+		t.Fatalf("task ledger should be reset when current task state is model-facing: %#v", agent.Runtime.TaskLedger.Snapshot())
+	}
+}
+
+func TestAgent_ResetConversationState_PreservesTaskLedgerWhenCurrentTaskStateContextDisabled(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
+
+	if err := agent.resetConversationState(); err != nil {
+		t.Fatalf("resetConversationState() error = %v", err)
+	}
+	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
+		t.Fatal("task ledger was reset even though current task state context is disabled")
+	}
+}
+
+func TestAgent_ApplyLoadedSession_ClearsModelFacingTaskLedger(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.Runtime.Options.EnableCurrentTaskStateContext = true
+	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
+
+	session := history.NewSession("test-model")
+	session.AddMessage("user", "loaded request", "test-model")
+
+	agent.applyLoadedSession(session)
+
+	if !agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
+		t.Fatalf("task ledger should be reset when loading a session with model-facing task state: %#v", agent.Runtime.TaskLedger.Snapshot())
+	}
+	if got := api.ActiveContextBlocksFromContext(agent.requestContext(context.Background())); got != nil {
+		t.Fatalf("ActiveContextBlocksFromContext() = %#v, want nil after session load resets task ledger", got)
+	}
+}
+
+func TestAgent_ApplyLoadedSession_PreservesTaskLedgerWhenCurrentTaskStateContextDisabled(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
+
+	session := history.NewSession("test-model")
+	session.AddMessage("user", "loaded request", "test-model")
+
+	agent.applyLoadedSession(session)
+
+	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
+		t.Fatal("task ledger was reset on session load even though current task state context is disabled")
+	}
+}
+
 func TestAgent_RestoreSessionConversation_ReplacesRuntimeMirrors(t *testing.T) {
 	disableColors(t)
 

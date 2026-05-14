@@ -24,6 +24,8 @@ func TestGeminiApplyPatchRepairSuccess(t *testing.T) {
 
 	provider := &sequenceMockProvider{name: "gemini", responses: []string{validAddFilePatch}}
 	agent := newGeminiRepairTestAgent(t, provider)
+	agent.Runtime.Options.EnableCurrentTaskStateContext = true
+	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
 
 	tc := applyPatchCall(invalidAddFilePatch)
 	result, change := agent.executeToolWithSpinner(context.Background(), tc)
@@ -59,6 +61,9 @@ func TestGeminiApplyPatchRepairSuccess(t *testing.T) {
 	}
 	if got := tools.RegistryFromContext(provider.contexts[0]); got != agent.registry() {
 		t.Fatal("repair context should carry agent tool registry")
+	}
+	if got := api.ActiveContextBlocksFromContext(provider.contexts[0]); got != nil {
+		t.Fatalf("repair active context = %#v, want nil for isolated repair model call", got)
 	}
 
 	obs := agent.Stats.ToolObs

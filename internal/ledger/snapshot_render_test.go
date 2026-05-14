@@ -17,6 +17,20 @@ func TestRenderCurrentTaskStateSnapshot_EmptyState(t *testing.T) {
 	)
 }
 
+func TestRuntimeTaskStateIsEmpty_MatchesSnapshotRenderer(t *testing.T) {
+	empty := RuntimeTaskState{}
+	if !empty.IsEmpty() {
+		t.Fatal("empty RuntimeTaskState IsEmpty() = false, want true")
+	}
+	assertSnapshotRenderContains(t, RenderCurrentTaskStateSnapshot(empty, SnapshotRenderOptions{}), "- No runtime task facts recorded yet.")
+
+	populated := populatedSnapshotRenderState()
+	if populated.IsEmpty() {
+		t.Fatal("populated RuntimeTaskState IsEmpty() = true, want false")
+	}
+	assertSnapshotRenderOmits(t, RenderCurrentTaskStateSnapshot(populated, SnapshotRenderOptions{}), "- No runtime task facts recorded yet.")
+}
+
 func TestRenderCurrentTaskStateSnapshot_CompactFormat(t *testing.T) {
 	state := populatedSnapshotRenderState()
 

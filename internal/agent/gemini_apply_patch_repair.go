@@ -87,7 +87,7 @@ func (a *Agent) shouldRepairGeminiApplyPatch(tc *tools.ToolCall) bool {
 }
 
 func (a *Agent) requestGeminiApplyPatchRepair(ctx context.Context, originalPatch, errorResult string) (string, error) {
-	ctx = a.requestContext(ctx)
+	ctx = a.requestContextWithoutActiveContext(ctx)
 	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	ctx = api.WithProviderCacheNamespace(ctx, geminiApplyPatchRepairCacheNamespace)

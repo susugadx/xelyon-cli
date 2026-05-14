@@ -108,3 +108,21 @@ func TestRequestContext_IncludesCompactedInputItems(t *testing.T) {
 		t.Fatalf("compacted input item = %#v, want compact-data", got[0])
 	}
 }
+
+func TestCompressWithCompactAPI_DoesNotSendCurrentTaskStateActiveContext(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", supportsCompact: true}
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", config.DefaultConfig())
+	agent.Runtime.Options.EnableCurrentTaskStateContext = true
+	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
+	agent.History = []api.Message{{Role: "user", Content: "message"}}
+
+	if err := agent.CompressWithCompactAPI(context.Background()); err != nil {
+		t.Fatalf("CompressWithCompactAPI() error = %v", err)
+	}
+	if provider.capturedCompactActiveContext != 0 {
+		t.Fatalf("compact active context count = %d, want 0", provider.capturedCompactActiveContext)
+	}
+	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
+		t.Fatal("CompressWithCompactAPI() should not reset the runtime task ledger")
+	}
+}

@@ -19,12 +19,15 @@ func newModelIdentity(requestModel, catalogModel string) modelIdentity {
 
 func (p *Provider) buildChatResponsesRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) responsesRequest {
 	modelIdentity := azureModelIdentity(ctx, model)
+	activeContext := openairesponses.ActiveContextFromContext(ctx)
 	previousResponseID := azurePreviousResponseIDForRequest(ctx, p.GetResponseID())
+	previousResponseID = openairesponses.PreviousResponseIDForActiveContext(previousResponseID, activeContext)
 	serverCompactionDecision := openairesponses.ResolveServerCompactionDecision(ctx, "azure", modelIdentity, previousResponseID)
 	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
 		Base:               p.newBaseResponsesRequestOptions(ctx, modelIdentity, serverCompactionDecision),
 		SystemPrompt:       systemPrompt,
 		CompactedInput:     api.CompactedInputItemsFromContext(ctx),
+		ActiveContext:      activeContext,
 		History:            history,
 		PreviousResponseID: previousResponseID,
 	})
@@ -43,6 +46,7 @@ func (p *Provider) buildImageResponsesRequest(
 		Base:           p.newBaseResponsesRequestOptions(ctx, modelIdentity, openairesponses.ServerCompactionDecision{}),
 		SystemPrompt:   systemPrompt,
 		CompactedInput: api.CompactedInputItemsFromContext(ctx),
+		ActiveContext:  openairesponses.ActiveContextFromContext(ctx),
 		History:        history,
 		UserMessage:    userMessage,
 		Image:          image,

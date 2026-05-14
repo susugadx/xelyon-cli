@@ -49,6 +49,7 @@ func (a *Agent) prepareChatRequest(req *chatRequest) {
 
 	req.input = a.AddGitHubHint(req.input)
 	a.refreshProjectPrompt(req.input)
+	a.clearResponseContextForActiveContextRequest()
 
 	if a.session != nil {
 		a.appendSessionMessage("user", req.input, a.CurrentModel)

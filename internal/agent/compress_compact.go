@@ -39,7 +39,7 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	// Compact API 呼び出し
 	compactModel := a.getCompressionModel()
 	finishResponseContext := a.suspendResponseContinuationForLocalCompression(true)
-	result, err := compactProvider.CompactHistory(a.requestContext(ctx), input, compactModel, a.SystemPrompt)
+	result, err := compactProvider.CompactHistory(a.requestContextWithoutActiveContext(ctx), input, compactModel, a.SystemPrompt)
 	if err != nil {
 		finishResponseContext(false, nil)
 		return fmt.Errorf("compact API failed: %w", err)

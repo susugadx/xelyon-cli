@@ -11,12 +11,14 @@ import (
 
 type capturingMockProvider struct {
 	capturedHistory []api.Message
+	capturedContext context.Context
 }
 
 func (m *capturingMockProvider) Name() string                   { return "test" }
 func (m *capturingMockProvider) SupportsImages() bool           { return false }
 func (m *capturingMockProvider) IsFunctionCallingEnabled() bool { return true }
-func (m *capturingMockProvider) ChatWithTools(_ context.Context, _ string, history []api.Message, _ string) (string, error) {
+func (m *capturingMockProvider) ChatWithTools(ctx context.Context, _ string, history []api.Message, _ string) (string, error) {
+	m.capturedContext = ctx
 	m.capturedHistory = history
 	return "Summary of conversation", nil
 }
@@ -76,5 +78,28 @@ func TestCompressHistory_UsesCompressionModelDefault(t *testing.T) {
 	}
 	if provider.capturedChatModel != "gpt-5.4-mini" {
 		t.Fatalf("CompressHistory() model = %q, want %q", provider.capturedChatModel, "gpt-5.4-mini")
+	}
+}
+
+func TestCompressHistory_DoesNotSendCurrentTaskStateActiveContext(t *testing.T) {
+	provider := &capturingMockProvider{}
+	agent := NewAgent("gpt-5.4", provider, false)
+	t.Cleanup(agent.Cleanup)
+	agent.Runtime.Options.EnableCurrentTaskStateContext = true
+	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
+	agent.History = []api.Message{
+		{Role: "user", Content: "old message"},
+		{Role: "assistant", Content: "old response"},
+		{Role: "user", Content: "latest message"},
+	}
+
+	if err := agent.CompressHistory(1); err != nil {
+		t.Fatalf("CompressHistory() error = %v", err)
+	}
+	if got := api.ActiveContextBlocksFromContext(provider.capturedContext); got != nil {
+		t.Fatalf("compression summary active context = %#v, want nil", got)
+	}
+	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
+		t.Fatal("CompressHistory() should not reset the runtime task ledger")
 	}
 }
