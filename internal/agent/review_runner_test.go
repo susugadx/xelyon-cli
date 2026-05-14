@@ -156,6 +156,8 @@ func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 			)), nil
 		case 1:
 			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
+		case 2:
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
 		default:
 			t.Fatalf("unexpected provider call %d", call)
 			return "", nil
@@ -173,8 +175,8 @@ func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 	if report.Verdict != review.ReviewVerdictClean {
 		t.Fatalf("report verdict = %q, want clean", report.Verdict)
 	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider calls = %d, want 2", provider.callCount)
+	if provider.callCount != 3 {
+		t.Fatalf("provider calls = %d, want 3", provider.callCount)
 	}
 	if len(agent.History) != 1 || agent.History[0].Content != "existing chat" {
 		t.Fatalf("agent history mutated: %#v", agent.History)
@@ -220,6 +222,8 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 			return `{"schema_version":"review_report.v2"`, nil
 		case 3:
 			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
+		case 4:
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
 		default:
 			t.Fatalf("unexpected provider call %d", call)
 			return "", nil
@@ -237,11 +241,11 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 	if report.Verdict != review.ReviewVerdictClean {
 		t.Fatalf("report verdict = %q, want clean", report.Verdict)
 	}
-	if provider.callCount != 4 {
-		t.Fatalf("provider calls = %d, want 4", provider.callCount)
+	if provider.callCount != 5 {
+		t.Fatalf("provider calls = %d, want 5", provider.callCount)
 	}
-	if len(prompts) != 4 {
-		t.Fatalf("captured prompts = %d, want 4", len(prompts))
+	if len(prompts) != 5 {
+		t.Fatalf("captured prompts = %d, want 5", len(prompts))
 	}
 	for _, want := range []string{"Probe Plan JSON Repair", "{not-json"} {
 		if !strings.Contains(prompts[1], want) {
@@ -251,6 +255,11 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 	for _, want := range []string{"Report JSON Repair", `{"schema_version":"review_report.v2"`} {
 		if !strings.Contains(prompts[3], want) {
 			t.Fatalf("report repair prompt missing %q:\n%s", want, prompts[3])
+		}
+	}
+	for _, want := range []string{"Review Final Report Saturation Check", "review_saturation_check.v1"} {
+		if !strings.Contains(prompts[4], want) {
+			t.Fatalf("saturation prompt missing %q:\n%s", want, prompts[4])
 		}
 	}
 	for i := range prompts {
@@ -423,6 +432,14 @@ func newAgentCleanReviewReportForTest() review.ReviewReport {
 				},
 			},
 		},
+	}
+}
+
+func newAgentSaturatedReviewCheckForTest() review.ReviewSaturationCheck {
+	return review.ReviewSaturationCheck{
+		SchemaVersion:  review.ReviewSaturationCheckSchemaVersionV1,
+		Status:         review.ReviewSaturationStatusSaturated,
+		CheckedSummary: "Final report covers Pass1 scope.",
 	}
 }
 

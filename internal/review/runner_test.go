@@ -47,6 +47,7 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, modelReport))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 		events: &events,
 	}
@@ -66,6 +67,7 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		"model:probe_plan",
 		"probe:probe-1",
 		"model:report",
+		"model:saturation_check",
 	})
 	if got, want := len(probes.calls), 1; got != want {
 		t.Fatalf("probe calls = %d, want %d", got, want)
@@ -76,7 +78,7 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	if got, want := probes.calls[0].Commands[0].WorkDir, ""; got != want {
 		t.Fatalf("probe command WorkDir = %q, want %q", got, want)
 	}
-	if got, want := len(model.requests), 2; got != want {
+	if got, want := len(model.requests), 3; got != want {
 		t.Fatalf("model requests = %d, want %d", got, want)
 	}
 	if got, want := model.requests[0].Phase, ReviewModelPhaseProbePlan; got != want {
@@ -84,6 +86,9 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	}
 	if got, want := model.requests[1].Phase, ReviewModelPhaseReport; got != want {
 		t.Fatalf("second model phase = %q, want %q", got, want)
+	}
+	if got, want := model.requests[2].Phase, ReviewModelPhaseSaturationCheck; got != want {
+		t.Fatalf("third model phase = %q, want %q", got, want)
 	}
 	firstPrompt := model.requests[0].Prompt
 	for _, want := range []string{"Review Pass 1", "focus on runner orchestration", "# Review Evidence", ReviewProbePlanSchemaVersionV2} {
@@ -149,6 +154,7 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, modelReport))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -220,6 +226,7 @@ func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *te
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, modelReport))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -327,6 +334,7 @@ func TestReviewRunnerRunNoProbeReasonSkipsProbeRunner(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, modelReport))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -342,7 +350,7 @@ func TestReviewRunnerRunNoProbeReasonSkipsProbeRunner(t *testing.T) {
 	if got, want := len(probes.calls), 0; got != want {
 		t.Fatalf("probe calls = %d, want %d", got, want)
 	}
-	if got, want := len(model.requests), 2; got != want {
+	if got, want := len(model.requests), 3; got != want {
 		t.Fatalf("model requests = %d, want %d", got, want)
 	}
 	if !strings.Contains(model.requests[1].Prompt, `"no_probe_reason": "surface-1 and risk-1 are checked by existing evidence."`) {
@@ -358,6 +366,7 @@ func TestReviewRunnerRunRepairsInvalidProbePlanJSON(t *testing.T) {
 			{content: `{not-json`},
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -376,6 +385,7 @@ func TestReviewRunnerRunRepairsInvalidProbePlanJSON(t *testing.T) {
 		ReviewModelPhaseProbePlan,
 		ReviewModelPhaseProbePlan,
 		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
 	})
 	for _, want := range []string{"Probe Plan JSON Repair", "Return corrected JSON only.", "{not-json", "decode review probe plan"} {
 		if !strings.Contains(model.requests[1].Prompt, want) {
@@ -392,6 +402,7 @@ func TestReviewRunnerRunRepairsInvalidProbePlanValidation(t *testing.T) {
 			{content: string(mustMarshalReviewProbePlanWithMissingNoProbeReasonForRunnerTest(t))},
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -407,6 +418,7 @@ func TestReviewRunnerRunRepairsInvalidProbePlanValidation(t *testing.T) {
 		ReviewModelPhaseProbePlan,
 		ReviewModelPhaseProbePlan,
 		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
 	})
 	for _, want := range []string{"Probe Plan JSON Repair", "no_probe_reason must be non-empty"} {
 		if !strings.Contains(model.requests[1].Prompt, want) {
@@ -423,6 +435,7 @@ func TestReviewRunnerRunRepairsInvalidReportJSON(t *testing.T) {
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: `{not-json`},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -441,6 +454,7 @@ func TestReviewRunnerRunRepairsInvalidReportJSON(t *testing.T) {
 		ReviewModelPhaseProbePlan,
 		ReviewModelPhaseReport,
 		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
 	})
 	for _, want := range []string{"Report JSON Repair", "Return corrected JSON only.", "Preserve trusted probe summary IDs", "{not-json", "decode review report"} {
 		if !strings.Contains(model.requests[2].Prompt, want) {
@@ -457,6 +471,7 @@ func TestReviewRunnerRunRepairsInvalidReportValidation(t *testing.T) {
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: `{"schema_version":"review_report.v2","target_kind":"current_changes"}`},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -475,6 +490,7 @@ func TestReviewRunnerRunRepairsInvalidReportValidation(t *testing.T) {
 		ReviewModelPhaseProbePlan,
 		ReviewModelPhaseReport,
 		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
 	})
 	for _, want := range []string{"Report JSON Repair", "finalize report", "generated_at must be non-zero"} {
 		if !strings.Contains(model.requests[2].Prompt, want) {
@@ -493,6 +509,7 @@ func TestReviewRunnerRunRepairsReportScopeCoverageValidation(t *testing.T) {
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, invalidReport))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -508,6 +525,7 @@ func TestReviewRunnerRunRepairsReportScopeCoverageValidation(t *testing.T) {
 		ReviewModelPhaseProbePlan,
 		ReviewModelPhaseReport,
 		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
 	})
 	for _, want := range []string{"Report JSON Repair", "finalize report", "scope_coverage is required"} {
 		if !strings.Contains(model.requests[2].Prompt, want) {
@@ -860,6 +878,7 @@ func TestReviewRunnerPromptRedactsAbsoluteRepoRoot(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, report))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -868,7 +887,7 @@ func TestReviewRunnerPromptRedactsAbsoluteRepoRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if got, want := len(model.requests), 2; got != want {
+	if got, want := len(model.requests), 3; got != want {
 		t.Fatalf("model requests = %d, want %d", got, want)
 	}
 	for i, req := range model.requests {
@@ -921,6 +940,7 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -929,16 +949,18 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if got, want := len(model.requests), 2; got != want {
+	if got, want := len(model.requests), 3; got != want {
 		t.Fatalf("model requests = %d, want %d", got, want)
 	}
 
-	secondPrompt := model.requests[1].Prompt
-	for _, leaked := range []string{repoRoot, repoFile, probeRoot, probeWorkDir, probeWorkFile, probeRuntimeFile, scratchRoot, scratchFile} {
-		if strings.Contains(secondPrompt, leaked) {
-			t.Fatalf("Pass2 prompt contains absolute path %q:\n%s", leaked, secondPrompt)
+	for i, prompt := range []string{model.requests[1].Prompt, model.requests[2].Prompt} {
+		for _, leaked := range []string{repoRoot, repoFile, probeRoot, probeWorkDir, probeWorkFile, probeRuntimeFile, scratchRoot, scratchFile} {
+			if strings.Contains(prompt, leaked) {
+				t.Fatalf("prompt %d contains absolute path %q:\n%s", i+1, leaked, prompt)
+			}
 		}
 	}
+	secondPrompt := model.requests[1].Prompt
 	for _, want := range []string{
 		"<repo_root>/internal/review/runner.go",
 		"<probe_workdir>/output.txt",
@@ -997,6 +1019,7 @@ func TestReviewRunnerRunsProbesInPlanOrder(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(BuildReviewProbeSummaries(results))))},
+			saturatedRunnerModelResponseForTest(t),
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)

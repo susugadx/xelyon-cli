@@ -123,6 +123,14 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 }
 
 func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
+	report, err := r.completeInitialReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor)
+	if err != nil {
+		return ReviewReport{}, err
+	}
+	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report)
+}
+
+func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
 	reportResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReport,
 		Prompt: buildReviewReportPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor),
