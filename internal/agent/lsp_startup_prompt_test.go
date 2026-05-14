@@ -65,15 +65,14 @@ func TestCheckLSPInstallPrompt_ShowsOnlyDetectedMissingServers(t *testing.T) {
 		"LSP servers missing for detected project languages",
 		"go: go install golang.org/x/tools/gopls@latest",
 		"typescript: npm i -g @vtsls/language-server typescript",
-		"/lsp install go",
-		"/lsp install typescript",
+		"Install the listed command(s) in your shell",
 		"lsp.skip_install_prompt: true",
 	} {
 		if !strings.Contains(got, fragment) {
 			t.Fatalf("output missing %q:\n%s", fragment, got)
 		}
 	}
-	for _, fragment := range []string{"python:", "/lsp install python", "/lsp install all"} {
+	for _, fragment := range []string{"python:", "/lsp install"} {
 		if strings.Contains(got, fragment) {
 			t.Fatalf("output should not contain %q:\n%s", fragment, got)
 		}
@@ -191,7 +190,7 @@ func TestCheckLSPInstallPrompt_TUISkipsClassicOnlySlashCommands(t *testing.T) {
 		}
 	}
 	if strings.Contains(got, "/lsp install") {
-		t.Fatalf("TUI startup prompt should not suggest classic-only /lsp install:\n%s", got)
+		t.Fatalf("TUI startup prompt should not suggest removed /lsp install:\n%s", got)
 	}
 	if strings.Contains(got, "/config") {
 		t.Fatalf("TUI startup prompt should not suggest an install-related slash command:\n%s", got)

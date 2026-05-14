@@ -1,9 +1,6 @@
 package lsp
 
 import (
-	"bytes"
-	"os/exec"
-	"strings"
 	"testing"
 )
 
@@ -195,26 +192,6 @@ func TestIsServerInstalled(t *testing.T) {
 	}
 	if IsServerInstalled("test", configs) {
 		t.Error("Expected false for non-existent command")
-	}
-}
-
-func TestExecuteCommandWithIO_UsesInjectedIO(t *testing.T) {
-	if _, err := exec.LookPath("cat"); err != nil {
-		t.Skip("cat command not available")
-	}
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	if err := executeCommandWithIO("cat", strings.NewReader("hello\n"), &stdout, &stderr); err != nil {
-		t.Fatalf("executeCommandWithIO() error = %v", err)
-	}
-
-	if stdout.String() != "hello\n" {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), "hello\n")
-	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 

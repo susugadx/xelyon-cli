@@ -42,8 +42,8 @@ func TestSurfaceFiltering(t *testing.T) {
 	if strings.Contains(classicHelp, "/detach-all") {
 		t.Fatalf("classic help should not include TUI-only /detach-all:\n%s", classicHelp)
 	}
-	if !strings.Contains(classicHelp, "/lsp") {
-		t.Fatalf("classic help should include legacy /lsp:\n%s", classicHelp)
+	if strings.Contains(classicHelp, "/lsp") {
+		t.Fatalf("classic help should not include removed /lsp:\n%s", classicHelp)
 	}
 	if strings.Contains(classicHelp, "/use") {
 		t.Fatalf("classic help should not advertise compatibility /use:\n%s", classicHelp)
@@ -56,7 +56,7 @@ func TestSurfaceFiltering(t *testing.T) {
 		t.Fatalf("TUI help should include /review:\n%s", tuiHelp)
 	}
 	if strings.Contains(tuiHelp, "/lsp") {
-		t.Fatalf("TUI help should not include classic-only /lsp:\n%s", tuiHelp)
+		t.Fatalf("TUI help should not include removed /lsp:\n%s", tuiHelp)
 	}
 	if !strings.Contains(tuiHelp, "/init") {
 		t.Fatalf("TUI help should include /init:\n%s", tuiHelp)

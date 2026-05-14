@@ -56,60 +56,19 @@ Language Server Protocol (LSP) は、エディタとプログラミング言語�
 
 ## セットアップ
 
-`/lsp` は legacy classic (`--no-tui`) 用の診断コマンドです。TUI では候補と `/help` に表示されません。以下の `/lsp` コマンド例は `xelyon --no-tui` で起動した classic REPL 内で実行します。
+XELYON は起動時にプロジェクト内の対応言語を検出し、未導入の LSP サーバーがあれば shell で実行するインストールコマンドを案内します。不要な場合は `lsp.skip_install_prompt: true` で非表示にできます。
 
-### 1. 言語検出
-
-プロジェクト内の言語を自動検出します。
+### 1. LSPサーバーのインストール
 
 ```bash
-xelyon --no-tui
-> /lsp detect
-```
+# 例: Go
+go install golang.org/x/tools/gopls@latest
 
-**出力例:**
-```
-Detected languages / 検出された言語:
-  - Go (3 files)
-  - TypeScript (15 files)
-  - Python (2 files)
+# 例: TypeScript/JavaScript
+npm i -g @vtsls/language-server typescript
 
-LSP server status / LSPサーバー状態:
-  ✅ Go: gopls (installed)
-  ⚠️ TypeScript: vtsls (not installed)
-  ⚠️ Python: pyright (not installed)
-
-💡 Install with: /lsp install typescript
-```
-
-### 2. LSPサーバーのインストール
-
-```bash
-# 個別にインストール
-> /lsp install go
-> /lsp install typescript
-> /lsp install python
-
-# 未インストールの全サーバーをインストール
-> /lsp install all
-```
-
-### 3. ステータス確認
-
-```bash
-> /lsp
-# または
-> /lsp status
-```
-
-**出力例:**
-```
-LSP Server Status / LSPサーバー状態
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ✅ Go: gopls (running)
-  ✅ TypeScript: vtsls (running)
-  ⏸️ Python: pyright (installed, idle)
-  ❌ Rust: rust-analyzer (not installed)
+# 例: Python
+pip install pyright
 ```
 
 ## 設定
@@ -191,10 +150,7 @@ Continue? (y/n/c):
 ### LSPサーバーが起動しない
 
 ```bash
-# legacy classic (--no-tui) でサーバーがインストールされているか確認
-> /lsp status
-
-# 手動でサーバーを起動して確認
+# サーバーがインストールされているか確認
 $ gopls version
 $ vtsls --version
 ```
@@ -202,11 +158,8 @@ $ vtsls --version
 ### 「not installed」と表示される
 
 ```bash
-# インストールコマンドを実行
-> /lsp install <言語>
-
 # 例: TypeScript
-> /lsp install typescript
+npm i -g @vtsls/language-server typescript
 ```
 
 ### 参照が見つからない

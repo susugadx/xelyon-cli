@@ -42,11 +42,6 @@ func legacyFallbackSurfaces() []CommandSurface {
 	return []CommandSurface{CommandSurfaceTUI, CommandSurfaceClassic}
 }
 
-// classicOnlySurfaces は TUI primary では公開しない legacy/debug command に使う。
-func classicOnlySurfaces() []CommandSurface {
-	return []CommandSurface{CommandSurfaceClassic}
-}
-
 func tuiOnlySurfaces() []CommandSurface {
 	return []CommandSurface{CommandSurfaceTUI}
 }

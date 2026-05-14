@@ -29,10 +29,6 @@ func legacyCompatibilityCommand(name, args, description, descriptionJP string, c
 	return cmd
 }
 
-func classicOnlyHiddenCommand(name, args, description, descriptionJP string, category CommandCategory, sortWeight int) CommandInfo {
-	return newCommandInfo(name, args, description, descriptionJP, classicOnlySurfaces(), category, sortWeight, false)
-}
-
 func legacyAgentTUILocalCommand(
 	name, args, description, descriptionJP string,
 	action TUILocalAction,
@@ -111,7 +107,6 @@ var Commands = []CommandInfo{
 	commandProject(),
 	commandPlan(),
 	commandThink(),
-	commandLSP(),
 	commandVersion(),
 	commandHelp(),
 }
@@ -326,10 +321,6 @@ func commandPlan() CommandInfo {
 
 func commandThink() CommandInfo {
 	return legacyDiscoverableCommand("/thinking", "[on|off|level]", "Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)", "Extended Thinkingを切り替え", CommandCategoryModel, 40, "/think")
-}
-
-func commandLSP() CommandInfo {
-	return classicOnlyHiddenCommand("/lsp", "[status]", "Show LSP server status (running/not started/disabled)", "LSPサーバー状態を表示", CommandCategoryDev, 190)
 }
 
 func commandVersion() CommandInfo {

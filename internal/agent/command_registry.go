@@ -35,7 +35,6 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 				allowOverwritePrompt: commandSurface != commandcatalog.CommandSurfaceTUI,
 			})
 		},
-		"/lsp":      func(args []string) bool { return handleLSPCommand(agent, args) },
 		"/tokens":   func(_ []string) bool { return handleTokensCommand(agent) },
 		"/thinking": func(args []string) bool { return handleThinkingCommand(agent, args) },
 		"/think":    func(args []string) bool { return handleThinkingCommand(agent, args) },

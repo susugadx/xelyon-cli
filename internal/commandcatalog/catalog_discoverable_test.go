@@ -42,7 +42,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		}
 	}
 
-	for _, hidden := range []string{"/use", "/version", "/help", "/lsp"} {
+	for _, hidden := range []string{"/use", "/version", "/help"} {
 		if containsCommandName(commands, hidden) {
 			t.Fatalf("%s should not be TUI-discoverable", hidden)
 		}

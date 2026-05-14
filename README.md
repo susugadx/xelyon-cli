@@ -113,7 +113,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **完了検証**: AI が「完了」「done」と宣言した際、変更ファイルの LSP 診断を自動実行しエラー残存時は修正を続行
 - **Final Checks**: `completed_with_changes` の完了候補でユーザー定義のシェルコマンド（`go test ./...` 等）を自動実行。失敗時は AI が修正を続行（`final_checks.commands` で設定）
 - **自動検出**: プロジェクト内の言語を起動時に自動検出し、未インストールのLSPサーバーを提案（`lsp.skip_install_prompt` で非表示化）
-- **サーバー設定**: TUI では `/config` の `lsp.servers` で管理。診断用 `/lsp` は legacy classic (`--no-tui`) 用です
+- **サーバー設定**: TUI では `/config` の `lsp.servers` で管理。未導入サーバーは起動時案内の shell command で導入します
 - **23言語対応**:
   - **メイン**: Go, TypeScript/JavaScript (React/JSX), Python, Rust
   - **バックエンド**: Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua

@@ -27,7 +27,6 @@ const GeneratedHelpCommandsText = `Commands:
   /init                     - Create xelyon.yaml project template
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
   /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
-  /lsp [status]             - Show LSP server status (running/not started/disabled)
   /version                  - Show version information
   /help, /h                 - Show this help
 `

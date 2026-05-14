@@ -296,22 +296,6 @@ func TestConfigProjectInitCommandBoundaries(t *testing.T) {
 	}
 }
 
-func TestLSPCommandIsClassicOnlyLegacyDiagnostic(t *testing.T) {
-	cmd, ok := Find("/lsp")
-	if !ok {
-		t.Fatal("Find(/lsp) ok = false, want true")
-	}
-	if cmd.SupportsSurface(CommandSurfaceTUI) {
-		t.Fatal("/lsp should not support TUI surface")
-	}
-	if !cmd.SupportsSurface(CommandSurfaceClassic) {
-		t.Fatal("/lsp should support classic surface")
-	}
-	if cmd.Discoverable {
-		t.Fatal("/lsp should not be discoverable")
-	}
-}
-
 func TestDefaultCommandMetadata(t *testing.T) {
 	matches := MatchPrefix("/copy")
 	if len(matches) == 0 {
@@ -346,6 +330,12 @@ func TestDefaultCommandMetadata(t *testing.T) {
 	}
 	if empty.EffectiveSortWeight() != 1000 {
 		t.Fatalf("empty sort weight = %d, want 1000", empty.EffectiveSortWeight())
+	}
+}
+
+func TestLSPCommandRemovedFromCatalog(t *testing.T) {
+	if _, ok := Find("/lsp"); ok {
+		t.Fatal("Find(/lsp) ok = true, want false after legacy command removal")
 	}
 }
 

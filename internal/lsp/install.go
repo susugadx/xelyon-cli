@@ -1,12 +1,7 @@
 package lsp
 
 import (
-	"fmt"
-	"io"
 	"os/exec"
-	"strings"
-
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // InstallInfo はLSPサーバーのインストール情報
@@ -156,51 +151,6 @@ func GetInstallInfo(serverKey string) (InstallInfo, bool) {
 // GetAllInstallInfos は全てのインストール情報を返す
 func GetAllInstallInfos() map[string]InstallInfo {
 	return InstallCommands
-}
-
-// RunInstall はLSPサーバーをインストール（最初のコマンドを実行）
-// 成功した場合は nil、失敗した場合はエラーを返す
-func RunInstall(serverKey string) error {
-	runtime := ui.DefaultRuntime()
-	return RunInstallWithIO(serverKey, runtime.Input(), runtime.Output(), runtime.ErrorOutput())
-}
-
-// RunInstallWithIO は LSP サーバーをインストールし、入出力先を明示指定する。
-func RunInstallWithIO(serverKey string, in io.Reader, out, errOut io.Writer) error {
-	info, ok := GetInstallInfo(serverKey)
-	if !ok {
-		return fmt.Errorf("unknown server key: %s", serverKey)
-	}
-
-	if len(info.Commands) == 0 {
-		return fmt.Errorf("no install command available for %s", serverKey)
-	}
-
-	return executeCommandWithIO(info.Commands[0], in, out, errOut)
-}
-
-func executeCommandWithIO(cmdStr string, in io.Reader, out, errOut io.Writer) error {
-	// コマンドをパース
-	parts := strings.Fields(cmdStr)
-	if len(parts) == 0 {
-		return fmt.Errorf("empty command")
-	}
-
-	cmd := exec.Command(parts[0], parts[1:]...)
-	if in == nil {
-		in = ui.DefaultRuntime().Input()
-	}
-	if out == nil {
-		out = ui.DefaultRuntime().Output()
-	}
-	if errOut == nil {
-		errOut = ui.DefaultRuntime().ErrorOutput()
-	}
-	cmd.Stdout = out
-	cmd.Stderr = errOut
-	cmd.Stdin = in
-
-	return cmd.Run()
 }
 
 // IsServerInstalled はLSPサーバーがインストールされているかチェック

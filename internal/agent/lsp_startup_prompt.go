@@ -2,11 +2,18 @@ package agent
 
 import (
 	"io"
+	"os"
 	"os/exec"
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
+)
+
+var (
+	lspCommandGetwd                  = os.Getwd
+	lspCommandDetectProjectLanguages = lsp.DetectProjectLanguages
+	lspCommandGetInstallInfo         = lsp.GetInstallInfo
 )
 
 type lspInstallPromptItem struct {
@@ -45,16 +52,13 @@ func checkLSPInstallPrompt(agent *Agent, commandSurface commandcatalog.CommandSu
 	for _, item := range missing {
 		dim.Fprintf(out, "     %s: %s\n", item.serverKey, item.command)
 	}
-	writeLSPInstallPromptRemediation(out, missing, commandSurface)
+	writeLSPInstallPromptRemediation(out, commandSurface)
 	dim.Fprintln(out, "   Set lsp.skip_install_prompt: true to hide this startup notice.")
 }
 
-func writeLSPInstallPromptRemediation(out io.Writer, missing []lspInstallPromptItem, commandSurface commandcatalog.CommandSurface) {
+func writeLSPInstallPromptRemediation(out io.Writer, commandSurface commandcatalog.CommandSurface) {
 	if commandSurface == commandcatalog.CommandSurfaceClassic {
-		dim.Fprintln(out, "   Suggested commands:")
-		for _, item := range missing {
-			dim.Fprintf(out, "     /lsp install %s\n", item.serverKey)
-		}
+		dim.Fprintln(out, "   Install the listed command(s) in your shell. LSP server settings are in lsp.servers.")
 		return
 	}
 

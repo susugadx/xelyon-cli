@@ -473,44 +473,6 @@ Extended Thinking（推論モード）を切り替えます。複雑なタスク
 
 **注意**: Extended Thinking はトークン消費量が増加します。
 
-### `/lsp`
-
-LSPサーバーのステータスを表示・管理します。
-
-`/lsp` は legacy classic (`--no-tui`) 用の診断コマンドです。TUI では候補と `/help` には表示せず、LSP 設定は `/config` から編集します。
-
-```
-xelyon --no-tui
-> /lsp              # ステータス表示
-> /lsp status       # 同上
-> /lsp detect       # プロジェクト内の言語を検出
-> /lsp install go   # 指定言語のLSPサーバーをインストール
-> /lsp install all  # 未インストールの全サーバーをインストール
-```
-
-**出力例:**
-```
-LSP Server Status / LSPサーバー状態
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ✅ Go: gopls (running)
-  ✅ TypeScript: vtsls (running)
-  ⏸️ Python: pyright (installed, idle)
-  ❌ Rust: rust-analyzer (not installed)
-```
-
-**サブコマンド:**
-
-| コマンド | 説明 |
-|---------|------|
-| `/lsp` または `/lsp status` | 現在のLSPサーバー状態を表示 |
-| `/lsp detect` | プロジェクト内の言語を検出して表示 |
-| `/lsp install <言語>` | 指定言語のLSPサーバーをインストール |
-| `/lsp install all` | 未インストールの全サーバーをインストール |
-
-**対応言語:** Go, TypeScript/JavaScript, Python, Rust, Java, C/C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Elixir, Lua, CSS/SCSS, HTML, Vue, Svelte, YAML, TOML, SQL, Bash, Markdown（23言語）
-
-詳細は [LSP連携ガイド](lsp.md) を参照してください。
-
 ### `/version`
 
 XELYONのバージョン情報を表示します。
