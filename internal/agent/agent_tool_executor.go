@@ -83,6 +83,7 @@ func (a *Agent) currentRequestContext() context.Context {
 
 func (a *Agent) executeQuietToolResult(ctx context.Context, toolCall *tools.ToolCall, stdin io.Reader, stdout, stderr io.Writer, repair bool) tools.ExecutionResult {
 	execCtx := a.toolExecutionContext(ctx, stdin, stdout, stderr)
+	a.observeEditReadinessBeforeTool(ctx, toolCall)
 	execResult := tools.ExecuteQuietUnpublishedWithContext(execCtx, toolCall)
 	if repair {
 		execResult = a.maybeRepairGeminiApplyPatchExecution(ctx, toolCall, execResult, execCtx, true)
@@ -144,6 +145,7 @@ func (a *Agent) executePublishedToolWithSpinner(ctx context.Context, toolCall *t
 	a.ui().SetSpinner(spinner)
 
 	execCtx := a.toolExecutionContext(ctx, nil, nil, nil)
+	a.observeEditReadinessBeforeTool(ctx, toolCall)
 	if a.shouldRepairGeminiApplyPatch(toolCall) {
 		execResult := tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
 		a.ui().StopSpinner()

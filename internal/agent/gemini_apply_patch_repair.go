@@ -60,6 +60,7 @@ func (a *Agent) maybeRepairGeminiApplyPatchExecution(ctx context.Context, tc *to
 		Args:    map[string]string{"patch": repairedPatch},
 	}
 
+	a.observeEditReadinessBeforeTool(ctx, repairedTC)
 	repairedExecResult := executeRepairedApplyPatch(execCtx, repairedTC, quiet)
 	if repairedExecResult.Error {
 		return execResult

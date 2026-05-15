@@ -512,10 +512,11 @@ func capTestResults(results []TestResult, limit int) []TestResult {
 
 // Store は RuntimeTaskState を mutex 付きで保持する。
 type Store struct {
-	mu            sync.Mutex
-	state         RuntimeTaskState
-	repoRoot      string
-	invocationCWD string
+	mu                        sync.Mutex
+	state                     RuntimeTaskState
+	editReadinessObservations []EditReadinessObservation
+	repoRoot                  string
+	invocationCWD             string
 }
 
 // NewStore は空の runtime task ledger を返す。
@@ -571,6 +572,7 @@ func (s *Store) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state = RuntimeTaskState{}
+	s.editReadinessObservations = nil
 }
 
 // Recorder は Store への書き込み入口を返す。
