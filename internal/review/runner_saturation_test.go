@@ -251,7 +251,55 @@ func TestReviewRunnerRunBlockedSaturationReturnsError(t *testing.T) {
 	})
 }
 
-func TestReviewRunnerRunReportRevisionOutputIsNotRepaired(t *testing.T) {
+func TestReviewRunnerRunRepairsInvalidReportRevisionJSONOnce(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	plan := newRunnerNoProbePlanForTest()
+	revisedReport := newPlanAwareHasFindingsReportForValidationTest()
+	revisedReport.ProbeSummaries = nil
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			{content: string(mustMarshalReviewSaturationCheckForTest(t, needsRevisionMissingRiskCheckForRunnerTest()))},
+			{content: `{"schema_version":"review_report.v2"}`},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, revisedReport))},
+			saturatedRunnerModelResponseForTest(t),
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	got, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	want := withComputedSummaryForRunnerTest(revisedReport, nil)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Run() report = %#v, want repaired revision %#v", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
+		ReviewModelPhaseReportRevision,
+		ReviewModelPhaseReportRevision,
+		ReviewModelPhaseSaturationCheck,
+	})
+	repairPrompt := model.requests[4].Prompt
+	for _, wantText := range []string{
+		"Review Pass 2: Report Revision JSON Repair",
+		"## Invalid Model Output",
+		`{"schema_version":"review_report.v2"}`,
+		"## Decode Or Validation Error",
+		"target_kind",
+	} {
+		if !strings.Contains(repairPrompt, wantText) {
+			t.Fatalf("revision repair prompt missing %q:\n%s", wantText, repairPrompt)
+		}
+	}
+}
+
+func TestReviewRunnerRunInvalidReportRevisionRepairReturnsError(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
 	plan := newRunnerNoProbePlanForTest()
@@ -261,22 +309,25 @@ func TestReviewRunnerRunReportRevisionOutputIsNotRepaired(t *testing.T) {
 			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
 			{content: string(mustMarshalReviewSaturationCheckForTest(t, needsRevisionMissingRiskCheckForRunnerTest()))},
 			{content: `{"schema_version":"review_report.v2"}`},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, newPlanAwareHasFindingsReportForValidationTest()))},
+			{content: `{"schema_version":"review_report.v2"}`},
 		},
 	}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
 
 	_, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
 	if err == nil {
-		t.Fatal("Run() error = nil, want report revision error")
+		t.Fatal("Run() error = nil, want report revision repair error")
 	}
-	if !strings.Contains(err.Error(), "report revision") || !strings.Contains(err.Error(), "target_kind") {
-		t.Fatalf("Run() error = %q, want report revision validation error", err.Error())
+	for _, want := range []string{"report revision repair", "target_kind"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Run() error = %q, want %q", err.Error(), want)
+		}
 	}
 	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
 		ReviewModelPhaseProbePlan,
 		ReviewModelPhaseReport,
 		ReviewModelPhaseSaturationCheck,
+		ReviewModelPhaseReportRevision,
 		ReviewModelPhaseReportRevision,
 	})
 }

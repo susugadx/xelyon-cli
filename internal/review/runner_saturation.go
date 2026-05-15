@@ -84,10 +84,35 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
 	}
 
-	report, err := finalizeReviewRunnerReportModelOutput(revisionResp.Content, plan, probeSummaries, redactor)
-	if err != nil {
-		return ReviewReport{}, fmt.Errorf("review runner report revision: %w", err)
+	report, revisionErr := finalizeReviewRunnerReportModelOutput(revisionResp.Content, plan, probeSummaries, redactor)
+	if revisionErr == nil {
+		return report, nil
 	}
+
+	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
+		Phase: ReviewModelPhaseReportRevision,
+		Prompt: buildReviewReportRevisionRepairPrompt(
+			req,
+			evidenceMarkdown,
+			plan,
+			probeSummaries,
+			probeResults,
+			redactor,
+			finalizedReport,
+			saturationCheck,
+			revisionResp.Content,
+			revisionErr,
+		),
+	})
+	if err != nil {
+		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
+	}
+
+	report, err = finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor)
+	if err != nil {
+		return ReviewReport{}, fmt.Errorf("review runner report revision repair: %w", err)
+	}
+
 	return report, nil
 }
 

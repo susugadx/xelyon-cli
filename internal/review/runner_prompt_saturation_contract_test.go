@@ -98,13 +98,6 @@ func TestBuildReviewSaturationCheckRepairPromptIncludesRepairContract(t *testing
 
 func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T) {
 	report := withComputedSummaryForRunnerTest(newRunnerCleanReportForTest(nil), nil)
-	check := ReviewSaturationCheck{
-		SchemaVersion:        ReviewSaturationCheckSchemaVersionV1,
-		Status:               ReviewSaturationStatusNeedsRevision,
-		CheckedSummary:       "risk-1 was not reflected.",
-		MissingRiskIDs:       []string{"risk-1"},
-		RevisionInstructions: "Classify risk-1 in scope_coverage.",
-	}
 	prompt := buildReviewReportRevisionPrompt(
 		NewCurrentChangesRequest("focus revision"),
 		"diff evidence",
@@ -113,7 +106,7 @@ func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T)
 		nil,
 		reviewRunnerPromptRedactor{},
 		report,
-		check,
+		needsRevisionCheckForPromptContractTest(),
 	)
 
 	wants := []string{
@@ -139,6 +132,63 @@ func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T)
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("report revision prompt missing %q:\n%s", want, prompt)
 		}
+	}
+}
+
+func TestBuildReviewReportRevisionRepairPromptIncludesRepairContract(t *testing.T) {
+	report := withComputedSummaryForRunnerTest(newRunnerCleanReportForTest(nil), nil)
+	prompt := buildReviewReportRevisionRepairPrompt(
+		NewCurrentChangesRequest("focus revision repair"),
+		"diff evidence",
+		newNoProbeReviewProbePlanForTest(),
+		nil,
+		nil,
+		reviewRunnerPromptRedactor{},
+		report,
+		needsRevisionCheckForPromptContractTest(),
+		`{"schema_version":"review_report.v2","computed_summary":{}}`,
+		errors.New("target_kind must be current_changes"),
+	)
+
+	wants := []string{
+		"Review Pass 2: Report Revision JSON Repair",
+		"Return corrected review_report.v2 JSON only.",
+		"Do not add markdown fences.",
+		"Do not change schema_version from the contract value.",
+		"Do not request or rely on tools.",
+		"Preserve trusted probe summary IDs; do not invent probe IDs.",
+		"Do not output computed_summary.",
+		"Do not perform a new review.",
+		"Only repair the revision so it satisfies the report contract and saturation check.",
+		"## Review Report JSON Contract",
+		`Do not output top-level "computed_summary"; runner computes it after validation`,
+		"## Original Finalized Review Report",
+		"## Saturation Check",
+		`"status": "needs_revision"`,
+		`"missing_risk_ids": [
+    "risk-1"
+  ]`,
+		"## Invalid Model Output",
+		`{"schema_version":"review_report.v2","computed_summary":{}}`,
+		"## Decode Or Validation Error",
+		"target_kind must be current_changes",
+		"focus revision repair",
+		"diff evidence",
+	}
+	for _, want := range wants {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("report revision repair prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+func needsRevisionCheckForPromptContractTest() ReviewSaturationCheck {
+	return ReviewSaturationCheck{
+		SchemaVersion:        ReviewSaturationCheckSchemaVersionV1,
+		Status:               ReviewSaturationStatusNeedsRevision,
+		CheckedSummary:       "risk-1 was not reflected.",
+		MissingRiskIDs:       []string{"risk-1"},
+		RevisionInstructions: "Classify risk-1 in scope_coverage.",
 	}
 }
 

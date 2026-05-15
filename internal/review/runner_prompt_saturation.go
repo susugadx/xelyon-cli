@@ -57,14 +57,33 @@ func buildReviewReportRevisionPrompt(req ReviewRequest, evidenceMarkdown string,
 	b.WriteString("Revise the supplied finalized report only to address the saturation check. Use only the supplied evidence, decoded probe plan, probe summaries, and probe result context. Do not perform a new review, do not request tools, and do not add speculative findings. The original finalized report may include runner-computed computed_summary as context; do not output top-level computed_summary in the revised report.\n\n")
 
 	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
-	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)
-	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", evidenceMarkdown)
-	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", plan)
-	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(probeSummaries, redactor))
-	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", buildReviewProbeResultPromptContexts(results, redactor))
-	appendReviewRunnerPromptRedactedJSONSection(&b, "Original Finalized Review Report", finalizedReport, redactor)
-	appendReviewRunnerPromptJSONSection(&b, "Saturation Check", saturationCheck)
+	appendReviewReportRevisionPromptContext(&b, req, evidenceMarkdown, plan, probeSummaries, results, redactor, finalizedReport, saturationCheck)
 	return b.String()
+}
+
+func buildReviewReportRevisionRepairPrompt(req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, results []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck, invalidRevisionOutput string, decodeOrValidationErr error) string {
+	var b strings.Builder
+	b.WriteString("# Review Pass 2: Report Revision JSON Repair\n\n")
+	b.WriteString("The previous report revision response failed strict JSON decode or validation. Return corrected ")
+	b.WriteString(ReviewReportSchemaVersionV2)
+	b.WriteString(" JSON only. Do not add markdown fences. Do not change schema_version from the contract value. Do not request or rely on tools. Preserve trusted probe summary IDs; do not invent probe IDs.\n\n")
+	b.WriteString("Use the same evidence, decoded probe plan, probe summaries, probe result context, original finalized report, and saturation check. Do not perform a new review. Only repair the revision so it satisfies the report contract and saturation check. Do not output computed_summary.\n\n")
+
+	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
+	appendReviewReportRevisionPromptContext(&b, req, evidenceMarkdown, plan, probeSummaries, results, redactor, finalizedReport, saturationCheck)
+	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", redactor.redactText(invalidRevisionOutput))
+	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", redactor.redactText(reviewRunnerPromptErrorText(decodeOrValidationErr)))
+	return b.String()
+}
+
+func appendReviewReportRevisionPromptContext(b *strings.Builder, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, results []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck) {
+	appendReviewRunnerPromptTextSection(b, "Custom Instructions", req.CustomInstructions)
+	appendReviewRunnerPromptMarkdownSection(b, "Evidence Markdown", evidenceMarkdown)
+	appendReviewRunnerPromptJSONSection(b, "Decoded Probe Plan", plan)
+	appendReviewRunnerPromptJSONSection(b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(probeSummaries, redactor))
+	appendReviewRunnerPromptJSONSection(b, "Probe Result Context", buildReviewProbeResultPromptContexts(results, redactor))
+	appendReviewRunnerPromptRedactedJSONSection(b, "Original Finalized Review Report", finalizedReport, redactor)
+	appendReviewRunnerPromptJSONSection(b, "Saturation Check", saturationCheck)
 }
 
 func appendReviewRunnerPromptRedactedJSONSection(b *strings.Builder, title string, value any, redactor reviewRunnerPromptRedactor) {
