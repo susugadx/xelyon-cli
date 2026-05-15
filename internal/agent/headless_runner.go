@@ -257,6 +257,9 @@ func appendHeadlessToolResultToHistory(agent *Agent, toolCall *tools.ToolCall, r
 	if agent == nil || toolCall == nil {
 		return
 	}
+	if !keepToolResultHistory(toolCall) {
+		return
+	}
 	agent.History = append(agent.History, toolruntime.BuildToolResultMessage(toolCall, result, toolruntime.FormatTextToolResultContent(toolCall.Tool, result)))
 }
 

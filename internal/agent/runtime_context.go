@@ -18,10 +18,11 @@ func (a *Agent) requestContext(ctx context.Context) context.Context {
 	if a != nil && a.session != nil && strings.TrimSpace(a.session.ID) != "" {
 		ctx = api.WithPromptCacheScope(ctx, api.PromptCacheScope{SessionID: a.session.ID})
 	}
-	if a != nil && a.isCompactedMode && len(a.compactedItems) > 0 {
-		ctx = api.WithCompactedInputItems(ctx, a.compactedItems)
+	inputPlan := a.modelInputAssemblyPlan()
+	if len(inputPlan.CompactedInput) > 0 {
+		ctx = api.WithCompactedInputItems(ctx, inputPlan.CompactedInput)
 	}
-	if blocks := a.providerFacingActiveContextBlocks(); len(blocks) > 0 {
+	if blocks := inputPlan.ActiveContextBlocks; len(blocks) > 0 {
 		ctx = api.WithActiveContextBlocks(ctx, blocks)
 	} else {
 		ctx = api.WithoutActiveContextBlocks(ctx)

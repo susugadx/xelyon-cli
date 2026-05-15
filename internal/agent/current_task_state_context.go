@@ -50,10 +50,7 @@ func (a *Agent) estimateActiveContextTokens() int {
 }
 
 func (a *Agent) providerFacingActiveContextBlocks() []api.ActiveContextBlock {
-	if !a.shouldSendActiveContextToProvider() {
-		return nil
-	}
-	return a.buildActiveContextBlocks()
+	return activeContextInputPolicy{}.Blocks(a)
 }
 
 func (a *Agent) shouldSendActiveContextToProvider() bool {
