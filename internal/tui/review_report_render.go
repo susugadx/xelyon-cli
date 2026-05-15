@@ -24,11 +24,15 @@ func newReviewReportLineBuilder() reviewReportLineBuilder {
 }
 
 func (b *reviewReportLineBuilder) appendReport(report review.ReviewReport) {
-	rootCauseCount, findingCount := reviewReportCounts(report)
+	summary := reviewReportComputedSummary(report)
 	b.appendDim("")
 	b.appendDim("Verdict: " + string(report.Verdict))
 	b.appendDim("Verification: " + string(report.OverallVerificationStatus))
-	b.appendDim(fmt.Sprintf("Root cause groups: %d  Findings: %d", rootCauseCount, findingCount))
+	b.appendDim(fmt.Sprintf("Root cause groups: %d  Findings: %d", summary.RootCauseGroupCount, summary.FindingCount))
+	b.appendDim(fmt.Sprintf("Surfaces: checked %d  finding %d  unverified %d  residual %d", summary.CheckedSurfaceCount, summary.FindingSurfaceCount, summary.UnverifiedSurfaceCount, summary.ResidualSurfaceCount))
+	b.appendDim(fmt.Sprintf("Candidate risks: total %d  dismissed %d  finding %d  unverified %d  residual %d", summary.CandidateRiskCount, summary.DismissedRiskCount, summary.FindingRiskCount, summary.UnverifiedRiskCount, summary.ResidualRiskCount))
+	b.appendDim(fmt.Sprintf("New report-pass findings: %d", summary.NewReportPassFindingCount))
+	b.appendDim(fmt.Sprintf("Probes: total %d  passed %d  failed %d  timed_out %d  blocked %d  mutated %d", summary.ProbeCount, summary.PassedProbeCount, summary.FailedProbeCount, summary.TimedOutProbeCount, summary.BlockedProbeCount, summary.MutatedWorktreeProbeCount))
 	if strings.TrimSpace(report.Summary) != "" {
 		b.appendDim("Summary: " + reviewReportSingleLine(report.Summary))
 	}
@@ -120,10 +124,9 @@ func reviewReportSingleLine(text string) string {
 	return termtext.SanitizeSingleLineANSI(text)
 }
 
-func reviewReportCounts(report review.ReviewReport) (rootCauseCount, findingCount int) {
-	rootCauseCount = len(report.RootCauseGroups)
-	for _, group := range report.RootCauseGroups {
-		findingCount += len(group.Findings)
+func reviewReportComputedSummary(report review.ReviewReport) review.ReviewReportComputedSummary {
+	if report.ComputedSummary != nil {
+		return *report.ComputedSummary
 	}
-	return rootCauseCount, findingCount
+	return review.ComputeReviewReportComputedSummary(report, report.ProbeSummaries)
 }

@@ -14,10 +14,40 @@ func reviewProbePlanPromptContract() string {
     "schema_version": %q,
     "target_kind": %q,
     "summary": "optional short string",
+    "impact_surfaces": [
+      {
+        "id": "surface-1",
+        "summary": "material surface summary",
+        "category": %q,
+        "evidence_summary": "pre-probe evidence summary",
+        "evidence_refs": [
+          {"kind": %q, "path": "internal/review/probe_plan.go", "line": 1, "summary": "optional evidence summary"}
+        ],
+        "status": %q,
+        "reason": "why this surface is checked, needs a probe, or remains unverified"
+      }
+    ],
+    "candidate_risks": [
+      {
+        "id": "risk-1",
+        "summary": "candidate risk summary",
+        "severity": %q,
+        "surface_ids": ["surface-1"],
+        "evidence_summary": "pre-probe evidence summary",
+        "evidence_refs": [
+          {"kind": %q, "path": "internal/review/probe_plan.go"}
+        ],
+        "verification_strategy": "how a bounded probe would confirm or falsify the risk",
+        "status": %q
+      }
+    ],
+    "no_candidate_risk_reason": "",
     "probes": [
       {
         "id": "probe-1",
-        "purpose": "non-empty purpose, at most %d bytes",
+        "surface_ids": ["surface-1"],
+        "risk_ids": ["risk-1"],
+        "purpose": "confirm or falsify risk-1 on surface-1 with a bounded check, at most %d bytes",
         "mode": %q,
         "commands": [
           {"command": "go", "args": ["test", "./internal/review"], "work_dir": "."}
@@ -31,9 +61,21 @@ func reviewProbePlanPromptContract() string {
     ],
     "no_probe_reason": "required non-empty only when probes is empty"
   }
-- "target_kind" must be %q. "probes" must contain at most %d entries.
-- If "probes" is empty, "no_probe_reason" must be non-empty. If "probes" is non-empty, omit "no_probe_reason" or set it to "".
-- Probe IDs must be unique, non-empty, canonical IDs without whitespace.
+- "target_kind" must be %q. "impact_surfaces" must contain at least one entry. "candidate_risks" may be empty only when no material candidate risk remains after evaluating every impact surface. "probes" must contain at most %d entries.
+- Scope analysis order: first enumerate material "impact_surfaces"; then derive "candidate_risks" for material risks from those surfaces; then create probes only for evidence-backed risks or unverified material surfaces.
+- Consider changed files, callers, tests, related search hits, related tests/context files, CLI, TUI, config, validator, prompt contract, JSON schema, sandbox, timeout, path validation, error handling, persistence, and compatibility as material surfaces when the evidence makes them relevant.
+- Impact surface IDs and risk IDs must be unique, non-empty canonical IDs using only ASCII letters, digits, hyphen, or underscore. Risk "surface_ids" must reference existing impact surface IDs.
+- Impact surface "summary" and "reason" must be non-empty. Candidate risk "summary" and "verification_strategy" must be non-empty.
+- Impact surface category must be one of %s. Impact surface status must be one of %s.
+- Candidate risk severity must be one of %s. Candidate risk status must be one of %s.
+- Each impact surface and candidate risk requires either non-empty "evidence_summary" or at least one "evidence_refs" entry.
+- Scope evidence refs are pre-probe only: "kind" must be one of %s, and "probe", "probe_command", "probe_id", and "command_index" are forbidden in the probe plan.
+- If "candidate_risks" is empty, "no_candidate_risk_reason" must be non-empty, must mention every impact surface ID, and must explain why no material candidate risk remains for each named surface. Do not use generic "No risk" wording. If "candidate_risks" is non-empty, omit "no_candidate_risk_reason" or set it to "".
+- If "probes" is empty, "no_probe_reason" must be non-empty, every impact surface status must be %q, every candidate risk status must be %q, and "no_probe_reason" must name every checked surface ID and checked risk ID. If "probes" is non-empty, omit "no_probe_reason" or set it to "".
+- Probe IDs must be unique, non-empty canonical IDs using only ASCII letters, digits, hyphen, or underscore.
+- Each probe must include "surface_ids" or "risk_ids" with at least one referenced ID. Probe "surface_ids" must reference existing impact surface IDs. Probe "risk_ids" must reference existing candidate risk IDs.
+- Every impact surface with status "needs_probe" or "unverified" must be referenced directly by at least one probe "surface_ids" entry. Every candidate risk with status "needs_probe" or "unverified" must be referenced directly by at least one probe "risk_ids" entry. Checked surfaces and "checked_by_evidence" risks may remain unreferenced by probes.
+- Each probe purpose must explain how the referenced surface or risk IDs will be confirmed or falsified.
 - "mode" must be one of %q, %q, %q.
 - Each probe must contain 1 to %d commands. Each command "command" is an executable name only: no whitespace, no null byte, no slash, no backslash.
 - "args" is a JSON array of already-split arguments. Do not output shell pipelines, redirects, env assignments, command strings, or quoted command lines.
@@ -42,16 +84,30 @@ func reviewProbePlanPromptContract() string {
 - "timeout_seconds" and "max_output_bytes" are optional non-negative integers. Their maximums are %d seconds and %d bytes.
 
 Mode command contract:
-- %q runs against the original repository in a read-only hardened environment. It allows commands: %s. Prefer focused read-only inspection and normal test commands only.
-- %q runs only against generated scratch files. It allows commands: %s. Python commands must name a single script path; "go" is limited to "go run" of one .go file.
-- %q runs against an isolated copy of the repository plus generated files. It allows commands: %s. Path-like args must stay inside the sandbox/repo copy.
+- %q runs against the original repository in a read-only hardened environment. It allows commands: %s. Use it for additional reads and lightweight confirmation that must not mutate the worktree.
+- %q runs only against generated scratch files. It allows commands: %s. Use it for repo-clean reproductions or small experiments that do not require the real worktree. Python commands must name a single script path; "go" is limited to "go run" of one .go file.
+- %q runs against an isolated copy of the repository plus generated files. It allows commands: %s. Use it for real tests or change-impact verification where writes/build artifacts are expected inside the sandbox. Path-like args must stay inside the sandbox/repo copy.
+- Do not plan broad speculative test suites. The validator requires each probe to be linked to the candidate risks or unverified material surfaces it will confirm or falsify.
 `,
-		ReviewProbePlanSchemaVersionV1,
+		ReviewProbePlanSchemaVersionV2,
 		TargetCurrentChanges,
+		ReviewProbeImpactSurfaceChangedFile,
+		ReviewEvidenceKindDiff,
+		ReviewProbeImpactSurfaceNeedsProbe,
+		ReviewGroupSeverityMedium,
+		ReviewEvidenceKindDiff,
+		ReviewProbeCandidateRiskNeedsProbe,
 		MaxReviewProbePlanPurposeBytes,
 		ReviewProbeHostReadOnly,
 		TargetCurrentChanges,
 		MaxReviewProbePlanProbes,
+		quoteAndJoinSortedReviewPromptValues(reviewProbeImpactSurfaceCategoryPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewProbeImpactSurfaceStatusPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewGroupSeverityPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewProbeCandidateRiskStatusPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewProbePlanPreProbeEvidenceKindPromptValues()),
+		ReviewProbeImpactSurfaceChecked,
+		ReviewProbeCandidateRiskCheckedByEvidence,
 		ReviewProbeHostReadOnly,
 		ReviewProbeScratchOnly,
 		ReviewProbeRepoSandbox,
@@ -87,17 +143,49 @@ func reviewReportPromptContract() string {
     "probe_summaries": [],
     "checked_surfaces": [],
     "unverified_surfaces": [],
-    "residual_risks": []
+    "residual_risks": [],
+    "scope_coverage": {
+      "reviewed_impact_surfaces": [
+        {
+          "surface_id": "surface-1",
+          "status": %q,
+          "summary": "how impact surface surface-1 was reviewed",
+          "evidence_refs": [],
+          "finding_ids": []
+        }
+      ],
+      "reviewed_candidate_risks": [
+        {
+          "risk_id": "risk-1",
+          "status": %q,
+          "summary": "why risk-1 was dismissed, became a finding, remains residual, or is unverified",
+          "evidence_refs": [],
+          "finding_ids": []
+        }
+      ],
+      "new_findings_from_report_pass": []
+    }
   }
 - There is no top-level "findings" or "has_findings" field. Findings must be nested under "root_cause_groups[].findings".
+- Do not output top-level "computed_summary"; runner computes it after validation from the validated report and trusted probe summaries.
 - "schema_version" must be %q and "target_kind" must be %q.
 - "verdict" must be one of %q, %q, %q.
 - "overall_verification_status" and group "verification_status" must be one of %q, %q, %q, %q, %q.
 - Root cause groups use: {"id","title","summary","severity","verification_status","fix_strategy","do_not_fix_by","verification_plan","findings","checked_surfaces","unverified_surfaces","residual_risks"}. "id" and "title" are required. Group IDs must be unique and contain no whitespace. Severity must be one of %q, %q, %q, %q, %q.
-- Findings use: {"id","title","summary","evidence_refs","checked_surfaces","unverified_surfaces","residual_risks"}. "title" is required. Finding IDs are optional but must be unique when provided and contain no whitespace.
+- Findings use: {"id","title","summary","evidence_refs","checked_surfaces","unverified_surfaces","residual_risks"}. "title" is required. In runner reports with root cause groups, finding IDs are required, must be unique, and must contain no whitespace so scope_coverage can reference them.
 - Evidence refs use: {"kind","summary","probe_id","command_index","path","line","snippet"}. "kind" must be one of %q, %q, %q, %q, %q, %q. "probe_command" refs require both "probe_id" and zero-based "command_index". "file", "diff", and "rule_file" refs require "path". "line" must be non-negative; line > 0 requires "path". Paths must be canonical repo-relative evidence paths.
 - Surface coverage entries use: {"surface_id","summary","evidence_refs"}. "surface_id" is required and must contain no whitespace.
 - Residual risks use: {"id","summary","suggested_mitigation","evidence_refs"}. "summary" is required.
+- Scope coverage is required in runner reports. It must classify every ID from the Decoded Probe Plan exactly once: "reviewed_impact_surfaces" must contain each "impact_surfaces[].id" as "surface_id", and "reviewed_candidate_risks" must contain each "candidate_risks[].id" as "risk_id". Unknown or duplicate IDs are invalid.
+- Impact surface scope status must be one of %s. Candidate risk scope status must be one of %s.
+- Candidate risks must be classified as "finding", "dismissed", "residual_risk", or "unverified". Use "finding_ids" to connect scope coverage entries to root cause findings when a Pass1 risk becomes a finding. Finding IDs must reference "root_cause_groups[].findings[].id".
+- "finding_ids" in reviewed impact surfaces and reviewed candidate risks must be empty unless that scope entry status is "finding".
+- Every root cause finding ID must be connected from "scope_coverage" via an impact surface "finding_ids", candidate risk "finding_ids", or "new_findings_from_report_pass[].finding_ids".
+- A "clean" verdict is allowed only when every impact surface status is %q and every candidate risk status is %q.
+- Reviewed impact surface status %q must include non-empty "finding_ids"; each referenced finding must exist under "root_cause_groups" and include evidence_refs.
+- Reviewed candidate risk status %q must include non-empty "finding_ids"; each referenced finding must exist under "root_cause_groups" and include evidence_refs.
+- A "blocked" verdict must have unverified scope coverage or an existing blocked reason.
+- Findings discovered during Pass2 that were not Pass1 candidate risks are allowed only as root cause findings connected through "scope_coverage.new_findings_from_report_pass[].finding_ids".
 - Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries. Do not invent probe IDs. Probe summary modes must be one of %q, %q, %q. Probe and command statuses must be one of %q, %q, %q, %q, %q.
 
 Verdict contract:
@@ -105,11 +193,13 @@ Verdict contract:
 - %q: "overall_verification_status" must be %q or %q, at least one root cause group is required, and each group "verification_status" must be %q or %q. Each root cause group must include at least one "findings" item, non-empty "fix_strategy", and at least one "verification_plan" item. Each finding must include at least one "evidence_refs" item.
 - %q: "overall_verification_status" must be %q, %q, or %q, and the report must include a blocked reason in "summary", "unverified_surfaces", "residual_risks", or a blocked/timed-out/mutated probe summary.
 `,
-		ReviewReportSchemaVersionV1,
+		ReviewReportSchemaVersionV2,
 		TargetCurrentChanges,
 		ReviewVerificationVerified,
 		ReviewVerdictClean,
-		ReviewReportSchemaVersionV1,
+		ReviewReportImpactSurfaceChecked,
+		ReviewReportCandidateRiskDismissed,
+		ReviewReportSchemaVersionV2,
 		TargetCurrentChanges,
 		ReviewVerdictClean,
 		ReviewVerdictHasFindings,
@@ -130,6 +220,12 @@ Verdict contract:
 		ReviewEvidenceKindDiff,
 		ReviewEvidenceKindGitStatus,
 		ReviewEvidenceKindRuleFile,
+		quoteAndJoinSortedReviewPromptValues(reviewReportImpactSurfaceStatusPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewReportCandidateRiskStatusPromptValues()),
+		ReviewReportImpactSurfaceChecked,
+		ReviewReportCandidateRiskDismissed,
+		ReviewReportImpactSurfaceFinding,
+		ReviewReportCandidateRiskFinding,
 		ReviewProbeHostReadOnly,
 		ReviewProbeScratchOnly,
 		ReviewProbeRepoSandbox,
@@ -175,6 +271,64 @@ func sortedQuotedRepoSandboxCommandNames() string {
 		names = append(names, name)
 	}
 	return quoteAndJoinSortedReviewPromptValues(names)
+}
+
+func reviewProbeImpactSurfaceCategoryPromptValues() []string {
+	values := make([]string, 0, len(reviewProbeImpactSurfaceCategories))
+	for _, category := range reviewProbeImpactSurfaceCategories {
+		values = append(values, string(category))
+	}
+	return values
+}
+
+func reviewProbeImpactSurfaceStatusPromptValues() []string {
+	values := make([]string, 0, len(reviewProbeImpactSurfaceStatuses))
+	for _, status := range reviewProbeImpactSurfaceStatuses {
+		values = append(values, string(status))
+	}
+	return values
+}
+
+func reviewProbeCandidateRiskStatusPromptValues() []string {
+	values := make([]string, 0, len(reviewProbeCandidateRiskStatuses))
+	for _, status := range reviewProbeCandidateRiskStatuses {
+		values = append(values, string(status))
+	}
+	return values
+}
+
+func reviewReportImpactSurfaceStatusPromptValues() []string {
+	values := make([]string, 0, len(reviewReportImpactSurfaceStatuses))
+	for _, status := range reviewReportImpactSurfaceStatuses {
+		values = append(values, string(status))
+	}
+	return values
+}
+
+func reviewReportCandidateRiskStatusPromptValues() []string {
+	values := make([]string, 0, len(reviewReportCandidateRiskStatuses))
+	for _, status := range reviewReportCandidateRiskStatuses {
+		values = append(values, string(status))
+	}
+	return values
+}
+
+func reviewGroupSeverityPromptValues() []string {
+	values := make([]string, 0, len(reviewGroupSeverities))
+	for _, severity := range reviewGroupSeverities {
+		values = append(values, string(severity))
+	}
+	return values
+}
+
+func reviewProbePlanPreProbeEvidenceKindPromptValues() []string {
+	values := make([]string, 0, len(reviewEvidenceKinds))
+	for _, kind := range reviewEvidenceKinds {
+		if isReviewProbePlanPreProbeEvidenceKind(kind) {
+			values = append(values, kind)
+		}
+	}
+	return values
 }
 
 func quoteAndJoinSortedReviewPromptValues(values []string) string {

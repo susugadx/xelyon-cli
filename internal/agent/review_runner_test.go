@@ -150,21 +150,14 @@ func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 		}
 		switch call {
 		case 0:
-			return mustMarshalReviewValueForAgentTest(t, review.ReviewProbePlan{
-				SchemaVersion: review.ReviewProbePlanSchemaVersionV1,
-				TargetKind:    review.TargetCurrentChanges,
-				Probes:        []review.ReviewPlannedProbe{},
-				NoProbeReason: "No additional probe is needed.",
-			}), nil
+			return mustMarshalReviewValueForAgentTest(t, newAgentNoProbeReviewPlanForTest(
+				"Agent review runner path.",
+				"Agent runner could mutate conversation state.",
+			)), nil
 		case 1:
-			return mustMarshalReviewValueForAgentTest(t, review.ReviewReport{
-				SchemaVersion:             review.ReviewReportSchemaVersionV1,
-				TargetKind:                review.TargetCurrentChanges,
-				GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-				OverallVerificationStatus: review.ReviewVerificationVerified,
-				Verdict:                   review.ReviewVerdictClean,
-				Summary:                   "No findings.",
-			}), nil
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
+		case 2:
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
 		default:
 			t.Fatalf("unexpected provider call %d", call)
 			return "", nil
@@ -182,8 +175,103 @@ func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 	if report.Verdict != review.ReviewVerdictClean {
 		t.Fatalf("report verdict = %q, want clean", report.Verdict)
 	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider calls = %d, want 2", provider.callCount)
+	if provider.callCount != 3 {
+		t.Fatalf("provider calls = %d, want 3", provider.callCount)
+	}
+	if len(agent.History) != 1 || agent.History[0].Content != "existing chat" {
+		t.Fatalf("agent history mutated: %#v", agent.History)
+	}
+	if got := len(agent.session.Messages); got != 1 {
+		t.Fatalf("session messages = %d, want 1", got)
+	}
+}
+
+func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *testing.T) {
+	repo := setupReviewGitRepo(t)
+	t.Chdir(repo)
+
+	var prompts []string
+	var toolUseDisabled []bool
+	var toolCounts []int
+	var updateModes []string
+	provider := &scriptedChatProvider{name: "openai"}
+	provider.chatWithToolsFn = func(call int, ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+		if systemPrompt != "" {
+			t.Fatalf("systemPrompt = %q, want empty", systemPrompt)
+		}
+		if model != "review-model" {
+			t.Fatalf("model = %q, want review-model", model)
+		}
+		if len(history) != 1 || history[0].Role != "user" {
+			t.Fatalf("history = %#v, want single review prompt", history)
+		}
+		prompts = append(prompts, history[0].Content)
+		toolUseDisabled = append(toolUseDisabled, api.IsToolUseDisabled(ctx))
+		toolCounts = append(toolCounts, len(api.ToolDefinitionsFromContext(ctx)))
+		updateModes = append(updateModes, api.AssistantUpdateModeFromContext(ctx))
+
+		switch call {
+		case 0:
+			return `{not-json`, nil
+		case 1:
+			return mustMarshalReviewValueForAgentTest(t, newAgentNoProbeReviewPlanForTest(
+				"Agent repair path.",
+				"Repair path could lose context.",
+			)), nil
+		case 2:
+			return `{"schema_version":"review_report.v2"`, nil
+		case 3:
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
+		case 4:
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
+		default:
+			t.Fatalf("unexpected provider call %d", call)
+			return "", nil
+		}
+	}
+	agent := newReviewAgentForTest(t, provider)
+	agent.History = []api.Message{{Role: "user", Content: "existing chat"}}
+	agent.session = history.NewSession("review-model")
+	agent.session.AddMessage("user", "existing chat", "review-model")
+
+	report, err := agent.RunReview(context.Background(), review.NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("RunReview() error = %v", err)
+	}
+	if report.Verdict != review.ReviewVerdictClean {
+		t.Fatalf("report verdict = %q, want clean", report.Verdict)
+	}
+	if provider.callCount != 5 {
+		t.Fatalf("provider calls = %d, want 5", provider.callCount)
+	}
+	if len(prompts) != 5 {
+		t.Fatalf("captured prompts = %d, want 5", len(prompts))
+	}
+	for _, want := range []string{"Probe Plan JSON Repair", "{not-json"} {
+		if !strings.Contains(prompts[1], want) {
+			t.Fatalf("probe plan repair prompt missing %q:\n%s", want, prompts[1])
+		}
+	}
+	for _, want := range []string{"Report JSON Repair", `{"schema_version":"review_report.v2"`} {
+		if !strings.Contains(prompts[3], want) {
+			t.Fatalf("report repair prompt missing %q:\n%s", want, prompts[3])
+		}
+	}
+	for _, want := range []string{"Review Final Report Saturation Check", "review_saturation_check.v1"} {
+		if !strings.Contains(prompts[4], want) {
+			t.Fatalf("saturation prompt missing %q:\n%s", want, prompts[4])
+		}
+	}
+	for i := range prompts {
+		if !toolUseDisabled[i] {
+			t.Fatalf("call %d tool use disabled = false, want true", i)
+		}
+		if toolCounts[i] != 0 {
+			t.Fatalf("call %d tool definitions = %d, want 0", i, toolCounts[i])
+		}
+		if updateModes[i] != api.AssistantUpdatesOff {
+			t.Fatalf("call %d assistant update mode = %q, want off", i, updateModes[i])
+		}
 	}
 	if len(agent.History) != 1 || agent.History[0].Content != "existing chat" {
 		t.Fatalf("agent history mutated: %#v", agent.History)
@@ -287,6 +375,71 @@ func runGitForReviewTest(t *testing.T, repo string, args ...string) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review.ReviewProbePlan {
+	return review.ReviewProbePlan{
+		SchemaVersion: review.ReviewProbePlanSchemaVersionV2,
+		TargetKind:    review.TargetCurrentChanges,
+		ImpactSurfaces: []review.ReviewProbeImpactSurface{
+			{
+				ID:              "surface-1",
+				Summary:         surfaceSummary,
+				Category:        review.ReviewProbeImpactSurfaceChangedFile,
+				EvidenceSummary: "Git evidence is sufficient.",
+				Status:          review.ReviewProbeImpactSurfaceChecked,
+				Reason:          "Existing evidence covers surface-1.",
+			},
+		},
+		CandidateRisks: []review.ReviewProbeCandidateRisk{
+			{
+				ID:                   "risk-1",
+				Summary:              riskSummary,
+				Severity:             review.ReviewGroupSeverityMedium,
+				SurfaceIDs:           []string{"surface-1"},
+				EvidenceSummary:      "Existing evidence covers the path.",
+				VerificationStrategy: "No additional probe is needed.",
+				Status:               review.ReviewProbeCandidateRiskCheckedByEvidence,
+			},
+		},
+		Probes:        []review.ReviewPlannedProbe{},
+		NoProbeReason: "surface-1 and risk-1 are checked by existing evidence.",
+	}
+}
+
+func newAgentCleanReviewReportForTest() review.ReviewReport {
+	return review.ReviewReport{
+		SchemaVersion:             review.ReviewReportSchemaVersionV2,
+		TargetKind:                review.TargetCurrentChanges,
+		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+		OverallVerificationStatus: review.ReviewVerificationVerified,
+		Verdict:                   review.ReviewVerdictClean,
+		Summary:                   "No findings.",
+		ScopeCoverage: &review.ReviewReportScopeCoverage{
+			ReviewedImpactSurfaces: []review.ReviewReportImpactSurfaceCoverage{
+				{
+					SurfaceID: "surface-1",
+					Status:    review.ReviewReportImpactSurfaceChecked,
+					Summary:   "surface-1 was checked.",
+				},
+			},
+			ReviewedCandidateRisks: []review.ReviewReportCandidateRiskCoverage{
+				{
+					RiskID:  "risk-1",
+					Status:  review.ReviewReportCandidateRiskDismissed,
+					Summary: "risk-1 was dismissed.",
+				},
+			},
+		},
+	}
+}
+
+func newAgentSaturatedReviewCheckForTest() review.ReviewSaturationCheck {
+	return review.ReviewSaturationCheck{
+		SchemaVersion:  review.ReviewSaturationCheckSchemaVersionV1,
+		Status:         review.ReviewSaturationStatusSaturated,
+		CheckedSummary: "Final report covers Pass1 scope.",
 	}
 }
 

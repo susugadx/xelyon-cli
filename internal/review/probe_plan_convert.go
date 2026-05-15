@@ -4,6 +4,8 @@ import "time"
 
 // BuildReviewProbeRequestsFromPlan は検証済み plan DTO を ProbeRunner 用 runtime request へ変換する。
 func BuildReviewProbeRequestsFromPlan(plan ReviewProbePlan) ([]ReviewProbeRequest, error) {
+	// DecodeReviewProbePlanJSON と同じ schema validation を direct caller 向けにも通す。
+	// 以降は semantic validation を増やさず、runtime request への機械的な変換だけを行う。
 	if err := ValidateReviewProbePlan(plan); err != nil {
 		return nil, err
 	}

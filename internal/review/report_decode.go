@@ -39,3 +39,23 @@ func decodeReviewReportStrictJSON(data []byte) (ReviewReport, error) {
 
 	return report, nil
 }
+
+func decodeReviewReportModelStrictJSON(data []byte) (ReviewReport, error) {
+	if err := rejectModelComputedSummaryInReviewReportJSON(data); err != nil {
+		return ReviewReport{}, err
+	}
+	return decodeReviewReportStrictJSON(data)
+}
+
+func rejectModelComputedSummaryInReviewReportJSON(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+
+	var fields map[string]json.RawMessage
+	if err := decoder.Decode(&fields); err != nil {
+		return nil
+	}
+	if _, exists := fields["computed_summary"]; exists {
+		return fmt.Errorf("computed_summary is runner-computed and must not be supplied by model output")
+	}
+	return nil
+}

@@ -65,6 +65,7 @@ func TestReviewRunnerRunStopsProbeExecutionAfterMutatedWorktree(t *testing.T) {
 				responses: []runnerFakeModelResponse{
 					{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
 					{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerBlockedReportForTest(expectedSummaries)))},
+					saturatedRunnerModelResponseForTest(t),
 				},
 			}
 			runner := newReviewRunnerForTest(t, evidence, probes, model)
@@ -88,7 +89,7 @@ func TestReviewRunnerRunStopsProbeExecutionAfterMutatedWorktree(t *testing.T) {
 			if !strings.Contains(got.ProbeSummaries[1].Error, "probe-a") {
 				t.Fatalf("skipped probe error = %q, want mutated probe ID", got.ProbeSummaries[1].Error)
 			}
-			if got, want := len(model.requests), 2; got != want {
+			if got, want := len(model.requests), 3; got != want {
 				t.Fatalf("model requests = %d, want %d", got, want)
 			}
 			secondPrompt := model.requests[1].Prompt

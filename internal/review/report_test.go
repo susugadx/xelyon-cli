@@ -9,8 +9,12 @@ import (
 
 func TestReviewReportJSONRoundTrip(t *testing.T) {
 	generatedAt := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	const (
+		primaryFindingID    = "finding-1"
+		reportPassFindingID = "finding-2"
+	)
 	original := ReviewReport{
-		SchemaVersion:             ReviewReportSchemaVersionV1,
+		SchemaVersion:             ReviewReportSchemaVersionV2,
 		TargetKind:                TargetCurrentChanges,
 		CustomInstructions:        "correctness を優先",
 		GeneratedAt:               generatedAt,
@@ -35,7 +39,7 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 				},
 				Findings: []ReviewFinding{
 					{
-						ID:      "finding-1",
+						ID:      primaryFindingID,
 						Title:   "path traversal の可能性",
 						Summary: "relative path が sanitize されない",
 						EvidenceRefs: []ReviewEvidenceRef{
@@ -66,6 +70,19 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 								ID:                  "risk-1",
 								Summary:             "symlink 経由の迂回余地",
 								SuggestedMitigation: "path policy を inode ベースへ強化",
+							},
+						},
+					},
+					{
+						ID:      reportPassFindingID,
+						Title:   "Pass2 追加 finding",
+						Summary: "report pass で追加確認した finding",
+						EvidenceRefs: []ReviewEvidenceRef{
+							{
+								Kind:    ReviewEvidenceKindFile,
+								Path:    "internal/review/report_validation.go",
+								Line:    1,
+								Summary: "Pass2 追加 finding の証跡",
 							},
 						},
 					},
@@ -132,6 +149,57 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 				SuggestedMitigation: "OS matrix test を追加",
 			},
 		},
+		ScopeCoverage: &ReviewReportScopeCoverage{
+			ReviewedImpactSurfaces: []ReviewReportImpactSurfaceCoverage{
+				{
+					SurfaceID:    "surface-1",
+					Status:       ReviewReportImpactSurfaceFinding,
+					Summary:      "surface-1 は finding-1 に接続",
+					EvidenceRefs: []ReviewEvidenceRef{{Kind: ReviewEvidenceKindDiff, Path: "internal/review/report_types.go"}},
+					FindingIDs:   []string{primaryFindingID},
+				},
+			},
+			ReviewedCandidateRisks: []ReviewReportCandidateRiskCoverage{
+				{
+					RiskID:       "risk-1",
+					Status:       ReviewReportCandidateRiskFinding,
+					Summary:      "risk-1 は finding-1 として確認",
+					EvidenceRefs: []ReviewEvidenceRef{{Kind: ReviewEvidenceKindProbe, ProbeID: "probe-1"}},
+					FindingIDs:   []string{primaryFindingID},
+				},
+			},
+			NewFindingsFromReportPass: []ReviewReportPassFindingCoverage{
+				{
+					FindingIDs:   []string{reportPassFindingID},
+					Summary:      "Pass2 で追加確認した finding",
+					EvidenceRefs: []ReviewEvidenceRef{{Kind: ReviewEvidenceKindFile, Path: "internal/review/report_validation.go"}},
+				},
+			},
+		},
+		ComputedSummary: &ReviewReportComputedSummary{
+			RootCauseGroupCount:       1,
+			FindingCount:              2,
+			CheckedSurfaceCount:       0,
+			FindingSurfaceCount:       1,
+			UnverifiedSurfaceCount:    0,
+			ResidualSurfaceCount:      0,
+			CandidateRiskCount:        1,
+			DismissedRiskCount:        0,
+			FindingRiskCount:          1,
+			UnverifiedRiskCount:       0,
+			ResidualRiskCount:         0,
+			NewReportPassFindingCount: 1,
+			ProbeCount:                1,
+			PassedProbeCount:          0,
+			FailedProbeCount:          0,
+			TimedOutProbeCount:        0,
+			BlockedProbeCount:         0,
+			MutatedWorktreeProbeCount: 1,
+		},
+	}
+
+	if err := ValidateReviewReport(original); err != nil {
+		t.Fatalf("ValidateReviewReport(original) error = %v, want nil", err)
 	}
 
 	data, err := json.Marshal(original)
@@ -142,6 +210,9 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 	var got ReviewReport
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if err := ValidateReviewReport(got); err != nil {
+		t.Fatalf("ValidateReviewReport(got) error = %v, want nil", err)
 	}
 
 	if !reflect.DeepEqual(got, original) {
@@ -315,7 +386,7 @@ func TestBuildReviewProbeSummaries(t *testing.T) {
 
 func TestReviewReportJSONOmitempty(t *testing.T) {
 	report := ReviewReport{
-		SchemaVersion:             ReviewReportSchemaVersionV1,
+		SchemaVersion:             ReviewReportSchemaVersionV2,
 		TargetKind:                TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationPartiallyVerified,
@@ -370,6 +441,12 @@ func TestReviewReportJSONOmitempty(t *testing.T) {
 	}
 	if _, exists := parsed["summary"]; exists {
 		t.Fatal("summary should be omitted when empty")
+	}
+	if _, exists := parsed["scope_coverage"]; exists {
+		t.Fatal("scope_coverage should be omitted when nil")
+	}
+	if _, exists := parsed["computed_summary"]; exists {
+		t.Fatal("computed_summary should be omitted when nil")
 	}
 	if rawVerdict, exists := parsed["verdict"]; !exists {
 		t.Fatal("verdict should be present")
@@ -431,8 +508,8 @@ func TestNewReviewReportSkeleton(t *testing.T) {
 	generatedAt := time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
 
 	got := NewReviewReportSkeleton(req, generatedAt)
-	if got.SchemaVersion != ReviewReportSchemaVersionV1 {
-		t.Fatalf("SchemaVersion = %q, want %q", got.SchemaVersion, ReviewReportSchemaVersionV1)
+	if got.SchemaVersion != ReviewReportSchemaVersionV2 {
+		t.Fatalf("SchemaVersion = %q, want %q", got.SchemaVersion, ReviewReportSchemaVersionV2)
 	}
 	if got.TargetKind != TargetCurrentChanges {
 		t.Fatalf("TargetKind = %q, want %q", got.TargetKind, TargetCurrentChanges)

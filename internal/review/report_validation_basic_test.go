@@ -17,7 +17,7 @@ func TestValidateReviewReportBasicContract(t *testing.T) {
 			name: "invalid schema_version",
 			report: func() ReviewReport {
 				report := newValidReviewReportForValidationTest()
-				report.SchemaVersion = "review_report.v2"
+				report.SchemaVersion = ReviewReportSchemaVersionV1
 				return report
 			},
 			wantErr:     true,

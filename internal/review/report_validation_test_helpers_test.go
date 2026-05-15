@@ -37,7 +37,7 @@ func runReviewReportValidationCases(t *testing.T, tests []reviewReportValidation
 
 func newValidReviewReportForValidationTest() ReviewReport {
 	return ReviewReport{
-		SchemaVersion:             ReviewReportSchemaVersionV1,
+		SchemaVersion:             ReviewReportSchemaVersionV2,
 		TargetKind:                TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
@@ -80,10 +80,14 @@ func newHasFindingsReportForValidationTest(overallStatus ReviewVerificationStatu
 	report.Verdict = ReviewVerdictHasFindings
 	report.OverallVerificationStatus = overallStatus
 	report.Summary = ""
-	report.RootCauseGroups = []ReviewRootCauseGroup{
-		newRootCauseGroupForValidationTest("rc-1", "finding-1", groupStatus),
-	}
+	report.RootCauseGroups = newRootCauseGroupsForValidationTest(groupStatus)
 	return report
+}
+
+func newRootCauseGroupsForValidationTest(status ReviewVerificationStatus) []ReviewRootCauseGroup {
+	return []ReviewRootCauseGroup{
+		newRootCauseGroupForValidationTest("rc-1", "finding-1", status),
+	}
 }
 
 func newRootCauseGroupForValidationTest(id, findingID string, status ReviewVerificationStatus) ReviewRootCauseGroup {

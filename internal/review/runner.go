@@ -68,17 +68,9 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	}
 	evidenceMarkdown := RenderReviewEvidenceMarkdown(bundle)
 
-	planResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseProbePlan,
-		Prompt: buildReviewProbePlanPrompt(req, evidenceMarkdown),
-	})
+	plan, err := r.completeReviewProbePlan(ctx, req, evidenceMarkdown)
 	if err != nil {
-		return ReviewReport{}, fmt.Errorf("review runner pass1 model: %w", err)
-	}
-
-	plan, err := DecodeReviewProbePlanJSON([]byte(planResp.Content))
-	if err != nil {
-		return ReviewReport{}, fmt.Errorf("review runner decode probe plan: %w", err)
+		return ReviewReport{}, err
 	}
 	probeRequests, err := BuildReviewProbeRequestsFromPlan(plan)
 	if err != nil {
@@ -92,6 +84,53 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	probeSummaries := BuildReviewProbeSummaries(probeResults)
 	redactor := newReviewRunnerPromptRedactor(bundle, probeResults)
 
+	return r.completeReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor)
+}
+
+func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRequest, evidenceMarkdown string) (ReviewProbePlan, error) {
+	planPrompt := buildReviewProbePlanPrompt(req, evidenceMarkdown)
+	planResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
+		Phase:  ReviewModelPhaseProbePlan,
+		Prompt: planPrompt,
+	})
+	if err != nil {
+		return ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
+	}
+
+	plan, decodeErr := DecodeReviewProbePlanJSON([]byte(planResp.Content))
+	if decodeErr == nil {
+		return plan, nil
+	}
+
+	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
+		Phase: ReviewModelPhaseProbePlan,
+		Prompt: buildReviewProbePlanRepairPrompt(
+			req,
+			evidenceMarkdown,
+			planResp.Content,
+			decodeErr,
+		),
+	})
+	if err != nil {
+		return ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
+	}
+
+	plan, decodeErr = DecodeReviewProbePlanJSON([]byte(repairResp.Content))
+	if decodeErr != nil {
+		return ReviewProbePlan{}, fmt.Errorf("review runner decode probe plan: %w", decodeErr)
+	}
+	return plan, nil
+}
+
+func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
+	report, err := r.completeInitialReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor)
+	if err != nil {
+		return ReviewReport{}, err
+	}
+	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report)
+}
+
+func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
 	reportResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReport,
 		Prompt: buildReviewReportPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor),
@@ -100,11 +139,37 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}
 
-	report, err := decodeReviewReportStrictJSON([]byte(reportResp.Content))
+	report, reportErr := finalizeReviewRunnerReportModelOutput(reportResp.Content, plan, probeSummaries, redactor)
+	if reportErr == nil {
+		return report, nil
+	}
+
+	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
+		Phase: ReviewModelPhaseReport,
+		Prompt: buildReviewReportRepairPrompt(
+			req,
+			evidenceMarkdown,
+			plan,
+			probeSummaries,
+			probeResults,
+			redactor,
+			reportResp.Content,
+			reportErr,
+		),
+	})
+	if err != nil {
+		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
+	}
+
+	return finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor)
+}
+
+func finalizeReviewRunnerReportModelOutput(content string, plan ReviewProbePlan, trustedProbeSummaries []ReviewProbeSummary, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
+	report, err := decodeReviewReportModelStrictJSON([]byte(content))
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner decode report: %w", err)
 	}
-	report, err = finalizeReviewRunnerReport(report, probeSummaries, redactor)
+	report, err = finalizeReviewRunnerReport(report, plan, trustedProbeSummaries, redactor)
 	if err != nil {
 		return ReviewReport{}, err
 	}
