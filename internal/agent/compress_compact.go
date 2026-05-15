@@ -16,21 +16,42 @@ const (
 
 // CompressWithCompactAPI は OpenAI Compact API で会話履歴を圧縮
 func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
+	_, err := a.compressWithCompactAPI(ctx, compressCompactOptions{})
+	return err
+}
+
+type compressCompactOptions struct {
+	displayReason      string
+	suppressTUIDisplay bool
+}
+
+func (a *Agent) compressWithCompactAPI(ctx context.Context, opts compressCompactOptions) (*api.CompactResponse, error) {
 	out := a.output()
 
 	// CompactCapable インターフェースをチェック
 	compactProvider, ok := a.CurrentProvider.(api.CompactCapable)
 	if !ok {
-		return fmt.Errorf("current provider does not support Compact API")
+		return nil, fmt.Errorf("current provider does not support Compact API")
 	}
 
 	if !compactProvider.SupportsCompact() {
-		return fmt.Errorf("compact API is not supported for this model")
+		return nil, fmt.Errorf("compact API is not supported for this model")
 	}
 
 	// 履歴が空の場合はスキップ
 	if len(a.History) == 0 {
-		return fmt.Errorf("no history to compress")
+		return nil, fmt.Errorf("no history to compress")
+	}
+
+	beforeTokens := a.EstimateTokens()
+	display := compressionDisplayOperation{}
+	if !opts.suppressTUIDisplay {
+		display = a.beginCompressionDisplay(
+			compressionDisplayModeCompactAPI,
+			opts.displayReason,
+			0,
+			beforeTokens,
+		)
 	}
 
 	// フル会話ウィンドウを構築
@@ -39,10 +60,12 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	// Compact API 呼び出し
 	compactModel := a.getCompressionModel()
 	finishResponseContext := a.suspendResponseContinuationForLocalCompression(true)
-	result, err := compactProvider.CompactHistory(a.requestContext(ctx), input, compactModel, a.SystemPrompt)
+	result, err := compactProvider.CompactHistory(a.compressionRequestContext(ctx), input, compactModel, a.SystemPrompt)
 	if err != nil {
 		finishResponseContext(false, nil)
-		return fmt.Errorf("compact API failed: %w", err)
+		wrapped := fmt.Errorf("compact API failed: %w", err)
+		a.finishCompressionDisplay(display, 0, wrapped)
+		return nil, wrapped
 	}
 
 	// 圧縮結果を保存
@@ -54,15 +77,18 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 	finishResponseContext(true, nil)
 
 	// 統計情報を表示
-	if result.Usage != nil {
-		yellow.Fprintf(out, "📦 History compacted: %d → %d tokens\n",
-			result.Usage.InputTokens,
-			result.Usage.OutputTokens)
-	} else {
-		yellow.Fprintln(out, "📦 History compacted successfully")
+	if a.shouldPrintCompressionOutput() {
+		if result.Usage != nil {
+			yellow.Fprintf(out, "📦 History compacted: %d → %d tokens\n",
+				result.Usage.InputTokens,
+				result.Usage.OutputTokens)
+		} else {
+			yellow.Fprintln(out, "📦 History compacted successfully")
+		}
 	}
 
-	return nil
+	a.finishCompressionDisplay(display, compactResultOutputTokens(result), nil)
+	return result, nil
 }
 
 // buildFullInputItems は History から完全な InputItem リストを構築
@@ -119,4 +145,11 @@ func convertToHistoryCompactedItems(items []api.InputItem) []history.CompactedIt
 // convertFromHistoryCompactedItems は保存済み input item を API 用に defensive copy する。
 func convertFromHistoryCompactedItems(items []history.CompactedItem) []api.InputItem {
 	return api.CloneInputItems(items)
+}
+
+func compactResultOutputTokens(result *api.CompactResponse) int {
+	if result == nil || result.Usage == nil {
+		return 0
+	}
+	return result.Usage.OutputTokens
 }

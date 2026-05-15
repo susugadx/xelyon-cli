@@ -78,3 +78,22 @@ func TestCompressHistory_UsesCompressionModelDefault(t *testing.T) {
 		t.Fatalf("CompressHistory() model = %q, want %q", provider.capturedChatModel, "gpt-5.4-mini")
 	}
 }
+
+func TestCompressHistory_SuppressesAssistantUpdatesForSummaryRequest(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", summary: "summary"}
+	cfg := config.DefaultConfig()
+	cfg.Output.AssistantUpdates = api.AssistantUpdatesVerbose
+
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
+	agent.History = []api.Message{
+		{Role: "user", Content: "old"},
+		{Role: "assistant", Content: "latest"},
+	}
+
+	if err := agent.CompressHistory(1); err != nil {
+		t.Fatalf("CompressHistory() error = %v", err)
+	}
+	if provider.capturedChatUpdateMode != api.AssistantUpdatesOff {
+		t.Fatalf("summary request assistant update mode = %q, want %q", provider.capturedChatUpdateMode, api.AssistantUpdatesOff)
+	}
+}

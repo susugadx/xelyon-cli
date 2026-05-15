@@ -26,6 +26,8 @@ func ToolDisplayIcon(toolName string) string {
 	switch toolName {
 	case "gather_context":
 		return "🧭"
+	case ToolNameCompress:
+		return "🗜️"
 	case "read_file", "read_files":
 		return "📄"
 	case "write_file":
@@ -72,6 +74,7 @@ var toolDisplayIcons = []string{
 	"📦",
 	"🔌",
 	"🧭",
+	"🗜️",
 	"📄",
 	"📝",
 	"✏️",
@@ -92,6 +95,8 @@ func formatToolSummary(info ToolDisplayInfo, trimmed string) string {
 	switch {
 	case info.ToolName == "gather_context":
 		return formatGatherContextSummary(info.Args)
+	case info.ToolName == ToolNameCompress:
+		return formatCompressionSummary(info.Args)
 	case info.ToolName == "read_file":
 		return formatReadFileSummary(info.Args, trimmed)
 	case info.ToolName == "read_files":
@@ -173,6 +178,8 @@ func toolTarget(info ToolDisplayInfo) string {
 			target += " (impact)"
 		}
 		return target
+	case info.ToolName == ToolNameCompress:
+		return formatCompressionSummary(info.Args)
 	case info.ToolName == "read_file":
 		return readFileDisplayTarget(info.Args)
 	case info.ToolName == "write_file", info.ToolName == "str_replace", info.ToolName == "delete_file":
@@ -201,4 +208,48 @@ func toolTarget(info ToolDisplayInfo) string {
 	}
 
 	return firstNonEmpty(info.Args, sortedKeys(info.Args)...)
+}
+
+func formatCompressionSummary(args map[string]string) string {
+	parts := []string{compressionModeLabel(args[ToolArgCompressionMode])}
+	if reason := strings.TrimSpace(args[ToolArgCompressionReason]); reason != "" {
+		parts = append(parts, reason)
+	}
+	if outcome := strings.TrimSpace(args[ToolArgCompressionOutcome]); outcome != "" {
+		parts = append(parts, outcome)
+	}
+
+	before := strings.TrimSpace(args[ToolArgCompressionBeforeTokens])
+	after := strings.TrimSpace(args[ToolArgCompressionAfterTokens])
+	switch {
+	case before != "" && after != "":
+		parts = append(parts, before+" -> "+after+" tok")
+	case before != "":
+		parts = append(parts, before+" tok")
+	case after != "":
+		parts = append(parts, after+" tok")
+	}
+
+	return strings.Join(nonEmptyText(parts...), " · ")
+}
+
+func compressionModeLabel(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case ToolCompressionModeCompactAPI:
+		return "compact API"
+	default:
+		return "context"
+	}
+}
+
+func nonEmptyText(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
 }

@@ -20,6 +20,8 @@ const (
 type compressHistoryOptions struct {
 	// Plan Mode の retry など、呼び出し側が restore 前の一時履歴を保存したくない場合だけ true。
 	skipPersistenceOnSuccess bool
+	displayReason            string
+	suppressTUIDisplay       bool
 }
 
 // CompressHistory は会話履歴を圧縮する
@@ -49,6 +51,16 @@ func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) err
 		return fmt.Errorf("圧縮対象のメッセージがありません（FC ターン保護により分割不可）")
 	}
 
+	display := compressionDisplayOperation{}
+	if !opts.suppressTUIDisplay {
+		display = a.beginCompressionDisplay(
+			compressionDisplayModeHistory,
+			opts.displayReason,
+			keepRecent,
+			beforeTokens,
+		)
+	}
+
 	// サマリー生成プロンプト
 	// 古いツール結果を截断してトークン節約（サマリー生成の入力を削減）
 	prunedCompress, metrics := CompactOldToolResults(toCompress, manualCompressMaxLines, manualCompressHeadLines, manualCompressTailLines)
@@ -61,18 +73,22 @@ func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) err
 	summaryPrompt := prompt.BuildSummaryPrompt(promptMessages, config.MessageTruncateLen)
 
 	// LLMにサマリーを依頼
-	cyan.Fprintln(out, "🗜️ Compressing history...")
+	if a.shouldPrintCompressionOutput() {
+		cyan.Fprintln(out, "🗜️ Compressing history...")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	compressModel := a.getCompressionModel()
 	finishResponseContext := a.suspendResponseContinuationForLocalCompression(!opts.skipPersistenceOnSuccess)
-	summary, err := a.CurrentProvider.ChatWithTools(a.requestContext(ctx), "", []api.Message{
+	summary, err := a.CurrentProvider.ChatWithTools(a.compressionRequestContext(ctx), "", []api.Message{
 		{Role: "user", Content: summaryPrompt},
 	}, compressModel)
 	if err != nil {
 		finishResponseContext(false, nil)
-		return fmt.Errorf("サマリー生成に失敗しました: %w", err)
+		wrapped := fmt.Errorf("サマリー生成に失敗しました: %w", err)
+		a.finishCompressionDisplay(display, 0, wrapped)
+		return wrapped
 	}
 
 	// 新しい履歴を構築
@@ -93,11 +109,18 @@ func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) err
 	afterTokens := estimateTokens(a.CurrentModel, a.History)
 
 	// 結果表示
-	_, _ = fmt.Fprintf(out, "   Before: %s tokens → After: %s tokens\n",
-		formatNumber(beforeTokens), formatNumber(afterTokens))
-	_, _ = fmt.Fprintln(out)
+	if a.shouldPrintCompressionOutput() {
+		_, _ = fmt.Fprintf(out, "   Before: %s tokens → After: %s tokens\n",
+			formatNumber(beforeTokens), formatNumber(afterTokens))
+		_, _ = fmt.Fprintln(out)
+	}
+	a.finishCompressionDisplay(display, afterTokens, nil)
 
 	return nil
+}
+
+func (a *Agent) compressionRequestContext(ctx context.Context) context.Context {
+	return api.WithAssistantUpdateMode(a.requestContext(ctx), api.AssistantUpdatesOff)
 }
 
 // adjustSplitForFCPairs は FC ターン（assistant+ToolCalls → tool レスポンス）のペアが

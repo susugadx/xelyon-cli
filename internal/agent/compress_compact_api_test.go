@@ -23,3 +23,19 @@ func TestCompressWithCompactAPI_UsesCompressionModel(t *testing.T) {
 		t.Fatalf("CompressWithCompactAPI() model = %q, want %q", provider.capturedCompactModel, "gpt-5.4-mini")
 	}
 }
+
+func TestCompressWithCompactAPI_SuppressesAssistantUpdates(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", supportsCompact: true}
+	cfg := config.DefaultConfig()
+	cfg.Output.AssistantUpdates = api.AssistantUpdatesVerbose
+
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
+	agent.History = []api.Message{{Role: "user", Content: "hello"}}
+
+	if err := agent.CompressWithCompactAPI(context.Background()); err != nil {
+		t.Fatalf("CompressWithCompactAPI() error = %v", err)
+	}
+	if provider.capturedCompactUpdateMode != api.AssistantUpdatesOff {
+		t.Fatalf("compact request assistant update mode = %q, want %q", provider.capturedCompactUpdateMode, api.AssistantUpdatesOff)
+	}
+}

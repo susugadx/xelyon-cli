@@ -19,6 +19,7 @@ type compressionTestProvider struct {
 	capturedChatModel         string
 	capturedChatHistory       []api.Message
 	capturedChatResponseID    string
+	capturedChatUpdateMode    string
 	cachedResponseID          bool
 	responseID                string
 	serverCompactionLocalSkip bool
@@ -28,6 +29,7 @@ type compressionTestProvider struct {
 	capturedCompactModel      string
 	capturedCompactInput      []api.InputItem
 	capturedCompactResponseID string
+	capturedCompactUpdateMode string
 	compactOutput             []api.InputItem
 	supportsClaudeCompaction  bool
 }
@@ -47,11 +49,12 @@ func (m *compressionTestProvider) IsFunctionCallingEnabled() bool {
 	return false
 }
 
-func (m *compressionTestProvider) ChatWithTools(_ context.Context, _ string, history []api.Message, model string) (string, error) {
+func (m *compressionTestProvider) ChatWithTools(ctx context.Context, _ string, history []api.Message, model string) (string, error) {
 	m.chatCalls++
 	m.capturedChatModel = model
 	m.capturedChatHistory = append([]api.Message(nil), history...)
 	m.capturedChatResponseID = m.responseID
+	m.capturedChatUpdateMode = api.AssistantUpdateModeFromContext(ctx)
 	if m.chatErr != nil {
 		return "", m.chatErr
 	}
@@ -86,11 +89,12 @@ func (m *compressionTestProvider) SupportsCompact() bool {
 	return m.supportsCompact
 }
 
-func (m *compressionTestProvider) CompactHistory(_ context.Context, input []api.InputItem, model, _ string) (*api.CompactResponse, error) {
+func (m *compressionTestProvider) CompactHistory(ctx context.Context, input []api.InputItem, model, _ string) (*api.CompactResponse, error) {
 	m.compactCalls++
 	m.capturedCompactModel = model
 	m.capturedCompactInput = api.CloneInputItems(input)
 	m.capturedCompactResponseID = m.responseID
+	m.capturedCompactUpdateMode = api.AssistantUpdateModeFromContext(ctx)
 	if m.compactErr != nil {
 		return nil, m.compactErr
 	}

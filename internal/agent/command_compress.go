@@ -51,15 +51,19 @@ func handleCompressCommand(agent *Agent, args []string) bool {
 	}
 
 	// 確認プロンプト
-	printCommandHeaderToWriter(out, "Compress History / 会話履歴を圧縮")
-	_, _ = fmt.Fprintf(out, "現在の履歴: %d messages\n", len(agent.History))
-	_, _ = fmt.Fprintf(out, "保持する最新件数: %d messages\n", keepRecent)
-	_, _ = fmt.Fprintf(out, "圧縮対象: %d messages\n", len(agent.History)-keepRecent)
-	yellow.Fprintln(out, "\n⚠️  Warning: 圧縮後、古いメッセージはサマリーに置き換わります")
+	if agent.shouldPrintCompressionOutput() {
+		printCommandHeaderToWriter(out, "Compress History / 会話履歴を圧縮")
+		_, _ = fmt.Fprintf(out, "現在の履歴: %d messages\n", len(agent.History))
+		_, _ = fmt.Fprintf(out, "保持する最新件数: %d messages\n", keepRecent)
+		_, _ = fmt.Fprintf(out, "圧縮対象: %d messages\n", len(agent.History)-keepRecent)
+		yellow.Fprintln(out, "\n⚠️  Warning: 圧縮後、古いメッセージはサマリーに置き換わります")
+	}
 
 	// 確認
 	if !promptConfirmWithRuntime(agent.ui(), "\nContinue? (y/n): ") {
-		yellow.Fprintln(out, "Cancelled")
+		if agent.shouldPrintCompressionOutput() {
+			yellow.Fprintln(out, "Cancelled")
+		}
 		return true
 	}
 
@@ -90,15 +94,19 @@ func handleCompactAPICompress(agent *Agent) bool {
 	}
 
 	// 確認プロンプト
-	printCommandHeaderToWriter(out, "Compress with OpenAI Compact API")
-	_, _ = fmt.Fprintf(out, "現在の履歴: %d messages\n", len(agent.History))
-	yellow.Fprintln(out, "\n💡 Compact API uses OpenAI's lossy compression")
-	yellow.Fprintln(out, "   User messages are preserved verbatim")
-	yellow.Fprintln(out, "   Assistant responses are replaced with encrypted data")
+	if agent.shouldPrintCompressionOutput() {
+		printCommandHeaderToWriter(out, "Compress with OpenAI Compact API")
+		_, _ = fmt.Fprintf(out, "現在の履歴: %d messages\n", len(agent.History))
+		yellow.Fprintln(out, "\n💡 Compact API uses OpenAI's lossy compression")
+		yellow.Fprintln(out, "   User messages are preserved verbatim")
+		yellow.Fprintln(out, "   Assistant responses are replaced with encrypted data")
+	}
 
 	// 確認
 	if !promptConfirmWithRuntime(agent.ui(), "\nContinue? (y/n): ") {
-		yellow.Fprintln(out, "Cancelled")
+		if agent.shouldPrintCompressionOutput() {
+			yellow.Fprintln(out, "Cancelled")
+		}
 		return true
 	}
 
@@ -109,6 +117,8 @@ func handleCompactAPICompress(agent *Agent) bool {
 		return true
 	}
 
-	green.Fprintln(out, "✅ History compressed with Compact API")
+	if agent.shouldPrintCompressionOutput() {
+		green.Fprintln(out, "✅ History compressed with Compact API")
+	}
 	return true
 }

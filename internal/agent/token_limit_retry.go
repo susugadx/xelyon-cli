@@ -28,7 +28,9 @@ func (a *Agent) handleTokenLimitErrorWithRetryOptions(err error, retryFunc func(
 	}
 
 	// 通知表示
-	cyan.Fprintln(a.output(), "\n⚡ トークン上限到達。自動圧縮して再実行します...")
+	if a.shouldPrintCompressionOutput() {
+		cyan.Fprintln(a.output(), "\n⚡ トークン上限到達。自動圧縮して再実行します...")
+	}
 
 	// LLMサマリー方式で圧縮（既存のCompressHistoryを使用）
 	// keepRecentはデフォルト値10を使用
@@ -40,15 +42,24 @@ func (a *Agent) handleTokenLimitErrorWithRetryOptions(err error, retryFunc func(
 
 	// 履歴が短すぎる場合は圧縮できない
 	if len(a.History) <= keepRecent {
-		yellow.Fprintln(a.output(), "⚠️  履歴が短すぎるため圧縮できません")
+		if a.shouldPrintCompressionOutput() {
+			yellow.Fprintln(a.output(), "⚠️  履歴が短すぎるため圧縮できません")
+		}
 		handleTokenLimitErrorWithWriter(a.output(), err)
 		return false
 	}
 
 	// 圧縮実行
-	yellow.Fprintln(a.output(), "🗜️  会話を圧縮中...")
-	if err := a.compressHistory(keepRecent, compressHistoryOptions{skipPersistenceOnSuccess: opts.skipCompressionPersistence}); err != nil {
-		red.Fprintf(a.output(), "❌ 自動圧縮に失敗しました: %v\n", err)
+	if a.shouldPrintCompressionOutput() {
+		yellow.Fprintln(a.output(), "🗜️  会話を圧縮中...")
+	}
+	if err := a.compressHistory(keepRecent, compressHistoryOptions{
+		skipPersistenceOnSuccess: opts.skipCompressionPersistence,
+		displayReason:            compressionDisplayReasonTokenLimit,
+	}); err != nil {
+		if a.shouldPrintCompressionOutput() {
+			red.Fprintf(a.output(), "❌ 自動圧縮に失敗しました: %v\n", err)
+		}
 		handleTokenLimitErrorWithWriter(a.output(), err)
 		return false
 	}
@@ -57,18 +68,24 @@ func (a *Agent) handleTokenLimitErrorWithRetryOptions(err error, retryFunc func(
 	a.tokenLimitRetryCount++
 
 	// リトライ実行
-	cyan.Fprintln(a.output(), "🔄 圧縮完了、再実行します...")
+	if a.shouldPrintCompressionOutput() {
+		cyan.Fprintln(a.output(), "🔄 圧縮完了、再実行します...")
+	}
 	if retryErr := retryFunc(); retryErr != nil {
 		// リトライ後もエラーの場合は通常のエラー表示
 		if token.IsTokenLimitError(retryErr) {
-			red.Fprintln(a.output(), "❌ 圧縮後もトークン上限を超えています")
+			if a.shouldPrintCompressionOutput() {
+				red.Fprintln(a.output(), "❌ 圧縮後もトークン上限を超えています")
+			}
 		}
 		handleTokenLimitErrorWithWriter(a.output(), retryErr)
 		return false
 	}
 
 	// リトライ成功
-	green.Fprintln(a.output(), "✅ 自動圧縮＆リトライ成功")
+	if a.shouldPrintCompressionOutput() {
+		green.Fprintln(a.output(), "✅ 自動圧縮＆リトライ成功")
+	}
 	a.tokenLimitRetryCount = 0 // 成功したらリセット
 	return true
 }

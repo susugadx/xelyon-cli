@@ -20,53 +20,95 @@ type ResponsesServerCompactionLocalSkipCapable interface {
 	ShouldSkipLocalAutoCompressionForServerCompaction() bool
 }
 
-func (a *Agent) runAutoCompression(costAwareCompress bool) bool {
+func (a *Agent) runAutoCompression(decision autoCompressionDecision) bool {
 	cfg := a.cfg()
+	costAwareCompress := decision.costAware
+	keepRecent := cfg.Compression.KeepRecent
+	if keepRecent == 0 {
+		keepRecent = 10
+	}
+	beforeTokens := decision.currentTokens
+	if beforeTokens == 0 {
+		beforeTokens = a.EstimateTokens()
+	}
+	display := compressionDisplayOperation{}
 
 	// Compact API を優先的に使用するか確認
 	if cfg.Compression.PreferCompactAPI {
 		if compactProvider, ok := a.CurrentProvider.(api.CompactCapable); ok {
 			if compactProvider.SupportsCompact() {
+				display = a.beginCompressionDisplay(
+					compressionDisplayModeCompactAPI,
+					compressionDisplayReasonAuto,
+					keepRecent,
+					beforeTokens,
+				)
 				ctx := context.Background()
-				if err := a.CompressWithCompactAPI(ctx); err == nil {
+				result, err := a.compressWithCompactAPI(ctx, compressCompactOptions{
+					displayReason:      compressionDisplayReasonAuto,
+					suppressTUIDisplay: true,
+				})
+				if err == nil {
+					a.finishCompressionDisplay(display, compactResultOutputTokens(result), nil)
 					metrics := OptimizationMetrics{CompactionCount: 1}
 					if costAwareCompress {
 						metrics.CostAwareCompressions = 1
 					}
 					a.addOptimizationMetrics(metrics)
-					_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.enabled false")
-					_, _ = fmt.Fprintln(a.output())
+					if a.shouldPrintCompressionOutput() {
+						_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.enabled false")
+						_, _ = fmt.Fprintln(a.output())
+					}
 					return true
 				}
 				// Compact API 失敗時はLLMサマリーにフォールバック
-				yellow.Fprintf(a.output(), "   ⚠️ Compact API failed, falling back to LLM summary...\n")
+				if a.usesTUICompressionDisplay() {
+					display = a.updateCompressionDisplay(display, compressionDisplayModeHistory, "Compact API failed; falling back to history summary.")
+				} else {
+					yellow.Fprintf(a.output(), "   ⚠️ Compact API failed, falling back to LLM summary...\n")
+				}
 			}
 		}
 	}
 
-	keepRecent := cfg.Compression.KeepRecent
-	if keepRecent == 0 {
-		keepRecent = 10
+	if !display.active {
+		display = a.beginCompressionDisplay(
+			compressionDisplayModeHistory,
+			compressionDisplayReasonAuto,
+			keepRecent,
+			beforeTokens,
+		)
 	}
 
 	// 履歴が短すぎる場合はスキップ
 	if len(a.History) <= keepRecent {
-		_, _ = fmt.Fprintln(a.output(), "   Skipped: history too short")
+		if a.shouldPrintCompressionOutput() {
+			_, _ = fmt.Fprintln(a.output(), "   Skipped: history too short")
+		}
+		a.finishCompressionDisplaySkipped(display, "history too short")
 		return false
 	}
 
-	beforeTokens := a.EstimateTokens()
-	if err := a.CompressHistory(keepRecent); err != nil {
-		yellow.Fprintf(a.output(), "   ⚠️ Auto-compress failed: %v\n", err)
+	if err := a.compressHistory(keepRecent, compressHistoryOptions{
+		displayReason:      compressionDisplayReasonAuto,
+		suppressTUIDisplay: true,
+	}); err != nil {
+		if a.shouldPrintCompressionOutput() {
+			yellow.Fprintf(a.output(), "   ⚠️ Auto-compress failed: %v\n", err)
+		}
+		a.finishCompressionDisplay(display, 0, err)
 		return false
 	}
 	afterTokens := a.EstimateTokens()
+	a.finishCompressionDisplay(display, afterTokens, nil)
 
 	// 結果を表示
-	_, _ = fmt.Fprintf(a.output(), "   Before: %s tokens → After: %s tokens\n",
-		formatNumber(beforeTokens), formatNumber(afterTokens))
-	_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.enabled false")
-	_, _ = fmt.Fprintln(a.output())
+	if a.shouldPrintCompressionOutput() {
+		_, _ = fmt.Fprintf(a.output(), "   Before: %s tokens → After: %s tokens\n",
+			formatNumber(beforeTokens), formatNumber(afterTokens))
+		_, _ = fmt.Fprintln(a.output(), "   💡 Disable with: xelyon config set compression.enabled false")
+		_, _ = fmt.Fprintln(a.output())
+	}
 
 	metrics := OptimizationMetrics{CompactionCount: 1}
 	if costAwareCompress {
@@ -94,7 +136,7 @@ func (a *Agent) applyAutoCompressionDecision(decision autoCompressionDecision) b
 	switch decision.action {
 	case autoCompressionActionRun:
 		a.printAutoCompressionStart(decision)
-		return a.runAutoCompression(decision.costAware)
+		return a.runAutoCompression(decision)
 	case autoCompressionActionWarnUnknownContext:
 		a.warnAutoCompressUnknownContext(decision.providerKey, decision.model)
 		return false
@@ -104,6 +146,9 @@ func (a *Agent) applyAutoCompressionDecision(decision autoCompressionDecision) b
 }
 
 func (a *Agent) printAutoCompressionStart(decision autoCompressionDecision) {
+	if !a.shouldPrintCompressionOutput() {
+		return
+	}
 	switch decision.reason {
 	case autoCompressionReasonPricingCliff:
 		cyan.Fprintf(a.output(),
