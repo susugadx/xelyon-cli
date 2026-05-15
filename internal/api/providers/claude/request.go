@@ -2,12 +2,9 @@ package claude
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
@@ -87,89 +84,8 @@ func isClaudeOpus46Model(model string) bool {
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	p.lastContentBlocks = nil
 
-	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-6）
-	model = api.GetDefaultModelWithContext(ctx, model, "claude", "claude-sonnet-4-6")
-
-	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
-	messages := ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
-
-	// デバッグ: tool_use/tool_result の整合性チェック
-	if os.Getenv("XELYON_DEBUG_CLAUDE") == "1" {
-		errOut := api.ErrorWriterFromContext(ctx)
-		fmt.Fprintf(errOut, "[DEBUG Claude] === History (%d messages) ===\n", len(history))
-		for i, m := range history {
-			tcIDs := make([]string, len(m.ToolCalls))
-			for j, tc := range m.ToolCalls {
-				tcIDs[j] = tc.ID
-			}
-			if len(tcIDs) > 0 {
-				fmt.Fprintf(errOut, "[DEBUG Claude] history[%d] role=%s tool_calls=%v\n", i, m.Role, tcIDs)
-			} else if m.ToolCallID != "" {
-				fmt.Fprintf(errOut, "[DEBUG Claude] history[%d] role=%s tool_call_id=%s\n", i, m.Role, m.ToolCallID)
-			} else {
-				fmt.Fprintf(errOut, "[DEBUG Claude] history[%d] role=%s content_len=%d\n", i, m.Role, len(m.Content))
-			}
-		}
-		fmt.Fprintf(errOut, "[DEBUG Claude] === Converted (%d messages) ===\n", len(messages))
-		for i, m := range messages {
-			var types []string
-			for _, b := range m.Content {
-				switch b.Type {
-				case "tool_use":
-					types = append(types, "tool_use:"+b.ID)
-				case "tool_result":
-					types = append(types, "tool_result:"+b.ToolUseID)
-				default:
-					types = append(types, b.Type)
-				}
-			}
-			fmt.Fprintf(errOut, "[DEBUG Claude] messages[%d] role=%s content=%v\n", i, m.Role, types)
-		}
-		validateAnthropicToolPairs(messages, errOut)
-	}
-
-	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-	catalogModel := cfg.ModelCatalogName(p.configLookupKey(), model)
-
-	reqBody := Request{
-		Model:     model,
-		Messages:  messages,
-		System:    api.BuildSystemFieldWithConfig(systemPrompt, cfg),
-		MaxTokens: p.maxOutputTokens(ctx, model),
-		Stream:    true,
-	}
-	if cfg != nil && cfg.PromptCache.Enabled {
-		// Anthropic automatic caching advances the breakpoint with conversation growth.
-		// Keep explicit breakpoints on system/tools, and let the request-level cache
-		// capture the latest conversation prefix from the second turn onward.
-		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
-	}
-
-	reqBody.ContextManagement = buildContextManagementForModel(catalogModel, cfg.Compression)
-
-	// Extended Thinking 適用
-	if api.IsThinkingEnabled(ctx) {
-		if IsAdaptiveThinkingModel(catalogModel) {
-			reqBody.Thinking = &ThinkingConfig{
-				Type: "adaptive",
-			}
-			reqBody.OutputConfig = &OutputConfig{
-				Effort: LevelToEffort(cfg.Thinking.Level, catalogModel),
-			}
-		} else {
-			reqBody.Thinking = &ThinkingConfig{
-				Type:         "enabled",
-				BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
-			}
-		}
-	}
-
-	// Tool Use: ツール定義を追加（環境変数で無効化可能）
-	if api.ShouldSendToolPayload(ctx, os.Getenv("CLAUDE_FUNCTION_CALLING") != "0") {
-		reqBody.Tools = GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
-	}
-
-	result, err := p.executeRequest(ctx, reqBody, model, reqBody.ContextManagement, false)
+	built := p.buildMessagesRequest(ctx, systemPrompt, history, model)
+	result, err := p.executeRequest(ctx, built.Request, built.Model, built.Request.ContextManagement, false)
 	if err != nil {
 		return "", err
 	}
@@ -188,76 +104,8 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	// モデル名を設定（config優先、フォールバックはclaude-sonnet-4-6）
-	model = api.GetDefaultModelWithContext(ctx, model, "claude", "claude-sonnet-4-6")
-
-	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
-	converted := ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
-
-	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-	catalogModel := cfg.ModelCatalogName(p.configLookupKey(), model)
-
-	var messages []interface{}
-	for _, msg := range converted {
-		messages = append(messages, msg)
-	}
-
-	// 画像付きユーザーメッセージを追加
-	multimodalMessage := MultimodalMessage{
-		Role: "user",
-		Content: []ContentPart{
-			{
-				Type: "image",
-				Source: &ImageSource{
-					Type:      "base64",
-					MediaType: image.MediaType,
-					Data:      image.Base64,
-				},
-			},
-			{
-				Type: "text",
-				Text: userMessage,
-			},
-		},
-	}
-	messages = append(messages, multimodalMessage)
-
-	reqBody := MultimodalRequest{
-		Model:     model,
-		Messages:  messages,
-		System:    api.BuildSystemFieldWithConfig(systemPrompt, cfg),
-		MaxTokens: p.maxOutputTokens(ctx, model),
-		Stream:    true,
-	}
-	if cfg != nil && cfg.PromptCache.Enabled {
-		reqBody.CacheControl = api.NewCacheControlWithConfig(cfg)
-	}
-
-	reqBody.ContextManagement = buildContextManagementForModel(catalogModel, cfg.Compression)
-
-	// Extended Thinking 適用
-	if api.IsThinkingEnabled(ctx) {
-		if IsAdaptiveThinkingModel(catalogModel) {
-			reqBody.Thinking = &ThinkingConfig{
-				Type: "adaptive",
-			}
-			reqBody.OutputConfig = &OutputConfig{
-				Effort: LevelToEffort(cfg.Thinking.Level, catalogModel),
-			}
-		} else {
-			reqBody.Thinking = &ThinkingConfig{
-				Type:         "enabled",
-				BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
-			}
-		}
-	}
-
-	// Tool Use: ツール定義を追加（環境変数で無効化可能）
-	if api.ShouldSendToolPayload(ctx, os.Getenv("CLAUDE_FUNCTION_CALLING") != "0") {
-		reqBody.Tools = GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
-	}
-
-	result, err := p.executeRequest(ctx, reqBody, model, reqBody.ContextManagement, true)
+	built := p.buildMultimodalRequest(ctx, systemPrompt, history, userMessage, image, model)
+	result, err := p.executeRequest(ctx, built.Request, built.Model, built.Request.ContextManagement, true)
 	if err != nil {
 		return "", err
 	}

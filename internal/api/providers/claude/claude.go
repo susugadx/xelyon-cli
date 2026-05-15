@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -25,7 +26,12 @@ func init() {
 	})
 }
 
-const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
+const (
+	defaultClaudeURL        = "https://api.anthropic.com/v1/messages"
+	defaultClaudeModel      = "claude-sonnet-4-6"
+	claudeFunctionCallEnv   = "CLAUDE_FUNCTION_CALLING"
+	defaultAnthropicVersion = "2023-06-01"
+)
 
 const (
 	compactEditType             = "compact_20260112"
@@ -201,7 +207,11 @@ func (p *Provider) SupportsImages() bool {
 
 // IsFunctionCallingEnabled は Function Calling が有効かを返す
 func (p *Provider) IsFunctionCallingEnabled() bool {
-	return true
+	return claudeFunctionCallingEnabled()
+}
+
+func claudeFunctionCallingEnabled() bool {
+	return os.Getenv(claudeFunctionCallEnv) != "0"
 }
 
 // SupportsClaudeCompaction は Claude Compaction 対応を返す
@@ -256,7 +266,7 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 		model = cfg.GetEffectiveModelForProvider(providerKey)
 	}
 	if model == "" {
-		model = "claude-sonnet-4-6"
+		model = defaultClaudeModel
 	}
 	return isCompactionSupported(cfg.ModelCatalogName(providerKey, model))
 }

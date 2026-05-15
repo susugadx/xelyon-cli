@@ -312,7 +312,13 @@ func TestHandleNonStreamingResponse_NoContentError(t *testing.T) {
 }
 
 func TestProviderIsFunctionCallingEnabled(t *testing.T) {
+	t.Setenv(claudeFunctionCallEnv, "1")
 	if !New("test-key").IsFunctionCallingEnabled() {
 		t.Fatal("IsFunctionCallingEnabled() = false, want true")
+	}
+
+	t.Setenv(claudeFunctionCallEnv, "0")
+	if New("test-key").IsFunctionCallingEnabled() {
+		t.Fatal("IsFunctionCallingEnabled() = true, want false when CLAUDE_FUNCTION_CALLING=0")
 	}
 }
