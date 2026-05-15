@@ -178,6 +178,11 @@ func (g Evidence) Items() []evidenceFact {
 	return items
 }
 
+// Pointers は記録済み根拠を外部向け pointer の防御コピーで返す。
+func (g Evidence) Pointers() []EvidencePointer {
+	return evidencePointersFromFacts(g.items)
+}
+
 // Len は記録済み根拠数を返す。
 func (g Evidence) Len() int {
 	return len(g.items)
@@ -280,6 +285,11 @@ func (f evidenceFact) FileHash() string {
 // Stale は evidence が古い可能性を返す。P0a では常に false。
 func (f evidenceFact) Stale() bool {
 	return f.stale
+}
+
+// EvidencePointersFromState は RuntimeTaskState から evidence pointer を防御コピーで返す。
+func EvidencePointersFromState(state RuntimeTaskState) []EvidencePointer {
+	return state.Evidence.Pointers()
 }
 
 // RecommendedReads は後続で読むべきファイルを初出順で保持する。
