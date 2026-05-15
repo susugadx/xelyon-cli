@@ -44,6 +44,7 @@ func (o *normalModeTurnOrchestrator) Run() error {
 		onNoToolCalls:    o.onNoToolCalls,
 		beforeToolCalls:  o.beforeToolCalls,
 		executeToolCalls: o.executeToolCalls,
+		afterToolResults: o.afterToolResults,
 	})
 	if err != nil {
 		return err
@@ -104,6 +105,10 @@ func (o *normalModeTurnOrchestrator) executeToolCalls(_ int, response string, to
 	if err := o.runner.processNormalModeToolCalls(response, toolCalls, o.state, &o.state.rs); err != nil {
 		return turnLoopReturn, err
 	}
+	return turnLoopProceed, nil
+}
+
+func (o *normalModeTurnOrchestrator) afterToolResults(_ int, _ string, _ []*tools.ToolCall) (turnLoopDirective, error) {
 	return turnLoopProceed, nil
 }
 

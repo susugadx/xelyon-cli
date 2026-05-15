@@ -11,19 +11,21 @@ import (
 )
 
 type chatRequest struct {
-	input      string
-	image      *api.ImageData
-	oneShot    bool
-	startStats SessionStats
+	input           string
+	image           *api.ImageData
+	oneShot         bool
+	startStats      SessionStats
+	autoCompression *autoCompressionTurnState
 }
 
 // chatCore は chat / ChatOnce の共有実装
 // oneShot=true の場合: エラーを返し、対話向け後処理（usage表示・圧縮・context提案）をスキップ
 func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error {
 	req := &chatRequest{
-		input:   input,
-		image:   image,
-		oneShot: oneShot,
+		input:           input,
+		image:           image,
+		oneShot:         oneShot,
+		autoCompression: newAutoCompressionTurnState(),
 	}
 
 	a.prepareChatRequest(req)
@@ -139,7 +141,7 @@ func (a *Agent) finishChatRequest(req *chatRequest) error {
 	}
 
 	a.printTaskUsage(req.startStats)
-	a.maybeAutoCompress()
+	a.maybeAutoCompressAfterTurn(req.autoCompression)
 	a.printContextSuggestion()
 	a.setReadyForInputStatus()
 	return nil

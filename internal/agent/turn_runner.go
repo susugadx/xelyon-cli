@@ -33,6 +33,7 @@ type turnLoopPolicy struct {
 	onNoToolCalls    func(iteration int, response string) (turnLoopDirective, error)
 	beforeToolCalls  func(iteration int, response string, toolCalls []*tools.ToolCall)
 	executeToolCalls func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error)
+	afterToolResults func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error)
 }
 
 func newTurnRunner(agent *Agent, ctx context.Context) *TurnRunner {
@@ -166,10 +167,21 @@ func (r *TurnRunner) runTurnLoop(policy turnLoopPolicy) (turnLoopDirective, erro
 			return turnLoopReturn, err
 		}
 		switch directive {
-		case turnLoopContinue:
-			continue
 		case turnLoopBreak, turnLoopDone, turnLoopReturn:
 			return directive, nil
+		}
+
+		if policy.afterToolResults != nil {
+			directive, err := policy.afterToolResults(iteration, response, toolCalls)
+			if err != nil {
+				return turnLoopReturn, err
+			}
+			switch directive {
+			case turnLoopContinue:
+				continue
+			case turnLoopBreak, turnLoopDone, turnLoopReturn:
+				return directive, nil
+			}
 		}
 	}
 }

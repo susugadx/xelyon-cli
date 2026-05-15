@@ -118,18 +118,30 @@ func (a *Agent) runAutoCompression(decision autoCompressionDecision) bool {
 	return true
 }
 
-// maybeAutoCompress は閾値を超えた場合に自動圧縮を実行
-// 圧縮した場合は true を返す
-func (a *Agent) maybeAutoCompress() bool {
+type autoCompressionAttemptResult struct {
+	attempted  bool
+	compressed bool
+}
+
+func (a *Agent) maybeAutoCompressAttempt() autoCompressionAttemptResult {
 	cfg := a.cfg()
 	if !cfg.Compression.Enabled {
-		return false
+		return autoCompressionAttemptResult{}
 	}
 
 	currentTokens := a.EstimateTokens()
 	providerKey := a.sessionProviderConfigKey(cfg)
 	decision := a.planAutoCompression(cfg, providerKey, currentTokens)
-	return a.applyAutoCompressionDecision(decision)
+	return autoCompressionAttemptResult{
+		attempted:  decision.action == autoCompressionActionRun,
+		compressed: a.applyAutoCompressionDecision(decision),
+	}
+}
+
+// maybeAutoCompress は閾値を超えた場合に自動圧縮を実行
+// 圧縮した場合は true を返す
+func (a *Agent) maybeAutoCompress() bool {
+	return a.maybeAutoCompressAttempt().compressed
 }
 
 func (a *Agent) applyAutoCompressionDecision(decision autoCompressionDecision) bool {

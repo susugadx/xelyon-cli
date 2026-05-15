@@ -111,3 +111,49 @@ func TestAdjustSplitForFCPairs_NoFC(t *testing.T) {
 		t.Errorf("Expected splitIdx=3 (unchanged), got %d", got)
 	}
 }
+
+func TestSplitHistoryForCompression_UsesPersistableHistoryForCompressedSide(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "runtime old"},
+		{Role: "assistant", Content: "runtime middle"},
+		{Role: "user", Content: "runtime latest"},
+	}
+	persistHistory := []api.Message{
+		{Role: "user", Content: "persist old"},
+		{Role: "assistant", Content: "persist middle"},
+		{Role: "user", Content: "persist latest"},
+	}
+
+	split := splitHistoryForCompression(history, persistHistory, 1)
+
+	if len(split.toCompress) != 2 {
+		t.Fatalf("toCompress len = %d, want 2", len(split.toCompress))
+	}
+	if split.toCompress[0].Content != "persist old" || split.toCompress[1].Content != "persist middle" {
+		t.Fatalf("toCompress = %#v, want persistable compressed messages", split.toCompress)
+	}
+	if len(split.toKeep) != 1 || split.toKeep[0].Content != "runtime latest" {
+		t.Fatalf("toKeep = %#v, want runtime tail", split.toKeep)
+	}
+	if len(split.toKeepPersist) != 1 || split.toKeepPersist[0].Content != "persist latest" {
+		t.Fatalf("toKeepPersist = %#v, want persistable tail", split.toKeepPersist)
+	}
+}
+
+func TestSplitHistoryForCompression_FCPairProtectionCanMakeCompressionEmpty(t *testing.T) {
+	history := []api.Message{
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{}`}},
+		}},
+		{Role: "tool", Content: "result", ToolCallID: "call_1"},
+	}
+
+	split := splitHistoryForCompression(history, history, 1)
+
+	if len(split.toCompress) != 0 {
+		t.Fatalf("toCompress len = %d, want 0 for unsplittable FC pair", len(split.toCompress))
+	}
+	if len(split.toKeep) != 2 {
+		t.Fatalf("toKeep len = %d, want 2", len(split.toKeep))
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -144,6 +145,105 @@ func TestRunTurnLoop_ExecuteToolCallsDoneDirectiveStopsLoop(t *testing.T) {
 	}
 	if !executeCalled {
 		t.Fatal("executeToolCalls was not called")
+	}
+}
+
+func TestRunTurnLoop_AfterToolResultsRunsBeforeNextRequest(t *testing.T) {
+	disableColors(t)
+
+	runner := newTurnLoopTestRunner(t, &commentSignalTool{})
+	events := []string{}
+
+	directive, err := runner.runTurnLoop(turnLoopPolicy{
+		hardLimit: 3,
+		requestResponse: func(iteration int) (string, error) {
+			events = append(events, "request")
+			if iteration == 0 {
+				return `{"tool":"comment_signal","args":{"note":"inspect"}}`, nil
+			}
+			return "plain response", nil
+		},
+		onNoToolCalls: func(iteration int, response string) (turnLoopDirective, error) {
+			events = append(events, "no-tools")
+			return turnLoopBreak, nil
+		},
+		beforeToolCalls: func(iteration int, response string, toolCalls []*tools.ToolCall) {
+			events = append(events, "before-tools")
+		},
+		executeToolCalls: func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			events = append(events, "execute-tools")
+			return turnLoopProceed, nil
+		},
+		afterToolResults: func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			events = append(events, "after-results")
+			return turnLoopProceed, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("runTurnLoop() error = %v", err)
+	}
+	if directive != turnLoopBreak {
+		t.Fatalf("directive = %v, want %v", directive, turnLoopBreak)
+	}
+	want := []string{"request", "before-tools", "execute-tools", "after-results", "request", "no-tools"}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events = %#v, want %#v", events, want)
+	}
+}
+
+func TestRunTurnLoop_AfterToolResultsBreakStopsNextRequest(t *testing.T) {
+	disableColors(t)
+
+	runner := newTurnLoopTestRunner(t, &commentSignalTool{})
+	requests := 0
+
+	directive, err := runner.runTurnLoop(turnLoopPolicy{
+		hardLimit: 3,
+		requestResponse: func(iteration int) (string, error) {
+			requests++
+			return `{"tool":"comment_signal","args":{"note":"inspect"}}`, nil
+		},
+		executeToolCalls: func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			return turnLoopProceed, nil
+		},
+		afterToolResults: func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			return turnLoopBreak, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("runTurnLoop() error = %v", err)
+	}
+	if directive != turnLoopBreak {
+		t.Fatalf("directive = %v, want %v", directive, turnLoopBreak)
+	}
+	if requests != 1 {
+		t.Fatalf("request count = %d, want 1", requests)
+	}
+}
+
+func TestRunTurnLoop_AfterToolResultsErrorPropagates(t *testing.T) {
+	disableColors(t)
+
+	runner := newTurnLoopTestRunner(t, &commentSignalTool{})
+	expectedErr := errors.New("after results failed")
+
+	directive, err := runner.runTurnLoop(turnLoopPolicy{
+		hardLimit: 2,
+		requestResponse: func(iteration int) (string, error) {
+			return `{"tool":"comment_signal","args":{"note":"inspect"}}`, nil
+		},
+		executeToolCalls: func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			return turnLoopProceed, nil
+		},
+		afterToolResults: func(iteration int, response string, toolCalls []*tools.ToolCall) (turnLoopDirective, error) {
+			return turnLoopProceed, expectedErr
+		},
+	})
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("error = %v, want %v", err, expectedErr)
+	}
+	if directive != turnLoopReturn {
+		t.Fatalf("directive = %v, want %v", directive, turnLoopReturn)
 	}
 }
 
