@@ -50,13 +50,7 @@ func runDeepSeekDiagnosticSmoke(ctx context.Context, cfg *config.Config, report 
 	started := time.Now()
 	for _, request := range deepSeekDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, DiagnosticSmokeRequestResult{
-				Name:        request.Name,
-				Skipped:     true,
-				SkipReason:  fmt.Sprintf("DeepSeek function calling payloads are disabled (%s=0)", deepSeekFunctionCallingEnv),
-				ToolPayload: true,
-				Route:       report.Route,
-			})
+			result.Requests = append(result.Requests, newDeepSeekDiagnosticSkippedToolSmokeRequest(request, report.Route))
 			continue
 		}
 
@@ -81,6 +75,30 @@ func deepSeekDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingE
 		ToolName:               deepSeekDiagnosticSmokeToolName,
 		ToolExpectedValue:      "deepseek-tool-ok",
 	})
+}
+
+func newDeepSeekDiagnosticSkippedToolSmokeRequest(request deepSeekDiagnosticSmokeRequest, route string) DiagnosticSmokeRequestResult {
+	return DiagnosticSmokeRequestResult{
+		Name:        request.Name,
+		Skipped:     true,
+		SkipReason:  deepSeekDiagnosticDisabledToolSkipReason(),
+		ToolPayload: request.ToolPayload,
+		Route:       route,
+	}
+}
+
+func newDeepSeekDiagnosticSkippedToolPreviewRequest(request deepSeekDiagnosticSmokeRequest, route string) DiagnosticRequestPreviewRequest {
+	return DiagnosticRequestPreviewRequest{
+		Name:        request.Name,
+		Skipped:     true,
+		SkipReason:  deepSeekDiagnosticDisabledToolSkipReason(),
+		ToolPayload: request.ToolPayload,
+		Route:       route,
+	}
+}
+
+func deepSeekDiagnosticDisabledToolSkipReason() string {
+	return fmt.Sprintf("DeepSeek function calling payloads are disabled (%s=0)", deepSeekFunctionCallingEnv)
 }
 
 func runDeepSeekDiagnosticSmokeRequest(

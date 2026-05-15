@@ -44,6 +44,8 @@ Moonshot は `$web_search` call fee と Chat Completions token 使用量を別�
 
 ## Diagnostics
 
+`doctor kimi --web-search-smoke --print-request` は live API を呼ばず、同じ builder から `tools[].type = "builtin_function"` / `function.name = "$web_search"` / `thinking: {"type":"disabled"}` / `prompt_cache_key` / `max_completion_tokens` / `stream_options.include_usage` を含む request preview を出す。
+
 `doctor kimi --web-search-smoke` と `make kimi-web-search-smoke` は live API で以下を確認する。
 
 - `$web_search` payload が `builtin_function` になっていること

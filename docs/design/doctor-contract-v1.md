@@ -27,7 +27,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | none |
 | Azure OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | `--deployment`, `--print-config` |
-| Kimi | yes | yes | yes | yes | yes | no | yes | no | no | no | no | none |
+| Kimi | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
 | Bedrock | yes | yes | yes | yes | yes | yes | no | no | no | no | no | none |
 | DeepSeek | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | Gemini | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
@@ -54,10 +54,11 @@ Azure OpenAI:
 
 Kimi:
 
-- Checks `MOONSHOT_API_KEY`, `KIMI_API_URL`, provider registration, model config, image capability, unsupported native features, and prompt cache request shape.
+- Checks `MOONSHOT_API_KEY`, `KIMI_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, token / pricing metadata, image capability, unsupported native features, and prompt cache request shape.
+- Supports `--print-request`.
 - Live smoke supports text, image, tool, and built-in `$web_search`.
-- Does not yet support `--capabilities`, `--require-capability`, or `--print-request`.
-- Main owner packages: `cmd/doctor_kimi.go`, `internal/api/providers/kimi/diagnostics*.go`.
+- Does not yet support `--capabilities` or `--require-capability`.
+- Main owner packages: `cmd/doctor_kimi.go`, `internal/api/providers/kimi/diagnostics*.go`, `internal/providerdiag`.
 
 Bedrock:
 

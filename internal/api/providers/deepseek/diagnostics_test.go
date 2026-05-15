@@ -177,6 +177,44 @@ func TestDiagnoseDeepSeek_PrintRequestDoesNotRequireAPIKeyOrSendNetwork(t *testi
 	}
 }
 
+func TestDiagnoseDeepSeek_PrintRequestSkipsDisabledToolPreview(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		t.Fatalf("unexpected network request: %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	t.Setenv(deepSeekAPIKeyEnv, "")
+	t.Setenv(deepSeekAPIURLEnv, server.URL+"/chat/completions")
+	t.Setenv(deepSeekFunctionCallingEnv, "0")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "deepseek-v4-flash",
+		CatalogModel: "deepseek-v4-flash",
+		ToolSmoke:    true,
+		PrintRequest: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want disabled tool preview skip to pass: %#v", report.Checks)
+	}
+	if requests != 0 {
+		t.Fatalf("network requests = %d, want 0", requests)
+	}
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 2 {
+		t.Fatalf("RequestPreview = %#v, want text fallback plus skipped tool request", report.RequestPreview)
+	}
+	text := report.RequestPreview.Requests[0]
+	if text.Name != "text" || text.Skipped || text.ToolPayload {
+		t.Fatalf("text preview = %#v, want runnable text fallback", text)
+	}
+	tool := report.RequestPreview.Requests[1]
+	if tool.Name != "tool" || !tool.Skipped || !tool.ToolPayload || !strings.Contains(tool.SkipReason, deepSeekFunctionCallingEnv+"=0") {
+		t.Fatalf("tool preview = %#v, want skipped disabled tool request", tool)
+	}
+}
+
 func TestDiagnoseDeepSeek_TextSmokeObservesUsageAndCost(t *testing.T) {
 	var received openaicompat.ChatCompletionsRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -11,7 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func (r *DiagnosticReport) addCheck(status DiagnosticStatus, name, message, detail, suggestion string) {
@@ -81,32 +81,88 @@ func (r *DiagnosticReport) addProviderRegistrationCheck() {
 	r.addCheck(DiagnosticStatusOK, "provider_registration", "kimi and moonshot providers are registered", "", "")
 }
 
-func (r *DiagnosticReport) addModelConfigCheck() {
+func (r *DiagnosticReport) addModelCheck() {
 	if strings.TrimSpace(r.Model) == "" {
 		r.addCheck(DiagnosticStatusFail, "model", "Kimi model is not resolved", "", "Pass --model kimi-k2.6 or set provider_models.kimi.default_model")
-		return
-	}
-	if strings.TrimSpace(r.CatalogModel) == "" {
-		r.addCheck(DiagnosticStatusFail, "model", "Kimi catalog model is not resolved", r.Model, "Use a known Kimi model such as kimi-k2.6")
-		return
-	}
-	if llmcatalog.InferProviderFromModel(r.CatalogModel) != "kimi" {
-		r.addCheck(
-			DiagnosticStatusWarn,
-			"model",
-			"resolved catalog model does not look like a native Kimi model",
-			fmt.Sprintf("model=%s catalog_model=%s", r.Model, r.CatalogModel),
-			"Set provider_models.kimi.catalog_model or model_overrides.<model>.catalog_model to kimi-k2.6 or kimi-k2.5 for custom aliases",
-		)
 		return
 	}
 	r.addCheck(
 		DiagnosticStatusOK,
 		"model",
-		"Kimi model config is resolved",
-		fmt.Sprintf("%s (%s), catalog_model=%s (%s), max_output_tokens=%d", r.Model, r.ModelSource, r.CatalogModel, r.CatalogModelSource, r.MaxOutputTokens),
+		"Kimi request model is resolved",
+		fmt.Sprintf("%s (%s)", r.Model, r.ModelSource),
 		"",
 	)
+}
+
+func (r *DiagnosticReport) addCatalogModelCheck() {
+	if strings.TrimSpace(r.CatalogModel) == "" {
+		r.addCheck(DiagnosticStatusFail, "catalog_model", "Kimi catalog model is not resolved", r.Model, "Use --catalog-model when the request model is an alias")
+		return
+	}
+	if !providerdiag.IsProviderCatalogModelKnown("kimi", r.CatalogModel) {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"catalog_model",
+			"Kimi catalog model is not known to local Kimi metadata",
+			fmt.Sprintf("model=%s catalog_model=%s (%s)", r.Model, r.CatalogModel, r.CatalogModelSource),
+			"Set --catalog-model or provider_models.kimi.catalog_model to kimi-k2.6 or kimi-k2.5 before relying on token-limit diagnostics",
+		)
+		return
+	}
+	r.addCheck(
+		DiagnosticStatusOK,
+		"catalog_model",
+		"Kimi catalog model is resolved",
+		fmt.Sprintf("%s (%s)", r.CatalogModel, r.CatalogModelSource),
+		"",
+	)
+}
+
+func (r *DiagnosticReport) addRouteCheck() {
+	if r.Route != DiagnosticRouteChatCompletions {
+		r.addCheck(DiagnosticStatusFail, "route", "Kimi route could not be resolved", r.RouteReason, "")
+		return
+	}
+	r.addCheck(DiagnosticStatusOK, "route", "Kimi Chat Completions route is selected", r.routeCheckDetail(), "")
+}
+
+func (r DiagnosticReport) routeCheckDetail() string {
+	if strings.TrimSpace(r.RouteReason) == "" {
+		return r.Route
+	}
+	return fmt.Sprintf("%s; %s", r.Route, r.RouteReason)
+}
+
+func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
+	model := strings.TrimSpace(r.Model)
+	catalogModel := strings.TrimSpace(r.CatalogModel)
+	if model == "" || catalogModel == "" {
+		return
+	}
+	policy := providerdiag.KimiCatalogPolicy(cfg, model, catalogModel)
+	detail := policy.KimiDetail()
+	if !providerdiag.IsProviderCatalogModelKnown("kimi", catalogModel) {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"catalog_policy",
+			"catalog_model is not a Kimi model known to local metadata",
+			detail,
+			"Use a Kimi catalog model before relying on token-limit diagnostics or cost estimates",
+		)
+		return
+	}
+
+	switch {
+	case !policy.ContextWindowKnown:
+		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing context window metadata", detail, "Use a Kimi model known to XELYON before relying on token-limit diagnostics")
+	case !policy.MaxOutput.Available:
+		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing max output metadata", detail, "Use a Kimi model known to XELYON, or set max_output_tokens explicitly for this model")
+	case policy.Pricing.PricingUnavailable:
+		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing Kimi pricing metadata", detail, "Use a Kimi model with pricing metadata before relying on cost estimates")
+	default:
+		r.addCheck(DiagnosticStatusOK, "catalog_policy", "catalog_model policy is available", detail, "")
+	}
 }
 
 func (r *DiagnosticReport) addFunctionCallingCheck() {
@@ -116,11 +172,11 @@ func (r *DiagnosticReport) addFunctionCallingCheck() {
 			"function_calling",
 			"Kimi function calling payloads are enabled",
 			"",
-			"Set KIMI_FUNCTION_CALLING=0 only if the selected endpoint rejects tool payloads",
+			fmt.Sprintf("Set %s=0 only if the selected endpoint rejects tool payloads", kimiFunctionCallingEnv),
 		)
 		return
 	}
-	r.addCheck(DiagnosticStatusOK, "function_calling", "Kimi function calling payloads are disabled", "KIMI_FUNCTION_CALLING=0", "")
+	r.addCheck(DiagnosticStatusOK, "function_calling", "Kimi function calling payloads are disabled", kimiFunctionCallingEnv+"=0", "")
 }
 
 func (r *DiagnosticReport) addImageInputCheck() {
@@ -184,8 +240,8 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 			DiagnosticStatusWarn,
 			"tool_smoke",
 			"tool payload smoke was skipped because function calling is disabled",
-			"KIMI_FUNCTION_CALLING=0",
-			"Unset KIMI_FUNCTION_CALLING or set it to 1 before rerunning --tool-smoke",
+			kimiFunctionCallingEnv+"=0",
+			fmt.Sprintf("Unset %s or set it to 1 before rerunning --tool-smoke", kimiFunctionCallingEnv),
 		)
 	}
 

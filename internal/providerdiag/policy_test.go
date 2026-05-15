@@ -44,6 +44,11 @@ func TestCatalogPolicyDetailsPreserveProviderFormatting(t *testing.T) {
 		t.Fatalf("GeminiDetail() = %q, want %q", got, want)
 	}
 
+	kimiPolicy := KimiCatalogPolicy(cfg, "kimi-k2.6", "kimi-k2.6")
+	if got, want := kimiPolicy.KimiDetail(), "catalog_model=kimi-k2.6, context_window=256000, max_output_tokens=32768, pricing=input $0.95/M cached $0.160/M output $4.00/M"; got != want {
+		t.Fatalf("KimiDetail() = %q, want %q", got, want)
+	}
+
 	openRouterPolicy := OpenRouterCatalogPolicy(cfg, "openai/gpt-5.4", "openai/gpt-5.4")
 	if got, want := openRouterPolicy.OpenRouterDetail(), "catalog_model=openai/gpt-5.4, context_window=1000000, max_output_tokens=64000, pricing=input $2.50/M cached $0.250/M output $15.00/M"; got != want {
 		t.Fatalf("OpenRouterDetail() = %q, want %q", got, want)
@@ -93,6 +98,35 @@ func TestGeminiCatalogPolicyIgnoresNonGeminiGlobalMetadata(t *testing.T) {
 	maxOutput := GeminiMaxOutputPolicy(cfg, "corp-gemini-model", "gpt-5.5")
 	if maxOutput.Available || maxOutput.Source != "missing" {
 		t.Fatalf("GeminiMaxOutputPolicy(non-Gemini) = %+v, want missing", maxOutput)
+	}
+}
+
+func TestKimiCatalogPolicyIgnoresNonKimiGlobalMetadata(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	policy := KimiCatalogPolicy(cfg, "corp-kimi-model", "gpt-5.5")
+	if policy.ContextWindowKnown || policy.ContextWindowTokens != 0 {
+		t.Fatalf("Kimi context window = %d known=%t, want unknown for non-Kimi catalog", policy.ContextWindowTokens, policy.ContextWindowKnown)
+	}
+	if policy.MaxOutput.Available || policy.MaxOutput.Tokens != 0 || policy.MaxOutput.Source != "missing" {
+		t.Fatalf("Kimi max output = %+v, want missing for non-Kimi catalog", policy.MaxOutput)
+	}
+	if !policy.Pricing.PricingUnavailable {
+		t.Fatalf("Kimi pricing = %+v, want unavailable for non-Kimi catalog", policy.Pricing)
+	}
+	detail := policy.KimiDetail()
+	for _, unwanted := range []string{"128000", "1050000", "gpt-5.5-pro"} {
+		if strings.Contains(detail, unwanted) {
+			t.Fatalf("KimiDetail() = %q, should not contain non-Kimi metadata %q", detail, unwanted)
+		}
+	}
+	if got, want := detail, "catalog_model=gpt-5.5, context_window=unknown, max_output_tokens=unknown, pricing=unavailable"; got != want {
+		t.Fatalf("KimiDetail() = %q, want %q", got, want)
+	}
+
+	maxOutput := KimiMaxOutputPolicy(cfg, "corp-kimi-model", "gpt-5.5")
+	if maxOutput.Available || maxOutput.Source != "missing" {
+		t.Fatalf("KimiMaxOutputPolicy(non-Kimi) = %+v, want missing", maxOutput)
 	}
 }
 

@@ -21,10 +21,41 @@ func writeKimiDiagnosticSSE(t *testing.T, w http.ResponseWriter, chunks ...strin
 }
 
 func hasKimiDiagnosticCheck(report DiagnosticReport, name string, status DiagnosticStatus) bool {
+	check, ok := kimiDiagnosticCheckByName(report, name)
+	return ok && check.Status == status
+}
+
+func kimiDiagnosticCheckByName(report DiagnosticReport, name string) (DiagnosticCheck, bool) {
 	for _, check := range report.Checks {
-		if check.Name == name && check.Status == status {
-			return true
+		if check.Name == name {
+			return check, true
 		}
 	}
-	return false
+	return DiagnosticCheck{}, false
+}
+
+func hasKimiDiagnosticCheckName(report DiagnosticReport, name string) bool {
+	_, ok := kimiDiagnosticCheckByName(report, name)
+	return ok
+}
+
+func requireKimiSmokeRequest(t *testing.T, smoke *DiagnosticSmokeResult, name string) DiagnosticSmokeRequestResult {
+	t.Helper()
+	if smoke == nil {
+		t.Fatalf("Smoke = nil, want request %q", name)
+	}
+	var found *DiagnosticSmokeRequestResult
+	for i := range smoke.Requests {
+		if smoke.Requests[i].Name != name {
+			continue
+		}
+		if found != nil {
+			t.Fatalf("Smoke has duplicate request name %q: %#v", name, smoke.Requests)
+		}
+		found = &smoke.Requests[i]
+	}
+	if found == nil {
+		t.Fatalf("Smoke missing request %q: %#v", name, smoke.Requests)
+	}
+	return *found
 }

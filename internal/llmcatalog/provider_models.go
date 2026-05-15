@@ -10,6 +10,12 @@ var knownProviderModels = map[string][]string{
 		"deepseek-reasoner",
 		"deepseek-coder",
 	},
+	"kimi": {
+		"kimi-k2",
+		"kimi-k2.5",
+		"kimi-k2.6",
+		"kimi-k2-thinking",
+	},
 	"openai": {
 		"gpt-5.5",
 		"gpt-5.5-pro",
@@ -111,6 +117,9 @@ var knownProviderModelPrefixes = map[string][]string{
 		"deepseek-v3",
 		"deepseek-r1",
 		"deepseek-coder",
+	},
+	"kimi": {
+		"kimi-",
 	},
 	"groq": {
 		"meta-llama/llama-4-scout",

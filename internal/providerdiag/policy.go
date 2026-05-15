@@ -123,6 +123,19 @@ func GeminiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOu
 	})
 }
 
+// KimiMaxOutputPolicy は Kimi doctor の max output 解決規則を返す。
+func KimiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	if nonProviderCatalogModel("kimi", catalogModel) {
+		return MaxOutputPolicy{Source: "missing"}
+	}
+	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
+		Provider:             "kimi",
+		RequestModel:         model,
+		CatalogModel:         catalogModel,
+		ProviderDefaultKnown: true,
+	})
+}
+
 func nonProviderCatalogModel(provider, catalogModel string) bool {
 	catalogModel = strings.TrimSpace(catalogModel)
 	return catalogModel != "" && !IsProviderCatalogModelKnown(provider, catalogModel)
@@ -287,6 +300,19 @@ func GeminiCatalogPolicy(cfg *config.Config, model, catalogModel string) Catalog
 	)
 }
 
+// KimiCatalogPolicy は Kimi doctor 用の catalog policy snapshot を返す。
+func KimiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	if nonProviderCatalogModel("kimi", catalogModel) {
+		return unknownProviderCatalogPolicy(catalogModel)
+	}
+	return NewCatalogPolicy(
+		catalogModel,
+		KimiMaxOutputPolicy(cfg, model, catalogModel),
+		cost.GetPricingInfoForConfig(cfg, "kimi", model),
+		false,
+	)
+}
+
 func unknownProviderCatalogPolicy(catalogModel string) CatalogPolicy {
 	return CatalogPolicy{
 		CatalogModel: strings.TrimSpace(catalogModel),
@@ -310,13 +336,7 @@ func NewCatalogPolicy(catalogModel string, maxOutput MaxOutputPolicy, pricing co
 
 // OpenAIDetail は OpenAI doctor の既存 catalog_policy detail を返す。
 func (p CatalogPolicy) OpenAIDetail() string {
-	return fmt.Sprintf(
-		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
-		p.CatalogModel,
-		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
-		p.MaxOutput.PlainDetail("unknown"),
-		PricingDetail(p.Pricing),
-	)
+	return p.plainDetail()
 }
 
 // AzureDetail は Azure doctor の既存 catalog_policy detail を返す。
@@ -333,39 +353,30 @@ func (p CatalogPolicy) AzureDetail() string {
 
 // GroqDetail は Groq doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) GroqDetail() string {
-	return fmt.Sprintf(
-		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
-		p.CatalogModel,
-		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
-		p.MaxOutput.PlainDetail("unknown"),
-		PricingDetail(p.Pricing),
-	)
+	return p.plainDetail()
 }
 
 // DeepSeekDetail は DeepSeek doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) DeepSeekDetail() string {
-	return fmt.Sprintf(
-		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
-		p.CatalogModel,
-		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
-		p.MaxOutput.PlainDetail("unknown"),
-		PricingDetail(p.Pricing),
-	)
+	return p.plainDetail()
 }
 
 // OpenRouterDetail は OpenRouter doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) OpenRouterDetail() string {
-	return fmt.Sprintf(
-		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
-		p.CatalogModel,
-		IntDetail(p.ContextWindowTokens, p.ContextWindowKnown),
-		p.MaxOutput.PlainDetail("unknown"),
-		PricingDetail(p.Pricing),
-	)
+	return p.plainDetail()
 }
 
 // GeminiDetail は Gemini doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) GeminiDetail() string {
+	return p.plainDetail()
+}
+
+// KimiDetail は Kimi doctor の catalog_policy detail を返す。
+func (p CatalogPolicy) KimiDetail() string {
+	return p.plainDetail()
+}
+
+func (p CatalogPolicy) plainDetail() string {
 	return fmt.Sprintf(
 		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
 		p.CatalogModel,

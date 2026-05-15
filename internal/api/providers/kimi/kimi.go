@@ -28,10 +28,11 @@ func init() {
 }
 
 const (
-	kimiAPIKeyEnv    = "MOONSHOT_API_KEY"
-	kimiAPIURLEnv    = "KIMI_API_URL"
-	defaultKimiURL   = "https://api.moonshot.ai/v1/chat/completions"
-	defaultKimiModel = "kimi-k2.6"
+	kimiAPIKeyEnv          = "MOONSHOT_API_KEY"
+	kimiAPIURLEnv          = "KIMI_API_URL"
+	kimiFunctionCallingEnv = "KIMI_FUNCTION_CALLING"
+	defaultKimiURL         = "https://api.moonshot.ai/v1/chat/completions"
+	defaultKimiModel       = "kimi-k2.6"
 )
 
 // Provider は Kimi API のプロバイダー実装。
@@ -92,7 +93,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 	if p != nil && p.functionCalling != nil {
 		return *p.functionCalling
 	}
-	return os.Getenv("KIMI_FUNCTION_CALLING") != "0"
+	return os.Getenv(kimiFunctionCallingEnv) != "0"
 }
 
 // ChatWithTools は Provider interface の実装。

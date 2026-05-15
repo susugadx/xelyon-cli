@@ -15,19 +15,7 @@ import (
 func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, provider *Provider, model string, request kimiDiagnosticSmokeRequest, output io.Writer) (DiagnosticSmokeRequestResult, error) {
 	requestCfg := config.CloneConfig(cfg)
 	requestCfg.Thinking.Enabled = request.Thinking
-	requestCtx := newKimiDiagnosticContext(ctx, requestCfg, request.Thinking, output)
-	if request.SessionID != "" {
-		requestCtx = api.WithPromptCacheScope(requestCtx, api.PromptCacheScope{SessionID: request.SessionID})
-	}
-	if request.ToolPayload {
-		requestCtx = api.WithToolDefinitions(requestCtx, diagnosticSmokeToolDefinitions())
-		provider.SetToolChoice(diagnosticSmokeToolName)
-	} else {
-		requestCtx = api.WithToolDefinitions(requestCtx, nil)
-		provider.ClearToolChoice()
-	}
-	provider.SetMCPTools(nil)
-	provider.setDiagnosticFunctionCalling(request.ToolPayload)
+	requestCtx := newKimiDiagnosticSmokeRequestContext(ctx, requestCfg, provider, request, output)
 
 	var usage api.Usage
 	endpointUsageObserved := false
@@ -75,8 +63,10 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 	}
 
 	usageObservation := diagnosticUsageObservation(usage)
-	return DiagnosticSmokeRequestResult{
+	result := DiagnosticSmokeRequestResult{
 		Name:                     request.Name,
+		Ran:                      true,
+		ToolPayload:              request.ToolPayload,
 		Content:                  strings.TrimSpace(content),
 		Duration:                 elapsed.String(),
 		UsageObserved:            endpointUsageObserved,
@@ -89,7 +79,28 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 		WebSearchCallFeeEstimate: usageObservation.WebSearchCallFeeEstimate,
 		WebSearchUsageObserved:   usageObservation.webSearchUsageObserved(),
 		SearchResultTotalTokens:  usageObservation.SearchResultTotalTokens,
-	}, err
+	}
+	if err != nil {
+		result.Error = err.Error()
+	}
+	return result, err
+}
+
+func newKimiDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, provider *Provider, request kimiDiagnosticSmokeRequest, output io.Writer) context.Context {
+	requestCtx := newKimiDiagnosticContext(ctx, cfg, request.Thinking, output)
+	if request.SessionID != "" {
+		requestCtx = api.WithPromptCacheScope(requestCtx, api.PromptCacheScope{SessionID: request.SessionID})
+	}
+	if request.ToolPayload {
+		requestCtx = api.WithToolDefinitions(requestCtx, diagnosticSmokeToolDefinitions())
+		provider.SetToolChoice(diagnosticSmokeToolName)
+	} else {
+		requestCtx = api.WithToolDefinitions(requestCtx, nil)
+		provider.ClearToolChoice()
+	}
+	provider.SetMCPTools(nil)
+	provider.setDiagnosticFunctionCalling(request.ToolPayload)
+	return requestCtx
 }
 
 func kimiDiagnosticImage() *api.ImageData {

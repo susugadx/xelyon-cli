@@ -50,13 +50,7 @@ func runGroqDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 	started := time.Now()
 	for _, request := range groqDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, DiagnosticSmokeRequestResult{
-				Name:        request.Name,
-				Skipped:     true,
-				SkipReason:  "Groq function calling payloads are disabled (GROQ_FUNCTION_CALLING=0)",
-				ToolPayload: true,
-				Route:       report.Route,
-			})
+			result.Requests = append(result.Requests, newGroqDiagnosticSkippedToolSmokeRequest(request, report.Route))
 			continue
 		}
 
@@ -81,6 +75,30 @@ func groqDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingEnabl
 		ToolName:               groqDiagnosticSmokeToolName,
 		ToolExpectedValue:      "groq-tool-ok",
 	})
+}
+
+func newGroqDiagnosticSkippedToolSmokeRequest(request groqDiagnosticSmokeRequest, route string) DiagnosticSmokeRequestResult {
+	return DiagnosticSmokeRequestResult{
+		Name:        request.Name,
+		Skipped:     true,
+		SkipReason:  groqDiagnosticDisabledToolSkipReason(),
+		ToolPayload: request.ToolPayload,
+		Route:       route,
+	}
+}
+
+func newGroqDiagnosticSkippedToolPreviewRequest(request groqDiagnosticSmokeRequest, route string) DiagnosticRequestPreviewRequest {
+	return DiagnosticRequestPreviewRequest{
+		Name:        request.Name,
+		Skipped:     true,
+		SkipReason:  groqDiagnosticDisabledToolSkipReason(),
+		ToolPayload: request.ToolPayload,
+		Route:       route,
+	}
+}
+
+func groqDiagnosticDisabledToolSkipReason() string {
+	return "Groq function calling payloads are disabled (GROQ_FUNCTION_CALLING=0)"
 }
 
 func runGroqDiagnosticSmokeRequest(

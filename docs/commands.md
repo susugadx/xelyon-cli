@@ -26,13 +26,16 @@ xelyon doctor deepseek --json
 
 ### `xelyon doctor kimi`
 
-Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model config、未対応機能、`prompt_cache_key` request shape を確認します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。web search smoke は `web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`cached_input_tokens`、検索結果 token 観測値を text / JSON に出します。
+Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、token / pricing metadata、未対応機能、`prompt_cache_key` request shape を確認します。`--catalog-model` は alias の underlying Kimi model として token / pricing 判定に使います。`--print-request` は live request を送らず、redacted bearer header と request body を `request_preview` に表示します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。web search smoke は `web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`cached_input_tokens`、検索結果 token 観測値を text / JSON に出します。
 
-`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生し、`$web_search` tool call が 1 件以上観測された場合だけ成功扱いになります。通常の `stop` response で tool call がない場合、request 自体が返っていても smoke は fail します。call fee は token cost とは別料金で、検索結果 tokens は次 request の `prompt_tokens` に含まれるため二重加算しません。endpoint の token usage が返らない場合は `usage` check が warn になり、web search の fee / call count 観測だけでは token usage 観測済みとは扱いません。
+`--print-request` は `MOONSHOT_API_KEY` なしで実行でき、text / tool / image / built-in `$web_search` の request body を送信前に確認できます。`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生し、`$web_search` tool call が 1 件以上観測された場合だけ成功扱いになります。通常の `stop` response で tool call がない場合、request 自体が返っていても smoke は fail します。call fee は token cost とは別料金で、検索結果 tokens は次 request の `prompt_tokens` に含まれるため二重加算しません。endpoint の token usage が返らない場合は `usage` check が warn になり、web search の fee / call count 観測だけでは token usage 観測済みとは扱いません。
 
 ```bash
 xelyon doctor kimi
 xelyon doctor kimi --model kimi-k2.6
+xelyon doctor kimi --model corp-kimi-model --catalog-model kimi-k2.6
+xelyon doctor kimi --print-request
+xelyon doctor kimi --tool-smoke --print-request
 xelyon doctor kimi --smoke
 xelyon doctor kimi --image-smoke
 xelyon doctor kimi --tool-smoke
@@ -40,7 +43,7 @@ xelyon doctor kimi --web-search-smoke
 xelyon doctor kimi --json
 ```
 
-手元で実 Kimi 環境の回帰確認を走らせる場合は、`MOONSHOT_API_KEY` を設定して `make kimi-smoke` を実行します。画像入力だけ確認する場合は `make kimi-image-smoke`、tool calling も含める場合は `make kimi-tool-smoke`、built-in web search は `make kimi-web-search-smoke` を使います。
+手元で doctor 経路だけを実 Kimi 環境で確認する場合は、`MOONSHOT_API_KEY` を設定して `make kimi-doctor-smoke` を実行します。既定では `kimi-k2.6` で text / tool / image / built-in web search smoke をまとめて実行し、必要なら `KIMI_DOCTOR_SMOKE_MODEL` で変更できます。runtime live test を走らせる場合は `make kimi-smoke`、画像入力だけ確認する場合は `make kimi-image-smoke`、tool calling も含める場合は `make kimi-tool-smoke`、built-in web search は `make kimi-web-search-smoke` を使います。
 
 ### `xelyon doctor gemini`
 

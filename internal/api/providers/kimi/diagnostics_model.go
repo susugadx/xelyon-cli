@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func resolveKimiDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
@@ -29,20 +30,15 @@ func resolveKimiDiagnosticModel(cfg *config.Config, explicitModel string) (strin
 	return defaultKimiModel, "fallback"
 }
 
-func resolveKimiDiagnosticCatalogModel(cfg *config.Config, model string) (string, string) {
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return "", ""
-	}
-	resolution := cfg.ResolveModelCatalog("kimi", model)
-	if strings.TrimSpace(resolution.Model) == "" {
-		return model, "model"
-	}
-	if resolution.Model != model {
-		return resolution.Model, "provider_models.kimi.catalog_model"
-	}
-	if resolution.ConfiguredWithoutCatalog {
-		return resolution.Model, "configured model"
-	}
-	return resolution.Model, "model"
+func resolveKimiDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {
+	return providerdiag.ResolveProviderDiagnosticCatalogModel(cfg, "kimi", model, explicitCatalogModel)
+}
+
+func kimiDiagnosticPolicyConfig(cfg *config.Config, model, catalogModel string, maxOutputTokens int) *config.Config {
+	return providerdiag.ProviderDiagnosticPolicyConfig(cfg, providerdiag.ProviderDiagnosticPolicyConfigOptions{
+		Provider:        "kimi",
+		Model:           model,
+		CatalogModel:    catalogModel,
+		MaxOutputTokens: maxOutputTokens,
+	})
 }
