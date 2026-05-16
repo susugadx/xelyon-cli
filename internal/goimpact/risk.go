@@ -115,10 +115,11 @@ func ReferenceSpread(result navigation.InspectResult) (int, int) {
 	fileSeen := make(map[string]struct{})
 	dirSeen := make(map[string]struct{})
 	add := func(file string) {
-		file = filepath.ToSlash(filepath.Clean(strings.TrimSpace(file)))
+		file = strings.TrimSpace(file)
 		if file == "" {
 			return
 		}
+		file = filepath.ToSlash(filepath.Clean(file))
 		fileSeen[file] = struct{}{}
 		dirSeen[filepath.ToSlash(filepath.Dir(file))] = struct{}{}
 	}
