@@ -13,11 +13,14 @@ import (
 )
 
 type mockGoSymbolLSPClient struct {
-	refs  []navigation.LSPLocation
-	impls []navigation.LSPLocation
+	refs                    []navigation.LSPLocation
+	impls                   []navigation.LSPLocation
+	findReferencesCalls     int
+	gotoImplementationCalls int
 }
 
 func (m *mockGoSymbolLSPClient) FindReferences(context.Context, string, int, int, bool) ([]navigation.LSPLocation, error) {
+	m.findReferencesCalls++
 	return m.refs, nil
 }
 
@@ -26,6 +29,7 @@ func (m *mockGoSymbolLSPClient) GotoDefinition(context.Context, string, int, int
 }
 
 func (m *mockGoSymbolLSPClient) GotoImplementation(context.Context, string, int, int) ([]navigation.LSPLocation, error) {
+	m.gotoImplementationCalls++
 	return m.impls, nil
 }
 

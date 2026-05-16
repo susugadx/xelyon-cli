@@ -30,40 +30,45 @@ type structuredGoImpactInspection struct {
 }
 
 func inspectStructuredGoImpactSymbol(symbol string, scope structuredImpactScope) structuredGoImpactInspection {
+	collectionPlan := goImpactPlanForRisk(goImpactRiskHigh)
+	result, output, status := navigation.ResolveInspectSymbolAuto(symbol, scope.Definition.Path, navigation.InspectSymbolAutoOptions{
+		Budget:             collectionPlan.budget,
+		Registry:           nil,
+		LSPClient:          scope.Definition.LSPClient,
+		ProjectMap:         scope.Definition.ProjectMap,
+		ProjectMapRootPath: scope.Definition.ProjectMapRootPath,
+		ProjectMapStateKey: scope.Definition.ProjectMapStateKey,
+		InvocationCWD:      scope.Definition.InvocationCWD,
+		ReferenceFilter:    structuredGoImpactReferenceFilter(scope.Evidence),
+	})
+	result = filterStructuredGoImpactEvidence(result, scope.Evidence)
+	inspected := structuredGoImpactInspection{
+		result: result,
+		output: output,
+		status: status,
+		plan:   collectionPlan,
+	}
+
+	if status != navigation.SymbolAutoSingle {
+		return inspected
+	}
+
+	inspected.plan = selectStructuredGoImpactPlan(result)
+	inspected.result = navigation.ApplyInspectBudget(result, inspected.plan.budget)
+	return inspected
+}
+
+func selectStructuredGoImpactPlan(collected navigation.InspectResult) goImpactPlan {
 	plan := goImpactPlanForRisk(goImpactRiskLow)
-	inspected := structuredGoImpactInspection{plan: plan}
-
 	for i := 0; i < 3; i++ {
-		result, output, status := navigation.ResolveInspectSymbolAuto(symbol, scope.Definition.Path, navigation.InspectSymbolAutoOptions{
-			Budget:             plan.budget,
-			Registry:           nil,
-			LSPClient:          scope.Definition.LSPClient,
-			ProjectMap:         scope.Definition.ProjectMap,
-			ProjectMapRootPath: scope.Definition.ProjectMapRootPath,
-			ProjectMapStateKey: scope.Definition.ProjectMapStateKey,
-			InvocationCWD:      scope.Definition.InvocationCWD,
-			ReferenceFilter:    structuredGoImpactReferenceFilter(scope.Evidence),
-		})
-		result = filterStructuredGoImpactEvidence(result, scope.Evidence)
-		inspected.result = result
-		inspected.output = output
-		inspected.status = status
-		inspected.plan = plan
-
-		if status != navigation.SymbolAutoSingle {
-			return inspected
-		}
-
-		nextPlan := nextStructuredGoImpactPlan(plan, result)
+		budgeted := navigation.ApplyInspectBudget(collected, plan.budget)
+		nextPlan := nextStructuredGoImpactPlan(plan, budgeted)
 		if goImpactPlanEqual(plan, nextPlan) {
-			inspected.plan = nextPlan
-			return inspected
+			return nextPlan
 		}
 		plan = nextPlan
 	}
-
-	inspected.plan = plan
-	return inspected
+	return plan
 }
 
 func nextStructuredGoImpactPlan(current goImpactPlan, result navigation.InspectResult) goImpactPlan {
