@@ -18,6 +18,12 @@ type OutputConfig struct {
 	Effort string `json:"effort"` // low / medium / high / xhigh / max
 }
 
+// ClaudeToolChoice は Anthropic Messages API の forced tool choice を表す。
+type ClaudeToolChoice struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
+}
+
 type Request struct {
 	Model    string             `json:"model"`
 	Messages []AnthropicMessage `json:"messages"`
@@ -29,6 +35,7 @@ type Request struct {
 	Thinking          *ThinkingConfig    `json:"thinking,omitempty"`
 	OutputConfig      *OutputConfig      `json:"output_config,omitempty"`
 	Tools             []ClaudeTool       `json:"tools,omitempty"`              // Tool Use用
+	ToolChoice        *ClaudeToolChoice  `json:"tool_choice,omitempty"`        // Tool Use 強制用
 	ContextManagement *ContextManagement `json:"context_management,omitempty"` // NEW
 }
 

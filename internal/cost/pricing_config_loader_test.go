@@ -60,6 +60,29 @@ func TestPricingFamilyHasKnownModelUsesExactAllowlist(t *testing.T) {
 	}
 }
 
+func TestHasKnownPricingModelUsesProviderPricingFamily(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		model    string
+		want     bool
+	}{
+		{name: "claude dated exact", provider: "claude", model: "claude-sonnet-4-20250514", want: true},
+		{name: "claude opus 3 exact", provider: "claude", model: "claude-3-opus-20240229", want: true},
+		{name: "claude alias rejected", provider: "claude", model: "corp-claude-sonnet-prod", want: false},
+		{name: "claude rejects openai exact", provider: "claude", model: "gpt-5.5", want: false},
+		{name: "unknown provider", provider: "unknown", model: "claude-sonnet-4-20250514", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := HasKnownPricingModel(tt.provider, tt.model); got != tt.want {
+				t.Fatalf("HasKnownPricingModel(%q, %q) = %v, want %v", tt.provider, tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestKnownPricingModelsResolveToAvailablePricing(t *testing.T) {
 	cfg := loadPricingConfig()
 	if cfg == nil {

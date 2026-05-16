@@ -70,9 +70,9 @@ func WebSearchWithContext(ctx context.Context, query, model string) (string, err
 }
 
 func webSearchWithContextForProvider(ctx context.Context, providerKey, query, model string) (string, error) {
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	apiKey := os.Getenv(anthropicAPIKeyEnv)
 	if apiKey == "" {
-		return "", fmt.Errorf("ANTHROPIC_API_KEY not set")
+		return "", fmt.Errorf("%s not set", anthropicAPIKeyEnv)
 	}
 
 	model = api.GetDefaultModelWithContext(ctx, model, providerKey, defaultClaudeModel)

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
@@ -123,7 +124,11 @@ func ProviderDiagnosticPolicyConfig(cfg *config.Config, options ProviderDiagnost
 	return policyCfg
 }
 
-// IsProviderCatalogModelKnown は provider 所有の catalog ID / prefix だけを既知として扱う。
+// IsProviderCatalogModelKnown は provider 所有の catalog ID / prefix と pricing exact metadata を既知として扱う。
 func IsProviderCatalogModelKnown(provider, model string) bool {
-	return llmcatalog.IsKnownModelNameForProvider(provider, model)
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return false
+	}
+	return llmcatalog.IsKnownModelNameForProvider(provider, model) || cost.HasKnownPricingModel(provider, model)
 }

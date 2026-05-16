@@ -62,6 +62,7 @@ type MultimodalRequest struct {
 	Thinking          *ThinkingConfig    `json:"thinking,omitempty"`
 	OutputConfig      *OutputConfig      `json:"output_config,omitempty"`
 	Tools             []ClaudeTool       `json:"tools,omitempty"`              // Tool Use用
+	ToolChoice        *ClaudeToolChoice  `json:"tool_choice,omitempty"`        // Tool Use 強制用
 	ContextManagement *ContextManagement `json:"context_management,omitempty"` // NEW
 }
 

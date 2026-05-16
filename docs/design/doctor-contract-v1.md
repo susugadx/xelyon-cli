@@ -31,7 +31,7 @@
 | Bedrock | yes | yes | yes | yes | yes | yes | no | no | no | no | no | none |
 | DeepSeek | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | Gemini | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
-| Claude / Anthropic | no | no | no | no | no | no | no | no | no | no | no | none |
+| Claude / Anthropic | yes | yes | yes | yes | yes | yes | yes | no | no | no | yes | none |
 | Groq | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | Ollama | no | no | no | no | no | no | no | no | no | no | no | none |
 | OpenRouter | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
@@ -107,9 +107,20 @@ Gemini:
 - Does not support `--capabilities`, `--require-capability`, retention smoke, or separate thinking smoke in v1.
 - Main owner packages: `cmd/doctor_gemini.go`, `internal/api/providers/gemini/diagnostics*.go`, `internal/providerdiag`.
 
+Claude / Anthropic:
+
+- Checks `ANTHROPIC_API_KEY`, `ANTHROPIC_API_URL`, provider registration, model / `catalog_model`, Anthropic Messages route, function calling, image input, thinking request config, context management, Claude compaction, native web search, and catalog policy.
+- Supports `--print-request`.
+- Live smoke supports text, tool, image, thinking, and native web search request types through the Claude runtime request builders. Native web search uses the Anthropic Messages endpoint with `web-search-2025-03-05` beta.
+- Request preview is credential-independent and records redacted `x-api-key`, `anthropic-version`, optional `anthropic-beta`, endpoint, route, and request body without sending network traffic.
+- Non-Claude `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token or cost policy.
+- `CLAUDE_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
+- Native web search smoke currently treats summary or source as the success condition and does not require token usage / cost observation.
+- Does not support `--capabilities`, `--require-capability`, or retention smoke in v1.
+- Main owner packages: `cmd/doctor_claude.go`, `internal/api/providers/claude/diagnostics*.go`, `internal/providerdiag`.
+
 Missing doctor providers:
 
-- `claude` / `anthropic`: Anthropic Messages, `ANTHROPIC_API_KEY`, context management, image support, tool use, web search.
 - `ollama`: local endpoint, default `http://localhost:11434`, installed model availability, local usage counts, no API key.
 
 ## Contract v1
@@ -358,8 +369,14 @@ Targets: `gemini`, `claude` / `anthropic`, `ollama`.
 Focus:
 
 - Gemini: model URL, function calling, image, thinking, caching, web search
-- Claude: Messages endpoint, tool use, image, context management, web search
+- Claude: Messages endpoint, tool use, image, thinking, context management, web search
 - Ollama: local endpoint reachability, installed model check, local usage counts, no-auth semantics
+
+Status:
+
+- Gemini: completed.
+- Claude / Anthropic: completed.
+- Ollama: not started.
 
 Preparatory boundary for native providers:
 

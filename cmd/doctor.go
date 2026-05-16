@@ -14,6 +14,7 @@ var (
 	doctorDeploymentFlag           string
 	doctorCatalogModelFlag         string
 	doctorBedrockModelFlag         string
+	doctorClaudeModelFlag          string
 	doctorDeepSeekModelFlag        string
 	doctorGeminiModelFlag          string
 	doctorGroqModelFlag            string
@@ -28,6 +29,9 @@ var (
 	doctorOpenAIRetentionSmokeFlag bool
 	doctorBedrockImageSmokeFlag    bool
 	doctorBedrockThinkingSmokeFlag bool
+	doctorClaudeImageSmokeFlag     bool
+	doctorClaudeThinkingSmokeFlag  bool
+	doctorClaudeWebSearchSmokeFlag bool
 	doctorGeminiImageSmokeFlag     bool
 	doctorGeminiWebSearchSmokeFlag bool
 	doctorKimiImageSmokeFlag       bool
@@ -49,6 +53,7 @@ func newDoctorCommand() *cobra.Command {
 	}
 	cmd.AddCommand(newAzureDoctorCommand())
 	cmd.AddCommand(newBedrockDoctorCommand())
+	cmd.AddCommand(newClaudeDoctorCommand())
 	cmd.AddCommand(newDeepSeekDoctorCommand())
 	cmd.AddCommand(newGeminiDoctorCommand())
 	cmd.AddCommand(newGroqDoctorCommand())

@@ -417,6 +417,24 @@ xelyon --provider claude --model claude-opus-4-6
 - `xhigh` レベルは Opus 4.7 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
 - Claude Compaction は Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
 
+設定の到達性は CLI から診断できます。`doctor claude` は `ANTHROPIC_API_KEY`、`ANTHROPIC_API_URL`、provider 登録、model / `catalog_model` 解決、Anthropic Messages route、function calling、画像入力、thinking request config、context management、Claude compaction、native web search、token / pricing metadata を確認します。`--catalog-model` は alias の underlying Claude model として token / pricing / thinking / context management 判定に使います。`--print-request` は live request を送らず、redacted `x-api-key` header、`anthropic-version` / `anthropic-beta`、request body を `request_preview` に表示します。`--smoke` を付けると live Messages request を送って usage / cost を観測します。画像入力は `--image-smoke`、function calling は `--tool-smoke`、thinking request は `--thinking-smoke`、native web search は `--web-search-smoke` を使います。
+
+```bash
+xelyon doctor claude
+xelyon doctor claude --model claude-sonnet-4-6
+xelyon doctor claude --model corp-claude-model --catalog-model claude-sonnet-4-6
+xelyon doctor claude --print-request
+xelyon doctor claude --tool-smoke --print-request
+xelyon doctor claude --smoke
+xelyon doctor claude --tool-smoke
+xelyon doctor claude --image-smoke
+xelyon doctor claude --thinking-smoke
+xelyon doctor claude --web-search-smoke
+xelyon doctor claude --json
+```
+
+`ANTHROPIC_API_URL` は runtime と同じ exact endpoint / proxy override で、公式 Anthropic endpoint では `/v1/messages` を期待します。non-Claude `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Claude doctor の token / cost policy に使いません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--thinking-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では実行しません。手元では `ANTHROPIC_API_KEY` を設定して `make claude-doctor-smoke` を実行します。既定モデルは `CLAUDE_DOCTOR_SMOKE_MODEL ?= claude-sonnet-4-6`、timeout は `CLAUDE_DOCTOR_SMOKE_TIMEOUT ?= 180s` です。Claude native web search smoke は summary または source が返れば成功扱いで、現時点では token usage / cost 観測は必須にしません。
+
 ### 7. Groq
 
 ```bash

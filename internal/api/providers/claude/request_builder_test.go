@@ -45,6 +45,30 @@ func TestBuildMessagesRequest_UsesRuntimeFeaturePolicy(t *testing.T) {
 	}
 }
 
+func TestBuildMessagesRequest_UsesForcedToolChoice(t *testing.T) {
+	t.Setenv(claudeFunctionCallEnv, "1")
+
+	p := New("test-key")
+	p.SetToolChoice("custom_lookup")
+	ctx := api.WithToolDefinitions(context.Background(), []api.ToolDefinition{{
+		Name:        "custom_lookup",
+		Description: "lookup",
+		Parameters:  map[string]interface{}{"type": "object"},
+	}})
+
+	built := p.buildMessagesRequest(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, defaultClaudeModel)
+	if len(built.Request.Tools) != 1 || built.Request.Tools[0].Name != "custom_lookup" {
+		t.Fatalf("Tools = %+v, want custom_lookup tool", built.Request.Tools)
+	}
+	requireClaudeToolChoice(t, built.Request.ToolChoice, "custom_lookup")
+
+	p.ClearToolChoice()
+	built = p.buildMessagesRequest(ctx, "System", []api.Message{{Role: "user", Content: "Hello"}}, defaultClaudeModel)
+	if built.Request.ToolChoice != nil {
+		t.Fatalf("ToolChoice = %+v, want nil after ClearToolChoice", built.Request.ToolChoice)
+	}
+}
+
 func TestAnthropicHeaders_MergeConfiguredAndContextManagementBetas(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("claude", config.ProviderModelConfig{

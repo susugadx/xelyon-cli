@@ -26,6 +26,7 @@ type claudeRequestFeatures struct {
 	Thinking          *ThinkingConfig
 	OutputConfig      *OutputConfig
 	Tools             []ClaudeTool
+	ToolChoice        *ClaudeToolChoice
 	ContextManagement *ContextManagement
 }
 
@@ -50,6 +51,7 @@ func (p *Provider) buildMessagesRequest(ctx context.Context, systemPrompt string
 			Thinking:          features.Thinking,
 			OutputConfig:      features.OutputConfig,
 			Tools:             features.Tools,
+			ToolChoice:        features.ToolChoice,
 			ContextManagement: features.ContextManagement,
 		},
 	}
@@ -81,6 +83,7 @@ func (p *Provider) buildMultimodalRequest(ctx context.Context, systemPrompt stri
 			Thinking:          features.Thinking,
 			OutputConfig:      features.OutputConfig,
 			Tools:             features.Tools,
+			ToolChoice:        features.ToolChoice,
 			ContextManagement: features.ContextManagement,
 		},
 	}
@@ -108,8 +111,19 @@ func (p *Provider) buildRequestFeatures(ctx context.Context, cfg *config.Config,
 	}
 	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		features.Tools = GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
+		features.ToolChoice = buildClaudeToolChoice(p.toolChoice)
 	}
 	return features
+}
+
+func buildClaudeToolChoice(toolChoice *string) *ClaudeToolChoice {
+	if toolChoice == nil || *toolChoice == "" {
+		return nil
+	}
+	return &ClaudeToolChoice{
+		Type: "tool",
+		Name: *toolChoice,
+	}
 }
 
 func claudeImageMessage(userMessage string, image *api.ImageData) MultimodalMessage {

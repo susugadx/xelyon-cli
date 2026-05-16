@@ -136,6 +136,19 @@ func KimiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutp
 	})
 }
 
+// ClaudeMaxOutputPolicy は Claude doctor の max output 解決規則を返す。
+func ClaudeMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	if nonProviderCatalogModel("claude", catalogModel) {
+		return MaxOutputPolicy{Source: "missing"}
+	}
+	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
+		Provider:             "claude",
+		RequestModel:         model,
+		CatalogModel:         catalogModel,
+		ProviderDefaultKnown: true,
+	})
+}
+
 func nonProviderCatalogModel(provider, catalogModel string) bool {
 	catalogModel = strings.TrimSpace(catalogModel)
 	return catalogModel != "" && !IsProviderCatalogModelKnown(provider, catalogModel)
@@ -313,6 +326,19 @@ func KimiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPo
 	)
 }
 
+// ClaudeCatalogPolicy は Claude doctor 用の catalog policy snapshot を返す。
+func ClaudeCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	if nonProviderCatalogModel("claude", catalogModel) {
+		return unknownProviderCatalogPolicy(catalogModel)
+	}
+	return NewCatalogPolicy(
+		catalogModel,
+		ClaudeMaxOutputPolicy(cfg, model, catalogModel),
+		cost.GetPricingInfoForConfig(cfg, "claude", model),
+		false,
+	)
+}
+
 func unknownProviderCatalogPolicy(catalogModel string) CatalogPolicy {
 	return CatalogPolicy{
 		CatalogModel: strings.TrimSpace(catalogModel),
@@ -373,6 +399,11 @@ func (p CatalogPolicy) GeminiDetail() string {
 
 // KimiDetail は Kimi doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) KimiDetail() string {
+	return p.plainDetail()
+}
+
+// ClaudeDetail は Claude doctor の catalog_policy detail を返す。
+func (p CatalogPolicy) ClaudeDetail() string {
 	return p.plainDetail()
 }
 

@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke claude-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -14,6 +14,8 @@ OPENAI_DOCTOR_SMOKE_MODEL ?= gpt-5.4
 DEEPSEEK_DOCTOR_SMOKE_MODEL ?= deepseek-v4-flash
 GEMINI_DOCTOR_SMOKE_MODEL ?= gemini-3.1-pro-preview-customtools
 GEMINI_DOCTOR_SMOKE_TIMEOUT ?= 180s
+CLAUDE_DOCTOR_SMOKE_MODEL ?= claude-sonnet-4-6
+CLAUDE_DOCTOR_SMOKE_TIMEOUT ?= 180s
 GROQ_DOCTOR_SMOKE_MODEL ?= meta-llama/llama-4-scout-17b-16e-instruct
 OPENROUTER_DOCTOR_SMOKE_MODEL ?= openai/gpt-5.4-mini
 KIMI_DOCTOR_SMOKE_MODEL ?= kimi-k2.6
@@ -191,6 +193,11 @@ deepseek-doctor-smoke:
 gemini-doctor-smoke:
 	@test -n "$(GEMINI_API_KEY)" || { echo "GEMINI_API_KEY is required for make gemini-doctor-smoke"; exit 1; }
 	go run . doctor gemini --model "$(GEMINI_DOCTOR_SMOKE_MODEL)" --timeout "$(GEMINI_DOCTOR_SMOKE_TIMEOUT)" --smoke --tool-smoke --image-smoke --web-search-smoke
+
+# Claude doctor 診断経路を実環境で確認（ANTHROPIC_API_KEY 必須）
+claude-doctor-smoke:
+	@test -n "$(ANTHROPIC_API_KEY)" || { echo "ANTHROPIC_API_KEY is required for make claude-doctor-smoke"; exit 1; }
+	go run . doctor claude --model "$(CLAUDE_DOCTOR_SMOKE_MODEL)" --timeout "$(CLAUDE_DOCTOR_SMOKE_TIMEOUT)" --smoke --tool-smoke --image-smoke --thinking-smoke --web-search-smoke
 
 # Groq doctor 診断経路を実環境で確認（GROQ_API_KEY 必須）
 groq-doctor-smoke:

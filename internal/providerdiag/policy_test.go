@@ -49,6 +49,11 @@ func TestCatalogPolicyDetailsPreserveProviderFormatting(t *testing.T) {
 		t.Fatalf("KimiDetail() = %q, want %q", got, want)
 	}
 
+	claudePolicy := ClaudeCatalogPolicy(cfg, "claude-sonnet-4-6", "claude-sonnet-4-6")
+	if got, want := claudePolicy.ClaudeDetail(), "catalog_model=claude-sonnet-4-6, context_window=200000, max_output_tokens=64000, pricing=input $3.00/M cached $0.300/M output $15.00/M"; got != want {
+		t.Fatalf("ClaudeDetail() = %q, want %q", got, want)
+	}
+
 	openRouterPolicy := OpenRouterCatalogPolicy(cfg, "openai/gpt-5.4", "openai/gpt-5.4")
 	if got, want := openRouterPolicy.OpenRouterDetail(), "catalog_model=openai/gpt-5.4, context_window=1000000, max_output_tokens=64000, pricing=input $2.50/M cached $0.250/M output $15.00/M"; got != want {
 		t.Fatalf("OpenRouterDetail() = %q, want %q", got, want)

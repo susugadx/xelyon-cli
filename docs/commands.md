@@ -69,6 +69,29 @@ xelyon doctor gemini --json
 
 Gemini live smoke の失敗時は `smoke` check の message / suggestion と `smoke.requests[].error` を見ます。doctor は認証・権限、quota / rate limit / capacity、model unavailable、empty SSE response、`GEMINI_API_URL` route mismatch、tool unsupported、image unsupported、native web search unsupported を分類します。text / tool / image は `streamGenerateContent?alt=sse`、web search は `generateContent` のため、proxy や endpoint override を使う場合は `xelyon doctor gemini --smoke --tool-smoke --image-smoke --web-search-smoke --print-request` で request preview を確認してから live smoke を実行してください。pricing metadata がない場合は smoke 自体は fail せず、`cost` check が warn になります。
 
+### `xelyon doctor claude`
+
+Claude provider の `ANTHROPIC_API_KEY`、`ANTHROPIC_API_URL`、provider 登録、model / `catalog_model` 解決、Anthropic Messages route、function calling、画像入力、thinking request config、context management、Claude compaction、native web search、token / pricing metadata を確認します。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、diagnostic tool call を強制します。画像入力は `--image-smoke`、thinking request は `--thinking-smoke`、native web search は `--web-search-smoke` で確認します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted `x-api-key` header、Anthropic headers、request body を `request_preview` に表示します。
+
+`--model` は実 request に送る Claude model ID または alias、`--catalog-model` は alias の underlying Claude model として token / pricing / thinking / context management 判定に使います。non-Claude `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Claude doctor の token / cost policy に使いません。`ANTHROPIC_API_URL` は runtime と同じ exact endpoint / proxy override で、公式 Anthropic endpoint では `/v1/messages` を期待します。`--print-request` は `ANTHROPIC_API_KEY` なしで実行でき、text / tool / image / thinking / native web search の request body を送信前に確認できます。`--capabilities`、`--require-capability`、`--retention-smoke` は Claude doctor v1 では提供しません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--thinking-smoke` / `--web-search-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+
+```bash
+xelyon doctor claude
+xelyon doctor claude --model claude-sonnet-4-6
+xelyon doctor claude --model corp-claude-model --catalog-model claude-sonnet-4-6
+xelyon doctor claude --smoke
+xelyon doctor claude --tool-smoke
+xelyon doctor claude --image-smoke
+xelyon doctor claude --thinking-smoke
+xelyon doctor claude --web-search-smoke
+xelyon doctor claude --print-request
+xelyon doctor claude --tool-smoke --print-request
+xelyon doctor claude --smoke --tool-smoke --image-smoke --thinking-smoke --web-search-smoke
+xelyon doctor claude --json
+```
+
+手元で doctor 経路だけを実 Claude 環境で確認する場合は、`ANTHROPIC_API_KEY` を設定して `make claude-doctor-smoke` を実行します。既定では `claude-sonnet-4-6` で text / tool / image / thinking / web search smoke をまとめて実行し、必要なら `CLAUDE_DOCTOR_SMOKE_MODEL` で変更できます。timeout は `CLAUDE_DOCTOR_SMOKE_TIMEOUT ?= 180s` で変更できます。Claude native web search smoke は summary または source が返れば成功扱いで、現時点では token usage / cost 観測は必須にしません。
+
 ### `xelyon doctor groq`
 
 Groq provider の `GROQ_API_KEY`、`GROQ_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、function calling 設定、token / pricing metadata を確認します。route は常に `chat_completions` です。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。

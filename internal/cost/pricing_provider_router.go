@@ -1,6 +1,8 @@
 package cost
 
 import (
+	"strings"
+
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
@@ -55,6 +57,18 @@ func GetPricingInfoForConfig(cfg *config.Config, provider string, model string, 
 		return pricingUnavailableInfo()
 	}
 	return GetPricingInfo(provider, resolution.Model, promptTokenCount...)
+}
+
+// HasKnownPricingModel は provider の pricing family が model を exact known model として持つか返す。
+func HasKnownPricingModel(provider string, model string) bool {
+	if strings.TrimSpace(model) == "" {
+		return false
+	}
+	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
+	if !ok {
+		return false
+	}
+	return pricingFamilyHasKnownModel(entry.PricingFamily, model)
 }
 
 func pricingModelForConfig(cfg *config.Config, provider string, model string) string {
