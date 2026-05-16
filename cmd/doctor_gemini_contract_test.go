@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -212,7 +211,7 @@ func TestRenderGeminiDoctorTextContractWithMultipleSmokeRequests(t *testing.T) {
 
 	var out bytes.Buffer
 	renderGeminiDoctorText(&out, report)
-	requireGeminiDoctorTextContainsAll(t, out.String(), []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Gemini doctor",
 		"Status: OK",
 		"Capabilities: function_calling=true image_input=true web_search=true context_caching=true thinking=true",
@@ -266,7 +265,7 @@ func TestRenderGeminiDoctorTextContractWithSmokeFailure(t *testing.T) {
 
 	var out bytes.Buffer
 	renderGeminiDoctorText(&out, report)
-	requireGeminiDoctorTextContainsAll(t, out.String(), []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Status: FAIL",
 		"FAIL smoke: live Gemini smoke authentication or authorization failed",
 		"detail: request=text route=stream_generate_content_sse error=API error (401): bad key",
@@ -335,22 +334,4 @@ func requireGeminiDoctorWebSearchPreviewBody(t *testing.T, body map[string]any) 
 	if !strings.Contains(rendered, "google_search") || strings.Contains(rendered, "google_search_retrieval") {
 		t.Fatalf("web search body = %#v, want google_search request", body)
 	}
-}
-
-func requireGeminiDoctorTextContainsAll(t *testing.T, output string, wants []string) {
-	t.Helper()
-	for _, want := range wants {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output missing %q:\n%s", want, output)
-		}
-	}
-}
-
-func renderedDoctorContractValue(t *testing.T, value any) string {
-	t.Helper()
-	payload, err := json.Marshal(value)
-	if err != nil {
-		t.Fatalf("json.Marshal(%T) error = %v", value, err)
-	}
-	return string(payload)
 }

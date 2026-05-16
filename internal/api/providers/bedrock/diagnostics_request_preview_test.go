@@ -170,39 +170,40 @@ func TestDiagnoseBedrock_PrintRequestBuildsConverseBodiesAndSkippedRequests(t *t
 	}
 }
 
-func TestBedrockDiagnosticConversePreviewBodyMatchesRuntimeBuilder(t *testing.T) {
+func TestBedrockDiagnosticConversePreviewBodiesMatchRuntimeBuilder(t *testing.T) {
 	setBedrockDiagnosticTestEnv(t)
 
 	const model = "amazon.nova-pro-v1:0"
 	cfg := bedrockDiagnosticTestConfig(model, "")
 	report := newBedrockDiagnosticPreviewReport(model, bedrockRouteConverseStream)
-	options := DiagnosticOptions{ToolSmoke: true, MaxOutputTokens: 8}
+	options := DiagnosticOptions{TextSmoke: true, ToolSmoke: true, MaxOutputTokens: 8}
 	plan := buildBedrockDiagnosticRequestPlan(options)
 
 	preview, err := buildBedrockDiagnosticRequestPreview(context.Background(), cfg, report, options, plan)
 	if err != nil {
 		t.Fatalf("buildBedrockDiagnosticRequestPreview() error = %v", err)
 	}
-	if len(preview.Requests) != 1 {
-		t.Fatalf("preview requests = %#v, want one tool request", preview.Requests)
+	if len(preview.Requests) != len(plan.Requests) {
+		t.Fatalf("preview requests = %d, want %d", len(preview.Requests), len(plan.Requests))
 	}
 
 	previewCfg := bedrockDiagnosticSmokeConfig(cfg, report, options.MaxOutputTokens)
 	provider := &Provider{region: report.Region, runtimeConfig: previewCfg}
-	request := plan.Requests[0]
-	requestCfg := bedrockDiagnosticRequestConfig(previewCfg, request)
-	requestCtx := newBedrockDiagnosticSmokeRequestContext(context.Background(), requestCfg, request, nil)
-	req := provider.resolveBedrockRequestContext(requestCtx, report.Model)
-	input, err := provider.buildConverseStreamInput(requestCtx, request.SystemPrompt, bedrockDiagnosticUserMessages(request.UserContent), req)
-	if err != nil {
-		t.Fatalf("buildConverseStreamInput() error = %v", err)
-	}
-	wantBody, err := normalizeBedrockConverseStreamPreviewBody(input)
-	if err != nil {
-		t.Fatalf("normalizeBedrockConverseStreamPreviewBody() error = %v", err)
-	}
-	if got, want := canonicalBedrockDiagnosticJSON(t, preview.Requests[0].Body), canonicalBedrockDiagnosticJSON(t, wantBody); got != want {
-		t.Fatalf("Converse preview body drifted from runtime builder:\ngot:  %s\nwant: %s", got, want)
+	for i, request := range plan.Requests {
+		requestCfg := bedrockDiagnosticRequestConfig(previewCfg, request)
+		requestCtx := newBedrockDiagnosticSmokeRequestContext(context.Background(), requestCfg, request, nil)
+		req := provider.resolveBedrockRequestContext(requestCtx, report.Model)
+		input, err := provider.buildConverseStreamInput(requestCtx, request.SystemPrompt, bedrockDiagnosticUserMessages(request.UserContent), req)
+		if err != nil {
+			t.Fatalf("buildConverseStreamInput(%s) error = %v", request.Name, err)
+		}
+		wantBody, err := normalizeBedrockConverseStreamPreviewBody(input)
+		if err != nil {
+			t.Fatalf("normalizeBedrockConverseStreamPreviewBody(%s) error = %v", request.Name, err)
+		}
+		if got, want := canonicalBedrockDiagnosticJSON(t, preview.Requests[i].Body), canonicalBedrockDiagnosticJSON(t, wantBody); got != want {
+			t.Fatalf("%s Converse preview body drifted from runtime builder:\ngot:  %s\nwant: %s", request.Name, got, want)
+		}
 	}
 }
 
