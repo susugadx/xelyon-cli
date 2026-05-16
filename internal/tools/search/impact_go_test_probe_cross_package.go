@@ -56,6 +56,15 @@ type parsedGoHelperFile struct {
 	file *goast.File
 }
 
+type crossPackageHelperGraphKey struct {
+	packageDir     string
+	allowTestFiles bool
+}
+
+type crossPackageHelperGraphCache struct {
+	graphs map[crossPackageHelperGraphKey]*crossPackageHelperGraph
+}
+
 type crossPackageHelperGraph struct {
 	ctx              goMethodTestProbeContext
 	packageDir       string
@@ -67,26 +76,42 @@ type crossPackageHelperGraph struct {
 	fileASTCache     map[string]parsedGoHelperFile
 	declCache        map[string]*goast.FuncDecl
 	summaryCache     map[string]helperSummary
+	graphCache       *crossPackageHelperGraphCache
 }
 
-func crossPackageMethodTestMatchesSymbol(ctx goMethodTestProbeContext, absPath string, test navigation.TestRef) bool {
-	ctx.dependencies.add(absPath)
-	src, err := os.ReadFile(absPath)
-	if err != nil {
-		return false
+type goMethodCrossPackageTestMatcher struct {
+	ctx        goMethodTestProbeContext
+	testFiles  map[string]crossPackageMethodTestFile
+	graphCache *crossPackageHelperGraphCache
+}
+
+type crossPackageMethodTestFile struct {
+	src    []byte
+	parsed *ast.ParsedFile
+	valid  bool
+}
+
+func newGoMethodCrossPackageTestMatcher(ctx goMethodTestProbeContext) *goMethodCrossPackageTestMatcher {
+	return &goMethodCrossPackageTestMatcher{
+		ctx:        ctx,
+		testFiles:  make(map[string]crossPackageMethodTestFile),
+		graphCache: newCrossPackageHelperGraphCache(),
 	}
-	parsed, err := ast.ParseBytesForReuse(absPath, src)
-	if err != nil {
+}
+
+func (m *goMethodCrossPackageTestMatcher) matches(absPath string, test navigation.TestRef) bool {
+	src, parsed, ok := m.testFile(absPath)
+	if !ok {
 		return false
 	}
 	testSymbol, ok := findCrossPackageMethodProbeTestSymbol(absPath, src, test)
 	if !ok {
 		return false
 	}
-	if methodTestBodyMatchesSymbol(ctx.matchContext(absPath, src), parsed, testSymbol, false) {
+	if methodTestBodyMatchesSymbol(m.ctx.matchContext(absPath, src), parsed, testSymbol, false) {
 		return true
 	}
-	graph := newCrossPackageHelperGraph(ctx, filepath.Dir(absPath), true)
+	graph := newCrossPackageHelperGraphWithCache(m.ctx, filepath.Dir(absPath), true, m.graphCache)
 	helper := packageHelper{
 		key:    helperCacheKeyFromFields(absPath, testSymbol.Name, testSymbol.Line, testSymbol.EndLine),
 		name:   testSymbol.Name,
@@ -98,7 +123,60 @@ func crossPackageMethodTestMatchesSymbol(ctx goMethodTestProbeContext, absPath s
 	return graph.matchesSymbol(helper, make(map[string]struct{}))
 }
 
-func newCrossPackageHelperGraph(ctx goMethodTestProbeContext, packageDir string, allowTestFiles bool) *crossPackageHelperGraph {
+func (m *goMethodCrossPackageTestMatcher) testFile(absPath string) ([]byte, *ast.ParsedFile, bool) {
+	absPath = filepath.Clean(strings.TrimSpace(absPath))
+	if absPath == "" {
+		return nil, nil, false
+	}
+	if cached, ok := m.testFiles[absPath]; ok {
+		return cached.src, cached.parsed, cached.valid
+	}
+
+	m.ctx.dependencies.add(absPath)
+	src, err := os.ReadFile(absPath)
+	if err != nil {
+		m.testFiles[absPath] = crossPackageMethodTestFile{}
+		return nil, nil, false
+	}
+	parsed, err := ast.ParseBytesForReuse(absPath, src)
+	if err != nil {
+		m.testFiles[absPath] = crossPackageMethodTestFile{}
+		return nil, nil, false
+	}
+
+	cached := crossPackageMethodTestFile{src: src, parsed: parsed, valid: true}
+	m.testFiles[absPath] = cached
+	return cached.src, cached.parsed, cached.valid
+}
+
+func newCrossPackageHelperGraphCache() *crossPackageHelperGraphCache {
+	return &crossPackageHelperGraphCache{graphs: make(map[crossPackageHelperGraphKey]*crossPackageHelperGraph)}
+}
+
+func (c *crossPackageHelperGraphCache) graph(ctx goMethodTestProbeContext, packageDir string, allowTestFiles bool) *crossPackageHelperGraph {
+	if c == nil {
+		return buildCrossPackageHelperGraph(ctx, packageDir, allowTestFiles, nil)
+	}
+	key := crossPackageHelperGraphKey{
+		packageDir:     cleanCrossPackageHelperGraphDir(packageDir),
+		allowTestFiles: allowTestFiles,
+	}
+	if graph, ok := c.graphs[key]; ok {
+		return graph
+	}
+	graph := buildCrossPackageHelperGraph(ctx, key.packageDir, allowTestFiles, c)
+	c.graphs[key] = graph
+	return graph
+}
+
+func newCrossPackageHelperGraphWithCache(ctx goMethodTestProbeContext, packageDir string, allowTestFiles bool, cache *crossPackageHelperGraphCache) *crossPackageHelperGraph {
+	if cache == nil {
+		cache = newCrossPackageHelperGraphCache()
+	}
+	return cache.graph(ctx, packageDir, allowTestFiles)
+}
+
+func buildCrossPackageHelperGraph(ctx goMethodTestProbeContext, packageDir string, allowTestFiles bool, cache *crossPackageHelperGraphCache) *crossPackageHelperGraph {
 	graph := &crossPackageHelperGraph{
 		ctx:              ctx,
 		packageDir:       packageDir,
@@ -110,6 +188,7 @@ func newCrossPackageHelperGraph(ctx goMethodTestProbeContext, packageDir string,
 		fileASTCache:     make(map[string]parsedGoHelperFile),
 		declCache:        make(map[string]*goast.FuncDecl),
 		summaryCache:     make(map[string]helperSummary),
+		graphCache:       cache,
 	}
 
 	entries, err := os.ReadDir(packageDir)
@@ -156,6 +235,14 @@ func newCrossPackageHelperGraph(ctx goMethodTestProbeContext, packageDir string,
 	}
 
 	return graph
+}
+
+func cleanCrossPackageHelperGraphDir(dir string) string {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return ""
+	}
+	return filepath.Clean(dir)
 }
 
 func (g *crossPackageHelperGraph) addHelper(helper packageHelper) {
@@ -239,7 +326,7 @@ func (g *crossPackageHelperGraph) importedGraph(dir string) *crossPackageHelperG
 	if graph, ok := g.importedGraphs[dir]; ok {
 		return graph
 	}
-	graph := newCrossPackageHelperGraph(g.ctx, dir, false)
+	graph := newCrossPackageHelperGraphWithCache(g.ctx, dir, false, g.graphCache)
 	g.importedGraphs[dir] = graph
 	return graph
 }

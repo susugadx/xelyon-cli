@@ -82,15 +82,16 @@ func findGoImpactMethodTestsByNameProbe(probe string, symbol navigation.SymbolCa
 	}
 
 	ctx.collectLocalTests(entries, appendTest)
-	ctx.collectCrossPackageTests(limit, appendTest)
+	ctx.collectCrossPackageTests(appendTest)
 	return tests, total, deps.list()
 }
 
-func (ctx goMethodTestProbeContext) collectCrossPackageTests(limit int, appendTest func(navigation.TestRef)) {
+func (ctx goMethodTestProbeContext) collectCrossPackageTests(appendTest func(navigation.TestRef)) {
 	if !ctx.symbol.Exported {
 		return
 	}
 
+	matcher := newGoMethodCrossPackageTestMatcher(ctx)
 	broader, _ := findGoImpactTestsByNameProbe(ctx.probe, ctx.symbol.RootPath, ctx.opts, 0)
 	for _, candidate := range broader {
 		absPath := absoluteAffectedFilePathWithPreferredBases(
@@ -103,7 +104,7 @@ func (ctx goMethodTestProbeContext) collectCrossPackageTests(limit int, appendTe
 		if absPath == "" || filepath.Clean(filepath.Dir(absPath)) == filepath.Clean(ctx.packageDir) {
 			continue
 		}
-		if !crossPackageMethodTestMatchesSymbol(ctx, absPath, candidate) {
+		if !matcher.matches(absPath, candidate) {
 			continue
 		}
 		appendTest(candidate)
