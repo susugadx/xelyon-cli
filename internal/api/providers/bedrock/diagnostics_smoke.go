@@ -39,7 +39,7 @@ func runBedrockDiagnosticSmoke(ctx context.Context, cfg *config.Config, report D
 	}
 	result := DiagnosticSmokeResult{Ran: true}
 	for _, request := range requestPlan.Requests {
-		if skipReason, ok := bedrockDiagnosticSmokeSkipReason(report, request); ok {
+		if skipReason, ok := bedrockDiagnosticRequestSkipReason(report, request); ok {
 			result.Requests = append(result.Requests, newBedrockDiagnosticSkippedSmokeRequest(request, skipReason))
 			continue
 		}
@@ -92,11 +92,7 @@ func newBedrockDiagnosticSmokeProvider(cfg *config.Config, region string, option
 }
 
 func runBedrockDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, provider *Provider, model string, request bedrockDiagnosticSmokeRequest, output io.Writer) (DiagnosticSmokeRequestResult, error) {
-	requestCfg := config.CloneConfig(cfg)
-	requestCfg.Thinking.Enabled = request.ThinkingEnabled
-	if request.ThinkingEnabled && strings.TrimSpace(requestCfg.Thinking.Level) == "" {
-		requestCfg.Thinking.Level = "low"
-	}
+	requestCfg := bedrockDiagnosticRequestConfig(cfg, request)
 	requestCtx := newBedrockDiagnosticSmokeRequestContext(ctx, requestCfg, request, output)
 
 	var usage api.Usage

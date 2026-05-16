@@ -70,18 +70,41 @@ type DiagnosticSmokeResult struct {
 	Requests      []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
 }
 
+// DiagnosticRequestPreview は live request を送らずに構築した request shape を表す。
+type DiagnosticRequestPreview struct {
+	Requests []DiagnosticRequestPreviewRequest `json:"requests"`
+}
+
+// DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
+type DiagnosticRequestPreviewRequest struct {
+	Name            string            `json:"name"`
+	Skipped         bool              `json:"skipped,omitempty"`
+	SkipReason      string            `json:"skip_reason,omitempty"`
+	ToolPayload     bool              `json:"tool_payload,omitempty"`
+	ImagePayload    bool              `json:"image_payload,omitempty"`
+	ThinkingEnabled bool              `json:"thinking_enabled,omitempty"`
+	Route           string            `json:"route"`
+	Operation       string            `json:"operation,omitempty"`
+	ModelID         string            `json:"model_id,omitempty"`
+	Method          string            `json:"method,omitempty"`
+	URL             string            `json:"url,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	Body            any               `json:"body,omitempty"`
+}
+
 // DiagnosticReport は Bedrock の設定診断結果を表す。
 type DiagnosticReport struct {
-	Provider               string                 `json:"provider"`
-	Region                 string                 `json:"region"`
-	Model                  string                 `json:"model"`
-	ModelSource            string                 `json:"model_source"`
-	CatalogModel           string                 `json:"catalog_model"`
-	CatalogModelSource     string                 `json:"catalog_model_source"`
-	Route                  string                 `json:"route"`
-	FunctionCallingEnabled bool                   `json:"function_calling_enabled"`
-	Checks                 []DiagnosticCheck      `json:"checks"`
-	Smoke                  *DiagnosticSmokeResult `json:"smoke,omitempty"`
+	Provider               string                    `json:"provider"`
+	Region                 string                    `json:"region"`
+	Model                  string                    `json:"model"`
+	ModelSource            string                    `json:"model_source"`
+	CatalogModel           string                    `json:"catalog_model"`
+	CatalogModelSource     string                    `json:"catalog_model_source"`
+	Route                  string                    `json:"route"`
+	FunctionCallingEnabled bool                      `json:"function_calling_enabled"`
+	Checks                 []DiagnosticCheck         `json:"checks"`
+	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
+	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
 
 // HasFailures は診断に fail 項目が含まれるか返す。
@@ -117,6 +140,7 @@ type DiagnosticOptions struct {
 	ToolSmoke       bool
 	ImageSmoke      bool
 	ThinkingSmoke   bool
+	PrintRequest    bool
 	SmokeTimeout    time.Duration
 	MaxOutputTokens int
 	SmokeOutput     io.Writer
@@ -124,6 +148,10 @@ type DiagnosticOptions struct {
 	invokeClient     invokeModelWithResponseStreamClient
 	converseClient   converseStreamClient
 	skipAWSAuthCheck bool
+}
+
+func (o DiagnosticOptions) requiresAWSAuthCheck() bool {
+	return !o.PrintRequest && !o.skipAWSAuthCheck && o.invokeClient == nil && o.converseClient == nil
 }
 
 // Diagnose は Bedrock のローカル設定と、必要に応じて live smoke を検証する。
@@ -157,7 +185,10 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addCatalogPolicyCheck(cfg, route)
 	report.addFunctionCallingCheck()
 
-	if options.RunSmoke {
+	if options.PrintRequest {
+		report.addRequestPreview(ctx, cfg, options, requestPlan)
+	}
+	if options.RunSmoke && !options.PrintRequest {
 		report.runSmokeIfReady(ctx, cfg, options, requestPlan)
 	}
 

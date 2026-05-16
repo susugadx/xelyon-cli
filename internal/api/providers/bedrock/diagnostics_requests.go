@@ -1,5 +1,11 @@
 package bedrock
 
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
+
 const defaultBedrockDiagnosticSmokeMaxOutputTokens = 64
 
 const (
@@ -23,8 +29,10 @@ type bedrockDiagnosticSmokeRequest struct {
 }
 
 func buildBedrockDiagnosticRequestPlan(options DiagnosticOptions) bedrockDiagnosticRequestPlan {
+	includeText := options.TextSmoke || (options.PrintRequest && !options.ToolSmoke && !options.ImageSmoke && !options.ThinkingSmoke)
+
 	var requests []bedrockDiagnosticSmokeRequest
-	if options.TextSmoke {
+	if includeText {
 		requests = append(requests, bedrockDiagnosticSmokeRequest{
 			Name:         bedrockDiagnosticTextRequestName,
 			SystemPrompt: "Reply briefly.",
@@ -74,7 +82,16 @@ func bedrockDiagnosticRequestMaxOutputTokens(options DiagnosticOptions) int {
 	return defaultBedrockDiagnosticSmokeMaxOutputTokens
 }
 
-func bedrockDiagnosticSmokeSkipReason(report DiagnosticReport, request bedrockDiagnosticSmokeRequest) (string, bool) {
+func bedrockDiagnosticRequestConfig(cfg *config.Config, request bedrockDiagnosticSmokeRequest) *config.Config {
+	requestCfg := config.CloneConfig(cfg)
+	requestCfg.Thinking.Enabled = request.ThinkingEnabled
+	if request.ThinkingEnabled && strings.TrimSpace(requestCfg.Thinking.Level) == "" {
+		requestCfg.Thinking.Level = "low"
+	}
+	return requestCfg
+}
+
+func bedrockDiagnosticRequestSkipReason(report DiagnosticReport, request bedrockDiagnosticSmokeRequest) (string, bool) {
 	if request.ToolPayload && !report.FunctionCallingEnabled {
 		return "Bedrock function calling payloads are disabled (BEDROCK_FUNCTION_CALLING=0)", true
 	}

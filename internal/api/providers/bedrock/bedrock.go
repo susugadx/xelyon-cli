@@ -221,6 +221,11 @@ func (p *Provider) chatWithClaudeMessages(ctx context.Context, systemPrompt stri
 		return "", err
 	}
 
+	reqBody := p.buildBedrockClaudeMessagesRequest(ctx, systemPrompt, history, req)
+	return p.invokeClaudeMessagesStream(ctx, req.model, reqBody)
+}
+
+func (p *Provider) buildBedrockClaudeMessagesRequest(ctx context.Context, systemPrompt string, history []api.Message, req bedrockRequestContext) BedrockClaudeMessagesRequest {
 	messages := claude.ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 
 	// Anthropic Version（config → フォールバック定数）
@@ -253,7 +258,7 @@ func (p *Provider) chatWithClaudeMessages(ctx context.Context, systemPrompt stri
 	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(req.catalogModel, req.cfg.Compression, reqBody.AnthropicBeta)
 	reqBody.AnthropicBeta = mergeBedrockOutputBetaHeaders(reqBody.AnthropicBeta, reqBody.OutputConfig)
 
-	return p.invokeClaudeMessagesStream(ctx, req.model, reqBody)
+	return reqBody
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う
@@ -282,6 +287,11 @@ func (p *Provider) chatWithClaudeImage(ctx context.Context, systemPrompt string,
 		return "", err
 	}
 
+	reqBody := p.buildBedrockClaudeImageRequest(ctx, systemPrompt, history, userMessage, image, req)
+	return p.invokeClaudeMessagesStream(ctx, req.model, reqBody)
+}
+
+func (p *Provider) buildBedrockClaudeImageRequest(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, req bedrockRequestContext) BedrockClaudeMultimodalRequest {
 	// Anthropic Messages API 形式に変換（role:"tool" → role:"user"+tool_result 等）
 	converted := claude.ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 
@@ -340,7 +350,7 @@ func (p *Provider) chatWithClaudeImage(ctx context.Context, systemPrompt string,
 	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(req.catalogModel, req.cfg.Compression, reqBody.AnthropicBeta)
 	reqBody.AnthropicBeta = mergeBedrockOutputBetaHeaders(reqBody.AnthropicBeta, reqBody.OutputConfig)
 
-	return p.invokeClaudeMessagesStream(ctx, req.model, reqBody)
+	return reqBody
 }
 
 func (p *Provider) effectiveConfig() *config.Config {

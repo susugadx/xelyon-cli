@@ -184,9 +184,11 @@ Azure API error では 401/403/404/429 と tool payload rejected の原因候補
 
 ### `xelyon doctor bedrock`
 
-AWS Bedrock の region、AWS 認証チェーン、provider 登録、model / `catalog_model` 解決、Claude Messages / ConverseStream route、function calling 設定、token / pricing metadata を確認します。`--smoke` は text smoke、`--tool-smoke` は dummy tool call、`--image-smoke` は tiny PNG 画像入力、`--thinking-smoke` は Extended Thinking request を明示実行します。
+AWS Bedrock の region、AWS 認証チェーン、provider 登録、model / `catalog_model` 解決、Claude Messages / ConverseStream route、function calling 設定、token / pricing metadata を確認します。`--smoke` は text smoke、`--tool-smoke` は dummy tool call、`--image-smoke` は tiny PNG 画像入力、`--thinking-smoke` は Extended Thinking request を明示実行します。`--print-request` を付けると live request を送らず、選択した smoke request の Bedrock operation、conceptual endpoint、redacted AWS SigV4 header、request body を `request_preview` に表示します。
 
 Smoke の JSON では AWS SDK `ResultMetadata` 由来の `request_id`、request 単位の usage、概算 cost を `smoke.requests[]` に出します。summary usage / cost は request 単位の観測値を合算します。request ID、usage、pricing が返らない場合は warn ですが、API smoke 自体が成功していれば fail にはしません。複数 request のうち 1 件でも usage が返らない場合、summary cost は部分値を確定値として表示せず usage unavailable とします。Bedrock では Azure の `response_id` alias は出しません。`BEDROCK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip します。ConverseStream route で `--image-smoke` / `--thinking-smoke` を指定した場合は、未対応 request shape として warn skip します。
+
+`--print-request` は AWS credential retrieval と live API request を行わず、`--print-request` 単体では text request preview を 1 件出します。Claude family は `InvokeModelWithResponseStream`、非 Claude は `ConverseStream` の request builder を使います。ConverseStream route の image / thinking preview は smoke と同じ unsupported request shape として skipped entry に残します。
 
 ```bash
 xelyon doctor bedrock
@@ -196,6 +198,8 @@ xelyon doctor bedrock --smoke
 xelyon doctor bedrock --tool-smoke
 xelyon doctor bedrock --image-smoke
 xelyon doctor bedrock --thinking-smoke
+xelyon doctor bedrock --print-request
+xelyon doctor bedrock --tool-smoke --print-request
 xelyon doctor bedrock --json
 ```
 

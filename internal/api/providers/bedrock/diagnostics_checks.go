@@ -45,7 +45,11 @@ func (r *DiagnosticReport) addAWSConfigChecks(ctx context.Context, awsCfg aws.Co
 	}
 	r.addCheck(DiagnosticStatusOK, "region", "AWS region is resolved", fmt.Sprintf("%s (%s)", r.Region, regionSource), "")
 
-	if options.skipAWSAuthCheck || options.invokeClient != nil || options.converseClient != nil {
+	if options.PrintRequest {
+		return
+	}
+
+	if !options.requiresAWSAuthCheck() {
 		r.addCheck(DiagnosticStatusOK, "auth", "AWS credential check was skipped for injected diagnostic clients", "", "")
 		return
 	}

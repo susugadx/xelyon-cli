@@ -28,7 +28,7 @@
 | OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | none |
 | Azure OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | `--deployment`, `--print-config` |
 | Kimi | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
-| Bedrock | yes | yes | yes | yes | yes | yes | no | no | no | no | no | none |
+| Bedrock | yes | yes | yes | yes | yes | yes | no | no | no | no | yes | none |
 | DeepSeek | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | Gemini | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
 | Claude / Anthropic | yes | yes | yes | yes | yes | yes | yes | no | no | no | yes | none |
@@ -64,8 +64,11 @@ Bedrock:
 
 - Checks AWS region / credentials, provider registration, model / `catalog_model`, route, function calling, catalog policy.
 - Live smoke supports text, tool, image, and thinking request types. Unsupported request shapes are reported as skipped.
-- Does not yet support `--capabilities`, `--require-capability`, or `--print-request`.
-- Main owner packages: `cmd/doctor_bedrock.go`, `internal/api/providers/bedrock/diagnostics.go`.
+- Supports `--print-request`.
+- Request preview is credential-independent and records request name, route, Bedrock operation, conceptual runtime endpoint, model ID, redacted AWS SigV4 header, and request body without sending network traffic.
+- Claude family preview uses the same Claude Messages body builder as `InvokeModelWithResponseStream`; non-Claude preview uses the same `buildConverseStreamInput` builder as `ConverseStream`.
+- Does not yet support `--capabilities` or `--require-capability`.
+- Main owner packages: `cmd/doctor_bedrock.go`, `internal/api/providers/bedrock/diagnostics*.go`.
 
 Groq:
 

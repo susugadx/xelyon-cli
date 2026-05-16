@@ -9,6 +9,8 @@ import (
 	bedrockprovider "github.com/susugadx/xelyon-cli/internal/api/providers/bedrock"
 )
 
+const bedrockDoctorCatalogModelForTest = "global.anthropic.claude-sonnet-4-6"
+
 func TestRunBedrockDoctorInvocation_JSONReportsExplicitModel(t *testing.T) {
 	setBedrockDoctorCommandTestEnv(t)
 
@@ -50,7 +52,7 @@ func TestRootCommand_BedrockDoctorCommandParsesFlags(t *testing.T) {
 	setBedrockDoctorCommandTestEnv(t)
 
 	out := newRootCommandExecutionTest(t)
-	rootCmd.SetArgs([]string{"doctor", "bedrock", "--model", "amazon.nova-pro-v1:0", "--catalog-model", "amazon.nova-pro-v1:0", "--json"})
+	rootCmd.SetArgs([]string{"doctor", "bedrock", "--model", "amazon.nova-pro-v1:0", "--catalog-model", "amazon.nova-pro-v1:0", "--print-request", "--json"})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
@@ -67,10 +69,71 @@ func TestRootCommand_BedrockDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--tool-smoke", "--image-smoke", "--thinking-smoke", "Diagnose AWS Bedrock configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--tool-smoke", "--image-smoke", "--thinking-smoke", "--print-request", "Diagnose AWS Bedrock configuration"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want Bedrock doctor help substring %q", out.String(), want)
 		}
+	}
+}
+
+func TestRunBedrockDoctorInvocation_PrintRequestJSONDoesNotRequireAWSCredentials(t *testing.T) {
+	setBedrockDoctorCommandTestEnv(t)
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_SESSION_TOKEN", "")
+
+	cmd, out := newDoctorSubcommandTest(t, newBedrockDoctorCommand)
+
+	doctorBedrockModelFlag = "corp-bedrock-sonnet"
+	doctorCatalogModelFlag = bedrockDoctorCatalogModelForTest
+	doctorToolSmokeFlag = true
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runBedrockDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runBedrockDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		Smoke          any `json:"smoke"`
+		RequestPreview struct {
+			Requests []struct {
+				Name        string            `json:"name"`
+				ToolPayload bool              `json:"tool_payload"`
+				Route       string            `json:"route"`
+				Operation   string            `json:"operation"`
+				ModelID     string            `json:"model_id"`
+				URL         string            `json:"url"`
+				Headers     map[string]string `json:"headers"`
+				Body        struct {
+					AnthropicVersion string `json:"anthropic_version"`
+					Tools            []struct {
+						Name string `json:"name"`
+					} `json:"tools"`
+				} `json:"body"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.Smoke != nil {
+		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
+	}
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	if len(report.RequestPreview.Requests) != 1 {
+		t.Fatalf("request_preview = %#v, want one tool request", report.RequestPreview)
+	}
+	request := report.RequestPreview.Requests[0]
+	if request.Name != "tool" || !request.ToolPayload || request.Route != "claude_messages" || request.Operation != "invoke_model_with_response_stream" {
+		t.Fatalf("preview request = %#v, want Bedrock Claude tool invoke request", request)
+	}
+	if request.ModelID != "corp-bedrock-sonnet" || !strings.Contains(request.URL, "/invoke-with-response-stream") {
+		t.Fatalf("preview target = model_id:%q url:%q, want Bedrock invoke target", request.ModelID, request.URL)
+	}
+	if request.Headers["Authorization"] != "<redacted: AWS SigV4>" {
+		t.Fatalf("Authorization preview = %q, want redacted SigV4", request.Headers["Authorization"])
+	}
+	if request.Body.AnthropicVersion == "" || len(request.Body.Tools) != 1 || request.Body.Tools[0].Name != "xelyon_bedrock_doctor_probe" {
+		t.Fatalf("request body = %#v, want Bedrock Claude body with diagnostic tool", request.Body)
 	}
 }
 
@@ -128,6 +191,46 @@ func TestRenderBedrockDoctorTextIncludesSmokeRequests(t *testing.T) {
 		"Smoke cost estimate text: $0.00012345 USD",
 		"Smoke request image: skipped (unsupported route)",
 		"Smoke total usage: input=10 cached=2 output=4 reasoning=1 cache_creation=3",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want substring %q", output, want)
+		}
+	}
+}
+
+func TestRenderBedrockDoctorTextIncludesRequestPreview(t *testing.T) {
+	report := bedrockprovider.DiagnosticReport{
+		Provider:           "bedrock",
+		Region:             "us-east-1",
+		Model:              "global.anthropic.claude-sonnet-4-6",
+		ModelSource:        "test",
+		CatalogModel:       "global.anthropic.claude-sonnet-4-6",
+		CatalogModelSource: "test",
+		Route:              "claude_messages",
+		Checks: []bedrockprovider.DiagnosticCheck{
+			{Name: "request_preview", Status: bedrockprovider.DiagnosticStatusOK, Message: "Bedrock request preview was built without sending a live request"},
+		},
+		RequestPreview: &bedrockprovider.DiagnosticRequestPreview{
+			Requests: []bedrockprovider.DiagnosticRequestPreviewRequest{{
+				Name:      "text",
+				Route:     "claude_messages",
+				Operation: "invoke_model_with_response_stream",
+				ModelID:   "global.anthropic.claude-sonnet-4-6",
+				Method:    "POST",
+				URL:       "https://bedrock-runtime.us-east-1.amazonaws.com/model/global.anthropic.claude-sonnet-4-6/invoke-with-response-stream",
+				Headers:   map[string]string{"Authorization": "<redacted: AWS SigV4>"},
+				Body:      map[string]any{"anthropic_version": "bedrock-2023-05-31"},
+			}},
+		},
+	}
+
+	var out bytes.Buffer
+	renderBedrockDoctorText(&out, report)
+	output := out.String()
+	for _, want := range []string{
+		"Request preview:",
+		`"operation": "invoke_model_with_response_stream"`,
+		`"Authorization": "<redacted: AWS SigV4>"`,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output = %q, want substring %q", output, want)

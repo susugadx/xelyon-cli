@@ -22,7 +22,8 @@ metadata, and optional live smoke requests. Use --smoke for a text request,
 --tool-smoke for a dummy tool call, --image-smoke for a tiny image request, and
 --thinking-smoke for an extended-thinking request. ConverseStream image and
 thinking smoke requests are reported as skipped because that route does not
-support those request shapes yet.`,
+support those request shapes yet. Use --print-request to print sanitized request
+JSON without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runBedrockDoctorInvocation,
 	}
@@ -35,6 +36,7 @@ support those request shapes yet.`,
 	cmd.Flags().BoolVar(&doctorBedrockThinkingSmokeFlag, "thinking-smoke", false, "Send a live Bedrock extended-thinking smoke request")
 	addDoctorTimeoutFlag(cmd, "bedrock", "")
 	addDoctorJSONFlag(cmd, "bedrock")
+	addDoctorPrintRequestFlag(cmd, "bedrock")
 
 	return cmd
 }
@@ -50,11 +52,12 @@ func runBedrockDoctorInvocation(cmd *cobra.Command, args []string) error {
 		Config:        cfg,
 		Model:         doctorBedrockModelFlag,
 		CatalogModel:  doctorCatalogModelFlag,
-		RunSmoke:      doctorSmokeFlag || doctorToolSmokeFlag || doctorBedrockImageSmokeFlag || doctorBedrockThinkingSmokeFlag,
+		RunSmoke:      !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorBedrockImageSmokeFlag || doctorBedrockThinkingSmokeFlag),
 		TextSmoke:     doctorSmokeFlag,
 		ToolSmoke:     doctorToolSmokeFlag,
 		ImageSmoke:    doctorBedrockImageSmokeFlag,
 		ThinkingSmoke: doctorBedrockThinkingSmokeFlag,
+		PrintRequest:  doctorPrintRequestFlag,
 		SmokeTimeout:  doctorTimeoutFlag,
 	})
 	if loadErr != nil {
@@ -96,6 +99,11 @@ func renderBedrockDoctorText(w io.Writer, report bedrockprovider.DiagnosticRepor
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, bedrockDoctorCheckLines(report.Checks))
+
+	if report.RequestPreview != nil {
+		fmt.Fprintln(w)
+		renderDoctorRequestPreview(w, report.RequestPreview)
+	}
 
 	if report.Smoke == nil || !report.Smoke.Ran {
 		return

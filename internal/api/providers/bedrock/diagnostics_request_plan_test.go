@@ -19,6 +19,13 @@ func TestBuildBedrockDiagnosticRequestPlan(t *testing.T) {
 			wantNames: nil,
 		},
 		{
+			name: "print request defaults to text preview",
+			options: DiagnosticOptions{
+				PrintRequest: true,
+			},
+			wantNames: []string{bedrockDiagnosticTextRequestName},
+		},
+		{
 			name: "all smoke requests keep stable order",
 			options: DiagnosticOptions{
 				TextSmoke:     true,
@@ -69,7 +76,7 @@ func TestBedrockDiagnosticRequestMaxOutputTokens(t *testing.T) {
 	}
 }
 
-func TestBedrockDiagnosticSmokeSkipReason(t *testing.T) {
+func TestBedrockDiagnosticRequestSkipReason(t *testing.T) {
 	tests := []struct {
 		name       string
 		report     DiagnosticReport
@@ -109,7 +116,7 @@ func TestBedrockDiagnosticSmokeSkipReason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reason, gotSkip := bedrockDiagnosticSmokeSkipReason(tt.report, tt.request)
+			reason, gotSkip := bedrockDiagnosticRequestSkipReason(tt.report, tt.request)
 			if gotSkip != tt.wantSkip {
 				t.Fatalf("skip = %v, want %v (reason=%q)", gotSkip, tt.wantSkip, reason)
 			}
