@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke claude-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke claude-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke ollama-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -19,6 +19,7 @@ CLAUDE_DOCTOR_SMOKE_TIMEOUT ?= 180s
 GROQ_DOCTOR_SMOKE_MODEL ?= meta-llama/llama-4-scout-17b-16e-instruct
 OPENROUTER_DOCTOR_SMOKE_MODEL ?= openai/gpt-5.4-mini
 KIMI_DOCTOR_SMOKE_MODEL ?= kimi-k2.6
+OLLAMA_DOCTOR_SMOKE_MODEL ?= qwen2.5-coder:7b
 
 # ビルド
 build:
@@ -213,6 +214,10 @@ openrouter-doctor-smoke:
 kimi-doctor-smoke:
 	@test -n "$(MOONSHOT_API_KEY)" || { echo "MOONSHOT_API_KEY is required for make kimi-doctor-smoke"; exit 1; }
 	go run . doctor kimi --model "$(KIMI_DOCTOR_SMOKE_MODEL)" --catalog-model "$(KIMI_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke --image-smoke --web-search-smoke
+
+# Ollama doctor 診断経路をローカル Ollama で確認（ollama serve と pull 済みモデルが必要）
+ollama-doctor-smoke:
+	go run . doctor ollama --model "$(OLLAMA_DOCTOR_SMOKE_MODEL)" --catalog-model "$(OLLAMA_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke
 
 # Kimi native provider の実 API smoke test（MOONSHOT_API_KEY 必須）
 kimi-smoke:

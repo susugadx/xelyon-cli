@@ -73,6 +73,7 @@ func resetRootFlagsForTest() {
 	doctorGeminiModelFlag = ""
 	doctorGroqModelFlag = ""
 	doctorKimiModelFlag = ""
+	doctorOllamaModelFlag = ""
 	doctorOpenAIModelFlag = ""
 	doctorOpenRouterModelFlag = ""
 	doctorSmokeFlag = false

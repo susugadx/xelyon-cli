@@ -58,6 +58,11 @@ func TestCatalogPolicyDetailsPreserveProviderFormatting(t *testing.T) {
 	if got, want := openRouterPolicy.OpenRouterDetail(), "catalog_model=openai/gpt-5.4, context_window=1000000, max_output_tokens=64000, pricing=input $2.50/M cached $0.250/M output $15.00/M"; got != want {
 		t.Fatalf("OpenRouterDetail() = %q, want %q", got, want)
 	}
+
+	ollamaPolicy := OllamaCatalogPolicy(cfg, "qwen2.5-coder:7b", "qwen2.5-coder:7b")
+	if got, want := ollamaPolicy.OllamaDetail(), "catalog_model=qwen2.5-coder:7b, context_window=32768, max_output_tokens=4096, pricing=input $0.00/M cached $0.000/M output $0.00/M"; got != want {
+		t.Fatalf("OllamaDetail() = %q, want %q", got, want)
+	}
 }
 
 func TestMaxOutputPolicyPreservesOpenAIAndAzureFallbackDifference(t *testing.T) {
@@ -132,6 +137,30 @@ func TestKimiCatalogPolicyIgnoresNonKimiGlobalMetadata(t *testing.T) {
 	maxOutput := KimiMaxOutputPolicy(cfg, "corp-kimi-model", "gpt-5.5")
 	if maxOutput.Available || maxOutput.Source != "missing" {
 		t.Fatalf("KimiMaxOutputPolicy(non-Kimi) = %+v, want missing", maxOutput)
+	}
+}
+
+func TestOllamaCatalogPolicyIgnoresNonOllamaGlobalMetadata(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	policy := OllamaCatalogPolicy(cfg, "corp-ollama-model", "gpt-5.5")
+	if policy.ContextWindowKnown || policy.ContextWindowTokens != 0 {
+		t.Fatalf("Ollama context window = %d known=%t, want unknown for non-Ollama catalog", policy.ContextWindowTokens, policy.ContextWindowKnown)
+	}
+	if !policy.MaxOutput.Available || policy.MaxOutput.Tokens != 4096 || policy.MaxOutput.Source != "provider_default" {
+		t.Fatalf("Ollama max output = %+v, want provider default for non-Ollama catalog", policy.MaxOutput)
+	}
+	if policy.Pricing.PricingUnavailable {
+		t.Fatalf("Ollama pricing = %+v, want local zero pricing", policy.Pricing)
+	}
+	detail := policy.OllamaDetail()
+	for _, unwanted := range []string{"128000", "1050000", "gpt-5.5-pro"} {
+		if strings.Contains(detail, unwanted) {
+			t.Fatalf("OllamaDetail() = %q, should not contain non-Ollama metadata %q", detail, unwanted)
+		}
+	}
+	if got, want := detail, "catalog_model=gpt-5.5, context_window=unknown, max_output_tokens=4096, pricing=input $0.00/M cached $0.000/M output $0.00/M"; got != want {
+		t.Fatalf("OllamaDetail() = %q, want %q", got, want)
 	}
 }
 

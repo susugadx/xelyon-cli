@@ -19,6 +19,7 @@ var (
 	doctorGeminiModelFlag          string
 	doctorGroqModelFlag            string
 	doctorKimiModelFlag            string
+	doctorOllamaModelFlag          string
 	doctorOpenAIModelFlag          string
 	doctorOpenRouterModelFlag      string
 	doctorSmokeFlag                bool
@@ -58,6 +59,7 @@ func newDoctorCommand() *cobra.Command {
 	cmd.AddCommand(newGeminiDoctorCommand())
 	cmd.AddCommand(newGroqDoctorCommand())
 	cmd.AddCommand(newKimiDoctorCommand())
+	cmd.AddCommand(newOllamaDoctorCommand())
 	cmd.AddCommand(newOpenAIDoctorCommand())
 	cmd.AddCommand(newOpenRouterDoctorCommand())
 	return cmd

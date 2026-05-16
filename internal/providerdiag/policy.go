@@ -110,6 +110,19 @@ func OpenRouterMaxOutputPolicy(cfg *config.Config, model, catalogModel string) M
 	})
 }
 
+// OllamaMaxOutputPolicy は Ollama doctor の max output 解決規則を返す。
+func OllamaMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	if nonProviderCatalogModel("ollama", catalogModel) {
+		catalogModel = ""
+	}
+	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
+		Provider:             "ollama",
+		RequestModel:         model,
+		CatalogModel:         catalogModel,
+		ProviderDefaultKnown: true,
+	})
+}
+
 // GeminiMaxOutputPolicy は Gemini doctor の max output 解決規則を返す。
 func GeminiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
 	if nonProviderCatalogModel("gemini", catalogModel) {
@@ -300,6 +313,22 @@ func OpenRouterCatalogPolicy(cfg *config.Config, model, catalogModel string) Cat
 	)
 }
 
+// OllamaCatalogPolicy は Ollama doctor 用の catalog policy snapshot を返す。
+func OllamaCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	metadataCatalogModel := catalogModel
+	if nonProviderCatalogModel("ollama", catalogModel) {
+		metadataCatalogModel = ""
+	}
+	policy := NewCatalogPolicy(
+		metadataCatalogModel,
+		OllamaMaxOutputPolicy(cfg, model, catalogModel),
+		cost.GetPricingInfoForConfig(cfg, "ollama", model),
+		false,
+	)
+	policy.CatalogModel = strings.TrimSpace(catalogModel)
+	return policy
+}
+
 // GeminiCatalogPolicy は Gemini doctor 用の catalog policy snapshot を返す。
 func GeminiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
 	if nonProviderCatalogModel("gemini", catalogModel) {
@@ -389,6 +418,11 @@ func (p CatalogPolicy) DeepSeekDetail() string {
 
 // OpenRouterDetail は OpenRouter doctor の catalog_policy detail を返す。
 func (p CatalogPolicy) OpenRouterDetail() string {
+	return p.plainDetail()
+}
+
+// OllamaDetail は Ollama doctor の catalog_policy detail を返す。
+func (p CatalogPolicy) OllamaDetail() string {
 	return p.plainDetail()
 }
 

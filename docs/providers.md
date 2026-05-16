@@ -24,7 +24,7 @@ XELYON は provider/model に応じて編集ツールを自動で切り替えま
 | Gemini | ✅ | `GEMINI_API_KEY` | https://ai.google.dev |
 | Claude | ✅ | `ANTHROPIC_API_KEY` | https://console.anthropic.com |
 | Groq | ❌ | `GROQ_API_KEY` | https://console.groq.com |
-| Ollama | ❌ | - | https://ollama.com |
+| Ollama | ❌ | `OLLAMA_BASE_URL`（任意） | https://ollama.com |
 | OpenRouter | ✅ | `OPENROUTER_API_KEY` | https://openrouter.ai |
 | Bedrock | ✅ | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | https://aws.amazon.com/bedrock |
 
@@ -485,6 +485,20 @@ xelyon --provider ollama --model llama3.1:8b
 - プライバシー保護
 - 無料
 - 画像入力非対応
+
+設定の到達性は CLI から診断できます。`doctor ollama` は `OLLAMA_BASE_URL`、provider 登録、model / `catalog_model` 解決、`/api/tags` の installed model、`/api/chat` route、function calling 設定、token / local zero-cost metadata を確認します。`--smoke` を付けると live text request をローカル Ollama に送り、usage / cost を観測します。function calling まで確認したい場合は `--tool-smoke` を使います。`--print-request` は live request を送らずに request body を表示します。
+
+```bash
+xelyon doctor ollama
+xelyon doctor ollama --model qwen2.5-coder:7b
+xelyon doctor ollama --model corp-local-model --catalog-model qwen2.5-coder:7b
+xelyon doctor ollama --smoke
+xelyon doctor ollama --tool-smoke
+xelyon doctor ollama --print-request
+xelyon doctor ollama --json
+```
+
+`OLLAMA_BASE_URL` は `http://localhost:11434` のような base URL を指定します。`/api/chat` や `/api/tags` そのものを指定すると doctor は fail します。`OLLAMA_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。手元では `ollama serve` と `ollama pull "$(OLLAMA_DOCTOR_SMOKE_MODEL)"` を済ませてから `make ollama-doctor-smoke` を実行します。既定モデルは `OLLAMA_DOCTOR_SMOKE_MODEL ?= qwen2.5-coder:7b` です。
 
 ### 9. OpenRouter
 

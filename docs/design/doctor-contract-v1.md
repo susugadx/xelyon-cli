@@ -33,7 +33,7 @@
 | Gemini | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
 | Claude / Anthropic | yes | yes | yes | yes | yes | yes | yes | no | no | no | yes | none |
 | Groq | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
-| Ollama | no | no | no | no | no | no | no | no | no | no | no | none |
+| Ollama | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 | OpenRouter | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
 
 ### Current Behavior Notes
@@ -122,9 +122,20 @@ Claude / Anthropic:
 - Does not support `--capabilities`, `--require-capability`, or retention smoke in v1.
 - Main owner packages: `cmd/doctor_claude.go`, `internal/api/providers/claude/diagnostics*.go`, `internal/providerdiag`.
 
+Ollama:
+
+- Checks `OLLAMA_BASE_URL`, provider registration, model / `catalog_model`, installed model availability from `/api/tags`, `/api/chat` route, function calling, and catalog policy.
+- Supports `--print-request`.
+- Live smoke supports text and tool request types through the Ollama runtime request builder. `OLLAMA_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
+- Has no API key. `auth` reports explicit no-auth local provider status.
+- `OLLAMA_BASE_URL` must be a base URL. Concrete `/api/chat` or `/api/tags` endpoint values fail endpoint diagnostics so smoke does not send a guaranteed wrong `.../api/chat/api/chat` request.
+- Non-Ollama `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token policy. Unknown local request models are allowed but fail `installed_model` when absent from `/api/tags`.
+- Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1.
+- Main owner packages: `cmd/doctor_ollama.go`, `internal/api/providers/ollama/diagnostics*.go`, `internal/providerdiag`.
+
 Missing doctor providers:
 
-- `ollama`: local endpoint, default `http://localhost:11434`, installed model availability, local usage counts, no API key.
+- None for canonical providers in the current matrix. Future work is contract consolidation, not a missing v1 baseline.
 
 ## Contract v1
 
@@ -379,7 +390,7 @@ Status:
 
 - Gemini: completed.
 - Claude / Anthropic: completed.
-- Ollama: not started.
+- Ollama: completed.
 
 Preparatory boundary for native providers:
 
