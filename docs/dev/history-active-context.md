@@ -44,6 +44,17 @@ Phase 5b-1 introduces a provider-facing `History` projection seam.
 - No history reduction, replacement, compression, or pruning policy is implemented in Phase 5b-1.
 - Raw storage is unchanged: `history.Session.Messages`, session tool execution audit entries, tool execution audit logs, and change records continue to store the raw conversation/audit data.
 
+Phase 5b-2 adds a dry-run reduction candidate detector behind the same projection seam.
+
+- Default projection policy remains disabled.
+- Disabled projection still returns a no-op clone of raw `Agent.History` and produces an empty report.
+- Dry-run policy produces an internal `ProviderHistoryProjectionReport` only; provider-facing message content is not omitted, replaced, compressed, or pruned.
+- Candidate detection is limited to old `read_file`, `search_code`, and `gather_context` tool results where a later assistant message exists.
+- The detector keeps the final contiguous trailing `tool` suffix, the latest tool result, write/command tools, non-allowlisted tools, and ambiguous or invalid tool-call linkage.
+- Request call sites continue to pass only projected history to providers; the dry-run report is not sent to provider implementations.
+- Raw storage remains unchanged: session conversation messages, tool execution audit entries, audit logs, and change records continue to store the raw conversation/audit data.
+- Actual provider-facing reduction is deferred to Phase 5b-3 or later.
+
 ## Responses Continuation
 
 - OpenAI and Azure Responses builders read active context from request context.
@@ -87,5 +98,5 @@ Never delete from raw storage:
 
 ## Phase 5b TODO
 
-Introduce a provider-facing `History` projection while keeping the raw log intact.
-Reduction should be selected by policy, applied only to provider input, and covered by tests that distinguish raw session storage from model-facing history.
+Implement policy-selected provider-facing history reduction while keeping the raw log intact.
+Reduction should be applied only to provider input, preserve Responses tool-output continuity, and stay covered by tests that distinguish raw session storage from model-facing history.

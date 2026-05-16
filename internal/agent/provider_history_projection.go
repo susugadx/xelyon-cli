@@ -2,23 +2,13 @@ package agent
 
 import "github.com/susugadx/xelyon-cli/internal/api"
 
-type providerHistoryProjectionPolicy interface {
-	ProjectProviderHistory(*Agent) []api.Message
-}
-
-type defaultProviderHistoryProjectionPolicy struct{}
-
-func (defaultProviderHistoryProjectionPolicy) ProjectProviderHistory(a *Agent) []api.Message {
-	if a == nil {
-		return nil
-	}
-	a.historyMu.Lock()
-	defer a.historyMu.Unlock()
-	return api.CloneMessages(a.History)
+type providerHistoryProjectionResult struct {
+	History []api.Message
+	Report  ProviderHistoryProjectionReport
 }
 
 func (a *Agent) providerFacingHistory() []api.Message {
-	return a.buildProviderHistoryProjection(defaultProviderHistoryProjectionPolicy{})
+	return a.buildProviderHistoryProjection(ProviderHistoryReductionPolicy{}).History
 }
 
 func (a *Agent) providerFacingHistoryExcludingLatestMessage() []api.Message {
@@ -29,9 +19,19 @@ func (a *Agent) providerFacingHistoryExcludingLatestMessage() []api.Message {
 	return history[:len(history)-1]
 }
 
-func (a *Agent) buildProviderHistoryProjection(policy providerHistoryProjectionPolicy) []api.Message {
-	if a == nil || policy == nil {
-		return nil
+func (a *Agent) buildProviderHistoryProjection(policy ProviderHistoryReductionPolicy) providerHistoryProjectionResult {
+	policy = normalizeProviderHistoryReductionPolicy(policy)
+	if a == nil {
+		return providerHistoryProjectionResult{
+			Report: buildProviderHistoryProjectionReport(nil, nil, policy),
+		}
 	}
-	return policy.ProjectProviderHistory(a)
+	a.historyMu.Lock()
+	projection := api.CloneMessages(a.History)
+	a.historyMu.Unlock()
+
+	return providerHistoryProjectionResult{
+		History: projection,
+		Report:  buildProviderHistoryProjectionReport(projection, projection, policy),
+	}
 }
