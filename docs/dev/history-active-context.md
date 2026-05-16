@@ -55,6 +55,18 @@ Phase 5b-2 adds a dry-run reduction candidate detector behind the same projectio
 - Raw storage remains unchanged: session conversation messages, tool execution audit entries, audit logs, and change records continue to store the raw conversation/audit data.
 - Actual provider-facing reduction is deferred to Phase 5b-3 or later.
 
+Phase 5b-3 adds gated actual replacement mode behind the internal projection policy.
+
+- Default projection policy remains disabled.
+- `ProviderHistoryReductionApply` is an explicit internal mode; normal, headless, image, and plan provider requests still call the default disabled projection and continue to send raw-clone content.
+- Apply mode uses the same dry-run detector candidates, then replaces only candidate `Content` on the projection clone when matching task-ledger evidence pointers exist and the placeholder is smaller than the original content.
+- Evidence pointers are matched by `ToolCallID` and `Source == ToolName`. If the runtime task ledger is missing, a matching pointer is absent, or another candidate/kept tool result shares the same `(ToolCallID, ToolName)`, the candidate is kept in the projection.
+- Replacement text is a single-line placeholder such as `[omitted old read_file result; evidence: README.md:L1-L80 source=read_file; +2 more]`.
+- Message shape is preserved: role, tool call id, tool name, assistant tool calls, reasoning content, provider state, and continuation metadata are not changed.
+- Raw storage remains unchanged: `Agent.History`, `history.Session.Messages`, session tool execution audit entries, audit logs, and change records continue to store the raw conversation/audit data.
+- The projection report records detected candidates, kept candidates, replacement count, original/projected content bytes, and estimated saved bytes.
+- Phase 5b-4 can enable this policy on a limited request path without adding a new storage migration.
+
 ## Responses Continuation
 
 - OpenAI and Azure Responses builders read active context from request context.
@@ -98,5 +110,5 @@ Never delete from raw storage:
 
 ## Phase 5b TODO
 
-Implement policy-selected provider-facing history reduction while keeping the raw log intact.
-Reduction should be applied only to provider input, preserve Responses tool-output continuity, and stay covered by tests that distinguish raw session storage from model-facing history.
+Enable `ProviderHistoryReductionApply` on a limited request path while keeping the raw log intact.
+Request-path enablement should preserve Responses tool-output continuity, keep default startup disabled until explicitly selected, and stay covered by tests that distinguish raw session storage from model-facing history.

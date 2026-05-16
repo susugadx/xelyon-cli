@@ -27,11 +27,23 @@ func (a *Agent) buildProviderHistoryProjection(policy ProviderHistoryReductionPo
 		}
 	}
 	a.historyMu.Lock()
-	projection := api.CloneMessages(a.History)
+	raw := api.CloneMessages(a.History)
 	a.historyMu.Unlock()
+
+	projection := raw
+	if policy.Mode == ProviderHistoryReductionApply {
+		projection = api.CloneMessages(raw)
+		report := buildProviderHistoryReductionDetectionReport(raw, projection, policy.Mode)
+		a.applyProviderHistoryReduction(&report, projection)
+		finalizeProviderHistoryProjectionReport(&report, raw, projection)
+		return providerHistoryProjectionResult{
+			History: projection,
+			Report:  report,
+		}
+	}
 
 	return providerHistoryProjectionResult{
 		History: projection,
-		Report:  buildProviderHistoryProjectionReport(projection, projection, policy),
+		Report:  buildProviderHistoryProjectionReport(raw, projection, policy),
 	}
 }

@@ -41,6 +41,10 @@ func TestProviderHistoryReductionDryRunDetectsOldAllowedToolResults(t *testing.T
 	if report.ToolResultCount != 4 {
 		t.Fatalf("ToolResultCount = %d, want 4", report.ToolResultCount)
 	}
+	if report.CandidateCount != 3 || report.ReplacedCount != 0 || report.KeptCount != report.ToolResultCount {
+		t.Fatalf("dry-run report counts = candidates %d replaced %d kept %d toolResults %d, want 3/0/all kept", report.CandidateCount, report.ReplacedCount, report.KeptCount, report.ToolResultCount)
+	}
+	assertProviderHistoryByteMetrics(t, agent.History, result.History, report)
 	if got, want := candidateTools(report), []string{"read_file", "search_code", "gather_context"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("candidate tools = %#v, want %#v", got, want)
 	}
@@ -262,38 +266,5 @@ func TestProviderHistoryReductionProjectionAndReportAreDefensiveCopies(t *testin
 	}
 	if agent.History[1].Content != "old read" {
 		t.Fatalf("Agent.History tool content = %q, want old read", agent.History[1].Content)
-	}
-}
-
-func candidateTools(report ProviderHistoryProjectionReport) []string {
-	tools := make([]string, len(report.Candidates))
-	for i, candidate := range report.Candidates {
-		tools[i] = candidate.ToolName
-	}
-	return tools
-}
-
-func candidateToolCallIDs(report ProviderHistoryProjectionReport) []string {
-	ids := make([]string, len(report.Candidates))
-	for i, candidate := range report.Candidates {
-		ids[i] = candidate.ToolCallID
-	}
-	return ids
-}
-
-func keptByToolCallID(report ProviderHistoryProjectionReport, id string) *ProviderHistoryReductionCandidate {
-	for i := range report.Kept {
-		if report.Kept[i].ToolCallID == id {
-			return &report.Kept[i]
-		}
-	}
-	return nil
-}
-
-func assertKeepReason(t *testing.T, report ProviderHistoryProjectionReport, id, want string) {
-	t.Helper()
-	entry := keptByToolCallID(report, id)
-	if entry == nil || entry.KeepReason != want {
-		t.Fatalf("kept entry for %q = %#v, want keep reason %q", id, entry, want)
 	}
 }
