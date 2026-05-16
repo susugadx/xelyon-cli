@@ -111,7 +111,7 @@ func (r *headlessRunner) requestAssistantResponse(ctx context.Context, iteration
 		r.agent.refreshProjectPromptIfDirty(r.query)
 	}
 
-	return r.provider.ChatWithTools(r.agent.requestContext(reqCtx), r.agent.SystemPrompt, r.agent.History, r.model)
+	return r.provider.ChatWithTools(r.agent.requestContext(reqCtx), r.agent.SystemPrompt, r.agent.providerFacingHistory(), r.model)
 }
 
 func (r *headlessRunner) handleAssistantResponse(ctx context.Context, response string) bool {

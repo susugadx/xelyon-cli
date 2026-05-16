@@ -32,6 +32,18 @@ This document is descriptive. It does not change retention, compression, provide
 - Active context is only injected into provider request context. It is not appended to `Agent.History` or `Session.Messages`.
 - `requestContextWithoutActiveContext` remains the boundary for internal model calls that must not receive active context.
 
+## Provider-Facing History Projection
+
+Phase 5b-1 introduces a provider-facing `History` projection seam.
+
+- `Agent.History` remains the raw runtime conversation history.
+- User-facing provider requests use `Agent.providerFacingHistory()` instead of passing `Agent.History` directly.
+- The default Phase 5b-1 projection is a no-op content clone: provider input contains the same messages, tool calls, tool results, and provider continuation metadata as raw `Agent.History`.
+- The projection defensively clones message slices, function-calling tool calls, Gemini thought parts, and Anthropic provider state before handing history to providers.
+- Image requests keep the existing payload shape: past history is sent as provider history, and the current image prompt is sent through the `userMessage` argument.
+- No history reduction, replacement, compression, or pruning policy is implemented in Phase 5b-1.
+- Raw storage is unchanged: `history.Session.Messages`, session tool execution audit entries, tool execution audit logs, and change records continue to store the raw conversation/audit data.
+
 ## Responses Continuation
 
 - OpenAI and Azure Responses builders read active context from request context.

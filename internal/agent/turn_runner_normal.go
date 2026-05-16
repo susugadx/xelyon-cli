@@ -44,7 +44,7 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 	requestCtx := a.requestContext(r.ctx)
 	if iteration == 0 && image != nil {
 		response, err := a.CurrentProvider.ChatWithImage(
-			requestCtx, effectivePrompt, a.History[:len(a.History)-1], input+promptnormal.NormalModePrompt, image, a.CurrentModel,
+			requestCtx, effectivePrompt, a.providerFacingHistoryExcludingLatestMessage(), input+promptnormal.NormalModePrompt, image, a.CurrentModel,
 		)
 		if err != nil {
 			a.ui().StopSpinner()
@@ -56,7 +56,7 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 	response, err := a.CurrentProvider.ChatWithTools(
 		requestCtx,
 		effectivePrompt,
-		a.History,
+		a.providerFacingHistory(),
 		a.CurrentModel,
 	)
 	if tc, ok := a.CurrentProvider.(interface{ ClearToolChoice() }); ok {

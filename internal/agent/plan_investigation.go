@@ -91,7 +91,7 @@ func (r *planInvestigationRunner) requestResponse() (string, error) {
 	response, err := r.agent.CurrentProvider.ChatWithTools(
 		r.agent.requestContext(r.ctx),
 		r.agent.SystemPrompt,
-		r.agent.History,
+		r.agent.providerFacingHistory(),
 		r.agent.CurrentModel,
 	)
 	if err != nil {
