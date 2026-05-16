@@ -256,6 +256,87 @@ func TestExecuteSearchCodeArtifactWithConfig_JSFamilyStructuredImpactFiltersAdap
 	}
 }
 
+func TestExecuteSearchCodeArtifactWithConfig_JSFamilyStructuredImpactFiltersRelativeScopedGlobFromSearchTarget(t *testing.T) {
+	tests := []struct {
+		name           string
+		extension      string
+		definition     string
+		newOptions     func(string, string) SearchOptions
+		assertArtifact func(*testing.T, SearchExecutionArtifact)
+	}{
+		{
+			name:       "typescript",
+			extension:  "ts",
+			definition: "export function buildUser(id: string) { return id }\n",
+			newOptions: func(root string, cwd string) SearchOptions {
+				return SearchOptions{
+					Pattern:            "buildUser",
+					Intent:             "impact",
+					Path:               ".",
+					FilePattern:        "src/**/*.ts",
+					ProjectMapRootPath: root,
+					InvocationCWD:      cwd,
+				}
+			},
+			assertArtifact: func(t *testing.T, artifact SearchExecutionArtifact) {
+				t.Helper()
+				assertTypeScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+			},
+		},
+		{
+			name:       "javascript",
+			extension:  "js",
+			definition: "export function buildUser(id) { return id }\n",
+			newOptions: func(root string, cwd string) SearchOptions {
+				return SearchOptions{
+					Pattern:            "buildUser",
+					Intent:             "impact",
+					Path:               ".",
+					FilePattern:        "src/**/*.js",
+					ProjectMapRootPath: root,
+					InvocationCWD:      cwd,
+				}
+			},
+			assertArtifact: func(t *testing.T, artifact SearchExecutionArtifact) {
+				t.Helper()
+				assertJavaScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			appLine := "buildUser('in scope')"
+			siblingLine := "buildUser('sibling caller')"
+			root := setupMultiLangDir(t, map[string]string{
+				"pkg/src/build." + tt.extension: tt.definition,
+				"pkg/src/app." + tt.extension:   appLine + "\n",
+				"other/src/app." + tt.extension: siblingLine + "\n",
+			})
+			cwd := filepath.Join(root, "pkg")
+			withWorkingDirForSearchTest(t, cwd)
+
+			opts := tt.newOptions(root, cwd)
+			opts.LSPClient = &mockJSFamilyRawLSPClient{
+				rootDir: cwd,
+				refs: []lsp.Location{
+					rawJSFamilyLSPLocationForToken(filepath.Join(root, "pkg", "src", "app."+tt.extension), 1, appLine, "buildUser"),
+					rawJSFamilyLSPLocationForToken(filepath.Join(root, "other", "src", "app."+tt.extension), 1, siblingLine, "buildUser"),
+				},
+			}
+
+			artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, opts)
+
+			tt.assertArtifact(t, artifact)
+			if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
+				t.Fatal("ResolvedViaLSP = false, want true")
+			}
+			assertJSFamilyImpactSectionContainsFile(t, artifact, "callers", "src/app."+tt.extension)
+			assertJSFamilyImpactRenderedExcludesFiles(t, artifact, "../other/src/app."+tt.extension, "other/src/app."+tt.extension)
+		})
+	}
+}
+
 func rawJSFamilyLSPLocationForToken(file string, line int, lineText string, token string) lsp.Location {
 	start, end := testLSPRangeForSearchToken(lineText, token)
 	return rawJSFamilyLSPLocation(file, line, start, end)

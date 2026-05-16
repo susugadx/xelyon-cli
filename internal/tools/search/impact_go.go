@@ -10,20 +10,13 @@ import (
 
 const structuredGoImpactRouteTag = "impact-structured-go-v1"
 
-func shouldAttemptStructuredGoImpactSearch(opts SearchOptions, pattern string) bool {
-	if !shouldAttemptSinglePatternImpactSearch(opts, pattern) {
-		return false
-	}
-	return resolveLanguage(opts) == "go"
-}
-
-func resolveStructuredGoImpactSymbol(symbol string, opts SearchOptions) symbolResolveResult {
-	inspected := inspectStructuredGoImpactSymbol(symbol, opts)
+func resolveStructuredGoImpactSymbol(symbol string, scope structuredImpactScope) symbolResolveResult {
+	inspected := inspectStructuredGoImpactSymbol(symbol, scope)
 	switch inspected.status {
 	case navigation.SymbolAutoMultiple:
-		return resolveStructuredGoImpactMultipleSymbol(symbol, inspected.result, inspected.output, opts, inspected.plan.budget)
+		return resolveStructuredGoImpactMultipleSymbol(symbol, inspected.result, inspected.output, scope.Definition, inspected.plan.budget)
 	case navigation.SymbolAutoSingle:
-		return buildStructuredGoImpactSingleSymbolResult(symbol, inspected.result, opts, inspected.plan)
+		return buildStructuredGoImpactSingleSymbolResult(symbol, inspected.result, scope.Definition, scope.Evidence, inspected.plan)
 	default:
 		return symbolResolveResult{Status: navigationStatusToSymbolResolveStatus(inspected.status)}
 	}
@@ -36,20 +29,22 @@ type structuredGoImpactInspection struct {
 	plan   goImpactPlan
 }
 
-func inspectStructuredGoImpactSymbol(symbol string, opts SearchOptions) structuredGoImpactInspection {
+func inspectStructuredGoImpactSymbol(symbol string, scope structuredImpactScope) structuredGoImpactInspection {
 	plan := goImpactPlanForRisk(goImpactRiskLow)
 	inspected := structuredGoImpactInspection{plan: plan}
 
 	for i := 0; i < 3; i++ {
-		result, output, status := navigation.ResolveInspectSymbolAuto(symbol, opts.Path, navigation.InspectSymbolAutoOptions{
+		result, output, status := navigation.ResolveInspectSymbolAuto(symbol, scope.Definition.Path, navigation.InspectSymbolAutoOptions{
 			Budget:             plan.budget,
 			Registry:           nil,
-			LSPClient:          opts.LSPClient,
-			ProjectMap:         opts.ProjectMap,
-			ProjectMapRootPath: opts.ProjectMapRootPath,
-			ProjectMapStateKey: opts.ProjectMapStateKey,
-			InvocationCWD:      opts.InvocationCWD,
+			LSPClient:          scope.Definition.LSPClient,
+			ProjectMap:         scope.Definition.ProjectMap,
+			ProjectMapRootPath: scope.Definition.ProjectMapRootPath,
+			ProjectMapStateKey: scope.Definition.ProjectMapStateKey,
+			InvocationCWD:      scope.Definition.InvocationCWD,
+			ReferenceFilter:    structuredGoImpactReferenceFilter(scope.Evidence),
 		})
+		result = filterStructuredGoImpactEvidence(result, scope.Evidence)
 		inspected.result = result
 		inspected.output = output
 		inspected.status = status
@@ -79,13 +74,14 @@ func nextStructuredGoImpactPlan(current goImpactPlan, result navigation.InspectR
 	return nextPlan
 }
 
-func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.InspectResult, opts SearchOptions, plan goImpactPlan) symbolResolveResult {
+func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.InspectResult, formatOpts SearchOptions, evidenceOpts SearchOptions, plan goImpactPlan) symbolResolveResult {
 	var probeDependencies []string
-	impactOpts := opts
+	impactOpts := evidenceOpts
 	if result.Symbol != nil {
-		impactOpts = structuredImpactNameOnlyEvidenceOptions(result.Symbol.File, opts)
+		impactOpts = structuredImpactNameOnlyEvidenceOptions(result.Symbol.File, evidenceOpts)
 	}
 	result, probeDependencies = supplementGoImpactTestsFromProbe(symbol, result, impactOpts, plan.budget.TestLimit)
+	result = filterStructuredGoImpactEvidence(result, evidenceOpts)
 	impact := buildGoImpactMetadata(result, plan.riskLevel)
 	bundle := buildGoSymbolBundleWithOptions(symbol, result, goSymbolBundleBuildOptions{
 		implementationLimit: plan.implementationLimit,
@@ -97,7 +93,7 @@ func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.
 	bundle.Debug.DependencyFiles = dedupePaths(append(bundle.Debug.DependencyFiles, probeDependencies...))
 
 	return symbolResolveResult{
-		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
+		Output: formatSymbolBundle(bundle, formatOpts.LocatorRegistry, nil),
 		Status: symbolResolveSingle,
 		Bundle: bundle,
 	}

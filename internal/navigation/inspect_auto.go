@@ -23,6 +23,7 @@ type InspectSymbolAutoOptions struct {
 	ProjectMapRootPath string
 	ProjectMapStateKey string
 	InvocationCWD      string
+	ReferenceFilter    ReferenceFilter
 }
 
 // ResolveInspectSymbolAuto はシンボル自動解決の構造化結果を返す。
@@ -43,7 +44,7 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 	if isZeroInspectBudget(budget) {
 		budget = SummaryBudget
 	}
-	return resolveInspectSymbol(symbol, pathHint, budget, runtime, opts.Registry, opts.LSPClient, true)
+	return resolveInspectSymbol(symbol, pathHint, budget, runtime, opts.Registry, opts.LSPClient, opts.ReferenceFilter, true)
 }
 
 // InspectSymbolAuto はシンボル名の自動解決を試みる。

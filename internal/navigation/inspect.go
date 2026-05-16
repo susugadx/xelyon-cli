@@ -18,18 +18,18 @@ func InspectSymbol(symbol, pathHint, mode string) string {
 		budget = FullBudget
 	}
 
-	_, output, status := resolveInspectSymbol(symbol, pathHint, budget, GoSymbolRuntime{}, nil, nil, false)
+	_, output, status := resolveInspectSymbol(symbol, pathHint, budget, GoSymbolRuntime{}, nil, nil, nil, false)
 	if status == SymbolAutoNone {
 		return fmt.Sprintf("No symbol found: %q", symbol)
 	}
 	return output
 }
 
-func buildInspectResultForSingleCandidate(query symbolQuery, cand SymbolCandidate, budget Budget, runtime GoSymbolRuntime, lspClient LSPClient, normalizePaths bool) InspectResult {
+func buildInspectResultForSingleCandidate(query symbolQuery, cand SymbolCandidate, budget Budget, runtime GoSymbolRuntime, lspClient LSPClient, referenceFilter ReferenceFilter, normalizePaths bool) InspectResult {
 	result := InspectResult{Symbol: &cand}
 	result.Body = readDefinitionBody(cand, budget.BodyLines)
 
-	allRefs, implementations, resolvedViaLSP, upstreamTruncated, upstreamIncomplete := collectInspectReferences(query.BaseName, cand, runtime, lspClient)
+	allRefs, implementations, resolvedViaLSP, upstreamTruncated, upstreamIncomplete := collectInspectReferences(query.BaseName, cand, runtime, lspClient, referenceFilter)
 	result.Implementations = implementations
 	result.ResolvedViaLSP = resolvedViaLSP
 	result.UpstreamTruncated = upstreamTruncated
@@ -44,7 +44,7 @@ func buildInspectResultForSingleCandidate(query symbolQuery, cand SymbolCandidat
 	return result
 }
 
-func collectInspectReferences(baseName string, cand SymbolCandidate, runtime GoSymbolRuntime, lspClient LSPClient) ([]Reference, []ImplementationRef, bool, bool, bool) {
+func collectInspectReferences(baseName string, cand SymbolCandidate, runtime GoSymbolRuntime, lspClient LSPClient, referenceFilter ReferenceFilter) ([]Reference, []ImplementationRef, bool, bool, bool) {
 	var implementations []ImplementationRef
 	if lspClient != nil {
 		if cand.Kind == "interface" {
@@ -52,12 +52,12 @@ func collectInspectReferences(baseName string, cand SymbolCandidate, runtime GoS
 				implementations = impls
 			}
 		}
-		lspRefs, err := findReferencesViaLSP(lspClient, cand, runtime.InvocationCWD)
+		lspRefs, err := findReferencesViaLSP(lspClient, cand, runtime.InvocationCWD, referenceFilter)
 		if err == nil && len(lspRefs) > 0 {
 			return lspRefs, implementations, true, false, false
 		}
 	}
 
-	refs, truncated, incomplete := findReferencesWithFallbackRuntime(baseName, cand, runtime)
+	refs, truncated, incomplete := findReferencesWithFallbackRuntime(baseName, cand, runtime, referenceFilter)
 	return refs, implementations, false, truncated, incomplete
 }

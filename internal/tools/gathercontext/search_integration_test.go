@@ -84,6 +84,40 @@ type Builder interface {
 	}
 }
 
+func TestGatherContext_SearchRouteUsesGoStructuredImpactForScopedGlob(t *testing.T) {
+	if !common.IsRipgrepAvailable() {
+		t.Skip("ripgrep not available")
+	}
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "packages", "app", "src", "build.go"):   "package app\n\nfunc ScopedImpactBuild() string { return \"app\" }\n",
+		filepath.Join(root, "packages", "other", "src", "build.go"): "package other\n\nfunc ScopedImpactBuild() string { return \"other\" }\n",
+	})
+
+	result, _ := runGatherContext(t, newGatherContextExecCtx(root), map[string]string{
+		"query":       "ScopedImpactBuild",
+		"path":        root,
+		"file_filter": "packages/app/src/**/*.go",
+	})
+
+	assertGatherContextContainsAll(t, result,
+		"Route: Structured impact + prefetched evidence",
+		"Recommended reads:",
+		"Prefetched Evidence",
+		"packages/app/src/build.go",
+		`return "app"`,
+	)
+	assertGatherContextExcludesAll(t, result,
+		"packages/other/src/build.go",
+		`return "other"`,
+	)
+}
+
 func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousSymbol(t *testing.T) {
 	if !common.IsRipgrepAvailable() {
 		t.Skip("ripgrep not available")

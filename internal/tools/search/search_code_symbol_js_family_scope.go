@@ -7,7 +7,11 @@ import (
 )
 
 func jsFamilySearchCandidateAllowed(absPath string, displayPath string, opts SearchOptions) bool {
-	if !jsFamilyPathInSearchScope(absPath, opts) {
+	return searchCandidateAllowedByOptions(absPath, displayPath, opts)
+}
+
+func searchCandidateAllowedByOptions(absPath string, displayPath string, opts SearchOptions) bool {
+	if !searchPathInScope(absPath, opts) {
 		return false
 	}
 	if matchesSearchIgnoreFilter(displayPath, opts) {
@@ -16,7 +20,7 @@ func jsFamilySearchCandidateAllowed(absPath string, displayPath string, opts Sea
 	return matchesSearchFileFilter(displayPath, opts)
 }
 
-func jsFamilyPathInSearchScope(absPath string, opts SearchOptions) bool {
+func searchPathInScope(absPath string, opts SearchOptions) bool {
 	basis := resolveSearchPathBasisForOptions(opts)
 	base := basis.Workdir
 	if strings.TrimSpace(base) == "" {

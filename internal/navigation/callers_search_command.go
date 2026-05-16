@@ -14,7 +14,7 @@ const ripgrepReferenceTimeout = 10 * time.Second
 // findReferences は ripgrep でシンボル名を検索し、全参照を返す。
 // truncated が true の場合、上流の検索結果が上限を超えたことを示す。
 // incomplete が true の場合、読み取り失敗や異常終了により結果が不完全であることを示す。
-func findReferences(symbol string) (refs []Reference, truncated bool, incomplete bool) {
+func findReferences(symbol string, referenceFilter ReferenceFilter) (refs []Reference, truncated bool, incomplete bool) {
 	if !common.IsRipgrepAvailable() {
 		return nil, false, false
 	}
@@ -25,7 +25,7 @@ func findReferences(symbol string) (refs []Reference, truncated bool, incomplete
 	}
 	defer cancel()
 
-	return runReferenceSearch(stdout, symbol, cancel, wait)
+	return runReferenceSearch(stdout, symbol, cancel, wait, referenceFilter)
 }
 
 func startReferenceSearchCommand(symbol string) (stdout io.Reader, cancel context.CancelFunc, wait func() error, err error) {

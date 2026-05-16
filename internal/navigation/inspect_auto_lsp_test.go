@@ -3,6 +3,7 @@ package navigation
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -56,6 +57,53 @@ func main() {
 	}
 	if !strings.Contains(output, "resolved via gopls") {
 		t.Fatalf("expected gopls suffix, got: %s", output)
+	}
+}
+
+func TestResolveInspectSymbolAuto_FiltersLSPReferencesBeforeClassification(t *testing.T) {
+	setupTestGoFiles(t, map[string]string{
+		"run.go": `package example
+
+func Run() {
+}
+`,
+		"app/caller.go": `package app
+
+func main() {
+	Run()
+}
+`,
+		"other/caller.go": `package other
+
+func main() {
+	Run()
+}
+`,
+	})
+
+	client := &mockNavigationLSPClient{
+		refs: []LSPLocation{
+			{File: "other/caller.go", Line: 4, Character: 1, EndLine: 4, EndChar: 5},
+			{File: "app/caller.go", Line: 4, Character: 1, EndLine: 4, EndChar: 5},
+		},
+	}
+
+	result, _, status := ResolveInspectSymbolAuto("Run", "", InspectSymbolAutoOptions{
+		Budget:    FullBudget,
+		LSPClient: client,
+		ReferenceFilter: func(ref Reference) bool {
+			return strings.Contains(filepath.ToSlash(ref.ResolvedPath), "/app/")
+		},
+	})
+
+	if status != SymbolAutoSingle {
+		t.Fatalf("expected SymbolAutoSingle, got %s", status)
+	}
+	if len(result.Callers) != 1 {
+		t.Fatalf("callers = %+v, want one in-scope LSP caller", result.Callers)
+	}
+	if result.Callers[0].File != "app/caller.go" {
+		t.Fatalf("caller file = %q, want app/caller.go", result.Callers[0].File)
 	}
 }
 

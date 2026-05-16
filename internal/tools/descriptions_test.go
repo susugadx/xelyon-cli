@@ -102,6 +102,9 @@ func TestToolDescriptions_ReadFileAndSearchCodeDescribeLowLevelUsage(t *testing.
 	if !strings.Contains(ToolDescriptions["search_code"], "targeted TSX .tsx, and JavaScript .js symbols") {
 		t.Error("search_code description should mention targeted TSX and JavaScript structured impact")
 	}
+	if !strings.Contains(ToolDescriptions["search_code"], "file_filter=go, *.go, scoped Go **/*.go globs, or direct .go paths for Go") {
+		t.Error("search_code description should mention the targeted Go structured impact filters")
+	}
 	if !strings.Contains(ToolDescriptions["search_code"], "file_filter=typescript and file_filter=javascript remain broad fallback scopes") {
 		t.Error("search_code description should preserve the broad TypeScript and JavaScript fallback contracts")
 	}

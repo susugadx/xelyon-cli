@@ -17,62 +17,19 @@ func tryExpandedStructuredJavaScriptImpactSearchResult(cache tools.ToolCacheInte
 }
 
 func tryStructuredJavaScriptImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
-	ctx, resolverOpts, ok := newStructuredJavaScriptImpactSearchContext(opts)
+	ctx, scope, ok := newStructuredJavaScriptImpactSearchContext(opts)
 	if !ok {
 		return structuredImpactExecutionResult{}, false
 	}
-	return tryStructuredImpactSearchResult(cache, ctx, resolverOpts, resolveStructuredJavaScriptImpactSymbol)
+	return tryStructuredImpactSearchResult(cache, ctx, scope, resolveStructuredJavaScriptImpactSymbol)
 }
 
-func newStructuredJavaScriptImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, SearchOptions, bool) {
-	pattern := strings.TrimSpace(opts.Pattern)
-	resolverOpts, ok := normalizeStructuredJavaScriptImpactOptions(opts)
-	if !shouldAttemptStructuredJavaScriptImpactSearch(opts, pattern) || !ok {
-		return structuredImpactSearchContext{}, SearchOptions{}, false
-	}
-
-	route, ok := structuredJavaScriptImpactRoute(pattern, opts)
-	if !ok {
-		return structuredImpactSearchContext{}, SearchOptions{}, false
-	}
-
-	return structuredImpactSearchContext{
-		Pattern:  pattern,
-		Route:    route,
-		CacheKey: buildStructuredImpactCacheKey(opts, route, structuredJavaScriptImpactRouteTag),
-	}, resolverOpts, true
-}
-
-func shouldAttemptStructuredJavaScriptImpactSearch(opts SearchOptions, pattern string) bool {
-	return shouldAttemptSinglePatternImpactSearch(opts, pattern)
+func newStructuredJavaScriptImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, structuredImpactScope, bool) {
+	return newStructuredImpactSearchContext(opts, structuredJavaScriptImpactRouteTag, normalizeStructuredJavaScriptImpactScope, structuredJavaScriptImpactRoute)
 }
 
 func structuredJavaScriptImpactRoute(pattern string, opts SearchOptions) (searchRouteTrace, bool) {
-	analysis := analyzeSearchQuery(pattern)
-	if !analysis.LooksLikeBareIdentifier && !analysis.LooksLikeDottedSymbol {
-		return searchRouteTrace{}, false
-	}
-
-	route := planSearchRoute(pattern, opts)
-	if route.InitialLane == searchLaneSymbol {
-		if route.Language == "" {
-			route.Language = "js"
-		}
-		return route, true
-	}
-
-	mode := SearchMode(opts.Mode)
-	if mode == SearchModeLiteral || mode == SearchModeRegex {
-		return searchRouteTrace{}, false
-	}
-
-	return assignRouteSymbolQuery(searchRouteTrace{
-		RequestedMode: mode,
-		Language:      "js",
-		FallbackLane:  analysis.defaultTextLane(),
-		Decision:      structuredJavaScriptImpactRouteTag,
-		Analysis:      analysis,
-	}, analysis.TrimmedPattern, []string{analysis.TrimmedPattern}), true
+	return structuredImpactSymbolRoute(pattern, opts, "js", structuredJavaScriptImpactRouteTag)
 }
 
 func normalizeStructuredJavaScriptImpactOptions(opts SearchOptions) (SearchOptions, bool) {
@@ -106,7 +63,13 @@ func normalizeStructuredJavaScriptImpactOptions(opts SearchOptions) (SearchOptio
 	}
 }
 
-func resolveStructuredJavaScriptImpactSymbol(symbol string, opts SearchOptions) symbolResolveResult {
+func normalizeStructuredJavaScriptImpactScope(opts SearchOptions) (structuredImpactScope, bool) {
+	return normalizeStructuredImpactSameScope(opts, normalizeStructuredJavaScriptImpactOptions)
+}
+
+func resolveStructuredJavaScriptImpactSymbol(symbol string, scope structuredImpactScope) symbolResolveResult {
+	opts := scope.Definition
+	evidenceOpts := scope.Evidence
 	defs := findStructuredJavaScriptImpactDefinitions(symbol, opts)
 	if len(defs) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
@@ -120,7 +83,7 @@ func resolveStructuredJavaScriptImpactSymbol(symbol string, opts SearchOptions) 
 	}
 
 	def := defs[0]
-	refOpts := structuredJavaScriptImpactReferenceOptions(def, opts)
+	refOpts := structuredJavaScriptImpactReferenceOptions(def, evidenceOpts)
 	refResult := findJSFamilyReferencesWithSemantic(symbol, def, refOpts)
 	refs := normalizeStructuredJavaScriptRefs(refResult.refs)
 	refs = filterGenericRefs(refs, def)

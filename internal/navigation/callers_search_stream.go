@@ -7,7 +7,7 @@ import (
 )
 
 // collectReferenceSearchResult は ripgrep の標準出力を読み取り、参照一覧を構築する。
-func collectReferenceSearchResult(reader io.Reader, symbol string) referenceSearchResult {
+func collectReferenceSearchResult(reader io.Reader, symbol string, filter ReferenceFilter) referenceSearchResult {
 	result := referenceSearchResult{}
 	if reader == nil {
 		result.Incomplete = true
@@ -24,10 +24,17 @@ func collectReferenceSearchResult(reader io.Reader, symbol string) referenceSear
 			continue
 		}
 
-		ref := parseRipgrepLine(line, symbol, cache)
-		if ref == nil {
+		parsed, ok := parseRipgrepReferenceLine(line)
+		if !ok {
 			continue
 		}
+		if filter != nil && !filter(referenceForPreClassificationFilter(parsed)) {
+			continue
+		}
+
+		classification := classifyParsedReferenceLine(parsed, symbol, cache)
+		classification = applySnippetCompletionHints(parsed.Snippet, symbol, classification)
+		ref := buildReferenceFromParsedLine(parsed, classification)
 		result.Refs = append(result.Refs, *ref)
 
 		// 上限+1件目を検出したら truncated=true にし、先頭上限件のみ保持して早期停止。
@@ -47,8 +54,8 @@ func collectReferenceSearchResult(reader io.Reader, symbol string) referenceSear
 }
 
 // runReferenceSearch は参照ストリームの読み取りと終了待機をまとめて処理する。
-func runReferenceSearch(reader io.Reader, symbol string, cancel func(), wait func() error) ([]Reference, bool, bool) {
-	result := collectReferenceSearchResult(reader, symbol)
+func runReferenceSearch(reader io.Reader, symbol string, cancel func(), wait func() error, referenceFilter ReferenceFilter) ([]Reference, bool, bool) {
+	result := collectReferenceSearchResult(reader, symbol, referenceFilter)
 	if result.StopRequested && cancel != nil {
 		cancel()
 	}
@@ -58,4 +65,14 @@ func runReferenceSearch(reader io.Reader, symbol string, cancel func(), wait fun
 		}
 	}
 	return result.Refs, result.Truncated, result.Incomplete
+}
+
+func referenceForPreClassificationFilter(parsed parsedRipgrepReferenceLine) Reference {
+	return Reference{
+		File:         parsed.RelPath,
+		ResolvedPath: cleanNavigationResolvedPath(parsed.AbsPath),
+		Line:         parsed.Line,
+		Snippet:      parsed.Snippet,
+		IsTest:       parsed.IsTest,
+	}
 }

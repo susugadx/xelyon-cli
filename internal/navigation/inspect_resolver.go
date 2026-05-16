@@ -2,7 +2,7 @@ package navigation
 
 import "github.com/susugadx/xelyon-cli/internal/locator"
 
-func resolveInspectSymbol(symbol, pathHint string, budget Budget, runtime GoSymbolRuntime, reg *locator.Registry, lspClient LSPClient, normalizePaths bool) (InspectResult, string, SymbolAutoStatus) {
+func resolveInspectSymbol(symbol, pathHint string, budget Budget, runtime GoSymbolRuntime, reg *locator.Registry, lspClient LSPClient, referenceFilter ReferenceFilter, normalizePaths bool) (InspectResult, string, SymbolAutoStatus) {
 	query := parseSymbolQuery(symbol)
 	candidates := resolveSymbolCandidatesWithRuntime(symbol, pathHint, runtime)
 	if len(candidates) == 0 {
@@ -14,7 +14,7 @@ func resolveInspectSymbol(symbol, pathHint string, budget Budget, runtime GoSymb
 	}
 
 	cand := candidates[0]
-	result := buildInspectResultForSingleCandidate(query, cand, budget, runtime, lspClient, normalizePaths)
+	result := buildInspectResultForSingleCandidate(query, cand, budget, runtime, lspClient, referenceFilter, normalizePaths)
 	return result, formatInspectResult(result, reg), SymbolAutoSingle
 }
 

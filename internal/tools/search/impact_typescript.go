@@ -17,62 +17,19 @@ func tryExpandedStructuredTypeScriptImpactSearchResult(cache tools.ToolCacheInte
 }
 
 func tryStructuredTypeScriptImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
-	ctx, resolverOpts, ok := newStructuredTypeScriptImpactSearchContext(opts)
+	ctx, scope, ok := newStructuredTypeScriptImpactSearchContext(opts)
 	if !ok {
 		return structuredImpactExecutionResult{}, false
 	}
-	return tryStructuredImpactSearchResult(cache, ctx, resolverOpts, resolveStructuredTypeScriptImpactSymbol)
+	return tryStructuredImpactSearchResult(cache, ctx, scope, resolveStructuredTypeScriptImpactSymbol)
 }
 
-func newStructuredTypeScriptImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, SearchOptions, bool) {
-	pattern := strings.TrimSpace(opts.Pattern)
-	resolverOpts, ok := normalizeStructuredTypeScriptImpactOptions(opts)
-	if !shouldAttemptStructuredTypeScriptImpactSearch(opts, pattern) || !ok {
-		return structuredImpactSearchContext{}, SearchOptions{}, false
-	}
-
-	route, ok := structuredTypeScriptImpactRoute(pattern, opts)
-	if !ok {
-		return structuredImpactSearchContext{}, SearchOptions{}, false
-	}
-
-	return structuredImpactSearchContext{
-		Pattern:  pattern,
-		Route:    route,
-		CacheKey: buildStructuredImpactCacheKey(opts, route, structuredTypeScriptImpactRouteTag),
-	}, resolverOpts, true
-}
-
-func shouldAttemptStructuredTypeScriptImpactSearch(opts SearchOptions, pattern string) bool {
-	return shouldAttemptSinglePatternImpactSearch(opts, pattern)
+func newStructuredTypeScriptImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, structuredImpactScope, bool) {
+	return newStructuredImpactSearchContext(opts, structuredTypeScriptImpactRouteTag, normalizeStructuredTypeScriptImpactScope, structuredTypeScriptImpactRoute)
 }
 
 func structuredTypeScriptImpactRoute(pattern string, opts SearchOptions) (searchRouteTrace, bool) {
-	analysis := analyzeSearchQuery(pattern)
-	if !analysis.LooksLikeBareIdentifier && !analysis.LooksLikeDottedSymbol {
-		return searchRouteTrace{}, false
-	}
-
-	route := planSearchRoute(pattern, opts)
-	if route.InitialLane == searchLaneSymbol {
-		if route.Language == "" {
-			route.Language = "js"
-		}
-		return route, true
-	}
-
-	mode := SearchMode(opts.Mode)
-	if mode == SearchModeLiteral || mode == SearchModeRegex {
-		return searchRouteTrace{}, false
-	}
-
-	return assignRouteSymbolQuery(searchRouteTrace{
-		RequestedMode: mode,
-		Language:      "js",
-		FallbackLane:  analysis.defaultTextLane(),
-		Decision:      structuredTypeScriptImpactRouteTag,
-		Analysis:      analysis,
-	}, analysis.TrimmedPattern, []string{analysis.TrimmedPattern}), true
+	return structuredImpactSymbolRoute(pattern, opts, "js", structuredTypeScriptImpactRouteTag)
 }
 
 func normalizeStructuredTypeScriptImpactOptions(opts SearchOptions) (SearchOptions, bool) {
@@ -106,7 +63,13 @@ func normalizeStructuredTypeScriptImpactOptions(opts SearchOptions) (SearchOptio
 	}
 }
 
-func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) symbolResolveResult {
+func normalizeStructuredTypeScriptImpactScope(opts SearchOptions) (structuredImpactScope, bool) {
+	return normalizeStructuredImpactSameScope(opts, normalizeStructuredTypeScriptImpactOptions)
+}
+
+func resolveStructuredTypeScriptImpactSymbol(symbol string, scope structuredImpactScope) symbolResolveResult {
+	opts := scope.Definition
+	evidenceOpts := scope.Evidence
 	defs := normalizeStructuredTypeScriptDefs(findJSFamilyDefinitionsWithAST(symbol, opts))
 	if len(defs) == 0 {
 		defs = normalizeStructuredTypeScriptDefs(findGenericDefinitions(symbol, opts))
@@ -125,7 +88,7 @@ func resolveStructuredTypeScriptImpactSymbol(symbol string, opts SearchOptions) 
 	}
 
 	def := defs[0]
-	refOpts := structuredTypeScriptImpactReferenceOptions(def, opts)
+	refOpts := structuredTypeScriptImpactReferenceOptions(def, evidenceOpts)
 	refResult := findJSFamilyReferencesWithSemantic(symbol, def, refOpts)
 	refs := normalizeStructuredTypeScriptRefs(refResult.refs)
 	refs = filterStructuredTypeScriptSuppressedDeclarationRefs(refs, structuredTypeScriptSuppressedDeclarationDefsForImpact(def, preferredDefs))

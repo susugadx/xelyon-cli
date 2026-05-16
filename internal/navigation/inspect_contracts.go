@@ -18,6 +18,11 @@ type Budget struct {
 	TestLimit   int
 }
 
+// ReferenceFilter は参照候補を caller/ref/test の分類と budget 適用前に絞り込む。
+// LSP / ripgrep fallback では AST 分類前にも呼ばれるため、path / line / IsTest
+// の基本フィールドだけに依存する。
+type ReferenceFilter func(Reference) bool
+
 // SummaryBudget は summary モードの出力上限。
 var SummaryBudget = Budget{
 	BodyLines:   15,

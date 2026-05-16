@@ -171,6 +171,10 @@ func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredLanguageBeha
 
 	for _, want := range []string{
 		"structured Go, TypeScript .ts, targeted TSX .tsx, or JavaScript .js single-symbol impact path",
+		"file_filter=go",
+		"*.go",
+		"scoped Go **/*.go globs",
+		"direct .go paths",
 		"file_filter=tsx",
 		"*.tsx",
 		"direct .tsx paths",
