@@ -20,6 +20,7 @@ type planModeRequest struct {
 	investigationPrompt string
 	checkpoint          planModeCheckpoint
 	approved            bool
+	handoff             *planModeImplementationHandoff
 }
 
 type planModeRestoreMode int
@@ -91,7 +92,7 @@ func (r *planModeRequest) executeApprovalStep(p *plan.Plan, policy *planModeExit
 		return handled, err
 	}
 
-	// Plan 承認後は planning-only。調査フェーズ履歴は通常ターンへ持ち越さない。
+	// Plan 承認後は調査フェーズ履歴を通常実装ターンへ持ち越さない。
 	policy.restoreMode = planModeRestoreConversation
 	policy.clearResponseContext = true
 	return handled, err
@@ -185,8 +186,9 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 	approved, feedback := r.confirmPlanApproval()
 	if approved {
 		r.approved = true
+		r.handoff = newPlanModeImplementationHandoff(r.originalUserRequest, p)
 		a.setPlanModeEnabled(false)
-		green.Fprintln(out, "✓ Plan approved. Plan Mode complete. Implementation not started.")
+		green.Fprintln(out, "✓ Plan approved. Plan Mode complete.")
 		a.setReadyForInputStatus()
 		return true, nil
 	}
@@ -241,7 +243,11 @@ func (r *planModeRequest) feedbackRerunRequest(feedback string) string {
 
 func (r *planModeRequest) rerunPlanMode(userRequest string) error {
 	r.recordRerunRequest(userRequest)
-	return r.agent.RunPlanMode(r.ctx, userRequest)
+	handoff, err := r.agent.runPlanMode(r.ctx, userRequest)
+	if handoff != nil {
+		r.handoff = handoff
+	}
+	return err
 }
 
 func (r *planModeRequest) recordRerunRequest(userRequest string) {
@@ -277,8 +283,8 @@ func (r *planModeRequest) clearResponseContext() {
 		return
 	}
 
-	// Plan Mode は planning-only なので、承認後の通常ターンは
-	// planning チェーン(previous_response_id)を継続せず履歴ベースで開始する。
+	// 承認後の通常実装ターンは planning チェーン(previous_response_id)を
+	// 継続せず、承認済み plan handoff のローカル履歴から開始する。
 	r.agent.clearResponseContinuationContext()
 }
 

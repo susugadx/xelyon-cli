@@ -45,7 +45,7 @@ func TestPlanModeRequest_HandleInvestigationResult_NoImplementationCases(t *test
 	}
 }
 
-func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalStopsAfterApproval(t *testing.T) {
+func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalCreatesHandoff(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
@@ -71,8 +71,11 @@ func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalStopsAfterApprova
 	if !strings.Contains(out.String(), "Implementation Plan") {
 		t.Fatalf("expected rendered plan in output, got %q", out.String())
 	}
-	if !strings.Contains(out.String(), "Plan approved. Plan Mode complete. Implementation not started.") {
+	if !strings.Contains(out.String(), "Plan approved. Plan Mode complete.") {
 		t.Fatalf("expected approval output, got %q", out.String())
+	}
+	if req.handoff == nil {
+		t.Fatal("approved plan should create implementation handoff")
 	}
 	if agent.PlanModeEnabled {
 		t.Fatal("PlanModeEnabled should be false after approval")
@@ -82,7 +85,7 @@ func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalStopsAfterApprova
 	}
 }
 
-func TestPlanModeRequest_Run_PlanApprovalStopsBeforeImplementation(t *testing.T) {
+func TestPlanModeRequest_Run_PlanApprovalReturnsHandoffWithoutExecutingIt(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
@@ -112,11 +115,14 @@ func TestPlanModeRequest_Run_PlanApprovalStopsBeforeImplementation(t *testing.T)
 	if !strings.Contains(output, "Implementation Plan") {
 		t.Fatalf("expected rendered plan in output, got %q", output)
 	}
-	if !strings.Contains(output, "Plan approved. Plan Mode complete. Implementation not started.") {
+	if !strings.Contains(output, "Plan approved. Plan Mode complete.") {
 		t.Fatalf("expected approval output, got %q", output)
 	}
+	if req.handoff == nil {
+		t.Fatal("approved plan should be available as handoff")
+	}
 	if strings.Contains(output, "Starting implementation") {
-		t.Fatalf("expected no implementation start message, got %q", output)
+		t.Fatalf("plan request alone should not start implementation, got %q", output)
 	}
 	if agent.PlanModeEnabled {
 		t.Fatal("PlanModeEnabled should be false after approval")

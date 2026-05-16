@@ -160,7 +160,7 @@ func TestHandlePlanCommand_StatusUsesRuntimeOutput(t *testing.T) {
 	}
 }
 
-func TestHandlePlanCommand_StatusOnUsesPlanningOnlyDescription(t *testing.T) {
+func TestHandlePlanCommand_StatusOnUsesHandoffDescription(t *testing.T) {
 	var out bytes.Buffer
 	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 	agent.PlanModeEnabled = true
@@ -174,8 +174,8 @@ func TestHandlePlanCommand_StatusOnUsesPlanningOnlyDescription(t *testing.T) {
 	}
 
 	output := out.String()
-	if !strings.Contains(output, "調査 → 計画 → 承認。実装は次の通常ターンで行う") {
-		t.Fatalf("expected planning-only status description, got %q", output)
+	if !strings.Contains(output, "調査 → 計画 → 承認後、同じターンで通常モード実装へ進む") {
+		t.Fatalf("expected plan handoff status description, got %q", output)
 	}
 	if strings.Contains(output, "ステップ") {
 		t.Fatalf("expected no step execution wording in plan status, got %q", output)

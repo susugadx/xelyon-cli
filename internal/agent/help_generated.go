@@ -25,7 +25,7 @@ const GeneratedHelpCommandsText = `Commands:
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch model without restart
   /init                     - Create xelyon.yaml project template
-  /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
+  /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
   /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
   /help, /h                 - Show this help
@@ -59,7 +59,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /model [name]             - Open model picker or switch model without restart
   /init                     - Create xelyon.yaml project template
   /project                  - Edit project xelyon.yaml interactively
-  /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval; implementation happens on next normal turn)
+  /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
   /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
   /help, /h                 - Show this help

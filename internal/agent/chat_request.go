@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -84,23 +85,52 @@ func (a *Agent) executeChatRequest(ctx context.Context, req *chatRequest) error 
 		defer a.registry().SetExcludedTools(prevExcluded)
 	}
 
-	toolVisibility := a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
+	return a.runChatRequestForCurrentMode(ctx, req)
+}
+
+func (a *Agent) runChatRequestForCurrentMode(ctx context.Context, req *chatRequest) error {
 	if a.PlanModeEnabled {
-		toolVisibility = a.toolVisibilityPolicy(toolSurfacePhasePlan, toolVisibilityOptions{allowSubAgents: true})
-		a.registry().SetExcludedTools(toolVisibility.excluded())
-		return a.RunPlanMode(ctx, req.input)
+		return a.runPlanModeChatRequest(ctx, req)
 	}
 
+	a.applyChatRequestToolVisibility(toolSurfacePhaseNormal)
+	return a.runNormalChatRequest(ctx, req)
+}
+
+func (a *Agent) runPlanModeChatRequest(ctx context.Context, req *chatRequest) error {
+	a.applyChatRequestToolVisibility(toolSurfacePhasePlan)
+	handoff, err := a.runPlanMode(ctx, req.input)
+	if err != nil || handoff == nil {
+		return err
+	}
+	return a.executeApprovedPlanHandoff(ctx, req, handoff)
+}
+
+func (a *Agent) applyChatRequestToolVisibility(phase toolSurfacePhase) {
+	toolVisibility := a.toolVisibilityPolicy(phase, toolVisibilityOptions{allowSubAgents: true})
 	a.registry().SetExcludedTools(toolVisibility.excluded())
+}
+
+func (a *Agent) executeApprovedPlanHandoff(ctx context.Context, req *chatRequest, handoff *planModeImplementationHandoff) error {
+	input := strings.TrimSpace(handoff.normalModeInput())
+	if input == "" {
+		return nil
+	}
+
+	req.input = input
+	if a.session != nil {
+		a.appendSessionMessage("user", req.input, a.CurrentModel)
+	}
+
+	a.applyChatRequestToolVisibility(toolSurfacePhaseNormal)
+	a.SetStatus(StateRunning, "Implementing approved plan", "承認済み計画を実装中", "Wait for implementation", "実装完了を待ってください")
+	cyan.Fprintln(a.output(), "\nStarting implementation from approved plan...")
 	return a.runNormalChatRequest(ctx, req)
 }
 
 func (a *Agent) retryChatRequest(req *chatRequest) error {
 	ctx := context.Background()
-	if a.PlanModeEnabled {
-		return a.RunPlanMode(ctx, req.input)
-	}
-	return a.runNormalChatRequest(ctx, req)
+	return a.runChatRequestForCurrentMode(ctx, req)
 }
 
 func (a *Agent) runNormalChatRequest(ctx context.Context, req *chatRequest) error {

@@ -10,6 +10,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
+const (
+	planModeFlowApprovedStep            = "Update foo.go and tests"
+	planModeFlowApprovedPlanResponse    = "Here is the plan:\n```json\n{\"plan\":{\"summary\":\"Ship a small change\",\"steps\":[{\"id\":1,\"description\":\"" + planModeFlowApprovedStep + "\",\"tools\":[\"str_replace\"]}]}}\n```"
+	planModeFlowImplementationResponse  = "The requested changes are done."
+	planModeFlowImplementationStartText = "Starting implementation from approved plan"
+)
+
 type planResponseContextProvider struct {
 	callCount               int
 	responses               []string
@@ -59,6 +66,68 @@ func (p *planResponseContextProvider) ChatWithTools(ctx context.Context, systemP
 
 func (p *planResponseContextProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
 	return p.ChatWithTools(ctx, systemPrompt, history, model)
+}
+
+func newPlanApprovalFlowProvider(initialResponseID string) *planResponseContextProvider {
+	return &planResponseContextProvider{
+		responseID: initialResponseID,
+		responses: []string{
+			planModeFlowApprovedPlanResponse,
+			planModeFlowImplementationResponse,
+		},
+	}
+}
+
+func assertPlanAndImplementationProviderCalls(t *testing.T, provider *planResponseContextProvider) {
+	t.Helper()
+	if provider.callCount != 2 {
+		t.Fatalf("provider.callCount = %d, want 2 for planning + implementation", provider.callCount)
+	}
+	if len(provider.histories) != 2 {
+		t.Fatalf("len(provider.histories) = %d, want 2", len(provider.histories))
+	}
+}
+
+func planImplementationHistory(t *testing.T, provider *planResponseContextProvider) []api.Message {
+	t.Helper()
+	assertPlanAndImplementationProviderCalls(t, provider)
+	return provider.histories[1]
+}
+
+func assertImplementationHistoryContainsApprovedPlanHandoff(t *testing.T, history []api.Message) {
+	t.Helper()
+	if len(history) == 0 {
+		t.Fatal("implementation history should contain handoff input")
+	}
+	handoffContent := history[len(history)-1].Content
+	if !strings.Contains(handoffContent, "Implement the approved plan now.") || !strings.Contains(handoffContent, planModeFlowApprovedStep) {
+		t.Fatalf("implementation handoff history = %q, want approved plan", handoffContent)
+	}
+}
+
+func assertImplementationHistoryOmitsInvestigationContext(t *testing.T, history []api.Message) {
+	t.Helper()
+	for _, msg := range history {
+		for _, fragment := range []string{
+			"READ-ONLY ONLY",
+			"Modification tools are FORBIDDEN",
+			"You are in PLAN MODE (Investigation Phase).",
+		} {
+			if strings.Contains(msg.Content, fragment) {
+				t.Fatalf("implementation history must not contain investigation context %q, got %q", fragment, msg.Content)
+			}
+		}
+	}
+}
+
+func assertImplementationPreviousResponseIDCleared(t *testing.T, provider *planResponseContextProvider) {
+	t.Helper()
+	if len(provider.usedPreviousResponseIDs) != 2 {
+		t.Fatalf("len(usedPreviousResponseIDs) = %d, want 2", len(provider.usedPreviousResponseIDs))
+	}
+	if provider.usedPreviousResponseIDs[1] != "" {
+		t.Fatalf("implementation previous_response_id = %q, want empty", provider.usedPreviousResponseIDs[1])
+	}
 }
 
 func TestChatCore_PlanModeEnabledUsesPlanModeFlow(t *testing.T) {
@@ -113,20 +182,11 @@ func TestChatCore_PlanModeEnabledUsesPlanModeFlow(t *testing.T) {
 	}
 }
 
-func TestChatCore_PlanModeApproval_EndsPlanModeWithoutStartingImplementation(t *testing.T) {
+func TestChatCore_PlanModeApproval_StartsImplementationWithApprovedPlan(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
-	provider := &scriptedChatProvider{
-		name:            "test",
-		functionCalling: true,
-		chatWithToolsFn: func(call int, ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-			if call != 0 {
-				return "unexpected extra provider call", nil
-			}
-			return "Here is the plan:\n```json\n{\"plan\":{\"summary\":\"Ship a small change\",\"steps\":[{\"id\":1,\"description\":\"Update foo.go and tests\",\"tools\":[\"str_replace\"]}]}}\n```", nil
-		},
-	}
+	provider := newPlanApprovalFlowProvider("")
 	agent := newPlanRequestTestAgent(t, provider, "1\n", &out)
 	agent.PlanModeEnabled = true
 	req := &chatRequest{input: "implement feature"}
@@ -138,135 +198,91 @@ func TestChatCore_PlanModeApproval_EndsPlanModeWithoutStartingImplementation(t *
 	if err := agent.executeChatRequest(ctx, req); err != nil {
 		t.Fatalf("executeChatRequest() error = %v", err)
 	}
+	implementationHistory := planImplementationHistory(t, provider)
 	if agent.SystemPrompt != baselineSystemPrompt {
 		t.Fatalf("SystemPrompt should be restored after /plan approval")
 	}
 	if strings.Contains(agent.SystemPrompt, "You are in Plan Mode - producing a text plan") {
 		t.Fatalf("planning prompt should not remain in SystemPrompt: %q", agent.SystemPrompt)
 	}
-	if len(agent.History) != 0 {
-		t.Fatalf("len(agent.History) = %d, want 0 after plan-only approval rollback", len(agent.History))
+	assertImplementationHistoryContainsApprovedPlanHandoff(t, implementationHistory)
+	assertImplementationHistoryOmitsInvestigationContext(t, implementationHistory)
+	if len(agent.History) != 2 {
+		t.Fatalf("len(agent.History) = %d, want 2 for handoff user + implementation response", len(agent.History))
 	}
 	if agent.session == nil {
 		t.Fatal("agent.session = nil")
 	}
-	if len(agent.session.Messages) != 0 {
-		t.Fatalf("len(agent.session.Messages) = %d, want 0 after plan-only approval rollback", len(agent.session.Messages))
+	if len(agent.session.Messages) != 2 {
+		t.Fatalf("len(agent.session.Messages) = %d, want 2 for handoff user + implementation response", len(agent.session.Messages))
+	}
+	if !strings.Contains(agent.session.Messages[0].Content, "Implement the approved plan now.") {
+		t.Fatalf("session handoff = %q, want approved plan handoff", agent.session.Messages[0].Content)
 	}
 
 	loaded, err := agent.storage.Load(agent.session.ID)
 	if err != nil {
 		t.Fatalf("storage.Load() error = %v", err)
 	}
-	if len(loaded.ToAPIMessages()) != 0 {
-		t.Fatalf("len(loaded.ToAPIMessages()) = %d, want 0 after plan-only approval rollback", len(loaded.ToAPIMessages()))
+	loadedMessages := loaded.ToAPIMessages()
+	if len(loadedMessages) != 2 {
+		t.Fatalf("len(loaded.ToAPIMessages()) = %d, want 2 after implementation handoff", len(loadedMessages))
 	}
 	if strings.Contains(out.String(), "[APPROVED PLAN HANDOFF]") {
 		t.Fatalf("plan approval should not create legacy marker, got %q", out.String())
 	}
+	if !strings.Contains(out.String(), planModeFlowImplementationStartText) {
+		t.Fatalf("expected implementation start output, got %q", out.String())
+	}
 }
 
-func TestChatCore_PlanModeApproval_DoesNotCarryPlanningResponseContextToNextNormalTurnOnNewSession(t *testing.T) {
+func TestChatCore_PlanModeApproval_DoesNotCarryPlanningResponseContextToImplementation(t *testing.T) {
 	disableColors(t)
 
-	planResponse := "Here is the plan:\n```json\n{\"plan\":{\"summary\":\"Ship a small change\",\"steps\":[{\"id\":1,\"description\":\"Update foo.go and tests\",\"tools\":[\"str_replace\"]}]}}\n```"
-
 	var out bytes.Buffer
-	provider := &planResponseContextProvider{
-		responses: []string{
-			planResponse,
-			"The requested changes are done.",
-		},
-	}
+	provider := newPlanApprovalFlowProvider("")
 	agent := newPlanRequestTestAgent(t, provider, "1\n", &out)
 	agent.PlanModeEnabled = true
 
 	if err := agent.chatCore("implement feature", nil, false); err != nil {
 		t.Fatalf("first chatCore() error = %v", err)
 	}
-	if provider.GetResponseID() != "" {
-		t.Fatalf("provider responseID after plan approval = %q, want empty (planning chain must be detached)", provider.GetResponseID())
-	}
-	if agent.session == nil {
-		t.Fatal("agent.session = nil")
-	}
-	if agent.session.ResponseID != "" {
-		t.Fatalf("session.ResponseID after plan approval = %q, want empty", agent.session.ResponseID)
-	}
-	if len(agent.History) != 0 {
-		t.Fatalf("len(agent.History) after plan approval = %d, want 0 (investigation history must be rolled back)", len(agent.History))
-	}
-	if len(agent.session.Messages) != 0 {
-		t.Fatalf("len(agent.session.Messages) after plan approval = %d, want 0 (investigation history must be rolled back)", len(agent.session.Messages))
-	}
-
-	if err := agent.chatCore("continue", nil, false); err != nil {
-		t.Fatalf("second chatCore() error = %v", err)
-	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
-	}
-	if len(provider.usedPreviousResponseIDs) != 2 {
-		t.Fatalf("len(usedPreviousResponseIDs) = %d, want 2", len(provider.usedPreviousResponseIDs))
-	}
-	if provider.usedPreviousResponseIDs[1] != "" {
-		t.Fatalf("second turn previous_response_id = %q, want empty to avoid planning-chain continuation", provider.usedPreviousResponseIDs[1])
-	}
-	if len(provider.histories) != 2 {
-		t.Fatalf("len(provider.histories) = %d, want 2", len(provider.histories))
-	}
-	for _, msg := range provider.histories[1] {
-		if strings.Contains(msg.Content, "READ-ONLY ONLY") {
-			t.Fatalf("next normal turn history must not contain investigation restriction, got %q", msg.Content)
-		}
-		if strings.Contains(msg.Content, "Modification tools are FORBIDDEN") {
-			t.Fatalf("next normal turn history must not contain investigation restriction, got %q", msg.Content)
-		}
-		if strings.Contains(msg.Content, "You are in PLAN MODE (Investigation Phase).") {
-			t.Fatalf("next normal turn history must not contain investigation prompt, got %q", msg.Content)
-		}
-	}
+	assertImplementationPreviousResponseIDCleared(t, provider)
+	assertImplementationHistoryOmitsInvestigationContext(t, planImplementationHistory(t, provider))
 }
 
-func TestChatCore_PlanModeApproval_ClearsPrePlanResponseContextForNextNormalTurn(t *testing.T) {
+func TestChatCore_PlanModeApproval_ClearsPrePlanResponseContextForImplementation(t *testing.T) {
 	disableColors(t)
 
-	planResponse := "Here is the plan:\n```json\n{\"plan\":{\"summary\":\"Ship a small change\",\"steps\":[{\"id\":1,\"description\":\"Update foo.go and tests\",\"tools\":[\"str_replace\"]}]}}\n```"
-
 	var out bytes.Buffer
-	provider := &planResponseContextProvider{
-		responseID: "resp_before_plan",
-		responses: []string{
-			planResponse,
-			"The requested changes are done.",
-		},
-	}
+	provider := newPlanApprovalFlowProvider("resp_before_plan")
 	agent := newPlanRequestTestAgent(t, provider, "1\n", &out)
 	agent.PlanModeEnabled = true
 
 	if err := agent.chatCore("implement feature", nil, false); err != nil {
 		t.Fatalf("first chatCore() error = %v", err)
 	}
-	if provider.GetResponseID() != "" {
-		t.Fatalf("provider responseID after plan approval = %q, want empty", provider.GetResponseID())
-	}
-	if agent.session == nil {
-		t.Fatal("agent.session = nil")
-	}
-	if agent.session.ResponseID != "" {
-		t.Fatalf("session.ResponseID after plan approval = %q, want empty", agent.session.ResponseID)
-	}
+	assertPlanAndImplementationProviderCalls(t, provider)
+	assertImplementationPreviousResponseIDCleared(t, provider)
+}
 
-	if err := agent.chatCore("continue", nil, false); err != nil {
-		t.Fatalf("second chatCore() error = %v", err)
+func TestRetryChatRequest_PlanModeApprovalStartsImplementation(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := newPlanApprovalFlowProvider("")
+	agent := newPlanRequestTestAgent(t, provider, "1\n", &out)
+	agent.PlanModeEnabled = true
+	req := &chatRequest{input: "implement feature", autoCompression: newAutoCompressionTurnState()}
+	agent.prepareChatRequest(req)
+
+	if err := agent.retryChatRequest(req); err != nil {
+		t.Fatalf("retryChatRequest() error = %v", err)
 	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
+	implementationHistory := planImplementationHistory(t, provider)
+	if agent.PlanModeEnabled {
+		t.Fatal("PlanModeEnabled should be false after approval")
 	}
-	if len(provider.usedPreviousResponseIDs) != 2 {
-		t.Fatalf("len(usedPreviousResponseIDs) = %d, want 2", len(provider.usedPreviousResponseIDs))
-	}
-	if provider.usedPreviousResponseIDs[1] != "" {
-		t.Fatalf("second turn previous_response_id = %q, want empty to force history-based normal turn", provider.usedPreviousResponseIDs[1])
-	}
+	assertImplementationHistoryContainsApprovedPlanHandoff(t, implementationHistory)
+	assertImplementationPreviousResponseIDCleared(t, provider)
 }

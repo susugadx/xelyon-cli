@@ -10,7 +10,7 @@ func handlePlanCommand(agent *Agent, args []string) bool {
 		switch args[0] {
 		case "on":
 			agent.setPlanModeEnabled(true)
-			green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認（planning only）")
+			green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認→実装")
 			return true
 		case "off":
 			agent.setPlanModeEnabled(false)
@@ -22,13 +22,13 @@ func handlePlanCommand(agent *Agent, args []string) bool {
 				green.Fprintln(out, "✅ Plan Mode OFF - 通常モード")
 			} else {
 				agent.setPlanModeEnabled(true)
-				green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認（planning only）")
+				green.Fprintln(out, "✅ Plan Mode ON - 調査→計画→承認→実装")
 			}
 			return true
 		case "status":
 			if agent.PlanModeEnabled {
 				cyan.Fprintln(out, "📋 Plan Mode: ON")
-				_, _ = fmt.Fprintln(out, "   調査 → 計画 → 承認。実装は次の通常ターンで行う")
+				_, _ = fmt.Fprintln(out, "   調査 → 計画 → 承認後、同じターンで通常モード実装へ進む")
 			} else {
 				cyan.Fprintln(out, "📋 Plan Mode: OFF")
 				_, _ = fmt.Fprintln(out, "   通常モード（ツール個別確認）")
@@ -40,7 +40,7 @@ func handlePlanCommand(agent *Agent, args []string) bool {
 	// 引数なし：現在のステータスを表示
 	if agent.PlanModeEnabled {
 		cyan.Fprintln(out, "📋 Plan Mode: ON")
-		_, _ = fmt.Fprintln(out, "   調査 → 計画 → 承認。実装は次の通常ターンで行う")
+		_, _ = fmt.Fprintln(out, "   調査 → 計画 → 承認後、同じターンで通常モード実装へ進む")
 	} else {
 		cyan.Fprintln(out, "📋 Plan Mode: OFF")
 		_, _ = fmt.Fprintln(out, "   通常モード（ツール個別確認）")
