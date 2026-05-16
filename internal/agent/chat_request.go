@@ -104,7 +104,10 @@ func (a *Agent) retryChatRequest(req *chatRequest) error {
 }
 
 func (a *Agent) runNormalChatRequest(ctx context.Context, req *chatRequest) error {
-	return a.runNormalMode(ctx, req.input, req.image)
+	if req.oneShot {
+		return a.runNormalMode(ctx, req.input, req.image)
+	}
+	return a.runNormalModeWithAutoCompression(ctx, req.input, req.image, req.autoCompression)
 }
 
 func (a *Agent) handleChatRequestError(req *chatRequest, err error) error {

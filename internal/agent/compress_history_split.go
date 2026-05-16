@@ -9,7 +9,31 @@ type compressionHistorySplit struct {
 }
 
 func splitHistoryForCompression(history, persistHistory []api.Message, keepRecent int) compressionHistorySplit {
-	splitIdx := adjustSplitForFCPairs(history, len(history)-keepRecent)
+	return splitHistoryBeforeIndex(history, persistHistory, len(history)-keepRecent)
+}
+
+func splitHistoryForInTurnCompression(history, persistHistory []api.Message, currentTurnStartIndex, keepRecent int) compressionHistorySplit {
+	splitIdx := len(history) - keepRecent
+	if splitIdx > currentTurnStartIndex {
+		splitIdx = currentTurnStartIndex
+	}
+	return splitHistoryBeforeIndex(history, persistHistory, splitIdx)
+}
+
+func splitHistoryBeforeIndex(history, persistHistory []api.Message, splitIdx int) compressionHistorySplit {
+	if splitIdx < 0 {
+		splitIdx = 0
+	}
+	if splitIdx > len(history) {
+		splitIdx = len(history)
+	}
+	splitIdx = adjustSplitForFCPairs(history, splitIdx)
+	if splitIdx < 0 {
+		splitIdx = 0
+	}
+	if splitIdx > len(history) {
+		splitIdx = len(history)
+	}
 	return compressionHistorySplit{
 		toCompress:    persistHistory[:splitIdx],
 		toKeep:        history[splitIdx:],

@@ -22,11 +22,7 @@ type ResponsesServerCompactionLocalSkipCapable interface {
 
 func (a *Agent) runAutoCompression(decision autoCompressionDecision) bool {
 	cfg := a.cfg()
-	costAwareCompress := decision.costAware
-	keepRecent := cfg.Compression.KeepRecent
-	if keepRecent == 0 {
-		keepRecent = 10
-	}
+	keepRecent := normalizedAutoCompressionKeepRecent(cfg.Compression.KeepRecent)
 	beforeTokens := decision.currentTokens
 	if beforeTokens == 0 {
 		beforeTokens = a.EstimateTokens()
@@ -51,7 +47,7 @@ func (a *Agent) runAutoCompression(decision autoCompressionDecision) bool {
 				if err == nil {
 					a.finishCompressionDisplay(display, compactResultOutputTokens(result), nil)
 					metrics := OptimizationMetrics{CompactionCount: 1}
-					if costAwareCompress {
+					if decision.costAware {
 						metrics.CostAwareCompressions = 1
 					}
 					a.addOptimizationMetrics(metrics)
@@ -89,7 +85,124 @@ func (a *Agent) runAutoCompression(decision autoCompressionDecision) bool {
 		return false
 	}
 
-	if err := a.compressHistory(keepRecent, compressHistoryOptions{
+	result := a.runAutoCompressionHistorySummary(decision, display, keepRecent, beforeTokens, func(opts compressHistoryOptions) error {
+		return a.compressHistory(keepRecent, opts)
+	})
+	return result.compressed
+}
+
+func normalizedAutoCompressionKeepRecent(keepRecent int) int {
+	if keepRecent == 0 {
+		return 10
+	}
+	return keepRecent
+}
+
+type inTurnAutoCompressionPlan struct {
+	ctx         context.Context
+	decision    autoCompressionDecision
+	historyPlan compressionHistoryPlan
+	keepRecent  int
+}
+
+type inTurnAutoCompressionResult struct {
+	attempted  bool
+	compressed bool
+	requestErr error
+}
+
+func (a *Agent) maybeAutoCompressDuringTurn(ctx context.Context, currentTurnStartIndex int, state *autoCompressionTurnState) inTurnAutoCompressionResult {
+	plan, ok := a.planInTurnAutoCompression(ctx, currentTurnStartIndex, state)
+	if !ok {
+		return inTurnAutoCompressionResult{}
+	}
+	return a.runInTurnAutoCompression(plan, state)
+}
+
+func (a *Agent) planInTurnAutoCompression(ctx context.Context, currentTurnStartIndex int, state *autoCompressionTurnState) (inTurnAutoCompressionPlan, bool) {
+	if state == nil || state.attemptedThisTurn() {
+		return inTurnAutoCompressionPlan{}, false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
+		return inTurnAutoCompressionPlan{}, false
+	}
+
+	cfg := a.cfg()
+	if !cfg.Compression.Enabled {
+		return inTurnAutoCompressionPlan{}, false
+	}
+
+	currentTokens := a.EstimateTokens()
+	providerKey := a.sessionProviderConfigKey(cfg)
+	decision := a.planAutoCompression(cfg, providerKey, currentTokens)
+	if decision.action != autoCompressionActionRun {
+		return inTurnAutoCompressionPlan{}, false
+	}
+
+	keepRecent := normalizedAutoCompressionKeepRecent(cfg.Compression.KeepRecent)
+	historyPlan := a.compressionHistoryPlanForInTurn(currentTurnStartIndex, keepRecent)
+	if !historyPlan.hasCompressibleHistory() {
+		return inTurnAutoCompressionPlan{}, false
+	}
+
+	return inTurnAutoCompressionPlan{
+		ctx:         ctx,
+		decision:    decision,
+		historyPlan: historyPlan,
+		keepRecent:  keepRecent,
+	}, true
+}
+
+func (a *Agent) runInTurnAutoCompression(plan inTurnAutoCompressionPlan, state *autoCompressionTurnState) inTurnAutoCompressionResult {
+	beforeTokens := plan.decision.currentTokens
+	if beforeTokens == 0 {
+		beforeTokens = a.EstimateTokens()
+	}
+
+	a.printAutoCompressionStart(plan.decision)
+	result := a.runAutoCompressionHistorySummary(plan.decision, compressionDisplayOperation{}, plan.keepRecent, beforeTokens, func(opts compressHistoryOptions) error {
+		opts.baseContext = plan.ctx
+		opts.onSummaryStart = func() {
+			state.recordAttempt(false)
+		}
+		err := a.compressHistoryWithPlan(plan.historyPlan, opts)
+		if err == nil {
+			state.recordAttempt(true)
+		}
+		return err
+	})
+
+	return inTurnAutoCompressionResult{
+		attempted:  state.attemptedThisTurn(),
+		compressed: result.compressed,
+		requestErr: requestContextErr(plan.ctx),
+	}
+}
+
+type autoCompressionRunResult struct {
+	compressed bool
+}
+
+func (a *Agent) runAutoCompressionHistorySummary(
+	decision autoCompressionDecision,
+	display compressionDisplayOperation,
+	displayKeepRecent int,
+	beforeTokens int,
+	compress func(compressHistoryOptions) error,
+) autoCompressionRunResult {
+	if !display.active {
+		display = a.beginCompressionDisplay(
+			compressionDisplayModeHistory,
+			compressionDisplayReasonAuto,
+			displayKeepRecent,
+			beforeTokens,
+		)
+	}
+
+	if err := compress(compressHistoryOptions{
 		displayReason:      compressionDisplayReasonAuto,
 		suppressTUIDisplay: true,
 	}); err != nil {
@@ -97,12 +210,11 @@ func (a *Agent) runAutoCompression(decision autoCompressionDecision) bool {
 			yellow.Fprintf(a.output(), "   ⚠️ Auto-compress failed: %v\n", err)
 		}
 		a.finishCompressionDisplay(display, 0, err)
-		return false
+		return autoCompressionRunResult{}
 	}
 	afterTokens := a.EstimateTokens()
 	a.finishCompressionDisplay(display, afterTokens, nil)
 
-	// 結果を表示
 	if a.shouldPrintCompressionOutput() {
 		_, _ = fmt.Fprintf(a.output(), "   Before: %s tokens → After: %s tokens\n",
 			formatNumber(beforeTokens), formatNumber(afterTokens))
@@ -111,11 +223,11 @@ func (a *Agent) runAutoCompression(decision autoCompressionDecision) bool {
 	}
 
 	metrics := OptimizationMetrics{CompactionCount: 1}
-	if costAwareCompress {
+	if decision.costAware {
 		metrics.CostAwareCompressions = 1
 	}
 	a.addOptimizationMetrics(metrics)
-	return true
+	return autoCompressionRunResult{compressed: true}
 }
 
 type autoCompressionAttemptResult struct {

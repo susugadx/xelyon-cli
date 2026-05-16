@@ -9,6 +9,13 @@ func (a *Agent) beginChatRequestContext() (context.Context, func()) {
 	return a.beginCancelableRequestContext(context.Background(), "request")
 }
 
+func requestContextErr(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
+}
+
 func (a *Agent) beginReviewRequestContext(ctx context.Context) (context.Context, func()) {
 	return a.beginCancelableRequestContext(ctx, "review")
 }

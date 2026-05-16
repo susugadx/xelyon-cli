@@ -53,6 +53,10 @@ func (a *Agent) runNormalMode(ctx context.Context, input string, image *api.Imag
 	return newTurnRunner(a, ctx).RunNormalMode(input, image)
 }
 
+func (a *Agent) runNormalModeWithAutoCompression(ctx context.Context, input string, image *api.ImageData, autoCompression *autoCompressionTurnState) error {
+	return newTurnRunner(a, ctx).runNormalModeLoopWithAutoCompression(input, image, autoCompression)
+}
+
 // showTaskSummary は現在タスクの changeStack からサマリーを生成して表示
 // taskChangeOffset 以降の変更のみを対象とする（Issue #118: タスク分離）
 func (a *Agent) showTaskSummary() {

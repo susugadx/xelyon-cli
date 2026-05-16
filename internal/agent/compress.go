@@ -20,8 +20,20 @@ const (
 type compressHistoryOptions struct {
 	// Plan Mode の retry など、呼び出し側が restore 前の一時履歴を保存したくない場合だけ true。
 	skipPersistenceOnSuccess bool
+	baseContext              context.Context
 	displayReason            string
 	suppressTUIDisplay       bool
+	onSummaryStart           func()
+}
+
+type compressionHistoryPlan struct {
+	split             compressionHistorySplit
+	beforeTokens      int
+	displayKeepRecent int
+}
+
+func (p compressionHistoryPlan) hasCompressibleHistory() bool {
+	return len(p.split.toCompress) > 0
 }
 
 // CompressHistory は会話履歴を圧縮する
@@ -30,22 +42,53 @@ func (a *Agent) CompressHistory(keepRecent int) error {
 }
 
 func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) error {
-	out := a.output()
-
 	if len(a.History) <= keepRecent {
 		return fmt.Errorf("履歴が短すぎます（%d件）。圧縮は%d件を超える場合のみ可能です", len(a.History), keepRecent)
 	}
 
-	// 圧縮前の統計
+	return a.compressHistoryWithPlan(a.compressionHistoryPlanForKeepRecent(keepRecent), opts)
+}
+
+func (a *Agent) compressionHistoryPlanForKeepRecent(keepRecent int) compressionHistoryPlan {
 	beforeTokens := estimateTokens(a.CurrentModel, a.History)
-
 	persistHistory := a.persistableHistoryForCompression()
+	return compressionHistoryPlan{
+		split:             splitHistoryForCompression(a.History, persistHistory, keepRecent),
+		beforeTokens:      beforeTokens,
+		displayKeepRecent: keepRecent,
+	}
+}
 
-	// 圧縮対象のメッセージを抽出（FC ターンペアの分断を防止）
-	split := splitHistoryForCompression(a.History, persistHistory, keepRecent)
-	toCompress := split.toCompress
-	toKeep := split.toKeep
-	toKeepPersist := split.toKeepPersist
+func (a *Agent) compressionHistoryPlanForInTurn(currentTurnStartIndex, keepRecent int) compressionHistoryPlan {
+	beforeTokens := estimateTokens(a.CurrentModel, a.History)
+	persistHistory := a.persistableHistoryForCompression()
+	return compressionHistoryPlan{
+		split:             splitHistoryForInTurnCompression(a.History, persistHistory, currentTurnStartIndex, keepRecent),
+		beforeTokens:      beforeTokens,
+		displayKeepRecent: keepRecent,
+	}
+}
+
+func (a *Agent) compressHistoryWithPlan(plan compressionHistoryPlan, opts compressHistoryOptions) error {
+	return a.compressHistoryWithSplit(
+		plan.split.toCompress,
+		plan.split.toKeep,
+		plan.split.toKeepPersist,
+		plan.beforeTokens,
+		plan.displayKeepRecent,
+		opts,
+	)
+}
+
+func (a *Agent) compressHistoryWithSplit(
+	toCompress []api.Message,
+	toKeep []api.Message,
+	toKeepPersist []api.Message,
+	beforeTokens int,
+	displayKeepRecent int,
+	opts compressHistoryOptions,
+) error {
+	out := a.output()
 
 	if len(toCompress) == 0 {
 		return fmt.Errorf("圧縮対象のメッセージがありません（FC ターン保護により分割不可）")
@@ -56,7 +99,7 @@ func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) err
 		display = a.beginCompressionDisplay(
 			compressionDisplayModeHistory,
 			opts.displayReason,
-			keepRecent,
+			displayKeepRecent,
 			beforeTokens,
 		)
 	}
@@ -76,11 +119,18 @@ func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) err
 	if a.shouldPrintCompressionOutput() {
 		cyan.Fprintln(out, "🗜️ Compressing history...")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	baseCtx := opts.baseContext
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
 	defer cancel()
 
 	compressModel := a.getCompressionModel()
 	finishResponseContext := a.suspendResponseContinuationForLocalCompression(!opts.skipPersistenceOnSuccess)
+	if opts.onSummaryStart != nil {
+		opts.onSummaryStart()
+	}
 	summary, err := a.CurrentProvider.ChatWithTools(a.compressionRequestContext(ctx), "", []api.Message{
 		{Role: "user", Content: summaryPrompt},
 	}, compressModel)

@@ -157,3 +157,111 @@ func TestSplitHistoryForCompression_FCPairProtectionCanMakeCompressionEmpty(t *t
 		t.Fatalf("toKeep len = %d, want 2", len(split.toKeep))
 	}
 }
+
+func TestSplitHistoryBeforeIndex_KeepsCurrentTurnTail(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "old user"},
+		{Role: "assistant", Content: "old assistant"},
+		{Role: "user", Content: "current user"},
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{}`}},
+		}},
+		{Role: "tool", Content: "current tool result", ToolCallID: "call_1"},
+	}
+	persistHistory := []api.Message{
+		{Role: "user", Content: "old user persisted"},
+		{Role: "assistant", Content: "old assistant persisted"},
+		{Role: "user", Content: "current user persisted"},
+		{Role: "assistant", Content: "", ToolCalls: history[3].ToolCalls},
+		{Role: "tool", Content: "current tool result persisted", ToolCallID: "call_1"},
+	}
+
+	split := splitHistoryBeforeIndex(history, persistHistory, 2)
+
+	if len(split.toCompress) != 2 {
+		t.Fatalf("toCompress len = %d, want 2", len(split.toCompress))
+	}
+	if split.toCompress[0].Content != "old user persisted" || split.toCompress[1].Content != "old assistant persisted" {
+		t.Fatalf("toCompress = %#v, want persisted pre-turn history", split.toCompress)
+	}
+	if len(split.toKeep) != 3 || split.toKeep[0].Content != "current user" || split.toKeep[2].Content != "current tool result" {
+		t.Fatalf("toKeep = %#v, want current runtime turn tail", split.toKeep)
+	}
+	if len(split.toKeepPersist) != 3 || split.toKeepPersist[0].Content != "current user persisted" || split.toKeepPersist[2].Content != "current tool result persisted" {
+		t.Fatalf("toKeepPersist = %#v, want current persisted turn tail", split.toKeepPersist)
+	}
+}
+
+func TestSplitHistoryForInTurnCompression_RespectsKeepRecentBeforeCurrentTurn(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "old 0"},
+		{Role: "assistant", Content: "old 1"},
+		{Role: "user", Content: "old 2"},
+		{Role: "assistant", Content: "old 3"},
+		{Role: "user", Content: "recent old 4"},
+		{Role: "assistant", Content: "recent old 5"},
+		{Role: "user", Content: "current user"},
+		{Role: "assistant", Content: "current assistant"},
+	}
+	persistHistory := []api.Message{
+		{Role: "user", Content: "persist old 0"},
+		{Role: "assistant", Content: "persist old 1"},
+		{Role: "user", Content: "persist old 2"},
+		{Role: "assistant", Content: "persist old 3"},
+		{Role: "user", Content: "persist recent old 4"},
+		{Role: "assistant", Content: "persist recent old 5"},
+		{Role: "user", Content: "persist current user"},
+		{Role: "assistant", Content: "persist current assistant"},
+	}
+
+	split := splitHistoryForInTurnCompression(history, persistHistory, 6, 4)
+
+	if len(split.toCompress) != 4 || split.toCompress[0].Content != "persist old 0" || split.toCompress[3].Content != "persist old 3" {
+		t.Fatalf("toCompress = %#v, want only messages older than keep_recent", split.toCompress)
+	}
+	if len(split.toKeep) != 4 || split.toKeep[0].Content != "recent old 4" || split.toKeep[2].Content != "current user" {
+		t.Fatalf("toKeep = %#v, want keep_recent tail plus current turn", split.toKeep)
+	}
+	if len(split.toKeepPersist) != 4 || split.toKeepPersist[0].Content != "persist recent old 4" || split.toKeepPersist[2].Content != "persist current user" {
+		t.Fatalf("toKeepPersist = %#v, want persisted keep_recent tail plus current turn", split.toKeepPersist)
+	}
+}
+
+func TestSplitHistoryForInTurnCompression_KeepsCurrentTurnWhenLongerThanKeepRecent(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "old 0"},
+		{Role: "assistant", Content: "old 1"},
+		{Role: "user", Content: "current 0"},
+		{Role: "assistant", Content: "current 1"},
+		{Role: "tool", Content: "current 2"},
+	}
+
+	split := splitHistoryForInTurnCompression(history, history, 2, 1)
+
+	if len(split.toCompress) != 2 {
+		t.Fatalf("toCompress len = %d, want 2 pre-turn messages", len(split.toCompress))
+	}
+	if len(split.toKeep) != 3 || split.toKeep[0].Content != "current 0" {
+		t.Fatalf("toKeep = %#v, want full current turn even when longer than keep_recent", split.toKeep)
+	}
+}
+
+func TestSplitHistoryBeforeIndex_FCPairProtectionKeepsPreviousOpenPairOutOfCompression(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "old user"},
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "bash", Arguments: `{}`}},
+		}},
+		{Role: "user", Content: "current user"},
+		{Role: "assistant", Content: "current assistant"},
+	}
+
+	split := splitHistoryBeforeIndex(history, history, 2)
+
+	if len(split.toCompress) != 1 || split.toCompress[0].Content != "old user" {
+		t.Fatalf("toCompress = %#v, want only messages before previous open FC pair", split.toCompress)
+	}
+	if len(split.toKeep) != 3 || len(split.toKeep[0].ToolCalls) != 1 || split.toKeep[1].Content != "current user" {
+		t.Fatalf("toKeep = %#v, want previous open FC pair plus current tail", split.toKeep)
+	}
+}

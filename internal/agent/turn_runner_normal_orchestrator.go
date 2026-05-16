@@ -18,9 +18,11 @@ type normalModeTurnOrchestrator struct {
 	hardLimit       int
 	state           *normalModeState
 	planningHandler *normalModePlanningHandler
+	autoCompression *autoCompressionTurnState
+	turnStartIndex  int
 }
 
-func newNormalModeTurnOrchestrator(r *TurnRunner, input string, image *api.ImageData) *normalModeTurnOrchestrator {
+func newNormalModeTurnOrchestrator(r *TurnRunner, input string, image *api.ImageData, autoCompression *autoCompressionTurnState) *normalModeTurnOrchestrator {
 	cfg := r.agent.cfg()
 	return &normalModeTurnOrchestrator{
 		runner:          r,
@@ -30,6 +32,8 @@ func newNormalModeTurnOrchestrator(r *TurnRunner, input string, image *api.Image
 		hardLimit:       normalizeToolLoopLimit(cfg.General.ToolLoopLimit),
 		state:           &normalModeState{turnMutations: newTurnMutationState()},
 		planningHandler: newNormalModePlanningHandler(r),
+		autoCompression: autoCompression,
+		turnStartIndex:  len(r.agent.History),
 	}
 }
 
@@ -109,6 +113,13 @@ func (o *normalModeTurnOrchestrator) executeToolCalls(_ int, response string, to
 }
 
 func (o *normalModeTurnOrchestrator) afterToolResults(_ int, _ string, _ []*tools.ToolCall) (turnLoopDirective, error) {
+	if err := requestContextErr(o.runner.ctx); err != nil {
+		return turnLoopReturn, err
+	}
+	result := o.runner.agent.maybeAutoCompressDuringTurn(o.runner.ctx, o.turnStartIndex, o.autoCompression)
+	if result.requestErr != nil {
+		return turnLoopReturn, result.requestErr
+	}
 	return turnLoopProceed, nil
 }
 
@@ -130,5 +141,9 @@ func (o *normalModeTurnOrchestrator) handleDirective(directive turnLoopDirective
 }
 
 func (r *TurnRunner) runNormalModeLoop(input string, image *api.ImageData) error {
-	return newNormalModeTurnOrchestrator(r, input, image).Run()
+	return r.runNormalModeLoopWithAutoCompression(input, image, nil)
+}
+
+func (r *TurnRunner) runNormalModeLoopWithAutoCompression(input string, image *api.ImageData, autoCompression *autoCompressionTurnState) error {
+	return newNormalModeTurnOrchestrator(r, input, image, autoCompression).Run()
 }

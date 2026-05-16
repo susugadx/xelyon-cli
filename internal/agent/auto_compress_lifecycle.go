@@ -28,7 +28,7 @@ func (s *autoCompressionTurnState) attemptedThisTurn() bool {
 }
 
 func (a *Agent) maybeAutoCompressAfterTurn(state *autoCompressionTurnState) bool {
-	if state != nil && state.compressedThisTurn() {
+	if state != nil && state.attemptedThisTurn() {
 		return false
 	}
 	result := a.maybeAutoCompressAttempt()
