@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
@@ -84,29 +83,4 @@ func findGoImpactMethodTestsByNameProbe(probe string, symbol navigation.SymbolCa
 	ctx.collectLocalTests(entries, appendTest)
 	ctx.collectCrossPackageTests(appendTest)
 	return tests, total, deps.list()
-}
-
-func (ctx goMethodTestProbeContext) collectCrossPackageTests(appendTest func(navigation.TestRef)) {
-	if !ctx.symbol.Exported {
-		return
-	}
-
-	matcher := newGoMethodCrossPackageTestMatcher(ctx)
-	broader, _ := findGoImpactTestsByNameProbe(ctx.probe, ctx.symbol.RootPath, ctx.opts, 0)
-	for _, candidate := range broader {
-		absPath := absoluteAffectedFilePathWithPreferredBases(
-			candidate.File,
-			ctx.symbol.RootPath,
-			affectedFileBasePath(ctx.opts, affectedFileSourceText),
-			structuredGoImpactProbeRootPath(ctx.opts, ctx.packageDir),
-		)
-		ctx.dependencies.add(absPath)
-		if absPath == "" || filepath.Clean(filepath.Dir(absPath)) == filepath.Clean(ctx.packageDir) {
-			continue
-		}
-		if !matcher.matches(absPath, candidate) {
-			continue
-		}
-		appendTest(candidate)
-	}
 }
