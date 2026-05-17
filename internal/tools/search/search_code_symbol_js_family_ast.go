@@ -9,7 +9,23 @@ import (
 )
 
 func findJSFamilyDefinitionsWithAST(symbol string, opts SearchOptions) []genericSymbolDef {
+	return collectJSFamilyDefinitionCandidates(symbol, opts).astDefs
+}
+
+type jsFamilyDefinitionCandidates struct {
+	matches []genericSymbolMatch
+	astDefs []genericSymbolDef
+}
+
+func collectJSFamilyDefinitionCandidates(symbol string, opts SearchOptions) jsFamilyDefinitionCandidates {
 	matches := findGenericSymbolMatches(symbol, opts, 0)
+	return jsFamilyDefinitionCandidates{
+		matches: matches,
+		astDefs: findJSFamilyDefinitionsWithASTFromMatches(symbol, opts, matches),
+	}
+}
+
+func findJSFamilyDefinitionsWithASTFromMatches(symbol string, opts SearchOptions, matches []genericSymbolMatch) []genericSymbolDef {
 	files := jsFamilyMatchedFiles(matches, opts)
 	defs := make([]genericSymbolDef, 0)
 	for _, file := range files {

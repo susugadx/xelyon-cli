@@ -109,6 +109,10 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 // findGenericDefinitions は ripgrep + signaturePatterns でシンボルの定義行を見つける。
 func findGenericDefinitions(symbol string, opts SearchOptions) []genericSymbolDef {
 	matches := findGenericSymbolMatches(symbol, opts, 0)
+	return genericDefinitionsFromMatches(symbol, opts, matches)
+}
+
+func genericDefinitionsFromMatches(symbol string, opts SearchOptions, matches []genericSymbolMatch) []genericSymbolDef {
 	lang := resolvePatternLang(filefilter.RepresentativeToken(opts.FileType, opts.FilePattern))
 
 	defs := make([]genericSymbolDef, 0, len(matches))

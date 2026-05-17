@@ -6,9 +6,14 @@ type structuredTypeScriptPreferredDefs struct {
 }
 
 func findStructuredTypeScriptImpactDefinitionSet(symbol string, opts SearchOptions) jsFamilyImpactDefinitionSet {
-	defs := normalizeStructuredTypeScriptDefs(findJSFamilyDefinitionsWithAST(symbol, opts))
+	candidates := collectJSFamilyDefinitionCandidates(symbol, opts)
+	return structuredTypeScriptImpactDefinitionSetFromCandidates(symbol, opts, candidates)
+}
+
+func structuredTypeScriptImpactDefinitionSetFromCandidates(symbol string, opts SearchOptions, candidates jsFamilyDefinitionCandidates) jsFamilyImpactDefinitionSet {
+	defs := normalizeStructuredTypeScriptDefs(candidates.astDefs)
 	if len(defs) == 0 {
-		defs = normalizeStructuredTypeScriptDefs(findGenericDefinitions(symbol, opts))
+		defs = normalizeStructuredTypeScriptDefs(genericDefinitionsFromMatches(symbol, opts, candidates.matches))
 	}
 	preferredDefs := preferStructuredTypeScriptImplementationDefs(defs)
 	return jsFamilyImpactDefinitionSet{

@@ -7,11 +7,16 @@ import (
 )
 
 func findStructuredJavaScriptImpactDefinitions(symbol string, opts SearchOptions) []genericSymbolDef {
-	defs := normalizeStructuredJavaScriptDefs(findJSFamilyDefinitionsWithAST(symbol, opts))
+	candidates := collectJSFamilyDefinitionCandidates(symbol, opts)
+	return structuredJavaScriptImpactDefinitionsFromCandidates(symbol, opts, candidates)
+}
+
+func structuredJavaScriptImpactDefinitionsFromCandidates(symbol string, opts SearchOptions, candidates jsFamilyDefinitionCandidates) []genericSymbolDef {
+	defs := normalizeStructuredJavaScriptDefs(candidates.astDefs)
 	if len(defs) == 0 {
-		defs = normalizeStructuredJavaScriptDefs(findGenericDefinitions(symbol, opts))
+		defs = normalizeStructuredJavaScriptDefs(genericDefinitionsFromMatches(symbol, opts, candidates.matches))
 	}
-	defs = append(defs, findStructuredJavaScriptCommonJSInlineDefinitions(symbol, opts)...)
+	defs = append(defs, findStructuredJavaScriptCommonJSInlineDefinitionsFromMatches(symbol, candidates.matches)...)
 	return dedupeStructuredJavaScriptDefs(defs)
 }
 
@@ -38,6 +43,10 @@ func isStructuredJavaScriptFunctionExpressionSignature(signature string, name st
 
 func findStructuredJavaScriptCommonJSInlineDefinitions(symbol string, opts SearchOptions) []genericSymbolDef {
 	matches := findGenericSymbolMatches(symbol, opts, 0)
+	return findStructuredJavaScriptCommonJSInlineDefinitionsFromMatches(symbol, matches)
+}
+
+func findStructuredJavaScriptCommonJSInlineDefinitionsFromMatches(symbol string, matches []genericSymbolMatch) []genericSymbolDef {
 	defs := make([]genericSymbolDef, 0)
 	for _, match := range matches {
 		if !isJavaScriptSourceFilePath(match.File) {

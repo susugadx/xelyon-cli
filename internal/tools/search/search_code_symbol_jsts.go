@@ -16,9 +16,10 @@ const (
 // 参照を import / caller / type ref / other に分類し、Go fast path に近い構造化結果を返す。
 // フォールバック: 定義が見つからなければ genericSymbolNone を返し、text search に委譲する。
 func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
-	defs := findJSFamilyDefinitionsWithAST(symbol, opts)
+	candidates := collectJSFamilyDefinitionCandidates(symbol, opts)
+	defs := candidates.astDefs
 	if len(defs) == 0 {
-		defs = findGenericDefinitions(symbol, opts)
+		defs = genericDefinitionsFromMatches(symbol, opts, candidates.matches)
 	}
 	if len(defs) == 0 {
 		return genericResolveResult{Status: genericSymbolNone}
