@@ -21,7 +21,7 @@ const (
 	deepSeekDiagnosticSmokeToolName               = "xelyon_deepseek_doctor_probe"
 )
 
-type deepSeekDiagnosticSmokeRequest = providerdiag.ChatCompletionsSmokeRequest
+type deepSeekDiagnosticSmokeRequest = providerdiag.TextToolSmokeRequest
 
 func runDeepSeekDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
 	timeout := options.SmokeTimeout
@@ -50,15 +50,15 @@ func runDeepSeekDiagnosticSmoke(ctx context.Context, cfg *config.Config, report 
 	started := time.Now()
 	for _, request := range deepSeekDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			providerdiag.AddChatCompletionsSmokeRequestResult(
+			providerdiag.AddTextToolSmokeRequestResult(
 				&result,
-				providerdiag.NewSkippedChatCompletionsToolSmokeRequest(request, report.Route, deepSeekDiagnosticDisabledToolSkipReason()),
+				providerdiag.NewSkippedTextToolSmokeRequest(request, report.Route, deepSeekDiagnosticDisabledToolSkipReason()),
 			)
 			continue
 		}
 
 		requestResult, err := runDeepSeekDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
-		providerdiag.AddChatCompletionsSmokeRequestResult(&result, requestResult)
+		providerdiag.AddTextToolSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -141,7 +141,7 @@ func runDeepSeekDiagnosticSmokeRequest(
 }
 
 func newDeepSeekDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request deepSeekDiagnosticSmokeRequest, output io.Writer) context.Context {
-	return providerdiag.NewChatCompletionsSmokeRequestContext(
+	return providerdiag.NewTextToolSmokeRequestContext(
 		ctx,
 		cfg,
 		request,

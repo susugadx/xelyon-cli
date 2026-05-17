@@ -36,11 +36,11 @@ func TestTextToolSmokeRequests(t *testing.T) {
 	}
 }
 
-func TestNewChatCompletionsSmokeRequestContextDisablesToolsForText(t *testing.T) {
-	ctx := NewChatCompletionsSmokeRequestContext(
+func TestNewTextToolSmokeRequestContextDisablesToolsForText(t *testing.T) {
+	ctx := NewTextToolSmokeRequestContext(
 		context.Background(),
 		config.DefaultConfig(),
-		ChatCompletionsSmokeRequest{Name: "text"},
+		TextToolSmokeRequest{Name: "text"},
 		NoopDiagnosticToolDefinitions("xelyon_test_probe", "Test"),
 		io.Discard,
 	)
@@ -53,11 +53,11 @@ func TestNewChatCompletionsSmokeRequestContextDisablesToolsForText(t *testing.T)
 	}
 }
 
-func TestNewChatCompletionsSmokeRequestContextAddsToolsForToolPayload(t *testing.T) {
-	ctx := NewChatCompletionsSmokeRequestContext(
+func TestNewTextToolSmokeRequestContextAddsToolsForToolPayload(t *testing.T) {
+	ctx := NewTextToolSmokeRequestContext(
 		context.Background(),
 		config.DefaultConfig(),
-		ChatCompletionsSmokeRequest{Name: "tool", ToolPayload: true},
+		TextToolSmokeRequest{Name: "tool", ToolPayload: true},
 		NoopDiagnosticToolDefinitions("xelyon_test_probe", "Test"),
 		io.Discard,
 	)
@@ -95,10 +95,10 @@ func TestSmokeUsageAndCostAggregation(t *testing.T) {
 	}
 }
 
-func TestSkippedChatCompletionsToolEntries(t *testing.T) {
-	request := ChatCompletionsSmokeRequest{Name: "tool", ToolPayload: true}
+func TestSkippedTextToolEntries(t *testing.T) {
+	request := TextToolSmokeRequest{Name: "tool", ToolPayload: true}
 
-	smoke := NewSkippedChatCompletionsToolSmokeRequest(request, "chat_completions", "Provider function calling payloads are disabled")
+	smoke := NewSkippedTextToolSmokeRequest(request, "chat_completions", "Provider function calling payloads are disabled")
 	if !smoke.Skipped || smoke.Ran || !smoke.ToolPayload || smoke.Name != "tool" || smoke.Route != "chat_completions" {
 		t.Fatalf("skipped smoke request = %+v, want skipped tool entry", smoke)
 	}
@@ -106,7 +106,7 @@ func TestSkippedChatCompletionsToolEntries(t *testing.T) {
 		t.Fatalf("smoke skip reason = %q", smoke.SkipReason)
 	}
 
-	preview := NewSkippedChatCompletionsToolPreviewRequest(request, "chat_completions", "Provider function calling payloads are disabled")
+	preview := NewSkippedTextToolPreviewRequest(request, "chat_completions", "Provider function calling payloads are disabled")
 	if !preview.Skipped || !preview.ToolPayload || preview.Name != "tool" || preview.Route != "chat_completions" {
 		t.Fatalf("skipped preview request = %+v, want skipped tool entry", preview)
 	}
@@ -115,9 +115,9 @@ func TestSkippedChatCompletionsToolEntries(t *testing.T) {
 	}
 }
 
-func TestAddChatCompletionsSmokeRequestResult(t *testing.T) {
-	result := ChatCompletionsSmokeResult{Ran: true, Route: "chat_completions"}
-	text := ChatCompletionsSmokeRequestResult{
+func TestAddTextToolSmokeRequestResult(t *testing.T) {
+	result := TextToolSmokeResult{Ran: true, Route: "chat_completions"}
+	text := TextToolSmokeRequestResult{
 		Name:          "text",
 		Ran:           true,
 		Route:         "chat_completions",
@@ -126,13 +126,13 @@ func TestAddChatCompletionsSmokeRequestResult(t *testing.T) {
 		Usage:         SmokeUsage{InputTokens: 10, OutputTokens: 3},
 		Cost:          SmokeCost{USD: 0.125},
 	}
-	AddChatCompletionsSmokeRequestResult(&result, text)
+	AddTextToolSmokeRequestResult(&result, text)
 
 	if result.Content != "ok" || !result.UsageObserved || result.Usage.InputTokens != 10 || result.Cost.USD != 0.125 {
 		t.Fatalf("result after text observation = %+v, want content, usage and cost", result)
 	}
 
-	tool := ChatCompletionsSmokeRequestResult{
+	tool := TextToolSmokeRequestResult{
 		Name:          "tool",
 		Ran:           true,
 		ToolPayload:   true,
@@ -142,7 +142,7 @@ func TestAddChatCompletionsSmokeRequestResult(t *testing.T) {
 		Usage:         SmokeUsage{InputTokens: 2, OutputTokens: 1},
 		Cost:          SmokeCost{USD: 0.25},
 	}
-	AddChatCompletionsSmokeRequestResult(&result, tool)
+	AddTextToolSmokeRequestResult(&result, tool)
 
 	if !result.ToolPayload || result.Content != "ok" {
 		t.Fatalf("result after tool observation = %+v, want tool payload and first content preserved", result)
@@ -150,13 +150,13 @@ func TestAddChatCompletionsSmokeRequestResult(t *testing.T) {
 	if result.Usage.InputTokens != 12 || result.Usage.OutputTokens != 4 || result.Cost.USD != 0.375 {
 		t.Fatalf("result after tool observation = %+v, want summed usage and cost", result)
 	}
-	if !AllChatCompletionsSmokeRequestsObservedUsage(result.Requests) {
-		t.Fatalf("AllChatCompletionsSmokeRequestsObservedUsage(%+v) = false, want true", result.Requests)
+	if !AllTextToolSmokeRequestsObservedUsage(result.Requests) {
+		t.Fatalf("AllTextToolSmokeRequestsObservedUsage(%+v) = false, want true", result.Requests)
 	}
 
-	AddChatCompletionsSmokeRequestResult(&result, ChatCompletionsSmokeRequestResult{Name: "followup", Ran: true})
-	if AllChatCompletionsSmokeRequestsObservedUsage(result.Requests) {
-		t.Fatalf("AllChatCompletionsSmokeRequestsObservedUsage(%+v) = true, want false for partial usage", result.Requests)
+	AddTextToolSmokeRequestResult(&result, TextToolSmokeRequestResult{Name: "followup", Ran: true})
+	if AllTextToolSmokeRequestsObservedUsage(result.Requests) {
+		t.Fatalf("AllTextToolSmokeRequestsObservedUsage(%+v) = true, want false for partial usage", result.Requests)
 	}
 }
 

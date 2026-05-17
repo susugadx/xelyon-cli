@@ -12,16 +12,16 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// ChatCompletionsSmokeRequest は OpenAI-compatible doctor smoke の request 単位を表す。
-type ChatCompletionsSmokeRequest struct {
+// TextToolSmokeRequest は provider doctor の text/tool smoke request 単位を表す。
+type TextToolSmokeRequest struct {
 	Name         string
 	SystemPrompt string
 	UserContent  string
 	ToolPayload  bool
 }
 
-// ChatCompletionsSmokeRequestResult は OpenAI-compatible doctor smoke の request 単位結果を表す。
-type ChatCompletionsSmokeRequestResult struct {
+// TextToolSmokeRequestResult は provider doctor の text/tool smoke request 単位結果を表す。
+type TextToolSmokeRequestResult struct {
 	Name          string     `json:"name"`
 	Ran           bool       `json:"ran"`
 	Skipped       bool       `json:"skipped,omitempty"`
@@ -36,21 +36,21 @@ type ChatCompletionsSmokeRequestResult struct {
 	Error         string     `json:"error,omitempty"`
 }
 
-// ChatCompletionsSmokeResult は OpenAI-compatible doctor smoke 実行結果を表す。
-type ChatCompletionsSmokeResult struct {
-	Ran           bool                                `json:"ran"`
-	ToolPayload   bool                                `json:"tool_payload"`
-	Route         string                              `json:"route"`
-	Content       string                              `json:"content,omitempty"`
-	Duration      string                              `json:"duration,omitempty"`
-	UsageObserved bool                                `json:"usage_observed"`
-	Usage         SmokeUsage                          `json:"usage"`
-	Cost          SmokeCost                           `json:"cost"`
-	Requests      []ChatCompletionsSmokeRequestResult `json:"requests,omitempty"`
+// TextToolSmokeResult は provider doctor の text/tool smoke 実行結果を表す。
+type TextToolSmokeResult struct {
+	Ran           bool                         `json:"ran"`
+	ToolPayload   bool                         `json:"tool_payload"`
+	Route         string                       `json:"route"`
+	Content       string                       `json:"content,omitempty"`
+	Duration      string                       `json:"duration,omitempty"`
+	UsageObserved bool                         `json:"usage_observed"`
+	Usage         SmokeUsage                   `json:"usage"`
+	Cost          SmokeCost                    `json:"cost"`
+	Requests      []TextToolSmokeRequestResult `json:"requests,omitempty"`
 }
 
-// ChatCompletionsRequestPreviewRequest は OpenAI-compatible doctor preview の request 単位結果を表す。
-type ChatCompletionsRequestPreviewRequest struct {
+// TextToolRequestPreviewRequest は provider doctor の text/tool preview request 単位結果を表す。
+type TextToolRequestPreviewRequest struct {
 	Name        string            `json:"name"`
 	Skipped     bool              `json:"skipped,omitempty"`
 	SkipReason  string            `json:"skip_reason,omitempty"`
@@ -73,7 +73,7 @@ type TextToolSmokeRequestOptions struct {
 }
 
 // TextToolSmokeRequests は text/tool smoke の request plan を構築する。
-func TextToolSmokeRequests(options TextToolSmokeRequestOptions) []ChatCompletionsSmokeRequest {
+func TextToolSmokeRequests(options TextToolSmokeRequestOptions) []TextToolSmokeRequest {
 	textSmoke := options.TextSmoke || !options.ToolSmoke
 	if options.ToolSmoke && !options.FunctionCallingEnabled {
 		textSmoke = true
@@ -83,16 +83,16 @@ func TextToolSmokeRequests(options TextToolSmokeRequestOptions) []ChatCompletion
 	toolName := strings.TrimSpace(options.ToolName)
 	toolExpectedValue := strings.TrimSpace(options.ToolExpectedValue)
 
-	var requests []ChatCompletionsSmokeRequest
+	var requests []TextToolSmokeRequest
 	if textSmoke {
-		requests = append(requests, ChatCompletionsSmokeRequest{
+		requests = append(requests, TextToolSmokeRequest{
 			Name:         "text",
 			SystemPrompt: "Reply briefly.",
 			UserContent:  fmt.Sprintf("Reply with: xelyon %s doctor ok", providerSlug),
 		})
 	}
 	if options.ToolSmoke {
-		requests = append(requests, ChatCompletionsSmokeRequest{
+		requests = append(requests, TextToolSmokeRequest{
 			Name:         "tool",
 			SystemPrompt: "Use the diagnostic tool.",
 			UserContent:  fmt.Sprintf(`Call %s exactly once with {"value":"%s"} and do not answer in prose.`, toolName, toolExpectedValue),
@@ -102,9 +102,9 @@ func TextToolSmokeRequests(options TextToolSmokeRequestOptions) []ChatCompletion
 	return requests
 }
 
-// NewSkippedChatCompletionsToolSmokeRequest は function calling 無効時の skipped tool smoke entry を構築する。
-func NewSkippedChatCompletionsToolSmokeRequest(request ChatCompletionsSmokeRequest, route, skipReason string) ChatCompletionsSmokeRequestResult {
-	return ChatCompletionsSmokeRequestResult{
+// NewSkippedTextToolSmokeRequest は function calling 無効時の skipped tool smoke entry を構築する。
+func NewSkippedTextToolSmokeRequest(request TextToolSmokeRequest, route, skipReason string) TextToolSmokeRequestResult {
+	return TextToolSmokeRequestResult{
 		Name:        request.Name,
 		Skipped:     true,
 		SkipReason:  strings.TrimSpace(skipReason),
@@ -113,9 +113,9 @@ func NewSkippedChatCompletionsToolSmokeRequest(request ChatCompletionsSmokeReque
 	}
 }
 
-// NewSkippedChatCompletionsToolPreviewRequest は function calling 無効時の skipped tool preview entry を構築する。
-func NewSkippedChatCompletionsToolPreviewRequest(request ChatCompletionsSmokeRequest, route, skipReason string) ChatCompletionsRequestPreviewRequest {
-	return ChatCompletionsRequestPreviewRequest{
+// NewSkippedTextToolPreviewRequest は function calling 無効時の skipped tool preview entry を構築する。
+func NewSkippedTextToolPreviewRequest(request TextToolSmokeRequest, route, skipReason string) TextToolRequestPreviewRequest {
+	return TextToolRequestPreviewRequest{
 		Name:        request.Name,
 		Skipped:     true,
 		SkipReason:  strings.TrimSpace(skipReason),
@@ -124,8 +124,8 @@ func NewSkippedChatCompletionsToolPreviewRequest(request ChatCompletionsSmokeReq
 	}
 }
 
-// AddChatCompletionsSmokeRequestResult は request-level smoke 結果を追加し summary に集約する。
-func AddChatCompletionsSmokeRequestResult(result *ChatCompletionsSmokeResult, request ChatCompletionsSmokeRequestResult) {
+// AddTextToolSmokeRequestResult は request-level smoke 結果を追加し summary に集約する。
+func AddTextToolSmokeRequestResult(result *TextToolSmokeResult, request TextToolSmokeRequestResult) {
 	if result == nil {
 		return
 	}
@@ -145,11 +145,11 @@ func AddChatCompletionsSmokeRequestResult(result *ChatCompletionsSmokeResult, re
 
 	result.Usage = AddSmokeUsage(result.Usage, request.Usage)
 	result.Cost = AddSmokeCost(result.Cost, request.Cost)
-	result.UsageObserved = AllChatCompletionsSmokeRequestsObservedUsage(result.Requests)
+	result.UsageObserved = AllTextToolSmokeRequestsObservedUsage(result.Requests)
 }
 
-// AllChatCompletionsSmokeRequestsObservedUsage は skipped 以外の実行済み request すべてで usage が観測されたかを返す。
-func AllChatCompletionsSmokeRequestsObservedUsage(requests []ChatCompletionsSmokeRequestResult) bool {
+// AllTextToolSmokeRequestsObservedUsage は skipped 以外の実行済み request すべてで usage が観測されたかを返す。
+func AllTextToolSmokeRequestsObservedUsage(requests []TextToolSmokeRequestResult) bool {
 	observedAnyRequest := false
 	for _, request := range requests {
 		if request.Skipped || !request.Ran {
@@ -163,11 +163,11 @@ func AllChatCompletionsSmokeRequestsObservedUsage(requests []ChatCompletionsSmok
 	return observedAnyRequest
 }
 
-// NewChatCompletionsSmokeRequestContext は doctor smoke/preview 用の runtime context を構築する。
-func NewChatCompletionsSmokeRequestContext(
+// NewTextToolSmokeRequestContext は doctor smoke/preview 用の runtime context を構築する。
+func NewTextToolSmokeRequestContext(
 	ctx context.Context,
 	cfg *config.Config,
-	request ChatCompletionsSmokeRequest,
+	request TextToolSmokeRequest,
 	toolDefinitions []api.ToolDefinition,
 	output io.Writer,
 ) context.Context {
@@ -188,7 +188,7 @@ func NewChatCompletionsSmokeRequestContext(
 	return config.WithContext(requestCtx, cfg)
 }
 
-// RedactedBearerHeaders は request preview 用の認証済み Chat Completions headers を返す。
+// RedactedBearerHeaders は request preview 用の redacted bearer 認証 headers を返す。
 func RedactedBearerHeaders() map[string]string {
 	return map[string]string{
 		"Content-Type":  "application/json",
@@ -217,7 +217,7 @@ func ContentHasToolCall(content, toolName string) bool {
 	return strings.Contains(content, `"tool":"`+strings.TrimSpace(toolName)+`"`)
 }
 
-// SmokeUsage は Chat Completions doctor smoke で観測した usage を表す。
+// SmokeUsage は doctor smoke で観測した usage を表す。
 type SmokeUsage struct {
 	InputTokens         int `json:"input_tokens"`
 	OutputTokens        int `json:"output_tokens"`
@@ -226,7 +226,7 @@ type SmokeUsage struct {
 	CacheCreationTokens int `json:"cache_creation_tokens"`
 }
 
-// SmokeCost は Chat Completions doctor smoke の cost estimate を表す。
+// SmokeCost は doctor smoke の cost estimate を表す。
 type SmokeCost struct {
 	USD                float64 `json:"usd"`
 	PricingUnavailable bool    `json:"pricing_unavailable"`

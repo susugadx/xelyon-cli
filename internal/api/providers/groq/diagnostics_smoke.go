@@ -21,7 +21,7 @@ const (
 	groqDiagnosticSmokeToolName               = "xelyon_groq_doctor_probe"
 )
 
-type groqDiagnosticSmokeRequest = providerdiag.ChatCompletionsSmokeRequest
+type groqDiagnosticSmokeRequest = providerdiag.TextToolSmokeRequest
 
 func runGroqDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
 	timeout := options.SmokeTimeout
@@ -50,15 +50,15 @@ func runGroqDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 	started := time.Now()
 	for _, request := range groqDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			providerdiag.AddChatCompletionsSmokeRequestResult(
+			providerdiag.AddTextToolSmokeRequestResult(
 				&result,
-				providerdiag.NewSkippedChatCompletionsToolSmokeRequest(request, report.Route, groqDiagnosticDisabledToolSkipReason()),
+				providerdiag.NewSkippedTextToolSmokeRequest(request, report.Route, groqDiagnosticDisabledToolSkipReason()),
 			)
 			continue
 		}
 
 		requestResult, err := runGroqDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
-		providerdiag.AddChatCompletionsSmokeRequestResult(&result, requestResult)
+		providerdiag.AddTextToolSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -141,7 +141,7 @@ func runGroqDiagnosticSmokeRequest(
 }
 
 func newGroqDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request groqDiagnosticSmokeRequest, output io.Writer) context.Context {
-	return providerdiag.NewChatCompletionsSmokeRequestContext(
+	return providerdiag.NewTextToolSmokeRequestContext(
 		ctx,
 		cfg,
 		request,

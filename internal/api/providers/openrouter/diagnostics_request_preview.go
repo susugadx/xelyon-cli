@@ -47,7 +47,7 @@ func buildOpenRouterDiagnosticRequestPreview(
 	preview := DiagnosticRequestPreview{}
 	for _, request := range openRouterDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			preview.Requests = append(preview.Requests, newOpenRouterDiagnosticSkippedToolPreviewRequest(request.Name, report.Route))
+			preview.Requests = append(preview.Requests, providerdiag.NewSkippedTextToolPreviewRequest(request, report.Route, openRouterDiagnosticToolSmokeSkipReason))
 			continue
 		}
 

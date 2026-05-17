@@ -46,7 +46,7 @@ func buildDeepSeekDiagnosticRequestPreview(
 	preview := DiagnosticRequestPreview{}
 	for _, request := range deepSeekDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			preview.Requests = append(preview.Requests, providerdiag.NewSkippedChatCompletionsToolPreviewRequest(request, report.Route, deepSeekDiagnosticDisabledToolSkipReason()))
+			preview.Requests = append(preview.Requests, providerdiag.NewSkippedTextToolPreviewRequest(request, report.Route, deepSeekDiagnosticDisabledToolSkipReason()))
 			continue
 		}
 

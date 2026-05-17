@@ -20,7 +20,7 @@ const (
 	ollamaDiagnosticSmokeToolName               = "xelyon_ollama_doctor_probe"
 )
 
-type ollamaDiagnosticSmokeRequest = providerdiag.ChatCompletionsSmokeRequest
+type ollamaDiagnosticSmokeRequest = providerdiag.TextToolSmokeRequest
 
 func runOllamaDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
 	timeout := options.SmokeTimeout
@@ -162,7 +162,7 @@ func runOllamaDiagnosticSmokeRequest(
 }
 
 func newOllamaDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request ollamaDiagnosticSmokeRequest, output io.Writer) context.Context {
-	return providerdiag.NewChatCompletionsSmokeRequestContext(ctx, cfg, request, ollamaDiagnosticSmokeToolDefinitions(), output)
+	return providerdiag.NewTextToolSmokeRequestContext(ctx, cfg, request, ollamaDiagnosticSmokeToolDefinitions(), output)
 }
 
 func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {

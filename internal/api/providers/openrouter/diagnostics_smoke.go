@@ -22,7 +22,7 @@ const (
 	openRouterDiagnosticToolSmokeSkipReason         = "OpenRouter function calling payloads are disabled (OPENROUTER_FUNCTION_CALLING=0)"
 )
 
-type openRouterDiagnosticSmokeRequest = providerdiag.ChatCompletionsSmokeRequest
+type openRouterDiagnosticSmokeRequest = providerdiag.TextToolSmokeRequest
 
 func runOpenRouterDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
 	timeout := options.SmokeTimeout
@@ -51,13 +51,15 @@ func runOpenRouterDiagnosticSmoke(ctx context.Context, cfg *config.Config, repor
 	started := time.Now()
 	for _, request := range openRouterDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, newOpenRouterDiagnosticSkippedToolSmokeRequest(request.Name, report.Route))
+			providerdiag.AddTextToolSmokeRequestResult(
+				&result,
+				providerdiag.NewSkippedTextToolSmokeRequest(request, report.Route, openRouterDiagnosticToolSmokeSkipReason),
+			)
 			continue
 		}
 
 		requestResult, err := runOpenRouterDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddTextToolSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -76,26 +78,6 @@ func openRouterDiagnosticSmokeRequests(options DiagnosticOptions, functionCallin
 		ToolName:               openRouterDiagnosticSmokeToolName,
 		ToolExpectedValue:      "openrouter-tool-ok",
 	})
-}
-
-func newOpenRouterDiagnosticSkippedToolSmokeRequest(name, route string) DiagnosticSmokeRequestResult {
-	return DiagnosticSmokeRequestResult{
-		Name:        name,
-		Skipped:     true,
-		SkipReason:  openRouterDiagnosticToolSmokeSkipReason,
-		ToolPayload: true,
-		Route:       route,
-	}
-}
-
-func newOpenRouterDiagnosticSkippedToolPreviewRequest(name, route string) DiagnosticRequestPreviewRequest {
-	return DiagnosticRequestPreviewRequest{
-		Name:        name,
-		Skipped:     true,
-		SkipReason:  openRouterDiagnosticToolSmokeSkipReason,
-		ToolPayload: true,
-		Route:       route,
-	}
 }
 
 func runOpenRouterDiagnosticSmokeRequest(
@@ -134,15 +116,15 @@ func runOpenRouterDiagnosticSmokeRequest(
 		Content:       strings.TrimSpace(content),
 		Duration:      elapsed.String(),
 		UsageObserved: usageObserved,
-		Usage:         openRouterDiagnosticSmokeUsage(usage),
-		Cost:          openRouterDiagnosticSmokeCost(costEstimate),
+		Usage:         providerdiag.SmokeUsageFromAPIUsage(usage),
+		Cost:          providerdiag.SmokeCostFromEstimate(costEstimate),
 	}
 	if err != nil {
 		result.Error = err.Error()
 		return result, err
 	}
 	if request.ToolPayload {
-		if !openRouterDiagnosticSmokeContentHasToolCall(content) {
+		if !providerdiag.ContentHasToolCall(content, openRouterDiagnosticSmokeToolName) {
 			result.Error = fmt.Sprintf("tool smoke response did not include %s function_call", openRouterDiagnosticSmokeToolName)
 			return result, errors.New(result.Error)
 		}
@@ -156,7 +138,13 @@ func runOpenRouterDiagnosticSmokeRequest(
 }
 
 func newOpenRouterDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request openRouterDiagnosticSmokeRequest, output io.Writer) context.Context {
-	return providerdiag.NewChatCompletionsSmokeRequestContext(ctx, cfg, request, openRouterDiagnosticSmokeToolDefinitions(), output)
+	return providerdiag.NewTextToolSmokeRequestContext(
+		ctx,
+		cfg,
+		request,
+		providerdiag.NoopDiagnosticToolDefinitions(openRouterDiagnosticSmokeToolName, "OpenRouter"),
+		output,
+	)
 }
 
 func applyOpenRouterDiagnosticToolChoice(provider *Provider, request openRouterDiagnosticSmokeRequest) {
@@ -167,39 +155,6 @@ func applyOpenRouterDiagnosticToolChoice(provider *Provider, request openRouterD
 	provider.ClearToolChoice()
 }
 
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	if request.ToolPayload {
-		r.ToolPayload = true
-	}
-	if r.Route == "" {
-		r.Route = request.Route
-	}
-	if strings.TrimSpace(r.Content) == "" {
-		r.Content = request.Content
-	}
-
-	r.Usage = providerdiag.AddSmokeUsage(r.Usage, request.Usage)
-	r.Cost = providerdiag.AddSmokeCost(r.Cost, request.Cost)
-	r.UsageObserved = r.allRanRequestsObservedUsage()
-}
-
-func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
-	observedAnyRequest := false
-	for _, request := range r.Requests {
-		if request.Skipped || !request.Ran {
-			continue
-		}
-		observedAnyRequest = true
-		if !request.UsageObserved {
-			return false
-		}
-	}
-	return observedAnyRequest
-}
-
 func openRouterSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 	for _, request := range smoke.Requests {
 		if request.ToolPayload && request.Ran && strings.TrimSpace(request.Error) != "" {
@@ -207,20 +162,4 @@ func openRouterSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 		}
 	}
 	return false
-}
-
-func openRouterDiagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return providerdiag.SmokeUsageFromAPIUsage(usage)
-}
-
-func openRouterDiagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return providerdiag.SmokeCostFromEstimate(estimate)
-}
-
-func openRouterDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
-	return providerdiag.NoopDiagnosticToolDefinitions(openRouterDiagnosticSmokeToolName, "OpenRouter")
-}
-
-func openRouterDiagnosticSmokeContentHasToolCall(content string) bool {
-	return providerdiag.ContentHasToolCall(content, openRouterDiagnosticSmokeToolName)
 }
