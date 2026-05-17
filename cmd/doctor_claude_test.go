@@ -8,49 +8,6 @@ import (
 	claudeprovider "github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 )
 
-func TestRunClaudeDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
-	setClaudeDoctorCommandTestEnv(t, "")
-
-	cmd, out := newDoctorSubcommandTest(t, newClaudeDoctorCommand)
-
-	doctorClaudeModelFlag = "corp-claude-model"
-	doctorCatalogModelFlag = "claude-sonnet-4-6"
-	doctorToolSmokeFlag = true
-	doctorPrintRequestFlag = true
-	doctorJSONFlag = true
-
-	if err := runClaudeDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runClaudeDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
-	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
-	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
-	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
-	if request.Name != "tool" || !request.ToolPayload || request.Route != "claude_messages" {
-		t.Fatalf("preview request = %#v, want Claude tool Messages request", request)
-	}
-	requireDoctorJSONRequestPreviewHeader(t, request, "x-api-key", "<redacted>")
-	requireDoctorJSONRequestPreviewHeader(t, request, "anthropic-version", "2023-06-01")
-	body := requireDoctorJSONRequestPreviewBody[struct {
-		Model string `json:"model"`
-		Tools []struct {
-			Name string `json:"name"`
-		} `json:"tools"`
-		ToolChoice struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
-		} `json:"tool_choice"`
-	}](t, request)
-	if body.Model != "corp-claude-model" || len(body.Tools) != 1 || body.Tools[0].Name != "xelyon_claude_doctor_probe" {
-		t.Fatalf("request body = %#v, want model and diagnostic Claude tool", body)
-	}
-	if body.ToolChoice.Type != "tool" || body.ToolChoice.Name != "xelyon_claude_doctor_probe" {
-		t.Fatalf("tool_choice = %#v, want forced diagnostic Claude tool", body.ToolChoice)
-	}
-}
-
 func TestRunClaudeDoctorInvocation_PrintRequestJSONReportsProxyEndpointWarning(t *testing.T) {
 	proxyURL := "https://claude.example/proxy"
 	setClaudeDoctorCommandTestEnv(t, "")

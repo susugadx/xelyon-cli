@@ -9,45 +9,6 @@ import (
 	azureprovider "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 )
 
-func TestRunAzureDoctorInvocation_PrintRequestJSONDoesNotRequireAuth(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
-	t.Setenv("AZURE_OPENAI_API_KEY", "")
-	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
-	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
-
-	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
-
-	doctorDeploymentFlag = "corp-gpt55-pro-deployment"
-	doctorCatalogModelFlag = "gpt-5.5-pro"
-	doctorAzureRetentionSmokeFlag = true
-	doctorPrintRequestFlag = true
-	doctorJSONFlag = true
-
-	if err := runAzureDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
-	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 2)
-	followup := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 1, "retention_followup")
-	if followup.Name != "retention_followup" || !followup.RetentionPayload {
-		t.Fatalf("followup preview = %#v, want retention followup", followup)
-	}
-	if followup.URL != "https://example.openai.azure.com/openai/v1/responses" {
-		t.Fatalf("followup URL = %q, want Azure Responses endpoint", followup.URL)
-	}
-	body := requireDoctorJSONRequestPreviewBody[struct {
-		Model              string `json:"model"`
-		Store              bool   `json:"store"`
-		PreviousResponseID string `json:"previous_response_id"`
-	}](t, followup)
-	if body.Model != "corp-gpt55-pro-deployment" || !body.Store || body.PreviousResponseID != followup.PreviousResponseID {
-		t.Fatalf("followup body = %#v, want deployment, store true, and placeholder previous_response_id", body)
-	}
-}
-
 func TestRunAzureDoctorInvocation_CapabilitiesJSONDoesNotRequireEndpointOrAuth(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	_ = os.Unsetenv("AZURE_OPENAI_BASE_URL")

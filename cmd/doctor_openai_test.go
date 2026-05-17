@@ -10,40 +10,6 @@ import (
 	openaiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 )
 
-func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("OPENAI_API_KEY", "")
-	t.Setenv("OPENAI_API_URL", "")
-	t.Setenv("OPENAI_RESPONSES_URL", "")
-
-	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
-
-	doctorOpenAIModelFlag = "gpt-5.5-pro"
-	doctorCatalogModelFlag = "gpt-5.5-pro"
-	doctorOpenAIRetentionSmokeFlag = true
-	doctorPrintRequestFlag = true
-	doctorJSONFlag = true
-
-	if err := runOpenAIDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
-	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 2)
-	followup := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 1, "retention_followup")
-	if followup.Name != "retention_followup" || !followup.RetentionPayload {
-		t.Fatalf("followup preview = %#v, want retention followup", followup)
-	}
-	body := requireDoctorJSONRequestPreviewBody[struct {
-		Store              bool   `json:"store"`
-		PreviousResponseID string `json:"previous_response_id"`
-	}](t, followup)
-	if followup.PreviousResponseID == "" || body.PreviousResponseID != followup.PreviousResponseID || !body.Store {
-		t.Fatalf("followup previous/store = body:%#v request:%#v, want placeholder previous_response_id and store true", body, followup)
-	}
-}
-
 func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsChatProxyEndpointWarning(t *testing.T) {
 	proxyURL := "https://openai.example/proxy/chat"
 	t.Setenv("HOME", t.TempDir())

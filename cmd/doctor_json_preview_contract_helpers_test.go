@@ -52,6 +52,16 @@ func requireDoctorJSONPreviewRequests(t *testing.T, preview doctorJSONRequestPre
 	}
 }
 
+func requireDoctorJSONPreviewSetupContract(t *testing.T, report doctorJSONContractReport, want doctorJSONPreviewSetupContract) {
+	t.Helper()
+	if want.apiURL != "" && report.APIURL != want.apiURL {
+		t.Fatalf("api_url = %q, want setup URL %q", report.APIURL, want.apiURL)
+	}
+	if want.networkRequests != nil && want.networkRequests.Load() != 0 {
+		t.Fatalf("print-request sent %d network requests, want 0", want.networkRequests.Load())
+	}
+}
+
 func requireDoctorJSONRequestPreviewByName(t *testing.T, preview doctorJSONRequestPreview, name string) doctorJSONRequestPreviewRequest {
 	t.Helper()
 	var found *doctorJSONRequestPreviewRequest

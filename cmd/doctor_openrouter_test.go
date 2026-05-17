@@ -46,56 +46,6 @@ func TestRunOpenRouterDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t
 	requireDoctorJSONCheckStatus(t, imageInput, "ok")
 }
 
-func TestRunOpenRouterDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("OPENROUTER_API_KEY", "")
-	t.Setenv("OPENROUTER_API_URL", "")
-	t.Setenv("OPENROUTER_FUNCTION_CALLING", "1")
-
-	cmd, out := newDoctorSubcommandTest(t, newOpenRouterDoctorCommand)
-
-	doctorOpenRouterModelFlag = "anthropic/claude-sonnet-4.6"
-	doctorCatalogModelFlag = "anthropic/claude-sonnet-4.6"
-	doctorToolSmokeFlag = true
-	doctorPrintRequestFlag = true
-	doctorJSONFlag = true
-
-	if err := runOpenRouterDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runOpenRouterDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
-	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
-	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
-	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
-	if request.Name != "tool" || !request.ToolPayload || request.Route != "anthropic_messages" {
-		t.Fatalf("preview request = %#v, want Anthropic Skin tool payload", request)
-	}
-	requireDoctorJSONRequestPreviewHeader(t, request, "Authorization", "Bearer <redacted>")
-	requireDoctorJSONRequestPreviewHeader(t, request, "X-Title", "XELYON CLI")
-	body := requireDoctorJSONRequestPreviewBody[struct {
-		Model            string `json:"model"`
-		AnthropicVersion string `json:"anthropic_version"`
-		MaxTokens        int    `json:"max_tokens"`
-		Tools            []any  `json:"tools"`
-		ToolChoice       struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
-		} `json:"tool_choice"`
-		ContextManagement any `json:"context_management"`
-	}](t, request)
-	if body.Model != "anthropic/claude-sonnet-4.6" ||
-		body.AnthropicVersion == "" ||
-		body.MaxTokens != 64 ||
-		len(body.Tools) != 1 ||
-		body.ToolChoice.Type != "tool" ||
-		body.ToolChoice.Name != "xelyon_openrouter_doctor_probe" ||
-		body.ContextManagement == nil {
-		t.Fatalf("preview body = %#v, want diagnostic Anthropic Skin body", body)
-	}
-}
-
 func TestRunOpenRouterDoctorInvocation_PrintRequestJSONReportsMessagesEndpointFailure(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("OPENROUTER_API_KEY", "")

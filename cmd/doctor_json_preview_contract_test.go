@@ -2,16 +2,20 @@ package cmd
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
 
 type doctorJSONPreviewContractCase struct {
+	name               string
 	provider           string
 	newCommand         func() *cobra.Command
 	run                func(*cobra.Command, []string) error
-	setup              func(*testing.T, *cobra.Command)
+	setup              func(*testing.T, *cobra.Command) doctorJSONPreviewSetupContract
 	requiredJSONFields []string
 	want               doctorJSONContractIdentity
 	requiredChecks     []string
@@ -38,11 +42,16 @@ type doctorJSONPreviewRequestContract struct {
 	bodyOmittedTopFields []string
 }
 
+type doctorJSONPreviewSetupContract struct {
+	apiURL          string
+	networkRequests *atomic.Int32
+}
+
 func TestDoctorJSONPrintRequestProviderContractMatrix(t *testing.T) {
 	for _, tc := range doctorJSONPreviewContractCases() {
-		t.Run(tc.provider, func(t *testing.T) {
+		t.Run(doctorJSONPreviewContractCaseName(tc), func(t *testing.T) {
 			cmd, out := newDoctorSubcommandTest(t, tc.newCommand)
-			tc.setup(t, cmd)
+			setupContract := tc.setup(t, cmd)
 			setDoctorCommandFlag(t, cmd, "print-request", "true")
 			setDoctorCommandFlag(t, cmd, "json", "true")
 
@@ -60,6 +69,7 @@ func TestDoctorJSONPrintRequestProviderContractMatrix(t *testing.T) {
 			}, tc.requiredJSONFields...)...)
 			requireDoctorJSONFieldsOmitted(t, raw, "smoke")
 			requireDoctorJSONContractIdentity(t, report, tc.want)
+			requireDoctorJSONPreviewSetupContract(t, report, setupContract)
 			requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
 			for _, check := range tc.requiredChecks {
 				requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, check), "ok")
@@ -68,6 +78,13 @@ func TestDoctorJSONPrintRequestProviderContractMatrix(t *testing.T) {
 			requireDoctorJSONPreviewRequests(t, report.RequestPreview, tc.previewCount, tc.previewRequests)
 		})
 	}
+}
+
+func doctorJSONPreviewContractCaseName(tc doctorJSONPreviewContractCase) string {
+	if tc.name == "" {
+		return tc.provider
+	}
+	return tc.provider + "/" + tc.name
 }
 
 func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
@@ -119,7 +136,7 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				toolPayload:  true,
 				urlContains:  []string{"/chat/completions"},
 				headers:      redactedBearerHeaders,
-				bodyContains: []string{`"model":"deepseek-v4-flash"`, "xelyon_deepseek_doctor_probe", `"thinking":{"type":"disabled"}`},
+				bodyContains: []string{`"model":"deepseek-v4-flash"`, `"max_tokens":64`, "xelyon_deepseek_doctor_probe", `"tool_choice"`, `"thinking":{"type":"disabled"}`},
 			}},
 		},
 		{
@@ -150,6 +167,7 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 					`"model":"corp-groq-model"`,
 					"xelyon_groq_doctor_probe",
 					`"max_tokens":64`,
+					`"tool_choice"`,
 				},
 			}},
 		},
@@ -165,7 +183,6 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				catalogModel:       "qwen2.5-coder:7b",
 				catalogModelSource: "--catalog-model",
 				route:              "ollama_chat",
-				apiURLContains:     []string{"http://127.0.0.1:11434"},
 			},
 			requiredChecks: []string{"auth", "endpoint", "provider_registration", "catalog_policy", "function_calling", "request_preview"},
 			previewCount:   1,
@@ -174,12 +191,14 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				route:       "ollama_chat",
 				method:      "POST",
 				toolPayload: true,
-				urlContains: []string{"http://127.0.0.1:11434/api/chat"},
+				urlContains: []string{"/api/chat"},
 				headers:     map[string]string{"Content-Type": "application/json"},
 				bodyContains: []string{
 					`"model":"qwen2.5-coder:7b"`,
 					`"stream":true`,
+					`"num_predict":64`,
 					"xelyon_ollama_doctor_probe",
+					`"tool_choice":"xelyon_ollama_doctor_probe"`,
 				},
 			}},
 		},
@@ -214,11 +233,14 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				bodyContains: []string{
 					`"model":"anthropic/claude-sonnet-4.6"`,
 					"xelyon_openrouter_doctor_probe",
+					`"max_tokens":64`,
+					`"tool_choice"`,
 					`"context_management"`,
 				},
 			}},
 		},
 		{
+			name:               "tool",
 			provider:           "openai",
 			newCommand:         newOpenAIDoctorCommand,
 			run:                runOpenAIDoctorInvocation,
@@ -250,10 +272,76 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			}},
 		},
 		{
+			name:               "retention",
+			provider:           "openai",
+			newCommand:         newOpenAIDoctorCommand,
+			run:                runOpenAIDoctorInvocation,
+			setup:              setupOpenAIJSONPreviewRetentionContract,
+			requiredJSONFields: []string{"api_url", "responses_url", "model", "model_source", "catalog_model", "catalog_model_source", "route_reason", "max_output_tokens", "function_calling_enabled"},
+			want: doctorJSONContractIdentity{
+				model:                "gpt-5.5-pro",
+				modelSource:          "--model",
+				catalogModel:         "gpt-5.5-pro",
+				catalogModelSource:   "--catalog-model",
+				route:                "responses_non_streaming",
+				responsesURLContains: []string{"/v1/responses"},
+			},
+			requiredChecks: []string{"api_url", "responses_url", "provider_registration", "model", "route", "catalog_policy", "function_calling", "request_preview"},
+			omittedChecks:  []string{"auth"},
+			previewCount:   2,
+			previewRequests: []doctorJSONPreviewRequestContract{{
+				name:               "retention_followup",
+				route:              "responses_non_streaming",
+				method:             "POST",
+				retentionPayload:   true,
+				previousResponseID: true,
+				urlContains:        []string{"/v1/responses"},
+				headers:            map[string]string{"Content-Type": "application/json"},
+				bodyContains: []string{
+					`"model":"gpt-5.5-pro"`,
+					`"store":true`,
+					`"previous_response_id":"${retention_initial.response_id}"`,
+				},
+			}},
+		},
+		{
+			name:               "no-auth-retention",
 			provider:           "azure",
 			newCommand:         newAzureDoctorCommand,
 			run:                runAzureDoctorInvocation,
 			setup:              setupAzureJSONPreviewContract,
+			requiredJSONFields: []string{"normalized_base_url", "auth_mode", "deployment", "deployment_source", "catalog_model", "catalog_model_source", "route_reason", "function_calling_enabled"},
+			want: doctorJSONContractIdentity{
+				deployment:            "corp-azure-gpt55",
+				catalogModel:          "gpt-5.5-pro",
+				catalogModelSource:    "--catalog-model",
+				route:                 "responses_non_streaming",
+				normalizedURLContains: []string{"https://example.openai.azure.com/openai/v1"},
+			},
+			requiredChecks: []string{"base_url", "deployment", "catalog_model", "route", "catalog_policy", "function_calling", "request_preview"},
+			omittedChecks:  []string{"auth"},
+			previewCount:   2,
+			previewRequests: []doctorJSONPreviewRequestContract{{
+				name:               "retention_followup",
+				route:              "responses_non_streaming",
+				method:             "POST",
+				retentionPayload:   true,
+				previousResponseID: true,
+				urlContains:        []string{"https://example.openai.azure.com/openai/v1/responses"},
+				headers:            map[string]string{"Content-Type": "application/json"},
+				bodyContains: []string{
+					`"model":"corp-azure-gpt55"`,
+					`"store":true`,
+					`"previous_response_id":"${retention_initial.response_id}"`,
+				},
+			}},
+		},
+		{
+			name:               "keyed-retention",
+			provider:           "azure",
+			newCommand:         newAzureDoctorCommand,
+			run:                runAzureDoctorInvocation,
+			setup:              setupAzureJSONPreviewKeyedContract,
 			requiredJSONFields: []string{"normalized_base_url", "auth_mode", "deployment", "deployment_source", "catalog_model", "catalog_model_source", "route_reason", "function_calling_enabled"},
 			want: doctorJSONContractIdentity{
 				deployment:            "corp-azure-gpt55",
@@ -307,6 +395,7 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				bodyContains: []string{
 					`"model":"corp-kimi-model"`,
 					"xelyon_kimi_doctor_probe",
+					`"tools"`,
 					`"tool_choice"`,
 				},
 			}},
@@ -326,7 +415,7 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				apiURLContains:     []string{":streamGenerateContent", "alt=sse"},
 			},
 			requiredChecks: []string{"endpoint", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "thinking", "context_caching", "web_search", "request_preview"},
-			omittedChecks:  []string{"smoke"},
+			omittedChecks:  []string{"auth", "smoke"},
 			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
@@ -337,6 +426,7 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				headers:     map[string]string{"Content-Type": "application/json", "x-goog-api-key": "<redacted>"},
 				bodyContains: []string{
 					"xelyon_gemini_doctor_probe",
+					`"function_declarations"`,
 					`"function_calling_config":{"mode":"ANY"}`,
 				},
 			}},
@@ -356,6 +446,7 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				apiURLContains:     []string{"/v1/messages"},
 			},
 			requiredChecks: []string{"endpoint", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "thinking", "context_management", "web_search", "request_preview"},
+			omittedChecks:  []string{"auth"},
 			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
@@ -367,6 +458,7 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 				bodyContains: []string{
 					`"model":"corp-claude-model"`,
 					"xelyon_claude_doctor_probe",
+					`"max_tokens":64`,
 					`"tool_choice"`,
 				},
 			}},
@@ -406,50 +498,60 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 	}
 }
 
-func setupDeepSeekJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupDeepSeekJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
-	t.Setenv("DEEPSEEK_API_KEY", "sk-test")
+	t.Setenv("DEEPSEEK_API_KEY", "")
 	t.Setenv("DEEPSEEK_API_URL", "")
 	t.Setenv("DEEPSEEK_FUNCTION_CALLING", "1")
 	setDoctorCommandFlag(t, cmd, "model", "deepseek-v4-flash")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "deepseek-v4-flash")
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
-func setupGroqJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupGroqJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
-	t.Setenv("GROQ_API_KEY", "gsk-test")
+	t.Setenv("GROQ_API_KEY", "")
 	t.Setenv("GROQ_API_URL", "")
 	t.Setenv("GROQ_FUNCTION_CALLING", "1")
 	setDoctorCommandFlag(t, cmd, "model", "corp-groq-model")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "meta-llama/llama-4-scout-17b-16e-instruct")
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
-func setupOllamaJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupOllamaJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
-	t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+	var networkRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		networkRequests.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("OLLAMA_BASE_URL", server.URL)
 	t.Setenv("OLLAMA_FUNCTION_CALLING", "1")
 	setDoctorCommandFlag(t, cmd, "model", "qwen2.5-coder:7b")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "qwen2.5-coder:7b")
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{apiURL: server.URL, networkRequests: &networkRequests}
 }
 
-func setupOpenRouterJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupOpenRouterJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
-	t.Setenv("OPENROUTER_API_KEY", "sk-or-test")
+	t.Setenv("OPENROUTER_API_KEY", "")
 	t.Setenv("OPENROUTER_API_URL", "")
 	t.Setenv("OPENROUTER_FUNCTION_CALLING", "1")
 	setDoctorCommandFlag(t, cmd, "model", "anthropic/claude-sonnet-4.6")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "anthropic/claude-sonnet-4.6")
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
-func setupOpenAIJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupOpenAIJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
 	t.Setenv("OPENAI_API_KEY", "sk-test")
@@ -459,9 +561,36 @@ func setupOpenAIJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
 	setDoctorCommandFlag(t, cmd, "model", "corp-openai-responses")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "gpt-5.4")
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
-func setupAzureJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupOpenAIJSONPreviewRetentionContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
+	t.Helper()
+	setCommonDoctorJSONPreviewEnv(t)
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", "")
+	setDoctorCommandFlag(t, cmd, "model", "gpt-5.5-pro")
+	setDoctorCommandFlag(t, cmd, "catalog-model", "gpt-5.5-pro")
+	setDoctorCommandFlag(t, cmd, "retention-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
+}
+
+func setupAzureJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
+	t.Helper()
+	setCommonDoctorJSONPreviewEnv(t)
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+	t.Setenv("AZURE_OPENAI_API_KEY", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
+	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
+	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "1")
+	setDoctorCommandFlag(t, cmd, "deployment", "corp-azure-gpt55")
+	setDoctorCommandFlag(t, cmd, "catalog-model", "gpt-5.5-pro")
+	setDoctorCommandFlag(t, cmd, "retention-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
+}
+
+func setupAzureJSONPreviewKeyedContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
@@ -472,43 +601,47 @@ func setupAzureJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
 	setDoctorCommandFlag(t, cmd, "deployment", "corp-azure-gpt55")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "gpt-5.5-pro")
 	setDoctorCommandFlag(t, cmd, "retention-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
-func setupKimiJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupKimiJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
-	t.Setenv("MOONSHOT_API_KEY", "moonshot-key")
+	t.Setenv("MOONSHOT_API_KEY", "")
 	t.Setenv("KIMI_API_URL", "")
 	t.Setenv("KIMI_FUNCTION_CALLING", "1")
 	setDoctorCommandFlag(t, cmd, "model", "corp-kimi-model")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "kimi-k2.6")
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
-func setupGeminiJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupGeminiJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
-	t.Setenv("GEMINI_API_KEY", "gemini-key")
+	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GEMINI_API_URL", "")
 	t.Setenv("GEMINI_CONTEXT_CACHING", "")
 	t.Setenv("GEMINI_FC_MODE", "")
 	setDoctorCommandFlag(t, cmd, "model", "corp-gemini-model")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "gemini-3.1-pro-preview-customtools")
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
-func setupClaudeJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupClaudeJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
-	t.Setenv("ANTHROPIC_API_KEY", "claude-key")
+	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("ANTHROPIC_API_URL", "")
 	t.Setenv("CLAUDE_FUNCTION_CALLING", "1")
 	setDoctorCommandFlag(t, cmd, "model", "corp-claude-model")
 	setDoctorCommandFlag(t, cmd, "catalog-model", "claude-sonnet-4-6")
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
-func setupBedrockJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
+func setupBedrockJSONPreviewContract(t *testing.T, cmd *cobra.Command) doctorJSONPreviewSetupContract {
 	t.Helper()
 	setCommonDoctorJSONPreviewEnv(t)
 	setBedrockDoctorCommandTestEnv(t)
@@ -519,6 +652,7 @@ func setupBedrockJSONPreviewContract(t *testing.T, cmd *cobra.Command) {
 	setDoctorCommandFlag(t, cmd, "model", "corp-bedrock-sonnet")
 	setDoctorCommandFlag(t, cmd, "catalog-model", bedrockDoctorCatalogModelForTest)
 	setDoctorCommandFlag(t, cmd, "tool-smoke", "true")
+	return doctorJSONPreviewSetupContract{}
 }
 
 func setCommonDoctorJSONPreviewEnv(t *testing.T) {

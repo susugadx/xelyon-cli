@@ -8,50 +8,6 @@ import (
 	geminiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/gemini"
 )
 
-func TestRunGeminiDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
-	setGeminiDoctorCommandTestEnv(t, "")
-
-	cmd, out := newDoctorSubcommandTest(t, newGeminiDoctorCommand)
-
-	doctorGeminiModelFlag = "gemini-3.1-pro-preview-customtools"
-	doctorCatalogModelFlag = "gemini-3.1-pro-preview-customtools"
-	doctorToolSmokeFlag = true
-	doctorPrintRequestFlag = true
-	doctorJSONFlag = true
-
-	if err := runGeminiDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runGeminiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
-	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
-	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
-	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
-	if request.Name != "tool" || !request.ToolPayload || request.Route != "stream_generate_content_sse" {
-		t.Fatalf("preview request = %#v, want Gemini tool stream request", request)
-	}
-	requireDoctorJSONRequestPreviewHeader(t, request, "x-goog-api-key", "<redacted>")
-	body := requireDoctorJSONRequestPreviewBody[struct {
-		ToolConfig struct {
-			FunctionCallingConfig struct {
-				Mode string `json:"mode"`
-			} `json:"function_calling_config"`
-		} `json:"tool_config"`
-		Tools []struct {
-			FunctionDeclarations []struct {
-				Name string `json:"name"`
-			} `json:"function_declarations"`
-		} `json:"tools"`
-	}](t, request)
-	if body.ToolConfig.FunctionCallingConfig.Mode != "ANY" {
-		t.Fatalf("tool mode = %q, want ANY", body.ToolConfig.FunctionCallingConfig.Mode)
-	}
-	if len(body.Tools) != 1 || len(body.Tools[0].FunctionDeclarations) != 1 || body.Tools[0].FunctionDeclarations[0].Name != "xelyon_gemini_doctor_probe" {
-		t.Fatalf("tools = %#v, want diagnostic Gemini tool", body.Tools)
-	}
-}
-
 func TestRootCommand_GeminiDoctorCommandParsesFlags(t *testing.T) {
 	setGeminiDoctorCommandTestEnv(t, "gemini-key")
 

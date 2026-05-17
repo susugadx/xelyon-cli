@@ -11,55 +11,6 @@ import (
 	ollamaprovider "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 )
 
-func TestRunOllamaDoctorInvocation_PrintRequestJSONDoesNotSendNetwork(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests++
-		t.Fatalf("unexpected network request: %s %s", r.Method, r.URL.Path)
-	}))
-	defer server.Close()
-	t.Setenv("OLLAMA_BASE_URL", server.URL)
-	t.Setenv("OLLAMA_FUNCTION_CALLING", "1")
-
-	cmd, out := newDoctorSubcommandTest(t, newOllamaDoctorCommand)
-
-	doctorOllamaModelFlag = "qwen2.5-coder:7b"
-	doctorCatalogModelFlag = "qwen2.5-coder:7b"
-	doctorToolSmokeFlag = true
-	doctorPrintRequestFlag = true
-	doctorJSONFlag = true
-
-	if err := runOllamaDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runOllamaDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-	if requests != 0 {
-		t.Fatalf("network requests = %d, want 0", requests)
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
-	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "auth"), "ok")
-	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
-	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
-	if request.Name != "tool" || !request.ToolPayload {
-		t.Fatalf("preview request = %#v, want tool payload", request)
-	}
-	requireDoctorJSONRequestPreviewHeader(t, request, "Content-Type", "application/json")
-	body := requireDoctorJSONRequestPreviewBody[struct {
-		Model   string `json:"model"`
-		Stream  bool   `json:"stream"`
-		Options struct {
-			NumPredict int `json:"num_predict"`
-		} `json:"options"`
-		Tools      []any  `json:"tools"`
-		ToolChoice string `json:"tool_choice"`
-	}](t, request)
-	if body.Model != "qwen2.5-coder:7b" || !body.Stream || body.Options.NumPredict != 64 || len(body.Tools) != 1 || body.ToolChoice != "xelyon_ollama_doctor_probe" {
-		t.Fatalf("preview body = %#v, want diagnostic tool body", body)
-	}
-}
-
 func TestRootCommand_OllamaDoctorCommandParsesFlags(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	server := newOllamaDoctorCommandTestServer(t, []string{"qwen2.5-coder:7b"}, nil)

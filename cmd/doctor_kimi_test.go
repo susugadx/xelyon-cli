@@ -163,44 +163,6 @@ func TestRunKimiDoctorInvocation_UsesConfiguredModelWhenFlagOmitted(t *testing.T
 	}
 }
 
-func TestRunKimiDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
-	setKimiDoctorCommandTestEnv(t, "")
-
-	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
-
-	if err := cmd.Flags().Set("model", "corp-kimi-model"); err != nil {
-		t.Fatalf("set model flag: %v", err)
-	}
-	if err := cmd.Flags().Set("catalog-model", "kimi-k2.6"); err != nil {
-		t.Fatalf("set catalog-model flag: %v", err)
-	}
-	doctorToolSmokeFlag = true
-	doctorPrintRequestFlag = true
-	doctorJSONFlag = true
-
-	if err := runKimiDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runKimiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
-	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
-	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 4)
-	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 3, "tool_smoke")
-	if request.Name != "tool_smoke" || !request.ToolPayload || request.Route != "chat_completions" {
-		t.Fatalf("preview request = %#v, want Kimi tool request", request)
-	}
-	requireDoctorJSONRequestPreviewHeader(t, request, "Authorization", "Bearer <redacted>")
-	body := requireDoctorJSONRequestPreviewBody[struct {
-		Model      string `json:"model"`
-		Tools      []any  `json:"tools"`
-		ToolChoice any    `json:"tool_choice"`
-	}](t, request)
-	if body.Model != "corp-kimi-model" || len(body.Tools) != 1 || body.ToolChoice == nil {
-		t.Fatalf("request body = %#v, want model, diagnostic tool, and forced tool_choice", body)
-	}
-}
-
 func TestRunKimiDoctorInvocation_PrintRequestJSONReportsProxyEndpointWarning(t *testing.T) {
 	proxyURL := "https://kimi.example/proxy"
 
