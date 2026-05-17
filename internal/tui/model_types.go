@@ -27,8 +27,9 @@ const (
 )
 
 var statusHintsNormal = []string{
-	"Esc:NAV • /copy • drag:select",
-	"Esc:NAV • /copy",
+	"Esc:NAV • /plan • /copy • drag:select",
+	"Esc:NAV • /plan • /copy",
+	"Esc:NAV • /plan",
 }
 
 var statusHintsNav = []string{

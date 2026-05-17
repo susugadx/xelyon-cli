@@ -39,6 +39,28 @@ func TestTUIAdapter_WrapperStateAccessors(t *testing.T) {
 	}
 }
 
+func TestTUIAdapter_StatusSnapshotLabelsPlanModeState(t *testing.T) {
+	disableColors(t)
+
+	agent := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-5.4",
+		Stats:           &SessionStats{},
+		Runtime:         NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
+		PlanModeEnabled: false,
+	}
+	adapter := NewTUIAdapter(agent, nil)
+
+	if got := adapter.StatusSnapshot().Mode; got != "Plan: OFF" {
+		t.Fatalf("StatusSnapshot().Mode = %q, want Plan: OFF", got)
+	}
+
+	agent.PlanModeEnabled = true
+	if got := adapter.StatusSnapshot().Mode; got != "Plan: ON" {
+		t.Fatalf("StatusSnapshot().Mode = %q, want Plan: ON", got)
+	}
+}
+
 func TestTUIAdapter_CancelAndCleanup(t *testing.T) {
 	agent := &Agent{}
 	adapter := NewTUIAdapter(agent, nil)

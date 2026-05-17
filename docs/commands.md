@@ -420,6 +420,8 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 > /plan status    # ステータス表示
 ```
 
+TUI のステータスバーには現在値が `Plan: OFF` / `Plan: ON` と表示され、通常フッターの `/plan` ヒントから状態確認と切替コマンドを確認できます。
+
 **デフォルト:** OFF（通常モード）
 
 **通常モード（OFF）:**
@@ -435,8 +437,8 @@ Plan Modeを切り替えます。有効にすると、リクエストが「調�
 
 **ステータス表示:**
 ```
-[Status] waiting_input | Mode: Normal | Ready / 入力待ち
-[Status] waiting_input | Mode: 📋 Plan | Ready / 入力待ち
+[Status] waiting_input | Mode: Plan: OFF | Ready / 入力待ち
+[Status] waiting_input | Mode: Plan: ON | Ready / 入力待ち
 ```
 
 ### `/thinking`, `/think`

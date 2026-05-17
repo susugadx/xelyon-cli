@@ -35,7 +35,7 @@ func TestModel_UpdateStatusMsgUpdatesSnapshotMode(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
 	m.statusSnapshot = StatusSnapshot{
-		Mode:       "Plan",
+		Mode:       "Plan: ON",
 		LegacyLine: "ready",
 	}
 
@@ -49,7 +49,7 @@ func TestModel_UpdateStatusMsgUpdatesSnapshotMode(t *testing.T) {
 	if !strings.Contains(plain, "running") {
 		t.Fatalf("status text should contain updated status, got %q", plain)
 	}
-	if strings.Contains(plain, "Plan") {
+	if strings.Contains(plain, "Plan: ON") {
 		t.Fatalf("status text should not keep stale mode, got %q", plain)
 	}
 }

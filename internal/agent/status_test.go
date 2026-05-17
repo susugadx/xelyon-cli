@@ -267,6 +267,26 @@ func TestPrintStatusFooter_UsesRuntimeOutput(t *testing.T) {
 	}
 }
 
+func TestFormatStatusLine_LabelsPlanModeState(t *testing.T) {
+	disableColors(t)
+
+	agent := &Agent{
+		CurrentModel: "gpt-5.4",
+		ProviderName: "openai",
+		Stats:        NewSessionStats("openai", "gpt-5.4"),
+		Runtime:      NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
+	}
+
+	if got := agent.FormatStatusLine(); !strings.Contains(got, "Plan: OFF") {
+		t.Fatalf("FormatStatusLine() should label disabled plan mode, got %q", got)
+	}
+
+	agent.PlanModeEnabled = true
+	if got := agent.FormatStatusLine(); !strings.Contains(got, "Plan: ON") {
+		t.Fatalf("FormatStatusLine() should label enabled plan mode, got %q", got)
+	}
+}
+
 func TestPrintStatusFooter_IncludesSubAgentCost(t *testing.T) {
 	var out bytes.Buffer
 

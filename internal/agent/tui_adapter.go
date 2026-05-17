@@ -140,10 +140,7 @@ func (a *TUIAdapter) StatusSnapshot() tui.StatusSnapshot {
 		return tui.StatusSnapshot{}
 	}
 	agent := a.agent
-	modeText := "Normal"
-	if agent.PlanModeEnabled {
-		modeText = "Plan"
-	}
+	modeText := planModeStatusText(agent.PlanModeEnabled)
 
 	tokens := "0"
 	var estimate cost.CostEstimate

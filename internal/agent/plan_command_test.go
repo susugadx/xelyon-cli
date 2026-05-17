@@ -158,6 +158,9 @@ func TestHandlePlanCommand_StatusUsesRuntimeOutput(t *testing.T) {
 	if !strings.Contains(output, "Plan Mode: OFF") {
 		t.Fatalf("expected runtime output to contain plan status, got %q", output)
 	}
+	if !strings.Contains(output, "切替: /plan toggle") {
+		t.Fatalf("expected runtime output to contain plan toggle guidance, got %q", output)
+	}
 }
 
 func TestHandlePlanCommand_StatusOnUsesHandoffDescription(t *testing.T) {

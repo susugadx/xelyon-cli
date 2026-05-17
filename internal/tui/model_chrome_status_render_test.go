@@ -71,6 +71,9 @@ func TestModel_RenderStatusBar_ContainsHints(t *testing.T) {
 	if !strings.Contains(bar, "ready") {
 		t.Fatalf("status bar should contain status text, got %q", bar)
 	}
+	if !strings.Contains(bar, "/plan") {
+		t.Fatalf("status bar should show plan-mode command hint, got %q", bar)
+	}
 }
 
 func TestModel_BuildStatusTextPrioritizesProcessingSegments(t *testing.T) {
@@ -105,16 +108,19 @@ func TestModel_BuildStatusTextPrioritizesProcessingSegments(t *testing.T) {
 }
 
 func TestModel_BuildStatusTextKeepsProcessingSummaryCompact(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready", processing: true}
-	m := newModelWithViewport(agent)
-	m.statusSnapshot = StatusSnapshot{
-		Provider:   "openai",
-		Model:      "gpt-5.4",
-		Mode:       "Plan",
-		Tokens:     "12.3k",
-		Cost:       "~$0.123",
-		LegacyLine: "legacy",
+	agent := &stubAgent{
+		statusLine: "legacy",
+		processing: true,
+		statusSnapshot: StatusSnapshot{
+			Provider:   "openai",
+			Model:      "gpt-5.4",
+			Mode:       "Plan: ON",
+			Tokens:     "12.3k",
+			Cost:       "~$0.123",
+			LegacyLine: "legacy",
+		},
 	}
+	m := newModelWithViewport(agent)
 	m.appendToolResult(ToolResult{
 		ID:        "tool-1",
 		Name:      "read_file",
@@ -125,7 +131,7 @@ func TestModel_BuildStatusTextKeepsProcessingSummaryCompact(t *testing.T) {
 	})
 
 	plain := stripANSI(m.buildStatusText(time.Now()))
-	for _, fragment := range []string{"openai/gpt-5.4", "12.3k tok", "~$0.123"} {
+	for _, fragment := range []string{"openai/gpt-5.4", "Plan: ON", "12.3k tok", "~$0.123"} {
 		if !strings.Contains(plain, fragment) {
 			t.Fatalf("status text missing %q, got %q", fragment, plain)
 		}
@@ -136,25 +142,27 @@ func TestModel_BuildStatusTextKeepsProcessingSummaryCompact(t *testing.T) {
 }
 
 func TestModel_BuildStatusTextIdleUsesLegacyLineDetails(t *testing.T) {
-	agent := &stubAgent{statusLine: "ready"}
-	m := newModelWithViewport(agent)
-	m.statusLine = "● gpt-5.4 │ openai │ Normal │ 12.3k │ ~$0.123"
-	m.statusSnapshot = StatusSnapshot{
-		Provider:   "openai",
-		Model:      "gpt-5.4",
-		Mode:       "Normal",
-		Tokens:     "12.3k",
-		Cost:       "~$0.123",
-		LegacyLine: m.statusLine,
+	statusLine := "● gpt-5.4 │ openai │ Plan: OFF │ 12.3k │ ~$0.123"
+	agent := &stubAgent{
+		statusLine: statusLine,
+		statusSnapshot: StatusSnapshot{
+			Provider:   "openai",
+			Model:      "gpt-5.4",
+			Mode:       "Plan: OFF",
+			Tokens:     "12.3k",
+			Cost:       "~$0.123",
+			LegacyLine: statusLine,
+		},
 	}
+	m := newModelWithViewport(agent)
 
 	plain := stripANSI(m.buildStatusText(time.Now()))
-	for _, fragment := range []string{"gpt-5.4", "openai", "12.3k", "~$0.123"} {
+	for _, fragment := range []string{"gpt-5.4", "openai", "Plan: OFF", "12.3k", "~$0.123"} {
 		if !strings.Contains(plain, fragment) {
 			t.Fatalf("idle status text missing %q, got %q", fragment, plain)
 		}
 	}
-	if strings.TrimSpace(plain) == "Normal" {
+	if strings.TrimSpace(plain) == "Plan: OFF" {
 		t.Fatalf("idle status text should not collapse to mode only, got %q", plain)
 	}
 }

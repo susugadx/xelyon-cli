@@ -88,12 +88,9 @@ func (a *Agent) statusRef() *statusHolder {
 }
 
 // FormatStatusLine はステータスバーに表示する文字列を返す。
-// Format: ● model │ Mode │ tokens │ ~$cost
+// Format: ● model │ provider │ Plan: ON/OFF │ tokens │ ~$cost
 func (a *Agent) FormatStatusLine() string {
-	modeText := "Normal"
-	if a.PlanModeEnabled {
-		modeText = "Plan"
-	}
+	modeText := planModeStatusText(a.PlanModeEnabled)
 
 	// TUI の spinner tick goroutine と agent.chat goroutine から同時にアクセスされるためロック
 	a.statsMu.Lock()
@@ -139,7 +136,7 @@ func (a *Agent) FormatStatusLine() string {
 }
 
 // PrintStatusFooter prints a status bar with divider lines.
-// Format: ● model │ Mode │ tokens │ ~$cost
+// Format: ● model │ provider │ Plan: ON/OFF │ tokens │ ~$cost
 // This should be called right before showing the input prompt.
 func (a *Agent) PrintStatusFooter() {
 	const dividerLine = "────────────────────────────────────────────"
@@ -158,10 +155,7 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 	printCommandHeaderToWriter(out, "Status / 状態")
 	_, _ = fmt.Fprintln(out)
 
-	modeText := "Normal"
-	if agent.PlanModeEnabled {
-		modeText = "Plan"
-	}
+	modeText := planModeStatusText(agent.PlanModeEnabled)
 
 	status := agent.statusRef().getStatus()
 	currentTokens := agent.EstimateTokens()
@@ -199,6 +193,13 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 	printSessionSections(agent)
 	_, _ = fmt.Fprintln(out)
 	return true
+}
+
+func planModeStatusText(enabled bool) string {
+	if enabled {
+		return "Plan: ON"
+	}
+	return "Plan: OFF"
 }
 
 func statusSurfaceSummary(commandSurface commandcatalog.CommandSurface) string {

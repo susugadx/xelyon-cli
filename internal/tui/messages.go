@@ -43,7 +43,7 @@ type ToolResult struct {
 type StatusSnapshot struct {
 	Provider   string
 	Model      string
-	Mode       string
+	Mode       string // TUI 表示用に整形済みのモード名（例: "Plan: ON"）
 	Tokens     string
 	Cost       string
 	LegacyLine string

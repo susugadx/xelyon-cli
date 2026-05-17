@@ -26,6 +26,7 @@ type statusTextSegmentKey string
 const (
 	statusSegmentPrimary   statusTextSegmentKey = "primary"
 	statusSegmentProvider  statusTextSegmentKey = "provider"
+	statusSegmentMode      statusTextSegmentKey = "mode"
 	statusSegmentTokens    statusTextSegmentKey = "tokens"
 	statusSegmentCost      statusTextSegmentKey = "cost"
 	statusSegmentNewOutput statusTextSegmentKey = "new_output"
@@ -62,6 +63,9 @@ func (m *Model) statusTextSegments(now time.Time) []statusTextSegment {
 		segments = append(segments, statusTextSegment{text: m.spinner.View(), key: statusSegmentPrimary})
 		if providerModel := providerModelStatusText(snapshot, statusLine); providerModel != "" {
 			segments = append(segments, statusTextSegment{text: chrome.StatusFg + providerModel + chrome.Reset, key: statusSegmentProvider})
+		}
+		if mode := processingModeStatusText(snapshot); mode != "" {
+			segments = append(segments, statusTextSegment{text: chrome.StatusFg + mode + chrome.Reset, key: statusSegmentMode})
 		}
 		if snapshot.Tokens != "" {
 			segments = append(segments, statusTextSegment{text: chrome.StatusFg + snapshot.Tokens + " tok" + chrome.Reset, key: statusSegmentTokens})
@@ -149,6 +153,14 @@ func providerModelStatusText(snapshot StatusSnapshot, fallback string) string {
 	}
 }
 
+func processingModeStatusText(snapshot StatusSnapshot) string {
+	mode := strings.TrimSpace(snapshot.Mode)
+	if mode == "" || mode == strings.TrimSpace(snapshot.LegacyLine) {
+		return ""
+	}
+	return mode
+}
+
 func (m Model) activeStatusHints() []string {
 	if m.hasActiveMouseSelection() || m.mouseDragging {
 		return statusHintsMouseSel
@@ -203,6 +215,7 @@ func (m Model) fitStatusBarSegments(req statusBarLayoutRequest, segments []statu
 		statusSegmentTokens,
 		statusSegmentNewOutput,
 		statusSegmentTransient,
+		statusSegmentMode,
 	}
 	for dropCount := 0; dropCount <= len(dropOrder)+1; dropCount++ {
 		dropped := make(map[statusTextSegmentKey]struct{}, dropCount)
