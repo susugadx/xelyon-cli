@@ -196,6 +196,12 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 		dim.Fprintln(out, "  No request usage data available")
 	}
 
+	if summary, ok := providerHistoryReductionStatusSummary(agent.Runtime); ok {
+		_, _ = fmt.Fprintln(out)
+		green.Fprintln(out, "🧾 Provider history reduction")
+		_, _ = fmt.Fprintf(out, "  %s\n", summary)
+	}
+
 	printSessionSections(agent)
 	_, _ = fmt.Fprintln(out)
 	return true

@@ -77,6 +77,14 @@ Phase 5b-4 enables replacement on user-facing provider request paths behind an i
 - Apply mode changes candidate `Content` on the provider projection clone, and may fill a missing projected tool-result `ToolName` from the matched assistant tool call. Tool call continuity, provider metadata, raw runtime history, raw session storage, and audit storage remain unchanged.
 - Internal model calls remain excluded: `CompressHistory`, Compact API compression, Gemini apply-patch repair, review model calls, and other isolated calls that use explicit single-user prompts or compact inputs do not call `providerFacingHistory()` and do not update the last projection report.
 
+Phase 5c exposes the last provider history reduction projection as a `/status` runtime diagnostic only.
+
+- `/status` shows a `Provider history reduction` section only when the internal runtime option is enabled without a report, or when `AgentRuntime.LastProviderHistoryProjectionReport` contains a non-empty report.
+- With the internal runtime option enabled and no report yet, `/status` prints `enabled; no report yet`.
+- With a report, `/status` prints a deterministic count/byte summary such as `mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B`.
+- The diagnostic reports counts and bytes only. It does not add token savings, cost estimates, config, CLI flags, environment flags, generated config, `/config`, or `/tokens` output.
+- The diagnostic remains runtime-only: it is not appended to `Agent.History`, `history.Session.Messages`, tool execution audit entries, audit logs, change records, compacted state, model input, or persisted session JSONL.
+
 ## Responses Continuation
 
 - OpenAI and Azure Responses builders read active context from request context.
