@@ -120,6 +120,7 @@ Claude / Anthropic:
 - Supports `--print-request`.
 - Live smoke supports text, tool, image, thinking, and native web search request types through the Claude runtime request builders. Native web search uses the Anthropic Messages endpoint with `web-search-2025-03-05` beta.
 - Request preview is credential-independent and records redacted `x-api-key`, `anthropic-version`, optional `anthropic-beta`, endpoint, route, and request body without sending network traffic.
+- `ANTHROPIC_API_URL` is an exact Messages endpoint / proxy override. The official Anthropic path ends with `/v1/messages`; other paths remain warn-only intentional proxy endpoints and are still used by request preview / live smoke.
 - Non-Claude `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token or cost policy.
 - `CLAUDE_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
 - Native web search smoke currently treats summary or source as the success condition and does not require token usage / cost observation.

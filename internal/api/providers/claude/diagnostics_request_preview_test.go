@@ -19,7 +19,8 @@ func TestDiagnoseClaude_PrintRequestBuildsTextToolImageThinkingAndWebBodies(t *t
 	}))
 	defer server.Close()
 
-	setClaudeDiagnosticTestEnv(t, server.URL, "")
+	proxyURL := server.URL + "/proxy"
+	setClaudeDiagnosticTestEnv(t, proxyURL, "")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:         config.DefaultConfig(),
@@ -41,6 +42,8 @@ func TestDiagnoseClaude_PrintRequestBuildsTextToolImageThinkingAndWebBodies(t *t
 	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 5 {
 		t.Fatalf("RequestPreview = %#v, want text/tool/image/thinking/web requests", report.RequestPreview)
 	}
+	requireClaudeDiagnosticCheckStatus(t, report, "endpoint", DiagnosticStatusWarn)
+	requireClaudePreviewRequestsUseURL(t, report, proxyURL)
 
 	text := report.RequestPreview.Requests[0]
 	if text.Name != "text" || text.Route != DiagnosticRouteClaudeMessages || text.Headers["x-api-key"] != "<redacted>" {

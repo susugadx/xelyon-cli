@@ -27,12 +27,13 @@ func init() {
 }
 
 const (
-	defaultClaudeURL        = "https://api.anthropic.com/v1/messages"
-	defaultClaudeModel      = "claude-sonnet-4-6"
-	anthropicAPIKeyEnv      = "ANTHROPIC_API_KEY"
-	anthropicAPIURLEnv      = "ANTHROPIC_API_URL"
-	claudeFunctionCallEnv   = "CLAUDE_FUNCTION_CALLING"
-	defaultAnthropicVersion = "2023-06-01"
+	claudeMessagesEndpointPath = "/v1/messages"
+	defaultClaudeURL           = "https://api.anthropic.com" + claudeMessagesEndpointPath
+	defaultClaudeModel         = "claude-sonnet-4-6"
+	anthropicAPIKeyEnv         = "ANTHROPIC_API_KEY"
+	anthropicAPIURLEnv         = "ANTHROPIC_API_URL"
+	claudeFunctionCallEnv      = "CLAUDE_FUNCTION_CALLING"
+	defaultAnthropicVersion    = "2023-06-01"
 )
 
 const (

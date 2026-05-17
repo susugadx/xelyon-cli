@@ -227,8 +227,12 @@ func TestDiagnoseClaude_ThinkingSmokeEnablesThinkingConfig(t *testing.T) {
 }
 
 func TestDiagnoseClaude_WebSearchSmokeUsesNativeWebSearchPayload(t *testing.T) {
+	const proxyPath = "/proxy"
 	var captured webSearchRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != proxyPath {
+			t.Fatalf("path = %s, want %s", r.URL.Path, proxyPath)
+		}
 		if r.Header.Get("anthropic-beta") != webSearchBetaHeader {
 			t.Fatalf("anthropic-beta = %q, want %s", r.Header.Get("anthropic-beta"), webSearchBetaHeader)
 		}
@@ -240,7 +244,7 @@ func TestDiagnoseClaude_WebSearchSmokeUsesNativeWebSearchPayload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	setClaudeDiagnosticTestEnv(t, server.URL, "claude-key")
+	setClaudeDiagnosticTestEnv(t, server.URL+proxyPath, "claude-key")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:         config.DefaultConfig(),
@@ -252,6 +256,7 @@ func TestDiagnoseClaude_WebSearchSmokeUsesNativeWebSearchPayload(t *testing.T) {
 	if report.HasFailures() {
 		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
 	}
+	requireClaudeDiagnosticCheckStatus(t, report, "endpoint", DiagnosticStatusWarn)
 	requireClaudeDiagnosticCheckStatus(t, report, "web_search_smoke", DiagnosticStatusOK)
 	requireClaudeDiagnosticCheckStatus(t, report, "usage", DiagnosticStatusWarn)
 	if report.Smoke == nil || report.Smoke.Route != DiagnosticRouteClaudeWebSearch || !report.Smoke.WebSearchPayload || !strings.Contains(report.Smoke.Content, "Summary:") || !strings.Contains(report.Smoke.Content, "Sources:") {

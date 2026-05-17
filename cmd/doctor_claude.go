@@ -19,11 +19,13 @@ func newClaudeDoctorCommand() *cobra.Command {
 Checks ANTHROPIC_API_KEY, ANTHROPIC_API_URL, provider registration, model/catalog
 model resolution, Anthropic Messages route, function calling, image input,
 thinking request config, context management, Claude compaction, native web
-search, and token/cost metadata. Use --smoke to send a live text request,
---tool-smoke to force a dummy tool call, --image-smoke to send one tiny image
-request, --thinking-smoke to send one thinking request, --web-search-smoke to
-verify native Claude web search, or --print-request to print sanitized request
-JSON without sending it.`,
+search, and token/cost metadata. ANTHROPIC_API_URL is an exact Messages
+endpoint override; the official path ends with /v1/messages, and other paths
+are treated as intentional proxy endpoints. Use --smoke to send a live text
+request, --tool-smoke to force a dummy tool call, --image-smoke to send one
+tiny image request, --thinking-smoke to send one thinking request,
+--web-search-smoke to verify native Claude web search, or --print-request to
+print sanitized request JSON without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runClaudeDoctorInvocation,
 	}

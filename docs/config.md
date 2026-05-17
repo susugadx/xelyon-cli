@@ -857,6 +857,8 @@ DeepSeek の `DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpo
 
 Kimi の `KIMI_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 Moonshot endpoint は `/v1/chat/completions` で終わります。別 path の proxy endpoint も指定できますが、`doctor kimi` では意図的な proxy path として warn になります。
 
+Claude の `ANTHROPIC_API_URL` は Messages まで含む完全な endpoint override です。公式 Anthropic endpoint は `/v1/messages` で終わります。別 path の proxy endpoint も指定できますが、`doctor claude` では意図的な proxy path として warn になります。
+
 Groq の `GROQ_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 Groq endpoint は `/openai/v1/chat/completions` で終わります。OpenAI 互換 proxy が `/v1/chat/completions` を公開する場合も指定できますが、`doctor groq` では意図的な proxy path として warn になります。
 
 OpenRouter の `OPENROUTER_API_URL` は Chat Completions endpoint または互換 proxy path を指定します。Claude 系 model で Anthropic Skin route を使う場合も `/v1/messages` は provider が派生するため、`OPENROUTER_API_URL` に直接 `/v1/messages` を指定しないでください。

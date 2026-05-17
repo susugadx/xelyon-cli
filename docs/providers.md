@@ -433,7 +433,7 @@ xelyon doctor claude --web-search-smoke
 xelyon doctor claude --json
 ```
 
-`ANTHROPIC_API_URL` は runtime と同じ exact endpoint / proxy override で、公式 Anthropic endpoint では `/v1/messages` を期待します。non-Claude `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Claude doctor の token / cost policy に使いません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--thinking-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では実行しません。手元では `ANTHROPIC_API_KEY` を設定して `make claude-doctor-smoke` を実行します。既定モデルは `CLAUDE_DOCTOR_SMOKE_MODEL ?= claude-sonnet-4-6`、timeout は `CLAUDE_DOCTOR_SMOKE_TIMEOUT ?= 180s` です。Claude native web search smoke は summary または source が返れば成功扱いで、現時点では token usage / cost 観測は必須にしません。
+`ANTHROPIC_API_URL` は runtime と同じ exact endpoint / proxy override で、公式 Anthropic endpoint では `/v1/messages` を期待します。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になり、`--print-request` / live smoke はその URL を実 request 先として使います。non-Claude `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Claude doctor の token / cost policy に使いません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--thinking-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では実行しません。手元では `ANTHROPIC_API_KEY` を設定して `make claude-doctor-smoke` を実行します。既定モデルは `CLAUDE_DOCTOR_SMOKE_MODEL ?= claude-sonnet-4-6`、timeout は `CLAUDE_DOCTOR_SMOKE_TIMEOUT ?= 180s` です。Claude native web search smoke は summary または source が返れば成功扱いで、現時点では token usage / cost 観測は必須にしません。
 
 ### 7. Groq
 

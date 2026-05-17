@@ -128,6 +128,43 @@ func TestRunClaudeDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testi
 	}
 }
 
+func TestRunClaudeDoctorInvocation_PrintRequestJSONReportsProxyEndpointWarning(t *testing.T) {
+	proxyURL := "https://claude.example/proxy"
+	setClaudeDoctorCommandTestEnv(t, "")
+	t.Setenv("ANTHROPIC_API_URL", proxyURL)
+
+	cmd, out := newDoctorSubcommandTest(t, newClaudeDoctorCommand)
+
+	doctorClaudeModelFlag = "corp-claude-model"
+	doctorCatalogModelFlag = "claude-sonnet-4-6"
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runClaudeDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runClaudeDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		APIURL         string `json:"api_url"`
+		RequestPreview struct {
+			Requests []struct {
+				URL string `json:"url"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.APIURL != proxyURL {
+		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
+	}
+	endpoint := requireDoctorJSONCheck(t, report.Checks, "endpoint")
+	requireDoctorJSONCheckStatus(t, endpoint, "warn")
+	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
+	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
+	if len(report.RequestPreview.Requests) != 1 || report.RequestPreview.Requests[0].URL != proxyURL {
+		t.Fatalf("request_preview = %#v, want configured proxy request URL", report.RequestPreview)
+	}
+}
+
 func TestRunClaudeDoctorInvocation_FailsForMissingKey(t *testing.T) {
 	setClaudeDoctorCommandTestEnv(t, "")
 
@@ -181,7 +218,7 @@ func TestRootCommand_ClaudeDoctorHelpShowsMinimalFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--image-smoke", "--thinking-smoke", "--web-search-smoke", "--print-request", "--timeout", "--json", "Diagnose Claude provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--image-smoke", "--thinking-smoke", "--web-search-smoke", "--print-request", "--timeout", "--json", "Diagnose Claude provider configuration", "exact Messages", "/v1/messages"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want Claude doctor help substring %q", out.String(), want)
 		}

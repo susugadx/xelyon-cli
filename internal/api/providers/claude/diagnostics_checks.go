@@ -55,17 +55,17 @@ func (r *DiagnosticReport) addEndpointCheck() {
 		return
 	}
 
-	if strings.Contains(parsed.Host, "anthropic.com") && parsed.Path != "/v1/messages" {
+	if strings.TrimRight(parsed.Path, "/") != claudeMessagesEndpointPath {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"endpoint",
-			fmt.Sprintf("%s may not match the Claude Messages route", anthropicAPIURLEnv),
+			fmt.Sprintf("%s does not end with %s", anthropicAPIURLEnv, claudeMessagesEndpointPath),
 			raw,
-			fmt.Sprintf("Use %s unless this is an intentional proxy endpoint", defaultClaudeURL),
+			"This is OK only for an intentional proxy endpoint",
 		)
 		return
 	}
-	r.addCheck(DiagnosticStatusOK, "endpoint", fmt.Sprintf("%s is configured", anthropicAPIURLEnv), raw, "")
+	r.addCheck(DiagnosticStatusOK, "endpoint", fmt.Sprintf("%s is configured", anthropicAPIURLEnv), r.APIURL, "")
 }
 
 func (r *DiagnosticReport) addProviderRegistrationCheck() {

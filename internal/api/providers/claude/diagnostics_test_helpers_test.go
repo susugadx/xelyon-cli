@@ -19,3 +19,18 @@ func requireClaudeToolChoice(t *testing.T, choice *ClaudeToolChoice, name string
 		t.Fatalf("ToolChoice = %+v, want forced %s tool choice", choice, name)
 	}
 }
+
+func requireClaudePreviewRequestsUseURL(t *testing.T, report DiagnosticReport, wantURL string) {
+	t.Helper()
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) == 0 {
+		t.Fatalf("RequestPreview = %#v, want preview requests", report.RequestPreview)
+	}
+	for _, request := range report.RequestPreview.Requests {
+		if request.Skipped {
+			continue
+		}
+		if request.URL != wantURL {
+			t.Fatalf("%s preview URL = %q, want %q", request.Name, request.URL, wantURL)
+		}
+	}
+}

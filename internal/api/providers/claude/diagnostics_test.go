@@ -127,28 +127,6 @@ func TestDiagnoseClaude_CatalogModelsKnownByPricingMetadata(t *testing.T) {
 	}
 }
 
-func TestDiagnoseClaude_EndpointCheck(t *testing.T) {
-	setClaudeDiagnosticTestEnv(t, "", "claude-key")
-
-	t.Setenv(anthropicAPIURLEnv, defaultClaudeURL)
-	report := Diagnose(context.Background(), DiagnosticOptions{Config: config.DefaultConfig()})
-	requireClaudeDiagnosticCheckStatus(t, report, "endpoint", DiagnosticStatusOK)
-
-	t.Setenv(anthropicAPIURLEnv, "https://api.anthropic.com/v1/complete")
-	report = Diagnose(context.Background(), DiagnosticOptions{Config: config.DefaultConfig()})
-	endpoint := requireClaudeDiagnosticCheckStatus(t, report, "endpoint", DiagnosticStatusWarn)
-	if !strings.Contains(endpoint.Suggestion, defaultClaudeURL) {
-		t.Fatalf("endpoint suggestion = %q, want Claude Messages guidance", endpoint.Suggestion)
-	}
-
-	t.Setenv(anthropicAPIURLEnv, "http://")
-	report = Diagnose(context.Background(), DiagnosticOptions{Config: config.DefaultConfig()})
-	requireClaudeDiagnosticCheckStatus(t, report, "endpoint", DiagnosticStatusFail)
-	if !report.HasFailures() {
-		t.Fatalf("HasFailures() = false, want invalid endpoint failure")
-	}
-}
-
 func requireClaudeDiagnosticCheckStatus(t *testing.T, report DiagnosticReport, name string, status DiagnosticStatus) DiagnosticCheck {
 	t.Helper()
 	for _, check := range report.Checks {
