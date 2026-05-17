@@ -48,7 +48,7 @@ func (r *DiagnosticReport) addAPIURLCheck() {
 		openAIAPIURLEnv,
 		r.APIURL,
 		defaultOpenAIURL,
-		"/v1/chat/completions",
+		openAIChatCompletionsEndpointPath,
 		r.Route == DiagnosticRouteChatCompletions,
 	)
 }
@@ -59,7 +59,7 @@ func (r *DiagnosticReport) addResponsesURLCheck() {
 		openAIResponsesURLEnv,
 		r.ResponsesURL,
 		defaultOpenAIResponsesURL,
-		"/v1/responses",
+		openAIResponsesEndpointPath,
 		r.Route != DiagnosticRouteChatCompletions,
 	)
 }

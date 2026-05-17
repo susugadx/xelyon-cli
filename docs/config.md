@@ -839,6 +839,7 @@ export KIMI_API_URL=https://your-proxy.com/v1/chat/completions
 
 # OpenAI
 export OPENAI_API_URL=https://your-proxy.com/v1/chat/completions
+export OPENAI_RESPONSES_URL=https://your-proxy.com/v1/responses
 
 # Claude (Anthropic)
 export ANTHROPIC_API_URL=https://your-proxy.com/v1/messages
@@ -856,6 +857,8 @@ export OPENROUTER_API_URL=https://your-proxy.com/v1/chat/completions
 DeepSeek の `DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 DeepSeek 互換 endpoint は `/chat/completions` で終わります。OpenAI 互換 proxy が `/v1/chat/completions` を公開する場合も指定できますが、`doctor deepseek` では意図的な proxy path として warn になります。
 
 Kimi の `KIMI_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 Moonshot endpoint は `/v1/chat/completions` で終わります。別 path の proxy endpoint も指定できますが、`doctor kimi` では意図的な proxy path として warn になります。
+
+OpenAI の `OPENAI_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 OpenAI Chat Completions endpoint は `/v1/chat/completions` で終わります。Responses API route では `OPENAI_RESPONSES_URL` が使われ、公式 endpoint は `/v1/responses` で終わります。別 path の proxy endpoint も指定できますが、`doctor openai` では意図的な proxy path として warn になり、request preview / live smoke は設定 URL をそのまま使います。
 
 Claude の `ANTHROPIC_API_URL` は Messages まで含む完全な endpoint override です。公式 Anthropic endpoint は `/v1/messages` で終わります。別 path の proxy endpoint も指定できますが、`doctor claude` では意図的な proxy path として warn になります。
 

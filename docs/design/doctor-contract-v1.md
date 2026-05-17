@@ -41,6 +41,8 @@
 OpenAI:
 
 - Checks `OPENAI_API_KEY`, `OPENAI_API_URL`, `OPENAI_RESPONSES_URL`, provider registration, model / `catalog_model`, route, function calling, catalog policy, retention settings.
+- `OPENAI_API_URL` is an exact Chat Completions endpoint override. The official OpenAI path ends with `/v1/chat/completions`; other paths remain warn-only intentional proxy endpoints and are still used by request preview / live smoke.
+- `OPENAI_RESPONSES_URL` is an exact Responses endpoint override. The official OpenAI path ends with `/v1/responses`; other paths remain warn-only intentional proxy endpoints and are still used by request preview / live smoke.
 - Supports local `--capabilities`, `--require-capability`, and `--print-request`.
 - Live smoke supports text, tool, and Responses retention chain.
 - Main owner packages: `cmd/doctor_openai.go`, `internal/api/providers/openai/diagnostics*.go`, `internal/providerdiag`.

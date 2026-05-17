@@ -216,7 +216,7 @@ xelyon doctor openai --smoke --tool-smoke --retention-smoke
 xelyon doctor openai --json
 ```
 
-`OPENAI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip し、tool payload / `tool_choice` は送信しません。`--retention-smoke` は Responses API route 専用で、Chat Completions route では live request を送らず fail します。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、通常 CI では実行しません。手元では `OPENAI_API_KEY` を設定して `make openai-doctor-smoke` を実行します。既定モデルは `OPENAI_DOCTOR_SMOKE_MODEL ?= gpt-5.4` です。
+`OPENAI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip し、tool payload / `tool_choice` は送信しません。`--retention-smoke` は Responses API route 専用で、Chat Completions route では live request を送らず fail します。`OPENAI_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 path は `/v1/chat/completions` です。`OPENAI_RESPONSES_URL` は Responses まで含む完全な endpoint override で、公式 path は `/v1/responses` です。別 path の proxy endpoint も指定できますが、`doctor openai` では意図的な proxy path として warn になり、request preview / live smoke は設定 URL をそのまま使います。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、通常 CI では実行しません。手元では `OPENAI_API_KEY` を設定して `make openai-doctor-smoke` を実行します。既定モデルは `OPENAI_DOCTOR_SMOKE_MODEL ?= gpt-5.4` です。
 
 ### 4. Azure OpenAI
 

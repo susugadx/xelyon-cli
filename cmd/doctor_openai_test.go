@@ -100,6 +100,100 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testi
 	}
 }
 
+func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsChatProxyEndpointWarning(t *testing.T) {
+	proxyURL := "https://openai.example/proxy/chat"
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", proxyURL)
+	t.Setenv("OPENAI_RESPONSES_URL", "")
+	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
+
+	doctorOpenAIModelFlag = "gpt-4"
+	doctorCatalogModelFlag = "gpt-4"
+	doctorToolSmokeFlag = true
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runOpenAIDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		APIURL         string `json:"api_url"`
+		RequestPreview struct {
+			Requests []struct {
+				Route string `json:"route"`
+				URL   string `json:"url"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.APIURL != proxyURL {
+		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
+	}
+	endpoint := requireDoctorJSONCheck(t, report.Checks, "api_url_path")
+	requireDoctorJSONCheckStatus(t, endpoint, "warn")
+	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
+	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
+	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "api_url"), "ok")
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	if len(report.RequestPreview.Requests) != 1 ||
+		report.RequestPreview.Requests[0].Route != string(openaiprovider.DiagnosticRouteChatCompletions) ||
+		report.RequestPreview.Requests[0].URL != proxyURL {
+		t.Fatalf("request_preview = %#v, want chat completions proxy request URL", report.RequestPreview)
+	}
+}
+
+func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsResponsesProxyEndpointWarning(t *testing.T) {
+	proxyURL := "https://openai.example/proxy/responses"
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", proxyURL)
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
+
+	doctorOpenAIModelFlag = "gpt-5.5-pro"
+	doctorCatalogModelFlag = "gpt-5.5-pro"
+	doctorOpenAIRetentionSmokeFlag = true
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runOpenAIDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		ResponsesURL   string `json:"responses_url"`
+		RequestPreview struct {
+			Requests []struct {
+				Route string `json:"route"`
+				URL   string `json:"url"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.ResponsesURL != proxyURL {
+		t.Fatalf("responses_url = %q, want configured proxy URL", report.ResponsesURL)
+	}
+	endpoint := requireDoctorJSONCheck(t, report.Checks, "responses_url_path")
+	requireDoctorJSONCheckStatus(t, endpoint, "warn")
+	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
+	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
+	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "responses_url"), "ok")
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	if len(report.RequestPreview.Requests) != 2 {
+		t.Fatalf("request_preview = %#v, want two retention requests", report.RequestPreview)
+	}
+	for _, request := range report.RequestPreview.Requests {
+		if request.Route != string(openaiprovider.DiagnosticRouteResponsesNonStreaming) || request.URL != proxyURL {
+			t.Fatalf("request_preview = %#v, want responses proxy request URLs", report.RequestPreview)
+		}
+	}
+}
+
 func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("OPENAI_API_KEY", "")
