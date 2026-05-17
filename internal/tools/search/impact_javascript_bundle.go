@@ -2,6 +2,8 @@ package search
 
 import (
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/impactplan"
 )
 
 func buildJavaScriptImpactBundle(symbol string, def genericSymbolDef, opts SearchOptions, refs javaScriptImpactRefs) *SymbolBundle {
@@ -48,13 +50,13 @@ func classifyJavaScriptImpactRisk(def genericSymbolDef, refs javaScriptImpactRef
 
 	switch {
 	case !hasTests && nonTestRefCount >= jsFamilyImpactHighNonTestReferenceThreshold:
-		return goImpactRiskHigh
+		return impactplan.RiskHigh
 	case exported && !hasTests && nonTestRefCount >= jsFamilyImpactMediumNonTestReferenceThreshold:
-		return goImpactRiskHigh
+		return impactplan.RiskHigh
 	case exported || !hasTests || nonTestRefCount >= jsFamilyImpactMediumNonTestReferenceThreshold:
-		return goImpactRiskMedium
+		return impactplan.RiskMedium
 	default:
-		return goImpactRiskLow
+		return impactplan.RiskLow
 	}
 }
 

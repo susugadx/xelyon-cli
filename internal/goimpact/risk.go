@@ -4,102 +4,32 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/impactplan"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 )
-
-const (
-	// RiskLow は低リスクの Go symbol impact を表す。
-	RiskLow = "low"
-	// RiskMedium は中リスクの Go symbol impact を表す。
-	RiskMedium = "medium"
-	// RiskHigh は高リスクの Go symbol impact を表す。
-	RiskHigh = "high"
-)
-
-// Plan は Go impact 解析で使う探索 budget と出力上限を表す。
-type Plan struct {
-	RiskLevel           string
-	Budget              navigation.Budget
-	ImplementationLimit int
-}
-
-// LowBudget は低リスク symbol の inspect budget。
-var LowBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 3,
-	RefLimit:    3,
-	TestLimit:   2,
-}
-
-// MediumBudget は中リスク symbol の inspect budget。
-var MediumBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 5,
-	RefLimit:    5,
-	TestLimit:   3,
-}
-
-// HighBudget は高リスク symbol の inspect budget。
-var HighBudget = navigation.Budget{
-	BodyLines:   18,
-	CallerLimit: 8,
-	RefLimit:    8,
-	TestLimit:   4,
-}
-
-// PlanForRisk は risk level に応じた Go impact plan を返す。
-func PlanForRisk(risk string) Plan {
-	switch strings.TrimSpace(risk) {
-	case RiskHigh:
-		return Plan{RiskLevel: RiskHigh, Budget: HighBudget, ImplementationLimit: 8}
-	case RiskMedium:
-		return Plan{RiskLevel: RiskMedium, Budget: MediumBudget, ImplementationLimit: 4}
-	default:
-		return Plan{RiskLevel: RiskLow, Budget: LowBudget, ImplementationLimit: 2}
-	}
-}
-
-// PlanEqual は 2 つの Go impact plan が同じか返す。
-func PlanEqual(left, right Plan) bool {
-	return left.RiskLevel == right.RiskLevel &&
-		left.ImplementationLimit == right.ImplementationLimit &&
-		left.Budget == right.Budget
-}
-
-// PlanRank は Go impact plan の risk 順位を返す。
-func PlanRank(plan Plan) int {
-	switch plan.RiskLevel {
-	case RiskHigh:
-		return 3
-	case RiskMedium:
-		return 2
-	default:
-		return 1
-	}
-}
 
 // ClassifyRisk は inspect 結果から Go impact risk を判定する。
 func ClassifyRisk(result navigation.InspectResult) string {
 	if result.Symbol == nil {
-		return RiskLow
+		return impactplan.RiskLow
 	}
 
 	if result.Symbol.Exported || result.Symbol.Kind == "interface" || len(result.Implementations) > 0 {
-		return RiskHigh
+		return impactplan.RiskHigh
 	}
 
 	fileCount, dirCount := ReferenceSpread(result)
 	if dirCount > 1 {
-		return RiskHigh
+		return impactplan.RiskHigh
 	}
 	if fileCount > 1 || IsSharedPackageSymbol(*result.Symbol) {
-		return RiskMedium
+		return impactplan.RiskMedium
 	}
 	if NeedsWidening(result) {
-		return RiskMedium
+		return impactplan.RiskMedium
 	}
 
-	return RiskLow
+	return impactplan.RiskLow
 }
 
 // NeedsWidening は upstream の truncation や未取得件数により探索拡張が必要か返す。

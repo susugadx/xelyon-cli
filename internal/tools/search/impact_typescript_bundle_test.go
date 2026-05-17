@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/impactplan"
 	"github.com/susugadx/xelyon-cli/internal/jsast"
 )
 
@@ -161,7 +162,7 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 				callers:     genericSymbolRefsForTest("src/app", ".ts", 8),
 				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
 			},
-			want: goImpactRiskMedium,
+			want: impactplan.RiskMedium,
 		},
 		{
 			name: "exported many refs without tests is high",
@@ -169,7 +170,7 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 			refs: typeScriptImpactRefs{
 				callers: genericSymbolRefsForTest("src/app", ".ts", 8),
 			},
-			want: goImpactRiskHigh,
+			want: impactplan.RiskHigh,
 		},
 		{
 			name: "local few refs with nearby tests is low",
@@ -178,7 +179,7 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 				callers:     genericSymbolRefsForTest("src/app", ".ts", 1),
 				nearbyTests: []genericSymbolRef{{File: "src/build.spec.ts", Line: 1, IsTest: true}},
 			},
-			want: goImpactRiskLow,
+			want: impactplan.RiskLow,
 		},
 		{
 			name: "local declaration exported later with direct tests is medium",
@@ -187,7 +188,7 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 				imports:     []genericSymbolRef{{File: "src/index.ts", Line: 2, Snippet: "export { buildUser }", Class: jsast.ClassExport}},
 				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
 			},
-			want: goImpactRiskMedium,
+			want: impactplan.RiskMedium,
 		},
 		{
 			name: "ast exported definition with direct tests is medium",
@@ -195,7 +196,7 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 			refs: typeScriptImpactRefs{
 				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
 			},
-			want: goImpactRiskMedium,
+			want: impactplan.RiskMedium,
 		},
 		{
 			name: "export default class is exported",
@@ -203,7 +204,7 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 			refs: typeScriptImpactRefs{
 				callers: genericSymbolRefsForTest("src/app", ".ts", 4),
 			},
-			want: goImpactRiskHigh,
+			want: impactplan.RiskHigh,
 		},
 	}
 

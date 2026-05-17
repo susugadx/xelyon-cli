@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/impactplan"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 )
 
@@ -14,7 +15,7 @@ func resolveStructuredGoImpactSymbol(symbol string, scope structuredImpactScope)
 	inspected := inspectStructuredGoImpactSymbol(symbol, scope)
 	switch inspected.status {
 	case navigation.SymbolAutoMultiple:
-		return resolveStructuredGoImpactMultipleSymbol(symbol, inspected.result, inspected.output, scope.Definition, inspected.plan.budget)
+		return resolveStructuredGoImpactMultipleSymbol(symbol, inspected.result, inspected.output, scope.Definition, inspected.plan.Budget)
 	case navigation.SymbolAutoSingle:
 		return buildStructuredGoImpactSingleSymbolResult(symbol, inspected.result, scope.Definition, scope.Evidence, inspected.plan)
 	default:
@@ -26,13 +27,13 @@ type structuredGoImpactInspection struct {
 	result navigation.InspectResult
 	output string
 	status navigation.SymbolAutoStatus
-	plan   goImpactPlan
+	plan   impactplan.Plan
 }
 
 func inspectStructuredGoImpactSymbol(symbol string, scope structuredImpactScope) structuredGoImpactInspection {
-	collectionPlan := goImpactPlanForRisk(goImpactRiskHigh)
+	collectionPlan := impactplan.PlanForRisk(impactplan.RiskHigh)
 	result, output, status := navigation.ResolveInspectSymbolAuto(symbol, scope.Definition.Path, navigation.InspectSymbolAutoOptions{
-		Budget:                      collectionPlan.budget,
+		Budget:                      collectionPlan.Budget,
 		Registry:                    nil,
 		LSPClient:                   scope.Definition.LSPClient,
 		ProjectMap:                  scope.Definition.ProjectMap,
@@ -55,16 +56,16 @@ func inspectStructuredGoImpactSymbol(symbol string, scope structuredImpactScope)
 	}
 
 	inspected.plan = selectStructuredGoImpactPlan(result)
-	inspected.result = navigation.ApplyInspectBudget(result, inspected.plan.budget)
+	inspected.result = navigation.ApplyInspectBudget(result, inspected.plan.Budget)
 	return inspected
 }
 
-func selectStructuredGoImpactPlan(collected navigation.InspectResult) goImpactPlan {
-	plan := goImpactPlanForRisk(goImpactRiskLow)
+func selectStructuredGoImpactPlan(collected navigation.InspectResult) impactplan.Plan {
+	plan := impactplan.PlanForRisk(impactplan.RiskLow)
 	for i := 0; i < 3; i++ {
-		budgeted := navigation.ApplyInspectBudget(collected, plan.budget)
+		budgeted := navigation.ApplyInspectBudget(collected, plan.Budget)
 		nextPlan := nextStructuredGoImpactPlan(plan, budgeted)
-		if goImpactPlanEqual(plan, nextPlan) {
+		if impactplan.PlanEqual(plan, nextPlan) {
 			return nextPlan
 		}
 		plan = nextPlan
@@ -72,25 +73,25 @@ func selectStructuredGoImpactPlan(collected navigation.InspectResult) goImpactPl
 	return plan
 }
 
-func nextStructuredGoImpactPlan(current goImpactPlan, result navigation.InspectResult) goImpactPlan {
-	nextPlan := goImpactPlanForRisk(classifyGoImpactRisk(result))
-	if goImpactPlanRank(nextPlan) < goImpactPlanRank(current) {
+func nextStructuredGoImpactPlan(current impactplan.Plan, result navigation.InspectResult) impactplan.Plan {
+	nextPlan := impactplan.PlanForRisk(classifyGoImpactRisk(result))
+	if impactplan.PlanRank(nextPlan) < impactplan.PlanRank(current) {
 		return current
 	}
 	return nextPlan
 }
 
-func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.InspectResult, formatOpts SearchOptions, evidenceOpts SearchOptions, plan goImpactPlan) symbolResolveResult {
+func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.InspectResult, formatOpts SearchOptions, evidenceOpts SearchOptions, plan impactplan.Plan) symbolResolveResult {
 	var probeDependencies []string
 	impactOpts := evidenceOpts
 	if result.Symbol != nil {
 		impactOpts = structuredImpactNameOnlyEvidenceOptions(result.Symbol.File, evidenceOpts)
 	}
-	result, probeDependencies = supplementGoImpactTestsFromProbe(symbol, result, impactOpts, plan.budget.TestLimit)
+	result, probeDependencies = supplementGoImpactTestsFromProbe(symbol, result, impactOpts, plan.Budget.TestLimit)
 	result = filterStructuredGoImpactEvidence(result, evidenceOpts)
-	impact := buildGoImpactMetadata(result, plan.riskLevel)
+	impact := buildGoImpactMetadata(result, plan.RiskLevel)
 	bundle := buildGoSymbolBundleWithOptions(symbol, result, goSymbolBundleBuildOptions{
-		implementationLimit: plan.implementationLimit,
+		implementationLimit: plan.ImplementationLimit,
 		impact:              impact,
 	})
 	if bundle == nil {
@@ -210,32 +211,32 @@ func impactReadLimit(risk, kind string) int {
 	switch kind {
 	case "callers":
 		switch risk {
-		case goImpactRiskHigh:
+		case impactplan.RiskHigh:
 			return 3
-		case goImpactRiskMedium:
+		case impactplan.RiskMedium:
 			return 2
 		default:
 			return 1
 		}
 	case "tests":
-		if risk == goImpactRiskHigh {
+		if risk == impactplan.RiskHigh {
 			return 2
 		}
 		return 1
 	case "implementations":
 		switch risk {
-		case goImpactRiskHigh:
+		case impactplan.RiskHigh:
 			return 3
-		case goImpactRiskMedium:
+		case impactplan.RiskMedium:
 			return 2
 		default:
 			return 1
 		}
 	case "references":
 		switch risk {
-		case goImpactRiskHigh:
+		case impactplan.RiskHigh:
 			return 2
-		case goImpactRiskMedium:
+		case impactplan.RiskMedium:
 			return 1
 		default:
 			return 0

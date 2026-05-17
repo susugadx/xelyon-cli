@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/impactplan"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 )
 
@@ -55,13 +56,13 @@ func TestClassifyGoImpactRisk_WidensOnUpstreamSignals(t *testing.T) {
 
 	truncated := base
 	truncated.UpstreamTruncated = true
-	if got := classifyGoImpactRisk(truncated); got != goImpactRiskMedium {
-		t.Fatalf("classifyGoImpactRisk(truncated) = %q, want %q", got, goImpactRiskMedium)
+	if got := classifyGoImpactRisk(truncated); got != impactplan.RiskMedium {
+		t.Fatalf("classifyGoImpactRisk(truncated) = %q, want %q", got, impactplan.RiskMedium)
 	}
 
 	incomplete := base
 	incomplete.UpstreamIncomplete = true
-	if got := classifyGoImpactRisk(incomplete); got != goImpactRiskMedium {
-		t.Fatalf("classifyGoImpactRisk(incomplete) = %q, want %q", got, goImpactRiskMedium)
+	if got := classifyGoImpactRisk(incomplete); got != impactplan.RiskMedium {
+		t.Fatalf("classifyGoImpactRisk(incomplete) = %q, want %q", got, impactplan.RiskMedium)
 	}
 }
