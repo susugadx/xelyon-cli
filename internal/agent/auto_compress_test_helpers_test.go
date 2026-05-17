@@ -12,26 +12,28 @@ import (
 )
 
 type compressionTestProvider struct {
-	name                      string
-	summary                   string
-	chatErr                   error
-	chatCalls                 int
-	capturedChatModel         string
-	capturedChatHistory       []api.Message
-	capturedChatResponseID    string
-	capturedChatUpdateMode    string
-	cachedResponseID          bool
-	responseID                string
-	serverCompactionLocalSkip bool
-	supportsCompact           bool
-	compactErr                error
-	compactCalls              int
-	capturedCompactModel      string
-	capturedCompactInput      []api.InputItem
-	capturedCompactResponseID string
-	capturedCompactUpdateMode string
-	compactOutput             []api.InputItem
-	supportsClaudeCompaction  bool
+	name                         string
+	summary                      string
+	chatErr                      error
+	chatCalls                    int
+	capturedChatModel            string
+	capturedChatHistory          []api.Message
+	capturedChatActiveContext    int
+	capturedChatResponseID       string
+	capturedChatUpdateMode       string
+	cachedResponseID             bool
+	responseID                   string
+	serverCompactionLocalSkip    bool
+	supportsCompact              bool
+	compactErr                   error
+	compactCalls                 int
+	capturedCompactModel         string
+	capturedCompactInput         []api.InputItem
+	capturedCompactActiveContext int
+	capturedCompactResponseID    string
+	capturedCompactUpdateMode    string
+	compactOutput                []api.InputItem
+	supportsClaudeCompaction     bool
 }
 
 func (m *compressionTestProvider) Name() string {
@@ -53,6 +55,7 @@ func (m *compressionTestProvider) ChatWithTools(ctx context.Context, _ string, h
 	m.chatCalls++
 	m.capturedChatModel = model
 	m.capturedChatHistory = append([]api.Message(nil), history...)
+	m.capturedChatActiveContext = len(api.ActiveContextBlocksFromContext(ctx))
 	m.capturedChatResponseID = m.responseID
 	m.capturedChatUpdateMode = api.AssistantUpdateModeFromContext(ctx)
 	if m.chatErr != nil {
@@ -93,6 +96,7 @@ func (m *compressionTestProvider) CompactHistory(ctx context.Context, input []ap
 	m.compactCalls++
 	m.capturedCompactModel = model
 	m.capturedCompactInput = api.CloneInputItems(input)
+	m.capturedCompactActiveContext = len(api.ActiveContextBlocksFromContext(ctx))
 	m.capturedCompactResponseID = m.responseID
 	m.capturedCompactUpdateMode = api.AssistantUpdateModeFromContext(ctx)
 	if m.compactErr != nil {

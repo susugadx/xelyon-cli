@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -180,6 +179,7 @@ func (a *Agent) compressHistoryWithSplit(
 
 	// 履歴を置き換え
 	a.History = newHistory
+	a.resetProviderFacingTaskLedger()
 	finishResponseContext(true, persistedHistory)
 
 	// 圧縮後の統計
@@ -197,14 +197,5 @@ func (a *Agent) compressHistoryWithSplit(
 }
 
 func (a *Agent) compressionRequestContext(ctx context.Context) context.Context {
-	return api.WithAssistantUpdateMode(a.requestContext(ctx), api.AssistantUpdatesOff)
-}
-
-// estimateTokens は会話履歴の概算トークン数を計算する。
-func estimateTokens(model string, messages []api.Message) int {
-	total := 0
-	for _, msg := range messages {
-		total += token.EstimateTokenCountForModel(model, msg.Content)
-	}
-	return total
+	return api.WithAssistantUpdateMode(a.requestContextWithoutActiveContext(ctx), api.AssistantUpdatesOff)
 }

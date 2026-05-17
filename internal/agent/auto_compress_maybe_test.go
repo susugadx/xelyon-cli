@@ -35,6 +35,38 @@ func TestCustomTokenThreshold_TriggersBeforePercentage(t *testing.T) {
 	}
 }
 
+func TestMaybeAutoCompress_UsesProviderFacingHistoryReductionBudget(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
+	cfg := config.DefaultConfig()
+	cfg.Compression.TokenThreshold = 20000
+	cfg.Compression.TriggerPercent = 99
+	cfg.Compression.KeepRecent = 1
+	cfg.Compression.PreferCompactAPI = false
+
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", cfg)
+	callID := "call_budget_old"
+	agent.Runtime.Options.EnableProviderHistoryReduction = true
+	agent.Runtime.TaskLedger = providerHistoryTaskLedgerWithEvidence(t,
+		providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: callID, Path: providerHistoryRequestEvidencePath, StartLine: 1, EndLine: 3},
+	)
+	agent.History = providerHistoryReductionRequestHistory(callID, strings.Repeat("あ", 30000))
+
+	rawTotal := agent.EstimateSystemPromptTokens() + estimateTokens(agent.CurrentModel, agent.History)
+	if rawTotal < cfg.Compression.TokenThreshold {
+		t.Fatalf("raw token estimate = %d, want above token threshold %d", rawTotal, cfg.Compression.TokenThreshold)
+	}
+	if got := agent.EstimateTokens(); got >= cfg.Compression.TokenThreshold {
+		t.Fatalf("EstimateTokens() = %d, want provider-facing estimate below token threshold %d", got, cfg.Compression.TokenThreshold)
+	}
+
+	if agent.maybeAutoCompress() {
+		t.Fatal("maybeAutoCompress() = true, want false when provider-facing history is below threshold")
+	}
+	if provider.chatCalls != 0 {
+		t.Fatalf("ChatWithTools call count = %d, want 0 without unnecessary compression", provider.chatCalls)
+	}
+}
+
 func TestCustomTokenThreshold_BelowThresholdContinuesToStandardThreshold(t *testing.T) {
 	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
 	cfg := config.DefaultConfig()

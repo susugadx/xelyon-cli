@@ -64,6 +64,25 @@ func (p *headlessToolSetProbeProvider) ChatWithImage(ctx context.Context, system
 	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
+type headlessActiveContextProbeProvider struct {
+	activeContextBlocks int
+}
+
+func (p *headlessActiveContextProbeProvider) Name() string { return "openai" }
+
+func (p *headlessActiveContextProbeProvider) SupportsImages() bool { return false }
+
+func (p *headlessActiveContextProbeProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *headlessActiveContextProbeProvider) ChatWithTools(ctx context.Context, _ string, _ []api.Message, _ string) (string, error) {
+	p.activeContextBlocks = len(api.ActiveContextBlocksFromContext(ctx))
+	return "done", nil
+}
+
+func (p *headlessActiveContextProbeProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
+}
+
 type headlessUsageProvider struct {
 	usageCallback api.UsageCallback
 }
@@ -158,6 +177,23 @@ func cloneHeadlessHistory(history []api.Message) []api.Message {
 		}
 	}
 	return cloned
+}
+
+func TestRunHeadless_ClearsInheritedActiveContextWhenRuntimeGateOff(t *testing.T) {
+	provider := &headlessActiveContextProbeProvider{}
+	ctx := api.WithActiveContextBlocks(context.Background(), []api.ActiveContextBlock{{
+		Name:    currentTaskStateActiveContextName,
+		Content: "parent task state",
+	}})
+
+	result := RunHeadlessWithConfig(ctx, "hello", "gpt-5.4", provider, config.DefaultConfig())
+
+	if result.Status != "success" {
+		t.Fatalf("RunHeadlessWithConfig() status = %q, want success: %v", result.Status, result.Error)
+	}
+	if provider.activeContextBlocks != 0 {
+		t.Fatalf("active context blocks sent to child request = %d, want 0", provider.activeContextBlocks)
+	}
 }
 
 func TestHeadlessResult_ToJSON(t *testing.T) {

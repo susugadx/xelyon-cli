@@ -111,7 +111,8 @@ func (r *headlessRunner) requestAssistantResponse(ctx context.Context, iteration
 		r.agent.refreshProjectPromptIfDirty(r.query)
 	}
 
-	return r.provider.ChatWithTools(r.agent.requestContext(reqCtx), r.agent.SystemPrompt, r.agent.History, r.model)
+	requestCtx, history := r.agent.providerFacingHistoryForRequest(r.agent.requestContext(reqCtx))
+	return r.provider.ChatWithTools(requestCtx, r.agent.SystemPrompt, history, r.model)
 }
 
 func (r *headlessRunner) handleAssistantResponse(ctx context.Context, response string) bool {
@@ -255,6 +256,9 @@ func appendHeadlessToolCallsToHistory(agent *Agent, response string, toolCalls [
 
 func appendHeadlessToolResultToHistory(agent *Agent, toolCall *tools.ToolCall, result string) {
 	if agent == nil || toolCall == nil {
+		return
+	}
+	if !keepToolResultHistory(toolCall) {
 		return
 	}
 	agent.History = append(agent.History, toolruntime.BuildToolResultMessage(toolCall, result, toolruntime.FormatTextToolResultContent(toolCall.Tool, result)))

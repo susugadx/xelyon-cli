@@ -253,7 +253,9 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 
 			// AIに警告を送信
 			content := toolruntime.FormatTextToolResultContent(toolCall.Tool, result)
-			a.History = append(a.History, toolruntime.BuildToolResultMessage(toolCall, content, content))
+			if keepToolResultHistory(toolCall) {
+				a.History = append(a.History, toolruntime.BuildToolResultMessage(toolCall, content, content))
+			}
 			a.History = append(a.History, api.Message{
 				Role: "user",
 				Content: `[SYSTEM WARNING] str_replace has failed multiple times. The old_str pattern was not found in the file.
@@ -305,7 +307,9 @@ func (a *Agent) handleCommentFlow(toolCall *tools.ToolCall, result string) bool 
 	}
 
 	// 結果を履歴に追加（Function Calling形式を考慮）
-	a.History = append(a.History, toolruntime.BuildToolResultMessage(toolCall, result, toolruntime.FormatTextToolResultContent(toolCall.Tool, result)))
+	if keepToolResultHistory(toolCall) {
+		a.History = append(a.History, toolruntime.BuildToolResultMessage(toolCall, result, toolruntime.FormatTextToolResultContent(toolCall.Tool, result)))
+	}
 
 	// AIに「コメントを反映して別案を提示」するよう促す
 	a.History = append(a.History, api.Message{

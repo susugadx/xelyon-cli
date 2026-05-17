@@ -65,12 +65,21 @@ func (c *planModeCheckpoint) restore(a *Agent) error {
 	c.restoreProviderResponseContext(a)
 	a.SystemPrompt = c.systemPrompt
 
+	resetTaskLedger := false
+	defer func() {
+		if resetTaskLedger {
+			a.resetProviderFacingTaskLedger()
+		}
+	}()
+
 	if c.historyLen >= 0 && c.historyLen <= len(a.History) {
+		resetTaskLedger = c.historyLen < len(a.History)
 		a.History = append([]api.Message(nil), a.History[:c.historyLen]...)
 	}
 
 	if a.session != nil {
 		truncated := a.session.TruncateMessages(c.sessionMessageCount)
+		resetTaskLedger = resetTaskLedger || truncated
 		if a.responsesPersistResponseIDEnabled() {
 			c.restoreSessionResponseContext(a.session)
 		} else {

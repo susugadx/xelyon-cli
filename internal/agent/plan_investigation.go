@@ -136,10 +136,11 @@ func (r *planInvestigationRunner) beforeIteration(iteration int) error {
 }
 
 func (r *planInvestigationRunner) requestResponse() (string, error) {
+	requestCtx, history := r.agent.providerFacingHistoryForRequest(r.agent.requestContext(r.ctx))
 	response, err := r.agent.CurrentProvider.ChatWithTools(
-		r.agent.requestContext(r.ctx),
+		requestCtx,
 		r.agent.SystemPrompt,
-		r.agent.History,
+		history,
 		r.agent.CurrentModel,
 	)
 	if err != nil {

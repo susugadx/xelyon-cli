@@ -60,6 +60,7 @@ func (a *Agent) maybeRepairGeminiApplyPatchExecution(ctx context.Context, tc *to
 		Args:    map[string]string{"patch": repairedPatch},
 	}
 
+	a.observeEditReadinessBeforeTool(ctx, repairedTC)
 	repairedExecResult := executeRepairedApplyPatch(execCtx, repairedTC, quiet)
 	if repairedExecResult.Error {
 		return execResult
@@ -87,7 +88,7 @@ func (a *Agent) shouldRepairGeminiApplyPatch(tc *tools.ToolCall) bool {
 }
 
 func (a *Agent) requestGeminiApplyPatchRepair(ctx context.Context, originalPatch, errorResult string) (string, error) {
-	ctx = a.requestContext(ctx)
+	ctx = a.requestContextWithoutActiveContext(ctx)
 	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	ctx = api.WithProviderCacheNamespace(ctx, geminiApplyPatchRepairCacheNamespace)

@@ -8,6 +8,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
+const responsesTestActiveContextSnapshot = "<current_task_state>\nstate\n</current_task_state>"
+
 func TestModelIdentity_CatalogNameDefaultsToRequestName(t *testing.T) {
 	identity := NewModelIdentity("corp-deployment", "")
 
@@ -38,10 +40,7 @@ func TestBuildChatRequest_UsesPreviousResponseIDForTrailingToolOutputs(t *testin
 	if req.PreviousResponseID != "resp_123" {
 		t.Fatalf("PreviousResponseID = %q, want resp_123", req.PreviousResponseID)
 	}
-	outputs, ok := req.Input.([]InputItem)
-	if !ok {
-		t.Fatalf("Input type = %T, want []InputItem", req.Input)
-	}
+	outputs := requestInputItems(t, req)
 	if len(outputs) != 1 || outputs[0].Type != "function_call_output" || outputs[0].CallID != "call_1" {
 		t.Fatalf("Input = %#v, want trailing function_call_output", outputs)
 	}
@@ -65,10 +64,7 @@ func TestBuildChatRequest_IncludesCompactedInputWithoutPreviousResponseID(t *tes
 	if req.PreviousResponseID != "" {
 		t.Fatalf("PreviousResponseID = %q, want empty", req.PreviousResponseID)
 	}
-	input, ok := req.Input.([]InputItem)
-	if !ok {
-		t.Fatalf("Input type = %T, want []InputItem", req.Input)
-	}
+	input := requestInputItems(t, req)
 	if len(input) != 3 {
 		t.Fatalf("len(Input) = %d, want developer + compacted + current history", len(input))
 	}
@@ -81,6 +77,148 @@ func TestBuildChatRequest_IncludesCompactedInputWithoutPreviousResponseID(t *tes
 	if input[2].Role != "user" || input[2].Content != "next turn" {
 		t.Fatalf("Input[2] = %#v, want current user history", input[2])
 	}
+}
+
+func TestBuildChatRequest_IncludesActiveContextAfterCompactedInput(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		SystemPrompt:   "system",
+		CompactedInput: []api.InputItem{{Type: "compacted", Data: "compact-data"}},
+		ActiveContext:  activeContextBlocks(responsesTestActiveContextSnapshot),
+		History:        []api.Message{{Role: "user", Content: "next turn"}},
+	})
+
+	input := requestInputItems(t, req)
+	if len(input) != 4 {
+		t.Fatalf("len(Input) = %d, want developer + compacted + active context + history", len(input))
+	}
+	assertInputMessage(t, input[0], "developer", "system")
+	if input[1].Type != "compacted" || input[1].Data != "compact-data" {
+		t.Fatalf("Input[1] = %#v, want compacted item", input[1])
+	}
+	assertInputMessage(t, input[2], "developer", responsesTestActiveContextSnapshot)
+	assertInputMessage(t, input[3], "user", "next turn")
+}
+
+func TestBuildChatRequest_ActiveContextForcesFullHistoryWithoutPreviousResponseID(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		SystemPrompt:       "system",
+		PreviousResponseID: "resp_123",
+		ActiveContext:      activeContextBlocks(responsesTestActiveContextSnapshot),
+		History:            []api.Message{{Role: "user", Content: "next turn"}},
+	})
+
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty when active context is present", req.PreviousResponseID)
+	}
+	input := requestInputItems(t, req)
+	if len(input) != 3 {
+		t.Fatalf("len(Input) = %d, want developer + active context + full history", len(input))
+	}
+	assertInputMessage(t, input[0], "developer", "system")
+	assertInputMessage(t, input[1], "developer", responsesTestActiveContextSnapshot)
+	assertInputMessage(t, input[2], "user", "next turn")
+}
+
+func TestBuildChatRequest_ResponseIDChainDisabledForcesFullHistoryWithoutPreviousResponseID(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		RequestContext:     api.WithResponseIDChainDisabled(context.Background()),
+		SystemPrompt:       "system",
+		PreviousResponseID: "resp_123",
+		History: []api.Message{
+			{Role: "user", Content: "first"},
+			{Role: "assistant", Content: "answer"},
+			{Role: "user", Content: "next turn"},
+		},
+	})
+
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty when response ID chain is disabled", req.PreviousResponseID)
+	}
+	input := requestInputItems(t, req)
+	if len(input) != 4 {
+		t.Fatalf("len(Input) = %d, want developer + full history", len(input))
+	}
+	assertInputMessage(t, input[0], "developer", "system")
+	assertInputMessage(t, input[1], "user", "first")
+	assertInputMessage(t, input[2], "assistant", "answer")
+	assertInputMessage(t, input[3], "user", "next turn")
+}
+
+func TestBuildChatRequest_ActiveContextToolContinuationForcesFullInput(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		SystemPrompt:       "system",
+		PreviousResponseID: "resp_123",
+		ActiveContext:      activeContextBlocks(responsesTestActiveContextSnapshot),
+		History: []api.Message{
+			{Role: "user", Content: "read README"},
+			{
+				Role: "assistant",
+				ToolCalls: []api.OpenAIToolCall{{
+					ID:   "call_1",
+					Type: "function",
+					Function: api.OpenAIToolCallFunction{
+						Name:      "read_file",
+						Arguments: `{"path":"README.md"}`,
+					},
+				}},
+			},
+			{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+		},
+	})
+
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty when active context is present", req.PreviousResponseID)
+	}
+	input := requestInputItems(t, req)
+	if len(input) != 5 {
+		t.Fatalf("len(Input) = %d, want developer + active context + full tool history", len(input))
+	}
+	assertInputMessage(t, input[0], "developer", "system")
+	assertInputMessage(t, input[1], "developer", responsesTestActiveContextSnapshot)
+	assertInputMessage(t, input[2], "user", "read README")
+	assertInputFunctionCall(t, input[3], "call_1", "read_file", `{"path":"README.md"}`)
+	assertInputFunctionCallOutput(t, input[4], "call_1", "README contents")
+}
+
+func TestBuildChatRequest_BlankActiveContextKeepsPreviousResponseID(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		SystemPrompt:       "system",
+		PreviousResponseID: "resp_123",
+		ActiveContext: []api.ActiveContextBlock{{
+			Name:    "current_task_state",
+			Content: "   ",
+		}},
+		History: []api.Message{{Role: "user", Content: "next turn"}},
+	})
+
+	if req.PreviousResponseID != "resp_123" {
+		t.Fatalf("PreviousResponseID = %q, want resp_123 for blank active context", req.PreviousResponseID)
+	}
+	input := requestInputItems(t, req)
+	if len(input) != 1 {
+		t.Fatalf("len(Input) = %d, want last message only", len(input))
+	}
+	assertInputMessage(t, input[0], "user", "next turn")
 }
 
 func TestBuildImageRequest_IncludesDeveloperHistoryAndImage(t *testing.T) {
@@ -99,10 +237,7 @@ func TestBuildImageRequest_IncludesDeveloperHistoryAndImage(t *testing.T) {
 		},
 	})
 
-	input, ok := req.Input.([]InputItem)
-	if !ok {
-		t.Fatalf("Input type = %T, want []InputItem", req.Input)
-	}
+	input := requestInputItems(t, req)
 	if len(input) != 3 {
 		t.Fatalf("len(Input) = %d, want 3", len(input))
 	}
@@ -116,6 +251,30 @@ func TestBuildImageRequest_IncludesDeveloperHistoryAndImage(t *testing.T) {
 	if parts[0].Type != "input_image" || parts[0].ImageURL != "data:image/png;base64,abc123" {
 		t.Fatalf("image part = %#v, want data URL image", parts[0])
 	}
+}
+
+func TestBuildImageRequest_IncludesActiveContextBeforeHistoryAndImage(t *testing.T) {
+	req := BuildImageRequest(ImageRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		SystemPrompt:  "system",
+		ActiveContext: activeContextBlocks("snapshot"),
+		History:       []api.Message{{Role: "user", Content: "before"}},
+		UserMessage:   "what is this?",
+		Image: &api.ImageData{
+			Base64:    "abc123",
+			MediaType: "image/png",
+		},
+	})
+
+	input := requestInputItems(t, req)
+	if len(input) != 4 {
+		t.Fatalf("len(Input) = %d, want developer + active context + history + image", len(input))
+	}
+	assertInputMessage(t, input[1], "developer", "snapshot")
+	assertInputMessage(t, input[2], "user", "before")
 }
 
 func TestBuildImageRequest_IncludesCompactedInput(t *testing.T) {
@@ -133,10 +292,7 @@ func TestBuildImageRequest_IncludesCompactedInput(t *testing.T) {
 		},
 	})
 
-	input, ok := req.Input.([]InputItem)
-	if !ok {
-		t.Fatalf("Input type = %T, want []InputItem", req.Input)
-	}
+	input := requestInputItems(t, req)
 	if len(input) != 3 {
 		t.Fatalf("len(Input) = %d, want developer + compacted + image", len(input))
 	}
@@ -248,5 +404,42 @@ func TestResolveServerCompactionDecision_CompactThresholdTooSmallOmitAndFallback
 	}
 	if decision.CompactThreshold() != 0 {
 		t.Fatalf("CompactThreshold() = %d, want 0", decision.CompactThreshold())
+	}
+}
+
+func activeContextBlocks(content string) []api.ActiveContextBlock {
+	return []api.ActiveContextBlock{{
+		Name:    "current_task_state",
+		Content: content,
+	}}
+}
+
+func requestInputItems(t *testing.T, req Request) []InputItem {
+	t.Helper()
+	input, ok := req.Input.([]InputItem)
+	if !ok {
+		t.Fatalf("Input type = %T, want []InputItem", req.Input)
+	}
+	return input
+}
+
+func assertInputMessage(t *testing.T, item InputItem, role, content string) {
+	t.Helper()
+	if item.Type != "message" || item.Role != role || item.Content != content {
+		t.Fatalf("Input item = %#v, want %s message with content %q", item, role, content)
+	}
+}
+
+func assertInputFunctionCall(t *testing.T, item InputItem, callID, name, arguments string) {
+	t.Helper()
+	if item.Type != "function_call" || item.CallID != callID || item.Name != name || item.Arguments != arguments {
+		t.Fatalf("Input item = %#v, want function_call %s %s %s", item, callID, name, arguments)
+	}
+}
+
+func assertInputFunctionCallOutput(t *testing.T, item InputItem, callID, output string) {
+	t.Helper()
+	if item.Type != "function_call_output" || item.CallID != callID || item.Output != output {
+		t.Fatalf("Input item = %#v, want function_call_output %s %q", item, callID, output)
 	}
 }

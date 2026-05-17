@@ -567,6 +567,101 @@ func TestBuildChatResponsesRequest_StoreFalseSendsFullHistoryWithoutPreviousResp
 	}
 }
 
+func TestBuildChatResponsesRequest_ResponseIDChainDisabledSendsFullHistoryWithoutPreviousResponseID(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+	ctx := api.WithResponseIDChainDisabled(azureTestContext(cfg))
+	req := p.buildChatResponsesRequest(
+		ctx,
+		"system",
+		[]api.Message{
+			{Role: "user", Content: "first"},
+			{Role: "assistant", Content: "answer"},
+			{Role: "user", Content: "next"},
+		},
+		"corp-gpt55-deployment",
+	)
+
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty when response ID chain is disabled", req.PreviousResponseID)
+	}
+	if len(req.ContextManagement) != 0 {
+		t.Fatalf("ContextManagement = %#v, want omitted without previous_response_id", req.ContextManagement)
+	}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	input, ok := body["input"].([]any)
+	if !ok || len(input) != 4 {
+		t.Fatalf("input = %#v, want developer plus full history", body["input"])
+	}
+	first, ok := input[1].(map[string]any)
+	if !ok || first["role"] != "user" || first["content"] != "first" {
+		t.Fatalf("input[1] = %#v, want first user message", input[1])
+	}
+	if _, ok := body["previous_response_id"]; ok {
+		t.Fatalf("previous_response_id should be omitted: %s", payload)
+	}
+}
+
+func TestChatWithTools_ResponseIDChainDisabledStartsNewResponseIDChain(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if _, ok := body["previous_response_id"]; ok {
+			t.Fatalf("previous_response_id should be omitted when response ID chain is disabled: %#v", body)
+		}
+		if _, ok := body["context_management"]; ok {
+			t.Fatalf("context_management should be omitted without previous_response_id: %#v", body["context_management"])
+		}
+		input, ok := body["input"].([]any)
+		if !ok || len(input) != 4 {
+			t.Fatalf("input = %#v, want developer + full history", body["input"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_new","output_text":"Fresh","usage":{"input_tokens":4,"output_tokens":2}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-pro-deployment",
+		CatalogModel: "gpt-5.5-pro",
+	})
+	p := New("azure-key")
+	p.SetResponseID("resp_old")
+	ctx := api.WithResponseIDChainDisabled(azureTestContext(cfg))
+
+	content, err := p.ChatWithTools(ctx, "system", []api.Message{
+		{Role: "user", Content: "first"},
+		{Role: "assistant", Content: "answer"},
+		{Role: "user", Content: "next"},
+	}, "corp-gpt55-pro-deployment")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "Fresh" {
+		t.Fatalf("content = %q, want Fresh", content)
+	}
+	if got := p.GetResponseID(); got != "resp_new" {
+		t.Fatalf("GetResponseID() = %q, want new response ID chain", got)
+	}
+}
+
 func TestBuildChatResponsesRequest_IncludesServerCompactionContextManagementOnPreviousResponseChain(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{

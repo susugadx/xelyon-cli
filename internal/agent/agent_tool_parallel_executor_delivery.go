@@ -44,6 +44,9 @@ func (d *parallelResultDelivery) deliverAt(idx int, tc *tools.ToolCall, entry to
 }
 
 func (d *parallelResultDelivery) appendLoopAbortHistory(tc *tools.ToolCall, idx int) {
+	if !keepToolResultHistory(tc) {
+		return
+	}
 	msg, ok := toolruntime.BuildLoopAbortHistoryMessage(tc, idx, d.state.LoopTriggerIdx, d.threshold)
 	if !ok {
 		return

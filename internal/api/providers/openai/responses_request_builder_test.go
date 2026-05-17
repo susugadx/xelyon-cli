@@ -192,6 +192,39 @@ func TestBuildChatResponsesRequest_StoreFalseSendsFullHistoryWithoutPreviousResp
 	}
 }
 
+func TestBuildChatResponsesRequest_ResponseIDChainDisabledSendsFullHistoryWithoutPreviousResponseID(t *testing.T) {
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	ctx = api.WithResponseIDChainDisabled(ctx)
+
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+	req := p.buildChatResponsesRequest(ctx, "system", []api.Message{
+		{Role: "user", Content: "first"},
+		{Role: "assistant", Content: "answer"},
+		{Role: "user", Content: "next"},
+	}, "gpt-5.5")
+
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty when response ID chain is disabled", req.PreviousResponseID)
+	}
+	if len(req.ContextManagement) != 0 {
+		t.Fatalf("ContextManagement = %#v, want omitted without previous_response_id", req.ContextManagement)
+	}
+	inputItems, ok := req.Input.([]openairesponses.InputItem)
+	if !ok {
+		t.Fatalf("Input type = %T, want []openairesponses.InputItem", req.Input)
+	}
+	if len(inputItems) != 4 {
+		t.Fatalf("Input length = %d, want developer plus full history", len(inputItems))
+	}
+	if inputItems[1].Role != "user" || inputItems[1].Content != "first" {
+		t.Fatalf("Input[1] = %#v, want first user message", inputItems[1])
+	}
+	if inputItems[3].Role != "user" || inputItems[3].Content != "next" {
+		t.Fatalf("Input[3] = %#v, want latest user message", inputItems[3])
+	}
+}
+
 func TestBuildChatResponsesRequest_IncludesServerCompactionContextManagementOnPreviousResponseChain(t *testing.T) {
 	ctx := config.WithContext(context.Background(), config.DefaultConfig())
 	p := New("test-key")

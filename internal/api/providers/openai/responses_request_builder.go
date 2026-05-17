@@ -19,12 +19,16 @@ func resolveResponsesAPIURL() string {
 
 func (p *Provider) buildChatResponsesRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) ResponsesRequest {
 	modelIdentity := newOpenAIResponsesModelIdentity(ctx, model)
+	activeContext := openairesponses.ActiveContextFromContext(ctx)
 	previousResponseID := previousResponseIDForRequest(ctx, p.lastResponseID)
+	previousResponseID = openairesponses.PreviousResponseIDForRequestContext(ctx, previousResponseID, activeContext)
 	serverCompactionDecision := openairesponses.ResolveServerCompactionDecision(ctx, "openai", modelIdentity, previousResponseID)
 	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
 		Base:               p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity, serverCompactionDecision),
+		RequestContext:     ctx,
 		SystemPrompt:       systemPrompt,
 		CompactedInput:     api.CompactedInputItemsFromContext(ctx),
+		ActiveContext:      activeContext,
 		History:            history,
 		PreviousResponseID: previousResponseID,
 	})
@@ -43,6 +47,7 @@ func (p *Provider) buildImageResponsesRequest(
 		Base:           p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity, openairesponses.ServerCompactionDecision{}),
 		SystemPrompt:   systemPrompt,
 		CompactedInput: api.CompactedInputItemsFromContext(ctx),
+		ActiveContext:  openairesponses.ActiveContextFromContext(ctx),
 		History:        history,
 		UserMessage:    userMessage,
 		Image:          image,
@@ -81,7 +86,7 @@ func (p *Provider) newBaseResponsesRequestOptions(
 }
 
 func previousResponseIDForRequest(ctx context.Context, responseID string) string {
-	if !config.FromContext(ctx).ResponsesStoreEnabled() {
+	if !openairesponses.ResponseIDChainReusable(ctx) {
 		return ""
 	}
 	return responseID

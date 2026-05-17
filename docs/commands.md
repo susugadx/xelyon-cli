@@ -259,6 +259,22 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 - 使用モデルとコンテキストサイズ
 - 自動圧縮の状態
 
+### `/ledger`
+
+現在の runtime task ledger を表示します。引数なし専用です。TUI と `--no-tui` の classic REPL で利用できます。表示は確認用のコマンド出力だけで、会話履歴、保存済みセッション、prompt、圧縮、provider request には追加されません。
+
+```
+> /ledger
+```
+
+**表示内容:**
+- Changed files
+- Touched files
+- Evidence
+- Recommended reads
+- Last failed tests
+- Last passed tests
+
 ### `/compress`
 
 会話履歴を圧縮してトークン数を削減します。

@@ -91,6 +91,7 @@ var Commands = []CommandInfo{
 	commandSessions(),
 	commandStatus(),
 	commandTokens(),
+	commandLedger(),
 	commandCopy(),
 	commandAttach(),
 	commandDetach(),
@@ -161,6 +162,12 @@ func commandStatus() CommandInfo {
 
 func commandTokens() CommandInfo {
 	return legacyDiscoverableCommand("/tokens", "", "Show token usage and context window status", "トークン使用量を表示", CommandCategoryContext, 60)
+}
+
+func commandLedger() CommandInfo {
+	cmd := legacyDiscoverableCommand("/ledger", "", "Show runtime task ledger", "タスク台帳を表示", CommandCategoryContext, 65)
+	cmd.Owner = CommandOwnerAgent
+	return cmd
 }
 
 func commandCopy() CommandInfo {

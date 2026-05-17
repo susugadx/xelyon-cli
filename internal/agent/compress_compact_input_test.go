@@ -108,3 +108,38 @@ func TestRequestContext_IncludesCompactedInputItems(t *testing.T) {
 		t.Fatalf("compacted input item = %#v, want compact-data", got[0])
 	}
 }
+
+func TestCompressWithCompactAPI_DoesNotSendCurrentTaskStateActiveContextAndClearsConsumedLedgerOnSuccess(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", supportsCompact: true}
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", config.DefaultConfig())
+	agent.Runtime.Options.EnableCurrentTaskStateContext = true
+	agent.Runtime.TaskLedger = newTaskLedgerWithPassedTest(t)
+	agent.History = []api.Message{{Role: "user", Content: "message"}}
+
+	if err := agent.CompressWithCompactAPI(context.Background()); err != nil {
+		t.Fatalf("CompressWithCompactAPI() error = %v", err)
+	}
+	if provider.capturedCompactActiveContext != 0 {
+		t.Fatalf("compact active context count = %d, want 0", provider.capturedCompactActiveContext)
+	}
+	if !agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
+		t.Fatalf("CompressWithCompactAPI() should reset provider-facing task ledger after compacted history rewrite: %#v", agent.Runtime.TaskLedger.Snapshot())
+	}
+}
+
+func TestCompressWithCompactAPI_ClearsProviderHistoryReductionTaskLedgerOnSuccess(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", supportsCompact: true}
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", config.DefaultConfig())
+	fixture := newProviderHistoryStaleLedgerFixture()
+	seedProviderHistoryReductionStaleLedgerEvidence(t, agent, fixture)
+	assertTaskLedgerPreserved(t, agent, "test setup")
+	agent.History = []api.Message{{Role: "user", Content: "message"}}
+
+	if err := agent.CompressWithCompactAPI(context.Background()); err != nil {
+		t.Fatalf("CompressWithCompactAPI() error = %v", err)
+	}
+
+	assertTaskLedgerReset(t, agent, "CompressWithCompactAPI provider history reduction success")
+	agent.History = fixture.History
+	assertProviderHistoryReductionDoesNotUseStaleLedgerEvidence(t, agent, fixture)
+}

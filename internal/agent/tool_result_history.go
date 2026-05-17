@@ -17,9 +17,15 @@ func (a *Agent) appendToolResultToHistoryWithContent(toolCall *tools.ToolCall, f
 		return
 	}
 
+	decision := toolResultRetentionDecisionFor(toolCall)
 	msg := toolruntime.BuildToolResultMessage(toolCall, functionContent, textContent)
-	a.History = append(a.History, msg)
+	if decision.KeepHistory {
+		a.History = append(a.History, msg)
+	}
 
+	if !decision.KeepSessionConversation {
+		return
+	}
 	if toolCall.ID != "" {
 		a.appendSessionMessageFromAPI(msg, a.CurrentModel)
 		return

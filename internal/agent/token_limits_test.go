@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
@@ -80,6 +81,42 @@ func TestAgent_EstimateTokens(t *testing.T) {
 	if tokens <= 0 {
 		t.Errorf("EstimateTokens() = %d, want > 0", tokens)
 	}
+}
+
+func TestAgent_EstimateTokens_UsesProviderFacingHistoryReduction(t *testing.T) {
+	callID := "call_budget_old"
+	oldRead := strings.Repeat("あ", 12000)
+	agent := &Agent{
+		CurrentModel: "gpt-5.4",
+		SystemPrompt: "system",
+		Runtime: &AgentRuntime{
+			Options: RuntimeOptions{EnableProviderHistoryReduction: true},
+			TaskLedger: providerHistoryTaskLedgerWithEvidence(t,
+				providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: callID, Path: "README.md", StartLine: 1, EndLine: 3},
+			),
+			LastProviderHistoryProjectionReport: ProviderHistoryProjectionReport{
+				Mode:           ProviderHistoryReductionDryRun,
+				CandidateCount: 42,
+			},
+		},
+		History: providerHistoryReductionRequestHistory(callID, oldRead),
+	}
+	wantReport := agent.Runtime.LastProviderHistoryProjectionReport
+
+	projected := agent.buildProviderHistoryProjection(ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionApply}).History
+	wantHistoryTokens := estimateTokens(agent.CurrentModel, projected)
+	if rawHistoryTokens := estimateTokens(agent.CurrentModel, agent.History); wantHistoryTokens >= rawHistoryTokens {
+		t.Fatalf("projected history tokens = %d, want less than raw history tokens %d", wantHistoryTokens, rawHistoryTokens)
+	}
+
+	if got := agent.EstimateHistoryTokens(); got != wantHistoryTokens {
+		t.Fatalf("EstimateHistoryTokens() = %d, want provider-facing history tokens %d", got, wantHistoryTokens)
+	}
+	wantTotal := token.EstimateTokenCountForModel(agent.CurrentModel, agent.SystemPrompt) + wantHistoryTokens
+	if got := agent.EstimateTokens(); got != wantTotal {
+		t.Fatalf("EstimateTokens() = %d, want system + provider-facing history = %d", got, wantTotal)
+	}
+	assertLastProviderHistoryProjectionReportPreserved(t, agent.Runtime, wantReport)
 }
 
 func TestAgent_EstimateSystemPromptTokens(t *testing.T) {

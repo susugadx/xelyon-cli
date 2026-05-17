@@ -323,6 +323,47 @@ func TestChatWithResponses_StoreFalseOmitsPreviousAndDoesNotCacheResponseID(t *t
 	}
 }
 
+func TestChatWithResponses_ResponseIDChainDisabledStartsNewResponseIDChain(t *testing.T) {
+	var raw map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if _, ok := raw["previous_response_id"]; ok {
+			t.Fatalf("previous_response_id should be omitted when response ID chain is disabled: %#v", raw)
+		}
+		if _, ok := raw["context_management"]; ok {
+			t.Fatalf("context_management should be omitted without previous_response_id: %#v", raw["context_management"])
+		}
+		input, ok := raw["input"].([]any)
+		if !ok || len(input) != 4 {
+			t.Fatalf("input = %#v, want developer + full history", raw["input"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_new","output_text":"Fresh"}`))
+	})
+	t.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	ctx := api.WithResponseIDChainDisabled(newOpenAITestContext(t, false))
+	p := New("test-key")
+	p.SetResponseID("resp_old")
+
+	content, err := p.chatWithResponses(ctx, "system", []api.Message{
+		{Role: "user", Content: "first"},
+		{Role: "assistant", Content: "answer"},
+		{Role: "user", Content: "next"},
+	}, "gpt-5.5-pro")
+	if err != nil {
+		t.Fatalf("chatWithResponses() error = %v", err)
+	}
+	if content != "Fresh" {
+		t.Fatalf("content = %q, want Fresh", content)
+	}
+	if p.GetResponseID() != "resp_new" {
+		t.Fatalf("GetResponseID() = %q, want new response ID chain", p.GetResponseID())
+	}
+}
+
 func TestChatWithResponses_ServerCompactionPayloadControlsLocalSkipState(t *testing.T) {
 	var raw map[string]any
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -25,17 +26,16 @@ func (a *Agent) GetTokenUsagePercentage() float64 {
 	return float64(currentTokens) / float64(limit) * 100
 }
 
-// EstimateTokens は現在のトークン使用量を推定
+// EstimateTokens は provider request に載る現在のトークン使用量を推定
 func (a *Agent) EstimateTokens() int {
 	total := 0
 
 	// システムプロンプト
 	total += token.EstimateTokenCountForModel(a.CurrentModel, a.SystemPrompt)
 
-	// 会話履歴
-	for _, msg := range a.History {
-		total += token.EstimateTokenCountForModel(a.CurrentModel, msg.Content)
-	}
+	total += a.EstimateHistoryTokens()
+
+	total += a.EstimateActiveContextTokens()
 
 	// FC プロバイダーはツール定義を JSON で別送信 → トークン消費に含める
 	// （非FC プロバイダーはシステムプロンプト内にツール説明を含むため二重計上を避ける）
@@ -51,11 +51,21 @@ func (a *Agent) EstimateSystemPromptTokens() int {
 	return token.EstimateTokenCountForModel(a.CurrentModel, a.SystemPrompt)
 }
 
-// EstimateHistoryTokens は会話履歴のトークン数を推定
+// EstimateHistoryTokens は provider request に載る会話履歴のトークン数を推定
 func (a *Agent) EstimateHistoryTokens() int {
+	return estimateTokens(a.CurrentModel, a.tokenBudgetHistory())
+}
+
+// EstimateActiveContextTokens は request に追加される動的 context のトークン数を推定する。
+func (a *Agent) EstimateActiveContextTokens() int {
+	return a.estimateActiveContextTokens()
+}
+
+// estimateTokens は message content の概算トークン数を計算する。
+func estimateTokens(model string, messages []api.Message) int {
 	total := 0
-	for _, msg := range a.History {
-		total += token.EstimateTokenCountForModel(a.CurrentModel, msg.Content)
+	for _, msg := range messages {
+		total += token.EstimateTokenCountForModel(model, msg.Content)
 	}
 	return total
 }

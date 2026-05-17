@@ -1,7 +1,9 @@
 package openairesponses
 
 import (
+	"context"
 	"fmt"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
@@ -24,8 +26,10 @@ type BaseRequestOptions struct {
 // ChatRequestOptions は text chat 用 Responses API request の構築入力を表す。
 type ChatRequestOptions struct {
 	Base               BaseRequestOptions
+	RequestContext     context.Context
 	SystemPrompt       string
 	CompactedInput     []api.InputItem
+	ActiveContext      []api.ActiveContextBlock
 	History            []api.Message
 	PreviousResponseID string
 }
@@ -35,19 +39,29 @@ type ImageRequestOptions struct {
 	Base           BaseRequestOptions
 	SystemPrompt   string
 	CompactedInput []api.InputItem
+	ActiveContext  []api.ActiveContextBlock
 	History        []api.Message
 	UserMessage    string
 	Image          *api.ImageData
+}
+
+// InitialInputOptions は previous_response_id を使わない request input の構築入力を表す。
+type InitialInputOptions struct {
+	DeveloperMessage InputItem
+	CompactedInput   []api.InputItem
+	ActiveContext    []api.ActiveContextBlock
+	History          []api.Message
 }
 
 // BuildChatRequest は履歴と response id から text chat 用 Responses API request を構築する。
 func BuildChatRequest(options ChatRequestOptions) Request {
 	reqBody := BuildBaseRequest(options.Base)
 	developerMsg := BuildDeveloperMessage(options.SystemPrompt)
+	previousResponseID := PreviousResponseIDForRequestContext(options.RequestContext, options.PreviousResponseID, options.ActiveContext)
 
-	if options.PreviousResponseID != "" && len(options.History) > 0 {
+	if previousResponseID != "" && len(options.History) > 0 {
 		lastMsg := options.History[len(options.History)-1]
-		reqBody.PreviousResponseID = options.PreviousResponseID
+		reqBody.PreviousResponseID = previousResponseID
 		if lastMsg.Role == "tool" {
 			reqBody.Input = BuildTrailingToolOutputs(options.History)
 			return reqBody
@@ -61,14 +75,24 @@ func BuildChatRequest(options ChatRequestOptions) Request {
 		return reqBody
 	}
 
-	reqBody.Input = BuildInitialInput(developerMsg, options.CompactedInput, options.History)
+	reqBody.Input = BuildInitialInput(InitialInputOptions{
+		DeveloperMessage: developerMsg,
+		CompactedInput:   options.CompactedInput,
+		ActiveContext:    options.ActiveContext,
+		History:          options.History,
+	})
 	return reqBody
 }
 
 // BuildImageRequest は画像入力用 Responses API request を構築する。
 func BuildImageRequest(options ImageRequestOptions) Request {
 	reqBody := BuildBaseRequest(options.Base)
-	input := BuildInitialInput(BuildDeveloperMessage(options.SystemPrompt), options.CompactedInput, options.History)
+	input := BuildInitialInput(InitialInputOptions{
+		DeveloperMessage: BuildDeveloperMessage(options.SystemPrompt),
+		CompactedInput:   options.CompactedInput,
+		ActiveContext:    options.ActiveContext,
+		History:          options.History,
+	})
 
 	if options.Image != nil {
 		dataURL := fmt.Sprintf("data:%s;base64,%s", options.Image.MediaType, options.Image.Base64)
@@ -93,11 +117,48 @@ func BuildImageRequest(options ImageRequestOptions) Request {
 }
 
 // BuildInitialInput は previous_response_id を使わない request の input を構築する。
-func BuildInitialInput(developerMsg InputItem, compactedInput []api.InputItem, history []api.Message) []InputItem {
-	input := []InputItem{developerMsg}
-	input = append(input, compactedInput...)
-	input = append(input, api.ConvertHistoryToInputItems(history)...)
+func BuildInitialInput(options InitialInputOptions) []InputItem {
+	input := []InputItem{options.DeveloperMessage}
+	input = append(input, options.CompactedInput...)
+	input = append(input, buildActiveContextMessages(options.ActiveContext)...)
+	input = append(input, api.ConvertHistoryToInputItems(options.History)...)
 	return input
+}
+
+// HasActiveContext は provider request に送る実体のある active context があるかを返す。
+func HasActiveContext(blocks []api.ActiveContextBlock) bool {
+	for _, block := range blocks {
+		if _, ok := activeContextRequestContent(block); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func buildActiveContextMessages(blocks []api.ActiveContextBlock) []InputItem {
+	if len(blocks) == 0 {
+		return nil
+	}
+	input := make([]InputItem, 0, len(blocks))
+	for _, block := range blocks {
+		content, ok := activeContextRequestContent(block)
+		if !ok {
+			continue
+		}
+		input = append(input, InputItem{
+			Type:    "message",
+			Role:    "developer",
+			Content: content,
+		})
+	}
+	return input
+}
+
+func activeContextRequestContent(block api.ActiveContextBlock) (string, bool) {
+	if strings.TrimSpace(block.Content) == "" {
+		return "", false
+	}
+	return block.Content, true
 }
 
 // BuildBaseRequest は provider 差分を渡して Responses API request の共通部を構築する。

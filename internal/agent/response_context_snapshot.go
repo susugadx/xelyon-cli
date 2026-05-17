@@ -89,3 +89,21 @@ func clearSavedResponseContext(session *history.Session) {
 	}
 	session.ClearResponseContext()
 }
+
+func (a *Agent) clearProviderAndSavedResponseContext() {
+	if a == nil {
+		return
+	}
+	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
+		ridProvider.SetResponseID("")
+	}
+	clearSavedResponseContext(a.session)
+}
+
+func (a *Agent) hasResponseIDChainProvider() bool {
+	if a == nil {
+		return false
+	}
+	_, ok := a.CurrentProvider.(ResponseIDCapable)
+	return ok
+}

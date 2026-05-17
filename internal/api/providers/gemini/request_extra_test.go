@@ -140,6 +140,75 @@ func TestChatWithFunctionCalling_RequestTransformsHistoryAndThinkingConfig(t *te
 	}
 }
 
+func TestChatWithFunctionCalling_RequestUsesToolNameForReducedHistoryPlaceholder(t *testing.T) {
+	var captured map[string]any
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{
+				{Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "done"}}}},
+			},
+		}
+		jsonBytes, _ := json.Marshal(resp)
+		_, _ = w.Write([]byte("data: " + string(jsonBytes) + "\n\n"))
+	})
+	t.Setenv("GEMINI_API_URL", server.URL)
+	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
+
+	p := New("test-key")
+	p.SetMCPTools([]api.ToolDefinition{{
+		Name:        "read_file",
+		Description: "read file",
+		Parameters:  map[string]any{"type": "object"},
+	}})
+	history := []api.Message{
+		{
+			Role: "assistant",
+			ToolCalls: []api.OpenAIToolCall{{
+				ID:   "call_1",
+				Type: "function",
+				Function: api.OpenAIToolCallFunction{
+					Name:      "read_file",
+					Arguments: `{"path":"README.md"}`,
+				},
+			}},
+		},
+		{
+			Role:       "tool",
+			ToolCallID: "call_1",
+			ToolName:   "read_file",
+			Content:    "[omitted old read_file result; evidence: README.md:L1 source=read_file]",
+		},
+	}
+
+	if _, err := p.chatWithFunctionCalling(newGeminiRequestContext(false, "medium"), "System prompt", history, ""); err != nil {
+		t.Fatalf("chatWithFunctionCalling() error = %v", err)
+	}
+
+	contents, ok := captured["contents"].([]any)
+	if !ok || len(contents) != 2 {
+		t.Fatalf("contents = %#v, want 2 entries", captured["contents"])
+	}
+	toolTurn, ok := contents[1].(map[string]any)
+	if !ok || toolTurn["role"] != "user" {
+		t.Fatalf("tool turn = %#v, want role=user", contents[1])
+	}
+	toolParts, ok := toolTurn["parts"].([]any)
+	if !ok || len(toolParts) != 1 {
+		t.Fatalf("tool parts = %#v, want single functionResponse", toolTurn["parts"])
+	}
+	functionResponse, ok := toolParts[0].(map[string]any)["functionResponse"].(map[string]any)
+	if !ok || functionResponse["name"] != "read_file" {
+		t.Fatalf("functionResponse = %#v, want read_file from ToolName metadata", toolParts[0])
+	}
+	if functionResponse["response"].(map[string]any)["result"] != "[omitted old read_file result; evidence: README.md:L1 source=read_file]" {
+		t.Fatalf("function response payload = %#v, want reduced placeholder content preserved", functionResponse["response"])
+	}
+}
+
 func TestChatWithTextMode_RequestUsesSystemInstructionAndThinkingBudget(t *testing.T) {
 	var captured GeminiRequest
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {

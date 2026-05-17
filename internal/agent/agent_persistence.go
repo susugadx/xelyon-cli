@@ -27,6 +27,10 @@ func (a *Agent) appendSessionToolExecution(toolCall *tools.ToolCall, result stri
 	if a == nil || a.session == nil || toolCall == nil {
 		return
 	}
+	decision := toolResultRetentionDecisionFor(toolCall)
+	if !decision.KeepSessionToolExecution {
+		return
+	}
 	a.withSessionMutation(func() {
 		success := !isError
 		a.session.AddToolExecution(toolCall.Tool, toolCall.Args, result, success, a.CurrentModel)

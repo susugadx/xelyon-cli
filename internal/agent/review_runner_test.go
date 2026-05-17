@@ -27,6 +27,7 @@ func TestAgentReviewModelCompleteReviewPassesPromptAsSingleUserMessage(t *testin
 		toolCount    int
 		mergedTools  int
 		compacted    int
+		activeCtx    int
 		cacheNS      string
 	}
 	provider := &scriptedChatProvider{
@@ -44,6 +45,7 @@ func TestAgentReviewModelCompleteReviewPassesPromptAsSingleUserMessage(t *testin
 				Parameters:  map[string]interface{}{"type": "object"},
 			}}))
 			captured.compacted = len(api.CompactedInputItemsFromContext(ctx))
+			captured.activeCtx = len(api.ActiveContextBlocksFromContext(ctx))
 			captured.cacheNS = api.ProviderCacheNamespaceFromContext(ctx)
 			return `{"ok":true}`, nil
 		},
@@ -52,7 +54,7 @@ func TestAgentReviewModelCompleteReviewPassesPromptAsSingleUserMessage(t *testin
 	agent.isCompactedMode = true
 	agent.compactedItems = []api.InputItem{{Type: "message", Role: "user", Content: "existing compacted chat"}}
 
-	resp, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
+	resp, err := (agentReviewModel{agent: agent}).CompleteReview(contextWithInheritedActiveContext(), review.ReviewModelRequest{
 		Phase:  review.ReviewModelPhaseReport,
 		Prompt: "return review json",
 	})
@@ -85,6 +87,9 @@ func TestAgentReviewModelCompleteReviewPassesPromptAsSingleUserMessage(t *testin
 	}
 	if captured.compacted != 0 {
 		t.Fatalf("compacted input items = %d, want 0 for isolated review model call", captured.compacted)
+	}
+	if captured.activeCtx != 0 {
+		t.Fatalf("active context blocks = %d, want 0 for isolated review model call", captured.activeCtx)
 	}
 	if captured.cacheNS != reviewModelProviderCacheNamespace {
 		t.Fatalf("provider cache namespace = %q, want %q", captured.cacheNS, reviewModelProviderCacheNamespace)
