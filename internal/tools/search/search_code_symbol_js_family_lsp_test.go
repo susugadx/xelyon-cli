@@ -110,6 +110,64 @@ func TestJSFamilyRefFromLSPLocationRejectsIgnoredPath(t *testing.T) {
 	}
 }
 
+func TestJSFamilyLSPReferenceCollectorFiltersBeforeLoadingEvidence(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/app.ts":       "buildUser('accepted')\n",
+		"src/generated.ts": "buildUser('generated')\n",
+		"src/app.jsx":      "buildUser('jsx')\n",
+		"other/app.ts":     "buildUser('other')\n",
+	})
+	opts := SearchOptions{
+		Path:          filepath.Join(dir, "src"),
+		FileType:      "ts",
+		InvocationCWD: dir,
+		ignoreMatcher: pathmatch.NewMatcher([]string{"src/generated.ts"}),
+	}
+	lspOpts := newJSFamilyLSPReferenceOptions(opts, opts, opts)
+	collector := newJSFamilyLSPReferenceCollector("buildUser", lspOpts, 5)
+	defer collector.Close()
+
+	var loaded []string
+	acceptedPath := filepath.Join(dir, "src", "app.ts")
+	collector.builder.loadFile = func(absPath string) *jsFamilyLSPReferenceFile {
+		loaded = append(loaded, absPath)
+		return &jsFamilyLSPReferenceFile{lines: []string{"buildUser('accepted')"}}
+	}
+
+	tests := []struct {
+		name string
+		loc  navigation.LSPLocation
+		want bool
+	}{
+		{name: "accepted", loc: navigation.LSPLocation{File: "src/app.ts", Line: 1, Character: 1}, want: true},
+		{name: "ignored", loc: navigation.LSPLocation{File: "src/generated.ts", Line: 1, Character: 1}},
+		{name: "wrong file type", loc: navigation.LSPLocation{File: "src/app.jsx", Line: 1, Character: 1}},
+		{name: "out of scope", loc: navigation.LSPLocation{File: "other/app.ts", Line: 1, Character: 1}},
+		{name: "missing line", loc: navigation.LSPLocation{File: "src/app.ts", Character: 1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := collector.AddLocation(tt.loc); got != tt.want {
+				t.Fatalf("AddLocation() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	collection := collector.Result()
+	if len(collection.refs) != 1 {
+		t.Fatalf("refs = %+v, want one accepted LSP ref", collection.refs)
+	}
+	if got := collection.refs[0].File; got != "src/app.ts" {
+		t.Fatalf("ref file = %q, want src/app.ts", got)
+	}
+	if got := collection.refs[0].Snippet; got != "buildUser('accepted')" {
+		t.Fatalf("snippet = %q, want accepted snippet", got)
+	}
+	if len(loaded) != 1 || loaded[0] != acceptedPath {
+		t.Fatalf("loaded paths = %+v, want only %q", loaded, acceptedPath)
+	}
+}
+
 func TestJSFamilyLSPReferenceBuilderLoadsEachFileOnce(t *testing.T) {
 	absPath := filepath.Join(t.TempDir(), "src", "app.ts")
 	loads := 0
