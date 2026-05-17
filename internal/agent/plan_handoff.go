@@ -12,6 +12,11 @@ type planModeImplementationHandoff struct {
 	approvedPlan        plan.Plan
 }
 
+type planHandoffFileGroup struct {
+	label string
+	files []string
+}
+
 func newPlanModeImplementationHandoff(originalUserRequest string, approvedPlan *plan.Plan) *planModeImplementationHandoff {
 	if approvedPlan == nil || len(approvedPlan.Steps) == 0 {
 		return nil
@@ -74,9 +79,11 @@ func (h *planModeImplementationHandoff) normalModeInput() string {
 			b.WriteString(strings.Join(step.Tools, ", "))
 			b.WriteString("\n")
 		}
-		if files := handoffStepFiles(step); len(files) > 0 {
-			b.WriteString("   Files: ")
-			b.WriteString(strings.Join(files, ", "))
+		for _, group := range handoffStepFileGroups(step) {
+			b.WriteString("   ")
+			b.WriteString(group.label)
+			b.WriteString(": ")
+			b.WriteString(strings.Join(group.files, ", "))
 			b.WriteString("\n")
 		}
 	}
@@ -85,17 +92,51 @@ func (h *planModeImplementationHandoff) normalModeInput() string {
 	return b.String()
 }
 
-func handoffStepFiles(step plan.PlanStep) []string {
+func handoffStepFileGroups(step plan.PlanStep) []planHandoffFileGroup {
+	targetFiles := compactHandoffFiles(step.TargetFiles, nil)
+	readFiles := compactHandoffFiles(step.ReadFiles, nil)
+	writeFiles := compactHandoffFiles(step.WriteFiles, nil)
+	structuredFiles := handoffFileSet(targetFiles, readFiles, writeFiles)
+	relatedFiles := compactHandoffFiles(step.Files, structuredFiles)
+
+	groups := make([]planHandoffFileGroup, 0, 4)
+	if len(targetFiles) > 0 {
+		groups = append(groups, planHandoffFileGroup{label: "Target files", files: targetFiles})
+	}
+	if len(readFiles) > 0 {
+		groups = append(groups, planHandoffFileGroup{label: "Read files", files: readFiles})
+	}
+	if len(writeFiles) > 0 {
+		groups = append(groups, planHandoffFileGroup{label: "Write files", files: writeFiles})
+	}
+	if len(relatedFiles) > 0 {
+		groups = append(groups, planHandoffFileGroup{label: "Related files", files: relatedFiles})
+	}
+	return groups
+}
+
+func compactHandoffFiles(files []string, exclude map[string]bool) []string {
 	seen := make(map[string]bool)
-	files := make([]string, 0, len(step.TargetFiles)+len(step.Files)+len(step.ReadFiles)+len(step.WriteFiles))
-	for _, group := range [][]string{step.TargetFiles, step.Files, step.ReadFiles, step.WriteFiles} {
+	compact := make([]string, 0, len(files))
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		if file == "" || seen[file] {
+			continue
+		}
+		if exclude != nil && exclude[file] {
+			continue
+		}
+		seen[file] = true
+		compact = append(compact, file)
+	}
+	return compact
+}
+
+func handoffFileSet(groups ...[]string) map[string]bool {
+	files := make(map[string]bool)
+	for _, group := range groups {
 		for _, file := range group {
-			file = strings.TrimSpace(file)
-			if file == "" || seen[file] {
-				continue
-			}
-			seen[file] = true
-			files = append(files, file)
+			files[file] = true
 		}
 	}
 	return files

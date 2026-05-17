@@ -11,10 +11,9 @@ import (
 )
 
 const (
-	planModeFlowApprovedStep            = "Update foo.go and tests"
-	planModeFlowApprovedPlanResponse    = "Here is the plan:\n```json\n{\"plan\":{\"summary\":\"Ship a small change\",\"steps\":[{\"id\":1,\"description\":\"" + planModeFlowApprovedStep + "\",\"tools\":[\"str_replace\"]}]}}\n```"
-	planModeFlowImplementationResponse  = "The requested changes are done."
-	planModeFlowImplementationStartText = "Starting implementation from approved plan"
+	planModeFlowStructuredRelatedFilesFragment = "Related files: foo.go, foo_test.go"
+	planModeFlowImplementationResponse         = "The requested changes are done."
+	planModeFlowImplementationStartText        = "Starting implementation from approved plan"
 )
 
 type planResponseContextProvider struct {
@@ -72,7 +71,7 @@ func newPlanApprovalFlowProvider(initialResponseID string) *planResponseContextP
 	return &planResponseContextProvider{
 		responseID: initialResponseID,
 		responses: []string{
-			planModeFlowApprovedPlanResponse,
+			planHandoffTestApprovedPlanResponse(planHandoffTestApprovedStep),
 			planModeFlowImplementationResponse,
 		},
 	}
@@ -100,8 +99,14 @@ func assertImplementationHistoryContainsApprovedPlanHandoff(t *testing.T, histor
 		t.Fatal("implementation history should contain handoff input")
 	}
 	handoffContent := history[len(history)-1].Content
-	if !strings.Contains(handoffContent, "Implement the approved plan now.") || !strings.Contains(handoffContent, planModeFlowApprovedStep) {
+	if !strings.Contains(handoffContent, "Implement the approved plan now.") || !strings.Contains(handoffContent, planHandoffTestApprovedStep) {
 		t.Fatalf("implementation handoff history = %q, want approved plan", handoffContent)
+	}
+	if !strings.Contains(handoffContent, planModeFlowStructuredRelatedFilesFragment) {
+		t.Fatalf("implementation handoff history = %q, want structured related files", handoffContent)
+	}
+	if strings.Contains(handoffContent, "Files: foo.go") {
+		t.Fatalf("implementation handoff history = %q, should not use legacy Files label", handoffContent)
 	}
 }
 

@@ -24,7 +24,7 @@ func planAutoCompressionToolResponse(path string) string {
 }
 
 func planAutoCompressionApprovedPlanResponse() string {
-	return "Here is the plan:\n```json\n{\"plan\":{\"summary\":\"Ship a small change\",\"steps\":[{\"id\":1,\"description\":\"Update foo.go and tests\",\"tools\":[\"str_replace\"]}]}}\n```"
+	return planHandoffTestApprovedPlanResponse(planHandoffTestApprovedStep)
 }
 
 func newPlanAutoCompressionTestAgent(t *testing.T, provider *inTurnCompressionProvider, input string, cfg *config.Config, out *bytes.Buffer) *Agent {
