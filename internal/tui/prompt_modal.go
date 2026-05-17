@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -22,13 +20,6 @@ type promptModalState struct {
 	selected int
 	values   map[string]bool
 	text     promptTextState
-}
-
-type promptOptionView struct {
-	label       string
-	description string
-	value       string
-	action      ui.PromptAction
 }
 
 func newPromptModalState(msg OpenPromptMsg) *promptModalState {
@@ -60,36 +51,6 @@ func newPromptModalState(msg OpenPromptMsg) *promptModalState {
 	}
 
 	return state
-}
-
-func promptOptions(req ui.PromptRequest) []promptOptionView {
-	switch req.Kind {
-	case ui.PromptKindConfirm:
-		options := []promptOptionView{
-			{label: "Yes", description: "Approve", action: ui.PromptActionYes},
-			{label: "No", description: "Cancel", action: ui.PromptActionNo},
-		}
-		if req.AllowComment {
-			options = append(options, promptOptionView{label: "Comment", description: "Send feedback", action: ui.PromptActionComment})
-		}
-		return options
-	case ui.PromptKindSingleChoice, ui.PromptKindMultiChoice:
-		options := make([]promptOptionView, 0, len(req.Options))
-		for _, opt := range req.Options {
-			value := opt.Value
-			if value == "" {
-				value = opt.Label
-			}
-			options = append(options, promptOptionView{
-				label:       opt.Label,
-				description: opt.Description,
-				value:       value,
-			})
-		}
-		return options
-	default:
-		return nil
-	}
 }
 
 func (m Model) handleOpenPromptMsg(msg OpenPromptMsg) (Model, tea.Cmd) {
@@ -130,7 +91,7 @@ func (m Model) handlePromptChoiceKeyMsg(msg tea.KeyMsg) Model {
 		m.finishPrompt(ui.PromptResponse{Cancelled: true})
 		return m
 	}
-	if action, ok := promptConfirmShortcutAction(m.prompt.req, msg); ok {
+	if action, ok := promptConfirmShortcutAction(m.prompt.req, options, msg); ok {
 		m.submitPromptConfirmAction(action)
 		return m
 	}
@@ -152,26 +113,6 @@ func (m Model) handlePromptChoiceKeyMsg(msg tea.KeyMsg) Model {
 		}
 	}
 	return m
-}
-
-func promptConfirmShortcutAction(req ui.PromptRequest, msg tea.KeyMsg) (ui.PromptAction, bool) {
-	if req.Kind != ui.PromptKindConfirm {
-		return "", false
-	}
-	input := strings.ToLower(strings.TrimSpace(msg.String()))
-	switch input {
-	case "y", "yes", "1":
-		return ui.PromptActionYes, true
-	case "n", "no", "2":
-		return ui.PromptActionNo, true
-	case "c", "comment", "3":
-		if req.AllowComment {
-			return ui.PromptActionComment, true
-		}
-		return "", false
-	default:
-		return "", false
-	}
 }
 
 func (m Model) handlePromptTextKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -207,7 +148,7 @@ func (m *Model) submitPromptChoice(opt promptOptionView, options []promptOptionV
 func (m *Model) submitPromptConfirmAction(action ui.PromptAction) {
 	if action == ui.PromptActionComment {
 		m.prompt.mode = promptModalText
-		m.prompt.text.beginComment()
+		m.prompt.text.beginComment(m.prompt.req.Placeholder)
 		return
 	}
 	m.finishPrompt(ui.PromptResponse{Action: action})

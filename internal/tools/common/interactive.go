@@ -43,13 +43,19 @@ var ConfirmInteractive = func(message string) ConfirmResult {
 
 // ConfirmInteractiveWithIO は入出力先を指定した拡張確認プロンプトを実行する。
 func ConfirmInteractiveWithIO(promptIO ui.PromptIO, message string) ConfirmResult {
+	return ConfirmInteractiveRequestWithIO(promptIO, ui.PromptRequest{
+		Kind:         ui.PromptKindConfirm,
+		Message:      message,
+		AllowComment: true,
+	})
+}
+
+// ConfirmInteractiveRequestWithIO は PromptRequest を指定して拡張確認プロンプトを実行する。
+func ConfirmInteractiveRequestWithIO(promptIO ui.PromptIO, req ui.PromptRequest) ConfirmResult {
 	promptIO = ui.NormalizePromptIO(promptIO)
+	req.Kind = ui.PromptKindConfirm
 	if prompter := promptIO.Prompter(); prompter != nil {
-		resp, err := prompter.Prompt(promptIO.PromptContext(), ui.PromptRequest{
-			Kind:         ui.PromptKindConfirm,
-			Message:      message,
-			AllowComment: true,
-		})
+		resp, err := prompter.Prompt(promptIO.PromptContext(), req)
 		if err != nil || resp.Cancelled {
 			return ConfirmResult{Action: "no"}
 		}
@@ -65,7 +71,7 @@ func ConfirmInteractiveWithIO(promptIO ui.PromptIO, message string) ConfirmResul
 	}
 
 	// 矢印キー選択UIを使用
-	result, err := ui.ConfirmSelectorWithIO(promptIO, message)
+	result, err := ui.ConfirmSelectorRequestWithIO(promptIO, req)
 	if err != nil {
 		// キャンセルまたはエラー時はnoを返す
 		return ConfirmResult{Action: "no"}

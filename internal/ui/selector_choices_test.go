@@ -13,6 +13,7 @@ func TestSelectorRunWithIO_InputVariants(t *testing.T) {
 		want  string
 	}{
 		{name: "default enter", input: "\n", want: "yes"},
+		{name: "eof falls back to default", input: "", want: "yes"},
 		{name: "no shortcut", input: "n\n", want: "no"},
 		{name: "comment numeric", input: "3\n", want: "comment"},
 		{name: "comment literal", input: "comment\n", want: "comment"},
@@ -53,5 +54,64 @@ func TestConfirmSelectorWithIO_UsesThreeWaySelector(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "continue?") {
 		t.Fatalf("expected selector message in output, got %q", out.String())
+	}
+}
+
+func TestConfirmSelectorRequestWithIO_UsesCustomConfirmOptionOrder(t *testing.T) {
+	var out bytes.Buffer
+	req := NewPlanApprovalPromptRequest()
+	got, err := ConfirmSelectorRequestWithIO(NewPromptIO(strings.NewReader("2\n"), &out, &out, nil), req)
+	if err != nil {
+		t.Fatalf("ConfirmSelectorRequestWithIO() error = %v", err)
+	}
+	if got != string(PromptActionComment) {
+		t.Fatalf("ConfirmSelectorRequestWithIO() = %q, want comment from second custom option", got)
+	}
+	for _, want := range []string{"Approve", "Request changes", "Cancel"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("selector output = %q, want custom option %q", out.String(), want)
+		}
+	}
+}
+
+func TestConfirmSelectorRequestWithIO_UsesNamedShortcutsForCustomOptions(t *testing.T) {
+	var out bytes.Buffer
+	req := NewPlanApprovalPromptRequest()
+	got, err := ConfirmSelectorRequestWithIO(NewPromptIO(strings.NewReader("n\n"), &out, &out, nil), req)
+	if err != nil {
+		t.Fatalf("ConfirmSelectorRequestWithIO() error = %v", err)
+	}
+	if got != string(PromptActionNo) {
+		t.Fatalf("ConfirmSelectorRequestWithIO() = %q, want no from n shortcut", got)
+	}
+}
+
+func TestConfirmSelectorRequestWithIO_ExplicitPolicyRePromptsOnEmptySubmit(t *testing.T) {
+	var out bytes.Buffer
+	req := NewPlanApprovalPromptRequest()
+	got, err := ConfirmSelectorRequestWithIO(NewPromptIO(strings.NewReader("\n2\n"), &out, &out, nil), req)
+	if err != nil {
+		t.Fatalf("ConfirmSelectorRequestWithIO() error = %v", err)
+	}
+	if got != string(PromptActionComment) {
+		t.Fatalf("ConfirmSelectorRequestWithIO() = %q, want comment after retry", got)
+	}
+	if strings.Contains(out.String(), "Enter=Approve") || !strings.Contains(out.String(), "Choice:") {
+		t.Fatalf("selector output = %q, want explicit prompt without Enter default", out.String())
+	}
+	if !strings.Contains(out.String(), "Please choose one of the listed options.") {
+		t.Fatalf("selector output = %q, want retry guidance after empty submit", out.String())
+	}
+}
+
+func TestConfirmSelectorRequestWithIO_ExplicitPolicyReturnsEOFWhenNoInput(t *testing.T) {
+	var out bytes.Buffer
+	req := NewPlanApprovalPromptRequest()
+	got, err := ConfirmSelectorRequestWithIO(NewPromptIO(strings.NewReader(""), &out, &out, nil), req)
+	if err == nil {
+		t.Fatal("ConfirmSelectorRequestWithIO() error = nil, want EOF")
+	}
+	if got != "" {
+		t.Fatalf("ConfirmSelectorRequestWithIO() = %q, want empty value on EOF", got)
 	}
 }

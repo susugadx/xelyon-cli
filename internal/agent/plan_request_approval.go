@@ -5,11 +5,13 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 // confirmPlan は計画の承認確認
 func (a *Agent) confirmPlan(ctx context.Context) (approved bool, feedback string) {
-	result := tools.ConfirmInteractiveWithIO(a.requestPromptIO(ctx), "Approve this plan?")
+	promptIO := a.requestPromptIO(ctx)
+	result := tools.ConfirmInteractiveRequestWithIO(promptIO, ui.NewPlanApprovalPromptRequest())
 
 	switch result.Action {
 	case "yes":

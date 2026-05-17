@@ -33,10 +33,13 @@ func (s *promptTextState) focus() {
 	s.input.Focus()
 }
 
-func (s *promptTextState) beginComment() {
+func (s *promptTextState) beginComment(placeholder string) {
 	s.responseAction = ui.PromptActionComment
 	s.setValue("")
-	s.input.Placeholder = "Type feedback. Use image:/path to attach an image."
+	if placeholder == "" {
+		placeholder = "Type feedback. Use image:/path to attach an image."
+	}
+	s.input.Placeholder = placeholder
 	s.input.Focus()
 }
 

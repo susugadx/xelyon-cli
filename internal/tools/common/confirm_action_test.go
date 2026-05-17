@@ -37,6 +37,24 @@ func TestConfirmWithIO_InteractiveDecisionPaths(t *testing.T) {
 	})
 }
 
+func TestConfirmInteractiveRequestWithIO_ExplicitPolicyRePromptsBeforeFeedback(t *testing.T) {
+	var out strings.Builder
+	result := ConfirmInteractiveRequestWithIO(
+		ui.NewPromptIO(strings.NewReader("\n2\nneeds more context\n\n"), &out, io.Discard, nil),
+		ui.NewPlanApprovalPromptRequest(),
+	)
+
+	if result.Action != string(ConfirmComment) {
+		t.Fatalf("Action = %q, want %q", result.Action, ConfirmComment)
+	}
+	if result.Comment != "needs more context" {
+		t.Fatalf("Comment = %q, want feedback after retry", result.Comment)
+	}
+	if !strings.Contains(out.String(), "Please choose one of the listed options.") {
+		t.Fatalf("output = %q, want retry guidance", out.String())
+	}
+}
+
 func TestConfirmToolAction_DecisionMatrix(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
 

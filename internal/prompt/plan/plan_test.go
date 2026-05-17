@@ -15,6 +15,9 @@ func TestPlanJSONSchemaInstructions_ContainsFilesContract(t *testing.T) {
 		`"description"`,
 		`"tools"`,
 		`"files"`,
+		"reviewable sentence",
+		"normally 2-6 steps",
+		"understandable without the investigation transcript",
 		"implementation-relevant repo-relative files",
 	})
 }

@@ -58,6 +58,7 @@ func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalCreatesHandoff(t 
 			ID:          1,
 			Description: "Update the target file",
 			Tools:       []string{"read_file", "str_replace"},
+			Files:       []string{"internal/agent/plan_request.go"},
 		}},
 	}
 
@@ -70,6 +71,9 @@ func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalCreatesHandoff(t 
 	}
 	if !strings.Contains(out.String(), "Implementation Plan") {
 		t.Fatalf("expected rendered plan in output, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "関連ファイル") || !strings.Contains(out.String(), "internal/agent/plan_request.go") {
+		t.Fatalf("expected rendered plan files in output, got %q", out.String())
 	}
 	if !strings.Contains(out.String(), "Plan approved. Plan Mode complete.") {
 		t.Fatalf("expected approval output, got %q", out.String())

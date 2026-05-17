@@ -27,6 +27,14 @@ type planApprovalBlockingPrompter struct {
 	started chan struct{}
 }
 
+type planApprovalResponsePrompter struct {
+	resp ui.PromptResponse
+}
+
+func (p planApprovalResponsePrompter) Prompt(ctx context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+	return p.resp, nil
+}
+
 func (p *planApprovalBlockingPrompter) Prompt(ctx context.Context, _ ui.PromptRequest) (ui.PromptResponse, error) {
 	close(p.started)
 	select {
@@ -37,12 +45,33 @@ func (p *planApprovalBlockingPrompter) Prompt(ctx context.Context, _ ui.PromptRe
 	}
 }
 
+func TestConfirmPlan_UsesPlanFeedbackPromptResponse(t *testing.T) {
+	var out bytes.Buffer
+	runtime := ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.SetPrompter(planApprovalResponsePrompter{
+		resp: ui.PromptResponse{Action: ui.PromptActionComment, Text: "  add tests first  "},
+	})
+	agent := &Agent{
+		Runtime: &AgentRuntime{
+			UI: runtime,
+		},
+	}
+
+	approved, feedback := agent.confirmPlan(context.Background())
+	if approved {
+		t.Fatal("confirmPlan() approved = true, want false")
+	}
+	if feedback != "add tests first" {
+		t.Fatalf("confirmPlan() feedback = %q, want trimmed feedback", feedback)
+	}
+}
+
 func TestConfirmPlan_UsesRuntimePromptIO(t *testing.T) {
 	var out bytes.Buffer
 
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader("2\n"), &out, &out),
+			UI: ui.NewRuntime(strings.NewReader("n\n"), &out, &out),
 		},
 	}
 
@@ -53,7 +82,7 @@ func TestConfirmPlan_UsesRuntimePromptIO(t *testing.T) {
 	if feedback != "" {
 		t.Fatalf("confirmPlan() feedback = %q, want empty", feedback)
 	}
-	if !strings.Contains(out.String(), "Approve this plan?") {
+	if !strings.Contains(out.String(), "Approve the plan, request changes, or cancel Plan Mode.") {
 		t.Fatalf("expected runtime output to contain confirmation prompt, got %q", out.String())
 	}
 }
@@ -84,8 +113,18 @@ func TestConfirmPlan_UsesRequestContextForPrompt(t *testing.T) {
 	if got := prompter.ctx.Value(planApprovalContextKey{}); got != "plan-request" {
 		t.Fatalf("prompt context marker = %v, want plan-request", got)
 	}
-	if prompter.req.Kind != ui.PromptKindConfirm || prompter.req.Message != "Approve this plan?" || !prompter.req.AllowComment {
+	if prompter.req.Kind != ui.PromptKindConfirm ||
+		prompter.req.Title != "Review implementation plan" ||
+		prompter.req.Message != "Approve the plan, request changes, or cancel Plan Mode." ||
+		!prompter.req.AllowComment ||
+		prompter.req.ConfirmSubmitPolicy != ui.PromptConfirmSubmitExplicit {
 		t.Fatalf("prompt request = %#v, want plan approval confirm", prompter.req)
+	}
+	if len(prompter.req.Options) != 3 ||
+		prompter.req.Options[0].Value != string(ui.PromptActionYes) ||
+		prompter.req.Options[1].Value != string(ui.PromptActionComment) ||
+		prompter.req.Options[2].Value != string(ui.PromptActionNo) {
+		t.Fatalf("prompt options = %#v, want approve/comment/cancel actions", prompter.req.Options)
 	}
 }
 

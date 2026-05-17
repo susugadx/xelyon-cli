@@ -9,7 +9,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 type planModeRequest struct {
@@ -194,7 +193,7 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 
 	r.renderPlan(p)
 
-	a.SetStatus(StateWaitingApproval, "Waiting for plan approval", "計画の承認待ち", "Answer y/n/c", "y/n/c で回答")
+	a.SetStatus(StateWaitingApproval, "Waiting for plan review", "計画レビュー待ち", "Approve/request changes/cancel", "承認/変更依頼/中止を選択")
 	approved, feedback := r.confirmPlanApproval()
 	if approved {
 		r.approved = true
@@ -206,25 +205,19 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 	}
 
 	if feedback != "" {
-		yellow.Fprintf(out, "Plan rejected with feedback: %s\n", feedback)
+		yellow.Fprintf(out, "Plan feedback received. Regenerating plan: %s\n", feedback)
 		if err := r.restoreConversationState(); err != nil {
 			return true, err
 		}
 		return true, r.rerunPlanMode(r.feedbackRerunRequest(feedback))
 	}
 
-	red.Fprintln(out, "Plan mode cancelled.")
+	red.Fprintln(out, "Plan mode cancelled. No implementation started.")
 	return true, nil
 }
 
 func (r *planModeRequest) renderPlan(p *plan.Plan) string {
-	planDisplay := ui.NewPlanDisplay("Implementation Plan").
-		SetSummary(p.Summary)
-
-	for _, step := range p.Steps {
-		planDisplay.AddStep(step.ID, step.Description, step.Tools, step.TargetFiles)
-	}
-
+	planDisplay := buildPlanReviewDisplay(p)
 	rendered := planDisplay.Render()
 	_, _ = fmt.Fprintln(r.agent.output())
 	_, _ = fmt.Fprint(r.agent.output(), rendered)

@@ -16,22 +16,37 @@ type PlanStep struct {
 
 // PlanDisplay は計画表示用の構造体
 type PlanDisplay struct {
-	Title   string
-	Summary string
-	Steps   []PlanStep
+	Title      string
+	Summary    string
+	Steps      []PlanStep
+	FilesTitle string
+	Footer     string
 }
 
 // NewPlanDisplay は新しい PlanDisplay を作成
 func NewPlanDisplay(title string) *PlanDisplay {
 	return &PlanDisplay{
-		Title: title,
-		Steps: nil,
+		Title:      title,
+		Steps:      nil,
+		FilesTitle: "修正ファイル",
 	}
 }
 
 // SetSummary は概要を設定
 func (p *PlanDisplay) SetSummary(summary string) *PlanDisplay {
 	p.Summary = summary
+	return p
+}
+
+// SetFilesTitle はファイル一覧の見出しを設定
+func (p *PlanDisplay) SetFilesTitle(title string) *PlanDisplay {
+	p.FilesTitle = title
+	return p
+}
+
+// SetFooter は計画表示の下部補足を設定
+func (p *PlanDisplay) SetFooter(footer string) *PlanDisplay {
+	p.Footer = footer
 	return p
 }
 
@@ -90,8 +105,15 @@ func (p *PlanDisplay) Render() string {
 
 	// 修正ファイル一覧（テーブル形式）
 	if files := p.collectFiles(); len(files) > 0 {
-		sb.WriteString("修正ファイル\n")
+		sb.WriteString(p.filesTitle())
+		sb.WriteString("\n")
 		sb.WriteString(p.renderFilesTable(files))
+	}
+
+	if p.Footer != "" {
+		sb.WriteString("\n確認\n")
+		writeIndentedNonEmptyLines(&sb, p.Footer, "  ")
+		sb.WriteString("\n")
 	}
 
 	// 下部罫線
@@ -99,6 +121,22 @@ func (p *PlanDisplay) Render() string {
 	sb.WriteString("\n")
 
 	return sb.String()
+}
+
+func (p *PlanDisplay) filesTitle() string {
+	if p.FilesTitle == "" {
+		return "修正ファイル"
+	}
+	return p.FilesTitle
+}
+
+func writeIndentedNonEmptyLines(sb *strings.Builder, text string, indent string) {
+	for _, line := range strings.Split(text, "\n") {
+		if line == "" {
+			continue
+		}
+		fmt.Fprintf(sb, "%s%s\n", indent, line)
+	}
 }
 
 // collectFiles はすべてのステップからファイルを収集

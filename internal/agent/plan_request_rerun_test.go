@@ -20,7 +20,7 @@ func TestPlanModeRequest_HandleInvestigationResult_FeedbackRestartsPlanMode(t *t
 		name:      "test",
 		responses: []string{"Investigation complete."},
 	}
-	agent := newPlanRequestTestAgent(t, provider, "3\nNeed more evidence\n\n", &out)
+	agent := newPlanRequestTestAgent(t, provider, "c\nNeed more evidence\n\n", &out)
 	req := newPlanModeRequest(agent, context.Background(), "implement feature")
 	p := &plan.Plan{
 		Summary: "Ship a small change",
@@ -40,8 +40,11 @@ func TestPlanModeRequest_HandleInvestigationResult_FeedbackRestartsPlanMode(t *t
 	if provider.callCount != 1 {
 		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
 	}
-	if !strings.Contains(out.String(), "Plan rejected with feedback: Need more evidence") {
+	if !strings.Contains(out.String(), "Plan feedback received. Regenerating plan: Need more evidence") {
 		t.Fatalf("expected feedback output, got %q", out.String())
+	}
+	if req.handoff != nil {
+		t.Fatal("feedback should not create an implementation handoff")
 	}
 	if status := agent.statusRef().getStatus(); status.State != StateWaitingInput {
 		t.Fatalf("status.State = %q, want %q", status.State, StateWaitingInput)
@@ -66,7 +69,7 @@ func TestPlanModeRequest_Run_FeedbackRerunRecordsUserRequestInSession(t *testing
 			}
 		},
 	}
-	agent := newPlanRequestTestAgent(t, provider, "3\nNeed more evidence\n\n", &out)
+	agent := newPlanRequestTestAgent(t, provider, "c\nNeed more evidence\n\n", &out)
 	req := newPlanModeRequest(agent, context.Background(), "task b")
 
 	if err := req.Run(); err != nil {

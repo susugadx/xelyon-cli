@@ -35,7 +35,7 @@ const (
 type PromptOption struct {
 	Label       string
 	Description string
-	Value       string
+	Value       string // confirm では "yes" / "no" / "comment" の action 値
 }
 
 // PromptRequest は TUI などの UI 実装へ渡す prompt 契約。
@@ -43,7 +43,7 @@ type PromptRequest struct {
 	Kind                PromptKind
 	Title               string
 	Message             string
-	Options             []PromptOption
+	Options             []PromptOption // confirm では任意の表示ラベル/順序を指定できる
 	DefaultValue        string
 	DefaultValues       []string
 	AllowComment        bool

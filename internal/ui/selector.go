@@ -14,8 +14,9 @@ type SelectOption struct {
 
 // Selector は選択UI（数字キー + Enter方式）
 type Selector struct {
-	Message string         // 質問メッセージ
-	Options []SelectOption // 選択肢
+	Message         string         // 質問メッセージ
+	Options         []SelectOption // 選択肢
+	RequireExplicit bool           // 空入力や不明な入力で先頭 option に倒さない
 }
 
 // ANSI escape codes
@@ -61,51 +62,100 @@ func (s *Selector) RunWithIO(promptIO PromptIO) (string, error) {
 	}
 
 	// ヒント表示
-	_, _ = fmt.Fprintf(promptIO.Out, "\n%s  (Enter=Yes, 2/n=No, 3/c=Comment)%s\n", colorDim, colorReset)
-	_, _ = fmt.Fprintf(promptIO.Out, "%sChoice [1]:%s ", colorCyan, colorReset)
-
-	input, err := promptIO.ReadSimpleLine()
-	if err != nil {
-		input = ""
+	if hint := selectorInputHint(s.Options, s.RequireExplicit); hint != "" {
+		_, _ = fmt.Fprintf(promptIO.Out, "\n%s  (%s)%s\n", colorDim, hint, colorReset)
 	}
-	input = strings.TrimSpace(strings.ToLower(input))
-	// 入力を解釈
-	switch input {
-	case "", "1", "y", "yes":
-		_, _ = fmt.Fprintf(promptIO.Out, "%s✓ Yes%s\n", colorGreen, colorReset)
-		return "yes", nil
-	case "2", "n", "no":
-		_, _ = fmt.Fprintf(promptIO.Out, "%s✓ No%s\n", colorGreen, colorReset)
-		return "no", nil
-	case "3", "c", "comment":
-		_, _ = fmt.Fprintf(promptIO.Out, "%s✓ Comment%s\n", colorGreen, colorReset)
-		return "comment", nil
-	default:
-		// 数字入力の場合
-		if len(input) == 1 && input[0] >= '1' && input[0] <= '9' {
-			idx := int(input[0] - '1')
-			if idx < len(s.Options) {
-				_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s%s\n", colorGreen, s.Options[idx].Label, colorReset)
-				return s.Options[idx].Value, nil
+	choicePrompt := "Choice [1]:"
+	if s.RequireExplicit {
+		choicePrompt = "Choice:"
+	}
+	for {
+		_, _ = fmt.Fprintf(promptIO.Out, "%s%s%s ", colorCyan, choicePrompt, colorReset)
+
+		input, err := promptIO.ReadSimpleLine()
+		if err != nil {
+			if s.RequireExplicit {
+				return "", err
+			}
+			input = ""
+		}
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		selected, ok := resolveSelectorInput(s.Options, input, s.RequireExplicit)
+		if !ok {
+			_, _ = fmt.Fprintf(promptIO.Out, "%sPlease choose one of the listed options.%s\n", colorDim, colorReset)
+			continue
+		}
+		if selected.defaulted {
+			_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s (default)%s\n", colorGreen, selected.label, colorReset)
+		} else {
+			_, _ = fmt.Fprintf(promptIO.Out, "%s✓ %s%s\n", colorGreen, selected.label, colorReset)
+		}
+		return selected.value, nil
+	}
+}
+
+type selectorResolvedInput struct {
+	value     string
+	label     string
+	defaulted bool
+}
+
+func resolveSelectorInput(options []SelectOption, input string, requireExplicit bool) (selectorResolvedInput, bool) {
+	if len(options) == 0 {
+		return selectorResolvedInput{}, false
+	}
+	if input == "" {
+		if requireExplicit {
+			return selectorResolvedInput{}, false
+		}
+		return selectorResolvedInput{value: options[0].Value, label: options[0].Label, defaulted: true}, true
+	}
+	if len(input) == 1 && input[0] >= '1' && input[0] <= '9' {
+		idx := int(input[0] - '1')
+		if idx >= 0 && idx < len(options) {
+			return selectorResolvedInput{value: options[idx].Value, label: options[idx].Label}, true
+		}
+	}
+
+	for _, opt := range options {
+		if selectorInputMatchesOption(input, opt) {
+			return selectorResolvedInput{value: opt.Value, label: opt.Label}, true
+		}
+	}
+
+	if requireExplicit {
+		return selectorResolvedInput{}, false
+	}
+	return selectorResolvedInput{value: options[0].Value, label: options[0].Label, defaulted: true}, true
+}
+
+func selectorInputMatchesOption(input string, opt SelectOption) bool {
+	return ConfirmPromptOptionMatchesInput(input, PromptOption(opt))
+}
+
+func selectorInputHint(options []SelectOption, requireExplicit bool) string {
+	if len(options) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(options)+1)
+	if !requireExplicit {
+		parts = append(parts, "Enter="+options[0].Label)
+	}
+	for i, opt := range options {
+		shortcuts := []string{fmt.Sprintf("%d", i+1)}
+		if action, ok := ConfirmPromptActionFromValue(opt.Value); ok {
+			switch action {
+			case PromptActionYes:
+				shortcuts = append(shortcuts, "y")
+			case PromptActionNo:
+				shortcuts = append(shortcuts, "n")
+			case PromptActionComment:
+				shortcuts = append(shortcuts, "c")
 			}
 		}
-		// 不明な入力はデフォルト（Yes）
-		_, _ = fmt.Fprintf(promptIO.Out, "%s✓ Yes (default)%s\n", colorGreen, colorReset)
-		return "yes", nil
+		parts = append(parts, strings.Join(shortcuts, "/")+"="+opt.Label)
 	}
-}
-
-// ConfirmSelector は確認用の3択セレクター（Yes/No/Comment）
-func ConfirmSelector(message string) (string, error) {
-	return ConfirmSelectorWithIO(DefaultPromptIO(), message)
-}
-
-// ConfirmSelectorWithIO は入出力先を指定した確認用の3択セレクター。
-func ConfirmSelectorWithIO(promptIO PromptIO, message string) (string, error) {
-	selector := NewSelector(message, []SelectOption{
-		{Label: "Yes", Description: "Execute the proposed change", Value: "yes"},
-		{Label: "No", Description: "Skip this action", Value: "no"},
-		{Label: "Comment", Description: "Provide feedback to AI", Value: "comment"},
-	})
-	return selector.RunWithIO(promptIO)
+	return strings.Join(parts, ", ")
 }

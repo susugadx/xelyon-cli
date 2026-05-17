@@ -5,11 +5,11 @@ Use exactly one JSON object in this shape:
 ` + "```json" + `
 {
   "plan": {
-    "summary": "Short implementation goal",
+    "summary": "User-facing implementation goal with scope",
     "steps": [
       {
         "id": 1,
-        "description": "Concrete implementation action",
+        "description": "Concrete implementation action and intended outcome",
         "tools": ["str_replace", "go test ./internal/agent"],
         "files": [
           "internal/agent/plan_handoff.go",
@@ -22,9 +22,10 @@ Use exactly one JSON object in this shape:
 ` + "```" + `
 
 Field rules:
-- plan.summary: one concise sentence describing the implementation goal.
-- steps[].description: an implementation action, not an investigation action.
-- steps[].tools: expected tools or verification commands for the step.
+- plan.summary: one concise, reviewable sentence describing the goal, scope, and important constraint when known.
+- steps: keep the plan short and ordered (normally 2-6 steps). Each step must be understandable without the investigation transcript.
+- steps[].description: an implementation action and expected outcome, not an investigation action. Mention tests/docs/config in the step when that is the point of the work.
+- steps[].tools: expected tools or verification commands for the step. Include focused test commands when known.
 - steps[].files: implementation-relevant repo-relative files to confirm first in implementation mode. Include source, tests, docs, and config files when known; omit only when no relevant file is known yet.`
 
 // PlanJSONSchemaInstructions は Plan mode が要求する Plan JSON schema 文面を返す。
