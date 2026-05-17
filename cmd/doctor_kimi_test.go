@@ -10,9 +10,7 @@ import (
 )
 
 func TestRunKimiDoctorInvocation_JSONReportsExplicitModel(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("MOONSHOT_API_KEY", "moonshot-key")
-	t.Setenv("KIMI_API_URL", "")
+	setKimiDoctorCommandTestEnv(t, "moonshot-key")
 	t.Setenv("XELYON_MODEL", "kimi-k2.6")
 
 	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
@@ -199,9 +197,7 @@ func TestRenderKimiDoctorJSON_WebSearchSmokeObservation(t *testing.T) {
 }
 
 func TestRunKimiDoctorInvocation_UsesConfiguredModelWhenFlagOmitted(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("MOONSHOT_API_KEY", "moonshot-key")
-	t.Setenv("KIMI_API_URL", "")
+	setKimiDoctorCommandTestEnv(t, "moonshot-key")
 	t.Setenv("XELYON_MODEL", "kimi-k2.5")
 
 	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
@@ -225,11 +221,7 @@ func TestRunKimiDoctorInvocation_UsesConfiguredModelWhenFlagOmitted(t *testing.T
 }
 
 func TestRunKimiDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("MOONSHOT_API_KEY", "")
-	t.Setenv("KIMI_API_URL", "")
-	t.Setenv("XELYON_MODEL", "")
-	t.Setenv("KIMI_FUNCTION_CALLING", "")
+	setKimiDoctorCommandTestEnv(t, "")
 
 	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
 
@@ -284,11 +276,56 @@ func TestRunKimiDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing
 	}
 }
 
+func TestRunKimiDoctorInvocation_PrintRequestJSONReportsProxyEndpointWarning(t *testing.T) {
+	proxyURL := "https://kimi.example/proxy"
+
+	setKimiDoctorCommandTestEnv(t, "")
+	t.Setenv("KIMI_API_URL", proxyURL)
+
+	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
+
+	if err := cmd.Flags().Set("model", "corp-kimi-model"); err != nil {
+		t.Fatalf("set model flag: %v", err)
+	}
+	if err := cmd.Flags().Set("catalog-model", "kimi-k2.6"); err != nil {
+		t.Fatalf("set catalog-model flag: %v", err)
+	}
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runKimiDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runKimiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		APIURL         string `json:"api_url"`
+		RequestPreview struct {
+			Requests []struct {
+				URL string `json:"url"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.APIURL != proxyURL {
+		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
+	}
+	endpoint := requireDoctorJSONCheck(t, report.Checks, "api_url_path")
+	requireDoctorJSONCheckStatus(t, endpoint, "warn")
+	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
+	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
+	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "api_url"), "ok")
+	if len(report.RequestPreview.Requests) == 0 {
+		t.Fatalf("request_preview = %#v, want request previews", report.RequestPreview)
+	}
+	for _, request := range report.RequestPreview.Requests {
+		if request.URL != proxyURL {
+			t.Fatalf("request_preview = %#v, want configured proxy request URL", report.RequestPreview)
+		}
+	}
+}
+
 func TestRunKimiDoctorInvocation_FailsForMissingKey(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("MOONSHOT_API_KEY", "")
-	t.Setenv("KIMI_API_URL", "")
-	t.Setenv("XELYON_MODEL", "")
+	setKimiDoctorCommandTestEnv(t, "")
 
 	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
 
@@ -302,10 +339,7 @@ func TestRunKimiDoctorInvocation_FailsForMissingKey(t *testing.T) {
 }
 
 func TestRootCommand_KimiDoctorCommandParsesFlags(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("MOONSHOT_API_KEY", "moonshot-key")
-	t.Setenv("KIMI_API_URL", "")
-	t.Setenv("XELYON_MODEL", "")
+	setKimiDoctorCommandTestEnv(t, "moonshot-key")
 
 	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "kimi", "--model", "corp-kimi-model", "--catalog-model", "kimi-k2.6", "--json"})
@@ -331,7 +365,7 @@ func TestRootCommand_KimiDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if !strings.Contains(out.String(), "--model") {
 		t.Fatalf("output = %q, want Kimi doctor model flag", out.String())
 	}
-	for _, want := range []string{"--catalog-model", "--tool-smoke", "--image-smoke", "--web-search-smoke", "--print-request"} {
+	for _, want := range []string{"--catalog-model", "--tool-smoke", "--image-smoke", "--web-search-smoke", "--print-request", "exact Chat Completions", "endpoint override", "/v1/chat/completions"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want Kimi doctor help substring %q", out.String(), want)
 		}
@@ -339,4 +373,13 @@ func TestRootCommand_KimiDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if !strings.Contains(out.String(), "Diagnose Kimi native provider configuration") {
 		t.Fatalf("output = %q, want Kimi doctor help", out.String())
 	}
+}
+
+func setKimiDoctorCommandTestEnv(t *testing.T, apiKey string) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MOONSHOT_API_KEY", apiKey)
+	t.Setenv("KIMI_API_URL", "")
+	t.Setenv("KIMI_FUNCTION_CALLING", "")
+	t.Setenv("XELYON_MODEL", "")
 }

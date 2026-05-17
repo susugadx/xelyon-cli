@@ -38,21 +38,21 @@ func (r *DiagnosticReport) addAPIURLCheck() {
 			"api_url",
 			fmt.Sprintf("%s is not a valid absolute URL", kimiAPIURLEnv),
 			raw,
-			fmt.Sprintf("Set %s to a full chat completions endpoint such as %s", kimiAPIURLEnv, defaultKimiURL),
+			fmt.Sprintf("Set %s to a valid absolute URL such as %s", kimiAPIURLEnv, defaultKimiURL),
 		)
 		return
 	}
 
-	if strings.TrimRight(parsed.Path, "/") != "/v1/chat/completions" {
+	if strings.TrimRight(parsed.Path, "/") != kimiChatCompletionsEndpointPath {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"api_url_path",
-			fmt.Sprintf("%s does not end with /v1/chat/completions", kimiAPIURLEnv),
+			fmt.Sprintf("%s does not end with %s", kimiAPIURLEnv, kimiChatCompletionsEndpointPath),
 			raw,
 			"This is OK only for an intentional proxy endpoint",
 		)
 	}
-	r.addCheck(DiagnosticStatusOK, "api_url", "Kimi API URL is configured", raw, "")
+	r.addCheck(DiagnosticStatusOK, "api_url", "Kimi API URL is configured", r.APIURL, "")
 }
 
 func (r *DiagnosticReport) addAuthCheck() {

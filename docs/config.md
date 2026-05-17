@@ -695,7 +695,7 @@ export OPENAI_API_KEY=sk-...
 
 # Kimi / Moonshot を検索に使う場合
 export MOONSHOT_API_KEY=sk-...
-# 任意: proxy や互換 endpoint を使う場合
+# 任意: proxy や互換 endpoint を使う場合も Chat Completions まで含める
 export KIMI_API_URL=https://api.moonshot.ai/v1/chat/completions
 
 # Gemini を検索に使う場合
@@ -834,6 +834,9 @@ xelyon --provider ollama --model phi3
 # DeepSeek
 export DEEPSEEK_API_URL=https://your-proxy.com/chat/completions
 
+# Kimi (Moonshot)
+export KIMI_API_URL=https://your-proxy.com/v1/chat/completions
+
 # OpenAI
 export OPENAI_API_URL=https://your-proxy.com/v1/chat/completions
 
@@ -851,6 +854,8 @@ export OPENROUTER_API_URL=https://your-proxy.com/v1/chat/completions
 ```
 
 DeepSeek の `DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 DeepSeek 互換 endpoint は `/chat/completions` で終わります。OpenAI 互換 proxy が `/v1/chat/completions` を公開する場合も指定できますが、`doctor deepseek` では意図的な proxy path として warn になります。
+
+Kimi の `KIMI_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 Moonshot endpoint は `/v1/chat/completions` で終わります。別 path の proxy endpoint も指定できますが、`doctor kimi` では意図的な proxy path として warn になります。
 
 Groq の `GROQ_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 Groq endpoint は `/openai/v1/chat/completions` で終わります。OpenAI 互換 proxy が `/v1/chat/completions` を公開する場合も指定できますが、`doctor groq` では意図的な proxy path として warn になります。
 

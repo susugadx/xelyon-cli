@@ -28,11 +28,12 @@ func init() {
 }
 
 const (
-	kimiAPIKeyEnv          = "MOONSHOT_API_KEY"
-	kimiAPIURLEnv          = "KIMI_API_URL"
-	kimiFunctionCallingEnv = "KIMI_FUNCTION_CALLING"
-	defaultKimiURL         = "https://api.moonshot.ai/v1/chat/completions"
-	defaultKimiModel       = "kimi-k2.6"
+	kimiAPIKeyEnv                   = "MOONSHOT_API_KEY"
+	kimiAPIURLEnv                   = "KIMI_API_URL"
+	kimiFunctionCallingEnv          = "KIMI_FUNCTION_CALLING"
+	kimiChatCompletionsEndpointPath = "/v1/chat/completions"
+	defaultKimiURL                  = "https://api.moonshot.ai" + kimiChatCompletionsEndpointPath
+	defaultKimiModel                = "kimi-k2.6"
 )
 
 // Provider は Kimi API のプロバイダー実装。

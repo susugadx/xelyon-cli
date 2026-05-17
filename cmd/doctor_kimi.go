@@ -20,11 +20,13 @@ func newKimiDoctorCommand() *cobra.Command {
 
 Checks MOONSHOT_API_KEY, KIMI_API_URL, provider registration, model/catalog
 config, Chat Completions route, image capability, unsupported native features,
-and prompt_cache_key request shape. Use --smoke to send live Kimi Chat
-Completions requests, --image-smoke to send one tiny image request,
+and prompt_cache_key request shape. KIMI_API_URL is an exact Chat Completions
+endpoint override; the official path ends with /v1/chat/completions, and other
+paths are treated as intentional proxy endpoints. Use --smoke to send live Kimi
+Chat Completions requests, --image-smoke to send one tiny image request,
 --tool-smoke to include a dummy tool call, --web-search-smoke to verify the
-built-in $web_search route, or --print-request to preview sanitized request
-JSON without sending it.`,
+built-in $web_search route, or --print-request to preview sanitized request JSON
+without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runKimiDoctorInvocation,
 	}

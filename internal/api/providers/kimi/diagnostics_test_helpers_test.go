@@ -25,6 +25,16 @@ func hasKimiDiagnosticCheck(report DiagnosticReport, name string, status Diagnos
 	return ok && check.Status == status
 }
 
+func requireKimiDiagnosticCheckStatus(t *testing.T, report DiagnosticReport, name string, status DiagnosticStatus) DiagnosticCheck {
+	t.Helper()
+
+	check, ok := kimiDiagnosticCheckByName(report, name)
+	if !ok || check.Status != status {
+		t.Fatalf("%s check = %#v, %v; want %s", name, check, ok, status)
+	}
+	return check
+}
+
 func kimiDiagnosticCheckByName(report DiagnosticReport, name string) (DiagnosticCheck, bool) {
 	for _, check := range report.Checks {
 		if check.Name == name {

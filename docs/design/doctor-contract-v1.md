@@ -55,6 +55,7 @@ Azure OpenAI:
 Kimi:
 
 - Checks `MOONSHOT_API_KEY`, `KIMI_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, token / pricing metadata, image capability, unsupported native features, and prompt cache request shape.
+- `KIMI_API_URL` is an exact Chat Completions endpoint override. The official Moonshot path ends with `/v1/chat/completions`; other paths remain warn-only intentional proxy endpoints and are still used by request preview / live smoke.
 - Supports `--print-request`.
 - Live smoke supports text, image, tool, and built-in `$web_search`.
 - Does not yet support `--capabilities` or `--require-capability`.

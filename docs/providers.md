@@ -86,7 +86,7 @@ xelyon --provider moonshot --model kimi-k2.5
 - `/think off`: K2.6 / K2.5 は `thinking: {"type":"disabled"}` を送信します。`kimi-k2-thinking` には disabled を送信しません。
 - `/think on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信し、forced tool choice は `auto` に丸めます。
 - `reasoning_content`（思考内容）はストリーミング表示され、ツール実行時も保持されます。
-- `KIMI_API_URL` は `/v1/chat/completions` まで含む完全な endpoint override として扱います。
+- `KIMI_API_URL` は `/v1/chat/completions` まで含む完全な endpoint override として扱います。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になります。
 
 `kimi-k2-thinking` は明示指定された場合のみ 256K context / 最大 32K output の legacy/compat thinking model として扱います。新規利用では thinking on/off が可能な `kimi-k2.6` を推奨します。
 
@@ -94,7 +94,7 @@ Kimi built-in `$web_search` は通常 function tools とは別の `web_search` �
 
 Memory / code runner、video 入力、file upload / `ms://` 参照は現在の native provider では未対応です。URL 画像は Kimi 公式仕様でも未対応のため、XELYON はローカル画像ファイルを base64 data URL として送ります。
 
-設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、token / pricing metadata、画像入力対応、未対応機能、`prompt_cache_key` request shape を確認します。`--catalog-model` は alias の underlying Kimi model として token / pricing 判定に使います。`--print-request` は live request を送らず、redacted bearer header と request body を `request_preview` に表示します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認したい場合は `--image-smoke`、function calling は `--tool-smoke`、built-in `$web_search` は `--web-search-smoke` を使います。
+設定の到達性は CLI から診断できます。`doctor kimi` は `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、token / pricing metadata、画像入力対応、未対応機能、`prompt_cache_key` request shape を確認します。`KIMI_API_URL` が `/v1/chat/completions` 以外の path を指す場合は proxy endpoint として warn し、`--print-request` / live smoke はその URL を実 request 先として使います。`--catalog-model` は alias の underlying Kimi model として token / pricing 判定に使います。`--print-request` は live request を送らず、redacted bearer header と request body を `request_preview` に表示します。`--smoke` を付けると live Chat Completions request を送って、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認したい場合は `--image-smoke`、function calling は `--tool-smoke`、built-in `$web_search` は `--web-search-smoke` を使います。
 
 ```bash
 xelyon doctor kimi
