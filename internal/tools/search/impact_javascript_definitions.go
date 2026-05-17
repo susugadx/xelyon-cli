@@ -15,6 +15,10 @@ func findStructuredJavaScriptImpactDefinitions(symbol string, opts SearchOptions
 	return dedupeStructuredJavaScriptDefs(defs)
 }
 
+func findStructuredJavaScriptImpactDefinitionSet(symbol string, opts SearchOptions) jsFamilyImpactDefinitionSet {
+	return jsFamilyImpactDefinitionSet{defs: findStructuredJavaScriptImpactDefinitions(symbol, opts)}
+}
+
 func normalizeStructuredJavaScriptDefForImpact(def genericSymbolDef) genericSymbolDef {
 	if isStructuredJavaScriptFunctionExpressionSignature(def.Signature, def.Name) {
 		def.Kind = "function"

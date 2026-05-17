@@ -30,6 +30,10 @@ func buildJavaScriptImpactBundle(symbol string, def genericSymbolDef, opts Searc
 	return bundle
 }
 
+func buildJavaScriptImpactBundleFromRefs(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef) *SymbolBundle {
+	return buildJavaScriptImpactBundle(symbol, def, opts, javaScriptImpactRefsForDef(def, refs, opts))
+}
+
 func buildJavaScriptImpactMetadata(def genericSymbolDef, refs javaScriptImpactRefs, rootPath string) *SymbolBundleImpact {
 	return buildJSFamilyImpactMetadata(def, rootPath, classifyJavaScriptImpactRisk(def, refs), javaScriptImpactRecommendedReadGroups(refs))
 }

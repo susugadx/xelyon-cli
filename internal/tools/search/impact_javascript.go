@@ -59,35 +59,15 @@ func normalizeStructuredJavaScriptImpactScope(opts SearchOptions) (structuredImp
 }
 
 func resolveStructuredJavaScriptImpactSymbol(symbol string, scope structuredImpactScope) symbolResolveResult {
-	opts := scope.Definition
-	evidenceOpts := scope.Evidence
-	defs := findStructuredJavaScriptImpactDefinitions(symbol, opts)
-	if len(defs) == 0 {
-		return symbolResolveResult{Status: symbolResolveNone}
-	}
-	if len(defs) > 1 {
-		return symbolResolveResult{
-			Output:        formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts),
-			Status:        symbolResolveMultiple,
-			AffectedFiles: collectStructuredJavaScriptDefAffectedFiles(defs, opts),
-		}
-	}
+	return resolveStructuredJSFamilyImpactSymbol(symbol, scope, structuredJavaScriptImpactResolverSpec())
+}
 
-	def := defs[0]
-	refOpts := structuredJavaScriptImpactReferenceOptions(def, evidenceOpts)
-	refResult := findJSFamilyReferencesWithSemantic(symbol, def, refOpts)
-	refs := normalizeStructuredJavaScriptRefs(refResult.refs)
-	refs = filterGenericRefs(refs, def)
-	classifiedRefs := javaScriptImpactRefsForDef(def, refs, refOpts.nameOnly)
-	bundle := buildJavaScriptImpactBundle(symbol, def, refOpts.nameOnly, classifiedRefs)
-	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
-		return symbolResolveResult{Status: symbolResolveNone}
-	}
-	setJSFamilyBundleLSPDiagnostics(bundle, refResult.resolvedViaLSP)
-
-	return symbolResolveResult{
-		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
-		Status: symbolResolveSingle,
-		Bundle: bundle,
+func structuredJavaScriptImpactResolverSpec() jsFamilyImpactResolverSpec {
+	return jsFamilyImpactResolverSpec{
+		findDefinitions:         findStructuredJavaScriptImpactDefinitionSet,
+		collectDefAffectedFiles: collectStructuredJavaScriptDefAffectedFiles,
+		referenceOptions:        structuredJavaScriptImpactReferenceOptions,
+		normalizeRefs:           normalizeStructuredJavaScriptRefs,
+		buildBundle:             buildJavaScriptImpactBundleFromRefs,
 	}
 }

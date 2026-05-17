@@ -5,6 +5,18 @@ type structuredTypeScriptPreferredDefs struct {
 	suppressedDeclarationDefs []genericSymbolDef
 }
 
+func findStructuredTypeScriptImpactDefinitionSet(symbol string, opts SearchOptions) jsFamilyImpactDefinitionSet {
+	defs := normalizeStructuredTypeScriptDefs(findJSFamilyDefinitionsWithAST(symbol, opts))
+	if len(defs) == 0 {
+		defs = normalizeStructuredTypeScriptDefs(findGenericDefinitions(symbol, opts))
+	}
+	preferredDefs := preferStructuredTypeScriptImplementationDefs(defs)
+	return jsFamilyImpactDefinitionSet{
+		defs:              preferredDefs.defs,
+		suppressedRefDefs: preferredDefs.suppressedDeclarationDefs,
+	}
+}
+
 func preferStructuredTypeScriptImplementationDefs(defs []genericSymbolDef) structuredTypeScriptPreferredDefs {
 	if len(defs) <= 1 {
 		return structuredTypeScriptPreferredDefs{defs: defs}
@@ -37,8 +49,13 @@ func preferStructuredTypeScriptImplementationDefs(defs []genericSymbolDef) struc
 	}
 }
 
-func structuredTypeScriptSuppressedDeclarationDefsForImpact(def genericSymbolDef, preferredDefs structuredTypeScriptPreferredDefs) []genericSymbolDef {
-	suppressed := append([]genericSymbolDef{}, preferredDefs.suppressedDeclarationDefs...)
+func filterStructuredTypeScriptImpactRefs(def genericSymbolDef, definitionSet jsFamilyImpactDefinitionSet, refs []genericSymbolRef) []genericSymbolRef {
+	suppressed := structuredTypeScriptSuppressedDeclarationDefsForImpact(def, definitionSet.suppressedRefDefs)
+	return filterStructuredTypeScriptSuppressedDeclarationRefs(refs, suppressed)
+}
+
+func structuredTypeScriptSuppressedDeclarationDefsForImpact(def genericSymbolDef, suppressedDefs []genericSymbolDef) []genericSymbolDef {
+	suppressed := append([]genericSymbolDef{}, suppressedDefs...)
 	suppressed = append(suppressed, structuredTypeScriptPairedDeclarationDefsForImplementation(def)...)
 	return suppressed
 }

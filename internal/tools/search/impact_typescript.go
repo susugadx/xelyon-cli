@@ -59,41 +59,16 @@ func normalizeStructuredTypeScriptImpactScope(opts SearchOptions) (structuredImp
 }
 
 func resolveStructuredTypeScriptImpactSymbol(symbol string, scope structuredImpactScope) symbolResolveResult {
-	opts := scope.Definition
-	evidenceOpts := scope.Evidence
-	defs := normalizeStructuredTypeScriptDefs(findJSFamilyDefinitionsWithAST(symbol, opts))
-	if len(defs) == 0 {
-		defs = normalizeStructuredTypeScriptDefs(findGenericDefinitions(symbol, opts))
-	}
-	preferredDefs := preferStructuredTypeScriptImplementationDefs(defs)
-	defs = preferredDefs.defs
-	if len(defs) == 0 {
-		return symbolResolveResult{Status: symbolResolveNone}
-	}
-	if len(defs) > 1 {
-		return symbolResolveResult{
-			Output:        formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts),
-			Status:        symbolResolveMultiple,
-			AffectedFiles: collectStructuredTypeScriptDefAffectedFiles(defs, opts),
-		}
-	}
+	return resolveStructuredJSFamilyImpactSymbol(symbol, scope, structuredTypeScriptImpactResolverSpec())
+}
 
-	def := defs[0]
-	refOpts := structuredTypeScriptImpactReferenceOptions(def, evidenceOpts)
-	refResult := findJSFamilyReferencesWithSemantic(symbol, def, refOpts)
-	refs := normalizeStructuredTypeScriptRefs(refResult.refs)
-	refs = filterStructuredTypeScriptSuppressedDeclarationRefs(refs, structuredTypeScriptSuppressedDeclarationDefsForImpact(def, preferredDefs))
-	filteredRefs := filterGenericRefs(refs, def)
-	classifiedRefs := typeScriptImpactRefsForDef(def, filteredRefs, refOpts.nameOnly)
-	bundle := buildTypeScriptImpactBundle(symbol, def, refOpts.nameOnly, classifiedRefs)
-	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
-		return symbolResolveResult{Status: symbolResolveNone}
-	}
-	setJSFamilyBundleLSPDiagnostics(bundle, refResult.resolvedViaLSP)
-
-	return symbolResolveResult{
-		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
-		Status: symbolResolveSingle,
-		Bundle: bundle,
+func structuredTypeScriptImpactResolverSpec() jsFamilyImpactResolverSpec {
+	return jsFamilyImpactResolverSpec{
+		findDefinitions:         findStructuredTypeScriptImpactDefinitionSet,
+		collectDefAffectedFiles: collectStructuredTypeScriptDefAffectedFiles,
+		referenceOptions:        structuredTypeScriptImpactReferenceOptions,
+		normalizeRefs:           normalizeStructuredTypeScriptRefs,
+		filterRefs:              filterStructuredTypeScriptImpactRefs,
+		buildBundle:             buildTypeScriptImpactBundleFromRefs,
 	}
 }

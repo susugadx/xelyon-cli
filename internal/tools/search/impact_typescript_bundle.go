@@ -31,6 +31,10 @@ func buildTypeScriptImpactBundle(symbol string, def genericSymbolDef, opts Searc
 	return bundle
 }
 
+func buildTypeScriptImpactBundleFromRefs(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef) *SymbolBundle {
+	return buildTypeScriptImpactBundle(symbol, def, opts, typeScriptImpactRefsForDef(def, refs, opts))
+}
+
 func typeScriptImpactDebugSource(def genericSymbolDef) string {
 	if isTypeScriptDeclarationFilePath(def.File) {
 		return "typescript-impact-structured-declaration"
