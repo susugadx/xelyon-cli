@@ -41,21 +41,26 @@ type doctorJSONSmokeCost struct {
 }
 
 type doctorJSONSmokeRequest struct {
-	Name               string               `json:"name"`
-	Ran                bool                 `json:"ran"`
-	Skipped            bool                 `json:"skipped"`
-	SkipReason         string               `json:"skip_reason"`
-	ToolPayload        bool                 `json:"tool_payload"`
-	ImagePayload       bool                 `json:"image_payload"`
-	WebSearchPayload   bool                 `json:"web_search_payload"`
-	RetentionPayload   bool                 `json:"retention_payload"`
-	Route              string               `json:"route"`
-	ResponseID         string               `json:"response_id"`
-	RequestID          string               `json:"request_id"`
-	PreviousResponseID string               `json:"previous_response_id"`
-	UsageObserved      bool                 `json:"usage_observed"`
-	Usage              doctorJSONSmokeUsage `json:"usage"`
-	Cost               doctorJSONSmokeCost  `json:"cost"`
+	Name                     string               `json:"name"`
+	Ran                      bool                 `json:"ran"`
+	Skipped                  bool                 `json:"skipped"`
+	SkipReason               string               `json:"skip_reason"`
+	ToolPayload              bool                 `json:"tool_payload"`
+	ImagePayload             bool                 `json:"image_payload"`
+	WebSearchPayload         bool                 `json:"web_search_payload"`
+	RetentionPayload         bool                 `json:"retention_payload"`
+	ThinkingPayload          bool                 `json:"thinking_payload"`
+	Route                    string               `json:"route"`
+	ResponseID               string               `json:"response_id"`
+	RequestID                string               `json:"request_id"`
+	PreviousResponseID       string               `json:"previous_response_id"`
+	UsageObserved            bool                 `json:"usage_observed"`
+	Usage                    doctorJSONSmokeUsage `json:"usage"`
+	Cost                     doctorJSONSmokeCost  `json:"cost"`
+	WebSearchCallCount       int                  `json:"web_search_call_count"`
+	WebSearchCallFeeEstimate float64              `json:"web_search_call_fee_estimate"`
+	WebSearchUsageObserved   bool                 `json:"web_search_usage_observed"`
+	SearchResultTotalTokens  int                  `json:"search_result_total_tokens"`
 }
 
 func unmarshalDoctorJSONSmoke(t *testing.T, out *bytes.Buffer) doctorJSONSmokeResult {
