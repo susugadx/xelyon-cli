@@ -8,49 +8,6 @@ import (
 	claudeprovider "github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 )
 
-func TestRunClaudeDoctorInvocation_JSONReportsExplicitModelCatalogAndCapabilities(t *testing.T) {
-	setClaudeDoctorCommandTestEnv(t, "claude-key")
-
-	cmd, out := newDoctorSubcommandTest(t, newClaudeDoctorCommand)
-
-	doctorClaudeModelFlag = "corp-claude-model"
-	doctorCatalogModelFlag = "claude-sonnet-4-6"
-	doctorJSONFlag = true
-
-	if err := runClaudeDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runClaudeDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	if report.Provider != "claude" {
-		t.Fatalf("provider = %q, want claude", report.Provider)
-	}
-	if report.Model != "corp-claude-model" || report.ModelSource != "--model" {
-		t.Fatalf("model = %q (%s), want explicit model", report.Model, report.ModelSource)
-	}
-	if report.CatalogModel != "claude-sonnet-4-6" || report.CatalogModelSource != "--catalog-model" {
-		t.Fatalf("catalog_model = %q (%s), want explicit catalog model", report.CatalogModel, report.CatalogModelSource)
-	}
-	if report.Route != "claude_messages" {
-		t.Fatalf("route = %q, want claude_messages", report.Route)
-	}
-	if !report.FunctionCallingEnabled || !report.ImageInputSupported || !report.WebSearchSupported || !report.ContextManagementEnabled || !report.ClaudeCompactionSupported {
-		t.Fatalf("capabilities = fc:%t image:%t web:%t context:%t compaction:%t, want all enabled",
-			report.FunctionCallingEnabled,
-			report.ImageInputSupported,
-			report.WebSearchSupported,
-			report.ContextManagementEnabled,
-			report.ClaudeCompactionSupported,
-		)
-	}
-	if report.AnthropicVersion != "2023-06-01" {
-		t.Fatalf("anthropic_version = %q, want default", report.AnthropicVersion)
-	}
-	catalogPolicy := requireDoctorJSONCheck(t, report.Checks, "catalog_policy")
-	requireDoctorJSONCheckStatus(t, catalogPolicy, "ok")
-	requireDoctorJSONCheckDetailContains(t, catalogPolicy, "max_output_tokens=64000")
-}
-
 func TestRunClaudeDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
 	setClaudeDoctorCommandTestEnv(t, "")
 

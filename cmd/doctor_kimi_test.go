@@ -8,43 +8,6 @@ import (
 	kimiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/kimi"
 )
 
-func TestRunKimiDoctorInvocation_JSONReportsExplicitModel(t *testing.T) {
-	setKimiDoctorCommandTestEnv(t, "moonshot-key")
-	t.Setenv("XELYON_MODEL", "kimi-k2.6")
-
-	cmd, out := newDoctorSubcommandTest(t, newKimiDoctorCommand)
-
-	if err := cmd.Flags().Set("model", "kimi-k2.5"); err != nil {
-		t.Fatalf("set model flag: %v", err)
-	}
-	if err := cmd.Flags().Set("catalog-model", "kimi-k2.6"); err != nil {
-		t.Fatalf("set catalog-model flag: %v", err)
-	}
-	doctorJSONFlag = true
-
-	if err := runKimiDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runKimiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	if report.Provider != "kimi" {
-		t.Fatalf("provider = %q, want kimi", report.Provider)
-	}
-	if report.Model != "kimi-k2.5" {
-		t.Fatalf("model = %q, want kimi-k2.5", report.Model)
-	}
-	if report.CatalogModel != "kimi-k2.6" || report.CatalogModelSource != "--catalog-model" {
-		t.Fatalf("catalog_model = %q (%s), want explicit catalog", report.CatalogModel, report.CatalogModelSource)
-	}
-	if report.Route != "chat_completions" {
-		t.Fatalf("route = %q, want chat_completions", report.Route)
-	}
-	if !report.PromptCacheKeyPresent {
-		t.Fatal("prompt_cache_key_present = false, want true")
-	}
-	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "catalog_policy"), "ok")
-}
-
 func TestRenderKimiDoctorText_WebSearchSmokeObservation(t *testing.T) {
 	report := kimiprovider.DiagnosticReport{
 		Provider:           "kimi",

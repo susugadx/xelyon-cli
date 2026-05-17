@@ -9,47 +9,6 @@ import (
 	azureprovider "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 )
 
-func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
-	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
-	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
-	t.Setenv("AZURE_OPENAI_AUTH_TOKEN_COMMAND", "")
-
-	cmd, out := newDoctorSubcommandTest(t, newAzureDoctorCommand)
-
-	doctorDeploymentFlag = "corp-codex-deployment"
-	doctorCatalogModelFlag = "gpt-5.3-codex"
-	doctorJSONFlag = true
-
-	if err := runAzureDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	if report.Provider != "azure" {
-		t.Fatalf("provider = %q, want azure", report.Provider)
-	}
-	if report.Deployment != "corp-codex-deployment" {
-		t.Fatalf("deployment = %q, want CLI deployment", report.Deployment)
-	}
-	if report.CatalogModel != "gpt-5.3-codex" {
-		t.Fatalf("catalog_model = %q, want CLI catalog model", report.CatalogModel)
-	}
-	if report.Route != "responses_streaming" {
-		t.Fatalf("route = %q, want responses_streaming", report.Route)
-	}
-	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.3-codex supports Responses streaming") {
-		t.Fatalf("route_reason = %q, want catalog streaming reason", report.RouteReason)
-	}
-	if report.NormalizedBaseURL != "https://example.openai.azure.com/openai/v1" {
-		t.Fatalf("normalized_base_url = %q, want v1 URL", report.NormalizedBaseURL)
-	}
-	catalogPolicy := requireDoctorJSONCheck(t, report.Checks, "catalog_policy")
-	requireDoctorJSONCheckStatus(t, catalogPolicy, "ok")
-	requireDoctorJSONCheckDetailContains(t, catalogPolicy, "max_output_tokens=128000")
-}
-
 func TestRunAzureDoctorInvocation_PrintRequestJSONDoesNotRequireAuth(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")

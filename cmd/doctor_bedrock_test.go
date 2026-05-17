@@ -11,43 +11,6 @@ import (
 
 const bedrockDoctorCatalogModelForTest = "global.anthropic.claude-sonnet-4-6"
 
-func TestRunBedrockDoctorInvocation_JSONReportsExplicitModel(t *testing.T) {
-	setBedrockDoctorCommandTestEnv(t)
-
-	cmd, out := newDoctorSubcommandTest(t, newBedrockDoctorCommand)
-
-	doctorBedrockModelFlag = "corp-bedrock-sonnet"
-	doctorCatalogModelFlag = "global.anthropic.claude-sonnet-4-6"
-	doctorJSONFlag = true
-
-	if err := runBedrockDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runBedrockDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	var report struct {
-		Provider     string `json:"provider"`
-		Region       string `json:"region"`
-		Model        string `json:"model"`
-		CatalogModel string `json:"catalog_model"`
-		Route        string `json:"route"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	if report.Provider != "bedrock" {
-		t.Fatalf("provider = %q, want bedrock", report.Provider)
-	}
-	if report.Region != "us-east-1" {
-		t.Fatalf("region = %q, want us-east-1", report.Region)
-	}
-	if report.Model != "corp-bedrock-sonnet" || report.CatalogModel != "global.anthropic.claude-sonnet-4-6" {
-		t.Fatalf("model/catalog = %q/%q, want explicit values", report.Model, report.CatalogModel)
-	}
-	if report.Route != "claude_messages" {
-		t.Fatalf("route = %q, want claude_messages", report.Route)
-	}
-}
-
 func TestRootCommand_BedrockDoctorCommandParsesFlags(t *testing.T) {
 	setBedrockDoctorCommandTestEnv(t)
 

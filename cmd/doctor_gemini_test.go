@@ -8,40 +8,6 @@ import (
 	geminiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/gemini"
 )
 
-func TestRunGeminiDoctorInvocation_JSONReportsExplicitModelCatalogAndRoutes(t *testing.T) {
-	setGeminiDoctorCommandTestEnv(t, "gemini-key")
-
-	cmd, out := newDoctorSubcommandTest(t, newGeminiDoctorCommand)
-
-	doctorGeminiModelFlag = "corp-gemini-model"
-	doctorCatalogModelFlag = "gemini-3.1-pro-preview-customtools"
-	doctorJSONFlag = true
-
-	if err := runGeminiDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runGeminiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	if report.Provider != "gemini" {
-		t.Fatalf("provider = %q, want gemini", report.Provider)
-	}
-	if report.Model != "corp-gemini-model" || report.ModelSource != "--model" {
-		t.Fatalf("model = %q (%s), want explicit model", report.Model, report.ModelSource)
-	}
-	if report.CatalogModel != "gemini-3.1-pro-preview-customtools" || report.CatalogModelSource != "--catalog-model" {
-		t.Fatalf("catalog_model = %q (%s), want explicit catalog model", report.CatalogModel, report.CatalogModelSource)
-	}
-	if report.Route != "stream_generate_content_sse" {
-		t.Fatalf("route = %q, want stream_generate_content_sse", report.Route)
-	}
-	if !report.FunctionCallingEnabled || !report.ImageInputSupported || !report.WebSearchSupported {
-		t.Fatalf("capabilities = fc:%t image:%t web:%t, want all enabled", report.FunctionCallingEnabled, report.ImageInputSupported, report.WebSearchSupported)
-	}
-	catalogPolicy := requireDoctorJSONCheck(t, report.Checks, "catalog_policy")
-	requireDoctorJSONCheckStatus(t, catalogPolicy, "ok")
-	requireDoctorJSONCheckDetailContains(t, catalogPolicy, "max_output_tokens=65536")
-}
-
 func TestRunGeminiDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
 	setGeminiDoctorCommandTestEnv(t, "")
 

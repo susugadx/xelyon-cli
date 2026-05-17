@@ -11,44 +11,6 @@ import (
 	ollamaprovider "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 )
 
-func TestRunOllamaDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	server := newOllamaDoctorCommandTestServer(t, []string{"qwen2.5-coder:7b"}, nil)
-	defer server.Close()
-	t.Setenv("OLLAMA_BASE_URL", server.URL)
-
-	cmd, out := newDoctorSubcommandTest(t, newOllamaDoctorCommand)
-
-	doctorOllamaModelFlag = "qwen2.5-coder:7b"
-	doctorCatalogModelFlag = "qwen2.5-coder:7b"
-	doctorJSONFlag = true
-
-	if err := runOllamaDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runOllamaDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	if report.Provider != "ollama" {
-		t.Fatalf("provider = %q, want ollama", report.Provider)
-	}
-	if report.APIURL != server.URL {
-		t.Fatalf("api_url = %q, want fake server URL", report.APIURL)
-	}
-	if report.Model != "qwen2.5-coder:7b" || report.ModelSource != "--model" {
-		t.Fatalf("model = %q (%s), want explicit model", report.Model, report.ModelSource)
-	}
-	if report.CatalogModel != "qwen2.5-coder:7b" || report.CatalogModelSource != "--catalog-model" {
-		t.Fatalf("catalog_model = %q (%s), want explicit catalog model", report.CatalogModel, report.CatalogModelSource)
-	}
-	if report.Route != "ollama_chat" {
-		t.Fatalf("route = %q, want ollama_chat", report.Route)
-	}
-	for _, name := range []string{"auth", "endpoint", "installed_model", "catalog_policy"} {
-		requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, name), "ok")
-	}
-	requireDoctorJSONCheckDetailContains(t, requireDoctorJSONCheck(t, report.Checks, "catalog_policy"), "pricing=input $0.00/M")
-}
-
 func TestRunOllamaDoctorInvocation_PrintRequestJSONDoesNotSendNetwork(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	requests := 0

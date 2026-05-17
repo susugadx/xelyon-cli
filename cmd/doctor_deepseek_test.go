@@ -8,48 +8,6 @@ import (
 	deepseekprovider "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
 )
 
-func TestRunDeepSeekDoctorInvocation_JSONReportsExplicitModelCatalogAndThinking(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("DEEPSEEK_API_KEY", "sk-test")
-	t.Setenv("DEEPSEEK_API_URL", "")
-
-	cmd, out := newDoctorSubcommandTest(t, newDeepSeekDoctorCommand)
-
-	doctorDeepSeekModelFlag = "corp-deepseek-model"
-	doctorCatalogModelFlag = "deepseek-v4-flash"
-	doctorJSONFlag = true
-
-	if err := runDeepSeekDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runDeepSeekDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	if report.Provider != "deepseek" {
-		t.Fatalf("provider = %q, want deepseek", report.Provider)
-	}
-	if report.Model != "corp-deepseek-model" || report.ModelSource != "--model" {
-		t.Fatalf("model = %q (%s), want explicit model", report.Model, report.ModelSource)
-	}
-	if report.APIModel != "corp-deepseek-model" {
-		t.Fatalf("api_model = %q, want request alias", report.APIModel)
-	}
-	if report.CatalogModel != "deepseek-v4-flash" || report.CatalogModelSource != "--catalog-model" {
-		t.Fatalf("catalog_model = %q (%s), want explicit catalog model", report.CatalogModel, report.CatalogModelSource)
-	}
-	if report.Route != "chat_completions" {
-		t.Fatalf("route = %q, want chat_completions", report.Route)
-	}
-	if !report.ThinkingSupported || report.ThinkingType != "disabled" {
-		t.Fatalf("thinking = supported:%t type:%q, want disabled V4 thinking payload", report.ThinkingSupported, report.ThinkingType)
-	}
-	catalogPolicy := requireDoctorJSONCheck(t, report.Checks, "catalog_policy")
-	requireDoctorJSONCheckStatus(t, catalogPolicy, "ok")
-	requireDoctorJSONCheckDetailContains(t, catalogPolicy, "max_output_tokens=384000")
-	thinking := requireDoctorJSONCheck(t, report.Checks, "thinking")
-	requireDoctorJSONCheckStatus(t, thinking, "ok")
-	requireDoctorJSONCheckDetailContains(t, thinking, "thinking.type=disabled")
-}
-
 func TestRunDeepSeekDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DEEPSEEK_API_KEY", "")

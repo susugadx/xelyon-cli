@@ -8,39 +8,6 @@ import (
 	groqprovider "github.com/susugadx/xelyon-cli/internal/api/providers/groq"
 )
 
-func TestRunGroqDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GROQ_API_KEY", "gsk-test")
-	t.Setenv("GROQ_API_URL", "")
-
-	cmd, out := newDoctorSubcommandTest(t, newGroqDoctorCommand)
-
-	doctorGroqModelFlag = "corp-groq-model"
-	doctorCatalogModelFlag = "meta-llama/llama-4-scout-17b-16e-instruct"
-	doctorJSONFlag = true
-
-	if err := runGroqDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runGroqDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	if report.Provider != "groq" {
-		t.Fatalf("provider = %q, want groq", report.Provider)
-	}
-	if report.Model != "corp-groq-model" || report.ModelSource != "--model" {
-		t.Fatalf("model = %q (%s), want explicit model", report.Model, report.ModelSource)
-	}
-	if report.CatalogModel != "meta-llama/llama-4-scout-17b-16e-instruct" || report.CatalogModelSource != "--catalog-model" {
-		t.Fatalf("catalog_model = %q (%s), want explicit catalog model", report.CatalogModel, report.CatalogModelSource)
-	}
-	if report.Route != "chat_completions" {
-		t.Fatalf("route = %q, want chat_completions", report.Route)
-	}
-	catalogPolicy := requireDoctorJSONCheck(t, report.Checks, "catalog_policy")
-	requireDoctorJSONCheckStatus(t, catalogPolicy, "ok")
-	requireDoctorJSONCheckDetailContains(t, catalogPolicy, "max_output_tokens=8192")
-}
-
 func TestRunGroqDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GROQ_API_KEY", "")

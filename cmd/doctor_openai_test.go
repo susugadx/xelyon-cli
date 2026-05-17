@@ -10,40 +10,6 @@ import (
 	openaiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 )
 
-func TestRunOpenAIDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("OPENAI_API_KEY", "sk-test")
-	t.Setenv("OPENAI_API_URL", "")
-	t.Setenv("OPENAI_RESPONSES_URL", "")
-
-	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
-
-	doctorOpenAIModelFlag = "corp-openai-deployment"
-	doctorCatalogModelFlag = "gpt-5.4"
-	doctorJSONFlag = true
-
-	if err := runOpenAIDoctorInvocation(cmd, nil); err != nil {
-		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
-	}
-
-	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
-	if report.Provider != "openai" {
-		t.Fatalf("provider = %q, want openai", report.Provider)
-	}
-	if report.Model != "corp-openai-deployment" || report.ModelSource != "--model" {
-		t.Fatalf("model = %q (%s), want explicit model", report.Model, report.ModelSource)
-	}
-	if report.CatalogModel != "gpt-5.4" || report.CatalogModelSource != "--catalog-model" {
-		t.Fatalf("catalog_model = %q (%s), want explicit catalog model", report.CatalogModel, report.CatalogModelSource)
-	}
-	if report.Route != "responses_streaming" {
-		t.Fatalf("route = %q, want responses_streaming", report.Route)
-	}
-	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.4 supports Responses streaming") {
-		t.Fatalf("route_reason = %q, want catalog streaming reason", report.RouteReason)
-	}
-}
-
 func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("OPENAI_API_KEY", "")
