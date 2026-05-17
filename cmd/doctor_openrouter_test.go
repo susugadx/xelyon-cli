@@ -23,17 +23,7 @@ func TestRunOpenRouterDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t
 		t.Fatalf("runOpenRouterDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Provider           string            `json:"provider"`
-		Model              string            `json:"model"`
-		ModelSource        string            `json:"model_source"`
-		CatalogModel       string            `json:"catalog_model"`
-		CatalogModelSource string            `json:"catalog_model_source"`
-		UpstreamProvider   string            `json:"upstream_provider"`
-		UpstreamModel      string            `json:"upstream_model"`
-		Route              string            `json:"route"`
-		Checks             []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.Provider != "openrouter" {
 		t.Fatalf("provider = %q, want openrouter", report.Provider)
 	}
@@ -74,52 +64,35 @@ func TestRunOpenRouterDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *t
 		t.Fatalf("runOpenRouterDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Smoke          any `json:"smoke"`
-		RequestPreview struct {
-			Requests []struct {
-				Name        string            `json:"name"`
-				ToolPayload bool              `json:"tool_payload"`
-				Route       string            `json:"route"`
-				URL         string            `json:"url"`
-				Headers     map[string]string `json:"headers"`
-				Body        struct {
-					Model            string `json:"model"`
-					AnthropicVersion string `json:"anthropic_version"`
-					MaxTokens        int    `json:"max_tokens"`
-					Tools            []any  `json:"tools"`
-					ToolChoice       struct {
-						Type string `json:"type"`
-						Name string `json:"name"`
-					} `json:"tool_choice"`
-					ContextManagement any `json:"context_management"`
-				} `json:"body"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
-	requireNoDoctorJSONChecks(t, report.Checks, "auth")
-	if len(report.RequestPreview.Requests) != 1 {
-		t.Fatalf("request_preview = %#v, want one tool request", report.RequestPreview)
-	}
-	request := report.RequestPreview.Requests[0]
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
+	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
 	if request.Name != "tool" || !request.ToolPayload || request.Route != "anthropic_messages" {
 		t.Fatalf("preview request = %#v, want Anthropic Skin tool payload", request)
 	}
-	if request.Headers["Authorization"] != "Bearer <redacted>" || request.Headers["X-Title"] != "XELYON CLI" {
-		t.Fatalf("headers = %#v, want redacted OpenRouter headers", request.Headers)
-	}
-	if request.Body.Model != "anthropic/claude-sonnet-4.6" ||
-		request.Body.AnthropicVersion == "" ||
-		request.Body.MaxTokens != 64 ||
-		len(request.Body.Tools) != 1 ||
-		request.Body.ToolChoice.Type != "tool" ||
-		request.Body.ToolChoice.Name != "xelyon_openrouter_doctor_probe" ||
-		request.Body.ContextManagement == nil {
-		t.Fatalf("preview body = %#v, want diagnostic Anthropic Skin body", request.Body)
+	requireDoctorJSONRequestPreviewHeader(t, request, "Authorization", "Bearer <redacted>")
+	requireDoctorJSONRequestPreviewHeader(t, request, "X-Title", "XELYON CLI")
+	body := requireDoctorJSONRequestPreviewBody[struct {
+		Model            string `json:"model"`
+		AnthropicVersion string `json:"anthropic_version"`
+		MaxTokens        int    `json:"max_tokens"`
+		Tools            []any  `json:"tools"`
+		ToolChoice       struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		} `json:"tool_choice"`
+		ContextManagement any `json:"context_management"`
+	}](t, request)
+	if body.Model != "anthropic/claude-sonnet-4.6" ||
+		body.AnthropicVersion == "" ||
+		body.MaxTokens != 64 ||
+		len(body.Tools) != 1 ||
+		body.ToolChoice.Type != "tool" ||
+		body.ToolChoice.Name != "xelyon_openrouter_doctor_probe" ||
+		body.ContextManagement == nil {
+		t.Fatalf("preview body = %#v, want diagnostic Anthropic Skin body", body)
 	}
 }
 

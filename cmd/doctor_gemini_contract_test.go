@@ -8,41 +8,6 @@ import (
 	geminiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/gemini"
 )
 
-type geminiDoctorJSONContractReport struct {
-	Provider               string            `json:"provider"`
-	APIURL                 string            `json:"api_url"`
-	Model                  string            `json:"model"`
-	ModelSource            string            `json:"model_source"`
-	CatalogModel           string            `json:"catalog_model"`
-	CatalogModelSource     string            `json:"catalog_model_source"`
-	Route                  string            `json:"route"`
-	RouteReason            string            `json:"route_reason"`
-	MaxOutputTokens        int               `json:"max_output_tokens"`
-	ContextWindowTokens    int               `json:"context_window_tokens"`
-	FunctionCallingEnabled bool              `json:"function_calling_enabled"`
-	ImageInputSupported    bool              `json:"image_input_supported"`
-	WebSearchSupported     bool              `json:"web_search_supported"`
-	ContextCachingEnabled  bool              `json:"context_caching_enabled"`
-	ThinkingEnabled        bool              `json:"thinking_enabled"`
-	Checks                 []doctorJSONCheck `json:"checks"`
-	RequestPreview         struct {
-		Requests []geminiDoctorJSONPreviewRequest `json:"requests"`
-	} `json:"request_preview"`
-	Smoke any `json:"smoke"`
-}
-
-type geminiDoctorJSONPreviewRequest struct {
-	Name             string            `json:"name"`
-	ToolPayload      bool              `json:"tool_payload"`
-	ImagePayload     bool              `json:"image_payload"`
-	WebSearchPayload bool              `json:"web_search_payload"`
-	Route            string            `json:"route"`
-	Method           string            `json:"method"`
-	URL              string            `json:"url"`
-	Headers          map[string]string `json:"headers"`
-	Body             map[string]any    `json:"body"`
-}
-
 func TestRunGeminiDoctorInvocation_JSONContractPrintRequestAllShapes(t *testing.T) {
 	setGeminiDoctorCommandTestEnv(t, "")
 
@@ -60,7 +25,7 @@ func TestRunGeminiDoctorInvocation_JSONContractPrintRequestAllShapes(t *testing.
 		t.Fatalf("runGeminiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[geminiDoctorJSONContractReport](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.Provider != "gemini" ||
 		report.Model != "gemini-3.1-pro-preview-customtools" ||
 		report.ModelSource != "--model" ||
@@ -80,9 +45,7 @@ func TestRunGeminiDoctorInvocation_JSONContractPrintRequestAllShapes(t *testing.
 	if !report.FunctionCallingEnabled || !report.ImageInputSupported || !report.WebSearchSupported || !report.ContextCachingEnabled {
 		t.Fatalf("Gemini doctor capability booleans = fc:%t image:%t web:%t cache:%t", report.FunctionCallingEnabled, report.ImageInputSupported, report.WebSearchSupported, report.ContextCachingEnabled)
 	}
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
 	requireNoDoctorJSONChecks(t, report.Checks, "auth")
 	for _, check := range []string{
 		"endpoint",
@@ -101,32 +64,33 @@ func TestRunGeminiDoctorInvocation_JSONContractPrintRequestAllShapes(t *testing.
 		requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, check), "ok")
 	}
 
-	if got, want := len(report.RequestPreview.Requests), 4; got != want {
-		t.Fatalf("request_preview.requests length = %d, want %d", got, want)
-	}
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 4)
 	text := requireGeminiDoctorJSONPreviewRequest(t, report, 0, "text", "stream_generate_content_sse")
-	requireGeminiDoctorPreviewBodyAbsent(t, text.Body, "tools", "tool_config")
-	requireGeminiDoctorPreviewBodyContainsText(t, text.Body, "Reply with: xelyon gemini doctor ok")
+	textBody := requireDoctorJSONRequestPreviewBodyMap(t, text)
+	requireDoctorJSONPreviewBodyAbsent(t, textBody, "tools", "tool_config")
+	requireDoctorJSONPreviewBodyContains(t, textBody, "Reply with: xelyon gemini doctor ok")
 
 	tool := requireGeminiDoctorJSONPreviewRequest(t, report, 1, "tool", "stream_generate_content_sse")
 	if !tool.ToolPayload {
 		t.Fatalf("tool request = %+v, want tool_payload", tool)
 	}
-	requireGeminiDoctorToolPreviewBody(t, tool.Body)
+	requireGeminiDoctorToolPreviewBody(t, requireDoctorJSONRequestPreviewBodyMap(t, tool))
 
 	image := requireGeminiDoctorJSONPreviewRequest(t, report, 2, "image", "stream_generate_content_sse")
 	if !image.ImagePayload {
 		t.Fatalf("image request = %+v, want image_payload", image)
 	}
-	requireGeminiDoctorImagePreviewBody(t, image.Body)
-	requireGeminiDoctorPreviewBodyAbsent(t, image.Body, "tools", "tool_config")
+	imageBody := requireDoctorJSONRequestPreviewBodyMap(t, image)
+	requireGeminiDoctorImagePreviewBody(t, imageBody)
+	requireDoctorJSONPreviewBodyAbsent(t, imageBody, "tools", "tool_config")
 
 	web := requireGeminiDoctorJSONPreviewRequest(t, report, 3, "web_search", "generate_content")
 	if !web.WebSearchPayload {
 		t.Fatalf("web request = %+v, want web_search_payload", web)
 	}
-	requireGeminiDoctorWebSearchPreviewBody(t, web.Body)
-	requireGeminiDoctorPreviewBodyAbsent(t, web.Body, "tool_config")
+	webBody := requireDoctorJSONRequestPreviewBodyMap(t, web)
+	requireGeminiDoctorWebSearchPreviewBody(t, webBody)
+	requireDoctorJSONPreviewBodyAbsent(t, webBody, "tool_config")
 }
 
 func TestRenderGeminiDoctorTextContractWithMultipleSmokeRequests(t *testing.T) {
@@ -274,35 +238,15 @@ func TestRenderGeminiDoctorTextContractWithSmokeFailure(t *testing.T) {
 	})
 }
 
-func requireGeminiDoctorJSONPreviewRequest(t *testing.T, report geminiDoctorJSONContractReport, index int, name, route string) geminiDoctorJSONPreviewRequest {
+func requireGeminiDoctorJSONPreviewRequest(t *testing.T, report doctorJSONContractReport, index int, name, route string) doctorJSONRequestPreviewRequest {
 	t.Helper()
-	if index >= len(report.RequestPreview.Requests) {
-		t.Fatalf("missing request index %d in %#v", index, report.RequestPreview.Requests)
-	}
-	request := report.RequestPreview.Requests[index]
+	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, index, name)
 	if request.Name != name || request.Route != route || request.Method != "POST" {
 		t.Fatalf("request[%d] = %+v, want name=%s route=%s method=POST", index, request, name, route)
 	}
-	if request.Headers["Content-Type"] != "application/json" || request.Headers["x-goog-api-key"] != "<redacted>" {
-		t.Fatalf("request[%d] headers = %#v, want redacted Gemini JSON headers", index, request.Headers)
-	}
+	requireDoctorJSONRequestPreviewHeader(t, request, "Content-Type", "application/json")
+	requireDoctorJSONRequestPreviewHeader(t, request, "x-goog-api-key", "<redacted>")
 	return request
-}
-
-func requireGeminiDoctorPreviewBodyAbsent(t *testing.T, body map[string]any, keys ...string) {
-	t.Helper()
-	for _, key := range keys {
-		if _, ok := body[key]; ok {
-			t.Fatalf("body should not contain %q: %#v", key, body)
-		}
-	}
-}
-
-func requireGeminiDoctorPreviewBodyContainsText(t *testing.T, body map[string]any, want string) {
-	t.Helper()
-	if !strings.Contains(renderedDoctorContractValue(t, body), want) {
-		t.Fatalf("body = %#v, want text %q", body, want)
-	}
 }
 
 func requireGeminiDoctorToolPreviewBody(t *testing.T, body map[string]any) {

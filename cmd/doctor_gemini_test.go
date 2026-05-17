@@ -21,18 +21,7 @@ func TestRunGeminiDoctorInvocation_JSONReportsExplicitModelCatalogAndRoutes(t *t
 		t.Fatalf("runGeminiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Provider               string            `json:"provider"`
-		Model                  string            `json:"model"`
-		ModelSource            string            `json:"model_source"`
-		CatalogModel           string            `json:"catalog_model"`
-		CatalogModelSource     string            `json:"catalog_model_source"`
-		Route                  string            `json:"route"`
-		FunctionCallingEnabled bool              `json:"function_calling_enabled"`
-		ImageInputSupported    bool              `json:"image_input_supported"`
-		WebSearchSupported     bool              `json:"web_search_supported"`
-		Checks                 []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.Provider != "gemini" {
 		t.Fatalf("provider = %q, want gemini", report.Provider)
 	}
@@ -68,50 +57,32 @@ func TestRunGeminiDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testi
 		t.Fatalf("runGeminiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Smoke          any `json:"smoke"`
-		RequestPreview struct {
-			Requests []struct {
-				Name        string            `json:"name"`
-				ToolPayload bool              `json:"tool_payload"`
-				Route       string            `json:"route"`
-				URL         string            `json:"url"`
-				Headers     map[string]string `json:"headers"`
-				Body        struct {
-					ToolConfig struct {
-						FunctionCallingConfig struct {
-							Mode string `json:"mode"`
-						} `json:"function_calling_config"`
-					} `json:"tool_config"`
-					Tools []struct {
-						FunctionDeclarations []struct {
-							Name string `json:"name"`
-						} `json:"function_declarations"`
-					} `json:"tools"`
-				} `json:"body"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
-	requireNoDoctorJSONChecks(t, report.Checks, "auth")
-	if len(report.RequestPreview.Requests) != 1 {
-		t.Fatalf("request_preview = %#v, want one tool request", report.RequestPreview)
-	}
-	request := report.RequestPreview.Requests[0]
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
+	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
 	if request.Name != "tool" || !request.ToolPayload || request.Route != "stream_generate_content_sse" {
 		t.Fatalf("preview request = %#v, want Gemini tool stream request", request)
 	}
-	if request.Headers["x-goog-api-key"] != "<redacted>" {
-		t.Fatalf("x-goog-api-key preview = %q, want redacted", request.Headers["x-goog-api-key"])
+	requireDoctorJSONRequestPreviewHeader(t, request, "x-goog-api-key", "<redacted>")
+	body := requireDoctorJSONRequestPreviewBody[struct {
+		ToolConfig struct {
+			FunctionCallingConfig struct {
+				Mode string `json:"mode"`
+			} `json:"function_calling_config"`
+		} `json:"tool_config"`
+		Tools []struct {
+			FunctionDeclarations []struct {
+				Name string `json:"name"`
+			} `json:"function_declarations"`
+		} `json:"tools"`
+	}](t, request)
+	if body.ToolConfig.FunctionCallingConfig.Mode != "ANY" {
+		t.Fatalf("tool mode = %q, want ANY", body.ToolConfig.FunctionCallingConfig.Mode)
 	}
-	if request.Body.ToolConfig.FunctionCallingConfig.Mode != "ANY" {
-		t.Fatalf("tool mode = %q, want ANY", request.Body.ToolConfig.FunctionCallingConfig.Mode)
-	}
-	if len(request.Body.Tools) != 1 || len(request.Body.Tools[0].FunctionDeclarations) != 1 || request.Body.Tools[0].FunctionDeclarations[0].Name != "xelyon_gemini_doctor_probe" {
-		t.Fatalf("tools = %#v, want diagnostic Gemini tool", request.Body.Tools)
+	if len(body.Tools) != 1 || len(body.Tools[0].FunctionDeclarations) != 1 || body.Tools[0].FunctionDeclarations[0].Name != "xelyon_gemini_doctor_probe" {
+		t.Fatalf("tools = %#v, want diagnostic Gemini tool", body.Tools)
 	}
 }
 

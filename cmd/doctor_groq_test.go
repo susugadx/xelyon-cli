@@ -23,15 +23,7 @@ func TestRunGroqDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *test
 		t.Fatalf("runGroqDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Provider           string            `json:"provider"`
-		Model              string            `json:"model"`
-		ModelSource        string            `json:"model_source"`
-		CatalogModel       string            `json:"catalog_model"`
-		CatalogModelSource string            `json:"catalog_model_source"`
-		Route              string            `json:"route"`
-		Checks             []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.Provider != "groq" {
 		t.Fatalf("provider = %q, want groq", report.Provider)
 	}
@@ -66,40 +58,23 @@ func TestRunGroqDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing
 		t.Fatalf("runGroqDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Smoke          any `json:"smoke"`
-		RequestPreview struct {
-			Requests []struct {
-				Name        string            `json:"name"`
-				ToolPayload bool              `json:"tool_payload"`
-				URL         string            `json:"url"`
-				Headers     map[string]string `json:"headers"`
-				Body        struct {
-					Model      string `json:"model"`
-					MaxTokens  int    `json:"max_tokens"`
-					Tools      []any  `json:"tools"`
-					ToolChoice any    `json:"tool_choice"`
-				} `json:"body"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
-	requireNoDoctorJSONChecks(t, report.Checks, "auth")
-	if len(report.RequestPreview.Requests) != 1 {
-		t.Fatalf("request_preview = %#v, want one tool request", report.RequestPreview)
-	}
-	request := report.RequestPreview.Requests[0]
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
+	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
 	if request.Name != "tool" || !request.ToolPayload {
 		t.Fatalf("preview request = %#v, want tool payload", request)
 	}
-	if request.Headers["Authorization"] != "Bearer <redacted>" {
-		t.Fatalf("Authorization preview = %q, want redacted bearer", request.Headers["Authorization"])
-	}
-	if request.Body.Model != "meta-llama/llama-4-scout-17b-16e-instruct" || request.Body.MaxTokens != 64 || len(request.Body.Tools) != 1 || request.Body.ToolChoice == nil {
-		t.Fatalf("preview body = %#v, want diagnostic tool body", request.Body)
+	requireDoctorJSONRequestPreviewHeader(t, request, "Authorization", "Bearer <redacted>")
+	body := requireDoctorJSONRequestPreviewBody[struct {
+		Model      string `json:"model"`
+		MaxTokens  int    `json:"max_tokens"`
+		Tools      []any  `json:"tools"`
+		ToolChoice any    `json:"tool_choice"`
+	}](t, request)
+	if body.Model != "meta-llama/llama-4-scout-17b-16e-instruct" || body.MaxTokens != 64 || len(body.Tools) != 1 || body.ToolChoice == nil {
+		t.Fatalf("preview body = %#v, want diagnostic tool body", body)
 	}
 }
 
@@ -122,7 +97,7 @@ func TestRunGroqDoctorInvocation_PrintRequestJSONReportsOpenAICompatibleProxyEnd
 		t.Fatalf("runGroqDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.APIURL != proxyURL {
 		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
 	}

@@ -27,16 +27,7 @@ func TestRunOllamaDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *te
 		t.Fatalf("runOllamaDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Provider           string            `json:"provider"`
-		APIURL             string            `json:"api_url"`
-		Model              string            `json:"model"`
-		ModelSource        string            `json:"model_source"`
-		CatalogModel       string            `json:"catalog_model"`
-		CatalogModelSource string            `json:"catalog_model_source"`
-		Route              string            `json:"route"`
-		Checks             []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.Provider != "ollama" {
 		t.Fatalf("provider = %q, want ollama", report.Provider)
 	}
@@ -84,43 +75,26 @@ func TestRunOllamaDoctorInvocation_PrintRequestJSONDoesNotSendNetwork(t *testing
 		t.Fatalf("network requests = %d, want 0", requests)
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Smoke          any `json:"smoke"`
-		RequestPreview struct {
-			Requests []struct {
-				Name        string            `json:"name"`
-				ToolPayload bool              `json:"tool_payload"`
-				URL         string            `json:"url"`
-				Headers     map[string]string `json:"headers"`
-				Body        struct {
-					Model   string `json:"model"`
-					Stream  bool   `json:"stream"`
-					Options struct {
-						NumPredict int `json:"num_predict"`
-					} `json:"options"`
-					Tools      []any  `json:"tools"`
-					ToolChoice string `json:"tool_choice"`
-				} `json:"body"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
 	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "auth"), "ok")
-	if len(report.RequestPreview.Requests) != 1 {
-		t.Fatalf("request_preview = %#v, want one tool request", report.RequestPreview)
-	}
-	request := report.RequestPreview.Requests[0]
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
+	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
 	if request.Name != "tool" || !request.ToolPayload {
 		t.Fatalf("preview request = %#v, want tool payload", request)
 	}
-	if request.Headers["Content-Type"] != "application/json" {
-		t.Fatalf("Content-Type preview = %q, want application/json", request.Headers["Content-Type"])
-	}
-	if request.Body.Model != "qwen2.5-coder:7b" || !request.Body.Stream || request.Body.Options.NumPredict != 64 || len(request.Body.Tools) != 1 || request.Body.ToolChoice != "xelyon_ollama_doctor_probe" {
-		t.Fatalf("preview body = %#v, want diagnostic tool body", request.Body)
+	requireDoctorJSONRequestPreviewHeader(t, request, "Content-Type", "application/json")
+	body := requireDoctorJSONRequestPreviewBody[struct {
+		Model   string `json:"model"`
+		Stream  bool   `json:"stream"`
+		Options struct {
+			NumPredict int `json:"num_predict"`
+		} `json:"options"`
+		Tools      []any  `json:"tools"`
+		ToolChoice string `json:"tool_choice"`
+	}](t, request)
+	if body.Model != "qwen2.5-coder:7b" || !body.Stream || body.Options.NumPredict != 64 || len(body.Tools) != 1 || body.ToolChoice != "xelyon_ollama_doctor_probe" {
+		t.Fatalf("preview body = %#v, want diagnostic tool body", body)
 	}
 }
 

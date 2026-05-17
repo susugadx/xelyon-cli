@@ -21,21 +21,7 @@ func TestRunClaudeDoctorInvocation_JSONReportsExplicitModelCatalogAndCapabilitie
 		t.Fatalf("runClaudeDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Provider                  string            `json:"provider"`
-		Model                     string            `json:"model"`
-		ModelSource               string            `json:"model_source"`
-		CatalogModel              string            `json:"catalog_model"`
-		CatalogModelSource        string            `json:"catalog_model_source"`
-		Route                     string            `json:"route"`
-		FunctionCallingEnabled    bool              `json:"function_calling_enabled"`
-		ImageInputSupported       bool              `json:"image_input_supported"`
-		WebSearchSupported        bool              `json:"web_search_supported"`
-		ContextManagementEnabled  bool              `json:"context_management_enabled"`
-		ClaudeCompactionSupported bool              `json:"claude_compaction_supported"`
-		AnthropicVersion          string            `json:"anthropic_version"`
-		Checks                    []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.Provider != "claude" {
 		t.Fatalf("provider = %q, want claude", report.Provider)
 	}
@@ -80,51 +66,31 @@ func TestRunClaudeDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testi
 		t.Fatalf("runClaudeDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Smoke          any `json:"smoke"`
-		RequestPreview struct {
-			Requests []struct {
-				Name        string            `json:"name"`
-				ToolPayload bool              `json:"tool_payload"`
-				Route       string            `json:"route"`
-				URL         string            `json:"url"`
-				Headers     map[string]string `json:"headers"`
-				Body        struct {
-					Model string `json:"model"`
-					Tools []struct {
-						Name string `json:"name"`
-					} `json:"tools"`
-					ToolChoice struct {
-						Type string `json:"type"`
-						Name string `json:"name"`
-					} `json:"tool_choice"`
-				} `json:"body"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
-	requireNoDoctorJSONChecks(t, report.Checks, "auth")
-	if len(report.RequestPreview.Requests) != 1 {
-		t.Fatalf("request_preview = %#v, want one tool request", report.RequestPreview)
-	}
-	request := report.RequestPreview.Requests[0]
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
+	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "tool")
 	if request.Name != "tool" || !request.ToolPayload || request.Route != "claude_messages" {
 		t.Fatalf("preview request = %#v, want Claude tool Messages request", request)
 	}
-	if request.Headers["x-api-key"] != "<redacted>" {
-		t.Fatalf("x-api-key preview = %q, want redacted", request.Headers["x-api-key"])
+	requireDoctorJSONRequestPreviewHeader(t, request, "x-api-key", "<redacted>")
+	requireDoctorJSONRequestPreviewHeader(t, request, "anthropic-version", "2023-06-01")
+	body := requireDoctorJSONRequestPreviewBody[struct {
+		Model string `json:"model"`
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+		ToolChoice struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		} `json:"tool_choice"`
+	}](t, request)
+	if body.Model != "corp-claude-model" || len(body.Tools) != 1 || body.Tools[0].Name != "xelyon_claude_doctor_probe" {
+		t.Fatalf("request body = %#v, want model and diagnostic Claude tool", body)
 	}
-	if request.Headers["anthropic-version"] != "2023-06-01" {
-		t.Fatalf("anthropic-version preview = %q, want default", request.Headers["anthropic-version"])
-	}
-	if request.Body.Model != "corp-claude-model" || len(request.Body.Tools) != 1 || request.Body.Tools[0].Name != "xelyon_claude_doctor_probe" {
-		t.Fatalf("request body = %#v, want model and diagnostic Claude tool", request.Body)
-	}
-	if request.Body.ToolChoice.Type != "tool" || request.Body.ToolChoice.Name != "xelyon_claude_doctor_probe" {
-		t.Fatalf("tool_choice = %#v, want forced diagnostic Claude tool", request.Body.ToolChoice)
+	if body.ToolChoice.Type != "tool" || body.ToolChoice.Name != "xelyon_claude_doctor_probe" {
+		t.Fatalf("tool_choice = %#v, want forced diagnostic Claude tool", body.ToolChoice)
 	}
 }
 
@@ -144,7 +110,7 @@ func TestRunClaudeDoctorInvocation_PrintRequestJSONReportsProxyEndpointWarning(t
 		t.Fatalf("runClaudeDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.APIURL != proxyURL {
 		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
 	}

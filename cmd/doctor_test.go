@@ -27,15 +27,7 @@ func TestRunAzureDoctorInvocation_JSONReportsConfiguredDeployment(t *testing.T) 
 		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Provider          string            `json:"provider"`
-		Deployment        string            `json:"deployment"`
-		CatalogModel      string            `json:"catalog_model"`
-		Route             string            `json:"route"`
-		RouteReason       string            `json:"route_reason"`
-		NormalizedBaseURL string            `json:"normalized_base_url"`
-		Checks            []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.Provider != "azure" {
 		t.Fatalf("provider = %q, want azure", report.Provider)
 	}
@@ -78,37 +70,23 @@ func TestRunAzureDoctorInvocation_PrintRequestJSONDoesNotRequireAuth(t *testing.
 		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Smoke          any `json:"smoke"`
-		RequestPreview struct {
-			Requests []struct {
-				Name               string `json:"name"`
-				RetentionPayload   bool   `json:"retention_payload"`
-				PreviousResponseID string `json:"previous_response_id"`
-				URL                string `json:"url"`
-				Body               struct {
-					Model              string `json:"model"`
-					Store              bool   `json:"store"`
-					PreviousResponseID string `json:"previous_response_id"`
-				} `json:"body"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-	}](t, out)
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
-	if len(report.RequestPreview.Requests) != 2 {
-		t.Fatalf("request_preview = %#v, want two retention requests", report.RequestPreview)
-	}
-	followup := report.RequestPreview.Requests[1]
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 2)
+	followup := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 1, "retention_followup")
 	if followup.Name != "retention_followup" || !followup.RetentionPayload {
 		t.Fatalf("followup preview = %#v, want retention followup", followup)
 	}
 	if followup.URL != "https://example.openai.azure.com/openai/v1/responses" {
 		t.Fatalf("followup URL = %q, want Azure Responses endpoint", followup.URL)
 	}
-	if followup.Body.Model != "corp-gpt55-pro-deployment" || !followup.Body.Store || followup.Body.PreviousResponseID != followup.PreviousResponseID {
-		t.Fatalf("followup body = %#v, want deployment, store true, and placeholder previous_response_id", followup.Body)
+	body := requireDoctorJSONRequestPreviewBody[struct {
+		Model              string `json:"model"`
+		Store              bool   `json:"store"`
+		PreviousResponseID string `json:"previous_response_id"`
+	}](t, followup)
+	if body.Model != "corp-gpt55-pro-deployment" || !body.Store || body.PreviousResponseID != followup.PreviousResponseID {
+		t.Fatalf("followup body = %#v, want deployment, store true, and placeholder previous_response_id", body)
 	}
 }
 

@@ -27,15 +27,7 @@ func TestRunOpenAIDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *te
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Provider           string `json:"provider"`
-		Model              string `json:"model"`
-		ModelSource        string `json:"model_source"`
-		CatalogModel       string `json:"catalog_model"`
-		CatalogModelSource string `json:"catalog_model_source"`
-		Route              string `json:"route"`
-		RouteReason        string `json:"route_reason"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.Provider != "openai" {
 		t.Fatalf("provider = %q, want openai", report.Provider)
 	}
@@ -71,32 +63,19 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testi
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		Smoke          any `json:"smoke"`
-		RequestPreview struct {
-			Requests []struct {
-				Name               string `json:"name"`
-				RetentionPayload   bool   `json:"retention_payload"`
-				PreviousResponseID string `json:"previous_response_id"`
-				Body               struct {
-					Store              bool   `json:"store"`
-					PreviousResponseID string `json:"previous_response_id"`
-				} `json:"body"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-	}](t, out)
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
-	if len(report.RequestPreview.Requests) != 2 {
-		t.Fatalf("request_preview = %#v, want two retention requests", report.RequestPreview)
-	}
-	followup := report.RequestPreview.Requests[1]
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 2)
+	followup := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 1, "retention_followup")
 	if followup.Name != "retention_followup" || !followup.RetentionPayload {
 		t.Fatalf("followup preview = %#v, want retention followup", followup)
 	}
-	if followup.PreviousResponseID == "" || followup.Body.PreviousResponseID != followup.PreviousResponseID || !followup.Body.Store {
-		t.Fatalf("followup previous/store = %#v, want placeholder previous_response_id and store true", followup)
+	body := requireDoctorJSONRequestPreviewBody[struct {
+		Store              bool   `json:"store"`
+		PreviousResponseID string `json:"previous_response_id"`
+	}](t, followup)
+	if followup.PreviousResponseID == "" || body.PreviousResponseID != followup.PreviousResponseID || !body.Store {
+		t.Fatalf("followup previous/store = body:%#v request:%#v, want placeholder previous_response_id and store true", body, followup)
 	}
 }
 
@@ -120,7 +99,7 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsChatProxyEndpointWarni
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.APIURL != proxyURL {
 		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
 	}
@@ -148,7 +127,7 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsResponsesProxyEndpoint
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.ResponsesURL != proxyURL {
 		t.Fatalf("responses_url = %q, want configured proxy URL", report.ResponsesURL)
 	}

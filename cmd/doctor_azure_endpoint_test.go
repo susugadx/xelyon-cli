@@ -47,13 +47,11 @@ func TestRunAzureDoctorInvocation_PrintRequestJSONReportsProxyBaseURLWarning(t *
 		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
 	if report.NormalizedBaseURL != proxyBaseURL {
 		t.Fatalf("normalized_base_url = %q, want configured proxy base URL", report.NormalizedBaseURL)
 	}
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
+	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
 	requireDoctorJSONProxyWarning(t, report.Checks, "base_url_path", "base_url", proxyBaseURL)
 	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
 	requireDoctorJSONRequestPreviewRouteAndURL(t, report.RequestPreview, 2, azureprovider.DiagnosticRouteResponsesNonStreaming, proxyBaseURL+"/responses")
