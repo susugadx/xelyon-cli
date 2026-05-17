@@ -18,6 +18,8 @@ func symbolFromNode(parsed *ParsedFile, node *gotreesitter.Node) (Symbol, bool) 
 		return namedDeclarationSymbol(parsed, node, "type")
 	case "enum_declaration":
 		return namedDeclarationSymbol(parsed, node, "enum")
+	case "method_definition", "method_signature", "abstract_method_signature":
+		return methodDeclarationSymbol(parsed, node)
 	case "variable_declarator":
 		return variableDeclaratorSymbol(parsed, node)
 	case "assignment_expression":
@@ -25,6 +27,20 @@ func symbolFromNode(parsed *ParsedFile, node *gotreesitter.Node) (Symbol, bool) 
 	default:
 		return Symbol{}, false
 	}
+}
+
+func methodDeclarationSymbol(parsed *ParsedFile, node *gotreesitter.Node) (Symbol, bool) {
+	if !isTypeBodyMethodNode(parsed, node) {
+		return Symbol{}, false
+	}
+	symbol, ok := namedDeclarationSymbol(parsed, node, "method")
+	if !ok {
+		return Symbol{}, false
+	}
+	if methodHasNonPublicAccess(parsed, node) {
+		symbol.Exported = false
+	}
+	return symbol, true
 }
 
 func namedDeclarationSymbol(parsed *ParsedFile, node *gotreesitter.Node, kind string) (Symbol, bool) {
@@ -47,6 +63,36 @@ func namedDeclarationSymbol(parsed *ParsedFile, node *gotreesitter.Node, kind st
 		Character: lspCharacterForByteOffset(parsed.src, nameNode.StartByte()),
 		Exported:  hasAncestorKind(parsed, node, "export_statement"),
 	}, true
+}
+
+func methodHasNonPublicAccess(parsed *ParsedFile, node *gotreesitter.Node) bool {
+	nameNode := childByField(parsed, node, "name")
+	if nameNode == nil {
+		return false
+	}
+	name := strings.TrimSpace(nodeText(parsed, nameNode))
+	if strings.HasPrefix(name, "#") {
+		return true
+	}
+	prefix := strings.TrimSpace(nodePrefixText(parsed, node, nameNode))
+	for _, field := range strings.Fields(prefix) {
+		switch field {
+		case "private", "protected":
+			return true
+		}
+	}
+	return false
+}
+
+func nodePrefixText(parsed *ParsedFile, node *gotreesitter.Node, child *gotreesitter.Node) string {
+	if parsed == nil || node == nil || child == nil || child.StartByte() < node.StartByte() {
+		return ""
+	}
+	start, end := int(node.StartByte()), int(child.StartByte())
+	if start < 0 || end > len(parsed.src) || start > end {
+		return ""
+	}
+	return string(parsed.src[start:end])
 }
 
 func variableDeclaratorSymbol(parsed *ParsedFile, node *gotreesitter.Node) (Symbol, bool) {

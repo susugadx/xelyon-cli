@@ -44,25 +44,18 @@ var fallbackSymbolPatterns = []fallbackSymbolPattern{
 }
 
 func fallbackSymbolsFromSource(parsed *ParsedFile) []Symbol {
+	return fallbackSymbolsFromSourceWithOptions(parsed, fallbackSymbolOptions{includeMethods: true})
+}
+
+type fallbackSymbolOptions struct {
+	includeMethods bool
+}
+
+func fallbackSymbolsFromSourceWithOptions(parsed *ParsedFile, opts fallbackSymbolOptions) []Symbol {
 	if parsed == nil || len(parsed.src) == 0 {
 		return nil
 	}
-	lines := strings.Split(string(parsed.src), "\n")
-	symbols := make([]Symbol, 0)
-	byteOffset := 0
-	for idx, line := range lines {
-		lineNo := idx + 1
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			byteOffset += len(line) + 1
-			continue
-		}
-		if symbol, ok := fallbackSymbolFromLine(parsed, line, trimmed, lineNo, byteOffset); ok {
-			symbols = append(symbols, symbol)
-		}
-		byteOffset += len(line) + 1
-	}
-	return symbols
+	return newFallbackSymbolScanner(parsed, opts).Scan(strings.Split(string(parsed.src), "\n"))
 }
 
 func fallbackSymbolFromLine(parsed *ParsedFile, line string, trimmed string, lineNo int, lineStart int) (Symbol, bool) {
