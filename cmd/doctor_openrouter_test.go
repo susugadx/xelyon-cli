@@ -123,6 +123,34 @@ func TestRunOpenRouterDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *t
 	}
 }
 
+func TestRunOpenRouterDoctorInvocation_PrintRequestJSONReportsMessagesEndpointFailure(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENROUTER_API_KEY", "")
+	t.Setenv("OPENROUTER_API_URL", "https://openrouter.example/v1/messages")
+	t.Setenv("OPENROUTER_FUNCTION_CALLING", "1")
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenRouterDoctorCommand)
+
+	doctorOpenRouterModelFlag = "anthropic/claude-sonnet-4.6"
+	doctorCatalogModelFlag = "anthropic/claude-sonnet-4.6"
+	doctorToolSmokeFlag = true
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runOpenRouterDoctorInvocation(cmd, nil); err == nil {
+		t.Fatalf("runOpenRouterDoctorInvocation() error = nil, want endpoint failure\noutput:\n%s", out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	endpoint := requireDoctorJSONCheck(t, report.Checks, "endpoint")
+	requireDoctorJSONCheckStatus(t, endpoint, "fail")
+	requireDoctorJSONCheckDetailContains(t, endpoint, "https://openrouter.example/v1/messages")
+	requireDoctorJSONCheckSuggestionContains(t, endpoint, "/v1/chat/completions")
+}
+
 func TestRootCommand_OpenRouterDoctorCommandParsesFlags(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("OPENROUTER_API_KEY", "sk-or-test")
@@ -149,7 +177,18 @@ func TestRootCommand_OpenRouterDoctorHelpShowsMinimalFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--print-request", "--timeout", "--json", "Diagnose OpenRouter provider configuration"} {
+	for _, want := range []string{
+		"--model",
+		"--catalog-model",
+		"--smoke",
+		"--tool-smoke",
+		"--print-request",
+		"--timeout",
+		"--json",
+		"Diagnose OpenRouter provider configuration",
+		"Chat Completions endpoint",
+		"should not be configured directly",
+	} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want OpenRouter doctor help substring %q", out.String(), want)
 		}

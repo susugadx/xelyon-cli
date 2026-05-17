@@ -182,7 +182,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.requiresAuthCheck() {
 		report.addAuthCheck()
 	}
-	report.addEndpointCheck(configuredAPIURL)
+	report.addEndpointCheck(route)
 	report.addProviderRegistrationCheck()
 	report.addModelCheck()
 	report.addCatalogModelCheck()

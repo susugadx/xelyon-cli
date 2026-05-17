@@ -528,7 +528,7 @@ xelyon doctor openrouter --print-request
 xelyon doctor openrouter --json
 ```
 
-`--tool-smoke` は選択 route の形式で dummy tool call を強制します。`OPENROUTER_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--print-request` は live request を送らず、OpenRouter 固有の `HTTP-Referer` / `X-Title` と redacted bearer header、選択 route の request body を表示します。`image_input` は provider-level support のローカル check で、OpenRouter doctor v1 は画像 live smoke を送りません。`--smoke` / `--tool-smoke` は live API request を送るため、通常 CI では実行しません。手元では `OPENROUTER_API_KEY` を設定して `make openrouter-doctor-smoke` を実行します。既定モデルは `OPENROUTER_DOCTOR_SMOKE_MODEL ?= openai/gpt-5.4-mini` です。
+`OPENROUTER_API_URL` は Chat Completions endpoint または互換 proxy path を指定します。`/v1/messages` など Messages endpoint を直接指定すると fail になり、Anthropic Skin route では doctor/runtime が `/v1/messages` を派生します。`--tool-smoke` は選択 route の形式で dummy tool call を強制します。`OPENROUTER_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--print-request` は live request を送らず、OpenRouter 固有の `HTTP-Referer` / `X-Title` と redacted bearer header、選択 route の request body を表示します。`image_input` は provider-level support のローカル check で、OpenRouter doctor v1 は画像 live smoke を送りません。`--smoke` / `--tool-smoke` は live API request を送るため、通常 CI では実行しません。手元では `OPENROUTER_API_KEY` を設定して `make openrouter-doctor-smoke` を実行します。既定モデルは `OPENROUTER_DOCTOR_SMOKE_MODEL ?= openai/gpt-5.4-mini` です。
 
 ### 10. Bedrock (AWS)
 

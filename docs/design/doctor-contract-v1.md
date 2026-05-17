@@ -94,6 +94,7 @@ OpenRouter:
 - Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1. `image_input` is a local provider-level check only.
 - Route selection follows the runtime request model. A configured alias whose `catalog_model` is Claude still reports Chat Completions unless the request model itself is `anthropic/claude-*`.
 - A direct routed OpenRouter request model cannot be re-described by a different known routed `catalog_model`; mismatch is warn and token / pricing policy falls back to the request model when local metadata is available.
+- `OPENROUTER_API_URL` is treated as a Chat Completions endpoint or compatible proxy path. Messages endpoints such as `/v1/messages` fail because Anthropic Skin `/v1/messages` is derived by the provider.
 - Main owner packages: `cmd/doctor_openrouter.go`, `internal/api/providers/openrouter/diagnostics*.go`, `internal/providerdiag`.
 
 Gemini:

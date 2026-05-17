@@ -11,6 +11,11 @@ const (
 	openRouterRouteChatCompletions   = "chat_completions"
 	openRouterRouteAnthropicMessages = "anthropic_messages"
 
+	openRouterChatCompletionsEndpointPath   = "/v1/chat/completions"
+	openRouterAnthropicMessagesEndpointPath = "/v1/messages"
+	openRouterChatCompletionsPathSuffix     = "/chat/completions"
+	openRouterAnthropicMessagesPathSuffix   = "/messages"
+
 	DiagnosticRouteChatCompletions   = openRouterRouteChatCompletions
 	DiagnosticRouteAnthropicMessages = openRouterRouteAnthropicMessages
 )
@@ -34,8 +39,9 @@ func resolveOpenRouterRoutePlan(cfg *config.Config, configuredAPIURL, model stri
 		return openRouterRoutePlan{
 			Route: DiagnosticRouteAnthropicMessages,
 			Reason: fmt.Sprintf(
-				"request model %s enables OpenRouter Anthropic Skin context management; /v1/messages is selected",
+				"request model %s enables OpenRouter Anthropic Skin context management; %s is selected",
 				model,
+				openRouterAnthropicMessagesEndpointPath,
 			),
 			APIURL: getAnthropicSkinURL(configuredAPIURL),
 		}
@@ -58,8 +64,8 @@ func (p openRouterRoutePlan) usesAnthropicMessages() bool {
 
 // getAnthropicSkinURL は OpenAI 互換 URL から Anthropic Skin URL を導出する。
 func getAnthropicSkinURL(openaiURL string) string {
-	if idx := strings.Index(openaiURL, "/v1/chat/completions"); idx >= 0 {
-		return openaiURL[:idx] + "/v1/messages"
+	if idx := strings.Index(openaiURL, openRouterChatCompletionsEndpointPath); idx >= 0 {
+		return openaiURL[:idx] + openRouterAnthropicMessagesEndpointPath
 	}
-	return strings.TrimSuffix(openaiURL, "/chat/completions") + "/messages"
+	return strings.TrimSuffix(openaiURL, openRouterChatCompletionsPathSuffix) + openRouterAnthropicMessagesPathSuffix
 }

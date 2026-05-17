@@ -22,7 +22,9 @@ selection, image input support, function calling settings, and token/cost
 metadata. Use --smoke to send a minimal live request through the selected
 route. Use --tool-smoke to force a dummy diagnostic tool call when function
 calling is enabled. Use --print-request to print the sanitized smoke request
-JSON without sending it.`,
+JSON without sending it. OPENROUTER_API_URL must be a Chat Completions endpoint
+or compatible proxy path; Anthropic Skin /v1/messages is derived by the
+provider and should not be configured directly.`,
 		Args: cobra.NoArgs,
 		RunE: runOpenRouterDoctorInvocation,
 	}

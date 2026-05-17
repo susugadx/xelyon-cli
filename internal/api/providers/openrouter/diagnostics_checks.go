@@ -41,7 +41,7 @@ func (r *DiagnosticReport) addAuthCheck() {
 	r.addCheck(DiagnosticStatusOK, "auth", "OpenRouter API key is configured", openRouterAPIKeyEnv, "")
 }
 
-func (r *DiagnosticReport) addEndpointCheck(configuredAPIURL string) {
+func (r *DiagnosticReport) addEndpointCheck(route openRouterRoutePlan) {
 	raw := strings.TrimSpace(os.Getenv(openRouterAPIURLEnv))
 	if raw == "" {
 		r.addCheck(DiagnosticStatusOK, "endpoint", fmt.Sprintf("%s uses the built-in endpoint", openRouterAPIURLEnv), defaultOpenRouterURL, "")
@@ -61,17 +61,31 @@ func (r *DiagnosticReport) addEndpointCheck(configuredAPIURL string) {
 	}
 
 	path := strings.TrimRight(parsed.Path, "/")
-	if !strings.HasSuffix(path, "/v1/chat/completions") {
+	if openRouterEndpointLooksLikeMessagesPath(path) {
 		r.addCheck(
-			DiagnosticStatusWarn,
+			DiagnosticStatusFail,
 			"endpoint",
-			fmt.Sprintf("%s does not end with /v1/chat/completions", openRouterAPIURLEnv),
+			fmt.Sprintf("%s is an Anthropic Skin Messages endpoint, but %s route expects a Chat Completions endpoint or proxy", openRouterAPIURLEnv, route.Route),
 			raw,
-			"This is OK only for an intentional proxy endpoint; Anthropic Skin preview/smoke derives /v1/messages from this URL",
+			fmt.Sprintf("Set %s to %s or to an intentional proxy path; the provider derives %s for anthropic_messages route", openRouterAPIURLEnv, defaultOpenRouterURL, openRouterAnthropicMessagesEndpointPath),
 		)
 		return
 	}
-	r.addCheck(DiagnosticStatusOK, "endpoint", fmt.Sprintf("%s is configured", openRouterAPIURLEnv), configuredAPIURL, "")
+	if !strings.HasSuffix(path, openRouterChatCompletionsEndpointPath) {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"endpoint",
+			fmt.Sprintf("%s does not end with %s", openRouterAPIURLEnv, openRouterChatCompletionsEndpointPath),
+			raw,
+			fmt.Sprintf("This is OK only for an intentional proxy endpoint; Anthropic Skin preview/smoke derives %s from this URL", openRouterAnthropicMessagesEndpointPath),
+		)
+		return
+	}
+	r.addCheck(DiagnosticStatusOK, "endpoint", fmt.Sprintf("%s is configured", openRouterAPIURLEnv), raw, "")
+}
+
+func openRouterEndpointLooksLikeMessagesPath(path string) bool {
+	return strings.HasSuffix(strings.TrimRight(path, "/"), openRouterAnthropicMessagesPathSuffix)
 }
 
 func (r *DiagnosticReport) addProviderRegistrationCheck() {

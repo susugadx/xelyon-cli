@@ -850,6 +850,8 @@ export GROQ_API_URL=https://your-proxy.com/openai/v1/chat/completions
 export OPENROUTER_API_URL=https://your-proxy.com/v1/chat/completions
 ```
 
+OpenRouter の `OPENROUTER_API_URL` は Chat Completions endpoint または互換 proxy path を指定します。Claude 系 model で Anthropic Skin route を使う場合も `/v1/messages` は provider が派生するため、`OPENROUTER_API_URL` に直接 `/v1/messages` を指定しないでください。
+
 ## 設定ファイルの編集
 
 ### 手動編集
