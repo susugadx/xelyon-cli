@@ -20,11 +20,44 @@ const (
 )
 
 type planInvestigationRunner struct {
-	agent         *Agent
-	ctx           context.Context
-	hardLimit     int
-	lastToolCall  *tools.ToolCall
-	sameCallCount int
+	agent           *Agent
+	ctx             context.Context
+	hardLimit       int
+	lastToolCall    *tools.ToolCall
+	sameCallCount   int
+	autoCompression planInvestigationAutoCompression
+}
+
+type planInvestigationOptions struct {
+	autoCompression planInvestigationAutoCompression
+}
+
+type planInvestigationAutoCompression struct {
+	currentTurnStartIndex int
+	turnState             *autoCompressionTurnState
+	persistHistory        func() []api.Message
+	onSuccess             func(currentTurnStartIndex int)
+}
+
+func (c planInvestigationAutoCompression) shouldAttempt() bool {
+	return c.turnState != nil && c.currentTurnStartIndex > 0
+}
+
+func (c planInvestigationAutoCompression) compressionOptions() inTurnAutoCompressionOptions {
+	if !c.shouldAttempt() || c.persistHistory == nil {
+		return inTurnAutoCompressionOptions{}
+	}
+	return inTurnAutoCompressionOptions{persistHistory: c.persistHistory()}
+}
+
+func (c *planInvestigationAutoCompression) applyResult(result inTurnAutoCompressionResult) {
+	if !result.compressed || result.compressedCurrentTurnStartIndex <= 0 {
+		return
+	}
+	c.currentTurnStartIndex = result.compressedCurrentTurnStartIndex
+	if c.onSuccess != nil {
+		c.onSuccess(result.compressedCurrentTurnStartIndex)
+	}
 }
 
 // runInvestigationPhase は調査フェーズを実行する。
@@ -37,12 +70,23 @@ func (a *Agent) runInvestigationPhase(ctx context.Context) (*plan.Plan, error) {
 	return newPlanInvestigationRunner(a, ctx).Run()
 }
 
+func (a *Agent) runInvestigationPhaseWithOptions(ctx context.Context, opts planInvestigationOptions) (*plan.Plan, error) {
+	return newPlanInvestigationRunnerWithOptions(a, ctx, opts).Run()
+}
+
 func newPlanInvestigationRunner(agent *Agent, ctx context.Context) *planInvestigationRunner {
+	return newPlanInvestigationRunnerWithOptions(agent, ctx, planInvestigationOptions{
+		autoCompression: planInvestigationAutoCompression{currentTurnStartIndex: len(agent.History)},
+	})
+}
+
+func newPlanInvestigationRunnerWithOptions(agent *Agent, ctx context.Context, opts planInvestigationOptions) *planInvestigationRunner {
 	cfg := agent.cfg()
 	return &planInvestigationRunner{
-		agent:     agent,
-		ctx:       ctx,
-		hardLimit: normalizeToolLoopLimit(cfg.General.ToolLoopLimit),
+		agent:           agent,
+		ctx:             ctx,
+		hardLimit:       normalizeToolLoopLimit(cfg.General.ToolLoopLimit),
+		autoCompression: opts.autoCompression,
 	}
 }
 
@@ -72,6 +116,9 @@ func (r *planInvestigationRunner) Run() (*plan.Plan, error) {
 		}
 
 		if err := r.executeToolCalls(toolCalls); err != nil {
+			return nil, err
+		}
+		if err := r.afterToolResults(); err != nil {
 			return nil, err
 		}
 	}
@@ -171,6 +218,26 @@ func (r *planInvestigationRunner) executeToolCalls(toolCalls []*tools.ToolCall) 
 
 		r.rejectTool(tc)
 	}
+	return nil
+}
+
+func (r *planInvestigationRunner) afterToolResults() error {
+	if err := requestContextErr(r.ctx); err != nil {
+		return err
+	}
+	if !r.autoCompression.shouldAttempt() {
+		return nil
+	}
+	result := r.agent.maybeAutoCompressDuringTurnWithOptions(
+		r.ctx,
+		r.autoCompression.currentTurnStartIndex,
+		r.autoCompression.turnState,
+		r.autoCompression.compressionOptions(),
+	)
+	if result.requestErr != nil {
+		return result.requestErr
+	}
+	r.autoCompression.applyResult(result)
 	return nil
 }
 

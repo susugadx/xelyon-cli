@@ -22,12 +22,7 @@ type chatRequest struct {
 // chatCore は chat / ChatOnce の共有実装
 // oneShot=true の場合: エラーを返し、対話向け後処理（usage表示・圧縮・context提案）をスキップ
 func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error {
-	req := &chatRequest{
-		input:           input,
-		image:           image,
-		oneShot:         oneShot,
-		autoCompression: newAutoCompressionTurnState(),
-	}
+	req := newChatRequest(input, image, oneShot)
 
 	a.prepareChatRequest(req)
 
@@ -43,6 +38,18 @@ func (a *Agent) chatCore(input string, image *api.ImageData, oneShot bool) error
 	}
 
 	return a.finishChatRequest(req)
+}
+
+func newChatRequest(input string, image *api.ImageData, oneShot bool) *chatRequest {
+	req := &chatRequest{
+		input:   input,
+		image:   image,
+		oneShot: oneShot,
+	}
+	if !oneShot {
+		req.autoCompression = newAutoCompressionTurnState()
+	}
+	return req
 }
 
 func (a *Agent) prepareChatRequest(req *chatRequest) {
@@ -99,7 +106,7 @@ func (a *Agent) runChatRequestForCurrentMode(ctx context.Context, req *chatReque
 
 func (a *Agent) runPlanModeChatRequest(ctx context.Context, req *chatRequest) error {
 	a.applyChatRequestToolVisibility(toolSurfacePhasePlan)
-	handoff, err := a.runPlanMode(ctx, req.input)
+	handoff, err := a.runPlanModeWithAutoCompression(ctx, req.input, req.autoCompression)
 	if err != nil || handoff == nil {
 		return err
 	}

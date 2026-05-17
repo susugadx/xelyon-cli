@@ -27,9 +27,10 @@ type compressHistoryOptions struct {
 }
 
 type compressionHistoryPlan struct {
-	split             compressionHistorySplit
-	beforeTokens      int
-	displayKeepRecent int
+	split                           compressionHistorySplit
+	beforeTokens                    int
+	displayKeepRecent               int
+	compressedCurrentTurnStartIndex int
 }
 
 func (p compressionHistoryPlan) hasCompressibleHistory() bool {
@@ -60,13 +61,39 @@ func (a *Agent) compressionHistoryPlanForKeepRecent(keepRecent int) compressionH
 }
 
 func (a *Agent) compressionHistoryPlanForInTurn(currentTurnStartIndex, keepRecent int) compressionHistoryPlan {
+	return a.compressionHistoryPlanForInTurnWithPersistHistory(currentTurnStartIndex, keepRecent, nil)
+}
+
+func (a *Agent) compressionHistoryPlanForInTurnWithPersistHistory(currentTurnStartIndex, keepRecent int, persistHistory []api.Message) compressionHistoryPlan {
 	beforeTokens := estimateTokens(a.CurrentModel, a.History)
-	persistHistory := a.persistableHistoryForCompression()
-	return compressionHistoryPlan{
-		split:             splitHistoryForInTurnCompression(a.History, persistHistory, currentTurnStartIndex, keepRecent),
-		beforeTokens:      beforeTokens,
-		displayKeepRecent: keepRecent,
+	if len(persistHistory) != len(a.History) {
+		persistHistory = a.persistableHistoryForCompression()
 	}
+	if len(persistHistory) != len(a.History) {
+		persistHistory = a.History
+	}
+	split := splitHistoryForInTurnCompression(a.History, persistHistory, currentTurnStartIndex, keepRecent)
+	return compressionHistoryPlan{
+		split:                           split,
+		beforeTokens:                    beforeTokens,
+		displayKeepRecent:               keepRecent,
+		compressedCurrentTurnStartIndex: compressedCurrentTurnStartIndex(a.History, split, currentTurnStartIndex),
+	}
+}
+
+func compressedCurrentTurnStartIndex(history []api.Message, split compressionHistorySplit, currentTurnStartIndex int) int {
+	if currentTurnStartIndex < 0 {
+		currentTurnStartIndex = 0
+	}
+	if currentTurnStartIndex > len(history) {
+		currentTurnStartIndex = len(history)
+	}
+	currentTurnTailLen := len(history) - currentTurnStartIndex
+	keptBeforeCurrentTurn := len(split.toKeep) - currentTurnTailLen
+	if keptBeforeCurrentTurn < 0 {
+		keptBeforeCurrentTurn = 0
+	}
+	return 1 + keptBeforeCurrentTurn
 }
 
 func (a *Agent) compressHistoryWithPlan(plan compressionHistoryPlan, opts compressHistoryOptions) error {

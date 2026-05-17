@@ -227,6 +227,33 @@ func TestSplitHistoryForInTurnCompression_RespectsKeepRecentBeforeCurrentTurn(t 
 	}
 }
 
+func TestSplitHistoryForInTurnCompression_NoPreTurnHistoryKeepsCurrentTurn(t *testing.T) {
+	history := []api.Message{
+		{Role: "user", Content: "current user"},
+		{Role: "assistant", Content: "", ToolCalls: []api.OpenAIToolCall{
+			{ID: "call_1", Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{}`}},
+		}},
+		{Role: "tool", Content: "current tool result", ToolCallID: "call_1"},
+	}
+	persistHistory := []api.Message{
+		{Role: "user", Content: "persist current user"},
+		{Role: "assistant", Content: "", ToolCalls: history[1].ToolCalls},
+		{Role: "tool", Content: "persist current tool result", ToolCallID: "call_1"},
+	}
+
+	split := splitHistoryForInTurnCompression(history, persistHistory, 0, 1)
+
+	if len(split.toCompress) != 0 {
+		t.Fatalf("toCompress = %#v, want no compression when there is no pre-turn history", split.toCompress)
+	}
+	if len(split.toKeep) != 3 || split.toKeep[0].Content != "current user" || split.toKeep[2].Content != "current tool result" {
+		t.Fatalf("toKeep = %#v, want full current runtime turn", split.toKeep)
+	}
+	if len(split.toKeepPersist) != 3 || split.toKeepPersist[0].Content != "persist current user" || split.toKeepPersist[2].Content != "persist current tool result" {
+		t.Fatalf("toKeepPersist = %#v, want full current persisted turn", split.toKeepPersist)
+	}
+}
+
 func TestSplitHistoryForInTurnCompression_KeepsCurrentTurnWhenLongerThanKeepRecent(t *testing.T) {
 	history := []api.Message{
 		{Role: "user", Content: "old 0"},

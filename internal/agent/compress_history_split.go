@@ -13,6 +13,13 @@ func splitHistoryForCompression(history, persistHistory []api.Message, keepRecen
 }
 
 func splitHistoryForInTurnCompression(history, persistHistory []api.Message, currentTurnStartIndex, keepRecent int) compressionHistorySplit {
+	if currentTurnStartIndex <= 0 {
+		return compressionHistorySplit{
+			toCompress:    nil,
+			toKeep:        history,
+			toKeepPersist: persistHistory,
+		}
+	}
 	splitIdx := len(history) - keepRecent
 	if splitIdx > currentTurnStartIndex {
 		splitIdx = currentTurnStartIndex

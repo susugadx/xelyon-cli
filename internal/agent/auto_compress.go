@@ -105,21 +105,30 @@ type inTurnAutoCompressionPlan struct {
 	keepRecent  int
 }
 
+type inTurnAutoCompressionOptions struct {
+	persistHistory []api.Message
+}
+
 type inTurnAutoCompressionResult struct {
-	attempted  bool
-	compressed bool
-	requestErr error
+	attempted                       bool
+	compressed                      bool
+	compressedCurrentTurnStartIndex int
+	requestErr                      error
 }
 
 func (a *Agent) maybeAutoCompressDuringTurn(ctx context.Context, currentTurnStartIndex int, state *autoCompressionTurnState) inTurnAutoCompressionResult {
-	plan, ok := a.planInTurnAutoCompression(ctx, currentTurnStartIndex, state)
+	return a.maybeAutoCompressDuringTurnWithOptions(ctx, currentTurnStartIndex, state, inTurnAutoCompressionOptions{})
+}
+
+func (a *Agent) maybeAutoCompressDuringTurnWithOptions(ctx context.Context, currentTurnStartIndex int, state *autoCompressionTurnState, opts inTurnAutoCompressionOptions) inTurnAutoCompressionResult {
+	plan, ok := a.planInTurnAutoCompression(ctx, currentTurnStartIndex, state, opts)
 	if !ok {
 		return inTurnAutoCompressionResult{}
 	}
 	return a.runInTurnAutoCompression(plan, state)
 }
 
-func (a *Agent) planInTurnAutoCompression(ctx context.Context, currentTurnStartIndex int, state *autoCompressionTurnState) (inTurnAutoCompressionPlan, bool) {
+func (a *Agent) planInTurnAutoCompression(ctx context.Context, currentTurnStartIndex int, state *autoCompressionTurnState, opts inTurnAutoCompressionOptions) (inTurnAutoCompressionPlan, bool) {
 	if state == nil || state.attemptedThisTurn() {
 		return inTurnAutoCompressionPlan{}, false
 	}
@@ -144,6 +153,9 @@ func (a *Agent) planInTurnAutoCompression(ctx context.Context, currentTurnStartI
 
 	keepRecent := normalizedAutoCompressionKeepRecent(cfg.Compression.KeepRecent)
 	historyPlan := a.compressionHistoryPlanForInTurn(currentTurnStartIndex, keepRecent)
+	if len(opts.persistHistory) > 0 {
+		historyPlan = a.compressionHistoryPlanForInTurnWithPersistHistory(currentTurnStartIndex, keepRecent, opts.persistHistory)
+	}
 	if !historyPlan.hasCompressibleHistory() {
 		return inTurnAutoCompressionPlan{}, false
 	}
@@ -176,10 +188,18 @@ func (a *Agent) runInTurnAutoCompression(plan inTurnAutoCompressionPlan, state *
 	})
 
 	return inTurnAutoCompressionResult{
-		attempted:  state.attemptedThisTurn(),
-		compressed: result.compressed,
-		requestErr: requestContextErr(plan.ctx),
+		attempted:                       state.attemptedThisTurn(),
+		compressed:                      result.compressed,
+		compressedCurrentTurnStartIndex: compressedCurrentTurnStartIndexForResult(result, plan.historyPlan),
+		requestErr:                      requestContextErr(plan.ctx),
 	}
+}
+
+func compressedCurrentTurnStartIndexForResult(result autoCompressionRunResult, plan compressionHistoryPlan) int {
+	if !result.compressed {
+		return 0
+	}
+	return plan.compressedCurrentTurnStartIndex
 }
 
 type autoCompressionRunResult struct {

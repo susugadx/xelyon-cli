@@ -97,6 +97,23 @@ func (c *planModeCheckpoint) restoreSystemPrompt(a *Agent) {
 	a.SystemPrompt = c.systemPrompt
 }
 
+func (c *planModeCheckpoint) rebaseAfterInTurnCompression(a *Agent, currentTurnStartIndex int) {
+	if c == nil || a == nil {
+		return
+	}
+	if currentTurnStartIndex < 0 {
+		currentTurnStartIndex = 0
+	}
+	if currentTurnStartIndex > len(a.History) {
+		currentTurnStartIndex = len(a.History)
+	}
+	c.historyLen = currentTurnStartIndex
+	if a.session != nil {
+		c.sessionMessageCount = currentTurnStartIndex
+	}
+	c.responseID = ""
+}
+
 func (c *planModeCheckpoint) restoreProviderResponseContext(a *Agent) {
 	if a == nil {
 		return

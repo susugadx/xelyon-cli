@@ -21,6 +21,11 @@ type planModeRequest struct {
 	checkpoint          planModeCheckpoint
 	approved            bool
 	handoff             *planModeImplementationHandoff
+	autoCompression     *autoCompressionTurnState
+}
+
+type planModeRequestOptions struct {
+	autoCompression *autoCompressionTurnState
 }
 
 type planModeRestoreMode int
@@ -42,10 +47,15 @@ type planModeInvestigationOutcome struct {
 }
 
 func newPlanModeRequest(agent *Agent, ctx context.Context, userRequest string) *planModeRequest {
+	return newPlanModeRequestWithOptions(agent, ctx, userRequest, planModeRequestOptions{})
+}
+
+func newPlanModeRequestWithOptions(agent *Agent, ctx context.Context, userRequest string, opts planModeRequestOptions) *planModeRequest {
 	return &planModeRequest{
 		agent:               agent,
 		ctx:                 ctx,
 		originalUserRequest: userRequest,
+		autoCompression:     opts.autoCompression,
 	}
 }
 
@@ -154,7 +164,9 @@ func (r *planModeRequest) runInvestigation() (*plan.Plan, bool, error) {
 	a.SetStatus(StateRunning, "Investigating", "調査中", "Wait for investigation", "調査完了を待ってください")
 	a.History = append(a.History, api.Message{Role: "user", Content: r.investigationPrompt})
 
-	p, err := a.runInvestigationPhase(r.ctx)
+	p, err := a.runInvestigationPhaseWithOptions(r.ctx, planInvestigationOptions{
+		autoCompression: r.investigationAutoCompression(),
+	})
 	if err != nil {
 		if r.handleTokenLimit(err) {
 			return nil, true, nil
@@ -243,7 +255,7 @@ func (r *planModeRequest) feedbackRerunRequest(feedback string) string {
 
 func (r *planModeRequest) rerunPlanMode(userRequest string) error {
 	r.recordRerunRequest(userRequest)
-	handoff, err := r.agent.runPlanMode(r.ctx, userRequest)
+	handoff, err := r.agent.runPlanModeWithAutoCompression(r.ctx, userRequest, r.autoCompression)
 	if handoff != nil {
 		r.handoff = handoff
 	}

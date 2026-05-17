@@ -14,7 +14,13 @@ func (a *Agent) RunPlanMode(ctx context.Context, userRequest string) error {
 }
 
 func (a *Agent) runPlanMode(ctx context.Context, userRequest string) (*planModeImplementationHandoff, error) {
-	req := newPlanModeRequest(a, ctx, userRequest)
+	return a.runPlanModeWithAutoCompression(ctx, userRequest, nil)
+}
+
+func (a *Agent) runPlanModeWithAutoCompression(ctx context.Context, userRequest string, autoCompression *autoCompressionTurnState) (*planModeImplementationHandoff, error) {
+	req := newPlanModeRequestWithOptions(a, ctx, userRequest, planModeRequestOptions{
+		autoCompression: autoCompression,
+	})
 	if err := req.Run(); err != nil {
 		return nil, err
 	}
