@@ -15,23 +15,25 @@ func newNormalModePlanningHandler(r *TurnRunner) *normalModePlanningHandler {
 }
 
 func (h *normalModePlanningHandler) HandlePlanJSONFallback(response string, toolCalls []*tools.ToolCall) (normalModeAction, bool, error) {
-	if len(toolCalls) != 0 || !plan.ContainsPlanJSON(response) {
+	if len(toolCalls) != 0 {
 		return normalModeContinue, false, nil
 	}
 
 	a := h.runner.agent
-	if planJSON := plan.ExtractPlanJSON(response); planJSON != "" {
-		if _, err := plan.ParsePlan(planJSON); err == nil {
-			yellow.Fprintln(a.output(), "⚠️  Plan JSON detected in normal mode. Execute tools directly instead.")
-		} else {
-			yellow.Fprintln(a.output(), "⚠️  Plan JSON detected but parse failed. Execute tools directly.")
-		}
-		h.runner.appendAssistantHistoryOnly(response)
-		a.History = append(a.History, api.Message{
-			Role:    "user",
-			Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptDirectExecution),
-		})
-		return normalModeContinue, true, nil
+	planJSON := plan.ExtractPlanJSONForNormalModeRecovery(response)
+	if planJSON == "" {
+		return normalModeContinue, false, nil
 	}
-	return normalModeContinue, false, nil
+
+	if _, err := plan.ParsePlan(planJSON); err == nil {
+		yellow.Fprintln(a.output(), "⚠️  Plan JSON detected in normal mode. Execute tools directly instead.")
+	} else {
+		yellow.Fprintln(a.output(), "⚠️  Plan JSON detected but parse failed. Execute tools directly.")
+	}
+	h.runner.appendAssistantHistoryOnly(response)
+	a.History = append(a.History, api.Message{
+		Role:    "user",
+		Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptDirectExecution),
+	})
+	return normalModeContinue, true, nil
 }

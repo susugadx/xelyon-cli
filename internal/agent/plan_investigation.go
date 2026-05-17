@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/dev"
 )
@@ -201,7 +202,7 @@ func (r *planInvestigationRunner) extractPlan(response string) (*plan.Plan, bool
 func (r *planInvestigationRunner) requestPlanJSONRetry() {
 	r.agent.History = append(r.agent.History, api.Message{
 		Role:    "user",
-		Content: "[SYSTEM] Plan JSON を**必ず**次のスキーマ例に沿って、```json``` で囲んだ1つのJSONとして出力してください（箇条書き/番号付きリスト/文章のみは禁止）。\n\n例:\n```json\n{\n  \"title\": \"調査と実装計画\",\n  \"goal\": \"<最終的に達成したいこと>\",\n  \"assumptions\": [\"<前提>\"],\n  \"steps\": [\n    {\n      \"id\": 1,\n      \"title\": \"<手順タイトル>\",\n      \"description\": \"<この手順でやること>\",\n      \"expected_output\": \"<完了条件/成果物>\"\n    }\n  ]\n}\n```",
+		Content: promptplan.BuildPlanJSONRetryMessage(),
 	})
 }
 

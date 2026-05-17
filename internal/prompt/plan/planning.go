@@ -12,5 +12,7 @@ Use ONLY when necessary:
 
 ### Output format (IMPORTANT)
 - After investigation, output a plan as plain text that includes a single JSON object matching the Plan schema.
-- The runtime will extract it via ExtractPlanJSON/ParsePlan.`
+- The runtime will extract it via ExtractPlanJSON/ParsePlan.
+
+` + PlanJSONSchemaInstructions()
 }

@@ -81,6 +81,11 @@ func TestBuildInvestigationPrompt_LocalVsSharedGuidance(t *testing.T) {
 	}
 }
 
+func TestBuildInvestigationPrompt_ContainsPlanSchemaWithFiles(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request", investigation.SurfaceEditExactControl)
+	assertContainsPlanSchema(t, "investigation prompt", prompt)
+}
+
 func TestBuildInvestigationPrompt_LegacyAllowedTools(t *testing.T) {
 	prompt := BuildInvestigationPrompt("test request", investigation.SurfaceLegacyOverrides)
 	if !strings.Contains(prompt, promptfragments.InvestigationAllowedToolsLine(investigation.SurfaceLegacyOverrides)) {

@@ -59,7 +59,9 @@ When ready, output your implementation plan as text that includes a single JSON 
 - Do NOT create steps like "investigate X" or "read file Y"
 - Each step should be an ACTION that modifies the codebase
 
-Start investigation now.`, userRequest, allowedTools, checklist)
+%s
+
+Start investigation now.`, userRequest, allowedTools, checklist, PlanJSONSchemaInstructions())
 }
 
 // BuildPlanRequestMessage generates the system message asking for a plan
@@ -72,5 +74,7 @@ Before using modification tools, you must provide an implementation plan.
 Output your plan as text that includes a single JSON object matching the Plan schema.
 The runtime extracts it via ExtractPlanJSON/ParsePlan.
 
-Do not call tools in this response. Return only the implementation plan.`, toolName)
+%s
+
+Do not call tools in this response. Return only the implementation plan.`, toolName, PlanJSONSchemaInstructions())
 }

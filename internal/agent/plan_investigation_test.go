@@ -13,6 +13,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+const planJSONRetryPromptFragment = "Plan JSON を**必ず**"
+
 type scriptedStreamingProvider struct {
 	name     string
 	response string
@@ -126,11 +128,7 @@ func TestRunInvestigationPhase_PlanModeShowsFinalProse(t *testing.T) {
 }
 
 func TestPlanInvestigationRunner_HandleNoToolResponse_InvalidPlanJSONRequestsRetry(t *testing.T) {
-	disableColors(t)
-
-	var out bytes.Buffer
-	agent := newChatRequestTestAgent(t, &mockProvider{name: "test"}, &out)
-	runner := newPlanInvestigationRunner(agent, context.Background())
+	agent, runner := newPlanInvestigationNoToolTest(t)
 
 	response := "```json\n{\"plan\":{\"summary\":\"Research only\",\"steps\":[]}}\n```"
 	p, action, err := runner.handleNoToolResponse(response)
@@ -143,11 +141,158 @@ func TestPlanInvestigationRunner_HandleNoToolResponse_InvalidPlanJSONRequestsRet
 	if action != investigationLoopContinue {
 		t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
 	}
+	assertPlanJSONRetryPromptAppended(t, agent, `"files"`)
+}
+
+func TestPlanInvestigationRunner_HandleNoToolResponse_MalformedPlanWrapperRequestsRetry(t *testing.T) {
+	agent, runner := newPlanInvestigationNoToolTest(t)
+
+	p, action, err := runner.handleNoToolResponse(`{"plan": invalid}`)
+	if err != nil {
+		t.Fatalf("handleNoToolResponse() error = %v", err)
+	}
+	if p != nil {
+		t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
+	}
+	if action != investigationLoopContinue {
+		t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
+	}
+	assertPlanJSONRetryPromptAppended(t, agent)
+}
+
+func TestPlanInvestigationRunner_HandleNoToolResponse_MalformedLegacyStepsRequestsRetry(t *testing.T) {
+	agent, runner := newPlanInvestigationNoToolTest(t)
+
+	p, action, err := runner.handleNoToolResponse(`{"steps": invalid}`)
+	if err != nil {
+		t.Fatalf("handleNoToolResponse() error = %v", err)
+	}
+	if p != nil {
+		t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
+	}
+	if action != investigationLoopContinue {
+		t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
+	}
+	assertPlanJSONRetryPromptAppended(t, agent)
+}
+
+func TestPlanInvestigationRunner_HandleNoToolResponse_SchemaInvalidPlanJSONRequestsRetry(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+	}{
+		{
+			name:     "wrapper steps object",
+			response: `{"plan":{"summary":"Fix","steps":{"id":1,"description":"Do it"}}}`,
+		},
+		{
+			name:     "legacy steps object",
+			response: `{"summary":"Fix","steps":{"id":1,"description":"Do it"}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent, runner := newPlanInvestigationNoToolTest(t)
+
+			p, action, err := runner.handleNoToolResponse(tt.response)
+			if err != nil {
+				t.Fatalf("handleNoToolResponse() error = %v", err)
+			}
+			if p != nil {
+				t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
+			}
+			if action != investigationLoopContinue {
+				t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
+			}
+			assertPlanJSONRetryPromptAppended(t, agent)
+		})
+	}
+}
+
+func TestPlanInvestigationRunner_HandleNoToolResponse_FencedLegacyRetrySchemaReturnsPlan(t *testing.T) {
+	agent, runner := newPlanInvestigationNoToolTest(t)
+
+	response := "```json\n" + `{
+  "title": "Fix parser",
+  "goal": "Preserve legacy plan compatibility",
+  "assumptions": ["Parser still accepts legacy steps"],
+  "steps": [
+    {
+      "id": 1,
+      "description": "Update legacy evidence",
+      "expected_output": "Legacy fenced plan is extracted"
+    }
+  ]
+}` + "\n```"
+	p, action, err := runner.handleNoToolResponse(response)
+	if err != nil {
+		t.Fatalf("handleNoToolResponse() error = %v", err)
+	}
+	if p == nil {
+		t.Fatal("handleNoToolResponse() plan = nil, want legacy plan")
+	}
+	if action != investigationLoopDone {
+		t.Fatalf("handleNoToolResponse() action = %v, want done", action)
+	}
+	if p.Title != "Fix parser" || len(p.Steps) != 1 || p.Steps[0].Description != "Update legacy evidence" {
+		t.Fatalf("handleNoToolResponse() plan = %#v, want parsed legacy plan", p)
+	}
+	assertPlanJSONRetryPromptNotAppended(t, agent)
+}
+
+func TestPlanInvestigationRunner_HandleNoToolResponse_ToolCallJSONWithPlanShapedStepsDoesNotRetry(t *testing.T) {
+	agent, runner := newPlanInvestigationNoToolTest(t)
+
+	response := "```json\n" +
+		`{"tool":"read_file","steps":[{"id":1,"description":"Read parser","tools":["read_file"]}],"args":{"paths":["internal/agent/plan/parser.go"]}}` +
+		"\n```"
+	p, action, err := runner.handleNoToolResponse(response)
+	if err != nil {
+		t.Fatalf("handleNoToolResponse() error = %v", err)
+	}
+	if p != nil {
+		t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
+	}
+	if action != investigationLoopDone {
+		t.Fatalf("handleNoToolResponse() action = %v, want done", action)
+	}
+	assertPlanJSONRetryPromptNotAppended(t, agent)
+}
+
+func newPlanInvestigationNoToolTest(t *testing.T) (*Agent, *planInvestigationRunner) {
+	t.Helper()
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &mockProvider{name: "test"}, &out)
+	return agent, newPlanInvestigationRunner(agent, context.Background())
+}
+
+func assertPlanJSONRetryPromptAppended(t *testing.T, agent *Agent, requiredFragments ...string) {
+	t.Helper()
+
 	if len(agent.History) == 0 {
 		t.Fatal("expected retry instruction to be appended to history")
 	}
-	if !strings.Contains(agent.History[len(agent.History)-1].Content, "Plan JSON を**必ず**") {
-		t.Fatalf("expected retry instruction in history, got %q", agent.History[len(agent.History)-1].Content)
+	content := agent.History[len(agent.History)-1].Content
+	if !strings.Contains(content, planJSONRetryPromptFragment) {
+		t.Fatalf("expected retry instruction in history, got %q", content)
+	}
+	for _, fragment := range requiredFragments {
+		if !strings.Contains(content, fragment) {
+			t.Fatalf("expected retry instruction to include %q, got %q", fragment, content)
+		}
+	}
+}
+
+func assertPlanJSONRetryPromptNotAppended(t *testing.T, agent *Agent) {
+	t.Helper()
+
+	for _, msg := range agent.History {
+		if strings.Contains(msg.Content, planJSONRetryPromptFragment) {
+			t.Fatalf("plan mode should not append retry instruction for tool-call JSON, got %#v", agent.History)
+		}
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+const normalModeDirectExecutionPromptFragment = "Do NOT output JSON directly"
+
 func TestNormalMode_MixedToolResponse_CountsAssistantOnce(t *testing.T) {
 	testFile := t.TempDir() + "/sample.txt"
 	if err := os.WriteFile(testFile, []byte("hello\n"), 0644); err != nil {
@@ -64,7 +66,7 @@ func TestNormalMode_PlanJSONFallback(t *testing.T) {
 	if provider.callCount != 2 {
 		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
 	}
-	if got := capturedHistories[1][len(capturedHistories[1])-1].Content; !strings.Contains(got, "Do NOT output JSON directly") {
+	if got := capturedHistories[1][len(capturedHistories[1])-1].Content; !strings.Contains(got, normalModeDirectExecutionPromptFragment) {
 		t.Fatalf("expected direct execution recovery prompt, got %q", got)
 	}
 	for _, msg := range agent.History {
@@ -98,8 +100,116 @@ func TestNormalMode_PlanJSONParseFailed(t *testing.T) {
 	if provider.callCount != 2 {
 		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
 	}
-	if got := capturedHistories[1][len(capturedHistories[1])-1].Content; !strings.Contains(got, "Do NOT output JSON directly") {
+	if got := capturedHistories[1][len(capturedHistories[1])-1].Content; !strings.Contains(got, normalModeDirectExecutionPromptFragment) {
 		t.Fatalf("expected direct execution recovery prompt, got %q", got)
+	}
+}
+
+func TestNormalMode_PlanJSONFallback_DetectsSchemaInvalidPlanJSON(t *testing.T) {
+	var capturedHistories [][]api.Message
+	provider := &scriptedChatProvider{
+		name:            "test",
+		functionCalling: true,
+		chatWithToolsFn: func(call int, ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+			snapshot := append([]api.Message(nil), history...)
+			capturedHistories = append(capturedHistories, snapshot)
+			if call == 0 {
+				return `{"plan":{"summary":"Fix","steps":{"id":1,"description":"Do it"}}}`, nil
+			}
+			return "OK, I'll execute it directly.", nil
+		},
+	}
+
+	agent := newAgentChatTestAgent(t, provider)
+	agent.Stats = NewSessionStats("test")
+
+	if err := agent.runNormalMode(context.Background(), "do something", nil); err != nil {
+		t.Fatalf("runNormalMode() returned error: %v", err)
+	}
+	if provider.callCount != 2 {
+		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
+	}
+	if got := capturedHistories[1][len(capturedHistories[1])-1].Content; !strings.Contains(got, normalModeDirectExecutionPromptFragment) {
+		t.Fatalf("expected direct execution recovery prompt, got %q", got)
+	}
+}
+
+func TestNormalMode_PlanJSONFallback_IgnoresUnrelatedStepsJSON(t *testing.T) {
+	agent, provider := runNormalModeWithSingleResponse(t, "return recipe json", `{"title":"recipe","steps":["mix","bake"]}`)
+
+	assertNormalModeDidNotRequestPlanRecovery(t, agent, provider, `"title":"recipe"`)
+}
+
+func TestNormalMode_PlanJSONFallback_IgnoresUnrelatedObjectStepsJSON(t *testing.T) {
+	response := `{"title":"recipe","steps":[{"id":1,"description":"mix"}]}`
+	agent, provider := runNormalModeWithSingleResponse(t, "return recipe json", response)
+
+	assertNormalModeDidNotRequestPlanRecovery(t, agent, provider, `"description":"mix"`)
+}
+
+func TestNormalMode_PlanJSONFallback_IgnoresLegacyShapeWithoutWrapper(t *testing.T) {
+	response := `{"summary":"recipe","steps":[{"id":1,"description":"mix","tools":["bowl"]}]}`
+	agent, provider := runNormalModeWithSingleResponse(t, "return recipe json", response)
+
+	assertNormalModeDidNotRequestPlanRecovery(t, agent, provider, `"summary":"recipe"`)
+}
+
+func TestNormalMode_PlanJSONFallback_IgnoresLegacyRetrySchemaWithoutWrapper(t *testing.T) {
+	response := `{"title":"recipe","goal":"dessert","assumptions":["oven"],"steps":[{"id":1,"description":"mix","expected_output":"batter"}]}`
+	agent, provider := runNormalModeWithSingleResponse(t, "return recipe json", response)
+
+	assertNormalModeDidNotRequestPlanRecovery(t, agent, provider, `"expected_output":"batter"`)
+}
+
+func TestNormalMode_PlanJSONFallback_IgnoresUnrelatedPlanFieldJSON(t *testing.T) {
+	agent, provider := runNormalModeWithSingleResponse(t, "return subscription json", `{"title":"monthly","plan":"free"}`)
+
+	assertNormalModeDidNotRequestPlanRecovery(t, agent, provider, `"plan":"free"`)
+}
+
+func TestNormalMode_PlanJSONFallback_IgnoresToolCallJSONWithPlanShapedSteps(t *testing.T) {
+	response := "I'll show the tool call shape:\n```json\n" +
+		`{"tool":"read_file","steps":[{"id":1,"description":"Read parser","tools":["read_file"]}],"args":{"paths":["internal/agent/plan/parser.go"]}}` +
+		"\n```"
+	agent, provider := runNormalModeWithSingleResponse(t, "return tool example", response)
+
+	assertNormalModeDidNotRequestPlanRecovery(t, agent, provider, `"tool":"read_file"`)
+}
+
+func runNormalModeWithSingleResponse(t *testing.T, userMessage string, response string) (*Agent, *scriptedChatProvider) {
+	t.Helper()
+
+	provider := &scriptedChatProvider{
+		name:            "test",
+		functionCalling: true,
+		chatWithToolsFn: func(call int, ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+			return response, nil
+		},
+	}
+
+	agent := newAgentChatTestAgent(t, provider)
+	agent.Stats = NewSessionStats("test")
+
+	if err := agent.runNormalMode(context.Background(), userMessage, nil); err != nil {
+		t.Fatalf("runNormalMode() returned error: %v", err)
+	}
+
+	return agent, provider
+}
+
+func assertNormalModeDidNotRequestPlanRecovery(t *testing.T, agent *Agent, provider *scriptedChatProvider, originalResponseFragment string) {
+	t.Helper()
+
+	if provider.callCount != 1 {
+		t.Fatalf("provider.callCount = %d, want 1 without plan JSON recovery", provider.callCount)
+	}
+	for _, msg := range agent.History {
+		if strings.Contains(msg.Content, normalModeDirectExecutionPromptFragment) {
+			t.Fatalf("normal mode should not append plan recovery prompt, got %#v", agent.History)
+		}
+	}
+	if got := agent.History[len(agent.History)-1].Content; !strings.Contains(got, originalResponseFragment) {
+		t.Fatalf("last history message = %q, want original response fragment %q", got, originalResponseFragment)
 	}
 }
 

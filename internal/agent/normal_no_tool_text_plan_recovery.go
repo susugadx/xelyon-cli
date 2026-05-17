@@ -54,7 +54,7 @@ func hasStrongTextPlanSignal(response string) bool {
 	if trimmed == "" {
 		return false
 	}
-	if plan.ContainsPlanJSON(trimmed) {
+	if plan.ContainsPlanJSONForNormalModeRecovery(trimmed) {
 		return true
 	}
 

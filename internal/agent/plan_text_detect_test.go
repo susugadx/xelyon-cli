@@ -163,3 +163,35 @@ func TestIsActionPlan(t *testing.T) {
 		})
 	}
 }
+
+func TestHasStrongTextPlanSignal_UsesNormalModeRecoveryPlanJSONScope(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		want     bool
+	}{
+		{
+			name:     "wrapper plan json is strong signal",
+			response: `{"plan":{"summary":"Fix","steps":[{"id":1,"description":"Do it"}]}}`,
+			want:     true,
+		},
+		{
+			name:     "legacy-shaped json alone is not normal-mode recovery signal",
+			response: `{"summary":"recipe","steps":[{"id":1,"description":"mix","tools":["bowl"]}]}`,
+			want:     false,
+		},
+		{
+			name:     "text plan prefix remains strong signal",
+			response: "Plan:\n1. Create file\n2. Update tests\n3. Run go test",
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasStrongTextPlanSignal(tt.response); got != tt.want {
+				t.Fatalf("hasStrongTextPlanSignal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
