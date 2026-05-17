@@ -20,11 +20,6 @@ const (
 	DiagnosticStatusFail DiagnosticStatus = "fail"
 )
 
-const (
-	DiagnosticRouteChatCompletions   = "chat_completions"
-	DiagnosticRouteAnthropicMessages = "anthropic_messages"
-)
-
 // DiagnosticCheck は OpenRouter 設定診断の 1 項目を表す。
 type DiagnosticCheck struct {
 	Name       string           `json:"name"`
@@ -158,7 +153,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	policyCfg := openRouterDiagnosticPolicyConfig(cfg, model, catalogModel, 0)
 	configCtx := config.WithContext(context.Background(), policyCfg)
 	configuredAPIURL := New("diagnostic-key").APIURL
-	route := resolveOpenRouterDiagnosticRoute(policyCfg, configuredAPIURL, model)
+	route := resolveOpenRouterRoutePlan(policyCfg, configuredAPIURL, model)
 	upstreamProvider, upstreamModel := resolveOpenRouterDiagnosticUpstreamModel(model, policyCatalogModel)
 
 	contextWindow := 0

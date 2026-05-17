@@ -8,12 +8,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
-type openRouterDiagnosticRoute struct {
-	Route  string
-	Reason string
-	APIURL string
-}
-
 type openRouterDiagnosticCatalogModelUse struct {
 	CatalogKnown       bool
 	Trusted            bool
@@ -111,32 +105,6 @@ func resolveOpenRouterDiagnosticCatalogModelUse(model, catalogModel string) open
 
 func openRouterDiagnosticPolicyCatalogModel(model, catalogModel string) string {
 	return resolveOpenRouterDiagnosticCatalogModelUse(model, catalogModel).PolicyCatalogModel
-}
-
-func resolveOpenRouterDiagnosticRoute(cfg *config.Config, configuredAPIURL, model string) openRouterDiagnosticRoute {
-	if cfg == nil {
-		cfg = config.DefaultConfig()
-	}
-	if shouldUseOpenRouterClaudeAPI(model, cfg.Compression) {
-		return openRouterDiagnosticRoute{
-			Route: DiagnosticRouteAnthropicMessages,
-			Reason: fmt.Sprintf(
-				"request model %s enables OpenRouter Anthropic Skin context management; /v1/messages is selected",
-				strings.TrimSpace(model),
-			),
-			APIURL: getAnthropicSkinURL(configuredAPIURL),
-		}
-	}
-
-	reason := "request model does not enable OpenRouter Claude context management; OpenAI-compatible Chat Completions is selected"
-	if isClaudeModel(model) {
-		reason = "request model is Claude but OpenRouter Claude context management is disabled; OpenAI-compatible Chat Completions is selected"
-	}
-	return openRouterDiagnosticRoute{
-		Route:  DiagnosticRouteChatCompletions,
-		Reason: reason,
-		APIURL: configuredAPIURL,
-	}
 }
 
 func resolveOpenRouterDiagnosticUpstreamModel(model, catalogModel string) (string, string) {

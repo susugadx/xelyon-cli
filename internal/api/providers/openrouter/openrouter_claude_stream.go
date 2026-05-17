@@ -40,21 +40,13 @@ func shouldUseOpenRouterClaudeAPI(model string, compression config.CompressionCo
 	return contextManagement != nil
 }
 
-// getAnthropicSkinURL は OpenAI 互換 URL から Anthropic Skin URL を導出する。
-func getAnthropicSkinURL(openaiURL string) string {
-	if idx := strings.Index(openaiURL, "/v1/chat/completions"); idx >= 0 {
-		return openaiURL[:idx] + "/v1/messages"
-	}
-	return strings.TrimSuffix(openaiURL, "/chat/completions") + "/messages"
-}
-
 // chatWithClaudeAPI は OpenRouter Claude 経路の request 構築と送信を担う。
-func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, history []api.Message, userMessage, model string, image *api.ImageData) (string, error) {
+func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, history []api.Message, userMessage, model string, image *api.ImageData, route openRouterRoutePlan) (string, error) {
 	payload, err := p.buildClaudeChatPayload(ctx, systemPrompt, history, userMessage, model, image)
 	if err != nil {
 		return "", err
 	}
-	return p.executeClaudeStreamingRequest(ctx, getAnthropicSkinURL(p.APIURL), payload, image != nil)
+	return p.executeClaudeStreamingRequest(ctx, route.APIURL, payload, image != nil)
 }
 
 // handleClaudeStreamingResponse は Anthropic SSE の最小共通処理を claude_stream に委譲する。
