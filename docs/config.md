@@ -832,7 +832,7 @@ xelyon --provider ollama --model phi3
 
 ```bash
 # DeepSeek
-export DEEPSEEK_API_URL=https://your-proxy.com/v1/chat/completions
+export DEEPSEEK_API_URL=https://your-proxy.com/chat/completions
 
 # OpenAI
 export OPENAI_API_URL=https://your-proxy.com/v1/chat/completions
@@ -849,6 +849,8 @@ export GROQ_API_URL=https://your-proxy.com/openai/v1/chat/completions
 # OpenRouter
 export OPENROUTER_API_URL=https://your-proxy.com/v1/chat/completions
 ```
+
+DeepSeek の `DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 DeepSeek 互換 endpoint は `/chat/completions` で終わります。OpenAI 互換 proxy が `/v1/chat/completions` を公開する場合も指定できますが、`doctor deepseek` では意図的な proxy path として warn になります。
 
 OpenRouter の `OPENROUTER_API_URL` は Chat Completions endpoint または互換 proxy path を指定します。Claude 系 model で Anthropic Skin route を使う場合も `/v1/messages` は provider が派生するため、`OPENROUTER_API_URL` に直接 `/v1/messages` を指定しないでください。
 

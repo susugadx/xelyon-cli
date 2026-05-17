@@ -52,7 +52,7 @@ xelyon --provider deepseek --model deepseek-v4-pro
 - `deepseek-chat` / `deepseek-reasoner` は legacy alias（`deepseek-v4-flash` 相当）です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。
 - `reasoning_content`（思考内容）はストリーミング表示（💭）され、ツール実行時も保持されます。
 
-設定の到達性は CLI から診断できます。`doctor deepseek` は `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、thinking request config、function calling 設定、token / pricing metadata を確認します。`--smoke` を付けると live text request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。`--print-request` は live request を送らずに redacted request body を表示します。
+設定の到達性は CLI から診断できます。`doctor deepseek` は `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、thinking request config、function calling 設定、token / pricing metadata を確認します。`DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 DeepSeek 互換 endpoint は `/chat/completions` で終わります。OpenAI 互換 proxy の `/v1/chat/completions` も指定できますが、doctor では意図的な proxy path として warn になります。`--smoke` を付けると live text request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。`--print-request` は live request を送らずに redacted request body を表示します。
 
 ```bash
 xelyon doctor deepseek

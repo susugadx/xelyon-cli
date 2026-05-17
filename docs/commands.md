@@ -8,7 +8,7 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 DeepSeek provider の `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、thinking request config、function calling 設定、token / pricing metadata を確認します。route は常に `chat_completions` です。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
 
-`--model` は実 request に送る DeepSeek model ID または alias、`--catalog-model` は alias の underlying DeepSeek model として token / pricing / thinking 判定に使います。`DEEPSEEK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities`、`--require-capability`、`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は DeepSeek doctor v1 では提供しません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+`--model` は実 request に送る DeepSeek model ID または alias、`--catalog-model` は alias の underlying DeepSeek model として token / pricing / thinking 判定に使います。`DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 DeepSeek 互換 endpoint は `/chat/completions` で終わります。OpenAI 互換 proxy の `/v1/chat/completions` も指定できますが、doctor では意図的な proxy path として warn になります。`DEEPSEEK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities`、`--require-capability`、`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は DeepSeek doctor v1 では提供しません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
 ```bash
 xelyon doctor deepseek

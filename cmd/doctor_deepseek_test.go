@@ -119,6 +119,45 @@ func TestRunDeepSeekDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *tes
 	}
 }
 
+func TestRunDeepSeekDoctorInvocation_PrintRequestJSONReportsOpenAICompatibleProxyEndpointWarning(t *testing.T) {
+	proxyURL := "https://deepseek.example/v1/chat/completions"
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("DEEPSEEK_API_URL", proxyURL)
+
+	cmd, out := newDoctorSubcommandTest(t, newDeepSeekDoctorCommand)
+
+	doctorDeepSeekModelFlag = "deepseek-v4-flash"
+	doctorCatalogModelFlag = "deepseek-v4-flash"
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runDeepSeekDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runDeepSeekDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		APIURL         string `json:"api_url"`
+		RequestPreview struct {
+			Requests []struct {
+				URL string `json:"url"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.APIURL != proxyURL {
+		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
+	}
+	endpoint := requireDoctorJSONCheck(t, report.Checks, "endpoint")
+	requireDoctorJSONCheckStatus(t, endpoint, "warn")
+	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
+	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
+	if len(report.RequestPreview.Requests) != 1 || report.RequestPreview.Requests[0].URL != proxyURL {
+		t.Fatalf("request_preview = %#v, want configured proxy request URL", report.RequestPreview)
+	}
+}
+
 func TestRootCommand_DeepSeekDoctorCommandParsesFlags(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DEEPSEEK_API_KEY", "sk-test")
@@ -145,7 +184,7 @@ func TestRootCommand_DeepSeekDoctorHelpShowsMinimalFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--print-request", "--timeout", "--json", "Diagnose DeepSeek provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--print-request", "--timeout", "--json", "Diagnose DeepSeek provider configuration", "exact Chat Completions endpoint", "/chat/completions"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want DeepSeek doctor help substring %q", out.String(), want)
 		}

@@ -81,6 +81,7 @@ Groq:
 DeepSeek:
 
 - Checks `DEEPSEEK_API_KEY`, `DEEPSEEK_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, thinking request config, function calling, catalog policy.
+- `DEEPSEEK_API_URL` is an exact Chat Completions endpoint override. The official DeepSeek-compatible path ends with `/chat/completions`; `/v1/chat/completions` remains a warn-only intentional proxy path.
 - Supports `--print-request`.
 - Live smoke supports text and tool request types. `DEEPSEEK_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
 - Does not support `--capabilities`, `--require-capability`, image, web search, or retention smoke in v1. Thinking is reported from normal request config rather than a separate `--thinking-smoke`.

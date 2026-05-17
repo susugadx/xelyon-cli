@@ -11,6 +11,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
+const deepSeekOpenAICompatibleProxyPath = "/v1/chat/completions"
+
 func TestDiagnoseDeepSeek_EndpointCheckClassifiesConfiguredPaths(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -26,10 +28,10 @@ func TestDiagnoseDeepSeek_EndpointCheckClassifiesConfiguredPaths(t *testing.T) {
 			wantDetail: "https://example.com" + deepSeekChatCompletionsEndpointPath,
 		},
 		{
-			name:       "documented_v1_proxy_path_warns_currently",
-			apiURL:     "https://example.com/v1/chat/completions",
+			name:       "openai_compatible_v1_proxy_path_warns",
+			apiURL:     "https://example.com" + deepSeekOpenAICompatibleProxyPath,
 			wantStatus: DiagnosticStatusWarn,
-			wantDetail: "https://example.com/v1/chat/completions",
+			wantDetail: "https://example.com" + deepSeekOpenAICompatibleProxyPath,
 			wantText:   deepSeekChatCompletionsEndpointPath,
 		},
 		{
@@ -82,6 +84,49 @@ func TestDiagnoseDeepSeek_EndpointFailureSkipsSmoke(t *testing.T) {
 	}
 	if report.Smoke != nil {
 		t.Fatalf("Smoke = %#v, want nil when endpoint check fails", report.Smoke)
+	}
+}
+
+func TestDiagnoseDeepSeek_ProxyEndpointWarningStillAllowsLiveSmoke(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != deepSeekOpenAICompatibleProxyPath {
+			t.Errorf("path = %s, want %s", r.URL.Path, deepSeekOpenAICompatibleProxyPath)
+		}
+		if r.Header.Get("Authorization") != "Bearer sk-test" {
+			t.Errorf("Authorization = %q, want Bearer sk-test", r.Header.Get("Authorization"))
+		}
+		writeDeepSeekSSE(w,
+			`{"choices":[{"delta":{"content":"proxy smoke ok"}}]}`,
+			`{"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
+		)
+	}))
+	defer server.Close()
+
+	t.Setenv(deepSeekAPIKeyEnv, "sk-test")
+	t.Setenv(deepSeekAPIURLEnv, server.URL+deepSeekOpenAICompatibleProxyPath)
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "deepseek-v4-flash",
+		CatalogModel: "deepseek-v4-flash",
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want proxy endpoint warning only: %#v", report.Checks)
+	}
+	requireDeepSeekDiagnosticCheckStatus(t, report, "endpoint", DiagnosticStatusWarn)
+	requireDeepSeekDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusOK)
+	if requests.Load() != 1 {
+		t.Fatalf("requests = %d, want one live smoke request to proxy endpoint", requests.Load())
+	}
+	if report.Smoke == nil || report.Smoke.Content != "proxy smoke ok" {
+		t.Fatalf("Smoke = %#v, want proxy smoke content", report.Smoke)
 	}
 }
 
