@@ -15,7 +15,14 @@ func buildPlanReviewDisplay(p *plan.Plan) *ui.PlanDisplay {
 
 	display.SetSummary(p.Summary)
 	for _, step := range p.Steps {
-		display.AddStep(step.ID, step.Description, step.Tools, planReviewStepFiles(step))
+		display.AddPlanStep(ui.PlanStep{
+			ID:           step.ID,
+			Description:  step.Description,
+			Purpose:      step.Purpose,
+			Tools:        step.Tools,
+			Files:        planReviewStepFiles(step),
+			Verification: planReviewStepVerification(step),
+		})
 	}
 	return display
 }
@@ -39,4 +46,18 @@ func planReviewStepFiles(step plan.PlanStep) []string {
 	appendFiles(step.ReadFiles)
 	appendFiles(step.Files)
 	return files
+}
+
+func planReviewStepVerification(step plan.PlanStep) []string {
+	seen := make(map[string]bool)
+	verification := make([]string, 0, len(step.Verification))
+	for _, item := range step.Verification {
+		item = strings.TrimSpace(item)
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		verification = append(verification, item)
+	}
+	return verification
 }

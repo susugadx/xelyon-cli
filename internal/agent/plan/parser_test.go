@@ -37,8 +37,10 @@ func TestParsePlan_V2FormatPreservesStepFiles(t *testing.T) {
 				{
 					"id": 1,
 					"description": "Update handoff files",
+					"purpose": "Keep implementation handoff readable",
 					"tools": ["str_replace"],
-					"files": ["internal/agent/plan_handoff.go", "internal/agent/plan_handoff_test.go"]
+					"files": ["internal/agent/plan_handoff.go", "internal/agent/plan_handoff_test.go"],
+					"verification": ["go test ./internal/agent"]
 				}
 			]
 		}
@@ -49,7 +51,11 @@ func TestParsePlan_V2FormatPreservesStepFiles(t *testing.T) {
 		t.Fatalf("ParsePlan failed: %v", err)
 	}
 
+	if plan.Steps[0].Purpose != "Keep implementation handoff readable" {
+		t.Fatalf("PlanStep.Purpose = %q, want purpose", plan.Steps[0].Purpose)
+	}
 	assertStringSliceEqual(t, "PlanStep.Files", plan.Steps[0].Files, []string{"internal/agent/plan_handoff.go", "internal/agent/plan_handoff_test.go"})
+	assertStringSliceEqual(t, "PlanStep.Verification", plan.Steps[0].Verification, []string{"go test ./internal/agent"})
 }
 
 func TestParsePlan_LegacyFormat(t *testing.T) {

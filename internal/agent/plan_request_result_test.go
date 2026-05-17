@@ -55,10 +55,12 @@ func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalCreatesHandoff(t 
 	p := &plan.Plan{
 		Summary: "Ship a small change",
 		Steps: []plan.PlanStep{{
-			ID:          1,
-			Description: "Update the target file",
-			Tools:       []string{"read_file", "str_replace"},
-			Files:       []string{"internal/agent/plan_request.go"},
+			ID:           1,
+			Description:  "Update the target file",
+			Purpose:      "Make approval output reviewable",
+			Tools:        []string{"read_file", "str_replace"},
+			Files:        []string{"internal/agent/plan_request.go"},
+			Verification: []string{"go test ./internal/agent"},
 		}},
 	}
 
@@ -74,6 +76,9 @@ func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalCreatesHandoff(t 
 	}
 	if !strings.Contains(out.String(), "関連ファイル") || !strings.Contains(out.String(), "internal/agent/plan_request.go") {
 		t.Fatalf("expected rendered plan files in output, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "目的: Make approval output reviewable") || !strings.Contains(out.String(), "検証: go test ./internal/agent") {
+		t.Fatalf("expected rendered plan review details in output, got %q", out.String())
 	}
 	if !strings.Contains(out.String(), "Plan approved. Plan Mode complete.") {
 		t.Fatalf("expected approval output, got %q", out.String())

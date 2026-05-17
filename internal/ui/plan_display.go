@@ -7,11 +7,13 @@ import (
 
 // PlanStep は計画のステップ情報（UI表示用）
 type PlanStep struct {
-	ID          int
-	Description string
-	Tools       []string
-	Files       []string // 対象ファイル
-	Status      string   // "pending", "running", "completed", "failed"
+	ID           int
+	Description  string
+	Purpose      string
+	Tools        []string
+	Files        []string // 対象ファイル
+	Verification []string
+	Status       string // "pending", "running", "completed", "failed"
 }
 
 // PlanDisplay は計画表示用の構造体
@@ -52,13 +54,21 @@ func (p *PlanDisplay) SetFooter(footer string) *PlanDisplay {
 
 // AddStep はステップを追加
 func (p *PlanDisplay) AddStep(id int, description string, tools []string, files []string) *PlanDisplay {
-	p.Steps = append(p.Steps, PlanStep{
+	return p.AddPlanStep(PlanStep{
 		ID:          id,
 		Description: description,
 		Tools:       tools,
 		Files:       files,
 		Status:      "pending",
 	})
+}
+
+// AddPlanStep は表示用の詳細付きステップを追加する。
+func (p *PlanDisplay) AddPlanStep(step PlanStep) *PlanDisplay {
+	if step.Status == "" {
+		step.Status = "pending"
+	}
+	p.Steps = append(p.Steps, step)
 	return p
 }
 
@@ -95,9 +105,17 @@ func (p *PlanDisplay) Render() string {
 			icon := getStepStatusIcon(step.Status)
 			fmt.Fprintf(&sb, "  %s %d. %s\n", icon, step.ID, step.Description)
 
-			// ツール
+			if strings.TrimSpace(step.Purpose) != "" {
+				writePlanStepDetailLine(&sb, "目的", []string{step.Purpose})
+			}
+			if len(step.Files) > 0 {
+				writePlanStepDetailLine(&sb, "触るファイル", step.Files)
+			}
+			if len(step.Verification) > 0 {
+				writePlanStepDetailLine(&sb, "検証", step.Verification)
+			}
 			if len(step.Tools) > 0 {
-				fmt.Fprintf(&sb, "       Tools: %s\n", strings.Join(step.Tools, ", "))
+				writePlanStepDetailLine(&sb, "Tools", step.Tools)
 			}
 		}
 		sb.WriteString("\n")
@@ -139,6 +157,28 @@ func writeIndentedNonEmptyLines(sb *strings.Builder, text string, indent string)
 	}
 }
 
+func writePlanStepDetailLine(sb *strings.Builder, label string, values []string) {
+	compact := compactPlanStepDetailValues(values)
+	if len(compact) == 0 {
+		return
+	}
+	fmt.Fprintf(sb, "       %s: %s\n", label, strings.Join(compact, ", "))
+}
+
+func compactPlanStepDetailValues(values []string) []string {
+	seen := make(map[string]bool)
+	compact := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		compact = append(compact, value)
+	}
+	return compact
+}
+
 // collectFiles はすべてのステップからファイルを収集
 func (p *PlanDisplay) collectFiles() []struct {
 	File   string
@@ -152,6 +192,10 @@ func (p *PlanDisplay) collectFiles() []struct {
 
 	for _, step := range p.Steps {
 		for _, file := range step.Files {
+			file = strings.TrimSpace(file)
+			if file == "" {
+				continue
+			}
 			if !seen[file] {
 				seen[file] = true
 				// ステップの説明からアクションを推測

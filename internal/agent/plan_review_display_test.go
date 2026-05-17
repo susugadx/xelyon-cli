@@ -13,8 +13,12 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 		Steps: []plan.PlanStep{{
 			ID:          1,
 			Description: "Update plan review UI",
+			Purpose:     "Make the approval screen readable",
 			Tools:       []string{"apply_patch", "go test ./internal/agent"},
 			Files:       []string{" internal/agent/plan_request.go ", "internal/agent/plan_request_test.go"},
+			Verification: []string{
+				"go test ./internal/agent",
+			},
 		}},
 	})
 
@@ -23,6 +27,9 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 		"Implementation Plan Review",
 		"Ship a reviewable plan",
 		"Update plan review UI",
+		"目的: Make the approval screen readable",
+		"触るファイル: internal/agent/plan_request.go, internal/agent/plan_request_test.go",
+		"検証: go test ./internal/agent",
 		"Tools: apply_patch, go test ./internal/agent",
 		"関連ファイル",
 		"internal/agent/plan_request.go",
@@ -30,6 +37,22 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered plan review = %q, want fragment %q", rendered, want)
+		}
+	}
+}
+
+func TestPlanReviewStepVerification_TrimsAndDedupes(t *testing.T) {
+	verification := planReviewStepVerification(plan.PlanStep{
+		Verification: []string{" go test ./internal/agent ", "go test ./internal/agent", "", "make ci-check"},
+	})
+
+	want := []string{"go test ./internal/agent", "make ci-check"}
+	if len(verification) != len(want) {
+		t.Fatalf("verification = %#v, want %#v", verification, want)
+	}
+	for i := range want {
+		if verification[i] != want[i] {
+			t.Fatalf("verification = %#v, want %#v", verification, want)
 		}
 	}
 }

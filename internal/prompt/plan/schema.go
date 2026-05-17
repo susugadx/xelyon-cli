@@ -10,11 +10,13 @@ Use exactly one JSON object in this shape:
       {
         "id": 1,
         "description": "Concrete implementation action and intended outcome",
-        "tools": ["str_replace", "go test ./internal/agent"],
+        "purpose": "Why this step is needed or what risk/contract it closes",
+        "tools": ["read_file", "str_replace"],
         "files": [
           "internal/agent/plan_handoff.go",
           "internal/agent/plan_handoff_test.go"
-        ]
+        ],
+        "verification": ["go test ./internal/agent"]
       }
     ]
   }
@@ -25,8 +27,10 @@ Field rules:
 - plan.summary: one concise, reviewable sentence describing the goal, scope, and important constraint when known.
 - steps: keep the plan short and ordered (normally 2-6 steps). Each step must be understandable without the investigation transcript.
 - steps[].description: an implementation action and expected outcome, not an investigation action. Mention tests/docs/config in the step when that is the point of the work.
-- steps[].tools: expected tools or verification commands for the step. Include focused test commands when known.
-- steps[].files: implementation-relevant repo-relative files to confirm first in implementation mode. Include source, tests, docs, and config files when known; omit only when no relevant file is known yet.`
+- steps[].purpose: a short review-facing reason for the step. Say what user-visible behavior, contract, risk, or cleanup it addresses. Omit only when description already fully explains the reason.
+- steps[].tools: expected implementation or inspection tools for the step, not test commands.
+- steps[].files: implementation-relevant repo-relative files to confirm first in implementation mode. Include source, tests, docs, and config files when known; omit only when no relevant file is known yet.
+- steps[].verification: focused commands or checks that prove this step, or the whole plan, worked. Include package-level tests when known; use an empty array only when no concrete check is known yet.`
 
 // PlanJSONSchemaInstructions は Plan mode が要求する Plan JSON schema 文面を返す。
 func PlanJSONSchemaInstructions() string {

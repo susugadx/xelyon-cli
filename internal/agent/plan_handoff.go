@@ -41,6 +41,7 @@ func clonePlanForHandoff(src *plan.Plan) plan.Plan {
 		dst.Steps[i].ReadFiles = append([]string(nil), src.Steps[i].ReadFiles...)
 		dst.Steps[i].WriteFiles = append([]string(nil), src.Steps[i].WriteFiles...)
 		dst.Steps[i].Files = append([]string(nil), src.Steps[i].Files...)
+		dst.Steps[i].Verification = append([]string(nil), src.Steps[i].Verification...)
 	}
 	return dst
 }
@@ -74,9 +75,19 @@ func (h *planModeImplementationHandoff) normalModeInput() string {
 			id = idx + 1
 		}
 		fmt.Fprintf(&b, "%d. %s\n", id, description)
+		if purpose := strings.TrimSpace(step.Purpose); purpose != "" {
+			b.WriteString("   Purpose: ")
+			b.WriteString(purpose)
+			b.WriteString("\n")
+		}
 		if len(step.Tools) > 0 {
 			b.WriteString("   Tools: ")
 			b.WriteString(strings.Join(step.Tools, ", "))
+			b.WriteString("\n")
+		}
+		if verification := compactHandoffValues(step.Verification, nil); len(verification) > 0 {
+			b.WriteString("   Verification: ")
+			b.WriteString(strings.Join(verification, ", "))
 			b.WriteString("\n")
 		}
 		for _, group := range handoffStepFileGroups(step) {
@@ -116,18 +127,22 @@ func handoffStepFileGroups(step plan.PlanStep) []planHandoffFileGroup {
 }
 
 func compactHandoffFiles(files []string, exclude map[string]bool) []string {
+	return compactHandoffValues(files, exclude)
+}
+
+func compactHandoffValues(values []string, exclude map[string]bool) []string {
 	seen := make(map[string]bool)
-	compact := make([]string, 0, len(files))
-	for _, file := range files {
-		file = strings.TrimSpace(file)
-		if file == "" || seen[file] {
+	compact := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
 			continue
 		}
-		if exclude != nil && exclude[file] {
+		if exclude != nil && exclude[value] {
 			continue
 		}
-		seen[file] = true
-		compact = append(compact, file)
+		seen[value] = true
+		compact = append(compact, value)
 	}
 	return compact
 }

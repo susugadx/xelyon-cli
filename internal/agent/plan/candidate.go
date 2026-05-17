@@ -204,7 +204,7 @@ func hasPlanSpecificStepKey(value json.RawMessage) bool {
 	if err := json.Unmarshal(value, &obj); err != nil {
 		return true
 	}
-	for _, key := range []string{"tools", "depends_on", "files", legacyPlanExpectedOutputStepKey} {
+	for _, key := range []string{"purpose", "tools", "depends_on", "files", "verification", legacyPlanExpectedOutputStepKey} {
 		if _, ok := obj[key]; ok {
 			return true
 		}
@@ -241,7 +241,7 @@ func isPlanStepObjectLike(value json.RawMessage) bool {
 	if err := json.Unmarshal(value, &obj); err != nil {
 		return true
 	}
-	for _, key := range []string{"id", "description", "tools", "depends_on", "files"} {
+	for _, key := range []string{"id", "description", "purpose", "tools", "depends_on", "files", "verification"} {
 		if _, ok := obj[key]; ok {
 			return true
 		}
@@ -264,9 +264,11 @@ func isPlanShape(p Plan) bool {
 func isPlanStepShape(step PlanStep) bool {
 	return step.ID != 0 ||
 		strings.TrimSpace(step.Description) != "" ||
+		strings.TrimSpace(step.Purpose) != "" ||
 		len(step.Tools) > 0 ||
 		len(step.DependsOn) > 0 ||
-		len(step.Files) > 0
+		len(step.Files) > 0 ||
+		len(step.Verification) > 0
 }
 
 // isToolCallJSON はJSONがツール呼び出しかどうかを判定

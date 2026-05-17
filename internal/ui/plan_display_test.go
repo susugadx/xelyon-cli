@@ -72,6 +72,34 @@ func TestPlanDisplay_Render(t *testing.T) {
 	}
 }
 
+func TestPlanDisplay_RenderStepReviewDetails(t *testing.T) {
+	p := NewPlanDisplay("Plan Review").
+		AddPlanStep(PlanStep{
+			ID:           1,
+			Description:  "Update approval flow",
+			Purpose:      "Make the plan easier to review before implementation",
+			Tools:        []string{"read_file", "apply_patch"},
+			Files:        []string{"internal/ui/plan_display.go", "internal/ui/plan_display.go", ""},
+			Verification: []string{"go test ./internal/ui", "go test ./internal/ui"},
+		})
+
+	result := p.Render()
+	for _, want := range []string{
+		"1. Update approval flow",
+		"目的: Make the plan easier to review before implementation",
+		"触るファイル: internal/ui/plan_display.go",
+		"検証: go test ./internal/ui",
+		"Tools: read_file, apply_patch",
+	} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("PlanDisplay.Render() = %q, want fragment %q", result, want)
+		}
+	}
+	if strings.Contains(result, "go test ./internal/ui, go test ./internal/ui") {
+		t.Fatalf("PlanDisplay.Render() = %q, duplicated verification detail", result)
+	}
+}
+
 func TestGetStepStatusIcon(t *testing.T) {
 	tests := []struct {
 		status   string

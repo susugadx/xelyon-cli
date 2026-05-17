@@ -69,6 +69,7 @@ func (p *Plan) AddLog(log StepLog) {
 type PlanStep struct {
 	ID            int      `json:"id"`
 	Description   string   `json:"description"`
+	Purpose       string   `json:"purpose,omitempty"`
 	Tools         []string `json:"tools"`      // 使用予定ツール
 	DependsOn     []int    `json:"depends_on"` // 依存するステップID
 	Status        string   `json:"status"`     // "pending", "running", "completed", "failed"
@@ -81,9 +82,10 @@ type PlanStep struct {
 	WriteFiles  []string `json:"-"` // 書き込みファイル
 
 	// 追加フィールド（Phase 1）
-	Files       []string   `json:"files,omitempty"`        // 関連ファイル
-	StartedAt   *time.Time `json:"started_at,omitempty"`   // 開始時刻
-	CompletedAt *time.Time `json:"completed_at,omitempty"` // 完了時刻
+	Files        []string   `json:"files,omitempty"`        // 関連ファイル
+	Verification []string   `json:"verification,omitempty"` // 検証コマンド・確認観点
+	StartedAt    *time.Time `json:"started_at,omitempty"`   // 開始時刻
+	CompletedAt  *time.Time `json:"completed_at,omitempty"` // 完了時刻
 }
 
 // UnmarshalJSON は PlanStep のカスタムデシリアライズ

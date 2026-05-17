@@ -11,13 +11,15 @@ func TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *te
 	handoff := newPlanModeImplementationHandoff("implement feature", &plan.Plan{
 		Summary: "Ship a small change",
 		Steps: []plan.PlanStep{{
-			ID:          1,
-			Description: "Update foo.go and tests",
-			Tools:       []string{"read_file", "apply_patch"},
-			TargetFiles: []string{"foo.go"},
-			Files:       []string{"foo.go", "foo_test.go", "docs/foo.md"},
-			ReadFiles:   []string{"README.md"},
-			WriteFiles:  []string{"foo_test.go"},
+			ID:           1,
+			Description:  "Update foo.go and tests",
+			Purpose:      "Close the approval contract",
+			Tools:        []string{"read_file", "apply_patch"},
+			TargetFiles:  []string{"foo.go"},
+			Files:        []string{"foo.go", "foo_test.go", "docs/foo.md"},
+			ReadFiles:    []string{"README.md"},
+			WriteFiles:   []string{"foo_test.go"},
+			Verification: []string{"go test ./internal/agent"},
 		}},
 	})
 	if handoff == nil {
@@ -31,7 +33,9 @@ func TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *te
 		"implement feature",
 		"Summary: Ship a small change",
 		"1. Update foo.go and tests",
+		"Purpose: Close the approval contract",
 		"Tools: read_file, apply_patch",
+		"Verification: go test ./internal/agent",
 		"Target files: foo.go",
 		"Read files: README.md",
 		"Write files: foo_test.go",
@@ -48,13 +52,15 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 	p := &plan.Plan{
 		Summary: "Ship a small change",
 		Steps: []plan.PlanStep{{
-			ID:          1,
-			Description: "Update foo.go and tests",
-			Tools:       []string{"apply_patch"},
-			TargetFiles: []string{"foo.go"},
-			ReadFiles:   []string{"foo.go"},
-			WriteFiles:  []string{"foo_test.go"},
-			Files:       []string{"README.md"},
+			ID:           1,
+			Description:  "Update foo.go and tests",
+			Purpose:      "Keep approval behavior stable",
+			Tools:        []string{"apply_patch"},
+			TargetFiles:  []string{"foo.go"},
+			ReadFiles:    []string{"foo.go"},
+			WriteFiles:   []string{"foo_test.go"},
+			Files:        []string{"README.md"},
+			Verification: []string{"go test ./internal/agent"},
 		}},
 	}
 	handoff := newPlanModeImplementationHandoff("implement feature", p)
@@ -64,17 +70,21 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 
 	p.Summary = "mutated summary"
 	p.Steps[0].Description = "mutated description"
+	p.Steps[0].Purpose = "mutated purpose"
 	p.Steps[0].Tools[0] = "mutated_tool"
 	p.Steps[0].TargetFiles[0] = "mutated.go"
 	p.Steps[0].ReadFiles[0] = "mutated_read.go"
 	p.Steps[0].WriteFiles[0] = "mutated_write.go"
 	p.Steps[0].Files[0] = "mutated_related.go"
+	p.Steps[0].Verification[0] = "mutated verification"
 
 	input := handoff.normalModeInput()
 	for _, want := range []string{
 		"Summary: Ship a small change",
 		"1. Update foo.go and tests",
+		"Purpose: Keep approval behavior stable",
 		"Tools: apply_patch",
+		"Verification: go test ./internal/agent",
 		"Target files: foo.go",
 		"Read files: foo.go",
 		"Write files: foo_test.go",
@@ -84,7 +94,7 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 			t.Fatalf("normalModeInput() = %q, want original fragment %q", input, want)
 		}
 	}
-	for _, notWant := range []string{"mutated summary", "mutated description", "mutated_tool", "mutated.go", "mutated_read.go", "mutated_write.go", "mutated_related.go"} {
+	for _, notWant := range []string{"mutated summary", "mutated description", "mutated purpose", "mutated_tool", "mutated.go", "mutated_read.go", "mutated_write.go", "mutated_related.go", "mutated verification"} {
 		if strings.Contains(input, notWant) {
 			t.Fatalf("normalModeInput() = %q, should not contain mutated fragment %q", input, notWant)
 		}
