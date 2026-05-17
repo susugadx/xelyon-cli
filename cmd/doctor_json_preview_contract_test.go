@@ -13,24 +13,11 @@ type doctorJSONPreviewContractCase struct {
 	run                func(*cobra.Command, []string) error
 	setup              func(*testing.T, *cobra.Command)
 	requiredJSONFields []string
-	want               doctorJSONPreviewContractIdentity
+	want               doctorJSONContractIdentity
+	requiredChecks     []string
+	omittedChecks      []string
 	previewCount       int
 	previewRequests    []doctorJSONPreviewRequestContract
-}
-
-type doctorJSONPreviewContractIdentity struct {
-	model                 string
-	modelSource           string
-	deployment            string
-	catalogModel          string
-	catalogModelSource    string
-	route                 string
-	apiURLContains        []string
-	responsesURLContains  []string
-	normalizedURLContains []string
-	region                string
-	requiredChecks        []string
-	omittedChecks         []string
 }
 
 type doctorJSONPreviewRequestContract struct {
@@ -72,12 +59,12 @@ func TestDoctorJSONPrintRequestProviderContractMatrix(t *testing.T) {
 				"request_preview",
 			}, tc.requiredJSONFields...)...)
 			requireDoctorJSONFieldsOmitted(t, raw, "smoke")
-			requireDoctorJSONPreviewIdentity(t, report, tc.want)
+			requireDoctorJSONContractIdentity(t, report, tc.want)
 			requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
-			for _, check := range tc.want.requiredChecks {
+			for _, check := range tc.requiredChecks {
 				requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, check), "ok")
 			}
-			requireNoDoctorJSONChecks(t, report.Checks, tc.want.omittedChecks...)
+			requireNoDoctorJSONChecks(t, report.Checks, tc.omittedChecks...)
 			requireDoctorJSONPreviewRequests(t, report.RequestPreview, tc.previewCount, tc.previewRequests)
 		})
 	}
@@ -114,17 +101,17 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runDeepSeekDoctorInvocation,
 			setup:              setupDeepSeekJSONPreviewContract,
 			requiredJSONFields: append([]string{"api_model", "thinking_supported", "thinking_enabled"}, openAICompatibleRequiredFields...),
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:              "deepseek-v4-flash",
 				modelSource:        "--model",
 				catalogModel:       "deepseek-v4-flash",
 				catalogModelSource: "--catalog-model",
 				route:              "chat_completions",
 				apiURLContains:     []string{"/chat/completions"},
-				requiredChecks:     openAICompatibleChecks,
-				omittedChecks:      []string{"auth"},
 			},
-			previewCount: 1,
+			requiredChecks: openAICompatibleChecks,
+			omittedChecks:  []string{"auth"},
+			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:         "tool",
 				route:        "chat_completions",
@@ -141,17 +128,17 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runGroqDoctorInvocation,
 			setup:              setupGroqJSONPreviewContract,
 			requiredJSONFields: append([]string{"context_window_tokens"}, openAICompatibleRequiredFields...),
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:              "corp-groq-model",
 				modelSource:        "--model",
 				catalogModel:       "meta-llama/llama-4-scout-17b-16e-instruct",
 				catalogModelSource: "--catalog-model",
 				route:              "chat_completions",
 				apiURLContains:     []string{"/openai/v1/chat/completions"},
-				requiredChecks:     openAICompatibleChecks,
-				omittedChecks:      []string{"auth"},
 			},
-			previewCount: 1,
+			requiredChecks: openAICompatibleChecks,
+			omittedChecks:  []string{"auth"},
+			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
 				route:       "chat_completions",
@@ -172,16 +159,16 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runOllamaDoctorInvocation,
 			setup:              setupOllamaJSONPreviewContract,
 			requiredJSONFields: []string{"api_url", "model", "model_source", "catalog_model", "catalog_model_source", "route_reason", "function_calling_enabled"},
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:              "qwen2.5-coder:7b",
 				modelSource:        "--model",
 				catalogModel:       "qwen2.5-coder:7b",
 				catalogModelSource: "--catalog-model",
 				route:              "ollama_chat",
 				apiURLContains:     []string{"http://127.0.0.1:11434"},
-				requiredChecks:     []string{"auth", "endpoint", "provider_registration", "catalog_policy", "function_calling", "request_preview"},
 			},
-			previewCount: 1,
+			requiredChecks: []string{"auth", "endpoint", "provider_registration", "catalog_policy", "function_calling", "request_preview"},
+			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
 				route:       "ollama_chat",
@@ -202,17 +189,17 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runOpenRouterDoctorInvocation,
 			setup:              setupOpenRouterJSONPreviewContract,
 			requiredJSONFields: append([]string{"upstream_provider", "upstream_model"}, openAICompatibleRequiredFields...),
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:              "anthropic/claude-sonnet-4.6",
 				modelSource:        "--model",
 				catalogModel:       "anthropic/claude-sonnet-4.6",
 				catalogModelSource: "--catalog-model",
 				route:              "anthropic_messages",
 				apiURLContains:     []string{"/api/v1/messages"},
-				requiredChecks:     append(openAICompatibleChecks, "image_input"),
-				omittedChecks:      []string{"auth"},
 			},
-			previewCount: 1,
+			requiredChecks: append(openAICompatibleChecks, "image_input"),
+			omittedChecks:  []string{"auth"},
+			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
 				route:       "anthropic_messages",
@@ -237,17 +224,17 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runOpenAIDoctorInvocation,
 			setup:              setupOpenAIJSONPreviewContract,
 			requiredJSONFields: []string{"api_url", "responses_url", "model", "model_source", "catalog_model", "catalog_model_source", "route_reason", "max_output_tokens", "function_calling_enabled"},
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:                "corp-openai-responses",
 				modelSource:          "--model",
 				catalogModel:         "gpt-5.4",
 				catalogModelSource:   "--catalog-model",
 				route:                "responses_streaming",
 				responsesURLContains: []string{"/v1/responses"},
-				requiredChecks:       []string{"api_url", "responses_url", "provider_registration", "model", "route", "catalog_policy", "function_calling", "request_preview"},
-				omittedChecks:        []string{"auth"},
 			},
-			previewCount: 1,
+			requiredChecks: []string{"api_url", "responses_url", "provider_registration", "model", "route", "catalog_policy", "function_calling", "request_preview"},
+			omittedChecks:  []string{"auth"},
+			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
 				route:       "responses_streaming",
@@ -268,16 +255,16 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runAzureDoctorInvocation,
 			setup:              setupAzureJSONPreviewContract,
 			requiredJSONFields: []string{"normalized_base_url", "auth_mode", "deployment", "deployment_source", "catalog_model", "catalog_model_source", "route_reason", "function_calling_enabled"},
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				deployment:            "corp-azure-gpt55",
 				catalogModel:          "gpt-5.5-pro",
 				catalogModelSource:    "--catalog-model",
 				route:                 "responses_non_streaming",
 				normalizedURLContains: []string{"https://example.openai.azure.com/openai/v1"},
-				requiredChecks:        []string{"base_url", "deployment", "catalog_model", "route", "catalog_policy", "function_calling", "request_preview"},
-				omittedChecks:         []string{"auth"},
 			},
-			previewCount: 2,
+			requiredChecks: []string{"base_url", "deployment", "catalog_model", "route", "catalog_policy", "function_calling", "request_preview"},
+			omittedChecks:  []string{"auth"},
+			previewCount:   2,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:               "retention_followup",
 				route:              "responses_non_streaming",
@@ -299,17 +286,17 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runKimiDoctorInvocation,
 			setup:              setupKimiJSONPreviewContract,
 			requiredJSONFields: []string{"api_url", "model", "model_source", "catalog_model", "catalog_model_source", "route_reason", "max_output_tokens", "context_window_tokens", "function_calling_enabled", "prompt_cache_key_present"},
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:              "corp-kimi-model",
 				modelSource:        "--model",
 				catalogModel:       "kimi-k2.6",
 				catalogModelSource: "--catalog-model",
 				route:              "chat_completions",
 				apiURLContains:     []string{"/v1/chat/completions"},
-				requiredChecks:     []string{"api_url", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "request_preview"},
-				omittedChecks:      []string{"auth"},
 			},
-			previewCount: 4,
+			requiredChecks: []string{"api_url", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "request_preview"},
+			omittedChecks:  []string{"auth"},
+			previewCount:   4,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool_smoke",
 				route:       "chat_completions",
@@ -330,17 +317,17 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runGeminiDoctorInvocation,
 			setup:              setupGeminiJSONPreviewContract,
 			requiredJSONFields: []string{"api_url", "model", "model_source", "catalog_model", "catalog_model_source", "route_reason", "max_output_tokens", "context_window_tokens", "function_calling_enabled", "image_input_supported", "web_search_supported", "context_caching_enabled", "thinking_enabled"},
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:              "corp-gemini-model",
 				modelSource:        "--model",
 				catalogModel:       "gemini-3.1-pro-preview-customtools",
 				catalogModelSource: "--catalog-model",
 				route:              "stream_generate_content_sse",
 				apiURLContains:     []string{":streamGenerateContent", "alt=sse"},
-				requiredChecks:     []string{"endpoint", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "thinking", "context_caching", "web_search", "request_preview"},
-				omittedChecks:      []string{"smoke"},
 			},
-			previewCount: 1,
+			requiredChecks: []string{"endpoint", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "thinking", "context_caching", "web_search", "request_preview"},
+			omittedChecks:  []string{"smoke"},
+			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
 				route:       "stream_generate_content_sse",
@@ -360,16 +347,16 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runClaudeDoctorInvocation,
 			setup:              setupClaudeJSONPreviewContract,
 			requiredJSONFields: []string{"api_url", "model", "model_source", "catalog_model", "catalog_model_source", "route_reason", "max_output_tokens", "context_window_tokens", "function_calling_enabled", "image_input_supported", "web_search_supported", "context_management_enabled", "claude_compaction_supported", "thinking_enabled", "anthropic_version"},
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:              "corp-claude-model",
 				modelSource:        "--model",
 				catalogModel:       "claude-sonnet-4-6",
 				catalogModelSource: "--catalog-model",
 				route:              "claude_messages",
 				apiURLContains:     []string{"/v1/messages"},
-				requiredChecks:     []string{"endpoint", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "thinking", "context_management", "web_search", "request_preview"},
 			},
-			previewCount: 1,
+			requiredChecks: []string{"endpoint", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "thinking", "context_management", "web_search", "request_preview"},
+			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
 				route:       "claude_messages",
@@ -390,17 +377,17 @@ func doctorJSONPreviewContractCases() []doctorJSONPreviewContractCase {
 			run:                runBedrockDoctorInvocation,
 			setup:              setupBedrockJSONPreviewContract,
 			requiredJSONFields: []string{"region", "model", "model_source", "catalog_model", "catalog_model_source", "function_calling_enabled"},
-			want: doctorJSONPreviewContractIdentity{
+			want: doctorJSONContractIdentity{
 				model:              "corp-bedrock-sonnet",
 				modelSource:        "--model",
 				catalogModel:       bedrockDoctorCatalogModelForTest,
 				catalogModelSource: "--catalog-model",
 				route:              "claude_messages",
 				region:             "us-east-1",
-				requiredChecks:     []string{"region", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "request_preview"},
-				omittedChecks:      []string{"auth"},
 			},
-			previewCount: 1,
+			requiredChecks: []string{"region", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "request_preview"},
+			omittedChecks:  []string{"auth"},
+			previewCount:   1,
 			previewRequests: []doctorJSONPreviewRequestContract{{
 				name:        "tool",
 				route:       "claude_messages",

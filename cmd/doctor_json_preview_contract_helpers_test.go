@@ -43,31 +43,6 @@ func sortedDoctorJSONFieldNames(raw map[string]json.RawMessage) []string {
 	return fields
 }
 
-func requireDoctorJSONPreviewIdentity(t *testing.T, report doctorJSONContractReport, want doctorJSONPreviewContractIdentity) {
-	t.Helper()
-	if report.Provider == "" {
-		t.Fatal("provider is empty")
-	}
-	if want.model != "" && (report.Model != want.model || report.ModelSource != want.modelSource) {
-		t.Fatalf("model = %q (%s), want %q (%s)", report.Model, report.ModelSource, want.model, want.modelSource)
-	}
-	if want.deployment != "" && report.Deployment != want.deployment {
-		t.Fatalf("deployment = %q, want %q", report.Deployment, want.deployment)
-	}
-	if want.catalogModel != "" && (report.CatalogModel != want.catalogModel || report.CatalogModelSource != want.catalogModelSource) {
-		t.Fatalf("catalog_model = %q (%s), want %q (%s)", report.CatalogModel, report.CatalogModelSource, want.catalogModel, want.catalogModelSource)
-	}
-	if want.route != "" && report.Route != want.route {
-		t.Fatalf("route = %q, want %q", report.Route, want.route)
-	}
-	if want.region != "" && report.Region != want.region {
-		t.Fatalf("region = %q, want %q", report.Region, want.region)
-	}
-	requireContainsAll(t, "api_url", report.APIURL, want.apiURLContains)
-	requireContainsAll(t, "responses_url", report.ResponsesURL, want.responsesURLContains)
-	requireContainsAll(t, "normalized_base_url", report.NormalizedBaseURL, want.normalizedURLContains)
-}
-
 func requireDoctorJSONPreviewRequests(t *testing.T, preview doctorJSONRequestPreview, wantCount int, wants []doctorJSONPreviewRequestContract) {
 	t.Helper()
 	requireDoctorJSONRequestPreviewCount(t, preview, wantCount)
@@ -152,15 +127,6 @@ func requireDoctorJSONPreviewRedaction(t *testing.T, request doctorJSONRequestPr
 	for _, secret := range []string{"sk-test", "gsk-test", "sk-or-test", "moonshot-key", "gemini-key", "claude-key", "azure-key"} {
 		if strings.Contains(rendered, secret) {
 			t.Fatalf("request %q preview leaked secret %q: %s", request.Name, secret, rendered)
-		}
-	}
-}
-
-func requireContainsAll(t *testing.T, label, got string, wants []string) {
-	t.Helper()
-	for _, want := range wants {
-		if !strings.Contains(got, want) {
-			t.Fatalf("%s = %q, want substring %q", label, got, want)
 		}
 	}
 }
