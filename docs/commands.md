@@ -4,6 +4,23 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 ## CLI 診断コマンド
 
+### Doctor provider matrix
+
+`doctor` は provider ごとに runtime route、endpoint override、live smoke の意味が違います。共通の確認だけなら `--json` と `--print-request` を使い、`--smoke` 系は live API request を送る場合だけ指定してください。
+
+| Provider | Request target | Live smoke flags | Local / gate flags | Request preview | Endpoint contract | Usage / cost observation |
+| --- | --- | --- | --- | --- | --- | --- |
+| `deepseek` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | none | `--print-request` | `DEEPSEEK_API_URL` is an exact Chat Completions endpoint or intentional proxy path | text / tool token usage and cost when returned |
+| `kimi` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--web-search-smoke` | none | `--print-request` | `KIMI_API_URL` is an exact Chat Completions endpoint or intentional proxy path | token usage plus built-in web search call count / fee observations |
+| `gemini` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--web-search-smoke` | none | `--print-request` | text / tool / image use `streamGenerateContent?alt=sse`; native web search uses `generateContent` | SSE / `usageMetadata` usage and cost when returned; web search usage is optional for success |
+| `claude` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke`, `--web-search-smoke` | none | `--print-request` | `ANTHROPIC_API_URL` is an exact `/v1/messages` endpoint or intentional proxy path | Messages usage and cost when returned; web search usage is optional for success |
+| `groq` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | none | `--print-request` | `GROQ_API_URL` is an exact Chat Completions endpoint or intentional proxy path | text / tool token usage and cost when returned |
+| `ollama` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | none | `--print-request` | `OLLAMA_BASE_URL` is a base URL; concrete `/api/chat` or `/api/tags` endpoints fail | local zero-cost token usage when returned |
+| `openrouter` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | none | `--print-request` | `OPENROUTER_API_URL` is Chat Completions / proxy; Anthropic Skin `/v1/messages` is derived | selected route token usage and cost when returned |
+| `openai` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OPENAI_API_URL` is Chat Completions; `OPENAI_RESPONSES_URL` is Responses | response ID, token usage, cost, and retention chain metadata when returned |
+| `azure` | `--deployment`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability`, `--print-config` | `--print-request` | `AZURE_OPENAI_BASE_URL` is a resource v1 base URL; smoke uses `<normalized_base_url>/responses` | response ID, token usage, cost, and retention chain metadata when returned |
+| `bedrock` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke` | none | `--print-request` | AWS region / credentials select Bedrock runtime route; request preview is credential-independent | AWS request ID, token usage, and cost when returned; partial usage makes total cost unavailable |
+
 ### `xelyon doctor deepseek`
 
 DeepSeek provider の `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、thinking request config、function calling 設定、token / pricing metadata を確認します。route は常に `chat_completions` です。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
