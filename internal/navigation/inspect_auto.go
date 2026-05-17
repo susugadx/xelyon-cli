@@ -24,6 +24,9 @@ type InspectSymbolAutoOptions struct {
 	ProjectMapStateKey string
 	InvocationCWD      string
 	ReferenceFilter    ReferenceFilter
+	// FallbackReferenceSearchPath は LSP が参照を返さない場合の rg 探索開始位置。
+	// 空文字は従来どおり "." を使う。
+	FallbackReferenceSearchPath string
 }
 
 // ResolveInspectSymbolAuto はシンボル自動解決の構造化結果を返す。
@@ -44,7 +47,15 @@ func ResolveInspectSymbolAuto(symbol, pathHint string, opts InspectSymbolAutoOpt
 	if isZeroInspectBudget(budget) {
 		budget = SummaryBudget
 	}
-	return resolveInspectSymbol(symbol, pathHint, budget, runtime, opts.Registry, opts.LSPClient, opts.ReferenceFilter, true)
+	return resolveInspectSymbol(symbol, pathHint, inspectResolveOptions{
+		budget:                      budget,
+		runtime:                     runtime,
+		registry:                    opts.Registry,
+		lspClient:                   opts.LSPClient,
+		referenceFilter:             opts.ReferenceFilter,
+		fallbackReferenceSearchPath: opts.FallbackReferenceSearchPath,
+		normalizePaths:              true,
+	})
 }
 
 // InspectSymbolAuto はシンボル名の自動解決を試みる。

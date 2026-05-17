@@ -32,14 +32,15 @@ type structuredGoImpactInspection struct {
 func inspectStructuredGoImpactSymbol(symbol string, scope structuredImpactScope) structuredGoImpactInspection {
 	collectionPlan := goImpactPlanForRisk(goImpactRiskHigh)
 	result, output, status := navigation.ResolveInspectSymbolAuto(symbol, scope.Definition.Path, navigation.InspectSymbolAutoOptions{
-		Budget:             collectionPlan.budget,
-		Registry:           nil,
-		LSPClient:          scope.Definition.LSPClient,
-		ProjectMap:         scope.Definition.ProjectMap,
-		ProjectMapRootPath: scope.Definition.ProjectMapRootPath,
-		ProjectMapStateKey: scope.Definition.ProjectMapStateKey,
-		InvocationCWD:      scope.Definition.InvocationCWD,
-		ReferenceFilter:    structuredGoImpactReferenceFilter(scope.Evidence),
+		Budget:                      collectionPlan.budget,
+		Registry:                    nil,
+		LSPClient:                   scope.Definition.LSPClient,
+		ProjectMap:                  scope.Definition.ProjectMap,
+		ProjectMapRootPath:          scope.Definition.ProjectMapRootPath,
+		ProjectMapStateKey:          scope.Definition.ProjectMapStateKey,
+		InvocationCWD:               scope.Definition.InvocationCWD,
+		ReferenceFilter:             structuredGoImpactReferenceFilter(scope.Evidence),
+		FallbackReferenceSearchPath: structuredGoImpactFallbackReferenceSearchPath(scope.Evidence),
 	})
 	result = filterStructuredGoImpactEvidence(result, scope.Evidence)
 	inspected := structuredGoImpactInspection{
