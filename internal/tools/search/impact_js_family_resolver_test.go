@@ -53,7 +53,7 @@ func TestResolveStructuredJSFamilyImpactSymbol_MultipleDefinitionsUsesSharedDefi
 			t.Fatalf("normalizeRefs called for multiple definitions: %+v", refs)
 			return nil
 		},
-		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef) *SymbolBundle {
+		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef) *SymbolBundle {
 			t.Fatal("buildBundle called for multiple definitions")
 			return nil
 		},
@@ -97,7 +97,7 @@ func TestResolveStructuredJSFamilyImpactSymbol_IncompleteSingleDefinitionDefersT
 			t.Fatalf("normalizeRefs called for incomplete single definition: %+v", refs)
 			return nil
 		},
-		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef) *SymbolBundle {
+		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef) *SymbolBundle {
 			t.Fatal("buildBundle called for incomplete single definition")
 			return nil
 		},
@@ -132,7 +132,7 @@ func TestResolveStructuredJSFamilyImpactSymbol_IncompleteMultipleDefinitionsDefe
 			t.Fatalf("normalizeRefs called for incomplete multiple definitions: %+v", refs)
 			return nil
 		},
-		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef) *SymbolBundle {
+		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef) *SymbolBundle {
 			t.Fatal("buildBundle called for incomplete multiple definitions")
 			return nil
 		},
@@ -212,9 +212,12 @@ func TestResolveStructuredJSFamilyImpactSymbol_SingleDefinitionUsesSharedReferen
 			}
 			return refs
 		},
-		buildBundle: func(symbol string, gotDef genericSymbolDef, opts SearchOptions, refs []genericSymbolRef) *SymbolBundle {
+		buildBundle: func(symbol string, gotDef genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef) *SymbolBundle {
 			if opts.Path != evidenceOpts.Path {
 				t.Fatalf("bundle opts path = %q, want %q", opts.Path, evidenceOpts.Path)
+			}
+			if !slices.Equal(refs, totalRefs) {
+				t.Fatalf("total refs = %+v, want same refs for non-LSP fallback %+v", totalRefs, refs)
 			}
 			builtRefs = append([]genericSymbolRef(nil), refs...)
 			return newJSFamilyResolverTestBundle(symbol, gotDef, refs)

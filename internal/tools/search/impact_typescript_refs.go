@@ -1,22 +1,39 @@
 package search
 
 type typeScriptImpactRefs struct {
-	imports     []genericSymbolRef
-	callers     []genericSymbolRef
-	typeRefs    []genericSymbolRef
-	others      []genericSymbolRef
-	directTests []genericSymbolRef
-	nearbyTests []genericSymbolRef
+	imports          []genericSymbolRef
+	callers          []genericSymbolRef
+	typeRefs         []genericSymbolRef
+	others           []genericSymbolRef
+	directTests      []genericSymbolRef
+	nearbyTests      []genericSymbolRef
+	hasTotalRefs     bool
+	totalImports     []genericSymbolRef
+	totalCallers     []genericSymbolRef
+	totalTypeRefs    []genericSymbolRef
+	totalOthers      []genericSymbolRef
+	totalDirectTests []genericSymbolRef
 }
 
 func typeScriptImpactRefsForDef(def genericSymbolDef, refs []genericSymbolRef, opts SearchOptions) typeScriptImpactRefs {
+	return typeScriptImpactRefsForDisplayAndTotalRefs(def, refs, refs, opts)
+}
+
+func typeScriptImpactRefsForDisplayAndTotalRefs(def genericSymbolDef, refs []genericSymbolRef, totalRefs []genericSymbolRef, opts SearchOptions) typeScriptImpactRefs {
 	classified := classifyJSFamilySymbolRefsFromAST(refs)
+	totalClassified := classifyJSFamilySymbolRefsFromAST(totalRefs)
 	result := typeScriptImpactRefs{
-		imports:     classified.imports,
-		callers:     classified.callers,
-		typeRefs:    classified.typeRefs,
-		others:      classified.others,
-		directTests: classified.tests,
+		imports:          classified.imports,
+		callers:          classified.callers,
+		typeRefs:         classified.typeRefs,
+		others:           classified.others,
+		directTests:      classified.tests,
+		totalImports:     totalClassified.imports,
+		totalCallers:     totalClassified.callers,
+		totalTypeRefs:    totalClassified.typeRefs,
+		totalOthers:      totalClassified.others,
+		totalDirectTests: totalClassified.tests,
+		hasTotalRefs:     true,
 	}
 	result.nearbyTests = findNearbyTypeScriptTests(def, opts, result.directTests)
 	return result
@@ -24,6 +41,41 @@ func typeScriptImpactRefsForDef(def genericSymbolDef, refs []genericSymbolRef, o
 
 func (refs typeScriptImpactRefs) allTests() []genericSymbolRef {
 	return allJSFamilyTests(refs.directTests, refs.nearbyTests)
+}
+
+func (refs typeScriptImpactRefs) allTotalTests() []genericSymbolRef {
+	if !refs.hasTotalRefs {
+		return refs.allTests()
+	}
+	return allJSFamilyTests(refs.totalDirectTests, refs.nearbyTests)
+}
+
+func (refs typeScriptImpactRefs) totalImportsForRisk() []genericSymbolRef {
+	if refs.hasTotalRefs {
+		return refs.totalImports
+	}
+	return refs.imports
+}
+
+func (refs typeScriptImpactRefs) totalCallersForRisk() []genericSymbolRef {
+	if refs.hasTotalRefs {
+		return refs.totalCallers
+	}
+	return refs.callers
+}
+
+func (refs typeScriptImpactRefs) totalTypeRefsForRisk() []genericSymbolRef {
+	if refs.hasTotalRefs {
+		return refs.totalTypeRefs
+	}
+	return refs.typeRefs
+}
+
+func (refs typeScriptImpactRefs) totalOthersForRisk() []genericSymbolRef {
+	if refs.hasTotalRefs {
+		return refs.totalOthers
+	}
+	return refs.others
 }
 
 func findNearbyTypeScriptTests(def genericSymbolDef, opts SearchOptions, directTests []genericSymbolRef) []genericSymbolRef {

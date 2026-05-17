@@ -68,6 +68,6 @@ func structuredJavaScriptImpactResolverSpec() jsFamilyImpactResolverSpec {
 		collectDefAffectedFiles: collectStructuredJavaScriptDefAffectedFiles,
 		referenceOptions:        structuredJavaScriptImpactReferenceOptions,
 		normalizeRefs:           normalizeStructuredJavaScriptRefs,
-		buildBundle:             buildJavaScriptImpactBundleFromRefs,
+		buildBundle:             buildJavaScriptImpactBundleFromDisplayAndTotalRefs,
 	}
 }

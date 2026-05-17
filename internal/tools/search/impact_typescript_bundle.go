@@ -22,17 +22,21 @@ func buildTypeScriptImpactBundle(symbol string, def genericSymbolDef, opts Searc
 		impact:      impact,
 	})
 
-	appendJSFamilyImpactSection(bundle, def, "imports", "Imports", refs.imports, jsImportLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSection(bundle, def, "callers", "Callers", refs.callers, jsCallerLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSection(bundle, def, "type_refs", "Type References", refs.typeRefs, jsTypeRefLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSection(bundle, def, "references", "References", refs.others, genericRefLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSection(bundle, def, "tests", "Related Tests", refs.allTests(), genericTestLimit, true, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "imports", "Imports", refs.imports, refs.totalImports, jsImportLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "callers", "Callers", refs.callers, refs.totalCallers, jsCallerLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "type_refs", "Type References", refs.typeRefs, refs.totalTypeRefs, jsTypeRefLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "references", "References", refs.others, refs.totalOthers, genericRefLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "tests", "Related Tests", refs.allTests(), refs.allTotalTests(), genericTestLimit, true, rootPath, symbol)
 
 	return bundle
 }
 
 func buildTypeScriptImpactBundleFromRefs(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef) *SymbolBundle {
 	return buildTypeScriptImpactBundle(symbol, def, opts, typeScriptImpactRefsForDef(def, refs, opts))
+}
+
+func buildTypeScriptImpactBundleFromDisplayAndTotalRefs(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef) *SymbolBundle {
+	return buildTypeScriptImpactBundle(symbol, def, opts, typeScriptImpactRefsForDisplayAndTotalRefs(def, refs, totalRefs, opts))
 }
 
 func typeScriptImpactDebugSource(def genericSymbolDef) string {
@@ -93,12 +97,12 @@ func typeScriptImpactPrefersTypeRefs(kind string) bool {
 }
 
 func classifyTypeScriptImpactRisk(def genericSymbolDef, refs typeScriptImpactRefs) string {
-	nonTestRefCount := len(dedupeGenericRefs(append(append(append(append([]genericSymbolRef(nil), refs.imports...), refs.callers...), refs.typeRefs...), refs.others...)))
-	hasTests := len(dedupeGenericRefs(refs.allTests())) > 0
+	nonTestRefCount := len(dedupeGenericRefs(append(append(append(append([]genericSymbolRef(nil), refs.totalImportsForRisk()...), refs.totalCallersForRisk()...), refs.totalTypeRefsForRisk()...), refs.totalOthersForRisk()...)))
+	hasTests := len(dedupeGenericRefs(refs.allTotalTests())) > 0
 	exported := typeScriptDefinitionIsExported(def, refs)
 	primaryRefCount := nonTestRefCount
 	if typeScriptImpactPrefersTypeRefs(def.Kind) {
-		primaryRefCount = len(dedupeGenericRefs(refs.typeRefs))
+		primaryRefCount = len(dedupeGenericRefs(refs.totalTypeRefsForRisk()))
 	}
 
 	switch {
@@ -120,5 +124,5 @@ func typeScriptDefinitionIsExported(def genericSymbolDef, refs typeScriptImpactR
 	if jsFamilySignatureStartsWithExport(def.Signature) {
 		return true
 	}
-	return jsFamilyRefsContainExport(refs.imports)
+	return jsFamilyRefsContainExport(refs.totalImportsForRisk())
 }

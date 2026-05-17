@@ -278,3 +278,25 @@ func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactFallsBack
 		t.Fatalf("callers = %+v, want fallback AST caller", callers)
 	}
 }
+
+func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactFallsBackWhenLSPEvidenceCannotLoad(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/build.js": "function buildUser(id) { return id }\n",
+		"src/app.js":   "buildUser('fallback')\n",
+	})
+	opts := newJavaScriptImpactSearchOptions(dir, "buildUser")
+	opts.LSPClient = &mockJSFamilyLSPClient{
+		refs: []navigation.LSPLocation{{File: "src/missing.js", Line: 1, Character: 1}},
+	}
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, opts)
+
+	assertJavaScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
+		t.Fatal("ResolvedViaLSP = true, want false when LSP refs have no loadable evidence")
+	}
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainSnippet(callers, "buildUser('fallback')") {
+		t.Fatalf("callers = %+v, want fallback AST caller", callers)
+	}
+}

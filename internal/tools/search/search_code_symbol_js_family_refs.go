@@ -4,7 +4,15 @@ const jsFamilyBundleLSPSource = "TypeScript/JavaScript LSP"
 
 type jsFamilyReferenceResult struct {
 	refs           []genericSymbolRef
+	totalRefs      []genericSymbolRef
 	resolvedViaLSP bool
+}
+
+func (result jsFamilyReferenceResult) refsForTotals() []genericSymbolRef {
+	if len(result.totalRefs) > 0 {
+		return result.totalRefs
+	}
+	return result.refs
 }
 
 type jsFamilyReferenceOptions struct {
@@ -57,9 +65,13 @@ func setJSFamilyBundleLSPDiagnostics(bundle *SymbolBundle, resolved bool) {
 
 func findJSFamilyReferencesWithSemantic(symbol string, def genericSymbolDef, opts jsFamilyReferenceOptions) jsFamilyReferenceResult {
 	if opts.lsp.request.LSPClient != nil && def.Character > 0 {
-		refs, err := findJSFamilyReferencesWithLSP(symbol, def, opts.lsp)
-		if err == nil && len(refs) > 0 {
-			return jsFamilyReferenceResult{refs: refs, resolvedViaLSP: true}
+		collection, err := findJSFamilyReferencesWithLSP(symbol, def, opts.lsp)
+		if err == nil && collection.usable() {
+			return jsFamilyReferenceResult{
+				refs:           collection.refs,
+				totalRefs:      collection.summaryRefs,
+				resolvedViaLSP: true,
+			}
 		}
 	}
 	return jsFamilyReferenceResult{refs: findJSFamilyReferencesWithAST(symbol, opts.nameOnly)}

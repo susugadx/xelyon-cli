@@ -97,12 +97,19 @@ func buildJSFamilyImpactMetadata(def genericSymbolDef, rootPath string, riskLeve
 }
 
 func appendJSFamilyImpactSection(bundle *SymbolBundle, def genericSymbolDef, kind, title string, refs []genericSymbolRef, limit int, isTest bool, rootPath string, symbol string) {
+	appendJSFamilyImpactSectionWithTotals(bundle, def, kind, title, refs, refs, limit, isTest, rootPath, symbol)
+}
+
+func appendJSFamilyImpactSectionWithTotals(bundle *SymbolBundle, def genericSymbolDef, kind, title string, refs []genericSymbolRef, totalRefs []genericSymbolRef, limit int, isTest bool, rootPath string, symbol string) {
 	items := jsFamilyImpactItemsFromRefs(def, refs, kind, limit, isTest, rootPath, symbol)
 	if len(items) == 0 {
 		return
 	}
+	if totalRefs == nil {
+		totalRefs = refs
+	}
 
-	total := len(dedupeGenericRefs(refs))
+	total := len(dedupeGenericRefs(totalRefs))
 	bundle.Sections = append(bundle.Sections, SymbolBundleSection{
 		Kind:  kind,
 		Title: title,

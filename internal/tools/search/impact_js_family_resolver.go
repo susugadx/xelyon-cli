@@ -12,7 +12,7 @@ type jsFamilyImpactResolverSpec struct {
 	referenceOptions        func(def genericSymbolDef, opts SearchOptions) jsFamilyReferenceOptions
 	normalizeRefs           func(refs []genericSymbolRef) []genericSymbolRef
 	filterRefs              func(def genericSymbolDef, defs jsFamilyImpactDefinitionSet, refs []genericSymbolRef) []genericSymbolRef
-	buildBundle             func(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef) *SymbolBundle
+	buildBundle             func(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef) *SymbolBundle
 }
 
 func resolveStructuredJSFamilyImpactSymbol(symbol string, scope structuredImpactScope, spec jsFamilyImpactResolverSpec) symbolResolveResult {
@@ -41,12 +41,15 @@ func resolveStructuredJSFamilyImpactSymbol(symbol string, scope structuredImpact
 	refOpts := spec.referenceOptions(def, scope.Evidence)
 	refResult := findJSFamilyReferencesWithSemantic(symbol, def, refOpts)
 	refs := spec.normalizeRefs(refResult.refs)
+	totalRefs := spec.normalizeRefs(refResult.refsForTotals())
 	if spec.filterRefs != nil {
 		refs = spec.filterRefs(def, definitionSet, refs)
+		totalRefs = spec.filterRefs(def, definitionSet, totalRefs)
 	}
 	refs = filterGenericRefs(refs, def)
+	totalRefs = filterGenericRefs(totalRefs, def)
 
-	bundle := spec.buildBundle(symbol, def, refOpts.nameOnly, refs)
+	bundle := spec.buildBundle(symbol, def, refOpts.nameOnly, refs, totalRefs)
 	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}

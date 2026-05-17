@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/impactplan"
 	"github.com/susugadx/xelyon-cli/internal/jsast"
@@ -145,6 +146,49 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactTypeRefsF
 		if !strings.Contains(artifact.Rendered, want) {
 			t.Fatalf("expected rendered TypeScript impact to include %q, got:\n%s", want, artifact.Rendered)
 		}
+	}
+}
+
+func TestBuildTypeScriptImpactBundleFromDisplayAndTotalRefsKeepsSummaryTotals(t *testing.T) {
+	def := genericSymbolDef{
+		Name:      "buildUser",
+		Kind:      "function",
+		File:      "src/build.ts",
+		Line:      1,
+		Signature: "function buildUser(id: string) { return id }",
+	}
+	displayRefs := []genericSymbolRef{{
+		File:    "src/app0.ts",
+		Line:    1,
+		Snippet: "buildUser('0')",
+		Class:   codeast.ClassCall,
+	}}
+	totalRefs := make([]genericSymbolRef, 0, jsFamilyImpactHighNonTestReferenceThreshold)
+	for i := 0; i < jsFamilyImpactHighNonTestReferenceThreshold; i++ {
+		totalRefs = append(totalRefs, genericSymbolRef{
+			File:  filepath.ToSlash(filepath.Join("src", "app"+string(rune('0'+i))+".ts")),
+			Line:  1,
+			Class: codeast.ClassCall,
+		})
+	}
+
+	bundle := buildTypeScriptImpactBundleFromDisplayAndTotalRefs("buildUser", def, SearchOptions{}, displayRefs, totalRefs)
+
+	if bundle == nil || bundle.Impact == nil {
+		t.Fatal("bundle impact = nil, want structured impact bundle")
+	}
+	if got := bundle.Impact.RiskLevel; got != impactplan.RiskHigh {
+		t.Fatalf("risk = %q, want %q from total refs summary", got, impactplan.RiskHigh)
+	}
+	callers := symbolBundleSectionByKind(bundle, "callers")
+	if callers == nil {
+		t.Fatal("callers section = nil, want budgeted evidence section")
+	}
+	if len(callers.Items) != 1 {
+		t.Fatalf("callers items len = %d, want one display evidence item", len(callers.Items))
+	}
+	if callers.Total != jsFamilyImpactHighNonTestReferenceThreshold || !callers.More {
+		t.Fatalf("callers total/more = %d/%v, want total refs summary %d with More", callers.Total, callers.More, jsFamilyImpactHighNonTestReferenceThreshold)
 	}
 }
 

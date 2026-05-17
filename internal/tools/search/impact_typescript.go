@@ -69,6 +69,6 @@ func structuredTypeScriptImpactResolverSpec() jsFamilyImpactResolverSpec {
 		referenceOptions:        structuredTypeScriptImpactReferenceOptions,
 		normalizeRefs:           normalizeStructuredTypeScriptRefs,
 		filterRefs:              filterStructuredTypeScriptImpactRefs,
-		buildBundle:             buildTypeScriptImpactBundleFromRefs,
+		buildBundle:             buildTypeScriptImpactBundleFromDisplayAndTotalRefs,
 	}
 }

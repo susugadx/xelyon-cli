@@ -38,16 +38,19 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	def := defs[0]
 	refResult := findJSFamilyReferencesWithSemantic(symbol, def, newJSFamilyReferenceOptions(opts))
 	refs := refResult.refs
+	totalRefs := refResult.refsForTotals()
 	filteredRefs := filterGenericRefs(refs, def)
+	filteredTotalRefs := filterGenericRefs(totalRefs, def)
 	classifiedRefs := classifyJSFamilySymbolRefsFromAST(filteredRefs)
+	classifiedTotalRefs := classifyJSFamilySymbolRefsFromAST(filteredTotalRefs)
 	bundle := buildGenericSymbolBundle("js", symbol, def, []string{
 		fmt.Sprintf("%d: %s", def.Line, def.Signature),
 	}, []symbolBundleSectionInput{
-		{Kind: "imports", Title: "Imports", Items: classifiedRefs.imports, Limit: jsImportLimit},
-		{Kind: "callers", Title: "Callers", Items: classifiedRefs.callers, Limit: jsCallerLimit},
-		{Kind: "type_refs", Title: "Type References", Items: classifiedRefs.typeRefs, Limit: jsTypeRefLimit},
-		{Kind: "references", Title: "References", Items: classifiedRefs.others, Limit: genericRefLimit},
-		{Kind: "tests", Title: "Related Tests", Items: classifiedRefs.tests, Limit: genericTestLimit, IsTest: true},
+		{Kind: "imports", Title: "Imports", Items: classifiedRefs.imports, TotalItems: classifiedTotalRefs.imports, Limit: jsImportLimit},
+		{Kind: "callers", Title: "Callers", Items: classifiedRefs.callers, TotalItems: classifiedTotalRefs.callers, Limit: jsCallerLimit},
+		{Kind: "type_refs", Title: "Type References", Items: classifiedRefs.typeRefs, TotalItems: classifiedTotalRefs.typeRefs, Limit: jsTypeRefLimit},
+		{Kind: "references", Title: "References", Items: classifiedRefs.others, TotalItems: classifiedTotalRefs.others, Limit: genericRefLimit},
+		{Kind: "tests", Title: "Related Tests", Items: classifiedRefs.tests, TotalItems: classifiedTotalRefs.tests, Limit: genericTestLimit, IsTest: true},
 	})
 	setJSFamilyBundleLSPDiagnostics(bundle, refResult.resolvedViaLSP)
 	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)

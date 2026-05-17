@@ -11,11 +11,12 @@ import (
 )
 
 type symbolBundleSectionInput struct {
-	Kind   string
-	Title  string
-	Items  []genericSymbolRef
-	Limit  int
-	IsTest bool
+	Kind       string
+	Title      string
+	Items      []genericSymbolRef
+	TotalItems []genericSymbolRef
+	Limit      int
+	IsTest     bool
 }
 
 type goSymbolBundleBuildOptions struct {

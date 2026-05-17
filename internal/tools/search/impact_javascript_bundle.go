@@ -22,16 +22,20 @@ func buildJavaScriptImpactBundle(symbol string, def genericSymbolDef, opts Searc
 		impact:      impact,
 	})
 
-	appendJSFamilyImpactSection(bundle, def, "imports", "Imports", refs.imports, jsImportLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSection(bundle, def, "callers", "Callers", refs.callers, jsCallerLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSection(bundle, def, "references", "References", refs.others, genericRefLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSection(bundle, def, "tests", "Related Tests", refs.allTests(), genericTestLimit, true, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "imports", "Imports", refs.imports, refs.totalImports, jsImportLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "callers", "Callers", refs.callers, refs.totalCallers, jsCallerLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "references", "References", refs.others, refs.totalOthers, genericRefLimit, false, rootPath, symbol)
+	appendJSFamilyImpactSectionWithTotals(bundle, def, "tests", "Related Tests", refs.allTests(), refs.allTotalTests(), genericTestLimit, true, rootPath, symbol)
 
 	return bundle
 }
 
 func buildJavaScriptImpactBundleFromRefs(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef) *SymbolBundle {
 	return buildJavaScriptImpactBundle(symbol, def, opts, javaScriptImpactRefsForDef(def, refs, opts))
+}
+
+func buildJavaScriptImpactBundleFromDisplayAndTotalRefs(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef) *SymbolBundle {
+	return buildJavaScriptImpactBundle(symbol, def, opts, javaScriptImpactRefsForDisplayAndTotalRefs(def, refs, totalRefs, opts))
 }
 
 func buildJavaScriptImpactMetadata(def genericSymbolDef, refs javaScriptImpactRefs, rootPath string) *SymbolBundleImpact {
@@ -48,8 +52,8 @@ func javaScriptImpactRecommendedReadGroups(refs javaScriptImpactRefs) []jsFamily
 }
 
 func classifyJavaScriptImpactRisk(def genericSymbolDef, refs javaScriptImpactRefs) string {
-	nonTestRefCount := len(dedupeGenericRefs(append(append(append([]genericSymbolRef(nil), refs.imports...), refs.callers...), refs.others...)))
-	hasTests := len(dedupeGenericRefs(refs.allTests())) > 0
+	nonTestRefCount := len(dedupeGenericRefs(append(append(append([]genericSymbolRef(nil), refs.totalImportsForRisk()...), refs.totalCallersForRisk()...), refs.totalOthersForRisk()...)))
+	hasTests := len(dedupeGenericRefs(refs.allTotalTests())) > 0
 	exported := javaScriptDefinitionIsExported(def, refs)
 
 	switch {
@@ -75,5 +79,5 @@ func javaScriptDefinitionIsExported(def genericSymbolDef, refs javaScriptImpactR
 	if strings.HasPrefix(signature, "module.exports") || strings.HasPrefix(signature, "exports.") || strings.HasPrefix(signature, "exports[") {
 		return true
 	}
-	return jsFamilyRefsContainExport(refs.imports)
+	return jsFamilyRefsContainExport(refs.totalImportsForRisk())
 }
