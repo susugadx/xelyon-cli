@@ -36,6 +36,9 @@ func requireDoctorSmokeJSONContract(t *testing.T, smoke doctorJSONSmokeResult, w
 	if smoke.Duration != want.duration {
 		t.Fatalf("smoke.duration = %q, want %q", smoke.Duration, want.duration)
 	}
+	if smoke.RetentionPayload != want.retentionPayload {
+		t.Fatalf("smoke.retention_payload = %t, want %t", smoke.RetentionPayload, want.retentionPayload)
+	}
 	if smoke.UsageObserved != want.usageObserved {
 		t.Fatalf("smoke.usage_observed = %t, want %t", smoke.UsageObserved, want.usageObserved)
 	}

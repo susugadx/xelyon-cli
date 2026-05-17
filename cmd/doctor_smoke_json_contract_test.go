@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	azureprovider "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
@@ -18,6 +19,7 @@ import (
 
 type doctorSmokeJSONContractCase struct {
 	provider string
+	name     string
 	render   func(*bytes.Buffer) error
 	want     doctorSmokeJSONContract
 }
@@ -27,6 +29,7 @@ type doctorSmokeJSONContract struct {
 	responseID               string
 	requestID                string
 	duration                 string
+	retentionPayload         bool
 	usageObserved            bool
 	usage                    *doctorJSONSmokeUsage
 	cost                     *doctorJSONSmokeCost
@@ -36,6 +39,7 @@ type doctorSmokeJSONContract struct {
 	webSearchUsageObserved   bool
 	searchResultTotalTokens  int
 	requests                 []doctorSmokeJSONRequestContract
+	outputOmitted            []string
 }
 
 type doctorSmokeJSONRequestContract struct {
@@ -63,15 +67,27 @@ type doctorSmokeJSONRequestContract struct {
 
 func TestDoctorSmokeJSONProviderContractMatrix(t *testing.T) {
 	for _, tc := range doctorSmokeJSONContractCases() {
-		t.Run(tc.provider, func(t *testing.T) {
+		t.Run(tc.caseName(), func(t *testing.T) {
 			var out bytes.Buffer
 			if err := tc.render(&out); err != nil {
 				t.Fatalf("render %s doctor JSON error = %v", tc.provider, err)
+			}
+			for _, value := range tc.want.outputOmitted {
+				if strings.Contains(out.String(), value) {
+					t.Fatalf("rendered %s doctor JSON contains omitted substring %q:\n%s", tc.provider, value, out.String())
+				}
 			}
 			smoke := unmarshalDoctorJSONSmoke(t, &out)
 			requireDoctorSmokeJSONContract(t, smoke, tc.want)
 		})
 	}
+}
+
+func (tc doctorSmokeJSONContractCase) caseName() string {
+	if tc.name != "" {
+		return tc.name
+	}
+	return tc.provider
 }
 
 func doctorSmokeJSONContractCases() []doctorSmokeJSONContractCase {
@@ -204,6 +220,7 @@ func doctorSmokeJSONContractCases() []doctorSmokeJSONContractCase {
 		},
 		{
 			provider: "openai",
+			name:     "openai/responses_streaming",
 			render: func(out *bytes.Buffer) error {
 				return renderOpenAIDoctorJSON(out, openaiprovider.DiagnosticReport{
 					Provider: "openai",
@@ -224,15 +241,54 @@ func doctorSmokeJSONContractCases() []doctorSmokeJSONContractCase {
 				})
 			},
 			want: doctorSmokeJSONContract{
-				route:         "responses_streaming",
-				responseID:    "resp_summary",
-				duration:      "2ms",
-				usageObserved: true,
-				usage:         commonUsage,
-				cost:          commonCost,
+				route:            "responses_streaming",
+				responseID:       "resp_summary",
+				duration:         "2ms",
+				retentionPayload: true,
+				usageObserved:    true,
+				usage:            commonUsage,
+				cost:             commonCost,
 				requests: []doctorSmokeJSONRequestContract{
 					{name: "retention_initial", ran: true, retentionPayload: true, route: "responses_streaming", responseID: "resp_initial", usageObserved: true, usage: commonUsage, cost: commonCost},
 					{name: "tool", skipped: true, skipReasonContains: "function calling payloads are disabled", toolPayload: true, route: "responses_streaming"},
+				},
+			},
+		},
+		{
+			provider: "openai",
+			name:     "openai/retention_non_streaming",
+			render: func(out *bytes.Buffer) error {
+				return renderOpenAIDoctorJSON(out, openaiprovider.DiagnosticReport{
+					Provider: "openai",
+					Smoke: &openaiprovider.DiagnosticSmokeResult{
+						Ran:              true,
+						Route:            openaiprovider.DiagnosticRouteResponsesNonStreaming,
+						ResponseID:       "resp_json",
+						Duration:         "2ms",
+						UsageObserved:    true,
+						RetentionPayload: true,
+						Usage:            openaiprovider.DiagnosticSmokeUsage{InputTokens: 10, CachedInputTokens: 3, OutputTokens: 4, ThinkingTokens: 2, CacheCreationTokens: 1},
+						Cost:             openaiprovider.DiagnosticSmokeCost{USD: 0.00012345},
+						Requests: []openaiprovider.DiagnosticSmokeRequestResult{
+							{Name: "text", Ran: true, Route: openaiprovider.DiagnosticRouteResponsesNonStreaming, ResponseID: "resp_json", UsageObserved: true, Usage: openaiprovider.DiagnosticSmokeUsage{InputTokens: 10, CachedInputTokens: 3, OutputTokens: 4, ThinkingTokens: 2, CacheCreationTokens: 1}, Cost: openaiprovider.DiagnosticSmokeCost{USD: 0.00012345}},
+							{Name: "retention_followup", Ran: true, RetentionPayload: true, Route: openaiprovider.DiagnosticRouteResponsesNonStreaming, ResponseID: "resp_retention_followup", PreviousResponseID: "resp_json", UsageObserved: true, Usage: openaiprovider.DiagnosticSmokeUsage{InputTokens: 10, CachedInputTokens: 3, OutputTokens: 4, ThinkingTokens: 2, CacheCreationTokens: 1}, Cost: openaiprovider.DiagnosticSmokeCost{USD: 0.00012345}},
+							{Name: "tool", Skipped: true, SkipReason: "OpenAI function calling payloads are disabled", ToolPayload: true, Route: openaiprovider.DiagnosticRouteResponsesNonStreaming},
+						},
+					},
+				})
+			},
+			want: doctorSmokeJSONContract{
+				route:            "responses_non_streaming",
+				responseID:       "resp_json",
+				duration:         "2ms",
+				retentionPayload: true,
+				usageObserved:    true,
+				usage:            commonUsage,
+				cost:             commonCost,
+				requests: []doctorSmokeJSONRequestContract{
+					{name: "text", ran: true, route: "responses_non_streaming", responseID: "resp_json", usageObserved: true, usage: commonUsage, cost: commonCost},
+					{name: "retention_followup", ran: true, retentionPayload: true, route: "responses_non_streaming", responseID: "resp_retention_followup", previousResponseID: "resp_json", usageObserved: true, usage: commonUsage, cost: commonCost},
+					{name: "tool", skipped: true, skipReasonContains: "function calling payloads are disabled", toolPayload: true, route: "responses_non_streaming"},
 				},
 			},
 		},
@@ -257,11 +313,12 @@ func doctorSmokeJSONContractCases() []doctorSmokeJSONContractCase {
 				})
 			},
 			want: doctorSmokeJSONContract{
-				responseID:    "az_resp_summary",
-				duration:      "2ms",
-				usageObserved: true,
-				usage:         commonUsage,
-				cost:          commonCost,
+				responseID:       "az_resp_summary",
+				duration:         "2ms",
+				retentionPayload: true,
+				usageObserved:    true,
+				usage:            commonUsage,
+				cost:             commonCost,
 				requests: []doctorSmokeJSONRequestContract{
 					{name: "retention_followup", ran: true, retentionPayload: true, responseID: "az_resp_followup", previousResponseID: "az_resp_initial", usageObserved: true, usage: commonUsage, cost: commonCost},
 					{name: "tool", skipped: true, skipReasonContains: "function calling payloads are disabled", toolPayload: true},
@@ -391,6 +448,7 @@ func doctorSmokeJSONContractCases() []doctorSmokeJSONContractCase {
 					{name: "text", ran: true, requestID: "req_text", usageObserved: true, usage: commonUsage, cost: commonCost},
 					{name: "image", skipped: true, skipReasonContains: "unsupported route", imagePayload: true},
 				},
+				outputOmitted: []string{"response_id"},
 			},
 		},
 	}

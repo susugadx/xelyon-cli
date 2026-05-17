@@ -112,33 +112,6 @@ func TestRenderKimiDoctorText_SkippedToolSmokeRequest(t *testing.T) {
 	}
 }
 
-func TestRenderKimiDoctorJSON_WebSearchSmokeObservation(t *testing.T) {
-	report := kimiprovider.DiagnosticReport{
-		Provider:    "kimi",
-		Model:       "kimi-k2.6",
-		ModelSource: "test",
-		Smoke: &kimiprovider.DiagnosticSmokeResult{
-			Ran:                      true,
-			WebSearchPayload:         true,
-			WebSearchCallCount:       2,
-			WebSearchCallFeeEstimate: 0.010,
-			WebSearchUsageObserved:   true,
-			SearchResultTotalTokens:  55,
-			CachedInputTokens:        7,
-		},
-	}
-
-	var out bytes.Buffer
-	if err := renderKimiDoctorJSON(&out, report); err != nil {
-		t.Fatalf("renderKimiDoctorJSON() error = %v", err)
-	}
-
-	smoke := unmarshalDoctorJSONSmoke(t, &out)
-	if smoke.WebSearchCallCount != 2 || smoke.WebSearchCallFeeEstimate != 0.010 || !smoke.WebSearchUsageObserved || smoke.CachedInputTokens != 7 || smoke.SearchResultTotalTokens != 55 {
-		t.Fatalf("smoke JSON = %+v, want web search observation", smoke)
-	}
-}
-
 func TestRunKimiDoctorInvocation_UsesConfiguredModelWhenFlagOmitted(t *testing.T) {
 	setKimiDoctorCommandTestEnv(t, "moonshot-key")
 	t.Setenv("XELYON_MODEL", "kimi-k2.5")

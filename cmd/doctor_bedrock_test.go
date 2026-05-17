@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -77,41 +76,6 @@ func TestRenderBedrockDoctorTextMarksPartialTotalCostUnavailable(t *testing.T) {
 	var out bytes.Buffer
 	renderBedrockDoctorText(&out, report)
 	requireDoctorSmokeTextUnavailableTotalCost(t, out.String())
-}
-
-func TestRenderBedrockDoctorJSONUsesRequestIDOnly(t *testing.T) {
-	report := bedrockprovider.DiagnosticReport{
-		Provider: "bedrock",
-		Smoke: &bedrockprovider.DiagnosticSmokeResult{
-			Ran: true,
-			Requests: []bedrockprovider.DiagnosticSmokeRequestResult{{
-				Name:      "text",
-				Ran:       true,
-				RequestID: "req_json",
-			}},
-		},
-	}
-
-	var out bytes.Buffer
-	if err := renderBedrockDoctorJSON(&out, report); err != nil {
-		t.Fatalf("renderBedrockDoctorJSON() error = %v", err)
-	}
-	if strings.Contains(out.String(), "response_id") {
-		t.Fatalf("output = %q, should not contain response_id alias", out.String())
-	}
-	var parsed struct {
-		Smoke struct {
-			Requests []struct {
-				RequestID string `json:"request_id"`
-			} `json:"requests"`
-		} `json:"smoke"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	if len(parsed.Smoke.Requests) != 1 || parsed.Smoke.Requests[0].RequestID != "req_json" {
-		t.Fatalf("requests = %#v, want request_id", parsed.Smoke.Requests)
-	}
 }
 
 func setBedrockDoctorCommandTestEnv(t *testing.T) {
