@@ -11,7 +11,7 @@ func structuredGoImpactFallbackReferenceSearchPath(opts SearchOptions) string {
 			return pathHint
 		}
 	}
-	if target := structuredImpactSearchTargetPath(opts); target != "" {
+	if target := searchTargetPathForOptions(opts); target != "" {
 		return target
 	}
 	return strings.TrimSpace(opts.Path)

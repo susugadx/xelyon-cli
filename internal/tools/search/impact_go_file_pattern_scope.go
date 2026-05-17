@@ -48,7 +48,7 @@ func newStructuredGoImpactFilePatternScope(opts SearchOptions, dir string) struc
 		workspaceRoot:   structuredImpactWorkspaceRoot(opts),
 		searchTargetRel: cleanStaticDirectoryPrefix(basis.Target),
 		matchRoot:       strings.TrimSpace(basis.MatchRoot),
-		searchTargetAbs: structuredImpactSearchTargetPath(opts),
+		searchTargetAbs: searchTargetPathForOptions(opts),
 	}
 }
 

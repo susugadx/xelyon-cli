@@ -153,14 +153,18 @@ func findGenericReferences(symbol string, opts SearchOptions) []genericSymbolRef
 }
 
 func findGenericSymbolMatches(symbol string, opts SearchOptions, limit int) []genericSymbolMatch {
+	return findGenericSymbolMatchResult(symbol, opts, limit).matches
+}
+
+func findGenericSymbolMatchResult(symbol string, opts SearchOptions, limit int) genericSymbolSearchResult {
 	if !common.IsRipgrepAvailable() {
-		return nil
+		return genericSymbolSearchResult{}
 	}
 
 	return runGenericSymbolRipgrep(symbol, opts, limit)
 }
 
-func runGenericSymbolRipgrep(symbol string, opts SearchOptions, limit int) []genericSymbolMatch {
+func runGenericSymbolRipgrep(symbol string, opts SearchOptions, limit int) genericSymbolSearchResult {
 	args, workdir := buildGenericRgArgs(symbol, opts)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -173,10 +177,10 @@ func runGenericSymbolRipgrep(symbol string, opts SearchOptions, limit int) []gen
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil
+		return genericSymbolSearchResult{}
 	}
 	if err := cmd.Start(); err != nil {
-		return nil
+		return genericSymbolSearchResult{}
 	}
 
 	result := collectGenericSymbolMatches(stdout, opts, limit)
@@ -184,7 +188,7 @@ func runGenericSymbolRipgrep(symbol string, opts SearchOptions, limit int) []gen
 		cancel()
 	}
 	_ = cmd.Wait()
-	return result.matches
+	return result
 }
 
 func collectGenericSymbolMatches(reader io.Reader, opts SearchOptions, limit int) genericSymbolSearchResult {

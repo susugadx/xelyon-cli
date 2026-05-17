@@ -161,7 +161,7 @@ func structuredGoImpactEvidenceAbsolutePath(path string, opts SearchOptions) str
 
 func structuredGoImpactEvidenceBaseCandidates(opts SearchOptions) []string {
 	candidates := make([]string, 0, 3)
-	if target := structuredImpactSearchTargetPath(opts); target != "" {
+	if target := searchTargetPathForOptions(opts); target != "" {
 		candidates = append(candidates, target)
 	}
 	if root := structuredImpactWorkspaceRoot(opts); root != "" && root != "." {

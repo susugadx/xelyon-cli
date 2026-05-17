@@ -24,6 +24,9 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 	if len(defs) == 0 {
 		return genericResolveResult{Status: genericSymbolNone}
 	}
+	if shouldDeferIncompleteJSFamilyDefinitions(candidates.definitionIncomplete) {
+		return genericResolveResult{Status: genericSymbolNone}
+	}
 	if len(defs) > 1 {
 		return genericResolveResult{
 			Output:        formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts),

@@ -2,37 +2,68 @@ package search
 
 import (
 	"os"
+	"path/filepath"
 	"sort"
 
 	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/jsast"
 )
 
-func findJSFamilyDefinitionsWithAST(symbol string, opts SearchOptions) []genericSymbolDef {
-	return collectJSFamilyDefinitionCandidates(symbol, opts).astDefs
-}
+const (
+	jsFamilyDefinitionCandidateMatchLimit = 500
+	jsFamilyDefinitionCandidateProbeLimit = jsFamilyDefinitionCandidateMatchLimit + 1
+)
 
 type jsFamilyDefinitionCandidates struct {
-	matches []genericSymbolMatch
-	astDefs []genericSymbolDef
+	matches              []genericSymbolMatch
+	astDefs              []genericSymbolDef
+	definitionIncomplete bool
+}
+
+type jsFamilyASTDefinitionResult struct {
+	defs        []genericSymbolDef
+	parsedFiles map[string]struct{}
 }
 
 func collectJSFamilyDefinitionCandidates(symbol string, opts SearchOptions) jsFamilyDefinitionCandidates {
-	matches := findGenericSymbolMatches(symbol, opts, 0)
+	result := findGenericSymbolMatchResult(symbol, opts, jsFamilyDefinitionCandidateProbeLimit)
+	matches, overLimit := jsFamilyDefinitionCandidateMatchesWithinLimit(result.matches)
+	files := jsFamilyMatchedFiles(matches, opts)
+	astResult := findJSFamilyDefinitionsWithASTFromFiles(symbol, files)
 	return jsFamilyDefinitionCandidates{
-		matches: matches,
-		astDefs: findJSFamilyDefinitionsWithASTFromMatches(symbol, opts, matches),
+		matches:              matches,
+		astDefs:              astResult.defs,
+		definitionIncomplete: jsFamilyDefinitionCoverageIncomplete(result.cancelRequested, overLimit, astResult, opts),
 	}
 }
 
-func findJSFamilyDefinitionsWithASTFromMatches(symbol string, opts SearchOptions, matches []genericSymbolMatch) []genericSymbolDef {
-	files := jsFamilyMatchedFiles(matches, opts)
+func jsFamilyDefinitionCandidateMatchesWithinLimit(matches []genericSymbolMatch) ([]genericSymbolMatch, bool) {
+	if len(matches) <= jsFamilyDefinitionCandidateMatchLimit {
+		return matches, false
+	}
+	return matches[:jsFamilyDefinitionCandidateMatchLimit], true
+}
+
+func jsFamilyDefinitionCoverageIncomplete(searchIncomplete bool, overLimit bool, astResult jsFamilyASTDefinitionResult, opts SearchOptions) bool {
+	if !searchIncomplete && !overLimit {
+		return false
+	}
+	return !jsFamilyDirectSearchFileParsed(astResult, opts)
+}
+
+func shouldDeferIncompleteJSFamilyDefinitions(definitionIncomplete bool) bool {
+	return definitionIncomplete
+}
+
+func findJSFamilyDefinitionsWithASTFromFiles(symbol string, files []jsFamilyMatchedFile) jsFamilyASTDefinitionResult {
 	defs := make([]genericSymbolDef, 0)
+	parsedFiles := make(map[string]struct{}, len(files))
 	for _, file := range files {
 		parsed, ok := parseJSFamilyFileForSearch(file.abs)
 		if !ok {
 			continue
 		}
+		parsedFiles[filepath.Clean(file.abs)] = struct{}{}
 		symbols := jsast.ExtractSymbolsWithParsed(parsed)
 		parsed.Close()
 		for _, astSymbol := range symbols {
@@ -50,7 +81,28 @@ func findJSFamilyDefinitionsWithASTFromMatches(symbol string, opts SearchOptions
 			})
 		}
 	}
-	return defs
+	return jsFamilyASTDefinitionResult{defs: defs, parsedFiles: parsedFiles}
+}
+
+func jsFamilyDirectSearchFileParsed(astResult jsFamilyASTDefinitionResult, opts SearchOptions) bool {
+	targetPath, ok := jsFamilyDirectSearchFilePath(opts)
+	if !ok {
+		return false
+	}
+	_, ok = astResult.parsedFiles[targetPath]
+	return ok
+}
+
+func jsFamilyDirectSearchFilePath(opts SearchOptions) (string, bool) {
+	targetPath := searchTargetPathForOptions(opts)
+	if targetPath == "" {
+		return "", false
+	}
+	info, err := os.Stat(targetPath)
+	if err != nil || info.IsDir() || !jsast.Supports(targetPath) {
+		return "", false
+	}
+	return filepath.Clean(targetPath), true
 }
 
 func findJSFamilyReferencesWithAST(symbol string, opts SearchOptions) []genericSymbolRef {

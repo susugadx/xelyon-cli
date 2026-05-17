@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-func findStructuredJavaScriptImpactDefinitions(symbol string, opts SearchOptions) []genericSymbolDef {
-	candidates := collectJSFamilyDefinitionCandidates(symbol, opts)
-	return structuredJavaScriptImpactDefinitionsFromCandidates(symbol, opts, candidates)
-}
-
 func structuredJavaScriptImpactDefinitionsFromCandidates(symbol string, opts SearchOptions, candidates jsFamilyDefinitionCandidates) []genericSymbolDef {
 	defs := normalizeStructuredJavaScriptDefs(candidates.astDefs)
 	if len(defs) == 0 {
@@ -21,7 +16,11 @@ func structuredJavaScriptImpactDefinitionsFromCandidates(symbol string, opts Sea
 }
 
 func findStructuredJavaScriptImpactDefinitionSet(symbol string, opts SearchOptions) jsFamilyImpactDefinitionSet {
-	return jsFamilyImpactDefinitionSet{defs: findStructuredJavaScriptImpactDefinitions(symbol, opts)}
+	candidates := collectJSFamilyDefinitionCandidates(symbol, opts)
+	return jsFamilyImpactDefinitionSet{
+		defs:                 structuredJavaScriptImpactDefinitionsFromCandidates(symbol, opts, candidates),
+		definitionIncomplete: candidates.definitionIncomplete,
+	}
 }
 
 func normalizeStructuredJavaScriptDefForImpact(def genericSymbolDef) genericSymbolDef {
@@ -39,11 +38,6 @@ func isStructuredJavaScriptFunctionExpressionSignature(signature string, name st
 
 	pattern := `^(?:export\s+)?(?:const|let)\s+` + regexp.QuoteMeta(name) + `\b\s*=\s*(?:async\s+)?function(?:\s+` + regexp.QuoteMeta(name) + `\b|\s*\()`
 	return regexp.MustCompile(pattern).MatchString(strings.TrimSpace(signature))
-}
-
-func findStructuredJavaScriptCommonJSInlineDefinitions(symbol string, opts SearchOptions) []genericSymbolDef {
-	matches := findGenericSymbolMatches(symbol, opts, 0)
-	return findStructuredJavaScriptCommonJSInlineDefinitionsFromMatches(symbol, matches)
 }
 
 func findStructuredJavaScriptCommonJSInlineDefinitionsFromMatches(symbol string, matches []genericSymbolMatch) []genericSymbolDef {

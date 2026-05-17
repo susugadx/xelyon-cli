@@ -17,8 +17,9 @@ func structuredTypeScriptImpactDefinitionSetFromCandidates(symbol string, opts S
 	}
 	preferredDefs := preferStructuredTypeScriptImplementationDefs(defs)
 	return jsFamilyImpactDefinitionSet{
-		defs:              preferredDefs.defs,
-		suppressedRefDefs: preferredDefs.suppressedDeclarationDefs,
+		defs:                 preferredDefs.defs,
+		suppressedRefDefs:    preferredDefs.suppressedDeclarationDefs,
+		definitionIncomplete: candidates.definitionIncomplete,
 	}
 }
 

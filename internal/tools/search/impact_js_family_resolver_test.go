@@ -76,6 +76,73 @@ func TestResolveStructuredJSFamilyImpactSymbol_MultipleDefinitionsUsesSharedDefi
 	}
 }
 
+func TestResolveStructuredJSFamilyImpactSymbol_IncompleteSingleDefinitionDefersToFallback(t *testing.T) {
+	def := genericSymbolDef{Name: "buildUser", Kind: "function", File: "src/build.ts", Line: 1}
+	result := resolveStructuredJSFamilyImpactSymbol("buildUser", structuredImpactScope{
+		Definition: SearchOptions{Path: "definitions"},
+		Evidence:   SearchOptions{Path: "evidence"},
+	}, jsFamilyImpactResolverSpec{
+		findDefinitions: func(string, SearchOptions) jsFamilyImpactDefinitionSet {
+			return jsFamilyImpactDefinitionSet{defs: []genericSymbolDef{def}, definitionIncomplete: true}
+		},
+		collectDefAffectedFiles: func([]genericSymbolDef, SearchOptions) []string {
+			t.Fatal("collectDefAffectedFiles called for incomplete single definition")
+			return nil
+		},
+		referenceOptions: func(genericSymbolDef, SearchOptions) jsFamilyReferenceOptions {
+			t.Fatal("referenceOptions called for incomplete single definition")
+			return jsFamilyReferenceOptions{}
+		},
+		normalizeRefs: func(refs []genericSymbolRef) []genericSymbolRef {
+			t.Fatalf("normalizeRefs called for incomplete single definition: %+v", refs)
+			return nil
+		},
+		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef) *SymbolBundle {
+			t.Fatal("buildBundle called for incomplete single definition")
+			return nil
+		},
+	})
+
+	if result.Status != symbolResolveNone {
+		t.Fatalf("status = %s, want %s", result.Status, symbolResolveNone)
+	}
+}
+
+func TestResolveStructuredJSFamilyImpactSymbol_IncompleteMultipleDefinitionsDefersToFallback(t *testing.T) {
+	defs := []genericSymbolDef{
+		{Name: "buildUser", Kind: "function", File: "src/build.ts", Line: 1},
+		{Name: "buildUser", Kind: "function", File: "src/other.ts", Line: 2},
+	}
+	result := resolveStructuredJSFamilyImpactSymbol("buildUser", structuredImpactScope{
+		Definition: SearchOptions{Path: "definitions"},
+		Evidence:   SearchOptions{Path: "evidence"},
+	}, jsFamilyImpactResolverSpec{
+		findDefinitions: func(string, SearchOptions) jsFamilyImpactDefinitionSet {
+			return jsFamilyImpactDefinitionSet{defs: defs, definitionIncomplete: true}
+		},
+		collectDefAffectedFiles: func([]genericSymbolDef, SearchOptions) []string {
+			t.Fatal("collectDefAffectedFiles called for incomplete multiple definitions")
+			return nil
+		},
+		referenceOptions: func(genericSymbolDef, SearchOptions) jsFamilyReferenceOptions {
+			t.Fatal("referenceOptions called for incomplete multiple definitions")
+			return jsFamilyReferenceOptions{}
+		},
+		normalizeRefs: func(refs []genericSymbolRef) []genericSymbolRef {
+			t.Fatalf("normalizeRefs called for incomplete multiple definitions: %+v", refs)
+			return nil
+		},
+		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef) *SymbolBundle {
+			t.Fatal("buildBundle called for incomplete multiple definitions")
+			return nil
+		},
+	})
+
+	if result.Status != symbolResolveNone {
+		t.Fatalf("status = %s, want %s", result.Status, symbolResolveNone)
+	}
+}
+
 func TestResolveStructuredJSFamilyImpactSymbol_SingleDefinitionUsesSharedReferenceFlow(t *testing.T) {
 	if !common.IsRipgrepAvailable() {
 		t.Skip("ripgrep not available")

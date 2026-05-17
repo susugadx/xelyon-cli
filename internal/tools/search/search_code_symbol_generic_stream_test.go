@@ -18,6 +18,23 @@ func TestCollectGenericSymbolMatches_RequestsCancelAtLimit(t *testing.T) {
 	}
 }
 
+func TestCollectGenericSymbolMatches_RequestsCancelAtLargeLimit(t *testing.T) {
+	const largeLimit = 500
+	lines := make([]string, 0, largeLimit+1)
+	for i := 0; i <= largeLimit; i++ {
+		lines = append(lines, "src/file.go:10:Run()")
+	}
+
+	result := collectGenericSymbolMatches(strings.NewReader(genericSymbolRGOutput(lines...)), SearchOptions{FileType: "go"}, largeLimit)
+
+	if !result.cancelRequested {
+		t.Fatal("cancelRequested = false, want true at large limit")
+	}
+	if len(result.matches) != largeLimit {
+		t.Fatalf("matches len = %d, want %d", len(result.matches), largeLimit)
+	}
+}
+
 func TestCollectGenericSymbolMatches_DoesNotRequestCancelForUnlimitedSearch(t *testing.T) {
 	result := collectGenericSymbolMatches(strings.NewReader(genericSymbolRGOutput(
 		"pkg/service.go:10:func Run(){}",

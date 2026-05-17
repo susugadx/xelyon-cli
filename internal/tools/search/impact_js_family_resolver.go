@@ -1,8 +1,9 @@
 package search
 
 type jsFamilyImpactDefinitionSet struct {
-	defs              []genericSymbolDef
-	suppressedRefDefs []genericSymbolDef
+	defs                 []genericSymbolDef
+	suppressedRefDefs    []genericSymbolDef
+	definitionIncomplete bool
 }
 
 type jsFamilyImpactResolverSpec struct {
@@ -23,6 +24,9 @@ func resolveStructuredJSFamilyImpactSymbol(symbol string, scope structuredImpact
 	definitionSet := spec.findDefinitions(symbol, opts)
 	defs := definitionSet.defs
 	if len(defs) == 0 {
+		return symbolResolveResult{Status: symbolResolveNone}
+	}
+	if shouldDeferIncompleteJSFamilyDefinitions(definitionSet.definitionIncomplete) {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
 	if len(defs) > 1 {

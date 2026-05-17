@@ -48,7 +48,7 @@ func structuredImpactEvidenceFileTypeOptions(opts SearchOptions, fileType string
 }
 
 func structuredImpactSearchPathIsFile(opts SearchOptions) bool {
-	targetPath := structuredImpactSearchTargetPath(opts)
+	targetPath := searchTargetPathForOptions(opts)
 	if targetPath == "" {
 		return false
 	}
@@ -56,30 +56,10 @@ func structuredImpactSearchPathIsFile(opts SearchOptions) bool {
 	return err == nil && !info.IsDir()
 }
 
-func structuredImpactSearchTargetPath(opts SearchOptions) string {
-	basis := resolveSearchPathBasisForOptions(opts)
-	target := strings.TrimSpace(basis.Target)
-	if target == "" {
-		target = "."
-	}
-	if filepath.IsAbs(target) {
-		return filepath.Clean(target)
-	}
-
-	base := strings.TrimSpace(basis.Workdir)
-	if base == "" {
-		base = invocationCWDOrGetwd(opts)
-	}
-	if base == "" {
-		return ""
-	}
-	return filepath.Clean(filepath.Join(base, target))
-}
-
 func structuredImpactDefinitionDir(defFile string, opts SearchOptions) string {
 	defFile = strings.TrimSpace(defFile)
 	if defFile == "" {
-		target := structuredImpactSearchTargetPath(opts)
+		target := searchTargetPathForOptions(opts)
 		if target == "" {
 			return ""
 		}
