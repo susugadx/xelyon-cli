@@ -50,13 +50,15 @@ func runDeepSeekDiagnosticSmoke(ctx context.Context, cfg *config.Config, report 
 	started := time.Now()
 	for _, request := range deepSeekDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, newDeepSeekDiagnosticSkippedToolSmokeRequest(request, report.Route))
+			providerdiag.AddChatCompletionsSmokeRequestResult(
+				&result,
+				providerdiag.NewSkippedChatCompletionsToolSmokeRequest(request, report.Route, deepSeekDiagnosticDisabledToolSkipReason()),
+			)
 			continue
 		}
 
 		requestResult, err := runDeepSeekDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddChatCompletionsSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -75,26 +77,6 @@ func deepSeekDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingE
 		ToolName:               deepSeekDiagnosticSmokeToolName,
 		ToolExpectedValue:      "deepseek-tool-ok",
 	})
-}
-
-func newDeepSeekDiagnosticSkippedToolSmokeRequest(request deepSeekDiagnosticSmokeRequest, route string) DiagnosticSmokeRequestResult {
-	return DiagnosticSmokeRequestResult{
-		Name:        request.Name,
-		Skipped:     true,
-		SkipReason:  deepSeekDiagnosticDisabledToolSkipReason(),
-		ToolPayload: request.ToolPayload,
-		Route:       route,
-	}
-}
-
-func newDeepSeekDiagnosticSkippedToolPreviewRequest(request deepSeekDiagnosticSmokeRequest, route string) DiagnosticRequestPreviewRequest {
-	return DiagnosticRequestPreviewRequest{
-		Name:        request.Name,
-		Skipped:     true,
-		SkipReason:  deepSeekDiagnosticDisabledToolSkipReason(),
-		ToolPayload: request.ToolPayload,
-		Route:       route,
-	}
 }
 
 func deepSeekDiagnosticDisabledToolSkipReason() string {
@@ -137,15 +119,15 @@ func runDeepSeekDiagnosticSmokeRequest(
 		Content:       strings.TrimSpace(content),
 		Duration:      elapsed.String(),
 		UsageObserved: usageObserved,
-		Usage:         deepSeekDiagnosticSmokeUsage(usage),
-		Cost:          deepSeekDiagnosticSmokeCost(costEstimate),
+		Usage:         providerdiag.SmokeUsageFromAPIUsage(usage),
+		Cost:          providerdiag.SmokeCostFromEstimate(costEstimate),
 	}
 	if err != nil {
 		result.Error = err.Error()
 		return result, err
 	}
 	if request.ToolPayload {
-		if !deepSeekDiagnosticSmokeContentHasToolCall(content) {
+		if !providerdiag.ContentHasToolCall(content, deepSeekDiagnosticSmokeToolName) {
 			result.Error = fmt.Sprintf("tool smoke response did not include %s function_call", deepSeekDiagnosticSmokeToolName)
 			return result, errors.New(result.Error)
 		}
@@ -159,7 +141,13 @@ func runDeepSeekDiagnosticSmokeRequest(
 }
 
 func newDeepSeekDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request deepSeekDiagnosticSmokeRequest, output io.Writer) context.Context {
-	return providerdiag.NewChatCompletionsSmokeRequestContext(ctx, cfg, request, deepSeekDiagnosticSmokeToolDefinitions(), output)
+	return providerdiag.NewChatCompletionsSmokeRequestContext(
+		ctx,
+		cfg,
+		request,
+		providerdiag.NoopDiagnosticToolDefinitions(deepSeekDiagnosticSmokeToolName, "DeepSeek"),
+		output,
+	)
 }
 
 func applyDeepSeekDiagnosticToolChoice(provider *Provider, request deepSeekDiagnosticSmokeRequest) {
@@ -170,39 +158,6 @@ func applyDeepSeekDiagnosticToolChoice(provider *Provider, request deepSeekDiagn
 	provider.ClearToolChoice()
 }
 
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	if request.ToolPayload {
-		r.ToolPayload = true
-	}
-	if r.Route == "" {
-		r.Route = request.Route
-	}
-	if strings.TrimSpace(r.Content) == "" {
-		r.Content = request.Content
-	}
-
-	r.Usage = providerdiag.AddSmokeUsage(r.Usage, request.Usage)
-	r.Cost = providerdiag.AddSmokeCost(r.Cost, request.Cost)
-	r.UsageObserved = r.allRanRequestsObservedUsage()
-}
-
-func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
-	observedAnyRequest := false
-	for _, request := range r.Requests {
-		if request.Skipped || !request.Ran {
-			continue
-		}
-		observedAnyRequest = true
-		if !request.UsageObserved {
-			return false
-		}
-	}
-	return observedAnyRequest
-}
-
 func deepSeekSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 	for _, request := range smoke.Requests {
 		if request.ToolPayload && request.Ran && strings.TrimSpace(request.Error) != "" {
@@ -210,20 +165,4 @@ func deepSeekSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 		}
 	}
 	return false
-}
-
-func deepSeekDiagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return providerdiag.SmokeUsageFromAPIUsage(usage)
-}
-
-func deepSeekDiagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return providerdiag.SmokeCostFromEstimate(estimate)
-}
-
-func deepSeekDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
-	return providerdiag.NoopDiagnosticToolDefinitions(deepSeekDiagnosticSmokeToolName, "DeepSeek")
-}
-
-func deepSeekDiagnosticSmokeContentHasToolCall(content string) bool {
-	return providerdiag.ContentHasToolCall(content, deepSeekDiagnosticSmokeToolName)
 }

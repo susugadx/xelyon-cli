@@ -20,6 +20,48 @@ type ChatCompletionsSmokeRequest struct {
 	ToolPayload  bool
 }
 
+// ChatCompletionsSmokeRequestResult は OpenAI-compatible doctor smoke の request 単位結果を表す。
+type ChatCompletionsSmokeRequestResult struct {
+	Name          string     `json:"name"`
+	Ran           bool       `json:"ran"`
+	Skipped       bool       `json:"skipped,omitempty"`
+	SkipReason    string     `json:"skip_reason,omitempty"`
+	ToolPayload   bool       `json:"tool_payload"`
+	Route         string     `json:"route"`
+	Content       string     `json:"content,omitempty"`
+	Duration      string     `json:"duration,omitempty"`
+	UsageObserved bool       `json:"usage_observed"`
+	Usage         SmokeUsage `json:"usage"`
+	Cost          SmokeCost  `json:"cost"`
+	Error         string     `json:"error,omitempty"`
+}
+
+// ChatCompletionsSmokeResult は OpenAI-compatible doctor smoke 実行結果を表す。
+type ChatCompletionsSmokeResult struct {
+	Ran           bool                                `json:"ran"`
+	ToolPayload   bool                                `json:"tool_payload"`
+	Route         string                              `json:"route"`
+	Content       string                              `json:"content,omitempty"`
+	Duration      string                              `json:"duration,omitempty"`
+	UsageObserved bool                                `json:"usage_observed"`
+	Usage         SmokeUsage                          `json:"usage"`
+	Cost          SmokeCost                           `json:"cost"`
+	Requests      []ChatCompletionsSmokeRequestResult `json:"requests,omitempty"`
+}
+
+// ChatCompletionsRequestPreviewRequest は OpenAI-compatible doctor preview の request 単位結果を表す。
+type ChatCompletionsRequestPreviewRequest struct {
+	Name        string            `json:"name"`
+	Skipped     bool              `json:"skipped,omitempty"`
+	SkipReason  string            `json:"skip_reason,omitempty"`
+	ToolPayload bool              `json:"tool_payload"`
+	Route       string            `json:"route"`
+	Method      string            `json:"method,omitempty"`
+	URL         string            `json:"url,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Body        any               `json:"body,omitempty"`
+}
+
 // TextToolSmokeRequestOptions は text/tool smoke の request plan 入力を表す。
 type TextToolSmokeRequestOptions struct {
 	TextSmoke              bool
@@ -58,6 +100,67 @@ func TextToolSmokeRequests(options TextToolSmokeRequestOptions) []ChatCompletion
 		})
 	}
 	return requests
+}
+
+// NewSkippedChatCompletionsToolSmokeRequest は function calling 無効時の skipped tool smoke entry を構築する。
+func NewSkippedChatCompletionsToolSmokeRequest(request ChatCompletionsSmokeRequest, route, skipReason string) ChatCompletionsSmokeRequestResult {
+	return ChatCompletionsSmokeRequestResult{
+		Name:        request.Name,
+		Skipped:     true,
+		SkipReason:  strings.TrimSpace(skipReason),
+		ToolPayload: request.ToolPayload,
+		Route:       route,
+	}
+}
+
+// NewSkippedChatCompletionsToolPreviewRequest は function calling 無効時の skipped tool preview entry を構築する。
+func NewSkippedChatCompletionsToolPreviewRequest(request ChatCompletionsSmokeRequest, route, skipReason string) ChatCompletionsRequestPreviewRequest {
+	return ChatCompletionsRequestPreviewRequest{
+		Name:        request.Name,
+		Skipped:     true,
+		SkipReason:  strings.TrimSpace(skipReason),
+		ToolPayload: request.ToolPayload,
+		Route:       route,
+	}
+}
+
+// AddChatCompletionsSmokeRequestResult は request-level smoke 結果を追加し summary に集約する。
+func AddChatCompletionsSmokeRequestResult(result *ChatCompletionsSmokeResult, request ChatCompletionsSmokeRequestResult) {
+	if result == nil {
+		return
+	}
+	result.Requests = append(result.Requests, request)
+	if request.Skipped {
+		return
+	}
+	if request.ToolPayload {
+		result.ToolPayload = true
+	}
+	if result.Route == "" {
+		result.Route = request.Route
+	}
+	if strings.TrimSpace(result.Content) == "" {
+		result.Content = request.Content
+	}
+
+	result.Usage = AddSmokeUsage(result.Usage, request.Usage)
+	result.Cost = AddSmokeCost(result.Cost, request.Cost)
+	result.UsageObserved = AllChatCompletionsSmokeRequestsObservedUsage(result.Requests)
+}
+
+// AllChatCompletionsSmokeRequestsObservedUsage は skipped 以外の実行済み request すべてで usage が観測されたかを返す。
+func AllChatCompletionsSmokeRequestsObservedUsage(requests []ChatCompletionsSmokeRequestResult) bool {
+	observedAnyRequest := false
+	for _, request := range requests {
+		if request.Skipped || !request.Ran {
+			continue
+		}
+		observedAnyRequest = true
+		if !request.UsageObserved {
+			return false
+		}
+	}
+	return observedAnyRequest
 }
 
 // NewChatCompletionsSmokeRequestContext は doctor smoke/preview 用の runtime context を構築する。

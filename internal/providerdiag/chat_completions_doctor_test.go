@@ -95,6 +95,71 @@ func TestSmokeUsageAndCostAggregation(t *testing.T) {
 	}
 }
 
+func TestSkippedChatCompletionsToolEntries(t *testing.T) {
+	request := ChatCompletionsSmokeRequest{Name: "tool", ToolPayload: true}
+
+	smoke := NewSkippedChatCompletionsToolSmokeRequest(request, "chat_completions", "Provider function calling payloads are disabled")
+	if !smoke.Skipped || smoke.Ran || !smoke.ToolPayload || smoke.Name != "tool" || smoke.Route != "chat_completions" {
+		t.Fatalf("skipped smoke request = %+v, want skipped tool entry", smoke)
+	}
+	if smoke.SkipReason != "Provider function calling payloads are disabled" {
+		t.Fatalf("smoke skip reason = %q", smoke.SkipReason)
+	}
+
+	preview := NewSkippedChatCompletionsToolPreviewRequest(request, "chat_completions", "Provider function calling payloads are disabled")
+	if !preview.Skipped || !preview.ToolPayload || preview.Name != "tool" || preview.Route != "chat_completions" {
+		t.Fatalf("skipped preview request = %+v, want skipped tool entry", preview)
+	}
+	if preview.Method != "" || preview.URL != "" || preview.Body != nil {
+		t.Fatalf("skipped preview request = %+v, should not include live request fields", preview)
+	}
+}
+
+func TestAddChatCompletionsSmokeRequestResult(t *testing.T) {
+	result := ChatCompletionsSmokeResult{Ran: true, Route: "chat_completions"}
+	text := ChatCompletionsSmokeRequestResult{
+		Name:          "text",
+		Ran:           true,
+		Route:         "chat_completions",
+		Content:       "ok",
+		UsageObserved: true,
+		Usage:         SmokeUsage{InputTokens: 10, OutputTokens: 3},
+		Cost:          SmokeCost{USD: 0.125},
+	}
+	AddChatCompletionsSmokeRequestResult(&result, text)
+
+	if result.Content != "ok" || !result.UsageObserved || result.Usage.InputTokens != 10 || result.Cost.USD != 0.125 {
+		t.Fatalf("result after text observation = %+v, want content, usage and cost", result)
+	}
+
+	tool := ChatCompletionsSmokeRequestResult{
+		Name:          "tool",
+		Ran:           true,
+		ToolPayload:   true,
+		Route:         "chat_completions",
+		Content:       `{"tool":"xelyon_test_probe"}`,
+		UsageObserved: true,
+		Usage:         SmokeUsage{InputTokens: 2, OutputTokens: 1},
+		Cost:          SmokeCost{USD: 0.25},
+	}
+	AddChatCompletionsSmokeRequestResult(&result, tool)
+
+	if !result.ToolPayload || result.Content != "ok" {
+		t.Fatalf("result after tool observation = %+v, want tool payload and first content preserved", result)
+	}
+	if result.Usage.InputTokens != 12 || result.Usage.OutputTokens != 4 || result.Cost.USD != 0.375 {
+		t.Fatalf("result after tool observation = %+v, want summed usage and cost", result)
+	}
+	if !AllChatCompletionsSmokeRequestsObservedUsage(result.Requests) {
+		t.Fatalf("AllChatCompletionsSmokeRequestsObservedUsage(%+v) = false, want true", result.Requests)
+	}
+
+	AddChatCompletionsSmokeRequestResult(&result, ChatCompletionsSmokeRequestResult{Name: "followup", Ran: true})
+	if AllChatCompletionsSmokeRequestsObservedUsage(result.Requests) {
+		t.Fatalf("AllChatCompletionsSmokeRequestsObservedUsage(%+v) = true, want false for partial usage", result.Requests)
+	}
+}
+
 func TestContentHasToolCall(t *testing.T) {
 	if !ContentHasToolCall(`{"tool":"xelyon_test_probe","args":{}}`, "xelyon_test_probe") {
 		t.Fatal("ContentHasToolCall() = false, want true")

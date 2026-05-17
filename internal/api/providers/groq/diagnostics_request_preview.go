@@ -46,7 +46,7 @@ func buildGroqDiagnosticRequestPreview(
 	preview := DiagnosticRequestPreview{}
 	for _, request := range groqDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			preview.Requests = append(preview.Requests, newGroqDiagnosticSkippedToolPreviewRequest(request, report.Route))
+			preview.Requests = append(preview.Requests, providerdiag.NewSkippedChatCompletionsToolPreviewRequest(request, report.Route, groqDiagnosticDisabledToolSkipReason()))
 			continue
 		}
 

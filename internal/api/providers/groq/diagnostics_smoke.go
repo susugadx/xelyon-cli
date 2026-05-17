@@ -50,13 +50,15 @@ func runGroqDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 	started := time.Now()
 	for _, request := range groqDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, newGroqDiagnosticSkippedToolSmokeRequest(request, report.Route))
+			providerdiag.AddChatCompletionsSmokeRequestResult(
+				&result,
+				providerdiag.NewSkippedChatCompletionsToolSmokeRequest(request, report.Route, groqDiagnosticDisabledToolSkipReason()),
+			)
 			continue
 		}
 
 		requestResult, err := runGroqDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddChatCompletionsSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -75,26 +77,6 @@ func groqDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingEnabl
 		ToolName:               groqDiagnosticSmokeToolName,
 		ToolExpectedValue:      "groq-tool-ok",
 	})
-}
-
-func newGroqDiagnosticSkippedToolSmokeRequest(request groqDiagnosticSmokeRequest, route string) DiagnosticSmokeRequestResult {
-	return DiagnosticSmokeRequestResult{
-		Name:        request.Name,
-		Skipped:     true,
-		SkipReason:  groqDiagnosticDisabledToolSkipReason(),
-		ToolPayload: request.ToolPayload,
-		Route:       route,
-	}
-}
-
-func newGroqDiagnosticSkippedToolPreviewRequest(request groqDiagnosticSmokeRequest, route string) DiagnosticRequestPreviewRequest {
-	return DiagnosticRequestPreviewRequest{
-		Name:        request.Name,
-		Skipped:     true,
-		SkipReason:  groqDiagnosticDisabledToolSkipReason(),
-		ToolPayload: request.ToolPayload,
-		Route:       route,
-	}
 }
 
 func groqDiagnosticDisabledToolSkipReason() string {
@@ -137,15 +119,15 @@ func runGroqDiagnosticSmokeRequest(
 		Content:       strings.TrimSpace(content),
 		Duration:      elapsed.String(),
 		UsageObserved: usageObserved,
-		Usage:         groqDiagnosticSmokeUsage(usage),
-		Cost:          groqDiagnosticSmokeCost(costEstimate),
+		Usage:         providerdiag.SmokeUsageFromAPIUsage(usage),
+		Cost:          providerdiag.SmokeCostFromEstimate(costEstimate),
 	}
 	if err != nil {
 		result.Error = err.Error()
 		return result, err
 	}
 	if request.ToolPayload {
-		if !groqDiagnosticSmokeContentHasToolCall(content) {
+		if !providerdiag.ContentHasToolCall(content, groqDiagnosticSmokeToolName) {
 			result.Error = fmt.Sprintf("tool smoke response did not include %s function_call", groqDiagnosticSmokeToolName)
 			return result, errors.New(result.Error)
 		}
@@ -159,7 +141,13 @@ func runGroqDiagnosticSmokeRequest(
 }
 
 func newGroqDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request groqDiagnosticSmokeRequest, output io.Writer) context.Context {
-	return providerdiag.NewChatCompletionsSmokeRequestContext(ctx, cfg, request, groqDiagnosticSmokeToolDefinitions(), output)
+	return providerdiag.NewChatCompletionsSmokeRequestContext(
+		ctx,
+		cfg,
+		request,
+		providerdiag.NoopDiagnosticToolDefinitions(groqDiagnosticSmokeToolName, "Groq"),
+		output,
+	)
 }
 
 func applyGroqDiagnosticToolChoice(provider *Provider, request groqDiagnosticSmokeRequest) {
@@ -170,39 +158,6 @@ func applyGroqDiagnosticToolChoice(provider *Provider, request groqDiagnosticSmo
 	provider.ClearToolChoice()
 }
 
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	if request.ToolPayload {
-		r.ToolPayload = true
-	}
-	if r.Route == "" {
-		r.Route = request.Route
-	}
-	if strings.TrimSpace(r.Content) == "" {
-		r.Content = request.Content
-	}
-
-	r.Usage = providerdiag.AddSmokeUsage(r.Usage, request.Usage)
-	r.Cost = providerdiag.AddSmokeCost(r.Cost, request.Cost)
-	r.UsageObserved = r.allRanRequestsObservedUsage()
-}
-
-func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
-	observedAnyRequest := false
-	for _, request := range r.Requests {
-		if request.Skipped || !request.Ran {
-			continue
-		}
-		observedAnyRequest = true
-		if !request.UsageObserved {
-			return false
-		}
-	}
-	return observedAnyRequest
-}
-
 func groqSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 	for _, request := range smoke.Requests {
 		if request.ToolPayload && request.Ran && strings.TrimSpace(request.Error) != "" {
@@ -210,20 +165,4 @@ func groqSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 		}
 	}
 	return false
-}
-
-func groqDiagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return providerdiag.SmokeUsageFromAPIUsage(usage)
-}
-
-func groqDiagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return providerdiag.SmokeCostFromEstimate(estimate)
-}
-
-func groqDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
-	return providerdiag.NoopDiagnosticToolDefinitions(groqDiagnosticSmokeToolName, "Groq")
-}
-
-func groqDiagnosticSmokeContentHasToolCall(content string) bool {
-	return providerdiag.ContentHasToolCall(content, groqDiagnosticSmokeToolName)
 }
