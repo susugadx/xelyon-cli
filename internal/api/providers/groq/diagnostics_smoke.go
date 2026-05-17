@@ -98,7 +98,7 @@ func newGroqDiagnosticSkippedToolPreviewRequest(request groqDiagnosticSmokeReque
 }
 
 func groqDiagnosticDisabledToolSkipReason() string {
-	return "Groq function calling payloads are disabled (GROQ_FUNCTION_CALLING=0)"
+	return fmt.Sprintf("Groq function calling payloads are disabled (%s=0)", groqFunctionCallingEnv)
 }
 
 func runGroqDiagnosticSmokeRequest(
@@ -110,11 +110,7 @@ func runGroqDiagnosticSmokeRequest(
 	output io.Writer,
 ) (DiagnosticSmokeRequestResult, error) {
 	requestCtx := newGroqDiagnosticSmokeRequestContext(ctx, cfg, request, output)
-	if request.ToolPayload {
-		provider.SetToolChoice(groqDiagnosticSmokeToolName)
-	} else {
-		provider.ClearToolChoice()
-	}
+	applyGroqDiagnosticToolChoice(provider, request)
 
 	var usage api.Usage
 	usageObserved := false
@@ -164,6 +160,14 @@ func runGroqDiagnosticSmokeRequest(
 
 func newGroqDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request groqDiagnosticSmokeRequest, output io.Writer) context.Context {
 	return providerdiag.NewChatCompletionsSmokeRequestContext(ctx, cfg, request, groqDiagnosticSmokeToolDefinitions(), output)
+}
+
+func applyGroqDiagnosticToolChoice(provider *Provider, request groqDiagnosticSmokeRequest) {
+	if request.ToolPayload {
+		provider.SetToolChoice(groqDiagnosticSmokeToolName)
+		return
+	}
+	provider.ClearToolChoice()
 }
 
 func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {

@@ -51,11 +51,7 @@ func buildDeepSeekDiagnosticRequestPreview(
 		}
 
 		requestCtx := newDeepSeekDiagnosticSmokeRequestContext(ctx, previewCfg, request, io.Discard)
-		if request.ToolPayload {
-			provider.SetToolChoice(deepSeekDiagnosticSmokeToolName)
-		} else {
-			provider.ClearToolChoice()
-		}
+		applyDeepSeekDiagnosticToolChoice(provider, request)
 		preview.Requests = append(preview.Requests, buildDeepSeekDiagnosticRequestPreviewRequest(requestCtx, provider, report, request))
 	}
 	return preview, nil

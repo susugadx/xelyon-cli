@@ -13,9 +13,8 @@ import (
 )
 
 const (
-	deepSeekAPIKeyEnv          = "DEEPSEEK_API_KEY"
-	deepSeekAPIURLEnv          = "DEEPSEEK_API_URL"
-	deepSeekFunctionCallingEnv = "DEEPSEEK_FUNCTION_CALLING"
+	deepSeekAPIKeyEnv = "DEEPSEEK_API_KEY"
+	deepSeekAPIURLEnv = "DEEPSEEK_API_URL"
 )
 
 func (r *DiagnosticReport) addCheck(status DiagnosticStatus, name, message, detail, suggestion string) {
@@ -61,11 +60,11 @@ func (r *DiagnosticReport) addEndpointCheck() {
 		return
 	}
 
-	if strings.TrimRight(parsed.Path, "/") != "/chat/completions" {
+	if strings.TrimRight(parsed.Path, "/") != deepSeekChatCompletionsEndpointPath {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"endpoint",
-			fmt.Sprintf("%s does not end with /chat/completions", deepSeekAPIURLEnv),
+			fmt.Sprintf("%s does not end with %s", deepSeekAPIURLEnv, deepSeekChatCompletionsEndpointPath),
 			raw,
 			"This is OK only for an intentional proxy endpoint",
 		)

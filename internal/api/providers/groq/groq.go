@@ -25,7 +25,11 @@ func init() {
 
 var yellow = color.New(color.FgYellow)
 
-const defaultGroqURL = "https://api.groq.com/openai/v1/chat/completions"
+const (
+	groqChatCompletionsEndpointPath = "/openai/v1/chat/completions"
+	defaultGroqURL                  = "https://api.groq.com" + groqChatCompletionsEndpointPath
+	groqFunctionCallingEnv          = "GROQ_FUNCTION_CALLING"
+)
 
 // Provider はGroq APIのプロバイダー実装（OpenAI互換）
 type Provider struct {
@@ -50,7 +54,7 @@ func (p *Provider) SupportsImages() bool {
 // IsFunctionCallingEnabled は Function Calling が有効かを返す
 // GROQ_FUNCTION_CALLING=0 で無効化可能
 func (p *Provider) IsFunctionCallingEnabled() bool {
-	return os.Getenv("GROQ_FUNCTION_CALLING") != "0"
+	return os.Getenv(groqFunctionCallingEnv) != "0"
 }
 
 // ChatWithTools は Provider interface の実装（context対応）

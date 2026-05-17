@@ -60,11 +60,11 @@ func (r *DiagnosticReport) addEndpointCheck() {
 		return
 	}
 
-	if strings.TrimRight(parsed.Path, "/") != "/openai/v1/chat/completions" {
+	if strings.TrimRight(parsed.Path, "/") != groqChatCompletionsEndpointPath {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"endpoint",
-			fmt.Sprintf("%s does not end with /openai/v1/chat/completions", groqAPIURLEnv),
+			fmt.Sprintf("%s does not end with %s", groqAPIURLEnv, groqChatCompletionsEndpointPath),
 			raw,
 			"This is OK only for an intentional proxy endpoint",
 		)
@@ -167,11 +167,11 @@ func (r *DiagnosticReport) addFunctionCallingCheck() {
 			"function_calling",
 			"Groq function calling payloads are enabled",
 			"",
-			"Set GROQ_FUNCTION_CALLING=0 only if the selected endpoint rejects tool payloads",
+			fmt.Sprintf("Set %s=0 only if the selected endpoint rejects tool payloads", groqFunctionCallingEnv),
 		)
 		return
 	}
-	r.addCheck(DiagnosticStatusOK, "function_calling", "Groq function calling payloads are disabled", "GROQ_FUNCTION_CALLING=0", "")
+	r.addCheck(DiagnosticStatusOK, "function_calling", "Groq function calling payloads are disabled", fmt.Sprintf("%s=0", groqFunctionCallingEnv), "")
 }
 
 func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -190,8 +190,8 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 			DiagnosticStatusWarn,
 			"tool_smoke",
 			"tool payload smoke was skipped because function calling is disabled",
-			"GROQ_FUNCTION_CALLING=0",
-			"Unset GROQ_FUNCTION_CALLING or set it to 1 before rerunning --tool-smoke",
+			fmt.Sprintf("%s=0", groqFunctionCallingEnv),
+			fmt.Sprintf("Unset %s or set it to 1 before rerunning --tool-smoke", groqFunctionCallingEnv),
 		)
 	}
 

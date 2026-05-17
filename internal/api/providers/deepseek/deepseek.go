@@ -26,7 +26,11 @@ func init() {
 
 var yellow = color.New(color.FgYellow)
 
-const defaultDeepSeekURL = "https://api.deepseek.com/chat/completions"
+const (
+	deepSeekChatCompletionsEndpointPath = "/chat/completions"
+	defaultDeepSeekURL                  = "https://api.deepseek.com" + deepSeekChatCompletionsEndpointPath
+	deepSeekFunctionCallingEnv          = "DEEPSEEK_FUNCTION_CALLING"
+)
 
 // Provider はDeepSeek APIのプロバイダー実装
 type Provider struct {
@@ -62,7 +66,7 @@ func (p *Provider) SupportsImages() bool {
 // IsFunctionCallingEnabled は Function Calling が有効かを返す
 // DEEPSEEK_FUNCTION_CALLING=0 で無効化可能
 func (p *Provider) IsFunctionCallingEnabled() bool {
-	return os.Getenv("DEEPSEEK_FUNCTION_CALLING") != "0"
+	return os.Getenv(deepSeekFunctionCallingEnv) != "0"
 }
 
 // ChatWithTools は Provider interface の実装（context対応）

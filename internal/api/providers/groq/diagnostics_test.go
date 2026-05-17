@@ -29,7 +29,7 @@ func TestDiagnoseGroq_MissingAPIKeyFails(t *testing.T) {
 func TestDiagnoseGroq_ModelCatalogPolicyRouteAndFunctionCalling(t *testing.T) {
 	t.Setenv(groqAPIKeyEnv, "gsk-test")
 	t.Setenv(groqAPIURLEnv, "")
-	t.Setenv("GROQ_FUNCTION_CALLING", "1")
+	t.Setenv(groqFunctionCallingEnv, "1")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),
@@ -123,7 +123,7 @@ func TestDiagnoseGroq_PrintRequestDoesNotRequireAPIKeyOrSendNetwork(t *testing.T
 
 	t.Setenv(groqAPIKeyEnv, "")
 	t.Setenv(groqAPIURLEnv, server.URL+"/openai/v1/chat/completions")
-	t.Setenv("GROQ_FUNCTION_CALLING", "1")
+	t.Setenv(groqFunctionCallingEnv, "1")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),
@@ -170,7 +170,7 @@ func TestDiagnoseGroq_PrintRequestSkipsDisabledToolPreview(t *testing.T) {
 
 	t.Setenv(groqAPIKeyEnv, "")
 	t.Setenv(groqAPIURLEnv, server.URL+"/openai/v1/chat/completions")
-	t.Setenv("GROQ_FUNCTION_CALLING", "0")
+	t.Setenv(groqFunctionCallingEnv, "0")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),
@@ -193,7 +193,7 @@ func TestDiagnoseGroq_PrintRequestSkipsDisabledToolPreview(t *testing.T) {
 		t.Fatalf("text preview = %#v, want runnable text fallback", text)
 	}
 	tool := report.RequestPreview.Requests[1]
-	if tool.Name != "tool" || !tool.Skipped || !tool.ToolPayload || !strings.Contains(tool.SkipReason, "GROQ_FUNCTION_CALLING=0") {
+	if tool.Name != "tool" || !tool.Skipped || !tool.ToolPayload || !strings.Contains(tool.SkipReason, groqFunctionCallingEnv+"=0") {
 		t.Fatalf("tool preview = %#v, want skipped disabled tool request", tool)
 	}
 }
@@ -265,7 +265,7 @@ func TestDiagnoseGroq_ToolSmokeRequiresToolCall(t *testing.T) {
 
 	t.Setenv(groqAPIKeyEnv, "gsk-test")
 	t.Setenv(groqAPIURLEnv, server.URL+"/openai/v1/chat/completions")
-	t.Setenv("GROQ_FUNCTION_CALLING", "1")
+	t.Setenv(groqFunctionCallingEnv, "1")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),
@@ -302,7 +302,7 @@ func TestDiagnoseGroq_ToolSmokeFailsWithoutToolCall(t *testing.T) {
 
 	t.Setenv(groqAPIKeyEnv, "gsk-test")
 	t.Setenv(groqAPIURLEnv, server.URL+"/openai/v1/chat/completions")
-	t.Setenv("GROQ_FUNCTION_CALLING", "1")
+	t.Setenv(groqFunctionCallingEnv, "1")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),
@@ -337,7 +337,7 @@ func TestDiagnoseGroq_FunctionCallingDisabledSkipsToolAndRunsTextFallback(t *tes
 
 	t.Setenv(groqAPIKeyEnv, "gsk-test")
 	t.Setenv(groqAPIURLEnv, server.URL+"/openai/v1/chat/completions")
-	t.Setenv("GROQ_FUNCTION_CALLING", "0")
+	t.Setenv(groqFunctionCallingEnv, "0")
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:       config.DefaultConfig(),

@@ -110,11 +110,7 @@ func runDeepSeekDiagnosticSmokeRequest(
 	output io.Writer,
 ) (DiagnosticSmokeRequestResult, error) {
 	requestCtx := newDeepSeekDiagnosticSmokeRequestContext(ctx, cfg, request, output)
-	if request.ToolPayload {
-		provider.SetToolChoice(deepSeekDiagnosticSmokeToolName)
-	} else {
-		provider.ClearToolChoice()
-	}
+	applyDeepSeekDiagnosticToolChoice(provider, request)
 
 	var usage api.Usage
 	usageObserved := false
@@ -164,6 +160,14 @@ func runDeepSeekDiagnosticSmokeRequest(
 
 func newDeepSeekDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request deepSeekDiagnosticSmokeRequest, output io.Writer) context.Context {
 	return providerdiag.NewChatCompletionsSmokeRequestContext(ctx, cfg, request, deepSeekDiagnosticSmokeToolDefinitions(), output)
+}
+
+func applyDeepSeekDiagnosticToolChoice(provider *Provider, request deepSeekDiagnosticSmokeRequest) {
+	if request.ToolPayload {
+		provider.SetToolChoice(deepSeekDiagnosticSmokeToolName)
+		return
+	}
+	provider.ClearToolChoice()
 }
 
 func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {

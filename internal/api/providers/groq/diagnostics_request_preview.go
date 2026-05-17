@@ -51,11 +51,7 @@ func buildGroqDiagnosticRequestPreview(
 		}
 
 		requestCtx := newGroqDiagnosticSmokeRequestContext(ctx, previewCfg, request, io.Discard)
-		if request.ToolPayload {
-			provider.SetToolChoice(groqDiagnosticSmokeToolName)
-		} else {
-			provider.ClearToolChoice()
-		}
+		applyGroqDiagnosticToolChoice(provider, request)
 		preview.Requests = append(preview.Requests, buildGroqDiagnosticRequestPreviewRequest(requestCtx, provider, report, request))
 	}
 	return preview, nil
