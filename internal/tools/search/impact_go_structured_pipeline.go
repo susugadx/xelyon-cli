@@ -13,17 +13,23 @@ func tryStructuredGoImpactSearch(cache tools.ToolCacheInterface, opts SearchOpti
 }
 
 func tryStructuredGoImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
-	ctx, scope, ok := newStructuredGoImpactSearchContext(opts)
-	if !ok {
-		return structuredImpactExecutionResult{}, false
-	}
-	return tryStructuredImpactSearchResult(cache, ctx, scope, resolveStructuredGoImpactSymbol)
+	return structuredGoImpactLanguageSpec().trySearchResult(cache, opts)
 }
 
 func newStructuredGoImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, structuredImpactScope, bool) {
-	return newStructuredImpactSearchContext(opts, structuredGoImpactRouteTag, normalizeStructuredGoImpactScope, structuredGoImpactRoute)
+	return structuredGoImpactLanguageSpec().newSearchContext(opts)
 }
 
 func structuredGoImpactRoute(pattern string, opts SearchOptions) (searchRouteTrace, bool) {
 	return structuredImpactSymbolRoute(pattern, opts, "go", structuredGoImpactRouteTag)
+}
+
+func structuredGoImpactLanguageSpec() structuredImpactLanguageSpec {
+	return structuredImpactLanguageSpec{
+		name:      "go",
+		routeTag:  structuredGoImpactRouteTag,
+		normalize: normalizeStructuredGoImpactScope,
+		planRoute: structuredGoImpactRoute,
+		resolver:  resolveStructuredGoImpactSymbol,
+	}
 }

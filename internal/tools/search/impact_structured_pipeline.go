@@ -36,6 +36,52 @@ type structuredImpactOptionsNormalizer func(SearchOptions) (SearchOptions, bool)
 type structuredImpactScopeNormalizer func(SearchOptions) (structuredImpactScope, bool)
 type structuredImpactRoutePlanner func(pattern string, opts SearchOptions) (searchRouteTrace, bool)
 
+type structuredImpactLanguageSpec struct {
+	name               string
+	routeTag           string
+	normalize          structuredImpactScopeNormalizer
+	planRoute          structuredImpactRoutePlanner
+	resolver           structuredImpactResolver
+	expandSupplemental bool
+}
+
+func structuredImpactLanguageSpecs() []structuredImpactLanguageSpec {
+	return []structuredImpactLanguageSpec{
+		structuredGoImpactLanguageSpec(),
+		structuredTypeScriptImpactLanguageSpec(),
+		structuredJavaScriptImpactLanguageSpec(),
+	}
+}
+
+func (spec structuredImpactLanguageSpec) newSearchContext(opts SearchOptions) (structuredImpactSearchContext, structuredImpactScope, bool) {
+	if spec.routeTag == "" || spec.normalize == nil || spec.planRoute == nil {
+		return structuredImpactSearchContext{}, structuredImpactScope{}, false
+	}
+	return newStructuredImpactSearchContext(opts, spec.routeTag, spec.normalize, spec.planRoute)
+}
+
+func (spec structuredImpactLanguageSpec) trySearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
+	if spec.resolver == nil {
+		return structuredImpactExecutionResult{}, false
+	}
+	ctx, scope, ok := spec.newSearchContext(opts)
+	if !ok {
+		return structuredImpactExecutionResult{}, false
+	}
+	return tryStructuredImpactSearchResult(cache, ctx, scope, spec.resolver)
+}
+
+func (spec structuredImpactLanguageSpec) trySearchResultForIntent(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
+	result, ok := spec.trySearchResult(cache, opts)
+	if !ok {
+		return structuredImpactExecutionResult{}, false
+	}
+	if spec.expandSupplemental {
+		result = expandStructuredImpactSearchResult(cache, opts, result)
+	}
+	return result, true
+}
+
 func structuredImpactSameScope(opts SearchOptions) structuredImpactScope {
 	return structuredImpactScope{
 		Definition: opts,
@@ -89,14 +135,10 @@ func shouldAttemptSinglePatternImpactSearch(opts SearchOptions, pattern string) 
 }
 
 func tryStructuredImpactSearchResultForIntent(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
-	if result, ok := tryStructuredGoImpactSearchResult(cache, opts); ok {
-		return result, true
-	}
-	if result, ok := tryExpandedStructuredTypeScriptImpactSearchResult(cache, opts); ok {
-		return result, true
-	}
-	if result, ok := tryExpandedStructuredJavaScriptImpactSearchResult(cache, opts); ok {
-		return result, true
+	for _, spec := range structuredImpactLanguageSpecs() {
+		if result, ok := spec.trySearchResultForIntent(cache, opts); ok {
+			return result, true
+		}
 	}
 	return structuredImpactExecutionResult{}, false
 }

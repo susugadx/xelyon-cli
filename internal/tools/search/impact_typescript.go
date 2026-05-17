@@ -1,35 +1,26 @@
 package search
 
-import (
-	"strings"
-
-	"github.com/susugadx/xelyon-cli/internal/tools"
-)
+import "strings"
 
 const structuredTypeScriptImpactRouteTag = "impact-structured-typescript-v1"
 
-func tryExpandedStructuredTypeScriptImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
-	result, ok := tryStructuredTypeScriptImpactSearchResult(cache, opts)
-	if !ok {
-		return structuredImpactExecutionResult{}, false
-	}
-	return expandStructuredImpactSearchResult(cache, opts, result), true
-}
-
-func tryStructuredTypeScriptImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
-	ctx, scope, ok := newStructuredTypeScriptImpactSearchContext(opts)
-	if !ok {
-		return structuredImpactExecutionResult{}, false
-	}
-	return tryStructuredImpactSearchResult(cache, ctx, scope, resolveStructuredTypeScriptImpactSymbol)
-}
-
 func newStructuredTypeScriptImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, structuredImpactScope, bool) {
-	return newStructuredImpactSearchContext(opts, structuredTypeScriptImpactRouteTag, normalizeStructuredTypeScriptImpactScope, structuredTypeScriptImpactRoute)
+	return structuredTypeScriptImpactLanguageSpec().newSearchContext(opts)
 }
 
 func structuredTypeScriptImpactRoute(pattern string, opts SearchOptions) (searchRouteTrace, bool) {
 	return structuredImpactSymbolRoute(pattern, opts, "js", structuredTypeScriptImpactRouteTag)
+}
+
+func structuredTypeScriptImpactLanguageSpec() structuredImpactLanguageSpec {
+	return structuredImpactLanguageSpec{
+		name:               "typescript",
+		routeTag:           structuredTypeScriptImpactRouteTag,
+		normalize:          normalizeStructuredTypeScriptImpactScope,
+		planRoute:          structuredTypeScriptImpactRoute,
+		resolver:           resolveStructuredTypeScriptImpactSymbol,
+		expandSupplemental: true,
+	}
 }
 
 func normalizeStructuredTypeScriptImpactOptions(opts SearchOptions) (SearchOptions, bool) {
