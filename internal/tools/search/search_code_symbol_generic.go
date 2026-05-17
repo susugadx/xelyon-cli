@@ -1,21 +1,14 @@
 package search
 
 import (
-	"bufio"
-	"context"
 	"fmt"
-	"io"
-	"os/exec"
-	"strconv"
 	"strings"
-	"time"
 
 	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/filefilter"
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
-	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 type genericSymbolStatus string
@@ -57,11 +50,6 @@ type genericSymbolMatch struct {
 	File    string
 	Line    int
 	Content string
-}
-
-type genericSymbolSearchResult struct {
-	matches         []genericSymbolMatch
-	cancelRequested bool
 }
 
 // resolveGenericSymbol は Go 以外の言語でシンボル解決を試みる。
@@ -141,122 +129,19 @@ func findGenericReferences(symbol string, opts SearchOptions) []genericSymbolRef
 	matches := findGenericSymbolMatches(symbol, opts, maxGenericRefs)
 	refs := make([]genericSymbolRef, 0, len(matches))
 	for _, match := range matches {
-		refs = append(refs, genericSymbolRef{
-			File:    match.File,
-			Line:    match.Line,
-			Snippet: match.Content,
-			IsTest:  repomap.IsTestFile(match.File),
-		})
+		refs = append(refs, genericSymbolRefFromMatch(match))
 	}
 
 	return refs
 }
 
-func findGenericSymbolMatches(symbol string, opts SearchOptions, limit int) []genericSymbolMatch {
-	return findGenericSymbolMatchResult(symbol, opts, limit).matches
-}
-
-func findGenericSymbolMatchResult(symbol string, opts SearchOptions, limit int) genericSymbolSearchResult {
-	if !common.IsRipgrepAvailable() {
-		return genericSymbolSearchResult{}
+func genericSymbolRefFromMatch(match genericSymbolMatch) genericSymbolRef {
+	return genericSymbolRef{
+		File:    match.File,
+		Line:    match.Line,
+		Snippet: match.Content,
+		IsTest:  repomap.IsTestFile(match.File),
 	}
-
-	return runGenericSymbolRipgrep(symbol, opts, limit)
-}
-
-func runGenericSymbolRipgrep(symbol string, opts SearchOptions, limit int) genericSymbolSearchResult {
-	args, workdir := buildGenericRgArgs(symbol, opts)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, common.RipgrepPath(), args...)
-	if workdir != "" {
-		cmd.Dir = workdir
-	}
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return genericSymbolSearchResult{}
-	}
-	if err := cmd.Start(); err != nil {
-		return genericSymbolSearchResult{}
-	}
-
-	result := collectGenericSymbolMatches(stdout, opts, limit)
-	if result.cancelRequested {
-		cancel()
-	}
-	_ = cmd.Wait()
-	return result
-}
-
-func collectGenericSymbolMatches(reader io.Reader, opts SearchOptions, limit int) genericSymbolSearchResult {
-	if reader == nil {
-		return genericSymbolSearchResult{}
-	}
-
-	capacity := 0
-	if limit > 0 {
-		capacity = limit
-		if capacity > maxGenericRefs {
-			capacity = maxGenericRefs
-		}
-	}
-	matches := make([]genericSymbolMatch, 0, capacity)
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		match, ok := parseGenericSymbolMatchLine(scanner.Text(), opts)
-		if !ok {
-			continue
-		}
-		matches = append(matches, match)
-		if limit > 0 && len(matches) >= limit {
-			return genericSymbolSearchResult{matches: matches, cancelRequested: true}
-		}
-	}
-	return genericSymbolSearchResult{
-		matches:         matches,
-		cancelRequested: scanner.Err() != nil,
-	}
-}
-
-func parseGenericSymbolMatchLine(line string, opts SearchOptions) (genericSymbolMatch, bool) {
-	parts := strings.SplitN(line, ":", 3)
-	if len(parts) < 3 {
-		return genericSymbolMatch{}, false
-	}
-
-	file := parts[0]
-	if matchesSearchIgnoreFilter(file, opts) {
-		return genericSymbolMatch{}, false
-	}
-	if !matchesSearchFileFilter(file, opts) {
-		return genericSymbolMatch{}, false
-	}
-	lineNum, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return genericSymbolMatch{}, false
-	}
-	return genericSymbolMatch{
-		File:    file,
-		Line:    lineNum,
-		Content: strings.TrimSpace(parts[2]),
-	}, true
-}
-
-// buildGenericRgArgs は多言語シンボル検索用の ripgrep 引数を構築する。
-func buildGenericRgArgs(symbol string, opts SearchOptions) ([]string, string) {
-	basis := resolveSearchPathBasisForOptions(opts)
-
-	args := []string{
-		"-n", "--no-heading", "--with-filename", "--color", "never",
-		"-w",
-	}
-	args = appendRipgrepFileFilterArgs(args, opts)
-	args = appendRipgrepVisibilityFilterArgs(args, opts)
-	args = append(args, symbol, basis.Target)
-	return args, basis.Workdir
 }
 
 // resolvePatternLang は FileType を signaturePattern の lang に変換する。

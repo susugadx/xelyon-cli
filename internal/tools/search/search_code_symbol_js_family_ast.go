@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/jsast"
 )
 
@@ -103,63 +102,6 @@ func jsFamilyDirectSearchFilePath(opts SearchOptions) (string, bool) {
 		return "", false
 	}
 	return filepath.Clean(targetPath), true
-}
-
-func findJSFamilyReferencesWithAST(symbol string, opts SearchOptions) []genericSymbolRef {
-	refs := findGenericReferences(symbol, opts)
-	grouped := make(map[string][]int)
-	for i := range refs {
-		abs := absoluteAffectedFilePath(refs[i].File, opts, affectedFileSourceText)
-		if abs == "" || !jsast.Supports(abs) {
-			continue
-		}
-		grouped[abs] = append(grouped[abs], i)
-	}
-
-	for abs, indexes := range grouped {
-		parsed, ok := parseJSFamilyFileForSearch(abs)
-		if !ok {
-			continue
-		}
-		for _, idx := range indexes {
-			info, err := jsast.ClassifyLineWithParsed(parsed, refs[idx].Line, symbol)
-			if err != nil || info == nil {
-				continue
-			}
-			refs[idx].Class = info.Class
-		}
-		parsed.Close()
-	}
-	return refs
-}
-
-func classifyJSFamilySymbolRefsFromAST(refs []genericSymbolRef) jsFamilySymbolRefs {
-	var classified jsFamilySymbolRefs
-	for _, ref := range refs {
-		switch ref.Class {
-		case codeast.ClassString, codeast.ClassComment, jsast.ClassIgnored:
-			continue
-		}
-		if ref.IsTest {
-			classified.tests = append(classified.tests, ref)
-			continue
-		}
-		switch ref.Class {
-		case codeast.ClassImport:
-			classified.imports = append(classified.imports, ref)
-		case jsast.ClassExport:
-			classified.imports = append(classified.imports, ref)
-		case codeast.ClassCall:
-			classified.callers = append(classified.callers, ref)
-		case jsast.ClassTypeRef:
-			classified.typeRefs = append(classified.typeRefs, ref)
-		case codeast.ClassDef:
-			continue
-		default:
-			classified.others = append(classified.others, ref)
-		}
-	}
-	return classified
 }
 
 type jsFamilyMatchedFile struct {
