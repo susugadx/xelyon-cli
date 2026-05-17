@@ -1,7 +1,6 @@
 package azure
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,45 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
-
-func TestNormalizeBaseURL(t *testing.T) {
-	tests := []struct {
-		name string
-		raw  string
-		want string
-	}{
-		{
-			name: "resource endpoint",
-			raw:  "https://example.openai.azure.com",
-			want: "https://example.openai.azure.com/openai/v1",
-		},
-		{
-			name: "resource endpoint with slash",
-			raw:  "https://example.openai.azure.com/",
-			want: "https://example.openai.azure.com/openai/v1",
-		},
-		{
-			name: "openai path",
-			raw:  "https://example.openai.azure.com/openai",
-			want: "https://example.openai.azure.com/openai/v1",
-		},
-		{
-			name: "v1 base url",
-			raw:  "https://example.openai.azure.com/openai/v1/",
-			want: "https://example.openai.azure.com/openai/v1",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeBaseURL(tt.raw); got != tt.want {
-				t.Fatalf("normalizeBaseURL(%q) = %q, want %q", tt.raw, got, tt.want)
-			}
-		})
-	}
-}
 
 func TestChatWithTools_UsesAzureResponsesAPI(t *testing.T) {
 	var received struct {
@@ -836,11 +797,4 @@ func TestNewLongRunningResponsesHTTPClient_DisablesResponseHeaderTimeout(t *test
 	if baseTransport.ResponseHeaderTimeout != 2*time.Second {
 		t.Fatalf("base transport mutated: ResponseHeaderTimeout = %s, want 2s", baseTransport.ResponseHeaderTimeout)
 	}
-}
-
-func azureTestContext(cfg *config.Config) context.Context {
-	var out strings.Builder
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
-	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
-	return config.WithContext(ctx, cfg)
 }

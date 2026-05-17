@@ -254,7 +254,7 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 			"base_url",
 			fmt.Sprintf("%s is not set", baseURLEnv),
 			"",
-			fmt.Sprintf("Set %s=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1", baseURLEnv),
+			fmt.Sprintf("Set %s=%s", baseURLEnv, azureOpenAIBaseURLExample),
 		)
 		return
 	}
@@ -266,7 +266,7 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 			"base_url",
 			fmt.Sprintf("%s is not a valid absolute URL", baseURLEnv),
 			r.BaseURL,
-			"Use the Azure OpenAI v1 base URL, for example https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1",
+			fmt.Sprintf("Use the Azure OpenAI v1 base URL, for example %s", azureOpenAIBaseURLExample),
 		)
 		return
 	}
@@ -276,7 +276,7 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 			"base_url",
 			fmt.Sprintf("%s points to the public OpenAI API, not Azure OpenAI", baseURLEnv),
 			r.BaseURL,
-			fmt.Sprintf("Set %s to your Azure OpenAI resource URL, for example https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1", baseURLEnv),
+			fmt.Sprintf("Set %s to your Azure OpenAI resource URL, for example %s", baseURLEnv, azureOpenAIBaseURLExample),
 		)
 		return
 	}
@@ -303,13 +303,13 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 		)
 	}
 
-	if normalizedParsed != nil && strings.TrimRight(normalizedParsed.Path, "/") != "/openai/v1" {
+	if normalizedParsed != nil && strings.TrimRight(normalizedParsed.Path, "/") != azureOpenAIBasePath {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"base_url_path",
 			"base URL path is not the standard Azure OpenAI v1 path",
 			r.NormalizedBaseURL,
-			"Use /openai/v1 unless this endpoint is an intentional proxy",
+			fmt.Sprintf("Use %s unless this endpoint is an intentional proxy", azureOpenAIBasePath),
 		)
 	}
 

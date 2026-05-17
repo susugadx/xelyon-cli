@@ -19,9 +19,9 @@ func normalizeBaseURL(raw string) string {
 	path := strings.TrimRight(parsed.Path, "/")
 	switch path {
 	case "", "/":
-		parsed.Path = "/openai/v1"
+		parsed.Path = azureOpenAIBasePath
 	case "/openai":
-		parsed.Path = "/openai/v1"
+		parsed.Path = azureOpenAIBasePath
 	default:
 		parsed.Path = path
 	}

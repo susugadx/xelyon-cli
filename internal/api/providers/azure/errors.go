@@ -63,9 +63,9 @@ func azureHTTPErrorAdvice(resp *http.Response, detail string, context azureHTTPE
 func azureNotFoundAdvice(deployment string) string {
 	deployment = strings.TrimSpace(deployment)
 	if deployment == "" {
-		return fmt.Sprintf("resource was not found. Check %s uses the resource v1 URL ending in /openai/v1 and that the Azure deployment exists.", baseURLEnv)
+		return fmt.Sprintf("resource was not found. Check %s uses the resource v1 URL ending in %s and that the Azure deployment exists.", baseURLEnv, azureOpenAIBasePath)
 	}
-	return fmt.Sprintf("resource was not found. Check %s uses the resource v1 URL ending in /openai/v1 and that Azure deployment %q exists in that resource.", baseURLEnv, deployment)
+	return fmt.Sprintf("resource was not found. Check %s uses the resource v1 URL ending in %s and that Azure deployment %q exists in that resource.", baseURLEnv, azureOpenAIBasePath, deployment)
 }
 
 func azureRateLimitAdvice(resp *http.Response) string {
