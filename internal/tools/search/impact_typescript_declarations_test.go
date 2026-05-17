@@ -114,6 +114,25 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactDeclarati
 	}
 }
 
+func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactDeclarationIncludesTSXRefs(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/types.d.ts": "export interface BuildOptions { id: string }\n",
+		"src/App.tsx":    "import type { BuildOptions } from './types'\nexport function App(props: BuildOptions) { return <div>{props.id}</div> }\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newTypeScriptImpactSearchOptions(dir, "BuildOptions"))
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "BuildOptions", "interface")
+	if got := artifact.Metadata.Bundle.Definition.File; got != "src/types.d.ts" {
+		t.Fatalf("definition file = %q, want src/types.d.ts", got)
+	}
+	assertRecommendedReadAt(t, artifact.Metadata.Bundle.Impact.RecommendedReads, 1, "type_refs", "src/App.tsx")
+	assertRecommendedReadAt(t, artifact.Metadata.Bundle.Impact.RecommendedReads, 2, "imports", "src/App.tsx")
+	if !symbolBundleItemsContainFile(symbolBundleSectionItems(artifact.Metadata.Bundle, "type_refs"), "src/App.tsx") {
+		t.Fatalf("type_refs section should include TSX usage, sections: %+v", artifact.Metadata.Bundle.Sections)
+	}
+}
+
 func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactDeclareForms(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -88,7 +88,7 @@ func structuredTypeScriptImpactReferenceFileType(def genericSymbolDef) (string, 
 		return target.fileType, true
 	}
 	if target.declaration {
-		return "ts", true
+		return "typescript", true
 	}
 	return "", false
 }
