@@ -12,7 +12,7 @@ func (a *Agent) restoreSessionConversation(session *history.Session) {
 		return
 	}
 
-	a.resetModelFacingTaskLedger()
+	a.resetProviderFacingTaskLedger()
 	a.session = session
 	a.lastOutputs = nil
 
@@ -37,7 +37,7 @@ func (a *Agent) resetConversationState() error {
 	a.lastOutputs = nil
 	a.RestoreCompactedState(nil)
 	a.restoreProviderResponseID("")
-	a.resetModelFacingTaskLedger()
+	a.resetProviderFacingTaskLedger()
 
 	if a.session == nil {
 		return nil

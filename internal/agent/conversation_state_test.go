@@ -114,6 +114,25 @@ func TestAgent_ResetConversationState_ClearsModelFacingTaskLedger(t *testing.T) 
 	assertCurrentTaskLedgerReset(t, agent, "resetConversationState with provider-facing current task state")
 }
 
+func TestAgent_ResetConversationState_ClearsProviderHistoryReductionTaskLedger(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	fixture := newProviderHistoryStaleLedgerFixture()
+	seedProviderHistoryReductionStaleLedgerEvidence(t, agent, fixture)
+	assertTaskLedgerPreserved(t, agent, "test setup")
+
+	if err := agent.resetConversationState(); err != nil {
+		t.Fatalf("resetConversationState() error = %v", err)
+	}
+
+	assertTaskLedgerReset(t, agent, "resetConversationState with provider history reduction")
+	agent.History = fixture.History
+	assertProviderHistoryReductionDoesNotUseStaleLedgerEvidence(t, agent, fixture)
+}
+
 func TestAgent_ResetConversationState_PreservesTaskLedgerWhenCurrentTaskStateProviderDoesNotConsumeIt(t *testing.T) {
 	disableColors(t)
 
@@ -157,6 +176,27 @@ func TestAgent_ApplyLoadedSession_ClearsModelFacingTaskLedger(t *testing.T) {
 	if got := api.ActiveContextBlocksFromContext(agent.requestContext(context.Background())); got != nil {
 		t.Fatalf("ActiveContextBlocksFromContext() = %#v, want nil after session load resets task ledger", got)
 	}
+}
+
+func TestAgent_ApplyLoadedSession_ClearsProviderHistoryReductionTaskLedger(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	fixture := newProviderHistoryStaleLedgerFixture()
+	seedProviderHistoryReductionStaleLedgerEvidence(t, agent, fixture)
+	assertTaskLedgerPreserved(t, agent, "test setup")
+
+	session := history.NewSession("test-model")
+	for _, msg := range fixture.History {
+		session.AddMessageFromAPI(msg, "test-model")
+	}
+
+	agent.applyLoadedSession(session)
+
+	assertTaskLedgerReset(t, agent, "applyLoadedSession with provider history reduction")
+	assertProviderHistoryReductionDoesNotUseStaleLedgerEvidence(t, agent, fixture)
 }
 
 func TestAgent_ApplyLoadedSession_PreservesTaskLedgerWhenCurrentTaskStateProviderDoesNotConsumeIt(t *testing.T) {

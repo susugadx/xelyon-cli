@@ -51,6 +51,7 @@ func (a *Agent) CompressWithCompactAPI(ctx context.Context) error {
 
 	// 元の履歴をクリア（圧縮済みデータに置き換え）
 	a.History = nil
+	a.resetProviderFacingTaskLedger()
 	finishResponseContext(true, nil)
 
 	// 統計情報を表示

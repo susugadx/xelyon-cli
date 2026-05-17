@@ -69,7 +69,12 @@ func TestCreateCachedContent_BuildsRequest(t *testing.T) {
 				}},
 			}},
 		},
-		{Role: "tool", ToolCallID: "call-1", Content: "[Tool Result for read_file] package main"},
+		{
+			Role:       "tool",
+			ToolCallID: "call-1",
+			ToolName:   "read_file",
+			Content:    "[omitted old read_file result; evidence: main.go:L1 source=read_file]",
+		},
 		{Role: "assistant", Content: "done"},
 	}, "300s", tools, &GeminiToolConfigWrapper{
 		FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: "ANY"},
@@ -136,7 +141,7 @@ func TestCreateCachedContent_BuildsRequest(t *testing.T) {
 	if functionResponse["name"] != "read_file" {
 		t.Fatalf("functionResponse.name = %#v, want read_file", functionResponse["name"])
 	}
-	if functionResponse["response"].(map[string]any)["result"] != "[Tool Result for read_file] package main" {
+	if functionResponse["response"].(map[string]any)["result"] != "[omitted old read_file result; evidence: main.go:L1 source=read_file]" {
 		t.Fatalf("unexpected function response payload: %#v", functionResponse["response"])
 	}
 
@@ -168,22 +173,6 @@ func TestCreateCachedContent_APIError(t *testing.T) {
 }
 
 func TestGeminiHelperFunctions(t *testing.T) {
-	t.Run("extractToolNameFromContent", func(t *testing.T) {
-		tests := []struct {
-			content string
-			want    string
-		}{
-			{content: "[Tool Result for read_file] body", want: "read_file"},
-			{content: "[Tool Result for tool_with_suffix]", want: "tool_with_suffix"},
-			{content: "plain output", want: "unknown_tool"},
-		}
-		for _, tt := range tests {
-			if got := extractToolNameFromContent(tt.content); got != tt.want {
-				t.Fatalf("extractToolNameFromContent(%q) = %q, want %q", tt.content, got, tt.want)
-			}
-		}
-	})
-
 	t.Run("isCacheExpiredError", func(t *testing.T) {
 		if !isCacheExpiredError(http.StatusNotFound, []byte(`{"error":"cachedContent NOT_FOUND"}`)) {
 			t.Fatal("isCacheExpiredError() = false, want true for NOT_FOUND cache error")

@@ -3,77 +3,11 @@ package agent
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
-
-type providerFacingHistoryMutationProbe struct {
-	name             string
-	supportsImages   bool
-	response         string
-	capturedContents []string
-	capturedLen      int
-	imageUserMessage string
-	imageCalls       int
-}
-
-func (p *providerFacingHistoryMutationProbe) Name() string {
-	if p.name != "" {
-		return p.name
-	}
-	return "openai"
-}
-
-func (p *providerFacingHistoryMutationProbe) SupportsImages() bool { return p.supportsImages }
-
-func (p *providerFacingHistoryMutationProbe) IsFunctionCallingEnabled() bool { return true }
-
-func (p *providerFacingHistoryMutationProbe) ChatWithTools(_ context.Context, _ string, history []api.Message, _ string) (string, error) {
-	p.capture(history)
-	mutateProviderFacingHistoryForTest(history)
-	if p.response != "" {
-		return p.response, nil
-	}
-	return "provider response", nil
-}
-
-func (p *providerFacingHistoryMutationProbe) ChatWithImage(_ context.Context, _ string, history []api.Message, userMessage string, image *api.ImageData, _ string) (string, error) {
-	if image == nil {
-		return "", fmt.Errorf("image is required")
-	}
-	p.imageCalls++
-	p.imageUserMessage = userMessage
-	p.capture(history)
-	mutateProviderFacingHistoryForTest(history)
-	if p.response != "" {
-		return p.response, nil
-	}
-	return "image response", nil
-}
-
-func (p *providerFacingHistoryMutationProbe) capture(messages []api.Message) {
-	p.capturedLen = len(messages)
-	p.capturedContents = make([]string, len(messages))
-	for i, msg := range messages {
-		p.capturedContents[i] = msg.Content
-	}
-}
-
-func mutateProviderFacingHistoryForTest(messages []api.Message) {
-	if len(messages) == 0 {
-		return
-	}
-	messages[0].Content = "provider mutated content"
-	if len(messages[0].ToolCalls) > 0 {
-		messages[0].ToolCalls[0].ID = "provider_mutated_call"
-		if len(messages[0].ToolCalls[0].ThoughtParts) > 0 {
-			messages[0].ToolCalls[0].ThoughtParts[0]["text"] = "provider mutated thought"
-		}
-	}
-}
 
 func TestNormalModeRequestUsesProviderFacingHistoryClone(t *testing.T) {
 	disableColors(t)
@@ -104,20 +38,20 @@ func TestNormalModeRequestUsesProviderFacingHistoryClone(t *testing.T) {
 		t.Fatalf("chatInternal() error = %v", err)
 	}
 
-	if provider.capturedLen != 4 {
-		t.Fatalf("provider history length = %d, want previous assistant/tool context + current user", provider.capturedLen)
+	if len(provider.capturedHistory) != 4 {
+		t.Fatalf("provider history length = %d, want previous assistant/tool context + current user", len(provider.capturedHistory))
 	}
-	if provider.capturedContents[0] != "previous assistant" {
-		t.Fatalf("provider first history content = %q, want previous assistant", provider.capturedContents[0])
+	if provider.capturedHistory[0].Content != "previous assistant" {
+		t.Fatalf("provider first history content = %q, want previous assistant", provider.capturedHistory[0].Content)
 	}
-	if provider.capturedContents[1] != "old read_file reduction candidate" {
-		t.Fatalf("provider old tool result = %q, want unchanged reduction candidate content", provider.capturedContents[1])
+	if provider.capturedHistory[1].Content != "old read_file reduction candidate" {
+		t.Fatalf("provider old tool result = %q, want unchanged reduction candidate content", provider.capturedHistory[1].Content)
 	}
-	if provider.capturedContents[2] != "previous assistant" {
-		t.Fatalf("provider previous assistant content = %q, want previous assistant", provider.capturedContents[2])
+	if provider.capturedHistory[2].Content != "previous assistant" {
+		t.Fatalf("provider previous assistant content = %q, want previous assistant", provider.capturedHistory[2].Content)
 	}
-	if !strings.Contains(provider.capturedContents[3], "next request") {
-		t.Fatalf("provider current user content = %q, want current request", provider.capturedContents[3])
+	if !strings.Contains(provider.capturedHistory[3].Content, "next request") {
+		t.Fatalf("provider current user content = %q, want current request", provider.capturedHistory[3].Content)
 	}
 	if agent.History[0].Content != "previous assistant" {
 		t.Fatalf("Agent.History[0].Content = %q, want previous assistant", agent.History[0].Content)
@@ -150,14 +84,14 @@ func TestImageRequestUsesProjectedPastHistoryAndCurrentPrompt(t *testing.T) {
 	if provider.imageCalls != 1 {
 		t.Fatalf("ChatWithImage calls = %d, want 1", provider.imageCalls)
 	}
-	if provider.capturedLen != 3 {
-		t.Fatalf("image provider history length = %d, want past history only", provider.capturedLen)
+	if len(provider.capturedHistory) != 3 {
+		t.Fatalf("image provider history length = %d, want past history only", len(provider.capturedHistory))
 	}
-	if provider.capturedContents[1] != "old image-history read_file result" {
-		t.Fatalf("image provider old tool result = %q, want unchanged reduction candidate content", provider.capturedContents[1])
+	if provider.capturedHistory[1].Content != "old image-history read_file result" {
+		t.Fatalf("image provider old tool result = %q, want unchanged reduction candidate content", provider.capturedHistory[1].Content)
 	}
-	if provider.capturedContents[2] != "previous image context" {
-		t.Fatalf("image provider history[2] = %q, want previous image context", provider.capturedContents[2])
+	if provider.capturedHistory[2].Content != "previous image context" {
+		t.Fatalf("image provider history[2] = %q, want previous image context", provider.capturedHistory[2].Content)
 	}
 	if !strings.Contains(provider.imageUserMessage, "describe image") || !strings.Contains(provider.imageUserMessage, "[NORMAL MODE]") {
 		t.Fatalf("image userMessage = %q, want current prompt with normal-mode directive", provider.imageUserMessage)
@@ -187,8 +121,8 @@ func TestHeadlessRequestUsesProviderFacingHistoryClone(t *testing.T) {
 		t.Fatalf("requestAssistantResponse() error = %v", err)
 	}
 
-	if provider.capturedLen != 4 || provider.capturedContents[1] != "old headless read_file result" || provider.capturedContents[3] != "headless query" {
-		t.Fatalf("headless provider history = len %d contents %#v, want raw previous context and query", provider.capturedLen, provider.capturedContents)
+	if len(provider.capturedHistory) != 4 || provider.capturedHistory[1].Content != "old headless read_file result" || provider.capturedHistory[3].Content != "headless query" {
+		t.Fatalf("headless provider history = %#v, want raw previous context and query", provider.capturedHistory)
 	}
 	if runner.agent.History[1].Content != "old headless read_file result" {
 		t.Fatalf("headless Agent.History[1].Content = %q, want old tool result", runner.agent.History[1].Content)
@@ -215,10 +149,142 @@ func TestPlanInvestigationRequestUsesProviderFacingHistoryClone(t *testing.T) {
 	if response != "investigation done" {
 		t.Fatalf("response = %q, want investigation done", response)
 	}
-	if provider.capturedLen != 4 || provider.capturedContents[1] != "old plan read_file result" || provider.capturedContents[3] != "investigation prompt" {
-		t.Fatalf("plan provider history = len %d contents %#v, want raw previous context and investigation prompt", provider.capturedLen, provider.capturedContents)
+	if len(provider.capturedHistory) != 4 || provider.capturedHistory[1].Content != "old plan read_file result" || provider.capturedHistory[3].Content != "investigation prompt" {
+		t.Fatalf("plan provider history = %#v, want raw previous context and investigation prompt", provider.capturedHistory)
 	}
 	if agent.History[1].Content != "old plan read_file result" {
 		t.Fatalf("plan Agent.History[1].Content = %q, want old tool result", agent.History[1].Content)
 	}
+}
+
+func TestNormalModeRequestAppliesProviderHistoryReductionWhenRuntimeGateEnabled(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldRead := seedProviderHistoryReductionRequestFixture(t, agent, "call_normal_old")
+	agent.session.AddMessageFromAPI(agent.History[0], agent.CurrentModel)
+	agent.session.AddMessageFromAPI(agent.History[1], agent.CurrentModel)
+	agent.session.AddToolExecution("read_file", map[string]string{"path": "README.md"}, oldRead, true, agent.CurrentModel)
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	assertProviderRequestHistoryReductionApplied(t, agent, provider, oldRead, "next request")
+	if agent.session.Messages[1].Content != oldRead {
+		t.Fatalf("session conversation tool content = %q, want raw old read", agent.session.Messages[1].Content)
+	}
+	if agent.session.Messages[2].ToolExecution == nil || agent.session.Messages[2].ToolExecution.ResultPreview != oldRead {
+		t.Fatalf("session tool execution = %#v, want raw old read audit entry", agent.session.Messages[2].ToolExecution)
+	}
+}
+
+func TestNormalModeRequestKeepsReductionCandidateWithoutEvidencePointer(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldRead := seedProviderHistoryReductionRequestFixtureWithoutEvidence(agent, "call_missing_evidence")
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if provider.capturedHistory[1].Content != oldRead {
+		t.Fatalf("provider old tool result = %q, want raw candidate without evidence", provider.capturedHistory[1].Content)
+	}
+	if agent.History[1].Content != oldRead {
+		t.Fatalf("Agent.History[1].Content = %q, want raw old read", agent.History[1].Content)
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionApply || report.CandidateCount != 1 || report.ReplacedCount != 0 {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want one unapplied apply candidate", report)
+	}
+	candidate := candidateByToolCallID(report, "call_missing_evidence")
+	if candidate == nil || candidate.ReplacementApplied || candidate.KeepReason != "missing_evidence_pointer" {
+		t.Fatalf("candidate = %#v, want missing_evidence_pointer without replacement", candidate)
+	}
+}
+
+func TestNormalModeRequestAppliesProviderHistoryReductionPreservesInferredToolName(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{name: "gemini"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldRead := seedProviderHistoryReductionRequestFixture(t, agent, "call_missing_stored_name")
+	agent.History[1].ToolName = ""
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	assertProviderRequestHistoryReductionApplied(t, agent, provider, oldRead, "next request")
+	if provider.capturedHistory[1].ToolName != "read_file" {
+		t.Fatalf("provider old tool name = %q, want inferred read_file for reduced tool response", provider.capturedHistory[1].ToolName)
+	}
+	if agent.History[1].ToolName != "" {
+		t.Fatalf("Agent.History[1].ToolName = %q, want raw history unchanged", agent.History[1].ToolName)
+	}
+}
+
+func TestImageRequestAppliesProviderHistoryReductionToPastHistoryWhenRuntimeGateEnabled(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{supportsImages: true}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldRead := seedProviderHistoryReductionRequestFixture(t, agent, "call_image_apply_old")
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png", Path: "test.png", Size: 4}
+
+	if err := agent.chatInternal("describe image", image); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	assertProviderRequestHistoryReductionApplied(t, agent, provider, oldRead, "")
+	if len(provider.capturedHistory) != 6 {
+		t.Fatalf("image provider history length = %d, want only projected past history", len(provider.capturedHistory))
+	}
+	if strings.Contains(strings.Join(providerHistoryMessageContents(provider.capturedHistory), "\n"), "describe image") {
+		t.Fatalf("image provider history should exclude current prompt, got %#v", provider.capturedHistory)
+	}
+	if !strings.Contains(provider.imageUserMessage, "describe image") {
+		t.Fatalf("image userMessage = %q, want current prompt", provider.imageUserMessage)
+	}
+}
+
+func TestHeadlessRequestAppliesProviderHistoryReductionWhenRuntimeGateEnabled(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provider := &providerFacingHistoryMutationProbe{}
+	runner := newHeadlessRunner("headless query", "test-model", provider, newProjectMapDisabledConfig())
+	t.Cleanup(runner.agent.Cleanup)
+	oldRead := seedProviderHistoryReductionRequestFixture(t, runner.agent, "call_headless_apply_old")
+
+	if _, err := runner.requestAssistantResponse(context.Background(), 0); err != nil {
+		t.Fatalf("requestAssistantResponse() error = %v", err)
+	}
+
+	assertProviderRequestHistoryReductionApplied(t, runner.agent, provider, oldRead, "")
+}
+
+func TestPlanInvestigationRequestAppliesProviderHistoryReductionWhenRuntimeGateEnabled(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{response: "investigation done"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldRead := seedProviderHistoryReductionRequestFixture(t, agent, "call_plan_apply_old")
+
+	response, err := newPlanInvestigationRunner(agent, context.Background()).requestResponse()
+	if err != nil {
+		t.Fatalf("requestResponse() error = %v", err)
+	}
+	if response != "investigation done" {
+		t.Fatalf("response = %q, want investigation done", response)
+	}
+	assertProviderRequestHistoryReductionApplied(t, agent, provider, oldRead, "")
 }

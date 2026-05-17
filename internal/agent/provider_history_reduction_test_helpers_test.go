@@ -2,12 +2,16 @@ package agent
 
 import (
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ledger"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
+
+const providerHistoryReductionPlaceholderPrefix = "[omitted old "
 
 func candidateTools(report ProviderHistoryProjectionReport) []string {
 	tools := make([]string, len(report.Candidates))
@@ -75,6 +79,39 @@ func assertProviderHistoryByteMetrics(t *testing.T, original, projected []api.Me
 	if report.EstimatedSavedBytes != wantSaved {
 		t.Fatalf("EstimatedSavedBytes = %d, want %d", report.EstimatedSavedBytes, wantSaved)
 	}
+}
+
+func assertLastProviderHistoryProjectionReportPreserved(t *testing.T, runtime *AgentRuntime, want ProviderHistoryProjectionReport) {
+	t.Helper()
+	if runtime == nil {
+		t.Fatalf("runtime is nil, want preserved LastProviderHistoryProjectionReport %#v", want)
+	}
+	if !reflect.DeepEqual(runtime.LastProviderHistoryProjectionReport, want) {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want preserved stale report %#v", runtime.LastProviderHistoryProjectionReport, want)
+	}
+}
+
+func providerHistoryMessagesContainReductionPlaceholder(messages []api.Message) bool {
+	for _, msg := range messages {
+		if strings.Contains(msg.Content, providerHistoryReductionPlaceholderPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func providerHistoryInputItemsContainReductionPlaceholder(items []api.InputItem) bool {
+	for _, item := range items {
+		if strings.Contains(item.Output, providerHistoryReductionPlaceholderPrefix) ||
+			strings.Contains(item.Data, providerHistoryReductionPlaceholderPrefix) ||
+			strings.Contains(item.Arguments, providerHistoryReductionPlaceholderPrefix) {
+			return true
+		}
+		if content, ok := item.Content.(string); ok && strings.Contains(content, providerHistoryReductionPlaceholderPrefix) {
+			return true
+		}
+	}
+	return false
 }
 
 type providerHistoryEvidenceItem struct {

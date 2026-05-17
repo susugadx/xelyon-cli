@@ -87,6 +87,7 @@ func (a *Agent) compressHistory(keepRecent int, opts compressHistoryOptions) err
 
 	// 履歴を置き換え
 	a.History = newHistory
+	a.resetProviderFacingTaskLedger()
 	finishResponseContext(true, persistedHistory)
 
 	// 圧縮後の統計

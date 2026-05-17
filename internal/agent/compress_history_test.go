@@ -103,3 +103,24 @@ func TestCompressHistory_DoesNotSendCurrentTaskStateActiveContext(t *testing.T) 
 		t.Fatal("CompressHistory() should not reset the runtime task ledger")
 	}
 }
+
+func TestCompressHistory_ClearsProviderHistoryReductionTaskLedgerOnSuccess(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", summary: "summary"}
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", config.DefaultConfig())
+	fixture := newProviderHistoryStaleLedgerFixture()
+	seedProviderHistoryReductionStaleLedgerEvidence(t, agent, fixture)
+	assertTaskLedgerPreserved(t, agent, "test setup")
+	agent.History = []api.Message{
+		{Role: "user", Content: "old message"},
+		{Role: "assistant", Content: "old response"},
+		{Role: "user", Content: "latest message"},
+	}
+
+	if err := agent.CompressHistory(1); err != nil {
+		t.Fatalf("CompressHistory() error = %v", err)
+	}
+
+	assertTaskLedgerReset(t, agent, "CompressHistory provider history reduction success")
+	agent.History = fixture.History
+	assertProviderHistoryReductionDoesNotUseStaleLedgerEvidence(t, agent, fixture)
+}

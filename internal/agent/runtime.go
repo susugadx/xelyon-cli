@@ -14,22 +14,24 @@ import (
 
 // RuntimeOptions は一時的な内部 runtime gate を束ねる。
 type RuntimeOptions struct {
-	EnableCurrentTaskStateContext bool
+	EnableCurrentTaskStateContext  bool
+	EnableProviderHistoryReduction bool
 }
 
 // AgentRuntime は agent/session 単位で保持する実行時 state を束ねる。
 type AgentRuntime struct {
-	Registry        *tools.Registry
-	ToolCache       *ToolCache
-	Config          *config.Config
-	Options         RuntimeOptions
-	ProjectConfig   *ProjectConfigStore
-	InvocationCWD   string
-	AutoApprove     bool
-	UI              *ui.Runtime
-	AuditLogger     audit.ToolLogger
-	SubAgentManager *subagent.Manager
-	TaskLedger      *ledger.Store
+	Registry                            *tools.Registry
+	ToolCache                           *ToolCache
+	Config                              *config.Config
+	Options                             RuntimeOptions
+	ProjectConfig                       *ProjectConfigStore
+	InvocationCWD                       string
+	AutoApprove                         bool
+	UI                                  *ui.Runtime
+	AuditLogger                         audit.ToolLogger
+	SubAgentManager                     *subagent.Manager
+	TaskLedger                          *ledger.Store
+	LastProviderHistoryProjectionReport ProviderHistoryProjectionReport
 
 	managedTaskLedger       *ledger.Store
 	taskLedgerInvocationCWD string

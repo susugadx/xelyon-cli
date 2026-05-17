@@ -26,87 +26,6 @@ func (p *Provider) CreateCachedContent(ctx context.Context, model string, system
 		}
 	}
 
-	// コンテンツの変換（Gemini API は role: "user" / "model" のみ受け付ける）
-	geminiContents := make([]interface{}, 0, len(contents))
-	for _, msg := range contents {
-		switch {
-		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
-			// assistant の functionCall パート → role: "model"
-			parts := make([]interface{}, 0, len(msg.ToolCalls)+1)
-			if msg.Content != "" {
-				parts = append(parts, GeminiPart{Text: msg.Content})
-			}
-			// Gemini 3: thought パートを先に追加（最初の ToolCall から取得、全 TC で共有）
-			if len(msg.ToolCalls) > 0 && len(msg.ToolCalls[0].ThoughtParts) > 0 {
-				for _, tp := range msg.ToolCalls[0].ThoughtParts {
-					geminiPart := make(map[string]any)
-					if text, ok := tp["text"].(string); ok && text != "" {
-						geminiPart["text"] = text
-					}
-					if thought, ok := tp["thought"].(bool); ok && thought {
-						geminiPart["thought"] = true
-					}
-					if sig, ok := tp["thought_signature"].(string); ok && sig != "" {
-						geminiPart["thoughtSignature"] = sig // Gemini API は camelCase
-					}
-					if len(geminiPart) > 0 {
-						parts = append(parts, geminiPart)
-					}
-				}
-			}
-			for _, tc := range msg.ToolCalls {
-				var args map[string]any
-				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-				parts = append(parts, GeminiFunctionCallPart{
-					FunctionCall: GeminiFunctionCallData{
-						Name: tc.Function.Name,
-						Args: args,
-					},
-					ThoughtSignature: tc.ThoughtSignature,
-				})
-			}
-			geminiContents = append(geminiContents, GeminiGenericContent{
-				Parts: parts,
-				Role:  "model",
-			})
-
-		case msg.Role == "tool" && msg.ToolCallID != "":
-			// functionResponse パート → role: "user"（Gemini API仕様）
-			toolName := msg.ToolName
-			if toolName == "" {
-				toolName = extractToolNameFromContent(msg.Content)
-			}
-			geminiContents = append(geminiContents, GeminiGenericContent{
-				Parts: []interface{}{
-					GeminiFunctionResponsePart{
-						FunctionResponse: GeminiFunctionResponseData{
-							Name: toolName,
-							Response: map[string]any{
-								"result": msg.Content,
-							},
-						},
-					},
-				},
-				Role: "user",
-			})
-
-		default:
-			// 通常のテキストメッセージ: "assistant" → "model", それ以外 → "user"
-			role := "user"
-			if msg.Role == "assistant" {
-				role = "model"
-			}
-			parts := []GeminiPart{}
-			if msg.Content != "" {
-				parts = append(parts, GeminiPart{Text: msg.Content})
-			}
-			geminiContents = append(geminiContents, GeminiContent{
-				Role:  role,
-				Parts: parts,
-			})
-		}
-	}
-
 	// モデル名に "models/" プレフィックスを強制
 	if !strings.HasPrefix(model, "models/") {
 		model = "models/" + model
@@ -114,7 +33,7 @@ func (p *Provider) CreateCachedContent(ctx context.Context, model string, system
 
 	reqBody := GeminiCachedContentRequest{
 		Model:             model,
-		Contents:          geminiContents,
+		Contents:          geminiFunctionHistoryContents(contents, omitEmptyTextHistoryPart),
 		SystemInstruction: sysInst,
 		Tools:             tools,
 		ToolConfig:        toolConfig,

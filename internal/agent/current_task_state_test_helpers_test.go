@@ -84,14 +84,10 @@ func enableCurrentTaskStateContext(t *testing.T, agent *Agent) {
 
 func assertCurrentTaskLedgerReset(t *testing.T, agent *Agent, action string) {
 	t.Helper()
-	if !agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
-		t.Fatalf("task ledger should be reset after %s: %#v", action, agent.Runtime.TaskLedger.Snapshot())
-	}
+	assertTaskLedgerReset(t, agent, action)
 }
 
 func assertCurrentTaskLedgerPreserved(t *testing.T, agent *Agent, action string) {
 	t.Helper()
-	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
-		t.Fatalf("task ledger was reset after %s", action)
-	}
+	assertTaskLedgerPreserved(t, agent, action)
 }

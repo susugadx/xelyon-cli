@@ -59,13 +59,23 @@ Phase 5b-3 adds gated actual replacement mode behind the internal projection pol
 
 - Default projection policy remains disabled.
 - `ProviderHistoryReductionApply` is an explicit internal mode; normal, headless, image, and plan provider requests still call the default disabled projection and continue to send raw-clone content.
-- Apply mode uses the same dry-run detector candidates, then replaces only candidate `Content` on the projection clone when matching task-ledger evidence pointers exist and the placeholder is smaller than the original content.
+- Apply mode uses the same dry-run detector candidates, then replaces candidate `Content` on the projection clone when matching task-ledger evidence pointers exist and the placeholder is smaller than the original content.
 - Evidence pointers are matched by `ToolCallID` and `Source == ToolName`. If the runtime task ledger is missing, a matching pointer is absent, or another candidate/kept tool result shares the same `(ToolCallID, ToolName)`, the candidate is kept in the projection.
 - Replacement text is a single-line placeholder such as `[omitted old read_file result; evidence: README.md:L1-L80 source=read_file; +2 more]`.
-- Message shape is preserved: role, tool call id, tool name, assistant tool calls, reasoning content, provider state, and continuation metadata are not changed.
+- Message shape is preserved: role, tool call id, assistant tool calls, reasoning content, provider state, and continuation metadata are not changed. If a replaced tool result is missing `ToolName`, apply mode copies the tool name inferred from the matching assistant tool call onto the projection clone so provider adapters can keep function-response continuity.
 - Raw storage remains unchanged: `Agent.History`, `history.Session.Messages`, session tool execution audit entries, audit logs, and change records continue to store the raw conversation/audit data.
 - The projection report records detected candidates, kept candidates, replacement count, original/projected content bytes, and estimated saved bytes.
 - Phase 5b-4 can enable this policy on a limited request path without adding a new storage migration.
+
+Phase 5b-4 enables replacement on user-facing provider request paths behind an internal runtime option.
+
+- Default behavior remains disabled. `RuntimeOptions.EnableProviderHistoryReduction` defaults to false and there is no config key, environment variable, CLI flag, `/config` entry, generated config field, or session migration for this gate.
+- When the runtime option is false, normal, headless, image, and plan investigation requests still send the raw-clone projection and overwrite `AgentRuntime.LastProviderHistoryProjectionReport` with an empty report.
+- When the runtime option is true, normal, headless, image, and plan investigation requests use `ProviderHistoryReductionApply` through the provider-facing projection seam.
+- Image requests project only the past history that is actually sent through `ChatWithImage(..., history, userMessage, image, ...)`; the current image prompt stays in the `userMessage` argument.
+- `AgentRuntime.LastProviderHistoryProjectionReport` is runtime-only diagnostic state. It is not appended to `Agent.History`, `history.Session.Messages`, session tool execution audit entries, tool execution audit logs, change records, compacted state, or persisted session JSONL.
+- Apply mode changes candidate `Content` on the provider projection clone, and may fill a missing projected tool-result `ToolName` from the matched assistant tool call. Tool call continuity, provider metadata, raw runtime history, raw session storage, and audit storage remain unchanged.
+- Internal model calls remain excluded: `CompressHistory`, Compact API compression, Gemini apply-patch repair, review model calls, and other isolated calls that use explicit single-user prompts or compact inputs do not call `providerFacingHistory()` and do not update the last projection report.
 
 ## Responses Continuation
 
@@ -110,5 +120,5 @@ Never delete from raw storage:
 
 ## Phase 5b TODO
 
-Enable `ProviderHistoryReductionApply` on a limited request path while keeping the raw log intact.
-Request-path enablement should preserve Responses tool-output continuity, keep default startup disabled until explicitly selected, and stay covered by tests that distinguish raw session storage from model-facing history.
+Expose provider history reduction only after a separate config/user-facing contract decision.
+Any future public gate must update config docs, generated config, migration/backward-compatibility notes, and request-path tests in the same change.

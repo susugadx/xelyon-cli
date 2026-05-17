@@ -68,16 +68,6 @@ func (a *Agent) shouldSendActiveContextToProvider() bool {
 	}
 }
 
-func (a *Agent) resetModelFacingTaskLedger() {
-	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
-		return
-	}
-	if !a.shouldSendActiveContextToProvider() {
-		return
-	}
-	a.Runtime.TaskLedger.Reset()
-}
-
 func (a *Agent) clearResponseContextForActiveContextRequest() {
 	if len(a.providerFacingActiveContextBlocks()) == 0 {
 		return

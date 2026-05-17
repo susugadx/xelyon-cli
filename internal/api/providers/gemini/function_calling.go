@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -47,91 +46,11 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 		return "", err
 	}
 
-	// メッセージを interface{} スライスに変換（Function Calling リクエスト用）
-	var contents []interface{}
-
-	// 会話履歴を変換（ネイティブ functionCall / functionResponse 形式）
-	// msgsToSend（差分のみ、または全量）を使用
-	for _, msg := range msgsToSend {
-		switch {
-		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
-			// assistant の functionCall パート
-			parts := make([]interface{}, 0, len(msg.ToolCalls)+1)
-			if msg.Content != "" {
-				parts = append(parts, GeminiPart{Text: msg.Content})
-			}
-			// Gemini 3: thought パートを先に追加（最初の ToolCall から取得、全 TC で共有）
-			if len(msg.ToolCalls) > 0 && len(msg.ToolCalls[0].ThoughtParts) > 0 {
-				for _, tp := range msg.ToolCalls[0].ThoughtParts {
-					geminiPart := make(map[string]any)
-					if text, ok := tp["text"].(string); ok && text != "" {
-						geminiPart["text"] = text
-					}
-					if thought, ok := tp["thought"].(bool); ok && thought {
-						geminiPart["thought"] = true
-					}
-					if sig, ok := tp["thought_signature"].(string); ok && sig != "" {
-						geminiPart["thoughtSignature"] = sig // Gemini API は camelCase
-					}
-					if len(geminiPart) > 0 {
-						parts = append(parts, geminiPart)
-					}
-				}
-			}
-			for _, tc := range msg.ToolCalls {
-				var args map[string]any
-				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-				parts = append(parts, GeminiFunctionCallPart{
-					FunctionCall: GeminiFunctionCallData{
-						Name: tc.Function.Name,
-						Args: args,
-					},
-					ThoughtSignature: tc.ThoughtSignature,
-				})
-			}
-			contents = append(contents, GeminiGenericContent{
-				Parts: parts,
-				Role:  "model",
-			})
-
-		case msg.Role == "tool" && msg.ToolCallID != "":
-			// functionResponse パート（role: "user" — Gemini API仕様）
-			toolName := msg.ToolName
-			if toolName == "" {
-				toolName = extractToolNameFromContent(msg.Content)
-			}
-			contents = append(contents, GeminiGenericContent{
-				Parts: []interface{}{
-					GeminiFunctionResponsePart{
-						FunctionResponse: GeminiFunctionResponseData{
-							Name: toolName,
-							Response: map[string]any{
-								"result": msg.Content,
-							},
-						},
-					},
-				},
-				Role: "user",
-			})
-
-		default:
-			// 通常のテキストメッセージ
-			role := "user"
-			if msg.Role == "assistant" {
-				role = "model"
-			}
-			contents = append(contents, GeminiContent{
-				Parts: []GeminiPart{{Text: msg.Content}},
-				Role:  role,
-			})
-		}
-	}
-
 	cfg := config.FromContext(ctx)
 
 	// Function Calling 用リクエストを構築
 	reqBody := GeminiRequestWithTools{
-		Contents: contents,
+		Contents: geminiFunctionHistoryContents(msgsToSend, includeEmptyTextHistoryPart),
 	}
 	if cacheName != "" {
 		// キャッシュ使用時: system_instruction, tools, tool_config はキャッシュに含まれているため除外
@@ -232,15 +151,4 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	// Function Calling レスポンスを処理（SSE ストリーミング）
 	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg)
-}
-
-// extractToolNameFromContent はメッセージ内容からツール名を推定
-func extractToolNameFromContent(content string) string {
-	if strings.HasPrefix(content, "[Tool Result for ") {
-		end := strings.Index(content, "]")
-		if end > 17 {
-			return content[17:end]
-		}
-	}
-	return "unknown_tool"
 }

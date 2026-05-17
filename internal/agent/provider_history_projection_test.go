@@ -2,6 +2,7 @@ package agent
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -112,5 +113,140 @@ func TestProviderFacingHistoryExcludingLatestMessage(t *testing.T) {
 	got[0].Content = "provider mutated"
 	if agent.History[0].Content != "previous context" {
 		t.Fatalf("Agent.History[0].Content = %q, want previous context", agent.History[0].Content)
+	}
+}
+
+func TestProviderFacingHistoryRecordsEmptyReportWhenRuntimeGateDisabled(t *testing.T) {
+	runtime := &AgentRuntime{
+		LastProviderHistoryProjectionReport: ProviderHistoryProjectionReport{
+			Mode:                ProviderHistoryReductionApply,
+			CandidateCount:      1,
+			ReplacedCount:       1,
+			EstimatedSavedBytes: 100,
+		},
+	}
+	agent := &Agent{
+		Runtime: runtime,
+		History: []api.Message{
+			providerHistoryAssistantToolCall("call_old", "read_file"),
+			providerHistoryToolResult("call_old", "read_file", strings.Repeat("old read\n", 12)),
+			{Role: "assistant", Content: "after old read"},
+		},
+	}
+
+	projection := agent.providerFacingHistory()
+
+	if !reflect.DeepEqual(projection, agent.History) {
+		t.Fatalf("disabled providerFacingHistory() = %#v, want raw clone %#v", projection, agent.History)
+	}
+	if !reflect.DeepEqual(runtime.LastProviderHistoryProjectionReport, ProviderHistoryProjectionReport{}) {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want empty disabled report", runtime.LastProviderHistoryProjectionReport)
+	}
+}
+
+func TestProviderFacingHistoryAppliesRuntimeGateAndRecordsReport(t *testing.T) {
+	oldRead := strings.Repeat("old read_file output\n", 12)
+	runtime := &AgentRuntime{
+		Options: RuntimeOptions{EnableProviderHistoryReduction: true},
+		TaskLedger: providerHistoryTaskLedgerWithEvidence(t,
+			providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: "call_old", Path: "README.md", StartLine: 1, EndLine: 2},
+		),
+	}
+	agent := &Agent{
+		Runtime: runtime,
+		History: []api.Message{
+			providerHistoryAssistantToolCall("call_old", "read_file"),
+			providerHistoryToolResult("call_old", "read_file", oldRead),
+			{Role: "assistant", Content: "after old read"},
+			providerHistoryAssistantToolCall("call_latest", "read_file"),
+			providerHistoryToolResult("call_latest", "read_file", "latest read"),
+			{Role: "assistant", Content: "done"},
+		},
+	}
+
+	projection := agent.providerFacingHistory()
+
+	if projection[1].Content != "[omitted old read_file result; evidence: README.md:L1-L2 source=read_file]" {
+		t.Fatalf("projection old tool content = %q, want provider placeholder", projection[1].Content)
+	}
+	if agent.History[1].Content != oldRead {
+		t.Fatalf("Agent.History[1].Content = %q, want raw old read", agent.History[1].Content)
+	}
+	report := runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionApply || report.ReplacedCount != 1 || report.EstimatedSavedBytes <= 0 {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want apply report with one replacement and saved bytes", report)
+	}
+}
+
+func TestProviderFacingHistoryAppliesRuntimeGateAndPreservesInferredToolName(t *testing.T) {
+	oldRead := strings.Repeat("old read_file output without stored tool name\n", 12)
+	runtime := &AgentRuntime{
+		Options: RuntimeOptions{EnableProviderHistoryReduction: true},
+		TaskLedger: providerHistoryTaskLedgerWithEvidence(t,
+			providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: "call_old", Path: "README.md", StartLine: 1},
+		),
+	}
+	agent := &Agent{
+		Runtime: runtime,
+		History: []api.Message{
+			providerHistoryAssistantToolCall("call_old", "read_file"),
+			{Role: "tool", ToolCallID: "call_old", Content: oldRead},
+			{Role: "assistant", Content: "after old read"},
+			providerHistoryAssistantToolCall("call_latest", "read_file"),
+			providerHistoryToolResult("call_latest", "read_file", "latest read"),
+			{Role: "assistant", Content: "done"},
+		},
+	}
+
+	projection := agent.providerFacingHistory()
+
+	if projection[1].Content != "[omitted old read_file result; evidence: README.md:L1 source=read_file]" {
+		t.Fatalf("projection old tool content = %q, want provider placeholder", projection[1].Content)
+	}
+	if projection[1].ToolName != "read_file" {
+		t.Fatalf("projection old tool name = %q, want inferred read_file", projection[1].ToolName)
+	}
+	if agent.History[1].ToolName != "" {
+		t.Fatalf("Agent.History[1].ToolName = %q, want raw history unchanged", agent.History[1].ToolName)
+	}
+	report := runtime.LastProviderHistoryProjectionReport
+	candidate := candidateByToolCallID(report, "call_old")
+	if candidate == nil || candidate.ToolName != "read_file" || !candidate.ReplacementApplied {
+		t.Fatalf("candidate = %#v, want inferred read_file replacement", candidate)
+	}
+}
+
+func TestProviderFacingHistoryExcludingLatestMessageReportsProjectedPastHistory(t *testing.T) {
+	oldRead := strings.Repeat("old image read output\n", 12)
+	runtime := &AgentRuntime{
+		Options: RuntimeOptions{EnableProviderHistoryReduction: true},
+		TaskLedger: providerHistoryTaskLedgerWithEvidence(t,
+			providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: "call_image_old", Path: "image.md", StartLine: 4},
+		),
+	}
+	agent := &Agent{
+		Runtime: runtime,
+		History: []api.Message{
+			providerHistoryAssistantToolCall("call_image_old", "read_file"),
+			providerHistoryToolResult("call_image_old", "read_file", oldRead),
+			{Role: "assistant", Content: "after image read"},
+			providerHistoryAssistantToolCall("call_image_latest", "read_file"),
+			providerHistoryToolResult("call_image_latest", "read_file", "latest image read"),
+			{Role: "assistant", Content: "after latest image read"},
+			{Role: "user", Content: "current image prompt"},
+		},
+	}
+
+	projection := agent.providerFacingHistoryExcludingLatestMessage()
+
+	if len(projection) != 6 {
+		t.Fatalf("excluding projection length = %d, want past history only", len(projection))
+	}
+	if projection[1].Content != "[omitted old read_file result; evidence: image.md:L4 source=read_file]" {
+		t.Fatalf("excluding old tool content = %q, want provider placeholder", projection[1].Content)
+	}
+	report := runtime.LastProviderHistoryProjectionReport
+	if report.OriginalMessageCount != 6 || report.ProjectedMessageCount != 6 || report.ReplacedCount != 1 {
+		t.Fatalf("excluding report = %#v, want counts for provider past history only", report)
 	}
 }

@@ -87,8 +87,11 @@ func TestProviderHistoryReductionApplyReplacesAllowedToolResultsWithEvidencePoin
 		blocks[0].Input["path"] != "README.md" {
 		t.Fatalf("read replacement AnthropicContentBlocks = %#v, want preserved provider state", blocks)
 	}
-	if result.History[5].ToolCallID != "call_search_old" || result.History[5].ToolName != "" {
-		t.Fatalf("search replacement changed tool id/name: %#v", result.History[5])
+	if result.History[5].ToolCallID != "call_search_old" || result.History[5].ToolName != "search_code" {
+		t.Fatalf("search replacement tool id/name = %#v, want inferred search_code", result.History[5])
+	}
+	if agent.History[5].ToolName != "" {
+		t.Fatalf("raw search tool name = %q, want raw history unchanged", agent.History[5].ToolName)
 	}
 	for _, candidate := range report.Candidates {
 		if !candidate.ReplacementApplied {
