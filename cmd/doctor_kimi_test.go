@@ -297,31 +297,12 @@ func TestRunKimiDoctorInvocation_PrintRequestJSONReportsProxyEndpointWarning(t *
 		t.Fatalf("runKimiDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		APIURL         string `json:"api_url"`
-		RequestPreview struct {
-			Requests []struct {
-				URL string `json:"url"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
 	if report.APIURL != proxyURL {
 		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
 	}
-	endpoint := requireDoctorJSONCheck(t, report.Checks, "api_url_path")
-	requireDoctorJSONCheckStatus(t, endpoint, "warn")
-	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
-	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
-	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "api_url"), "ok")
-	if len(report.RequestPreview.Requests) == 0 {
-		t.Fatalf("request_preview = %#v, want request previews", report.RequestPreview)
-	}
-	for _, request := range report.RequestPreview.Requests {
-		if request.URL != proxyURL {
-			t.Fatalf("request_preview = %#v, want configured proxy request URL", report.RequestPreview)
-		}
-	}
+	requireDoctorJSONProxyWarning(t, report.Checks, "api_url_path", "api_url", proxyURL)
+	requireDoctorJSONRequestPreviewAllURLs(t, report.RequestPreview, proxyURL)
 }
 
 func TestRunKimiDoctorInvocation_FailsForMissingKey(t *testing.T) {

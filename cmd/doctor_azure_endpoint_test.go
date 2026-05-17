@@ -47,36 +47,14 @@ func TestRunAzureDoctorInvocation_PrintRequestJSONReportsProxyBaseURLWarning(t *
 		t.Fatalf("runAzureDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		NormalizedBaseURL string `json:"normalized_base_url"`
-		Smoke             any    `json:"smoke"`
-		RequestPreview    struct {
-			Requests []struct {
-				Route string `json:"route"`
-				URL   string `json:"url"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
 	if report.NormalizedBaseURL != proxyBaseURL {
 		t.Fatalf("normalized_base_url = %q, want configured proxy base URL", report.NormalizedBaseURL)
 	}
 	if report.Smoke != nil {
 		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
 	}
-	endpoint := requireDoctorJSONCheck(t, report.Checks, "base_url_path")
-	requireDoctorJSONCheckStatus(t, endpoint, "warn")
-	requireDoctorJSONCheckDetailContains(t, endpoint, proxyBaseURL)
-	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
-	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "base_url"), "ok")
-	requireNoDoctorJSONChecks(t, report.Checks, "auth")
-	if len(report.RequestPreview.Requests) != 2 {
-		t.Fatalf("request_preview = %#v, want two retention requests", report.RequestPreview)
-	}
-	for _, request := range report.RequestPreview.Requests {
-		if request.Route != azureprovider.DiagnosticRouteResponsesNonStreaming ||
-			request.URL != proxyBaseURL+"/responses" {
-			t.Fatalf("request_preview = %#v, want proxy responses request URLs", report.RequestPreview)
-		}
-	}
+	requireDoctorJSONProxyWarning(t, report.Checks, "base_url_path", "base_url", proxyBaseURL)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewRouteAndURL(t, report.RequestPreview, 2, azureprovider.DiagnosticRouteResponsesNonStreaming, proxyBaseURL+"/responses")
 }

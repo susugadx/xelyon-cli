@@ -120,30 +120,13 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsChatProxyEndpointWarni
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		APIURL         string `json:"api_url"`
-		RequestPreview struct {
-			Requests []struct {
-				Route string `json:"route"`
-				URL   string `json:"url"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
 	if report.APIURL != proxyURL {
 		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
 	}
-	endpoint := requireDoctorJSONCheck(t, report.Checks, "api_url_path")
-	requireDoctorJSONCheckStatus(t, endpoint, "warn")
-	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
-	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
-	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "api_url"), "ok")
-	requireNoDoctorJSONChecks(t, report.Checks, "auth")
-	if len(report.RequestPreview.Requests) != 1 ||
-		report.RequestPreview.Requests[0].Route != string(openaiprovider.DiagnosticRouteChatCompletions) ||
-		report.RequestPreview.Requests[0].URL != proxyURL {
-		t.Fatalf("request_preview = %#v, want chat completions proxy request URL", report.RequestPreview)
-	}
+	requireDoctorJSONProxyWarning(t, report.Checks, "api_url_path", "api_url", proxyURL)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewRouteAndURL(t, report.RequestPreview, 1, string(openaiprovider.DiagnosticRouteChatCompletions), proxyURL)
 }
 
 func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsResponsesProxyEndpointWarning(t *testing.T) {
@@ -165,33 +148,13 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsResponsesProxyEndpoint
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		ResponsesURL   string `json:"responses_url"`
-		RequestPreview struct {
-			Requests []struct {
-				Route string `json:"route"`
-				URL   string `json:"url"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
 	if report.ResponsesURL != proxyURL {
 		t.Fatalf("responses_url = %q, want configured proxy URL", report.ResponsesURL)
 	}
-	endpoint := requireDoctorJSONCheck(t, report.Checks, "responses_url_path")
-	requireDoctorJSONCheckStatus(t, endpoint, "warn")
-	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
-	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
-	requireDoctorJSONCheckStatus(t, requireDoctorJSONCheck(t, report.Checks, "responses_url"), "ok")
-	requireNoDoctorJSONChecks(t, report.Checks, "auth")
-	if len(report.RequestPreview.Requests) != 2 {
-		t.Fatalf("request_preview = %#v, want two retention requests", report.RequestPreview)
-	}
-	for _, request := range report.RequestPreview.Requests {
-		if request.Route != string(openaiprovider.DiagnosticRouteResponsesNonStreaming) || request.URL != proxyURL {
-			t.Fatalf("request_preview = %#v, want responses proxy request URLs", report.RequestPreview)
-		}
-	}
+	requireDoctorJSONProxyWarning(t, report.Checks, "responses_url_path", "responses_url", proxyURL)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewRouteAndURL(t, report.RequestPreview, 2, string(openaiprovider.DiagnosticRouteResponsesNonStreaming), proxyURL)
 }
 
 func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testing.T) {

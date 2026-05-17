@@ -144,25 +144,12 @@ func TestRunClaudeDoctorInvocation_PrintRequestJSONReportsProxyEndpointWarning(t
 		t.Fatalf("runClaudeDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	report := unmarshalDoctorJSON[struct {
-		APIURL         string `json:"api_url"`
-		RequestPreview struct {
-			Requests []struct {
-				URL string `json:"url"`
-			} `json:"requests"`
-		} `json:"request_preview"`
-		Checks []doctorJSONCheck `json:"checks"`
-	}](t, out)
+	report := unmarshalDoctorJSON[doctorEndpointContractReport](t, out)
 	if report.APIURL != proxyURL {
 		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
 	}
-	endpoint := requireDoctorJSONCheck(t, report.Checks, "endpoint")
-	requireDoctorJSONCheckStatus(t, endpoint, "warn")
-	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
-	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
-	if len(report.RequestPreview.Requests) != 1 || report.RequestPreview.Requests[0].URL != proxyURL {
-		t.Fatalf("request_preview = %#v, want configured proxy request URL", report.RequestPreview)
-	}
+	requireDoctorJSONProxyWarning(t, report.Checks, "endpoint", "", proxyURL)
+	requireDoctorJSONRequestPreviewURLs(t, report.RequestPreview, 1, proxyURL)
 }
 
 func TestRunClaudeDoctorInvocation_FailsForMissingKey(t *testing.T) {
