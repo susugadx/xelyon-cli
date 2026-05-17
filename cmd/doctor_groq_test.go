@@ -198,17 +198,12 @@ func TestRenderGroqDoctorTextIncludesRequestPreviewAndSmokeObservability(t *test
 
 	var out bytes.Buffer
 	renderGroqDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Route reason: Groq provider uses OpenAI-compatible Chat Completions",
 		"Request preview:",
 		`"Authorization": "Bearer <redacted>"`,
 		"Smoke route: chat_completions",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }

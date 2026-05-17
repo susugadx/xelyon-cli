@@ -178,19 +178,14 @@ func TestRenderOllamaDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 
 	var out bytes.Buffer
 	renderOllamaDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Route reason: Ollama provider uses the local /api/chat JSONL stream endpoint",
 		"Request preview:",
 		`"Content-Type": "application/json"`,
 		"Smoke route: ollama_chat",
 		"Smoke usage: input=10 cached=0 output=4 reasoning=0 cache_creation=0",
 		"Smoke cost estimate: $0.00000000 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func newOllamaDoctorCommandTestServer(t *testing.T, models []string, chat http.HandlerFunc) *httptest.Server {

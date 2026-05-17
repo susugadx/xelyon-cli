@@ -219,8 +219,7 @@ func TestRenderOpenRouterDoctorTextIncludesRequestPreviewAndSmokeObservability(t
 
 	var out bytes.Buffer
 	renderOpenRouterDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Upstream model: anthropic/claude-sonnet-4.6",
 		"Route reason: request model anthropic/claude-sonnet-4.6 enables OpenRouter Anthropic Skin context management",
 		"Request preview:",
@@ -228,9 +227,5 @@ func TestRenderOpenRouterDoctorTextIncludesRequestPreviewAndSmokeObservability(t
 		"Smoke route: anthropic_messages",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }

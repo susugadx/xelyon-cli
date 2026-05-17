@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -319,18 +318,13 @@ func TestRenderOpenAIDoctorTextIncludesSmokeObservability(t *testing.T) {
 
 	var out bytes.Buffer
 	renderOpenAIDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Route reason: model=gpt-5.4 uses Responses API; catalog_model=gpt-5.4 supports Responses streaming",
 		"Smoke route: responses_streaming",
 		"Smoke response ID: resp_text",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func TestRenderOpenAIDoctorTextIncludesRequestPreview(t *testing.T) {
@@ -457,19 +451,14 @@ func TestRenderOpenAIDoctorTextIncludesSmokeRequests(t *testing.T) {
 
 	var out bytes.Buffer
 	renderOpenAIDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Smoke request text: ok route=responses_streaming duration=1ms response_id=resp_text",
 		"Smoke content text: xelyon openai doctor ok",
 		"Smoke request tool: ok route=responses_streaming duration=2ms response_id=resp_tool",
 		"Smoke usage tool: input=8 cached=0 output=4 reasoning=0 cache_creation=0",
 		"Smoke total usage: input=18 cached=0 output=8 reasoning=0 cache_creation=0",
 		"Smoke total cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func TestRenderOpenAIDoctorTextIncludesRetentionSmokePreviousResponseID(t *testing.T) {
@@ -513,15 +502,10 @@ func TestRenderOpenAIDoctorTextIncludesRetentionSmokePreviousResponseID(t *testi
 
 	var out bytes.Buffer
 	renderOpenAIDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Smoke request retention_initial: ok route=responses_non_streaming duration=1ms response_id=resp_retention_initial previous_response_id=(not returned)",
 		"Smoke request retention_followup: ok route=responses_non_streaming duration=2ms response_id=resp_retention_followup previous_response_id=resp_retention_initial",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func TestRenderOpenAIDoctorJSONIncludesSmokeObservability(t *testing.T) {
@@ -571,54 +555,25 @@ func TestRenderOpenAIDoctorJSONIncludesSmokeObservability(t *testing.T) {
 		t.Fatalf("renderOpenAIDoctorJSON() error = %v", err)
 	}
 
-	var got struct {
-		Smoke struct {
-			Route         string `json:"route"`
-			ResponseID    string `json:"response_id"`
-			UsageObserved bool   `json:"usage_observed"`
-			Usage         struct {
-				InputTokens         int `json:"input_tokens"`
-				OutputTokens        int `json:"output_tokens"`
-				ThinkingTokens      int `json:"thinking_tokens"`
-				CachedInputTokens   int `json:"cached_input_tokens"`
-				CacheCreationTokens int `json:"cache_creation_tokens"`
-			} `json:"usage"`
-			Cost struct {
-				USD                float64 `json:"usd"`
-				PricingUnavailable bool    `json:"pricing_unavailable"`
-			} `json:"cost"`
-			Requests []struct {
-				Name               string `json:"name"`
-				Ran                bool   `json:"ran"`
-				RetentionPayload   bool   `json:"retention_payload"`
-				Route              string `json:"route"`
-				ResponseID         string `json:"response_id"`
-				PreviousResponseID string `json:"previous_response_id"`
-			} `json:"requests"`
-		} `json:"smoke"`
+	got := unmarshalDoctorJSONSmoke(t, &out)
+	if got.Route != "responses_non_streaming" || got.ResponseID != "resp_json" || !got.UsageObserved {
+		t.Fatalf("smoke metadata = %#v, want route, response_id, and usage_observed", got)
 	}
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
+	requireDoctorJSONSmokeUsage(t, got.Usage, doctorJSONSmokeUsage{
+		InputTokens:         10,
+		OutputTokens:        4,
+		ThinkingTokens:      2,
+		CachedInputTokens:   3,
+		CacheCreationTokens: 1,
+	})
+	requireDoctorJSONSmokeCost(t, got.Cost, 0.00012345, false)
+	requireDoctorJSONSmokeRequestCount(t, got, 2)
+	text := requireDoctorJSONSmokeRequestAt(t, got, 0, "text")
+	if text.ResponseID != "resp_json" {
+		t.Fatalf("text request = %+v, want response_id", text)
 	}
-	if got.Smoke.Route != "responses_non_streaming" || got.Smoke.ResponseID != "resp_json" || !got.Smoke.UsageObserved {
-		t.Fatalf("smoke metadata = %#v, want route, response_id, and usage_observed", got.Smoke)
-	}
-	if got.Smoke.Usage.InputTokens != 10 ||
-		got.Smoke.Usage.OutputTokens != 4 ||
-		got.Smoke.Usage.ThinkingTokens != 2 ||
-		got.Smoke.Usage.CachedInputTokens != 3 ||
-		got.Smoke.Usage.CacheCreationTokens != 1 {
-		t.Fatalf("smoke usage = %+v, want nested usage fields", got.Smoke.Usage)
-	}
-	if got.Smoke.Cost.USD != 0.00012345 || got.Smoke.Cost.PricingUnavailable {
-		t.Fatalf("smoke cost = %+v, want nested cost fields", got.Smoke.Cost)
-	}
-	if len(got.Smoke.Requests) != 2 || got.Smoke.Requests[0].Name != "text" || got.Smoke.Requests[0].ResponseID != "resp_json" {
-		t.Fatalf("smoke requests = %+v, want text and retention request metadata", got.Smoke.Requests)
-	}
-	if got.Smoke.Requests[1].Name != "retention_followup" ||
-		!got.Smoke.Requests[1].RetentionPayload ||
-		got.Smoke.Requests[1].PreviousResponseID != "resp_json" {
-		t.Fatalf("retention request = %+v, want retention payload and previous_response_id", got.Smoke.Requests[1])
+	retention := requireDoctorJSONSmokeRequestAt(t, got, 1, "retention_followup")
+	if !retention.RetentionPayload || retention.PreviousResponseID != "resp_json" {
+		t.Fatalf("retention request = %+v, want retention payload and previous_response_id", retention)
 	}
 }

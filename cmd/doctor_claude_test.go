@@ -236,8 +236,7 @@ func TestRenderClaudeDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 
 	var out bytes.Buffer
 	renderClaudeDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Claude doctor",
 		"Route: claude_messages",
 		"Capabilities: function_calling=true image_input=true web_search=true thinking=true context_management=true claude_compaction=true thinking_type=adaptive",
@@ -247,11 +246,7 @@ func TestRenderClaudeDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 		"Smoke route: claude_messages",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=0 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func TestRenderClaudeDoctorText_SkippedToolSmokeRequest(t *testing.T) {
@@ -328,18 +323,11 @@ func TestRenderClaudeDoctorText_MultiSmokePartialUsageDoesNotPrintTotalCost(t *t
 	var out bytes.Buffer
 	renderClaudeDoctorText(&out, report)
 	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, output, []string{
 		"Smoke cost estimate text: $0.00012345 USD",
 		"Smoke cost estimate web_search: N/A (usage unavailable)",
-		"Smoke total cost estimate: N/A (usage unavailable)",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("renderClaudeDoctorText() output missing %q:\n%s", want, output)
-		}
-	}
-	if strings.Contains(output, "Smoke total cost estimate: $") {
-		t.Fatalf("renderClaudeDoctorText() printed partial total cost:\n%s", output)
-	}
+	})
+	requireDoctorSmokeTextUnavailableTotalCost(t, output)
 }
 
 func setClaudeDoctorCommandTestEnv(t *testing.T, apiKey string) {

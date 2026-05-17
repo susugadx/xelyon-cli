@@ -204,8 +204,7 @@ func TestRenderDeepSeekDoctorTextIncludesThinkingRequestPreviewAndSmokeObservabi
 
 	var out bytes.Buffer
 	renderDeepSeekDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"API model: deepseek-v4-flash",
 		"Thinking: supported=true enabled=true type=enabled reasoning_effort=max",
 		"Route reason: DeepSeek provider uses OpenAI-compatible Chat Completions",
@@ -214,9 +213,5 @@ func TestRenderDeepSeekDoctorTextIncludesThinkingRequestPreviewAndSmokeObservabi
 		"Smoke route: chat_completions",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=0 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }

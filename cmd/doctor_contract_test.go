@@ -15,6 +15,15 @@ func requireDoctorContractTextContainsAll(t *testing.T, output string, wants []s
 	}
 }
 
+func requireDoctorContractTextOmitsAll(t *testing.T, output string, unwanted []string) {
+	t.Helper()
+	for _, value := range unwanted {
+		if strings.Contains(output, value) {
+			t.Fatalf("output contains unwanted %q:\n%s", value, output)
+		}
+	}
+}
+
 func renderedDoctorContractValue(t *testing.T, value any) string {
 	t.Helper()
 	payload, err := json.Marshal(value)

@@ -113,13 +113,7 @@ func TestRenderBedrockDoctorTextMarksPartialTotalCostUnavailable(t *testing.T) {
 
 	var out bytes.Buffer
 	renderBedrockDoctorText(&out, report)
-	output := out.String()
-	if !strings.Contains(output, "Smoke total cost estimate: N/A (usage unavailable)") {
-		t.Fatalf("output = %q, want unavailable total cost for partial usage", output)
-	}
-	if strings.Contains(output, "Smoke total cost estimate: $") {
-		t.Fatalf("output = %q, should not print a dollar total for partial usage", output)
-	}
+	requireDoctorSmokeTextUnavailableTotalCost(t, out.String())
 }
 
 func TestRenderBedrockDoctorJSONUsesRequestIDOnly(t *testing.T) {

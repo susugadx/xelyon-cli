@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -171,20 +170,9 @@ func TestRenderKimiDoctorJSON_WebSearchSmokeObservation(t *testing.T) {
 		t.Fatalf("renderKimiDoctorJSON() error = %v", err)
 	}
 
-	var parsed struct {
-		Smoke struct {
-			WebSearchCallCount       int     `json:"web_search_call_count"`
-			WebSearchCallFeeEstimate float64 `json:"web_search_call_fee_estimate"`
-			WebSearchUsageObserved   bool    `json:"web_search_usage_observed"`
-			CachedInputTokens        int     `json:"cached_input_tokens"`
-			SearchResultTotalTokens  int     `json:"search_result_total_tokens"`
-		} `json:"smoke"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	if parsed.Smoke.WebSearchCallCount != 2 || parsed.Smoke.WebSearchCallFeeEstimate != 0.010 || !parsed.Smoke.WebSearchUsageObserved || parsed.Smoke.CachedInputTokens != 7 || parsed.Smoke.SearchResultTotalTokens != 55 {
-		t.Fatalf("smoke JSON = %+v, want web search observation", parsed.Smoke)
+	smoke := unmarshalDoctorJSONSmoke(t, &out)
+	if smoke.WebSearchCallCount != 2 || smoke.WebSearchCallFeeEstimate != 0.010 || !smoke.WebSearchUsageObserved || smoke.CachedInputTokens != 7 || smoke.SearchResultTotalTokens != 55 {
+		t.Fatalf("smoke JSON = %+v, want web search observation", smoke)
 	}
 }
 

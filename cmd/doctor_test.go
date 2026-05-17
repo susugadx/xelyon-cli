@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -429,18 +428,13 @@ func TestRenderAzureDoctorTextIncludesSmokeObservability(t *testing.T) {
 
 	var out bytes.Buffer
 	renderAzureDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Route: responses_streaming",
 		"Route reason: deployment=corp-codex uses Responses API; catalog_model=gpt-5.3-codex supports Responses streaming",
 		"Smoke response ID: resp_text",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func TestRenderAzureDoctorTextIncludesRequestPreview(t *testing.T) {
@@ -541,15 +535,10 @@ func TestRenderAzureDoctorTextIncludesRetentionSmokeRequests(t *testing.T) {
 
 	var out bytes.Buffer
 	renderAzureDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Smoke request retention_initial: ok duration=1ms response_id=resp_retention_initial previous_response_id=(not returned)",
 		"Smoke request retention_followup: ok duration=2ms response_id=resp_retention_followup previous_response_id=resp_retention_initial",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func TestRenderAzureDoctorJSONIncludesSmokeObservability(t *testing.T) {
@@ -588,48 +577,21 @@ func TestRenderAzureDoctorJSONIncludesSmokeObservability(t *testing.T) {
 		t.Fatalf("renderAzureDoctorJSON() error = %v", err)
 	}
 
-	var got struct {
-		Smoke struct {
-			ResponseID       string `json:"response_id"`
-			RetentionPayload bool   `json:"retention_payload"`
-			UsageObserved    bool   `json:"usage_observed"`
-			Usage            struct {
-				InputTokens         int `json:"input_tokens"`
-				OutputTokens        int `json:"output_tokens"`
-				ThinkingTokens      int `json:"thinking_tokens"`
-				CachedInputTokens   int `json:"cached_input_tokens"`
-				CacheCreationTokens int `json:"cache_creation_tokens"`
-			} `json:"usage"`
-			Cost struct {
-				USD                float64 `json:"usd"`
-				PricingUnavailable bool    `json:"pricing_unavailable"`
-			} `json:"cost"`
-			Requests []struct {
-				Name               string `json:"name"`
-				Ran                bool   `json:"ran"`
-				RetentionPayload   bool   `json:"retention_payload"`
-				ResponseID         string `json:"response_id"`
-				PreviousResponseID string `json:"previous_response_id"`
-			} `json:"requests"`
-		} `json:"smoke"`
+	got := unmarshalDoctorJSONSmoke(t, &out)
+	if got.ResponseID != "resp_json" || !got.UsageObserved {
+		t.Fatalf("smoke metadata = %#v, want response_id and usage_observed", got)
 	}
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	if got.Smoke.ResponseID != "resp_json" || !got.Smoke.UsageObserved {
-		t.Fatalf("smoke metadata = %#v, want response_id and usage_observed", got.Smoke)
-	}
-	if got.Smoke.Usage.InputTokens != 10 ||
-		got.Smoke.Usage.OutputTokens != 4 ||
-		got.Smoke.Usage.ThinkingTokens != 2 ||
-		got.Smoke.Usage.CachedInputTokens != 3 ||
-		got.Smoke.Usage.CacheCreationTokens != 1 {
-		t.Fatalf("smoke usage = %+v, want nested usage fields", got.Smoke.Usage)
-	}
-	if got.Smoke.Cost.USD != 0.00012345 || got.Smoke.Cost.PricingUnavailable {
-		t.Fatalf("smoke cost = %+v, want nested cost fields", got.Smoke.Cost)
-	}
-	if !got.Smoke.RetentionPayload || len(got.Smoke.Requests) != 1 || got.Smoke.Requests[0].PreviousResponseID != "resp_json" {
-		t.Fatalf("smoke retention JSON = %+v, want retention request metadata", got.Smoke)
+	requireDoctorJSONSmokeUsage(t, got.Usage, doctorJSONSmokeUsage{
+		InputTokens:         10,
+		OutputTokens:        4,
+		ThinkingTokens:      2,
+		CachedInputTokens:   3,
+		CacheCreationTokens: 1,
+	})
+	requireDoctorJSONSmokeCost(t, got.Cost, 0.00012345, false)
+	requireDoctorJSONSmokeRequestCount(t, got, 1)
+	retention := requireDoctorJSONSmokeRequestAt(t, got, 0, "retention_followup")
+	if !got.RetentionPayload || retention.PreviousResponseID != "resp_json" {
+		t.Fatalf("smoke retention JSON = %+v, request = %+v, want retention request metadata", got, retention)
 	}
 }

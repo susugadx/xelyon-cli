@@ -181,8 +181,7 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 
 	var out bytes.Buffer
 	renderGeminiDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Gemini doctor",
 		"Route: stream_generate_content_sse",
 		"Capabilities: function_calling=true image_input=true web_search=true context_caching=true thinking=false",
@@ -191,9 +190,5 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 		"Smoke route: stream_generate_content_sse",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=1 cache_creation=0",
 		"Smoke cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
