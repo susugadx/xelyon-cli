@@ -103,6 +103,46 @@ func TestRunGroqDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing
 	}
 }
 
+func TestRunGroqDoctorInvocation_PrintRequestJSONReportsOpenAICompatibleProxyEndpointWarning(t *testing.T) {
+	proxyURL := "https://groq.example/v1/chat/completions"
+	model := "meta-llama/llama-4-scout-17b-16e-instruct"
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GROQ_API_KEY", "")
+	t.Setenv("GROQ_API_URL", proxyURL)
+
+	cmd, out := newDoctorSubcommandTest(t, newGroqDoctorCommand)
+
+	doctorGroqModelFlag = model
+	doctorCatalogModelFlag = model
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runGroqDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runGroqDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		APIURL         string `json:"api_url"`
+		RequestPreview struct {
+			Requests []struct {
+				URL string `json:"url"`
+			} `json:"requests"`
+		} `json:"request_preview"`
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	if report.APIURL != proxyURL {
+		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
+	}
+	endpoint := requireDoctorJSONCheck(t, report.Checks, "endpoint")
+	requireDoctorJSONCheckStatus(t, endpoint, "warn")
+	requireDoctorJSONCheckDetailContains(t, endpoint, proxyURL)
+	requireDoctorJSONCheckSuggestionContains(t, endpoint, "intentional proxy")
+	if len(report.RequestPreview.Requests) != 1 || report.RequestPreview.Requests[0].URL != proxyURL {
+		t.Fatalf("request_preview = %#v, want configured proxy request URL", report.RequestPreview)
+	}
+}
+
 func TestRootCommand_GroqDoctorCommandParsesFlags(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GROQ_API_KEY", "gsk-test")
@@ -129,7 +169,18 @@ func TestRootCommand_GroqDoctorHelpShowsMinimalFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--print-request", "--timeout", "--json", "Diagnose Groq provider configuration"} {
+	for _, want := range []string{
+		"--model",
+		"--catalog-model",
+		"--smoke",
+		"--tool-smoke",
+		"--print-request",
+		"--timeout",
+		"--json",
+		"Diagnose Groq provider configuration",
+		"exact Chat Completions endpoint",
+		"/openai/v1/chat/completions",
+	} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want Groq doctor help substring %q", out.String(), want)
 		}

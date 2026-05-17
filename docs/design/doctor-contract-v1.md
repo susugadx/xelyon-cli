@@ -73,6 +73,7 @@ Bedrock:
 Groq:
 
 - Checks `GROQ_API_KEY`, `GROQ_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, function calling, catalog policy.
+- `GROQ_API_URL` is an exact Chat Completions endpoint override. The official Groq path ends with `/openai/v1/chat/completions`; `/v1/chat/completions` remains a warn-only intentional proxy path.
 - Supports `--print-request`.
 - Live smoke supports text and tool request types. `GROQ_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
 - Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1.

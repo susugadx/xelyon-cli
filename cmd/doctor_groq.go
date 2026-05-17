@@ -18,9 +18,12 @@ func newGroqDoctorCommand() *cobra.Command {
 
 Checks GROQ_API_KEY, GROQ_API_URL, provider registration, model/catalog model
 resolution, Chat Completions route selection, function calling settings, and
-token/cost metadata. Use --smoke to send a minimal live request. Use
---tool-smoke to force a dummy tool call when function calling is enabled. Use
---print-request to print the sanitized smoke request JSON without sending it.`,
+token/cost metadata. GROQ_API_URL is an exact Chat Completions endpoint
+override; the official Groq path ends with /openai/v1/chat/completions.
+OpenAI-compatible /v1/chat/completions proxy paths are allowed but reported as
+endpoint warnings. Use --smoke to send a minimal live request. Use --tool-smoke
+to force a dummy tool call when function calling is enabled. Use --print-request
+to print the sanitized smoke request JSON without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runGroqDoctorInvocation,
 	}

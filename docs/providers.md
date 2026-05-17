@@ -451,7 +451,7 @@ xelyon --provider groq --model meta-llama/llama-4-scout-17b-16e-instruct
 - 画像入力非対応
 - プロンプトキャッシュ対応（自動、50% OFF、一部モデルのみ）
 
-設定の到達性は CLI から診断できます。`doctor groq` は `GROQ_API_KEY`、`GROQ_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、function calling 設定、token / pricing metadata を確認します。`--smoke` を付けると live text request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。`--print-request` は live request を送らずに redacted request body を表示します。
+設定の到達性は CLI から診断できます。`doctor groq` は `GROQ_API_KEY`、`GROQ_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、function calling 設定、token / pricing metadata を確認します。`GROQ_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 Groq endpoint は `/openai/v1/chat/completions` で終わります。OpenAI 互換 proxy の `/v1/chat/completions` も指定できますが、doctor では意図的な proxy path として warn になります。`--smoke` を付けると live text request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。`--print-request` は live request を送らずに redacted request body を表示します。
 
 ```bash
 xelyon doctor groq

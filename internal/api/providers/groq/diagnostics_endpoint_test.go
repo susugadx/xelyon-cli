@@ -11,6 +11,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
+const groqOpenAICompatibleProxyPath = "/v1/chat/completions"
+
 func TestDiagnoseGroq_EndpointCheckClassifiesConfiguredPaths(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -26,10 +28,10 @@ func TestDiagnoseGroq_EndpointCheckClassifiesConfiguredPaths(t *testing.T) {
 			wantDetail: "https://example.com" + groqChatCompletionsEndpointPath,
 		},
 		{
-			name:       "generic_openai_path_warns_currently",
-			apiURL:     "https://example.com/v1/chat/completions",
+			name:       "openai_compatible_v1_proxy_path_warns",
+			apiURL:     "https://example.com" + groqOpenAICompatibleProxyPath,
 			wantStatus: DiagnosticStatusWarn,
-			wantDetail: "https://example.com/v1/chat/completions",
+			wantDetail: "https://example.com" + groqOpenAICompatibleProxyPath,
 			wantText:   groqChatCompletionsEndpointPath,
 		},
 		{
@@ -82,6 +84,50 @@ func TestDiagnoseGroq_EndpointFailureSkipsSmoke(t *testing.T) {
 	}
 	if report.Smoke != nil {
 		t.Fatalf("Smoke = %#v, want nil when endpoint check fails", report.Smoke)
+	}
+}
+
+func TestDiagnoseGroq_ProxyEndpointWarningStillAllowsLiveSmoke(t *testing.T) {
+	model := "meta-llama/llama-4-scout-17b-16e-instruct"
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != groqOpenAICompatibleProxyPath {
+			t.Errorf("path = %s, want %s", r.URL.Path, groqOpenAICompatibleProxyPath)
+		}
+		if r.Header.Get("Authorization") != "Bearer gsk-test" {
+			t.Errorf("Authorization = %q, want Bearer gsk-test", r.Header.Get("Authorization"))
+		}
+		writeGroqSSE(w,
+			`{"choices":[{"delta":{"content":"proxy smoke ok"}}]}`,
+			`{"choices":[{"delta":{}}],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
+		)
+	}))
+	defer server.Close()
+
+	t.Setenv(groqAPIKeyEnv, "gsk-test")
+	t.Setenv(groqAPIURLEnv, server.URL+groqOpenAICompatibleProxyPath)
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        model,
+		CatalogModel: model,
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want proxy endpoint warning only: %#v", report.Checks)
+	}
+	requireGroqDiagnosticCheckStatus(t, report, "endpoint", DiagnosticStatusWarn)
+	requireGroqDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusOK)
+	if requests.Load() != 1 {
+		t.Fatalf("requests = %d, want one live smoke request to proxy endpoint", requests.Load())
+	}
+	if report.Smoke == nil || report.Smoke.Content != "proxy smoke ok" {
+		t.Fatalf("Smoke = %#v, want proxy smoke content", report.Smoke)
 	}
 }
 
