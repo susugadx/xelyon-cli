@@ -251,6 +251,8 @@ xelyon --provider azure --model my-gpt-5-deployment
 
 `model` / `provider_models.azure.default_model` には Azure 側の **deployment 名**を入れます。deployment 名が実モデル名と異なる場合は、token limit / pricing / capability 判定用に `catalog_model` を設定してください。`catalog_model` は `gpt-5.4`、`gpt-5.5-pro`、`gpt-5.3-codex` のような実モデル名で、deployment 名ではありません。
 
+`AZURE_OPENAI_BASE_URL` は Azure OpenAI resource の v1 base URL です。resource root と `/openai` は `/openai/v1` に正規化され、runtime / doctor smoke / `--print-request` は `<normalized_base_url>/responses` を実 request endpoint として使います。`/openai/deployments/<deployment>` まで含めた旧 Azure endpoint や public OpenAI host は fail になります。`api-version` query は Azure OpenAI v1 Responses path では使わないため warn で無視します。会社 proxy などで非標準 path を指定した場合は intentional proxy として warn になり、その path に `/responses` を付けた URL が request preview / live smoke に使われます。
+
 API key 認証の最小設定:
 
 ```bash
@@ -300,6 +302,7 @@ provider_models:
 
 - `AZURE_OPENAI_BASE_URL` に `https://api.openai.com/v1` を入れる。Azure provider では Azure OpenAI resource の URL が必要です。
 - `AZURE_OPENAI_BASE_URL` に `/openai/deployments/<deployment>` まで入れる。XELYON は `/openai/v1/responses` を使うため、base URL は `/openai/v1` で止めます。
+- `AZURE_OPENAI_BASE_URL` に `api-version` query を付ける。Azure OpenAI v1 Responses path では query を使わず、XELYON は query を無視します。
 - `AZURE_OPENAI_API_KEY` に OpenAI の `sk-...` key を入れる。Azure OpenAI resource key か Microsoft Entra ID bearer token を使ってください。
 - `default_model` と `catalog_model` を逆にする。`default_model` は deployment 名、`catalog_model` は実モデル名です。
 

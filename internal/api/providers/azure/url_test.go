@@ -28,6 +28,11 @@ func TestNormalizeBaseURL(t *testing.T) {
 			raw:  "https://example.openai.azure.com/openai/v1/",
 			want: "https://example.openai.azure.com/openai/v1",
 		},
+		{
+			name: "proxy path",
+			raw:  "https://example.openai.azure.com/proxy/azure/?api-version=2025-04-01-preview",
+			want: "https://example.openai.azure.com/proxy/azure",
+		},
 	}
 
 	for _, tt := range tests {

@@ -50,6 +50,8 @@ OpenAI:
 Azure OpenAI:
 
 - Checks `AZURE_OPENAI_BASE_URL`, API key / Entra ID auth, deployment, `catalog_model`, route, function calling, catalog policy, retention settings.
+- `AZURE_OPENAI_BASE_URL` is a resource v1 base URL, not a full request endpoint. Resource root and `/openai` normalize to `/openai/v1`; request preview / live smoke use `<normalized_base_url>/responses`.
+- Deployment-scoped `/openai/deployments/<deployment>` URLs and public OpenAI hosts fail. `api-version` query parameters warn and are ignored. Non-standard paths remain warn-only intentional proxy base URLs and are still used by request preview / live smoke with `/responses` appended.
 - Supports local `--capabilities`, `--require-capability`, `--print-request`, and Azure-specific `--print-config`.
 - Live smoke supports text, tool, and Responses retention chain.
 - Main owner packages: `cmd/doctor.go`, `cmd/doctor_azure_config.go`, `internal/api/providers/azure/diagnostics*.go`, `internal/providerdiag`.

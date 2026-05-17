@@ -77,6 +77,10 @@ to send a minimal live Responses API request. Use --tool-smoke to force a
 dummy tool call and verify function calling support for the deployment. Use
 --retention-smoke to verify a previous_response_id chain. Use --capabilities
 to print resolved model/deployment capabilities without sending a live request.
+AZURE_OPENAI_BASE_URL is a resource v1 base URL; resource root and /openai
+normalize to /openai/v1, and request preview / live smoke use
+<normalized_base_url>/responses. Non-standard paths are treated as intentional
+proxy base URLs and reported as warnings.
 Use --print-request to print the sanitized smoke request JSON without sending
 it. Use --require-capability to fail when a resolved local capability is
 missing. Use --print-config with --deployment and --catalog-model to print a
