@@ -95,37 +95,130 @@ func findJSFamilyReferencesWithLSP(symbol string, def genericSymbolDef, opts jsF
 	}
 
 	refs := make([]genericSymbolRef, 0, len(locations))
+	builder := newJSFamilyLSPReferenceBuilder(symbol)
+	defer builder.Close()
 	for _, loc := range locations {
-		ref, ok := jsFamilyRefFromLSPLocation(symbol, loc, opts)
+		candidate, ok := jsFamilyLSPReferenceCandidateFromLocation(loc, opts)
 		if ok {
-			refs = append(refs, ref)
+			refs = append(refs, builder.Ref(candidate))
 		}
 	}
 	return refs, nil
 }
 
 func jsFamilyRefFromLSPLocation(symbol string, loc navigation.LSPLocation, opts jsFamilyLSPReferenceOptions) (genericSymbolRef, bool) {
+	candidate, ok := jsFamilyLSPReferenceCandidateFromLocation(loc, opts)
+	if !ok {
+		return genericSymbolRef{}, false
+	}
+	builder := newJSFamilyLSPReferenceBuilder(symbol)
+	defer builder.Close()
+	return builder.Ref(candidate), true
+}
+
+type jsFamilyLSPReferenceCandidate struct {
+	displayPath string
+	absPath     string
+	loc         navigation.LSPLocation
+}
+
+func jsFamilyLSPReferenceCandidateFromLocation(loc navigation.LSPLocation, opts jsFamilyLSPReferenceOptions) (jsFamilyLSPReferenceCandidate, bool) {
 	displayPath, absPath := jsFamilyLSPPaths(loc.File, opts.location)
 	if displayPath == "" || absPath == "" || loc.Line <= 0 {
-		return genericSymbolRef{}, false
+		return jsFamilyLSPReferenceCandidate{}, false
 	}
 	if !jsFamilyLSPReferenceAllowed(absPath, displayPath, opts.filter) {
-		return genericSymbolRef{}, false
+		return jsFamilyLSPReferenceCandidate{}, false
 	}
 
-	ref := genericSymbolRef{
-		File:    displayPath,
-		Line:    loc.Line,
-		Snippet: jsFamilyLineSnippet(absPath, loc.Line),
-		IsTest:  repomap.IsTestFile(displayPath),
+	return jsFamilyLSPReferenceCandidate{
+		displayPath: displayPath,
+		absPath:     absPath,
+		loc:         loc,
+	}, true
+}
+
+type jsFamilyLSPReferenceBuilder struct {
+	symbol   string
+	files    map[string]*jsFamilyLSPReferenceFile
+	loadFile func(absPath string) *jsFamilyLSPReferenceFile
+}
+
+type jsFamilyLSPReferenceFile struct {
+	lines  []string
+	parsed *jsast.ParsedFile
+}
+
+func newJSFamilyLSPReferenceBuilder(symbol string) *jsFamilyLSPReferenceBuilder {
+	return &jsFamilyLSPReferenceBuilder{
+		symbol:   symbol,
+		files:    make(map[string]*jsFamilyLSPReferenceFile),
+		loadFile: loadJSFamilyLSPReferenceFile,
 	}
-	if parsed, ok := parseJSFamilyFileForSearch(absPath); ok {
-		if info, err := jsast.ClassifyRangeWithParsed(parsed, loc.Line, loc.Character, loc.EndLine, loc.EndChar, symbol); err == nil && info != nil {
+}
+
+func loadJSFamilyLSPReferenceFile(absPath string) *jsFamilyLSPReferenceFile {
+	src, err := os.ReadFile(absPath)
+	if err != nil {
+		return &jsFamilyLSPReferenceFile{}
+	}
+	file := &jsFamilyLSPReferenceFile{
+		lines: strings.Split(string(src), "\n"),
+	}
+	if parsed, err := jsast.ParseBytes(absPath, src); err == nil {
+		file.parsed = parsed
+	}
+	return file
+}
+
+func (b *jsFamilyLSPReferenceBuilder) Ref(candidate jsFamilyLSPReferenceCandidate) genericSymbolRef {
+	file := b.file(candidate.absPath)
+	loc := candidate.loc
+	ref := genericSymbolRef{
+		File:    candidate.displayPath,
+		Line:    loc.Line,
+		Snippet: file.snippet(loc.Line),
+		IsTest:  repomap.IsTestFile(candidate.displayPath),
+	}
+	if file.parsed != nil {
+		if info, err := jsast.ClassifyRangeWithParsed(file.parsed, loc.Line, loc.Character, loc.EndLine, loc.EndChar, b.symbol); err == nil && info != nil {
 			ref.Class = info.Class
 		}
-		parsed.Close()
 	}
-	return ref, true
+	return ref
+}
+
+func (b *jsFamilyLSPReferenceBuilder) file(absPath string) *jsFamilyLSPReferenceFile {
+	if b.files == nil {
+		b.files = make(map[string]*jsFamilyLSPReferenceFile)
+	}
+	if file, ok := b.files[absPath]; ok {
+		return file
+	}
+	if b.loadFile == nil {
+		b.loadFile = loadJSFamilyLSPReferenceFile
+	}
+	file := b.loadFile(absPath)
+	if file == nil {
+		file = &jsFamilyLSPReferenceFile{}
+	}
+	b.files[absPath] = file
+	return file
+}
+
+func (b *jsFamilyLSPReferenceBuilder) Close() {
+	for _, file := range b.files {
+		if file != nil && file.parsed != nil {
+			file.parsed.Close()
+		}
+	}
+}
+
+func (file *jsFamilyLSPReferenceFile) snippet(line int) string {
+	if file == nil || line <= 0 || line > len(file.lines) {
+		return ""
+	}
+	return strings.TrimSpace(file.lines[line-1])
 }
 
 func jsFamilyLSPReferenceAllowed(absPath string, displayPath string, opts SearchOptions) bool {
@@ -181,16 +274,4 @@ func jsFamilyRelativePathInBase(path string, base string) (string, bool) {
 		return "", false
 	}
 	return filepath.ToSlash(filepath.Clean(rel)), true
-}
-
-func jsFamilyLineSnippet(absPath string, line int) string {
-	src, err := os.ReadFile(absPath)
-	if err != nil || line <= 0 {
-		return ""
-	}
-	lines := strings.Split(string(src), "\n")
-	if line > len(lines) {
-		return ""
-	}
-	return strings.TrimSpace(lines[line-1])
 }
