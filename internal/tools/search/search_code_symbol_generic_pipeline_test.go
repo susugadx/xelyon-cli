@@ -1,7 +1,6 @@
 package search
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 
@@ -24,13 +23,14 @@ func TestParseGenericSymbolMatchLine(t *testing.T) {
 	}
 }
 
-func TestParseGenericSymbolMatches_AppliesFilterAndLimit(t *testing.T) {
-	var stdout bytes.Buffer
-	stdout.WriteString("pkg/service.go:10:func Run(){}\n")
-	stdout.WriteString("pkg/service.py:11:def Run():\n")
-	stdout.WriteString("pkg/runner.go:12:Run()\n")
+func TestCollectGenericSymbolMatches_AppliesFilterAndLimit(t *testing.T) {
+	output := strings.Join([]string{
+		"pkg/service.go:10:func Run(){}",
+		"pkg/service.py:11:def Run():",
+		"pkg/runner.go:12:Run()",
+	}, "\n")
 
-	matches := parseGenericSymbolMatches(stdout, SearchOptions{FileType: "go"}, 1)
+	matches := collectGenericSymbolMatches(strings.NewReader(output), SearchOptions{FileType: "go"}, 1).matches
 	if len(matches) != 1 {
 		t.Fatalf("matches len = %d, want %d", len(matches), 1)
 	}
@@ -39,15 +39,16 @@ func TestParseGenericSymbolMatches_AppliesFilterAndLimit(t *testing.T) {
 	}
 }
 
-func TestParseGenericSymbolMatches_AppliesIgnoreMatcher(t *testing.T) {
-	var stdout bytes.Buffer
-	stdout.WriteString("generated/service.ts:10:export function buildUser() {}\n")
-	stdout.WriteString("src/service.ts:11:export function buildUser() {}\n")
+func TestCollectGenericSymbolMatches_AppliesIgnoreMatcher(t *testing.T) {
+	output := strings.Join([]string{
+		"generated/service.ts:10:export function buildUser() {}",
+		"src/service.ts:11:export function buildUser() {}",
+	}, "\n")
 
-	matches := parseGenericSymbolMatches(stdout, SearchOptions{
+	matches := collectGenericSymbolMatches(strings.NewReader(output), SearchOptions{
 		FileType:      "ts",
 		ignoreMatcher: pathmatch.NewMatcher([]string{"generated"}),
-	}, 0)
+	}, 0).matches
 	if len(matches) != 1 {
 		t.Fatalf("matches len = %d, want 1: %+v", len(matches), matches)
 	}

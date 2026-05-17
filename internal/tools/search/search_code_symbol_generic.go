@@ -2,9 +2,9 @@ package search
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -57,6 +57,11 @@ type genericSymbolMatch struct {
 	File    string
 	Line    int
 	Content string
+}
+
+type genericSymbolSearchResult struct {
+	matches         []genericSymbolMatch
+	cancelRequested bool
 }
 
 // resolveGenericSymbol は Go 以外の言語でシンボル解決を試みる。
@@ -148,11 +153,10 @@ func findGenericSymbolMatches(symbol string, opts SearchOptions, limit int) []ge
 		return nil
 	}
 
-	stdout := runGenericSymbolRipgrep(symbol, opts)
-	return parseGenericSymbolMatches(stdout, opts, limit)
+	return runGenericSymbolRipgrep(symbol, opts, limit)
 }
 
-func runGenericSymbolRipgrep(symbol string, opts SearchOptions) bytes.Buffer {
+func runGenericSymbolRipgrep(symbol string, opts SearchOptions, limit int) []genericSymbolMatch {
 	args, workdir := buildGenericRgArgs(symbol, opts)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -163,13 +167,27 @@ func runGenericSymbolRipgrep(symbol string, opts SearchOptions) bytes.Buffer {
 		cmd.Dir = workdir
 	}
 
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	_ = cmd.Run()
-	return stdout
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil
+	}
+	if err := cmd.Start(); err != nil {
+		return nil
+	}
+
+	result := collectGenericSymbolMatches(stdout, opts, limit)
+	if result.cancelRequested {
+		cancel()
+	}
+	_ = cmd.Wait()
+	return result.matches
 }
 
-func parseGenericSymbolMatches(stdout bytes.Buffer, opts SearchOptions, limit int) []genericSymbolMatch {
+func collectGenericSymbolMatches(reader io.Reader, opts SearchOptions, limit int) genericSymbolSearchResult {
+	if reader == nil {
+		return genericSymbolSearchResult{}
+	}
+
 	capacity := 0
 	if limit > 0 {
 		capacity = limit
@@ -178,7 +196,7 @@ func parseGenericSymbolMatches(stdout bytes.Buffer, opts SearchOptions, limit in
 		}
 	}
 	matches := make([]genericSymbolMatch, 0, capacity)
-	scanner := bufio.NewScanner(&stdout)
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		match, ok := parseGenericSymbolMatchLine(scanner.Text(), opts)
 		if !ok {
@@ -186,10 +204,13 @@ func parseGenericSymbolMatches(stdout bytes.Buffer, opts SearchOptions, limit in
 		}
 		matches = append(matches, match)
 		if limit > 0 && len(matches) >= limit {
-			break
+			return genericSymbolSearchResult{matches: matches, cancelRequested: true}
 		}
 	}
-	return matches
+	return genericSymbolSearchResult{
+		matches:         matches,
+		cancelRequested: scanner.Err() != nil,
+	}
 }
 
 func parseGenericSymbolMatchLine(line string, opts SearchOptions) (genericSymbolMatch, bool) {
