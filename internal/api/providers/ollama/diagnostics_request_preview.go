@@ -7,6 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func (r *DiagnosticReport) addRequestPreview(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -44,7 +45,7 @@ func buildOllamaDiagnosticRequestPreview(
 	preview := DiagnosticRequestPreview{}
 	for _, request := range ollamaDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			preview.Requests = append(preview.Requests, newOllamaDiagnosticSkippedToolPreviewRequest(request, report.Route))
+			preview.Requests = append(preview.Requests, providerdiag.NewSkippedTextToolPreviewRequest(request, report.Route, ollamaDiagnosticDisabledToolSkipReason()))
 			continue
 		}
 

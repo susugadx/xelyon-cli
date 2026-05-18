@@ -49,13 +49,15 @@ func runOllamaDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 	started := time.Now()
 	for _, request := range ollamaDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, newOllamaDiagnosticSkippedToolSmokeRequest(request, report.Route))
+			providerdiag.AddTextToolSmokeRequestResult(
+				&result,
+				providerdiag.NewSkippedTextToolSmokeRequest(request, report.Route, ollamaDiagnosticDisabledToolSkipReason()),
+			)
 			continue
 		}
 
 		requestResult, err := runOllamaDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddTextToolSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -74,26 +76,6 @@ func ollamaDiagnosticSmokeRequests(options DiagnosticOptions, functionCallingEna
 		ToolName:               ollamaDiagnosticSmokeToolName,
 		ToolExpectedValue:      "ollama-tool-ok",
 	})
-}
-
-func newOllamaDiagnosticSkippedToolSmokeRequest(request ollamaDiagnosticSmokeRequest, route string) DiagnosticSmokeRequestResult {
-	return DiagnosticSmokeRequestResult{
-		Name:        request.Name,
-		Skipped:     true,
-		SkipReason:  ollamaDiagnosticDisabledToolSkipReason(),
-		ToolPayload: request.ToolPayload,
-		Route:       route,
-	}
-}
-
-func newOllamaDiagnosticSkippedToolPreviewRequest(request ollamaDiagnosticSmokeRequest, route string) DiagnosticRequestPreviewRequest {
-	return DiagnosticRequestPreviewRequest{
-		Name:        request.Name,
-		Skipped:     true,
-		SkipReason:  ollamaDiagnosticDisabledToolSkipReason(),
-		ToolPayload: request.ToolPayload,
-		Route:       route,
-	}
 }
 
 func ollamaDiagnosticDisabledToolSkipReason() string {
@@ -140,15 +122,15 @@ func runOllamaDiagnosticSmokeRequest(
 		Content:       strings.TrimSpace(content),
 		Duration:      elapsed.String(),
 		UsageObserved: usageObserved,
-		Usage:         ollamaDiagnosticSmokeUsage(usage),
-		Cost:          ollamaDiagnosticSmokeCost(costEstimate),
+		Usage:         providerdiag.SmokeUsageFromAPIUsage(usage),
+		Cost:          providerdiag.SmokeCostFromEstimate(costEstimate),
 	}
 	if err != nil {
 		result.Error = err.Error()
 		return result, err
 	}
 	if request.ToolPayload {
-		if !ollamaDiagnosticSmokeContentHasToolCall(content) {
+		if !providerdiag.ContentHasToolCall(content, ollamaDiagnosticSmokeToolName) {
 			result.Error = fmt.Sprintf("tool smoke response did not include %s function_call", ollamaDiagnosticSmokeToolName)
 			return result, errors.New(result.Error)
 		}
@@ -162,40 +144,13 @@ func runOllamaDiagnosticSmokeRequest(
 }
 
 func newOllamaDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, request ollamaDiagnosticSmokeRequest, output io.Writer) context.Context {
-	return providerdiag.NewTextToolSmokeRequestContext(ctx, cfg, request, ollamaDiagnosticSmokeToolDefinitions(), output)
-}
-
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	if request.ToolPayload {
-		r.ToolPayload = true
-	}
-	if r.Route == "" {
-		r.Route = request.Route
-	}
-	if strings.TrimSpace(r.Content) == "" {
-		r.Content = request.Content
-	}
-
-	r.Usage = providerdiag.AddSmokeUsage(r.Usage, request.Usage)
-	r.Cost = providerdiag.AddSmokeCost(r.Cost, request.Cost)
-	r.UsageObserved = r.allRanRequestsObservedUsage()
-}
-
-func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
-	observedAnyRequest := false
-	for _, request := range r.Requests {
-		if request.Skipped || !request.Ran {
-			continue
-		}
-		observedAnyRequest = true
-		if !request.UsageObserved {
-			return false
-		}
-	}
-	return observedAnyRequest
+	return providerdiag.NewTextToolSmokeRequestContext(
+		ctx,
+		cfg,
+		request,
+		providerdiag.NoopDiagnosticToolDefinitions(ollamaDiagnosticSmokeToolName, "Ollama"),
+		output,
+	)
 }
 
 func ollamaSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
@@ -205,20 +160,4 @@ func ollamaSmokeErrorIsToolFailure(smoke DiagnosticSmokeResult) bool {
 		}
 	}
 	return false
-}
-
-func ollamaDiagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return providerdiag.SmokeUsageFromAPIUsage(usage)
-}
-
-func ollamaDiagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return providerdiag.SmokeCostFromEstimate(estimate)
-}
-
-func ollamaDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
-	return providerdiag.NoopDiagnosticToolDefinitions(ollamaDiagnosticSmokeToolName, "Ollama")
-}
-
-func ollamaDiagnosticSmokeContentHasToolCall(content string) bool {
-	return providerdiag.ContentHasToolCall(content, ollamaDiagnosticSmokeToolName)
 }
