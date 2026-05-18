@@ -7,6 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func (r *DiagnosticReport) addRequestPreview(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -57,17 +58,13 @@ func buildGeminiDiagnosticRequestPreviewRequest(
 	cfg := config.FromContext(ctx)
 	route := geminiDiagnosticRequestRoute(request)
 	body := buildGeminiDiagnosticRequestBody(ctx, provider, report, request, cfg)
-	return DiagnosticRequestPreviewRequest{
-		Name:             request.Name,
-		ToolPayload:      request.ToolPayload,
-		ImagePayload:     request.ImagePayload,
-		WebSearchPayload: request.WebSearchPayload,
-		Route:            route,
-		Method:           "POST",
-		URL:              geminiDiagnosticRequestURL(report.Model, request),
-		Headers:          redactedGeminiHeaders(),
-		Body:             body,
-	}
+	result := providerdiag.NewMultimodalPreviewRequest(request.multimodalSmokeRequest())
+	result.Route = route
+	result.Method = "POST"
+	result.URL = geminiDiagnosticRequestURL(report.Model, request)
+	result.Headers = redactedGeminiHeaders()
+	result.Body = body
+	return result
 }
 
 func buildGeminiDiagnosticRequestBody(

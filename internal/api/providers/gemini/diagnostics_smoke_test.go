@@ -399,6 +399,53 @@ func TestDiagnoseGemini_WebSearchSmokeSucceedsWithoutUsageMetadata(t *testing.T)
 	}
 }
 
+func TestDiagnoseGemini_MultiSmokeRequiresUsageForEveryRanRequest(t *testing.T) {
+	var requestCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		switch requestCount {
+		case 1:
+			writeGeminiDiagnosticSSE(t, w, GeminiFunctionResponse{
+				Candidates: []GeminiFunctionCandidate{{
+					Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "xelyon gemini doctor ok"}}},
+				}},
+				UsageMetadata: &GeminiUsageMetadata{PromptTokenCount: 10, CandidatesTokenCount: 5},
+			})
+		case 2:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"web search ok"}]}}]}`))
+		default:
+			t.Fatalf("unexpected request %d", requestCount)
+		}
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         config.DefaultConfig(),
+		Model:          defaultGeminiDiagnosticModel,
+		CatalogModel:   defaultGeminiDiagnosticModel,
+		RunSmoke:       true,
+		TextSmoke:      true,
+		WebSearchSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || len(report.Smoke.Requests) != 2 {
+		t.Fatalf("Smoke = %#v, want text and web search requests", report.Smoke)
+	}
+	if !report.Smoke.Requests[0].UsageObserved || report.Smoke.Requests[1].UsageObserved {
+		t.Fatalf("request usage observed = [%t,%t], want [true,false]", report.Smoke.Requests[0].UsageObserved, report.Smoke.Requests[1].UsageObserved)
+	}
+	if report.Smoke.UsageObserved {
+		t.Fatalf("summary UsageObserved = true, want false when one ran request has no usage")
+	}
+	requireGeminiDiagnosticCheckStatus(t, report, "usage", DiagnosticStatusWarn)
+	requireGeminiDiagnosticCheckStatus(t, report, "cost", DiagnosticStatusWarn)
+}
+
 func writeGeminiDiagnosticSSE(t *testing.T, w http.ResponseWriter, chunk GeminiFunctionResponse) {
 	t.Helper()
 	w.Header().Set("Content-Type", "text/event-stream")

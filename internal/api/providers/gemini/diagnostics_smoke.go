@@ -47,8 +47,7 @@ func runGeminiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 	started := time.Now()
 	for _, request := range geminiDiagnosticRequests(options) {
 		requestResult, err := runGeminiDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddMultimodalSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -80,19 +79,13 @@ func runGeminiDiagnosticSmokeRequest(
 	elapsed := time.Since(started).Round(time.Millisecond)
 	costEstimate := cost.EstimateRequestCostWithCacheForConfig(cfg, "gemini", report.Model, usage)
 
-	result := DiagnosticSmokeRequestResult{
-		Name:             request.Name,
-		Ran:              true,
-		ToolPayload:      request.ToolPayload,
-		ImagePayload:     request.ImagePayload,
-		WebSearchPayload: request.WebSearchPayload,
-		Route:            geminiDiagnosticRequestRoute(request),
-		Content:          strings.TrimSpace(content),
-		Duration:         elapsed.String(),
-		UsageObserved:    usageObserved,
-		Usage:            providerdiag.SmokeUsageFromAPIUsage(usage),
-		Cost:             providerdiag.SmokeCostFromEstimate(costEstimate),
-	}
+	result := providerdiag.NewMultimodalSmokeRequestResult(request.multimodalSmokeRequest())
+	result.Ran = true
+	result.Content = strings.TrimSpace(content)
+	result.Duration = elapsed.String()
+	result.UsageObserved = usageObserved
+	result.Usage = providerdiag.SmokeUsageFromAPIUsage(usage)
+	result.Cost = providerdiag.SmokeCostFromEstimate(costEstimate)
 	if err != nil {
 		result.Error = err.Error()
 		return result, err
@@ -127,30 +120,6 @@ func runGeminiDiagnosticSmokePayload(ctx context.Context, provider *Provider, re
 	default:
 		return provider.ChatWithTools(ctx, request.SystemPrompt, []api.Message{{Role: "user", Content: request.UserContent}}, report.Model)
 	}
-}
-
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.ToolPayload {
-		r.ToolPayload = true
-	}
-	if request.ImagePayload {
-		r.ImagePayload = true
-	}
-	if request.WebSearchPayload {
-		r.WebSearchPayload = true
-	}
-	switch {
-	case r.Route == "":
-		r.Route = request.Route
-	case r.Route != request.Route:
-		r.Route = "mixed"
-	}
-	if strings.TrimSpace(r.Content) == "" {
-		r.Content = request.Content
-	}
-	r.Usage = providerdiag.AddSmokeUsage(r.Usage, request.Usage)
-	r.Cost = providerdiag.AddSmokeCost(r.Cost, request.Cost)
-	r.UsageObserved = r.UsageObserved || request.UsageObserved
 }
 
 func geminiDiagnosticSmokeContentHasToolCall(content string) bool {

@@ -20,6 +20,16 @@ type geminiDiagnosticRequest struct {
 	WebSearchPayload bool
 }
 
+func (r geminiDiagnosticRequest) multimodalSmokeRequest() providerdiag.MultimodalSmokeRequest {
+	return providerdiag.MultimodalSmokeRequest{
+		Name:             r.Name,
+		ToolPayload:      r.ToolPayload,
+		ImagePayload:     r.ImagePayload,
+		WebSearchPayload: r.WebSearchPayload,
+		Route:            geminiDiagnosticRequestRoute(r),
+	}
+}
+
 func geminiDiagnosticRequests(options DiagnosticOptions) []geminiDiagnosticRequest {
 	includeText := options.TextSmoke || (!options.ToolSmoke && !options.ImageSmoke && !options.WebSearchSmoke)
 

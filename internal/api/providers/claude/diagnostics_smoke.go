@@ -45,12 +45,11 @@ func runClaudeDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 	plan := buildClaudeDiagnosticRequestPlan(options, report.FunctionCallingEnabled)
 	for _, request := range plan.Requests {
 		if request.skipped(report.FunctionCallingEnabled) {
-			result.Requests = append(result.Requests, newClaudeDiagnosticSkippedToolSmokeRequest(request))
+			providerdiag.AddThinkingMultimodalSmokeRequestResult(&result, newClaudeDiagnosticSkippedToolSmokeRequest(request))
 			continue
 		}
 		requestResult, err := runClaudeDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddThinkingMultimodalSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -125,50 +124,6 @@ func runClaudeDiagnosticSmokePayload(ctx context.Context, provider *Provider, re
 	default:
 		return provider.ChatWithTools(ctx, request.SystemPrompt, []api.Message{{Role: "user", Content: request.UserContent}}, report.Model)
 	}
-}
-
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	if request.ToolPayload {
-		r.ToolPayload = true
-	}
-	if request.ImagePayload {
-		r.ImagePayload = true
-	}
-	if request.ThinkingPayload {
-		r.ThinkingPayload = true
-	}
-	if request.WebSearchPayload {
-		r.WebSearchPayload = true
-	}
-	switch {
-	case r.Route == "":
-		r.Route = request.Route
-	case r.Route != request.Route:
-		r.Route = "mixed"
-	}
-	if strings.TrimSpace(r.Content) == "" {
-		r.Content = request.Content
-	}
-	r.Usage = providerdiag.AddSmokeUsage(r.Usage, request.Usage)
-	r.Cost = providerdiag.AddSmokeCost(r.Cost, request.Cost)
-	r.UsageObserved = r.allRanRequestsObservedUsage()
-}
-
-func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
-	observedAnyRequest := false
-	for _, request := range r.Requests {
-		if request.Skipped || !request.Ran {
-			continue
-		}
-		observedAnyRequest = true
-		if !request.UsageObserved {
-			return false
-		}
-	}
-	return observedAnyRequest
 }
 
 func claudeDiagnosticSmokeContentHasToolCall(content string) bool {

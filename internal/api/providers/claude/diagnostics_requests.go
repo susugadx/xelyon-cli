@@ -39,18 +39,15 @@ func (r claudeDiagnosticRequest) skipped(functionCallingEnabled bool) bool {
 }
 
 func (r claudeDiagnosticRequest) previewBase() DiagnosticRequestPreviewRequest {
-	return DiagnosticRequestPreviewRequest{
-		Name:             r.Name,
-		ToolPayload:      r.ToolPayload,
-		ImagePayload:     r.ImagePayload,
-		ThinkingPayload:  r.ThinkingPayload,
-		WebSearchPayload: r.WebSearchPayload,
-		Route:            claudeDiagnosticRequestRoute(r),
-	}
+	return providerdiag.NewMultimodalPreviewRequest(r.multimodalSmokeRequest())
 }
 
 func (r claudeDiagnosticRequest) smokeBase() DiagnosticSmokeRequestResult {
-	return DiagnosticSmokeRequestResult{
+	return providerdiag.NewMultimodalSmokeRequestResult(r.multimodalSmokeRequest())
+}
+
+func (r claudeDiagnosticRequest) multimodalSmokeRequest() providerdiag.MultimodalSmokeRequest {
+	return providerdiag.MultimodalSmokeRequest{
 		Name:             r.Name,
 		ToolPayload:      r.ToolPayload,
 		ImagePayload:     r.ImagePayload,
@@ -183,17 +180,11 @@ func applyClaudeDiagnosticToolChoice(provider *Provider, request claudeDiagnosti
 }
 
 func newClaudeDiagnosticSkippedToolPreviewRequest(request claudeDiagnosticRequest) DiagnosticRequestPreviewRequest {
-	result := request.previewBase()
-	result.Skipped = true
-	result.SkipReason = claudeDiagnosticDisabledToolSkipReason()
-	return result
+	return providerdiag.NewSkippedMultimodalPreviewRequest(request.multimodalSmokeRequest(), claudeDiagnosticDisabledToolSkipReason())
 }
 
 func newClaudeDiagnosticSkippedToolSmokeRequest(request claudeDiagnosticRequest) DiagnosticSmokeRequestResult {
-	result := request.smokeBase()
-	result.Skipped = true
-	result.SkipReason = claudeDiagnosticDisabledToolSkipReason()
-	return result
+	return providerdiag.NewSkippedMultimodalSmokeRequest(request.multimodalSmokeRequest(), claudeDiagnosticDisabledToolSkipReason())
 }
 
 func claudeDiagnosticDisabledToolSkipReason() string {

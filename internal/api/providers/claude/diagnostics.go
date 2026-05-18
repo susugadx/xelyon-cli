@@ -43,39 +43,10 @@ type DiagnosticSmokeUsage = providerdiag.SmokeUsage
 type DiagnosticSmokeCost = providerdiag.SmokeCost
 
 // DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
-type DiagnosticSmokeRequestResult struct {
-	Name             string               `json:"name"`
-	Ran              bool                 `json:"ran"`
-	Skipped          bool                 `json:"skipped,omitempty"`
-	SkipReason       string               `json:"skip_reason,omitempty"`
-	ToolPayload      bool                 `json:"tool_payload,omitempty"`
-	ImagePayload     bool                 `json:"image_payload,omitempty"`
-	ThinkingPayload  bool                 `json:"thinking_payload,omitempty"`
-	WebSearchPayload bool                 `json:"web_search_payload,omitempty"`
-	Route            string               `json:"route"`
-	Content          string               `json:"content,omitempty"`
-	Duration         string               `json:"duration,omitempty"`
-	UsageObserved    bool                 `json:"usage_observed"`
-	Usage            DiagnosticSmokeUsage `json:"usage"`
-	Cost             DiagnosticSmokeCost  `json:"cost"`
-	Error            string               `json:"error,omitempty"`
-}
+type DiagnosticSmokeRequestResult = providerdiag.MultimodalSmokeRequestResult
 
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
-type DiagnosticSmokeResult struct {
-	Ran              bool                           `json:"ran"`
-	ToolPayload      bool                           `json:"tool_payload"`
-	ImagePayload     bool                           `json:"image_payload"`
-	ThinkingPayload  bool                           `json:"thinking_payload"`
-	WebSearchPayload bool                           `json:"web_search_payload"`
-	Route            string                         `json:"route"`
-	Content          string                         `json:"content,omitempty"`
-	Duration         string                         `json:"duration,omitempty"`
-	UsageObserved    bool                           `json:"usage_observed"`
-	Usage            DiagnosticSmokeUsage           `json:"usage"`
-	Cost             DiagnosticSmokeCost            `json:"cost"`
-	Requests         []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
-}
+type DiagnosticSmokeResult = providerdiag.ThinkingMultimodalSmokeResult
 
 // DiagnosticRequestPreview は live request を送らずに構築した request shape を表す。
 type DiagnosticRequestPreview struct {
@@ -83,20 +54,7 @@ type DiagnosticRequestPreview struct {
 }
 
 // DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
-type DiagnosticRequestPreviewRequest struct {
-	Name             string            `json:"name"`
-	Skipped          bool              `json:"skipped,omitempty"`
-	SkipReason       string            `json:"skip_reason,omitempty"`
-	ToolPayload      bool              `json:"tool_payload,omitempty"`
-	ImagePayload     bool              `json:"image_payload,omitempty"`
-	ThinkingPayload  bool              `json:"thinking_payload,omitempty"`
-	WebSearchPayload bool              `json:"web_search_payload,omitempty"`
-	Route            string            `json:"route"`
-	Method           string            `json:"method,omitempty"`
-	URL              string            `json:"url,omitempty"`
-	Headers          map[string]string `json:"headers,omitempty"`
-	Body             any               `json:"body,omitempty"`
-}
+type DiagnosticRequestPreviewRequest = providerdiag.MultimodalRequestPreviewRequest
 
 // DiagnosticReport は Claude の設定診断結果を表す。
 type DiagnosticReport struct {
