@@ -695,7 +695,7 @@ bash: git checkout -b feature-branch
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
-| `search_code` | コード検索。`mode=auto` を既定に symbol-aware / literal / regex を language-aware に routing し、複数パターン・結果分類にも対応。対応言語では symbol-like query から定義・caller・参照・テストを自動解決。`intent=impact` は Go、TypeScript `.ts`、対象を絞った TSX `.tsx`、JavaScript `.js` で構造化 impact を優先し、それ以外は関連 multi-pattern 検索へフォールバック | `pattern`, `intent`, `mode`, `path`, `file_filter` 等 |
+| `search_code` | コード検索。`mode=auto` を既定に symbol-aware / literal / regex を language-aware に routing し、複数パターン・結果分類にも対応。対応言語では symbol-like query から定義・caller・参照・テストを自動解決。`intent=impact` は Go、TypeScript `.ts`、対象を絞った TSX `.tsx`、JavaScript `.js/.jsx` で構造化 impact を優先し、それ以外は関連 multi-pattern 検索へフォールバック | `pattern`, `intent`, `mode`, `path`, `file_filter` 等 |
 | `web_search` | ネイティブWeb検索（`web_search.provider` で Kimi / OpenAI / Gemini / Claude を選択可能） | `query` |
 **注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。メインプロバイダーが Kimi の場合は provider 指定なしで Moonshot built-in `$web_search` を使います。Kimi で `$web_search` が起動すると call fee が発生し、XELYON は token usage と別枠で観測します。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 

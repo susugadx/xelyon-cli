@@ -10,13 +10,8 @@ func cleanStructuredJavaScriptFilePattern(pattern string) string {
 }
 
 func isJavaScriptSourceFilePath(path string) bool {
-	path = strings.ToLower(cleanStructuredJavaScriptDisplayPath(path))
-	return strings.HasSuffix(path, ".js") && !strings.HasSuffix(path, ".d.ts")
-}
-
-func isJavaScriptOnlyFilePattern(pattern string) bool {
-	pattern = strings.ToLower(cleanStructuredJavaScriptFilePattern(pattern))
-	return strings.HasSuffix(pattern, ".js") && !strings.HasSuffix(pattern, ".jsx") && !strings.HasSuffix(pattern, ".mjs") && !strings.HasSuffix(pattern, ".cjs")
+	_, ok := structuredJavaScriptImpactTargetForPath(path)
+	return ok
 }
 
 func normalizeStructuredJavaScriptDefs(defs []genericSymbolDef) []genericSymbolDef {
@@ -62,5 +57,14 @@ func structuredJavaScriptImpactFileRoot(opts SearchOptions) string {
 }
 
 func structuredJavaScriptImpactReferenceOptions(def genericSymbolDef, opts SearchOptions) jsFamilyReferenceOptions {
-	return newJSFamilyStructuredImpactReferenceOptions(def, opts, "js")
+	fileType, _ := structuredJavaScriptImpactReferenceFileType(def)
+	return newJSFamilyStructuredImpactReferenceOptions(def, opts, fileType)
+}
+
+func structuredJavaScriptImpactReferenceFileType(def genericSymbolDef) (string, bool) {
+	target, ok := structuredJavaScriptImpactTargetForPath(def.File)
+	if !ok {
+		return "", false
+	}
+	return target.fileType, true
 }

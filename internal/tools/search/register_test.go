@@ -170,7 +170,7 @@ func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredLanguageBeha
 	}
 
 	for _, want := range []string{
-		"structured Go, TypeScript .ts, targeted TSX .tsx, or JavaScript .js single-symbol impact path",
+		"structured Go, TypeScript .ts, targeted TSX .tsx, or JavaScript .js/.jsx single-symbol impact path",
 		"file_filter=go",
 		"*.go",
 		"scoped Go **/*.go globs",
@@ -181,8 +181,11 @@ func TestSearchCodeToolParameters_ImpactDescriptionMatchesStructuredLanguageBeha
 		"file_filter=js",
 		"*.js",
 		"direct .js paths",
+		"file_filter=jsx",
+		"*.jsx",
+		"direct .jsx paths",
 		"file_filter=typescript and file_filter=javascript remain broad fallback scopes",
-		".jsx/.mjs/.cjs are not JavaScript structured impact targets",
+		".mjs/.cjs are not JavaScript structured impact targets",
 		"conservative related multi-pattern search",
 	} {
 		if !strings.Contains(description, want) {

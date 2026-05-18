@@ -28,20 +28,17 @@ func normalizeStructuredJavaScriptImpactOptions(opts SearchOptions) (SearchOptio
 	filePattern := cleanStructuredJavaScriptFilePattern(opts.FilePattern)
 
 	if fileType != "" {
-		if fileType != "js" {
+		target, ok := structuredJavaScriptImpactTargetForFileType(fileType)
+		if !ok {
 			return SearchOptions{}, false
 		}
-		opts.FileType = "js"
+		opts.FileType = target.fileType
 		opts.FilePattern = ""
 		return opts, true
 	}
 
 	switch {
-	case filePattern == "*.js":
-		opts.FileType = ""
-		opts.FilePattern = "*.js"
-		return opts, true
-	case isJavaScriptOnlyFilePattern(filePattern):
+	case structuredJavaScriptImpactAllowsFilePattern(filePattern):
 		opts.FileType = ""
 		opts.FilePattern = filePattern
 		return opts, true

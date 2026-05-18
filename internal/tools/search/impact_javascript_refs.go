@@ -1,10 +1,5 @@
 package search
 
-import (
-	"path/filepath"
-	"strings"
-)
-
 type javaScriptImpactRefs struct {
 	imports          []genericSymbolRef
 	callers          []genericSymbolRef
@@ -74,31 +69,27 @@ func (refs javaScriptImpactRefs) totalOthersForRisk() []genericSymbolRef {
 
 func findNearbyJavaScriptTests(def genericSymbolDef, opts SearchOptions, directTests []genericSymbolRef) []genericSymbolRef {
 	rootPath := structuredJavaScriptImpactFileRoot(opts)
-	if rootPath == "" || !isJavaScriptSourceFilePath(def.File) {
+	target, ok := structuredJavaScriptImpactTargetForPath(def.File)
+	if rootPath == "" || !ok {
 		return nil
 	}
 
 	return findNearbyJSFamilyTests(rootPath, javaScriptNearbyTestCandidatePaths(def.File), directTests, func(absPath string, displayPath string) bool {
-		return isUsableNearbyJavaScriptTest(absPath, displayPath, opts)
+		return isUsableNearbyJavaScriptTest(absPath, displayPath, opts, target)
 	})
 }
 
 func javaScriptNearbyTestCandidatePaths(defFile string) []string {
-	cleanFile := filepath.ToSlash(filepath.Clean(defFile))
-	dir := filepath.ToSlash(filepath.Dir(cleanFile))
-	base := strings.TrimSuffix(filepath.Base(cleanFile), ".js")
-
-	candidates := []string{
-		filepath.ToSlash(filepath.Join(dir, base+".test.js")),
-		filepath.ToSlash(filepath.Join(dir, base+".spec.js")),
-		filepath.ToSlash(filepath.Join(dir, "__tests__", base+".test.js")),
-		filepath.ToSlash(filepath.Join(dir, "__tests__", base+".spec.js")),
-		filepath.ToSlash(filepath.Join("tests", base+".test.js")),
-		filepath.ToSlash(filepath.Join("tests", base+".spec.js")),
+	target, ok := structuredJavaScriptImpactTargetForPath(defFile)
+	if !ok {
+		return nil
 	}
-	return dedupeStringList(candidates)
+	return target.nearbyTestCandidatePaths(defFile)
 }
 
-func isUsableNearbyJavaScriptTest(absPath, displayPath string, opts SearchOptions) bool {
+func isUsableNearbyJavaScriptTest(absPath, displayPath string, opts SearchOptions, target structuredJavaScriptImpactTarget) bool {
+	if !target.matchesNearbyTestPath(displayPath) {
+		return false
+	}
 	return isUsableNearbyJSFamilyTest(absPath, displayPath, opts)
 }
