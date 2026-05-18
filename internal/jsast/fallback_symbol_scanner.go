@@ -8,7 +8,7 @@ type fallbackSymbolScanner struct {
 	symbols        []Symbol
 	byteOffset     int
 	braceDepth     int
-	typeBodyDepths []int
+	typeBodyScopes []fallbackTypeBodyScope
 	braceScanner   fallbackBraceScanner
 }
 
@@ -17,7 +17,7 @@ func newFallbackSymbolScanner(parsed *ParsedFile, opts fallbackSymbolOptions) *f
 		parsed:         parsed,
 		opts:           opts,
 		symbols:        make([]Symbol, 0),
-		typeBodyDepths: make([]int, 0),
+		typeBodyScopes: make([]fallbackTypeBodyScope, 0),
 	}
 }
 
@@ -40,19 +40,24 @@ func (s *fallbackSymbolScanner) addLineSymbols(line string, trimmed string, line
 	if symbol, ok := fallbackSymbolFromLine(s.parsed, line, trimmed, lineNo, s.byteOffset); ok {
 		s.symbols = append(s.symbols, symbol)
 	}
-	if s.opts.includeMethods && fallbackInDirectTypeBody(s.braceDepth, s.typeBodyDepths) {
+	if scope, ok := fallbackDirectTypeBodyScope(s.braceDepth, s.typeBodyScopes); s.opts.includeTypeBodyMembers && ok {
 		if symbol, ok := fallbackMethodSymbolFromLine(s.parsed, line, trimmed, lineNo, s.byteOffset); ok {
 			s.symbols = append(s.symbols, symbol)
 		}
+		if symbol, ok := fallbackPropertySymbolFromLine(s.parsed, line, trimmed, lineNo, s.byteOffset, scope.kind); ok {
+			s.symbols = append(s.symbols, symbol)
+		}
 	}
-	if s.opts.includeMethods && fallbackOpensTypeBody(trimmed) {
-		s.typeBodyDepths = append(s.typeBodyDepths, s.braceDepth+1)
+	if s.opts.includeTypeBodyMembers {
+		if scope, ok := fallbackOpeningTypeBodyScope(trimmed, s.braceDepth+1); ok {
+			s.typeBodyScopes = append(s.typeBodyScopes, scope)
+		}
 	}
 }
 
 func (s *fallbackSymbolScanner) advanceLine(line string) {
 	s.braceDepth += s.braceScanner.delta(line)
-	s.typeBodyDepths = fallbackOpenTypeBodyDepths(s.typeBodyDepths, s.braceDepth)
+	s.typeBodyScopes = fallbackOpenTypeBodyScopes(s.typeBodyScopes, s.braceDepth)
 	s.byteOffset += len(line) + 1
 }
 

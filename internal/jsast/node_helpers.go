@@ -91,6 +91,7 @@ func childByField(parsed *ParsedFile, node *gotreesitter.Node, field string) *go
 	case "function_declaration", "generator_function_declaration", "function_signature",
 		"class_declaration", "interface_declaration", "type_alias_declaration", "enum_declaration",
 		"method_definition", "method_signature", "abstract_method_signature",
+		"public_field_definition", "property_signature",
 		"function", "function_expression", "generator_function",
 		"class", "class_expression":
 		if field == "name" {

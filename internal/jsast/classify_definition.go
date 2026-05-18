@@ -15,6 +15,10 @@ func isDefinitionName(parsed *ParsedFile, node *gotreesitter.Node, startByte uin
 			if isTypeBodyMethodNode(parsed, current) && fieldContainsRange(parsed, current, "name", startByte, endByte) {
 				return true
 			}
+		case "public_field_definition", "property_signature":
+			if isTypeBodyPropertyNode(parsed, current) && fieldContainsRange(parsed, current, "name", startByte, endByte) {
+				return true
+			}
 		}
 	}
 	return false

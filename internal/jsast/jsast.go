@@ -134,7 +134,7 @@ func ExtractSymbolsWithParsed(parsed *ParsedFile) []Symbol {
 			appendSymbol(&symbols, seen, symbol)
 		}
 	})
-	for _, symbol := range fallbackSymbolsFromSourceWithOptions(parsed, fallbackSymbolOptions{includeMethods: !jsFamilyTreeUsable(parsed.tree)}) {
+	for _, symbol := range fallbackSymbolsFromSourceWithOptions(parsed, fallbackSymbolOptions{includeTypeBodyMembers: !jsFamilyTreeUsable(parsed.tree)}) {
 		if symbolAtLineExists(symbols, symbol) {
 			continue
 		}

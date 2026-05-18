@@ -20,6 +20,10 @@ func symbolFromNode(parsed *ParsedFile, node *gotreesitter.Node) (Symbol, bool) 
 		return namedDeclarationSymbol(parsed, node, "enum")
 	case "method_definition", "method_signature", "abstract_method_signature":
 		return methodDeclarationSymbol(parsed, node)
+	case "public_field_definition":
+		return propertyDeclarationSymbol(parsed, node, "field")
+	case "property_signature":
+		return propertyDeclarationSymbol(parsed, node, "property")
 	case "variable_declarator":
 		return variableDeclaratorSymbol(parsed, node)
 	case "assignment_expression":
@@ -37,7 +41,21 @@ func methodDeclarationSymbol(parsed *ParsedFile, node *gotreesitter.Node) (Symbo
 	if !ok {
 		return Symbol{}, false
 	}
-	if methodHasNonPublicAccess(parsed, node) {
+	if typeBodyMemberHasNonPublicAccess(parsed, node) {
+		symbol.Exported = false
+	}
+	return symbol, true
+}
+
+func propertyDeclarationSymbol(parsed *ParsedFile, node *gotreesitter.Node, kind string) (Symbol, bool) {
+	if !isTypeBodyPropertyNode(parsed, node) {
+		return Symbol{}, false
+	}
+	symbol, ok := namedDeclarationSymbol(parsed, node, kind)
+	if !ok {
+		return Symbol{}, false
+	}
+	if typeBodyMemberHasNonPublicAccess(parsed, node) {
 		symbol.Exported = false
 	}
 	return symbol, true
@@ -65,7 +83,7 @@ func namedDeclarationSymbol(parsed *ParsedFile, node *gotreesitter.Node, kind st
 	}, true
 }
 
-func methodHasNonPublicAccess(parsed *ParsedFile, node *gotreesitter.Node) bool {
+func typeBodyMemberHasNonPublicAccess(parsed *ParsedFile, node *gotreesitter.Node) bool {
 	nameNode := childByField(parsed, node, "name")
 	if nameNode == nil {
 		return false

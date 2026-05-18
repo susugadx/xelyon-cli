@@ -44,11 +44,11 @@ var fallbackSymbolPatterns = []fallbackSymbolPattern{
 }
 
 func fallbackSymbolsFromSource(parsed *ParsedFile) []Symbol {
-	return fallbackSymbolsFromSourceWithOptions(parsed, fallbackSymbolOptions{includeMethods: true})
+	return fallbackSymbolsFromSourceWithOptions(parsed, fallbackSymbolOptions{includeTypeBodyMembers: true})
 }
 
 type fallbackSymbolOptions struct {
-	includeMethods bool
+	includeTypeBodyMembers bool
 }
 
 func fallbackSymbolsFromSourceWithOptions(parsed *ParsedFile, opts fallbackSymbolOptions) []Symbol {

@@ -31,21 +31,36 @@ func fallbackMethodNameIsKeyword(name string) bool {
 	}
 }
 
-func fallbackOpensTypeBody(trimmed string) bool {
+type fallbackTypeBodyScope struct {
+	depth int
+	kind  string
+}
+
+func fallbackOpeningTypeBodyScope(trimmed string, depth int) (fallbackTypeBodyScope, bool) {
 	if !strings.Contains(trimmed, "{") {
-		return false
+		return fallbackTypeBodyScope{}, false
 	}
-	return fallbackClassDeclarationPattern.MatchString(trimmed) ||
-		fallbackInterfaceDeclarationPattern.MatchString(trimmed)
+	switch {
+	case fallbackClassDeclarationPattern.MatchString(trimmed):
+		return fallbackTypeBodyScope{depth: depth, kind: "class"}, true
+	case fallbackInterfaceDeclarationPattern.MatchString(trimmed):
+		return fallbackTypeBodyScope{depth: depth, kind: "interface"}, true
+	default:
+		return fallbackTypeBodyScope{}, false
+	}
 }
 
-func fallbackInDirectTypeBody(braceDepth int, typeBodyDepths []int) bool {
-	return len(typeBodyDepths) > 0 && typeBodyDepths[len(typeBodyDepths)-1] == braceDepth
+func fallbackDirectTypeBodyScope(braceDepth int, scopes []fallbackTypeBodyScope) (fallbackTypeBodyScope, bool) {
+	if len(scopes) == 0 {
+		return fallbackTypeBodyScope{}, false
+	}
+	scope := scopes[len(scopes)-1]
+	return scope, scope.depth == braceDepth
 }
 
-func fallbackOpenTypeBodyDepths(depths []int, braceDepth int) []int {
-	for len(depths) > 0 && braceDepth < depths[len(depths)-1] {
-		depths = depths[:len(depths)-1]
+func fallbackOpenTypeBodyScopes(scopes []fallbackTypeBodyScope, braceDepth int) []fallbackTypeBodyScope {
+	for len(scopes) > 0 && braceDepth < scopes[len(scopes)-1].depth {
+		scopes = scopes[:len(scopes)-1]
 	}
-	return depths
+	return scopes
 }

@@ -8,7 +8,19 @@ func isTypeBodyMethodNode(parsed *ParsedFile, node *gotreesitter.Node) bool {
 	default:
 		return false
 	}
+	return isNamedTypeBodyMemberNode(parsed, node)
+}
 
+func isTypeBodyPropertyNode(parsed *ParsedFile, node *gotreesitter.Node) bool {
+	switch nodeKind(parsed, node) {
+	case "public_field_definition", "property_signature":
+	default:
+		return false
+	}
+	return isNamedTypeBodyMemberNode(parsed, node)
+}
+
+func isNamedTypeBodyMemberNode(parsed *ParsedFile, node *gotreesitter.Node) bool {
 	for current := node.Parent(); current != nil; current = current.Parent() {
 		switch nodeKind(parsed, current) {
 		case "class_body", "interface_body":
