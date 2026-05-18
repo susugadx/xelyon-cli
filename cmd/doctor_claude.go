@@ -124,8 +124,7 @@ func renderClaudeDoctorText(w io.Writer, report claudeprovider.DiagnosticReport)
 	renderDoctorChecks(w, claudeDoctorCheckLines(report.Checks))
 
 	if report.RequestPreview != nil {
-		fmt.Fprintln(w)
-		renderDoctorRequestPreview(w, report.RequestPreview)
+		renderDoctorRequestPreviewSection(w, report.RequestPreview)
 	}
 
 	if report.Smoke != nil && report.Smoke.Ran {
@@ -134,20 +133,19 @@ func renderClaudeDoctorText(w io.Writer, report claudeprovider.DiagnosticReport)
 			for _, request := range report.Smoke.Requests {
 				renderClaudeDoctorSmokeRequest(w, request)
 			}
-			fmt.Fprintf(w, "Smoke total usage: %s\n", formatDoctorSmokeUsage(claudeDoctorSmokeUsage(report.Smoke.Usage)))
-			fmt.Fprintf(w, "Smoke total cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
+			renderDoctorSmokeTotal(w, claudeDoctorSmokeUsage(report.Smoke.Usage), report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD)
 			return
 		}
-		fmt.Fprintf(w, "Smoke route: %s\n", report.Smoke.Route)
-		fmt.Fprintf(w, "Smoke duration: %s\n", report.Smoke.Duration)
-		if strings.TrimSpace(report.Smoke.Content) != "" {
-			fmt.Fprintf(w, "Smoke content: %s\n", report.Smoke.Content)
-		}
-		if errText := claudeDoctorSmokeFirstError(report.Smoke.Requests); errText != "" {
-			fmt.Fprintf(w, "Smoke error: %s\n", errText)
-		}
-		fmt.Fprintf(w, "Smoke usage: %s\n", formatDoctorSmokeUsage(claudeDoctorSmokeUsage(report.Smoke.Usage)))
-		fmt.Fprintf(w, "Smoke cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
+		renderDoctorSmokeSummary(w, doctorSmokeSummaryLine{
+			Route:              report.Smoke.Route,
+			Duration:           report.Smoke.Duration,
+			Content:            report.Smoke.Content,
+			Error:              claudeDoctorSmokeFirstError(report.Smoke.Requests),
+			UsageObserved:      report.Smoke.UsageObserved,
+			PricingUnavailable: report.Smoke.Cost.PricingUnavailable,
+			CostUSD:            report.Smoke.Cost.USD,
+			Usage:              claudeDoctorSmokeUsage(report.Smoke.Usage),
+		}, doctorSmokeSummaryRenderOptions{IncludeRoute: true, PrintError: true})
 	}
 }
 
@@ -161,31 +159,19 @@ func claudeDoctorSmokeHasSkippedRequest(requests []claudeprovider.DiagnosticSmok
 }
 
 func renderClaudeDoctorSmokeRequest(w io.Writer, request claudeprovider.DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		fmt.Fprintf(w, "Smoke request %s: skipped (%s)\n", request.Name, request.SkipReason)
-		return
-	}
-
-	status := "ok"
-	if strings.TrimSpace(request.Error) != "" {
-		status = "fail"
-	}
-	fmt.Fprintf(
-		w,
-		"Smoke request %s: %s route=%s duration=%s\n",
-		request.Name,
-		status,
-		request.Route,
-		request.Duration,
-	)
-	if strings.TrimSpace(request.Content) != "" {
-		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
-	}
-	if strings.TrimSpace(request.Error) != "" {
-		fmt.Fprintf(w, "Smoke error %s: %s\n", request.Name, request.Error)
-	}
-	fmt.Fprintf(w, "Smoke usage %s: %s\n", request.Name, formatDoctorSmokeUsage(claudeDoctorSmokeUsage(request.Usage)))
-	fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, doctorSmokeCostText(request.UsageObserved, request.Cost.PricingUnavailable, request.Cost.USD))
+	renderDoctorSmokeRequestLine(w, doctorSmokeRequestLine{
+		Name:               request.Name,
+		Route:              request.Route,
+		Duration:           request.Duration,
+		Content:            request.Content,
+		Error:              request.Error,
+		Skipped:            request.Skipped,
+		SkipReason:         request.SkipReason,
+		UsageObserved:      request.UsageObserved,
+		PricingUnavailable: request.Cost.PricingUnavailable,
+		CostUSD:            request.Cost.USD,
+		Usage:              claudeDoctorSmokeUsage(request.Usage),
+	}, doctorSmokeRequestRenderOptions{IncludeRoute: true, PrintError: true, PrintUsageAndCost: true})
 }
 
 func claudeDoctorSmokeFirstError(requests []claudeprovider.DiagnosticSmokeRequestResult) string {

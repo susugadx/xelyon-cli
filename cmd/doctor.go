@@ -190,8 +190,7 @@ func renderAzureDoctorText(w io.Writer, report azureprovider.DiagnosticReport) {
 	}
 
 	if report.RequestPreview != nil {
-		fmt.Fprintln(w)
-		renderDoctorRequestPreview(w, report.RequestPreview)
+		renderDoctorRequestPreviewSection(w, report.RequestPreview)
 	}
 
 	if report.Smoke != nil && report.Smoke.Ran {
@@ -200,46 +199,41 @@ func renderAzureDoctorText(w io.Writer, report azureprovider.DiagnosticReport) {
 			for _, request := range report.Smoke.Requests {
 				renderAzureDoctorSmokeRequest(w, request)
 			}
-			fmt.Fprintf(w, "Smoke total usage: %s\n", formatDoctorSmokeUsage(azureDoctorSmokeUsage(report.Smoke.Usage)))
-			fmt.Fprintf(w, "Smoke total cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
+			renderDoctorSmokeTotal(w, azureDoctorSmokeUsage(report.Smoke.Usage), report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD)
 			return
 		}
-		fmt.Fprintf(w, "Smoke duration: %s\n", report.Smoke.Duration)
-		fmt.Fprintf(w, "Smoke response ID: %s\n", doctorOptionalIDText(report.Smoke.ResponseID))
-		if strings.TrimSpace(report.Smoke.Content) != "" {
-			fmt.Fprintf(w, "Smoke content: %s\n", report.Smoke.Content)
-		}
-		fmt.Fprintf(w, "Smoke usage: %s\n", formatDoctorSmokeUsage(azureDoctorSmokeUsage(report.Smoke.Usage)))
-		fmt.Fprintf(w, "Smoke cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
+		renderDoctorSmokeSummary(w, doctorSmokeSummaryLine{
+			Duration:           report.Smoke.Duration,
+			ResponseID:         report.Smoke.ResponseID,
+			Content:            report.Smoke.Content,
+			UsageObserved:      report.Smoke.UsageObserved,
+			PricingUnavailable: report.Smoke.Cost.PricingUnavailable,
+			CostUSD:            report.Smoke.Cost.USD,
+			Usage:              azureDoctorSmokeUsage(report.Smoke.Usage),
+		}, doctorSmokeSummaryRenderOptions{IncludeResponseID: true})
 	}
 }
 
 func renderAzureDoctorSmokeRequest(w io.Writer, request azureprovider.DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		fmt.Fprintf(w, "Smoke request %s: skipped (%s)\n", request.Name, request.SkipReason)
-		return
-	}
-
-	status := "ok"
-	if strings.TrimSpace(request.Error) != "" {
-		status = "fail"
-	}
-	line := fmt.Sprintf(
-		"Smoke request %s: %s duration=%s response_id=%s",
-		request.Name,
-		status,
-		request.Duration,
-		doctorOptionalIDText(request.ResponseID),
-	)
-	if request.RetentionPayload {
-		line += fmt.Sprintf(" previous_response_id=%s", doctorOptionalIDText(request.PreviousResponseID))
-	}
-	fmt.Fprintln(w, line)
-	if strings.TrimSpace(request.Content) != "" {
-		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
-	}
-	fmt.Fprintf(w, "Smoke usage %s: %s\n", request.Name, formatDoctorSmokeUsage(azureDoctorSmokeUsage(request.Usage)))
-	fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, doctorSmokeCostText(request.UsageObserved, request.Cost.PricingUnavailable, request.Cost.USD))
+	renderDoctorSmokeRequestLine(w, doctorSmokeRequestLine{
+		Name:               request.Name,
+		Duration:           request.Duration,
+		Content:            request.Content,
+		Error:              request.Error,
+		PreviousResponseID: request.PreviousResponseID,
+		Skipped:            request.Skipped,
+		SkipReason:         request.SkipReason,
+		RetentionPayload:   request.RetentionPayload,
+		UsageObserved:      request.UsageObserved,
+		PricingUnavailable: request.Cost.PricingUnavailable,
+		CostUSD:            request.Cost.USD,
+		Usage:              azureDoctorSmokeUsage(request.Usage),
+	}, doctorSmokeRequestRenderOptions{
+		IDLabel:                   "response_id",
+		IDValue:                   request.ResponseID,
+		IncludePreviousResponseID: true,
+		PrintUsageAndCost:         true,
+	})
 }
 
 func azureDoctorCheckLines(checks []azureprovider.DiagnosticCheck) []doctorCheckLine {

@@ -101,8 +101,7 @@ func renderBedrockDoctorText(w io.Writer, report bedrockprovider.DiagnosticRepor
 	renderDoctorChecks(w, bedrockDoctorCheckLines(report.Checks))
 
 	if report.RequestPreview != nil {
-		fmt.Fprintln(w)
-		renderDoctorRequestPreview(w, report.RequestPreview)
+		renderDoctorRequestPreviewSection(w, report.RequestPreview)
 	}
 
 	if report.Smoke == nil || !report.Smoke.Ran {
@@ -113,34 +112,23 @@ func renderBedrockDoctorText(w io.Writer, report bedrockprovider.DiagnosticRepor
 		renderBedrockDoctorSmokeRequest(w, request)
 	}
 	if len(report.Smoke.Requests) > 1 {
-		fmt.Fprintf(w, "Smoke total usage: %s\n", formatDoctorSmokeUsage(bedrockDoctorSmokeUsage(report.Smoke.Usage)))
-		fmt.Fprintf(w, "Smoke total cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
+		renderDoctorSmokeTotal(w, bedrockDoctorSmokeUsage(report.Smoke.Usage), report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD)
 	}
 }
 
 func renderBedrockDoctorSmokeRequest(w io.Writer, request bedrockprovider.DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		fmt.Fprintf(w, "Smoke request %s: skipped (%s)\n", request.Name, request.SkipReason)
-		return
-	}
-
-	status := "ok"
-	if strings.TrimSpace(request.Error) != "" {
-		status = "fail"
-	}
-	fmt.Fprintf(
-		w,
-		"Smoke request %s: %s duration=%s request_id=%s\n",
-		request.Name,
-		status,
-		request.Duration,
-		doctorOptionalIDText(request.RequestID),
-	)
-	if strings.TrimSpace(request.Content) != "" {
-		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
-	}
-	fmt.Fprintf(w, "Smoke usage %s: %s\n", request.Name, formatDoctorSmokeUsage(bedrockDoctorSmokeUsage(request.Usage)))
-	fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, doctorSmokeCostText(request.UsageObserved, request.Cost.PricingUnavailable, request.Cost.USD))
+	renderDoctorSmokeRequestLine(w, doctorSmokeRequestLine{
+		Name:               request.Name,
+		Duration:           request.Duration,
+		Content:            request.Content,
+		Error:              request.Error,
+		Skipped:            request.Skipped,
+		SkipReason:         request.SkipReason,
+		UsageObserved:      request.UsageObserved,
+		PricingUnavailable: request.Cost.PricingUnavailable,
+		CostUSD:            request.Cost.USD,
+		Usage:              bedrockDoctorSmokeUsage(request.Usage),
+	}, doctorSmokeRequestRenderOptions{IDLabel: "request_id", IDValue: request.RequestID, PrintUsageAndCost: true})
 }
 
 func bedrockDoctorCheckLines(checks []bedrockprovider.DiagnosticCheck) []doctorCheckLine {

@@ -114,8 +114,7 @@ func renderKimiDoctorText(w io.Writer, report kimiprovider.DiagnosticReport) {
 	renderDoctorChecks(w, kimiDoctorCheckLines(report.Checks))
 
 	if report.RequestPreview != nil {
-		fmt.Fprintln(w)
-		renderDoctorRequestPreview(w, report.RequestPreview)
+		renderDoctorRequestPreviewSection(w, report.RequestPreview)
 	}
 
 	if report.Smoke != nil && report.Smoke.Ran {
@@ -125,18 +124,7 @@ func renderKimiDoctorText(w io.Writer, report kimiprovider.DiagnosticReport) {
 			fmt.Fprintf(w, "Smoke content: %s\n", report.Smoke.Content)
 		}
 		for _, request := range report.Smoke.Requests {
-			if request.Skipped {
-				fmt.Fprintf(w, "Smoke request %s: skipped (%s)\n", request.Name, request.SkipReason)
-				continue
-			}
-			status := "ok"
-			if strings.TrimSpace(request.Error) != "" {
-				status = "fail"
-			}
-			fmt.Fprintf(w, "Smoke request %s: %s duration=%s\n", request.Name, status, request.Duration)
-			if strings.TrimSpace(request.Error) != "" {
-				fmt.Fprintf(w, "Smoke error %s: %s\n", request.Name, request.Error)
-			}
+			renderKimiDoctorSmokeRequest(w, request)
 		}
 		fmt.Fprintf(w, "Cached input tokens observed: %d\n", report.Smoke.CachedInputTokens)
 		if report.Smoke.WebSearchPayload {
@@ -149,6 +137,16 @@ func renderKimiDoctorText(w io.Writer, report kimiprovider.DiagnosticReport) {
 			fmt.Fprintln(w, "Note: Kimi $web_search call fee is separate from token cost; search result tokens are included in the next prompt_tokens response and are not added again.")
 		}
 	}
+}
+
+func renderKimiDoctorSmokeRequest(w io.Writer, request kimiprovider.DiagnosticSmokeRequestResult) {
+	renderDoctorSmokeRequestLine(w, doctorSmokeRequestLine{
+		Name:       request.Name,
+		Duration:   request.Duration,
+		Error:      request.Error,
+		Skipped:    request.Skipped,
+		SkipReason: request.SkipReason,
+	}, doctorSmokeRequestRenderOptions{OmitContent: true, PrintError: true})
 }
 
 func kimiDoctorCheckLines(checks []kimiprovider.DiagnosticCheck) []doctorCheckLine {

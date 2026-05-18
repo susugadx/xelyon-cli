@@ -49,6 +49,11 @@ func renderDoctorRequestPreview(w io.Writer, preview any) {
 	renderDoctorJSONBlock(w, "Request preview", preview)
 }
 
+func renderDoctorRequestPreviewSection(w io.Writer, preview any) {
+	fmt.Fprintln(w)
+	renderDoctorRequestPreview(w, preview)
+}
+
 func renderDoctorCapabilities(w io.Writer, capabilities any) {
 	renderDoctorJSONBlock(w, "Capabilities", capabilities)
 }
@@ -92,4 +97,109 @@ func doctorSmokeCostText(usageObserved, pricingUnavailable bool, usd float64) st
 		return "N/A (pricing unavailable)"
 	}
 	return fmt.Sprintf("$%.8f USD", usd)
+}
+
+type doctorSmokeRequestLine struct {
+	Name               string
+	Route              string
+	Duration           string
+	Content            string
+	Error              string
+	PreviousResponseID string
+	Skipped            bool
+	SkipReason         string
+	RetentionPayload   bool
+	UsageObserved      bool
+	PricingUnavailable bool
+	CostUSD            float64
+	Usage              doctorSmokeUsageLine
+}
+
+type doctorSmokeRequestRenderOptions struct {
+	IncludeRoute              bool
+	IDLabel                   string
+	IDValue                   string
+	IncludePreviousResponseID bool
+	OmitContent               bool
+	PrintError                bool
+	PrintUsageAndCost         bool
+}
+
+type doctorSmokeSummaryLine struct {
+	Route              string
+	Duration           string
+	Content            string
+	Error              string
+	ResponseID         string
+	UsageObserved      bool
+	PricingUnavailable bool
+	CostUSD            float64
+	Usage              doctorSmokeUsageLine
+}
+
+type doctorSmokeSummaryRenderOptions struct {
+	IncludeRoute      bool
+	IncludeResponseID bool
+	PrintError        bool
+}
+
+func renderDoctorSmokeRequestLine(w io.Writer, request doctorSmokeRequestLine, options doctorSmokeRequestRenderOptions) {
+	if request.Skipped {
+		fmt.Fprintf(w, "Smoke request %s: skipped (%s)\n", request.Name, request.SkipReason)
+		return
+	}
+
+	line := fmt.Sprintf("Smoke request %s: %s", request.Name, doctorSmokeStatus(request.Error))
+	if options.IncludeRoute {
+		line += fmt.Sprintf(" route=%s", request.Route)
+	}
+	line += fmt.Sprintf(" duration=%s", request.Duration)
+	if options.IDLabel != "" {
+		line += fmt.Sprintf(" %s=%s", options.IDLabel, doctorOptionalIDText(options.IDValue))
+	}
+	if options.IncludePreviousResponseID && request.RetentionPayload {
+		line += fmt.Sprintf(" previous_response_id=%s", doctorOptionalIDText(request.PreviousResponseID))
+	}
+	fmt.Fprintln(w, line)
+
+	if !options.OmitContent && strings.TrimSpace(request.Content) != "" {
+		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
+	}
+	if options.PrintError && strings.TrimSpace(request.Error) != "" {
+		fmt.Fprintf(w, "Smoke error %s: %s\n", request.Name, request.Error)
+	}
+	if options.PrintUsageAndCost {
+		fmt.Fprintf(w, "Smoke usage %s: %s\n", request.Name, formatDoctorSmokeUsage(request.Usage))
+		fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, doctorSmokeCostText(request.UsageObserved, request.PricingUnavailable, request.CostUSD))
+	}
+}
+
+func renderDoctorSmokeSummary(w io.Writer, smoke doctorSmokeSummaryLine, options doctorSmokeSummaryRenderOptions) {
+	if options.IncludeRoute {
+		fmt.Fprintf(w, "Smoke route: %s\n", smoke.Route)
+	}
+	fmt.Fprintf(w, "Smoke duration: %s\n", smoke.Duration)
+	if options.IncludeResponseID {
+		fmt.Fprintf(w, "Smoke response ID: %s\n", doctorOptionalIDText(smoke.ResponseID))
+	}
+	if strings.TrimSpace(smoke.Content) != "" {
+		fmt.Fprintf(w, "Smoke content: %s\n", smoke.Content)
+	}
+	if options.PrintError && strings.TrimSpace(smoke.Error) != "" {
+		fmt.Fprintf(w, "Smoke error: %s\n", smoke.Error)
+	}
+	fmt.Fprintf(w, "Smoke usage: %s\n", formatDoctorSmokeUsage(smoke.Usage))
+	fmt.Fprintf(w, "Smoke cost estimate: %s\n", doctorSmokeCostText(smoke.UsageObserved, smoke.PricingUnavailable, smoke.CostUSD))
+}
+
+func renderDoctorSmokeTotal(w io.Writer, usage doctorSmokeUsageLine, usageObserved, pricingUnavailable bool, costUSD float64) {
+	fmt.Fprintf(w, "Smoke total usage: %s\n", formatDoctorSmokeUsage(usage))
+	fmt.Fprintf(w, "Smoke total cost estimate: %s\n", doctorSmokeCostText(usageObserved, pricingUnavailable, costUSD))
+}
+
+func doctorSmokeStatus(errorText string) string {
+	if strings.TrimSpace(errorText) != "" {
+		return "fail"
+	}
+	return "ok"
 }

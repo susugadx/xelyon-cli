@@ -110,8 +110,7 @@ func renderGeminiDoctorText(w io.Writer, report geminiprovider.DiagnosticReport)
 	renderDoctorChecks(w, geminiDoctorCheckLines(report.Checks))
 
 	if report.RequestPreview != nil {
-		fmt.Fprintln(w)
-		renderDoctorRequestPreview(w, report.RequestPreview)
+		renderDoctorRequestPreviewSection(w, report.RequestPreview)
 	}
 
 	if report.Smoke != nil && report.Smoke.Ran {
@@ -120,44 +119,36 @@ func renderGeminiDoctorText(w io.Writer, report geminiprovider.DiagnosticReport)
 			for _, request := range report.Smoke.Requests {
 				renderGeminiDoctorSmokeRequest(w, request)
 			}
-			fmt.Fprintf(w, "Smoke total usage: %s\n", formatDoctorSmokeUsage(geminiDoctorSmokeUsage(report.Smoke.Usage)))
-			fmt.Fprintf(w, "Smoke total cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
+			renderDoctorSmokeTotal(w, geminiDoctorSmokeUsage(report.Smoke.Usage), report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD)
 			return
 		}
-		fmt.Fprintf(w, "Smoke route: %s\n", report.Smoke.Route)
-		fmt.Fprintf(w, "Smoke duration: %s\n", report.Smoke.Duration)
-		if strings.TrimSpace(report.Smoke.Content) != "" {
-			fmt.Fprintf(w, "Smoke content: %s\n", report.Smoke.Content)
-		}
-		if errText := geminiDoctorSmokeFirstError(report.Smoke.Requests); errText != "" {
-			fmt.Fprintf(w, "Smoke error: %s\n", errText)
-		}
-		fmt.Fprintf(w, "Smoke usage: %s\n", formatDoctorSmokeUsage(geminiDoctorSmokeUsage(report.Smoke.Usage)))
-		fmt.Fprintf(w, "Smoke cost estimate: %s\n", doctorSmokeCostText(report.Smoke.UsageObserved, report.Smoke.Cost.PricingUnavailable, report.Smoke.Cost.USD))
+		renderDoctorSmokeSummary(w, doctorSmokeSummaryLine{
+			Route:              report.Smoke.Route,
+			Duration:           report.Smoke.Duration,
+			Content:            report.Smoke.Content,
+			Error:              geminiDoctorSmokeFirstError(report.Smoke.Requests),
+			UsageObserved:      report.Smoke.UsageObserved,
+			PricingUnavailable: report.Smoke.Cost.PricingUnavailable,
+			CostUSD:            report.Smoke.Cost.USD,
+			Usage:              geminiDoctorSmokeUsage(report.Smoke.Usage),
+		}, doctorSmokeSummaryRenderOptions{IncludeRoute: true, PrintError: true})
 	}
 }
 
 func renderGeminiDoctorSmokeRequest(w io.Writer, request geminiprovider.DiagnosticSmokeRequestResult) {
-	status := "ok"
-	if strings.TrimSpace(request.Error) != "" {
-		status = "fail"
-	}
-	fmt.Fprintf(
-		w,
-		"Smoke request %s: %s route=%s duration=%s\n",
-		request.Name,
-		status,
-		request.Route,
-		request.Duration,
-	)
-	if strings.TrimSpace(request.Content) != "" {
-		fmt.Fprintf(w, "Smoke content %s: %s\n", request.Name, request.Content)
-	}
-	if strings.TrimSpace(request.Error) != "" {
-		fmt.Fprintf(w, "Smoke error %s: %s\n", request.Name, request.Error)
-	}
-	fmt.Fprintf(w, "Smoke usage %s: %s\n", request.Name, formatDoctorSmokeUsage(geminiDoctorSmokeUsage(request.Usage)))
-	fmt.Fprintf(w, "Smoke cost estimate %s: %s\n", request.Name, doctorSmokeCostText(request.UsageObserved, request.Cost.PricingUnavailable, request.Cost.USD))
+	renderDoctorSmokeRequestLine(w, doctorSmokeRequestLine{
+		Name:               request.Name,
+		Route:              request.Route,
+		Duration:           request.Duration,
+		Content:            request.Content,
+		Error:              request.Error,
+		Skipped:            request.Skipped,
+		SkipReason:         request.SkipReason,
+		UsageObserved:      request.UsageObserved,
+		PricingUnavailable: request.Cost.PricingUnavailable,
+		CostUSD:            request.Cost.USD,
+		Usage:              geminiDoctorSmokeUsage(request.Usage),
+	}, doctorSmokeRequestRenderOptions{IncludeRoute: true, PrintError: true, PrintUsageAndCost: true})
 }
 
 func geminiDoctorSmokeFirstError(requests []geminiprovider.DiagnosticSmokeRequestResult) string {
