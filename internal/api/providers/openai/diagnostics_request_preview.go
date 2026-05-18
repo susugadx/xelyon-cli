@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const openAIDiagnosticPreviewRetentionResponseID = "${retention_initial.response_id}"
@@ -52,13 +53,11 @@ func buildOpenAIDiagnosticRequestPreview(
 	preview := DiagnosticRequestPreview{}
 	for _, request := range openAIDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			preview.Requests = append(preview.Requests, DiagnosticRequestPreviewRequest{
-				Name:        request.Name,
-				Skipped:     true,
-				SkipReason:  "OpenAI function calling payloads are disabled (OPENAI_FUNCTION_CALLING=0)",
-				ToolPayload: true,
-				Route:       report.Route,
-			})
+			preview.Requests = append(preview.Requests, providerdiag.NewSkippedRoutedResponsesPreviewRequest(
+				request,
+				report.Route,
+				"OpenAI function calling payloads are disabled (OPENAI_FUNCTION_CALLING=0)",
+			))
 			continue
 		}
 		if request.RetentionPayload && report.Route == DiagnosticRouteChatCompletions {

@@ -12,6 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -21,13 +22,7 @@ const (
 	openAIDiagnosticSmokeToolName             = "xelyon_openai_doctor_probe"
 )
 
-type openAIDiagnosticSmokeRequest struct {
-	Name             string
-	SystemPrompt     string
-	UserContent      string
-	ToolPayload      bool
-	RetentionPayload bool
-}
+type openAIDiagnosticSmokeRequest = providerdiag.ResponsesSmokeRequest
 
 func runOpenAIDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
 	timeout := options.SmokeTimeout
@@ -58,20 +53,20 @@ func runOpenAIDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 	started := time.Now()
 	for _, request := range openAIDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, DiagnosticSmokeRequestResult{
-				Name:        request.Name,
-				Skipped:     true,
-				SkipReason:  "OpenAI function calling payloads are disabled (OPENAI_FUNCTION_CALLING=0)",
-				ToolPayload: true,
-				Route:       report.Route,
-			})
+			providerdiag.AddRoutedResponsesSmokeRequestResult(
+				&result,
+				providerdiag.NewSkippedRoutedResponsesSmokeRequest(
+					request,
+					report.Route,
+					"OpenAI function calling payloads are disabled (OPENAI_FUNCTION_CALLING=0)",
+				),
+			)
 			continue
 		}
 
 		requestCfg := openAIDiagnosticSmokeRequestConfig(baseSmokeCfg, request)
 		requestResult, err := runOpenAIDiagnosticSmokeRequest(smokeCtx, requestCfg, provider, report, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddRoutedResponsesSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -184,8 +179,8 @@ func runOpenAIDiagnosticSmokeRequest(
 		PreviousResponseID: previousResponseID,
 		Duration:           elapsed.String(),
 		UsageObserved:      usageObserved,
-		Usage:              openAIDiagnosticSmokeUsage(usage),
-		Cost:               openAIDiagnosticSmokeCost(costEstimate),
+		Usage:              providerdiag.SmokeUsageFromAPIUsage(usage),
+		Cost:               providerdiag.SmokeCostFromEstimate(costEstimate),
 	}
 	if err != nil {
 		result.Error = err.Error()
@@ -203,7 +198,7 @@ func runOpenAIDiagnosticSmokeRequest(
 		return result, nil
 	}
 	if request.ToolPayload {
-		if !openAIDiagnosticSmokeContentHasToolCall(content) {
+		if !providerdiag.ContentHasToolCall(content, openAIDiagnosticSmokeToolName) {
 			result.Error = fmt.Sprintf("tool smoke response did not include %s function_call", openAIDiagnosticSmokeToolName)
 			return result, errors.New(result.Error)
 		}
@@ -313,80 +308,6 @@ func runOpenAIDiagnosticProviderSmokeRequest(
 	})
 }
 
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	if request.ToolPayload {
-		r.ToolPayload = true
-	}
-	if request.RetentionPayload {
-		r.RetentionPayload = true
-	}
-	if r.Route == "" {
-		r.Route = request.Route
-	}
-	if strings.TrimSpace(r.Content) == "" {
-		r.Content = request.Content
-	}
-	if strings.TrimSpace(r.ResponseID) == "" {
-		r.ResponseID = request.ResponseID
-	}
-
-	var usage api.Usage
-	usage.InputTokens = request.Usage.InputTokens
-	usage.OutputTokens = request.Usage.OutputTokens
-	usage.ThinkingTokens = request.Usage.ThinkingTokens
-	usage.CachedInputTokens = request.Usage.CachedInputTokens
-	usage.CacheCreationTokens = request.Usage.CacheCreationTokens
-
-	var current api.Usage
-	current.InputTokens = r.Usage.InputTokens
-	current.OutputTokens = r.Usage.OutputTokens
-	current.ThinkingTokens = r.Usage.ThinkingTokens
-	current.CachedInputTokens = r.Usage.CachedInputTokens
-	current.CacheCreationTokens = r.Usage.CacheCreationTokens
-	current.Add(usage)
-	r.Usage = openAIDiagnosticSmokeUsage(current)
-	if request.Cost.PricingUnavailable {
-		r.Cost.PricingUnavailable = true
-	} else {
-		r.Cost.USD += request.Cost.USD
-	}
-	r.UsageObserved = r.allRanRequestsObservedUsage()
-}
-
-func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
-	observedAnyRequest := false
-	for _, request := range r.Requests {
-		if request.Skipped || !request.Ran {
-			continue
-		}
-		observedAnyRequest = true
-		if !request.UsageObserved {
-			return false
-		}
-	}
-	return observedAnyRequest
-}
-
-func openAIDiagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return DiagnosticSmokeUsage{
-		InputTokens:         usage.InputTokens,
-		OutputTokens:        usage.OutputTokens,
-		ThinkingTokens:      usage.ThinkingTokens,
-		CachedInputTokens:   usage.CachedInputTokens,
-		CacheCreationTokens: usage.CacheCreationTokens,
-	}
-}
-
-func openAIDiagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return DiagnosticSmokeCost{
-		USD:                estimate.Cost,
-		PricingUnavailable: estimate.PricingUnavailable,
-	}
-}
-
 func openAIDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
 	return []api.ToolDefinition{{
 		Name:        openAIDiagnosticSmokeToolName,
@@ -400,8 +321,4 @@ func openAIDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
 			"required": []string{"value"},
 		},
 	}}
-}
-
-func openAIDiagnosticSmokeContentHasToolCall(content string) bool {
-	return strings.Contains(content, `"tool":"`+openAIDiagnosticSmokeToolName+`"`)
 }
