@@ -18,11 +18,12 @@ type PlanStep struct {
 
 // PlanDisplay は計画表示用の構造体
 type PlanDisplay struct {
-	Title      string
-	Summary    string
-	Steps      []PlanStep
-	FilesTitle string
-	Footer     string
+	Title          string
+	Summary        string
+	DetailSections []PlanDetailSection
+	Steps          []PlanStep
+	FilesTitle     string
+	Footer         string
 }
 
 // NewPlanDisplay は新しい PlanDisplay を作成
@@ -95,6 +96,10 @@ func (p *PlanDisplay) Render() string {
 				fmt.Fprintf(&sb, "  %s\n", line)
 			}
 		}
+		sb.WriteString("\n")
+	}
+
+	if writePlanDetailSections(&sb, p.DetailSections) {
 		sb.WriteString("\n")
 	}
 

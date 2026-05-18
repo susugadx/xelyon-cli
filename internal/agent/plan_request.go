@@ -186,6 +186,9 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 	}
 
 	if len(p.Steps) == 0 {
+		if display := buildPlanNoImplementationDisplay(p); display != nil {
+			fmt.Fprint(out, display.Render())
+		}
 		green.Fprintln(out, "\n✓ Investigation complete. No implementation steps needed.")
 		a.setReadyForInputStatus()
 		return true, nil

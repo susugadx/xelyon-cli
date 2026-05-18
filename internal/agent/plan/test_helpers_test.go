@@ -28,9 +28,8 @@ func mustParsePlanJSON(t *testing.T, jsonStr string) *Plan {
 func assertPlanJSONNeedsRetry(t *testing.T, jsonStr string) {
 	t.Helper()
 
-	plan, err := ParsePlan(jsonStr)
-	if err == nil && len(plan.Steps) > 0 {
-		t.Fatalf("ParsePlan(%q) returned executable plan %#v, want retry candidate", jsonStr, plan)
+	if plan, err := ParsePlan(jsonStr); err == nil {
+		t.Fatalf("ParsePlan(%q) returned plan %#v, want retry parse error", jsonStr, plan)
 	}
 }
 

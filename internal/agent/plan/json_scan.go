@@ -25,6 +25,11 @@ func topLevelRawValue(jsonStr string, key string) (json.RawMessage, bool, bool) 
 	return value, ok, true
 }
 
+func hasTopLevelJSONKey(jsonStr string, key string) bool {
+	_, ok, _ := topLevelRawValue(jsonStr, key)
+	return ok
+}
+
 func jsonValueKindAt(s string, start int) jsonValueKind {
 	start = skipJSONWhitespace(s, start)
 	if start >= len(s) {

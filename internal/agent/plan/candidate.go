@@ -2,16 +2,6 @@ package plan
 
 import (
 	"encoding/json"
-	"strings"
-)
-
-const (
-	planWrapperJSONKey              = "plan"
-	planSummaryJSONKey              = "summary"
-	legacyPlanStepsKey              = "steps"
-	legacyPlanGoalKey               = "goal"
-	legacyPlanAssumptionsKey        = "assumptions"
-	legacyPlanExpectedOutputStepKey = "expected_output"
 )
 
 type planJSONCandidateKind int
@@ -27,6 +17,7 @@ type planJSONCandidateScope int
 const (
 	planJSONCandidateAny planJSONCandidateScope = iota
 	planJSONCandidateWrapper
+	planJSONCandidateNormalModeWrapper
 	planJSONCandidateLegacy
 )
 
@@ -46,6 +37,8 @@ func classifyPlanJSONCandidateForScope(jsonStr string, scope planJSONCandidateSc
 	switch scope {
 	case planJSONCandidateWrapper:
 		return classifyPlanWrapperJSONCandidate(jsonStr)
+	case planJSONCandidateNormalModeWrapper:
+		return classifyNormalModePlanWrapperJSONCandidate(jsonStr)
 	case planJSONCandidateLegacy:
 		return classifyLegacyPlanJSONCandidate(jsonStr)
 	}
@@ -54,32 +47,6 @@ func classifyPlanJSONCandidateForScope(jsonStr string, scope planJSONCandidateSc
 		return kind
 	}
 	return classifyLegacyPlanJSONCandidate(jsonStr)
-}
-
-func classifyPlanWrapperJSONCandidate(jsonStr string) planJSONCandidateKind {
-	value, ok, valid := topLevelRawValue(jsonStr, planWrapperJSONKey)
-	if !ok {
-		return planJSONNotCandidate
-	}
-
-	if valid {
-		valueStr := string(value)
-		if jsonValueKindAt(valueStr, 0) != jsonValueObject {
-			return planJSONNotCandidate
-		}
-		return classifyPlanObjectJSONCandidate(valueStr)
-	}
-
-	valueStart, ok := topLevelValueStart(jsonStr, planWrapperJSONKey)
-	if !ok {
-		return planJSONNotCandidate
-	}
-	switch jsonValueKindAt(jsonStr, valueStart) {
-	case jsonValueObject, jsonValueInvalid:
-		return planJSONMalformedCandidate
-	default:
-		return planJSONNotCandidate
-	}
 }
 
 func classifyLegacyPlanJSONCandidate(jsonStr string) planJSONCandidateKind {
@@ -129,7 +96,7 @@ func isPlanObjectShape(jsonStr string) bool {
 	if err := json.Unmarshal([]byte(jsonStr), &p); err != nil {
 		return false
 	}
-	return isPlanShape(p)
+	return hasPlanContent(p)
 }
 
 func isLegacyPlanObjectShape(jsonStr string) bool {
@@ -137,11 +104,11 @@ func isLegacyPlanObjectShape(jsonStr string) bool {
 	if err != nil {
 		return false
 	}
-	return isPlanShape(*p)
+	return hasPlanContent(*p)
 }
 
 func isPlanObjectLike(jsonStr string) bool {
-	if hasTopLevelJSONKey(jsonStr, planSummaryJSONKey) {
+	if hasPlanContentKey(jsonStr) {
 		return true
 	}
 
@@ -155,24 +122,14 @@ func isPlanObjectLike(jsonStr string) bool {
 	return isPlanStepsValueLike(steps)
 }
 
-func hasTopLevelJSONKey(jsonStr string, key string) bool {
-	_, ok, _ := topLevelRawValue(jsonStr, key)
-	return ok
-}
-
 func hasLegacyPlanEvidence(jsonStr string, steps json.RawMessage) bool {
-	return hasTopLevelJSONKey(jsonStr, planSummaryJSONKey) ||
+	return hasPlanContentKey(jsonStr) ||
 		hasLegacyPlanTopLevelEvidence(jsonStr) ||
 		hasPlanSpecificStepEvidence(steps)
 }
 
 func hasLegacyPlanTopLevelEvidence(jsonStr string) bool {
-	for _, key := range []string{legacyPlanGoalKey, legacyPlanAssumptionsKey} {
-		if hasTopLevelJSONKey(jsonStr, key) {
-			return true
-		}
-	}
-	return false
+	return hasAnyTopLevelJSONKey(jsonStr, legacyPlanTopLevelEvidenceJSONKeys[:])
 }
 
 func hasPlanSpecificStepEvidence(value json.RawMessage) bool {
@@ -204,7 +161,7 @@ func hasPlanSpecificStepKey(value json.RawMessage) bool {
 	if err := json.Unmarshal(value, &obj); err != nil {
 		return true
 	}
-	for _, key := range []string{"purpose", "tools", "depends_on", "files", "verification", legacyPlanExpectedOutputStepKey} {
+	for _, key := range planSpecificStepEvidenceJSONKeys {
 		if _, ok := obj[key]; ok {
 			return true
 		}
@@ -241,34 +198,12 @@ func isPlanStepObjectLike(value json.RawMessage) bool {
 	if err := json.Unmarshal(value, &obj); err != nil {
 		return true
 	}
-	for _, key := range []string{"id", "description", "purpose", "tools", "depends_on", "files", "verification"} {
+	for _, key := range planStepShapeJSONKeys {
 		if _, ok := obj[key]; ok {
 			return true
 		}
 	}
 	return false
-}
-
-func isPlanShape(p Plan) bool {
-	if strings.TrimSpace(p.Summary) != "" {
-		return true
-	}
-	for _, step := range p.Steps {
-		if isPlanStepShape(step) {
-			return true
-		}
-	}
-	return false
-}
-
-func isPlanStepShape(step PlanStep) bool {
-	return step.ID != 0 ||
-		strings.TrimSpace(step.Description) != "" ||
-		strings.TrimSpace(step.Purpose) != "" ||
-		len(step.Tools) > 0 ||
-		len(step.DependsOn) > 0 ||
-		len(step.Files) > 0 ||
-		len(step.Verification) > 0
 }
 
 // isToolCallJSON はJSONがツール呼び出しかどうかを判定

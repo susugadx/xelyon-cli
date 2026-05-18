@@ -29,11 +29,15 @@ func ExtractPlanJSON(response string) string {
 // recovery 対象だけを抽出する。Plan Mode の修復用抽出より高精度にし、通常のユーザー要求 JSON を
 // direct-execution recovery へ流さない。
 func ExtractPlanJSONForNormalModeRecovery(response string) string {
-	return findPlanWrapperJSON(response)
+	return findPlanWrapperJSONForNormalModeRecovery(response)
 }
 
 func findPlanWrapperJSON(response string) string {
 	return findScopedPlanJSON(response, planJSONCandidateWrapper)
+}
+
+func findPlanWrapperJSONForNormalModeRecovery(response string) string {
+	return findScopedPlanJSON(response, planJSONCandidateNormalModeWrapper)
 }
 
 func findLegacyPlanJSON(response string) string {

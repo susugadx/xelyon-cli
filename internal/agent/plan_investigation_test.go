@@ -127,87 +127,31 @@ func TestRunInvestigationPhase_PlanModeShowsFinalProse(t *testing.T) {
 	}
 }
 
-func TestPlanInvestigationRunner_HandleNoToolResponse_InvalidPlanJSONRequestsRetry(t *testing.T) {
+func TestPlanInvestigationRunner_HandleNoToolResponse_NoStepPlanReturnsPlan(t *testing.T) {
 	agent, runner := newPlanInvestigationNoToolTest(t)
 
-	response := "```json\n{\"plan\":{\"summary\":\"Research only\",\"steps\":[]}}\n```"
+	response := "```json\n" + `{
+  "plan": {
+    "findings": ["Existing behavior already satisfies the request"],
+    "evidence": ["README.md documents it"],
+    "constraints": ["Do not change CLI output"],
+    "steps": []
+  }
+}` + "\n```"
 	p, action, err := runner.handleNoToolResponse(response)
 	if err != nil {
 		t.Fatalf("handleNoToolResponse() error = %v", err)
 	}
-	if p != nil {
-		t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
+	if p == nil {
+		t.Fatal("handleNoToolResponse() plan = nil, want parsed no-step plan")
 	}
-	if action != investigationLoopContinue {
-		t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
+	if len(p.Steps) != 0 {
+		t.Fatalf("len(plan.Steps) = %d, want 0", len(p.Steps))
 	}
-	assertPlanJSONRetryPromptAppended(t, agent, `"files"`)
-}
-
-func TestPlanInvestigationRunner_HandleNoToolResponse_MalformedPlanWrapperRequestsRetry(t *testing.T) {
-	agent, runner := newPlanInvestigationNoToolTest(t)
-
-	p, action, err := runner.handleNoToolResponse(`{"plan": invalid}`)
-	if err != nil {
-		t.Fatalf("handleNoToolResponse() error = %v", err)
+	if action != investigationLoopDone {
+		t.Fatalf("handleNoToolResponse() action = %v, want done", action)
 	}
-	if p != nil {
-		t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
-	}
-	if action != investigationLoopContinue {
-		t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
-	}
-	assertPlanJSONRetryPromptAppended(t, agent)
-}
-
-func TestPlanInvestigationRunner_HandleNoToolResponse_MalformedLegacyStepsRequestsRetry(t *testing.T) {
-	agent, runner := newPlanInvestigationNoToolTest(t)
-
-	p, action, err := runner.handleNoToolResponse(`{"steps": invalid}`)
-	if err != nil {
-		t.Fatalf("handleNoToolResponse() error = %v", err)
-	}
-	if p != nil {
-		t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
-	}
-	if action != investigationLoopContinue {
-		t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
-	}
-	assertPlanJSONRetryPromptAppended(t, agent)
-}
-
-func TestPlanInvestigationRunner_HandleNoToolResponse_SchemaInvalidPlanJSONRequestsRetry(t *testing.T) {
-	tests := []struct {
-		name     string
-		response string
-	}{
-		{
-			name:     "wrapper steps object",
-			response: `{"plan":{"summary":"Fix","steps":{"id":1,"description":"Do it"}}}`,
-		},
-		{
-			name:     "legacy steps object",
-			response: `{"summary":"Fix","steps":{"id":1,"description":"Do it"}}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			agent, runner := newPlanInvestigationNoToolTest(t)
-
-			p, action, err := runner.handleNoToolResponse(tt.response)
-			if err != nil {
-				t.Fatalf("handleNoToolResponse() error = %v", err)
-			}
-			if p != nil {
-				t.Fatalf("handleNoToolResponse() plan = %v, want nil", p)
-			}
-			if action != investigationLoopContinue {
-				t.Fatalf("handleNoToolResponse() action = %v, want continue", action)
-			}
-			assertPlanJSONRetryPromptAppended(t, agent)
-		})
-	}
+	assertPlanJSONRetryPromptNotAppended(t, agent)
 }
 
 func TestPlanInvestigationRunner_HandleNoToolResponse_FencedLegacyRetrySchemaReturnsPlan(t *testing.T) {
@@ -236,6 +180,26 @@ func TestPlanInvestigationRunner_HandleNoToolResponse_FencedLegacyRetrySchemaRet
 		t.Fatalf("handleNoToolResponse() action = %v, want done", action)
 	}
 	if p.Title != "Fix parser" || len(p.Steps) != 1 || p.Steps[0].Description != "Update legacy evidence" {
+		t.Fatalf("handleNoToolResponse() plan = %#v, want parsed legacy plan", p)
+	}
+	assertPlanJSONRetryPromptNotAppended(t, agent)
+}
+
+func TestPlanInvestigationRunner_HandleNoToolResponse_LegacyPlanObjectMetadataReturnsPlan(t *testing.T) {
+	agent, runner := newPlanInvestigationNoToolTest(t)
+
+	response := `{"plan":{"name":"rollout"},"summary":"Fix","steps":[{"id":1,"description":"Do it","tools":["apply_patch"]}]}`
+	p, action, err := runner.handleNoToolResponse(response)
+	if err != nil {
+		t.Fatalf("handleNoToolResponse() error = %v", err)
+	}
+	if p == nil {
+		t.Fatal("handleNoToolResponse() plan = nil, want legacy plan")
+	}
+	if action != investigationLoopDone {
+		t.Fatalf("handleNoToolResponse() action = %v, want done", action)
+	}
+	if p.Summary != "Fix" || len(p.Steps) != 1 || p.Steps[0].Description != "Do it" {
 		t.Fatalf("handleNoToolResponse() plan = %#v, want parsed legacy plan", p)
 	}
 	assertPlanJSONRetryPromptNotAppended(t, agent)

@@ -6,6 +6,15 @@ Use exactly one JSON object in this shape:
 {
   "plan": {
     "summary": "User-facing implementation goal with scope",
+    "findings": [
+      "Important investigation fact that implementation mode should know"
+    ],
+    "evidence": [
+      "internal/agent/plan_handoff.go: normalModeInput builds the implementation handoff"
+    ],
+    "constraints": [
+      "Do not carry raw investigation history into implementation mode"
+    ],
     "steps": [
       {
         "id": 1,
@@ -25,6 +34,9 @@ Use exactly one JSON object in this shape:
 
 Field rules:
 - plan.summary: one concise, reviewable sentence describing the goal, scope, and important constraint when known.
+- plan.findings: concise investigation facts that are useful during implementation. Include only stable facts discovered from the codebase; omit guesses.
+- plan.evidence: files, functions, tests, commands, or concrete observations supporting the plan. Preserve file/function/test names when known.
+- plan.constraints: constraints, compatibility requirements, existing design boundaries, and changes to avoid.
 - steps: keep the plan short and ordered (normally 2-6 steps). Each step must be understandable without the investigation transcript.
 - steps[].description: an implementation action and expected outcome, not an investigation action. Mention tests/docs/config in the step when that is the point of the work.
 - steps[].purpose: a short review-facing reason for the step. Say what user-visible behavior, contract, risk, or cleanup it addresses. Omit only when description already fully explains the reason.

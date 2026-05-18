@@ -32,6 +32,9 @@ func clonePlanForHandoff(src *plan.Plan) plan.Plan {
 		return plan.Plan{}
 	}
 	dst := *src
+	dst.Findings = append([]string(nil), src.Findings...)
+	dst.Evidence = append([]string(nil), src.Evidence...)
+	dst.Constraints = append([]string(nil), src.Constraints...)
 	dst.Steps = make([]plan.PlanStep, len(src.Steps))
 	for i := range src.Steps {
 		dst.Steps[i] = src.Steps[i]
@@ -65,6 +68,9 @@ func (h *planModeImplementationHandoff) normalModeInput() string {
 		b.WriteString(summary)
 		b.WriteString("\n")
 	}
+	writeHandoffListSection(&b, "Findings", h.approvedPlan.Findings)
+	writeHandoffListSection(&b, "Evidence", h.approvedPlan.Evidence)
+	writeHandoffListSection(&b, "Constraints", h.approvedPlan.Constraints)
 	for idx, step := range h.approvedPlan.Steps {
 		description := strings.TrimSpace(step.Description)
 		if description == "" {
@@ -124,6 +130,22 @@ func handoffStepFileGroups(step plan.PlanStep) []planHandoffFileGroup {
 		groups = append(groups, planHandoffFileGroup{label: "Related files", files: relatedFiles})
 	}
 	return groups
+}
+
+func writeHandoffListSection(b *strings.Builder, label string, values []string) bool {
+	values = compactHandoffValues(values, nil)
+	if len(values) == 0 {
+		return false
+	}
+
+	b.WriteString(label)
+	b.WriteString(":\n")
+	for _, value := range values {
+		b.WriteString(" - ")
+		b.WriteString(value)
+		b.WriteString("\n")
+	}
+	return true
 }
 
 func compactHandoffFiles(files []string, exclude map[string]bool) []string {

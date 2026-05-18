@@ -86,6 +86,13 @@ func TestBuildInvestigationPrompt_ContainsPlanSchemaWithFiles(t *testing.T) {
 	assertContainsPlanSchema(t, "investigation prompt", prompt)
 }
 
+func TestBuildInvestigationPrompt_AllowsDirectNoImplementationAnswer(t *testing.T) {
+	prompt := BuildInvestigationPrompt("test request", investigation.SurfaceEditExactControl)
+	if !strings.Contains(prompt, "If no implementation is needed, answer directly in prose and do not output Plan JSON.") {
+		t.Fatal("investigation prompt should tell the model not to emit Plan JSON for no-implementation answers")
+	}
+}
+
 func TestBuildInvestigationPrompt_LegacyAllowedTools(t *testing.T) {
 	prompt := BuildInvestigationPrompt("test request", investigation.SurfaceLegacyOverrides)
 	if !strings.Contains(prompt, promptfragments.InvestigationAllowedToolsLine(investigation.SurfaceLegacyOverrides)) {

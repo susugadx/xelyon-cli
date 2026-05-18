@@ -76,33 +76,18 @@ func TestNormalMode_PlanJSONFallback(t *testing.T) {
 	}
 }
 
-func TestNormalMode_PlanJSONParseFailed(t *testing.T) {
-	var capturedHistories [][]api.Message
-	provider := &scriptedChatProvider{
-		name:            "test",
-		functionCalling: true,
-		chatWithToolsFn: func(call int, ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-			snapshot := append([]api.Message(nil), history...)
-			capturedHistories = append(capturedHistories, snapshot)
-			if call == 0 {
-				return `{"plan": {"summary": "broken plan"}}`, nil
-			}
-			return "OK, I'll just do it directly. Task completed.", nil
-		},
-	}
+func TestNormalMode_PlanJSONFallback_IgnoresNoStepPlanJSON(t *testing.T) {
+	response := `{"plan":{"summary":"Already done","findings":["Existing behavior is enough"],"evidence":["README.md"],"constraints":["Do not edit"],"steps":[]}}`
+	agent, provider := runNormalModeWithSingleResponse(t, "do something", response)
 
-	agent := newAgentChatTestAgent(t, provider)
-	agent.Stats = NewSessionStats("test")
+	assertNormalModeDidNotRequestPlanRecovery(t, agent, provider, `"summary":"Already done"`)
+}
 
-	if err := agent.runNormalMode(context.Background(), "do something", nil); err != nil {
-		t.Fatalf("runNormalMode() returned error: %v", err)
-	}
-	if provider.callCount != 2 {
-		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
-	}
-	if got := capturedHistories[1][len(capturedHistories[1])-1].Content; !strings.Contains(got, normalModeDirectExecutionPromptFragment) {
-		t.Fatalf("expected direct execution recovery prompt, got %q", got)
-	}
+func TestNormalMode_PlanJSONFallback_IgnoresIDOnlyStepPlanJSON(t *testing.T) {
+	response := `{"plan":{"summary":"Fix","steps":[{"id":1}]}}`
+	agent, provider := runNormalModeWithSingleResponse(t, "return plan-like json", response)
+
+	assertNormalModeDidNotRequestPlanRecovery(t, agent, provider, `"steps":[{"id":1}]`)
 }
 
 func TestNormalMode_PlanJSONFallback_DetectsSchemaInvalidPlanJSON(t *testing.T) {

@@ -187,6 +187,49 @@ func TestChatCore_PlanModeEnabledUsesPlanModeFlow(t *testing.T) {
 	}
 }
 
+func TestChatCore_PlanModeNoStepPlanCompletesWithoutRetry(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &sequenceMockProvider{
+		name: "test",
+		responses: []string{"```json\n" + `{
+  "plan": {
+    "findings": ["Existing behavior already satisfies the request"],
+    "evidence": ["README.md documents it"],
+    "constraints": ["Do not change CLI output"],
+    "steps": []
+  }
+}` + "\n```"},
+	}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.PlanModeEnabled = true
+
+	if err := agent.chatCore("investigate only", nil, false); err != nil {
+		t.Fatalf("chatCore() error = %v", err)
+	}
+	if provider.callCount != 1 {
+		t.Fatalf("provider.callCount = %d, want 1 without plan JSON retry", provider.callCount)
+	}
+	if !strings.Contains(out.String(), "No implementation steps needed.") {
+		t.Fatalf("expected no-implementation output, got %q", out.String())
+	}
+	for _, want := range []string{
+		"Investigation Result",
+		"Existing behavior already satisfies the request",
+		"README.md documents it",
+		"Do not change CLI output",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("expected no-step plan details to include %q, got %q", want, out.String())
+		}
+	}
+	assertPlanJSONRetryPromptNotAppended(t, agent)
+	if status := agent.statusRef().getStatus(); status.State != StateWaitingInput {
+		t.Fatalf("status.State = %q, want %q", status.State, StateWaitingInput)
+	}
+}
+
 func TestChatCore_PlanModeApproval_StartsImplementationWithApprovedPlan(t *testing.T) {
 	disableColors(t)
 
@@ -239,6 +282,67 @@ func TestChatCore_PlanModeApproval_StartsImplementationWithApprovedPlan(t *testi
 	if !strings.Contains(out.String(), planModeFlowImplementationStartText) {
 		t.Fatalf("expected implementation start output, got %q", out.String())
 	}
+}
+
+func TestChatCore_PlanModeApproval_HandoffCarriesInvestigationSummaryFieldsOnly(t *testing.T) {
+	disableColors(t)
+
+	const rawInvestigationFragment = "RAW INVESTIGATION TRANSCRIPT SHOULD NOT CARRY"
+	var out bytes.Buffer
+	provider := &planResponseContextProvider{
+		responses: []string{
+			rawInvestigationFragment + `
+Here is the approved plan:
+` + "```json" + `
+{
+  "plan": {
+    "summary": "Ship summarized plan handoff",
+    "findings": ["plan_handoff.go owns implementation handoff"],
+    "evidence": [
+      "internal/agent/plan_handoff.go: normalModeInput",
+      "internal/agent/plan_handoff_test.go: TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan"
+    ],
+    "constraints": ["Do not carry raw investigation history"],
+    "steps": [
+      {
+        "id": 1,
+        "description": "Update handoff summary fields",
+        "tools": ["str_replace"],
+        "files": ["internal/agent/plan_handoff.go"]
+      }
+    ]
+  }
+}
+` + "```",
+			planModeFlowImplementationResponse,
+		},
+	}
+	agent := newPlanRequestTestAgent(t, provider, "1\n", &out)
+	agent.PlanModeEnabled = true
+
+	if err := agent.chatCore("implement feature", nil, false); err != nil {
+		t.Fatalf("chatCore() error = %v", err)
+	}
+
+	implementationHistory := planImplementationHistory(t, provider)
+	handoffContent := implementationHistory[len(implementationHistory)-1].Content
+	for _, want := range []string{
+		"Findings:",
+		" - plan_handoff.go owns implementation handoff",
+		"Evidence:",
+		" - internal/agent/plan_handoff.go: normalModeInput",
+		" - internal/agent/plan_handoff_test.go: TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan",
+		"Constraints:",
+		" - Do not carry raw investigation history",
+	} {
+		if !strings.Contains(handoffContent, want) {
+			t.Fatalf("implementation handoff = %q, want fragment %q", handoffContent, want)
+		}
+	}
+	if strings.Contains(handoffContent, rawInvestigationFragment) {
+		t.Fatalf("implementation handoff should not carry raw investigation text, got %q", handoffContent)
+	}
+	assertImplementationHistoryOmitsInvestigationContext(t, implementationHistory)
 }
 
 func TestChatCore_PlanModeApproval_DoesNotCarryPlanningResponseContextToImplementation(t *testing.T) {

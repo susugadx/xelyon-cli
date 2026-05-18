@@ -54,6 +54,7 @@ Modification tools are FORBIDDEN: apply_patch, write_file, str_replace, delete_f
 
 ### AFTER INVESTIGATION
 When ready, output your implementation plan as text that includes a single JSON object matching the Plan schema.
+- If no implementation is needed, answer directly in prose and do not output Plan JSON.
 - The runtime extracts it via ExtractPlanJSON/ParsePlan
 - Plan should contain IMPLEMENTATION steps, not investigation steps
 - Do NOT create steps like "investigate X" or "read file Y"

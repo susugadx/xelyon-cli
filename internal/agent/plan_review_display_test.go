@@ -9,7 +9,10 @@ import (
 
 func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 	display := buildPlanReviewDisplay(&plan.Plan{
-		Summary: "Ship a reviewable plan",
+		Summary:     "Ship a reviewable plan",
+		Findings:    []string{"plan_request.go owns approval handoff"},
+		Evidence:    []string{"internal/agent/plan_request.go: handleInvestigationResult"},
+		Constraints: []string{"Do not carry raw investigation history"},
 		Steps: []plan.PlanStep{{
 			ID:          1,
 			Description: "Update plan review UI",
@@ -26,6 +29,12 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 	for _, want := range []string{
 		"Implementation Plan Review",
 		"Ship a reviewable plan",
+		"調査結果",
+		"plan_request.go owns approval handoff",
+		"根拠",
+		"internal/agent/plan_request.go: handleInvestigationResult",
+		"制約",
+		"Do not carry raw investigation history",
 		"Update plan review UI",
 		"目的: Make the approval screen readable",
 		"触るファイル: internal/agent/plan_request.go, internal/agent/plan_request_test.go",
@@ -38,6 +47,38 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered plan review = %q, want fragment %q", rendered, want)
 		}
+	}
+}
+
+func TestBuildPlanNoImplementationDisplay_IncludesHandoffDetails(t *testing.T) {
+	display := buildPlanNoImplementationDisplay(&plan.Plan{
+		Summary:     "No implementation is required",
+		Findings:    []string{"The existing command already handles this"},
+		Evidence:    []string{"internal/agent/plan_request.go: handleInvestigationResult"},
+		Constraints: []string{"Do not change CLI output"},
+		Steps:       []plan.PlanStep{},
+	})
+	if display == nil {
+		t.Fatal("display = nil, want no-implementation details")
+	}
+
+	rendered := display.Render()
+	for _, want := range []string{
+		"Investigation Result",
+		"No implementation is required",
+		"調査結果",
+		"The existing command already handles this",
+		"根拠",
+		"internal/agent/plan_request.go: handleInvestigationResult",
+		"制約",
+		"Do not change CLI output",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered no-implementation display = %q, want fragment %q", rendered, want)
+		}
+	}
+	if strings.Contains(rendered, "ステップ") {
+		t.Fatalf("rendered no-implementation display = %q, should not render step sections", rendered)
 	}
 }
 

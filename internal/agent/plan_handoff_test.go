@@ -9,7 +9,10 @@ import (
 
 func TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *testing.T) {
 	handoff := newPlanModeImplementationHandoff("implement feature", &plan.Plan{
-		Summary: "Ship a small change",
+		Summary:     "Ship a small change",
+		Findings:    []string{"plan_handoff.go owns implementation input"},
+		Evidence:    []string{"internal/agent/plan_handoff.go: normalModeInput", "internal/agent/plan_handoff_test.go: handoff tests"},
+		Constraints: []string{"Do not carry raw investigation history"},
 		Steps: []plan.PlanStep{{
 			ID:           1,
 			Description:  "Update foo.go and tests",
@@ -32,6 +35,13 @@ func TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *te
 		"Original request:",
 		"implement feature",
 		"Summary: Ship a small change",
+		"Findings:",
+		" - plan_handoff.go owns implementation input",
+		"Evidence:",
+		" - internal/agent/plan_handoff.go: normalModeInput",
+		" - internal/agent/plan_handoff_test.go: handoff tests",
+		"Constraints:",
+		" - Do not carry raw investigation history",
 		"1. Update foo.go and tests",
 		"Purpose: Close the approval contract",
 		"Tools: read_file, apply_patch",
@@ -50,7 +60,10 @@ func TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *te
 
 func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 	p := &plan.Plan{
-		Summary: "Ship a small change",
+		Summary:     "Ship a small change",
+		Findings:    []string{"original finding"},
+		Evidence:    []string{"original evidence"},
+		Constraints: []string{"original constraint"},
 		Steps: []plan.PlanStep{{
 			ID:           1,
 			Description:  "Update foo.go and tests",
@@ -69,6 +82,9 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 	}
 
 	p.Summary = "mutated summary"
+	p.Findings[0] = "mutated finding"
+	p.Evidence[0] = "mutated evidence"
+	p.Constraints[0] = "mutated constraint"
 	p.Steps[0].Description = "mutated description"
 	p.Steps[0].Purpose = "mutated purpose"
 	p.Steps[0].Tools[0] = "mutated_tool"
@@ -81,6 +97,9 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 	input := handoff.normalModeInput()
 	for _, want := range []string{
 		"Summary: Ship a small change",
+		" - original finding",
+		" - original evidence",
+		" - original constraint",
 		"1. Update foo.go and tests",
 		"Purpose: Keep approval behavior stable",
 		"Tools: apply_patch",
@@ -94,7 +113,7 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 			t.Fatalf("normalModeInput() = %q, want original fragment %q", input, want)
 		}
 	}
-	for _, notWant := range []string{"mutated summary", "mutated description", "mutated purpose", "mutated_tool", "mutated.go", "mutated_read.go", "mutated_write.go", "mutated_related.go", "mutated verification"} {
+	for _, notWant := range []string{"mutated summary", "mutated finding", "mutated evidence", "mutated constraint", "mutated description", "mutated purpose", "mutated_tool", "mutated.go", "mutated_read.go", "mutated_write.go", "mutated_related.go", "mutated verification"} {
 		if strings.Contains(input, notWant) {
 			t.Fatalf("normalModeInput() = %q, should not contain mutated fragment %q", input, notWant)
 		}

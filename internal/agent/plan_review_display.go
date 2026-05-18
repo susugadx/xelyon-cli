@@ -14,6 +14,9 @@ func buildPlanReviewDisplay(p *plan.Plan) *ui.PlanDisplay {
 	}
 
 	display.SetSummary(p.Summary)
+	display.AddDetailSection("調査結果", p.Findings)
+	display.AddDetailSection("根拠", p.Evidence)
+	display.AddDetailSection("制約", p.Constraints)
 	for _, step := range p.Steps {
 		display.AddPlanStep(ui.PlanStep{
 			ID:           step.ID,
@@ -25,6 +28,35 @@ func buildPlanReviewDisplay(p *plan.Plan) *ui.PlanDisplay {
 		})
 	}
 	return display
+}
+
+func buildPlanNoImplementationDisplay(p *plan.Plan) *ui.PlanDisplay {
+	if p == nil || !planHasNoImplementationDetails(p) {
+		return nil
+	}
+
+	display := ui.NewPlanDisplay("Investigation Result")
+	display.SetSummary(p.Summary)
+	display.AddDetailSection("調査結果", p.Findings)
+	display.AddDetailSection("根拠", p.Evidence)
+	display.AddDetailSection("制約", p.Constraints)
+	return display
+}
+
+func planHasNoImplementationDetails(p *plan.Plan) bool {
+	return strings.TrimSpace(p.Summary) != "" ||
+		hasNonEmptyStrings(p.Findings) ||
+		hasNonEmptyStrings(p.Evidence) ||
+		hasNonEmptyStrings(p.Constraints)
+}
+
+func hasNonEmptyStrings(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func planReviewStepFiles(step plan.PlanStep) []string {

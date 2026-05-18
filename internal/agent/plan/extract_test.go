@@ -20,32 +20,6 @@ End of response.`
 	mustParsePlanJSON(t, result)
 }
 
-func TestExtractPlanJSON_V2MalformedWrapperReturnsRetryCandidate(t *testing.T) {
-	response := `Here is the plan:
-{"plan": invalid}
-End of response.`
-
-	result := mustExtractPlanJSON(t, response)
-	if result != `{"plan": invalid}` {
-		t.Fatalf("ExtractPlanJSON() = %q, want malformed wrapper candidate", result)
-	}
-	if _, err := ParsePlan(result); err == nil {
-		t.Fatal("ParsePlan() should fail for malformed wrapper candidate")
-	}
-}
-
-func TestExtractPlanJSON_V2SchemaInvalidWrapperReturnsRetryCandidate(t *testing.T) {
-	response := `Here is the plan:
-{"plan":{"summary":"Fix","steps":{"id":1,"description":"Do it"}}}
-End of response.`
-
-	result := mustExtractPlanJSON(t, response)
-	if result != `{"plan":{"summary":"Fix","steps":{"id":1,"description":"Do it"}}}` {
-		t.Fatalf("ExtractPlanJSON() = %q, want schema-invalid wrapper candidate", result)
-	}
-	assertPlanJSONNeedsRetry(t, result)
-}
-
 func TestExtractPlanJSON_WrapperRequiresPlanShape(t *testing.T) {
 	response := `Here is ordinary JSON:
 {"title":"monthly","plan":"free"}
@@ -63,25 +37,6 @@ Done.`
 
 	if got := ExtractPlanJSON(response); got != "" {
 		t.Fatalf("ExtractPlanJSON() = %q, want empty for unrelated plan object", got)
-	}
-}
-
-func TestExtractPlanJSONForNormalModeRecovery_UsesWrapperOnly(t *testing.T) {
-	legacy := `Here is a legacy plan:
-{"summary":"Fix","steps":[{"id":1,"description":"Do it","tools":["str_replace"]}]}
-Done.`
-	if got := ExtractPlanJSON(legacy); got == "" {
-		t.Fatal("ExtractPlanJSON() returned empty for plan-mode legacy candidate")
-	}
-	if got := ExtractPlanJSONForNormalModeRecovery(legacy); got != "" {
-		t.Fatalf("ExtractPlanJSONForNormalModeRecovery() = %q, want empty for legacy candidate", got)
-	}
-
-	wrapper := `Here is a wrapper plan:
-{"plan":{"summary":"Fix","steps":[{"id":1,"description":"Do it"}]}}
-Done.`
-	if got := ExtractPlanJSONForNormalModeRecovery(wrapper); got == "" {
-		t.Fatal("ExtractPlanJSONForNormalModeRecovery() returned empty for wrapper candidate")
 	}
 }
 
@@ -103,22 +58,6 @@ End of response.`
 
 	parsed := mustParsePlanJSON(t, mustExtractPlanJSON(t, response))
 	assertStringSliceEqual(t, "parsed step files", parsed.Steps[0].Files, []string{"internal/agent/plan/parser.go"})
-}
-
-func TestExtractPlanJSON_V2PrettyPrintedMalformedWrapperReturnsRetryCandidate(t *testing.T) {
-	response := `Here is the plan:
-{
-  "plan": invalid
-}
-End of response.`
-
-	result := mustExtractPlanJSON(t, response)
-	if result != "{\n  \"plan\": invalid\n}" {
-		t.Fatalf("ExtractPlanJSON() = %q, want pretty malformed wrapper candidate", result)
-	}
-	if _, err := ParsePlan(result); err == nil {
-		t.Fatal("ParsePlan() should fail for malformed wrapper candidate")
-	}
 }
 
 func TestExtractPlanJSON_V2PatternAfterUnmatchedBrace(t *testing.T) {
@@ -193,6 +132,28 @@ Done.`
 	assertStringSliceEqual(t, "parsed verification", parsed.Steps[0].Verification, []string{"go test ./internal/ui"})
 }
 
+func TestExtractPlanJSON_LegacyWithNonObjectPlanField(t *testing.T) {
+	response := `Here is the plan:
+{"plan":"rollout","summary":"Fix","steps":[{"id":1,"description":"Do it","tools":["apply_patch"]}]}
+Done.`
+
+	parsed := mustParsePlanJSON(t, mustExtractPlanJSON(t, response))
+	if parsed.Summary != "Fix" || len(parsed.Steps) != 1 || parsed.Steps[0].Description != "Do it" {
+		t.Fatalf("parsed plan = %#v, want legacy plan despite non-object plan field", parsed)
+	}
+}
+
+func TestExtractPlanJSON_LegacyWithNonWrapperPlanObject(t *testing.T) {
+	response := `Here is the plan:
+{"plan":{"name":"rollout"},"summary":"Fix","steps":[{"id":1,"description":"Do it","tools":["apply_patch"]}]}
+Done.`
+
+	parsed := mustParsePlanJSON(t, mustExtractPlanJSON(t, response))
+	if parsed.Summary != "Fix" || len(parsed.Steps) != 1 || parsed.Steps[0].Description != "Do it" {
+		t.Fatalf("parsed plan = %#v, want legacy plan despite non-wrapper plan object", parsed)
+	}
+}
+
 func TestExtractPlanJSON_FencedLegacyRetrySchemaReturnsCandidate(t *testing.T) {
 	response := "Here is the plan:\n```json\n" + `{
   "title": "Fix parser",
@@ -214,32 +175,6 @@ func TestExtractPlanJSON_FencedLegacyRetrySchemaReturnsCandidate(t *testing.T) {
 	if len(parsed.Steps) != 1 || parsed.Steps[0].Description != "Update legacy evidence" {
 		t.Fatalf("parsed steps = %#v, want legacy step", parsed.Steps)
 	}
-}
-
-func TestExtractPlanJSON_LegacyMalformedStepsReturnsRetryCandidate(t *testing.T) {
-	response := `Here is the plan:
-{"steps": invalid}
-Done.`
-
-	result := mustExtractPlanJSON(t, response)
-	if result != `{"steps": invalid}` {
-		t.Fatalf("ExtractPlanJSON() = %q, want malformed legacy candidate", result)
-	}
-	if _, err := ParsePlan(result); err == nil {
-		t.Fatal("ParsePlan() should fail for malformed legacy candidate")
-	}
-}
-
-func TestExtractPlanJSON_LegacySchemaInvalidStepsReturnsRetryCandidate(t *testing.T) {
-	response := `Here is the plan:
-{"summary":"Fix","steps":{"id":1,"description":"Do it"}}
-Done.`
-
-	result := mustExtractPlanJSON(t, response)
-	if result != `{"summary":"Fix","steps":{"id":1,"description":"Do it"}}` {
-		t.Fatalf("ExtractPlanJSON() = %q, want schema-invalid legacy candidate", result)
-	}
-	assertPlanJSONNeedsRetry(t, result)
 }
 
 func TestExtractPlanJSON_CodeBlockStepsRequiresPlanShape(t *testing.T) {

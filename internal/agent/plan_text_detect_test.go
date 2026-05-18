@@ -176,6 +176,16 @@ func TestHasStrongTextPlanSignal_UsesNormalModeRecoveryPlanJSONScope(t *testing.
 			want:     true,
 		},
 		{
+			name:     "wrapper no-op handoff fields are not normal-mode recovery signal",
+			response: `{"plan":{"summary":"Already done","findings":["Already done"],"evidence":["README.md"],"constraints":["Do not edit"],"steps":[]}}`,
+			want:     false,
+		},
+		{
+			name:     "wrapper id-only step is not normal-mode recovery signal",
+			response: `{"plan":{"summary":"Fix","steps":[{"id":1}]}}`,
+			want:     false,
+		},
+		{
 			name:     "legacy-shaped json alone is not normal-mode recovery signal",
 			response: `{"summary":"recipe","steps":[{"id":1,"description":"mix","tools":["bowl"]}]}`,
 			want:     false,

@@ -194,10 +194,10 @@ func (r *planInvestigationRunner) extractPlan(response string) (*plan.Plan, bool
 	}
 
 	p, err := plan.ParsePlan(planJSON)
-	if err == nil && len(p.Steps) > 0 {
-		return p, true
+	if err != nil {
+		return nil, true
 	}
-	return nil, true
+	return p, true
 }
 
 func (r *planInvestigationRunner) requestPlanJSONRetry() {
