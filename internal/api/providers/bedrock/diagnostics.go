@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 // DiagnosticStatus は Bedrock 診断チェックの結果を表す。
@@ -29,46 +30,16 @@ type DiagnosticCheck struct {
 }
 
 // DiagnosticSmokeUsage は Bedrock smoke request で観測した usage を表す。
-type DiagnosticSmokeUsage struct {
-	InputTokens         int `json:"input_tokens"`
-	OutputTokens        int `json:"output_tokens"`
-	ThinkingTokens      int `json:"thinking_tokens"`
-	CachedInputTokens   int `json:"cached_input_tokens"`
-	CacheCreationTokens int `json:"cache_creation_tokens"`
-}
+type DiagnosticSmokeUsage = providerdiag.SmokeUsage
 
 // DiagnosticSmokeCost は Bedrock smoke request の cost estimate を表す。
-type DiagnosticSmokeCost struct {
-	USD                float64 `json:"usd"`
-	PricingUnavailable bool    `json:"pricing_unavailable"`
-}
+type DiagnosticSmokeCost = providerdiag.SmokeCost
 
 // DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
-type DiagnosticSmokeRequestResult struct {
-	Name            string               `json:"name"`
-	Ran             bool                 `json:"ran"`
-	Skipped         bool                 `json:"skipped,omitempty"`
-	SkipReason      string               `json:"skip_reason,omitempty"`
-	ToolPayload     bool                 `json:"tool_payload,omitempty"`
-	ImagePayload    bool                 `json:"image_payload,omitempty"`
-	ThinkingEnabled bool                 `json:"thinking_enabled,omitempty"`
-	Content         string               `json:"content,omitempty"`
-	RequestID       string               `json:"request_id"`
-	Duration        string               `json:"duration,omitempty"`
-	UsageObserved   bool                 `json:"usage_observed"`
-	Usage           DiagnosticSmokeUsage `json:"usage"`
-	Cost            DiagnosticSmokeCost  `json:"cost"`
-	Error           string               `json:"error,omitempty"`
-}
+type DiagnosticSmokeRequestResult = providerdiag.InvocationSmokeRequestResult
 
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
-type DiagnosticSmokeResult struct {
-	Ran           bool                           `json:"ran"`
-	UsageObserved bool                           `json:"usage_observed"`
-	Usage         DiagnosticSmokeUsage           `json:"usage"`
-	Cost          DiagnosticSmokeCost            `json:"cost"`
-	Requests      []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
-}
+type DiagnosticSmokeResult = providerdiag.InvocationSmokeResult
 
 // DiagnosticRequestPreview は live request を送らずに構築した request shape を表す。
 type DiagnosticRequestPreview struct {

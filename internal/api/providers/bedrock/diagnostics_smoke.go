@@ -11,6 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -40,12 +41,11 @@ func runBedrockDiagnosticSmoke(ctx context.Context, cfg *config.Config, report D
 	result := DiagnosticSmokeResult{Ran: true}
 	for _, request := range requestPlan.Requests {
 		if skipReason, ok := bedrockDiagnosticRequestSkipReason(report, request); ok {
-			result.Requests = append(result.Requests, newBedrockDiagnosticSkippedSmokeRequest(request, skipReason))
+			providerdiag.AddInvocationSmokeRequestResult(&result, newBedrockDiagnosticSkippedSmokeRequest(request, skipReason))
 			continue
 		}
 		requestResult, requestErr := runBedrockDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report.Model, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddInvocationSmokeRequestResult(&result, requestResult)
 		if requestErr != nil {
 			return result, requestErr
 		}
@@ -125,8 +125,8 @@ func runBedrockDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, p
 		RequestID:       requestID,
 		Duration:        elapsed.String(),
 		UsageObserved:   usageObserved,
-		Usage:           diagnosticSmokeUsage(usage),
-		Cost:            diagnosticSmokeCost(costEstimate),
+		Usage:           providerdiag.SmokeUsageFromAPIUsage(usage),
+		Cost:            providerdiag.SmokeCostFromEstimate(costEstimate),
 	}
 	if err != nil {
 		result.Error = err.Error()
@@ -166,64 +166,6 @@ func newBedrockDiagnosticContext(ctx context.Context, cfg *config.Config, output
 	requestCtx = config.WithContext(requestCtx, cfg)
 	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
 	return requestCtx
-}
-
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	var usage api.Usage
-	usage.InputTokens = request.Usage.InputTokens
-	usage.OutputTokens = request.Usage.OutputTokens
-	usage.ThinkingTokens = request.Usage.ThinkingTokens
-	usage.CachedInputTokens = request.Usage.CachedInputTokens
-	usage.CacheCreationTokens = request.Usage.CacheCreationTokens
-
-	var current api.Usage
-	current.InputTokens = r.Usage.InputTokens
-	current.OutputTokens = r.Usage.OutputTokens
-	current.ThinkingTokens = r.Usage.ThinkingTokens
-	current.CachedInputTokens = r.Usage.CachedInputTokens
-	current.CacheCreationTokens = r.Usage.CacheCreationTokens
-	current.Add(usage)
-	r.Usage = diagnosticSmokeUsage(current)
-	if request.Cost.PricingUnavailable {
-		r.Cost.PricingUnavailable = true
-	} else {
-		r.Cost.USD += request.Cost.USD
-	}
-	r.UsageObserved = r.allRanRequestsObservedUsage()
-}
-
-func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
-	observedAnyRequest := false
-	for _, request := range r.Requests {
-		if request.Skipped || !request.Ran {
-			continue
-		}
-		observedAnyRequest = true
-		if !request.UsageObserved {
-			return false
-		}
-	}
-	return observedAnyRequest
-}
-
-func diagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return DiagnosticSmokeUsage{
-		InputTokens:         usage.InputTokens,
-		OutputTokens:        usage.OutputTokens,
-		ThinkingTokens:      usage.ThinkingTokens,
-		CachedInputTokens:   usage.CachedInputTokens,
-		CacheCreationTokens: usage.CacheCreationTokens,
-	}
-}
-
-func diagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return DiagnosticSmokeCost{
-		USD:                estimate.Cost,
-		PricingUnavailable: estimate.PricingUnavailable,
-	}
 }
 
 func bedrockDiagnosticImage() *api.ImageData {

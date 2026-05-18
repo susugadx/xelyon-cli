@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const defaultBedrockDiagnosticSmokeMaxOutputTokens = 64
@@ -102,12 +103,13 @@ func bedrockDiagnosticRequestSkipReason(report DiagnosticReport, request bedrock
 }
 
 func newBedrockDiagnosticSkippedSmokeRequest(request bedrockDiagnosticSmokeRequest, skipReason string) DiagnosticSmokeRequestResult {
-	return DiagnosticSmokeRequestResult{
-		Name:            request.Name,
-		Skipped:         true,
-		SkipReason:      skipReason,
-		ToolPayload:     request.ToolPayload,
-		ImagePayload:    request.ImagePayload,
-		ThinkingEnabled: request.ThinkingEnabled,
-	}
+	return providerdiag.NewSkippedInvocationSmokeRequest(
+		providerdiag.InvocationSmokeRequest{
+			Name:            request.Name,
+			ToolPayload:     request.ToolPayload,
+			ImagePayload:    request.ImagePayload,
+			ThinkingEnabled: request.ThinkingEnabled,
+		},
+		skipReason,
+	)
 }
