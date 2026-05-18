@@ -35,74 +35,19 @@ type DiagnosticCheck struct {
 }
 
 // DiagnosticUsageObservation は smoke request で観測した usage を表す。
-type DiagnosticUsageObservation struct {
-	InputTokens              int     `json:"input_tokens,omitempty"`
-	OutputTokens             int     `json:"output_tokens,omitempty"`
-	ThinkingTokens           int     `json:"thinking_tokens,omitempty"`
-	CachedInputTokens        int     `json:"cached_input_tokens,omitempty"`
-	WebSearchCallCount       int     `json:"web_search_call_count,omitempty"`
-	WebSearchCallFeeEstimate float64 `json:"web_search_call_fee_estimate,omitempty"`
-	SearchResultTotalTokens  int     `json:"search_result_total_tokens,omitempty"`
-}
+type DiagnosticUsageObservation = providerdiag.KimiSmokeUsageObservation
 
 // DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
-type DiagnosticSmokeRequestResult struct {
-	Name                     string                     `json:"name"`
-	Ran                      bool                       `json:"ran"`
-	Skipped                  bool                       `json:"skipped,omitempty"`
-	SkipReason               string                     `json:"skip_reason,omitempty"`
-	ToolPayload              bool                       `json:"tool_payload,omitempty"`
-	Content                  string                     `json:"content,omitempty"`
-	Duration                 string                     `json:"duration,omitempty"`
-	UsageObserved            bool                       `json:"usage_observed"`
-	Usage                    DiagnosticUsageObservation `json:"usage,omitempty"`
-	PromptCacheKeyPresent    bool                       `json:"prompt_cache_key_present"`
-	PromptCacheKey           string                     `json:"prompt_cache_key,omitempty"`
-	ImagePayload             bool                       `json:"image_payload,omitempty"`
-	WebSearchPayload         bool                       `json:"web_search_payload,omitempty"`
-	WebSearchCallCount       int                        `json:"web_search_call_count,omitempty"`
-	WebSearchCallFeeEstimate float64                    `json:"web_search_call_fee_estimate,omitempty"`
-	WebSearchUsageObserved   bool                       `json:"web_search_usage_observed,omitempty"`
-	SearchResultTotalTokens  int                        `json:"search_result_total_tokens,omitempty"`
-	Error                    string                     `json:"error,omitempty"`
-}
+type DiagnosticSmokeRequestResult = providerdiag.KimiSmokeRequestResult
 
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
-type DiagnosticSmokeResult struct {
-	Ran                      bool                           `json:"ran"`
-	ToolPayload              bool                           `json:"tool_payload"`
-	ImagePayload             bool                           `json:"image_payload"`
-	WebSearchPayload         bool                           `json:"web_search_payload"`
-	Content                  string                         `json:"content,omitempty"`
-	Duration                 string                         `json:"duration,omitempty"`
-	UsageObserved            bool                           `json:"usage_observed"`
-	CachedInputTokens        int                            `json:"cached_input_tokens"`
-	WebSearchCallCount       int                            `json:"web_search_call_count,omitempty"`
-	WebSearchCallFeeEstimate float64                        `json:"web_search_call_fee_estimate,omitempty"`
-	WebSearchUsageObserved   bool                           `json:"web_search_usage_observed"`
-	SearchResultTotalTokens  int                            `json:"search_result_total_tokens,omitempty"`
-	Requests                 []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
-}
+type DiagnosticSmokeResult = providerdiag.KimiSmokeResult
 
 // DiagnosticRequestPreview は live request を送らずに構築した request shape を表す。
-type DiagnosticRequestPreview struct {
-	Requests []DiagnosticRequestPreviewRequest `json:"requests"`
-}
+type DiagnosticRequestPreview = providerdiag.KimiRequestPreview
 
 // DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
-type DiagnosticRequestPreviewRequest struct {
-	Name             string            `json:"name"`
-	Skipped          bool              `json:"skipped,omitempty"`
-	SkipReason       string            `json:"skip_reason,omitempty"`
-	ToolPayload      bool              `json:"tool_payload,omitempty"`
-	ImagePayload     bool              `json:"image_payload,omitempty"`
-	WebSearchPayload bool              `json:"web_search_payload,omitempty"`
-	Route            string            `json:"route"`
-	Method           string            `json:"method,omitempty"`
-	URL              string            `json:"url,omitempty"`
-	Headers          map[string]string `json:"headers,omitempty"`
-	Body             any               `json:"body,omitempty"`
-}
+type DiagnosticRequestPreviewRequest = providerdiag.KimiRequestPreviewRequest
 
 // DiagnosticReport は Kimi の設定診断結果を表す。
 type DiagnosticReport struct {

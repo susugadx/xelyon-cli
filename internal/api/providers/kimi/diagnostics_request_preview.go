@@ -70,17 +70,12 @@ func buildKimiDiagnosticRequestPreviewRequest(
 	if err != nil {
 		return DiagnosticRequestPreviewRequest{}, err
 	}
-	return DiagnosticRequestPreviewRequest{
-		Name:             request.Name,
-		ToolPayload:      request.ToolPayload,
-		ImagePayload:     request.ImagePayload,
-		WebSearchPayload: request.WebSearchPayload,
-		Route:            kimiDiagnosticRequestRoute(request),
-		Method:           "POST",
-		URL:              report.APIURL,
-		Headers:          providerdiag.RedactedBearerHeaders(),
-		Body:             body,
-	}, nil
+	preview := providerdiag.NewKimiPreviewRequest(request.kimiSmokeRequest())
+	preview.Method = "POST"
+	preview.URL = report.APIURL
+	preview.Headers = providerdiag.RedactedBearerHeaders()
+	preview.Body = body
+	return preview, nil
 }
 
 func buildKimiDiagnosticRequestBody(ctx context.Context, provider *Provider, model string, request kimiDiagnosticSmokeRequest) (any, error) {

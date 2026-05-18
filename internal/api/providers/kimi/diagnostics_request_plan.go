@@ -1,6 +1,10 @@
 package kimi
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
+)
 
 type kimiDiagnosticSmokeRequest struct {
 	Name             string
@@ -108,22 +112,11 @@ func kimiDiagnosticToolSmokeRequest() kimiDiagnosticSmokeRequest {
 }
 
 func newKimiDiagnosticSkippedToolSmokeRequest(request kimiDiagnosticSmokeRequest) DiagnosticSmokeRequestResult {
-	return DiagnosticSmokeRequestResult{
-		Name:        request.Name,
-		Skipped:     true,
-		SkipReason:  kimiDiagnosticDisabledToolSkipReason(),
-		ToolPayload: request.ToolPayload,
-	}
+	return providerdiag.NewSkippedKimiSmokeRequest(request.kimiSmokeRequest(), kimiDiagnosticDisabledToolSkipReason())
 }
 
 func newKimiDiagnosticSkippedToolPreviewRequest(request kimiDiagnosticSmokeRequest) DiagnosticRequestPreviewRequest {
-	return DiagnosticRequestPreviewRequest{
-		Name:        request.Name,
-		Skipped:     true,
-		SkipReason:  kimiDiagnosticDisabledToolSkipReason(),
-		ToolPayload: request.ToolPayload,
-		Route:       kimiDiagnosticRequestRoute(request),
-	}
+	return providerdiag.NewSkippedKimiPreviewRequest(request.kimiSmokeRequest(), kimiDiagnosticDisabledToolSkipReason())
 }
 
 func kimiDiagnosticDisabledToolSkipReason() string {
@@ -135,4 +128,14 @@ func kimiDiagnosticRequestRoute(request kimiDiagnosticSmokeRequest) string {
 		return DiagnosticRouteChatCompletionsWebSearch
 	}
 	return DiagnosticRouteChatCompletions
+}
+
+func (request kimiDiagnosticSmokeRequest) kimiSmokeRequest() providerdiag.KimiSmokeRequest {
+	return providerdiag.KimiSmokeRequest{
+		Name:             request.Name,
+		ToolPayload:      request.ToolPayload,
+		ImagePayload:     request.ImagePayload,
+		WebSearchPayload: request.WebSearchPayload,
+		Route:            kimiDiagnosticRequestRoute(request),
+	}
 }

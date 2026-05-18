@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const (
@@ -49,27 +49,23 @@ func runKimiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 
 	for _, request := range plan.Requests {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, newKimiDiagnosticSkippedToolSmokeRequest(request))
+			providerdiag.AddKimiSmokeRequestResult(&result, newKimiDiagnosticSkippedToolSmokeRequest(request))
 			continue
 		}
 
 		requestResult, err := runKimiDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report.Model, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
-		if requestResult.Content != "" {
-			result.Content = requestResult.Content
-		}
+		providerdiag.AddKimiSmokeRequestResult(&result, requestResult)
 		if request.ImagePayload {
 			result.ImagePayload = true
 			if !requestResult.PromptCacheKeyPresent {
-				result.markLastRequestError("image smoke request did not include prompt_cache_key")
+				markLastKimiDiagnosticSmokeRequestError(&result, "image smoke request did not include prompt_cache_key")
 				return result, fmt.Errorf("image smoke request did not include prompt_cache_key")
 			}
 		}
 		if request.WebSearchPayload {
 			result.WebSearchPayload = true
 			if !requestResult.PromptCacheKeyPresent {
-				result.markLastRequestError("web search smoke request did not include prompt_cache_key")
+				markLastKimiDiagnosticSmokeRequestError(&result, "web search smoke request did not include prompt_cache_key")
 				return result, fmt.Errorf("web search smoke request did not include prompt_cache_key")
 			}
 		}
@@ -77,7 +73,7 @@ func runKimiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 			result.ToolPayload = true
 			if !diagnosticSmokeContentHasToolCall(requestResult.Content) {
 				err := fmt.Errorf("tool smoke response did not include %s function_call", diagnosticSmokeToolName)
-				result.markLastRequestError(err.Error())
+				markLastKimiDiagnosticSmokeRequestError(&result, err.Error())
 				return result, err
 			}
 		}
@@ -97,11 +93,11 @@ func runKimiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diag
 	return result, nil
 }
 
-func (r *DiagnosticSmokeResult) markLastRequestError(message string) {
-	if r == nil || len(r.Requests) == 0 {
+func markLastKimiDiagnosticSmokeRequestError(result *DiagnosticSmokeResult, message string) {
+	if result == nil || len(result.Requests) == 0 {
 		return
 	}
-	r.Requests[len(r.Requests)-1].Error = message
+	result.Requests[len(result.Requests)-1].Error = message
 }
 
 func diagnosticSmokePromptCacheKey(requests []DiagnosticSmokeRequestResult, name string) string {
@@ -111,36 +107,6 @@ func diagnosticSmokePromptCacheKey(requests []DiagnosticSmokeRequestResult, name
 		}
 	}
 	return ""
-}
-
-func diagnosticUsageObservation(usage api.Usage) DiagnosticUsageObservation {
-	return DiagnosticUsageObservation{
-		InputTokens:              usage.InputTokens,
-		OutputTokens:             usage.OutputTokens,
-		ThinkingTokens:           usage.ThinkingTokens,
-		CachedInputTokens:        usage.CachedInputTokens,
-		WebSearchCallCount:       usage.WebSearchCalls,
-		WebSearchCallFeeEstimate: usage.StorageCost,
-		SearchResultTotalTokens:  usage.WebSearchResultTokens,
-	}
-}
-
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	if request.UsageObserved {
-		r.UsageObserved = true
-	}
-	r.CachedInputTokens += request.Usage.CachedInputTokens
-	r.WebSearchCallCount += request.Usage.WebSearchCallCount
-	r.WebSearchCallFeeEstimate += request.Usage.WebSearchCallFeeEstimate
-	r.SearchResultTotalTokens += request.Usage.SearchResultTotalTokens
-	r.WebSearchUsageObserved = r.WebSearchUsageObserved || request.WebSearchUsageObserved
-}
-
-func (u DiagnosticUsageObservation) webSearchUsageObserved() bool {
-	return u.WebSearchCallCount > 0
 }
 
 func isTransientKimiSmokeError(err error) bool {

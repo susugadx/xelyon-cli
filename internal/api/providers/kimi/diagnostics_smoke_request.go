@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -62,24 +63,19 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 		err = fmt.Errorf("%s smoke response content is empty", request.Name)
 	}
 
-	usageObservation := diagnosticUsageObservation(usage)
-	result := DiagnosticSmokeRequestResult{
-		Name:                     request.Name,
-		Ran:                      true,
-		ToolPayload:              request.ToolPayload,
-		Content:                  strings.TrimSpace(content),
-		Duration:                 elapsed.String(),
-		UsageObserved:            endpointUsageObserved,
-		Usage:                    usageObservation,
-		PromptCacheKeyPresent:    strings.TrimSpace(promptCacheKey) != "",
-		PromptCacheKey:           promptCacheKey,
-		ImagePayload:             request.ImagePayload,
-		WebSearchPayload:         request.WebSearchPayload,
-		WebSearchCallCount:       usageObservation.WebSearchCallCount,
-		WebSearchCallFeeEstimate: usageObservation.WebSearchCallFeeEstimate,
-		WebSearchUsageObserved:   usageObservation.webSearchUsageObserved(),
-		SearchResultTotalTokens:  usageObservation.SearchResultTotalTokens,
-	}
+	usageObservation := providerdiag.KimiSmokeUsageFromAPIUsage(usage)
+	result := providerdiag.NewKimiSmokeRequestResult(request.kimiSmokeRequest())
+	result.Ran = true
+	result.Content = strings.TrimSpace(content)
+	result.Duration = elapsed.String()
+	result.UsageObserved = endpointUsageObserved
+	result.Usage = usageObservation
+	result.PromptCacheKeyPresent = strings.TrimSpace(promptCacheKey) != ""
+	result.PromptCacheKey = promptCacheKey
+	result.WebSearchCallCount = usageObservation.WebSearchCallCount
+	result.WebSearchCallFeeEstimate = usageObservation.WebSearchCallFeeEstimate
+	result.WebSearchUsageObserved = usageObservation.WebSearchUsageObserved()
+	result.SearchResultTotalTokens = usageObservation.SearchResultTotalTokens
 	if err != nil {
 		result.Error = err.Error()
 	}
