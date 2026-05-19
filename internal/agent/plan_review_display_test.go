@@ -29,6 +29,7 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 	for _, want := range []string{
 		"Implementation Plan Review",
 		"Ship a reviewable plan",
+		"検証予定",
 		"調査結果",
 		"plan_request.go owns approval handoff",
 		"根拠",
@@ -47,6 +48,47 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered plan review = %q, want fragment %q", rendered, want)
 		}
+	}
+}
+
+func TestBuildPlanReviewDisplay_IncludesPlanVerificationSummary(t *testing.T) {
+	display := buildPlanReviewDisplay(&plan.Plan{
+		Summary: "Ship a reviewable plan",
+		Steps: []plan.PlanStep{
+			{
+				ID:           1,
+				Description:  "Update implementation",
+				Verification: []string{" go test ./internal/agent ", "make ci-check"},
+			},
+			{
+				ID:           2,
+				Description:  "Update UI",
+				Verification: []string{"go test ./internal/agent", "go test ./internal/ui"},
+			},
+		},
+	})
+
+	rendered := display.Render()
+	summaryStart := strings.Index(rendered, "検証予定")
+	stepsStart := strings.Index(rendered, "ステップ")
+	if summaryStart < 0 {
+		t.Fatalf("rendered plan review = %q, want verification summary", rendered)
+	}
+	if stepsStart < 0 || summaryStart > stepsStart {
+		t.Fatalf("verification summary should render before steps, got %q", rendered)
+	}
+	summarySection := rendered[summaryStart:stepsStart]
+	for _, want := range []string{
+		"go test ./internal/agent",
+		"make ci-check",
+		"go test ./internal/ui",
+	} {
+		if !strings.Contains(summarySection, want) {
+			t.Fatalf("verification summary = %q, want %q", summarySection, want)
+		}
+	}
+	if strings.Count(summarySection, "go test ./internal/agent") != 1 {
+		t.Fatalf("verification summary should dedupe commands, got %q", summarySection)
 	}
 }
 
@@ -79,6 +121,12 @@ func TestBuildPlanNoImplementationDisplay_IncludesHandoffDetails(t *testing.T) {
 	}
 	if strings.Contains(rendered, "ステップ") {
 		t.Fatalf("rendered no-implementation display = %q, should not render step sections", rendered)
+	}
+}
+
+func TestPlanReviewPlanVerification_HandlesNilPlan(t *testing.T) {
+	if got := planReviewPlanVerification(nil); len(got) != 0 {
+		t.Fatalf("planReviewPlanVerification(nil) = %#v, want empty", got)
 	}
 }
 

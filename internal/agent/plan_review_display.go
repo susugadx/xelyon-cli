@@ -14,6 +14,7 @@ func buildPlanReviewDisplay(p *plan.Plan) *ui.PlanDisplay {
 	}
 
 	display.SetSummary(p.Summary)
+	display.AddDetailSection("検証予定", planReviewPlanVerification(p))
 	display.AddDetailSection("調査結果", p.Findings)
 	display.AddDetailSection("根拠", p.Evidence)
 	display.AddDetailSection("制約", p.Constraints)
@@ -78,6 +79,25 @@ func planReviewStepFiles(step plan.PlanStep) []string {
 	appendFiles(step.ReadFiles)
 	appendFiles(step.Files)
 	return files
+}
+
+func planReviewPlanVerification(p *plan.Plan) []string {
+	if p == nil {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	verification := make([]string, 0)
+	for _, step := range p.Steps {
+		for _, item := range planReviewStepVerification(step) {
+			if seen[item] {
+				continue
+			}
+			seen[item] = true
+			verification = append(verification, item)
+		}
+	}
+	return verification
 }
 
 func planReviewStepVerification(step plan.PlanStep) []string {
