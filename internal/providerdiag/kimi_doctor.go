@@ -114,6 +114,16 @@ func NewKimiPreviewRequest(request KimiSmokeRequest) KimiRequestPreviewRequest {
 	}
 }
 
+// NewKimiRequestPreview は Kimi doctor の request preview entry を構築する。
+func NewKimiRequestPreview(request KimiSmokeRequest, transport RequestPreviewTransport) KimiRequestPreviewRequest {
+	result := NewKimiPreviewRequest(request)
+	result.Method = transport.Method
+	result.URL = transport.URL
+	result.Headers = transport.Headers
+	result.Body = transport.Body
+	return result
+}
+
 // NewSkippedKimiPreviewRequest は skipped Kimi preview entry を構築する。
 func NewSkippedKimiPreviewRequest(request KimiSmokeRequest, skipReason string) KimiRequestPreviewRequest {
 	result := NewKimiPreviewRequest(request)

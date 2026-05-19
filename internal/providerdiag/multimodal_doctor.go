@@ -110,6 +110,16 @@ func NewMultimodalPreviewRequest(request MultimodalSmokeRequest) MultimodalReque
 	}
 }
 
+// NewMultimodalRequestPreview は multimodal provider doctor の request preview entry を構築する。
+func NewMultimodalRequestPreview(request MultimodalSmokeRequest, transport RequestPreviewTransport) MultimodalRequestPreviewRequest {
+	result := NewMultimodalPreviewRequest(request)
+	result.Method = transport.Method
+	result.URL = transport.URL
+	result.Headers = transport.Headers
+	result.Body = transport.Body
+	return result
+}
+
 // NewSkippedMultimodalPreviewRequest は skipped preview entry を構築する。
 func NewSkippedMultimodalPreviewRequest(request MultimodalSmokeRequest, skipReason string) MultimodalRequestPreviewRequest {
 	result := NewMultimodalPreviewRequest(request)

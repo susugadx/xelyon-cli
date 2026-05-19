@@ -72,13 +72,10 @@ func buildOllamaDiagnosticRequestPreviewRequest(
 		[]api.Message{{Role: "user", Content: request.UserContent}},
 		report.Model,
 	)
-	return DiagnosticRequestPreviewRequest{
-		Name:        request.Name,
-		ToolPayload: request.ToolPayload,
-		Route:       report.Route,
-		Method:      "POST",
-		URL:         build.URL,
-		Headers:     map[string]string{"Content-Type": "application/json"},
-		Body:        build.Request,
-	}
+	return providerdiag.NewTextToolPreviewRequest(request, report.Route, providerdiag.RequestPreviewTransport{
+		Method:  "POST",
+		URL:     build.URL,
+		Headers: providerdiag.JSONHeaders(),
+		Body:    build.Request,
+	})
 }

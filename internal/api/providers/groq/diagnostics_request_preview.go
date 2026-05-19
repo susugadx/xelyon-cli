@@ -63,18 +63,15 @@ func buildGroqDiagnosticRequestPreviewRequest(
 	report DiagnosticReport,
 	request groqDiagnosticSmokeRequest,
 ) DiagnosticRequestPreviewRequest {
-	return DiagnosticRequestPreviewRequest{
-		Name:        request.Name,
-		ToolPayload: request.ToolPayload,
-		Route:       report.Route,
-		Method:      "POST",
-		URL:         report.APIURL,
-		Headers:     providerdiag.RedactedBearerHeaders(),
+	return providerdiag.NewTextToolPreviewRequest(request, report.Route, providerdiag.RequestPreviewTransport{
+		Method:  "POST",
+		URL:     report.APIURL,
+		Headers: providerdiag.RedactedBearerHeaders(),
 		Body: provider.buildChatCompletionsRequest(
 			ctx,
 			request.SystemPrompt,
 			[]api.Message{{Role: "user", Content: request.UserContent}},
 			report.Model,
 		),
-	}
+	})
 }

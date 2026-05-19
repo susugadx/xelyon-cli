@@ -77,15 +77,12 @@ func buildOpenRouterDiagnosticRequestPreviewRequest(
 		return DiagnosticRequestPreviewRequest{}, err
 	}
 
-	return DiagnosticRequestPreviewRequest{
-		Name:        request.Name,
-		ToolPayload: request.ToolPayload,
-		Route:       report.Route,
-		Method:      "POST",
-		URL:         report.APIURL,
-		Headers:     openRouterDiagnosticPreviewHeaders(),
-		Body:        body,
-	}, nil
+	return providerdiag.NewTextToolPreviewRequest(request, report.Route, providerdiag.RequestPreviewTransport{
+		Method:  "POST",
+		URL:     report.APIURL,
+		Headers: openRouterDiagnosticPreviewHeaders(),
+		Body:    body,
+	}), nil
 }
 
 func buildOpenRouterDiagnosticPreviewPayload(

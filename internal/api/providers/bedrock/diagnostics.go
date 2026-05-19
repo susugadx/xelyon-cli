@@ -47,21 +47,7 @@ type DiagnosticRequestPreview struct {
 }
 
 // DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
-type DiagnosticRequestPreviewRequest struct {
-	Name            string            `json:"name"`
-	Skipped         bool              `json:"skipped,omitempty"`
-	SkipReason      string            `json:"skip_reason,omitempty"`
-	ToolPayload     bool              `json:"tool_payload,omitempty"`
-	ImagePayload    bool              `json:"image_payload,omitempty"`
-	ThinkingEnabled bool              `json:"thinking_enabled,omitempty"`
-	Route           string            `json:"route"`
-	Operation       string            `json:"operation,omitempty"`
-	ModelID         string            `json:"model_id,omitempty"`
-	Method          string            `json:"method,omitempty"`
-	URL             string            `json:"url,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	Body            any               `json:"body,omitempty"`
-}
+type DiagnosticRequestPreviewRequest = providerdiag.InvocationRequestPreviewRequest
 
 // DiagnosticReport は Bedrock の設定診断結果を表す。
 type DiagnosticReport struct {

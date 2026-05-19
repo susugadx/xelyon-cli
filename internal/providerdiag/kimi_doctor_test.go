@@ -36,6 +36,28 @@ func TestKimiSmokeRequestBuilders(t *testing.T) {
 	}
 }
 
+func TestNewKimiRequestPreview(t *testing.T) {
+	request := KimiSmokeRequest{
+		Name:             "web_search_smoke",
+		WebSearchPayload: true,
+		Route:            "chat_completions_web_search",
+	}
+	transport := RequestPreviewTransport{
+		Method:  "POST",
+		URL:     "https://api.moonshot.ai/v1/chat/completions",
+		Headers: RedactedBearerHeaders(),
+		Body:    map[string]any{"model": "kimi-k2.5"},
+	}
+
+	preview := NewKimiRequestPreview(request, transport)
+	if preview.Name != request.Name || !preview.WebSearchPayload || preview.Route != request.Route {
+		t.Fatalf("preview request = %+v, want descriptor fields", preview)
+	}
+	if preview.Method != transport.Method || preview.URL != transport.URL || preview.Headers["Authorization"] != "Bearer <redacted>" || preview.Body == nil {
+		t.Fatalf("preview request = %+v, want transport fields", preview)
+	}
+}
+
 func TestKimiSmokeUsageFromAPIUsage(t *testing.T) {
 	got := KimiSmokeUsageFromAPIUsage(api.Usage{
 		InputTokens:           10,

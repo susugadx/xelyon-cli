@@ -38,10 +38,6 @@ func (r claudeDiagnosticRequest) skipped(functionCallingEnabled bool) bool {
 	return r.ToolPayload && !functionCallingEnabled
 }
 
-func (r claudeDiagnosticRequest) previewBase() DiagnosticRequestPreviewRequest {
-	return providerdiag.NewMultimodalPreviewRequest(r.multimodalSmokeRequest())
-}
-
 func (r claudeDiagnosticRequest) smokeBase() DiagnosticSmokeRequestResult {
 	return providerdiag.NewMultimodalSmokeRequestResult(r.multimodalSmokeRequest())
 }

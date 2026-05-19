@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func (r *DiagnosticReport) addRequestPreview(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -67,12 +68,12 @@ func buildClaudeDiagnosticRequestPreviewRequest(
 	if request.WebSearchPayload {
 		headers = provider.anthropicHeaders(ctx, report.Model, nil, webSearchBetaHeader)
 	}
-	result := request.previewBase()
-	result.Method = "POST"
-	result.URL = report.APIURL
-	result.Headers = redactedClaudeHeaders(headers)
-	result.Body = body
-	return result, nil
+	return providerdiag.NewMultimodalRequestPreview(request.multimodalSmokeRequest(), providerdiag.RequestPreviewTransport{
+		Method:  "POST",
+		URL:     report.APIURL,
+		Headers: redactedClaudeHeaders(headers),
+		Body:    body,
+	}), nil
 }
 
 func buildClaudeDiagnosticRequestBody(ctx context.Context, provider *Provider, model string, request claudeDiagnosticRequest) (any, *ContextManagement) {
@@ -97,11 +98,9 @@ func buildClaudeDiagnosticRequestBody(ctx context.Context, provider *Provider, m
 }
 
 func redactedClaudeHeaders(headers http.Header) map[string]string {
-	result := map[string]string{
-		"Content-Type":      headers.Get("Content-Type"),
-		"x-api-key":         "<redacted>",
-		"anthropic-version": headers.Get("anthropic-version"),
-	}
+	result := providerdiag.RedactedAPIKeyHeaders("x-api-key")
+	result["Content-Type"] = headers.Get("Content-Type")
+	result["anthropic-version"] = headers.Get("anthropic-version")
 	if beta := headers.Get("anthropic-beta"); beta != "" {
 		result["anthropic-beta"] = beta
 	}

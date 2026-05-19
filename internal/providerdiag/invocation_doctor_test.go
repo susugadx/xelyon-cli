@@ -22,6 +22,39 @@ func TestSkippedInvocationSmokeRequest(t *testing.T) {
 	}
 }
 
+func TestInvocationPreviewRequests(t *testing.T) {
+	request := InvocationSmokeRequest{
+		Name:            "image",
+		ImagePayload:    true,
+		ThinkingEnabled: true,
+	}
+	transport := RequestPreviewTransport{
+		Method:  "POST",
+		URL:     "https://bedrock-runtime.us-east-1.amazonaws.com/model/example/invoke-with-response-stream",
+		Headers: RedactedSigV4Headers(),
+		Body:    map[string]any{"anthropic_version": "bedrock-2023-05-31"},
+	}
+
+	preview := NewInvocationPreviewRequest(request, "claude_messages", "invoke_model_with_response_stream", "anthropic.claude-3-5-sonnet", transport)
+	if preview.Name != "image" || !preview.ImagePayload || !preview.ThinkingEnabled {
+		t.Fatalf("preview request = %+v, want descriptor fields", preview)
+	}
+	if preview.Route != "claude_messages" || preview.Operation != "invoke_model_with_response_stream" || preview.ModelID != "anthropic.claude-3-5-sonnet" {
+		t.Fatalf("preview request = %+v, want invocation route fields", preview)
+	}
+	if preview.Method != transport.Method || preview.URL != transport.URL || preview.Headers["Authorization"] != "<redacted: AWS SigV4>" || preview.Body == nil {
+		t.Fatalf("preview request = %+v, want transport fields", preview)
+	}
+
+	skipped := NewSkippedInvocationPreviewRequest(request, "converse_stream", " unsupported ")
+	if !skipped.Skipped || skipped.SkipReason != "unsupported" || skipped.Route != "converse_stream" {
+		t.Fatalf("skipped preview request = %+v, want trimmed skipped preview", skipped)
+	}
+	if skipped.Method != "" || skipped.URL != "" || skipped.Body != nil {
+		t.Fatalf("skipped preview request = %+v, should not include live request fields", skipped)
+	}
+}
+
 func TestAddInvocationSmokeRequestResult(t *testing.T) {
 	result := InvocationSmokeResult{Ran: true}
 	text := InvocationSmokeRequestResult{

@@ -37,6 +37,23 @@ type InvocationSmokeResult struct {
 	Requests      []InvocationSmokeRequestResult `json:"requests,omitempty"`
 }
 
+// InvocationRequestPreviewRequest は invocation 系 provider doctor の request preview 単位結果を表す。
+type InvocationRequestPreviewRequest struct {
+	Name            string            `json:"name"`
+	Skipped         bool              `json:"skipped,omitempty"`
+	SkipReason      string            `json:"skip_reason,omitempty"`
+	ToolPayload     bool              `json:"tool_payload,omitempty"`
+	ImagePayload    bool              `json:"image_payload,omitempty"`
+	ThinkingEnabled bool              `json:"thinking_enabled,omitempty"`
+	Route           string            `json:"route"`
+	Operation       string            `json:"operation,omitempty"`
+	ModelID         string            `json:"model_id,omitempty"`
+	Method          string            `json:"method,omitempty"`
+	URL             string            `json:"url,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	Body            any               `json:"body,omitempty"`
+}
+
 // NewSkippedInvocationSmokeRequest は skipped smoke entry を構築する。
 func NewSkippedInvocationSmokeRequest(request InvocationSmokeRequest, skipReason string) InvocationSmokeRequestResult {
 	return InvocationSmokeRequestResult{
@@ -47,6 +64,31 @@ func NewSkippedInvocationSmokeRequest(request InvocationSmokeRequest, skipReason
 		ImagePayload:    request.ImagePayload,
 		ThinkingEnabled: request.ThinkingEnabled,
 	}
+}
+
+// NewInvocationPreviewRequest は invocation 系 provider doctor の request preview entry を構築する。
+func NewInvocationPreviewRequest(request InvocationSmokeRequest, route, operation, modelID string, transport RequestPreviewTransport) InvocationRequestPreviewRequest {
+	return InvocationRequestPreviewRequest{
+		Name:            request.Name,
+		ToolPayload:     request.ToolPayload,
+		ImagePayload:    request.ImagePayload,
+		ThinkingEnabled: request.ThinkingEnabled,
+		Route:           route,
+		Operation:       operation,
+		ModelID:         modelID,
+		Method:          transport.Method,
+		URL:             transport.URL,
+		Headers:         transport.Headers,
+		Body:            transport.Body,
+	}
+}
+
+// NewSkippedInvocationPreviewRequest は invocation 系 provider doctor の skipped preview entry を構築する。
+func NewSkippedInvocationPreviewRequest(request InvocationSmokeRequest, route, skipReason string) InvocationRequestPreviewRequest {
+	result := NewInvocationPreviewRequest(request, route, "", "", RequestPreviewTransport{})
+	result.Skipped = true
+	result.SkipReason = strings.TrimSpace(skipReason)
+	return result
 }
 
 // AddInvocationSmokeRequestResult は request-level smoke 結果を追加し summary の usage/cost を集約する。

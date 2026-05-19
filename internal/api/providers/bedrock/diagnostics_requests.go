@@ -103,13 +103,14 @@ func bedrockDiagnosticRequestSkipReason(report DiagnosticReport, request bedrock
 }
 
 func newBedrockDiagnosticSkippedSmokeRequest(request bedrockDiagnosticSmokeRequest, skipReason string) DiagnosticSmokeRequestResult {
-	return providerdiag.NewSkippedInvocationSmokeRequest(
-		providerdiag.InvocationSmokeRequest{
-			Name:            request.Name,
-			ToolPayload:     request.ToolPayload,
-			ImagePayload:    request.ImagePayload,
-			ThinkingEnabled: request.ThinkingEnabled,
-		},
-		skipReason,
-	)
+	return providerdiag.NewSkippedInvocationSmokeRequest(request.invocationSmokeRequest(), skipReason)
+}
+
+func (request bedrockDiagnosticSmokeRequest) invocationSmokeRequest() providerdiag.InvocationSmokeRequest {
+	return providerdiag.InvocationSmokeRequest{
+		Name:            request.Name,
+		ToolPayload:     request.ToolPayload,
+		ImagePayload:    request.ImagePayload,
+		ThinkingEnabled: request.ThinkingEnabled,
+	}
 }

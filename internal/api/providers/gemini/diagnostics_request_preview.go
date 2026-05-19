@@ -56,15 +56,13 @@ func buildGeminiDiagnosticRequestPreviewRequest(
 	request geminiDiagnosticRequest,
 ) DiagnosticRequestPreviewRequest {
 	cfg := config.FromContext(ctx)
-	route := geminiDiagnosticRequestRoute(request)
 	body := buildGeminiDiagnosticRequestBody(ctx, provider, report, request, cfg)
-	result := providerdiag.NewMultimodalPreviewRequest(request.multimodalSmokeRequest())
-	result.Route = route
-	result.Method = "POST"
-	result.URL = geminiDiagnosticRequestURL(report.Model, request)
-	result.Headers = redactedGeminiHeaders()
-	result.Body = body
-	return result
+	return providerdiag.NewMultimodalRequestPreview(request.multimodalSmokeRequest(), providerdiag.RequestPreviewTransport{
+		Method:  "POST",
+		URL:     geminiDiagnosticRequestURL(report.Model, request),
+		Headers: redactedGeminiHeaders(),
+		Body:    body,
+	})
 }
 
 func buildGeminiDiagnosticRequestBody(
@@ -115,8 +113,5 @@ func buildGeminiDiagnosticRequestBody(
 }
 
 func redactedGeminiHeaders() map[string]string {
-	return map[string]string{
-		"Content-Type":   "application/json",
-		"x-goog-api-key": "<redacted>",
-	}
+	return providerdiag.RedactedAPIKeyHeaders("x-goog-api-key")
 }

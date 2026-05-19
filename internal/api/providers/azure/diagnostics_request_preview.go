@@ -101,23 +101,17 @@ func buildDiagnosticRequestPreviewRequest(
 		[]api.Message{{Role: "user", Content: request.UserContent}},
 		report.Deployment,
 	)
-	return DiagnosticRequestPreviewRequest{
-		Name:               request.Name,
-		ToolPayload:        request.ToolPayload,
-		RetentionPayload:   request.RetentionPayload,
-		Route:              report.Route,
+	return providerdiag.NewResponsesPreviewRequest(request, report.Route, providerdiag.RequestPreviewTransport{
 		Method:             "POST",
 		URL:                provider.responsesURL(),
 		Headers:            diagnosticRequestPreviewHeaders(report.AuthMode),
-		PreviousResponseID: strings.TrimSpace(body.PreviousResponseID),
+		PreviousResponseID: body.PreviousResponseID,
 		Body:               body,
-	}
+	})
 }
 
 func diagnosticRequestPreviewHeaders(authMode string) map[string]string {
-	headers := map[string]string{
-		"Content-Type": "application/json",
-	}
+	headers := providerdiag.JSONHeaders()
 	switch strings.TrimSpace(authMode) {
 	case "api_key":
 		headers["api-key"] = "<redacted>"

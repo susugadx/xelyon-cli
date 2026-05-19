@@ -124,6 +124,19 @@ func NewSkippedTextToolPreviewRequest(request TextToolSmokeRequest, route, skipR
 	}
 }
 
+// NewTextToolPreviewRequest は text/tool request preview entry を構築する。
+func NewTextToolPreviewRequest(request TextToolSmokeRequest, route string, transport RequestPreviewTransport) TextToolRequestPreviewRequest {
+	return TextToolRequestPreviewRequest{
+		Name:        request.Name,
+		ToolPayload: request.ToolPayload,
+		Route:       route,
+		Method:      transport.Method,
+		URL:         transport.URL,
+		Headers:     transport.Headers,
+		Body:        transport.Body,
+	}
+}
+
 // AddTextToolSmokeRequestResult は request-level smoke 結果を追加し summary に集約する。
 func AddTextToolSmokeRequestResult(result *TextToolSmokeResult, request TextToolSmokeRequestResult) {
 	if result == nil {
@@ -190,10 +203,9 @@ func NewTextToolSmokeRequestContext(
 
 // RedactedBearerHeaders は request preview 用の redacted bearer 認証 headers を返す。
 func RedactedBearerHeaders() map[string]string {
-	return map[string]string{
-		"Content-Type":  "application/json",
-		"Authorization": "Bearer <redacted>",
-	}
+	headers := JSONHeaders()
+	headers["Authorization"] = "Bearer <redacted>"
+	return headers
 }
 
 // NoopDiagnosticToolDefinitions は doctor tool smoke 用の no-op tool 定義を返す。

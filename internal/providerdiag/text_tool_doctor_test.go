@@ -115,6 +115,29 @@ func TestSkippedTextToolEntries(t *testing.T) {
 	}
 }
 
+func TestNewTextToolPreviewRequest(t *testing.T) {
+	request := TextToolSmokeRequest{Name: "tool", ToolPayload: true}
+	preview := NewTextToolPreviewRequest(request, "chat_completions", RequestPreviewTransport{
+		Method:  "POST",
+		URL:     "https://example.test/v1/chat/completions",
+		Headers: RedactedBearerHeaders(),
+		Body:    map[string]any{"model": "test-model"},
+	})
+
+	if preview.Name != "tool" || !preview.ToolPayload || preview.Route != "chat_completions" {
+		t.Fatalf("preview request = %+v, want request flags and route", preview)
+	}
+	if preview.Method != "POST" || preview.URL != "https://example.test/v1/chat/completions" {
+		t.Fatalf("preview transport = %+v, want POST URL", preview)
+	}
+	if preview.Headers["Authorization"] != "Bearer <redacted>" {
+		t.Fatalf("headers = %+v, want redacted bearer", preview.Headers)
+	}
+	if preview.Body == nil {
+		t.Fatalf("body = nil, want request body")
+	}
+}
+
 func TestAddTextToolSmokeRequestResult(t *testing.T) {
 	result := TextToolSmokeResult{Ran: true, Route: "chat_completions"}
 	text := TextToolSmokeRequestResult{

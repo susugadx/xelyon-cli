@@ -13,6 +13,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const (
@@ -76,24 +77,28 @@ func buildBedrockDiagnosticRequestPreviewRequest(
 	request bedrockDiagnosticSmokeRequest,
 ) (DiagnosticRequestPreviewRequest, error) {
 	req := provider.resolveBedrockRequestContext(ctx, report.Model)
-	result := newBedrockDiagnosticBasePreviewRequest(request, string(req.route))
-	result.Method = "POST"
-	result.ModelID = req.model
-	result.Headers = bedrockDiagnosticRedactedHeaders()
+	transport := providerdiag.RequestPreviewTransport{
+		Method:  "POST",
+		Headers: providerdiag.RedactedSigV4Headers(),
+	}
 
 	switch req.route {
 	case bedrockRouteClaudeMessages:
-		result.Operation = bedrockDiagnosticOperationInvokeModelWithResponseStream
-		result.URL = bedrockDiagnosticRequestPreviewURL(report.Region, req.model, "invoke-with-response-stream")
+		transport.URL = bedrockDiagnosticRequestPreviewURL(report.Region, req.model, "invoke-with-response-stream")
 		if request.ImagePayload {
-			result.Body = provider.buildBedrockClaudeImageRequest(ctx, request.SystemPrompt, nil, request.UserContent, bedrockDiagnosticImage(), req)
+			transport.Body = provider.buildBedrockClaudeImageRequest(ctx, request.SystemPrompt, nil, request.UserContent, bedrockDiagnosticImage(), req)
 		} else {
-			result.Body = provider.buildBedrockClaudeMessagesRequest(ctx, request.SystemPrompt, []api.Message{{Role: "user", Content: request.UserContent}}, req)
+			transport.Body = provider.buildBedrockClaudeMessagesRequest(ctx, request.SystemPrompt, []api.Message{{Role: "user", Content: request.UserContent}}, req)
 		}
-		return result, nil
+		return providerdiag.NewInvocationPreviewRequest(
+			request.invocationSmokeRequest(),
+			string(req.route),
+			bedrockDiagnosticOperationInvokeModelWithResponseStream,
+			req.model,
+			transport,
+		), nil
 	case bedrockRouteConverseStream:
-		result.Operation = bedrockDiagnosticOperationConverseStream
-		result.URL = bedrockDiagnosticRequestPreviewURL(report.Region, req.model, "converse-stream")
+		transport.URL = bedrockDiagnosticRequestPreviewURL(report.Region, req.model, "converse-stream")
 		input, err := provider.buildConverseStreamInput(ctx, request.SystemPrompt, []api.Message{{Role: "user", Content: request.UserContent}}, req)
 		if err != nil {
 			return DiagnosticRequestPreviewRequest{}, err
@@ -102,36 +107,21 @@ func buildBedrockDiagnosticRequestPreviewRequest(
 		if err != nil {
 			return DiagnosticRequestPreviewRequest{}, err
 		}
-		result.Body = body
-		return result, nil
+		transport.Body = body
+		return providerdiag.NewInvocationPreviewRequest(
+			request.invocationSmokeRequest(),
+			string(req.route),
+			bedrockDiagnosticOperationConverseStream,
+			req.model,
+			transport,
+		), nil
 	default:
 		return DiagnosticRequestPreviewRequest{}, fmt.Errorf("unsupported bedrock route %q for request preview", req.route)
 	}
 }
 
 func newBedrockDiagnosticSkippedPreviewRequest(request bedrockDiagnosticSmokeRequest, route, skipReason string) DiagnosticRequestPreviewRequest {
-	result := newBedrockDiagnosticBasePreviewRequest(request, route)
-	result.Skipped = true
-	result.SkipReason = skipReason
-	return result
-}
-
-func newBedrockDiagnosticBasePreviewRequest(request bedrockDiagnosticSmokeRequest, route string) DiagnosticRequestPreviewRequest {
-	return DiagnosticRequestPreviewRequest{
-		Name:            request.Name,
-		ToolPayload:     request.ToolPayload,
-		ImagePayload:    request.ImagePayload,
-		ThinkingEnabled: request.ThinkingEnabled,
-		Route:           route,
-	}
-}
-
-func bedrockDiagnosticRedactedHeaders() map[string]string {
-	return map[string]string{
-		"Content-Type":  "application/json",
-		"Accept":        "application/json",
-		"Authorization": "<redacted: AWS SigV4>",
-	}
+	return providerdiag.NewSkippedInvocationPreviewRequest(request.invocationSmokeRequest(), route, skipReason)
 }
 
 func bedrockDiagnosticRequestPreviewURL(region, modelID, operationPath string) string {

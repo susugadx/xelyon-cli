@@ -32,6 +32,30 @@ func TestSkippedResponsesEntries(t *testing.T) {
 	}
 }
 
+func TestResponsesPreviewRequests(t *testing.T) {
+	request := ResponsesSmokeRequest{Name: "retention_followup", RetentionPayload: true}
+	transport := RequestPreviewTransport{
+		Method:             "POST",
+		URL:                "https://example.test/v1/responses",
+		Headers:            JSONHeaders(),
+		PreviousResponseID: " resp_initial ",
+		Body:               map[string]any{"store": true},
+	}
+
+	preview := NewResponsesPreviewRequest(request, "responses_non_streaming", transport)
+	if preview.Name != request.Name || !preview.RetentionPayload || preview.Route != "responses_non_streaming" {
+		t.Fatalf("preview request = %+v, want retention request with route", preview)
+	}
+	if preview.PreviousResponseID != "resp_initial" || preview.Method != "POST" || preview.URL != transport.URL || preview.Body == nil {
+		t.Fatalf("preview transport = %+v, want trimmed previous response ID and transport fields", preview)
+	}
+
+	routed := NewRoutedResponsesPreviewRequest(request, "responses_streaming", transport)
+	if routed.Route != "responses_streaming" || routed.PreviousResponseID != "resp_initial" || routed.Headers["Content-Type"] != "application/json" {
+		t.Fatalf("routed preview request = %+v, want route and transport fields", routed)
+	}
+}
+
 func TestAddResponsesSmokeRequestResult(t *testing.T) {
 	result := ResponsesSmokeResult{Ran: true}
 	text := ResponsesSmokeRequestResult{

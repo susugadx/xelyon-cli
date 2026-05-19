@@ -29,6 +29,28 @@ func TestMultimodalRequestBases(t *testing.T) {
 	}
 }
 
+func TestNewMultimodalRequestPreview(t *testing.T) {
+	request := MultimodalSmokeRequest{
+		Name:             "web_search",
+		WebSearchPayload: true,
+		Route:            "generate_content",
+	}
+	transport := RequestPreviewTransport{
+		Method:  "POST",
+		URL:     "https://example.test/v1/models/demo:generateContent",
+		Headers: RedactedAPIKeyHeaders("x-api-key"),
+		Body:    map[string]any{"model": "demo"},
+	}
+
+	preview := NewMultimodalRequestPreview(request, transport)
+	if preview.Name != "web_search" || !preview.WebSearchPayload || preview.Route != "generate_content" {
+		t.Fatalf("preview request = %+v, want descriptor fields", preview)
+	}
+	if preview.Method != transport.Method || preview.URL != transport.URL || preview.Headers["x-api-key"] != "<redacted>" || preview.Body == nil {
+		t.Fatalf("preview request = %+v, want transport fields", preview)
+	}
+}
+
 func TestAddMultimodalSmokeRequestResult(t *testing.T) {
 	result := MultimodalSmokeResult{Ran: true}
 	text := MultimodalSmokeRequestResult{

@@ -154,6 +154,36 @@ func NewSkippedRoutedResponsesPreviewRequest(request ResponsesSmokeRequest, rout
 	}
 }
 
+// NewResponsesPreviewRequest は Responses API 系 provider doctor の request preview entry を構築する。
+func NewResponsesPreviewRequest(request ResponsesSmokeRequest, route string, transport RequestPreviewTransport) ResponsesRequestPreviewRequest {
+	return ResponsesRequestPreviewRequest{
+		Name:               request.Name,
+		ToolPayload:        request.ToolPayload,
+		RetentionPayload:   request.RetentionPayload,
+		Route:              route,
+		Method:             transport.Method,
+		URL:                transport.URL,
+		Headers:            transport.Headers,
+		PreviousResponseID: strings.TrimSpace(transport.PreviousResponseID),
+		Body:               transport.Body,
+	}
+}
+
+// NewRoutedResponsesPreviewRequest は route 必須の Responses API 系 request preview entry を構築する。
+func NewRoutedResponsesPreviewRequest(request ResponsesSmokeRequest, route string, transport RequestPreviewTransport) RoutedResponsesRequestPreviewRequest {
+	return RoutedResponsesRequestPreviewRequest{
+		Name:               request.Name,
+		ToolPayload:        request.ToolPayload,
+		RetentionPayload:   request.RetentionPayload,
+		Route:              route,
+		Method:             transport.Method,
+		URL:                transport.URL,
+		Headers:            transport.Headers,
+		PreviousResponseID: strings.TrimSpace(transport.PreviousResponseID),
+		Body:               transport.Body,
+	}
+}
+
 // AddResponsesSmokeRequestResult は request-level smoke 結果を追加し summary に集約する。
 func AddResponsesSmokeRequestResult(result *ResponsesSmokeResult, request ResponsesSmokeRequestResult) {
 	if result == nil {
