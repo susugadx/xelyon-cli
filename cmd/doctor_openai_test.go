@@ -2,63 +2,49 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	openaiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 )
 
-func TestRunOpenAIDoctorInvocation_JSONReportsExplicitModelAndCatalogModel(t *testing.T) {
+func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsChatProxyEndpointWarning(t *testing.T) {
+	proxyURL := "https://openai.example/proxy/chat"
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("OPENAI_API_KEY", "sk-test")
-	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", proxyURL)
 	t.Setenv("OPENAI_RESPONSES_URL", "")
+	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
 
 	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
 
-	doctorOpenAIModelFlag = "corp-openai-deployment"
-	doctorCatalogModelFlag = "gpt-5.4"
+	doctorOpenAIModelFlag = "gpt-4"
+	doctorCatalogModelFlag = "gpt-4"
+	doctorToolSmokeFlag = true
+	doctorPrintRequestFlag = true
 	doctorJSONFlag = true
 
 	if err := runOpenAIDoctorInvocation(cmd, nil); err != nil {
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
-		Provider           string `json:"provider"`
-		Model              string `json:"model"`
-		ModelSource        string `json:"model_source"`
-		CatalogModel       string `json:"catalog_model"`
-		CatalogModelSource string `json:"catalog_model_source"`
-		Route              string `json:"route"`
-		RouteReason        string `json:"route_reason"`
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	if report.APIURL != proxyURL {
+		t.Fatalf("api_url = %q, want configured proxy URL", report.APIURL)
 	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	if report.Provider != "openai" {
-		t.Fatalf("provider = %q, want openai", report.Provider)
-	}
-	if report.Model != "corp-openai-deployment" || report.ModelSource != "--model" {
-		t.Fatalf("model = %q (%s), want explicit model", report.Model, report.ModelSource)
-	}
-	if report.CatalogModel != "gpt-5.4" || report.CatalogModelSource != "--catalog-model" {
-		t.Fatalf("catalog_model = %q (%s), want explicit catalog model", report.CatalogModel, report.CatalogModelSource)
-	}
-	if report.Route != "responses_streaming" {
-		t.Fatalf("route = %q, want responses_streaming", report.Route)
-	}
-	if !strings.Contains(report.RouteReason, "catalog_model=gpt-5.4 supports Responses streaming") {
-		t.Fatalf("route_reason = %q, want catalog streaming reason", report.RouteReason)
-	}
+	requireDoctorJSONProxyWarning(t, report.Checks, "api_url_path", "api_url", proxyURL)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewRouteAndURL(t, report.RequestPreview, 1, string(openaiprovider.DiagnosticRouteChatCompletions), proxyURL)
 }
 
-func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testing.T) {
+func TestRunOpenAIDoctorInvocation_PrintRequestJSONReportsResponsesProxyEndpointWarning(t *testing.T) {
+	proxyURL := "https://openai.example/proxy/responses"
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("OPENAI_API_KEY", "")
 	t.Setenv("OPENAI_API_URL", "")
-	t.Setenv("OPENAI_RESPONSES_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", proxyURL)
 
 	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
 
@@ -72,36 +58,13 @@ func TestRunOpenAIDoctorInvocation_PrintRequestJSONDoesNotRequireAPIKey(t *testi
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
-		Smoke          any `json:"smoke"`
-		RequestPreview struct {
-			Requests []struct {
-				Name               string `json:"name"`
-				RetentionPayload   bool   `json:"retention_payload"`
-				PreviousResponseID string `json:"previous_response_id"`
-				Body               struct {
-					Store              bool   `json:"store"`
-					PreviousResponseID string `json:"previous_response_id"`
-				} `json:"body"`
-			} `json:"requests"`
-		} `json:"request_preview"`
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	if report.ResponsesURL != proxyURL {
+		t.Fatalf("responses_url = %q, want configured proxy URL", report.ResponsesURL)
 	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	if report.Smoke != nil {
-		t.Fatalf("smoke = %#v, want omitted for --print-request", report.Smoke)
-	}
-	if len(report.RequestPreview.Requests) != 2 {
-		t.Fatalf("request_preview = %#v, want two retention requests", report.RequestPreview)
-	}
-	followup := report.RequestPreview.Requests[1]
-	if followup.Name != "retention_followup" || !followup.RetentionPayload {
-		t.Fatalf("followup preview = %#v, want retention followup", followup)
-	}
-	if followup.PreviousResponseID == "" || followup.Body.PreviousResponseID != followup.PreviousResponseID || !followup.Body.Store {
-		t.Fatalf("followup previous/store = %#v, want placeholder previous_response_id and store true", followup)
-	}
+	requireDoctorJSONProxyWarning(t, report.Checks, "responses_url_path", "responses_url", proxyURL)
+	requireDoctorJSONPrintRequestSkippedAuth(t, report.Checks)
+	requireDoctorJSONRequestPreviewRouteAndURL(t, report.RequestPreview, 2, string(openaiprovider.DiagnosticRouteResponsesNonStreaming), proxyURL)
 }
 
 func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testing.T) {
@@ -121,7 +84,7 @@ func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testi
 		t.Fatalf("runOpenAIDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
 	}
 
-	var report struct {
+	report := unmarshalDoctorJSON[struct {
 		Capabilities struct {
 			Model              string `json:"model"`
 			CatalogModel       string `json:"catalog_model"`
@@ -135,13 +98,8 @@ func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testi
 				CompactThreshold int  `json:"compact_threshold"`
 			} `json:"server_compaction"`
 		} `json:"capabilities"`
-		Checks []struct {
-			Name string `json:"name"`
-		} `json:"checks"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
 	if report.Capabilities.Model != "corp-openai-deployment" ||
 		report.Capabilities.CatalogModel != "gpt-5.4" ||
 		!report.Capabilities.ResponsesAPI ||
@@ -151,11 +109,70 @@ func TestRunOpenAIDoctorInvocation_CapabilitiesJSONDoesNotRequireAPIKey(t *testi
 		report.Capabilities.ServerCompaction.CompactThreshold <= 0 {
 		t.Fatalf("capabilities = %+v, want resolved OpenAI capabilities", report.Capabilities)
 	}
-	for _, check := range report.Checks {
-		if check.Name == "auth" {
-			t.Fatalf("auth check should be skipped for capabilities-only report: %#v", report.Checks)
-		}
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+}
+
+func TestRunOpenAIDoctorInvocation_RequireCapabilityFailsWithoutAPIKeyCheck(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", "")
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
+
+	doctorOpenAIModelFlag = "gpt-5.5-pro"
+	doctorCatalogModelFlag = "gpt-5.5-pro"
+	doctorRequiredCapabilityFlags = []string{"responses_streaming"}
+	doctorJSONFlag = true
+
+	err := runOpenAIDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatalf("runOpenAIDoctorInvocation() error = nil, want required capability failure\noutput:\n%s", out.String())
 	}
+
+	report := unmarshalDoctorJSON[struct {
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	check := requireDoctorJSONCheck(t, report.Checks, "required_capability")
+	requireDoctorJSONCheckStatus(t, check, "fail")
+	requireDoctorJSONCheckDetailContains(t, check, "responses_streaming=missing")
+}
+
+func TestRunOpenAIDoctorInvocation_RequireStreamingCapabilityFailsWithoutCatalogModel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_URL", "")
+	t.Setenv("OPENAI_RESPONSES_URL", "")
+	configDir := filepath.Join(home, ".xelyon")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("openai:\n  responses_api_models:\n    - corp-gpt55-pro-alias\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAIDoctorCommand)
+
+	doctorOpenAIModelFlag = "corp-gpt55-pro-alias"
+	doctorRequiredCapabilityFlags = []string{"responses_streaming"}
+	doctorJSONFlag = true
+
+	err := runOpenAIDoctorInvocation(cmd, nil)
+	if err == nil {
+		t.Fatalf("runOpenAIDoctorInvocation() error = nil, want unknown required capability failure\noutput:\n%s", out.String())
+	}
+
+	report := unmarshalDoctorJSON[struct {
+		Checks []doctorJSONCheck `json:"checks"`
+	}](t, out)
+	requireNoDoctorJSONChecks(t, report.Checks, "auth")
+	check := requireDoctorJSONCheck(t, report.Checks, "required_capability")
+	requireDoctorJSONCheckStatus(t, check, "fail")
+	requireDoctorJSONCheckDetailContains(t, check, "responses_streaming=unknown")
+	requireDoctorJSONCheckSuggestionContains(t, check, "--catalog-model")
 }
 
 func TestRootCommand_OpenAIDoctorCommandParsesFlags(t *testing.T) {
@@ -185,7 +202,7 @@ func TestRootCommand_OpenAIDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--retention-smoke", "--capabilities", "--print-request", "--timeout", "--json", "Diagnose OpenAI provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--retention-smoke", "--capabilities", "--require-capability", "--print-request", "--timeout", "--json", "Diagnose OpenAI provider configuration"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want OpenAI doctor help substring %q", out.String(), want)
 		}
@@ -233,18 +250,13 @@ func TestRenderOpenAIDoctorTextIncludesSmokeObservability(t *testing.T) {
 
 	var out bytes.Buffer
 	renderOpenAIDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Route reason: model=gpt-5.4 uses Responses API; catalog_model=gpt-5.4 supports Responses streaming",
 		"Smoke route: responses_streaming",
 		"Smoke response ID: resp_text",
 		"Smoke usage: input=10 cached=3 output=4 reasoning=2 cache_creation=1",
 		"Smoke cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func TestRenderOpenAIDoctorTextIncludesRequestPreview(t *testing.T) {
@@ -371,19 +383,14 @@ func TestRenderOpenAIDoctorTextIncludesSmokeRequests(t *testing.T) {
 
 	var out bytes.Buffer
 	renderOpenAIDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Smoke request text: ok route=responses_streaming duration=1ms response_id=resp_text",
 		"Smoke content text: xelyon openai doctor ok",
 		"Smoke request tool: ok route=responses_streaming duration=2ms response_id=resp_tool",
 		"Smoke usage tool: input=8 cached=0 output=4 reasoning=0 cache_creation=0",
 		"Smoke total usage: input=18 cached=0 output=8 reasoning=0 cache_creation=0",
 		"Smoke total cost estimate: $0.00012345 USD",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
+	})
 }
 
 func TestRenderOpenAIDoctorTextIncludesRetentionSmokePreviousResponseID(t *testing.T) {
@@ -427,112 +434,8 @@ func TestRenderOpenAIDoctorTextIncludesRetentionSmokePreviousResponseID(t *testi
 
 	var out bytes.Buffer
 	renderOpenAIDoctorText(&out, report)
-	output := out.String()
-	for _, want := range []string{
+	requireDoctorContractTextContainsAll(t, out.String(), []string{
 		"Smoke request retention_initial: ok route=responses_non_streaming duration=1ms response_id=resp_retention_initial previous_response_id=(not returned)",
 		"Smoke request retention_followup: ok route=responses_non_streaming duration=2ms response_id=resp_retention_followup previous_response_id=resp_retention_initial",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output = %q, want substring %q", output, want)
-		}
-	}
-}
-
-func TestRenderOpenAIDoctorJSONIncludesSmokeObservability(t *testing.T) {
-	report := openaiprovider.DiagnosticReport{
-		Provider: "openai",
-		Smoke: &openaiprovider.DiagnosticSmokeResult{
-			Ran:              true,
-			Route:            openaiprovider.DiagnosticRouteResponsesNonStreaming,
-			ResponseID:       "resp_json",
-			Duration:         "1ms",
-			RetentionPayload: true,
-			UsageObserved:    true,
-			Usage: openaiprovider.DiagnosticSmokeUsage{
-				InputTokens:         10,
-				OutputTokens:        4,
-				ThinkingTokens:      2,
-				CachedInputTokens:   3,
-				CacheCreationTokens: 1,
-			},
-			Cost: openaiprovider.DiagnosticSmokeCost{
-				USD:                0.00012345,
-				PricingUnavailable: false,
-			},
-			Requests: []openaiprovider.DiagnosticSmokeRequestResult{
-				{
-					Name:          "text",
-					Ran:           true,
-					Route:         openaiprovider.DiagnosticRouteResponsesNonStreaming,
-					ResponseID:    "resp_json",
-					UsageObserved: true,
-				},
-				{
-					Name:               "retention_followup",
-					Ran:                true,
-					RetentionPayload:   true,
-					Route:              openaiprovider.DiagnosticRouteResponsesNonStreaming,
-					ResponseID:         "resp_retention_followup",
-					PreviousResponseID: "resp_json",
-					UsageObserved:      true,
-				},
-			},
-		},
-	}
-
-	var out bytes.Buffer
-	if err := renderOpenAIDoctorJSON(&out, report); err != nil {
-		t.Fatalf("renderOpenAIDoctorJSON() error = %v", err)
-	}
-
-	var got struct {
-		Smoke struct {
-			Route         string `json:"route"`
-			ResponseID    string `json:"response_id"`
-			UsageObserved bool   `json:"usage_observed"`
-			Usage         struct {
-				InputTokens         int `json:"input_tokens"`
-				OutputTokens        int `json:"output_tokens"`
-				ThinkingTokens      int `json:"thinking_tokens"`
-				CachedInputTokens   int `json:"cached_input_tokens"`
-				CacheCreationTokens int `json:"cache_creation_tokens"`
-			} `json:"usage"`
-			Cost struct {
-				USD                float64 `json:"usd"`
-				PricingUnavailable bool    `json:"pricing_unavailable"`
-			} `json:"cost"`
-			Requests []struct {
-				Name               string `json:"name"`
-				Ran                bool   `json:"ran"`
-				RetentionPayload   bool   `json:"retention_payload"`
-				Route              string `json:"route"`
-				ResponseID         string `json:"response_id"`
-				PreviousResponseID string `json:"previous_response_id"`
-			} `json:"requests"`
-		} `json:"smoke"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("unmarshal output: %v\n%s", err, out.String())
-	}
-	if got.Smoke.Route != "responses_non_streaming" || got.Smoke.ResponseID != "resp_json" || !got.Smoke.UsageObserved {
-		t.Fatalf("smoke metadata = %#v, want route, response_id, and usage_observed", got.Smoke)
-	}
-	if got.Smoke.Usage.InputTokens != 10 ||
-		got.Smoke.Usage.OutputTokens != 4 ||
-		got.Smoke.Usage.ThinkingTokens != 2 ||
-		got.Smoke.Usage.CachedInputTokens != 3 ||
-		got.Smoke.Usage.CacheCreationTokens != 1 {
-		t.Fatalf("smoke usage = %+v, want nested usage fields", got.Smoke.Usage)
-	}
-	if got.Smoke.Cost.USD != 0.00012345 || got.Smoke.Cost.PricingUnavailable {
-		t.Fatalf("smoke cost = %+v, want nested cost fields", got.Smoke.Cost)
-	}
-	if len(got.Smoke.Requests) != 2 || got.Smoke.Requests[0].Name != "text" || got.Smoke.Requests[0].ResponseID != "resp_json" {
-		t.Fatalf("smoke requests = %+v, want text and retention request metadata", got.Smoke.Requests)
-	}
-	if got.Smoke.Requests[1].Name != "retention_followup" ||
-		!got.Smoke.Requests[1].RetentionPayload ||
-		got.Smoke.Requests[1].PreviousResponseID != "resp_json" {
-		t.Fatalf("retention request = %+v, want retention payload and previous_response_id", got.Smoke.Requests[1])
-	}
+	})
 }

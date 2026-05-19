@@ -509,6 +509,10 @@ func TestDiagnose_ToolSmokeIncludesDummyToolPayload(t *testing.T) {
 	if report.Smoke == nil || !report.Smoke.ToolPayload {
 		t.Fatalf("Smoke = %#v, want tool payload smoke", report.Smoke)
 	}
+	toolSmoke := requireKimiSmokeRequest(t, report.Smoke, kimiDiagnosticSmokeToolName)
+	if !toolSmoke.Ran || toolSmoke.Skipped || !toolSmoke.ToolPayload {
+		t.Fatalf("tool smoke request = %#v, want ran tool payload", toolSmoke)
+	}
 	if !hasKimiDiagnosticCheck(report, "tool_smoke", DiagnosticStatusOK) {
 		t.Fatalf("missing tool_smoke OK check: %#v", report.Checks)
 	}
@@ -523,6 +527,55 @@ func TestDiagnose_ToolSmokeIncludesDummyToolPayload(t *testing.T) {
 	function, ok := toolChoice["function"].(map[string]any)
 	if !ok || function["name"] != diagnosticSmokeToolName {
 		t.Fatalf("tool_choice.function = %#v, want %s", toolChoice["function"], diagnosticSmokeToolName)
+	}
+}
+
+func TestDiagnose_ToolSmokeRecordsSkippedRequestWhenFunctionCallingDisabled(t *testing.T) {
+	var captured []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if _, ok := body["tools"]; ok {
+			t.Fatalf("captured live tool request while function calling is disabled: %#v", body)
+		}
+		captured = append(captured, body)
+		writeKimiDiagnosticSSE(t, w, `{"choices":[{"delta":{"content":"ok"}}]}`, `{"choices":[{"delta":{},"finish_reason":"stop","usage":{"prompt_tokens":7,"completion_tokens":3,"cached_tokens":1}}]}`)
+	}))
+	defer server.Close()
+
+	t.Setenv(kimiAPIKeyEnv, "moonshot-key")
+	t.Setenv(kimiAPIURLEnv, server.URL+"/v1/chat/completions")
+	t.Setenv(kimiFunctionCallingEnv, "0")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:    config.DefaultConfig(),
+		RunSmoke:  true,
+		ToolSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false for skipped disabled tool smoke: %#v", report.Checks)
+	}
+	if len(captured) != 3 {
+		t.Fatalf("captured request count = %d, want text fallback requests only", len(captured))
+	}
+	if report.Smoke == nil || !report.Smoke.Ran {
+		t.Fatalf("Smoke = %#v, want ran text fallback with skipped tool request", report.Smoke)
+	}
+	if report.Smoke.ToolPayload {
+		t.Fatalf("Smoke.ToolPayload = true, want false when tool request is skipped")
+	}
+	toolSmoke := requireKimiSmokeRequest(t, report.Smoke, kimiDiagnosticSmokeToolName)
+	if toolSmoke.Ran || !toolSmoke.Skipped || !toolSmoke.ToolPayload {
+		t.Fatalf("tool smoke request = %#v, want skipped non-ran tool payload", toolSmoke)
+	}
+	if !strings.Contains(toolSmoke.SkipReason, kimiFunctionCallingEnv+"=0") {
+		t.Fatalf("tool skip reason = %q, want %s=0", toolSmoke.SkipReason, kimiFunctionCallingEnv)
+	}
+	if !hasKimiDiagnosticCheck(report, "tool_smoke", DiagnosticStatusWarn) {
+		t.Fatalf("missing disabled tool_smoke warning: %#v", report.Checks)
 	}
 }
 

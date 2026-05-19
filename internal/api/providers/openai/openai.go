@@ -18,8 +18,6 @@ func init() {
 	})
 }
 
-const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
-
 // Provider はOpenAI APIのプロバイダー実装
 type Provider struct {
 	api.BaseProvider

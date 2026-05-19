@@ -183,6 +183,42 @@ func TestBuildLastRequestTable_ShowsWebSearchObservation(t *testing.T) {
 	}
 }
 
+func TestBuildLastRequestTable_GeminiWebSearchUsageStaysTokenUsage(t *testing.T) {
+	usage := &api.Usage{
+		InputTokens:       17,
+		CachedInputTokens: 4,
+		OutputTokens:      5,
+		ThinkingTokens:    3,
+	}
+
+	table := buildLastRequestTable(nil, "gemini", "gemini-3.1-pro-preview-customtools", usage, nil)
+	if table == nil {
+		t.Fatal("buildLastRequestTable() = nil, want table")
+	}
+
+	output := table.RenderCompact()
+	for _, want := range []string{
+		"Input",
+		"17 tokens",
+		"Cached",
+		"4 tokens",
+		"Output",
+		"5 tokens",
+		"Thinking",
+		"3 tokens",
+		"Cost",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("buildLastRequestTable() output missing %q:\n%s", want, output)
+		}
+	}
+	for _, unwanted := range []string{"Web Search Calls", "Search Result Tokens", "Web Search Fee"} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("buildLastRequestTable() output should not contain %q for Gemini token usage:\n%s", unwanted, output)
+		}
+	}
+}
+
 func TestBuildLastRequestTable_ShowsPricingUnavailable(t *testing.T) {
 	usage := &api.Usage{InputTokens: 1000, OutputTokens: 200}
 	table := buildLastRequestTable(nil, "bedrock", "amazon.nova-unknown-v1:0", usage, nil)
@@ -360,6 +396,51 @@ func TestBuildSessionTokenTable_WithSubAgentCosts(t *testing.T) {
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("buildSessionTokenTable() output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestBuildSessionTokenTable_GeminiWebSearchUsageStaysTokenUsage(t *testing.T) {
+	stats := NewSessionStats("gemini", "gemini-3.1-pro-preview-customtools")
+	stats.AddUsageForProviderConfig(nil, "gemini", "gemini-3.1-pro-preview-customtools", api.Usage{
+		InputTokens:       17,
+		CachedInputTokens: 4,
+		OutputTokens:      5,
+		ThinkingTokens:    3,
+	})
+
+	agent := &Agent{
+		CurrentModel:    "gemini-3.1-pro-preview-customtools",
+		ProviderName:    "gemini",
+		CurrentProvider: &mockProvider{name: "gemini"},
+	}
+
+	table := buildSessionTokenTable(agent, stats, nil)
+	if table == nil {
+		t.Fatal("buildSessionTokenTable() = nil, want table")
+	}
+
+	output := table.RenderCompact()
+	for _, want := range []string{
+		"Input",
+		"17 tokens",
+		"Cached",
+		"4 tokens",
+		"Output",
+		"5 tokens",
+		"Thinking",
+		"3 tokens",
+		"Total",
+		"25 tokens",
+		"Cost",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("buildSessionTokenTable() output missing %q:\n%s", want, output)
+		}
+	}
+	for _, unwanted := range []string{"Web Search Calls", "Search Result Tokens", "Web Search Fee"} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("buildSessionTokenTable() output should not contain %q for Gemini token usage:\n%s", unwanted, output)
 		}
 	}
 }

@@ -59,13 +59,6 @@ func TestNew_CustomURL(t *testing.T) {
 	}
 }
 
-// Helper functions for testing
-
-func mockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(handler)
-}
-
 func errorHandler(statusCode int, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(statusCode)
@@ -78,35 +71,6 @@ func rateLimitHandler(retryAfter string) http.HandlerFunc {
 		w.Header().Set("Retry-After", retryAfter)
 		w.WriteHeader(429)
 		_, _ = w.Write([]byte("Rate limit exceeded"))
-	}
-}
-
-// ollamaStreamingHandler はOllama形式のJSON Linesストリーミングハンドラー
-func ollamaStreamingHandler(texts []string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-ndjson")
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-			return
-		}
-
-		for _, text := range texts {
-			resp := OllamaStreamResponse{
-				Message: OllamaMessageContent{Content: text},
-				Done:    false,
-			}
-			data, _ := json.Marshal(resp)
-			fmt.Fprintln(w, string(data))
-			flusher.Flush()
-		}
-
-		// 終了レスポンス
-		doneResp := OllamaStreamResponse{Done: true}
-		data, _ := json.Marshal(doneResp)
-		fmt.Fprintln(w, string(data))
-		flusher.Flush()
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const diagnosticCapabilityPreviousResponseID = "capability_previous_response_id"
@@ -76,87 +76,112 @@ func (r *DiagnosticReport) addCapabilities(ctx context.Context, cfg *config.Conf
 }
 
 func buildOpenAIDiagnosticCapabilities(ctx context.Context, cfg *config.Config, report DiagnosticReport) DiagnosticCapabilities {
+	snapshot := openAIDiagnosticCapabilitySnapshot(ctx, cfg, report)
+	return openAIDiagnosticCapabilitiesFromSnapshot(snapshot)
+}
+
+func openAIDiagnosticCapabilitySnapshot(ctx context.Context, cfg *config.Config, report DiagnosticReport) providerdiag.CapabilitySnapshot {
 	responsesAPI := report.Route != "" && report.Route != DiagnosticRouteChatCompletions
-	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(report.CatalogModel)
-	maxOutput := openAIDiagnosticMaxOutputPolicy(cfg, report.Model, report.CatalogModel)
-	pricing := cost.GetPricingInfoForConfig(cfg, "openai", report.Model)
+	policy := providerdiag.OpenAICatalogPolicy(cfg, report.Model, report.CatalogModel)
+	return buildOpenAIDiagnosticCapabilitySnapshot(ctx, cfg, report, responsesAPI, policy)
+}
 
+func buildOpenAIDiagnosticCapabilitySnapshot(
+	ctx context.Context,
+	cfg *config.Config,
+	report DiagnosticReport,
+	responsesAPI bool,
+	policy providerdiag.CatalogPolicy,
+) providerdiag.CapabilitySnapshot {
+	responsesStreaming := report.Route == DiagnosticRouteResponsesStreaming
+	return providerdiag.CapabilitySnapshot{
+		RequestModel:                   report.Model,
+		CatalogModel:                   report.CatalogModel,
+		Route:                          report.Route,
+		RouteReason:                    report.RouteReason,
+		ResponsesAPI:                   responsesAPI,
+		ResponsesStreaming:             responsesStreaming,
+		ResponsesStreamingAvailability: providerdiag.ResponsesStreamingCapabilityAvailability(responsesStreaming, policy),
+		ChatCompletions:                report.Route == DiagnosticRouteChatCompletions,
+		FunctionCalling:                report.FunctionCallingEnabled,
+		ImageInput:                     New("diagnostic-key").SupportsImages(),
+		Retention:                      providerdiag.NewRetentionSnapshot(responsesAPI, report.ResponsesStore, report.ResponsesPersistResponseID),
+		ServerCompaction:               openAIDiagnosticServerCompactionSnapshot(ctx, cfg, report, responsesAPI),
+		ContextWindowTokens:            policy.ContextWindowTokens,
+		ContextWindowKnown:             policy.ContextWindowKnown,
+		MaxOutput:                      policy.MaxOutput,
+		Pricing:                        policy.Pricing,
+	}
+}
+
+func openAIDiagnosticCapabilitiesFromSnapshot(snapshot providerdiag.CapabilitySnapshot) DiagnosticCapabilities {
 	return DiagnosticCapabilities{
-		Model:                 report.Model,
-		CatalogModel:          report.CatalogModel,
-		Route:                 report.Route,
-		RouteReason:           report.RouteReason,
-		ResponsesAPI:          responsesAPI,
-		ResponsesStreaming:    report.Route == DiagnosticRouteResponsesStreaming,
-		ChatCompletions:       report.Route == DiagnosticRouteChatCompletions,
-		FunctionCalling:       report.FunctionCallingEnabled,
-		ImageInput:            New("diagnostic-key").SupportsImages(),
-		Retention:             openAIDiagnosticRetentionCapability(report, responsesAPI),
-		ServerCompaction:      openAIDiagnosticServerCompactionCapability(ctx, cfg, report, responsesAPI),
-		ContextWindowTokens:   contextWindow,
-		ContextWindowKnown:    contextOK,
-		MaxOutputTokens:       maxOutput.Tokens,
-		MaxOutputTokensKnown:  maxOutput.Available,
-		MaxOutputTokensSource: maxOutput.Source,
-		Pricing:               openAIDiagnosticPricingCapability(pricing),
+		Model:                 snapshot.RequestModel,
+		CatalogModel:          snapshot.CatalogModel,
+		Route:                 snapshot.Route,
+		RouteReason:           snapshot.RouteReason,
+		ResponsesAPI:          snapshot.ResponsesAPI,
+		ResponsesStreaming:    snapshot.ResponsesStreaming,
+		ChatCompletions:       snapshot.ChatCompletions,
+		FunctionCalling:       snapshot.FunctionCalling,
+		ImageInput:            snapshot.ImageInput,
+		Retention:             openAIDiagnosticRetentionCapabilityFromSnapshot(snapshot.Retention),
+		ServerCompaction:      openAIDiagnosticServerCompactionCapabilityFromSnapshot(snapshot.ServerCompaction),
+		ContextWindowTokens:   snapshot.ContextWindowTokens,
+		ContextWindowKnown:    snapshot.ContextWindowKnown,
+		MaxOutputTokens:       snapshot.MaxOutput.Tokens,
+		MaxOutputTokensKnown:  snapshot.MaxOutput.Available,
+		MaxOutputTokensSource: snapshot.MaxOutput.Source,
+		Pricing:               openAIDiagnosticPricingCapability(snapshot.Pricing),
 	}
 }
 
-func openAIDiagnosticRetentionCapability(report DiagnosticReport, responsesAPI bool) DiagnosticRetentionCapability {
-	previousResponseID := responsesAPI && report.ResponsesStore
-	sessionPersistence := previousResponseID && report.ResponsesPersistResponseID
-	detail := fmt.Sprintf(
-		"responses_api=%t, responses.store=%t, previous_response_id=%t, session_persistence=%t",
-		responsesAPI,
-		report.ResponsesStore,
-		previousResponseID,
-		sessionPersistence,
-	)
+func openAIDiagnosticRetentionCapabilityFromSnapshot(snapshot providerdiag.RetentionSnapshot) DiagnosticRetentionCapability {
 	return DiagnosticRetentionCapability{
-		Supported:          responsesAPI,
-		Store:              report.ResponsesStore,
-		PreviousResponseID: previousResponseID,
-		PersistResponseID:  report.ResponsesPersistResponseID,
-		SessionPersistence: sessionPersistence,
-		Detail:             detail,
+		Supported:          snapshot.Supported,
+		Store:              snapshot.Store,
+		PreviousResponseID: snapshot.PreviousResponseID,
+		PersistResponseID:  snapshot.PersistResponseID,
+		SessionPersistence: snapshot.SessionPersistence,
+		Detail:             snapshot.Detail,
 	}
 }
 
-func openAIDiagnosticServerCompactionCapability(ctx context.Context, cfg *config.Config, report DiagnosticReport, responsesAPI bool) DiagnosticServerCompactionCapability {
-	capability := DiagnosticServerCompactionCapability{
-		Enabled:       responsesAPI && cfg.ResponsesServerCompactionEnabled(),
-		LocalFallback: cfg.ResponsesServerCompactionLocalFallbackEnabled(),
-	}
-	if !responsesAPI {
-		capability.Detail = "not available on the Chat Completions route"
-		return capability
-	}
-	if !cfg.ResponsesServerCompactionEnabled() {
-		capability.Detail = "responses.server_compaction is disabled or responses.store=false"
-		return capability
-	}
+func openAIDiagnosticServerCompactionSnapshot(ctx context.Context, cfg *config.Config, report DiagnosticReport, responsesAPI bool) providerdiag.ServerCompactionSnapshot {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
-	decision := openairesponses.ResolveServerCompactionDecision(
-		config.WithContext(ctx, cfg),
-		"openai",
-		openairesponses.NewModelIdentity(report.Model, report.CatalogModel),
-		diagnosticCapabilityPreviousResponseID,
-	)
-	capability.CompactThreshold = decision.CompactThreshold()
-	capability.RequestPayload = capability.CompactThreshold > 0
-	capability.SkipLocalAutoCompression = decision.ShouldSkipLocalAutoCompression
-	switch {
-	case capability.RequestPayload:
-		capability.Detail = "context_management.compaction would be sent with previous_response_id"
-	case capability.SkipLocalAutoCompression:
-		capability.Detail = "compact_threshold could not be resolved and local fallback is disabled"
-	default:
-		capability.Detail = "compact_threshold could not be resolved; local fallback remains enabled"
+	var compactThreshold int
+	var skipLocalAutoCompression bool
+	if responsesAPI && cfg.ResponsesServerCompactionEnabled() {
+		decision := openairesponses.ResolveServerCompactionDecision(
+			config.WithContext(ctx, cfg),
+			"openai",
+			openairesponses.NewModelIdentity(report.Model, report.CatalogModel),
+			diagnosticCapabilityPreviousResponseID,
+		)
+		compactThreshold = decision.CompactThreshold()
+		skipLocalAutoCompression = decision.ShouldSkipLocalAutoCompression
 	}
-	return capability
+	return providerdiag.NewServerCompactionSnapshot(providerdiag.ServerCompactionSnapshotOptions{
+		ResponsesAPI:             responsesAPI,
+		Enabled:                  cfg.ResponsesServerCompactionEnabled(),
+		LocalFallback:            cfg.ResponsesServerCompactionLocalFallbackEnabled(),
+		CompactThreshold:         compactThreshold,
+		SkipLocalAutoCompression: skipLocalAutoCompression,
+		UnavailableDetail:        "not available on the Chat Completions route",
+	})
+}
+
+func openAIDiagnosticServerCompactionCapabilityFromSnapshot(snapshot providerdiag.ServerCompactionSnapshot) DiagnosticServerCompactionCapability {
+	return DiagnosticServerCompactionCapability{
+		Enabled:                  snapshot.Enabled,
+		RequestPayload:           snapshot.RequestPayload,
+		CompactThreshold:         snapshot.CompactThreshold,
+		LocalFallback:            snapshot.LocalFallback,
+		SkipLocalAutoCompression: snapshot.SkipLocalAutoCompression,
+		Detail:                   snapshot.Detail,
+	}
 }
 
 func openAIDiagnosticPricingCapability(pricing cost.PricingInfo) DiagnosticPricingCapability {
@@ -165,7 +190,7 @@ func openAIDiagnosticPricingCapability(pricing cost.PricingInfo) DiagnosticPrici
 		InputCostPerM:       pricing.InputCostPerM,
 		CachedInputCostPerM: pricing.CachedInputCostPerM,
 		OutputCostPerM:      pricing.OutputCostPerM,
-		Detail:              openAIDiagnosticPricingDetail(pricing),
+		Detail:              providerdiag.PricingDetail(pricing),
 	}
 }
 

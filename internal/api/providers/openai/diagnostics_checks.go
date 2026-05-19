@@ -9,8 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const (
@@ -49,7 +48,7 @@ func (r *DiagnosticReport) addAPIURLCheck() {
 		openAIAPIURLEnv,
 		r.APIURL,
 		defaultOpenAIURL,
-		"/v1/chat/completions",
+		openAIChatCompletionsEndpointPath,
 		r.Route == DiagnosticRouteChatCompletions,
 	)
 }
@@ -60,7 +59,7 @@ func (r *DiagnosticReport) addResponsesURLCheck() {
 		openAIResponsesURLEnv,
 		r.ResponsesURL,
 		defaultOpenAIResponsesURL,
-		"/v1/responses",
+		openAIResponsesEndpointPath,
 		r.Route != DiagnosticRouteChatCompletions,
 	)
 }
@@ -165,23 +164,15 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 		return
 	}
 
-	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
-	maxOutput, maxOutputOK := openAIDiagnosticMaxOutputTokens(cfg, model, catalogModel)
-	pricing := cost.GetPricingInfoForConfig(cfg, "openai", model)
-	detail := fmt.Sprintf(
-		"catalog_model=%s, context_window=%s, max_output_tokens=%s, %s",
-		catalogModel,
-		openAIDiagnosticIntDetail(contextWindow, contextOK),
-		openAIDiagnosticIntDetail(maxOutput, maxOutputOK),
-		openAIDiagnosticPricingDetail(pricing),
-	)
+	policy := providerdiag.OpenAICatalogPolicy(cfg, model, catalogModel)
+	detail := policy.OpenAIDetail()
 
 	switch {
-	case !contextOK:
+	case !policy.ContextWindowKnown:
 		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing context window metadata", detail, "Use an OpenAI model known to XELYON before relying on token-limit diagnostics")
-	case !maxOutputOK:
+	case !policy.MaxOutput.Available:
 		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing max output metadata", detail, "Use an OpenAI model known to XELYON, or set max_output_tokens explicitly for this model")
-	case pricing.PricingUnavailable:
+	case policy.Pricing.PricingUnavailable:
 		r.addCheck(DiagnosticStatusWarn, "catalog_policy", "catalog_model is missing pricing metadata", detail, "Use an OpenAI model with pricing metadata before relying on cost estimates")
 	default:
 		r.addCheck(DiagnosticStatusOK, "catalog_policy", "catalog_model policy is available", detail, "")
@@ -215,6 +206,26 @@ func (r *DiagnosticReport) addResponsesRetentionCheck() {
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "responses_retention", message, "", "")
+}
+
+func (r *DiagnosticReport) addRequiredCapabilities(ctx context.Context, cfg *config.Config, required []string) {
+	if !providerdiag.HasRequiredCapabilityRequest(required) {
+		return
+	}
+
+	snapshot := openAIDiagnosticCapabilitySnapshot(ctx, cfg, *r)
+	check := providerdiag.EvaluateRequiredCapabilities(snapshot, required)
+	if check.Satisfied() {
+		r.addCheck(DiagnosticStatusOK, providerdiag.RequiredCapabilityCheckName, "required OpenAI capabilities are available", check.Detail(), "")
+		return
+	}
+
+	suggestion := providerdiag.RequiredCapabilityFailureSuggestion(
+		check,
+		"model/configuration",
+		"Set --catalog-model or provider_models.openai.catalog_model to the underlying OpenAI model before requiring catalog-dependent capabilities",
+	)
+	r.addCheck(DiagnosticStatusFail, providerdiag.RequiredCapabilityCheckName, "required OpenAI capabilities are missing", check.Detail(), suggestion)
 }
 
 func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {

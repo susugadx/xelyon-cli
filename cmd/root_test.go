@@ -68,15 +68,27 @@ func resetRootFlagsForTest() {
 	doctorDeploymentFlag = ""
 	doctorCatalogModelFlag = ""
 	doctorBedrockModelFlag = ""
+	doctorClaudeModelFlag = ""
+	doctorDeepSeekModelFlag = ""
+	doctorGeminiModelFlag = ""
+	doctorGroqModelFlag = ""
 	doctorKimiModelFlag = ""
+	doctorOllamaModelFlag = ""
 	doctorOpenAIModelFlag = ""
+	doctorOpenRouterModelFlag = ""
 	doctorSmokeFlag = false
 	doctorToolSmokeFlag = false
 	doctorCapabilitiesFlag = false
+	doctorRequiredCapabilityFlags = nil
 	doctorAzureRetentionSmokeFlag = false
 	doctorOpenAIRetentionSmokeFlag = false
 	doctorBedrockImageSmokeFlag = false
 	doctorBedrockThinkingSmokeFlag = false
+	doctorClaudeImageSmokeFlag = false
+	doctorClaudeThinkingSmokeFlag = false
+	doctorClaudeWebSearchSmokeFlag = false
+	doctorGeminiImageSmokeFlag = false
+	doctorGeminiWebSearchSmokeFlag = false
 	doctorKimiImageSmokeFlag = false
 	doctorKimiWebSearchSmokeFlag = false
 	doctorTimeoutFlag = defaultDoctorTimeout
@@ -84,6 +96,7 @@ func resetRootFlagsForTest() {
 	doctorPrintConfigFlag = false
 	doctorPrintRequestFlag = false
 	resetCommandFlagsForTest(rootCmd)
+	doctorRequiredCapabilityFlags = nil
 }
 
 func newDoctorSubcommandTest(t *testing.T, newCommand func() *cobra.Command) (*cobra.Command, *bytes.Buffer) {

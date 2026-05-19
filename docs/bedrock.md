@@ -20,6 +20,8 @@ Bedrock live smoke は AWS 認証チェーンを使って実 API を呼びます
 xelyon doctor bedrock
 xelyon doctor bedrock --model global.anthropic.claude-sonnet-4-6 --smoke
 xelyon doctor bedrock --model amazon.nova-pro-v1:0 --smoke --tool-smoke
+xelyon doctor bedrock --print-request
+xelyon doctor bedrock --tool-smoke --print-request
 xelyon doctor bedrock --json
 
 # 単発 smoke
@@ -44,6 +46,8 @@ make bedrock-smoke-matrix
 ```
 
 `doctor bedrock` の live smoke は request 単位で AWS SDK `ResultMetadata` の `request_id`、usage、概算 cost を表示します。複数 smoke を指定した場合は `smoke.requests[]` に分け、summary usage / cost は request 単位の観測値を合算します。`request_id`、usage、pricing が返らない場合は warn ですが、API request が成功していれば smoke 成功自体は fail にしません。複数 request のうち 1 件でも usage が返らない場合、summary cost は部分値を確定値として表示せず usage unavailable とします。Bedrock では Azure の `response_id` alias は出しません。
+
+`--print-request` は AWS credential retrieval と live API request を行わず、選択した smoke request の `request_preview.requests[]` を表示します。`--print-request` 単体では text request preview を 1 件出します。Claude route は runtime と同じ Claude Messages body builder から `InvokeModelWithResponseStream` preview を作り、非 Claude route は runtime と同じ `buildConverseStreamInput` から `ConverseStream` preview を作ります。ConverseStream route の image / thinking request は smoke と同じ unsupported request shape として skipped entry に残します。
 
 `--smoke` は text smoke、`--tool-smoke` は dummy tool call、`--image-smoke` は tiny PNG 画像入力、`--thinking-smoke` は Extended Thinking request です。Claude route では指定された request を実 API に送ります。`BEDROCK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip します。ConverseStream route は text / tool smoke だけを実行し、image / thinking smoke は未対応 request shape として warn skip します。
 

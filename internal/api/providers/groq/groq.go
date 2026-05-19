@@ -25,7 +25,11 @@ func init() {
 
 var yellow = color.New(color.FgYellow)
 
-const defaultGroqURL = "https://api.groq.com/openai/v1/chat/completions"
+const (
+	groqChatCompletionsEndpointPath = "/openai/v1/chat/completions"
+	defaultGroqURL                  = "https://api.groq.com" + groqChatCompletionsEndpointPath
+	groqFunctionCallingEnv          = "GROQ_FUNCTION_CALLING"
+)
 
 // Provider はGroq APIのプロバイダー実装（OpenAI互換）
 type Provider struct {
@@ -50,7 +54,7 @@ func (p *Provider) SupportsImages() bool {
 // IsFunctionCallingEnabled は Function Calling が有効かを返す
 // GROQ_FUNCTION_CALLING=0 で無効化可能
 func (p *Provider) IsFunctionCallingEnabled() bool {
-	return os.Getenv("GROQ_FUNCTION_CALLING") != "0"
+	return os.Getenv(groqFunctionCallingEnv) != "0"
 }
 
 // ChatWithTools は Provider interface の実装（context対応）
@@ -60,9 +64,21 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		yellow.Fprintln(api.OutputWriterFromContext(ctx), "⚠️  Warning: Groq does not support Extended Thinking. Proceeding without it.")
 	}
 
+	reqBody := p.buildChatCompletionsRequest(ctx, systemPrompt, history, model)
+	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		StreamHandler:    p.handleStreamingResponse,
+		NonStreamHandler: p.handleNonStreamingResponse,
+	})
+}
+
+func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) openaicompat.ChatCompletionsRequest {
 	// モデル名を設定（config優先、フォールバックはkimi-k2-instruct）
 	model = api.GetDefaultModelWithContext(ctx, model, "groq", "moonshotai/kimi-k2-instruct")
-
 	options := openaicompat.ChatCompletionsRequestOptions{
 		Model:        model,
 		SystemPrompt: systemPrompt,
@@ -80,16 +96,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 	}
 
-	reqBody := openaicompat.BuildChatCompletionsRequest(options)
-	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, reqBody)
-	if err != nil {
-		return "", err
-	}
-
-	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
-		StreamHandler:    p.handleStreamingResponse,
-		NonStreamHandler: p.handleNonStreamingResponse,
-	})
+	return openaicompat.BuildChatCompletionsRequest(options)
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理

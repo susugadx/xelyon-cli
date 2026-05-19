@@ -147,6 +147,7 @@ var modelContextLimits = map[string]int{
 }
 
 var modelMaxOutputTokenPrefixes = []ModelLimit{
+	{Pattern: "llama-4-scout", Limit: 8192},
 	{Pattern: "deepseek-v4", Limit: 384000},
 }
 
@@ -179,6 +180,7 @@ var modelContextLimitPrefixes = []ModelLimit{
 	{Pattern: "deepseek-v3", Limit: 128000},
 	{Pattern: "deepseek-r1", Limit: 128000},
 	{Pattern: "deepseek-coder", Limit: 64000},
+	{Pattern: "llama-4-scout", Limit: 131072},
 	{Pattern: "llama-3", Limit: 128000},
 	{Pattern: "llama3", Limit: 8192},
 	{Pattern: "qwen", Limit: 32768},

@@ -437,7 +437,7 @@ echo password | sudo -S ...
 ### OpenAI設定 (`openai`)（内部）
 
 > **注意**: `/config` メニューには表示されません。Responses API ルーティングはプレフィックスマッチで自動判定されるため、通常は設定不要です。
-> カスタムモデルを Responses API で使いたい場合のみ、YAML 直接編集で `responses_api_models` にモデル名を追加してください。
+> カスタムモデルを Responses API で使いたい場合のみ、YAML 直接編集で `responses_api_models` にモデル名を追加してください。`doctor openai --require-capability responses_streaming` で gate する場合は、streaming 可否を判定できるよう `provider_models.openai.catalog_model` または `model_overrides.<model>.catalog_model` に実モデル名も設定してください。
 
 `gpt-5.5` は Responses API の streaming 経路で動作します。`gpt-5.5-pro` は Responses API 対応ですが streaming unsupported のため、XELYON は non-streaming 経路を使用します。GPT-5.5 Pro は cached input discount がなく、応答に数分かかる場合があります。background mode は未対応です。
 
@@ -682,7 +682,7 @@ export GROQ_API_KEY=gsk_...
 - **`web_search.provider` 設定あり**: 指定した検索プロバイダーを使用
 - **メインが非対応**: DeepSeek / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
 
-Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。Moonshot は `$web_search` call fee と token 使用量を別々に課金します。XELYON は API が返す token usage と `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。call fee は `finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合だけ観測し、`finish_reason = "stop"` で tool call がない response には加算しません。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、表示用に観測しても token totals へは二重加算しません。
+Gemini native web search は API の `usageMetadata` が返る場合、通常の token usage / cost として表示します。Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。Moonshot は `$web_search` call fee と token 使用量を別々に課金します。XELYON は API が返す token usage と `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。call fee は `finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合だけ観測し、`finish_reason = "stop"` で tool call がない response には加算しません。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、表示用に観測しても token totals へは二重加算しません。
 
 #### 設定例
 
@@ -701,7 +701,7 @@ export OPENAI_API_KEY=sk-...
 
 # Kimi / Moonshot を検索に使う場合
 export MOONSHOT_API_KEY=sk-...
-# 任意: proxy や互換 endpoint を使う場合
+# 任意: proxy や互換 endpoint を使う場合も Chat Completions まで含める
 export KIMI_API_URL=https://api.moonshot.ai/v1/chat/completions
 
 # Gemini を検索に使う場合
@@ -787,8 +787,9 @@ export XELYON_STR_REPLACE_BATCH_EXACT_LINE_STATS=1
 
 ### Function Calling（ツール呼び出し）
 
-Bedrock 以外の各プロバイダーでは Function Calling（ツール呼び出し）機能を無効化できます。
+Gemini と Bedrock 以外の各プロバイダーでは Function Calling（ツール呼び出し）機能を無効化できます。
 モデルがFunction Callingに対応していない場合や、テキストベースのツール呼び出しに戻したい場合に使用します。
+Gemini provider は native function calling を前提にし、内部の text-only request だけ request-scoped tool disable を使います。
 Bedrock provider は agent 実行で structured tool calling を必須とするため、streaming tool use が未確認または非対応の Bedrock Converse モデルは runtime supported として扱いません。
 
 ```bash
@@ -800,9 +801,6 @@ export DEEPSEEK_FUNCTION_CALLING=0
 
 # Azure OpenAI Function Calling 無効化
 export AZURE_OPENAI_FUNCTION_CALLING=0
-
-# Gemini Function Calling 無効化
-export GEMINI_FUNCTION_CALLING=0
 
 # Groq Function Calling 無効化
 export GROQ_FUNCTION_CALLING=0
@@ -822,7 +820,6 @@ export OPENROUTER_FUNCTION_CALLING=0
 | `OPENAI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `DEEPSEEK_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `AZURE_OPENAI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
-| `GEMINI_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `GROQ_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `CLAUDE_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
 | `OLLAMA_FUNCTION_CALLING` | `1`（有効） | `0` で無効化 |
@@ -841,16 +838,23 @@ xelyon --provider ollama --model phi3
 
 ```bash
 # DeepSeek
-export DEEPSEEK_API_URL=https://your-proxy.com/v1/chat/completions
+export DEEPSEEK_API_URL=https://your-proxy.com/chat/completions
+
+# Kimi (Moonshot)
+export KIMI_API_URL=https://your-proxy.com/v1/chat/completions
 
 # OpenAI
 export OPENAI_API_URL=https://your-proxy.com/v1/chat/completions
+export OPENAI_RESPONSES_URL=https://your-proxy.com/v1/responses
+
+# Azure OpenAI
+export AZURE_OPENAI_BASE_URL=https://your-proxy.com/openai/v1
 
 # Claude (Anthropic)
 export ANTHROPIC_API_URL=https://your-proxy.com/v1/messages
 
 # Gemini
-export GEMINI_API_URL=https://your-proxy.com/v1beta/models
+export GEMINI_API_URL=https://your-proxy.com/v1beta/models/YOUR_MODEL:streamGenerateContent?alt=sse
 
 # Groq
 export GROQ_API_URL=https://your-proxy.com/openai/v1/chat/completions
@@ -858,6 +862,20 @@ export GROQ_API_URL=https://your-proxy.com/openai/v1/chat/completions
 # OpenRouter
 export OPENROUTER_API_URL=https://your-proxy.com/v1/chat/completions
 ```
+
+DeepSeek の `DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 DeepSeek 互換 endpoint は `/chat/completions` で終わります。OpenAI 互換 proxy が `/v1/chat/completions` を公開する場合も指定できますが、`doctor deepseek` では意図的な proxy path として warn になります。
+
+Kimi の `KIMI_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 Moonshot endpoint は `/v1/chat/completions` で終わります。別 path の proxy endpoint も指定できますが、`doctor kimi` では意図的な proxy path として warn になります。
+
+OpenAI の `OPENAI_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 OpenAI Chat Completions endpoint は `/v1/chat/completions` で終わります。Responses API route では `OPENAI_RESPONSES_URL` が使われ、公式 endpoint は `/v1/responses` で終わります。別 path の proxy endpoint も指定できますが、`doctor openai` では意図的な proxy path として warn になり、request preview / live smoke は設定 URL をそのまま使います。
+
+Azure OpenAI の `AZURE_OPENAI_BASE_URL` は完全 endpoint ではなく resource v1 base URL です。公式 path は `/openai/v1` で、runtime / doctor smoke / request preview は `<normalized_base_url>/responses` を使います。resource root と `/openai` は `/openai/v1` に正規化されます。非標準 path の proxy も指定できますが、`doctor azure` では意図的な proxy path として warn になり、その path に `/responses` を付けた URL が使われます。
+
+Claude の `ANTHROPIC_API_URL` は Messages まで含む完全な endpoint override です。公式 Anthropic endpoint は `/v1/messages` で終わります。別 path の proxy endpoint も指定できますが、`doctor claude` では意図的な proxy path として warn になります。
+
+Groq の `GROQ_API_URL` は Chat Completions まで含む完全な endpoint override です。公式 Groq endpoint は `/openai/v1/chat/completions` で終わります。OpenAI 互換 proxy が `/v1/chat/completions` を公開する場合も指定できますが、`doctor groq` では意図的な proxy path として warn になります。
+
+OpenRouter の `OPENROUTER_API_URL` は Chat Completions endpoint または互換 proxy path を指定します。Claude 系 model で Anthropic Skin route を使う場合も `/v1/messages` は provider が派生するため、`OPENROUTER_API_URL` に直接 `/v1/messages` を指定しないでください。
 
 ## 設定ファイルの編集
 

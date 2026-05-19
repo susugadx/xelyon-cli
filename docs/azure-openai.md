@@ -24,6 +24,8 @@ export AZURE_OPENAI_AUTH_TOKEN_COMMAND='az account get-access-token --resource h
 export AZURE_OPENAI_AUTH_TOKEN_COMMAND_TIMEOUT=10s
 ```
 
+`AZURE_OPENAI_BASE_URL` は resource の v1 base URL です。resource root と `/openai` は `/openai/v1` に正規化され、XELYON は `<normalized_base_url>/responses` に Responses request を送ります。`/openai/deployments/<deployment>` や `api-version` query は入れません。会社 proxy などで非標準 path を使う場合は `doctor azure` が intentional proxy として warn し、その path に `/responses` を付けた URL を request preview / live smoke に使います。
+
 必要なら先に Azure CLI でログインします。
 
 ```bash
@@ -68,6 +70,12 @@ deployment 能力だけを live request なしで確認する場合:
 xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --capabilities
 ```
 
+必要な deployment 能力を CI などで gate する場合:
+
+```bash
+xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --require-capability responses_api --require-capability previous_response_id
+```
+
 実 deployment へ最小リクエストを送る場合:
 
 ```bash
@@ -80,7 +88,7 @@ tool payload まで確認する場合:
 xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --tool-smoke
 ```
 
-`--capabilities` は live API request を送りません。`--smoke` / `--tool-smoke` は live API request を送ります。単なる設定確認では付けないでください。
+`--capabilities` と `--require-capability` は live API request を送りません。`--require-capability` で指定できる名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`previous_response_id`、`session_persistence`、`server_compaction` です。`responses_streaming` は `catalog_model` が未解決の場合 `unknown` として fail するため、`--catalog-model` か config の `catalog_model` を指定してください。`--smoke` / `--tool-smoke` は live API request を送ります。単なる設定確認では付けないでください。
 
 ## 認証方式の優先順位
 
@@ -114,6 +122,7 @@ XELYON は次の順で Azure 認証を使います。
 
 - `AZURE_OPENAI_BASE_URL` は `https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1` 形式か
 - `AZURE_OPENAI_BASE_URL` に `/deployments/<name>` や `api-version` を含めていないか
+- proxy path を使う場合、`xelyon doctor azure --print-request` の `request_preview.requests[].url` が期待する `<proxy-path>/responses` になっているか
 - `provider_models.azure.default_model` は Azure deployment 名か
 - `provider_models.azure.catalog_model` は実モデル名か
 - Entra ID を使う場合、`AZURE_OPENAI_API_KEY` が残っていないか

@@ -284,6 +284,59 @@ func TestChatCore_PlanModeApproval_StartsImplementationWithApprovedPlan(t *testi
 	}
 }
 
+func TestChatCore_PlanModeCancel_DisablesPlanModeForNextRequest(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &planResponseContextProvider{
+		responses: []string{
+			planHandoffTestApprovedPlanResponse(planHandoffTestApprovedStep),
+			"normal response",
+		},
+	}
+	agent := newPlanRequestTestAgent(t, provider, "n\n", &out)
+	agent.PlanModeEnabled = true
+
+	if err := agent.chatCore("implement feature", nil, false); err != nil {
+		t.Fatalf("first chatCore() error = %v", err)
+	}
+	if provider.callCount != 1 {
+		t.Fatalf("provider.callCount after cancel = %d, want 1", provider.callCount)
+	}
+	if !strings.Contains(out.String(), "Plan mode cancelled. No implementation started.") {
+		t.Fatalf("expected cancel output, got %q", out.String())
+	}
+	if agent.PlanModeEnabled {
+		t.Fatal("PlanModeEnabled should be false after cancel")
+	}
+
+	firstOutputLen := out.Len()
+	if err := agent.chatCore("normal followup", nil, false); err != nil {
+		t.Fatalf("second chatCore() error = %v", err)
+	}
+	if provider.callCount != 2 {
+		t.Fatalf("provider.callCount after next request = %d, want 2", provider.callCount)
+	}
+	secondOutput := out.String()[firstOutputLen:]
+	if strings.Contains(secondOutput, "Investigation phase - researching the codebase") {
+		t.Fatalf("next request unexpectedly re-entered Plan Mode, output: %q", secondOutput)
+	}
+	if len(provider.histories) != 2 {
+		t.Fatalf("len(provider.histories) = %d, want 2", len(provider.histories))
+	}
+	nextHistory := provider.histories[1]
+	if len(nextHistory) == 0 {
+		t.Fatal("normal followup history is empty")
+	}
+	nextUserContent := nextHistory[len(nextHistory)-1].Content
+	if !strings.Contains(nextUserContent, "normal followup") {
+		t.Fatalf("next request history = %q, want normal followup", nextUserContent)
+	}
+	if strings.Contains(nextUserContent, "PLAN MODE") || strings.Contains(nextUserContent, "Investigation Phase") {
+		t.Fatalf("next request history = %q, should not contain plan investigation prompt", nextUserContent)
+	}
+}
+
 func TestChatCore_PlanModeApproval_HandoffCarriesInvestigationSummaryFieldsOnly(t *testing.T) {
 	disableColors(t)
 

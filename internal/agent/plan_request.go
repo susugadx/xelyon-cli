@@ -201,9 +201,8 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 	if approved {
 		r.approved = true
 		r.handoff = newPlanModeImplementationHandoff(r.originalUserRequest, p)
-		a.setPlanModeEnabled(false)
 		green.Fprintln(out, "✓ Plan approved. Plan Mode complete.")
-		a.setReadyForInputStatus()
+		r.exitPlanModeReview()
 		return true, nil
 	}
 
@@ -216,7 +215,16 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 	}
 
 	red.Fprintln(out, "Plan mode cancelled. No implementation started.")
+	r.exitPlanModeReview()
 	return true, nil
+}
+
+func (r *planModeRequest) exitPlanModeReview() {
+	if r == nil || r.agent == nil {
+		return
+	}
+	r.agent.setPlanModeEnabled(false)
+	r.agent.setReadyForInputStatus()
 }
 
 func (r *planModeRequest) renderPlan(p *plan.Plan) string {

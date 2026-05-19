@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -24,39 +23,8 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 		return "", err
 	}
 
-	// System prompt を system_instruction フィールドに設定（キャッシュ利用時は不要）
-	var sysInstruction *GeminiSystemInstruction
-	if cacheName == "" && systemPrompt != "" {
-		sysInstruction = &GeminiSystemInstruction{
-			Parts: []GeminiPart{{Text: systemPrompt}},
-		}
-	}
-
-	// Geminiのメッセージ構造に変換
-	var contents []GeminiContent
-
-	// 会話履歴を変換（msgsToSendを使用）
-	for _, msg := range msgsToSend {
-		role := "user"
-		if msg.Role == "assistant" {
-			role = "model"
-		}
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: msg.Content}},
-			Role:  role,
-		})
-	}
-
 	cfg := config.FromContext(ctx)
-
-	reqBody := GeminiRequest{
-		CachedContent:     cacheName,
-		SystemInstruction: sysInstruction,
-		Contents:          contents,
-	}
-
-	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
-	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfg)
+	reqBody := buildGeminiTextRequest(ctx, systemPrompt, msgsToSend, model, cacheName, cfg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -120,67 +88,8 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
 	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
 
-	// System prompt を system_instruction フィールドに設定
-	var sysInstruction *GeminiSystemInstruction
-	if systemPrompt != "" {
-		sysInstruction = &GeminiSystemInstruction{
-			Parts: []GeminiPart{{Text: systemPrompt}},
-		}
-	}
-
-	// contentsを構築
-	var contents []interface{}
-
-	// 会話履歴を変換（テキストのみ）
-	for _, msg := range history {
-		role := "user"
-		if msg.Role == "assistant" {
-			role = "model"
-		}
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: msg.Content}},
-			Role:  role,
-		})
-	}
-
-	// 画像付きユーザーメッセージを追加
-	multimodalContent := GeminiMultimodalContent{
-		Role: "user",
-		Parts: []GeminiMultimodalPart{
-			{
-				InlineData: &GeminiInlineData{
-					MimeType: image.MediaType,
-					Data:     image.Base64,
-				},
-			},
-			{
-				Text: userMessage,
-			},
-		},
-	}
-	contents = append(contents, multimodalContent)
-
 	cfgImg := config.FromContext(ctx)
-
-	reqBody := GeminiMultimodalRequest{
-		SystemInstruction: sysInstruction,
-		Contents:          contents,
-	}
-
-	// FC有効時はTools/ToolConfigを追加（画像+FC対応）
-	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
-		reqBody.Tools = GetCombinedToolDefinitionsWithContext(ctx, p.mcpTools)
-		fcMode := os.Getenv("GEMINI_FC_MODE")
-		if fcMode == "" {
-			fcMode = "AUTO"
-		}
-		reqBody.ToolConfig = &GeminiToolConfigWrapper{
-			FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: fcMode},
-		}
-	}
-
-	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
-	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfgImg)
+	reqBody := buildGeminiMultimodalRequest(ctx, systemPrompt, history, userMessage, image, model, p.mcpTools, p.IsFunctionCallingEnabled(), cfgImg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {

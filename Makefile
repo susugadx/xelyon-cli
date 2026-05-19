@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke claude-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke ollama-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -11,6 +11,15 @@ BEDROCK_SMOKE_CLAUDE_MODEL ?= global.anthropic.claude-sonnet-4-6
 BEDROCK_SMOKE_CONVERSE_MODELS ?= amazon.nova-pro-v1:0 moonshotai.kimi-k2.5
 BEDROCK_PROBE_CONVERSE_MODELS ?= us.meta.llama4-scout-17b-instruct-v1:0 us.deepseek.r1-v1:0 google.gemma-3-4b-it
 OPENAI_DOCTOR_SMOKE_MODEL ?= gpt-5.4
+DEEPSEEK_DOCTOR_SMOKE_MODEL ?= deepseek-v4-flash
+GEMINI_DOCTOR_SMOKE_MODEL ?= gemini-3.1-pro-preview-customtools
+GEMINI_DOCTOR_SMOKE_TIMEOUT ?= 180s
+CLAUDE_DOCTOR_SMOKE_MODEL ?= claude-sonnet-4-6
+CLAUDE_DOCTOR_SMOKE_TIMEOUT ?= 180s
+GROQ_DOCTOR_SMOKE_MODEL ?= meta-llama/llama-4-scout-17b-16e-instruct
+OPENROUTER_DOCTOR_SMOKE_MODEL ?= openai/gpt-5.4-mini
+KIMI_DOCTOR_SMOKE_MODEL ?= kimi-k2.6
+OLLAMA_DOCTOR_SMOKE_MODEL ?= qwen2.5-coder:7b
 
 # ビルド
 build:
@@ -175,6 +184,40 @@ azure-doctor-smoke:
 openai-doctor-smoke:
 	@test -n "$(OPENAI_API_KEY)" || { echo "OPENAI_API_KEY is required for make openai-doctor-smoke"; exit 1; }
 	go run . doctor openai --model "$(OPENAI_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke --retention-smoke
+
+# DeepSeek doctor 診断経路を実環境で確認（DEEPSEEK_API_KEY 必須）
+deepseek-doctor-smoke:
+	@test -n "$(DEEPSEEK_API_KEY)" || { echo "DEEPSEEK_API_KEY is required for make deepseek-doctor-smoke"; exit 1; }
+	go run . doctor deepseek --model "$(DEEPSEEK_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke
+
+# Gemini doctor 診断経路を実環境で確認（GEMINI_API_KEY 必須）
+gemini-doctor-smoke:
+	@test -n "$(GEMINI_API_KEY)" || { echo "GEMINI_API_KEY is required for make gemini-doctor-smoke"; exit 1; }
+	go run . doctor gemini --model "$(GEMINI_DOCTOR_SMOKE_MODEL)" --timeout "$(GEMINI_DOCTOR_SMOKE_TIMEOUT)" --smoke --tool-smoke --image-smoke --web-search-smoke
+
+# Claude doctor 診断経路を実環境で確認（ANTHROPIC_API_KEY 必須）
+claude-doctor-smoke:
+	@test -n "$(ANTHROPIC_API_KEY)" || { echo "ANTHROPIC_API_KEY is required for make claude-doctor-smoke"; exit 1; }
+	go run . doctor claude --model "$(CLAUDE_DOCTOR_SMOKE_MODEL)" --timeout "$(CLAUDE_DOCTOR_SMOKE_TIMEOUT)" --smoke --tool-smoke --image-smoke --thinking-smoke --web-search-smoke
+
+# Groq doctor 診断経路を実環境で確認（GROQ_API_KEY 必須）
+groq-doctor-smoke:
+	@test -n "$(GROQ_API_KEY)" || { echo "GROQ_API_KEY is required for make groq-doctor-smoke"; exit 1; }
+	go run . doctor groq --model "$(GROQ_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke
+
+# OpenRouter doctor 診断経路を実環境で確認（OPENROUTER_API_KEY 必須）
+openrouter-doctor-smoke:
+	@test -n "$(OPENROUTER_API_KEY)" || { echo "OPENROUTER_API_KEY is required for make openrouter-doctor-smoke"; exit 1; }
+	go run . doctor openrouter --model "$(OPENROUTER_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke
+
+# Kimi doctor 診断経路を実環境で確認（MOONSHOT_API_KEY 必須）
+kimi-doctor-smoke:
+	@test -n "$(MOONSHOT_API_KEY)" || { echo "MOONSHOT_API_KEY is required for make kimi-doctor-smoke"; exit 1; }
+	go run . doctor kimi --model "$(KIMI_DOCTOR_SMOKE_MODEL)" --catalog-model "$(KIMI_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke --image-smoke --web-search-smoke
+
+# Ollama doctor 診断経路をローカル Ollama で確認（ollama serve と pull 済みモデルが必要）
+ollama-doctor-smoke:
+	go run . doctor ollama --model "$(OLLAMA_DOCTOR_SMOKE_MODEL)" --catalog-model "$(OLLAMA_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke
 
 # Kimi native provider の実 API smoke test（MOONSHOT_API_KEY 必須）
 kimi-smoke:

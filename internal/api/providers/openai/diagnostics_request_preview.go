@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const openAIDiagnosticPreviewRetentionResponseID = "${retention_initial.response_id}"
@@ -52,13 +53,11 @@ func buildOpenAIDiagnosticRequestPreview(
 	preview := DiagnosticRequestPreview{}
 	for _, request := range openAIDiagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			preview.Requests = append(preview.Requests, DiagnosticRequestPreviewRequest{
-				Name:        request.Name,
-				Skipped:     true,
-				SkipReason:  "OpenAI function calling payloads are disabled (OPENAI_FUNCTION_CALLING=0)",
-				ToolPayload: true,
-				Route:       report.Route,
-			})
+			preview.Requests = append(preview.Requests, providerdiag.NewSkippedRoutedResponsesPreviewRequest(
+				request,
+				report.Route,
+				"OpenAI function calling payloads are disabled (OPENAI_FUNCTION_CALLING=0)",
+			))
 			continue
 		}
 		if request.RetentionPayload && report.Route == DiagnosticRouteChatCompletions {
@@ -91,33 +90,29 @@ func buildOpenAIDiagnosticRequestPreviewRequest(
 	request openAIDiagnosticSmokeRequest,
 ) DiagnosticRequestPreviewRequest {
 	history := []api.Message{{Role: "user", Content: request.UserContent}}
-	preview := DiagnosticRequestPreviewRequest{
-		Name:             request.Name,
-		ToolPayload:      request.ToolPayload,
-		RetentionPayload: request.RetentionPayload,
-		Route:            report.Route,
-		Method:           "POST",
-		Headers:          openAIDiagnosticRequestPreviewHeaders(),
-	}
 
 	if report.Route == DiagnosticRouteChatCompletions {
 		body := provider.buildChatCompletionsRequest(ctx, request.SystemPrompt, history, report.Model)
-		preview.URL = report.APIURL
-		preview.Body = body
-		return preview
+		return providerdiag.NewRoutedResponsesPreviewRequest(request, report.Route, providerdiag.RequestPreviewTransport{
+			Method:  "POST",
+			URL:     report.APIURL,
+			Headers: openAIDiagnosticRequestPreviewHeaders(),
+			Body:    body,
+		})
 	}
 
 	body := provider.buildChatResponsesRequest(ctx, request.SystemPrompt, history, report.Model)
-	preview.URL = report.ResponsesURL
-	preview.PreviousResponseID = strings.TrimSpace(body.PreviousResponseID)
-	preview.Body = body
-	return preview
+	return providerdiag.NewRoutedResponsesPreviewRequest(request, report.Route, providerdiag.RequestPreviewTransport{
+		Method:             "POST",
+		URL:                report.ResponsesURL,
+		Headers:            openAIDiagnosticRequestPreviewHeaders(),
+		PreviousResponseID: body.PreviousResponseID,
+		Body:               body,
+	})
 }
 
 func openAIDiagnosticRequestPreviewHeaders() map[string]string {
-	headers := map[string]string{
-		"Content-Type": "application/json",
-	}
+	headers := providerdiag.JSONHeaders()
 	if strings.TrimSpace(os.Getenv(openAIAPIKeyEnv)) != "" {
 		headers["Authorization"] = "Bearer <redacted>"
 	}

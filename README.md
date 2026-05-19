@@ -25,7 +25,7 @@ DeepSeek, Kimi, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, 
 ローカルLLM（Ollama）も対応で、オフラインでも使用可能。
 
 **OpenAI / Azure OpenAI Responses API 対応**: `gpt-5.3-codex` などの Codex モデルを自動検出し、Azure OpenAI は API key と Microsoft Entra ID bearer token の両方に対応。
-**プロバイダー診断**: `xelyon doctor openai --capabilities` / `xelyon doctor azure --capabilities` は model / deployment 能力を live request なしで確認し、`--smoke` は response ID / usage / cost を text / JSON に出力。
+**プロバイダー診断**: `xelyon doctor openai --capabilities` / `xelyon doctor azure --capabilities` は model / deployment 能力を live request なしで確認し、`--require-capability responses_api` で必要な capability を gate できます。`xelyon doctor deepseek` / `xelyon doctor groq` / `xelyon doctor openrouter` は Chat Completions 系の request preview と smoke を確認できます。OpenRouter は Claude 系 model で Anthropic Skin route も表示します。`--smoke` は usage / cost を text / JSON に出力し、対応 provider では response ID も表示します。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
 **Kimi Native Provider 対応**: Moonshot の Chat Completions API で `kimi-k2.6` / `kimi-k2.5` の streaming、tool calls、thinking、`reasoning_content` に対応。
 **プロバイダー別プロンプト最適化**: OpenAI / Gemini では短い実況を促し、Gemini など特定モデルのルール遵守を強化するプレフィックスを自動注入。
@@ -264,7 +264,7 @@ web_search:
 
 ```
 
-Kimi で `$web_search` が起動すると、Moonshot の call fee（`$0.005 / invocation`）が token cost とは別に発生します。XELYON は call fee を外部固定費として観測し、検索結果 tokens は次の `prompt_tokens` に含まれるため token totals へ二重加算しません。
+Gemini native web search は API の `usageMetadata` が返る場合、通常の token usage / cost として表示します。Kimi で `$web_search` が起動すると、Moonshot の call fee（`$0.005 / invocation`）が token cost とは別に発生します。XELYON は call fee を外部固定費として観測し、検索結果 tokens は次の `prompt_tokens` に含まれるため token totals へ二重加算しません。
 
 Gemini API キーは無料で取得できます: https://aistudio.google.com/apikey
 

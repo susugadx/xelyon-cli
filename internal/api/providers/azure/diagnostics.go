@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -34,6 +34,8 @@ const (
 const (
 	DiagnosticRouteResponsesStreaming    = "responses_streaming"
 	DiagnosticRouteResponsesNonStreaming = "responses_non_streaming"
+
+	diagnosticCatalogModelSourceDeploymentFallback = "deployment name fallback"
 )
 
 // DiagnosticCheck は Azure 設定診断の 1 項目を表す。
@@ -46,51 +48,16 @@ type DiagnosticCheck struct {
 }
 
 // DiagnosticSmokeUsage は Azure smoke request で観測した usage を表す。
-type DiagnosticSmokeUsage struct {
-	InputTokens         int `json:"input_tokens"`
-	OutputTokens        int `json:"output_tokens"`
-	ThinkingTokens      int `json:"thinking_tokens"`
-	CachedInputTokens   int `json:"cached_input_tokens"`
-	CacheCreationTokens int `json:"cache_creation_tokens"`
-}
+type DiagnosticSmokeUsage = providerdiag.SmokeUsage
 
 // DiagnosticSmokeCost は Azure smoke request の cost estimate を表す。
-type DiagnosticSmokeCost struct {
-	USD                float64 `json:"usd"`
-	PricingUnavailable bool    `json:"pricing_unavailable"`
-}
+type DiagnosticSmokeCost = providerdiag.SmokeCost
 
 // DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
-type DiagnosticSmokeRequestResult struct {
-	Name               string               `json:"name"`
-	Ran                bool                 `json:"ran"`
-	Skipped            bool                 `json:"skipped,omitempty"`
-	SkipReason         string               `json:"skip_reason,omitempty"`
-	ToolPayload        bool                 `json:"tool_payload"`
-	RetentionPayload   bool                 `json:"retention_payload"`
-	Content            string               `json:"content,omitempty"`
-	ResponseID         string               `json:"response_id"`
-	PreviousResponseID string               `json:"previous_response_id"`
-	Duration           string               `json:"duration,omitempty"`
-	UsageObserved      bool                 `json:"usage_observed"`
-	Usage              DiagnosticSmokeUsage `json:"usage"`
-	Cost               DiagnosticSmokeCost  `json:"cost"`
-	Error              string               `json:"error,omitempty"`
-}
+type DiagnosticSmokeRequestResult = providerdiag.ResponsesSmokeRequestResult
 
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
-type DiagnosticSmokeResult struct {
-	Ran              bool                           `json:"ran"`
-	ToolPayload      bool                           `json:"tool_payload"`
-	RetentionPayload bool                           `json:"retention_payload"`
-	Content          string                         `json:"content,omitempty"`
-	ResponseID       string                         `json:"response_id"`
-	Duration         string                         `json:"duration,omitempty"`
-	UsageObserved    bool                           `json:"usage_observed"`
-	Usage            DiagnosticSmokeUsage           `json:"usage"`
-	Cost             DiagnosticSmokeCost            `json:"cost"`
-	Requests         []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
-}
+type DiagnosticSmokeResult = providerdiag.ResponsesSmokeResult
 
 // DiagnosticRequestPreview は live request を送らずに構築した request shape を表す。
 type DiagnosticRequestPreview struct {
@@ -98,19 +65,7 @@ type DiagnosticRequestPreview struct {
 }
 
 // DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
-type DiagnosticRequestPreviewRequest struct {
-	Name               string            `json:"name"`
-	Skipped            bool              `json:"skipped,omitempty"`
-	SkipReason         string            `json:"skip_reason,omitempty"`
-	ToolPayload        bool              `json:"tool_payload"`
-	RetentionPayload   bool              `json:"retention_payload"`
-	Route              string            `json:"route,omitempty"`
-	Method             string            `json:"method,omitempty"`
-	URL                string            `json:"url,omitempty"`
-	Headers            map[string]string `json:"headers,omitempty"`
-	PreviousResponseID string            `json:"previous_response_id,omitempty"`
-	Body               any               `json:"body,omitempty"`
-}
+type DiagnosticRequestPreviewRequest = providerdiag.ResponsesRequestPreviewRequest
 
 // DiagnosticReport は Azure OpenAI の設定診断結果を表す。
 type DiagnosticReport struct {
@@ -158,26 +113,31 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は Azure 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Deployment      string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	Capabilities    bool
-	RetentionSmoke  bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Deployment           string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	Capabilities         bool
+	RetentionSmoke       bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresBaseURLCheck() bool {
-	return !o.Capabilities || o.RunSmoke || o.PrintRequest
+	return !o.hasLocalCapabilityRequest() || o.RunSmoke || o.PrintRequest
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest && (!o.Capabilities || o.RunSmoke)
+	return !o.PrintRequest && (!o.hasLocalCapabilityRequest() || o.RunSmoke)
+}
+
+func (o DiagnosticOptions) hasLocalCapabilityRequest() bool {
+	return o.Capabilities || providerdiag.HasRequiredCapabilityRequest(o.RequiredCapabilities)
 }
 
 // Diagnose は Azure OpenAI のローカル設定と、必要に応じて live smoke を検証する。
@@ -185,7 +145,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	cfg := config.CloneConfig(options.Config)
 	deployment, deploymentSource := resolveDiagnosticDeployment(cfg, options.Deployment)
 	catalogModel, catalogSource := resolveDiagnosticCatalogModel(cfg, deployment, options.CatalogModel)
-	route, routeReason := resolveDiagnosticRoute(deployment, catalogModel)
+	routeDecision := resolveDiagnosticRoute(deployment, catalogModel)
 
 	report := DiagnosticReport{
 		Provider:               "azure",
@@ -196,8 +156,8 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		DeploymentSource:       deploymentSource,
 		CatalogModel:           catalogModel,
 		CatalogModelSource:     catalogSource,
-		Route:                  route,
-		RouteReason:            routeReason,
+		Route:                  routeDecision.Route,
+		RouteReason:            routeDecision.ReasonString(),
 		FunctionCallingEnabled: os.Getenv("AZURE_OPENAI_FUNCTION_CALLING") != "0",
 		ResponsesStore:         cfg.ResponsesStoreEnabled(),
 		ResponsesPersistID:     cfg.ResponsesPersistResponseIDEnabled(),
@@ -219,6 +179,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.Capabilities {
 		report.addCapabilities(ctx, cfg)
 	}
+	report.addRequiredCapabilities(ctx, cfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, cfg, options)
 	}
@@ -246,7 +207,7 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 			"base_url",
 			fmt.Sprintf("%s is not set", baseURLEnv),
 			"",
-			fmt.Sprintf("Set %s=https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1", baseURLEnv),
+			fmt.Sprintf("Set %s=%s", baseURLEnv, azureOpenAIBaseURLExample),
 		)
 		return
 	}
@@ -258,7 +219,7 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 			"base_url",
 			fmt.Sprintf("%s is not a valid absolute URL", baseURLEnv),
 			r.BaseURL,
-			"Use the Azure OpenAI v1 base URL, for example https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1",
+			fmt.Sprintf("Use the Azure OpenAI v1 base URL, for example %s", azureOpenAIBaseURLExample),
 		)
 		return
 	}
@@ -268,7 +229,7 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 			"base_url",
 			fmt.Sprintf("%s points to the public OpenAI API, not Azure OpenAI", baseURLEnv),
 			r.BaseURL,
-			fmt.Sprintf("Set %s to your Azure OpenAI resource URL, for example https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1", baseURLEnv),
+			fmt.Sprintf("Set %s to your Azure OpenAI resource URL, for example %s", baseURLEnv, azureOpenAIBaseURLExample),
 		)
 		return
 	}
@@ -295,13 +256,13 @@ func (r *DiagnosticReport) addBaseURLChecks() {
 		)
 	}
 
-	if normalizedParsed != nil && strings.TrimRight(normalizedParsed.Path, "/") != "/openai/v1" {
+	if normalizedParsed != nil && strings.TrimRight(normalizedParsed.Path, "/") != azureOpenAIBasePath {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"base_url_path",
 			"base URL path is not the standard Azure OpenAI v1 path",
 			r.NormalizedBaseURL,
-			"Use /openai/v1 unless this endpoint is an intentional proxy",
+			fmt.Sprintf("Use %s unless this endpoint is an intentional proxy", azureOpenAIBasePath),
 		)
 	}
 
@@ -418,8 +379,7 @@ func (r *DiagnosticReport) addDeploymentCheck(cfg *config.Config, explicitDeploy
 		"",
 	)
 
-	if looksLikeOpenAICatalogModel(r.Deployment) &&
-		r.CatalogModelSource == "deployment name fallback" {
+	if looksLikeOpenAICatalogModel(r.Deployment) && r.catalogModelUsesDeploymentFallback() {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"deployment_catalog_mixup",
@@ -445,7 +405,7 @@ func (r *DiagnosticReport) addCatalogModelCheck() {
 		return
 	}
 
-	if r.CatalogModel == r.Deployment && r.CatalogModelSource == "deployment name fallback" {
+	if r.CatalogModel == r.Deployment && r.catalogModelUsesDeploymentFallback() {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_model",
@@ -509,14 +469,11 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 	}
 
 	policyCfg := diagnosticCatalogPolicyConfig(cfg, deployment, catalogModel)
-	maxOutput := diagnosticMaxOutputPolicy(policyCfg, deployment, catalogModel)
-	contextWindow, contextOK := llmcatalog.KnownModelContextLimit(catalogModel)
-	pricing := cost.GetPricingInfoForConfig(policyCfg, "azure", deployment)
-	responsesStreaming := openai.ShouldStreamResponses(catalogModel)
-	detail := diagnosticCatalogPolicyDetail(catalogModel, contextWindow, contextOK, maxOutput, pricing, responsesStreaming)
+	policy := providerdiag.AzureCatalogPolicy(policyCfg, deployment, catalogModel)
+	detail := policy.AzureDetail()
 
 	switch {
-	case !contextOK:
+	case !policy.ContextWindowKnown:
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
@@ -524,7 +481,7 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 			detail,
 			"Use an OpenAI catalog model known to XELYON, or update the model catalog before relying on token limits",
 		)
-	case !maxOutput.Available:
+	case !policy.MaxOutput.Available:
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
@@ -532,7 +489,7 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 			detail,
 			"Use an OpenAI catalog model known to XELYON, or set max_output_tokens explicitly for this deployment",
 		)
-	case pricing.PricingUnavailable:
+	case policy.Pricing.PricingUnavailable:
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
@@ -568,81 +525,6 @@ func diagnosticCatalogPolicyConfig(cfg *config.Config, deployment, catalogModel 
 	return policyCfg
 }
 
-type diagnosticMaxOutputPolicyResult struct {
-	Tokens          int
-	Source          string
-	Available       bool
-	RuntimeFallback int
-}
-
-func diagnosticMaxOutputPolicy(cfg *config.Config, deployment, catalogModel string) diagnosticMaxOutputPolicyResult {
-	if override, ok := cfg.ModelOverrideForProvider("azure", deployment); ok && override.MaxOutputTokens > 0 {
-		return diagnosticMaxOutputPolicyResult{
-			Tokens:    override.MaxOutputTokens,
-			Source:    "model_overrides",
-			Available: true,
-		}
-	}
-
-	if tokens, ok := llmcatalog.KnownMaxOutputTokens(catalogModel); ok {
-		return diagnosticMaxOutputPolicyResult{
-			Tokens:    tokens,
-			Source:    "catalog",
-			Available: true,
-		}
-	}
-
-	runtimeFallback := api.GetMaxOutputTokens(config.WithContext(context.Background(), cfg), "azure", deployment)
-	return diagnosticMaxOutputPolicyResult{
-		Source:          "missing",
-		RuntimeFallback: runtimeFallback,
-	}
-}
-
-func diagnosticCatalogPolicyDetail(
-	catalogModel string,
-	contextWindow int,
-	contextOK bool,
-	maxOutput diagnosticMaxOutputPolicyResult,
-	pricing cost.PricingInfo,
-	responsesStreaming bool,
-) string {
-	contextDetail := "unknown"
-	if contextOK {
-		contextDetail = fmt.Sprintf("%d", contextWindow)
-	}
-	return fmt.Sprintf(
-		"catalog_model=%s, context_window=%s, max_output_tokens=%s, responses_streaming=%t, %s",
-		catalogModel,
-		contextDetail,
-		diagnosticMaxOutputDetail(maxOutput),
-		responsesStreaming,
-		diagnosticPricingDetail(pricing),
-	)
-}
-
-func diagnosticMaxOutputDetail(maxOutput diagnosticMaxOutputPolicyResult) string {
-	if maxOutput.Available {
-		return fmt.Sprintf("%d (%s)", maxOutput.Tokens, maxOutput.Source)
-	}
-	if maxOutput.RuntimeFallback > 0 {
-		return fmt.Sprintf("missing (runtime_fallback=%d)", maxOutput.RuntimeFallback)
-	}
-	return "missing"
-}
-
-func diagnosticPricingDetail(pricing cost.PricingInfo) string {
-	if pricing.PricingUnavailable {
-		return "pricing=unavailable"
-	}
-	return fmt.Sprintf(
-		"pricing=input $%.2f/M cached $%.3f/M output $%.2f/M",
-		pricing.InputCostPerM,
-		pricing.CachedInputCostPerM,
-		pricing.OutputCostPerM,
-	)
-}
-
 func (r *DiagnosticReport) addFunctionCallingCheck() {
 	if r.FunctionCallingEnabled {
 		r.addCheck(
@@ -676,6 +558,27 @@ func (r *DiagnosticReport) addResponsesRetentionCheck() {
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "responses_retention", message, "", "")
+}
+
+func (r *DiagnosticReport) addRequiredCapabilities(ctx context.Context, cfg *config.Config, required []string) {
+	if !providerdiag.HasRequiredCapabilityRequest(required) {
+		return
+	}
+
+	policyCfg := diagnosticCatalogPolicyConfig(cfg, r.Deployment, r.CatalogModel)
+	snapshot := diagnosticCapabilitySnapshot(ctx, policyCfg, *r)
+	check := providerdiag.EvaluateRequiredCapabilities(snapshot, required)
+	if check.Satisfied() {
+		r.addCheck(DiagnosticStatusOK, providerdiag.RequiredCapabilityCheckName, "required Azure OpenAI capabilities are available", check.Detail(), "")
+		return
+	}
+
+	suggestion := providerdiag.RequiredCapabilityFailureSuggestion(
+		check,
+		"deployment/configuration",
+		"Set --catalog-model or provider_models.azure.catalog_model to the underlying model before requiring catalog-dependent capabilities",
+	)
+	r.addCheck(DiagnosticStatusFail, providerdiag.RequiredCapabilityCheckName, "required Azure OpenAI capabilities are missing", check.Detail(), suggestion)
 }
 
 func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -816,31 +719,36 @@ func resolveDiagnosticCatalogModel(cfg *config.Config, deployment, explicitCatal
 		}
 	}
 
-	return cfg.ModelCatalogName("azure", deployment), "deployment name fallback"
+	return cfg.ModelCatalogName("azure", deployment), diagnosticCatalogModelSourceDeploymentFallback
 }
 
-func resolveDiagnosticRoute(deployment, catalogModel string) (string, string) {
+func (r DiagnosticReport) catalogModelUsesDeploymentFallback() bool {
+	return r.CatalogModelSource == diagnosticCatalogModelSourceDeploymentFallback
+}
+
+func resolveDiagnosticRoute(deployment, catalogModel string) providerdiag.RouteDecision {
 	deployment = strings.TrimSpace(deployment)
 	catalogModel = strings.TrimSpace(catalogModel)
 	if deployment == "" {
-		return "", "deployment is not resolved"
+		return providerdiag.RouteDecision{Reasons: []string{"deployment is not resolved"}}
 	}
 
-	if openai.ShouldStreamResponses(catalogModel) {
-		return DiagnosticRouteResponsesStreaming, fmt.Sprintf("deployment=%s uses Responses API; %s", deployment, diagnosticResponsesStreamingReason(catalogModel, true))
+	if providerdiag.ShouldStreamResponsesCatalogModel(catalogModel) {
+		return providerdiag.RouteDecision{
+			Route: DiagnosticRouteResponsesStreaming,
+			Reasons: []string{
+				fmt.Sprintf("deployment=%s uses Responses API", deployment),
+				providerdiag.ResponsesStreamingReason(catalogModel, true),
+			},
+		}
 	}
-	return DiagnosticRouteResponsesNonStreaming, fmt.Sprintf("deployment=%s uses Responses API; %s", deployment, diagnosticResponsesStreamingReason(catalogModel, false))
-}
-
-func diagnosticResponsesStreamingReason(catalogModel string, streaming bool) string {
-	catalogModel = strings.TrimSpace(catalogModel)
-	if catalogModel == "" {
-		return "catalog_model is not resolved; Responses streaming defaults to enabled"
+	return providerdiag.RouteDecision{
+		Route: DiagnosticRouteResponsesNonStreaming,
+		Reasons: []string{
+			fmt.Sprintf("deployment=%s uses Responses API", deployment),
+			providerdiag.ResponsesStreamingReason(catalogModel, false),
+		},
 	}
-	if streaming {
-		return fmt.Sprintf("catalog_model=%s supports Responses streaming", catalogModel)
-	}
-	return fmt.Sprintf("catalog_model=%s disables Responses streaming", catalogModel)
 }
 
 func isUnconfiguredPlaceholderDeployment(cfg *config.Config, deployment, explicitDeployment string) bool {
@@ -916,19 +824,19 @@ func runDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diagnost
 
 	for _, request := range diagnosticSmokeRequests(options, report.FunctionCallingEnabled) {
 		if request.ToolPayload && !report.FunctionCallingEnabled {
-			result.Requests = append(result.Requests, DiagnosticSmokeRequestResult{
-				Name:        request.Name,
-				Skipped:     true,
-				SkipReason:  "Azure OpenAI function calling payloads are disabled (AZURE_OPENAI_FUNCTION_CALLING=0)",
-				ToolPayload: true,
-			})
+			providerdiag.AddResponsesSmokeRequestResult(
+				&result,
+				providerdiag.NewSkippedResponsesSmokeRequest(
+					request,
+					"Azure OpenAI function calling payloads are disabled (AZURE_OPENAI_FUNCTION_CALLING=0)",
+				),
+			)
 			continue
 		}
 
 		requestCfg := diagnosticSmokeRequestConfig(baseSmokeCfg, request)
 		requestResult, err := runDiagnosticSmokeRequest(smokeCtx, requestCfg, provider, report, request, output)
-		result.Requests = append(result.Requests, requestResult)
-		result.addRequestObservation(requestResult)
+		providerdiag.AddResponsesSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
 			return result, err
@@ -938,13 +846,7 @@ func runDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Diagnost
 	return result, nil
 }
 
-type diagnosticSmokeRequest struct {
-	Name             string
-	SystemPrompt     string
-	UserContent      string
-	ToolPayload      bool
-	RetentionPayload bool
-}
+type diagnosticSmokeRequest = providerdiag.ResponsesSmokeRequest
 
 func diagnosticSmokeRequests(options DiagnosticOptions, functionCallingEnabled bool) []diagnosticSmokeRequest {
 	textSmoke := options.TextSmoke || (!options.ToolSmoke && !options.RetentionSmoke)
@@ -1047,8 +949,8 @@ func runDiagnosticSmokeRequest(
 		PreviousResponseID: previousResponseID,
 		Duration:           elapsed.String(),
 		UsageObserved:      usageObserved,
-		Usage:              diagnosticSmokeUsage(usage),
-		Cost:               diagnosticSmokeCost(costEstimate),
+		Usage:              providerdiag.SmokeUsageFromAPIUsage(usage),
+		Cost:               providerdiag.SmokeCostFromEstimate(costEstimate),
 	}
 	if err != nil {
 		result.Error = err.Error()
@@ -1066,7 +968,7 @@ func runDiagnosticSmokeRequest(
 		return result, nil
 	}
 	if request.ToolPayload {
-		if !diagnosticSmokeContentHasToolCall(content) {
+		if !providerdiag.ContentHasToolCall(content, diagnosticSmokeToolName) {
 			result.Error = fmt.Sprintf("tool smoke response did not include %s function_call", diagnosticSmokeToolName)
 			return result, fmt.Errorf("%s", result.Error)
 		}
@@ -1172,77 +1074,6 @@ func runDiagnosticSmokeResponsesRequest(
 	})
 }
 
-func (r *DiagnosticSmokeResult) addRequestObservation(request DiagnosticSmokeRequestResult) {
-	if request.Skipped {
-		return
-	}
-	if request.ToolPayload {
-		r.ToolPayload = true
-	}
-	if request.RetentionPayload {
-		r.RetentionPayload = true
-	}
-	if strings.TrimSpace(r.Content) == "" {
-		r.Content = request.Content
-	}
-	if strings.TrimSpace(r.ResponseID) == "" {
-		r.ResponseID = request.ResponseID
-	}
-
-	var usage api.Usage
-	usage.InputTokens = request.Usage.InputTokens
-	usage.OutputTokens = request.Usage.OutputTokens
-	usage.ThinkingTokens = request.Usage.ThinkingTokens
-	usage.CachedInputTokens = request.Usage.CachedInputTokens
-	usage.CacheCreationTokens = request.Usage.CacheCreationTokens
-
-	var current api.Usage
-	current.InputTokens = r.Usage.InputTokens
-	current.OutputTokens = r.Usage.OutputTokens
-	current.ThinkingTokens = r.Usage.ThinkingTokens
-	current.CachedInputTokens = r.Usage.CachedInputTokens
-	current.CacheCreationTokens = r.Usage.CacheCreationTokens
-	current.Add(usage)
-	r.Usage = diagnosticSmokeUsage(current)
-	if request.Cost.PricingUnavailable {
-		r.Cost.PricingUnavailable = true
-	} else {
-		r.Cost.USD += request.Cost.USD
-	}
-	r.UsageObserved = r.allRanRequestsObservedUsage()
-}
-
-func (r *DiagnosticSmokeResult) allRanRequestsObservedUsage() bool {
-	observedAnyRequest := false
-	for _, request := range r.Requests {
-		if request.Skipped || !request.Ran {
-			continue
-		}
-		observedAnyRequest = true
-		if !request.UsageObserved {
-			return false
-		}
-	}
-	return observedAnyRequest
-}
-
-func diagnosticSmokeUsage(usage api.Usage) DiagnosticSmokeUsage {
-	return DiagnosticSmokeUsage{
-		InputTokens:         usage.InputTokens,
-		OutputTokens:        usage.OutputTokens,
-		ThinkingTokens:      usage.ThinkingTokens,
-		CachedInputTokens:   usage.CachedInputTokens,
-		CacheCreationTokens: usage.CacheCreationTokens,
-	}
-}
-
-func diagnosticSmokeCost(estimate cost.CostEstimate) DiagnosticSmokeCost {
-	return DiagnosticSmokeCost{
-		USD:                estimate.Cost,
-		PricingUnavailable: estimate.PricingUnavailable,
-	}
-}
-
 const diagnosticSmokeToolName = "xelyon_azure_doctor_probe"
 
 func diagnosticSmokeToolDefinitions() []api.ToolDefinition {
@@ -1255,8 +1086,4 @@ func diagnosticSmokeToolDefinitions() []api.ToolDefinition {
 			"properties":           map[string]interface{}{},
 		},
 	}}
-}
-
-func diagnosticSmokeContentHasToolCall(content string) bool {
-	return strings.Contains(content, `"tool":"`+diagnosticSmokeToolName+`"`)
 }

@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -12,20 +13,28 @@ import (
 func init() {
 	api.RegisterProvider("claude", func(apiKey string) (api.Provider, error) {
 		if apiKey == "" {
-			return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
+			return nil, fmt.Errorf("%s not set", anthropicAPIKeyEnv)
 		}
 		return newProvider(apiKey, "claude"), nil
 	})
 	// anthropic エイリアス
 	api.RegisterProvider("anthropic", func(apiKey string) (api.Provider, error) {
 		if apiKey == "" {
-			return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
+			return nil, fmt.Errorf("%s not set", anthropicAPIKeyEnv)
 		}
 		return newProvider(apiKey, "anthropic"), nil
 	})
 }
 
-const defaultClaudeURL = "https://api.anthropic.com/v1/messages"
+const (
+	claudeMessagesEndpointPath = "/v1/messages"
+	defaultClaudeURL           = "https://api.anthropic.com" + claudeMessagesEndpointPath
+	defaultClaudeModel         = "claude-sonnet-4-6"
+	anthropicAPIKeyEnv         = "ANTHROPIC_API_KEY"
+	anthropicAPIURLEnv         = "ANTHROPIC_API_URL"
+	claudeFunctionCallEnv      = "CLAUDE_FUNCTION_CALLING"
+	defaultAnthropicVersion    = "2023-06-01"
+)
 
 const (
 	compactEditType             = "compact_20260112"
@@ -41,6 +50,7 @@ const (
 type Provider struct {
 	api.BaseProvider
 	mcpTools          []api.ToolDefinition // MCP ツール定義（Tool Use用）
+	toolChoice        *string              // tool_choice 強制用
 	usageCallback     api.UsageCallback    // トークン使用量コールバック
 	runtimeConfig     *config.Config
 	configKey         string
@@ -151,7 +161,7 @@ func New(apiKey string) *Provider {
 
 func newProvider(apiKey, configKey string) *Provider {
 	return &Provider{
-		BaseProvider: api.NewBaseProvider("Claude", apiKey, defaultClaudeURL, "ANTHROPIC_API_URL"),
+		BaseProvider: api.NewBaseProvider("Claude", apiKey, defaultClaudeURL, anthropicAPIURLEnv),
 		configKey:    config.NormalizeProviderName(configKey),
 	}
 }
@@ -201,7 +211,11 @@ func (p *Provider) SupportsImages() bool {
 
 // IsFunctionCallingEnabled は Function Calling が有効かを返す
 func (p *Provider) IsFunctionCallingEnabled() bool {
-	return true
+	return claudeFunctionCallingEnabled()
+}
+
+func claudeFunctionCallingEnabled() bool {
+	return os.Getenv(claudeFunctionCallEnv) != "0"
 }
 
 // SupportsClaudeCompaction は Claude Compaction 対応を返す
@@ -256,7 +270,7 @@ func (p *Provider) supportsClaudeCompactionWithConfig(cfg *config.Config, model 
 		model = cfg.GetEffectiveModelForProvider(providerKey)
 	}
 	if model == "" {
-		model = "claude-sonnet-4-6"
+		model = defaultClaudeModel
 	}
 	return isCompactionSupported(cfg.ModelCatalogName(providerKey, model))
 }
@@ -269,6 +283,16 @@ func buildContextManagementForModel(model string, compression config.Compression
 
 func (p *Provider) SetMCPTools(tools []api.ToolDefinition) {
 	p.mcpTools = tools
+}
+
+// SetToolChoice は tool_choice を設定する。
+func (p *Provider) SetToolChoice(name string) {
+	p.toolChoice = &name
+}
+
+// ClearToolChoice は tool_choice をクリアする。
+func (p *Provider) ClearToolChoice() {
+	p.toolChoice = nil
 }
 
 // SetUsageCallback は使用量レポートのコールバックを設定する

@@ -169,6 +169,99 @@ func TestDiagnoseOpenAI_CapabilitiesShowChatCompletionsLimitations(t *testing.T)
 	}
 }
 
+func TestDiagnoseOpenAI_RequiredCapabilitiesDoNotRequireAPIKey(t *testing.T) {
+	t.Setenv(openAIAPIKeyEnv, "")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, "")
+	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:               config.DefaultConfig(),
+		Model:                "corp-openai-deployment",
+		CatalogModel:         "gpt-5.4",
+		RequiredCapabilities: []string{"responses_api", "previous_response_id", "server_compaction"},
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want local required capability check to pass without API key: %#v", report.Checks)
+	}
+	if _, ok := openAIDiagnosticCheckByName(report, "auth"); ok {
+		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
+	}
+	if report.Capabilities != nil {
+		t.Fatalf("Capabilities = %#v, want nil without --capabilities", report.Capabilities)
+	}
+	check, ok := openAIDiagnosticCheckByName(report, "required_capability")
+	if !ok || check.Status != DiagnosticStatusOK {
+		t.Fatalf("required_capability check = %#v, %v; want ok", check, ok)
+	}
+	for _, want := range []string{"responses_api=ok", "previous_response_id=ok", "server_compaction=ok"} {
+		if !strings.Contains(check.Detail, want) {
+			t.Fatalf("required_capability detail = %q, want %q", check.Detail, want)
+		}
+	}
+}
+
+func TestDiagnoseOpenAI_RequiredCapabilityFailsWhenMissing(t *testing.T) {
+	t.Setenv(openAIAPIKeyEnv, "")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:               config.DefaultConfig(),
+		Model:                "gpt-5.5-pro",
+		CatalogModel:         "gpt-5.5-pro",
+		RequiredCapabilities: []string{"responses_streaming"},
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want missing required capability failure: %#v", report.Checks)
+	}
+	if _, ok := openAIDiagnosticCheckByName(report, "auth"); ok {
+		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
+	}
+	check, ok := openAIDiagnosticCheckByName(report, "required_capability")
+	if !ok || check.Status != DiagnosticStatusFail {
+		t.Fatalf("required_capability check = %#v, %v; want fail", check, ok)
+	}
+	if !strings.Contains(check.Detail, "responses_streaming=missing") {
+		t.Fatalf("required_capability detail = %q, want missing streaming", check.Detail)
+	}
+}
+
+func TestDiagnoseOpenAI_RequiredCapabilityStreamingUnknownForCustomResponsesModelWithoutCatalogModel(t *testing.T) {
+	t.Setenv(openAIAPIKeyEnv, "")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, "")
+
+	cfg := config.DefaultConfig()
+	cfg.OpenAI.ResponsesAPIModels = append(cfg.OpenAI.ResponsesAPIModels, "corp-gpt55-pro-alias")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:               cfg,
+		Model:                "corp-gpt55-pro-alias",
+		RequiredCapabilities: []string{"responses_streaming"},
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want unknown required capability failure: %#v", report.Checks)
+	}
+	if _, ok := openAIDiagnosticCheckByName(report, "auth"); ok {
+		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
+	}
+	modelCheck, ok := openAIDiagnosticCheckByName(report, "model")
+	if !ok || modelCheck.Status != DiagnosticStatusWarn {
+		t.Fatalf("model check = %#v, %v; want unresolved catalog warning", modelCheck, ok)
+	}
+	check, ok := openAIDiagnosticCheckByName(report, "required_capability")
+	if !ok || check.Status != DiagnosticStatusFail {
+		t.Fatalf("required_capability check = %#v, %v; want fail", check, ok)
+	}
+	if !strings.Contains(check.Detail, "responses_streaming=unknown") {
+		t.Fatalf("required_capability detail = %q, want unknown streaming", check.Detail)
+	}
+	if !strings.Contains(check.Suggestion, "--catalog-model") {
+		t.Fatalf("required_capability suggestion = %q, want catalog model guidance", check.Suggestion)
+	}
+}
+
 func TestDiagnoseOpenAI_FunctionCallingDisabled(t *testing.T) {
 	t.Setenv(openAIAPIKeyEnv, "sk-test")
 	t.Setenv(openAIAPIURLEnv, "")

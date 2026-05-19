@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 // DiagnosticStatus は OpenAI 診断チェックの結果を表す。
@@ -35,53 +36,16 @@ type DiagnosticCheck struct {
 }
 
 // DiagnosticSmokeUsage は OpenAI smoke request で観測した usage を表す。
-type DiagnosticSmokeUsage struct {
-	InputTokens         int `json:"input_tokens"`
-	OutputTokens        int `json:"output_tokens"`
-	ThinkingTokens      int `json:"thinking_tokens"`
-	CachedInputTokens   int `json:"cached_input_tokens"`
-	CacheCreationTokens int `json:"cache_creation_tokens"`
-}
+type DiagnosticSmokeUsage = providerdiag.SmokeUsage
 
 // DiagnosticSmokeCost は OpenAI smoke request の cost estimate を表す。
-type DiagnosticSmokeCost struct {
-	USD                float64 `json:"usd"`
-	PricingUnavailable bool    `json:"pricing_unavailable"`
-}
+type DiagnosticSmokeCost = providerdiag.SmokeCost
 
 // DiagnosticSmokeRequestResult は live smoke の request 単位の結果を表す。
-type DiagnosticSmokeRequestResult struct {
-	Name               string               `json:"name"`
-	Ran                bool                 `json:"ran"`
-	Skipped            bool                 `json:"skipped,omitempty"`
-	SkipReason         string               `json:"skip_reason,omitempty"`
-	ToolPayload        bool                 `json:"tool_payload"`
-	RetentionPayload   bool                 `json:"retention_payload"`
-	Route              string               `json:"route"`
-	Content            string               `json:"content,omitempty"`
-	ResponseID         string               `json:"response_id"`
-	PreviousResponseID string               `json:"previous_response_id"`
-	Duration           string               `json:"duration,omitempty"`
-	UsageObserved      bool                 `json:"usage_observed"`
-	Usage              DiagnosticSmokeUsage `json:"usage"`
-	Cost               DiagnosticSmokeCost  `json:"cost"`
-	Error              string               `json:"error,omitempty"`
-}
+type DiagnosticSmokeRequestResult = providerdiag.RoutedResponsesSmokeRequestResult
 
 // DiagnosticSmokeResult は live smoke 実行の結果を表す。
-type DiagnosticSmokeResult struct {
-	Ran              bool                           `json:"ran"`
-	ToolPayload      bool                           `json:"tool_payload"`
-	RetentionPayload bool                           `json:"retention_payload"`
-	Route            string                         `json:"route"`
-	Content          string                         `json:"content,omitempty"`
-	ResponseID       string                         `json:"response_id"`
-	Duration         string                         `json:"duration,omitempty"`
-	UsageObserved    bool                           `json:"usage_observed"`
-	Usage            DiagnosticSmokeUsage           `json:"usage"`
-	Cost             DiagnosticSmokeCost            `json:"cost"`
-	Requests         []DiagnosticSmokeRequestResult `json:"requests,omitempty"`
-}
+type DiagnosticSmokeResult = providerdiag.RoutedResponsesSmokeResult
 
 // DiagnosticRequestPreview は live request を送らずに構築した request shape を表す。
 type DiagnosticRequestPreview struct {
@@ -89,19 +53,7 @@ type DiagnosticRequestPreview struct {
 }
 
 // DiagnosticRequestPreviewRequest は doctor smoke request 単位の request preview を表す。
-type DiagnosticRequestPreviewRequest struct {
-	Name               string            `json:"name"`
-	Skipped            bool              `json:"skipped,omitempty"`
-	SkipReason         string            `json:"skip_reason,omitempty"`
-	ToolPayload        bool              `json:"tool_payload"`
-	RetentionPayload   bool              `json:"retention_payload"`
-	Route              string            `json:"route"`
-	Method             string            `json:"method,omitempty"`
-	URL                string            `json:"url,omitempty"`
-	Headers            map[string]string `json:"headers,omitempty"`
-	PreviousResponseID string            `json:"previous_response_id,omitempty"`
-	Body               any               `json:"body,omitempty"`
-}
+type DiagnosticRequestPreviewRequest = providerdiag.RoutedResponsesRequestPreviewRequest
 
 // DiagnosticReport は OpenAI の設定診断結果を表す。
 type DiagnosticReport struct {
@@ -150,22 +102,27 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は OpenAI 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	Capabilities    bool
-	RetentionSmoke  bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	Capabilities         bool
+	RetentionSmoke       bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest && (!o.Capabilities || o.RunSmoke)
+	return !o.PrintRequest && (!o.hasLocalCapabilityRequest() || o.RunSmoke)
+}
+
+func (o DiagnosticOptions) hasLocalCapabilityRequest() bool {
+	return o.Capabilities || providerdiag.HasRequiredCapabilityRequest(o.RequiredCapabilities)
 }
 
 // Diagnose は OpenAI のローカル設定と、必要に応じて live smoke を検証する。
@@ -187,7 +144,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModel:               catalogModel,
 		CatalogModelSource:         catalogSource,
 		Route:                      routeResolution.Route,
-		RouteReason:                routeResolution.Reason,
+		RouteReason:                routeResolution.ReasonString(),
 		MaxOutputTokens:            api.GetMaxOutputTokens(configCtx, "openai", model),
 		ContextWindowTokens:        contextWindow,
 		FunctionCallingEnabled:     New("diagnostic-key").IsFunctionCallingEnabled(),
@@ -210,6 +167,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.Capabilities {
 		report.addCapabilities(configCtx, policyCfg)
 	}
+	report.addRequiredCapabilities(configCtx, policyCfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

@@ -151,7 +151,7 @@ func (p *Provider) ShouldSkipLocalAutoCompressionForServerCompaction() bool {
 }
 
 func (p *Provider) responsesURL() string {
-	return joinEndpoint(p.APIURL, "responses")
+	return joinEndpoint(p.APIURL, azureOpenAIResponsesEndpoint)
 }
 
 func azureModelIdentity(ctx context.Context, model string) modelIdentity {

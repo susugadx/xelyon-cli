@@ -94,6 +94,44 @@ func TestPlanModeRequest_HandleInvestigationResult_PlanApprovalCreatesHandoff(t 
 	}
 }
 
+func TestPlanModeRequest_HandleInvestigationResult_CancelExitsPlanMode(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newPlanRequestTestAgent(t, &mockProvider{name: "test"}, "n\n", &out)
+	agent.PlanModeEnabled = true
+	req := newPlanModeRequest(agent, context.Background(), "implement feature")
+	p := &plan.Plan{
+		Summary: "Ship a small change",
+		Steps: []plan.PlanStep{{
+			ID:          1,
+			Description: "Update the target file",
+			Tools:       []string{"str_replace"},
+			Files:       []string{"internal/agent/plan_request.go"},
+		}},
+	}
+
+	handled, err := req.handleInvestigationResult(p)
+	if err != nil {
+		t.Fatalf("handleInvestigationResult() error = %v", err)
+	}
+	if !handled {
+		t.Fatal("handleInvestigationResult() handled = false, want true")
+	}
+	if !strings.Contains(out.String(), "Plan mode cancelled. No implementation started.") {
+		t.Fatalf("expected cancel output, got %q", out.String())
+	}
+	if req.handoff != nil {
+		t.Fatal("cancelled plan should not create implementation handoff")
+	}
+	if agent.PlanModeEnabled {
+		t.Fatal("PlanModeEnabled should be false after cancel")
+	}
+	if status := agent.statusRef().getStatus(); status.State != StateWaitingInput {
+		t.Fatalf("status.State = %q, want %q", status.State, StateWaitingInput)
+	}
+}
+
 func TestPlanModeRequest_Run_PlanApprovalReturnsHandoffWithoutExecutingIt(t *testing.T) {
 	disableColors(t)
 

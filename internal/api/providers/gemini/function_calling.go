@@ -32,13 +32,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	// ツール定義を事前に取得（キャッシュにも含めるため）
 	toolDefs := GetCombinedToolDefinitionsWithContext(ctx, p.mcpTools)
-	fcMode := os.Getenv("GEMINI_FC_MODE")
-	if fcMode == "" {
-		fcMode = "AUTO"
-	}
-	toolCfg := &GeminiToolConfigWrapper{
-		FunctionCallingConfig: GeminiFunctionCallingConfig{Mode: fcMode},
-	}
+	toolCfg := newGeminiToolConfig(geminiFunctionCallingMode(ctx))
 
 	// キャッシュ管理（ツール定義もキャッシュに含める）
 	cacheName, msgsToSend, err := p.updateOrUseCache(ctx, systemPrompt, history, model, toolDefs, toolCfg)
@@ -47,26 +41,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	}
 
 	cfg := config.FromContext(ctx)
-
-	// Function Calling 用リクエストを構築
-	reqBody := GeminiRequestWithTools{
-		Contents: geminiFunctionHistoryContents(msgsToSend, includeEmptyTextHistoryPart),
-	}
-	if cacheName != "" {
-		// キャッシュ使用時: system_instruction, tools, tool_config はキャッシュに含まれているため除外
-		reqBody.CachedContent = cacheName
-	} else {
-		if systemPrompt != "" {
-			reqBody.SystemInstruction = &GeminiSystemInstruction{
-				Parts: []GeminiPart{{Text: systemPrompt}},
-			}
-		}
-		reqBody.Tools = toolDefs
-		reqBody.ToolConfig = toolCfg
-	}
-
-	// Thinking 設定（Gemini 3 vs 2.5 で自動分岐）
-	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfg)
+	reqBody := buildGeminiFunctionCallingRequest(ctx, systemPrompt, msgsToSend, model, cacheName, toolDefs, toolCfg, cfg)
 
 	if debug && reqBody.GenerationConfig != nil && reqBody.GenerationConfig.ThinkingConfig != nil {
 		tc := reqBody.GenerationConfig.ThinkingConfig

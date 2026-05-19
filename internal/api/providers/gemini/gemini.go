@@ -90,10 +90,9 @@ func (p *Provider) SupportsImages() bool {
 	return true
 }
 
-// IsFunctionCallingEnabled は Function Calling が有効かを返す
-// GEMINI_FUNCTION_CALLING=0 で無効化可能
+// IsFunctionCallingEnabled は Function Calling が有効かを返す。
 func (p *Provider) IsFunctionCallingEnabled() bool {
-	return os.Getenv("GEMINI_FUNCTION_CALLING") != "0"
+	return true
 }
 
 // SetUsageCallback は使用量レポートのコールバックを設定する
@@ -241,19 +240,18 @@ func isNetworkTimeout(err error) bool {
 }
 
 // ChatWithTools は Provider interface の実装（context対応）
-// GEMINI_FUNCTION_CALLING=0の場合のみテキストモードを使用
 // MCPツールもFunction Calling経由で呼び出される
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	// デバッグモード
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	errOut := api.ErrorWriterFromContext(ctx)
 
-	// 環境変数と request mode で Function Calling を制御（デフォルト: 有効）
+	// request mode で Function Calling を制御（デフォルト: 有効）
 	useFunctionCalling := api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled())
 
 	if debug {
-		fmt.Fprintf(errOut, "[DEBUG Gemini] GEMINI_FUNCTION_CALLING=%q, toolUseDisabled=%v, useFunctionCalling=%v, mcpTools=%d\n",
-			os.Getenv("GEMINI_FUNCTION_CALLING"), api.IsToolUseDisabled(ctx), useFunctionCalling, len(p.mcpTools))
+		fmt.Fprintf(errOut, "[DEBUG Gemini] toolUseDisabled=%v, useFunctionCalling=%v, mcpTools=%d\n",
+			api.IsToolUseDisabled(ctx), useFunctionCalling, len(p.mcpTools))
 	}
 
 	if useFunctionCalling {
@@ -339,8 +337,6 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	if debug {
 		if api.IsToolUseDisabled(ctx) {
 			fmt.Fprintln(errOut, "[DEBUG Gemini] Mode: TextMode (tool use disabled for request)")
-		} else {
-			fmt.Fprintln(errOut, "[DEBUG Gemini] Mode: TextMode (GEMINI_FUNCTION_CALLING=0)")
 		}
 	}
 	return p.chatWithTextMode(ctx, systemPrompt, history, model)

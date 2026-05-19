@@ -112,42 +112,14 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		yellow.Fprintln(api.OutputWriterFromContext(ctx), "⚠️  Note: Extended Thinking depends on your model (use R1/QwQ for best results).")
 	}
 
-	// モデル名を設定（config優先、フォールバックはllama3）
-	model = api.GetDefaultModelWithContext(ctx, model, "ollama", "llama3")
+	build := p.buildChatRequest(ctx, systemPrompt, history, model)
 
-	// メッセージ構築
-	messages := []api.Message{
-		{Role: "system", Content: systemPrompt},
-	}
-	messages = append(messages, history...)
-
-	reqBody := OllamaRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   true,
-		Options: &OllamaOptions{
-			NumPredict: api.GetMaxOutputTokens(ctx, "ollama", model),
-		},
-	}
-
-	// Function Calling: ツール定義を追加（環境変数で無効化可能）
-	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
-		reqBody.Tools = openai.GetCombinedOpenAIToolsWithContext(ctx, p.mcpTools)
-		reqBody.ToolChoice = "auto"
-
-		// tool_choice 強制設定がある場合
-		if p.toolChoice != nil {
-			reqBody.ToolChoice = *p.toolChoice
-		}
-	}
-
-	jsonBody, err := json.Marshal(reqBody)
+	jsonBody, err := json.Marshal(build.Request)
 	if err != nil {
 		return "", err
 	}
 
-	url := p.baseURL + "/api/chat"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", build.URL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return "", err
 	}

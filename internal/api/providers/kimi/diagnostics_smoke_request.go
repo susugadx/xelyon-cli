@@ -9,25 +9,14 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, provider *Provider, model string, request kimiDiagnosticSmokeRequest, output io.Writer) (DiagnosticSmokeRequestResult, error) {
 	requestCfg := config.CloneConfig(cfg)
 	requestCfg.Thinking.Enabled = request.Thinking
-	requestCtx := newKimiDiagnosticContext(ctx, requestCfg, request.Thinking, output)
-	if request.SessionID != "" {
-		requestCtx = api.WithPromptCacheScope(requestCtx, api.PromptCacheScope{SessionID: request.SessionID})
-	}
-	if request.ToolPayload {
-		requestCtx = api.WithToolDefinitions(requestCtx, diagnosticSmokeToolDefinitions())
-		provider.SetToolChoice(diagnosticSmokeToolName)
-	} else {
-		requestCtx = api.WithToolDefinitions(requestCtx, nil)
-		provider.ClearToolChoice()
-	}
-	provider.SetMCPTools(nil)
-	provider.setDiagnosticFunctionCalling(request.ToolPayload)
+	requestCtx := newKimiDiagnosticSmokeRequestContext(ctx, requestCfg, provider, request, output)
 
 	var usage api.Usage
 	endpointUsageObserved := false
@@ -74,22 +63,40 @@ func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, prov
 		err = fmt.Errorf("%s smoke response content is empty", request.Name)
 	}
 
-	usageObservation := diagnosticUsageObservation(usage)
-	return DiagnosticSmokeRequestResult{
-		Name:                     request.Name,
-		Content:                  strings.TrimSpace(content),
-		Duration:                 elapsed.String(),
-		UsageObserved:            endpointUsageObserved,
-		Usage:                    usageObservation,
-		PromptCacheKeyPresent:    strings.TrimSpace(promptCacheKey) != "",
-		PromptCacheKey:           promptCacheKey,
-		ImagePayload:             request.ImagePayload,
-		WebSearchPayload:         request.WebSearchPayload,
-		WebSearchCallCount:       usageObservation.WebSearchCallCount,
-		WebSearchCallFeeEstimate: usageObservation.WebSearchCallFeeEstimate,
-		WebSearchUsageObserved:   usageObservation.webSearchUsageObserved(),
-		SearchResultTotalTokens:  usageObservation.SearchResultTotalTokens,
-	}, err
+	usageObservation := providerdiag.KimiSmokeUsageFromAPIUsage(usage)
+	result := providerdiag.NewKimiSmokeRequestResult(request.kimiSmokeRequest())
+	result.Ran = true
+	result.Content = strings.TrimSpace(content)
+	result.Duration = elapsed.String()
+	result.UsageObserved = endpointUsageObserved
+	result.Usage = usageObservation
+	result.PromptCacheKeyPresent = strings.TrimSpace(promptCacheKey) != ""
+	result.PromptCacheKey = promptCacheKey
+	result.WebSearchCallCount = usageObservation.WebSearchCallCount
+	result.WebSearchCallFeeEstimate = usageObservation.WebSearchCallFeeEstimate
+	result.WebSearchUsageObserved = usageObservation.WebSearchUsageObserved()
+	result.SearchResultTotalTokens = usageObservation.SearchResultTotalTokens
+	if err != nil {
+		result.Error = err.Error()
+	}
+	return result, err
+}
+
+func newKimiDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, provider *Provider, request kimiDiagnosticSmokeRequest, output io.Writer) context.Context {
+	requestCtx := newKimiDiagnosticContext(ctx, cfg, request.Thinking, output)
+	if request.SessionID != "" {
+		requestCtx = api.WithPromptCacheScope(requestCtx, api.PromptCacheScope{SessionID: request.SessionID})
+	}
+	if request.ToolPayload {
+		requestCtx = api.WithToolDefinitions(requestCtx, diagnosticSmokeToolDefinitions())
+		provider.SetToolChoice(diagnosticSmokeToolName)
+	} else {
+		requestCtx = api.WithToolDefinitions(requestCtx, nil)
+		provider.ClearToolChoice()
+	}
+	provider.SetMCPTools(nil)
+	provider.setDiagnosticFunctionCalling(request.ToolPayload)
+	return requestCtx
 }
 
 func kimiDiagnosticImage() *api.ImageData {

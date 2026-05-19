@@ -110,10 +110,11 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
+	route := p.routePlanForRequest(cfg, model)
 
 	// Claude モデルで context_management が有効なら Anthropic Skin エンドポイントを使用
-	if shouldUseOpenRouterClaudeAPI(model, cfg.Compression) {
-		return p.chatWithClaudeAPI(ctx, systemPrompt, history, "", model, nil)
+	if route.usesAnthropicMessages() {
+		return p.chatWithClaudeAPI(ctx, systemPrompt, history, "", model, nil, route)
 	}
 
 	if api.IsThinkingEnabled(ctx) {
@@ -136,9 +137,10 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 
 	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
+	route := p.routePlanForRequest(cfg, model)
 
-	if shouldUseOpenRouterClaudeAPI(model, cfg.Compression) {
-		return p.chatWithClaudeAPI(ctx, systemPrompt, history, userMessage, model, image)
+	if route.usesAnthropicMessages() {
+		return p.chatWithClaudeAPI(ctx, systemPrompt, history, userMessage, model, image, route)
 	}
 
 	return p.chatWithImageRequest(ctx, systemPrompt, history, userMessage, image, model)

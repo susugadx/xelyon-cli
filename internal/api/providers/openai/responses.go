@@ -10,8 +10,6 @@ import (
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 )
 
-const defaultOpenAIResponsesURL = "https://api.openai.com/v1/responses"
-
 // isCodexModel は Codex モデルかどうかを判定
 // Codex モデルは reasoning が必須（"none" 非サポート）
 func isCodexModel(model string) bool {

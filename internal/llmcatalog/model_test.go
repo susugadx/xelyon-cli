@@ -102,6 +102,34 @@ func TestKnownModelNamesForProvider_IncludesGPT53CodexForOpenAIProviders(t *test
 	}
 }
 
+func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
+	tests := []struct {
+		provider string
+		model    string
+		want     bool
+	}{
+		{provider: "groq", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: true},
+		{provider: "groq", model: "llama-3.2-11b-vision-preview", want: true},
+		{provider: "groq", model: "gpt-5.4", want: false},
+		{provider: "deepseek", model: "deepseek-v4-custom", want: true},
+		{provider: "deepseek", model: "gpt-5.4", want: false},
+		{provider: "kimi", model: "kimi-k2.6", want: true},
+		{provider: "kimi", model: "kimi-k2-custom", want: true},
+		{provider: "kimi", model: "moonshotai.kimi-k2.5", want: false},
+		{provider: "openai", model: "gpt-5.4", want: true},
+		{provider: "openai", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: false},
+		{provider: "azure", model: "gpt-5.4", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.provider+"/"+tt.model, func(t *testing.T) {
+			if got := IsKnownModelNameForProvider(tt.provider, tt.model); got != tt.want {
+				t.Fatalf("IsKnownModelNameForProvider(%q, %q) = %v, want %v", tt.provider, tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestModelContextLimit_ClaudeOpus47(t *testing.T) {
 	for _, model := range []string{
 		"claude-opus-4-7",

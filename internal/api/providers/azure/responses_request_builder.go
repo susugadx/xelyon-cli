@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 type modelIdentity = openairesponses.ModelIdentity
@@ -63,7 +64,7 @@ func (p *Provider) newBaseResponsesRequestOptions(
 	options := openairesponses.BaseRequestOptions{
 		Model:                                 model,
 		MaxOutputTokens:                       api.GetMaxOutputTokens(ctx, "azure", model.RequestName()),
-		Stream:                                openai.ShouldStreamResponses(model.CatalogName()),
+		Stream:                                providerdiag.ShouldStreamResponsesCatalogModel(model.CatalogName()),
 		Store:                                 cfg.ResponsesStoreEnabled(),
 		ContextManagement:                     serverCompactionDecision.ContextManagement,
 		SkipLocalAutoCompressionAfterResponse: serverCompactionDecision.ShouldSkipLocalAutoCompression,

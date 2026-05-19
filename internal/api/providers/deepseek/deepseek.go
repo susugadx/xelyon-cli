@@ -26,7 +26,11 @@ func init() {
 
 var yellow = color.New(color.FgYellow)
 
-const defaultDeepSeekURL = "https://api.deepseek.com/chat/completions"
+const (
+	deepSeekChatCompletionsEndpointPath = "/chat/completions"
+	defaultDeepSeekURL                  = "https://api.deepseek.com" + deepSeekChatCompletionsEndpointPath
+	deepSeekFunctionCallingEnv          = "DEEPSEEK_FUNCTION_CALLING"
+)
 
 // Provider はDeepSeek APIのプロバイダー実装
 type Provider struct {
@@ -62,18 +66,18 @@ func (p *Provider) SupportsImages() bool {
 // IsFunctionCallingEnabled は Function Calling が有効かを返す
 // DEEPSEEK_FUNCTION_CALLING=0 で無効化可能
 func (p *Provider) IsFunctionCallingEnabled() bool {
-	return os.Getenv("DEEPSEEK_FUNCTION_CALLING") != "0"
+	return os.Getenv(deepSeekFunctionCallingEnv) != "0"
 }
 
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	messages := openaicompat.BuildChatMessages(systemPrompt, history)
+	reqBody, spinnerSuffix := p.buildChatCompletionsRequest(ctx, systemPrompt, history, model)
 
 	// デバッグ: メッセージ構造をダンプ
 	if os.Getenv("XELYON_DEBUG_DEEPSEEK") == "1" {
 		errOut := api.ErrorWriterFromContext(ctx)
-		fmt.Fprintf(errOut, "[DEBUG DeepSeek] === Messages (%d) ===\n", len(messages))
-		for i, m := range messages {
+		fmt.Fprintf(errOut, "[DEBUG DeepSeek] === Messages (%d) ===\n", len(reqBody.Messages))
+		for i, m := range reqBody.Messages {
 			if i == 0 {
 				fmt.Fprintf(errOut, "[DEBUG DeepSeek] [%d] role=%s (system, len=%d)\n", i, m.Role, len(m.Content))
 				continue
@@ -91,6 +95,23 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 			}
 		}
 	}
+
+	req, err := p.CreateAPIRequest(ctx, reqBody)
+	if err != nil {
+		return "", err
+	}
+	p.SetBearerAuth(req)
+
+	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
+		SpinnerSuffix:      spinnerSuffix,
+		ForceStreaming:     true,
+		RequestErrorPrefix: "DeepSeek API request failed",
+		StreamHandler:      p.handleStreamingResponse,
+	})
+}
+
+func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) (openaicompat.ChatCompletionsRequest, string) {
+	messages := openaicompat.BuildChatMessages(systemPrompt, history)
 
 	// モデル名を設定（config優先、フォールバックは DeepSeek V4 Flash）
 	requestedModel := api.GetDefaultModelWithContext(ctx, model, "deepseek", defaultDeepSeekModel)
@@ -121,19 +142,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 	}
 
-	reqBody := openaicompat.BuildChatCompletionsRequest(options)
-	req, err := p.CreateAPIRequest(ctx, reqBody)
-	if err != nil {
-		return "", err
-	}
-	p.SetBearerAuth(req)
-
-	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
-		SpinnerSuffix:      spinnerSuffix,
-		ForceStreaming:     true,
-		RequestErrorPrefix: "DeepSeek API request failed",
-		StreamHandler:      p.handleStreamingResponse,
-	})
+	return openaicompat.BuildChatCompletionsRequest(options), spinnerSuffix
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
@@ -158,23 +167,35 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 				return nil, nil
 			}
 			var usagePayload struct {
-				PromptTokens          int `json:"prompt_tokens"`
-				CompletionTokens      int `json:"completion_tokens"`
-				PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
-				PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
+				PromptTokens            int `json:"prompt_tokens"`
+				CompletionTokens        int `json:"completion_tokens"`
+				PromptCacheHitTokens    int `json:"prompt_cache_hit_tokens,omitempty"`
+				PromptCacheMissTokens   int `json:"prompt_cache_miss_tokens,omitempty"`
+				CompletionTokensDetails struct {
+					ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+				} `json:"completion_tokens_details,omitempty"`
 			}
 			if err := json.Unmarshal(raw, &usagePayload); err != nil {
 				return nil, err
 			}
 
-			usage := &api.Usage{
-				InputTokens:       usagePayload.PromptTokens,
-				OutputTokens:      usagePayload.CompletionTokens,
-				CachedInputTokens: usagePayload.PromptCacheHitTokens,
-			}
+			normalized := api.UsageFromOutputTokensIncludingThinking(
+				usagePayload.PromptTokens,
+				usagePayload.CompletionTokens,
+				usagePayload.PromptCacheHitTokens,
+				usagePayload.CompletionTokensDetails.ReasoningTokens,
+			)
+			usage := &normalized
 			if os.Getenv("XELYON_DEBUG_DEEPSEEK") == "1" {
-				fmt.Fprintf(errOut, "[DEBUG DeepSeek] usage received: input=%d, output=%d, cached=%d\n",
-					usagePayload.PromptTokens, usagePayload.CompletionTokens, usagePayload.PromptCacheHitTokens)
+				fmt.Fprintf(
+					errOut,
+					"[DEBUG DeepSeek] usage received: input=%d, output=%d, reasoning=%d, cached=%d, cache_miss=%d\n",
+					usagePayload.PromptTokens,
+					usage.OutputTokens,
+					usage.ThinkingTokens,
+					usagePayload.PromptCacheHitTokens,
+					usagePayload.PromptCacheMissTokens,
+				)
 			}
 			return usage, nil
 		},

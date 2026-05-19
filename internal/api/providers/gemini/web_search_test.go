@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -42,18 +43,24 @@ func TestWebSearch_Success(t *testing.T) {
 						]
 					}
 				}
-			]
+			],
+			"usageMetadata": {
+				"promptTokenCount": 12,
+				"candidatesTokenCount": 6,
+				"thoughtsTokenCount": 2,
+				"cachedContentTokenCount": 4
+			}
 		}`))
 	})
 
-	oldURL := os.Getenv("GEMINI_API_URL")
-	oldKey := os.Getenv("GEMINI_API_KEY")
-	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Setenv("GEMINI_API_KEY", "test-key")
-	defer os.Setenv("GEMINI_API_URL", oldURL)
-	defer os.Setenv("GEMINI_API_KEY", oldKey)
+	t.Setenv("GEMINI_API_URL", server.URL)
+	t.Setenv("GEMINI_API_KEY", "test-key")
 
+	var usage api.Usage
 	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+	ctx = websearch.WithUsageCallback(ctx, func(observed api.Usage) {
+		usage = observed
+	})
 	result, err := WebSearchWithContext(ctx, "go 1.24 release", "gemini-3.1-pro-preview-customtools")
 	if err != nil {
 		t.Fatalf("WebSearchWithContext() error = %v", err)
@@ -63,6 +70,9 @@ func TestWebSearch_Success(t *testing.T) {
 	}
 	if !strings.Contains(result, "https://go.dev/doc/go1.24") {
 		t.Fatalf("result should contain grounding source, got %q", result)
+	}
+	if usage.InputTokens != 12 || usage.OutputTokens != 6 || usage.ThinkingTokens != 2 || usage.CachedInputTokens != 4 {
+		t.Fatalf("usage = %+v, want Gemini usageMetadata normalized", usage)
 	}
 }
 
@@ -85,12 +95,8 @@ func TestWebSearch_LegacyModelUsesGoogleSearchRetrieval(t *testing.T) {
 		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"Legacy grounded response."}]}}]}`))
 	})
 
-	oldURL := os.Getenv("GEMINI_API_URL")
-	oldKey := os.Getenv("GEMINI_API_KEY")
-	os.Setenv("GEMINI_API_URL", server.URL)
-	os.Setenv("GEMINI_API_KEY", "test-key")
-	defer os.Setenv("GEMINI_API_URL", oldURL)
-	defer os.Setenv("GEMINI_API_KEY", oldKey)
+	t.Setenv("GEMINI_API_URL", server.URL)
+	t.Setenv("GEMINI_API_KEY", "test-key")
 
 	ctx := config.WithContext(context.Background(), config.DefaultConfig())
 	result, err := WebSearchWithContext(ctx, "legacy grounding", "gemini-1.5-pro")

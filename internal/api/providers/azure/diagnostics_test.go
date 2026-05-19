@@ -109,59 +109,6 @@ func TestDiagnose_AuthTokenCommandFailureFailsWhenCommandIsOnlyCredential(t *tes
 	}
 }
 
-func TestDiagnose_WarnsForAPIVersionQueryAndCatalogFallback(t *testing.T) {
-	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1?api-version=2025-04-01-preview")
-	t.Setenv(apiKeyEnv, "azure-key")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:     config.DefaultConfig(),
-		Deployment: "corp-gpt55-deployment",
-	})
-
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
-	}
-	if !hasDiagnosticCheck(report, "api_version", DiagnosticStatusWarn) {
-		t.Fatalf("missing api-version warning: %#v", report.Checks)
-	}
-	if !hasDiagnosticCheck(report, "catalog_model", DiagnosticStatusWarn) {
-		t.Fatalf("missing catalog_model fallback warning: %#v", report.Checks)
-	}
-	if report.NormalizedBaseURL != "https://example.openai.azure.com/openai/v1" {
-		t.Fatalf("NormalizedBaseURL = %q, want v1 URL without query", report.NormalizedBaseURL)
-	}
-}
-
-func TestDiagnose_FailsForDeploymentScopedBaseURL(t *testing.T) {
-	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/deployments/corp-gpt55")
-	t.Setenv(apiKeyEnv, "azure-key")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:       config.DefaultConfig(),
-		Deployment:   "corp-gpt55",
-		CatalogModel: "gpt-5.5",
-	})
-
-	if !hasDiagnosticCheck(report, "base_url", DiagnosticStatusFail) {
-		t.Fatalf("missing deployment URL failure: %#v", report.Checks)
-	}
-}
-
-func TestDiagnose_FailsForPublicOpenAIBaseURL(t *testing.T) {
-	t.Setenv(baseURLEnv, "https://api.openai.com/v1")
-	t.Setenv(apiKeyEnv, "azure-key")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:       config.DefaultConfig(),
-		Deployment:   "corp-gpt55",
-		CatalogModel: "gpt-5.5",
-	})
-
-	if !hasDiagnosticCheck(report, "base_url", DiagnosticStatusFail) {
-		t.Fatalf("missing public OpenAI base URL failure: %#v", report.Checks)
-	}
-}
-
 func TestDiagnose_WarnsForOpenAIKeyShape(t *testing.T) {
 	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
 	t.Setenv(apiKeyEnv, "sk-public-openai-key")
@@ -352,6 +299,136 @@ func TestDiagnose_CapabilitiesDoNotReportRetentionWhenRouteUnresolved(t *testing
 	}
 	if report.Capabilities.Retention.PreviousResponseID || report.Capabilities.Retention.SessionPersistence {
 		t.Fatalf("retention capabilities = %+v, want no previous_response_id or session persistence without a resolved route", report.Capabilities.Retention)
+	}
+}
+
+func TestDiagnose_RequiredCapabilitiesDoNotRequireAzureEndpointOrAuth(t *testing.T) {
+	t.Setenv(baseURLEnv, "")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "")
+	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "1")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:               config.DefaultConfig(),
+		Deployment:           "corp-codex-deployment",
+		CatalogModel:         "gpt-5.3-codex",
+		RequiredCapabilities: []string{"responses_api", "previous_response_id", "server_compaction"},
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want local required capability check to pass without endpoint/auth: %#v", report.Checks)
+	}
+	if _, ok := diagnosticCheckByName(report, "base_url"); ok {
+		t.Fatalf("base_url check was added for required capability report: %#v", report.Checks)
+	}
+	if _, ok := diagnosticCheckByName(report, "auth"); ok {
+		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
+	}
+	if report.Capabilities != nil {
+		t.Fatalf("Capabilities = %#v, want nil without --capabilities", report.Capabilities)
+	}
+	check, ok := diagnosticCheckByName(report, "required_capability")
+	if !ok || check.Status != DiagnosticStatusOK {
+		t.Fatalf("required_capability check = %#v, %v; want ok", check, ok)
+	}
+	for _, want := range []string{"responses_api=ok", "previous_response_id=ok", "server_compaction=ok"} {
+		if !strings.Contains(check.Detail, want) {
+			t.Fatalf("required_capability detail = %q, want %q", check.Detail, want)
+		}
+	}
+}
+
+func TestDiagnose_RequiredCapabilityFailsWhenMissing(t *testing.T) {
+	t.Setenv(baseURLEnv, "")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:               config.DefaultConfig(),
+		Deployment:           "corp-gpt55-pro-deployment",
+		CatalogModel:         "gpt-5.5-pro",
+		RequiredCapabilities: []string{"responses_streaming"},
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want missing required capability failure: %#v", report.Checks)
+	}
+	if _, ok := diagnosticCheckByName(report, "base_url"); ok {
+		t.Fatalf("base_url check was added for required capability report: %#v", report.Checks)
+	}
+	if _, ok := diagnosticCheckByName(report, "auth"); ok {
+		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
+	}
+	check, ok := diagnosticCheckByName(report, "required_capability")
+	if !ok || check.Status != DiagnosticStatusFail {
+		t.Fatalf("required_capability check = %#v, %v; want fail", check, ok)
+	}
+	if !strings.Contains(check.Detail, "responses_streaming=missing") {
+		t.Fatalf("required_capability detail = %q, want missing streaming", check.Detail)
+	}
+}
+
+func TestDiagnose_RequiredCapabilityStreamingUnknownWithoutResolvedCatalogModel(t *testing.T) {
+	t.Setenv(baseURLEnv, "")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:               config.DefaultConfig(),
+		Deployment:           "corp-gpt55-pro-deployment",
+		RequiredCapabilities: []string{"responses_streaming"},
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want unresolved catalog required capability failure: %#v", report.Checks)
+	}
+	if report.CatalogModelSource != diagnosticCatalogModelSourceDeploymentFallback {
+		t.Fatalf("CatalogModelSource = %q, want deployment fallback", report.CatalogModelSource)
+	}
+	if _, ok := diagnosticCheckByName(report, "base_url"); ok {
+		t.Fatalf("base_url check was added for required capability report: %#v", report.Checks)
+	}
+	if _, ok := diagnosticCheckByName(report, "auth"); ok {
+		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
+	}
+	check, ok := diagnosticCheckByName(report, "required_capability")
+	if !ok || check.Status != DiagnosticStatusFail {
+		t.Fatalf("required_capability check = %#v, %v; want fail", check, ok)
+	}
+	if !strings.Contains(check.Detail, "responses_streaming=unknown") {
+		t.Fatalf("required_capability detail = %q, want unknown streaming", check.Detail)
+	}
+	if !strings.Contains(check.Suggestion, "--catalog-model") {
+		t.Fatalf("required_capability suggestion = %q, want catalog model guidance", check.Suggestion)
+	}
+}
+
+func TestDiagnose_RequiredCapabilityStreamingPassesForKnownCatalogModelDeploymentFallback(t *testing.T) {
+	t.Setenv(baseURLEnv, "")
+	t.Setenv(apiKeyEnv, "")
+	t.Setenv(authTokenEnv, "")
+	t.Setenv(authTokenCommandEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:               config.DefaultConfig(),
+		Deployment:           "gpt-5.4",
+		RequiredCapabilities: []string{"responses_streaming"},
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want known fallback catalog model to pass required capability: %#v", report.Checks)
+	}
+	if report.CatalogModelSource != diagnosticCatalogModelSourceDeploymentFallback {
+		t.Fatalf("CatalogModelSource = %q, want deployment fallback", report.CatalogModelSource)
+	}
+	if report.Route != DiagnosticRouteResponsesStreaming {
+		t.Fatalf("Route = %q, want responses streaming", report.Route)
+	}
+	check, ok := diagnosticCheckByName(report, "required_capability")
+	if !ok || check.Status != DiagnosticStatusOK {
+		t.Fatalf("required_capability check = %#v, %v; want ok", check, ok)
+	}
+	if !strings.Contains(check.Detail, "responses_streaming=ok") {
+		t.Fatalf("required_capability detail = %q, want ok streaming", check.Detail)
 	}
 }
 
@@ -1158,22 +1235,4 @@ func TestDiagnose_ToolSmokeSkippedWhenFunctionCallingDisabled(t *testing.T) {
 	if !hasDiagnosticCheck(report, "tool_smoke", DiagnosticStatusWarn) {
 		t.Fatalf("missing tool_smoke skip warning: %#v", report.Checks)
 	}
-}
-
-func hasDiagnosticCheck(report DiagnosticReport, name string, status DiagnosticStatus) bool {
-	for _, check := range report.Checks {
-		if check.Name == name && check.Status == status {
-			return true
-		}
-	}
-	return false
-}
-
-func diagnosticCheckByName(report DiagnosticReport, name string) (DiagnosticCheck, bool) {
-	for _, check := range report.Checks {
-		if check.Name == name {
-			return check, true
-		}
-	}
-	return DiagnosticCheck{}, false
 }

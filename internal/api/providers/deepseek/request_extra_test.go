@@ -356,7 +356,7 @@ func TestHandleStreamingResponse_PersistsReasoningAndUsage(t *testing.T) {
 		`{"choices":[{"delta":{"reasoning_content":"Think"}}]}`,
 		`{"choices":[{"delta":{"reasoning_content":" deeply"}}]}`,
 		`{"choices":[{"delta":{"content":"Answer"}}]}`,
-		`{"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":7,"prompt_cache_hit_tokens":3}}`,
+		`{"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":7,"prompt_cache_hit_tokens":3,"completion_tokens_details":{"reasoning_tokens":2}}}`,
 		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
 	)
 	defer resp.Body.Close()
@@ -371,8 +371,11 @@ func TestHandleStreamingResponse_PersistsReasoningAndUsage(t *testing.T) {
 	if p.LastReasoningContent() != "Think deeply" {
 		t.Fatalf("LastReasoningContent() = %q, want %q", p.LastReasoningContent(), "Think deeply")
 	}
-	if gotUsage.InputTokens != 11 || gotUsage.OutputTokens != 7 || gotUsage.CachedInputTokens != 3 {
-		t.Fatalf("usage = %+v, want input=11 output=7 cached=3", gotUsage)
+	if gotUsage.InputTokens != 11 ||
+		gotUsage.OutputTokens != 5 ||
+		gotUsage.ThinkingTokens != 2 ||
+		gotUsage.CachedInputTokens != 3 {
+		t.Fatalf("usage = %+v, want input=11 output=5 thinking=2 cached=3", gotUsage)
 	}
 	if !strings.Contains(out.String(), "Think deeply") {
 		t.Fatalf("output should include reasoning content, got %q", out.String())

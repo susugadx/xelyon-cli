@@ -22,38 +22,9 @@ type requestResult struct {
 // executeRequest はClaude API呼び出しの共通処理
 // withImage: 画像付きリクエストの場合はtrue（スピナー表示に影響）
 func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, model string, contextManagement *ContextManagement, withImage bool) (*requestResult, error) {
-	jsonBody, err := json.Marshal(reqBody)
+	req, err := p.newAnthropicRequest(ctx, reqBody, model, contextManagement)
 	if err != nil {
 		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", p.APIKey)
-
-	cfg := config.FromContext(ctx)
-	lookupProvider := cfg.RuntimeProviderConfigKey(p.configLookupKey(), model)
-	pCfg, _ := cfg.GetProviderModelConfig(lookupProvider)
-
-	// Anthropic Version
-	version := pCfg.AnthropicVersion
-	if version == "" {
-		version = "2023-06-01"
-	}
-	req.Header.Set("anthropic-version", version)
-
-	// Anthropic Beta
-	betaHeaders := make([]string, 0)
-	if len(pCfg.AnthropicBeta) > 0 {
-		betaHeaders = append(betaHeaders, pCfg.AnthropicBeta...)
-	}
-	betaHeaders = MergeAnthropicBetaHeaders(betaHeaders, contextManagement)
-	if len(betaHeaders) > 0 {
-		req.Header.Set("anthropic-beta", strings.Join(betaHeaders, ","))
 	}
 
 	spinner := api.StartThinkingSpinner(ctx, withImage, "")
@@ -79,6 +50,87 @@ func (p *Provider) executeRequest(ctx context.Context, reqBody interface{}, mode
 	}
 
 	return &requestResult{Response: resp, Spinner: spinner}, nil
+}
+
+func (p *Provider) newAnthropicRequest(ctx context.Context, reqBody interface{}, model string, contextManagement *ContextManagement, betaDefaults ...string) (*http.Request, error) {
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.APIURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+
+	applyAnthropicHeaders(req, p.anthropicHeaders(ctx, model, contextManagement, betaDefaults...))
+	return req, nil
+}
+
+func (p *Provider) anthropicHeaders(ctx context.Context, model string, contextManagement *ContextManagement, betaDefaults ...string) http.Header {
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("x-api-key", p.APIKey)
+	headers.Set("anthropic-version", p.anthropicVersion(ctx, model))
+
+	betaHeaders := p.anthropicBetaHeaders(ctx, model, contextManagement, betaDefaults...)
+	if len(betaHeaders) > 0 {
+		headers.Set("anthropic-beta", strings.Join(betaHeaders, ","))
+	}
+	return headers
+}
+
+func (p *Provider) anthropicVersion(ctx context.Context, model string) string {
+	cfg := config.FromContext(ctx)
+	lookupProvider := cfg.RuntimeProviderConfigKey(p.configLookupKey(), model)
+	pCfg, _ := cfg.GetProviderModelConfig(lookupProvider)
+
+	if pCfg.AnthropicVersion != "" {
+		return pCfg.AnthropicVersion
+	}
+	return defaultAnthropicVersion
+}
+
+func (p *Provider) anthropicBetaHeaders(ctx context.Context, model string, contextManagement *ContextManagement, betaDefaults ...string) []string {
+	cfg := config.FromContext(ctx)
+	lookupProvider := cfg.RuntimeProviderConfigKey(p.configLookupKey(), model)
+	pCfg, _ := cfg.GetProviderModelConfig(lookupProvider)
+
+	if len(betaDefaults) == 0 {
+		betaHeaders := make([]string, 0)
+		if len(pCfg.AnthropicBeta) > 0 {
+			betaHeaders = append(betaHeaders, pCfg.AnthropicBeta...)
+		}
+		return MergeAnthropicBetaHeaders(betaHeaders, contextManagement)
+	}
+
+	seen := make(map[string]bool, len(betaDefaults)+len(pCfg.AnthropicBeta))
+	betaHeaders := make([]string, 0, len(betaDefaults)+len(pCfg.AnthropicBeta))
+	for _, header := range betaDefaults {
+		header = strings.TrimSpace(header)
+		if header == "" || seen[header] {
+			continue
+		}
+		seen[header] = true
+		betaHeaders = append(betaHeaders, header)
+	}
+	for _, header := range pCfg.AnthropicBeta {
+		header = strings.TrimSpace(header)
+		if header == "" || seen[header] {
+			continue
+		}
+		seen[header] = true
+		betaHeaders = append(betaHeaders, header)
+	}
+	return MergeAnthropicBetaHeaders(betaHeaders, contextManagement)
+}
+
+func applyAnthropicHeaders(req *http.Request, headers http.Header) {
+	for name, values := range headers {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
 }
 
 // processResponse はレスポンス処理（ストリーミング/非ストリーミング）
