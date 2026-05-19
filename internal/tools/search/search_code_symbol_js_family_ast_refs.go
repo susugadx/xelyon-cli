@@ -1,8 +1,6 @@
 package search
 
 import (
-	"path/filepath"
-
 	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/jsast"
 )
@@ -10,8 +8,8 @@ import (
 func findJSFamilyReferencesWithAST(symbol string, opts SearchOptions) []genericSymbolRef {
 	collector := newJSFamilyASTReferenceCollector(symbol, opts, maxGenericRefs)
 	defer collector.Close()
-	streamGenericSymbolMatches(symbol, opts, collector.Add)
-	return collector.refs
+	collector.CollectNameMatches()
+	return collector.Result()
 }
 
 func classifyJSFamilySymbolRefsFromAST(refs []genericSymbolRef) jsFamilySymbolRefs {
@@ -45,7 +43,7 @@ type jsFamilyASTReferenceCollector struct {
 	opts   SearchOptions
 	limit  int
 	refs   []genericSymbolRef
-	files  map[string]*jsast.ParsedFile
+	files  *jsFamilyASTParsedFileCache
 }
 
 func newJSFamilyASTReferenceCollector(symbol string, opts SearchOptions, limit int) *jsFamilyASTReferenceCollector {
@@ -54,17 +52,36 @@ func newJSFamilyASTReferenceCollector(symbol string, opts SearchOptions, limit i
 		opts:   opts,
 		limit:  limit,
 		refs:   make([]genericSymbolRef, 0, limit),
-		files:  make(map[string]*jsast.ParsedFile),
+		files:  newJSFamilyASTParsedFileCache(),
 	}
 }
 
-func (c *jsFamilyASTReferenceCollector) Add(match genericSymbolMatch) bool {
+func (c *jsFamilyASTReferenceCollector) CollectNameMatches() {
+	streamGenericSymbolMatches(c.symbol, c.opts, c.AddNameMatch)
+}
+
+func (c *jsFamilyASTReferenceCollector) Result() []genericSymbolRef {
+	return c.refs
+}
+
+func (c *jsFamilyASTReferenceCollector) AddNameMatch(match genericSymbolMatch) bool {
+	ref, ok := c.refFromNameMatch(match)
+	if !ok {
+		return true
+	}
+	return c.addRef(ref)
+}
+
+func (c *jsFamilyASTReferenceCollector) refFromNameMatch(match genericSymbolMatch) (genericSymbolRef, bool) {
 	ref := genericSymbolRefFromMatch(match)
 	c.classify(&ref)
 	if !jsFamilyReferenceClassVisible(ref.Class) {
-		return true
+		return genericSymbolRef{}, false
 	}
+	return ref, true
+}
 
+func (c *jsFamilyASTReferenceCollector) addRef(ref genericSymbolRef) bool {
 	c.refs = append(c.refs, ref)
 	return c.limit <= 0 || len(c.refs) < c.limit
 }
@@ -74,7 +91,7 @@ func (c *jsFamilyASTReferenceCollector) classify(ref *genericSymbolRef) {
 	if abs == "" || !jsast.Supports(abs) {
 		return
 	}
-	parsed := c.parsedFile(abs)
+	parsed := c.files.Parsed(abs)
 	if parsed == nil {
 		return
 	}
@@ -85,26 +102,9 @@ func (c *jsFamilyASTReferenceCollector) classify(ref *genericSymbolRef) {
 	ref.Class = info.Class
 }
 
-func (c *jsFamilyASTReferenceCollector) parsedFile(absPath string) *jsast.ParsedFile {
-	key := filepath.Clean(absPath)
-	if parsed, ok := c.files[key]; ok {
-		return parsed
-	}
-
-	parsed, ok := parseJSFamilyFileForSearch(key)
-	if !ok {
-		c.files[key] = nil
-		return nil
-	}
-	c.files[key] = parsed
-	return parsed
-}
-
 func (c *jsFamilyASTReferenceCollector) Close() {
-	for _, parsed := range c.files {
-		if parsed != nil {
-			parsed.Close()
-		}
+	if c.files != nil {
+		c.files.Close()
 	}
 }
 
