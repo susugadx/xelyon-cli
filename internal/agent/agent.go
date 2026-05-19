@@ -46,12 +46,13 @@ type agentRequestState struct {
 }
 
 type agentWorkspaceState struct {
-	changeStack      []tools.FileChange
-	taskChangeOffset int
-	changeStorage    *history.ChangeStorage
-	taskTestResult   *bool
-	taskTestCommand  string
-	pendingLSPFiles  []string
+	changeStack          []tools.FileChange
+	taskChangeOffset     int
+	changeStorage        *history.ChangeStorage
+	taskTestResult       *bool
+	taskTestCommand      string
+	taskPlanVerification []string
+	pendingLSPFiles      []string
 }
 
 type agentProjectPromptState struct {

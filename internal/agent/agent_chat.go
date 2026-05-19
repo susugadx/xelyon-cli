@@ -86,6 +86,7 @@ func (a *Agent) showTaskSummary() {
 	if a.taskTestCommand != "" {
 		ts.SetTestCommand(a.taskTestCommand)
 	}
+	ts.SetPlannedVerification(a.taskPlanVerification)
 
 	_, _ = fmt.Fprint(a.output(), ts.Render())
 }

@@ -49,6 +49,7 @@ func TestShowTaskSummary_UsesTaskOffsetAndDetails(t *testing.T) {
 	agent.taskTestCommand = "go test ./internal/agent"
 	passed := true
 	agent.taskTestResult = &passed
+	agent.taskPlanVerification = []string{"go test ./internal/agent", "make ci-check"}
 
 	agent.showTaskSummary()
 	got := out.String()
@@ -59,6 +60,8 @@ func TestShowTaskSummary_UsesTaskOffsetAndDetails(t *testing.T) {
 		"view.go",
 		"modified",
 		"go test ./internal/agent",
+		"Planned verification",
+		"make ci-check",
 		"passed",
 		"2 file(s)",
 		"+8",
@@ -70,5 +73,16 @@ func TestShowTaskSummary_UsesTaskOffsetAndDetails(t *testing.T) {
 	}
 	if strings.Contains(got, "ignored.go") {
 		t.Fatalf("showTaskSummary() should ignore changes before taskChangeOffset:\n%s", got)
+	}
+}
+
+func TestBeginTaskTracking_ClearsPlanVerification(t *testing.T) {
+	agent := &Agent{}
+	agent.taskPlanVerification = []string{"go test ./internal/agent"}
+
+	agent.beginTaskTracking()
+
+	if len(agent.taskPlanVerification) != 0 {
+		t.Fatalf("taskPlanVerification = %#v, want cleared", agent.taskPlanVerification)
 	}
 }

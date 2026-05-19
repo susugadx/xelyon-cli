@@ -79,6 +79,7 @@ func (a *Agent) beginTaskTracking() {
 
 	a.taskTestResult = nil
 	a.taskTestCommand = ""
+	a.taskPlanVerification = nil
 
 	if prevChanges > 0 {
 		yellow.Fprintf(a.output(), "⚠️  %d uncommitted changes from previous task\n", prevChanges)
@@ -125,6 +126,7 @@ func (a *Agent) executeApprovedPlanHandoff(ctx context.Context, req *chatRequest
 		return nil
 	}
 
+	a.setTaskPlanVerification(handoff.verificationHints())
 	req.input = input
 	if a.session != nil {
 		a.appendSessionMessage("user", req.input, a.CurrentModel)

@@ -46,6 +46,25 @@ func TestTaskSummary_SetTestResult(t *testing.T) {
 	}
 }
 
+func TestTaskSummary_SetPlannedVerification(t *testing.T) {
+	ts := NewTaskSummary().SetPlannedVerification([]string{
+		" go test ./internal/agent ",
+		"",
+		"go test ./internal/agent",
+		"make ci-check",
+	})
+
+	want := []string{"go test ./internal/agent", "make ci-check"}
+	if len(ts.PlannedVerification) != len(want) {
+		t.Fatalf("PlannedVerification = %#v, want %#v", ts.PlannedVerification, want)
+	}
+	for i := range want {
+		if ts.PlannedVerification[i] != want[i] {
+			t.Fatalf("PlannedVerification = %#v, want %#v", ts.PlannedVerification, want)
+		}
+	}
+}
+
 func TestTaskSummary_Calculate(t *testing.T) {
 	ts := NewTaskSummary().
 		AddChange("file1.go", "created", 100, 0).
@@ -103,7 +122,8 @@ func TestTaskSummary_Render(t *testing.T) {
 		AddChange("internal/agent/agent_chat.go", "modified", 5, 3).
 		AddChange("internal/ui/task_summary.go", "created", 120, 0).
 		SetTestResult(true).
-		SetTestCommand("make ci-check")
+		SetTestCommand("make ci-check").
+		SetPlannedVerification([]string{"go test ./internal/ui"})
 
 	result := ts.Render()
 
@@ -131,6 +151,9 @@ func TestTaskSummary_Render(t *testing.T) {
 	// テスト結果チェック
 	if !strings.Contains(result, "Test result (make ci-check): passed") {
 		t.Error("Missing test result")
+	}
+	if !strings.Contains(result, "Planned verification") || !strings.Contains(result, "go test ./internal/ui") {
+		t.Error("Missing planned verification")
 	}
 
 	// サマリーチェック

@@ -8,10 +8,11 @@ import (
 
 // TaskSummary はタスク完了時のサマリー表示用
 type TaskSummary struct {
-	Changes     []FileChangeSummary // ファイル変更一覧
-	TestsPassed *bool               // テスト成功フラグ（nil = 未実行）
-	TestCommand string              // テスト/final checks コマンド要約
-	Stats       SummaryStats        // 統計情報
+	Changes             []FileChangeSummary // ファイル変更一覧
+	TestsPassed         *bool               // テスト成功フラグ（nil = 未実行）
+	TestCommand         string              // テスト/final checks コマンド要約
+	PlannedVerification []string            // Plan Mode で承認された予定検証
+	Stats               SummaryStats        // 統計情報
 }
 
 // FileChangeSummary はファイル変更の概要
@@ -57,6 +58,12 @@ func (ts *TaskSummary) SetTestResult(passed bool) *TaskSummary {
 // SetTestCommand はテスト/final checks コマンド要約を設定
 func (ts *TaskSummary) SetTestCommand(command string) *TaskSummary {
 	ts.TestCommand = strings.TrimSpace(command)
+	return ts
+}
+
+// SetPlannedVerification は Plan Mode 由来の予定検証を設定
+func (ts *TaskSummary) SetPlannedVerification(values []string) *TaskSummary {
+	ts.PlannedVerification = compactSummaryValues(values)
 	return ts
 }
 
@@ -162,6 +169,14 @@ func (ts *TaskSummary) Render() string {
 		sb.WriteString("\n")
 	}
 
+	if len(ts.PlannedVerification) > 0 {
+		sb.WriteString("Planned verification:\n")
+		for _, item := range ts.PlannedVerification {
+			_, _ = fmt.Fprintf(&sb, "• %s\n", item)
+		}
+		sb.WriteString("\n")
+	}
+
 	// サマリー行
 	summary := fmt.Sprintf("Summary: %d file(s), +%d -%d lines",
 		ts.Stats.FilesChanged,
@@ -191,6 +206,20 @@ func formatLines(added, removed int) string {
 		parts = append(parts, fmt.Sprintf("-%d", removed))
 	}
 	return strings.Join(parts, " ")
+}
+
+func compactSummaryValues(values []string) []string {
+	seen := make(map[string]bool)
+	compact := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		compact = append(compact, value)
+	}
+	return compact
 }
 
 // getGitShortHash は現在の git commit hash の短縮版を取得

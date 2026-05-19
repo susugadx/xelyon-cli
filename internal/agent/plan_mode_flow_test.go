@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -281,6 +282,66 @@ func TestChatCore_PlanModeApproval_StartsImplementationWithApprovedPlan(t *testi
 	}
 	if !strings.Contains(out.String(), planModeFlowImplementationStartText) {
 		t.Fatalf("expected implementation start output, got %q", out.String())
+	}
+}
+
+func TestChatCore_PlanModeApproval_TaskSummaryShowsPlannedVerification(t *testing.T) {
+	disableColors(t)
+
+	targetPath := filepath.Join(t.TempDir(), "plan_followthrough.go")
+	var out bytes.Buffer
+	provider := &planResponseContextProvider{
+		responses: []string{
+			"```json\n" + `{
+  "plan": {
+    "summary": "Update implementation",
+    "steps": [
+      {
+        "id": 1,
+        "description": "Write implementation file",
+        "tools": ["final_check_write"],
+        "verification": [
+          "go test ./internal/agent",
+          "go test ./internal/agent",
+          "make ci-check"
+        ]
+      }
+    ]
+  }
+}` + "\n```",
+			`{"tool":"final_check_write","args":{"path":"` + targetPath + `","content":"package main\n"}}`,
+			"Done.",
+		},
+	}
+	agent := newPlanRequestTestAgent(t, provider, "1\n", &out)
+	agent.registry().Register(&finalCheckWriteTool{})
+	agent.PlanModeEnabled = true
+
+	if err := agent.chatCore("implement feature", nil, false); err != nil {
+		t.Fatalf("chatCore() error = %v", err)
+	}
+	if provider.callCount != 3 {
+		t.Fatalf("provider.callCount = %d, want 3", provider.callCount)
+	}
+
+	output := out.String()
+	for _, want := range []string{
+		"Task Completed",
+		"Planned verification",
+		"go test ./internal/agent",
+		"make ci-check",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+	summaryStart := strings.LastIndex(output, "Task Completed")
+	if summaryStart < 0 {
+		t.Fatalf("output missing task summary:\n%s", output)
+	}
+	summaryOutput := output[summaryStart:]
+	if strings.Count(summaryOutput, "go test ./internal/agent") != 1 {
+		t.Fatalf("planned verification should be deduplicated in task summary, got output:\n%s", summaryOutput)
 	}
 }
 
