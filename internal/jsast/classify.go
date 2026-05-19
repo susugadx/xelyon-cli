@@ -27,7 +27,10 @@ func classifyNode(parsed *ParsedFile, root *gotreesitter.Node, node *gotreesitte
 	if isDefinitionName(parsed, node, startByte, endByte) {
 		return codeast.ClassDef
 	}
-	if isCallTarget(parsed, node, startByte, endByte) || isNewTarget(parsed, node, startByte, endByte) || isJSXUsageTarget(parsed, node, targetName, startByte, endByte) {
+	if class, ok := classifyJSXTarget(parsed, node, targetName, startByte, endByte); ok {
+		return class
+	}
+	if isCallTarget(parsed, node, startByte, endByte) || isNewTarget(parsed, node, startByte, endByte) {
 		return codeast.ClassCall
 	}
 	if isTypeReference(parsed, node, startByte, endByte) {

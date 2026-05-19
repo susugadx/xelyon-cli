@@ -59,6 +59,10 @@ func fallbackSymbolsFromSourceWithOptions(parsed *ParsedFile, opts fallbackSymbo
 }
 
 func fallbackSymbolFromLine(parsed *ParsedFile, line string, trimmed string, lineNo int, lineStart int) (Symbol, bool) {
+	if symbol, ok := fallbackDefaultWrappedSymbolFromLine(parsed, line, trimmed, lineNo, lineStart); ok {
+		return symbol, true
+	}
+
 	exportedDeclaration := strings.HasPrefix(trimmed, "export ")
 	for _, candidate := range fallbackSymbolPatterns {
 		if match := candidate.pattern.FindStringSubmatch(trimmed); len(match) > 0 {
@@ -71,7 +75,10 @@ func fallbackSymbolFromLine(parsed *ParsedFile, line string, trimmed string, lin
 }
 
 func fallbackSymbol(parsed *ParsedFile, line string, trimmed string, lineNo int, lineStart int, name string, kind string, exported bool) Symbol {
-	nameColumn := strings.Index(line, name)
+	return fallbackSymbolAtNameColumn(parsed, trimmed, lineNo, lineStart, strings.Index(line, name), name, kind, exported)
+}
+
+func fallbackSymbolAtNameColumn(parsed *ParsedFile, trimmed string, lineNo int, lineStart int, nameColumn int, name string, kind string, exported bool) Symbol {
 	character := 1
 	if nameColumn >= 0 {
 		character = lspCharacterForByteOffset(parsed.src, uint32(lineStart+nameColumn))

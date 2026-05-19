@@ -44,6 +44,24 @@ func TestExecuteSearchCodeArtifactWithConfig_JSXStructuredImpactComponentCallers
 	}
 }
 
+func TestExecuteSearchCodeArtifactWithConfig_JSXStructuredImpactDefaultWrappedComponent(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/Button.jsx": "import { memo } from 'react'\nexport default memo(function DefaultButton() { return <button /> })\n",
+		"src/App.jsx":    "import DefaultButton from './Button'\nexport function App() { return <DefaultButton /> }\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newJSXImpactSearchOptions(dir, "DefaultButton"))
+
+	assertJavaScriptStructuredImpactArtifact(t, artifact, "DefaultButton", "function")
+	if got := artifact.Metadata.Bundle.Definition.File; got != "src/Button.jsx" {
+		t.Fatalf("definition file = %q, want src/Button.jsx", got)
+	}
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainSnippet(callers, "<DefaultButton />") {
+		t.Fatalf("callers = %+v, want JSX usage caller", callers)
+	}
+}
+
 func TestStructuredJavaScriptImpactSearchContextAllowsJSX(t *testing.T) {
 	opts := SearchOptions{
 		Pattern:  "Button",

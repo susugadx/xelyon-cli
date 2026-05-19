@@ -161,6 +161,53 @@ func TestExecuteSearchCodeArtifactWithConfig_TSXStructuredImpactJSXUsageCallers(
 	}
 }
 
+func TestExecuteSearchCodeArtifactWithConfig_TSXStructuredImpactIgnoresJSXClosingTagReferences(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/Button.tsx": "export function Button() { return <button /> }\n",
+		"src/App.tsx": "import { Button } from './Button'\n" +
+			"export function App() {\n" +
+			"  return <Button>\n" +
+			"    Save\n" +
+			"  </Button>\n" +
+			"}\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newTSXImpactSearchOptions(dir, "Button"))
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "Button", "function")
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainSnippet(callers, "return <Button>") {
+		t.Fatalf("callers = %+v, want multiline JSX opening caller", callers)
+	}
+	refs := symbolBundleSectionItems(artifact.Metadata.Bundle, "references")
+	if symbolBundleItemsContainSnippet(refs, "</Button>") {
+		t.Fatalf("references = %+v, did not want JSX closing tag as a reference", refs)
+	}
+	if slices.ContainsFunc(artifact.Metadata.Bundle.Impact.RecommendedReads, func(item SymbolBundleItem) bool {
+		return item.File == "src/App.tsx" && item.Line == 5
+	}) {
+		t.Fatalf("RecommendedReads = %+v, did not want JSX closing tag", artifact.Metadata.Bundle.Impact.RecommendedReads)
+	}
+}
+
+func TestExecuteSearchCodeArtifactWithConfig_TSXStructuredImpactDefaultWrappedComponent(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/Button.tsx": "import { forwardRef } from 'react'\ntype Props<T> = { value: T }\nexport default forwardRef<HTMLButtonElement, Props<Foo>>(function ForwardButton() { return <button /> })\n",
+		"src/App.tsx":    "import ForwardButton from './Button'\nexport function App() { return <ForwardButton /> }\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newTSXImpactSearchOptions(dir, "ForwardButton"))
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "ForwardButton", "function")
+	if got := artifact.Metadata.Bundle.Definition.File; got != "src/Button.tsx" {
+		t.Fatalf("definition file = %q, want src/Button.tsx", got)
+	}
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainSnippet(callers, "<ForwardButton />") {
+		t.Fatalf("callers = %+v, want JSX usage caller", callers)
+	}
+}
+
 func TestExecuteSearchCodeArtifactWithConfig_TSXStructuredImpactPrefersImplementationOverPairedDeclaration(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"src/Button.tsx":  "export function Button() { return <button /> }\n",

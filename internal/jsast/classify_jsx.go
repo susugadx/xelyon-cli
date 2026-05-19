@@ -2,29 +2,49 @@ package jsast
 
 import (
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/odvcencio/gotreesitter"
+	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 )
 
-func isJSXUsageTarget(parsed *ParsedFile, node *gotreesitter.Node, targetName string, startByte uint32, endByte uint32) bool {
+func classifyJSXTarget(parsed *ParsedFile, node *gotreesitter.Node, targetName string, startByte uint32, endByte uint32) (codeast.MatchClass, bool) {
 	targetName = strings.TrimSpace(targetName)
 	if targetName == "" {
-		return false
+		return "", false
 	}
 	for current := node; current != nil; current = current.Parent() {
 		switch nodeKind(parsed, current) {
 		case "jsx_opening_element", "jsx_self_closing_element":
-			return jsxTargetIsBareLocalName(parsed, jsxElementName(parsed, current), targetName, startByte, endByte)
+			return classifyJSXOpeningTarget(parsed, current, targetName, startByte, endByte)
 		case "jsx_element":
 			if opening := jsxOpeningElement(parsed, current); opening != nil {
-				return jsxTargetIsBareLocalName(parsed, jsxElementName(parsed, opening), targetName, startByte, endByte)
+				return classifyJSXOpeningTarget(parsed, opening, targetName, startByte, endByte)
 			}
-			return false
+			return "", false
 		case "jsx_closing_element":
-			return false
+			return classifyJSXClosingTarget(parsed, current, targetName, startByte, endByte)
 		}
 	}
-	return false
+	return "", false
+}
+
+func classifyJSXOpeningTarget(parsed *ParsedFile, node *gotreesitter.Node, targetName string, startByte uint32, endByte uint32) (codeast.MatchClass, bool) {
+	if !jsxTargetIsBareLocalName(parsed, jsxElementName(parsed, node), targetName, startByte, endByte) {
+		return "", false
+	}
+	if !jsxBareLocalNameIsComponent(targetName) {
+		return ClassIgnored, true
+	}
+	return codeast.ClassCall, true
+}
+
+func classifyJSXClosingTarget(parsed *ParsedFile, node *gotreesitter.Node, targetName string, startByte uint32, endByte uint32) (codeast.MatchClass, bool) {
+	if !jsxTargetIsBareLocalName(parsed, jsxElementName(parsed, node), targetName, startByte, endByte) {
+		return "", false
+	}
+	return ClassIgnored, true
 }
 
 func jsxOpeningElement(parsed *ParsedFile, node *gotreesitter.Node) *gotreesitter.Node {
@@ -75,4 +95,12 @@ func jsxTargetIsBareLocalName(parsed *ParsedFile, node *gotreesitter.Node, targe
 		return false
 	}
 	return true
+}
+
+func jsxBareLocalNameIsComponent(name string) bool {
+	r, _ := utf8.DecodeRuneInString(name)
+	if r == utf8.RuneError {
+		return false
+	}
+	return r == '_' || r == '$' || unicode.IsUpper(r)
 }
