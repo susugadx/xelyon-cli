@@ -64,6 +64,61 @@ func TestNormalModeRequestKeepsReductionCandidateWithoutEvidencePointer(t *testi
 	}
 }
 
+func TestNormalModeRequestDryRunReportsCandidatesWithoutChangingProviderPayload(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldRead := seedProviderHistoryReductionRequestFixture(t, agent, "call_normal_dry_run")
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionDryRun
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if provider.capturedHistory[1].Content != oldRead {
+		t.Fatalf("provider old tool result = %q, want raw dry-run payload", provider.capturedHistory[1].Content)
+	}
+	if provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context disabled response ID chain in dry-run mode")
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionDryRun || report.CandidateCount != 1 || report.ReplacedCount != 0 {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want dry-run candidate report without replacement", report)
+	}
+	if agent.History[1].Content != oldRead {
+		t.Fatalf("Agent.History[1].Content = %q, want raw old read", agent.History[1].Content)
+	}
+}
+
+func TestNormalModeRequestAutoUsesDryRunEffectiveMode(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldRead := seedProviderHistoryReductionRequestFixture(t, agent, "call_normal_auto")
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionAuto
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if provider.capturedHistory[1].Content != oldRead {
+		t.Fatalf("provider old tool result = %q, want raw auto/dry-run payload", provider.capturedHistory[1].Content)
+	}
+	if provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context disabled response ID chain in auto dry-run mode")
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionDryRun || report.CandidateCount != 1 || report.ReplacedCount != 0 {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want dry-run report for auto mode", report)
+	}
+}
+
 func TestNormalModeRequestAppliesProviderHistoryReductionPreservesInferredToolName(t *testing.T) {
 	disableColors(t)
 

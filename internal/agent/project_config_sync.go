@@ -19,6 +19,9 @@ func (a *Agent) syncRuntimeProjectConfig(pc *config.ProjectConfig) error {
 	if err := a.syncRuntimeProjectFinalChecks(pc); err != nil {
 		return err
 	}
+	if err := syncProviderHistoryReductionModeFromProjectConfig(a.Runtime, pc); err != nil {
+		return err
+	}
 
 	a.promptManager().InvalidateProjectMap()
 	a.refreshProjectPrompt("")

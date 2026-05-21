@@ -25,10 +25,12 @@ func RunOnceWithConfig(query string, model string, provider api.Provider, cfg *c
 	}
 
 	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
-	initializeProjectInstructions(agent, projectInstructionApplyOptions{
+	if err := initializeProjectInstructions(agent, projectInstructionApplyOptions{
 		showStatus:       !quiet,
 		injectProjectMap: true,
-	})
+	}); err != nil {
+		return err
+	}
 
 	// 明示的に1ターンのみ実行（ChatOnce は stdin を読まず、REPL に入らない）
 	return agent.ChatOnce(query)
@@ -66,10 +68,12 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 	}
 
 	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
-	initializeProjectInstructions(agent, projectInstructionApplyOptions{
+	if err := initializeProjectInstructions(agent, projectInstructionApplyOptions{
 		showStatus:       !quiet,
 		injectProjectMap: true,
-	})
+	}); err != nil {
+		return err
+	}
 
 	if !quiet {
 		_, _ = fmt.Fprintln(agent.output())

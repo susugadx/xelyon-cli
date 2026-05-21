@@ -17,11 +17,13 @@ func providerHistoryProjectionReportIsEmpty(report ProviderHistoryProjectionRepo
 func providerHistoryProjectionModeLabel(mode ProviderHistoryReductionMode) string {
 	switch mode {
 	case ProviderHistoryReductionDisabled:
-		return "disabled"
+		return "off"
 	case ProviderHistoryReductionDryRun:
-		return "dry-run"
+		return "dry_run"
 	case ProviderHistoryReductionApply:
 		return "apply"
+	case ProviderHistoryReductionAuto:
+		return "auto"
 	default:
 		return "unknown"
 	}
@@ -45,11 +47,22 @@ func providerHistoryReductionStatusSummary(runtime *AgentRuntime) (string, bool)
 		return "", false
 	}
 	report := runtime.LastProviderHistoryProjectionReport
-	if !providerHistoryProjectionReportIsEmpty(report) {
+	hasReport := !providerHistoryProjectionReportIsEmpty(report)
+	resolution := providerHistoryReductionModeResolutionForRuntime(runtime)
+
+	if resolution.configured == ProviderHistoryReductionAuto {
+		prefix := fmt.Sprintf("mode=auto; effective=%s", providerHistoryProjectionModeLabel(resolution.effective))
+		if hasReport {
+			return fmt.Sprintf("%s; report: %s", prefix, formatProviderHistoryProjectionReportSummary(report)), true
+		}
+		return prefix + "; no report yet", true
+	}
+
+	if hasReport {
 		return formatProviderHistoryProjectionReportSummary(report), true
 	}
-	if runtime.Options.EnableProviderHistoryReduction {
-		return "enabled; no report yet", true
+	if resolution.specified && resolution.configured != ProviderHistoryReductionDisabled {
+		return fmt.Sprintf("mode=%s; no report yet", providerHistoryProjectionModeLabel(resolution.configured)), true
 	}
 	return "", false
 }

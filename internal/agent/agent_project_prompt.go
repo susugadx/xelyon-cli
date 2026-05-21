@@ -15,22 +15,31 @@ type projectInstructionApplyOptions struct {
 }
 
 func loadProjectInstructionBundleForCWD(cfg *config.Config, cwd string) *config.ProjectInstructionBundle {
-	bundle, err := config.LoadProjectInstructionBundleForDir(cfg, cwd)
-	if err != nil {
-		return nil
-	}
+	bundle, _ := loadProjectInstructionBundleForCWDWithError(cfg, cwd)
 	return bundle
 }
 
+func loadProjectInstructionBundleForCWDWithError(cfg *config.Config, cwd string) (*config.ProjectInstructionBundle, error) {
+	return config.LoadProjectInstructionBundleForDir(cfg, cwd)
+}
+
 func (a *Agent) loadProjectInstructionBundleCached(forceReload bool) *config.ProjectInstructionBundle {
+	bundle, _ := a.loadProjectInstructionBundleCachedWithError(forceReload)
+	return bundle
+}
+
+func (a *Agent) loadProjectInstructionBundleCachedWithError(forceReload bool) (*config.ProjectInstructionBundle, error) {
 	if a == nil {
-		return nil
+		return nil, nil
 	}
 	cache := newProjectInstructionBundleCache(a)
 	if decision := cache.decision(forceReload); decision.reuse {
-		return a.projectInstructionBundle
+		return a.projectInstructionBundle, nil
 	} else {
-		bundle := loadProjectInstructionBundleForCWD(a.cfg(), a.invocationCWD())
+		bundle, err := loadProjectInstructionBundleForCWDWithError(a.cfg(), a.invocationCWD())
+		if err != nil {
+			return nil, err
+		}
 		a.projectInstructionBundle = bundle
 		a.projectInstructionBundleLoaded = true
 		if decision.cacheKey != "" {
@@ -38,7 +47,7 @@ func (a *Agent) loadProjectInstructionBundleCached(forceReload bool) *config.Pro
 		} else {
 			a.projectInstructionBundleKey = cache.currentKey()
 		}
-		return bundle
+		return bundle, nil
 	}
 }
 
@@ -103,31 +112,35 @@ func injectProjectInstructionBundle(systemPrompt string, bundle *config.ProjectI
 }
 
 // initializeProjectInstructions はプロジェクト instruction 初期化を行う統一ヘルパー。
-// bundle 読み込み + SystemPrompt 注入 + final checks 解決 + UI 表示 + project map 注入を行う。
-func initializeProjectInstructions(agent *Agent, opts projectInstructionApplyOptions) {
+// bundle 読み込み + SystemPrompt 注入 + runtime 設定同期 + UI 表示 + project map 注入を行う。
+func initializeProjectInstructions(agent *Agent, opts projectInstructionApplyOptions) error {
 	if agent == nil {
-		return
+		return nil
 	}
 	pm := agent.promptManager()
 	if pm == nil {
-		return
+		return nil
 	}
-	pm.InitializeProjectInstructions(opts)
+	return pm.InitializeProjectInstructions(opts)
 }
 
-// applyProjectInstructionBundle は bundle を final checks / 表示へ適用する。
-func applyProjectInstructionBundle(agent *Agent, bundle *config.ProjectInstructionBundle, showStatus bool) {
+// applyProjectInstructionBundle は bundle を runtime 設定 / 表示へ適用する。
+func applyProjectInstructionBundle(agent *Agent, bundle *config.ProjectInstructionBundle, showStatus bool) error {
 	if bundle == nil {
-		return
+		return nil
 	}
 
 	applyFinalChecksFromBundle(agent, bundle)
+	if err := syncProviderHistoryReductionModeFromProjectConfig(agent.Runtime, bundle.ProjectConfig); err != nil {
+		return err
+	}
 
 	if !showStatus {
-		return
+		return nil
 	}
 
 	renderProjectInstructionStatus(agent, bundle)
+	return nil
 }
 
 func applyFinalChecksFromBundle(agent *Agent, bundle *config.ProjectInstructionBundle) {

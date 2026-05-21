@@ -10,6 +10,8 @@ const (
 	ProviderHistoryReductionDryRun
 	// ProviderHistoryReductionApply は projection clone 上で安全な候補だけを置換する。
 	ProviderHistoryReductionApply
+	// ProviderHistoryReductionAuto は現時点では dry-run 相当の安全側実効 mode。
+	ProviderHistoryReductionAuto
 )
 
 // ProviderHistoryReductionPolicy は provider-facing reduction の方針を選ぶ。
@@ -49,7 +51,11 @@ type ProviderHistoryProjectionReport struct {
 }
 
 func normalizeProviderHistoryReductionPolicy(policy ProviderHistoryReductionPolicy) ProviderHistoryReductionPolicy {
-	if policy.Mode != ProviderHistoryReductionDryRun && policy.Mode != ProviderHistoryReductionApply {
+	switch policy.Mode {
+	case ProviderHistoryReductionDryRun, ProviderHistoryReductionApply:
+	case ProviderHistoryReductionAuto:
+		policy.Mode = ProviderHistoryReductionDryRun
+	default:
 		policy.Mode = ProviderHistoryReductionDisabled
 	}
 	return policy

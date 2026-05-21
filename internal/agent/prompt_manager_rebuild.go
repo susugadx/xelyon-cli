@@ -16,14 +16,20 @@ func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
 	})
 }
 
-func (m *PromptManager) InitializeProjectInstructions(opts projectInstructionApplyOptions) {
+func (m *PromptManager) InitializeProjectInstructions(opts projectInstructionApplyOptions) error {
 	a := m.agent
 	if a == nil {
-		return
+		return nil
 	}
-	bundle := a.loadProjectInstructionBundleCached(true)
-	applyProjectInstructionBundle(a, bundle, opts.showStatus)
+	bundle, err := a.loadProjectInstructionBundleCachedWithError(true)
+	if err != nil {
+		return err
+	}
+	if err := applyProjectInstructionBundle(a, bundle, opts.showStatus); err != nil {
+		return err
+	}
 	m.rebuildProjectPromptWithResolvedBundle(opts.projectMapInput, bundle, opts.injectProjectMap)
+	return nil
 }
 
 func (m *PromptManager) RebuildSystemPrompt(req systemPromptRebuildRequest) {

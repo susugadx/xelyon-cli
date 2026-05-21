@@ -46,10 +46,12 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 	setupSignalHandler(agent)
 
 	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
-	initializeProjectInstructions(agent, projectInstructionApplyOptions{
+	if err := initializeProjectInstructions(agent, projectInstructionApplyOptions{
 		showStatus:       true,
 		injectProjectMap: true,
-	})
+	}); err != nil {
+		red.Fprintf(runtimeUI.Output(), "Failed to load project instructions: %v\n", err)
+	}
 	checkRipgrepAvailability(agent)
 	checkLSPInstallPrompt(agent, commandSurface)
 

@@ -55,9 +55,10 @@ func TestProviderHistoryProjectionModeLabel(t *testing.T) {
 		mode ProviderHistoryReductionMode
 		want string
 	}{
-		{ProviderHistoryReductionDisabled, "disabled"},
-		{ProviderHistoryReductionDryRun, "dry-run"},
+		{ProviderHistoryReductionDisabled, "off"},
+		{ProviderHistoryReductionDryRun, "dry_run"},
 		{ProviderHistoryReductionApply, "apply"},
+		{ProviderHistoryReductionAuto, "auto"},
 		{ProviderHistoryReductionMode(99), "unknown"},
 	}
 
@@ -86,7 +87,24 @@ func TestHandleStatusCommandShowsProviderHistoryReductionEnabledWithoutReport(t 
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
 	for _, want := range []string{
 		"Provider history reduction",
-		"enabled; no report yet",
+		"mode=apply; no report yet",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestHandleStatusCommandShowsProviderHistoryReductionDryRunWithoutReport(t *testing.T) {
+	var out bytes.Buffer
+	agent := newProviderHistoryStatusTestAgent(t, &out)
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionDryRun
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+
+	output := renderProviderHistoryStatusCommand(t, agent, &out)
+	for _, want := range []string{
+		"Provider history reduction",
+		"mode=dry_run; no report yet",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -104,6 +122,27 @@ func TestHandleStatusCommandShowsProviderHistoryReductionReportSummary(t *testin
 	for _, want := range []string{
 		"Provider history reduction",
 		providerHistoryStatusSummaryFixture,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestHandleStatusCommandShowsProviderHistoryReductionAutoAndEffectiveReport(t *testing.T) {
+	var out bytes.Buffer
+	agent := newProviderHistoryStatusTestAgent(t, &out)
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionAuto
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+	report := providerHistoryStatusTestReport()
+	report.Mode = ProviderHistoryReductionDryRun
+	agent.Runtime.LastProviderHistoryProjectionReport = report
+
+	output := renderProviderHistoryStatusCommand(t, agent, &out)
+	for _, want := range []string{
+		"Provider history reduction",
+		"mode=auto; effective=dry_run",
+		"report: mode=dry_run; candidates=3; replaced=2; kept=1",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)

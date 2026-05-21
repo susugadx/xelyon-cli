@@ -82,10 +82,9 @@ func (a *Agent) buildProviderHistoryProjectionFromRaw(policy ProviderHistoryRedu
 }
 
 func providerHistoryReductionPolicyForRuntime(runtime *AgentRuntime) ProviderHistoryReductionPolicy {
-	if runtime == nil || !runtime.Options.EnableProviderHistoryReduction {
-		return ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionDisabled}
+	return ProviderHistoryReductionPolicy{
+		Mode: providerHistoryReductionModeResolutionForRuntime(runtime).effective,
 	}
-	return ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionApply}
 }
 
 func (a *Agent) recordLastProviderHistoryProjectionReport(report ProviderHistoryProjectionReport) {
