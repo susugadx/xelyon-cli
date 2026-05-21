@@ -66,7 +66,7 @@ func setJSFamilyBundleLSPDiagnostics(bundle *SymbolBundle, resolved bool) {
 func findJSFamilyReferencesWithSemantic(symbol string, def genericSymbolDef, opts jsFamilyReferenceOptions) jsFamilyReferenceResult {
 	if opts.lsp.request.LSPClient != nil && def.Character > 0 {
 		collection, err := findJSFamilyReferencesWithLSP(symbol, def, opts.lsp)
-		if err == nil && collection.usable() {
+		if err == nil && collection.hasRawLocations() {
 			return jsFamilyReferenceResult{
 				refs:           collection.refs,
 				totalRefs:      collection.summaryRefs,
@@ -74,5 +74,5 @@ func findJSFamilyReferencesWithSemantic(symbol string, def genericSymbolDef, opt
 			}
 		}
 	}
-	return jsFamilyReferenceResult{refs: findJSFamilyReferencesWithAST(symbol, opts.nameOnly)}
+	return jsFamilyReferenceResult{refs: findJSFamilyReferencesWithAST(symbol, def, opts.nameOnly)}
 }

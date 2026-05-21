@@ -279,7 +279,34 @@ func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactFallsBack
 	}
 }
 
-func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactFallsBackWhenLSPEvidenceCannotLoad(t *testing.T) {
+func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactUsesLSPWhenFilteredRefsAreEmpty(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/build.ts": "export function buildUser(id: string) { return id }\n",
+		"src/noise.ts": "buildUser('fallback-only')\n",
+		"other/app.ts": "buildUser('semantic out of scope')\n",
+	})
+	opts := newTypeScriptImpactSearchOptions(dir, "buildUser")
+	opts.Path = filepath.Join(dir, "src")
+	opts.LSPClient = &mockJSFamilyLSPClient{
+		refs: []navigation.LSPLocation{{File: "other/app.ts", Line: 1, Character: 1}},
+	}
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, opts)
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
+		t.Fatal("ResolvedViaLSP = false, want true when LSP returned refs that were filtered by user scope")
+	}
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if symbolBundleItemsContainSnippet(callers, "fallback-only") {
+		t.Fatalf("callers = %+v, did not want AST fallback caller after LSP returned refs", callers)
+	}
+	if symbolBundleItemsContainSnippet(callers, "semantic out of scope") {
+		t.Fatalf("callers = %+v, did not want out-of-scope LSP caller", callers)
+	}
+}
+
+func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactUsesLSPWhenLSPEvidenceCannotLoad(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"src/build.js": "function buildUser(id) { return id }\n",
 		"src/app.js":   "buildUser('fallback')\n",
@@ -292,11 +319,11 @@ func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactFallsBack
 	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, opts)
 
 	assertJavaScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
-	if artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
-		t.Fatal("ResolvedViaLSP = true, want false when LSP refs have no loadable evidence")
+	if !artifact.Metadata.Bundle.Diagnostics.ResolvedViaLSP {
+		t.Fatal("ResolvedViaLSP = false, want true when LSP returned refs whose evidence could not load")
 	}
 	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
-	if !symbolBundleItemsContainSnippet(callers, "buildUser('fallback')") {
-		t.Fatalf("callers = %+v, want fallback AST caller", callers)
+	if symbolBundleItemsContainSnippet(callers, "buildUser('fallback')") {
+		t.Fatalf("callers = %+v, did not want AST fallback caller after LSP returned refs", callers)
 	}
 }

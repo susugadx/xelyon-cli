@@ -3,7 +3,6 @@ package search
 import (
 	"context"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
@@ -31,17 +30,13 @@ func findJSFamilyReferencesWithLSP(symbol string, def genericSymbolDef, opts jsF
 }
 
 type jsFamilyLSPReferenceCollection struct {
-	refs        []genericSymbolRef
-	summaryRefs []genericSymbolRef
+	refs             []genericSymbolRef
+	summaryRefs      []genericSymbolRef
+	rawLocationCount int
 }
 
-func (collection jsFamilyLSPReferenceCollection) usable() bool {
-	for _, ref := range collection.refs {
-		if strings.TrimSpace(ref.Snippet) != "" || ref.Class != "" {
-			return true
-		}
-	}
-	return false
+func (collection jsFamilyLSPReferenceCollection) hasRawLocations() bool {
+	return collection.rawLocationCount > 0
 }
 
 func collectJSFamilyLSPReferences(symbol string, def genericSymbolDef, locations []navigation.LSPLocation, opts jsFamilyLSPReferenceOptions) jsFamilyLSPReferenceCollection {
@@ -50,7 +45,9 @@ func collectJSFamilyLSPReferences(symbol string, def genericSymbolDef, locations
 	for _, loc := range locations {
 		collector.AddLocation(loc)
 	}
-	return collector.Result()
+	collection := collector.Result()
+	collection.rawLocationCount = len(locations)
+	return collection
 }
 
 func jsFamilyRefFromLSPLocation(symbol string, loc navigation.LSPLocation, opts jsFamilyLSPReferenceOptions) (genericSymbolRef, bool) {

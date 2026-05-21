@@ -10,12 +10,13 @@ func TestFindJSFamilyReferencesWithAST_CollectsCallerBehindCommentBudget(t *test
 		"src/build.ts": jsFamilyReferenceBudgetSource("export function buildUser(id: string) { return id }\n"),
 	})
 
-	refs := findJSFamilyReferencesWithAST("buildUser", SearchOptions{
+	opts := SearchOptions{
 		Path:               dir,
 		FileType:           "ts",
 		InvocationCWD:      dir,
 		ProjectMapRootPath: dir,
-	})
+	}
+	refs := findJSFamilyReferencesWithAST("buildUser", genericSymbolDef{File: "src/build.ts"}, opts)
 	classified := classifyJSFamilySymbolRefsFromAST(refs)
 
 	if !genericRefsContainSnippet(classified.callers, "buildUser('real caller')") {

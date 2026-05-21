@@ -48,6 +48,22 @@ func nodeText(parsed *ParsedFile, node *gotreesitter.Node) string {
 	return node.Text(parsed.src)
 }
 
+func hasDirectAnonymousChildKind(parsed *ParsedFile, node *gotreesitter.Node, kinds ...string) bool {
+	for i := 0; node != nil && i < node.ChildCount(); i++ {
+		child := node.Child(i)
+		if child == nil || child.IsNamed() {
+			continue
+		}
+		childKind := nodeKind(parsed, child)
+		for _, kind := range kinds {
+			if childKind == kind {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func childByField(parsed *ParsedFile, node *gotreesitter.Node, field string) *gotreesitter.Node {
 	if parsed == nil || parsed.grammar == nil || node == nil {
 		return nil
@@ -88,8 +104,25 @@ func childByField(parsed *ParsedFile, node *gotreesitter.Node, field string) *go
 				return node.NamedChild(count - 1)
 			}
 		}
+	case "nested_identifier":
+		switch field {
+		case "object":
+			return node.NamedChild(0)
+		case "property":
+			if count := node.NamedChildCount(); count > 1 {
+				return node.NamedChild(count - 1)
+			}
+		}
+	case "internal_module":
+		if field == "name" {
+			return node.NamedChild(0)
+		}
+	case "import_statement":
+		if field == "source" {
+			return firstNamedChildOfKind(parsed, node, "string")
+		}
 	case "function_declaration", "generator_function_declaration", "function_signature",
-		"class_declaration", "interface_declaration", "type_alias_declaration", "enum_declaration",
+		"class_declaration", "abstract_class_declaration", "interface_declaration", "type_alias_declaration", "enum_declaration",
 		"method_definition", "method_signature", "abstract_method_signature",
 		"public_field_definition", "property_signature",
 		"function", "function_expression", "generator_function",
