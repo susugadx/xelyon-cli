@@ -127,3 +127,90 @@ func TestSaveAndSyncProjectConfigRefreshesProjectMapIgnorePatterns(t *testing.T)
 		t.Fatalf("SystemPrompt did not refresh project context:\n%s", agent.SystemPrompt)
 	}
 }
+
+func TestSaveAndSyncProjectConfigKeepsFinalChecksOnInvalidProviderHistoryReductionEnv(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv(config.ProviderHistoryReductionEnvVar, "x")
+	cfg := newProjectMapDisabledConfig()
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+
+	projectDir := t.TempDir()
+	agent := newProjectConfigSyncTestAgent(t, cfg)
+	agent.cfg().FinalChecks = config.FinalChecksConfig{
+		Commands: []string{"existing verify"},
+		Timeout:  99,
+	}
+
+	pc := &config.ProjectConfig{
+		Context: "new context",
+		FinalChecks: &config.FinalChecksConfig{
+			Commands: []string{"project verify"},
+			Timeout:  30,
+		},
+		FilePath: filepath.Join(projectDir, "xelyon.yaml"),
+	}
+	err := agent.SaveAndSyncProjectConfig(pc)
+	if err == nil {
+		t.Fatal("SaveAndSyncProjectConfig() error = nil, want invalid provider history reduction env error")
+	}
+	assertInvalidProviderHistoryReductionModeError(t, err.Error())
+	assertRuntimeFinalChecks(t, agent, []string{"existing verify"}, 99)
+	if strings.Contains(agent.SystemPrompt, "new context") {
+		t.Fatalf("SystemPrompt refreshed after sync error:\n%s", agent.SystemPrompt)
+	}
+}
+
+func TestSaveAndSyncProjectConfigKeepsProviderHistoryModeWhenFinalChecksFallbackFails(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	configDir := filepath.Join(tmpHome, ".xelyon")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(configDir) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("final_checks: ["), 0o644); err != nil {
+		t.Fatalf("WriteFile(config.yaml) error = %v", err)
+	}
+
+	projectDir := t.TempDir()
+	cfg := newProjectMapDisabledConfig()
+	agent := newProjectConfigSyncTestAgent(t, cfg)
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionApply
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+	agent.cfg().FinalChecks = config.FinalChecksConfig{
+		Commands: []string{"existing verify"},
+		Timeout:  99,
+	}
+
+	pc := &config.ProjectConfig{
+		Context: "new context",
+		Experimental: config.ProjectExperimentalConfig{
+			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
+				Mode: config.ProjectProviderHistoryReductionModeDryRun,
+			},
+		},
+		FilePath: filepath.Join(projectDir, "xelyon.yaml"),
+	}
+	err := agent.SaveAndSyncProjectConfig(pc)
+	if err == nil {
+		t.Fatal("SaveAndSyncProjectConfig() error = nil, want invalid global config error")
+	}
+	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionApply, true)
+	assertRuntimeFinalChecks(t, agent, []string{"existing verify"}, 99)
+	if strings.Contains(agent.SystemPrompt, "new context") {
+		t.Fatalf("SystemPrompt refreshed after sync error:\n%s", agent.SystemPrompt)
+	}
+}
+
+func newProjectConfigSyncTestAgent(t *testing.T, cfg *config.Config) *Agent {
+	t.Helper()
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	return &Agent{
+		Runtime:      runtime,
+		SystemPrompt: "base prompt",
+		CurrentModel: "deepseek-chat",
+	}
+}

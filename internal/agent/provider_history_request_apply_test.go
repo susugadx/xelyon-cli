@@ -55,8 +55,8 @@ func TestNormalModeRequestKeepsReductionCandidateWithoutEvidencePointer(t *testi
 		t.Fatalf("Agent.History[1].Content = %q, want raw old read", agent.History[1].Content)
 	}
 	report := agent.Runtime.LastProviderHistoryProjectionReport
-	if report.Mode != ProviderHistoryReductionApply || report.CandidateCount != 1 || report.ReplacedCount != 0 {
-		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want one unapplied apply candidate", report)
+	if report.Mode != ProviderHistoryReductionApply || report.CandidateCount != 1 || report.ReplacedCount != 0 || report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want one unapplied apply candidate without chain disable", report)
 	}
 	candidate := candidateByToolCallID(report, "call_missing_evidence")
 	if candidate == nil || candidate.ReplacementApplied || candidate.KeepReason != "missing_evidence_pointer" {
@@ -85,8 +85,8 @@ func TestNormalModeRequestDryRunReportsCandidatesWithoutChangingProviderPayload(
 		t.Fatal("provider request context disabled response ID chain in dry-run mode")
 	}
 	report := agent.Runtime.LastProviderHistoryProjectionReport
-	if report.Mode != ProviderHistoryReductionDryRun || report.CandidateCount != 1 || report.ReplacedCount != 0 {
-		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want dry-run candidate report without replacement", report)
+	if report.Mode != ProviderHistoryReductionDryRun || report.CandidateCount != 1 || report.ReplacedCount != 0 || report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want dry-run candidate report without replacement or chain disable", report)
 	}
 	if agent.History[1].Content != oldRead {
 		t.Fatalf("Agent.History[1].Content = %q, want raw old read", agent.History[1].Content)
@@ -114,8 +114,8 @@ func TestNormalModeRequestAutoUsesDryRunEffectiveMode(t *testing.T) {
 		t.Fatal("provider request context disabled response ID chain in auto dry-run mode")
 	}
 	report := agent.Runtime.LastProviderHistoryProjectionReport
-	if report.Mode != ProviderHistoryReductionDryRun || report.CandidateCount != 1 || report.ReplacedCount != 0 {
-		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want dry-run report for auto mode", report)
+	if report.Mode != ProviderHistoryReductionDryRun || report.CandidateCount != 1 || report.ReplacedCount != 0 || report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want dry-run report for auto mode without chain disable", report)
 	}
 }
 

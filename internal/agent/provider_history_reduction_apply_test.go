@@ -61,6 +61,9 @@ func TestProviderHistoryReductionApplyReplacesAllowedToolResultsWithEvidencePoin
 	if report.CandidateCount != 3 || report.ReplacedCount != 3 || report.ToolResultCount != 4 || report.KeptCount != 1 {
 		t.Fatalf("report counts = candidates %d replaced %d toolResults %d kept %d, want 3/3/4/1", report.CandidateCount, report.ReplacedCount, report.ToolResultCount, report.KeptCount)
 	}
+	if !report.ResponsesChainDisabled {
+		t.Fatalf("ResponsesChainDisabled = false, want true after provider-facing replacements")
+	}
 	wantRead := "[omitted old read_file result; evidence: README.md:L1-L80 source=read_file; internal/a.go:L2 source=read_file; internal/b.go:L3-L4 source=read_file; +2 more]"
 	if result.History[2].Content != wantRead {
 		t.Fatalf("read replacement = %q, want %q", result.History[2].Content, wantRead)
@@ -103,6 +106,9 @@ func TestProviderHistoryReductionApplyReplacesAllowedToolResultsWithEvidencePoin
 	if latest := keptByToolCallID(report, "call_latest"); latest == nil || latest.KeepReason != "latest_tool_result" {
 		t.Fatalf("latest tool result keep entry = %#v, want latest_tool_result", latest)
 	}
+	if report.KeptReasonCounts["latest_tool_result"] != 1 {
+		t.Fatalf("KeptReasonCounts = %#v, want latest_tool_result:1", report.KeptReasonCounts)
+	}
 	assertProviderHistoryByteMetrics(t, agent.History, result.History, report)
 }
 
@@ -138,6 +144,9 @@ func TestProviderHistoryReductionApplyKeepsWhenReplacementWouldNotReduceBytes(t 
 	if result.Report.ReplacedCount != 0 || result.Report.KeptCount != result.Report.ToolResultCount || result.Report.EstimatedSavedBytes != 0 {
 		t.Fatalf("report = replaced %d kept %d toolResults %d saved %d, want no increase/no replacement", result.Report.ReplacedCount, result.Report.KeptCount, result.Report.ToolResultCount, result.Report.EstimatedSavedBytes)
 	}
+	if result.Report.ResponsesChainDisabled {
+		t.Fatalf("ResponsesChainDisabled = true, want false without replacement")
+	}
 	assertProviderHistoryByteMetrics(t, agent.History, result.History, result.Report)
 }
 
@@ -163,6 +172,12 @@ func TestProviderHistoryReductionApplyKeepsCandidateWithoutEvidencePointer(t *te
 	assertKeepReason(t, result.Report, "call_old", "missing_evidence_pointer")
 	if result.Report.ReplacedCount != 0 || result.Report.KeptCount != result.Report.ToolResultCount {
 		t.Fatalf("report replacement/keep counts = %d/%d with tool results %d, want 0/all kept", result.Report.ReplacedCount, result.Report.KeptCount, result.Report.ToolResultCount)
+	}
+	if result.Report.KeptReasonCounts["missing_evidence_pointer"] != 1 {
+		t.Fatalf("KeptReasonCounts = %#v, want missing_evidence_pointer:1", result.Report.KeptReasonCounts)
+	}
+	if result.Report.ResponsesChainDisabled {
+		t.Fatalf("ResponsesChainDisabled = true, want false without replacement")
 	}
 	assertProviderHistoryByteMetrics(t, agent.History, result.History, result.Report)
 }

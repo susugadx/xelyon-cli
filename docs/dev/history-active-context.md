@@ -64,7 +64,7 @@ Phase 5b-3 adds gated actual replacement mode behind the internal projection pol
 - Replacement text is a single-line placeholder such as `[omitted old read_file result; evidence: README.md:L1-L80 source=read_file; +2 more]`.
 - Message shape is preserved: role, tool call id, assistant tool calls, reasoning content, provider state, and continuation metadata are not changed. If a replaced tool result is missing `ToolName`, apply mode copies the tool name inferred from the matching assistant tool call onto the projection clone so provider adapters can keep function-response continuity.
 - Raw storage remains unchanged: `Agent.History`, `history.Session.Messages`, session tool execution audit entries, audit logs, and change records continue to store the raw conversation/audit data.
-- The projection report records detected candidates, kept candidates, replacement count, original/projected content bytes, and estimated saved bytes.
+- The projection report records detected candidates, kept candidates, replacement count, original/projected content bytes, estimated saved bytes, approximate saved tokens, kept reason counts, and whether a replacement disabled Responses continuation.
 - Phase 5b-4 can enable this policy on a limited request path without adding a new storage migration.
 
 Phase 5b-4 enables replacement on user-facing provider request paths behind an internal runtime option.
@@ -81,8 +81,8 @@ Phase 5c exposes the last provider history reduction projection as a `/status` r
 
 - `/status` shows a `Provider history reduction` section only when the runtime mode is not `off` without a report, or when `AgentRuntime.LastProviderHistoryProjectionReport` contains a non-empty report.
 - With a non-`off` runtime mode and no report yet, `/status` prints the configured mode, for example `mode=apply; no report yet`.
-- With a report, `/status` prints a deterministic count/byte summary such as `mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B`.
-- The diagnostic reports counts and bytes only. It does not add token savings, cost estimates, config, CLI flags, environment flags, generated config, `/config`, or `/tokens` output.
+- With a report, `/status` prints a deterministic count/byte summary such as `mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B; approx_saved_tokens=42; kept_reasons=dry_run:1, missing_evidence_pointer:2; responses_chain_disabled=true`.
+- The diagnostic reports counts, bytes, approximate saved tokens, kept reason counts, and whether the Responses continuation chain was disabled. It does not add cost estimates, config, CLI flags, generated config, `/config`, or `/tokens` output.
 - The diagnostic remains runtime-only: it is not appended to `Agent.History`, `history.Session.Messages`, tool execution audit entries, audit logs, change records, compacted state, model input, or persisted session JSONL.
 
 Phase 5d adds an experimental project-local mode selector for controlled rollout.
@@ -93,6 +93,37 @@ Phase 5d adds an experimental project-local mode selector for controlled rollout
 - `apply` uses the existing safe replacement path and disables the Responses continuation chain only when a replacement is actually applied.
 - `auto` is accepted as an enum but currently resolves to the safe `dry_run` effective mode. `/status` reports the configured mode separately, for example `mode=auto; effective=dry_run; report: mode=dry_run; ...`.
 - Raw storage remains unchanged in every mode: `Agent.History`, `history.Session.Messages`, session tool execution audit entries, audit logs, change records, compacted state, and persisted session JSONL keep the original conversation/audit data.
+
+## Provider History Reduction Dogfood
+
+This mode is experimental runtime dogfood only. Do not expose it in `/config`, generated config metadata, README, or `docs/config.md` until the public config contract is decided.
+
+Project-local dry-run:
+
+```yaml
+experimental:
+  provider_history_reduction:
+    mode: dry_run
+```
+
+Environment override for a single run:
+
+```sh
+XELYON_PROVIDER_HISTORY_REDUCTION=dry_run xelyon
+XELYON_PROVIDER_HISTORY_REDUCTION=apply xelyon
+XELYON_PROVIDER_HISTORY_REDUCTION=off xelyon
+```
+
+In `dry_run`, inspect `/status` after a provider-facing request:
+
+- `candidates`, `replaced`, and `kept` show detector and replacement counts.
+- `saved` shows estimated content bytes saved; `approx_saved_tokens` is a diagnostic-only token estimate, not billing usage.
+- `kept_reasons` shows sorted keep reason counts using the internal reason strings.
+- `responses_chain_disabled` should stay `false` in `dry_run` and `auto` because provider payload remains raw.
+
+Switch to `apply` only after dry-run candidates and kept reasons look expected, and test on a limited task where repeated read/search calls do not increase and answer quality does not regress. OpenAI/Azure Responses requests may drop the `previous_response_id` continuation chain when replacement actually happens; `apply` with zero replacements keeps the chain.
+
+Raw storage is unchanged in all modes: runtime `Agent.History`, `Session.Messages`, audit entries, change records, and persisted JSONL keep the original content.
 
 ## Responses Continuation
 

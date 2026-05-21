@@ -3,6 +3,7 @@ package agent
 import (
 	"sort"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
@@ -32,9 +33,13 @@ func finalizeProviderHistoryProjectionReport(report *ProviderHistoryProjectionRe
 	})
 	report.OriginalBytes = providerHistoryContentBytes(original)
 	report.ProjectedBytes = providerHistoryContentBytes(projected)
+	report.EstimatedSavedBytes = 0
 	if report.OriginalBytes > report.ProjectedBytes {
 		report.EstimatedSavedBytes = report.OriginalBytes - report.ProjectedBytes
 	}
+	report.ApproxSavedTokens = providerHistoryApproxSavedTokens(original, projected)
+	report.KeptReasonCounts = countProviderHistoryKeptReasons(report.Kept)
+	report.ResponsesChainDisabled = report.Mode == ProviderHistoryReductionApply && report.ReplacedCount > 0
 }
 
 func countProviderHistoryReplacementApplied(candidates []ProviderHistoryReductionCandidate) int {
@@ -53,4 +58,38 @@ func providerHistoryContentBytes(messages []api.Message) int {
 		total += len(msg.Content)
 	}
 	return total
+}
+
+func providerHistoryApproxSavedTokens(original, projected []api.Message) int {
+	originalTokens := providerHistoryContentTokens(original)
+	projectedTokens := providerHistoryContentTokens(projected)
+	if originalTokens <= projectedTokens {
+		return 0
+	}
+	return originalTokens - projectedTokens
+}
+
+func providerHistoryContentTokens(messages []api.Message) int {
+	total := 0
+	for _, msg := range messages {
+		total += token.EstimateTokenCount(msg.Content)
+	}
+	return total
+}
+
+func countProviderHistoryKeptReasons(kept []ProviderHistoryReductionCandidate) map[string]int {
+	if len(kept) == 0 {
+		return nil
+	}
+	counts := make(map[string]int)
+	for _, candidate := range kept {
+		if candidate.KeepReason == "" {
+			continue
+		}
+		counts[candidate.KeepReason]++
+	}
+	if len(counts) == 0 {
+		return nil
+	}
+	return counts
 }

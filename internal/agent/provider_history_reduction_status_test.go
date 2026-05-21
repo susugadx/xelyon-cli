@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-const providerHistoryStatusSummaryFixture = "mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B"
+const providerHistoryStatusSummaryFixture = "mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B; approx_saved_tokens=42; kept_reasons=dry_run:1, missing_evidence_pointer:2; responses_chain_disabled=true"
 
 func TestProviderHistoryProjectionReportStatusSummaryFormat(t *testing.T) {
 	report := providerHistoryStatusTestReport()
@@ -19,6 +19,17 @@ func TestProviderHistoryProjectionReportStatusSummaryFormat(t *testing.T) {
 	got := formatProviderHistoryProjectionReportSummary(report)
 	if got != providerHistoryStatusSummaryFixture {
 		t.Fatalf("formatProviderHistoryProjectionReportSummary() = %q, want %q", got, providerHistoryStatusSummaryFixture)
+	}
+}
+
+func TestFormatProviderHistoryKeptReasonCountsSortsReasons(t *testing.T) {
+	got := formatProviderHistoryKeptReasonCounts(map[string]int{
+		"missing_evidence_pointer": 2,
+		"dry_run":                  1,
+	})
+	want := "dry_run:1, missing_evidence_pointer:2"
+	if got != want {
+		t.Fatalf("formatProviderHistoryKeptReasonCounts() = %q, want %q", got, want)
 	}
 }
 
@@ -185,7 +196,7 @@ func TestHandleTokensCommandOmitsProviderHistoryReductionDiagnostics(t *testing.
 	}
 
 	output := out.String()
-	for _, reject := range []string{"Provider history reduction", "candidates="} {
+	for _, reject := range []string{"Provider history reduction", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled"} {
 		if strings.Contains(output, reject) {
 			t.Fatalf("/tokens output should not contain %q:\n%s", reject, output)
 		}
@@ -194,13 +205,16 @@ func TestHandleTokensCommandOmitsProviderHistoryReductionDiagnostics(t *testing.
 
 func providerHistoryStatusTestReport() ProviderHistoryProjectionReport {
 	return ProviderHistoryProjectionReport{
-		Mode:                ProviderHistoryReductionApply,
-		CandidateCount:      3,
-		ReplacedCount:       2,
-		KeptCount:           1,
-		OriginalBytes:       1000,
-		ProjectedBytes:      250,
-		EstimatedSavedBytes: 750,
+		Mode:                   ProviderHistoryReductionApply,
+		CandidateCount:         3,
+		ReplacedCount:          2,
+		KeptCount:              1,
+		OriginalBytes:          1000,
+		ProjectedBytes:         250,
+		EstimatedSavedBytes:    750,
+		ApproxSavedTokens:      42,
+		KeptReasonCounts:       map[string]int{"missing_evidence_pointer": 2, "dry_run": 1},
+		ResponsesChainDisabled: true,
 	}
 }
 

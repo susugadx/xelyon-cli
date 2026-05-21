@@ -79,6 +79,10 @@ func assertProviderHistoryByteMetrics(t *testing.T, original, projected []api.Me
 	if report.EstimatedSavedBytes != wantSaved {
 		t.Fatalf("EstimatedSavedBytes = %d, want %d", report.EstimatedSavedBytes, wantSaved)
 	}
+	wantSavedTokens := providerHistoryApproxSavedTokens(original, projected)
+	if report.ApproxSavedTokens != wantSavedTokens {
+		t.Fatalf("ApproxSavedTokens = %d, want %d", report.ApproxSavedTokens, wantSavedTokens)
+	}
 }
 
 func assertLastProviderHistoryProjectionReportPreserved(t *testing.T, runtime *AgentRuntime, want ProviderHistoryProjectionReport) {

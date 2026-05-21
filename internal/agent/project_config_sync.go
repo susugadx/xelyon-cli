@@ -2,6 +2,12 @@ package agent
 
 import "github.com/susugadx/xelyon-cli/internal/config"
 
+type runtimeProjectConfigResolution struct {
+	providerHistoryReductionMode    ProviderHistoryReductionMode
+	providerHistoryReductionModeSet bool
+	finalChecks                     config.FinalChecksConfig
+}
+
 // SaveAndSyncProjectConfig は xelyon.yaml を保存し、現在 runtime の project 由来設定を同期する。
 func (a *Agent) SaveAndSyncProjectConfig(pc *config.ProjectConfig) error {
 	if err := config.SaveProjectConfig(pc); err != nil {
@@ -16,31 +22,48 @@ func (a *Agent) syncRuntimeProjectConfig(pc *config.ProjectConfig) error {
 		return nil
 	}
 
-	if err := a.syncRuntimeProjectFinalChecks(pc); err != nil {
+	resolution, err := a.resolveRuntimeProjectConfig(pc)
+	if err != nil {
 		return err
 	}
-	if err := syncProviderHistoryReductionModeFromProjectConfig(a.Runtime, pc); err != nil {
-		return err
-	}
-
+	a.applyRuntimeProjectConfig(resolution)
 	a.promptManager().InvalidateProjectMap()
 	a.refreshProjectPrompt("")
 	return nil
 }
 
-func (a *Agent) syncRuntimeProjectFinalChecks(pc *config.ProjectConfig) error {
-	cfg := a.cfg()
+func (a *Agent) resolveRuntimeProjectConfig(pc *config.ProjectConfig) (runtimeProjectConfigResolution, error) {
+	providerHistoryMode, providerHistoryModeSet, err := resolveProviderHistoryReductionModeFromProjectConfig(pc)
+	if err != nil {
+		return runtimeProjectConfigResolution{}, err
+	}
+	finalChecks, err := a.resolveRuntimeProjectFinalChecks(pc)
+	if err != nil {
+		return runtimeProjectConfigResolution{}, err
+	}
+
+	return runtimeProjectConfigResolution{
+		providerHistoryReductionMode:    providerHistoryMode,
+		providerHistoryReductionModeSet: providerHistoryModeSet,
+		finalChecks:                     finalChecks,
+	}, nil
+}
+
+func (a *Agent) applyRuntimeProjectConfig(resolution runtimeProjectConfigResolution) {
+	applyProviderHistoryReductionModeToRuntime(a.Runtime, resolution.providerHistoryReductionMode, resolution.providerHistoryReductionModeSet)
+	a.cfg().FinalChecks = resolution.finalChecks
+}
+
+func (a *Agent) resolveRuntimeProjectFinalChecks(pc *config.ProjectConfig) (config.FinalChecksConfig, error) {
 	if pc != nil && pc.FinalChecks != nil {
-		cfg.FinalChecks = cloneFinalChecksValue(*pc.FinalChecks)
-		return nil
+		return cloneFinalChecksValue(*pc.FinalChecks), nil
 	}
 
 	globalCfg, err := config.LoadConfig()
 	if err != nil {
-		return err
+		return config.FinalChecksConfig{}, err
 	}
-	cfg.FinalChecks = cloneFinalChecksValue(globalCfg.FinalChecks)
-	return nil
+	return cloneFinalChecksValue(globalCfg.FinalChecks), nil
 }
 
 func cloneFinalChecksValue(fc config.FinalChecksConfig) config.FinalChecksConfig {

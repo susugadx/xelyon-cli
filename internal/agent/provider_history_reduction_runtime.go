@@ -12,13 +12,28 @@ func syncProviderHistoryReductionModeFromProjectConfig(runtime *AgentRuntime, pr
 	if runtime == nil {
 		return nil
 	}
-	mode, specified, err := config.ResolveProjectProviderHistoryReductionMode(projectCfg, nil)
+	mode, specified, err := resolveProviderHistoryReductionModeFromProjectConfig(projectCfg)
 	if err != nil {
 		return err
 	}
-	runtime.Options.ProviderHistoryReductionMode = providerHistoryReductionModeFromProjectConfigMode(mode)
-	runtime.Options.ProviderHistoryReductionModeSet = specified
+	applyProviderHistoryReductionModeToRuntime(runtime, mode, specified)
 	return nil
+}
+
+func resolveProviderHistoryReductionModeFromProjectConfig(projectCfg *config.ProjectConfig) (ProviderHistoryReductionMode, bool, error) {
+	mode, specified, err := config.ResolveProjectProviderHistoryReductionMode(projectCfg, nil)
+	if err != nil {
+		return ProviderHistoryReductionDisabled, false, err
+	}
+	return providerHistoryReductionModeFromProjectConfigMode(mode), specified, nil
+}
+
+func applyProviderHistoryReductionModeToRuntime(runtime *AgentRuntime, mode ProviderHistoryReductionMode, specified bool) {
+	if runtime == nil {
+		return
+	}
+	runtime.Options.ProviderHistoryReductionMode = mode
+	runtime.Options.ProviderHistoryReductionModeSet = specified
 }
 
 func providerHistoryReductionModeFromProjectConfigMode(mode config.ProjectProviderHistoryReductionMode) ProviderHistoryReductionMode {

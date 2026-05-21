@@ -2,9 +2,6 @@ package agent
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -20,6 +17,19 @@ func TestInitializeProjectInstructionsSyncsExperimentalProviderHistoryReductionM
 		t.Fatalf("initializeProjectInstructions() error = %v", err)
 	}
 	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionDryRun, true)
+}
+
+func TestInitializeProjectInstructionsAppliesFinalChecksAndProviderHistoryReductionTogether(t *testing.T) {
+	unsetProviderHistoryReductionEnv(t)
+	dir := t.TempDir()
+	writeProviderHistoryReductionProjectConfigWithFinalChecks(t, dir, "apply", "make verify")
+	agent := newProviderHistoryReductionStartupTestAgent(t, dir)
+
+	if err := initializeProjectInstructions(agent, projectInstructionApplyOptions{injectProjectMap: false}); err != nil {
+		t.Fatalf("initializeProjectInstructions() error = %v", err)
+	}
+	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionApply, true)
+	assertRuntimeFinalChecks(t, agent, []string{"make verify"}, 30)
 }
 
 func TestInitializeProjectInstructionsSyncsProviderHistoryReductionEnvWithoutProjectConfig(t *testing.T) {
@@ -45,6 +55,36 @@ func TestInitializeProjectInstructionsReturnsInvalidExperimentalProviderHistoryR
 	assertInvalidProviderHistoryReductionModeError(t, err.Error())
 }
 
+func TestInitializeProjectInstructionsKeepsFinalChecksOnInvalidExperimentalProviderHistoryReductionMode(t *testing.T) {
+	unsetProviderHistoryReductionEnv(t)
+	dir := t.TempDir()
+	writeProviderHistoryReductionProjectConfigWithFinalChecks(t, dir, "x", "make verify")
+	agent := newProviderHistoryReductionStartupTestAgent(t, dir)
+	agent.cfg().FinalChecks = config.FinalChecksConfig{Commands: []string{"existing verify"}, Timeout: 99}
+
+	err := initializeProjectInstructions(agent, projectInstructionApplyOptions{injectProjectMap: false})
+	if err == nil {
+		t.Fatal("initializeProjectInstructions() error = nil, want invalid mode error")
+	}
+	assertInvalidProviderHistoryReductionModeError(t, err.Error())
+	assertRuntimeFinalChecks(t, agent, []string{"existing verify"}, 99)
+}
+
+func TestInitializeProjectInstructionsKeepsFinalChecksOnInvalidProviderHistoryReductionEnv(t *testing.T) {
+	t.Setenv(config.ProviderHistoryReductionEnvVar, "x")
+	dir := t.TempDir()
+	writeProviderHistoryReductionProjectConfigWithFinalChecks(t, dir, "dry_run", "make verify")
+	agent := newProviderHistoryReductionStartupTestAgent(t, dir)
+	agent.cfg().FinalChecks = config.FinalChecksConfig{Commands: []string{"existing verify"}, Timeout: 99}
+
+	err := initializeProjectInstructions(agent, projectInstructionApplyOptions{injectProjectMap: false})
+	if err == nil {
+		t.Fatal("initializeProjectInstructions() error = nil, want invalid env error")
+	}
+	assertInvalidProviderHistoryReductionModeError(t, err.Error())
+	assertRuntimeFinalChecks(t, agent, []string{"existing verify"}, 99)
+}
+
 func TestRunHeadlessWithConfigReturnsConfigErrorForInvalidProviderHistoryReductionEnv(t *testing.T) {
 	t.Setenv(config.ProviderHistoryReductionEnvVar, "x")
 	t.Setenv("HOME", t.TempDir())
@@ -66,27 +106,4 @@ func newProviderHistoryReductionStartupTestAgent(t *testing.T, cwd string) *Agen
 	agent := NewAgentWithRuntime("test-model", &mockProvider{name: "openai"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
 	return agent
-}
-
-func writeProviderHistoryReductionProjectConfig(t *testing.T, dir, mode string) {
-	t.Helper()
-	data := []byte("experimental:\n  provider_history_reduction:\n    mode: " + mode + "\n")
-	if err := os.WriteFile(filepath.Join(dir, "xelyon.yaml"), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func assertProviderHistoryReductionRuntimeMode(t *testing.T, runtime *AgentRuntime, wantMode ProviderHistoryReductionMode, wantSet bool) {
-	t.Helper()
-	if runtime.Options.ProviderHistoryReductionMode != wantMode || runtime.Options.ProviderHistoryReductionModeSet != wantSet {
-		t.Fatalf("runtime provider history reduction mode = (%v, %v), want (%v, %v)", runtime.Options.ProviderHistoryReductionMode, runtime.Options.ProviderHistoryReductionModeSet, wantMode, wantSet)
-	}
-}
-
-func assertInvalidProviderHistoryReductionModeError(t *testing.T, got string) {
-	t.Helper()
-	want := `invalid provider history reduction mode "x" (expected: off, dry_run, apply, auto)`
-	if !strings.Contains(got, want) {
-		t.Fatalf("error = %q, want containing %q", got, want)
-	}
 }

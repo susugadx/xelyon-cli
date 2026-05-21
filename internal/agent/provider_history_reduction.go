@@ -36,18 +36,21 @@ type ProviderHistoryReductionCandidate struct {
 
 // ProviderHistoryProjectionReport は provider-facing projection の構築結果を要約する。
 type ProviderHistoryProjectionReport struct {
-	Mode                  ProviderHistoryReductionMode
-	OriginalMessageCount  int
-	ProjectedMessageCount int
-	ToolResultCount       int
-	CandidateCount        int
-	KeptCount             int
-	ReplacedCount         int
-	OriginalBytes         int
-	ProjectedBytes        int
-	EstimatedSavedBytes   int
-	Candidates            []ProviderHistoryReductionCandidate
-	Kept                  []ProviderHistoryReductionCandidate
+	Mode                   ProviderHistoryReductionMode
+	OriginalMessageCount   int
+	ProjectedMessageCount  int
+	ToolResultCount        int
+	CandidateCount         int
+	KeptCount              int
+	ReplacedCount          int
+	OriginalBytes          int
+	ProjectedBytes         int
+	EstimatedSavedBytes    int
+	ApproxSavedTokens      int
+	KeptReasonCounts       map[string]int
+	ResponsesChainDisabled bool
+	Candidates             []ProviderHistoryReductionCandidate
+	Kept                   []ProviderHistoryReductionCandidate
 }
 
 func normalizeProviderHistoryReductionPolicy(policy ProviderHistoryReductionPolicy) ProviderHistoryReductionPolicy {

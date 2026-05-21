@@ -95,6 +95,13 @@ func (a *Agent) recordLastProviderHistoryProjectionReport(report ProviderHistory
 }
 
 func cloneProviderHistoryProjectionReport(report ProviderHistoryProjectionReport) ProviderHistoryProjectionReport {
+	if len(report.KeptReasonCounts) > 0 {
+		counts := make(map[string]int, len(report.KeptReasonCounts))
+		for reason, count := range report.KeptReasonCounts {
+			counts[reason] = count
+		}
+		report.KeptReasonCounts = counts
+	}
 	if len(report.Candidates) > 0 {
 		report.Candidates = append([]ProviderHistoryReductionCandidate(nil), report.Candidates...)
 	}

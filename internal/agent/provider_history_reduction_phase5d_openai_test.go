@@ -74,6 +74,9 @@ func TestPhase5DOpenAIResponsesReductionForcesFullHistoryAndKeepsTrailingToolOut
 	if report.CandidateCount != 1 || report.ReplacedCount != 1 || report.KeptCount != 2 {
 		t.Fatalf("report counts = candidates %d replaced %d kept %d, want 1/1/2", report.CandidateCount, report.ReplacedCount, report.KeptCount)
 	}
+	if !report.ResponsesChainDisabled {
+		t.Fatalf("ResponsesChainDisabled = false, want true after replacement")
+	}
 	if report.EstimatedSavedBytes <= 0 || !strings.Contains(formatProviderHistoryProjectionReportSummary(report), "saved=") {
 		t.Fatalf("status projection report = %#v, want saved bytes for payload that contains placeholder", report)
 	}
@@ -107,8 +110,8 @@ func TestPhase5DOpenAIResponsesContinuationKeptWhenProjectionHasNoReplacement(t 
 		t.Fatalf("continuation input length = %d, want latest message only", len(items))
 	}
 	report := agent.Runtime.LastProviderHistoryProjectionReport
-	if report.Mode != ProviderHistoryReductionApply || report.ReplacedCount != 0 || report.CandidateCount != 1 {
-		t.Fatalf("report = %#v, want apply candidate without replacement", report)
+	if report.Mode != ProviderHistoryReductionApply || report.ReplacedCount != 0 || report.CandidateCount != 1 || report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v, want apply candidate without replacement or chain disable", report)
 	}
 }
 

@@ -63,6 +63,9 @@ func TestProviderHistoryReductionDryRunDetectsOldAllowedToolResults(t *testing.T
 	if latest := keptByToolCallID(report, "call_latest"); latest == nil || latest.KeepReason != "latest_tool_result" {
 		t.Fatalf("latest tool result keep entry = %#v, want latest_tool_result", latest)
 	}
+	if report.KeptReasonCounts["latest_tool_result"] != 1 {
+		t.Fatalf("KeptReasonCounts = %#v, want latest_tool_result:1", report.KeptReasonCounts)
+	}
 }
 
 func TestProviderHistoryReductionDryRunKeepsTrailingToolSuffix(t *testing.T) {
@@ -266,5 +269,18 @@ func TestProviderHistoryReductionProjectionAndReportAreDefensiveCopies(t *testin
 	}
 	if agent.History[1].Content != "old read" {
 		t.Fatalf("Agent.History tool content = %q, want old read", agent.History[1].Content)
+	}
+}
+
+func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T) {
+	report := ProviderHistoryProjectionReport{
+		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
+	}
+
+	cloned := cloneProviderHistoryProjectionReport(report)
+	cloned.KeptReasonCounts["missing_evidence_pointer"] = 2
+
+	if report.KeptReasonCounts["missing_evidence_pointer"] != 1 {
+		t.Fatalf("original KeptReasonCounts mutated: %#v", report.KeptReasonCounts)
 	}
 }

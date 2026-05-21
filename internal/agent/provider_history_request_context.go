@@ -35,7 +35,7 @@ func (a *Agent) providerFacingHistoryForRequestFromRaw(ctx context.Context, raw 
 }
 
 func providerHistoryProjectionDisablesResponseIDChain(report ProviderHistoryProjectionReport) bool {
-	return report.Mode == ProviderHistoryReductionApply && report.ReplacedCount > 0
+	return report.ResponsesChainDisabled
 }
 
 func (a *Agent) clearResponseContextForProviderHistoryReductionRequest() {

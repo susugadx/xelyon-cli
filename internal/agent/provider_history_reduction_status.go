@@ -3,14 +3,17 @@ package agent
 import (
 	"fmt"
 	"reflect"
+	"sort"
+	"strings"
 )
 
 func providerHistoryProjectionReportIsEmpty(report ProviderHistoryProjectionReport) bool {
-	if len(report.Candidates) > 0 || len(report.Kept) > 0 {
+	if len(report.Candidates) > 0 || len(report.Kept) > 0 || len(report.KeptReasonCounts) > 0 {
 		return false
 	}
 	report.Candidates = nil
 	report.Kept = nil
+	report.KeptReasonCounts = nil
 	return reflect.DeepEqual(report, ProviderHistoryProjectionReport{})
 }
 
@@ -31,7 +34,7 @@ func providerHistoryProjectionModeLabel(mode ProviderHistoryReductionMode) strin
 
 func formatProviderHistoryProjectionReportSummary(report ProviderHistoryProjectionReport) string {
 	return fmt.Sprintf(
-		"mode=%s; candidates=%s; replaced=%s; kept=%s; original=%s B; projected=%s B; saved=%s B",
+		"mode=%s; candidates=%s; replaced=%s; kept=%s; original=%s B; projected=%s B; saved=%s B; approx_saved_tokens=%s; kept_reasons=%s; responses_chain_disabled=%t",
 		providerHistoryProjectionModeLabel(report.Mode),
 		formatNumber(report.CandidateCount),
 		formatNumber(report.ReplacedCount),
@@ -39,7 +42,32 @@ func formatProviderHistoryProjectionReportSummary(report ProviderHistoryProjecti
 		formatNumber(report.OriginalBytes),
 		formatNumber(report.ProjectedBytes),
 		formatNumber(report.EstimatedSavedBytes),
+		formatNumber(report.ApproxSavedTokens),
+		formatProviderHistoryKeptReasonCounts(report.KeptReasonCounts),
+		report.ResponsesChainDisabled,
 	)
+}
+
+func formatProviderHistoryKeptReasonCounts(counts map[string]int) string {
+	if len(counts) == 0 {
+		return "none"
+	}
+	reasons := make([]string, 0, len(counts))
+	for reason := range counts {
+		if strings.TrimSpace(reason) == "" {
+			continue
+		}
+		reasons = append(reasons, reason)
+	}
+	if len(reasons) == 0 {
+		return "none"
+	}
+	sort.Strings(reasons)
+	parts := make([]string, 0, len(reasons))
+	for _, reason := range reasons {
+		parts = append(parts, fmt.Sprintf("%s:%d", reason, counts[reason]))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func providerHistoryReductionStatusSummary(runtime *AgentRuntime) (string, bool) {

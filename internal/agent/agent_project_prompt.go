@@ -130,10 +130,10 @@ func applyProjectInstructionBundle(agent *Agent, bundle *config.ProjectInstructi
 		return nil
 	}
 
-	applyFinalChecksFromBundle(agent, bundle)
 	if err := syncProviderHistoryReductionModeFromProjectConfig(agent.Runtime, bundle.ProjectConfig); err != nil {
 		return err
 	}
+	applyFinalChecksFromBundle(agent, bundle)
 
 	if !showStatus {
 		return nil
