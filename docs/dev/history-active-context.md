@@ -120,6 +120,7 @@ In `dry_run`, inspect `/status` after a provider-facing request:
 - `saved` shows estimated content bytes saved; `approx_saved_tokens` is a diagnostic-only token estimate, not billing usage.
 - `kept_reasons` shows sorted keep reason counts using the internal reason strings.
 - `responses_chain_disabled` should stay `false` in `dry_run` and `auto` because provider payload remains raw.
+- `command/edit dry_run` is a separate diagnostics-only line for old `bash`/`command` outputs and edit tool arguments. `replacement=not_implemented` means these candidates are never replaced yet; the byte/token numbers are future placeholder estimates only and are not billing usage.
 
 Switch to `apply` only after dry-run candidates and kept reasons look expected, and test on a limited task where repeated read/search calls do not increase and answer quality does not regress. OpenAI/Azure Responses requests may drop the `previous_response_id` continuation chain when replacement actually happens; `apply` with zero replacements keeps the chain.
 

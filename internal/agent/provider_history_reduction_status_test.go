@@ -12,6 +12,7 @@ import (
 )
 
 const providerHistoryStatusSummaryFixture = "mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B; approx_saved_tokens=42; kept_reasons=dry_run:1, missing_evidence_pointer:2; responses_chain_disabled=true"
+const providerHistoryCommandEditStatusSummaryFixture = "command/edit dry_run: replacement=not_implemented; command_candidates=2; edit_arg_candidates=1; command_original_bytes=4,096 B; edit_arg_original_bytes=2,048 B; approx_command_saved_tokens=120; approx_edit_arg_saved_tokens=60; candidate_reasons=command_exit_nonzero:1, git_diff_output:1, write_file_content:1; kept_reasons=latest_tool_result:1, trailing_tool_suffix:2"
 
 func TestProviderHistoryProjectionReportStatusSummaryFormat(t *testing.T) {
 	report := providerHistoryStatusTestReport()
@@ -22,14 +23,23 @@ func TestProviderHistoryProjectionReportStatusSummaryFormat(t *testing.T) {
 	}
 }
 
-func TestFormatProviderHistoryKeptReasonCountsSortsReasons(t *testing.T) {
-	got := formatProviderHistoryKeptReasonCounts(map[string]int{
+func TestFormatProviderHistoryReasonCountsSortsReasons(t *testing.T) {
+	got := formatProviderHistoryReasonCounts(map[string]int{
 		"missing_evidence_pointer": 2,
 		"dry_run":                  1,
 	})
 	want := "dry_run:1, missing_evidence_pointer:2"
 	if got != want {
-		t.Fatalf("formatProviderHistoryKeptReasonCounts() = %q, want %q", got, want)
+		t.Fatalf("formatProviderHistoryReasonCounts() = %q, want %q", got, want)
+	}
+}
+
+func TestProviderHistoryCommandEditDryRunStatusSummaryFormat(t *testing.T) {
+	report := providerHistoryStatusTestCommandEditReport()
+
+	got := formatProviderHistoryCommandEditDryRunReportSummary(report)
+	if got != providerHistoryCommandEditStatusSummaryFixture {
+		t.Fatalf("formatProviderHistoryCommandEditDryRunReportSummary() = %q, want %q", got, providerHistoryCommandEditStatusSummaryFixture)
 	}
 }
 
@@ -45,10 +55,18 @@ func TestProviderHistoryProjectionReportIsEmptyForDisabledZeroReport(t *testing.
 			Candidates: []ProviderHistoryReductionCandidate{},
 			Kept:       []ProviderHistoryReductionCandidate{},
 		}, want: true},
+		{name: "command edit default replacement only", report: ProviderHistoryProjectionReport{
+			CommandEditDryRun: newProviderHistoryCommandEditDryRunReport(),
+		}, want: true},
 		{name: "disabled with bytes", report: ProviderHistoryProjectionReport{Mode: ProviderHistoryReductionDisabled, OriginalBytes: 1}},
 		{name: "apply empty report", report: ProviderHistoryProjectionReport{Mode: ProviderHistoryReductionApply}},
 		{name: "candidate slice entry", report: ProviderHistoryProjectionReport{
 			Candidates: []ProviderHistoryReductionCandidate{{ToolName: "read_file"}},
+		}},
+		{name: "command edit candidate slice entry", report: ProviderHistoryProjectionReport{
+			CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
+				Candidates: []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "bash"}},
+			},
 		}},
 	}
 
@@ -127,12 +145,36 @@ func TestHandleStatusCommandShowsProviderHistoryReductionReportSummary(t *testin
 	var out bytes.Buffer
 	agent := newProviderHistoryStatusTestAgent(t, &out)
 	agent.Runtime.Options.EnableProviderHistoryReduction = false
-	agent.Runtime.LastProviderHistoryProjectionReport = providerHistoryStatusTestReport()
+	report := providerHistoryStatusTestReport()
+	report.CommandEditDryRun = newProviderHistoryCommandEditDryRunReport()
+	agent.Runtime.LastProviderHistoryProjectionReport = report
 
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
 	for _, want := range []string{
 		"Provider history reduction",
 		providerHistoryStatusSummaryFixture,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "command/edit dry_run") {
+		t.Fatalf("status output should hide empty command/edit dry-run diagnostics:\n%s", output)
+	}
+}
+
+func TestHandleStatusCommandShowsProviderHistoryReductionCommandEditDryRunSummary(t *testing.T) {
+	var out bytes.Buffer
+	agent := newProviderHistoryStatusTestAgent(t, &out)
+	report := providerHistoryStatusTestReport()
+	report.CommandEditDryRun = providerHistoryStatusTestCommandEditReport()
+	agent.Runtime.LastProviderHistoryProjectionReport = report
+
+	output := renderProviderHistoryStatusCommand(t, agent, &out)
+	for _, want := range []string{
+		"Provider history reduction",
+		providerHistoryStatusSummaryFixture,
+		providerHistoryCommandEditStatusSummaryFixture,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -196,7 +238,7 @@ func TestHandleTokensCommandOmitsProviderHistoryReductionDiagnostics(t *testing.
 	}
 
 	output := out.String()
-	for _, reject := range []string{"Provider history reduction", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled"} {
+	for _, reject := range []string{"Provider history reduction", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled", "command_candidates", "edit_arg_candidates", "approx_command_saved_tokens", "approx_edit_arg_saved_tokens", "replacement=not_implemented"} {
 		if strings.Contains(output, reject) {
 			t.Fatalf("/tokens output should not contain %q:\n%s", reject, output)
 		}
@@ -215,6 +257,20 @@ func providerHistoryStatusTestReport() ProviderHistoryProjectionReport {
 		ApproxSavedTokens:      42,
 		KeptReasonCounts:       map[string]int{"missing_evidence_pointer": 2, "dry_run": 1},
 		ResponsesChainDisabled: true,
+	}
+}
+
+func providerHistoryStatusTestCommandEditReport() ProviderHistoryCommandEditDryRunReport {
+	return ProviderHistoryCommandEditDryRunReport{
+		ReplacementStatus:        providerHistoryCommandEditReplacementStatusNotImplemented,
+		CommandCandidates:        2,
+		EditArgCandidates:        1,
+		CommandOriginalBytes:     4096,
+		EditArgOriginalBytes:     2048,
+		ApproxCommandSavedTokens: 120,
+		ApproxEditArgSavedTokens: 60,
+		CandidateReasonCounts:    map[string]int{"write_file_content": 1, "git_diff_output": 1, "command_exit_nonzero": 1},
+		KeptReasonCounts:         map[string]int{"trailing_tool_suffix": 2, "latest_tool_result": 1},
 	}
 }
 

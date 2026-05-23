@@ -275,12 +275,34 @@ func TestProviderHistoryReductionProjectionAndReportAreDefensiveCopies(t *testin
 func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T) {
 	report := ProviderHistoryProjectionReport{
 		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
+		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
+			CandidateReasonCounts: map[string]int{"command_output": 1},
+			KeptReasonCounts:      map[string]int{"latest_tool_result": 1},
+			Candidates:            []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "bash"}},
+			Kept:                  []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "write_file"}},
+		},
 	}
 
 	cloned := cloneProviderHistoryProjectionReport(report)
 	cloned.KeptReasonCounts["missing_evidence_pointer"] = 2
+	cloned.CommandEditDryRun.CandidateReasonCounts["command_output"] = 2
+	cloned.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] = 2
+	cloned.CommandEditDryRun.Candidates[0].ToolName = "command"
+	cloned.CommandEditDryRun.Kept[0].ToolName = "apply_patch"
 
 	if report.KeptReasonCounts["missing_evidence_pointer"] != 1 {
 		t.Fatalf("original KeptReasonCounts mutated: %#v", report.KeptReasonCounts)
+	}
+	if report.CommandEditDryRun.CandidateReasonCounts["command_output"] != 1 {
+		t.Fatalf("original command/edit CandidateReasonCounts mutated: %#v", report.CommandEditDryRun.CandidateReasonCounts)
+	}
+	if report.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] != 1 {
+		t.Fatalf("original command/edit KeptReasonCounts mutated: %#v", report.CommandEditDryRun.KeptReasonCounts)
+	}
+	if report.CommandEditDryRun.Candidates[0].ToolName != "bash" {
+		t.Fatalf("original command/edit Candidates mutated: %#v", report.CommandEditDryRun.Candidates)
+	}
+	if report.CommandEditDryRun.Kept[0].ToolName != "write_file" {
+		t.Fatalf("original command/edit Kept mutated: %#v", report.CommandEditDryRun.Kept)
 	}
 }

@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -90,6 +91,69 @@ func TestNormalModeRequestDryRunReportsCandidatesWithoutChangingProviderPayload(
 	}
 	if agent.History[1].Content != oldRead {
 		t.Fatalf("Agent.History[1].Content = %q, want raw old read", agent.History[1].Content)
+	}
+}
+
+func TestNormalModeRequestDryRunReportsCommandEditWithoutChangingProviderPayload(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	commandOutput := strings.Repeat("command dry-run output\n", 12)
+	writeArgs := providerHistoryJSONArguments(t, map[string]string{
+		"path":    "generated.txt",
+		"content": strings.Repeat("line\n", 40),
+	})
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionDryRun
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect command and edit history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_cmd", "bash", map[string]string{"command": "ls -la"})),
+		providerHistoryToolResult("call_cmd", "bash", commandOutput),
+		{Role: "assistant", Content: "command checked"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithArguments("call_write", "write_file", writeArgs)),
+		providerHistoryToolResult("call_write", "write_file", "wrote generated.txt"),
+		{Role: "assistant", Content: "write done"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	for _, msg := range agent.History {
+		agent.session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+	beforeHistory := api.CloneMessages(agent.History)
+	beforeSession := append(agent.session.Messages[:0:0], agent.session.Messages...)
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if provider.capturedHistory[2].Content != commandOutput {
+		t.Fatalf("provider command output = %q, want raw command output", provider.capturedHistory[2].Content)
+	}
+	if provider.capturedHistory[4].ToolCalls[0].Function.Arguments != writeArgs {
+		t.Fatalf("provider write_file args = %q, want raw args", provider.capturedHistory[4].ToolCalls[0].Function.Arguments)
+	}
+	if provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context disabled response ID chain for command/edit dry-run candidates")
+	}
+	for i, want := range beforeHistory {
+		if !reflect.DeepEqual(agent.History[i], want) {
+			t.Fatalf("Agent.History[%d] changed after command/edit dry-run request:\n got %#v\nwant %#v", i, agent.History[i], want)
+		}
+	}
+	for i, want := range beforeSession {
+		if !reflect.DeepEqual(agent.session.Messages[i], want) {
+			t.Fatalf("session.Messages[%d] changed after command/edit dry-run request:\n got %#v\nwant %#v", i, agent.session.Messages[i], want)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionDryRun || report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want dry-run report without response chain disable", report)
+	}
+	if report.CommandEditDryRun.CommandCandidates != 1 || report.CommandEditDryRun.EditArgCandidates != 1 || report.CommandEditDryRun.ReplacementStatus != providerHistoryCommandEditReplacementStatusNotImplemented {
+		t.Fatalf("CommandEditDryRun = %#v, want one command and one edit dry-run candidate", report.CommandEditDryRun)
 	}
 }
 

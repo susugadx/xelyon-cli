@@ -108,5 +108,30 @@ func cloneProviderHistoryProjectionReport(report ProviderHistoryProjectionReport
 	if len(report.Kept) > 0 {
 		report.Kept = append([]ProviderHistoryReductionCandidate(nil), report.Kept...)
 	}
+	report.CommandEditDryRun = cloneProviderHistoryCommandEditDryRunReport(report.CommandEditDryRun)
+	return report
+}
+
+func cloneProviderHistoryCommandEditDryRunReport(report ProviderHistoryCommandEditDryRunReport) ProviderHistoryCommandEditDryRunReport {
+	if len(report.CandidateReasonCounts) > 0 {
+		counts := make(map[string]int, len(report.CandidateReasonCounts))
+		for reason, count := range report.CandidateReasonCounts {
+			counts[reason] = count
+		}
+		report.CandidateReasonCounts = counts
+	}
+	if len(report.KeptReasonCounts) > 0 {
+		counts := make(map[string]int, len(report.KeptReasonCounts))
+		for reason, count := range report.KeptReasonCounts {
+			counts[reason] = count
+		}
+		report.KeptReasonCounts = counts
+	}
+	if len(report.Candidates) > 0 {
+		report.Candidates = append([]ProviderHistoryCommandEditDryRunCandidate(nil), report.Candidates...)
+	}
+	if len(report.Kept) > 0 {
+		report.Kept = append([]ProviderHistoryCommandEditDryRunCandidate(nil), report.Kept...)
+	}
 	return report
 }

@@ -34,6 +34,35 @@ type ProviderHistoryReductionCandidate struct {
 	ReplacementApplied       bool
 }
 
+// ProviderHistoryCommandEditDryRunCandidate は command/edit 系の将来置換候補診断を表す。
+type ProviderHistoryCommandEditDryRunCandidate struct {
+	HistoryIndex         int
+	Role                 string
+	ToolName             string
+	ToolCallID           string
+	Kind                 string
+	OriginalByteSize     int
+	OriginalRuneSize     int
+	ApproxOriginalTokens int
+	Reason               string
+	KeepReason           string
+}
+
+// ProviderHistoryCommandEditDryRunReport は command/edit 系 dry-run 診断を表す。
+type ProviderHistoryCommandEditDryRunReport struct {
+	ReplacementStatus        string
+	CommandCandidates        int
+	EditArgCandidates        int
+	CommandOriginalBytes     int
+	EditArgOriginalBytes     int
+	ApproxCommandSavedTokens int
+	ApproxEditArgSavedTokens int
+	CandidateReasonCounts    map[string]int
+	KeptReasonCounts         map[string]int
+	Candidates               []ProviderHistoryCommandEditDryRunCandidate
+	Kept                     []ProviderHistoryCommandEditDryRunCandidate
+}
+
 // ProviderHistoryProjectionReport は provider-facing projection の構築結果を要約する。
 type ProviderHistoryProjectionReport struct {
 	Mode                   ProviderHistoryReductionMode
@@ -51,6 +80,7 @@ type ProviderHistoryProjectionReport struct {
 	ResponsesChainDisabled bool
 	Candidates             []ProviderHistoryReductionCandidate
 	Kept                   []ProviderHistoryReductionCandidate
+	CommandEditDryRun      ProviderHistoryCommandEditDryRunReport
 }
 
 func normalizeProviderHistoryReductionPolicy(policy ProviderHistoryReductionPolicy) ProviderHistoryReductionPolicy {

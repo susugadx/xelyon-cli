@@ -11,10 +11,28 @@ func providerHistoryProjectionReportIsEmpty(report ProviderHistoryProjectionRepo
 	if len(report.Candidates) > 0 || len(report.Kept) > 0 || len(report.KeptReasonCounts) > 0 {
 		return false
 	}
+	if !providerHistoryCommandEditDryRunReportIsEmpty(report.CommandEditDryRun) {
+		return false
+	}
 	report.Candidates = nil
 	report.Kept = nil
 	report.KeptReasonCounts = nil
+	report.CommandEditDryRun = ProviderHistoryCommandEditDryRunReport{}
 	return reflect.DeepEqual(report, ProviderHistoryProjectionReport{})
+}
+
+func providerHistoryCommandEditDryRunReportIsEmpty(report ProviderHistoryCommandEditDryRunReport) bool {
+	if len(report.Candidates) > 0 || len(report.Kept) > 0 || len(report.CandidateReasonCounts) > 0 || len(report.KeptReasonCounts) > 0 {
+		return false
+	}
+	report.Candidates = nil
+	report.Kept = nil
+	report.CandidateReasonCounts = nil
+	report.KeptReasonCounts = nil
+	if report.ReplacementStatus == providerHistoryCommandEditReplacementStatusNotImplemented {
+		report.ReplacementStatus = ""
+	}
+	return reflect.DeepEqual(report, ProviderHistoryCommandEditDryRunReport{})
 }
 
 func providerHistoryProjectionModeLabel(mode ProviderHistoryReductionMode) string {
@@ -43,12 +61,31 @@ func formatProviderHistoryProjectionReportSummary(report ProviderHistoryProjecti
 		formatNumber(report.ProjectedBytes),
 		formatNumber(report.EstimatedSavedBytes),
 		formatNumber(report.ApproxSavedTokens),
-		formatProviderHistoryKeptReasonCounts(report.KeptReasonCounts),
+		formatProviderHistoryReasonCounts(report.KeptReasonCounts),
 		report.ResponsesChainDisabled,
 	)
 }
 
-func formatProviderHistoryKeptReasonCounts(counts map[string]int) string {
+func formatProviderHistoryCommandEditDryRunReportSummary(report ProviderHistoryCommandEditDryRunReport) string {
+	replacementStatus := report.ReplacementStatus
+	if replacementStatus == "" {
+		replacementStatus = providerHistoryCommandEditReplacementStatusNotImplemented
+	}
+	return fmt.Sprintf(
+		"command/edit dry_run: replacement=%s; command_candidates=%s; edit_arg_candidates=%s; command_original_bytes=%s B; edit_arg_original_bytes=%s B; approx_command_saved_tokens=%s; approx_edit_arg_saved_tokens=%s; candidate_reasons=%s; kept_reasons=%s",
+		replacementStatus,
+		formatNumber(report.CommandCandidates),
+		formatNumber(report.EditArgCandidates),
+		formatNumber(report.CommandOriginalBytes),
+		formatNumber(report.EditArgOriginalBytes),
+		formatNumber(report.ApproxCommandSavedTokens),
+		formatNumber(report.ApproxEditArgSavedTokens),
+		formatProviderHistoryReasonCounts(report.CandidateReasonCounts),
+		formatProviderHistoryReasonCounts(report.KeptReasonCounts),
+	)
+}
+
+func formatProviderHistoryReasonCounts(counts map[string]int) string {
 	if len(counts) == 0 {
 		return "none"
 	}
@@ -93,4 +130,15 @@ func providerHistoryReductionStatusSummary(runtime *AgentRuntime) (string, bool)
 		return fmt.Sprintf("mode=%s; no report yet", providerHistoryProjectionModeLabel(resolution.configured)), true
 	}
 	return "", false
+}
+
+func providerHistoryCommandEditDryRunStatusSummary(runtime *AgentRuntime) (string, bool) {
+	if runtime == nil {
+		return "", false
+	}
+	report := runtime.LastProviderHistoryProjectionReport
+	if providerHistoryProjectionReportIsEmpty(report) || providerHistoryCommandEditDryRunReportIsEmpty(report.CommandEditDryRun) {
+		return "", false
+	}
+	return formatProviderHistoryCommandEditDryRunReportSummary(report.CommandEditDryRun), true
 }
