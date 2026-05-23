@@ -99,6 +99,9 @@ func TestProviderHistoryReductionApplyReplacesAllowedToolResultsWithEvidencePoin
 		if !candidate.ReplacementApplied {
 			t.Fatalf("candidate was not applied: %#v", candidate)
 		}
+		if len(candidate.EvidencePointers) == 0 {
+			t.Fatalf("candidate missing matched evidence pointers after apply: %#v", candidate)
+		}
 		if result.History[candidate.HistoryIndex].Content != candidate.SuggestedReplacementText {
 			t.Fatalf("candidate replacement text = %q, projection content = %q", candidate.SuggestedReplacementText, result.History[candidate.HistoryIndex].Content)
 		}

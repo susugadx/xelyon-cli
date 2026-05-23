@@ -48,6 +48,7 @@ func (a *Agent) applyProviderHistoryReduction(report *ProviderHistoryProjectionR
 
 		applyProviderHistoryReductionCandidateProjection(&projection[candidate.HistoryIndex], candidate, replacementText)
 		report.Candidates[i].ReplacementApplied = true
+		report.Candidates[i].EvidencePointers = cloneProviderHistoryReductionEvidencePointers(evidencePointers)
 	}
 }
 

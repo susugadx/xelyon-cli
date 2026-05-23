@@ -103,13 +103,24 @@ func cloneProviderHistoryProjectionReport(report ProviderHistoryProjectionReport
 		report.KeptReasonCounts = counts
 	}
 	if len(report.Candidates) > 0 {
-		report.Candidates = append([]ProviderHistoryReductionCandidate(nil), report.Candidates...)
+		report.Candidates = cloneProviderHistoryReductionCandidates(report.Candidates)
 	}
 	if len(report.Kept) > 0 {
-		report.Kept = append([]ProviderHistoryReductionCandidate(nil), report.Kept...)
+		report.Kept = cloneProviderHistoryReductionCandidates(report.Kept)
 	}
 	report.CommandEditDryRun = cloneProviderHistoryCommandEditDryRunReport(report.CommandEditDryRun)
 	return report
+}
+
+func cloneProviderHistoryReductionCandidates(candidates []ProviderHistoryReductionCandidate) []ProviderHistoryReductionCandidate {
+	if len(candidates) == 0 {
+		return nil
+	}
+	cloned := make([]ProviderHistoryReductionCandidate, len(candidates))
+	for i, candidate := range candidates {
+		cloned[i] = cloneProviderHistoryReductionCandidate(candidate)
+	}
+	return cloned
 }
 
 func cloneProviderHistoryCommandEditDryRunReport(report ProviderHistoryCommandEditDryRunReport) ProviderHistoryCommandEditDryRunReport {

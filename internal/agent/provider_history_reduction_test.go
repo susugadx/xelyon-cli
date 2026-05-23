@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
 func TestProviderHistoryReductionDryRunDetectsOldAllowedToolResults(t *testing.T) {
@@ -275,6 +276,10 @@ func TestProviderHistoryReductionProjectionAndReportAreDefensiveCopies(t *testin
 func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T) {
 	report := ProviderHistoryProjectionReport{
 		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
+		Candidates: []ProviderHistoryReductionCandidate{{
+			ToolName:         "read_file",
+			EvidencePointers: []ledger.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
+		}},
 		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
 			CandidateReasonCounts: map[string]int{"command_success_output": 1},
 			KeptReasonCounts:      map[string]int{"latest_tool_result": 1},
@@ -285,6 +290,7 @@ func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T
 
 	cloned := cloneProviderHistoryProjectionReport(report)
 	cloned.KeptReasonCounts["missing_evidence_pointer"] = 2
+	cloned.Candidates[0].EvidencePointers[0].Path = "mutated.go"
 	cloned.CommandEditDryRun.CandidateReasonCounts["command_success_output"] = 2
 	cloned.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] = 2
 	cloned.CommandEditDryRun.Candidates[0].ToolName = "command"
@@ -292,6 +298,9 @@ func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T
 
 	if report.KeptReasonCounts["missing_evidence_pointer"] != 1 {
 		t.Fatalf("original KeptReasonCounts mutated: %#v", report.KeptReasonCounts)
+	}
+	if report.Candidates[0].EvidencePointers[0].Path != "src/main.go" {
+		t.Fatalf("original candidate EvidencePointers mutated: %#v", report.Candidates)
 	}
 	if report.CommandEditDryRun.CandidateReasonCounts["command_success_output"] != 1 {
 		t.Fatalf("original command/edit CandidateReasonCounts mutated: %#v", report.CommandEditDryRun.CandidateReasonCounts)

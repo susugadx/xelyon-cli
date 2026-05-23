@@ -126,6 +126,16 @@ Switch to `apply` only after dry-run candidates and kept reasons look expected, 
 
 Raw storage is unchanged in all modes: runtime `Agent.History`, `Session.Messages`, audit entries, change records, and persisted JSONL keep the original content.
 
+## Synthetic Measurement And Rehydrate Dry-Run
+
+The provider history reduction synthetic harness exercises `off`, `dry_run`, and `apply` against fixed read/search/gather, command, edit, latest-tool, trailing-tool, and invalid-linkage fixtures. This lets safety and savings regressions be checked before live dogfood depends on a real provider transcript.
+
+`internal/ledger` owns the rehydrate planner dry-run. It plans which omitted old read/search/gather evidence ranges should be refreshed from current files, but it does not read files, inject provider input, append `Agent.History`, append `Session.Messages`, or change persisted JSONL. The intended design is that runtime state refreshes needed evidence instead of asking the model to rediscover raw history by itself.
+
+Apply-mode projection reports keep matched evidence pointers only on read/search/gather candidates whose provider-facing placeholder was actually applied. Command output replacements do not attach evidence pointers.
+
+Automatic rehydrate execution and provider-input injection are a later phase. The current planner only returns bounded path/range items for tests and future integration.
+
 ## Responses Continuation
 
 - OpenAI and Azure Responses builders read active context from request context.

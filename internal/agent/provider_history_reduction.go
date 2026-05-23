@@ -1,5 +1,7 @@
 package agent
 
+import "github.com/susugadx/xelyon-cli/internal/ledger"
+
 // ProviderHistoryReductionMode は provider-facing history reduction の動作を表す。
 type ProviderHistoryReductionMode int
 
@@ -25,6 +27,7 @@ type ProviderHistoryReductionCandidate struct {
 	Role                     string
 	ToolName                 string
 	ToolCallID               string
+	EvidencePointers         []ledger.EvidencePointer
 	OriginalByteSize         int
 	OriginalRuneSize         int
 	Reason                   string
@@ -32,6 +35,20 @@ type ProviderHistoryReductionCandidate struct {
 	SuggestedReplacementText string
 	KeepReason               string
 	ReplacementApplied       bool
+}
+
+func cloneProviderHistoryReductionCandidate(candidate ProviderHistoryReductionCandidate) ProviderHistoryReductionCandidate {
+	candidate.EvidencePointers = cloneProviderHistoryReductionEvidencePointers(candidate.EvidencePointers)
+	return candidate
+}
+
+func cloneProviderHistoryReductionEvidencePointers(pointers []ledger.EvidencePointer) []ledger.EvidencePointer {
+	if len(pointers) == 0 {
+		return nil
+	}
+	cloned := make([]ledger.EvidencePointer, len(pointers))
+	copy(cloned, pointers)
+	return cloned
 }
 
 // ProviderHistoryCommandEditDryRunCandidate は command/edit 系の将来置換候補診断を表す。
