@@ -12,7 +12,7 @@ import (
 )
 
 const providerHistoryStatusSummaryFixture = "mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B; approx_saved_tokens=42; kept_reasons=dry_run:1, missing_evidence_pointer:2; responses_chain_disabled=true"
-const providerHistoryCommandEditStatusSummaryFixture = "command/edit dry_run: replacement=not_implemented; command_candidates=2; edit_arg_candidates=1; command_original_bytes=4,096 B; edit_arg_original_bytes=2,048 B; approx_command_saved_tokens=120; approx_edit_arg_saved_tokens=60; candidate_reasons=command_exit_nonzero:1, git_diff_output:1, write_file_content:1; kept_reasons=latest_tool_result:1, trailing_tool_suffix:2"
+const providerHistoryCommandEditStatusSummaryFixture = "command/edit: replacement=partial_apply; command_candidates=2; command_replaced=1; edit_arg_candidates=1; command_original_bytes=4,096 B; edit_arg_original_bytes=2,048 B; command_replacement_saved=1,500 B; approx_command_saved_tokens=120; approx_command_replacement_saved_tokens=90; approx_edit_arg_saved_tokens=60; candidate_reasons=command_exit_nonzero:1, git_diff_output:1, write_file_content:1; kept_reasons=latest_tool_result:1, trailing_tool_suffix:2"
 
 func TestProviderHistoryProjectionReportStatusSummaryFormat(t *testing.T) {
 	report := providerHistoryStatusTestReport()
@@ -158,7 +158,7 @@ func TestHandleStatusCommandShowsProviderHistoryReductionReportSummary(t *testin
 			t.Fatalf("status output missing %q:\n%s", want, output)
 		}
 	}
-	if strings.Contains(output, "command/edit dry_run") {
+	if strings.Contains(output, "command/edit:") {
 		t.Fatalf("status output should hide empty command/edit dry-run diagnostics:\n%s", output)
 	}
 }
@@ -238,7 +238,7 @@ func TestHandleTokensCommandOmitsProviderHistoryReductionDiagnostics(t *testing.
 	}
 
 	output := out.String()
-	for _, reject := range []string{"Provider history reduction", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled", "command_candidates", "edit_arg_candidates", "approx_command_saved_tokens", "approx_edit_arg_saved_tokens", "replacement=not_implemented"} {
+	for _, reject := range []string{"Provider history reduction", "command/edit", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled", "command_candidates", "command_replaced", "edit_arg_candidates", "command_replacement_saved", "approx_command_saved_tokens", "approx_command_replacement_saved_tokens", "approx_edit_arg_saved_tokens", "replacement=not_implemented", "replacement=partial_apply"} {
 		if strings.Contains(output, reject) {
 			t.Fatalf("/tokens output should not contain %q:\n%s", reject, output)
 		}
@@ -262,15 +262,18 @@ func providerHistoryStatusTestReport() ProviderHistoryProjectionReport {
 
 func providerHistoryStatusTestCommandEditReport() ProviderHistoryCommandEditDryRunReport {
 	return ProviderHistoryCommandEditDryRunReport{
-		ReplacementStatus:        providerHistoryCommandEditReplacementStatusNotImplemented,
-		CommandCandidates:        2,
-		EditArgCandidates:        1,
-		CommandOriginalBytes:     4096,
-		EditArgOriginalBytes:     2048,
-		ApproxCommandSavedTokens: 120,
-		ApproxEditArgSavedTokens: 60,
-		CandidateReasonCounts:    map[string]int{"write_file_content": 1, "git_diff_output": 1, "command_exit_nonzero": 1},
-		KeptReasonCounts:         map[string]int{"trailing_tool_suffix": 2, "latest_tool_result": 1},
+		ReplacementStatus:                   providerHistoryCommandEditReplacementStatusPartialApply,
+		CommandCandidates:                   2,
+		EditArgCandidates:                   1,
+		CommandOriginalBytes:                4096,
+		EditArgOriginalBytes:                2048,
+		CommandReplacedCount:                1,
+		CommandReplacementSavedBytes:        1500,
+		ApproxCommandSavedTokens:            120,
+		ApproxCommandReplacementSavedTokens: 90,
+		ApproxEditArgSavedTokens:            60,
+		CandidateReasonCounts:               map[string]int{"write_file_content": 1, "git_diff_output": 1, "command_exit_nonzero": 1},
+		KeptReasonCounts:                    map[string]int{"trailing_tool_suffix": 2, "latest_tool_result": 1},
 	}
 }
 

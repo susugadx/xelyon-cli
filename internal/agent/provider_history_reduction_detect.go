@@ -22,7 +22,7 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 	assistantToolCallsByID := collectProviderHistoryAssistantToolCalls(original)
 	trailingToolStart := providerHistoryTrailingToolSuffixStart(original)
 	latestToolResultIndex := providerHistoryLatestToolResultIndex(original)
-	report.CommandEditDryRun = buildProviderHistoryCommandEditDryRunReport(original, assistantToolCallsByID, trailingToolStart, latestToolResultIndex)
+	report.CommandEditDryRun = buildProviderHistoryCommandEditDryRunReport(original, projected, mode, assistantToolCallsByID, trailingToolStart, latestToolResultIndex)
 
 	for i, msg := range original {
 		if msg.Role != "tool" {

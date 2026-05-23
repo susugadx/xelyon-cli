@@ -115,6 +115,54 @@ func TestPhase5DOpenAIResponsesContinuationKeptWhenProjectionHasNoReplacement(t 
 	}
 }
 
+func TestPhase5DOpenAIResponsesCommandReplacementDisablesContinuation(t *testing.T) {
+	commandOutput := providerHistoryLargeSuccessfulTestOutput()
+	agent := &Agent{
+		Runtime: &AgentRuntime{
+			Options: RuntimeOptions{EnableProviderHistoryReduction: true},
+		},
+		History: []api.Message{
+			{Role: "user", Content: "run tests"},
+			providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_old_cmd", "bash", map[string]string{"command": providerHistorySuccessfulTestCommand})),
+			providerHistoryToolResult("call_old_cmd", "bash", commandOutput),
+			{Role: "assistant", Content: "tests passed"},
+			providerHistoryAssistantToolCall("call_latest", "read_file"),
+			providerHistoryToolResult("call_latest", "read_file", "latest raw output"),
+			{Role: "assistant", Content: "done"},
+		},
+	}
+	rawBefore := api.CloneMessages(agent.History)
+
+	requestCtx, history := agent.providerFacingHistoryForRequest(context.Background())
+	req := openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
+		Base:               openairesponses.BaseRequestOptions{Model: openairesponses.NewModelIdentity("gpt-5.4", ""), Store: true},
+		RequestContext:     requestCtx,
+		SystemPrompt:       "system",
+		History:            history,
+		PreviousResponseID: "resp_prev",
+	})
+
+	assertProviderHistoryCommandContentReplacement(t, history[2].Content, commandOutput, providerHistorySuccessfulTestReplacementLabel)
+	if !api.ResponseIDChainDisabledFromContext(requestCtx) {
+		t.Fatal("request context did not disable response ID chain after command replacement")
+	}
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty after command replacement", req.PreviousResponseID)
+	}
+	item := phase5DFindResponsesFunctionOutput(t, phase5DResponsesInputItems(t, req.Input), "call_old_cmd")
+	if item == nil {
+		t.Fatal("full input command output is missing")
+	}
+	assertProviderHistoryCommandContentReplacement(t, item.Output, commandOutput, providerHistorySuccessfulTestReplacementLabel)
+	if !reflect.DeepEqual(agent.History, rawBefore) {
+		t.Fatalf("Agent.History changed after command projection:\n got %#v\nwant %#v", agent.History, rawBefore)
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.ReplacedCount != 0 || report.CommandEditDryRun.CommandReplacedCount != 1 || !report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v, want command-only replacement with response chain disabled", report)
+	}
+}
+
 func TestPhase5DOpenAIResponsesContinuationKeptWhenReductionDisabled(t *testing.T) {
 	agent := &Agent{
 		Runtime: &AgentRuntime{},

@@ -86,6 +86,59 @@ func TestPhase5DGeminiFunctionResponsesUseProjectedToolNames(t *testing.T) {
 	}
 }
 
+func TestPhase5DGeminiFunctionResponsesUseProjectedCommandToolName(t *testing.T) {
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode Gemini request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(`data: {"candidates":[{"content":{"parts":[{"text":"done"}]}}]}` + "\n\n"))
+	}))
+	defer server.Close()
+	t.Setenv("GEMINI_API_URL", server.URL)
+	t.Setenv("GEMINI_CONTEXT_CACHING", "0")
+	t.Setenv("GEMINI_FUNCTION_CALLING", "1")
+
+	commandOutput := providerHistoryLargeSuccessfulTestOutput()
+	agent := &Agent{
+		Runtime: &AgentRuntime{},
+		History: []api.Message{
+			providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_cmd", "bash", map[string]string{"command": providerHistorySuccessfulTestCommand})),
+			providerHistoryToolResult("call_cmd", "", commandOutput),
+			{Role: "assistant", Content: "tests passed"},
+			providerHistoryAssistantToolCall("call_latest", "read_file"),
+			providerHistoryToolResult("call_latest", "read_file", "latest raw output"),
+			{Role: "assistant", Content: "done"},
+		},
+	}
+	rawBefore := api.CloneMessages(agent.History)
+	result := agent.buildProviderHistoryProjection(ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionApply})
+
+	if _, err := gemini.New("test-key").ChatWithTools(context.Background(), "system", result.History, "gemini-2.0-flash-exp"); err != nil {
+		t.Fatalf("Gemini ChatWithTools() error = %v", err)
+	}
+
+	functionResponses := phase5DGeminiFunctionResponses(t, captured)
+	response := functionResponses["bash"]
+	if response == nil {
+		t.Fatalf("Gemini request missing functionResponse.name bash: %#v", functionResponses)
+	}
+	resultText, _ := response["result"].(string)
+	if !strings.Contains(resultText, providerHistorySuccessfulTestReplacementLabel) {
+		t.Fatalf("Gemini bash response result = %q, want command replacement placeholder", resultText)
+	}
+	if got := phase5DProjectedToolName(result.History, "call_cmd"); got != "bash" {
+		t.Fatalf("projection ToolName for call_cmd = %q, want bash", got)
+	}
+	if agent.History[1].ToolName != "" {
+		t.Fatalf("raw Agent.History[1].ToolName = %q, want unchanged empty", agent.History[1].ToolName)
+	}
+	if !reflect.DeepEqual(agent.History, rawBefore) {
+		t.Fatalf("Agent.History changed after Gemini command projection:\n got %#v\nwant %#v", agent.History, rawBefore)
+	}
+}
+
 func TestPhase5DAnthropicProviderStateProjectionCloneIsolation(t *testing.T) {
 	oldRead := phase5DOutput("old Claude read result")
 	readResult := providerHistoryToolResult("call_claude_old", "read_file", oldRead)

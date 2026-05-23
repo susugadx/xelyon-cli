@@ -276,7 +276,7 @@ func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T
 	report := ProviderHistoryProjectionReport{
 		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
 		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
-			CandidateReasonCounts: map[string]int{"command_output": 1},
+			CandidateReasonCounts: map[string]int{"command_success_output": 1},
 			KeptReasonCounts:      map[string]int{"latest_tool_result": 1},
 			Candidates:            []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "bash"}},
 			Kept:                  []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "write_file"}},
@@ -285,7 +285,7 @@ func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T
 
 	cloned := cloneProviderHistoryProjectionReport(report)
 	cloned.KeptReasonCounts["missing_evidence_pointer"] = 2
-	cloned.CommandEditDryRun.CandidateReasonCounts["command_output"] = 2
+	cloned.CommandEditDryRun.CandidateReasonCounts["command_success_output"] = 2
 	cloned.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] = 2
 	cloned.CommandEditDryRun.Candidates[0].ToolName = "command"
 	cloned.CommandEditDryRun.Kept[0].ToolName = "apply_patch"
@@ -293,7 +293,7 @@ func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T
 	if report.KeptReasonCounts["missing_evidence_pointer"] != 1 {
 		t.Fatalf("original KeptReasonCounts mutated: %#v", report.KeptReasonCounts)
 	}
-	if report.CommandEditDryRun.CandidateReasonCounts["command_output"] != 1 {
+	if report.CommandEditDryRun.CandidateReasonCounts["command_success_output"] != 1 {
 		t.Fatalf("original command/edit CandidateReasonCounts mutated: %#v", report.CommandEditDryRun.CandidateReasonCounts)
 	}
 	if report.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] != 1 {

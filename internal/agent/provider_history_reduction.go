@@ -50,17 +50,20 @@ type ProviderHistoryCommandEditDryRunCandidate struct {
 
 // ProviderHistoryCommandEditDryRunReport は command/edit 系 dry-run 診断を表す。
 type ProviderHistoryCommandEditDryRunReport struct {
-	ReplacementStatus        string
-	CommandCandidates        int
-	EditArgCandidates        int
-	CommandOriginalBytes     int
-	EditArgOriginalBytes     int
-	ApproxCommandSavedTokens int
-	ApproxEditArgSavedTokens int
-	CandidateReasonCounts    map[string]int
-	KeptReasonCounts         map[string]int
-	Candidates               []ProviderHistoryCommandEditDryRunCandidate
-	Kept                     []ProviderHistoryCommandEditDryRunCandidate
+	ReplacementStatus                   string
+	CommandCandidates                   int
+	EditArgCandidates                   int
+	CommandOriginalBytes                int
+	EditArgOriginalBytes                int
+	CommandReplacedCount                int
+	CommandReplacementSavedBytes        int
+	ApproxCommandSavedTokens            int
+	ApproxCommandReplacementSavedTokens int
+	ApproxEditArgSavedTokens            int
+	CandidateReasonCounts               map[string]int
+	KeptReasonCounts                    map[string]int
+	Candidates                          []ProviderHistoryCommandEditDryRunCandidate
+	Kept                                []ProviderHistoryCommandEditDryRunCandidate
 }
 
 // ProviderHistoryProjectionReport は provider-facing projection の構築結果を要約する。

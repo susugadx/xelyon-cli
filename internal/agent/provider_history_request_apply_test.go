@@ -157,6 +157,69 @@ func TestNormalModeRequestDryRunReportsCommandEditWithoutChangingProviderPayload
 	}
 }
 
+func TestNormalModeRequestApplyReplacesSuccessfulCommandOutputOnlyInProviderPayload(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	commandOutput := providerHistoryLargeSuccessfulTestOutput()
+	writeArgs := providerHistoryJSONArguments(t, map[string]string{
+		"path":    "generated.txt",
+		"content": strings.Repeat("line\n", 80),
+	})
+	agent.Runtime.Options.EnableProviderHistoryReduction = true
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect command and edit history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_cmd", "bash", map[string]string{"command": providerHistorySuccessfulTestCommand})),
+		providerHistoryToolResult("call_cmd", "bash", commandOutput),
+		{Role: "assistant", Content: "command checked"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithArguments("call_write", "write_file", writeArgs)),
+		providerHistoryToolResult("call_write", "write_file", "wrote generated.txt"),
+		{Role: "assistant", Content: "write done"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	for _, msg := range agent.History {
+		agent.session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+	beforeHistory := api.CloneMessages(agent.History)
+	beforeSession := append(agent.session.Messages[:0:0], agent.session.Messages...)
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	assertProviderHistoryCommandContentReplacement(t, provider.capturedHistory[2].Content, commandOutput, providerHistorySuccessfulTestReplacementLabel)
+	if provider.capturedHistory[4].ToolCalls[0].Function.Arguments != writeArgs {
+		t.Fatalf("provider write_file args = %q, want raw args", provider.capturedHistory[4].ToolCalls[0].Function.Arguments)
+	}
+	if !provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context did not disable response ID chain for command replacement")
+	}
+	for i, want := range beforeHistory {
+		if !reflect.DeepEqual(agent.History[i], want) {
+			t.Fatalf("Agent.History[%d] changed after command replacement request:\n got %#v\nwant %#v", i, agent.History[i], want)
+		}
+	}
+	for i, want := range beforeSession {
+		if !reflect.DeepEqual(agent.session.Messages[i], want) {
+			t.Fatalf("session.Messages[%d] changed after command replacement request:\n got %#v\nwant %#v", i, agent.session.Messages[i], want)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionApply || report.ReplacedCount != 0 || !report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want command-only apply report with response chain disabled", report)
+	}
+	if report.CommandEditDryRun.CommandReplacedCount != 1 ||
+		report.CommandEditDryRun.ReplacementStatus != providerHistoryCommandEditReplacementStatusPartialApply ||
+		report.CommandEditDryRun.CommandReplacementSavedBytes <= 0 ||
+		report.CommandEditDryRun.ApproxCommandReplacementSavedTokens < providerHistoryCommandReplacementMinSavedTokens {
+		t.Fatalf("CommandEditDryRun = %#v, want one command replacement with savings", report.CommandEditDryRun)
+	}
+}
+
 func TestNormalModeRequestAutoUsesDryRunEffectiveMode(t *testing.T) {
 	disableColors(t)
 

@@ -39,7 +39,7 @@ func finalizeProviderHistoryProjectionReport(report *ProviderHistoryProjectionRe
 	}
 	report.ApproxSavedTokens = providerHistoryApproxSavedTokens(original, projected)
 	report.KeptReasonCounts = countProviderHistoryKeptReasons(report.Kept)
-	report.ResponsesChainDisabled = report.Mode == ProviderHistoryReductionApply && report.ReplacedCount > 0
+	report.ResponsesChainDisabled = report.Mode == ProviderHistoryReductionApply && (report.ReplacedCount > 0 || report.CommandEditDryRun.CommandReplacedCount > 0)
 }
 
 func countProviderHistoryReplacementApplied(candidates []ProviderHistoryReductionCandidate) int {
