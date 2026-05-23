@@ -28,11 +28,34 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactPrefersIm
 	}
 	reads := artifact.Metadata.Bundle.Impact.RecommendedReads
 	assertRecommendedReadAt(t, reads, 1, "callers", "src/app.ts")
-	if recommendedReadsContainFile(artifact.Metadata.Bundle, "src/build.d.ts") {
-		t.Fatalf("paired declaration should not be recommended as impact evidence, got %v", recommendedReadFiles(artifact.Metadata.Bundle))
+	assertTypeScriptImpactBundleExcludesEvidenceFile(t, artifact.Metadata.Bundle, "src/build.d.ts")
+}
+
+func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactDirectPathSuppressesPairedDeclarationRefs(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/build.ts":   "export function buildUser(id: string) { return id }\n",
+		"src/build.d.ts": "export function buildUser(id: string): string\ntype BuildUserFactory = () => buildUser\n",
+		"src/app.ts":     "import { buildUser } from './build'\nbuildUser('1')\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, SearchOptions{
+		Pattern:       "buildUser",
+		Intent:        "impact",
+		Path:          filepath.Join(dir, "src", "build.ts"),
+		InvocationCWD: dir,
+	})
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if got := artifact.Metadata.Bundle.Definition.File; got != "src/build.ts" {
+		t.Fatalf("definition file = %q, want src/build.ts", got)
 	}
-	if bundleSectionsContainFile(artifact.Metadata.Bundle, "src/build.d.ts") {
-		t.Fatalf("paired declaration should not be emitted in impact sections, got %+v", artifact.Metadata.Bundle.Sections)
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainFile(callers, "src/app.ts") {
+		t.Fatalf("callers = %+v, want workspace caller after direct definition path", callers)
+	}
+	assertTypeScriptImpactBundleExcludesEvidenceFile(t, artifact.Metadata.Bundle, "src/build.d.ts")
+	if strings.Contains(artifact.Rendered, "src/build.d.ts") {
+		t.Fatalf("paired declaration should stay suppressed after widened refs, got:\n%s", artifact.Rendered)
 	}
 }
 
@@ -88,6 +111,25 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactDeclarati
 	assertRecommendedReadAt(t, reads, 3, "references", "src/app.ts")
 	if recommendedReadsContainFile(artifact.Metadata.Bundle, "src/types.d.test.ts") {
 		t.Fatalf("declaration impact should not add nearby tests, got %v", recommendedReadFiles(artifact.Metadata.Bundle))
+	}
+}
+
+func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactDeclarationIncludesTSXRefs(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/types.d.ts": "export interface BuildOptions { id: string }\n",
+		"src/App.tsx":    "import type { BuildOptions } from './types'\nexport function App(props: BuildOptions) { return <div>{props.id}</div> }\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newTypeScriptImpactSearchOptions(dir, "BuildOptions"))
+
+	assertTypeScriptStructuredImpactArtifact(t, artifact, "BuildOptions", "interface")
+	if got := artifact.Metadata.Bundle.Definition.File; got != "src/types.d.ts" {
+		t.Fatalf("definition file = %q, want src/types.d.ts", got)
+	}
+	assertRecommendedReadAt(t, artifact.Metadata.Bundle.Impact.RecommendedReads, 1, "type_refs", "src/App.tsx")
+	assertRecommendedReadAt(t, artifact.Metadata.Bundle.Impact.RecommendedReads, 2, "imports", "src/App.tsx")
+	if !symbolBundleItemsContainFile(symbolBundleSectionItems(artifact.Metadata.Bundle, "type_refs"), "src/App.tsx") {
+		t.Fatalf("type_refs section should include TSX usage, sections: %+v", artifact.Metadata.Bundle.Sections)
 	}
 }
 

@@ -1,170 +1,102 @@
 package search
 
-import (
-	"bufio"
-	"os"
-	"path/filepath"
-	"strings"
-)
-
 type typeScriptImpactRefs struct {
-	imports     []genericSymbolRef
-	callers     []genericSymbolRef
-	typeRefs    []genericSymbolRef
-	others      []genericSymbolRef
-	directTests []genericSymbolRef
-	nearbyTests []genericSymbolRef
+	imports          []genericSymbolRef
+	callers          []genericSymbolRef
+	typeRefs         []genericSymbolRef
+	others           []genericSymbolRef
+	directTests      []genericSymbolRef
+	nearbyTests      []genericSymbolRef
+	hasTotalRefs     bool
+	totalImports     []genericSymbolRef
+	totalCallers     []genericSymbolRef
+	totalTypeRefs    []genericSymbolRef
+	totalOthers      []genericSymbolRef
+	totalDirectTests []genericSymbolRef
 }
 
-func typeScriptImpactRefsForDef(def genericSymbolDef, refs []genericSymbolRef, opts SearchOptions, symbol string) typeScriptImpactRefs {
-	classified := classifyJSFamilySymbolRefs(refs, symbol)
+func typeScriptImpactRefsForDisplayAndTotalRefs(def genericSymbolDef, refs []genericSymbolRef, totalRefs []genericSymbolRef, opts SearchOptions) typeScriptImpactRefs {
+	classified := classifyJSFamilySymbolRefsFromAST(refs)
+	totalClassified := classifyJSFamilySymbolRefsFromAST(totalRefs)
 	result := typeScriptImpactRefs{
-		imports:     classified.imports,
-		callers:     classified.callers,
-		typeRefs:    classified.typeRefs,
-		others:      classified.others,
-		directTests: classified.tests,
+		imports:          classified.imports,
+		callers:          classified.callers,
+		typeRefs:         classified.typeRefs,
+		others:           classified.others,
+		directTests:      classified.tests,
+		totalImports:     totalClassified.imports,
+		totalCallers:     totalClassified.callers,
+		totalTypeRefs:    totalClassified.typeRefs,
+		totalOthers:      totalClassified.others,
+		totalDirectTests: totalClassified.tests,
+		hasTotalRefs:     true,
 	}
 	result.nearbyTests = findNearbyTypeScriptTests(def, opts, result.directTests)
 	return result
 }
 
 func (refs typeScriptImpactRefs) allTests() []genericSymbolRef {
-	tests := make([]genericSymbolRef, 0, len(refs.directTests)+len(refs.nearbyTests))
-	tests = append(tests, refs.directTests...)
-	tests = append(tests, refs.nearbyTests...)
-	return tests
+	return allJSFamilyTests(refs.directTests, refs.nearbyTests)
+}
+
+func (refs typeScriptImpactRefs) allTotalTests() []genericSymbolRef {
+	if !refs.hasTotalRefs {
+		return refs.allTests()
+	}
+	return allJSFamilyTests(refs.totalDirectTests, refs.nearbyTests)
+}
+
+func (refs typeScriptImpactRefs) totalImportsForRisk() []genericSymbolRef {
+	if refs.hasTotalRefs {
+		return refs.totalImports
+	}
+	return refs.imports
+}
+
+func (refs typeScriptImpactRefs) totalCallersForRisk() []genericSymbolRef {
+	if refs.hasTotalRefs {
+		return refs.totalCallers
+	}
+	return refs.callers
+}
+
+func (refs typeScriptImpactRefs) totalTypeRefsForRisk() []genericSymbolRef {
+	if refs.hasTotalRefs {
+		return refs.totalTypeRefs
+	}
+	return refs.typeRefs
+}
+
+func (refs typeScriptImpactRefs) totalOthersForRisk() []genericSymbolRef {
+	if refs.hasTotalRefs {
+		return refs.totalOthers
+	}
+	return refs.others
 }
 
 func findNearbyTypeScriptTests(def genericSymbolDef, opts SearchOptions, directTests []genericSymbolRef) []genericSymbolRef {
 	rootPath := structuredTypeScriptImpactFileRoot(opts)
-	if rootPath == "" || !isTypeScriptImplementationFilePath(def.File) {
+	target, ok := structuredTypeScriptImplementationTargetForPath(def.File)
+	if rootPath == "" || !ok {
 		return nil
 	}
 
-	directTestFiles := make(map[string]struct{}, len(directTests))
-	for _, test := range directTests {
-		if test.File == "" {
-			continue
-		}
-		directTestFiles[filepath.ToSlash(filepath.Clean(test.File))] = struct{}{}
-	}
-
-	candidates := typeScriptNearbyTestCandidatePaths(def.File)
-	refs := make([]genericSymbolRef, 0, len(candidates))
-	for _, candidate := range candidates {
-		candidate = filepath.ToSlash(filepath.Clean(candidate))
-		if _, ok := directTestFiles[candidate]; ok {
-			continue
-		}
-
-		absPath := filepath.Join(rootPath, filepath.FromSlash(candidate))
-		if !isUsableNearbyTypeScriptTest(absPath, candidate, opts) {
-			continue
-		}
-		line, snippet := firstNearbyTypeScriptTestSnippet(absPath)
-		refs = append(refs, genericSymbolRef{
-			File:    candidate,
-			Line:    line,
-			Snippet: snippet,
-			IsTest:  true,
-		})
-	}
-	return refs
+	return findNearbyJSFamilyTests(rootPath, typeScriptNearbyTestCandidatePaths(def.File), directTests, func(absPath string, displayPath string) bool {
+		return isUsableNearbyTypeScriptTest(absPath, displayPath, opts, target)
+	})
 }
 
 func typeScriptNearbyTestCandidatePaths(defFile string) []string {
-	cleanFile := filepath.ToSlash(filepath.Clean(defFile))
-	dir := filepath.ToSlash(filepath.Dir(cleanFile))
-	base := strings.TrimSuffix(filepath.Base(cleanFile), filepath.Ext(cleanFile))
-
-	candidates := []string{
-		filepath.ToSlash(filepath.Join(dir, base+".test.ts")),
-		filepath.ToSlash(filepath.Join(dir, base+".spec.ts")),
-		filepath.ToSlash(filepath.Join(dir, "__tests__", base+".test.ts")),
-		filepath.ToSlash(filepath.Join("tests", base+".test.ts")),
+	target, ok := structuredTypeScriptImplementationTargetForPath(defFile)
+	if !ok {
+		return nil
 	}
-	return dedupeStringList(candidates)
+	return target.nearbyTestCandidatePaths(defFile)
 }
 
-func isUsableNearbyTypeScriptTest(absPath, displayPath string, opts SearchOptions) bool {
-	if strings.ToLower(filepath.Ext(absPath)) != ".ts" {
+func isUsableNearbyTypeScriptTest(absPath, displayPath string, opts SearchOptions, target structuredTypeScriptImpactTarget) bool {
+	if !target.matchesNearbyTestPath(displayPath) {
 		return false
 	}
-	info, err := os.Stat(absPath)
-	if err != nil || info.IsDir() {
-		return false
-	}
-	if !nearbyTypeScriptTestInSearchScope(absPath, opts) {
-		return false
-	}
-	if matchesSearchIgnoreFilter(displayPath, opts) {
-		return false
-	}
-	return matchesSearchFileFilter(displayPath, opts)
-}
-
-func nearbyTypeScriptTestInSearchScope(absPath string, opts SearchOptions) bool {
-	basis := resolveSearchPathBasisForOptions(opts)
-	base := basis.Workdir
-	if strings.TrimSpace(base) == "" {
-		base = invocationCWDOrGetwd(opts)
-	}
-	target := strings.TrimSpace(basis.Target)
-	if target == "" {
-		target = "."
-	}
-
-	var targetPath string
-	if filepath.IsAbs(target) {
-		targetPath = filepath.Clean(target)
-	} else {
-		targetPath = filepath.Clean(filepath.Join(base, target))
-	}
-
-	info, err := os.Stat(targetPath)
-	if err == nil && !info.IsDir() {
-		return filepath.Clean(absPath) == targetPath
-	}
-
-	rel, err := filepath.Rel(targetPath, filepath.Clean(absPath))
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
-}
-
-func firstNearbyTypeScriptTestSnippet(absPath string) (int, string) {
-	file, err := os.Open(absPath)
-	if err != nil {
-		return 1, ""
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	line := 0
-	for scanner.Scan() {
-		line++
-		text := strings.TrimSpace(scanner.Text())
-		if text != "" {
-			return line, text
-		}
-	}
-	return 1, ""
-}
-
-func dedupeStringList(items []string) []string {
-	seen := make(map[string]struct{}, len(items))
-	result := make([]string, 0, len(items))
-	for _, item := range items {
-		if item == "" {
-			continue
-		}
-		if _, ok := seen[item]; ok {
-			continue
-		}
-		seen[item] = struct{}{}
-		result = append(result, item)
-	}
-	return result
+	return isUsableNearbyJSFamilyTest(absPath, displayPath, opts)
 }

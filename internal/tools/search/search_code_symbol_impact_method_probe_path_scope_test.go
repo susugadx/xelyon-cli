@@ -48,7 +48,7 @@ func TestRun(t *testing.T) {
 	}
 }
 
-func TestExecuteSearchCode_ImpactIntentStructuredGoMethodTestProbeRespectsFileScopedPath(t *testing.T) {
+func TestExecuteSearchCode_ImpactIntentStructuredGoMethodTestProbeUsesPackageFromFileScopedPath(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"agent.go": `package example
 
@@ -79,8 +79,53 @@ func TestRun(t *testing.T) {
 		LSPClient: &mockGoSymbolLSPClient{refs: []navigation.LSPLocation{{File: "agent.go", Line: 8, Character: 11, EndLine: 8, EndChar: 14}}},
 	})
 
-	if strings.Contains(output, "Related Tests") {
-		t.Fatalf("expected file-scoped path to avoid sibling test files, got:\n%s", output)
+	if !strings.Contains(output, "Related Tests") || !strings.Contains(output, "agent_test.go") {
+		t.Fatalf("expected file-scoped definition to still include same-package impact tests, got:\n%s", output)
+	}
+}
+
+func TestExecuteSearchCode_ImpactIntentStructuredGoFunctionTestProbeStaysInPackageFromFileScopedPath(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"app/build.go": `package app
+
+func Build() string { return "" }
+
+func UseBuild() string {
+	return Build()
+}
+`,
+		"app/build_test.go": `package app
+
+import "testing"
+
+func TestBuild(t *testing.T) {
+	_ = Build()
+}
+`,
+		"other/build_test.go": `package other
+
+import "testing"
+
+func TestBuild(t *testing.T) {
+	t.Fatal("unrelated same-name test")
+}
+`,
+	})
+
+	output := ExecuteSearchCode(SearchOptions{
+		Pattern:       "Build",
+		Intent:        "impact",
+		Path:          filepath.Join(dir, "app", "build.go"),
+		FileType:      "go",
+		InvocationCWD: dir,
+		LSPClient:     &mockGoSymbolLSPClient{refs: []navigation.LSPLocation{{File: "app/build.go", Line: 6, Character: 9, EndLine: 6, EndChar: 14}}},
+	})
+
+	if !strings.Contains(output, "Related Tests") || !strings.Contains(output, "app/build_test.go") {
+		t.Fatalf("expected file-scoped function probe to include same-package TestBuild, got:\n%s", output)
+	}
+	if strings.Contains(output, "other/build_test.go") {
+		t.Fatalf("expected name-only function probe to exclude sibling same-name TestBuild, got:\n%s", output)
 	}
 }
 

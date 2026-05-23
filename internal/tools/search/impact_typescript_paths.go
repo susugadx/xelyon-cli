@@ -1,7 +1,6 @@
 package search
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -11,29 +10,22 @@ func cleanStructuredTypeScriptFilePattern(pattern string) string {
 }
 
 func isTypeScriptSourceFilePath(path string) bool {
-	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(path)))
-	return ext == ".ts"
+	_, ok := structuredTypeScriptSourceTargetForPath(path)
+	return ok
 }
 
 func isTypeScriptDeclarationFilePath(path string) bool {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return false
-	}
-	clean := strings.ToLower(filepath.ToSlash(filepath.Clean(path)))
-	return strings.HasSuffix(clean, ".d.ts")
+	_, ok := structuredTypeScriptDeclarationTargetForPath(path)
+	return ok
 }
 
 func isTypeScriptImplementationFilePath(path string) bool {
-	return isTypeScriptSourceFilePath(path) && !isTypeScriptDeclarationFilePath(path)
+	_, ok := structuredTypeScriptImplementationTargetForPath(path)
+	return ok
 }
 
 func isTypeScriptOnlyFilePattern(pattern string) bool {
-	pattern = strings.ToLower(cleanStructuredTypeScriptFilePattern(pattern))
-	if pattern == "" || strings.Contains(pattern, ".tsx") {
-		return false
-	}
-	return strings.HasSuffix(pattern, ".ts")
+	return structuredTypeScriptImpactAllowsFilePattern(pattern)
 }
 
 func normalizeStructuredTypeScriptDefs(defs []genericSymbolDef) []genericSymbolDef {
@@ -41,6 +33,7 @@ func normalizeStructuredTypeScriptDefs(defs []genericSymbolDef) []genericSymbolD
 	for i, def := range defs {
 		normalized[i] = def
 		normalized[i].File = cleanStructuredTypeScriptDisplayPath(def.File)
+		normalized[i] = normalizeStructuredTypeScriptDefForImpact(normalized[i])
 	}
 	return normalized
 }
@@ -56,13 +49,6 @@ func normalizeStructuredTypeScriptRefs(refs []genericSymbolRef) []genericSymbolR
 
 func structuredTypeScriptDefPathKey(path string) string {
 	return cleanStructuredTypeScriptDisplayPath(path)
-}
-
-func structuredTypeScriptLocationKey(file string, line int) string {
-	if file == "" || line <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("%s:%d", file, line)
 }
 
 func cleanStructuredTypeScriptDisplayPath(path string) string {
@@ -86,4 +72,23 @@ func structuredTypeScriptImpactFileRoot(opts SearchOptions) string {
 		return basis.Workdir
 	}
 	return invocationCWDOrGetwd(opts)
+}
+
+func structuredTypeScriptImpactReferenceOptions(def genericSymbolDef, opts SearchOptions) jsFamilyReferenceOptions {
+	fileType, _ := structuredTypeScriptImpactReferenceFileType(def)
+	return newJSFamilyStructuredImpactReferenceOptions(def, opts, fileType)
+}
+
+func structuredTypeScriptImpactReferenceFileType(def genericSymbolDef) (string, bool) {
+	target, ok := structuredTypeScriptImpactTargetForPath(def.File)
+	if !ok {
+		return "", false
+	}
+	if target.fileType != "" {
+		return target.fileType, true
+	}
+	if target.declaration {
+		return "typescript", true
+	}
+	return "", false
 }

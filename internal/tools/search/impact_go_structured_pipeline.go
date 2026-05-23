@@ -1,31 +1,27 @@
 package search
 
 import (
-	"strings"
-
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func tryStructuredGoImpactSearchResult(cache tools.ToolCacheInterface, opts SearchOptions) (structuredImpactExecutionResult, bool) {
-	ctx, ok := newStructuredGoImpactSearchContext(opts)
-	if !ok {
-		return structuredImpactExecutionResult{}, false
-	}
-	return tryStructuredImpactSearchResult(cache, ctx, opts, resolveStructuredGoImpactSymbol)
+	return structuredGoImpactLanguageSpec().trySearchResult(cache, opts)
 }
 
-func newStructuredGoImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, bool) {
-	pattern := strings.TrimSpace(opts.Pattern)
-	if !shouldAttemptStructuredGoImpactSearch(opts, pattern) {
-		return structuredImpactSearchContext{}, false
-	}
+func newStructuredGoImpactSearchContext(opts SearchOptions) (structuredImpactSearchContext, structuredImpactScope, bool) {
+	return structuredGoImpactLanguageSpec().newSearchContext(opts)
+}
 
-	ctx, ok := newStructuredImpactSearchContext(opts, structuredGoImpactRouteTag)
-	if !ok {
-		return structuredImpactSearchContext{}, false
+func structuredGoImpactRoute(pattern string, opts SearchOptions) (searchRouteTrace, bool) {
+	return structuredImpactSymbolRoute(pattern, opts, "go", structuredGoImpactRouteTag)
+}
+
+func structuredGoImpactLanguageSpec() structuredImpactLanguageSpec {
+	return structuredImpactLanguageSpec{
+		name:      "go",
+		routeTag:  structuredGoImpactRouteTag,
+		normalize: normalizeStructuredGoImpactScope,
+		planRoute: structuredGoImpactRoute,
+		resolver:  resolveStructuredGoImpactSymbol,
 	}
-	if ctx.Route.Language != "go" {
-		return structuredImpactSearchContext{}, false
-	}
-	return ctx, true
 }

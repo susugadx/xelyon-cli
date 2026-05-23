@@ -6,7 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	codeast "github.com/susugadx/xelyon-cli/internal/ast"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/impactplan"
+	"github.com/susugadx/xelyon-cli/internal/jsast"
 )
 
 func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactRelatedTests(t *testing.T) {
@@ -15,7 +18,11 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactRelatedTe
 		testPath string
 	}{
 		{name: "sibling test", testPath: "src/build.test.ts"},
+		{name: "sibling spec", testPath: "src/build.spec.ts"},
 		{name: "__tests__ directory", testPath: "src/__tests__/build.test.ts"},
+		{name: "__tests__ spec", testPath: "src/__tests__/build.spec.ts"},
+		{name: "workspace test", testPath: "tests/build.test.ts"},
+		{name: "workspace spec", testPath: "tests/build.spec.ts"},
 	}
 
 	for _, tt := range tests {
@@ -23,7 +30,7 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactRelatedTe
 			dir := setupMultiLangDir(t, map[string]string{
 				"src/build.ts": "export function buildUser(id: string) { return id }\n",
 				"src/app.ts":   "import { buildUser } from './build'\nbuildUser('1')\n",
-				tt.testPath:    "import { buildUser } from '../build'\nbuildUser('test')\n",
+				tt.testPath:    "import { describe } from 'vitest'\ndescribe('build', () => {})\n",
 			})
 
 			artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newTypeScriptImpactSearchOptions(dir, "buildUser"))
@@ -146,6 +153,49 @@ func TestExecuteSearchCodeArtifactWithConfig_TypeScriptStructuredImpactTypeRefsF
 	}
 }
 
+func TestBuildTypeScriptImpactBundleFromDisplayAndTotalRefsKeepsSummaryTotals(t *testing.T) {
+	def := genericSymbolDef{
+		Name:      "buildUser",
+		Kind:      "function",
+		File:      "src/build.ts",
+		Line:      1,
+		Signature: "function buildUser(id: string) { return id }",
+	}
+	displayRefs := []genericSymbolRef{{
+		File:    "src/app0.ts",
+		Line:    1,
+		Snippet: "buildUser('0')",
+		Class:   codeast.ClassCall,
+	}}
+	totalRefs := make([]genericSymbolRef, 0, jsFamilyImpactHighNonTestReferenceThreshold)
+	for i := 0; i < jsFamilyImpactHighNonTestReferenceThreshold; i++ {
+		totalRefs = append(totalRefs, genericSymbolRef{
+			File:  filepath.ToSlash(filepath.Join("src", "app"+string(rune('0'+i))+".ts")),
+			Line:  1,
+			Class: codeast.ClassCall,
+		})
+	}
+
+	bundle := buildTypeScriptImpactBundleFromDisplayAndTotalRefs("buildUser", def, SearchOptions{}, displayRefs, totalRefs)
+
+	if bundle == nil || bundle.Impact == nil {
+		t.Fatal("bundle impact = nil, want structured impact bundle")
+	}
+	if got := bundle.Impact.RiskLevel; got != impactplan.RiskHigh {
+		t.Fatalf("risk = %q, want %q from total refs summary", got, impactplan.RiskHigh)
+	}
+	callers := symbolBundleSectionByKind(bundle, "callers")
+	if callers == nil {
+		t.Fatal("callers section = nil, want budgeted evidence section")
+	}
+	if len(callers.Items) != 1 {
+		t.Fatalf("callers items len = %d, want one display evidence item", len(callers.Items))
+	}
+	if callers.Total != jsFamilyImpactHighNonTestReferenceThreshold || !callers.More {
+		t.Fatalf("callers total/more = %d/%v, want total refs summary %d with More", callers.Total, callers.More, jsFamilyImpactHighNonTestReferenceThreshold)
+	}
+}
+
 func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 	tests := []struct {
 		name string
@@ -157,35 +207,52 @@ func TestClassifyTypeScriptImpactRisk(t *testing.T) {
 			name: "exported with direct tests is not high",
 			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "export  function buildUser() {}"},
 			refs: typeScriptImpactRefs{
-				callers:     typeScriptGenericRefs("src/app", 8),
+				callers:     genericSymbolRefsForTest("src/app", ".ts", 8),
 				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
 			},
-			want: goImpactRiskMedium,
+			want: impactplan.RiskMedium,
 		},
 		{
 			name: "exported many refs without tests is high",
 			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "export\tfunction buildUser() {}"},
 			refs: typeScriptImpactRefs{
-				callers: typeScriptGenericRefs("src/app", 8),
+				callers: genericSymbolRefsForTest("src/app", ".ts", 8),
 			},
-			want: goImpactRiskHigh,
+			want: impactplan.RiskHigh,
 		},
 		{
 			name: "local few refs with nearby tests is low",
 			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "function buildUser() {}"},
 			refs: typeScriptImpactRefs{
-				callers:     typeScriptGenericRefs("src/app", 1),
+				callers:     genericSymbolRefsForTest("src/app", ".ts", 1),
 				nearbyTests: []genericSymbolRef{{File: "src/build.spec.ts", Line: 1, IsTest: true}},
 			},
-			want: goImpactRiskLow,
+			want: impactplan.RiskLow,
+		},
+		{
+			name: "local declaration exported later with direct tests is medium",
+			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "function buildUser() {}"},
+			refs: typeScriptImpactRefs{
+				imports:     []genericSymbolRef{{File: "src/index.ts", Line: 2, Snippet: "export { buildUser }", Class: jsast.ClassExport}},
+				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
+			},
+			want: impactplan.RiskMedium,
+		},
+		{
+			name: "ast exported definition with direct tests is medium",
+			def:  genericSymbolDef{Name: "buildUser", Kind: "function", Signature: "function buildUser() {}", Exported: true},
+			refs: typeScriptImpactRefs{
+				directTests: []genericSymbolRef{{File: "src/build.test.ts", Line: 1, IsTest: true}},
+			},
+			want: impactplan.RiskMedium,
 		},
 		{
 			name: "export default class is exported",
 			def:  genericSymbolDef{Name: "UserBuilder", Kind: "class", Signature: "export default class UserBuilder {}"},
 			refs: typeScriptImpactRefs{
-				callers: typeScriptGenericRefs("src/app", 4),
+				callers: genericSymbolRefsForTest("src/app", ".ts", 4),
 			},
-			want: goImpactRiskHigh,
+			want: impactplan.RiskHigh,
 		},
 	}
 

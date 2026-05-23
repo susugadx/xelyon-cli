@@ -68,11 +68,8 @@ func ExecuteSearchCodeArtifactWithConfig(cfg *config.Config, cache tools.ToolCac
 }
 
 func executeImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOptions) SearchExecutionArtifact {
-	if artifact, ok := tryStructuredGoImpactSearchArtifact(cache, opts); ok {
-		return artifact
-	}
-	if artifact, ok := tryStructuredTypeScriptImpactSearchArtifact(cache, opts); ok {
-		return artifact
+	if result, ok := tryStructuredImpactSearchResultForIntent(cache, opts); ok {
+		return newStructuredImpactSearchArtifact(result)
 	}
 
 	basePatterns := impactBasePatterns(opts)
@@ -92,15 +89,6 @@ func executeImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOpti
 	finalResult := executeSearchPatternsDetailed(cache, finalPatterns, opts)
 	return searchPatternsArtifact(finalResult, len(finalPatterns) > 1)
 }
-
-func tryStructuredGoImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOptions) (SearchExecutionArtifact, bool) {
-	result, ok := tryStructuredGoImpactSearchResult(cache, opts)
-	if !ok {
-		return SearchExecutionArtifact{}, false
-	}
-	return newStructuredImpactSearchArtifact(result), true
-}
-
 func searchPatternsArtifact(result searchPatternsExecution, multiPattern bool) SearchExecutionArtifact {
 	return SearchExecutionArtifact{
 		Rendered: result.Output,

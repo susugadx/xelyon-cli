@@ -83,7 +83,11 @@ func appendSymbolBundleDiagnostics(sb *strings.Builder, bundle *SymbolBundle) {
 	}
 
 	if bundle.Diagnostics.ResolvedViaLSP {
-		sb.WriteString("\nNote: resolved via gopls.\n")
+		source := strings.TrimSpace(bundle.Diagnostics.LSPSource)
+		if source == "" {
+			source = "LSP"
+		}
+		fmt.Fprintf(sb, "\nNote: resolved via %s.\n", source)
 	}
 }
 

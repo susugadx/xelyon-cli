@@ -11,11 +11,12 @@ import (
 )
 
 type symbolBundleSectionInput struct {
-	Kind   string
-	Title  string
-	Items  []genericSymbolRef
-	Limit  int
-	IsTest bool
+	Kind       string
+	Title      string
+	Items      []genericSymbolRef
+	TotalItems []genericSymbolRef
+	Limit      int
+	IsTest     bool
 }
 
 type goSymbolBundleBuildOptions struct {
@@ -31,6 +32,7 @@ var searchCodeGoSymbolBudget = navigation.Budget{
 }
 
 const goImplementationLimit = 4
+const goSymbolBundleLSPSource = "gopls"
 
 func buildGoSymbolBundle(query string, result navigation.InspectResult) *SymbolBundle {
 	return buildGoSymbolBundleWithOptions(query, result, goSymbolBundleBuildOptions{
@@ -75,6 +77,7 @@ func newGoSymbolBundle(query string, result navigation.InspectResult, opts goSym
 		},
 		Diagnostics: SymbolBundleDiagnostics{
 			ResolvedViaLSP:     result.ResolvedViaLSP,
+			LSPSource:          goSymbolBundleLSPSource,
 			UpstreamTruncated:  result.UpstreamTruncated,
 			UpstreamIncomplete: result.UpstreamIncomplete,
 		},

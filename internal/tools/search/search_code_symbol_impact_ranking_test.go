@@ -398,17 +398,6 @@ func normalizedImpactSearchOptionsForTest(t *testing.T, root string) SearchOptio
 	return opts
 }
 
-func recommendedReadFiles(bundle *SymbolBundle) []string {
-	if bundle == nil || bundle.Impact == nil {
-		return nil
-	}
-	files := make([]string, 0, len(bundle.Impact.RecommendedReads))
-	for _, item := range bundle.Impact.RecommendedReads {
-		files = append(files, item.File)
-	}
-	return files
-}
-
 func equalStrings(left, right []string) bool {
 	if len(left) != len(right) {
 		return false

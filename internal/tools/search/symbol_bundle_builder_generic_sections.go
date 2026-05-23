@@ -12,7 +12,11 @@ func buildGenericBundleSection(def genericSymbolDef, input symbolBundleSectionIn
 		return nil
 	}
 
-	total := len(dedupeGenericRefs(input.Items))
+	totalItems := input.Items
+	if input.TotalItems != nil {
+		totalItems = input.TotalItems
+	}
+	total := len(dedupeGenericRefs(totalItems))
 	items := prioritizeGenericRefs(def, input.Items, input.Limit, input.IsTest)
 	if len(items) == 0 {
 		return nil

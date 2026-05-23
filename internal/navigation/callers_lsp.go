@@ -8,7 +8,7 @@ import (
 const lspReferenceTimeout = 5 * time.Second
 
 // findReferencesViaLSP は LSP の参照結果を navigation.Reference に変換する。
-func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string) ([]Reference, error) {
+func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string, filter ReferenceFilter) ([]Reference, error) {
 	locations, err := queryLSPLocations(cand, func(ctx context.Context, filePath string, line, col int) ([]LSPLocation, error) {
 		return client.FindReferences(ctx, filePath, line, col, false)
 	})
@@ -18,7 +18,11 @@ func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD 
 
 	refs := make([]Reference, 0, len(locations))
 	for _, loc := range locations {
-		refs = append(refs, newReferenceFromLSPLocation(loc, cand, invocationCWD))
+		filePath := lspLocationFilePath(loc.File, cand.RootPath, invocationCWD)
+		if filter != nil && !filter(referenceForLSPPreClassificationFilter(filePath, loc)) {
+			continue
+		}
+		refs = append(refs, newReferenceFromLSPFilePath(filePath, loc, cand))
 	}
 	return refs, nil
 }
@@ -53,8 +57,7 @@ func queryLSPLocations(cand SymbolCandidate, query lspLocationQuery) ([]LSPLocat
 	return query(ctx, cand.File, cand.Line, col)
 }
 
-func newReferenceFromLSPLocation(loc LSPLocation, cand SymbolCandidate, invocationCWD string) Reference {
-	filePath := lspLocationFilePath(loc.File, cand.RootPath, invocationCWD)
+func newReferenceFromLSPFilePath(filePath string, loc LSPLocation, cand SymbolCandidate) Reference {
 	return Reference{
 		File:         filePath,
 		ResolvedPath: cleanNavigationResolvedPath(filePath),
@@ -63,6 +66,15 @@ func newReferenceFromLSPLocation(loc LSPLocation, cand SymbolCandidate, invocati
 		Snippet:      readLineSnippet(filePath, loc.Line),
 		IsTest:       isTestFile(filePath),
 		Class:        classifyLineByAST(filePath, loc.Line, cand.Name),
+	}
+}
+
+func referenceForLSPPreClassificationFilter(filePath string, loc LSPLocation) Reference {
+	return Reference{
+		File:         filePath,
+		ResolvedPath: cleanNavigationResolvedPath(filePath),
+		Line:         loc.Line,
+		IsTest:       isTestFile(filePath),
 	}
 }
 

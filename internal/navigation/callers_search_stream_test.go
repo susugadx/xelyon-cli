@@ -48,7 +48,7 @@ func TestCollectReferenceSearchResult_LongLineDoesNotSilentlyDrop(t *testing.T) 
 	symbol := "Target"
 	longLine := "file.go:1:" + strings.Repeat("x", 70*1024) + symbol + "()\n"
 
-	result := collectReferenceSearchResult(strings.NewReader(longLine), symbol)
+	result := collectReferenceSearchResult(strings.NewReader(longLine), symbol, nil)
 	if result.Incomplete {
 		t.Fatal("expected complete result for line larger than default scanner buffer")
 	}
@@ -70,7 +70,7 @@ func TestCollectReferenceSearchResult_ReaderErrorMarksIncomplete(t *testing.T) {
 		finalErr: errors.New("read failed"),
 	}
 
-	result := collectReferenceSearchResult(reader, symbol)
+	result := collectReferenceSearchResult(reader, symbol, nil)
 	if !result.Incomplete {
 		t.Fatal("expected incomplete result when reader returns an error")
 	}
@@ -88,6 +88,7 @@ func TestRunReferenceSearch_WaitErrorMarksIncomplete(t *testing.T) {
 		"Target",
 		nil,
 		func() error { return errors.New("rg exit status 2") },
+		nil,
 	)
 
 	if truncated {
@@ -107,6 +108,7 @@ func TestFindReferences_ExactlyLimitNotTruncated(t *testing.T) {
 		"Target",
 		nil,
 		func() error { return nil },
+		nil,
 	)
 
 	if truncated {
@@ -120,6 +122,38 @@ func TestFindReferences_ExactlyLimitNotTruncated(t *testing.T) {
 	}
 }
 
+func TestCollectReferenceSearchResult_AppliesFilterBeforeLimit(t *testing.T) {
+	symbol := "Target"
+	var output strings.Builder
+	for i := range maxRipgrepResults + 10 {
+		output.WriteString("a")
+		output.WriteString(strconv.Itoa(i))
+		output.WriteString("/use.go:1:")
+		output.WriteString(symbol)
+		output.WriteString("()\n")
+	}
+	output.WriteString("zapp/use.go:1:")
+	output.WriteString(symbol)
+	output.WriteString("()\n")
+
+	result := collectReferenceSearchResult(strings.NewReader(output.String()), symbol, func(ref Reference) bool {
+		return strings.HasPrefix(ref.File, "zapp/")
+	})
+
+	if result.Truncated {
+		t.Fatal("expected out-of-scope references not to consume the reference limit")
+	}
+	if result.Incomplete {
+		t.Fatal("expected complete result")
+	}
+	if len(result.Refs) != 1 {
+		t.Fatalf("expected one filtered ref, got %d", len(result.Refs))
+	}
+	if result.Refs[0].File != "zapp/use.go" {
+		t.Fatalf("filtered ref file = %q, want zapp/use.go", result.Refs[0].File)
+	}
+}
+
 func TestFindReferences_OverLimitTruncated(t *testing.T) {
 	canceled := false
 	refs, truncated, incomplete := runReferenceSearch(
@@ -127,6 +161,7 @@ func TestFindReferences_OverLimitTruncated(t *testing.T) {
 		"Target",
 		func() { canceled = true },
 		func() error { return errors.New("signal: killed") },
+		nil,
 	)
 
 	if !truncated {

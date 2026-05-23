@@ -1,10 +1,26 @@
 package search
 
-import "strings"
-
 type structuredTypeScriptPreferredDefs struct {
 	defs                      []genericSymbolDef
 	suppressedDeclarationDefs []genericSymbolDef
+}
+
+func findStructuredTypeScriptImpactDefinitionSet(symbol string, opts SearchOptions) jsFamilyImpactDefinitionSet {
+	candidates := collectJSFamilyDefinitionCandidates(symbol, opts)
+	return structuredTypeScriptImpactDefinitionSetFromCandidates(symbol, opts, candidates)
+}
+
+func structuredTypeScriptImpactDefinitionSetFromCandidates(symbol string, opts SearchOptions, candidates jsFamilyDefinitionCandidates) jsFamilyImpactDefinitionSet {
+	defs := normalizeStructuredTypeScriptDefs(candidates.astDefs)
+	if len(defs) == 0 {
+		defs = normalizeStructuredTypeScriptDefs(genericDefinitionsFromMatches(symbol, opts, candidates.matches))
+	}
+	preferredDefs := preferStructuredTypeScriptImplementationDefs(defs)
+	return jsFamilyImpactDefinitionSet{
+		defs:                 preferredDefs.defs,
+		suppressedRefDefs:    preferredDefs.suppressedDeclarationDefs,
+		definitionIncomplete: candidates.definitionIncomplete,
+	}
 }
 
 func preferStructuredTypeScriptImplementationDefs(defs []genericSymbolDef) structuredTypeScriptPreferredDefs {
@@ -39,6 +55,35 @@ func preferStructuredTypeScriptImplementationDefs(defs []genericSymbolDef) struc
 	}
 }
 
+func filterStructuredTypeScriptImpactRefs(def genericSymbolDef, definitionSet jsFamilyImpactDefinitionSet, refs []genericSymbolRef) []genericSymbolRef {
+	suppressed := structuredTypeScriptSuppressedDeclarationDefsForImpact(def, definitionSet.suppressedRefDefs)
+	return filterStructuredTypeScriptSuppressedDeclarationRefs(refs, suppressed)
+}
+
+func structuredTypeScriptSuppressedDeclarationDefsForImpact(def genericSymbolDef, suppressedDefs []genericSymbolDef) []genericSymbolDef {
+	suppressed := append([]genericSymbolDef{}, suppressedDefs...)
+	suppressed = append(suppressed, structuredTypeScriptPairedDeclarationDefsForImplementation(def)...)
+	return suppressed
+}
+
+func structuredTypeScriptPairedDeclarationDefsForImplementation(def genericSymbolDef) []genericSymbolDef {
+	target, ok := structuredTypeScriptImplementationTargetForPath(def.File)
+	if !ok {
+		return nil
+	}
+
+	key := structuredTypeScriptDefPathKey(def.File)
+	if key == "" || len(key) <= len(target.suffix) {
+		return nil
+	}
+
+	declarationPath := key[:len(key)-len(target.suffix)] + structuredTypeScriptDeclarationImpactTarget.suffix
+	return []genericSymbolDef{{
+		Name: def.Name,
+		File: declarationPath,
+	}}
+}
+
 func filterStructuredTypeScriptSuppressedDeclarationRefs(refs []genericSymbolRef, suppressed []genericSymbolDef) []genericSymbolRef {
 	if len(refs) == 0 || len(suppressed) == 0 {
 		return refs
@@ -65,24 +110,28 @@ func filterStructuredTypeScriptSuppressedDeclarationRefs(refs []genericSymbolRef
 }
 
 func isPairedTypeScriptDeclarationDef(def genericSymbolDef, implementationPaths map[string]struct{}) bool {
-	implementationPath, ok := structuredTypeScriptDeclarationImplementationPath(def.File)
-	if !ok {
-		return false
+	for _, implementationPath := range structuredTypeScriptDeclarationImplementationPaths(def.File) {
+		if _, ok := implementationPaths[implementationPath]; ok {
+			return true
+		}
 	}
-	_, ok = implementationPaths[implementationPath]
-	return ok
+	return false
 }
 
 func structuredTypeScriptDeclarationImplementationPath(path string) (string, bool) {
-	key := structuredTypeScriptDefPathKey(path)
-	if key == "" {
+	paths := structuredTypeScriptDeclarationImplementationPaths(path)
+	if len(paths) == 0 {
 		return "", false
 	}
-	lowerKey := strings.ToLower(key)
-	if !strings.HasSuffix(lowerKey, ".d.ts") {
-		return "", false
+	return paths[0], true
+}
+
+func structuredTypeScriptDeclarationImplementationPaths(path string) []string {
+	target, ok := structuredTypeScriptDeclarationTargetForPath(path)
+	if !ok {
+		return nil
 	}
-	return key[:len(key)-len(".d.ts")] + ".ts", true
+	return target.declarationImplementationPaths(path)
 }
 
 func collectStructuredTypeScriptDefAffectedFiles(defs []genericSymbolDef, opts SearchOptions) []string {

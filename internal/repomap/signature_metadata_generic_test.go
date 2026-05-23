@@ -33,6 +33,12 @@ func TestExtractSignatureMetadata(t *testing.T) {
 			wantName: "buildMap",
 			wantKind: "function",
 		},
+		{
+			name:     "TSX function expression stays const in generic extractor",
+			sig:      "export const Button = function Button() { return <button /> }",
+			wantName: "Button",
+			wantKind: "const",
+		},
 	}
 
 	for _, tt := range tests {

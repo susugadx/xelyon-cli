@@ -6,6 +6,79 @@ import (
 	"testing"
 )
 
+func TestStructuredImpactLanguageSpecs_DefineDispatchOrderAndPolicy(t *testing.T) {
+	tests := []struct {
+		name               string
+		routeTag           string
+		fileType           string
+		routeLanguage      string
+		expandSupplemental bool
+	}{
+		{
+			name:          "go",
+			routeTag:      structuredGoImpactRouteTag,
+			fileType:      "go",
+			routeLanguage: "go",
+		},
+		{
+			name:               "typescript",
+			routeTag:           structuredTypeScriptImpactRouteTag,
+			fileType:           "ts",
+			routeLanguage:      "js",
+			expandSupplemental: true,
+		},
+		{
+			name:               "javascript",
+			routeTag:           structuredJavaScriptImpactRouteTag,
+			fileType:           "js",
+			routeLanguage:      "js",
+			expandSupplemental: true,
+		},
+	}
+
+	specs := structuredImpactLanguageSpecs()
+	if len(specs) != len(tests) {
+		t.Fatalf("structuredImpactLanguageSpecs() len = %d, want %d", len(specs), len(tests))
+	}
+
+	for i, tt := range tests {
+		spec := specs[i]
+		if spec.name != tt.name {
+			t.Fatalf("spec[%d].name = %q, want %q", i, spec.name, tt.name)
+		}
+		if spec.routeTag != tt.routeTag {
+			t.Fatalf("spec[%d].routeTag = %q, want %q", i, spec.routeTag, tt.routeTag)
+		}
+		if spec.expandSupplemental != tt.expandSupplemental {
+			t.Fatalf("spec[%d].expandSupplemental = %v, want %v", i, spec.expandSupplemental, tt.expandSupplemental)
+		}
+		if spec.normalize == nil || spec.planRoute == nil || spec.resolver == nil {
+			t.Fatalf("spec[%d] has nil function field: %+v", i, spec)
+		}
+
+		opts := SearchOptions{
+			Pattern:  "Run",
+			Intent:   "impact",
+			Path:     ".",
+			FileType: tt.fileType,
+		}
+		ctx, scope, ok := spec.newSearchContext(opts)
+		if !ok {
+			t.Fatalf("spec[%d].newSearchContext() rejected %s impact opts", i, tt.name)
+		}
+		if ctx.Route.Language != tt.routeLanguage {
+			t.Fatalf("spec[%d] route language = %q, want %q", i, ctx.Route.Language, tt.routeLanguage)
+		}
+		wantKey := buildSearchCacheKeyWithRoute(opts, ctx.Route.cacheSignature()+"|"+tt.routeTag)
+		if ctx.CacheKey != wantKey {
+			t.Fatalf("spec[%d] cache key = %q, want %q", i, ctx.CacheKey, wantKey)
+		}
+		if scope.Definition.FileType != tt.fileType || scope.Evidence.FileType != tt.fileType {
+			t.Fatalf("spec[%d] scope file type = (%q, %q), want %q", i, scope.Definition.FileType, scope.Evidence.FileType, tt.fileType)
+		}
+	}
+}
+
 func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles(t *testing.T) {
 	clearSearchSidecarCaches()
 	t.Cleanup(clearSearchSidecarCaches)
@@ -28,9 +101,13 @@ func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles
 	cache := &testSearchCache{data: make(map[string]string)}
 	bundle := newStructuredImpactPipelineTestBundle(root)
 
-	result, ok := tryStructuredImpactSearchResult(cache, ctx, opts, func(symbol string, opts SearchOptions) symbolResolveResult {
+	scope := structuredImpactSameScope(opts)
+	result, ok := tryStructuredImpactSearchResult(cache, ctx, scope, func(symbol string, scope structuredImpactScope) symbolResolveResult {
 		if symbol != "Run" {
 			t.Fatalf("resolver symbol = %q, want Run", symbol)
+		}
+		if scope.Definition.Path != root || scope.Evidence.Path != root {
+			t.Fatalf("resolver scope = %+v, want definition/evidence path %q", scope, root)
 		}
 		return symbolResolveResult{
 			Output: "resolver-output",
@@ -79,6 +156,98 @@ func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles
 	}
 }
 
+func TestTryStructuredImpactSearchResult_PassesDistinctDefinitionAndEvidenceScope(t *testing.T) {
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
+
+	root := t.TempDir()
+	writeStructuredImpactPipelineTestFile(t, filepath.Join(root, "run.go"), "package example\n\nfunc Run() {}\n")
+	writeStructuredImpactPipelineTestFile(t, filepath.Join(root, "caller.go"), "package example\n\nfunc callRun() { Run() }\n")
+
+	definition := SearchOptions{
+		Pattern:            "Run",
+		Path:               filepath.Join(root, "packages", "app", "src"),
+		ProjectMapRootPath: root,
+		InvocationCWD:      root,
+	}
+	evidence := definition
+	evidence.Path = root
+	evidence.FilePattern = "packages/app/src/**/*.go"
+	scope := structuredImpactScope{
+		Definition: definition,
+		Evidence:   evidence,
+	}
+	ctx := structuredImpactSearchContext{
+		Pattern:  "Run",
+		Route:    searchRouteTrace{Language: "go", InitialLane: searchLaneSymbol, SymbolQuery: "Run"},
+		CacheKey: "structured-impact-scope-cache-key",
+	}
+
+	called := false
+	result, ok := tryStructuredImpactSearchResult(&testSearchCache{data: make(map[string]string)}, ctx, scope, func(symbol string, got structuredImpactScope) symbolResolveResult {
+		called = true
+		if symbol != "Run" {
+			t.Fatalf("resolver symbol = %q, want Run", symbol)
+		}
+		if got.Definition.Path != definition.Path {
+			t.Fatalf("definition path = %q, want %q", got.Definition.Path, definition.Path)
+		}
+		if got.Evidence.Path != evidence.Path || got.Evidence.FilePattern != evidence.FilePattern {
+			t.Fatalf("evidence scope = (%q, %q), want (%q, %q)", got.Evidence.Path, got.Evidence.FilePattern, evidence.Path, evidence.FilePattern)
+		}
+		return symbolResolveResult{
+			Output: "resolver-output",
+			Status: symbolResolveSingle,
+			Bundle: newStructuredImpactPipelineTestBundle(root),
+		}
+	})
+	if !ok || !called {
+		t.Fatalf("structured impact result ok=%v called=%v", ok, called)
+	}
+	if result.Bundle == nil {
+		t.Fatal("Bundle = nil, want runtime bundle")
+	}
+}
+
+func TestTryStructuredImpactSearchResult_UsesRouteSymbolQuery(t *testing.T) {
+	clearSearchSidecarCaches()
+	t.Cleanup(clearSearchSidecarCaches)
+
+	root := t.TempDir()
+	writeStructuredImpactPipelineTestFile(t, filepath.Join(root, "run.go"), "package example\n\nfunc Run() {}\n")
+	writeStructuredImpactPipelineTestFile(t, filepath.Join(root, "caller.go"), "package example\n\nfunc callRun() { Run() }\n")
+
+	opts := SearchOptions{
+		Pattern:       `Run\(`,
+		Path:          root,
+		InvocationCWD: root,
+	}
+	ctx := structuredImpactSearchContext{
+		Pattern:  `Run\(`,
+		Route:    searchRouteTrace{Language: "go", InitialLane: searchLaneSymbol, SymbolQuery: "Run", SymbolRescue: true},
+		CacheKey: "structured-impact-rescue-cache-key",
+	}
+
+	called := false
+	result, ok := tryStructuredImpactSearchResult(&testSearchCache{data: make(map[string]string)}, ctx, structuredImpactSameScope(opts), func(symbol string, scope structuredImpactScope) symbolResolveResult {
+		called = true
+		if symbol != "Run" {
+			t.Fatalf("resolver symbol = %q, want routed SymbolQuery Run", symbol)
+		}
+		return symbolResolveResult{
+			Output: "resolver-output",
+			Status: symbolResolveSingle,
+			Bundle: newStructuredImpactPipelineTestBundle(root),
+		}
+	})
+	if !ok || !called {
+		t.Fatalf("structured impact result ok=%v called=%v", ok, called)
+	}
+	if result.Bundle == nil {
+		t.Fatal("Bundle = nil, want runtime bundle")
+	}
+}
+
 func TestTryStructuredImpactSearchResult_AmbiguousStoresAffectedFilesWithoutBundle(t *testing.T) {
 	clearSearchSidecarCaches()
 	t.Cleanup(clearSearchSidecarCaches)
@@ -102,7 +271,7 @@ func TestTryStructuredImpactSearchResult_AmbiguousStoresAffectedFilesWithoutBund
 	cache := &testSearchCache{data: make(map[string]string)}
 	output := `Multiple symbols matched "Build":`
 
-	result, ok := tryStructuredImpactSearchResult(cache, ctx, opts, func(symbol string, opts SearchOptions) symbolResolveResult {
+	result, ok := tryStructuredImpactSearchResult(cache, ctx, structuredImpactSameScope(opts), func(symbol string, scope structuredImpactScope) symbolResolveResult {
 		if symbol != "Build" {
 			t.Fatalf("resolver symbol = %q, want Build", symbol)
 		}
@@ -159,7 +328,7 @@ func TestTryStructuredImpactSearchResult_RejectsMalformedSingleBundle(t *testing
 	}
 	cache := &testSearchCache{data: make(map[string]string)}
 
-	result, ok := tryStructuredImpactSearchResult(cache, ctx, opts, func(symbol string, opts SearchOptions) symbolResolveResult {
+	result, ok := tryStructuredImpactSearchResult(cache, ctx, structuredImpactSameScope(opts), func(symbol string, scope structuredImpactScope) symbolResolveResult {
 		return symbolResolveResult{
 			Output: "malformed-output",
 			Status: symbolResolveSingle,
@@ -212,7 +381,7 @@ func TestTryStructuredImpactSearchResult_CacheHitRejectsMalformedSingleBundle(t 
 	})
 
 	called := false
-	result, ok := tryStructuredImpactSearchResult(cache, ctx, opts, func(symbol string, opts SearchOptions) symbolResolveResult {
+	result, ok := tryStructuredImpactSearchResult(cache, ctx, structuredImpactSameScope(opts), func(symbol string, scope structuredImpactScope) symbolResolveResult {
 		called = true
 		return symbolResolveResult{Status: symbolResolveNone}
 	})
