@@ -884,7 +884,7 @@ func newValidReviewProbePlanForTest() ReviewProbePlan {
 				ID:              "surface-1",
 				Summary:         "Probe plan validation changed.",
 				Category:        ReviewProbeImpactSurfaceValidator,
-				EvidenceSummary: "Diff touches probe plan validation.",
+				EvidenceSummary: "Diff touches internal/review/probe_plan_validate.go.",
 				Status:          ReviewProbeImpactSurfaceNeedsProbe,
 				Reason:          "Focused tests should verify the contract.",
 			},

@@ -16,6 +16,8 @@ func RenderReviewEvidenceMarkdown(bundle ReviewEvidenceBundle) string {
 	appendReviewEvidenceMarkdownCWDDisplay(&b, input)
 	appendReviewEvidenceMarkdownGitStatus(&b, input)
 	appendReviewEvidenceMarkdownChangeInventory(&b, input)
+	appendReviewEvidenceMarkdownReviewPressureSignals(&b, input)
+	appendReviewEvidenceMarkdownGenericImpactCandidates(&b, input)
 	appendReviewEvidenceMarkdownChangedFiles(&b, input)
 	appendReviewEvidenceMarkdownChangedFileContext(&b, input)
 	appendReviewEvidenceMarkdownRelatedContextFiles(&b, input)
@@ -56,6 +58,16 @@ func appendReviewEvidenceMarkdownGitStatus(b *strings.Builder, input ReviewEvide
 func appendReviewEvidenceMarkdownChangeInventory(b *strings.Builder, input ReviewEvidenceModelInput) {
 	appendReviewEvidenceMarkdownSection(b, "change inventory")
 	appendReviewEvidenceMarkdownJSONFence(b, input.ChangeInventory)
+}
+
+func appendReviewEvidenceMarkdownReviewPressureSignals(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "review pressure signals")
+	appendReviewEvidenceMarkdownJSONFence(b, buildReviewPressureSignalInputs(input))
+}
+
+func appendReviewEvidenceMarkdownGenericImpactCandidates(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "generic impact candidates")
+	appendReviewEvidenceMarkdownJSONFence(b, input.GenericImpact)
 }
 
 func appendReviewEvidenceMarkdownChangedFiles(b *strings.Builder, input ReviewEvidenceModelInput) {

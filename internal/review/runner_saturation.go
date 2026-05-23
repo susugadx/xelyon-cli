@@ -41,78 +41,92 @@ func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req R
 }
 
 func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport) (ReviewSaturationCheck, error) {
+	checkPrompt := buildReviewSaturationCheckPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, finalizedReport)
+	r.saveReviewRunTextArtifact("saturation_prompt.md", checkPrompt, redactor)
 	checkResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseSaturationCheck,
-		Prompt: buildReviewSaturationCheckPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, finalizedReport),
+		Prompt: checkPrompt,
 	})
 	if err != nil {
 		return ReviewSaturationCheck{}, fmt.Errorf("review runner saturation check model: %w", err)
 	}
+	r.saveReviewRunTextArtifact("saturation_raw.json", checkResp.Content, redactor)
 
 	check, checkErr := finalizeReviewRunnerSaturationCheckModelOutput(checkResp.Content, plan, finalizedReport)
 	if checkErr == nil {
 		return check, nil
 	}
 
+	repairPrompt := buildReviewSaturationCheckRepairPrompt(
+		req,
+		evidenceMarkdown,
+		plan,
+		probeSummaries,
+		probeResults,
+		redactor,
+		finalizedReport,
+		checkResp.Content,
+		checkErr,
+	)
+	r.saveReviewRunTextArtifact("saturation_prompt.md", repairPrompt, redactor)
 	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase: ReviewModelPhaseSaturationCheck,
-		Prompt: buildReviewSaturationCheckRepairPrompt(
-			req,
-			evidenceMarkdown,
-			plan,
-			probeSummaries,
-			probeResults,
-			redactor,
-			finalizedReport,
-			checkResp.Content,
-			checkErr,
-		),
+		Phase:  ReviewModelPhaseSaturationCheck,
+		Prompt: repairPrompt,
 	})
 	if err != nil {
 		return ReviewSaturationCheck{}, fmt.Errorf("review runner saturation check model: %w", err)
 	}
+	r.saveReviewRunTextArtifact("saturation_raw.json", repairResp.Content, redactor)
 
 	return finalizeReviewRunnerSaturationCheckModelOutput(repairResp.Content, plan, finalizedReport)
 }
 
 func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck) (ReviewReport, error) {
+	revisionPrompt := buildReviewReportRevisionPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, finalizedReport, saturationCheck)
+	r.saveReviewRunTextArtifact("revision_prompt.md", revisionPrompt, redactor)
 	revisionResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReportRevision,
-		Prompt: buildReviewReportRevisionPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, finalizedReport, saturationCheck),
+		Prompt: revisionPrompt,
 	})
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
 	}
+	r.saveReviewRunTextArtifact("revision_raw.json", revisionResp.Content, redactor)
 
 	report, revisionErr := finalizeReviewRunnerReportModelOutput(revisionResp.Content, plan, probeSummaries, redactor)
 	if revisionErr == nil {
+		r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
 		return report, nil
 	}
 
+	repairPrompt := buildReviewReportRevisionRepairPrompt(
+		req,
+		evidenceMarkdown,
+		plan,
+		probeSummaries,
+		probeResults,
+		redactor,
+		finalizedReport,
+		saturationCheck,
+		revisionResp.Content,
+		revisionErr,
+	)
+	r.saveReviewRunTextArtifact("revision_prompt.md", repairPrompt, redactor)
 	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase: ReviewModelPhaseReportRevision,
-		Prompt: buildReviewReportRevisionRepairPrompt(
-			req,
-			evidenceMarkdown,
-			plan,
-			probeSummaries,
-			probeResults,
-			redactor,
-			finalizedReport,
-			saturationCheck,
-			revisionResp.Content,
-			revisionErr,
-		),
+		Phase:  ReviewModelPhaseReportRevision,
+		Prompt: repairPrompt,
 	})
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
 	}
+	r.saveReviewRunTextArtifact("revision_raw.json", repairResp.Content, redactor)
 
 	report, err = finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor)
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner report revision repair: %w", err)
 	}
 
+	r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
 	return report, nil
 }
 

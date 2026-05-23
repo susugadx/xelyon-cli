@@ -28,8 +28,7 @@ func normalizeReviewRunnerReportForTrustedProbeOutcomes(report ReviewReport) Rev
 
 	switch report.Verdict {
 	case ReviewVerdictClean:
-		report.Verdict = ReviewVerdictBlocked
-		report.OverallVerificationStatus = ReviewVerificationBlockedOrInconclusive
+		return report
 	case ReviewVerdictHasFindings:
 		if report.OverallVerificationStatus == ReviewVerificationVerified {
 			report.OverallVerificationStatus = ReviewVerificationPartiallyVerified

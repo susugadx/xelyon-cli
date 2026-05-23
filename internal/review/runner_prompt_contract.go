@@ -64,12 +64,21 @@ func reviewProbePlanPromptContract() string {
 - "target_kind" must be %q. "impact_surfaces" must contain at least one entry. "candidate_risks" may be empty only when no material candidate risk remains after evaluating every impact surface. "probes" must contain at most %d entries.
 - Scope analysis order: first enumerate material "impact_surfaces"; then derive "candidate_risks" for material risks from those surfaces; then create probes only for evidence-backed risks or unverified material surfaces.
 - Consider changed files, callers, tests, related search hits, related tests/context files, CLI, TUI, config, validator, prompt contract, JSON schema, sandbox, timeout, path validation, error handling, persistence, and compatibility as material surfaces when the evidence makes them relevant.
+- Generic impact candidates in Evidence Markdown are review leads, not proof of impact. Do not report findings solely because a candidate exists, but do not ignore them when deciding "impact_surfaces".
+- If generic impact candidates cannot be verified from current evidence, classify the relevant surface/risk as unverified or residual, or plan a bounded probe. Absence of generic impact candidates is not proof of no impact.
 - Impact surface IDs and risk IDs must be unique, non-empty canonical IDs using only ASCII letters, digits, hyphen, or underscore. Risk "surface_ids" must reference existing impact surface IDs.
 - Impact surface "summary" and "reason" must be non-empty. Candidate risk "summary" and "verification_strategy" must be non-empty.
 - Impact surface category must be one of %s. Impact surface status must be one of %s.
 - Candidate risk severity must be one of %s. Candidate risk status must be one of %s.
 - Each impact surface and candidate risk requires either non-empty "evidence_summary" or at least one "evidence_refs" entry.
 - Scope evidence refs are pre-probe only: "kind" must be one of %s, and "probe", "probe_command", "probe_id", and "command_index" are forbidden in the probe plan.
+- Every changed file path, rename old path, deleted/renamed file path, and inventory category path shown in Evidence Markdown must appear literally in at least one impact surface "evidence_summary" or impact surface "evidence_refs[].path".
+- When the production, config, tests, docs, or generated inventory category is non-empty, impact surfaces must mention that category name or one path from that category.
+- When generic impact candidates are present, impact surfaces must cover each candidate role group by naming the role, one candidate path, or one candidate token. Literal coverage of every candidate path is not required.
+- Untracked files must be explicitly covered by an impact surface path/summary, the word "untracked", or "no_candidate_risk_reason"/"no_probe_reason" naming the untracked path or untracked state.
+- If diff, changed/related context, or related search evidence is truncated, do not mark all impact surfaces checked; plan at least one bounded probe or keep material scope unverified through a probed surface.
+- If generic impact candidates are truncated, do not return an all-checked no-probe plan.
+- Do not use empty related context/search evidence as proof for an all-checked no-probe plan. A no-probe all-checked plan requires related context files or related search hits.
 - If "candidate_risks" is empty, "no_candidate_risk_reason" must be non-empty, must mention every impact surface ID, and must explain why no material candidate risk remains for each named surface. Do not use generic "No risk" wording. If "candidate_risks" is non-empty, omit "no_candidate_risk_reason" or set it to "".
 - If "probes" is empty, "no_probe_reason" must be non-empty, every impact surface status must be %q, every candidate risk status must be %q, and "no_probe_reason" must name every checked surface ID and checked risk ID. If "probes" is non-empty, omit "no_probe_reason" or set it to "".
 - Probe IDs must be unique, non-empty canonical IDs using only ASCII letters, digits, hyphen, or underscore.
@@ -182,11 +191,15 @@ func reviewReportPromptContract() string {
 - "finding_ids" in reviewed impact surfaces and reviewed candidate risks must be empty unless that scope entry status is "finding".
 - Every root cause finding ID must be connected from "scope_coverage" via an impact surface "finding_ids", candidate risk "finding_ids", or "new_findings_from_report_pass[].finding_ids".
 - A "clean" verdict is allowed only when every impact surface status is %q and every candidate risk status is %q.
+- A "clean" verdict is invalid when any supplied trusted probe summary status is %q, %q, %q, or %q, or when "mutated_worktree" is true.
+- If a Pass1 impact surface status was "needs_probe" or "unverified", reporting that surface as %q requires an "evidence_refs" entry with kind "probe" or "probe_command" for a linked probe_id whose trusted probe summary status is %q.
+- If a Pass1 candidate risk status was "needs_probe" or "unverified", reporting that risk as %q requires an "evidence_refs" entry with kind "probe" or "probe_command" for a linked probe_id whose trusted probe summary status is %q.
+- If any linked trusted probe failed, was blocked, timed out, or mutated the worktree, do not classify that linked impact surface as %q or that linked candidate risk as %q; use "finding", "residual_risk", or "unverified" according to the evidence.
 - Reviewed impact surface status %q must include non-empty "finding_ids"; each referenced finding must exist under "root_cause_groups" and include evidence_refs.
 - Reviewed candidate risk status %q must include non-empty "finding_ids"; each referenced finding must exist under "root_cause_groups" and include evidence_refs.
 - A "blocked" verdict must have unverified scope coverage or an existing blocked reason.
 - Findings discovered during Pass2 that were not Pass1 candidate risks are allowed only as root cause findings connected through "scope_coverage.new_findings_from_report_pass[].finding_ids".
-- Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries. Do not invent probe IDs. Probe summary modes must be one of %q, %q, %q. Probe and command statuses must be one of %q, %q, %q, %q, %q.
+- Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries with the same count, same order, and same "probe_id" values. Do not invent probe IDs. Probe summary modes must be one of %q, %q, %q. Probe and command statuses must be one of %q, %q, %q, %q, %q.
 
 Verdict contract:
 - %q: "overall_verification_status" must be %q or %q, and "root_cause_groups" must be empty.
@@ -222,6 +235,16 @@ Verdict contract:
 		ReviewEvidenceKindRuleFile,
 		quoteAndJoinSortedReviewPromptValues(reviewReportImpactSurfaceStatusPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewReportCandidateRiskStatusPromptValues()),
+		ReviewReportImpactSurfaceChecked,
+		ReviewReportCandidateRiskDismissed,
+		ReviewProbeFailed,
+		ReviewProbeBlocked,
+		ReviewProbeTimedOut,
+		ReviewProbeMutatedWorktree,
+		ReviewReportImpactSurfaceChecked,
+		ReviewProbePassed,
+		ReviewReportCandidateRiskDismissed,
+		ReviewProbePassed,
 		ReviewReportImpactSurfaceChecked,
 		ReviewReportCandidateRiskDismissed,
 		ReviewReportImpactSurfaceFinding,

@@ -19,6 +19,8 @@ func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) 
 		"## cwd display\n",
 		"## git status --short\n",
 		"## change inventory\n",
+		"## review pressure signals\n",
+		"## generic impact candidates\n",
 		"## changed files\n",
 		"## changed file context\n",
 		"## related tests/context files\n",
@@ -56,6 +58,44 @@ func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) 
 		if !strings.Contains(markdown, want) {
 			t.Fatalf("markdown = %q, want truncation flag fragment %q", markdown, want)
 		}
+	}
+}
+
+func TestRenderReviewEvidenceMarkdownIncludesGenericImpactCandidates(t *testing.T) {
+	bundle := newReviewEvidenceRenderTestBundle(t)
+	repo := bundle.RepoRoot
+	bundle.GenericImpactCandidates = ReviewGenericImpactCandidates{
+		Tokens: []string{"/review"},
+		Candidates: []ReviewGenericImpactCandidate{
+			{
+				Path:    filepath.Join(repo, "docs/commands.md"),
+				Role:    ReviewGenericImpactRoleDocsReference,
+				Reason:  "docs mention " + filepath.Join(repo, "cmd", "review.ts"),
+				Token:   "/review",
+				Line:    3,
+				Snippet: "Run " + filepath.Join(repo, "cmd", "review.ts") + " with /review.",
+			},
+		},
+	}
+
+	markdown := RenderReviewEvidenceMarkdown(bundle)
+
+	if !strings.Contains(markdown, "## generic impact candidates\n") {
+		t.Fatalf("markdown = %q, want generic impact candidates section", markdown)
+	}
+	for _, want := range []string{
+		`"path": "docs/commands.md"`,
+		`"role": "docs_reference"`,
+		`"token": "/review"`,
+		`"line": 3`,
+		`<repo_root>/cmd/review.ts`,
+	} {
+		if !strings.Contains(markdown, want) {
+			t.Fatalf("markdown = %q, want %q", markdown, want)
+		}
+	}
+	if strings.Contains(markdown, repo) {
+		t.Fatalf("markdown leaked repo root %q: %s", repo, markdown)
 	}
 }
 
@@ -341,6 +381,8 @@ func TestRenderReviewEvidenceJSONUsesModelInputDTO(t *testing.T) {
 		`"CWD"`,
 		`"CommandTimeout"`,
 		`"command_timeout":`,
+		`"review_pressure_signals"`,
+		`"production_changed_without_tests"`,
 		`1500000000`,
 	} {
 		if strings.Contains(payload, forbidden) {
@@ -384,6 +426,12 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	if input.RelatedSearchHits == nil {
 		t.Fatal("RelatedSearchHits = nil, want empty slice")
 	}
+	if input.GenericImpact.Tokens == nil {
+		t.Fatal("GenericImpact.Tokens = nil, want empty slice")
+	}
+	if input.GenericImpact.Candidates == nil {
+		t.Fatal("GenericImpact.Candidates = nil, want empty slice")
+	}
 	if input.RuleFiles == nil {
 		t.Fatal("RuleFiles = nil, want empty slice")
 	}
@@ -419,6 +467,9 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 		`"changed_file_context": []`,
 		`"related_context_files": []`,
 		`"related_search_hits": []`,
+		`"generic_impact_candidates": {`,
+		`"tokens": []`,
+		`"candidates": []`,
 		`"rule_files": []`,
 		`"diffs": []`,
 		`"untracked_files": []`,
@@ -434,6 +485,7 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 		"## changed file context\n```json\n[]\n```",
 		"## related tests/context files\n```json\n[]\n```",
 		"## related search hits\n```json\n[]\n```",
+		"## generic impact candidates\n```json\n",
 		"## diffs\n```json\n[]\n```",
 		"## untracked files\n```json\n[]\n```",
 	} {

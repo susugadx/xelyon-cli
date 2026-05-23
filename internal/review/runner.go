@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 )
 
 var (
@@ -29,6 +30,9 @@ type ReviewRunnerOptions struct {
 	EvidenceBuilder ReviewEvidenceProvider
 	ProbeRunner     ReviewProbeExecutor
 	Model           ReviewModel
+
+	ArtifactWriter        ReviewRunArtifactWriter
+	ArtifactWarningWriter io.Writer
 }
 
 // ReviewRunner は /review current_changes の evidence、model、probe、report を順に束ねる。
@@ -36,6 +40,9 @@ type ReviewRunner struct {
 	evidenceBuilder ReviewEvidenceProvider
 	probeRunner     ReviewProbeExecutor
 	model           ReviewModel
+
+	artifactWriter        ReviewRunArtifactWriter
+	artifactWarningWriter io.Writer
 }
 
 // NewReviewRunner は ReviewRunner を構築し、必須依存を検証する。
@@ -44,9 +51,11 @@ func NewReviewRunner(opts ReviewRunnerOptions) (*ReviewRunner, error) {
 		return nil, err
 	}
 	return &ReviewRunner{
-		evidenceBuilder: opts.EvidenceBuilder,
-		probeRunner:     opts.ProbeRunner,
-		model:           opts.Model,
+		evidenceBuilder:       opts.EvidenceBuilder,
+		probeRunner:           opts.ProbeRunner,
+		model:                 opts.Model,
+		artifactWriter:        opts.ArtifactWriter,
+		artifactWarningWriter: opts.ArtifactWarningWriter,
 	}, nil
 }
 
@@ -67,8 +76,10 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 		return ReviewReport{}, fmt.Errorf("review runner build evidence: %w", err)
 	}
 	evidenceMarkdown := RenderReviewEvidenceMarkdown(bundle)
+	evidenceRedactor := newReviewRunnerPromptRedactor(bundle, nil)
+	r.saveReviewRunTextArtifact("evidence.md", evidenceMarkdown, evidenceRedactor)
 
-	plan, err := r.completeReviewProbePlan(ctx, req, evidenceMarkdown)
+	plan, err := r.completeReviewProbePlan(ctx, req, evidenceMarkdown, bundle)
 	if err != nil {
 		return ReviewReport{}, err
 	}
@@ -76,6 +87,7 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner build probe requests: %w", err)
 	}
+	r.saveReviewRunJSONArtifact("probe_requests.json", probeRequests, evidenceRedactor)
 
 	probeResults, err := r.runReviewProbesSequentially(ctx, probeRequests)
 	if err != nil {
@@ -83,12 +95,15 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	}
 	probeSummaries := BuildReviewProbeSummaries(probeResults)
 	redactor := newReviewRunnerPromptRedactor(bundle, probeResults)
+	r.saveReviewRunJSONArtifact("probe_results.json", buildReviewProbeResultPromptContexts(probeResults, redactor), redactor)
 
 	return r.completeReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor)
 }
 
-func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRequest, evidenceMarkdown string) (ReviewProbePlan, error) {
+func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRequest, evidenceMarkdown string, bundle ReviewEvidenceBundle) (ReviewProbePlan, error) {
 	planPrompt := buildReviewProbePlanPrompt(req, evidenceMarkdown)
+	redactor := newReviewRunnerPromptRedactor(bundle, nil)
+	r.saveReviewRunTextArtifact("probe_plan_prompt.md", planPrompt, redactor)
 	planResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseProbePlan,
 		Prompt: planPrompt,
@@ -96,28 +111,45 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 	if err != nil {
 		return ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
 	}
+	r.saveReviewRunTextArtifact("probe_plan_raw.json", planResp.Content, redactor)
 
-	plan, decodeErr := DecodeReviewProbePlanJSON([]byte(planResp.Content))
+	plan, decodeErr := decodeReviewProbePlanJSONAgainstEvidence(planResp.Content, bundle)
 	if decodeErr == nil {
+		r.saveReviewRunJSONArtifact("probe_plan_final.json", plan, redactor)
 		return plan, nil
 	}
 
+	repairPrompt := buildReviewProbePlanRepairPrompt(
+		req,
+		evidenceMarkdown,
+		planResp.Content,
+		decodeErr,
+	)
+	r.saveReviewRunTextArtifact("probe_plan_prompt.md", repairPrompt, redactor)
 	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase: ReviewModelPhaseProbePlan,
-		Prompt: buildReviewProbePlanRepairPrompt(
-			req,
-			evidenceMarkdown,
-			planResp.Content,
-			decodeErr,
-		),
+		Phase:  ReviewModelPhaseProbePlan,
+		Prompt: repairPrompt,
 	})
 	if err != nil {
 		return ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
 	}
+	r.saveReviewRunTextArtifact("probe_plan_raw.json", repairResp.Content, redactor)
 
-	plan, decodeErr = DecodeReviewProbePlanJSON([]byte(repairResp.Content))
+	plan, decodeErr = decodeReviewProbePlanJSONAgainstEvidence(repairResp.Content, bundle)
 	if decodeErr != nil {
 		return ReviewProbePlan{}, fmt.Errorf("review runner decode probe plan: %w", decodeErr)
+	}
+	r.saveReviewRunJSONArtifact("probe_plan_final.json", plan, redactor)
+	return plan, nil
+}
+
+func decodeReviewProbePlanJSONAgainstEvidence(content string, bundle ReviewEvidenceBundle) (ReviewProbePlan, error) {
+	plan, err := DecodeReviewProbePlanJSON([]byte(content))
+	if err != nil {
+		return ReviewProbePlan{}, err
+	}
+	if err := ValidateReviewProbePlanAgainstEvidence(plan, bundle); err != nil {
+		return ReviewProbePlan{}, fmt.Errorf("ValidateReviewProbePlanAgainstEvidence: %w", err)
 	}
 	return plan, nil
 }
@@ -131,37 +163,49 @@ func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewReque
 }
 
 func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
+	reportPrompt := buildReviewReportPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor)
+	r.saveReviewRunTextArtifact("report_prompt.md", reportPrompt, redactor)
 	reportResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReport,
-		Prompt: buildReviewReportPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor),
+		Prompt: reportPrompt,
 	})
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}
+	r.saveReviewRunTextArtifact("report_raw.json", reportResp.Content, redactor)
 
 	report, reportErr := finalizeReviewRunnerReportModelOutput(reportResp.Content, plan, probeSummaries, redactor)
 	if reportErr == nil {
+		r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
 		return report, nil
 	}
 
+	repairPrompt := buildReviewReportRepairPrompt(
+		req,
+		evidenceMarkdown,
+		plan,
+		probeSummaries,
+		probeResults,
+		redactor,
+		reportResp.Content,
+		reportErr,
+	)
+	r.saveReviewRunTextArtifact("report_prompt.md", repairPrompt, redactor)
 	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase: ReviewModelPhaseReport,
-		Prompt: buildReviewReportRepairPrompt(
-			req,
-			evidenceMarkdown,
-			plan,
-			probeSummaries,
-			probeResults,
-			redactor,
-			reportResp.Content,
-			reportErr,
-		),
+		Phase:  ReviewModelPhaseReport,
+		Prompt: repairPrompt,
 	})
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}
+	r.saveReviewRunTextArtifact("report_raw.json", repairResp.Content, redactor)
 
-	return finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor)
+	report, err = finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor)
+	if err != nil {
+		return ReviewReport{}, err
+	}
+	r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
+	return report, nil
 }
 
 func finalizeReviewRunnerReportModelOutput(content string, plan ReviewProbePlan, trustedProbeSummaries []ReviewProbeSummary, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {

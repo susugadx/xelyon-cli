@@ -13,14 +13,18 @@ type ReviewEvidenceBundle struct {
 	StatusShortTruncated bool
 	Diffs                []ReviewDiffEvidence
 
-	ChangedFiles                  []ReviewChangedFile
-	ChangedFileContext            []ReviewContextFileEvidence
-	RelatedContextFiles           []ReviewContextFileEvidence
-	RelatedSearchHits             []ReviewRelatedSearchHit
-	UntrackedFiles                []ReviewUntrackedFile
-	RelatedCandidateListTruncated bool
-	RelatedSearchTruncated        bool
-	UntrackedListTruncated        bool
+	ChangedFiles                         []ReviewChangedFile
+	ChangedFileContext                   []ReviewContextFileEvidence
+	RelatedContextFiles                  []ReviewContextFileEvidence
+	RelatedSearchHits                    []ReviewRelatedSearchHit
+	GenericImpactCandidatePaths          []string
+	GenericImpactCandidateListTruncated  bool
+	GenericImpactCandidatePathsCollected bool
+	GenericImpactCandidates              ReviewGenericImpactCandidates
+	UntrackedFiles                       []ReviewUntrackedFile
+	RelatedCandidateListTruncated        bool
+	RelatedSearchTruncated               bool
+	UntrackedListTruncated               bool
 	// UntrackedSnapshotsTruncated は snapshot 読み取りの file count / total bytes budget 到達を表す。
 	UntrackedSnapshotsTruncated bool
 	RuleFiles                   []ReviewRuleFileEvidence
@@ -69,6 +73,24 @@ type ReviewRelatedSearchHit struct {
 	Line    int
 	Snippet string
 	Reason  string
+}
+
+// ReviewGenericImpactCandidates は言語非依存 heuristic で広げた review 用 impact 候補を表す。
+// 完全な import/caller graph ではなく、Pass1 の impact surface 検討に使う lead として扱う。
+type ReviewGenericImpactCandidates struct {
+	Tokens     []string
+	Candidates []ReviewGenericImpactCandidate
+	Truncated  bool
+}
+
+// ReviewGenericImpactCandidate は generic impact expansion が検出した 1 候補を表す。
+type ReviewGenericImpactCandidate struct {
+	Path    string
+	Role    string
+	Reason  string
+	Token   string
+	Line    int
+	Snippet string
 }
 
 // ReviewUntrackedFile は untracked path の安全に制限された snapshot または symlink metadata を表す。

@@ -225,6 +225,8 @@ xelyon
 /exit       # 終了
 ```
 
+`/review` は `evidence -> probe plan -> probe results -> report -> saturation` の段階を持つ監査可能な review harness です。Go-first の evidence augmentation を使いつつ、共通 harness は全言語で雑な clean 判定を抑制します。`XELYON_REVIEW_RUN_ARTIFACTS=1` を設定すると、各段階の debug artifact を実行中はメモリに保持し、終了後にリポジトリ配下の `.xelyon/review-runs/<UTC timestamp>/` へ保存します。保存先 component が symlink の場合は repo 外へ書かず warning にします。artifact には evidence や probe output が含まれ得るため、必要な場合だけ明示的に有効化してください。
+
 ### 4. NAVモードでテキストをコピー
 
 ```text

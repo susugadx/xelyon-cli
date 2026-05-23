@@ -1,6 +1,10 @@
 package reviewadapter
 
-import "github.com/susugadx/xelyon-cli/internal/review"
+import (
+	"io"
+
+	"github.com/susugadx/xelyon-cli/internal/review"
+)
 
 // RunnerFactoryOptions は ReviewRunner の concrete 依存を組み立てる入力を表す。
 type RunnerFactoryOptions struct {
@@ -10,10 +14,13 @@ type RunnerFactoryOptions struct {
 	// Model は provider/agent 側で実装される必須境界。
 	Model review.ReviewModel
 
-	// EvidenceBuilder と ProbeRunner はテストや将来の hook 用の差し替え口。
-	// raw probe result や trace hook はまだこの adapter の public contract にしない。
+	// EvidenceBuilder / ProbeRunner / ArtifactWriter はテストや review runtime hook 用の差し替え口。
+	// artifact 保存の有効化判断は agent 側に置き、この factory は注入された境界だけを渡す。
 	EvidenceBuilder review.ReviewEvidenceProvider
 	ProbeRunner     review.ReviewProbeExecutor
+
+	ArtifactWriter        review.ReviewRunArtifactWriter
+	ArtifactWarningWriter io.Writer
 }
 
 // RunnerFactory は ReviewRunner の構築責務を review domain の外側で保持する。
@@ -39,8 +46,10 @@ func (f RunnerFactory) NewReviewRunner() (*review.ReviewRunner, error) {
 	}
 
 	return review.NewReviewRunner(review.ReviewRunnerOptions{
-		EvidenceBuilder: evidenceBuilder,
-		ProbeRunner:     probeRunner,
-		Model:           f.opts.Model,
+		EvidenceBuilder:       evidenceBuilder,
+		ProbeRunner:           probeRunner,
+		Model:                 f.opts.Model,
+		ArtifactWriter:        f.opts.ArtifactWriter,
+		ArtifactWarningWriter: f.opts.ArtifactWarningWriter,
 	})
 }

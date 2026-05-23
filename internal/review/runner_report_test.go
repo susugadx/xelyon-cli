@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(t *testing.T) {
+func TestFinalizeReviewRunnerReportRejectsCleanReportWithBlockedTrustedProbe(t *testing.T) {
 	tests := []struct {
 		name            string
 		status          ReviewProbeStatus
@@ -22,7 +22,7 @@ func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), []ReviewProbeSummary{
+			_, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), []ReviewProbeSummary{
 				{
 					ProbeID:         "probe-1",
 					Mode:            ReviewProbeHostReadOnly,
@@ -30,20 +30,13 @@ func TestFinalizeReviewRunnerReportDowngradesCleanReportWithBlockedTrustedProbe(
 					MutatedWorktree: tt.mutatedWorktree,
 				},
 			}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
-			if err != nil {
-				t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
+			if err == nil {
+				t.Fatal("finalizeReviewRunnerReport() error = nil, want clean trusted probe rejection")
 			}
-			if got.Verdict != ReviewVerdictBlocked {
-				t.Fatalf("Verdict = %q, want %q", got.Verdict, ReviewVerdictBlocked)
-			}
-			if got.OverallVerificationStatus != ReviewVerificationBlockedOrInconclusive {
-				t.Fatalf("OverallVerificationStatus = %q, want %q", got.OverallVerificationStatus, ReviewVerificationBlockedOrInconclusive)
-			}
-			if tt.wantMutation && got.ProbeSummaries[0].Status != ReviewProbeMutatedWorktree {
-				t.Fatalf("ProbeSummaries[0].Status = %q, want %q", got.ProbeSummaries[0].Status, ReviewProbeMutatedWorktree)
-			}
-			if tt.wantMutation && !got.ProbeSummaries[0].MutatedWorktree {
-				t.Fatal("ProbeSummaries[0].MutatedWorktree = false, want true")
+			for _, want := range []string{"finalize report", `verdict "clean"`} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("finalizeReviewRunnerReport() error = %q, want %q", err.Error(), want)
+				}
 			}
 		})
 	}
@@ -53,7 +46,7 @@ func TestFinalizeReviewRunnerReportDowngradesVerifiedFindingsWithBlockedTrustedP
 	report := newHasFindingsReportForValidationTest(ReviewVerificationVerified, ReviewVerificationVerified)
 	report.ScopeCoverage = &ReviewReportScopeCoverage{
 		ReviewedImpactSurfaces: []ReviewReportImpactSurfaceCoverage{
-			{SurfaceID: "surface-1", Status: ReviewReportImpactSurfaceChecked},
+			{SurfaceID: "surface-1", Status: ReviewReportImpactSurfaceUnverified},
 		},
 		ReviewedCandidateRisks: []ReviewReportCandidateRiskCoverage{
 			{RiskID: "risk-1", Status: ReviewReportCandidateRiskFinding, FindingIDs: []string{"finding-1"}},
@@ -126,7 +119,7 @@ func TestFinalizeReviewRunnerReportInjectsRedactedTrustedProbeSummaries(t *testi
 		},
 	})
 
-	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), trustedSummaries, redactor)
+	got, err := finalizeReviewRunnerReport(newRunnerBlockedReportForTest(nil), newRunnerProbePlanForTest("probe-1"), trustedSummaries, redactor)
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -206,7 +199,7 @@ func TestFinalizeReviewRunnerReportComputesSummaryForFindingRisk(t *testing.T) {
 }
 
 func TestFinalizeReviewRunnerReportComputesBlockedProbeCount(t *testing.T) {
-	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), []ReviewProbeSummary{
+	got, err := finalizeReviewRunnerReport(newRunnerBlockedReportForTest(nil), newRunnerProbePlanForTest("probe-1"), []ReviewProbeSummary{
 		{
 			ProbeID: "probe-1",
 			Mode:    ReviewProbeHostReadOnly,
@@ -217,11 +210,11 @@ func TestFinalizeReviewRunnerReportComputesBlockedProbeCount(t *testing.T) {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
 	assertReviewReportComputedSummaryPointerForTest(t, got.ComputedSummary, ReviewReportComputedSummary{
-		CheckedSurfaceCount: 1,
-		CandidateRiskCount:  1,
-		DismissedRiskCount:  1,
-		ProbeCount:          1,
-		BlockedProbeCount:   1,
+		UnverifiedSurfaceCount: 1,
+		CandidateRiskCount:     1,
+		UnverifiedRiskCount:    1,
+		ProbeCount:             1,
+		BlockedProbeCount:      1,
 	})
 }
 

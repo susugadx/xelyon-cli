@@ -1,5 +1,7 @@
 package review
 
+import "strings"
+
 const reviewEvidenceRepoRootPathDisplay = "<repo_root>"
 
 // ReviewEvidenceModelInput は ReviewEvidenceBundle を LLM 入力向けに正規化した DTO。
@@ -14,6 +16,7 @@ type ReviewEvidenceModelInput struct {
 	ChangedFileContext  []ReviewEvidenceContextFileInput      `json:"changed_file_context"`
 	RelatedContextFiles []ReviewEvidenceContextFileInput      `json:"related_context_files"`
 	RelatedSearchHits   []ReviewEvidenceRelatedSearchHitInput `json:"related_search_hits"`
+	GenericImpact       ReviewEvidenceGenericImpactInput      `json:"generic_impact_candidates"`
 	RuleFiles           []ReviewEvidenceRuleFileInput         `json:"rule_files"`
 	Diffs               []ReviewEvidenceDiffInput             `json:"diffs"`
 	UntrackedFiles      []ReviewEvidenceUntrackedFileInput    `json:"untracked_files"`
@@ -54,6 +57,23 @@ type ReviewEvidenceRelatedSearchHitInput struct {
 	Line    int    `json:"line"`
 	Snippet string `json:"snippet"`
 	Reason  string `json:"reason"`
+}
+
+// ReviewEvidenceGenericImpactInput は generic impact candidates の LLM 入力表現。
+type ReviewEvidenceGenericImpactInput struct {
+	Tokens     []string                                    `json:"tokens"`
+	Candidates []ReviewEvidenceGenericImpactCandidateInput `json:"candidates"`
+	Truncated  bool                                        `json:"truncated"`
+}
+
+// ReviewEvidenceGenericImpactCandidateInput は generic impact candidate の LLM 入力表現。
+type ReviewEvidenceGenericImpactCandidateInput struct {
+	Path    string `json:"path"`
+	Role    string `json:"role"`
+	Reason  string `json:"reason"`
+	Token   string `json:"token"`
+	Line    int    `json:"line"`
+	Snippet string `json:"snippet"`
 }
 
 // ReviewEvidenceChangeInventoryInput は変更 surface の一覧を LLM 入力向けに表す。
@@ -162,6 +182,7 @@ func BuildReviewEvidenceModelInput(bundle ReviewEvidenceBundle) ReviewEvidenceMo
 		ChangedFileContext:  buildReviewEvidenceContextFileInputs(repoRoot, bundle.ChangedFileContext),
 		RelatedContextFiles: buildReviewEvidenceContextFileInputs(repoRoot, bundle.RelatedContextFiles),
 		RelatedSearchHits:   buildReviewEvidenceRelatedSearchHitInputs(repoRoot, bundle.RelatedSearchHits),
+		GenericImpact:       buildReviewEvidenceGenericImpactInput(repoRoot, bundle.GenericImpactCandidates),
 		RuleFiles:           buildReviewEvidenceRuleFileInputs(repoRoot, bundle.RuleFiles),
 		Diffs:               buildReviewEvidenceDiffInputs(bundle.Diffs),
 		UntrackedFiles:      buildReviewEvidenceUntrackedFileInputs(repoRoot, bundle.UntrackedFiles),
@@ -226,6 +247,37 @@ func buildReviewEvidenceRelatedSearchHitInputs(repoRoot string, hits []ReviewRel
 		})
 	}
 	return result
+}
+
+func buildReviewEvidenceGenericImpactInput(repoRoot string, generic ReviewGenericImpactCandidates) ReviewEvidenceGenericImpactInput {
+	candidates := make([]ReviewEvidenceGenericImpactCandidateInput, 0, len(generic.Candidates))
+	for _, candidate := range generic.Candidates {
+		candidates = append(candidates, ReviewEvidenceGenericImpactCandidateInput{
+			Path:    formatReviewEvidencePathDisplay(repoRoot, candidate.Path),
+			Role:    candidate.Role,
+			Reason:  redactReviewEvidenceRepoRootInText(repoRoot, candidate.Reason),
+			Token:   candidate.Token,
+			Line:    candidate.Line,
+			Snippet: redactReviewEvidenceRepoRootInText(repoRoot, candidate.Snippet),
+		})
+	}
+	return ReviewEvidenceGenericImpactInput{
+		Tokens:     append([]string{}, generic.Tokens...),
+		Candidates: candidates,
+		Truncated:  generic.Truncated,
+	}
+}
+
+func redactReviewEvidenceRepoRootInText(repoRoot, text string) string {
+	displayRepoRoot, ok := normalizeReviewEvidencePathDisplayRepoRoot(repoRoot)
+	if !ok || text == "" {
+		return text
+	}
+	redacted := text
+	for _, variant := range reviewRunnerPromptReplacementPathVariants(displayRepoRoot) {
+		redacted = strings.ReplaceAll(redacted, variant, reviewEvidenceRepoRootPathDisplay)
+	}
+	return redacted
 }
 
 func buildReviewEvidenceRuleFileInputs(repoRoot string, files []ReviewRuleFileEvidence) []ReviewEvidenceRuleFileInput {

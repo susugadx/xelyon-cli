@@ -80,28 +80,33 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 		return ReviewEvidenceBundle{}, err
 	}
 
-	return buildReviewCurrentChangesBundle(repoRoot, cwd, gitEvidence, fileEvidence, b.limits), nil
+	bundle := buildReviewCurrentChangesBundle(repoRoot, cwd, gitEvidence, fileEvidence, b.limits)
+	bundle.GenericImpactCandidates = BuildReviewGenericImpactCandidates(bundle)
+	return bundle, nil
 }
 
 func buildReviewCurrentChangesBundle(repoRoot, cwd string, git reviewCurrentChangesGitEvidence, files reviewCurrentChangesFileEvidence, limits ReviewEvidenceLimits) ReviewEvidenceBundle {
 	return ReviewEvidenceBundle{
-		TargetKind:                    TargetCurrentChanges,
-		RepoRoot:                      repoRoot,
-		CWD:                           cwd,
-		StatusShort:                   git.statusShort,
-		StatusShortTruncated:          git.statusShortTruncated,
-		Diffs:                         git.diffs,
-		ChangedFiles:                  git.changedFiles,
-		ChangedFileContext:            files.changedFileContext,
-		RelatedContextFiles:           files.relatedContextFiles,
-		RelatedSearchHits:             files.relatedSearchHits,
-		UntrackedFiles:                files.untrackedFiles,
-		RelatedCandidateListTruncated: git.relatedCandidateListTruncated,
-		RelatedSearchTruncated:        files.relatedSearchTruncated,
-		UntrackedListTruncated:        git.untrackedListTruncated,
-		UntrackedSnapshotsTruncated:   files.untrackedSnapshotsTruncated,
-		RuleFiles:                     files.ruleFiles,
-		Inventory:                     buildReviewChangeInventory(git.changedFiles, git.untrackedPaths),
-		Limits:                        limits,
+		TargetKind:                           TargetCurrentChanges,
+		RepoRoot:                             repoRoot,
+		CWD:                                  cwd,
+		StatusShort:                          git.statusShort,
+		StatusShortTruncated:                 git.statusShortTruncated,
+		Diffs:                                git.diffs,
+		ChangedFiles:                         git.changedFiles,
+		ChangedFileContext:                   files.changedFileContext,
+		RelatedContextFiles:                  files.relatedContextFiles,
+		RelatedSearchHits:                    files.relatedSearchHits,
+		GenericImpactCandidatePaths:          git.genericImpactCandidatePaths,
+		GenericImpactCandidateListTruncated:  git.genericImpactListTruncated,
+		GenericImpactCandidatePathsCollected: true,
+		UntrackedFiles:                       files.untrackedFiles,
+		RelatedCandidateListTruncated:        git.relatedCandidateListTruncated,
+		RelatedSearchTruncated:               files.relatedSearchTruncated,
+		UntrackedListTruncated:               git.untrackedListTruncated,
+		UntrackedSnapshotsTruncated:          files.untrackedSnapshotsTruncated,
+		RuleFiles:                            files.ruleFiles,
+		Inventory:                            buildReviewChangeInventory(git.changedFiles, git.untrackedPaths),
+		Limits:                               limits,
 	}
 }

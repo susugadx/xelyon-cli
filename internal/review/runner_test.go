@@ -20,18 +20,15 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	probeResult := ReviewProbeResult{
 		ID:              "probe-1",
 		Mode:            ReviewProbeHostReadOnly,
-		Status:          ReviewProbeFailed,
+		Status:          ReviewProbePassed,
 		OutputTruncated: true,
-		Error:           "probe failed",
 		CommandResults: []ReviewProbeCommandResult{
 			{
 				Command:         "go",
 				Args:            []string{"test", "./internal/review"},
-				Status:          ReviewProbeFailed,
-				ExitCode:        1,
-				Output:          "FAIL runner",
+				Status:          ReviewProbePassed,
+				Output:          "PASS runner",
 				OutputTruncated: true,
-				Error:           "exit status 1",
 				Duration:        1500 * time.Millisecond,
 			},
 		},
@@ -42,7 +39,8 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	}
 	plan := newRunnerProbePlanForTest("probe-1")
 	probeResults := []ReviewProbeResult{probeResult}
-	modelReport := newRunnerCleanReportForTest(newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, probeResults))
+	modelReport := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")
+	modelReport.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, probeResults)
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
@@ -101,9 +99,8 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		"Review Pass 2",
 		ReviewReportSchemaVersionV2,
 		"Probe Result Context",
-		`"output": "FAIL runner"`,
-		`"status": "failed"`,
-		`"error": "exit status 1"`,
+		`"output": "PASS runner"`,
+		`"status": "passed"`,
 		`"output_truncated": true`,
 		`"duration_ms": 1500`,
 	} {
@@ -140,7 +137,7 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 			},
 		},
 	}
-	modelReport := newRunnerCleanReportForTest([]ReviewProbeSummary{
+	modelReport := newRunnerBlockedReportForTest([]ReviewProbeSummary{
 		{
 			ProbeID:      "fake-probe",
 			Mode:         ReviewProbeHostReadOnly,
@@ -208,7 +205,7 @@ func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *te
 			},
 		},
 	}
-	modelReport := newRunnerCleanReportForTest(nil)
+	modelReport := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")
 	modelReport.CheckedSurfaces = []ReviewSurfaceCoverage{
 		{
 			SurfaceID: "surface-1",
@@ -365,7 +362,7 @@ func TestReviewRunnerRunRepairsInvalidProbePlanJSON(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: `{not-json`},
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")))},
 			saturatedRunnerModelResponseForTest(t),
 		},
 	}
@@ -401,7 +398,7 @@ func TestReviewRunnerRunRepairsInvalidProbePlanValidation(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanWithMissingNoProbeReasonForRunnerTest(t))},
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")))},
 			saturatedRunnerModelResponseForTest(t),
 		},
 	}
@@ -427,6 +424,41 @@ func TestReviewRunnerRunRepairsInvalidProbePlanValidation(t *testing.T) {
 	}
 }
 
+func TestReviewRunnerRunRepairsProbePlanEvidenceValidation(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	probes := &runnerFakeProbeRunner{}
+	invalidPlan := newRunnerProbePlanForTest("probe-1")
+	invalidPlan.ImpactSurfaces[0].EvidenceSummary = "Evidence references current review changes."
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, invalidPlan))},
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")))},
+			saturatedRunnerModelResponseForTest(t),
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	_, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if got, want := len(probes.calls), 1; got != want {
+		t.Fatalf("probe calls = %d, want %d", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
+	})
+	for _, want := range []string{"Probe Plan JSON Repair", "ValidateReviewProbePlanAgainstEvidence", "internal/review/runner.go"} {
+		if !strings.Contains(model.requests[1].Prompt, want) {
+			t.Fatalf("probe plan repair prompt missing %q:\n%s", want, model.requests[1].Prompt)
+		}
+	}
+}
+
 func TestReviewRunnerRunRepairsInvalidReportJSON(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
@@ -434,7 +466,7 @@ func TestReviewRunnerRunRepairsInvalidReportJSON(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: `{not-json`},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")))},
 			saturatedRunnerModelResponseForTest(t),
 		},
 	}
@@ -470,7 +502,7 @@ func TestReviewRunnerRunRepairsInvalidReportValidation(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: `{"schema_version":"review_report.v2","target_kind":"current_changes"}`},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")))},
 			saturatedRunnerModelResponseForTest(t),
 		},
 	}
@@ -508,7 +540,7 @@ func TestReviewRunnerRunRepairsReportScopeCoverageValidation(t *testing.T) {
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
 			{content: string(mustMarshalReviewReportForRunnerTest(t, invalidReport))},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")))},
 			saturatedRunnerModelResponseForTest(t),
 		},
 	}
@@ -939,7 +971,7 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerBlockedReportForTest(nil)))},
 			saturatedRunnerModelResponseForTest(t),
 		},
 	}
@@ -1015,10 +1047,12 @@ func TestReviewRunnerRunsProbesInPlanOrder(t *testing.T) {
 		"probe-b": results[1],
 		"probe-c": results[2],
 	}
+	report := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-a")
+	report.ProbeSummaries = BuildReviewProbeSummaries(results)
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
-			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(BuildReviewProbeSummaries(results))))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, report))},
 			saturatedRunnerModelResponseForTest(t),
 		},
 	}
@@ -1136,109 +1170,6 @@ func newRunnerNonNilDependenciesForTest() ReviewRunnerOptions {
 		ProbeRunner:     &runnerFakeProbeRunner{},
 		Model:           &runnerFakeModel{},
 	}
-}
-
-func newRunnerEvidenceBundleForTest(repoRoot string) ReviewEvidenceBundle {
-	return ReviewEvidenceBundle{
-		TargetKind:  TargetCurrentChanges,
-		RepoRoot:    repoRoot,
-		CWD:         filepath.Join(repoRoot, "internal"),
-		StatusShort: " M internal/review/runner.go\n",
-		ChangedFiles: []ReviewChangedFile{
-			{
-				Path:     filepath.Join(repoRoot, "internal/review/runner.go"),
-				Status:   "M",
-				Unstaged: true,
-			},
-		},
-		Inventory: ReviewChangeInventory{
-			Production: []string{filepath.Join(repoRoot, "internal/review/runner.go")},
-		},
-		Limits: DefaultReviewEvidenceLimits(),
-	}
-}
-
-func newRunnerProbePlanForTest(ids ...string) ReviewProbePlan {
-	probes := make([]ReviewPlannedProbe, 0, len(ids))
-	for _, id := range ids {
-		probes = append(probes, ReviewPlannedProbe{
-			ID:         id,
-			SurfaceIDs: []string{"surface-1"},
-			RiskIDs:    []string{"risk-1"},
-			Purpose:    "Confirm or falsify risk-1 for surface-1 with focused review checks.",
-			Mode:       ReviewProbeHostReadOnly,
-			Commands: []ReviewPlannedProbeCommand{
-				{
-					Command: "go",
-					Args:    []string{"test", "./internal/review"},
-					WorkDir: ".",
-				},
-			},
-			TimeoutSeconds: 30,
-			MaxOutputBytes: 4096,
-		})
-	}
-	return ReviewProbePlan{
-		SchemaVersion: ReviewProbePlanSchemaVersionV2,
-		TargetKind:    TargetCurrentChanges,
-		Summary:       "Probe current changes.",
-		ImpactSurfaces: []ReviewProbeImpactSurface{
-			{
-				ID:              "surface-1",
-				Summary:         "Runner orchestration may need verification.",
-				Category:        ReviewProbeImpactSurfaceChangedFile,
-				EvidenceSummary: "Evidence references current review changes.",
-				Status:          ReviewProbeImpactSurfaceNeedsProbe,
-				Reason:          "Run the planned probes in order.",
-			},
-		},
-		CandidateRisks: []ReviewProbeCandidateRisk{
-			{
-				ID:                   "risk-1",
-				Summary:              "A runner contract could regress.",
-				Severity:             ReviewGroupSeverityMedium,
-				SurfaceIDs:           []string{"surface-1"},
-				EvidenceSummary:      "Runner tests cover probe orchestration.",
-				VerificationStrategy: "Execute the focused runner probe.",
-				Status:               ReviewProbeCandidateRiskNeedsProbe,
-			},
-		},
-		Probes: probes,
-	}
-}
-
-func newRunnerNoProbePlanForTest() ReviewProbePlan {
-	return markReviewProbePlanCheckedWithoutProbesForTest(newRunnerProbePlanForTest())
-}
-
-func newRunnerCleanReportForTest(probeSummaries []ReviewProbeSummary) ReviewReport {
-	var reportProbeSummaries []ReviewProbeSummary
-	if len(probeSummaries) > 0 {
-		reportProbeSummaries = probeSummaries
-	}
-	return ReviewReport{
-		SchemaVersion:             ReviewReportSchemaVersionV2,
-		TargetKind:                TargetCurrentChanges,
-		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-		OverallVerificationStatus: ReviewVerificationVerified,
-		Verdict:                   ReviewVerdictClean,
-		ProbeSummaries:            reportProbeSummaries,
-		ScopeCoverage:             newCleanScopeCoverageForTest(),
-	}
-}
-
-func newRunnerBlockedReportForTest(probeSummaries []ReviewProbeSummary) ReviewReport {
-	report := newRunnerCleanReportForTest(probeSummaries)
-	report.OverallVerificationStatus = ReviewVerificationBlockedOrInconclusive
-	report.Verdict = ReviewVerdictBlocked
-	report.Summary = "Review blocked by probe execution."
-	return report
-}
-
-func withComputedSummaryForRunnerTest(report ReviewReport, probeSummaries []ReviewProbeSummary) ReviewReport {
-	computedSummary := ComputeReviewReportComputedSummary(report, probeSummaries)
-	report.ComputedSummary = &computedSummary
-	return report
 }
 
 func mustMarshalReviewProbePlanForRunnerTest(t *testing.T, plan ReviewProbePlan) []byte {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -144,6 +145,7 @@ func TestAgentReviewModelCompleteReviewRestoresResponseID(t *testing.T) {
 func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 	repo := setupReviewGitRepo(t)
 	t.Chdir(repo)
+	t.Setenv(reviewRunArtifactsEnv, "")
 
 	provider := &scriptedChatProvider{name: "openai"}
 	provider.chatWithToolsFn = func(call int, _ context.Context, _ string, history []api.Message, model string) (string, error) {
@@ -188,6 +190,183 @@ func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 	}
 	if got := len(agent.session.Messages); got != 1 {
 		t.Fatalf("session messages = %d, want 1", got)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".xelyon", "review-runs")); !os.IsNotExist(err) {
+		t.Fatalf("review artifacts directory exists without %s: err=%v", reviewRunArtifactsEnv, err)
+	}
+}
+
+func TestAgentRunReviewArtifactEnvDoesNotCreateRepoFilesBeforeProbesComplete(t *testing.T) {
+	repo := setupReviewGitRepo(t)
+	t.Chdir(repo)
+	t.Setenv(reviewRunArtifactsEnv, "1")
+
+	provider := &scriptedChatProvider{name: "openai"}
+	provider.chatWithToolsFn = func(call int, _ context.Context, _ string, history []api.Message, _ string) (string, error) {
+		if len(history) != 1 || history[0].Role != "user" {
+			t.Fatalf("history = %#v, want single review prompt", history)
+		}
+		switch call {
+		case 0:
+			return mustMarshalReviewValueForAgentTest(t, newAgentArtifactIsolationProbePlanForTest()), nil
+		case 1:
+			if _, err := os.Stat(filepath.Join(repo, ".xelyon")); !os.IsNotExist(err) {
+				t.Fatalf(".xelyon exists before report phase flush: err=%v", err)
+			}
+			if strings.Contains(history[0].Content, "review-runs") {
+				t.Fatalf("report prompt contains repo-local review artifacts before probes completed:\n%s", history[0].Content)
+			}
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportWithPassedProbeEvidenceForTest("probe-artifact-isolation")), nil
+		case 2:
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
+		default:
+			t.Fatalf("unexpected provider call %d", call)
+			return "", nil
+		}
+	}
+	agent := newReviewAgentForTest(t, provider)
+
+	if _, err := agent.RunReview(context.Background(), review.NewCurrentChangesRequest("")); err != nil {
+		t.Fatalf("RunReview() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".xelyon", "review-runs")); err != nil {
+		t.Fatalf("review artifacts were not flushed after review completed: %v", err)
+	}
+}
+
+func TestAgentRunReviewArtifactFlushFailureWarnsWithoutFailingReview(t *testing.T) {
+	repo := setupReviewGitRepo(t)
+	t.Chdir(repo)
+	t.Setenv(reviewRunArtifactsEnv, "1")
+
+	provider := &scriptedChatProvider{name: "openai"}
+	provider.chatWithToolsFn = func(call int, _ context.Context, _ string, _ []api.Message, _ string) (string, error) {
+		switch call {
+		case 0:
+			return mustMarshalReviewValueForAgentTest(t, newAgentNoProbeReviewPlanForTest(
+				"Agent artifact flush failure path.",
+				"Agent artifact flush failure could fail the review.",
+			)), nil
+		case 1:
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
+		case 2:
+			if err := os.WriteFile(filepath.Join(repo, ".xelyon"), []byte("not a directory\n"), 0o600); err != nil {
+				t.Fatalf("write blocking .xelyon file: %v", err)
+			}
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
+		default:
+			t.Fatalf("unexpected provider call %d", call)
+			return "", nil
+		}
+	}
+	agent, out := newReviewAgentWithOutputForTest(t, provider)
+
+	report, err := agent.RunReview(context.Background(), review.NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("RunReview() error = %v, want nil despite artifact flush failure", err)
+	}
+	if report.Verdict != review.ReviewVerdictClean {
+		t.Fatalf("report verdict = %q, want clean", report.Verdict)
+	}
+	if !strings.Contains(out.String(), "Warning: failed to save review artifact") {
+		t.Fatalf("warning output = %q, want artifact warning", out.String())
+	}
+}
+
+func TestAgentRunReviewArtifactFlushRejectsSymlinkedRepoArtifactDir(t *testing.T) {
+	repo := setupReviewGitRepo(t)
+	t.Chdir(repo)
+	t.Setenv(reviewRunArtifactsEnv, "1")
+	outside := t.TempDir()
+
+	provider := &scriptedChatProvider{name: "openai"}
+	provider.chatWithToolsFn = func(call int, _ context.Context, _ string, _ []api.Message, _ string) (string, error) {
+		switch call {
+		case 0:
+			return mustMarshalReviewValueForAgentTest(t, newAgentNoProbeReviewPlanForTest(
+				"Agent artifact symlink rejection path.",
+				"Agent artifact flush could follow a repo-controlled symlink.",
+			)), nil
+		case 1:
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
+		case 2:
+			createReviewArtifactSymlinkForAgentTest(t, outside, filepath.Join(repo, ".xelyon"))
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
+		default:
+			t.Fatalf("unexpected provider call %d", call)
+			return "", nil
+		}
+	}
+	agent, out := newReviewAgentWithOutputForTest(t, provider)
+
+	report, err := agent.RunReview(context.Background(), review.NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("RunReview() error = %v, want nil despite artifact flush failure", err)
+	}
+	if report.Verdict != review.ReviewVerdictClean {
+		t.Fatalf("report verdict = %q, want clean", report.Verdict)
+	}
+	if !strings.Contains(out.String(), "Warning: failed to save review artifact") || !strings.Contains(out.String(), "symlink") {
+		t.Fatalf("warning output = %q, want artifact symlink warning", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(outside, "review-runs")); !os.IsNotExist(err) {
+		t.Fatalf("artifact escaped through .xelyon symlink: err=%v", err)
+	}
+}
+
+func TestAgentRunReviewSavesArtifactsWhenEnvEnabled(t *testing.T) {
+	repo := setupReviewGitRepo(t)
+	t.Chdir(repo)
+	t.Setenv(reviewRunArtifactsEnv, "1")
+
+	provider := &scriptedChatProvider{name: "openai"}
+	provider.chatWithToolsFn = func(call int, _ context.Context, _ string, _ []api.Message, _ string) (string, error) {
+		switch call {
+		case 0:
+			return mustMarshalReviewValueForAgentTest(t, newAgentNoProbeReviewPlanForTest(
+				"Agent artifact runner path.",
+				"Agent artifact runner could skip debug output.",
+			)), nil
+		case 1:
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
+		case 2:
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
+		default:
+			t.Fatalf("unexpected provider call %d", call)
+			return "", nil
+		}
+	}
+	agent := newReviewAgentForTest(t, provider)
+
+	if _, err := agent.RunReview(context.Background(), review.NewCurrentChangesRequest("")); err != nil {
+		t.Fatalf("RunReview() error = %v", err)
+	}
+
+	runsRoot := filepath.Join(repo, ".xelyon", "review-runs")
+	entries, err := os.ReadDir(runsRoot)
+	if err != nil {
+		t.Fatalf("ReadDir(%s) error = %v", runsRoot, err)
+	}
+	if len(entries) != 1 || !entries[0].IsDir() {
+		t.Fatalf("review-runs entries = %#v, want one run directory", entries)
+	}
+	runDir := filepath.Join(runsRoot, entries[0].Name())
+	for _, name := range []string{
+		"evidence.md",
+		"probe_plan_prompt.md",
+		"probe_plan_raw.json",
+		"probe_plan_final.json",
+		"probe_requests.json",
+		"probe_results.json",
+		"report_prompt.md",
+		"report_raw.json",
+		"report_final.json",
+		"saturation_prompt.md",
+		"saturation_raw.json",
+	} {
+		if _, err := os.Stat(filepath.Join(runDir, name)); err != nil {
+			t.Fatalf("expected artifact %s: %v", name, err)
+		}
 	}
 }
 
@@ -352,11 +531,17 @@ func (p *reviewResponseIDProvider) GetResponseID() string {
 
 func newReviewAgentForTest(t *testing.T, provider api.Provider) *Agent {
 	t.Helper()
+	agent, _ := newReviewAgentWithOutputForTest(t, provider)
+	return agent
+}
+
+func newReviewAgentWithOutputForTest(t *testing.T, provider api.Provider) (*Agent, *bytes.Buffer) {
+	t.Helper()
 	var out bytes.Buffer
 	agent := newChatRequestTestAgent(t, provider, &out)
 	agent.CurrentModel = "review-model"
 	agent.Model = "review-model"
-	return agent
+	return agent, &out
 }
 
 func setupReviewGitRepo(t *testing.T) string {
@@ -366,7 +551,10 @@ func setupReviewGitRepo(t *testing.T) string {
 	if err := os.WriteFile(repo+"/main.go", []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
 		t.Fatalf("write initial file: %v", err)
 	}
-	runGitForReviewTest(t, repo, "add", "main.go")
+	if err := os.WriteFile(repo+"/helper.go", []byte("package main\n\nfunc helper() { main() }\n"), 0o644); err != nil {
+		t.Fatalf("write helper file: %v", err)
+	}
+	runGitForReviewTest(t, repo, "add", "main.go", "helper.go")
 	runGitForReviewTest(t, repo, "-c", "user.name=Review Test", "-c", "user.email=review@example.test", "commit", "-m", "initial")
 	if err := os.WriteFile(repo+"/main.go", []byte("package main\n\nfunc main() { println(\"review\") }\n"), 0o644); err != nil {
 		t.Fatalf("write changed file: %v", err)
@@ -383,6 +571,14 @@ func runGitForReviewTest(t *testing.T, repo string, args ...string) {
 	}
 }
 
+func createReviewArtifactSymlinkForAgentTest(t *testing.T, oldname, newname string) {
+	t.Helper()
+
+	if err := os.Symlink(oldname, newname); err != nil {
+		t.Skipf("symlink not supported in this environment: %v", err)
+	}
+}
+
 func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review.ReviewProbePlan {
 	return review.ReviewProbePlan{
 		SchemaVersion: review.ReviewProbePlanSchemaVersionV2,
@@ -392,7 +588,7 @@ func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review
 				ID:              "surface-1",
 				Summary:         surfaceSummary,
 				Category:        review.ReviewProbeImpactSurfaceChangedFile,
-				EvidenceSummary: "Git evidence is sufficient.",
+				EvidenceSummary: "Git evidence covers main.go.",
 				Status:          review.ReviewProbeImpactSurfaceChecked,
 				Reason:          "Existing evidence covers surface-1.",
 			},
@@ -411,6 +607,37 @@ func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review
 		Probes:        []review.ReviewPlannedProbe{},
 		NoProbeReason: "surface-1 and risk-1 are checked by existing evidence.",
 	}
+}
+
+func newAgentArtifactIsolationProbePlanForTest() review.ReviewProbePlan {
+	plan := newAgentNoProbeReviewPlanForTest(
+		"Agent artifact runner path covers main.go production changes and untracked debug artifact pressure.",
+		"Agent artifact runner could expose debug files to review probes.",
+	)
+	plan.ImpactSurfaces[0].Status = review.ReviewProbeImpactSurfaceNeedsProbe
+	plan.ImpactSurfaces[0].Reason = "A host-readonly probe should verify repo-local debug artifacts are absent before artifact flush."
+	plan.CandidateRisks[0].Status = review.ReviewProbeCandidateRiskNeedsProbe
+	plan.CandidateRisks[0].VerificationStrategy = "Run a read-only find scoped to .xelyon and confirm no review-run paths are visible."
+	plan.NoProbeReason = ""
+	plan.Probes = []review.ReviewPlannedProbe{
+		{
+			ID:         "probe-artifact-isolation",
+			SurfaceIDs: []string{"surface-1"},
+			RiskIDs:    []string{"risk-1"},
+			Purpose:    "Verify debug review artifacts do not appear in the repository before probes complete.",
+			Mode:       review.ReviewProbeHostReadOnly,
+			Commands: []review.ReviewPlannedProbeCommand{
+				{
+					Command: "find",
+					Args:    []string{".", "-path", "./.xelyon/*", "-print"},
+					WorkDir: ".",
+				},
+			},
+			TimeoutSeconds: 2,
+			MaxOutputBytes: 1024,
+		},
+	}
+	return plan
 }
 
 func newAgentCleanReviewReportForTest() review.ReviewReport {
@@ -438,6 +665,18 @@ func newAgentCleanReviewReportForTest() review.ReviewReport {
 			},
 		},
 	}
+}
+
+func newAgentCleanReviewReportWithPassedProbeEvidenceForTest(probeID string) review.ReviewReport {
+	report := newAgentCleanReviewReportForTest()
+	ref := review.ReviewEvidenceRef{
+		Kind:    review.ReviewEvidenceKindProbe,
+		ProbeID: probeID,
+		Summary: "The linked probe passed.",
+	}
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []review.ReviewEvidenceRef{ref}
+	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []review.ReviewEvidenceRef{ref}
+	return report
 }
 
 func newAgentSaturatedReviewCheckForTest() review.ReviewSaturationCheck {

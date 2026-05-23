@@ -12,6 +12,10 @@ func reviewRelatedCandidateListGitArgs() []string {
 	return []string{"ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.go"}
 }
 
+func reviewGenericImpactCandidateListGitArgs() []string {
+	return []string{"ls-files", "-z", "--cached", "--others", "--exclude-standard"}
+}
+
 func reviewDiffBaseGitArgs(staged bool) []string {
 	args := []string{"diff"}
 	if staged {

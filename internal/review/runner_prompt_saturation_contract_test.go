@@ -32,11 +32,18 @@ func TestBuildReviewSaturationCheckPromptIncludesStrictSchemaContract(t *testing
 		`"status" must be one of "saturated", "needs_revision", "blocked"`,
 		"This is a saturation check, not a new review",
 		"Do not request tools, perform additional exploration",
+		"Do not treat \"scope_coverage\" as saturated just because it repeats every Pass1 ID",
+		"Failed, blocked, timed-out, or \"mutated_worktree\" probe outcomes must be reflected",
+		"Shallow, empty, or absent related context/search evidence is not proof of no impact",
+		"do not bias toward saturated/clean/verified",
+		"Trace review pressure signals from Evidence Markdown and the Decoded Probe Plan",
+		"supports an additional finding candidate within the report scope",
 		`may contain only IDs from Decoded Probe Plan "impact_surfaces[].id"`,
 		`may contain only IDs from Decoded Probe Plan "candidate_risks[].id"`,
 		"Do not use it for new exploration or speculation",
 		`Status "saturated" requires "missing_surface_ids", "missing_risk_ids", "additional_finding_candidates", and "revision_instructions" to be empty`,
 		`Status "needs_revision" requires non-empty "revision_instructions"`,
+		"Use it when the Finalized Review Report escapes, omits, or downplays pressure signals",
 		"Output only this saturation check JSON object",
 		`do not include top-level "computed_summary"`,
 		"## Finalized Review Report",
@@ -81,6 +88,8 @@ func TestBuildReviewSaturationCheckRepairPromptIncludesRepairContract(t *testing
 		"Keep the same finalized report and Pass1 scope.",
 		"## Saturation Check JSON Contract",
 		`"schema_version": "review_saturation_check.v1"`,
+		"Failed, blocked, timed-out, or \"mutated_worktree\" probe outcomes must be reflected",
+		"Use it when the Finalized Review Report escapes, omits, or downplays pressure signals",
 		"focus saturation repair",
 		"diff evidence",
 		"## Finalized Review Report",
@@ -93,6 +102,63 @@ func TestBuildReviewSaturationCheckRepairPromptIncludesRepairContract(t *testing
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("saturation check repair prompt missing %q:\n%s", want, prompt)
 		}
+	}
+}
+
+func TestBuildReviewSaturationAndRevisionPromptsIncludeStrictReviewerStance(t *testing.T) {
+	report := withComputedSummaryForRunnerTest(newRunnerCleanReportForTest(nil), nil)
+	plan := newNoProbeReviewProbePlanForTest()
+	check := needsRevisionCheckForPromptContractTest()
+	prompts := map[string]string{
+		"saturation check": buildReviewSaturationCheckPrompt(
+			NewCurrentChangesRequest("focus saturation"),
+			"diff evidence",
+			plan,
+			nil,
+			nil,
+			reviewRunnerPromptRedactor{},
+			report,
+		),
+		"saturation check repair": buildReviewSaturationCheckRepairPrompt(
+			NewCurrentChangesRequest("focus saturation repair"),
+			"diff evidence",
+			plan,
+			nil,
+			nil,
+			reviewRunnerPromptRedactor{},
+			report,
+			`{"schema_version":"wrong"}`,
+			errors.New("status must be known"),
+		),
+		"report revision": buildReviewReportRevisionPrompt(
+			NewCurrentChangesRequest("focus revision"),
+			"diff evidence",
+			plan,
+			nil,
+			nil,
+			reviewRunnerPromptRedactor{},
+			report,
+			check,
+		),
+		"report revision repair": buildReviewReportRevisionRepairPrompt(
+			NewCurrentChangesRequest("focus revision repair"),
+			"diff evidence",
+			plan,
+			nil,
+			nil,
+			reviewRunnerPromptRedactor{},
+			report,
+			check,
+			`{"schema_version":"review_report.v2","computed_summary":{}}`,
+			errors.New("target_kind must be current_changes"),
+		),
+	}
+
+	for name, prompt := range prompts {
+		t.Run(name, func(t *testing.T) {
+			assertReviewRunnerPromptContainsStrictReviewerStance(t, prompt)
+			assertReviewRunnerPromptContainsPostProbeInsufficientEvidenceGuidance(t, prompt)
+		})
 	}
 }
 
@@ -119,6 +185,11 @@ func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T)
 		"do not output top-level computed_summary",
 		"## Review Report JSON Contract",
 		`Do not output top-level "computed_summary"; runner computes it after validation`,
+		"## Saturation Revision Guardrails",
+		"Revise only the issues identified by the supplied saturation_check",
+		"Preserve review_report.v2 schema shape exactly",
+		"Preserve the trusted probe_summaries entries supplied for the report schema with the same count, same order, and same probe_id values",
+		"Do not convert failed, blocked, timed-out, or mutated_worktree probe outcomes into clean, checked, dismissed, or verified coverage",
 		"## Original Finalized Review Report",
 		"## Saturation Check",
 		`"status": "needs_revision"`,
@@ -162,6 +233,11 @@ func TestBuildReviewReportRevisionRepairPromptIncludesRepairContract(t *testing.
 		"Only repair the revision so it satisfies the report contract and saturation check.",
 		"## Review Report JSON Contract",
 		`Do not output top-level "computed_summary"; runner computes it after validation`,
+		"## Saturation Revision Guardrails",
+		"Revise only the issues identified by the supplied saturation_check",
+		"Preserve review_report.v2 schema shape exactly",
+		"Preserve the trusted probe_summaries entries supplied for the report schema with the same count, same order, and same probe_id values",
+		"Do not convert failed, blocked, timed-out, or mutated_worktree probe outcomes into clean, checked, dismissed, or verified coverage",
 		"## Original Finalized Review Report",
 		"## Saturation Check",
 		`"status": "needs_revision"`,

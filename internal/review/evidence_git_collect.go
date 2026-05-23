@@ -15,6 +15,8 @@ type reviewCurrentChangesGitEvidence struct {
 	untrackedPaths                []string
 	relatedCandidatePaths         []string
 	relatedCandidateListTruncated bool
+	genericImpactCandidatePaths   []string
+	genericImpactListTruncated    bool
 	untrackedListTruncated        bool
 }
 
@@ -47,6 +49,10 @@ func (c reviewGitEvidenceCollector) collectCurrentChanges(ctx context.Context, r
 	if err != nil {
 		return reviewCurrentChangesGitEvidence{}, err
 	}
+	genericImpactCandidatePaths, genericImpactListTruncated, err := c.collectPathList(ctx, repoRoot, cwd, reviewGenericImpactCandidateListGitArgs(), "generic impact candidate path")
+	if err != nil {
+		return reviewCurrentChangesGitEvidence{}, err
+	}
 
 	changedFiles := buildReviewChangedFiles(
 		unstagedDiff.nameStatusEntries,
@@ -61,6 +67,8 @@ func (c reviewGitEvidenceCollector) collectCurrentChanges(ctx context.Context, r
 		untrackedPaths:                untrackedPaths,
 		relatedCandidatePaths:         relatedCandidatePaths,
 		relatedCandidateListTruncated: relatedCandidateListTruncated,
+		genericImpactCandidatePaths:   genericImpactCandidatePaths,
+		genericImpactListTruncated:    genericImpactListTruncated,
 		untrackedListTruncated:        untrackedListTruncated,
 	}, nil
 }
