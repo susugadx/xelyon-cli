@@ -754,6 +754,24 @@ func TestGeminiResponseHeaderTimeout_ThinkingRequestExtendsDefaultOnly(t *testin
 	}
 }
 
+func TestGeminiTimeoutPolicy_UsesCatalogModelForThinkingAlias(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Streaming.IdleTimeoutSeconds = 30
+	cfg.Streaming.ThinkingTimeoutSeconds = 120
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-gemini",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	if got := geminiResponseHeaderTimeout(ctx, "corp-gemini", defaultResponseHeaderTimeout); got != 120*time.Second {
+		t.Fatalf("geminiResponseHeaderTimeout(alias) = %s, want 120s", got)
+	}
+	if got := geminiTransportIdleTimeout(ctx, "corp-gemini", cfg); got != 120*time.Second {
+		t.Fatalf("geminiTransportIdleTimeout(alias) = %s, want 120s", got)
+	}
+}
+
 func TestDoRequestWithRetry_ResponseStartTimeout(t *testing.T) {
 	// サーバーがレスポンスヘッダーを返さない場合に ErrResponseStartTimeout が返される
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

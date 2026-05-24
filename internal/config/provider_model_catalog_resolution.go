@@ -2,7 +2,7 @@ package config
 
 import "strings"
 
-// ModelCatalogResolution は provider/model から catalog lookup 用モデル名への解決結果です。
+// ModelCatalogResolution は provider/model から catalog / local policy lookup 用モデル名への解決結果です。
 type ModelCatalogResolution struct {
 	Model                    string
 	ConfiguredWithoutCatalog bool
@@ -27,12 +27,12 @@ func (c *Config) ModelOverrideForProvider(provider, model string) (ModelOverride
 	return override, ok
 }
 
-// ModelCatalogName は token limit / pricing / catalog lookup に使うモデル名を返す。
+// ModelCatalogName は token limit / pricing / catalog / local policy lookup に使うモデル名を返す。
 func (c *Config) ModelCatalogName(provider, model string) string {
 	return c.ResolveModelCatalog(provider, model).Model
 }
 
-// ResolveModelCatalog は token limit / pricing / catalog lookup に使うモデル名と、
+// ResolveModelCatalog は token limit / pricing / catalog / local policy lookup に使うモデル名と、
 // その名前が catalog_model なしの設定値かどうかを返す。
 func (c *Config) ResolveModelCatalog(provider, model string) ModelCatalogResolution {
 	model = strings.TrimSpace(model)

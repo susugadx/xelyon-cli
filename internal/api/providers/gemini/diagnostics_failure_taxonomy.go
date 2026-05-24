@@ -16,6 +16,7 @@ const (
 	geminiDiagnosticSmokeFailureKindImage         geminiDiagnosticSmokeFailureKind = "image"
 	geminiDiagnosticSmokeFailureKindWebSearch     geminiDiagnosticSmokeFailureKind = "web_search"
 	geminiDiagnosticSmokeFailureKindEmptyResponse geminiDiagnosticSmokeFailureKind = "empty_response"
+	geminiDiagnosticSmokeFailureKindTimeout       geminiDiagnosticSmokeFailureKind = "timeout"
 	geminiDiagnosticSmokeFailureKindEndpoint      geminiDiagnosticSmokeFailureKind = "endpoint"
 	geminiDiagnosticSmokeFailureKindGeneric       geminiDiagnosticSmokeFailureKind = "generic"
 )
@@ -53,6 +54,7 @@ var geminiDiagnosticSmokeFailureRules = []geminiDiagnosticSmokeFailureRule{
 	{kind: geminiDiagnosticSmokeFailureKindImage, matches: geminiDiagnosticSmokeFailureIsImage},
 	{kind: geminiDiagnosticSmokeFailureKindWebSearch, matches: geminiDiagnosticSmokeFailureIsWebSearch},
 	{kind: geminiDiagnosticSmokeFailureKindEmptyResponse, matches: geminiDiagnosticSmokeFailureIsEmptyResponse},
+	{kind: geminiDiagnosticSmokeFailureKindTimeout, matches: geminiDiagnosticSmokeFailureIsTimeout},
 	{kind: geminiDiagnosticSmokeFailureKindEndpoint, matches: geminiDiagnosticSmokeFailureIsEndpoint},
 }
 
@@ -115,6 +117,13 @@ func newGeminiDiagnosticSmokeFailure(kind geminiDiagnosticSmokeFailureKind, deta
 			Message:    "live Gemini smoke response was empty",
 			Detail:     detail,
 			Suggestion: "The selected Gemini model returned an SSE stream without text or tool calls; retry, change --model if it repeats, or inspect --print-request for the request shape",
+		}
+	case geminiDiagnosticSmokeFailureKindTimeout:
+		return geminiDiagnosticSmokeFailure{
+			Kind:       kind,
+			Message:    "live Gemini smoke request timed out",
+			Detail:     detail,
+			Suggestion: "Rerun with a larger --timeout, increase streaming.thinking_timeout_seconds for long-thinking Gemini requests, or use XELYON_DEBUG_GEMINI=1 to inspect SSE progress",
 		}
 	case geminiDiagnosticSmokeFailureKindEndpoint:
 		return geminiDiagnosticSmokeFailure{
@@ -180,6 +189,19 @@ func geminiDiagnosticSmokeFailureIsWebSearch(ctx geminiDiagnosticSmokeFailureCon
 
 func geminiDiagnosticSmokeFailureIsEmptyResponse(ctx geminiDiagnosticSmokeFailureContext) bool {
 	return !ctx.Endpoint.HasOverride() && geminiDiagnosticEmptySSEResponseSmokeFailure(ctx.LowerDetail)
+}
+
+func geminiDiagnosticSmokeFailureIsTimeout(ctx geminiDiagnosticSmokeFailureContext) bool {
+	return geminiDiagnosticErrorContainsAny(
+		ctx.LowerDetail,
+		"response start timeout",
+		"transport idle timeout",
+		"thinking timeout",
+		"context deadline exceeded",
+		"client.timeout exceeded",
+		"i/o timeout",
+		"timeout awaiting response headers",
+	)
 }
 
 func geminiDiagnosticSmokeFailureIsEndpoint(ctx geminiDiagnosticSmokeFailureContext) bool {

@@ -273,14 +273,14 @@ type LSPServerConfig struct {
 // ModelOverride はモデルごとの個別設定
 type ModelOverride struct {
 	MaxOutputTokens int    `yaml:"max_output_tokens,omitempty"` // このモデル固有の最大出力トークン数
-	CatalogModel    string `yaml:"catalog_model,omitempty"`     // token/pricing/catalog lookup に使う既知モデル名
+	CatalogModel    string `yaml:"catalog_model,omitempty"`     // token/pricing/catalog/local policy lookup に使う既知モデル名
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
 type ProviderModelConfig struct {
 	DefaultModel     string                   `yaml:"default_model"`
 	MaxOutputTokens  int                      `yaml:"max_output_tokens,omitempty"` // プロバイダー全体のデフォルト最大出力トークン数
-	CatalogModel     string                   `yaml:"catalog_model,omitempty"`     // default_model が deployment/alias の場合の既知モデル名
+	CatalogModel     string                   `yaml:"catalog_model,omitempty"`     // default_model が deployment/alias の場合の token/pricing/catalog/local policy 用既知モデル名
 	AnthropicVersion string                   `yaml:"anthropic_version,omitempty"` // Anthropic API バージョン
 	AnthropicBeta    []string                 `yaml:"anthropic_beta,omitempty"`    // Anthropic Beta ヘッダー
 	ModelOverrides   map[string]ModelOverride `yaml:"model_overrides,omitempty"`   // モデルごとの個別オーバーライド

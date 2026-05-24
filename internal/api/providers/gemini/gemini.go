@@ -64,8 +64,19 @@ func geminiConfiguredThinkingTimeout(cfg *config.Config) time.Duration {
 	return time.Duration(cfg.Streaming.ThinkingTimeoutSeconds) * time.Second
 }
 
+func geminiPolicyModel(cfg *config.Config, model string) string {
+	model = strings.TrimSpace(model)
+	if cfg == nil {
+		return model
+	}
+	if catalogModel := strings.TrimSpace(cfg.ModelCatalogName("gemini", model)); catalogModel != "" {
+		return catalogModel
+	}
+	return model
+}
+
 func isGeminiThinkingRequest(ctx context.Context, model string) bool {
-	return isGemini3Model(model) || api.IsThinkingEnabled(ctx)
+	return isGemini3Model(geminiPolicyModel(config.FromContext(ctx), model)) || api.IsThinkingEnabled(ctx)
 }
 
 func geminiResponseHeaderTimeout(ctx context.Context, model string, current time.Duration) time.Duration {
@@ -175,15 +186,16 @@ func isGemini3Model(model string) bool {
 // Gemini 2.5: thinkingBudget（thinking.enabled=true のときのみ）
 func getThinkingConfigForModel(ctx context.Context, model string, cfg *config.Config) *GeminiGenerationConfig {
 	maxTokens := api.GetMaxOutputTokens(ctx, "gemini", model)
+	policyModel := geminiPolicyModel(cfg, model)
 
-	if isGemini3Model(model) {
+	if isGemini3Model(policyModel) {
 		// Gemini 3: thinking は無効化不可
 		// Flash は "minimal" が使える（最も latency が低い）
 		// Pro は "low" が最小
-		isFlash := strings.Contains(model, "flash")
+		isFlash := strings.Contains(policyModel, "flash")
 		var thinkingLevel string
 		if api.IsThinkingEnabled(ctx) {
-			thinkingLevel = levelToThinkingLevel(cfg.Thinking.Level, model)
+			thinkingLevel = levelToThinkingLevel(cfg.Thinking.Level, policyModel)
 		} else {
 			if isFlash {
 				thinkingLevel = "minimal"
@@ -266,9 +278,10 @@ const maxResponseStartTimeoutRetries = 1
 // getThinkingSpinnerMessage はモデルとコンテキストに基づいて thinking スピナーメッセージを返す
 // SSEストリーム開始後に "Waiting for Gemini..." から切り替える際に使用
 func getThinkingSpinnerMessage(ctx context.Context, model string, isImage bool) string {
+	policyModel := geminiPolicyModel(config.FromContext(ctx), model)
 	if isImage {
-		if isGemini3Model(model) {
-			isFlash := strings.Contains(model, "flash")
+		if isGemini3Model(policyModel) {
+			isFlash := strings.Contains(policyModel, "flash")
 			if isFlash && !api.IsThinkingEnabled(ctx) {
 				return "Analyzing image"
 			}
@@ -279,8 +292,8 @@ func getThinkingSpinnerMessage(ctx context.Context, model string, isImage bool) 
 		}
 		return "Analyzing image"
 	}
-	if isGemini3Model(model) {
-		isFlash := strings.Contains(model, "flash")
+	if isGemini3Model(policyModel) {
+		isFlash := strings.Contains(policyModel, "flash")
 		if isFlash && !api.IsThinkingEnabled(ctx) {
 			return "Thinking"
 		}

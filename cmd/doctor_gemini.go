@@ -28,7 +28,7 @@ without sending it.`,
 	}
 
 	cmd.Flags().StringVar(&doctorGeminiModelFlag, "model", "", "Gemini model or configured alias for 'doctor gemini'")
-	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor gemini' token/pricing policy")
+	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor gemini' token/pricing/thinking policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal Gemini text smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live Gemini smoke request that forces a dummy tool call")
 	cmd.Flags().BoolVar(&doctorGeminiImageSmokeFlag, "image-smoke", false, "Send one live Gemini image input smoke request")

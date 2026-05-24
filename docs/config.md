@@ -282,7 +282,7 @@ final_checks:
 - **サブキー**:
   - `default_model`: プロバイダーのデフォルトモデル名
   - `max_output_tokens`: プロバイダーの出力トークン上限（デフォルト値）
-  - `catalog_model`: `default_model` が deployment 名や社内 alias の場合に、token limit / pricing / context 判定へ使う既知モデル名（オプション）
+  - `catalog_model`: `default_model` が deployment 名や社内 alias の場合に、token limit / pricing / context / provider 固有 policy 判定へ使う既知モデル名（オプション）
   - `model_overrides`: 特定モデル別の出力トークン上限設定（オプション）
     - **用途**: 既知モデルマップにないモデル、deployment 名、デフォルト値を上書きしたい場合に指定
     - **サブキー**: `max_output_tokens`, `catalog_model`
@@ -308,7 +308,7 @@ final_checks:
       catalog_model: gpt-5.4
   ```
 
-料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
+料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Gemini alias では Gemini の実モデル名を指定すると、token / pricing に加えて thinkingLevel と SSE timeout policy もその family に揃います。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 
 DeepSeek の推奨モデル:
 - `deepseek-v4-flash`: 低コスト・高速・普段使い向き

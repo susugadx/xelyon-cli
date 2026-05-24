@@ -77,6 +77,47 @@ func TestGetThinkingConfigForModel_Gemini35FlashWithoutThinkingUsesMinimalLevel(
 	}
 }
 
+func TestGetThinkingConfigForModel_UsesCatalogModelForGemini3Alias(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = false
+	cfg.Thinking.Level = "high"
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-gemini",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	got := getThinkingConfigForModel(ctx, "corp-gemini", cfg)
+	if got == nil || got.ThinkingConfig == nil {
+		t.Fatalf("getThinkingConfigForModel() = %+v, want Gemini 3 thinking config", got)
+	}
+	if got.ThinkingConfig.ThinkingLevel != "minimal" {
+		t.Fatalf("ThinkingLevel = %q, want catalog model flash minimal level", got.ThinkingConfig.ThinkingLevel)
+	}
+	if got.ThinkingConfig.ThinkingBudget != 0 {
+		t.Fatalf("ThinkingBudget = %d, want 0 for Gemini 3 thinkingLevel request", got.ThinkingConfig.ThinkingBudget)
+	}
+	if got.MaxOutputTokens != 65536 {
+		t.Fatalf("MaxOutputTokens = %d, want catalog model limit 65536", got.MaxOutputTokens)
+	}
+}
+
+func TestGetThinkingSpinnerMessage_UsesCatalogModelForAlias(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-gemini-pro",
+		CatalogModel: "gemini-3.1-pro-preview-customtools",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	if got := getThinkingSpinnerMessage(ctx, "corp-gemini-pro", false); got != "Deep thinking" {
+		t.Fatalf("getThinkingSpinnerMessage(alias) = %q, want %q", got, "Deep thinking")
+	}
+	if got := getThinkingSpinnerMessage(ctx, "corp-gemini-pro", true); got != "Deep thinking (image)" {
+		t.Fatalf("getThinkingSpinnerMessage(alias image) = %q, want %q", got, "Deep thinking (image)")
+	}
+}
+
 func TestGetThinkingSpinnerMessage_Gemini25ImageWithThinking(t *testing.T) {
 	ctx := newGeminiRequestContext(true, "medium")
 	if got := getThinkingSpinnerMessage(ctx, "gemini-2.5-flash", true); got != "Deep thinking (image)" {
