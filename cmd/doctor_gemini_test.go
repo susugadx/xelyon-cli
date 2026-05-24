@@ -42,7 +42,7 @@ func TestRootCommand_GeminiDoctorHelpShowsMinimalFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--image-smoke", "--web-search-smoke", "--print-request", "--timeout", "--json", "Diagnose Gemini provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--image-smoke", "--web-search-smoke", "--print-request", "--timeout", "--json", "Diagnose Gemini provider configuration", "function-calling smoke", "Per-request timeout"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want Gemini doctor help substring %q", out.String(), want)
 		}

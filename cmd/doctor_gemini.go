@@ -18,8 +18,8 @@ func newGeminiDoctorCommand() *cobra.Command {
 
 Checks GEMINI_API_KEY, GEMINI_API_URL, provider registration, model/catalog
 model resolution, native Gemini request routes, function calling, image input,
-thinking, context caching, web search, and token/cost metadata. Use --smoke to
-send a live text request, --tool-smoke to force a dummy tool call,
+thinking, context caching, web search, and token/cost metadata. Use --smoke for
+minimal text/SSE connectivity, --tool-smoke for the function-calling runtime path,
 --image-smoke to send one tiny image request, --web-search-smoke to verify
 native Gemini web search, or --print-request to print sanitized request JSON
 without sending it.`,
@@ -29,11 +29,11 @@ without sending it.`,
 
 	cmd.Flags().StringVar(&doctorGeminiModelFlag, "model", "", "Gemini model or configured alias for 'doctor gemini'")
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor gemini' token/pricing/thinking policy")
-	addDoctorSmokeFlag(cmd, "Send a live minimal Gemini text smoke request")
-	addDoctorToolSmokeFlag(cmd, "Send a live Gemini smoke request that forces a dummy tool call")
+	addDoctorSmokeFlag(cmd, "Send a live minimal Gemini text/SSE smoke request")
+	addDoctorToolSmokeFlag(cmd, "Send a live Gemini function-calling smoke request that forces a dummy tool call")
 	cmd.Flags().BoolVar(&doctorGeminiImageSmokeFlag, "image-smoke", false, "Send one live Gemini image input smoke request")
 	cmd.Flags().BoolVar(&doctorGeminiWebSearchSmokeFlag, "web-search-smoke", false, "Send one live Gemini native web search smoke request")
-	addDoctorTimeoutFlag(cmd, "gemini", "")
+	addDoctorTimeoutFlag(cmd, "gemini", "Per-request timeout for 'doctor gemini' live smoke requests")
 	addDoctorJSONFlag(cmd, "gemini")
 	addDoctorPrintRequestFlag(cmd, "gemini")
 
