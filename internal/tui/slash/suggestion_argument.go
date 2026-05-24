@@ -67,9 +67,19 @@ func newArgumentSuggestion(command, value, labelSuffix, description string, subm
 		InsertText:    insertText,
 		Description:   description,
 		Category:      commandcatalog.CommandCategoryModel,
+		CategoryLabel: argumentSuggestionCategoryLabel(command),
 		ArgHint:       value,
 		Detail:        description,
 		HasArgs:       false,
 		SubmitOnEnter: submitOnEnter,
+	}
+}
+
+func argumentSuggestionCategoryLabel(command string) string {
+	switch command {
+	case "/thinking", "/think":
+		return "thinking"
+	default:
+		return ""
 	}
 }

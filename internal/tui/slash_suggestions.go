@@ -144,7 +144,7 @@ func (m Model) visibleSlashSuggestionRenderRows() []slashSuggestionRenderRow {
 
 func newSlashSuggestionRenderRow(suggestion slash.Suggestion, selected bool) slashSuggestionRenderRow {
 	return slashSuggestionRenderRow{
-		Category:     string(suggestion.Category),
+		Category:     suggestion.CategoryDisplayLabel(),
 		CommandLabel: suggestion.Label,
 		Description:  suggestion.Description,
 		Selected:     selected,
@@ -251,8 +251,9 @@ func providerArgumentSuggestions(candidates []providerpicker.ProviderCandidate, 
 			InsertText:    insertText,
 			Description:   providerCandidateDescription(candidate),
 			Category:      commandcatalog.CommandCategoryModel,
+			CategoryLabel: "provider",
 			ArgHint:       candidate.Key,
-			Detail:        "Switch provider to " + candidate.Label,
+			Detail:        "Switch to " + candidate.Label,
 			SubmitOnEnter: submitOnEnter,
 		})
 	}
@@ -273,6 +274,7 @@ func modelArgumentSuggestions(candidates []providerpicker.ModelCandidate, argPre
 			InsertText:    insertText,
 			Description:   modelCandidateDescription(candidate),
 			Category:      commandcatalog.CommandCategoryModel,
+			CategoryLabel: "model",
 			ArgHint:       candidate.Name,
 			Detail:        "Switch current provider model to " + candidate.Name,
 			SubmitOnEnter: submitOnEnter,
@@ -283,6 +285,9 @@ func modelArgumentSuggestions(candidates []providerpicker.ModelCandidate, argPre
 
 func providerCandidateDescription(candidate providerpicker.ProviderCandidate) string {
 	var parts []string
+	if candidate.Label != "" && candidate.Label != candidate.Key {
+		parts = append(parts, candidate.Label)
+	}
 	if candidate.Current {
 		parts = append(parts, "current")
 	}

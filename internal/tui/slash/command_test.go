@@ -3,6 +3,7 @@ package slash
 import (
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
 )
 
@@ -179,6 +180,9 @@ func TestSuggestionsExposeDisplayLabelAndCompletionText(t *testing.T) {
 	if got := suggestion.SubmissionText(); got != "/thinking" {
 		t.Fatalf("SubmissionText() = %q, want /thinking", got)
 	}
+	if got := suggestion.CategoryDisplayLabel(); got != "thinking" {
+		t.Fatalf("CategoryDisplayLabel() = %q, want thinking", got)
+	}
 }
 
 func TestSuggestionSubmissionTextCanDifferFromCompletionText(t *testing.T) {
@@ -194,6 +198,16 @@ func TestSuggestionSubmissionTextCanDifferFromCompletionText(t *testing.T) {
 	}
 	if got := suggestion.SubmissionText(); got != "/plan toggle" {
 		t.Fatalf("SubmissionText() = %q, want '/plan toggle'", got)
+	}
+}
+
+func TestSuggestionCategoryDisplayLabelUsesExplicitLabelFirst(t *testing.T) {
+	suggestion := Suggestion{
+		Category:      commandcatalog.CommandCategoryModel,
+		CategoryLabel: "provider",
+	}
+	if got := suggestion.CategoryDisplayLabel(); got != "provider" {
+		t.Fatalf("CategoryDisplayLabel() = %q, want provider", got)
 	}
 }
 

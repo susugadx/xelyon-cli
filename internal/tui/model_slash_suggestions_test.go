@@ -35,12 +35,36 @@ func TestSlashSuggestions_ShowOnSlashAndRenderDescription(t *testing.T) {
 	}
 }
 
+func TestSlashSuggestions_RootLLMCommandsUseSpecificDisplayCategories(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+
+	m = sendComposerRunes(m, "/")
+
+	categoriesByCommand := map[string]string{}
+	for _, row := range m.visibleSlashSuggestionRenderRows() {
+		categoriesByCommand[row.CommandLabel] = row.Category
+	}
+	for _, tt := range []struct {
+		command string
+		want    string
+	}{
+		{command: "/model [name]", want: "model"},
+		{command: "/provider [provider] [model]", want: "provider"},
+		{command: "/thinking [on|off|level]", want: "thinking"},
+	} {
+		if got := categoriesByCommand[tt.command]; got != tt.want {
+			t.Fatalf("%s display category = %q, want %q; rows=%#v", tt.command, got, tt.want, categoriesByCommand)
+		}
+	}
+}
+
 func TestSlashSuggestions_RenderRowsCarryDisplayModel(t *testing.T) {
 	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
 	m.slashSuggestions = slashSuggestionState{
 		suggestions: []slash.Suggestion{
-			{Label: "/model", Description: "Select model"},
-			{Label: "/review", Description: "Review current changes and find issues"},
+			{Label: "/model", Description: "Select model", Category: commandcatalog.CommandCategoryModel},
+			{Label: "/provider openai", Description: "OpenAI", Category: commandcatalog.CommandCategoryModel, CategoryLabel: "provider"},
 		},
 		selected: 1,
 	}
@@ -49,11 +73,11 @@ func TestSlashSuggestions_RenderRowsCarryDisplayModel(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("render rows = %d, want 2", len(rows))
 	}
-	if rows[0].CommandLabel != "/model" || rows[0].Description != "Select model" || rows[0].Selected {
+	if rows[0].Category != "llm" || rows[0].CommandLabel != "/model" || rows[0].Description != "Select model" || rows[0].Selected {
 		t.Fatalf("first row = %#v, want non-selected /model", rows[0])
 	}
-	if rows[1].CommandLabel != "/review" || rows[1].Description != "Review current changes and find issues" || !rows[1].Selected {
-		t.Fatalf("second row = %#v, want selected /review", rows[1])
+	if rows[1].Category != "provider" || rows[1].CommandLabel != "/provider openai" || rows[1].Description != "OpenAI" || !rows[1].Selected {
+		t.Fatalf("second row = %#v, want selected provider row", rows[1])
 	}
 }
 
@@ -171,7 +195,14 @@ func TestSlashSuggestions_ShowProviderRuntimeCandidates(t *testing.T) {
 	if suggestion.InsertText != "/provider openai" || suggestion.Category != commandcatalog.CommandCategoryModel {
 		t.Fatalf("provider suggestion = %#v", suggestion)
 	}
-	if detail := m.selectedSlashSuggestionDetailText(); !strings.Contains(detail, "Switch provider to OpenAI") {
+	if got := suggestion.CategoryDisplayLabel(); got != "provider" {
+		t.Fatalf("provider category display = %q, want provider", got)
+	}
+	rendered := stripANSI(m.chromeCache)
+	if !strings.Contains(rendered, "provider") || !strings.Contains(rendered, "OpenAI · current · configured") {
+		t.Fatalf("provider suggestion render missing display category/description:\n%s", rendered)
+	}
+	if detail := m.selectedSlashSuggestionDetailText(); !strings.Contains(detail, "Switch to OpenAI") {
 		t.Fatalf("selected detail = %q, want provider detail", detail)
 	}
 }
@@ -200,6 +231,9 @@ func TestSlashSuggestions_ShowModelRuntimeCandidates(t *testing.T) {
 	suggestion := m.slashSuggestions.suggestions[0]
 	if suggestion.InsertText != "/model gpt-5.4-mini" {
 		t.Fatalf("model suggestion insert = %q, want /model gpt-5.4-mini", suggestion.InsertText)
+	}
+	if got := suggestion.CategoryDisplayLabel(); got != "model" {
+		t.Fatalf("model category display = %q, want model", got)
 	}
 	if strings.Contains(stripANSI(m.chromeCache), "Custom model") {
 		t.Fatalf("custom model candidate should not be inserted as slash argument:\n%s", stripANSI(m.chromeCache))

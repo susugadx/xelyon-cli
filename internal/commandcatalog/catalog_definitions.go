@@ -241,8 +241,8 @@ func commandProvider() CommandInfo {
 	return legacyAgentTUILocalCommand(
 		"/provider",
 		"[provider] [model]",
-		"Open provider picker or switch provider and optionally model",
-		"プロバイダーを選択/切り替え",
+		"Open provider/model picker or switch directly",
+		"プロバイダー/モデルを選択・切り替え",
 		TUILocalActionOpenProviderPicker,
 		TUILocalArgBareOnly,
 		TUILocalWhenNone,
@@ -294,8 +294,8 @@ func commandModel() CommandInfo {
 	return legacyAgentTUILocalCommand(
 		"/model",
 		"[name]",
-		"Open model picker or switch model without restart",
-		"モデルを選択/切り替え",
+		"Open model picker or switch current provider model",
+		"現在のプロバイダーのモデルを選択/切り替え",
 		TUILocalActionOpenModelPicker,
 		TUILocalArgBareOnly,
 		TUILocalWhenNone,
