@@ -12,6 +12,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
 func TestDiagnoseGemini_TextSmokeObservesUsageAndCost(t *testing.T) {
@@ -59,6 +60,63 @@ func TestDiagnoseGemini_TextSmokeObservesUsageAndCost(t *testing.T) {
 	gen, ok := captured["generationConfig"].(map[string]any)
 	if !ok || gen["maxOutputTokens"] != float64(8) {
 		t.Fatalf("generationConfig = %#v, want maxOutputTokens 8", captured["generationConfig"])
+	}
+}
+
+func TestDiagnoseGemini_TextSmokeReportsActualBillingServiceTier(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeGeminiDiagnosticSSE(t, w, GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{{
+				Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "xelyon gemini doctor ok"}}},
+			}},
+			UsageMetadata: &GeminiUsageMetadata{
+				PromptTokenCount:     10,
+				CandidatesTokenCount: 5,
+				ServiceTier:          config.GeminiServiceTierStandard,
+			},
+		})
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
+
+	cfg := config.DefaultConfig()
+	cfg.Gemini.ServiceTier = config.GeminiServiceTierPriority
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       cfg,
+		Model:        defaultGeminiDiagnosticModel,
+		CatalogModel: defaultGeminiDiagnosticModel,
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || report.Smoke.Usage.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("Smoke = %#v, want observed standard billing tier", report.Smoke)
+	}
+	if len(report.Smoke.Requests) != 1 || report.Smoke.Requests[0].Usage.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("Smoke requests = %#v, want request-level standard billing tier", report.Smoke.Requests)
+	}
+	usageCheck := requireGeminiDiagnosticCheckStatus(t, report, "usage", DiagnosticStatusOK)
+	if !strings.Contains(usageCheck.Detail, "billing_tier=standard") {
+		t.Fatalf("usage detail = %q, want billing_tier=standard", usageCheck.Detail)
+	}
+
+	actualUsage := api.Usage{
+		InputTokens:        10,
+		OutputTokens:       5,
+		BillingServiceTier: config.GeminiServiceTierStandard,
+	}
+	want := cost.EstimateRequestCostWithCacheForConfig(cfg, "gemini", defaultGeminiDiagnosticModel, actualUsage)
+	priorityUsage := actualUsage
+	priorityUsage.BillingServiceTier = ""
+	priorityCost := cost.EstimateRequestCostWithCacheForConfig(cfg, "gemini", defaultGeminiDiagnosticModel, priorityUsage)
+	if want.Cost == priorityCost.Cost {
+		t.Fatalf("test pricing setup has no tier delta: standard=%v priority=%v", want, priorityCost)
+	}
+	if report.Smoke.Cost.PricingUnavailable || report.Smoke.Cost.USD != want.Cost {
+		t.Fatalf("Smoke cost = %+v, want actual-tier estimate %+v", report.Smoke.Cost, want)
 	}
 }
 

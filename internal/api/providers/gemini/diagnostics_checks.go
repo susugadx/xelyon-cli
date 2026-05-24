@@ -464,7 +464,7 @@ func (r *DiagnosticReport) addSmokeObservationChecks(smoke DiagnosticSmokeResult
 }
 
 func geminiDiagnosticSmokeUsageDetail(usage DiagnosticSmokeUsage) string {
-	return fmt.Sprintf(
+	detail := fmt.Sprintf(
 		"input=%d cached_input=%d output=%d thinking=%d cache_creation=%d",
 		usage.InputTokens,
 		usage.CachedInputTokens,
@@ -472,4 +472,8 @@ func geminiDiagnosticSmokeUsageDetail(usage DiagnosticSmokeUsage) string {
 		usage.ThinkingTokens,
 		usage.CacheCreationTokens,
 	)
+	if tier := strings.TrimSpace(usage.BillingServiceTier); tier != "" {
+		detail += fmt.Sprintf(" billing_tier=%s", tier)
+	}
+	return detail
 }

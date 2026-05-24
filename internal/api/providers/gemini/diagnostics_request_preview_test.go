@@ -81,6 +81,38 @@ func TestDiagnoseGemini_PrintRequestBuildsTextToolImageAndWebBodies(t *testing.T
 	}
 }
 
+func TestDiagnoseGemini_PrintRequestIncludesConfiguredServiceTier(t *testing.T) {
+	t.Setenv(geminiAPIKeyEnv, "")
+	t.Setenv(geminiAPIURLEnv, "")
+	t.Setenv("XELYON_MODEL", "")
+
+	cfg := config.DefaultConfig()
+	cfg.Gemini.ServiceTier = config.GeminiServiceTierFlex
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         cfg,
+		Model:          defaultGeminiDiagnosticModel,
+		CatalogModel:   defaultGeminiDiagnosticModel,
+		PrintRequest:   true,
+		TextSmoke:      true,
+		ToolSmoke:      true,
+		ImageSmoke:     true,
+		WebSearchSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 4 {
+		t.Fatalf("RequestPreview = %#v, want text/tool/image/web requests", report.RequestPreview)
+	}
+
+	for _, request := range report.RequestPreview.Requests {
+		if got := geminiDiagnosticPreviewServiceTier(request.Body); got != config.GeminiServiceTierFlex {
+			t.Fatalf("%s service tier = %q, want flex in body %#v", request.Name, got, request.Body)
+		}
+	}
+}
+
 func TestDiagnoseGemini_PrintRequestSkipsToolPreviewForUnsupportedFunctionCallingModel(t *testing.T) {
 	t.Setenv(geminiAPIKeyEnv, "")
 	t.Setenv(geminiAPIURLEnv, "")
@@ -101,6 +133,21 @@ func TestDiagnoseGemini_PrintRequestSkipsToolPreviewForUnsupportedFunctionCallin
 	tool := report.RequestPreview.Requests[0]
 	if tool.Name != "tool" || !tool.ToolPayload || !tool.Skipped || tool.SkipReason == "" || tool.Body != nil {
 		t.Fatalf("tool preview = %#v, want skipped tool preview without body", tool)
+	}
+}
+
+func geminiDiagnosticPreviewServiceTier(body any) string {
+	switch body := body.(type) {
+	case GeminiRequest:
+		return body.ServiceTier
+	case GeminiRequestWithTools:
+		return body.ServiceTier
+	case GeminiMultimodalRequest:
+		return body.ServiceTier
+	case webSearchRequest:
+		return body.ServiceTier
+	default:
+		return ""
 	}
 }
 

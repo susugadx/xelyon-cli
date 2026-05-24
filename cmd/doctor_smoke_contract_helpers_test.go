@@ -28,11 +28,12 @@ type doctorJSONSmokeResult struct {
 }
 
 type doctorJSONSmokeUsage struct {
-	InputTokens         int `json:"input_tokens"`
-	OutputTokens        int `json:"output_tokens"`
-	ThinkingTokens      int `json:"thinking_tokens"`
-	CachedInputTokens   int `json:"cached_input_tokens"`
-	CacheCreationTokens int `json:"cache_creation_tokens"`
+	InputTokens         int    `json:"input_tokens"`
+	OutputTokens        int    `json:"output_tokens"`
+	ThinkingTokens      int    `json:"thinking_tokens"`
+	CachedInputTokens   int    `json:"cached_input_tokens"`
+	CacheCreationTokens int    `json:"cache_creation_tokens"`
+	BillingServiceTier  string `json:"billing_service_tier"`
 }
 
 type doctorJSONSmokeCost struct {

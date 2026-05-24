@@ -94,6 +94,7 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 				ThinkingTokens:      1,
 				CachedInputTokens:   3,
 				CacheCreationTokens: 0,
+				BillingServiceTier:  "standard",
 			},
 			Cost: geminiprovider.DiagnosticSmokeCost{
 				USD: 0.00012345,
@@ -110,7 +111,7 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 		"Request preview:",
 		`"x-goog-api-key": "<redacted>"`,
 		"Smoke route: stream_generate_content_sse",
-		"Smoke usage: input=10 cached=3 output=4 reasoning=1 cache_creation=0",
+		"Smoke usage: input=10 cached=3 output=4 reasoning=1 cache_creation=0 billing_tier=standard",
 		"Smoke cost estimate: $0.00012345 USD",
 	})
 }

@@ -371,10 +371,10 @@ func doctorSmokeJSONContractCases() []doctorSmokeJSONContractCase {
 						Route:         geminiprovider.DiagnosticRouteGenerateContent,
 						Duration:      "2ms",
 						UsageObserved: true,
-						Usage:         geminiprovider.DiagnosticSmokeUsage{InputTokens: 10, CachedInputTokens: 3, OutputTokens: 4, ThinkingTokens: 2, CacheCreationTokens: 1},
+						Usage:         geminiprovider.DiagnosticSmokeUsage{InputTokens: 10, CachedInputTokens: 3, OutputTokens: 4, ThinkingTokens: 2, CacheCreationTokens: 1, BillingServiceTier: "standard"},
 						Cost:          geminiprovider.DiagnosticSmokeCost{USD: 0.00012345},
 						Requests: []geminiprovider.DiagnosticSmokeRequestResult{
-							{Name: "web_search", Ran: true, WebSearchPayload: true, Route: geminiprovider.DiagnosticRouteGenerateContent, UsageObserved: true, Usage: geminiprovider.DiagnosticSmokeUsage{InputTokens: 10, CachedInputTokens: 3, OutputTokens: 4, ThinkingTokens: 2, CacheCreationTokens: 1}, Cost: geminiprovider.DiagnosticSmokeCost{USD: 0.00012345}},
+							{Name: "web_search", Ran: true, WebSearchPayload: true, Route: geminiprovider.DiagnosticRouteGenerateContent, UsageObserved: true, Usage: geminiprovider.DiagnosticSmokeUsage{InputTokens: 10, CachedInputTokens: 3, OutputTokens: 4, ThinkingTokens: 2, CacheCreationTokens: 1, BillingServiceTier: "standard"}, Cost: geminiprovider.DiagnosticSmokeCost{USD: 0.00012345}},
 						},
 					},
 				})
@@ -383,10 +383,10 @@ func doctorSmokeJSONContractCases() []doctorSmokeJSONContractCase {
 				route:         "generate_content",
 				duration:      "2ms",
 				usageObserved: true,
-				usage:         commonUsage,
+				usage:         doctorSmokeJSONUsageWithBillingTier(10, 3, 4, 2, 1, "standard"),
 				cost:          commonCost,
 				requests: []doctorSmokeJSONRequestContract{
-					{name: "web_search", ran: true, webSearchPayload: true, route: "generate_content", usageObserved: true, usage: commonUsage, cost: commonCost},
+					{name: "web_search", ran: true, webSearchPayload: true, route: "generate_content", usageObserved: true, usage: doctorSmokeJSONUsageWithBillingTier(10, 3, 4, 2, 1, "standard"), cost: commonCost},
 				},
 			},
 		},

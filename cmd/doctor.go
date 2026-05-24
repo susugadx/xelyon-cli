@@ -257,5 +257,6 @@ func azureDoctorSmokeUsage(usage azureprovider.DiagnosticSmokeUsage) doctorSmoke
 		OutputTokens:        usage.OutputTokens,
 		ThinkingTokens:      usage.ThinkingTokens,
 		CacheCreationTokens: usage.CacheCreationTokens,
+		BillingServiceTier:  usage.BillingServiceTier,
 	}
 }

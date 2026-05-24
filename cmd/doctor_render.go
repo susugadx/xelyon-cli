@@ -22,6 +22,7 @@ type doctorSmokeUsageLine struct {
 	OutputTokens        int
 	ThinkingTokens      int
 	CacheCreationTokens int
+	BillingServiceTier  string
 }
 
 func renderDoctorJSON(w io.Writer, report any) error {
@@ -71,7 +72,7 @@ func renderDoctorJSONBlock(w io.Writer, title string, payloadValue any) {
 }
 
 func formatDoctorSmokeUsage(usage doctorSmokeUsageLine) string {
-	return fmt.Sprintf(
+	text := fmt.Sprintf(
 		"input=%d cached=%d output=%d reasoning=%d cache_creation=%d",
 		usage.InputTokens,
 		usage.CachedInputTokens,
@@ -79,6 +80,10 @@ func formatDoctorSmokeUsage(usage doctorSmokeUsageLine) string {
 		usage.ThinkingTokens,
 		usage.CacheCreationTokens,
 	)
+	if tier := strings.TrimSpace(usage.BillingServiceTier); tier != "" {
+		text += fmt.Sprintf(" billing_tier=%s", tier)
+	}
+	return text
 }
 
 func doctorOptionalIDText(id string) string {

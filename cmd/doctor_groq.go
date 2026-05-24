@@ -161,5 +161,6 @@ func groqDoctorSmokeUsage(usage groqprovider.DiagnosticSmokeUsage) doctorSmokeUs
 		OutputTokens:        usage.OutputTokens,
 		ThinkingTokens:      usage.ThinkingTokens,
 		CacheCreationTokens: usage.CacheCreationTokens,
+		BillingServiceTier:  usage.BillingServiceTier,
 	}
 }

@@ -15,6 +15,12 @@ func doctorSmokeJSONUsage(input, cached, output, reasoning, cacheCreation int) *
 	}
 }
 
+func doctorSmokeJSONUsageWithBillingTier(input, cached, output, reasoning, cacheCreation int, billingTier string) *doctorJSONSmokeUsage {
+	usage := doctorSmokeJSONUsage(input, cached, output, reasoning, cacheCreation)
+	usage.BillingServiceTier = billingTier
+	return usage
+}
+
 func doctorSmokeJSONCost(usd float64, pricingUnavailable bool) *doctorJSONSmokeCost {
 	return &doctorJSONSmokeCost{USD: usd, PricingUnavailable: pricingUnavailable}
 }

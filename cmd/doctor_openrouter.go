@@ -165,5 +165,6 @@ func openRouterDoctorSmokeUsage(usage openrouterprovider.DiagnosticSmokeUsage) d
 		OutputTokens:        usage.OutputTokens,
 		ThinkingTokens:      usage.ThinkingTokens,
 		CacheCreationTokens: usage.CacheCreationTokens,
+		BillingServiceTier:  usage.BillingServiceTier,
 	}
 }
