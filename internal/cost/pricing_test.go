@@ -106,19 +106,22 @@ func TestGetClaudePricing_AllModels(t *testing.T) {
 
 func TestGetGeminiPricing_AllModels(t *testing.T) {
 	tests := []struct {
-		name       string
-		model      string
-		ptc        int
-		wantInput  float64
-		wantOutput float64
+		name        string
+		model       string
+		ptc         int
+		wantInput   float64
+		wantOutput  float64
+		wantStorage float64
 	}{
-		{name: "2.5-pro normal", model: "gemini-2.5-pro", ptc: 100000, wantInput: 1.25, wantOutput: 10.00},
-		{name: "2.5-pro long", model: "gemini-2.5-pro", ptc: 250000, wantInput: 2.50, wantOutput: 15.00},
-		{name: "2.5-flash", model: "gemini-2.5-flash", ptc: 0, wantInput: 0.30, wantOutput: 2.50},
-		{name: "3.5-flash", model: "gemini-3.5-flash", ptc: 0, wantInput: 1.50, wantOutput: 9.00},
-		{name: "3.x flash default", model: "gemini-3-flash", ptc: 0, wantInput: 0.50, wantOutput: 3.00},
-		{name: "3.1-pro normal", model: "gemini-3.1-pro", ptc: 100000, wantInput: 2.00, wantOutput: 12.00},
-		{name: "3.1-pro long", model: "gemini-3.1-pro", ptc: 250000, wantInput: 4.00, wantOutput: 18.00},
+		{name: "2.5-pro normal", model: "gemini-2.5-pro", ptc: 100000, wantInput: 1.25, wantOutput: 10.00, wantStorage: 4.50},
+		{name: "2.5-pro long", model: "gemini-2.5-pro", ptc: 250000, wantInput: 2.50, wantOutput: 15.00, wantStorage: 4.50},
+		{name: "2.5-flash", model: "gemini-2.5-flash", ptc: 0, wantInput: 0.30, wantOutput: 2.50, wantStorage: 1.00},
+		{name: "3.5-flash", model: "gemini-3.5-flash", ptc: 0, wantInput: 1.50, wantOutput: 9.00, wantStorage: 1.00},
+		{name: "3.1-flash-lite", model: "gemini-3.1-flash-lite", ptc: 0, wantInput: 0.25, wantOutput: 1.50, wantStorage: 1.00},
+		{name: "3.x flash default", model: "gemini-3-flash", ptc: 0, wantInput: 0.50, wantOutput: 3.00, wantStorage: 1.00},
+		{name: "3.1-pro normal", model: "gemini-3.1-pro", ptc: 100000, wantInput: 2.00, wantOutput: 12.00, wantStorage: 4.50},
+		{name: "3.1-pro long", model: "gemini-3.1-pro", ptc: 250000, wantInput: 4.00, wantOutput: 18.00, wantStorage: 4.50},
+		{name: "2.0-flash-lite no storage", model: "gemini-2.0-flash-lite", ptc: 0, wantInput: 0.075, wantOutput: 0.30, wantStorage: 0},
 	}
 
 	for _, tt := range tests {
@@ -129,6 +132,9 @@ func TestGetGeminiPricing_AllModels(t *testing.T) {
 			}
 			if pricing.OutputCostPerM != tt.wantOutput {
 				t.Errorf("OutputCostPerM = %f, want %f", pricing.OutputCostPerM, tt.wantOutput)
+			}
+			if pricing.CacheStorageCostPerMHour != tt.wantStorage {
+				t.Errorf("CacheStorageCostPerMHour = %f, want %f", pricing.CacheStorageCostPerMHour, tt.wantStorage)
 			}
 		})
 	}
@@ -880,6 +886,65 @@ func TestEstimateRequestCostWithCache_UnknownPricing(t *testing.T) {
 		InputTokens:  1000000,
 		OutputTokens: 1000000,
 	})
+	if !estimate.PricingUnavailable {
+		t.Fatalf("PricingUnavailable = false, want true: %#v", estimate)
+	}
+	if estimate.Cost != 0 {
+		t.Fatalf("Cost = %f, want 0 for unavailable pricing", estimate.Cost)
+	}
+}
+
+func TestEstimateCacheStorageCost_GeminiModelRates(t *testing.T) {
+	tests := []struct {
+		name       string
+		model      string
+		tokens     int
+		ttlSeconds int
+		want       float64
+	}{
+		{
+			name:       "flash lite standard",
+			model:      "gemini-3.1-flash-lite",
+			tokens:     1000000,
+			ttlSeconds: 3600,
+			want:       1.00,
+		},
+		{
+			name:       "pro long tier keeps standard storage rate",
+			model:      "gemini-3.1-pro-preview",
+			tokens:     250000,
+			ttlSeconds: 3600,
+			want:       1.125,
+		},
+		{
+			name:       "pro ttl scales by hour",
+			model:      "gemini-3.1-pro-preview",
+			tokens:     1000000,
+			ttlSeconds: 7200,
+			want:       9.00,
+		},
+		{
+			name:       "2.0 flash lite has no explicit cache storage pricing",
+			model:      "gemini-2.0-flash-lite",
+			tokens:     1000000,
+			ttlSeconds: 3600,
+			want:       0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			estimate := EstimateCacheStorageCost("gemini", tt.model, tt.tokens, tt.ttlSeconds)
+			if estimate.PricingUnavailable {
+				t.Fatalf("PricingUnavailable = true, want false")
+			}
+			assertCostApprox(t, estimate.Cost, tt.want)
+		})
+	}
+}
+
+func TestEstimateCacheStorageCost_UnknownPricing(t *testing.T) {
+	estimate := EstimateCacheStorageCost("gemini", "gemini-unknown", 1000000, 3600)
 	if !estimate.PricingUnavailable {
 		t.Fatalf("PricingUnavailable = false, want true: %#v", estimate)
 	}

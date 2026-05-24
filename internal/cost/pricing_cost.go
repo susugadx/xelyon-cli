@@ -84,3 +84,27 @@ func EstimateRequestCostWithCacheForConfig(cfg *config.Config, provider, model s
 
 	return CostEstimate{Cost: cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost + thinkingCost}
 }
+
+// EstimateCacheStorageCost は explicit context cache の保管コストを計算する。
+func EstimateCacheStorageCost(provider, model string, tokens, ttlSeconds int) CostEstimate {
+	return EstimateCacheStorageCostForConfig(nil, provider, model, tokens, ttlSeconds)
+}
+
+// EstimateCacheStorageCostForConfig は catalog_model 設定を考慮して explicit context cache の保管コストを計算する。
+func EstimateCacheStorageCostForConfig(cfg *config.Config, provider, model string, tokens, ttlSeconds int) CostEstimate {
+	if provider == "ollama" || tokens <= 0 || ttlSeconds <= 0 {
+		return CostEstimate{}
+	}
+
+	pricing := GetPricingInfoForConfig(cfg, provider, model, tokens)
+	if pricing.PricingUnavailable {
+		return CostEstimate{PricingUnavailable: true}
+	}
+	if pricing.CacheStorageCostPerMHour <= 0 {
+		return CostEstimate{}
+	}
+
+	ttlHours := float64(ttlSeconds) / 3600.0
+	cost := float64(tokens) / 1_000_000.0 * pricing.CacheStorageCostPerMHour * ttlHours
+	return CostEstimate{Cost: cost}
+}

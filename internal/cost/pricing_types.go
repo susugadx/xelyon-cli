@@ -1,12 +1,13 @@
 package cost
 
-// PricingInfo はプロバイダー別の料金情報（$/1M tokens）
+// PricingInfo はプロバイダー別の料金情報を表す。
 type PricingInfo struct {
-	InputCostPerM         float64 // 通常入力トークン
-	OutputCostPerM        float64 // 出力トークン
-	CachedInputCostPerM   float64 // キャッシュヒット入力（割引後）
-	CacheCreationCostPerM float64 // キャッシュ作成（Claude: 1.25x）
-	PricingUnavailable    bool    // 既知の料金表にないためUSD見積もり不可
+	InputCostPerM            float64 // 通常入力トークン（$/1M tokens）
+	OutputCostPerM           float64 // 出力トークン（$/1M tokens）
+	CachedInputCostPerM      float64 // キャッシュヒット入力（$/1M tokens）
+	CacheCreationCostPerM    float64 // キャッシュ作成（$/1M tokens）
+	CacheStorageCostPerMHour float64 // キャッシュ保管（$/1M tokens/hour）
+	PricingUnavailable       bool    // 既知の料金表にないためUSD見積もり不可
 }
 
 func pricingUnavailableInfo() PricingInfo {

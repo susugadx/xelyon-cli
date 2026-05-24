@@ -14,6 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -194,6 +195,91 @@ func TestUpdateOrUseCache(t *testing.T) {
 					t.Errorf("expected full history (%d), but got %d", len(tt.history), len(msgs))
 				}
 			}
+		})
+	}
+}
+
+func TestUpdateOrUseCache_ReportsModelSpecificStorageCost(t *testing.T) {
+	t.Setenv("GEMINI_CONTEXT_CACHING", "1")
+	t.Setenv("GEMINI_CACHE_TTL", "3600")
+
+	systemPrompt := "sys"
+	history := []api.Message{
+		{Role: "user", Content: cacheEligibleContent()},
+		{Role: "user", Content: "last"},
+	}
+	tests := []struct {
+		model           string
+		wantStorageRate float64
+		cfg             func() *config.Config
+	}{
+		{model: "gemini-3.1-flash-lite", wantStorageRate: 1.00},
+		{model: "gemini-3.1-pro-preview", wantStorageRate: 4.50},
+		{
+			model:           "corp-gemini-flash-lite",
+			wantStorageRate: 1.00,
+			cfg: func() *config.Config {
+				cfg := config.DefaultConfig()
+				cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+					DefaultModel: "corp-gemini-flash-lite",
+					CatalogModel: "gemini-3.1-flash-lite",
+				})
+				return cfg
+			},
+		},
+		{
+			model:           "corp-gemini-pro",
+			wantStorageRate: 4.50,
+			cfg: func() *config.Config {
+				cfg := config.DefaultConfig()
+				cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+					DefaultModel:   "corp-gemini-flash-lite",
+					CatalogModel:   "gemini-3.1-flash-lite",
+					ModelOverrides: map[string]config.ModelOverride{"corp-gemini-pro": {CatalogModel: "gemini-3.1-pro-preview"}},
+				})
+				return cfg
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			p := New("test-key")
+			p.httpClient = &http.Client{
+				Transport: &mockTransport{
+					roundTripFunc: func(req *http.Request) (*http.Response, error) {
+						if req.Method == "POST" && strings.Contains(req.URL.Path, "cachedContents") {
+							return &http.Response{
+								StatusCode: 201,
+								Body:       io.NopCloser(strings.NewReader(`{"name": "cachedContents/new", "createTime": "2024-01-01T00:00:00Z"}`)),
+							}, nil
+						}
+						return nil, fmt.Errorf("unexpected request: %s %s", req.Method, req.URL.Path)
+					},
+				},
+			}
+
+			var receivedStorageCost float64
+			p.SetUsageCallback(func(usage api.Usage) {
+				receivedStorageCost = usage.StorageCost
+			})
+
+			ctx := context.Background()
+			if tt.cfg != nil {
+				ctx = config.WithContext(ctx, tt.cfg())
+			}
+
+			cacheName, _, err := p.updateOrUseCache(ctx, systemPrompt, history, tt.model, nil, nil)
+			if err != nil {
+				t.Fatalf("updateOrUseCache() error = %v", err)
+			}
+			if cacheName == "" {
+				t.Fatal("cacheName = empty, want created cache")
+			}
+
+			totalTokens := estimateTokens(tt.model, systemPrompt, history, nil)
+			want := float64(totalTokens) / 1_000_000.0 * tt.wantStorageRate
+			assertFloatApprox(t, receivedStorageCost, want)
 		})
 	}
 }
@@ -508,6 +594,14 @@ func makeHistory(longContent string, count int) []api.Message {
 func cacheEligibleContent() string {
 	// 非 ASCII を使って 1 rune ~= 1 token の安全側推定を満たす。
 	return strings.Repeat("日", minCacheTokens+100)
+}
+
+func assertFloatApprox(t *testing.T, got, want float64) {
+	t.Helper()
+	const tolerance = 0.000001
+	if got < want-tolerance || got > want+tolerance {
+		t.Fatalf("got %f, want %f", got, want)
+	}
 }
 
 type mockTransport struct {
