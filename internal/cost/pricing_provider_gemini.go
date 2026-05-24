@@ -115,3 +115,8 @@ func geminiPricingFamilyForServiceTier(serviceTier string) string {
 		return geminiPricingFamilyStandard
 	}
 }
+
+// GeminiPricingFamilyForServiceTier は Gemini service tier に対応する pricing.yaml provider family を返す。
+func GeminiPricingFamilyForServiceTier(serviceTier string) string {
+	return geminiPricingFamilyForServiceTier(serviceTier)
+}

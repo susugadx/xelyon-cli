@@ -137,7 +137,7 @@ func buildGeminiWebSearchRequest(ctx context.Context, query, model string, cfg *
 		}},
 		Tools:            []webSearchTool{buildWebSearchTool(model)},
 		GenerationConfig: getThinkingConfigForModel(ctx, model, cfg),
-		ServiceTier:      geminiRequestServiceTier(cfg),
+		ServiceTier:      config.GeminiRequestServiceTier(cfg),
 	}
 }
 

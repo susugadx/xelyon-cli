@@ -52,3 +52,13 @@ func (c *Config) GeminiServiceTier() string {
 	}
 	return serviceTier
 }
+
+// GeminiRequestServiceTier は Gemini request body に明示する service_tier を返す。
+// standard は API 既定値として扱うため、request には出さない。
+func GeminiRequestServiceTier(c *Config) string {
+	serviceTier := c.GeminiServiceTier()
+	if serviceTier == GeminiServiceTierStandard {
+		return ""
+	}
+	return serviceTier
+}

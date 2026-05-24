@@ -6,20 +6,32 @@ func TestGeminiServiceTierDefaultsAndNormalization(t *testing.T) {
 	if got := (*Config)(nil).GeminiServiceTier(); got != GeminiServiceTierStandard {
 		t.Fatalf("nil config GeminiServiceTier() = %q, want standard", got)
 	}
+	if got := GeminiRequestServiceTier(nil); got != "" {
+		t.Fatalf("nil config GeminiRequestServiceTier() = %q, want omitted", got)
+	}
 
 	cfg := DefaultConfig()
 	if got := cfg.GeminiServiceTier(); got != GeminiServiceTierStandard {
 		t.Fatalf("default GeminiServiceTier() = %q, want standard", got)
+	}
+	if got := GeminiRequestServiceTier(cfg); got != "" {
+		t.Fatalf("default GeminiRequestServiceTier() = %q, want omitted", got)
 	}
 
 	cfg.Gemini.ServiceTier = " Priority "
 	if got := cfg.GeminiServiceTier(); got != GeminiServiceTierPriority {
 		t.Fatalf("normalized GeminiServiceTier() = %q, want priority", got)
 	}
+	if got := GeminiRequestServiceTier(cfg); got != GeminiServiceTierPriority {
+		t.Fatalf("priority GeminiRequestServiceTier() = %q, want priority", got)
+	}
 
 	cfg.Gemini.ServiceTier = "turbo"
 	if got := cfg.GeminiServiceTier(); got != GeminiServiceTierStandard {
 		t.Fatalf("invalid GeminiServiceTier() = %q, want standard", got)
+	}
+	if got := GeminiRequestServiceTier(cfg); got != "" {
+		t.Fatalf("invalid GeminiRequestServiceTier() = %q, want omitted", got)
 	}
 }
 

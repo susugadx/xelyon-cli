@@ -72,6 +72,25 @@ func TestGetPricingInfoForConfig_GeminiServiceTier(t *testing.T) {
 	}
 }
 
+func TestGeminiPricingFamilyForServiceTier(t *testing.T) {
+	tests := []struct {
+		tier string
+		want string
+	}{
+		{tier: "", want: geminiPricingFamilyStandard},
+		{tier: config.GeminiServiceTierStandard, want: geminiPricingFamilyStandard},
+		{tier: config.GeminiServiceTierFlex, want: geminiPricingFamilyFlex},
+		{tier: config.GeminiServiceTierPriority, want: geminiPricingFamilyPriority},
+		{tier: "turbo", want: geminiPricingFamilyStandard},
+	}
+
+	for _, tt := range tests {
+		if got := GeminiPricingFamilyForServiceTier(tt.tier); got != tt.want {
+			t.Fatalf("GeminiPricingFamilyForServiceTier(%q) = %q, want %q", tt.tier, got, tt.want)
+		}
+	}
+}
+
 func TestGetPricingInfoForConfig_GeminiServiceTierPreviewModels(t *testing.T) {
 	tests := []struct {
 		name       string

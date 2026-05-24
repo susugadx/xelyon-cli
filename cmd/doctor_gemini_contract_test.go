@@ -45,6 +45,9 @@ func TestRunGeminiDoctorInvocation_JSONContractPrintRequestAllShapes(t *testing.
 	if !report.FunctionCallingEnabled || !report.ImageInputSupported || !report.WebSearchSupported || !report.ContextCachingEnabled {
 		t.Fatalf("Gemini doctor capability booleans = fc:%t image:%t web:%t cache:%t", report.FunctionCallingEnabled, report.ImageInputSupported, report.WebSearchSupported, report.ContextCachingEnabled)
 	}
+	if report.ServiceTier.ConfiguredTier != "standard" || report.ServiceTier.RequestBodyTier != "omitted" || report.ServiceTier.PricingFamily != "gemini" {
+		t.Fatalf("Gemini service tier = %+v, want standard omitted request body with standard pricing family", report.ServiceTier)
+	}
 	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
 	requireNoDoctorJSONChecks(t, report.Checks, "auth")
 	for _, check := range []string{
@@ -53,6 +56,7 @@ func TestRunGeminiDoctorInvocation_JSONContractPrintRequestAllShapes(t *testing.
 		"model",
 		"catalog_model",
 		"route",
+		"service_tier",
 		"catalog_policy",
 		"function_calling",
 		"image_input",

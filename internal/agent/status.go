@@ -159,7 +159,8 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 
 	status := agent.statusRef().getStatus()
 	currentTokens := agent.EstimateTokens()
-	limit := agent.currentModelTokenLimit(agent.cfg())
+	cfg := agent.cfg()
+	limit := agent.currentModelTokenLimit(cfg)
 	contextText := formatNumber(currentTokens)
 	if limit > 0 {
 		contextText = fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), float64(currentTokens)/float64(limit)*100)
@@ -172,14 +173,16 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 		AddRow("Next", statusNextForSurface(status, commandSurface)).
 		AddRow("Mode", modeText).
 		AddRow("Provider", agent.ProviderName).
-		AddRow("Model", agent.CurrentModel).
-		AddRow("Context", contextText)
+		AddRow("Model", agent.CurrentModel)
+	if detail := geminiServiceTierStatusDetail(cfg, agent.activeModelProviderConfigKey(cfg), nil); detail != "" {
+		statusTable.AddRow("Service Tier", detail)
+	}
+	statusTable.AddRow("Context", contextText)
 	_, _ = fmt.Fprint(out, statusTable.RenderCompact())
 
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "🧾 Last Turn")
 	if agent.Stats != nil {
-		cfg := agent.cfg()
 		usage, costOverride := lastRequestUsageForStatus(agent.Stats)
 		if table := buildLastRequestTable(cfg, agent.activeModelProviderConfigKey(cfg), agent.CurrentModel, usage, costOverride); table != nil {
 			_, _ = fmt.Fprint(out, table.RenderCompact())

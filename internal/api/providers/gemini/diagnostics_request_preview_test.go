@@ -111,6 +111,12 @@ func TestDiagnoseGemini_PrintRequestIncludesConfiguredServiceTier(t *testing.T) 
 			t.Fatalf("%s service tier = %q, want flex in body %#v", request.Name, got, request.Body)
 		}
 	}
+	if report.ServiceTier.ConfiguredTier != config.GeminiServiceTierFlex ||
+		report.ServiceTier.RequestBodyTier != config.GeminiServiceTierFlex ||
+		report.ServiceTier.PricingFamily != "gemini_flex" {
+		t.Fatalf("ServiceTier = %+v, want flex request and flex pricing family", report.ServiceTier)
+	}
+	requireGeminiServiceTierCheckDetail(t, report, "request_body=flex", "pricing_family=gemini_flex")
 }
 
 func TestDiagnoseGemini_PrintRequestSkipsToolPreviewForUnsupportedFunctionCallingModel(t *testing.T) {

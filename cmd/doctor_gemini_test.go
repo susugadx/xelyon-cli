@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	geminiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/gemini"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func TestRootCommand_GeminiDoctorCommandParsesFlags(t *testing.T) {
@@ -69,6 +70,13 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 		WebSearchSupported:     true,
 		ContextCachingEnabled:  true,
 		ThinkingEnabled:        false,
+		ServiceTier: providerdiag.GeminiServiceTierSnapshot{
+			ConfiguredTier:       "priority",
+			RequestBodyTier:      "priority",
+			PricingFamily:        "gemini_priority",
+			BillingTier:          "standard",
+			BillingPricingFamily: "gemini",
+		},
 		Checks: []geminiprovider.DiagnosticCheck{
 			{Name: "smoke", Status: geminiprovider.DiagnosticStatusOK, Message: "live Gemini smoke request succeeded"},
 		},
@@ -108,6 +116,7 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 		"Gemini doctor",
 		"Route: stream_generate_content_sse",
 		"Capabilities: function_calling=true image_input=true web_search=true context_caching=true thinking=false",
+		"Service tier: configured=priority, request_body=priority, pricing_family=gemini_priority, billing=standard, billing_pricing_family=gemini",
 		"Request preview:",
 		`"x-goog-api-key": "<redacted>"`,
 		"Smoke route: stream_generate_content_sse",

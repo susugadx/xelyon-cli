@@ -59,24 +59,25 @@ type DiagnosticRequestPreviewRequest = providerdiag.MultimodalRequestPreviewRequ
 
 // DiagnosticReport は Gemini の設定診断結果を表す。
 type DiagnosticReport struct {
-	Provider               string                    `json:"provider"`
-	APIURL                 string                    `json:"api_url"`
-	Model                  string                    `json:"model"`
-	ModelSource            string                    `json:"model_source"`
-	CatalogModel           string                    `json:"catalog_model"`
-	CatalogModelSource     string                    `json:"catalog_model_source"`
-	Route                  string                    `json:"route"`
-	RouteReason            string                    `json:"route_reason,omitempty"`
-	MaxOutputTokens        int                       `json:"max_output_tokens"`
-	ContextWindowTokens    int                       `json:"context_window_tokens,omitempty"`
-	FunctionCallingEnabled bool                      `json:"function_calling_enabled"`
-	ImageInputSupported    bool                      `json:"image_input_supported"`
-	WebSearchSupported     bool                      `json:"web_search_supported"`
-	ContextCachingEnabled  bool                      `json:"context_caching_enabled"`
-	ThinkingEnabled        bool                      `json:"thinking_enabled"`
-	Checks                 []DiagnosticCheck         `json:"checks"`
-	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
-	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
+	Provider               string                                 `json:"provider"`
+	APIURL                 string                                 `json:"api_url"`
+	Model                  string                                 `json:"model"`
+	ModelSource            string                                 `json:"model_source"`
+	CatalogModel           string                                 `json:"catalog_model"`
+	CatalogModelSource     string                                 `json:"catalog_model_source"`
+	Route                  string                                 `json:"route"`
+	RouteReason            string                                 `json:"route_reason,omitempty"`
+	MaxOutputTokens        int                                    `json:"max_output_tokens"`
+	ContextWindowTokens    int                                    `json:"context_window_tokens,omitempty"`
+	FunctionCallingEnabled bool                                   `json:"function_calling_enabled"`
+	ImageInputSupported    bool                                   `json:"image_input_supported"`
+	WebSearchSupported     bool                                   `json:"web_search_supported"`
+	ContextCachingEnabled  bool                                   `json:"context_caching_enabled"`
+	ThinkingEnabled        bool                                   `json:"thinking_enabled"`
+	ServiceTier            providerdiag.GeminiServiceTierSnapshot `json:"service_tier"`
+	Checks                 []DiagnosticCheck                      `json:"checks"`
+	RequestPreview         *DiagnosticRequestPreview              `json:"request_preview,omitempty"`
+	Smoke                  *DiagnosticSmokeResult                 `json:"smoke,omitempty"`
 }
 
 // HasFailures は診断に fail 項目が含まれるか返す。
@@ -152,6 +153,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		WebSearchSupported:     true,
 		ContextCachingEnabled:  os.Getenv("GEMINI_CONTEXT_CACHING") != "0",
 		ThinkingEnabled:        api.IsThinkingEnabled(configCtx),
+		ServiceTier:            providerdiag.NewGeminiServiceTierSnapshot(policyCfg, nil),
 	}
 
 	if options.requiresAuthCheck() {
@@ -163,6 +165,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addCatalogModelCheck()
 	report.addModelLifecycleCheck()
 	report.addRouteCheck()
+	report.addServiceTierCheck(policyCfg)
 	report.addCatalogPolicyCheck(policyCfg)
 	report.addFunctionCallingCheck()
 	report.addImageInputCheck()
@@ -174,6 +177,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	}
 	if options.RunSmoke && !options.PrintRequest {
 		report.runSmokeIfReady(ctx, policyCfg, options)
+		report.addServiceTierCheck(policyCfg)
 	}
 
 	return report

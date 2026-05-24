@@ -29,6 +29,23 @@ func (r *DiagnosticReport) addCheck(status DiagnosticStatus, name, message, deta
 	})
 }
 
+func (r *DiagnosticReport) setCheck(status DiagnosticStatus, name, message, detail, suggestion string) {
+	check := DiagnosticCheck{
+		Name:       name,
+		Status:     status,
+		Message:    message,
+		Detail:     detail,
+		Suggestion: suggestion,
+	}
+	for i := range r.Checks {
+		if r.Checks[i].Name == name {
+			r.Checks[i] = check
+			return
+		}
+	}
+	r.Checks = append(r.Checks, check)
+}
+
 func (r *DiagnosticReport) addAuthCheck() {
 	if strings.TrimSpace(os.Getenv(geminiAPIKeyEnv)) == "" {
 		r.addCheck(
@@ -268,6 +285,19 @@ func (r DiagnosticReport) routeCheckDetail() string {
 		return r.Route
 	}
 	return fmt.Sprintf("%s; %s", r.Route, r.RouteReason)
+}
+
+func (r *DiagnosticReport) addServiceTierCheck(cfg *config.Config) {
+	var usage *api.Usage
+	if r.Smoke != nil && strings.TrimSpace(r.Smoke.Usage.BillingServiceTier) != "" {
+		usage = &api.Usage{BillingServiceTier: r.Smoke.Usage.BillingServiceTier}
+	}
+	r.ServiceTier = providerdiag.NewGeminiServiceTierSnapshot(cfg, usage)
+	message := "Gemini service tier request and pricing policy are resolved"
+	if strings.TrimSpace(r.ServiceTier.BillingTier) != "" {
+		message = "Gemini service tier request, billing, and pricing policy are resolved"
+	}
+	r.setCheck(DiagnosticStatusOK, "service_tier", message, r.ServiceTier.Detail(), "")
 }
 
 func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {

@@ -98,6 +98,20 @@ func TestDiagnoseGemini_TextSmokeReportsActualBillingServiceTier(t *testing.T) {
 	if len(report.Smoke.Requests) != 1 || report.Smoke.Requests[0].Usage.BillingServiceTier != config.GeminiServiceTierStandard {
 		t.Fatalf("Smoke requests = %#v, want request-level standard billing tier", report.Smoke.Requests)
 	}
+	if report.ServiceTier.ConfiguredTier != config.GeminiServiceTierPriority ||
+		report.ServiceTier.RequestBodyTier != config.GeminiServiceTierPriority ||
+		report.ServiceTier.PricingFamily != "gemini_priority" ||
+		report.ServiceTier.BillingTier != config.GeminiServiceTierStandard ||
+		report.ServiceTier.BillingPricingFamily != "gemini" {
+		t.Fatalf("ServiceTier = %+v, want priority request with observed standard billing", report.ServiceTier)
+	}
+	requireGeminiServiceTierCheckDetail(t, report,
+		"configured=priority",
+		"request_body=priority",
+		"pricing_family=gemini_priority",
+		"billing=standard",
+		"billing_pricing_family=gemini",
+	)
 	usageCheck := requireGeminiDiagnosticCheckStatus(t, report, "usage", DiagnosticStatusOK)
 	if !strings.Contains(usageCheck.Detail, "billing_tier=standard") {
 		t.Fatalf("usage detail = %q, want billing_tier=standard", usageCheck.Detail)

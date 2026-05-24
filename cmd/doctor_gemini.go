@@ -104,6 +104,9 @@ func renderGeminiDoctorText(w io.Writer, report geminiprovider.DiagnosticReport)
 		report.ContextCachingEnabled,
 		report.ThinkingEnabled,
 	)
+	if strings.TrimSpace(report.ServiceTier.ConfiguredTier) != "" {
+		fmt.Fprintf(w, "Service tier: %s\n", report.ServiceTier.Detail())
+	}
 	fmt.Fprintf(w, "API URL: %s\n", report.APIURL)
 	fmt.Fprintln(w)
 
