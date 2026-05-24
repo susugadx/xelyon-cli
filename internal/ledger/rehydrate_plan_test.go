@@ -53,6 +53,38 @@ func TestRehydratePlan_SkipsTargetWithNonStaleRecentEvidence(t *testing.T) {
 	}
 }
 
+func TestRehydratePlan_PlansExactOldPointerDespiteNonStaleLedgerEvidence(t *testing.T) {
+	root := t.TempDir()
+	state := RuntimeTaskState{
+		Evidence: Evidence{items: []evidenceFact{{
+			path:       "src/main.go",
+			startLine:  10,
+			endLine:    20,
+			source:     "read_file",
+			toolCallID: "call_old_read",
+			excerpt:    "old omitted evidence still in ledger",
+		}}},
+	}
+	plan := BuildRehydratePlan(state, rehydratePlanTestWorkspace(root), RehydratePlanOptions{
+		TargetPaths: []string{"src/main.go"},
+		OldEvidencePointers: []EvidencePointer{
+			oldRehydratePlanPointer("src/main.go", 10, 20, "read_file", "call_old_read"),
+		},
+	})
+
+	want := RehydratePlan{Items: []RehydratePlanItem{{
+		Path:       "src/main.go",
+		StartLine:  10,
+		EndLine:    20,
+		Source:     "read_file",
+		Reason:     RehydratePlanReasonEditTargetMissingEvidence,
+		ToolCallID: "call_old_read",
+	}}}
+	if !reflect.DeepEqual(plan, want) {
+		t.Fatalf("BuildRehydratePlan() = %#v, want exact old pointer to stay eligible %#v", plan, want)
+	}
+}
+
 func TestRehydratePlan_FiltersInvalidTargetsPointersAndSources(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()

@@ -141,6 +141,22 @@ func TestLedgerCommand_PopulatedLedgerRendersSnapshot(t *testing.T) {
 	assertLedgerOutputOmits(t, output, "RuntimeTaskState struct {\nChangedFiles")
 }
 
+func TestLedgerCommand_RendersProviderHistoryRehydrateCandidates(t *testing.T) {
+	store := newLedgerCommandStore(t)
+	agent, out := newLedgerCommandTestAgent(store)
+	agent.Runtime.LastProviderHistoryProjectionReport = recordProviderHistoryRehydratePlanFixture(store, "internal/agent/provider_history.go", 7, 18)
+
+	if !handleSpecialCommandForSurface("/ledger", agent, commandcatalog.CommandSurfaceClassic) {
+		t.Fatal("/ledger was not handled")
+	}
+
+	assertLedgerOutputContains(t, out.String(),
+		"Rehydrate candidates:",
+		"internal/agent/provider_history.go:L7-L18",
+		"source: read_file | reason: edit_target_missing_recent_evidence | stale: false",
+	)
+}
+
 func populateLedgerCommandStore(store *ledger.Store) {
 	recorder := store.Recorder()
 	recorder.RecordChangedFile("src/main.go")
@@ -207,6 +223,7 @@ func TestLedgerCommand_DoesNotMutateConversationState(t *testing.T) {
 			store := newLedgerCommandStore(t)
 			store.Recorder().RecordChangedFile("src/main.go")
 			agent, _ := newLedgerCommandTestAgent(store)
+			agent.Runtime.LastProviderHistoryProjectionReport = recordProviderHistoryRehydratePlanFixture(store, "src/main.go", 1, 2)
 			agent.History = []api.Message{{Role: "user", Content: "hello"}}
 			agent.session.Messages = []history.MessageEntry{{Role: "assistant", Content: "persisted"}}
 			beforeHistory := append([]api.Message(nil), agent.History...)

@@ -134,7 +134,11 @@ The provider history reduction synthetic harness exercises `off`, `dry_run`, and
 
 Apply-mode projection reports keep matched evidence pointers only on read/search/gather candidates whose provider-facing placeholder was actually applied. Command output replacements do not attach evidence pointers.
 
-Automatic rehydrate execution and provider-input injection are a later phase. The current planner only returns bounded path/range items for tests and future integration.
+The runtime can pass those applied read/search/gather `EvidencePointers` into `ledger.BuildRehydratePlan` as old evidence. `/ledger` shows non-empty rehydrate candidates after the normal task-ledger snapshot so the dry-run can be inspected during dogfood.
+
+Command output replacement is backed by successful command summaries, not evidence pointers, so command/edit replacements are not rehydrate candidates.
+
+Automatic rehydrate execution, provider-input injection, and history appends are a later phase. The current planner only returns bounded path/range items for tests, diagnostics, and future integration.
 
 ## Responses Continuation
 

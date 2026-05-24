@@ -53,6 +53,14 @@ type rehydratePlanItemKey struct {
 	endLine   int
 }
 
+type rehydratePlanEvidencePointerKey struct {
+	path       string
+	startLine  int
+	endLine    int
+	source     string
+	toolCallID string
+}
+
 // BuildRehydratePlan は provider history で省略された古い evidence の再読込計画を作る。
 // この関数は dry-run 専用で、ファイル読込、provider input 注入、history 追記は行わない。
 func BuildRehydratePlan(state RuntimeTaskState, workspace EvidenceRehydrateOptions, opts RehydratePlanOptions) RehydratePlan {
@@ -67,12 +75,13 @@ func BuildRehydratePlan(state RuntimeTaskState, workspace EvidenceRehydrateOptio
 		return RehydratePlan{}
 	}
 
+	oldEvidenceKeys := buildRehydratePlanOldEvidenceKeySet(rehydrateWorkspace, normalized.OldEvidencePointers)
 	var plan RehydratePlan
 	seen := make(map[rehydratePlanItemKey]struct{})
 	totalLines := 0
 	for _, targetPath := range targets.order {
 		target := targets.targets[targetPath]
-		if !target.staleWarning && hasNonStaleRecentEvidenceForPath(state, targetPath) {
+		if !target.staleWarning && hasNonStaleEvidenceOutsideOldPointers(state, targetPath, rehydrateWorkspace, oldEvidenceKeys) {
 			continue
 		}
 		for _, pointer := range normalized.OldEvidencePointers {
@@ -206,13 +215,52 @@ func editReadinessObservationHasStaleEvidenceWarning(observation EditReadinessOb
 	return false
 }
 
-func hasNonStaleRecentEvidenceForPath(state RuntimeTaskState, path string) bool {
+func hasNonStaleEvidenceOutsideOldPointers(state RuntimeTaskState, path string, workspace evidenceRehydrateWorkspace, oldEvidenceKeys map[rehydratePlanEvidencePointerKey]struct{}) bool {
 	for _, pointer := range state.EvidencePointersForPath(path) {
-		if !pointer.Stale {
-			return true
+		if pointer.Stale {
+			continue
 		}
+		key, ok := rehydratePlanEvidencePointerKeyForPointer(pointer, workspace)
+		if ok {
+			if _, exists := oldEvidenceKeys[key]; exists {
+				continue
+			}
+		}
+		return true
 	}
 	return false
+}
+
+func buildRehydratePlanOldEvidenceKeySet(workspace evidenceRehydrateWorkspace, pointers []EvidencePointer) map[rehydratePlanEvidencePointerKey]struct{} {
+	if len(pointers) == 0 {
+		return nil
+	}
+	keys := make(map[rehydratePlanEvidencePointerKey]struct{})
+	for _, pointer := range pointers {
+		if !isRehydratePlanSupportedEvidenceSource(pointer.Source) || !validRehydratePlanPointerRange(pointer) {
+			continue
+		}
+		key, ok := rehydratePlanEvidencePointerKeyForPointer(pointer, workspace)
+		if !ok {
+			continue
+		}
+		keys[key] = struct{}{}
+	}
+	return keys
+}
+
+func rehydratePlanEvidencePointerKeyForPointer(pointer EvidencePointer, workspace evidenceRehydrateWorkspace) (rehydratePlanEvidencePointerKey, bool) {
+	resolved, _, err := resolveEvidencePointerPath(pointer, workspace)
+	if err != nil {
+		return rehydratePlanEvidencePointerKey{}, false
+	}
+	return rehydratePlanEvidencePointerKey{
+		path:       resolved.relativePath,
+		startLine:  pointer.StartLine,
+		endLine:    pointer.EndLine,
+		source:     pointer.Source,
+		toolCallID: pointer.ToolCallID,
+	}, true
 }
 
 func rehydratePlanItemForPointer(pointer EvidencePointer, targetPath string, target rehydratePlanTarget, workspace evidenceRehydrateWorkspace, opts RehydratePlanOptions, remainingLines int) (RehydratePlanItem, bool) {

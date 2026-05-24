@@ -203,6 +203,17 @@ func TestHandleStatusCommandShowsProviderHistoryReductionAutoAndEffectiveReport(
 	}
 }
 
+func TestHandleStatusCommandOmitsProviderHistoryRehydrateCandidates(t *testing.T) {
+	var out bytes.Buffer
+	agent := newProviderHistoryStatusTestAgent(t, &out)
+	installProviderHistoryRehydratePlanFixture(t, agent, "src/main.go", 1, 2)
+
+	output := renderProviderHistoryStatusCommand(t, agent, &out)
+	if strings.Contains(output, "Rehydrate candidates") {
+		t.Fatalf("status output should not contain rehydrate diagnostics:\n%s", output)
+	}
+}
+
 func TestHandleStatusCommandDoesNotMutateHistoryOrSessionForProviderHistoryReductionDiagnostics(t *testing.T) {
 	var out bytes.Buffer
 	agent := newProviderHistoryStatusTestAgent(t, &out)
@@ -231,14 +242,14 @@ func TestHandleTokensCommandOmitsProviderHistoryReductionDiagnostics(t *testing.
 	var out bytes.Buffer
 	agent := newProviderHistoryStatusTestAgent(t, &out)
 	agent.Runtime.Options.EnableProviderHistoryReduction = true
-	agent.Runtime.LastProviderHistoryProjectionReport = providerHistoryStatusTestReport()
+	installProviderHistoryRehydratePlanFixture(t, agent, "src/main.go", 1, 2)
 
 	if !handleTokensCommand(agent) {
 		t.Fatal("handleTokensCommand() = false, want true")
 	}
 
 	output := out.String()
-	for _, reject := range []string{"Provider history reduction", "command/edit", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled", "command_candidates", "command_replaced", "edit_arg_candidates", "command_replacement_saved", "approx_command_saved_tokens", "approx_command_replacement_saved_tokens", "approx_edit_arg_saved_tokens", "replacement=not_implemented", "replacement=partial_apply"} {
+	for _, reject := range []string{"Provider history reduction", "Rehydrate candidates", "command/edit", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled", "command_candidates", "command_replaced", "edit_arg_candidates", "command_replacement_saved", "approx_command_saved_tokens", "approx_command_replacement_saved_tokens", "approx_edit_arg_saved_tokens", "replacement=not_implemented", "replacement=partial_apply"} {
 		if strings.Contains(output, reject) {
 			t.Fatalf("/tokens output should not contain %q:\n%s", reject, output)
 		}
