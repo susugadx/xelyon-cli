@@ -67,6 +67,35 @@ func TestMaybeAutoCompress_UsesProviderFacingHistoryReductionBudget(t *testing.T
 	}
 }
 
+func TestMaybeAutoCompress_CountsProviderHistoryRehydratedEvidenceBudget(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
+	cfg := config.DefaultConfig()
+	cfg.Compression.Enabled = true
+	cfg.Compression.TriggerPercent = 99
+	cfg.Compression.KeepRecent = 1
+	cfg.Compression.PreferCompactAPI = false
+
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent.CurrentProvider = provider
+	agent.Stats = NewSessionStats("openai", agent.CurrentModel)
+
+	baseTokens := agent.EstimateSystemPromptTokens() + agent.EstimateHistoryTokens()
+	withActiveContext := agent.EstimateTokens()
+	if withActiveContext <= baseTokens {
+		t.Fatalf("EstimateTokens() = %d, want above base provider-facing tokens %d due to rehydrated evidence", withActiveContext, baseTokens)
+	}
+
+	cfg.Compression.TokenThreshold = baseTokens + 1
+	agent.Runtime.SetConfig(cfg)
+
+	if !agent.maybeAutoCompress() {
+		t.Fatal("maybeAutoCompress() = false, want true when rehydrated evidence crosses token threshold")
+	}
+	if provider.chatCalls != 1 {
+		t.Fatalf("ChatWithTools call count = %d, want 1 compression summary call", provider.chatCalls)
+	}
+}
+
 func TestCustomTokenThreshold_BelowThresholdContinuesToStandardThreshold(t *testing.T) {
 	provider := &compressionTestProvider{name: "openai", summary: "compressed summary"}
 	cfg := config.DefaultConfig()

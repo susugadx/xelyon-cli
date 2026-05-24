@@ -31,6 +31,7 @@ func (a *Agent) providerFacingHistoryForRequestFromRaw(ctx context.Context, raw 
 		ctx = api.WithResponseIDChainDisabled(ctx)
 		a.clearResponseContextForProviderHistoryReductionRequest()
 	}
+	ctx = appendProviderHistoryRehydratedEvidenceActiveContext(ctx, a.providerHistoryRehydratedEvidenceActiveContextBlocks(ctx, result.Report))
 	return ctx, result.History
 }
 

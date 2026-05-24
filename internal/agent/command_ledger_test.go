@@ -2,6 +2,8 @@ package agent
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -142,19 +144,30 @@ func TestLedgerCommand_PopulatedLedgerRendersSnapshot(t *testing.T) {
 }
 
 func TestLedgerCommand_RendersProviderHistoryRehydrateCandidates(t *testing.T) {
-	store := newLedgerCommandStore(t)
+	root := t.TempDir()
+	path := "internal/agent/provider_history.go"
+	fullPath := filepath.Join(root, filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatalf("mkdir rehydrate candidate parent: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte("ACTUAL_REHYDRATED_CONTENT\n"), 0o644); err != nil {
+		t.Fatalf("write rehydrate candidate file: %v", err)
+	}
+	store := ledger.NewStoreWithRoot(root)
 	agent, out := newLedgerCommandTestAgent(store)
-	agent.Runtime.LastProviderHistoryProjectionReport = recordProviderHistoryRehydratePlanFixture(store, "internal/agent/provider_history.go", 7, 18)
+	agent.Runtime.LastProviderHistoryProjectionReport = recordProviderHistoryRehydratePlanFixture(store, path, 7, 18)
 
 	if !handleSpecialCommandForSurface("/ledger", agent, commandcatalog.CommandSurfaceClassic) {
 		t.Fatal("/ledger was not handled")
 	}
 
-	assertLedgerOutputContains(t, out.String(),
+	output := out.String()
+	assertLedgerOutputContains(t, output,
 		"Rehydrate candidates:",
 		"internal/agent/provider_history.go:L7-L18",
 		"source: read_file | reason: edit_target_missing_recent_evidence | stale: false",
 	)
+	assertLedgerOutputOmits(t, output, "ACTUAL_REHYDRATED_CONTENT")
 }
 
 func populateLedgerCommandStore(store *ledger.Store) {

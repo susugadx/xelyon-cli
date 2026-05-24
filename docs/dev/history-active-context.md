@@ -26,8 +26,9 @@ This document is descriptive. It does not change retention, compression, provide
   - `ActiveContextBlocks`, selected by `activeContextInputPolicy`.
 - `activeContextInputPolicy` keeps the current behavior:
   - default is off.
-  - enabled only when `RuntimeOptions.EnableCurrentTaskStateContext` is true.
-  - sent to Azure Responses and OpenAI Responses models.
+  - the current task state block is built only when `RuntimeOptions.EnableCurrentTaskStateContext` is true.
+  - provider-history rehydrated evidence is built only when `RuntimeOptions.EnableProviderHistoryRehydrateContext` is true.
+  - sent to Azure Responses and OpenAI Responses models when a block exists.
   - not sent to OpenAI Chat Completions, Gemini, Claude, DeepSeek, or other non-consuming providers.
 - Active context is only injected into provider request context. It is not appended to `Agent.History` or `Session.Messages`.
 - `requestContextWithoutActiveContext` remains the boundary for internal model calls that must not receive active context.
@@ -130,15 +131,25 @@ Raw storage is unchanged in all modes: runtime `Agent.History`, `Session.Message
 
 The provider history reduction synthetic harness exercises `off`, `dry_run`, and `apply` against fixed read/search/gather, command, edit, latest-tool, trailing-tool, and invalid-linkage fixtures. This lets safety and savings regressions be checked before live dogfood depends on a real provider transcript.
 
-`internal/ledger` owns the rehydrate planner dry-run. It plans which omitted old read/search/gather evidence ranges should be refreshed from current files, but it does not read files, inject provider input, append `Agent.History`, append `Session.Messages`, or change persisted JSONL. The intended design is that runtime state refreshes needed evidence instead of asking the model to rediscover raw history by itself.
+`internal/ledger` owns the rehydrate planner dry-run. It plans which omitted old read/search/gather evidence ranges should be refreshed from current files, but the planner itself does not read files, inject provider input, append `Agent.History`, append `Session.Messages`, or change persisted JSONL.
+
+`internal/ledger` also owns the separate `ExecuteRehydratePlan` execution seam. Execution is not part of the dry-run planner contract: it reuses the existing evidence-pointer path safety policy, rejects unsafe plan paths before reading files, reads only current repo-root-relative file ranges, and returns a `RehydratedEvidenceBlock` plus diagnostic failures. Failed items are omitted from model input. The executor budget is bounded by item count, total lines, and rendered block bytes; if the next item would exceed the budget, it is omitted instead of partially rendered.
+
+The intended design is that runtime state refreshes needed evidence from current files instead of asking the model to rediscover raw history by itself.
 
 Apply-mode projection reports keep matched evidence pointers only on read/search/gather candidates whose provider-facing placeholder was actually applied. Command output replacements do not attach evidence pointers.
 
-The runtime can pass those applied read/search/gather `EvidencePointers` into `ledger.BuildRehydratePlan` as old evidence. `/ledger` shows non-empty rehydrate candidates after the normal task-ledger snapshot so the dry-run can be inspected during dogfood.
+The runtime can pass those applied read/search/gather `EvidencePointers` into `ledger.BuildRehydratePlan` as old evidence. `/ledger` shows non-empty rehydrate candidates after the normal task-ledger snapshot so the dry-run can be inspected during dogfood. `/ledger` remains a candidate diagnostic and does not show rehydrated file content.
 
 Command output replacement is backed by successful command summaries, not evidence pointers, so command/edit replacements are not rehydrate candidates.
 
-Automatic rehydrate execution, provider-input injection, and history appends are a later phase. The current planner only returns bounded path/range items for tests, diagnostics, and future integration.
+Provider-input injection is available only behind the internal runtime gate `RuntimeOptions.EnableProviderHistoryRehydrateContext`, which defaults to false and is not connected to config, environment variables, CLI flags, `/config`, generated config metadata, README, or `docs/config.md`.
+
+When the gate is true, provider-facing request assembly uses the projection report from the same request, builds a rehydrate plan from applied read/search/gather replacements, executes it against current files, renders `<rehydrated_evidence>`, and appends it as a dynamic active context block named `provider_history_rehydrated_evidence`. This happens only for provider request paths that already use `providerFacingHistoryForRequest` and only for providers that consume active context: OpenAI Responses and Azure Responses. OpenAI Chat Completions, Gemini, Claude, DeepSeek, compression, Compact API, Gemini apply-patch repair, review model calls, and other isolated internal model calls do not receive this block.
+
+The same request-local rehydrated block is included in provider-facing token estimates, `/tokens`, token warnings, and local auto-compress decisions. Token estimation does not update `AgentRuntime.LastProviderHistoryProjectionReport`.
+
+The rehydrated block is request-local model input only. It is not appended to `Agent.History`, `history.Session.Messages`, tool execution audit entries, audit logs, change records, compacted state, `/ledger` actual-content output, or persisted session JSONL.
 
 ## Responses Continuation
 

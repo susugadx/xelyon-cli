@@ -23,6 +23,7 @@ type RehydratePlanItem struct {
 	Source     string
 	Reason     string
 	ToolCallID string
+	FileHash   string
 	Stale      bool
 }
 
@@ -293,6 +294,7 @@ func rehydratePlanItemForPointer(pointer EvidencePointer, targetPath string, tar
 		Source:     pointer.Source,
 		Reason:     rehydratePlanReason(pointer, target),
 		ToolCallID: pointer.ToolCallID,
+		FileHash:   pointer.FileHash,
 		Stale:      stale,
 	}, true
 }

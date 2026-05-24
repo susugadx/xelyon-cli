@@ -43,10 +43,17 @@ func providerHistoryEvidencePointerKeyForPointer(pointer ledger.EvidencePointer)
 }
 
 func (a *Agent) buildProviderHistoryRehydratePlan(targetPaths []string) ledger.RehydratePlan {
+	if a == nil || a.Runtime == nil {
+		return ledger.RehydratePlan{}
+	}
+	return a.buildProviderHistoryRehydratePlanFromReport(a.Runtime.LastProviderHistoryProjectionReport, targetPaths)
+}
+
+func (a *Agent) buildProviderHistoryRehydratePlanFromReport(report ProviderHistoryProjectionReport, targetPaths []string) ledger.RehydratePlan {
 	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
 		return ledger.RehydratePlan{}
 	}
-	oldEvidence := providerHistoryAppliedEvidencePointers(a.Runtime.LastProviderHistoryProjectionReport)
+	oldEvidence := providerHistoryAppliedEvidencePointers(report)
 	if len(oldEvidence) == 0 {
 		return ledger.RehydratePlan{}
 	}

@@ -14,10 +14,11 @@ import (
 
 // RuntimeOptions は一時的な内部 runtime gate を束ねる。
 type RuntimeOptions struct {
-	EnableCurrentTaskStateContext   bool
-	EnableProviderHistoryReduction  bool
-	ProviderHistoryReductionMode    ProviderHistoryReductionMode
-	ProviderHistoryReductionModeSet bool
+	EnableCurrentTaskStateContext         bool
+	EnableProviderHistoryRehydrateContext bool
+	EnableProviderHistoryReduction        bool
+	ProviderHistoryReductionMode          ProviderHistoryReductionMode
+	ProviderHistoryReductionModeSet       bool
 }
 
 // AgentRuntime は agent/session 単位で保持する実行時 state を束ねる。
