@@ -88,55 +88,79 @@ func skillsSubcommandToken(suggestion slash.Suggestion) string {
 }
 
 func (m Model) skillNameArgumentSuggestions(argPrefix string) []slash.Suggestion {
-	argPrefix = strings.ToLower(strings.TrimSpace(argPrefix))
+	argPrefix = normalizedSkillArgPrefix(argPrefix)
 	submitOnEnter := argPrefix != ""
-	catalog := m.currentSkillCatalog()
-	suggestions := make([]slash.Suggestion, 0, len(catalog.Skills))
-	for _, skill := range catalog.Skills {
-		if !strings.HasPrefix(strings.ToLower(skill.Name), argPrefix) {
-			continue
-		}
-		view := newSkillSuggestionView(skill)
-		suggestions = append(suggestions, slash.Suggestion{
-			Label:         view.name,
-			InsertText:    view.showCommand,
-			Description:   view.description,
-			Category:      commandcatalog.CommandCategoryContext,
-			CategoryLabel: "skill",
-			HideCategory:  true,
-			Detail:        view.detail,
-			SubmitOnEnter: submitOnEnter,
-		})
+	views := m.matchingSkillSuggestionViews(argPrefix)
+	suggestions := make([]slash.Suggestion, 0, len(views))
+	for _, view := range views {
+		suggestions = append(suggestions, newSkillNameArgumentSuggestion(view, submitOnEnter))
 	}
 	return suggestions
 }
 
 func (m Model) skillPromptReferenceSuggestions(argPrefix string) []slash.Suggestion {
-	argPrefix = strings.ToLower(strings.TrimSpace(argPrefix))
+	argPrefix = normalizedSkillArgPrefix(argPrefix)
 	submitOnEnter := argPrefix != ""
-	catalog := m.currentSkillCatalog()
-	suggestions := make([]slash.Suggestion, 0, len(catalog.Skills))
-	for _, skill := range catalog.Skills {
-		if !strings.HasPrefix(strings.ToLower(skill.Name), argPrefix) {
+	views := m.matchingSkillSuggestionViews(argPrefix)
+	suggestions := make([]slash.Suggestion, 0, len(views))
+	for _, view := range views {
+		suggestion, ok := newSkillPromptReferenceSuggestion(view, submitOnEnter)
+		if !ok {
 			continue
 		}
-		view := newSkillSuggestionView(skill)
-		if view.promptReference == "" {
-			continue
-		}
-		suggestions = append(suggestions, slash.Suggestion{
-			Label:           view.name,
-			InsertText:      view.promptReference,
-			Description:     view.description,
-			Category:        commandcatalog.CommandCategoryContext,
-			CategoryLabel:   "skill",
-			HideCategory:    true,
-			Detail:          view.detail,
-			CompleteOnEnter: true,
-			SubmitOnEnter:   submitOnEnter,
-		})
+		suggestions = append(suggestions, suggestion)
 	}
 	return suggestions
+}
+
+func (m Model) matchingSkillSuggestionViews(argPrefix string) []skillSuggestionView {
+	catalog := m.currentSkillCatalog()
+	views := make([]skillSuggestionView, 0, len(catalog.Skills))
+	for _, skill := range catalog.Skills {
+		if !skillNameMatchesArgPrefix(skill.Name, argPrefix) {
+			continue
+		}
+		views = append(views, newSkillSuggestionView(skill))
+	}
+	return views
+}
+
+func normalizedSkillArgPrefix(argPrefix string) string {
+	return strings.ToLower(strings.TrimSpace(argPrefix))
+}
+
+func skillNameMatchesArgPrefix(name string, argPrefix string) bool {
+	return strings.HasPrefix(strings.ToLower(name), argPrefix)
+}
+
+func newSkillNameArgumentSuggestion(view skillSuggestionView, submitOnEnter bool) slash.Suggestion {
+	return slash.Suggestion{
+		Label:         view.name,
+		InsertText:    view.showCommand,
+		Description:   view.description,
+		Category:      commandcatalog.CommandCategoryContext,
+		CategoryLabel: "skill",
+		HideCategory:  true,
+		Detail:        view.detail,
+		SubmitOnEnter: submitOnEnter,
+	}
+}
+
+func newSkillPromptReferenceSuggestion(view skillSuggestionView, submitOnEnter bool) (slash.Suggestion, bool) {
+	if view.promptReference == "" {
+		return slash.Suggestion{}, false
+	}
+	return slash.Suggestion{
+		Label:           view.name,
+		InsertText:      view.promptReference,
+		Description:     view.description,
+		Category:        commandcatalog.CommandCategoryContext,
+		CategoryLabel:   "skill",
+		HideCategory:    true,
+		Detail:          view.detail,
+		CompleteOnEnter: true,
+		SubmitOnEnter:   submitOnEnter,
+	}, true
 }
 
 func (m Model) currentSkillCatalog() agentskills.SkillCatalog {
