@@ -16,7 +16,7 @@ const GeneratedHelpCommandsText = `Commands:
   /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider picker or switch provider and optionally model
-  /providers                - List available providers and their API key status
+  /providers                - Show provider credential status
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
@@ -50,7 +50,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /review [instructions]    - Review current changes and find issues
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider picker or switch provider and optionally model
-  /providers                - List available providers and their API key status
+  /providers                - Show provider credential status
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model

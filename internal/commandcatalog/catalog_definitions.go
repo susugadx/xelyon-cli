@@ -254,7 +254,7 @@ func commandProvider() CommandInfo {
 }
 
 func commandProviders() CommandInfo {
-	return legacyDiscoverableCommand("/providers", "", "List available providers and their API key status", "利用可能なプロバイダー一覧", CommandCategoryModel, 30)
+	return legacyHiddenCommand("/providers", "", "Show provider credential status", "プロバイダー認証状態を表示", CommandCategoryModel, 30)
 }
 
 func commandConfig() CommandInfo {

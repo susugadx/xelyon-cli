@@ -473,7 +473,7 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 
 ### `/providers`
 
-利用可能なプロバイダーとモデル一覧を表示します。
+プロバイダーの credential status をテキストで表示します。TUI でプロバイダーやモデルを選ぶ場合は `/provider` picker が primary です。
 
 ```
 > /providers

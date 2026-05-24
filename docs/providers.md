@@ -743,9 +743,9 @@ ollama serve
 ### モデルが見つからない
 
 ```bash
-# 利用可能なモデル一覧を確認
+# TUI で利用可能な provider/model 候補を確認
 xelyon
-> /providers
+> /provider
 
 # 正しいモデル名を指定
 xelyon --provider openai --model gpt-5.4

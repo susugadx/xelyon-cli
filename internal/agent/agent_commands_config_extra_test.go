@@ -508,7 +508,7 @@ func TestHandleProvidersCommand_ShowsAddedCurrentAliasStatus(t *testing.T) {
 		t.Fatal("handleProvidersCommand() = false, want true")
 	}
 	output := out.String()
-	if !strings.Contains(output, "anthropic") || !strings.Contains(output, "(API key設定済み)") {
+	if !strings.Contains(output, "anthropic") || !strings.Contains(output, "(credential configured)") {
 		t.Fatalf("output = %q, want anthropic alias entry with configured status", output)
 	}
 }

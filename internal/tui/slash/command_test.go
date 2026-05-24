@@ -308,7 +308,7 @@ func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
 		t.Fatalf("Suggestions(/) returned %d matches, want at least 4", len(matches))
 	}
 	got := []string{matches[0].InsertText, matches[1].InsertText, matches[2].InsertText, matches[3].InsertText}
-	want := []string{"/model", "/provider", "/providers", "/thinking"}
+	want := []string{"/model", "/provider", "/thinking", "/status"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("leading suggestions = %#v, want prefix %#v", got, want)
@@ -317,7 +317,7 @@ func TestSuggestionsSortsDiscoverableCommands(t *testing.T) {
 }
 
 func TestSuggestionsHidesNonDiscoverableCommands(t *testing.T) {
-	for _, input := range []string{"/use", "/version", "/help"} {
+	for _, input := range []string{"/providers", "/use", "/version", "/help"} {
 		if matches := Suggestions(input); len(matches) != 0 {
 			t.Fatalf("Suggestions(%q) = %#v, want no matches", input, matches)
 		}
