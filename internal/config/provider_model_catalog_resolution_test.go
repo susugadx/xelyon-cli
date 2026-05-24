@@ -27,6 +27,27 @@ func TestModelCatalogName_UsesProviderDefaultCatalogModel(t *testing.T) {
 	}
 }
 
+func TestModelCatalogName_CanonicalizesGeminiResourceCatalogModel(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", ProviderModelConfig{
+		DefaultModel: "corp-gemini-flash",
+		CatalogModel: "models/Gemini-3.5-Flash",
+		ModelOverrides: map[string]ModelOverride{
+			"corp-gemini-lite": {CatalogModel: "models/gemini-3.1-flash-lite"},
+		},
+	})
+
+	if got := cfg.ModelCatalogName("gemini", "corp-gemini-flash"); got != "gemini-3.5-flash" {
+		t.Fatalf("ModelCatalogName(gemini default alias) = %q, want gemini-3.5-flash", got)
+	}
+	if got := cfg.ModelCatalogName("gemini", "corp-gemini-lite"); got != "gemini-3.1-flash-lite" {
+		t.Fatalf("ModelCatalogName(gemini override alias) = %q, want gemini-3.1-flash-lite", got)
+	}
+	if got := cfg.ModelCatalogName("gemini", "models/gemini-3.5-flash"); got != "gemini-3.5-flash" {
+		t.Fatalf("ModelCatalogName(gemini resource model) = %q, want gemini-3.5-flash", got)
+	}
+}
+
 func TestResolveModelCatalog_ProviderCatalogSurvivesDefaultModelOverride(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SetProviderModelConfig("openai", ProviderModelConfig{

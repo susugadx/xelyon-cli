@@ -88,6 +88,11 @@ func ModelLifecycleForProvider(provider, model string) (ModelLifecycle, bool) {
 }
 
 func pickerVisibleModelForProvider(provider, model string) bool {
+	if provider == "gemini" {
+		if support := GeminiFunctionCallingSupport(model); support.Known && !support.Supported {
+			return false
+		}
+	}
 	if lifecycle, ok := ModelLifecycleForProvider(provider, model); ok {
 		return lifecycle.pickerVisible()
 	}

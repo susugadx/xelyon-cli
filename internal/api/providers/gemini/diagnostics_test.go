@@ -111,6 +111,73 @@ func TestDiagnoseGemini_NonGeminiCatalogModelDoesNotUseGlobalMetadata(t *testing
 	}
 }
 
+func TestDiagnoseGemini_FunctionCallingCapabilityUsesCatalogModel(t *testing.T) {
+	t.Setenv(geminiAPIKeyEnv, "gemini-key")
+	t.Setenv(geminiAPIURLEnv, "")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "corp-lite",
+		CatalogModel: "gemini-2.0-flash-lite",
+	})
+	if report.FunctionCallingEnabled {
+		t.Fatalf("FunctionCallingEnabled = true, want false for unsupported catalog_model")
+	}
+	functionCalling := requireGeminiDiagnosticCheckStatus(t, report, "function_calling", DiagnosticStatusFail)
+	if !strings.Contains(functionCalling.Detail, "catalog_model=gemini-2.0-flash-lite") ||
+		!strings.Contains(functionCalling.Detail, "supported=false") ||
+		!strings.Contains(functionCalling.Suggestion, "gemini-3.1-flash-lite") {
+		t.Fatalf("function_calling check = %#v, want unsupported catalog_model guidance", functionCalling)
+	}
+
+	report = Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "corp-lite",
+		CatalogModel: "models/gemini-2.0-flash-lite",
+	})
+	if report.CatalogModel != "gemini-2.0-flash-lite" {
+		t.Fatalf("CatalogModel = %q, want canonical Gemini catalog model", report.CatalogModel)
+	}
+	if report.FunctionCallingEnabled {
+		t.Fatalf("FunctionCallingEnabled = true, want false for unsupported canonical catalog_model")
+	}
+	functionCalling = requireGeminiDiagnosticCheckStatus(t, report, "function_calling", DiagnosticStatusFail)
+	if !strings.Contains(functionCalling.Detail, "catalog_model=gemini-2.0-flash-lite") ||
+		!strings.Contains(functionCalling.Detail, "supported=false") ||
+		!strings.Contains(functionCalling.Suggestion, "gemini-3.1-flash-lite") {
+		t.Fatalf("function_calling check = %#v, want unsupported canonical catalog_model guidance", functionCalling)
+	}
+	requireGeminiDiagnosticCheckStatus(t, report, "catalog_policy", DiagnosticStatusOK)
+
+	report = Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "corp-flash",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	if !report.FunctionCallingEnabled {
+		t.Fatalf("FunctionCallingEnabled = false, want true for supported catalog_model")
+	}
+	functionCalling = requireGeminiDiagnosticCheckStatus(t, report, "function_calling", DiagnosticStatusOK)
+	if !strings.Contains(functionCalling.Detail, "catalog_model=gemini-3.5-flash") ||
+		!strings.Contains(functionCalling.Detail, "supported=true") {
+		t.Fatalf("function_calling check = %#v, want supported catalog_model detail", functionCalling)
+	}
+
+	report = Diagnose(context.Background(), DiagnosticOptions{
+		Config: config.DefaultConfig(),
+		Model:  "corp-unknown",
+	})
+	if !report.FunctionCallingEnabled {
+		t.Fatalf("FunctionCallingEnabled = false, want optimistic true for unknown alias")
+	}
+	functionCalling = requireGeminiDiagnosticCheckStatus(t, report, "function_calling", DiagnosticStatusWarn)
+	if !strings.Contains(functionCalling.Detail, "catalog_model=corp-unknown") ||
+		!strings.Contains(functionCalling.Suggestion, "--catalog-model") {
+		t.Fatalf("function_calling check = %#v, want catalog_model guidance for unknown alias", functionCalling)
+	}
+}
+
 func TestDiagnoseGemini_ModelLifecycleWarnings(t *testing.T) {
 	t.Setenv(geminiAPIKeyEnv, "gemini-key")
 	t.Setenv(geminiAPIURLEnv, "")

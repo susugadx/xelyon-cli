@@ -374,8 +374,15 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	errOut := api.ErrorWriterFromContext(ctx)
 
+	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
+	cfg := config.FromContext(ctx)
+	functionCallingPolicy := newGeminiFunctionCallingPolicy(cfg, model)
+	if !functionCallingPolicy.Enabled() && !api.IsToolUseDisabled(ctx) {
+		return "", functionCallingPolicy.UnsupportedError()
+	}
+
 	// request mode で Function Calling を制御（デフォルト: 有効）
-	useFunctionCalling := api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled())
+	useFunctionCalling := api.ShouldSendToolPayload(ctx, functionCallingPolicy.Enabled())
 
 	if debug {
 		fmt.Fprintf(errOut, "[DEBUG Gemini] toolUseDisabled=%v, useFunctionCalling=%v, mcpTools=%d\n",

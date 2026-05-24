@@ -55,6 +55,24 @@ func TestResolveProviderDiagnosticCatalogModelUsesSharedPrecedence(t *testing.T)
 	}
 }
 
+func TestResolveProviderDiagnosticCatalogModelCanonicalizesGeminiResourceNames(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-gemini",
+		CatalogModel: "models/gemini-3.5-flash",
+	})
+
+	if got, source := ResolveProviderDiagnosticCatalogModel(cfg, "gemini", "corp-gemini", ""); got != "gemini-3.5-flash" || source != "provider_models.gemini.catalog_model" {
+		t.Fatalf("configured Gemini catalog = %q (%s), want canonical catalog model", got, source)
+	}
+	if got, source := ResolveProviderDiagnosticCatalogModel(cfg, "gemini", "corp-gemini", "models/gemini-2.0-flash-lite"); got != "gemini-2.0-flash-lite" || source != "--catalog-model" {
+		t.Fatalf("explicit Gemini catalog = %q (%s), want canonical explicit catalog model", got, source)
+	}
+	if !IsProviderCatalogModelKnown("gemini", "models/gemini-3.5-flash") {
+		t.Fatal("IsProviderCatalogModelKnown(gemini, models/gemini-3.5-flash) = false, want true")
+	}
+}
+
 func TestProviderDiagnosticPolicyConfigKeepsProviderScopedCatalogPolicy(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("deepseek", config.ProviderModelConfig{
@@ -82,5 +100,16 @@ func TestProviderDiagnosticPolicyConfigKeepsProviderScopedCatalogPolicy(t *testi
 	}
 	if got := api.GetMaxOutputTokens(config.WithContext(context.Background(), validCatalogCfg), "deepseek", "corp-deepseek"); got != 64 {
 		t.Fatalf("GetMaxOutputTokens(valid catalog policy) = %d, want explicit smoke max output", got)
+	}
+}
+
+func TestProviderDiagnosticPolicyConfigCanonicalizesGeminiResourceCatalogModel(t *testing.T) {
+	cfg := ProviderDiagnosticPolicyConfig(config.DefaultConfig(), ProviderDiagnosticPolicyConfigOptions{
+		Provider:     "gemini",
+		Model:        "corp-gemini",
+		CatalogModel: "models/gemini-3.5-flash",
+	})
+	if got := cfg.ModelCatalogName("gemini", "corp-gemini"); got != "gemini-3.5-flash" {
+		t.Fatalf("Gemini diagnostic policy catalog = %q, want gemini-3.5-flash", got)
 	}
 }

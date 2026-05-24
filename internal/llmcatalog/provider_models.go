@@ -157,10 +157,21 @@ func KnownModelNamesForProvider(provider string) []string {
 	return visible
 }
 
+// CanonicalModelNameForProvider は provider catalog lookup 用の model 名を正規化する。
+func CanonicalModelNameForProvider(provider, model string) string {
+	key := CanonicalProviderKey(provider)
+	model = strings.TrimSpace(model)
+	if key == "gemini" {
+		model = strings.ToLower(model)
+		model = strings.TrimPrefix(model, "models/")
+	}
+	return model
+}
+
 // IsKnownModelNameForProvider は model が provider 所有の既知 catalog 名または既知 prefix か返す。
 func IsKnownModelNameForProvider(provider, model string) bool {
 	key := CanonicalProviderKey(provider)
-	model = strings.TrimSpace(model)
+	model = CanonicalModelNameForProvider(key, model)
 	if key == "" || model == "" {
 		return false
 	}

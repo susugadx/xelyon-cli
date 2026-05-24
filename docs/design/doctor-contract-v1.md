@@ -111,6 +111,8 @@ Gemini:
 - Live smoke supports text, tool, image, and native web search request types. Text smoke is a minimal text/SSE connectivity check; tool smoke is the function-calling runtime-path check. Text / tool / image use `streamGenerateContent?alt=sse`; web search uses native `generateContent`.
 - Native web search smoke observes usage / cost from `generateContent` `usageMetadata` when available, but usage is not required for the smoke success condition.
 - `GEMINI_API_URL` is an exact endpoint / proxy override. Endpoint diagnostics are route-aware: selected text / tool / image requests expect `streamGenerateContent?alt=sse`, while selected native web search requests expect `generateContent`.
+- Function calling capability is model-aware and uses the resolved `catalog_model`. Known unsupported Gemini models fail the `function_calling` check; unknown aliases warn unless a supported `catalog_model` is supplied.
+- Gemini `models/...` resource names in `catalog_model` are canonicalized before catalog policy and function-calling capability checks.
 - Tool smoke / preview forces request-scoped Gemini function calling mode `ANY` for the diagnostic tool only. Normal runtime still uses `GEMINI_FC_MODE` fallback.
 - Live smoke timeout is applied per selected request, not to the whole multi-smoke suite.
 - Non-Gemini `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token or cost policy.

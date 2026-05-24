@@ -102,6 +102,21 @@ func TestKnownModelNamesForProvider_AzureDoesNotUseCatalogModels(t *testing.T) {
 	}
 }
 
+func TestCanonicalModelNameForProvider_GeminiResourceName(t *testing.T) {
+	if got := CanonicalModelNameForProvider("gemini", "models/Gemini-3.5-Flash"); got != "gemini-3.5-flash" {
+		t.Fatalf("CanonicalModelNameForProvider(gemini) = %q, want gemini-3.5-flash", got)
+	}
+	if got := CanonicalModelNameForProvider("openai", "models/GPT-5.4"); got != "models/GPT-5.4" {
+		t.Fatalf("CanonicalModelNameForProvider(openai) = %q, want provider-specific form preserved", got)
+	}
+}
+
+func TestIsKnownModelNameForProvider_GeminiResourceName(t *testing.T) {
+	if !IsKnownModelNameForProvider("gemini", "models/gemini-3.5-flash") {
+		t.Fatal("IsKnownModelNameForProvider(gemini, models/gemini-3.5-flash) = false, want true")
+	}
+}
+
 func TestKnownModelNamesForProvider_IncludesGPT53CodexForOpenAIProviders(t *testing.T) {
 	tests := []struct {
 		provider string

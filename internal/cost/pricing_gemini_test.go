@@ -131,7 +131,7 @@ func TestGetPricingInfoForConfig_GeminiServiceTierUsesCatalogModel(t *testing.T)
 	cfg.Gemini.ServiceTier = config.GeminiServiceTierFlex
 	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
 		DefaultModel: "corp-gemini-flash-lite",
-		CatalogModel: "gemini-3.1-flash-lite",
+		CatalogModel: "models/gemini-3.1-flash-lite",
 	})
 
 	got := GetPricingInfoForConfig(cfg, "gemini", "corp-gemini-flash-lite")

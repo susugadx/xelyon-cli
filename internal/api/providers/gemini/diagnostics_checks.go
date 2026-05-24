@@ -303,13 +303,57 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 }
 
 func (r *DiagnosticReport) addFunctionCallingCheck() {
+	support := llmcatalog.GeminiFunctionCallingSupport(r.CatalogModel)
+	detail := geminiDiagnosticFunctionCallingDetail(r.CatalogModel, support)
+	if support.Known && !support.Supported {
+		r.addCheck(
+			DiagnosticStatusFail,
+			"function_calling",
+			"Gemini model does not support function calling",
+			detail,
+			geminiDiagnosticFunctionCallingSuggestion(support),
+		)
+		return
+	}
+	if !support.Known {
+		r.addCheck(
+			DiagnosticStatusWarn,
+			"function_calling",
+			"Gemini function calling support is unknown for this catalog_model",
+			detail,
+			"Set --catalog-model or provider_models.gemini.catalog_model to a Gemini model with function calling support, then verify with --tool-smoke",
+		)
+		return
+	}
 	r.addCheck(
 		DiagnosticStatusOK,
 		"function_calling",
 		"Gemini function calling payloads are enabled",
-		"",
+		detail,
 		"Use request-scoped tool disable only for internal text-only paths",
 	)
+}
+
+func geminiDiagnosticFunctionCallingDetail(model string, support llmcatalog.ModelCapabilitySupport) string {
+	parts := []string{
+		"catalog_model=" + strings.TrimSpace(model),
+		fmt.Sprintf("known=%t", support.Known),
+		fmt.Sprintf("supported=%t", support.Supported),
+	}
+	if reason := strings.TrimSpace(support.Reason); reason != "" {
+		parts = append(parts, "reason="+reason)
+	}
+	if replacement := strings.TrimSpace(support.Replacement); replacement != "" {
+		parts = append(parts, "replacement="+replacement)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func geminiDiagnosticFunctionCallingSuggestion(support llmcatalog.ModelCapabilitySupport) string {
+	if replacement := strings.TrimSpace(support.Replacement); replacement != "" {
+		return "Use " + replacement + " for Gemini function calling"
+	}
+	return "Use a Gemini model with function calling support, such as gemini-3.5-flash"
 }
 
 func (r *DiagnosticReport) addImageInputCheck() {

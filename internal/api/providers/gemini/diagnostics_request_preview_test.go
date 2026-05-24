@@ -81,11 +81,35 @@ func TestDiagnoseGemini_PrintRequestBuildsTextToolImageAndWebBodies(t *testing.T
 	}
 }
 
+func TestDiagnoseGemini_PrintRequestSkipsToolPreviewForUnsupportedFunctionCallingModel(t *testing.T) {
+	t.Setenv(geminiAPIKeyEnv, "")
+	t.Setenv(geminiAPIURLEnv, "")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "corp-lite",
+		CatalogModel: "models/gemini-2.0-flash-lite",
+		PrintRequest: true,
+		ToolSmoke:    true,
+	})
+	requireGeminiDiagnosticCheckStatus(t, report, "function_calling", DiagnosticStatusFail)
+	requireGeminiDiagnosticCheckStatus(t, report, "request_preview", DiagnosticStatusOK)
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 1 {
+		t.Fatalf("RequestPreview = %#v, want one skipped tool request", report.RequestPreview)
+	}
+	tool := report.RequestPreview.Requests[0]
+	if tool.Name != "tool" || !tool.ToolPayload || !tool.Skipped || tool.SkipReason == "" || tool.Body != nil {
+		t.Fatalf("tool preview = %#v, want skipped tool preview without body", tool)
+	}
+}
+
 func TestGeminiDiagnosticRequestPreviewBodiesMatchBodyBuilder(t *testing.T) {
 	cfg := config.DefaultConfig()
 	report := DiagnosticReport{
-		Model:        defaultGeminiDiagnosticModel,
-		CatalogModel: defaultGeminiDiagnosticModel,
+		Model:                  defaultGeminiDiagnosticModel,
+		CatalogModel:           defaultGeminiDiagnosticModel,
+		FunctionCallingEnabled: true,
 	}
 	options := DiagnosticOptions{
 		TextSmoke:       true,

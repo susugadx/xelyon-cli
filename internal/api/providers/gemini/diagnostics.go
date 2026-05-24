@@ -134,6 +134,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if geminiCatalogModelKnown(catalogModel) {
 		contextWindow, _ = llmcatalog.KnownModelContextLimit(catalogModel)
 	}
+	functionCallingEnabled := newGeminiFunctionCallingPolicyForCatalogModel(model, catalogModel).Enabled()
 
 	report := DiagnosticReport{
 		Provider:               "gemini",
@@ -146,7 +147,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		RouteReason:            "Gemini text, tool, and image requests use streamGenerateContent?alt=sse; native web search uses generateContent",
 		MaxOutputTokens:        api.GetMaxOutputTokens(configCtx, "gemini", model),
 		ContextWindowTokens:    contextWindow,
-		FunctionCallingEnabled: New("diagnostic-key").IsFunctionCallingEnabled(),
+		FunctionCallingEnabled: functionCallingEnabled,
 		ImageInputSupported:    true,
 		WebSearchSupported:     true,
 		ContextCachingEnabled:  os.Getenv("GEMINI_CONTEXT_CACHING") != "0",

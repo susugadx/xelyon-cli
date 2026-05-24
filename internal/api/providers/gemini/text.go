@@ -88,7 +88,11 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
 
 	cfgImg := config.FromContext(ctx)
-	reqBody := buildGeminiMultimodalRequest(ctx, systemPrompt, history, userMessage, image, model, p.mcpTools, p.IsFunctionCallingEnabled(), cfgImg)
+	functionCallingPolicy := newGeminiFunctionCallingPolicy(cfgImg, model)
+	if !functionCallingPolicy.Enabled() && !api.IsToolUseDisabled(ctx) {
+		return "", functionCallingPolicy.UnsupportedError()
+	}
+	reqBody := buildGeminiMultimodalRequest(ctx, systemPrompt, history, userMessage, image, model, p.mcpTools, functionCallingPolicy.Enabled(), cfgImg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {

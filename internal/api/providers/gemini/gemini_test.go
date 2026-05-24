@@ -21,7 +21,9 @@ import (
 
 func mockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(handler)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return server
 }
 
 func assertRequestMethod(t *testing.T, r *http.Request, expected string) {
@@ -365,6 +367,67 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 	// テキストとツール呼び出しが含まれていることを確認
 	if result == "" {
 		t.Error("ChatWithTools() should return non-empty result")
+	}
+}
+
+func TestProvider_ChatWithTools_UnsupportedFunctionCallingModelFailsBeforeRequest(t *testing.T) {
+	var requestCount atomic.Int32
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		t.Fatalf("unsupported function-calling model should fail before request")
+	})
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(context.Background(), "System", history, "gemini-2.0-flash-lite")
+	if err == nil {
+		t.Fatal("ChatWithTools() error = nil, want unsupported function calling error")
+	}
+	if !strings.Contains(err.Error(), "function calling is not supported") ||
+		!strings.Contains(err.Error(), "gemini-3.1-flash-lite") {
+		t.Fatalf("ChatWithTools() error = %q, want unsupported function calling guidance", err.Error())
+	}
+	if requestCount.Load() != 0 {
+		t.Fatalf("requestCount = %d, want no network request", requestCount.Load())
+	}
+}
+
+func TestProvider_ChatWithTools_UnsupportedCatalogModelFailsBeforeRequest(t *testing.T) {
+	var requestCount atomic.Int32
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		t.Fatalf("unsupported catalog_model should fail before request")
+	})
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		ModelOverrides: map[string]config.ModelOverride{
+			"corp-lite": {CatalogModel: "gemini-2.0-flash-lite"},
+		},
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(ctx, "System", history, "corp-lite")
+	if err == nil {
+		t.Fatal("ChatWithTools() error = nil, want unsupported catalog_model error")
+	}
+	if !strings.Contains(err.Error(), "corp-lite (catalog_model=gemini-2.0-flash-lite)") {
+		t.Fatalf("ChatWithTools() error = %q, want request model and catalog_model detail", err.Error())
+	}
+	if requestCount.Load() != 0 {
+		t.Fatalf("requestCount = %d, want no network request", requestCount.Load())
 	}
 }
 

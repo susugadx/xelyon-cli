@@ -125,6 +125,7 @@ func OllamaMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOu
 
 // GeminiMaxOutputPolicy は Gemini doctor の max output 解決規則を返す。
 func GeminiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	catalogModel = llmcatalog.CanonicalModelNameForProvider("gemini", catalogModel)
 	if nonProviderCatalogModel("gemini", catalogModel) {
 		return MaxOutputPolicy{Source: "missing"}
 	}
@@ -163,7 +164,7 @@ func ClaudeMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOu
 }
 
 func nonProviderCatalogModel(provider, catalogModel string) bool {
-	catalogModel = strings.TrimSpace(catalogModel)
+	catalogModel = llmcatalog.CanonicalModelNameForProvider(provider, catalogModel)
 	return catalogModel != "" && !IsProviderCatalogModelKnown(provider, catalogModel)
 }
 
@@ -179,6 +180,7 @@ func resolveMaxOutputPolicy(cfg *config.Config, options maxOutputPolicyOptions) 
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
+	options.CatalogModel = llmcatalog.CanonicalModelNameForProvider(options.Provider, options.CatalogModel)
 
 	if override, ok := cfg.ModelOverrideForProvider(options.Provider, options.RequestModel); ok && override.MaxOutputTokens > 0 {
 		return MaxOutputPolicy{
@@ -331,6 +333,7 @@ func OllamaCatalogPolicy(cfg *config.Config, model, catalogModel string) Catalog
 
 // GeminiCatalogPolicy は Gemini doctor 用の catalog policy snapshot を返す。
 func GeminiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	catalogModel = llmcatalog.CanonicalModelNameForProvider("gemini", catalogModel)
 	if nonProviderCatalogModel("gemini", catalogModel) {
 		return unknownProviderCatalogPolicy(catalogModel)
 	}

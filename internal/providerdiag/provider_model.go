@@ -46,19 +46,19 @@ func ResolveProviderDiagnosticCatalogModel(cfg *config.Config, provider, model, 
 	model = strings.TrimSpace(model)
 
 	if catalogModel := strings.TrimSpace(explicitCatalogModel); catalogModel != "" {
-		return catalogModel, "--catalog-model"
+		return canonicalProviderCatalogModel(provider, catalogModel), "--catalog-model"
 	}
 	if model == "" {
 		return "", ""
 	}
 	if override, ok := cfg.ModelOverrideForProvider(provider, model); ok {
 		if catalogModel := strings.TrimSpace(override.CatalogModel); catalogModel != "" {
-			return catalogModel, "provider_models." + provider + ".model_overrides"
+			return canonicalProviderCatalogModel(provider, catalogModel), "provider_models." + provider + ".model_overrides"
 		}
 	}
 	if pm, ok := cfg.GetProviderModelConfig(provider); ok && strings.TrimSpace(pm.DefaultModel) == model {
 		if catalogModel := strings.TrimSpace(pm.CatalogModel); catalogModel != "" {
-			return catalogModel, "provider_models." + provider + ".catalog_model"
+			return canonicalProviderCatalogModel(provider, catalogModel), "provider_models." + provider + ".catalog_model"
 		}
 	}
 
@@ -75,6 +75,10 @@ func ResolveProviderDiagnosticCatalogModel(cfg *config.Config, provider, model, 
 	return resolution.Model, "model"
 }
 
+func canonicalProviderCatalogModel(provider, model string) string {
+	return llmcatalog.CanonicalModelNameForProvider(provider, model)
+}
+
 // ProviderDiagnosticPolicyConfigOptions は doctor policy 用 config patch の入力を表す。
 type ProviderDiagnosticPolicyConfigOptions struct {
 	Provider        string
@@ -88,7 +92,7 @@ func ProviderDiagnosticPolicyConfig(cfg *config.Config, options ProviderDiagnost
 	policyCfg := config.CloneConfig(cfg)
 	provider := config.NormalizeProviderName(options.Provider)
 	model := strings.TrimSpace(options.Model)
-	catalogModel := strings.TrimSpace(options.CatalogModel)
+	catalogModel := canonicalProviderCatalogModel(provider, options.CatalogModel)
 	invalidCatalogModel := catalogModel != "" && !IsProviderCatalogModelKnown(provider, catalogModel)
 	if invalidCatalogModel {
 		catalogModel = ""
@@ -126,7 +130,7 @@ func ProviderDiagnosticPolicyConfig(cfg *config.Config, options ProviderDiagnost
 
 // IsProviderCatalogModelKnown は provider 所有の catalog ID / prefix と pricing exact metadata を既知として扱う。
 func IsProviderCatalogModelKnown(provider, model string) bool {
-	model = strings.TrimSpace(model)
+	model = canonicalProviderCatalogModel(provider, model)
 	if model == "" {
 		return false
 	}
