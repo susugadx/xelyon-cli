@@ -91,6 +91,7 @@ func (p *Provider) buildMultimodalRequest(ctx context.Context, systemPrompt stri
 
 func (p *Provider) buildRequestFeatures(ctx context.Context, cfg *config.Config, systemPrompt, model, catalogModel string) claudeRequestFeatures {
 	cfg = config.ResolveContext(ctx, cfg)
+	systemPrompt = api.SystemPromptWithActiveContextFromContext(ctx, systemPrompt)
 	features := claudeRequestFeatures{
 		System:            api.BuildSystemFieldWithConfig(systemPrompt, cfg),
 		MaxTokens:         p.maxOutputTokens(ctx, model),

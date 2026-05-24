@@ -28,8 +28,8 @@ This document is descriptive. It does not change retention, compression, provide
   - default is off.
   - the current task state block is built only when `RuntimeOptions.EnableCurrentTaskStateContext` is true.
   - provider-history rehydrated evidence is built only when `RuntimeOptions.EnableProviderHistoryRehydrateContext` is true.
-  - sent to Azure Responses and OpenAI Responses models when a block exists.
-  - not sent to OpenAI Chat Completions, Gemini, Claude, DeepSeek, or other non-consuming providers.
+  - sent only when `internal/api` reports a provider active-context transport for the runtime provider/model.
+  - unsupported providers keep active context out of the request context.
 - Active context is only injected into provider request context. It is not appended to `Agent.History` or `Session.Messages`.
 - `requestContextWithoutActiveContext` remains the boundary for internal model calls that must not receive active context.
 
@@ -145,13 +145,23 @@ Command output replacement is backed by successful command summaries, not eviden
 
 Provider-input injection is available only behind the internal runtime gate `RuntimeOptions.EnableProviderHistoryRehydrateContext`, which defaults to false and is not connected to config, environment variables, CLI flags, `/config`, generated config metadata, README, or `docs/config.md`.
 
-When the gate is true, provider-facing request assembly uses the projection report from the same request, builds a rehydrate plan from applied read/search/gather replacements, executes it against current files, renders `<rehydrated_evidence>`, and appends it as a dynamic active context block named `provider_history_rehydrated_evidence`. This happens only for provider request paths that already use `providerFacingHistoryForRequest` and only for providers that consume active context: OpenAI Responses and Azure Responses. OpenAI Chat Completions, Gemini, Claude, DeepSeek, compression, Compact API, Gemini apply-patch repair, review model calls, and other isolated internal model calls do not receive this block.
+When the gate is true, provider-facing request assembly uses the projection report from the same request, builds a rehydrate plan from applied read/search/gather replacements, executes it against current files, renders `<rehydrated_evidence>`, and appends it as a dynamic active context block named `provider_history_rehydrated_evidence`. This happens only for provider request paths that already use `providerFacingHistoryForRequest` and only when `internal/api.ProviderActiveContextTransportForRequest` reports a supported transport. The active context core contract is provider-independent and request-local; provider adapters own the transport-specific placement.
+
+Supported transports:
+
+- OpenAI Responses and Azure Responses use the native Responses developer input path.
+- OpenAI Chat Completions, DeepSeek, Groq, Kimi, Ollama, and the OpenRouter OpenAI-compatible route add an ephemeral system message after the base system prompt and before history.
+- Claude, the OpenRouter Claude route, and Bedrock Claude Messages append active context to the dynamic system suffix, separated from the static prompt by `SystemPromptCacheBoundary`.
+- Gemini text, function-calling, and multimodal requests add active context as request-local user content immediately before the latest user request sent to Gemini. Cached `systemInstruction` is not modified.
+- Bedrock Converse adds active context as a separate `System` content block.
+
+If the rehydrate gate is true but a provider has no active-context transport, read/search/gather evidence replacement is skipped for that request and the projection report keeps those candidates with `active_context_transport_unsupported`. Successful command output replacement keeps its existing safe replacement behavior because it does not require rehydrated evidence.
 
 The same request-local rehydrated block is included in provider-facing token estimates, `/tokens`, token warnings, and local auto-compress decisions. Token estimation does not update `AgentRuntime.LastProviderHistoryProjectionReport`.
 
 The rehydrated block is request-local model input only. It is not appended to `Agent.History`, `history.Session.Messages`, tool execution audit entries, audit logs, change records, compacted state, `/ledger` actual-content output, or persisted session JSONL.
 
-## Responses Continuation
+## Provider Transports And Responses Continuation
 
 - OpenAI and Azure Responses builders read active context from request context.
 - If active context has nonblank content, `previous_response_id` is not used for that request.

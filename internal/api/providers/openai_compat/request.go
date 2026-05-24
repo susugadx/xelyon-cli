@@ -39,6 +39,7 @@ type ChatCompletionsRequestOptions struct {
 	Model                string
 	Messages             []api.Message
 	SystemPrompt         string
+	ActiveContext        []api.ActiveContextBlock
 	History              []api.Message
 	MaxTokens            int
 	MaxCompletionTokens  int
@@ -74,7 +75,7 @@ var chatCompletionsStandardFields = map[string]struct{}{
 func BuildChatCompletionsRequest(options ChatCompletionsRequestOptions) ChatCompletionsRequest {
 	messages := options.Messages
 	if messages == nil {
-		messages = BuildChatMessages(options.SystemPrompt, options.History)
+		messages = BuildChatMessagesWithActiveContext(options.SystemPrompt, options.ActiveContext, options.History)
 	}
 
 	streamOptions := options.StreamOptions
@@ -146,10 +147,35 @@ func (r ChatCompletionsRequest) MarshalJSON() ([]byte, error) {
 
 // BuildChatMessages は system prompt と履歴から OpenAI 互換 messages を構築する。
 func BuildChatMessages(systemPrompt string, history []api.Message) []api.Message {
+	return BuildChatMessagesWithActiveContext(systemPrompt, nil, history)
+}
+
+// BuildChatMessagesWithActiveContext は system prompt、active context、履歴から messages を構築する。
+func BuildChatMessagesWithActiveContext(systemPrompt string, activeContext []api.ActiveContextBlock, history []api.Message) []api.Message {
 	messages := make([]api.Message, 0, len(history)+1)
 	messages = append(messages, api.Message{Role: "system", Content: systemPrompt})
+	if content := api.RenderActiveContextBlocks(activeContext); content != "" {
+		messages = append(messages, api.Message{Role: "system", Content: content})
+	}
 	messages = append(messages, history...)
 	return messages
+}
+
+// BuildChatMessageInterfacesWithActiveContext は multimodal message を後続で追加する OpenAI 互換 payload 用の messages を構築する。
+// transform は履歴メッセージだけに適用する。
+func BuildChatMessageInterfacesWithActiveContext(systemPrompt string, activeContext []api.ActiveContextBlock, history []api.Message, transform func(api.Message) api.Message) []any {
+	prefix := BuildChatMessagesWithActiveContext(systemPrompt, activeContext, nil)
+	result := make([]any, 0, len(prefix)+len(history))
+	for _, message := range prefix {
+		result = append(result, message)
+	}
+	for _, message := range history {
+		if transform != nil {
+			message = transform(message)
+		}
+		result = append(result, message)
+	}
+	return result
 }
 
 // DefaultToolChoicePolicy は未指定なら auto、指定ありなら function 強制にする標準方針を返す。

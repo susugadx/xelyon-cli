@@ -111,7 +111,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 }
 
 func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) (openaicompat.ChatCompletionsRequest, string) {
-	messages := openaicompat.BuildChatMessages(systemPrompt, history)
+	messages := openaicompat.BuildChatMessagesWithActiveContext(systemPrompt, api.ActiveContextBlocksFromContext(ctx), history)
 
 	// モデル名を設定（config優先、フォールバックは DeepSeek V4 Flash）
 	requestedModel := api.GetDefaultModelWithContext(ctx, model, "deepseek", defaultDeepSeekModel)

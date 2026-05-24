@@ -61,6 +61,33 @@ func TestBuildRequestFeatures_DefaultsNilConfig(t *testing.T) {
 	}
 }
 
+func TestBuildMessagesRequest_AddsActiveContextToDynamicSystemSuffix(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	p := New("test-key")
+	ctx := api.WithActiveContextBlocks(config.WithContext(context.Background(), cfg), []api.ActiveContextBlock{{
+		Name:    "provider_history_rehydrated_evidence",
+		Content: "<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>",
+	}})
+
+	built := p.buildMessagesRequest(ctx, "Static"+api.SystemPromptCacheBoundary+"Dynamic", []api.Message{{Role: "user", Content: "Hello"}}, defaultClaudeModel)
+
+	systemBlocks, ok := built.Request.System.([]api.SystemBlock)
+	if !ok || len(systemBlocks) != 2 {
+		t.Fatalf("System = %#v, want static/dynamic system blocks", built.Request.System)
+	}
+	if systemBlocks[0].Text != "Static" {
+		t.Fatalf("System[0].Text = %q, want static system prompt", systemBlocks[0].Text)
+	}
+	wantDynamic := "Dynamic\n\n<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>"
+	if systemBlocks[1].Text != wantDynamic {
+		t.Fatalf("System[1].Text = %q, want active context appended to dynamic suffix", systemBlocks[1].Text)
+	}
+	if systemBlocks[1].CacheControl == nil {
+		t.Fatal("System[1].CacheControl = nil, want dynamic cache boundary preserved")
+	}
+}
+
 func TestBuildMessagesRequest_UsesForcedToolChoice(t *testing.T) {
 	t.Setenv(claudeFunctionCallEnv, "1")
 

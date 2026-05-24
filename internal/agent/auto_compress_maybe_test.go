@@ -75,7 +75,7 @@ func TestMaybeAutoCompress_CountsProviderHistoryRehydratedEvidenceBudget(t *test
 	cfg.Compression.KeepRecent = 1
 	cfg.Compression.PreferCompactAPI = false
 
-	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 	agent.CurrentProvider = provider
 	agent.Stats = NewSessionStats("openai", agent.CurrentModel)
 

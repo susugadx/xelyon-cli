@@ -181,6 +181,34 @@ func TestBuildConverseStreamInput_ToolUseDisabledOmitsToolConfig(t *testing.T) {
 	}
 }
 
+func TestBuildConverseStreamInput_AddsActiveContextAsSeparateSystemBlock(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel: "amazon.nova-pro-v1:0",
+	}
+	p := &Provider{}
+	ctx := api.WithActiveContextBlocks(newBedrockTestContext(cfg), []api.ActiveContextBlock{{
+		Name:    "provider_history_rehydrated_evidence",
+		Content: "<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>",
+	}})
+
+	input, err := p.buildConverseStreamInput(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, p.resolveBedrockRequestContext(ctx, ""))
+	if err != nil {
+		t.Fatalf("buildConverseStreamInput() error = %v", err)
+	}
+	if len(input.System) != 2 {
+		t.Fatalf("len(System) = %d, want system prompt plus active context block", len(input.System))
+	}
+	base, ok := input.System[0].(*bedrocktypes.SystemContentBlockMemberText)
+	if !ok || base.Value != "system prompt" {
+		t.Fatalf("System[0] = %#v, want base system prompt", input.System[0])
+	}
+	active, ok := input.System[1].(*bedrocktypes.SystemContentBlockMemberText)
+	if !ok || active.Value != "<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>" {
+		t.Fatalf("System[1] = %#v, want active context system block", input.System[1])
+	}
+}
+
 func TestProvider_ChatWithTools_RejectsUnsupportedConverseModelBeforeAPI(t *testing.T) {
 	mockConverse := &mockConverseStreamClient{err: errors.New("should not call converse")}
 	p := &Provider{converseClient: mockConverse}

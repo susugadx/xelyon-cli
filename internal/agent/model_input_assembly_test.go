@@ -17,7 +17,7 @@ func TestModelInputAssemblyPlan_DefaultOffKeepsCompactedInputAndOmitsActiveConte
 			isCompactedMode: true,
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 
 	plan := agent.modelInputAssemblyPlan()
 	if len(plan.CompactedInput) != 1 || plan.CompactedInput[0].Data != "compact-data" {
@@ -54,7 +54,7 @@ func TestModelInputAssemblyPlan_ActiveContextOnDoesNotMutateRawConversation(t *t
 			session: session,
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 	beforeHistoryLen := len(agent.History)
 	beforeSessionLen := len(session.Messages)
 

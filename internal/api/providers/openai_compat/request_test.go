@@ -88,6 +88,60 @@ func TestBuildChatMessages_StandardMessagesPayloadUnchanged(t *testing.T) {
 	}
 }
 
+func TestBuildChatMessagesWithActiveContext_InsertsEphemeralSystemBeforeHistory(t *testing.T) {
+	messages := BuildChatMessagesWithActiveContext("system", []api.ActiveContextBlock{
+		{Name: "blank", Content: "\n \n"},
+		{Name: "state", Content: "<current_task_state>\nstate\n</current_task_state>"},
+		{Name: "evidence", Content: "<rehydrated_evidence>\nevidence\n</rehydrated_evidence>"},
+	}, []api.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "hi"},
+	})
+
+	if len(messages) != 4 {
+		t.Fatalf("len(messages) = %d, want system + active context + history", len(messages))
+	}
+	if messages[0].Role != "system" || messages[0].Content != "system" {
+		t.Fatalf("messages[0] = %#v, want base system prompt", messages[0])
+	}
+	if messages[1].Role != "system" {
+		t.Fatalf("messages[1].Role = %q, want system active context", messages[1].Role)
+	}
+	wantActive := "<current_task_state>\nstate\n</current_task_state>\n\n<rehydrated_evidence>\nevidence\n</rehydrated_evidence>"
+	if messages[1].Content != wantActive {
+		t.Fatalf("messages[1].Content = %q, want rendered active context", messages[1].Content)
+	}
+	if messages[2].Role != "user" || messages[2].Content != "hello" {
+		t.Fatalf("messages[2] = %#v, want first history message after active context", messages[2])
+	}
+}
+
+func TestBuildChatMessageInterfacesWithActiveContext_UsesSharedEphemeralSystemPlacement(t *testing.T) {
+	messages := BuildChatMessageInterfacesWithActiveContext("system", []api.ActiveContextBlock{{
+		Name:    "state",
+		Content: "<current_task_state>\nstate\n</current_task_state>",
+	}}, []api.Message{{
+		Role:     "tool",
+		ToolName: "read_file",
+		Content:  "result",
+	}}, func(message api.Message) api.Message {
+		message.ToolName = ""
+		return message
+	})
+
+	if len(messages) != 3 {
+		t.Fatalf("len(messages) = %d, want system + active context + history", len(messages))
+	}
+	active, ok := messages[1].(api.Message)
+	if !ok || active.Role != "system" || active.Content != "<current_task_state>\nstate\n</current_task_state>" {
+		t.Fatalf("messages[1] = %#v, want active context system message", messages[1])
+	}
+	history, ok := messages[2].(api.Message)
+	if !ok || history.Role != "tool" || history.ToolName != "" || history.Content != "result" {
+		t.Fatalf("messages[2] = %#v, want transformed history message", messages[2])
+	}
+}
+
 func TestBuildChatMessages_OmitsEmptyReasoningContent(t *testing.T) {
 	messages := BuildChatMessages("system", []api.Message{
 		{Role: "assistant", Content: "hi", ReasoningContent: ""},

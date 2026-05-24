@@ -18,7 +18,7 @@ import (
 )
 
 func TestProviderHistoryRehydrateContextDefaultOffDoesNotChangeActiveContext(t *testing.T) {
-	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = false
 
 	requestCtx, projected := agent.providerFacingHistoryForRequest(agent.requestContext(context.Background()))
@@ -32,7 +32,7 @@ func TestProviderHistoryRehydrateContextDefaultOffDoesNotChangeActiveContext(t *
 }
 
 func TestProviderHistoryRehydrateContextTokenBudgetGateSkipsDefaultOff(t *testing.T) {
-	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = false
 	agent.Runtime.Options.EnableCurrentTaskStateContext = true
 
@@ -46,7 +46,7 @@ func TestProviderHistoryRehydrateContextTokenBudgetGateSkipsDefaultOff(t *testin
 }
 
 func TestProviderHistoryRehydrateContextTokenBudgetGateSkipsUnsupportedProvider(t *testing.T) {
-	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateGemini)
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextUnsupported)
 	agent.Runtime.Options.EnableCurrentTaskStateContext = true
 
 	if agent.shouldBuildProviderHistoryRehydratedEvidenceActiveContext() {
@@ -57,8 +57,42 @@ func TestProviderHistoryRehydrateContextTokenBudgetGateSkipsUnsupportedProvider(
 	}
 }
 
+func TestProviderHistoryRehydrateContextUnsupportedTransportKeepsEvidenceReplacementButAppliesCommandReplacement(t *testing.T) {
+	agent, _, oldRead := newProviderHistoryRehydrateContextFixture(t, activeContextUnsupported)
+	commandOutput := providerHistoryLargeSuccessfulTestOutput()
+	agent.History = []api.Message{
+		providerHistoryAssistantToolCall("call_rehydrate_ctx", "read_file"),
+		providerHistoryToolResult("call_rehydrate_ctx", "read_file", oldRead),
+		{Role: "assistant", Content: "after old read"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_cmd", "bash", map[string]string{"command": providerHistorySuccessfulTestCommand})),
+		providerHistoryToolResult("call_cmd", "bash", commandOutput),
+		{Role: "assistant", Content: "tests passed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", providerHistoryReductionLatestToolOutput),
+		{Role: "assistant", Content: "done"},
+	}
+
+	requestCtx, projected := agent.providerFacingHistoryForRequest(agent.requestContext(context.Background()))
+
+	if blocks := api.ActiveContextBlocksFromContext(requestCtx); blocks != nil {
+		t.Fatalf("active context blocks = %#v, want nil for unsupported transport", blocks)
+	}
+	if projected[1].Content != oldRead {
+		t.Fatalf("projected read result = %q, want raw read when transport is unsupported", projected[1].Content)
+	}
+	assertProviderHistoryCommandContentReplacement(t, projected[4].Content, commandOutput, providerHistorySuccessfulTestReplacementLabel)
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.ReplacedCount != 0 {
+		t.Fatalf("ReplacedCount = %d, want no read/search/gather replacement", report.ReplacedCount)
+	}
+	if report.CommandEditDryRun.CommandReplacedCount != 1 {
+		t.Fatalf("CommandReplacedCount = %d, want successful command replacement", report.CommandEditDryRun.CommandReplacedCount)
+	}
+	assertKeepReason(t, report, "call_rehydrate_ctx", "active_context_transport_unsupported")
+}
+
 func TestProviderHistoryRehydrateContextAppendsRehydratedEvidenceBlock(t *testing.T) {
-	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 
 	requestCtx, _ := agent.providerFacingHistoryForRequest(agent.requestContext(context.Background()))
 
@@ -88,7 +122,7 @@ func TestProviderHistoryRehydrateContextAppendsRehydratedEvidenceBlock(t *testin
 }
 
 func TestProviderHistoryRehydrateContextAppendsAfterCurrentTaskState(t *testing.T) {
-	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 	agent.Runtime.Options.EnableCurrentTaskStateContext = true
 
 	requestCtx, _ := agent.providerFacingHistoryForRequest(agent.requestContext(context.Background()))
@@ -103,7 +137,7 @@ func TestProviderHistoryRehydrateContextAppendsAfterCurrentTaskState(t *testing.
 }
 
 func TestProviderHistoryRehydrateContextDoesNotMutateRawHistoryOrSession(t *testing.T) {
-	agent, session, oldRead := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent, session, oldRead := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 	for _, msg := range agent.History {
 		session.AddMessageFromAPI(msg, agent.CurrentModel)
 	}
@@ -124,7 +158,7 @@ func TestProviderHistoryRehydrateContextDoesNotMutateRawHistoryOrSession(t *test
 }
 
 func TestProviderHistoryRehydrateContextTokenEstimateMatchesProviderRequest(t *testing.T) {
-	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 	staleReport := ProviderHistoryProjectionReport{Mode: ProviderHistoryReductionApply, OriginalMessageCount: 99}
 	agent.Runtime.LastProviderHistoryProjectionReport = staleReport
 
@@ -138,7 +172,7 @@ func TestProviderHistoryRehydrateContextTokenEstimateMatchesProviderRequest(t *t
 		t.Fatalf("active context blocks = %#v, want one rehydrated evidence block", blocks)
 	}
 
-	wantActive := token.EstimateTokenCountForModel(agent.CurrentModel, blocks[0].Content)
+	wantActive := token.EstimateTokenCountForModel(agent.CurrentModel, api.RenderActiveContextBlocks(blocks))
 	if estimatedActive != wantActive {
 		t.Fatalf("EstimateActiveContextTokens() = %d, want request active context tokens %d", estimatedActive, wantActive)
 	}
@@ -152,7 +186,7 @@ func TestProviderHistoryRehydrateContextTokenEstimateMatchesProviderRequest(t *t
 
 func TestHandleTokensCommand_ShowsProviderHistoryRehydratedEvidenceTokens(t *testing.T) {
 	var out bytes.Buffer
-	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, currentTaskStateOpenAIResponses)
+	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 	agent.Runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
 
 	activeTokens := agent.EstimateActiveContextTokens()
@@ -170,18 +204,26 @@ func TestHandleTokensCommand_ShowsProviderHistoryRehydratedEvidenceTokens(t *tes
 	}
 }
 
-func TestProviderHistoryRehydrateContextOnlyForResponsesProviders(t *testing.T) {
+func TestProviderHistoryRehydrateContextForActiveContextTransports(t *testing.T) {
 	tests := []struct {
 		name    string
-		fixture currentTaskStateProviderFixture
+		fixture activeContextProviderFixture
 		want    bool
 	}{
-		{name: "openai responses", fixture: currentTaskStateOpenAIResponses, want: true},
-		{name: "azure responses", fixture: currentTaskStateAzureResponses, want: true},
-		{name: "openai chat completions", fixture: currentTaskStateOpenAIChatCompletions},
-		{name: "gemini", fixture: currentTaskStateGemini},
-		{name: "claude", fixture: currentTaskStateClaude},
-		{name: "deepseek", fixture: currentTaskStateDeepSeek},
+		{name: "openai responses", fixture: activeContextOpenAIResponses, want: true},
+		{name: "azure responses", fixture: activeContextAzureResponses, want: true},
+		{name: "openai chat completions", fixture: activeContextOpenAIChatCompletions, want: true},
+		{name: "gemini", fixture: activeContextGemini, want: true},
+		{name: "claude", fixture: activeContextClaude, want: true},
+		{name: "deepseek", fixture: activeContextDeepSeek, want: true},
+		{name: "groq", fixture: activeContextGroq, want: true},
+		{name: "kimi", fixture: activeContextKimi, want: true},
+		{name: "ollama", fixture: activeContextOllama, want: true},
+		{name: "openrouter openai route", fixture: activeContextOpenRouterOpenAI, want: true},
+		{name: "openrouter claude route", fixture: activeContextOpenRouterClaude, want: true},
+		{name: "bedrock claude messages", fixture: activeContextBedrockClaude, want: true},
+		{name: "bedrock converse", fixture: activeContextBedrockConverse, want: true},
+		{name: "unsupported", fixture: activeContextUnsupported},
 	}
 
 	for _, tt := range tests {
@@ -204,7 +246,7 @@ func TestProviderHistoryRehydrateContextOnlyForResponsesProviders(t *testing.T) 
 	}
 }
 
-func newProviderHistoryRehydrateContextFixture(t *testing.T, fixture currentTaskStateProviderFixture) (*Agent, *history.Session, string) {
+func newProviderHistoryRehydrateContextFixture(t *testing.T, fixture activeContextProviderFixture) (*Agent, *history.Session, string) {
 	t.Helper()
 	root := t.TempDir()
 	path := "README.md"
@@ -245,7 +287,7 @@ func newProviderHistoryRehydrateContextFixture(t *testing.T, fixture currentTask
 			session: session,
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, fixture)
+	applyActiveContextProviderFixture(agent, fixture)
 	return agent, session, oldRead
 }
 

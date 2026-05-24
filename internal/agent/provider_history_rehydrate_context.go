@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
@@ -54,6 +55,27 @@ func (a *Agent) shouldBuildProviderHistoryRehydratedEvidenceActiveContext() bool
 		return false
 	}
 	return a.Runtime.Options.EnableProviderHistoryRehydrateContext && a.providerCanConsumeActiveContext()
+}
+
+func (a *Agent) providerActiveContextTransport() api.ActiveContextTransport {
+	if a == nil {
+		return api.ActiveContextTransportNone
+	}
+	cfg := a.cfg()
+	return api.ProviderActiveContextTransportForRequest(
+		a.CurrentProvider,
+		a.activeContextRuntimeProviderName(),
+		a.activeModelProviderConfigKey(cfg),
+		config.WithContext(context.Background(), cfg),
+		a.CurrentModel,
+	)
+}
+
+func (a *Agent) providerHistoryReductionRequiresActiveContextTransport() bool {
+	return a != nil &&
+		a.Runtime != nil &&
+		a.Runtime.Options.EnableProviderHistoryRehydrateContext &&
+		a.providerActiveContextTransport() == api.ActiveContextTransportNone
 }
 
 func appendProviderHistoryRehydratedEvidenceActiveContext(ctx context.Context, additions []api.ActiveContextBlock) context.Context {

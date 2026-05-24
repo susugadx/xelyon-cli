@@ -22,12 +22,13 @@ type openRouterClaudeToolChoice struct {
 
 func (p *Provider) buildOpenAITextChatPayload(ctx context.Context, systemPrompt string, history []api.Message, model string) ([]byte, error) {
 	options := openaicompat.ChatCompletionsRequestOptions{
-		Model:        model,
-		SystemPrompt: systemPrompt,
-		History:      history,
-		MaxTokens:    api.GetMaxOutputTokens(ctx, "openrouter", model),
-		Stream:       true,
-		IncludeUsage: true,
+		Model:         model,
+		SystemPrompt:  systemPrompt,
+		ActiveContext: api.ActiveContextBlocksFromContext(ctx),
+		History:       history,
+		MaxTokens:     api.GetMaxOutputTokens(ctx, "openrouter", model),
+		Stream:        true,
+		IncludeUsage:  true,
 	}
 
 	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
@@ -49,11 +50,7 @@ func (p *Provider) buildOpenAIImageChatPayload(ctx context.Context, systemPrompt
 		{Type: "image_url", ImageURL: &ImageURL{URL: imageURL}},
 	}
 
-	var messages []interface{}
-	messages = append(messages, api.Message{Role: "system", Content: systemPrompt})
-	for _, msg := range history {
-		messages = append(messages, msg)
-	}
+	messages := openaicompat.BuildChatMessageInterfacesWithActiveContext(systemPrompt, api.ActiveContextBlocksFromContext(ctx), history, nil)
 	messages = append(messages, MultimodalMessage{
 		Role:    "user",
 		Content: content,
@@ -120,7 +117,7 @@ func (p *Provider) buildClaudeChatPayload(ctx context.Context, systemPrompt stri
 		Model:            model,
 		AnthropicVersion: "2023-06-01",
 		MaxTokens:        api.GetMaxOutputTokens(ctx, "openrouter", model),
-		System:           api.BuildSystemFieldWithConfig(systemPrompt, cfg),
+		System:           api.BuildSystemFieldWithConfig(api.SystemPromptWithActiveContextFromContext(ctx, systemPrompt), cfg),
 		Messages:         messages,
 		Stream:           true,
 	}
