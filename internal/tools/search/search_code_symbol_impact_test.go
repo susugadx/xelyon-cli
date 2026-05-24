@@ -67,6 +67,17 @@ func TestBuildGoSymbolBundleCarriesDiagnostics(t *testing.T) {
 	if !strings.Contains(result, "Note: resolved via gopls.") {
 		t.Fatalf("expected LSP note in bundle output, got:\n%s", result)
 	}
+	if bundle.Diagnostics.Incomplete == nil || !*bundle.Diagnostics.Incomplete {
+		t.Fatalf("Diagnostics.Incomplete = %v, want true", bundle.Diagnostics.Incomplete)
+	}
+	assertBoolPtr(t, bundle.Diagnostics.LSPAttempted, true, "Diagnostics.LSPAttempted")
+	assertBoolPtr(t, bundle.Diagnostics.LSPAvailable, true, "Diagnostics.LSPAvailable")
+	if bundle.Diagnostics.RawRefCount != nil || bundle.Diagnostics.AcceptedRefCount != nil || bundle.Diagnostics.DroppedRefCount != nil {
+		t.Fatalf("reference counts = raw %v accepted %v dropped %v, want nil legacy counts", bundle.Diagnostics.RawRefCount, bundle.Diagnostics.AcceptedRefCount, bundle.Diagnostics.DroppedRefCount)
+	}
+	if bundle.Diagnostics.FallbackUsed != nil {
+		t.Fatalf("Diagnostics.FallbackUsed = %v, want nil for legacy LSP-only diagnostics", *bundle.Diagnostics.FallbackUsed)
+	}
 }
 
 func TestBuildGoSymbolBundleCarriesTruncatedDiagnostic(t *testing.T) {
@@ -87,6 +98,36 @@ func TestBuildGoSymbolBundleCarriesTruncatedDiagnostic(t *testing.T) {
 	result := formatSymbolBundle(bundle, nil, nil)
 	if !strings.Contains(result, "Note: upstream results were truncated.") {
 		t.Fatalf("expected truncation note in bundle output, got:\n%s", result)
+	}
+	if bundle.Diagnostics.Truncated == nil || !*bundle.Diagnostics.Truncated {
+		t.Fatalf("Diagnostics.Truncated = %v, want true", bundle.Diagnostics.Truncated)
+	}
+}
+
+func TestBuildGoSymbolBundleLeavesUnknownReferenceDiagnosticsUnset(t *testing.T) {
+	bundle := buildGoSymbolBundle("Run", navigation.InspectResult{
+		Symbol: &navigation.SymbolCandidate{
+			Name:    "Run",
+			Kind:    "function",
+			File:    "run.go",
+			Line:    10,
+			EndLine: 12,
+		},
+		Body: []string{
+			"10: func Run() {",
+			"11: }",
+		},
+	})
+
+	assertDiagnosticsResolvedBy(t, bundle.Diagnostics, symbolBundleResolvedByUnknown)
+	if bundle.Diagnostics.LSPSource != "" {
+		t.Fatalf("Diagnostics.LSPSource = %q, want empty for unknown reference diagnostics", bundle.Diagnostics.LSPSource)
+	}
+	if bundle.Diagnostics.LSPAttempted != nil || bundle.Diagnostics.LSPAvailable != nil || bundle.Diagnostics.FallbackUsed != nil {
+		t.Fatalf("diagnostic bools = attempted %v available %v fallback %v, want nil unknowns", bundle.Diagnostics.LSPAttempted, bundle.Diagnostics.LSPAvailable, bundle.Diagnostics.FallbackUsed)
+	}
+	if bundle.Diagnostics.RawRefCount != nil || bundle.Diagnostics.AcceptedRefCount != nil || bundle.Diagnostics.DroppedRefCount != nil {
+		t.Fatalf("reference counts = raw %v accepted %v dropped %v, want nil unknowns", bundle.Diagnostics.RawRefCount, bundle.Diagnostics.AcceptedRefCount, bundle.Diagnostics.DroppedRefCount)
 	}
 }
 

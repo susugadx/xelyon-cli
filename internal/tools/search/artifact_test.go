@@ -171,6 +171,18 @@ func TestBuilder(t *testing.T) {
 	if artifact.Metadata.Bundle == nil {
 		t.Fatal("Bundle = nil, want structured bundle")
 	}
+	if artifact.Metadata.Diagnostics == nil {
+		t.Fatal("Diagnostics = nil, want structured bundle diagnostics")
+	}
+	if artifact.Metadata.Diagnostics.ResolvedBy != symbolBundleResolvedByLSP {
+		t.Fatalf("Diagnostics.ResolvedBy = %q, want %q", artifact.Metadata.Diagnostics.ResolvedBy, symbolBundleResolvedByLSP)
+	}
+	if artifact.Metadata.Diagnostics.RawRefCount == nil || *artifact.Metadata.Diagnostics.RawRefCount != 1 {
+		t.Fatalf("Diagnostics.RawRefCount = %v, want 1", artifact.Metadata.Diagnostics.RawRefCount)
+	}
+	if artifact.Metadata.Diagnostics.AcceptedRefCount == nil || *artifact.Metadata.Diagnostics.AcceptedRefCount != 1 {
+		t.Fatalf("Diagnostics.AcceptedRefCount = %v, want 1", artifact.Metadata.Diagnostics.AcceptedRefCount)
+	}
 	if artifact.Metadata.Ambiguous {
 		t.Fatal("Ambiguous = true, want false for single resolved symbol")
 	}

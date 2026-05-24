@@ -53,7 +53,7 @@ func resolveStructuredJSFamilyImpactSymbol(symbol string, scope structuredImpact
 	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
-	setJSFamilyBundleLSPDiagnostics(bundle, refResult.resolvedViaLSP)
+	setJSFamilyBundleDiagnostics(bundle, refResult.diagnostics, totalRefs)
 
 	return symbolResolveResult{
 		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),

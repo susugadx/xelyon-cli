@@ -16,6 +16,7 @@ type SearchExecutionArtifact struct {
 // SearchExecutionMetadata は orchestration が参照する検索実行 metadata を表す。
 type SearchExecutionMetadata struct {
 	Bundle              *SymbolBundle
+	Diagnostics         *SymbolBundleDiagnostics
 	AffectedFiles       []string
 	Observation         *tools.RuntimeObservation
 	PatternObservations map[string]*tools.RuntimeObservation
@@ -79,15 +80,21 @@ func executeImpactSearchArtifact(cache tools.ToolCacheInterface, opts SearchOpti
 
 	baseResult := executeSearchPatternsDetailed(cache, basePatterns, opts)
 	if !shouldAppendImpactTestProbe(baseResult.Output, basePatterns) {
-		return searchPatternsArtifact(baseResult, len(basePatterns) > 1)
+		artifact := searchPatternsArtifact(baseResult, len(basePatterns) > 1)
+		artifact.Metadata.Diagnostics = fallbackSearchDiagnostics(symbolBundleFallbackReasonStructuredUnavailable)
+		return artifact
 	}
 
 	finalPatterns := appendImpactTestProbePattern(basePatterns, opts.Pattern)
 	if len(finalPatterns) == len(basePatterns) {
-		return searchPatternsArtifact(baseResult, len(basePatterns) > 1)
+		artifact := searchPatternsArtifact(baseResult, len(basePatterns) > 1)
+		artifact.Metadata.Diagnostics = fallbackSearchDiagnostics(symbolBundleFallbackReasonStructuredUnavailable)
+		return artifact
 	}
 	finalResult := executeSearchPatternsDetailed(cache, finalPatterns, opts)
-	return searchPatternsArtifact(finalResult, len(finalPatterns) > 1)
+	artifact := searchPatternsArtifact(finalResult, len(finalPatterns) > 1)
+	artifact.Metadata.Diagnostics = fallbackSearchDiagnostics(symbolBundleFallbackReasonStructuredUnavailable)
+	return artifact
 }
 func searchPatternsArtifact(result searchPatternsExecution, multiPattern bool) SearchExecutionArtifact {
 	return SearchExecutionArtifact{
@@ -106,6 +113,7 @@ func singlePatternArtifact(pattern string, result singlePatternExecution) Search
 		Rendered: result.Output,
 		Metadata: SearchExecutionMetadata{
 			Bundle:              result.Bundle,
+			Diagnostics:         cloneBundleDiagnosticsForMetadata(result.Bundle),
 			AffectedFiles:       append([]string(nil), result.AffectedFiles...),
 			Observation:         tools.CloneRuntimeObservation(result.Observation),
 			PatternObservations: singlePatternObservationMap(pattern, result.Observation),

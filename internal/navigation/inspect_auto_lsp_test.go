@@ -105,6 +105,15 @@ func main() {
 	if result.Callers[0].File != "app/caller.go" {
 		t.Fatalf("caller file = %q, want app/caller.go", result.Callers[0].File)
 	}
+	if result.ReferenceDiagnostics.ResolvedBy != "lsp" {
+		t.Fatalf("ResolvedBy = %q, want lsp", result.ReferenceDiagnostics.ResolvedBy)
+	}
+	if !result.ReferenceDiagnostics.LSPAttempted || !result.ReferenceDiagnostics.LSPAvailable {
+		t.Fatalf("LSP diagnostics = %+v, want attempted and available", result.ReferenceDiagnostics)
+	}
+	if result.ReferenceDiagnostics.RawRefCount != 2 || result.ReferenceDiagnostics.AcceptedRefCount != 1 || result.ReferenceDiagnostics.DroppedRefCount != 1 {
+		t.Fatalf("ref counts = raw %d accepted %d dropped %d, want 2/1/1", result.ReferenceDiagnostics.RawRefCount, result.ReferenceDiagnostics.AcceptedRefCount, result.ReferenceDiagnostics.DroppedRefCount)
+	}
 }
 
 func TestInspectSymbolAuto_LSPFallbackOnError(t *testing.T) {
@@ -121,6 +130,23 @@ func TestInspectSymbolAuto_LSPFallbackOnError(t *testing.T) {
 	}
 	if !strings.Contains(output, "func Run") {
 		t.Fatalf("expected fallback output to still inspect the symbol, got: %s", output)
+	}
+
+	result, _, status := ResolveInspectSymbolAuto("Run", "", InspectSymbolAutoOptions{
+		Budget:    FullBudget,
+		LSPClient: client,
+	})
+	if status != SymbolAutoSingle {
+		t.Fatalf("expected SymbolAutoSingle from resolved inspect, got %s", status)
+	}
+	if result.ReferenceDiagnostics.ResolvedBy != "mixed" {
+		t.Fatalf("ResolvedBy = %q, want mixed", result.ReferenceDiagnostics.ResolvedBy)
+	}
+	if !result.ReferenceDiagnostics.LSPAttempted || !result.ReferenceDiagnostics.FallbackUsed {
+		t.Fatalf("LSP fallback diagnostics = %+v, want attempted fallback", result.ReferenceDiagnostics)
+	}
+	if result.ReferenceDiagnostics.FallbackReason != "lsp_error" {
+		t.Fatalf("FallbackReason = %q, want lsp_error", result.ReferenceDiagnostics.FallbackReason)
 	}
 }
 

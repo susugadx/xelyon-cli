@@ -17,8 +17,14 @@ type prefetchResult struct {
 	observation *tools.RuntimeObservation
 }
 
+type prefetchPolicy struct {
+	shouldPrefetch bool
+	diagnostics    *search.SymbolBundleDiagnostics
+}
+
 func prefetchRecommendedEvidence(execCtx tools.ExecutionContext, artifact search.SearchExecutionArtifact) prefetchResult {
-	if !artifact.Metadata.StructuredImpact || artifact.Metadata.Ambiguous || artifact.Metadata.Bundle == nil || artifact.Metadata.Bundle.Impact == nil {
+	policy := prefetchPolicyForArtifact(artifact.Metadata)
+	if !policy.shouldPrefetch {
 		return prefetchResult{}
 	}
 	items := boundedRecommendedReads(artifact.Metadata.Bundle.Impact.RecommendedReads, maxPrefetchedReads)
@@ -45,6 +51,17 @@ func prefetchRecommendedEvidence(execCtx tools.ExecutionContext, artifact search
 	return prefetchResult{
 		output:      strings.Join(sections, "\n\n"),
 		observation: tools.MergeRuntimeObservations(observations...),
+	}
+}
+
+func prefetchPolicyForArtifact(metadata search.SearchExecutionMetadata) prefetchPolicy {
+	return prefetchPolicy{
+		shouldPrefetch: metadata.StructuredImpact &&
+			!metadata.Ambiguous &&
+			metadata.Bundle != nil &&
+			metadata.Bundle.Impact != nil &&
+			len(metadata.Bundle.Impact.RecommendedReads) > 0,
+		diagnostics: metadata.Diagnostics,
 	}
 }
 

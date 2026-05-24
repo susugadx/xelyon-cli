@@ -52,6 +52,20 @@ type SymbolBundleDiagnostics struct {
 	LSPSource          string
 	UpstreamTruncated  bool
 	UpstreamIncomplete bool
+
+	ResolvedBy       string
+	LSPAttempted     *bool
+	LSPAvailable     *bool
+	LSPTimedOut      *bool
+	FallbackUsed     *bool
+	Incomplete       *bool
+	Truncated        *bool
+	BudgetLimitHit   *bool
+	FallbackReason   string
+	Confidence       string
+	RawRefCount      *int
+	AcceptedRefCount *int
+	DroppedRefCount  *int
 }
 
 // SymbolBundleItem は bundle 内の 1 つの編集候補箇所。

@@ -130,6 +130,36 @@ func TestPrefetchRecommendedEvidence_IgnoresAmbiguousOrFailedReads(t *testing.T)
 	assertObservationMissingResolvedPath(t, prefetch.observation, filepath.Join(root, "missing.go"))
 }
 
+func TestPrefetchPolicyForArtifactCarriesDiagnosticsAndKeepsAmbiguousGate(t *testing.T) {
+	diagnostics := &search.SymbolBundleDiagnostics{ResolvedBy: "fallback", Confidence: "low"}
+	metadata := search.SearchExecutionMetadata{
+		StructuredImpact: true,
+		Diagnostics:      diagnostics,
+		Bundle: &search.SymbolBundle{
+			Impact: &search.SymbolBundleImpact{
+				RecommendedReads: []search.SymbolBundleItem{{Kind: "definition", File: "valid.go", Line: 1}},
+			},
+		},
+	}
+
+	policy := prefetchPolicyForArtifact(metadata)
+	if !policy.shouldPrefetch {
+		t.Fatal("shouldPrefetch = false, want true for non-ambiguous structured impact with reads")
+	}
+	if policy.diagnostics != diagnostics {
+		t.Fatal("policy diagnostics did not carry metadata diagnostics")
+	}
+
+	metadata.Ambiguous = true
+	policy = prefetchPolicyForArtifact(metadata)
+	if policy.shouldPrefetch {
+		t.Fatal("shouldPrefetch = true, want false for ambiguous structured impact")
+	}
+	if policy.diagnostics != diagnostics {
+		t.Fatal("ambiguous policy should still receive diagnostics for future gates")
+	}
+}
+
 func TestBuildSearchExecutionResult_MergesPrefetchedObservation(t *testing.T) {
 	root := t.TempDir()
 	withGatherContextWorkingDir(t, root)

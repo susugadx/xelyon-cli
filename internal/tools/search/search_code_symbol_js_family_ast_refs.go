@@ -6,10 +6,22 @@ import (
 )
 
 func findJSFamilyReferencesWithAST(symbol string, def genericSymbolDef, opts SearchOptions) []genericSymbolRef {
+	return findJSFamilyReferencesWithASTDetailed(symbol, def, opts).refs
+}
+
+type jsFamilyASTReferenceResult struct {
+	refs           []genericSymbolRef
+	rawMatchCount  int
+	incomplete     bool
+	truncated      bool
+	budgetLimitHit bool
+}
+
+func findJSFamilyReferencesWithASTDetailed(symbol string, def genericSymbolDef, opts SearchOptions) jsFamilyASTReferenceResult {
 	collector := newJSFamilyASTReferenceCollector(symbol, def, opts, maxGenericRefs)
 	defer collector.Close()
 	collector.CollectNameMatches()
-	return collector.Result()
+	return collector.DetailedResult()
 }
 
 func classifyJSFamilySymbolRefsFromAST(refs []genericSymbolRef) jsFamilySymbolRefs {
@@ -44,6 +56,11 @@ type jsFamilyASTReferenceCollector struct {
 	opts                    SearchOptions
 	limit                   int
 	refs                    []genericSymbolRef
+	rawMatchCount           int
+	aliasUsageCount         int
+	incomplete              bool
+	truncated               bool
+	budgetLimitHit          bool
 	importBindingRefs       []genericSymbolRef
 	importBindingImports    []genericSymbolRef
 	files                   *jsFamilyASTParsedFileCache
@@ -63,7 +80,7 @@ func newJSFamilyASTReferenceCollector(symbol string, def genericSymbolDef, opts 
 }
 
 func (c *jsFamilyASTReferenceCollector) CollectNameMatches() {
-	streamGenericSymbolMatches(c.symbol, c.opts, c.AddNameMatch)
+	c.recordStreamResult(streamGenericSymbolMatches(c.symbol, c.opts, c.AddNameMatch))
 	c.CollectDefaultImportSourceMatches()
 }
 
@@ -71,15 +88,33 @@ func (c *jsFamilyASTReferenceCollector) CollectDefaultImportSourceMatches() {
 	if !c.definitionAllowsDefaultImport() {
 		return
 	}
-	streamGenericSymbolMatches("import", c.opts, c.AddDefaultImportSourceMatch)
-	streamGenericSymbolMatches("require", c.opts, c.AddDefaultImportSourceMatch)
+	c.recordStreamResult(streamGenericSymbolMatches("import", c.opts, c.AddDefaultImportSourceMatch))
+	c.recordStreamResult(streamGenericSymbolMatches("require", c.opts, c.AddDefaultImportSourceMatch))
 }
 
 func (c *jsFamilyASTReferenceCollector) Result() []genericSymbolRef {
 	return c.refsWithImportBindingUsages()
 }
 
+func (c *jsFamilyASTReferenceCollector) DetailedResult() jsFamilyASTReferenceResult {
+	refs := c.Result()
+	return jsFamilyASTReferenceResult{
+		refs:           refs,
+		rawMatchCount:  c.rawMatchCount + c.aliasUsageCount,
+		incomplete:     c.incomplete,
+		truncated:      c.truncated,
+		budgetLimitHit: c.budgetLimitHit,
+	}
+}
+
+func (c *jsFamilyASTReferenceCollector) recordStreamResult(result genericSymbolSearchResult) {
+	if result.cancelRequested && !c.truncated {
+		c.incomplete = true
+	}
+}
+
 func (c *jsFamilyASTReferenceCollector) AddNameMatch(match genericSymbolMatch) bool {
+	c.rawMatchCount++
 	ref, ok := c.refFromNameMatch(match)
 	if !ok {
 		ref, ok = c.importBindingRefFromSourceMatch(match)
@@ -96,6 +131,7 @@ func (c *jsFamilyASTReferenceCollector) AddNameMatch(match genericSymbolMatch) b
 }
 
 func (c *jsFamilyASTReferenceCollector) AddDefaultImportSourceMatch(match genericSymbolMatch) bool {
+	c.rawMatchCount++
 	ref, ok := c.defaultImportBindingRefFromSourceMatch(match)
 	if !ok {
 		return true
@@ -218,7 +254,12 @@ func (c *jsFamilyASTReferenceCollector) importBindingRefFromMatch(match genericS
 
 func (c *jsFamilyASTReferenceCollector) addRef(ref genericSymbolRef) bool {
 	c.refs = append(c.refs, ref)
-	return c.limit <= 0 || len(c.refs) < c.limit
+	if c.limit <= 0 || len(c.refs) < c.limit {
+		return true
+	}
+	c.truncated = true
+	c.budgetLimitHit = true
+	return false
 }
 
 func (c *jsFamilyASTReferenceCollector) classify(ref *genericSymbolRef) {

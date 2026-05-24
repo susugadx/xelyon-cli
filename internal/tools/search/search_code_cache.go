@@ -150,6 +150,7 @@ func cloneSymbolBundle(bundle *SymbolBundle) *SymbolBundle {
 		return nil
 	}
 	cloned := *bundle
+	cloned.Diagnostics = cloneSymbolBundleDiagnostics(bundle.Diagnostics)
 	if bundle.Definition.Body != nil {
 		cloned.Definition.Body = append([]string(nil), bundle.Definition.Body...)
 	}

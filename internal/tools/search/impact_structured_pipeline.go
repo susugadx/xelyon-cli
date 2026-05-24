@@ -289,6 +289,7 @@ func newStructuredImpactSearchArtifact(result structuredImpactExecutionResult) S
 		Rendered: result.Rendered,
 		Metadata: SearchExecutionMetadata{
 			Bundle:           result.Bundle,
+			Diagnostics:      cloneBundleDiagnosticsForMetadata(result.Bundle),
 			AffectedFiles:    result.AffectedFiles,
 			Observation:      tools.CloneRuntimeObservation(result.Observation),
 			StructuredImpact: true,

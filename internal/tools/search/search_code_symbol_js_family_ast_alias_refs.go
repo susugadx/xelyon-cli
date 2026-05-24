@@ -242,8 +242,14 @@ func jsFamilyImportSourceCandidateStems(sourceBase string) []string {
 }
 
 func (c *jsFamilyASTReferenceCollector) addImportBindingRef(ref genericSymbolRef) bool {
+	c.aliasUsageCount++
 	c.importBindingRefs = append(c.importBindingRefs, ref)
-	return c.limit <= 0 || len(c.importBindingRefs) < c.limit
+	if c.limit <= 0 || len(c.importBindingRefs) < c.limit {
+		return true
+	}
+	c.truncated = true
+	c.budgetLimitHit = true
+	return false
 }
 
 func (c *jsFamilyASTReferenceCollector) markImportBindingCompletion(file string, localName string) bool {

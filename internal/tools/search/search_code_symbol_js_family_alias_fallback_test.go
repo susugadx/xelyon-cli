@@ -201,10 +201,17 @@ func TestJSFamilyASTReferenceCollector_AliasExpansionStopsAtAliasBudget(t *testi
 		Content: "import { Button as PrimaryButton } from './Button'",
 	})
 
-	classified := classifyJSFamilySymbolRefsFromAST(collector.Result())
+	result := collector.DetailedResult()
+	classified := classifyJSFamilySymbolRefsFromAST(result.refs)
 
 	if len(classified.callers) != 3 {
 		t.Fatalf("callers len = %d, want alias caller budget 3; callers=%+v", len(classified.callers), classified.callers)
+	}
+	if !result.budgetLimitHit || !result.truncated {
+		t.Fatalf("diagnostics = budgetLimitHit %v truncated %v, want true/true for alias budget", result.budgetLimitHit, result.truncated)
+	}
+	if result.rawMatchCount < len(result.refs) {
+		t.Fatalf("rawMatchCount = %d, refs = %d, want raw count to include alias expansion refs", result.rawMatchCount, len(result.refs))
 	}
 }
 
