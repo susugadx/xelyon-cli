@@ -287,7 +287,7 @@ func TestModelCandidates_KnownDefaultCurrentCustomStableDedupe(t *testing.T) {
 	}
 }
 
-func TestModelCandidates_IncludesGeminiFlashModels(t *testing.T) {
+func TestModelCandidates_IncludesRecommendedGeminiModels(t *testing.T) {
 	agent := &Agent{
 		ProviderName:      "gemini",
 		ProviderConfigKey: "gemini",
@@ -305,6 +305,18 @@ func TestModelCandidates_IncludesGeminiFlashModels(t *testing.T) {
 	}
 	if c := candidateByName(got, "gemini-3.1-flash-lite"); c.Name == "" || c.Custom {
 		t.Fatalf("gemini-3.1-flash-lite candidate = %#v, want normal runtime candidate", c)
+	}
+	if c := candidateByName(got, "gemini-3.1-pro-preview-customtools"); c.Name == "" || c.Custom {
+		t.Fatalf("gemini-3.1-pro-preview-customtools candidate = %#v, want normal runtime candidate", c)
+	}
+	if c := candidateByName(got, "gemini-3.1-pro"); c.Name != "" {
+		t.Fatalf("gemini-3.1-pro candidate = %#v, should not be exposed in picker", c)
+	}
+	if c := candidateByName(got, "gemini-3.1-pro-preview"); c.Name != "" {
+		t.Fatalf("gemini-3.1-pro-preview candidate = %#v, should prefer customtools variant", c)
+	}
+	if c := candidateByName(got, "gemini-2.0-flash-exp"); c.Name != "" {
+		t.Fatalf("gemini-2.0-flash-exp candidate = %#v, should not expose shutdown model", c)
 	}
 }
 

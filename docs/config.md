@@ -934,7 +934,7 @@ provider_models:
   openai:
     default_model: gpt-4-turbo
   gemini:
-    default_model: gemini-2.0-flash-exp
+    default_model: gemini-3.5-flash
 ```
 
 ## トラブルシューティング

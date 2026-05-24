@@ -327,7 +327,7 @@ Kimi `$web_search` を使った直近リクエストでは、`WebSearchCalls > 0
 > /model gpt-5.5-pro
 > /model gpt-5.3-codex
 > /model claude-sonnet-4-5-20250514
-> /model gemini-2.0-flash-exp
+> /model gemini-3.5-flash
 ```
 
 `gpt-5.5` は OpenAI Responses API の streaming 経路、`gpt-5.5-pro` は streaming unsupported のため non-streaming 経路を使用します。GPT-5.5 Pro は応答に数分かかる場合があります。
@@ -464,7 +464,7 @@ TUIモードで、現在の変更レビュー用の preset 画面を開きます
 > /provider deepseek
 > /provider openai gpt-5.4
 > /provider kimi kimi-k2.6
-> /provider gemini gemini-2.0-flash-exp
+> /provider gemini gemini-3.5-flash
 > /provider claude claude-sonnet-4-5-20250514
 > /provider ollama qwen2.5-coder:7b
 > /provider groq meta-llama/llama-4-scout-17b-16e-instruct
@@ -685,7 +685,7 @@ xelyon --provider groq
 
 # モデル指定
 xelyon --provider openai --model gpt-4
-xelyon -m gemini-2.0-flash-exp
+xelyon -m gemini-3.5-flash
 ```
 
 ### 初期プロンプト

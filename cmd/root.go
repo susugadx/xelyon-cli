@@ -164,7 +164,7 @@ func init() {
 	// プロバイダー/モデル指定フラグ
 	providerHelp := fmt.Sprintf("Specify LLM provider (%s)", strings.Join(config.GetDisplayProviders(), ", "))
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", providerHelp)
-	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-4o, gemini-2.0-flash-exp)")
+	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-5.5, gemini-3.5-flash)")
 
 	// 新規: --resume / --once / --interactive / --quiet フラグ
 	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")

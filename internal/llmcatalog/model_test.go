@@ -121,13 +121,33 @@ func TestKnownModelNamesForProvider_IncludesGPT53CodexForOpenAIProviders(t *test
 	}
 }
 
-func TestKnownModelNamesForProvider_IncludesGeminiFlashModels(t *testing.T) {
+func TestKnownModelNamesForProvider_IncludesRecommendedGeminiModels(t *testing.T) {
 	models := KnownModelNamesForProvider("gemini")
-	if !slices.Contains(models, "gemini-3.5-flash") {
-		t.Fatalf("KnownModelNamesForProvider(gemini) = %v, want gemini-3.5-flash", models)
+	wantPrefix := []string{
+		"gemini-3.5-flash",
+		"gemini-3.1-flash-lite",
+		"gemini-3.1-pro-preview-customtools",
 	}
-	if !slices.Contains(models, "gemini-3.1-flash-lite") {
-		t.Fatalf("KnownModelNamesForProvider(gemini) = %v, want gemini-3.1-flash-lite", models)
+	if len(models) < len(wantPrefix) {
+		t.Fatalf("KnownModelNamesForProvider(gemini) = %v, want at least %d models", models, len(wantPrefix))
+	}
+	if !slices.Equal(models[:len(wantPrefix)], wantPrefix) {
+		t.Fatalf("KnownModelNamesForProvider(gemini) prefix = %v, want %v; all=%v", models[:len(wantPrefix)], wantPrefix, models)
+	}
+
+	hiddenModels := []string{
+		"gemini-3.1-pro",
+		"gemini-3.1-pro-preview",
+		"gemini-3-pro-preview",
+		"gemini-2.0-flash",
+		"gemini-2.0-flash-exp",
+		"gemini-1.5-pro",
+		"gemini-1.5-flash",
+	}
+	for _, model := range hiddenModels {
+		if slices.Contains(models, model) {
+			t.Fatalf("KnownModelNamesForProvider(gemini) = %v, should not expose %q", models, model)
+		}
 	}
 }
 

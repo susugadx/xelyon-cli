@@ -249,7 +249,7 @@ func handleProviderSwitchCommand(agent *Agent, args []string, commandName string
 	if len(args) == 0 {
 		yellow.Fprintf(out, "Usage: %s <provider> [model]\n", commandName)
 		yellow.Fprintf(out, "Available providers: %s\n", providerList)
-		yellow.Fprintf(out, "Example: %s gemini gemini-2.0-flash-exp\n", commandName)
+		yellow.Fprintf(out, "Example: %s gemini gemini-3.5-flash\n", commandName)
 		return true
 	}
 
