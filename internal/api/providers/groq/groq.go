@@ -80,12 +80,13 @@ func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt
 	// モデル名を設定（config優先、フォールバックはkimi-k2-instruct）
 	model = api.GetDefaultModelWithContext(ctx, model, "groq", "moonshotai/kimi-k2-instruct")
 	options := openaicompat.ChatCompletionsRequestOptions{
-		Model:        model,
-		SystemPrompt: systemPrompt,
-		History:      history,
-		MaxTokens:    api.GetMaxOutputTokens(ctx, "groq", model),
-		Stream:       true,
-		IncludeUsage: true,
+		Model:         model,
+		SystemPrompt:  systemPrompt,
+		ActiveContext: api.ActiveContextBlocksFromContext(ctx),
+		History:       history,
+		MaxTokens:     api.GetMaxOutputTokens(ctx, "groq", model),
+		Stream:        true,
+		IncludeUsage:  true,
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）

@@ -17,7 +17,7 @@ func TestRequestContext_CurrentTaskStateContextDefaultOff(t *testing.T) {
 			TaskLedger: newTaskLedgerWithPassedTest(t),
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(context.Background()))
 	if got != nil {
@@ -31,7 +31,7 @@ func TestRequestContext_CurrentTaskStateContextClearsInheritedBlocksWhenDefaultO
 			TaskLedger: newTaskLedgerWithPassedTest(t),
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(contextWithInheritedActiveContext()))
 	if got != nil {
@@ -45,7 +45,7 @@ func TestRequestContext_CurrentTaskStateContextNilLedgerNoop(t *testing.T) {
 			Options: RuntimeOptions{EnableCurrentTaskStateContext: true},
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(contextWithInheritedActiveContext()))
 	if got != nil {
@@ -60,7 +60,7 @@ func TestRequestContext_CurrentTaskStateContextEmptyLedgerNoop(t *testing.T) {
 			TaskLedger: ledger.NewStoreWithRoot(t.TempDir()),
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(context.Background()))
 	if got != nil {
@@ -75,7 +75,7 @@ func TestRequestContext_CurrentTaskStateContextClearsInheritedBlocksWhenLedgerIs
 			TaskLedger: ledger.NewStoreWithRoot(t.TempDir()),
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 
 	got := api.ActiveContextBlocksFromContext(agent.requestContext(contextWithInheritedActiveContext()))
 	if got != nil {
@@ -96,7 +96,7 @@ func TestRequestContext_CurrentTaskStateContextIncludesSnapshotWithoutMutatingHi
 			session: session,
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 	beforeHistory := append([]api.Message(nil), agent.History...)
 	beforeSessionMessages := append([]history.MessageEntry(nil), session.Messages...)
 
@@ -133,7 +133,7 @@ func TestRequestContext_CurrentTaskStateContextClearsBlocksWhenProviderDoesNotCo
 			TaskLedger: newTaskLedgerWithPassedTest(t),
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateDeepSeek)
+	applyActiveContextProviderFixture(agent, activeContextUnsupported)
 
 	if len(agent.buildActiveContextBlocks()) == 0 {
 		t.Fatal("test setup produced empty active context")
@@ -152,7 +152,7 @@ func TestRequestContextWithoutActiveContextClearsOwnedAndInheritedBlocks(t *test
 			TaskLedger: newTaskLedgerWithPassedTest(t),
 		},
 	}
-	applyCurrentTaskStateProviderFixture(agent, currentTaskStateOpenAIResponses)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
 	if len(agent.providerFacingActiveContextBlocks()) == 0 {
 		t.Fatal("test setup produced empty provider-facing active context")
 	}

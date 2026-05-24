@@ -82,10 +82,9 @@ func (a *Agent) buildProviderHistoryProjectionFromRaw(policy ProviderHistoryRedu
 }
 
 func providerHistoryReductionPolicyForRuntime(runtime *AgentRuntime) ProviderHistoryReductionPolicy {
-	if runtime == nil || !runtime.Options.EnableProviderHistoryReduction {
-		return ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionDisabled}
+	return ProviderHistoryReductionPolicy{
+		Mode: providerHistoryReductionModeResolutionForRuntime(runtime).effective,
 	}
-	return ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionApply}
 }
 
 func (a *Agent) recordLastProviderHistoryProjectionReport(report ProviderHistoryProjectionReport) {
@@ -96,11 +95,54 @@ func (a *Agent) recordLastProviderHistoryProjectionReport(report ProviderHistory
 }
 
 func cloneProviderHistoryProjectionReport(report ProviderHistoryProjectionReport) ProviderHistoryProjectionReport {
+	if len(report.KeptReasonCounts) > 0 {
+		counts := make(map[string]int, len(report.KeptReasonCounts))
+		for reason, count := range report.KeptReasonCounts {
+			counts[reason] = count
+		}
+		report.KeptReasonCounts = counts
+	}
 	if len(report.Candidates) > 0 {
-		report.Candidates = append([]ProviderHistoryReductionCandidate(nil), report.Candidates...)
+		report.Candidates = cloneProviderHistoryReductionCandidates(report.Candidates)
 	}
 	if len(report.Kept) > 0 {
-		report.Kept = append([]ProviderHistoryReductionCandidate(nil), report.Kept...)
+		report.Kept = cloneProviderHistoryReductionCandidates(report.Kept)
+	}
+	report.CommandEditDryRun = cloneProviderHistoryCommandEditDryRunReport(report.CommandEditDryRun)
+	return report
+}
+
+func cloneProviderHistoryReductionCandidates(candidates []ProviderHistoryReductionCandidate) []ProviderHistoryReductionCandidate {
+	if len(candidates) == 0 {
+		return nil
+	}
+	cloned := make([]ProviderHistoryReductionCandidate, len(candidates))
+	for i, candidate := range candidates {
+		cloned[i] = cloneProviderHistoryReductionCandidate(candidate)
+	}
+	return cloned
+}
+
+func cloneProviderHistoryCommandEditDryRunReport(report ProviderHistoryCommandEditDryRunReport) ProviderHistoryCommandEditDryRunReport {
+	if len(report.CandidateReasonCounts) > 0 {
+		counts := make(map[string]int, len(report.CandidateReasonCounts))
+		for reason, count := range report.CandidateReasonCounts {
+			counts[reason] = count
+		}
+		report.CandidateReasonCounts = counts
+	}
+	if len(report.KeptReasonCounts) > 0 {
+		counts := make(map[string]int, len(report.KeptReasonCounts))
+		for reason, count := range report.KeptReasonCounts {
+			counts[reason] = count
+		}
+		report.KeptReasonCounts = counts
+	}
+	if len(report.Candidates) > 0 {
+		report.Candidates = append([]ProviderHistoryCommandEditDryRunCandidate(nil), report.Candidates...)
+	}
+	if len(report.Kept) > 0 {
+		report.Kept = append([]ProviderHistoryCommandEditDryRunCandidate(nil), report.Kept...)
 	}
 	return report
 }

@@ -9,7 +9,10 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
-const ledgerCommandExcerptLimit = 180
+const (
+	ledgerCommandExcerptLimit       = 180
+	ledgerCommandRehydratePlanLimit = 5
+)
 
 func renderLedgerCommandOutput(out io.Writer, state ledger.RuntimeTaskState) {
 	_, _ = fmt.Fprintln(out, "Runtime task ledger")
@@ -73,6 +76,29 @@ func renderLedgerTestResultsSection(out io.Writer, title string, results []ledge
 	_, _ = fmt.Fprintln(out)
 }
 
+func renderLedgerRehydratePlanSection(out io.Writer, plan ledger.RehydratePlan) {
+	if len(plan.Items) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(out, "Rehydrate candidates:")
+	limit := len(plan.Items)
+	if limit > ledgerCommandRehydratePlanLimit {
+		limit = ledgerCommandRehydratePlanLimit
+	}
+	for _, item := range plan.Items[:limit] {
+		_, _ = fmt.Fprintf(out, "  - %s:%s\n", item.Path, ledgerRehydratePlanLineRange(item))
+		_, _ = fmt.Fprintf(out, "    source: %s | reason: %s | stale: %t\n",
+			ledgerDisplayValue(item.Source, "unknown"),
+			ledgerDisplayValue(item.Reason, "unknown"),
+			item.Stale,
+		)
+	}
+	if remaining := len(plan.Items) - limit; remaining > 0 {
+		_, _ = fmt.Fprintf(out, "  ... +%d more\n", remaining)
+	}
+	_, _ = fmt.Fprintln(out)
+}
+
 func ledgerEvidenceFields(item ledgerEvidenceItem) []string {
 	parts := []string{
 		fmt.Sprintf("%s:L%d-L%d", item.Path(), item.StartLine(), item.EndLine()),
@@ -131,6 +157,13 @@ func ledgerSingleLineExcerpt(value string) string {
 	}
 	runes := []rune(value)
 	return string(runes[:ledgerCommandExcerptLimit-3]) + "..."
+}
+
+func ledgerRehydratePlanLineRange(item ledger.RehydratePlanItem) string {
+	if item.EndLine > item.StartLine {
+		return fmt.Sprintf("L%d-L%d", item.StartLine, item.EndLine)
+	}
+	return fmt.Sprintf("L%d", item.StartLine)
 }
 
 type ledgerEvidenceItem interface {

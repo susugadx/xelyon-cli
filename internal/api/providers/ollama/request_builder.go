@@ -23,7 +23,7 @@ func (p *Provider) buildChatRequest(ctx context.Context, systemPrompt string, hi
 
 	reqBody := OllamaRequest{
 		Model:    model,
-		Messages: buildOllamaChatMessages(systemPrompt, history),
+		Messages: buildOllamaChatMessages(systemPrompt, api.ActiveContextBlocksFromContext(ctx), history),
 		Stream:   true,
 		Options: &OllamaOptions{
 			NumPredict: api.GetMaxOutputTokens(ctx, "ollama", model),
@@ -45,9 +45,12 @@ func (p *Provider) buildChatRequest(ctx context.Context, systemPrompt string, hi
 	}
 }
 
-func buildOllamaChatMessages(systemPrompt string, history []api.Message) []api.Message {
+func buildOllamaChatMessages(systemPrompt string, activeContext []api.ActiveContextBlock, history []api.Message) []api.Message {
 	messages := []api.Message{
 		{Role: "system", Content: systemPrompt},
+	}
+	if content := api.RenderActiveContextBlocks(activeContext); content != "" {
+		messages = append(messages, api.Message{Role: "system", Content: content})
 	}
 	messages = append(messages, history...)
 	return messages

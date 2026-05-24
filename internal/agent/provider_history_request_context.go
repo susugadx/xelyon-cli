@@ -31,11 +31,12 @@ func (a *Agent) providerFacingHistoryForRequestFromRaw(ctx context.Context, raw 
 		ctx = api.WithResponseIDChainDisabled(ctx)
 		a.clearResponseContextForProviderHistoryReductionRequest()
 	}
+	ctx = appendProviderHistoryRehydratedEvidenceActiveContext(ctx, a.providerHistoryRehydratedEvidenceActiveContextBlocks(ctx, result.Report))
 	return ctx, result.History
 }
 
 func providerHistoryProjectionDisablesResponseIDChain(report ProviderHistoryProjectionReport) bool {
-	return report.Mode == ProviderHistoryReductionApply && report.ReplacedCount > 0
+	return report.ResponsesChainDisabled
 }
 
 func (a *Agent) clearResponseContextForProviderHistoryReductionRequest() {

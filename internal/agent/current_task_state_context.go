@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"context"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
@@ -42,11 +44,10 @@ func (a *Agent) buildCurrentTaskStateBlock() (api.ActiveContextBlock, bool) {
 }
 
 func (a *Agent) estimateActiveContextTokens() int {
-	total := 0
-	for _, block := range a.providerFacingActiveContextBlocks() {
-		total += token.EstimateTokenCountForModel(a.CurrentModel, block.Content)
-	}
-	return total
+	return token.EstimateTokenCountForModel(
+		a.CurrentModel,
+		api.RenderActiveContextBlocks(a.providerFacingActiveContextBlocksForTokenBudget(context.Background())),
+	)
 }
 
 func (a *Agent) providerFacingActiveContextBlocks() []api.ActiveContextBlock {
@@ -57,15 +58,24 @@ func (a *Agent) shouldSendActiveContextToProvider() bool {
 	if a == nil || a.Runtime == nil || !a.Runtime.Options.EnableCurrentTaskStateContext {
 		return false
 	}
-	cfg := a.cfg()
-	switch a.activeModelProviderConfigKey(cfg) {
-	case "azure":
-		return true
-	case "openai":
-		return cfg.IsProviderResponsesAPIModel("openai", a.CurrentModel)
-	default:
+	return a.providerCanConsumeActiveContext()
+}
+
+func (a *Agent) providerCanConsumeActiveContext() bool {
+	if a == nil {
 		return false
 	}
+	return a.providerActiveContextTransport() != api.ActiveContextTransportNone
+}
+
+func (a *Agent) activeContextRuntimeProviderName() string {
+	if a == nil {
+		return ""
+	}
+	if runtimeProvider := providerRuntimeNameFromProvider(a.CurrentProvider); runtimeProvider != "" {
+		return runtimeProvider
+	}
+	return config.CanonicalProviderName(a.ProviderName)
 }
 
 func (a *Agent) clearResponseContextForActiveContextRequest() {

@@ -11,6 +11,7 @@ func handleLedgerCommand(agent *Agent, args []string) bool {
 	}
 
 	renderLedgerCommandOutput(out, ledgerCommandSnapshot(agent))
+	renderLedgerRehydratePlanSection(out, agent.buildProviderHistoryRehydratePlan(nil))
 	return true
 }
 

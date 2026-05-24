@@ -229,7 +229,7 @@ func TestChatWithCompletions_PromptCacheScopeDoesNotChangeOpenAIKey(t *testing.T
 	}
 }
 
-func TestBuildChatCompletionsRequest_IgnoresActiveContextFromContext(t *testing.T) {
+func TestBuildChatCompletionsRequest_IncludesActiveContextFromContext(t *testing.T) {
 	ctx := api.WithActiveContextBlocks(newOpenAITestContext(t, false), openAITestActiveContextBlocks())
 
 	req := New("test-key").buildChatCompletionsRequest(
@@ -239,19 +239,17 @@ func TestBuildChatCompletionsRequest_IgnoresActiveContextFromContext(t *testing.
 		"gpt-4-turbo",
 	)
 
-	if len(req.Messages) != 2 {
-		t.Fatalf("len(Messages) = %d, want system + history only", len(req.Messages))
+	if len(req.Messages) != 3 {
+		t.Fatalf("len(Messages) = %d, want system + active context + history", len(req.Messages))
 	}
 	if req.Messages[0].Role != "system" || req.Messages[0].Content != "System" {
 		t.Fatalf("Messages[0] = %#v, want system message", req.Messages[0])
 	}
-	if req.Messages[1].Role != "user" || req.Messages[1].Content != "Hello" {
-		t.Fatalf("Messages[1] = %#v, want original history message", req.Messages[1])
+	if req.Messages[1].Role != "system" || req.Messages[1].Content != openAITestActiveContextSnapshot {
+		t.Fatalf("Messages[1] = %#v, want active context system message", req.Messages[1])
 	}
-	for i, msg := range req.Messages {
-		if msg.Content == openAITestActiveContextSnapshot {
-			t.Fatalf("Messages[%d] contains active context in Chat Completions request: %#v", i, msg)
-		}
+	if req.Messages[2].Role != "user" || req.Messages[2].Content != "Hello" {
+		t.Fatalf("Messages[2] = %#v, want original history message", req.Messages[2])
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
 func TestBuildMessagesRequest_UsesRuntimeFeaturePolicy(t *testing.T) {
@@ -59,6 +60,46 @@ func TestBuildRequestFeatures_DefaultsNilConfig(t *testing.T) {
 	if features.ContextManagement == nil {
 		t.Fatal("ContextManagement = nil, want default-config context management payload")
 	}
+}
+
+func TestBuildMessagesRequest_AddsActiveContextToDynamicSystemSuffix(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.PromptCache.Enabled = true
+	p := New("test-key")
+	evidence := claudeTestRehydratedEvidence()
+	ctx := api.WithActiveContextBlocks(config.WithContext(context.Background(), cfg), []api.ActiveContextBlock{{
+		Name:    "provider_history_rehydrated_evidence",
+		Content: evidence,
+	}})
+
+	built := p.buildMessagesRequest(ctx, "Static"+api.SystemPromptCacheBoundary+"Dynamic", []api.Message{{Role: "user", Content: "Hello"}}, defaultClaudeModel)
+
+	systemBlocks, ok := built.Request.System.([]api.SystemBlock)
+	if !ok || len(systemBlocks) != 2 {
+		t.Fatalf("System = %#v, want static/dynamic system blocks", built.Request.System)
+	}
+	if systemBlocks[0].Text != "Static" {
+		t.Fatalf("System[0].Text = %q, want static system prompt", systemBlocks[0].Text)
+	}
+	wantDynamic := "Dynamic\n\n" + evidence
+	if systemBlocks[1].Text != wantDynamic {
+		t.Fatalf("System[1].Text = %q, want active context appended to dynamic suffix", systemBlocks[1].Text)
+	}
+	if systemBlocks[1].CacheControl == nil {
+		t.Fatal("System[1].CacheControl = nil, want dynamic cache boundary preserved")
+	}
+}
+
+func claudeTestRehydratedEvidence() string {
+	return ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+		Path:       "README.md",
+		StartLine:  1,
+		EndLine:    2,
+		Source:     "read_file",
+		Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+		ToolCallID: "call_read",
+		Content:    "line one\nline two",
+	}}})
 }
 
 func TestBuildMessagesRequest_UsesForcedToolChoice(t *testing.T) {

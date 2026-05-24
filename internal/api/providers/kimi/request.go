@@ -90,7 +90,7 @@ var kimiMultimodalChatCompletionsStandardFields = map[string]struct{}{
 
 func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) kimiChatCompletionsBuild {
 	options, thinkingActive, spinnerSuffix := p.buildChatCompletionsRequestOptions(ctx, systemPrompt, model)
-	messages := buildKimiChatMessages(systemPrompt, history)
+	messages := buildKimiChatMessages(systemPrompt, api.ActiveContextBlocksFromContext(ctx), history)
 
 	return kimiChatCompletionsBuild{
 		Model:          options.model,
@@ -139,8 +139,8 @@ func buildKimiTextChatCompletionsRequest(options kimiChatCompletionsRequestOptio
 	return openaicompat.BuildChatCompletionsRequest(options.openAICompatOptions(messages))
 }
 
-func buildKimiChatMessages(systemPrompt string, history []api.Message) []api.Message {
-	messages := openaicompat.BuildChatMessages(systemPrompt, history)
+func buildKimiChatMessages(systemPrompt string, activeContext []api.ActiveContextBlock, history []api.Message) []api.Message {
+	messages := openaicompat.BuildChatMessagesWithActiveContext(systemPrompt, activeContext, history)
 	for i := range messages {
 		messages[i] = sanitizeKimiRequestMessage(messages[i])
 	}
@@ -154,7 +154,7 @@ func sanitizeKimiRequestMessage(message api.Message) api.Message {
 
 func (p *Provider) buildImageChatCompletionsRequest(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (kimiImageChatCompletionsBuild, error) {
 	options, thinkingActive, spinnerSuffix := p.buildChatCompletionsRequestOptions(ctx, systemPrompt, model)
-	request, err := buildKimiImageChatCompletionsRequest(options, systemPrompt, history, userMessage, image)
+	request, err := buildKimiImageChatCompletionsRequest(options, systemPrompt, api.ActiveContextBlocksFromContext(ctx), history, userMessage, image)
 	if err != nil {
 		return kimiImageChatCompletionsBuild{}, err
 	}
@@ -168,17 +168,13 @@ func (p *Provider) buildImageChatCompletionsRequest(ctx context.Context, systemP
 	}, nil
 }
 
-func buildKimiImageChatCompletionsRequest(options kimiChatCompletionsRequestOptions, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData) (kimiMultimodalChatCompletionsRequest, error) {
+func buildKimiImageChatCompletionsRequest(options kimiChatCompletionsRequestOptions, systemPrompt string, activeContext []api.ActiveContextBlock, history []api.Message, userMessage string, image *api.ImageData) (kimiMultimodalChatCompletionsRequest, error) {
 	dataURL, err := kimiImageDataURL(image)
 	if err != nil {
 		return kimiMultimodalChatCompletionsRequest{}, err
 	}
 
-	messages := make([]any, 0, len(history)+2)
-	messages = append(messages, api.Message{Role: "system", Content: systemPrompt})
-	for _, msg := range history {
-		messages = append(messages, sanitizeKimiRequestMessage(msg))
-	}
+	messages := openaicompat.BuildChatMessageInterfacesWithActiveContext(systemPrompt, activeContext, history, sanitizeKimiRequestMessage)
 	messages = append(messages, kimiMultimodalMessage{
 		Role: "user",
 		Content: []kimiMultimodalContent{

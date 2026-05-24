@@ -1,13 +1,36 @@
 package agent
 
-import "github.com/susugadx/xelyon-cli/internal/api"
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
+)
 
 func providerHistoryToolCall(id, name string) api.OpenAIToolCall {
+	return providerHistoryToolCallWithArguments(id, name, "{}")
+}
+
+func providerHistoryToolCallWithArguments(id, name, arguments string) api.OpenAIToolCall {
 	return api.OpenAIToolCall{
 		ID:       id,
 		Type:     "function",
-		Function: api.OpenAIToolCallFunction{Name: name, Arguments: "{}"},
+		Function: api.OpenAIToolCallFunction{Name: name, Arguments: arguments},
 	}
+}
+
+func providerHistoryToolCallWithJSONArguments(t *testing.T, id, name string, arguments map[string]string) api.OpenAIToolCall {
+	t.Helper()
+	return providerHistoryToolCallWithArguments(id, name, providerHistoryJSONArguments(t, arguments))
+}
+
+func providerHistoryJSONArguments(t *testing.T, arguments map[string]string) string {
+	t.Helper()
+	data, err := json.Marshal(arguments)
+	if err != nil {
+		t.Fatalf("json.Marshal(%#v) error = %v", arguments, err)
+	}
+	return string(data)
 }
 
 func providerHistoryAssistantToolCall(id, name string) api.Message {

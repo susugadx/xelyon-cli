@@ -105,7 +105,7 @@ func TestAgent_ResetConversationState_ClearsModelFacingTaskLedger(t *testing.T) 
 	disableColors(t)
 
 	var out bytes.Buffer
-	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "openai"}, currentTaskStateOpenAIResponses, &out)
+	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "openai"}, activeContextOpenAIResponses, &out)
 	assertCurrentTaskLedgerPreserved(t, agent, "test setup")
 
 	if err := agent.resetConversationState(); err != nil {
@@ -137,7 +137,7 @@ func TestAgent_ResetConversationState_PreservesTaskLedgerWhenCurrentTaskStatePro
 	disableColors(t)
 
 	var out bytes.Buffer
-	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "deepseek"}, currentTaskStateDeepSeek, &out)
+	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "unsupported"}, activeContextUnsupported, &out)
 
 	if err := agent.resetConversationState(); err != nil {
 		t.Fatalf("resetConversationState() error = %v", err)
@@ -165,7 +165,7 @@ func TestAgent_ApplyLoadedSession_ClearsModelFacingTaskLedger(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
-	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "openai"}, currentTaskStateOpenAIResponses, &out)
+	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "openai"}, activeContextOpenAIResponses, &out)
 
 	session := history.NewSession("test-model")
 	session.AddMessage("user", "loaded request", "test-model")
@@ -203,7 +203,7 @@ func TestAgent_ApplyLoadedSession_PreservesTaskLedgerWhenCurrentTaskStateProvide
 	disableColors(t)
 
 	var out bytes.Buffer
-	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "deepseek"}, currentTaskStateDeepSeek, &out)
+	agent := newCurrentTaskStateAgent(t, &mockProvider{name: "unsupported"}, activeContextUnsupported, &out)
 
 	session := history.NewSession("test-model")
 	session.AddMessage("user", "loaded request", "test-model")

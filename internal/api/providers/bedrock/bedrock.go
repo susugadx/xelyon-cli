@@ -141,6 +141,19 @@ func (p *Provider) SupportsClaudeCompactionWithContext(ctx context.Context, mode
 	return p.supportsClaudeCompactionWithConfig(cfg, model)
 }
 
+// ActiveContextTransport は Bedrock の実 route に対応する active context transport を返す。
+func (p *Provider) ActiveContextTransport(ctx context.Context, model string) api.ActiveContextTransport {
+	req := p.resolveBedrockRequestContext(ctx, model)
+	switch req.route {
+	case bedrockRouteClaudeMessages:
+		return api.ActiveContextTransportSystemPromptSuffix
+	case bedrockRouteConverseStream:
+		return api.ActiveContextTransportBedrockSystemBlock
+	default:
+		return api.ActiveContextTransportNone
+	}
+}
+
 // SetRuntimeConfig は provider が参照する runtime 設定を差し替える。
 func (p *Provider) SetRuntimeConfig(cfg *config.Config) {
 	p.runtimeConfig = cfg
@@ -297,7 +310,7 @@ func (p *Provider) buildBedrockClaudeMessagesRequest(ctx context.Context, system
 		AnthropicVersion: version,
 		AnthropicBeta:    req.providerConfig.AnthropicBeta,
 		MaxTokens:        resolveClaudeMessagesMaxTokens(ctx, req),
-		System:           api.BuildSystemFieldWithConfig(systemPrompt, req.cfg),
+		System:           api.BuildSystemFieldWithConfig(api.SystemPromptWithActiveContextFromContext(ctx, systemPrompt), req.cfg),
 		Messages:         messages,
 	}
 	if req.cfg.PromptCache.Enabled {
@@ -389,7 +402,7 @@ func (p *Provider) buildBedrockClaudeImageRequest(ctx context.Context, systemPro
 		AnthropicVersion: version,
 		AnthropicBeta:    req.providerConfig.AnthropicBeta,
 		MaxTokens:        resolveClaudeMessagesMaxTokens(ctx, req),
-		System:           api.BuildSystemFieldWithConfig(systemPrompt, req.cfg),
+		System:           api.BuildSystemFieldWithConfig(api.SystemPromptWithActiveContextFromContext(ctx, systemPrompt), req.cfg),
 		Messages:         messages,
 	}
 	if req.cfg.PromptCache.Enabled {

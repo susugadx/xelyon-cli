@@ -174,6 +174,42 @@ func TestProvider_ChatWithTools_ToolUseDisabledOmitsClaudeMessagesTools(t *testi
 	}
 }
 
+func TestBuildBedrockClaudeMessagesRequest_AddsActiveContextToDynamicSystemSuffix(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel: defaultModel,
+	}
+	cfg.PromptCache.Enabled = true
+	p := &Provider{}
+	evidence := bedrockTestRehydratedEvidence()
+	ctx := api.WithActiveContextBlocks(newBedrockTestContext(cfg), []api.ActiveContextBlock{{
+		Name:    "provider_history_rehydrated_evidence",
+		Content: evidence,
+	}})
+
+	req := p.buildBedrockClaudeMessagesRequest(
+		ctx,
+		"Static"+api.SystemPromptCacheBoundary+"Dynamic",
+		[]api.Message{{Role: "user", Content: "hello"}},
+		p.resolveBedrockRequestContext(ctx, ""),
+	)
+
+	systemBlocks, ok := req.System.([]api.SystemBlock)
+	if !ok || len(systemBlocks) != 2 {
+		t.Fatalf("System = %#v, want static/dynamic system blocks", req.System)
+	}
+	if systemBlocks[0].Text != "Static" {
+		t.Fatalf("System[0].Text = %q, want static system prompt", systemBlocks[0].Text)
+	}
+	wantDynamic := "Dynamic\n\n" + evidence
+	if systemBlocks[1].Text != wantDynamic {
+		t.Fatalf("System[1].Text = %q, want active context appended to dynamic suffix", systemBlocks[1].Text)
+	}
+	if systemBlocks[1].CacheControl == nil {
+		t.Fatal("System[1].CacheControl = nil, want dynamic cache boundary preserved")
+	}
+}
+
 func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
 	p := &Provider{client: mockClient}

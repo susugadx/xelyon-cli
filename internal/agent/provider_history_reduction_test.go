@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
 func TestProviderHistoryReductionDryRunDetectsOldAllowedToolResults(t *testing.T) {
@@ -62,6 +63,9 @@ func TestProviderHistoryReductionDryRunDetectsOldAllowedToolResults(t *testing.T
 	}
 	if latest := keptByToolCallID(report, "call_latest"); latest == nil || latest.KeepReason != "latest_tool_result" {
 		t.Fatalf("latest tool result keep entry = %#v, want latest_tool_result", latest)
+	}
+	if report.KeptReasonCounts["latest_tool_result"] != 1 {
+		t.Fatalf("KeptReasonCounts = %#v, want latest_tool_result:1", report.KeptReasonCounts)
 	}
 }
 
@@ -266,5 +270,48 @@ func TestProviderHistoryReductionProjectionAndReportAreDefensiveCopies(t *testin
 	}
 	if agent.History[1].Content != "old read" {
 		t.Fatalf("Agent.History tool content = %q, want old read", agent.History[1].Content)
+	}
+}
+
+func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T) {
+	report := ProviderHistoryProjectionReport{
+		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
+		Candidates: []ProviderHistoryReductionCandidate{{
+			ToolName:         "read_file",
+			EvidencePointers: []ledger.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
+		}},
+		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
+			CandidateReasonCounts: map[string]int{"command_success_output": 1},
+			KeptReasonCounts:      map[string]int{"latest_tool_result": 1},
+			Candidates:            []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "bash"}},
+			Kept:                  []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "write_file"}},
+		},
+	}
+
+	cloned := cloneProviderHistoryProjectionReport(report)
+	cloned.KeptReasonCounts["missing_evidence_pointer"] = 2
+	cloned.Candidates[0].EvidencePointers[0].Path = "mutated.go"
+	cloned.CommandEditDryRun.CandidateReasonCounts["command_success_output"] = 2
+	cloned.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] = 2
+	cloned.CommandEditDryRun.Candidates[0].ToolName = "command"
+	cloned.CommandEditDryRun.Kept[0].ToolName = "apply_patch"
+
+	if report.KeptReasonCounts["missing_evidence_pointer"] != 1 {
+		t.Fatalf("original KeptReasonCounts mutated: %#v", report.KeptReasonCounts)
+	}
+	if report.Candidates[0].EvidencePointers[0].Path != "src/main.go" {
+		t.Fatalf("original candidate EvidencePointers mutated: %#v", report.Candidates)
+	}
+	if report.CommandEditDryRun.CandidateReasonCounts["command_success_output"] != 1 {
+		t.Fatalf("original command/edit CandidateReasonCounts mutated: %#v", report.CommandEditDryRun.CandidateReasonCounts)
+	}
+	if report.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] != 1 {
+		t.Fatalf("original command/edit KeptReasonCounts mutated: %#v", report.CommandEditDryRun.KeptReasonCounts)
+	}
+	if report.CommandEditDryRun.Candidates[0].ToolName != "bash" {
+		t.Fatalf("original command/edit Candidates mutated: %#v", report.CommandEditDryRun.Candidates)
+	}
+	if report.CommandEditDryRun.Kept[0].ToolName != "write_file" {
+		t.Fatalf("original command/edit Kept mutated: %#v", report.CommandEditDryRun.Kept)
 	}
 }

@@ -57,7 +57,7 @@ func (p *Provider) buildConverseStreamInput(ctx context.Context, systemPrompt st
 	input := &bedrockruntime.ConverseStreamInput{
 		ModelId:  aws.String(req.model),
 		Messages: messages,
-		System:   buildConverseSystemBlocks(systemPrompt),
+		System:   buildConverseSystemBlocks(systemPrompt, api.ActiveContextBlocksFromContext(ctx)),
 	}
 	if maxTokens := resolveConverseMaxTokens(req); maxTokens != nil {
 		input.InferenceConfig = &types.InferenceConfiguration{MaxTokens: maxTokens}
@@ -122,13 +122,19 @@ func converseMaxOutputPolicy(req bedrockRequestContext) bedrockMaxOutputPolicy {
 	return bedrockMaxOutputPolicy{source: bedrockMaxOutputSourceMissing}
 }
 
-func buildConverseSystemBlocks(systemPrompt string) []types.SystemContentBlock {
-	if strings.TrimSpace(systemPrompt) == "" {
+func buildConverseSystemBlocks(systemPrompt string, activeContext []api.ActiveContextBlock) []types.SystemContentBlock {
+	renderedActiveContext := api.RenderActiveContextBlocks(activeContext)
+	if strings.TrimSpace(systemPrompt) == "" && renderedActiveContext == "" {
 		return nil
 	}
-	return []types.SystemContentBlock{
-		&types.SystemContentBlockMemberText{Value: systemPrompt},
+	blocks := make([]types.SystemContentBlock, 0, 2)
+	if strings.TrimSpace(systemPrompt) != "" {
+		blocks = append(blocks, &types.SystemContentBlockMemberText{Value: systemPrompt})
 	}
+	if renderedActiveContext != "" {
+		blocks = append(blocks, &types.SystemContentBlockMemberText{Value: renderedActiveContext})
+	}
+	return blocks
 }
 
 func buildConverseToolConfig(ctx context.Context, additionalTools []api.ToolDefinition) *types.ToolConfiguration {

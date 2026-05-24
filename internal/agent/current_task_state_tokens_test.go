@@ -43,9 +43,9 @@ func TestEstimateTokens_IncludesModelFacingCurrentTaskStateContext(t *testing.T)
 
 func TestEstimateTokens_DoesNotCountCurrentTaskStateForProvidersThatDoNotConsumeIt(t *testing.T) {
 	agent := &Agent{
-		CurrentModel:      "deepseek-chat",
-		ProviderName:      "deepseek",
-		ProviderConfigKey: "deepseek",
+		CurrentModel:      activeContextUnsupported.model,
+		ProviderName:      activeContextUnsupported.providerName,
+		ProviderConfigKey: activeContextUnsupported.providerConfigKey,
 		SystemPrompt:      "system",
 		Runtime: &AgentRuntime{
 			Options:    RuntimeOptions{EnableCurrentTaskStateContext: true},
@@ -55,7 +55,7 @@ func TestEstimateTokens_DoesNotCountCurrentTaskStateForProvidersThatDoNotConsume
 	}
 
 	if got := agent.EstimateActiveContextTokens(); got != 0 {
-		t.Fatalf("EstimateActiveContextTokens() = %d, want 0 for non-Responses provider", got)
+		t.Fatalf("EstimateActiveContextTokens() = %d, want 0 for unsupported active-context transport", got)
 	}
 	wantTotal := token.EstimateTokenCountForModel(agent.CurrentModel, agent.SystemPrompt) +
 		token.EstimateTokenCountForModel(agent.CurrentModel, "hello")

@@ -141,7 +141,7 @@ func assertProviderRequestHistoryReductionApplied(t *testing.T, agent *Agent, pr
 		t.Fatalf("Agent.History[1].Content = %q, want raw old read", agent.History[1].Content)
 	}
 	report := agent.Runtime.LastProviderHistoryProjectionReport
-	if report.Mode != ProviderHistoryReductionApply || report.ReplacedCount != 1 || report.EstimatedSavedBytes <= 0 {
-		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want apply report with one replacement", report)
+	if report.Mode != ProviderHistoryReductionApply || report.ReplacedCount != 1 || report.EstimatedSavedBytes <= 0 || report.ApproxSavedTokens <= 0 || !report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want apply report with one replacement and chain disabled", report)
 	}
 }

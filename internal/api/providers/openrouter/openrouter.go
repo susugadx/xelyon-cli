@@ -91,6 +91,16 @@ func (p *Provider) SupportsClaudeCompactionWithContext(ctx context.Context, mode
 	return p.supportsClaudeCompactionWithConfig(cfg, model)
 }
 
+// ActiveContextTransport は実際の OpenRouter route に対応する active context transport を返す。
+func (p *Provider) ActiveContextTransport(ctx context.Context, model string) api.ActiveContextTransport {
+	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
+	if p.routePlanForRequest(cfg, model).usesAnthropicMessages() {
+		return api.ActiveContextTransportSystemPromptSuffix
+	}
+	return api.ActiveContextTransportEphemeralSystem
+}
+
 // SetRuntimeConfig は provider が参照する runtime 設定を差し替える。
 func (p *Provider) SetRuntimeConfig(cfg *config.Config) {
 	p.runtimeConfig = cfg

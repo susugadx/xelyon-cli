@@ -13,6 +13,7 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 		Mode:                  mode,
 		OriginalMessageCount:  len(original),
 		ProjectedMessageCount: len(projected),
+		CommandEditDryRun:     newProviderHistoryCommandEditDryRunReport(),
 	}
 	if len(original) == 0 {
 		return report
@@ -21,6 +22,7 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 	assistantToolCallsByID := collectProviderHistoryAssistantToolCalls(original)
 	trailingToolStart := providerHistoryTrailingToolSuffixStart(original)
 	latestToolResultIndex := providerHistoryLatestToolResultIndex(original)
+	report.CommandEditDryRun = buildProviderHistoryCommandEditDryRunReport(original, projected, mode, assistantToolCallsByID, trailingToolStart, latestToolResultIndex)
 
 	for i, msg := range original {
 		if msg.Role != "tool" {
@@ -29,57 +31,16 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 		report.ToolResultCount++
 		entry := providerHistoryReductionEntry(i, msg)
 
-		if i >= trailingToolStart {
-			entry.KeepReason = "trailing_tool_suffix"
+		linkage := resolveProviderHistoryToolResultLinkage(original, i, msg, assistantToolCallsByID, trailingToolStart, latestToolResultIndex)
+		if linkage.ToolName != "" {
+			entry.ToolName = linkage.ToolName
+		}
+		if linkage.KeepReason != "" {
+			entry.KeepReason = linkage.KeepReason
 			report.Kept = append(report.Kept, entry)
 			continue
 		}
-		if i == latestToolResultIndex {
-			entry.KeepReason = "latest_tool_result"
-			report.Kept = append(report.Kept, entry)
-			continue
-		}
-		if msg.ToolCallID == "" {
-			entry.KeepReason = "missing_tool_call_id"
-			report.Kept = append(report.Kept, entry)
-			continue
-		}
-		localToolResultCount := countProviderHistoryToolResultsByIDInContiguousBlock(original, i, msg.ToolCallID)
-		if localToolResultCount > 1 {
-			entry.KeepReason = "ambiguous_tool_result_id"
-			report.Kept = append(report.Kept, entry)
-			continue
-		}
-
-		allRefs := assistantToolCallsByID[msg.ToolCallID]
-		localAssistantIndex := providerHistoryContiguousAssistantIndexForToolResult(original, i)
-		localRefs := providerHistoryAssistantToolCallRefsAtIndex(original, localAssistantIndex, msg.ToolCallID)
-		if len(localRefs) == 0 {
-			if providerHistoryHasEarlierAssistantToolCallRef(allRefs, i) {
-				entry.KeepReason = "non_contiguous_tool_call_linkage"
-				report.Kept = append(report.Kept, entry)
-				continue
-			}
-			entry.KeepReason = "missing_assistant_tool_call"
-			report.Kept = append(report.Kept, entry)
-			continue
-		}
-		if len(localRefs) > 1 {
-			entry.KeepReason = "ambiguous_assistant_tool_call"
-			report.Kept = append(report.Kept, entry)
-			continue
-		}
-		ref := localRefs[0]
-
-		toolName := msg.ToolName
-		if toolName == "" {
-			toolName = ref.name
-		} else if toolName != ref.name {
-			entry.ToolName = toolName
-			entry.KeepReason = "mismatched_tool_name"
-			report.Kept = append(report.Kept, entry)
-			continue
-		}
+		toolName := linkage.ToolName
 		entry.ToolName = toolName
 		if toolName == "" {
 			entry.KeepReason = "missing_tool_name"
@@ -121,6 +82,14 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 type providerHistoryAssistantToolCallRef struct {
 	historyIndex int
 	name         string
+	arguments    string
+}
+
+type providerHistoryToolResultLinkage struct {
+	ToolName     string
+	Ref          providerHistoryAssistantToolCallRef
+	RefToolNames []string
+	KeepReason   string
 }
 
 func collectProviderHistoryAssistantToolCalls(messages []api.Message) map[string][]providerHistoryAssistantToolCallRef {
@@ -136,10 +105,94 @@ func collectProviderHistoryAssistantToolCalls(messages []api.Message) map[string
 			refsByID[toolCall.ID] = append(refsByID[toolCall.ID], providerHistoryAssistantToolCallRef{
 				historyIndex: i,
 				name:         toolCall.Function.Name,
+				arguments:    toolCall.Function.Arguments,
 			})
 		}
 	}
 	return refsByID
+}
+
+func resolveProviderHistoryToolResultLinkage(messages []api.Message, historyIndex int, msg api.Message, assistantToolCallsByID map[string][]providerHistoryAssistantToolCallRef, trailingToolStart, latestToolResultIndex int) providerHistoryToolResultLinkage {
+	linkage, localRefs, hasEarlierRef := providerHistoryToolResultLinkageMetadata(messages, historyIndex, msg, assistantToolCallsByID)
+	if historyIndex >= trailingToolStart {
+		linkage.KeepReason = "trailing_tool_suffix"
+		return linkage
+	}
+	if historyIndex == latestToolResultIndex {
+		linkage.KeepReason = "latest_tool_result"
+		return linkage
+	}
+	if msg.ToolCallID == "" {
+		linkage.KeepReason = "missing_tool_call_id"
+		return linkage
+	}
+	localToolResultCount := countProviderHistoryToolResultsByIDInContiguousBlock(messages, historyIndex, msg.ToolCallID)
+	if localToolResultCount > 1 {
+		linkage.KeepReason = "ambiguous_tool_result_id"
+		return linkage
+	}
+
+	if len(localRefs) == 0 {
+		if hasEarlierRef {
+			linkage.KeepReason = "non_contiguous_tool_call_linkage"
+			return linkage
+		}
+		linkage.KeepReason = "missing_assistant_tool_call"
+		return linkage
+	}
+	if len(localRefs) > 1 {
+		linkage.KeepReason = "ambiguous_assistant_tool_call"
+		return linkage
+	}
+
+	ref := linkage.Ref
+	if msg.ToolName != "" && ref.name != "" && msg.ToolName != ref.name {
+		linkage.KeepReason = "mismatched_tool_name"
+		return linkage
+	}
+	return linkage
+}
+
+func providerHistoryToolResultLinkageMetadata(messages []api.Message, historyIndex int, msg api.Message, assistantToolCallsByID map[string][]providerHistoryAssistantToolCallRef) (providerHistoryToolResultLinkage, []providerHistoryAssistantToolCallRef, bool) {
+	linkage := providerHistoryToolResultLinkage{ToolName: msg.ToolName}
+	if msg.ToolCallID == "" {
+		return linkage, nil, false
+	}
+
+	allRefs := assistantToolCallsByID[msg.ToolCallID]
+	localAssistantIndex := providerHistoryContiguousAssistantIndexForToolResult(messages, historyIndex)
+	localRefs := providerHistoryAssistantToolCallRefsAtIndex(messages, localAssistantIndex, msg.ToolCallID)
+	switch len(localRefs) {
+	case 0:
+		if providerHistoryHasEarlierAssistantToolCallRef(allRefs, historyIndex) {
+			linkage.RefToolNames = providerHistoryToolNamesFromAssistantRefs(allRefs)
+			return linkage, localRefs, true
+		}
+	case 1:
+		ref := localRefs[0]
+		linkage.Ref = ref
+		linkage.RefToolNames = providerHistoryToolNamesFromAssistantRefs(localRefs)
+		if linkage.ToolName == "" {
+			linkage.ToolName = ref.name
+		}
+	default:
+		linkage.RefToolNames = providerHistoryToolNamesFromAssistantRefs(localRefs)
+	}
+	return linkage, localRefs, false
+}
+
+func providerHistoryToolNamesFromAssistantRefs(refs []providerHistoryAssistantToolCallRef) []string {
+	if len(refs) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref.name == "" {
+			continue
+		}
+		names = append(names, ref.name)
+	}
+	return names
 }
 
 func providerHistoryTrailingToolSuffixStart(messages []api.Message) int {
@@ -163,6 +216,7 @@ func providerHistoryAssistantToolCallRefsAtIndex(messages []api.Message, history
 		refs = append(refs, providerHistoryAssistantToolCallRef{
 			historyIndex: historyIndex,
 			name:         toolCall.Function.Name,
+			arguments:    toolCall.Function.Arguments,
 		})
 	}
 	return refs
@@ -224,12 +278,10 @@ func providerHistoryHasLaterAssistant(messages []api.Message, historyIndex int) 
 }
 
 func isProviderHistoryReductionAlwaysKeptTool(toolName string) bool {
-	switch toolName {
-	case "apply_patch", "str_replace", "write_file", "delete_file", "bash", "command":
+	if providerHistoryIsCommandEditTool(toolName) {
 		return true
-	default:
-		return tools.IsWriteTool(toolName)
 	}
+	return tools.IsWriteTool(toolName)
 }
 
 func isProviderHistoryReductionCandidateTool(toolName string) bool {

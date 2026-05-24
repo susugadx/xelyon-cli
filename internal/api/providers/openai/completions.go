@@ -63,6 +63,7 @@ func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt
 	options := openaicompat.ChatCompletionsRequestOptions{
 		Model:                model,
 		SystemPrompt:         systemPrompt,
+		ActiveContext:        api.ActiveContextBlocksFromContext(ctx),
 		History:              history,
 		MaxTokens:            api.GetMaxOutputTokens(ctx, "openai", model),
 		Stream:               true,
@@ -152,14 +153,7 @@ func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Re
 func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
 	cfg := config.FromContext(ctx)
 
-	// システムプロンプトを最初のメッセージとして追加
-	var messages []interface{}
-	messages = append(messages, api.Message{Role: "system", Content: systemPrompt})
-
-	// 履歴をメッセージ配列に追加（テキストのみ）
-	for _, msg := range history {
-		messages = append(messages, msg)
-	}
+	messages := openaicompat.BuildChatMessageInterfacesWithActiveContext(systemPrompt, api.ActiveContextBlocksFromContext(ctx), history, nil)
 
 	// Data URL形式で画像を埋め込む
 	dataURL := fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64)

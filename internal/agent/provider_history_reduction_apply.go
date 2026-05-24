@@ -12,6 +12,12 @@ func (a *Agent) applyProviderHistoryReduction(report *ProviderHistoryProjectionR
 	if report == nil || report.Mode != ProviderHistoryReductionApply || len(report.Candidates) == 0 {
 		return
 	}
+	if a.providerHistoryReductionRequiresActiveContextTransport() {
+		for i := range report.Candidates {
+			keepProviderHistoryReductionCandidate(report, i, "active_context_transport_unsupported")
+		}
+		return
+	}
 
 	pointers := a.providerHistoryReductionEvidencePointers()
 	evidenceKeyCounts := countProviderHistoryReductionEvidenceKeys(report.Candidates, report.Kept)
@@ -48,6 +54,7 @@ func (a *Agent) applyProviderHistoryReduction(report *ProviderHistoryProjectionR
 
 		applyProviderHistoryReductionCandidateProjection(&projection[candidate.HistoryIndex], candidate, replacementText)
 		report.Candidates[i].ReplacementApplied = true
+		report.Candidates[i].EvidencePointers = cloneProviderHistoryReductionEvidencePointers(evidencePointers)
 	}
 }
 

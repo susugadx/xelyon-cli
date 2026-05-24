@@ -17,7 +17,7 @@ func buildGeminiTextRequest(ctx context.Context, systemPrompt string, messages [
 	reqBody := GeminiRequest{
 		CachedContent:     cacheName,
 		SystemInstruction: geminiSystemInstructionIfUncached(systemPrompt, cacheName),
-		Contents:          geminiTextContentsFromMessages(messages),
+		Contents:          geminiTextContentsFromMessages(geminiMessagesWithActiveContext(ctx, messages)),
 	}
 	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfg)
 	return reqBody
@@ -36,7 +36,7 @@ func buildGeminiMultimodalRequest(
 ) GeminiMultimodalRequest {
 	reqBody := GeminiMultimodalRequest{
 		SystemInstruction: newGeminiSystemInstruction(systemPrompt),
-		Contents:          geminiMultimodalContentsFromMessages(history, userMessage, image),
+		Contents:          geminiMultimodalContentsFromMessages(ctx, history, userMessage, image),
 	}
 
 	if api.ShouldSendToolPayload(ctx, functionCallingEnabled) {
@@ -59,7 +59,7 @@ func buildGeminiFunctionCallingRequest(
 	cfg *config.Config,
 ) GeminiRequestWithTools {
 	reqBody := GeminiRequestWithTools{
-		Contents: geminiFunctionCallingContentsFromMessages(messages),
+		Contents: geminiFunctionCallingContentsFromMessages(geminiMessagesWithActiveContext(ctx, messages)),
 	}
 	if cacheName != "" {
 		reqBody.CachedContent = cacheName
@@ -88,24 +88,48 @@ func geminiSystemInstructionIfUncached(systemPrompt, cacheName string) *GeminiSy
 	return newGeminiSystemInstruction(systemPrompt)
 }
 
+func geminiMessagesWithActiveContext(ctx context.Context, messages []api.Message) []api.Message {
+	message, ok := geminiActiveContextMessage(ctx)
+	if !ok {
+		return messages
+	}
+	insertAt := len(messages)
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			insertAt = i
+			break
+		}
+	}
+	withActiveContext := make([]api.Message, 0, len(messages)+1)
+	withActiveContext = append(withActiveContext, messages[:insertAt]...)
+	withActiveContext = append(withActiveContext, message)
+	withActiveContext = append(withActiveContext, messages[insertAt:]...)
+	return withActiveContext
+}
+
+func geminiActiveContextMessage(ctx context.Context) (api.Message, bool) {
+	content := api.RenderActiveContextBlocksFromContext(ctx)
+	if content == "" {
+		return api.Message{}, false
+	}
+	return api.Message{Role: "user", Content: content}, true
+}
+
 func geminiTextContentsFromMessages(messages []api.Message) []GeminiContent {
 	var contents []GeminiContent
 	for _, msg := range messages {
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: msg.Content}},
-			Role:  geminiContentRole(msg.Role),
-		})
+		contents = append(contents, geminiContentFromMessage(msg))
 	}
 	return contents
 }
 
-func geminiMultimodalContentsFromMessages(history []api.Message, userMessage string, image *api.ImageData) []interface{} {
-	contents := make([]interface{}, 0, len(history)+1)
+func geminiMultimodalContentsFromMessages(ctx context.Context, history []api.Message, userMessage string, image *api.ImageData) []interface{} {
+	contents := make([]interface{}, 0, len(history)+2)
 	for _, msg := range history {
-		contents = append(contents, GeminiContent{
-			Parts: []GeminiPart{{Text: msg.Content}},
-			Role:  geminiContentRole(msg.Role),
-		})
+		contents = append(contents, geminiContentFromMessage(msg))
+	}
+	if message, ok := geminiActiveContextMessage(ctx); ok {
+		contents = append(contents, geminiContentFromMessage(message))
 	}
 	contents = append(contents, GeminiMultimodalContent{
 		Role: "user",
@@ -124,6 +148,13 @@ func geminiMultimodalContentsFromMessages(history []api.Message, userMessage str
 	return contents
 }
 
+func geminiContentFromMessage(msg api.Message) GeminiContent {
+	return GeminiContent{
+		Parts: []GeminiPart{{Text: msg.Content}},
+		Role:  geminiContentRole(msg.Role),
+	}
+}
+
 func geminiFunctionCallingContentsFromMessages(messages []api.Message) []interface{} {
 	var contents []interface{}
 	for _, msg := range messages {
@@ -136,10 +167,7 @@ func geminiFunctionCallingContentsFromMessages(messages []api.Message) []interfa
 		case msg.Role == "tool" && msg.ToolCallID != "":
 			contents = append(contents, geminiFunctionResponseContentFromMessage(msg))
 		default:
-			contents = append(contents, GeminiContent{
-				Parts: []GeminiPart{{Text: msg.Content}},
-				Role:  geminiContentRole(msg.Role),
-			})
+			contents = append(contents, geminiContentFromMessage(msg))
 		}
 	}
 	return contents

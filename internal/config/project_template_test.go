@@ -48,6 +48,11 @@ func TestCloneProjectConfigDeepCopiesSlices(t *testing.T) {
 			Commands: []string{"go test ./..."},
 			Timeout:  60,
 		},
+		Experimental: ProjectExperimentalConfig{
+			ProviderHistoryReduction: ProjectProviderHistoryReductionConfig{
+				Mode: ProjectProviderHistoryReductionModeDryRun,
+			},
+		},
 	}
 
 	clone := CloneProjectConfig(original)
@@ -56,6 +61,7 @@ func TestCloneProjectConfigDeepCopiesSlices(t *testing.T) {
 	clone.Conditional[0].Rules[0] = "lint"
 	clone.Ignore.Patterns[0] = "node_modules"
 	clone.FinalChecks.Commands[0] = "make test"
+	clone.Experimental.ProviderHistoryReduction.Mode = ProjectProviderHistoryReductionModeApply
 
 	if original.Rules[0] != "rule" {
 		t.Fatalf("Rules shared backing array: %#v", original.Rules)
@@ -71,5 +77,8 @@ func TestCloneProjectConfigDeepCopiesSlices(t *testing.T) {
 	}
 	if original.FinalChecks.Commands[0] != "go test ./..." {
 		t.Fatalf("FinalChecks.Commands shared backing array: %#v", original.FinalChecks.Commands)
+	}
+	if original.Experimental.ProviderHistoryReduction.Mode != ProjectProviderHistoryReductionModeDryRun {
+		t.Fatalf("Experimental.ProviderHistoryReduction.Mode = %q, want dry_run", original.Experimental.ProviderHistoryReduction.Mode)
 	}
 }

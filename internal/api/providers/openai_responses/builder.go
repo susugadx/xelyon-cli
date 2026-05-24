@@ -3,7 +3,6 @@ package openairesponses
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 )
@@ -127,38 +126,21 @@ func BuildInitialInput(options InitialInputOptions) []InputItem {
 
 // HasActiveContext は provider request に送る実体のある active context があるかを返す。
 func HasActiveContext(blocks []api.ActiveContextBlock) bool {
-	for _, block := range blocks {
-		if _, ok := activeContextRequestContent(block); ok {
-			return true
-		}
-	}
-	return false
+	return api.RenderActiveContextBlocks(blocks) != ""
 }
 
 func buildActiveContextMessages(blocks []api.ActiveContextBlock) []InputItem {
-	if len(blocks) == 0 {
+	content := api.RenderActiveContextBlocks(blocks)
+	if content == "" {
 		return nil
 	}
-	input := make([]InputItem, 0, len(blocks))
-	for _, block := range blocks {
-		content, ok := activeContextRequestContent(block)
-		if !ok {
-			continue
-		}
-		input = append(input, InputItem{
+	return []InputItem{
+		{
 			Type:    "message",
 			Role:    "developer",
 			Content: content,
-		})
+		},
 	}
-	return input
-}
-
-func activeContextRequestContent(block api.ActiveContextBlock) (string, bool) {
-	if strings.TrimSpace(block.Content) == "" {
-		return "", false
-	}
-	return block.Content, true
 }
 
 // BuildBaseRequest は provider 差分を渡して Responses API request の共通部を構築する。

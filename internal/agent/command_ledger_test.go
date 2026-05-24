@@ -2,6 +2,8 @@ package agent
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -141,6 +143,33 @@ func TestLedgerCommand_PopulatedLedgerRendersSnapshot(t *testing.T) {
 	assertLedgerOutputOmits(t, output, "RuntimeTaskState struct {\nChangedFiles")
 }
 
+func TestLedgerCommand_RendersProviderHistoryRehydrateCandidates(t *testing.T) {
+	root := t.TempDir()
+	path := "internal/agent/provider_history.go"
+	fullPath := filepath.Join(root, filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatalf("mkdir rehydrate candidate parent: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte("ACTUAL_REHYDRATED_CONTENT\n"), 0o644); err != nil {
+		t.Fatalf("write rehydrate candidate file: %v", err)
+	}
+	store := ledger.NewStoreWithRoot(root)
+	agent, out := newLedgerCommandTestAgent(store)
+	agent.Runtime.LastProviderHistoryProjectionReport = recordProviderHistoryRehydratePlanFixture(store, path, 7, 18)
+
+	if !handleSpecialCommandForSurface("/ledger", agent, commandcatalog.CommandSurfaceClassic) {
+		t.Fatal("/ledger was not handled")
+	}
+
+	output := out.String()
+	assertLedgerOutputContains(t, output,
+		"Rehydrate candidates:",
+		"internal/agent/provider_history.go:L7-L18",
+		"source: read_file | reason: edit_target_missing_recent_evidence | stale: false",
+	)
+	assertLedgerOutputOmits(t, output, "ACTUAL_REHYDRATED_CONTENT")
+}
+
 func populateLedgerCommandStore(store *ledger.Store) {
 	recorder := store.Recorder()
 	recorder.RecordChangedFile("src/main.go")
@@ -207,6 +236,7 @@ func TestLedgerCommand_DoesNotMutateConversationState(t *testing.T) {
 			store := newLedgerCommandStore(t)
 			store.Recorder().RecordChangedFile("src/main.go")
 			agent, _ := newLedgerCommandTestAgent(store)
+			agent.Runtime.LastProviderHistoryProjectionReport = recordProviderHistoryRehydratePlanFixture(store, "src/main.go", 1, 2)
 			agent.History = []api.Message{{Role: "user", Content: "hello"}}
 			agent.session.Messages = []history.MessageEntry{{Role: "assistant", Content: "persisted"}}
 			beforeHistory := append([]api.Message(nil), agent.History...)

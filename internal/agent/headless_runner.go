@@ -25,6 +25,7 @@ type headlessRunner struct {
 	startedAt  time.Time
 	toolCalls  []ToolCallResult
 	finalReply string
+	initErr    error
 }
 
 // RunHeadlessWithConfig は指定設定で Headless モードのクエリを実行する。
@@ -51,7 +52,7 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 	}
 
 	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
-	initializeProjectInstructions(agent, projectInstructionApplyOptions{
+	initErr := initializeProjectInstructions(agent, projectInstructionApplyOptions{
 		showStatus:       false,
 		injectProjectMap: true,
 	})
@@ -74,10 +75,15 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 		provider: provider,
 		model:    model,
 		query:    query,
+		initErr:  initErr,
 	}
 }
 
 func (r *headlessRunner) run(ctx context.Context) *HeadlessResult {
+	if r.initErr != nil {
+		return r.errorResult("config_error", r.initErr.Error())
+	}
+
 	maxIterations := normalizeToolLoopLimit(r.agent.cfg().General.ToolLoopLimit)
 
 	for iteration := 0; maxIterations == 0 || iteration < maxIterations; iteration++ {
