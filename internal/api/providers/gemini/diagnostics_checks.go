@@ -333,8 +333,9 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 }
 
 func (r *DiagnosticReport) addFunctionCallingCheck() {
-	support := llmcatalog.GeminiFunctionCallingSupport(r.CatalogModel)
-	detail := geminiDiagnosticFunctionCallingDetail(r.CatalogModel, support)
+	policy := llmcatalog.NewGeminiFunctionCallingPolicy(r.Model, r.CatalogModel)
+	support := policy.Support()
+	detail := geminiDiagnosticFunctionCallingDetail(policy)
 	if support.Known && !support.Supported {
 		r.addCheck(
 			DiagnosticStatusFail,
@@ -364,9 +365,10 @@ func (r *DiagnosticReport) addFunctionCallingCheck() {
 	)
 }
 
-func geminiDiagnosticFunctionCallingDetail(model string, support llmcatalog.ModelCapabilitySupport) string {
+func geminiDiagnosticFunctionCallingDetail(policy llmcatalog.GeminiFunctionCallingPolicy) string {
+	support := policy.Support()
 	parts := []string{
-		"catalog_model=" + strings.TrimSpace(model),
+		"catalog_model=" + policy.PolicyModel(),
 		fmt.Sprintf("known=%t", support.Known),
 		fmt.Sprintf("supported=%t", support.Supported),
 	}

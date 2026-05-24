@@ -135,7 +135,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if geminiCatalogModelKnown(catalogModel) {
 		contextWindow, _ = llmcatalog.KnownModelContextLimit(catalogModel)
 	}
-	functionCallingEnabled := newGeminiFunctionCallingPolicyForCatalogModel(model, catalogModel).Enabled()
+	functionCallingEnabled := llmcatalog.NewGeminiFunctionCallingPolicy(model, catalogModel).Enabled()
 
 	report := DiagnosticReport{
 		Provider:               "gemini",
