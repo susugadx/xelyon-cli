@@ -21,26 +21,46 @@ type agentReviewModel struct {
 
 func (m agentReviewModel) CompleteReview(ctx context.Context, req review.ReviewModelRequest) (review.ReviewModelResponse, error) {
 	a := m.agent
-	if a == nil {
-		return review.ReviewModelResponse{}, fmt.Errorf("review model %s: agent is nil", req.Phase)
-	}
-	if a.CurrentProvider == nil {
-		return review.ReviewModelResponse{}, fmt.Errorf("review model %s: provider is nil", req.Phase)
+	target, err := a.currentReviewModelTarget()
+	if err != nil {
+		return review.ReviewModelResponse{}, fmt.Errorf("review model %s: %w", req.Phase, err)
 	}
 
-	restoreResponseID := a.suspendResponseContinuationForReviewModelCall()
+	restoreResponseID := suspendReviewModelResponseContinuation(target.provider)
 	defer restoreResponseID()
 
-	content, err := a.CurrentProvider.ChatWithTools(
+	content, err := target.provider.ChatWithTools(
 		a.reviewModelRequestContext(ctx),
 		"",
-		[]api.Message{{Role: "user", Content: req.Prompt}},
-		a.CurrentModel,
+		reviewModelPromptHistory(req.Prompt),
+		target.model,
 	)
 	if err != nil {
 		return review.ReviewModelResponse{}, fmt.Errorf("review model %s: %w", req.Phase, err)
 	}
 	return review.ReviewModelResponse{Content: content}, nil
+}
+
+type reviewModelTarget struct {
+	provider api.Provider
+	model    string
+}
+
+func (a *Agent) currentReviewModelTarget() (reviewModelTarget, error) {
+	if a == nil {
+		return reviewModelTarget{}, fmt.Errorf("agent is nil")
+	}
+	if a.CurrentProvider == nil {
+		return reviewModelTarget{}, fmt.Errorf("provider is nil")
+	}
+	return reviewModelTarget{
+		provider: a.CurrentProvider,
+		model:    a.CurrentModel,
+	}, nil
+}
+
+func reviewModelPromptHistory(prompt string) []api.Message {
+	return []api.Message{{Role: "user", Content: prompt}}
 }
 
 func (a *Agent) reviewModelRequestContext(ctx context.Context) context.Context {
@@ -58,11 +78,11 @@ func (a *Agent) reviewModelRequestContext(ctx context.Context) context.Context {
 	return api.WithAdditionalToolDefinitionsDisabled(ctx)
 }
 
-func (a *Agent) suspendResponseContinuationForReviewModelCall() func() {
-	if a == nil {
+func suspendReviewModelResponseContinuation(provider api.Provider) func() {
+	if provider == nil {
 		return func() {}
 	}
-	ridProvider, ok := a.CurrentProvider.(ResponseIDCapable)
+	ridProvider, ok := provider.(ResponseIDCapable)
 	if !ok {
 		return func() {}
 	}
