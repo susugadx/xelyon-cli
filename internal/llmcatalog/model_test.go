@@ -140,14 +140,89 @@ func TestKnownModelNamesForProvider_IncludesRecommendedGeminiModels(t *testing.T
 		"gemini-3.1-pro-preview",
 		"gemini-3-pro-preview",
 		"gemini-2.0-flash",
+		"gemini-2.0-flash-001",
 		"gemini-2.0-flash-exp",
+		"gemini-2.0-flash-lite",
+		"gemini-2.0-flash-lite-001",
 		"gemini-1.5-pro",
 		"gemini-1.5-flash",
+		"gemini-3.1-flash-lite-preview",
 	}
 	for _, model := range hiddenModels {
 		if slices.Contains(models, model) {
 			t.Fatalf("KnownModelNamesForProvider(gemini) = %v, should not expose %q", models, model)
 		}
+	}
+}
+
+func TestModelLifecycleForProvider_GeminiPickerAndShutdownMetadata(t *testing.T) {
+	tests := []struct {
+		model        string
+		stage        ModelLifecycleStage
+		hidden       bool
+		shutdownDate string
+		replacement  string
+		warn         bool
+	}{
+		{
+			model: "gemini-3.5-flash",
+			stage: ModelLifecycleActive,
+		},
+		{
+			model:       "gemini-3.1-pro",
+			stage:       ModelLifecycleActive,
+			hidden:      true,
+			replacement: "gemini-3.1-pro-preview-customtools",
+			warn:        true,
+		},
+		{
+			model:        "gemini-3-pro-preview",
+			stage:        ModelLifecycleShutdown,
+			hidden:       true,
+			shutdownDate: "2026-03-09",
+			replacement:  "gemini-3.1-pro-preview-customtools",
+			warn:         true,
+		},
+		{
+			model:        "gemini-2.0-flash",
+			stage:        ModelLifecycleDeprecated,
+			hidden:       true,
+			shutdownDate: "2026-06-01",
+			replacement:  "gemini-3.5-flash",
+			warn:         true,
+		},
+		{
+			model:        "gemini-1.5-pro-001",
+			stage:        ModelLifecycleShutdown,
+			hidden:       true,
+			shutdownDate: "2025-09-29",
+			replacement:  "gemini-3.1-pro-preview-customtools",
+			warn:         true,
+		},
+		{
+			model:        "gemini-1.5-flash-latest",
+			stage:        ModelLifecycleShutdown,
+			hidden:       true,
+			shutdownDate: "2025-09-29",
+			replacement:  "gemini-3.5-flash",
+			warn:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got, ok := ModelLifecycleForProvider("gemini", tt.model)
+			if !ok {
+				t.Fatalf("ModelLifecycleForProvider(gemini, %q) ok = false, want true", tt.model)
+			}
+			if got.Stage != tt.stage ||
+				got.HiddenFromPicker != tt.hidden ||
+				got.ShutdownDate != tt.shutdownDate ||
+				got.Replacement != tt.replacement ||
+				got.ShouldWarn() != tt.warn {
+				t.Fatalf("ModelLifecycleForProvider(gemini, %q) = %#v, want stage=%s hidden=%t shutdown=%q replacement=%q warn=%t", tt.model, got, tt.stage, tt.hidden, tt.shutdownDate, tt.replacement, tt.warn)
+			}
+		})
 	}
 }
 
@@ -167,6 +242,9 @@ func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
 		{provider: "kimi", model: "moonshotai.kimi-k2.5", want: false},
 		{provider: "openai", model: "gpt-5.4", want: true},
 		{provider: "openai", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: false},
+		{provider: "gemini", model: "gemini-3.1-pro", want: true},
+		{provider: "gemini", model: "gemini-3-pro-preview", want: true},
+		{provider: "gemini", model: "gemini-2.0-flash", want: true},
 		{provider: "azure", model: "gpt-5.4", want: false},
 	}
 

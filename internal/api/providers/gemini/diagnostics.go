@@ -160,6 +160,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addProviderRegistrationCheck()
 	report.addModelCheck()
 	report.addCatalogModelCheck()
+	report.addModelLifecycleCheck()
 	report.addRouteCheck()
 	report.addCatalogPolicyCheck(policyCfg)
 	report.addFunctionCallingCheck()

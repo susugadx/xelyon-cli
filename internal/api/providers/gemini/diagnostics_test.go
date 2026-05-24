@@ -111,6 +111,63 @@ func TestDiagnoseGemini_NonGeminiCatalogModelDoesNotUseGlobalMetadata(t *testing
 	}
 }
 
+func TestDiagnoseGemini_ModelLifecycleWarnings(t *testing.T) {
+	t.Setenv(geminiAPIKeyEnv, "gemini-key")
+	t.Setenv(geminiAPIURLEnv, "")
+	t.Setenv("XELYON_MODEL", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gemini-3.1-pro",
+		CatalogModel: "gemini-3.1-pro",
+	})
+	lifecycle := requireGeminiDiagnosticCheckStatus(t, report, "model_lifecycle", DiagnosticStatusWarn)
+	if !strings.Contains(lifecycle.Detail, "stage=active") ||
+		!strings.Contains(lifecycle.Detail, "picker=hidden") ||
+		!strings.Contains(lifecycle.Detail, "replacement=gemini-3.1-pro-preview-customtools") {
+		t.Fatalf("model_lifecycle detail = %q, want active hidden replacement detail", lifecycle.Detail)
+	}
+
+	report = Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gemini-3-pro-preview",
+		CatalogModel: "gemini-3-pro-preview",
+	})
+	lifecycle = requireGeminiDiagnosticCheckStatus(t, report, "model_lifecycle", DiagnosticStatusWarn)
+	if !strings.Contains(lifecycle.Message, "shut down") ||
+		!strings.Contains(lifecycle.Detail, "stage=shutdown") ||
+		!strings.Contains(lifecycle.Detail, "shutdown_date=2026-03-09") {
+		t.Fatalf("model_lifecycle = %#v, want shutdown warning", lifecycle)
+	}
+
+	report = Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gemini-3-pro-preview",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	lifecycle = requireGeminiDiagnosticCheckStatus(t, report, "model_lifecycle", DiagnosticStatusWarn)
+	if !strings.Contains(lifecycle.Message, "request model has been shut down") ||
+		!strings.Contains(lifecycle.Detail, "request_model{model=gemini-3-pro-preview") ||
+		!strings.Contains(lifecycle.Detail, "stage=shutdown") ||
+		!strings.Contains(lifecycle.Detail, "shutdown_date=2026-03-09") ||
+		strings.Contains(lifecycle.Detail, "catalog_model{") {
+		t.Fatalf("model_lifecycle = %#v, want request model shutdown warning without catalog warning", lifecycle)
+	}
+
+	report = Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gemini-1.5-pro-001",
+		PrintRequest: true,
+	})
+	lifecycle = requireGeminiDiagnosticCheckStatus(t, report, "model_lifecycle", DiagnosticStatusWarn)
+	if !strings.Contains(lifecycle.Message, "shut down") ||
+		!strings.Contains(lifecycle.Detail, "model=gemini-1.5-pro-001") ||
+		!strings.Contains(lifecycle.Detail, "stage=shutdown") ||
+		!strings.Contains(lifecycle.Detail, "shutdown_date=2025-09-29") {
+		t.Fatalf("model_lifecycle = %#v, want suffixed Gemini 1.5 shutdown warning", lifecycle)
+	}
+}
+
 func TestDiagnoseGemini_EndpointCheckMatchesSelectedRoutes(t *testing.T) {
 	t.Setenv(geminiAPIKeyEnv, "gemini-key")
 	t.Setenv("XELYON_MODEL", "")

@@ -41,6 +41,17 @@ var knownProviderModels = map[string][]string{
 		"gemini-3.1-pro-preview-customtools",
 		"gemini-2.5-pro",
 		"gemini-2.5-flash",
+		"gemini-3.1-pro",
+		"gemini-3.1-pro-preview",
+		"gemini-3-pro-preview",
+		"gemini-2.0-flash",
+		"gemini-2.0-flash-001",
+		"gemini-2.0-flash-exp",
+		"gemini-2.0-flash-lite",
+		"gemini-2.0-flash-lite-001",
+		"gemini-1.5-pro",
+		"gemini-1.5-flash",
+		"gemini-3.1-flash-lite-preview",
 	},
 	"claude": {
 		"claude-sonnet-4-6",
@@ -129,7 +140,7 @@ var knownProviderModelPrefixes = map[string][]string{
 	},
 }
 
-// KnownModelNamesForProvider は picker 表示用の既知 model 名を provider ごとの安定順で返す。
+// KnownModelNamesForProvider は picker 表示用の推奨 model 名を provider ごとの安定順で返す。
 // Azure は deployment 名をユーザー環境が所有するため、ここでは候補を返さない。
 func KnownModelNamesForProvider(provider string) []string {
 	key := CanonicalProviderKey(provider)
@@ -137,7 +148,13 @@ func KnownModelNamesForProvider(provider string) []string {
 		return nil
 	}
 	models := knownProviderModels[key]
-	return cloneStrings(models)
+	visible := make([]string, 0, len(models))
+	for _, model := range models {
+		if pickerVisibleModelForProvider(key, model) {
+			visible = append(visible, model)
+		}
+	}
+	return visible
 }
 
 // IsKnownModelNameForProvider は model が provider 所有の既知 catalog 名または既知 prefix か返す。
@@ -148,7 +165,7 @@ func IsKnownModelNameForProvider(provider, model string) bool {
 		return false
 	}
 
-	for _, known := range KnownModelNamesForProvider(key) {
+	for _, known := range knownProviderModels[key] {
 		if strings.EqualFold(model, known) {
 			return true
 		}

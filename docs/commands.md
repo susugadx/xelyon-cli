@@ -70,8 +70,8 @@ Gemini provider の `GEMINI_API_KEY`、`GEMINI_API_URL`、provider 登録、mode
 
 ```bash
 xelyon doctor gemini
-xelyon doctor gemini --model gemini-3.1-pro-preview-customtools
-xelyon doctor gemini --model corp-gemini-model --catalog-model gemini-3.1-pro-preview-customtools
+xelyon doctor gemini --model gemini-3.5-flash
+xelyon doctor gemini --model corp-gemini-model --catalog-model gemini-3.5-flash
 xelyon doctor gemini --smoke
 xelyon doctor gemini --tool-smoke
 xelyon doctor gemini --image-smoke

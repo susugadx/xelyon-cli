@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -158,6 +159,100 @@ func (r *DiagnosticReport) addCatalogModelCheck() {
 		fmt.Sprintf("model=%s catalog_model=%s (%s)", r.Model, r.CatalogModel, r.CatalogModelSource),
 		"Set --catalog-model or provider_models.gemini.catalog_model to a Gemini model before relying on token-limit diagnostics",
 	)
+}
+
+func (r *DiagnosticReport) addModelLifecycleCheck() {
+	warnings := r.modelLifecycleWarnings()
+	if len(warnings) == 0 {
+		return
+	}
+
+	r.addCheck(
+		DiagnosticStatusWarn,
+		"model_lifecycle",
+		geminiModelLifecycleMessage(warnings),
+		geminiModelLifecycleDetail(warnings),
+		geminiModelLifecycleSuggestion(warnings),
+	)
+}
+
+type geminiModelLifecycleWarning struct {
+	Label     string
+	Model     string
+	Lifecycle llmcatalog.ModelLifecycle
+}
+
+func (r DiagnosticReport) modelLifecycleWarnings() []geminiModelLifecycleWarning {
+	var warnings []geminiModelLifecycleWarning
+	addLifecycleWarning := func(label, model string) {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			return
+		}
+		lifecycle, ok := llmcatalog.ModelLifecycleForProvider("gemini", model)
+		if !ok || !lifecycle.ShouldWarn() {
+			return
+		}
+		warnings = append(warnings, geminiModelLifecycleWarning{
+			Label:     label,
+			Model:     model,
+			Lifecycle: lifecycle,
+		})
+	}
+
+	requestModel := strings.TrimSpace(r.Model)
+	catalogModel := strings.TrimSpace(r.CatalogModel)
+	addLifecycleWarning("request_model", requestModel)
+	if !strings.EqualFold(catalogModel, requestModel) {
+		addLifecycleWarning("catalog_model", catalogModel)
+	}
+	return warnings
+}
+
+func geminiModelLifecycleMessage(warnings []geminiModelLifecycleWarning) string {
+	subject := "Gemini model"
+	if len(warnings) == 1 {
+		switch warnings[0].Label {
+		case "request_model":
+			subject = "Gemini request model"
+		case "catalog_model":
+			subject = "Gemini catalog model"
+		}
+	}
+
+	for _, warning := range warnings {
+		if warning.Lifecycle.Stage == llmcatalog.ModelLifecycleShutdown {
+			return subject + " has been shut down"
+		}
+	}
+	for _, warning := range warnings {
+		if warning.Lifecycle.Stage == llmcatalog.ModelLifecycleDeprecated {
+			return subject + " is deprecated or near shutdown"
+		}
+	}
+	return subject + " is not recommended for new configurations"
+}
+
+func geminiModelLifecycleDetail(warnings []geminiModelLifecycleWarning) string {
+	parts := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		parts = append(parts, fmt.Sprintf("%s{%s}", warning.Label, warning.Lifecycle.DiagnosticDetail(warning.Model)))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func geminiModelLifecycleSuggestion(warnings []geminiModelLifecycleWarning) string {
+	seen := make(map[string]bool)
+	suggestions := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		suggestion := strings.TrimSpace(warning.Lifecycle.DiagnosticSuggestion())
+		if suggestion == "" || seen[suggestion] {
+			continue
+		}
+		seen[suggestion] = true
+		suggestions = append(suggestions, suggestion)
+	}
+	return strings.Join(suggestions, "; ")
 }
 
 func (r *DiagnosticReport) addRouteCheck() {

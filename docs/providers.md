@@ -385,8 +385,7 @@ Gemini 3 / 3.5 系は **thinking（推論）が常時 ON** です。XELYON で�
 ```bash
 xelyon doctor gemini
 xelyon doctor gemini --model gemini-3.5-flash
-xelyon doctor gemini --model gemini-3.1-pro-preview-customtools
-xelyon doctor gemini --model corp-gemini-model --catalog-model gemini-3.1-pro-preview-customtools
+xelyon doctor gemini --model corp-gemini-model --catalog-model gemini-3.5-flash
 xelyon doctor gemini --smoke
 xelyon doctor gemini --tool-smoke
 xelyon doctor gemini --image-smoke
