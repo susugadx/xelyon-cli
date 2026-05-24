@@ -14,11 +14,12 @@ const (
 )
 
 type symbolResolveResult struct {
-	Output        string
-	Status        symbolResolveStatus
-	Bundle        *SymbolBundle
-	AffectedFiles []string
-	Observation   *tools.RuntimeObservation
+	Output               string
+	Status               symbolResolveStatus
+	Bundle               *SymbolBundle
+	SemanticShadowBundle *SymbolBundle
+	AffectedFiles        []string
+	Observation          *tools.RuntimeObservation
 }
 
 type symbolResolver interface {

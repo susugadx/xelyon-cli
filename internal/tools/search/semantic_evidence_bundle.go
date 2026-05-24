@@ -152,7 +152,7 @@ func semanticEvidenceRecommendedReads(evidence SemanticEvidence, definition Sema
 }
 
 func semanticEvidenceReadKey(item SymbolBundleItem) string {
-	return fmt.Sprintf("%s:%d:%s", item.File, item.Line, item.Kind)
+	return fmt.Sprintf("%s:%d", item.File, item.Line)
 }
 
 func semanticDefinitionReadItem(evidence SemanticEvidence, definition SemanticDefinition) SymbolBundleItem {
