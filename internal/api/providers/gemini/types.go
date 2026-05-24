@@ -41,6 +41,7 @@ type GeminiMultimodalRequest struct {
 	ToolConfig        *GeminiToolConfigWrapper `json:"tool_config,omitempty"`
 	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
 	CachedContent     string                   `json:"cachedContent,omitempty"`
+	ServiceTier       string                   `json:"service_tier,omitempty"`
 }
 
 // GeminiContent はGeminiの contents 構造
@@ -55,6 +56,7 @@ type GeminiRequest struct {
 	Contents          []GeminiContent          `json:"contents"`
 	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
 	CachedContent     string                   `json:"cachedContent,omitempty"`
+	ServiceTier       string                   `json:"service_tier,omitempty"`
 }
 
 // GeminiCandidate はレスポンスの候補
@@ -64,10 +66,11 @@ type GeminiCandidate struct {
 
 // GeminiUsageMetadata はトークン使用量
 type GeminiUsageMetadata struct {
-	PromptTokenCount        int `json:"promptTokenCount"`
-	CandidatesTokenCount    int `json:"candidatesTokenCount"`
-	ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"` // Extended Thinking トークン（candidatesTokenCount には含まれない）
-	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
+	PromptTokenCount        int    `json:"promptTokenCount"`
+	CandidatesTokenCount    int    `json:"candidatesTokenCount"`
+	ThoughtsTokenCount      int    `json:"thoughtsTokenCount,omitempty"` // Extended Thinking トークン（candidatesTokenCount には含まれない）
+	CachedContentTokenCount int    `json:"cachedContentTokenCount,omitempty"`
+	ServiceTier             string `json:"serviceTier,omitempty"`
 }
 
 // GeminiResponse はGeminiレスポンス
@@ -169,6 +172,7 @@ type GeminiRequestWithTools struct {
 	ToolConfig        *GeminiToolConfigWrapper `json:"tool_config,omitempty"`
 	GenerationConfig  *GeminiGenerationConfig  `json:"generationConfig,omitempty"`
 	CachedContent     string                   `json:"cachedContent,omitempty"`
+	ServiceTier       string                   `json:"service_tier,omitempty"`
 }
 
 // ===== Context Caching structures =====

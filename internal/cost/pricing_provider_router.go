@@ -27,8 +27,14 @@ var pricingResolvers = map[string]pricingResolver{
 	"bedrock": func(req pricingRequest) PricingInfo {
 		return getBedrockPricing(req.Model, req.PromptTokenCount)
 	},
-	"gemini": func(req pricingRequest) PricingInfo {
-		return getGeminiPricing(req.Model, req.PromptTokenCount)
+	geminiPricingFamilyStandard: func(req pricingRequest) PricingInfo {
+		return getGeminiStandardPricing(req.Model, req.PromptTokenCount)
+	},
+	geminiPricingFamilyFlex: func(req pricingRequest) PricingInfo {
+		return getGeminiPricing(req.Model, req.PromptTokenCount, config.GeminiServiceTierFlex)
+	},
+	geminiPricingFamilyPriority: func(req pricingRequest) PricingInfo {
+		return getGeminiPricing(req.Model, req.PromptTokenCount, config.GeminiServiceTierPriority)
 	},
 	"groq": func(req pricingRequest) PricingInfo {
 		return getGroqPricing(req.Model)
@@ -56,7 +62,7 @@ func GetPricingInfoForConfig(cfg *config.Config, provider string, model string, 
 	if resolution.ConfiguredWithoutCatalog && !configuredModelCanUseDirectPricing(provider, resolution.Model) {
 		return pricingUnavailableInfo()
 	}
-	return GetPricingInfo(provider, resolution.Model, promptTokenCount...)
+	return resolvePricingByProviderForConfig(cfg, provider, resolution.Model, normalizePromptTokenCount(promptTokenCount))
 }
 
 // HasKnownPricingModel は provider の pricing family が model を exact known model として持つか返す。
@@ -107,6 +113,21 @@ func resolvePricingByProvider(provider string, model string, promptTokenCount in
 	}
 
 	return resolvePricingByFamily(entry.PricingFamily, pricingRequest{
+		Model:            model,
+		PromptTokenCount: promptTokenCount,
+	})
+}
+
+func resolvePricingByProviderForConfig(cfg *config.Config, provider string, model string, promptTokenCount int) PricingInfo {
+	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
+	if !ok {
+		return pricingUnavailableInfo()
+	}
+	family := entry.PricingFamily
+	if family == geminiPricingFamilyStandard {
+		family = geminiPricingFamilyForServiceTier(cfg.GeminiServiceTier())
+	}
+	return resolvePricingByFamily(family, pricingRequest{
 		Model:            model,
 		PromptTokenCount: promptTokenCount,
 	})

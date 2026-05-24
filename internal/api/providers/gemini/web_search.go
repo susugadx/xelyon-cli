@@ -18,6 +18,7 @@ type webSearchRequest struct {
 	Contents         []GeminiContent         `json:"contents"`
 	Tools            []webSearchTool         `json:"tools"`
 	GenerationConfig *GeminiGenerationConfig `json:"generationConfig,omitempty"`
+	ServiceTier      string                  `json:"service_tier,omitempty"`
 }
 
 type webSearchTool struct {
@@ -122,7 +123,7 @@ func (p *Provider) webSearch(ctx context.Context, query, model string) (string, 
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
-	p.emitUsageMetadata(parsed.UsageMetadata)
+	p.emitUsageMetadata(parsed.UsageMetadata, geminiResponseBillingServiceTier(resp, cfg))
 
 	summary, sources := parseWebSearchResponse(parsed)
 	return formatWebSearchResult(summary, sources), nil
@@ -136,6 +137,7 @@ func buildGeminiWebSearchRequest(ctx context.Context, query, model string, cfg *
 		}},
 		Tools:            []webSearchTool{buildWebSearchTool(model)},
 		GenerationConfig: getThinkingConfigForModel(ctx, model, cfg),
+		ServiceTier:      geminiRequestServiceTier(cfg),
 	}
 }
 

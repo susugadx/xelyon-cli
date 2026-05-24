@@ -135,6 +135,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **Claude系の server-side tool clearing**: Claude / Bedrock(Claude) / OpenRouter(Claude models) では `clear_tool_uses` により古い `tool_use` / `tool_result` ペア構造をサーバー側で削減し、compaction 発動前に入力トークンを節約
 - **プロンプトキャッシュ最適化**: Claude/Bedrock(Claude) 利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置
 - **Long Context 料金自動判定**: Claude/Gemini Pro で200Kトークン超のリクエスト時、long context 料金ティアを自動適用。キャッシュトークン（cache_read + cache_creation）も含めた総入力トークンでティア判定
+- **Gemini service tier**: `gemini.service_tier` で Gemini BYOK の `standard` / `flex` / `priority` 同期 inference と料金表示を切り替え
 
 ### 📈 リアルタイムトークン表示
 API実測値に基づくトークン使用量とコストをリアルタイム表示。

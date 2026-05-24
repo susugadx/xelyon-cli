@@ -59,6 +59,20 @@ func geminiTransportIdleTimeout(ctx context.Context, model string, cfg *config.C
 	return idleTimeout
 }
 
+func geminiResponseBillingServiceTier(resp *http.Response, cfg *config.Config) string {
+	if resp == nil {
+		return ""
+	}
+	actual := geminiBillingServiceTierFromValue(resp.Header.Get("x-gemini-service-tier"))
+	if actual == "" {
+		return ""
+	}
+	if actual == cfg.GeminiServiceTier() {
+		return ""
+	}
+	return actual
+}
+
 // handleSSEResponse は streamGenerateContent?alt=sse の SSE ストリームを処理する
 // thinkingMsg はSSEストリーム開始時にスピナーを切り替えるメッセージ（空なら切り替えなし）
 func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, thinkingMsg, model string) (string, error) {
@@ -68,6 +82,7 @@ func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, s
 	defer state.stopSpinner()
 
 	cfg := config.FromContext(ctx)
+	state.billingServiceTier = geminiResponseBillingServiceTier(resp, cfg)
 	transportIdleTimeout := geminiTransportIdleTimeout(ctx, model, cfg)
 	loopPolicy := newSSELoopPolicy(ctx, transportIdleTimeout)
 	controller := api.NewStreamLoopController(resp.Body, api.StreamLoopOptions{

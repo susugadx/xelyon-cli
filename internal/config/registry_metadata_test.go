@@ -17,6 +17,7 @@ func TestFieldTypeMap(t *testing.T) {
 		"agent_instructions.project.mode":   FieldTypeSelect,
 		"agent_instructions.max_file_bytes": FieldTypeInt,
 		"provider_models":                   FieldTypeStructMap,
+		"gemini.service_tier":               FieldTypeSelect,
 		"sub_agent.max_concurrent":          FieldTypeInt,
 	}
 
@@ -43,6 +44,7 @@ func TestSelectOptions(t *testing.T) {
 		{"execution.mode", 3},      // balanced, trusted, full_auto
 		{"agent_instructions.project.mode", 3},
 		{"output.assistant_updates", 4},
+		{"gemini.service_tier", 3},
 	}
 
 	for _, tt := range tests {
@@ -89,6 +91,7 @@ func TestFieldDescriptions(t *testing.T) {
 		"execution.mode",
 		"output.assistant_updates",
 		"project_map.context_ratio",
+		"gemini.service_tier",
 		"sub_agent.default_model",
 	}
 

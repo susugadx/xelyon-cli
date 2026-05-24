@@ -41,6 +41,7 @@ type Config struct {
 	GitStage            GitStageConfig     `yaml:"git_stage"`
 	LSP                 LSPConfig          `yaml:"lsp"`
 	OpenAI              OpenAIConfig       `yaml:"openai"`
+	Gemini              GeminiConfig       `yaml:"gemini"`
 	Thinking            ThinkingConfig     `yaml:"thinking"`
 	Output              OutputConfig       `yaml:"output"`
 	WebSearch           WebSearchConfig    `yaml:"web_search"`
@@ -210,6 +211,11 @@ type GitStageConfig struct {
 // Responses API ルーティングはプレフィックスマッチで自動判定し、このリストはフォールバック用
 type OpenAIConfig struct {
 	ResponsesAPIModels []string `yaml:"responses_api_models"` // 内部: Responses API フォールバックリスト
+}
+
+// GeminiConfig は Gemini プロバイダーの実行時設定
+type GeminiConfig struct {
+	ServiceTier string `yaml:"service_tier"` // service_tier（standard / flex / priority）
 }
 
 // ThinkingConfig は Extended Thinking の内部設定（user-facing config から削除済み、YAML 互換は維持）

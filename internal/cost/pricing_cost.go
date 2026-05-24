@@ -63,7 +63,7 @@ func EstimateRequestCostWithCacheForConfig(cfg *config.Config, provider, model s
 	}
 
 	tierInputTokens := pricingTierInputTokensForUsage(cfg, provider, model, usage)
-	pricing := GetPricingInfoForConfig(cfg, provider, model, tierInputTokens)
+	pricing := GetPricingInfoForConfig(pricingConfigForUsage(cfg, provider, usage), provider, model, tierInputTokens)
 	if pricing.PricingUnavailable {
 		return CostEstimate{PricingUnavailable: true}
 	}
@@ -83,6 +83,23 @@ func EstimateRequestCostWithCacheForConfig(cfg *config.Config, provider, model s
 	thinkingCost := float64(usage.ThinkingTokens) / 1_000_000.0 * pricing.OutputCostPerM
 
 	return CostEstimate{Cost: cachedInputCost + cacheCreationCost + uncachedInputCost + outputCost + thinkingCost}
+}
+
+func pricingConfigForUsage(cfg *config.Config, provider string, usage api.Usage) *config.Config {
+	if provider != "gemini" || usage.BillingServiceTier == "" {
+		return cfg
+	}
+	if !config.IsValidGeminiServiceTier(usage.BillingServiceTier) {
+		return cfg
+	}
+	if cfg == nil {
+		next := config.DefaultConfig()
+		next.Gemini.ServiceTier = config.NormalizeGeminiServiceTier(usage.BillingServiceTier)
+		return next
+	}
+	next := *cfg
+	next.Gemini.ServiceTier = config.NormalizeGeminiServiceTier(usage.BillingServiceTier)
+	return &next
 }
 
 // EstimateCacheStorageCost は explicit context cache の保管コストを計算する。

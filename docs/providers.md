@@ -359,6 +359,8 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 - 画像入力対応
 - 無料枠あり
 
+Gemini BYOK の同期 inference tier は `gemini.service_tier` で指定できます。既定の `standard` では `service_tier` を送信せず、`flex` / `priority` のときだけ Gemini request body に `service_tier` を入れます。`flex` はキュー待ちでレスポンス開始が遅くなるため、XELYON は Gemini の既定 response-start timeout を 10 分まで広げます。`priority` が Google 側で `standard` に downgrade された場合は、`x-gemini-service-tier` response header を見て standard 料金で概算します。Batch API は非同期ジョブ API のため、この設定の対象外です。
+
 #### Gemini 3 / 3.5 モデル（thinking 対応）
 
 Gemini 3 / 3.5 系は **thinking（推論）が常時 ON** です。XELYON では自動的に `thinkingLevel` パラメータを送信します。`gemini-3.5-flash` は Stable model として扱い、1,048,576 input tokens / 65,536 output tokens の catalog metadata を持ちます。
@@ -379,7 +381,7 @@ Gemini 3 / 3.5 系は **thinking（推論）が常時 ON** です。XELYON で�
 
 **注意:** Gemini 3 Pro の Function Calling には既知のバグ（空レスポンス）が報告されています。問題が発生する場合は `XELYON_DEBUG_GEMINI=1` で詳細ログを確認してください。
 
-設定の到達性は CLI から診断できます。`doctor gemini` は `GEMINI_API_KEY`、`GEMINI_API_URL`、provider 登録、model / `catalog_model` 解決、`streamGenerateContent?alt=sse` route、function calling 設定、画像入力、thinking、context caching、native web search、token / pricing metadata を確認します。`--smoke` を付けると live text SSE request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。画像入力の実 API 受理は `--image-smoke`、native web search は `--web-search-smoke` で確認します。`--print-request` は live request を送らず、redacted `x-goog-api-key` header と request body を表示します。live smoke の失敗は `smoke` check の message / suggestion と request 単位の `smoke.requests[].error` に分類して表示します。Gemini thinking request では response-start / SSE idle の待機上限に `streaming.thinking_timeout_seconds` を使い、thinking 途中の沈黙や thought progress を通常の transport idle と区別します。
+設定の到達性は CLI から診断できます。`doctor gemini` は `GEMINI_API_KEY`、`GEMINI_API_URL`、provider 登録、model / `catalog_model` 解決、`streamGenerateContent?alt=sse` route、function calling 設定、画像入力、thinking、context caching、native web search、token / pricing metadata を確認します。`--smoke` を付けると live text SSE request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。画像入力の実 API 受理は `--image-smoke`、native web search は `--web-search-smoke` で確認します。`--print-request` は live request を送らず、redacted `x-goog-api-key` header と request body を表示します。`gemini.service_tier` が `flex` / `priority` の場合は preview body にも `service_tier` が出ます。live smoke の失敗は `smoke` check の message / suggestion と request 単位の `smoke.requests[].error` に分類して表示します。Gemini thinking request では response-start / SSE idle の待機上限に `streaming.thinking_timeout_seconds` を使い、thinking 途中の沈黙や thought progress を通常の transport idle と区別します。
 
 ```bash
 xelyon doctor gemini
@@ -683,7 +685,7 @@ xelyon
 
 ## 料金表示
 
-`/status`、ステータスバー、headless JSON の `cost` は `internal/cost/pricing.yaml` と組み込みの既知ルールに基づく推定値です。価格表にない provider/model は別モデルの料金で代用せず、UI では `N/A (pricing unavailable)`、ステータスバーでは `cost N/A` と表示します。headless JSON では `pricing_unavailable: true` を返します。Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含め、Kimi `$web_search` の call fee など token 料金とは別枠の固定費は `cost` に含めますが、検索結果 tokens は token totals に再加算しません。headless JSON では Kimi web search の観測値を `web_search` object の `calls`、`fee_estimate`、`result_tokens` にも分けて出します。
+`/status`、ステータスバー、headless JSON の `cost` は `internal/cost/pricing.yaml` と組み込みの既知ルールに基づく推定値です。価格表にない provider/model は別モデルの料金で代用せず、UI では `N/A (pricing unavailable)`、ステータスバーでは `cost N/A` と表示します。headless JSON では `pricing_unavailable: true` を返します。Gemini は `gemini.service_tier` に応じて `standard` / `flex` / `priority` の同期 inference 料金を使い、Batch API 料金は使いません。Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含め、Kimi `$web_search` の call fee など token 料金とは別枠の固定費は `cost` に含めますが、検索結果 tokens は token totals に再加算しません。headless JSON では Kimi web search の観測値を `web_search` object の `calls`、`fee_estimate`、`result_tokens` にも分けて出します。
 
 カスタム deployment 名や社内 alias を使う場合は、`provider_models.<provider>.catalog_model` または `model_overrides.<model>.catalog_model` に provider の pricing family で解決できる既知モデル名を指定すると、そのモデルの token limit / pricing / context 判定を使えます。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 

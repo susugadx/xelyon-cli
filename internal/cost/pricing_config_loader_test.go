@@ -1,6 +1,7 @@
 package cost
 
 import (
+	"reflect"
 	"sync"
 	"testing"
 
@@ -57,6 +58,39 @@ func TestPricingFamilyHasKnownModelUsesExactAllowlist(t *testing.T) {
 				t.Fatalf("pricingFamilyHasKnownModel(%q, %q) = %v, want %v", tt.family, tt.model, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGeminiServiceTierKnownModelsStayInSync(t *testing.T) {
+	cfg := loadPricingConfig()
+	if cfg == nil {
+		t.Fatal("loadPricingConfig() = nil")
+	}
+
+	flex, ok := cfg.provider(geminiPricingFamilyFlex)
+	if !ok {
+		t.Fatalf("pricing config missing %q provider", geminiPricingFamilyFlex)
+	}
+	priority, ok := cfg.provider(geminiPricingFamilyPriority)
+	if !ok {
+		t.Fatalf("pricing config missing %q provider", geminiPricingFamilyPriority)
+	}
+	if !reflect.DeepEqual(flex.KnownModels.Exact, priority.KnownModels.Exact) {
+		t.Fatalf("Gemini service tier known models drifted:\nflex=%#v\npriority=%#v", flex.KnownModels.Exact, priority.KnownModels.Exact)
+	}
+
+	for _, model := range []string{
+		"gemini-2.5-pro-preview",
+		"gemini-3-pro-preview",
+		"gemini-3.1-pro-preview",
+		"gemini-3.1-pro-preview-customtools",
+	} {
+		if !pricingFamilyHasKnownModel(geminiPricingFamilyFlex, model) {
+			t.Fatalf("Gemini flex known models missing %q", model)
+		}
+		if !pricingFamilyHasKnownModel(geminiPricingFamilyPriority, model) {
+			t.Fatalf("Gemini priority known models missing %q", model)
+		}
 	}
 }
 

@@ -163,6 +163,12 @@ func defaultOpenAIConfig() OpenAIConfig {
 	}
 }
 
+func defaultGeminiConfig() GeminiConfig {
+	return GeminiConfig{
+		ServiceTier: GeminiServiceTierStandard,
+	}
+}
+
 func defaultThinkingConfig() ThinkingConfig {
 	return ThinkingConfig{
 		Enabled: false,    // 内部 runtime 初期値（/thinking コマンドが正規ルート）

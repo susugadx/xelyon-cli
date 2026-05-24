@@ -1,6 +1,9 @@
 package configgen
 
-import "github.com/susugadx/xelyon-cli/internal/llmcatalog"
+import (
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+)
 
 // SectionInfo describes a user-facing config section and its fields.
 type SectionInfo struct {
@@ -69,6 +72,24 @@ var Sections = map[string]SectionInfo{
 		},
 		Example: ExampleSectionPolicy{
 			FilterMode: ExampleFilterModeKeepAll,
+		},
+	},
+	"gemini": {
+		StructName: "GeminiConfig",
+		Title:      "Gemini 設定",
+		Icon:       "🤖",
+		Comments: []string{
+			"Gemini BYOK の同期 inference tier を制御",
+			"standard は既定、flex は低コスト・高遅延、priority は高コスト・高優先度",
+		},
+		Fields: map[string]string{
+			"service_tier": "Gemini service_tier（standard / flex / priority）",
+		},
+		FieldTypes: map[string]string{
+			"service_tier": "select",
+		},
+		SelectOpts: map[string][]string{
+			"service_tier": config.GeminiServiceTierValues(),
 		},
 	},
 	"general": {
@@ -326,6 +347,7 @@ var sectionCatalog = []sectionCatalogEntry{
 	{Name: "default_provider", Category: "provider"},
 	{Name: "default_model", Category: "provider"},
 	{Name: "provider_models", Category: "provider"},
+	{Name: "gemini", Category: "provider"},
 	{Name: "general", Category: "general"},
 	{Name: "execution", Category: "execution"},
 	{Name: "compression", Category: "compression"},

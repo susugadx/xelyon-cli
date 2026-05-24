@@ -26,6 +26,7 @@ func TestUsageAdd(t *testing.T) {
 		CachedInputTokens:     2,
 		CacheCreationTokens:   1,
 		StorageCost:           0.01,
+		BillingServiceTier:    "priority",
 		WebSearchCalls:        1,
 		WebSearchResultTokens: 100,
 	}
@@ -37,6 +38,7 @@ func TestUsageAdd(t *testing.T) {
 		CachedInputTokens:     7,
 		CacheCreationTokens:   8,
 		StorageCost:           0.02,
+		BillingServiceTier:    "standard",
 		WebSearchCalls:        2,
 		WebSearchResultTokens: 300,
 	})
@@ -48,6 +50,7 @@ func TestUsageAdd(t *testing.T) {
 		usage.CacheCreationTokens != 9 ||
 		usage.StorageCost < 0.0299 ||
 		usage.StorageCost > 0.0301 ||
+		usage.BillingServiceTier != "standard" ||
 		usage.WebSearchCalls != 3 ||
 		usage.WebSearchResultTokens != 400 {
 		t.Fatalf("Usage.Add() = %+v, want all fields accumulated", usage)

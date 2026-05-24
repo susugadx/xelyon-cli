@@ -21,7 +21,7 @@ var openRouterDelegationRules = []openRouterDelegationRule{
 	{
 		owners: []string{"google"},
 		resolver: func(req pricingRequest) PricingInfo {
-			return getGeminiPricing(req.Model, req.PromptTokenCount)
+			return getGeminiStandardPricing(req.Model, req.PromptTokenCount)
 		},
 	},
 	{

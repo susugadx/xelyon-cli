@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // Test helpers
@@ -67,6 +68,26 @@ func TestNew(t *testing.T) {
 
 	if provider == nil {
 		t.Fatal("New() returned nil")
+	}
+}
+
+func TestGeminiResponseHeaderTimeout_ServiceTierFlex(t *testing.T) {
+	flexCfg := config.DefaultConfig()
+	flexCfg.Gemini.ServiceTier = config.GeminiServiceTierFlex
+	flexCtx := config.WithContext(context.Background(), flexCfg)
+
+	if got := geminiResponseHeaderTimeout(flexCtx, "gemini-2.5-flash", defaultResponseHeaderTimeout); got != geminiFlexResponseHeaderTimeout {
+		t.Fatalf("flex response header timeout = %s, want %s", got, geminiFlexResponseHeaderTimeout)
+	}
+
+	standardCtx := config.WithContext(context.Background(), config.DefaultConfig())
+	if got := geminiResponseHeaderTimeout(standardCtx, "gemini-2.5-flash", defaultResponseHeaderTimeout); got != defaultResponseHeaderTimeout {
+		t.Fatalf("standard response header timeout = %s, want %s", got, defaultResponseHeaderTimeout)
+	}
+
+	customTimeout := 2 * time.Second
+	if got := geminiResponseHeaderTimeout(flexCtx, "gemini-2.5-flash", customTimeout); got != customTimeout {
+		t.Fatalf("custom response header timeout = %s, want %s", got, customTimeout)
 	}
 }
 

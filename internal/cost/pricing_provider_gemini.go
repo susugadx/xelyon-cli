@@ -2,14 +2,30 @@ package cost
 
 import (
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
+
+const (
+	geminiPricingFamilyStandard = "gemini"
+	geminiPricingFamilyFlex     = "gemini_flex"
+	geminiPricingFamilyPriority = "gemini_priority"
+)
+
+func getGeminiStandardPricing(model string, promptTokenCount int) PricingInfo {
+	return getGeminiPricing(model, promptTokenCount, config.GeminiServiceTierStandard)
+}
 
 // getGeminiPricing はモデル名からGemini料金を返す
 // promptTokenCount はリクエストの入力トークン数（200Kティア判定に使用）
-func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
+func getGeminiPricing(model string, promptTokenCount int, serviceTier string) PricingInfo {
 	lm := strings.ToLower(model)
-	if pricing, ok := resolveProviderPricingFromLoadedConfig("gemini", lm, promptTokenCount, true); ok {
+	family := geminiPricingFamilyForServiceTier(serviceTier)
+	if pricing, ok := resolveProviderPricingFromLoadedConfig(family, lm, promptTokenCount, true); ok {
 		return pricing
+	}
+	if config.NormalizeGeminiServiceTier(serviceTier) != config.GeminiServiceTierStandard {
+		return pricingUnavailableInfo()
 	}
 
 	switch {
@@ -86,5 +102,16 @@ func getGeminiPricing(model string, promptTokenCount int) PricingInfo {
 		}
 	default:
 		return pricingUnavailableInfo()
+	}
+}
+
+func geminiPricingFamilyForServiceTier(serviceTier string) string {
+	switch config.NormalizeGeminiServiceTier(serviceTier) {
+	case config.GeminiServiceTierFlex:
+		return geminiPricingFamilyFlex
+	case config.GeminiServiceTierPriority:
+		return geminiPricingFamilyPriority
+	default:
+		return geminiPricingFamilyStandard
 	}
 }

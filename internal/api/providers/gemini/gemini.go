@@ -54,6 +54,9 @@ type Provider struct {
 // Google側でリクエスト処理が詰まった場合に無制限にぶら下がるのを防ぐ
 const defaultResponseHeaderTimeout = 60 * time.Second
 
+// geminiFlexResponseHeaderTimeout は Flex tier の queue 待ちを許容する response-start 上限。
+const geminiFlexResponseHeaderTimeout = 10 * time.Minute
+
 func geminiConfiguredThinkingTimeout(cfg *config.Config) time.Duration {
 	if cfg == nil || cfg.Streaming.ThinkingTimeoutSeconds <= 0 {
 		return 300 * time.Second
@@ -67,17 +70,22 @@ func isGeminiThinkingRequest(ctx context.Context, model string) bool {
 
 func geminiResponseHeaderTimeout(ctx context.Context, model string, current time.Duration) time.Duration {
 	// 明示的に差し替えられた transport の timeout は尊重する。通常の provider 既定値だけ、
-	// thinking request では streaming.thinking_timeout_seconds まで広げる。
+	// Flex / thinking request では config に合わせて広げる。
 	if current != defaultResponseHeaderTimeout {
 		return current
 	}
-	if !isGeminiThinkingRequest(ctx, model) {
-		return current
+	cfg := config.FromContext(ctx)
+	timeout := current
+	if cfg.GeminiServiceTier() == config.GeminiServiceTierFlex && geminiFlexResponseHeaderTimeout > timeout {
+		timeout = geminiFlexResponseHeaderTimeout
 	}
-	if thinkingTimeout := geminiConfiguredThinkingTimeout(config.FromContext(ctx)); thinkingTimeout > current {
+	if !isGeminiThinkingRequest(ctx, model) {
+		return timeout
+	}
+	if thinkingTimeout := geminiConfiguredThinkingTimeout(cfg); thinkingTimeout > timeout {
 		return thinkingTimeout
 	}
-	return current
+	return timeout
 }
 
 func (p *Provider) httpClientForRequest(ctx context.Context, model string) *http.Client {

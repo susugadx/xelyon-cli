@@ -18,6 +18,66 @@ func newGeminiRequestContext(thinking bool, level string) context.Context {
 	return config.WithContext(context.Background(), cfg)
 }
 
+func TestBuildGeminiRequests_ServiceTier(t *testing.T) {
+	flexCfg := config.DefaultConfig()
+	flexCfg.Gemini.ServiceTier = config.GeminiServiceTierFlex
+	flexCtx := config.WithContext(context.Background(), flexCfg)
+
+	text := buildGeminiTextRequest(flexCtx, "system", []api.Message{{Role: "user", Content: "hello"}}, "gemini-3.5-flash", "", flexCfg)
+	if text.ServiceTier != config.GeminiServiceTierFlex {
+		t.Fatalf("text ServiceTier = %q, want flex", text.ServiceTier)
+	}
+
+	image := buildGeminiMultimodalRequest(
+		flexCtx,
+		"system",
+		nil,
+		"describe",
+		&api.ImageData{MediaType: "image/png", Base64: "AA=="},
+		"gemini-3.5-flash",
+		nil,
+		false,
+		flexCfg,
+	)
+	if image.ServiceTier != config.GeminiServiceTierFlex {
+		t.Fatalf("image ServiceTier = %q, want flex", image.ServiceTier)
+	}
+
+	tool := buildGeminiFunctionCallingRequest(
+		flexCtx,
+		"system",
+		[]api.Message{{Role: "user", Content: "hello"}},
+		"gemini-3.5-flash",
+		"",
+		nil,
+		nil,
+		flexCfg,
+	)
+	if tool.ServiceTier != config.GeminiServiceTierFlex {
+		t.Fatalf("tool ServiceTier = %q, want flex", tool.ServiceTier)
+	}
+
+	web := buildGeminiWebSearchRequest(flexCtx, "query", "gemini-3.5-flash", flexCfg)
+	if web.ServiceTier != config.GeminiServiceTierFlex {
+		t.Fatalf("web ServiceTier = %q, want flex", web.ServiceTier)
+	}
+
+	standardCfg := config.DefaultConfig()
+	standardCtx := config.WithContext(context.Background(), standardCfg)
+	standard := buildGeminiTextRequest(standardCtx, "system", []api.Message{{Role: "user", Content: "hello"}}, "gemini-3.5-flash", "", standardCfg)
+	if standard.ServiceTier != "" {
+		t.Fatalf("standard ServiceTier = %q, want omitted empty value", standard.ServiceTier)
+	}
+
+	invalidCfg := config.DefaultConfig()
+	invalidCfg.Gemini.ServiceTier = "turbo"
+	invalidCtx := config.WithContext(context.Background(), invalidCfg)
+	invalid := buildGeminiTextRequest(invalidCtx, "system", []api.Message{{Role: "user", Content: "hello"}}, "gemini-3.5-flash", "", invalidCfg)
+	if invalid.ServiceTier != "" {
+		t.Fatalf("invalid ServiceTier = %q, want omitted standard fallback", invalid.ServiceTier)
+	}
+}
+
 func TestChatWithFunctionCalling_RequestTransformsHistoryAndThinkingConfig(t *testing.T) {
 	var captured map[string]any
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {

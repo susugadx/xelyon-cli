@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
@@ -129,6 +130,25 @@ func TestSessionStats_AddUsage_WebSearchObservation(t *testing.T) {
 	}
 	if stats.LastUsage == nil || stats.LastUsage.WebSearchCalls != 1 {
 		t.Fatalf("LastUsage = %+v, want web search usage", stats.LastUsage)
+	}
+}
+
+func TestSessionStats_UsageDeltaSince_PreservesBillingServiceTier(t *testing.T) {
+	stats := NewSessionStats("gemini", "gemini-3.1-flash-lite")
+	start := *stats
+
+	stats.AddUsageForProviderConfig(nil, "gemini", "gemini-3.1-flash-lite", api.Usage{
+		InputTokens:        100,
+		OutputTokens:       25,
+		BillingServiceTier: config.GeminiServiceTierStandard,
+	})
+
+	delta := stats.UsageDeltaSince(start)
+	if delta.InputTokens != 100 || delta.OutputTokens != 25 {
+		t.Fatalf("UsageDeltaSince() tokens = input %d output %d, want 100/25", delta.InputTokens, delta.OutputTokens)
+	}
+	if delta.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("UsageDeltaSince() BillingServiceTier = %q, want %q", delta.BillingServiceTier, config.GeminiServiceTierStandard)
 	}
 }
 

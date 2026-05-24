@@ -22,6 +22,7 @@ type sseInterpretState struct {
 	thoughtParts        []map[string]any
 	rescuedToolJSONs    []string
 	usage               *GeminiUsageMetadata
+	billingServiceTier  string
 	suppressingToolJSON bool
 	toolJSONDepth       int
 	toolJSONInStr       bool

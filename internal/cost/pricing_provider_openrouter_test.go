@@ -12,7 +12,7 @@ func TestResolveOpenRouterDelegatedProviderPricing(t *testing.T) {
 		{name: "openai delegated", model: "openai/gpt-5.4", want: getOpenAIPricing("gpt-5.4", 250000)},
 		{name: "openai gpt-5.5 delegated", model: "openai/gpt-5.5", want: getOpenAIPricing("gpt-5.5", 250000)},
 		{name: "openai gpt-5.5-pro delegated", model: "openai/gpt-5.5-pro", want: getOpenAIPricing("gpt-5.5-pro", 250000)},
-		{name: "gemini delegated", model: "google/gemini-2.5-pro", want: getGeminiPricing("gemini-2.5-pro", 250000)},
+		{name: "gemini delegated", model: "google/gemini-2.5-pro", want: getGeminiStandardPricing("gemini-2.5-pro", 250000)},
 		{name: "deepseek delegated", model: "deepseek/deepseek-chat", want: getDeepSeekPricing("deepseek-chat")},
 		{name: "deepseek v4 flash delegated", model: "deepseek/deepseek-v4-flash", want: getDeepSeekPricing("deepseek-v4-flash")},
 		{name: "deepseek v4 pro delegated", model: "deepseek/deepseek-v4-pro", want: getDeepSeekPricing("deepseek-v4-pro")},

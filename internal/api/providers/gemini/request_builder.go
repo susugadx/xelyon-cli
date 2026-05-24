@@ -18,6 +18,7 @@ func buildGeminiTextRequest(ctx context.Context, systemPrompt string, messages [
 		CachedContent:     cacheName,
 		SystemInstruction: geminiSystemInstructionIfUncached(systemPrompt, cacheName),
 		Contents:          geminiTextContentsFromMessages(messages),
+		ServiceTier:       geminiRequestServiceTier(cfg),
 	}
 	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfg)
 	return reqBody
@@ -37,6 +38,7 @@ func buildGeminiMultimodalRequest(
 	reqBody := GeminiMultimodalRequest{
 		SystemInstruction: newGeminiSystemInstruction(systemPrompt),
 		Contents:          geminiMultimodalContentsFromMessages(history, userMessage, image),
+		ServiceTier:       geminiRequestServiceTier(cfg),
 	}
 
 	if api.ShouldSendToolPayload(ctx, functionCallingEnabled) {
@@ -59,7 +61,8 @@ func buildGeminiFunctionCallingRequest(
 	cfg *config.Config,
 ) GeminiRequestWithTools {
 	reqBody := GeminiRequestWithTools{
-		Contents: geminiFunctionCallingContentsFromMessages(messages),
+		Contents:    geminiFunctionCallingContentsFromMessages(messages),
+		ServiceTier: geminiRequestServiceTier(cfg),
 	}
 	if cacheName != "" {
 		reqBody.CachedContent = cacheName
@@ -70,6 +73,14 @@ func buildGeminiFunctionCallingRequest(
 	}
 	reqBody.GenerationConfig = getThinkingConfigForModel(ctx, model, cfg)
 	return reqBody
+}
+
+func geminiRequestServiceTier(cfg *config.Config) string {
+	serviceTier := cfg.GeminiServiceTier()
+	if serviceTier == config.GeminiServiceTierStandard {
+		return ""
+	}
+	return serviceTier
 }
 
 func newGeminiSystemInstruction(systemPrompt string) *GeminiSystemInstruction {

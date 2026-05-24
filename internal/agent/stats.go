@@ -172,7 +172,7 @@ func (s *SessionStats) UsageDeltaSince(start SessionStats) api.Usage {
 	if s == nil {
 		return api.Usage{}
 	}
-	return api.Usage{
+	usage := api.Usage{
 		InputTokens:           s.InputTokens - start.InputTokens,
 		OutputTokens:          s.OutputTokens - start.OutputTokens,
 		ThinkingTokens:        s.ThinkingTokens - start.ThinkingTokens,
@@ -182,6 +182,10 @@ func (s *SessionStats) UsageDeltaSince(start SessionStats) api.Usage {
 		WebSearchCalls:        s.WebSearchCalls - start.WebSearchCalls,
 		WebSearchResultTokens: s.WebSearchResultTokens - start.WebSearchResultTokens,
 	}
+	if s.LastUsage != nil && usage.HasTokenOrWebSearchObservation() {
+		usage.BillingServiceTier = s.LastUsage.BillingServiceTier
+	}
+	return usage
 }
 
 func (s *SessionStats) ResetUsageForProvider(provider, model string) {
