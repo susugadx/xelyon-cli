@@ -50,7 +50,7 @@ type reviewPreset struct {
 
 var reviewPresets = []reviewPreset{
 	{label: "Review current changes", action: reviewPresetActionCurrentChanges},
-	{label: "Custom review instructions", action: reviewPresetActionCustomInstructions},
+	{label: "Review current changes with custom focus", action: reviewPresetActionCustomInstructions},
 }
 
 type reviewScreen struct {
@@ -71,7 +71,7 @@ type reviewScreen struct {
 func newReviewScreen(screenID int) *reviewScreen {
 	input := textinput.New()
 	input.Prompt = ""
-	input.Placeholder = "Add review instructions..."
+	input.Placeholder = "Add custom focus..."
 	input.CharLimit = 0
 	input.Width = 80
 

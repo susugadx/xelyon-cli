@@ -221,9 +221,11 @@ xelyon
 /config     # global config を対話式で編集
 /project    # xelyon.yaml を対話式で編集
 /init       # xelyon.yaml テンプレート作成
-/review [instructions] # 現在の変更レビューを開く（引数ありは即時実行）
+/review [instructions] # 現在の変更レビューを開く（引数は追加観点として即時実行）
 /exit       # 終了
 ```
+
+`/review` は現在の作業ツリー差分全体をレビューします。preset の `Review current changes` は追加指示なしの通常レビューで、`Review current changes with custom focus` は同じ current changes 全体に追加の観点・重点項目を渡します。custom focus は対象ファイルや差分範囲を絞るものではありません。特定 finding だけの再検証や focused verification mode はまだ未実装です。
 
 `/review` は `evidence -> probe plan -> probe results -> report -> saturation` の段階を持つ監査可能な review harness です。Go-first の evidence augmentation を使いつつ、共通 harness は全言語で雑な clean 判定を抑制します。`XELYON_REVIEW_RUN_ARTIFACTS=1` を設定すると、各段階の debug artifact を実行中はメモリに保持し、終了後にリポジトリ配下の `.xelyon/review-runs/<UTC timestamp>/` へ保存します。保存先 component が symlink の場合は repo 外へ書かず warning にします。artifact には evidence や probe output が含まれ得るため、必要な場合だけ明示的に有効化してください。
 

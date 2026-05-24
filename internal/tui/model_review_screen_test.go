@@ -47,6 +47,55 @@ func TestReviewScreen_CurrentChangesPresetCreatesRequest(t *testing.T) {
 	}
 }
 
+func TestReviewScreen_CustomFocusCopyClarifiesScope(t *testing.T) {
+	m := newReviewTestModel()
+
+	presetView := stripANSI(m.View())
+	for _, want := range []string{"Review current changes", "Review current changes with custom focus"} {
+		if !strings.Contains(presetView, want) {
+			t.Fatalf("preset view missing %q:\n%s", want, presetView)
+		}
+	}
+	if strings.Contains(presetView, "Custom review instructions") {
+		t.Fatalf("preset view should not use old custom instructions label:\n%s", presetView)
+	}
+
+	m = sendReviewKey(m, "down")
+	m = sendReviewKey(m, "enter")
+	customView := stripANSI(m.View())
+	for _, want := range []string{
+		"Review current changes with custom focus",
+		"Reviews all current changes.",
+		"Custom focus adjusts priorities; it does not narrow files or diff scope.",
+		"It is not a single-finding recheck mode.",
+	} {
+		if !strings.Contains(customView, want) {
+			t.Fatalf("custom focus view missing %q:\n%s", want, customView)
+		}
+	}
+}
+
+func TestReviewScreen_CustomFocusInputVisibleOnShortTerminal(t *testing.T) {
+	m := newReviewTestModel()
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 8})
+	m = updated.(Model)
+
+	m = sendReviewKey(m, "down")
+	m = sendReviewKey(m, "enter")
+
+	view := stripANSI(m.View())
+	for _, want := range []string{
+		"Review current changes with custom focus",
+		"Add custom focus...",
+		"Reviews all current changes.",
+		"It is not a single-finding recheck mode.",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("short custom focus view missing %q:\n%s", want, view)
+		}
+	}
+}
+
 func TestReviewScreen_CustomInstructionsCreatesRequest(t *testing.T) {
 	m := newReviewTestModel()
 
@@ -62,6 +111,13 @@ func TestReviewScreen_CustomInstructionsCreatesRequest(t *testing.T) {
 	assertReviewRequest(t, m, review.TargetCurrentChanges, "focus on regressions")
 	if m.reviewScreen.mode != reviewScreenSubmitted {
 		t.Fatalf("review mode = %d, want submitted", m.reviewScreen.mode)
+	}
+	view := stripANSI(m.View())
+	if !strings.Contains(view, "Custom focus: focus on regressions") {
+		t.Fatalf("submitted view missing custom focus label:\n%s", view)
+	}
+	if strings.Contains(view, "Custom instructions:") {
+		t.Fatalf("submitted view should not use old custom instructions label:\n%s", view)
 	}
 }
 

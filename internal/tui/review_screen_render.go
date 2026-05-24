@@ -88,9 +88,12 @@ func reviewPresetLines(rs *reviewScreen) []string {
 func (m Model) reviewCustomLines(rs *reviewScreen) []string {
 	inputView := strings.ReplaceAll(rs.customInput.View(), theme.Config.Reset, theme.Config.Reset+theme.Config.BgNormal)
 	return []string{
-		theme.Config.BgNormal + theme.Config.FgDim + " Custom review instructions" + theme.Config.Reset,
-		theme.Config.BgNormal + theme.Config.FgDim + "" + theme.Config.Reset,
+		theme.Config.BgNormal + theme.Config.FgDim + " Review current changes with custom focus" + theme.Config.Reset,
 		theme.Config.BgNormal + theme.Config.FgBright + "  " + inputView + theme.Config.Reset,
+		theme.Config.BgNormal + theme.Config.FgDim + "" + theme.Config.Reset,
+		theme.Config.BgNormal + theme.Config.FgDim + "  Reviews all current changes." + theme.Config.Reset,
+		theme.Config.BgNormal + theme.Config.FgDim + "  Custom focus adjusts priorities; it does not narrow files or diff scope." + theme.Config.Reset,
+		theme.Config.BgNormal + theme.Config.FgDim + "  It is not a single-finding recheck mode." + theme.Config.Reset,
 	}
 }
 
@@ -106,7 +109,7 @@ func reviewSubmittedLines(rs *reviewScreen) []string {
 	)
 	if rs.request.CustomInstructions != "" {
 		lines = append(lines,
-			theme.Config.BgNormal+theme.Config.FgDim+" Custom instructions: "+termtext.SanitizeSingleLineANSI(rs.request.CustomInstructions)+theme.Config.Reset,
+			theme.Config.BgNormal+theme.Config.FgDim+" Custom focus: "+termtext.SanitizeSingleLineANSI(rs.request.CustomInstructions)+theme.Config.Reset,
 		)
 	}
 	if rs.runState == reviewRunFailed && rs.errMessage != "" {

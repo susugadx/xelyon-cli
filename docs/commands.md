@@ -386,8 +386,10 @@ TUI で現在の入力ドラフトにファイルまたは画像を 1 件添付�
 
 ### `/review`
 
-TUIモードで、現在の変更レビュー用の preset 画面を開きます。
-引数を付けた場合は、そのテキストを追加指示として現在の変更レビューを即時実行します。
+TUIモードで、現在の作業ツリー差分全体をレビューする preset 画面を開きます。
+preset の `Review current changes` は追加指示なしの通常レビューです。`Review current changes with custom focus` は同じ current changes 全体に追加の観点・重点項目を渡します。
+引数を付けた場合は、そのテキストを custom focus として current changes 全体レビューを即時実行します。
+custom focus は対象ファイルや差分範囲を絞るものではありません。特定 finding だけの再検証や focused verification mode はまだ未実装です。
 `/review` は `evidence -> probe plan -> probe results -> report -> saturation` の段階を持つ監査可能な review harness です。Go-first の evidence augmentation はありますが、共通 harness は全言語で雑な clean 判定を抑制します。
 `XELYON_REVIEW_RUN_ARTIFACTS=1` を設定すると、各段階の debug artifact を実行中はメモリに保持し、終了後に `.xelyon/review-runs/<UTC timestamp>/` へ保存します。保存先 component が symlink の場合は repo 外へ書かず warning にします。artifact には evidence や probe output が含まれ得るため、必要な場合だけ明示的に有効化してください。
 
