@@ -6,75 +6,70 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
-	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
-type reviewReportLineBuilder struct {
-	lines []string
+func reviewReportTimelineMessage(report review.ReviewReport) string {
+	lines := reviewReportPlainLines(report)
+	return strings.Join(lines, "\n")
 }
 
-func reviewReportLines(report review.ReviewReport) []string {
-	builder := newReviewReportLineBuilder()
-	builder.appendReport(report)
-	return builder.lines
-}
-
-func newReviewReportLineBuilder() reviewReportLineBuilder {
-	return reviewReportLineBuilder{}
-}
-
-func (b *reviewReportLineBuilder) appendReport(report review.ReviewReport) {
+func reviewReportPlainLines(report review.ReviewReport) []string {
 	summary := reviewReportComputedSummary(report)
-	b.appendDim("")
-	b.appendDim("Verdict: " + string(report.Verdict))
-	b.appendDim("Verification: " + string(report.OverallVerificationStatus))
-	b.appendDim(fmt.Sprintf("Root cause groups: %d  Findings: %d", summary.RootCauseGroupCount, summary.FindingCount))
-	b.appendDim(fmt.Sprintf("Surfaces: checked %d  finding %d  unverified %d  residual %d", summary.CheckedSurfaceCount, summary.FindingSurfaceCount, summary.UnverifiedSurfaceCount, summary.ResidualSurfaceCount))
-	b.appendDim(fmt.Sprintf("Candidate risks: total %d  dismissed %d  finding %d  unverified %d  residual %d", summary.CandidateRiskCount, summary.DismissedRiskCount, summary.FindingRiskCount, summary.UnverifiedRiskCount, summary.ResidualRiskCount))
-	b.appendDim(fmt.Sprintf("New report-pass findings: %d", summary.NewReportPassFindingCount))
-	b.appendDim(fmt.Sprintf("Probes: total %d  passed %d  failed %d  timed_out %d  blocked %d  mutated %d", summary.ProbeCount, summary.PassedProbeCount, summary.FailedProbeCount, summary.TimedOutProbeCount, summary.BlockedProbeCount, summary.MutatedWorktreeProbeCount))
+	lines := []string{
+		"Review result",
+		"Verdict: " + string(report.Verdict),
+		"Verification: " + string(report.OverallVerificationStatus),
+		fmt.Sprintf("Root cause groups: %d  Findings: %d", summary.RootCauseGroupCount, summary.FindingCount),
+		fmt.Sprintf("Surfaces: checked %d  finding %d  unverified %d  residual %d", summary.CheckedSurfaceCount, summary.FindingSurfaceCount, summary.UnverifiedSurfaceCount, summary.ResidualSurfaceCount),
+		fmt.Sprintf("Candidate risks: total %d  dismissed %d  finding %d  unverified %d  residual %d", summary.CandidateRiskCount, summary.DismissedRiskCount, summary.FindingRiskCount, summary.UnverifiedRiskCount, summary.ResidualRiskCount),
+		fmt.Sprintf("New report-pass findings: %d", summary.NewReportPassFindingCount),
+		fmt.Sprintf("Probes: total %d  passed %d  failed %d  timed_out %d  blocked %d  mutated %d", summary.ProbeCount, summary.PassedProbeCount, summary.FailedProbeCount, summary.TimedOutProbeCount, summary.BlockedProbeCount, summary.MutatedWorktreeProbeCount),
+	}
 	if strings.TrimSpace(report.Summary) != "" {
-		b.appendDim("Summary: " + reviewReportSingleLine(report.Summary))
+		lines = append(lines, "Summary: "+reviewReportSingleLine(report.Summary))
 	}
 	for _, group := range report.RootCauseGroups {
-		b.appendGroup(group)
+		lines = append(lines, reviewPlainGroupLines(group)...)
 	}
 	for _, risk := range report.ResidualRisks {
-		b.appendDim("Residual risk: " + reviewReportSingleLine(risk.Summary))
+		lines = append(lines, "Residual risk: "+reviewReportSingleLine(risk.Summary))
 	}
 	for _, probe := range report.ProbeSummaries {
-		b.appendDim(fmt.Sprintf("Probe: %s %s %s", probe.ProbeID, probe.Mode, probe.Status))
+		lines = append(lines, fmt.Sprintf("Probe: %s %s %s", probe.ProbeID, probe.Mode, probe.Status))
 	}
 	if !report.GeneratedAt.IsZero() {
-		b.appendDim("Generated at: " + report.GeneratedAt.Format("2006-01-02T15:04:05Z07:00"))
+		lines = append(lines, "Generated at: "+report.GeneratedAt.Format("2006-01-02T15:04:05Z07:00"))
 	}
+	return lines
 }
 
-func (b *reviewReportLineBuilder) appendGroup(group review.ReviewRootCauseGroup) {
-	b.appendDim(fmt.Sprintf("Group: %s [%s/%s]", reviewReportSingleLine(group.Title), group.Severity, group.VerificationStatus))
+func reviewPlainGroupLines(group review.ReviewRootCauseGroup) []string {
+	lines := []string{
+		fmt.Sprintf("Group: %s [%s/%s]", reviewReportSingleLine(group.Title), group.Severity, group.VerificationStatus),
+	}
 	if strings.TrimSpace(group.Summary) != "" {
-		b.appendDim("Group summary: " + reviewReportSingleLine(group.Summary))
+		lines = append(lines, "Group summary: "+reviewReportSingleLine(group.Summary))
 	}
 	if strings.TrimSpace(group.FixStrategy) != "" {
-		b.appendDim("Fix strategy: " + reviewReportSingleLine(group.FixStrategy))
+		lines = append(lines, "Fix strategy: "+reviewReportSingleLine(group.FixStrategy))
 	}
 	for _, finding := range group.Findings {
-		b.appendFinding(group, finding)
+		lines = append(lines, reviewPlainFindingLines(group, finding)...)
 	}
+	return lines
 }
 
-func (b *reviewReportLineBuilder) appendFinding(group review.ReviewRootCauseGroup, finding review.ReviewFinding) {
-	b.appendDim(fmt.Sprintf("Finding: %s [%s/%s]", reviewReportSingleLine(finding.Title), group.Severity, group.VerificationStatus))
+func reviewPlainFindingLines(group review.ReviewRootCauseGroup, finding review.ReviewFinding) []string {
+	lines := []string{
+		fmt.Sprintf("Finding: %s [%s/%s]", reviewReportSingleLine(finding.Title), group.Severity, group.VerificationStatus),
+	}
 	if strings.TrimSpace(finding.Summary) != "" {
-		b.appendDim("Finding summary: " + reviewReportSingleLine(finding.Summary))
+		lines = append(lines, "Finding summary: "+reviewReportSingleLine(finding.Summary))
 	}
 	for _, ref := range finding.EvidenceRefs {
-		b.appendDim(reviewEvidenceRefLine(ref))
+		lines = append(lines, reviewEvidenceRefLine(ref))
 	}
-}
-
-func (b *reviewReportLineBuilder) appendDim(text string) {
-	b.lines = append(b.lines, theme.Config.BgNormal+theme.Config.FgDim+" "+text+theme.Config.Reset)
+	return lines
 }
 
 func reviewEvidenceRefLine(ref review.ReviewEvidenceRef) string {

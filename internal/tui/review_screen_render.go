@@ -17,7 +17,7 @@ func (m Model) reviewView() string {
 	bodyLines := m.reviewBodyLines()
 	header := m.renderReviewHeader(m.width)
 	body := m.renderReviewBody(bodyLines, bodyHeight)
-	status := m.renderReviewStatus(m.width, reviewBodyScrollBoundsForLines(bodyLines, bodyHeight))
+	status := m.renderReviewStatus(m.width)
 
 	return header + "\n" + body + "\n" + status
 }
@@ -45,8 +45,6 @@ func reviewHeaderHint(rs *reviewScreen) string {
 	switch rs.mode {
 	case reviewScreenCustom:
 		return "Esc:presets"
-	case reviewScreenSubmitted:
-		return "Esc:back"
 	default:
 		return "Esc:back"
 	}
@@ -61,8 +59,6 @@ func (m Model) reviewBodyLines() []string {
 	switch rs.mode {
 	case reviewScreenCustom:
 		return m.reviewCustomLines(rs)
-	case reviewScreenSubmitted:
-		return reviewSubmittedLines(rs)
 	default:
 		return reviewPresetLines(rs)
 	}
@@ -71,8 +67,9 @@ func (m Model) reviewBodyLines() []string {
 func reviewPresetLines(rs *reviewScreen) []string {
 	lines := []string{
 		theme.Config.BgNormal + theme.Config.FgDim + " Select review preset" + theme.Config.Reset,
-		theme.Config.BgNormal + theme.Config.FgDim + "" + theme.Config.Reset,
 	}
+	lines = appendReviewNoticeLine(lines, rs)
+	lines = append(lines, theme.Config.BgNormal+theme.Config.FgDim+""+theme.Config.Reset)
 	for i, preset := range reviewPresets {
 		prefix := "  "
 		style := theme.Config.BgNormal + theme.Config.FgNormal
@@ -87,58 +84,32 @@ func reviewPresetLines(rs *reviewScreen) []string {
 
 func (m Model) reviewCustomLines(rs *reviewScreen) []string {
 	inputView := strings.ReplaceAll(rs.customInput.View(), theme.Config.Reset, theme.Config.Reset+theme.Config.BgNormal)
-	return []string{
+	lines := []string{
 		theme.Config.BgNormal + theme.Config.FgDim + " Review current changes with custom focus" + theme.Config.Reset,
 		theme.Config.BgNormal + theme.Config.FgBright + "  " + inputView + theme.Config.Reset,
-		theme.Config.BgNormal + theme.Config.FgDim + "" + theme.Config.Reset,
-		theme.Config.BgNormal + theme.Config.FgDim + "  Reviews all current changes." + theme.Config.Reset,
-		theme.Config.BgNormal + theme.Config.FgDim + "  Custom focus adjusts priorities; it does not narrow files or diff scope." + theme.Config.Reset,
-		theme.Config.BgNormal + theme.Config.FgDim + "  It is not a single-finding recheck mode." + theme.Config.Reset,
 	}
-}
-
-func reviewSubmittedLines(rs *reviewScreen) []string {
-	lines := []string{
-		reviewStateLine(rs),
-	}
-	if rs.request == nil {
-		return lines
-	}
+	lines = appendReviewNoticeLine(lines, rs)
 	lines = append(lines,
-		theme.Config.BgNormal+theme.Config.FgDim+" Target: "+string(rs.request.TargetKind)+theme.Config.Reset,
+		theme.Config.BgNormal+theme.Config.FgDim+""+theme.Config.Reset,
+		theme.Config.BgNormal+theme.Config.FgDim+"  Reviews all current changes."+theme.Config.Reset,
+		theme.Config.BgNormal+theme.Config.FgDim+"  Custom focus adjusts priorities; it does not narrow files or diff scope."+theme.Config.Reset,
+		theme.Config.BgNormal+theme.Config.FgDim+"  It is not a single-finding recheck mode."+theme.Config.Reset,
 	)
-	if rs.request.CustomInstructions != "" {
-		lines = append(lines,
-			theme.Config.BgNormal+theme.Config.FgDim+" Custom focus: "+termtext.SanitizeSingleLineANSI(rs.request.CustomInstructions)+theme.Config.Reset,
-		)
-	}
-	if rs.runState == reviewRunFailed && rs.errMessage != "" {
-		lines = append(lines,
-			theme.Config.BgNormal+theme.Config.FgRed+" Error: "+termtext.SanitizeSingleLineANSI(rs.errMessage)+theme.Config.Reset,
-		)
-	}
-	if rs.runState == reviewRunSucceeded && rs.report != nil {
-		lines = append(lines, reviewReportLines(*rs.report)...)
-	}
 	return lines
 }
 
-func reviewStateLine(rs *reviewScreen) string {
-	style := theme.Config.FgYellow
-	switch rs.runState {
-	case reviewRunSucceeded:
-		style = theme.Config.FgGreen
-	case reviewRunFailed:
-		style = theme.Config.FgRed
+func appendReviewNoticeLine(lines []string, rs *reviewScreen) []string {
+	if rs == nil || rs.notice == "" {
+		return lines
 	}
-	return theme.Config.BgNormal + style + " " + rs.message + theme.Config.Reset
+	return append(lines, theme.Config.BgNormal+theme.Config.FgYellow+"  "+rs.notice+theme.Config.Reset)
 }
 
-func (m Model) renderReviewStatus(width int, bodyBounds reviewBodyScrollBounds) string {
+func (m Model) renderReviewStatus(width int) string {
 	rs := m.reviewScreen
 	leftText := reviewStatusText(rs)
 	left := " " + theme.Config.FgGreen + leftText + theme.Config.Reset
-	hintText := reviewStatusHint(rs, bodyBounds)
+	hintText := reviewStatusHint(rs)
 	right := theme.Config.FgDim + hintText + theme.Config.Reset + " "
 	padding := width - lipgloss.Width(leftText) - lipgloss.Width(hintText) - 3
 	if padding < 1 {
@@ -151,36 +122,16 @@ func reviewStatusText(rs *reviewScreen) string {
 	if rs == nil {
 		return "review"
 	}
-	if rs.mode == reviewScreenSubmitted {
-		switch rs.runState {
-		case reviewRunRunning:
-			return "review running"
-		case reviewRunSucceeded:
-			return "review complete"
-		case reviewRunFailed:
-			return "review failed"
-		default:
-			return "review pending"
-		}
-	}
 	return "review"
 }
 
-func reviewStatusHint(rs *reviewScreen, bodyBounds reviewBodyScrollBounds) string {
+func reviewStatusHint(rs *reviewScreen) string {
 	if rs == nil {
 		return ""
 	}
 	switch rs.mode {
 	case reviewScreenCustom:
 		return "Enter:confirm  Esc:presets"
-	case reviewScreenSubmitted:
-		if rs.runState == reviewRunRunning {
-			return "Esc:cancel"
-		}
-		if bodyBounds.hasOverflow() {
-			return "j/k:scroll  PgUp/PgDn:page  Esc:back"
-		}
-		return "Esc:back"
 	default:
 		return "j/k:move  Enter:select  Esc:back"
 	}

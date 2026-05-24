@@ -11,6 +11,10 @@ func (m Model) handleCtrlC() (tea.Model, tea.Cmd) {
 		m.copyMouseSelection()
 		return m, nil
 	}
+	if m.interruptReviewTimelineRun() {
+		m.appendSystemInfo("⚠️  Review interrupted. Press Ctrl+C again to exit.")
+		return m, nil
+	}
 	if m.conversation.IsProcessing() {
 		m.conversation.Cancel()
 		m.appendSystemInfo("⚠️  Interrupted. Press Ctrl+C again to exit.")

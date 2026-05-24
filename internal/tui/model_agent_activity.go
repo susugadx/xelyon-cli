@@ -11,7 +11,18 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+type agentActivityOptions struct {
+	title       string
+	workingText string
+	doneText    string
+	hideStatus  bool
+}
+
 func (m *Model) beginAgentActivity() tea.Cmd {
+	return m.beginAgentActivityWithOptions(agentActivityOptions{})
+}
+
+func (m *Model) beginAgentActivityWithOptions(opts agentActivityOptions) tea.Cmd {
 	if m.hasActiveAgentActivity() {
 		m.setTransientStatus(agentTurnBusyStatus)
 		return nil
@@ -24,7 +35,7 @@ func (m *Model) beginAgentActivity() tea.Cmd {
 		m.statusLine = m.conversation.GetStatusLine()
 		m.statusSnapshot.LegacyLine = m.statusLine
 	}
-	m.agentActivity = newAgentActivityState(now)
+	m.agentActivity = newAgentActivityState(now, opts)
 	m.chromeDirty = true
 	return m.appendTrackedBlockLines(&m.agentActivity.block, m.buildAgentActivityLines(now))
 }
@@ -35,14 +46,22 @@ func agentActivityDoneCmd() tea.Cmd {
 	}
 }
 
-func newAgentActivityState(startedAt time.Time) agentActivityState {
+func newAgentActivityState(startedAt time.Time, opts agentActivityOptions) agentActivityState {
+	title := strings.TrimSpace(opts.title)
+	if title == "" {
+		title = "agent"
+	}
 	return agentActivityState{
-		active:    true,
-		startedAt: startedAt,
-		status:    agentActivityStatusWorking,
-		tools:     nil,
-		errorText: "",
-		errorKind: AgentErrorUnknown,
+		active:      true,
+		title:       termtext.SanitizeSingleLineANSI(title),
+		workingText: termtext.SanitizeSingleLineANSI(strings.TrimSpace(opts.workingText)),
+		doneText:    termtext.SanitizeSingleLineANSI(strings.TrimSpace(opts.doneText)),
+		hideStatus:  opts.hideStatus,
+		startedAt:   startedAt,
+		status:      agentActivityStatusWorking,
+		tools:       nil,
+		errorText:   "",
+		errorKind:   AgentErrorUnknown,
 	}
 }
 
@@ -204,6 +223,10 @@ func (m Model) renderAgentActivityHeader(activity agentActivityState, now time.T
 	if status == "" {
 		status = agentActivityStatusWorking
 	}
+	title := activity.title
+	if title == "" {
+		title = "agent"
+	}
 
 	elapsed := now.Sub(activity.startedAt)
 	if !activity.finishedAt.IsZero() {
@@ -217,21 +240,27 @@ func (m Model) renderAgentActivityHeader(activity agentActivityState, now time.T
 	if activity.active {
 		elapsedText = formatAgentClockElapsed(elapsed)
 	}
-	return palette.Header + fmt.Sprintf("── agent · %s · %s ──", status, elapsedText) + palette.Reset
+	return palette.Header + fmt.Sprintf("── %s · %s · %s ──", title, status, elapsedText) + palette.Reset
 }
 
 func (m Model) renderAgentActivityWorkingLine() string {
 	palette := theme.Activity
 	snapshot := sanitizeStatusSnapshot(m.statusSnapshot)
-	parts := []string{"working"}
-	if providerModel := providerModelStatusText(snapshot, ""); providerModel != "" {
-		parts = append(parts, providerModel)
+	workingText := m.agentActivity.workingText
+	if workingText == "" {
+		workingText = "working"
 	}
-	if snapshot.Tokens != "" {
-		parts = append(parts, snapshot.Tokens+" tok")
-	}
-	if snapshot.Cost != "" {
-		parts = append(parts, snapshot.Cost)
+	parts := []string{workingText}
+	if !m.agentActivity.hideStatus {
+		if providerModel := providerModelStatusText(snapshot, ""); providerModel != "" {
+			parts = append(parts, providerModel)
+		}
+		if snapshot.Tokens != "" {
+			parts = append(parts, snapshot.Tokens+" tok")
+		}
+		if snapshot.Cost != "" {
+			parts = append(parts, snapshot.Cost)
+		}
 	}
 
 	scanner := m.spinner.View()
@@ -243,13 +272,23 @@ func (m Model) renderAgentActivityWorkingLine() string {
 
 func (m Model) renderAgentActivityDoneSummary(activity agentActivityState) string {
 	palette := theme.Activity
-	parts := []string{fmt.Sprintf("%d tools", len(activity.tools))}
-	snapshot := sanitizeStatusSnapshot(m.statusSnapshot)
-	if snapshot.Tokens != "" {
-		parts = append(parts, snapshot.Tokens+" tok")
+	var parts []string
+	if activity.doneText != "" {
+		parts = append(parts, activity.doneText)
+		if len(activity.tools) > 0 {
+			parts = append(parts, fmt.Sprintf("%d tools", len(activity.tools)))
+		}
+	} else {
+		parts = append(parts, fmt.Sprintf("%d tools", len(activity.tools)))
 	}
-	if snapshot.Cost != "" {
-		parts = append(parts, snapshot.Cost)
+	if !activity.hideStatus {
+		snapshot := sanitizeStatusSnapshot(m.statusSnapshot)
+		if snapshot.Tokens != "" {
+			parts = append(parts, snapshot.Tokens+" tok")
+		}
+		if snapshot.Cost != "" {
+			parts = append(parts, snapshot.Cost)
+		}
 	}
 	return "│ " + palette.Success + "✓ " + palette.Reset + palette.Dim + strings.Join(parts, " · ") + palette.Reset
 }

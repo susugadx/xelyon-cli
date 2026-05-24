@@ -7,29 +7,25 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/review"
 )
 
-func TestReviewReportLines_SanitizesGroupAndFindingTitles(t *testing.T) {
+func TestReviewReportTimelineMessage_SanitizesGroupAndFindingTitles(t *testing.T) {
 	report := newTUITestReviewReport()
 	report.RootCauseGroups[0].Title = "request\nstate"
 	report.RootCauseGroups[0].Findings[0].Title = "stale\nresult"
 
-	lines := reviewReportLines(report)
-	for _, line := range lines {
-		plain := stripANSI(line)
-		if strings.Contains(plain, "\n") {
-			t.Fatalf("review report line contains embedded newline: %q", plain)
-		}
+	message := reviewReportTimelineMessage(report)
+	if strings.Contains(message, "request\nstate") || strings.Contains(message, "stale\nresult") {
+		t.Fatalf("timeline report contains unsanitized multiline title:\n%s", message)
 	}
 
-	joined := stripANSI(strings.Join(lines, "\n"))
-	if !strings.Contains(joined, "Group: request state") {
-		t.Fatalf("rendered report missing sanitized group title:\n%s", joined)
+	if !strings.Contains(message, "Group: request state") {
+		t.Fatalf("rendered report missing sanitized group title:\n%s", message)
 	}
-	if !strings.Contains(joined, "Finding: stale result") {
-		t.Fatalf("rendered report missing sanitized finding title:\n%s", joined)
+	if !strings.Contains(message, "Finding: stale result") {
+		t.Fatalf("rendered report missing sanitized finding title:\n%s", message)
 	}
 }
 
-func TestReviewReportLines_RendersFindingSummaryAndEvidenceRefs(t *testing.T) {
+func TestReviewReportTimelineMessage_RendersFindingSummaryAndEvidenceRefs(t *testing.T) {
 	report := newTUITestReviewReport()
 	report.RootCauseGroups[0].Summary = "request state lifecycle is split"
 	report.RootCauseGroups[0].FixStrategy = "centralize request lifecycle"
@@ -44,20 +40,20 @@ func TestReviewReportLines_RendersFindingSummaryAndEvidenceRefs(t *testing.T) {
 		CommandIndex: review.ReviewCommandIndex(0),
 	}}
 
-	plain := stripANSI(strings.Join(reviewReportLines(report), "\n"))
+	message := reviewReportTimelineMessage(report)
 	for _, want := range []string{
 		"Group summary: request state lifecycle is split",
 		"Fix strategy: centralize request lifecycle",
 		"Finding summary: completed review result is discarded after close",
 		"Evidence: file - internal/tui/review_screen_input.go:87; probe probe-1 cmd 0; Esc closes the screen while the request keeps running; snippet: return reviewCommandClose",
 	} {
-		if !strings.Contains(plain, want) {
-			t.Fatalf("review report lines missing %q:\n%s", want, plain)
+		if !strings.Contains(message, want) {
+			t.Fatalf("review report message missing %q:\n%s", want, message)
 		}
 	}
 }
 
-func TestReviewReportLines_RendersComputedSummaryCounts(t *testing.T) {
+func TestReviewReportTimelineMessage_RendersComputedSummaryCounts(t *testing.T) {
 	report := newTUITestReviewReport()
 	report.ComputedSummary = &review.ReviewReportComputedSummary{
 		RootCauseGroupCount:       2,
@@ -80,7 +76,7 @@ func TestReviewReportLines_RendersComputedSummaryCounts(t *testing.T) {
 		MutatedWorktreeProbeCount: 19,
 	}
 
-	plain := stripANSI(strings.Join(reviewReportLines(report), "\n"))
+	message := reviewReportTimelineMessage(report)
 	for _, want := range []string{
 		"Root cause groups: 2  Findings: 3",
 		"Surfaces: checked 4  finding 5  unverified 6  residual 7",
@@ -88,8 +84,8 @@ func TestReviewReportLines_RendersComputedSummaryCounts(t *testing.T) {
 		"New report-pass findings: 13",
 		"Probes: total 14  passed 15  failed 16  timed_out 17  blocked 18  mutated 19",
 	} {
-		if !strings.Contains(plain, want) {
-			t.Fatalf("review report lines missing %q:\n%s", want, plain)
+		if !strings.Contains(message, want) {
+			t.Fatalf("review report message missing %q:\n%s", want, message)
 		}
 	}
 }

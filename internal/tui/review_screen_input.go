@@ -1,10 +1,13 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/review"
+)
 
-func (rs *reviewScreen) handleKey(msg tea.KeyMsg, bodyBounds reviewBodyScrollBounds) (reviewCommand, tea.Cmd) {
+func (rs *reviewScreen) handleKey(msg tea.KeyMsg) (reviewCommand, *review.ReviewRequest, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
-		return reviewCommandDelegateCtrlC, nil
+		return reviewCommandDelegateCtrlC, nil, nil
 	}
 
 	switch rs.mode {
@@ -12,101 +15,65 @@ func (rs *reviewScreen) handleKey(msg tea.KeyMsg, bodyBounds reviewBodyScrollBou
 		return rs.handlePresetKey(msg)
 	case reviewScreenCustom:
 		return rs.handleCustomKey(msg)
-	case reviewScreenSubmitted:
-		return rs.handleSubmittedKey(msg, bodyBounds), nil
 	default:
-		return reviewCommandNone, nil
+		return reviewCommandNone, nil, nil
 	}
 }
 
-func (rs *reviewScreen) handlePresetKey(msg tea.KeyMsg) (reviewCommand, tea.Cmd) {
+func (rs *reviewScreen) handlePresetKey(msg tea.KeyMsg) (reviewCommand, *review.ReviewRequest, tea.Cmd) {
 	switch {
 	case msg.Type == tea.KeyEsc:
-		return reviewCommandClose, nil
+		return reviewCommandClose, nil, nil
 
 	case msg.Type == tea.KeyUp || msg.String() == "k":
 		if rs.presetIndex > 0 {
 			rs.presetIndex--
 		}
-		return reviewCommandNone, nil
+		rs.clearNotice()
+		return reviewCommandNone, nil, nil
 
 	case msg.Type == tea.KeyDown || msg.String() == "j":
 		if rs.presetIndex < len(reviewPresets)-1 {
 			rs.presetIndex++
 		}
-		return reviewCommandNone, nil
+		rs.clearNotice()
+		return reviewCommandNone, nil, nil
 
 	case isEnterKey(msg):
 		preset, ok := rs.selectedPreset()
 		if !ok {
-			return reviewCommandNone, nil
+			return reviewCommandNone, nil, nil
 		}
 		switch preset.action {
 		case reviewPresetActionCurrentChanges:
-			rs.submitCurrentChanges("")
-			return reviewCommandSubmit, nil
+			req := review.NewCurrentChangesRequest("")
+			rs.customInput.Blur()
+			return reviewCommandSubmit, &req, nil
 		case reviewPresetActionCustomInstructions:
 			rs.openCustomInput()
-			return reviewCommandNone, nil
+			return reviewCommandNone, nil, nil
 		}
 	}
 
-	return reviewCommandNone, nil
+	return reviewCommandNone, nil, nil
 }
 
-func (rs *reviewScreen) handleCustomKey(msg tea.KeyMsg) (reviewCommand, tea.Cmd) {
+func (rs *reviewScreen) handleCustomKey(msg tea.KeyMsg) (reviewCommand, *review.ReviewRequest, tea.Cmd) {
 	switch {
 	case msg.Type == tea.KeyEsc:
 		rs.backToPreset()
-		return reviewCommandNone, nil
+		return reviewCommandNone, nil, nil
 
 	case isEnterKey(msg):
-		rs.submitCurrentChanges(rs.customInput.Value())
-		return reviewCommandSubmit, nil
+		req := review.NewCurrentChangesRequest(rs.customInput.Value())
+		rs.bodyViewport.reset()
+		rs.customInput.Blur()
+		return reviewCommandSubmit, &req, nil
 
 	default:
 		var cmd tea.Cmd
 		rs.customInput, cmd = rs.customInput.Update(msg)
-		return reviewCommandNone, cmd
+		rs.clearNotice()
+		return reviewCommandNone, nil, cmd
 	}
-}
-
-func (rs *reviewScreen) handleMouse(msg tea.MouseMsg, bodyBounds reviewBodyScrollBounds) bool {
-	if rs.mode != reviewScreenSubmitted {
-		return false
-	}
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
-		rs.bodyViewport.scrollUp(3, bodyBounds)
-		return true
-	case tea.MouseButtonWheelDown:
-		rs.bodyViewport.scrollDown(3, bodyBounds)
-		return true
-	default:
-		return false
-	}
-}
-
-func (rs *reviewScreen) handleSubmittedKey(msg tea.KeyMsg, bodyBounds reviewBodyScrollBounds) reviewCommand {
-	switch {
-	case msg.Type == tea.KeyEsc || msg.String() == "q":
-		if rs.runState == reviewRunRunning {
-			rs.cancelRunningReview()
-			return reviewCommandNone
-		}
-		return reviewCommandClose
-	case msg.Type == tea.KeyUp || msg.String() == "k":
-		rs.bodyViewport.scrollUp(1, bodyBounds)
-	case msg.Type == tea.KeyDown || msg.String() == "j":
-		rs.bodyViewport.scrollDown(1, bodyBounds)
-	case msg.Type == tea.KeyPgUp:
-		rs.bodyViewport.scrollUp(bodyBounds.pageSize(), bodyBounds)
-	case msg.Type == tea.KeyPgDown:
-		rs.bodyViewport.scrollDown(bodyBounds.pageSize(), bodyBounds)
-	case msg.Type == tea.KeyHome || msg.String() == "g":
-		rs.bodyViewport.gotoTop()
-	case msg.Type == tea.KeyEnd || msg.String() == "G":
-		rs.bodyViewport.gotoBottom(bodyBounds)
-	}
-	return reviewCommandNone
 }

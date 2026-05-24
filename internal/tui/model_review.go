@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/review"
 )
@@ -8,26 +10,19 @@ import (
 // openReviewScreen は review preset screen を開く。
 func (m Model) openReviewScreen() (tea.Model, tea.Cmd) {
 	m.activateModalScreen(screenReview)
-	m.reviewScreenSeq++
-	m.reviewScreen = newReviewScreen(m.reviewScreenSeq)
+	m.reviewScreen = newReviewScreen()
 	m.reviewScreen.customInput.Width = max(0, m.width-4)
 	return m, nil
 }
 
-// openReviewScreenAndRun は /review <instructions> の即時実行用に画面を開いて request を走らせる。
+// openReviewScreenAndRun は /review <instructions> の即時実行用に timeline review を開始する。
 func (m Model) openReviewScreenAndRun(customInstructions string) (tea.Model, tea.Cmd) {
-	updated, cmd := m.openReviewScreen()
-	m = updated.(Model)
 	req := review.NewCurrentChangesRequest(customInstructions)
-	updated, reviewCmd := m.handleReviewRequest(req)
-	return updated, tea.Batch(cmd, reviewCmd)
+	return m.startReviewTimeline(req)
 }
 
 // closeReviewScreen は review screen を閉じて chat に戻る。
 func (m Model) closeReviewScreen() (tea.Model, tea.Cmd) {
-	if m.reviewScreen != nil {
-		m.reviewScreen.cancelActiveReviewRun()
-	}
 	m.reviewScreen = nil
 	m.deactivateModalScreen(true)
 	return m, nil
@@ -41,24 +36,12 @@ func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case reviewRunFinishedMsg:
-		if !msg.appliesTo(rs) {
-			return m, nil
-		}
-		msg.applyTo(rs)
-		m.chromeDirty = true
-		return m, nil
-
 	case tea.WindowSizeMsg:
 		m.applyChatWindowSize(msg.Width, msg.Height)
 		rs.customInput.Width = max(0, msg.Width-4)
-		rs.bodyViewport.clamp(m.reviewBodyScrollBounds())
 		return m, nil
 
 	case tea.MouseMsg:
-		if rs.handleMouse(msg, m.reviewBodyScrollBounds()) {
-			return m, nil
-		}
 		m.screen = screenChat
 		updated, cmd := m.Update(msg)
 		m = updated.(Model)
@@ -66,17 +49,17 @@ func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
-		action, cmd := rs.handleKey(msg, m.reviewBodyScrollBounds())
+		action, req, cmd := rs.handleKey(msg)
 		switch action {
 		case reviewCommandDelegateCtrlC:
 			return m.handleCtrlC()
 		case reviewCommandClose:
 			return m.closeReviewScreen()
 		case reviewCommandSubmit:
-			if rs.request == nil {
+			if req == nil {
 				return m, cmd
 			}
-			updated, reviewCmd := m.handleReviewRequest(*rs.request)
+			updated, reviewCmd := m.startReviewTimeline(*req)
 			return updated, tea.Batch(cmd, reviewCmd)
 		default:
 			return m, cmd
@@ -87,25 +70,52 @@ func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m Model) reviewBodyScrollBounds() reviewBodyScrollBounds {
-	return newReviewBodyScrollBounds(len(m.reviewBodyLines()), m.reviewBodyHeight())
+func (m Model) startReviewTimeline(req review.ReviewRequest) (tea.Model, tea.Cmd) {
+	if m.rejectReviewTimelineWhileBusy() {
+		return m, nil
+	}
+	m.prepareReviewTimelineHandoff()
+
+	m.appendUserMessage(reviewTimelineUserDisplay(req))
+	m.beginAgentActivityWithOptions(reviewActivityOptions(req))
+	if m.reviewAgent == nil {
+		err := errors.New(reviewRunnerNotImplementedMessage)
+		m.finishAgentActivity(err, AgentErrorValidation)
+		return m, nil
+	}
+
+	m.reviewTimelineSeq++
+	runCtx := newReviewRunContext(newReviewRunID(m.reviewTimelineSeq))
+	m.reviewTimelineRun = runCtx
+	agent := m.reviewAgent
+	return m, newReviewTimelineRunInvocation(runCtx, agent, req).command()
 }
 
-// handleReviewRequest は生成済み ReviewRequest の runner handoff 境界。
-func (m Model) handleReviewRequest(req review.ReviewRequest) (tea.Model, tea.Cmd) {
-	if m.reviewScreen == nil {
-		return m, nil
+func (m *Model) rejectReviewTimelineWhileBusy() bool {
+	if !m.rejectAgentTurnWhileBusy() {
+		return false
 	}
-	if m.reviewAgent == nil {
-		m.reviewScreen.markReviewNotImplemented(req)
-		return m, nil
-	}
-	if m.conversation != nil && m.conversation.IsProcessing() {
-		m.reviewScreen.markReviewBlocked(req, reviewRunnerBusyMessage)
-		return m, nil
-	}
+	m.showReviewBusyNotice()
+	return true
+}
 
-	runCtx := m.reviewScreen.startReview(req)
-	agent := m.reviewAgent
-	return m, newReviewRunInvocation(runCtx, agent, req).command()
+func (m *Model) showReviewBusyNotice() {
+	if m.screen != screenReview || m.reviewScreen == nil {
+		return
+	}
+	m.reviewScreen.setNotice(agentTurnBusyStatus)
+	if m.reviewScreen.mode == reviewScreenCustom {
+		m.reviewScreen.customInput.Focus()
+	}
+	m.chromeDirty = true
+}
+
+func (m *Model) prepareReviewTimelineHandoff() {
+	m.clearComposerDraft()
+	if m.reviewScreen != nil {
+		m.reviewScreen = nil
+	}
+	if m.screen != screenChat {
+		m.deactivateModalScreen(false)
+	}
 }
