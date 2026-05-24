@@ -14,6 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
 
@@ -127,6 +128,14 @@ func (a *TUIAdapter) flushTUIEvents() {
 // HandleCommand は特殊コマンドを処理する。処理した場合 true を返す。
 func (a *TUIAdapter) HandleCommand(cmd string) bool {
 	return handleSpecialCommandForSurface(cmd, a.agent, commandcatalog.CommandSurfaceTUI)
+}
+
+// SkillCatalog は TUI の /skills 補完に現在の skill catalog を提供する。
+func (a *TUIAdapter) SkillCatalog() agentskills.SkillCatalog {
+	if a == nil || a.agent == nil {
+		return agentskills.SkillCatalog{}
+	}
+	return a.agent.SkillCatalog()
 }
 
 // GetStatusLine はステータスバーに表示する文字列を返す。

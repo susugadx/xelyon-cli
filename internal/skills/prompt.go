@@ -38,11 +38,11 @@ func BuildPromptCatalog(catalog SkillCatalog, maxEntries int) string {
 	}
 	for i := 0; i < limit; i++ {
 		skill := catalog.Skills[i]
-		name := sanitizeCatalogPromptValue(skill.Name)
+		name := SanitizeCatalogPromptValue(skill.Name)
 		if name == "" {
 			name = "(invalid-skill-name)"
 		}
-		desc := truncateRunes(sanitizeCatalogPromptValue(skill.Description), descLimit)
+		desc := truncateRunes(SanitizeCatalogPromptValue(skill.Description), descLimit)
 		if desc == "" {
 			desc = "(no description)"
 		}
@@ -83,7 +83,8 @@ func truncateRunes(value string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit])) + "..."
 }
 
-func sanitizeCatalogPromptValue(value string) string {
+// SanitizeCatalogPromptValue は skill metadata を prompt / composer 用の 1 行テキストに正規化する。
+func SanitizeCatalogPromptValue(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return ""

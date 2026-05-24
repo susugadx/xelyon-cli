@@ -82,6 +82,32 @@ func (cmd CommandInfo) EffectiveCategory() CommandCategory {
 	return cmd.Category
 }
 
+// EffectiveCategoryDisplayLabel は command discovery の表示用カテゴリ名を返す。
+func (cmd CommandInfo) EffectiveCategoryDisplayLabel() string {
+	switch cmd.Name {
+	case "/model":
+		return "model"
+	case "/provider":
+		return "provider"
+	case "/thinking":
+		return "thinking"
+	}
+	return CommandCategoryDisplayLabel(cmd.EffectiveCategory())
+}
+
+// CommandCategoryDisplayLabel は内部カテゴリを短い表示ラベルへ変換する。
+func CommandCategoryDisplayLabel(category CommandCategory) string {
+	switch category {
+	case CommandCategoryModel:
+		return "llm"
+	default:
+		if category == "" {
+			return string(CommandCategoryOther)
+		}
+		return string(category)
+	}
+}
+
 // EffectiveSortWeight は command 候補の並び順を返す。
 func (cmd CommandInfo) EffectiveSortWeight() int {
 	if cmd.SortWeight == 0 {

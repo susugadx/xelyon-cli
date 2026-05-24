@@ -51,6 +51,7 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 		statusSnapshot.LegacyLine = agent.GetStatusLine()
 	}
 	reviewAgent, _ := agent.(ReviewAgent)
+	skillCatalog, _ := agent.(SkillCatalogAgent)
 
 	return Model{
 		conversation:   agent,
@@ -60,6 +61,7 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 		providerModels: agent,
 		projectAgent:   agent,
 		reviewAgent:    reviewAgent,
+		skillCatalog:   skillCatalog,
 		textInput:      ti,
 		spinner:        sp,
 		rawLines:       append([]string(nil), initLines...),

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -311,68 +310,53 @@ func switchProviderModelWithOutput(agent *Agent, providerName, requestedModel st
 	return nil
 }
 
-// handleProvidersCommand は利用可能なプロバイダー一覧を表示
+// handleProvidersCommand は provider credential status を表示する。
 func handleProvidersCommand(agent *Agent) bool {
-	providers := api.ListProviders()
 	out := agent.output()
-	currentProviderConfigKey := agent.currentProviderConfigKey()
-	if currentProviderConfigKey != "" && api.IsRegisteredProvider(currentProviderConfigKey) {
-		found := false
-		for _, provider := range providers {
-			if config.ActiveProviderConfigKey(provider) == currentProviderConfigKey {
-				found = true
-				break
-			}
-		}
-		if !found {
-			providers = append(providers, currentProviderConfigKey)
-			slices.Sort(providers)
-		}
-	}
+	providers := agent.ProviderCandidates()
 
 	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	cyan.Fprintln(out, "📡 利用可能なプロバイダー / Available Providers")
+	cyan.Fprintln(out, "📡 Provider credential status")
 	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	_, _ = fmt.Fprintln(out)
 
 	for _, provider := range providers {
-		// 表示上の current は session が所有する exact provider config key に合わせる。
-		isCurrent := currentProviderConfigKey != "" && config.ActiveProviderConfigKey(provider) == currentProviderConfigKey
-		hasAPIKey := IsAPIKeyAvailable(provider)
-
-		// アイコン
 		icon := "  "
-		if isCurrent {
+		if provider.Current {
 			icon = "✓ "
 		}
-
-		// ステータス
-		status := ""
-		if provider == "ollama" {
-			status = "(ローカル)"
-		} else if provider == "bedrock" {
-			status = "(AWS認証)"
-		} else if hasAPIKey {
-			status = "(API key設定済み)"
-		} else {
-			status = "(API key未設定)"
+		label := provider.Label
+		if label == "" {
+			label = provider.Key
 		}
-
-		// 色付け
-		if isCurrent {
-			green.Fprintf(out, "%s%-12s %s\n", icon, provider, status)
-		} else if hasAPIKey {
-			_, _ = fmt.Fprintf(out, "%s%-12s %s\n", icon, provider, status)
+		if provider.Key != "" && provider.Key != label {
+			label += " (" + provider.Key + ")"
+		}
+		status := providerCredentialStatusDisplay(provider.CredentialStatus)
+		if provider.Current {
+			green.Fprintf(out, "%s%-24s %s\n", icon, label, status)
 		} else {
-			// API key未設定は薄く表示
-			_, _ = fmt.Fprintf(out, "%s%-12s %s\n", icon, provider, status)
+			_, _ = fmt.Fprintf(out, "%s%-24s %s\n", icon, label, status)
 		}
 	}
 
 	_, _ = fmt.Fprintln(out)
-	cyan.Fprintln(out, "使い方: /use <provider>")
-	cyan.Fprintln(out, "例: /use claude")
+	cyan.Fprintln(out, "Usage: /provider [provider] [model]")
+	cyan.Fprintln(out, "TUI: /provider opens the provider/model picker")
 	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	return true
+}
+
+func providerCredentialStatusDisplay(status ProviderCredentialStatus) string {
+	switch status {
+	case ProviderCredentialConfigured:
+		return "(credential configured)"
+	case ProviderCredentialLocal:
+		return "(local)"
+	case ProviderCredentialAWSAuth:
+		return "(AWS auth)"
+	default:
+		return "(credential missing)"
+	}
 }

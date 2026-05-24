@@ -8,8 +8,12 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
+	"github.com/susugadx/xelyon-cli/internal/tui"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
+
+var _ tui.SkillCatalogAgent = (*TUIAdapter)(nil)
 
 func newTUIAdapterTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
 	t.Helper()
@@ -27,6 +31,36 @@ func newTUIAdapterTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
 	}
 
 	return agent, out
+}
+
+func TestTUIAdapter_SkillCatalogForwardsAgentCatalog(t *testing.T) {
+	oldLoader := loadSkillCatalogForAgent
+	defer func() { loadSkillCatalogForAgent = oldLoader }()
+
+	invocationCWD := t.TempDir()
+	var gotInvocationCWD string
+	loadSkillCatalogForAgent = func(cwd string) agentskills.SkillCatalog {
+		gotInvocationCWD = cwd
+		return agentskills.SkillCatalog{
+			Skills: []agentskills.ParsedSkill{{
+				Name:        "bug-investigation",
+				Description: "Investigate known bugs before editing",
+			}},
+		}
+	}
+
+	agent, _ := newTUIAdapterTestAgent(t)
+	agent.Runtime.InvocationCWD = invocationCWD
+	adapter := NewTUIAdapter(agent, nil)
+
+	catalog := adapter.SkillCatalog()
+
+	if gotInvocationCWD != invocationCWD {
+		t.Fatalf("SkillCatalog invocation cwd = %q, want %q", gotInvocationCWD, invocationCWD)
+	}
+	if len(catalog.Skills) != 1 || catalog.Skills[0].Name != "bug-investigation" {
+		t.Fatalf("SkillCatalog() = %#v", catalog.Skills)
+	}
 }
 
 func TestTUIConfig_UnknownSubcommand_DoesNotRunInteractive(t *testing.T) {

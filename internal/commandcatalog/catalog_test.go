@@ -68,8 +68,8 @@ func TestFindMatchesNameAndAlias(t *testing.T) {
 	if cmd, ok := Find("/stats"); !ok || cmd.Name != "/status" {
 		t.Fatalf("Find(/stats) = %#v, %v, want /status alias owner", cmd, ok)
 	}
-	if cmd, ok := Find("/think"); !ok || cmd.Name != "/thinking" {
-		t.Fatalf("Find(/think) = %#v, %v, want /thinking alias owner", cmd, ok)
+	if cmd, ok := Find("/think"); !ok || cmd.Name != "/think" || !cmd.HiddenFromHelp || cmd.Discoverable {
+		t.Fatalf("Find(/think) = %#v, %v, want hidden compatibility command", cmd, ok)
 	}
 	if cmd, ok := Find("/h"); !ok || cmd.Name != "/help" {
 		t.Fatalf("Find(/h) = %#v, %v, want /help alias owner", cmd, ok)
@@ -314,6 +314,9 @@ func TestDefaultCommandMetadata(t *testing.T) {
 	if cmd.EffectiveCategory() != CommandCategorySession {
 		t.Fatalf("/copy category = %q, want session", cmd.EffectiveCategory())
 	}
+	if cmd.EffectiveCategoryDisplayLabel() != "session" {
+		t.Fatalf("/copy category display = %q, want session", cmd.EffectiveCategoryDisplayLabel())
+	}
 	if cmd.EffectiveOwner() != CommandOwnerAgent {
 		t.Fatalf("/copy owner = %q, want %q", cmd.EffectiveOwner(), CommandOwnerAgent)
 	}
@@ -328,8 +331,39 @@ func TestDefaultCommandMetadata(t *testing.T) {
 	if empty.EffectiveCategory() != CommandCategoryOther {
 		t.Fatalf("empty category = %q, want other", empty.EffectiveCategory())
 	}
+	if empty.EffectiveCategoryDisplayLabel() != "other" {
+		t.Fatalf("empty category display = %q, want other", empty.EffectiveCategoryDisplayLabel())
+	}
 	if empty.EffectiveSortWeight() != 1000 {
 		t.Fatalf("empty sort weight = %d, want 1000", empty.EffectiveSortWeight())
+	}
+}
+
+func TestCommandCategoryDisplayLabelUsesSpecificLLMCommandLabels(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		want string
+	}{
+		{name: "/model", want: "model"},
+		{name: "/provider", want: "provider"},
+		{name: "/thinking", want: "thinking"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, ok := Find(tt.name)
+			if !ok {
+				t.Fatalf("Find(%s) ok = false, want true", tt.name)
+			}
+			if cmd.EffectiveCategory() != CommandCategoryModel {
+				t.Fatalf("%s internal category = %q, want model", tt.name, cmd.EffectiveCategory())
+			}
+			if got := cmd.EffectiveCategoryDisplayLabel(); got != tt.want {
+				t.Fatalf("%s category display = %q, want %q", tt.name, got, tt.want)
+			}
+		})
+	}
+
+	if got := (CommandInfo{Category: CommandCategoryModel}).EffectiveCategoryDisplayLabel(); got != "llm" {
+		t.Fatalf("generic model category display = %q, want llm", got)
 	}
 }
 

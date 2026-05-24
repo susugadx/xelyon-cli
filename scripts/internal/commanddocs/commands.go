@@ -36,6 +36,9 @@ func FindExistingCommands(content string) map[string]bool {
 func MissingCommands(commands []commandcatalog.CommandInfo, documented map[string]bool) []commandcatalog.CommandInfo {
 	var missing []commandcatalog.CommandInfo
 	for _, cmd := range commands {
+		if cmd.HiddenFromHelp {
+			continue
+		}
 		if commandDocumented(cmd, documented) {
 			continue
 		}

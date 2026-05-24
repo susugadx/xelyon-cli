@@ -15,19 +15,19 @@ const GeneratedHelpCommandsText = `Commands:
   /ledger                   - Show runtime task ledger
   /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
-  /provider [provider] [model] - Open provider picker or switch provider and optionally model
-  /providers                - List available providers and their API key status
+  /provider [provider] [model] - Open provider/model picker or switch directly
+  /providers                - Show provider credential status
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
-  /skills                   - List and inspect Agent Skills catalog
-                            /skills list - List discovered skills
+  /skills                   - Pick skills or inspect the Agent Skills catalog
+                            /skills overview - Print skill catalog overview
                             /skills show <name> - Show SKILL.md body and resource listings
                             /skills doctor - Show parsing/duplicate diagnostics
-  /model [name]             - Open model picker or switch model without restart
+  /model [name]             - Open model picker or switch current provider model
   /init                     - Create xelyon.yaml project template
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
-  /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
+  /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
   /help, /h                 - Show this help
 `
@@ -49,20 +49,20 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /detach-all               - Detach all attachments from the current draft
   /review [instructions]    - Review current changes and find issues
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
-  /provider [provider] [model] - Open provider picker or switch provider and optionally model
-  /providers                - List available providers and their API key status
+  /provider [provider] [model] - Open provider/model picker or switch directly
+  /providers                - Show provider credential status
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
-  /skills                   - List and inspect Agent Skills catalog
-                            /skills list - List discovered skills
+  /skills                   - Pick skills or inspect the Agent Skills catalog
+                            /skills overview - Print skill catalog overview
                             /skills show <name> - Show SKILL.md body and resource listings
                             /skills doctor - Show parsing/duplicate diagnostics
-  /model [name]             - Open model picker or switch model without restart
+  /model [name]             - Open model picker or switch current provider model
   /init                     - Create xelyon.yaml project template
   /project                  - Edit project xelyon.yaml interactively
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
-  /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
+  /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
   /help, /h                 - Show this help
 `

@@ -49,3 +49,15 @@ func TestMissingCommandsTreatsAliasHeadingAsDocumented(t *testing.T) {
 		t.Fatalf("MissingCommands() = %#v, want none", missing)
 	}
 }
+
+func TestMissingCommandsSkipsHiddenCompatibilityCommands(t *testing.T) {
+	commands := []commandcatalog.CommandInfo{
+		{Name: "/thinking"},
+		{Name: "/think", HiddenFromHelp: true},
+	}
+	documented := map[string]bool{"/thinking": true}
+
+	if missing := MissingCommands(commands, documented); len(missing) != 0 {
+		t.Fatalf("MissingCommands() = %#v, want none", missing)
+	}
+}

@@ -147,10 +147,10 @@ func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
 	}
 
 	output := out.String()
-	if !strings.Contains(output, "利用可能なプロバイダー") {
+	if !strings.Contains(output, "Provider credential status") {
 		t.Fatalf("expected runtime output to contain providers header, got %q", output)
 	}
-	if !strings.Contains(output, "/use <provider>") {
+	if !strings.Contains(output, "/provider [provider] [model]") {
 		t.Fatalf("expected runtime output to contain usage hint, got %q", output)
 	}
 	if !strings.Contains(output, "openai") {

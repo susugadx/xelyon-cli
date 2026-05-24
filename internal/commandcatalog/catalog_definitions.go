@@ -108,6 +108,7 @@ var Commands = []CommandInfo{
 	commandProject(),
 	commandPlan(),
 	commandThink(),
+	commandThinkAlias(),
 	commandVersion(),
 	commandHelp(),
 }
@@ -241,8 +242,8 @@ func commandProvider() CommandInfo {
 	return legacyAgentTUILocalCommand(
 		"/provider",
 		"[provider] [model]",
-		"Open provider picker or switch provider and optionally model",
-		"プロバイダーを選択/切り替え",
+		"Open provider/model picker or switch directly",
+		"プロバイダー/モデルを選択・切り替え",
 		TUILocalActionOpenProviderPicker,
 		TUILocalArgBareOnly,
 		TUILocalWhenNone,
@@ -254,7 +255,7 @@ func commandProvider() CommandInfo {
 }
 
 func commandProviders() CommandInfo {
-	return legacyDiscoverableCommand("/providers", "", "List available providers and their API key status", "利用可能なプロバイダー一覧", CommandCategoryModel, 30)
+	return legacyHiddenCommand("/providers", "", "Show provider credential status", "プロバイダー認証状態を表示", CommandCategoryModel, 30)
 }
 
 func commandConfig() CommandInfo {
@@ -274,9 +275,9 @@ func commandConfig() CommandInfo {
 }
 
 func commandSkills() CommandInfo {
-	cmd := legacyDiscoverableCommand("/skills", "", "List and inspect Agent Skills catalog", "Agent Skillsの一覧と診断", CommandCategoryContext, 95)
+	cmd := legacyDiscoverableCommand("/skills", "", "Pick skills or inspect the Agent Skills catalog", "Agent Skillsを選択・確認・診断", CommandCategoryContext, 95)
 	cmd.SubCommands = []SubCommand{
-		{Name: "/skills list", Description: "List discovered skills"},
+		{Name: "/skills overview", Description: "Print skill catalog overview"},
 		{Name: "/skills show <name>", Description: "Show SKILL.md body and resource listings"},
 		{Name: "/skills doctor", Description: "Show parsing/duplicate diagnostics"},
 	}
@@ -294,8 +295,8 @@ func commandModel() CommandInfo {
 	return legacyAgentTUILocalCommand(
 		"/model",
 		"[name]",
-		"Open model picker or switch model without restart",
-		"モデルを選択/切り替え",
+		"Open model picker or switch current provider model",
+		"現在のプロバイダーのモデルを選択/切り替え",
 		TUILocalActionOpenModelPicker,
 		TUILocalArgBareOnly,
 		TUILocalWhenNone,
@@ -327,7 +328,11 @@ func commandPlan() CommandInfo {
 }
 
 func commandThink() CommandInfo {
-	return legacyDiscoverableCommand("/thinking", "[on|off|level]", "Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)", "Extended Thinkingを切り替え", CommandCategoryModel, 40, "/think")
+	return legacyDiscoverableCommand("/thinking", "<on|off|level>", "Set Extended Thinking mode (level: low/medium/high/xhigh=max)", "Extended Thinkingを設定", CommandCategoryModel, 40)
+}
+
+func commandThinkAlias() CommandInfo {
+	return legacyCompatibilityCommand("/think", "<on|off|level>", "Set Extended Thinking mode (legacy alias for /thinking)", "Extended Thinkingを設定（互換）", CommandCategoryModel, 41)
 }
 
 func commandVersion() CommandInfo {

@@ -130,6 +130,10 @@ func (m Model) handleComposerInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleComposerSubmit() (tea.Model, tea.Cmd) {
+	if updated, ok := m.expandSlashSuggestionOnSubmit(); ok {
+		return updated, nil
+	}
+
 	submission, ok := m.buildComposerSubmission()
 	if !ok {
 		return m, nil

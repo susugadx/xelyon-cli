@@ -601,7 +601,6 @@ lsp:
 **コマンドで切り替え（正規ルート）:**
 
 ```
-/thinking          # 現在の状態を表示
 /thinking on       # 有効化（現在のレベルで）
 /thinking off      # 無効化
 /thinking low      # low レベルで有効化

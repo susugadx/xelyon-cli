@@ -42,6 +42,39 @@ func Split(input string) []string {
 	return parts
 }
 
+// QuoteArg は SplitStrict が 1 引数として復元できる slash command 引数表現を返す。
+func QuoteArg(value string) string {
+	if value == "" {
+		return `""`
+	}
+	if !needsQuotedArg(value) {
+		return value
+	}
+	body, trailingBackslashes := splitTrailingBackslashes(value)
+	return `"` + quoteArgBody(body) + `"` + trailingBackslashes
+}
+
+func quoteArgBody(value string) string {
+	return strings.ReplaceAll(value, `"`, `\"`)
+}
+
+func splitTrailingBackslashes(value string) (string, string) {
+	index := len(value)
+	for index > 0 && value[index-1] == '\\' {
+		index--
+	}
+	return value[:index], value[index:]
+}
+
+func needsQuotedArg(value string) bool {
+	for _, r := range value {
+		if unicode.IsSpace(r) || isQuoteRune(r) {
+			return true
+		}
+	}
+	return false
+}
+
 // SplitStrict は slash command 文字列を quote-aware に分割し、parse 状態を返す。
 func SplitStrict(input string) ([]string, SplitStatus) {
 	var parts []string

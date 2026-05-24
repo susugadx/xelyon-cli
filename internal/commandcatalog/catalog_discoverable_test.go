@@ -11,7 +11,6 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 	wantNames := []string{
 		"/model",
 		"/provider",
-		"/providers",
 		"/thinking",
 		"/status",
 		"/tokens",
@@ -43,7 +42,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		}
 	}
 
-	for _, hidden := range []string{"/use", "/version", "/help"} {
+	for _, hidden := range []string{"/providers", "/use", "/think", "/version", "/help"} {
 		if containsCommandName(commands, hidden) {
 			t.Fatalf("%s should not be TUI-discoverable", hidden)
 		}
@@ -78,7 +77,7 @@ func TestDiscoverablePrefixFiltering(t *testing.T) {
 	if got := MatchDiscoverablePrefixForSurface("/use", CommandSurfaceTUI); len(got) != 0 {
 		t.Fatalf("TUI discoverable /use = %#v, want no matches", got)
 	}
-	if got := MatchDiscoverablePrefixForSurface("/provider", CommandSurfaceTUI); len(got) != 2 || got[0].Name != "/provider" || got[1].Name != "/providers" {
-		t.Fatalf("TUI discoverable /provider = %#v, want /provider then /providers", got)
+	if got := MatchDiscoverablePrefixForSurface("/provider", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/provider" {
+		t.Fatalf("TUI discoverable /provider = %#v, want /provider", got)
 	}
 }

@@ -18,3 +18,7 @@ func injectSkillCatalogPrompt(systemPrompt string, invocationCWD string) string 
 func (a *Agent) loadSkillCatalog() agentskills.SkillCatalog {
 	return loadSkillCatalogForAgent(a.invocationCWD())
 }
+
+func (a *Agent) SkillCatalog() agentskills.SkillCatalog {
+	return a.loadSkillCatalog()
+}

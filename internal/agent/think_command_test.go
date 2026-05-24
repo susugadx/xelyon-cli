@@ -85,7 +85,7 @@ func TestHandleThinkingCommand_DeepSeekOffPreservesNonReasonerModel(t *testing.T
 	}
 }
 
-func TestHandleSpecialCommandThinkingNameAndAlias(t *testing.T) {
+func TestHandleSpecialCommandThinkingNameAndHiddenAlias(t *testing.T) {
 	runtime := newIsolatedRuntime()
 	agent := NewAgentWithRuntime("gpt-test", &mockProvider{name: "openai"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
@@ -98,10 +98,10 @@ func TestHandleSpecialCommandThinkingNameAndAlias(t *testing.T) {
 	}
 
 	if !handleSpecialCommandForSurface("/think off", agent, commandcatalog.CommandSurfaceTUI) {
-		t.Fatal("handleSpecialCommandForSurface(/think off) = false, want true")
+		t.Fatal("handleSpecialCommandForSurface(/think off) = false, want hidden compatibility alias to dispatch")
 	}
 	if agent.cfg().Thinking.Enabled {
-		t.Fatal("Thinking.Enabled = true, want false after /think alias off")
+		t.Fatalf("Thinking = %+v, want hidden compatibility alias to disable thinking", agent.cfg().Thinking)
 	}
 }
 
@@ -135,9 +135,9 @@ func TestHandleThinkingCommand_UsesCatalogModelForCodexMinimum(t *testing.T) {
 
 	out.Reset()
 	if !handleThinkingCommand(agent, nil) {
-		t.Fatal("handleThinkingCommand(status) = false, want true")
+		t.Fatal("handleThinkingCommand(no args) = false, want true")
 	}
-	if output := out.String(); !strings.Contains(output, "low (Codex minimum)") {
-		t.Fatalf("status output should show Codex minimum, got:\n%s", output)
+	if output := out.String(); !strings.Contains(output, "Usage: /thinking <on|off|low|medium|high|xhigh>") {
+		t.Fatalf("no-arg output should show usage, got:\n%s", output)
 	}
 }

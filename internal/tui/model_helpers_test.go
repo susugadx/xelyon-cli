@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
+	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 )
 
 type providerModelSwitchCall struct {
@@ -52,6 +53,7 @@ type stubAgent struct {
 	projectCreateErr          error
 	lastSavedProject          *config.ProjectConfig
 	savedProjects             []*config.ProjectConfig
+	skillCatalog              agentskills.SkillCatalog
 }
 
 type azureDeploymentSetupCall struct {
@@ -110,6 +112,11 @@ func (s *stubAgent) StatusSnapshot() StatusSnapshot {
 		Mode:       s.statusLine,
 		LegacyLine: s.statusLine,
 	}
+}
+func (s *stubAgent) SkillCatalog() agentskills.SkillCatalog {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.skillCatalog
 }
 func (s *stubAgent) Cancel() {
 	s.mu.Lock()
