@@ -97,6 +97,34 @@ func boolPtrValue(value *bool) bool {
 	return value != nil && *value
 }
 
+func symbolBundleDiagnosticsSummary(diag SymbolBundleDiagnostics) string {
+	legacyIncomplete := diag.UpstreamIncomplete
+	legacyTruncated := diag.UpstreamTruncated
+	diag = cloneSymbolBundleDiagnostics(diag)
+	normalizeSymbolBundleDiagnostics(&diag)
+
+	parts := make([]string, 0, 6)
+	if resolvedBy := strings.TrimSpace(diag.ResolvedBy); resolvedBy != "" && resolvedBy != symbolBundleResolvedByUnknown {
+		parts = append(parts, "resolved_by="+resolvedBy)
+	}
+	if confidence := strings.TrimSpace(diag.Confidence); confidence != "" && confidence != symbolBundleConfidenceUnknown {
+		parts = append(parts, "confidence="+confidence)
+	}
+	if fallbackReason := strings.TrimSpace(diag.FallbackReason); fallbackReason != "" {
+		parts = append(parts, "fallback_reason="+fallbackReason)
+	}
+	if legacyIncomplete || diag.UpstreamIncomplete || boolPtrValue(diag.Incomplete) {
+		parts = append(parts, "incomplete=true")
+	}
+	if legacyTruncated || diag.UpstreamTruncated || boolPtrValue(diag.Truncated) {
+		parts = append(parts, "truncated=true")
+	}
+	if boolPtrValue(diag.BudgetLimitHit) {
+		parts = append(parts, "budget_limit_hit=true")
+	}
+	return strings.Join(parts, ", ")
+}
+
 func normalizeSymbolBundleDiagnostics(diag *SymbolBundleDiagnostics) {
 	if diag == nil {
 		return

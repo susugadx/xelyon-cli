@@ -39,6 +39,13 @@ func TestSearchExecutionMetadataDiagnosticsCopiesLSPBundleDiagnostics(t *testing
 		t.Fatal("Metadata.Diagnostics shares bundle diagnostics pointer, want defensive copy")
 	}
 	assertDiagnosticsResolvedBy(t, *artifact.Metadata.Diagnostics, symbolBundleResolvedByLSP)
+	assertDiagnosticsSummaryFragments(t, artifact.Rendered, "resolved_by=lsp", "confidence=high")
+	artifact.Metadata.Diagnostics.ResolvedBy = symbolBundleResolvedByFallback
+	artifact.Metadata.Diagnostics.Confidence = symbolBundleConfidenceLow
+	assertDiagnosticsResolvedBy(t, artifact.Metadata.Bundle.Diagnostics, symbolBundleResolvedByLSP)
+	if artifact.Metadata.Bundle.Diagnostics.Confidence != symbolBundleConfidenceHigh {
+		t.Fatalf("bundle Confidence changed after metadata mutation: %q", artifact.Metadata.Bundle.Diagnostics.Confidence)
+	}
 }
 
 func TestSearchExecutionMetadataDiagnosticsPreservedOnStructuredImpactCacheHit(t *testing.T) {
@@ -55,6 +62,7 @@ func TestSearchExecutionMetadataDiagnosticsPreservedOnStructuredImpactCacheHit(t
 	first := ExecuteSearchCodeArtifactWithConfig(nil, cache, opts)
 	assertTypeScriptStructuredImpactArtifact(t, first, "buildUser", "function")
 	assertDiagnosticsResolvedBy(t, first.Metadata.Bundle.Diagnostics, symbolBundleResolvedByAST)
+	assertDiagnosticsSummaryFragments(t, first.Rendered, "resolved_by=ast", "confidence=medium")
 
 	second := ExecuteSearchCodeArtifactWithConfig(nil, cache, opts)
 	assertTypeScriptStructuredImpactArtifact(t, second, "buildUser", "function")
@@ -62,7 +70,13 @@ func TestSearchExecutionMetadataDiagnosticsPreservedOnStructuredImpactCacheHit(t
 	if second.Metadata.Diagnostics == nil {
 		t.Fatal("cached Metadata.Diagnostics = nil, want diagnostics snapshot")
 	}
+	if second.Metadata.Diagnostics == &second.Metadata.Bundle.Diagnostics {
+		t.Fatal("cached Metadata.Diagnostics shares bundle diagnostics pointer, want defensive copy")
+	}
 	assertDiagnosticsResolvedBy(t, *second.Metadata.Diagnostics, symbolBundleResolvedByAST)
+	assertDiagnosticsSummaryFragments(t, second.Rendered, "resolved_by=ast", "confidence=medium")
+	second.Metadata.Diagnostics.ResolvedBy = symbolBundleResolvedByFallback
+	assertDiagnosticsResolvedBy(t, second.Metadata.Bundle.Diagnostics, symbolBundleResolvedByAST)
 }
 
 func TestCloneSymbolBundleDeepCopiesDiagnosticsPointers(t *testing.T) {
@@ -129,6 +143,7 @@ func TestJSFamilyDiagnosticsRecordsLSPFallbackAndBudgetHit(t *testing.T) {
 		if diag.Confidence != symbolBundleConfidenceLow {
 			t.Fatalf("Confidence = %q, want %q", diag.Confidence, symbolBundleConfidenceLow)
 		}
+		assertDiagnosticsSummaryFragments(t, artifact.Rendered, "resolved_by=mixed", "confidence=low", "fallback_reason=lsp_error")
 	})
 
 	t.Run("ast budget", func(t *testing.T) {
@@ -151,6 +166,7 @@ func TestJSFamilyDiagnosticsRecordsLSPFallbackAndBudgetHit(t *testing.T) {
 		if diag.Confidence != symbolBundleConfidenceLow {
 			t.Fatalf("Confidence = %q, want %q", diag.Confidence, symbolBundleConfidenceLow)
 		}
+		assertDiagnosticsSummaryFragments(t, artifact.Rendered, "resolved_by=ast", "confidence=low", "truncated=true", "budget_limit_hit=true")
 	})
 
 	t.Run("ast alias expansion budget", func(t *testing.T) {

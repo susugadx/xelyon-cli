@@ -89,6 +89,18 @@ func appendSymbolBundleDiagnostics(sb *strings.Builder, bundle *SymbolBundle) {
 		}
 		fmt.Fprintf(sb, "\nNote: resolved via %s.\n", source)
 	}
+
+	appendSymbolBundleImpactDiagnosticsSummary(sb, bundle)
+}
+
+func appendSymbolBundleImpactDiagnosticsSummary(sb *strings.Builder, bundle *SymbolBundle) {
+	if bundle == nil || bundle.Impact == nil {
+		return
+	}
+
+	if summary := symbolBundleDiagnosticsSummary(bundle.Diagnostics); summary != "" {
+		fmt.Fprintf(sb, "\nDiagnostics: %s\n", summary)
+	}
 }
 
 func appendSymbolBundleImpact(sb *strings.Builder, bundle *SymbolBundle, reg *locator.Registry) {

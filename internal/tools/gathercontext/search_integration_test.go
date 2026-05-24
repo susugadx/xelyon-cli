@@ -201,6 +201,9 @@ func TestGatherContext_SearchRouteUsesTypeScriptStructuredImpactAndPrefetch(t *t
 	if !strings.Contains(result, "Recommended reads:") {
 		t.Fatalf("expected TypeScript structured impact output, got:\n%s", result)
 	}
+	if !strings.Contains(result, "Diagnostics: resolved_by=ast, confidence=medium") {
+		t.Fatalf("expected TypeScript diagnostics summary in search discovery, got:\n%s", result)
+	}
 	if !strings.Contains(result, "export function buildUser") {
 		t.Fatalf("expected prefetched TypeScript definition evidence, got:\n%s", result)
 	}
@@ -244,6 +247,9 @@ func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousTypeScriptSymbol(t *t
 	}
 	if strings.Contains(result, "Prefetched Evidence") {
 		t.Fatalf("expected ambiguous TypeScript search to avoid speculative prefetch, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Prefetch skipped: ambiguous structured impact") {
+		t.Fatalf("expected ambiguous TypeScript prefetch skip note, got:\n%s", result)
 	}
 }
 
@@ -361,6 +367,9 @@ func TestGatherContext_SearchRouteUsesJavaScriptStructuredImpactAndPrefetch(t *t
 	if !strings.Contains(result, "Recommended reads:") || !strings.Contains(result, "Prefetched Evidence") {
 		t.Fatalf("expected JavaScript structured impact with prefetched evidence, got:\n%s", result)
 	}
+	if !strings.Contains(result, "Diagnostics: resolved_by=ast, confidence=medium") {
+		t.Fatalf("expected JavaScript diagnostics summary in search discovery, got:\n%s", result)
+	}
 	if !strings.Contains(result, "export function buildUser") || !strings.Contains(result, "buildUser('1')") {
 		t.Fatalf("expected prefetched JavaScript evidence, got:\n%s", result)
 	}
@@ -404,6 +413,9 @@ func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousJavaScriptSymbol(t *t
 	}
 	if strings.Contains(result, "Prefetched Evidence") {
 		t.Fatalf("expected ambiguous JavaScript search to avoid speculative prefetch, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Prefetch skipped: ambiguous structured impact") {
+		t.Fatalf("expected ambiguous JavaScript prefetch skip note, got:\n%s", result)
 	}
 }
 
