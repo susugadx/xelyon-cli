@@ -424,6 +424,26 @@ func TestHandleSSEResponse_TextResetsThinkingTimeout(t *testing.T) {
 	}
 }
 
+func TestHandleSSEResponse_TextWithThoughtSignaturePreservesText(t *testing.T) {
+	p := New("test-key")
+	ctx := newGeminiSSETestContext(2, 1)
+	resp := newTimedSSEResponse(t, []timedSSEChunk{
+		{payload: mustSSEPayload(t, GeminiFunctionPart{
+			Text:             "final answer",
+			ThoughtSignature: "sig-text",
+		})},
+	}, 0)
+	defer resp.Body.Close()
+
+	got, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
+	if err != nil {
+		t.Fatalf("handleSSEResponse() error = %v", err)
+	}
+	if got != "final answer" {
+		t.Fatalf("handleSSEResponse() = %q, want %q", got, "final answer")
+	}
+}
+
 func TestHandleSSEResponse_ThoughtSignatureOnlyResetsTransportIdle(t *testing.T) {
 	p := New("test-key")
 	ctx := newGeminiSSETestContext(2, 1)

@@ -30,7 +30,7 @@ func TestBuildPartAction_ThoughtTakesPriority(t *testing.T) {
 	}
 }
 
-func TestBuildPartAction_ThoughtSignatureSuppressesTextPath(t *testing.T) {
+func TestBuildPartAction_FunctionCallThoughtSignatureSuppressesTextPath(t *testing.T) {
 	functionCall := &api.GeminiFunctionCall{Name: "read_file"}
 	action := buildPartAction(GeminiFunctionPart{
 		Text:             "signature hidden text",
@@ -49,6 +49,26 @@ func TestBuildPartAction_ThoughtSignatureSuppressesTextPath(t *testing.T) {
 	}
 	if action.thoughtSignature != "sig-1" {
 		t.Fatalf("buildPartAction() thoughtSignature = %q, want %q", action.thoughtSignature, "sig-1")
+	}
+}
+
+func TestBuildPartAction_TextThoughtSignaturePreservesTextPath(t *testing.T) {
+	action := buildPartAction(GeminiFunctionPart{
+		Text:             "final answer",
+		ThoughtSignature: "sig-text",
+	})
+
+	if !action.collectSignature {
+		t.Fatal("buildPartAction() collectSignature = false, want true")
+	}
+	if action.text != "final answer" {
+		t.Fatalf("buildPartAction() text = %q, want final answer", action.text)
+	}
+	if action.functionCall != nil {
+		t.Fatal("buildPartAction() functionCall = non-nil, want nil")
+	}
+	if action.thoughtSignature != "sig-text" {
+		t.Fatalf("buildPartAction() thoughtSignature = %q, want sig-text", action.thoughtSignature)
 	}
 }
 

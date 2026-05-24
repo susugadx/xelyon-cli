@@ -131,6 +131,8 @@ func (s *sseInterpretState) processPart(ctx context.Context, part GeminiFunction
 		s.collectSignaturePart(part)
 		if action.functionCall != nil {
 			s.handleFunctionCall(action.functionCall, action.thoughtSignature, thinkingTimer, thinkingTimeout)
+		} else if action.text != "" {
+			s.handleTextPart(ctx, action.text, thinkingTimer, thinkingTimeout)
 		} else {
 			s.resetThinkingTimer(thinkingTimer, thinkingTimeout)
 		}

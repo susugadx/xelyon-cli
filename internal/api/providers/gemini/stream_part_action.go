@@ -22,6 +22,9 @@ func buildPartAction(part GeminiFunctionPart) ssePartAction {
 	}
 	if part.ThoughtSignature != "" {
 		action.collectSignature = true
+		if part.FunctionCall == nil {
+			action.text = part.Text
+		}
 		return action
 	}
 	if part.Text != "" {
