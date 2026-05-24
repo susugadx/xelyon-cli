@@ -20,12 +20,14 @@ import (
 
 // TUIAdapter は Agent を tui.AgentInterface に適合させるアダプタ
 type TUIAdapter struct {
-	agent         *Agent
-	sendMsg       func(tui.AppendMessageMsg)
-	captureWriter *tuiCaptureWriter
-	processing    atomic.Bool
-	flushMu       sync.RWMutex
-	tuiEventFlush func()
+	agent              *Agent
+	sendMsg            func(tui.AppendMessageMsg)
+	sendToolResult     func(tui.AppendToolResultMsg)
+	sendReviewProgress func(tui.ReviewProgressMsg)
+	captureWriter      *tuiCaptureWriter
+	processing         atomic.Bool
+	flushMu            sync.RWMutex
+	tuiEventFlush      func()
 }
 
 // NewTUIAdapter は TUIAdapter を作成する。
@@ -204,9 +206,11 @@ func (a *TUIAdapter) RunReview(ctx context.Context, req review.ReviewRequest) (t
 	defer a.processing.Store(false)
 
 	startStats := a.reviewStatsSnapshot()
-	report, err := a.agent.RunReview(ctx, req)
+	report, err := a.agent.runReview(ctx, req, reviewRunOptions{
+		ProgressSink: a.reviewProgressSink(ctx),
+	})
 	summary := a.reviewRunUsageSummarySince(startStats)
-	a.flushCapture()
+	a.finishTUITurnOutput()
 	return tui.ReviewRunResult{
 		Report: report,
 		Usage:  summary,

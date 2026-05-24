@@ -20,6 +20,9 @@ func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	case reviewTimelineRunFinishedMsg:
 		updated, cmd := m.handleReviewTimelineFinishedMsg(msg)
 		return updated, cmd, true
+	case ReviewProgressMsg:
+		updated, cmd := m.handleReviewProgressMsg(msg)
+		return updated, cmd, true
 	case OpenPromptMsg:
 		updated, cmd := m.handleOpenPromptMsg(msg)
 		return updated, cmd, true

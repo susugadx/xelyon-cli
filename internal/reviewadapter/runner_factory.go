@@ -21,6 +21,7 @@ type RunnerFactoryOptions struct {
 
 	ArtifactWriter        review.ReviewRunArtifactWriter
 	ArtifactWarningWriter io.Writer
+	ProgressSink          review.ReviewProgressSink
 }
 
 // RunnerFactory は ReviewRunner の構築責務を review domain の外側で保持する。
@@ -51,5 +52,6 @@ func (f RunnerFactory) NewReviewRunner() (*review.ReviewRunner, error) {
 		Model:                 f.opts.Model,
 		ArtifactWriter:        f.opts.ArtifactWriter,
 		ArtifactWarningWriter: f.opts.ArtifactWarningWriter,
+		ProgressSink:          f.opts.ProgressSink,
 	})
 }

@@ -194,7 +194,9 @@ func (b *tuiProgramBridge) start() {
 	go b.forwardToolResults()
 
 	b.adapter.sendMsg = b.enqueueCapturedMessage
-	b.adapter.setTUIEventFlush(b.flushToolResults)
+	b.adapter.sendToolResult = b.enqueueToolResult
+	b.adapter.sendReviewProgress = b.enqueueReviewProgress
+	b.adapter.setTUIEventFlush(b.flushPendingTUIEvents)
 	b.adapter.SetOutputCapture()
 	if b.agent != nil && b.send != nil {
 		b.promptBridge = newTUIPromptBridge(b.send)
@@ -280,7 +282,14 @@ func (b *tuiProgramBridge) enqueueToolResult(msg tui.AppendToolResultMsg) {
 	b.outgoing <- msg
 }
 
-func (b *tuiProgramBridge) flushToolResults() {
+func (b *tuiProgramBridge) enqueueReviewProgress(msg tui.ReviewProgressMsg) {
+	if b.closed.Load() {
+		return
+	}
+	b.outgoing <- msg
+}
+
+func (b *tuiProgramBridge) flushPendingTUIEvents() {
 	if b == nil || b.closed.Load() {
 		return
 	}
@@ -312,6 +321,8 @@ func (b *tuiProgramBridge) shutdown() {
 	}
 	b.closed.Store(true)
 	if b.adapter != nil {
+		b.adapter.sendToolResult = nil
+		b.adapter.sendReviewProgress = nil
 		b.adapter.setTUIEventFlush(nil)
 	}
 	if b.agent != nil {

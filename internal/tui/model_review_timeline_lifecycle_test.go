@@ -141,6 +141,101 @@ func TestReviewTimeline_RendersRunUsageInTimelineAndStatus(t *testing.T) {
 	}
 }
 
+func TestReviewTimeline_RendersProgressToolResultsWhileRunning(t *testing.T) {
+	agent := &reviewCapableStubAgent{
+		stubAgent: stubAgent{statusLine: "ready"},
+		report:    newTUITestReviewReport(),
+	}
+	m := newModelWithViewport(agent)
+
+	updated, cmd := m.startReviewTimeline(review.NewCurrentChangesRequest(""))
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("startReviewTimeline() cmd = nil, want async review command")
+	}
+	if m.reviewTimelineRun == nil {
+		t.Fatal("reviewTimelineRun = nil, want active timeline run")
+	}
+	activeID := m.reviewTimelineRun.id
+
+	updated, _ = m.Update(ReviewProgressMsg{
+		RunID: int(activeID),
+		Tool: ToolResult{
+			ID:        "review:probe:probe-1:0",
+			Name:      "probe host_readonly",
+			Target:    `· rg "ReviewRunUsageSummary" internal/tui`,
+			Status:    ToolStatusRunning,
+			StartedAt: time.Now(),
+		},
+	})
+	m = updated.(Model)
+
+	view := stripANSI(m.View())
+	for _, want := range []string{
+		"review · working",
+		"running current changes review",
+		`● running probe host_readonly · rg "ReviewRunUsageSummary" internal/tui`,
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("View() missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestReviewTimeline_IgnoresStaleAndCanceledProgress(t *testing.T) {
+	agent := &reviewCapableStubAgent{
+		stubAgent: stubAgent{statusLine: "ready"},
+		report:    newTUITestReviewReport(),
+	}
+	m := newModelWithViewport(agent)
+
+	updated, cmd := m.startReviewTimeline(review.NewCurrentChangesRequest(""))
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("startReviewTimeline() cmd = nil, want async review command")
+	}
+	if m.reviewTimelineRun == nil {
+		t.Fatal("reviewTimelineRun = nil, want active timeline run")
+	}
+	activeID := m.reviewTimelineRun.id
+
+	updated, _ = m.Update(ReviewProgressMsg{
+		RunID: int(activeID) + 1,
+		Tool: ToolResult{
+			ID:     "review:probe:stale:0",
+			Name:   "stale probe",
+			Status: ToolStatusRunning,
+		},
+	})
+	m = updated.(Model)
+	if view := stripANSI(m.View()); strings.Contains(view, "stale probe") {
+		t.Fatalf("stale review progress should be ignored:\n%s", view)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = updated.(Model)
+	if m.reviewTimelineRun != nil {
+		t.Fatal("reviewTimelineRun should clear immediately after local cancellation")
+	}
+
+	updated, _ = m.Update(ReviewProgressMsg{
+		RunID: int(activeID),
+		Tool: ToolResult{
+			ID:     "review:probe:late:0",
+			Name:   "late canceled probe",
+			Status: ToolStatusError,
+		},
+	})
+	m = updated.(Model)
+	view := stripANSI(m.View())
+	if strings.Contains(view, "late canceled probe") {
+		t.Fatalf("canceled review progress should be ignored:\n%s", view)
+	}
+	if !strings.Contains(view, reviewRunnerCancelledMessage) {
+		t.Fatalf("View() should keep local cancellation state:\n%s", view)
+	}
+}
+
 func TestReviewTimeline_CtrlCCancelsRunningReview(t *testing.T) {
 	agent := newCancellableReviewAgent()
 	m := newModelWithViewport(agent)

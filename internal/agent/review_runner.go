@@ -13,8 +13,16 @@ import (
 
 const reviewRunArtifactsEnv = "XELYON_REVIEW_RUN_ARTIFACTS"
 
+type reviewRunOptions struct {
+	ProgressSink review.ReviewProgressSink
+}
+
 // RunReview は Agent runtime を使って /review current_changes runner を実行する。
 func (a *Agent) RunReview(ctx context.Context, req review.ReviewRequest) (review.ReviewReport, error) {
+	return a.runReview(ctx, req, reviewRunOptions{})
+}
+
+func (a *Agent) runReview(ctx context.Context, req review.ReviewRequest, opts reviewRunOptions) (review.ReviewReport, error) {
 	if a == nil {
 		return review.ReviewReport{}, fmt.Errorf("review run: agent is nil")
 	}
@@ -37,6 +45,7 @@ func (a *Agent) RunReview(ctx context.Context, req review.ReviewRequest) (review
 		Model:                 agentReviewModel{agent: a},
 		ArtifactWriter:        artifactSink.writer,
 		ArtifactWarningWriter: a.errorOutput(),
+		ProgressSink:          opts.ProgressSink,
 	})
 	runner, err := factory.NewReviewRunner()
 	if err != nil {

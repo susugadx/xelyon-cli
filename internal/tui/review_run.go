@@ -23,7 +23,7 @@ type reviewRunContext struct {
 }
 
 func newReviewRunContext(id reviewRunID) *reviewRunContext {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(contextWithReviewRunID(context.Background(), id))
 	return &reviewRunContext{
 		id:     id,
 		ctx:    ctx,
@@ -89,6 +89,17 @@ type reviewTimelineRunFinishedMsg struct {
 
 func (msg reviewTimelineRunFinishedMsg) appliesTo(m Model) bool {
 	return m.reviewTimelineRun != nil && msg.id == m.reviewTimelineRun.id
+}
+
+func (msg ReviewProgressMsg) appliesTo(m Model) bool {
+	return m.reviewTimelineRun != nil && reviewRunID(msg.RunID) == m.reviewTimelineRun.id
+}
+
+func (m Model) handleReviewProgressMsg(msg ReviewProgressMsg) (tea.Model, tea.Cmd) {
+	if !msg.appliesTo(m) {
+		return m, nil
+	}
+	return m, m.handleAppendToolResultMsg(AppendToolResultMsg{Tool: msg.Tool})
 }
 
 func (m Model) handleReviewTimelineFinishedMsg(msg reviewTimelineRunFinishedMsg) (tea.Model, tea.Cmd) {

@@ -113,7 +113,51 @@ func TestTUIProgramBridge_StartCapturesAssistantAndToolResults(t *testing.T) {
 	}
 }
 
-func TestTUIProgramBridge_FlushToolResultsDeliversBufferedToolBeforeReturning(t *testing.T) {
+func TestTUIProgramBridge_StartCapturesReviewProgressMessages(t *testing.T) {
+	disableColors(t)
+
+	agent := newChatRequestTestAgent(t, &scriptedChatProvider{name: "openai", functionCalling: true}, &bytes.Buffer{})
+	adapter := NewTUIAdapter(agent, nil)
+	toolResultCh := make(chan tools.ToolResultInfo)
+
+	var (
+		mu   sync.Mutex
+		msgs []tea.Msg
+	)
+	bridge := newTUIProgramBridge(adapter, agent, toolResultCh, func(msg tea.Msg) {
+		mu.Lock()
+		msgs = append(msgs, msg)
+		mu.Unlock()
+	}, nil)
+	bridge.start()
+
+	adapter.sendReviewProgress(tui.ReviewProgressMsg{
+		RunID: 7,
+		Tool: tui.ToolResult{
+			ID:     "review:probe:probe-1:0",
+			Name:   "probe host_readonly",
+			Status: tui.ToolStatusRunning,
+		},
+	})
+
+	waitForTUIMessageCount(t, &msgs, &mu, 1)
+
+	mu.Lock()
+	defer mu.Unlock()
+	progressMsg, ok := msgs[0].(tui.ReviewProgressMsg)
+	if !ok {
+		t.Fatalf("message = %T, want ReviewProgressMsg", msgs[0])
+	}
+	if progressMsg.RunID != 7 || progressMsg.Tool.ID != "review:probe:probe-1:0" || progressMsg.Tool.Name != "probe host_readonly" {
+		t.Fatalf("progress message = %#v, want run-scoped review progress message", progressMsg)
+	}
+
+	close(toolResultCh)
+	close(bridge.outgoing)
+	bridge.shutdown()
+}
+
+func TestTUIProgramBridge_FlushPendingTUIEventsDeliversBufferedToolBeforeReturning(t *testing.T) {
 	disableColors(t)
 
 	agent := newChatRequestTestAgent(t, &scriptedChatProvider{name: "openai", functionCalling: true}, &bytes.Buffer{})
@@ -130,7 +174,7 @@ func TestTUIProgramBridge_FlushToolResultsDeliversBufferedToolBeforeReturning(t 
 
 	toolResultCh <- tools.ToolResultInfo{ToolName: "bash", Result: "ok", Error: false}
 
-	bridge.flushToolResults()
+	bridge.flushPendingTUIEvents()
 
 	select {
 	case msg := <-msgCh:
@@ -142,7 +186,7 @@ func TestTUIProgramBridge_FlushToolResultsDeliversBufferedToolBeforeReturning(t 
 			t.Fatalf("tool message = %#v, want bash ok", toolMsg.Tool)
 		}
 	default:
-		t.Fatal("flushToolResults returned before buffered tool result was delivered")
+		t.Fatal("flushPendingTUIEvents returned before buffered tool result was delivered")
 	}
 }
 

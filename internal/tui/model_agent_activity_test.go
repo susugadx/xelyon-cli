@@ -146,6 +146,40 @@ func TestModel_AppendToolResultMsgUpsertsToolInsideActiveAgentActivity(t *testin
 	}
 }
 
+func TestModel_AppendNonBlockingToolErrorKeepsAgentActivityWorking(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	m.beginAgentActivity()
+
+	updated, _, handled := m.handleStreamMessage(AppendToolResultMsg{
+		Tool: ToolResult{
+			ID:               "review:probe:probe-1:0",
+			Name:             "probe host_readonly",
+			Target:           "· go test ./internal/tui",
+			Status:           ToolStatusError,
+			NonBlockingError: true,
+			Duration:         120 * time.Millisecond,
+		},
+	})
+	if !handled {
+		t.Fatal("AppendToolResultMsg should be handled")
+	}
+	m = updated
+
+	if m.agentActivity.status != agentActivityStatusWorking {
+		t.Fatalf("agentActivity status = %q, want working for non-blocking error", m.agentActivity.status)
+	}
+	plain := plainRawTranscript(m)
+	for _, want := range []string{
+		"working",
+		"✕ [tool error] probe host_readonly failed · 120ms",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("transcript missing %q:\n%s", want, plain)
+		}
+	}
+}
+
 func TestModel_AppendToolResultMsgWithoutActiveAgentActivityUsesFallbackToolBlock(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)

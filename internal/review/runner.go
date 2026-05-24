@@ -33,6 +33,7 @@ type ReviewRunnerOptions struct {
 
 	ArtifactWriter        ReviewRunArtifactWriter
 	ArtifactWarningWriter io.Writer
+	ProgressSink          ReviewProgressSink
 }
 
 // ReviewRunner は /review current_changes の evidence、model、probe、report を順に束ねる。
@@ -43,6 +44,7 @@ type ReviewRunner struct {
 
 	artifactWriter        ReviewRunArtifactWriter
 	artifactWarningWriter io.Writer
+	progressSink          ReviewProgressSink
 }
 
 // NewReviewRunner は ReviewRunner を構築し、必須依存を検証する。
@@ -56,6 +58,7 @@ func NewReviewRunner(opts ReviewRunnerOptions) (*ReviewRunner, error) {
 		model:                 opts.Model,
 		artifactWriter:        opts.ArtifactWriter,
 		artifactWarningWriter: opts.ArtifactWarningWriter,
+		progressSink:          opts.ProgressSink,
 	}, nil
 }
 
@@ -71,22 +74,29 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 		return ReviewReport{}, fmt.Errorf("review runner target_kind must be %q: got %q", TargetCurrentChanges, req.TargetKind)
 	}
 
+	r.emitProgressRunning(reviewProgressEvidenceItem)
 	bundle, err := r.evidenceBuilder.BuildCurrentChanges(ctx)
 	if err != nil {
+		r.emitProgressError(reviewProgressEvidenceItem, err)
 		return ReviewReport{}, fmt.Errorf("review runner build evidence: %w", err)
 	}
+	r.emitProgressOK(reviewProgressEvidenceItem, reviewEvidenceProgressDetail(bundle))
 	evidenceMarkdown := RenderReviewEvidenceMarkdown(bundle)
 	evidenceRedactor := newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("evidence.md", evidenceMarkdown, evidenceRedactor)
 
+	r.emitProgressRunning(reviewProgressProbePlanItem)
 	plan, err := r.completeReviewProbePlan(ctx, req, evidenceMarkdown, bundle)
 	if err != nil {
+		r.emitProgressError(reviewProgressProbePlanItem, err)
 		return ReviewReport{}, err
 	}
 	probeRequests, err := BuildReviewProbeRequestsFromPlan(plan)
 	if err != nil {
+		r.emitProgressError(reviewProgressProbePlanItem, err)
 		return ReviewReport{}, fmt.Errorf("review runner build probe requests: %w", err)
 	}
+	r.emitProgressOK(reviewProgressProbePlanItem, reviewProgressProbeCountDetail(len(probeRequests)))
 	r.saveReviewRunJSONArtifact("probe_requests.json", probeRequests, evidenceRedactor)
 
 	probeResults, err := r.runReviewProbesSequentially(ctx, probeRequests)
@@ -155,10 +165,13 @@ func decodeReviewProbePlanJSONAgainstEvidence(content string, bundle ReviewEvide
 }
 
 func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor) (ReviewReport, error) {
+	r.emitProgressRunning(reviewProgressReportItem)
 	report, err := r.completeInitialReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor)
 	if err != nil {
+		r.emitProgressError(reviewProgressReportItem, err)
 		return ReviewReport{}, err
 	}
+	r.emitProgressOK(reviewProgressReportItem, "")
 	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report)
 }
 

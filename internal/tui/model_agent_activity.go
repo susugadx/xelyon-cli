@@ -90,7 +90,7 @@ func (m *Model) upsertAgentActivityTool(tool ToolResult) tea.Cmd {
 		m.agentActivity.tools = append(m.agentActivity.tools, agentActivityTool{tool: tool})
 	}
 
-	if tool.Status == ToolStatusError || tool.Error {
+	if (tool.Status == ToolStatusError || tool.Error) && !tool.NonBlockingError {
 		m.agentActivity.status = agentActivityStatusBlocked
 		m.agentActivity.errorKind = AgentErrorTool
 		if m.agentActivity.errorText == "" {

@@ -27,16 +27,17 @@ const (
 
 // ToolResult は1つのツール実行結果
 type ToolResult struct {
-	Name      string // "search_code", "apply_patch", "read_file" 等
-	Summary   string // 1行サマリー
-	Detail    string // 展開時に表示する全文
-	Collapsed bool   // true=折りたたみ、false=展開
-	Error     bool   // エラーかどうか
-	ID        string
-	Status    ToolStatus
-	Target    string
-	StartedAt time.Time
-	Duration  time.Duration
+	Name             string // "search_code", "apply_patch", "read_file" 等
+	Summary          string // 1行サマリー
+	Detail           string // 展開時に表示する全文
+	Collapsed        bool   // true=折りたたみ、false=展開
+	Error            bool   // エラーかどうか
+	NonBlockingError bool   // true の場合、エラー表示でも agent activity 全体は blocked にしない
+	ID               string
+	Status           ToolStatus
+	Target           string
+	StartedAt        time.Time
+	Duration         time.Duration
 }
 
 // StatusSnapshot は TUI のステータスバー用に構造化した内部 runtime 状態。
@@ -59,6 +60,12 @@ type AppendMessageMsg struct {
 // AppendToolResultMsg はツール結果を追加するMsg。Phase 2 以降で使用。
 type AppendToolResultMsg struct {
 	Tool ToolResult
+}
+
+// ReviewProgressMsg は /review 実行中の progress を active review run に紐付けて表示するMsg。
+type ReviewProgressMsg struct {
+	RunID int
+	Tool  ToolResult
 }
 
 // StreamTextMsg はAI応答のストリーミングテキストMsg。Phase 2 以降で使用。
