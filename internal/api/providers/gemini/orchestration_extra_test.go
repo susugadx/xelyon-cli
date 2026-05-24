@@ -386,6 +386,128 @@ func TestChatWithImage_RequestIncludesHistoryAndToolConfigWhenFCEnabled(t *testi
 	}
 }
 
+func TestChatWithImage_IdleTimeoutRetryThenSuccess(t *testing.T) {
+	p := New("test-key")
+	var attempts atomic.Int32
+	var firstBodyClosed atomic.Bool
+	p.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch attempts.Add(1) {
+			case 1:
+				pr, pw := io.Pipe()
+				go func() {
+					_, _ = fmt.Fprint(pw, ": keepalive\n\n")
+					time.Sleep(1200 * time.Millisecond)
+					_ = pw.Close()
+				}()
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       &closeFlagReadCloser{ReadCloser: pr, closed: &firstBodyClosed},
+					Header:     make(http.Header),
+				}, nil
+			case 2:
+				if !firstBodyClosed.Load() {
+					t.Fatal("first image SSE response body should be closed before retry request")
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(strings.NewReader(geminiSSEPayload(t, GeminiFunctionResponse{
+						Candidates: []GeminiFunctionCandidate{{
+							Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "image idle retry ok"}}},
+						}},
+					}))),
+					Header: make(http.Header),
+				}, nil
+			default:
+				t.Fatalf("unexpected request count: %d", attempts.Load())
+				return nil, nil
+			}
+		}),
+	}
+
+	ctx, _, errOut := newGeminiOrchestrationContext(1, 3)
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+	got, err := p.ChatWithImage(ctx, "System", nil, "describe", image, "gemini-2.0-flash")
+	if err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	if got != "image idle retry ok" {
+		t.Fatalf("ChatWithImage() = %q, want %q", got, "image idle retry ok")
+	}
+	if attempts.Load() != 2 {
+		t.Fatalf("request count = %d, want 2", attempts.Load())
+	}
+	if !strings.Contains(errOut.String(), "Transport idle timeout, retrying multimodal FC mode") {
+		t.Fatalf("errOut = %q, want image idle timeout retry warning", errOut.String())
+	}
+}
+
+type closeFlagReadCloser struct {
+	io.ReadCloser
+	closed *atomic.Bool
+}
+
+func (r *closeFlagReadCloser) Close() error {
+	r.closed.Store(true)
+	return r.ReadCloser.Close()
+}
+
+func TestChatWithImage_ThinkingTimeoutRetryThenSuccess(t *testing.T) {
+	p := New("test-key")
+	var attempts atomic.Int32
+	p.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch attempts.Add(1) {
+			case 1:
+				pr, pw := io.Pipe()
+				go func() {
+					_, _ = fmt.Fprint(pw, geminiSSEPayload(t, GeminiFunctionResponse{
+						Candidates: []GeminiFunctionCandidate{{
+							Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{
+								Thought:          true,
+								Text:             "planning",
+								ThoughtSignature: "sig-image",
+							}}},
+						}},
+					}))
+					time.Sleep(1500 * time.Millisecond)
+					_ = pw.Close()
+				}()
+				return &http.Response{StatusCode: http.StatusOK, Body: pr, Header: make(http.Header)}, nil
+			case 2:
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(strings.NewReader(geminiSSEPayload(t, GeminiFunctionResponse{
+						Candidates: []GeminiFunctionCandidate{{
+							Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "image thinking retry ok"}}},
+						}},
+					}))),
+					Header: make(http.Header),
+				}, nil
+			default:
+				t.Fatalf("unexpected request count: %d", attempts.Load())
+				return nil, nil
+			}
+		}),
+	}
+
+	ctx, _, errOut := newGeminiOrchestrationContext(5, 1)
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+	got, err := p.ChatWithImage(ctx, "System", nil, "describe", image, "gemini-3.5-flash")
+	if err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	if got != "image thinking retry ok" {
+		t.Fatalf("ChatWithImage() = %q, want %q", got, "image thinking retry ok")
+	}
+	if attempts.Load() != 2 {
+		t.Fatalf("request count = %d, want 2", attempts.Load())
+	}
+	if !strings.Contains(errOut.String(), "Thinking timeout, retrying multimodal FC mode") {
+		t.Fatalf("errOut = %q, want image thinking timeout retry warning", errOut.String())
+	}
+}
+
 func TestChatWithFunctionCalling_CacheExpiredInvalidatesAndRetries(t *testing.T) {
 	t.Setenv("XELYON_DEBUG_GEMINI", "1")
 

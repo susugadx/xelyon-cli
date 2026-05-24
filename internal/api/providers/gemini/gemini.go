@@ -275,6 +275,61 @@ const responseStartTimeoutRetryKey ctxKey = "gemini_response_start_timeout_retry
 // maxResponseStartTimeoutRetries はresponse-start timeout時のリトライ上限
 const maxResponseStartTimeoutRetries = 1
 
+type geminiTimeoutRetryFunc func(context.Context) (string, error)
+
+func geminiRetryCount(ctx context.Context, key ctxKey) int {
+	if retryCount, ok := ctx.Value(key).(int); ok {
+		return retryCount
+	}
+	return 0
+}
+
+func retryGeminiTimeout(ctx context.Context, err error, retryMode string, retry geminiTimeoutRetryFunc) (string, bool, error) {
+	// Response-start timeout: レスポンスヘッダー受信前にタイムアウト（1回リトライ）
+	var responseStartErr *ErrResponseStartTimeout
+	if errors.As(err, &responseStartErr) {
+		retryCount := geminiRetryCount(ctx, responseStartTimeoutRetryKey)
+		if retryCount >= maxResponseStartTimeoutRetries {
+			return "", true, fmt.Errorf("response start timeout: exceeded max retries (%d): %w", maxResponseStartTimeoutRetries, err)
+		}
+		retryCount++
+		api.StopSpinnerAndResetTerminal(ctx)
+		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Response start timeout, retrying (%d/%d)...\n", retryCount, maxResponseStartTimeoutRetries)
+		result, retryErr := retry(context.WithValue(ctx, responseStartTimeoutRetryKey, retryCount))
+		return result, true, retryErr
+	}
+
+	// Transport idle timeout: SSE の有効 data chunk が途切れた場合は同じ request mode で1回リトライ。
+	var idleErr *ErrIdleTimeout
+	if errors.As(err, &idleErr) {
+		retryCount := geminiRetryCount(ctx, idleTimeoutRetryKey)
+		if retryCount >= maxIdleTimeoutRetries {
+			return "", true, fmt.Errorf("transport idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
+		}
+		retryCount++
+		api.StopSpinnerAndResetTerminal(ctx)
+		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Transport idle timeout, retrying %s (attempt %d/%d)...\n", retryMode, retryCount, maxIdleTimeoutRetries)
+		result, retryErr := retry(context.WithValue(ctx, idleTimeoutRetryKey, retryCount))
+		return result, true, retryErr
+	}
+
+	// Thinking timeout: thought だけが続いて actionable output が出ない場合は同じ request mode でリトライ。
+	var thinkingErr *ErrThinkingTimeout
+	if errors.As(err, &thinkingErr) {
+		retryCount := geminiRetryCount(ctx, thinkingTimeoutRetryKey)
+		if retryCount >= maxThinkingTimeoutRetries {
+			return "", true, fmt.Errorf("thinking timeout: exceeded max retries (%d): %w", maxThinkingTimeoutRetries, err)
+		}
+		retryCount++
+		api.StopSpinnerAndResetTerminal(ctx)
+		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Thinking timeout, retrying %s (attempt %d/%d)...\n", retryMode, retryCount, maxThinkingTimeoutRetries)
+		result, retryErr := retry(context.WithValue(ctx, thinkingTimeoutRetryKey, retryCount))
+		return result, true, retryErr
+	}
+
+	return "", false, nil
+}
+
 // getThinkingSpinnerMessage はモデルとコンテキストに基づいて thinking スピナーメッセージを返す
 // SSEストリーム開始後に "Waiting for Gemini..." から切り替える際に使用
 func getThinkingSpinnerMessage(ctx context.Context, model string, isImage bool) string {
@@ -333,55 +388,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
-			// Response-start timeout: レスポンスヘッダー受信前にタイムアウト（1回リトライ）
-			var responseStartErr *ErrResponseStartTimeout
-			if errors.As(err, &responseStartErr) {
-				retryCount := 0
-				if v := ctx.Value(responseStartTimeoutRetryKey); v != nil {
-					retryCount = v.(int)
-				}
-				if retryCount >= maxResponseStartTimeoutRetries {
-					return "", fmt.Errorf("response start timeout: exceeded max retries (%d): %w", maxResponseStartTimeoutRetries, err)
-				}
-				retryCount++
-				api.StopSpinnerAndResetTerminal(ctx)
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Response start timeout, retrying (%d/%d)...\n", retryCount, maxResponseStartTimeoutRetries)
-				ctx = context.WithValue(ctx, responseStartTimeoutRetryKey, retryCount)
-				return p.ChatWithTools(ctx, systemPrompt, history, model)
-			}
-
-			// Transport idle timeout: FCモードで1回リトライ → それでもダメならエラー
-			var idleErr *ErrIdleTimeout
-			if errors.As(err, &idleErr) {
-				retryCount := 0
-				if v := ctx.Value(idleTimeoutRetryKey); v != nil {
-					retryCount = v.(int)
-				}
-				if retryCount >= maxIdleTimeoutRetries {
-					return "", fmt.Errorf("transport idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
-				}
-				retryCount++
-				api.StopSpinnerAndResetTerminal(ctx)
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Transport idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
-				ctx = context.WithValue(ctx, idleTimeoutRetryKey, retryCount)
-				return p.ChatWithTools(ctx, systemPrompt, history, model)
-			}
-
-			// Thinking timeout: FCモードでリトライ（既存ロジック、変更なし）
-			var thinkingErr *ErrThinkingTimeout
-			if errors.As(err, &thinkingErr) {
-				retryCount := 0
-				if v := ctx.Value(thinkingTimeoutRetryKey); v != nil {
-					retryCount = v.(int)
-				}
-				if retryCount >= maxThinkingTimeoutRetries {
-					return "", fmt.Errorf("thinking timeout: exceeded max retries (%d): %w", maxThinkingTimeoutRetries, err)
-				}
-				retryCount++
-				api.StopSpinnerAndResetTerminal(ctx)
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Thinking timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxThinkingTimeoutRetries)
-				ctx = context.WithValue(ctx, thinkingTimeoutRetryKey, retryCount)
-				return p.ChatWithTools(ctx, systemPrompt, history, model)
+			if retryResult, handled, retryErr := retryGeminiTimeout(ctx, err, "FC mode", func(retryCtx context.Context) (string, error) {
+				return p.ChatWithTools(retryCtx, systemPrompt, history, model)
+			}); handled {
+				return retryResult, retryErr
 			}
 
 			// その他のFCエラー: FCモードで1回リトライ → それでもダメならエラー

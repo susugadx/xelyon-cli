@@ -3,7 +3,6 @@ package gemini
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -116,25 +115,22 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	resp, err := p.doRequestWithRetry(ctx, req, jsonBody, model)
 	if err != nil {
 		spinner.Stop()
-		// Response-start timeout: 通常 chat と同じ方針で 1 回リトライ
-		var responseStartErr *ErrResponseStartTimeout
-		if errors.As(err, &responseStartErr) {
-			retryCount := 0
-			if v := ctx.Value(responseStartTimeoutRetryKey); v != nil {
-				retryCount = v.(int)
-			}
-			if retryCount < maxResponseStartTimeoutRetries {
-				retryCount++
-				api.StopSpinnerAndResetTerminal(ctx)
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Response start timeout, retrying (%d/%d)...\n", retryCount, maxResponseStartTimeoutRetries)
-				ctx = context.WithValue(ctx, responseStartTimeoutRetryKey, retryCount)
-				return p.ChatWithImage(ctx, systemPrompt, history, userMessage, image, model)
-			}
-			return "", fmt.Errorf("response start timeout: exceeded max retries (%d): %w", maxResponseStartTimeoutRetries, err)
+		if retryResult, handled, retryErr := retryGeminiTimeout(ctx, err, "multimodal FC mode", func(retryCtx context.Context) (string, error) {
+			return p.ChatWithImage(retryCtx, systemPrompt, history, userMessage, image, model)
+		}); handled {
+			return retryResult, retryErr
 		}
 		return "", err
 	}
-	defer resp.Body.Close()
+	respBodyClosed := false
+	closeRespBody := func() {
+		if respBodyClosed {
+			return
+		}
+		respBodyClosed = true
+		_ = resp.Body.Close()
+	}
+	defer closeRespBody()
 
 	if resp.StatusCode != 200 {
 		spinner.Stop()
@@ -153,5 +149,14 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	// 常にストリーミング処理（SSE）
-	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg, model)
+	result, err := p.handleSSEResponse(ctx, resp, spinner, thinkingMsg, model)
+	if err != nil {
+		if retryResult, handled, retryErr := retryGeminiTimeout(ctx, err, "multimodal FC mode", func(retryCtx context.Context) (string, error) {
+			closeRespBody()
+			return p.ChatWithImage(retryCtx, systemPrompt, history, userMessage, image, model)
+		}); handled {
+			return retryResult, retryErr
+		}
+	}
+	return result, err
 }
