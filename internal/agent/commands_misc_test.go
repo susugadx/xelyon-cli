@@ -254,25 +254,6 @@ func TestBuildLastRequestTable_UsesCatalogModelForPricing(t *testing.T) {
 	}
 }
 
-func TestLastRequestUsageForStatus_PrefersLastTurnUsage(t *testing.T) {
-	stats := NewSessionStats("openai", "gpt-5.4")
-	stats.LastUsage = &api.Usage{InputTokens: 100, OutputTokens: 10}
-	stats.LastTurnUsage = &api.Usage{
-		InputTokens:       200,
-		CachedInputTokens: 120,
-		OutputTokens:      20,
-	}
-	stats.LastTurnCost = 0.0456
-
-	usage, cost := lastRequestUsageForStatus(stats)
-	if usage != stats.LastTurnUsage {
-		t.Fatal("expected last turn usage to be returned")
-	}
-	if cost == nil || cost.Cost != 0.0456 {
-		t.Fatalf("cost override = %v, want 0.0456", cost)
-	}
-}
-
 func TestRequestCacheHitRate(t *testing.T) {
 	usage := api.Usage{InputTokens: 200, CachedInputTokens: 50}
 	if got := requestCacheHitRate(usage); got != 25.0 {

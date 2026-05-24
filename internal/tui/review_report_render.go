@@ -13,6 +13,14 @@ func reviewReportTimelineMessage(report review.ReviewReport) string {
 	return strings.Join(lines, "\n")
 }
 
+func reviewRunTimelineMessage(result ReviewRunResult) string {
+	lines := reviewReportPlainLines(result.Report)
+	if usage := result.Usage.inlineText(); usage != "" {
+		lines = append(lines[:1], append([]string{"Usage: " + usage}, lines[1:]...)...)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func reviewReportPlainLines(report review.ReviewReport) []string {
 	summary := reviewReportComputedSummary(report)
 	lines := []string{

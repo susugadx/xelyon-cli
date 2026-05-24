@@ -108,6 +108,39 @@ func TestReviewTimeline_RefreshesStatusSnapshotAfterCompletion(t *testing.T) {
 	}
 }
 
+func TestReviewTimeline_RendersRunUsageInTimelineAndStatus(t *testing.T) {
+	agent := &reviewCapableStubAgent{
+		stubAgent: stubAgent{statusLine: "ready"},
+		report:    newTUITestReviewReport(),
+		usage: ReviewRunUsageSummary{
+			Tokens: "42k tok",
+			Cost:   "~$0.123",
+		},
+	}
+	m := newModelWithViewport(agent)
+
+	updated, cmd := m.startReviewTimeline(review.NewCurrentChangesRequest(""))
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("startReviewTimeline() cmd = nil, want async review command")
+	}
+
+	m = applyReviewCommandMessages(t, m, cmd)
+	view := stripANSI(m.View())
+	for _, want := range []string{
+		"completed current changes review · 42k tok · ~$0.123",
+		"Usage: 42k tok · ~$0.123",
+		"Review: 42k tok · ~$0.123",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("View() missing %q:\n%s", want, view)
+		}
+	}
+	if got := m.transientStatus; got != "Review: 42k tok · ~$0.123" {
+		t.Fatalf("transientStatus = %q, want review usage status", got)
+	}
+}
+
 func TestReviewTimeline_CtrlCCancelsRunningReview(t *testing.T) {
 	agent := newCancellableReviewAgent()
 	m := newModelWithViewport(agent)
@@ -202,7 +235,7 @@ func TestReviewTimeline_CanceledRunIgnoresQueuedSuccessResult(t *testing.T) {
 
 	queuedSuccess := reviewTimelineRunFinishedMsg{
 		id:     activeID,
-		report: newTUITestReviewReport(),
+		result: ReviewRunResult{Report: newTUITestReviewReport()},
 	}
 	updated, _ = m.Update(queuedSuccess)
 	m = updated.(Model)
@@ -233,7 +266,7 @@ func TestReviewTimeline_StaleFinishedMessageIsIgnored(t *testing.T) {
 	activeID := m.reviewTimelineRun.id
 	stale := reviewTimelineRunFinishedMsg{
 		id:     newReviewRunID(int(activeID) + 1),
-		report: newTUITestReviewReport(),
+		result: ReviewRunResult{Report: newTUITestReviewReport()},
 	}
 
 	updated, _ = m.Update(stale)

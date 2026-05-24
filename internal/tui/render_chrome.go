@@ -16,6 +16,14 @@ func (m *Model) rebuildChrome() {
 	m.chromeCache = m.renderInputDock() + "\n" + m.renderStatusBar()
 }
 
+func (m *Model) rebuildChromeIfDirty() {
+	if !m.chromeDirty {
+		return
+	}
+	m.chromeDirty = false
+	m.rebuildChrome()
+}
+
 // View は bubbletea の View を実装する。
 func (m Model) View() string {
 	if m.quitting {

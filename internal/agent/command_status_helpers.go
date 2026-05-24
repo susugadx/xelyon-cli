@@ -45,18 +45,24 @@ func buildLastRequestTable(cfg *config.Config, provider, model string, usage *ap
 	return renderLastRequestTable(cfg, provider, model, usage, costOverride)
 }
 
-func lastRequestUsageForStatus(stats *SessionStats) (*api.Usage, *cost.CostEstimate) {
-	if stats == nil {
+func lastChatTurnUsageForStatus(stats *SessionStats) (*api.Usage, *cost.CostEstimate) {
+	if stats == nil || stats.LastTurnUsage == nil {
 		return nil, nil
 	}
-	if stats.LastTurnUsage != nil {
-		estimate := cost.CostEstimate{
-			Cost:               stats.LastTurnCost,
-			PricingUnavailable: stats.LastTurnCostUnknown,
-		}
-		return stats.LastTurnUsage, &estimate
+	return stats.LastTurnUsage, &cost.CostEstimate{
+		Cost:               stats.LastTurnCost,
+		PricingUnavailable: stats.LastTurnCostUnknown,
 	}
-	return stats.LastUsage, nil
+}
+
+func lastReviewUsageForStatus(stats *SessionStats) (*api.Usage, *cost.CostEstimate) {
+	if stats == nil || stats.LastReviewUsage == nil {
+		return nil, nil
+	}
+	return stats.LastReviewUsage, &cost.CostEstimate{
+		Cost:               stats.LastReviewCost,
+		PricingUnavailable: stats.LastReviewCostUnknown,
+	}
 }
 
 func getSessionFileInfo(agent *Agent) (string, int64) {

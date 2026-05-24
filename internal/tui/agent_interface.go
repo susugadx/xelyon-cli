@@ -103,7 +103,7 @@ type ProjectAgent interface {
 
 // ReviewAgent は /review 実行を TUI の外側へ渡す optional capability を表す。
 type ReviewAgent interface {
-	RunReview(context.Context, review.ReviewRequest) (review.ReviewReport, error)
+	RunReview(context.Context, review.ReviewRequest) (ReviewRunResult, error)
 }
 
 // SkillCatalogAgent は /skills 補完が利用する optional capability を表す。

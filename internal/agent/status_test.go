@@ -205,6 +205,41 @@ func TestHandleStatusCommandForSurface_ShowsSurfaceBoundary(t *testing.T) {
 	}
 }
 
+func TestHandleStatusCommandForSurface_SeparatesChatTurnAndReviewUsage(t *testing.T) {
+	var out bytes.Buffer
+	runtime := newIsolatedRuntime()
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	agent.Stats.LastTurnUsage = &api.Usage{InputTokens: 1000, OutputTokens: 100}
+	agent.Stats.LastTurnCost = 0.01
+	reviewUsage := api.Usage{InputTokens: 2000, OutputTokens: 200}
+	agent.Stats.ReviewUsage = reviewUsage
+	agent.Stats.LastReviewUsage = &reviewUsage
+	agent.Stats.LastReviewCost = 0.02
+	agent.Stats.ReviewAccumulatedCost = 0.02
+
+	if !handleStatusCommandForSurface(agent, commandcatalog.CommandSurfaceTUI) {
+		t.Fatal("handleStatusCommandForSurface() = false, want true")
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"Last Chat Turn",
+		"1,000 tokens",
+		"$0.0100 USD",
+		"Last Review",
+		"2,000 tokens",
+		"$0.0200 USD",
+		"Review Cost",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("status output missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestStatusHolder_Concurrent(t *testing.T) {
 	var holder statusHolder
 	done := make(chan bool)

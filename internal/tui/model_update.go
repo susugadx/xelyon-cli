@@ -93,10 +93,7 @@ func (m Model) updateChatScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = appendCmd(cmds, cmd)
 	}
 
-	if m.chromeDirty {
-		m.chromeDirty = false
-		m.rebuildChrome()
-	}
+	m.rebuildChromeIfDirty()
 
 	return m, tea.Batch(cmds...)
 }

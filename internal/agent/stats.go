@@ -80,30 +80,37 @@ type ToolObservability struct {
 
 // SessionStats はセッション統計情報
 type SessionStats struct {
-	StartTime             time.Time
-	UserMessages          int
-	AssistantMessages     int
-	ToolExecutions        map[string]int // ツール名 -> 実行回数
-	InputTokens           int
-	OutputTokens          int
-	ThinkingTokens        int        // Extended Thinking トークン数（累計、出力レート課金）
-	CachedInputTokens     int        // キャッシュヒットトークン数（累計）
-	CacheCreationTokens   int        // キャッシュ作成トークン数（累計、Claude用）
-	WebSearchCalls        int        // built-in web search 呼び出し回数（累計）
-	WebSearchResultTokens int        // provider が返した検索結果 token 観測値（累計、入力 tokens には再加算しない）
-	WebSearchCost         float64    // built-in web search 固定料金（USD、累計）
-	Provider              string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
-	Model                 string     // 現在のモデル名（料金計算に使用）
-	LastUsage             *api.Usage // 直近のリクエストの使用量
-	LastTurnUsage         *api.Usage // 直近のユーザーリクエスト全体の使用量
-	LastTurnCost          float64    // 直近のユーザーリクエスト全体の正確なコスト
-	LastTurnCostUnknown   bool       // 直近ターンに既知の料金表がない provider/model が含まれる
-	AccumulatedCost       float64    // リクエスト単位で計算・累積したコスト
-	CostUnknown           bool       // セッション累積に既知の料金表がない provider/model が含まれる
-	CostUnknownEvents     int        // 料金不明のリクエスト累計数
-	Optimizations         OptimizationMetrics
-	ToolObs               ToolObservability // ツール実行・compaction の観測メトリクス
-	Savings               SavingsMetrics    // コスト最適化による推定削減量
+	StartTime               time.Time
+	UserMessages            int
+	AssistantMessages       int
+	ToolExecutions          map[string]int // ツール名 -> 実行回数
+	InputTokens             int
+	OutputTokens            int
+	ThinkingTokens          int        // Extended Thinking トークン数（累計、出力レート課金）
+	CachedInputTokens       int        // キャッシュヒットトークン数（累計）
+	CacheCreationTokens     int        // キャッシュ作成トークン数（累計、Claude用）
+	WebSearchCalls          int        // built-in web search 呼び出し回数（累計）
+	WebSearchResultTokens   int        // provider が返した検索結果 token 観測値（累計、入力 tokens には再加算しない）
+	WebSearchCost           float64    // built-in web search 固定料金（USD、累計）
+	Provider                string     // "deepseek", "openai", "claude", "gemini", "groq", "ollama"
+	Model                   string     // 現在のモデル名（料金計算に使用）
+	LastUsage               *api.Usage // 直近のリクエストの使用量
+	LastTurnUsage           *api.Usage // 直近のユーザーリクエスト全体の使用量
+	LastTurnCost            float64    // 直近のユーザーリクエスト全体の正確なコスト
+	LastTurnCostUnknown     bool       // 直近ターンに既知の料金表がない provider/model が含まれる
+	ReviewUsage             api.Usage  // /review 実行の累計使用量
+	LastReviewUsage         *api.Usage // 直近の /review 実行全体の使用量
+	LastReviewCost          float64    // 直近の /review 実行全体の正確なコスト
+	LastReviewCostUnknown   bool       // 直近の /review 実行に既知の料金表がない provider/model が含まれる
+	ReviewAccumulatedCost   float64    // /review 実行単位で計算・累積したコスト
+	ReviewCostUnknown       bool       // /review 累積に既知の料金表がない provider/model が含まれる
+	ReviewCostUnknownEvents int        // 料金不明の /review 実行累計数
+	AccumulatedCost         float64    // リクエスト単位で計算・累積したコスト
+	CostUnknown             bool       // セッション累積に既知の料金表がない provider/model が含まれる
+	CostUnknownEvents       int        // 料金不明のリクエスト累計数
+	Optimizations           OptimizationMetrics
+	ToolObs                 ToolObservability // ツール実行・compaction の観測メトリクス
+	Savings                 SavingsMetrics    // コスト最適化による推定削減量
 }
 
 // NewSessionStats は新しいSessionStatsを作成
@@ -167,6 +174,50 @@ func (s *SessionStats) AddUsageForProviderConfig(cfg *config.Config, provider, m
 	}
 }
 
+// RecordReviewRunUsage は /review 1回分の usage/cost を chat turn とは別枠で記録する。
+func (s *SessionStats) RecordReviewRunUsage(usage api.Usage, estimate cost.CostEstimate) {
+	if s == nil {
+		return
+	}
+	s.ReviewUsage.Add(usage)
+	usageCopy := usage
+	s.LastReviewUsage = &usageCopy
+	s.LastReviewCost = estimate.Cost
+	s.LastReviewCostUnknown = estimate.PricingUnavailable
+	s.ReviewAccumulatedCost += estimate.Cost
+	if estimate.PricingUnavailable {
+		s.ReviewCostUnknown = true
+		s.ReviewCostUnknownEvents++
+	}
+}
+
+// ReviewCostEstimate は /review 累積の cost estimate を返す。
+func (s *SessionStats) ReviewCostEstimate() cost.CostEstimate {
+	if s == nil {
+		return cost.CostEstimate{}
+	}
+	return cost.CostEstimate{
+		Cost:               s.ReviewAccumulatedCost,
+		PricingUnavailable: s.ReviewCostUnknown,
+	}
+}
+
+func (s *SessionStats) HasReviewUsage() bool {
+	if s == nil {
+		return false
+	}
+	return s.ReviewUsage.HasTokenOrWebSearchObservation() ||
+		s.ReviewAccumulatedCost > 0 ||
+		s.ReviewCostUnknown
+}
+
+func (s *SessionStats) ReviewTotalTokens() int {
+	if s == nil {
+		return 0
+	}
+	return s.ReviewUsage.InputTokens + s.ReviewUsage.OutputTokens + s.ReviewUsage.ThinkingTokens
+}
+
 // UsageDeltaSince は指定時点から現在までの request usage 相当の差分を返す。
 func (s *SessionStats) UsageDeltaSince(start SessionStats) api.Usage {
 	if s == nil {
@@ -200,6 +251,13 @@ func (s *SessionStats) ResetUsageForProvider(provider, model string) {
 	s.LastTurnUsage = nil
 	s.LastTurnCost = 0
 	s.LastTurnCostUnknown = false
+	s.ReviewUsage = api.Usage{}
+	s.LastReviewUsage = nil
+	s.LastReviewCost = 0
+	s.LastReviewCostUnknown = false
+	s.ReviewAccumulatedCost = 0
+	s.ReviewCostUnknown = false
+	s.ReviewCostUnknownEvents = 0
 	s.AccumulatedCost = 0
 	s.CostUnknown = false
 	s.CostUnknownEvents = 0

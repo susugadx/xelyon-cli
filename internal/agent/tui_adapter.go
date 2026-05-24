@@ -199,13 +199,76 @@ func (a *TUIAdapter) IsProcessing() bool {
 }
 
 // RunReview は /review 実行中だけ TUI の処理中状態を立て、Agent の runner へ委譲する。
-func (a *TUIAdapter) RunReview(ctx context.Context, req review.ReviewRequest) (review.ReviewReport, error) {
+func (a *TUIAdapter) RunReview(ctx context.Context, req review.ReviewRequest) (tui.ReviewRunResult, error) {
 	a.processing.Store(true)
 	defer a.processing.Store(false)
 
+	startStats := a.reviewStatsSnapshot()
 	report, err := a.agent.RunReview(ctx, req)
+	summary := a.reviewRunUsageSummarySince(startStats)
 	a.flushCapture()
-	return report, err
+	return tui.ReviewRunResult{
+		Report: report,
+		Usage:  summary,
+	}, err
+}
+
+func (a *TUIAdapter) reviewStatsSnapshot() SessionStats {
+	if a == nil || a.agent == nil || a.agent.Stats == nil {
+		return SessionStats{}
+	}
+	a.agent.statsMu.Lock()
+	defer a.agent.statsMu.Unlock()
+	return *a.agent.Stats
+}
+
+func (a *TUIAdapter) reviewRunUsageSummarySince(start SessionStats) tui.ReviewRunUsageSummary {
+	usage, estimate, ok := a.recordReviewRunUsageSince(start)
+	if !ok {
+		return tui.ReviewRunUsageSummary{}
+	}
+	return formatReviewRunUsageSummary(usage, estimate)
+}
+
+func (a *TUIAdapter) recordReviewRunUsageSince(start SessionStats) (api.Usage, cost.CostEstimate, bool) {
+	if a == nil || a.agent == nil || a.agent.Stats == nil {
+		return api.Usage{}, cost.CostEstimate{}, false
+	}
+
+	agent := a.agent
+	agent.statsMu.Lock()
+	defer agent.statsMu.Unlock()
+
+	turnUsage := agent.Stats.UsageDeltaSince(start)
+	cfg := agent.cfg()
+	endEstimate := agent.Stats.EstimatedCostEstimateForConfig(cfg)
+	startEstimate := start.EstimatedCostEstimateForConfig(cfg)
+	costDiff := endEstimate.Cost - startEstimate.Cost
+	costUnknown := agent.Stats.CostUnknownEvents > start.CostUnknownEvents
+
+	if !turnUsage.HasTokenOrWebSearchObservation() && costDiff == 0 && !costUnknown {
+		return api.Usage{}, cost.CostEstimate{}, false
+	}
+
+	estimate := cost.CostEstimate{
+		Cost:               costDiff,
+		PricingUnavailable: costUnknown,
+	}
+	agent.Stats.RecordReviewRunUsage(turnUsage, estimate)
+	return turnUsage, estimate, true
+}
+
+func formatReviewRunUsageSummary(usage api.Usage, estimate cost.CostEstimate) tui.ReviewRunUsageSummary {
+	totalTokens := usage.InputTokens + usage.OutputTokens + usage.ThinkingTokens
+	summary := tui.ReviewRunUsageSummary{}
+	if totalTokens > 0 {
+		summary.Tokens = FormatTokens(totalTokens) + " tok"
+	}
+
+	if estimate.PricingUnavailable || estimate.Cost > 0 {
+		summary.Cost = formatCompactCostEstimate(estimate)
+	}
+	return summary
 }
 
 // CopyText は指定テキストをクリップボードにコピーする。

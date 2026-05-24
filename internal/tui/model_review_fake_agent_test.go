@@ -11,12 +11,13 @@ type reviewCapableStubAgent struct {
 	reviewCalls               int
 	lastRequest               review.ReviewRequest
 	report                    review.ReviewReport
+	usage                     ReviewRunUsageSummary
 	err                       error
 	statusLineAfterReview     string
 	statusSnapshotAfterReview StatusSnapshot
 }
 
-func (s *reviewCapableStubAgent) RunReview(_ context.Context, req review.ReviewRequest) (review.ReviewReport, error) {
+func (s *reviewCapableStubAgent) RunReview(_ context.Context, req review.ReviewRequest) (ReviewRunResult, error) {
 	s.reviewCalls++
 	s.lastRequest = req
 	if s.statusLineAfterReview != "" || s.statusSnapshotAfterReview != (StatusSnapshot{}) {
@@ -29,7 +30,7 @@ func (s *reviewCapableStubAgent) RunReview(_ context.Context, req review.ReviewR
 		}
 		s.mu.Unlock()
 	}
-	return s.report, s.err
+	return ReviewRunResult{Report: s.report, Usage: s.usage}, s.err
 }
 
 type cancellableReviewAgent struct {
@@ -44,8 +45,8 @@ func newCancellableReviewAgent() *cancellableReviewAgent {
 	}
 }
 
-func (s *cancellableReviewAgent) RunReview(ctx context.Context, _ review.ReviewRequest) (review.ReviewReport, error) {
+func (s *cancellableReviewAgent) RunReview(ctx context.Context, _ review.ReviewRequest) (ReviewRunResult, error) {
 	close(s.started)
 	<-ctx.Done()
-	return review.ReviewReport{}, ctx.Err()
+	return ReviewRunResult{}, ctx.Err()
 }

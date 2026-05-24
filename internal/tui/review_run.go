@@ -72,10 +72,10 @@ func newReviewTimelineRunInvocation(runCtx *reviewRunContext, agent ReviewAgent,
 
 func (r reviewTimelineRunInvocation) command() tea.Cmd {
 	return func() tea.Msg {
-		report, err := r.agent.RunReview(r.ctx, r.request)
+		result, err := r.agent.RunReview(r.ctx, r.request)
 		return reviewTimelineRunFinishedMsg{
 			id:     r.id,
-			report: report,
+			result: result,
 			err:    err,
 		}
 	}
@@ -83,7 +83,7 @@ func (r reviewTimelineRunInvocation) command() tea.Cmd {
 
 type reviewTimelineRunFinishedMsg struct {
 	id     reviewRunID
-	report review.ReviewReport
+	result ReviewRunResult
 	err    error
 }
 
@@ -98,19 +98,40 @@ func (m Model) handleReviewTimelineFinishedMsg(msg reviewTimelineRunFinishedMsg)
 	m.reviewTimelineRun = nil
 	m.resetStreamingState()
 	m.refreshStatusLine()
+	m.showReviewRunUsageStatus(msg.result.Usage)
 	if msg.err != nil {
 		err := msg.err
 		if errors.Is(err, context.Canceled) {
 			err = errors.New(reviewRunnerCancelledMessage)
 		}
 		m.finishAgentActivity(err, AgentErrorKindFromError(err, AgentErrorUnknown))
+		m.rebuildChromeIfDirty()
 		return m, nil
 	}
+	if doneText := reviewDoneText(msg.result.Usage); doneText != "" {
+		m.agentActivity.doneText = doneText
+	}
 	m.finishAgentActivity(nil, AgentErrorUnknown)
-	return m, m.appendMessage(ChatMessage{
+	cmd := m.appendMessage(ChatMessage{
 		Role:    "assistant",
-		Content: reviewReportTimelineMessage(msg.report),
+		Content: reviewRunTimelineMessage(msg.result),
 	})
+	m.rebuildChromeIfDirty()
+	return m, cmd
+}
+
+func (m *Model) showReviewRunUsageStatus(summary ReviewRunUsageSummary) {
+	if status := summary.statusText(); status != "" {
+		m.setTransientStatus(status)
+	}
+}
+
+func reviewDoneText(summary ReviewRunUsageSummary) string {
+	base := "completed current changes review"
+	if usage := summary.inlineText(); usage != "" {
+		return base + " · " + usage
+	}
+	return base
 }
 
 func reviewTimelineUserDisplay(req review.ReviewRequest) string {

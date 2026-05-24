@@ -2,10 +2,13 @@ package agent
 
 import (
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/fatih/color"
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -176,19 +179,8 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 		AddRow("Context", contextText)
 	_, _ = fmt.Fprint(out, statusTable.RenderCompact())
 
-	_, _ = fmt.Fprintln(out)
-	green.Fprintln(out, "🧾 Last Turn")
-	if agent.Stats != nil {
-		cfg := agent.cfg()
-		usage, costOverride := lastRequestUsageForStatus(agent.Stats)
-		if table := buildLastRequestTable(cfg, agent.activeModelProviderConfigKey(cfg), agent.CurrentModel, usage, costOverride); table != nil {
-			_, _ = fmt.Fprint(out, table.RenderCompact())
-		} else {
-			dim.Fprintln(out, "  No request usage data available")
-		}
-	} else {
-		dim.Fprintln(out, "  No request usage data available")
-	}
+	printStatusUsageSection(out, agent, "🧾 Last Chat Turn", "No chat turn usage data available", lastChatTurnUsageForStatus)
+	printStatusUsageSection(out, agent, "🧾 Last Review", "No review usage data available", lastReviewUsageForStatus)
 
 	if summary, ok := providerHistoryReductionStatusSummary(agent.Runtime); ok {
 		_, _ = fmt.Fprintln(out)
@@ -202,6 +194,25 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 	printSessionSections(agent)
 	_, _ = fmt.Fprintln(out)
 	return true
+}
+
+type statusUsageSelector func(*SessionStats) (*api.Usage, *cost.CostEstimate)
+
+func printStatusUsageSection(out io.Writer, agent *Agent, title, emptyText string, selectUsage statusUsageSelector) {
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, title)
+	if agent == nil || agent.Stats == nil {
+		dim.Fprintf(out, "  %s\n", emptyText)
+		return
+	}
+
+	cfg := agent.cfg()
+	usage, costOverride := selectUsage(agent.Stats)
+	if table := buildLastRequestTable(cfg, agent.activeModelProviderConfigKey(cfg), agent.CurrentModel, usage, costOverride); table != nil {
+		_, _ = fmt.Fprint(out, table.RenderCompact())
+		return
+	}
+	dim.Fprintf(out, "  %s\n", emptyText)
 }
 
 func planModeStatusText(enabled bool) string {

@@ -69,7 +69,7 @@ func renderSessionOverviewTable(agent *Agent, stats *SessionStats) *ui.Table {
 
 func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *ui.Table {
 	hasSubAgents := subSummary != nil && subSummary.TotalSpawned > 0
-	if stats.TotalTokens() <= 0 && stats.WebSearchCalls <= 0 && !hasSubAgents {
+	if stats.TotalTokens() <= 0 && stats.WebSearchCalls <= 0 && !stats.HasReviewUsage() && !hasSubAgents {
 		return nil
 	}
 
@@ -102,6 +102,8 @@ func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *suba
 	addWebSearchUsageRows(tokenTable, func(label string) string {
 		return tokenRowLabel(hasSubAgents, "Parent", label)
 	}, stats.WebSearchCalls, stats.WebSearchResultTokens, stats.WebSearchCost)
+
+	addReviewUsageRows(tokenTable, stats)
 
 	if hasSubAgents {
 		tokenTable.AddRow("Sub-agent Input", formatNumber(subSummary.TotalInput)+" tokens")
@@ -137,7 +139,34 @@ func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *suba
 	} else {
 		tokenTable.AddRow("Cost", "Free (local)")
 	}
+	addReviewCostRow(tokenTable, stats)
 	return tokenTable
+}
+
+func addReviewUsageRows(table *ui.Table, stats *SessionStats) {
+	if table == nil || stats == nil || !stats.HasReviewUsage() {
+		return
+	}
+
+	reviewUsage := stats.ReviewUsage
+	if reviewUsage.HasTokenObservation() {
+		table.AddRow("Review Input", formatNumber(reviewUsage.InputTokens)+" tokens").
+			AddRow("Review Output", formatNumber(reviewUsage.OutputTokens)+" tokens")
+		if reviewUsage.ThinkingTokens > 0 {
+			table.AddRow("Review Thinking", formatNumber(reviewUsage.ThinkingTokens)+" tokens")
+		}
+		table.AddRow("Review Total", formatNumber(stats.ReviewTotalTokens())+" tokens")
+	}
+	addWebSearchUsageRows(table, func(label string) string {
+		return "Review " + label
+	}, reviewUsage.WebSearchCalls, reviewUsage.WebSearchResultTokens, reviewUsage.StorageCost)
+}
+
+func addReviewCostRow(table *ui.Table, stats *SessionStats) {
+	if table == nil || stats == nil || !stats.HasReviewUsage() {
+		return
+	}
+	table.AddRow("Review Cost", formatCostEstimate(stats.ReviewCostEstimate()))
 }
 
 func addWebSearchUsageRows(table *ui.Table, label func(string) string, calls, resultTokens int, fee float64) {
