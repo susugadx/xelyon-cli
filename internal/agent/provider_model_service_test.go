@@ -287,6 +287,24 @@ func TestModelCandidates_KnownDefaultCurrentCustomStableDedupe(t *testing.T) {
 	}
 }
 
+func TestModelCandidates_IncludesGemini35Flash(t *testing.T) {
+	agent := &Agent{
+		ProviderName:      "gemini",
+		ProviderConfigKey: "gemini",
+		CurrentModel:      "gemini-2.5-flash",
+		Runtime:           NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
+	}
+
+	got := agent.ModelCandidates("gemini")
+	names := modelCandidateNames(got)
+	if len(names) == 0 || names[0] != "gemini-3.5-flash" {
+		t.Fatalf("gemini candidates prefix = %v, want gemini-3.5-flash first; full=%v", names[:min(len(names), 3)], names)
+	}
+	if c := candidateByName(got, "gemini-3.5-flash"); c.Name == "" || c.Custom {
+		t.Fatalf("gemini-3.5-flash candidate = %#v, want normal runtime candidate", c)
+	}
+}
+
 func TestModelCandidates_AzureDeploymentOnly(t *testing.T) {
 	cfg := newProjectMapDisabledConfig()
 	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
