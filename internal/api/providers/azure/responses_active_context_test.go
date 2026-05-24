@@ -9,9 +9,18 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
-const azureTestActiveContextSnapshot = "<current_task_state>\nstate\n</current_task_state>"
+var azureTestActiveContextSnapshot = ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+	Path:       "README.md",
+	StartLine:  1,
+	EndLine:    2,
+	Source:     "read_file",
+	Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+	ToolCallID: "call_read",
+	Content:    "line one\nline two",
+}}})
 
 func TestBuildChatResponsesRequest_IncludesActiveContextFromContext(t *testing.T) {
 	ctx := azureTestContextWithActiveContext(azureTestResponsesModelConfig("corp-gpt55-deployment", "gpt-5.5"))
@@ -157,7 +166,7 @@ func azureTestContextWithActiveContext(cfg *config.Config) context.Context {
 
 func azureTestActiveContextBlocks() []api.ActiveContextBlock {
 	return []api.ActiveContextBlock{{
-		Name:    "current_task_state",
+		Name:    "provider_history_rehydrated_evidence",
 		Content: azureTestActiveContextSnapshot,
 	}}
 }

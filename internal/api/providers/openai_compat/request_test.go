@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
 func TestBuildChatCompletionsRequest_BuildsStandardPayloadWithExtras(t *testing.T) {
@@ -89,10 +90,11 @@ func TestBuildChatMessages_StandardMessagesPayloadUnchanged(t *testing.T) {
 }
 
 func TestBuildChatMessagesWithActiveContext_InsertsEphemeralSystemBeforeHistory(t *testing.T) {
+	evidence := openAICompatTestRehydratedEvidence()
 	messages := BuildChatMessagesWithActiveContext("system", []api.ActiveContextBlock{
 		{Name: "blank", Content: "\n \n"},
 		{Name: "state", Content: "<current_task_state>\nstate\n</current_task_state>"},
-		{Name: "evidence", Content: "<rehydrated_evidence>\nevidence\n</rehydrated_evidence>"},
+		{Name: "evidence", Content: evidence},
 	}, []api.Message{
 		{Role: "user", Content: "hello"},
 		{Role: "assistant", Content: "hi"},
@@ -107,13 +109,25 @@ func TestBuildChatMessagesWithActiveContext_InsertsEphemeralSystemBeforeHistory(
 	if messages[1].Role != "system" {
 		t.Fatalf("messages[1].Role = %q, want system active context", messages[1].Role)
 	}
-	wantActive := "<current_task_state>\nstate\n</current_task_state>\n\n<rehydrated_evidence>\nevidence\n</rehydrated_evidence>"
+	wantActive := "<current_task_state>\nstate\n</current_task_state>\n\n" + evidence
 	if messages[1].Content != wantActive {
 		t.Fatalf("messages[1].Content = %q, want rendered active context", messages[1].Content)
 	}
 	if messages[2].Role != "user" || messages[2].Content != "hello" {
 		t.Fatalf("messages[2] = %#v, want first history message after active context", messages[2])
 	}
+}
+
+func openAICompatTestRehydratedEvidence() string {
+	return ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+		Path:       "README.md",
+		StartLine:  1,
+		EndLine:    2,
+		Source:     "read_file",
+		Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+		ToolCallID: "call_read",
+		Content:    "line one\nline two",
+	}}})
 }
 
 func TestBuildChatMessageInterfacesWithActiveContext_UsesSharedEphemeralSystemPlacement(t *testing.T) {

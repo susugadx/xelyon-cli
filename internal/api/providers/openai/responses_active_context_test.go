@@ -9,9 +9,18 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
-const openAITestActiveContextSnapshot = "<current_task_state>\nstate\n</current_task_state>"
+var openAITestActiveContextSnapshot = ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+	Path:       "README.md",
+	StartLine:  1,
+	EndLine:    2,
+	Source:     "read_file",
+	Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+	ToolCallID: "call_read",
+	Content:    "line one\nline two",
+}}})
 
 func TestBuildChatResponsesRequest_IncludesActiveContextFromContext(t *testing.T) {
 	p := New("test-key")
@@ -159,7 +168,7 @@ func openAITestRuntimeContextWithActiveContext(t *testing.T) context.Context {
 
 func openAITestActiveContextBlocks() []api.ActiveContextBlock {
 	return []api.ActiveContextBlock{{
-		Name:    "current_task_state",
+		Name:    "provider_history_rehydrated_evidence",
 		Content: openAITestActiveContextSnapshot,
 	}}
 }

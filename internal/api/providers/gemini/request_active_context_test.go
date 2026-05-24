@@ -6,9 +6,18 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
-const geminiTestActiveContextSnapshot = "<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>"
+var geminiTestActiveContextSnapshot = ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+	Path:       "README.md",
+	StartLine:  1,
+	EndLine:    2,
+	Source:     "read_file",
+	Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+	ToolCallID: "call_read",
+	Content:    "line one\nline two",
+}}})
 
 func newGeminiRequestContextWithActiveContext() context.Context {
 	return api.WithActiveContextBlocks(newGeminiRequestContext(false, "medium"), []api.ActiveContextBlock{{

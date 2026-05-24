@@ -7,6 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
 func TestBuildMessagesRequest_UsesRuntimeFeaturePolicy(t *testing.T) {
@@ -65,9 +66,10 @@ func TestBuildMessagesRequest_AddsActiveContextToDynamicSystemSuffix(t *testing.
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true
 	p := New("test-key")
+	evidence := claudeTestRehydratedEvidence()
 	ctx := api.WithActiveContextBlocks(config.WithContext(context.Background(), cfg), []api.ActiveContextBlock{{
 		Name:    "provider_history_rehydrated_evidence",
-		Content: "<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>",
+		Content: evidence,
 	}})
 
 	built := p.buildMessagesRequest(ctx, "Static"+api.SystemPromptCacheBoundary+"Dynamic", []api.Message{{Role: "user", Content: "Hello"}}, defaultClaudeModel)
@@ -79,13 +81,25 @@ func TestBuildMessagesRequest_AddsActiveContextToDynamicSystemSuffix(t *testing.
 	if systemBlocks[0].Text != "Static" {
 		t.Fatalf("System[0].Text = %q, want static system prompt", systemBlocks[0].Text)
 	}
-	wantDynamic := "Dynamic\n\n<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>"
+	wantDynamic := "Dynamic\n\n" + evidence
 	if systemBlocks[1].Text != wantDynamic {
 		t.Fatalf("System[1].Text = %q, want active context appended to dynamic suffix", systemBlocks[1].Text)
 	}
 	if systemBlocks[1].CacheControl == nil {
 		t.Fatal("System[1].CacheControl = nil, want dynamic cache boundary preserved")
 	}
+}
+
+func claudeTestRehydratedEvidence() string {
+	return ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+		Path:       "README.md",
+		StartLine:  1,
+		EndLine:    2,
+		Source:     "read_file",
+		Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+		ToolCallID: "call_read",
+		Content:    "line one\nline two",
+	}}})
 }
 
 func TestBuildMessagesRequest_UsesForcedToolChoice(t *testing.T) {

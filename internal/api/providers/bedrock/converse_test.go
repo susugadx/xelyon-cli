@@ -14,6 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -187,9 +188,10 @@ func TestBuildConverseStreamInput_AddsActiveContextAsSeparateSystemBlock(t *test
 		DefaultModel: "amazon.nova-pro-v1:0",
 	}
 	p := &Provider{}
+	evidence := bedrockTestRehydratedEvidence()
 	ctx := api.WithActiveContextBlocks(newBedrockTestContext(cfg), []api.ActiveContextBlock{{
 		Name:    "provider_history_rehydrated_evidence",
-		Content: "<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>",
+		Content: evidence,
 	}})
 
 	input, err := p.buildConverseStreamInput(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, p.resolveBedrockRequestContext(ctx, ""))
@@ -204,9 +206,21 @@ func TestBuildConverseStreamInput_AddsActiveContextAsSeparateSystemBlock(t *test
 		t.Fatalf("System[0] = %#v, want base system prompt", input.System[0])
 	}
 	active, ok := input.System[1].(*bedrocktypes.SystemContentBlockMemberText)
-	if !ok || active.Value != "<rehydrated_evidence>\nREADME.md:L1-L2\n</rehydrated_evidence>" {
+	if !ok || active.Value != evidence {
 		t.Fatalf("System[1] = %#v, want active context system block", input.System[1])
 	}
+}
+
+func bedrockTestRehydratedEvidence() string {
+	return ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+		Path:       "README.md",
+		StartLine:  1,
+		EndLine:    2,
+		Source:     "read_file",
+		Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+		ToolCallID: "call_read",
+		Content:    "line one\nline two",
+	}}})
 }
 
 func TestProvider_ChatWithTools_RejectsUnsupportedConverseModelBeforeAPI(t *testing.T) {

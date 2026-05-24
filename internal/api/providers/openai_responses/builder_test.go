@@ -6,9 +6,18 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
-const responsesTestActiveContextSnapshot = "<current_task_state>\nstate\n</current_task_state>"
+var responsesTestActiveContextSnapshot = ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+	Path:       "README.md",
+	StartLine:  1,
+	EndLine:    2,
+	Source:     "read_file",
+	Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+	ToolCallID: "call_read",
+	Content:    "line one\nline two",
+}}})
 
 func TestModelIdentity_CatalogNameDefaultsToRequestName(t *testing.T) {
 	identity := NewModelIdentity("corp-deployment", "")
@@ -409,7 +418,7 @@ func TestResolveServerCompactionDecision_CompactThresholdTooSmallOmitAndFallback
 
 func activeContextBlocks(content string) []api.ActiveContextBlock {
 	return []api.ActiveContextBlock{{
-		Name:    "current_task_state",
+		Name:    "provider_history_rehydrated_evidence",
 		Content: content,
 	}}
 }
