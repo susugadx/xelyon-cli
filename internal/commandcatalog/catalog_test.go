@@ -68,8 +68,8 @@ func TestFindMatchesNameAndAlias(t *testing.T) {
 	if cmd, ok := Find("/stats"); !ok || cmd.Name != "/status" {
 		t.Fatalf("Find(/stats) = %#v, %v, want /status alias owner", cmd, ok)
 	}
-	if cmd, ok := Find("/think"); !ok || cmd.Name != "/thinking" {
-		t.Fatalf("Find(/think) = %#v, %v, want /thinking alias owner", cmd, ok)
+	if _, ok := Find("/think"); ok {
+		t.Fatal("Find(/think) ok = true, want removed alias to be unavailable")
 	}
 	if cmd, ok := Find("/h"); !ok || cmd.Name != "/help" {
 		t.Fatalf("Find(/h) = %#v, %v, want /help alias owner", cmd, ok)

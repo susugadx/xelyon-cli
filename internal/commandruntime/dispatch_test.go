@@ -15,6 +15,38 @@ func TestParse_NormalizesCommandAndQuotes(t *testing.T) {
 	}
 }
 
+func TestQuoteArgRoundTripsSplitStrict(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "plain", value: "demo", want: "demo"},
+		{name: "space", value: "my skill", want: `"my skill"`},
+		{name: "double quote", value: `my "quoted" skill`, want: `"my \"quoted\" skill"`},
+		{name: "single quote", value: "don't stop", want: `"don't stop"`},
+		{name: "backslash before quote", value: `a\"b`, want: `"a\\"b"`},
+		{name: "trailing backslash", value: `my skill\`, want: `"my skill"\`},
+		{name: "quote and trailing backslash", value: `my "quoted" skill\`, want: `"my \"quoted\" skill"\`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			quoted := QuoteArg(tt.value)
+			if quoted != tt.want {
+				t.Fatalf("QuoteArg(%q) = %q, want %q", tt.value, quoted, tt.want)
+			}
+			parts, status := SplitStrict("/cmd " + quoted)
+			if !status.IsOK() {
+				t.Fatalf("SplitStrict() status = %v, want ok", status)
+			}
+			if len(parts) != 2 || parts[1] != tt.value {
+				t.Fatalf("SplitStrict round trip parts = %#v, want [/cmd %q]", parts, tt.value)
+			}
+		})
+	}
+}
+
 func TestSplitStrict_SupportsWhitespaceDelimiters(t *testing.T) {
 	parts, status := SplitStrict("/attach\t\"a b\"\nextra")
 	if !status.IsOK() {

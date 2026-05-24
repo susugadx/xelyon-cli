@@ -113,6 +113,7 @@ type Model struct {
 	providerModels   ProviderModelAgent
 	projectAgent     ProjectAgent
 	reviewAgent      ReviewAgent
+	skillCatalog     SkillCatalogAgent
 	screen           screenMode     // 現在の画面モード
 	configScreen     *configScreen  // /config 画面の状態（screenConfig 時のみ非 nil）
 	reviewScreen     *reviewScreen  // /review 画面の状態（screenReview 時のみ非 nil）

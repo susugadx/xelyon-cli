@@ -82,8 +82,8 @@ xelyon --provider moonshot --model kimi-k2.5
 - 256K context / 最大 32K output（K2.6 / K2.5）
 - 画像入力対応。`--image` / `image:` から渡された PNG / JPEG / WebP / GIF を `data:image/...;base64,...` の multimodal `image_url` part として送信します。
 - `web_search.provider = kimi` / `moonshot`、またはメイン provider が Kimi の場合、Moonshot Chat Completions の built-in `$web_search` を使います。
-- `/think off`: K2.6 / K2.5 は `thinking: {"type":"disabled"}` を送信します。`kimi-k2-thinking` には disabled を送信しません。
-- `/think on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信し、forced tool choice は `auto` に丸めます。
+- `/thinking off`: K2.6 / K2.5 は `thinking: {"type":"disabled"}` を送信します。`kimi-k2-thinking` には disabled を送信しません。
+- `/thinking on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信し、forced tool choice は `auto` に丸めます。
 - `reasoning_content`（思考内容）はストリーミング表示され、ツール実行時も保持されます。
 - `KIMI_API_URL` は `/v1/chat/completions` まで含む完全な endpoint override として扱います。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になります。
 

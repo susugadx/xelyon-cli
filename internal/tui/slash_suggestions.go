@@ -5,8 +5,6 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
-	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
@@ -205,11 +203,17 @@ func (m Model) suggestionsForSlashPrefix(prefix string) []slash.Suggestion {
 }
 
 func (m Model) runtimeArgumentSuggestions(prefix string) ([]slash.Suggestion, bool) {
+	if argPrefix, ok := parseSkillsShowArgument(prefix); ok {
+		return m.skillNameArgumentSuggestions(argPrefix), true
+	}
+
 	command, argPrefix, ok := parseSingleSlashArgument(prefix)
 	if !ok {
 		return nil, false
 	}
 	switch command {
+	case "/skills":
+		return m.skillsArgumentSuggestions(prefix, argPrefix), true
 	case "/provider":
 		return providerArgumentSuggestions(m.providerModels.ProviderCandidates(), argPrefix), true
 	case "/model":
@@ -235,77 +239,6 @@ func parseSingleSlashArgument(input string) (command, argPrefix string, ok bool)
 		return command, "", false
 	}
 	return command, argPrefix, true
-}
-
-func providerArgumentSuggestions(candidates []providerpicker.ProviderCandidate, argPrefix string) []slash.Suggestion {
-	argPrefix = strings.ToLower(strings.TrimSpace(argPrefix))
-	submitOnEnter := argPrefix != ""
-	suggestions := make([]slash.Suggestion, 0, len(candidates))
-	for _, candidate := range candidates {
-		if !strings.HasPrefix(strings.ToLower(candidate.Key), argPrefix) {
-			continue
-		}
-		insertText := "/provider " + candidate.Key
-		suggestions = append(suggestions, slash.Suggestion{
-			Label:         insertText,
-			InsertText:    insertText,
-			Description:   providerCandidateDescription(candidate),
-			Category:      commandcatalog.CommandCategoryModel,
-			CategoryLabel: "provider",
-			ArgHint:       candidate.Key,
-			Detail:        "Switch to " + candidate.Label,
-			SubmitOnEnter: submitOnEnter,
-		})
-	}
-	return suggestions
-}
-
-func modelArgumentSuggestions(candidates []providerpicker.ModelCandidate, argPrefix string) []slash.Suggestion {
-	argPrefix = strings.ToLower(strings.TrimSpace(argPrefix))
-	submitOnEnter := argPrefix != ""
-	suggestions := make([]slash.Suggestion, 0, len(candidates))
-	for _, candidate := range candidates {
-		if candidate.Custom || !strings.HasPrefix(strings.ToLower(candidate.Name), argPrefix) {
-			continue
-		}
-		insertText := "/model " + candidate.Name
-		suggestions = append(suggestions, slash.Suggestion{
-			Label:         insertText,
-			InsertText:    insertText,
-			Description:   modelCandidateDescription(candidate),
-			Category:      commandcatalog.CommandCategoryModel,
-			CategoryLabel: "model",
-			ArgHint:       candidate.Name,
-			Detail:        "Switch current provider model to " + candidate.Name,
-			SubmitOnEnter: submitOnEnter,
-		})
-	}
-	return suggestions
-}
-
-func providerCandidateDescription(candidate providerpicker.ProviderCandidate) string {
-	var parts []string
-	if candidate.Label != "" && candidate.Label != candidate.Key {
-		parts = append(parts, candidate.Label)
-	}
-	if candidate.Current {
-		parts = append(parts, "current")
-	}
-	if candidate.CredentialStatus != "" {
-		parts = append(parts, string(candidate.CredentialStatus))
-	}
-	return strings.Join(parts, " · ")
-}
-
-func modelCandidateDescription(candidate providerpicker.ModelCandidate) string {
-	var parts []string
-	if candidate.Current {
-		parts = append(parts, "current")
-	}
-	if candidate.Default {
-		parts = append(parts, "default")
-	}
-	return strings.Join(parts, " · ")
 }
 
 func (m Model) slashSuggestionWindowStart() int {
@@ -345,6 +278,40 @@ func (m *Model) setInputToSlashSuggestion(suggestion slash.Suggestion, appendArg
 	m.chromeDirty = true
 }
 
+func (m *Model) expandSlashSuggestion(suggestion slash.Suggestion) {
+	value := suggestion.CompletionText(true)
+	if !strings.HasSuffix(value, " ") {
+		value += " "
+	}
+	m.textInput.SetValue(value)
+	m.textInput.SetCursor(utf8.RuneCountInString(value))
+	m.refreshSlashSuggestions()
+	if m.slashSuggestions.visible() {
+		m.slashSuggestions.selectionActive = true
+	}
+	m.chromeDirty = true
+}
+
+func (m Model) expandSlashSuggestionOnSubmit() (Model, bool) {
+	prefix, ok := m.currentSlashSuggestionPrefix()
+	if !ok {
+		return m, false
+	}
+	suggestions := m.suggestionsForSlashPrefix(prefix)
+	if len(suggestions) != 1 {
+		return m, false
+	}
+	suggestion := suggestions[0]
+	if !suggestion.ExpandOnEnter || suggestion.SubmitOnEnter {
+		return m, false
+	}
+	if strings.TrimSpace(prefix) != suggestion.InsertText {
+		return m, false
+	}
+	m.expandSlashSuggestion(suggestion)
+	return m, true
+}
+
 func (m *Model) setInputToSlashSuggestionSubmission(suggestion slash.Suggestion) {
 	value := suggestion.SubmissionText()
 	m.textInput.SetValue(value)
@@ -375,6 +342,18 @@ func (m Model) handleSlashSuggestionKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	case isEnterKey(msg):
 		if suggestion, ok := m.slashSuggestions.selectedSuggestion(); ok {
+			if suggestion.ExpandOnEnter && (m.slashSuggestions.selectionActive || !suggestion.SubmitOnEnter) {
+				m.expandSlashSuggestion(suggestion)
+				return m, nil, true
+			}
+			if suggestion.CompleteOnEnter {
+				if !suggestion.SubmitOnEnter && !m.slashSuggestions.selectionActive {
+					m.activateSlashSuggestionSelection()
+					return m, nil, true
+				}
+				m.setInputToSlashSuggestion(suggestion, false)
+				return m, nil, true
+			}
 			if !suggestion.SubmitOnEnter && !m.slashSuggestions.selectionActive {
 				m.activateSlashSuggestionSelection()
 				return m, nil, true

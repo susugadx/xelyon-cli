@@ -1,6 +1,7 @@
 package slash
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
@@ -168,8 +169,8 @@ func TestSuggestionsExposeDisplayLabelAndCompletionText(t *testing.T) {
 		t.Fatalf("Suggestions(/thinking) returned %d matches, want 1", len(matches))
 	}
 	suggestion := matches[0]
-	if suggestion.Label != "/thinking [on|off|level]" {
-		t.Fatalf("Label = %q, want %q", suggestion.Label, "/thinking [on|off|level]")
+	if suggestion.Label != "/thinking <on|off|level>" {
+		t.Fatalf("Label = %q, want %q", suggestion.Label, "/thinking <on|off|level>")
 	}
 	if got := suggestion.CompletionText(false); got != "/thinking" {
 		t.Fatalf("CompletionText(false) = %q, want /thinking", got)
@@ -182,6 +183,12 @@ func TestSuggestionsExposeDisplayLabelAndCompletionText(t *testing.T) {
 	}
 	if got := suggestion.CategoryDisplayLabel(); got != "thinking" {
 		t.Fatalf("CategoryDisplayLabel() = %q, want thinking", got)
+	}
+	if !suggestion.ExpandOnEnter {
+		t.Fatal("/thinking root suggestion should expand to argument suggestions on Enter")
+	}
+	if suggestion.SubmitOnEnter {
+		t.Fatal("/thinking root suggestion should not submit on Enter; it should open argument suggestions")
 	}
 }
 
@@ -209,6 +216,10 @@ func TestSuggestionCategoryDisplayLabelUsesExplicitLabelFirst(t *testing.T) {
 	if got := suggestion.CategoryDisplayLabel(); got != "provider" {
 		t.Fatalf("CategoryDisplayLabel() = %q, want provider", got)
 	}
+	suggestion.HideCategory = true
+	if got := suggestion.CategoryDisplayLabel(); got != "" {
+		t.Fatalf("hidden CategoryDisplayLabel() = %q, want empty", got)
+	}
 }
 
 func TestSuggestionsPlanSubmitsToggleWithoutChangingCompletion(t *testing.T) {
@@ -228,13 +239,13 @@ func TestSuggestionsPlanSubmitsToggleWithoutChangingCompletion(t *testing.T) {
 	}
 }
 
-func TestSuggestionsCanonicalizeThinkAlias(t *testing.T) {
+func TestSuggestionsCompleteThinkingPrefix(t *testing.T) {
 	matches := Suggestions("/think")
 	if len(matches) != 1 {
 		t.Fatalf("Suggestions(/think) returned %d matches, want 1", len(matches))
 	}
 	if got := matches[0].InsertText; got != "/thinking" {
-		t.Fatalf("InsertText = %q, want /thinking", got)
+		t.Fatalf("InsertText = %q, want /thinking prefix completion", got)
 	}
 }
 
@@ -243,8 +254,8 @@ func TestSuggestionsThinkingArguments(t *testing.T) {
 	if len(matches) != 6 {
 		t.Fatalf("Suggestions(/thinking ) returned %d matches, want 6", len(matches))
 	}
-	if got := matches[5].Label; got != "/thinking xhigh (max)" {
-		t.Fatalf("xhigh label = %q, want /thinking xhigh (max)", got)
+	if got := matches[5].Label; got != "xhigh (max)" {
+		t.Fatalf("xhigh label = %q, want xhigh (max)", got)
 	}
 	if got := matches[5].InsertText; got != "/thinking xhigh" {
 		t.Fatalf("xhigh InsertText = %q, want /thinking xhigh", got)
@@ -252,36 +263,50 @@ func TestSuggestionsThinkingArguments(t *testing.T) {
 	if got := matches[5].CompletionText(true); got != "/thinking xhigh" {
 		t.Fatalf("xhigh CompletionText(true) = %q, want /thinking xhigh", got)
 	}
-	if matches[0].SubmitOnEnter {
-		t.Fatal("empty-prefix thinking argument suggestions should not submit on Enter")
+	if !matches[0].SubmitOnEnter {
+		t.Fatal("empty-prefix thinking argument suggestions should submit on Enter")
 	}
 }
 
-func TestSuggestionsThinkingAliasArguments(t *testing.T) {
+func TestSuggestionsThinkingAliasArgumentsRemoved(t *testing.T) {
 	matches := Suggestions("/think x")
-	if len(matches) != 1 {
-		t.Fatalf("Suggestions(/think x) returned %d matches, want 1", len(matches))
-	}
-	if got := matches[0].InsertText; got != "/thinking xhigh" {
-		t.Fatalf("InsertText = %q, want /thinking xhigh", got)
-	}
-	if !matches[0].SubmitOnEnter {
-		t.Fatal("non-empty thinking argument suggestions should submit on Enter")
+	if len(matches) != 0 {
+		t.Fatalf("Suggestions(/think x) returned %#v, want no removed alias argument suggestions", matches)
 	}
 }
 
 func TestSuggestionsSkillsSubcommands(t *testing.T) {
+	root := Suggestions("/skills")
+	if len(root) != 1 {
+		t.Fatalf("Suggestions(/skills) returned %d matches, want 1", len(root))
+	}
+	if !root[0].ExpandOnEnter {
+		t.Fatal("/skills root suggestion should expand to subcommand suggestions on Enter")
+	}
+	if root[0].SubmitOnEnter {
+		t.Fatal("/skills root suggestion should not submit on Enter; /skills overview remains the executable overview command")
+	}
+	for _, fragment := range []string{
+		"overview: Print skill catalog overview",
+		"show <name>: Show SKILL.md body and resource listings",
+		"doctor: Show parsing/duplicate diagnostics",
+	} {
+		if !strings.Contains(root[0].Detail, fragment) {
+			t.Fatalf("/skills detail missing %q: %q", fragment, root[0].Detail)
+		}
+	}
+
 	matches := Suggestions("/skills ")
 	if len(matches) != 3 {
 		t.Fatalf("Suggestions(/skills ) returned %d matches, want 3", len(matches))
 	}
 
-	wantLabels := []string{"/skills list", "/skills show <name>", "/skills doctor"}
+	wantLabels := []string{"overview", "show <name>", "doctor"}
 	for i, want := range wantLabels {
 		if matches[i].Label != want {
 			t.Fatalf("matches[%d].Label = %q, want %q", i, matches[i].Label, want)
 		}
-		if !matches[i].SubmitOnEnter {
+		if want != "show <name>" && !matches[i].SubmitOnEnter {
 			t.Fatalf("matches[%d].SubmitOnEnter = false, want true", i)
 		}
 	}
@@ -291,6 +316,21 @@ func TestSuggestionsSkillsSubcommands(t *testing.T) {
 	}
 	if !matches[1].HasArgs {
 		t.Fatal("show suggestion should keep HasArgs for Tab trailing space")
+	}
+	if !matches[1].ExpandOnEnter {
+		t.Fatal("show suggestion should expand on Enter because it requires <name>")
+	}
+	if matches[1].SubmitOnEnter {
+		t.Fatal("show suggestion should expand before submit because it requires <name>")
+	}
+	if got := matches[0].InsertText; got != "/skills overview" {
+		t.Fatalf("overview InsertText = %q, want /skills overview", got)
+	}
+	if matches[0].ExpandOnEnter {
+		t.Fatal("overview suggestion should submit on Enter")
+	}
+	if matches[2].ExpandOnEnter {
+		t.Fatal("doctor suggestion should submit on Enter")
 	}
 	if got := matches[1].CompletionText(true); got != "/skills show " {
 		t.Fatalf("show CompletionText(true) = %q, want '/skills show '", got)

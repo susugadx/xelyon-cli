@@ -20,7 +20,7 @@ func (t *ActivateSkillTool) Description() string {
 func (t *ActivateSkillTool) Parameters() map[string]interface{} {
 	nameProperty := map[string]interface{}{
 		"type":        "string",
-		"description": "Skill name to activate. If unknown, run /skills list or ask the user to provide an exact name.",
+		"description": "Skill name to activate. If unknown, run /skills overview or ask the user to provide an exact name.",
 	}
 
 	return map[string]interface{}{

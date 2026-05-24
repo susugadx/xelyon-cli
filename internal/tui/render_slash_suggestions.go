@@ -15,8 +15,9 @@ func (m Model) renderSlashSuggestionRows() []string {
 		return nil
 	}
 	lines := make([]string, 0, len(rows))
+	showCategory := slashSuggestionRowsHaveCategory(rows)
 	for _, row := range rows {
-		lines = append(lines, m.renderSlashSuggestionRenderRow(row))
+		lines = append(lines, m.renderSlashSuggestionRenderRowWithCategory(row, showCategory))
 	}
 	return lines
 }
@@ -32,6 +33,10 @@ type slashSuggestionRowLayout struct {
 }
 
 func (m Model) renderSlashSuggestionRenderRow(row slashSuggestionRenderRow) string {
+	return m.renderSlashSuggestionRenderRowWithCategory(row, strings.TrimSpace(row.Category) != "")
+}
+
+func (m Model) renderSlashSuggestionRenderRowWithCategory(row slashSuggestionRenderRow, showCategory bool) string {
 	chrome := theme.Chrome
 	bg := chrome.SuggestionBg
 	prefix := "  "
@@ -46,7 +51,7 @@ func (m Model) renderSlashSuggestionRenderRow(row slashSuggestionRenderRow) stri
 		descriptionFg = chrome.SuggestionSelectedDimFg
 	}
 
-	layout := slashSuggestionRowLayoutForWidth(m.width)
+	layout := slashSuggestionRowLayoutForWidthWithCategory(m.width, showCategory)
 	category := paddedPlainText(row.Category, layout.categoryWidth)
 	label := paddedPlainText(row.CommandLabel, layout.commandWidth)
 	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(row.Description), layout.descriptionWidth)
@@ -61,13 +66,33 @@ func (m Model) renderSlashSuggestionRenderRow(row slashSuggestionRenderRow) stri
 	return termtext.FillANSITextWidth(line+chrome.Reset, m.width, bg)
 }
 
+func slashSuggestionRowsHaveCategory(rows []slashSuggestionRenderRow) bool {
+	for _, row := range rows {
+		if strings.TrimSpace(row.Category) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func slashSuggestionRowLayoutForWidth(width int) slashSuggestionRowLayout {
-	categoryWidth := slashSuggestionCategoryWidth(width)
+	return slashSuggestionRowLayoutForWidthWithCategory(width, true)
+}
+
+func slashSuggestionRowLayoutForWidthWithCategory(width int, showCategory bool) slashSuggestionRowLayout {
+	categoryWidth := 0
+	if showCategory {
+		categoryWidth = slashSuggestionCategoryWidth(width)
+	}
 	commandWidth := slashSuggestionCommandWidth(width)
+	separatorWidth := 4
+	if categoryWidth > 0 {
+		separatorWidth = 6
+	}
 	return slashSuggestionRowLayout{
 		categoryWidth:    categoryWidth,
 		commandWidth:     commandWidth,
-		descriptionWidth: max(0, width-commandWidth-categoryWidth-6),
+		descriptionWidth: max(0, width-commandWidth-categoryWidth-separatorWidth),
 	}
 }
 

@@ -25,15 +25,16 @@ func catalogSubcommandArgumentSuggestions(req argumentSuggestionRequest) ([]Sugg
 		}
 		insertText, hasArgs := subcommandInsertText(cmd.Name, value)
 		suggestions = append(suggestions, Suggestion{
-			Label:         sub.Name,
+			Label:         value,
 			InsertText:    insertText,
 			Description:   sub.Description,
 			Category:      cmd.Category,
 			CategoryLabel: cmd.EffectiveCategoryDisplayLabel(),
-			ArgHint:       value,
+			HideCategory:  true,
 			Detail:        sub.Description,
 			HasArgs:       hasArgs,
-			SubmitOnEnter: true,
+			ExpandOnEnter: hasArgs,
+			SubmitOnEnter: !hasArgs,
 		})
 	}
 	return suggestions, true

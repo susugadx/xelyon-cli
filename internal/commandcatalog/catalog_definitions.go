@@ -274,9 +274,9 @@ func commandConfig() CommandInfo {
 }
 
 func commandSkills() CommandInfo {
-	cmd := legacyDiscoverableCommand("/skills", "", "List and inspect Agent Skills catalog", "Agent Skillsの一覧と診断", CommandCategoryContext, 95)
+	cmd := legacyDiscoverableCommand("/skills", "", "Pick skills or inspect the Agent Skills catalog", "Agent Skillsを選択・確認・診断", CommandCategoryContext, 95)
 	cmd.SubCommands = []SubCommand{
-		{Name: "/skills list", Description: "List discovered skills"},
+		{Name: "/skills overview", Description: "Print skill catalog overview"},
 		{Name: "/skills show <name>", Description: "Show SKILL.md body and resource listings"},
 		{Name: "/skills doctor", Description: "Show parsing/duplicate diagnostics"},
 	}
@@ -327,7 +327,7 @@ func commandPlan() CommandInfo {
 }
 
 func commandThink() CommandInfo {
-	return legacyDiscoverableCommand("/thinking", "[on|off|level]", "Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)", "Extended Thinkingを切り替え", CommandCategoryModel, 40, "/think")
+	return legacyDiscoverableCommand("/thinking", "<on|off|level>", "Set Extended Thinking mode (level: low/medium/high/xhigh=max)", "Extended Thinkingを設定", CommandCategoryModel, 40)
 }
 
 func commandVersion() CommandInfo {

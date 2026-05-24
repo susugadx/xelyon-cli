@@ -6,6 +6,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 )
 
 // ConversationAgent は chat 実行と処理状態を TUI に提供する。
@@ -103,6 +104,11 @@ type ProjectAgent interface {
 // ReviewAgent は /review 実行を TUI の外側へ渡す optional capability を表す。
 type ReviewAgent interface {
 	RunReview(context.Context, review.ReviewRequest) (review.ReviewReport, error)
+}
+
+// SkillCatalogAgent は /skills 補完が利用する optional capability を表す。
+type SkillCatalogAgent interface {
+	SkillCatalog() agentskills.SkillCatalog
 }
 
 // AgentInterface は tui パッケージから agent パッケージへの依存を逆転させる。

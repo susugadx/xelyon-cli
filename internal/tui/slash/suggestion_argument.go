@@ -63,12 +63,12 @@ func suggestionsFromArgumentProviders(req argumentSuggestionRequest) []Suggestio
 func newArgumentSuggestion(command, value, labelSuffix, description string, submitOnEnter bool) Suggestion {
 	insertText := command + " " + value
 	return Suggestion{
-		Label:         insertText + labelSuffix,
+		Label:         value + labelSuffix,
 		InsertText:    insertText,
 		Description:   description,
 		Category:      commandcatalog.CommandCategoryModel,
 		CategoryLabel: argumentSuggestionCategoryLabel(command),
-		ArgHint:       value,
+		HideCategory:  true,
 		Detail:        description,
 		HasArgs:       false,
 		SubmitOnEnter: submitOnEnter,
@@ -77,7 +77,7 @@ func newArgumentSuggestion(command, value, labelSuffix, description string, subm
 
 func argumentSuggestionCategoryLabel(command string) string {
 	switch command {
-	case "/thinking", "/think":
+	case "/thinking":
 		return "thinking"
 	default:
 		return ""

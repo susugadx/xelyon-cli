@@ -5,19 +5,6 @@ import (
 	"strings"
 )
 
-// FormatCatalogList は /skills list 向けの表示文字列を返す。
-func FormatCatalogList(catalog SkillCatalog) string {
-	var b strings.Builder
-	if len(catalog.Skills) == 0 {
-		b.WriteString("No skills found.\n")
-		return b.String()
-	}
-	for _, skill := range catalog.Skills {
-		fmt.Fprintf(&b, "- %s: %s\n", skill.Name, skill.Description)
-	}
-	return b.String()
-}
-
 // FormatDoctorReport は /skills doctor 向けの診断文字列を返す。
 func FormatDoctorReport(catalog SkillCatalog) string {
 	if len(catalog.Diagnostics) == 0 {

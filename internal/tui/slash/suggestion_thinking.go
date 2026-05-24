@@ -3,8 +3,7 @@ package slash
 import "strings"
 
 const (
-	thinkingCommandName  = "/thinking"
-	thinkingCommandAlias = "/think"
+	thinkingCommandName = "/thinking"
 )
 
 type thinkingOption struct {
@@ -23,12 +22,11 @@ var thinkingOptions = []thinkingOption{
 }
 
 func thinkingArgumentSuggestions(req argumentSuggestionRequest) ([]Suggestion, bool) {
-	if req.command != thinkingCommandName && req.command != thinkingCommandAlias {
+	if req.command != thinkingCommandName {
 		return nil, false
 	}
 
 	argPrefix := strings.ToLower(req.argPrefix)
-	submitOnEnter := argPrefix != ""
 	suggestions := make([]Suggestion, 0, len(thinkingOptions))
 	for _, option := range thinkingOptions {
 		if !strings.HasPrefix(option.value, argPrefix) {
@@ -39,7 +37,7 @@ func thinkingArgumentSuggestions(req argumentSuggestionRequest) ([]Suggestion, b
 			option.value,
 			option.labelSuffix,
 			option.description,
-			submitOnEnter,
+			true,
 		))
 	}
 	return suggestions, true

@@ -11,17 +11,16 @@ func handleSkillsCommand(agent *Agent, args []string) bool {
 	out := agent.output()
 	catalog := agent.loadSkillCatalog()
 
-	if len(args) == 0 || args[0] == "list" {
-		printCommandHeaderToWriter(out, "Agent Skills")
-		_, _ = fmt.Fprintf(out, "Discovered skills: %d\n", len(catalog.Skills))
-		_, _ = fmt.Fprint(out, agentskills.FormatCatalogList(catalog))
-		if len(catalog.Diagnostics) > 0 {
-			yellow.Fprintf(out, "\n⚠️  Diagnostics found: %d (run /skills doctor)\n", len(catalog.Diagnostics))
-		}
+	subcommand := ""
+	if len(args) > 0 {
+		subcommand = strings.ToLower(strings.TrimSpace(args[0]))
+	}
+
+	if subcommand == "" || subcommand == "overview" || subcommand == "list" {
+		printSkillsOverview(out, catalog)
 		return true
 	}
 
-	subcommand := strings.ToLower(strings.TrimSpace(args[0]))
 	switch subcommand {
 	case "show":
 		if len(args) < 2 {
@@ -34,7 +33,7 @@ func handleSkillsCommand(agent *Agent, args []string) bool {
 			red.Fprintf(out, "❌ %v\n", err)
 			return true
 		}
-		_, _ = fmt.Fprintln(out, activated.Content)
+		printSkillDetail(out, activated.Skill)
 		return true
 
 	case "doctor":
@@ -43,7 +42,8 @@ func handleSkillsCommand(agent *Agent, args []string) bool {
 		return true
 
 	default:
-		yellow.Fprintln(out, "Usage: /skills [list|show <name>|doctor]")
+		yellow.Fprintln(out, "Usage: /skills [overview|show <name>|doctor]")
+		dim.Fprintln(out, "       /skills list is accepted as an alias for overview")
 		return true
 	}
 }

@@ -20,14 +20,14 @@ const GeneratedHelpCommandsText = `Commands:
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
-  /skills                   - List and inspect Agent Skills catalog
-                            /skills list - List discovered skills
+  /skills                   - Pick skills or inspect the Agent Skills catalog
+                            /skills overview - Print skill catalog overview
                             /skills show <name> - Show SKILL.md body and resource listings
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
   /init                     - Create xelyon.yaml project template
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
-  /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
+  /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
   /help, /h                 - Show this help
 `
@@ -54,15 +54,15 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
-  /skills                   - List and inspect Agent Skills catalog
-                            /skills list - List discovered skills
+  /skills                   - Pick skills or inspect the Agent Skills catalog
+                            /skills overview - Print skill catalog overview
                             /skills show <name> - Show SKILL.md body and resource listings
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
   /init                     - Create xelyon.yaml project template
   /project                  - Edit project xelyon.yaml interactively
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
-  /thinking, /think [on|off|level] - Toggle Extended Thinking mode (level: low/medium/high/xhigh=max)
+  /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
   /help, /h                 - Show this help
 `

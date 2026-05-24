@@ -524,10 +524,10 @@ global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対
 
 ### `/skills`
 
-Agent Skills のカタログを一覧・確認・診断します。`/skills list` は検出済み skill 名を一覧表示し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。`/skills doctor` は parse error や重複名などの診断を表示します。
+Agent Skills を選択・確認・診断します。TUI では `/skills` から skill 名を選ぶと、対応する skill 利用文を入力欄に貼り付けます。`/skills overview` は検出済み skill catalog の概要を会話ログに出力し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。`/skills doctor` は parse error や重複名などの診断を表示します。互換性のため `/skills list` も overview の alias として受け付けます。
 
 ```
-> /skills list
+> /skills overview
 > /skills show imagegen
 > /skills doctor
 ```
@@ -611,13 +611,12 @@ TUI のステータスバーには現在値が `Plan: OFF` / `Plan: ON` と表�
 [Status] waiting_input | Mode: Plan: ON | Ready / 入力待ち
 ```
 
-### `/thinking`, `/think`
+### `/thinking`
 
 Extended Thinking（推論モード）を切り替えます。複雑なタスクでより深い推論を行う際に使用します。
-`/think` は互換 alias です。
+TUI では `/thinking` を選ぶと `on/off/low/medium/high/xhigh` の候補を表示します。
 
 ```
-> /thinking              # 現在の状態表示
 > /thinking on           # 有効化（現在のレベルで）
 > /thinking off          # 無効化
 > /thinking low          # 低レベルで有効化
