@@ -54,13 +54,14 @@ func resolveStructuredJSFamilyImpactSymbol(symbol string, scope structuredImpact
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
 	setJSFamilyBundleDiagnostics(bundle, refResult.diagnostics, totalRefs)
-	semanticShadowBundle := buildJSFamilySemanticEvidenceShadowBundle(bundle.Identity.Language, symbol, def, refOpts.nameOnly, refs, totalRefs, bundle.Diagnostics)
+	semanticShadow := buildJSFamilySemanticEvidenceShadow(bundle.Identity.Language, symbol, def, refOpts.nameOnly, refs, totalRefs, bundle.Diagnostics)
 
 	return symbolResolveResult{
-		Output:               formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
-		Status:               symbolResolveSingle,
-		Bundle:               bundle,
-		SemanticShadowBundle: semanticShadowBundle,
+		Output:                 formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
+		Status:                 symbolResolveSingle,
+		Bundle:                 bundle,
+		SemanticShadowBundle:   semanticShadow.Bundle,
+		SemanticShadowEvidence: semanticShadow.Evidence,
 	}
 }
 

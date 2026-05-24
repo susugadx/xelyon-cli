@@ -18,6 +18,15 @@ func assertSemanticReferenceKindCount(t *testing.T, refs []SemanticReference, ki
 	}
 }
 
+func assertSemanticDefinitionAttributes(t *testing.T, def SemanticDefinition, exported, implementation, declaration bool) {
+	t.Helper()
+	if def.Exported != exported || def.Implementation != implementation || def.Declaration != declaration {
+		t.Fatalf("definition attributes = exported:%v implementation:%v declaration:%v, want %v/%v/%v; definition=%+v",
+			def.Exported, def.Implementation, def.Declaration,
+			exported, implementation, declaration, def)
+	}
+}
+
 func assertSymbolBundleSectionSummary(t *testing.T, bundle *SymbolBundle, kind string, wantTotal int, wantMore bool) {
 	t.Helper()
 	section := symbolBundleSectionByKind(bundle, kind)

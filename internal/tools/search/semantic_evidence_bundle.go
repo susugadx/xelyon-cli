@@ -44,7 +44,10 @@ func buildSymbolBundleFromSemanticEvidence(evidence SemanticEvidence) (*SymbolBu
 	}
 
 	if reads := semanticEvidenceRecommendedReads(evidence, definition); len(reads) > 0 {
-		bundle.Impact = &SymbolBundleImpact{RecommendedReads: reads}
+		bundle.Impact = &SymbolBundleImpact{
+			RiskLevel:        strings.TrimSpace(evidence.RiskLevel),
+			RecommendedReads: reads,
+		}
 	}
 	finalizeSymbolBundleDiagnostics(bundle)
 	return bundle, true

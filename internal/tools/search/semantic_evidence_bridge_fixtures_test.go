@@ -17,6 +17,7 @@ func semanticEvidenceGoBuildInspectFixture() navigation.InspectResult {
 			Line:      3,
 			EndLine:   5,
 			Signature: "func Build() string",
+			Exported:  true,
 			RootPath:  "/repo",
 		},
 		Body: []string{
@@ -69,6 +70,7 @@ func semanticEvidenceGoRunInspectFixture(stableKey string) navigation.InspectRes
 			Receiver:     "*Agent",
 			ReceiverNorm: "Agent",
 			Signature:    "func (a *Agent) Run() error",
+			Exported:     true,
 			PackageDir:   "pkg",
 			StableKey:    stableKey,
 		},

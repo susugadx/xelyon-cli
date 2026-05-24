@@ -40,18 +40,21 @@ func semanticEvidenceFromGoInspectResult(query string, result navigation.Inspect
 
 func semanticDefinitionFromGoCandidate(candidate navigation.SymbolCandidate, body []string, diagnostics SymbolBundleDiagnostics) SemanticDefinition {
 	return SemanticDefinition{
-		Name:        candidate.Name,
-		DisplayName: goSymbolBundleDisplayName(candidate),
-		Canonical:   canonicalGoSymbolBundleKey(candidate),
-		Kind:        candidate.Kind,
-		File:        candidate.File,
-		Line:        candidate.Line,
-		EndLine:     candidate.EndLine,
-		Signature:   candidate.Signature,
-		Body:        append([]string(nil), body...),
-		RootPath:    candidate.RootPath,
-		Source:      diagnostics.ResolvedBy,
-		Confidence:  diagnostics.Confidence,
+		Name:           candidate.Name,
+		DisplayName:    goSymbolBundleDisplayName(candidate),
+		Canonical:      canonicalGoSymbolBundleKey(candidate),
+		Kind:           candidate.Kind,
+		Exported:       candidate.Exported,
+		Implementation: true,
+		Declaration:    false,
+		File:           candidate.File,
+		Line:           candidate.Line,
+		EndLine:        candidate.EndLine,
+		Signature:      candidate.Signature,
+		Body:           append([]string(nil), body...),
+		RootPath:       candidate.RootPath,
+		Source:         diagnostics.ResolvedBy,
+		Confidence:     diagnostics.Confidence,
 	}
 }
 
@@ -140,6 +143,10 @@ func semanticEvidenceFromJSFamilyRefs(language, symbol string, def genericSymbol
 }
 
 func semanticEvidenceFromJSFamilyRefsWithTotals(language, symbol string, def genericSymbolDef, refs []genericSymbolRef, totalRefs []genericSymbolRef, diagnostics SymbolBundleDiagnostics) (SemanticEvidence, bool) {
+	return semanticEvidenceFromJSFamilyRefsWithRiskLevel(language, symbol, def, refs, totalRefs, diagnostics, "")
+}
+
+func semanticEvidenceFromJSFamilyRefsWithRiskLevel(language, symbol string, def genericSymbolDef, refs []genericSymbolRef, totalRefs []genericSymbolRef, diagnostics SymbolBundleDiagnostics, riskLevelOverride string) (SemanticEvidence, bool) {
 	if strings.TrimSpace(def.File) == "" || def.Line <= 0 {
 		return SemanticEvidence{}, false
 	}
@@ -151,31 +158,82 @@ func semanticEvidenceFromJSFamilyRefsWithTotals(language, symbol string, def gen
 	filteredRefs := filterGenericRefs(refs, def)
 	filteredTotalRefs := filterGenericRefs(totalRefs, def)
 	semanticRefs, sectionSummaries := semanticEvidenceFromJSFamilyReferenceGroups(def, filteredRefs, filteredTotalRefs, diagnostics)
+	definitionFacts := semanticEvidenceJSFamilyDefinitionFactsForRefs(language, def, filteredRefs, filteredTotalRefs, riskLevelOverride)
 	evidence := SemanticEvidence{
-		Language: strings.TrimSpace(language),
-		Query:    symbol,
-		Symbol:   symbol,
-		Definitions: []SemanticDefinition{{
-			Name:       def.Name,
-			Kind:       def.Kind,
-			File:       def.File,
-			Line:       def.Line,
-			EndLine:    def.Line,
-			Signature:  def.Signature,
-			Body:       []string{fmt.Sprintf("%d: %s", def.Line, def.Signature)},
-			Source:     diagnostics.ResolvedBy,
-			Confidence: diagnostics.Confidence,
-		}},
+		Language:          strings.TrimSpace(language),
+		Query:             symbol,
+		Symbol:            symbol,
+		Definitions:       []SemanticDefinition{semanticDefinitionFromJSFamilyDef(def, diagnostics, definitionFacts)},
 		References:        semanticRefs,
 		ReferenceSections: sectionSummaries,
 		Diagnostics:       &diagnostics,
 		Source:            diagnostics.ResolvedBy,
 		Confidence:        diagnostics.Confidence,
+		RiskLevel:         definitionFacts.RiskLevel,
 	}
 	if semanticDefinitionDisplayName(evidence, evidence.Definitions[0]) == "" {
 		return SemanticEvidence{}, false
 	}
 	return evidence, true
+}
+
+type semanticEvidenceJSFamilyDefinitionFacts struct {
+	Exported       bool
+	Implementation bool
+	Declaration    bool
+	RiskLevel      string
+}
+
+func semanticEvidenceJSFamilyDefinitionFactsForRefs(language string, def genericSymbolDef, refs []genericSymbolRef, totalRefs []genericSymbolRef, riskLevelOverride string) semanticEvidenceJSFamilyDefinitionFacts {
+	facts := semanticEvidenceJSFamilyDefinitionFacts{
+		Implementation: semanticEvidenceJSFamilyDefinitionIsImplementation(def),
+		Declaration:    semanticEvidenceJSFamilyDefinitionIsDeclaration(def),
+		RiskLevel:      strings.TrimSpace(riskLevelOverride),
+	}
+
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "typescript":
+		impactRefs := typeScriptImpactRefsForDisplayAndTotalRefs(def, refs, totalRefs, SearchOptions{})
+		facts.Exported = typeScriptDefinitionIsExported(def, impactRefs)
+		if facts.RiskLevel == "" {
+			facts.RiskLevel = classifyTypeScriptImpactRisk(def, impactRefs)
+		}
+	case "javascript":
+		impactRefs := javaScriptImpactRefsForDisplayAndTotalRefs(def, refs, totalRefs, SearchOptions{})
+		facts.Exported = javaScriptDefinitionIsExported(def, impactRefs)
+		if facts.RiskLevel == "" {
+			facts.RiskLevel = classifyJavaScriptImpactRisk(def, impactRefs)
+		}
+	default:
+		facts.Exported = def.Exported || jsFamilySignatureStartsWithExport(def.Signature) || jsFamilyRefsContainExport(totalRefs)
+	}
+
+	return facts
+}
+
+func semanticDefinitionFromJSFamilyDef(def genericSymbolDef, diagnostics SymbolBundleDiagnostics, facts semanticEvidenceJSFamilyDefinitionFacts) SemanticDefinition {
+	return SemanticDefinition{
+		Name:           def.Name,
+		Kind:           def.Kind,
+		Exported:       facts.Exported,
+		Implementation: facts.Implementation,
+		Declaration:    facts.Declaration,
+		File:           def.File,
+		Line:           def.Line,
+		EndLine:        def.Line,
+		Signature:      def.Signature,
+		Body:           []string{fmt.Sprintf("%d: %s", def.Line, def.Signature)},
+		Source:         diagnostics.ResolvedBy,
+		Confidence:     diagnostics.Confidence,
+	}
+}
+
+func semanticEvidenceJSFamilyDefinitionIsImplementation(def genericSymbolDef) bool {
+	return isTypeScriptImplementationFilePath(def.File) || isJavaScriptSourceFilePath(def.File)
+}
+
+func semanticEvidenceJSFamilyDefinitionIsDeclaration(def genericSymbolDef) bool {
+	return isTypeScriptDeclarationFilePath(def.File)
 }
 
 func semanticEvidenceFromJSFamilyReferenceGroups(def genericSymbolDef, refs []genericSymbolRef, totalRefs []genericSymbolRef, diagnostics SymbolBundleDiagnostics) ([]SemanticReference, []SemanticReferenceSection) {

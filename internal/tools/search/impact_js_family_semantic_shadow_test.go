@@ -110,6 +110,28 @@ func TestJSFamilySemanticEvidenceShadowBundle_PreservesMixedFallbackDiagnostics(
 	assertJSFamilyShadowConfidence(t, result, symbolBundleConfidenceLow)
 }
 
+func TestJSFamilySemanticEvidenceShadowBundle_PreservesRiskAndEvidenceAttributes(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/build.ts": "export function buildUser(id: string) { return id }\n",
+		"src/app.ts":   "import { buildUser } from './build'\nbuildUser('semantic')\n",
+	})
+
+	result := resolveStructuredTypeScriptImpactSymbol("buildUser", structuredImpactSameScope(newTypeScriptImpactSearchOptions(dir, "buildUser")))
+
+	assertJSFamilySemanticShadowBundleEquivalent(t, result)
+	if result.SemanticShadowEvidence == nil {
+		t.Fatal("SemanticShadowEvidence = nil, want shadow evidence")
+	}
+	evidence := result.SemanticShadowEvidence
+	if evidence.RiskLevel != result.Bundle.Impact.RiskLevel {
+		t.Fatalf("shadow evidence RiskLevel = %q, want production risk %q", evidence.RiskLevel, result.Bundle.Impact.RiskLevel)
+	}
+	if len(evidence.Definitions) != 1 {
+		t.Fatalf("shadow evidence definitions = %+v, want one definition", evidence.Definitions)
+	}
+	assertSemanticDefinitionAttributes(t, evidence.Definitions[0], true, true, false)
+}
+
 func TestBuildSymbolBundleFromSemanticEvidenceDedupeRecommendedReadsByLocationOnly(t *testing.T) {
 	evidence := SemanticEvidence{
 		Language: "typescript",
@@ -164,6 +186,12 @@ func assertJSFamilySemanticShadowBundleEquivalent(t *testing.T, result symbolRes
 	}
 	if bundle.Diagnostics.ResolvedBy != shadow.Diagnostics.ResolvedBy || bundle.Diagnostics.Confidence != shadow.Diagnostics.Confidence {
 		t.Fatalf("shadow diagnostics = resolved_by:%q confidence:%q, want %q/%q", shadow.Diagnostics.ResolvedBy, shadow.Diagnostics.Confidence, bundle.Diagnostics.ResolvedBy, bundle.Diagnostics.Confidence)
+	}
+	if bundle.Impact == nil || shadow.Impact == nil {
+		t.Fatalf("impact presence mismatch: bundle=%+v shadow=%+v", bundle.Impact, shadow.Impact)
+	}
+	if bundle.Impact.RiskLevel != shadow.Impact.RiskLevel {
+		t.Fatalf("shadow risk = %q, want %q", shadow.Impact.RiskLevel, bundle.Impact.RiskLevel)
 	}
 
 	assertJSFamilyShadowFirstRecommendedRead(t, bundle, shadow)

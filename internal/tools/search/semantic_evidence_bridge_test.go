@@ -24,6 +24,7 @@ func TestSemanticEvidenceFromGoInspectResult(t *testing.T) {
 	if def.File != "pkg/build.go" || def.Line != 3 || def.RootPath != "/repo" || len(def.Body) != 3 {
 		t.Fatalf("definition = %+v, want Go candidate details", def)
 	}
+	assertSemanticDefinitionAttributes(t, def, true, true, false)
 	assertSemanticReferenceKindCount(t, evidence.References, SemanticReferenceKindCaller, 1)
 	assertSemanticReferenceKindCount(t, evidence.References, SemanticReferenceKindReference, 1)
 	assertSemanticReferenceKindCount(t, evidence.References, SemanticReferenceKindTest, 1)
@@ -132,6 +133,7 @@ func TestSemanticEvidenceFromJSFamilyRefs(t *testing.T) {
 	if len(evidence.Definitions) != 1 || evidence.Definitions[0].File != "src/Button.tsx" {
 		t.Fatalf("definitions = %+v, want Button definition", evidence.Definitions)
 	}
+	assertSemanticDefinitionAttributes(t, evidence.Definitions[0], true, true, false)
 	assertSemanticReferenceKindCount(t, evidence.References, SemanticReferenceKindCaller, 1)
 	assertSemanticReferenceKindCount(t, evidence.References, SemanticReferenceKindExport, 1)
 	assertSemanticReferenceKindCount(t, evidence.References, SemanticReferenceKindTypeRef, 1)

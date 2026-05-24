@@ -32,24 +32,28 @@ type SemanticEvidence struct {
 	Diagnostics       *SymbolBundleDiagnostics
 	Source            string
 	Confidence        string
+	RiskLevel         string
 }
 
 // SemanticDefinition は編集起点になる定義 evidence。
 type SemanticDefinition struct {
-	Name         string
-	Symbol       string
-	DisplayName  string
-	Canonical    string
-	Kind         string
-	File         string
-	ResolvedPath string
-	Line         int
-	EndLine      int
-	Signature    string
-	Body         []string
-	RootPath     string
-	Source       string
-	Confidence   string
+	Name           string
+	Symbol         string
+	DisplayName    string
+	Canonical      string
+	Kind           string
+	Exported       bool
+	Implementation bool
+	Declaration    bool
+	File           string
+	ResolvedPath   string
+	Line           int
+	EndLine        int
+	Signature      string
+	Body           []string
+	RootPath       string
+	Source         string
+	Confidence     string
 }
 
 // SemanticReferenceSection は参照 section の全体件数と省略有無を運ぶ。
