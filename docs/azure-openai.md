@@ -88,7 +88,7 @@ tool payload まで確認する場合:
 xelyon doctor azure --deployment corp-gpt55-prod --catalog-model gpt-5.5 --tool-smoke
 ```
 
-`--capabilities` と `--require-capability` は live API request を送りません。`--require-capability` で指定できる名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`previous_response_id`、`session_persistence`、`server_compaction` です。`responses_streaming` は `catalog_model` が未解決の場合 `unknown` として fail するため、`--catalog-model` か config の `catalog_model` を指定してください。`--smoke` / `--tool-smoke` は live API request を送ります。単なる設定確認では付けないでください。
+`--capabilities` と `--require-capability` は live API request を送りません。`--require-capability` で指定できる名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`web_search`、`thinking`、`previous_response_id`、`session_persistence`、`server_compaction`、`local_model_available` です。`responses_streaming` は `catalog_model` が未解決の場合 `unknown` として fail するため、`--catalog-model` か config の `catalog_model` を指定してください。`thinking` は Responses route だけでなく、通常の request builder が reasoning payload を送る設定または Codex の reasoning fallback を確認できた場合だけ pass します。`--smoke` / `--tool-smoke` は live API request を送ります。単なる設定確認では付けないでください。
 
 ## 認証方式の優先順位
 

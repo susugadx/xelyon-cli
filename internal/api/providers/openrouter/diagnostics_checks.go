@@ -182,11 +182,12 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 		return
 	}
 	if !openRouterCatalogModelKnown(catalogModel) {
+		policy := providerdiag.OpenRouterCatalogPolicy(cfg, model, catalogModel)
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
 			"catalog_model is not an OpenRouter model known to local metadata",
-			fmt.Sprintf("catalog_model=%s, context_window=unknown, max_output_tokens=unknown, pricing=unavailable", catalogModel),
+			policy.OpenRouterDetail(),
 			"Use an OpenRouter model known to XELYON before relying on token-limit diagnostics",
 		)
 		return
@@ -194,18 +195,18 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 
 	catalogUse := resolveOpenRouterDiagnosticCatalogModelUse(model, catalogModel)
 	if !catalogUse.Trusted {
+		policy := providerdiag.OpenRouterCatalogPolicy(cfg, model, catalogUse.PolicyCatalogModel)
 		if strings.TrimSpace(catalogUse.PolicyCatalogModel) == "" || !openRouterCatalogModelKnown(catalogUse.PolicyCatalogModel) {
 			r.addCheck(
 				DiagnosticStatusWarn,
 				"catalog_policy",
 				"catalog_model is not trusted for this OpenRouter request model",
-				fmt.Sprintf("%s, context_window=unknown, max_output_tokens=unknown, pricing=unavailable", catalogUse.MismatchDetail),
+				fmt.Sprintf("%s; %s", catalogUse.MismatchDetail, openRouterDiagnosticCatalogPolicyDetail(policy, catalogModel)),
 				catalogUse.MismatchSuggestion,
 			)
 			return
 		}
 
-		policy := providerdiag.OpenRouterCatalogPolicy(cfg, model, catalogUse.PolicyCatalogModel)
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
@@ -290,10 +291,20 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke, err := runOpenRouterDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.TextToolSmokeFailureContext(
+			providerdiag.SmokeFailureContextOptions{
+				Provider:         "OpenRouter",
+				AuthEnv:          openRouterAPIKeyEnv,
+				EndpointEnv:      openRouterAPIURLEnv,
+				EndpointOverride: strings.TrimSpace(os.Getenv(openRouterAPIURLEnv)) != "",
+			},
+			smoke,
+			err,
+		))
 		if openRouterSmokeErrorIsToolFailure(smoke) {
-			r.addCheck(DiagnosticStatusFail, "tool_smoke", "OpenRouter tool smoke response did not include the diagnostic tool call", err.Error(), "")
+			r.addCheck(DiagnosticStatusFail, "tool_smoke", "OpenRouter tool smoke response did not include the diagnostic tool call", failure.Detail, failure.Suggestion)
 		}
-		r.addCheck(DiagnosticStatusFail, "smoke", "live OpenRouter smoke request failed", err.Error(), "")
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live OpenRouter smoke request succeeded", smoke.Duration, "")

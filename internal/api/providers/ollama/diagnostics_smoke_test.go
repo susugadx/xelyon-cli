@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -128,6 +129,10 @@ func TestDiagnoseOllama_ToolSmokeFailsWithoutToolCall(t *testing.T) {
 	check, ok := ollamaDiagnosticCheckByName(report, "tool_smoke")
 	if !ok || check.Status != DiagnosticStatusFail {
 		t.Fatalf("tool_smoke check = %#v, %v; want fail", check, ok)
+	}
+	smoke, ok := ollamaDiagnosticCheckByName(report, "smoke")
+	if !ok || smoke.Status != DiagnosticStatusFail || !strings.Contains(smoke.Message, "function calling smoke was not accepted") {
+		t.Fatalf("smoke check = %#v, %v; want common feature classification", smoke, ok)
 	}
 }
 

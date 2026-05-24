@@ -105,6 +105,8 @@ func TestRootCommand_OpenRouterDoctorHelpShowsMinimalFlags(t *testing.T) {
 		"--catalog-model",
 		"--smoke",
 		"--tool-smoke",
+		"--capabilities",
+		"--require-capability",
 		"--print-request",
 		"--timeout",
 		"--json",
@@ -116,7 +118,7 @@ func TestRootCommand_OpenRouterDoctorHelpShowsMinimalFlags(t *testing.T) {
 			t.Fatalf("output = %q, want OpenRouter doctor help substring %q", out.String(), want)
 		}
 	}
-	for _, unwanted := range []string{"--capabilities", "--require-capability", "--retention-smoke", "--image-smoke", "--web-search-smoke", "--thinking-smoke", "--print-config"} {
+	for _, unwanted := range []string{"--retention-smoke", "--image-smoke", "--web-search-smoke", "--thinking-smoke", "--print-config"} {
 		if strings.Contains(out.String(), unwanted) {
 			t.Fatalf("output = %q, should not contain %s", out.String(), unwanted)
 		}

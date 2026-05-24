@@ -134,19 +134,18 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 	if model == "" || catalogModel == "" {
 		return
 	}
+	policy := providerdiag.GroqCatalogPolicy(cfg, model, catalogModel)
+	detail := policy.GroqDetail()
 	if !groqCatalogModelKnown(catalogModel) {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
 			"catalog_model is not a Groq model known to local metadata",
-			fmt.Sprintf("catalog_model=%s, context_window=unknown, max_output_tokens=unknown, pricing=unavailable", catalogModel),
+			detail,
 			"Use a Groq model known to XELYON before relying on token-limit diagnostics",
 		)
 		return
 	}
-
-	policy := providerdiag.GroqCatalogPolicy(cfg, model, catalogModel)
-	detail := policy.GroqDetail()
 
 	switch {
 	case !policy.ContextWindowKnown:
@@ -198,10 +197,20 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke, err := runGroqDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.TextToolSmokeFailureContext(
+			providerdiag.SmokeFailureContextOptions{
+				Provider:         "Groq",
+				AuthEnv:          groqAPIKeyEnv,
+				EndpointEnv:      groqAPIURLEnv,
+				EndpointOverride: strings.TrimSpace(os.Getenv(groqAPIURLEnv)) != "",
+			},
+			smoke,
+			err,
+		))
 		if groqSmokeErrorIsToolFailure(smoke) {
-			r.addCheck(DiagnosticStatusFail, "tool_smoke", "Groq tool smoke response did not include the diagnostic tool call", err.Error(), "")
+			r.addCheck(DiagnosticStatusFail, "tool_smoke", "Groq tool smoke response did not include the diagnostic tool call", failure.Detail, failure.Suggestion)
 		}
-		r.addCheck(DiagnosticStatusFail, "smoke", "live Groq smoke request failed", err.Error(), "")
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live Groq smoke request succeeded", smoke.Duration, "")

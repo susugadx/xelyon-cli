@@ -21,10 +21,11 @@ model/catalog model resolution, OpenAI-compatible vs Anthropic Skin route
 selection, image input support, function calling settings, and token/cost
 metadata. Use --smoke to send a minimal live request through the selected
 route. Use --tool-smoke to force a dummy diagnostic tool call when function
-calling is enabled. Use --print-request to print the sanitized smoke request
-JSON without sending it. OPENROUTER_API_URL must be a Chat Completions endpoint
-or compatible proxy path; Anthropic Skin /v1/messages is derived by the
-provider and should not be configured directly.`,
+calling is enabled. Use --capabilities or --require-capability to verify
+resolved local capabilities without sending a live request. Use --print-request
+to print the sanitized smoke request JSON without sending it. OPENROUTER_API_URL
+must be a Chat Completions endpoint or compatible proxy path; Anthropic Skin
+/v1/messages is derived by the provider and should not be configured directly.`,
 		Args: cobra.NoArgs,
 		RunE: runOpenRouterDoctorInvocation,
 	}
@@ -33,6 +34,8 @@ provider and should not be configured directly.`,
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor openrouter' token/pricing policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal OpenRouter text smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live OpenRouter smoke request that forces a dummy tool call")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved OpenRouter model capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	addDoctorTimeoutFlag(cmd, "openrouter", "")
 	addDoctorJSONFlag(cmd, "openrouter")
 	addDoctorPrintRequestFlag(cmd, "openrouter")
@@ -48,14 +51,16 @@ func runOpenRouterDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := openrouterprovider.Diagnose(cmd.Context(), openrouterprovider.DiagnosticOptions{
-		Config:       cfg,
-		Model:        doctorOpenRouterModelFlag,
-		CatalogModel: doctorCatalogModelFlag,
-		RunSmoke:     !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag),
-		TextSmoke:    doctorSmokeFlag,
-		ToolSmoke:    doctorToolSmokeFlag,
-		PrintRequest: doctorPrintRequestFlag,
-		SmokeTimeout: doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                doctorOpenRouterModelFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]openrouterprovider.DiagnosticCheck{{
@@ -102,6 +107,11 @@ func renderOpenRouterDoctorText(w io.Writer, report openrouterprovider.Diagnosti
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, openRouterDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
 
 	if report.RequestPreview != nil {
 		renderDoctorRequestPreviewSection(w, report.RequestPreview)

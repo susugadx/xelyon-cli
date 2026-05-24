@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const defaultBedrockDiagnosticAWSAuthTimeout = 10 * time.Second
@@ -159,7 +160,12 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	r.Smoke = &smoke
 	r.addSmokeObservationChecks(smoke)
 	if err != nil {
-		r.addCheck(DiagnosticStatusFail, "smoke", "live Bedrock smoke request failed", err.Error(), "")
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.InvocationSmokeFailureContext(
+			providerdiag.SmokeFailureContextOptions{Provider: "Bedrock"},
+			smoke,
+			err,
+		))
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live Bedrock smoke requests completed", "", "")

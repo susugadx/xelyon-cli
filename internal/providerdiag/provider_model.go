@@ -132,3 +132,58 @@ func IsProviderCatalogModelKnown(provider, model string) bool {
 	}
 	return llmcatalog.IsKnownModelNameForProvider(provider, model) || cost.HasKnownPricingModel(provider, model)
 }
+
+// IsProviderCatalogModelListed は provider catalog に exact model として載る場合だけ true を返す。
+// prefix や pricing-only metadata は、model-gated capability の証跡としては扱わない。
+func IsProviderCatalogModelListed(provider, model string) bool {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return false
+	}
+	for _, known := range llmcatalog.KnownModelNamesForProvider(provider) {
+		if strings.EqualFold(model, known) {
+			return true
+		}
+	}
+	return false
+}
+
+type modelCapabilityLookup func(provider, model string) (bool, bool)
+
+// ModelGatedImageInputAvailability は trusted catalog model から画像入力可否を返す。
+func ModelGatedImageInputAvailability(provider, model, catalogModel string, providerPathAvailable bool) CapabilityAvailability {
+	return modelGatedCapabilityAvailability(provider, model, catalogModel, providerPathAvailable, llmcatalog.KnownImageInputSupport)
+}
+
+// ModelGatedWebSearchAvailability は trusted catalog model から native web search 可否を返す。
+func ModelGatedWebSearchAvailability(provider, model, catalogModel string, providerPathAvailable bool) CapabilityAvailability {
+	return modelGatedCapabilityAvailability(provider, model, catalogModel, providerPathAvailable, llmcatalog.KnownWebSearchSupport)
+}
+
+func modelGatedCapabilityAvailability(provider, model, catalogModel string, providerPathAvailable bool, lookup modelCapabilityLookup) CapabilityAvailability {
+	if !providerPathAvailable {
+		return KnownCapabilityAvailability(false)
+	}
+	if available, ok := knownCapabilityForTrustedCatalog(provider, catalogModel, lookup); ok {
+		return KnownCapabilityAvailability(available)
+	}
+	if available, ok := knownCapabilityForTrustedCatalog(provider, model, lookup); ok {
+		return KnownCapabilityAvailability(available)
+	}
+	return UnknownCapabilityAvailability()
+}
+
+func knownCapabilityForTrustedCatalog(provider, model string, lookup modelCapabilityLookup) (bool, bool) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return false, false
+	}
+	trustProvider := provider
+	if config.NormalizeProviderName(provider) == "azure" {
+		trustProvider = "openai"
+	}
+	if !IsProviderCatalogModelListed(trustProvider, model) {
+		return false, false
+	}
+	return lookup(provider, model)
+}

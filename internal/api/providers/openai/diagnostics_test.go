@@ -90,178 +90,6 @@ func TestDiagnoseOpenAI_ModelPolicyRouteAndFunctionCalling(t *testing.T) {
 	}
 }
 
-func TestDiagnoseOpenAI_CapabilitiesDoNotRequireAPIKey(t *testing.T) {
-	t.Setenv(openAIAPIKeyEnv, "")
-	t.Setenv(openAIAPIURLEnv, "")
-	t.Setenv(openAIResponsesURLEnv, "")
-	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:       config.DefaultConfig(),
-		Model:        "corp-openai-deployment",
-		CatalogModel: "gpt-5.4",
-		Capabilities: true,
-	})
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want capabilities without API key to succeed: %#v", report.Checks)
-	}
-	if _, ok := openAIDiagnosticCheckByName(report, "auth"); ok {
-		t.Fatalf("auth check was added for capabilities-only report: %#v", report.Checks)
-	}
-	if report.Capabilities == nil {
-		t.Fatal("Capabilities = nil, want resolved capabilities")
-	}
-	capabilities := report.Capabilities
-	if !capabilities.ResponsesAPI || !capabilities.ResponsesStreaming || capabilities.ChatCompletions {
-		t.Fatalf("route capabilities = %+v, want Responses streaming only", capabilities)
-	}
-	if !capabilities.FunctionCalling || !capabilities.ImageInput {
-		t.Fatalf("tool/image capabilities = %+v, want enabled", capabilities)
-	}
-	if !capabilities.Retention.PreviousResponseID || !capabilities.Retention.SessionPersistence {
-		t.Fatalf("retention capabilities = %+v, want previous_response_id and session persistence", capabilities.Retention)
-	}
-	if !capabilities.ServerCompaction.Enabled || !capabilities.ServerCompaction.RequestPayload || capabilities.ServerCompaction.CompactThreshold <= 0 {
-		t.Fatalf("server compaction capabilities = %+v, want request payload with compact_threshold", capabilities.ServerCompaction)
-	}
-	if capabilities.ContextWindowTokens != 1000000 || !capabilities.ContextWindowKnown {
-		t.Fatalf("context capability = %+v, want gpt-5.4 context window", capabilities)
-	}
-	if capabilities.MaxOutputTokens != 16384 || !capabilities.MaxOutputTokensKnown || capabilities.MaxOutputTokensSource != "provider_default" {
-		t.Fatalf("max output capability = %+v, want provider default max output", capabilities)
-	}
-	if !capabilities.Pricing.Available {
-		t.Fatalf("pricing capability = %+v, want available pricing", capabilities.Pricing)
-	}
-	if !hasOpenAIDiagnosticCheck(report, "capabilities", DiagnosticStatusOK) {
-		t.Fatalf("missing capabilities OK check: %#v", report.Checks)
-	}
-}
-
-func TestDiagnoseOpenAI_CapabilitiesShowChatCompletionsLimitations(t *testing.T) {
-	t.Setenv(openAIAPIKeyEnv, "")
-	t.Setenv(openAIAPIURLEnv, "")
-	t.Setenv(openAIResponsesURLEnv, "")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:       config.DefaultConfig(),
-		Model:        "gpt-4",
-		CatalogModel: "gpt-4",
-		Capabilities: true,
-	})
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want capabilities without API key to succeed: %#v", report.Checks)
-	}
-	if report.Capabilities == nil {
-		t.Fatal("Capabilities = nil, want resolved capabilities")
-	}
-	if report.Capabilities.ResponsesAPI || !report.Capabilities.ChatCompletions {
-		t.Fatalf("route capabilities = %+v, want Chat Completions route", report.Capabilities)
-	}
-	if report.Capabilities.Retention.PreviousResponseID {
-		t.Fatalf("retention capabilities = %+v, want no previous_response_id on Chat Completions", report.Capabilities.Retention)
-	}
-	if report.Capabilities.Retention.SessionPersistence {
-		t.Fatalf("retention capabilities = %+v, want no session persistence on Chat Completions", report.Capabilities.Retention)
-	}
-	if report.Capabilities.ServerCompaction.RequestPayload {
-		t.Fatalf("server compaction capabilities = %+v, want no request payload on Chat Completions", report.Capabilities.ServerCompaction)
-	}
-}
-
-func TestDiagnoseOpenAI_RequiredCapabilitiesDoNotRequireAPIKey(t *testing.T) {
-	t.Setenv(openAIAPIKeyEnv, "")
-	t.Setenv(openAIAPIURLEnv, "")
-	t.Setenv(openAIResponsesURLEnv, "")
-	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:               config.DefaultConfig(),
-		Model:                "corp-openai-deployment",
-		CatalogModel:         "gpt-5.4",
-		RequiredCapabilities: []string{"responses_api", "previous_response_id", "server_compaction"},
-	})
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want local required capability check to pass without API key: %#v", report.Checks)
-	}
-	if _, ok := openAIDiagnosticCheckByName(report, "auth"); ok {
-		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
-	}
-	if report.Capabilities != nil {
-		t.Fatalf("Capabilities = %#v, want nil without --capabilities", report.Capabilities)
-	}
-	check, ok := openAIDiagnosticCheckByName(report, "required_capability")
-	if !ok || check.Status != DiagnosticStatusOK {
-		t.Fatalf("required_capability check = %#v, %v; want ok", check, ok)
-	}
-	for _, want := range []string{"responses_api=ok", "previous_response_id=ok", "server_compaction=ok"} {
-		if !strings.Contains(check.Detail, want) {
-			t.Fatalf("required_capability detail = %q, want %q", check.Detail, want)
-		}
-	}
-}
-
-func TestDiagnoseOpenAI_RequiredCapabilityFailsWhenMissing(t *testing.T) {
-	t.Setenv(openAIAPIKeyEnv, "")
-	t.Setenv(openAIAPIURLEnv, "")
-	t.Setenv(openAIResponsesURLEnv, "")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:               config.DefaultConfig(),
-		Model:                "gpt-5.5-pro",
-		CatalogModel:         "gpt-5.5-pro",
-		RequiredCapabilities: []string{"responses_streaming"},
-	})
-	if !report.HasFailures() {
-		t.Fatalf("HasFailures() = false, want missing required capability failure: %#v", report.Checks)
-	}
-	if _, ok := openAIDiagnosticCheckByName(report, "auth"); ok {
-		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
-	}
-	check, ok := openAIDiagnosticCheckByName(report, "required_capability")
-	if !ok || check.Status != DiagnosticStatusFail {
-		t.Fatalf("required_capability check = %#v, %v; want fail", check, ok)
-	}
-	if !strings.Contains(check.Detail, "responses_streaming=missing") {
-		t.Fatalf("required_capability detail = %q, want missing streaming", check.Detail)
-	}
-}
-
-func TestDiagnoseOpenAI_RequiredCapabilityStreamingUnknownForCustomResponsesModelWithoutCatalogModel(t *testing.T) {
-	t.Setenv(openAIAPIKeyEnv, "")
-	t.Setenv(openAIAPIURLEnv, "")
-	t.Setenv(openAIResponsesURLEnv, "")
-
-	cfg := config.DefaultConfig()
-	cfg.OpenAI.ResponsesAPIModels = append(cfg.OpenAI.ResponsesAPIModels, "corp-gpt55-pro-alias")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:               cfg,
-		Model:                "corp-gpt55-pro-alias",
-		RequiredCapabilities: []string{"responses_streaming"},
-	})
-	if !report.HasFailures() {
-		t.Fatalf("HasFailures() = false, want unknown required capability failure: %#v", report.Checks)
-	}
-	if _, ok := openAIDiagnosticCheckByName(report, "auth"); ok {
-		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
-	}
-	modelCheck, ok := openAIDiagnosticCheckByName(report, "model")
-	if !ok || modelCheck.Status != DiagnosticStatusWarn {
-		t.Fatalf("model check = %#v, %v; want unresolved catalog warning", modelCheck, ok)
-	}
-	check, ok := openAIDiagnosticCheckByName(report, "required_capability")
-	if !ok || check.Status != DiagnosticStatusFail {
-		t.Fatalf("required_capability check = %#v, %v; want fail", check, ok)
-	}
-	if !strings.Contains(check.Detail, "responses_streaming=unknown") {
-		t.Fatalf("required_capability detail = %q, want unknown streaming", check.Detail)
-	}
-	if !strings.Contains(check.Suggestion, "--catalog-model") {
-		t.Fatalf("required_capability suggestion = %q, want catalog model guidance", check.Suggestion)
-	}
-}
-
 func TestDiagnoseOpenAI_FunctionCallingDisabled(t *testing.T) {
 	t.Setenv(openAIAPIKeyEnv, "sk-test")
 	t.Setenv(openAIAPIURLEnv, "")
@@ -711,6 +539,68 @@ func TestDiagnoseOpenAI_RetentionSmokeFailsWhenFollowupRetriesWithoutPreviousRes
 	}
 	if report.Smoke == nil || len(report.Smoke.Requests) != 2 || !strings.Contains(report.Smoke.Requests[1].Error, "retried without proving previous_response_id") {
 		t.Fatalf("Smoke = %#v, want followup retry failure", report.Smoke)
+	}
+}
+
+func TestDiagnoseOpenAI_SmokeQuotaFailureUsesCommonClassifier(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"quota exceeded"}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(openAIAPIKeyEnv, "sk-test")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, server.URL)
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gpt-5.4",
+		CatalogModel: "gpt-5.4",
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want quota-classified smoke failure: %#v", report.Checks)
+	}
+	smokeCheck, ok := openAIDiagnosticCheckByName(report, "smoke")
+	if !ok || smokeCheck.Status != DiagnosticStatusFail || !strings.Contains(smokeCheck.Message, "quota, rate limit, or capacity") {
+		t.Fatalf("smoke check = %#v, %v; want common quota classification", smokeCheck, ok)
+	}
+	if !strings.Contains(smokeCheck.Detail, "request=text") || !strings.Contains(smokeCheck.Suggestion, "quota") {
+		t.Fatalf("smoke check = %#v, want request detail and quota suggestion", smokeCheck)
+	}
+}
+
+func TestDiagnoseOpenAI_SmokeRateLimitCodeUsesCommonClassifier(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"rate_limit_exceeded"}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(openAIAPIKeyEnv, "sk-test")
+	t.Setenv(openAIAPIURLEnv, "")
+	t.Setenv(openAIResponsesURLEnv, server.URL)
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gpt-5.4",
+		CatalogModel: "gpt-5.4",
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want rate-limit-classified smoke failure: %#v", report.Checks)
+	}
+	smokeCheck, ok := openAIDiagnosticCheckByName(report, "smoke")
+	if !ok || smokeCheck.Status != DiagnosticStatusFail || !strings.Contains(smokeCheck.Message, "quota, rate limit, or capacity") {
+		t.Fatalf("smoke check = %#v, %v; want common quota classification", smokeCheck, ok)
+	}
+	if !strings.Contains(smokeCheck.Detail, "rate_limit_exceeded") || !strings.Contains(smokeCheck.Suggestion, "quota") {
+		t.Fatalf("smoke check = %#v, want rate_limit_exceeded detail and quota suggestion", smokeCheck)
 	}
 }
 

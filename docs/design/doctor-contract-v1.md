@@ -27,14 +27,14 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | none |
 | Azure OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | `--deployment`, `--print-config` |
-| Kimi | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
-| Bedrock | yes | yes | yes | yes | yes | yes | no | no | no | no | yes | none |
-| DeepSeek | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
-| Gemini | yes | yes | yes | yes | yes | no | yes | no | no | no | yes | none |
-| Claude / Anthropic | yes | yes | yes | yes | yes | yes | yes | no | no | no | yes | none |
-| Groq | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
-| Ollama | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
-| OpenRouter | yes | yes | yes | yes | no | no | no | no | no | no | yes | none |
+| Kimi | yes | yes | yes | yes | yes | no | yes | no | yes | yes | yes | none |
+| Bedrock | yes | yes | yes | yes | yes | yes | no | no | yes | yes | yes | none |
+| DeepSeek | yes | yes | yes | yes | no | no | no | no | yes | yes | yes | none |
+| Gemini | yes | yes | yes | yes | yes | no | yes | no | yes | yes | yes | none |
+| Claude / Anthropic | yes | yes | yes | yes | yes | yes | yes | no | yes | yes | yes | none |
+| Groq | yes | yes | yes | yes | no | no | no | no | yes | yes | yes | none |
+| Ollama | yes | yes | yes | yes | no | no | no | no | yes | yes | yes | none |
+| OpenRouter | yes | yes | yes | yes | no | no | no | no | yes | yes | yes | none |
 
 ### Current Behavior Notes
 
@@ -44,6 +44,7 @@ OpenAI:
 - `OPENAI_API_URL` is an exact Chat Completions endpoint override. The official OpenAI path ends with `/v1/chat/completions`; other paths remain warn-only intentional proxy endpoints and are still used by request preview / live smoke.
 - `OPENAI_RESPONSES_URL` is an exact Responses endpoint override. The official OpenAI path ends with `/v1/responses`; other paths remain warn-only intentional proxy endpoints and are still used by request preview / live smoke.
 - Supports local `--capabilities`, `--require-capability`, and `--print-request`.
+- `thinking` capability follows runtime reasoning request support: Responses route alone is not enough; the selected model/config must produce a reasoning payload or model-required reasoning fallback. Chat Completions route is missing.
 - Live smoke supports text, tool, and Responses retention chain.
 - Main owner packages: `cmd/doctor_openai.go`, `internal/api/providers/openai/diagnostics*.go`, `internal/providerdiag`.
 
@@ -54,92 +55,96 @@ Azure OpenAI:
 - Deployment-scoped `/openai/deployments/<deployment>` URLs and public OpenAI hosts fail. `api-version` query parameters warn and are ignored. Non-standard paths remain warn-only intentional proxy base URLs and are still used by request preview / live smoke with `/responses` appended.
 - Supports local `--capabilities`, `--require-capability`, `--print-request`, and Azure-specific `--print-config`.
 - Live smoke supports text, tool, and Responses retention chain.
+- `thinking` capability follows runtime reasoning request support and passes only when a Responses route is resolved and the selected deployment/catalog config produces a reasoning payload or model-required reasoning fallback.
 - Main owner packages: `cmd/doctor.go`, `cmd/doctor_azure_config.go`, `internal/api/providers/azure/diagnostics*.go`, `internal/providerdiag`.
 
 Kimi:
 
 - Checks `MOONSHOT_API_KEY`, `KIMI_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, token / pricing metadata, image capability, unsupported native features, and prompt cache request shape.
 - `KIMI_API_URL` is an exact Chat Completions endpoint override. The official Moonshot path ends with `/v1/chat/completions`; other paths remain warn-only intentional proxy endpoints and are still used by request preview / live smoke.
-- Supports `--print-request`.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
+- Non-Kimi `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token, pricing, or capability policy.
 - Live smoke supports text, image, tool, and built-in `$web_search`.
-- Does not yet support `--capabilities` or `--require-capability`.
 - Main owner packages: `cmd/doctor_kimi.go`, `internal/api/providers/kimi/diagnostics*.go`, `internal/providerdiag`.
 
 Bedrock:
 
 - Checks AWS region / credentials, provider registration, model / `catalog_model`, route, function calling, catalog policy.
 - Live smoke supports text, tool, image, and thinking request types. Unsupported request shapes are reported as skipped.
-- Supports `--print-request`.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
+- `function_calling` capability follows the selected runtime route: Claude Messages route supports tool payloads, while ConverseStream requires a model with verified streaming tool use.
 - Request preview is credential-independent and records request name, route, Bedrock operation, conceptual runtime endpoint, model ID, redacted AWS SigV4 header, and request body without sending network traffic.
 - Claude family preview uses the same Claude Messages body builder as `InvokeModelWithResponseStream`; non-Claude preview uses the same `buildConverseStreamInput` builder as `ConverseStream`.
-- Does not yet support `--capabilities` or `--require-capability`.
 - Main owner packages: `cmd/doctor_bedrock.go`, `internal/api/providers/bedrock/diagnostics*.go`.
 
 Groq:
 
 - Checks `GROQ_API_KEY`, `GROQ_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, function calling, catalog policy.
 - `GROQ_API_URL` is an exact Chat Completions endpoint override. The official Groq path ends with `/openai/v1/chat/completions`; `/v1/chat/completions` remains a warn-only intentional proxy path.
-- Supports `--print-request`.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
+- Non-Groq `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token, pricing, or capability policy.
 - Live smoke supports text and tool request types. `GROQ_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
-- Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1.
+- Does not support image, thinking, web search, or retention smoke in v1.
 - Main owner packages: `cmd/doctor_groq.go`, `internal/api/providers/groq/diagnostics*.go`, `internal/providerdiag`.
 
 DeepSeek:
 
 - Checks `DEEPSEEK_API_KEY`, `DEEPSEEK_API_URL`, provider registration, model / `catalog_model`, Chat Completions route, thinking request config, function calling, catalog policy.
 - `DEEPSEEK_API_URL` is an exact Chat Completions endpoint override. The official DeepSeek-compatible path ends with `/chat/completions`; `/v1/chat/completions` remains a warn-only intentional proxy path.
-- Supports `--print-request`.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
+- Non-DeepSeek `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token, pricing, or capability policy.
 - Live smoke supports text and tool request types. `DEEPSEEK_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
-- Does not support `--capabilities`, `--require-capability`, image, web search, or retention smoke in v1. Thinking is reported from normal request config rather than a separate `--thinking-smoke`.
+- Does not support image, web search, or retention smoke in v1. Thinking is reported from normal request config rather than a separate `--thinking-smoke`.
 - Main owner packages: `cmd/doctor_deepseek.go`, `internal/api/providers/deepseek/diagnostics*.go`, `internal/providerdiag`.
 
 OpenRouter:
 
 - Checks `OPENROUTER_API_KEY`, `OPENROUTER_API_URL`, provider registration, model / `catalog_model`, OpenAI-compatible Chat Completions vs Anthropic Skin route, function calling, image input support, and catalog policy.
-- Supports `--print-request`.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
 - Live smoke supports text and tool request types on the selected runtime route. `OPENROUTER_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
-- Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1. `image_input` is a local provider-level check only.
+- Does not support image, thinking, web search, or retention smoke in v1. `image_input` has a provider request path, but `--require-capability image_input` is model-gated and only passes when trusted OpenRouter catalog metadata proves the selected upstream model supports images.
 - Route selection follows the runtime request model. A configured alias whose `catalog_model` is Claude still reports Chat Completions unless the request model itself is `anthropic/claude-*`.
 - A direct routed OpenRouter request model cannot be re-described by a different known routed `catalog_model`; mismatch is warn and token / pricing policy falls back to the request model when local metadata is available.
+- `--capabilities` uses the same trusted policy catalog as `catalog_policy`; untrusted routed `catalog_model` values do not leak token / pricing metadata into the capability DTO.
 - `OPENROUTER_API_URL` is treated as a Chat Completions endpoint or compatible proxy path. Messages endpoints such as `/v1/messages` fail because Anthropic Skin `/v1/messages` is derived by the provider.
 - Main owner packages: `cmd/doctor_openrouter.go`, `internal/api/providers/openrouter/diagnostics*.go`, `internal/providerdiag`.
 
 Gemini:
 
 - Checks `GEMINI_API_KEY`, `GEMINI_API_URL`, provider registration, model / `catalog_model`, `streamGenerateContent?alt=sse` route, function calling, image input, thinking, context caching, native web search, and catalog policy.
-- Supports `--print-request`.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
 - Live smoke supports text, tool, image, and native web search request types. Text / tool / image use `streamGenerateContent?alt=sse`; web search uses native `generateContent`.
 - Native web search smoke observes usage / cost from `generateContent` `usageMetadata` when available, but usage is not required for the smoke success condition.
 - `GEMINI_API_URL` is an exact endpoint / proxy override. Endpoint diagnostics are route-aware: selected text / tool / image requests expect `streamGenerateContent?alt=sse`, while selected native web search requests expect `generateContent`.
 - Tool smoke / preview forces request-scoped Gemini function calling mode `ANY` for the diagnostic tool only. Normal runtime still uses `GEMINI_FC_MODE` fallback.
-- Non-Gemini `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token or cost policy.
+- Non-Gemini `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token, pricing, or capability policy.
 - Live smoke failures classify auth / authorization, quota / rate limit / capacity, model unavailable, empty SSE response, endpoint route mismatch, tool unsupported, image unsupported, and native web search unsupported in the `smoke` check suggestion. Request-level errors stay in `smoke.requests[].error`.
 - Pricing metadata unavailable is a `cost` warn after successful usage observation, not a smoke failure.
-- Does not support `--capabilities`, `--require-capability`, retention smoke, or separate thinking smoke in v1.
+- Does not support retention smoke or separate thinking smoke in v1.
 - Main owner packages: `cmd/doctor_gemini.go`, `internal/api/providers/gemini/diagnostics*.go`, `internal/providerdiag`.
 
 Claude / Anthropic:
 
 - Checks `ANTHROPIC_API_KEY`, `ANTHROPIC_API_URL`, provider registration, model / `catalog_model`, Anthropic Messages route, function calling, image input, thinking request config, context management, Claude compaction, native web search, and catalog policy.
-- Supports `--print-request`.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
 - Live smoke supports text, tool, image, thinking, and native web search request types through the Claude runtime request builders. Native web search uses the Anthropic Messages endpoint with `web-search-2025-03-05` beta.
 - Request preview is credential-independent and records redacted `x-api-key`, `anthropic-version`, optional `anthropic-beta`, endpoint, route, and request body without sending network traffic.
 - `ANTHROPIC_API_URL` is an exact Messages endpoint / proxy override. The official Anthropic path ends with `/v1/messages`; other paths remain warn-only intentional proxy endpoints and are still used by request preview / live smoke.
-- Non-Claude `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token or cost policy.
+- Non-Claude `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token, pricing, or capability policy.
 - `CLAUDE_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
 - Native web search smoke currently treats summary or source as the success condition and does not require token usage / cost observation.
-- Does not support `--capabilities`, `--require-capability`, or retention smoke in v1.
+- Does not support retention smoke in v1.
 - Main owner packages: `cmd/doctor_claude.go`, `internal/api/providers/claude/diagnostics*.go`, `internal/providerdiag`.
 
 Ollama:
 
 - Checks `OLLAMA_BASE_URL`, provider registration, model / `catalog_model`, installed model availability from `/api/tags`, `/api/chat` route, function calling, and catalog policy.
-- Supports `--print-request`.
+- Supports local `--capabilities`, `--require-capability`, and `--print-request`.
 - Live smoke supports text and tool request types through the Ollama runtime request builder. `OLLAMA_FUNCTION_CALLING=0` skips tool smoke with warn and runs text smoke fallback.
 - Has no API key. `auth` reports explicit no-auth local provider status.
 - `OLLAMA_BASE_URL` must be a base URL. Concrete `/api/chat` or `/api/tags` endpoint values fail endpoint diagnostics so smoke does not send a guaranteed wrong `.../api/chat/api/chat` request.
 - Non-Ollama `catalog_model` values are warn and do not use OpenAI / OpenRouter / other owner metadata for token policy. Unknown local request models are allowed but fail `installed_model` when absent from `/api/tags`.
-- Does not support `--capabilities`, `--require-capability`, image, thinking, web search, or retention smoke in v1.
+- Does not support image, thinking, web search, or retention smoke in v1. Plain capability-only requests do not call `/api/tags`, so `local_model_available=false` with `local_model_available_known=false` means unknown rather than absent. `--require-capability local_model_available` is an explicit endpoint discovery gate and calls `/api/tags` without sending a generation request.
 - Main owner packages: `cmd/doctor_ollama.go`, `internal/api/providers/ollama/diagnostics*.go`, `internal/providerdiag`.
 
 Missing doctor providers:
@@ -170,7 +175,7 @@ Specialized flags stay provider-specific:
 - Providers with tool calling: `--tool-smoke`
 - Azure: `--print-config`
 
-`--capabilities` and `--require-capability` should become shared v1.1 after the common capability DTO is stable across non-OpenAI-family providers.
+`--capabilities` and `--require-capability` are shared v1.1 local gate flags. Provider-specific smoke flags remain separate from the shared capability contract.
 
 ### Shared JSON Envelope
 
@@ -260,6 +265,22 @@ Live smoke should warn, not fail, when:
 - provider request ID is unavailable
 - a non-required observation is missing
 
+### Shared Smoke Failure Vocabulary
+
+Live smoke failure guidance uses a shared vocabulary owned by `internal/providerdiag`. Provider packages still own request execution and request-specific checks, but the summary `smoke` check should classify common failure causes consistently.
+
+| Kind | Meaning |
+| --- | --- |
+| `auth` | Credential is missing, invalid, unauthorized, forbidden, expired, or lacks model/resource permission. |
+| `quota` | Rate limit, quota, provider capacity, service overload, or throttling stopped the smoke. |
+| `model_unavailable` | The selected runtime model / deployment / model ID is not available for the provider route. |
+| `endpoint_mismatch` | A configured endpoint or proxy does not accept the route selected by doctor. |
+| `feature_unsupported` | A requested feature smoke, such as function calling, image input, thinking, or web search, was not accepted by the selected model/endpoint. |
+| `empty_response` | The endpoint returned an otherwise successful-looking stream/response without the expected content. |
+| `generic` | The error is not safely classifiable; preserve the request-level error and suggest `--print-request`. |
+
+The `smoke` check message/suggestion may be provider-specific, but these kinds are the source vocabulary. Request-level checks such as `tool_smoke`, `image_smoke`, `thinking_smoke`, and `web_search_smoke` should use the same classified detail/suggestion when they fail.
+
 ### Request Preview Contract
 
 `--print-request` means "build the same request shape as smoke would send, but do not send it".
@@ -288,6 +309,8 @@ Capability availability should use tri-state semantics:
 - `missing` / known unavailable
 - `unknown` / metadata unresolved
 
+The public `capabilities` JSON keeps compatibility-friendly boolean fields and pairs tri-state local gates with `*_known` fields, for example `image_input=false` plus `image_input_known=false` when model-gated support is not proven, or `local_model_available=false` plus `local_model_available_known=false` when Ollama `/api/tags` discovery was not performed.
+
 The owner for availability policy should be a provider-neutral diagnostic package where possible. Provider packages should own provider-specific resolution, such as Azure deployment to catalog model mapping or Ollama installed model discovery.
 
 Initial shared capability names:
@@ -306,6 +329,30 @@ Initial shared capability names:
 
 Do not require every provider to implement every capability. Unsupported or inapplicable capabilities should be explicit.
 
+### Provider Capability Matrix v1.1
+
+Values:
+
+- `yes`: known available when the resolved route/model supports it
+- `no`: stable unsupported or not applicable for the provider
+- `route`: depends on the selected runtime route
+- `model`: depends on the selected request model / trusted `catalog_model`
+- `config`: depends on environment or config toggles
+- `discovery`: depends on an explicit local discovery check
+
+| Provider | `responses_api` | `responses_streaming` | `chat_completions` | `function_calling` | `image_input` | `web_search` | `thinking` | `previous_response_id` | `session_persistence` | `server_compaction` | `local_model_available` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| OpenAI | route | route+catalog | route | config | model | model+route | route+config | route+config | route+config | route+config | no |
+| Azure OpenAI | route | route+catalog | no | config | model | no | route+config | route+config | route+config | route+config | no |
+| Kimi | no | no | yes | config | yes | yes | model+config | no | no | no | no |
+| Bedrock | no | no | no | route+config | route | no | route+config | no | no | no | no |
+| DeepSeek | no | no | yes | config | no | no | model+config | no | no | no | no |
+| Gemini | no | no | no | config | model | model | model+config | no | no | no | no |
+| Claude / Anthropic | no | no | no | config | model | model | config | no | no | no | no |
+| Groq | no | no | yes | config | no | no | no | no | no | no | no |
+| Ollama | no | no | no | config | no | no | no | no | no | no | discovery |
+| OpenRouter | no | no | route | config | model | no | no | no | no | no | no |
+
 ## Owner Map
 
 | Path | Current owner | Boundary notes |
@@ -313,7 +360,7 @@ Do not require every provider to implement every capability. Unsupported or inap
 | `cmd/doctor*.go` | CLI flags, config loading, text / JSON rendering handoff | Flag names and user-visible command surface live here. Avoid provider policy here. |
 | `cmd/doctor_render.go` | Shared text rendering helpers | Good owner for common smoke usage/cost rendering. Not a provider policy owner. |
 | `internal/api/providers/<provider>/diagnostics*.go` | Provider-specific diagnostic orchestration and smoke execution | Correct owner for auth, endpoint, model resolution, request preview, and smoke request construction. Some providers do not have this package yet. |
-| `internal/providerdiag` | Provider-neutral doctor policy DTOs and required capability evaluation | Correct owner for shared capability names, status semantics, catalog policy, and route decision DTOs. Do not put provider credentials or request I/O here. |
+| `internal/providerdiag` | Provider-neutral doctor policy DTOs, required capability evaluation, and smoke failure vocabulary | Correct owner for shared capability names, status semantics, catalog policy, smoke failure classification, and route decision DTOs. Do not put provider credentials or request I/O here. |
 | `internal/api/providers/openai_compat*` | Shared OpenAI-compatible request/stream helpers | Good candidate for future DeepSeek/Groq/OpenRouter doctor request preview and smoke helpers, but should not own CLI contract. |
 | `docs/commands.md` / `docs/providers.md` | User-facing command reference | Should link to this contract once provider doctor v1 starts migrating. |
 
@@ -355,7 +402,6 @@ Remaining expected scope:
 
 Do not include:
 
-- `--capabilities` / `--require-capability` for every provider in this first migration
 - `doctor all`
 - OpenRouter route split
 
@@ -422,7 +468,7 @@ SHOULD during implementation:
 NO for Phase 0:
 
 - Do not rename existing check names yet. That is a user-visible JSON contract migration and should be handled separately.
-- Do not add `--capabilities` / `--require-capability` to all providers in one change.
+- Do not add live network capability probes to the shared capability DTO without a separate opt-in contract.
 - Do not introduce a generic `doctor` interface before two non-OpenAI-family providers have been migrated; it would likely hard-code the wrong abstraction.
 
 ## Verification Strategy

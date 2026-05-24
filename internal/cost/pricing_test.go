@@ -228,7 +228,7 @@ func TestGetDeepSeekPricing_V4ModelsAndLegacyAliases(t *testing.T) {
 		wantCached float64
 	}{
 		{name: "v4 flash", model: "deepseek-v4-flash", wantInput: 0.14, wantOutput: 0.28, wantCached: 0.0028},
-		{name: "v4 pro", model: "deepseek-v4-pro", wantInput: 1.74, wantOutput: 3.48, wantCached: 0.0145},
+		{name: "v4 pro", model: "deepseek-v4-pro", wantInput: 0.435, wantOutput: 0.87, wantCached: 0.003625},
 		{name: "legacy chat", model: "deepseek-chat", wantInput: 0.14, wantOutput: 0.28, wantCached: 0.0028},
 		{name: "legacy reasoner", model: "deepseek-reasoner", wantInput: 0.14, wantOutput: 0.28, wantCached: 0.0028},
 		{name: "v3 static", model: "deepseek-v3", wantInput: 0.28, wantOutput: 0.42, wantCached: 0.028},
@@ -613,7 +613,7 @@ func TestGetPricingInfoForConfig_ConfiguredKnownExactModelsAcrossProvidersStillP
 		wantOut   float64
 	}{
 		{provider: "claude", model: "claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
-		{provider: "deepseek", model: "deepseek-v4-pro", wantInput: 1.74, wantOut: 3.48},
+		{provider: "deepseek", model: "deepseek-v4-pro", wantInput: 0.435, wantOut: 0.87},
 		{provider: "gemini", model: "gemini-3.1-pro", wantInput: 2.00, wantOut: 12.00},
 		{provider: "groq", model: "llama-3.1-70b", wantInput: 0.59, wantOut: 0.79},
 		{provider: "groq", model: "meta-llama/llama-4-scout-17b-16e-instruct", wantInput: 0.11, wantOut: 0.34},

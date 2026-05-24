@@ -5,9 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -118,11 +116,20 @@ type DiagnosticOptions struct {
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest && (!o.hasLocalCapabilityRequest() || o.RunSmoke)
+	return o.localCapabilityRequest().RequiresAuthCheck()
 }
 
-func (o DiagnosticOptions) hasLocalCapabilityRequest() bool {
-	return o.Capabilities || providerdiag.HasRequiredCapabilityRequest(o.RequiredCapabilities)
+func (o DiagnosticOptions) requiresEndpointCheck() bool {
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は OpenAI のローカル設定と、必要に応じて live smoke を検証する。
@@ -131,9 +138,9 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	model, modelSource := resolveOpenAIDiagnosticModel(cfg, options.Model)
 	catalogModel, catalogSource := resolveOpenAIDiagnosticCatalogModel(cfg, model, options.CatalogModel)
 	policyCfg := openAIDiagnosticPolicyConfig(cfg, model, catalogModel)
-	routeResolution := resolveOpenAIDiagnosticRouteResolution(policyCfg, model, catalogModel)
-	contextWindow, _ := llmcatalog.KnownModelContextLimit(catalogModel)
 	configCtx := config.WithContext(context.Background(), policyCfg)
+	routeResolution := resolveOpenAIDiagnosticRouteResolution(policyCfg, model, catalogModel)
+	policy := providerdiag.OpenAICatalogPolicy(policyCfg, model, catalogModel)
 
 	report := DiagnosticReport{
 		Provider:                   "openai",
@@ -145,8 +152,8 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModelSource:         catalogSource,
 		Route:                      routeResolution.Route,
 		RouteReason:                routeResolution.ReasonString(),
-		MaxOutputTokens:            api.GetMaxOutputTokens(configCtx, "openai", model),
-		ContextWindowTokens:        contextWindow,
+		MaxOutputTokens:            policy.MaxOutput.CapabilityTokens(),
+		ContextWindowTokens:        policy.ContextWindowTokens,
 		FunctionCallingEnabled:     New("diagnostic-key").IsFunctionCallingEnabled(),
 		ResponsesStore:             cfg.ResponsesStoreEnabled(),
 		ResponsesPersistResponseID: cfg.ResponsesPersistResponseIDEnabled(),
@@ -155,8 +162,10 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.requiresAuthCheck() {
 		report.addAuthCheck()
 	}
-	report.addAPIURLCheck()
-	report.addResponsesURLCheck()
+	if options.requiresEndpointCheck() {
+		report.addAPIURLCheck()
+		report.addResponsesURLCheck()
+	}
 	report.addProviderRegistrationCheck()
 	report.addModelConfigCheck()
 	report.addRouteCheck()

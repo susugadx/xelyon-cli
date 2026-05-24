@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
@@ -139,6 +140,63 @@ func TestDiagnoseOpenRouter_SmokeCostUsesRoutedModelWhenCatalogMismatches(t *tes
 	}
 	if math.Abs(report.Smoke.Cost.USD-0.003) > 0.000000001 {
 		t.Fatalf("Smoke cost = %.12f, want Claude routed-model price", report.Smoke.Cost.USD)
+	}
+}
+
+func TestDiagnoseOpenRouter_SmokeEndpointFailureUsesCommonClassifier(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"route not found"}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(openRouterAPIKeyEnv, "sk-or-test")
+	t.Setenv(openRouterAPIURLEnv, server.URL)
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "openai/gpt-5.4",
+		CatalogModel: "openai/gpt-5.4",
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want endpoint-classified smoke failure: %#v", report.Checks)
+	}
+	smoke := requireOpenRouterDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "endpoint does not match") || !strings.Contains(smoke.Suggestion, openRouterAPIURLEnv) {
+		t.Fatalf("smoke check = %#v, want common endpoint classification", smoke)
+	}
+}
+
+func TestDiagnoseOpenRouter_SmokeEndpointOverrideResourceNotFoundUsesEndpointGuidance(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"resource not found"}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(openRouterAPIKeyEnv, "sk-or-test")
+	t.Setenv(openRouterAPIURLEnv, server.URL)
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "openai/gpt-5.4",
+		CatalogModel: "openai/gpt-5.4",
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want endpoint-classified smoke failure: %#v", report.Checks)
+	}
+	smoke := requireOpenRouterDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "endpoint does not match") || !strings.Contains(smoke.Suggestion, openRouterAPIURLEnv) {
+		t.Fatalf("smoke check = %#v, want endpoint override guidance", smoke)
+	}
+	if strings.Contains(smoke.Suggestion, "--model") {
+		t.Fatalf("smoke suggestion = %q, should not suggest model changes for endpoint override resource errors", smoke.Suggestion)
 	}
 }
 

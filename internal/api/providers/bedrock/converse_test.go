@@ -161,6 +161,67 @@ func TestProvider_ChatWithTools_UsesConverseStreamForNonClaudeBedrockModel(t *te
 	}
 }
 
+func TestConverseMaxOutputPolicyIgnoresCrossProviderCatalogModel(t *testing.T) {
+	tests := []struct {
+		name       string
+		model      string
+		catalog    string
+		override   int
+		wantTokens int
+		wantSource bedrockMaxOutputSource
+		wantOK     bool
+	}{
+		{
+			name:       "known Bedrock request model fallback",
+			model:      "amazon.nova-pro-v1:0",
+			catalog:    "gpt-5.4",
+			wantTokens: 5000,
+			wantSource: bedrockMaxOutputSourceCatalog,
+			wantOK:     true,
+		},
+		{
+			name:       "custom alias does not inherit OpenAI catalog",
+			model:      "corp-bedrock-model",
+			catalog:    "gpt-5.4",
+			wantSource: bedrockMaxOutputSourceMissing,
+		},
+		{
+			name:       "explicit override remains authoritative",
+			model:      "corp-bedrock-model",
+			catalog:    "gpt-5.4",
+			override:   2048,
+			wantTokens: 2048,
+			wantSource: bedrockMaxOutputSourceModelOverrides,
+			wantOK:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			if tt.override > 0 {
+				cfg.SetProviderModelConfig("bedrock", config.ProviderModelConfig{
+					ModelOverrides: map[string]config.ModelOverride{
+						tt.model: {
+							CatalogModel:    tt.catalog,
+							MaxOutputTokens: tt.override,
+						},
+					},
+				})
+			}
+
+			policy := converseMaxOutputPolicy(bedrockRequestContext{
+				model:        tt.model,
+				catalogModel: tt.catalog,
+				cfg:          cfg,
+			})
+			if policy.available != tt.wantOK || policy.tokens != tt.wantTokens || policy.source != tt.wantSource {
+				t.Fatalf("converseMaxOutputPolicy() = %+v, want tokens=%d source=%v available=%t", policy, tt.wantTokens, tt.wantSource, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestBuildConverseStreamInput_ToolUseDisabledOmitsToolConfig(t *testing.T) {
 	t.Setenv("BEDROCK_FUNCTION_CALLING", "1")
 

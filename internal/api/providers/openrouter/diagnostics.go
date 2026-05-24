@@ -5,9 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -66,6 +64,7 @@ type DiagnosticReport struct {
 	FunctionCallingEnabled bool                      `json:"function_calling_enabled"`
 	ImageInputSupported    bool                      `json:"image_input_supported"`
 	Checks                 []DiagnosticCheck         `json:"checks"`
+	Capabilities           *DiagnosticCapabilities   `json:"capabilities,omitempty"`
 	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
 	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
@@ -95,20 +94,35 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は OpenRouter 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	Capabilities         bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest
+	return o.localCapabilityRequest().RequiresAuthCheck()
+}
+
+func (o DiagnosticOptions) requiresEndpointCheck() bool {
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は OpenRouter のローカル設定と、必要に応じて live smoke を検証する。
@@ -118,15 +132,10 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	catalogModel, catalogSource := resolveOpenRouterDiagnosticCatalogModel(cfg, model, options.CatalogModel)
 	policyCatalogModel := openRouterDiagnosticPolicyCatalogModel(model, catalogModel)
 	policyCfg := openRouterDiagnosticPolicyConfig(cfg, model, catalogModel, 0)
-	configCtx := config.WithContext(context.Background(), policyCfg)
+	policy := providerdiag.OpenRouterCatalogPolicy(policyCfg, model, policyCatalogModel)
 	configuredAPIURL := New("diagnostic-key").APIURL
 	route := resolveOpenRouterRoutePlan(policyCfg, configuredAPIURL, model)
 	upstreamProvider, upstreamModel := resolveOpenRouterDiagnosticUpstreamModel(model, policyCatalogModel)
-
-	contextWindow := 0
-	if openRouterCatalogModelKnown(policyCatalogModel) {
-		contextWindow, _ = llmcatalog.KnownModelContextLimit(policyCatalogModel)
-	}
 
 	provider := New("diagnostic-key")
 	report := DiagnosticReport{
@@ -140,8 +149,8 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		UpstreamModel:          upstreamModel,
 		Route:                  route.Route,
 		RouteReason:            route.Reason,
-		MaxOutputTokens:        api.GetMaxOutputTokens(configCtx, "openrouter", model),
-		ContextWindowTokens:    contextWindow,
+		MaxOutputTokens:        providerdiag.RuntimeMaxOutputTokens(policyCfg, "openrouter", model),
+		ContextWindowTokens:    policy.ContextWindowTokens,
 		FunctionCallingEnabled: provider.IsFunctionCallingEnabled(),
 		ImageInputSupported:    provider.SupportsImages(),
 	}
@@ -149,7 +158,9 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.requiresAuthCheck() {
 		report.addAuthCheck()
 	}
-	report.addEndpointCheck(route)
+	if options.requiresEndpointCheck() {
+		report.addEndpointCheck(route)
+	}
 	report.addProviderRegistrationCheck()
 	report.addModelCheck()
 	report.addCatalogModelCheck()
@@ -157,6 +168,10 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addCatalogPolicyCheck(policyCfg)
 	report.addFunctionCallingCheck()
 	report.addImageInputCheck()
+	if options.Capabilities {
+		report.addCapabilities(policyCfg)
+	}
+	report.addRequiredCapabilities(policyCfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

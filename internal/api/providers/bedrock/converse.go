@@ -69,27 +69,57 @@ func (p *Provider) buildConverseStreamInput(ctx context.Context, systemPrompt st
 }
 
 func resolveConverseMaxTokens(req bedrockRequestContext) *int32 {
-	if tokens, ok := converseMaxTokens(req); ok {
-		return int32Ptr(tokens)
+	policy := converseMaxOutputPolicy(req)
+	if policy.available {
+		return int32Ptr(policy.tokens)
 	}
 	return nil
 }
 
-func converseMaxTokens(req bedrockRequestContext) (int, bool) {
+type bedrockMaxOutputSource int
+
+const (
+	bedrockMaxOutputSourceMissing bedrockMaxOutputSource = iota
+	bedrockMaxOutputSourceModelOverrides
+	bedrockMaxOutputSourceCatalog
+	bedrockMaxOutputSourceProviderDefault
+)
+
+type bedrockMaxOutputPolicy struct {
+	tokens    int
+	source    bedrockMaxOutputSource
+	available bool
+}
+
+func converseMaxOutputPolicy(req bedrockRequestContext) bedrockMaxOutputPolicy {
 	if req.cfg != nil {
 		if override, ok := req.cfg.ModelOverrideForProvider("bedrock", req.model); ok && override.MaxOutputTokens > 0 {
-			return override.MaxOutputTokens, true
+			return bedrockMaxOutputPolicy{
+				tokens:    override.MaxOutputTokens,
+				source:    bedrockMaxOutputSourceModelOverrides,
+				available: true,
+			}
 		}
 	}
-	if tokens, ok := llmcatalog.KnownMaxOutputTokens(req.catalogModel); ok {
-		return tokens, true
+	if llmcatalog.IsKnownModelNameForProvider("bedrock", req.catalogModel) {
+		if tokens, ok := llmcatalog.KnownMaxOutputTokens(req.catalogModel); ok {
+			return bedrockMaxOutputPolicy{
+				tokens:    tokens,
+				source:    bedrockMaxOutputSourceCatalog,
+				available: true,
+			}
+		}
 	}
-	if req.catalogModel != req.model {
+	if req.catalogModel != req.model && llmcatalog.IsKnownModelNameForProvider("bedrock", req.model) {
 		if tokens, ok := llmcatalog.KnownMaxOutputTokens(req.model); ok {
-			return tokens, true
+			return bedrockMaxOutputPolicy{
+				tokens:    tokens,
+				source:    bedrockMaxOutputSourceCatalog,
+				available: true,
+			}
 		}
 	}
-	return 0, false
+	return bedrockMaxOutputPolicy{source: bedrockMaxOutputSourceMissing}
 }
 
 func buildConverseSystemBlocks(systemPrompt string) []types.SystemContentBlock {

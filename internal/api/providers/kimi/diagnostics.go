@@ -65,6 +65,7 @@ type DiagnosticReport struct {
 	UnsupportedFeatures    []string                  `json:"unsupported_features"`
 	PromptCacheKeyPresent  bool                      `json:"prompt_cache_key_present"`
 	Checks                 []DiagnosticCheck         `json:"checks"`
+	Capabilities           *DiagnosticCapabilities   `json:"capabilities,omitempty"`
 	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
 	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
@@ -94,22 +95,37 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は Kimi 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	ImageSmoke      bool
-	WebSearchSmoke  bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	ImageSmoke           bool
+	WebSearchSmoke       bool
+	Capabilities         bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest
+	return o.localCapabilityRequest().RequiresAuthCheck()
+}
+
+func (o DiagnosticOptions) requiresEndpointCheck() bool {
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は Kimi のローカル設定と、必要に応じて live smoke を検証する。
@@ -129,7 +145,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModelSource:     catalogSource,
 		Route:                  DiagnosticRouteChatCompletions,
 		RouteReason:            "Kimi text, tool, image, and built-in $web_search diagnostics use Moonshot Chat Completions",
-		MaxOutputTokens:        policy.MaxOutput.CapabilityTokens(),
+		MaxOutputTokens:        providerdiag.RuntimeMaxOutputTokens(policyCfg, "kimi", model),
 		ContextWindowTokens:    policy.ContextWindowTokens,
 		FunctionCallingEnabled: os.Getenv(kimiFunctionCallingEnv) != "0",
 		UnsupportedFeatures: []string{
@@ -140,7 +156,9 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		},
 	}
 
-	report.addAPIURLCheck()
+	if options.requiresEndpointCheck() {
+		report.addAPIURLCheck()
+	}
 	if options.requiresAuthCheck() {
 		report.addAuthCheck()
 	}
@@ -153,6 +171,10 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addImageInputCheck()
 	report.addUnsupportedFeaturesCheck()
 	report.addPromptCacheKeyCheck(ctx, policyCfg)
+	if options.Capabilities {
+		report.addCapabilities(policyCfg)
+	}
+	report.addRequiredCapabilities(policyCfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

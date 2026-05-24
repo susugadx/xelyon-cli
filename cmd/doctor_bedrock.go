@@ -22,8 +22,9 @@ metadata, and optional live smoke requests. Use --smoke for a text request,
 --tool-smoke for a dummy tool call, --image-smoke for a tiny image request, and
 --thinking-smoke for an extended-thinking request. ConverseStream image and
 thinking smoke requests are reported as skipped because that route does not
-support those request shapes yet. Use --print-request to print sanitized request
-JSON without sending it.`,
+support those request shapes yet. Use --capabilities or --require-capability to
+verify resolved local capabilities without sending a live request. Use
+--print-request to print sanitized request JSON without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runBedrockDoctorInvocation,
 	}
@@ -34,6 +35,8 @@ JSON without sending it.`,
 	addDoctorToolSmokeFlag(cmd, "Send a live Bedrock smoke request that forces a dummy tool call")
 	cmd.Flags().BoolVar(&doctorBedrockImageSmokeFlag, "image-smoke", false, "Send a live Bedrock image input smoke request")
 	cmd.Flags().BoolVar(&doctorBedrockThinkingSmokeFlag, "thinking-smoke", false, "Send a live Bedrock extended-thinking smoke request")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved Bedrock model capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	addDoctorTimeoutFlag(cmd, "bedrock", "")
 	addDoctorJSONFlag(cmd, "bedrock")
 	addDoctorPrintRequestFlag(cmd, "bedrock")
@@ -49,16 +52,18 @@ func runBedrockDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := bedrockprovider.Diagnose(cmd.Context(), bedrockprovider.DiagnosticOptions{
-		Config:        cfg,
-		Model:         doctorBedrockModelFlag,
-		CatalogModel:  doctorCatalogModelFlag,
-		RunSmoke:      !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorBedrockImageSmokeFlag || doctorBedrockThinkingSmokeFlag),
-		TextSmoke:     doctorSmokeFlag,
-		ToolSmoke:     doctorToolSmokeFlag,
-		ImageSmoke:    doctorBedrockImageSmokeFlag,
-		ThinkingSmoke: doctorBedrockThinkingSmokeFlag,
-		PrintRequest:  doctorPrintRequestFlag,
-		SmokeTimeout:  doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                doctorBedrockModelFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorBedrockImageSmokeFlag || doctorBedrockThinkingSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		ImageSmoke:           doctorBedrockImageSmokeFlag,
+		ThinkingSmoke:        doctorBedrockThinkingSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]bedrockprovider.DiagnosticCheck{{
@@ -99,6 +104,11 @@ func renderBedrockDoctorText(w io.Writer, report bedrockprovider.DiagnosticRepor
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, bedrockDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
 
 	if report.RequestPreview != nil {
 		renderDoctorRequestPreviewSection(w, report.RequestPreview)

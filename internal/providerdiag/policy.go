@@ -60,6 +60,19 @@ type MaxOutputPolicy struct {
 	RuntimeFallback int
 }
 
+const (
+	// MaxOutputSourceCatalog は catalog metadata 由来の max_output_tokens を表す。
+	MaxOutputSourceCatalog = "catalog"
+	// MaxOutputSourceModelOverrides は provider_models.<provider>.model_overrides 由来の max_output_tokens を表す。
+	MaxOutputSourceModelOverrides = "model_overrides"
+	// MaxOutputSourceProviderDefault は provider default 由来の max_output_tokens を表す。
+	MaxOutputSourceProviderDefault = "provider_default"
+	// MaxOutputSourceRuntimeFallback は metadata 不足時に runtime が使う fallback 値を表す。
+	MaxOutputSourceRuntimeFallback = "runtime_fallback"
+	// MaxOutputSourceMissing は max_output_tokens を確定できない状態を表す。
+	MaxOutputSourceMissing = "missing"
+)
+
 // OpenAIMaxOutputPolicy は OpenAI doctor の既存 max output 解決規則を返す。
 func OpenAIMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
@@ -82,6 +95,9 @@ func AzureMaxOutputPolicy(cfg *config.Config, deployment, catalogModel string) M
 
 // GroqMaxOutputPolicy は Groq doctor の既存 max output 解決規則を返す。
 func GroqMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	if nonProviderCatalogModel("groq", catalogModel) {
+		return maxOutputOverridePolicy(cfg, "groq", model)
+	}
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
 		Provider:             "groq",
 		RequestModel:         model,
@@ -92,6 +108,9 @@ func GroqMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutp
 
 // DeepSeekMaxOutputPolicy は DeepSeek doctor の max output 解決規則を返す。
 func DeepSeekMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	if nonProviderCatalogModel("deepseek", catalogModel) {
+		return maxOutputOverridePolicy(cfg, "deepseek", model)
+	}
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
 		Provider:             "deepseek",
 		RequestModel:         model,
@@ -102,6 +121,9 @@ func DeepSeekMaxOutputPolicy(cfg *config.Config, model, catalogModel string) Max
 
 // OpenRouterMaxOutputPolicy は OpenRouter doctor の max output 解決規則を返す。
 func OpenRouterMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
+	if strings.TrimSpace(catalogModel) == "" || nonProviderCatalogModel("openrouter", catalogModel) {
+		return maxOutputOverridePolicy(cfg, "openrouter", model)
+	}
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
 		Provider:             "openrouter",
 		RequestModel:         model,
@@ -123,10 +145,83 @@ func OllamaMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOu
 	})
 }
 
+// BedrockUntrustedCatalogMaxOutputPolicy は non-Bedrock catalog を使わず request model 側の Bedrock max output を返す。
+func BedrockUntrustedCatalogMaxOutputPolicy(cfg *config.Config, model string) MaxOutputPolicy {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	if override, ok := cfg.ModelOverrideForProvider("bedrock", model); ok && override.MaxOutputTokens > 0 {
+		return MaxOutputPolicy{
+			Tokens:    override.MaxOutputTokens,
+			Source:    MaxOutputSourceModelOverrides,
+			Available: true,
+		}
+	}
+	if providerCfg, ok := cfg.GetProviderModelConfig("bedrock"); ok &&
+		strings.TrimSpace(providerCfg.DefaultModel) == strings.TrimSpace(model) &&
+		providerCfg.MaxOutputTokens > 0 {
+		return MaxOutputPolicy{
+			Tokens:    providerCfg.MaxOutputTokens,
+			Source:    MaxOutputSourceProviderDefault,
+			Available: true,
+		}
+	}
+	if llmcatalog.IsKnownModelNameForProvider("bedrock", model) {
+		if tokens, ok := llmcatalog.KnownMaxOutputTokens(model); ok {
+			return MaxOutputPolicy{
+				Tokens:    tokens,
+				Source:    MaxOutputSourceCatalog,
+				Available: true,
+			}
+		}
+	}
+	return MaxOutputPolicy{Source: MaxOutputSourceMissing}
+}
+
+// BedrockClaudeMaxOutputPolicy は Bedrock Claude Messages route の max output 解決規則を返す。
+func BedrockClaudeMaxOutputPolicy(cfg *config.Config, model string) MaxOutputPolicy {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	if override, ok := cfg.ModelOverrideForProvider("bedrock", model); ok && override.MaxOutputTokens > 0 {
+		return MaxOutputPolicy{
+			Tokens:    override.MaxOutputTokens,
+			Source:    MaxOutputSourceModelOverrides,
+			Available: true,
+		}
+	}
+	if catalogModel := cfg.ModelCatalogName("bedrock", model); llmcatalog.IsKnownModelNameForProvider("bedrock", catalogModel) {
+		if tokens, ok := llmcatalog.KnownMaxOutputTokens(catalogModel); ok {
+			return MaxOutputPolicy{
+				Tokens:    tokens,
+				Source:    MaxOutputSourceCatalog,
+				Available: true,
+			}
+		}
+	}
+	if llmcatalog.IsKnownModelNameForProvider("bedrock", model) {
+		if tokens, ok := llmcatalog.KnownMaxOutputTokens(model); ok {
+			return MaxOutputPolicy{
+				Tokens:    tokens,
+				Source:    MaxOutputSourceCatalog,
+				Available: true,
+			}
+		}
+	}
+	if providerCfg, ok := cfg.GetProviderModelConfig("bedrock"); ok && providerCfg.MaxOutputTokens > 0 {
+		return MaxOutputPolicy{
+			Tokens:    providerCfg.MaxOutputTokens,
+			Source:    MaxOutputSourceProviderDefault,
+			Available: true,
+		}
+	}
+	return MaxOutputPolicy{Source: MaxOutputSourceMissing}
+}
+
 // GeminiMaxOutputPolicy は Gemini doctor の max output 解決規則を返す。
 func GeminiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
 	if nonProviderCatalogModel("gemini", catalogModel) {
-		return MaxOutputPolicy{Source: "missing"}
+		return maxOutputOverridePolicy(cfg, "gemini", model)
 	}
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
 		Provider:             "gemini",
@@ -139,7 +234,7 @@ func GeminiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOu
 // KimiMaxOutputPolicy は Kimi doctor の max output 解決規則を返す。
 func KimiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
 	if nonProviderCatalogModel("kimi", catalogModel) {
-		return MaxOutputPolicy{Source: "missing"}
+		return maxOutputOverridePolicy(cfg, "kimi", model)
 	}
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
 		Provider:             "kimi",
@@ -152,7 +247,7 @@ func KimiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutp
 // ClaudeMaxOutputPolicy は Claude doctor の max output 解決規則を返す。
 func ClaudeMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
 	if nonProviderCatalogModel("claude", catalogModel) {
-		return MaxOutputPolicy{Source: "missing"}
+		return maxOutputOverridePolicy(cfg, "claude", model)
 	}
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
 		Provider:             "claude",
@@ -183,7 +278,7 @@ func resolveMaxOutputPolicy(cfg *config.Config, options maxOutputPolicyOptions) 
 	if override, ok := cfg.ModelOverrideForProvider(options.Provider, options.RequestModel); ok && override.MaxOutputTokens > 0 {
 		return MaxOutputPolicy{
 			Tokens:    override.MaxOutputTokens,
-			Source:    "model_overrides",
+			Source:    MaxOutputSourceModelOverrides,
 			Available: true,
 		}
 	}
@@ -191,7 +286,7 @@ func resolveMaxOutputPolicy(cfg *config.Config, options maxOutputPolicyOptions) 
 	if tokens, ok := llmcatalog.KnownMaxOutputTokens(options.CatalogModel); ok {
 		return MaxOutputPolicy{
 			Tokens:    tokens,
-			Source:    "catalog",
+			Source:    MaxOutputSourceCatalog,
 			Available: true,
 		}
 	}
@@ -200,16 +295,35 @@ func resolveMaxOutputPolicy(cfg *config.Config, options maxOutputPolicyOptions) 
 	if options.ProviderDefaultKnown && tokens > 0 {
 		return MaxOutputPolicy{
 			Tokens:    tokens,
-			Source:    "provider_default",
+			Source:    MaxOutputSourceProviderDefault,
 			Available: true,
 		}
 	}
 
-	result := MaxOutputPolicy{Source: "missing"}
+	result := MaxOutputPolicy{Source: MaxOutputSourceMissing}
 	if options.IncludeRuntimeFallback {
 		result.RuntimeFallback = tokens
 	}
 	return result
+}
+
+func maxOutputOverridePolicy(cfg *config.Config, provider, model string) MaxOutputPolicy {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	if override, ok := cfg.ModelOverrideForProvider(provider, model); ok && override.MaxOutputTokens > 0 {
+		return MaxOutputPolicy{
+			Tokens:    override.MaxOutputTokens,
+			Source:    MaxOutputSourceModelOverrides,
+			Available: true,
+		}
+	}
+	return MaxOutputPolicy{Source: MaxOutputSourceMissing}
+}
+
+// RuntimeMaxOutputTokens は doctor report の runtime request path と同じ max output 値を返す。
+func RuntimeMaxOutputTokens(cfg *config.Config, provider, model string) int {
+	return api.GetMaxOutputTokens(config.WithContext(context.Background(), cfg), provider, model)
 }
 
 // CapabilityTokens は provider-specific public capability DTO 用の値を返す。
@@ -226,7 +340,7 @@ func (p MaxOutputPolicy) CapabilitySource() string {
 		return p.Source
 	}
 	if p.RuntimeFallback > 0 {
-		return "runtime_fallback"
+		return MaxOutputSourceRuntimeFallback
 	}
 	return p.Source
 }
@@ -250,7 +364,7 @@ func (p MaxOutputPolicy) SourceDetail() string {
 	if p.RuntimeFallback > 0 {
 		return fmt.Sprintf("missing (runtime_fallback=%d)", p.RuntimeFallback)
 	}
-	return "missing"
+	return MaxOutputSourceMissing
 }
 
 // CatalogPolicy は catalog由来の context / output / pricing / streaming policy を表す。
@@ -285,6 +399,9 @@ func AzureCatalogPolicy(cfg *config.Config, deployment, catalogModel string) Cat
 
 // GroqCatalogPolicy は Groq doctor 用の catalog policy snapshot を返す。
 func GroqCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	if nonProviderCatalogModel("groq", catalogModel) {
+		return unknownProviderCatalogPolicy(catalogModel, GroqMaxOutputPolicy(cfg, model, catalogModel))
+	}
 	return NewCatalogPolicy(
 		catalogModel,
 		GroqMaxOutputPolicy(cfg, model, catalogModel),
@@ -295,6 +412,9 @@ func GroqCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPo
 
 // DeepSeekCatalogPolicy は DeepSeek doctor 用の catalog policy snapshot を返す。
 func DeepSeekCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	if nonProviderCatalogModel("deepseek", catalogModel) {
+		return unknownProviderCatalogPolicy(catalogModel, DeepSeekMaxOutputPolicy(cfg, model, catalogModel))
+	}
 	return NewCatalogPolicy(
 		catalogModel,
 		DeepSeekMaxOutputPolicy(cfg, model, catalogModel),
@@ -305,6 +425,9 @@ func DeepSeekCatalogPolicy(cfg *config.Config, model, catalogModel string) Catal
 
 // OpenRouterCatalogPolicy は OpenRouter doctor 用の catalog policy snapshot を返す。
 func OpenRouterCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
+	if strings.TrimSpace(catalogModel) == "" || nonProviderCatalogModel("openrouter", catalogModel) {
+		return unknownProviderCatalogPolicy(catalogModel, OpenRouterMaxOutputPolicy(cfg, model, catalogModel))
+	}
 	return NewCatalogPolicy(
 		catalogModel,
 		OpenRouterMaxOutputPolicy(cfg, model, catalogModel),
@@ -329,10 +452,23 @@ func OllamaCatalogPolicy(cfg *config.Config, model, catalogModel string) Catalog
 	return policy
 }
 
+// BedrockCatalogPolicy は Bedrock doctor 用の catalog policy snapshot を返す。
+func BedrockCatalogPolicy(cfg *config.Config, model, catalogModel string, maxOutput MaxOutputPolicy) CatalogPolicy {
+	if nonProviderCatalogModel("bedrock", catalogModel) {
+		return unknownProviderCatalogPolicy(catalogModel, maxOutput)
+	}
+	return NewCatalogPolicy(
+		catalogModel,
+		maxOutput,
+		cost.GetPricingInfoForConfig(cfg, "bedrock", model),
+		false,
+	)
+}
+
 // GeminiCatalogPolicy は Gemini doctor 用の catalog policy snapshot を返す。
 func GeminiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
 	if nonProviderCatalogModel("gemini", catalogModel) {
-		return unknownProviderCatalogPolicy(catalogModel)
+		return unknownProviderCatalogPolicy(catalogModel, GeminiMaxOutputPolicy(cfg, model, catalogModel))
 	}
 	return NewCatalogPolicy(
 		catalogModel,
@@ -345,7 +481,7 @@ func GeminiCatalogPolicy(cfg *config.Config, model, catalogModel string) Catalog
 // KimiCatalogPolicy は Kimi doctor 用の catalog policy snapshot を返す。
 func KimiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
 	if nonProviderCatalogModel("kimi", catalogModel) {
-		return unknownProviderCatalogPolicy(catalogModel)
+		return unknownProviderCatalogPolicy(catalogModel, KimiMaxOutputPolicy(cfg, model, catalogModel))
 	}
 	return NewCatalogPolicy(
 		catalogModel,
@@ -358,7 +494,7 @@ func KimiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPo
 // ClaudeCatalogPolicy は Claude doctor 用の catalog policy snapshot を返す。
 func ClaudeCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
 	if nonProviderCatalogModel("claude", catalogModel) {
-		return unknownProviderCatalogPolicy(catalogModel)
+		return unknownProviderCatalogPolicy(catalogModel, ClaudeMaxOutputPolicy(cfg, model, catalogModel))
 	}
 	return NewCatalogPolicy(
 		catalogModel,
@@ -368,10 +504,10 @@ func ClaudeCatalogPolicy(cfg *config.Config, model, catalogModel string) Catalog
 	)
 }
 
-func unknownProviderCatalogPolicy(catalogModel string) CatalogPolicy {
+func unknownProviderCatalogPolicy(catalogModel string, maxOutput MaxOutputPolicy) CatalogPolicy {
 	return CatalogPolicy{
 		CatalogModel: strings.TrimSpace(catalogModel),
-		MaxOutput:    MaxOutputPolicy{Source: "missing"},
+		MaxOutput:    maxOutput,
 		Pricing:      cost.PricingInfo{PricingUnavailable: true},
 	}
 }
@@ -483,7 +619,10 @@ type CapabilitySnapshot struct {
 	ResponsesStreamingAvailability CapabilityAvailability
 	ChatCompletions                bool
 	FunctionCalling                bool
-	ImageInput                     bool
+	ImageInput                     CapabilityAvailability
+	WebSearch                      CapabilityAvailability
+	Thinking                       CapabilityAvailability
+	LocalModelAvailable            CapabilityAvailability
 	Retention                      RetentionSnapshot
 	ServerCompaction               ServerCompactionSnapshot
 	ContextWindowTokens            int

@@ -209,23 +209,24 @@ func (r *DiagnosticReport) addResponsesRetentionCheck() {
 }
 
 func (r *DiagnosticReport) addRequiredCapabilities(ctx context.Context, cfg *config.Config, required []string) {
-	if !providerdiag.HasRequiredCapabilityRequest(required) {
-		return
-	}
-
 	snapshot := openAIDiagnosticCapabilitySnapshot(ctx, cfg, *r)
-	check := providerdiag.EvaluateRequiredCapabilities(snapshot, required)
-	if check.Satisfied() {
-		r.addCheck(DiagnosticStatusOK, providerdiag.RequiredCapabilityCheckName, "required OpenAI capabilities are available", check.Detail(), "")
+	diagnostic := providerdiag.NewRequiredCapabilityDiagnostic(
+		snapshot,
+		required,
+		providerdiag.RequiredCapabilityDiagnosticOptions{
+			ProviderName:                  "OpenAI",
+			MissingTarget:                 "model/configuration",
+			UnknownAvailabilitySuggestion: "Set --catalog-model or provider_models.openai.catalog_model to the underlying OpenAI model before requiring catalog-dependent capabilities",
+		},
+	)
+	if !diagnostic.Requested {
 		return
 	}
-
-	suggestion := providerdiag.RequiredCapabilityFailureSuggestion(
-		check,
-		"model/configuration",
-		"Set --catalog-model or provider_models.openai.catalog_model to the underlying OpenAI model before requiring catalog-dependent capabilities",
-	)
-	r.addCheck(DiagnosticStatusFail, providerdiag.RequiredCapabilityCheckName, "required OpenAI capabilities are missing", check.Detail(), suggestion)
+	status := DiagnosticStatusFail
+	if diagnostic.Satisfied {
+		status = DiagnosticStatusOK
+	}
+	r.addCheck(status, diagnostic.Name, diagnostic.Message, diagnostic.Detail, diagnostic.Suggestion)
 }
 
 func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -262,7 +263,12 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke, err := runOpenAIDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {
-		r.addCheck(DiagnosticStatusFail, "smoke", "live OpenAI smoke request failed", err.Error(), "")
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.RoutedResponsesSmokeFailureContext(
+			openAIDiagnosticSmokeFailureContextOptions(r.Route),
+			smoke,
+			err,
+		))
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live OpenAI smoke request succeeded", smoke.Duration, "")
@@ -272,6 +278,22 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	}
 	if smoke.RetentionPayload {
 		r.addCheck(DiagnosticStatusOK, "retention_smoke", "OpenAI endpoint accepted a previous_response_id chain", smoke.Duration, "")
+	}
+}
+
+func openAIDiagnosticSmokeFailureContextOptions(route string) providerdiag.SmokeFailureContextOptions {
+	endpointEnv := openAIResponsesURLEnv
+	endpointOverride := strings.TrimSpace(os.Getenv(openAIResponsesURLEnv)) != ""
+	if route == DiagnosticRouteChatCompletions {
+		endpointEnv = openAIAPIURLEnv
+		endpointOverride = strings.TrimSpace(os.Getenv(openAIAPIURLEnv)) != ""
+	}
+	return providerdiag.SmokeFailureContextOptions{
+		Provider:         "OpenAI",
+		AuthEnv:          openAIAPIKeyEnv,
+		EndpointEnv:      endpointEnv,
+		DebugEnv:         "XELYON_DEBUG_OPENAI",
+		EndpointOverride: endpointOverride,
 	}
 }
 

@@ -135,19 +135,18 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 	if model == "" || catalogModel == "" {
 		return
 	}
+	policy := providerdiag.ClaudeCatalogPolicy(cfg, model, catalogModel)
+	detail := policy.ClaudeDetail()
 	if !claudeCatalogModelKnown(catalogModel) {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
 			"catalog_model is not a Claude model known to local metadata",
-			fmt.Sprintf("catalog_model=%s, context_window=unknown, max_output_tokens=unknown, pricing=unavailable", catalogModel),
+			detail,
 			"Use a Claude catalog model before relying on token-limit diagnostics or cost estimates",
 		)
 		return
 	}
-
-	policy := providerdiag.ClaudeCatalogPolicy(cfg, model, catalogModel)
-	detail := policy.ClaudeDetail()
 
 	switch {
 	case !policy.ContextWindowKnown:
@@ -220,8 +219,19 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke, err := runClaudeDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {
-		r.addFailedSpecializedSmokeChecks(smoke)
-		r.addCheck(DiagnosticStatusFail, "smoke", "live Claude smoke request failed", err.Error(), "Inspect smoke.requests[].error and rerun with --print-request")
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.MultimodalSmokeFailureContext(
+			providerdiag.SmokeFailureContextOptions{
+				Provider:         "Claude",
+				AuthEnv:          anthropicAPIKeyEnv,
+				EndpointEnv:      anthropicAPIURLEnv,
+				DebugEnv:         "XELYON_DEBUG_CLAUDE",
+				EndpointOverride: strings.TrimSpace(os.Getenv(anthropicAPIURLEnv)) != "",
+			},
+			smoke,
+			err,
+		))
+		r.addFailedSpecializedSmokeChecks(smoke, failure)
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live Claude smoke request succeeded", smoke.Duration, "")
@@ -285,20 +295,20 @@ func (r *DiagnosticReport) addSpecializedSmokeChecks(smoke DiagnosticSmokeResult
 	}
 }
 
-func (r *DiagnosticReport) addFailedSpecializedSmokeChecks(smoke DiagnosticSmokeResult) {
+func (r *DiagnosticReport) addFailedSpecializedSmokeChecks(smoke DiagnosticSmokeResult, failure providerdiag.SmokeFailure) {
 	for _, request := range smoke.Requests {
 		if strings.TrimSpace(request.Error) == "" {
 			continue
 		}
 		switch {
 		case request.ToolPayload:
-			r.addCheck(DiagnosticStatusFail, "tool_smoke", "Claude tool smoke response did not include the diagnostic tool call", request.Error, "")
+			r.addCheck(DiagnosticStatusFail, "tool_smoke", "Claude tool smoke response did not include the diagnostic tool call", failure.Detail, failure.Suggestion)
 		case request.ImagePayload:
-			r.addCheck(DiagnosticStatusFail, "image_smoke", "Claude image smoke failed before proving image input", request.Error, "")
+			r.addCheck(DiagnosticStatusFail, "image_smoke", "Claude image smoke failed before proving image input", failure.Detail, failure.Suggestion)
 		case request.ThinkingPayload:
-			r.addCheck(DiagnosticStatusFail, "thinking_smoke", "Claude thinking smoke failed before proving thinking request support", request.Error, "")
+			r.addCheck(DiagnosticStatusFail, "thinking_smoke", "Claude thinking smoke failed before proving thinking request support", failure.Detail, failure.Suggestion)
 		case request.WebSearchPayload:
-			r.addCheck(DiagnosticStatusFail, "web_search_smoke", "Claude web search smoke failed before proving native web search", request.Error, "")
+			r.addCheck(DiagnosticStatusFail, "web_search_smoke", "Claude web search smoke failed before proving native web search", failure.Detail, failure.Suggestion)
 		}
 	}
 }

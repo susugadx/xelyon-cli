@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke claude-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke ollama-doctor-smoke kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke claude-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke ollama-doctor-smoke doctor-smoke-matrix kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -20,6 +20,7 @@ GROQ_DOCTOR_SMOKE_MODEL ?= meta-llama/llama-4-scout-17b-16e-instruct
 OPENROUTER_DOCTOR_SMOKE_MODEL ?= openai/gpt-5.4-mini
 KIMI_DOCTOR_SMOKE_MODEL ?= kimi-k2.6
 OLLAMA_DOCTOR_SMOKE_MODEL ?= qwen2.5-coder:7b
+DOCTOR_SMOKE_PROVIDERS ?=
 
 # ビルド
 build:
@@ -218,6 +219,35 @@ kimi-doctor-smoke:
 # Ollama doctor 診断経路をローカル Ollama で確認（ollama serve と pull 済みモデルが必要）
 ollama-doctor-smoke:
 	go run . doctor ollama --model "$(OLLAMA_DOCTOR_SMOKE_MODEL)" --catalog-model "$(OLLAMA_DOCTOR_SMOKE_MODEL)" --smoke --tool-smoke
+
+# 任意 provider の doctor smoke を横断実行（DOCTOR_SMOKE_PROVIDERS で明示 opt-in）
+doctor-smoke-matrix:
+	@providers="$(DOCTOR_SMOKE_PROVIDERS)"; \
+	if [ -z "$$providers" ]; then \
+		echo "Set DOCTOR_SMOKE_PROVIDERS=\"openai deepseek gemini claude groq openrouter kimi ollama bedrock azure\" to opt in."; \
+		exit 0; \
+	fi; \
+	matrix_status=0; \
+	for provider in $$providers; do \
+		case "$$provider" in \
+			azure) target="azure-doctor-smoke" ;; \
+			openai) target="openai-doctor-smoke" ;; \
+			deepseek) target="deepseek-doctor-smoke" ;; \
+			gemini) target="gemini-doctor-smoke" ;; \
+			claude) target="claude-doctor-smoke" ;; \
+			groq) target="groq-doctor-smoke" ;; \
+			openrouter) target="openrouter-doctor-smoke" ;; \
+			kimi) target="kimi-doctor-smoke" ;; \
+			ollama) target="ollama-doctor-smoke" ;; \
+			bedrock) target="bedrock-doctor-smoke" ;; \
+			*) echo "Unknown DOCTOR_SMOKE_PROVIDERS entry: $$provider"; exit 2 ;; \
+		esac; \
+		echo "=== doctor smoke: $$provider ($$target) ==="; \
+		if ! $(MAKE) --no-print-directory "$$target"; then \
+			matrix_status=1; \
+		fi; \
+	done; \
+	exit $$matrix_status
 
 # Kimi native provider の実 API smoke test（MOONSHOT_API_KEY 必須）
 kimi-smoke:

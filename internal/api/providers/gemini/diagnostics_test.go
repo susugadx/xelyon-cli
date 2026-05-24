@@ -98,8 +98,8 @@ func TestDiagnoseGemini_NonGeminiCatalogModelDoesNotUseGlobalMetadata(t *testing
 	if report.ContextWindowTokens != 0 {
 		t.Fatalf("ContextWindowTokens = %d, want non-Gemini metadata ignored", report.ContextWindowTokens)
 	}
-	if report.MaxOutputTokens == 128000 {
-		t.Fatalf("MaxOutputTokens = %d, should not use OpenAI max output metadata", report.MaxOutputTokens)
+	if report.MaxOutputTokens != 65536 {
+		t.Fatalf("MaxOutputTokens = %d, want Gemini runtime fallback", report.MaxOutputTokens)
 	}
 	requireGeminiDiagnosticCheckStatus(t, report, "catalog_model", DiagnosticStatusWarn)
 	catalogPolicy := requireGeminiDiagnosticCheckStatus(t, report, "catalog_policy", DiagnosticStatusWarn)

@@ -103,8 +103,11 @@ func TestDiagnose_NonKimiCatalogModelDoesNotUseGlobalMetadata(t *testing.T) {
 	if report.HasFailures() {
 		t.Fatalf("HasFailures() = true, want warn-only non-Kimi catalog: %#v", report.Checks)
 	}
-	if report.ContextWindowTokens != 0 || report.MaxOutputTokens != 0 {
-		t.Fatalf("Kimi policy used non-Kimi metadata: context=%d max=%d", report.ContextWindowTokens, report.MaxOutputTokens)
+	if report.ContextWindowTokens != 0 {
+		t.Fatalf("ContextWindowTokens = %d, want non-Kimi metadata ignored", report.ContextWindowTokens)
+	}
+	if report.MaxOutputTokens != 32768 {
+		t.Fatalf("MaxOutputTokens = %d, want Kimi runtime fallback", report.MaxOutputTokens)
 	}
 	if !hasKimiDiagnosticCheck(report, "catalog_model", DiagnosticStatusWarn) {
 		t.Fatalf("missing catalog_model warning: %#v", report.Checks)

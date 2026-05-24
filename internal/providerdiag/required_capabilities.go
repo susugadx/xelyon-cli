@@ -6,15 +6,18 @@ import (
 )
 
 const (
-	RequiredCapabilityCheckName          = "required_capability"
-	RequiredCapabilityResponsesAPI       = "responses_api"
-	RequiredCapabilityResponsesStreaming = "responses_streaming"
-	RequiredCapabilityChatCompletions    = "chat_completions"
-	RequiredCapabilityFunctionCalling    = "function_calling"
-	RequiredCapabilityImageInput         = "image_input"
-	RequiredCapabilityPreviousResponseID = "previous_response_id"
-	RequiredCapabilitySessionPersistence = "session_persistence"
-	RequiredCapabilityServerCompaction   = "server_compaction"
+	RequiredCapabilityCheckName           = "required_capability"
+	RequiredCapabilityResponsesAPI        = "responses_api"
+	RequiredCapabilityResponsesStreaming  = "responses_streaming"
+	RequiredCapabilityChatCompletions     = "chat_completions"
+	RequiredCapabilityFunctionCalling     = "function_calling"
+	RequiredCapabilityImageInput          = "image_input"
+	RequiredCapabilityWebSearch           = "web_search"
+	RequiredCapabilityThinking            = "thinking"
+	RequiredCapabilityPreviousResponseID  = "previous_response_id"
+	RequiredCapabilitySessionPersistence  = "session_persistence"
+	RequiredCapabilityServerCompaction    = "server_compaction"
+	RequiredCapabilityLocalModelAvailable = "local_model_available"
 )
 
 type requiredCapabilityAvailabilityResolver func(CapabilitySnapshot) CapabilityAvailability
@@ -52,7 +55,19 @@ var requiredCapabilityDefinitions = []requiredCapabilityDefinition{
 	{
 		name: RequiredCapabilityImageInput,
 		resolve: func(snapshot CapabilitySnapshot) CapabilityAvailability {
-			return KnownCapabilityAvailability(snapshot.ImageInput)
+			return snapshot.ImageInput
+		},
+	},
+	{
+		name: RequiredCapabilityWebSearch,
+		resolve: func(snapshot CapabilitySnapshot) CapabilityAvailability {
+			return snapshot.WebSearch
+		},
+	},
+	{
+		name: RequiredCapabilityThinking,
+		resolve: func(snapshot CapabilitySnapshot) CapabilityAvailability {
+			return snapshot.Thinking
 		},
 	},
 	{
@@ -71,6 +86,12 @@ var requiredCapabilityDefinitions = []requiredCapabilityDefinition{
 		name: RequiredCapabilityServerCompaction,
 		resolve: func(snapshot CapabilitySnapshot) CapabilityAvailability {
 			return KnownCapabilityAvailability(snapshot.ServerCompaction.RequestPayload)
+		},
+	},
+	{
+		name: RequiredCapabilityLocalModelAvailable,
+		resolve: func(snapshot CapabilitySnapshot) CapabilityAvailability {
+			return snapshot.LocalModelAvailable
 		},
 	},
 }
@@ -121,6 +142,31 @@ type RequiredCapabilityCheck struct {
 	Results []RequiredCapabilityResult
 }
 
+// RequiredCapabilityDiagnosticOptions は provider doctor の required capability check 表示情報。
+type RequiredCapabilityDiagnosticOptions struct {
+	ProviderName                  string
+	MissingTarget                 string
+	UnknownAvailabilitySuggestion string
+}
+
+// RequiredCapabilityDiagnostic は provider doctor の check 行へ渡す評価結果。
+type RequiredCapabilityDiagnostic struct {
+	Requested  bool
+	Satisfied  bool
+	Name       string
+	Message    string
+	Detail     string
+	Suggestion string
+}
+
+// LocalCapabilityRequest は provider doctor が local capability 判定だけで完結できるかの入力。
+type LocalCapabilityRequest struct {
+	Capabilities         bool
+	RequiredCapabilities []string
+	RunSmoke             bool
+	PrintRequest         bool
+}
+
 // SupportedRequiredCapabilities は --require-capability で受け付ける名前を返す。
 func SupportedRequiredCapabilities() []string {
 	names := make([]string, 0, len(requiredCapabilityDefinitions))
@@ -151,6 +197,44 @@ func HasRequiredCapabilityRequest(values []string) bool {
 	return len(normalizeRequiredCapabilityNames(values)) > 0
 }
 
+// IsLocalCapabilityOnlyRequest は live smoke / request preview を伴わない capability request か返す。
+// Provider はこの判定を使い、local-only で不要な auth/endpoint/config discovery を skip する。
+func IsLocalCapabilityOnlyRequest(request LocalCapabilityRequest) bool {
+	if request.RunSmoke || request.PrintRequest {
+		return false
+	}
+	return request.Capabilities || HasRequiredCapabilityRequest(request.RequiredCapabilities)
+}
+
+// IsOnly は live smoke / request preview を伴わない capability request か返す。
+func (r LocalCapabilityRequest) IsOnly() bool {
+	return IsLocalCapabilityOnlyRequest(r)
+}
+
+// RequiresAuthCheck は doctor が credential/auth check を実行すべきか返す。
+func (r LocalCapabilityRequest) RequiresAuthCheck() bool {
+	return !r.PrintRequest && !r.IsOnly()
+}
+
+// RequiresExternalSetupCheck は doctor が endpoint/base URL/config などの外部 setup check を実行すべきか返す。
+func (r LocalCapabilityRequest) RequiresExternalSetupCheck() bool {
+	return !r.IsOnly()
+}
+
+// HasRequiredCapability は正規化後の required capability に capability が含まれるか返す。
+func HasRequiredCapability(values []string, capability string) bool {
+	capability = normalizeRequiredCapabilityName(capability)
+	if capability == "" {
+		return false
+	}
+	for _, name := range normalizeRequiredCapabilityNames(values) {
+		if name == capability {
+			return true
+		}
+	}
+	return false
+}
+
 // EvaluateRequiredCapabilities は capability snapshot が要求を満たすか判定する。
 func EvaluateRequiredCapabilities(snapshot CapabilitySnapshot, values []string) RequiredCapabilityCheck {
 	names := normalizeRequiredCapabilityNames(values)
@@ -177,6 +261,36 @@ func EvaluateRequiredCapabilities(snapshot CapabilitySnapshot, values []string) 
 	return RequiredCapabilityCheck{Results: results}
 }
 
+// NewRequiredCapabilityDiagnostic は snapshot と要求から provider doctor の check 行を組み立てる。
+func NewRequiredCapabilityDiagnostic(snapshot CapabilitySnapshot, values []string, options RequiredCapabilityDiagnosticOptions) RequiredCapabilityDiagnostic {
+	check := EvaluateRequiredCapabilities(snapshot, values)
+	if !check.Any() {
+		return RequiredCapabilityDiagnostic{}
+	}
+
+	providerName := strings.TrimSpace(options.ProviderName)
+	if providerName != "" {
+		providerName += " "
+	}
+	diagnostic := RequiredCapabilityDiagnostic{
+		Requested: true,
+		Satisfied: check.Satisfied(),
+		Name:      RequiredCapabilityCheckName,
+		Detail:    check.Detail(),
+	}
+	if diagnostic.Satisfied {
+		diagnostic.Message = fmt.Sprintf("required %scapabilities are available", providerName)
+		return diagnostic
+	}
+	diagnostic.Message = fmt.Sprintf("required %scapabilities are missing", providerName)
+	diagnostic.Suggestion = RequiredCapabilityFailureSuggestion(
+		check,
+		options.MissingTarget,
+		options.UnknownAvailabilitySuggestion,
+	)
+	return diagnostic
+}
+
 func requiredCapabilityDefinitionFor(name string) (requiredCapabilityDefinition, bool) {
 	for _, definition := range requiredCapabilityDefinitions {
 		if definition.name == name {
@@ -191,8 +305,7 @@ func normalizeRequiredCapabilityNames(values []string) []string {
 	names := make([]string, 0, len(values))
 	for _, value := range values {
 		for _, raw := range strings.Split(value, ",") {
-			name := strings.ToLower(strings.TrimSpace(raw))
-			name = strings.ReplaceAll(name, "-", "_")
+			name := normalizeRequiredCapabilityName(raw)
 			if name == "" || seen[name] {
 				continue
 			}
@@ -201,6 +314,11 @@ func normalizeRequiredCapabilityNames(values []string) []string {
 		}
 	}
 	return names
+}
+
+func normalizeRequiredCapabilityName(value string) string {
+	name := strings.ToLower(strings.TrimSpace(value))
+	return strings.ReplaceAll(name, "-", "_")
 }
 
 // Any は評価対象の要求が 1 つ以上あるか返す。

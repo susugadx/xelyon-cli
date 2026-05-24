@@ -206,7 +206,7 @@ func TestRootCommand_KimiDoctorHelpShowsDoctorFlags(t *testing.T) {
 	if !strings.Contains(out.String(), "--model") {
 		t.Fatalf("output = %q, want Kimi doctor model flag", out.String())
 	}
-	for _, want := range []string{"--catalog-model", "--tool-smoke", "--image-smoke", "--web-search-smoke", "--print-request", "exact Chat Completions", "endpoint override", "/v1/chat/completions"} {
+	for _, want := range []string{"--catalog-model", "--tool-smoke", "--image-smoke", "--web-search-smoke", "--capabilities", "--require-capability", "--print-request", "exact Chat Completions", "endpoint override", "/v1/chat/completions"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want Kimi doctor help substring %q", out.String(), want)
 		}

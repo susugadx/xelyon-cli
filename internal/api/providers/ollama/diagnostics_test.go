@@ -84,8 +84,8 @@ func TestDiagnoseOllama_NonOllamaCatalogModelDoesNotUseGlobalMetadata(t *testing
 	if report.ContextWindowTokens != 0 {
 		t.Fatalf("ContextWindowTokens = %d, want non-Ollama catalog metadata ignored", report.ContextWindowTokens)
 	}
-	if report.MaxOutputTokens == 128000 {
-		t.Fatalf("MaxOutputTokens = %d, want OpenAI catalog max output ignored", report.MaxOutputTokens)
+	if report.MaxOutputTokens != 4096 {
+		t.Fatalf("MaxOutputTokens = %d, want Ollama runtime fallback", report.MaxOutputTokens)
 	}
 	catalogModel, ok := ollamaDiagnosticCheckByName(report, "catalog_model")
 	if !ok || catalogModel.Status != DiagnosticStatusWarn {

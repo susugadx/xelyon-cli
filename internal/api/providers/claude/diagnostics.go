@@ -78,6 +78,7 @@ type DiagnosticReport struct {
 	AnthropicVersion          string                    `json:"anthropic_version"`
 	AnthropicBeta             []string                  `json:"anthropic_beta,omitempty"`
 	Checks                    []DiagnosticCheck         `json:"checks"`
+	Capabilities              *DiagnosticCapabilities   `json:"capabilities,omitempty"`
 	RequestPreview            *DiagnosticRequestPreview `json:"request_preview,omitempty"`
 	Smoke                     *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
@@ -107,23 +108,38 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は Claude 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	ImageSmoke      bool
-	ThinkingSmoke   bool
-	WebSearchSmoke  bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	ImageSmoke           bool
+	ThinkingSmoke        bool
+	WebSearchSmoke       bool
+	Capabilities         bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest
+	return o.localCapabilityRequest().RequiresAuthCheck()
+}
+
+func (o DiagnosticOptions) requiresEndpointCheck() bool {
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は Claude のローカル設定と、必要に応じて live smoke を検証する。
@@ -148,7 +164,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModelSource:        catalogSource,
 		Route:                     DiagnosticRouteClaudeMessages,
 		RouteReason:               "Claude text, tool, image, thinking, and native web search diagnostics use Anthropic Messages",
-		MaxOutputTokens:           policy.MaxOutput.CapabilityTokens(),
+		MaxOutputTokens:           providerdiag.RuntimeMaxOutputTokens(policyCfg, "claude", model),
 		ContextWindowTokens:       policy.ContextWindowTokens,
 		FunctionCallingEnabled:    provider.IsFunctionCallingEnabled(),
 		ImageInputSupported:       true,
@@ -161,7 +177,9 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		AnthropicBeta:             provider.anthropicBetaHeaders(configCtx, model, contextManagement),
 	}
 
-	report.addEndpointCheck()
+	if options.requiresEndpointCheck() {
+		report.addEndpointCheck()
+	}
 	if options.requiresAuthCheck() {
 		report.addAuthCheck()
 	}
@@ -175,6 +193,10 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addThinkingCheck()
 	report.addContextManagementCheck()
 	report.addWebSearchCheck()
+	if options.Capabilities {
+		report.addCapabilities(policyCfg)
+	}
+	report.addRequiredCapabilities(policyCfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

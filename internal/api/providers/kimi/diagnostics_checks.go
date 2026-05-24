@@ -250,11 +250,21 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke.Duration = time.Since(started).Round(time.Millisecond).String()
 	r.Smoke = &smoke
 	if err != nil {
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.KimiSmokeFailureContext(
+			providerdiag.SmokeFailureContextOptions{
+				Provider:         "Kimi",
+				AuthEnv:          kimiAPIKeyEnv,
+				EndpointEnv:      kimiAPIURLEnv,
+				EndpointOverride: strings.TrimSpace(os.Getenv(kimiAPIURLEnv)) != "",
+			},
+			smoke,
+			err,
+		))
 		if isTransientKimiSmokeError(err) {
-			r.addCheck(DiagnosticStatusWarn, "smoke", "live Kimi smoke hit a transient API condition", err.Error(), "Retry later or rerun with a longer --timeout")
+			r.addCheck(DiagnosticStatusWarn, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 			return
 		}
-		r.addCheck(DiagnosticStatusFail, "smoke", "live Kimi smoke request failed", err.Error(), "")
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 

@@ -94,8 +94,8 @@ func TestDiagnoseGroq_NonGroqCatalogModelDoesNotUseGlobalMetadata(t *testing.T) 
 	if report.ContextWindowTokens != 0 {
 		t.Fatalf("ContextWindowTokens = %d, want non-Groq catalog metadata ignored", report.ContextWindowTokens)
 	}
-	if report.MaxOutputTokens == 128000 {
-		t.Fatalf("MaxOutputTokens = %d, want OpenAI catalog max output ignored", report.MaxOutputTokens)
+	if report.MaxOutputTokens != 8192 {
+		t.Fatalf("MaxOutputTokens = %d, want Groq runtime fallback", report.MaxOutputTokens)
 	}
 	catalogModel, ok := groqDiagnosticCheckByName(report, "catalog_model")
 	if !ok || catalogModel.Status != DiagnosticStatusWarn {

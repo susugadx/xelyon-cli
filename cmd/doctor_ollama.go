@@ -20,8 +20,10 @@ Checks OLLAMA_BASE_URL, provider registration, model/catalog model resolution,
 installed local model availability, Ollama /api/chat route selection, function
 calling settings, and token/cost metadata. Use --smoke to send a minimal live
 local request. Use --tool-smoke to force a dummy tool call when function
-calling is enabled. Use --print-request to print the sanitized smoke request
-JSON without sending it.`,
+calling is enabled. Use --capabilities or --require-capability to verify
+resolved local capabilities without sending a generation request. Requiring
+local_model_available performs /api/tags discovery. Use --print-request to
+print the sanitized smoke request JSON without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runOllamaDoctorInvocation,
 	}
@@ -30,6 +32,8 @@ JSON without sending it.`,
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor ollama' token/pricing policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal Ollama text smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live Ollama smoke request that forces a dummy tool call")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved Ollama model capabilities without sending a generation request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	addDoctorTimeoutFlag(cmd, "ollama", "")
 	addDoctorJSONFlag(cmd, "ollama")
 	addDoctorPrintRequestFlag(cmd, "ollama")
@@ -45,14 +49,16 @@ func runOllamaDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := ollamaprovider.Diagnose(cmd.Context(), ollamaprovider.DiagnosticOptions{
-		Config:       cfg,
-		Model:        doctorOllamaModelFlag,
-		CatalogModel: doctorCatalogModelFlag,
-		RunSmoke:     !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag),
-		TextSmoke:    doctorSmokeFlag,
-		ToolSmoke:    doctorToolSmokeFlag,
-		PrintRequest: doctorPrintRequestFlag,
-		SmokeTimeout: doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                doctorOllamaModelFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]ollamaprovider.DiagnosticCheck{{
@@ -96,6 +102,11 @@ func renderOllamaDoctorText(w io.Writer, report ollamaprovider.DiagnosticReport)
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, ollamaDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
 
 	if report.RequestPreview != nil {
 		renderDoctorRequestPreviewSection(w, report.RequestPreview)

@@ -23,8 +23,9 @@ exact Chat Completions endpoint override; the official DeepSeek path ends with
 /chat/completions. OpenAI-compatible /v1/chat/completions proxy paths are
 allowed but reported as endpoint warnings. Use --smoke to send a minimal live
 request. Use --tool-smoke to force a dummy tool call when function calling is
-enabled. Use --print-request to print the sanitized smoke request JSON without
-sending it.`,
+enabled. Use --capabilities or --require-capability to verify resolved local
+capabilities without sending a live request. Use --print-request to print the
+sanitized smoke request JSON without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runDeepSeekDoctorInvocation,
 	}
@@ -33,6 +34,8 @@ sending it.`,
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor deepseek' token/pricing policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal DeepSeek text smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live DeepSeek smoke request that forces a dummy tool call")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved DeepSeek model capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	addDoctorTimeoutFlag(cmd, "deepseek", "")
 	addDoctorJSONFlag(cmd, "deepseek")
 	addDoctorPrintRequestFlag(cmd, "deepseek")
@@ -48,14 +51,16 @@ func runDeepSeekDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := deepseekprovider.Diagnose(cmd.Context(), deepseekprovider.DiagnosticOptions{
-		Config:       cfg,
-		Model:        doctorDeepSeekModelFlag,
-		CatalogModel: doctorCatalogModelFlag,
-		RunSmoke:     !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag),
-		TextSmoke:    doctorSmokeFlag,
-		ToolSmoke:    doctorToolSmokeFlag,
-		PrintRequest: doctorPrintRequestFlag,
-		SmokeTimeout: doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                doctorDeepSeekModelFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]deepseekprovider.DiagnosticCheck{{
@@ -105,6 +110,11 @@ func renderDeepSeekDoctorText(w io.Writer, report deepseekprovider.DiagnosticRep
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, deepSeekDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
 
 	if report.RequestPreview != nil {
 		renderDoctorRequestPreviewSection(w, report.RequestPreview)

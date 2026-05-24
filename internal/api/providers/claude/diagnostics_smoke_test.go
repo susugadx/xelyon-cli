@@ -90,6 +90,32 @@ func TestDiagnoseClaude_ToolSmokeRequiresToolCall(t *testing.T) {
 	requireClaudeToolChoice(t, captured.ToolChoice, claudeDiagnosticToolName)
 }
 
+func TestDiagnoseClaude_SmokeAuthFailureUsesCommonClassifier(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid API key"}}`))
+	}))
+	defer server.Close()
+
+	setClaudeDiagnosticTestEnv(t, server.URL, "bad-claude-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        defaultClaudeModel,
+		CatalogModel: defaultClaudeModel,
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want auth-classified smoke failure: %#v", report.Checks)
+	}
+	smoke := requireClaudeDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusFail)
+	if !strings.Contains(smoke.Message, "authentication or authorization") || !strings.Contains(smoke.Suggestion, anthropicAPIKeyEnv) {
+		t.Fatalf("smoke check = %#v, want common auth classification", smoke)
+	}
+}
+
 func TestDiagnoseClaude_ToolSmokeFailsWithoutToolCall(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeClaudeDiagnosticJSON(t, w, []Content{{Type: "text", Text: "plain response"}}, StreamUsage{})

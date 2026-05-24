@@ -14,6 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 func init() {
@@ -201,6 +202,64 @@ func buildBedrockThinkingConfig(model, level string) (*claude.ThinkingConfig, *c
 	}, nil
 }
 
+func resolveClaudeMessagesMaxTokens(ctx context.Context, req bedrockRequestContext) int {
+	cfg := req.cfg
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	policy := claudeMessagesMaxOutputPolicy(req)
+	maxTokens := policy.tokens
+	if api.IsThinkingEnabled(ctx) && !claude.IsAdaptiveThinkingModel(bedrockClaudeMessagesPolicyModel(req)) {
+		return api.LevelToBudgetTokens(cfg.Thinking.Level) + maxTokens
+	}
+	return maxTokens
+}
+
+func claudeMessagesMaxOutputPolicy(req bedrockRequestContext) bedrockMaxOutputPolicy {
+	cfg := req.cfg
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	if override, ok := cfg.ModelOverrideForProvider("bedrock", req.model); ok && override.MaxOutputTokens > 0 {
+		return bedrockMaxOutputPolicy{
+			tokens:    override.MaxOutputTokens,
+			source:    bedrockMaxOutputSourceModelOverrides,
+			available: true,
+		}
+	}
+	if model := bedrockClaudeMessagesPolicyModel(req); model != "" {
+		if tokens, ok := llmcatalog.KnownMaxOutputTokens(model); ok {
+			return bedrockMaxOutputPolicy{
+				tokens:    tokens,
+				source:    bedrockMaxOutputSourceCatalog,
+				available: true,
+			}
+		}
+	}
+	providerCfg := req.providerConfig
+	if providerCfg.MaxOutputTokens == 0 {
+		providerCfg, _ = cfg.GetProviderModelConfig("bedrock")
+	}
+	if providerCfg.MaxOutputTokens > 0 {
+		return bedrockMaxOutputPolicy{
+			tokens:    providerCfg.MaxOutputTokens,
+			source:    bedrockMaxOutputSourceProviderDefault,
+			available: true,
+		}
+	}
+	return bedrockMaxOutputPolicy{source: bedrockMaxOutputSourceMissing}
+}
+
+func bedrockClaudeMessagesPolicyModel(req bedrockRequestContext) string {
+	if llmcatalog.IsKnownModelNameForProvider("bedrock", req.catalogModel) {
+		return req.catalogModel
+	}
+	if llmcatalog.IsKnownModelNameForProvider("bedrock", req.model) {
+		return req.model
+	}
+	return ""
+}
+
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	p.lastContentBlocks = nil
@@ -237,7 +296,7 @@ func (p *Provider) buildBedrockClaudeMessagesRequest(ctx context.Context, system
 	reqBody := BedrockClaudeMessagesRequest{
 		AnthropicVersion: version,
 		AnthropicBeta:    req.providerConfig.AnthropicBeta,
-		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", req.model),
+		MaxTokens:        resolveClaudeMessagesMaxTokens(ctx, req),
 		System:           api.BuildSystemFieldWithConfig(systemPrompt, req.cfg),
 		Messages:         messages,
 	}
@@ -247,7 +306,7 @@ func (p *Provider) buildBedrockClaudeMessagesRequest(ctx context.Context, system
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(req.catalogModel, req.cfg.Thinking.Level)
+		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(bedrockClaudeMessagesPolicyModel(req), req.cfg.Thinking.Level)
 	}
 
 	// Tool Use: ツール定義を追加
@@ -255,7 +314,7 @@ func (p *Provider) buildBedrockClaudeMessagesRequest(ctx context.Context, system
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(req.catalogModel, req.cfg.Compression, reqBody.AnthropicBeta)
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(bedrockClaudeMessagesPolicyModel(req), req.cfg.Compression, reqBody.AnthropicBeta)
 	reqBody.AnthropicBeta = mergeBedrockOutputBetaHeaders(reqBody.AnthropicBeta, reqBody.OutputConfig)
 
 	return reqBody
@@ -329,7 +388,7 @@ func (p *Provider) buildBedrockClaudeImageRequest(ctx context.Context, systemPro
 	reqBody := BedrockClaudeMultimodalRequest{
 		AnthropicVersion: version,
 		AnthropicBeta:    req.providerConfig.AnthropicBeta,
-		MaxTokens:        api.GetMaxOutputTokens(ctx, "bedrock", req.model),
+		MaxTokens:        resolveClaudeMessagesMaxTokens(ctx, req),
 		System:           api.BuildSystemFieldWithConfig(systemPrompt, req.cfg),
 		Messages:         messages,
 	}
@@ -339,7 +398,7 @@ func (p *Provider) buildBedrockClaudeImageRequest(ctx context.Context, systemPro
 
 	// Extended Thinking 適用
 	if api.IsThinkingEnabled(ctx) {
-		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(req.catalogModel, req.cfg.Thinking.Level)
+		reqBody.Thinking, reqBody.OutputConfig = buildBedrockThinkingConfig(bedrockClaudeMessagesPolicyModel(req), req.cfg.Thinking.Level)
 	}
 
 	// Tool Use: ツール定義を追加
@@ -347,7 +406,7 @@ func (p *Provider) buildBedrockClaudeImageRequest(ctx context.Context, systemPro
 		reqBody.Tools = claude.GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 	}
 
-	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(req.catalogModel, req.cfg.Compression, reqBody.AnthropicBeta)
+	reqBody.ContextManagement, reqBody.AnthropicBeta = buildBedrockContextManagement(bedrockClaudeMessagesPolicyModel(req), req.cfg.Compression, reqBody.AnthropicBeta)
 	reqBody.AnthropicBeta = mergeBedrockOutputBetaHeaders(reqBody.AnthropicBeta, reqBody.OutputConfig)
 
 	return reqBody

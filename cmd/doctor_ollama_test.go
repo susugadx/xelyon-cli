@@ -38,12 +38,12 @@ func TestRootCommand_OllamaDoctorHelpShowsMinimalFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--print-request", "--timeout", "--json", "Diagnose Ollama provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--capabilities", "--require-capability", "--print-request", "--timeout", "--json", "Diagnose Ollama provider configuration", "without sending a generation request", "local_model_available performs /api/tags discovery"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want Ollama doctor help substring %q", out.String(), want)
 		}
 	}
-	for _, unwanted := range []string{"--capabilities", "--require-capability", "--retention-smoke", "--image-smoke", "--web-search-smoke", "--thinking-smoke", "--print-config"} {
+	for _, unwanted := range []string{"--retention-smoke", "--image-smoke", "--web-search-smoke", "--thinking-smoke", "--print-config"} {
 		if strings.Contains(out.String(), unwanted) {
 			t.Fatalf("output = %q, should not contain %s", out.String(), unwanted)
 		}

@@ -8,7 +8,6 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -75,6 +74,7 @@ type DiagnosticReport struct {
 	ContextCachingEnabled  bool                      `json:"context_caching_enabled"`
 	ThinkingEnabled        bool                      `json:"thinking_enabled"`
 	Checks                 []DiagnosticCheck         `json:"checks"`
+	Capabilities           *DiagnosticCapabilities   `json:"capabilities,omitempty"`
 	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
 	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
@@ -104,22 +104,37 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は Gemini 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	ImageSmoke      bool
-	WebSearchSmoke  bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	ImageSmoke           bool
+	WebSearchSmoke       bool
+	Capabilities         bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest
+	return o.localCapabilityRequest().RequiresAuthCheck()
+}
+
+func (o DiagnosticOptions) requiresEndpointCheck() bool {
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は Gemini のローカル設定と、必要に応じて live smoke を検証する。
@@ -129,11 +144,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	catalogModel, catalogSource := resolveGeminiDiagnosticCatalogModel(cfg, model, options.CatalogModel)
 	policyCfg := geminiDiagnosticPolicyConfig(cfg, model, catalogModel, 0)
 	configCtx := config.WithContext(context.Background(), policyCfg)
-
-	contextWindow := 0
-	if geminiCatalogModelKnown(catalogModel) {
-		contextWindow, _ = llmcatalog.KnownModelContextLimit(catalogModel)
-	}
+	policy := providerdiag.GeminiCatalogPolicy(policyCfg, model, catalogModel)
 
 	report := DiagnosticReport{
 		Provider:               "gemini",
@@ -144,8 +155,8 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModelSource:     catalogSource,
 		Route:                  DiagnosticRouteStreamGenerateContentSSE,
 		RouteReason:            "Gemini text, tool, and image requests use streamGenerateContent?alt=sse; native web search uses generateContent",
-		MaxOutputTokens:        api.GetMaxOutputTokens(configCtx, "gemini", model),
-		ContextWindowTokens:    contextWindow,
+		MaxOutputTokens:        providerdiag.RuntimeMaxOutputTokens(policyCfg, "gemini", model),
+		ContextWindowTokens:    policy.ContextWindowTokens,
 		FunctionCallingEnabled: New("diagnostic-key").IsFunctionCallingEnabled(),
 		ImageInputSupported:    true,
 		WebSearchSupported:     true,
@@ -156,7 +167,9 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.requiresAuthCheck() {
 		report.addAuthCheck()
 	}
-	report.addEndpointCheck(options)
+	if options.requiresEndpointCheck() {
+		report.addEndpointCheck(options)
+	}
 	report.addProviderRegistrationCheck()
 	report.addModelCheck()
 	report.addCatalogModelCheck()
@@ -167,6 +180,10 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addThinkingCheck()
 	report.addContextCachingCheck()
 	report.addWebSearchCheck()
+	if options.Capabilities {
+		report.addCapabilities(policyCfg)
+	}
+	report.addRequiredCapabilities(policyCfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

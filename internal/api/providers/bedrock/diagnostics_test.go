@@ -72,6 +72,33 @@ func TestDiagnose_ClaudeMessagesSmokeRequestsReportRequestIDUsageAndCost(t *test
 	}
 }
 
+func TestDiagnose_BedrockSmokeAuthFailureUsesCommonClassifier(t *testing.T) {
+	setBedrockDiagnosticTestEnv(t)
+
+	mockInvoke := &mockInvokeModelWithResponseStreamClient{
+		err: errors.New("AccessDeniedException: not authorized to invoke model"),
+	}
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       bedrockDiagnosticTestConfig(defaultModel, defaultModel),
+		Model:        defaultModel,
+		CatalogModel: defaultModel,
+		RunSmoke:     true,
+		TextSmoke:    true,
+		invokeClient: mockInvoke,
+	})
+
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want auth-classified smoke failure: %#v", report.Checks)
+	}
+	smoke, ok := bedrockDiagnosticCheck(report, "smoke")
+	if !ok || smoke.Status != DiagnosticStatusFail {
+		t.Fatalf("smoke check = %#v, %v; want fail", smoke, ok)
+	}
+	if !strings.Contains(smoke.Message, "authentication or authorization") {
+		t.Fatalf("smoke check = %#v, want common auth classification", smoke)
+	}
+}
+
 func TestDiagnose_ClaudeSmokePreservesConfiguredAnthropicVersion(t *testing.T) {
 	setBedrockDiagnosticTestEnv(t)
 
@@ -202,6 +229,14 @@ func TestDiagnose_CatalogPolicyUsesRuntimeMaxTokenPrecedence(t *testing.T) {
 			model:     defaultModel,
 			wantMax:   "max_output_tokens=64000",
 			unwantMax: "max_output_tokens=9999",
+			wantRoute: string(bedrockRouteClaudeMessages),
+		},
+		{
+			name:      "claude provider default used when catalog max output is unknown",
+			cfg:       bedrockDiagnosticPolicyMaxConfig("anthropic.claude-custom-v1:0", "anthropic.claude-custom-v1:0", 9999, config.ModelOverride{}),
+			model:     "anthropic.claude-custom-v1:0",
+			wantMax:   "max_output_tokens=9999",
+			unwantMax: "max_output_tokens=unknown",
 			wantRoute: string(bedrockRouteClaudeMessages),
 		},
 		{

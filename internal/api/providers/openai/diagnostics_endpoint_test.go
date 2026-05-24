@@ -143,6 +143,38 @@ func TestDiagnoseOpenAI_EndpointURLChecksClassifyInvalidURLsByActiveRoute(t *tes
 	}
 }
 
+func TestDiagnoseOpenAI_RemoteModesKeepEndpointChecksWithCapabilityFlags(t *testing.T) {
+	tests := []struct {
+		name    string
+		options DiagnosticOptions
+	}{
+		{
+			name: "print request",
+			options: DiagnosticOptions{
+				Capabilities: true,
+				PrintRequest: true,
+			},
+		},
+		{
+			name: "smoke",
+			options: DiagnosticOptions{
+				RequiredCapabilities: []string{"responses_api"},
+				RunSmoke:             true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report := diagnoseOpenAIEndpointReport(t, "gpt-5.4", "gpt-5.4", "", "://bad", tt.options)
+			if !report.HasFailures() {
+				t.Fatalf("HasFailures() = false, want active responses endpoint failure: %#v", report.Checks)
+			}
+			requireOpenAIDiagnosticCheck(t, report, "responses_url", DiagnosticStatusFail)
+		})
+	}
+}
+
 func TestDiagnoseOpenAI_ChatCompletionsSmokeUsesConfiguredProxyEndpoint(t *testing.T) {
 	var receivedPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

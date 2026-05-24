@@ -229,209 +229,6 @@ func TestDiagnose_CatalogPolicyUsesCodexCatalogModel(t *testing.T) {
 	}
 }
 
-func TestDiagnose_CapabilitiesDoNotRequireAzureEndpointOrAuth(t *testing.T) {
-	t.Setenv(baseURLEnv, "")
-	t.Setenv(apiKeyEnv, "")
-	t.Setenv(authTokenEnv, "")
-	t.Setenv(authTokenCommandEnv, "")
-	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "1")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:       config.DefaultConfig(),
-		Deployment:   "corp-codex-deployment",
-		CatalogModel: "gpt-5.3-codex",
-		Capabilities: true,
-	})
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want capabilities without endpoint/auth to succeed: %#v", report.Checks)
-	}
-	if _, ok := diagnosticCheckByName(report, "base_url"); ok {
-		t.Fatalf("base_url check was added for capabilities-only report: %#v", report.Checks)
-	}
-	if _, ok := diagnosticCheckByName(report, "auth"); ok {
-		t.Fatalf("auth check was added for capabilities-only report: %#v", report.Checks)
-	}
-	if report.Capabilities == nil {
-		t.Fatal("Capabilities = nil, want resolved capabilities")
-	}
-	capabilities := report.Capabilities
-	if !capabilities.ResponsesAPI || !capabilities.ResponsesStreaming {
-		t.Fatalf("route capabilities = %+v, want Responses streaming", capabilities)
-	}
-	if !capabilities.FunctionCalling || !capabilities.ImageInput {
-		t.Fatalf("tool/image capabilities = %+v, want enabled", capabilities)
-	}
-	if !capabilities.Retention.PreviousResponseID || !capabilities.Retention.SessionPersistence {
-		t.Fatalf("retention capabilities = %+v, want previous_response_id and session persistence", capabilities.Retention)
-	}
-	if !capabilities.ServerCompaction.Enabled || !capabilities.ServerCompaction.RequestPayload || capabilities.ServerCompaction.CompactThreshold <= 0 {
-		t.Fatalf("server compaction capabilities = %+v, want request payload with compact_threshold", capabilities.ServerCompaction)
-	}
-	if capabilities.ContextWindowTokens != 400000 || !capabilities.ContextWindowKnown {
-		t.Fatalf("context capability = %+v, want gpt-5.3-codex context window", capabilities)
-	}
-	if capabilities.MaxOutputTokens != 128000 || !capabilities.MaxOutputTokensKnown || capabilities.MaxOutputTokensSource != "catalog" {
-		t.Fatalf("max output capability = %+v, want catalog max output", capabilities)
-	}
-	if !capabilities.Pricing.Available {
-		t.Fatalf("pricing capability = %+v, want available pricing", capabilities.Pricing)
-	}
-	if !hasDiagnosticCheck(report, "capabilities", DiagnosticStatusOK) {
-		t.Fatalf("missing capabilities OK check: %#v", report.Checks)
-	}
-}
-
-func TestDiagnose_CapabilitiesDoNotReportRetentionWhenRouteUnresolved(t *testing.T) {
-	t.Setenv(baseURLEnv, "")
-	t.Setenv(apiKeyEnv, "")
-	t.Setenv(authTokenEnv, "")
-	t.Setenv(authTokenCommandEnv, "")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:       &config.Config{},
-		Capabilities: true,
-	})
-	if report.Capabilities == nil {
-		t.Fatal("Capabilities = nil, want resolved capabilities")
-	}
-	if report.Capabilities.ResponsesAPI {
-		t.Fatalf("ResponsesAPI = true, want false when deployment route is unresolved: %+v", report.Capabilities)
-	}
-	if report.Capabilities.Retention.PreviousResponseID || report.Capabilities.Retention.SessionPersistence {
-		t.Fatalf("retention capabilities = %+v, want no previous_response_id or session persistence without a resolved route", report.Capabilities.Retention)
-	}
-}
-
-func TestDiagnose_RequiredCapabilitiesDoNotRequireAzureEndpointOrAuth(t *testing.T) {
-	t.Setenv(baseURLEnv, "")
-	t.Setenv(apiKeyEnv, "")
-	t.Setenv(authTokenEnv, "")
-	t.Setenv(authTokenCommandEnv, "")
-	t.Setenv("AZURE_OPENAI_FUNCTION_CALLING", "1")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:               config.DefaultConfig(),
-		Deployment:           "corp-codex-deployment",
-		CatalogModel:         "gpt-5.3-codex",
-		RequiredCapabilities: []string{"responses_api", "previous_response_id", "server_compaction"},
-	})
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want local required capability check to pass without endpoint/auth: %#v", report.Checks)
-	}
-	if _, ok := diagnosticCheckByName(report, "base_url"); ok {
-		t.Fatalf("base_url check was added for required capability report: %#v", report.Checks)
-	}
-	if _, ok := diagnosticCheckByName(report, "auth"); ok {
-		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
-	}
-	if report.Capabilities != nil {
-		t.Fatalf("Capabilities = %#v, want nil without --capabilities", report.Capabilities)
-	}
-	check, ok := diagnosticCheckByName(report, "required_capability")
-	if !ok || check.Status != DiagnosticStatusOK {
-		t.Fatalf("required_capability check = %#v, %v; want ok", check, ok)
-	}
-	for _, want := range []string{"responses_api=ok", "previous_response_id=ok", "server_compaction=ok"} {
-		if !strings.Contains(check.Detail, want) {
-			t.Fatalf("required_capability detail = %q, want %q", check.Detail, want)
-		}
-	}
-}
-
-func TestDiagnose_RequiredCapabilityFailsWhenMissing(t *testing.T) {
-	t.Setenv(baseURLEnv, "")
-	t.Setenv(apiKeyEnv, "")
-	t.Setenv(authTokenEnv, "")
-	t.Setenv(authTokenCommandEnv, "")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:               config.DefaultConfig(),
-		Deployment:           "corp-gpt55-pro-deployment",
-		CatalogModel:         "gpt-5.5-pro",
-		RequiredCapabilities: []string{"responses_streaming"},
-	})
-	if !report.HasFailures() {
-		t.Fatalf("HasFailures() = false, want missing required capability failure: %#v", report.Checks)
-	}
-	if _, ok := diagnosticCheckByName(report, "base_url"); ok {
-		t.Fatalf("base_url check was added for required capability report: %#v", report.Checks)
-	}
-	if _, ok := diagnosticCheckByName(report, "auth"); ok {
-		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
-	}
-	check, ok := diagnosticCheckByName(report, "required_capability")
-	if !ok || check.Status != DiagnosticStatusFail {
-		t.Fatalf("required_capability check = %#v, %v; want fail", check, ok)
-	}
-	if !strings.Contains(check.Detail, "responses_streaming=missing") {
-		t.Fatalf("required_capability detail = %q, want missing streaming", check.Detail)
-	}
-}
-
-func TestDiagnose_RequiredCapabilityStreamingUnknownWithoutResolvedCatalogModel(t *testing.T) {
-	t.Setenv(baseURLEnv, "")
-	t.Setenv(apiKeyEnv, "")
-	t.Setenv(authTokenEnv, "")
-	t.Setenv(authTokenCommandEnv, "")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:               config.DefaultConfig(),
-		Deployment:           "corp-gpt55-pro-deployment",
-		RequiredCapabilities: []string{"responses_streaming"},
-	})
-	if !report.HasFailures() {
-		t.Fatalf("HasFailures() = false, want unresolved catalog required capability failure: %#v", report.Checks)
-	}
-	if report.CatalogModelSource != diagnosticCatalogModelSourceDeploymentFallback {
-		t.Fatalf("CatalogModelSource = %q, want deployment fallback", report.CatalogModelSource)
-	}
-	if _, ok := diagnosticCheckByName(report, "base_url"); ok {
-		t.Fatalf("base_url check was added for required capability report: %#v", report.Checks)
-	}
-	if _, ok := diagnosticCheckByName(report, "auth"); ok {
-		t.Fatalf("auth check was added for required capability report: %#v", report.Checks)
-	}
-	check, ok := diagnosticCheckByName(report, "required_capability")
-	if !ok || check.Status != DiagnosticStatusFail {
-		t.Fatalf("required_capability check = %#v, %v; want fail", check, ok)
-	}
-	if !strings.Contains(check.Detail, "responses_streaming=unknown") {
-		t.Fatalf("required_capability detail = %q, want unknown streaming", check.Detail)
-	}
-	if !strings.Contains(check.Suggestion, "--catalog-model") {
-		t.Fatalf("required_capability suggestion = %q, want catalog model guidance", check.Suggestion)
-	}
-}
-
-func TestDiagnose_RequiredCapabilityStreamingPassesForKnownCatalogModelDeploymentFallback(t *testing.T) {
-	t.Setenv(baseURLEnv, "")
-	t.Setenv(apiKeyEnv, "")
-	t.Setenv(authTokenEnv, "")
-	t.Setenv(authTokenCommandEnv, "")
-
-	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:               config.DefaultConfig(),
-		Deployment:           "gpt-5.4",
-		RequiredCapabilities: []string{"responses_streaming"},
-	})
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want known fallback catalog model to pass required capability: %#v", report.Checks)
-	}
-	if report.CatalogModelSource != diagnosticCatalogModelSourceDeploymentFallback {
-		t.Fatalf("CatalogModelSource = %q, want deployment fallback", report.CatalogModelSource)
-	}
-	if report.Route != DiagnosticRouteResponsesStreaming {
-		t.Fatalf("Route = %q, want responses streaming", report.Route)
-	}
-	check, ok := diagnosticCheckByName(report, "required_capability")
-	if !ok || check.Status != DiagnosticStatusOK {
-		t.Fatalf("required_capability check = %#v, %v; want ok", check, ok)
-	}
-	if !strings.Contains(check.Detail, "responses_streaming=ok") {
-		t.Fatalf("required_capability detail = %q, want ok streaming", check.Detail)
-	}
-}
-
 func TestDiagnose_CatalogPolicyWarnsWhenMaxOutputFallsBackToProviderDefault(t *testing.T) {
 	t.Setenv(baseURLEnv, "https://example.openai.azure.com/openai/v1")
 	t.Setenv(apiKeyEnv, "azure-key")
@@ -1096,6 +893,37 @@ func TestDiagnose_RetentionSmokeFailsWhenFollowupRetriesWithoutPreviousResponseI
 	}
 	if report.Smoke == nil || len(report.Smoke.Requests) != 2 || !strings.Contains(report.Smoke.Requests[1].Error, "retry changed previous_response_id") {
 		t.Fatalf("Smoke = %#v, want followup retry failure", report.Smoke)
+	}
+}
+
+func TestDiagnose_SmokeQuotaFailureUsesCommonClassifier(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"quota exceeded"}}`))
+	}))
+	defer server.Close()
+
+	t.Setenv(baseURLEnv, server.URL)
+	t.Setenv(apiKeyEnv, "azure-key")
+	t.Setenv(authTokenEnv, "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Deployment:   "corp-gpt54-deployment",
+		CatalogModel: "gpt-5.4",
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if !report.HasFailures() {
+		t.Fatalf("HasFailures() = false, want quota-classified smoke failure: %#v", report.Checks)
+	}
+	check, ok := diagnosticCheckByName(report, "smoke")
+	if !ok || check.Status != DiagnosticStatusFail || !strings.Contains(check.Message, "quota, rate limit, or capacity") {
+		t.Fatalf("smoke check = %#v, %v; want common quota classification", check, ok)
+	}
+	if !strings.Contains(check.Detail, "request=text") || !strings.Contains(check.Suggestion, "quota") {
+		t.Fatalf("smoke check = %#v, want request detail and quota suggestion", check)
 	}
 }
 

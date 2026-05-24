@@ -1,12 +1,14 @@
 package gemini
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 type geminiDiagnosticSmokeFailure struct {
-	Kind       geminiDiagnosticSmokeFailureKind
+	Kind       providerdiag.SmokeFailureKind
+	Feature    providerdiag.SmokeFailureFeature
 	Message    string
 	Detail     string
 	Suggestion string
@@ -17,31 +19,18 @@ func classifyGeminiDiagnosticSmokeFailure(smoke DiagnosticSmokeResult, err error
 }
 
 func classifyGeminiDiagnosticSmokeFailureWithEndpoint(smoke DiagnosticSmokeResult, err error, endpoint geminiDiagnosticEndpointFailureContext) geminiDiagnosticSmokeFailure {
-	classificationCtx := newGeminiDiagnosticSmokeFailureContext(smoke, err, endpoint)
-	kind := geminiDiagnosticSmokeFailureKindFor(classificationCtx)
-	return newGeminiDiagnosticSmokeFailure(kind, classificationCtx.Detail)
-}
-
-func newGeminiDiagnosticSmokeFailureContext(smoke DiagnosticSmokeResult, err error, endpoint geminiDiagnosticEndpointFailureContext) geminiDiagnosticSmokeFailureContext {
-	detail := geminiDiagnosticSmokeFailureDetail(smoke, err)
-	failed, hasFailedRequest := firstFailedGeminiSmokeRequest(smoke)
-	return geminiDiagnosticSmokeFailureContext{
-		Detail:           detail,
-		LowerDetail:      strings.ToLower(detail),
-		FailedRequest:    failed,
-		HasFailedRequest: hasFailedRequest,
-		Endpoint:         endpoint,
-	}
-}
-
-func geminiDiagnosticSmokeFailureDetail(smoke DiagnosticSmokeResult, err error) string {
-	if request, ok := firstFailedGeminiSmokeRequest(smoke); ok {
-		return fmt.Sprintf("request=%s route=%s error=%s", request.Name, request.Route, strings.TrimSpace(request.Error))
-	}
-	if err == nil {
-		return ""
-	}
-	return err.Error()
+	classificationCtx := providerdiag.BasicMultimodalSmokeFailureContext(
+		providerdiag.SmokeFailureContextOptions{
+			Provider:         "Gemini",
+			AuthEnv:          geminiAPIKeyEnv,
+			EndpointEnv:      geminiAPIURLEnv,
+			DebugEnv:         "XELYON_DEBUG_GEMINI",
+			EndpointOverride: endpoint.HasOverride(),
+		},
+		smoke,
+		err,
+	)
+	return newGeminiDiagnosticSmokeFailure(providerdiag.ClassifySmokeFailure(classificationCtx))
 }
 
 func (r *DiagnosticReport) addGeminiDiagnosticSmokeFailureChecks(smoke DiagnosticSmokeResult, failure geminiDiagnosticSmokeFailure) {
@@ -103,10 +92,6 @@ func geminiDiagnosticWebSearchSmokeFailureMessage(request DiagnosticSmokeRequest
 		return "Gemini web search smoke did not return summary or sources"
 	}
 	return "Gemini web search smoke failed before proving native web search"
-}
-
-func firstFailedGeminiSmokeRequest(smoke DiagnosticSmokeResult) (DiagnosticSmokeRequestResult, bool) {
-	return failedGeminiSmokeRequest(smoke, func(DiagnosticSmokeRequestResult) bool { return true })
 }
 
 func failedGeminiToolSmokeRequest(smoke DiagnosticSmokeResult) (DiagnosticSmokeRequestResult, bool) {

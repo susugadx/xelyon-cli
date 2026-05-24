@@ -69,7 +69,7 @@ func TestMaxOutputPolicyPreservesOpenAIAndAzureFallbackDifference(t *testing.T) 
 	cfg := config.DefaultConfig()
 
 	openAIPolicy := OpenAICatalogPolicy(cfg, "gpt-5.2-pro", "gpt-5.2-pro")
-	if !openAIPolicy.MaxOutput.Available || openAIPolicy.MaxOutput.Source != "provider_default" || openAIPolicy.MaxOutput.Tokens != 16384 {
+	if !openAIPolicy.MaxOutput.Available || openAIPolicy.MaxOutput.Source != MaxOutputSourceProviderDefault || openAIPolicy.MaxOutput.Tokens != 16384 {
 		t.Fatalf("OpenAI max output = %+v, want provider default available", openAIPolicy.MaxOutput)
 	}
 
@@ -82,61 +82,294 @@ func TestMaxOutputPolicyPreservesOpenAIAndAzureFallbackDifference(t *testing.T) 
 	}
 }
 
-func TestGeminiCatalogPolicyIgnoresNonGeminiGlobalMetadata(t *testing.T) {
-	cfg := config.DefaultConfig()
+func TestCatalogPolicyIgnoresCrossProviderGlobalMetadata(t *testing.T) {
+	tests := []struct {
+		name         string
+		providerName string
+		model        string
+		catalogModel string
+		policy       func(*config.Config, string, string) CatalogPolicy
+		maxOutput    func(*config.Config, string, string) MaxOutputPolicy
+		detail       func(CatalogPolicy) string
+		unwanted     []string
+		wantDetail   string
+	}{
+		{
+			name:         "gemini",
+			providerName: "Gemini",
+			model:        "corp-gemini-model",
+			catalogModel: "gpt-5.5",
+			policy:       GeminiCatalogPolicy,
+			maxOutput:    GeminiMaxOutputPolicy,
+			detail:       CatalogPolicy.GeminiDetail,
+			unwanted:     []string{"128000", "1050000", "gpt-5.5-pro"},
+			wantDetail:   "catalog_model=gpt-5.5, context_window=unknown, max_output_tokens=unknown, pricing=unavailable",
+		},
+		{
+			name:         "kimi",
+			providerName: "Kimi",
+			model:        "corp-kimi-model",
+			catalogModel: "gpt-5.5",
+			policy:       KimiCatalogPolicy,
+			maxOutput:    KimiMaxOutputPolicy,
+			detail:       CatalogPolicy.KimiDetail,
+			unwanted:     []string{"128000", "1050000", "gpt-5.5-pro"},
+			wantDetail:   "catalog_model=gpt-5.5, context_window=unknown, max_output_tokens=unknown, pricing=unavailable",
+		},
+		{
+			name:         "claude",
+			providerName: "Claude",
+			model:        "corp-claude-model",
+			catalogModel: "gpt-5.5",
+			policy:       ClaudeCatalogPolicy,
+			maxOutput:    ClaudeMaxOutputPolicy,
+			detail:       CatalogPolicy.ClaudeDetail,
+			unwanted:     []string{"128000", "1050000", "gpt-5.5-pro"},
+			wantDetail:   "catalog_model=gpt-5.5, context_window=unknown, max_output_tokens=unknown, pricing=unavailable",
+		},
+		{
+			name:         "deepseek",
+			providerName: "DeepSeek",
+			model:        "corp-deepseek-model",
+			catalogModel: "gpt-5.4",
+			policy:       DeepSeekCatalogPolicy,
+			maxOutput:    DeepSeekMaxOutputPolicy,
+			detail:       CatalogPolicy.DeepSeekDetail,
+			unwanted:     []string{"1000000", "64000", "pricing=input $2.50/M"},
+			wantDetail:   "catalog_model=gpt-5.4, context_window=unknown, max_output_tokens=unknown, pricing=unavailable",
+		},
+		{
+			name:         "groq",
+			providerName: "Groq",
+			model:        "corp-groq-model",
+			catalogModel: "gpt-5.4",
+			policy:       GroqCatalogPolicy,
+			maxOutput:    GroqMaxOutputPolicy,
+			detail:       CatalogPolicy.GroqDetail,
+			unwanted:     []string{"1000000", "64000", "pricing=input $2.50/M"},
+			wantDetail:   "catalog_model=gpt-5.4, context_window=unknown, max_output_tokens=unknown, pricing=unavailable",
+		},
+	}
 
-	policy := GeminiCatalogPolicy(cfg, "corp-gemini-model", "gpt-5.5")
-	if policy.ContextWindowKnown || policy.ContextWindowTokens != 0 {
-		t.Fatalf("Gemini context window = %d known=%t, want unknown for non-Gemini catalog", policy.ContextWindowTokens, policy.ContextWindowKnown)
-	}
-	if policy.MaxOutput.Available || policy.MaxOutput.Tokens != 0 || policy.MaxOutput.Source != "missing" {
-		t.Fatalf("Gemini max output = %+v, want missing for non-Gemini catalog", policy.MaxOutput)
-	}
-	if !policy.Pricing.PricingUnavailable {
-		t.Fatalf("Gemini pricing = %+v, want unavailable for non-Gemini catalog", policy.Pricing)
-	}
-	detail := policy.GeminiDetail()
-	for _, unwanted := range []string{"128000", "1050000", "gpt-5.5-pro"} {
-		if strings.Contains(detail, unwanted) {
-			t.Fatalf("GeminiDetail() = %q, should not contain non-Gemini metadata %q", detail, unwanted)
-		}
-	}
-	if got, want := detail, "catalog_model=gpt-5.5, context_window=unknown, max_output_tokens=unknown, pricing=unavailable"; got != want {
-		t.Fatalf("GeminiDetail() = %q, want %q", got, want)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			policy := tt.policy(cfg, tt.model, tt.catalogModel)
+			if policy.ContextWindowKnown || policy.ContextWindowTokens != 0 {
+				t.Fatalf("%s context window = %d known=%t, want unknown for cross-provider catalog", tt.providerName, policy.ContextWindowTokens, policy.ContextWindowKnown)
+			}
+			if policy.MaxOutput.Available || policy.MaxOutput.Tokens != 0 || policy.MaxOutput.Source != MaxOutputSourceMissing {
+				t.Fatalf("%s max output = %+v, want missing for cross-provider catalog", tt.providerName, policy.MaxOutput)
+			}
+			if !policy.Pricing.PricingUnavailable {
+				t.Fatalf("%s pricing = %+v, want unavailable for cross-provider catalog", tt.providerName, policy.Pricing)
+			}
 
-	maxOutput := GeminiMaxOutputPolicy(cfg, "corp-gemini-model", "gpt-5.5")
-	if maxOutput.Available || maxOutput.Source != "missing" {
-		t.Fatalf("GeminiMaxOutputPolicy(non-Gemini) = %+v, want missing", maxOutput)
+			detail := tt.detail(policy)
+			for _, unwanted := range tt.unwanted {
+				if strings.Contains(detail, unwanted) {
+					t.Fatalf("%s detail = %q, should not contain cross-provider metadata %q", tt.providerName, detail, unwanted)
+				}
+			}
+			if detail != tt.wantDetail {
+				t.Fatalf("%s detail = %q, want %q", tt.providerName, detail, tt.wantDetail)
+			}
+
+			maxOutput := tt.maxOutput(cfg, tt.model, tt.catalogModel)
+			if maxOutput.Available || maxOutput.Source != MaxOutputSourceMissing {
+				t.Fatalf("%s max output policy = %+v, want missing", tt.providerName, maxOutput)
+			}
+		})
 	}
 }
 
-func TestKimiCatalogPolicyIgnoresNonKimiGlobalMetadata(t *testing.T) {
+func TestCatalogPolicyPreservesMaxOutputOverrideForUntrustedCatalog(t *testing.T) {
+	tests := []struct {
+		name         string
+		provider     string
+		model        string
+		catalogModel string
+		policy       func(*config.Config, string, string) CatalogPolicy
+		maxOutput    func(*config.Config, string, string) MaxOutputPolicy
+		detail       func(CatalogPolicy) string
+	}{
+		{
+			name:         "gemini",
+			provider:     "gemini",
+			model:        "corp-gemini-model",
+			catalogModel: "gpt-5.5",
+			policy:       GeminiCatalogPolicy,
+			maxOutput:    GeminiMaxOutputPolicy,
+			detail:       CatalogPolicy.GeminiDetail,
+		},
+		{
+			name:         "kimi",
+			provider:     "kimi",
+			model:        "corp-kimi-model",
+			catalogModel: "gpt-5.5",
+			policy:       KimiCatalogPolicy,
+			maxOutput:    KimiMaxOutputPolicy,
+			detail:       CatalogPolicy.KimiDetail,
+		},
+		{
+			name:         "claude",
+			provider:     "claude",
+			model:        "corp-claude-model",
+			catalogModel: "gpt-5.5",
+			policy:       ClaudeCatalogPolicy,
+			maxOutput:    ClaudeMaxOutputPolicy,
+			detail:       CatalogPolicy.ClaudeDetail,
+		},
+		{
+			name:         "deepseek",
+			provider:     "deepseek",
+			model:        "corp-deepseek-model",
+			catalogModel: "gpt-5.4",
+			policy:       DeepSeekCatalogPolicy,
+			maxOutput:    DeepSeekMaxOutputPolicy,
+			detail:       CatalogPolicy.DeepSeekDetail,
+		},
+		{
+			name:         "groq",
+			provider:     "groq",
+			model:        "corp-groq-model",
+			catalogModel: "gpt-5.4",
+			policy:       GroqCatalogPolicy,
+			maxOutput:    GroqMaxOutputPolicy,
+			detail:       CatalogPolicy.GroqDetail,
+		},
+		{
+			name:         "openrouter",
+			provider:     "openrouter",
+			model:        "anthropic/claude-future-prod",
+			catalogModel: "",
+			policy:       OpenRouterCatalogPolicy,
+			maxOutput:    OpenRouterMaxOutputPolicy,
+			detail:       CatalogPolicy.OpenRouterDetail,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			cfg.SetProviderModelConfig(tt.provider, config.ProviderModelConfig{
+				ModelOverrides: map[string]config.ModelOverride{
+					tt.model: {MaxOutputTokens: 7777},
+				},
+			})
+
+			policy := tt.policy(cfg, tt.model, tt.catalogModel)
+			if policy.ContextWindowKnown || policy.ContextWindowTokens != 0 {
+				t.Fatalf("context window = %d known=%t, want unknown for untrusted catalog", policy.ContextWindowTokens, policy.ContextWindowKnown)
+			}
+			if !policy.MaxOutput.Available || policy.MaxOutput.Tokens != 7777 || policy.MaxOutput.Source != MaxOutputSourceModelOverrides {
+				t.Fatalf("catalog policy max output = %+v, want explicit override", policy.MaxOutput)
+			}
+			if !policy.Pricing.PricingUnavailable {
+				t.Fatalf("pricing = %+v, want unavailable for untrusted catalog", policy.Pricing)
+			}
+			detail := tt.detail(policy)
+			if !strings.Contains(detail, "max_output_tokens=7777") ||
+				strings.Contains(detail, "context_window=1000000") ||
+				strings.Contains(detail, "pricing=input $2.50/M") {
+				t.Fatalf("policy detail = %q, want override without untrusted catalog metadata", detail)
+			}
+
+			maxOutput := tt.maxOutput(cfg, tt.model, tt.catalogModel)
+			if !maxOutput.Available || maxOutput.Tokens != 7777 || maxOutput.Source != MaxOutputSourceModelOverrides {
+				t.Fatalf("max output policy = %+v, want explicit override", maxOutput)
+			}
+		})
+	}
+}
+
+func TestRuntimeMaxOutputTokensStaysSeparateFromUntrustedCatalogPolicy(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openrouter", config.ProviderModelConfig{
+		DefaultModel: "corp-openrouter-model",
+		CatalogModel: "openai/gpt-5.5",
+	})
+	policyCfg := ProviderDiagnosticPolicyConfig(cfg, ProviderDiagnosticPolicyConfigOptions{
+		Provider:     "openrouter",
+		Model:        "corp-openrouter-model",
+		CatalogModel: "bogus",
+	})
+
+	policy := OpenRouterCatalogPolicy(policyCfg, "corp-openrouter-model", "")
+	if policy.MaxOutput.Available || policy.MaxOutput.Tokens != 0 {
+		t.Fatalf("catalog policy max output = %+v, want unknown without trusted catalog", policy.MaxOutput)
+	}
+	if got := RuntimeMaxOutputTokens(policyCfg, "openrouter", "corp-openrouter-model"); got != 64000 {
+		t.Fatalf("RuntimeMaxOutputTokens() = %d, want provider runtime fallback", got)
+	}
+}
+
+func TestBedrockCatalogPolicyUsesProviderdiagTrustBoundary(t *testing.T) {
 	cfg := config.DefaultConfig()
 
-	policy := KimiCatalogPolicy(cfg, "corp-kimi-model", "gpt-5.5")
+	policy := BedrockCatalogPolicy(cfg, "amazon.nova-pro-v1:0", "gpt-5.4", MaxOutputPolicy{
+		Tokens:    5000,
+		Source:    MaxOutputSourceCatalog,
+		Available: true,
+	})
 	if policy.ContextWindowKnown || policy.ContextWindowTokens != 0 {
-		t.Fatalf("Kimi context window = %d known=%t, want unknown for non-Kimi catalog", policy.ContextWindowTokens, policy.ContextWindowKnown)
+		t.Fatalf("Bedrock context window = %d known=%t, want unknown for non-Bedrock catalog", policy.ContextWindowTokens, policy.ContextWindowKnown)
 	}
-	if policy.MaxOutput.Available || policy.MaxOutput.Tokens != 0 || policy.MaxOutput.Source != "missing" {
-		t.Fatalf("Kimi max output = %+v, want missing for non-Kimi catalog", policy.MaxOutput)
+	if !policy.MaxOutput.Available || policy.MaxOutput.Tokens != 5000 || policy.MaxOutput.Source != MaxOutputSourceCatalog {
+		t.Fatalf("Bedrock max output = %+v, want provider-supplied request-model fallback", policy.MaxOutput)
 	}
 	if !policy.Pricing.PricingUnavailable {
-		t.Fatalf("Kimi pricing = %+v, want unavailable for non-Kimi catalog", policy.Pricing)
-	}
-	detail := policy.KimiDetail()
-	for _, unwanted := range []string{"128000", "1050000", "gpt-5.5-pro"} {
-		if strings.Contains(detail, unwanted) {
-			t.Fatalf("KimiDetail() = %q, should not contain non-Kimi metadata %q", detail, unwanted)
-		}
-	}
-	if got, want := detail, "catalog_model=gpt-5.5, context_window=unknown, max_output_tokens=unknown, pricing=unavailable"; got != want {
-		t.Fatalf("KimiDetail() = %q, want %q", got, want)
+		t.Fatalf("Bedrock pricing = %+v, want unavailable for non-Bedrock catalog", policy.Pricing)
 	}
 
-	maxOutput := KimiMaxOutputPolicy(cfg, "corp-kimi-model", "gpt-5.5")
-	if maxOutput.Available || maxOutput.Source != "missing" {
-		t.Fatalf("KimiMaxOutputPolicy(non-Kimi) = %+v, want missing", maxOutput)
+	trusted := BedrockCatalogPolicy(cfg, "global.anthropic.claude-sonnet-4-6", "global.anthropic.claude-sonnet-4-6", MaxOutputPolicy{
+		Tokens:    64000,
+		Source:    MaxOutputSourceCatalog,
+		Available: true,
+	})
+	if !trusted.ContextWindowKnown || trusted.ContextWindowTokens == 0 {
+		t.Fatalf("trusted Bedrock context window = %d known=%t, want known metadata", trusted.ContextWindowTokens, trusted.ContextWindowKnown)
+	}
+	if trusted.Pricing.PricingUnavailable {
+		t.Fatalf("trusted Bedrock pricing = %+v, want pricing metadata", trusted.Pricing)
+	}
+}
+
+func TestBedrockMaxOutputPoliciesKeepRuntimeSourcesInProviderdiag(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	untrusted := BedrockUntrustedCatalogMaxOutputPolicy(cfg, "amazon.nova-pro-v1:0")
+	if !untrusted.Available || untrusted.Tokens != 5000 || untrusted.Source != MaxOutputSourceCatalog {
+		t.Fatalf("BedrockUntrustedCatalogMaxOutputPolicy() = %+v, want request-model catalog fallback", untrusted)
+	}
+
+	cfg.SetProviderModelConfig("bedrock", config.ProviderModelConfig{
+		DefaultModel:    "anthropic.claude-custom-v1:0",
+		MaxOutputTokens: 9999,
+	})
+	claude := BedrockClaudeMaxOutputPolicy(cfg, "anthropic.claude-custom-v1:0")
+	if !claude.Available || claude.Tokens != 9999 || claude.Source != MaxOutputSourceProviderDefault {
+		t.Fatalf("BedrockClaudeMaxOutputPolicy() = %+v, want provider default", claude)
+	}
+
+	cfg.SetProviderModelConfig("bedrock", config.ProviderModelConfig{
+		DefaultModel:    "global.anthropic.claude-sonnet-4-6",
+		CatalogModel:    "gpt-5.5",
+		MaxOutputTokens: 9999,
+	})
+	claudeCatalog := BedrockClaudeMaxOutputPolicy(cfg, "global.anthropic.claude-sonnet-4-6")
+	if !claudeCatalog.Available || claudeCatalog.Tokens != 64000 || claudeCatalog.Source != MaxOutputSourceCatalog {
+		t.Fatalf("BedrockClaudeMaxOutputPolicy(cross-provider catalog) = %+v, want Bedrock request-model catalog max output", claudeCatalog)
+	}
+
+	cfg.SetProviderModelConfig("bedrock", config.ProviderModelConfig{
+		ModelOverrides: map[string]config.ModelOverride{
+			"anthropic.claude-custom-v1:0": {MaxOutputTokens: 2048},
+		},
+	})
+	override := BedrockClaudeMaxOutputPolicy(cfg, "anthropic.claude-custom-v1:0")
+	if !override.Available || override.Tokens != 2048 || override.Source != MaxOutputSourceModelOverrides {
+		t.Fatalf("BedrockClaudeMaxOutputPolicy(override) = %+v, want model override", override)
 	}
 }
 
@@ -147,7 +380,7 @@ func TestOllamaCatalogPolicyIgnoresNonOllamaGlobalMetadata(t *testing.T) {
 	if policy.ContextWindowKnown || policy.ContextWindowTokens != 0 {
 		t.Fatalf("Ollama context window = %d known=%t, want unknown for non-Ollama catalog", policy.ContextWindowTokens, policy.ContextWindowKnown)
 	}
-	if !policy.MaxOutput.Available || policy.MaxOutput.Tokens != 4096 || policy.MaxOutput.Source != "provider_default" {
+	if !policy.MaxOutput.Available || policy.MaxOutput.Tokens != 4096 || policy.MaxOutput.Source != MaxOutputSourceProviderDefault {
 		t.Fatalf("Ollama max output = %+v, want provider default for non-Ollama catalog", policy.MaxOutput)
 	}
 	if policy.Pricing.PricingUnavailable {
@@ -194,139 +427,5 @@ func TestRouteDecisionReasonString(t *testing.T) {
 	}
 	if got, want := decision.ReasonString(), "deployment=corp uses Responses API; catalog_model=gpt-5.3-codex supports Responses streaming"; got != want {
 		t.Fatalf("ReasonString() = %q, want %q", got, want)
-	}
-}
-
-func TestEvaluateRequiredCapabilities(t *testing.T) {
-	snapshot := CapabilitySnapshot{
-		ResponsesAPI:                   true,
-		ResponsesStreaming:             false,
-		ResponsesStreamingAvailability: KnownCapabilityAvailability(false),
-		FunctionCalling:                true,
-		ImageInput:                     true,
-		Retention:                      NewRetentionSnapshot(true, true, true),
-		ServerCompaction: ServerCompactionSnapshot{
-			RequestPayload: true,
-		},
-	}
-
-	check := EvaluateRequiredCapabilities(snapshot, []string{
-		"responses-api",
-		"function_calling",
-		"responses_api",
-		"responses_streaming",
-		"unknown_capability",
-	})
-	if check.Satisfied() {
-		t.Fatalf("Satisfied() = true, want false for missing/unknown capability: %+v", check.Results)
-	}
-	if !check.HasUnknown() {
-		t.Fatalf("HasUnknown() = false, want true: %+v", check.Results)
-	}
-	if got, want := check.Detail(), "responses_api=ok, function_calling=ok, responses_streaming=missing, unknown_capability=unknown"; got != want {
-		t.Fatalf("Detail() = %q, want %q", got, want)
-	}
-}
-
-func TestEvaluateRequiredCapabilitiesSatisfied(t *testing.T) {
-	snapshot := CapabilitySnapshot{
-		ResponsesAPI:                   true,
-		ResponsesStreaming:             true,
-		ResponsesStreamingAvailability: KnownCapabilityAvailability(true),
-		ChatCompletions:                true,
-		FunctionCalling:                true,
-		ImageInput:                     true,
-		Retention:                      NewRetentionSnapshot(true, true, true),
-		ServerCompaction: ServerCompactionSnapshot{
-			RequestPayload: true,
-		},
-	}
-
-	check := EvaluateRequiredCapabilities(snapshot, SupportedRequiredCapabilities())
-	if !check.Satisfied() {
-		t.Fatalf("Satisfied() = false, want true: detail=%q results=%+v", check.Detail(), check.Results)
-	}
-}
-
-func TestEvaluateRequiredCapabilitiesUnknownAvailability(t *testing.T) {
-	snapshot := CapabilitySnapshot{
-		ResponsesAPI:                   true,
-		ResponsesStreaming:             true,
-		ResponsesStreamingAvailability: UnknownCapabilityAvailability(),
-	}
-
-	check := EvaluateRequiredCapabilities(snapshot, []string{RequiredCapabilityResponsesStreaming})
-	if check.Satisfied() {
-		t.Fatalf("Satisfied() = true, want false for unknown availability: %+v", check.Results)
-	}
-	if !check.HasUnknownAvailability() {
-		t.Fatalf("HasUnknownAvailability() = false, want true: %+v", check.Results)
-	}
-	if got, want := check.Detail(), "responses_streaming=unknown"; got != want {
-		t.Fatalf("Detail() = %q, want %q", got, want)
-	}
-}
-
-func TestResponsesStreamingCapabilityAvailability(t *testing.T) {
-	knownPolicy := CatalogPolicy{ContextWindowKnown: true}
-	unknownPolicy := CatalogPolicy{ContextWindowKnown: false}
-
-	for _, tt := range []struct {
-		name               string
-		responsesStreaming bool
-		policy             CatalogPolicy
-		want               CapabilityAvailability
-	}{
-		{
-			name:               "streaming route with known catalog",
-			responsesStreaming: true,
-			policy:             knownPolicy,
-			want:               KnownCapabilityAvailability(true),
-		},
-		{
-			name:               "streaming route with unknown catalog",
-			responsesStreaming: true,
-			policy:             unknownPolicy,
-			want:               UnknownCapabilityAvailability(),
-		},
-		{
-			name:               "non streaming route with unknown catalog",
-			responsesStreaming: false,
-			policy:             unknownPolicy,
-			want:               KnownCapabilityAvailability(false),
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ResponsesStreamingCapabilityAvailability(tt.responsesStreaming, tt.policy)
-			if got != tt.want {
-				t.Fatalf("ResponsesStreamingCapabilityAvailability() = %+v, want %+v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRequiredCapabilityFailureSuggestion(t *testing.T) {
-	missing := RequiredCapabilityCheck{Results: []RequiredCapabilityResult{{
-		Name:   RequiredCapabilityResponsesStreaming,
-		Status: RequiredCapabilityStatusMissing,
-	}}}
-	if got, want := RequiredCapabilityFailureSuggestion(missing, "model/configuration", ""), "Choose a model/configuration that provides the missing capability, or remove --require-capability"; got != want {
-		t.Fatalf("RequiredCapabilityFailureSuggestion() = %q, want %q", got, want)
-	}
-
-	unknown := RequiredCapabilityCheck{Results: []RequiredCapabilityResult{{
-		Name:   "unknown_capability",
-		Status: RequiredCapabilityStatusUnknownName,
-	}}}
-	if got, want := RequiredCapabilityFailureSuggestion(unknown, "model/configuration", ""), "Use one of: "+SupportedRequiredCapabilitiesText(); got != want {
-		t.Fatalf("RequiredCapabilityFailureSuggestion() = %q, want %q", got, want)
-	}
-
-	unknownAvailability := RequiredCapabilityCheck{Results: []RequiredCapabilityResult{{
-		Name:   RequiredCapabilityResponsesStreaming,
-		Status: RequiredCapabilityStatusUnknownAvailability,
-	}}}
-	if got, want := RequiredCapabilityFailureSuggestion(unknownAvailability, "model/configuration", "Set --catalog-model"), "Set --catalog-model"; got != want {
-		t.Fatalf("RequiredCapabilityFailureSuggestion() = %q, want %q", got, want)
 	}
 }

@@ -92,8 +92,8 @@ func TestDiagnoseClaude_NonClaudeCatalogModelDoesNotUseGlobalMetadata(t *testing
 	if report.ContextWindowTokens != 0 {
 		t.Fatalf("ContextWindowTokens = %d, want non-Claude metadata ignored", report.ContextWindowTokens)
 	}
-	if report.MaxOutputTokens == 128000 {
-		t.Fatalf("MaxOutputTokens = %d, should not use OpenAI max output metadata", report.MaxOutputTokens)
+	if report.MaxOutputTokens != 64000 {
+		t.Fatalf("MaxOutputTokens = %d, want Claude runtime fallback", report.MaxOutputTokens)
 	}
 	requireClaudeDiagnosticCheckStatus(t, report, "catalog_model", DiagnosticStatusWarn)
 	catalogPolicy := requireClaudeDiagnosticCheckStatus(t, report, "catalog_policy", DiagnosticStatusWarn)

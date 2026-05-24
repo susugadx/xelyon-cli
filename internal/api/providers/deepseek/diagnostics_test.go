@@ -104,8 +104,8 @@ func TestDiagnoseDeepSeek_NonDeepSeekCatalogModelDoesNotUseGlobalMetadata(t *tes
 	if report.ContextWindowTokens != 0 {
 		t.Fatalf("ContextWindowTokens = %d, want non-DeepSeek catalog metadata ignored", report.ContextWindowTokens)
 	}
-	if report.MaxOutputTokens == 128000 {
-		t.Fatalf("MaxOutputTokens = %d, want OpenAI catalog max output ignored", report.MaxOutputTokens)
+	if report.MaxOutputTokens != 16384 {
+		t.Fatalf("MaxOutputTokens = %d, want DeepSeek runtime fallback", report.MaxOutputTokens)
 	}
 	catalogModel, ok := deepSeekDiagnosticCheckByName(report, "catalog_model")
 	if !ok || catalogModel.Status != DiagnosticStatusWarn {

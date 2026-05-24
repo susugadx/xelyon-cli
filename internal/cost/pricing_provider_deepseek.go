@@ -13,10 +13,10 @@ func getDeepSeekPricing(model string) PricingInfo {
 
 	if strings.Contains(lm, "deepseek-v4-pro") {
 		return PricingInfo{
-			InputCostPerM:         1.74,
-			OutputCostPerM:        3.48,
-			CachedInputCostPerM:   0.0145,
-			CacheCreationCostPerM: 1.74,
+			InputCostPerM:         0.435,
+			OutputCostPerM:        0.87,
+			CachedInputCostPerM:   0.003625,
+			CacheCreationCostPerM: 0.435,
 		}
 	}
 	if strings.Contains(lm, "deepseek-v4-flash") ||

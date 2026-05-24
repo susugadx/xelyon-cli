@@ -5,9 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -65,6 +63,7 @@ type DiagnosticReport struct {
 	ContextWindowTokens    int                       `json:"context_window_tokens,omitempty"`
 	FunctionCallingEnabled bool                      `json:"function_calling_enabled"`
 	Checks                 []DiagnosticCheck         `json:"checks"`
+	Capabilities           *DiagnosticCapabilities   `json:"capabilities,omitempty"`
 	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
 	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
@@ -94,20 +93,35 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は Groq 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	Capabilities         bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest
+	return o.localCapabilityRequest().RequiresAuthCheck()
+}
+
+func (o DiagnosticOptions) requiresEndpointCheck() bool {
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は Groq のローカル設定と、必要に応じて live smoke を検証する。
@@ -116,11 +130,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	model, modelSource := resolveGroqDiagnosticModel(cfg, options.Model)
 	catalogModel, catalogSource := resolveGroqDiagnosticCatalogModel(cfg, model, options.CatalogModel)
 	policyCfg := groqDiagnosticPolicyConfig(cfg, model, catalogModel, 0)
-	contextWindow := 0
-	if groqCatalogModelKnown(catalogModel) {
-		contextWindow, _ = llmcatalog.KnownModelContextLimit(catalogModel)
-	}
-	configCtx := config.WithContext(context.Background(), policyCfg)
+	policy := providerdiag.GroqCatalogPolicy(policyCfg, model, catalogModel)
 
 	report := DiagnosticReport{
 		Provider:               "groq",
@@ -131,21 +141,27 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModelSource:     catalogSource,
 		Route:                  DiagnosticRouteChatCompletions,
 		RouteReason:            "Groq provider uses OpenAI-compatible Chat Completions",
-		MaxOutputTokens:        api.GetMaxOutputTokens(configCtx, "groq", model),
-		ContextWindowTokens:    contextWindow,
+		MaxOutputTokens:        providerdiag.RuntimeMaxOutputTokens(policyCfg, "groq", model),
+		ContextWindowTokens:    policy.ContextWindowTokens,
 		FunctionCallingEnabled: New("diagnostic-key").IsFunctionCallingEnabled(),
 	}
 
 	if options.requiresAuthCheck() {
 		report.addAuthCheck()
 	}
-	report.addEndpointCheck()
+	if options.requiresEndpointCheck() {
+		report.addEndpointCheck()
+	}
 	report.addProviderRegistrationCheck()
 	report.addModelCheck()
 	report.addCatalogModelCheck()
 	report.addRouteCheck()
 	report.addCatalogPolicyCheck(policyCfg)
 	report.addFunctionCallingCheck()
+	if options.Capabilities {
+		report.addCapabilities(policyCfg)
+	}
+	report.addRequiredCapabilities(policyCfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

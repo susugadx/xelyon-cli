@@ -812,7 +812,7 @@ func TestGetDeepSeekPricing_V4AndLegacyAliases(t *testing.T) {
 		wantOutput float64
 	}{
 		{"deepseek-v4-flash", 0.14, 0.28},
-		{"deepseek-v4-pro", 1.74, 3.48},
+		{"deepseek-v4-pro", 0.435, 0.87},
 		{"deepseek-chat", 0.14, 0.28},
 		{"deepseek-reasoner", 0.14, 0.28},
 		{"", 0.28, 0.42}, // V4 alias ではない既存フォールバック

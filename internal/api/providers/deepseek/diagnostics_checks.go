@@ -134,19 +134,18 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 	if model == "" || catalogModel == "" {
 		return
 	}
+	policy := providerdiag.DeepSeekCatalogPolicy(cfg, model, catalogModel)
+	detail := policy.DeepSeekDetail()
 	if !deepSeekCatalogModelKnown(catalogModel) {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
 			"catalog_model is not a DeepSeek model known to local metadata",
-			fmt.Sprintf("catalog_model=%s, context_window=unknown, max_output_tokens=unknown, pricing=unavailable", catalogModel),
+			detail,
 			"Use a DeepSeek model known to XELYON before relying on token-limit diagnostics",
 		)
 		return
 	}
-
-	policy := providerdiag.DeepSeekCatalogPolicy(cfg, model, catalogModel)
-	detail := policy.DeepSeekDetail()
 
 	switch {
 	case !policy.ContextWindowKnown:
@@ -219,10 +218,21 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke, err := runDeepSeekDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.TextToolSmokeFailureContext(
+			providerdiag.SmokeFailureContextOptions{
+				Provider:         "DeepSeek",
+				AuthEnv:          deepSeekAPIKeyEnv,
+				EndpointEnv:      deepSeekAPIURLEnv,
+				DebugEnv:         "XELYON_DEBUG_DEEPSEEK",
+				EndpointOverride: strings.TrimSpace(os.Getenv(deepSeekAPIURLEnv)) != "",
+			},
+			smoke,
+			err,
+		))
 		if deepSeekSmokeErrorIsToolFailure(smoke) {
-			r.addCheck(DiagnosticStatusFail, "tool_smoke", "DeepSeek tool smoke response did not include the diagnostic tool call", err.Error(), "")
+			r.addCheck(DiagnosticStatusFail, "tool_smoke", "DeepSeek tool smoke response did not include the diagnostic tool call", failure.Detail, failure.Suggestion)
 		}
-		r.addCheck(DiagnosticStatusFail, "smoke", "live DeepSeek smoke request failed", err.Error(), "")
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live DeepSeek smoke request succeeded", smoke.Duration, "")

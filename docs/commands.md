@@ -8,24 +8,26 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 `doctor` は provider ごとに runtime route、endpoint override、live smoke の意味が違います。共通の確認だけなら `--json` と `--print-request` を使い、`--smoke` 系は live API request を送る場合だけ指定してください。
 
+複数 provider の doctor smoke を横断実行する場合は、対象 provider を明示して `DOCTOR_SMOKE_PROVIDERS="openai groq kimi" make doctor-smoke-matrix` を使います。`DOCTOR_SMOKE_PROVIDERS` が空のときは実 API / ローカル runtime を呼ばず終了します。各 provider の API key や AWS / Ollama の準備は従来の個別 target と同じです。
+
 | Provider | Request target | Live smoke flags | Local / gate flags | Request preview | Endpoint contract | Usage / cost observation |
 | --- | --- | --- | --- | --- | --- | --- |
-| `deepseek` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | none | `--print-request` | `DEEPSEEK_API_URL` is an exact Chat Completions endpoint or intentional proxy path | text / tool token usage and cost when returned |
-| `kimi` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--web-search-smoke` | none | `--print-request` | `KIMI_API_URL` is an exact Chat Completions endpoint or intentional proxy path | token usage plus built-in web search call count / fee observations |
-| `gemini` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--web-search-smoke` | none | `--print-request` | text / tool / image use `streamGenerateContent?alt=sse`; native web search uses `generateContent` | SSE / `usageMetadata` usage and cost when returned; web search usage is optional for success |
-| `claude` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke`, `--web-search-smoke` | none | `--print-request` | `ANTHROPIC_API_URL` is an exact `/v1/messages` endpoint or intentional proxy path | Messages usage and cost when returned; web search usage is optional for success |
-| `groq` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | none | `--print-request` | `GROQ_API_URL` is an exact Chat Completions endpoint or intentional proxy path | text / tool token usage and cost when returned |
-| `ollama` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | none | `--print-request` | `OLLAMA_BASE_URL` is a base URL; concrete `/api/chat` or `/api/tags` endpoints fail | local zero-cost token usage when returned |
-| `openrouter` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | none | `--print-request` | `OPENROUTER_API_URL` is Chat Completions / proxy; Anthropic Skin `/v1/messages` is derived | selected route token usage and cost when returned |
+| `deepseek` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `DEEPSEEK_API_URL` is an exact Chat Completions endpoint or intentional proxy path | text / tool token usage and cost when returned |
+| `kimi` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--web-search-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `KIMI_API_URL` is an exact Chat Completions endpoint or intentional proxy path | token usage plus built-in web search call count / fee observations |
+| `gemini` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--web-search-smoke` | `--capabilities`, `--require-capability` | `--print-request` | text / tool / image use `streamGenerateContent?alt=sse`; native web search uses `generateContent` | SSE / `usageMetadata` usage and cost when returned; web search usage is optional for success |
+| `claude` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke`, `--web-search-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `ANTHROPIC_API_URL` is an exact `/v1/messages` endpoint or intentional proxy path | Messages usage and cost when returned; web search usage is optional for success |
+| `groq` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `GROQ_API_URL` is an exact Chat Completions endpoint or intentional proxy path | text / tool token usage and cost when returned |
+| `ollama` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OLLAMA_BASE_URL` is a base URL; concrete `/api/chat` or `/api/tags` endpoints fail | local zero-cost token usage when returned |
+| `openrouter` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OPENROUTER_API_URL` is Chat Completions / proxy; Anthropic Skin `/v1/messages` is derived | selected route token usage and cost when returned |
 | `openai` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OPENAI_API_URL` is Chat Completions; `OPENAI_RESPONSES_URL` is Responses | response ID, token usage, cost, and retention chain metadata when returned |
 | `azure` | `--deployment`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability`, `--print-config` | `--print-request` | `AZURE_OPENAI_BASE_URL` is a resource v1 base URL; smoke uses `<normalized_base_url>/responses` | response ID, token usage, cost, and retention chain metadata when returned |
-| `bedrock` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke` | none | `--print-request` | AWS region / credentials select Bedrock runtime route; request preview is credential-independent | AWS request ID, token usage, and cost when returned; partial usage makes total cost unavailable |
+| `bedrock` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke` | `--capabilities`, `--require-capability` | `--print-request` | AWS region / credentials select Bedrock runtime route; request preview is credential-independent | AWS request ID, token usage, and cost when returned; partial usage makes total cost unavailable |
 
 ### `xelyon doctor deepseek`
 
 DeepSeek provider の `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、thinking request config、function calling 設定、token / pricing metadata を確認します。route は常に `chat_completions` です。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
 
-`--model` は実 request に送る DeepSeek model ID または alias、`--catalog-model` は alias の underlying DeepSeek model として token / pricing / thinking 判定に使います。`DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 DeepSeek 互換 endpoint は `/chat/completions` で終わります。OpenAI 互換 proxy の `/v1/chat/completions` も指定できますが、doctor では意図的な proxy path として warn になります。`DEEPSEEK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities`、`--require-capability`、`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は DeepSeek doctor v1 では提供しません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+`--model` は実 request に送る DeepSeek model ID または alias、`--catalog-model` は alias の underlying DeepSeek model として token / pricing / thinking 判定に使います。non-DeepSeek `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は token / pricing / capability 判定に使いません。`DEEPSEEK_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 DeepSeek 互換 endpoint は `/chat/completions` で終わります。OpenAI 互換 proxy の `/v1/chat/completions` も指定できますが、doctor では意図的な proxy path として warn になります。`DEEPSEEK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は live request なしで shared capability 名を検証します。`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は DeepSeek doctor v1 では提供しません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
 ```bash
 xelyon doctor deepseek
@@ -33,6 +35,8 @@ xelyon doctor deepseek --model deepseek-v4-flash
 xelyon doctor deepseek --model corp-deepseek-model --catalog-model deepseek-v4-flash
 xelyon doctor deepseek --smoke
 xelyon doctor deepseek --tool-smoke
+xelyon doctor deepseek --capabilities
+xelyon doctor deepseek --require-capability chat_completions --require-capability function_calling
 xelyon doctor deepseek --print-request
 xelyon doctor deepseek --tool-smoke --print-request
 xelyon doctor deepseek --smoke --tool-smoke
@@ -43,9 +47,9 @@ xelyon doctor deepseek --json
 
 ### `xelyon doctor kimi`
 
-Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、token / pricing metadata、未対応機能、`prompt_cache_key` request shape を確認します。`KIMI_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 Moonshot endpoint は `/v1/chat/completions` で終わります。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になります。`--catalog-model` は alias の underlying Kimi model として token / pricing 判定に使います。`--print-request` は live request を送らず、redacted bearer header と request body を `request_preview` に表示します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。web search smoke は `web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`cached_input_tokens`、検索結果 token 観測値を text / JSON に出します。
+Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、token / pricing metadata、未対応機能、`prompt_cache_key` request shape を確認します。`KIMI_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 Moonshot endpoint は `/v1/chat/completions` で終わります。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になります。`--catalog-model` は alias の underlying Kimi model として token / pricing 判定に使います。non-Kimi `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は token / pricing / capability 判定に使いません。`--print-request` は live request を送らず、redacted bearer header と request body を `request_preview` に表示します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。web search smoke は `web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`cached_input_tokens`、検索結果 token 観測値を text / JSON に出します。
 
-`--print-request` は `MOONSHOT_API_KEY` なしで実行でき、text / tool / image / built-in `$web_search` の request body と実 request URL を送信前に確認できます。`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生し、`$web_search` tool call が 1 件以上観測された場合だけ成功扱いになります。通常の `stop` response で tool call がない場合、request 自体が返っていても smoke は fail します。call fee は token cost とは別料金で、検索結果 tokens は次 request の `prompt_tokens` に含まれるため二重加算しません。endpoint の token usage が返らない場合は `usage` check が warn になり、web search の fee / call count 観測だけでは token usage 観測済みとは扱いません。
+`--print-request` は `MOONSHOT_API_KEY` なしで実行でき、text / tool / image / built-in `$web_search` の request body と実 request URL を送信前に確認できます。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は live request なしで shared capability 名を検証します。`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生し、`$web_search` tool call が 1 件以上観測された場合だけ成功扱いになります。通常の `stop` response で tool call がない場合、request 自体が返っていても smoke は fail します。call fee は token cost とは別料金で、検索結果 tokens は次 request の `prompt_tokens` に含まれるため二重加算しません。endpoint の token usage が返らない場合は `usage` check が warn になり、web search の fee / call count 観測だけでは token usage 観測済みとは扱いません。
 
 ```bash
 xelyon doctor kimi
@@ -57,6 +61,8 @@ xelyon doctor kimi --smoke
 xelyon doctor kimi --image-smoke
 xelyon doctor kimi --tool-smoke
 xelyon doctor kimi --web-search-smoke
+xelyon doctor kimi --capabilities
+xelyon doctor kimi --require-capability image_input --require-capability web_search
 xelyon doctor kimi --json
 ```
 
@@ -66,7 +72,7 @@ xelyon doctor kimi --json
 
 Gemini provider の `GEMINI_API_KEY`、`GEMINI_API_URL`、provider 登録、model / `catalog_model` 解決、`streamGenerateContent?alt=sse` route、function calling、画像入力、thinking、context caching、native web search、token / pricing metadata を確認します。`--smoke` を付けると live text SSE request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、request-scoped `ANY` mode で dummy tool call を強制します。画像入力は `--image-smoke`、native web search は `--web-search-smoke` で確認します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted `x-goog-api-key` header、request body を `request_preview` に表示します。
 
-`--model` は実 request に送る Gemini model ID または alias、`--catalog-model` は alias の underlying Gemini model として token / pricing 判定に使います。non-Gemini `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Gemini doctor の token / cost policy に使いません。tool smoke / preview では request-scoped `ANY` mode を使って diagnostic tool だけを送り、通常 runtime の `GEMINI_FC_MODE` fallback は変更しません。`GEMINI_API_URL` は runtime と同じ exact endpoint / proxy override で、`--print-request` の `request_preview.requests[].url` が実際の送信先です。text / tool / image は `streamGenerateContent?alt=sse`、native web search は `generateContent` の request shape を同じ URL に送るため、`--web-search-smoke` では `generateContent` を受ける endpoint または両方の shape を受ける proxy を使います。`--capabilities`、`--require-capability`、`--retention-smoke`、`--thinking-smoke` は Gemini doctor v1 では提供しません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--web-search-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+`--model` は実 request に送る Gemini model ID または alias、`--catalog-model` は alias の underlying Gemini model として token / pricing 判定に使います。non-Gemini `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Gemini doctor の token / pricing / capability policy に使いません。tool smoke / preview では request-scoped `ANY` mode を使って diagnostic tool だけを送り、通常 runtime の `GEMINI_FC_MODE` fallback は変更しません。`GEMINI_API_URL` は runtime と同じ exact endpoint / proxy override で、`--print-request` の `request_preview.requests[].url` が実際の送信先です。text / tool / image は `streamGenerateContent?alt=sse`、native web search は `generateContent` の request shape を同じ URL に送るため、`--web-search-smoke` では `generateContent` を受ける endpoint または両方の shape を受ける proxy を使います。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は live request なしで shared capability 名を検証します。`--retention-smoke`、`--thinking-smoke` は Gemini doctor v1 では提供しません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--web-search-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
 ```bash
 xelyon doctor gemini
@@ -76,6 +82,8 @@ xelyon doctor gemini --smoke
 xelyon doctor gemini --tool-smoke
 xelyon doctor gemini --image-smoke
 xelyon doctor gemini --web-search-smoke
+xelyon doctor gemini --capabilities
+xelyon doctor gemini --require-capability image_input --require-capability web_search
 xelyon doctor gemini --print-request
 xelyon doctor gemini --tool-smoke --print-request
 xelyon doctor gemini --smoke --tool-smoke --image-smoke --web-search-smoke
@@ -90,7 +98,7 @@ Gemini live smoke の失敗時は `smoke` check の message / suggestion と `sm
 
 Claude provider の `ANTHROPIC_API_KEY`、`ANTHROPIC_API_URL`、provider 登録、model / `catalog_model` 解決、Anthropic Messages route、function calling、画像入力、thinking request config、context management、Claude compaction、native web search、token / pricing metadata を確認します。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、diagnostic tool call を強制します。画像入力は `--image-smoke`、thinking request は `--thinking-smoke`、native web search は `--web-search-smoke` で確認します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted `x-api-key` header、Anthropic headers、request body を `request_preview` に表示します。
 
-`--model` は実 request に送る Claude model ID または alias、`--catalog-model` は alias の underlying Claude model として token / pricing / thinking / context management 判定に使います。non-Claude `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Claude doctor の token / cost policy に使いません。`ANTHROPIC_API_URL` は runtime と同じ exact endpoint / proxy override で、公式 Anthropic endpoint では `/v1/messages` を期待します。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になり、`--print-request` / live smoke はその URL を実 request 先として使います。`--print-request` は `ANTHROPIC_API_KEY` なしで実行でき、text / tool / image / thinking / native web search の request body を送信前に確認できます。`--capabilities`、`--require-capability`、`--retention-smoke` は Claude doctor v1 では提供しません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--thinking-smoke` / `--web-search-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+`--model` は実 request に送る Claude model ID または alias、`--catalog-model` は alias の underlying Claude model として token / pricing / thinking / context management 判定に使います。non-Claude `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Claude doctor の token / pricing / capability policy に使いません。`web_search` required capability は request model または trusted Claude `catalog_model` で対応を確認できる場合だけ pass します。`ANTHROPIC_API_URL` は runtime と同じ exact endpoint / proxy override で、公式 Anthropic endpoint では `/v1/messages` を期待します。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になり、`--print-request` / live smoke はその URL を実 request 先として使います。`--print-request` は `ANTHROPIC_API_KEY` なしで実行でき、text / tool / image / thinking / native web search の request body を送信前に確認できます。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は live request なしで shared capability 名を検証します。`--retention-smoke` は Claude doctor v1 では提供しません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--thinking-smoke` / `--web-search-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
 ```bash
 xelyon doctor claude
@@ -101,6 +109,8 @@ xelyon doctor claude --tool-smoke
 xelyon doctor claude --image-smoke
 xelyon doctor claude --thinking-smoke
 xelyon doctor claude --web-search-smoke
+xelyon doctor claude --capabilities
+xelyon doctor claude --require-capability image_input --require-capability thinking
 xelyon doctor claude --print-request
 xelyon doctor claude --tool-smoke --print-request
 xelyon doctor claude --smoke --tool-smoke --image-smoke --thinking-smoke --web-search-smoke
@@ -113,7 +123,7 @@ xelyon doctor claude --json
 
 Groq provider の `GROQ_API_KEY`、`GROQ_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、function calling 設定、token / pricing metadata を確認します。route は常に `chat_completions` です。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
 
-`--model` は実 request に送る Groq model ID または alias、`--catalog-model` は alias の underlying Groq model として token / pricing 判定に使います。`GROQ_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 Groq endpoint は `/openai/v1/chat/completions` で終わります。OpenAI 互換 proxy の `/v1/chat/completions` も指定できますが、doctor では意図的な proxy path として warn になります。`GROQ_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities`、`--require-capability`、`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は Groq doctor v1 では提供しません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+`--model` は実 request に送る Groq model ID または alias、`--catalog-model` は alias の underlying Groq model として token / pricing 判定に使います。non-Groq `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は token / pricing / capability 判定に使いません。`GROQ_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 Groq endpoint は `/openai/v1/chat/completions` で終わります。OpenAI 互換 proxy の `/v1/chat/completions` も指定できますが、doctor では意図的な proxy path として warn になります。`GROQ_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は live request なしで shared capability 名を検証します。`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は Groq doctor v1 では提供しません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
 ```bash
 xelyon doctor groq
@@ -121,6 +131,8 @@ xelyon doctor groq --model meta-llama/llama-4-scout-17b-16e-instruct
 xelyon doctor groq --model corp-groq-model --catalog-model meta-llama/llama-4-scout-17b-16e-instruct
 xelyon doctor groq --smoke
 xelyon doctor groq --tool-smoke
+xelyon doctor groq --capabilities
+xelyon doctor groq --require-capability chat_completions --require-capability function_calling
 xelyon doctor groq --print-request
 xelyon doctor groq --tool-smoke --print-request
 xelyon doctor groq --smoke --tool-smoke
@@ -133,7 +145,7 @@ xelyon doctor groq --json
 
 Ollama provider の `OLLAMA_BASE_URL`、provider 登録、model / `catalog_model` 解決、`/api/tags` による installed model、`/api/chat` route、function calling 設定、token / local zero-cost metadata を確認します。Ollama は API key を使わないため、`auth` check は no-auth local provider として `ok` になります。`--smoke` を付けると live text request をローカル Ollama に送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の `/api/chat` endpoint、headers、request body を `request_preview` に表示します。
 
-`--model` は実 request に送る Ollama model ID または alias、`--catalog-model` は alias の underlying Ollama model として token policy に使います。`OLLAMA_BASE_URL` は `http://localhost:11434` のような base URL で、`/api/chat` や `/api/tags` そのものを指定すると fail になります。non-Ollama `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Ollama doctor の token policy に使いません。未知のローカルモデル名は request model としては許容されますが、`/api/tags` に存在しない場合は `installed_model` が fail します。`OLLAMA_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities`、`--require-capability`、`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は Ollama doctor v1 では提供しません。`--smoke` / `--tool-smoke` はローカル live request を送るため、設定確認だけなら付けないでください。
+`--model` は実 request に送る Ollama model ID または alias、`--catalog-model` は alias の underlying Ollama model として token policy に使います。`OLLAMA_BASE_URL` は `http://localhost:11434` のような base URL で、`/api/chat` や `/api/tags` そのものを指定すると fail になります。non-Ollama `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Ollama doctor の token policy に使いません。未知のローカルモデル名は request model としては許容されますが、`/api/tags` に存在しない場合は `installed_model` が fail します。`OLLAMA_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は generation request なしで shared capability 名を検証します。通常の capability-only 実行では `/api/tags` を叩かないため、JSON は `local_model_available=false` と `local_model_available_known=false` を出し、text detail は `local_model_available=unknown` になります。`--require-capability local_model_available` は model availability gate の source of truth として `/api/tags` discovery を実行します。`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は Ollama doctor v1 では提供しません。`--smoke` / `--tool-smoke` はローカル live generation request を送るため、設定確認だけなら付けないでください。
 
 ```bash
 xelyon doctor ollama
@@ -141,6 +153,8 @@ xelyon doctor ollama --model qwen2.5-coder:7b
 xelyon doctor ollama --model corp-local-model --catalog-model qwen2.5-coder:7b
 xelyon doctor ollama --smoke
 xelyon doctor ollama --tool-smoke
+xelyon doctor ollama --capabilities
+xelyon doctor ollama --require-capability function_calling
 xelyon doctor ollama --print-request
 xelyon doctor ollama --tool-smoke --print-request
 xelyon doctor ollama --smoke --tool-smoke
@@ -153,7 +167,7 @@ xelyon doctor ollama --json
 
 OpenRouter provider の `OPENROUTER_API_KEY`、`OPENROUTER_API_URL`、provider 登録、model / `catalog_model` 解決、OpenAI-compatible Chat Completions と Anthropic Skin Messages の route 判定、image input support、function calling 設定、token / pricing metadata を確認します。Claude 系 request model で context management が有効な場合は `anthropic_messages` route を選び、それ以外は `chat_completions` route を選びます。`--smoke` を付けると選択された route に live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、選択 route の形式で dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
 
-`--model` は実 request に送る OpenRouter model ID または alias、`--catalog-model` は alias の underlying OpenRouter model ID として token / pricing / upstream model 表示に使います。`--model` が `anthropic/...` や `openai/...` の routed OpenRouter ID の場合、別 owner の `catalog_model` や既知 routed model への別 ID 上書きは warn になり、token / pricing は実 request model 側へ戻します。route 判定は runtime と同じく実 request model で行うため、`catalog_model` だけが `anthropic/claude-*` の alias は Chat Completions route として warn になります。`OPENROUTER_API_URL` は Chat Completions endpoint または互換 proxy path を指定します。`/v1/messages` など Messages endpoint を直接指定すると fail になり、Anthropic Skin route では doctor/runtime が `/v1/messages` を派生します。`OPENROUTER_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities`、`--require-capability`、`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は OpenRouter doctor v1 では提供しません。`image_input` は provider-level support のローカル check で、画像 live smoke は送りません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
+`--model` は実 request に送る OpenRouter model ID または alias、`--catalog-model` は alias の underlying OpenRouter model ID として token / pricing / upstream model 表示に使います。`--model` が `anthropic/...` や `openai/...` の routed OpenRouter ID の場合、別 owner の `catalog_model` や既知 routed model への別 ID 上書きは warn になり、token / pricing / capability metadata は実 request model 側へ戻します。route 判定は runtime と同じく実 request model で行うため、`catalog_model` だけが `anthropic/claude-*` の alias は Chat Completions route として warn になります。`OPENROUTER_API_URL` は Chat Completions endpoint または互換 proxy path を指定します。`/v1/messages` など Messages endpoint を直接指定すると fail になり、Anthropic Skin route では doctor/runtime が `/v1/messages` を派生します。`OPENROUTER_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、text smoke fallback を実行します。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は live request なしで shared capability 名を検証します。`--retention-smoke`、`--image-smoke`、`--thinking-smoke`、`--web-search-smoke` は OpenRouter doctor v1 では提供しません。`image_input` の通常 check は provider request path を確認し、`--require-capability image_input` は trusted OpenRouter catalog metadata で選択 upstream model の画像対応が分かる場合だけ pass します。画像 live smoke は送りません。`--smoke` / `--tool-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
 ```bash
 xelyon doctor openrouter
@@ -162,6 +176,8 @@ xelyon doctor openrouter --model openai/gpt-5.4
 xelyon doctor openrouter --model corp-openrouter-model --catalog-model openai/gpt-5.4
 xelyon doctor openrouter --smoke
 xelyon doctor openrouter --tool-smoke
+xelyon doctor openrouter --capabilities
+xelyon doctor openrouter --require-capability image_input
 xelyon doctor openrouter --print-request
 xelyon doctor openrouter --tool-smoke --print-request
 xelyon doctor openrouter --smoke --tool-smoke
@@ -172,7 +188,7 @@ xelyon doctor openrouter --json
 
 ### `xelyon doctor openai`
 
-OpenAI provider の `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route と判定理由、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--require-capability` を付けると、解決済みのローカル capability が要求を満たすかを live request なしの `required_capability` check として検証します。対応する名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`previous_response_id`、`session_persistence`、`server_compaction` です。OpenAI の `responses_streaming` gate は実 `catalog_model` が既知 catalog model として解決できない場合 `unknown` として fail します。`--smoke` を付けると live text request を送信し、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。複数 smoke を指定した場合は request を別々に実行または preview し、JSON では `smoke.requests[]` / `request_preview.requests[]` に request 単位の結果を出します。
+OpenAI provider の `OPENAI_API_KEY`、`OPENAI_API_URL`、`OPENAI_RESPONSES_URL`、provider 登録、model / `catalog_model` 解決、Responses / Chat Completions route と判定理由、function calling 設定、token / pricing metadata、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / native web search / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--require-capability` を付けると、解決済みのローカル capability が要求を満たすかを live request なしの `required_capability` check として検証します。対応する名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`web_search`、`thinking`、`previous_response_id`、`session_persistence`、`server_compaction`、`local_model_available` です。OpenAI の `responses_streaming` gate は実 `catalog_model` が既知 catalog model として解決できない場合 `unknown` として fail します。`web_search` gate は runtime と同じく Responses API route の model だけ pass し、Chat Completions route では missing になります。`thinking` gate は Responses route だけでなく、通常の request builder が reasoning payload を送る設定または Codex の reasoning fallback を確認できた場合だけ pass します。`--smoke` を付けると live text request を送信し、Responses route では response ID、usage、概算 cost を表示します。Chat Completions route では response ID は返らないため、usage と概算 cost を確認します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。複数 smoke を指定した場合は request を別々に実行または preview し、JSON では `smoke.requests[]` / `request_preview.requests[]` に request 単位の結果を出します。
 
 `OPENAI_FUNCTION_CALLING=0` の場合、`--tool-smoke` は warn skip になり、tool payload / `tool_choice` は送信しません。`--retention-smoke` は Responses API route 専用で、Chat Completions route では live request を送らず fail します。`--model` は実 request に送るモデル名または alias、`--catalog-model` は alias の underlying OpenAI model として token / pricing / route 判定に使います。`OPENAI_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 path は `/v1/chat/completions` です。`OPENAI_RESPONSES_URL` は Responses まで含む完全な endpoint override で、公式 path は `/v1/responses` です。別 path の proxy endpoint も指定できますが、`doctor openai` では意図的な proxy path として warn になり、request preview / live smoke は設定 URL をそのまま使います。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、設定確認だけなら付けないでください。
 
@@ -197,7 +213,7 @@ xelyon doctor openai --json
 
 ### `xelyon doctor azure`
 
-Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、Responses route と判定理由、function calling 設定、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--require-capability` を付けると、解決済みのローカル capability が要求を満たすかを live request なしの `required_capability` check として検証します。対応する名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`previous_response_id`、`session_persistence`、`server_compaction` です。Azure の `responses_streaming` gate は実 `catalog_model` が未解決の場合 `unknown` として fail します。`--smoke` を付けると、設定済み deployment に `responses.store=false` の最小 Responses API リクエストを送信し、response ID、usage、概算 cost も表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
+Azure OpenAI の base URL、認証、Entra ID token command、deployment 解決、`catalog_model`、Responses route と判定理由、function calling 設定、Responses retention 設定を確認します。`--capabilities` を付けると live request を送らず、Responses API / streaming / function calling / image input / `previous_response_id` / server compaction / context window / max output / pricing の解決結果を `capabilities` に表示します。`--require-capability` を付けると、解決済みのローカル capability が要求を満たすかを live request なしの `required_capability` check として検証します。対応する名前は `responses_api`、`responses_streaming`、`chat_completions`、`function_calling`、`image_input`、`web_search`、`thinking`、`previous_response_id`、`session_persistence`、`server_compaction`、`local_model_available` です。Azure の `responses_streaming` gate は実 `catalog_model` が未解決の場合 `unknown` として fail します。`thinking` gate は Responses route だけでなく、通常の request builder が reasoning payload を送る設定または Codex の reasoning fallback を確認できた場合だけ pass します。`--smoke` を付けると、設定済み deployment に `responses.store=false` の最小 Responses API リクエストを送信し、response ID、usage、概算 cost も表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。Responses API の `previous_response_id` chain まで確認する場合は `--retention-smoke` を使い、`responses.store=true` の initial / followup request を連続実行します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。
 
 `--deployment` は Azure 側の deployment 名、`--catalog-model` はその deployment の実モデル名です。`AZURE_OPENAI_BASE_URL` は Azure OpenAI resource の v1 base URL で、公式 path は `/openai/v1` です。resource root と `/openai` は `/openai/v1` に正規化され、doctor/runtime は実 request を `<normalized_base_url>/responses` に送ります。`/openai/deployments/<deployment>` や public OpenAI host は fail、`api-version` query は warn で無視します。非標準 path は intentional proxy として warn になり、`--print-request` / live smoke はその path に `/responses` を付けた URL を使います。`--print-config` を付けると、deployment と catalog model から `~/.xelyon/config.yaml` に貼れる YAML 断片だけを出力します。`--smoke` / `--tool-smoke` / `--retention-smoke` は live API request を送るため、設定確認だけなら付けないでください。response ID や usage が返らない場合、または pricing catalog に該当モデルがない場合は warn になりますが、smoke 成功自体は失敗にしません。
 
@@ -221,7 +237,7 @@ Azure API error では 401/403/404/429 と tool payload rejected の原因候補
 
 ### `xelyon doctor bedrock`
 
-AWS Bedrock の region、AWS 認証チェーン、provider 登録、model / `catalog_model` 解決、Claude Messages / ConverseStream route、function calling 設定、token / pricing metadata を確認します。`--smoke` は text smoke、`--tool-smoke` は dummy tool call、`--image-smoke` は tiny PNG 画像入力、`--thinking-smoke` は Extended Thinking request を明示実行します。`--print-request` を付けると live request を送らず、選択した smoke request の Bedrock operation、conceptual endpoint、redacted AWS SigV4 header、request body を `request_preview` に表示します。
+AWS Bedrock の region、AWS 認証チェーン、provider 登録、model / `catalog_model` 解決、Claude Messages / ConverseStream route、function calling 設定、token / pricing metadata を確認します。`--smoke` は text smoke、`--tool-smoke` は dummy tool call、`--image-smoke` は tiny PNG 画像入力、`--thinking-smoke` は Extended Thinking request を明示実行します。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は live request なしで shared capability 名を検証します。Bedrock の `function_calling` gate は選択 route に従い、Claude Messages route または streaming tool use 確認済みの ConverseStream model だけ pass します。`thinking` gate は Claude Messages route かつ通常 request config で thinking が有効な場合だけ pass します。`--print-request` を付けると live request を送らず、選択した smoke request の Bedrock operation、conceptual endpoint、redacted AWS SigV4 header、request body を `request_preview` に表示します。
 
 Smoke の JSON では AWS SDK `ResultMetadata` 由来の `request_id`、request 単位の usage、概算 cost を `smoke.requests[]` に出します。summary usage / cost は request 単位の観測値を合算します。request ID、usage、pricing が返らない場合は warn ですが、API smoke 自体が成功していれば fail にはしません。複数 request のうち 1 件でも usage が返らない場合、summary cost は部分値を確定値として表示せず usage unavailable とします。Bedrock では Azure の `response_id` alias は出しません。`BEDROCK_FUNCTION_CALLING=0` の場合、`--tool-smoke` は function calling 無効として warn skip します。ConverseStream route で `--image-smoke` / `--thinking-smoke` を指定した場合は、未対応 request shape として warn skip します。
 
@@ -235,6 +251,8 @@ xelyon doctor bedrock --smoke
 xelyon doctor bedrock --tool-smoke
 xelyon doctor bedrock --image-smoke
 xelyon doctor bedrock --thinking-smoke
+xelyon doctor bedrock --capabilities
+xelyon doctor bedrock --require-capability image_input --require-capability thinking
 xelyon doctor bedrock --print-request
 xelyon doctor bedrock --tool-smoke --print-request
 xelyon doctor bedrock --json

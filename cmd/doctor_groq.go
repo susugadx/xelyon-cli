@@ -22,8 +22,10 @@ token/cost metadata. GROQ_API_URL is an exact Chat Completions endpoint
 override; the official Groq path ends with /openai/v1/chat/completions.
 OpenAI-compatible /v1/chat/completions proxy paths are allowed but reported as
 endpoint warnings. Use --smoke to send a minimal live request. Use --tool-smoke
-to force a dummy tool call when function calling is enabled. Use --print-request
-to print the sanitized smoke request JSON without sending it.`,
+to force a dummy tool call when function calling is enabled. Use --capabilities
+or --require-capability to verify resolved local capabilities without sending a
+live request. Use --print-request to print the sanitized smoke request JSON
+without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runGroqDoctorInvocation,
 	}
@@ -32,6 +34,8 @@ to print the sanitized smoke request JSON without sending it.`,
 	addDoctorCatalogModelFlag(cmd, "Catalog model for 'doctor groq' token/pricing policy")
 	addDoctorSmokeFlag(cmd, "Send a live minimal Groq text smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live Groq smoke request that forces a dummy tool call")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved Groq model capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	addDoctorTimeoutFlag(cmd, "groq", "")
 	addDoctorJSONFlag(cmd, "groq")
 	addDoctorPrintRequestFlag(cmd, "groq")
@@ -47,14 +51,16 @@ func runGroqDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := groqprovider.Diagnose(cmd.Context(), groqprovider.DiagnosticOptions{
-		Config:       cfg,
-		Model:        doctorGroqModelFlag,
-		CatalogModel: doctorCatalogModelFlag,
-		RunSmoke:     !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag),
-		TextSmoke:    doctorSmokeFlag,
-		ToolSmoke:    doctorToolSmokeFlag,
-		PrintRequest: doctorPrintRequestFlag,
-		SmokeTimeout: doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                doctorGroqModelFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]groqprovider.DiagnosticCheck{{
@@ -98,6 +104,11 @@ func renderGroqDoctorText(w io.Writer, report groqprovider.DiagnosticReport) {
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, groqDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
 
 	if report.RequestPreview != nil {
 		renderDoctorRequestPreviewSection(w, report.RequestPreview)

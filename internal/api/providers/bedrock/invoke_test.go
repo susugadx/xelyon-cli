@@ -285,6 +285,33 @@ func TestProvider_ChatWithTools_UsesCatalogModelForOpus47Alias(t *testing.T) {
 	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
 }
 
+func TestProvider_ChatWithTools_IgnoresCrossProviderCatalogForClaudeMaxTokens(t *testing.T) {
+	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
+	p := &Provider{client: mockClient}
+
+	model := "global.anthropic.claude-sonnet-4-6"
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    model,
+		CatalogModel:    "gpt-5.5",
+		MaxOutputTokens: 9999,
+	}
+
+	ctx := newBedrockTestContext(cfg)
+	_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, model)
+	if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
+		t.Fatalf("ChatWithTools() error = %v, want wrapped bedrock API error", err)
+	}
+
+	var req BedrockClaudeMessagesRequest
+	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
+		t.Fatalf("json.Unmarshal(request) error = %v", err)
+	}
+	if req.MaxTokens != 64000 {
+		t.Fatalf("MaxTokens = %d, want Bedrock request-model catalog limit 64000", req.MaxTokens)
+	}
+}
+
 func TestProvider_ChatWithImage_BuildsMultimodalRequestAndVersionFallback(t *testing.T) {
 	t.Setenv("BEDROCK_FUNCTION_CALLING", "0")
 
@@ -367,6 +394,38 @@ func TestProvider_ChatWithImage_BuildsMultimodalRequestAndVersionFallback(t *tes
 	textPart, ok := content[1].(map[string]any)
 	if !ok || textPart["text"] != "describe this image" {
 		t.Fatalf("text part = %v, want describe text", content[1])
+	}
+}
+
+func TestProvider_ChatWithImage_IgnoresCrossProviderCatalogForClaudeMaxTokens(t *testing.T) {
+	t.Setenv("BEDROCK_FUNCTION_CALLING", "0")
+
+	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
+	p := &Provider{client: mockClient}
+
+	model := "global.anthropic.claude-sonnet-4-6"
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+		DefaultModel:    model,
+		CatalogModel:    "gpt-5.5",
+		MaxOutputTokens: 9999,
+	}
+
+	ctx := newBedrockTestContext(cfg)
+	_, err := p.ChatWithImage(ctx, "system prompt", nil, "describe", &api.ImageData{
+		MediaType: "image/png",
+		Base64:    "dGVzdA==",
+	}, model)
+	if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
+		t.Fatalf("ChatWithImage() error = %v, want wrapped bedrock API error", err)
+	}
+
+	var req BedrockClaudeMultimodalRequest
+	if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
+		t.Fatalf("json.Unmarshal(request) error = %v", err)
+	}
+	if req.MaxTokens != 64000 {
+		t.Fatalf("MaxTokens = %d, want Bedrock request-model catalog limit 64000", req.MaxTokens)
 	}
 }
 

@@ -21,8 +21,9 @@ model resolution, native Gemini request routes, function calling, image input,
 thinking, context caching, web search, and token/cost metadata. Use --smoke to
 send a live text request, --tool-smoke to force a dummy tool call,
 --image-smoke to send one tiny image request, --web-search-smoke to verify
-native Gemini web search, or --print-request to print sanitized request JSON
-without sending it.`,
+native Gemini web search, --capabilities or --require-capability to verify
+resolved local capabilities without sending a live request, or --print-request
+to print sanitized request JSON without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runGeminiDoctorInvocation,
 	}
@@ -33,6 +34,8 @@ without sending it.`,
 	addDoctorToolSmokeFlag(cmd, "Send a live Gemini smoke request that forces a dummy tool call")
 	cmd.Flags().BoolVar(&doctorGeminiImageSmokeFlag, "image-smoke", false, "Send one live Gemini image input smoke request")
 	cmd.Flags().BoolVar(&doctorGeminiWebSearchSmokeFlag, "web-search-smoke", false, "Send one live Gemini native web search smoke request")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved Gemini model capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	addDoctorTimeoutFlag(cmd, "gemini", "")
 	addDoctorJSONFlag(cmd, "gemini")
 	addDoctorPrintRequestFlag(cmd, "gemini")
@@ -48,16 +51,18 @@ func runGeminiDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := geminiprovider.Diagnose(cmd.Context(), geminiprovider.DiagnosticOptions{
-		Config:         cfg,
-		Model:          doctorGeminiModelFlag,
-		CatalogModel:   doctorCatalogModelFlag,
-		RunSmoke:       !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorGeminiImageSmokeFlag || doctorGeminiWebSearchSmokeFlag),
-		TextSmoke:      doctorSmokeFlag,
-		ToolSmoke:      doctorToolSmokeFlag,
-		ImageSmoke:     doctorGeminiImageSmokeFlag,
-		WebSearchSmoke: doctorGeminiWebSearchSmokeFlag,
-		PrintRequest:   doctorPrintRequestFlag,
-		SmokeTimeout:   doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                doctorGeminiModelFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorGeminiImageSmokeFlag || doctorGeminiWebSearchSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		ImageSmoke:           doctorGeminiImageSmokeFlag,
+		WebSearchSmoke:       doctorGeminiWebSearchSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]geminiprovider.DiagnosticCheck{{
@@ -108,6 +113,11 @@ func renderGeminiDoctorText(w io.Writer, report geminiprovider.DiagnosticReport)
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, geminiDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
 
 	if report.RequestPreview != nil {
 		renderDoctorRequestPreviewSection(w, report.RequestPreview)

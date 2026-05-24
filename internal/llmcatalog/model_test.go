@@ -119,6 +119,8 @@ func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
 		{provider: "openai", model: "gpt-5.4", want: true},
 		{provider: "openai", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: false},
 		{provider: "azure", model: "gpt-5.4", want: false},
+		{provider: "bedrock", model: "meta.llama3-3-70b-instruct-v1:0", want: true},
+		{provider: "bedrock", model: "gpt-5.4", want: false},
 	}
 
 	for _, tt := range tests {

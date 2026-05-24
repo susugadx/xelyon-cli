@@ -601,6 +601,10 @@ func TestDiagnose_SmokeTransientErrorWarns(t *testing.T) {
 	if !hasKimiDiagnosticCheck(report, "smoke", DiagnosticStatusWarn) {
 		t.Fatalf("missing transient smoke warning: %#v", report.Checks)
 	}
+	smoke := requireKimiDiagnosticCheckStatus(t, report, "smoke", DiagnosticStatusWarn)
+	if !strings.Contains(smoke.Message, "quota, rate limit, or capacity") {
+		t.Fatalf("smoke check = %#v, want common quota classification", smoke)
+	}
 }
 
 func TestIsTransientKimiSmokeError(t *testing.T) {

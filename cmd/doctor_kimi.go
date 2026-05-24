@@ -25,8 +25,9 @@ endpoint override; the official path ends with /v1/chat/completions, and other
 paths are treated as intentional proxy endpoints. Use --smoke to send live Kimi
 Chat Completions requests, --image-smoke to send one tiny image request,
 --tool-smoke to include a dummy tool call, --web-search-smoke to verify the
-built-in $web_search route, or --print-request to preview sanitized request JSON
-without sending it.`,
+built-in $web_search route, --capabilities or --require-capability to verify
+resolved local capabilities without sending a live request, or --print-request
+to preview sanitized request JSON without sending it.`,
 		Args: cobra.NoArgs,
 		RunE: runKimiDoctorInvocation,
 	}
@@ -37,6 +38,8 @@ without sending it.`,
 	cmd.Flags().BoolVar(&doctorKimiImageSmokeFlag, "image-smoke", false, "Send one live Kimi image input smoke request")
 	addDoctorToolSmokeFlag(cmd, "Send a live Kimi smoke request that forces a dummy tool call")
 	cmd.Flags().BoolVar(&doctorKimiWebSearchSmokeFlag, "web-search-smoke", false, "Send a live Kimi built-in $web_search smoke request")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved Kimi model capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	addDoctorTimeoutFlag(cmd, "kimi", "")
 	addDoctorJSONFlag(cmd, "kimi")
 	addDoctorPrintRequestFlag(cmd, "kimi")
@@ -52,16 +55,18 @@ func runKimiDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := kimiprovider.Diagnose(cmd.Context(), kimiprovider.DiagnosticOptions{
-		Config:         cfg,
-		Model:          kimiDoctorExplicitModel(cmd),
-		CatalogModel:   doctorCatalogModelFlag,
-		RunSmoke:       !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorKimiImageSmokeFlag || doctorKimiWebSearchSmokeFlag),
-		TextSmoke:      doctorSmokeFlag,
-		ToolSmoke:      doctorToolSmokeFlag,
-		ImageSmoke:     doctorKimiImageSmokeFlag,
-		WebSearchSmoke: doctorKimiWebSearchSmokeFlag,
-		PrintRequest:   doctorPrintRequestFlag,
-		SmokeTimeout:   doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                kimiDoctorExplicitModel(cmd),
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorKimiImageSmokeFlag || doctorKimiWebSearchSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		ImageSmoke:           doctorKimiImageSmokeFlag,
+		WebSearchSmoke:       doctorKimiWebSearchSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]kimiprovider.DiagnosticCheck{{
@@ -112,6 +117,11 @@ func renderKimiDoctorText(w io.Writer, report kimiprovider.DiagnosticReport) {
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, kimiDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
 
 	if report.RequestPreview != nil {
 		renderDoctorRequestPreviewSection(w, report.RequestPreview)

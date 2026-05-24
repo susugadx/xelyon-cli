@@ -7,7 +7,6 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -70,6 +69,7 @@ type DiagnosticReport struct {
 	ThinkingType           string                    `json:"thinking_type,omitempty"`
 	ReasoningEffort        string                    `json:"reasoning_effort,omitempty"`
 	Checks                 []DiagnosticCheck         `json:"checks"`
+	Capabilities           *DiagnosticCapabilities   `json:"capabilities,omitempty"`
 	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
 	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
@@ -99,20 +99,35 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は DeepSeek 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	Capabilities         bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest
+	return o.localCapabilityRequest().RequiresAuthCheck()
+}
+
+func (o DiagnosticOptions) requiresEndpointCheck() bool {
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は DeepSeek のローカル設定と、必要に応じて live smoke を検証する。
@@ -124,11 +139,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	configCtx := config.WithContext(context.Background(), policyCfg)
 	modelSelection := resolveDeepSeekModelSelection(configCtx, model)
 	thinking := resolveDeepSeekThinkingPolicy(configCtx, modelSelection)
-
-	contextWindow := 0
-	if deepSeekCatalogModelKnown(catalogModel) {
-		contextWindow, _ = llmcatalog.KnownModelContextLimit(catalogModel)
-	}
+	policy := providerdiag.DeepSeekCatalogPolicy(policyCfg, model, catalogModel)
 
 	report := DiagnosticReport{
 		Provider:               "deepseek",
@@ -140,8 +151,8 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModelSource:     catalogSource,
 		Route:                  DiagnosticRouteChatCompletions,
 		RouteReason:            "DeepSeek provider uses OpenAI-compatible Chat Completions",
-		MaxOutputTokens:        api.GetMaxOutputTokens(configCtx, "deepseek", model),
-		ContextWindowTokens:    contextWindow,
+		MaxOutputTokens:        providerdiag.RuntimeMaxOutputTokens(policyCfg, "deepseek", model),
+		ContextWindowTokens:    policy.ContextWindowTokens,
 		FunctionCallingEnabled: New("diagnostic-key").IsFunctionCallingEnabled(),
 		ThinkingSupported:      thinking.Supported,
 		ThinkingEnabled:        api.IsThinkingEnabled(configCtx),
@@ -152,7 +163,9 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	if options.requiresAuthCheck() {
 		report.addAuthCheck()
 	}
-	report.addEndpointCheck()
+	if options.requiresEndpointCheck() {
+		report.addEndpointCheck()
+	}
 	report.addProviderRegistrationCheck()
 	report.addModelCheck()
 	report.addCatalogModelCheck()
@@ -160,6 +173,10 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	report.addCatalogPolicyCheck(policyCfg)
 	report.addThinkingCheck()
 	report.addFunctionCallingCheck()
+	if options.Capabilities {
+		report.addCapabilities(policyCfg)
+	}
+	report.addRequiredCapabilities(policyCfg, options.RequiredCapabilities)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

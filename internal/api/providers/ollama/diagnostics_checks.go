@@ -3,6 +3,7 @@ package ollama
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -149,10 +150,19 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke, err := runOllamaDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.TextToolSmokeFailureContext(
+			providerdiag.SmokeFailureContextOptions{
+				Provider:         "Ollama",
+				EndpointEnv:      ollamaBaseURLEnv,
+				EndpointOverride: strings.TrimSpace(os.Getenv(ollamaBaseURLEnv)) != "",
+			},
+			smoke,
+			err,
+		))
 		if ollamaSmokeErrorIsToolFailure(smoke) {
-			r.addCheck(DiagnosticStatusFail, "tool_smoke", "Ollama tool smoke response did not include the diagnostic tool call", err.Error(), "")
+			r.addCheck(DiagnosticStatusFail, "tool_smoke", "Ollama tool smoke response did not include the diagnostic tool call", failure.Detail, failure.Suggestion)
 		}
-		r.addCheck(DiagnosticStatusFail, "smoke", "live Ollama smoke request failed", err.Error(), "")
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live Ollama smoke request succeeded", smoke.Duration, "")

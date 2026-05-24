@@ -24,8 +24,10 @@ endpoint override; the official path ends with /v1/messages, and other paths
 are treated as intentional proxy endpoints. Use --smoke to send a live text
 request, --tool-smoke to force a dummy tool call, --image-smoke to send one
 tiny image request, --thinking-smoke to send one thinking request,
---web-search-smoke to verify native Claude web search, or --print-request to
-print sanitized request JSON without sending it.`,
+--web-search-smoke to verify native Claude web search, --capabilities or
+--require-capability to verify resolved local capabilities without sending a
+live request, or --print-request to print sanitized request JSON without sending
+it.`,
 		Args: cobra.NoArgs,
 		RunE: runClaudeDoctorInvocation,
 	}
@@ -37,6 +39,8 @@ print sanitized request JSON without sending it.`,
 	cmd.Flags().BoolVar(&doctorClaudeImageSmokeFlag, "image-smoke", false, "Send one live Claude image input smoke request")
 	cmd.Flags().BoolVar(&doctorClaudeThinkingSmokeFlag, "thinking-smoke", false, "Send one live Claude thinking request smoke")
 	cmd.Flags().BoolVar(&doctorClaudeWebSearchSmokeFlag, "web-search-smoke", false, "Send one live Claude native web search smoke request")
+	addDoctorCapabilitiesFlag(cmd, "Print resolved Claude model capabilities without sending a live request")
+	addDoctorRequiredCapabilityFlag(cmd)
 	addDoctorTimeoutFlag(cmd, "claude", "")
 	addDoctorJSONFlag(cmd, "claude")
 	addDoctorPrintRequestFlag(cmd, "claude")
@@ -52,17 +56,19 @@ func runClaudeDoctorInvocation(cmd *cobra.Command, args []string) error {
 	cfg.ApplyEnvironmentOverrides()
 
 	report := claudeprovider.Diagnose(cmd.Context(), claudeprovider.DiagnosticOptions{
-		Config:         cfg,
-		Model:          doctorClaudeModelFlag,
-		CatalogModel:   doctorCatalogModelFlag,
-		RunSmoke:       !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorClaudeImageSmokeFlag || doctorClaudeThinkingSmokeFlag || doctorClaudeWebSearchSmokeFlag),
-		TextSmoke:      doctorSmokeFlag,
-		ToolSmoke:      doctorToolSmokeFlag,
-		ImageSmoke:     doctorClaudeImageSmokeFlag,
-		ThinkingSmoke:  doctorClaudeThinkingSmokeFlag,
-		WebSearchSmoke: doctorClaudeWebSearchSmokeFlag,
-		PrintRequest:   doctorPrintRequestFlag,
-		SmokeTimeout:   doctorTimeoutFlag,
+		Config:               cfg,
+		Model:                doctorClaudeModelFlag,
+		CatalogModel:         doctorCatalogModelFlag,
+		RunSmoke:             !doctorPrintRequestFlag && (doctorSmokeFlag || doctorToolSmokeFlag || doctorClaudeImageSmokeFlag || doctorClaudeThinkingSmokeFlag || doctorClaudeWebSearchSmokeFlag),
+		TextSmoke:            doctorSmokeFlag,
+		ToolSmoke:            doctorToolSmokeFlag,
+		ImageSmoke:           doctorClaudeImageSmokeFlag,
+		ThinkingSmoke:        doctorClaudeThinkingSmokeFlag,
+		WebSearchSmoke:       doctorClaudeWebSearchSmokeFlag,
+		Capabilities:         doctorCapabilitiesFlag,
+		PrintRequest:         doctorPrintRequestFlag,
+		RequiredCapabilities: doctorRequiredCapabilityFlags,
+		SmokeTimeout:         doctorTimeoutFlag,
 	})
 	if loadErr != nil {
 		report.Checks = append([]claudeprovider.DiagnosticCheck{{
@@ -122,6 +128,11 @@ func renderClaudeDoctorText(w io.Writer, report claudeprovider.DiagnosticReport)
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, claudeDoctorCheckLines(report.Checks))
+
+	if report.Capabilities != nil {
+		fmt.Fprintln(w)
+		renderDoctorCapabilities(w, report.Capabilities)
+	}
 
 	if report.RequestPreview != nil {
 		renderDoctorRequestPreviewSection(w, report.RequestPreview)

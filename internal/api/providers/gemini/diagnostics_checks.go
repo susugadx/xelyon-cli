@@ -181,19 +181,18 @@ func (r *DiagnosticReport) addCatalogPolicyCheck(cfg *config.Config) {
 	if model == "" || catalogModel == "" {
 		return
 	}
+	policy := providerdiag.GeminiCatalogPolicy(cfg, model, catalogModel)
+	detail := policy.GeminiDetail()
 	if !geminiCatalogModelKnown(catalogModel) {
 		r.addCheck(
 			DiagnosticStatusWarn,
 			"catalog_policy",
 			"catalog_model is not a Gemini model known to local metadata",
-			fmt.Sprintf("catalog_model=%s, context_window=unknown, max_output_tokens=unknown, pricing=unavailable", catalogModel),
+			detail,
 			"Use a Gemini catalog model before relying on token-limit diagnostics or cost estimates",
 		)
 		return
 	}
-
-	policy := providerdiag.GeminiCatalogPolicy(cfg, model, catalogModel)
-	detail := policy.GeminiDetail()
 
 	switch {
 	case !policy.ContextWindowKnown:

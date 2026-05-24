@@ -5,9 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -65,6 +63,7 @@ type DiagnosticReport struct {
 	ContextWindowTokens    int                       `json:"context_window_tokens,omitempty"`
 	FunctionCallingEnabled bool                      `json:"function_calling_enabled"`
 	Checks                 []DiagnosticCheck         `json:"checks"`
+	Capabilities           *DiagnosticCapabilities   `json:"capabilities,omitempty"`
 	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
 	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
@@ -94,16 +93,35 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は Ollama 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	Capabilities         bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
+}
+
+func (o DiagnosticOptions) requiresEndpointCheck() bool {
+	return o.requiresInstalledModelLookup() || o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
+}
+
+func (o DiagnosticOptions) requiresInstalledModelLookup() bool {
+	return providerdiag.HasRequiredCapability(o.RequiredCapabilities, providerdiag.RequiredCapabilityLocalModelAvailable)
 }
 
 // Diagnose は Ollama のローカル設定と、必要に応じて live smoke を検証する。
@@ -112,11 +130,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	model, modelSource := resolveOllamaDiagnosticModel(cfg, options.Model)
 	catalogModel, catalogSource := resolveOllamaDiagnosticCatalogModel(cfg, model, options.CatalogModel)
 	policyCfg := ollamaDiagnosticPolicyConfig(cfg, model, catalogModel, 0)
-	contextWindow := 0
-	if ollamaCatalogModelKnown(catalogModel) {
-		contextWindow, _ = llmcatalog.KnownModelContextLimit(catalogModel)
-	}
-	configCtx := config.WithContext(context.Background(), policyCfg)
+	policy := providerdiag.OllamaCatalogPolicy(policyCfg, model, catalogModel)
 	baseURL := resolveOllamaDiagnosticBaseURL()
 
 	report := DiagnosticReport{
@@ -128,20 +142,35 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		CatalogModelSource:     catalogSource,
 		Route:                  DiagnosticRouteOllamaChat,
 		RouteReason:            "Ollama provider uses the local /api/chat JSONL stream endpoint",
-		MaxOutputTokens:        api.GetMaxOutputTokens(configCtx, "ollama", model),
-		ContextWindowTokens:    contextWindow,
+		MaxOutputTokens:        providerdiag.RuntimeMaxOutputTokens(policyCfg, "ollama", model),
+		ContextWindowTokens:    policy.ContextWindowTokens,
 		FunctionCallingEnabled: New(baseURL).IsFunctionCallingEnabled(),
 	}
 
 	report.addAuthCheck()
-	endpointOK, installedModels := report.addEndpointCheck(options.PrintRequest)
+	endpointOK := false
+	installedModels := []string(nil)
+	installedModelLookupOK := false
+	if options.requiresEndpointCheck() {
+		previewOnly := options.PrintRequest && !options.requiresInstalledModelLookup()
+		endpointOK, installedModels = report.addEndpointCheck(previewOnly)
+		installedModelLookupOK = endpointOK && !previewOnly
+		report.addInstalledModelCheck(endpointOK, installedModels, previewOnly)
+	}
 	report.addProviderRegistrationCheck()
 	report.addModelCheck()
-	report.addInstalledModelCheck(endpointOK, installedModels, options.PrintRequest)
 	report.addCatalogModelCheck()
 	report.addRouteCheck()
 	report.addCatalogPolicyCheck(policyCfg)
 	report.addFunctionCallingCheck()
+	localModelAvailable := providerdiag.UnknownCapabilityAvailability()
+	if installedModelLookupOK {
+		localModelAvailable = providerdiag.KnownCapabilityAvailability(ollamaInstalledModelMatches(report.Model, installedModels))
+	}
+	if options.Capabilities {
+		report.addCapabilities(policyCfg, localModelAvailable)
+	}
+	report.addRequiredCapabilities(policyCfg, options.RequiredCapabilities, localModelAvailable)
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, policyCfg, options)
 	}

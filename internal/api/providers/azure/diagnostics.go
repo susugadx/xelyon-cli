@@ -129,15 +129,20 @@ type DiagnosticOptions struct {
 }
 
 func (o DiagnosticOptions) requiresBaseURLCheck() bool {
-	return !o.hasLocalCapabilityRequest() || o.RunSmoke || o.PrintRequest
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
 }
 
 func (o DiagnosticOptions) requiresAuthCheck() bool {
-	return !o.PrintRequest && (!o.hasLocalCapabilityRequest() || o.RunSmoke)
+	return o.localCapabilityRequest().RequiresAuthCheck()
 }
 
-func (o DiagnosticOptions) hasLocalCapabilityRequest() bool {
-	return o.Capabilities || providerdiag.HasRequiredCapabilityRequest(o.RequiredCapabilities)
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は Azure OpenAI のローカル設定と、必要に応じて live smoke を検証する。
@@ -561,24 +566,25 @@ func (r *DiagnosticReport) addResponsesRetentionCheck() {
 }
 
 func (r *DiagnosticReport) addRequiredCapabilities(ctx context.Context, cfg *config.Config, required []string) {
-	if !providerdiag.HasRequiredCapabilityRequest(required) {
-		return
-	}
-
 	policyCfg := diagnosticCatalogPolicyConfig(cfg, r.Deployment, r.CatalogModel)
 	snapshot := diagnosticCapabilitySnapshot(ctx, policyCfg, *r)
-	check := providerdiag.EvaluateRequiredCapabilities(snapshot, required)
-	if check.Satisfied() {
-		r.addCheck(DiagnosticStatusOK, providerdiag.RequiredCapabilityCheckName, "required Azure OpenAI capabilities are available", check.Detail(), "")
+	diagnostic := providerdiag.NewRequiredCapabilityDiagnostic(
+		snapshot,
+		required,
+		providerdiag.RequiredCapabilityDiagnosticOptions{
+			ProviderName:                  "Azure OpenAI",
+			MissingTarget:                 "deployment/configuration",
+			UnknownAvailabilitySuggestion: "Set --catalog-model or provider_models.azure.catalog_model to the underlying model before requiring catalog-dependent capabilities",
+		},
+	)
+	if !diagnostic.Requested {
 		return
 	}
-
-	suggestion := providerdiag.RequiredCapabilityFailureSuggestion(
-		check,
-		"deployment/configuration",
-		"Set --catalog-model or provider_models.azure.catalog_model to the underlying model before requiring catalog-dependent capabilities",
-	)
-	r.addCheck(DiagnosticStatusFail, providerdiag.RequiredCapabilityCheckName, "required Azure OpenAI capabilities are missing", check.Detail(), suggestion)
+	status := DiagnosticStatusFail
+	if diagnostic.Satisfied {
+		status = DiagnosticStatusOK
+	}
+	r.addCheck(status, diagnostic.Name, diagnostic.Message, diagnostic.Detail, diagnostic.Suggestion)
 }
 
 func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Config, options DiagnosticOptions) {
@@ -605,7 +611,12 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	smoke, err := runDiagnosticSmoke(ctx, cfg, *r, options)
 	r.Smoke = &smoke
 	if err != nil {
-		r.addCheck(DiagnosticStatusFail, "smoke", "live Azure OpenAI smoke request failed", err.Error(), "")
+		failure := providerdiag.ClassifySmokeFailure(providerdiag.ResponsesSmokeFailureContext(
+			diagnosticSmokeFailureContextOptions(),
+			smoke,
+			err,
+		))
+		r.addCheck(DiagnosticStatusFail, "smoke", failure.Message, failure.Detail, failure.Suggestion)
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "smoke", "live Azure OpenAI smoke request succeeded", smoke.Duration, "")
@@ -615,6 +626,18 @@ func (r *DiagnosticReport) runSmokeIfReady(ctx context.Context, cfg *config.Conf
 	}
 	if smoke.RetentionPayload {
 		r.addCheck(DiagnosticStatusOK, "retention_smoke", "Azure OpenAI deployment accepted a previous_response_id chain", smoke.Duration, "")
+	}
+}
+
+func diagnosticSmokeFailureContextOptions() providerdiag.SmokeFailureContextOptions {
+	return providerdiag.SmokeFailureContextOptions{
+		Provider:         "Azure OpenAI",
+		AuthEnv:          apiKeyEnv,
+		EndpointEnv:      baseURLEnv,
+		DebugEnv:         "XELYON_DEBUG_AZURE",
+		EndpointOverride: strings.TrimSpace(os.Getenv(baseURLEnv)) != "",
+		ModelFlag:        "--deployment",
+		ModelLabel:       "deployment",
 	}
 }
 

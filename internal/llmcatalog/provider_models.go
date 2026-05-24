@@ -39,11 +39,18 @@ var knownProviderModels = map[string][]string{
 		"gemini-3.1-pro-preview-customtools",
 		"gemini-3.1-pro-preview",
 		"gemini-3.1-pro",
+		"gemini-3.1-flash",
+		"gemini-3.1-flash-lite",
+		"gemini-3.1-flash-lite-preview",
 		"gemini-3-pro-preview",
+		"gemini-3-flash",
 		"gemini-2.5-pro",
+		"gemini-2.5-pro-preview",
 		"gemini-2.5-flash",
+		"gemini-2.5-flash-lite",
 		"gemini-2.0-flash",
 		"gemini-2.0-flash-exp",
+		"gemini-2.0-flash-lite",
 		"gemini-1.5-pro",
 		"gemini-1.5-flash",
 	},
@@ -160,6 +167,9 @@ func IsKnownModelNameForProvider(provider, model string) bool {
 	}
 
 	normalized := strings.ToLower(model)
+	if key == "bedrock" && IsBedrockModelID(normalized) {
+		return true
+	}
 	for _, prefix := range knownProviderModelPrefixes[key] {
 		if strings.HasPrefix(normalized, strings.ToLower(strings.TrimSpace(prefix))) {
 			return true

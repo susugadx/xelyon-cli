@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
@@ -60,6 +61,7 @@ type DiagnosticReport struct {
 	Route                  string                    `json:"route"`
 	FunctionCallingEnabled bool                      `json:"function_calling_enabled"`
 	Checks                 []DiagnosticCheck         `json:"checks"`
+	Capabilities           *DiagnosticCapabilities   `json:"capabilities,omitempty"`
 	RequestPreview         *DiagnosticRequestPreview `json:"request_preview,omitempty"`
 	Smoke                  *DiagnosticSmokeResult    `json:"smoke,omitempty"`
 }
@@ -89,18 +91,20 @@ func (r DiagnosticReport) SummaryStatus() DiagnosticStatus {
 
 // DiagnosticOptions は Bedrock 診断の入力を表す。
 type DiagnosticOptions struct {
-	Config          *config.Config
-	Model           string
-	CatalogModel    string
-	RunSmoke        bool
-	TextSmoke       bool
-	ToolSmoke       bool
-	ImageSmoke      bool
-	ThinkingSmoke   bool
-	PrintRequest    bool
-	SmokeTimeout    time.Duration
-	MaxOutputTokens int
-	SmokeOutput     io.Writer
+	Config               *config.Config
+	Model                string
+	CatalogModel         string
+	RunSmoke             bool
+	TextSmoke            bool
+	ToolSmoke            bool
+	ImageSmoke           bool
+	ThinkingSmoke        bool
+	Capabilities         bool
+	PrintRequest         bool
+	RequiredCapabilities []string
+	SmokeTimeout         time.Duration
+	MaxOutputTokens      int
+	SmokeOutput          io.Writer
 
 	invokeClient     invokeModelWithResponseStreamClient
 	converseClient   converseStreamClient
@@ -108,7 +112,20 @@ type DiagnosticOptions struct {
 }
 
 func (o DiagnosticOptions) requiresAWSAuthCheck() bool {
-	return !o.PrintRequest && !o.skipAWSAuthCheck && o.invokeClient == nil && o.converseClient == nil
+	return o.localCapabilityRequest().RequiresAuthCheck() && !o.skipAWSAuthCheck && o.invokeClient == nil && o.converseClient == nil
+}
+
+func (o DiagnosticOptions) requiresAWSConfigCheck() bool {
+	return o.localCapabilityRequest().RequiresExternalSetupCheck()
+}
+
+func (o DiagnosticOptions) localCapabilityRequest() providerdiag.LocalCapabilityRequest {
+	return providerdiag.LocalCapabilityRequest{
+		Capabilities:         o.Capabilities,
+		RequiredCapabilities: o.RequiredCapabilities,
+		RunSmoke:             o.RunSmoke,
+		PrintRequest:         o.PrintRequest,
+	}
 }
 
 // Diagnose は Bedrock のローカル設定と、必要に応じて live smoke を検証する。
@@ -118,8 +135,13 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 	catalogModel, catalogSource := resolveBedrockDiagnosticCatalogModel(cfg, model, options.CatalogModel)
 	route := resolveBedrockRoute(model, catalogModel)
 	requestPlan := buildBedrockDiagnosticRequestPlan(options)
-	awsCfg, awsLoadErr := loadBedrockAWSConfig(ctx)
-	region := awsCfg.Region
+	var awsCfg aws.Config
+	var awsLoadErr error
+	region := explicitAWSRegionFromEnv()
+	if options.requiresAWSConfigCheck() {
+		awsCfg, awsLoadErr = loadBedrockAWSConfig(ctx)
+		region = awsCfg.Region
+	}
 	if strings.TrimSpace(region) == "" {
 		region = defaultRegion
 	}
@@ -135,12 +157,18 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 		FunctionCallingEnabled: os.Getenv("BEDROCK_FUNCTION_CALLING") != "0",
 	}
 
-	report.addAWSConfigChecks(ctx, awsCfg, awsLoadErr, options)
+	if options.requiresAWSConfigCheck() {
+		report.addAWSConfigChecks(ctx, awsCfg, awsLoadErr, options)
+	}
 	report.addProviderRegistrationCheck()
 	report.addModelConfigCheck()
 	report.addRouteCheck(route, requestPlan)
 	report.addCatalogPolicyCheck(cfg, route)
 	report.addFunctionCallingCheck()
+	if options.Capabilities {
+		report.addCapabilities(cfg, route)
+	}
+	report.addRequiredCapabilities(cfg, route, options.RequiredCapabilities)
 
 	if options.PrintRequest {
 		report.addRequestPreview(ctx, cfg, options, requestPlan)
