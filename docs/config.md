@@ -97,6 +97,17 @@ provider_models:
         max_output_tokens: 64000
 
 # ============================================================
+# レビュー設定
+# ============================================================
+# /review 専用モデル設定
+# 未設定の場合は現在の provider/model を使用
+review:
+    # /review 専用プロバイダー（空で現在の provider/model を使用）
+    provider: ""
+    # /review 専用モデル（provider 設定時のみ有効。空で provider の既定モデル）
+    model: ""
+
+# ============================================================
 # 一般設定
 # ============================================================
 general:
@@ -312,6 +323,18 @@ Kimi の推奨モデル:
 - `kimi-k2.5`: サブエージェント既定モデル。低コストな軽作業向き
 
 Kimi K2.6 / K2.5 は 256K context / 最大 32K output です。`kimi-k2-thinking` は明示指定時のみ同じ上限の legacy/compat thinking model として扱います。`moonshot` は `kimi` provider の alias として扱われます。
+
+### レビュー設定 (`review`)
+
+`/review` は通常、現在の provider/model で current changes 全体をレビューします。`review.provider` を設定すると `/review` だけ別 provider で実行し、通常の会話セッションの provider/model、履歴、response continuation は切り替えません。
+
+`review.model` は `review.provider` と一緒に設定してください。`review.provider` だけを設定した場合は、その provider の `provider_models.<provider>.default_model` または組み込み既定モデルを使います。
+
+```yaml
+review:
+  provider: claude
+  model: claude-sonnet-4-6
+```
 
 ### 会話履歴圧縮設定 (`compression`)
 

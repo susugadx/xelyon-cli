@@ -85,4 +85,28 @@ func TestBuildConfigRegistry(t *testing.T) {
 			t.Errorf("Provider category missing field: %s", expected)
 		}
 	}
+
+	var reviewCat *ConfigCategory
+	for i := range categories {
+		if categories[i].Name == "review" {
+			reviewCat = &categories[i]
+			break
+		}
+	}
+
+	if reviewCat == nil {
+		t.Error("Review category not found")
+		return
+	}
+
+	reviewFields := make(map[string]bool)
+	for _, field := range reviewCat.Fields {
+		reviewFields[field.Path] = true
+	}
+
+	for _, expected := range []string{"review.provider", "review.model"} {
+		if !reviewFields[expected] {
+			t.Errorf("Review category missing field: %s", expected)
+		}
+	}
 }

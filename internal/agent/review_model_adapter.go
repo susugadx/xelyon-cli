@@ -7,12 +7,15 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 const reviewModelProviderCacheNamespace = "review_model"
+
+var newReviewModelProvider = api.NewProvider
 
 // agentReviewModel は ReviewRunner の model 境界を Agent の provider runtime へ接続する。
 type agentReviewModel struct {
@@ -50,6 +53,15 @@ func (a *Agent) currentReviewModelTarget() (reviewModelTarget, error) {
 	if a == nil {
 		return reviewModelTarget{}, fmt.Errorf("agent is nil")
 	}
+	cfg := a.cfg()
+	reviewProvider := strings.TrimSpace(cfg.Review.Provider)
+	reviewModel := strings.TrimSpace(cfg.Review.Model)
+	if reviewProvider != "" {
+		return a.configuredReviewModelTarget(cfg, reviewProvider, reviewModel)
+	}
+	if reviewModel != "" {
+		return reviewModelTarget{}, fmt.Errorf("review.model requires review.provider")
+	}
 	if a.CurrentProvider == nil {
 		return reviewModelTarget{}, fmt.Errorf("provider is nil")
 	}
@@ -57,6 +69,67 @@ func (a *Agent) currentReviewModelTarget() (reviewModelTarget, error) {
 		provider: a.CurrentProvider,
 		model:    a.CurrentModel,
 	}, nil
+}
+
+func (a *Agent) configuredReviewModelTarget(cfg *config.Config, requestedProvider, requestedModel string) (reviewModelTarget, error) {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	providerConfigKey := config.ActiveProviderConfigKey(requestedProvider)
+	runtimeProviderName := config.CanonicalProviderName(requestedProvider)
+	if _, ok := config.ProviderCatalogEntryFor(runtimeProviderName); !ok {
+		return reviewModelTarget{}, fmt.Errorf("unknown review provider: %s", requestedProvider)
+	}
+	if providerConfigKey == "" {
+		providerConfigKey = runtimeProviderName
+	}
+	if !IsAPIKeyAvailable(runtimeProviderName) {
+		return reviewModelTarget{}, fmt.Errorf("%s のAPIキーが設定されていません", requestedProvider)
+	}
+
+	provider, err := newReviewModelProvider(providerConfigKey)
+	if err != nil {
+		return reviewModelTarget{}, fmt.Errorf("review provider initialization failed: %w", err)
+	}
+	api.ApplyRuntimeConfig(provider, cfg)
+	api.ApplyUIRuntime(provider, a.ui())
+	syncProviderConfigKeyToProvider(provider, providerConfigKey)
+	if key := providerConfigKeyFromProvider(provider); key != "" {
+		providerConfigKey = key
+	}
+
+	explicitModel := requestedModel != ""
+	model := requestedModel
+	if model == "" {
+		model = strings.TrimSpace(cfg.GetSelectedModelForProvider(providerConfigKey))
+	}
+	if err := validateProviderModelSelection(cfg, runtimeProviderName, providerConfigKey, model, explicitModel); err != nil {
+		return reviewModelTarget{}, err
+	}
+	setReviewModelUsageReporter(a, provider, providerConfigKey, model)
+
+	return reviewModelTarget{
+		provider: provider,
+		model:    model,
+	}, nil
+}
+
+func setReviewModelUsageReporter(agent *Agent, provider api.Provider, providerConfigKey, model string) {
+	if agent == nil || agent.Stats == nil {
+		return
+	}
+	reporter, ok := provider.(api.UsageReporter)
+	if !ok {
+		return
+	}
+	reporter.SetUsageCallback(func(u api.Usage) {
+		agent.statsMu.Lock()
+		defer agent.statsMu.Unlock()
+		if agent.Stats == nil {
+			return
+		}
+		agent.Stats.AddUsageForProviderConfig(agent.cfg(), providerConfigKey, model, u)
+	})
 }
 
 func reviewModelPromptHistory(prompt string) []api.Message {

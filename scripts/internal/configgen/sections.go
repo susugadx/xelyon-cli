@@ -71,6 +71,26 @@ var Sections = map[string]SectionInfo{
 			FilterMode: ExampleFilterModeKeepAll,
 		},
 	},
+	"review": {
+		StructName: "ReviewConfig",
+		Title:      "レビュー設定",
+		Icon:       "🔎",
+		Comments: []string{
+			"/review 専用モデル設定",
+			"未設定の場合は現在の provider/model を使用",
+		},
+		Fields: map[string]string{
+			"provider": "/review 専用プロバイダー（空で現在の provider/model を使用）",
+			"model":    "/review 専用モデル（provider 設定時のみ有効。空で provider の既定モデル）",
+		},
+		FieldTypes: map[string]string{
+			"provider": "select",
+			"model":    "string",
+		},
+		SelectOpts: map[string][]string{
+			"provider": reviewProviderSelectOptions(),
+		},
+	},
 	"general": {
 		StructName: "GeneralConfig",
 		Title:      "一般設定",
@@ -326,6 +346,7 @@ var sectionCatalog = []sectionCatalogEntry{
 	{Name: "default_provider", Category: "provider"},
 	{Name: "default_model", Category: "provider"},
 	{Name: "provider_models", Category: "provider"},
+	{Name: "review", Category: "review"},
 	{Name: "general", Category: "general"},
 	{Name: "execution", Category: "execution"},
 	{Name: "compression", Category: "compression"},
@@ -353,6 +374,7 @@ type categoryCatalogEntry struct {
 
 var categoryCatalog = []categoryCatalogEntry{
 	{Name: "provider", Info: CategoryInfo{DisplayName: "Provider & Model", Icon: "🤖"}},
+	{Name: "review", Info: CategoryInfo{DisplayName: "Review", Icon: "🔎"}},
 	{Name: "general", Info: CategoryInfo{DisplayName: "General", Icon: "⚙️"}},
 	{Name: "execution", Info: CategoryInfo{DisplayName: "Execution Mode", Icon: "🛡️"}},
 	{Name: "compression", Info: CategoryInfo{DisplayName: "Compression", Icon: "📦"}},
@@ -403,6 +425,10 @@ func buildCategoryMap(catalog []categoryCatalogEntry) map[string]CategoryInfo {
 		categories[entry.Name] = entry.Info
 	}
 	return categories
+}
+
+func reviewProviderSelectOptions() []string {
+	return append([]string{""}, llmcatalog.DisplayProviderKeys()...)
 }
 
 // OrderedSectionsForCategory returns the ordered sections that belong to a category.

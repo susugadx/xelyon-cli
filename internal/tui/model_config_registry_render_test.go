@@ -29,7 +29,7 @@ func TestConfigScreen_AllCategoriesPresent(t *testing.T) {
 	categories := config.BuildConfigRegistry(cfg)
 
 	expectedCats := []string{
-		"provider", "general", "execution", "compression",
+		"provider", "review", "general", "execution", "compression",
 		"paste", "project_map", "lsp", "output",
 		"web_search", "sub_agent", "mcp", "final_checks",
 	}

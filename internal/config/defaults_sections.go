@@ -7,6 +7,10 @@ func defaultGeneralConfig() GeneralConfig {
 	}
 }
 
+func defaultReviewConfig() ReviewConfig {
+	return ReviewConfig{}
+}
+
 func defaultCompressionConfig() CompressionConfig {
 	return CompressionConfig{
 		Enabled:              true, // デフォルトON - コスト削減のため

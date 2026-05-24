@@ -387,6 +387,7 @@ TUI で現在の入力ドラフトにファイルまたは画像を 1 件添付�
 ### `/review`
 
 TUIモードで、現在の作業ツリー差分全体をレビューする preset 画面を開きます。
+通常は現在の provider/model を使いますが、`review.provider` と `review.model` を設定すると `/review` だけ別の provider/model で実行できます。`review.provider` だけを設定した場合はその provider の既定モデルを使い、`review.model` を設定する場合は `review.provider` も必須です。review モデル呼び出しには通常会話履歴を渡しません。
 preset の `Review current changes` は追加指示なしの通常レビューです。`Review current changes with custom focus` は同じ current changes 全体に追加の観点・重点項目を渡します。
 引数を付けた場合は、そのテキストを custom focus として current changes 全体レビューを即時実行します。
 custom focus は対象ファイルや差分範囲を絞るものではありません。特定 finding だけの再検証や focused verification mode はまだ未実装です。

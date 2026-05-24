@@ -27,6 +27,7 @@ type CategoryDef struct {
 // CategoryDefinitions はカテゴリ定義リスト
 var CategoryDefinitions = []CategoryDef{
 	{Name: "provider", DisplayName: "Provider & Model", Icon: "🤖", Fields: []string{"default_model", "default_provider", "provider_models"}},
+	{Name: "review", DisplayName: "Review", Icon: "🔎", Fields: []string{"review.model", "review.provider"}},
 	{Name: "general", DisplayName: "General", Icon: "⚙️", Fields: []string{"general.ui_language"}},
 	{Name: "execution", DisplayName: "Execution Mode", Icon: "🛡️", Fields: []string{"execution.always_confirm", "execution.mode", "execution.safe_shell_commands"}},
 	{Name: "compression", DisplayName: "Compression", Icon: "📦", Fields: []string{"compression.enabled", "compression.keep_recent", "compression.trigger_percent"}},
@@ -75,6 +76,8 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"project_map.context_ratio":                     FieldTypeFloat,
 	"project_map.enabled":                           FieldTypeBool,
 	"provider_models":                               FieldTypeStructMap,
+	"review.model":                                  FieldTypeString,
+	"review.provider":                               FieldTypeSelect,
 	"sub_agent.default_effort":                      FieldTypeSelect,
 	"sub_agent.default_model":                       FieldTypeString,
 	"sub_agent.enabled":                             FieldTypeBool,
@@ -92,6 +95,7 @@ var SelectOptions = map[string][]string{
 	"execution.mode":                  {"balanced", "trusted", "full_auto"},
 	"general.ui_language":             {"auto", "ja", "en"},
 	"output.assistant_updates":        {"", "verbose", "phase", "off"},
+	"review.provider":                 {"", "deepseek", "kimi", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 	"sub_agent.default_effort":        {"off", "low", "medium", "high"},
 	"web_search.provider":             {"kimi", "moonshot", "openai", "gemini", "claude", "anthropic"},
 }
@@ -130,6 +134,8 @@ var FieldDescriptions = map[string]string{
 	"project_map.context_ratio":                     "ProjectMap のベース比率（0.01-0.20、デフォルト: 0.05。大規模 repo では 0.03-0.04 に自動補正）",
 	"project_map.enabled":                           "セッション開始時にプロジェクト構造マップを生成・注入",
 	"provider_models":                               "プロバイダーごとのモデル設定",
+	"review.model":                                  "/review 専用モデル（provider 設定時のみ有効。空で provider の既定モデル）",
+	"review.provider":                               "/review 専用プロバイダー（空で現在の provider/model を使用）",
 	"sub_agent.default_effort":                      "既定推論強度（off / low / medium / high）",
 	"sub_agent.default_model":                       "既定モデル（空でメイン provider の最安モデルを自動選択）",
 	"sub_agent.enabled":                             "サブエージェント機能を有効化",

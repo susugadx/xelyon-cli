@@ -7,6 +7,7 @@ func DefaultConfig() *Config {
 		DefaultModel:        "deepseek-v4-flash",
 		General:             defaultGeneralConfig(),
 		ProviderModels:      defaultProviderModels(),
+		Review:              defaultReviewConfig(),
 		Compression:         defaultCompressionConfig(),
 		LoopDetection:       defaultLoopDetectionConfig(),
 		APIRetry:            defaultAPIRetryConfig(),

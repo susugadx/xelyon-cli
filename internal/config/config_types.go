@@ -21,6 +21,7 @@ type Config struct {
 	DefaultProvider   string                         `yaml:"default_provider"`
 	DefaultModel      string                         `yaml:"default_model"`
 	ProviderModels    map[string]ProviderModelConfig `yaml:"provider_models"`
+	Review            ReviewConfig                   `yaml:"review"`
 	General           GeneralConfig                  `yaml:"general"`
 	Compression       CompressionConfig              `yaml:"compression"`
 	LoopDetection     LoopDetectionConfig            `yaml:"loop_detection"`
@@ -51,6 +52,12 @@ type Config struct {
 	providerModelsStore providerModelStore `yaml:"-"`
 	// 将来の拡張用
 	// Cloud CloudConfig `yaml:"cloud,omitempty"`
+}
+
+// ReviewConfig は /review 専用モデルの設定。
+type ReviewConfig struct {
+	Provider string `yaml:"provider"` // /review 専用プロバイダー。空なら現在の provider/model を使う。
+	Model    string `yaml:"model"`    // /review 専用モデル。provider 設定時のみ有効。空なら provider の既定モデルを使う。
 }
 
 func (c *Config) providerModelSectionState() providerModelSectionState {

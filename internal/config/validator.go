@@ -43,6 +43,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	result := ValidationResult{Valid: true}
 
 	appendValidationIssues(&result, validateProviderIssues(cfg))
+	appendValidationIssues(&result, validateReviewIssues(cfg))
 	appendValidationIssues(&result, validateNumericRangeIssues(cfg))
 	appendValidationIssues(&result, validateBashSafetyLevelIssues(cfg))
 	appendValidationIssues(&result, validateAgentInstructionIssues(cfg))
@@ -133,6 +134,7 @@ type configAutoFixer func(*Config, any) bool
 
 var configAutoFixers = map[string]configAutoFixer{
 	"default_provider": stringAutoFixer(func(cfg *Config, v string) { cfg.DefaultProvider = v }),
+	"review.provider":  stringAutoFixer(func(cfg *Config, v string) { cfg.Review.Provider = v }),
 	"compression.trigger_percent": intAutoFixer(func(cfg *Config, v int) {
 		cfg.Compression.TriggerPercent = v
 	}),

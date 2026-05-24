@@ -18,6 +18,7 @@ func TestYamlMarshalIncludesAllSections(t *testing.T) {
 	sections := []string{
 		"thinking:", "tool_confirm:", "streaming:",
 		"web_search:", "diff:", "output:", "general:", "compression:",
+		"review:",
 		"loop_detection:", "api_retry:", "prompt_cache:",
 		"responses:", "paste:", "bash:", "git_stage:",
 		"sub_agent:",
