@@ -116,10 +116,17 @@ func semanticEvidenceDiagnostics(evidence SemanticEvidence) SymbolBundleDiagnost
 }
 
 func semanticEvidenceRecommendedReads(evidence SemanticEvidence, definition SemanticDefinition) []SymbolBundleItem {
-	reads := make([]SymbolBundleItem, 0, 1+len(evidence.References))
-	seen := make(map[string]struct{}, 1+len(evidence.References))
+	capacity := 1 + len(evidence.References)
+	if len(evidence.RecommendedReads) > 0 {
+		capacity = 1 + len(evidence.RecommendedReads)
+	}
+	reads := make([]SymbolBundleItem, 0, capacity)
+	seen := make(map[string]struct{}, capacity)
 	add := func(item SymbolBundleItem) {
 		if item.File == "" || item.Line <= 0 {
+			return
+		}
+		if evidence.RecommendedReadLimit > 0 && len(reads) >= evidence.RecommendedReadLimit {
 			return
 		}
 		key := semanticEvidenceReadKey(item)
@@ -131,6 +138,12 @@ func semanticEvidenceRecommendedReads(evidence SemanticEvidence, definition Sema
 	}
 
 	add(semanticDefinitionReadItem(evidence, definition))
+	if len(evidence.RecommendedReads) > 0 {
+		for _, item := range evidence.RecommendedReads {
+			add(item)
+		}
+		return reads
+	}
 	for _, kind := range []string{
 		SemanticReferenceKindCaller,
 		SemanticReferenceKindTest,

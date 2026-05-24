@@ -23,16 +23,18 @@ const (
 
 // SemanticEvidence は言語 resolver が集めた定義・参照 evidence の共通 contract。
 type SemanticEvidence struct {
-	Language          string
-	Query             string
-	Symbol            string
-	Definitions       []SemanticDefinition
-	References        []SemanticReference
-	ReferenceSections []SemanticReferenceSection
-	Diagnostics       *SymbolBundleDiagnostics
-	Source            string
-	Confidence        string
-	RiskLevel         string
+	Language             string
+	Query                string
+	Symbol               string
+	Definitions          []SemanticDefinition
+	References           []SemanticReference
+	ReferenceSections    []SemanticReferenceSection
+	RecommendedReads     []SymbolBundleItem
+	RecommendedReadLimit int
+	Diagnostics          *SymbolBundleDiagnostics
+	Source               string
+	Confidence           string
+	RiskLevel            string
 }
 
 // SemanticDefinition は編集起点になる定義 evidence。

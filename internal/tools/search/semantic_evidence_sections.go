@@ -17,8 +17,16 @@ var semanticEvidenceSectionOrder = []semanticEvidenceSectionGroup{
 	{kind: SemanticReferenceSectionKindTypeRefs, title: "Type References"},
 }
 
+var jsFamilySemanticEvidenceSectionOrder = []semanticEvidenceSectionGroup{
+	{kind: SemanticReferenceSectionKindImports, title: "Imports"},
+	{kind: SemanticReferenceSectionKindCallers, title: "Callers"},
+	{kind: SemanticReferenceSectionKindTypeRefs, title: "Type References"},
+	{kind: SemanticReferenceSectionKindReferences, title: "References"},
+	{kind: SemanticReferenceSectionKindTests, title: "Related Tests"},
+}
+
 func semanticEvidenceSections(evidence SemanticEvidence) []SymbolBundleSection {
-	ordered := cloneSemanticEvidenceSectionOrder()
+	ordered := cloneSemanticEvidenceSectionOrder(evidence.Language)
 	byKind := make(map[string]*semanticEvidenceSectionGroup, len(ordered))
 	for i := range ordered {
 		byKind[ordered[i].kind] = &ordered[i]
@@ -54,7 +62,11 @@ func semanticEvidenceSections(evidence SemanticEvidence) []SymbolBundleSection {
 	return sections
 }
 
-func cloneSemanticEvidenceSectionOrder() []semanticEvidenceSectionGroup {
+func cloneSemanticEvidenceSectionOrder(language string) []semanticEvidenceSectionGroup {
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "typescript", "javascript":
+		return append([]semanticEvidenceSectionGroup(nil), jsFamilySemanticEvidenceSectionOrder...)
+	}
 	return append([]semanticEvidenceSectionGroup(nil), semanticEvidenceSectionOrder...)
 }
 

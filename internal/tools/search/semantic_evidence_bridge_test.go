@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	codeast "github.com/susugadx/xelyon-cli/internal/ast"
+	"github.com/susugadx/xelyon-cli/internal/impactplan"
 )
 
 func TestSemanticEvidenceFromGoInspectResult(t *testing.T) {
@@ -201,4 +202,46 @@ func TestSemanticEvidenceFromJSFamilyRefsPreservesReferenceBudgets(t *testing.T)
 	assertOutputContains(t, output, "References: 15 shown (of 17)")
 	assertOutputContains(t, output, "Related Tests: 5 shown (of 7)")
 	assertOutputContains(t, output, "Omitted: callers +2, references +2, tests +2")
+}
+
+func TestBuildJSFamilySemanticEvidenceUsesSearchOptionsForNearbyTestsAndRisk(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/build.ts":      "export function buildUser(id: string) { return id }\n",
+		"src/build.test.ts": "it('builds nearby', () => buildUser('nearby'))\n",
+	})
+	def := genericSymbolDef{
+		Name:      "buildUser",
+		Kind:      "function",
+		File:      "src/build.ts",
+		Line:      1,
+		Signature: "export function buildUser(id: string) { return id }",
+	}
+	refs := []genericSymbolRef{
+		{File: "src/app1.ts", Line: 1, Snippet: "buildUser('1')", Class: codeast.ClassCall},
+		{File: "src/app2.ts", Line: 1, Snippet: "buildUser('2')", Class: codeast.ClassCall},
+		{File: "src/app3.ts", Line: 1, Snippet: "buildUser('3')", Class: codeast.ClassCall},
+		{File: "src/app4.ts", Line: 1, Snippet: "buildUser('4')", Class: codeast.ClassCall},
+	}
+	diagnostics := semanticEvidenceASTDiagnosticsFixture()
+
+	withOptions, ok := buildJSFamilySemanticEvidence("typescript", "buildUser", def, newTypeScriptImpactSearchOptions(dir, "buildUser"), refs, refs, diagnostics)
+	if !ok {
+		t.Fatal("buildJSFamilySemanticEvidence(with options) ok = false")
+	}
+	if withOptions.RiskLevel != impactplan.RiskMedium {
+		t.Fatalf("RiskLevel with nearby test = %q, want %q", withOptions.RiskLevel, impactplan.RiskMedium)
+	}
+	assertSemanticReferenceKindCount(t, withOptions.References, SemanticReferenceKindTest, 1)
+	if withOptions.Definitions[0].RootPath == "" || withOptions.Definitions[0].ResolvedPath == "" {
+		t.Fatalf("definition paths = root:%q resolved:%q, want production paths", withOptions.Definitions[0].RootPath, withOptions.Definitions[0].ResolvedPath)
+	}
+
+	withoutOptions, ok := buildJSFamilySemanticEvidence("typescript", "buildUser", def, SearchOptions{}, refs, refs, diagnostics)
+	if !ok {
+		t.Fatal("buildJSFamilySemanticEvidence(without options) ok = false")
+	}
+	if withoutOptions.RiskLevel != impactplan.RiskHigh {
+		t.Fatalf("RiskLevel without nearby test = %q, want %q", withoutOptions.RiskLevel, impactplan.RiskHigh)
+	}
+	assertSemanticReferenceKindCount(t, withoutOptions.References, SemanticReferenceKindTest, 0)
 }

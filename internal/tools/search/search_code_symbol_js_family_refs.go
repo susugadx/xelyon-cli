@@ -57,6 +57,11 @@ func setJSFamilyBundleDiagnostics(bundle *SymbolBundle, diagnostics SymbolBundle
 	if bundle == nil {
 		return
 	}
+	bundle.Diagnostics = normalizedJSFamilyBundleDiagnostics(diagnostics, totalRefs)
+	finalizeSymbolBundleDiagnostics(bundle)
+}
+
+func normalizedJSFamilyBundleDiagnostics(diagnostics SymbolBundleDiagnostics, totalRefs []genericSymbolRef) SymbolBundleDiagnostics {
 	diagnostics = cloneSymbolBundleDiagnostics(diagnostics)
 	accepted := len(dedupeGenericRefs(totalRefs))
 	raw := accepted
@@ -68,8 +73,8 @@ func setJSFamilyBundleDiagnostics(bundle *SymbolBundle, diagnostics SymbolBundle
 		diagnostics.ResolvedViaLSP = true
 		diagnostics.LSPSource = jsFamilyBundleLSPSource
 	}
-	bundle.Diagnostics = diagnostics
-	finalizeSymbolBundleDiagnostics(bundle)
+	normalizeSymbolBundleDiagnostics(&diagnostics)
+	return diagnostics
 }
 
 func findJSFamilyReferencesWithSemantic(symbol string, def genericSymbolDef, opts jsFamilyReferenceOptions) jsFamilyReferenceResult {
