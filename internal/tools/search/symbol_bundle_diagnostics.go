@@ -25,6 +25,26 @@ const (
 	symbolBundleFallbackReasonStructuredUnavailable = "structured_unavailable"
 )
 
+// Exported aliases expose the diagnostics value contract to orchestration packages.
+const (
+	SymbolBundleResolvedByLSP      = symbolBundleResolvedByLSP
+	SymbolBundleResolvedByAST      = symbolBundleResolvedByAST
+	SymbolBundleResolvedByFallback = symbolBundleResolvedByFallback
+	SymbolBundleResolvedByMixed    = symbolBundleResolvedByMixed
+	SymbolBundleResolvedByUnknown  = symbolBundleResolvedByUnknown
+
+	SymbolBundleConfidenceHigh    = symbolBundleConfidenceHigh
+	SymbolBundleConfidenceMedium  = symbolBundleConfidenceMedium
+	SymbolBundleConfidenceLow     = symbolBundleConfidenceLow
+	SymbolBundleConfidenceUnknown = symbolBundleConfidenceUnknown
+
+	SymbolBundleFallbackReasonLSPUnavailable        = symbolBundleFallbackReasonLSPUnavailable
+	SymbolBundleFallbackReasonLSPEmpty              = symbolBundleFallbackReasonLSPEmpty
+	SymbolBundleFallbackReasonLSPError              = symbolBundleFallbackReasonLSPError
+	SymbolBundleFallbackReasonLSPTimeout            = symbolBundleFallbackReasonLSPTimeout
+	SymbolBundleFallbackReasonStructuredUnavailable = symbolBundleFallbackReasonStructuredUnavailable
+)
+
 func cloneSymbolBundleDiagnostics(diag SymbolBundleDiagnostics) SymbolBundleDiagnostics {
 	cloned := diag
 	cloned.LSPAttempted = cloneBoolPtr(diag.LSPAttempted)

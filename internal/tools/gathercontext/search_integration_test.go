@@ -157,6 +157,9 @@ func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousSymbol(t *testing.T) 
 	if strings.Contains(result, "Prefetched Evidence") {
 		t.Fatalf("expected ambiguous search to avoid speculative prefetch, got:\n%s", result)
 	}
+	if !strings.Contains(result, "Prefetch skipped: ambiguous structured impact") {
+		t.Fatalf("expected ambiguous prefetch skip note, got:\n%s", result)
+	}
 }
 
 func TestGatherContext_SearchRouteUsesTypeScriptStructuredImpactAndPrefetch(t *testing.T) {
@@ -201,6 +204,10 @@ func TestGatherContext_SearchRouteUsesTypeScriptStructuredImpactAndPrefetch(t *t
 	if !strings.Contains(result, "export function buildUser") {
 		t.Fatalf("expected prefetched TypeScript definition evidence, got:\n%s", result)
 	}
+	if !strings.Contains(result, "Prefetch limited: confidence=medium") {
+		t.Fatalf("expected medium-confidence TypeScript prefetch limit note, got:\n%s", result)
+	}
+	assertGatherContextPrefetchedFileCount(t, result, 2)
 }
 
 func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousTypeScriptSymbol(t *testing.T) {
@@ -357,6 +364,10 @@ func TestGatherContext_SearchRouteUsesJavaScriptStructuredImpactAndPrefetch(t *t
 	if !strings.Contains(result, "export function buildUser") || !strings.Contains(result, "buildUser('1')") {
 		t.Fatalf("expected prefetched JavaScript evidence, got:\n%s", result)
 	}
+	if !strings.Contains(result, "Prefetch limited: confidence=medium") {
+		t.Fatalf("expected medium-confidence JavaScript prefetch limit note, got:\n%s", result)
+	}
+	assertGatherContextPrefetchedFileCount(t, result, 2)
 }
 
 func TestGatherContext_SearchRouteSkipsPrefetchForAmbiguousJavaScriptSymbol(t *testing.T) {

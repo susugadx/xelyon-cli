@@ -98,3 +98,10 @@ func assertGatherContextExcludesAll(t *testing.T, result string, excludes ...str
 		}
 	}
 }
+
+func assertGatherContextPrefetchedFileCount(t *testing.T, result string, want int) {
+	t.Helper()
+	if count := strings.Count(result, "📄 File: "); count != want {
+		t.Fatalf("prefetched file count = %d, want %d:\n%s", count, want, result)
+	}
+}
