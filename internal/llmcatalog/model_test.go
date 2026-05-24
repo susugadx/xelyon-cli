@@ -26,13 +26,20 @@ func TestKnownMaxOutputTokens_ClaudeOpus47(t *testing.T) {
 	}
 }
 
-func TestKnownMaxOutputTokens_Gemini35Flash(t *testing.T) {
-	got, ok := KnownMaxOutputTokens("gemini-3.5-flash")
-	if !ok {
-		t.Fatal("KnownMaxOutputTokens(gemini-3.5-flash) ok = false, want true")
-	}
-	if got != 65536 {
-		t.Fatalf("KnownMaxOutputTokens(gemini-3.5-flash) = %d, want 65536", got)
+func TestKnownMaxOutputTokens_GeminiFlashModels(t *testing.T) {
+	for _, model := range []string{
+		"gemini-3.5-flash",
+		"gemini-3.1-flash-lite",
+	} {
+		t.Run(model, func(t *testing.T) {
+			got, ok := KnownMaxOutputTokens(model)
+			if !ok {
+				t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", model)
+			}
+			if got != 65536 {
+				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want 65536", model, got)
+			}
+		})
 	}
 }
 
@@ -50,6 +57,7 @@ func TestIsKnownModelName(t *testing.T) {
 		{model: "au.anthropic.claude-sonnet-4-6", want: true},
 		{model: "claude-sonnet-4.5", want: true},
 		{model: "gemini-3.5-flash", want: true},
+		{model: "gemini-3.1-flash-lite", want: true},
 		{model: "gemini-3.1-pro", want: true},
 		{model: "kimi-k2.6", want: true},
 		{model: "kimi-k2.5", want: true},
@@ -113,10 +121,13 @@ func TestKnownModelNamesForProvider_IncludesGPT53CodexForOpenAIProviders(t *test
 	}
 }
 
-func TestKnownModelNamesForProvider_IncludesGemini35Flash(t *testing.T) {
+func TestKnownModelNamesForProvider_IncludesGeminiFlashModels(t *testing.T) {
 	models := KnownModelNamesForProvider("gemini")
 	if !slices.Contains(models, "gemini-3.5-flash") {
 		t.Fatalf("KnownModelNamesForProvider(gemini) = %v, want gemini-3.5-flash", models)
+	}
+	if !slices.Contains(models, "gemini-3.1-flash-lite") {
+		t.Fatalf("KnownModelNamesForProvider(gemini) = %v, want gemini-3.1-flash-lite", models)
 	}
 }
 
@@ -189,6 +200,7 @@ func TestKnownModelContextLimit(t *testing.T) {
 	}{
 		{model: "gpt-5.4", want: 1000000, ok: true},
 		{model: "gemini-3.5-flash", want: 1048576, ok: true},
+		{model: "gemini-3.1-flash-lite", want: 1000000, ok: true},
 		{model: "claude-sonnet-4-6", want: 200000, ok: true},
 		{model: "deepseek-v4-custom", want: 1000000, ok: true},
 		{model: "kimi-k2.6", want: 256000, ok: true},

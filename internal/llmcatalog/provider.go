@@ -137,11 +137,11 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		CredentialKind:       "api_key",
 		APIKeyEnv:            "GEMINI_API_KEY",
 		SetupInstructions:    []string{"export GEMINI_API_KEY=your-api-key"},
-		DefaultSubAgentModel: "gemini-3.1-flash-lite-preview",
+		DefaultSubAgentModel: "gemini-3.1-flash-lite",
 		SupportsImages:       true,
 		NativeWebSearch:      true,
 		PricingFamily:        "gemini",
-		CompressionModel:     "gemini-3.1-flash-lite-preview",
+		CompressionModel:     "gemini-3.1-flash-lite",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "gemini-3.1-pro-preview-customtools",
 			MaxOutputTokens: 65536,

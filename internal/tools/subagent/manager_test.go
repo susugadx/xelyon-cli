@@ -69,7 +69,7 @@ func TestInferSubAgentModel(t *testing.T) {
 		{provider: "openai", want: "gpt-5.4-mini"},
 		{provider: "claude", want: "claude-haiku-4-5-20251001"},
 		{provider: "anthropic", want: "claude-haiku-4-5-20251001"},
-		{provider: "gemini", want: "gemini-3.1-flash-lite-preview"},
+		{provider: "gemini", want: "gemini-3.1-flash-lite"},
 		{provider: "deepseek", want: "deepseek-v4-flash"},
 		{provider: "groq", want: "llama-3.3-70b-versatile"},
 		{provider: "openrouter", want: "openai/gpt-5.4-mini"},
@@ -599,8 +599,8 @@ func TestManagerSpawn_PlaceholderModelFallsBackToMainProvider(t *testing.T) {
 	}
 	_ = manager.Wait([]string{id}, 0)
 
-	if gotModel != "gemini-3.1-flash-lite-preview" {
-		t.Fatalf("resolved model = %q, want gemini-3.1-flash-lite-preview", gotModel)
+	if gotModel != "gemini-3.1-flash-lite" {
+		t.Fatalf("resolved model = %q, want gemini-3.1-flash-lite", gotModel)
 	}
 }
 

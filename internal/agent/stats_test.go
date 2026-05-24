@@ -962,18 +962,22 @@ func TestGetOpenAIPricing_GPT54Nano(t *testing.T) {
 	}
 }
 
-// === 新規テスト: Gemini 3.1 Flash-Lite Preview 専用価格 ===
+// === 新規テスト: Gemini 3.1 Flash-Lite 専用価格 ===
 
 func TestGetGeminiPricing_31FlashLite(t *testing.T) {
-	pricing := cost.GetPricingInfo("gemini", "gemini-3.1-flash-lite-preview", 0)
-	if pricing.InputCostPerM != 0.25 {
-		t.Errorf("gemini-3.1-flash-lite-preview input: got %f, want 0.25", pricing.InputCostPerM)
-	}
-	if pricing.CachedInputCostPerM != 0.025 {
-		t.Errorf("gemini-3.1-flash-lite-preview cached input: got %f, want 0.025", pricing.CachedInputCostPerM)
-	}
-	if pricing.OutputCostPerM != 1.50 {
-		t.Errorf("gemini-3.1-flash-lite-preview output: got %f, want 1.50", pricing.OutputCostPerM)
+	for _, model := range []string{"gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview"} {
+		t.Run(model, func(t *testing.T) {
+			pricing := cost.GetPricingInfo("gemini", model, 0)
+			if pricing.InputCostPerM != 0.25 {
+				t.Errorf("%s input: got %f, want 0.25", model, pricing.InputCostPerM)
+			}
+			if pricing.CachedInputCostPerM != 0.025 {
+				t.Errorf("%s cached input: got %f, want 0.025", model, pricing.CachedInputCostPerM)
+			}
+			if pricing.OutputCostPerM != 1.50 {
+				t.Errorf("%s output: got %f, want 1.50", model, pricing.OutputCostPerM)
+			}
+		})
 	}
 }
 

@@ -232,6 +232,32 @@ func TestSlashSuggestions_ShowGemini35FlashModelCandidate(t *testing.T) {
 	}
 }
 
+func TestSlashSuggestions_ShowGemini31FlashLiteModelCandidate(t *testing.T) {
+	agent := &stubAgent{
+		statusLine:        "ready",
+		providerConfigKey: "gemini",
+		modelCandidates: map[string][]providerpicker.ModelCandidate{
+			"gemini": {
+				{Name: "gemini-3.5-flash"},
+				{Name: "gemini-3.1-flash-lite"},
+				{Name: "Custom model...", Custom: true},
+			},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m = sendComposerRunes(m, "/model gemini-3.1-f")
+
+	if !m.slashSuggestions.visible() {
+		t.Fatal("gemini model argument suggestions should be visible")
+	}
+	if got := len(m.slashSuggestions.suggestions); got != 1 {
+		t.Fatalf("gemini model suggestions len = %d, want 1", got)
+	}
+	if got := m.slashSuggestions.suggestions[0].InsertText; got != "/model gemini-3.1-flash-lite" {
+		t.Fatalf("gemini model suggestion insert = %q, want /model gemini-3.1-flash-lite", got)
+	}
+}
+
 func TestSlashSuggestions_TabCompletesThinkingArgument(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)

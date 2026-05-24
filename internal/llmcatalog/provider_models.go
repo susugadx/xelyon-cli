@@ -37,6 +37,7 @@ var knownProviderModels = map[string][]string{
 	},
 	"gemini": {
 		"gemini-3.5-flash",
+		"gemini-3.1-flash-lite",
 		"gemini-3.1-pro-preview-customtools",
 		"gemini-3.1-pro-preview",
 		"gemini-3.1-pro",

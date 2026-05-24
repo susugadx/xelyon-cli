@@ -287,7 +287,7 @@ func TestModelCandidates_KnownDefaultCurrentCustomStableDedupe(t *testing.T) {
 	}
 }
 
-func TestModelCandidates_IncludesGemini35Flash(t *testing.T) {
+func TestModelCandidates_IncludesGeminiFlashModels(t *testing.T) {
 	agent := &Agent{
 		ProviderName:      "gemini",
 		ProviderConfigKey: "gemini",
@@ -302,6 +302,9 @@ func TestModelCandidates_IncludesGemini35Flash(t *testing.T) {
 	}
 	if c := candidateByName(got, "gemini-3.5-flash"); c.Name == "" || c.Custom {
 		t.Fatalf("gemini-3.5-flash candidate = %#v, want normal runtime candidate", c)
+	}
+	if c := candidateByName(got, "gemini-3.1-flash-lite"); c.Name == "" || c.Custom {
+		t.Fatalf("gemini-3.1-flash-lite candidate = %#v, want normal runtime candidate", c)
 	}
 }
 
