@@ -115,6 +115,7 @@ func TestGetGeminiPricing_AllModels(t *testing.T) {
 		{name: "2.5-pro normal", model: "gemini-2.5-pro", ptc: 100000, wantInput: 1.25, wantOutput: 10.00},
 		{name: "2.5-pro long", model: "gemini-2.5-pro", ptc: 250000, wantInput: 2.50, wantOutput: 15.00},
 		{name: "2.5-flash", model: "gemini-2.5-flash", ptc: 0, wantInput: 0.30, wantOutput: 2.50},
+		{name: "3.5-flash", model: "gemini-3.5-flash", ptc: 0, wantInput: 1.50, wantOutput: 9.00},
 		{name: "3.x flash default", model: "gemini-3-flash", ptc: 0, wantInput: 0.50, wantOutput: 3.00},
 		{name: "3.1-pro normal", model: "gemini-3.1-pro", ptc: 100000, wantInput: 2.00, wantOutput: 12.00},
 		{name: "3.1-pro long", model: "gemini-3.1-pro", ptc: 250000, wantInput: 4.00, wantOutput: 18.00},
@@ -614,6 +615,7 @@ func TestGetPricingInfoForConfig_ConfiguredKnownExactModelsAcrossProvidersStillP
 	}{
 		{provider: "claude", model: "claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
 		{provider: "deepseek", model: "deepseek-v4-pro", wantInput: 1.74, wantOut: 3.48},
+		{provider: "gemini", model: "gemini-3.5-flash", wantInput: 1.50, wantOut: 9.00},
 		{provider: "gemini", model: "gemini-3.1-pro", wantInput: 2.00, wantOut: 12.00},
 		{provider: "groq", model: "llama-3.1-70b", wantInput: 0.59, wantOut: 0.79},
 		{provider: "groq", model: "meta-llama/llama-4-scout-17b-16e-instruct", wantInput: 0.11, wantOut: 0.34},

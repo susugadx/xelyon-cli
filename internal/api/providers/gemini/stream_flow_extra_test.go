@@ -32,7 +32,7 @@ func TestHandleSSEResponse_ContextCancelReturnsPartialText(t *testing.T) {
 		_ = pw.Close()
 	}()
 
-	got, err := p.handleSSEResponse(ctx, &http.Response{Body: pr}, nil, "")
+	got, err := p.handleSSEResponse(ctx, &http.Response{Body: pr}, nil, "", "")
 	if err != nil {
 		t.Fatalf("handleSSEResponse() error = %v", err)
 	}
@@ -55,7 +55,7 @@ func TestHandleSSEResponse_SuppressesSplitToolJSONAcrossChunks(t *testing.T) {
 		}},
 	})
 
-	got, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "")
+	got, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "", "gemini-3.5-flash")
 	if err != nil {
 		t.Fatalf("handleSSEResponse() error = %v", err)
 	}
@@ -97,7 +97,7 @@ func TestHandleSSEResponse_DedupesSignatureFunctionCallsAndCarriesThoughtParts(t
 		}},
 	})
 
-	got, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "")
+	got, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "", "gemini-3.5-flash")
 	if err != nil {
 		t.Fatalf("handleSSEResponse() error = %v", err)
 	}
@@ -131,7 +131,7 @@ func TestHandleSSEResponse_ScanErrorAfterPartialChunk(t *testing.T) {
 		iotest.ErrReader(readErr),
 	))
 
-	_, err := p.handleSSEResponse(ctx, &http.Response{Body: body}, spinner, "")
+	_, err := p.handleSSEResponse(ctx, &http.Response{Body: body}, spinner, "", "")
 	if err == nil {
 		t.Fatal("handleSSEResponse() should return scan error")
 	}

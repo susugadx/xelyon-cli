@@ -61,6 +61,22 @@ func TestGetThinkingConfigForModel_Gemini3ProWithoutThinkingUsesLowLevel(t *test
 	}
 }
 
+func TestGetThinkingConfigForModel_Gemini35FlashWithoutThinkingUsesMinimalLevel(t *testing.T) {
+	ctx := newGeminiRequestContext(false, "high")
+	cfg := config.FromContext(ctx)
+
+	got := getThinkingConfigForModel(ctx, "gemini-3.5-flash", cfg)
+	if got == nil || got.ThinkingConfig == nil {
+		t.Fatalf("getThinkingConfigForModel() = %+v, want thinking config", got)
+	}
+	if got.ThinkingConfig.ThinkingLevel != "minimal" {
+		t.Fatalf("ThinkingLevel = %q, want %q", got.ThinkingConfig.ThinkingLevel, "minimal")
+	}
+	if got.MaxOutputTokens != 65536 {
+		t.Fatalf("MaxOutputTokens = %d, want 65536", got.MaxOutputTokens)
+	}
+}
+
 func TestGetThinkingSpinnerMessage_Gemini25ImageWithThinking(t *testing.T) {
 	ctx := newGeminiRequestContext(true, "medium")
 	if got := getThinkingSpinnerMessage(ctx, "gemini-2.5-flash", true); got != "Deep thinking (image)" {
@@ -184,7 +200,7 @@ func TestChatWithTools_IdleTimeoutRetryThenSuccess(t *testing.T) {
 	}
 
 	ctx, _, errOut := newGeminiOrchestrationContext(1, 3)
-	got, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "")
+	got, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "gemini-2.0-flash")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -218,7 +234,7 @@ func TestChatWithTools_IdleTimeoutExceedsMaxRetries(t *testing.T) {
 	ctx, _, _ := newGeminiOrchestrationContext(1, 3)
 	ctx = context.WithValue(ctx, idleTimeoutRetryKey, maxIdleTimeoutRetries)
 
-	_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "")
+	_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "gemini-2.0-flash")
 	if err == nil {
 		t.Fatal("ChatWithTools() should return error when idle-timeout retry budget is exhausted")
 	}

@@ -222,6 +222,7 @@ gemini:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-3-flash
+      - gemini-3.5-flash
       - gemini-3-pro-preview
       - gemini-3.1-pro
       - gemini-3.1-pro-preview
@@ -236,6 +237,12 @@ gemini:
     cachedinputcostperm: 0.05
     cachecreationcostperm: 0.50
   rules:
+    - contains: ["3.5-flash"]
+      pricing:
+        inputcostperm: 1.50
+        outputcostperm: 9.00
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 1.50
     - contains: ["3.1-pro", "3-pro"]
       pricing:
         inputcostperm: 2.00

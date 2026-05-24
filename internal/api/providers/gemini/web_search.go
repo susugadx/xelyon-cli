@@ -98,7 +98,7 @@ func (p *Provider) webSearch(ctx context.Context, query, model string) (string, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", p.apiKey)
 
-	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
+	resp, err := p.doRequestWithRetry(ctx, req, jsonBody, model)
 	if err != nil {
 		return "", err
 	}

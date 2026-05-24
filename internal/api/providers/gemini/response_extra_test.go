@@ -60,7 +60,7 @@ func TestHandleSSEResponse_RescuesCodeBlockToolJSONAndReportsUsage(t *testing.T)
 		},
 	})
 
-	got, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "")
+	got, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "", "")
 	if err != nil {
 		t.Fatalf("handleSSEResponse() error = %v", err)
 	}
@@ -87,7 +87,7 @@ func TestHandleSSEResponse_NoContentReturnsError(t *testing.T) {
 		UsageMetadata: &GeminiUsageMetadata{PromptTokenCount: 1},
 	})
 
-	_, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "")
+	_, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "", "")
 	if err == nil {
 		t.Fatal("handleSSEResponse() should return error when stream has no content")
 	}

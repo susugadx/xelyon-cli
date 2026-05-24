@@ -347,6 +347,7 @@ GitHub Actions では `Azure Smoke` workflow を手動実行できます。通�
 export GEMINI_API_KEY=...
 
 # 使用例
+xelyon --provider gemini --model gemini-3.5-flash
 xelyon --provider gemini --model gemini-3-pro-preview
 xelyon --provider gemini --model gemini-3.1-pro-preview-customtools
 xelyon --provider gemini --model gemini-2.5-flash
@@ -358,30 +359,31 @@ xelyon --provider gemini --model gemini-2.0-flash-exp
 - 画像入力対応
 - 無料枠あり
 
-#### Gemini 3 モデル（thinking 対応）
+#### Gemini 3 / 3.5 モデル（thinking 対応）
 
-Gemini 3 Pro / Flash は **thinking（推論）が常時 ON** です。XELYON では自動的に `thinkingLevel` パラメータを送信します。
+Gemini 3 / 3.5 系は **thinking（推論）が常時 ON** です。XELYON では自動的に `thinkingLevel` パラメータを送信します。`gemini-3.5-flash` は Stable model として扱い、1,048,576 input tokens / 65,536 output tokens の catalog metadata を持ちます。
 
 **デフォルト動作:**
 - `thinking.enabled: false`（デフォルト）→ Flash: `"minimal"` / Pro: `"low"`（latency 最小化）
 - `thinking.enabled: true` → config の `thinking.level` に応じて変換
 
 **対応 thinkingLevel:**
-| Level | Gemini 3 Pro | Gemini 3 Flash |
-|-------|-------------|----------------|
-| `minimal` | ❌ | ✅（デフォルト） |
-| `low` | ✅（デフォルト） | ✅ |
-| `medium` | ❌（low にフォールバック） | ✅ |
-| `high` | ✅ | ✅ |
+| Level | Gemini 3 Pro Preview | Gemini 3.1 Pro | Gemini 3 / 3.5 Flash |
+|-------|----------------------|----------------|----------------------|
+| `minimal` | ❌ | ❌ | ✅（XELYON の Flash latency 優先デフォルト） |
+| `low` | ✅（XELYON の Pro latency 優先デフォルト） | ✅ | ✅ |
+| `medium` | ❌（low に丸め） | ✅ | ✅ |
+| `high` | ✅ | ✅ | ✅ |
 
 **Thought Signatures:** Gemini 3 の Function Calling レスポンスには `thoughtSignature`（暗号化された思考プロセス）が含まれます。XELYON はこれをパース・ログ出力しますが、テキストベースの履歴管理のため自動的に処理されます。
 
 **注意:** Gemini 3 Pro の Function Calling には既知のバグ（空レスポンス）が報告されています。問題が発生する場合は `XELYON_DEBUG_GEMINI=1` で詳細ログを確認してください。
 
-設定の到達性は CLI から診断できます。`doctor gemini` は `GEMINI_API_KEY`、`GEMINI_API_URL`、provider 登録、model / `catalog_model` 解決、`streamGenerateContent?alt=sse` route、function calling 設定、画像入力、thinking、context caching、native web search、token / pricing metadata を確認します。`--smoke` を付けると live text SSE request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。画像入力の実 API 受理は `--image-smoke`、native web search は `--web-search-smoke` で確認します。`--print-request` は live request を送らず、redacted `x-goog-api-key` header と request body を表示します。live smoke の失敗は `smoke` check の message / suggestion と request 単位の `smoke.requests[].error` に分類して表示します。
+設定の到達性は CLI から診断できます。`doctor gemini` は `GEMINI_API_KEY`、`GEMINI_API_URL`、provider 登録、model / `catalog_model` 解決、`streamGenerateContent?alt=sse` route、function calling 設定、画像入力、thinking、context caching、native web search、token / pricing metadata を確認します。`--smoke` を付けると live text SSE request を送って usage / cost を観測し、function calling まで確認したい場合は `--tool-smoke` を使います。画像入力の実 API 受理は `--image-smoke`、native web search は `--web-search-smoke` で確認します。`--print-request` は live request を送らず、redacted `x-goog-api-key` header と request body を表示します。live smoke の失敗は `smoke` check の message / suggestion と request 単位の `smoke.requests[].error` に分類して表示します。Gemini thinking request では response-start / SSE idle の待機上限に `streaming.thinking_timeout_seconds` を使い、thinking 途中の沈黙や thought progress を通常の transport idle と区別します。
 
 ```bash
 xelyon doctor gemini
+xelyon doctor gemini --model gemini-3.5-flash
 xelyon doctor gemini --model gemini-3.1-pro-preview-customtools
 xelyon doctor gemini --model corp-gemini-model --catalog-model gemini-3.1-pro-preview-customtools
 xelyon doctor gemini --smoke
@@ -392,7 +394,7 @@ xelyon doctor gemini --print-request
 xelyon doctor gemini --json
 ```
 
-tool smoke / preview では request-scoped `ANY` mode を使って diagnostic tool だけを送りますが、通常 runtime の `GEMINI_FC_MODE` fallback は変更しません。`GEMINI_API_URL` は exact endpoint / proxy override として扱われ、doctor の `request_preview.requests[].url` が実際の送信先です。text / tool / image は `streamGenerateContent?alt=sse`、native web search は `generateContent` の request shape を同じ URL に送るため、`--web-search-smoke` では `generateContent` を受ける endpoint または両方の shape を受ける proxy を使います。non-Gemini `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Gemini doctor の token / cost policy に使いません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では実行しません。手元では `GEMINI_API_KEY` を設定して `make gemini-doctor-smoke` を実行します。既定モデルは `GEMINI_DOCTOR_SMOKE_MODEL ?= gemini-3.1-pro-preview-customtools`、timeout は `GEMINI_DOCTOR_SMOKE_TIMEOUT ?= 180s` です。web search smoke は native `generateContent` の `usageMetadata` が返れば usage / cost を表示し、返らない場合は usage / cost を warn に留めます。summary または source が返れば smoke は成功扱いです。
+tool smoke / preview では request-scoped `ANY` mode を使って diagnostic tool だけを送りますが、通常 runtime の `GEMINI_FC_MODE` fallback は変更しません。`GEMINI_API_URL` は exact endpoint / proxy override として扱われ、doctor の `request_preview.requests[].url` が実際の送信先です。text / tool / image は `streamGenerateContent?alt=sse`、native web search は `generateContent` の request shape を同じ URL に送るため、`--web-search-smoke` では `generateContent` を受ける endpoint または両方の shape を受ける proxy を使います。non-Gemini `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は Gemini doctor の token / cost policy に使いません。`--smoke` / `--tool-smoke` / `--image-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では実行しません。手元では `GEMINI_API_KEY` を設定して `make gemini-doctor-smoke` を実行します。既定モデルは `GEMINI_DOCTOR_SMOKE_MODEL ?= gemini-3.1-pro-preview-customtools`、timeout は `GEMINI_DOCTOR_SMOKE_TIMEOUT ?= 180s` です。Gemini 3.5 Flash を smoke する場合は `GEMINI_DOCTOR_SMOKE_MODEL=gemini-3.5-flash make gemini-doctor-smoke` を使います。web search smoke は native `generateContent` の `usageMetadata` が返れば usage / cost を表示し、返らない場合は usage / cost を warn に留めます。summary または source が返れば smoke は成功扱いです。
 
 Gemini doctor は live smoke 失敗時に、認証・権限、quota / rate limit / capacity、model unavailable、empty SSE response、endpoint route mismatch、tool unsupported、image unsupported、native web search unsupported を分類して suggestion を出します。pricing metadata unavailable は live request 成功後の観測不足なので fail ではなく `cost` warn です。`GEMINI_API_URL` を使う場合は、route mismatch が疑わしいときに `--print-request` の URL と body を source of truth として確認してください。
 

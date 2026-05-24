@@ -54,6 +54,58 @@ type Provider struct {
 // Google側でリクエスト処理が詰まった場合に無制限にぶら下がるのを防ぐ
 const defaultResponseHeaderTimeout = 60 * time.Second
 
+func geminiConfiguredThinkingTimeout(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Streaming.ThinkingTimeoutSeconds <= 0 {
+		return 300 * time.Second
+	}
+	return time.Duration(cfg.Streaming.ThinkingTimeoutSeconds) * time.Second
+}
+
+func isGeminiThinkingRequest(ctx context.Context, model string) bool {
+	return isGemini3Model(model) || api.IsThinkingEnabled(ctx)
+}
+
+func geminiResponseHeaderTimeout(ctx context.Context, model string, current time.Duration) time.Duration {
+	// 明示的に差し替えられた transport の timeout は尊重する。通常の provider 既定値だけ、
+	// thinking request では streaming.thinking_timeout_seconds まで広げる。
+	if current != defaultResponseHeaderTimeout {
+		return current
+	}
+	if !isGeminiThinkingRequest(ctx, model) {
+		return current
+	}
+	if thinkingTimeout := geminiConfiguredThinkingTimeout(config.FromContext(ctx)); thinkingTimeout > current {
+		return thinkingTimeout
+	}
+	return current
+}
+
+func (p *Provider) httpClientForRequest(ctx context.Context, model string) *http.Client {
+	if p == nil || p.httpClient == nil {
+		return http.DefaultClient
+	}
+
+	transport := p.httpClient.Transport
+	if transport == nil {
+		return p.httpClient
+	}
+	httpTransport, ok := transport.(*http.Transport)
+	if !ok {
+		return p.httpClient
+	}
+
+	timeout := geminiResponseHeaderTimeout(ctx, model, httpTransport.ResponseHeaderTimeout)
+	if timeout == httpTransport.ResponseHeaderTimeout {
+		return p.httpClient
+	}
+
+	client := *p.httpClient
+	cloned := httpTransport.Clone()
+	cloned.ResponseHeaderTimeout = timeout
+	client.Transport = cloned
+	return &client
+}
+
 // New は新しいGeminiProviderを作成
 func New(apiKey string) *Provider {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -345,12 +397,12 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 // doRequestWithRetry は HTTP リクエストを実行し、503/429 の場合にリトライ
 // 503: 指数バックオフ（1s, 2s, 4s）
 // 429: Retry-After ヘッダー優先、なければ指数バックオフ（20s, 40s, 60s）
-func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bodyBytes []byte) (*http.Response, error) {
+func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bodyBytes []byte, model string) (*http.Response, error) {
 	const maxRetries = 3
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		resp, err := p.httpClient.Do(req)
+		resp, err := p.httpClientForRequest(ctx, model).Do(req)
 		if err != nil {
 			// ResponseHeaderTimeout によるタイムアウトを検出
 			// 親 context のキャンセルではない場合のみ ErrResponseStartTimeout に変換

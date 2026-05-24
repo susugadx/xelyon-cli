@@ -26,6 +26,16 @@ func TestKnownMaxOutputTokens_ClaudeOpus47(t *testing.T) {
 	}
 }
 
+func TestKnownMaxOutputTokens_Gemini35Flash(t *testing.T) {
+	got, ok := KnownMaxOutputTokens("gemini-3.5-flash")
+	if !ok {
+		t.Fatal("KnownMaxOutputTokens(gemini-3.5-flash) ok = false, want true")
+	}
+	if got != 65536 {
+		t.Fatalf("KnownMaxOutputTokens(gemini-3.5-flash) = %d, want 65536", got)
+	}
+}
+
 func TestIsKnownModelName(t *testing.T) {
 	tests := []struct {
 		model string
@@ -39,6 +49,7 @@ func TestIsKnownModelName(t *testing.T) {
 		{model: "eu.anthropic.claude-sonnet-4-6", want: true},
 		{model: "au.anthropic.claude-sonnet-4-6", want: true},
 		{model: "claude-sonnet-4.5", want: true},
+		{model: "gemini-3.5-flash", want: true},
 		{model: "gemini-3.1-pro", want: true},
 		{model: "kimi-k2.6", want: true},
 		{model: "kimi-k2.5", want: true},
@@ -99,6 +110,13 @@ func TestKnownModelNamesForProvider_IncludesGPT53CodexForOpenAIProviders(t *test
 				t.Fatalf("KnownModelNamesForProvider(%q) = %v, want %q", tt.provider, models, tt.model)
 			}
 		})
+	}
+}
+
+func TestKnownModelNamesForProvider_IncludesGemini35Flash(t *testing.T) {
+	models := KnownModelNamesForProvider("gemini")
+	if !slices.Contains(models, "gemini-3.5-flash") {
+		t.Fatalf("KnownModelNamesForProvider(gemini) = %v, want gemini-3.5-flash", models)
 	}
 }
 
@@ -170,6 +188,7 @@ func TestKnownModelContextLimit(t *testing.T) {
 		ok    bool
 	}{
 		{model: "gpt-5.4", want: 1000000, ok: true},
+		{model: "gemini-3.5-flash", want: 1048576, ok: true},
 		{model: "claude-sonnet-4-6", want: 200000, ok: true},
 		{model: "deepseek-v4-custom", want: 1000000, ok: true},
 		{model: "kimi-k2.6", want: 256000, ok: true},

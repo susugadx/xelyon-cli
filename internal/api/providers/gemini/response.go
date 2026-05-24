@@ -48,16 +48,27 @@ func (e *ErrResponseStartTimeout) Error() string {
 	return e.Message
 }
 
+func geminiTransportIdleTimeout(ctx context.Context, model string, cfg *config.Config) time.Duration {
+	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
+	if !isGeminiThinkingRequest(ctx, model) {
+		return idleTimeout
+	}
+	if thinkingTimeout := geminiConfiguredThinkingTimeout(cfg); thinkingTimeout > idleTimeout {
+		return thinkingTimeout
+	}
+	return idleTimeout
+}
+
 // handleSSEResponse は streamGenerateContent?alt=sse の SSE ストリームを処理する
 // thinkingMsg はSSEストリーム開始時にスピナーを切り替えるメッセージ（空なら切り替えなし）
-func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, thinkingMsg string) (string, error) {
+func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, thinkingMsg, model string) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	state := newSSEInterpretState(ctx, spinner, thinkingMsg, debug)
 	// どの return 経路でもスピナー停止を保証し、描画崩れを防ぐ。
 	defer state.stopSpinner()
 
 	cfg := config.FromContext(ctx)
-	transportIdleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
+	transportIdleTimeout := geminiTransportIdleTimeout(ctx, model, cfg)
 	loopPolicy := newSSELoopPolicy(ctx, transportIdleTimeout)
 	controller := api.NewStreamLoopController(resp.Body, api.StreamLoopOptions{
 		IdleTimeout:         transportIdleTimeout,

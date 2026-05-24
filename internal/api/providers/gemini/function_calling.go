@@ -79,7 +79,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	thinkingMsg := getThinkingSpinnerMessage(ctx, model, false)
 	spinner := api.StartSpinnerWithMessage(ctx, "Waiting for Gemini...")
 
-	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
+	resp, err := p.doRequestWithRetry(ctx, req, jsonBody, model)
 	if err != nil {
 		if spinner != nil {
 			spinner.Stop()
@@ -125,5 +125,5 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	}
 
 	// Function Calling レスポンスを処理（SSE ストリーミング）
-	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg)
+	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg, model)
 }

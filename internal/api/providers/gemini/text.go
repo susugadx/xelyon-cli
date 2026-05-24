@@ -48,7 +48,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 	spinner := api.StartSpinnerWithMessage(ctx, "Waiting for Gemini...")
 
 	// 503 リトライ付き HTTP リクエスト
-	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
+	resp, err := p.doRequestWithRetry(ctx, req, jsonBody, model)
 	if err != nil {
 		spinner.Stop()
 		return "", err
@@ -74,7 +74,7 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 
 	// Content-Typeでストリーミング対応を判定
 	// streamGenerateContent?alt=sse を使用しているため、常に SSE パーサーを使用する
-	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg)
+	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg, model)
 }
 
 // ChatWithImage は画像付きメッセージで会話を行う
@@ -113,7 +113,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	spinner := api.StartSpinnerWithMessage(ctx, "Waiting for Gemini...")
 
 	// 503 リトライ付き HTTP リクエスト
-	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
+	resp, err := p.doRequestWithRetry(ctx, req, jsonBody, model)
 	if err != nil {
 		spinner.Stop()
 		// Response-start timeout: 通常 chat と同じ方針で 1 回リトライ
@@ -153,5 +153,5 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	}
 
 	// 常にストリーミング処理（SSE）
-	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg)
+	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg, model)
 }

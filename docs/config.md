@@ -363,7 +363,7 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 ```yaml
 streaming:
   idle_timeout_seconds: 30       # アイドルタイムアウト秒
-  thinking_timeout_seconds: 120  # thinking 専用タイムアウト秒
+  thinking_timeout_seconds: 120  # thinking request のレスポンス開始 / SSE 進捗待ち上限
   show_file_info: true           # ファイル読み込み時にサイズ・行数表示
   show_search_progress: true     # 検索時に進捗表示
   stream_bash_output: true       # bash 出力をリアルタイム表示

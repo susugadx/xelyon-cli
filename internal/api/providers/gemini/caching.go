@@ -53,7 +53,7 @@ func (p *Provider) CreateCachedContent(ctx context.Context, model string, system
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", p.apiKey)
 
-	resp, err := p.doRequestWithRetry(ctx, req, bodyBytes)
+	resp, err := p.doRequestWithRetry(ctx, req, bodyBytes, model)
 	if err != nil {
 		return nil, err
 	}

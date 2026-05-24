@@ -247,6 +247,7 @@ q / i / Esc   入力モードへ戻る
 ### プロバイダー切り替え
 
 ```bash
+xelyon --provider gemini --model gemini-3.5-flash
 xelyon --provider gemini --model gemini-2.5-flash
 
 # または対話中に

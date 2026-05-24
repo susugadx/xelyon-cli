@@ -720,6 +720,19 @@ func TestErrResponseStartTimeout_ErrorType(t *testing.T) {
 	}
 }
 
+func TestGeminiResponseHeaderTimeout_ThinkingRequestExtendsDefaultOnly(t *testing.T) {
+	ctx := newGeminiSSETestContext(30, 120)
+	if got := geminiResponseHeaderTimeout(ctx, "gemini-3.5-flash", defaultResponseHeaderTimeout); got != 120*time.Second {
+		t.Fatalf("geminiResponseHeaderTimeout(thinking default) = %s, want 120s", got)
+	}
+	if got := geminiResponseHeaderTimeout(ctx, "gemini-2.0-flash", defaultResponseHeaderTimeout); got != defaultResponseHeaderTimeout {
+		t.Fatalf("geminiResponseHeaderTimeout(non-thinking) = %s, want %s", got, defaultResponseHeaderTimeout)
+	}
+	if got := geminiResponseHeaderTimeout(ctx, "gemini-3.5-flash", time.Second); got != time.Second {
+		t.Fatalf("geminiResponseHeaderTimeout(custom transport) = %s, want 1s", got)
+	}
+}
+
 func TestDoRequestWithRetry_ResponseStartTimeout(t *testing.T) {
 	// サーバーがレスポンスヘッダーを返さない場合に ErrResponseStartTimeout が返される
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -746,7 +759,7 @@ func TestDoRequestWithRetry_ResponseStartTimeout(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", "test-key")
 
-	_, err = p.doRequestWithRetry(context.Background(), req, []byte(`{}`))
+	_, err = p.doRequestWithRetry(context.Background(), req, []byte(`{}`), "gemini-2.0-flash")
 	if err == nil {
 		t.Fatal("doRequestWithRetry() should return error for timeout")
 	}
