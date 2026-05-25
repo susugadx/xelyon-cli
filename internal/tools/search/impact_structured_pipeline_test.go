@@ -100,6 +100,8 @@ func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles
 	}
 	cache := &testSearchCache{data: make(map[string]string)}
 	bundle := newStructuredImpactPipelineTestBundle(root)
+	shadowBundle := cloneSymbolBundle(bundle)
+	shadowBundle.Identity.Canonical = "shadow-canonical"
 
 	scope := structuredImpactSameScope(opts)
 	result, ok := tryStructuredImpactSearchResult(cache, ctx, scope, func(symbol string, scope structuredImpactScope) symbolResolveResult {
@@ -110,9 +112,10 @@ func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles
 			t.Fatalf("resolver scope = %+v, want definition/evidence path %q", scope, root)
 		}
 		return symbolResolveResult{
-			Output: "resolver-output",
-			Status: symbolResolveSingle,
-			Bundle: bundle,
+			Output:               "resolver-output",
+			Status:               symbolResolveSingle,
+			Bundle:               bundle,
+			SemanticShadowBundle: shadowBundle,
 		}
 	})
 	if !ok {
@@ -123,6 +126,9 @@ func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles
 	}
 	if result.Bundle == nil {
 		t.Fatal("Bundle = nil, want runtime bundle")
+	}
+	if result.Bundle.Identity.Canonical == "shadow-canonical" {
+		t.Fatal("runtime bundle used semantic shadow bundle, want production bundle")
 	}
 	if result.Rendered == "resolver-output" {
 		t.Fatal("expected rendered output to be formatted from runtime bundle")
@@ -142,6 +148,9 @@ func TestTryStructuredImpactSearchResult_SingleStoresRouteBundleAndAffectedFiles
 	storedBundle := loadSinglePatternBundle(ctx.Pattern, ctx.CacheKey)
 	if storedBundle == nil {
 		t.Fatal("expected bundle cache entry")
+	}
+	if storedBundle.Identity.Canonical == "shadow-canonical" {
+		t.Fatal("bundle cache used semantic shadow bundle, want production bundle")
 	}
 	if !storedBundle.Debug.Route.SymbolAttempted || !storedBundle.Debug.Route.SymbolResolved {
 		t.Fatalf("stored route = %+v, want attempted and resolved", storedBundle.Debug.Route)

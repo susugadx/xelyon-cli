@@ -98,11 +98,14 @@ func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
 	bundle.Debug.DependencyFiles = dedupePaths(append(bundle.Debug.DependencyFiles, probeDependencies...))
+	shadow, _ := buildGoSemanticShadowResult(symbol, result, bundle, plan)
 
 	return symbolResolveResult{
-		Output: formatSymbolBundle(bundle, formatOpts.LocatorRegistry, nil),
-		Status: symbolResolveSingle,
-		Bundle: bundle,
+		Output:                 formatSymbolBundle(bundle, formatOpts.LocatorRegistry, nil),
+		Status:                 symbolResolveSingle,
+		Bundle:                 bundle,
+		SemanticShadowBundle:   shadow.Bundle,
+		SemanticShadowEvidence: shadow.Evidence,
 	}
 }
 

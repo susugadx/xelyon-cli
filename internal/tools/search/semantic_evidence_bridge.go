@@ -10,8 +10,21 @@ import (
 )
 
 func semanticEvidenceFromGoInspectResult(query string, result navigation.InspectResult) (SemanticEvidence, bool) {
+	return semanticEvidenceFromGoInspectResultWithOptions(query, result, goSemanticEvidenceOptions{})
+}
+
+type goSemanticEvidenceOptions struct {
+	riskLevel           string
+	recommendedReads    []SymbolBundleItem
+	implementationLimit int
+}
+
+func semanticEvidenceFromGoInspectResultWithOptions(query string, result navigation.InspectResult, opts goSemanticEvidenceOptions) (SemanticEvidence, bool) {
 	if result.Symbol == nil {
 		return SemanticEvidence{}, false
+	}
+	if opts.implementationLimit <= 0 {
+		opts.implementationLimit = goImplementationLimit
 	}
 	diagnostics := cloneSymbolBundleDiagnostics(goSymbolBundleDiagnostics(result))
 	evidence := SemanticEvidence{
@@ -25,16 +38,18 @@ func semanticEvidenceFromGoInspectResult(query string, result navigation.Inspect
 			semanticReferenceSectionFromCounts(SemanticReferenceSectionKindCallers, len(result.Callers), result.TotalCallers, result.MoreCallers),
 			semanticReferenceSectionFromCounts(SemanticReferenceSectionKindReferences, len(result.Refs), result.TotalRefs, result.MoreRefs),
 			semanticReferenceSectionFromCounts(SemanticReferenceSectionKindTests, len(result.Tests), result.TotalTests, result.MoreTests),
-			semanticReferenceSectionFromCounts(SemanticReferenceSectionKindImplementations, min(len(result.Implementations), goImplementationLimit), len(result.Implementations), len(result.Implementations) > goImplementationLimit),
+			semanticReferenceSectionFromCounts(SemanticReferenceSectionKindImplementations, min(len(result.Implementations), opts.implementationLimit), len(result.Implementations), len(result.Implementations) > opts.implementationLimit),
 		},
-		Diagnostics: &diagnostics,
-		Source:      diagnostics.ResolvedBy,
-		Confidence:  diagnostics.Confidence,
+		RecommendedReads: append([]SymbolBundleItem(nil), opts.recommendedReads...),
+		Diagnostics:      &diagnostics,
+		Source:           diagnostics.ResolvedBy,
+		Confidence:       diagnostics.Confidence,
+		RiskLevel:        strings.TrimSpace(opts.riskLevel),
 	}
 	evidence.References = append(evidence.References, semanticReferencesFromGoReferences(result.Callers, SemanticReferenceKindCaller, diagnostics)...)
 	evidence.References = append(evidence.References, semanticReferencesFromGoReferences(result.Refs, SemanticReferenceKindReference, diagnostics)...)
 	evidence.References = append(evidence.References, semanticReferencesFromGoTests(result.Tests, diagnostics)...)
-	evidence.References = append(evidence.References, semanticReferencesFromGoImplementations(limitGoImplementationsForSemanticEvidence(result.Implementations), diagnostics)...)
+	evidence.References = append(evidence.References, semanticReferencesFromGoImplementations(limitGoImplementationsForSemanticEvidence(result.Implementations, opts.implementationLimit), diagnostics)...)
 	return evidence, true
 }
 
@@ -131,11 +146,14 @@ func semanticReferencesFromGoImplementations(impls []navigation.ImplementationRe
 	return semanticRefs
 }
 
-func limitGoImplementationsForSemanticEvidence(impls []navigation.ImplementationRef) []navigation.ImplementationRef {
-	if len(impls) <= goImplementationLimit {
+func limitGoImplementationsForSemanticEvidence(impls []navigation.ImplementationRef, limit int) []navigation.ImplementationRef {
+	if limit <= 0 {
+		return nil
+	}
+	if len(impls) <= limit {
 		return impls
 	}
-	return impls[:goImplementationLimit]
+	return impls[:limit]
 }
 
 func semanticEvidenceFromJSFamilyRefs(language, symbol string, def genericSymbolDef, refs []genericSymbolRef, diagnostics SymbolBundleDiagnostics) (SemanticEvidence, bool) {
