@@ -165,6 +165,26 @@ func TestDiagnoseGemini_FunctionCallingCapabilityUsesCatalogModel(t *testing.T) 
 	}
 
 	report = Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "gemini-2.0-flash-lite",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	if report.FunctionCallingEnabled {
+		t.Fatalf("FunctionCallingEnabled = true, want false for unsupported request model")
+	}
+	functionCalling = requireGeminiDiagnosticCheckStatus(t, report, "function_calling", DiagnosticStatusFail)
+	for _, fragment := range []string{
+		"request_model=gemini-2.0-flash-lite",
+		"catalog_model=gemini-3.5-flash",
+		"policy_model=gemini-2.0-flash-lite",
+		"supported=false",
+	} {
+		if !strings.Contains(functionCalling.Detail, fragment) {
+			t.Fatalf("function_calling detail = %q, want %q", functionCalling.Detail, fragment)
+		}
+	}
+
+	report = Diagnose(context.Background(), DiagnosticOptions{
 		Config: config.DefaultConfig(),
 		Model:  "corp-unknown",
 	})

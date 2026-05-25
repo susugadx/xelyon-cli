@@ -70,6 +70,87 @@ func TestSwitchModelForCurrentProvider_ReturnsOutcomeAndPersistsConfig(t *testin
 	}
 }
 
+func TestSwitchModelForCurrentProvider_GeminiUnsupportedFunctionCallingModelFails(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "gemini"
+	cfg.DefaultModel = "gemini-3.5-flash"
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{DefaultModel: "gemini-3.5-flash"})
+
+	var out bytes.Buffer
+	provider := &mockCacheClearableProviderForModel{name: "gemini"}
+	agent := &Agent{
+		ProviderName:      "gemini",
+		ProviderConfigKey: "gemini",
+		CurrentModel:      "gemini-3.5-flash",
+		CurrentProvider:   provider,
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	outcome := agent.SwitchModelForCurrentProvider("gemini-2.0-flash-lite")
+	if outcome.ValidationErr == nil {
+		t.Fatal("ValidationErr = nil, want Gemini function calling validation error")
+	}
+	if agent.CurrentModel != "gemini-3.5-flash" {
+		t.Fatalf("CurrentModel = %q, want unchanged", agent.CurrentModel)
+	}
+	if provider.cleared {
+		t.Fatal("provider cache should not be cleared when validation fails")
+	}
+}
+
+func TestSwitchModelForCurrentProvider_GeminiValidatesSavedCandidateConfig(t *testing.T) {
+	withConfigCommandHooks(t)
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "gemini"
+	cfg.DefaultModel = "gemini-3.5-flash"
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-old",
+		CatalogModel: "gemini-2.0-flash-lite",
+	})
+	loadConfigForCommand = func() (*config.Config, error) {
+		return config.CloneConfig(cfg), nil
+	}
+	var saveCalled bool
+	saveConfigForCommand = func(cfg *config.Config) error {
+		saveCalled = true
+		return nil
+	}
+
+	var out bytes.Buffer
+	provider := &mockCacheClearableProviderForModel{name: "gemini"}
+	agent := &Agent{
+		ProviderName:      "gemini",
+		ProviderConfigKey: "gemini",
+		CurrentModel:      "gemini-3.5-flash",
+		CurrentProvider:   provider,
+		Runtime: &AgentRuntime{
+			Config: config.CloneConfig(cfg),
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	outcome := agent.SwitchModelForCurrentProvider("corp-gemini")
+	if outcome.ValidationErr == nil {
+		t.Fatal("ValidationErr = nil, want saved candidate Gemini catalog_model validation error")
+	}
+	if !strings.Contains(outcome.ValidationErr.Error(), "catalog_model=gemini-2.0-flash-lite") {
+		t.Fatalf("ValidationErr = %v, want stale catalog_model detail", outcome.ValidationErr)
+	}
+	if saveCalled {
+		t.Fatal("saveConfigForCommand should not be called after candidate validation failure")
+	}
+	if agent.CurrentModel != "gemini-3.5-flash" {
+		t.Fatalf("CurrentModel = %q, want unchanged gemini-3.5-flash", agent.CurrentModel)
+	}
+	if provider.cleared {
+		t.Fatal("provider cache should not be cleared when candidate validation fails")
+	}
+}
+
 func TestSwitchModelForCurrentProvider_AzureDeploymentChangeClearsStaleCatalogModel(t *testing.T) {
 	withConfigCommandHooks(t)
 

@@ -368,7 +368,9 @@ func (r *DiagnosticReport) addFunctionCallingCheck() {
 func geminiDiagnosticFunctionCallingDetail(policy llmcatalog.GeminiFunctionCallingPolicy) string {
 	support := policy.Support()
 	parts := []string{
-		"catalog_model=" + policy.PolicyModel(),
+		"request_model=" + policy.RequestModel(),
+		"catalog_model=" + policy.CatalogModel(),
+		"policy_model=" + policy.PolicyModel(),
 		fmt.Sprintf("known=%t", support.Known),
 		fmt.Sprintf("supported=%t", support.Supported),
 	}

@@ -56,6 +56,13 @@ func (a *Agent) sessionProviderConfigKey(cfg *config.Config) string {
 	if a == nil {
 		return ""
 	}
+	return a.sessionProviderConfigKeyForModel(cfg, a.CurrentModel)
+}
+
+func (a *Agent) sessionProviderConfigKeyForModel(cfg *config.Config, model string) string {
+	if a == nil {
+		return ""
+	}
 
 	if key := config.ActiveProviderConfigKey(a.ProviderConfigKey); key != "" {
 		return key
@@ -63,7 +70,7 @@ func (a *Agent) sessionProviderConfigKey(cfg *config.Config) string {
 
 	runtimeProvider := config.ActiveProviderConfigKey(a.ProviderName)
 	if cfg != nil {
-		if owner := cfg.RuntimeProviderConfigKey(runtimeProvider, a.CurrentModel); owner != "" {
+		if owner := cfg.RuntimeProviderConfigKey(runtimeProvider, model); owner != "" {
 			return owner
 		}
 		if preferred := cfg.PreferredProviderConfigKey(runtimeProvider); preferred != "" {
@@ -115,14 +122,19 @@ func (a *Agent) SaveAndSyncConfig(cfg *config.Config) error {
 // 必要なら保存対象の provider_models entry を新規作成する。
 // CLI /config default_model と /model コマンドから使用する。
 func (a *Agent) SyncDefaultModelToProvider(cfg *config.Config) {
+	a.syncDefaultModelToProviderForModel(cfg, a.CurrentModel)
+}
+
+func (a *Agent) syncDefaultModelToProviderForModel(cfg *config.Config, model string) string {
 	if a == nil || a.ProviderName == "" || cfg == nil {
-		return
+		return ""
 	}
-	providerKey := a.sessionProviderConfigKey(cfg)
+	providerKey := a.sessionProviderConfigKeyForModel(cfg, model)
 	previousDefaultModel := strings.TrimSpace(cfg.GetExplicitProviderDefaultModel(providerKey))
 	nextDefaultModel := strings.TrimSpace(cfg.DefaultModel)
 	cfg.SyncProviderDefaultModel(providerKey, nextDefaultModel)
 	clearAzureCatalogModelAfterDeploymentChange(cfg, providerKey, previousDefaultModel, nextDefaultModel)
+	return providerKey
 }
 
 func clearAzureCatalogModelAfterDeploymentChange(cfg *config.Config, providerKey, previousDefaultModel, nextDefaultModel string) {

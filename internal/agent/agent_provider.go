@@ -33,7 +33,15 @@ func printProviderSwitchOutcome(agent *Agent, outcome ProviderSwitchOutcome) {
 }
 
 func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, providerConfigKey, model string, explicitModel bool) error {
-	if config.CanonicalProviderName(runtimeProviderName) != "azure" {
+	runtimeProvider := config.CanonicalProviderName(runtimeProviderName)
+	if runtimeProvider == "gemini" {
+		providerKey := strings.TrimSpace(providerConfigKey)
+		if providerKey == "" {
+			providerKey = runtimeProvider
+		}
+		return config.ValidateGeminiFunctionCallingSelection(cfg, providerKey, model)
+	}
+	if runtimeProvider != "azure" {
 		return nil
 	}
 

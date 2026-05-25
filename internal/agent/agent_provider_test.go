@@ -64,6 +64,18 @@ func (m *mockCacheClearableProvider) GetResponseID() string {
 	return m.responseID
 }
 
+func TestValidateProviderModelSelection_GeminiFunctionCalling(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	if err := validateProviderModelSelection(cfg, "gemini", "gemini", "gemini-3.5-flash", true); err != nil {
+		t.Fatalf("supported Gemini model error = %v, want nil", err)
+	}
+
+	err := validateProviderModelSelection(cfg, "gemini", "gemini", "gemini-2.0-flash-lite", true)
+	if err == nil || !strings.Contains(err.Error(), "gemini-3.1-flash-lite") {
+		t.Fatalf("unsupported Gemini model error = %v, want replacement guidance", err)
+	}
+}
+
 func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 	// APIキーを一時的に設定（SwitchProviderのバリデーションを通過させるため）
 	os.Setenv("OLLAMA_BASE_URL", "http://localhost:11434")

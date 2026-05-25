@@ -63,4 +63,26 @@ func TestValidateSelectedProviderModel(t *testing.T) {
 			t.Fatalf("validateSelectedProviderModel() error = %v, want nil with explicit --model", err)
 		}
 	})
+
+	t.Run("gemini unsupported function calling model fails", func(t *testing.T) {
+		modelFlag = ""
+		err := validateSelectedProviderModel(config.DefaultConfig(), &providerValidationTestProvider{name: "gemini"}, "gemini-2.0-flash-lite")
+		if err == nil {
+			t.Fatal("validateSelectedProviderModel() error = nil, want Gemini function calling guidance")
+		}
+	})
+
+	t.Run("gemini unsupported catalog model fails", func(t *testing.T) {
+		modelFlag = ""
+		cfg := config.DefaultConfig()
+		cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+			ModelOverrides: map[string]config.ModelOverride{
+				"corp-lite": {CatalogModel: "gemini-2.0-flash-lite"},
+			},
+		})
+		err := validateSelectedProviderModel(cfg, &providerValidationTestProvider{name: "gemini"}, "corp-lite")
+		if err == nil {
+			t.Fatal("validateSelectedProviderModel() error = nil, want Gemini catalog_model guidance")
+		}
+	})
 }

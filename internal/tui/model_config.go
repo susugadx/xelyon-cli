@@ -92,6 +92,9 @@ func (m Model) saveConfigCmd() tea.Cmd {
 	snapshot := config.CloneConfig(m.configScreen.cfg)
 	configAgent := m.configAgent
 	return func() tea.Msg {
+		if err := geminiFunctionCallingConfigSaveError(snapshot); err != nil {
+			return ConfigSavedMsg{Error: err, Snapshot: snapshot}
+		}
 		err := configAgent.SaveAndSyncConfig(snapshot)
 		return ConfigSavedMsg{Error: err, Snapshot: snapshot}
 	}

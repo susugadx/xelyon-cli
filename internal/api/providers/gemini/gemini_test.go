@@ -290,6 +290,29 @@ func TestProvider_ChatWithImage_WithImage(t *testing.T) {
 	}
 }
 
+func TestProvider_ChatWithImage_UnsupportedFunctionCallingModelFailsBeforeRequest(t *testing.T) {
+	var requestCount atomic.Int32
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		t.Fatalf("unsupported image function-calling model should fail before request")
+	})
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	p := New("test-key")
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+
+	_, err := p.ChatWithImage(context.Background(), "System", nil, "Describe this", image, "gemini-2.0-flash-lite")
+	if err == nil {
+		t.Fatal("ChatWithImage() error = nil, want unsupported function calling error")
+	}
+	if requestCount.Load() != 0 {
+		t.Fatalf("requestCount = %d, want no network request", requestCount.Load())
+	}
+}
+
 // ===== Function Calling Tests =====
 
 func TestProvider_SetMCPEnabled(t *testing.T) {
@@ -424,6 +447,39 @@ func TestProvider_ChatWithTools_UnsupportedCatalogModelFailsBeforeRequest(t *tes
 		t.Fatal("ChatWithTools() error = nil, want unsupported catalog_model error")
 	}
 	if !strings.Contains(err.Error(), "corp-lite (catalog_model=gemini-2.0-flash-lite)") {
+		t.Fatalf("ChatWithTools() error = %q, want request model and catalog_model detail", err.Error())
+	}
+	if requestCount.Load() != 0 {
+		t.Fatalf("requestCount = %d, want no network request", requestCount.Load())
+	}
+}
+
+func TestProvider_ChatWithTools_UnsupportedRequestModelFailsEvenWithSupportedCatalogModel(t *testing.T) {
+	var requestCount atomic.Int32
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		t.Fatalf("unsupported request model should fail before request")
+	})
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "gemini-2.0-flash-lite",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(ctx, "System", history, "gemini-2.0-flash-lite")
+	if err == nil {
+		t.Fatal("ChatWithTools() error = nil, want unsupported request model error")
+	}
+	if !strings.Contains(err.Error(), "gemini-2.0-flash-lite (catalog_model=gemini-3.5-flash)") {
 		t.Fatalf("ChatWithTools() error = %q, want request model and catalog_model detail", err.Error())
 	}
 	if requestCount.Load() != 0 {

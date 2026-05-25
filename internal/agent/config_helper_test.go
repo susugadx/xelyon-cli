@@ -152,3 +152,30 @@ func TestSyncDefaultModelToProvider_PreservesSessionAnthropicAliasWhenDefaultPro
 		t.Fatalf("ProviderModelsForSave()[claude].DefaultModel = %q, want %q", got, "claude-old")
 	}
 }
+
+func TestSyncDefaultModelToProviderForModel_UsesCandidateModelOwner(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "deepseek"
+	cfg.DefaultModel = "anthropic-new"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "anthropic-new"},
+		"claude":    {DefaultModel: "claude-old"},
+	})
+
+	a := &Agent{
+		ProviderName: "claude",
+		CurrentModel: "claude-old",
+	}
+	providerKey := a.syncDefaultModelToProviderForModel(cfg, "anthropic-new")
+
+	if providerKey != "anthropic" {
+		t.Fatalf("providerKey = %q, want anthropic", providerKey)
+	}
+	saved := cfg.ProviderModelsForSave()
+	if got := saved["anthropic"].DefaultModel; got != "anthropic-new" {
+		t.Fatalf("ProviderModelsForSave()[anthropic].DefaultModel = %q, want anthropic-new", got)
+	}
+	if got := saved["claude"].DefaultModel; got != "claude-old" {
+		t.Fatalf("ProviderModelsForSave()[claude].DefaultModel = %q, want claude-old", got)
+	}
+}

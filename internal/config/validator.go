@@ -115,19 +115,26 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 	}
 
 	for _, issue := range result.Issues {
-		if !issue.CanAutoFix || issue.FixedValue == nil {
-			continue
-		}
-		fixer, ok := configAutoFixers[issue.Field]
-		if !ok {
-			continue
-		}
-		if fixer(cfg, issue.FixedValue) {
+		if applyConfigAutoFix(cfg, issue) {
 			fixCount++
 		}
 	}
 
 	return fixCount
+}
+
+func applyConfigAutoFix(cfg *Config, issue ValidationIssue) bool {
+	if !issue.CanAutoFix || issue.FixedValue == nil {
+		return false
+	}
+	if applyGeminiFunctionCallingAutoFix(cfg, issue.FixedValue) {
+		return true
+	}
+	fixer, ok := configAutoFixers[issue.Field]
+	if !ok {
+		return false
+	}
+	return fixer(cfg, issue.FixedValue)
 }
 
 type configAutoFixer func(*Config, any) bool
