@@ -121,7 +121,7 @@ Examples:
 			result := runHeadless(cmd.Context(), query, model, provider, cfg)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
-			if result.Status == "error" {
+			if result.Status == agent.HeadlessStatusError {
 				return fmt.Errorf("headless execution failed")
 			}
 			return nil

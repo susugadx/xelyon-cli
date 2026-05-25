@@ -453,6 +453,8 @@ func (m *Manager) snapshotOrTimeout(sub *managedSubAgent, timeout bool) WaitResu
 	output := ""
 	if sub.result != nil {
 		switch {
+		case sub.result.Status == "error" && sub.result.ErrorMessage != "":
+			output = sub.result.ErrorMessage
 		case sub.result.Response != "":
 			output = sub.result.Response
 		case sub.result.ErrorMessage != "":

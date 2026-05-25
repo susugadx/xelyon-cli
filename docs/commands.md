@@ -902,6 +902,7 @@ XELYONはMCP（Model Context Protocol）に対応しており、`~/.xelyon/mcp.j
 
 対話なしでJSON形式で結果を出力します。他のツールやスクリプトから呼び出す際に便利です。
 Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含まれます。Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に `calls`、`fee_estimate`、`result_tokens` を分けて出します。検索結果 tokens は次 request の `prompt_tokens` に含まれる前提の表示用観測値で、headless JSON の token totals には再加算しません。
+API error、cancel、tool loop limit 到達時は `status: "error"` と `error.type` を出力し、CLI は non-zero exit code を返します。
 
 ```bash
 # JSON出力
@@ -909,16 +910,20 @@ xelyon --headless "main.goを読んで概要を説明して"
 
 # 出力例
 {
-  "query": "main.goを読んで概要を説明して",
+  "status": "success",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash",
   "response": "このファイルは...",
-  "success": true
+  "duration_ms": 1234,
+  "timestamp": "2026-05-25T12:00:00+09:00",
+  "cost": 0.00012
 }
 
 # jqと組み合わせて
 xelyon --headless "バグを修正して" | jq -r '.response'
 
 # CI/CDパイプラインで使用
-xelyon --output-format json "テストを実行して" | jq '.success'
+xelyon --output-format json "テストを実行して" | jq -e '.status == "success"'
 ```
 
 ### 対話的確認モード

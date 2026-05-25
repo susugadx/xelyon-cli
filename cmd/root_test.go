@@ -673,6 +673,50 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 	}
 }
 
+func TestRootCommand_HeadlessErrorReturnsErrorAfterPrintingJSON(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		return agent.NewToolLoopLimitResult(provider.Name(), model, 10, nil, 0)
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
+
+	rootCmd.SetArgs([]string{"--headless", "--provider", "ollama", "--no-update-check", "hello"})
+	execErr := rootCmd.Execute()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if execErr == nil {
+		t.Fatal("expected headless error status to return command error")
+	}
+	if !strings.Contains(execErr.Error(), "headless execution failed") {
+		t.Fatalf("unexpected error: %v", execErr)
+	}
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := strings.TrimSpace(buf.String())
+
+	var parsed agent.HeadlessResult
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("stdout is not headless JSON: %v\noutput=%q", err, output)
+	}
+	if parsed.Status != agent.HeadlessStatusError {
+		t.Fatalf("status = %q, want %q", parsed.Status, agent.HeadlessStatusError)
+	}
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeToolLoopLimit {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeToolLoopLimit)
+	}
+}
+
 func TestRootCommand_ImageFlagPreservesImagePath(t *testing.T) {
 	withRootCommandTest(t)
 

@@ -82,19 +82,22 @@ func (r *headlessRunner) run(ctx context.Context) *HeadlessResult {
 
 	for iteration := 0; maxIterations == 0 || iteration < maxIterations; iteration++ {
 		if ctx.Err() != nil {
-			return r.errorResult("cancelled", ctx.Err().Error())
+			return r.errorResult(HeadlessErrorTypeCancelled, ctx.Err().Error())
 		}
 
 		response, err := r.requestAssistantResponse(ctx, iteration)
 		if err != nil {
-			return r.errorResult("api_error", err.Error())
+			return r.errorResult(HeadlessErrorTypeAPI, err.Error())
 		}
 
 		if done := r.handleAssistantResponse(ctx, response); done {
-			break
+			return r.successResult()
 		}
 	}
 
+	if maxIterations > 0 {
+		return r.loopLimitResult(maxIterations)
+	}
 	return r.successResult()
 }
 
@@ -200,6 +203,12 @@ func (r *headlessRunner) successResult() *HeadlessResult {
 func (r *headlessRunner) errorResult(errType, errMsg string) *HeadlessResult {
 	duration := time.Since(r.startedAt).Milliseconds()
 	return attachHeadlessStats(r.agent, NewErrorResult(r.provider.Name(), r.model, errType, errMsg, duration))
+}
+
+func (r *headlessRunner) loopLimitResult(limit int) *HeadlessResult {
+	duration := time.Since(r.startedAt).Milliseconds()
+	result := NewToolLoopLimitResult(r.provider.Name(), r.model, limit, r.toolCalls, duration)
+	return attachHeadlessStats(r.agent, result)
 }
 
 func attachHeadlessStats(agent *Agent, result *HeadlessResult) *HeadlessResult {

@@ -2,12 +2,27 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
+)
+
+const (
+	// HeadlessStatusSuccess は headless JSON の成功 status。
+	HeadlessStatusSuccess = "success"
+	// HeadlessStatusError は headless JSON の失敗 status。
+	HeadlessStatusError = "error"
+
+	// HeadlessErrorTypeCancelled は context cancel / timeout 系の headless error type。
+	HeadlessErrorTypeCancelled = "cancelled"
+	// HeadlessErrorTypeAPI は provider request 失敗の headless error type。
+	HeadlessErrorTypeAPI = "api_error"
+	// HeadlessErrorTypeToolLoopLimit は tool loop limit 到達時の headless error type。
+	HeadlessErrorTypeToolLoopLimit = "tool_loop_limit"
 )
 
 // HeadlessResult はHeadlessモードの実行結果
 type HeadlessResult struct {
-	Status             string           `json:"status"`                        // "success" or "error"
+	Status             string           `json:"status"`                        // HeadlessStatusSuccess or HeadlessStatusError
 	Provider           string           `json:"provider"`                      // LLMプロバイダー名
 	Model              string           `json:"model"`                         // モデル名
 	Response           string           `json:"response"`                      // AIの最終回答
@@ -64,7 +79,7 @@ func (r *HeadlessResult) ToJSON() (string, error) {
 // NewSuccessResult は成功結果を生成
 func NewSuccessResult(provider, model, response string, toolCalls []ToolCallResult, durationMs int64) *HeadlessResult {
 	return &HeadlessResult{
-		Status:     "success",
+		Status:     HeadlessStatusSuccess,
 		Provider:   provider,
 		Model:      model,
 		Response:   response,
@@ -77,7 +92,7 @@ func NewSuccessResult(provider, model, response string, toolCalls []ToolCallResu
 // NewErrorResult はエラー結果を生成
 func NewErrorResult(provider, model string, errType, errMsg string, durationMs int64) *HeadlessResult {
 	return &HeadlessResult{
-		Status:     "error",
+		Status:     HeadlessStatusError,
 		Provider:   provider,
 		Model:      model,
 		Response:   "",
@@ -88,4 +103,16 @@ func NewErrorResult(provider, model string, errType, errMsg string, durationMs i
 			Message: errMsg,
 		},
 	}
+}
+
+// NewToolLoopLimitResult は headless tool loop limit 到達時の結果を生成する。
+func NewToolLoopLimitResult(provider, model string, limit int, toolCalls []ToolCallResult, durationMs int64) *HeadlessResult {
+	result := NewErrorResult(provider, model, HeadlessErrorTypeToolLoopLimit, HeadlessToolLoopLimitMessage(limit), durationMs)
+	result.ToolCalls = toolCalls
+	return result
+}
+
+// HeadlessToolLoopLimitMessage は tool loop limit 到達時のユーザー向け error message を返す。
+func HeadlessToolLoopLimitMessage(limit int) string {
+	return fmt.Sprintf("tool loop limit reached (%d iterations)", limit)
 }
