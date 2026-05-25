@@ -89,24 +89,42 @@ func buildStructuredGoImpactSingleSymbolResult(symbol string, result navigation.
 	}
 	result, probeDependencies = supplementGoImpactTestsFromProbe(symbol, result, impactOpts, plan.Budget.TestLimit)
 	result = filterStructuredGoImpactEvidence(result, evidenceOpts)
-	impact := buildGoImpactMetadata(result, plan.RiskLevel)
-	bundle := buildGoSymbolBundleWithOptions(symbol, result, goSymbolBundleBuildOptions{
-		implementationLimit: plan.ImplementationLimit,
-		impact:              impact,
-	})
-	if bundle == nil {
+
+	bundle, ok := buildStructuredGoImpactSemanticBundle(symbol, result, plan)
+	if !ok {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
 	bundle.Debug.DependencyFiles = dedupePaths(append(bundle.Debug.DependencyFiles, probeDependencies...))
-	shadow, _ := buildGoSemanticShadowResult(symbol, result, bundle, plan)
 
 	return symbolResolveResult{
-		Output:                 formatSymbolBundle(bundle, formatOpts.LocatorRegistry, nil),
-		Status:                 symbolResolveSingle,
-		Bundle:                 bundle,
-		SemanticShadowBundle:   shadow.Bundle,
-		SemanticShadowEvidence: shadow.Evidence,
+		Output: formatSymbolBundle(bundle, formatOpts.LocatorRegistry, nil),
+		Status: symbolResolveSingle,
+		Bundle: bundle,
 	}
+}
+
+func buildStructuredGoImpactSemanticBundle(symbol string, result navigation.InspectResult, plan impactplan.Plan) (*SymbolBundle, bool) {
+	impact := buildGoImpactMetadata(result, plan.RiskLevel)
+	var recommendedReads []SymbolBundleItem
+	if impact != nil {
+		recommendedReads = impact.RecommendedReads
+	}
+
+	evidence, ok := semanticEvidenceFromGoInspectResultWithOptions(symbol, result, goSemanticEvidenceOptions{
+		riskLevel:           plan.RiskLevel,
+		recommendedReads:    recommendedReads,
+		implementationLimit: plan.ImplementationLimit,
+	})
+	if !ok {
+		return nil, false
+	}
+
+	bundle, ok := buildSymbolBundleFromSemanticEvidence(evidence)
+	if !ok || bundle == nil {
+		return nil, false
+	}
+	bundle.Impact = cloneSymbolBundleImpact(impact)
+	return bundle, true
 }
 
 func resolveStructuredGoImpactMultipleSymbol(symbol string, result navigation.InspectResult, output string, opts SearchOptions, budget navigation.Budget) symbolResolveResult {

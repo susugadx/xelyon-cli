@@ -65,12 +65,19 @@ func semanticDefinitionFromGoCandidate(candidate navigation.SymbolCandidate, bod
 		File:           candidate.File,
 		Line:           candidate.Line,
 		EndLine:        candidate.EndLine,
-		Signature:      candidate.Signature,
+		Signature:      goSemanticDefinitionSignatureFromBody(body),
 		Body:           append([]string(nil), body...),
 		RootPath:       candidate.RootPath,
 		Source:         diagnostics.ResolvedBy,
 		Confidence:     diagnostics.Confidence,
 	}
+}
+
+func goSemanticDefinitionSignatureFromBody(body []string) string {
+	if len(body) == 0 {
+		return ""
+	}
+	return body[0]
 }
 
 func semanticReferenceSectionFromCounts(kind string, visible, total int, more bool) SemanticReferenceSection {

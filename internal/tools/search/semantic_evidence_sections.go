@@ -17,6 +17,13 @@ var semanticEvidenceSectionOrder = []semanticEvidenceSectionGroup{
 	{kind: SemanticReferenceSectionKindTypeRefs, title: "Type References"},
 }
 
+var goSemanticEvidenceSectionOrder = []semanticEvidenceSectionGroup{
+	{kind: SemanticReferenceSectionKindCallers, title: "Callers"},
+	{kind: SemanticReferenceSectionKindReferences, title: "References"},
+	{kind: SemanticReferenceSectionKindTests, title: "Related Tests"},
+	{kind: SemanticReferenceSectionKindImplementations, title: "Related Implementations"},
+}
+
 var jsFamilySemanticEvidenceSectionOrder = []semanticEvidenceSectionGroup{
 	{kind: SemanticReferenceSectionKindImports, title: "Imports"},
 	{kind: SemanticReferenceSectionKindCallers, title: "Callers"},
@@ -64,6 +71,8 @@ func semanticEvidenceSections(evidence SemanticEvidence) []SymbolBundleSection {
 
 func cloneSemanticEvidenceSectionOrder(language string) []semanticEvidenceSectionGroup {
 	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "go":
+		return append([]semanticEvidenceSectionGroup(nil), goSemanticEvidenceSectionOrder...)
 	case "typescript", "javascript":
 		return append([]semanticEvidenceSectionGroup(nil), jsFamilySemanticEvidenceSectionOrder...)
 	}

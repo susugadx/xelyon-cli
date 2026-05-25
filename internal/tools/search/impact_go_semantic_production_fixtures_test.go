@@ -8,7 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 )
 
-func buildStructuredGoShadowTestResult(t *testing.T, result navigation.InspectResult, plan impactplan.Plan) symbolResolveResult {
+func buildStructuredGoProductionTestResult(t *testing.T, result navigation.InspectResult, plan impactplan.Plan) symbolResolveResult {
 	t.Helper()
 	symbol := "Build"
 	if result.Symbol != nil && result.Symbol.Name != "" {
@@ -21,16 +21,13 @@ func buildStructuredGoShadowTestResult(t *testing.T, result navigation.InspectRe
 	if resolved.Bundle == nil {
 		t.Fatal("Bundle = nil, want production bundle")
 	}
-	if resolved.SemanticShadowBundle == nil {
-		t.Fatal("SemanticShadowBundle = nil, want Go shadow bundle")
-	}
-	if resolved.SemanticShadowEvidence == nil {
-		t.Fatal("SemanticShadowEvidence = nil, want Go shadow evidence")
+	if resolved.Bundle.Impact == nil {
+		t.Fatal("Impact = nil, want structured impact metadata")
 	}
 	return resolved
 }
 
-func goSemanticShadowFunctionFixture() navigation.InspectResult {
+func goStructuredProductionFunctionFixture() navigation.InspectResult {
 	result := semanticEvidenceGoBuildInspectFixture()
 	result.Symbol.PackageDir = "pkg"
 	result.TotalCallers = len(result.Callers)
@@ -46,8 +43,8 @@ func goSemanticShadowFunctionFixture() navigation.InspectResult {
 	return result
 }
 
-func goSemanticShadowImplementationFixture(total int) navigation.InspectResult {
-	result := goSemanticShadowFunctionFixture()
+func goStructuredProductionImplementationFixture(total int) navigation.InspectResult {
+	result := goStructuredProductionFunctionFixture()
 	result.Symbol.Kind = "interface"
 	result.Symbol.Signature = "type Builder interface { Build() string }"
 	result.Implementations = make([]navigation.ImplementationRef, 0, total)
@@ -62,8 +59,8 @@ func goSemanticShadowImplementationFixture(total int) navigation.InspectResult {
 	return result
 }
 
-func goSemanticShadowDiagnosticFixture(diag navigation.InspectReferenceDiagnostics, truncated bool, incomplete bool, budgetHit bool) navigation.InspectResult {
-	result := goSemanticShadowFunctionFixture()
+func goStructuredProductionDiagnosticFixture(diag navigation.InspectReferenceDiagnostics, truncated bool, incomplete bool, budgetHit bool) navigation.InspectResult {
+	result := goStructuredProductionFunctionFixture()
 	result.ReferenceDiagnostics = diag
 	result.ResolvedViaLSP = diag.ResolvedBy == SymbolBundleResolvedByLSP
 	result.UpstreamTruncated = truncated
