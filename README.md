@@ -35,18 +35,43 @@ DeepSeek, Kimi, OpenAI, Azure OpenAI, Gemini, Claude, Ollama, Groq, OpenRouter, 
 ### 🛠️ 組み込みツール
 - **ファイル操作**: 編集ツールは provider/model に応じて自動切替。OpenAI / Azure OpenAI / Gemini 系と OpenRouter の OpenAI/Gemini family は Codex 互換の `apply_patch`、Kimi / Claude / Bedrock / DeepSeek / Groq / Ollama / unknown 系は旧 `str_replace` / `write_file` / `delete_file` を使います。`XELYON_EDIT_TOOL=str_replace` などの明示 override がある場合はそれを最優先します
 - **コード検索**: `search_code` は language-aware router として動作し、`mode=auto` を既定に symbol-aware / literal / regex の各レーンを内部選択（複数パターン、結果分類、不正regex検出にも対応）
-- **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収し、`intent=impact` は Go、TypeScript `.ts`、対象を絞った TSX `.tsx`、JavaScript `.js/.jsx` で構造化 impact を返却
+- **シンボル調査**: `search_code` は短い symbol query を優先し、対応言語では定義・caller・参照・関連テストをまとめて返却。Go は first-class に `Config.Build` / `(*Config).Build` や regex っぽい query の rescue も吸収し、`intent=impact` は Go、TypeScript `.ts` / `.d.ts`、対象を絞った TSX `.tsx`、JavaScript `.js` / JSX `.jsx` で構造化 impact を返却
 - **サブエージェント委譲**: `spawn_agent` / `wait_agent` で探索タスクを別コンテキストの軽量モデルへ委譲し、親には最終レポートだけを返す
 - **AST基盤**: `internal/ast` の Pure Go Tree-sitter（gotreesitter）ベース共通解析基盤を、Go の symbol-aware 検索、`read_file(symbol=...)`、legacy `str_replace` の書き込み前構文検証で利用
 - **開発支援**: bash（git, テスト, フォーマット等すべて対応）
 - **LSP連携**: シンボル検索（定義・参照・実装）
+
+### 🔎 Runtime-owned investigation
+XELYON は検索ツールをモデルへ渡すだけでなく、runtime 側で調査経路を組み立てます。`gather_context` を既定の調査入口にし、symbol-like query では `search_code(intent=impact)` の structured impact を使って definition / caller / reference / related test を `SymbolBundle` として束ねます。
+
+Structured impact では `RecommendedReads` によって先に読むべき証拠を runtime が選び、`gather_context` が compact read として prefetch します。`resolved_by=lsp|ast|mixed|fallback`、`confidence`、`truncated`、`budget_limit_hit` などの diagnostics に応じて prefetch 件数も保守的に調整します。
+
+```text
+xelyon
+> Button の影響範囲を tsx に絞って調べて
+# runtime: gather_context query="Button" file_filter=tsx
+# → definition / JSX usage or caller / related test / diagnostics / prefetched evidence
+```
+
+詳細は [Search optimization and structured impact](docs/search.md) を参照してください。
+
+| language / target | file_filter / pattern | structured impact depth | notes |
+| --- | --- | --- | --- |
+| Go | `go`, `*.go`, `**/*.go`, direct `.go` path | definition, callers, references, tests, implementations | LSP / Go navigation を優先 |
+| TypeScript | `ts`, `*.ts`, direct `.ts` path | definition, imports, callers, type refs, references, tests | `.tsx` は含めず対象を絞る |
+| TypeScript declaration | `*.d.ts`, direct `.d.ts` path | declaration definition, type refs, imports, references | 実装 `.ts` / `.tsx` とは別 target |
+| TSX | `tsx`, `*.tsx`, direct `.tsx` path | definition, JSX usage / callers, type refs, references, tests | React/JSX component 調査向け |
+| JavaScript | `js`, `*.js`, direct `.js` path | definition, imports, callers, references, tests | `.mjs` / `.cjs` は structured impact 対象外 |
+| JSX | `jsx`, `*.jsx`, direct `.jsx` path | definition, JSX usage / callers, references, tests | JavaScript family の JSX target |
+| Broad TypeScript | `typescript` | fallback scope | `.ts` と `.tsx` を広く探すが structured impact target ではない |
+| Broad JavaScript | `javascript` | fallback scope | `.js` / `.jsx` / `.mjs` / `.cjs` を広く探すが structured impact target ではない |
 
 ### 📋 確認ベースの安全設計
 - 既定の `execution.mode: balanced` では、読み取り系は自動実行し、編集や通常 bash などは確認します
 - `execution.mode: trusted` は workspace 内の通常編集を自動化し、高影響操作だけ確認します
 - `execution.mode: full_auto` は原則自動実行し、`execution.always_confirm` に指定したカテゴリだけ確認します
 - `--auto-approve`で信頼環境向け全ツール自動承認（SafetyLow含む）
-- **既定編集フロー**: `search_code` / `read_file` で文脈を集め、active edit mode に応じて `apply_patch` または `str_replace` / `write_file` / `delete_file` で差分確認のうえ適用
+- **既定編集フロー**: `gather_context` で文脈を集め、必要に応じて `read_file` / `search_code` で補い、active edit mode に応じて `apply_patch` または `str_replace` / `write_file` / `delete_file` で差分確認のうえ適用
 
 ### 📋 Plan Mode（オプショナル）
 `/plan on` で有効化するとPlan Mode経由で処理されます。
@@ -140,7 +165,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 API実測値に基づくトークン使用量とコストをリアルタイム表示。
 - **ステータスバー**: プロンプト直前に `● model │ Mode │ tokens/limit │ ~$cost` を表示
 - **起動時コンテキスト表示**: ツリー形式で初期コンテキストの内訳を表示
-- **ナビゲーション削減**: Project Map + `search_code` の symbol-aware / structured impact routing により `read_file` の往復を減らし、編集に集中
+- **ナビゲーション削減**: Project Map + `gather_context` の structured impact / prefetch routing により `read_file` の往復を減らし、編集に集中
 - **リクエスト完了時**: `✓ In: 1,234 + Out: 567 = 1,801 tok (~$0.002)` で使用量を表示
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
 - **圧縮閾値**: `compression.trigger_percent`（デフォルト80%）超過時に自動圧縮/警告
@@ -416,6 +441,7 @@ final_checks:
 | [コマンド一覧](docs/commands.md) | 対話型/CLIコマンド、フラグ、使用例 |
 | [プロバイダー設定](docs/providers.md) | 各プロバイダーのAPIキー取得方法 |
 | [設定リファレンス](docs/config.md) | config.yaml と環境変数 |
+| [Search optimization](docs/search.md) | structured impact、RecommendedReads、diagnostics-aware prefetch |
 | [MCP連携](docs/mcp.md) | 外部ツール追加 |
 | [LSP連携](docs/lsp.md) | 言語サーバー連携（23言語対応） |
 | [使い方詳細](docs/usage.md) | 複数行入力、画像入力、サブエージェント委譲など |

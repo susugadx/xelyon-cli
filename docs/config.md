@@ -563,6 +563,8 @@ lsp:
 
 **起動準備:** `lsp.enabled: true` の場合、XELYON はプロジェクト内の対応言語を検出し、導入済みの LSP サーバーを起動準備します。起動時に検出されなかったサーバーは初回使用時に必要に応じて起動します。
 
+**structured impact との関係:** LSP サーバー設定の対応範囲と、`search_code(intent=impact)` の structured impact 深度は別です。現時点で structured impact が最も深く対応している target は Go、TypeScript `.ts` / `.d.ts`、TSX `.tsx`、JavaScript `.js`、JSX `.jsx` です。Python / Rust などは LSP 設定を持てますが、同じ structured impact 深度は今後の対象です。詳細は [Search optimization and structured impact](search.md) を参照してください。
+
 ### Extended Thinking設定 (`thinking`)（内部）
 
 > **注意**: `/config` メニューには表示されません。セッション中の切り替えは `/thinking` コマンドを使用してください。

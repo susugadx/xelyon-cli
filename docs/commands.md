@@ -851,7 +851,8 @@ bash: git checkout -b feature-branch
 
 | ツール名 | 説明 | 主な引数 |
 |---------|------|---------|
-| `search_code` | コード検索。`mode=auto` を既定に symbol-aware / literal / regex を language-aware に routing し、複数パターン・結果分類にも対応。対応言語では symbol-like query から定義・caller・参照・テストを自動解決。`intent=impact` は Go、TypeScript `.ts`、対象を絞った TSX `.tsx`、JavaScript `.js/.jsx` で構造化 impact を優先し、それ以外は関連 multi-pattern 検索へフォールバック | `pattern`, `intent`, `mode`, `path`, `file_filter` 等 |
+| `gather_context` | 既定の調査入口。symbol-like query では structured impact route を試し、`search_code(intent=impact)` が返す `RecommendedReads` を compact evidence として prefetch する。diagnostics の `resolved_by` / `confidence` / `truncated` / `budget_limit_hit` に応じて prefetch 件数を絞り、ambiguous の場合は speculative prefetch しない | `query`, `path`, `file_filter` |
+| `search_code` | 低レベルの expert 検索ツール。通常は `gather_context` を優先し、明示的に search route を制御したい場合だけ使う。`mode=auto` は symbol-aware / literal / regex を language-aware に routing する。`intent=impact` は shared-change impact analysis の入口で、Go、TypeScript `.ts` / `.d.ts`、対象を絞った TSX `.tsx`、JavaScript `.js` / JSX `.jsx` で構造化 impact を優先する。`file_filter=typescript` / `javascript` は broad fallback scope で、targeted structured impact には `ts` / `tsx` / `js` / `jsx` や direct path / glob を使う。結果の diagnostics summary で `resolved_by`、`confidence`、fallback / truncation / budget 状態を確認できる | `pattern`, `intent`, `mode`, `path`, `file_filter` 等 |
 | `web_search` | ネイティブWeb検索（`web_search.provider` で Kimi / OpenAI / Gemini / Claude を選択可能） | `query` |
 **注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。メインプロバイダーが Kimi の場合は provider 指定なしで Moonshot built-in `$web_search` を使います。Kimi で `$web_search` が起動すると call fee が発生し、XELYON は token usage と別枠で観測します。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 
@@ -872,7 +873,7 @@ bash: golangci-lint run
 
 LSPは診断（エラー検知）、削除時参照チェック、Plan依存分析で内部的に利用されます。
 コード検索には `search_code` ツールを使用してください。
-詳細は [LSP連携ガイド](lsp.md) を参照してください。
+structured impact と diagnostics-aware prefetch の詳細は [Search optimization and structured impact](search.md)、LSP の設定詳細は [LSP連携ガイド](lsp.md) を参照してください。
 
 ### 使用例
 
@@ -883,7 +884,7 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 # → read_file が実行される
 
 > バグを修正して
-# → read_file / search_code → active edit mode の編集ツールが実行される
+# → gather_context → active edit mode の編集ツールが実行される
 
 > 複数ファイルをまとめて編集して
 # → apply_patch mode では apply_patch、legacy edit mode ではファイル単位の編集ツールが実行される
@@ -895,7 +896,7 @@ AIは自然言語の指示に基づいてツールを自動選択します。
 # → bash で go test が実行される
 
 > TODOを探して
-# → search_code が実行される
+# → gather_context または search_code が実行される
 ```
 
 **apply_patch の補足**
@@ -960,5 +961,6 @@ xelyon
 
 - [プロバイダー設定](providers.md)
 - [設定リファレンス](config.md)
+- [Search optimization and structured impact](search.md)
 - [LSP連携](lsp.md)
 - [MCP連携](mcp.md)
