@@ -21,49 +21,6 @@ type jsFamilyImpactReadGroup struct {
 	isTest bool
 }
 
-type jsFamilyImpactBundleSpec struct {
-	language    string
-	debugSource string
-	symbol      string
-	def         genericSymbolDef
-	rootPath    string
-	impact      *SymbolBundleImpact
-}
-
-func newJSFamilyImpactBundle(spec jsFamilyImpactBundleSpec) *SymbolBundle {
-	if spec.impact == nil {
-		return nil
-	}
-	displayName := spec.def.Name
-	if displayName == "" {
-		displayName = spec.symbol
-	}
-	return &SymbolBundle{
-		Identity: SymbolBundleIdentity{
-			Language:    spec.language,
-			Query:       spec.symbol,
-			Canonical:   canonicalSymbolBundleKey(spec.language, spec.def.File, spec.def.Line, displayName),
-			DisplayName: displayName,
-			Kind:        spec.def.Kind,
-			File:        spec.def.File,
-			Line:        spec.def.Line,
-			EndLine:     spec.def.Line,
-		},
-		Definition: SymbolBundleDefinition{
-			File:      spec.def.File,
-			Line:      spec.def.Line,
-			EndLine:   spec.def.Line,
-			Signature: spec.def.Signature,
-			Body:      []string{fmt.Sprintf("%d: %s", spec.def.Line, spec.def.Signature)},
-		},
-		Impact: spec.impact,
-		Debug: SymbolBundleDebug{
-			Source:       spec.debugSource,
-			FileRootPath: spec.rootPath,
-		},
-	}
-}
-
 func buildJSFamilyImpactMetadata(def genericSymbolDef, rootPath string, riskLevel string, groups []jsFamilyImpactReadGroup) *SymbolBundleImpact {
 	impact := &SymbolBundleImpact{
 		RiskLevel:        riskLevel,
@@ -94,25 +51,6 @@ func buildJSFamilyImpactMetadata(def genericSymbolDef, rootPath string, riskLeve
 		return nil
 	}
 	return impact
-}
-
-func appendJSFamilyImpactSectionWithTotals(bundle *SymbolBundle, def genericSymbolDef, kind, title string, refs []genericSymbolRef, totalRefs []genericSymbolRef, limit int, isTest bool, rootPath string, symbol string) {
-	items := jsFamilyImpactItemsFromRefs(def, refs, kind, limit, isTest, rootPath, symbol)
-	if len(items) == 0 {
-		return
-	}
-	if totalRefs == nil {
-		totalRefs = refs
-	}
-
-	total := len(dedupeGenericRefs(totalRefs))
-	bundle.Sections = append(bundle.Sections, SymbolBundleSection{
-		Kind:  kind,
-		Title: title,
-		Items: items,
-		Total: total,
-		More:  total > len(items),
-	})
 }
 
 func jsFamilyImpactItemsFromRefs(def genericSymbolDef, refs []genericSymbolRef, kind string, limit int, isTest bool, rootPath string, symbol string) []SymbolBundleItem {

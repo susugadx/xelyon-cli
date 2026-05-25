@@ -6,44 +6,11 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/impactplan"
 )
 
-func buildTypeScriptImpactBundle(symbol string, def genericSymbolDef, opts SearchOptions, refs typeScriptImpactRefs) *SymbolBundle {
-	rootPath := structuredTypeScriptImpactFileRoot(opts)
-	impact := buildTypeScriptImpactMetadata(def, refs, rootPath)
-	if impact == nil || len(impact.RecommendedReads) == 0 {
-		return nil
-	}
-
-	bundle := newJSFamilyImpactBundle(jsFamilyImpactBundleSpec{
-		language:    "typescript",
-		debugSource: typeScriptImpactDebugSource(def),
-		symbol:      symbol,
-		def:         def,
-		rootPath:    rootPath,
-		impact:      impact,
-	})
-
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "imports", "Imports", refs.imports, refs.totalImports, jsImportLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "callers", "Callers", refs.callers, refs.totalCallers, jsCallerLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "type_refs", "Type References", refs.typeRefs, refs.totalTypeRefs, jsTypeRefLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "references", "References", refs.others, refs.totalOthers, genericRefLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "tests", "Related Tests", refs.allTests(), refs.allTotalTests(), genericTestLimit, true, rootPath, symbol)
-
-	return bundle
-}
-
-func buildTypeScriptImpactBundleFromDisplayAndTotalRefs(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef) *SymbolBundle {
-	return buildTypeScriptImpactBundle(symbol, def, opts, typeScriptImpactRefsForDisplayAndTotalRefs(def, refs, totalRefs, opts))
-}
-
 func typeScriptImpactDebugSource(def genericSymbolDef) string {
 	if isTypeScriptDeclarationFilePath(def.File) {
 		return "typescript-impact-structured-declaration"
 	}
 	return "typescript-impact-structured"
-}
-
-func buildTypeScriptImpactMetadata(def genericSymbolDef, refs typeScriptImpactRefs, rootPath string) *SymbolBundleImpact {
-	return buildJSFamilyImpactMetadata(def, rootPath, classifyTypeScriptImpactRisk(def, refs), typeScriptImpactRecommendedReadGroups(def, refs))
 }
 
 func typeScriptImpactRecommendedReadGroups(def genericSymbolDef, refs typeScriptImpactRefs) []jsFamilyImpactReadGroup {
