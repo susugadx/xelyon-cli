@@ -135,6 +135,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **Claude系の server-side tool clearing**: Claude / Bedrock(Claude) / OpenRouter(Claude models) では `clear_tool_uses` により古い `tool_use` / `tool_result` ペア構造をサーバー側で削減し、compaction 発動前に入力トークンを節約
 - **プロンプトキャッシュ最適化**: Claude/Bedrock(Claude) 利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置
 - **Long Context 料金自動判定**: Claude/Gemini Pro で200Kトークン超のリクエスト時、long context 料金ティアを自動適用。キャッシュトークン（cache_read + cache_creation）も含めた総入力トークンでティア判定
+- **Gemini service tier**: `gemini.service_tier` で Gemini BYOK の `standard` / `flex` / `priority` 同期 inference と料金表示を切り替え
 
 ### 🧠 履歴を消さずに、AIへ渡す文脈だけ軽くする
 XELYON は raw history / session / audit / JSONL を保持したまま、provider に送る履歴だけを request ごとに projection できます。
@@ -265,6 +266,7 @@ q / i / Esc   入力モードへ戻る
 ### プロバイダー切り替え
 
 ```bash
+xelyon --provider gemini --model gemini-3.5-flash
 xelyon --provider gemini --model gemini-2.5-flash
 
 # または対話中に
@@ -297,7 +299,7 @@ sub_agent:
   max_concurrent: 5
 ```
 
-`sub_agent.default_model` が空の場合は、メイン provider に応じて OpenAI は `gpt-5.4-mini`、Claude は `claude-haiku-4-5-20251001`、Gemini は `gemini-3.1-flash-lite-preview`、Kimi は `kimi-k2.5` などの低コストモデルを自動選択します。Azure OpenAI では hard-coded モデル名ではなく `provider_models.azure.default_model` の deployment 名を使います。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
+`sub_agent.default_model` が空の場合は、メイン provider に応じて OpenAI は `gpt-5.4-mini`、Claude は `claude-haiku-4-5-20251001`、Gemini は `gemini-3.1-flash-lite`、Kimi は `kimi-k2.5` などの低コストモデルを自動選択します。Azure OpenAI では hard-coded モデル名ではなく `provider_models.azure.default_model` の deployment 名を使います。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
 
 ### 最大出力トークン数の設定
 

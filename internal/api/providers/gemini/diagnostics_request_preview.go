@@ -43,6 +43,13 @@ func buildGeminiDiagnosticRequestPreview(
 
 	preview := DiagnosticRequestPreview{}
 	for _, request := range geminiDiagnosticRequests(options) {
+		if request.ToolPayload && !report.FunctionCallingEnabled {
+			preview.Requests = append(preview.Requests, providerdiag.NewSkippedMultimodalPreviewRequest(
+				request.multimodalSmokeRequest(),
+				"Gemini function calling is not supported for the resolved catalog_model",
+			))
+			continue
+		}
 		requestCtx := newGeminiDiagnosticRequestContext(ctx, previewCfg, request, io.Discard)
 		preview.Requests = append(preview.Requests, buildGeminiDiagnosticRequestPreviewRequest(requestCtx, provider, report, request))
 	}
@@ -95,7 +102,7 @@ func buildGeminiDiagnosticRequestBody(
 			geminiDiagnosticImage(),
 			report.Model,
 			nil,
-			provider.IsFunctionCallingEnabled(),
+			report.FunctionCallingEnabled,
 			cfg,
 		)
 	case request.WebSearchPayload:

@@ -61,6 +61,63 @@ func TestGetThinkingConfigForModel_Gemini3ProWithoutThinkingUsesLowLevel(t *test
 	}
 }
 
+func TestGetThinkingConfigForModel_Gemini35FlashWithoutThinkingUsesMinimalLevel(t *testing.T) {
+	ctx := newGeminiRequestContext(false, "high")
+	cfg := config.FromContext(ctx)
+
+	got := getThinkingConfigForModel(ctx, "gemini-3.5-flash", cfg)
+	if got == nil || got.ThinkingConfig == nil {
+		t.Fatalf("getThinkingConfigForModel() = %+v, want thinking config", got)
+	}
+	if got.ThinkingConfig.ThinkingLevel != "minimal" {
+		t.Fatalf("ThinkingLevel = %q, want %q", got.ThinkingConfig.ThinkingLevel, "minimal")
+	}
+	if got.MaxOutputTokens != 65536 {
+		t.Fatalf("MaxOutputTokens = %d, want 65536", got.MaxOutputTokens)
+	}
+}
+
+func TestGetThinkingConfigForModel_UsesCatalogModelForGemini3Alias(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = false
+	cfg.Thinking.Level = "high"
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-gemini",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	got := getThinkingConfigForModel(ctx, "corp-gemini", cfg)
+	if got == nil || got.ThinkingConfig == nil {
+		t.Fatalf("getThinkingConfigForModel() = %+v, want Gemini 3 thinking config", got)
+	}
+	if got.ThinkingConfig.ThinkingLevel != "minimal" {
+		t.Fatalf("ThinkingLevel = %q, want catalog model flash minimal level", got.ThinkingConfig.ThinkingLevel)
+	}
+	if got.ThinkingConfig.ThinkingBudget != 0 {
+		t.Fatalf("ThinkingBudget = %d, want 0 for Gemini 3 thinkingLevel request", got.ThinkingConfig.ThinkingBudget)
+	}
+	if got.MaxOutputTokens != 65536 {
+		t.Fatalf("MaxOutputTokens = %d, want catalog model limit 65536", got.MaxOutputTokens)
+	}
+}
+
+func TestGetThinkingSpinnerMessage_UsesCatalogModelForAlias(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-gemini-pro",
+		CatalogModel: "gemini-3.1-pro-preview-customtools",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	if got := getThinkingSpinnerMessage(ctx, "corp-gemini-pro", false); got != "Deep thinking" {
+		t.Fatalf("getThinkingSpinnerMessage(alias) = %q, want %q", got, "Deep thinking")
+	}
+	if got := getThinkingSpinnerMessage(ctx, "corp-gemini-pro", true); got != "Deep thinking (image)" {
+		t.Fatalf("getThinkingSpinnerMessage(alias image) = %q, want %q", got, "Deep thinking (image)")
+	}
+}
+
 func TestGetThinkingSpinnerMessage_Gemini25ImageWithThinking(t *testing.T) {
 	ctx := newGeminiRequestContext(true, "medium")
 	if got := getThinkingSpinnerMessage(ctx, "gemini-2.5-flash", true); got != "Deep thinking (image)" {
@@ -184,7 +241,7 @@ func TestChatWithTools_IdleTimeoutRetryThenSuccess(t *testing.T) {
 	}
 
 	ctx, _, errOut := newGeminiOrchestrationContext(1, 3)
-	got, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "")
+	got, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "gemini-2.0-flash")
 	if err != nil {
 		t.Fatalf("ChatWithTools() error = %v", err)
 	}
@@ -218,7 +275,7 @@ func TestChatWithTools_IdleTimeoutExceedsMaxRetries(t *testing.T) {
 	ctx, _, _ := newGeminiOrchestrationContext(1, 3)
 	ctx = context.WithValue(ctx, idleTimeoutRetryKey, maxIdleTimeoutRetries)
 
-	_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "")
+	_, err := p.ChatWithTools(ctx, "System", []api.Message{{Role: "user", Content: "hello"}}, "gemini-2.0-flash")
 	if err == nil {
 		t.Fatal("ChatWithTools() should return error when idle-timeout retry budget is exhausted")
 	}
@@ -326,6 +383,128 @@ func TestChatWithImage_RequestIncludesHistoryAndToolConfigWhenFCEnabled(t *testi
 	}
 	if parts[1].(map[string]any)["text"] != "describe this" {
 		t.Fatalf("user text part = %#v, want describe this", parts[1])
+	}
+}
+
+func TestChatWithImage_IdleTimeoutRetryThenSuccess(t *testing.T) {
+	p := New("test-key")
+	var attempts atomic.Int32
+	var firstBodyClosed atomic.Bool
+	p.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch attempts.Add(1) {
+			case 1:
+				pr, pw := io.Pipe()
+				go func() {
+					_, _ = fmt.Fprint(pw, ": keepalive\n\n")
+					time.Sleep(1200 * time.Millisecond)
+					_ = pw.Close()
+				}()
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       &closeFlagReadCloser{ReadCloser: pr, closed: &firstBodyClosed},
+					Header:     make(http.Header),
+				}, nil
+			case 2:
+				if !firstBodyClosed.Load() {
+					t.Fatal("first image SSE response body should be closed before retry request")
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(strings.NewReader(geminiSSEPayload(t, GeminiFunctionResponse{
+						Candidates: []GeminiFunctionCandidate{{
+							Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "image idle retry ok"}}},
+						}},
+					}))),
+					Header: make(http.Header),
+				}, nil
+			default:
+				t.Fatalf("unexpected request count: %d", attempts.Load())
+				return nil, nil
+			}
+		}),
+	}
+
+	ctx, _, errOut := newGeminiOrchestrationContext(1, 3)
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+	got, err := p.ChatWithImage(ctx, "System", nil, "describe", image, "gemini-2.0-flash")
+	if err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	if got != "image idle retry ok" {
+		t.Fatalf("ChatWithImage() = %q, want %q", got, "image idle retry ok")
+	}
+	if attempts.Load() != 2 {
+		t.Fatalf("request count = %d, want 2", attempts.Load())
+	}
+	if !strings.Contains(errOut.String(), "Transport idle timeout, retrying multimodal FC mode") {
+		t.Fatalf("errOut = %q, want image idle timeout retry warning", errOut.String())
+	}
+}
+
+type closeFlagReadCloser struct {
+	io.ReadCloser
+	closed *atomic.Bool
+}
+
+func (r *closeFlagReadCloser) Close() error {
+	r.closed.Store(true)
+	return r.ReadCloser.Close()
+}
+
+func TestChatWithImage_ThinkingTimeoutRetryThenSuccess(t *testing.T) {
+	p := New("test-key")
+	var attempts atomic.Int32
+	p.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch attempts.Add(1) {
+			case 1:
+				pr, pw := io.Pipe()
+				go func() {
+					_, _ = fmt.Fprint(pw, geminiSSEPayload(t, GeminiFunctionResponse{
+						Candidates: []GeminiFunctionCandidate{{
+							Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{
+								Thought:          true,
+								Text:             "planning",
+								ThoughtSignature: "sig-image",
+							}}},
+						}},
+					}))
+					time.Sleep(1500 * time.Millisecond)
+					_ = pw.Close()
+				}()
+				return &http.Response{StatusCode: http.StatusOK, Body: pr, Header: make(http.Header)}, nil
+			case 2:
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body: io.NopCloser(strings.NewReader(geminiSSEPayload(t, GeminiFunctionResponse{
+						Candidates: []GeminiFunctionCandidate{{
+							Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "image thinking retry ok"}}},
+						}},
+					}))),
+					Header: make(http.Header),
+				}, nil
+			default:
+				t.Fatalf("unexpected request count: %d", attempts.Load())
+				return nil, nil
+			}
+		}),
+	}
+
+	ctx, _, errOut := newGeminiOrchestrationContext(5, 1)
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+	got, err := p.ChatWithImage(ctx, "System", nil, "describe", image, "gemini-3.5-flash")
+	if err != nil {
+		t.Fatalf("ChatWithImage() error = %v", err)
+	}
+	if got != "image thinking retry ok" {
+		t.Fatalf("ChatWithImage() = %q, want %q", got, "image thinking retry ok")
+	}
+	if attempts.Load() != 2 {
+		t.Fatalf("request count = %d, want 2", attempts.Load())
+	}
+	if !strings.Contains(errOut.String(), "Thinking timeout, retrying multimodal FC mode") {
+		t.Fatalf("errOut = %q, want image thinking timeout retry warning", errOut.String())
 	}
 }
 

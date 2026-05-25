@@ -114,7 +114,7 @@ func (a *Agent) ModelCandidates(provider string) []ModelCandidate {
 		return a.azureDeploymentCandidates(provider)
 	}
 
-	models := llmcatalog.KnownModelNamesForProvider(runtimeProvider)
+	models := llmcatalog.RecommendedModelNamesForProvider(runtimeProvider)
 	if runtimeProvider == "ollama" {
 		if liveModels, err := listOllamaModelsForCandidates(a, runtimeProvider); err == nil && len(liveModels) > 0 {
 			models = liveModels
@@ -189,12 +189,7 @@ func knownOpenAICatalogModel(model string) bool {
 	if model == "" {
 		return false
 	}
-	for _, candidate := range llmcatalog.KnownModelNamesForProvider("openai") {
-		if candidate == model {
-			return true
-		}
-	}
-	return false
+	return llmcatalog.IsExactKnownModelNameForProvider("openai", model)
 }
 
 func (a *Agent) modelCandidatesFromNames(provider string, names []string, customLabel string) []ModelCandidate {

@@ -9,7 +9,7 @@ import (
 
 func TestOrderedSectionsForCategory(t *testing.T) {
 	got := OrderedSectionsForCategory("provider")
-	want := []string{"default_provider", "default_model", "provider_models"}
+	want := []string{"default_provider", "default_model", "provider_models", "gemini"}
 	if len(got) != len(want) {
 		t.Fatalf("unexpected section count: got=%v want=%v", got, want)
 	}

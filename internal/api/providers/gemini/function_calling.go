@@ -29,6 +29,9 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
 	// customtools版はカスタムツール優先度が高くパラレルFCを出す
 	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
+	if err := newGeminiFunctionCallingPolicy(config.FromContext(ctx), model).UnsupportedError(); err != nil {
+		return "", err
+	}
 
 	// ツール定義を事前に取得（キャッシュにも含めるため）
 	toolDefs := GetCombinedToolDefinitionsWithContext(ctx, p.mcpTools)
@@ -79,7 +82,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	thinkingMsg := getThinkingSpinnerMessage(ctx, model, false)
 	spinner := api.StartSpinnerWithMessage(ctx, "Waiting for Gemini...")
 
-	resp, err := p.doRequestWithRetry(ctx, req, jsonBody)
+	resp, err := p.doRequestWithRetry(ctx, req, jsonBody, model)
 	if err != nil {
 		if spinner != nil {
 			spinner.Stop()
@@ -125,5 +128,5 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 	}
 
 	// Function Calling レスポンスを処理（SSE ストリーミング）
-	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg)
+	return p.handleSSEResponse(ctx, resp, spinner, thinkingMsg, model)
 }

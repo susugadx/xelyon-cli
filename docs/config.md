@@ -200,6 +200,15 @@ lsp:
     enabled: true
 
 # ============================================================
+# Gemini 設定
+# ============================================================
+# Gemini BYOK の同期 inference tier を制御
+# standard は既定、flex は低コスト・高遅延、priority は高コスト・高優先度
+gemini:
+    # Gemini service_tier（standard / flex / priority）
+    service_tier: standard
+
+# ============================================================
 # ツール出力表示設定
 # ============================================================
 output:
@@ -284,7 +293,7 @@ final_checks:
 - **サブキー**:
   - `default_model`: プロバイダーのデフォルトモデル名
   - `max_output_tokens`: プロバイダーの出力トークン上限（デフォルト値）
-  - `catalog_model`: `default_model` が deployment 名や社内 alias の場合に、token limit / pricing / context 判定へ使う既知モデル名（オプション）
+  - `catalog_model`: `default_model` が deployment 名や社内 alias の場合に、token limit / pricing / context / provider 固有 policy 判定へ使う既知モデル名（オプション）
   - `model_overrides`: 特定モデル別の出力トークン上限設定（オプション）
     - **用途**: 既知モデルマップにないモデル、deployment 名、デフォルト値を上書きしたい場合に指定
     - **サブキー**: `max_output_tokens`, `catalog_model`
@@ -310,7 +319,7 @@ final_checks:
       catalog_model: gpt-5.4
   ```
 
-料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
+料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Gemini alias では Gemini の実モデル名を指定すると、token / pricing に加えて thinkingLevel、SSE timeout policy、function calling capability もその family に揃います。既知の function calling 非対応 Gemini を `provider_models.gemini.default_model`、`provider_models.gemini.catalog_model`、`provider_models.gemini.model_overrides.*.catalog_model` に設定すると config validation は error にし、既知の代替 model へ autofix できます。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 
 DeepSeek の推奨モデル:
 - `deepseek-v4-flash`: 低コスト・高速・普段使い向き
@@ -386,7 +395,7 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 ```yaml
 streaming:
   idle_timeout_seconds: 30       # アイドルタイムアウト秒
-  thinking_timeout_seconds: 120  # thinking 専用タイムアウト秒
+  thinking_timeout_seconds: 120  # thinking request のレスポンス開始 / SSE 進捗待ち上限
   show_file_info: true           # ファイル読み込み時にサイズ・行数表示
   show_search_progress: true     # 検索時に進捗表示
   stream_bash_output: true       # bash 出力をリアルタイム表示
@@ -812,6 +821,7 @@ export XELYON_STR_REPLACE_BATCH_EXACT_LINE_STATS=1
 Gemini と Bedrock 以外の各プロバイダーでは Function Calling（ツール呼び出し）機能を無効化できます。
 モデルがFunction Callingに対応していない場合や、テキストベースのツール呼び出しに戻したい場合に使用します。
 Gemini provider は native function calling を前提にし、内部の text-only request だけ request-scoped tool disable を使います。
+既知の function calling 非対応 Gemini は CLI/TUI のモデル選択時点で拒否され、config validation でも error になります。unknown alias は互換性のため即時拒否せず、`catalog_model` で実 Gemini model を明示して capability 判定を安定させます。
 Bedrock provider は agent 実行で structured tool calling を必須とするため、streaming tool use が未確認または非対応の Bedrock Converse モデルは runtime supported として扱いません。
 
 ```bash
@@ -947,7 +957,7 @@ provider_models:
   openai:
     default_model: gpt-4-turbo
   gemini:
-    default_model: gemini-2.0-flash-exp
+    default_model: gemini-3.5-flash
 ```
 
 ## トラブルシューティング

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
@@ -129,6 +130,25 @@ func TestSessionStats_AddUsage_WebSearchObservation(t *testing.T) {
 	}
 	if stats.LastUsage == nil || stats.LastUsage.WebSearchCalls != 1 {
 		t.Fatalf("LastUsage = %+v, want web search usage", stats.LastUsage)
+	}
+}
+
+func TestSessionStats_UsageDeltaSince_PreservesBillingServiceTier(t *testing.T) {
+	stats := NewSessionStats("gemini", "gemini-3.1-flash-lite")
+	start := *stats
+
+	stats.AddUsageForProviderConfig(nil, "gemini", "gemini-3.1-flash-lite", api.Usage{
+		InputTokens:        100,
+		OutputTokens:       25,
+		BillingServiceTier: config.GeminiServiceTierStandard,
+	})
+
+	delta := stats.UsageDeltaSince(start)
+	if delta.InputTokens != 100 || delta.OutputTokens != 25 {
+		t.Fatalf("UsageDeltaSince() tokens = input %d output %d, want 100/25", delta.InputTokens, delta.OutputTokens)
+	}
+	if delta.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("UsageDeltaSince() BillingServiceTier = %q, want %q", delta.BillingServiceTier, config.GeminiServiceTierStandard)
 	}
 }
 
@@ -962,18 +982,22 @@ func TestGetOpenAIPricing_GPT54Nano(t *testing.T) {
 	}
 }
 
-// === 新規テスト: Gemini 3.1 Flash-Lite Preview 専用価格 ===
+// === 新規テスト: Gemini 3.1 Flash-Lite 専用価格 ===
 
 func TestGetGeminiPricing_31FlashLite(t *testing.T) {
-	pricing := cost.GetPricingInfo("gemini", "gemini-3.1-flash-lite-preview", 0)
-	if pricing.InputCostPerM != 0.25 {
-		t.Errorf("gemini-3.1-flash-lite-preview input: got %f, want 0.25", pricing.InputCostPerM)
-	}
-	if pricing.CachedInputCostPerM != 0.025 {
-		t.Errorf("gemini-3.1-flash-lite-preview cached input: got %f, want 0.025", pricing.CachedInputCostPerM)
-	}
-	if pricing.OutputCostPerM != 1.50 {
-		t.Errorf("gemini-3.1-flash-lite-preview output: got %f, want 1.50", pricing.OutputCostPerM)
+	for _, model := range []string{"gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview"} {
+		t.Run(model, func(t *testing.T) {
+			pricing := cost.GetPricingInfo("gemini", model, 0)
+			if pricing.InputCostPerM != 0.25 {
+				t.Errorf("%s input: got %f, want 0.25", model, pricing.InputCostPerM)
+			}
+			if pricing.CachedInputCostPerM != 0.025 {
+				t.Errorf("%s cached input: got %f, want 0.025", model, pricing.CachedInputCostPerM)
+			}
+			if pricing.OutputCostPerM != 1.50 {
+				t.Errorf("%s output: got %f, want 1.50", model, pricing.OutputCostPerM)
+			}
+		})
 	}
 }
 

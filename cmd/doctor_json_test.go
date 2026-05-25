@@ -15,37 +15,46 @@ type doctorJSONCheck struct {
 }
 
 type doctorJSONContractReport struct {
-	Provider                  string                   `json:"provider"`
-	APIURL                    string                   `json:"api_url"`
-	ResponsesURL              string                   `json:"responses_url"`
-	NormalizedBaseURL         string                   `json:"normalized_base_url"`
-	Region                    string                   `json:"region"`
-	Deployment                string                   `json:"deployment"`
-	Model                     string                   `json:"model"`
-	ModelSource               string                   `json:"model_source"`
-	APIModel                  string                   `json:"api_model"`
-	CatalogModel              string                   `json:"catalog_model"`
-	CatalogModelSource        string                   `json:"catalog_model_source"`
-	UpstreamProvider          string                   `json:"upstream_provider"`
-	UpstreamModel             string                   `json:"upstream_model"`
-	Route                     string                   `json:"route"`
-	RouteReason               string                   `json:"route_reason"`
-	MaxOutputTokens           int                      `json:"max_output_tokens"`
-	ContextWindowTokens       int                      `json:"context_window_tokens"`
-	FunctionCallingEnabled    bool                     `json:"function_calling_enabled"`
-	ImageInputSupported       bool                     `json:"image_input_supported"`
-	WebSearchSupported        bool                     `json:"web_search_supported"`
-	ContextManagementEnabled  bool                     `json:"context_management_enabled"`
-	ClaudeCompactionSupported bool                     `json:"claude_compaction_supported"`
-	ContextCachingEnabled     bool                     `json:"context_caching_enabled"`
-	ThinkingEnabled           bool                     `json:"thinking_enabled"`
-	ThinkingSupported         bool                     `json:"thinking_supported"`
-	ThinkingType              string                   `json:"thinking_type"`
-	AnthropicVersion          string                   `json:"anthropic_version"`
-	PromptCacheKeyPresent     bool                     `json:"prompt_cache_key_present"`
-	Smoke                     any                      `json:"smoke"`
-	RequestPreview            doctorJSONRequestPreview `json:"request_preview"`
-	Checks                    []doctorJSONCheck        `json:"checks"`
+	Provider                  string                      `json:"provider"`
+	APIURL                    string                      `json:"api_url"`
+	ResponsesURL              string                      `json:"responses_url"`
+	NormalizedBaseURL         string                      `json:"normalized_base_url"`
+	Region                    string                      `json:"region"`
+	Deployment                string                      `json:"deployment"`
+	Model                     string                      `json:"model"`
+	ModelSource               string                      `json:"model_source"`
+	APIModel                  string                      `json:"api_model"`
+	CatalogModel              string                      `json:"catalog_model"`
+	CatalogModelSource        string                      `json:"catalog_model_source"`
+	UpstreamProvider          string                      `json:"upstream_provider"`
+	UpstreamModel             string                      `json:"upstream_model"`
+	Route                     string                      `json:"route"`
+	RouteReason               string                      `json:"route_reason"`
+	MaxOutputTokens           int                         `json:"max_output_tokens"`
+	ContextWindowTokens       int                         `json:"context_window_tokens"`
+	FunctionCallingEnabled    bool                        `json:"function_calling_enabled"`
+	ImageInputSupported       bool                        `json:"image_input_supported"`
+	WebSearchSupported        bool                        `json:"web_search_supported"`
+	ContextManagementEnabled  bool                        `json:"context_management_enabled"`
+	ClaudeCompactionSupported bool                        `json:"claude_compaction_supported"`
+	ContextCachingEnabled     bool                        `json:"context_caching_enabled"`
+	ThinkingEnabled           bool                        `json:"thinking_enabled"`
+	ServiceTier               doctorJSONGeminiServiceTier `json:"service_tier"`
+	ThinkingSupported         bool                        `json:"thinking_supported"`
+	ThinkingType              string                      `json:"thinking_type"`
+	AnthropicVersion          string                      `json:"anthropic_version"`
+	PromptCacheKeyPresent     bool                        `json:"prompt_cache_key_present"`
+	Smoke                     any                         `json:"smoke"`
+	RequestPreview            doctorJSONRequestPreview    `json:"request_preview"`
+	Checks                    []doctorJSONCheck           `json:"checks"`
+}
+
+type doctorJSONGeminiServiceTier struct {
+	ConfiguredTier       string `json:"configured_tier"`
+	RequestBodyTier      string `json:"request_body_tier"`
+	PricingFamily        string `json:"pricing_family"`
+	BillingTier          string `json:"billing_tier"`
+	BillingPricingFamily string `json:"billing_pricing_family"`
 }
 
 type doctorJSONRequestPreview struct {

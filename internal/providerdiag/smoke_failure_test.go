@@ -102,6 +102,13 @@ func TestClassifySmokeFailureCommonVocabulary(t *testing.T) {
 			message: "response was empty",
 			suggest: "--model",
 		},
+		{
+			name:    "timeout",
+			ctx:     SmokeFailureContext{SmokeFailureContextOptions: SmokeFailureContextOptions{Provider: "Gemini"}, Detail: "thinking timeout: no Gemini progress or actionable output received"},
+			want:    SmokeFailureKindTimeout,
+			message: "request timed out",
+			suggest: "--timeout",
+		},
 	}
 
 	for _, tt := range tests {

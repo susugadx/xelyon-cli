@@ -33,6 +33,9 @@ func renderLastRequestTable(cfg *config.Config, provider, model string, usage *a
 		table.AddRow("Thinking", formatNumber(usage.ThinkingTokens)+" tokens")
 	}
 	addWebSearchUsageRows(table, func(label string) string { return label }, usage.WebSearchCalls, usage.WebSearchResultTokens, usage.StorageCost)
+	if detail := geminiServiceTierStatusDetail(cfg, provider, usage); detail != "" {
+		table.AddRow("Service Tier", detail)
+	}
 
 	estimate := requestUsageCost(cfg, provider, model, *usage)
 	if costOverride != nil {

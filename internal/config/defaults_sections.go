@@ -99,7 +99,7 @@ func defaultPasteConfig() PasteConfig {
 func defaultStreamingConfig() StreamingConfig {
 	return StreamingConfig{
 		IdleTimeoutSeconds:     30,  // チャンク間隔タイムアウト（30秒）
-		ThinkingTimeoutSeconds: 120, // thinking専用: text/FC が来なければタイムアウト（最大リトライ2回=360秒）
+		ThinkingTimeoutSeconds: 120, // thinking request のレスポンス開始 / SSE 進捗待ち上限
 		ShowFileInfo:           true,
 		ShowSearchProgress:     true,
 		StreamBashOutput:       true,
@@ -164,6 +164,12 @@ func defaultGitStageConfig() GitStageConfig {
 func defaultOpenAIConfig() OpenAIConfig {
 	return OpenAIConfig{
 		ResponsesAPIModels: []string{}, // 内部: プレフィックスマッチのフォールバック（YAML 直接編集で追加可能）
+	}
+}
+
+func defaultGeminiConfig() GeminiConfig {
+	return GeminiConfig{
+		ServiceTier: GeminiServiceTierStandard,
 	}
 }
 

@@ -9,12 +9,17 @@ func (cs *configScreen) markModified() {
 }
 
 func (cs *configScreen) applyFieldValue(path string, value interface{}, providerConfigKey string) bool {
-	if err := config.SetFieldValue(cs.cfg, path, value); err != nil {
+	candidate := config.CloneConfig(cs.cfg)
+	if err := config.SetFieldValue(candidate, path, value); err != nil {
 		return false
 	}
 	if path == "default_model" {
-		cs.syncEditedProviderDefaultModel(providerConfigKey)
+		syncEditedProviderDefaultModel(candidate, providerConfigKey, cs.initialDefaultProvider)
 	}
+	if !cs.validateConfigEditCandidate(candidate, path, providerConfigKey) {
+		return false
+	}
+	cs.cfg = candidate
 	cs.markModified()
 	return true
 }
@@ -32,12 +37,17 @@ func (cs *configScreen) syncEditedProviderDefaultModel(providerConfigKey string)
 	if cs == nil || cs.cfg == nil {
 		return
 	}
+	syncEditedProviderDefaultModel(cs.cfg, providerConfigKey, cs.initialDefaultProvider)
+}
 
-	provName := cs.defaultModelSyncProvider(providerConfigKey)
-	if provName == "" {
+func syncEditedProviderDefaultModel(cfg *config.Config, providerConfigKey, initialDefaultProvider string) {
+	if cfg == nil {
 		return
 	}
-	cs.cfg.SyncProviderDefaultModel(provName, cs.cfg.DefaultModel)
+	provName := cfg.DefaultModelSyncProviderKey(providerConfigKey, initialDefaultProvider)
+	if provName != "" {
+		cfg.SyncProviderDefaultModel(provName, cfg.DefaultModel)
+	}
 }
 
 // defaultModelSyncProvider は global default_model を同期する provider_models key を返す。

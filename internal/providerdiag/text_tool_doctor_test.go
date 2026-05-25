@@ -73,11 +73,26 @@ func TestNewTextToolSmokeRequestContextAddsToolsForToolPayload(t *testing.T) {
 
 func TestSmokeUsageAndCostAggregation(t *testing.T) {
 	gotUsage := AddSmokeUsage(
-		SmokeUsage{InputTokens: 10, OutputTokens: 3, ThinkingTokens: 1, CachedInputTokens: 2, CacheCreationTokens: 1},
-		SmokeUsage{InputTokens: 4, OutputTokens: 5, ThinkingTokens: 2, CachedInputTokens: 1, CacheCreationTokens: 3},
+		SmokeUsage{InputTokens: 10, OutputTokens: 3, ThinkingTokens: 1, CachedInputTokens: 2, CacheCreationTokens: 1, BillingServiceTier: config.GeminiServiceTierStandard},
+		SmokeUsage{InputTokens: 4, OutputTokens: 5, ThinkingTokens: 2, CachedInputTokens: 1, CacheCreationTokens: 3, BillingServiceTier: config.GeminiServiceTierStandard},
 	)
-	if gotUsage != (SmokeUsage{InputTokens: 14, OutputTokens: 8, ThinkingTokens: 3, CachedInputTokens: 3, CacheCreationTokens: 4}) {
+	if gotUsage != (SmokeUsage{InputTokens: 14, OutputTokens: 8, ThinkingTokens: 3, CachedInputTokens: 3, CacheCreationTokens: 4, BillingServiceTier: config.GeminiServiceTierStandard}) {
 		t.Fatalf("AddSmokeUsage() = %+v, want summed fields", gotUsage)
+	}
+	mixedUsage := AddSmokeUsage(gotUsage, SmokeUsage{InputTokens: 1, BillingServiceTier: config.GeminiServiceTierPriority})
+	if mixedUsage.BillingServiceTier != "mixed" {
+		t.Fatalf("AddSmokeUsage() billing tier = %q, want mixed", mixedUsage.BillingServiceTier)
+	}
+
+	projectedUsage := SmokeUsageFromAPIUsage(api.Usage{
+		InputTokens:        2,
+		BillingServiceTier: config.GeminiServiceTierFlex,
+	})
+	if projectedUsage.BillingServiceTier != config.GeminiServiceTierFlex {
+		t.Fatalf("SmokeUsageFromAPIUsage() = %+v, want billing tier projected", projectedUsage)
+	}
+	if apiUsage := APIUsageFromSmokeUsage(projectedUsage); apiUsage.BillingServiceTier != config.GeminiServiceTierFlex {
+		t.Fatalf("APIUsageFromSmokeUsage() = %+v, want billing tier restored", apiUsage)
 	}
 
 	gotCost := AddSmokeCost(SmokeCost{USD: 0.125}, SmokeCost{USD: 0.25})

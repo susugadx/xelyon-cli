@@ -45,6 +45,9 @@ func TestRunGeminiDoctorInvocation_JSONContractPrintRequestAllShapes(t *testing.
 	if !report.FunctionCallingEnabled || !report.ImageInputSupported || !report.WebSearchSupported || !report.ContextCachingEnabled {
 		t.Fatalf("Gemini doctor capability booleans = fc:%t image:%t web:%t cache:%t", report.FunctionCallingEnabled, report.ImageInputSupported, report.WebSearchSupported, report.ContextCachingEnabled)
 	}
+	if report.ServiceTier.ConfiguredTier != "standard" || report.ServiceTier.RequestBodyTier != "omitted" || report.ServiceTier.PricingFamily != "gemini" {
+		t.Fatalf("Gemini service tier = %+v, want standard omitted request body with standard pricing family", report.ServiceTier)
+	}
 	requireDoctorJSONPrintRequestOmittedSmoke(t, report.Smoke)
 	requireNoDoctorJSONChecks(t, report.Checks, "auth")
 	for _, check := range []string{
@@ -53,6 +56,7 @@ func TestRunGeminiDoctorInvocation_JSONContractPrintRequestAllShapes(t *testing.
 		"model",
 		"catalog_model",
 		"route",
+		"service_tier",
 		"catalog_policy",
 		"function_calling",
 		"image_input",
@@ -131,10 +135,11 @@ func TestRenderGeminiDoctorTextContractWithMultipleSmokeRequests(t *testing.T) {
 			Duration:      "4ms",
 			UsageObserved: true,
 			Usage: geminiprovider.DiagnosticSmokeUsage{
-				InputTokens:       22,
-				CachedInputTokens: 6,
-				OutputTokens:      10,
-				ThinkingTokens:    3,
+				InputTokens:        22,
+				CachedInputTokens:  6,
+				OutputTokens:       10,
+				ThinkingTokens:     3,
+				BillingServiceTier: "standard",
 			},
 			Cost: geminiprovider.DiagnosticSmokeCost{USD: 0.00002},
 			Requests: []geminiprovider.DiagnosticSmokeRequestResult{
@@ -146,10 +151,11 @@ func TestRenderGeminiDoctorTextContractWithMultipleSmokeRequests(t *testing.T) {
 					Duration:      "1ms",
 					UsageObserved: true,
 					Usage: geminiprovider.DiagnosticSmokeUsage{
-						InputTokens:       10,
-						CachedInputTokens: 2,
-						OutputTokens:      4,
-						ThinkingTokens:    1,
+						InputTokens:        10,
+						CachedInputTokens:  2,
+						OutputTokens:       4,
+						ThinkingTokens:     1,
+						BillingServiceTier: "standard",
 					},
 					Cost: geminiprovider.DiagnosticSmokeCost{USD: 0.00001},
 				},
@@ -162,10 +168,11 @@ func TestRenderGeminiDoctorTextContractWithMultipleSmokeRequests(t *testing.T) {
 					Duration:         "3ms",
 					UsageObserved:    true,
 					Usage: geminiprovider.DiagnosticSmokeUsage{
-						InputTokens:       12,
-						CachedInputTokens: 4,
-						OutputTokens:      6,
-						ThinkingTokens:    2,
+						InputTokens:        12,
+						CachedInputTokens:  4,
+						OutputTokens:       6,
+						ThinkingTokens:     2,
+						BillingServiceTier: "standard",
 					},
 					Cost: geminiprovider.DiagnosticSmokeCost{USD: 0.00001},
 				},
@@ -182,13 +189,13 @@ func TestRenderGeminiDoctorTextContractWithMultipleSmokeRequests(t *testing.T) {
 		"Request preview:",
 		`"web_search_payload": true`,
 		"Smoke request text: ok route=stream_generate_content_sse duration=1ms",
-		"Smoke usage text: input=10 cached=2 output=4 reasoning=1 cache_creation=0",
+		"Smoke usage text: input=10 cached=2 output=4 reasoning=1 cache_creation=0 billing_tier=standard",
 		"Smoke cost estimate text: $0.00001000 USD",
 		"Smoke request web_search: ok route=generate_content duration=3ms",
 		"Smoke content web_search: Summary:\nweb search ok",
-		"Smoke usage web_search: input=12 cached=4 output=6 reasoning=2 cache_creation=0",
+		"Smoke usage web_search: input=12 cached=4 output=6 reasoning=2 cache_creation=0 billing_tier=standard",
 		"Smoke cost estimate web_search: $0.00001000 USD",
-		"Smoke total usage: input=22 cached=6 output=10 reasoning=3 cache_creation=0",
+		"Smoke total usage: input=22 cached=6 output=10 reasoning=3 cache_creation=0 billing_tier=standard",
 		"Smoke total cost estimate: $0.00002000 USD",
 	})
 }

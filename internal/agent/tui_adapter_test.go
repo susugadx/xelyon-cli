@@ -148,6 +148,45 @@ func TestTUIConfig_Model_StillWorks(t *testing.T) {
 	}
 }
 
+func TestTUIConfig_ModelRejectsUnsupportedGeminiFunctionCallingModel(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "gemini"
+	cfg.DefaultModel = "gemini-3.5-flash"
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{DefaultModel: "gemini-3.5-flash"})
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+
+	agent, out := newTUIAdapterTestAgent(t)
+	agent.ProviderName = "gemini"
+	agent.ProviderConfigKey = "gemini"
+	agent.CurrentModel = "gemini-3.5-flash"
+	agent.CurrentProvider = &MockProvider{name: "gemini"}
+	agent.Runtime.Config = cfg
+	adapter := NewTUIAdapter(agent, nil)
+
+	if !adapter.HandleCommand("/config model gemini-2.0-flash-lite") {
+		t.Fatal("HandleCommand(/config model gemini-2.0-flash-lite) = false, want true")
+	}
+
+	loaded, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if loaded.DefaultModel != "gemini-3.5-flash" {
+		t.Fatalf("loaded.DefaultModel = %q, want unchanged gemini-3.5-flash", loaded.DefaultModel)
+	}
+	if agent.CurrentModel != "gemini-3.5-flash" {
+		t.Fatalf("agent.CurrentModel = %q, want unchanged gemini-3.5-flash", agent.CurrentModel)
+	}
+	if !strings.Contains(out.String(), "gemini function calling is not supported") {
+		t.Fatalf("output = %q, want Gemini validation error", out.String())
+	}
+}
+
 func TestTUIAdapter_NonBareReviewFallsThrough(t *testing.T) {
 	agent, out := newTUIAdapterTestAgent(t)
 	adapter := NewTUIAdapter(agent, nil)

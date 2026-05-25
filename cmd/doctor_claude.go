@@ -215,5 +215,6 @@ func claudeDoctorSmokeUsage(usage claudeprovider.DiagnosticSmokeUsage) doctorSmo
 		OutputTokens:        usage.OutputTokens,
 		ThinkingTokens:      usage.ThinkingTokens,
 		CacheCreationTokens: usage.CacheCreationTokens,
+		BillingServiceTier:  usage.BillingServiceTier,
 	}
 }

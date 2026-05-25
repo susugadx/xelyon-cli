@@ -6,10 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
 func TestDiagnoseGemini_TextSmokeObservesUsageAndCost(t *testing.T) {
@@ -60,23 +63,84 @@ func TestDiagnoseGemini_TextSmokeObservesUsageAndCost(t *testing.T) {
 	}
 }
 
+func TestDiagnoseGemini_TextSmokeReportsActualBillingServiceTier(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeGeminiDiagnosticSSE(t, w, GeminiFunctionResponse{
+			Candidates: []GeminiFunctionCandidate{{
+				Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "xelyon gemini doctor ok"}}},
+			}},
+			UsageMetadata: &GeminiUsageMetadata{
+				PromptTokenCount:     10,
+				CandidatesTokenCount: 5,
+				ServiceTier:          config.GeminiServiceTierStandard,
+			},
+		})
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
+
+	cfg := config.DefaultConfig()
+	cfg.Gemini.ServiceTier = config.GeminiServiceTierPriority
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       cfg,
+		Model:        defaultGeminiDiagnosticModel,
+		CatalogModel: defaultGeminiDiagnosticModel,
+		RunSmoke:     true,
+		TextSmoke:    true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.Smoke == nil || report.Smoke.Usage.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("Smoke = %#v, want observed standard billing tier", report.Smoke)
+	}
+	if len(report.Smoke.Requests) != 1 || report.Smoke.Requests[0].Usage.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("Smoke requests = %#v, want request-level standard billing tier", report.Smoke.Requests)
+	}
+	if report.ServiceTier.ConfiguredTier != config.GeminiServiceTierPriority ||
+		report.ServiceTier.RequestBodyTier != config.GeminiServiceTierPriority ||
+		report.ServiceTier.PricingFamily != "gemini_priority" ||
+		report.ServiceTier.BillingTier != config.GeminiServiceTierStandard ||
+		report.ServiceTier.BillingPricingFamily != "gemini" {
+		t.Fatalf("ServiceTier = %+v, want priority request with observed standard billing", report.ServiceTier)
+	}
+	requireGeminiServiceTierCheckDetail(t, report,
+		"configured=priority",
+		"request_body=priority",
+		"pricing_family=gemini_priority",
+		"billing=standard",
+		"billing_pricing_family=gemini",
+	)
+	usageCheck := requireGeminiDiagnosticCheckStatus(t, report, "usage", DiagnosticStatusOK)
+	if !strings.Contains(usageCheck.Detail, "billing_tier=standard") {
+		t.Fatalf("usage detail = %q, want billing_tier=standard", usageCheck.Detail)
+	}
+
+	actualUsage := api.Usage{
+		InputTokens:        10,
+		OutputTokens:       5,
+		BillingServiceTier: config.GeminiServiceTierStandard,
+	}
+	want := cost.EstimateRequestCostWithCacheForConfig(cfg, "gemini", defaultGeminiDiagnosticModel, actualUsage)
+	priorityUsage := actualUsage
+	priorityUsage.BillingServiceTier = ""
+	priorityCost := cost.EstimateRequestCostWithCacheForConfig(cfg, "gemini", defaultGeminiDiagnosticModel, priorityUsage)
+	if want.Cost == priorityCost.Cost {
+		t.Fatalf("test pricing setup has no tier delta: standard=%v priority=%v", want, priorityCost)
+	}
+	if report.Smoke.Cost.PricingUnavailable || report.Smoke.Cost.USD != want.Cost {
+		t.Fatalf("Smoke cost = %+v, want actual-tier estimate %+v", report.Smoke.Cost, want)
+	}
+}
+
 func TestDiagnoseGemini_ToolSmokeRequiresToolCallAndUsesAnyMode(t *testing.T) {
 	var captured map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
-		writeGeminiDiagnosticSSE(t, w, GeminiFunctionResponse{
-			Candidates: []GeminiFunctionCandidate{{
-				Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{
-					FunctionCall: &api.GeminiFunctionCall{
-						Name: geminiDiagnosticToolName,
-						Args: map[string]any{"value": "gemini-tool-ok"},
-					},
-				}}},
-			}},
-			UsageMetadata: &GeminiUsageMetadata{PromptTokenCount: 8, CandidatesTokenCount: 4},
-		})
+		writeGeminiDiagnosticSSE(t, w, geminiDiagnosticToolSmokeResponse(8, 4))
 	}))
 	defer server.Close()
 
@@ -405,12 +469,7 @@ func TestDiagnoseGemini_MultiSmokeRequiresUsageForEveryRanRequest(t *testing.T) 
 		requestCount++
 		switch requestCount {
 		case 1:
-			writeGeminiDiagnosticSSE(t, w, GeminiFunctionResponse{
-				Candidates: []GeminiFunctionCandidate{{
-					Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "xelyon gemini doctor ok"}}},
-				}},
-				UsageMetadata: &GeminiUsageMetadata{PromptTokenCount: 10, CandidatesTokenCount: 5},
-			})
+			writeGeminiDiagnosticSSE(t, w, geminiDiagnosticTextSmokeResponse(10, 5))
 		case 2:
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"web search ok"}]}}]}`))
@@ -444,6 +503,68 @@ func TestDiagnoseGemini_MultiSmokeRequiresUsageForEveryRanRequest(t *testing.T) 
 	}
 	requireGeminiDiagnosticCheckStatus(t, report, "usage", DiagnosticStatusWarn)
 	requireGeminiDiagnosticCheckStatus(t, report, "cost", DiagnosticStatusWarn)
+}
+
+func TestDiagnoseGemini_MultiSmokeTimeoutAppliesPerRequest(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := requestCount.Add(1)
+		time.Sleep(150 * time.Millisecond)
+		switch n {
+		case 1:
+			writeGeminiDiagnosticSSE(t, w, geminiDiagnosticTextSmokeResponse(10, 5))
+		case 2:
+			writeGeminiDiagnosticSSE(t, w, geminiDiagnosticToolSmokeResponse(8, 4))
+		default:
+			t.Fatalf("unexpected request %d", n)
+		}
+	}))
+	defer server.Close()
+
+	setGeminiDiagnosticSmokeTestEnv(t, server.URL, "gemini-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        defaultGeminiDiagnosticModel,
+		CatalogModel: defaultGeminiDiagnosticModel,
+		RunSmoke:     true,
+		TextSmoke:    true,
+		ToolSmoke:    true,
+		SmokeTimeout: 250 * time.Millisecond,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want per-request timeout to allow both smoke requests: %#v", report.Checks)
+	}
+	if requestCount.Load() != 2 {
+		t.Fatalf("request count = %d, want 2", requestCount.Load())
+	}
+	if report.Smoke == nil || len(report.Smoke.Requests) != 2 {
+		t.Fatalf("Smoke = %#v, want text and tool smoke requests", report.Smoke)
+	}
+	requireGeminiDiagnosticCheckStatus(t, report, "tool_smoke", DiagnosticStatusOK)
+}
+
+func geminiDiagnosticTextSmokeResponse(promptTokens, candidateTokens int) GeminiFunctionResponse {
+	return GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{{
+			Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{Text: "xelyon gemini doctor ok"}}},
+		}},
+		UsageMetadata: &GeminiUsageMetadata{PromptTokenCount: promptTokens, CandidatesTokenCount: candidateTokens},
+	}
+}
+
+func geminiDiagnosticToolSmokeResponse(promptTokens, candidateTokens int) GeminiFunctionResponse {
+	return GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{{
+			Content: GeminiFunctionContent{Parts: []GeminiFunctionPart{{
+				FunctionCall: &api.GeminiFunctionCall{
+					Name: geminiDiagnosticToolName,
+					Args: map[string]any{"value": "gemini-tool-ok"},
+				},
+			}}},
+		}},
+		UsageMetadata: &GeminiUsageMetadata{PromptTokenCount: promptTokens, CandidatesTokenCount: candidateTokens},
+	}
 }
 
 func writeGeminiDiagnosticSSE(t *testing.T, w http.ResponseWriter, chunk GeminiFunctionResponse) {

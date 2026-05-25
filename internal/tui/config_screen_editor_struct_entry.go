@@ -54,8 +54,11 @@ func (cs *configScreen) toggleSelectedStructEntryBool() {
 		return
 	}
 	cur, _ := ef.Value.(bool)
-	ef.Value = !cur
-	cs.applyEntryFieldAndMark(ef)
+	updated := *ef
+	updated.Value = !cur
+	if cs.applyEntryFieldAndMark(updated) {
+		*ef = updated
+	}
 }
 
 func (cs *configScreen) activateSelectedStructEntryField() {
@@ -66,8 +69,11 @@ func (cs *configScreen) activateSelectedStructEntryField() {
 	switch ef.Type {
 	case "bool":
 		cur, _ := ef.Value.(bool)
-		ef.Value = !cur
-		cs.applyEntryFieldAndMark(ef)
+		updated := *ef
+		updated.Value = !cur
+		if cs.applyEntryFieldAndMark(updated) {
+			*ef = updated
+		}
 	case "string":
 		cs.beginStructEntryInputEdit(ef, func(value interface{}) string {
 			s, _ := value.(string)

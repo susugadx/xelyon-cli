@@ -380,9 +380,7 @@ func TestHeadless_MaxIterationsReached(t *testing.T) {
 
 	result := RunHeadlessWithConfig(context.Background(), "Keep calling tools forever", "test-model", provider, cfg)
 
-	if result.Status != "success" {
-		t.Fatalf("expected status 'success', got %q", result.Status)
-	}
+	requireHeadlessToolLoopLimitError(t, result, 10)
 	// maxIterations = 10 なので、10回のツール呼び出しが記録される
 	if len(result.ToolCalls) != 10 {
 		t.Errorf("expected 10 tool calls (max iterations), got %d", len(result.ToolCalls))

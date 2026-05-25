@@ -78,7 +78,7 @@ func (s *sseFinalizeState) appendUniqueFunctionCalls() {
 }
 
 func (s *sseFinalizeState) emitUsage(p *Provider) {
-	p.emitUsageMetadata(s.interpret.usage)
+	p.emitUsageMetadata(s.interpret.usage, s.interpret.billingServiceTier)
 }
 
 func (s *sseFinalizeState) emitFinalizeEffects(p *Provider, rescuedToolCallCount int) {

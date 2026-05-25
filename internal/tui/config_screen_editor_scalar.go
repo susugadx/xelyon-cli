@@ -49,7 +49,9 @@ func (cs *configScreen) handleSelectEdit(msg tea.KeyMsg, providerConfigKey strin
 
 	case isEnterKey(msg):
 		if cs.editSelect >= 0 && cs.editSelect < len(field.Options) {
-			cs.applyFieldValue(field.Path, field.Options[cs.editSelect], providerConfigKey)
+			if !cs.applyFieldValue(field.Path, field.Options[cs.editSelect], providerConfigKey) {
+				return configCommandNone, nil
+			}
 		}
 		cs.editMode = editNone
 		return configCommandNone, nil
@@ -96,7 +98,9 @@ func (cs *configScreen) handleInputEdit(msg tea.KeyMsg, providerConfigKey string
 		}
 
 		if newVal != nil {
-			cs.applyFieldValue(field.Path, newVal, providerConfigKey)
+			if !cs.applyFieldValue(field.Path, newVal, providerConfigKey) {
+				return configCommandNone, nil
+			}
 		}
 		cs.editMode = editNone
 		cs.editInput.Blur()

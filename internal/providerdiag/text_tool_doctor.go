@@ -231,11 +231,12 @@ func ContentHasToolCall(content, toolName string) bool {
 
 // SmokeUsage は doctor smoke で観測した usage を表す。
 type SmokeUsage struct {
-	InputTokens         int `json:"input_tokens"`
-	OutputTokens        int `json:"output_tokens"`
-	ThinkingTokens      int `json:"thinking_tokens"`
-	CachedInputTokens   int `json:"cached_input_tokens"`
-	CacheCreationTokens int `json:"cache_creation_tokens"`
+	InputTokens         int    `json:"input_tokens"`
+	OutputTokens        int    `json:"output_tokens"`
+	ThinkingTokens      int    `json:"thinking_tokens"`
+	CachedInputTokens   int    `json:"cached_input_tokens"`
+	CacheCreationTokens int    `json:"cache_creation_tokens"`
+	BillingServiceTier  string `json:"billing_service_tier,omitempty"`
 }
 
 // SmokeCost は doctor smoke の cost estimate を表す。
@@ -252,6 +253,7 @@ func SmokeUsageFromAPIUsage(usage api.Usage) SmokeUsage {
 		ThinkingTokens:      usage.ThinkingTokens,
 		CachedInputTokens:   usage.CachedInputTokens,
 		CacheCreationTokens: usage.CacheCreationTokens,
+		BillingServiceTier:  usage.BillingServiceTier,
 	}
 }
 
@@ -263,6 +265,7 @@ func APIUsageFromSmokeUsage(usage SmokeUsage) api.Usage {
 		ThinkingTokens:      usage.ThinkingTokens,
 		CachedInputTokens:   usage.CachedInputTokens,
 		CacheCreationTokens: usage.CacheCreationTokens,
+		BillingServiceTier:  usage.BillingServiceTier,
 	}
 }
 
@@ -270,7 +273,24 @@ func APIUsageFromSmokeUsage(usage SmokeUsage) api.Usage {
 func AddSmokeUsage(current, next SmokeUsage) SmokeUsage {
 	usage := APIUsageFromSmokeUsage(current)
 	usage.Add(APIUsageFromSmokeUsage(next))
-	return SmokeUsageFromAPIUsage(usage)
+	result := SmokeUsageFromAPIUsage(usage)
+	result.BillingServiceTier = mergeSmokeBillingServiceTier(current.BillingServiceTier, next.BillingServiceTier)
+	return result
+}
+
+func mergeSmokeBillingServiceTier(current, next string) string {
+	current = strings.TrimSpace(current)
+	next = strings.TrimSpace(next)
+	switch {
+	case current == "":
+		return next
+	case next == "":
+		return current
+	case current == next:
+		return current
+	default:
+		return "mixed"
+	}
 }
 
 // SmokeCostFromEstimate は cost estimate を doctor JSON DTO へ投影する。

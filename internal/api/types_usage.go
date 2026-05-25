@@ -12,6 +12,7 @@ type Usage struct {
 	CachedInputTokens   int     // キャッシュから読み取ったトークン数（割引対象）
 	CacheCreationTokens int     // キャッシュ作成に使用したトークン数（Claude: 1.25x課金）
 	StorageCost         float64 // トークン料金とは別枠の固定料金（USD、Gemini cache/Kimi web search など）
+	BillingServiceTier  string  // 実課金 tier（Gemini Priority downgrade など、空なら config の tier を使用）
 
 	// Web search 関連（Kimi built-in $web_search 用、検索結果 tokens は InputTokens に二重加算しない）
 	WebSearchCalls        int // built-in web search の呼び出し回数
@@ -26,6 +27,9 @@ func (u *Usage) Add(other Usage) {
 	u.CachedInputTokens += other.CachedInputTokens
 	u.CacheCreationTokens += other.CacheCreationTokens
 	u.StorageCost += other.StorageCost
+	if other.BillingServiceTier != "" {
+		u.BillingServiceTier = other.BillingServiceTier
+	}
 	u.WebSearchCalls += other.WebSearchCalls
 	u.WebSearchResultTokens += other.WebSearchResultTokens
 }

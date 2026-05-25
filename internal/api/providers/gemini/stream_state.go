@@ -22,6 +22,7 @@ type sseInterpretState struct {
 	thoughtParts        []map[string]any
 	rescuedToolJSONs    []string
 	usage               *GeminiUsageMetadata
+	billingServiceTier  string
 	suppressingToolJSON bool
 	toolJSONDepth       int
 	toolJSONInStr       bool
@@ -63,7 +64,7 @@ func (s *sseInterpretState) debugf(format string, args ...interface{}) {
 func (s *sseInterpretState) handleThinkingTimeout(thinkingTimeout time.Duration) error {
 	if !s.hadActionableOutput {
 		s.stopSpinner()
-		return &ErrThinkingTimeout{Message: fmt.Sprintf("thinking timeout: no actionable output received for %v (thought/progress data may have arrived, but no text or function call was produced)", thinkingTimeout)}
+		return &ErrThinkingTimeout{Message: fmt.Sprintf("thinking timeout: no Gemini progress or actionable output received for %v", thinkingTimeout)}
 	}
 
 	s.thinkingRetries++
@@ -74,10 +75,14 @@ func (s *sseInterpretState) handleThinkingTimeout(thinkingTimeout time.Duration)
 	return nil
 }
 
+func (s *sseInterpretState) resetThinkingTimer(timer *time.Timer, timeout time.Duration) {
+	resetTimer(timer, timeout)
+}
+
 func (s *sseInterpretState) resetThinkingProgress(timer *time.Timer, timeout time.Duration) {
 	s.hadActionableOutput = true
 	s.thinkingRetries = 0
-	resetTimer(timer, timeout)
+	s.resetThinkingTimer(timer, timeout)
 }
 
 func (s *sseInterpretState) processChunk(ctx context.Context, chunk GeminiFunctionResponse, thinkingTimer *time.Timer, thinkingTimeout time.Duration) {
@@ -120,12 +125,17 @@ func (s *sseInterpretState) processPart(ctx context.Context, part GeminiFunction
 	action := buildPartAction(part)
 	if action.collectThought {
 		s.collectThoughtPart(part)
+		s.resetThinkingTimer(thinkingTimer, thinkingTimeout)
 		return
 	}
 	if action.collectSignature {
 		s.collectSignaturePart(part)
 		if action.functionCall != nil {
 			s.handleFunctionCall(action.functionCall, action.thoughtSignature, thinkingTimer, thinkingTimeout)
+		} else if action.text != "" {
+			s.handleTextPart(ctx, action.text, thinkingTimer, thinkingTimeout)
+		} else {
+			s.resetThinkingTimer(thinkingTimer, thinkingTimeout)
 		}
 		return
 	}

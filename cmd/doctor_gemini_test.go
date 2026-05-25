@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	geminiprovider "github.com/susugadx/xelyon-cli/internal/api/providers/gemini"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func TestRootCommand_GeminiDoctorCommandParsesFlags(t *testing.T) {
@@ -42,7 +43,7 @@ func TestRootCommand_GeminiDoctorHelpShowsMinimalFlags(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--image-smoke", "--web-search-smoke", "--capabilities", "--require-capability", "--print-request", "--timeout", "--json", "Diagnose Gemini provider configuration"} {
+	for _, want := range []string{"--model", "--catalog-model", "--smoke", "--tool-smoke", "--image-smoke", "--web-search-smoke", "--capabilities", "--require-capability", "--print-request", "--timeout", "--json", "Diagnose Gemini provider configuration", "function-calling smoke", "Per-request timeout"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("output = %q, want Gemini doctor help substring %q", out.String(), want)
 		}
@@ -69,6 +70,13 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 		WebSearchSupported:     true,
 		ContextCachingEnabled:  true,
 		ThinkingEnabled:        false,
+		ServiceTier: providerdiag.GeminiServiceTierSnapshot{
+			ConfiguredTier:       "priority",
+			RequestBodyTier:      "priority",
+			PricingFamily:        "gemini_priority",
+			BillingTier:          "standard",
+			BillingPricingFamily: "gemini",
+		},
 		Checks: []geminiprovider.DiagnosticCheck{
 			{Name: "smoke", Status: geminiprovider.DiagnosticStatusOK, Message: "live Gemini smoke request succeeded"},
 		},
@@ -94,6 +102,7 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 				ThinkingTokens:      1,
 				CachedInputTokens:   3,
 				CacheCreationTokens: 0,
+				BillingServiceTier:  "standard",
 			},
 			Cost: geminiprovider.DiagnosticSmokeCost{
 				USD: 0.00012345,
@@ -107,10 +116,11 @@ func TestRenderGeminiDoctorTextIncludesRequestPreviewAndSmokeObservability(t *te
 		"Gemini doctor",
 		"Route: stream_generate_content_sse",
 		"Capabilities: function_calling=true image_input=true web_search=true context_caching=true thinking=false",
+		"Service tier: configured=priority, request_body=priority, pricing_family=gemini_priority, billing=standard, billing_pricing_family=gemini",
 		"Request preview:",
 		`"x-goog-api-key": "<redacted>"`,
 		"Smoke route: stream_generate_content_sse",
-		"Smoke usage: input=10 cached=3 output=4 reasoning=1 cache_creation=0",
+		"Smoke usage: input=10 cached=3 output=4 reasoning=1 cache_creation=0 billing_tier=standard",
 		"Smoke cost estimate: $0.00012345 USD",
 	})
 }

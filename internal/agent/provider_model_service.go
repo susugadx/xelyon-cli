@@ -20,6 +20,7 @@ type ModelSwitchOutcome struct {
 	OldModel      string
 	NewModel      string
 	ConfigSaved   bool
+	ValidationErr error
 	LoadConfigErr error
 	SaveConfigErr error
 }
@@ -57,17 +58,32 @@ func (a *Agent) SwitchModelForCurrentProvider(newModel string) ModelSwitchOutcom
 	}
 
 	outcome.OldModel = a.CurrentModel
-	a.clearCurrentProviderCache()
-	a.setCurrentModelAndSync(newModel)
+	if err := validateProviderModelSelection(a.cfg(), a.ProviderName, a.currentProviderConfigKey(), newModel, true); err != nil {
+		outcome.ValidationErr = err
+		return outcome
+	}
 
 	cfg, err := loadConfigForCommand()
 	if err != nil {
+		a.clearCurrentProviderCache()
+		a.setCurrentModelAndSync(newModel)
 		outcome.LoadConfigErr = err
 		return outcome
 	}
 
 	cfg.DefaultModel = newModel
-	a.SyncDefaultModelToProvider(cfg)
+	providerKey := a.syncDefaultModelToProviderForModel(cfg, newModel)
+	if err := validateProviderModelSelection(cfg, a.ProviderName, providerKey, newModel, true); err != nil {
+		outcome.ValidationErr = err
+		return outcome
+	}
+	if err := validateGeminiFunctionCallingConfigForSaveIfRelevant(cfg, a.ProviderName, cfg.DefaultProvider); err != nil {
+		outcome.ValidationErr = err
+		return outcome
+	}
+
+	a.clearCurrentProviderCache()
+	a.setCurrentModelAndSync(newModel)
 
 	if err := saveConfigForCommand(cfg); err != nil {
 		outcome.SaveConfigErr = err

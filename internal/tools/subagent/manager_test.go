@@ -69,7 +69,7 @@ func TestInferSubAgentModel(t *testing.T) {
 		{provider: "openai", want: "gpt-5.4-mini"},
 		{provider: "claude", want: "claude-haiku-4-5-20251001"},
 		{provider: "anthropic", want: "claude-haiku-4-5-20251001"},
-		{provider: "gemini", want: "gemini-3.1-flash-lite-preview"},
+		{provider: "gemini", want: "gemini-3.1-flash-lite"},
 		{provider: "deepseek", want: "deepseek-v4-flash"},
 		{provider: "groq", want: "llama-3.3-70b-versatile"},
 		{provider: "openrouter", want: "openai/gpt-5.4-mini"},
@@ -370,6 +370,44 @@ func TestManagerSpawnWaitCompleted(t *testing.T) {
 	}
 }
 
+// TestManagerWait_ErrorOutputPrefersErrorMessage は error result に Response が残っていても
+// wait_agent output では失敗理由を優先することを確認します。
+func TestManagerWait_ErrorOutputPrefersErrorMessage(t *testing.T) {
+	cfg := config.DefaultConfig()
+	provider := &managerTestProvider{name: "openai"}
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, _ *config.Config) *RunResult {
+			return &RunResult{
+				Status:       "error",
+				Response:     `{"tool":"read_file","args":{"path":"loop.go"}}`,
+				ErrorMessage: "tool loop limit reached (10 iterations)",
+			}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &managerTestProvider{name: providerName}, nil
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "looping task", "", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+
+	response := manager.Wait([]string{id}, 0)
+	if response.Status != "error" {
+		t.Fatalf("Wait().Status = %q, want error", response.Status)
+	}
+	if len(response.Results) != 1 {
+		t.Fatalf("len(Wait().Results) = %d, want 1", len(response.Results))
+	}
+	if response.Results[0].Status != "error" {
+		t.Fatalf("Wait().Results[0].Status = %q, want error", response.Results[0].Status)
+	}
+	if response.Results[0].Output != "tool loop limit reached (10 iterations)" {
+		t.Fatalf("Wait().Results[0].Output = %q, want error message", response.Results[0].Output)
+	}
+}
+
 // TestManagerSpawn_EmitsCompletionEvent は完了イベントが発行されることを確認します。
 func TestManagerSpawn_EmitsCompletionEvent(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -599,8 +637,8 @@ func TestManagerSpawn_PlaceholderModelFallsBackToMainProvider(t *testing.T) {
 	}
 	_ = manager.Wait([]string{id}, 0)
 
-	if gotModel != "gemini-3.1-flash-lite-preview" {
-		t.Fatalf("resolved model = %q, want gemini-3.1-flash-lite-preview", gotModel)
+	if gotModel != "gemini-3.1-flash-lite" {
+		t.Fatalf("resolved model = %q, want gemini-3.1-flash-lite", gotModel)
 	}
 }
 

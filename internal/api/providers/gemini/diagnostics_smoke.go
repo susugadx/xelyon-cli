@@ -22,17 +22,11 @@ const (
 )
 
 func runGeminiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report DiagnosticReport, options DiagnosticOptions) (DiagnosticSmokeResult, error) {
-	timeout := options.SmokeTimeout
-	if timeout <= 0 {
-		timeout = defaultGeminiDiagnosticSmokeTimeout
-	}
+	timeout := geminiDiagnosticSmokeTimeout(options)
 	maxOutputTokens := options.MaxOutputTokens
 	if maxOutputTokens <= 0 {
 		maxOutputTokens = defaultGeminiDiagnosticSmokeMaxOutputTokens
 	}
-
-	smokeCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	smokeCfg := geminiDiagnosticPolicyConfig(cfg, report.Model, report.CatalogModel, maxOutputTokens)
 	output := options.SmokeOutput
@@ -46,7 +40,7 @@ func runGeminiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 	result := DiagnosticSmokeResult{Ran: true}
 	started := time.Now()
 	for _, request := range geminiDiagnosticRequests(options) {
-		requestResult, err := runGeminiDiagnosticSmokeRequest(smokeCtx, smokeCfg, provider, report, request, output)
+		requestResult, err := runGeminiDiagnosticSmokeRequestWithTimeout(ctx, timeout, smokeCfg, provider, report, request, output)
 		providerdiag.AddMultimodalSmokeRequestResult(&result, requestResult)
 		if err != nil {
 			result.Duration = time.Since(started).Round(time.Millisecond).String()
@@ -55,6 +49,27 @@ func runGeminiDiagnosticSmoke(ctx context.Context, cfg *config.Config, report Di
 	}
 	result.Duration = time.Since(started).Round(time.Millisecond).String()
 	return result, nil
+}
+
+func geminiDiagnosticSmokeTimeout(options DiagnosticOptions) time.Duration {
+	if options.SmokeTimeout > 0 {
+		return options.SmokeTimeout
+	}
+	return defaultGeminiDiagnosticSmokeTimeout
+}
+
+func runGeminiDiagnosticSmokeRequestWithTimeout(
+	ctx context.Context,
+	timeout time.Duration,
+	cfg *config.Config,
+	provider *Provider,
+	report DiagnosticReport,
+	request geminiDiagnosticRequest,
+	output io.Writer,
+) (DiagnosticSmokeRequestResult, error) {
+	requestCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return runGeminiDiagnosticSmokeRequest(requestCtx, cfg, provider, report, request, output)
 }
 
 func runGeminiDiagnosticSmokeRequest(

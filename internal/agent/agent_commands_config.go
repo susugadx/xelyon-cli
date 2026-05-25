@@ -62,6 +62,10 @@ func handleModelCommand(agent *Agent, args []string) bool {
 func switchModelForCurrentProviderWithOutput(agent *Agent, newModel string) error {
 	out := agent.output()
 	outcome := agent.SwitchModelForCurrentProvider(newModel)
+	if outcome.ValidationErr != nil {
+		red.Fprintf(out, "Error: %v\n", outcome.ValidationErr)
+		return outcome.ValidationErr
+	}
 
 	green.Fprintf(out, "✅ Model switched: %s → %s\n", outcome.OldModel, outcome.NewModel)
 	if agent.CurrentProvider != nil {
@@ -102,8 +106,12 @@ func handleConfigCommand(agent *Agent, args []string) bool {
 	// /config model <model-name> → モデル変更
 	if len(args) >= 2 && args[0] == "model" {
 		newModel := args[1]
+		if err := validateConfigModelChange(agent, cfg, newModel); err != nil {
+			red.Fprintf(out, "Error: %v\n", err)
+			return true
+		}
 
-		// 設定更新（バリデーションなし、任意のモデル名を受け付ける）
+		// 設定更新
 		cfg.DefaultModel = newModel
 
 		// プロバイダー別の設定がある場合はそちらも更新
@@ -155,19 +163,43 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 				break // 'b' で戻る
 			}
 
+			beforeStructMapEdit := (*config.Config)(nil)
+			if selectedField.FieldType == config.FieldTypeStructMap {
+				beforeStructMapEdit = config.CloneConfig(cfg)
+			}
+
 			// フィールド編集
 			newValue, changed, err := menu.EditField(selectedField)
 			if err != nil {
+				restoreConfigSnapshot(cfg, beforeStructMapEdit)
 				red.Fprintf(out, "Error: %v\n", err)
 				continue
 			}
 
 			if !changed {
+				restoreConfigSnapshot(cfg, beforeStructMapEdit)
+				continue
+			}
+
+			if selectedField.Path == "default_model" {
+				if _, ok := newValue.(string); !ok {
+					red.Fprintf(out, "Error setting value: default_model must be a string\n")
+					continue
+				}
+			}
+			if err := validateInteractiveScalarConfigChange(agent, cfg, selectedField.Path, newValue); err != nil {
+				red.Fprintf(out, "Error: %v\n", err)
 				continue
 			}
 
 			// StructMap型は直接Configを編集するので、保存のみ
 			if selectedField.FieldType == config.FieldTypeStructMap {
+				if err := validateInteractiveStructMapConfigChange(cfg, selectedField.Path); err != nil {
+					restoreConfigSnapshot(cfg, beforeStructMapEdit)
+					red.Fprintf(out, "Error: %v\n", err)
+					_, menu, selectedCategory = refreshInteractiveConfigMenu(agent, cfg, selectedCategory)
+					continue
+				}
 				if err := saveConfigForCommand(cfg); err != nil {
 					red.Fprintf(out, "Error saving: %v\n", err)
 				} else {
@@ -178,15 +210,7 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 					}
 				}
 				// カテゴリを再構築
-				categories = buildConfigRegistryForCommand(cfg)
-				menu = newConfigMenuForCommand(cfg, categories, agent.ui())
-				// 現在のカテゴリを更新
-				for i := range categories {
-					if categories[i].Name == selectedCategory.Name {
-						selectedCategory = &categories[i]
-						break
-					}
-				}
+				_, menu, selectedCategory = refreshInteractiveConfigMenu(agent, cfg, selectedCategory)
 				continue
 			}
 
@@ -231,6 +255,54 @@ func runInteractiveConfig(agent *Agent, cfg *config.Config) {
 	}
 }
 
+func validateInteractiveStructMapConfigChange(cfg *config.Config, path string) error {
+	if path != "provider_models" {
+		return nil
+	}
+	return validateGeminiFunctionCallingConfigForSave(cfg)
+}
+
+func validateInteractiveScalarConfigChange(agent *Agent, cfg *config.Config, path string, value interface{}) error {
+	switch path {
+	case "default_model":
+		strValue, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("default_model must be a string")
+		}
+		return validateConfigModelChange(agent, cfg, strValue)
+	case "default_provider":
+		candidate := config.CloneConfig(cfg)
+		if err := config.SetFieldValue(candidate, path, value); err != nil {
+			return err
+		}
+		return validateGeminiFunctionCallingConfigForSave(candidate)
+	default:
+		return nil
+	}
+}
+
+func restoreConfigSnapshot(cfg, snapshot *config.Config) {
+	if cfg == nil || snapshot == nil {
+		return
+	}
+	*cfg = *config.CloneConfig(snapshot)
+}
+
+func refreshInteractiveConfigMenu(agent *Agent, cfg *config.Config, selectedCategory *config.ConfigCategory) ([]config.ConfigCategory, configCommandMenu, *config.ConfigCategory) {
+	categories := buildConfigRegistryForCommand(cfg)
+	menu := newConfigMenuForCommand(cfg, categories, agent.ui())
+	if selectedCategory == nil {
+		return categories, menu, selectedCategory
+	}
+	for i := range categories {
+		if categories[i].Name == selectedCategory.Name {
+			selectedCategory = &categories[i]
+			break
+		}
+	}
+	return categories, menu, selectedCategory
+}
+
 // handleProviderCommand はプロバイダーを切り替える。
 func handleProviderCommand(agent *Agent, args []string) bool {
 	return handleProviderSwitchCommand(agent, args, "/provider")
@@ -248,7 +320,7 @@ func handleProviderSwitchCommand(agent *Agent, args []string, commandName string
 	if len(args) == 0 {
 		yellow.Fprintf(out, "Usage: %s <provider> [model]\n", commandName)
 		yellow.Fprintf(out, "Available providers: %s\n", providerList)
-		yellow.Fprintf(out, "Example: %s gemini gemini-2.0-flash-exp\n", commandName)
+		yellow.Fprintf(out, "Example: %s gemini gemini-3.5-flash\n", commandName)
 		return true
 	}
 

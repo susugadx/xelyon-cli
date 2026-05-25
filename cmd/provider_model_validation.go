@@ -15,7 +15,11 @@ func validateSelectedProviderModel(cfg *config.Config, provider api.Provider, mo
 	if provider == nil {
 		return nil
 	}
-	if config.CanonicalProviderName(provider.Name()) != "azure" {
+	runtimeProvider := config.CanonicalProviderName(provider.Name())
+	if runtimeProvider == "gemini" {
+		return config.ValidateGeminiFunctionCallingSelection(cfg, runtimeProvider, model)
+	}
+	if runtimeProvider != "azure" {
 		return nil
 	}
 

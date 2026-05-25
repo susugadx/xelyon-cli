@@ -11,6 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -43,6 +44,13 @@ func requestUsageCost(cfg *config.Config, provider, model string, usage api.Usag
 
 func buildLastRequestTable(cfg *config.Config, provider, model string, usage *api.Usage, costOverride *cost.CostEstimate) *ui.Table {
 	return renderLastRequestTable(cfg, provider, model, usage, costOverride)
+}
+
+func geminiServiceTierStatusDetail(cfg *config.Config, provider string, usage *api.Usage) string {
+	if config.ActiveProviderConfigKey(provider) != "gemini" {
+		return ""
+	}
+	return providerdiag.NewGeminiServiceTierSnapshot(cfg, usage).Detail()
 }
 
 func lastChatTurnUsageForStatus(stats *SessionStats) (*api.Usage, *cost.CostEstimate) {

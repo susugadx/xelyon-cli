@@ -10,6 +10,8 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/cost"
 )
 
 // cacheEntry はモデル別キャッシュの状態を保持する
@@ -249,9 +251,10 @@ func (p *Provider) updateOrUseCache(ctx context.Context, systemPrompt string, hi
 
 	// ストレージ料金を概算して通知
 	if p.usageCallback != nil {
-		ttlHours := float64(ttl) / 3600.0
-		storageCost := float64(totalTokens) / 1_000_000.0 * 4.50 * ttlHours
-		p.usageCallback(api.Usage{StorageCost: storageCost})
+		estimate := cost.EstimateCacheStorageCostForConfig(config.FromContext(ctx), "gemini", model, totalTokens, ttl)
+		if !estimate.PricingUnavailable && estimate.Cost > 0 {
+			p.usageCallback(api.Usage{StorageCost: estimate.Cost})
+		}
 	}
 
 	if debug {

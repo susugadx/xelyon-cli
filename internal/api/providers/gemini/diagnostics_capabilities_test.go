@@ -91,7 +91,7 @@ func TestDiagnoseGemini_RequiredModelGatedCapabilitiesUnknownForUnverifiedModel(
 	}
 }
 
-func TestDiagnoseGemini_RequiredModelGatedCapabilitiesUseTrustedCatalogModel(t *testing.T) {
+func TestDiagnoseGemini_RequiredModelGatedCapabilitiesUseHiddenTrustedCatalogModel(t *testing.T) {
 	t.Setenv(geminiAPIKeyEnv, "")
 	t.Setenv(geminiAPIURLEnv, "://bad")
 	t.Setenv("XELYON_MODEL", "")
@@ -99,7 +99,7 @@ func TestDiagnoseGemini_RequiredModelGatedCapabilitiesUseTrustedCatalogModel(t *
 	report := Diagnose(context.Background(), DiagnosticOptions{
 		Config:               config.DefaultConfig(),
 		Model:                "corp-gemini-alias",
-		CatalogModel:         "gemini-3.1-pro-preview-customtools",
+		CatalogModel:         "gemini-3.1-pro-preview",
 		RequiredCapabilities: []string{providerdiag.RequiredCapabilityImageInput, providerdiag.RequiredCapabilityWebSearch},
 	})
 	if report.HasFailures() {

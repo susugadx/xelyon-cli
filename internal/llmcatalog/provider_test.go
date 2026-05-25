@@ -171,6 +171,22 @@ func TestProviderDescriptorFor_Kimi(t *testing.T) {
 	}
 }
 
+func TestProviderDescriptorFor_GeminiUsesStableHelperModels(t *testing.T) {
+	desc, ok := ProviderDescriptorFor("gemini")
+	if !ok {
+		t.Fatal("ProviderDescriptorFor(gemini) ok = false, want true")
+	}
+	if desc.DefaultSubAgentModel != "gemini-3.1-flash-lite" {
+		t.Fatalf("DefaultSubAgentModel = %q, want gemini-3.1-flash-lite", desc.DefaultSubAgentModel)
+	}
+	if desc.CompressionModel != "gemini-3.1-flash-lite" {
+		t.Fatalf("CompressionModel = %q, want gemini-3.1-flash-lite", desc.CompressionModel)
+	}
+	if desc.ModelDefaults.DefaultModel != "gemini-3.1-pro-preview-customtools" {
+		t.Fatalf("ModelDefaults.DefaultModel = %q, want gemini-3.1-pro-preview-customtools", desc.ModelDefaults.DefaultModel)
+	}
+}
+
 func TestNativeWebSearchProviderKeys_IncludesKimiAndMoonshotAlias(t *testing.T) {
 	got := NativeWebSearchProviderKeys(true)
 	want := []string{"kimi", "moonshot", "openai", "gemini", "claude", "anthropic"}

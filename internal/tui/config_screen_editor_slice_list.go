@@ -82,7 +82,10 @@ func (cs *configScreen) closeEntrySliceEdit() {
 	ef := &cs.editEntryFields[cs.editEntryIndex]
 	items := make([]string, len(cs.editSliceItems))
 	copy(items, cs.editSliceItems)
-	ef.Value = items
-	cs.applyEntryFieldAndMark(ef)
-	cs.editEntryFieldEdit = ""
+	updated := *ef
+	updated.Value = items
+	if cs.applyEntryFieldAndMark(updated) {
+		*ef = updated
+		cs.editEntryFieldEdit = ""
+	}
 }

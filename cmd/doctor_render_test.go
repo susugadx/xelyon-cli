@@ -22,6 +22,7 @@ func TestRenderDoctorSmokeRequestLine(t *testing.T) {
 			OutputTokens:        4,
 			ThinkingTokens:      2,
 			CacheCreationTokens: 1,
+			BillingServiceTier:  "standard",
 		},
 	}, doctorSmokeRequestRenderOptions{IncludeRoute: true, PrintError: true, PrintUsageAndCost: true})
 
@@ -29,7 +30,7 @@ func TestRenderDoctorSmokeRequestLine(t *testing.T) {
 		"Smoke content web_search: Summary:\n" +
 		"web search ok\n" +
 		"Smoke error web_search: request failed\n" +
-		"Smoke usage web_search: input=10 cached=3 output=4 reasoning=2 cache_creation=1\n" +
+		"Smoke usage web_search: input=10 cached=3 output=4 reasoning=2 cache_creation=1 billing_tier=standard\n" +
 		"Smoke cost estimate web_search: N/A (usage unavailable)\n"
 	if out.String() != want {
 		t.Fatalf("rendered request =\n%s\nwant\n%s", out.String(), want)

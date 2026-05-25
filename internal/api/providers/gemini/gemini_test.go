@@ -14,13 +14,16 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 // Test helpers
 
 func mockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(handler)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return server
 }
 
 func assertRequestMethod(t *testing.T, r *http.Request, expected string) {
@@ -67,6 +70,26 @@ func TestNew(t *testing.T) {
 
 	if provider == nil {
 		t.Fatal("New() returned nil")
+	}
+}
+
+func TestGeminiResponseHeaderTimeout_ServiceTierFlex(t *testing.T) {
+	flexCfg := config.DefaultConfig()
+	flexCfg.Gemini.ServiceTier = config.GeminiServiceTierFlex
+	flexCtx := config.WithContext(context.Background(), flexCfg)
+
+	if got := geminiResponseHeaderTimeout(flexCtx, "gemini-2.5-flash", defaultResponseHeaderTimeout); got != geminiFlexResponseHeaderTimeout {
+		t.Fatalf("flex response header timeout = %s, want %s", got, geminiFlexResponseHeaderTimeout)
+	}
+
+	standardCtx := config.WithContext(context.Background(), config.DefaultConfig())
+	if got := geminiResponseHeaderTimeout(standardCtx, "gemini-2.5-flash", defaultResponseHeaderTimeout); got != defaultResponseHeaderTimeout {
+		t.Fatalf("standard response header timeout = %s, want %s", got, defaultResponseHeaderTimeout)
+	}
+
+	customTimeout := 2 * time.Second
+	if got := geminiResponseHeaderTimeout(flexCtx, "gemini-2.5-flash", customTimeout); got != customTimeout {
+		t.Fatalf("custom response header timeout = %s, want %s", got, customTimeout)
 	}
 }
 
@@ -267,6 +290,29 @@ func TestProvider_ChatWithImage_WithImage(t *testing.T) {
 	}
 }
 
+func TestProvider_ChatWithImage_UnsupportedFunctionCallingModelFailsBeforeRequest(t *testing.T) {
+	var requestCount atomic.Int32
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		t.Fatalf("unsupported image function-calling model should fail before request")
+	})
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	p := New("test-key")
+	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png"}
+
+	_, err := p.ChatWithImage(context.Background(), "System", nil, "Describe this", image, "gemini-2.0-flash-lite")
+	if err == nil {
+		t.Fatal("ChatWithImage() error = nil, want unsupported function calling error")
+	}
+	if requestCount.Load() != 0 {
+		t.Fatalf("requestCount = %d, want no network request", requestCount.Load())
+	}
+}
+
 // ===== Function Calling Tests =====
 
 func TestProvider_SetMCPEnabled(t *testing.T) {
@@ -344,6 +390,100 @@ func TestProvider_ChatWithTools_FunctionCalling(t *testing.T) {
 	// テキストとツール呼び出しが含まれていることを確認
 	if result == "" {
 		t.Error("ChatWithTools() should return non-empty result")
+	}
+}
+
+func TestProvider_ChatWithTools_UnsupportedFunctionCallingModelFailsBeforeRequest(t *testing.T) {
+	var requestCount atomic.Int32
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		t.Fatalf("unsupported function-calling model should fail before request")
+	})
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(context.Background(), "System", history, "gemini-2.0-flash-lite")
+	if err == nil {
+		t.Fatal("ChatWithTools() error = nil, want unsupported function calling error")
+	}
+	if !strings.Contains(err.Error(), "function calling is not supported") ||
+		!strings.Contains(err.Error(), "gemini-3.1-flash-lite") {
+		t.Fatalf("ChatWithTools() error = %q, want unsupported function calling guidance", err.Error())
+	}
+	if requestCount.Load() != 0 {
+		t.Fatalf("requestCount = %d, want no network request", requestCount.Load())
+	}
+}
+
+func TestProvider_ChatWithTools_UnsupportedCatalogModelFailsBeforeRequest(t *testing.T) {
+	var requestCount atomic.Int32
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		t.Fatalf("unsupported catalog_model should fail before request")
+	})
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		ModelOverrides: map[string]config.ModelOverride{
+			"corp-lite": {CatalogModel: "gemini-2.0-flash-lite"},
+		},
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(ctx, "System", history, "corp-lite")
+	if err == nil {
+		t.Fatal("ChatWithTools() error = nil, want unsupported catalog_model error")
+	}
+	if !strings.Contains(err.Error(), "corp-lite (catalog_model=gemini-2.0-flash-lite)") {
+		t.Fatalf("ChatWithTools() error = %q, want request model and catalog_model detail", err.Error())
+	}
+	if requestCount.Load() != 0 {
+		t.Fatalf("requestCount = %d, want no network request", requestCount.Load())
+	}
+}
+
+func TestProvider_ChatWithTools_UnsupportedRequestModelFailsEvenWithSupportedCatalogModel(t *testing.T) {
+	var requestCount atomic.Int32
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		t.Fatalf("unsupported request model should fail before request")
+	})
+
+	originalURL := os.Getenv("GEMINI_API_URL")
+	defer os.Setenv("GEMINI_API_URL", originalURL)
+	os.Setenv("GEMINI_API_URL", server.URL)
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "gemini-2.0-flash-lite",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	p := New("test-key")
+	history := []api.Message{{Role: "user", Content: "Hello"}}
+
+	_, err := p.ChatWithTools(ctx, "System", history, "gemini-2.0-flash-lite")
+	if err == nil {
+		t.Fatal("ChatWithTools() error = nil, want unsupported request model error")
+	}
+	if !strings.Contains(err.Error(), "gemini-2.0-flash-lite (catalog_model=gemini-3.5-flash)") {
+		t.Fatalf("ChatWithTools() error = %q, want request model and catalog_model detail", err.Error())
+	}
+	if requestCount.Load() != 0 {
+		t.Fatalf("requestCount = %d, want no network request", requestCount.Load())
 	}
 }
 
@@ -720,6 +860,37 @@ func TestErrResponseStartTimeout_ErrorType(t *testing.T) {
 	}
 }
 
+func TestGeminiResponseHeaderTimeout_ThinkingRequestExtendsDefaultOnly(t *testing.T) {
+	ctx := newGeminiSSETestContext(30, 120)
+	if got := geminiResponseHeaderTimeout(ctx, "gemini-3.5-flash", defaultResponseHeaderTimeout); got != 120*time.Second {
+		t.Fatalf("geminiResponseHeaderTimeout(thinking default) = %s, want 120s", got)
+	}
+	if got := geminiResponseHeaderTimeout(ctx, "gemini-2.0-flash", defaultResponseHeaderTimeout); got != defaultResponseHeaderTimeout {
+		t.Fatalf("geminiResponseHeaderTimeout(non-thinking) = %s, want %s", got, defaultResponseHeaderTimeout)
+	}
+	if got := geminiResponseHeaderTimeout(ctx, "gemini-3.5-flash", time.Second); got != time.Second {
+		t.Fatalf("geminiResponseHeaderTimeout(custom transport) = %s, want 1s", got)
+	}
+}
+
+func TestGeminiTimeoutPolicy_UsesCatalogModelForThinkingAlias(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Streaming.IdleTimeoutSeconds = 30
+	cfg.Streaming.ThinkingTimeoutSeconds = 120
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-gemini",
+		CatalogModel: "gemini-3.5-flash",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	if got := geminiResponseHeaderTimeout(ctx, "corp-gemini", defaultResponseHeaderTimeout); got != 120*time.Second {
+		t.Fatalf("geminiResponseHeaderTimeout(alias) = %s, want 120s", got)
+	}
+	if got := geminiTransportIdleTimeout(ctx, "corp-gemini", cfg); got != 120*time.Second {
+		t.Fatalf("geminiTransportIdleTimeout(alias) = %s, want 120s", got)
+	}
+}
+
 func TestDoRequestWithRetry_ResponseStartTimeout(t *testing.T) {
 	// サーバーがレスポンスヘッダーを返さない場合に ErrResponseStartTimeout が返される
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -746,7 +917,7 @@ func TestDoRequestWithRetry_ResponseStartTimeout(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", "test-key")
 
-	_, err = p.doRequestWithRetry(context.Background(), req, []byte(`{}`))
+	_, err = p.doRequestWithRetry(context.Background(), req, []byte(`{}`), "gemini-2.0-flash")
 	if err == nil {
 		t.Fatal("doRequestWithRetry() should return error for timeout")
 	}

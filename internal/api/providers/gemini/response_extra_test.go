@@ -60,7 +60,7 @@ func TestHandleSSEResponse_RescuesCodeBlockToolJSONAndReportsUsage(t *testing.T)
 		},
 	})
 
-	got, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "")
+	got, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "", "")
 	if err != nil {
 		t.Fatalf("handleSSEResponse() error = %v", err)
 	}
@@ -78,6 +78,74 @@ func TestHandleSSEResponse_RescuesCodeBlockToolJSONAndReportsUsage(t *testing.T)
 	}
 }
 
+func TestHandleSSEResponse_ReportsBillingServiceTierDowngrade(t *testing.T) {
+	p := New("test-key")
+	var usage api.Usage
+	p.SetUsageCallback(func(u api.Usage) {
+		usage = u
+	})
+
+	ctx, _, _ := newGeminiResponseContext()
+	cfg := config.DefaultConfig()
+	cfg.Gemini.ServiceTier = config.GeminiServiceTierPriority
+	ctx = config.WithContext(ctx, cfg)
+
+	body := geminiSSEPayload(t, GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{{
+			Content: GeminiFunctionContent{
+				Parts: []GeminiFunctionPart{{Text: "done"}},
+			},
+		}},
+		UsageMetadata: &GeminiUsageMetadata{
+			PromptTokenCount:     11,
+			CandidatesTokenCount: 5,
+		},
+	})
+	resp := geminiSSEResponse(body)
+	resp.Header = make(http.Header)
+	resp.Header.Set("x-gemini-service-tier", config.GeminiServiceTierStandard)
+
+	if _, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash"); err != nil {
+		t.Fatalf("handleSSEResponse() error = %v", err)
+	}
+	if usage.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("BillingServiceTier = %q, want standard downgrade", usage.BillingServiceTier)
+	}
+}
+
+func TestHandleSSEResponse_ReportsBillingServiceTierFromUsageMetadata(t *testing.T) {
+	p := New("test-key")
+	var usage api.Usage
+	p.SetUsageCallback(func(u api.Usage) {
+		usage = u
+	})
+
+	ctx, _, _ := newGeminiResponseContext()
+	cfg := config.DefaultConfig()
+	cfg.Gemini.ServiceTier = config.GeminiServiceTierPriority
+	ctx = config.WithContext(ctx, cfg)
+
+	body := geminiSSEPayload(t, GeminiFunctionResponse{
+		Candidates: []GeminiFunctionCandidate{{
+			Content: GeminiFunctionContent{
+				Parts: []GeminiFunctionPart{{Text: "done"}},
+			},
+		}},
+		UsageMetadata: &GeminiUsageMetadata{
+			PromptTokenCount:     11,
+			CandidatesTokenCount: 5,
+			ServiceTier:          config.GeminiServiceTierStandard,
+		},
+	})
+
+	if _, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "", "gemini-3.5-flash"); err != nil {
+		t.Fatalf("handleSSEResponse() error = %v", err)
+	}
+	if usage.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("BillingServiceTier = %q, want usageMetadata standard downgrade", usage.BillingServiceTier)
+	}
+}
+
 func TestHandleSSEResponse_NoContentReturnsError(t *testing.T) {
 	p := New("test-key")
 	ctx, _, _ := newGeminiResponseContext()
@@ -87,7 +155,7 @@ func TestHandleSSEResponse_NoContentReturnsError(t *testing.T) {
 		UsageMetadata: &GeminiUsageMetadata{PromptTokenCount: 1},
 	})
 
-	_, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "")
+	_, err := p.handleSSEResponse(ctx, geminiSSEResponse(body), nil, "", "")
 	if err == nil {
 		t.Fatal("handleSSEResponse() should return error when stream has no content")
 	}

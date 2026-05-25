@@ -162,5 +162,6 @@ func bedrockDoctorSmokeUsage(usage bedrockprovider.DiagnosticSmokeUsage) doctorS
 		OutputTokens:        usage.OutputTokens,
 		ThinkingTokens:      usage.ThinkingTokens,
 		CacheCreationTokens: usage.CacheCreationTokens,
+		BillingServiceTier:  usage.BillingServiceTier,
 	}
 }

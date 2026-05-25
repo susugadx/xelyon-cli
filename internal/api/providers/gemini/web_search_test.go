@@ -76,6 +76,47 @@ func TestWebSearch_Success(t *testing.T) {
 	}
 }
 
+func TestWebSearch_ReportsBillingServiceTierFromUsageMetadata(t *testing.T) {
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"candidates": [
+				{
+					"content": {"parts": [{"text": "Grounded response."}]},
+					"groundingMetadata": {
+						"groundingChunks": [
+							{"web": {"uri": "https://example.com", "title": "Example"}}
+						]
+					}
+				}
+			],
+			"usageMetadata": {
+				"promptTokenCount": 12,
+				"candidatesTokenCount": 6,
+				"serviceTier": "standard"
+			}
+		}`))
+	})
+
+	t.Setenv("GEMINI_API_URL", server.URL)
+	t.Setenv("GEMINI_API_KEY", "test-key")
+
+	cfg := config.DefaultConfig()
+	cfg.Gemini.ServiceTier = config.GeminiServiceTierPriority
+	ctx := config.WithContext(context.Background(), cfg)
+	var usage api.Usage
+	ctx = websearch.WithUsageCallback(ctx, func(observed api.Usage) {
+		usage = observed
+	})
+
+	if _, err := WebSearchWithContext(ctx, "downgraded priority", "gemini-3.1-pro-preview-customtools"); err != nil {
+		t.Fatalf("WebSearchWithContext() error = %v", err)
+	}
+	if usage.BillingServiceTier != config.GeminiServiceTierStandard {
+		t.Fatalf("BillingServiceTier = %q, want usageMetadata standard downgrade", usage.BillingServiceTier)
+	}
+}
+
 func TestWebSearch_LegacyModelUsesGoogleSearchRetrieval(t *testing.T) {
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any

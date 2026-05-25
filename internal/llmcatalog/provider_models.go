@@ -36,11 +36,12 @@ var knownProviderModels = map[string][]string{
 		"o1",
 	},
 	"gemini": {
+		"gemini-3.5-flash",
+		"gemini-3.1-flash-lite",
 		"gemini-3.1-pro-preview-customtools",
 		"gemini-3.1-pro-preview",
 		"gemini-3.1-pro",
 		"gemini-3.1-flash",
-		"gemini-3.1-flash-lite",
 		"gemini-3.1-flash-lite-preview",
 		"gemini-3-pro-preview",
 		"gemini-3-flash",
@@ -49,8 +50,10 @@ var knownProviderModels = map[string][]string{
 		"gemini-2.5-flash",
 		"gemini-2.5-flash-lite",
 		"gemini-2.0-flash",
+		"gemini-2.0-flash-001",
 		"gemini-2.0-flash-exp",
 		"gemini-2.0-flash-lite",
+		"gemini-2.0-flash-lite-001",
 		"gemini-1.5-pro",
 		"gemini-1.5-flash",
 	},
@@ -141,29 +144,69 @@ var knownProviderModelPrefixes = map[string][]string{
 	},
 }
 
-// KnownModelNamesForProvider は picker 表示用の既知 model 名を provider ごとの安定順で返す。
-// Azure は deployment 名をユーザー環境が所有するため、ここでは候補を返さない。
+// KnownModelNamesForProvider は provider catalog に載る exact model 名を安定順で返す。
+// Azure は deployment 名をユーザー環境が所有するため、ここでは catalog 候補を返さない。
 func KnownModelNamesForProvider(provider string) []string {
 	key := CanonicalProviderKey(provider)
 	if key == "azure" {
 		return nil
 	}
 	models := knownProviderModels[key]
-	return cloneStrings(models)
+	return append([]string(nil), models...)
+}
+
+// RecommendedModelNamesForProvider は picker 表示用の推奨 model 名を provider ごとの安定順で返す。
+func RecommendedModelNamesForProvider(provider string) []string {
+	key := CanonicalProviderKey(provider)
+	if key == "azure" {
+		return nil
+	}
+	models := KnownModelNamesForProvider(key)
+	visible := make([]string, 0, len(models))
+	for _, model := range models {
+		if pickerVisibleModelForProvider(key, model) {
+			visible = append(visible, model)
+		}
+	}
+	return visible
+}
+
+// IsExactKnownModelNameForProvider は picker 表示対象外も含め、provider 所有の既知 catalog model 名か返す。
+func IsExactKnownModelNameForProvider(provider, model string) bool {
+	key := CanonicalProviderKey(provider)
+	model = CanonicalModelNameForProvider(key, model)
+	if key == "" || model == "" {
+		return false
+	}
+	for _, known := range knownProviderModels[key] {
+		if strings.EqualFold(model, known) {
+			return true
+		}
+	}
+	return false
+}
+
+// CanonicalModelNameForProvider は provider catalog lookup 用の model 名を正規化する。
+func CanonicalModelNameForProvider(provider, model string) string {
+	key := CanonicalProviderKey(provider)
+	model = strings.TrimSpace(model)
+	if key == "gemini" {
+		model = strings.ToLower(model)
+		model = strings.TrimPrefix(model, "models/")
+	}
+	return model
 }
 
 // IsKnownModelNameForProvider は model が provider 所有の既知 catalog 名または既知 prefix か返す。
 func IsKnownModelNameForProvider(provider, model string) bool {
 	key := CanonicalProviderKey(provider)
-	model = strings.TrimSpace(model)
+	model = CanonicalModelNameForProvider(key, model)
 	if key == "" || model == "" {
 		return false
 	}
 
-	for _, known := range KnownModelNamesForProvider(key) {
-		if strings.EqualFold(model, known) {
-			return true
-		}
+	if IsExactKnownModelNameForProvider(key, model) {
+		return true
 	}
 
 	normalized := strings.ToLower(model)

@@ -47,6 +47,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	appendValidationIssues(&result, validateNumericRangeIssues(cfg))
 	appendValidationIssues(&result, validateBashSafetyLevelIssues(cfg))
 	appendValidationIssues(&result, validateAgentInstructionIssues(cfg))
+	appendValidationIssues(&result, validateGeminiIssues(cfg))
 
 	return result
 }
@@ -115,19 +116,26 @@ func ApplyAutoFixes(cfg *Config, result ValidationResult) int {
 	}
 
 	for _, issue := range result.Issues {
-		if !issue.CanAutoFix || issue.FixedValue == nil {
-			continue
-		}
-		fixer, ok := configAutoFixers[issue.Field]
-		if !ok {
-			continue
-		}
-		if fixer(cfg, issue.FixedValue) {
+		if applyConfigAutoFix(cfg, issue) {
 			fixCount++
 		}
 	}
 
 	return fixCount
+}
+
+func applyConfigAutoFix(cfg *Config, issue ValidationIssue) bool {
+	if !issue.CanAutoFix || issue.FixedValue == nil {
+		return false
+	}
+	if applyGeminiFunctionCallingAutoFix(cfg, issue.FixedValue) {
+		return true
+	}
+	fixer, ok := configAutoFixers[issue.Field]
+	if !ok {
+		return false
+	}
+	return fixer(cfg, issue.FixedValue)
 }
 
 type configAutoFixer func(*Config, any) bool
@@ -146,6 +154,9 @@ var configAutoFixers = map[string]configAutoFixer{
 	}),
 	"bash.safety_level": stringAutoFixer(func(cfg *Config, v string) {
 		cfg.Bash.SafetyLevel = v
+	}),
+	"gemini.service_tier": stringAutoFixer(func(cfg *Config, v string) {
+		cfg.Gemini.ServiceTier = v
 	}),
 	"agent_instructions.project.mode": stringAutoFixer(func(cfg *Config, v string) {
 		cfg.AgentInstructions.Project.Mode = v

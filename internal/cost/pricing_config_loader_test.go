@@ -1,6 +1,7 @@
 package cost
 
 import (
+	"reflect"
 	"sync"
 	"testing"
 
@@ -55,6 +56,68 @@ func TestPricingFamilyHasKnownModelUsesExactAllowlist(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := pricingFamilyHasKnownModel(tt.family, tt.model); got != tt.want {
 				t.Fatalf("pricingFamilyHasKnownModel(%q, %q) = %v, want %v", tt.family, tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGeminiServiceTierKnownModelsStayInSync(t *testing.T) {
+	cfg := loadPricingConfig()
+	if cfg == nil {
+		t.Fatal("loadPricingConfig() = nil")
+	}
+
+	flex, ok := cfg.provider(geminiPricingFamilyFlex)
+	if !ok {
+		t.Fatalf("pricing config missing %q provider", geminiPricingFamilyFlex)
+	}
+	priority, ok := cfg.provider(geminiPricingFamilyPriority)
+	if !ok {
+		t.Fatalf("pricing config missing %q provider", geminiPricingFamilyPriority)
+	}
+	if !reflect.DeepEqual(flex.KnownModels.Exact, priority.KnownModels.Exact) {
+		t.Fatalf("Gemini service tier known models drifted:\nflex=%#v\npriority=%#v", flex.KnownModels.Exact, priority.KnownModels.Exact)
+	}
+
+	for _, model := range []string{
+		"gemini-2.5-pro-preview",
+		"gemini-3-pro-preview",
+		"gemini-3.1-pro-preview",
+		"gemini-3.1-pro-preview-customtools",
+	} {
+		if !pricingFamilyHasKnownModel(geminiPricingFamilyFlex, model) {
+			t.Fatalf("Gemini flex known models missing %q", model)
+		}
+		if !pricingFamilyHasKnownModel(geminiPricingFamilyPriority, model) {
+			t.Fatalf("Gemini priority known models missing %q", model)
+		}
+	}
+}
+
+func TestGeminiCatalogModelsResolveStandardPricingOrAreExplicitLifecycleOnly(t *testing.T) {
+	lifecycleOnlyModels := map[string]string{
+		"gemini-1.5-flash": "shutdown model kept for diagnostics; no safe standard pricing rule",
+	}
+
+	for _, model := range llmcatalog.KnownModelNamesForProvider("gemini") {
+		t.Run(model, func(t *testing.T) {
+			got := GetPricingInfo("gemini", model, 250000)
+			if got.PricingUnavailable {
+				if _, ok := lifecycleOnlyModels[model]; ok {
+					return
+				}
+				t.Fatalf("Gemini catalog model %q is missing standard pricing allowlist coverage", model)
+			}
+		})
+	}
+
+	for model := range lifecycleOnlyModels {
+		t.Run("lifecycle-only/"+model, func(t *testing.T) {
+			if !llmcatalog.IsExactKnownModelNameForProvider("gemini", model) {
+				t.Fatalf("lifecycle-only Gemini model %q is not in the exact catalog", model)
+			}
+			if got := GetPricingInfo("gemini", model); !got.PricingUnavailable {
+				t.Fatalf("lifecycle-only Gemini model %q pricing = %#v, want unavailable", model, got)
 			}
 		})
 	}

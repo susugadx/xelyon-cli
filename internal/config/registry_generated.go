@@ -26,7 +26,7 @@ type CategoryDef struct {
 
 // CategoryDefinitions はカテゴリ定義リスト
 var CategoryDefinitions = []CategoryDef{
-	{Name: "provider", DisplayName: "Provider & Model", Icon: "🤖", Fields: []string{"default_model", "default_provider", "provider_models"}},
+	{Name: "provider", DisplayName: "Provider & Model", Icon: "🤖", Fields: []string{"default_model", "default_provider", "gemini.service_tier", "provider_models"}},
 	{Name: "review", DisplayName: "Review", Icon: "🔎", Fields: []string{"review.model", "review.provider"}},
 	{Name: "general", DisplayName: "General", Icon: "⚙️", Fields: []string{"general.ui_language"}},
 	{Name: "execution", DisplayName: "Execution Mode", Icon: "🛡️", Fields: []string{"execution.always_confirm", "execution.mode", "execution.safe_shell_commands"}},
@@ -63,6 +63,7 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"execution.safe_shell_commands":                 FieldTypeStringSlice,
 	"final_checks.commands":                         FieldTypeStringSlice,
 	"final_checks.timeout":                          FieldTypeInt,
+	"gemini.service_tier":                           FieldTypeSelect,
 	"general.ui_language":                           FieldTypeSelect,
 	"lsp.enabled":                                   FieldTypeBool,
 	"lsp.servers":                                   FieldTypeStructMap,
@@ -93,6 +94,7 @@ var SelectOptions = map[string][]string{
 	"agent_instructions.project.mode": {"off", "fallback", "always"},
 	"default_provider":                {"deepseek", "kimi", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 	"execution.mode":                  {"balanced", "trusted", "full_auto"},
+	"gemini.service_tier":             {"standard", "flex", "priority"},
 	"general.ui_language":             {"auto", "ja", "en"},
 	"output.assistant_updates":        {"", "verbose", "phase", "off"},
 	"review.provider":                 {"", "deepseek", "kimi", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
@@ -121,6 +123,7 @@ var FieldDescriptions = map[string]string{
 	"execution.safe_shell_commands":                 "追加の安全シェルコマンド（verification / env 用）",
 	"final_checks.commands":                         "completed_with_changes 時に実行する final checks コマンド（例: go test ./...）",
 	"final_checks.timeout":                          "final checks コマンドタイムアウト（秒）（デフォルト: 600）",
+	"gemini.service_tier":                           "Gemini service_tier（standard / flex / priority）",
 	"general.ui_language":                           "表示言語（auto, ja, en）",
 	"lsp.enabled":                                   "LSP連携の有効/無効（有効時は検出言語の導入済みサーバーを起動準備）",
 	"lsp.servers":                                   "LSPサーバー個別設定（コマンド・引数・有効無効）",

@@ -13,8 +13,8 @@ func TestDefaultCompressionModel_OpenAI(t *testing.T) {
 }
 
 func TestDefaultCompressionModel_Gemini(t *testing.T) {
-	if got := defaultCompressionModel("gemini"); got != "gemini-3.1-flash-lite-preview" {
-		t.Fatalf("defaultCompressionModel(gemini) = %q, want %q", got, "gemini-3.1-flash-lite-preview")
+	if got := defaultCompressionModel("gemini"); got != "gemini-3.1-flash-lite" {
+		t.Fatalf("defaultCompressionModel(gemini) = %q, want %q", got, "gemini-3.1-flash-lite")
 	}
 }
 

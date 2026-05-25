@@ -1,8 +1,12 @@
 package config
 
-import "strings"
+import (
+	"strings"
 
-// ModelCatalogResolution は provider/model から catalog lookup 用モデル名への解決結果です。
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+)
+
+// ModelCatalogResolution は provider/model から catalog / local policy lookup 用モデル名への解決結果です。
 type ModelCatalogResolution struct {
 	Model                    string
 	ConfiguredWithoutCatalog bool
@@ -27,12 +31,16 @@ func (c *Config) ModelOverrideForProvider(provider, model string) (ModelOverride
 	return override, ok
 }
 
-// ModelCatalogName は token limit / pricing / catalog lookup に使うモデル名を返す。
+// ModelCatalogName は token limit / pricing / catalog / local policy lookup に使うモデル名を返す。
 func (c *Config) ModelCatalogName(provider, model string) string {
 	return c.ResolveModelCatalog(provider, model).Model
 }
 
-// ResolveModelCatalog は token limit / pricing / catalog lookup に使うモデル名と、
+func canonicalModelCatalogName(provider, model string) string {
+	return llmcatalog.CanonicalModelNameForProvider(provider, model)
+}
+
+// ResolveModelCatalog は token limit / pricing / catalog / local policy lookup に使うモデル名と、
 // その名前が catalog_model なしの設定値かどうかを返す。
 func (c *Config) ResolveModelCatalog(provider, model string) ModelCatalogResolution {
 	model = strings.TrimSpace(model)
@@ -45,25 +53,25 @@ func (c *Config) ResolveModelCatalog(provider, model string) ModelCatalogResolut
 
 	if override, ok := c.ModelOverrideForProvider(provider, model); ok {
 		if catalogModel := strings.TrimSpace(override.CatalogModel); catalogModel != "" {
-			return ModelCatalogResolution{Model: catalogModel}
+			return ModelCatalogResolution{Model: canonicalModelCatalogName(provider, catalogModel)}
 		}
 		if hasProviderModelConfig && strings.TrimSpace(pm.DefaultModel) == model {
 			if catalogModel := strings.TrimSpace(pm.CatalogModel); catalogModel != "" {
-				return ModelCatalogResolution{Model: catalogModel}
+				return ModelCatalogResolution{Model: canonicalModelCatalogName(provider, catalogModel)}
 			}
 		}
 		return ModelCatalogResolution{
-			Model:                    model,
+			Model:                    canonicalModelCatalogName(provider, model),
 			ConfiguredWithoutCatalog: true,
 		}
 	}
 
 	if hasProviderModelConfig && strings.TrimSpace(pm.DefaultModel) == model {
 		if catalogModel := strings.TrimSpace(pm.CatalogModel); catalogModel != "" {
-			return ModelCatalogResolution{Model: catalogModel}
+			return ModelCatalogResolution{Model: canonicalModelCatalogName(provider, catalogModel)}
 		}
 		return ModelCatalogResolution{
-			Model:                    model,
+			Model:                    canonicalModelCatalogName(provider, model),
 			ConfiguredWithoutCatalog: true,
 		}
 	}
@@ -72,10 +80,10 @@ func (c *Config) ResolveModelCatalog(provider, model string) ModelCatalogResolut
 		SameProviderRuntimeIdentity(provider, c.DefaultProvider) &&
 		c.configuredDefaultModelAppliesToProvider(provider, model) {
 		return ModelCatalogResolution{
-			Model:                    model,
+			Model:                    canonicalModelCatalogName(provider, model),
 			ConfiguredWithoutCatalog: true,
 		}
 	}
 
-	return ModelCatalogResolution{Model: model}
+	return ModelCatalogResolution{Model: canonicalModelCatalogName(provider, model)}
 }

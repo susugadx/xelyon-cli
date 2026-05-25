@@ -15,6 +15,7 @@ const (
 	SmokeFailureKindEndpointMismatch   SmokeFailureKind = "endpoint_mismatch"
 	SmokeFailureKindFeatureUnsupported SmokeFailureKind = "feature_unsupported"
 	SmokeFailureKindEmptyResponse      SmokeFailureKind = "empty_response"
+	SmokeFailureKindTimeout            SmokeFailureKind = "timeout"
 	SmokeFailureKindGeneric            SmokeFailureKind = "generic"
 )
 
@@ -80,6 +81,8 @@ func SmokeFailureKindFor(ctx SmokeFailureContext) SmokeFailureKind {
 		return SmokeFailureKindModelUnavailable
 	case smokeFailureIsFeatureUnsupported(detail, ctx.Feature):
 		return SmokeFailureKindFeatureUnsupported
+	case smokeFailureIsTimeout(detail):
+		return SmokeFailureKindTimeout
 	case smokeFailureIsEndpointMismatch(detail, ctx.EndpointOverride):
 		return SmokeFailureKindEndpointMismatch
 	case smokeFailureIsGenericModelUnavailable(detail, ctx.EndpointOverride):
@@ -392,6 +395,19 @@ func smokeFailureIsEmptyResponse(detail string) bool {
 	return smokeFailureContainsAny(detail, "no content", "empty response", "stream ended without", "response content is empty", "content is empty")
 }
 
+func smokeFailureIsTimeout(detail string) bool {
+	return smokeFailureContainsAny(
+		detail,
+		"response start timeout",
+		"transport idle timeout",
+		"thinking timeout",
+		"context deadline exceeded",
+		"client.timeout exceeded",
+		"i/o timeout",
+		"timeout awaiting response headers",
+	)
+}
+
 func smokeFailureIsEndpointMismatch(detail string, endpointOverride bool) bool {
 	if !endpointOverride {
 		return false
@@ -450,6 +466,8 @@ func smokeFailureMessage(ctx SmokeFailureContext, kind SmokeFailureKind) string 
 		return fmt.Sprintf("%s %s smoke was not accepted by the selected model or endpoint", provider, smokeFailureFeatureLabel(ctx.Feature))
 	case SmokeFailureKindEmptyResponse:
 		return fmt.Sprintf("live %s smoke response was empty", provider)
+	case SmokeFailureKindTimeout:
+		return fmt.Sprintf("live %s smoke request timed out", provider)
 	default:
 		return fmt.Sprintf("live %s smoke request failed", provider)
 	}
@@ -485,6 +503,8 @@ func smokeFailureSuggestion(ctx SmokeFailureContext, kind SmokeFailureKind) stri
 		return fmt.Sprintf("Use a model and endpoint with %s support, or rerun without the related smoke flag", smokeFailureFeatureLabel(ctx.Feature))
 	case SmokeFailureKindEmptyResponse:
 		return fmt.Sprintf("Retry, change %s if it repeats, or inspect --print-request for the request shape", smokeFailureModelFlag(ctx))
+	case SmokeFailureKindTimeout:
+		return "Rerun with a larger --timeout or provider-specific timeout setting, then inspect request progress with provider debug logging if it repeats"
 	default:
 		suggestion := "Inspect the request-level smoke error and rerun with --print-request"
 		if strings.TrimSpace(ctx.DebugEnv) != "" {

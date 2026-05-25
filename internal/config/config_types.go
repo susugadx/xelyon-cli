@@ -42,6 +42,7 @@ type Config struct {
 	GitStage            GitStageConfig     `yaml:"git_stage"`
 	LSP                 LSPConfig          `yaml:"lsp"`
 	OpenAI              OpenAIConfig       `yaml:"openai"`
+	Gemini              GeminiConfig       `yaml:"gemini"`
 	Thinking            ThinkingConfig     `yaml:"thinking"`
 	Output              OutputConfig       `yaml:"output"`
 	WebSearch           WebSearchConfig    `yaml:"web_search"`
@@ -158,7 +159,7 @@ type PasteConfig struct {
 // StreamingConfig はストリーミングレスポンスの設定
 type StreamingConfig struct {
 	IdleTimeoutSeconds     int  `yaml:"idle_timeout_seconds"`     // アイドルタイムアウト秒（デフォルト30）
-	ThinkingTimeoutSeconds int  `yaml:"thinking_timeout_seconds"` // thinking専用タイムアウト秒（text/FC未受信時、デフォルト300）
+	ThinkingTimeoutSeconds int  `yaml:"thinking_timeout_seconds"` // thinking request のレスポンス開始 / SSE 進捗待ち上限
 	ShowFileInfo           bool `yaml:"show_file_info"`           // ファイル読み込み時にサイズ表示（デフォルト: true）
 	ShowSearchProgress     bool `yaml:"show_search_progress"`     // 検索中に進捗表示（デフォルト: true）
 	StreamBashOutput       bool `yaml:"stream_bash_output"`       // bashコマンド出力をストリーミング（デフォルト: true）
@@ -219,6 +220,11 @@ type OpenAIConfig struct {
 	ResponsesAPIModels []string `yaml:"responses_api_models"` // 内部: Responses API フォールバックリスト
 }
 
+// GeminiConfig は Gemini プロバイダーの実行時設定
+type GeminiConfig struct {
+	ServiceTier string `yaml:"service_tier"` // service_tier（standard / flex / priority）
+}
+
 // ThinkingConfig は Extended Thinking の内部設定（user-facing config から削除済み、YAML 互換は維持）
 // 正規の切り替えルートは /thinking コマンド。config のデフォルト値は runtime 初期値として使用
 type ThinkingConfig struct {
@@ -274,14 +280,14 @@ type LSPServerConfig struct {
 // ModelOverride はモデルごとの個別設定
 type ModelOverride struct {
 	MaxOutputTokens int    `yaml:"max_output_tokens,omitempty"` // このモデル固有の最大出力トークン数
-	CatalogModel    string `yaml:"catalog_model,omitempty"`     // token/pricing/catalog lookup に使う既知モデル名
+	CatalogModel    string `yaml:"catalog_model,omitempty"`     // token/pricing/catalog/local policy lookup に使う既知モデル名
 }
 
 // ProviderModelConfig はプロバイダーごとのモデル設定
 type ProviderModelConfig struct {
 	DefaultModel     string                   `yaml:"default_model"`
 	MaxOutputTokens  int                      `yaml:"max_output_tokens,omitempty"` // プロバイダー全体のデフォルト最大出力トークン数
-	CatalogModel     string                   `yaml:"catalog_model,omitempty"`     // default_model が deployment/alias の場合の既知モデル名
+	CatalogModel     string                   `yaml:"catalog_model,omitempty"`     // default_model が deployment/alias の場合の token/pricing/catalog/local policy 用既知モデル名
 	AnthropicVersion string                   `yaml:"anthropic_version,omitempty"` // Anthropic API バージョン
 	AnthropicBeta    []string                 `yaml:"anthropic_beta,omitempty"`    // Anthropic Beta ヘッダー
 	ModelOverrides   map[string]ModelOverride `yaml:"model_overrides,omitempty"`   // モデルごとの個別オーバーライド

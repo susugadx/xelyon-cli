@@ -70,6 +70,87 @@ func TestSwitchModelForCurrentProvider_ReturnsOutcomeAndPersistsConfig(t *testin
 	}
 }
 
+func TestSwitchModelForCurrentProvider_GeminiUnsupportedFunctionCallingModelFails(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "gemini"
+	cfg.DefaultModel = "gemini-3.5-flash"
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{DefaultModel: "gemini-3.5-flash"})
+
+	var out bytes.Buffer
+	provider := &mockCacheClearableProviderForModel{name: "gemini"}
+	agent := &Agent{
+		ProviderName:      "gemini",
+		ProviderConfigKey: "gemini",
+		CurrentModel:      "gemini-3.5-flash",
+		CurrentProvider:   provider,
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	outcome := agent.SwitchModelForCurrentProvider("gemini-2.0-flash-lite")
+	if outcome.ValidationErr == nil {
+		t.Fatal("ValidationErr = nil, want Gemini function calling validation error")
+	}
+	if agent.CurrentModel != "gemini-3.5-flash" {
+		t.Fatalf("CurrentModel = %q, want unchanged", agent.CurrentModel)
+	}
+	if provider.cleared {
+		t.Fatal("provider cache should not be cleared when validation fails")
+	}
+}
+
+func TestSwitchModelForCurrentProvider_GeminiValidatesSavedCandidateConfig(t *testing.T) {
+	withConfigCommandHooks(t)
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "gemini"
+	cfg.DefaultModel = "gemini-3.5-flash"
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-old",
+		CatalogModel: "gemini-2.0-flash-lite",
+	})
+	loadConfigForCommand = func() (*config.Config, error) {
+		return config.CloneConfig(cfg), nil
+	}
+	var saveCalled bool
+	saveConfigForCommand = func(cfg *config.Config) error {
+		saveCalled = true
+		return nil
+	}
+
+	var out bytes.Buffer
+	provider := &mockCacheClearableProviderForModel{name: "gemini"}
+	agent := &Agent{
+		ProviderName:      "gemini",
+		ProviderConfigKey: "gemini",
+		CurrentModel:      "gemini-3.5-flash",
+		CurrentProvider:   provider,
+		Runtime: &AgentRuntime{
+			Config: config.CloneConfig(cfg),
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+	}
+
+	outcome := agent.SwitchModelForCurrentProvider("corp-gemini")
+	if outcome.ValidationErr == nil {
+		t.Fatal("ValidationErr = nil, want saved candidate Gemini catalog_model validation error")
+	}
+	if !strings.Contains(outcome.ValidationErr.Error(), "catalog_model=gemini-2.0-flash-lite") {
+		t.Fatalf("ValidationErr = %v, want stale catalog_model detail", outcome.ValidationErr)
+	}
+	if saveCalled {
+		t.Fatal("saveConfigForCommand should not be called after candidate validation failure")
+	}
+	if agent.CurrentModel != "gemini-3.5-flash" {
+		t.Fatalf("CurrentModel = %q, want unchanged gemini-3.5-flash", agent.CurrentModel)
+	}
+	if provider.cleared {
+		t.Fatal("provider cache should not be cleared when candidate validation fails")
+	}
+}
+
 func TestSwitchModelForCurrentProvider_AzureDeploymentChangeClearsStaleCatalogModel(t *testing.T) {
 	withConfigCommandHooks(t)
 
@@ -284,6 +365,39 @@ func TestModelCandidates_KnownDefaultCurrentCustomStableDedupe(t *testing.T) {
 	last := got[len(got)-1]
 	if !last.Custom || last.Name != "Custom model..." {
 		t.Fatalf("last candidate = %#v, want custom model row", last)
+	}
+}
+
+func TestModelCandidates_IncludesRecommendedGeminiModels(t *testing.T) {
+	agent := &Agent{
+		ProviderName:      "gemini",
+		ProviderConfigKey: "gemini",
+		CurrentModel:      "gemini-2.5-flash",
+		Runtime:           NewAgentRuntimeWithConfig(newProjectMapDisabledConfig()),
+	}
+
+	got := agent.ModelCandidates("gemini")
+	names := modelCandidateNames(got)
+	if len(names) == 0 || names[0] != "gemini-3.5-flash" {
+		t.Fatalf("gemini candidates prefix = %v, want gemini-3.5-flash first; full=%v", names[:min(len(names), 3)], names)
+	}
+	if c := candidateByName(got, "gemini-3.5-flash"); c.Name == "" || c.Custom {
+		t.Fatalf("gemini-3.5-flash candidate = %#v, want normal runtime candidate", c)
+	}
+	if c := candidateByName(got, "gemini-3.1-flash-lite"); c.Name == "" || c.Custom {
+		t.Fatalf("gemini-3.1-flash-lite candidate = %#v, want normal runtime candidate", c)
+	}
+	if c := candidateByName(got, "gemini-3.1-pro-preview-customtools"); c.Name == "" || c.Custom {
+		t.Fatalf("gemini-3.1-pro-preview-customtools candidate = %#v, want normal runtime candidate", c)
+	}
+	if c := candidateByName(got, "gemini-3.1-pro"); c.Name != "" {
+		t.Fatalf("gemini-3.1-pro candidate = %#v, should not be exposed in picker", c)
+	}
+	if c := candidateByName(got, "gemini-3.1-pro-preview"); c.Name != "" {
+		t.Fatalf("gemini-3.1-pro-preview candidate = %#v, should prefer customtools variant", c)
+	}
+	if c := candidateByName(got, "gemini-2.0-flash-exp"); c.Name != "" {
+		t.Fatalf("gemini-2.0-flash-exp candidate = %#v, should not expose shutdown model", c)
 	}
 }
 

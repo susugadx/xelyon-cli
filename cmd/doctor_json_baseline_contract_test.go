@@ -227,7 +227,7 @@ func doctorJSONBaselineContractCases() []doctorJSONBaselineContractCase {
 			newCommand:         newGeminiDoctorCommand,
 			run:                runGeminiDoctorInvocation,
 			setup:              setupGeminiJSONBaselineContract,
-			requiredJSONFields: []string{"api_url", "model", "model_source", "catalog_model", "catalog_model_source", "route_reason", "max_output_tokens", "context_window_tokens", "function_calling_enabled", "image_input_supported", "web_search_supported", "context_caching_enabled", "thinking_enabled"},
+			requiredJSONFields: []string{"api_url", "model", "model_source", "catalog_model", "catalog_model_source", "route_reason", "max_output_tokens", "context_window_tokens", "function_calling_enabled", "image_input_supported", "web_search_supported", "context_caching_enabled", "thinking_enabled", "service_tier"},
 			want: doctorJSONContractIdentity{
 				model:              "corp-gemini-model",
 				modelSource:        "--model",
@@ -237,8 +237,8 @@ func doctorJSONBaselineContractCases() []doctorJSONBaselineContractCase {
 				apiURLContains:     []string{"models/corp-gemini-model:streamGenerateContent", "alt=sse"},
 			},
 			trueFields:   []string{"function_calling_enabled", "image_input_supported", "web_search_supported"},
-			checks:       doctorJSONBaselineOKChecks("auth", "endpoint", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input", "thinking", "context_caching", "web_search"),
-			checkDetails: []doctorJSONBaselineCheckDetailContract{{name: "catalog_policy", contains: "max_output_tokens=65536"}},
+			checks:       doctorJSONBaselineOKChecks("auth", "endpoint", "provider_registration", "model", "catalog_model", "route", "service_tier", "catalog_policy", "function_calling", "image_input", "thinking", "context_caching", "web_search"),
+			checkDetails: []doctorJSONBaselineCheckDetailContract{{name: "catalog_policy", contains: "max_output_tokens=65536"}, {name: "service_tier", contains: "request_body=omitted"}},
 		},
 		{
 			provider:           "claude",

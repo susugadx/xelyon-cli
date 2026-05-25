@@ -55,6 +55,24 @@ func TestResolveProviderDiagnosticCatalogModelUsesSharedPrecedence(t *testing.T)
 	}
 }
 
+func TestResolveProviderDiagnosticCatalogModelCanonicalizesGeminiResourceNames(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{
+		DefaultModel: "corp-gemini",
+		CatalogModel: "models/gemini-3.5-flash",
+	})
+
+	if got, source := ResolveProviderDiagnosticCatalogModel(cfg, "gemini", "corp-gemini", ""); got != "gemini-3.5-flash" || source != "provider_models.gemini.catalog_model" {
+		t.Fatalf("configured Gemini catalog = %q (%s), want canonical catalog model", got, source)
+	}
+	if got, source := ResolveProviderDiagnosticCatalogModel(cfg, "gemini", "corp-gemini", "models/gemini-2.0-flash-lite"); got != "gemini-2.0-flash-lite" || source != "--catalog-model" {
+		t.Fatalf("explicit Gemini catalog = %q (%s), want canonical explicit catalog model", got, source)
+	}
+	if !IsProviderCatalogModelKnown("gemini", "models/gemini-3.5-flash") {
+		t.Fatal("IsProviderCatalogModelKnown(gemini, models/gemini-3.5-flash) = false, want true")
+	}
+}
+
 func TestProviderDiagnosticPolicyConfigKeepsProviderScopedCatalogPolicy(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("deepseek", config.ProviderModelConfig{
@@ -180,6 +198,14 @@ func TestModelGatedWebSearchAvailability(t *testing.T) {
 			wantAvailability: KnownCapabilityAvailability(true),
 		},
 		{
+			name:             "trusted hidden gemini catalog",
+			provider:         "gemini",
+			model:            "corp-gemini-model",
+			catalogModel:     "gemini-3.1-pro-preview",
+			providerPath:     true,
+			wantAvailability: KnownCapabilityAvailability(true),
+		},
+		{
 			name:             "gemini pricing-only model is not trusted",
 			provider:         "gemini",
 			model:            "gemini-pro",
@@ -211,10 +237,24 @@ func TestIsProviderCatalogModelListedUsesExactProviderCatalogOnly(t *testing.T) 
 	if !IsProviderCatalogModelListed("gemini", "gemini-3.1-pro-preview-customtools") {
 		t.Fatal("IsProviderCatalogModelListed(gemini exact) = false, want true")
 	}
+	if !IsProviderCatalogModelListed("gemini", "models/gemini-2.0-flash-exp") {
+		t.Fatal("IsProviderCatalogModelListed(gemini resource name) = false, want true")
+	}
 	if IsProviderCatalogModelListed("gemini", "gemini-3.1-pro-prod") {
 		t.Fatal("IsProviderCatalogModelListed(gemini prefix alias) = true, want false")
 	}
 	if IsProviderCatalogModelListed("gemini", "gemini-pro") {
 		t.Fatal("IsProviderCatalogModelListed(gemini-pro) = true, want false for legacy pricing-only metadata")
+	}
+}
+
+func TestProviderDiagnosticPolicyConfigCanonicalizesGeminiResourceCatalogModel(t *testing.T) {
+	cfg := ProviderDiagnosticPolicyConfig(config.DefaultConfig(), ProviderDiagnosticPolicyConfigOptions{
+		Provider:     "gemini",
+		Model:        "corp-gemini",
+		CatalogModel: "models/gemini-3.5-flash",
+	})
+	if got := cfg.ModelCatalogName("gemini", "corp-gemini"); got != "gemini-3.5-flash" {
+		t.Fatalf("Gemini diagnostic policy catalog = %q, want gemini-3.5-flash", got)
 	}
 }

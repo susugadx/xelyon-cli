@@ -52,7 +52,7 @@ Examples:
   xelyon                                           # Interactive mode (DeepSeek Chat)
   xelyon "explain this project"                    # One-shot query
   xelyon --interactive "explain this project"      # Force interactive TUI
-  xelyon --provider gemini --model gemini-2.5-flash # Use Gemini
+  xelyon --provider gemini --model gemini-3.5-flash # Use Gemini
   xelyon --provider openai --model gpt-5.2         # Use OpenAI GPT-5.2
   xelyon doctor openai --smoke                     # Diagnose OpenAI provider
   xelyon doctor azure --deployment my-gpt-5-deployment --smoke # Diagnose Azure OpenAI
@@ -121,7 +121,7 @@ Examples:
 			result := runHeadless(cmd.Context(), query, model, provider, cfg)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
-			if result.Status == "error" {
+			if result.Status == agent.HeadlessStatusError {
 				return fmt.Errorf("headless execution failed")
 			}
 			return nil
@@ -164,7 +164,7 @@ func init() {
 	// プロバイダー/モデル指定フラグ
 	providerHelp := fmt.Sprintf("Specify LLM provider (%s)", strings.Join(config.GetDisplayProviders(), ", "))
 	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "", providerHelp)
-	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-4o, gemini-2.0-flash-exp)")
+	rootCmd.Flags().StringVarP(&modelFlag, "model", "m", "", "Specify model name (e.g., gpt-5.5, gemini-3.5-flash)")
 
 	// 新規: --resume / --once / --interactive / --quiet フラグ
 	rootCmd.Flags().BoolVar(&resume, "resume", false, "Resume last session")

@@ -215,13 +215,16 @@ gemini:
     exact:
       - gemini-1.5-pro
       - gemini-2.0-flash
+      - gemini-2.0-flash-001
       - gemini-2.0-flash-exp
       - gemini-2.0-flash-lite
+      - gemini-2.0-flash-lite-001
       - gemini-2.5-pro
       - gemini-2.5-pro-preview
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-3-flash
+      - gemini-3.5-flash
       - gemini-3-pro-preview
       - gemini-3.1-pro
       - gemini-3.1-pro-preview
@@ -235,13 +238,22 @@ gemini:
     outputcostperm: 3.00
     cachedinputcostperm: 0.05
     cachecreationcostperm: 0.50
+    cachestoragecostpermhour: 1.00
   rules:
+    - contains: ["3.5-flash"]
+      pricing:
+        inputcostperm: 1.50
+        outputcostperm: 9.00
+        cachedinputcostperm: 0.15
+        cachecreationcostperm: 1.50
+        cachestoragecostpermhour: 1.00
     - contains: ["3.1-pro", "3-pro"]
       pricing:
         inputcostperm: 2.00
         outputcostperm: 12.00
         cachedinputcostperm: 0.20
         cachecreationcostperm: 2.00
+        cachestoragecostpermhour: 4.50
       long_input:
         threshold: 200000
         pricing:
@@ -249,12 +261,14 @@ gemini:
           outputcostperm: 18.00
           cachedinputcostperm: 0.40
           cachecreationcostperm: 4.00
+          cachestoragecostpermhour: 4.50
     - contains: ["2.5-pro"]
       pricing:
         inputcostperm: 1.25
         outputcostperm: 10.00
         cachedinputcostperm: 0.125
         cachecreationcostperm: 1.25
+        cachestoragecostpermhour: 4.50
       long_input:
         threshold: 200000
         pricing:
@@ -262,12 +276,14 @@ gemini:
           outputcostperm: 15.00
           cachedinputcostperm: 0.25
           cachecreationcostperm: 2.50
+          cachestoragecostpermhour: 4.50
     - contains: ["pro"]
       pricing:
         inputcostperm: 2.00
         outputcostperm: 12.00
         cachedinputcostperm: 0.20
         cachecreationcostperm: 2.00
+        cachestoragecostpermhour: 4.50
       long_input:
         threshold: 200000
         pricing:
@@ -275,18 +291,21 @@ gemini:
           outputcostperm: 18.00
           cachedinputcostperm: 0.40
           cachecreationcostperm: 4.00
+          cachestoragecostpermhour: 4.50
     - contains: ["3.1-flash-lite"]
       pricing:
         inputcostperm: 0.25
         outputcostperm: 1.50
         cachedinputcostperm: 0.025
         cachecreationcostperm: 0.25
+        cachestoragecostpermhour: 1.00
     - contains: ["2.5-flash-lite"]
       pricing:
         inputcostperm: 0.10
         outputcostperm: 0.40
         cachedinputcostperm: 0.01
         cachecreationcostperm: 0.10
+        cachestoragecostpermhour: 1.00
     - contains: ["2.0-flash-lite"]
       pricing:
         inputcostperm: 0.075
@@ -299,18 +318,217 @@ gemini:
         outputcostperm: 2.50
         cachedinputcostperm: 0.03
         cachecreationcostperm: 0.30
+        cachestoragecostpermhour: 1.00
     - contains: ["2.0-flash"]
       pricing:
         inputcostperm: 0.10
         outputcostperm: 0.40
         cachedinputcostperm: 0.025
         cachecreationcostperm: 0.10
+        cachestoragecostpermhour: 1.00
     - contains: ["3.1-flash", "3-flash"]
       pricing:
         inputcostperm: 0.50
         outputcostperm: 3.00
         cachedinputcostperm: 0.05
         cachecreationcostperm: 0.50
+        cachestoragecostpermhour: 1.00
+
+gemini_flex:
+  known_models:
+    exact: &gemini_service_tier_known_models
+      - gemini-2.5-pro
+      - gemini-2.5-pro-preview
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-3-flash
+      - gemini-3.5-flash
+      - gemini-3-pro-preview
+      - gemini-3.1-pro
+      - gemini-3.1-pro-preview
+      - gemini-3.1-pro-preview-customtools
+      - gemini-3.1-flash
+      - gemini-3.1-flash-lite
+      - gemini-3.1-flash-lite-preview
+      - gemini-pro
+  default:
+    inputcostperm: 0.25
+    outputcostperm: 1.50
+    cachedinputcostperm: 0.05
+    cachecreationcostperm: 0.25
+    cachestoragecostpermhour: 1.00
+  rules:
+    - contains: ["3.5-flash"]
+      pricing:
+        inputcostperm: 0.75
+        outputcostperm: 4.50
+        cachedinputcostperm: 0.08
+        cachecreationcostperm: 0.75
+        cachestoragecostpermhour: 1.00
+    - contains: ["3.1-pro", "3-pro"]
+      pricing:
+        inputcostperm: 1.00
+        outputcostperm: 6.00
+        cachedinputcostperm: 0.20
+        cachecreationcostperm: 1.00
+        cachestoragecostpermhour: 4.50
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 2.00
+          outputcostperm: 9.00
+          cachedinputcostperm: 0.40
+          cachecreationcostperm: 2.00
+          cachestoragecostpermhour: 4.50
+    - contains: ["2.5-pro"]
+      pricing:
+        inputcostperm: 0.625
+        outputcostperm: 5.00
+        cachedinputcostperm: 0.125
+        cachecreationcostperm: 0.625
+        cachestoragecostpermhour: 4.50
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 1.25
+          outputcostperm: 7.50
+          cachedinputcostperm: 0.25
+          cachecreationcostperm: 1.25
+          cachestoragecostpermhour: 4.50
+    - contains: ["pro"]
+      pricing:
+        inputcostperm: 1.00
+        outputcostperm: 6.00
+        cachedinputcostperm: 0.20
+        cachecreationcostperm: 1.00
+        cachestoragecostpermhour: 4.50
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 2.00
+          outputcostperm: 9.00
+          cachedinputcostperm: 0.40
+          cachecreationcostperm: 2.00
+          cachestoragecostpermhour: 4.50
+    - contains: ["3.1-flash-lite"]
+      pricing:
+        inputcostperm: 0.125
+        outputcostperm: 0.75
+        cachedinputcostperm: 0.0125
+        cachecreationcostperm: 0.125
+        cachestoragecostpermhour: 0.50
+    - contains: ["2.5-flash-lite"]
+      pricing:
+        inputcostperm: 0.05
+        outputcostperm: 0.20
+        cachedinputcostperm: 0.01
+        cachecreationcostperm: 0.05
+        cachestoragecostpermhour: 1.00
+    - contains: ["2.5-flash"]
+      pricing:
+        inputcostperm: 0.15
+        outputcostperm: 1.25
+        cachedinputcostperm: 0.03
+        cachecreationcostperm: 0.15
+        cachestoragecostpermhour: 1.00
+    - contains: ["3.1-flash", "3-flash"]
+      pricing:
+        inputcostperm: 0.25
+        outputcostperm: 1.50
+        cachedinputcostperm: 0.05
+        cachecreationcostperm: 0.25
+        cachestoragecostpermhour: 1.00
+
+gemini_priority:
+  known_models:
+    exact: *gemini_service_tier_known_models
+  default:
+    inputcostperm: 0.90
+    outputcostperm: 5.40
+    cachedinputcostperm: 0.09
+    cachecreationcostperm: 0.90
+    cachestoragecostpermhour: 1.80
+  rules:
+    - contains: ["3.5-flash"]
+      pricing:
+        inputcostperm: 2.70
+        outputcostperm: 16.20
+        cachedinputcostperm: 0.27
+        cachecreationcostperm: 2.70
+        cachestoragecostpermhour: 1.00
+    - contains: ["3.1-pro", "3-pro"]
+      pricing:
+        inputcostperm: 3.60
+        outputcostperm: 21.60
+        cachedinputcostperm: 0.36
+        cachecreationcostperm: 3.60
+        cachestoragecostpermhour: 8.10
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 7.20
+          outputcostperm: 32.40
+          cachedinputcostperm: 0.72
+          cachecreationcostperm: 7.20
+          cachestoragecostpermhour: 8.10
+    - contains: ["2.5-pro"]
+      pricing:
+        inputcostperm: 2.25
+        outputcostperm: 18.00
+        cachedinputcostperm: 0.225
+        cachecreationcostperm: 2.25
+        cachestoragecostpermhour: 8.10
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 4.50
+          outputcostperm: 27.00
+          cachedinputcostperm: 0.45
+          cachecreationcostperm: 4.50
+          cachestoragecostpermhour: 8.10
+    - contains: ["pro"]
+      pricing:
+        inputcostperm: 3.60
+        outputcostperm: 21.60
+        cachedinputcostperm: 0.36
+        cachecreationcostperm: 3.60
+        cachestoragecostpermhour: 8.10
+      long_input:
+        threshold: 200000
+        pricing:
+          inputcostperm: 7.20
+          outputcostperm: 32.40
+          cachedinputcostperm: 0.72
+          cachecreationcostperm: 7.20
+          cachestoragecostpermhour: 8.10
+    - contains: ["3.1-flash-lite"]
+      pricing:
+        inputcostperm: 0.45
+        outputcostperm: 2.70
+        cachedinputcostperm: 0.045
+        cachecreationcostperm: 0.45
+        cachestoragecostpermhour: 1.80
+    - contains: ["2.5-flash-lite"]
+      pricing:
+        inputcostperm: 0.18
+        outputcostperm: 0.72
+        cachedinputcostperm: 0.018
+        cachecreationcostperm: 0.18
+        cachestoragecostpermhour: 1.80
+    - contains: ["2.5-flash"]
+      pricing:
+        inputcostperm: 0.54
+        outputcostperm: 4.50
+        cachedinputcostperm: 0.054
+        cachecreationcostperm: 0.54
+        cachestoragecostpermhour: 1.80
+    - contains: ["3.1-flash", "3-flash"]
+      pricing:
+        inputcostperm: 0.90
+        outputcostperm: 5.40
+        cachedinputcostperm: 0.09
+        cachecreationcostperm: 0.90
+        cachestoragecostpermhour: 1.80
 
 deepseek:
   known_models:

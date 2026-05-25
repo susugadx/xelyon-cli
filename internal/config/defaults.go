@@ -26,6 +26,7 @@ func DefaultConfig() *Config {
 		GitStage:            defaultGitStageConfig(),
 		LSP:                 defaultLSPConfig(),
 		OpenAI:              defaultOpenAIConfig(),
+		Gemini:              defaultGeminiConfig(),
 		Thinking:            defaultThinkingConfig(),
 		Output:              defaultOutputConfig(),
 		WebSearch:           defaultWebSearchConfig(),

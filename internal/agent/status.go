@@ -162,7 +162,8 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 
 	status := agent.statusRef().getStatus()
 	currentTokens := agent.EstimateTokens()
-	limit := agent.currentModelTokenLimit(agent.cfg())
+	cfg := agent.cfg()
+	limit := agent.currentModelTokenLimit(cfg)
 	contextText := formatNumber(currentTokens)
 	if limit > 0 {
 		contextText = fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), float64(currentTokens)/float64(limit)*100)
@@ -175,8 +176,11 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 		AddRow("Next", statusNextForSurface(status, commandSurface)).
 		AddRow("Mode", modeText).
 		AddRow("Provider", agent.ProviderName).
-		AddRow("Model", agent.CurrentModel).
-		AddRow("Context", contextText)
+		AddRow("Model", agent.CurrentModel)
+	if detail := geminiServiceTierStatusDetail(cfg, agent.activeModelProviderConfigKey(cfg), nil); detail != "" {
+		statusTable.AddRow("Service Tier", detail)
+	}
+	statusTable.AddRow("Context", contextText)
 	_, _ = fmt.Fprint(out, statusTable.RenderCompact())
 
 	printStatusUsageSection(out, agent, "🧾 Last Chat Turn", "No chat turn usage data available", lastChatTurnUsageForStatus)

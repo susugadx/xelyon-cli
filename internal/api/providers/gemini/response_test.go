@@ -294,12 +294,32 @@ func TestHandleSSEResponse_ThoughtOnlyChunksDoNotTriggerTransportIdle(t *testing
 	}, 0)
 	defer resp.Body.Close()
 
-	got, err := p.handleSSEResponse(ctx, resp, nil, "")
+	got, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
 	if err != nil {
 		t.Fatalf("handleSSEResponse() error = %v", err)
 	}
 	if got != "final answer" {
 		t.Fatalf("handleSSEResponse() = %q, want %q", got, "final answer")
+	}
+}
+
+func TestHandleSSEResponse_ThoughtProgressResetsThinkingTimeout(t *testing.T) {
+	p := New("test-key")
+	ctx := newGeminiSSETestContext(3, 1)
+	resp := newTimedSSEResponse(t, []timedSSEChunk{
+		{delay: 400 * time.Millisecond, payload: mustSSEPayload(t, GeminiFunctionPart{Thought: true, Text: "thinking-1"})},
+		{delay: 400 * time.Millisecond, payload: mustSSEPayload(t, GeminiFunctionPart{Thought: true, Text: "thinking-2"})},
+		{delay: 400 * time.Millisecond, payload: mustSSEPayload(t, GeminiFunctionPart{Thought: true, Text: "thinking-3"})},
+		{delay: 400 * time.Millisecond, payload: mustSSEPayload(t, GeminiFunctionPart{Text: "final after thinking"})},
+	}, 0)
+	defer resp.Body.Close()
+
+	got, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
+	if err != nil {
+		t.Fatalf("handleSSEResponse() error = %v", err)
+	}
+	if got != "final after thinking" {
+		t.Fatalf("handleSSEResponse() = %q, want %q", got, "final after thinking")
 	}
 }
 
@@ -312,7 +332,7 @@ func TestHandleSSEResponse_ThoughtOnlyChunksBecomeThinkingTimeout(t *testing.T) 
 	}, 1500*time.Millisecond)
 	defer resp.Body.Close()
 
-	_, err := p.handleSSEResponse(ctx, resp, nil, "")
+	_, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
 	if err == nil {
 		t.Fatal("handleSSEResponse() should return thinking timeout")
 	}
@@ -321,8 +341,25 @@ func TestHandleSSEResponse_ThoughtOnlyChunksBecomeThinkingTimeout(t *testing.T) 
 	if !errors.As(err, &thinkingErr) {
 		t.Fatalf("error should be ErrThinkingTimeout, got %T: %v", err, err)
 	}
-	if !strings.Contains(thinkingErr.Error(), "no actionable output received") {
-		t.Fatalf("thinking timeout message should describe actionable output starvation, got %q", thinkingErr.Error())
+	if !strings.Contains(thinkingErr.Error(), "no Gemini progress") {
+		t.Fatalf("thinking timeout message should describe Gemini progress starvation, got %q", thinkingErr.Error())
+	}
+}
+
+func TestHandleSSEResponse_ThinkingModelUsesThinkingTimeoutForInitialIdle(t *testing.T) {
+	p := New("test-key")
+	ctx := newGeminiSSETestContext(1, 3)
+	resp := newTimedSSEResponse(t, []timedSSEChunk{
+		{delay: 1200 * time.Millisecond, payload: mustSSEPayload(t, GeminiFunctionPart{Text: "delayed first chunk"})},
+	}, 0)
+	defer resp.Body.Close()
+
+	got, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
+	if err != nil {
+		t.Fatalf("handleSSEResponse() error = %v", err)
+	}
+	if got != "delayed first chunk" {
+		t.Fatalf("handleSSEResponse() = %q, want %q", got, "delayed first chunk")
 	}
 }
 
@@ -332,7 +369,7 @@ func TestHandleSSEResponse_NoSSEDataTriggersTransportIdleTimeout(t *testing.T) {
 	resp := newTimedSSEResponse(t, nil, 1500*time.Millisecond)
 	defer resp.Body.Close()
 
-	_, err := p.handleSSEResponse(ctx, resp, nil, "")
+	_, err := p.handleSSEResponse(ctx, resp, nil, "", "")
 	if err == nil {
 		t.Fatal("handleSSEResponse() should return transport idle timeout")
 	}
@@ -360,7 +397,7 @@ func TestHandleSSEResponse_FunctionCallResetsThinkingTimeout(t *testing.T) {
 	}, 700*time.Millisecond)
 	defer resp.Body.Close()
 
-	got, err := p.handleSSEResponse(ctx, resp, nil, "")
+	got, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
 	if err != nil {
 		t.Fatalf("handleSSEResponse() error = %v", err)
 	}
@@ -378,12 +415,32 @@ func TestHandleSSEResponse_TextResetsThinkingTimeout(t *testing.T) {
 	}, 700*time.Millisecond)
 	defer resp.Body.Close()
 
-	got, err := p.handleSSEResponse(ctx, resp, nil, "")
+	got, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
 	if err != nil {
 		t.Fatalf("handleSSEResponse() error = %v", err)
 	}
 	if got != "partial answer" {
 		t.Fatalf("handleSSEResponse() = %q, want %q", got, "partial answer")
+	}
+}
+
+func TestHandleSSEResponse_TextWithThoughtSignaturePreservesText(t *testing.T) {
+	p := New("test-key")
+	ctx := newGeminiSSETestContext(2, 1)
+	resp := newTimedSSEResponse(t, []timedSSEChunk{
+		{payload: mustSSEPayload(t, GeminiFunctionPart{
+			Text:             "final answer",
+			ThoughtSignature: "sig-text",
+		})},
+	}, 0)
+	defer resp.Body.Close()
+
+	got, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
+	if err != nil {
+		t.Fatalf("handleSSEResponse() error = %v", err)
+	}
+	if got != "final answer" {
+		t.Fatalf("handleSSEResponse() = %q, want %q", got, "final answer")
 	}
 }
 
@@ -396,7 +453,7 @@ func TestHandleSSEResponse_ThoughtSignatureOnlyResetsTransportIdle(t *testing.T)
 	}, 1500*time.Millisecond)
 	defer resp.Body.Close()
 
-	_, err := p.handleSSEResponse(ctx, resp, nil, "")
+	_, err := p.handleSSEResponse(ctx, resp, nil, "", "gemini-3.5-flash")
 	if err == nil {
 		t.Fatal("handleSSEResponse() should return thinking timeout")
 	}

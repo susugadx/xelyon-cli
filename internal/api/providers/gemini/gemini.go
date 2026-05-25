@@ -54,6 +54,77 @@ type Provider struct {
 // Google側でリクエスト処理が詰まった場合に無制限にぶら下がるのを防ぐ
 const defaultResponseHeaderTimeout = 60 * time.Second
 
+// geminiFlexResponseHeaderTimeout は Flex tier の queue 待ちを許容する response-start 上限。
+const geminiFlexResponseHeaderTimeout = 10 * time.Minute
+
+func geminiConfiguredThinkingTimeout(cfg *config.Config) time.Duration {
+	if cfg == nil || cfg.Streaming.ThinkingTimeoutSeconds <= 0 {
+		return 300 * time.Second
+	}
+	return time.Duration(cfg.Streaming.ThinkingTimeoutSeconds) * time.Second
+}
+
+func geminiPolicyModel(cfg *config.Config, model string) string {
+	model = strings.TrimSpace(model)
+	if cfg == nil {
+		return model
+	}
+	if catalogModel := strings.TrimSpace(cfg.ModelCatalogName("gemini", model)); catalogModel != "" {
+		return catalogModel
+	}
+	return model
+}
+
+func isGeminiThinkingRequest(ctx context.Context, model string) bool {
+	return isGemini3Model(geminiPolicyModel(config.FromContext(ctx), model)) || api.IsThinkingEnabled(ctx)
+}
+
+func geminiResponseHeaderTimeout(ctx context.Context, model string, current time.Duration) time.Duration {
+	// 明示的に差し替えられた transport の timeout は尊重する。通常の provider 既定値だけ、
+	// Flex / thinking request では config に合わせて広げる。
+	if current != defaultResponseHeaderTimeout {
+		return current
+	}
+	cfg := config.FromContext(ctx)
+	timeout := current
+	if cfg.GeminiServiceTier() == config.GeminiServiceTierFlex && geminiFlexResponseHeaderTimeout > timeout {
+		timeout = geminiFlexResponseHeaderTimeout
+	}
+	if !isGeminiThinkingRequest(ctx, model) {
+		return timeout
+	}
+	if thinkingTimeout := geminiConfiguredThinkingTimeout(cfg); thinkingTimeout > timeout {
+		return thinkingTimeout
+	}
+	return timeout
+}
+
+func (p *Provider) httpClientForRequest(ctx context.Context, model string) *http.Client {
+	if p == nil || p.httpClient == nil {
+		return http.DefaultClient
+	}
+
+	transport := p.httpClient.Transport
+	if transport == nil {
+		return p.httpClient
+	}
+	httpTransport, ok := transport.(*http.Transport)
+	if !ok {
+		return p.httpClient
+	}
+
+	timeout := geminiResponseHeaderTimeout(ctx, model, httpTransport.ResponseHeaderTimeout)
+	if timeout == httpTransport.ResponseHeaderTimeout {
+		return p.httpClient
+	}
+
+	client := *p.httpClient
+	cloned := httpTransport.Clone()
+	cloned.ResponseHeaderTimeout = timeout
+	client.Transport = cloned
+	return &client
+}
+
 // New は新しいGeminiProviderを作成
 func New(apiKey string) *Provider {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -115,15 +186,16 @@ func isGemini3Model(model string) bool {
 // Gemini 2.5: thinkingBudget（thinking.enabled=true のときのみ）
 func getThinkingConfigForModel(ctx context.Context, model string, cfg *config.Config) *GeminiGenerationConfig {
 	maxTokens := api.GetMaxOutputTokens(ctx, "gemini", model)
+	policyModel := geminiPolicyModel(cfg, model)
 
-	if isGemini3Model(model) {
+	if isGemini3Model(policyModel) {
 		// Gemini 3: thinking は無効化不可
 		// Flash は "minimal" が使える（最も latency が低い）
 		// Pro は "low" が最小
-		isFlash := strings.Contains(model, "flash")
+		isFlash := strings.Contains(policyModel, "flash")
 		var thinkingLevel string
 		if api.IsThinkingEnabled(ctx) {
-			thinkingLevel = levelToThinkingLevel(cfg.Thinking.Level, model)
+			thinkingLevel = levelToThinkingLevel(cfg.Thinking.Level, policyModel)
 		} else {
 			if isFlash {
 				thinkingLevel = "minimal"
@@ -203,12 +275,68 @@ const responseStartTimeoutRetryKey ctxKey = "gemini_response_start_timeout_retry
 // maxResponseStartTimeoutRetries はresponse-start timeout時のリトライ上限
 const maxResponseStartTimeoutRetries = 1
 
+type geminiTimeoutRetryFunc func(context.Context) (string, error)
+
+func geminiRetryCount(ctx context.Context, key ctxKey) int {
+	if retryCount, ok := ctx.Value(key).(int); ok {
+		return retryCount
+	}
+	return 0
+}
+
+func retryGeminiTimeout(ctx context.Context, err error, retryMode string, retry geminiTimeoutRetryFunc) (string, bool, error) {
+	// Response-start timeout: レスポンスヘッダー受信前にタイムアウト（1回リトライ）
+	var responseStartErr *ErrResponseStartTimeout
+	if errors.As(err, &responseStartErr) {
+		retryCount := geminiRetryCount(ctx, responseStartTimeoutRetryKey)
+		if retryCount >= maxResponseStartTimeoutRetries {
+			return "", true, fmt.Errorf("response start timeout: exceeded max retries (%d): %w", maxResponseStartTimeoutRetries, err)
+		}
+		retryCount++
+		api.StopSpinnerAndResetTerminal(ctx)
+		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Response start timeout, retrying (%d/%d)...\n", retryCount, maxResponseStartTimeoutRetries)
+		result, retryErr := retry(context.WithValue(ctx, responseStartTimeoutRetryKey, retryCount))
+		return result, true, retryErr
+	}
+
+	// Transport idle timeout: SSE の有効 data chunk が途切れた場合は同じ request mode で1回リトライ。
+	var idleErr *ErrIdleTimeout
+	if errors.As(err, &idleErr) {
+		retryCount := geminiRetryCount(ctx, idleTimeoutRetryKey)
+		if retryCount >= maxIdleTimeoutRetries {
+			return "", true, fmt.Errorf("transport idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
+		}
+		retryCount++
+		api.StopSpinnerAndResetTerminal(ctx)
+		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Transport idle timeout, retrying %s (attempt %d/%d)...\n", retryMode, retryCount, maxIdleTimeoutRetries)
+		result, retryErr := retry(context.WithValue(ctx, idleTimeoutRetryKey, retryCount))
+		return result, true, retryErr
+	}
+
+	// Thinking timeout: thought だけが続いて actionable output が出ない場合は同じ request mode でリトライ。
+	var thinkingErr *ErrThinkingTimeout
+	if errors.As(err, &thinkingErr) {
+		retryCount := geminiRetryCount(ctx, thinkingTimeoutRetryKey)
+		if retryCount >= maxThinkingTimeoutRetries {
+			return "", true, fmt.Errorf("thinking timeout: exceeded max retries (%d): %w", maxThinkingTimeoutRetries, err)
+		}
+		retryCount++
+		api.StopSpinnerAndResetTerminal(ctx)
+		fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Thinking timeout, retrying %s (attempt %d/%d)...\n", retryMode, retryCount, maxThinkingTimeoutRetries)
+		result, retryErr := retry(context.WithValue(ctx, thinkingTimeoutRetryKey, retryCount))
+		return result, true, retryErr
+	}
+
+	return "", false, nil
+}
+
 // getThinkingSpinnerMessage はモデルとコンテキストに基づいて thinking スピナーメッセージを返す
 // SSEストリーム開始後に "Waiting for Gemini..." から切り替える際に使用
 func getThinkingSpinnerMessage(ctx context.Context, model string, isImage bool) string {
+	policyModel := geminiPolicyModel(config.FromContext(ctx), model)
 	if isImage {
-		if isGemini3Model(model) {
-			isFlash := strings.Contains(model, "flash")
+		if isGemini3Model(policyModel) {
+			isFlash := strings.Contains(policyModel, "flash")
 			if isFlash && !api.IsThinkingEnabled(ctx) {
 				return "Analyzing image"
 			}
@@ -219,8 +347,8 @@ func getThinkingSpinnerMessage(ctx context.Context, model string, isImage bool) 
 		}
 		return "Analyzing image"
 	}
-	if isGemini3Model(model) {
-		isFlash := strings.Contains(model, "flash")
+	if isGemini3Model(policyModel) {
+		isFlash := strings.Contains(policyModel, "flash")
 		if isFlash && !api.IsThinkingEnabled(ctx) {
 			return "Thinking"
 		}
@@ -246,8 +374,15 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	errOut := api.ErrorWriterFromContext(ctx)
 
+	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
+	cfg := config.FromContext(ctx)
+	functionCallingPolicy := newGeminiFunctionCallingPolicy(cfg, model)
+	if !functionCallingPolicy.Enabled() && !api.IsToolUseDisabled(ctx) {
+		return "", functionCallingPolicy.UnsupportedError()
+	}
+
 	// request mode で Function Calling を制御（デフォルト: 有効）
-	useFunctionCalling := api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled())
+	useFunctionCalling := api.ShouldSendToolPayload(ctx, functionCallingPolicy.Enabled())
 
 	if debug {
 		fmt.Fprintf(errOut, "[DEBUG Gemini] toolUseDisabled=%v, useFunctionCalling=%v, mcpTools=%d\n",
@@ -260,55 +395,10 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		}
 		result, err := p.chatWithFunctionCalling(ctx, systemPrompt, history, model)
 		if err != nil {
-			// Response-start timeout: レスポンスヘッダー受信前にタイムアウト（1回リトライ）
-			var responseStartErr *ErrResponseStartTimeout
-			if errors.As(err, &responseStartErr) {
-				retryCount := 0
-				if v := ctx.Value(responseStartTimeoutRetryKey); v != nil {
-					retryCount = v.(int)
-				}
-				if retryCount >= maxResponseStartTimeoutRetries {
-					return "", fmt.Errorf("response start timeout: exceeded max retries (%d): %w", maxResponseStartTimeoutRetries, err)
-				}
-				retryCount++
-				api.StopSpinnerAndResetTerminal(ctx)
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Response start timeout, retrying (%d/%d)...\n", retryCount, maxResponseStartTimeoutRetries)
-				ctx = context.WithValue(ctx, responseStartTimeoutRetryKey, retryCount)
-				return p.ChatWithTools(ctx, systemPrompt, history, model)
-			}
-
-			// Transport idle timeout: FCモードで1回リトライ → それでもダメならエラー
-			var idleErr *ErrIdleTimeout
-			if errors.As(err, &idleErr) {
-				retryCount := 0
-				if v := ctx.Value(idleTimeoutRetryKey); v != nil {
-					retryCount = v.(int)
-				}
-				if retryCount >= maxIdleTimeoutRetries {
-					return "", fmt.Errorf("transport idle timeout: exceeded max retries (%d): %w", maxIdleTimeoutRetries, err)
-				}
-				retryCount++
-				api.StopSpinnerAndResetTerminal(ctx)
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Transport idle timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxIdleTimeoutRetries)
-				ctx = context.WithValue(ctx, idleTimeoutRetryKey, retryCount)
-				return p.ChatWithTools(ctx, systemPrompt, history, model)
-			}
-
-			// Thinking timeout: FCモードでリトライ（既存ロジック、変更なし）
-			var thinkingErr *ErrThinkingTimeout
-			if errors.As(err, &thinkingErr) {
-				retryCount := 0
-				if v := ctx.Value(thinkingTimeoutRetryKey); v != nil {
-					retryCount = v.(int)
-				}
-				if retryCount >= maxThinkingTimeoutRetries {
-					return "", fmt.Errorf("thinking timeout: exceeded max retries (%d): %w", maxThinkingTimeoutRetries, err)
-				}
-				retryCount++
-				api.StopSpinnerAndResetTerminal(ctx)
-				fmt.Fprintf(api.ErrorWriterFromContext(ctx), "⚠️ Thinking timeout, retrying FC mode (attempt %d/%d)...\n", retryCount, maxThinkingTimeoutRetries)
-				ctx = context.WithValue(ctx, thinkingTimeoutRetryKey, retryCount)
-				return p.ChatWithTools(ctx, systemPrompt, history, model)
+			if retryResult, handled, retryErr := retryGeminiTimeout(ctx, err, "FC mode", func(retryCtx context.Context) (string, error) {
+				return p.ChatWithTools(retryCtx, systemPrompt, history, model)
+			}); handled {
+				return retryResult, retryErr
 			}
 
 			// その他のFCエラー: FCモードで1回リトライ → それでもダメならエラー
@@ -345,12 +435,12 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 // doRequestWithRetry は HTTP リクエストを実行し、503/429 の場合にリトライ
 // 503: 指数バックオフ（1s, 2s, 4s）
 // 429: Retry-After ヘッダー優先、なければ指数バックオフ（20s, 40s, 60s）
-func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bodyBytes []byte) (*http.Response, error) {
+func (p *Provider) doRequestWithRetry(ctx context.Context, req *http.Request, bodyBytes []byte, model string) (*http.Response, error) {
 	const maxRetries = 3
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		resp, err := p.httpClient.Do(req)
+		resp, err := p.httpClientForRequest(ctx, model).Do(req)
 		if err != nil {
 			// ResponseHeaderTimeout によるタイムアウトを検出
 			// 親 context のキャンセルではない場合のみ ErrResponseStartTimeout に変換

@@ -113,6 +113,12 @@ func TestAzureProviderCatalogDoesNotHardcodeHelperDeployments(t *testing.T) {
 	}
 }
 
+func TestGeminiProviderCatalogUsesStableHelperModel(t *testing.T) {
+	if got := ProviderDefaultSubAgentModel("gemini"); got != "gemini-3.1-flash-lite" {
+		t.Fatalf("ProviderDefaultSubAgentModel(gemini) = %q, want gemini-3.1-flash-lite", got)
+	}
+}
+
 func TestKimiProviderCatalog(t *testing.T) {
 	if got := ProviderDefaultSubAgentModel("kimi"); got != "kimi-k2.5" {
 		t.Fatalf("ProviderDefaultSubAgentModel(kimi) = %q, want kimi-k2.5", got)

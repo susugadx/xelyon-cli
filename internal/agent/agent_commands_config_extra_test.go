@@ -49,6 +49,7 @@ type configMenuEditResult struct {
 	value   interface{}
 	changed bool
 	err     error
+	mutate  func()
 }
 
 func (m *scriptedConfigMenu) Run() (*config.ConfigCategory, error) {
@@ -75,6 +76,9 @@ func (m *scriptedConfigMenu) EditField(field *config.ConfigField) (interface{}, 
 	}
 	result := m.editResults[m.editIndex]
 	m.editIndex++
+	if result.mutate != nil {
+		result.mutate()
+	}
 	return result.value, result.changed, result.err
 }
 

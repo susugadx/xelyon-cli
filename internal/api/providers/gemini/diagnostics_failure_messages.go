@@ -79,6 +79,14 @@ func newGeminiDiagnosticSmokeFailure(failure providerdiag.SmokeFailure) geminiDi
 			Detail:     failure.Detail,
 			Suggestion: "The selected Gemini model returned an SSE stream without text or tool calls; retry, change --model if it repeats, or inspect --print-request for the request shape",
 		}
+	case failure.Kind == providerdiag.SmokeFailureKindTimeout:
+		return geminiDiagnosticSmokeFailure{
+			Kind:       failure.Kind,
+			Feature:    failure.Feature,
+			Message:    "live Gemini smoke request timed out",
+			Detail:     failure.Detail,
+			Suggestion: "Rerun with a larger --timeout, increase streaming.thinking_timeout_seconds for long-thinking Gemini requests, or use XELYON_DEBUG_GEMINI=1 to inspect SSE progress",
+		}
 	case failure.Kind == providerdiag.SmokeFailureKindEndpointMismatch:
 		return geminiDiagnosticSmokeFailure{
 			Kind:       failure.Kind,

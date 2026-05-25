@@ -33,18 +33,22 @@ func (cs *configScreen) applySelectedStructEntryInput(raw string) bool {
 		return false
 	}
 	ef := &cs.editEntryFields[cs.editEntryIndex]
+	updated := *ef
 	switch ef.Type {
 	case "string":
-		ef.Value = raw
+		updated.Value = raw
 	case "int":
 		v, err := strconv.Atoi(raw)
 		if err != nil {
 			return false
 		}
-		ef.Value = v
+		updated.Value = v
 	default:
 		return false
 	}
-	cs.applyEntryFieldAndMark(ef)
+	if !cs.applyEntryFieldAndMark(updated) {
+		return false
+	}
+	*ef = updated
 	return true
 }

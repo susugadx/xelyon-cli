@@ -19,6 +19,7 @@ func TestFieldTypeMap(t *testing.T) {
 		"provider_models":                   FieldTypeStructMap,
 		"review.provider":                   FieldTypeSelect,
 		"review.model":                      FieldTypeString,
+		"gemini.service_tier":               FieldTypeSelect,
 		"sub_agent.max_concurrent":          FieldTypeInt,
 	}
 
@@ -46,6 +47,7 @@ func TestSelectOptions(t *testing.T) {
 		{"agent_instructions.project.mode", 3},
 		{"output.assistant_updates", 4},
 		{"review.provider", 11}, // empty + display providers
+		{"gemini.service_tier", 3},
 	}
 
 	for _, tt := range tests {
@@ -94,6 +96,7 @@ func TestFieldDescriptions(t *testing.T) {
 		"project_map.context_ratio",
 		"review.provider",
 		"review.model",
+		"gemini.service_tier",
 		"sub_agent.default_model",
 	}
 

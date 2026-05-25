@@ -26,6 +26,23 @@ func TestKnownMaxOutputTokens_ClaudeOpus47(t *testing.T) {
 	}
 }
 
+func TestKnownMaxOutputTokens_GeminiFlashModels(t *testing.T) {
+	for _, model := range []string{
+		"gemini-3.5-flash",
+		"gemini-3.1-flash-lite",
+	} {
+		t.Run(model, func(t *testing.T) {
+			got, ok := KnownMaxOutputTokens(model)
+			if !ok {
+				t.Fatalf("KnownMaxOutputTokens(%q) ok = false, want true", model)
+			}
+			if got != 65536 {
+				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want 65536", model, got)
+			}
+		})
+	}
+}
+
 func TestIsKnownModelName(t *testing.T) {
 	tests := []struct {
 		model string
@@ -39,6 +56,8 @@ func TestIsKnownModelName(t *testing.T) {
 		{model: "eu.anthropic.claude-sonnet-4-6", want: true},
 		{model: "au.anthropic.claude-sonnet-4-6", want: true},
 		{model: "claude-sonnet-4.5", want: true},
+		{model: "gemini-3.5-flash", want: true},
+		{model: "gemini-3.1-flash-lite", want: true},
 		{model: "gemini-3.1-pro", want: true},
 		{model: "kimi-k2.6", want: true},
 		{model: "kimi-k2.5", want: true},
@@ -83,6 +102,43 @@ func TestKnownModelNamesForProvider_AzureDoesNotUseCatalogModels(t *testing.T) {
 	}
 }
 
+func TestKnownAndRecommendedModelNamesForProviderDoNotDuplicateModels(t *testing.T) {
+	for provider := range knownProviderModels {
+		t.Run(provider+"/known", func(t *testing.T) {
+			assertNoDuplicateModels(t, KnownModelNamesForProvider(provider))
+		})
+		t.Run(provider+"/recommended", func(t *testing.T) {
+			assertNoDuplicateModels(t, RecommendedModelNamesForProvider(provider))
+		})
+	}
+}
+
+func assertNoDuplicateModels(t *testing.T, models []string) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, model := range models {
+		if seen[model] {
+			t.Fatalf("duplicate model %q in %v", model, models)
+		}
+		seen[model] = true
+	}
+}
+
+func TestCanonicalModelNameForProvider_GeminiResourceName(t *testing.T) {
+	if got := CanonicalModelNameForProvider("gemini", "models/Gemini-3.5-Flash"); got != "gemini-3.5-flash" {
+		t.Fatalf("CanonicalModelNameForProvider(gemini) = %q, want gemini-3.5-flash", got)
+	}
+	if got := CanonicalModelNameForProvider("openai", "models/GPT-5.4"); got != "models/GPT-5.4" {
+		t.Fatalf("CanonicalModelNameForProvider(openai) = %q, want provider-specific form preserved", got)
+	}
+}
+
+func TestIsKnownModelNameForProvider_GeminiResourceName(t *testing.T) {
+	if !IsKnownModelNameForProvider("gemini", "models/gemini-3.5-flash") {
+		t.Fatal("IsKnownModelNameForProvider(gemini, models/gemini-3.5-flash) = false, want true")
+	}
+}
+
 func TestKnownModelNamesForProvider_IncludesGPT53CodexForOpenAIProviders(t *testing.T) {
 	tests := []struct {
 		provider string
@@ -97,6 +153,124 @@ func TestKnownModelNamesForProvider_IncludesGPT53CodexForOpenAIProviders(t *test
 			models := KnownModelNamesForProvider(tt.provider)
 			if !slices.Contains(models, tt.model) {
 				t.Fatalf("KnownModelNamesForProvider(%q) = %v, want %q", tt.provider, models, tt.model)
+			}
+		})
+	}
+}
+
+func TestRecommendedModelNamesForProvider_IncludesRecommendedGeminiModels(t *testing.T) {
+	models := RecommendedModelNamesForProvider("gemini")
+	wantPrefix := []string{
+		"gemini-3.5-flash",
+		"gemini-3.1-flash-lite",
+		"gemini-3.1-pro-preview-customtools",
+	}
+	if len(models) < len(wantPrefix) {
+		t.Fatalf("RecommendedModelNamesForProvider(gemini) = %v, want at least %d models", models, len(wantPrefix))
+	}
+	if !slices.Equal(models[:len(wantPrefix)], wantPrefix) {
+		t.Fatalf("RecommendedModelNamesForProvider(gemini) prefix = %v, want %v; all=%v", models[:len(wantPrefix)], wantPrefix, models)
+	}
+
+	hiddenModels := []string{
+		"gemini-3.1-pro",
+		"gemini-3.1-pro-preview",
+		"gemini-3-pro-preview",
+		"gemini-2.0-flash",
+		"gemini-2.0-flash-001",
+		"gemini-2.0-flash-exp",
+		"gemini-2.0-flash-lite",
+		"gemini-2.0-flash-lite-001",
+		"gemini-1.5-pro",
+		"gemini-1.5-flash",
+		"gemini-3.1-flash-lite-preview",
+	}
+	for _, model := range hiddenModels {
+		if slices.Contains(models, model) {
+			t.Fatalf("RecommendedModelNamesForProvider(gemini) = %v, should not expose %q", models, model)
+		}
+	}
+}
+
+func TestKnownModelNamesForProvider_IncludesHiddenGeminiCatalogModels(t *testing.T) {
+	models := KnownModelNamesForProvider("gemini")
+	for _, model := range []string{
+		"gemini-3.1-pro-preview",
+		"gemini-3.1-pro",
+		"gemini-2.0-flash-exp",
+	} {
+		if !slices.Contains(models, model) {
+			t.Fatalf("KnownModelNamesForProvider(gemini) = %v, want hidden catalog model %q", models, model)
+		}
+	}
+}
+
+func TestModelLifecycleForProvider_GeminiPickerAndShutdownMetadata(t *testing.T) {
+	tests := []struct {
+		model        string
+		stage        ModelLifecycleStage
+		hidden       bool
+		shutdownDate string
+		replacement  string
+		warn         bool
+	}{
+		{
+			model: "gemini-3.5-flash",
+			stage: ModelLifecycleActive,
+		},
+		{
+			model:       "gemini-3.1-pro",
+			stage:       ModelLifecycleActive,
+			hidden:      true,
+			replacement: "gemini-3.1-pro-preview-customtools",
+			warn:        true,
+		},
+		{
+			model:        "gemini-3-pro-preview",
+			stage:        ModelLifecycleShutdown,
+			hidden:       true,
+			shutdownDate: "2026-03-09",
+			replacement:  "gemini-3.1-pro-preview-customtools",
+			warn:         true,
+		},
+		{
+			model:        "gemini-2.0-flash",
+			stage:        ModelLifecycleDeprecated,
+			hidden:       true,
+			shutdownDate: "2026-06-01",
+			replacement:  "gemini-3.5-flash",
+			warn:         true,
+		},
+		{
+			model:        "gemini-1.5-pro-001",
+			stage:        ModelLifecycleShutdown,
+			hidden:       true,
+			shutdownDate: "2025-09-29",
+			replacement:  "gemini-3.1-pro-preview-customtools",
+			warn:         true,
+		},
+		{
+			model:        "gemini-1.5-flash-latest",
+			stage:        ModelLifecycleShutdown,
+			hidden:       true,
+			shutdownDate: "2025-09-29",
+			replacement:  "gemini-3.5-flash",
+			warn:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got, ok := ModelLifecycleForProvider("gemini", tt.model)
+			if !ok {
+				t.Fatalf("ModelLifecycleForProvider(gemini, %q) ok = false, want true", tt.model)
+			}
+			if got.Stage != tt.stage ||
+				got.HiddenFromPicker != tt.hidden ||
+				got.ShutdownDate != tt.shutdownDate ||
+				got.Replacement != tt.replacement ||
+				got.ShouldWarn() != tt.warn {
+				t.Fatalf("ModelLifecycleForProvider(gemini, %q) = %#v, want stage=%s hidden=%t shutdown=%q replacement=%q warn=%t", tt.model, got, tt.stage, tt.hidden, tt.shutdownDate, tt.replacement, tt.warn)
 			}
 		})
 	}
@@ -118,6 +292,9 @@ func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
 		{provider: "kimi", model: "moonshotai.kimi-k2.5", want: false},
 		{provider: "openai", model: "gpt-5.4", want: true},
 		{provider: "openai", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: false},
+		{provider: "gemini", model: "gemini-3.1-pro", want: true},
+		{provider: "gemini", model: "gemini-3-pro-preview", want: true},
+		{provider: "gemini", model: "gemini-2.0-flash", want: true},
 		{provider: "azure", model: "gpt-5.4", want: false},
 		{provider: "bedrock", model: "meta.llama3-3-70b-instruct-v1:0", want: true},
 		{provider: "bedrock", model: "gpt-5.4", want: false},
@@ -172,6 +349,8 @@ func TestKnownModelContextLimit(t *testing.T) {
 		ok    bool
 	}{
 		{model: "gpt-5.4", want: 1000000, ok: true},
+		{model: "gemini-3.5-flash", want: 1048576, ok: true},
+		{model: "gemini-3.1-flash-lite", want: 1000000, ok: true},
 		{model: "claude-sonnet-4-6", want: 200000, ok: true},
 		{model: "deepseek-v4-custom", want: 1000000, ok: true},
 		{model: "kimi-k2.6", want: 256000, ok: true},
