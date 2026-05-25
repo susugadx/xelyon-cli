@@ -136,6 +136,17 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **プロンプトキャッシュ最適化**: Claude/Bedrock(Claude) 利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置
 - **Long Context 料金自動判定**: Claude/Gemini Pro で200Kトークン超のリクエスト時、long context 料金ティアを自動適用。キャッシュトークン（cache_read + cache_creation）も含めた総入力トークンでティア判定
 
+### 🧠 履歴を消さずに、AIへ渡す文脈だけ軽くする
+XELYON は raw history / session / audit / JSONL を保持したまま、provider に送る履歴だけを request ごとに projection できます。
+
+- 古い `read_file` / `search_code` / `gather_context` 結果は、条件を満たすと evidence pointer placeholder に置き換えられます
+- 成功した test / build / lint command output は、安全条件付きで summary 化できます
+- 必要な evidence は現在ファイルから rehydrate し、request-local active context として provider 入力へ戻せます
+- active context は OpenAI Responses、Chat Completions 系、Claude、Gemini、Bedrock など既存の provider transport に対応します
+- raw storage は変更せず、rehydrated evidence も history へ保存しません
+
+この provider history reduction / rehydrate context はまだ experimental dogfood 機能です。設定例と内部契約は [docs/dev/history-active-context.md](docs/dev/history-active-context.md) を参照してください。
+
 ### 📈 リアルタイムトークン表示
 API実測値に基づくトークン使用量とコストをリアルタイム表示。
 - **ステータスバー**: プロンプト直前に `● model │ Mode │ tokens/limit │ ~$cost` を表示

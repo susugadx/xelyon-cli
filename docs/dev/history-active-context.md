@@ -1,4 +1,70 @@
-# History / Active Context Contract
+# Provider History Reduction / Active Context
+
+このページは、provider history reduction と rehydrated evidence active context の開発者向け dogfood メモです。
+まだ stable public config ではありません。`/config`、`docs/config.md`、generated config metadata には出しません。
+
+## 早見表
+
+### これは何か
+
+XELYON の raw history を消さずに、provider へ送る履歴だけを request ごとに軽くする runtime-owned history optimization です。
+
+- `Agent.History`、`Session.Messages`、audit、change records、persisted JSONL は元の内容を保持します。
+- provider-facing history projection だけで、古い `read_file` / `search_code` / `gather_context` 結果を evidence pointer placeholder にできます。
+- 成功した test / build / lint command output は、安全条件を満たす場合だけ summary 化できます。
+- 置き換えた read/search/gather evidence は、必要に応じて現在ファイルから rehydrate し、request-local active context として provider 入力へ戻せます。
+
+### 何が嬉しいか
+
+- 長い作業履歴を保持したまま、provider に再送する古い巨大 tool output を減らせます。
+- raw log を失わないので、resume、audit、ledger、debug の根拠は残ります。
+- 古い evidence を完全に捨てるのではなく、必要な範囲を現在ファイルから読み直して active context に戻せます。
+- provider adapter ごとの既存 active-context transport を使うため、request assembly の責務を provider 側に閉じ込められます。
+
+### dogfood 設定例
+
+`xelyon.yaml` に project-local experimental 設定として書きます。default は `off` / `false` です。
+
+```yaml
+experimental:
+  provider_history_reduction:
+    mode: apply
+    rehydrate_context: true
+```
+
+`mode` は `off` / `dry_run` / `apply` / `auto` を受け付けます。`auto` は現時点では safe な `dry_run` として動きます。
+`rehydrate_context: true` は mode とは別の gate です。`mode: off` や `dry_run` と同時に指定しても設定としては有効ですが、実際に rehydrated block が出るのは read/search/gather evidence replacement が apply され、現在の provider route に active context transport がある場合だけです。
+
+### env override
+
+一時的に dogfood する場合は env で project config を上書きできます。
+
+```sh
+XELYON_PROVIDER_HISTORY_REDUCTION=dry_run xelyon
+XELYON_PROVIDER_HISTORY_REDUCTION=apply xelyon
+XELYON_PROVIDER_HISTORY_REDUCTION=off xelyon
+XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1 xelyon
+XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=false xelyon
+```
+
+`XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT` は `1` / `true` / `0` / `false` を受け付けます。無効な値は config error にします。
+
+### 見る場所
+
+- `/status`: provider history reduction の mode、candidate / replacement summary、`rehydrate_context=on|off`、`active_context_transport=...` を確認します。
+- `/tokens`: 通常の token 見積もりを見る場所です。provider history reduction diagnostics は混ぜません。
+- `/ledger`: read/search/gather replacement から作れる rehydrate candidates を確認します。rehydrated file content 自体は表示しません。
+
+### 大事な安全契約
+
+- raw history は消えません。`Agent.History`、`Session.Messages`、audit entries、change records、persisted JSONL は元の内容を保持します。
+- rehydrated evidence は request-local model input です。history、session、audit、ledger actual content、persisted JSONL には保存しません。
+- active context transport がない unsupported provider では、read/search/gather evidence replacement を skip し、`active_context_transport_unsupported` として保持します。
+- internal calls / compact / compression / Gemini repair / review model には active context を入れません。
+- これは stable config ではありません。README には experimental 概要だけを置き、通常設定表、`/config`、`docs/config.md`、generated config metadata にはまだ出しません。
+- default ON ではありません。コスト削減率も固定値としては約束しません。
+
+## 詳細メモ
 
 Phase 5a records the current contract before raw log and provider-facing active context are separated further.
 This document is descriptive. It does not change retention, compression, provider request payloads, or Responses continuation behavior.
@@ -90,7 +156,7 @@ Phase 5d adds an experimental project-local mode selector for controlled rollout
 
 - The default remains `off`. `xelyon.yaml` can opt in with `experimental.provider_history_reduction.mode: off|dry_run|apply|auto`; `XELYON_PROVIDER_HISTORY_REDUCTION` overrides the project file with the same values.
 - `experimental.provider_history_reduction.rehydrate_context: true` enables request-local rehydrated evidence active-context injection for dogfood. `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false` overrides the project file. The default is false.
-- `/config`, generated `config.yaml` metadata, README, and `docs/config.md` remain unchanged because this is not a stable global config surface.
+- `/config`, generated `config.yaml` metadata, and `docs/config.md` remain unchanged because this is not a stable global config surface. README may point developers to this dogfood note as an experimental feature overview.
 - `dry_run` updates `AgentRuntime.LastProviderHistoryProjectionReport` but sends raw provider payload and keeps any OpenAI/Azure Responses `previous_response_id` chain unchanged.
 - `apply` uses the existing safe replacement path and disables the Responses continuation chain only when a replacement is actually applied.
 - `auto` is accepted as an enum but currently resolves to the safe `dry_run` effective mode. `/status` reports the configured mode separately, for example `mode=auto; effective=dry_run; report: mode=dry_run; ...`.
@@ -98,7 +164,7 @@ Phase 5d adds an experimental project-local mode selector for controlled rollout
 
 ## Provider History Reduction Dogfood
 
-This mode is experimental runtime dogfood only. Do not expose it in `/config`, generated config metadata, README, or `docs/config.md` until the public config contract is decided.
+This mode is experimental runtime dogfood only. Do not expose it as a stable public config in `/config`, generated config metadata, or `docs/config.md` until the public config contract is decided. README may link here as an experimental developer feature overview.
 
 Project-local dry-run:
 
@@ -149,7 +215,7 @@ The runtime can pass those applied read/search/gather `EvidencePointers` into `l
 
 Command output replacement is backed by successful command summaries, not evidence pointers, so command/edit replacements are not rehydrate candidates.
 
-Provider-input injection is available behind `RuntimeOptions.EnableProviderHistoryRehydrateContext`. The gate defaults to false and can be enabled for dogfood with `experimental.provider_history_reduction.rehydrate_context: true` in `xelyon.yaml` or overridden for one run with `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false`. This remains an experimental project-local surface only: it is still not exposed in `/config`, README, `docs/config.md`, or generated config metadata.
+Provider-input injection is available behind `RuntimeOptions.EnableProviderHistoryRehydrateContext`. The gate defaults to false and can be enabled for dogfood with `experimental.provider_history_reduction.rehydrate_context: true` in `xelyon.yaml` or overridden for one run with `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false`. This remains an experimental project-local surface only: it is still not exposed as stable config in `/config`, `docs/config.md`, or generated config metadata.
 
 When the gate is true, provider-facing request assembly uses the projection report from the same request, builds a rehydrate plan from applied read/search/gather replacements, executes it against current files, renders `<rehydrated_evidence>`, and appends it as a dynamic active context block named `provider_history_rehydrated_evidence`. This happens only for provider request paths that already use `providerFacingHistoryForRequest` and only when `internal/api.ProviderActiveContextTransportForRequest` reports a supported transport. The active context core contract is provider-independent and request-local; provider adapters own the transport-specific placement.
 
