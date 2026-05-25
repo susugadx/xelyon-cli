@@ -119,8 +119,15 @@ LSPは以下の用途で内部的に利用されます（専用ツールは不�
 - **診断（エラー検知）**: `str_replace` 後の即座フィードバック、コミット前の自動チェック
 - **削除時参照チェック**: `delete_file` 実行前に外部参照を自動検出し警告
 - **Plan依存分析**: 変更ファイル間の依存関係を自動検出
+- **structured impact の semantic collection**: 対応 target では definition / references / implementations の第一候補として LSP を使い、AST classification と shallow fallback で補助します
 
 コード検索には `search_code` ツールを使用してください。`[def]`/`[ref]`/`[call]` アノテーションで定義・参照を自動識別します。
+
+## Structured impact との関係
+
+LSP サーバーを設定できることと、`search_code(intent=impact)` が同じ深度の structured impact を返せることは別です。現時点で structured impact の深い bundle を返す target は Go、TypeScript `.ts` / `.d.ts`、TSX `.tsx`、JavaScript `.js`、JSX `.jsx` です。Python、Rust、Java、C# などは LSP 設定を持てますが、同等の structured impact 対応とは書いていません。
+
+XELYON の方針は LSP-first です。LSP が使える場合は semantic references を優先し、AST は import / call / type ref / test / JSX usage などの分類に使います。fallback は LSP 失敗時の保険であり、自前 LSP や完全な module resolver ではありません。
 
 ## 削除時参照チェック
 
@@ -199,5 +206,6 @@ lsp:
 ## 関連ドキュメント
 
 - [コマンド一覧](commands.md)
+- [Search optimization and structured impact](search.md)
 - [設定リファレンス](config.md)
 - [プロバイダー設定](providers.md)

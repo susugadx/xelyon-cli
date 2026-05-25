@@ -34,7 +34,11 @@ func buildSearchExecutionResult(execCtx tools.ExecutionContext, plan searchPlan,
 			discovery: artifact.Rendered,
 		},
 	}
-	if prefetch := prefetchRecommendedEvidence(execCtx, artifact); prefetch.output != "" {
+	prefetch := prefetchRecommendedEvidence(execCtx, artifact)
+	if prefetch.discoveryNote != "" {
+		result.search.discovery = appendSearchDiscoveryNote(result.search.discovery, prefetch.discoveryNote)
+	}
+	if prefetch.output != "" {
 		result.routeHint = "Structured impact + prefetched evidence"
 		result.search.prefetchedEvidence = prefetch.output
 		result.observation = tools.MergeRuntimeObservations(result.observation, prefetch.observation)

@@ -6,17 +6,27 @@
 
 ## 現在の利用箇所
 
+### Go AST (`internal/ast`)
+
 - Go ファイルを CGO なしでパース
 - 定義シンボルを抽出し、`search_code` の Go symbol resolver と `read_file(symbol=...)` で利用
 - 行単位で `def` / `call` / `ref` / `import` / `comment` / `string` を分類
 - legacy `str_replace` の Go ファイル書き込み前に構文検証を実行し、問題があれば警告を返す
 - `grammar_set_core` ビルドタグで文法セットを削減
 
+### JS family AST (`internal/jsast`)
+
+- TypeScript / TSX / JavaScript / JSX を parsed file として扱い、structured impact の evidence classification に利用
+- import / export / call / type ref / JSX usage / related test の分類を補助
+- LSP から返った range の分類、AST-based reference collection、LSP が使えない場合の shallow fallback evidence extraction に利用
+- `SemanticEvidence` へ渡す snippets、section kind、RecommendedReads の材料を整える
+
 ## 主なファイル
 
 - `internal/ast/ast.go`
 - `internal/ast/queries.go`
 - `internal/ast/ast_test.go`
+- `internal/jsast/*.go`
 
 ## 公開 API
 
@@ -30,7 +40,9 @@
 
 ## 現在の制約
 
-- 対応言語は Go のみ
+- `internal/ast` の公開 API は Go 向けです。TypeScript / TSX / JavaScript / JSX の分類は `internal/jsast` が担当します
+- AST は semantic resolver ではありません。LSP が使える場合は LSP-first で semantic collection を行い、AST は分類・snippet・test/import/call/type-ref 判定の補助に使います
+- JS family fallback は lightweight evidence extractor であり、module graph、`tsconfig` paths、dynamic CommonJS を完全解決しません
 - `search_code` は Project Map と併用し、公開契約は `mode=auto | symbol | literal | regex` の router ベース
 - `ValidateSyntax` は現時点では警告を返すだけで、書き込み自体は止めない
 

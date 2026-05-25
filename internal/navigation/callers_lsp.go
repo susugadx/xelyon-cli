@@ -8,12 +8,12 @@ import (
 const lspReferenceTimeout = 5 * time.Second
 
 // findReferencesViaLSP は LSP の参照結果を navigation.Reference に変換する。
-func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string, filter ReferenceFilter) ([]Reference, error) {
+func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string, filter ReferenceFilter) ([]Reference, int, error) {
 	locations, err := queryLSPLocations(cand, func(ctx context.Context, filePath string, line, col int) ([]LSPLocation, error) {
 		return client.FindReferences(ctx, filePath, line, col, false)
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	refs := make([]Reference, 0, len(locations))
@@ -24,7 +24,7 @@ func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD 
 		}
 		refs = append(refs, newReferenceFromLSPFilePath(filePath, loc, cand))
 	}
-	return refs, nil
+	return refs, len(locations), nil
 }
 
 // findImplementationsViaLSP は LSP の実装検索結果を navigation.ImplementationRef に変換する。

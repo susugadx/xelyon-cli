@@ -6,38 +6,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/impactplan"
 )
 
-func buildJavaScriptImpactBundle(symbol string, def genericSymbolDef, opts SearchOptions, refs javaScriptImpactRefs) *SymbolBundle {
-	rootPath := structuredJavaScriptImpactFileRoot(opts)
-	impact := buildJavaScriptImpactMetadata(def, refs, rootPath)
-	if impact == nil || len(impact.RecommendedReads) == 0 {
-		return nil
-	}
-
-	bundle := newJSFamilyImpactBundle(jsFamilyImpactBundleSpec{
-		language:    "javascript",
-		debugSource: "javascript-impact-structured",
-		symbol:      symbol,
-		def:         def,
-		rootPath:    rootPath,
-		impact:      impact,
-	})
-
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "imports", "Imports", refs.imports, refs.totalImports, jsImportLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "callers", "Callers", refs.callers, refs.totalCallers, jsCallerLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "references", "References", refs.others, refs.totalOthers, genericRefLimit, false, rootPath, symbol)
-	appendJSFamilyImpactSectionWithTotals(bundle, def, "tests", "Related Tests", refs.allTests(), refs.allTotalTests(), genericTestLimit, true, rootPath, symbol)
-
-	return bundle
-}
-
-func buildJavaScriptImpactBundleFromDisplayAndTotalRefs(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef) *SymbolBundle {
-	return buildJavaScriptImpactBundle(symbol, def, opts, javaScriptImpactRefsForDisplayAndTotalRefs(def, refs, totalRefs, opts))
-}
-
-func buildJavaScriptImpactMetadata(def genericSymbolDef, refs javaScriptImpactRefs, rootPath string) *SymbolBundleImpact {
-	return buildJSFamilyImpactMetadata(def, rootPath, classifyJavaScriptImpactRisk(def, refs), javaScriptImpactRecommendedReadGroups(refs))
-}
-
 func javaScriptImpactRecommendedReadGroups(refs javaScriptImpactRefs) []jsFamilyImpactReadGroup {
 	return []jsFamilyImpactReadGroup{
 		{kind: "callers", refs: refs.callers, limit: jsFamilyImpactRecommendedReadPerGroupLimit},

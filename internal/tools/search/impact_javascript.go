@@ -65,6 +65,11 @@ func structuredJavaScriptImpactResolverSpec() jsFamilyImpactResolverSpec {
 		collectDefAffectedFiles: collectStructuredJavaScriptDefAffectedFiles,
 		referenceOptions:        structuredJavaScriptImpactReferenceOptions,
 		normalizeRefs:           normalizeStructuredJavaScriptRefs,
-		buildBundle:             buildJavaScriptImpactBundleFromDisplayAndTotalRefs,
+		language:                "javascript",
+		rootPath:                structuredJavaScriptImpactFileRoot,
+		debugSource: func(genericSymbolDef) string {
+			return "javascript-impact-structured"
+		},
+		buildSemanticEvidence: buildJSFamilySemanticEvidence,
 	}
 }

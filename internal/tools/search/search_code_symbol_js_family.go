@@ -12,10 +12,10 @@ const (
 	jsTypeRefLimit = 5
 )
 
-// resolveJSSymbol は TS/JS 向けの enhanced symbol fast path。
+// resolveJSFamilySymbol は TS/JS 向けの enhanced symbol fast path。
 // 参照を import / caller / type ref / other に分類し、Go fast path に近い構造化結果を返す。
 // フォールバック: 定義が見つからなければ genericSymbolNone を返し、text search に委譲する。
-func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
+func resolveJSFamilySymbol(symbol string, opts SearchOptions) genericResolveResult {
 	candidates := collectJSFamilyDefinitionCandidates(symbol, opts)
 	defs := candidates.astDefs
 	if len(defs) == 0 {
@@ -52,9 +52,9 @@ func resolveJSSymbol(symbol string, opts SearchOptions) genericResolveResult {
 		{Kind: "references", Title: "References", Items: classifiedRefs.others, TotalItems: classifiedTotalRefs.others, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: classifiedRefs.tests, TotalItems: classifiedTotalRefs.tests, Limit: genericTestLimit, IsTest: true},
 	})
-	setJSFamilyBundleLSPDiagnostics(bundle, refResult.resolvedViaLSP)
+	setJSFamilyBundleDiagnostics(bundle, refResult.diagnostics, filteredTotalRefs)
 	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatJSSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	return genericResolveResult{Output: formatJSFamilySymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 type jsFamilySymbolRefs struct {
@@ -65,8 +65,8 @@ type jsFamilySymbolRefs struct {
 	tests    []genericSymbolRef
 }
 
-// formatJSSymbolResult は TS/JS の分類済みシンボル結果をフォーマットする。
+// formatJSFamilySymbolResult は TS/JS の分類済みシンボル結果をフォーマットする。
 // 出力形式は Go fast path と同様のセクション構造で、locator ID を付与する。
-func formatJSSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
+func formatJSFamilySymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
 	return formatSymbolBundle(bundle, reg, nil)
 }

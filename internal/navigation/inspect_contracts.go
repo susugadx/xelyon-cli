@@ -59,13 +59,14 @@ type SymbolCandidate struct {
 // InspectResult は inspect_symbol の結果。
 type InspectResult struct {
 	// 単一候補の場合
-	Symbol          *SymbolCandidate
-	Body            []string // 行番号付き本文
-	Callers         []Reference
-	Refs            []Reference
-	Tests           []TestRef
-	ResolvedViaLSP  bool
-	Implementations []ImplementationRef
+	Symbol               *SymbolCandidate
+	Body                 []string // 行番号付き本文
+	Callers              []Reference
+	Refs                 []Reference
+	Tests                []TestRef
+	ResolvedViaLSP       bool
+	ReferenceDiagnostics InspectReferenceDiagnostics
+	Implementations      []ImplementationRef
 
 	// 複数候補の場合
 	Candidates []SymbolCandidate
@@ -79,6 +80,19 @@ type InspectResult struct {
 	MoreTests          bool
 	UpstreamTruncated  bool
 	UpstreamIncomplete bool
+}
+
+// InspectReferenceDiagnostics は参照収集経路の事実を表す。
+type InspectReferenceDiagnostics struct {
+	ResolvedBy       string
+	LSPAttempted     bool
+	LSPAvailable     bool
+	LSPTimedOut      bool
+	FallbackUsed     bool
+	FallbackReason   string
+	RawRefCount      int
+	AcceptedRefCount int
+	DroppedRefCount  int
 }
 
 // ImplementationRef は LSP で得られた実装位置を表す。

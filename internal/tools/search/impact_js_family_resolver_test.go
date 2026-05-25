@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/impactplan"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
@@ -53,9 +52,16 @@ func TestResolveStructuredJSFamilyImpactSymbol_MultipleDefinitionsUsesSharedDefi
 			t.Fatalf("normalizeRefs called for multiple definitions: %+v", refs)
 			return nil
 		},
-		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef) *SymbolBundle {
-			t.Fatal("buildBundle called for multiple definitions")
-			return nil
+		language: "typescript",
+		rootPath: func(SearchOptions) string {
+			return ""
+		},
+		debugSource: func(genericSymbolDef) string {
+			return "test"
+		},
+		buildSemanticEvidence: func(string, string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef, SymbolBundleDiagnostics) (SemanticEvidence, bool) {
+			t.Fatal("buildSemanticEvidence called for multiple definitions")
+			return SemanticEvidence{}, false
 		},
 	})
 
@@ -97,9 +103,16 @@ func TestResolveStructuredJSFamilyImpactSymbol_IncompleteSingleDefinitionDefersT
 			t.Fatalf("normalizeRefs called for incomplete single definition: %+v", refs)
 			return nil
 		},
-		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef) *SymbolBundle {
-			t.Fatal("buildBundle called for incomplete single definition")
-			return nil
+		language: "typescript",
+		rootPath: func(SearchOptions) string {
+			return ""
+		},
+		debugSource: func(genericSymbolDef) string {
+			return "test"
+		},
+		buildSemanticEvidence: func(string, string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef, SymbolBundleDiagnostics) (SemanticEvidence, bool) {
+			t.Fatal("buildSemanticEvidence called for incomplete single definition")
+			return SemanticEvidence{}, false
 		},
 	})
 
@@ -132,9 +145,16 @@ func TestResolveStructuredJSFamilyImpactSymbol_IncompleteMultipleDefinitionsDefe
 			t.Fatalf("normalizeRefs called for incomplete multiple definitions: %+v", refs)
 			return nil
 		},
-		buildBundle: func(string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef) *SymbolBundle {
-			t.Fatal("buildBundle called for incomplete multiple definitions")
-			return nil
+		language: "typescript",
+		rootPath: func(SearchOptions) string {
+			return ""
+		},
+		debugSource: func(genericSymbolDef) string {
+			return "test"
+		},
+		buildSemanticEvidence: func(string, string, genericSymbolDef, SearchOptions, []genericSymbolRef, []genericSymbolRef, SymbolBundleDiagnostics) (SemanticEvidence, bool) {
+			t.Fatal("buildSemanticEvidence called for incomplete multiple definitions")
+			return SemanticEvidence{}, false
 		},
 	})
 
@@ -212,15 +232,26 @@ func TestResolveStructuredJSFamilyImpactSymbol_SingleDefinitionUsesSharedReferen
 			}
 			return refs
 		},
-		buildBundle: func(symbol string, gotDef genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef) *SymbolBundle {
+		language: "typescript",
+		rootPath: func(opts SearchOptions) string {
+			return structuredTypeScriptImpactFileRoot(opts)
+		},
+		debugSource: func(genericSymbolDef) string {
+			return "test"
+		},
+		buildSemanticEvidence: func(language string, symbol string, gotDef genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef, diagnostics SymbolBundleDiagnostics) (SemanticEvidence, bool) {
+			if language != "typescript" {
+				t.Fatalf("language = %q, want typescript", language)
+			}
 			if opts.Path != evidenceOpts.Path {
-				t.Fatalf("bundle opts path = %q, want %q", opts.Path, evidenceOpts.Path)
+				t.Fatalf("semantic evidence opts path = %q, want %q", opts.Path, evidenceOpts.Path)
 			}
 			if !slices.Equal(refs, totalRefs) {
 				t.Fatalf("total refs = %+v, want same refs for non-LSP fallback %+v", totalRefs, refs)
 			}
+			assertDiagnosticsResolvedBy(t, diagnostics, symbolBundleResolvedByAST)
 			builtRefs = append([]genericSymbolRef(nil), refs...)
-			return newJSFamilyResolverTestBundle(symbol, gotDef, refs)
+			return semanticEvidenceFromJSFamilyRefsWithOptionsAndTotals(language, symbol, gotDef, opts, refs, totalRefs, diagnostics)
 		},
 	})
 
@@ -244,54 +275,6 @@ func TestResolveStructuredJSFamilyImpactSymbol_SingleDefinitionUsesSharedReferen
 	}
 	if !strings.Contains(result.Output, "Recommended reads:") {
 		t.Fatalf("output = %q, want formatted bundle output", result.Output)
-	}
-}
-
-func newJSFamilyResolverTestBundle(symbol string, def genericSymbolDef, refs []genericSymbolRef) *SymbolBundle {
-	recommended := []SymbolBundleItem{{
-		Kind:    "definition",
-		File:    def.File,
-		Line:    def.Line,
-		Snippet: def.Signature,
-	}}
-	callers := make([]SymbolBundleItem, 0, len(refs))
-	for _, ref := range refs {
-		item := SymbolBundleItem{
-			Kind:    "callers",
-			File:    ref.File,
-			Line:    ref.Line,
-			Snippet: ref.Snippet,
-		}
-		callers = append(callers, item)
-		if filepath.ToSlash(filepath.Clean(ref.File)) == "src/app.ts" {
-			recommended = append(recommended, item)
-		}
-	}
-	return &SymbolBundle{
-		Identity: SymbolBundleIdentity{
-			Language:    "typescript",
-			Query:       symbol,
-			Canonical:   symbol,
-			DisplayName: symbol,
-			Kind:        def.Kind,
-			File:        def.File,
-			Line:        def.Line,
-		},
-		Definition: SymbolBundleDefinition{
-			File:      def.File,
-			Line:      def.Line,
-			Signature: def.Signature,
-		},
-		Sections: []SymbolBundleSection{{
-			Kind:  "callers",
-			Title: "Callers",
-			Items: callers,
-			Total: len(callers),
-		}},
-		Impact: &SymbolBundleImpact{
-			RiskLevel:        impactplan.RiskLow,
-			RecommendedReads: recommended,
-		},
 	}
 }
 

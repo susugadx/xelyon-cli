@@ -58,6 +58,7 @@ func buildGoSymbolBundleWithOptions(query string, result navigation.InspectResul
 	addNavigationSection(bundle, "references", "References", result.Refs, result.TotalRefs, result.MoreRefs)
 	addNavigationTestSection(bundle, result.Tests, result.TotalTests, result.MoreTests)
 	appendGoImplementationSection(bundle, result.Implementations, opts.implementationLimit)
+	finalizeSymbolBundleDiagnostics(bundle)
 
 	return bundle
 }
@@ -75,12 +76,7 @@ func newGoSymbolBundle(query string, result navigation.InspectResult, opts goSym
 			Line:        result.Symbol.Line,
 			EndLine:     result.Symbol.EndLine,
 		},
-		Diagnostics: SymbolBundleDiagnostics{
-			ResolvedViaLSP:     result.ResolvedViaLSP,
-			LSPSource:          goSymbolBundleLSPSource,
-			UpstreamTruncated:  result.UpstreamTruncated,
-			UpstreamIncomplete: result.UpstreamIncomplete,
-		},
+		Diagnostics: goSymbolBundleDiagnostics(result),
 		Definition: SymbolBundleDefinition{
 			File:    result.Symbol.File,
 			Line:    result.Symbol.Line,
@@ -93,6 +89,75 @@ func newGoSymbolBundle(query string, result navigation.InspectResult, opts goSym
 			FileRootPath: result.Symbol.RootPath,
 		},
 	}
+}
+
+func goSymbolBundleDiagnostics(result navigation.InspectResult) SymbolBundleDiagnostics {
+	refDiagnostics := result.ReferenceDiagnostics
+	hasRefDetails := inspectReferenceDiagnosticsHasDetails(refDiagnostics)
+	resolvedBy := strings.TrimSpace(refDiagnostics.ResolvedBy)
+	if resolvedBy == "" {
+		if result.ResolvedViaLSP {
+			resolvedBy = symbolBundleResolvedByLSP
+		} else {
+			resolvedBy = symbolBundleResolvedByUnknown
+		}
+	}
+
+	diagnostics := SymbolBundleDiagnostics{
+		ResolvedBy:         resolvedBy,
+		ResolvedViaLSP:     resolvedBy == symbolBundleResolvedByLSP,
+		UpstreamTruncated:  result.UpstreamTruncated,
+		UpstreamIncomplete: result.UpstreamIncomplete,
+	}
+	if diagnostics.ResolvedViaLSP || refDiagnostics.LSPAttempted {
+		diagnostics.LSPSource = goSymbolBundleLSPSource
+	}
+	if hasRefDetails {
+		diagnostics.LSPAttempted = boolPtr(refDiagnostics.LSPAttempted)
+		diagnostics.LSPAvailable = boolPtr(refDiagnostics.LSPAvailable)
+		diagnostics.LSPTimedOut = boolPtr(refDiagnostics.LSPTimedOut)
+		diagnostics.FallbackUsed = boolPtr(refDiagnostics.FallbackUsed)
+		diagnostics.FallbackReason = refDiagnostics.FallbackReason
+		diagnostics.Incomplete = boolPtr(result.UpstreamIncomplete)
+		diagnostics.Truncated = boolPtr(result.UpstreamTruncated)
+		diagnostics.BudgetLimitHit = boolPtr(inspectResultBudgetLimitHit(result))
+		updateDiagnosticsRefCounts(&diagnostics, refDiagnostics.RawRefCount, refDiagnostics.AcceptedRefCount)
+		if refDiagnostics.DroppedRefCount >= 0 {
+			diagnostics.DroppedRefCount = intPtr(refDiagnostics.DroppedRefCount)
+		}
+	} else {
+		if result.ResolvedViaLSP {
+			diagnostics.LSPAttempted = boolPtr(true)
+			diagnostics.LSPAvailable = boolPtr(true)
+		}
+		if result.UpstreamIncomplete {
+			diagnostics.Incomplete = boolPtr(true)
+		}
+		if result.UpstreamTruncated {
+			diagnostics.Truncated = boolPtr(true)
+		}
+		if inspectResultBudgetLimitHit(result) {
+			diagnostics.BudgetLimitHit = boolPtr(true)
+		}
+	}
+	diagnostics.Confidence = inferSymbolBundleConfidence(diagnostics)
+	normalizeSymbolBundleDiagnostics(&diagnostics)
+	return diagnostics
+}
+
+func inspectReferenceDiagnosticsHasDetails(diag navigation.InspectReferenceDiagnostics) bool {
+	return diag.LSPAttempted ||
+		diag.LSPAvailable ||
+		diag.LSPTimedOut ||
+		diag.FallbackUsed ||
+		strings.TrimSpace(diag.FallbackReason) != "" ||
+		diag.RawRefCount != 0 ||
+		diag.AcceptedRefCount != 0 ||
+		diag.DroppedRefCount != 0
+}
+
+func inspectResultBudgetLimitHit(result navigation.InspectResult) bool {
+	return result.MoreCallers || result.MoreRefs || result.MoreTests
 }
 
 func goSymbolBundleDisplayName(symbol navigation.SymbolCandidate) string {
@@ -218,6 +283,7 @@ func buildGenericSymbolBundle(lang, query string, def genericSymbolDef, body []s
 			bundle.Sections = append(bundle.Sections, *section)
 		}
 	}
+	finalizeSymbolBundleDiagnostics(bundle)
 
 	return bundle
 }

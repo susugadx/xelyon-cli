@@ -76,7 +76,7 @@ func (r genericLanguageResolver) Resolve(symbol string, opts SearchOptions) symb
 	var result genericResolveResult
 	switch r.lang {
 	case "js":
-		result = resolveJSSymbol(symbol, opts)
+		result = resolveJSFamilySymbol(symbol, opts)
 	case "python":
 		result = resolvePythonSymbol(symbol, opts)
 	case "rust":

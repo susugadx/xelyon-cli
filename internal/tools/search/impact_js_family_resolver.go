@@ -12,7 +12,10 @@ type jsFamilyImpactResolverSpec struct {
 	referenceOptions        func(def genericSymbolDef, opts SearchOptions) jsFamilyReferenceOptions
 	normalizeRefs           func(refs []genericSymbolRef) []genericSymbolRef
 	filterRefs              func(def genericSymbolDef, defs jsFamilyImpactDefinitionSet, refs []genericSymbolRef) []genericSymbolRef
-	buildBundle             func(symbol string, def genericSymbolDef, opts SearchOptions, refs []genericSymbolRef, totalRefs []genericSymbolRef) *SymbolBundle
+	language                string
+	rootPath                func(opts SearchOptions) string
+	debugSource             func(def genericSymbolDef) string
+	buildSemanticEvidence   jsFamilySemanticEvidenceBuilder
 }
 
 func resolveStructuredJSFamilyImpactSymbol(symbol string, scope structuredImpactScope, spec jsFamilyImpactResolverSpec) symbolResolveResult {
@@ -49,11 +52,16 @@ func resolveStructuredJSFamilyImpactSymbol(symbol string, scope structuredImpact
 	refs = filterGenericRefs(refs, def)
 	totalRefs = filterGenericRefs(totalRefs, def)
 
-	bundle := spec.buildBundle(symbol, def, refOpts.nameOnly, refs, totalRefs)
+	diagnostics := normalizedJSFamilyBundleDiagnostics(refResult.diagnostics, totalRefs)
+	evidence, ok := spec.buildSemanticEvidence(spec.language, symbol, def, refOpts.nameOnly, refs, totalRefs, diagnostics)
+	if !ok {
+		return symbolResolveResult{Status: symbolResolveNone}
+	}
+	bundle, _ := buildSymbolBundleFromSemanticEvidence(evidence)
 	if bundle == nil || bundle.Impact == nil || len(bundle.Impact.RecommendedReads) == 0 {
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
-	setJSFamilyBundleLSPDiagnostics(bundle, refResult.resolvedViaLSP)
+	applyJSFamilySemanticImpactBundleDebug(bundle, spec, def, refOpts.nameOnly)
 
 	return symbolResolveResult{
 		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
@@ -67,5 +75,15 @@ func (spec jsFamilyImpactResolverSpec) valid() bool {
 		spec.collectDefAffectedFiles != nil &&
 		spec.referenceOptions != nil &&
 		spec.normalizeRefs != nil &&
-		spec.buildBundle != nil
+		spec.rootPath != nil &&
+		spec.debugSource != nil &&
+		spec.buildSemanticEvidence != nil
+}
+
+func applyJSFamilySemanticImpactBundleDebug(bundle *SymbolBundle, spec jsFamilyImpactResolverSpec, def genericSymbolDef, opts SearchOptions) {
+	if bundle == nil {
+		return
+	}
+	bundle.Debug.Source = spec.debugSource(def)
+	bundle.Debug.FileRootPath = spec.rootPath(opts)
 }

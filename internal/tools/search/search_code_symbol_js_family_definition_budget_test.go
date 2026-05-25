@@ -49,7 +49,7 @@ func TestResolveJSSymbol_ExactBudgetMultipleDefinitionsKeepsStructuredMultiple(t
 		"src/build.js": jsFamilyDefinitionSource("buildUser", jsFamilyDefinitionCandidateMatchLimit),
 	})
 
-	result := resolveJSSymbol("buildUser", SearchOptions{
+	result := resolveJSFamilySymbol("buildUser", SearchOptions{
 		Path:          dir,
 		FileType:      "js",
 		InvocationCWD: dir,
@@ -101,7 +101,7 @@ func TestResolveJSSymbol_IncompleteMultipleDefinitionCandidatesDefersToFallback(
 		"src/build.js": jsFamilyDefinitionSource("buildUser", jsFamilyDefinitionCandidateMatchLimit+1),
 	})
 
-	result := resolveJSSymbol("buildUser", SearchOptions{
+	result := resolveJSFamilySymbol("buildUser", SearchOptions{
 		Path:          dir,
 		FileType:      "js",
 		InvocationCWD: dir,
@@ -133,7 +133,7 @@ func TestResolveJSSymbol_DirectFileCappedMatchesKeepStructuredDefinition(t *test
 				tt.file: jsFamilyCappedDirectFileSource("buildUser", tt.definition),
 			})
 
-			result := resolveJSSymbol("buildUser", SearchOptions{
+			result := resolveJSFamilySymbol("buildUser", SearchOptions{
 				Path:               filepath.Join(dir, filepath.FromSlash(tt.file)),
 				FileType:           tt.fileType,
 				InvocationCWD:      dir,
