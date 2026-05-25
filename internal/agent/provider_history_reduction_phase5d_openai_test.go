@@ -163,6 +163,61 @@ func TestPhase5DOpenAIResponsesCommandReplacementDisablesContinuation(t *testing
 	}
 }
 
+func TestPhase5DOpenAIResponsesWriteFileContentReplacementDisablesContinuation(t *testing.T) {
+	path := "generated/responses.go"
+	content := providerHistoryLargeWriteFileContent()
+	args := providerHistoryWriteFileArguments(t, path, content)
+	agent := &Agent{
+		Runtime: &AgentRuntime{
+			Options: RuntimeOptions{EnableProviderHistoryReduction: true},
+		},
+		History: []api.Message{
+			{Role: "user", Content: "write generated file"},
+			providerHistoryAssistantToolCalls(providerHistoryToolCallWithArguments("call_old_write", "write_file", args)),
+			providerHistoryToolResult("call_old_write", "write_file", providerHistoryWriteFileSuccess(content, path)),
+			{Role: "assistant", Content: "write completed"},
+			providerHistoryAssistantToolCall("call_latest", "read_file"),
+			providerHistoryToolResult("call_latest", "read_file", "latest raw output"),
+			{Role: "assistant", Content: "done"},
+		},
+	}
+	rawBefore := api.CloneMessages(agent.History)
+
+	requestCtx, history := agent.providerFacingHistoryForRequest(context.Background())
+	req := openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
+		Base:               openairesponses.BaseRequestOptions{Model: openairesponses.NewModelIdentity("gpt-5.4", ""), Store: true},
+		RequestContext:     requestCtx,
+		SystemPrompt:       "system",
+		History:            history,
+		PreviousResponseID: "resp_prev",
+	})
+
+	assertProviderHistoryWriteFileContentReplacement(t, history[1].ToolCalls[0].Function.Arguments, path, content)
+	if !api.ResponseIDChainDisabledFromContext(requestCtx) {
+		t.Fatal("request context did not disable response ID chain after write_file.content replacement")
+	}
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty after write_file.content replacement", req.PreviousResponseID)
+	}
+	items := phase5DResponsesInputItems(t, req.Input)
+	callItem := phase5DFindResponsesFunctionCall(t, items, "call_old_write")
+	if callItem == nil {
+		t.Fatalf("full input write_file function_call is missing: %#v", items)
+	}
+	assertProviderHistoryWriteFileContentReplacement(t, callItem.Arguments, path, content)
+	outputItem := phase5DFindResponsesFunctionOutput(t, items, "call_old_write")
+	if outputItem == nil || outputItem.Output != providerHistoryWriteFileSuccess(content, path) {
+		t.Fatalf("full input write_file function_call_output = %#v, want raw success output", outputItem)
+	}
+	if !reflect.DeepEqual(agent.History, rawBefore) {
+		t.Fatalf("Agent.History changed after write_file.content projection:\n got %#v\nwant %#v", agent.History, rawBefore)
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.ReplacedCount != 0 || report.CommandEditDryRun.EditArgReplacedCount != 1 || !report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v, want write_file.content-only replacement with response chain disabled", report)
+	}
+}
+
 func TestPhase5DOpenAIResponsesContinuationKeptWhenReductionDisabled(t *testing.T) {
 	agent := &Agent{
 		Runtime: &AgentRuntime{},
@@ -189,6 +244,16 @@ func TestPhase5DOpenAIResponsesContinuationKeptWhenReductionDisabled(t *testing.
 	if req.PreviousResponseID != "resp_prev" {
 		t.Fatalf("PreviousResponseID = %q, want resp_prev when reduction is disabled", req.PreviousResponseID)
 	}
+}
+
+func phase5DFindResponsesFunctionCall(t *testing.T, items []openairesponses.InputItem, callID string) *openairesponses.InputItem {
+	t.Helper()
+	for i := range items {
+		if items[i].Type == "function_call" && items[i].CallID == callID {
+			return &items[i]
+		}
+	}
+	return nil
 }
 
 func TestPhase5DOpenAIResponsesFullHistoryUsesProjectedInput(t *testing.T) {

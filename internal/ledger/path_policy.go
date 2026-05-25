@@ -72,6 +72,15 @@ func normalizeRepoRelativeLedgerPath(repoRoot, invocationCWD, candidate string) 
 	return normalizeLedgerPathWithBaseOrder(repoRoot, invocationCWD, candidate, ledgerPathBaseRepoRoot, ledgerPathBaseInvocationCWD)
 }
 
+// NormalizeRepoRelativePath は candidate を repo root 基準の安全な相対パスとして正規化する。
+func NormalizeRepoRelativePath(candidate string) (string, bool) {
+	candidate = cleanPathCandidate(candidate)
+	if !isLedgerPathCandidateSafe(candidate) {
+		return "", false
+	}
+	return cleanLedgerRelativePath(candidate)
+}
+
 func normalizeLedgerPathWithBaseOrder(repoRoot, invocationCWD, candidate string, bases ...ledgerPathBase) (string, bool) {
 	candidate = cleanPathCandidate(candidate)
 	if !isLedgerPathCandidateSafe(candidate) {

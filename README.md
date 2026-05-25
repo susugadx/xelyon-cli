@@ -141,6 +141,7 @@ XELYON は raw history / session / audit / JSONL を保持したまま、provide
 
 - 古い `read_file` / `search_code` / `gather_context` 結果は、条件を満たすと evidence pointer placeholder に置き換えられます
 - 成功した test / build / lint command output は、安全条件付きで summary 化できます
+- 古い成功済み `write_file.content` も、raw storage を保ったまま provider-facing projection だけで省略できます
 - 必要な evidence は現在ファイルから rehydrate し、request-local active context として provider 入力へ戻せます
 - active context は OpenAI Responses、Chat Completions 系、Claude、Gemini、Bedrock など既存の provider transport に対応します
 - raw storage は変更せず、rehydrated evidence も history へ保存しません

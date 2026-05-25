@@ -73,10 +73,13 @@ type ProviderHistoryCommandEditDryRunReport struct {
 	CommandOriginalBytes                int
 	EditArgOriginalBytes                int
 	CommandReplacedCount                int
+	EditArgReplacedCount                int
 	CommandReplacementSavedBytes        int
+	EditArgReplacementSavedBytes        int
 	ApproxCommandSavedTokens            int
 	ApproxCommandReplacementSavedTokens int
 	ApproxEditArgSavedTokens            int
+	ApproxEditArgReplacementSavedTokens int
 	CandidateReasonCounts               map[string]int
 	KeptReasonCounts                    map[string]int
 	Candidates                          []ProviderHistoryCommandEditDryRunCandidate

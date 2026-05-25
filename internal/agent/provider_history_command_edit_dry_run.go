@@ -17,6 +17,7 @@ const (
 	providerHistoryCommandEditReplacementStatusNotImplemented = "not_implemented"
 	providerHistoryCommandEditReplacementStatusPartialApply   = "partial_apply"
 	providerHistoryCommandReplacementMinSavedTokens           = 128
+	providerHistoryEditArgReplacementMinSavedTokens           = 128
 	providerHistoryCommandPlaceholderCommandMaxRunes          = 120
 	providerHistoryCommandPlaceholder                         = "[omitted old command output; replacement not implemented]"
 	providerHistoryEditArgPlaceholder                         = "[omitted old edit arguments; replacement not implemented]"
@@ -77,7 +78,10 @@ func buildProviderHistoryCommandEditDryRunReport(original, projection []api.Mess
 			}
 			continue
 		}
-		recordProviderHistoryEditArgCandidate(&report, entry, linkage.ToolName, linkage.Ref.arguments)
+		candidateIndex, ok := recordProviderHistoryEditArgCandidate(&report, entry, linkage.ToolName, linkage.Ref.arguments)
+		if ok && mode == ProviderHistoryReductionApply && linkage.ToolName == "write_file" {
+			applyProviderHistoryWriteFileContentReplacementCandidate(&report, candidateIndex, linkage.Ref, msg.Content, projection)
+		}
 	}
 
 	finalizeProviderHistoryCommandEditDryRunReport(&report)
@@ -152,19 +156,20 @@ func recordProviderHistoryCommandCandidate(report *ProviderHistoryCommandEditDry
 	return len(report.Candidates) - 1, true
 }
 
-func recordProviderHistoryEditArgCandidate(report *ProviderHistoryCommandEditDryRunReport, entry ProviderHistoryCommandEditDryRunCandidate, toolName, arguments string) {
+func recordProviderHistoryEditArgCandidate(report *ProviderHistoryCommandEditDryRunReport, entry ProviderHistoryCommandEditDryRunCandidate, toolName, arguments string) (int, bool) {
 	payload, keepReason := providerHistoryEditArgPayload(toolName, arguments)
 	entry.Kind = "edit_arguments"
 	if keepReason != "" {
 		entry.KeepReason = keepReason
 		report.Kept = append(report.Kept, entry)
-		return
+		return -1, false
 	}
 	entry.OriginalByteSize = payload.bytes
 	entry.OriginalRuneSize = payload.runes
 	entry.ApproxOriginalTokens = payload.tokens
 	entry.Reason = payload.reason
 	report.Candidates = append(report.Candidates, entry)
+	return len(report.Candidates) - 1, true
 }
 
 type providerHistoryEditArgPayloadSummary struct {
@@ -610,7 +615,7 @@ func finalizeProviderHistoryCommandEditDryRunReport(report *ProviderHistoryComma
 	if report == nil {
 		return
 	}
-	if report.CommandReplacedCount > 0 {
+	if report.CommandReplacedCount > 0 || report.EditArgReplacedCount > 0 {
 		report.ReplacementStatus = providerHistoryCommandEditReplacementStatusPartialApply
 	}
 	commandPlaceholderTokens := token.EstimateTokenCount(providerHistoryCommandPlaceholder)

@@ -72,17 +72,20 @@ func formatProviderHistoryCommandEditDryRunReportSummary(report ProviderHistoryC
 		replacementStatus = providerHistoryCommandEditReplacementStatusNotImplemented
 	}
 	return fmt.Sprintf(
-		"command/edit: replacement=%s; command_candidates=%s; command_replaced=%s; edit_arg_candidates=%s; command_original_bytes=%s B; edit_arg_original_bytes=%s B; command_replacement_saved=%s B; approx_command_saved_tokens=%s; approx_command_replacement_saved_tokens=%s; approx_edit_arg_saved_tokens=%s; candidate_reasons=%s; kept_reasons=%s",
+		"command/edit: replacement=%s; command_candidates=%s; command_replaced=%s; edit_arg_candidates=%s; edit_arg_replaced=%s; command_original_bytes=%s B; edit_arg_original_bytes=%s B; command_replacement_saved=%s B; edit_arg_replacement_saved=%s B; approx_command_saved_tokens=%s; approx_command_replacement_saved_tokens=%s; approx_edit_arg_saved_tokens=%s; approx_edit_arg_replacement_saved_tokens=%s; candidate_reasons=%s; kept_reasons=%s",
 		replacementStatus,
 		formatNumber(report.CommandCandidates),
 		formatNumber(report.CommandReplacedCount),
 		formatNumber(report.EditArgCandidates),
+		formatNumber(report.EditArgReplacedCount),
 		formatNumber(report.CommandOriginalBytes),
 		formatNumber(report.EditArgOriginalBytes),
 		formatNumber(report.CommandReplacementSavedBytes),
+		formatNumber(report.EditArgReplacementSavedBytes),
 		formatNumber(report.ApproxCommandSavedTokens),
 		formatNumber(report.ApproxCommandReplacementSavedTokens),
 		formatNumber(report.ApproxEditArgSavedTokens),
+		formatNumber(report.ApproxEditArgReplacementSavedTokens),
 		formatProviderHistoryReasonCounts(report.CandidateReasonCounts),
 		formatProviderHistoryReasonCounts(report.KeptReasonCounts),
 	)

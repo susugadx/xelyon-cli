@@ -220,6 +220,64 @@ func TestNormalModeRequestApplyReplacesSuccessfulCommandOutputOnlyInProviderPayl
 	}
 }
 
+func TestNormalModeRequestApplyReplacesSuccessfulWriteFileContentOnlyInProviderPayload(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	path := "generated/request.go"
+	content := providerHistoryLargeWriteFileContent()
+	writeArgs := providerHistoryWriteFileArguments(t, path, content)
+	writeResult := providerHistoryWriteFileSuccess(content, path)
+	agent.Runtime.Options.EnableProviderHistoryReduction = true
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect write history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithArguments("call_write", "write_file", writeArgs)),
+		providerHistoryToolResult("call_write", "write_file", writeResult),
+		{Role: "assistant", Content: "write done"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	for _, msg := range agent.History {
+		agent.session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+	beforeHistory := api.CloneMessages(agent.History)
+	beforeSession := append(agent.session.Messages[:0:0], agent.session.Messages...)
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	assertProviderHistoryWriteFileContentReplacement(t, provider.capturedHistory[1].ToolCalls[0].Function.Arguments, path, content)
+	if provider.capturedHistory[2].Content != writeResult {
+		t.Fatalf("provider write_file result = %q, want raw success output", provider.capturedHistory[2].Content)
+	}
+	if !provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context did not disable response ID chain for write_file.content replacement")
+	}
+	for i, want := range beforeHistory {
+		if !reflect.DeepEqual(agent.History[i], want) {
+			t.Fatalf("Agent.History[%d] changed after write_file.content replacement request:\n got %#v\nwant %#v", i, agent.History[i], want)
+		}
+	}
+	for i, want := range beforeSession {
+		if !reflect.DeepEqual(agent.session.Messages[i], want) {
+			t.Fatalf("session.Messages[%d] changed after write_file.content replacement request:\n got %#v\nwant %#v", i, agent.session.Messages[i], want)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionApply ||
+		report.ReplacedCount != 0 ||
+		report.CommandEditDryRun.EditArgReplacedCount != 1 ||
+		report.CommandEditDryRun.EditArgReplacementSavedBytes <= 0 ||
+		report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens < providerHistoryEditArgReplacementMinSavedTokens ||
+		!report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want write_file.content-only apply report with response chain disabled", report)
+	}
+}
+
 func TestNormalModeRequestAutoUsesDryRunEffectiveMode(t *testing.T) {
 	disableColors(t)
 

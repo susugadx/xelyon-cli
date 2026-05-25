@@ -74,9 +74,14 @@ func TestProviderHistoryAppliedEvidencePointersFiltersDedupesAndCopies(t *testin
 			},
 		},
 		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
+			EditArgReplacedCount: 1,
 			Candidates: []ProviderHistoryCommandEditDryRunCandidate{{
 				ToolName:   "bash",
 				ToolCallID: "call_command_dry_run",
+			}, {
+				ToolName:   "write_file",
+				ToolCallID: "call_write",
+				Reason:     "write_file_content",
 			}},
 		},
 	}

@@ -58,7 +58,9 @@ XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=false xelyon
 ### 大事な安全契約
 
 - raw history は消えません。`Agent.History`、`Session.Messages`、audit entries、change records、persisted JSONL は元の内容を保持します。
+- provider-facing projection で古い成功済み `write_file.content` を省略しても、raw `write_file` arguments、tool result、audit、persisted JSONL は保持します。
 - rehydrated evidence は request-local model input です。history、session、audit、ledger actual content、persisted JSONL には保存しません。
+- `write_file.content` replacement は evidence pointer ではないため、rehydrate 対象には入りません。
 - active context transport がない unsupported provider では、read/search/gather evidence replacement を skip し、`active_context_transport_unsupported` として保持します。
 - internal calls / compact / compression / Gemini repair / review model には active context を入れません。
 - これは stable config ではありません。README には experimental 概要だけを置き、通常設定表、`/config`、`docs/config.md`、generated config metadata にはまだ出しません。
@@ -131,7 +133,7 @@ Phase 5b-3 adds gated actual replacement mode behind the internal projection pol
 - Replacement text is a single-line placeholder such as `[omitted old read_file result; evidence: README.md:L1-L80 source=read_file; +2 more]`.
 - Message shape is preserved: role, tool call id, assistant tool calls, reasoning content, provider state, and continuation metadata are not changed. If a replaced tool result is missing `ToolName`, apply mode copies the tool name inferred from the matching assistant tool call onto the projection clone so provider adapters can keep function-response continuity.
 - Raw storage remains unchanged: `Agent.History`, `history.Session.Messages`, session tool execution audit entries, audit logs, and change records continue to store the raw conversation/audit data.
-- The projection report records detected candidates, kept candidates, replacement count, original/projected content bytes, estimated saved bytes, approximate saved tokens, kept reason counts, and whether a replacement disabled Responses continuation.
+- The projection report records detected candidates, kept candidates, replacement count, original/projected content bytes, estimated saved bytes, approximate saved tokens, kept reason counts, command/edit replacement diagnostics, and whether a replacement disabled Responses continuation.
 - Phase 5b-4 can enable this policy on a limited request path without adding a new storage migration.
 
 Phase 5b-4 enables replacement on user-facing provider request paths behind an internal runtime option.
@@ -193,11 +195,11 @@ In `dry_run`, inspect `/status` after a provider-facing request:
 - `saved` shows estimated content bytes saved; `approx_saved_tokens` is a diagnostic-only token estimate, not billing usage.
 - `kept_reasons` shows sorted keep reason counts using the internal reason strings.
 - `responses_chain_disabled` should stay `false` in `dry_run` and `auto` because provider payload remains raw.
-- `command/edit` is a separate diagnostic line for old `bash`/`command` outputs and edit tool arguments. In `dry_run`, `replacement=not_implemented` means provider payload remains raw; the byte/token numbers are diagnostic estimates only and are not billing usage.
+- `command/edit` is a separate diagnostic line for old `bash`/`command` outputs and edit tool arguments. In `dry_run`, `replacement=not_implemented` means provider payload remains raw; the byte/token numbers are diagnostic estimates only and are not billing usage. In `apply`, `edit_arg_replaced` and `edit_arg_replacement_saved` cover only applied `write_file.content` argument replacement.
 
-Switch to `apply` only after dry-run candidates and kept reasons look expected, and test on a limited task where repeated command/read/search calls do not increase and answer quality does not regress. `apply` replaces only safe old successful `bash`/`command` outputs for single actual test/build/lint commands with explicit success evidence, and only when the placeholder is smaller and saves at least the internal token threshold. Failure logs, ambiguous build summaries, mixed passing/failing test output, lint output with errors/issues/problems/warnings, interrupted or partial command output, compound shell or command-substitution output, `git diff` output, generic successful command output, and edit tool arguments remain raw. When any provider-facing replacement is applied, `/status` reports `replacement=partial_apply` for command/edit replacement and `responses_chain_disabled=true`; OpenAI/Azure Responses requests may drop the `previous_response_id` continuation chain. `apply` with zero replacements keeps the chain.
+Switch to `apply` only after dry-run candidates and kept reasons look expected, and test on a limited task where repeated command/read/search calls do not increase and answer quality does not regress. `apply` replaces only safe old successful `bash`/`command` outputs for single actual test/build/lint commands with explicit success evidence, and safe old successful `write_file.content` arguments with repo-relative paths and successful write results. Both replacements apply only when the placeholder is smaller and saves at least the internal token threshold. Failure logs, ambiguous build summaries, mixed passing/failing test output, lint output with errors/issues/problems/warnings, interrupted or partial command output, compound shell or command-substitution output, `git diff` output, generic successful command output, unsupported edit tool arguments, unsafe write paths, invalid write arguments, and latest/trailing/incompletely linked tool results remain raw. When any provider-facing replacement is applied, `/status` reports `replacement=partial_apply` for command/edit replacement and `responses_chain_disabled=true`; OpenAI/Azure Responses requests may drop the `previous_response_id` continuation chain. `apply` with zero replacements keeps the chain.
 
-Raw storage is unchanged in all modes: runtime `Agent.History`, `Session.Messages`, audit entries, change records, and persisted JSONL keep the original content.
+Raw storage is unchanged in all modes: runtime `Agent.History`, `Session.Messages`, audit entries, change records, and persisted JSONL keep the original content and original tool arguments.
 
 ## Synthetic Measurement And Rehydrate Dry-Run
 
@@ -209,11 +211,11 @@ The provider history reduction synthetic harness exercises `off`, `dry_run`, and
 
 The intended design is that runtime state refreshes needed evidence from current files instead of asking the model to rediscover raw history by itself.
 
-Apply-mode projection reports keep matched evidence pointers only on read/search/gather candidates whose provider-facing placeholder was actually applied. Command output replacements do not attach evidence pointers.
+Apply-mode projection reports keep matched evidence pointers only on read/search/gather candidates whose provider-facing placeholder was actually applied. Command output and `write_file.content` replacements do not attach evidence pointers.
 
 The runtime can pass those applied read/search/gather `EvidencePointers` into `ledger.BuildRehydratePlan` as old evidence. `/ledger` shows non-empty rehydrate candidates after the normal task-ledger snapshot so the dry-run can be inspected during dogfood. `/ledger` remains a candidate diagnostic and does not show rehydrated file content.
 
-Command output replacement is backed by successful command summaries, not evidence pointers, so command/edit replacements are not rehydrate candidates.
+Command output replacement is backed by successful command summaries, and `write_file.content` replacement is backed by the successful write result plus retained path argument. Neither is an evidence pointer, so command/edit replacements are not rehydrate candidates.
 
 Provider-input injection is available behind `RuntimeOptions.EnableProviderHistoryRehydrateContext`. The gate defaults to false and can be enabled for dogfood with `experimental.provider_history_reduction.rehydrate_context: true` in `xelyon.yaml` or overridden for one run with `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false`. This remains an experimental project-local surface only: it is still not exposed as stable config in `/config`, `docs/config.md`, or generated config metadata.
 
@@ -227,7 +229,7 @@ Supported transports:
 - Gemini text, function-calling, and multimodal requests add active context as request-local user content immediately before the latest user request sent to Gemini. Cached `systemInstruction` is not modified.
 - Bedrock Converse adds active context as a separate `System` content block.
 
-If the rehydrate gate is true but a provider has no active-context transport, read/search/gather evidence replacement is skipped for that request and the projection report keeps those candidates with `active_context_transport_unsupported`. Successful command output replacement keeps its existing safe replacement behavior because it does not require rehydrated evidence.
+If the rehydrate gate is true but a provider has no active-context transport, read/search/gather evidence replacement is skipped for that request and the projection report keeps those candidates with `active_context_transport_unsupported`. Successful command output and `write_file.content` replacement keep their safe replacement behavior because they do not require rehydrated evidence.
 
 The same request-local rehydrated block is included in provider-facing token estimates, `/tokens`, token warnings, and local auto-compress decisions. Token estimation does not update `AgentRuntime.LastProviderHistoryProjectionReport`.
 
