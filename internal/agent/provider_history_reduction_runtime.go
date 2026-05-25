@@ -8,16 +8,38 @@ type providerHistoryReductionModeResolution struct {
 	specified  bool
 }
 
-func syncProviderHistoryReductionModeFromProjectConfig(runtime *AgentRuntime, projectCfg *config.ProjectConfig) error {
+type providerHistoryRuntimeConfigResolution struct {
+	mode             ProviderHistoryReductionMode
+	modeSet          bool
+	rehydrateContext bool
+}
+
+func syncProviderHistoryRuntimeConfigFromProjectConfig(runtime *AgentRuntime, projectCfg *config.ProjectConfig) error {
 	if runtime == nil {
 		return nil
 	}
-	mode, specified, err := resolveProviderHistoryReductionModeFromProjectConfig(projectCfg)
+	resolution, err := resolveProviderHistoryRuntimeConfigFromProjectConfig(projectCfg)
 	if err != nil {
 		return err
 	}
-	applyProviderHistoryReductionModeToRuntime(runtime, mode, specified)
+	applyProviderHistoryRuntimeConfigToRuntime(runtime, resolution)
 	return nil
+}
+
+func resolveProviderHistoryRuntimeConfigFromProjectConfig(projectCfg *config.ProjectConfig) (providerHistoryRuntimeConfigResolution, error) {
+	mode, specified, err := resolveProviderHistoryReductionModeFromProjectConfig(projectCfg)
+	if err != nil {
+		return providerHistoryRuntimeConfigResolution{}, err
+	}
+	rehydrateContext, err := resolveProviderHistoryRehydrateContextFromProjectConfig(projectCfg)
+	if err != nil {
+		return providerHistoryRuntimeConfigResolution{}, err
+	}
+	return providerHistoryRuntimeConfigResolution{
+		mode:             mode,
+		modeSet:          specified,
+		rehydrateContext: rehydrateContext,
+	}, nil
 }
 
 func resolveProviderHistoryReductionModeFromProjectConfig(projectCfg *config.ProjectConfig) (ProviderHistoryReductionMode, bool, error) {
@@ -26,6 +48,18 @@ func resolveProviderHistoryReductionModeFromProjectConfig(projectCfg *config.Pro
 		return ProviderHistoryReductionDisabled, false, err
 	}
 	return providerHistoryReductionModeFromProjectConfigMode(mode), specified, nil
+}
+
+func resolveProviderHistoryRehydrateContextFromProjectConfig(projectCfg *config.ProjectConfig) (bool, error) {
+	return config.ResolveProjectProviderHistoryRehydrateContext(projectCfg, nil)
+}
+
+func applyProviderHistoryRuntimeConfigToRuntime(runtime *AgentRuntime, resolution providerHistoryRuntimeConfigResolution) {
+	if runtime == nil {
+		return
+	}
+	applyProviderHistoryReductionModeToRuntime(runtime, resolution.mode, resolution.modeSet)
+	runtime.Options.EnableProviderHistoryRehydrateContext = resolution.rehydrateContext
 }
 
 func applyProviderHistoryReductionModeToRuntime(runtime *AgentRuntime, mode ProviderHistoryReductionMode, specified bool) {

@@ -7,17 +7,23 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-func unsetProviderHistoryReductionEnv(t *testing.T) {
+func unsetProviderHistoryRuntimeConfigEnv(t *testing.T) {
 	t.Helper()
-	oldValue, oldSet := os.LookupEnv(config.ProviderHistoryReductionEnvVar)
-	if err := os.Unsetenv(config.ProviderHistoryReductionEnvVar); err != nil {
+	unsetProviderHistoryEnvVar(t, config.ProviderHistoryReductionEnvVar)
+	unsetProviderHistoryEnvVar(t, config.ProviderHistoryRehydrateContextEnvVar)
+}
+
+func unsetProviderHistoryEnvVar(t *testing.T, key string) {
+	t.Helper()
+	oldValue, oldSet := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
 		t.Fatalf("Unsetenv() error = %v", err)
 	}
 	t.Cleanup(func() {
 		if oldSet {
-			_ = os.Setenv(config.ProviderHistoryReductionEnvVar, oldValue)
+			_ = os.Setenv(key, oldValue)
 		} else {
-			_ = os.Unsetenv(config.ProviderHistoryReductionEnvVar)
+			_ = os.Unsetenv(key)
 		}
 	})
 }

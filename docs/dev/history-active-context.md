@@ -27,7 +27,7 @@ This document is descriptive. It does not change retention, compression, provide
 - `activeContextInputPolicy` keeps the current behavior:
   - default is off.
   - the current task state block is built only when `RuntimeOptions.EnableCurrentTaskStateContext` is true.
-  - provider-history rehydrated evidence is built only when `RuntimeOptions.EnableProviderHistoryRehydrateContext` is true.
+  - provider-history rehydrated evidence is built only when `RuntimeOptions.EnableProviderHistoryRehydrateContext` is true. The runtime gate defaults to false and is dogfooded through the experimental project-local config/env described below.
   - sent only when `internal/api` reports a provider active-context transport for the runtime provider/model.
   - unsupported providers keep active context out of the request context.
 - Active context is only injected into provider request context. It is not appended to `Agent.History` or `Session.Messages`.
@@ -89,6 +89,7 @@ Phase 5c exposes the last provider history reduction projection as a `/status` r
 Phase 5d adds an experimental project-local mode selector for controlled rollout.
 
 - The default remains `off`. `xelyon.yaml` can opt in with `experimental.provider_history_reduction.mode: off|dry_run|apply|auto`; `XELYON_PROVIDER_HISTORY_REDUCTION` overrides the project file with the same values.
+- `experimental.provider_history_reduction.rehydrate_context: true` enables request-local rehydrated evidence active-context injection for dogfood. `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false` overrides the project file. The default is false.
 - `/config`, generated `config.yaml` metadata, README, and `docs/config.md` remain unchanged because this is not a stable global config surface.
 - `dry_run` updates `AgentRuntime.LastProviderHistoryProjectionReport` but sends raw provider payload and keeps any OpenAI/Azure Responses `previous_response_id` chain unchanged.
 - `apply` uses the existing safe replacement path and disables the Responses continuation chain only when a replacement is actually applied.
@@ -105,6 +106,7 @@ Project-local dry-run:
 experimental:
   provider_history_reduction:
     mode: dry_run
+    rehydrate_context: true
 ```
 
 Environment override for a single run:
@@ -113,7 +115,11 @@ Environment override for a single run:
 XELYON_PROVIDER_HISTORY_REDUCTION=dry_run xelyon
 XELYON_PROVIDER_HISTORY_REDUCTION=apply xelyon
 XELYON_PROVIDER_HISTORY_REDUCTION=off xelyon
+XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1 xelyon
+XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=false xelyon
 ```
+
+`rehydrate_context` is independent from the reduction mode selector. Setting it to true is allowed with `mode: off` or `mode: dry_run`, but a rehydrated evidence block is emitted only when the provider-facing projection has applied read/search/gather evidence replacements and the current provider route has an active-context transport.
 
 In `dry_run`, inspect `/status` after a provider-facing request:
 
@@ -143,7 +149,7 @@ The runtime can pass those applied read/search/gather `EvidencePointers` into `l
 
 Command output replacement is backed by successful command summaries, not evidence pointers, so command/edit replacements are not rehydrate candidates.
 
-Provider-input injection is available only behind the internal runtime gate `RuntimeOptions.EnableProviderHistoryRehydrateContext`, which defaults to false and is not connected to config, environment variables, CLI flags, `/config`, generated config metadata, README, or `docs/config.md`.
+Provider-input injection is available behind `RuntimeOptions.EnableProviderHistoryRehydrateContext`. The gate defaults to false and can be enabled for dogfood with `experimental.provider_history_reduction.rehydrate_context: true` in `xelyon.yaml` or overridden for one run with `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false`. This remains an experimental project-local surface only: it is still not exposed in `/config`, README, `docs/config.md`, or generated config metadata.
 
 When the gate is true, provider-facing request assembly uses the projection report from the same request, builds a rehydrate plan from applied read/search/gather replacements, executes it against current files, renders `<rehydrated_evidence>`, and appends it as a dynamic active context block named `provider_history_rehydrated_evidence`. This happens only for provider request paths that already use `providerFacingHistoryForRequest` and only when `internal/api.ProviderActiveContextTransportForRequest` reports a supported transport. The active context core contract is provider-independent and request-local; provider adapters own the transport-specific placement.
 
@@ -159,7 +165,7 @@ If the rehydrate gate is true but a provider has no active-context transport, re
 
 The same request-local rehydrated block is included in provider-facing token estimates, `/tokens`, token warnings, and local auto-compress decisions. Token estimation does not update `AgentRuntime.LastProviderHistoryProjectionReport`.
 
-The rehydrated block is request-local model input only. It is not appended to `Agent.History`, `history.Session.Messages`, tool execution audit entries, audit logs, change records, compacted state, `/ledger` actual-content output, or persisted session JSONL.
+The rehydrated block is request-local model input only. It is not appended to `Agent.History`, `history.Session.Messages`, tool execution audit entries, audit logs, change records, compacted state, `/ledger` actual-content output, or persisted session JSONL. Unsupported providers keep the safety fallback: evidence replacement is skipped rather than injecting or persisting refreshed evidence.
 
 ## Provider Transports And Responses Continuation
 

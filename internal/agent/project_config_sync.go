@@ -3,9 +3,8 @@ package agent
 import "github.com/susugadx/xelyon-cli/internal/config"
 
 type runtimeProjectConfigResolution struct {
-	providerHistoryReductionMode    ProviderHistoryReductionMode
-	providerHistoryReductionModeSet bool
-	finalChecks                     config.FinalChecksConfig
+	providerHistory providerHistoryRuntimeConfigResolution
+	finalChecks     config.FinalChecksConfig
 }
 
 // SaveAndSyncProjectConfig は xelyon.yaml を保存し、現在 runtime の project 由来設定を同期する。
@@ -33,7 +32,7 @@ func (a *Agent) syncRuntimeProjectConfig(pc *config.ProjectConfig) error {
 }
 
 func (a *Agent) resolveRuntimeProjectConfig(pc *config.ProjectConfig) (runtimeProjectConfigResolution, error) {
-	providerHistoryMode, providerHistoryModeSet, err := resolveProviderHistoryReductionModeFromProjectConfig(pc)
+	providerHistory, err := resolveProviderHistoryRuntimeConfigFromProjectConfig(pc)
 	if err != nil {
 		return runtimeProjectConfigResolution{}, err
 	}
@@ -43,14 +42,13 @@ func (a *Agent) resolveRuntimeProjectConfig(pc *config.ProjectConfig) (runtimePr
 	}
 
 	return runtimeProjectConfigResolution{
-		providerHistoryReductionMode:    providerHistoryMode,
-		providerHistoryReductionModeSet: providerHistoryModeSet,
-		finalChecks:                     finalChecks,
+		providerHistory: providerHistory,
+		finalChecks:     finalChecks,
 	}, nil
 }
 
 func (a *Agent) applyRuntimeProjectConfig(resolution runtimeProjectConfigResolution) {
-	applyProviderHistoryReductionModeToRuntime(a.Runtime, resolution.providerHistoryReductionMode, resolution.providerHistoryReductionModeSet)
+	applyProviderHistoryRuntimeConfigToRuntime(a.Runtime, resolution.providerHistory)
 	a.cfg().FinalChecks = resolution.finalChecks
 }
 

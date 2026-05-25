@@ -127,6 +127,7 @@ func TestHandleStatusCommandShowsProviderHistoryReductionEnabledWithoutReport(t 
 func TestHandleStatusCommandShowsProviderHistoryReductionDryRunWithoutReport(t *testing.T) {
 	var out bytes.Buffer
 	agent := newProviderHistoryStatusTestAgent(t, &out)
+	applyProviderHistoryStatusActiveContextFixture(agent, activeContextDeepSeek)
 	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionDryRun
 	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
 
@@ -134,6 +135,41 @@ func TestHandleStatusCommandShowsProviderHistoryReductionDryRunWithoutReport(t *
 	for _, want := range []string{
 		"Provider history reduction",
 		"mode=dry_run; no report yet",
+		"rehydrate_context=off; active_context_transport=ephemeral_system_message",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestHandleStatusCommandShowsProviderHistoryRehydrateContextEnabledWithoutReport(t *testing.T) {
+	var out bytes.Buffer
+	agent := newProviderHistoryStatusTestAgent(t, &out)
+	applyProviderHistoryStatusActiveContextFixture(agent, activeContextDeepSeek)
+	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = true
+
+	output := renderProviderHistoryStatusCommand(t, agent, &out)
+	for _, want := range []string{
+		"Provider history reduction",
+		"rehydrate_context=on; active_context_transport=ephemeral_system_message",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestHandleStatusCommandShowsProviderHistoryRehydrateContextUnsupportedTransport(t *testing.T) {
+	var out bytes.Buffer
+	agent := newProviderHistoryStatusTestAgent(t, &out)
+	applyProviderHistoryStatusActiveContextFixture(agent, activeContextUnsupported)
+	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = true
+
+	output := renderProviderHistoryStatusCommand(t, agent, &out)
+	for _, want := range []string{
+		"Provider history reduction",
+		"rehydrate_context=on; active_context_transport=none",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -218,6 +254,7 @@ func TestHandleStatusCommandDoesNotMutateHistoryOrSessionForProviderHistoryReduc
 	var out bytes.Buffer
 	agent := newProviderHistoryStatusTestAgent(t, &out)
 	agent.Runtime.Options.EnableProviderHistoryReduction = true
+	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = true
 	agent.Runtime.LastProviderHistoryProjectionReport = providerHistoryStatusTestReport()
 	agent.History = []api.Message{
 		{Role: "user", Content: "inspect the repo"},
@@ -249,7 +286,7 @@ func TestHandleTokensCommandOmitsProviderHistoryReductionDiagnostics(t *testing.
 	}
 
 	output := out.String()
-	for _, reject := range []string{"Provider history reduction", "Rehydrate candidates", "command/edit", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled", "command_candidates", "command_replaced", "edit_arg_candidates", "command_replacement_saved", "approx_command_saved_tokens", "approx_command_replacement_saved_tokens", "approx_edit_arg_saved_tokens", "replacement=not_implemented", "replacement=partial_apply"} {
+	for _, reject := range []string{"Provider history reduction", "Rehydrate candidates", "rehydrate_context", "active_context_transport", "command/edit", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled", "command_candidates", "command_replaced", "edit_arg_candidates", "command_replacement_saved", "approx_command_saved_tokens", "approx_command_replacement_saved_tokens", "approx_edit_arg_saved_tokens", "replacement=not_implemented", "replacement=partial_apply"} {
 		if strings.Contains(output, reject) {
 			t.Fatalf("/tokens output should not contain %q:\n%s", reject, output)
 		}
@@ -305,4 +342,9 @@ func renderProviderHistoryStatusCommand(t *testing.T, agent *Agent, out *bytes.B
 		t.Fatal("handleStatusCommandForSurface() = false, want true")
 	}
 	return out.String()
+}
+
+func applyProviderHistoryStatusActiveContextFixture(agent *Agent, fixture activeContextProviderFixture) {
+	applyActiveContextProviderFixture(agent, fixture)
+	agent.CurrentProvider = &mockProvider{name: fixture.providerName}
 }

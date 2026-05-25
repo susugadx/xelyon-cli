@@ -161,6 +161,36 @@ func TestProviderHistoryRehydrateContextDoesNotMutateRawHistoryOrSession(t *test
 	}
 }
 
+func TestProviderHistoryRehydrateContextEnabledFromProjectConfigDoesNotMutateRawHistoryOrSession(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+	agent, session, oldRead := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
+	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = false
+	projectCfg := newProviderHistoryRuntimeProjectConfig("apply", true)
+	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(agent.Runtime, projectCfg); err != nil {
+		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
+	}
+	if !agent.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext = false, want true")
+	}
+	for _, msg := range agent.History {
+		session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+	beforeHistory := api.CloneMessages(agent.History)
+	beforeSessionMessages := append([]history.MessageEntry(nil), session.Messages...)
+
+	_, _ = agent.providerFacingHistoryForRequest(agent.requestContext(context.Background()))
+
+	if !reflect.DeepEqual(agent.History, beforeHistory) {
+		t.Fatalf("Agent.History changed after project-config rehydrate injection:\n got %#v\nwant %#v", agent.History, beforeHistory)
+	}
+	if !reflect.DeepEqual(session.Messages, beforeSessionMessages) {
+		t.Fatalf("session.Messages changed after project-config rehydrate injection:\n got %#v\nwant %#v", session.Messages, beforeSessionMessages)
+	}
+	if agent.History[1].Content != oldRead || session.Messages[1].Content != oldRead {
+		t.Fatalf("raw old read changed: history=%q session=%q want %q", agent.History[1].Content, session.Messages[1].Content, oldRead)
+	}
+}
+
 func TestProviderHistoryRehydrateContextTokenEstimateMatchesProviderRequest(t *testing.T) {
 	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
 	staleReport := ProviderHistoryProjectionReport{Mode: ProviderHistoryReductionApply, OriginalMessageCount: 99}

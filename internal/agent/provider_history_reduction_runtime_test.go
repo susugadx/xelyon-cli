@@ -7,63 +7,110 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-func TestSyncProviderHistoryReductionModeFromProjectConfig(t *testing.T) {
-	unsetProviderHistoryReductionEnv(t)
+func TestSyncProviderHistoryRuntimeConfigFromProjectConfig(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
 
 	runtime := NewAgentRuntime()
-	projectCfg := &config.ProjectConfig{
-		Experimental: config.ProjectExperimentalConfig{
-			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
-				Mode: config.ProjectProviderHistoryReductionModeDryRun,
-			},
-		},
-	}
+	projectCfg := newProviderHistoryRuntimeProjectConfig(config.ProjectProviderHistoryReductionModeDryRun, true)
 
-	if err := syncProviderHistoryReductionModeFromProjectConfig(runtime, projectCfg); err != nil {
-		t.Fatalf("syncProviderHistoryReductionModeFromProjectConfig() error = %v", err)
+	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, projectCfg); err != nil {
+		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
 	}
 	if runtime.Options.ProviderHistoryReductionMode != ProviderHistoryReductionDryRun || !runtime.Options.ProviderHistoryReductionModeSet {
 		t.Fatalf("runtime provider history reduction mode = (%v, %v), want dry-run set", runtime.Options.ProviderHistoryReductionMode, runtime.Options.ProviderHistoryReductionModeSet)
 	}
+	if !runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext = false, want true")
+	}
 
-	if err := syncProviderHistoryReductionModeFromProjectConfig(runtime, nil); err != nil {
-		t.Fatalf("syncProviderHistoryReductionModeFromProjectConfig(nil) error = %v", err)
+	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, nil); err != nil {
+		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig(nil) error = %v", err)
 	}
 	if runtime.Options.ProviderHistoryReductionMode != ProviderHistoryReductionDisabled || runtime.Options.ProviderHistoryReductionModeSet {
 		t.Fatalf("runtime provider history reduction mode after nil project = (%v, %v), want off unset", runtime.Options.ProviderHistoryReductionMode, runtime.Options.ProviderHistoryReductionModeSet)
 	}
+	if runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext after nil project = true, want false")
+	}
 }
 
-func TestSyncProviderHistoryReductionModeFromProjectConfigEnvOverride(t *testing.T) {
+func TestSyncProviderHistoryRuntimeConfigModeEnvOverride(t *testing.T) {
 	t.Setenv(config.ProviderHistoryReductionEnvVar, "auto")
 	runtime := NewAgentRuntime()
-	projectCfg := &config.ProjectConfig{
-		Experimental: config.ProjectExperimentalConfig{
-			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
-				Mode: config.ProjectProviderHistoryReductionModeDryRun,
-			},
-		},
-	}
+	projectCfg := newProviderHistoryRuntimeProjectConfig(config.ProjectProviderHistoryReductionModeDryRun, false)
 
-	if err := syncProviderHistoryReductionModeFromProjectConfig(runtime, projectCfg); err != nil {
-		t.Fatalf("syncProviderHistoryReductionModeFromProjectConfig() error = %v", err)
+	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, projectCfg); err != nil {
+		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
 	}
 	if runtime.Options.ProviderHistoryReductionMode != ProviderHistoryReductionAuto || !runtime.Options.ProviderHistoryReductionModeSet {
 		t.Fatalf("runtime provider history reduction mode = (%v, %v), want auto set", runtime.Options.ProviderHistoryReductionMode, runtime.Options.ProviderHistoryReductionModeSet)
 	}
 }
 
-func TestSyncProviderHistoryReductionModeFromProjectConfigInvalidEnv(t *testing.T) {
+func TestSyncProviderHistoryRehydrateContextFromProjectConfigEnvOverride(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+
+	t.Run("env true overrides project false", func(t *testing.T) {
+		t.Setenv(config.ProviderHistoryRehydrateContextEnvVar, "true")
+		runtime := NewAgentRuntime()
+		projectCfg := newProviderHistoryRuntimeProjectConfig(config.ProjectProviderHistoryReductionModeApply, false)
+
+		if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, projectCfg); err != nil {
+			t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
+		}
+		if !runtime.Options.EnableProviderHistoryRehydrateContext {
+			t.Fatal("runtime EnableProviderHistoryRehydrateContext = false, want true")
+		}
+	})
+
+	t.Run("env false overrides project true", func(t *testing.T) {
+		t.Setenv(config.ProviderHistoryRehydrateContextEnvVar, "0")
+		runtime := NewAgentRuntime()
+		projectCfg := newProviderHistoryRuntimeProjectConfig(config.ProjectProviderHistoryReductionModeApply, true)
+
+		if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, projectCfg); err != nil {
+			t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
+		}
+		if runtime.Options.EnableProviderHistoryRehydrateContext {
+			t.Fatal("runtime EnableProviderHistoryRehydrateContext = true, want false")
+		}
+	})
+}
+
+func TestSyncProviderHistoryRuntimeConfigModeInvalidEnv(t *testing.T) {
 	t.Setenv(config.ProviderHistoryReductionEnvVar, "x")
 	runtime := NewAgentRuntime()
 
-	err := syncProviderHistoryReductionModeFromProjectConfig(runtime, nil)
+	err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, nil)
 	if err == nil {
-		t.Fatal("syncProviderHistoryReductionModeFromProjectConfig() error = nil, want invalid env error")
+		t.Fatal("syncProviderHistoryRuntimeConfigFromProjectConfig() error = nil, want invalid env error")
 	}
 	want := `invalid provider history reduction mode "x" (expected: off, dry_run, apply, auto)`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error = %q, want containing %q", err.Error(), want)
+	}
+}
+
+func TestSyncProviderHistoryRehydrateContextFromProjectConfigInvalidEnvDoesNotMutateRuntime(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+	t.Setenv(config.ProviderHistoryRehydrateContextEnvVar, "maybe")
+	runtime := NewAgentRuntime()
+	runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionApply
+	runtime.Options.ProviderHistoryReductionModeSet = true
+	runtime.Options.EnableProviderHistoryRehydrateContext = true
+	projectCfg := newProviderHistoryRuntimeProjectConfig(config.ProjectProviderHistoryReductionModeDryRun, false)
+
+	err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, projectCfg)
+	if err == nil {
+		t.Fatal("syncProviderHistoryRuntimeConfigFromProjectConfig() error = nil, want invalid env error")
+	}
+	want := `invalid provider history rehydrate_context "maybe" (expected: 1, true, 0, false)`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want containing %q", err.Error(), want)
+	}
+	assertProviderHistoryReductionRuntimeMode(t, runtime, ProviderHistoryReductionApply, true)
+	if !runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext changed to false after invalid env")
 	}
 }
 

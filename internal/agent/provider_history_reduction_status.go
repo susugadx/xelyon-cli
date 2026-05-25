@@ -135,6 +135,34 @@ func providerHistoryReductionStatusSummary(runtime *AgentRuntime) (string, bool)
 	return "", false
 }
 
+func providerHistoryRehydrateContextStatusSummary(agent *Agent) string {
+	return fmt.Sprintf(
+		"rehydrate_context=%s; active_context_transport=%s",
+		onOffProviderHistoryRehydrateContext(providerHistoryRehydrateContextEnabled(agent)),
+		providerHistoryActiveContextTransportForStatus(agent),
+	)
+}
+
+func providerHistoryRehydrateContextEnabled(agent *Agent) bool {
+	return agent != nil &&
+		agent.Runtime != nil &&
+		agent.Runtime.Options.EnableProviderHistoryRehydrateContext
+}
+
+func providerHistoryActiveContextTransportForStatus(agent *Agent) string {
+	if agent == nil {
+		return "none"
+	}
+	return string(agent.providerActiveContextTransport())
+}
+
+func onOffProviderHistoryRehydrateContext(enabled bool) string {
+	if enabled {
+		return "on"
+	}
+	return "off"
+}
+
 func providerHistoryCommandEditDryRunStatusSummary(runtime *AgentRuntime) (string, bool) {
 	if runtime == nil {
 		return "", false

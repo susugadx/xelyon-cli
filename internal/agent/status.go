@@ -182,10 +182,13 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 	printStatusUsageSection(out, agent, "🧾 Last Chat Turn", "No chat turn usage data available", lastChatTurnUsageForStatus)
 	printStatusUsageSection(out, agent, "🧾 Last Review", "No review usage data available", lastReviewUsageForStatus)
 
-	if summary, ok := providerHistoryReductionStatusSummary(agent.Runtime); ok {
+	if summary, ok := providerHistoryReductionStatusSummary(agent.Runtime); ok || providerHistoryRehydrateContextEnabled(agent) {
 		_, _ = fmt.Fprintln(out)
 		green.Fprintln(out, "🧾 Provider history reduction")
-		_, _ = fmt.Fprintf(out, "  %s\n", summary)
+		if ok {
+			_, _ = fmt.Fprintf(out, "  %s\n", summary)
+		}
+		_, _ = fmt.Fprintf(out, "  %s\n", providerHistoryRehydrateContextStatusSummary(agent))
 		if commandEditSummary, ok := providerHistoryCommandEditDryRunStatusSummary(agent.Runtime); ok {
 			_, _ = fmt.Fprintf(out, "  %s\n", commandEditSummary)
 		}

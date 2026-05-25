@@ -163,6 +163,57 @@ func TestSaveAndSyncProjectConfigKeepsFinalChecksOnInvalidProviderHistoryReducti
 	}
 }
 
+func TestSaveAndSyncProjectConfigKeepsRuntimeOnInvalidProviderHistoryRehydrateContextEnv(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv(config.ProviderHistoryRehydrateContextEnvVar, "maybe")
+	cfg := newProjectMapDisabledConfig()
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+
+	projectDir := t.TempDir()
+	agent := newProjectConfigSyncTestAgent(t, cfg)
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionApply
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = true
+	agent.cfg().FinalChecks = config.FinalChecksConfig{
+		Commands: []string{"existing verify"},
+		Timeout:  99,
+	}
+
+	pc := &config.ProjectConfig{
+		Context: "new context",
+		Experimental: config.ProjectExperimentalConfig{
+			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
+				Mode:             config.ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext: false,
+			},
+		},
+		FinalChecks: &config.FinalChecksConfig{
+			Commands: []string{"project verify"},
+			Timeout:  30,
+		},
+		FilePath: filepath.Join(projectDir, "xelyon.yaml"),
+	}
+	err := agent.SaveAndSyncProjectConfig(pc)
+	if err == nil {
+		t.Fatal("SaveAndSyncProjectConfig() error = nil, want invalid provider history rehydrate_context env error")
+	}
+	want := `invalid provider history rehydrate_context "maybe" (expected: 1, true, 0, false)`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want containing %q", err.Error(), want)
+	}
+	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionApply, true)
+	if !agent.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext changed to false after sync error")
+	}
+	assertRuntimeFinalChecks(t, agent, []string{"existing verify"}, 99)
+	if strings.Contains(agent.SystemPrompt, "new context") {
+		t.Fatalf("SystemPrompt refreshed after sync error:\n%s", agent.SystemPrompt)
+	}
+}
+
 func TestSaveAndSyncProjectConfigKeepsProviderHistoryModeWhenFinalChecksFallbackFails(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
@@ -179,6 +230,7 @@ func TestSaveAndSyncProjectConfigKeepsProviderHistoryModeWhenFinalChecksFallback
 	agent := newProjectConfigSyncTestAgent(t, cfg)
 	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionApply
 	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = false
 	agent.cfg().FinalChecks = config.FinalChecksConfig{
 		Commands: []string{"existing verify"},
 		Timeout:  99,
@@ -188,7 +240,8 @@ func TestSaveAndSyncProjectConfigKeepsProviderHistoryModeWhenFinalChecksFallback
 		Context: "new context",
 		Experimental: config.ProjectExperimentalConfig{
 			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
-				Mode: config.ProjectProviderHistoryReductionModeDryRun,
+				Mode:             config.ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext: true,
 			},
 		},
 		FilePath: filepath.Join(projectDir, "xelyon.yaml"),
@@ -198,6 +251,9 @@ func TestSaveAndSyncProjectConfigKeepsProviderHistoryModeWhenFinalChecksFallback
 		t.Fatal("SaveAndSyncProjectConfig() error = nil, want invalid global config error")
 	}
 	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionApply, true)
+	if agent.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext changed to true after sync error")
+	}
 	assertRuntimeFinalChecks(t, agent, []string{"existing verify"}, 99)
 	if strings.Contains(agent.SystemPrompt, "new context") {
 		t.Fatalf("SystemPrompt refreshed after sync error:\n%s", agent.SystemPrompt)

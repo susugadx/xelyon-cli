@@ -50,7 +50,8 @@ func TestCloneProjectConfigDeepCopiesSlices(t *testing.T) {
 		},
 		Experimental: ProjectExperimentalConfig{
 			ProviderHistoryReduction: ProjectProviderHistoryReductionConfig{
-				Mode: ProjectProviderHistoryReductionModeDryRun,
+				Mode:             ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext: true,
 			},
 		},
 	}
@@ -62,6 +63,7 @@ func TestCloneProjectConfigDeepCopiesSlices(t *testing.T) {
 	clone.Ignore.Patterns[0] = "node_modules"
 	clone.FinalChecks.Commands[0] = "make test"
 	clone.Experimental.ProviderHistoryReduction.Mode = ProjectProviderHistoryReductionModeApply
+	clone.Experimental.ProviderHistoryReduction.RehydrateContext = false
 
 	if original.Rules[0] != "rule" {
 		t.Fatalf("Rules shared backing array: %#v", original.Rules)
@@ -80,5 +82,8 @@ func TestCloneProjectConfigDeepCopiesSlices(t *testing.T) {
 	}
 	if original.Experimental.ProviderHistoryReduction.Mode != ProjectProviderHistoryReductionModeDryRun {
 		t.Fatalf("Experimental.ProviderHistoryReduction.Mode = %q, want dry_run", original.Experimental.ProviderHistoryReduction.Mode)
+	}
+	if !bool(original.Experimental.ProviderHistoryReduction.RehydrateContext) {
+		t.Fatalf("Experimental.ProviderHistoryReduction.RehydrateContext = false, want true")
 	}
 }

@@ -8,19 +8,22 @@ import (
 )
 
 func TestInitializeProjectInstructionsSyncsExperimentalProviderHistoryReductionMode(t *testing.T) {
-	unsetProviderHistoryReductionEnv(t)
+	unsetProviderHistoryRuntimeConfigEnv(t)
 	dir := t.TempDir()
-	writeProviderHistoryReductionProjectConfig(t, dir, "dry_run")
+	writeProviderHistoryReductionProjectConfigWithRehydrateContext(t, dir, "dry_run", true)
 	agent := newProviderHistoryReductionStartupTestAgent(t, dir)
 
 	if err := initializeProjectInstructions(agent, projectInstructionApplyOptions{injectProjectMap: false}); err != nil {
 		t.Fatalf("initializeProjectInstructions() error = %v", err)
 	}
 	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionDryRun, true)
+	if !agent.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext = false, want true")
+	}
 }
 
 func TestInitializeProjectInstructionsAppliesFinalChecksAndProviderHistoryReductionTogether(t *testing.T) {
-	unsetProviderHistoryReductionEnv(t)
+	unsetProviderHistoryRuntimeConfigEnv(t)
 	dir := t.TempDir()
 	writeProviderHistoryReductionProjectConfigWithFinalChecks(t, dir, "apply", "make verify")
 	agent := newProviderHistoryReductionStartupTestAgent(t, dir)
@@ -43,7 +46,7 @@ func TestInitializeProjectInstructionsSyncsProviderHistoryReductionEnvWithoutPro
 }
 
 func TestInitializeProjectInstructionsReturnsInvalidExperimentalProviderHistoryReductionMode(t *testing.T) {
-	unsetProviderHistoryReductionEnv(t)
+	unsetProviderHistoryRuntimeConfigEnv(t)
 	dir := t.TempDir()
 	writeProviderHistoryReductionProjectConfig(t, dir, "x")
 	agent := newProviderHistoryReductionStartupTestAgent(t, dir)
@@ -56,7 +59,7 @@ func TestInitializeProjectInstructionsReturnsInvalidExperimentalProviderHistoryR
 }
 
 func TestInitializeProjectInstructionsKeepsFinalChecksOnInvalidExperimentalProviderHistoryReductionMode(t *testing.T) {
-	unsetProviderHistoryReductionEnv(t)
+	unsetProviderHistoryRuntimeConfigEnv(t)
 	dir := t.TempDir()
 	writeProviderHistoryReductionProjectConfigWithFinalChecks(t, dir, "x", "make verify")
 	agent := newProviderHistoryReductionStartupTestAgent(t, dir)
@@ -85,6 +88,29 @@ func TestInitializeProjectInstructionsKeepsFinalChecksOnInvalidProviderHistoryRe
 	assertRuntimeFinalChecks(t, agent, []string{"existing verify"}, 99)
 }
 
+func TestInitializeProjectInstructionsKeepsRuntimeOnInvalidProviderHistoryRehydrateContextEnv(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+	t.Setenv(config.ProviderHistoryRehydrateContextEnvVar, "maybe")
+	dir := t.TempDir()
+	writeProviderHistoryReductionProjectConfigWithFinalChecks(t, dir, "dry_run", "make verify")
+	agent := newProviderHistoryReductionStartupTestAgent(t, dir)
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionApply
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = true
+	agent.cfg().FinalChecks = config.FinalChecksConfig{Commands: []string{"existing verify"}, Timeout: 99}
+
+	err := initializeProjectInstructions(agent, projectInstructionApplyOptions{injectProjectMap: false})
+	if err == nil {
+		t.Fatal("initializeProjectInstructions() error = nil, want invalid rehydrate_context env error")
+	}
+	assertInvalidProviderHistoryRehydrateContextError(t, err.Error())
+	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionApply, true)
+	if !agent.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext changed to false after invalid env")
+	}
+	assertRuntimeFinalChecks(t, agent, []string{"existing verify"}, 99)
+}
+
 func TestRunHeadlessWithConfigReturnsConfigErrorForInvalidProviderHistoryReductionEnv(t *testing.T) {
 	t.Setenv(config.ProviderHistoryReductionEnvVar, "x")
 	t.Setenv("HOME", t.TempDir())
@@ -97,6 +123,20 @@ func TestRunHeadlessWithConfigReturnsConfigErrorForInvalidProviderHistoryReducti
 		t.Fatalf("RunHeadlessWithConfig() error = %#v, want config_error", result.Error)
 	}
 	assertInvalidProviderHistoryReductionModeError(t, result.Error.Message)
+}
+
+func TestRunHeadlessWithConfigReturnsConfigErrorForInvalidProviderHistoryRehydrateContextEnv(t *testing.T) {
+	t.Setenv(config.ProviderHistoryRehydrateContextEnvVar, "maybe")
+	t.Setenv("HOME", t.TempDir())
+
+	result := RunHeadlessWithConfig(context.Background(), "query", "test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig())
+	if result.Status != "error" {
+		t.Fatalf("RunHeadlessWithConfig() status = %q, want error", result.Status)
+	}
+	if result.Error == nil || result.Error.Type != "config_error" {
+		t.Fatalf("RunHeadlessWithConfig() error = %#v, want config_error", result.Error)
+	}
+	assertInvalidProviderHistoryRehydrateContextError(t, result.Error.Message)
 }
 
 func newProviderHistoryReductionStartupTestAgent(t *testing.T, cwd string) *Agent {
