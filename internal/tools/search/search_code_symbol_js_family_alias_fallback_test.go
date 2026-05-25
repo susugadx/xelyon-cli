@@ -295,7 +295,7 @@ func TestResolveJSSymbol_TSXFindsNamedImportAliasJSXUsage(t *testing.T) {
 			"export function App() { return <PrimaryButton /> }\n",
 	})
 
-	result := resolveJSSymbol("Button", SearchOptions{
+	result := resolveJSFamilySymbol("Button", SearchOptions{
 		Path:          dir,
 		FileType:      "tsx",
 		InvocationCWD: dir,

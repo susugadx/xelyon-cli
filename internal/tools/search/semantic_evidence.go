@@ -79,16 +79,3 @@ type SemanticReference struct {
 	Source       string
 	Confidence   string
 }
-
-// LanguageImpactScope は定義解決と evidence 収集の探索条件を分けて渡す adapter contract。
-type LanguageImpactScope struct {
-	Definition SearchOptions
-	Evidence   SearchOptions
-}
-
-// LanguageImpactAdapter は言語ごとの semantic evidence 収集境界。
-type LanguageImpactAdapter interface {
-	Language() string
-	CanHandle(opts SearchOptions) bool
-	CollectSemanticEvidence(symbol string, scope LanguageImpactScope) (SemanticEvidence, bool)
-}
