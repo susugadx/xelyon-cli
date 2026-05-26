@@ -223,13 +223,15 @@ XELYON は探索・調査タスクを `spawn_agent` / `wait_agent` でサブエ�
 
 設定例:
 
+`sub_agent.max_concurrent` の既定は `1` です。複数の調査タスクを並列させたいときだけ、例のように値を上げてください。
+
 ```yaml
 # ~/.xelyon/config.yaml
 sub_agent:
   enabled: true
   default_model: ""
   default_effort: off
-  max_concurrent: 5
+  max_concurrent: 2  # 既定: 1
 ```
 
 サブエージェントは内部ツールなので、通常は自然言語の指示から自動で使われます。探索対象のファイルパスや観点を明示すると、より短い往復で結果が返ります。

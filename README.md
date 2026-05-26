@@ -315,13 +315,15 @@ Gemini API キーは無料で取得できます: https://aistudio.google.com/api
 
 ### サブエージェント設定
 
+`sub_agent.max_concurrent` の既定は `1` です。複数の調査タスクを並列させたいときだけ、例のように値を上げてください。
+
 ```yaml
 # ~/.xelyon/config.yaml
 sub_agent:
   enabled: true
   default_model: ""
   default_effort: off
-  max_concurrent: 5
+  max_concurrent: 2  # 既定: 1
 ```
 
 `sub_agent.default_model` が空の場合は、メイン provider に応じて OpenAI は `gpt-5.4-mini`、Claude は `claude-haiku-4-5-20251001`、Gemini は `gemini-3.1-flash-lite`、Kimi は `kimi-k2.5` などの低コストモデルを自動選択します。Azure OpenAI では hard-coded モデル名ではなく `provider_models.azure.default_model` の deployment 名を使います。親モデルの `default_model` や `thinking` 設定は直接上書きしません。
