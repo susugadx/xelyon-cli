@@ -1,6 +1,11 @@
 package search
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -101,15 +106,19 @@ func (ctx qualifiedReceiverProbeContext) role() methodProbeReceiverRole {
 	hint := ctx.resolveLocalHint()
 	if hint.baseName != "" && hint.pathHint != "" {
 		ctx.deps.addDirGoFiles(hint.pathHint)
-		autoOpts := qualifiedReceiverInspectAutoOptions(ctx.opts, hint.repoRoot)
-		result, _, status := navigation.ResolveInspectSymbolAuto(hint.baseName, hint.pathHint, autoOpts)
-		switch status {
-		case navigation.SymbolAutoSingle:
-			if result.Symbol != nil {
-				role = methodProbeReceiverRoleForKind(result.Symbol.Kind)
+		if fastRole, complete := qualifiedReceiverRoleFromLocalDir(hint.baseName, hint.pathHint); fastRole != methodProbeReceiverRoleUnknown || complete {
+			role = fastRole
+		} else {
+			autoOpts := qualifiedReceiverInspectAutoOptions(ctx.opts, hint.repoRoot, hint.pathHint)
+			result, _, status := navigation.ResolveInspectSymbolAuto(hint.baseName, hint.pathHint, autoOpts)
+			switch status {
+			case navigation.SymbolAutoSingle:
+				if result.Symbol != nil {
+					role = methodProbeReceiverRoleForKind(result.Symbol.Kind)
+				}
+			case navigation.SymbolAutoMultiple:
+				role = methodProbeReceiverRoleFromCandidates(result.Candidates)
 			}
-		case navigation.SymbolAutoMultiple:
-			role = methodProbeReceiverRoleFromCandidates(result.Candidates)
 		}
 	}
 
@@ -134,21 +143,25 @@ func (ctx qualifiedReceiverProbeContext) hasDirectMethod(methodName string) bool
 	hint := ctx.resolveLocalHint()
 	if hint.baseName != "" && hint.pathHint != "" {
 		ctx.deps.addDirGoFiles(hint.pathHint)
-		autoOpts := qualifiedReceiverInspectAutoOptions(ctx.opts, hint.repoRoot)
-		result, _, status := navigation.ResolveInspectSymbolAuto(hint.baseName+"."+methodName, hint.pathHint, autoOpts)
-		switch status {
-		case navigation.SymbolAutoSingle:
-			if result.Symbol != nil && result.Symbol.Kind == "method" {
-				direct = canonicalProbeReceiver(result.Symbol.ReceiverNorm) == hint.baseName
-			}
-		case navigation.SymbolAutoMultiple:
-			for _, candidate := range result.Candidates {
-				if strings.TrimSpace(candidate.Kind) != "method" {
-					continue
+		if fastDirect, complete := qualifiedReceiverDirectMethodFromLocalDir(hint.baseName, methodName, hint.pathHint); fastDirect || complete {
+			direct = fastDirect
+		} else {
+			autoOpts := qualifiedReceiverInspectAutoOptions(ctx.opts, hint.repoRoot, hint.pathHint)
+			result, _, status := navigation.ResolveInspectSymbolAuto(hint.baseName+"."+methodName, hint.pathHint, autoOpts)
+			switch status {
+			case navigation.SymbolAutoSingle:
+				if result.Symbol != nil && result.Symbol.Kind == "method" {
+					direct = canonicalProbeReceiver(result.Symbol.ReceiverNorm) == hint.baseName
 				}
-				if canonicalProbeReceiver(candidate.ReceiverNorm) == hint.baseName {
-					direct = true
-					break
+			case navigation.SymbolAutoMultiple:
+				for _, candidate := range result.Candidates {
+					if strings.TrimSpace(candidate.Kind) != "method" {
+						continue
+					}
+					if canonicalProbeReceiver(candidate.ReceiverNorm) == hint.baseName {
+						direct = true
+						break
+					}
 				}
 			}
 		}
@@ -198,11 +211,12 @@ func (ctx qualifiedReceiverProbeContext) resolveLocalHint() qualifiedReceiverLoc
 	}
 }
 
-func qualifiedReceiverInspectAutoOptions(opts SearchOptions, repoRoot string) navigation.InspectSymbolAutoOptions {
+func qualifiedReceiverInspectAutoOptions(opts SearchOptions, repoRoot, fallbackSearchPath string) navigation.InspectSymbolAutoOptions {
 	autoOpts := navigation.InspectSymbolAutoOptions{
-		Budget:             navigation.SummaryBudget,
-		ProjectMapStateKey: opts.ProjectMapStateKey,
-		InvocationCWD:      opts.InvocationCWD,
+		Budget:                      navigation.SummaryBudget,
+		ProjectMapStateKey:          opts.ProjectMapStateKey,
+		InvocationCWD:               opts.InvocationCWD,
+		FallbackReferenceSearchPath: strings.TrimSpace(fallbackSearchPath),
 	}
 	if repoRoot == "" {
 		return autoOpts
@@ -235,4 +249,100 @@ func methodProbeReceiverRoleFromCandidates(candidates []navigation.SymbolCandida
 		}
 	}
 	return role
+}
+
+func qualifiedReceiverRoleFromLocalDir(baseName, dir string) (methodProbeReceiverRole, bool) {
+	files, complete := parseGoPackageFilesInDir(dir)
+	if len(files) == 0 {
+		return methodProbeReceiverRoleUnknown, complete
+	}
+
+	role := methodProbeReceiverRoleUnknown
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok || typeSpec.Name == nil || typeSpec.Name.Name != baseName {
+					continue
+				}
+				if _, ok := typeSpec.Type.(*ast.InterfaceType); ok {
+					return methodProbeReceiverRoleInterface, complete
+				}
+				role = methodProbeReceiverRoleConcrete
+			}
+		}
+	}
+	return role, complete
+}
+
+func qualifiedReceiverDirectMethodFromLocalDir(baseName, methodName, dir string) (bool, bool) {
+	files, complete := parseGoPackageFilesInDir(dir)
+	if len(files) == 0 {
+		return false, complete
+	}
+
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Name == nil || fn.Name.Name != methodName || fn.Recv == nil {
+				continue
+			}
+			for _, recv := range fn.Recv.List {
+				if receiverTypeName(recv.Type) == baseName {
+					return true, complete
+				}
+			}
+		}
+	}
+	return false, complete
+}
+
+func parseGoPackageFilesInDir(dir string) ([]*ast.File, bool) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return nil, false
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, false
+	}
+
+	complete := true
+	files := make([]*ast.File, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil || file == nil {
+			complete = false
+			continue
+		}
+		files = append(files, file)
+	}
+	return files, complete
+}
+
+func receiverTypeName(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name
+	case *ast.StarExpr:
+		return receiverTypeName(e.X)
+	case *ast.IndexExpr:
+		return receiverTypeName(e.X)
+	case *ast.IndexListExpr:
+		return receiverTypeName(e.X)
+	case *ast.SelectorExpr:
+		if e.Sel != nil {
+			return e.Sel.Name
+		}
+	}
+	return ""
 }

@@ -7,12 +7,12 @@ import (
 )
 
 func resolveSymbolCandidatesFromASTSource(query symbolQuery, pathHint string, runtime GoSymbolRuntime) []SymbolCandidate {
-	goFiles := listGoFiles(pathHint)
+	rootPath := resolveRuntimeRootPath(runtime)
+	goFiles := listGoFiles(resolveASTSourcePathHint(pathHint, runtime, rootPath))
 	if len(goFiles) == 0 {
 		return nil
 	}
 
-	rootPath := resolveRuntimeRootPath(runtime)
 	var candidates []SymbolCandidate
 	for _, file := range goFiles {
 		symbols, err := extractASTSymbols(file)
@@ -44,4 +44,15 @@ func resolveRuntimeRootPath(runtime GoSymbolRuntime) string {
 		}
 	}
 	return rootPath
+}
+
+func resolveASTSourcePathHint(pathHint string, runtime GoSymbolRuntime, rootPath string) string {
+	pathHint = strings.TrimSpace(pathHint)
+	if pathHint == "" {
+		return rootPath
+	}
+	if filepath.IsAbs(pathHint) {
+		return filepath.Clean(pathHint)
+	}
+	return resolveNavigationRelativeFilePath(pathHint, runtime.InvocationCWD, rootPath)
 }

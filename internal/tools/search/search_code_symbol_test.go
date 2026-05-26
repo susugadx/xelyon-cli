@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
@@ -13,6 +14,7 @@ import (
 )
 
 type mockGoSymbolLSPClient struct {
+	mu                      sync.Mutex
 	refs                    []navigation.LSPLocation
 	impls                   []navigation.LSPLocation
 	findReferencesCalls     int
@@ -20,8 +22,10 @@ type mockGoSymbolLSPClient struct {
 }
 
 func (m *mockGoSymbolLSPClient) FindReferences(context.Context, string, int, int, bool) ([]navigation.LSPLocation, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.findReferencesCalls++
-	return m.refs, nil
+	return append([]navigation.LSPLocation(nil), m.refs...), nil
 }
 
 func (m *mockGoSymbolLSPClient) GotoDefinition(context.Context, string, int, int) ([]navigation.LSPLocation, error) {
@@ -29,8 +33,10 @@ func (m *mockGoSymbolLSPClient) GotoDefinition(context.Context, string, int, int
 }
 
 func (m *mockGoSymbolLSPClient) GotoImplementation(context.Context, string, int, int) ([]navigation.LSPLocation, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.gotoImplementationCalls++
-	return m.impls, nil
+	return append([]navigation.LSPLocation(nil), m.impls...), nil
 }
 
 const symbolTestSource = `package example

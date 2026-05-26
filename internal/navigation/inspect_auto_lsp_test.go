@@ -116,6 +116,54 @@ func main() {
 	}
 }
 
+func TestResolveInspectSymbolAuto_FiltersLSPImplementationsBeforeFormatting(t *testing.T) {
+	setupTestGoFiles(t, map[string]string{
+		"builder.go": `package example
+
+type Builder interface {
+	Build() string
+}
+`,
+		"app/impl.go": `package app
+
+type AppBuilder struct{}
+
+func (AppBuilder) Build() string { return "" }
+`,
+		"other/impl.go": `package other
+
+type OtherBuilder struct{}
+
+func (OtherBuilder) Build() string { return "" }
+`,
+	})
+
+	client := &mockNavigationLSPClient{
+		impls: []LSPLocation{
+			{File: "other/impl.go", Line: 3, Character: 1, EndLine: 3, EndChar: 13},
+			{File: "app/impl.go", Line: 3, Character: 1, EndLine: 3, EndChar: 11},
+		},
+	}
+
+	result, _, status := ResolveInspectSymbolAuto("Builder", "", InspectSymbolAutoOptions{
+		Budget:    FullBudget,
+		LSPClient: client,
+		ReferenceFilter: func(ref Reference) bool {
+			return strings.Contains(filepath.ToSlash(ref.ResolvedPath), "/app/")
+		},
+	})
+
+	if status != SymbolAutoSingle {
+		t.Fatalf("expected SymbolAutoSingle, got %s", status)
+	}
+	if len(result.Implementations) != 1 {
+		t.Fatalf("implementations = %+v, want one in-scope implementation", result.Implementations)
+	}
+	if result.Implementations[0].File != "app/impl.go" {
+		t.Fatalf("implementation file = %q, want app/impl.go", result.Implementations[0].File)
+	}
+}
+
 func TestInspectSymbolAuto_LSPFallbackOnError(t *testing.T) {
 	setupTestGoFile(t, "example.go", testGoSource)
 

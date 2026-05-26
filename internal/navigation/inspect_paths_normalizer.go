@@ -19,16 +19,16 @@ func normalizeInspectResultPaths(result *InspectResult, runtime GoSymbolRuntime)
 	sourceBase := resolveNavigationSourceBase(runtime.InvocationCWD)
 
 	for i := range result.Callers {
-		result.Callers[i].File = normalizeResultFilePath(result.Callers[i].File, targetRoot, sourceBase)
+		result.Callers[i].File = normalizeReferenceFilePath(result.Callers[i], targetRoot, sourceBase)
 	}
 	for i := range result.Refs {
-		result.Refs[i].File = normalizeResultFilePath(result.Refs[i].File, targetRoot, sourceBase)
+		result.Refs[i].File = normalizeReferenceFilePath(result.Refs[i], targetRoot, sourceBase)
 	}
 	for i := range result.Tests {
-		result.Tests[i].File = normalizeResultFilePath(result.Tests[i].File, targetRoot, sourceBase)
+		result.Tests[i].File = normalizeResolvedResultFilePath(result.Tests[i].File, result.Tests[i].ResolvedPath, targetRoot, sourceBase)
 	}
 	for i := range result.Implementations {
-		result.Implementations[i].File = normalizeResultFilePath(result.Implementations[i].File, targetRoot, sourceBase)
+		result.Implementations[i].File = normalizeResolvedResultFilePath(result.Implementations[i].File, result.Implementations[i].ResolvedPath, targetRoot, sourceBase)
 	}
 }
 
@@ -60,7 +60,28 @@ func pathWithinRoot(rootPath, candidatePath string) bool {
 }
 
 func normalizeResultFilePath(path, targetRoot, sourceBase string) string {
+	return normalizeResolvedResultFilePath(path, "", targetRoot, sourceBase)
+}
+
+func normalizeReferenceFilePath(ref Reference, targetRoot, sourceBase string) string {
+	return normalizeResolvedResultFilePath(ref.File, ref.ResolvedPath, targetRoot, sourceBase)
+}
+
+func normalizeResolvedResultFilePath(path, resolvedPath, targetRoot, sourceBase string) string {
 	path = strings.TrimSpace(path)
+	resolvedPath = strings.TrimSpace(resolvedPath)
+	if path == "" && resolvedPath == "" {
+		return ""
+	}
+
+	if resolvedPath != "" {
+		if absPath, err := filepath.Abs(filepath.FromSlash(resolvedPath)); err == nil && pathExists(absPath) {
+			if rel, ok := absoluteToSnapshotRel(targetRoot, absPath); ok {
+				return filepath.Clean(filepath.ToSlash(rel))
+			}
+		}
+	}
+
 	if path == "" {
 		return ""
 	}
@@ -80,7 +101,8 @@ func normalizeResultFilePath(path, targetRoot, sourceBase string) string {
 	}
 
 	if sourceBase != "" {
-		if rel, ok := absoluteToSnapshotRel(targetRoot, filepath.Join(sourceBase, filepath.FromSlash(path))); ok {
+		sourceRelativeAbs := filepath.Join(sourceBase, filepath.FromSlash(path))
+		if rel, ok := absoluteToSnapshotRel(targetRoot, sourceRelativeAbs); ok && pathExists(sourceRelativeAbs) {
 			return filepath.Clean(filepath.ToSlash(rel))
 		}
 	}
@@ -88,6 +110,13 @@ func normalizeResultFilePath(path, targetRoot, sourceBase string) string {
 	// 一部ヘルパーは process cwd 相対の path を返すため、存在確認付きで回収する。
 	if absPath, err := filepath.Abs(filepath.FromSlash(path)); err == nil && pathExists(absPath) {
 		if rel, ok := absoluteToSnapshotRel(targetRoot, absPath); ok {
+			return filepath.Clean(filepath.ToSlash(rel))
+		}
+	}
+
+	if sourceBase != "" {
+		sourceRelativeAbs := filepath.Join(sourceBase, filepath.FromSlash(path))
+		if rel, ok := absoluteToSnapshotRel(targetRoot, sourceRelativeAbs); ok {
 			return filepath.Clean(filepath.ToSlash(rel))
 		}
 	}

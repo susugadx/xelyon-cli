@@ -2,6 +2,7 @@ package navigation
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/ast"
 )
@@ -26,7 +27,7 @@ func newSymbolCandidateFromSnapshotEntry(entry goSymbolSnapshotEntry, rootPath s
 
 func newSymbolCandidateFromASTSymbol(symbol ast.Symbol, fileAbsPath, rootPath string) SymbolCandidate {
 	receiver := extractMethodReceiver(symbol.Signature)
-	relPath := toRelativePath(fileAbsPath)
+	relPath := symbolCandidateFilePath(fileAbsPath, rootPath)
 	receiverNorm := canonicalReceiver(receiver)
 	packageDir := filepath.Dir(relPath)
 	return SymbolCandidate{
@@ -43,4 +44,25 @@ func newSymbolCandidateFromASTSymbol(symbol ast.Symbol, fileAbsPath, rootPath st
 		StableKey:    stableGoSymbolKey(packageDir, receiverNorm, symbol.Name, string(symbol.Kind), symbol.Signature),
 		RootPath:     rootPath,
 	}
+}
+
+func symbolCandidateFilePath(filePath, rootPath string) string {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" {
+		return ""
+	}
+	absPath := filePath
+	if !filepath.IsAbs(absPath) {
+		if resolved, err := filepath.Abs(absPath); err == nil {
+			absPath = resolved
+		}
+	}
+
+	rootPath = normalizeNavigationRootPath(rootPath)
+	if rootPath != "" {
+		if relPath, err := filepath.Rel(rootPath, absPath); err == nil {
+			return filepath.ToSlash(filepath.Clean(relPath))
+		}
+	}
+	return filepath.ToSlash(filepath.Clean(toRelativePath(absPath)))
 }

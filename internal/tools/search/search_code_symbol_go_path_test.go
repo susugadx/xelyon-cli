@@ -63,6 +63,77 @@ func TestSearchCode_SymbolBundleAffectedFilesStayRepoRelativeFromSubdir(t *testi
 	}
 }
 
+func TestGoSymbolScopesUseInvocationCWDForRelativeDirectoryPath(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(filepath.Join(cwd, "app", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	opts := SearchOptions{
+		Path:               "app",
+		ProjectMapRootPath: root,
+		InvocationCWD:      cwd,
+	}
+	want := filepath.Join(cwd, "app")
+
+	scope := goSymbolSearchScopeForOptions(opts)
+	if scope.DefinitionPathHint != want {
+		t.Fatalf("DefinitionPathHint = %q, want %q", scope.DefinitionPathHint, want)
+	}
+	if scope.FallbackReferenceSearchPath != want {
+		t.Fatalf("FallbackReferenceSearchPath = %q, want %q", scope.FallbackReferenceSearchPath, want)
+	}
+	if scope.ReferenceFilter == nil {
+		t.Fatal("ReferenceFilter should be set for directory scope")
+	}
+	if !scope.ReferenceFilter(navigation.Reference{ResolvedPath: filepath.Join(want, "use.go")}) {
+		t.Fatal("ReferenceFilter rejected same-directory file")
+	}
+	if !scope.ReferenceFilter(navigation.Reference{ResolvedPath: filepath.Join(want, "sub", "use.go")}) {
+		t.Fatal("ReferenceFilter rejected directory subtree file")
+	}
+	if scope.ReferenceFilter(navigation.Reference{ResolvedPath: filepath.Join(cwd, "other", "use.go")}) {
+		t.Fatal("ReferenceFilter accepted sibling directory file")
+	}
+}
+
+func TestGoSymbolScopesKeepDirectFileReferencesInPackageDir(t *testing.T) {
+	root := t.TempDir()
+	filePath := filepath.Join(root, "pkg", "run.go")
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filePath, []byte("package pkg\n\nfunc Run() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := SearchOptions{
+		Path:               filePath,
+		ProjectMapRootPath: root,
+		InvocationCWD:      root,
+	}
+	scope := goSymbolSearchScopeForOptions(opts)
+	if scope.DefinitionPathHint != filePath {
+		t.Fatalf("DefinitionPathHint = %q, want direct file %q", scope.DefinitionPathHint, filePath)
+	}
+	packageDir := filepath.Join(root, "pkg")
+	if scope.FallbackReferenceSearchPath != packageDir {
+		t.Fatalf("FallbackReferenceSearchPath = %q, want package dir %q", scope.FallbackReferenceSearchPath, packageDir)
+	}
+	if scope.ReferenceFilter == nil {
+		t.Fatal("ReferenceFilter should be set for direct-file package scope")
+	}
+	if !scope.ReferenceFilter(navigation.Reference{ResolvedPath: filepath.Join(packageDir, "use.go")}) {
+		t.Fatal("ReferenceFilter rejected same-package sibling file")
+	}
+	if scope.ReferenceFilter(navigation.Reference{ResolvedPath: filepath.Join(packageDir, "sub", "use.go")}) {
+		t.Fatal("ReferenceFilter accepted subpackage file")
+	}
+	if scope.ReferenceFilter(navigation.Reference{ResolvedPath: filepath.Join(root, "other", "use.go")}) {
+		t.Fatal("ReferenceFilter accepted other package file")
+	}
+}
+
 func TestCollectNavigationCandidatesAffectedFiles_PrefersExistingProjectRoot(t *testing.T) {
 	outerDir := t.TempDir()
 	dir := filepath.Join(outerDir, "repo")
@@ -252,7 +323,8 @@ func TestRunFromShared(t *testing.T) {
 	cache := &testSearchCache{data: make(map[string]string)}
 	opts := SearchOptions{
 		Pattern:            "Run",
-		Path:               ".",
+		Path:               dir,
+		FileType:           "go",
 		ProjectMapRootPath: dir,
 		InvocationCWD:      subdir,
 		ProjectMap: &repomap.ProjectMap{

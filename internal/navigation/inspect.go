@@ -76,7 +76,7 @@ func collectInspectReferences(baseName string, cand SymbolCandidate, opts inspec
 			FallbackUsed: false,
 		}
 		if cand.Kind == "interface" {
-			if impls, implErr := findImplementationsViaLSP(opts.lspClient, cand, opts.runtime.InvocationCWD); implErr == nil {
+			if impls, implErr := findImplementationsViaLSP(opts.lspClient, cand, opts.runtime.InvocationCWD, opts.referenceFilter); implErr == nil {
 				collection.implementations = impls
 			}
 		}

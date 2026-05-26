@@ -9,12 +9,16 @@ func resolveSymbolCandidatesWithRuntime(symbol, pathHint string, runtime GoSymbo
 }
 
 func findAmbiguousFilesWithRuntime(symbol string, cand SymbolCandidate, runtime GoSymbolRuntime) map[string]bool {
+	return findAmbiguousFilesWithRuntimePath(symbol, cand, runtime, "")
+}
+
+func findAmbiguousFilesWithRuntimePath(symbol string, cand SymbolCandidate, runtime GoSymbolRuntime, pathHint string) map[string]bool {
 	ambiguous := findAmbiguousFilesFromSnapshot(symbol, cand, runtime)
 	if len(ambiguous) > 0 {
 		return ambiguous
 	}
 
-	allCandidates := resolveSymbolCandidatesWithRuntime(symbol, "", runtime)
+	allCandidates := resolveSymbolCandidatesWithRuntime(symbol, pathHint, runtime)
 	for _, candidate := range allCandidates {
 		if candidate.File == "" || candidate.File == cand.File {
 			continue

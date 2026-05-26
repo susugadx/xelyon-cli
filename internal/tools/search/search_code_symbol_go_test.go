@@ -1,6 +1,7 @@
 package search
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -170,5 +171,256 @@ func run(a *Agent) error {
 	}
 	if !strings.Contains(result, "Note: resolved via gopls.") {
 		t.Fatalf("expected LSP note in multi-pattern output, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_GoSymbolFallbackReferencesStayScopedToSearchPath(t *testing.T) {
+	root := setupMultiLangDir(t, map[string]string{
+		"app/agent.go": `package app
+
+type Agent struct{}
+
+func (a *Agent) Close() error { return nil }
+
+func run(a *Agent) error {
+	return a.Close()
+}
+`,
+		"other/agent.go": `package other
+
+type Agent struct{}
+
+func (a *Agent) Close() error { return nil }
+
+func unrelated(a *Agent) error {
+	return a.Close()
+}
+`,
+	})
+	withWorkingDirForSearchTest(t, root)
+
+	result := ExecuteSearchCode(SearchOptions{Pattern: "Close", Path: "app", FileType: "go"})
+	if !strings.Contains(result, "app/agent.go") {
+		t.Fatalf("expected scoped app symbol output, got:\n%s", result)
+	}
+	if strings.Contains(result, "other/agent.go") {
+		t.Fatalf("expected fallback references to stay scoped to app, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_GoSymbolDirectoryScopeFiltersLSPReferences(t *testing.T) {
+	root := setupMultiLangDir(t, map[string]string{
+		"app/target.go": `package app
+
+func Target() string { return "target" }
+`,
+		"app/use.go": `package app
+
+func UseTarget() string {
+	return Target()
+}
+`,
+		"other/use.go": `package other
+
+func UseOtherTarget() string {
+	return Target()
+}
+`,
+	})
+	withWorkingDirForSearchTest(t, root)
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:       "Target",
+		Path:          "app",
+		FileType:      "go",
+		InvocationCWD: root,
+		LSPClient: &mockGoSymbolLSPClient{
+			refs: []navigation.LSPLocation{
+				{File: "app/use.go", Line: 4, Character: 9, EndLine: 4, EndChar: 15},
+				{File: "other/use.go", Line: 4, Character: 9, EndLine: 4, EndChar: 15},
+			},
+		},
+	})
+	if !strings.Contains(result, "Note: resolved via gopls.") {
+		t.Fatalf("expected scoped LSP references to be used, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Callers (1)") || !strings.Contains(result, "app/use.go:4") {
+		t.Fatalf("expected directory-scoped LSP caller, got:\n%s", result)
+	}
+	if strings.Contains(result, "other/use.go") {
+		t.Fatalf("expected out-of-scope LSP caller to be filtered, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_GoSymbolDirectFileScopeFiltersLSPReferencesToPackageDir(t *testing.T) {
+	root := setupMultiLangDir(t, map[string]string{
+		"pkg/target.go": `package pkg
+
+func Target() string { return "target" }
+`,
+		"pkg/use.go": `package pkg
+
+func UseTarget() string {
+	return Target()
+}
+`,
+		"pkg/sub/use.go": `package sub
+
+func UseSubTarget() string {
+	return Target()
+}
+`,
+		"other/use.go": `package other
+
+func UseOtherTarget() string {
+	return Target()
+}
+`,
+	})
+	withWorkingDirForSearchTest(t, root)
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:       "Target",
+		Path:          filepath.Join(root, "pkg", "target.go"),
+		FileType:      "go",
+		InvocationCWD: root,
+		LSPClient: &mockGoSymbolLSPClient{
+			refs: []navigation.LSPLocation{
+				{File: "pkg/use.go", Line: 4, Character: 9, EndLine: 4, EndChar: 15},
+				{File: "pkg/sub/use.go", Line: 4, Character: 9, EndLine: 4, EndChar: 15},
+				{File: "other/use.go", Line: 4, Character: 9, EndLine: 4, EndChar: 15},
+			},
+		},
+	})
+	if !strings.Contains(result, "Note: resolved via gopls.") {
+		t.Fatalf("expected scoped LSP references to be used, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Callers (1)") || !strings.Contains(result, "pkg/use.go:4") {
+		t.Fatalf("expected direct-file LSP caller from same package dir, got:\n%s", result)
+	}
+	if strings.Contains(result, "pkg/sub/use.go") || strings.Contains(result, "other/use.go") {
+		t.Fatalf("expected out-of-package LSP callers to be filtered, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_GoSymbolFallbackReferencesResolveRelativePathFromInvocationCWD(t *testing.T) {
+	root := setupMultiLangDir(t, map[string]string{
+		"workspace/app/target.go": `package app
+
+func Target() string { return "target" }
+
+func UseTarget() string {
+	return Target()
+}
+`,
+	})
+	withWorkingDirForSearchTest(t, root)
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:  "Target",
+		Path:     "app",
+		FileType: "go",
+		ProjectMap: &repomap.ProjectMap{
+			RootPath: root,
+			Files: []*repomap.FileEntry{
+				{
+					Path: "workspace/app/target.go",
+					Symbols: []repomap.Symbol{
+						{Name: "Target", Kind: "function", Line: 3, EndLine: 3, Signature: "func Target() string", Exported: true},
+					},
+				},
+			},
+		},
+		ProjectMapRootPath: root,
+		ProjectMapStateKey: "go-symbol-fallback-relative-invocation-cwd",
+		InvocationCWD:      filepath.Join(root, "workspace"),
+	})
+	if !strings.Contains(result, "workspace/app/target.go") {
+		t.Fatalf("expected snapshot-backed symbol under invocation cwd, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Callers (1)") || !strings.Contains(result, "workspace/app/target.go:6") {
+		t.Fatalf("expected fallback references to resolve relative path from invocation cwd, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_GoSymbolASTFallbackRelativePathFromInvocationCWDIncludesDefinitionBody(t *testing.T) {
+	root := setupMultiLangDir(t, map[string]string{
+		"workspace/app/target.go": `package app
+
+func Target() string {
+	return "target"
+}
+
+func UseTarget() string {
+	return Target()
+}
+`,
+	})
+	withWorkingDirForSearchTest(t, root)
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:       "Target",
+		Path:          "app",
+		FileType:      "go",
+		InvocationCWD: filepath.Join(root, "workspace"),
+	})
+	if !strings.Contains(result, "in app/target.go") || strings.Contains(result, "workspace/app/target.go") {
+		t.Fatalf("expected AST fallback output path to stay invocation-cwd relative, got:\n%s", result)
+	}
+	if !strings.Contains(result, `return "target"`) {
+		t.Fatalf("expected AST fallback definition body, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Callers (1)") || !strings.Contains(result, "app/target.go:8") {
+		t.Fatalf("expected AST fallback caller path to stay invocation-cwd relative, got:\n%s", result)
+	}
+}
+
+func TestSearchCode_GoSymbolDirectFileFallbackReferencesIncludeSiblingCallers(t *testing.T) {
+	root := setupMultiLangDir(t, map[string]string{
+		"pkg/target.go": `package pkg
+
+func Target() string { return "target" }
+`,
+		"pkg/use.go": `package pkg
+
+func UseTarget() string {
+	return Target()
+}
+`,
+		"pkg/sub/use.go": `package sub
+
+func UseTargetFromSubpackage() string {
+	return Target()
+}
+`,
+		"other/target.go": `package other
+
+func Target() string { return "other" }
+`,
+		"other/use.go": `package other
+
+func UseOtherTarget() string {
+	return Target()
+}
+`,
+	})
+	withWorkingDirForSearchTest(t, root)
+
+	result := ExecuteSearchCode(SearchOptions{
+		Pattern:  "Target",
+		Path:     filepath.Join(root, "pkg", "target.go"),
+		FileType: "go",
+	})
+	if !strings.Contains(result, "pkg/target.go") {
+		t.Fatalf("expected direct-file definition output, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Callers (1)") || !strings.Contains(result, "pkg/use.go:4") {
+		t.Fatalf("expected direct-file fallback references to include sibling caller, got:\n%s", result)
+	}
+	if strings.Contains(result, "pkg/sub/use.go") {
+		t.Fatalf("expected direct-file fallback references to exclude subpackage caller, got:\n%s", result)
+	}
+	if strings.Contains(result, "other/use.go") {
+		t.Fatalf("expected direct-file fallback references to exclude other package caller, got:\n%s", result)
 	}
 }

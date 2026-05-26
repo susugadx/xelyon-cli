@@ -28,7 +28,7 @@ func findReferencesViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD 
 }
 
 // findImplementationsViaLSP は LSP の実装検索結果を navigation.ImplementationRef に変換する。
-func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string) ([]ImplementationRef, error) {
+func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate, invocationCWD string, filter ReferenceFilter) ([]ImplementationRef, error) {
 	locations, err := queryLSPLocations(cand, func(ctx context.Context, filePath string, line, col int) ([]LSPLocation, error) {
 		return client.GotoImplementation(ctx, filePath, line, col)
 	})
@@ -38,7 +38,11 @@ func findImplementationsViaLSP(client LSPClient, cand SymbolCandidate, invocatio
 
 	impls := make([]ImplementationRef, 0, len(locations))
 	for _, loc := range locations {
-		impls = append(impls, newImplementationFromLSPLocation(loc, cand, invocationCWD))
+		filePath := lspLocationFilePath(loc.File, cand.RootPath, invocationCWD)
+		if filter != nil && !filter(referenceForLSPPreClassificationFilter(filePath, loc)) {
+			continue
+		}
+		impls = append(impls, newImplementationFromLSPFilePath(filePath, loc))
 	}
 	return impls, nil
 }
@@ -78,8 +82,7 @@ func referenceForLSPPreClassificationFilter(filePath string, loc LSPLocation) Re
 	}
 }
 
-func newImplementationFromLSPLocation(loc LSPLocation, cand SymbolCandidate, invocationCWD string) ImplementationRef {
-	filePath := lspLocationFilePath(loc.File, cand.RootPath, invocationCWD)
+func newImplementationFromLSPFilePath(filePath string, loc LSPLocation) ImplementationRef {
 	return ImplementationRef{
 		File:         filePath,
 		ResolvedPath: cleanNavigationResolvedPath(filePath),

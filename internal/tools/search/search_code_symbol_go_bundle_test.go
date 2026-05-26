@@ -36,6 +36,7 @@ func TestBuild(t *testing.T) {
 	reg := locator.NewRegistry()
 	resolved := goSymbolResolver{}.Resolve("Builder", SearchOptions{
 		Path:            dir,
+		InvocationCWD:   dir,
 		LocatorRegistry: reg,
 		LSPClient: &mockGoSymbolLSPClient{
 			refs:  []navigation.LSPLocation{{File: "builder_test.go", Line: 5, Character: 1, EndLine: 5, EndChar: 6}},
@@ -80,6 +81,7 @@ func (FileBuilder) Build() string { return "" }
 	reg := locator.NewRegistry()
 	resolved := goSymbolResolver{}.Resolve("Builder", SearchOptions{
 		Path:            dir,
+		InvocationCWD:   dir,
 		LocatorRegistry: reg,
 		LSPClient: &mockGoSymbolLSPClient{
 			refs:  []navigation.LSPLocation{{File: "builder_test.go", Line: 5, Character: 1, EndLine: 5, EndChar: 6}},
