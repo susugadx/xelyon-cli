@@ -31,7 +31,7 @@ type claudeRequestFeatures struct {
 }
 
 func (p *Provider) buildMessagesRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) claudeMessagesRequestBuild {
-	model = api.GetDefaultModelWithContext(ctx, model, "claude", defaultClaudeModel)
+	model = api.ResolveProviderRequestModel(ctx, model, "claude")
 	messages := ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 	logClaudeRequestConversionDebug(ctx, history, messages)
 
@@ -58,7 +58,7 @@ func (p *Provider) buildMessagesRequest(ctx context.Context, systemPrompt string
 }
 
 func (p *Provider) buildMultimodalRequest(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) claudeMultimodalRequestBuild {
-	model = api.GetDefaultModelWithContext(ctx, model, "claude", defaultClaudeModel)
+	model = api.ResolveProviderRequestModel(ctx, model, "claude")
 	converted := ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())

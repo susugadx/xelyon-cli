@@ -93,7 +93,7 @@ func (p *Provider) SupportsClaudeCompactionWithContext(ctx context.Context, mode
 
 // ActiveContextTransport は実際の OpenRouter route に対応する active context transport を返す。
 func (p *Provider) ActiveContextTransport(ctx context.Context, model string) api.ActiveContextTransport {
-	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
+	model = api.ResolveProviderRequestModel(ctx, model, "openrouter")
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	if p.routePlanForRequest(cfg, model).usesAnthropicMessages() {
 		return api.ActiveContextTransportSystemPromptSuffix
@@ -118,7 +118,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // ChatWithTools は Provider interface の実装
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
+	model = api.ResolveProviderRequestModel(ctx, model, "openrouter")
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	route := p.routePlanForRequest(cfg, model)
 
@@ -145,7 +145,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	model = api.GetDefaultModelWithContext(ctx, model, "openrouter", "anthropic/claude-sonnet-4.6")
+	model = api.ResolveProviderRequestModel(ctx, model, "openrouter")
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	route := p.routePlanForRequest(cfg, model)
 

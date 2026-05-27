@@ -66,7 +66,7 @@ func WebSearchWithContext(ctx context.Context, query, model string) (string, err
 		return "", fmt.Errorf("OPENAI_API_KEY not set")
 	}
 
-	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
+	model = api.ResolveProviderRequestModel(ctx, model, "openai")
 	cfg := config.FromContext(ctx)
 	if !cfg.IsProviderResponsesAPIModel("openai", model) {
 		return "", fmt.Errorf("model %q does not support Responses API web search", model)

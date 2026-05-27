@@ -283,6 +283,17 @@ func TestCatalogPolicyPreservesMaxOutputOverrideForUntrustedCatalog(t *testing.T
 	}
 }
 
+func TestSimpleProviderCatalogPolicyMatchesGroqWrapper(t *testing.T) {
+	cfg := config.DefaultConfig()
+	model := "meta-llama/llama-4-scout-17b-16e-instruct"
+
+	got := SimpleProviderCatalogPolicy(cfg, "groq", model, model)
+	want := GroqCatalogPolicy(cfg, model, model)
+	if got != want {
+		t.Fatalf("SimpleProviderCatalogPolicy(groq) = %#v, want wrapper %#v", got, want)
+	}
+}
+
 func TestRuntimeMaxOutputTokensStaysSeparateFromUntrustedCatalogPolicy(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetProviderModelConfig("openrouter", config.ProviderModelConfig{

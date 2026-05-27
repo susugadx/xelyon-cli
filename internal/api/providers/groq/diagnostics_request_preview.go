@@ -67,7 +67,7 @@ func buildGroqDiagnosticRequestPreviewRequest(
 		Method:  "POST",
 		URL:     report.APIURL,
 		Headers: providerdiag.RedactedBearerHeaders(),
-		Body: provider.buildChatCompletionsRequest(
+		Body: provider.BuildChatCompletionsRequest(
 			ctx,
 			request.SystemPrompt,
 			[]api.Message{{Role: "user", Content: request.UserContent}},

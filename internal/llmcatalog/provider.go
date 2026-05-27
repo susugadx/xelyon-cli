@@ -28,6 +28,12 @@ type ProviderDescriptor struct {
 	NativeWebSearch      bool
 	SupportsResponsesAPI bool
 	PricingFamily        string
+	RuntimeFamily        string
+	PromptFamily         string
+	EditToolFamily       string
+	CapabilityFamily     string
+	ModelCatalogFamily   string
+	DoctorPolicyFamily   string
 	CompressionModel     string
 	ModelDefaults        ProviderModelDefaults
 }
@@ -73,6 +79,12 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		SetupInstructions:    []string{"export DEEPSEEK_API_KEY=your-api-key"},
 		DefaultSubAgentModel: "deepseek-v4-flash",
 		PricingFamily:        "deepseek",
+		RuntimeFamily:        "openai_compatible",
+		PromptFamily:         "deepseek",
+		EditToolFamily:       "legacy",
+		CapabilityFamily:     "deepseek",
+		ModelCatalogFamily:   "deepseek",
+		DoctorPolicyFamily:   "deepseek",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "deepseek-v4-flash",
 			MaxOutputTokens: 16384,
@@ -89,6 +101,12 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		SupportsImages:       true,
 		NativeWebSearch:      true,
 		PricingFamily:        "kimi",
+		RuntimeFamily:        "openai_compatible",
+		PromptFamily:         "kimi",
+		EditToolFamily:       "legacy",
+		CapabilityFamily:     "kimi",
+		ModelCatalogFamily:   "kimi",
+		DoctorPolicyFamily:   "kimi",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "kimi-k2.6",
 			MaxOutputTokens: 32768,
@@ -104,6 +122,12 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		NativeWebSearch:      true,
 		SupportsResponsesAPI: true,
 		PricingFamily:        "openai",
+		RuntimeFamily:        "openai",
+		PromptFamily:         "openai",
+		EditToolFamily:       "apply_patch",
+		CapabilityFamily:     "openai",
+		ModelCatalogFamily:   "openai",
+		DoctorPolicyFamily:   "openai",
 		CompressionModel:     "gpt-5.4-mini",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "gpt-5.4",
@@ -127,6 +151,12 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		SupportsImages:       true,
 		SupportsResponsesAPI: true,
 		PricingFamily:        "openai",
+		RuntimeFamily:        "openai",
+		PromptFamily:         "openai",
+		EditToolFamily:       "apply_patch",
+		CapabilityFamily:     "azure",
+		ModelCatalogFamily:   "openai",
+		DoctorPolicyFamily:   "azure",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "azure-gpt-5.4",
 			MaxOutputTokens: 16384,
@@ -141,6 +171,12 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		SupportsImages:       true,
 		NativeWebSearch:      true,
 		PricingFamily:        "gemini",
+		RuntimeFamily:        "gemini",
+		PromptFamily:         "gemini",
+		EditToolFamily:       "apply_patch",
+		CapabilityFamily:     "gemini",
+		ModelCatalogFamily:   "gemini",
+		DoctorPolicyFamily:   "gemini",
 		CompressionModel:     "gemini-3.1-flash-lite",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "gemini-3.1-pro-preview-customtools",
@@ -157,6 +193,12 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		SupportsImages:       true,
 		NativeWebSearch:      true,
 		PricingFamily:        "claude",
+		RuntimeFamily:        "claude",
+		PromptFamily:         "claude",
+		EditToolFamily:       "legacy",
+		CapabilityFamily:     "claude",
+		ModelCatalogFamily:   "claude",
+		DoctorPolicyFamily:   "claude",
 		CompressionModel:     "claude-haiku-4-5",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:     "claude-sonnet-4-6",
@@ -165,12 +207,18 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		},
 	},
 	"ollama": {
-		Key:               "ollama",
-		CredentialKind:    "base_url",
-		BaseURLEnv:        "OLLAMA_BASE_URL",
-		DefaultBaseURL:    "http://localhost:11434",
-		SetupInstructions: []string{"ローカルの Ollama サーバーを起動してください"},
-		PricingFamily:     "ollama",
+		Key:                "ollama",
+		CredentialKind:     "base_url",
+		BaseURLEnv:         "OLLAMA_BASE_URL",
+		DefaultBaseURL:     "http://localhost:11434",
+		SetupInstructions:  []string{"ローカルの Ollama サーバーを起動してください"},
+		PricingFamily:      "ollama",
+		RuntimeFamily:      "ollama",
+		PromptFamily:       "",
+		EditToolFamily:     "legacy",
+		CapabilityFamily:   "ollama",
+		ModelCatalogFamily: "ollama",
+		DoctorPolicyFamily: "ollama",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "qwen2.5-coder:7b",
 			MaxOutputTokens: 4096,
@@ -183,6 +231,12 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		SetupInstructions:    []string{"export GROQ_API_KEY=your-api-key"},
 		DefaultSubAgentModel: "llama-3.3-70b-versatile",
 		PricingFamily:        "groq",
+		RuntimeFamily:        "openai_compatible",
+		PromptFamily:         "groq",
+		EditToolFamily:       "legacy",
+		CapabilityFamily:     "groq",
+		ModelCatalogFamily:   "groq",
+		DoctorPolicyFamily:   "simple",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "meta-llama/llama-4-scout-17b-16e-instruct",
 			MaxOutputTokens: 8192,
@@ -196,19 +250,31 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		DefaultSubAgentModel: "openai/gpt-5.4-mini",
 		SupportsImages:       true,
 		PricingFamily:        "openrouter",
+		RuntimeFamily:        "openrouter",
+		PromptFamily:         "",
+		EditToolFamily:       "legacy",
+		CapabilityFamily:     "openrouter",
+		ModelCatalogFamily:   "openrouter",
+		DoctorPolicyFamily:   "openrouter",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "anthropic/claude-sonnet-4.6",
 			MaxOutputTokens: 64000,
 		},
 	},
 	"bedrock": {
-		Key:               "bedrock",
-		CredentialKind:    "static",
-		StaticCredential:  "aws-credentials",
-		SetupInstructions: []string{"AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定"},
-		SupportsImages:    true,
-		PricingFamily:     "bedrock",
-		CompressionModel:  "claude-haiku-4-5",
+		Key:                "bedrock",
+		CredentialKind:     "static",
+		StaticCredential:   "aws-credentials",
+		SetupInstructions:  []string{"AWS認証チェーン（IAMロール、環境変数、~/.aws/credentials等）を設定"},
+		SupportsImages:     true,
+		PricingFamily:      "bedrock",
+		RuntimeFamily:      "bedrock_converse",
+		PromptFamily:       "",
+		EditToolFamily:     "legacy",
+		CapabilityFamily:   "bedrock",
+		ModelCatalogFamily: "bedrock",
+		DoctorPolicyFamily: "bedrock",
+		CompressionModel:   "claude-haiku-4-5",
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:     "global.anthropic.claude-sonnet-4-6",
 			MaxOutputTokens:  64000,

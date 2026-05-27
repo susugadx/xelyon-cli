@@ -95,15 +95,7 @@ func AzureMaxOutputPolicy(cfg *config.Config, deployment, catalogModel string) M
 
 // GroqMaxOutputPolicy は Groq doctor の既存 max output 解決規則を返す。
 func GroqMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
-	if nonProviderCatalogModel("groq", catalogModel) {
-		return maxOutputOverridePolicy(cfg, "groq", model)
-	}
-	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
-		Provider:             "groq",
-		RequestModel:         model,
-		CatalogModel:         catalogModel,
-		ProviderDefaultKnown: true,
-	})
+	return SimpleProviderMaxOutputPolicy(cfg, "groq", model, catalogModel)
 }
 
 // DeepSeekMaxOutputPolicy は DeepSeek doctor の max output 解決規則を返す。
@@ -247,11 +239,16 @@ func KimiMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutp
 
 // ClaudeMaxOutputPolicy は Claude doctor の max output 解決規則を返す。
 func ClaudeMaxOutputPolicy(cfg *config.Config, model, catalogModel string) MaxOutputPolicy {
-	if nonProviderCatalogModel("claude", catalogModel) {
-		return maxOutputOverridePolicy(cfg, "claude", model)
+	return SimpleProviderMaxOutputPolicy(cfg, "claude", model, catalogModel)
+}
+
+// SimpleProviderMaxOutputPolicy は provider-scoped catalog だけを信頼する標準 doctor policy を返す。
+func SimpleProviderMaxOutputPolicy(cfg *config.Config, provider, model, catalogModel string) MaxOutputPolicy {
+	if nonProviderCatalogModel(provider, catalogModel) {
+		return maxOutputOverridePolicy(cfg, provider, model)
 	}
 	return resolveMaxOutputPolicy(cfg, maxOutputPolicyOptions{
-		Provider:             "claude",
+		Provider:             provider,
 		RequestModel:         model,
 		CatalogModel:         catalogModel,
 		ProviderDefaultKnown: true,
@@ -401,15 +398,7 @@ func AzureCatalogPolicy(cfg *config.Config, deployment, catalogModel string) Cat
 
 // GroqCatalogPolicy は Groq doctor 用の catalog policy snapshot を返す。
 func GroqCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
-	if nonProviderCatalogModel("groq", catalogModel) {
-		return unknownProviderCatalogPolicy(catalogModel, GroqMaxOutputPolicy(cfg, model, catalogModel))
-	}
-	return NewCatalogPolicy(
-		catalogModel,
-		GroqMaxOutputPolicy(cfg, model, catalogModel),
-		cost.GetPricingInfoForConfig(cfg, "groq", model),
-		false,
-	)
+	return SimpleProviderCatalogPolicy(cfg, "groq", model, catalogModel)
 }
 
 // DeepSeekCatalogPolicy は DeepSeek doctor 用の catalog policy snapshot を返す。
@@ -496,13 +485,18 @@ func KimiCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPo
 
 // ClaudeCatalogPolicy は Claude doctor 用の catalog policy snapshot を返す。
 func ClaudeCatalogPolicy(cfg *config.Config, model, catalogModel string) CatalogPolicy {
-	if nonProviderCatalogModel("claude", catalogModel) {
-		return unknownProviderCatalogPolicy(catalogModel, ClaudeMaxOutputPolicy(cfg, model, catalogModel))
+	return SimpleProviderCatalogPolicy(cfg, "claude", model, catalogModel)
+}
+
+// SimpleProviderCatalogPolicy は provider-scoped catalog を信頼境界にする標準 doctor policy snapshot を返す。
+func SimpleProviderCatalogPolicy(cfg *config.Config, provider, model, catalogModel string) CatalogPolicy {
+	if nonProviderCatalogModel(provider, catalogModel) {
+		return unknownProviderCatalogPolicy(catalogModel, SimpleProviderMaxOutputPolicy(cfg, provider, model, catalogModel))
 	}
 	return NewCatalogPolicy(
 		catalogModel,
-		ClaudeMaxOutputPolicy(cfg, model, catalogModel),
-		cost.GetPricingInfoForConfig(cfg, "claude", model),
+		SimpleProviderMaxOutputPolicy(cfg, provider, model, catalogModel),
+		cost.GetPricingInfoForConfig(cfg, provider, model),
 		false,
 	)
 }

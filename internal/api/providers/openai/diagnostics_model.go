@@ -29,7 +29,7 @@ func resolveOpenAIDiagnosticModel(cfg *config.Config, explicitModel string) (str
 	if model := strings.TrimSpace(cfg.GetSelectedModelForProvider("openai")); model != "" {
 		return model, "built-in provider default"
 	}
-	return "gpt-4o", "fallback"
+	return llmcatalog.DefaultModelForProvider("openai"), "fallback"
 }
 
 func resolveOpenAIDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {

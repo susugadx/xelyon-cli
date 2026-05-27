@@ -25,7 +25,7 @@ type bedrockRequestContext struct {
 }
 
 func (p *Provider) resolveBedrockRequestContext(ctx context.Context, model string) bedrockRequestContext {
-	model = api.GetDefaultModelWithContext(ctx, model, "bedrock", defaultModel)
+	model = api.ResolveProviderRequestModel(ctx, model, "bedrock")
 
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	if cfg == nil {

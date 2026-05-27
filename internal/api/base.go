@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -163,15 +164,23 @@ func StopSpinner(spinner *ui.Spinner) {
 	}
 }
 
-// GetDefaultModelWithContext は context に埋め込まれた設定を優先して使用モデルを返す。
-// providerName は alias を含む provider 名を受け付ける。
-func GetDefaultModelWithContext(ctx context.Context, model, providerName, fallback string) string {
+// ResolveProviderRequestModel は request model を explicit > config > provider descriptor default の順で解決する。
+func ResolveProviderRequestModel(ctx context.Context, model, providerName string) string {
 	if model != "" {
 		return model
 	}
 	cfg := config.FromContext(ctx)
 	if providerModel := cfg.GetEffectiveModelForProvider(providerName); providerModel != "" {
 		return providerModel
+	}
+	return llmcatalog.DefaultModelForProvider(providerName)
+}
+
+// GetDefaultModelWithContext は context に埋め込まれた設定を優先して使用モデルを返す。
+// providerName は alias を含む provider 名を受け付ける。
+func GetDefaultModelWithContext(ctx context.Context, model, providerName, fallback string) string {
+	if resolved := ResolveProviderRequestModel(ctx, model, providerName); resolved != "" {
+		return resolved
 	}
 	return fallback
 }

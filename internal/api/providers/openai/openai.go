@@ -64,8 +64,7 @@ func LevelToReasoningEffort(level string) string {
 
 // ChatWithTools は Provider interface の実装（context対応）
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	// モデル名を設定（config優先、フォールバックはgpt-4o）
-	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
+	model = api.ResolveProviderRequestModel(ctx, model, "openai")
 	p.responsesLocalAutoCompressSkip = false
 
 	// モデルに応じて API を自動選択
@@ -134,8 +133,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	// モデル名を設定（config優先、フォールバックはgpt-4o）
-	model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-4o")
+	model = api.ResolveProviderRequestModel(ctx, model, "openai")
 	p.responsesLocalAutoCompressSkip = false
 
 	// Responses API モデルの場合は専用の画像処理

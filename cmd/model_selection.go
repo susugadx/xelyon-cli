@@ -18,7 +18,7 @@ func getModel(cfg *config.Config) string {
 	}
 
 	if cfg == nil {
-		return "deepseek-chat"
+		cfg = config.DefaultConfig()
 	}
 
 	providerName := resolveProviderName(providerFlag, cfg.DefaultProvider)

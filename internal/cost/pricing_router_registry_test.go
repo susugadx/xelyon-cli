@@ -61,6 +61,22 @@ func TestPricingResolverRegistry_KimiFamilyReadyForFutureProviderDescriptor(t *t
 	}
 }
 
+func TestResolvePricingByFamily_UsesLoadedConfigWhenNoCustomResolver(t *testing.T) {
+	resolver := pricingResolvers["kimi"]
+	delete(pricingResolvers, "kimi")
+	t.Cleanup(func() {
+		pricingResolvers["kimi"] = resolver
+	})
+
+	got := resolvePricingByFamily("kimi", pricingRequest{Model: "kimi-k2.6"})
+	if got.PricingUnavailable {
+		t.Fatalf("resolvePricingByFamily(kimi without custom resolver).PricingUnavailable = true, want false: %#v", got)
+	}
+	if got.InputCostPerM != 0.95 || got.OutputCostPerM != 4.00 || got.CachedInputCostPerM != 0.16 {
+		t.Fatalf("resolvePricingByFamily(kimi without custom resolver) = %#v", got)
+	}
+}
+
 func TestPricingResolverRegistry_UnknownFamilyUnavailable(t *testing.T) {
 	got := resolvePricingByFamily("unknown-family", pricingRequest{
 		Model: "test-model",

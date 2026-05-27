@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 func resolveBedrockDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
@@ -26,7 +27,7 @@ func resolveBedrockDiagnosticModel(cfg *config.Config, explicitModel string) (st
 	if selected := strings.TrimSpace(cfg.GetEffectiveModelForProvider("bedrock")); selected != "" {
 		return selected, "built-in provider default"
 	}
-	return defaultModel, "provider fallback"
+	return llmcatalog.DefaultModelForProvider("bedrock"), "provider fallback"
 }
 
 func resolveBedrockDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {

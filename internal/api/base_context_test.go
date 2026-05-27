@@ -64,3 +64,21 @@ provider_models:
 		t.Fatalf("GetDefaultModelWithContext() = %q, want %q", got, want)
 	}
 }
+
+func TestResolveProviderRequestModel_UsesDescriptorDefaultWhenConfigMissingProviderModel(t *testing.T) {
+	ctx := config.WithContext(context.Background(), &config.Config{})
+
+	got := ResolveProviderRequestModel(ctx, "", "groq")
+	if got != "meta-llama/llama-4-scout-17b-16e-instruct" {
+		t.Fatalf("ResolveProviderRequestModel() = %q, want Groq descriptor default", got)
+	}
+}
+
+func TestGetDefaultModelWithContext_FallbackOnlyForUnknownProvider(t *testing.T) {
+	ctx := config.WithContext(context.Background(), &config.Config{})
+
+	got := GetDefaultModelWithContext(ctx, "", "unknown-provider", "fallback")
+	if got != "fallback" {
+		t.Fatalf("GetDefaultModelWithContext(unknown) = %q, want fallback", got)
+	}
+}

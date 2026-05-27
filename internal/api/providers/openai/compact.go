@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 const defaultCompactURL = "https://api.openai.com/v1/responses/compact"
@@ -38,7 +39,9 @@ func (p *Provider) CompactHistory(ctx context.Context, input []api.InputItem, mo
 
 	// モデルが指定されていない場合はデフォルト
 	if model == "" {
-		model = api.GetDefaultModelWithContext(ctx, model, "openai", "gpt-5.4-mini")
+		if entry, ok := llmcatalog.ProviderDescriptorFor("openai"); ok {
+			model = entry.CompressionModel
+		}
 	}
 
 	reqBody := CompactRequest{

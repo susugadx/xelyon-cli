@@ -81,7 +81,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // ChatWithTools は Azure OpenAI Responses API でツール対応チャットを実行する。
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	model = api.GetDefaultModelWithContext(ctx, model, "azure", "azure-gpt-5.4")
+	model = api.ResolveProviderRequestModel(ctx, model, "azure")
 	p.responsesLocalSkip = false
 	return p.chatWithResponses(ctx, systemPrompt, history, model)
 }
@@ -93,7 +93,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.ChatWithTools(ctx, systemPrompt, history, model)
 	}
 
-	model = api.GetDefaultModelWithContext(ctx, model, "azure", "azure-gpt-5.4")
+	model = api.ResolveProviderRequestModel(ctx, model, "azure")
 	p.responsesLocalSkip = false
 	return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
 }

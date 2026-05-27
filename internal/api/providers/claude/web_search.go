@@ -75,7 +75,7 @@ func webSearchWithContextForProvider(ctx context.Context, providerKey, query, mo
 		return "", fmt.Errorf("%s not set", anthropicAPIKeyEnv)
 	}
 
-	model = api.GetDefaultModelWithContext(ctx, model, providerKey, defaultClaudeModel)
+	model = api.ResolveProviderRequestModel(ctx, model, providerKey)
 	provider := newProvider(apiKey, providerKey)
 	return provider.webSearch(ctx, query, model)
 }

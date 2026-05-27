@@ -4,8 +4,8 @@ import "strings"
 
 // KnownImageInputSupport は catalog metadata で確認済みの画像入力対応可否を返す。
 func KnownImageInputSupport(provider, model string) (bool, bool) {
-	provider = CanonicalProviderKey(provider)
 	model = normalizeModelName(model)
+	provider = ResolveProviderRoute(provider, model, model).CapabilityFamily
 	if provider == "" || model == "" {
 		return false, false
 	}
@@ -32,8 +32,8 @@ func KnownImageInputSupport(provider, model string) (bool, bool) {
 
 // KnownWebSearchSupport は catalog metadata で確認済みの native web search 対応可否を返す。
 func KnownWebSearchSupport(provider, model string) (bool, bool) {
-	provider = CanonicalProviderKey(provider)
 	model = normalizeModelName(model)
+	provider = ResolveProviderRoute(provider, model, model).CapabilityFamily
 	if provider == "" || model == "" {
 		return false, false
 	}

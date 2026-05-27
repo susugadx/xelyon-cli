@@ -82,6 +82,15 @@ func TestGetModel_DefaultProviderKeepsGlobalDefaultModelWhenExplicitEntryHasOnly
 	}
 }
 
+func TestGetModel_NilConfigUsesDefaultConfigProviderModel(t *testing.T) {
+	resetRootFlagsForTest()
+	t.Cleanup(resetRootFlagsForTest)
+
+	if got := getModel(nil); got != "deepseek-v4-flash" {
+		t.Fatalf("getModel(nil) = %q, want default provider descriptor model", got)
+	}
+}
+
 func TestGetModel_EnvironmentModelOverridesProviderResolution(t *testing.T) {
 	resetRootFlagsForTest()
 	t.Cleanup(resetRootFlagsForTest)

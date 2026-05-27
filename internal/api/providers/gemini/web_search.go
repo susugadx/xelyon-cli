@@ -76,7 +76,7 @@ func WebSearchWithContext(ctx context.Context, query, model string) (string, err
 		return "", fmt.Errorf("GEMINI_API_KEY not set")
 	}
 
-	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
+	model = api.ResolveProviderRequestModel(ctx, model, "gemini")
 	provider := New(apiKey)
 	provider.SetUsageCallback(websearch.UsageCallbackFromContext(ctx))
 	return provider.webSearch(ctx, query, model)

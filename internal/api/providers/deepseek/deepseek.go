@@ -114,7 +114,7 @@ func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt
 	messages := openaicompat.BuildChatMessagesWithActiveContext(systemPrompt, api.ActiveContextBlocksFromContext(ctx), history)
 
 	// モデル名を設定（config優先、フォールバックは DeepSeek V4 Flash）
-	requestedModel := api.GetDefaultModelWithContext(ctx, model, "deepseek", defaultDeepSeekModel)
+	requestedModel := api.ResolveProviderRequestModel(ctx, model, "deepseek")
 	modelSelection := resolveDeepSeekModelSelection(ctx, requestedModel)
 	extraFields, reasoningEffort, spinnerSuffix := deepSeekThinkingConfig(ctx, modelSelection)
 	var initialToolChoice any

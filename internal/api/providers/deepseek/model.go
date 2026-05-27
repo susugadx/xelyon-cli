@@ -27,8 +27,8 @@ type deepSeekThinkingPolicy struct {
 func normalizeDeepSeekModel(model string) string {
 	trimmed := strings.TrimSpace(model)
 	switch strings.ToLower(trimmed) {
-	case "", "deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash":
-		return "deepseek-v4-flash"
+	case "", "deepseek-chat", "deepseek-reasoner", defaultDeepSeekModel:
+		return defaultDeepSeekModel
 	case "deepseek-v4-pro":
 		return "deepseek-v4-pro"
 	default:

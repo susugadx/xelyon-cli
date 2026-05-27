@@ -7,10 +7,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 )
 
-const (
-	defaultOllamaModel     = "llama3"
-	ollamaChatEndpointPath = "/api/chat"
-)
+const ollamaChatEndpointPath = "/api/chat"
 
 type ollamaChatRequestBuild struct {
 	Model   string
@@ -19,7 +16,7 @@ type ollamaChatRequestBuild struct {
 }
 
 func (p *Provider) buildChatRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) ollamaChatRequestBuild {
-	model = api.GetDefaultModelWithContext(ctx, model, "ollama", defaultOllamaModel)
+	model = api.ResolveProviderRequestModel(ctx, model, "ollama")
 
 	reqBody := OllamaRequest{
 		Model:    model,

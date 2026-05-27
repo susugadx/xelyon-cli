@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -17,7 +18,7 @@ type openRouterDiagnosticCatalogModelUse struct {
 }
 
 func resolveOpenRouterDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
-	return providerdiag.ResolveProviderDiagnosticModel(cfg, "openrouter", explicitModel, "anthropic/claude-sonnet-4.6")
+	return providerdiag.ResolveProviderDiagnosticModel(cfg, "openrouter", explicitModel, llmcatalog.DefaultModelForProvider("openrouter"))
 }
 
 func resolveOpenRouterDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {

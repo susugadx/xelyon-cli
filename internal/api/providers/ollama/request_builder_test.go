@@ -87,8 +87,8 @@ func TestProvider_BuildChatRequest_FallbackModelAndPayloadShape(t *testing.T) {
 	p := New("http://ollama.test")
 
 	build := p.buildChatRequest(ctx, "System", []api.Message{{Role: "user", Content: "Hi"}}, "")
-	if build.Model != "llama3" {
-		t.Fatalf("Model = %q, want built-in fallback llama3", build.Model)
+	if build.Model != "qwen2.5-coder:7b" {
+		t.Fatalf("Model = %q, want descriptor default qwen2.5-coder:7b", build.Model)
 	}
 	if build.URL != "http://ollama.test/api/chat" {
 		t.Fatalf("URL = %q, want chat endpoint", build.URL)

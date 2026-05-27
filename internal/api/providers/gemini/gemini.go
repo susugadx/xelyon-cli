@@ -374,7 +374,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	errOut := api.ErrorWriterFromContext(ctx)
 
-	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
+	model = api.ResolveProviderRequestModel(ctx, model, "gemini")
 	cfg := config.FromContext(ctx)
 	functionCallingPolicy := newGeminiFunctionCallingPolicy(cfg, model)
 	if !functionCallingPolicy.Enabled() && !api.IsToolUseDisabled(ctx) {

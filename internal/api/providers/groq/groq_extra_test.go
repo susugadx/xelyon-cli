@@ -74,7 +74,7 @@ func TestProvider_SettersAffectRequestAndUsageCallback(t *testing.T) {
 	}
 
 	p.ClearToolChoice()
-	if p.toolChoice != nil {
+	if p.ToolChoice() != nil {
 		t.Fatal("ClearToolChoice() should clear toolChoice")
 	}
 }

@@ -385,11 +385,12 @@ func TestSetMCPTools(t *testing.T) {
 	}
 	p.SetMCPTools(tools)
 
-	if len(p.mcpTools) != 1 {
-		t.Errorf("mcpTools length = %d, want 1", len(p.mcpTools))
+	gotTools := p.MCPTools()
+	if len(gotTools) != 1 {
+		t.Errorf("mcpTools length = %d, want 1", len(gotTools))
 	}
-	if p.mcpTools[0].Name != "custom_tool" {
-		t.Errorf("mcpTools[0].Name = %q, want 'custom_tool'", p.mcpTools[0].Name)
+	if gotTools[0].Name != "custom_tool" {
+		t.Errorf("mcpTools[0].Name = %q, want 'custom_tool'", gotTools[0].Name)
 	}
 }
 

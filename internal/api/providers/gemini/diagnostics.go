@@ -202,7 +202,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 }
 
 func resolveGeminiDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
-	return providerdiag.ResolveProviderDiagnosticModel(cfg, "gemini", explicitModel, defaultGeminiDiagnosticModel)
+	return providerdiag.ResolveProviderDiagnosticModel(cfg, "gemini", explicitModel, llmcatalog.DefaultModelForProvider("gemini"))
 }
 
 func resolveGeminiDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {

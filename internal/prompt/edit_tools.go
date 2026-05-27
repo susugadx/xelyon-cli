@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 // EditToolMode は編集ツール露出と編集ガイドの切り替えモードです。
@@ -36,49 +37,17 @@ func ResolveEditToolMode(providerName string, modelName string) EditToolMode {
 
 // ResolveEditToolModeWithConfig は provider/model と環境変数に基づいて編集ツールモードを解決します。
 func ResolveEditToolModeWithConfig(providerName string, modelName string, cfg *config.Config) EditToolMode {
-	// cfg は呼び出し契約維持用。編集ツール判定では provider/model の実行時 identity だけを見る。
-	_ = cfg
-
 	if env := strings.TrimSpace(os.Getenv("XELYON_EDIT_TOOL")); env != "" {
 		return NormalizeEditToolMode(env)
 	}
 
-	provider := config.CanonicalProviderName(providerName)
-	model := strings.ToLower(strings.TrimSpace(modelName))
-
-	return resolveProviderEditToolMode(provider, model)
-}
-
-func resolveProviderEditToolMode(provider string, model string) EditToolMode {
-	if provider == "openrouter" {
-		if openRouterModelUsesApplyPatch(model) {
-			return EditToolModeApplyPatch
-		}
-		return EditToolModeLegacy
+	catalogModel := ""
+	if cfg != nil {
+		catalogModel = cfg.ModelCatalogName(providerName, modelName)
 	}
-
-	if providerUsesApplyPatch(provider) {
+	route := llmcatalog.ResolveProviderRoute(providerName, modelName, catalogModel)
+	if route.EditToolFamily == "apply_patch" {
 		return EditToolModeApplyPatch
 	}
 	return EditToolModeLegacy
-}
-
-func providerUsesApplyPatch(provider string) bool {
-	switch provider {
-	case "openai", "azure", "gemini", "google":
-		return true
-	default:
-		return false
-	}
-}
-
-func openRouterModelUsesApplyPatch(model string) bool {
-	switch {
-	case strings.HasPrefix(model, "openai/"),
-		strings.HasPrefix(model, "google/"),
-		strings.HasPrefix(model, "gemini/"):
-		return true
-	default:
-		return false
-	}
 }

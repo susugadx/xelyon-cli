@@ -39,8 +39,8 @@ func TestProvider_CompactHistory_DefaultModelAndResponseParsing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompactHistory() error = %v", err)
 	}
-	if captured.Model != "gpt-5.4" {
-		t.Fatalf("request model = %q, want %q", captured.Model, "gpt-5.4")
+	if captured.Model != "gpt-5.4-mini" {
+		t.Fatalf("request model = %q, want %q", captured.Model, "gpt-5.4-mini")
 	}
 	if captured.Instructions != "summarize" {
 		t.Fatalf("Instructions = %q, want %q", captured.Instructions, "summarize")

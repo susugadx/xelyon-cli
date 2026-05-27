@@ -5,13 +5,14 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 const ollamaBaseURLEnv = "OLLAMA_BASE_URL"
 
 func resolveOllamaDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
-	return providerdiag.ResolveProviderDiagnosticModel(cfg, "ollama", explicitModel, defaultOllamaModel)
+	return providerdiag.ResolveProviderDiagnosticModel(cfg, "ollama", explicitModel, llmcatalog.DefaultModelForProvider("ollama"))
 }
 
 func resolveOllamaDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {

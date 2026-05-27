@@ -28,7 +28,7 @@ func (p *Provider) chatWithFunctionCalling(ctx context.Context, systemPrompt str
 
 	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
 	// customtools版はカスタムツール優先度が高くパラレルFCを出す
-	model = api.GetDefaultModelWithContext(ctx, model, "gemini", "gemini-3.1-pro-preview-customtools")
+	model = api.ResolveProviderRequestModel(ctx, model, "gemini")
 	if err := newGeminiFunctionCallingPolicy(config.FromContext(ctx), model).UnsupportedError(); err != nil {
 		return "", err
 	}

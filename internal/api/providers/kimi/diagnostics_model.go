@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -27,7 +28,7 @@ func resolveKimiDiagnosticModel(cfg *config.Config, explicitModel string) (strin
 	if model := strings.TrimSpace(cfg.GetSelectedModelForProvider("kimi")); model != "" {
 		return model, "built-in provider default"
 	}
-	return defaultKimiModel, "fallback"
+	return llmcatalog.DefaultModelForProvider("kimi"), "fallback"
 }
 
 func resolveKimiDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {

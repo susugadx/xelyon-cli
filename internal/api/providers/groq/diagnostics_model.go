@@ -2,11 +2,12 @@ package groq
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
 func resolveGroqDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
-	return providerdiag.ResolveProviderDiagnosticModel(cfg, "groq", explicitModel, "meta-llama/llama-4-scout-17b-16e-instruct")
+	return providerdiag.ResolveProviderDiagnosticModel(cfg, "groq", explicitModel, llmcatalog.DefaultModelForProvider("groq"))
 }
 
 func resolveGroqDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {

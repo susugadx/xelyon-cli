@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
@@ -208,7 +209,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 }
 
 func resolveClaudeDiagnosticModel(cfg *config.Config, explicitModel string) (string, string) {
-	return providerdiag.ResolveProviderDiagnosticModel(cfg, "claude", explicitModel, defaultClaudeModel)
+	return providerdiag.ResolveProviderDiagnosticModel(cfg, "claude", explicitModel, llmcatalog.DefaultModelForProvider("claude"))
 }
 
 func resolveClaudeDiagnosticCatalogModel(cfg *config.Config, model, explicitCatalogModel string) (string, string) {

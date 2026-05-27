@@ -124,7 +124,7 @@ func resolveKimiRequestOptions(ctx context.Context, providerConfigKey, model, sy
 	if providerConfigKey == "" {
 		providerConfigKey = "kimi"
 	}
-	requestedModel := api.GetDefaultModelWithContext(ctx, model, providerConfigKey, defaultKimiModel)
+	requestedModel := api.ResolveProviderRequestModel(ctx, model, providerConfigKey)
 	return kimiResolvedRequestOptions{
 		ctx:                 ctx,
 		providerConfigKey:   providerConfigKey,

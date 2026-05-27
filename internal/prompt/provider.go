@@ -40,12 +40,6 @@ var providerPrefixes = map[string]string{
 	"ollama":     "",
 }
 
-// providerAliases はプロバイダー名のエイリアスを正規名に変換するマップ
-var providerAliases = map[string]string{
-	"anthropic": "claude",
-	"azure":     "openai", // Azure OpenAI は OpenAI Responses 系
-}
-
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
 // 未登録プロバイダーは空文字を返す
 func GetProviderPrefix(provider string) string {
@@ -57,30 +51,14 @@ func getProviderPrefixForModel(provider string, model string, cfg *config.Config
 }
 
 func resolveProviderPromptKey(provider, model string, cfg *config.Config) string {
-	name := config.NormalizeProviderName(provider)
-	if name != "bedrock" {
-		name = config.CanonicalProviderName(name)
-	}
-	if canonical, ok := providerAliases[name]; ok {
-		name = canonical
-	}
-	if name == "bedrock" {
-		if bedrockPromptFamily(model, cfg) == llmcatalog.BedrockModelFamilyClaude {
-			name = "claude"
-		}
-	}
-	return name
-}
-
-func bedrockPromptFamily(model string, cfg *config.Config) llmcatalog.BedrockModelFamily {
 	catalogModel := model
 	if cfg != nil {
 		if strings.TrimSpace(model) == "" {
-			model = cfg.GetEffectiveModelForProvider("bedrock")
+			model = cfg.GetEffectiveModelForProvider(provider)
 		}
-		catalogModel = cfg.ModelCatalogName("bedrock", model)
+		catalogModel = cfg.ModelCatalogName(provider, model)
 	}
-	return llmcatalog.BedrockModelFamilyFor(model, catalogModel)
+	return llmcatalog.ResolveProviderRoute(provider, model, catalogModel).PromptFamily
 }
 
 const (

@@ -70,11 +70,11 @@ func HasKnownPricingModel(provider string, model string) bool {
 	if strings.TrimSpace(model) == "" {
 		return false
 	}
-	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
-	if !ok {
+	route := llmcatalog.ResolveProviderRoute(provider, model, model)
+	if route.PricingFamily == "" {
 		return false
 	}
-	return pricingFamilyHasKnownModel(entry.PricingFamily, model)
+	return pricingFamilyHasKnownModel(route.PricingFamily, model)
 }
 
 func pricingModelForConfig(cfg *config.Config, provider string, model string) string {
@@ -89,14 +89,14 @@ func pricingModelResolutionForConfig(cfg *config.Config, provider string, model 
 }
 
 func configuredModelCanUseDirectPricing(provider, model string) bool {
-	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
-	if !ok {
+	route := llmcatalog.ResolveProviderRoute(provider, model, model)
+	if route.PricingFamily == "" {
 		return false
 	}
-	if entry.PricingFamily == "ollama" {
+	if route.PricingFamily == "ollama" {
 		return true
 	}
-	return pricingFamilyHasKnownModel(entry.PricingFamily, model)
+	return pricingFamilyHasKnownModel(route.PricingFamily, model)
 }
 
 func normalizePromptTokenCount(promptTokenCount []int) int {
@@ -107,23 +107,26 @@ func normalizePromptTokenCount(promptTokenCount []int) int {
 }
 
 func resolvePricingByProvider(provider string, model string, promptTokenCount int) PricingInfo {
-	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
-	if !ok {
+	route := llmcatalog.ResolveProviderRoute(provider, model, model)
+	if route.PricingFamily == "" {
 		return pricingUnavailableInfo()
 	}
 
-	return resolvePricingByFamily(entry.PricingFamily, pricingRequest{
+	return resolvePricingByFamily(route.PricingFamily, pricingRequest{
 		Model:            model,
 		PromptTokenCount: promptTokenCount,
 	})
 }
 
 func resolvePricingByProviderForConfig(cfg *config.Config, provider string, model string, promptTokenCount int) PricingInfo {
-	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
-	if !ok {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	route := llmcatalog.ResolveProviderRoute(provider, model, model)
+	if route.PricingFamily == "" {
 		return pricingUnavailableInfo()
 	}
-	family := entry.PricingFamily
+	family := route.PricingFamily
 	if family == geminiPricingFamilyStandard {
 		family = geminiPricingFamilyForServiceTier(cfg.GeminiServiceTier())
 	}
@@ -136,6 +139,9 @@ func resolvePricingByProviderForConfig(cfg *config.Config, provider string, mode
 func resolvePricingByFamily(family string, req pricingRequest) PricingInfo {
 	resolver, ok := pricingResolvers[family]
 	if !ok {
+		if pricing, loaded := resolveProviderPricingFromLoadedConfig(family, req.Model, req.PromptTokenCount, true); loaded {
+			return pricing
+		}
 		return pricingUnavailableInfo()
 	}
 	return resolver(req)
