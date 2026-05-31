@@ -31,7 +31,7 @@ type promptConfirmTestTUIPrompter struct {
 	promptConfirmTestPrompter
 }
 
-func (*promptConfirmTestTUIPrompter) isTUIRuntimePrompter() {}
+func (*promptConfirmTestTUIPrompter) BypassCommandConfirm() {}
 
 func setManagerToolsForTest(t *testing.T, manager *mcp.Manager, tools []mcp.MCPTool) {
 	t.Helper()

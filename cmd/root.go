@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/susugadx/xelyon-cli/internal/agent"
+	"github.com/susugadx/xelyon-cli/internal/app"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/version"
 
@@ -32,15 +32,15 @@ var (
 	imageFlag     string
 	legacyNoTUI   bool
 
-	runLegacyInteractive           = agent.RunLegacyInteractiveWithConfig
-	runLegacyInteractiveWithResume = agent.RunLegacyInteractiveWithResumeWithConfig
-	runLegacyInteractiveWithImage  = agent.RunLegacyInteractiveWithImageWithConfig
-	runTUI                         = agent.RunTUIWithConfig
-	runTUIWithResume               = agent.RunTUIWithResumeWithConfig
-	runTUIWithImage                = agent.RunTUIWithImageWithConfig
-	runHeadless                    = agent.RunHeadlessWithConfig
-	runOnce                        = agent.RunOnceWithConfig
-	runOnceWithImage               = agent.RunOnceWithImageWithConfig
+	runLegacyInteractive           = app.RunLegacyInteractiveWithConfig
+	runLegacyInteractiveWithResume = app.RunLegacyInteractiveWithResumeWithConfig
+	runLegacyInteractiveWithImage  = app.RunLegacyInteractiveWithImageWithConfig
+	runTUI                         = app.RunTUIWithConfig
+	runTUIWithResume               = app.RunTUIWithResumeWithConfig
+	runTUIWithImage                = app.RunTUIWithImageWithConfig
+	runHeadless                    = app.RunHeadlessWithConfig
+	runOnce                        = app.RunOnceWithConfig
+	runOnceWithImage               = app.RunOnceWithImageWithConfig
 )
 var rootCmd = &cobra.Command{
 	Use:     "xelyon [query]",
@@ -121,7 +121,7 @@ Examples:
 			result := runHeadless(cmd.Context(), query, model, provider, cfg)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
-			if result.Status == agent.HeadlessStatusError {
+			if result.Status == app.HeadlessStatusError {
 				return fmt.Errorf("headless execution failed")
 			}
 			return nil

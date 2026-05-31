@@ -1,4 +1,4 @@
-package agent
+package app
 
 import (
 	"context"
@@ -11,9 +11,11 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	agentpkg "github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tui"
+	"github.com/susugadx/xelyon-cli/internal/tuiagent"
 )
 
 type blockingTUIImageProvider struct {
@@ -94,24 +96,35 @@ func TestRunTUIWithConfig_InitializesTUIAgentAndHeader(t *testing.T) {
 
 	originalRunner := runTUIProgram
 	defer func() { runTUIProgram = originalRunner }()
+	originalAdapterFactory := newTUIAdapter
+	defer func() { newTUIAdapter = originalAdapterFactory }()
 
 	var called atomic.Int32
-	var gotAdapter *TUIAdapter
+	var gotAdapter *tuiagent.TUIAdapter
+	var gotAgent *agentpkg.Agent
 	var gotInitialContent string
 	runTUIProgram = func(agent tui.AgentInterface, initialContent string, onProgram func(*tea.Program)) {
 		called.Add(1)
-		typed, ok := agent.(*TUIAdapter)
+		typed, ok := agent.(*tuiagent.TUIAdapter)
 		if !ok {
-			t.Fatalf("agent type = %T, want *TUIAdapter", agent)
+			t.Fatalf("agent type = %T, want *tuiagent.TUIAdapter", agent)
 		}
 		gotAdapter = typed
 		gotInitialContent = initialContent
 		onProgram(nil)
 	}
+	newTUIAdapter = func(ag *agentpkg.Agent, sendMsg func(tui.AppendMessageMsg)) *tuiagent.TUIAdapter {
+		gotAgent = ag
+		return tuiagent.NewTUIAdapter(ag, sendMsg)
+	}
 
 	var cleanupCount atomic.Int32
-	cleanupHook = func() { cleanupCount.Add(1) }
-	defer func() { cleanupHook = nil }()
+	originalCleanup := cleanupTUIAgent
+	cleanupTUIAgent = func(ag *agentpkg.Agent) {
+		cleanupCount.Add(1)
+		ag.Cleanup()
+	}
+	defer func() { cleanupTUIAgent = originalCleanup }()
 
 	RunTUIWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false)
 
@@ -121,17 +134,11 @@ func TestRunTUIWithConfig_InitializesTUIAgentAndHeader(t *testing.T) {
 	if gotAdapter == nil {
 		t.Fatal("expected TUI adapter to be passed to runner")
 	}
-	if gotAdapter.agent == nil {
+	if gotAgent == nil {
 		t.Fatal("expected adapter.agent to be initialized")
 	}
-	if gotAdapter.agent.AutoApprove {
+	if gotAgent.AutoApprove {
 		t.Fatal("expected TUI agent to preserve disabled auto-approve")
-	}
-	if gotAdapter.agent.exitHook == nil {
-		t.Fatal("expected TUI exit hook to be registered")
-	}
-	if gotAdapter.agent.tuiToolResultCh == nil {
-		t.Fatal("expected TUI tool result channel to be initialized")
 	}
 	if cleanupCount.Load() != 1 {
 		t.Fatalf("cleanup count = %d, want 1", cleanupCount.Load())
@@ -150,19 +157,27 @@ func TestRunTUIWithConfig_PreservesAutoApproveArgument(t *testing.T) {
 
 	originalRunner := runTUIProgram
 	defer func() { runTUIProgram = originalRunner }()
+	originalAdapterFactory := newTUIAdapter
+	defer func() { newTUIAdapter = originalAdapterFactory }()
 
-	var gotAdapter *TUIAdapter
+	var gotAgent *agentpkg.Agent
 	runTUIProgram = func(agent tui.AgentInterface, _ string, onProgram func(*tea.Program)) {
-		gotAdapter = agent.(*TUIAdapter)
+		if _, ok := agent.(*tuiagent.TUIAdapter); !ok {
+			t.Fatalf("agent type = %T, want *tuiagent.TUIAdapter", agent)
+		}
 		onProgram(nil)
+	}
+	newTUIAdapter = func(ag *agentpkg.Agent, sendMsg func(tui.AppendMessageMsg)) *tuiagent.TUIAdapter {
+		gotAgent = ag
+		return tuiagent.NewTUIAdapter(ag, sendMsg)
 	}
 
 	RunTUIWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), true)
 
-	if gotAdapter == nil || gotAdapter.agent == nil {
+	if gotAgent == nil {
 		t.Fatal("expected TUI agent")
 	}
-	if !gotAdapter.agent.AutoApprove {
+	if !gotAgent.AutoApprove {
 		t.Fatal("expected TUI agent to preserve enabled auto-approve")
 	}
 }
@@ -184,22 +199,30 @@ func TestRunTUIWithResumeWithConfig_LoadsLastSession(t *testing.T) {
 
 	originalRunner := runTUIProgram
 	defer func() { runTUIProgram = originalRunner }()
+	originalAdapterFactory := newTUIAdapter
+	defer func() { newTUIAdapter = originalAdapterFactory }()
 
-	var gotAdapter *TUIAdapter
+	var gotAgent *agentpkg.Agent
 	var gotInitialContent string
 	runTUIProgram = func(agent tui.AgentInterface, initialContent string, onProgram func(*tea.Program)) {
-		gotAdapter = agent.(*TUIAdapter)
+		if _, ok := agent.(*tuiagent.TUIAdapter); !ok {
+			t.Fatalf("agent type = %T, want *tuiagent.TUIAdapter", agent)
+		}
 		gotInitialContent = initialContent
 		onProgram(nil)
+	}
+	newTUIAdapter = func(ag *agentpkg.Agent, sendMsg func(tui.AppendMessageMsg)) *tuiagent.TUIAdapter {
+		gotAgent = ag
+		return tuiagent.NewTUIAdapter(ag, sendMsg)
 	}
 
 	RunTUIWithResumeWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false)
 
-	if gotAdapter == nil || gotAdapter.agent == nil {
+	if gotAgent == nil {
 		t.Fatal("expected TUI adapter and agent")
 	}
-	if len(gotAdapter.agent.History) != 1 || gotAdapter.agent.History[0].Content != "previous question" {
-		t.Fatalf("agent.History = %#v, want restored session history", gotAdapter.agent.History)
+	if len(gotAgent.History) != 1 || gotAgent.History[0].Content != "previous question" {
+		t.Fatalf("agent.History = %#v, want restored session history", gotAgent.History)
 	}
 	if !strings.Contains(stripANSI(gotInitialContent), "Resumed session") {
 		t.Fatalf("initial content missing resume message:\n%s", stripANSI(gotInitialContent))

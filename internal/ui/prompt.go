@@ -64,3 +64,10 @@ type PromptResponse struct {
 type Prompter interface {
 	Prompt(ctx context.Context, req PromptRequest) (PromptResponse, error)
 }
+
+// CommandConfirmBypassPrompter は slash command 側の同期確認をスキップできる prompt 実装を表す。
+// TUI など、command routing 側ですでに安全な入力境界を持つ runtime が実装する。
+type CommandConfirmBypassPrompter interface {
+	Prompter
+	BypassCommandConfirm()
+}

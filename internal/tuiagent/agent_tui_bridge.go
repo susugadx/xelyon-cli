@@ -1,4 +1,4 @@
-package agent
+package tuiagent
 
 import (
 	"context"
@@ -8,15 +8,18 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	agentpkg "github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
+var registerTUIOnExit = lifecycle.OnExit
+
 type tuiProgramBridge struct {
 	adapter         *TUIAdapter
-	agent           *Agent
+	agent           *agentpkg.Agent
 	toolResultCh    <-chan tools.ToolResultInfo
 	send            func(tea.Msg)
 	debugLog        func(string, ...any)
@@ -40,7 +43,7 @@ type tuiPromptBridge struct {
 	nextID atomic.Uint64
 }
 
-func (*tuiPromptBridge) isTUIRuntimePrompter() {}
+func (*tuiPromptBridge) BypassCommandConfirm() {}
 
 func newTUIPromptBridge(send func(tea.Msg)) *tuiPromptBridge {
 	return &tuiPromptBridge{
@@ -103,7 +106,7 @@ func cancelPromptResponse(req ui.PromptRequest) ui.PromptResponse {
 
 func newTUIProgramBridge(
 	adapter *TUIAdapter,
-	agent *Agent,
+	agent *agentpkg.Agent,
 	toolResultCh <-chan tools.ToolResultInfo,
 	send func(tea.Msg),
 	debugLog func(string, ...any),
@@ -185,6 +188,27 @@ func toolStatusLabel(status tui.ToolStatus) string {
 	}
 }
 
+// defaultToolCollapsed はツール種別に応じたデフォルトの折りたたみ状態を返す。
+func defaultToolCollapsed(toolName, result string, isError bool) bool {
+	// エラーは常に展開
+	if isError {
+		return false
+	}
+
+	switch toolName {
+	case "apply_patch":
+		return false // diff は見たい → 展開
+	case "bash":
+		return true // 成功は折りたたみ
+	case "gather_context", "search_code", "read_file", "read_files":
+		return true // 結果が長い → 折りたたみ
+	case "web_search":
+		return true // 結果が長い → 折りたたみ
+	default:
+		return true // デフォルトは折りたたみ
+	}
+}
+
 func (b *tuiProgramBridge) start() {
 	if b == nil || b.adapter == nil {
 		return
@@ -200,7 +224,7 @@ func (b *tuiProgramBridge) start() {
 	b.adapter.SetOutputCapture()
 	if b.agent != nil && b.send != nil {
 		b.promptBridge = newTUIPromptBridge(b.send)
-		b.agent.ui().SetPrompter(b.promptBridge)
+		b.agent.RuntimeUI().SetPrompter(b.promptBridge)
 	}
 }
 
@@ -326,10 +350,10 @@ func (b *tuiProgramBridge) shutdown() {
 		b.adapter.setTUIEventFlush(nil)
 	}
 	if b.agent != nil {
-		b.agent.tuiToolResultClosed.Store(true)
+		b.agent.MarkToolResultStreamClosed()
 		if b.promptBridge != nil {
 			b.promptBridge.close()
-			b.agent.ui().SetPrompter(nil)
+			b.agent.RuntimeUI().SetPrompter(nil)
 		}
 	}
 	if n := b.droppedEvents.Load(); n > 0 {
@@ -349,7 +373,12 @@ func registerTUIBridgeOnExit(register func(func()), shutdown func()) {
 	}
 }
 
-func bindTUIProgram(adapter *TUIAdapter, ag *Agent, toolResultCh <-chan tools.ToolResultInfo, program *tea.Program) *tuiProgramBridge {
+// BindTUIProgram は TUI program と Agent adapter の event bridge を接続する。
+func BindTUIProgram(adapter *TUIAdapter, ag *agentpkg.Agent, toolResultCh <-chan tools.ToolResultInfo, program *tea.Program) {
+	bindTUIProgram(adapter, ag, toolResultCh, program)
+}
+
+func bindTUIProgram(adapter *TUIAdapter, ag *agentpkg.Agent, toolResultCh <-chan tools.ToolResultInfo, program *tea.Program) *tuiProgramBridge {
 	var send func(tea.Msg)
 	if program != nil {
 		send = func(msg tea.Msg) {

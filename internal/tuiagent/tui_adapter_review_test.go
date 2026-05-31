@@ -1,4 +1,4 @@
-package agent
+package tuiagent
 
 import (
 	"context"
@@ -58,14 +58,13 @@ func TestTUIAdapterRunReviewReturnsUsageSummaryAndRecordsLastReview(t *testing.T
 		t.Fatalf("usage cost = %q, want compact estimated cost", result.Usage.Cost)
 	}
 
-	agent.statsMu.Lock()
-	lastTurnUsage := agent.Stats.LastTurnUsage
-	lastReviewUsage := agent.Stats.LastReviewUsage
-	lastReviewCost := agent.Stats.LastReviewCost
-	lastReviewCostUnknown := agent.Stats.LastReviewCostUnknown
-	reviewUsage := agent.Stats.ReviewUsage
-	reviewCost := agent.Stats.ReviewAccumulatedCost
-	agent.statsMu.Unlock()
+	stats := *agent.Stats
+	lastTurnUsage := stats.LastTurnUsage
+	lastReviewUsage := stats.LastReviewUsage
+	lastReviewCost := stats.LastReviewCost
+	lastReviewCostUnknown := stats.LastReviewCostUnknown
+	reviewUsage := stats.ReviewUsage
+	reviewCost := stats.ReviewAccumulatedCost
 	if lastTurnUsage != nil {
 		t.Fatalf("LastTurnUsage = %+v, want nil because review usage is tracked separately", lastTurnUsage)
 	}
@@ -99,7 +98,7 @@ func TestTUIAdapterRunReviewIncludesWebSearchEvidenceUsage(t *testing.T) {
 
 	provider := newReviewModelUsageProviderForTest(t, api.Usage{InputTokens: 10, OutputTokens: 1})
 	agent := newReviewAgentForTest(t, provider)
-	cfg := agent.cfg()
+	cfg := agent.Runtime.Config
 	cfg.WebSearch.Provider = "gemini"
 	cfg.WebSearch.CacheEnabled = false
 	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{DefaultModel: "gemini-3.1-pro-preview-customtools"})
@@ -118,9 +117,8 @@ func TestTUIAdapterRunReviewIncludesWebSearchEvidenceUsage(t *testing.T) {
 		t.Fatalf("usage tokens = %q, want 43 tok including web search evidence", result.Usage.Tokens)
 	}
 
-	agent.statsMu.Lock()
-	lastReviewUsage := agent.Stats.LastReviewUsage
-	agent.statsMu.Unlock()
+	stats := *agent.Stats
+	lastReviewUsage := stats.LastReviewUsage
 	if lastReviewUsage == nil {
 		t.Fatal("LastReviewUsage = nil, want review run usage")
 	}

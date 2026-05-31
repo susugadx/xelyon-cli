@@ -32,15 +32,11 @@ func promptConfirmWithRuntime(runtime *ui.Runtime, prompt string) bool {
 	return result.Action == "yes"
 }
 
-type tuiRuntimePrompter interface {
-	isTUIRuntimePrompter()
-}
-
 func hasTUIRuntimePrompter(runtime *ui.Runtime) bool {
 	if runtime == nil {
 		return false
 	}
-	_, ok := runtime.Prompter().(tuiRuntimePrompter)
+	_, ok := runtime.Prompter().(ui.CommandConfirmBypassPrompter)
 	return ok
 }
 

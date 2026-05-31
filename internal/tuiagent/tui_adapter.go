@@ -1,4 +1,4 @@
-package agent
+package tuiagent
 
 import (
 	"bytes"
@@ -8,19 +8,22 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/fatih/color"
+	agentpkg "github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
 
+var red = color.New(color.FgRed)
+
 // TUIAdapter は Agent を tui.AgentInterface に適合させるアダプタ
 type TUIAdapter struct {
-	agent              *Agent
+	agent              *agentpkg.Agent
 	sendMsg            func(tui.AppendMessageMsg)
 	sendToolResult     func(tui.AppendToolResultMsg)
 	sendReviewProgress func(tui.ReviewProgressMsg)
@@ -31,7 +34,7 @@ type TUIAdapter struct {
 }
 
 // NewTUIAdapter は TUIAdapter を作成する。
-func NewTUIAdapter(agent *Agent, sendMsg func(tui.AppendMessageMsg)) *TUIAdapter {
+func NewTUIAdapter(agent *agentpkg.Agent, sendMsg func(tui.AppendMessageMsg)) *TUIAdapter {
 	return &TUIAdapter{
 		agent:   agent,
 		sendMsg: sendMsg,
@@ -51,7 +54,7 @@ func (a *TUIAdapter) SetOutputCapture() {
 		}
 	})
 	a.captureWriter = capture
-	runtime := a.agent.ui()
+	runtime := a.agent.RuntimeUI()
 	runtime.SetOutput(capture)
 	runtime.SetErrorOutput(capture)
 }
@@ -64,13 +67,13 @@ func (a *TUIAdapter) Chat(input string) error {
 
 	// 画像入力チェック
 	if strings.Contains(input, "image:") {
-		textPart, image := parseImageInputWithWriter(a.agent.output(), input)
+		textPart, image := a.agent.ParseImageInput(input)
 		if image != nil {
 			return a.chatWithImage(textPart, image)
 		}
 	}
 
-	return a.agent.chat(input)
+	return a.agent.Chat(input)
 }
 
 // ChatWithImagePath は画像パス付き入力を AI に送信する。goroutine で呼ぶこと。
@@ -81,7 +84,7 @@ func (a *TUIAdapter) ChatWithImagePath(input string, imagePath string) error {
 
 	image, err := api.LoadImage(imagePath)
 	if err != nil {
-		red.Fprintf(a.agent.output(), "Failed to load image: %v\n", err)
+		red.Fprintf(a.agent.Output(), "Failed to load image: %v\n", err)
 		return tui.WrapAgentTurnError(tui.AgentErrorValidation, fmt.Errorf("failed to load image: %w", err))
 	}
 
@@ -98,7 +101,7 @@ func (a *TUIAdapter) ChatWithImage(input string, image *api.ImageData) error {
 }
 
 func (a *TUIAdapter) chatWithImage(input string, image *api.ImageData) error {
-	return a.agent.chatWithImage(input, image)
+	return a.agent.ChatWithImage(input, image)
 }
 
 func (a *TUIAdapter) finishTUITurnOutput() {
@@ -129,7 +132,7 @@ func (a *TUIAdapter) flushTUIEvents() {
 
 // HandleCommand は特殊コマンドを処理する。処理した場合 true を返す。
 func (a *TUIAdapter) HandleCommand(cmd string) bool {
-	return handleSpecialCommandForSurface(cmd, a.agent, commandcatalog.CommandSurfaceTUI)
+	return a.agent.HandleCommandForSurface(cmd, commandcatalog.CommandSurfaceTUI)
 }
 
 // SkillCatalog は TUI の /skills 補完に現在の skill catalog を提供する。
@@ -150,44 +153,20 @@ func (a *TUIAdapter) StatusSnapshot() tui.StatusSnapshot {
 	if a == nil || a.agent == nil {
 		return tui.StatusSnapshot{}
 	}
-	agent := a.agent
-	modeText := planModeStatusText(agent.PlanModeEnabled)
-
-	tokens := "0"
-	var estimate cost.CostEstimate
-	if agent.Stats != nil {
-		agent.statsMu.Lock()
-		tokens = FormatTokens(agent.Stats.TotalTokens())
-		estimate = agent.Stats.EstimatedCostEstimateForConfig(agent.cfg())
-		agent.statsMu.Unlock()
-	}
-
-	if manager := agent.subAgentManager(); manager != nil {
-		summary := manager.GetSummary()
-		estimate.Cost += summary.TotalCost
-		if summary.PricingUnavailable {
-			estimate.PricingUnavailable = true
-		}
-	}
-
-	costText := formatCompactCostEstimate(estimate)
-	if strings.EqualFold(agent.ProviderName, "ollama") && estimate.Cost == 0 && !estimate.PricingUnavailable {
-		costText = ""
-	}
-
+	snapshot := a.agent.InteractiveStatusSnapshot()
 	return tui.StatusSnapshot{
-		Provider:   agent.ProviderName,
-		Model:      agent.CurrentModel,
-		Mode:       modeText,
-		Tokens:     tokens,
-		Cost:       costText,
-		LegacyLine: agent.FormatStatusLine(),
+		Provider:   snapshot.Provider,
+		Model:      snapshot.Model,
+		Mode:       snapshot.Mode,
+		Tokens:     snapshot.Tokens,
+		Cost:       snapshot.Cost,
+		LegacyLine: snapshot.LegacyLine,
 	}
 }
 
 // Cancel は現在のAPI呼び出しをキャンセルする。
 func (a *TUIAdapter) Cancel() {
-	a.agent.cancelActiveRequest("user cancelled")
+	a.agent.CancelActiveRequest("user cancelled")
 }
 
 // Cleanup は終了処理を行う。
@@ -205,79 +184,20 @@ func (a *TUIAdapter) RunReview(ctx context.Context, req review.ReviewRequest) (t
 	a.processing.Store(true)
 	defer a.processing.Store(false)
 
-	startStats := a.reviewStatsSnapshot()
-	report, err := a.agent.runReview(ctx, req, reviewRunOptions{
-		ProgressSink: a.reviewProgressSink(ctx),
-	})
-	summary := a.reviewRunUsageSummarySince(startStats)
+	report, summary, err := a.agent.RunReviewWithProgress(ctx, req, a.reviewProgressSink(ctx))
 	a.finishTUITurnOutput()
 	return tui.ReviewRunResult{
 		Report: report,
-		Usage:  summary,
+		Usage: tui.ReviewRunUsageSummary{
+			Tokens: summary.Tokens,
+			Cost:   summary.Cost,
+		},
 	}, err
-}
-
-func (a *TUIAdapter) reviewStatsSnapshot() SessionStats {
-	if a == nil || a.agent == nil || a.agent.Stats == nil {
-		return SessionStats{}
-	}
-	a.agent.statsMu.Lock()
-	defer a.agent.statsMu.Unlock()
-	return *a.agent.Stats
-}
-
-func (a *TUIAdapter) reviewRunUsageSummarySince(start SessionStats) tui.ReviewRunUsageSummary {
-	usage, estimate, ok := a.recordReviewRunUsageSince(start)
-	if !ok {
-		return tui.ReviewRunUsageSummary{}
-	}
-	return formatReviewRunUsageSummary(usage, estimate)
-}
-
-func (a *TUIAdapter) recordReviewRunUsageSince(start SessionStats) (api.Usage, cost.CostEstimate, bool) {
-	if a == nil || a.agent == nil || a.agent.Stats == nil {
-		return api.Usage{}, cost.CostEstimate{}, false
-	}
-
-	agent := a.agent
-	agent.statsMu.Lock()
-	defer agent.statsMu.Unlock()
-
-	turnUsage := agent.Stats.UsageDeltaSince(start)
-	cfg := agent.cfg()
-	endEstimate := agent.Stats.EstimatedCostEstimateForConfig(cfg)
-	startEstimate := start.EstimatedCostEstimateForConfig(cfg)
-	costDiff := endEstimate.Cost - startEstimate.Cost
-	costUnknown := agent.Stats.CostUnknownEvents > start.CostUnknownEvents
-
-	if !turnUsage.HasTokenOrWebSearchObservation() && costDiff == 0 && !costUnknown {
-		return api.Usage{}, cost.CostEstimate{}, false
-	}
-
-	estimate := cost.CostEstimate{
-		Cost:               costDiff,
-		PricingUnavailable: costUnknown,
-	}
-	agent.Stats.RecordReviewRunUsage(turnUsage, estimate)
-	return turnUsage, estimate, true
-}
-
-func formatReviewRunUsageSummary(usage api.Usage, estimate cost.CostEstimate) tui.ReviewRunUsageSummary {
-	totalTokens := usage.InputTokens + usage.OutputTokens + usage.ThinkingTokens
-	summary := tui.ReviewRunUsageSummary{}
-	if totalTokens > 0 {
-		summary.Tokens = FormatTokens(totalTokens) + " tok"
-	}
-
-	if estimate.PricingUnavailable || estimate.Cost > 0 {
-		summary.Cost = formatCompactCostEstimate(estimate)
-	}
-	return summary
 }
 
 // CopyText は指定テキストをクリップボードにコピーする。
 func (a *TUIAdapter) CopyText(text string) error {
-	return clipboardWriteAll(text)
+	return agentpkg.CopyText(text)
 }
 
 // LoadConfigForEdit は設定ファイルを読み込み、編集用のクローンを返す。
@@ -350,7 +270,7 @@ func (a *TUIAdapter) AzureCatalogModelCandidates(deployment string) []providerpi
 
 // SwitchProviderModel は provider と model/deployment を切り替える。
 func (a *TUIAdapter) SwitchProviderModel(provider string, model string) error {
-	if err := switchProviderModelWithOutput(a.agent, provider, model); err != nil {
+	if err := a.agent.SwitchProviderModelWithOutput(provider, model); err != nil {
 		a.flushCapture()
 		return err
 	}
@@ -360,7 +280,7 @@ func (a *TUIAdapter) SwitchProviderModel(provider string, model string) error {
 
 // SwitchModelForCurrentProvider は current provider の model/deployment を切り替える。
 func (a *TUIAdapter) SwitchModelForCurrentProvider(model string) error {
-	if err := switchModelForCurrentProviderWithOutput(a.agent, model); err != nil {
+	if err := a.agent.SwitchModelForCurrentProviderWithOutput(model); err != nil {
 		a.flushCapture()
 		return err
 	}
@@ -381,19 +301,7 @@ func (a *TUIAdapter) ConfigureAndSwitchAzureDeployment(deployment string, catalo
 // CopyLastOutput は直近のAI出力をクリップボードにコピーする。
 // historyMu でロックし、chat goroutine との data race を防ぐ。
 func (a *TUIAdapter) CopyLastOutput() (string, error) {
-	a.agent.historyMu.Lock()
-	if len(a.agent.lastOutputs) == 0 {
-		a.agent.historyMu.Unlock()
-		return "", fmt.Errorf("no AI output to copy yet")
-	}
-	output := a.agent.lastOutputs[len(a.agent.lastOutputs)-1]
-	a.agent.historyMu.Unlock()
-
-	if err := clipboardWriteAll(output); err != nil {
-		return "", err
-	}
-	lines := strings.Count(output, "\n") + 1
-	return fmt.Sprintf("Copied %d lines", lines), nil
+	return a.agent.CopyLastOutput()
 }
 
 // tuiCaptureWriter は agent の出力をキャプチャし TUI に送信する io.Writer

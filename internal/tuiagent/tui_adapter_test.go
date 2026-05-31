@@ -1,4 +1,4 @@
-package agent
+package tuiagent
 
 import (
 	"bytes"
@@ -7,26 +7,26 @@ import (
 	"strings"
 	"testing"
 
+	agentpkg "github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 var _ tui.SkillCatalogAgent = (*TUIAdapter)(nil)
 
-func newTUIAdapterTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
+func newTUIAdapterTestAgent(t *testing.T) (*agentpkg.Agent, *bytes.Buffer) {
 	t.Helper()
 
 	cfg := newProjectMapDisabledConfig()
 	out := &bytes.Buffer{}
-	runtime := NewAgentRuntimeWithConfig(cfg)
+	runtime := agentpkg.NewAgentRuntimeWithConfig(cfg)
 	runtime.UI = ui.NewRuntime(strings.NewReader(""), out, out)
 
-	agent := &Agent{
+	agent := &agentpkg.Agent{
 		ProviderName:    "openai",
 		CurrentModel:    "gpt-old",
-		CurrentProvider: &MockProvider{name: "openai"},
+		CurrentProvider: &mockProvider{name: "openai"},
 		Runtime:         runtime,
 	}
 
@@ -34,19 +34,19 @@ func newTUIAdapterTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
 }
 
 func TestTUIAdapter_SkillCatalogForwardsAgentCatalog(t *testing.T) {
-	oldLoader := loadSkillCatalogForAgent
-	defer func() { loadSkillCatalogForAgent = oldLoader }()
-
 	invocationCWD := t.TempDir()
-	var gotInvocationCWD string
-	loadSkillCatalogForAgent = func(cwd string) agentskills.SkillCatalog {
-		gotInvocationCWD = cwd
-		return agentskills.SkillCatalog{
-			Skills: []agentskills.ParsedSkill{{
-				Name:        "bug-investigation",
-				Description: "Investigate known bugs before editing",
-			}},
-		}
+	skillDir := filepath.Join(invocationCWD, ".agents", "skills", "bug-investigation")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: bug-investigation
+description: Investigate known bugs before editing
+---
+
+# Bug Investigation
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
 	}
 
 	agent, _ := newTUIAdapterTestAgent(t)
@@ -55,10 +55,14 @@ func TestTUIAdapter_SkillCatalogForwardsAgentCatalog(t *testing.T) {
 
 	catalog := adapter.SkillCatalog()
 
-	if gotInvocationCWD != invocationCWD {
-		t.Fatalf("SkillCatalog invocation cwd = %q, want %q", gotInvocationCWD, invocationCWD)
+	found := false
+	for _, skill := range catalog.Skills {
+		if skill.Name == "bug-investigation" && skill.Directory == skillDir {
+			found = true
+			break
+		}
 	}
-	if len(catalog.Skills) != 1 || catalog.Skills[0].Name != "bug-investigation" {
+	if !found {
 		t.Fatalf("SkillCatalog() = %#v", catalog.Skills)
 	}
 }
@@ -164,7 +168,7 @@ func TestTUIConfig_ModelRejectsUnsupportedGeminiFunctionCallingModel(t *testing.
 	agent.ProviderName = "gemini"
 	agent.ProviderConfigKey = "gemini"
 	agent.CurrentModel = "gemini-3.5-flash"
-	agent.CurrentProvider = &MockProvider{name: "gemini"}
+	agent.CurrentProvider = &mockProvider{name: "gemini"}
 	agent.Runtime.Config = cfg
 	adapter := NewTUIAdapter(agent, nil)
 
@@ -317,7 +321,7 @@ func TestTUIAdapter_SaveProjectConfigSyncsProjectFinalChecks(t *testing.T) {
 	}
 
 	agent, _ := newTUIAdapterTestAgent(t)
-	agent.cfg().FinalChecks = config.FinalChecksConfig{
+	agent.Runtime.Config.FinalChecks = config.FinalChecksConfig{
 		Commands: []string{"old project verify"},
 		Timeout:  30,
 	}
@@ -336,7 +340,7 @@ func TestTUIAdapter_SaveProjectConfigSyncsProjectFinalChecks(t *testing.T) {
 		t.Fatalf("SaveProjectConfig() error = %v", err)
 	}
 
-	got := agent.cfg().FinalChecks
+	got := agent.Runtime.Config.FinalChecks
 	if len(got.Commands) != 1 || got.Commands[0] != "project verify" {
 		t.Fatalf("runtime FinalChecks.Commands = %#v, want project verify", got.Commands)
 	}
@@ -356,7 +360,7 @@ func TestTUIAdapter_SaveProjectConfigFallsBackToGlobalFinalChecks(t *testing.T) 
 	}
 
 	agent, _ := newTUIAdapterTestAgent(t)
-	agent.cfg().FinalChecks = config.FinalChecksConfig{
+	agent.Runtime.Config.FinalChecks = config.FinalChecksConfig{
 		Commands: []string{"stale project verify"},
 		Timeout:  30,
 	}
@@ -371,7 +375,7 @@ func TestTUIAdapter_SaveProjectConfigFallsBackToGlobalFinalChecks(t *testing.T) 
 		t.Fatalf("SaveProjectConfig() error = %v", err)
 	}
 
-	got := agent.cfg().FinalChecks
+	got := agent.Runtime.Config.FinalChecks
 	if len(got.Commands) != 1 || got.Commands[0] != "global verify" {
 		t.Fatalf("runtime FinalChecks.Commands = %#v, want global verify", got.Commands)
 	}
@@ -403,7 +407,7 @@ func TestTUIAdapter_SaveProjectConfigEmptyOverrideDisablesGlobalFinalChecks(t *t
 		t.Fatalf("SaveProjectConfig() error = %v", err)
 	}
 
-	got := agent.cfg().FinalChecks
+	got := agent.Runtime.Config.FinalChecks
 	if len(got.Commands) != 0 {
 		t.Fatalf("runtime FinalChecks.Commands = %#v, want empty project override", got.Commands)
 	}

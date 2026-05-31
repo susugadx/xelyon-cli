@@ -1,4 +1,4 @@
-package agent
+package tuiagent
 
 import (
 	"bytes"
@@ -63,7 +63,7 @@ func TestTUIProgramBridge_StartCapturesAssistantAndToolResults(t *testing.T) {
 
 	bridge.start()
 
-	fmt.Fprintln(agent.output(), "assistant line")
+	fmt.Fprintln(agent.Output(), "assistant line")
 	toolResultCh <- tools.ToolResultInfo{ToolName: "bash", Result: "ok", Error: false}
 	close(toolResultCh)
 
@@ -108,7 +108,7 @@ func TestTUIProgramBridge_StartCapturesAssistantAndToolResults(t *testing.T) {
 	}
 
 	bridge.shutdown()
-	if !agent.tuiToolResultClosed.Load() {
+	if !agent.ToolResultStreamClosed() {
 		t.Fatal("expected bridge shutdown to mark tool result channel closed")
 	}
 }
@@ -239,7 +239,7 @@ func TestTUIPromptBridge_BlocksUntilResponse(t *testing.T) {
 	defer close(bridge.outgoing)
 	defer bridge.shutdown()
 
-	prompter := agent.ui().Prompter()
+	prompter := agent.RuntimeUI().Prompter()
 	if prompter == nil {
 		t.Fatal("expected runtime prompter")
 	}
@@ -279,7 +279,7 @@ func TestTUIPromptBridge_ContextCancelSendsCancelPrompt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan ui.PromptResponse, 1)
 	go func() {
-		resp, _ := agent.ui().Prompter().Prompt(ctx, ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
+		resp, _ := agent.RuntimeUI().Prompter().Prompt(ctx, ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
 		done <- resp
 	}()
 
@@ -329,7 +329,7 @@ func TestTUIPromptBridge_ShutdownReleasesWaiter(t *testing.T) {
 
 	done := make(chan ui.PromptResponse, 1)
 	go func() {
-		resp, _ := agent.ui().Prompter().Prompt(context.Background(), ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
+		resp, _ := agent.RuntimeUI().Prompter().Prompt(context.Background(), ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
 		done <- resp
 	}()
 	<-openCh
@@ -343,7 +343,7 @@ func TestTUIPromptBridge_ShutdownReleasesWaiter(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for shutdown cancellation")
 	}
-	if agent.ui().Prompter() != nil {
+	if agent.RuntimeUI().Prompter() != nil {
 		t.Fatal("shutdown should clear runtime prompter")
 	}
 }
@@ -528,7 +528,7 @@ func TestBindTUIProgram_ReturnsBridgeAndRegistersShutdown(t *testing.T) {
 	close(toolResultCh)
 	close(bridge.outgoing)
 
-	if !agent.tuiToolResultClosed.Load() {
+	if !agent.ToolResultStreamClosed() {
 		t.Fatal("expected registered shutdown callback to mark tool result channel closed")
 	}
 }
