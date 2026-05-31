@@ -7,6 +7,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -28,7 +29,7 @@ func TestToolResultRetentionPolicy_DefaultKeepsAllRawToolResultStores(t *testing
 
 func TestNormalToolResultRetentionKeepsHistorySessionAndToolExecution(t *testing.T) {
 	agent := newToolResultRetentionTestAgent(t)
-	handler := newNormalModeToolResultHandler(&TurnRunner{agent: agent}, &normalModeState{turnMutations: newTurnMutationState()})
+	handler := newNormalModeToolResultHandler(&TurnRunner{agent: agent}, &normalModeState{turnMutations: turnsupport.NewMutationState()})
 	toolCall := retentionTestToolCall("call_1", "README.md")
 
 	handler.Handle(toolCall, toolruntime.Result{Result: "README contents"})
@@ -44,7 +45,7 @@ func TestNormalToolResultRetentionKeepsHistorySessionAndToolExecution(t *testing
 
 func TestParallelAndBatchToolResultRetentionKeepsPerToolResultsThroughCallback(t *testing.T) {
 	agent := newToolResultRetentionTestAgent(t)
-	handler := newNormalModeToolResultHandler(&TurnRunner{agent: agent}, &normalModeState{turnMutations: newTurnMutationState()})
+	handler := newNormalModeToolResultHandler(&TurnRunner{agent: agent}, &normalModeState{turnMutations: turnsupport.NewMutationState()})
 	toolCalls := []*tools.ToolCall{
 		retentionTestToolCall("call_1", "README.md"),
 		retentionTestToolCall("call_2", "main.go"),

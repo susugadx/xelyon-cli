@@ -4,15 +4,16 @@ import (
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
 
 type normalModeFailureHandler struct {
 	runner           *TurnRunner
-	retry            *retryState
+	retry            *turnsupport.RetryState
 	lastFailedResult string
 }
 
-func newNormalModeFailureHandler(r *TurnRunner, rs *retryState, lastFailedResult string) *normalModeFailureHandler {
+func newNormalModeFailureHandler(r *TurnRunner, rs *turnsupport.RetryState, lastFailedResult string) *normalModeFailureHandler {
 	return &normalModeFailureHandler{
 		runner:           r,
 		retry:            rs,
@@ -29,11 +30,11 @@ func (h *normalModeFailureHandler) Handle() error {
 		return nil
 	}
 
-	level := h.retry.recordFailure(h.lastFailedResult)
+	level := h.retry.RecordFailure(h.lastFailedResult)
 	switch level {
-	case stalledNone:
+	case turnsupport.StalledNone:
 		h.handleRetry()
-	case stalledSoft:
+	case turnsupport.StalledSoft:
 		h.handleStrategyChangeRetry()
 	default:
 		h.handleStalledHard()
@@ -44,42 +45,42 @@ func (h *normalModeFailureHandler) Handle() error {
 func (h *normalModeFailureHandler) handleRetry() {
 	a := h.runner.agent
 	a.ui().ResetTerminalState()
-	red.Fprintf(a.output(), "❌ Failed (retry %d)\n", h.retry.count)
+	red.Fprintf(a.output(), "❌ Failed (retry %d)\n", h.retry.Count())
 	yellow.Fprintf(a.output(), "🔄 Retrying...\n")
 
 	a.History = append(a.History, api.Message{
 		Role:    "user",
-		Content: buildNormalModeRetryMessage(h.retry.count, h.lastFailedResult),
+		Content: buildNormalModeRetryMessage(h.retry.Count(), h.lastFailedResult),
 	})
 }
 
 func (h *normalModeFailureHandler) handleStrategyChangeRetry() {
 	a := h.runner.agent
 	a.ui().ResetTerminalState()
-	yellow.Fprintf(a.output(), "⚠️  Similar failure repeated %d times (retry %d)\n", h.retry.sameCount, h.retry.count)
+	yellow.Fprintf(a.output(), "⚠️  Similar failure repeated %d times (retry %d)\n", h.retry.SameCount(), h.retry.Count())
 	yellow.Fprintf(a.output(), "🔄 Retrying with strategy change...\n")
 
 	a.History = append(a.History, api.Message{
 		Role:    "user",
-		Content: buildNormalModeStrategyChangeMessage(h.retry.count, h.retry.sameCount, h.lastFailedResult),
+		Content: buildNormalModeStrategyChangeMessage(h.retry.Count(), h.retry.SameCount(), h.lastFailedResult),
 	})
 }
 
 func (h *normalModeFailureHandler) handleStalledHard() {
 	a := h.runner.agent
 	a.ui().ResetTerminalState()
-	red.Fprintf(a.output(), "❌ Stalled — same error %d times\n", h.retry.sameCount)
+	red.Fprintf(a.output(), "❌ Stalled — same error %d times\n", h.retry.SameCount())
 	yellow.Fprintln(a.output(), "Could not complete the task automatically. Letting AI respond...")
-	h.retry.reset()
+	h.retry.Reset()
 }
 
 func (h *normalModeFailureHandler) handleRetrySuccess() {
 	a := h.runner.agent
-	if h.retry.count <= 0 {
+	if h.retry.Count() <= 0 {
 		return
 	}
-	green.Fprintf(a.output(), "✅ Succeeded (on retry %d)\n", h.retry.count)
-	h.retry.reset()
+	green.Fprintf(a.output(), "✅ Succeeded (on retry %d)\n", h.retry.Count())
+	h.retry.Reset()
 }
 
 func buildNormalModeRetryMessage(attempt int, lastFailedResult string) string {

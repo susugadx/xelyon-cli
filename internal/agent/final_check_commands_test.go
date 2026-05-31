@@ -13,11 +13,11 @@ func TestRunFinalCheckCommands_NoCommands(t *testing.T) {
 
 	a := newCompletionTestAgent(cfg)
 	result := a.runFinalCheckCommands([]string{"/src/main.go"})
-	if result.needsContinue {
+	if result.NeedsContinue {
 		t.Error("expected needsContinue=false when no final checks are configured")
 	}
-	if result.feedback != "" {
-		t.Errorf("expected empty feedback, got %q", result.feedback)
+	if result.Feedback != "" {
+		t.Errorf("expected empty feedback, got %q", result.Feedback)
 	}
 }
 
@@ -28,11 +28,11 @@ func TestRunFinalCheckCommands_SuccessfulCommand(t *testing.T) {
 
 	a := newCompletionTestAgent(cfg)
 	result := a.runFinalCheckCommands([]string{"/src/main.go"})
-	if result.needsContinue {
+	if result.NeedsContinue {
 		t.Error("expected needsContinue=false for successful command")
 	}
-	if result.feedback != "" {
-		t.Errorf("expected empty feedback, got %q", result.feedback)
+	if result.Feedback != "" {
+		t.Errorf("expected empty feedback, got %q", result.Feedback)
 	}
 }
 
@@ -43,16 +43,16 @@ func TestRunFinalCheckCommands_FailedCommand(t *testing.T) {
 
 	a := newCompletionTestAgent(cfg)
 	result := a.runFinalCheckCommands([]string{"/src/main.go"})
-	if !result.needsContinue {
+	if !result.NeedsContinue {
 		t.Error("expected needsContinue=true for failed command")
 	}
-	if !strings.Contains(result.feedback, "[SYSTEM] Final check failed") {
-		t.Errorf("expected system feedback, got %q", result.feedback)
+	if !strings.Contains(result.Feedback, "[SYSTEM] Final check failed") {
+		t.Errorf("expected system feedback, got %q", result.Feedback)
 	}
-	if !strings.Contains(result.feedback, "exit code 1") {
-		t.Errorf("expected exit code in feedback, got %q", result.feedback)
+	if !strings.Contains(result.Feedback, "exit code 1") {
+		t.Errorf("expected exit code in feedback, got %q", result.Feedback)
 	}
-	if result.failureFingerprint == "" {
+	if result.FailureFingerprint == "" {
 		t.Error("expected non-empty failure fingerprint")
 	}
 }
@@ -64,7 +64,7 @@ func TestRunFinalCheckCommands_ChangedFilesEnv(t *testing.T) {
 
 	a := newCompletionTestAgent(cfg)
 	result := a.runFinalCheckCommands([]string{"/src/main.go", "/src/util.go"})
-	if result.needsContinue {
+	if result.NeedsContinue {
 		t.Error("expected needsContinue=false, XELYON_CHANGED_FILES should be set")
 	}
 }
@@ -80,11 +80,11 @@ func TestRunFinalCheckCommands_MultipleCommands_StopsOnFirstFailure(t *testing.T
 
 	a := newCompletionTestAgent(cfg)
 	result := a.runFinalCheckCommands([]string{"/src/main.go"})
-	if !result.needsContinue {
+	if !result.NeedsContinue {
 		t.Error("expected needsContinue=true when second command fails")
 	}
-	if !strings.Contains(result.feedback, "exit code 42") {
-		t.Errorf("expected exit code 42 in feedback, got %q", result.feedback)
+	if !strings.Contains(result.Feedback, "exit code 42") {
+		t.Errorf("expected exit code 42 in feedback, got %q", result.Feedback)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestRunFinalCheckCommands_RecordsLedgerWithoutHistory(t *testing.T) {
 
 	a := newCompletionTestAgent(cfg)
 	result := a.runFinalCheckCommands([]string{"src/main.go"})
-	if !result.needsContinue {
+	if !result.NeedsContinue {
 		t.Fatal("expected failed final check to request continuation")
 	}
 	if len(a.History) != 0 {
@@ -126,10 +126,10 @@ func TestRunFinalCheckCommands_Timeout(t *testing.T) {
 
 	a := newCompletionTestAgent(cfg)
 	result := a.runFinalCheckCommands([]string{"/src/main.go"})
-	if !result.needsContinue {
+	if !result.NeedsContinue {
 		t.Error("expected needsContinue=true for timed-out command")
 	}
-	if result.feedback == "" {
+	if result.Feedback == "" {
 		t.Error("expected non-empty feedback for timed-out command")
 	}
 }

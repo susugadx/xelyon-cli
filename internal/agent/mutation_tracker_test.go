@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
 
 type ledgerMutationTrackerFixture struct {
@@ -17,7 +18,7 @@ type ledgerMutationTrackerFixture struct {
 	taskLedger *taskstate.Store
 	agent      *Agent
 	tracker    *MutationTracker
-	state      turnMutationState
+	state      turnsupport.MutationState
 }
 
 func newLedgerMutationTrackerFixture(t *testing.T) *ledgerMutationTrackerFixture {
@@ -40,7 +41,7 @@ func newLedgerMutationTrackerFixture(t *testing.T) *ledgerMutationTrackerFixture
 		taskLedger: taskLedger,
 		agent:      agent,
 		tracker:    agent.mutationTracker(),
-		state:      newTurnMutationState(),
+		state:      turnsupport.NewMutationState(),
 	}
 }
 
@@ -147,7 +148,7 @@ func TestMutationTracker_RecordToolResult_UpdatesTurnMutationState(t *testing.T)
 		},
 	}
 	tracker := a.mutationTracker()
-	state := newTurnMutationState()
+	state := turnsupport.NewMutationState()
 
 	change := &tools.FileChange{
 		FilePath: "/src/main.go",
@@ -160,17 +161,17 @@ func TestMutationTracker_RecordToolResult_UpdatesTurnMutationState(t *testing.T)
 
 	tracker.RecordToolResult(&tools.ToolCall{Tool: "write_file"}, "ok", change, &state)
 
-	if !state.hasMutations() {
+	if !state.HasMutations() {
 		t.Fatal("expected turn-local mutation state to be updated by file change event")
 	}
-	snapshot := state.snapshot()
-	if snapshot.mutationCount != 1 {
-		t.Fatalf("mutationCount = %d, want 1", snapshot.mutationCount)
+	snapshot := state.Snapshot()
+	if snapshot.MutationCount != 1 {
+		t.Fatalf("MutationCount = %d, want 1", snapshot.MutationCount)
 	}
-	if len(snapshot.files) != 2 {
-		t.Fatalf("len(files) = %d, want 2", len(snapshot.files))
+	if len(snapshot.Files) != 2 {
+		t.Fatalf("len(Files) = %d, want 2", len(snapshot.Files))
 	}
-	if snapshot.progressFingerprint == "" {
+	if snapshot.ProgressFingerprint == "" {
 		t.Fatal("expected non-empty progress fingerprint")
 	}
 	if len(a.changeStack) != 1 {
@@ -196,7 +197,7 @@ func TestMutationTracker_RecordToolResult_RecordsTaskLedgerWithoutChangingHistor
 	if len(fixture.agent.changeStack) != 1 {
 		t.Fatalf("changeStack len = %d, want 1", len(fixture.agent.changeStack))
 	}
-	if !fixture.state.hasMutations() {
+	if !fixture.state.HasMutations() {
 		t.Fatal("expected turn-local mutation state to keep recording file changes")
 	}
 	assertAgentHistoryUnchanged(t, fixture.agent)
@@ -232,7 +233,7 @@ func TestMutationTracker_RecordToolResultHelper_TracksLegacyPathWithoutChangingH
 	if len(fixture.agent.changeStack) != 1 {
 		t.Fatalf("changeStack len = %d, want 1", len(fixture.agent.changeStack))
 	}
-	if !fixture.state.hasMutations() {
+	if !fixture.state.HasMutations() {
 		t.Fatal("expected turn-local mutation state to keep recording file changes")
 	}
 	assertAgentHistoryUnchanged(t, fixture.agent)
@@ -267,7 +268,7 @@ func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHisto
 		Args: map[string]string{"command": "go test ./internal/taskstate"},
 	}, "ok\ninternal/taskstate/ledger_test.go:10: pass", nil, &fixture.state)
 
-	if fixture.state.hasMutations() {
+	if fixture.state.HasMutations() {
 		t.Fatal("read/search/bash observations without FileChange must not update turn mutation state")
 	}
 	if len(fixture.agent.changeStack) != 0 {
@@ -312,7 +313,7 @@ func TestMutationTracker_RecordToolExecutionResult_RecordsStructuredObservationW
 		},
 	}, &fixture.state)
 
-	if fixture.state.hasMutations() {
+	if fixture.state.HasMutations() {
 		t.Fatal("structured observation without FileChange must not update turn mutation state")
 	}
 	if len(fixture.agent.changeStack) != 0 {
@@ -367,7 +368,7 @@ func TestMutationTracker_RecordToolResult_UsesInvocationCWDForRelativeLedgerPath
 		},
 	}
 	tracker := a.mutationTracker()
-	state := newTurnMutationState()
+	state := turnsupport.NewMutationState()
 
 	tracker.RecordToolResult(&tools.ToolCall{
 		ID:   "read-1",

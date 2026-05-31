@@ -9,27 +9,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/finalcheck"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
-
-type finalCheckRunResult struct {
-	needsContinue      bool
-	feedback           string
-	failureFingerprint string
-}
 
 // runFinalCheckCommands は config.yaml の final_checks.commands に定義された
 // シェルコマンドを順番に実行する。いずれかのコマンドが失敗した場合、
 // needsContinue=true と AI 向けのフィードバックを返す。
 // すべて成功した場合は needsContinue=false を返す。
-func (a *Agent) runFinalCheckCommands(changedFiles []string) finalCheckRunResult {
+func (a *Agent) runFinalCheckCommands(changedFiles []string) finalcheck.RunResult {
 	cfg := a.cfg()
 	commands := cfg.FinalChecks.Commands
 	out := a.output()
 
 	// No final checks → nothing to run
 	if len(commands) == 0 {
-		return finalCheckRunResult{}
+		return finalcheck.RunResult{}
 	}
 	a.taskTestCommand = strings.Join(commands, " && ")
 
@@ -77,10 +72,7 @@ func (a *Agent) runFinalCheckCommands(changedFiles []string) finalCheckRunResult
 		cancel()
 
 		if err != nil {
-			outputStr := string(output)
-			if len(outputStr) > 2000 {
-				outputStr = outputStr[:2000] + "\n... (truncated)"
-			}
+			outputStr := finalcheck.TruncateOutput(string(output))
 
 			exitCode := -1
 			if exitErr, ok := err.(*exec.ExitError); ok {
@@ -95,21 +87,9 @@ func (a *Agent) runFinalCheckCommands(changedFiles []string) finalCheckRunResult
 			})
 			red.Fprintf(out, "  Final check failed (exit code %d): %s\n", exitCode, cmd)
 
-			feedback := fmt.Sprintf(`[SYSTEM] Final check failed. Command %q failed (exit code %d):
-
-%s
-
-[Context] git diff --stat:
-%s
-
-Please fix these errors before declaring completion. Do NOT skip these issues.`, cmd, exitCode, outputStr, diffOutput)
 			passed := false
 			a.taskTestResult = &passed
-			return finalCheckRunResult{
-				needsContinue:      true,
-				feedback:           feedback,
-				failureFingerprint: finalCheckFailureFingerprint(cmd, exitCode, outputStr),
-			}
+			return finalcheck.BuildFailureResult(cmd, exitCode, string(output), diffOutput)
 		}
 
 		a.recordFinalCheckObservation(taskstate.TestObservation{
@@ -123,7 +103,7 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 	passed := true
 	a.taskTestResult = &passed
 
-	return finalCheckRunResult{}
+	return finalcheck.RunResult{}
 }
 
 func (a *Agent) recordFinalCheckObservation(observation taskstate.TestObservation) {
@@ -131,10 +111,6 @@ func (a *Agent) recordFinalCheckObservation(observation taskstate.TestObservatio
 		return
 	}
 	a.Runtime.TaskLedger.Recorder().RecordTestObservation(observation)
-}
-
-func finalCheckFailureFingerprint(command string, exitCode int, output string) string {
-	return errorFingerprint(fmt.Sprintf("%s\nexit=%d\n%s", command, exitCode, output))
 }
 
 func runFinalCheckProcess(ctx context.Context, proc *exec.Cmd) ([]byte, error) {

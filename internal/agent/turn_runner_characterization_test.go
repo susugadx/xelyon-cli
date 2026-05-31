@@ -13,6 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -113,13 +114,12 @@ func newTurnRunnerTestAgent(provider api.Provider, cfg *config.Config, promptInp
 	return agent
 }
 
-func newForcedHardRetryState(errOutput string) *retryState {
-	return &retryState{
-		count:       3,
-		lastErrorFP: errorFingerprint(errOutput),
-		sameCount:   stalledRetryThreshold,
-		stalledRuns: stalledHardThreshold,
+func newForcedHardRetryState(errOutput string) *turnsupport.RetryState {
+	state := &turnsupport.RetryState{}
+	for i := 0; i < 4; i++ {
+		state.RecordFailure(errOutput)
 	}
+	return state
 }
 
 func chdirForTest(t *testing.T, dir string) {
@@ -268,7 +268,7 @@ func TestHandleNormalModeNoToolResponse_StalledHardDelegatesBackToAI(t *testing.
 	if err := runner.processNormalModeToolCalls(response, toolCalls, &normalModeState{}, rs); err != nil {
 		t.Fatalf("processNormalModeToolCalls() error = %v", err)
 	}
-	if rs.count != 0 || rs.sameCount != 0 || rs.stalledRuns != 0 {
+	if rs.Count() != 0 || rs.SameCount() != 0 {
 		t.Fatalf("retry state not reset after stalledHard: %+v", rs)
 	}
 	if !strings.Contains(out.String(), "Could not complete the task automatically. Letting AI respond...") {

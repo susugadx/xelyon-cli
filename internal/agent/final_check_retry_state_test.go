@@ -12,106 +12,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
-
-func TestFinalCheckRetryState_StallsOnRepeatedFailureWithoutChanges(t *testing.T) {
-	state := &finalCheckRetryState{}
-	result := finalCheckRunResult{
-		needsContinue:      true,
-		feedback:           "[SYSTEM] Final check failed",
-		failureFingerprint: "same failure",
-	}
-	changeFingerprint := "change-a"
-
-	if stalled := state.recordFailure(result, changeFingerprint); stalled {
-		t.Fatal("first repeated failure should not stall")
-	}
-	if stalled := state.recordFailure(result, changeFingerprint); !stalled {
-		t.Fatal("second identical failure without changes should stall")
-	}
-}
-
-func TestFinalCheckRetryState_ResetsWhenChangedFilesAdvance(t *testing.T) {
-	state := &finalCheckRetryState{}
-	result := finalCheckRunResult{
-		needsContinue:      true,
-		feedback:           "[SYSTEM] Final check failed",
-		failureFingerprint: "same failure",
-	}
-
-	if stalled := state.recordFailure(result, "change-a"); stalled {
-		t.Fatal("first failure should not stall")
-	}
-	if stalled := state.recordFailure(result, "change-b"); stalled {
-		t.Fatal("changed fingerprint advance should reset no-progress detection")
-	}
-}
-
-func TestFinalCheckRetryState_DoesNotStallWithoutProgressFingerprint(t *testing.T) {
-	state := &finalCheckRetryState{}
-	result := finalCheckRunResult{
-		needsContinue:      true,
-		feedback:           "[SYSTEM] Final check failed",
-		failureFingerprint: "same failure",
-	}
-
-	if stalled := state.recordFailure(result, ""); stalled {
-		t.Fatal("first failure without progress fingerprint should not stall")
-	}
-	if stalled := state.recordFailure(result, ""); stalled {
-		t.Fatal("unknown progress should not be treated as no progress")
-	}
-}
-
-func TestFinalCheckRetryState_DoesNotStallWhenSameFileContentAdvances(t *testing.T) {
-	targetFile := filepath.Join("/tmp", "foo.go")
-	agent := &Agent{
-		agentWorkspaceState: agentWorkspaceState{
-			changeStack: []tools.FileChange{{
-				FilePath: targetFile,
-				Tool:     "write_file",
-				Details: []tools.FileChangeDetail{{
-					FilePath: targetFile,
-					Action:   "modified",
-				}},
-			}},
-		},
-	}
-	firstFingerprint := agent.recordedTaskChangeFingerprint()
-	if firstFingerprint == "" {
-		t.Fatal("expected non-empty fingerprint after first file change")
-	}
-
-	state := &finalCheckRetryState{}
-	result := finalCheckRunResult{
-		needsContinue:      true,
-		feedback:           "[SYSTEM] Final check failed",
-		failureFingerprint: "same failure",
-	}
-	if stalled := state.recordFailure(result, firstFingerprint); stalled {
-		t.Fatal("first failure should not stall")
-	}
-
-	agent.changeStack = append(agent.changeStack, tools.FileChange{
-		FilePath: targetFile,
-		Tool:     "write_file",
-		Details: []tools.FileChangeDetail{{
-			FilePath: targetFile,
-			Action:   "modified",
-		}},
-	})
-	secondFingerprint := agent.recordedTaskChangeFingerprint()
-	if secondFingerprint == "" {
-		t.Fatal("expected non-empty fingerprint after second file change")
-	}
-	if secondFingerprint == firstFingerprint {
-		t.Fatal("expected fingerprint to change when the same file content advances")
-	}
-
-	if stalled := state.recordFailure(result, secondFingerprint); stalled {
-		t.Fatal("same file content advance should reset no-progress detection")
-	}
-}
 
 func TestHandleNormalModeNoToolResponse_FinalChecksNoProgressBreaks(t *testing.T) {
 	disableColors(t)
@@ -314,7 +216,7 @@ func TestHandleNormalModeNoToolResponse_MaxChangeStackOverflowStillRunsFinalChec
 
 	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
 	runner := newTurnRunner(agent, context.Background())
-	state := &normalModeState{turnMutations: newTurnMutationState()}
+	state := &normalModeState{turnMutations: turnsupport.NewMutationState()}
 	handler := newNormalModeToolResultHandler(runner, state)
 
 	totalMutations := config.MaxChangeStack + 5
@@ -337,8 +239,8 @@ func TestHandleNormalModeNoToolResponse_MaxChangeStackOverflowStillRunsFinalChec
 	if len(agent.changeStack) != config.MaxChangeStack {
 		t.Fatalf("changeStack len = %d, want %d", len(agent.changeStack), config.MaxChangeStack)
 	}
-	if state.turnMutations.snapshot().mutationCount != totalMutations {
-		t.Fatalf("mutationCount = %d, want %d", state.turnMutations.snapshot().mutationCount, totalMutations)
+	if state.turnMutations.Snapshot().MutationCount != totalMutations {
+		t.Fatalf("MutationCount = %d, want %d", state.turnMutations.Snapshot().MutationCount, totalMutations)
 	}
 
 	if action := runner.handleNormalModeNoToolResponse("Done.", cfg, state); action != normalModeContinue {
@@ -405,13 +307,13 @@ func TestHandleNormalModeNoToolResponse_StrongPlanSignalWithMutationUsesFinalChe
 
 func newMutatedNormalModeState(paths ...string) *normalModeState {
 	state := &normalModeState{
-		turnMutations: newTurnMutationState(),
+		turnMutations: turnsupport.NewMutationState(),
 	}
 	if len(paths) == 0 {
 		paths = []string{"/src/main.go"}
 	}
 	for _, path := range paths {
-		state.turnMutations.recordFileChange(tools.FileChange{
+		state.turnMutations.RecordFileChange(tools.FileChange{
 			FilePath: path,
 			Tool:     "write_file",
 			Details: []tools.FileChangeDetail{{

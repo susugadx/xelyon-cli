@@ -6,17 +6,18 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
 
 type normalModeToolResultHandler struct {
 	runner           *TurnRunner
 	tracker          *MutationTracker
-	turnMutations    *turnMutationState
+	turnMutations    *turnsupport.MutationState
 	lastFailedResult string
 }
 
 func newNormalModeToolResultHandler(r *TurnRunner, state *normalModeState) *normalModeToolResultHandler {
-	var turnMutations *turnMutationState
+	var turnMutations *turnsupport.MutationState
 	if state != nil {
 		turnMutations = &state.turnMutations
 	}

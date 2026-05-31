@@ -5,6 +5,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
 
 // normalModeTurnOrchestrator は通常ターンのループ方針を組み立てる。
@@ -30,7 +31,7 @@ func newNormalModeTurnOrchestrator(r *TurnRunner, input string, image *api.Image
 		image:           image,
 		cfg:             cfg,
 		hardLimit:       normalizeToolLoopLimit(cfg.General.ToolLoopLimit),
-		state:           &normalModeState{turnMutations: newTurnMutationState()},
+		state:           &normalModeState{turnMutations: turnsupport.NewMutationState()},
 		planningHandler: newNormalModePlanningHandler(r),
 		autoCompression: autoCompression,
 		turnStartIndex:  len(r.agent.History),

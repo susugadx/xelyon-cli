@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
 
 type MutationTracker struct {
@@ -20,7 +21,7 @@ type toolResultRecord struct {
 	change                  *tools.FileChange
 	observation             *tools.RuntimeObservation
 	isError                 bool
-	turnMutations           *turnMutationState
+	turnMutations           *turnsupport.MutationState
 	trackProjectMapMutation bool
 }
 
@@ -32,7 +33,7 @@ func (a *Agent) mutationTracker() *MutationTracker {
 	return newMutationTracker(a)
 }
 
-func (m *MutationTracker) RecordToolResult(tc *tools.ToolCall, result string, change *tools.FileChange, turnMutations *turnMutationState) {
+func (m *MutationTracker) RecordToolResult(tc *tools.ToolCall, result string, change *tools.FileChange, turnMutations *turnsupport.MutationState) {
 	m.recordToolResult(toolResultRecord{
 		toolCall:                tc,
 		result:                  result,
@@ -43,7 +44,7 @@ func (m *MutationTracker) RecordToolResult(tc *tools.ToolCall, result string, ch
 	})
 }
 
-func (m *MutationTracker) RecordToolExecutionResult(tc *tools.ToolCall, execResult toolruntime.Result, turnMutations *turnMutationState) {
+func (m *MutationTracker) RecordToolExecutionResult(tc *tools.ToolCall, execResult toolruntime.Result, turnMutations *turnsupport.MutationState) {
 	m.recordToolResult(toolResultRecord{
 		toolCall:                tc,
 		result:                  execResult.Result,
@@ -123,7 +124,7 @@ func (m *MutationTracker) NoteProjectMapMutation(tc *tools.ToolCall, change *too
 	}
 }
 
-func (m *MutationTracker) RecordFileChangeForTurn(change *tools.FileChange, turnMutations *turnMutationState) {
+func (m *MutationTracker) RecordFileChangeForTurn(change *tools.FileChange, turnMutations *turnsupport.MutationState) {
 	a := m.agent
 	if a == nil || change == nil {
 		return
@@ -133,7 +134,7 @@ func (m *MutationTracker) RecordFileChangeForTurn(change *tools.FileChange, turn
 
 	a.appendChange(*change)
 	if turnMutations != nil {
-		turnMutations.recordFileChange(*change)
+		turnMutations.RecordFileChange(*change)
 	}
 	if a.changeStorage != nil && a.session != nil {
 		if err := a.changeStorage.AppendChange(a.session.ID, toHistoryChangeRecordInput(*change)); err != nil {

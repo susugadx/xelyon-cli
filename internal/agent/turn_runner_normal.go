@@ -6,10 +6,12 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/finalcheck"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
 
 const (
@@ -18,12 +20,12 @@ const (
 )
 
 type normalModeState struct {
-	rs                    retryState
-	finalCheckRetry       finalCheckRetryState
+	rs                    turnsupport.RetryState
+	finalCheckRetry       finalcheck.RetryState
 	textPlanRedirectCount int
 	fallbackResponse      string
 	reachedHardLimit      bool
-	turnMutations         turnMutationState
+	turnMutations         turnsupport.MutationState
 }
 
 type normalModeAction int
@@ -92,7 +94,7 @@ func (r *TurnRunner) handleNormalModeNoToolResponse(response string, cfg *config
 	return newNormalModeNoToolHandler(r, cfg, state).Handle(response)
 }
 
-func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*tools.ToolCall, state *normalModeState, rs *retryState) error {
+func (r *TurnRunner) processNormalModeToolCalls(response string, toolCalls []*tools.ToolCall, state *normalModeState, rs *turnsupport.RetryState) error {
 	a := r.agent
 	handler := newNormalModeToolResultHandler(r, state)
 

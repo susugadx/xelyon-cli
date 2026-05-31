@@ -3,6 +3,8 @@ package agent
 import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/finalcheck"
+	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
 
 type normalModeNoToolHandler struct {
@@ -40,7 +42,7 @@ func (h *normalModeNoToolHandler) Handle(response string) normalModeAction {
 }
 
 func (h *normalModeNoToolHandler) hasTaskMutationsThisTurn() bool {
-	return h.state != nil && h.state.turnMutations.hasMutations()
+	return h.state != nil && h.state.turnMutations.HasMutations()
 }
 
 func (h *normalModeNoToolHandler) handlePostMutationFinalChecks(response string) (bool, normalModeAction) {
@@ -49,21 +51,21 @@ func (h *normalModeNoToolHandler) handlePostMutationFinalChecks(response string)
 		return false, normalModeContinue
 	}
 
-	turnMutations := h.state.turnMutations.snapshot()
+	turnMutations := h.state.turnMutations.Snapshot()
 	finalCheckTargets := h.finalCheckTargetSnapshot(turnMutations)
 
-	result := a.runFinalCheckCommands(finalCheckTargets.files)
-	if !result.needsContinue {
-		h.state.finalCheckRetry.reset()
+	result := a.runFinalCheckCommands(finalCheckTargets.Files)
+	if !result.NeedsContinue {
+		h.state.finalCheckRetry.Reset()
 		return false, normalModeContinue
 	}
 
 	h.runner.appendAssistantHistoryOnly(response)
-	if h.state.finalCheckRetry.recordFailure(result, finalCheckTargets.progressFingerprint) {
+	if h.state.finalCheckRetry.RecordFailure(result, finalCheckTargets.ProgressFingerprint) {
 		yellow.Fprintln(a.output(), "⚠️  Final checks failed again without any task progress. Returning control to user.")
 		a.History = append(a.History, api.Message{
 			Role:    "user",
-			Content: result.feedback,
+			Content: result.Feedback,
 		})
 		return true, normalModeBreak
 	}
@@ -71,23 +73,14 @@ func (h *normalModeNoToolHandler) handlePostMutationFinalChecks(response string)
 	yellow.Fprintln(a.output(), "⚠️  Final check command failed. Asking AI to fix...")
 	a.History = append(a.History, api.Message{
 		Role:    "user",
-		Content: result.feedback,
+		Content: result.Feedback,
 	})
 	return true, normalModeContinue
 }
 
-func (h *normalModeNoToolHandler) finalCheckTargetSnapshot(changes turnMutationSnapshot) turnMutationSnapshot {
-	files := append([]string(nil), changes.files...)
-	progressFingerprint := fingerprintFinalCheckTargetFiles(files)
-	if progressFingerprint == "" {
-		// 対象ファイルを特定できない mutation でも retry 進捗は追跡したいので、
-		// turn-local FileChange イベント由来の fingerprint にフォールバックする。
-		progressFingerprint = changes.progressFingerprint
-	}
-
-	return turnMutationSnapshot{
-		mutationCount:       changes.mutationCount,
-		files:               files,
-		progressFingerprint: progressFingerprint,
-	}
+func (h *normalModeNoToolHandler) finalCheckTargetSnapshot(changes turnsupport.MutationSnapshot) finalcheck.TargetSnapshot {
+	return finalcheck.BuildTargetSnapshot(finalcheck.TargetInput{
+		Files:               changes.Files,
+		ProgressFingerprint: changes.ProgressFingerprint,
+	})
 }

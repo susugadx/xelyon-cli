@@ -26,7 +26,7 @@ func TestRunFinalCheckCommands_TimeoutKillsBackgroundChildren(t *testing.T) {
 	a := newCompletionTestAgent(cfg)
 	start := time.Now()
 	result := a.runFinalCheckCommands([]string{"/src/main.go"})
-	if !result.needsContinue {
+	if !result.NeedsContinue {
 		t.Fatal("expected needsContinue=true for timed-out command")
 	}
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
