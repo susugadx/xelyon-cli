@@ -1,4 +1,4 @@
-package review
+package externaldoc
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-func TestHTTPReviewExternalDocFetcherRequiresHTTPS(t *testing.T) {
-	fetcher := NewHTTPReviewExternalDocFetcher(nil)
+func TestHTTPFetcherRequiresHTTPS(t *testing.T) {
+	fetcher := NewHTTPFetcher(nil)
 
 	got := fetchReviewExternalDocForTest(fetcher, "http://example.test/spec", "external-doc-1")
 
@@ -23,8 +23,8 @@ func TestHTTPReviewExternalDocFetcherRequiresHTTPS(t *testing.T) {
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherRejectsLoopbackHost(t *testing.T) {
-	fetcher := NewHTTPReviewExternalDocFetcher(nil)
+func TestHTTPFetcherRejectsLoopbackHost(t *testing.T) {
+	fetcher := NewHTTPFetcher(nil)
 
 	got := fetchReviewExternalDocForTest(fetcher, "https://127.0.0.1:8443/spec", "external-doc-1")
 
@@ -36,8 +36,8 @@ func TestHTTPReviewExternalDocFetcherRejectsLoopbackHost(t *testing.T) {
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherRejectsPrivateDNSResolution(t *testing.T) {
-	fetcher := NewHTTPReviewExternalDocFetcher(nil)
+func TestHTTPFetcherRejectsPrivateDNSResolution(t *testing.T) {
+	fetcher := NewHTTPFetcher(nil)
 	fetcher.networkGuard = reviewExternalDocNetworkGuard{
 		lookupIPAddr: func(context.Context, string) ([]net.IPAddr, error) {
 			return []net.IPAddr{{IP: net.ParseIP("10.0.0.10")}}, nil
@@ -51,8 +51,8 @@ func TestHTTPReviewExternalDocFetcherRejectsPrivateDNSResolution(t *testing.T) {
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherRejectsPrivateRedirectHost(t *testing.T) {
-	fetcher := NewHTTPReviewExternalDocFetcher(nil)
+func TestHTTPFetcherRejectsPrivateRedirectHost(t *testing.T) {
+	fetcher := NewHTTPFetcher(nil)
 	fetcher.networkGuard = reviewExternalDocNetworkGuard{
 		lookupIPAddr: func(context.Context, string) ([]net.IPAddr, error) {
 			return []net.IPAddr{{IP: net.ParseIP("172.16.0.4")}}, nil
@@ -68,7 +68,7 @@ func TestHTTPReviewExternalDocFetcherRejectsPrivateRedirectHost(t *testing.T) {
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherRejectsNonTextContentType(t *testing.T) {
+func TestHTTPFetcherRejectsNonTextContentType(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write([]byte{0, 1, 2})
@@ -86,7 +86,7 @@ func TestHTTPReviewExternalDocFetcherRejectsNonTextContentType(t *testing.T) {
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherRejectsCrossHostRedirect(t *testing.T) {
+func TestHTTPFetcherRejectsCrossHostRedirect(t *testing.T) {
 	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("target"))
 	}))
@@ -104,7 +104,7 @@ func TestHTTPReviewExternalDocFetcherRejectsCrossHostRedirect(t *testing.T) {
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherFollowsSameHostRedirect(t *testing.T) {
+func TestHTTPFetcherFollowsSameHostRedirect(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/redirect" {
 			http.Redirect(w, r, "/spec", http.StatusFound)
@@ -129,7 +129,7 @@ func TestHTTPReviewExternalDocFetcherFollowsSameHostRedirect(t *testing.T) {
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherSuccessfulFetchDefaultsUnknownCredibility(t *testing.T) {
+func TestHTTPFetcherSuccessfulFetchDefaultsUnknownCredibility(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("external spec text"))
@@ -142,7 +142,7 @@ func TestHTTPReviewExternalDocFetcherSuccessfulFetchDefaultsUnknownCredibility(t
 	if got.Error != "" {
 		t.Fatalf("Error = %q, want nil", got.Error)
 	}
-	if got.SourceCredibility != ReviewExternalDocSourceCredibilityUnknown {
+	if got.SourceCredibility != SourceCredibilityUnknown {
 		t.Fatalf("SourceCredibility = %q, want unknown", got.SourceCredibility)
 	}
 	if got.SourceCredibilityReason == "" {
@@ -150,7 +150,7 @@ func TestHTTPReviewExternalDocFetcherSuccessfulFetchDefaultsUnknownCredibility(t
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherRejectsSameHostDowngradeRedirect(t *testing.T) {
+func TestHTTPFetcherRejectsSameHostDowngradeRedirect(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/redirect" {
 			http.Redirect(w, r, "http://"+r.Host+"/spec", http.StatusFound)
@@ -175,7 +175,7 @@ func TestHTTPReviewExternalDocFetcherRejectsSameHostDowngradeRedirect(t *testing
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherTruncatesLargeResponses(t *testing.T) {
+func TestHTTPFetcherTruncatesLargeResponses(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte(strings.Repeat("x", reviewExternalDocMaxResponseBytes+100)))
@@ -204,8 +204,8 @@ func TestHTTPReviewExternalDocFetcherTruncatesLargeResponses(t *testing.T) {
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherUsesFixedTimeout(t *testing.T) {
-	fetcher := NewHTTPReviewExternalDocFetcher(&http.Client{Timeout: time.Minute})
+func TestHTTPFetcherUsesFixedTimeout(t *testing.T) {
+	fetcher := NewHTTPFetcher(&http.Client{Timeout: time.Minute})
 
 	client := fetcher.boundedClient("docs.example.test")
 
@@ -214,14 +214,14 @@ func TestHTTPReviewExternalDocFetcherUsesFixedTimeout(t *testing.T) {
 	}
 }
 
-func newLocalReviewExternalDocFetcherForTest(client *http.Client) *HTTPReviewExternalDocFetcher {
-	fetcher := NewHTTPReviewExternalDocFetcher(client)
+func newLocalReviewExternalDocFetcherForTest(client *http.Client) *HTTPFetcher {
+	fetcher := NewHTTPFetcher(client)
 	fetcher.networkGuard = reviewExternalDocNetworkGuard{allowPrivateAddr: true}
 	return fetcher
 }
 
-func fetchReviewExternalDocForTest(fetcher *HTTPReviewExternalDocFetcher, rawURL, docID string) ReviewExternalDocEvidence {
-	return fetcher.FetchExternalDoc(context.Background(), ReviewExternalDocFetchRequest{
+func fetchReviewExternalDocForTest(fetcher *HTTPFetcher, rawURL, docID string) Evidence {
+	return fetcher.FetchExternalDoc(context.Background(), FetchRequest{
 		URL:   rawURL,
 		DocID: docID,
 	})

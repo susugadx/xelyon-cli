@@ -1,21 +1,21 @@
-package review
+package externaldoc
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestClassifyReviewExternalDocSourceCredibilityOfficialCandidate(t *testing.T) {
-	got, reason := classifyReviewExternalDocSourceCredibility(
-		ReviewExternalDocFetchRequest{
+func TestClassifySourceCredibilityOfficialCandidate(t *testing.T) {
+	got, reason := classifySourceCredibility(
+		FetchRequest{
 			SearchResultTitle: "OpenAI API Reference - Responses",
 			QuerySubjectHint:  "OpenAI Responses API",
 		},
-		ReviewExternalDocEvidence{SourceDomain: "platform.openai.com"},
+		Evidence{SourceDomain: "platform.openai.com"},
 		"OpenAI API reference documentation for request parameters, responses, and authentication.",
 	)
 
-	if got != ReviewExternalDocSourceCredibilityOfficialCandidate {
+	if got != SourceCredibilityOfficialCandidate {
 		t.Fatalf("credibility = %q, want official_candidate; reason=%q", got, reason)
 	}
 	if !strings.Contains(reason, "trusted source domain") {
@@ -23,23 +23,23 @@ func TestClassifyReviewExternalDocSourceCredibilityOfficialCandidate(t *testing.
 	}
 }
 
-func TestClassifyReviewExternalDocSourceCredibilityRejectsOpenAILookalikeDomains(t *testing.T) {
+func TestClassifySourceCredibilityRejectsOpenAILookalikeDomains(t *testing.T) {
 	for _, sourceDomain := range []string{
 		"docs.openai.evil.example",
 		"openai.com.evil.example",
 		"evilopenai.com",
 	} {
 		t.Run(sourceDomain, func(t *testing.T) {
-			got, reason := classifyReviewExternalDocSourceCredibility(
-				ReviewExternalDocFetchRequest{
+			got, reason := classifySourceCredibility(
+				FetchRequest{
 					SearchResultTitle: "OpenAI API Reference - Responses",
 					QuerySubjectHint:  "OpenAI Responses API",
 				},
-				ReviewExternalDocEvidence{SourceDomain: sourceDomain},
+				Evidence{SourceDomain: sourceDomain},
 				"OpenAI API reference documentation for request parameters, responses, and authentication.",
 			)
 
-			if got != ReviewExternalDocSourceCredibilityUnknown {
+			if got != SourceCredibilityUnknown {
 				t.Fatalf("credibility = %q, want unknown; reason=%q", got, reason)
 			}
 			if !strings.Contains(reason, "does not match trusted domains") {
@@ -49,32 +49,32 @@ func TestClassifyReviewExternalDocSourceCredibilityRejectsOpenAILookalikeDomains
 	}
 }
 
-func TestClassifyReviewExternalDocSourceCredibilityKeepsOfficialDocWithThirdPartyBodyWording(t *testing.T) {
-	got, reason := classifyReviewExternalDocSourceCredibility(
-		ReviewExternalDocFetchRequest{
+func TestClassifySourceCredibilityKeepsOfficialDocWithThirdPartyBodyWording(t *testing.T) {
+	got, reason := classifySourceCredibility(
+		FetchRequest{
 			SearchResultTitle: "OpenAI API third-party integration reference",
 			QuerySubjectHint:  "OpenAI API",
 		},
-		ReviewExternalDocEvidence{SourceDomain: "platform.openai.com"},
+		Evidence{SourceDomain: "platform.openai.com"},
 		"OpenAI API reference documentation for third-party integration request parameters, responses, and authentication.",
 	)
 
-	if got != ReviewExternalDocSourceCredibilityOfficialCandidate {
+	if got != SourceCredibilityOfficialCandidate {
 		t.Fatalf("credibility = %q, want official_candidate; reason=%q", got, reason)
 	}
 }
 
-func TestClassifyReviewExternalDocSourceCredibilityThirdPartyHost(t *testing.T) {
-	got, reason := classifyReviewExternalDocSourceCredibility(
-		ReviewExternalDocFetchRequest{
+func TestClassifySourceCredibilityThirdPartyHost(t *testing.T) {
+	got, reason := classifySourceCredibility(
+		FetchRequest{
 			SearchResultTitle: "OpenAI API reference",
 			QuerySubjectHint:  "OpenAI API",
 		},
-		ReviewExternalDocEvidence{SourceDomain: "medium.com"},
+		Evidence{SourceDomain: "medium.com"},
 		"OpenAI API request examples.",
 	)
 
-	if got != ReviewExternalDocSourceCredibilityThirdParty {
+	if got != SourceCredibilityThirdParty {
 		t.Fatalf("credibility = %q, want third_party; reason=%q", got, reason)
 	}
 	if !strings.Contains(reason, "third-party host") {
@@ -82,32 +82,32 @@ func TestClassifyReviewExternalDocSourceCredibilityThirdPartyHost(t *testing.T) 
 	}
 }
 
-func TestClassifyReviewExternalDocSourceCredibilityThirdPartyTitleMetadata(t *testing.T) {
-	got, reason := classifyReviewExternalDocSourceCredibility(
-		ReviewExternalDocFetchRequest{
+func TestClassifySourceCredibilityThirdPartyTitleMetadata(t *testing.T) {
+	got, reason := classifySourceCredibility(
+		FetchRequest{
 			SearchResultTitle: "OpenAI API unofficial community tutorial",
 			QuerySubjectHint:  "OpenAI API",
 		},
-		ReviewExternalDocEvidence{SourceDomain: "docs.example.test"},
+		Evidence{SourceDomain: "docs.example.test"},
 		"OpenAI API request examples.",
 	)
 
-	if got != ReviewExternalDocSourceCredibilityThirdParty {
+	if got != SourceCredibilityThirdParty {
 		t.Fatalf("credibility = %q, want third_party; reason=%q", got, reason)
 	}
 }
 
-func TestClassifyReviewExternalDocSourceCredibilityUnknown(t *testing.T) {
-	got, reason := classifyReviewExternalDocSourceCredibility(
-		ReviewExternalDocFetchRequest{
+func TestClassifySourceCredibilityUnknown(t *testing.T) {
+	got, reason := classifySourceCredibility(
+		FetchRequest{
 			SearchResultTitle: "OpenAI API reference",
 			QuerySubjectHint:  "OpenAI API",
 		},
-		ReviewExternalDocEvidence{SourceDomain: "example.test"},
+		Evidence{SourceDomain: "example.test"},
 		"OpenAI API request and response examples.",
 	)
 
-	if got != ReviewExternalDocSourceCredibilityUnknown {
+	if got != SourceCredibilityUnknown {
 		t.Fatalf("credibility = %q, want unknown; reason=%q", got, reason)
 	}
 	if !strings.Contains(reason, "does not match trusted domains") {
@@ -115,17 +115,17 @@ func TestClassifyReviewExternalDocSourceCredibilityUnknown(t *testing.T) {
 	}
 }
 
-func TestClassifyReviewExternalDocSourceCredibilityUnknownSubject(t *testing.T) {
-	got, reason := classifyReviewExternalDocSourceCredibility(
-		ReviewExternalDocFetchRequest{
+func TestClassifySourceCredibilityUnknownSubject(t *testing.T) {
+	got, reason := classifySourceCredibility(
+		FetchRequest{
 			SearchResultTitle: "OAuth reference",
 			QuerySubjectHint:  "OAuth",
 		},
-		ReviewExternalDocEvidence{SourceDomain: "oauth.example.test"},
+		Evidence{SourceDomain: "oauth.example.test"},
 		"OAuth request and response examples.",
 	)
 
-	if got != ReviewExternalDocSourceCredibilityUnknown {
+	if got != SourceCredibilityUnknown {
 		t.Fatalf("credibility = %q, want unknown; reason=%q", got, reason)
 	}
 	if !strings.Contains(reason, "no trusted domain mapping") {
@@ -133,14 +133,14 @@ func TestClassifyReviewExternalDocSourceCredibilityUnknownSubject(t *testing.T) 
 	}
 }
 
-func TestNormalizeReviewExternalDocSourceCredibilityDefaultsUnknown(t *testing.T) {
-	if got := normalizeReviewExternalDocSourceCredibility(""); got != ReviewExternalDocSourceCredibilityUnknown {
+func TestNormalizeSourceCredibilityDefaultsUnknown(t *testing.T) {
+	if got := normalizeSourceCredibility(""); got != SourceCredibilityUnknown {
 		t.Fatalf("normalized credibility = %q, want unknown", got)
 	}
-	if got := normalizeReviewExternalDocSourceCredibility("surprising"); got != ReviewExternalDocSourceCredibilityUnknown {
+	if got := normalizeSourceCredibility("surprising"); got != SourceCredibilityUnknown {
 		t.Fatalf("normalized credibility = %q, want unknown", got)
 	}
-	if got := normalizeReviewExternalDocSourceCredibilityReason("", ""); got == "" || !strings.Contains(got, "unknown") {
+	if got := normalizeSourceCredibilityReason("", ""); got == "" || !strings.Contains(got, "unknown") {
 		t.Fatalf("normalized reason = %q, want unknown reason", got)
 	}
 }

@@ -1,4 +1,4 @@
-package review
+package externaldoc
 
 import (
 	"strings"
@@ -39,7 +39,7 @@ func TestBuildReviewExternalDocSnippetsFocusesAroundMultipleTerms(t *testing.T) 
 		strings.Repeat("middle filler ", 180) +
 		"The tool_choice option controls tool selection."
 
-	snippets := buildReviewExternalDocSnippets("external-doc-1", content, false, []ReviewExternalDocFocusTerm{
+	snippets := buildReviewExternalDocSnippets("external-doc-1", content, false, []FocusTerm{
 		{Term: "previous_response_id", Reason: "query focus"},
 		{Term: "tool_choice", Reason: "search result title"},
 	})
@@ -71,7 +71,7 @@ func TestBuildReviewExternalDocSnippetsFocusesAroundMultipleTerms(t *testing.T) 
 func TestBuildReviewExternalDocSnippetsDedupesSameRangeFocuses(t *testing.T) {
 	content := "The Responses API previous_response_id field controls follow-up requests and response_format output."
 
-	snippets := buildReviewExternalDocSnippets("external-doc-1", content, false, []ReviewExternalDocFocusTerm{
+	snippets := buildReviewExternalDocSnippets("external-doc-1", content, false, []FocusTerm{
 		{Term: "previous_response_id", Reason: "query focus"},
 		{Term: "response_format", Reason: "generic impact token"},
 		{Term: "Responses API", Reason: "query subject"},
@@ -93,7 +93,7 @@ func TestBuildReviewExternalDocSnippetsDedupesHashEquivalentFocuses(t *testing.T
 	buf[599] = 'A'
 	buf[600] = 'B'
 
-	snippets := buildReviewExternalDocSnippets("external-doc-1", string(buf), false, []ReviewExternalDocFocusTerm{
+	snippets := buildReviewExternalDocSnippets("external-doc-1", string(buf), false, []FocusTerm{
 		{Term: "A", Reason: "query focus"},
 		{Term: "B", Reason: "search result title"},
 	})
@@ -107,11 +107,6 @@ func TestBuildReviewExternalDocSnippetsDedupesHashEquivalentFocuses(t *testing.T
 }
 
 func TestBuildReviewExternalDocSnippetsUsesContractFocusBeforeGenericSubject(t *testing.T) {
-	candidate := reviewWebSearchEvidenceQueryCandidate{
-		query:   "OpenAI API previous_response_id official documentation",
-		subject: "OpenAI API",
-		focus:   "previous_response_id",
-	}
 	content := "generic-header OpenAI API overview " +
 		strings.Repeat("intro filler ", 180) +
 		"The previous_response_id section defines the follow-up request contract."
@@ -120,7 +115,14 @@ func TestBuildReviewExternalDocSnippetsUsesContractFocusBeforeGenericSubject(t *
 		"external-doc-1",
 		content,
 		false,
-		buildReviewExternalDocFocusTerms(candidate, ReviewWebSearchEvidenceResult{}, nil),
+		BuildFocusTerms(
+			"OpenAI API previous_response_id official documentation",
+			"OpenAI API",
+			"previous_response_id",
+			"",
+			"",
+			nil,
+		),
 	)
 
 	if len(snippets) == 0 {
@@ -141,7 +143,7 @@ func TestBuildReviewExternalDocSnippetsUsesContractFocusBeforeGenericSubject(t *
 func TestBuildReviewExternalDocSnippetsFallsBackToPrefixWhenFocusTermMissing(t *testing.T) {
 	content := "front-marker " + strings.Repeat("prefix filler ", 120) + "later target text"
 
-	snippets := buildReviewExternalDocSnippets("external-doc-1", content, false, []ReviewExternalDocFocusTerm{
+	snippets := buildReviewExternalDocSnippets("external-doc-1", content, false, []FocusTerm{
 		{Term: "missing_focus_token", Reason: "query focus"},
 	})
 
@@ -158,7 +160,7 @@ func TestBuildReviewExternalDocSnippetsFallsBackToPrefixWhenFocusTermMissing(t *
 
 func TestBuildReviewExternalDocSnippetsHashesStableFocusedContent(t *testing.T) {
 	content := strings.Repeat("intro ", 180) + "FocusAnchor stable text" + strings.Repeat(" outro", 180)
-	focusTerms := []ReviewExternalDocFocusTerm{{Term: "FocusAnchor", Reason: "query focus"}}
+	focusTerms := []FocusTerm{{Term: "FocusAnchor", Reason: "query focus"}}
 
 	first := buildReviewExternalDocSnippets("external-doc-1", content, false, focusTerms)
 	second := buildReviewExternalDocSnippets("external-doc-1", content, false, focusTerms)

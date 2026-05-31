@@ -3,8 +3,9 @@ package review
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 )
 
 const (
@@ -31,27 +32,6 @@ type ReviewWebSearchQueryResult struct {
 	Provider  string
 	Results   []ReviewWebSearchEvidenceResult
 	Truncated bool
-}
-
-// ReviewExternalDocFetchRequest は external_doc fetch 境界へ渡す検索結果 URL と判定 hint。
-// URL と DocID は required、FocusTerms は snippet 抽出用の任意 hint、SearchResultTitle と QuerySubjectHint は信頼度判定用の任意 hint として扱う。
-type ReviewExternalDocFetchRequest struct {
-	URL               string
-	DocID             string
-	FocusTerms        []ReviewExternalDocFocusTerm
-	SearchResultTitle string
-	QuerySubjectHint  string
-}
-
-// ReviewExternalDocFocusTerm は external_doc snippet で優先して引用範囲へ寄せる語句。
-type ReviewExternalDocFocusTerm struct {
-	Term   string
-	Reason string
-}
-
-// ReviewExternalDocFetcher は検索結果 URL から external_doc snippet を取得する境界。
-type ReviewExternalDocFetcher interface {
-	FetchExternalDoc(context.Context, ReviewExternalDocFetchRequest) ReviewExternalDocEvidence
 }
 
 // ReviewWebSearchEvidenceCollector は /review 用の外部 Web 検索 evidence を収集する。
@@ -163,7 +143,7 @@ func (c *ReviewWebSearchEvidenceCollector) CollectWebSearchEvidence(ctx context.
 	if len(errors) > 0 {
 		evidence.Error = strings.Join(errors, "; ")
 	}
-	if !reviewWebSearchEvidenceHasFetchedSnippet(evidence) {
+	if !externaldoc.HasFetchedSnippet(evidence.ExternalDocs) {
 		evidence.Inconclusive = true
 	}
 	return evidence
@@ -173,7 +153,7 @@ func buildReviewExternalDocFetchRequest(candidate reviewWebSearchEvidenceQueryCa
 	return ReviewExternalDocFetchRequest{
 		URL:               searchResult.URL,
 		DocID:             docID,
-		FocusTerms:        buildReviewExternalDocFocusTerms(candidate, searchResult, genericTokens),
+		FocusTerms:        externaldoc.BuildFocusTerms(candidate.query, candidate.subject, candidate.focus, searchResult.Title, searchResult.Snippet, genericTokens),
 		SearchResultTitle: searchResult.Title,
 		QuerySubjectHint:  candidate.subject,
 	}
@@ -188,18 +168,9 @@ func limitReviewWebSearchEvidenceResults(results []ReviewWebSearchEvidenceResult
 	return append([]ReviewWebSearchEvidenceResult(nil), results...), truncated
 }
 
-func reviewWebSearchEvidenceHasFetchedSnippet(evidence ReviewWebSearchEvidence) bool {
-	for _, doc := range evidence.ExternalDocs {
-		if len(doc.Snippets) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func buildReviewWebSearchEvidenceQueryCandidates(bundle ReviewEvidenceBundle) []reviewWebSearchEvidenceQueryCandidate {
 	corpus := reviewWebSearchEvidenceCorpus(bundle)
-	externalSubjects := reviewWebSearchEvidenceExternalSubjects(corpus)
+	externalSubjects := externaldoc.SearchSubjectsForCorpus(corpus)
 	if len(externalSubjects) == 0 {
 		return nil
 	}
@@ -247,44 +218,6 @@ func reviewWebSearchEvidenceCorpus(bundle ReviewEvidenceBundle) string {
 	}
 	parts = append(parts, bundle.GenericImpactCandidates.Tokens...)
 	return strings.ToLower(strings.Join(parts, "\n"))
-}
-
-func reviewWebSearchEvidenceExternalSubjects(corpus string) []string {
-	subjects := []struct {
-		token   string
-		subject string
-	}{
-		{token: "openai", subject: "OpenAI API"},
-		{token: "responses", subject: "OpenAI Responses API"},
-		{token: "anthropic", subject: "Anthropic API"},
-		{token: "claude", subject: "Claude API"},
-		{token: "gemini", subject: "Gemini API"},
-		{token: "google", subject: "Google Gemini API"},
-		{token: "kimi", subject: "Kimi API"},
-		{token: "moonshot", subject: "Moonshot Kimi API"},
-		{token: "bedrock", subject: "Amazon Bedrock API"},
-		{token: "aws", subject: "AWS API"},
-		{token: "azure", subject: "Azure OpenAI API"},
-		{token: "groq", subject: "Groq API"},
-		{token: "openrouter", subject: "OpenRouter API"},
-		{token: "mcp", subject: "Model Context Protocol"},
-		{token: "oauth", subject: "OAuth"},
-		{token: "cloudflare", subject: "Cloudflare Workers"},
-	}
-	result := make([]string, 0)
-	seen := make(map[string]struct{})
-	for _, subject := range subjects {
-		if !strings.Contains(corpus, subject.token) {
-			continue
-		}
-		if _, exists := seen[subject.subject]; exists {
-			continue
-		}
-		seen[subject.subject] = struct{}{}
-		result = append(result, subject.subject)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func reviewWebSearchEvidenceFocusTokens(bundle ReviewEvidenceBundle, corpus string) []string {
@@ -336,7 +269,7 @@ func reviewWebSearchEvidenceFocusTokens(bundle ReviewEvidenceBundle, corpus stri
 }
 
 func reviewWebSearchEvidenceGenericFocusTokenIsConcrete(token string) bool {
-	normalized, ok := normalizeReviewExternalDocFocusTerm(token)
+	normalized, ok := normalizeReviewWebSearchEvidenceGenericFocusToken(token)
 	if !ok {
 		return false
 	}
@@ -345,5 +278,55 @@ func reviewWebSearchEvidenceGenericFocusTokenIsConcrete(token string) bool {
 	case "api", "apis", "config", "configuration", "provider", "providers", "model", "models", "request", "requests", "response", "responses", "streaming":
 		return false
 	}
-	return strings.ContainsAny(normalized, "_-./:") || containsReviewExternalDocDigit(normalized) || containsReviewExternalDocCamelBoundary(normalized)
+	return strings.ContainsAny(normalized, "_-./:") || containsReviewWebSearchEvidenceDigit(normalized) || containsReviewWebSearchEvidenceCamelBoundary(normalized)
+}
+
+func normalizeReviewWebSearchEvidenceGenericFocusToken(token string) (string, bool) {
+	const maxTokenBytes = 80
+	normalized := strings.Join(strings.Fields(strings.TrimSpace(token)), " ")
+	normalized = strings.Trim(normalized, ".,;:")
+	if normalized == "" || len(normalized) > maxTokenBytes || !containsReviewWebSearchEvidenceAlphaNum(normalized) {
+		return "", false
+	}
+	for _, r := range normalized {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-' || r == '.' || r == '/' || r == ':' || r == ' ':
+		default:
+			return "", false
+		}
+	}
+	return normalized, true
+}
+
+func containsReviewWebSearchEvidenceAlphaNum(token string) bool {
+	for _, r := range token {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' {
+			return true
+		}
+	}
+	return false
+}
+
+func containsReviewWebSearchEvidenceDigit(token string) bool {
+	for _, r := range token {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
+func containsReviewWebSearchEvidenceCamelBoundary(token string) bool {
+	var prevLower bool
+	for _, r := range token {
+		currentUpper := r >= 'A' && r <= 'Z'
+		if prevLower && currentUpper {
+			return true
+		}
+		prevLower = r >= 'a' && r <= 'z'
+	}
+	return false
 }

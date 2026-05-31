@@ -1,4 +1,4 @@
-package review
+package externaldoc
 
 import (
 	"bytes"
@@ -54,8 +54,8 @@ var (
 	)
 )
 
-// HTTPReviewExternalDocFetcher は HTTPS URL から bounded text snippet を取得する。
-type HTTPReviewExternalDocFetcher struct {
+// HTTPFetcher は HTTPS URL から bounded text snippet を取得する。
+type HTTPFetcher struct {
 	client       *http.Client
 	networkGuard reviewExternalDocNetworkGuard
 }
@@ -66,25 +66,25 @@ type reviewExternalDocNetworkGuard struct {
 	allowPrivateAddr bool
 }
 
-// NewHTTPReviewExternalDocFetcher は external doc fetcher を構築する。
-func NewHTTPReviewExternalDocFetcher(client *http.Client) *HTTPReviewExternalDocFetcher {
+// NewHTTPFetcher は external doc fetcher を構築する。
+func NewHTTPFetcher(client *http.Client) *HTTPFetcher {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &HTTPReviewExternalDocFetcher{
+	return &HTTPFetcher{
 		client:       client,
 		networkGuard: newReviewExternalDocNetworkGuard(),
 	}
 }
 
 // FetchExternalDoc は検索結果 URL 由来の external_doc evidence を取得する。
-func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, fetchReq ReviewExternalDocFetchRequest) ReviewExternalDocEvidence {
-	doc := ReviewExternalDocEvidence{
+func (f *HTTPFetcher) FetchExternalDoc(ctx context.Context, fetchReq FetchRequest) Evidence {
+	doc := Evidence{
 		DocID:                   fetchReq.DocID,
 		URL:                     strings.TrimSpace(fetchReq.URL),
 		SourceDomain:            reviewExternalDocSourceDomain(fetchReq.URL),
-		SourceCredibility:       ReviewExternalDocSourceCredibilityUnknown,
-		SourceCredibilityReason: normalizeReviewExternalDocSourceCredibilityReason(ReviewExternalDocSourceCredibilityUnknown, ""),
+		SourceCredibility:       SourceCredibilityUnknown,
+		SourceCredibilityReason: normalizeSourceCredibilityReason(SourceCredibilityUnknown, ""),
 		FetchedAt:               time.Now().UTC(),
 	}
 	parsed, err := url.Parse(doc.URL)
@@ -142,9 +142,9 @@ func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, fet
 	}
 	doc.Truncated = truncated
 	doc.ContentHash = reviewExternalDocContentHash(sanitized)
-	doc.SourceCredibility, doc.SourceCredibilityReason = classifyReviewExternalDocSourceCredibility(fetchReq, doc, sanitized)
-	doc.SourceCredibility = normalizeReviewExternalDocSourceCredibility(doc.SourceCredibility)
-	doc.SourceCredibilityReason = normalizeReviewExternalDocSourceCredibilityReason(doc.SourceCredibility, doc.SourceCredibilityReason)
+	doc.SourceCredibility, doc.SourceCredibilityReason = classifySourceCredibility(fetchReq, doc, sanitized)
+	doc.SourceCredibility = normalizeSourceCredibility(doc.SourceCredibility)
+	doc.SourceCredibilityReason = normalizeSourceCredibilityReason(doc.SourceCredibility, doc.SourceCredibilityReason)
 	doc.Snippets = buildReviewExternalDocSnippets(doc.DocID, sanitized, truncated, fetchReq.FocusTerms)
 	if len(doc.Snippets) == 0 {
 		doc.Error = "fetched document produced no snippets"
@@ -152,7 +152,7 @@ func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, fet
 	return doc
 }
 
-func (f *HTTPReviewExternalDocFetcher) boundedClient(initialHost string) *http.Client {
+func (f *HTTPFetcher) boundedClient(initialHost string) *http.Client {
 	base := http.DefaultClient
 	if f != nil && f.client != nil {
 		base = f.client
@@ -185,7 +185,7 @@ func reviewExternalDocURLIsHTTPS(u *url.URL) bool {
 	return u != nil && strings.EqualFold(u.Scheme, "https")
 }
 
-func (f *HTTPReviewExternalDocFetcher) effectiveNetworkGuard() reviewExternalDocNetworkGuard {
+func (f *HTTPFetcher) effectiveNetworkGuard() reviewExternalDocNetworkGuard {
 	if f != nil && (f.networkGuard.lookupIPAddr != nil || f.networkGuard.dialContext != nil || f.networkGuard.allowPrivateAddr) {
 		guard := f.networkGuard
 		guard.setDefaults()

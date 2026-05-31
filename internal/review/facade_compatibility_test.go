@@ -9,6 +9,7 @@ import (
 )
 
 var _ ReviewProbeExecutor = (*ProbeRunner)(nil)
+var _ ReviewExternalDocFetcher = (*HTTPReviewExternalDocFetcher)(nil)
 
 func TestReviewFacadeReportAndArtifactCompatibility(t *testing.T) {
 	report := newPlanAwareCleanReportForValidationTest()
@@ -68,6 +69,9 @@ func TestReviewFacadeProbeCompatibility(t *testing.T) {
 	if err := ValidateReviewProbePlan(decoded); err != nil {
 		t.Fatalf("ValidateReviewProbePlan() error = %v", err)
 	}
+	if err := ValidateReviewProbePlanAgainstEvidence(decoded, newReviewProbePlanEvidenceBundleForFacadeTest()); err != nil {
+		t.Fatalf("ValidateReviewProbePlanAgainstEvidence() error = %v", err)
+	}
 
 	requests, err := BuildReviewProbeRequestsFromPlan(decoded)
 	if err != nil {
@@ -81,4 +85,48 @@ func TestReviewFacadeProbeCompatibility(t *testing.T) {
 	}
 
 	_ = NewProbeRunner(t.TempDir())
+}
+
+func TestReviewFacadeExternalDocCompatibility(t *testing.T) {
+	fetchReq := ReviewExternalDocFetchRequest{
+		URL:   "https://docs.example.test/spec",
+		DocID: "external-doc-1",
+		FocusTerms: []ReviewExternalDocFocusTerm{
+			{Term: "previous_response_id", Reason: "query focus"},
+		},
+	}
+	doc := ReviewExternalDocEvidence{
+		DocID:             fetchReq.DocID,
+		URL:               fetchReq.URL,
+		SourceCredibility: ReviewExternalDocSourceCredibilityUnknown,
+		Snippets: []ReviewExternalDocSnippetEvidence{
+			{SnippetID: "external-doc-1-snippet-1", ContentHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+		},
+	}
+
+	if doc.SourceCredibility != ReviewExternalDocSourceCredibilityUnknown || doc.Snippets[0].SnippetID == "" {
+		t.Fatalf("externaldoc aliases produced unexpected doc = %#v", doc)
+	}
+	if NewHTTPReviewExternalDocFetcher(nil) == nil {
+		t.Fatal("NewHTTPReviewExternalDocFetcher() = nil")
+	}
+}
+
+func newReviewProbePlanEvidenceBundleForFacadeTest() ReviewEvidenceBundle {
+	repoRoot := "/tmp/repo"
+	changedPath := filepath.Join(repoRoot, "internal", "review", "probe_plan_validate.go")
+	return ReviewEvidenceBundle{
+		TargetKind: TargetCurrentChanges,
+		RepoRoot:   repoRoot,
+		CWD:        repoRoot,
+		ChangedFiles: []ReviewChangedFile{
+			{Path: changedPath, Status: "M", Unstaged: true},
+		},
+		RelatedSearchHits: []ReviewRelatedSearchHit{
+			{Path: filepath.Join(repoRoot, "internal", "review", "probe_plan_test.go"), Line: 1, Snippet: "ValidateReviewProbePlan", Reason: "focused validation coverage"},
+		},
+		Inventory: ReviewChangeInventory{
+			Production: []string{changedPath},
+		},
+	}
 }

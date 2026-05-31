@@ -1,4 +1,4 @@
-package review
+package externaldoc
 
 import (
 	"net"
@@ -8,7 +8,7 @@ import (
 
 var reviewExternalDocCredibilityTokenRE = regexp.MustCompile(`[a-z0-9]+`)
 
-func classifyReviewExternalDocSourceCredibility(fetchReq ReviewExternalDocFetchRequest, doc ReviewExternalDocEvidence, content string) (ReviewExternalDocSourceCredibility, string) {
+func classifySourceCredibility(fetchReq FetchRequest, doc Evidence, content string) (SourceCredibility, string) {
 	source := reviewExternalDocNormalizeCredibilityDomain(doc.SourceDomain)
 	title := strings.ToLower(strings.Join(strings.Fields(fetchReq.SearchResultTitle), " "))
 	body := strings.ToLower(strings.Join(strings.Fields(content), " "))
@@ -16,46 +16,46 @@ func classifyReviewExternalDocSourceCredibility(fetchReq ReviewExternalDocFetchR
 	combined := strings.TrimSpace(source + " " + title + " " + body)
 
 	if reviewExternalDocHasThirdPartySignal(source, title) {
-		return ReviewExternalDocSourceCredibilityThirdParty, "third_party: known third-party host or source metadata signal is present"
+		return SourceCredibilityThirdParty, "third_party: known third-party host or source metadata signal is present"
 	}
 	if combined == "" {
-		return ReviewExternalDocSourceCredibilityUnknown, "unknown: source metadata and content are unavailable"
+		return SourceCredibilityUnknown, "unknown: source metadata and content are unavailable"
 	}
 
 	trustedDomains := reviewExternalDocTrustedDomainsForSubject(fetchReq.QuerySubjectHint)
 	if len(trustedDomains) == 0 {
-		return ReviewExternalDocSourceCredibilityUnknown, "unknown: query subject has no trusted domain mapping for official documentation"
+		return SourceCredibilityUnknown, "unknown: query subject has no trusted domain mapping for official documentation"
 	}
 	if !reviewExternalDocSourceMatchesTrustedDomains(source, trustedDomains) {
-		return ReviewExternalDocSourceCredibilityUnknown, "unknown: source domain does not match trusted domains for the query subject"
+		return SourceCredibilityUnknown, "unknown: source domain does not match trusted domains for the query subject"
 	}
 	if !reviewExternalDocSubjectMatchesText(title, body, subjectTokens) {
-		return ReviewExternalDocSourceCredibilityUnknown, "unknown: trusted domain matched but title or content lacks a query subject text signal"
+		return SourceCredibilityUnknown, "unknown: trusted domain matched but title or content lacks a query subject text signal"
 	}
 	if !reviewExternalDocContentHasReferenceSignal(body) {
-		return ReviewExternalDocSourceCredibilityUnknown, "unknown: trusted domain and subject text matched but reference content signal is absent"
+		return SourceCredibilityUnknown, "unknown: trusted domain and subject text matched but reference content signal is absent"
 	}
-	return ReviewExternalDocSourceCredibilityOfficialCandidate, "official_candidate: trusted source domain, query subject text signal, and reference content signal are present"
+	return SourceCredibilityOfficialCandidate, "official_candidate: trusted source domain, query subject text signal, and reference content signal are present"
 }
 
-func normalizeReviewExternalDocSourceCredibility(value ReviewExternalDocSourceCredibility) ReviewExternalDocSourceCredibility {
+func normalizeSourceCredibility(value SourceCredibility) SourceCredibility {
 	switch value {
-	case ReviewExternalDocSourceCredibilityOfficialCandidate, ReviewExternalDocSourceCredibilityThirdParty, ReviewExternalDocSourceCredibilityUnknown:
+	case SourceCredibilityOfficialCandidate, SourceCredibilityThirdParty, SourceCredibilityUnknown:
 		return value
 	default:
-		return ReviewExternalDocSourceCredibilityUnknown
+		return SourceCredibilityUnknown
 	}
 }
 
-func normalizeReviewExternalDocSourceCredibilityReason(value ReviewExternalDocSourceCredibility, reason string) string {
+func normalizeSourceCredibilityReason(value SourceCredibility, reason string) string {
 	reason = strings.Join(strings.Fields(strings.TrimSpace(reason)), " ")
 	if reason != "" {
 		return reason
 	}
-	switch normalizeReviewExternalDocSourceCredibility(value) {
-	case ReviewExternalDocSourceCredibilityOfficialCandidate:
+	switch normalizeSourceCredibility(value) {
+	case SourceCredibilityOfficialCandidate:
 		return "official_candidate: source signals matched official documentation heuristics"
-	case ReviewExternalDocSourceCredibilityThirdParty:
+	case SourceCredibilityThirdParty:
 		return "third_party: source signals matched unofficial or community heuristics"
 	default:
 		return "unknown: source credibility was not established"

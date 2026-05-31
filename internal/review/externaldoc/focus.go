@@ -1,4 +1,4 @@
-package review
+package externaldoc
 
 import (
 	"regexp"
@@ -67,19 +67,20 @@ var reviewExternalDocDocsTokens = map[string]struct{}{
 	"tools":     {},
 }
 
-func buildReviewExternalDocFocusTerms(candidate reviewWebSearchEvidenceQueryCandidate, result ReviewWebSearchEvidenceResult, genericTokens []string) []ReviewExternalDocFocusTerm {
+// BuildFocusTerms は検索 query と検索結果 metadata から snippet 抽出用 focus term を作る。
+func BuildFocusTerms(query, subject, focus, resultTitle, resultSnippet string, genericTokens []string) []FocusTerm {
 	builder := reviewExternalDocFocusTermBuilder{
 		seen: make(map[string]struct{}),
 	}
-	builder.add(candidate.focus, "query focus")
-	builder.add(candidate.subject, "query subject")
-	for _, token := range extractReviewExternalDocSearchQueryTerms(candidate.query) {
+	builder.add(focus, "query focus")
+	builder.add(subject, "query subject")
+	for _, token := range extractReviewExternalDocSearchQueryTerms(query) {
 		builder.add(token, "search query")
 	}
-	for _, token := range extractReviewExternalDocResultFocusTokens(result.Title) {
+	for _, token := range extractReviewExternalDocResultFocusTokens(resultTitle) {
 		builder.add(token, "search result title")
 	}
-	for _, token := range extractReviewExternalDocResultFocusTokens(result.Snippet) {
+	for _, token := range extractReviewExternalDocResultFocusTokens(resultSnippet) {
 		builder.add(token, "search result snippet")
 	}
 	for _, token := range genericTokens {
@@ -89,7 +90,7 @@ func buildReviewExternalDocFocusTerms(candidate reviewWebSearchEvidenceQueryCand
 }
 
 type reviewExternalDocFocusTermBuilder struct {
-	terms []ReviewExternalDocFocusTerm
+	terms []FocusTerm
 	seen  map[string]struct{}
 }
 
@@ -97,7 +98,7 @@ func (b *reviewExternalDocFocusTermBuilder) add(term, reason string) {
 	if len(b.terms) >= reviewExternalDocMaxFocusTerms {
 		return
 	}
-	normalized, ok := normalizeReviewExternalDocFocusTerm(term)
+	normalized, ok := normalizeFocusTerm(term)
 	if !ok {
 		return
 	}
@@ -106,13 +107,13 @@ func (b *reviewExternalDocFocusTermBuilder) add(term, reason string) {
 		return
 	}
 	b.seen[key] = struct{}{}
-	b.terms = append(b.terms, ReviewExternalDocFocusTerm{
+	b.terms = append(b.terms, FocusTerm{
 		Term:   normalized,
 		Reason: normalizeReviewExternalDocFocusReason(reason),
 	})
 }
 
-func sanitizeReviewExternalDocFocusTerms(terms []ReviewExternalDocFocusTerm) []ReviewExternalDocFocusTerm {
+func sanitizeFocusTerms(terms []FocusTerm) []FocusTerm {
 	builder := reviewExternalDocFocusTermBuilder{
 		seen: make(map[string]struct{}),
 	}
@@ -122,7 +123,7 @@ func sanitizeReviewExternalDocFocusTerms(terms []ReviewExternalDocFocusTerm) []R
 	return builder.terms
 }
 
-func normalizeReviewExternalDocFocusTerm(term string) (string, bool) {
+func normalizeFocusTerm(term string) (string, bool) {
 	normalized := strings.Join(strings.Fields(strings.TrimSpace(term)), " ")
 	normalized = strings.Trim(normalized, ".,;:")
 	if normalized == "" || len(normalized) > reviewExternalDocMaxFocusTermBytes || !containsReviewExternalDocFocusAlphaNum(normalized) {
@@ -184,7 +185,7 @@ func extractReviewExternalDocResultFocusTokens(text string) []string {
 }
 
 func reviewExternalDocFocusTokenIsSearchTerm(token string) bool {
-	normalized, ok := normalizeReviewExternalDocFocusTerm(token)
+	normalized, ok := normalizeFocusTerm(token)
 	if !ok {
 		return false
 	}
@@ -196,7 +197,7 @@ func reviewExternalDocFocusTokenIsSearchTerm(token string) bool {
 }
 
 func reviewExternalDocFocusTokenIsResultTerm(token string) bool {
-	normalized, ok := normalizeReviewExternalDocFocusTerm(token)
+	normalized, ok := normalizeFocusTerm(token)
 	if !ok {
 		return false
 	}

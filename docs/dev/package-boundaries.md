@@ -64,3 +64,14 @@ Phase 3-B 後の probe plan / runtime と repo-root path policy は次の owner 
 - `internal/review/report`: probe result から report schema への assembly は持たない。runner facade が `ReviewProbeResult` を `ReviewProbeSummary` に変換し、report package は report schema validation に集中する。
 
 `internal/review/probe/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、Bubble Tea、Lip Gloss への import を禁止する。`internal/review/pathpolicy/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。probe 実行順、mutation 後 skip、timeout / failure / blocked / mutation outcome、allowed / denied command、report / evidence JSON schema は Phase 3-B では変更しない。
+
+## Phase 3-C: review analysis / external doc boundary
+
+Phase 3-C 後の Pass1 evidence analysis と external_doc evidence helper は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、runner orchestration、evidence collection、web search collector、model prompt / repair、progress / artifact / redaction、report / saturation flow の owner。既存の `ReviewExternalDoc*`、`ValidateReviewProbePlanAgainstEvidence`、report / saturation validation entrypoint は alias / wrapper として維持し、agent / cmd 側の import path を変えない。
+- `internal/review/analysis`: Pass1 probe plan と evidence input からの deterministic analysis owner。material path / inventory category / untracked / generic impact / truncation / no-probe related evidence coverage、review pressure signals、Pass1 plan から report `PlanScope` への変換、external_doc evidence ref と fetched snippet の照合を扱う。親 `internal/review` は import せず、親 facade が `ReviewEvidenceModelInput` / `ReviewEvidenceBundle` から analysis 用 DTO へ変換する。
+- `internal/review/externaldoc`: external documentation source DTO、source credibility classification、focus term sanitation、snippet construction、bounded HTTPS fetcher、external-document search subject helper の owner。Web search provider 呼び出しや bundle 依存の query collection orchestration は持たず、`internal/review` の collector が caller として扱う。
+- `internal/review/report`: report / saturation schema validation の owner。Pass1 probe plan 全体には依存せず、`internal/review/analysis` が作る `PlanScope` を受け取る。
+
+`internal/review/analysis/package_boundaries_test.go` と `internal/review/externaldoc/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。report schema、evidence schema、probe behavior、web search query quality、external_doc official / third_party / unknown 判定基準は Phase 3-C では変更しない。

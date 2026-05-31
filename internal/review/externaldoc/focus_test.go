@@ -1,22 +1,11 @@
-package review
+package externaldoc
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestBuildReviewExternalDocFocusTermsPrioritizesAndSanitizesSources(t *testing.T) {
-	candidate := reviewWebSearchEvidenceQueryCandidate{
-		query:   "OpenAI API web_search official documentation",
-		reason:  "changed external contract token: OpenAI API / web_search",
-		subject: "OpenAI API",
-		focus:   "web_search",
-	}
-	searchResult := ReviewWebSearchEvidenceResult{
-		Title:   "OpenAI Responses API previous_response_id guide",
-		URL:     "https://docs.example.test/responses",
-		Snippet: "Use tool_choice with text/event-stream. Ignore <script>alert(1)</script> and ordinary words.",
-	}
+func TestBuildFocusTermsPrioritizesAndSanitizesSources(t *testing.T) {
 	genericTokens := []string{
 		"web_search",
 		"WEB_SEARCH",
@@ -26,7 +15,14 @@ func TestBuildReviewExternalDocFocusTermsPrioritizesAndSanitizesSources(t *testi
 		"<script>alert</script>",
 	}
 
-	got := buildReviewExternalDocFocusTerms(candidate, searchResult, genericTokens)
+	got := BuildFocusTerms(
+		"OpenAI API web_search official documentation",
+		"OpenAI API",
+		"web_search",
+		"OpenAI Responses API previous_response_id guide",
+		"Use tool_choice with text/event-stream. Ignore <script>alert(1)</script> and ordinary words.",
+		genericTokens,
+	)
 
 	if len(got) < 2 {
 		t.Fatalf("focus terms = %#v, want query focus and subject first", got)
@@ -74,7 +70,7 @@ func TestBuildReviewExternalDocFocusTermsPrioritizesAndSanitizesSources(t *testi
 	}
 }
 
-func reviewExternalDocFocusTermsByTermForTest(terms []ReviewExternalDocFocusTerm) map[string]string {
+func reviewExternalDocFocusTermsByTermForTest(terms []FocusTerm) map[string]string {
 	result := make(map[string]string, len(terms))
 	for _, term := range terms {
 		result[term.Term] = term.Reason

@@ -132,9 +132,6 @@ func TestReviewWebSearchEvidenceCollectorPassesSafeFocusTermsToFetcher(t *testin
 			t.Fatalf("focus terms = %#v, want %q", fetcher.requests[0].FocusTerms, want)
 		}
 	}
-	if len(fetcher.requests[0].FocusTerms) > reviewExternalDocMaxFocusTerms {
-		t.Fatalf("focus terms = %d, want <= %d", len(fetcher.requests[0].FocusTerms), reviewExternalDocMaxFocusTerms)
-	}
 }
 
 func TestReviewWebSearchEvidenceCollectorPropagatesFetcherTruncation(t *testing.T) {
@@ -332,4 +329,12 @@ func reviewPressureSignalsContain(signals []reviewPressureSignalInput, want stri
 	return slices.ContainsFunc(signals, func(signal reviewPressureSignalInput) bool {
 		return signal.Signal == want
 	})
+}
+
+func reviewExternalDocFocusTermsByTermForTest(terms []ReviewExternalDocFocusTerm) map[string]string {
+	result := make(map[string]string, len(terms))
+	for _, term := range terms {
+		result[term.Term] = term.Reason
+	}
+	return result
 }

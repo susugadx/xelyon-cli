@@ -1,23 +1,19 @@
-package review
+package analysis
 
 import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 )
 
 const reviewPressureSignalMaxPathEvidence = 8
 
-type reviewPressureSignalInput struct {
-	Signal   string   `json:"signal"`
-	Summary  string   `json:"summary"`
-	Evidence []string `json:"evidence"`
-}
-
 type reviewPressureSignalSpec struct {
 	signal   string
 	summary  string
-	evidence func(ReviewEvidenceModelInput) []string
+	evidence func(EvidenceInput) []string
 }
 
 var reviewPressureSignalSpecs = []reviewPressureSignalSpec{
@@ -113,8 +109,12 @@ var reviewPressureSignalSpecs = []reviewPressureSignalSpec{
 	},
 }
 
-func buildReviewPressureSignalInputs(input ReviewEvidenceModelInput) []reviewPressureSignalInput {
-	signals := make([]reviewPressureSignalInput, 0)
+// BuildPressureSignals は evidence input から Pass1 向け pressure signal を deterministic に構築する。
+func BuildPressureSignals(input EvidenceInput, opts PressureSignalOptions) []PressureSignal {
+	if len(opts.KnownRuleFilePaths) > 0 {
+		input.KnownRuleFilePaths = append([]string(nil), opts.KnownRuleFilePaths...)
+	}
+	signals := make([]PressureSignal, 0)
 	for _, spec := range reviewPressureSignalSpecs {
 		evidence := spec.evidence(input)
 		if len(evidence) == 0 {
@@ -125,18 +125,18 @@ func buildReviewPressureSignalInputs(input ReviewEvidenceModelInput) []reviewPre
 	return signals
 }
 
-func newReviewPressureSignalInput(signal, summary string, evidence []string) reviewPressureSignalInput {
+func newReviewPressureSignalInput(signal, summary string, evidence []string) PressureSignal {
 	if evidence == nil {
 		evidence = []string{}
 	}
-	return reviewPressureSignalInput{
+	return PressureSignal{
 		Signal:   signal,
 		Summary:  summary,
 		Evidence: evidence,
 	}
 }
 
-func reviewPressureSignalProductionWithoutTestsEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalProductionWithoutTestsEvidence(input EvidenceInput) []string {
 	inventory := input.ChangeInventory
 	if len(inventory.Production) == 0 || len(inventory.Tests) > 0 {
 		return nil
@@ -144,7 +144,7 @@ func reviewPressureSignalProductionWithoutTestsEvidence(input ReviewEvidenceMode
 	return append(reviewPressureSignalPathEvidence("production", inventory.Production), "tests: []")
 }
 
-func reviewPressureSignalConfigOrSchemaEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalConfigOrSchemaEvidence(input EvidenceInput) []string {
 	inventory := input.ChangeInventory
 	evidence := make([]string, 0)
 	evidence = append(evidence, reviewPressureSignalPathEvidence("config", inventory.Config)...)
@@ -152,11 +152,13 @@ func reviewPressureSignalConfigOrSchemaEvidence(input ReviewEvidenceModelInput) 
 	return evidence
 }
 
-func reviewPressureSignalPromptContractEvidence(input ReviewEvidenceModelInput) []string {
-	return reviewPressureSignalTokenPathEvidence("prompt_or_instruction_path", reviewPressureSignalAllInventoryPaths(input.ChangeInventory), reviewPressureSignalMatchesPromptContractPath)
+func reviewPressureSignalPromptContractEvidence(input EvidenceInput) []string {
+	return reviewPressureSignalTokenPathEvidence("prompt_or_instruction_path", reviewPressureSignalAllInventoryPaths(input.ChangeInventory), func(path string) bool {
+		return reviewPressureSignalMatchesPromptContractPath(path, input.KnownRuleFilePaths)
+	})
 }
 
-func reviewPressureSignalDeletedOrRenamedEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalDeletedOrRenamedEvidence(input EvidenceInput) []string {
 	inventory := input.ChangeInventory
 	if len(inventory.DeletedFiles) == 0 && len(inventory.RenamedFiles) == 0 {
 		return nil
@@ -167,28 +169,28 @@ func reviewPressureSignalDeletedOrRenamedEvidence(input ReviewEvidenceModelInput
 	return evidence
 }
 
-func reviewPressureSignalUntrackedEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalUntrackedEvidence(input EvidenceInput) []string {
 	if len(input.ChangeInventory.Untracked) == 0 {
 		return nil
 	}
 	return reviewPressureSignalPathEvidence("untracked", input.ChangeInventory.Untracked)
 }
 
-func reviewPressureSignalGeneratedEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalGeneratedEvidence(input EvidenceInput) []string {
 	if len(input.ChangeInventory.Generated) == 0 {
 		return nil
 	}
 	return reviewPressureSignalPathEvidence("generated", input.ChangeInventory.Generated)
 }
 
-func reviewPressureSignalGenericImpactCandidatesPresentEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalGenericImpactCandidatesPresentEvidence(input EvidenceInput) []string {
 	if len(input.GenericImpact.Candidates) == 0 {
 		return nil
 	}
 	return reviewPressureSignalGenericImpactCandidateEvidence(input.GenericImpact.Candidates)
 }
 
-func reviewPressureSignalGenericImpactCandidatesTruncatedEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalGenericImpactCandidatesTruncatedEvidence(input EvidenceInput) []string {
 	if !input.GenericImpact.Truncated {
 		return nil
 	}
@@ -197,11 +199,11 @@ func reviewPressureSignalGenericImpactCandidatesTruncatedEvidence(input ReviewEv
 	return evidence
 }
 
-func reviewPressureSignalGenericImpactCandidatesTestsOrDocsEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalGenericImpactCandidatesTestsOrDocsEvidence(input EvidenceInput) []string {
 	evidence := make([]string, 0)
 	for _, candidate := range input.GenericImpact.Candidates {
 		switch candidate.Role {
-		case ReviewGenericImpactRoleSameStemTestOrSpec, ReviewGenericImpactRoleNearbyTestOrTestsDir, ReviewGenericImpactRoleDocsReference:
+		case "same_stem_test_or_spec", "nearby_test_or_tests_dir", "docs_reference":
 			evidence = append(evidence, "generic_impact_candidate: "+candidate.Role+" "+candidate.Path)
 		}
 		if len(evidence) == reviewPressureSignalMaxPathEvidence {
@@ -211,32 +213,32 @@ func reviewPressureSignalGenericImpactCandidatesTestsOrDocsEvidence(input Review
 	return evidence
 }
 
-func reviewPressureSignalGenericImpactCandidatesEmptyForNonGoEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalGenericImpactCandidatesEmptyForNonGoEvidence(input EvidenceInput) []string {
 	if len(input.GenericImpact.Candidates) > 0 || !reviewPressureSignalHasNonGoChangedPath(input) {
 		return nil
 	}
 	return []string{"generic_impact_candidates: []", "non_go_changed_paths: present"}
 }
 
-func reviewPressureSignalWebSearchEvidenceDisabledForExternalContractEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalWebSearchEvidenceDisabledForExternalContractEvidence(input EvidenceInput) []string {
 	if input.WebSearchEvidence.Enabled {
 		return nil
 	}
-	subjects := reviewWebSearchEvidenceExternalSubjects(reviewPressureSignalWebSearchCorpus(input))
+	subjects := externaldoc.SearchSubjectsForCorpus(reviewPressureSignalWebSearchCorpus(input))
 	if len(subjects) == 0 {
 		return nil
 	}
 	return reviewPressureSignalPathEvidence("external_contract_subject", subjects)
 }
 
-func reviewPressureSignalWebSearchEvidencePresentEvidence(input ReviewEvidenceModelInput) []string {
-	if !input.WebSearchEvidence.Enabled || !reviewWebSearchEvidenceHasFetchedSnippet(input.WebSearchEvidence) {
+func reviewPressureSignalWebSearchEvidencePresentEvidence(input EvidenceInput) []string {
+	if !input.WebSearchEvidence.Enabled || !externaldoc.HasFetchedSnippet(input.WebSearchEvidence.ExternalDocs) {
 		return nil
 	}
 	return reviewPressureSignalExternalDocEvidence(input.WebSearchEvidence.ExternalDocs, false)
 }
 
-func reviewPressureSignalWebSearchEvidenceFailedEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalWebSearchEvidenceFailedEvidence(input EvidenceInput) []string {
 	if !input.WebSearchEvidence.Enabled {
 		return nil
 	}
@@ -257,7 +259,7 @@ func reviewPressureSignalWebSearchEvidenceFailedEvidence(input ReviewEvidenceMod
 	return reviewPressureSignalDedupeEvidence(evidence)
 }
 
-func reviewPressureSignalWebSearchEvidenceTruncatedEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalWebSearchEvidenceTruncatedEvidence(input EvidenceInput) []string {
 	if !input.WebSearchEvidence.Enabled || !input.WebSearchEvidence.Truncated && !input.TruncationFlags.WebSearchEvidence {
 		return nil
 	}
@@ -266,7 +268,7 @@ func reviewPressureSignalWebSearchEvidenceTruncatedEvidence(input ReviewEvidence
 	return evidence
 }
 
-func reviewPressureSignalWebSearchEvidenceInconclusiveEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalWebSearchEvidenceInconclusiveEvidence(input EvidenceInput) []string {
 	if !input.WebSearchEvidence.Enabled || !input.WebSearchEvidence.Inconclusive {
 		return nil
 	}
@@ -274,14 +276,14 @@ func reviewPressureSignalWebSearchEvidenceInconclusiveEvidence(input ReviewEvide
 	if len(input.WebSearchEvidence.Queries) == 0 {
 		evidence = append(evidence, "web_search_queries: []")
 	}
-	if !reviewWebSearchEvidenceHasFetchedSnippet(input.WebSearchEvidence) {
+	if !externaldoc.HasFetchedSnippet(input.WebSearchEvidence.ExternalDocs) {
 		evidence = append(evidence, "external_doc_snippets: []")
 	}
 	return evidence
 }
 
-func reviewPressureSignalExternalDocEvidence(docs []ReviewExternalDocEvidence, onlyTruncated bool) []string {
-	evidence := make([]string, 0, minReviewEvidenceInt(len(docs), reviewPressureSignalMaxPathEvidence))
+func reviewPressureSignalExternalDocEvidence(docs []externaldoc.Evidence, onlyTruncated bool) []string {
+	evidence := make([]string, 0, minReviewAnalysisInt(len(docs), reviewPressureSignalMaxPathEvidence))
 	for _, doc := range docs {
 		if onlyTruncated && !doc.Truncated {
 			continue
@@ -301,7 +303,7 @@ func reviewPressureSignalExternalDocEvidence(docs []ReviewExternalDocEvidence, o
 	return evidence
 }
 
-func reviewPressureSignalWebSearchCorpus(input ReviewEvidenceModelInput) string {
+func reviewPressureSignalWebSearchCorpus(input EvidenceInput) string {
 	var parts []string
 	parts = append(parts, reviewPressureSignalAllInventoryPaths(input.ChangeInventory)...)
 	parts = append(parts, input.GenericImpact.Tokens...)
@@ -311,8 +313,8 @@ func reviewPressureSignalWebSearchCorpus(input ReviewEvidenceModelInput) string 
 	return strings.ToLower(strings.Join(parts, "\n"))
 }
 
-func reviewPressureSignalGenericImpactCandidateEvidence(candidates []ReviewEvidenceGenericImpactCandidateInput) []string {
-	evidence := make([]string, 0, minReviewEvidenceInt(len(candidates), reviewPressureSignalMaxPathEvidence)+1)
+func reviewPressureSignalGenericImpactCandidateEvidence(candidates []GenericImpactCandidate) []string {
+	evidence := make([]string, 0, minReviewAnalysisInt(len(candidates), reviewPressureSignalMaxPathEvidence)+1)
 	for i, candidate := range candidates {
 		if i >= reviewPressureSignalMaxPathEvidence {
 			evidence = append(evidence, "generic_impact_candidates: ... ("+strconv.Itoa(len(candidates)-i)+" more)")
@@ -327,10 +329,10 @@ func reviewPressureSignalGenericImpactCandidateEvidence(candidates []ReviewEvide
 	return evidence
 }
 
-func reviewPressureSignalHasNonGoChangedPath(input ReviewEvidenceModelInput) bool {
+func reviewPressureSignalHasNonGoChangedPath(input EvidenceInput) bool {
 	for _, path := range reviewPressureSignalAllInventoryPaths(input.ChangeInventory) {
 		normalized := strings.ToLower(filepath.ToSlash(path))
-		if strings.TrimSpace(normalized) == "" || normalized == reviewEvidenceOutsideRepoPathDisplay {
+		if strings.TrimSpace(normalized) == "" || normalized == outsideRepoPathDisplay {
 			continue
 		}
 		if filepath.Ext(normalized) != ".go" {
@@ -340,7 +342,7 @@ func reviewPressureSignalHasNonGoChangedPath(input ReviewEvidenceModelInput) boo
 	return false
 }
 
-func reviewPressureSignalAllInventoryPaths(inventory ReviewEvidenceChangeInventoryInput) []string {
+func reviewPressureSignalAllInventoryPaths(inventory ChangeInventory) []string {
 	paths := make([]string, 0,
 		len(inventory.Generated)+
 			len(inventory.Tests)+
@@ -370,16 +372,16 @@ func reviewPressureSignalMatchesSchemaOrContractPath(path string) bool {
 		strings.Contains(normalized, "contract")
 }
 
-func reviewPressureSignalMatchesPromptContractPath(path string) bool {
+func reviewPressureSignalMatchesPromptContractPath(path string, ruleFilePaths []string) bool {
 	normalized := strings.ToLower(filepath.ToSlash(path))
-	return reviewPressureSignalMatchesKnownRuleFilePath(normalized) ||
+	return reviewPressureSignalMatchesKnownRuleFilePath(normalized, ruleFilePaths) ||
 		strings.Contains(normalized, "prompt") ||
 		strings.Contains(normalized, "instruction") ||
 		strings.Contains(normalized, "agents")
 }
 
-func reviewPressureSignalMatchesKnownRuleFilePath(normalizedPath string) bool {
-	for _, rulePath := range reviewEvidenceRuleFilePaths {
+func reviewPressureSignalMatchesKnownRuleFilePath(normalizedPath string, ruleFilePaths []string) bool {
+	for _, rulePath := range ruleFilePaths {
 		normalizedRulePath := strings.ToLower(filepath.ToSlash(rulePath))
 		if normalizedPath == normalizedRulePath || strings.HasSuffix(normalizedPath, "/"+normalizedRulePath) {
 			return true
@@ -388,7 +390,7 @@ func reviewPressureSignalMatchesKnownRuleFilePath(normalizedPath string) bool {
 	return false
 }
 
-func reviewPressureSignalRelatedContextEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalRelatedContextEvidence(input EvidenceInput) []string {
 	evidence := make([]string, 0)
 	if len(input.RelatedContextFiles) == 0 {
 		evidence = append(evidence, "related_context_files: []")
@@ -414,7 +416,7 @@ func reviewPressureSignalRelatedContextEvidence(input ReviewEvidenceModelInput) 
 	return reviewPressureSignalDedupeEvidence(evidence)
 }
 
-func reviewPressureSignalAllRelatedContextSkipped(files []ReviewEvidenceContextFileInput) bool {
+func reviewPressureSignalAllRelatedContextSkipped(files []ContextFile) bool {
 	if len(files) == 0 {
 		return false
 	}
@@ -426,14 +428,14 @@ func reviewPressureSignalAllRelatedContextSkipped(files []ReviewEvidenceContextF
 	return true
 }
 
-func reviewPressureSignalRelatedContextFileEvidence(prefix string, file ReviewEvidenceContextFileInput) string {
+func reviewPressureSignalRelatedContextFileEvidence(prefix string, file ContextFile) string {
 	if strings.TrimSpace(file.SkipReason) == "" {
 		return prefix + ": " + file.Path
 	}
 	return prefix + ": " + file.Path + " (" + file.SkipReason + ")"
 }
 
-func reviewPressureSignalRelatedSearchEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalRelatedSearchEvidence(input EvidenceInput) []string {
 	evidence := make([]string, 0, 2)
 	if len(input.RelatedSearchHits) == 0 {
 		evidence = append(evidence, "related_search_hits: []")
@@ -444,11 +446,11 @@ func reviewPressureSignalRelatedSearchEvidence(input ReviewEvidenceModelInput) [
 	return evidence
 }
 
-func reviewPressureSignalDiffOrContextTruncatedEvidence(input ReviewEvidenceModelInput) []string {
+func reviewPressureSignalDiffOrContextTruncatedEvidence(input EvidenceInput) []string {
 	return reviewPressureSignalTruncationEvidence(input.TruncationFlags)
 }
 
-func reviewPressureSignalTruncationEvidence(flags ReviewEvidenceTruncationFlagsInput) []string {
+func reviewPressureSignalTruncationEvidence(flags TruncationFlags) []string {
 	evidence := make([]string, 0)
 	if flags.StatusShort {
 		evidence = append(evidence, "status_short: truncated")
@@ -477,7 +479,7 @@ func reviewPressureSignalTruncationEvidence(flags ReviewEvidenceTruncationFlagsI
 	return reviewPressureSignalDedupeEvidence(evidence)
 }
 
-func reviewPressureSignalPathTruncationEvidence(prefix string, flags []ReviewEvidencePathTruncationInput) []string {
+func reviewPressureSignalPathTruncationEvidence(prefix string, flags []PathTruncation) []string {
 	evidence := make([]string, 0, len(flags))
 	for _, flag := range flags {
 		if flag.Truncated {
@@ -488,7 +490,7 @@ func reviewPressureSignalPathTruncationEvidence(prefix string, flags []ReviewEvi
 }
 
 func reviewPressureSignalPathEvidence(prefix string, paths []string) []string {
-	evidence := make([]string, 0, minReviewEvidenceInt(len(paths), reviewPressureSignalMaxPathEvidence)+1)
+	evidence := make([]string, 0, minReviewAnalysisInt(len(paths), reviewPressureSignalMaxPathEvidence)+1)
 	for i, path := range paths {
 		if i >= reviewPressureSignalMaxPathEvidence {
 			evidence = append(evidence, prefix+": ... ("+strconv.Itoa(len(paths)-i)+" more)")
@@ -526,4 +528,11 @@ func reviewPressureSignalDedupeEvidence(evidence []string) []string {
 		result = append(result, item)
 	}
 	return result
+}
+
+func minReviewAnalysisInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

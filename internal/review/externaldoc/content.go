@@ -1,4 +1,4 @@
-package review
+package externaldoc
 
 import (
 	"crypto/sha256"
@@ -43,18 +43,18 @@ func sanitizeReviewExternalDocText(body []byte, contentType string) string {
 	return strings.TrimSpace(reviewExternalDocSpaceRE.ReplaceAllString(text, " "))
 }
 
-func buildReviewExternalDocSnippets(docID, content string, sourceTruncated bool, focusTerms []ReviewExternalDocFocusTerm) []ReviewExternalDocSnippetEvidence {
+func buildReviewExternalDocSnippets(docID, content string, sourceTruncated bool, focusTerms []FocusTerm) []SnippetEvidence {
 	if snippets := buildReviewExternalDocFocusedSnippets(docID, content, sourceTruncated, focusTerms); len(snippets) > 0 {
 		return snippets
 	}
 	return buildReviewExternalDocPrefixSnippets(docID, content, sourceTruncated)
 }
 
-func buildReviewExternalDocFocusedSnippets(docID, content string, sourceTruncated bool, focusTerms []ReviewExternalDocFocusTerm) []ReviewExternalDocSnippetEvidence {
-	snippets := make([]ReviewExternalDocSnippetEvidence, 0, reviewExternalDocMaxSnippets)
+func buildReviewExternalDocFocusedSnippets(docID, content string, sourceTruncated bool, focusTerms []FocusTerm) []SnippetEvidence {
+	snippets := make([]SnippetEvidence, 0, reviewExternalDocMaxSnippets)
 	seenRanges := make(map[reviewExternalDocSnippetRange]struct{})
 	seenHashes := make(map[string]struct{})
-	for _, focusTerm := range sanitizeReviewExternalDocFocusTerms(focusTerms) {
+	for _, focusTerm := range sanitizeFocusTerms(focusTerms) {
 		matchStart := reviewExternalDocIndexFoldASCII(content, focusTerm.Term)
 		if matchStart < 0 {
 			continue
@@ -77,7 +77,7 @@ func buildReviewExternalDocFocusedSnippets(docID, content string, sourceTruncate
 		}
 		seenRanges[snippetRange] = struct{}{}
 		seenHashes[contentHash] = struct{}{}
-		snippets = append(snippets, ReviewExternalDocSnippetEvidence{
+		snippets = append(snippets, SnippetEvidence{
 			SnippetID:   fmt.Sprintf("%s-snippet-%d", docID, len(snippets)+1),
 			Content:     chunk,
 			ContentHash: contentHash,
@@ -101,8 +101,8 @@ func (r reviewExternalDocSnippetRange) empty() bool {
 	return r.start >= r.end
 }
 
-func buildReviewExternalDocPrefixSnippets(docID, content string, sourceTruncated bool) []ReviewExternalDocSnippetEvidence {
-	var snippets []ReviewExternalDocSnippetEvidence
+func buildReviewExternalDocPrefixSnippets(docID, content string, sourceTruncated bool) []SnippetEvidence {
+	var snippets []SnippetEvidence
 	remaining := content
 	for i := 1; i <= reviewExternalDocMaxSnippets && strings.TrimSpace(remaining) != ""; i++ {
 		chunk := reviewExternalDocBoundedString(remaining, reviewExternalDocMaxSnippetBytes)
@@ -111,7 +111,7 @@ func buildReviewExternalDocPrefixSnippets(docID, content string, sourceTruncated
 			break
 		}
 		truncated := len(chunk) < len(remaining) || sourceTruncated
-		snippets = append(snippets, ReviewExternalDocSnippetEvidence{
+		snippets = append(snippets, SnippetEvidence{
 			SnippetID:   fmt.Sprintf("%s-snippet-%d", docID, i),
 			Content:     chunk,
 			ContentHash: reviewExternalDocContentHash(chunk),
