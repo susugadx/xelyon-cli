@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"os/exec"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 type reviewEvidenceGitProcessRequest struct {
@@ -44,7 +46,7 @@ func newReviewEvidenceGitProcess(ctx context.Context, req reviewEvidenceGitProce
 }
 
 func resolveReviewEvidenceGitExecutable(repoRoot string, env []string) (string, error) {
-	return resolveCommandPath("git", commandResolutionContext{
+	return reviewprobe.ResolveCommandPath("git", reviewprobe.CommandResolutionContext{
 		RepoRoot: repoRoot,
 		WorkDir:  repoRoot,
 		Env:      env,

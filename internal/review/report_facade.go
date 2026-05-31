@@ -210,18 +210,6 @@ func ValidateReviewSaturationCheck(check ReviewSaturationCheck, plan ReviewProbe
 	return reviewreport.ValidateReviewSaturationCheck(check, reportPlanScopeFromProbePlan(plan), finalizedReport)
 }
 
-func validateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID map[string]ReviewProbeSummary) error {
-	return reviewreport.ValidateEvidenceRef(field, ref, probeSummariesByID)
-}
-
-func isKnownReviewGroupSeverity(severity ReviewGroupSeverity) bool {
-	return reviewreport.IsKnownReviewGroupSeverity(severity)
-}
-
-func isKnownReviewEvidenceKind(kind string) bool {
-	return reviewreport.IsKnownReviewEvidenceKind(kind)
-}
-
 func reportPlanScopeFromProbePlan(plan ReviewProbePlan) reviewreport.PlanScope {
 	scope := reviewreport.PlanScope{
 		ImpactSurfaces: make([]reviewreport.PlanImpactSurface, 0, len(plan.ImpactSurfaces)),

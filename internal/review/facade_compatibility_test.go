@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+var _ ReviewProbeExecutor = (*ProbeRunner)(nil)
 
 func TestReviewFacadeReportAndArtifactCompatibility(t *testing.T) {
 	report := newPlanAwareCleanReportForValidationTest()
@@ -49,4 +52,33 @@ func TestReviewFacadeReportAndArtifactCompatibility(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(writer.Dir(), "report.json")); err != nil {
 		t.Fatalf("facade artifact writer did not write report.json: %v", err)
 	}
+}
+
+func TestReviewFacadeProbeCompatibility(t *testing.T) {
+	plan := newValidReviewProbePlanForTest()
+	planJSON, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatalf("json.Marshal(plan) error = %v", err)
+	}
+
+	decoded, err := DecodeReviewProbePlanJSON(planJSON)
+	if err != nil {
+		t.Fatalf("DecodeReviewProbePlanJSON() error = %v", err)
+	}
+	if err := ValidateReviewProbePlan(decoded); err != nil {
+		t.Fatalf("ValidateReviewProbePlan() error = %v", err)
+	}
+
+	requests, err := BuildReviewProbeRequestsFromPlan(decoded)
+	if err != nil {
+		t.Fatalf("BuildReviewProbeRequestsFromPlan() error = %v", err)
+	}
+	if len(requests) != len(plan.Probes) {
+		t.Fatalf("request count = %d, want %d", len(requests), len(plan.Probes))
+	}
+	if requests[0].ID != plan.Probes[0].ID || !reflect.DeepEqual(requests[0].Commands[0].Args, plan.Probes[0].Commands[0].Args) {
+		t.Fatalf("converted request = %#v, want plan-derived request", requests[0])
+	}
+
+	_ = NewProbeRunner(t.TempDir())
 }

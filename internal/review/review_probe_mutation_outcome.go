@@ -1,14 +1,11 @@
 package review
 
+import reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+
 // canonicalizeReviewProbeResultMutationOutcome は mutation outcome の内部表現を揃える。
 // status と flag のどちらかが mutation を示す場合、両方を mutation として扱う。
 func canonicalizeReviewProbeResultMutationOutcome(result ReviewProbeResult) ReviewProbeResult {
-	if !isReviewProbeResultMutationOutcome(result) {
-		return result
-	}
-	result.Status = ReviewProbeMutatedWorktree
-	result.MutatedWorktree = true
-	return result
+	return reviewprobe.CanonicalizeReviewProbeResultMutationOutcome(result)
 }
 
 func canonicalizeReviewProbeSummaryMutationOutcome(summary ReviewProbeSummary) ReviewProbeSummary {
@@ -27,7 +24,7 @@ func canonicalizeReviewProbeSummaryMutationOutcomes(summaries []ReviewProbeSumma
 }
 
 func isReviewProbeResultMutationOutcome(result ReviewProbeResult) bool {
-	return isReviewProbeMutationOutcome(result.Status, result.MutatedWorktree)
+	return reviewprobe.IsReviewProbeResultMutationOutcome(result)
 }
 
 func isReviewProbeSummaryMutationOutcome(summary ReviewProbeSummary) bool {
@@ -35,5 +32,5 @@ func isReviewProbeSummaryMutationOutcome(summary ReviewProbeSummary) bool {
 }
 
 func isReviewProbeMutationOutcome(status ReviewProbeStatus, mutatedWorktree bool) bool {
-	return status == ReviewProbeMutatedWorktree || mutatedWorktree
+	return reviewprobe.IsReviewProbeMutationOutcome(status, mutatedWorktree)
 }

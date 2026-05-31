@@ -6,6 +6,8 @@ import (
 	pathpkg "path"
 	"path/filepath"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/pathpolicy"
 )
 
 func resolveReviewEvidenceDirs(repoRoot, cwd string) (string, string, error) {
@@ -99,7 +101,7 @@ func validateReviewEvidencePathWithinRepoRoot(repoRoot, absPath, label string) e
 	if !filepath.IsAbs(absPath) {
 		return fmt.Errorf("%s is not absolute after resolution", label)
 	}
-	inside, err := isPathWithinRepoRoot(repoRoot, filepath.Clean(absPath))
+	inside, err := pathpolicy.IsWithinRoot(repoRoot, filepath.Clean(absPath))
 	if err != nil {
 		return fmt.Errorf("failed to validate %s: %w", label, err)
 	}
@@ -114,7 +116,7 @@ func validateReviewEvidenceExistingPath(repoRoot, absPath, label string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve %s: %w", label, err)
 	}
-	inside, err := isPathWithinRepoRoot(repoRoot, filepath.Clean(evaluated))
+	inside, err := pathpolicy.IsWithinRoot(repoRoot, filepath.Clean(evaluated))
 	if err != nil {
 		return fmt.Errorf("failed to validate %s symlink target: %w", label, err)
 	}

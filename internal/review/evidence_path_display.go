@@ -3,6 +3,8 @@ package review
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/pathpolicy"
 )
 
 const reviewEvidenceOutsideRepoPathDisplay = "<outside-repo>"
@@ -84,7 +86,7 @@ func formatReviewEvidenceAbsolutePathDisplay(repoRoot, candidate string) (string
 }
 
 func formatReviewEvidenceRepoRelativePathDisplay(repoRoot, candidate string) (string, bool) {
-	inside, err := isPathWithinRepoRoot(repoRoot, candidate)
+	inside, err := pathpolicy.IsWithinRoot(repoRoot, candidate)
 	if err != nil || !inside {
 		return "", false
 	}

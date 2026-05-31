@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func reviewProbePlanPromptContract() string {
@@ -276,27 +278,15 @@ Verdict contract:
 }
 
 func sortedQuotedHostReadOnlyCommandNames() string {
-	names := make([]string, 0, len(hostReadOnlyCommandSpecs))
-	for name := range hostReadOnlyCommandSpecs {
-		names = append(names, name)
-	}
-	return quoteAndJoinSortedReviewPromptValues(names)
+	return quoteAndJoinSortedReviewPromptValues(reviewprobe.HostReadOnlyCommandNames())
 }
 
 func sortedQuotedScratchOnlyCommandNames() string {
-	names := make([]string, 0, len(scratchOnlyCommandSpecs))
-	for name := range scratchOnlyCommandSpecs {
-		names = append(names, name)
-	}
-	return quoteAndJoinSortedReviewPromptValues(names)
+	return quoteAndJoinSortedReviewPromptValues(reviewprobe.ScratchOnlyCommandNames())
 }
 
 func sortedQuotedRepoSandboxCommandNames() string {
-	names := make([]string, 0, len(repoSandboxCommandSpecs))
-	for name := range repoSandboxCommandSpecs {
-		names = append(names, name)
-	}
-	return quoteAndJoinSortedReviewPromptValues(names)
+	return quoteAndJoinSortedReviewPromptValues(reviewprobe.RepoSandboxCommandNames())
 }
 
 func reviewProbeImpactSurfaceCategoryPromptValues() []string {

@@ -22,10 +22,6 @@ const (
 	ReviewProbeRepoSandbox = domain.ReviewProbeRepoSandbox
 )
 
-func isKnownReviewProbeMode(mode ReviewProbeMode) bool {
-	return domain.IsKnownReviewProbeMode(mode)
-}
-
 // ReviewProbeStatus は probe 実行結果の状態を表す。
 type ReviewProbeStatus = domain.ReviewProbeStatus
 

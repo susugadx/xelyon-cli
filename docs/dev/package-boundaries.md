@@ -53,3 +53,14 @@ Phase 3-A 後の `/review` report schema と artifact 保存境界は次の owne
 - `internal/review/artifact`: review run artifact writer、artifact directory / name / repo-local path validation、buffered writer の owner。runner の保存制御、warning 出力、redaction 適用タイミングは `internal/review` に残す。
 
 `internal/review/report/package_boundaries_test.go` と `internal/review/domain/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。`internal/review/artifact/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、Bubble Tea、Lip Gloss への import を禁止する。evidence path / probe path policy は Phase 3-A では動かさず、repo root 内判定の owner を決める後続工程で扱う。
+
+## Phase 3-B: review probe / path policy boundary
+
+Phase 3-B 後の probe plan / runtime と repo-root path policy は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、runner orchestration、model prompt、evidence cross validation、progress / artifact / redaction、report / saturation flow の owner。既存の probe plan / runtime public-ish 名は alias / wrapper として維持し、agent / cmd 側の import path を変えない。
+- `internal/review/probe`: probe plan DTO / strict decode / basic validation / request conversion、probe runtime request/result DTO、`ProbeRunner`、host_readonly / scratch_only / repo_sandbox executor、command allowlist、sandbox policy、generated file / worktree snapshot / Go toolchain helper、review Git args/env policy、probe result mutation outcome helper の owner。`internal/review/domain` と `internal/review/report` には依存してよいが、親 `internal/review` には依存しない。
+- `internal/review/pathpolicy`: repo-root containment の lexical / symlink helper owner。evidence path schema や sandbox-specific error contract は持たず、caller がそれぞれの error message / `errors.Is` contract に変換する。
+- `internal/review/report`: probe result から report schema への assembly は持たない。runner facade が `ReviewProbeResult` を `ReviewProbeSummary` に変換し、report package は report schema validation に集中する。
+
+`internal/review/probe/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、Bubble Tea、Lip Gloss への import を禁止する。`internal/review/pathpolicy/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。probe 実行順、mutation 後 skip、timeout / failure / blocked / mutation outcome、allowed / denied command、report / evidence JSON schema は Phase 3-B では変更しない。
