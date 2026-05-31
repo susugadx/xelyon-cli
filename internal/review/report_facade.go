@@ -58,8 +58,6 @@ const (
 	ReviewGroupSeverityInfo = reviewreport.ReviewGroupSeverityInfo
 )
 
-var reviewGroupSeverities = reviewreport.KnownReviewGroupSeverities()
-
 // ReviewReport は `/review` の最終 report schema を表す。
 type ReviewReport = reviewreport.ReviewReport
 
@@ -92,8 +90,6 @@ const (
 	ReviewEvidenceKindExternalDoc = reviewreport.ReviewEvidenceKindExternalDoc
 )
 
-var reviewEvidenceKinds = reviewreport.KnownReviewEvidenceKinds()
-
 // ReviewCommandIndex は command index の明示値を返す。
 func ReviewCommandIndex(i int) *int {
 	return reviewreport.ReviewCommandIndex(i)
@@ -119,8 +115,6 @@ const (
 	ReviewReportImpactSurfaceResidualRisk = reviewreport.ReviewReportImpactSurfaceResidualRisk
 )
 
-var reviewReportImpactSurfaceStatuses = reviewreport.KnownReviewReportImpactSurfaceStatuses()
-
 // ReviewReportCandidateRiskStatus は Pass2 での candidate risk 処理結果。
 type ReviewReportCandidateRiskStatus = reviewreport.ReviewReportCandidateRiskStatus
 
@@ -134,8 +128,6 @@ const (
 	// ReviewReportCandidateRiskResidualRisk は residual-risk candidate risk coverage を表す。
 	ReviewReportCandidateRiskResidualRisk = reviewreport.ReviewReportCandidateRiskResidualRisk
 )
-
-var reviewReportCandidateRiskStatuses = reviewreport.KnownReviewReportCandidateRiskStatuses()
 
 // ReviewReportImpactSurfaceCoverage は Pass1 impact surface 1 件の Pass2 処理結果。
 type ReviewReportImpactSurfaceCoverage = reviewreport.ReviewReportImpactSurfaceCoverage

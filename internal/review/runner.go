@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 )
 
 var (
@@ -108,13 +110,16 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	}
 	probeSummaries := BuildReviewProbeSummaries(probeResults)
 	redactor := newReviewRunnerPromptRedactor(bundle, probeResults)
-	r.saveReviewRunJSONArtifact("probe_results.json", buildReviewProbeResultPromptContexts(probeResults, redactor), redactor)
+	r.saveReviewRunJSONArtifact("probe_results.json", reviewmodelinput.BuildProbeResultPromptContexts(probeResults, redactor), redactor)
 
 	return r.completeReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle)
 }
 
 func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRequest, evidenceMarkdown string, bundle ReviewEvidenceBundle) (ReviewProbePlan, error) {
-	planPrompt := buildReviewProbePlanPrompt(req, evidenceMarkdown)
+	planPrompt := reviewmodelinput.BuildProbePlanPrompt(reviewmodelinput.ProbePlanPromptInput{
+		CustomInstructions: req.CustomInstructions,
+		EvidenceMarkdown:   evidenceMarkdown,
+	})
 	redactor := newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("probe_plan_prompt.md", planPrompt, redactor)
 	planResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
@@ -132,12 +137,12 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 		return plan, nil
 	}
 
-	repairPrompt := buildReviewProbePlanRepairPrompt(
-		req,
-		evidenceMarkdown,
-		planResp.Content,
-		decodeErr,
-	)
+	repairPrompt := reviewmodelinput.BuildProbePlanRepairPrompt(reviewmodelinput.ProbePlanRepairPromptInput{
+		CustomInstructions:    req.CustomInstructions,
+		EvidenceMarkdown:      evidenceMarkdown,
+		InvalidOutput:         planResp.Content,
+		DecodeOrValidationErr: decodeErr,
+	})
 	r.saveReviewRunTextArtifact("probe_plan_prompt.md", repairPrompt, redactor)
 	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseProbePlan,
@@ -179,7 +184,14 @@ func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewReque
 }
 
 func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, bundle ReviewEvidenceBundle) (ReviewReport, error) {
-	reportPrompt := buildReviewReportPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor)
+	reportPrompt := reviewmodelinput.BuildReportPrompt(reviewmodelinput.ReportPromptInput{
+		CustomInstructions: req.CustomInstructions,
+		EvidenceMarkdown:   evidenceMarkdown,
+		Plan:               plan,
+		ProbeSummaries:     probeSummaries,
+		ProbeResults:       probeResults,
+		Redactor:           redactor,
+	})
 	r.saveReviewRunTextArtifact("report_prompt.md", reportPrompt, redactor)
 	reportResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReport,
@@ -196,16 +208,16 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 		return report, nil
 	}
 
-	repairPrompt := buildReviewReportRepairPrompt(
-		req,
-		evidenceMarkdown,
-		plan,
-		probeSummaries,
-		probeResults,
-		redactor,
-		reportResp.Content,
-		reportErr,
-	)
+	repairPrompt := reviewmodelinput.BuildReportRepairPrompt(reviewmodelinput.ReportRepairPromptInput{
+		CustomInstructions:    req.CustomInstructions,
+		EvidenceMarkdown:      evidenceMarkdown,
+		Plan:                  plan,
+		ProbeSummaries:        probeSummaries,
+		ProbeResults:          probeResults,
+		Redactor:              redactor,
+		InvalidOutput:         reportResp.Content,
+		DecodeOrValidationErr: reportErr,
+	})
 	r.saveReviewRunTextArtifact("report_prompt.md", repairPrompt, redactor)
 	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReport,

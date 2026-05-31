@@ -1,13 +1,16 @@
-package review
+package modelinput
 
 import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestBuildReviewProbePlanPromptIncludesStrictSchemaContract(t *testing.T) {
-	prompt := buildReviewProbePlanPrompt(NewCurrentChangesRequest(""), "diff evidence")
+	prompt := BuildProbePlanPrompt(ProbePlanPromptInput{EvidenceMarkdown: "diff evidence"})
 
 	wants := []string{
 		"## Probe Plan JSON Contract",
@@ -68,12 +71,12 @@ func TestBuildReviewProbePlanPromptIncludesStrictSchemaContract(t *testing.T) {
 }
 
 func TestBuildReviewProbePlanRepairPromptIncludesRepairContract(t *testing.T) {
-	prompt := buildReviewProbePlanRepairPrompt(
-		NewCurrentChangesRequest("focus repair"),
-		"diff evidence",
-		`{"schema_version":"wrong"}`,
-		errors.New("schema_version must be review_probe_plan.v2"),
-	)
+	prompt := BuildProbePlanRepairPrompt(ProbePlanRepairPromptInput{
+		CustomInstructions:    "focus repair",
+		EvidenceMarkdown:      "diff evidence",
+		InvalidOutput:         `{"schema_version":"wrong"}`,
+		DecodeOrValidationErr: errors.New("schema_version must be review_probe_plan.v2"),
+	})
 
 	wants := []string{
 		"Review Pass 1: Probe Plan JSON Repair",
@@ -116,34 +119,26 @@ func TestBuildReviewProbePlanRepairPromptIncludesRepairContract(t *testing.T) {
 func TestBuildReviewProbeAndReportPromptsIncludeStrictReviewerStance(t *testing.T) {
 	plan := newNoProbeReviewProbePlanForTest()
 	prompts := map[string]string{
-		"probe plan": buildReviewProbePlanPrompt(
-			NewCurrentChangesRequest(""),
-			"diff evidence",
-		),
-		"probe plan repair": buildReviewProbePlanRepairPrompt(
-			NewCurrentChangesRequest("focus repair"),
-			"diff evidence",
-			`{"schema_version":"wrong"}`,
-			errors.New("schema_version must be review_probe_plan.v2"),
-		),
-		"report": buildReviewReportPrompt(
-			NewCurrentChangesRequest(""),
-			"diff evidence",
-			plan,
-			nil,
-			nil,
-			reviewRunnerPromptRedactor{},
-		),
-		"report repair": buildReviewReportRepairPrompt(
-			NewCurrentChangesRequest("focus repair"),
-			"diff evidence",
-			plan,
-			nil,
-			nil,
-			reviewRunnerPromptRedactor{},
-			`{"schema_version":"wrong"}`,
-			errors.New("generated_at must be non-zero"),
-		),
+		"probe plan": BuildProbePlanPrompt(ProbePlanPromptInput{
+			EvidenceMarkdown: "diff evidence",
+		}),
+		"probe plan repair": BuildProbePlanRepairPrompt(ProbePlanRepairPromptInput{
+			CustomInstructions:    "focus repair",
+			EvidenceMarkdown:      "diff evidence",
+			InvalidOutput:         `{"schema_version":"wrong"}`,
+			DecodeOrValidationErr: errors.New("schema_version must be review_probe_plan.v2"),
+		}),
+		"report": BuildReportPrompt(ReportPromptInput{
+			EvidenceMarkdown: "diff evidence",
+			Plan:             plan,
+		}),
+		"report repair": BuildReportRepairPrompt(ReportRepairPromptInput{
+			CustomInstructions:    "focus repair",
+			EvidenceMarkdown:      "diff evidence",
+			Plan:                  plan,
+			InvalidOutput:         `{"schema_version":"wrong"}`,
+			DecodeOrValidationErr: errors.New("generated_at must be non-zero"),
+		}),
 	}
 
 	for name, prompt := range prompts {
@@ -159,14 +154,10 @@ func TestBuildReviewProbeAndReportPromptsIncludeStrictReviewerStance(t *testing.
 }
 
 func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
-	prompt := buildReviewReportPrompt(
-		NewCurrentChangesRequest(""),
-		"diff evidence",
-		newNoProbeReviewProbePlanForTest(),
-		nil,
-		nil,
-		reviewRunnerPromptRedactor{},
-	)
+	prompt := BuildReportPrompt(ReportPromptInput{
+		EvidenceMarkdown: "diff evidence",
+		Plan:             newNoProbeReviewProbePlanForTest(),
+	})
 
 	wants := []string{
 		"## Review Report JSON Contract",
@@ -224,14 +215,10 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 }
 
 func TestBuildReviewReportPromptDoesNotIncludeComputedSummaryInTopLevelSample(t *testing.T) {
-	prompt := buildReviewReportPrompt(
-		NewCurrentChangesRequest(""),
-		"diff evidence",
-		newNoProbeReviewProbePlanForTest(),
-		nil,
-		nil,
-		reviewRunnerPromptRedactor{},
-	)
+	prompt := BuildReportPrompt(ReportPromptInput{
+		EvidenceMarkdown: "diff evidence",
+		Plan:             newNoProbeReviewProbePlanForTest(),
+	})
 
 	if !strings.Contains(prompt, `Do not output top-level "computed_summary"; runner computes it after validation`) {
 		t.Fatalf("report prompt missing computed_summary prohibition:\n%s", prompt)
@@ -243,22 +230,20 @@ func TestBuildReviewReportPromptDoesNotIncludeComputedSummaryInTopLevelSample(t 
 }
 
 func TestBuildReviewReportRepairPromptIncludesRepairContract(t *testing.T) {
-	prompt := buildReviewReportRepairPrompt(
-		NewCurrentChangesRequest("focus repair"),
-		"diff evidence",
-		newNoProbeReviewProbePlanForTest(),
-		[]ReviewProbeSummary{
+	prompt := BuildReportRepairPrompt(ReportRepairPromptInput{
+		CustomInstructions: "focus repair",
+		EvidenceMarkdown:   "diff evidence",
+		Plan:               newNoProbeReviewProbePlanForTest(),
+		ProbeSummaries: []reviewreport.ReviewProbeSummary{
 			{
 				ProbeID: "probe-1",
-				Mode:    ReviewProbeHostReadOnly,
-				Status:  ReviewProbePassed,
+				Mode:    domain.ReviewProbeHostReadOnly,
+				Status:  domain.ReviewProbePassed,
 			},
 		},
-		nil,
-		reviewRunnerPromptRedactor{},
-		`{"schema_version":"wrong"}`,
-		errors.New("generated_at must be non-zero"),
-	)
+		InvalidOutput:         `{"schema_version":"wrong"}`,
+		DecodeOrValidationErr: errors.New("generated_at must be non-zero"),
+	})
 
 	wants := []string{
 		"Review Pass 2: Report JSON Repair",

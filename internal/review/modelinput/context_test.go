@@ -1,26 +1,29 @@
-package review
+package modelinput
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func TestBuildReviewProbeResultPromptContextsCapsCommandOutput(t *testing.T) {
 	output := strings.Repeat("z", maxReviewProbeResultPromptCommandOutputBytes+1)
-	contexts := buildReviewProbeResultPromptContexts([]ReviewProbeResult{
+	contexts := BuildProbeResultPromptContexts([]reviewprobe.ReviewProbeResult{
 		{
 			ID:     "probe-1",
-			Mode:   ReviewProbeHostReadOnly,
-			Status: ReviewProbeFailed,
-			CommandResults: []ReviewProbeCommandResult{
+			Mode:   domain.ReviewProbeHostReadOnly,
+			Status: domain.ReviewProbeFailed,
+			CommandResults: []reviewprobe.ReviewProbeCommandResult{
 				{
 					Command: "go",
-					Status:  ReviewProbeFailed,
+					Status:  domain.ReviewProbeFailed,
 					Output:  output,
 				},
 			},
 		},
-	}, reviewRunnerPromptRedactor{})
+	}, nil)
 
 	if got, want := len(contexts), 1; got != want {
 		t.Fatalf("contexts = %d, want %d", got, want)
@@ -39,23 +42,23 @@ func TestBuildReviewProbeResultPromptContextsCapsCommandOutput(t *testing.T) {
 
 func TestBuildReviewProbeResultPromptContextsCapsAggregateCommandOutput(t *testing.T) {
 	commandCount := maxReviewProbeResultPromptTotalOutputBytes/maxReviewProbeResultPromptCommandOutputBytes + 2
-	commandResults := make([]ReviewProbeCommandResult, 0, commandCount)
+	commandResults := make([]reviewprobe.ReviewProbeCommandResult, 0, commandCount)
 	for i := 0; i < commandCount; i++ {
-		commandResults = append(commandResults, ReviewProbeCommandResult{
+		commandResults = append(commandResults, reviewprobe.ReviewProbeCommandResult{
 			Command: "printf",
-			Status:  ReviewProbePassed,
+			Status:  domain.ReviewProbePassed,
 			Output:  strings.Repeat("z", maxReviewProbeResultPromptCommandOutputBytes),
 		})
 	}
 
-	contexts := buildReviewProbeResultPromptContexts([]ReviewProbeResult{
+	contexts := BuildProbeResultPromptContexts([]reviewprobe.ReviewProbeResult{
 		{
 			ID:             "probe-1",
-			Mode:           ReviewProbeHostReadOnly,
-			Status:         ReviewProbePassed,
+			Mode:           domain.ReviewProbeHostReadOnly,
+			Status:         domain.ReviewProbePassed,
 			CommandResults: commandResults,
 		},
-	}, reviewRunnerPromptRedactor{})
+	}, nil)
 
 	rawOutputBytes := 0
 	truncatedCommands := 0

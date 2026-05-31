@@ -3,6 +3,8 @@ package review
 import (
 	"context"
 	"fmt"
+
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 )
 
 func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, report ReviewReport, bundle ReviewEvidenceBundle) (ReviewReport, error) {
@@ -42,7 +44,15 @@ func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req R
 
 func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, bundle ReviewEvidenceBundle) (ReviewSaturationCheck, error) {
 	r.emitProgressRunning(reviewProgressSaturationCheckItem)
-	checkPrompt := buildReviewSaturationCheckPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, finalizedReport)
+	checkPrompt := reviewmodelinput.BuildSaturationCheckPrompt(reviewmodelinput.SaturationCheckPromptInput{
+		CustomInstructions: req.CustomInstructions,
+		EvidenceMarkdown:   evidenceMarkdown,
+		Plan:               plan,
+		ProbeSummaries:     probeSummaries,
+		ProbeResults:       probeResults,
+		Redactor:           redactor,
+		FinalizedReport:    finalizedReport,
+	})
 	r.saveReviewRunTextArtifact("saturation_prompt.md", checkPrompt, redactor)
 	checkResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseSaturationCheck,
@@ -61,17 +71,17 @@ func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req Re
 	}
 
 	r.emitProgressRunning(reviewProgressSaturationRepairItem)
-	repairPrompt := buildReviewSaturationCheckRepairPrompt(
-		req,
-		evidenceMarkdown,
-		plan,
-		probeSummaries,
-		probeResults,
-		redactor,
-		finalizedReport,
-		checkResp.Content,
-		checkErr,
-	)
+	repairPrompt := reviewmodelinput.BuildSaturationCheckRepairPrompt(reviewmodelinput.SaturationCheckRepairPromptInput{
+		CustomInstructions:    req.CustomInstructions,
+		EvidenceMarkdown:      evidenceMarkdown,
+		Plan:                  plan,
+		ProbeSummaries:        probeSummaries,
+		ProbeResults:          probeResults,
+		Redactor:              redactor,
+		FinalizedReport:       finalizedReport,
+		InvalidOutput:         checkResp.Content,
+		DecodeOrValidationErr: checkErr,
+	})
 	r.saveReviewRunTextArtifact("saturation_prompt.md", repairPrompt, redactor)
 	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseSaturationCheck,
@@ -94,7 +104,16 @@ func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req Re
 
 func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck, bundle ReviewEvidenceBundle) (ReviewReport, error) {
 	r.emitProgressRunning(reviewProgressReportRevisionItem)
-	revisionPrompt := buildReviewReportRevisionPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, finalizedReport, saturationCheck)
+	revisionPrompt := reviewmodelinput.BuildReportRevisionPrompt(reviewmodelinput.ReportRevisionPromptInput{
+		CustomInstructions: req.CustomInstructions,
+		EvidenceMarkdown:   evidenceMarkdown,
+		Plan:               plan,
+		ProbeSummaries:     probeSummaries,
+		ProbeResults:       probeResults,
+		Redactor:           redactor,
+		FinalizedReport:    finalizedReport,
+		SaturationCheck:    saturationCheck,
+	})
 	r.saveReviewRunTextArtifact("revision_prompt.md", revisionPrompt, redactor)
 	revisionResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReportRevision,
@@ -114,18 +133,18 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 	}
 
 	r.emitProgressRunning(reviewProgressReportRevisionRepairItem)
-	repairPrompt := buildReviewReportRevisionRepairPrompt(
-		req,
-		evidenceMarkdown,
-		plan,
-		probeSummaries,
-		probeResults,
-		redactor,
-		finalizedReport,
-		saturationCheck,
-		revisionResp.Content,
-		revisionErr,
-	)
+	repairPrompt := reviewmodelinput.BuildReportRevisionRepairPrompt(reviewmodelinput.ReportRevisionRepairPromptInput{
+		CustomInstructions:    req.CustomInstructions,
+		EvidenceMarkdown:      evidenceMarkdown,
+		Plan:                  plan,
+		ProbeSummaries:        probeSummaries,
+		ProbeResults:          probeResults,
+		Redactor:              redactor,
+		FinalizedReport:       finalizedReport,
+		SaturationCheck:       saturationCheck,
+		InvalidRevisionOutput: revisionResp.Content,
+		DecodeOrValidationErr: revisionErr,
+	})
 	r.saveReviewRunTextArtifact("revision_prompt.md", repairPrompt, redactor)
 	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
 		Phase:  ReviewModelPhaseReportRevision,

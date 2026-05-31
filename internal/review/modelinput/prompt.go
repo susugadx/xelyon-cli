@@ -1,28 +1,71 @@
-package review
+package modelinput
 
-import "strings"
+import (
+	"strings"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
+)
 
 const (
 	reviewRunnerJSONRepairOutputInstructions = "Return corrected JSON only. Do not add markdown fences. Do not change schema_version from the contract value. Do not request or rely on tools."
 	reviewRunnerJSONRepairScopeInstruction   = "Repair only the JSON shape and values needed to satisfy the contract."
 )
 
-func buildReviewProbePlanPrompt(req ReviewRequest, evidenceMarkdown string) string {
+// ProbePlanPromptInput は probe plan 生成 prompt の入力 DTO。
+type ProbePlanPromptInput struct {
+	CustomInstructions string
+	EvidenceMarkdown   string
+}
+
+// ProbePlanRepairPromptInput は probe plan repair prompt の入力 DTO。
+type ProbePlanRepairPromptInput struct {
+	CustomInstructions    string
+	EvidenceMarkdown      string
+	InvalidOutput         string
+	DecodeOrValidationErr error
+}
+
+// ReportPromptInput は final report 生成 prompt の入力 DTO。
+type ReportPromptInput struct {
+	CustomInstructions string
+	EvidenceMarkdown   string
+	Plan               reviewprobe.ReviewProbePlan
+	ProbeSummaries     []reviewreport.ReviewProbeSummary
+	ProbeResults       []reviewprobe.ReviewProbeResult
+	Redactor           Redactor
+}
+
+// ReportRepairPromptInput は final report repair prompt の入力 DTO。
+type ReportRepairPromptInput struct {
+	CustomInstructions    string
+	EvidenceMarkdown      string
+	Plan                  reviewprobe.ReviewProbePlan
+	ProbeSummaries        []reviewreport.ReviewProbeSummary
+	ProbeResults          []reviewprobe.ReviewProbeResult
+	Redactor              Redactor
+	InvalidOutput         string
+	DecodeOrValidationErr error
+}
+
+// BuildProbePlanPrompt は Pass1 probe plan 用の deterministic prompt を組み立てる。
+func BuildProbePlanPrompt(input ProbePlanPromptInput) string {
 	var b strings.Builder
 	b.WriteString("# Review Pass 1: Probe Plan\n\n")
 	b.WriteString("Return exactly one JSON object for schema ")
-	b.WriteString(ReviewProbePlanSchemaVersionV2)
+	b.WriteString(reviewprobe.ReviewProbePlanSchemaVersionV2)
 	b.WriteString(". Do not include markdown or explanatory text outside the JSON.\n\n")
 	b.WriteString("First enumerate material impact surfaces from the provided evidence, then candidate risks, then only bounded probes that confirm or falsify those risks or unverified material surfaces. Use plan order as execution order. If no candidate risks remain, provide no_candidate_risk_reason for every impact surface ID. If no probe is useful, return an empty probes array and a no_probe_reason that names the checked surface and risk IDs.\n\n")
 
 	appendReviewRunnerPromptStrictReviewerStance(&b, reviewRunnerPromptPass1InsufficientEvidenceGuidance)
 	appendReviewRunnerPromptTextSection(&b, "Probe Plan JSON Contract", reviewProbePlanPromptContract())
-	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)
-	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", evidenceMarkdown)
+	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", input.EvidenceMarkdown)
 	return b.String()
 }
 
-func buildReviewProbePlanRepairPrompt(req ReviewRequest, evidenceMarkdown, invalidOutput string, decodeOrValidationErr error) string {
+// BuildProbePlanRepairPrompt は Pass1 probe plan の strict decode/validation repair prompt を組み立てる。
+func BuildProbePlanRepairPrompt(input ProbePlanRepairPromptInput) string {
 	var b strings.Builder
 	b.WriteString("# Review Pass 1: Probe Plan JSON Repair\n\n")
 	b.WriteString("The previous probe plan response failed strict JSON decode or validation. ")
@@ -34,32 +77,38 @@ func buildReviewProbePlanRepairPrompt(req ReviewRequest, evidenceMarkdown, inval
 
 	appendReviewRunnerPromptStrictReviewerStance(&b, reviewRunnerPromptPass1InsufficientEvidenceGuidance)
 	appendReviewRunnerPromptTextSection(&b, "Probe Plan JSON Contract", reviewProbePlanPromptContract())
-	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)
-	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", evidenceMarkdown)
-	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", invalidOutput)
-	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", reviewRunnerPromptErrorText(decodeOrValidationErr))
+	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", input.EvidenceMarkdown)
+	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", input.InvalidOutput)
+	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", reviewRunnerPromptErrorText(input.DecodeOrValidationErr))
 	return b.String()
 }
 
-func buildReviewReportPrompt(req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, results []ReviewProbeResult, redactor reviewRunnerPromptRedactor) string {
+// BuildReportPrompt は Pass2 final report 用の deterministic prompt を組み立てる。
+func BuildReportPrompt(input ReportPromptInput) string {
+	redactor := normalizeRedactor(input.Redactor)
+
 	var b strings.Builder
 	b.WriteString("# Review Pass 2: Report\n\n")
 	b.WriteString("Return exactly one JSON object for schema ")
-	b.WriteString(ReviewReportSchemaVersionV2)
+	b.WriteString(reviewreport.ReviewReportSchemaVersionV2)
 	b.WriteString(". Do not include markdown or explanatory text outside the JSON.\n\n")
 	b.WriteString("Use the evidence, decoded probe plan, probe summaries, and probe result context to produce the final report. Preserve probe_summaries using the supplied summaries. The final report must classify every decoded probe plan impact surface and candidate risk in scope_coverage exactly once. Reference only repo-relative paths or displayed evidence paths.\n\n")
 
 	appendReviewRunnerPromptStrictReviewerStance(&b, reviewRunnerPromptPostProbeInsufficientEvidenceGuidance)
 	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
-	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)
-	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", evidenceMarkdown)
-	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", plan)
-	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(probeSummaries, redactor))
-	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", buildReviewProbeResultPromptContexts(results, redactor))
+	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", input.EvidenceMarkdown)
+	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", input.Plan)
+	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(input.ProbeSummaries, redactor))
+	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContexts(input.ProbeResults, redactor))
 	return b.String()
 }
 
-func buildReviewReportRepairPrompt(req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, results []ReviewProbeResult, redactor reviewRunnerPromptRedactor, invalidOutput string, decodeOrValidationErr error) string {
+// BuildReportRepairPrompt は Pass2 final report の strict decode/validation repair prompt を組み立てる。
+func BuildReportRepairPrompt(input ReportRepairPromptInput) string {
+	redactor := normalizeRedactor(input.Redactor)
+
 	var b strings.Builder
 	b.WriteString("# Review Pass 2: Report JSON Repair\n\n")
 	b.WriteString("The previous report response failed strict JSON decode or validation. ")
@@ -71,13 +120,13 @@ func buildReviewReportRepairPrompt(req ReviewRequest, evidenceMarkdown string, p
 
 	appendReviewRunnerPromptStrictReviewerStance(&b, reviewRunnerPromptPostProbeInsufficientEvidenceGuidance)
 	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
-	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", req.CustomInstructions)
-	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", evidenceMarkdown)
-	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", plan)
-	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(probeSummaries, redactor))
-	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", buildReviewProbeResultPromptContexts(results, redactor))
-	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", redactor.redactText(invalidOutput))
-	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", redactor.redactText(reviewRunnerPromptErrorText(decodeOrValidationErr)))
+	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", input.EvidenceMarkdown)
+	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", input.Plan)
+	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(input.ProbeSummaries, redactor))
+	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContexts(input.ProbeResults, redactor))
+	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", redactor.RedactText(input.InvalidOutput))
+	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", redactor.RedactText(reviewRunnerPromptErrorText(input.DecodeOrValidationErr)))
 	return b.String()
 }
 

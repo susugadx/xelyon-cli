@@ -1,6 +1,10 @@
-package review
+package modelinput
 
-import "fmt"
+import (
+	"fmt"
+
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
+)
 
 func reviewSaturationCheckPromptContract() string {
 	return fmt.Sprintf(`Strict JSON contract:
@@ -46,17 +50,17 @@ func reviewSaturationCheckPromptContract() string {
 - Status %q means the supplied context is insufficient to determine saturation. Do not return a clean/saturated check when blocked.
 - Output only this saturation check JSON object. Do not output review_report.v2, do not include markdown fences, and do not include top-level "computed_summary".
 `,
-		ReviewSaturationCheckSchemaVersionV1,
-		ReviewSaturationStatusNeedsRevision,
-		ReviewEvidenceKindFile,
-		ReviewSaturationCheckSchemaVersionV1,
-		ReviewSaturationStatusSaturated,
-		ReviewSaturationStatusNeedsRevision,
-		ReviewSaturationStatusBlocked,
-		ReviewSaturationStatusBlocked,
-		ReviewSaturationStatusNeedsRevision,
-		ReviewSaturationStatusSaturated,
-		ReviewSaturationStatusNeedsRevision,
-		ReviewSaturationStatusBlocked,
+		reviewreport.ReviewSaturationCheckSchemaVersionV1,
+		reviewreport.ReviewSaturationStatusNeedsRevision,
+		reviewreport.ReviewEvidenceKindFile,
+		reviewreport.ReviewSaturationCheckSchemaVersionV1,
+		reviewreport.ReviewSaturationStatusSaturated,
+		reviewreport.ReviewSaturationStatusNeedsRevision,
+		reviewreport.ReviewSaturationStatusBlocked,
+		reviewreport.ReviewSaturationStatusBlocked,
+		reviewreport.ReviewSaturationStatusNeedsRevision,
+		reviewreport.ReviewSaturationStatusSaturated,
+		reviewreport.ReviewSaturationStatusNeedsRevision,
+		reviewreport.ReviewSaturationStatusBlocked,
 	)
 }

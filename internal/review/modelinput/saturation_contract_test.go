@@ -1,22 +1,21 @@
-package review
+package modelinput
 
 import (
 	"errors"
 	"strings"
 	"testing"
+
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestBuildReviewSaturationCheckPromptIncludesStrictSchemaContract(t *testing.T) {
 	report := withComputedSummaryForRunnerTest(newRunnerCleanReportForTest(nil), nil)
-	prompt := buildReviewSaturationCheckPrompt(
-		NewCurrentChangesRequest("focus saturation"),
-		"diff evidence",
-		newNoProbeReviewProbePlanForTest(),
-		nil,
-		nil,
-		reviewRunnerPromptRedactor{},
-		report,
-	)
+	prompt := BuildSaturationCheckPrompt(SaturationCheckPromptInput{
+		CustomInstructions: "focus saturation",
+		EvidenceMarkdown:   "diff evidence",
+		Plan:               newNoProbeReviewProbePlanForTest(),
+		FinalizedReport:    report,
+	})
 
 	wants := []string{
 		"Review Final Report Saturation Check",
@@ -64,24 +63,21 @@ func TestBuildReviewSaturationCheckPromptIncludesStrictSchemaContract(t *testing
 	if strings.Contains(sample, `"probe_id": "probe-1"`) {
 		t.Fatalf("saturation prompt top-level sample contains dangling probe reference:\n%s", sample)
 	}
-	if _, err := DecodeReviewSaturationCheckJSON([]byte(sample), newNoProbeReviewProbePlanForTest(), newPlanAwareCleanReportForValidationTest()); err != nil {
+	if _, err := reviewreport.DecodeReviewSaturationCheckJSON([]byte(sample), newNoProbePlanScopeForTest(), newPlanAwareCleanReportForValidationTest()); err != nil {
 		t.Fatalf("saturation prompt top-level sample does not validate: %v\n%s", err, sample)
 	}
 }
 
 func TestBuildReviewSaturationCheckRepairPromptIncludesRepairContract(t *testing.T) {
 	report := withComputedSummaryForRunnerTest(newRunnerCleanReportForTest(nil), nil)
-	prompt := buildReviewSaturationCheckRepairPrompt(
-		NewCurrentChangesRequest("focus saturation repair"),
-		"diff evidence",
-		newNoProbeReviewProbePlanForTest(),
-		nil,
-		nil,
-		reviewRunnerPromptRedactor{},
-		report,
-		`{"schema_version":"wrong"}`,
-		errors.New("status must be known"),
-	)
+	prompt := BuildSaturationCheckRepairPrompt(SaturationCheckRepairPromptInput{
+		CustomInstructions:    "focus saturation repair",
+		EvidenceMarkdown:      "diff evidence",
+		Plan:                  newNoProbeReviewProbePlanForTest(),
+		FinalizedReport:       report,
+		InvalidOutput:         `{"schema_version":"wrong"}`,
+		DecodeOrValidationErr: errors.New("status must be known"),
+	})
 
 	wants := []string{
 		"Review Final Report Saturation Check JSON Repair",
@@ -116,48 +112,36 @@ func TestBuildReviewSaturationAndRevisionPromptsIncludeStrictReviewerStance(t *t
 	plan := newNoProbeReviewProbePlanForTest()
 	check := needsRevisionCheckForPromptContractTest()
 	prompts := map[string]string{
-		"saturation check": buildReviewSaturationCheckPrompt(
-			NewCurrentChangesRequest("focus saturation"),
-			"diff evidence",
-			plan,
-			nil,
-			nil,
-			reviewRunnerPromptRedactor{},
-			report,
-		),
-		"saturation check repair": buildReviewSaturationCheckRepairPrompt(
-			NewCurrentChangesRequest("focus saturation repair"),
-			"diff evidence",
-			plan,
-			nil,
-			nil,
-			reviewRunnerPromptRedactor{},
-			report,
-			`{"schema_version":"wrong"}`,
-			errors.New("status must be known"),
-		),
-		"report revision": buildReviewReportRevisionPrompt(
-			NewCurrentChangesRequest("focus revision"),
-			"diff evidence",
-			plan,
-			nil,
-			nil,
-			reviewRunnerPromptRedactor{},
-			report,
-			check,
-		),
-		"report revision repair": buildReviewReportRevisionRepairPrompt(
-			NewCurrentChangesRequest("focus revision repair"),
-			"diff evidence",
-			plan,
-			nil,
-			nil,
-			reviewRunnerPromptRedactor{},
-			report,
-			check,
-			`{"schema_version":"review_report.v2","computed_summary":{}}`,
-			errors.New("target_kind must be current_changes"),
-		),
+		"saturation check": BuildSaturationCheckPrompt(SaturationCheckPromptInput{
+			CustomInstructions: "focus saturation",
+			EvidenceMarkdown:   "diff evidence",
+			Plan:               plan,
+			FinalizedReport:    report,
+		}),
+		"saturation check repair": BuildSaturationCheckRepairPrompt(SaturationCheckRepairPromptInput{
+			CustomInstructions:    "focus saturation repair",
+			EvidenceMarkdown:      "diff evidence",
+			Plan:                  plan,
+			FinalizedReport:       report,
+			InvalidOutput:         `{"schema_version":"wrong"}`,
+			DecodeOrValidationErr: errors.New("status must be known"),
+		}),
+		"report revision": BuildReportRevisionPrompt(ReportRevisionPromptInput{
+			CustomInstructions: "focus revision",
+			EvidenceMarkdown:   "diff evidence",
+			Plan:               plan,
+			FinalizedReport:    report,
+			SaturationCheck:    check,
+		}),
+		"report revision repair": BuildReportRevisionRepairPrompt(ReportRevisionRepairPromptInput{
+			CustomInstructions:    "focus revision repair",
+			EvidenceMarkdown:      "diff evidence",
+			Plan:                  plan,
+			FinalizedReport:       report,
+			SaturationCheck:       check,
+			InvalidRevisionOutput: `{"schema_version":"review_report.v2","computed_summary":{}}`,
+			DecodeOrValidationErr: errors.New("target_kind must be current_changes"),
+		}),
 	}
 
 	for name, prompt := range prompts {
@@ -170,16 +154,13 @@ func TestBuildReviewSaturationAndRevisionPromptsIncludeStrictReviewerStance(t *t
 
 func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T) {
 	report := withComputedSummaryForRunnerTest(newRunnerCleanReportForTest(nil), nil)
-	prompt := buildReviewReportRevisionPrompt(
-		NewCurrentChangesRequest("focus revision"),
-		"diff evidence",
-		newNoProbeReviewProbePlanForTest(),
-		nil,
-		nil,
-		reviewRunnerPromptRedactor{},
-		report,
-		needsRevisionCheckForPromptContractTest(),
-	)
+	prompt := BuildReportRevisionPrompt(ReportRevisionPromptInput{
+		CustomInstructions: "focus revision",
+		EvidenceMarkdown:   "diff evidence",
+		Plan:               newNoProbeReviewProbePlanForTest(),
+		FinalizedReport:    report,
+		SaturationCheck:    needsRevisionCheckForPromptContractTest(),
+	})
 
 	wants := []string{
 		"Review Pass 2: Report Revision",
@@ -218,18 +199,15 @@ func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T)
 
 func TestBuildReviewReportRevisionRepairPromptIncludesRepairContract(t *testing.T) {
 	report := withComputedSummaryForRunnerTest(newRunnerCleanReportForTest(nil), nil)
-	prompt := buildReviewReportRevisionRepairPrompt(
-		NewCurrentChangesRequest("focus revision repair"),
-		"diff evidence",
-		newNoProbeReviewProbePlanForTest(),
-		nil,
-		nil,
-		reviewRunnerPromptRedactor{},
-		report,
-		needsRevisionCheckForPromptContractTest(),
-		`{"schema_version":"review_report.v2","computed_summary":{}}`,
-		errors.New("target_kind must be current_changes"),
-	)
+	prompt := BuildReportRevisionRepairPrompt(ReportRevisionRepairPromptInput{
+		CustomInstructions:    "focus revision repair",
+		EvidenceMarkdown:      "diff evidence",
+		Plan:                  newNoProbeReviewProbePlanForTest(),
+		FinalizedReport:       report,
+		SaturationCheck:       needsRevisionCheckForPromptContractTest(),
+		InvalidRevisionOutput: `{"schema_version":"review_report.v2","computed_summary":{}}`,
+		DecodeOrValidationErr: errors.New("target_kind must be current_changes"),
+	})
 
 	wants := []string{
 		"Review Pass 2: Report Revision JSON Repair",
@@ -268,10 +246,10 @@ func TestBuildReviewReportRevisionRepairPromptIncludesRepairContract(t *testing.
 	}
 }
 
-func needsRevisionCheckForPromptContractTest() ReviewSaturationCheck {
-	return ReviewSaturationCheck{
-		SchemaVersion:        ReviewSaturationCheckSchemaVersionV1,
-		Status:               ReviewSaturationStatusNeedsRevision,
+func needsRevisionCheckForPromptContractTest() reviewreport.ReviewSaturationCheck {
+	return reviewreport.ReviewSaturationCheck{
+		SchemaVersion:        reviewreport.ReviewSaturationCheckSchemaVersionV1,
+		Status:               reviewreport.ReviewSaturationStatusNeedsRevision,
 		CheckedSummary:       "risk-1 was not reflected.",
 		MissingRiskIDs:       []string{"risk-1"},
 		RevisionInstructions: "Classify risk-1 in scope_coverage.",

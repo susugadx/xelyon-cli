@@ -106,9 +106,6 @@ type ReviewProbeCommandResult = reviewprobe.ReviewProbeCommandResult
 type ProbeRunner = reviewprobe.ProbeRunner
 
 var (
-	reviewProbeImpactSurfaceCategories  = reviewprobe.KnownReviewProbeImpactSurfaceCategories()
-	reviewProbeImpactSurfaceStatuses    = reviewprobe.KnownReviewProbeImpactSurfaceStatuses()
-	reviewProbeCandidateRiskStatuses    = reviewprobe.KnownReviewProbeCandidateRiskStatuses()
 	reviewProbeIsolatedTempRootPrefixes = reviewprobe.ReviewProbeIsolatedTempRootPrefixes()
 )
 
@@ -143,8 +140,4 @@ func BuildReviewProbeRequestsFromPlan(plan ReviewProbePlan) ([]ReviewProbeReques
 
 func formatProbeCommand(command string, args []string) string {
 	return reviewprobe.FormatProbeCommand(command, args)
-}
-
-func isReviewProbePlanPreProbeEvidenceKind(kind string) bool {
-	return reviewprobe.IsReviewProbePlanPreProbeEvidenceKind(kind)
 }

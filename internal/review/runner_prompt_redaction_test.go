@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 )
 
 func TestReviewRunnerPromptRedactorRedactsWindowsNativePathVariants(t *testing.T) {
@@ -71,7 +73,7 @@ func TestReviewRunnerPromptRedactorRedactsIsolatedRootFromResultWithoutCommandRe
 	}
 
 	redactor := newReviewRunnerPromptRedactor(newRunnerEvidenceBundleForTest(repoRoot), []ReviewProbeResult{result})
-	contexts := buildReviewProbeResultPromptContexts([]ReviewProbeResult{result}, redactor)
+	contexts := reviewmodelinput.BuildProbeResultPromptContexts([]ReviewProbeResult{result}, redactor)
 	if got, want := len(contexts), 1; got != want {
 		t.Fatalf("contexts = %d, want %d", got, want)
 	}

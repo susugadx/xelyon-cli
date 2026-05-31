@@ -1,11 +1,13 @@
-package review
+package modelinput
 
 import (
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func reviewProbePlanPromptContract() string {
@@ -101,40 +103,40 @@ Mode command contract:
 - %q runs against an isolated copy of the repository plus generated files. It allows commands: %s. Use it for real tests or change-impact verification where writes/build artifacts are expected inside the sandbox. Path-like args must stay inside the sandbox/repo copy.
 - Do not plan broad speculative test suites. The validator requires each probe to be linked to the candidate risks or unverified material surfaces it will confirm or falsify.
 `,
-		ReviewProbePlanSchemaVersionV2,
-		TargetCurrentChanges,
-		ReviewProbeImpactSurfaceChangedFile,
-		ReviewEvidenceKindDiff,
-		ReviewProbeImpactSurfaceNeedsProbe,
-		ReviewGroupSeverityMedium,
-		ReviewEvidenceKindDiff,
-		ReviewProbeCandidateRiskNeedsProbe,
-		MaxReviewProbePlanPurposeBytes,
-		ReviewProbeHostReadOnly,
-		TargetCurrentChanges,
-		MaxReviewProbePlanProbes,
+		reviewprobe.ReviewProbePlanSchemaVersionV2,
+		domain.TargetCurrentChanges,
+		reviewprobe.ReviewProbeImpactSurfaceChangedFile,
+		reviewreport.ReviewEvidenceKindDiff,
+		reviewprobe.ReviewProbeImpactSurfaceNeedsProbe,
+		reviewreport.ReviewGroupSeverityMedium,
+		reviewreport.ReviewEvidenceKindDiff,
+		reviewprobe.ReviewProbeCandidateRiskNeedsProbe,
+		reviewprobe.MaxReviewProbePlanPurposeBytes,
+		domain.ReviewProbeHostReadOnly,
+		domain.TargetCurrentChanges,
+		reviewprobe.MaxReviewProbePlanProbes,
 		quoteAndJoinSortedReviewPromptValues(reviewProbeImpactSurfaceCategoryPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewProbeImpactSurfaceStatusPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewGroupSeverityPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewProbeCandidateRiskStatusPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewProbePlanPreProbeEvidenceKindPromptValues()),
-		ReviewProbeImpactSurfaceChecked,
-		ReviewProbeCandidateRiskCheckedByEvidence,
-		ReviewProbeHostReadOnly,
-		ReviewProbeScratchOnly,
-		ReviewProbeRepoSandbox,
-		MaxReviewProbePlanCommands,
-		ReviewProbeHostReadOnly,
-		MaxReviewProbePlanFiles,
-		MaxReviewProbePlanFileContentBytes,
-		MaxReviewProbePlanTotalFileContentBytes,
-		MaxReviewProbePlanTimeoutSeconds,
-		MaxReviewProbePlanMaxOutputBytes,
-		ReviewProbeHostReadOnly,
+		reviewprobe.ReviewProbeImpactSurfaceChecked,
+		reviewprobe.ReviewProbeCandidateRiskCheckedByEvidence,
+		domain.ReviewProbeHostReadOnly,
+		domain.ReviewProbeScratchOnly,
+		domain.ReviewProbeRepoSandbox,
+		reviewprobe.MaxReviewProbePlanCommands,
+		domain.ReviewProbeHostReadOnly,
+		reviewprobe.MaxReviewProbePlanFiles,
+		reviewprobe.MaxReviewProbePlanFileContentBytes,
+		reviewprobe.MaxReviewProbePlanTotalFileContentBytes,
+		reviewprobe.MaxReviewProbePlanTimeoutSeconds,
+		reviewprobe.MaxReviewProbePlanMaxOutputBytes,
+		domain.ReviewProbeHostReadOnly,
 		sortedQuotedHostReadOnlyCommandNames(),
-		ReviewProbeScratchOnly,
+		domain.ReviewProbeScratchOnly,
 		sortedQuotedScratchOnlyCommandNames(),
-		ReviewProbeRepoSandbox,
+		domain.ReviewProbeRepoSandbox,
 		sortedQuotedRepoSandboxCommandNames(),
 	)
 }
@@ -210,70 +212,70 @@ Verdict contract:
 - %q: "overall_verification_status" must be %q or %q, at least one root cause group is required, and each group "verification_status" must be %q or %q. Each root cause group must include at least one "findings" item, non-empty "fix_strategy", and at least one "verification_plan" item. Each finding must include at least one "evidence_refs" item.
 - %q: "overall_verification_status" must be %q, %q, or %q, and the report must include a blocked reason in "summary", "unverified_surfaces", "residual_risks", or a blocked/timed-out/mutated probe summary.
 `,
-		ReviewReportSchemaVersionV2,
-		TargetCurrentChanges,
-		ReviewVerificationVerified,
-		ReviewVerdictClean,
-		ReviewReportImpactSurfaceChecked,
-		ReviewReportCandidateRiskDismissed,
-		ReviewReportSchemaVersionV2,
-		TargetCurrentChanges,
-		ReviewVerdictClean,
-		ReviewVerdictHasFindings,
-		ReviewVerdictBlocked,
-		ReviewVerificationVerified,
-		ReviewVerificationPartiallyVerified,
-		ReviewVerificationUnverified,
-		ReviewVerificationNotApplicable,
-		ReviewVerificationBlockedOrInconclusive,
-		ReviewGroupSeverityCritical,
-		ReviewGroupSeverityHigh,
-		ReviewGroupSeverityMedium,
-		ReviewGroupSeverityLow,
-		ReviewGroupSeverityInfo,
-		ReviewEvidenceKindProbeCommand,
-		ReviewEvidenceKindProbe,
-		ReviewEvidenceKindFile,
-		ReviewEvidenceKindDiff,
-		ReviewEvidenceKindGitStatus,
-		ReviewEvidenceKindRuleFile,
-		ReviewEvidenceKindExternalDoc,
+		reviewreport.ReviewReportSchemaVersionV2,
+		domain.TargetCurrentChanges,
+		reviewreport.ReviewVerificationVerified,
+		reviewreport.ReviewVerdictClean,
+		reviewreport.ReviewReportImpactSurfaceChecked,
+		reviewreport.ReviewReportCandidateRiskDismissed,
+		reviewreport.ReviewReportSchemaVersionV2,
+		domain.TargetCurrentChanges,
+		reviewreport.ReviewVerdictClean,
+		reviewreport.ReviewVerdictHasFindings,
+		reviewreport.ReviewVerdictBlocked,
+		reviewreport.ReviewVerificationVerified,
+		reviewreport.ReviewVerificationPartiallyVerified,
+		reviewreport.ReviewVerificationUnverified,
+		reviewreport.ReviewVerificationNotApplicable,
+		reviewreport.ReviewVerificationBlockedOrInconclusive,
+		reviewreport.ReviewGroupSeverityCritical,
+		reviewreport.ReviewGroupSeverityHigh,
+		reviewreport.ReviewGroupSeverityMedium,
+		reviewreport.ReviewGroupSeverityLow,
+		reviewreport.ReviewGroupSeverityInfo,
+		reviewreport.ReviewEvidenceKindProbeCommand,
+		reviewreport.ReviewEvidenceKindProbe,
+		reviewreport.ReviewEvidenceKindFile,
+		reviewreport.ReviewEvidenceKindDiff,
+		reviewreport.ReviewEvidenceKindGitStatus,
+		reviewreport.ReviewEvidenceKindRuleFile,
+		reviewreport.ReviewEvidenceKindExternalDoc,
 		quoteAndJoinSortedReviewPromptValues(reviewReportImpactSurfaceStatusPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewReportCandidateRiskStatusPromptValues()),
-		ReviewReportImpactSurfaceChecked,
-		ReviewReportCandidateRiskDismissed,
-		ReviewProbeFailed,
-		ReviewProbeBlocked,
-		ReviewProbeTimedOut,
-		ReviewProbeMutatedWorktree,
-		ReviewReportImpactSurfaceChecked,
-		ReviewProbePassed,
-		ReviewReportCandidateRiskDismissed,
-		ReviewProbePassed,
-		ReviewReportImpactSurfaceChecked,
-		ReviewReportCandidateRiskDismissed,
-		ReviewReportImpactSurfaceFinding,
-		ReviewReportCandidateRiskFinding,
-		ReviewProbeHostReadOnly,
-		ReviewProbeScratchOnly,
-		ReviewProbeRepoSandbox,
-		ReviewProbePassed,
-		ReviewProbeFailed,
-		ReviewProbeBlocked,
-		ReviewProbeTimedOut,
-		ReviewProbeMutatedWorktree,
-		ReviewVerdictClean,
-		ReviewVerificationVerified,
-		ReviewVerificationPartiallyVerified,
-		ReviewVerdictHasFindings,
-		ReviewVerificationVerified,
-		ReviewVerificationPartiallyVerified,
-		ReviewVerificationVerified,
-		ReviewVerificationPartiallyVerified,
-		ReviewVerdictBlocked,
-		ReviewVerificationUnverified,
-		ReviewVerificationPartiallyVerified,
-		ReviewVerificationBlockedOrInconclusive,
+		reviewreport.ReviewReportImpactSurfaceChecked,
+		reviewreport.ReviewReportCandidateRiskDismissed,
+		domain.ReviewProbeFailed,
+		domain.ReviewProbeBlocked,
+		domain.ReviewProbeTimedOut,
+		domain.ReviewProbeMutatedWorktree,
+		reviewreport.ReviewReportImpactSurfaceChecked,
+		domain.ReviewProbePassed,
+		reviewreport.ReviewReportCandidateRiskDismissed,
+		domain.ReviewProbePassed,
+		reviewreport.ReviewReportImpactSurfaceChecked,
+		reviewreport.ReviewReportCandidateRiskDismissed,
+		reviewreport.ReviewReportImpactSurfaceFinding,
+		reviewreport.ReviewReportCandidateRiskFinding,
+		domain.ReviewProbeHostReadOnly,
+		domain.ReviewProbeScratchOnly,
+		domain.ReviewProbeRepoSandbox,
+		domain.ReviewProbePassed,
+		domain.ReviewProbeFailed,
+		domain.ReviewProbeBlocked,
+		domain.ReviewProbeTimedOut,
+		domain.ReviewProbeMutatedWorktree,
+		reviewreport.ReviewVerdictClean,
+		reviewreport.ReviewVerificationVerified,
+		reviewreport.ReviewVerificationPartiallyVerified,
+		reviewreport.ReviewVerdictHasFindings,
+		reviewreport.ReviewVerificationVerified,
+		reviewreport.ReviewVerificationPartiallyVerified,
+		reviewreport.ReviewVerificationVerified,
+		reviewreport.ReviewVerificationPartiallyVerified,
+		reviewreport.ReviewVerdictBlocked,
+		reviewreport.ReviewVerificationUnverified,
+		reviewreport.ReviewVerificationPartiallyVerified,
+		reviewreport.ReviewVerificationBlockedOrInconclusive,
 	)
 }
 
@@ -290,57 +292,64 @@ func sortedQuotedRepoSandboxCommandNames() string {
 }
 
 func reviewProbeImpactSurfaceCategoryPromptValues() []string {
-	values := make([]string, 0, len(reviewProbeImpactSurfaceCategories))
-	for _, category := range reviewProbeImpactSurfaceCategories {
+	categories := reviewprobe.KnownReviewProbeImpactSurfaceCategories()
+	values := make([]string, 0, len(categories))
+	for _, category := range categories {
 		values = append(values, string(category))
 	}
 	return values
 }
 
 func reviewProbeImpactSurfaceStatusPromptValues() []string {
-	values := make([]string, 0, len(reviewProbeImpactSurfaceStatuses))
-	for _, status := range reviewProbeImpactSurfaceStatuses {
+	statuses := reviewprobe.KnownReviewProbeImpactSurfaceStatuses()
+	values := make([]string, 0, len(statuses))
+	for _, status := range statuses {
 		values = append(values, string(status))
 	}
 	return values
 }
 
 func reviewProbeCandidateRiskStatusPromptValues() []string {
-	values := make([]string, 0, len(reviewProbeCandidateRiskStatuses))
-	for _, status := range reviewProbeCandidateRiskStatuses {
+	statuses := reviewprobe.KnownReviewProbeCandidateRiskStatuses()
+	values := make([]string, 0, len(statuses))
+	for _, status := range statuses {
 		values = append(values, string(status))
 	}
 	return values
 }
 
 func reviewReportImpactSurfaceStatusPromptValues() []string {
-	values := make([]string, 0, len(reviewReportImpactSurfaceStatuses))
-	for _, status := range reviewReportImpactSurfaceStatuses {
+	statuses := reviewreport.KnownReviewReportImpactSurfaceStatuses()
+	values := make([]string, 0, len(statuses))
+	for _, status := range statuses {
 		values = append(values, string(status))
 	}
 	return values
 }
 
 func reviewReportCandidateRiskStatusPromptValues() []string {
-	values := make([]string, 0, len(reviewReportCandidateRiskStatuses))
-	for _, status := range reviewReportCandidateRiskStatuses {
+	statuses := reviewreport.KnownReviewReportCandidateRiskStatuses()
+	values := make([]string, 0, len(statuses))
+	for _, status := range statuses {
 		values = append(values, string(status))
 	}
 	return values
 }
 
 func reviewGroupSeverityPromptValues() []string {
-	values := make([]string, 0, len(reviewGroupSeverities))
-	for _, severity := range reviewGroupSeverities {
+	severities := reviewreport.KnownReviewGroupSeverities()
+	values := make([]string, 0, len(severities))
+	for _, severity := range severities {
 		values = append(values, string(severity))
 	}
 	return values
 }
 
 func reviewProbePlanPreProbeEvidenceKindPromptValues() []string {
-	values := make([]string, 0, len(reviewEvidenceKinds))
-	for _, kind := range reviewEvidenceKinds {
-		if isReviewProbePlanPreProbeEvidenceKind(kind) {
+	evidenceKinds := reviewreport.KnownReviewEvidenceKinds()
+	values := make([]string, 0, len(evidenceKinds))
+	for _, kind := range evidenceKinds {
+		if reviewprobe.IsReviewProbePlanPreProbeEvidenceKind(kind) {
 			values = append(values, kind)
 		}
 	}

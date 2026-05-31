@@ -97,3 +97,14 @@ Phase 3-E 後の review evidence 収集と render は次の owner に分ける�
 - `internal/review/externaldoc`: Phase 3-D の Web 検索 query 計画と external_doc DTO / fetch request owner を維持する。Phase 3-D で親 package に残していた Web 検索 provider 実行と収集制御は、Phase 3-E から `internal/review/evidence` の collector owner へ移る。
 
 Phase 3-E では report schema、evidence markdown / JSON、probe behavior、external_doc behavior、runner 実行順は変更しない。`internal/review/evidence/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。
+
+## Phase 3-F: review model input assembly boundary
+
+Phase 3-F 後の review model input assembly は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、facade、runner orchestration、evidence 収集、probe 実行順、model phase 選択、`ReviewModelRequest` 送信、strict decode / validation / finalize、external_doc ref cross validation、artifact / progress、path replacement 発見と final report/probe summary redaction の owner。既存の `ReviewRequest`、`ReviewRunner`、`ReviewModel` はここに残し、agent / cmd 側の import path を変えない。
+- `internal/review/modelinput`: probe plan / report / saturation check / report revision の prompt text、JSON contract text、repair prompt、probe result prompt DTO、output budget limiter、prompt section / fence / JSON formatter の deterministic assembly owner。`internal/review/domain`、`internal/review/probe`、`internal/review/report` の型・定数を直接受け取り、親 `internal/review`、evidence collection、artifact、provider runtime、UI には依存しない。
+- `internal/review/evidence`: evidence bundle と markdown render の owner を維持する。`modelinput` には rendered markdown string として渡し、evidence package の型を prompt assembly に漏らさない。
+- `internal/review/report` / `internal/review/probe`: schema DTO、probe result DTO、trusted probe summary DTO の owner を維持する。`modelinput` はこれらを入力として prompt DTO へ写像するだけで、decode / validation / runtime 実行は持たない。
+
+Phase 3-F では prompt 文面、section order、JSON schema / validation、evidence markdown、probe behavior、external_doc behavior、runner の model phase / retry 制御は変更しない。`internal/review/modelinput/package_boundaries_test.go` は、親 `internal/review`、`internal/review/evidence`、artifact、agent / TUI / provider runtime、Bubble Tea、Lip Gloss への import を禁止する。
