@@ -223,7 +223,7 @@ func newRunnerEvidenceBundleWithWebSearchArtifactForTest(repoRoot string) Review
 	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
 		Enabled:  true,
 		Provider: "gemini",
-		Queries:  []ReviewWebSearchEvidenceQuery{{Query: "OpenAI API web_search documentation", Reason: "artifact test"}},
+		Queries:  []ReviewWebSearchEvidenceQuery{{Query: "OpenAI API web_search official documentation", Reason: "artifact test"}},
 	}
 	return bundle
 }

@@ -44,33 +44,61 @@ func sanitizeReviewExternalDocText(body []byte, contentType string) string {
 }
 
 func buildReviewExternalDocSnippets(docID, content string, sourceTruncated bool, focusTerms []ReviewExternalDocFocusTerm) []ReviewExternalDocSnippetEvidence {
-	if snippet, ok := buildReviewExternalDocFocusedSnippet(docID, content, sourceTruncated, focusTerms); ok {
-		return []ReviewExternalDocSnippetEvidence{snippet}
+	if snippets := buildReviewExternalDocFocusedSnippets(docID, content, sourceTruncated, focusTerms); len(snippets) > 0 {
+		return snippets
 	}
 	return buildReviewExternalDocPrefixSnippets(docID, content, sourceTruncated)
 }
 
-func buildReviewExternalDocFocusedSnippet(docID, content string, sourceTruncated bool, focusTerms []ReviewExternalDocFocusTerm) (ReviewExternalDocSnippetEvidence, bool) {
+func buildReviewExternalDocFocusedSnippets(docID, content string, sourceTruncated bool, focusTerms []ReviewExternalDocFocusTerm) []ReviewExternalDocSnippetEvidence {
+	snippets := make([]ReviewExternalDocSnippetEvidence, 0, reviewExternalDocMaxSnippets)
+	seenRanges := make(map[reviewExternalDocSnippetRange]struct{})
+	seenHashes := make(map[string]struct{})
 	for _, focusTerm := range sanitizeReviewExternalDocFocusTerms(focusTerms) {
 		matchStart := reviewExternalDocIndexFoldASCII(content, focusTerm.Term)
 		if matchStart < 0 {
 			continue
 		}
-		chunk := reviewExternalDocSnippetAround(content, matchStart, matchStart+len(focusTerm.Term), reviewExternalDocMaxSnippetBytes)
+		snippetRange := reviewExternalDocSnippetRangeAround(content, matchStart, matchStart+len(focusTerm.Term), reviewExternalDocMaxSnippetBytes)
+		if snippetRange.empty() {
+			continue
+		}
+		if _, exists := seenRanges[snippetRange]; exists {
+			continue
+		}
+		chunk := content[snippetRange.start:snippetRange.end]
 		chunk = strings.TrimSpace(chunk)
 		if chunk == "" {
 			continue
 		}
-		return ReviewExternalDocSnippetEvidence{
-			SnippetID:   fmt.Sprintf("%s-snippet-1", docID),
+		contentHash := reviewExternalDocContentHash(chunk)
+		if _, exists := seenHashes[contentHash]; exists {
+			continue
+		}
+		seenRanges[snippetRange] = struct{}{}
+		seenHashes[contentHash] = struct{}{}
+		snippets = append(snippets, ReviewExternalDocSnippetEvidence{
+			SnippetID:   fmt.Sprintf("%s-snippet-%d", docID, len(snippets)+1),
 			Content:     chunk,
-			ContentHash: reviewExternalDocContentHash(chunk),
+			ContentHash: contentHash,
 			Truncated:   len(chunk) < len(content) || sourceTruncated,
 			FocusTerm:   focusTerm.Term,
 			FocusReason: focusTerm.Reason,
-		}, true
+		})
+		if len(snippets) >= reviewExternalDocMaxSnippets {
+			break
+		}
 	}
-	return ReviewExternalDocSnippetEvidence{}, false
+	return snippets
+}
+
+type reviewExternalDocSnippetRange struct {
+	start int
+	end   int
+}
+
+func (r reviewExternalDocSnippetRange) empty() bool {
+	return r.start >= r.end
 }
 
 func buildReviewExternalDocPrefixSnippets(docID, content string, sourceTruncated bool) []ReviewExternalDocSnippetEvidence {
@@ -97,9 +125,9 @@ func buildReviewExternalDocPrefixSnippets(docID, content string, sourceTruncated
 	return snippets
 }
 
-func reviewExternalDocSnippetAround(value string, matchStart, matchEnd, maxBytes int) string {
+func reviewExternalDocSnippetRangeAround(value string, matchStart, matchEnd, maxBytes int) reviewExternalDocSnippetRange {
 	if len(value) <= maxBytes {
-		return value
+		return reviewExternalDocSnippetRange{start: 0, end: len(value)}
 	}
 	matchLen := matchEnd - matchStart
 	if matchLen < 0 {
@@ -124,9 +152,10 @@ func reviewExternalDocSnippetAround(value string, matchStart, matchEnd, maxBytes
 	start = reviewExternalDocForwardRuneBoundary(value, start)
 	end = reviewExternalDocBackwardRuneBoundary(value, end)
 	if start >= end {
-		return reviewExternalDocBoundedString(value[matchStart:], maxBytes)
+		end = matchStart + len(reviewExternalDocBoundedString(value[matchStart:], maxBytes))
+		return reviewExternalDocSnippetRange{start: matchStart, end: end}
 	}
-	return value[start:end]
+	return reviewExternalDocSnippetRange{start: start, end: end}
 }
 
 func reviewExternalDocForwardRuneBoundary(value string, index int) int {

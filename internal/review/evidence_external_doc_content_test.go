@@ -32,17 +32,20 @@ func TestSanitizeReviewExternalDocTextRemovesHTMLNoise(t *testing.T) {
 	}
 }
 
-func TestBuildReviewExternalDocSnippetsFocusesAroundTerm(t *testing.T) {
+func TestBuildReviewExternalDocSnippetsFocusesAroundMultipleTerms(t *testing.T) {
 	content := "front-marker " +
 		strings.Repeat("prefix filler ", 180) +
-		"The Responses API previous_response_id value links follow-up requests."
+		"The Responses API previous_response_id value links follow-up requests. " +
+		strings.Repeat("middle filler ", 180) +
+		"The tool_choice option controls tool selection."
 
 	snippets := buildReviewExternalDocSnippets("external-doc-1", content, false, []ReviewExternalDocFocusTerm{
 		{Term: "previous_response_id", Reason: "query focus"},
+		{Term: "tool_choice", Reason: "search result title"},
 	})
 
-	if len(snippets) != 1 {
-		t.Fatalf("Snippets = %d, want one focused snippet", len(snippets))
+	if len(snippets) != 2 {
+		t.Fatalf("Snippets = %d, want two focused snippets", len(snippets))
 	}
 	snippet := snippets[0]
 	if !strings.Contains(snippet.Content, "previous_response_id") {
@@ -54,14 +57,58 @@ func TestBuildReviewExternalDocSnippetsFocusesAroundTerm(t *testing.T) {
 	if snippet.FocusTerm != "previous_response_id" || snippet.FocusReason != "query focus" {
 		t.Fatalf("focus metadata = (%q, %q), want previous_response_id/query focus", snippet.FocusTerm, snippet.FocusReason)
 	}
+	if snippets[0].SnippetID != "external-doc-1-snippet-1" || snippets[1].SnippetID != "external-doc-1-snippet-2" {
+		t.Fatalf("snippet IDs = %q/%q, want stable sequential IDs", snippets[0].SnippetID, snippets[1].SnippetID)
+	}
+	if !strings.Contains(snippets[1].Content, "tool_choice") {
+		t.Fatalf("second focused snippet = %q, want second focus term", snippets[1].Content)
+	}
 	if len(snippet.Content) > reviewExternalDocMaxSnippetBytes {
 		t.Fatalf("snippet bytes = %d, want <= %d", len(snippet.Content), reviewExternalDocMaxSnippetBytes)
 	}
 }
 
+func TestBuildReviewExternalDocSnippetsDedupesSameRangeFocuses(t *testing.T) {
+	content := "The Responses API previous_response_id field controls follow-up requests and response_format output."
+
+	snippets := buildReviewExternalDocSnippets("external-doc-1", content, false, []ReviewExternalDocFocusTerm{
+		{Term: "previous_response_id", Reason: "query focus"},
+		{Term: "response_format", Reason: "generic impact token"},
+		{Term: "Responses API", Reason: "query subject"},
+	})
+
+	if len(snippets) != 1 {
+		t.Fatalf("Snippets = %d, want one deduped focused snippet: %#v", len(snippets), snippets)
+	}
+	if snippets[0].SnippetID != "external-doc-1-snippet-1" {
+		t.Fatalf("SnippetID = %q, want external-doc-1-snippet-1", snippets[0].SnippetID)
+	}
+	if snippets[0].FocusTerm != "previous_response_id" {
+		t.Fatalf("FocusTerm = %q, want first matching focus term", snippets[0].FocusTerm)
+	}
+}
+
+func TestBuildReviewExternalDocSnippetsDedupesHashEquivalentFocuses(t *testing.T) {
+	buf := []byte(" " + strings.Repeat("x", reviewExternalDocMaxSnippetBytes-1) + " ")
+	buf[599] = 'A'
+	buf[600] = 'B'
+
+	snippets := buildReviewExternalDocSnippets("external-doc-1", string(buf), false, []ReviewExternalDocFocusTerm{
+		{Term: "A", Reason: "query focus"},
+		{Term: "B", Reason: "search result title"},
+	})
+
+	if len(snippets) != 1 {
+		t.Fatalf("Snippets = %d, want one content-hash-deduped focused snippet: %#v", len(snippets), snippets)
+	}
+	if snippets[0].FocusTerm != "A" {
+		t.Fatalf("FocusTerm = %q, want first hash-equivalent focus term", snippets[0].FocusTerm)
+	}
+}
+
 func TestBuildReviewExternalDocSnippetsUsesContractFocusBeforeGenericSubject(t *testing.T) {
 	candidate := reviewWebSearchEvidenceQueryCandidate{
-		query:   "OpenAI API previous_response_id documentation",
+		query:   "OpenAI API previous_response_id official documentation",
 		subject: "OpenAI API",
 		focus:   "previous_response_id",
 	}
@@ -76,8 +123,8 @@ func TestBuildReviewExternalDocSnippetsUsesContractFocusBeforeGenericSubject(t *
 		buildReviewExternalDocFocusTerms(candidate, ReviewWebSearchEvidenceResult{}, nil),
 	)
 
-	if len(snippets) != 1 {
-		t.Fatalf("Snippets = %d, want one focused snippet", len(snippets))
+	if len(snippets) == 0 {
+		t.Fatal("Snippets empty, want focused snippet")
 	}
 	snippet := snippets[0]
 	if !strings.Contains(snippet.Content, "previous_response_id") {

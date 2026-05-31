@@ -80,10 +80,12 @@ func NewHTTPReviewExternalDocFetcher(client *http.Client) *HTTPReviewExternalDoc
 // FetchExternalDoc は検索結果 URL 由来の external_doc evidence を取得する。
 func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, fetchReq ReviewExternalDocFetchRequest) ReviewExternalDocEvidence {
 	doc := ReviewExternalDocEvidence{
-		DocID:        fetchReq.DocID,
-		URL:          strings.TrimSpace(fetchReq.URL),
-		SourceDomain: reviewExternalDocSourceDomain(fetchReq.URL),
-		FetchedAt:    time.Now().UTC(),
+		DocID:                   fetchReq.DocID,
+		URL:                     strings.TrimSpace(fetchReq.URL),
+		SourceDomain:            reviewExternalDocSourceDomain(fetchReq.URL),
+		SourceCredibility:       ReviewExternalDocSourceCredibilityUnknown,
+		SourceCredibilityReason: normalizeReviewExternalDocSourceCredibilityReason(ReviewExternalDocSourceCredibilityUnknown, ""),
+		FetchedAt:               time.Now().UTC(),
 	}
 	parsed, err := url.Parse(doc.URL)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
@@ -140,6 +142,9 @@ func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, fet
 	}
 	doc.Truncated = truncated
 	doc.ContentHash = reviewExternalDocContentHash(sanitized)
+	doc.SourceCredibility, doc.SourceCredibilityReason = classifyReviewExternalDocSourceCredibility(fetchReq, doc, sanitized)
+	doc.SourceCredibility = normalizeReviewExternalDocSourceCredibility(doc.SourceCredibility)
+	doc.SourceCredibilityReason = normalizeReviewExternalDocSourceCredibilityReason(doc.SourceCredibility, doc.SourceCredibilityReason)
 	doc.Snippets = buildReviewExternalDocSnippets(doc.DocID, sanitized, truncated, fetchReq.FocusTerms)
 	if len(doc.Snippets) == 0 {
 		doc.Error = "fetched document produced no snippets"

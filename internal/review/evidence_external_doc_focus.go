@@ -34,6 +34,7 @@ var reviewExternalDocFocusStopwords = map[string]struct{}{
 	"of":            {},
 	"on":            {},
 	"overview":      {},
+	"official":      {},
 	"reference":     {},
 	"the":           {},
 	"to":            {},

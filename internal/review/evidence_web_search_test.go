@@ -76,8 +76,8 @@ func TestReviewWebSearchEvidenceCollectorSearchesAndFetchesBoundedResults(t *tes
 	if !got.Truncated {
 		t.Fatal("Truncated = false, want true when search results exceed max_results_per_query")
 	}
-	if !strings.HasPrefix(got.Queries[0].Query, "OpenAI API web_search") {
-		t.Fatalf("query = %q, want OpenAI/web_search docs query", got.Queries[0].Query)
+	if got.Queries[0].Query != "OpenAI API web_search official documentation" {
+		t.Fatalf("query = %q, want OpenAI/web_search official docs query", got.Queries[0].Query)
 	}
 }
 
@@ -114,6 +114,12 @@ func TestReviewWebSearchEvidenceCollectorPassesSafeFocusTermsToFetcher(t *testin
 
 	if len(fetcher.requests) != 1 {
 		t.Fatalf("fetcher requests = %d, want 1", len(fetcher.requests))
+	}
+	if fetcher.requests[0].SearchResultTitle != "OpenAI Responses API previous_response_id guide" {
+		t.Fatalf("SearchResultTitle = %q, want search result title", fetcher.requests[0].SearchResultTitle)
+	}
+	if fetcher.requests[0].QuerySubjectHint != "OpenAI API" {
+		t.Fatalf("QuerySubjectHint = %q, want query subject", fetcher.requests[0].QuerySubjectHint)
 	}
 	terms := reviewExternalDocFocusTermsByTermForTest(fetcher.requests[0].FocusTerms)
 	for _, want := range []string{
@@ -213,12 +219,12 @@ func TestReviewEvidenceMarkdownIncludesWebSearchEvidenceSection(t *testing.T) {
 	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
 		Enabled:  true,
 		Provider: "gemini",
-		Queries:  []ReviewWebSearchEvidenceQuery{{Query: "OpenAI API web_search documentation", Reason: "test"}},
+		Queries:  []ReviewWebSearchEvidenceQuery{{Query: "OpenAI API web_search official documentation", Reason: "test"}},
 	}
 
 	got := RenderReviewEvidenceMarkdown(bundle)
 
-	for _, want := range []string{"## review web search evidence", `"provider": "gemini"`, `"OpenAI API web_search documentation"`} {
+	for _, want := range []string{"## review web search evidence", `"provider": "gemini"`, `"OpenAI API web_search official documentation"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("markdown missing %q:\n%s", want, got)
 		}

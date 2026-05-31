@@ -44,6 +44,20 @@ func TestFinalizeReviewRunnerReportAllowsFetchedExternalDocSnippetRef(t *testing
 	}
 }
 
+func TestFinalizeReviewRunnerReportExternalDocRefIgnoresCredibilityMetadata(t *testing.T) {
+	bundle := newExternalDocEvidenceBundleForValidationTest()
+	bundle.WebSearchEvidence.ExternalDocs[0].SourceCredibility = ReviewExternalDocSourceCredibilityThirdParty
+	bundle.WebSearchEvidence.ExternalDocs[0].SourceCredibilityReason = "third_party: test metadata"
+	report := newRunnerCleanReportForTest(nil)
+	ref := newExternalDocEvidenceRefForValidationTest(bundle)
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{ref}
+	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{ref}
+
+	if _, err := finalizeReviewRunnerReport(report, newRunnerNoProbePlanForTest(), nil, newRunnerReportRedactorForTest(t, "/tmp/repo", nil), bundle); err != nil {
+		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
+	}
+}
+
 func TestFinalizeReviewRunnerReportRejectsUnknownExternalDocSnippetRef(t *testing.T) {
 	bundle := newExternalDocEvidenceBundleForValidationTest()
 	report := newRunnerCleanReportForTest(nil)
@@ -88,13 +102,15 @@ func newExternalDocEvidenceBundleForValidationTest() ReviewEvidenceBundle {
 			Provider: "gemini",
 			ExternalDocs: []ReviewExternalDocEvidence{
 				{
-					DocID:        "external-doc-1",
-					URL:          "https://docs.example.test/spec",
-					SourceDomain: "docs.example.test",
-					FetchedAt:    fetchedAt,
-					StatusCode:   200,
-					ContentType:  "text/html",
-					ContentHash:  "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+					DocID:                   "external-doc-1",
+					URL:                     "https://docs.example.test/spec",
+					SourceDomain:            "docs.example.test",
+					SourceCredibility:       ReviewExternalDocSourceCredibilityUnknown,
+					SourceCredibilityReason: "unknown: test fixture",
+					FetchedAt:               fetchedAt,
+					StatusCode:              200,
+					ContentType:             "text/html",
+					ContentHash:             "sha256:1111111111111111111111111111111111111111111111111111111111111111",
 					Snippets: []ReviewExternalDocSnippetEvidence{
 						{
 							SnippetID:   "external-doc-1-snippet-1",

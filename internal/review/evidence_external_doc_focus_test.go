@@ -7,7 +7,7 @@ import (
 
 func TestBuildReviewExternalDocFocusTermsPrioritizesAndSanitizesSources(t *testing.T) {
 	candidate := reviewWebSearchEvidenceQueryCandidate{
-		query:   "OpenAI API web_search documentation",
+		query:   "OpenAI API web_search official documentation",
 		reason:  "changed external contract token: OpenAI API / web_search",
 		subject: "OpenAI API",
 		focus:   "web_search",
@@ -63,6 +63,7 @@ func TestBuildReviewExternalDocFocusTermsPrioritizesAndSanitizesSources(t *testi
 		"1",
 		"ordinary",
 		"documentation",
+		"official",
 	} {
 		if _, ok := terms[unwanted]; ok {
 			t.Fatalf("focus terms = %#v, should not include %q", got, unwanted)

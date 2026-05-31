@@ -129,6 +129,27 @@ func TestHTTPReviewExternalDocFetcherFollowsSameHostRedirect(t *testing.T) {
 	}
 }
 
+func TestHTTPReviewExternalDocFetcherSuccessfulFetchDefaultsUnknownCredibility(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("external spec text"))
+	}))
+	defer server.Close()
+
+	fetcher := newLocalReviewExternalDocFetcherForTest(server.Client())
+	got := fetchReviewExternalDocForTest(fetcher, server.URL, "external-doc-1")
+
+	if got.Error != "" {
+		t.Fatalf("Error = %q, want nil", got.Error)
+	}
+	if got.SourceCredibility != ReviewExternalDocSourceCredibilityUnknown {
+		t.Fatalf("SourceCredibility = %q, want unknown", got.SourceCredibility)
+	}
+	if got.SourceCredibilityReason == "" {
+		t.Fatal("SourceCredibilityReason empty, want explanation")
+	}
+}
+
 func TestHTTPReviewExternalDocFetcherRejectsSameHostDowngradeRedirect(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/redirect" {

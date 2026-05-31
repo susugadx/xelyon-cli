@@ -33,12 +33,14 @@ type ReviewWebSearchQueryResult struct {
 	Truncated bool
 }
 
-// ReviewExternalDocFetchRequest は external_doc fetch 境界へ渡す検索結果 URL と snippet focus hint。
-// URL と DocID は required、FocusTerms は snippet 抽出用の任意 hint として扱う。
+// ReviewExternalDocFetchRequest は external_doc fetch 境界へ渡す検索結果 URL と判定 hint。
+// URL と DocID は required、FocusTerms は snippet 抽出用の任意 hint、SearchResultTitle と QuerySubjectHint は信頼度判定用の任意 hint として扱う。
 type ReviewExternalDocFetchRequest struct {
-	URL        string
-	DocID      string
-	FocusTerms []ReviewExternalDocFocusTerm
+	URL               string
+	DocID             string
+	FocusTerms        []ReviewExternalDocFocusTerm
+	SearchResultTitle string
+	QuerySubjectHint  string
 }
 
 // ReviewExternalDocFocusTerm は external_doc snippet で優先して引用範囲へ寄せる語句。
@@ -146,11 +148,7 @@ func (c *ReviewWebSearchEvidenceCollector) CollectWebSearchEvidence(ctx context.
 		for _, searchResult := range queryEvidence.Results {
 			docID := fmt.Sprintf("external-doc-%d", docIndex)
 			docIndex++
-			doc := c.fetcher.FetchExternalDoc(ctx, ReviewExternalDocFetchRequest{
-				URL:        searchResult.URL,
-				DocID:      docID,
-				FocusTerms: buildReviewExternalDocFocusTerms(candidate, searchResult, bundle.GenericImpactCandidates.Tokens),
-			})
+			doc := c.fetcher.FetchExternalDoc(ctx, buildReviewExternalDocFetchRequest(candidate, searchResult, bundle.GenericImpactCandidates.Tokens, docID))
 			if doc.Truncated {
 				evidence.Truncated = true
 			}
@@ -169,6 +167,16 @@ func (c *ReviewWebSearchEvidenceCollector) CollectWebSearchEvidence(ctx context.
 		evidence.Inconclusive = true
 	}
 	return evidence
+}
+
+func buildReviewExternalDocFetchRequest(candidate reviewWebSearchEvidenceQueryCandidate, searchResult ReviewWebSearchEvidenceResult, genericTokens []string, docID string) ReviewExternalDocFetchRequest {
+	return ReviewExternalDocFetchRequest{
+		URL:               searchResult.URL,
+		DocID:             docID,
+		FocusTerms:        buildReviewExternalDocFocusTerms(candidate, searchResult, genericTokens),
+		SearchResultTitle: searchResult.Title,
+		QuerySubjectHint:  candidate.subject,
+	}
 }
 
 func limitReviewWebSearchEvidenceResults(results []ReviewWebSearchEvidenceResult, maxResults int) ([]ReviewWebSearchEvidenceResult, bool) {
@@ -197,14 +205,14 @@ func buildReviewWebSearchEvidenceQueryCandidates(bundle ReviewEvidenceBundle) []
 	}
 	focusTokens := reviewWebSearchEvidenceFocusTokens(bundle, corpus)
 	if len(focusTokens) == 0 {
-		focusTokens = []string{"API"}
+		return nil
 	}
 
 	candidates := make([]reviewWebSearchEvidenceQueryCandidate, 0, len(externalSubjects)*len(focusTokens))
 	seen := make(map[string]struct{})
 	for _, subject := range externalSubjects {
 		for _, focus := range focusTokens {
-			query := strings.TrimSpace(subject + " " + focus + " documentation")
+			query := strings.TrimSpace(subject + " " + focus + " official documentation")
 			key := strings.ToLower(query)
 			if _, exists := seen[key]; exists {
 				continue
@@ -289,13 +297,9 @@ func reviewWebSearchEvidenceFocusTokens(bundle ReviewEvidenceBundle, corpus stri
 		"tool calls",
 		"service_tier",
 		"anthropic_version",
-		"prompt cache",
 		"cache_control",
-		"streaming",
-		"citations",
-		"grounding",
+		"text/event-stream",
 		"JSON schema",
-		"configuration",
 	}
 	var result []string
 	seen := make(map[string]struct{})
@@ -315,7 +319,7 @@ func reviewWebSearchEvidenceFocusTokens(bundle ReviewEvidenceBundle, corpus stri
 	}
 	for _, token := range bundle.GenericImpactCandidates.Tokens {
 		token = strings.TrimSpace(token)
-		if token == "" {
+		if !reviewWebSearchEvidenceGenericFocusTokenIsConcrete(token) {
 			continue
 		}
 		key := strings.ToLower(token)
@@ -329,4 +333,17 @@ func reviewWebSearchEvidenceFocusTokens(bundle ReviewEvidenceBundle, corpus stri
 		}
 	}
 	return result
+}
+
+func reviewWebSearchEvidenceGenericFocusTokenIsConcrete(token string) bool {
+	normalized, ok := normalizeReviewExternalDocFocusTerm(token)
+	if !ok {
+		return false
+	}
+	lower := strings.ToLower(normalized)
+	switch lower {
+	case "api", "apis", "config", "configuration", "provider", "providers", "model", "models", "request", "requests", "response", "responses", "streaming":
+		return false
+	}
+	return strings.ContainsAny(normalized, "_-./:") || containsReviewExternalDocDigit(normalized) || containsReviewExternalDocCamelBoundary(normalized)
 }
