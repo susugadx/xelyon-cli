@@ -15,7 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
@@ -172,7 +172,7 @@ func TestAgentRuntime_InitializesTaskLedger(t *testing.T) {
 		t.Fatal("TaskLedger is nil")
 	}
 
-	runtime.TaskLedger.Recorder().RecordToolObservation(ledger.ToolObservation{Change: &tools.FileChange{FilePath: "src/main.go"}})
+	runtime.TaskLedger.Recorder().RecordToolObservation(taskstate.ToolObservation{Change: &tools.FileChange{FilePath: "src/main.go"}})
 	want := filepath.ToSlash(filepath.Join("internal", "agent", "src", "main.go"))
 	if got := runtime.TaskLedger.Snapshot().ChangedFiles.Paths(); len(got) != 1 || got[0] != want {
 		t.Fatalf("TaskLedger changed paths = %v, want [%s]", got, want)
@@ -212,7 +212,7 @@ func TestNewAgentWithRuntime_RebuildsManagedTaskLedgerAfterInvocationCWDOverride
 	runtime.InvocationCWD = explicitCWD
 	agent := newRuntimeTestAgent(t, runtime)
 
-	agent.Runtime.TaskLedger.Recorder().RecordToolObservation(ledger.ToolObservation{
+	agent.Runtime.TaskLedger.Recorder().RecordToolObservation(taskstate.ToolObservation{
 		InvocationCWD: agent.invocationCWD(),
 		Change:        &tools.FileChange{FilePath: target},
 	})
@@ -224,7 +224,7 @@ func TestNewAgentWithRuntime_RebuildsManagedTaskLedgerAfterInvocationCWDOverride
 
 func TestNewAgentWithRuntime_PreservesExplicitTaskLedger(t *testing.T) {
 	explicitCWD := t.TempDir()
-	explicitLedger := ledger.NewStoreWithWorkspace(explicitCWD, explicitCWD)
+	explicitLedger := taskstate.NewStoreWithWorkspace(explicitCWD, explicitCWD)
 	runtime := &AgentRuntime{
 		InvocationCWD: explicitCWD,
 		TaskLedger:    explicitLedger,

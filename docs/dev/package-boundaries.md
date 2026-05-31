@@ -20,3 +20,13 @@ Phase 2-A 後の provider-facing history projection と token helper は次の o
 - `internal/agent`: raw history の clone、runtime option 解決、TaskLedger snapshot からの evidence pointer 抽出、request context / response id chain / active context append の owner。provider history の pure policy 判断は `internal/providerhistory` に委譲する。
 
 `internal/providerhistory/package_boundaries_test.go` は、`internal/providerhistory` 配下から `internal/agent`、`internal/tui`、Bubble Tea、Lip Gloss への import を禁止する。Agent の runtime state や UI 表示に触る必要が出た場合は、providerhistory へ wrapper を増やさず `internal/agent` 側の caller で policy input に変換する。
+
+## Phase 2-B: task state boundary
+
+Phase 2-B 後の runtime task state は次の owner に分ける。
+
+- `internal/taskstate`: `RuntimeTaskState`、snapshot / reset、recorder、tool/test observation、evidence pointer、rehydrate plan / execution、edit readiness、current task state snapshot rendering の provider-neutral な state owner。`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss を直接知らない。
+- `internal/agent`: TaskLedger store の runtime 初期化と lifecycle、turn loop / mutation tracker / final check / edit readiness から state を更新・消費・reset するタイミング、provider-facing active context へ渡すかどうかの policy、`api.ActiveContextBlock` への wrapping、`/ledger` command surface の owner。
+- `internal/providerhistory`: provider history projection / reduction から `taskstate.EvidencePointer` と `taskstate.RehydratePlan` を扱う pure helper の owner。TaskLedger store の所有や request context の副作用は持たない。
+
+`internal/taskstate/package_boundaries_test.go` は、`internal/taskstate` 配下から `internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。Provider payload、TUI 表示、turn orchestration に触る必要が出た場合は、`internal/taskstate` へ wrapper を増やさず caller 側で `taskstate` の provider-neutral な型へ変換する。

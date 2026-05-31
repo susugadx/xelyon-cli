@@ -10,7 +10,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 func TestAgent_RehydrateEvidencePointer_DoesNotMutateHistoryOrSession(t *testing.T) {
@@ -18,7 +18,7 @@ func TestAgent_RehydrateEvidencePointer_DoesNotMutateHistoryOrSession(t *testing
 	if err := os.WriteFile(filepath.Join(root, "evidence.go"), []byte("line 1\nline 2\n"), 0o644); err != nil {
 		t.Fatalf("write evidence file: %v", err)
 	}
-	store := ledger.NewStoreWithRoot(root)
+	store := taskstate.NewStoreWithRoot(root)
 	session := history.NewSession("gpt-5.4")
 	session.AddMessage("user", "persisted", "gpt-5.4")
 	agent := &Agent{
@@ -33,7 +33,7 @@ func TestAgent_RehydrateEvidencePointer_DoesNotMutateHistoryOrSession(t *testing
 	beforeHistory := append([]api.Message(nil), agent.History...)
 	beforeSessionMessages := append([]history.MessageEntry(nil), session.Messages...)
 
-	result, err := agent.RehydrateEvidencePointer(context.Background(), ledger.EvidencePointer{
+	result, err := agent.RehydrateEvidencePointer(context.Background(), taskstate.EvidencePointer{
 		Path:      "evidence.go",
 		StartLine: 2,
 		EndLine:   2,
@@ -61,15 +61,15 @@ func TestAgent_RehydrateEvidencePointer_LedgerPointerDoesNotRequireInvocationCWD
 	if err := os.WriteFile(filepath.Join(root, "evidence.go"), []byte("root line\n"), 0o644); err != nil {
 		t.Fatalf("write evidence file: %v", err)
 	}
-	store := ledger.NewStoreWithWorkspace(root, invocationCWD)
-	store.Recorder().RecordToolObservation(ledger.ToolObservation{
+	store := taskstate.NewStoreWithWorkspace(root, invocationCWD)
+	store.Recorder().RecordToolObservation(taskstate.ToolObservation{
 		ToolName: "read_file",
 		Result:   "📄 File: evidence.go\n1: root line",
 	})
-	pointers := ledger.EvidencePointersFromState(store.Snapshot())
+	pointers := taskstate.EvidencePointersFromState(store.Snapshot())
 	if len(pointers) != 1 ||
 		pointers[0].Path != "evidence.go" ||
-		pointers[0].PathBase != ledger.EvidencePointerPathBaseRepoRoot {
+		pointers[0].PathBase != taskstate.EvidencePointerPathBaseRepoRoot {
 		t.Fatalf("EvidencePointersFromState() = %#v, want one repo-relative pointer", pointers)
 	}
 	if err := os.RemoveAll(invocationCWD); err != nil {
@@ -102,19 +102,19 @@ func TestAgent_RehydrateEvidencePointer_NilRuntimeOrLedgerReturnsStructuredError
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tt.agent.RehydrateEvidencePointer(context.Background(), ledger.EvidencePointer{
+			result, err := tt.agent.RehydrateEvidencePointer(context.Background(), taskstate.EvidencePointer{
 				Path:      "evidence.go",
 				StartLine: 1,
 				EndLine:   1,
 			})
-			if result.Reason != ledger.EvidenceRehydrateReasonWorkspaceUnavailable {
+			if result.Reason != taskstate.EvidenceRehydrateReasonWorkspaceUnavailable {
 				t.Fatalf("result reason = %q, want workspace_unavailable", result.Reason)
 			}
-			var rehydrateErr *ledger.EvidenceRehydrateError
+			var rehydrateErr *taskstate.EvidenceRehydrateError
 			if !errors.As(err, &rehydrateErr) {
 				t.Fatalf("error = %T %v, want *EvidenceRehydrateError", err, err)
 			}
-			if rehydrateErr.Reason != ledger.EvidenceRehydrateReasonWorkspaceUnavailable {
+			if rehydrateErr.Reason != taskstate.EvidenceRehydrateReasonWorkspaceUnavailable {
 				t.Fatalf("error reason = %q, want workspace_unavailable", rehydrateErr.Reason)
 			}
 		})

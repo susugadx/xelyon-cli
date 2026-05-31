@@ -3,20 +3,20 @@ package agent
 import (
 	"context"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 // RehydrateEvidencePointer は agent runtime の ledger で evidence pointer を再読込する。
-func (a *Agent) RehydrateEvidencePointer(ctx context.Context, pointer ledger.EvidencePointer) (ledger.EvidenceRehydrateResult, error) {
+func (a *Agent) RehydrateEvidencePointer(ctx context.Context, pointer taskstate.EvidencePointer) (taskstate.EvidenceRehydrateResult, error) {
 	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
-		result := ledger.EvidenceRehydrateResult{
+		result := taskstate.EvidenceRehydrateResult{
 			Path:      pointer.Path,
 			StartLine: pointer.StartLine,
 			EndLine:   pointer.EndLine,
-			Reason:    ledger.EvidenceRehydrateReasonWorkspaceUnavailable,
+			Reason:    taskstate.EvidenceRehydrateReasonWorkspaceUnavailable,
 		}
-		return result, &ledger.EvidenceRehydrateError{
-			Reason: ledger.EvidenceRehydrateReasonWorkspaceUnavailable,
+		return result, &taskstate.EvidenceRehydrateError{
+			Reason: taskstate.EvidenceRehydrateReasonWorkspaceUnavailable,
 			Path:   pointer.Path,
 		}
 	}

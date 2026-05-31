@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -17,20 +17,20 @@ func (a *Agent) observeEditReadinessBeforeTool(ctx context.Context, toolCall *to
 		return
 	}
 	if extraction.unknown {
-		store.RecordEditReadinessObservation(ledger.EditReadinessObservation{
+		store.RecordEditReadinessObservation(taskstate.EditReadinessObservation{
 			ToolName:   editReadinessToolName(toolCall),
 			ToolCallID: editReadinessToolCallID(toolCall),
-			Status:     ledger.EditReadinessStatusUnknown,
+			Status:     taskstate.EditReadinessStatusUnknown,
 		})
 		return
 	}
 	for _, target := range extraction.targets {
-		observation := store.CheckEditReadiness(ctx, target, ledger.EditReadinessOptions{})
+		observation := store.CheckEditReadiness(ctx, target, taskstate.EditReadinessOptions{})
 		store.RecordEditReadinessObservation(observation)
 	}
 }
 
-func (a *Agent) editReadinessStore() *ledger.Store {
+func (a *Agent) editReadinessStore() *taskstate.Store {
 	if a == nil || a.Runtime == nil {
 		return nil
 	}

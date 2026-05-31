@@ -7,14 +7,14 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 type ledgerMutationTrackerFixture struct {
 	root       string
-	taskLedger *ledger.Store
+	taskLedger *taskstate.Store
 	agent      *Agent
 	tracker    *MutationTracker
 	state      turnMutationState
@@ -24,7 +24,7 @@ func newLedgerMutationTrackerFixture(t *testing.T) *ledgerMutationTrackerFixture
 	t.Helper()
 
 	root := t.TempDir()
-	taskLedger := ledger.NewStoreWithRoot(root)
+	taskLedger := taskstate.NewStoreWithRoot(root)
 	agent := &Agent{
 		Runtime: &AgentRuntime{TaskLedger: taskLedger},
 		agentConversationState: agentConversationState{
@@ -249,7 +249,7 @@ func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHisto
 	fixture.tracker.RecordToolResult(&tools.ToolCall{
 		ID:   "read-1",
 		Tool: "read_file",
-	}, "📄 File: internal/ledger/ledger.go\n7: type RuntimeTaskState struct {}", nil, &fixture.state)
+	}, "📄 File: internal/taskstate/taskstate.go\n7: type RuntimeTaskState struct {}", nil, &fixture.state)
 	fixture.tracker.RecordToolResult(&tools.ToolCall{
 		ID:   "search-1",
 		Tool: "search_code",
@@ -264,8 +264,8 @@ func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHisto
 	}, "\n"), nil, &fixture.state)
 	fixture.tracker.RecordToolResult(&tools.ToolCall{
 		Tool: "bash",
-		Args: map[string]string{"command": "go test ./internal/ledger"},
-	}, "ok\ninternal/ledger/ledger_test.go:10: pass", nil, &fixture.state)
+		Args: map[string]string{"command": "go test ./internal/taskstate"},
+	}, "ok\ninternal/taskstate/ledger_test.go:10: pass", nil, &fixture.state)
 
 	if fixture.state.hasMutations() {
 		t.Fatal("read/search/bash observations without FileChange must not update turn mutation state")
@@ -276,7 +276,7 @@ func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHisto
 	assertAgentHistoryUnchanged(t, fixture.agent)
 
 	snapshot := fixture.taskLedger.Snapshot()
-	wantTouched := []string{"internal/ledger/ledger.go", "internal/agent/agent.go", "internal/ledger/ledger_test.go"}
+	wantTouched := []string{"internal/taskstate/taskstate.go", "internal/agent/agent.go", "internal/taskstate/ledger_test.go"}
 	if got := snapshot.TouchedFiles.Paths(); !reflect.DeepEqual(got, wantTouched) {
 		t.Fatalf("ledger touched paths = %v, want %v", got, wantTouched)
 	}
@@ -286,7 +286,7 @@ func TestMutationTracker_RecordToolResult_RecordsReadSearchBashFactsWithoutHisto
 	if got := snapshot.RecommendedReads.Items(); len(got) != 1 || got[0].Path() != "internal/agent/runtime.go" {
 		t.Fatalf("ledger recommended reads = %#v", got)
 	}
-	if got := snapshot.LastPassedTests.Results(); len(got) != 1 || got[0].Command() != "go test ./internal/ledger" {
+	if got := snapshot.LastPassedTests.Results(); len(got) != 1 || got[0].Command() != "go test ./internal/taskstate" {
 		t.Fatalf("ledger passed tests = %#v", got)
 	}
 }
@@ -301,10 +301,10 @@ func TestMutationTracker_RecordToolExecutionResult_RecordsStructuredObservationW
 		Result: "rendered output is not history",
 		Observation: &tools.RuntimeObservation{
 			TouchedFiles: []tools.ObservationPath{{
-				Path: "internal/ledger/ledger.go",
+				Path: "internal/taskstate/taskstate.go",
 			}},
 			Evidence: []tools.ObservationEvidence{{
-				Path:      "internal/ledger/ledger.go",
+				Path:      "internal/taskstate/taskstate.go",
 				StartLine: 22,
 				EndLine:   22,
 				Excerpt:   "type RuntimeTaskState struct {",
@@ -321,12 +321,12 @@ func TestMutationTracker_RecordToolExecutionResult_RecordsStructuredObservationW
 	assertAgentHistoryUnchanged(t, fixture.agent)
 
 	snapshot := fixture.taskLedger.Snapshot()
-	if got := snapshot.TouchedFiles.Paths(); !reflect.DeepEqual(got, []string{"internal/ledger/ledger.go"}) {
-		t.Fatalf("ledger touched paths = %v, want [internal/ledger/ledger.go]", got)
+	if got := snapshot.TouchedFiles.Paths(); !reflect.DeepEqual(got, []string{"internal/taskstate/taskstate.go"}) {
+		t.Fatalf("ledger touched paths = %v, want [internal/taskstate/taskstate.go]", got)
 	}
 	evidence := snapshot.Evidence.Items()
 	if len(evidence) != 1 ||
-		evidence[0].Path() != "internal/ledger/ledger.go" ||
+		evidence[0].Path() != "internal/taskstate/taskstate.go" ||
 		evidence[0].ToolCallID() != "structured-search" {
 		t.Fatalf("ledger evidence = %#v", evidence)
 	}
@@ -356,7 +356,7 @@ func TestMutationTracker_RecordToolExecutionResult_UsesExecutionErrorForBashLedg
 func TestMutationTracker_RecordToolResult_UsesInvocationCWDForRelativeLedgerPaths(t *testing.T) {
 	root := t.TempDir()
 	invocationCWD := filepath.Join(root, "pkg")
-	taskLedger := ledger.NewStoreWithRoot(root)
+	taskLedger := taskstate.NewStoreWithRoot(root)
 	a := &Agent{
 		Runtime: &AgentRuntime{
 			InvocationCWD: invocationCWD,

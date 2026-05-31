@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 type editReadinessProbeTool struct {
 	name              string
-	store             *ledger.Store
+	store             *taskstate.Store
 	observationsAtRun int
 	result            string
 	err               error
@@ -158,7 +158,7 @@ func TestExtractEditReadinessTargets_UnknownApplyPatch(t *testing.T) {
 }
 
 func TestObserveEditReadinessBeforeTool_DoesNotMutateConversation(t *testing.T) {
-	store := ledger.NewStoreWithRoot(t.TempDir())
+	store := taskstate.NewStoreWithRoot(t.TempDir())
 	agent := newEditReadinessProbeAgent(t, store, &editReadinessProbeTool{
 		name:   "write_file",
 		store:  store,
@@ -197,7 +197,7 @@ func TestToolExecution_RecordsEditReadinessBeforeToolWithoutChangingResult(t *te
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := ledger.NewStoreWithRoot(t.TempDir())
+			store := taskstate.NewStoreWithRoot(t.TempDir())
 			probe := &editReadinessProbeTool{
 				name:   "write_file",
 				store:  store,
@@ -225,7 +225,7 @@ func TestToolExecution_RecordsEditReadinessBeforeToolWithoutChangingResult(t *te
 }
 
 func TestExecuteToolWithSpinnerResult_EditReadinessDoesNotChangeFailureResult(t *testing.T) {
-	store := ledger.NewStoreWithRoot(t.TempDir())
+	store := taskstate.NewStoreWithRoot(t.TempDir())
 	probe := &editReadinessProbeTool{
 		name:   "delete_file",
 		store:  store,
@@ -253,7 +253,7 @@ func TestExecuteToolWithSpinnerResult_EditReadinessDoesNotChangeFailureResult(t 
 
 func TestExecuteToolWithSpinnerResult_MalformedApplyPatchStillUsesExistingErrorPath(t *testing.T) {
 	t.Chdir(t.TempDir())
-	store := ledger.NewStoreWithRoot(t.TempDir())
+	store := taskstate.NewStoreWithRoot(t.TempDir())
 	agent := newEditReadinessProbeAgent(t, store, nil)
 
 	execResult := agent.executeToolWithSpinnerResult(context.Background(), &tools.ToolCall{
@@ -268,7 +268,7 @@ func TestExecuteToolWithSpinnerResult_MalformedApplyPatchStillUsesExistingErrorP
 	}
 	assertEditReadinessConversationUnchanged(t, agent)
 	observations := store.EditReadinessObservations()
-	if len(observations) != 1 || observations[0].Status != ledger.EditReadinessStatusUnknown {
+	if len(observations) != 1 || observations[0].Status != taskstate.EditReadinessStatusUnknown {
 		t.Fatalf("observations = %#v, want one unknown observation", observations)
 	}
 }
@@ -304,7 +304,7 @@ func TestGeminiApplyPatchRepair_RecordsOriginalAndRepairedReadiness(t *testing.T
 
 			provider := &sequenceMockProvider{name: "gemini", responses: []string{validAddFilePatch}}
 			agent := newGeminiRepairTestAgent(t, provider)
-			store := ledger.NewStoreWithRoot(workspace)
+			store := taskstate.NewStoreWithRoot(workspace)
 			agent.Runtime.TaskLedger = store
 
 			execResult := tt.execute(agent)
@@ -317,7 +317,7 @@ func TestGeminiApplyPatchRepair_RecordsOriginalAndRepairedReadiness(t *testing.T
 	}
 }
 
-func newEditReadinessProbeAgent(t *testing.T, store *ledger.Store, tool tools.Tool) *Agent {
+func newEditReadinessProbeAgent(t *testing.T, store *taskstate.Store, tool tools.Tool) *Agent {
 	t.Helper()
 
 	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
@@ -334,7 +334,7 @@ func newEditReadinessProbeAgent(t *testing.T, store *ledger.Store, tool tools.To
 	return agent
 }
 
-func assertEditReadinessTargetPaths(t *testing.T, targets []ledger.EditReadinessTarget, want []string) {
+func assertEditReadinessTargetPaths(t *testing.T, targets []taskstate.EditReadinessTarget, want []string) {
 	t.Helper()
 	paths := make([]string, 0, len(targets))
 	for _, target := range targets {
@@ -355,7 +355,7 @@ func assertEditReadinessConversationUnchanged(t *testing.T, agent *Agent) {
 	}
 }
 
-func assertSingleEditReadinessPathNotInLedgerObservation(t *testing.T, store *ledger.Store, path string) {
+func assertSingleEditReadinessPathNotInLedgerObservation(t *testing.T, store *taskstate.Store, path string) {
 	t.Helper()
 
 	observations := store.EditReadinessObservations()
@@ -365,25 +365,25 @@ func assertSingleEditReadinessPathNotInLedgerObservation(t *testing.T, store *le
 	assertEditReadinessPathNotInLedgerObservation(t, observations[0], path)
 }
 
-func assertOriginalAndRepairedEditReadinessObservations(t *testing.T, store *ledger.Store, repairedPath string) {
+func assertOriginalAndRepairedEditReadinessObservations(t *testing.T, store *taskstate.Store, repairedPath string) {
 	t.Helper()
 
 	observations := store.EditReadinessObservations()
 	if len(observations) != 2 {
 		t.Fatalf("observations = %#v, want original unknown and repaired target warning", observations)
 	}
-	if observations[0].Status != ledger.EditReadinessStatusUnknown {
+	if observations[0].Status != taskstate.EditReadinessStatusUnknown {
 		t.Fatalf("original observation = %#v, want unknown", observations[0])
 	}
 	assertEditReadinessPathNotInLedgerObservation(t, observations[1], repairedPath)
 }
 
-func assertEditReadinessPathNotInLedgerObservation(t *testing.T, observation ledger.EditReadinessObservation, path string) {
+func assertEditReadinessPathNotInLedgerObservation(t *testing.T, observation taskstate.EditReadinessObservation, path string) {
 	t.Helper()
 
 	if observation.Path != path ||
-		observation.Status != ledger.EditReadinessStatusWarning ||
-		!reflect.DeepEqual(observation.Reasons, []ledger.EditReadinessReason{ledger.EditReadinessReasonPathNotInLedger}) {
+		observation.Status != taskstate.EditReadinessStatusWarning ||
+		!reflect.DeepEqual(observation.Reasons, []taskstate.EditReadinessReason{taskstate.EditReadinessReasonPathNotInLedger}) {
 		t.Fatalf("observation = %#v, want %s path_not_in_ledger warning", observation, path)
 	}
 }

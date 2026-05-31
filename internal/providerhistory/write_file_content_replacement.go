@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
@@ -63,7 +63,7 @@ func buildProviderHistoryWriteFileContentReplacement(arguments, toolResultConten
 	if !ok || rawPath == "" {
 		return providerHistoryWriteFileContentReplacement{}, false
 	}
-	path, ok := ledger.NormalizeRepoRelativePath(rawPath)
+	path, ok := taskstate.NormalizeRepoRelativePath(rawPath)
 	if !ok {
 		return providerHistoryWriteFileContentReplacement{}, false
 	}
@@ -114,7 +114,7 @@ func providerHistoryWriteFileSuccessResultPath(content string) (string, bool) {
 	if len(matches) < 2 {
 		return "", false
 	}
-	return ledger.NormalizeRepoRelativePath(matches[1])
+	return taskstate.NormalizeRepoRelativePath(matches[1])
 }
 
 func buildProviderHistoryWriteFileContentPlaceholder(path string) string {
@@ -188,7 +188,7 @@ func providerHistoryUpdateWriteFileInputContent(input map[string]any, replacemen
 	if !ok || strings.TrimSpace(pathValue) == "" {
 		return false
 	}
-	path, ok := ledger.NormalizeRepoRelativePath(pathValue)
+	path, ok := taskstate.NormalizeRepoRelativePath(pathValue)
 	if !ok || path != replacement.path {
 		return false
 	}

@@ -1,6 +1,6 @@
 package providerhistory
 
-import "github.com/susugadx/xelyon-cli/internal/ledger"
+import "github.com/susugadx/xelyon-cli/internal/taskstate"
 
 // Mode は provider-facing history reduction の動作を表す。
 type Mode int
@@ -19,7 +19,7 @@ const (
 // Policy は provider-facing reduction の方針を選ぶ。
 type Policy struct {
 	Mode                                   Mode
-	EvidencePointers                       []ledger.EvidencePointer
+	EvidencePointers                       []taskstate.EvidencePointer
 	EvidenceReductionRequiresActiveContext bool
 	ActiveContextTransportAvailable        bool
 }
@@ -30,7 +30,7 @@ type ReductionCandidate struct {
 	Role                     string
 	ToolName                 string
 	ToolCallID               string
-	EvidencePointers         []ledger.EvidencePointer
+	EvidencePointers         []taskstate.EvidencePointer
 	OriginalByteSize         int
 	OriginalRuneSize         int
 	Reason                   string
@@ -45,11 +45,11 @@ func cloneReductionCandidate(candidate ReductionCandidate) ReductionCandidate {
 	return candidate
 }
 
-func cloneProviderHistoryReductionEvidencePointers(pointers []ledger.EvidencePointer) []ledger.EvidencePointer {
+func cloneProviderHistoryReductionEvidencePointers(pointers []taskstate.EvidencePointer) []taskstate.EvidencePointer {
 	if len(pointers) == 0 {
 		return nil
 	}
-	cloned := make([]ledger.EvidencePointer, len(pointers))
+	cloned := make([]taskstate.EvidencePointer, len(pointers))
 	copy(cloned, pointers)
 	return cloned
 }

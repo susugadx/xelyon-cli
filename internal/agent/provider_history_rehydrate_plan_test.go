@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 func TestProviderHistoryAppliedEvidencePointersFiltersDedupesAndCopies(t *testing.T) {
-	readPointer := ledger.EvidencePointer{
+	readPointer := taskstate.EvidencePointer{
 		Path:       "README.md",
 		StartLine:  1,
 		EndLine:    20,
@@ -20,14 +20,14 @@ func TestProviderHistoryAppliedEvidencePointersFiltersDedupesAndCopies(t *testin
 	}
 	readDuplicate := readPointer
 	readDuplicate.FileHash = "duplicate"
-	searchPointer := ledger.EvidencePointer{
+	searchPointer := taskstate.EvidencePointer{
 		Path:       "internal/search.go",
 		StartLine:  10,
 		EndLine:    12,
 		Source:     "search_code",
 		ToolCallID: "call_search",
 	}
-	gatherPointer := ledger.EvidencePointer{
+	gatherPointer := taskstate.EvidencePointer{
 		Path:       "internal/context.go",
 		StartLine:  30,
 		EndLine:    40,
@@ -40,19 +40,19 @@ func TestProviderHistoryAppliedEvidencePointersFiltersDedupesAndCopies(t *testin
 				ToolName:           "read_file",
 				ToolCallID:         "call_read",
 				ReplacementApplied: true,
-				EvidencePointers:   []ledger.EvidencePointer{readPointer, readDuplicate},
+				EvidencePointers:   []taskstate.EvidencePointer{readPointer, readDuplicate},
 			},
 			{
 				ToolName:           "search_code",
 				ToolCallID:         "call_unapplied",
 				ReplacementApplied: false,
-				EvidencePointers:   []ledger.EvidencePointer{searchPointer},
+				EvidencePointers:   []taskstate.EvidencePointer{searchPointer},
 			},
 			{
 				ToolName:           "bash",
 				ToolCallID:         "call_command",
 				ReplacementApplied: true,
-				EvidencePointers: []ledger.EvidencePointer{{
+				EvidencePointers: []taskstate.EvidencePointer{{
 					Path:       "scripts/build.sh",
 					StartLine:  1,
 					EndLine:    2,
@@ -64,13 +64,13 @@ func TestProviderHistoryAppliedEvidencePointersFiltersDedupesAndCopies(t *testin
 				ToolName:           "search_code",
 				ToolCallID:         "call_search",
 				ReplacementApplied: true,
-				EvidencePointers:   []ledger.EvidencePointer{searchPointer},
+				EvidencePointers:   []taskstate.EvidencePointer{searchPointer},
 			},
 			{
 				ToolName:           "gather_context",
 				ToolCallID:         "call_gather",
 				ReplacementApplied: true,
-				EvidencePointers:   []ledger.EvidencePointer{gatherPointer},
+				EvidencePointers:   []taskstate.EvidencePointer{gatherPointer},
 			},
 		},
 		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
@@ -87,7 +87,7 @@ func TestProviderHistoryAppliedEvidencePointersFiltersDedupesAndCopies(t *testin
 	}
 
 	got := providerHistoryAppliedEvidencePointers(report)
-	want := []ledger.EvidencePointer{readPointer, searchPointer, gatherPointer}
+	want := []taskstate.EvidencePointer{readPointer, searchPointer, gatherPointer}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerHistoryAppliedEvidencePointers() = %#v, want %#v", got, want)
 	}
@@ -99,7 +99,7 @@ func TestProviderHistoryAppliedEvidencePointersFiltersDedupesAndCopies(t *testin
 }
 
 func TestProviderHistoryRehydratePlanEmptyWithoutLedgerOrAppliedEvidence(t *testing.T) {
-	store := ledger.NewStoreWithRoot(t.TempDir())
+	store := taskstate.NewStoreWithRoot(t.TempDir())
 	tests := []struct {
 		name  string
 		agent *Agent
@@ -113,7 +113,7 @@ func TestProviderHistoryRehydratePlanEmptyWithoutLedgerOrAppliedEvidence(t *test
 			LastProviderHistoryProjectionReport: ProviderHistoryProjectionReport{Candidates: []ProviderHistoryReductionCandidate{{
 				ToolName:         "read_file",
 				ToolCallID:       "call_read",
-				EvidencePointers: []ledger.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2, Source: "read_file"}},
+				EvidencePointers: []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2, Source: "read_file"}},
 			}}},
 		}}},
 	}
@@ -137,11 +137,11 @@ func TestProviderHistoryRehydratePlanBuildsFromAppliedReportAndEditReadinessObse
 			EndLine:    20,
 		},
 	)
-	taskLedger.RecordEditReadinessObservation(ledger.EditReadinessObservation{
+	taskLedger.RecordEditReadinessObservation(taskstate.EditReadinessObservation{
 		Path:           "src/main.go",
 		NormalizedPath: "src/main.go",
-		Status:         ledger.EditReadinessStatusWarning,
-		Reasons:        []ledger.EditReadinessReason{ledger.EditReadinessReasonNoRecentRead},
+		Status:         taskstate.EditReadinessStatusWarning,
+		Reasons:        []taskstate.EditReadinessReason{taskstate.EditReadinessReasonNoRecentRead},
 	})
 	agent := &Agent{
 		Runtime: &AgentRuntime{TaskLedger: taskLedger},
@@ -163,12 +163,12 @@ func TestProviderHistoryRehydratePlanBuildsFromAppliedReportAndEditReadinessObse
 	agent.recordLastProviderHistoryProjectionReport(result.Report)
 
 	plan := agent.buildProviderHistoryRehydratePlan(nil)
-	want := ledger.RehydratePlan{Items: []ledger.RehydratePlanItem{{
+	want := taskstate.RehydratePlan{Items: []taskstate.RehydratePlanItem{{
 		Path:       "src/main.go",
 		StartLine:  10,
 		EndLine:    20,
 		Source:     "read_file",
-		Reason:     ledger.RehydratePlanReasonEditTargetMissingEvidence,
+		Reason:     taskstate.RehydratePlanReasonEditTargetMissingEvidence,
 		ToolCallID: "call_old_read",
 	}}}
 	if !reflect.DeepEqual(plan, want) {

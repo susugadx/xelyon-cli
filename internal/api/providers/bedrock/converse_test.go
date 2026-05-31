@@ -14,7 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -273,12 +273,12 @@ func TestBuildConverseStreamInput_AddsActiveContextAsSeparateSystemBlock(t *test
 }
 
 func bedrockTestRehydratedEvidence() string {
-	return ledger.RenderRehydratedEvidenceBlock(ledger.RehydratedEvidenceBlock{Items: []ledger.RehydratedEvidenceItem{{
+	return taskstate.RenderRehydratedEvidenceBlock(taskstate.RehydratedEvidenceBlock{Items: []taskstate.RehydratedEvidenceItem{{
 		Path:       "README.md",
 		StartLine:  1,
 		EndLine:    2,
 		Source:     "read_file",
-		Reason:     ledger.RehydratePlanReasonOmittedProviderHistory,
+		Reason:     taskstate.RehydratePlanReasonOmittedProviderHistory,
 		ToolCallID: "call_read",
 		Content:    "line one\nline two",
 	}}})

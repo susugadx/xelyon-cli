@@ -8,7 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 func TestRequestContext_CurrentTaskStateContextDefaultOff(t *testing.T) {
@@ -57,7 +57,7 @@ func TestRequestContext_CurrentTaskStateContextEmptyLedgerNoop(t *testing.T) {
 	agent := &Agent{
 		Runtime: &AgentRuntime{
 			Options:    RuntimeOptions{EnableCurrentTaskStateContext: true},
-			TaskLedger: ledger.NewStoreWithRoot(t.TempDir()),
+			TaskLedger: taskstate.NewStoreWithRoot(t.TempDir()),
 		},
 	}
 	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
@@ -72,7 +72,7 @@ func TestRequestContext_CurrentTaskStateContextClearsInheritedBlocksWhenLedgerIs
 	agent := &Agent{
 		Runtime: &AgentRuntime{
 			Options:    RuntimeOptions{EnableCurrentTaskStateContext: true},
-			TaskLedger: ledger.NewStoreWithRoot(t.TempDir()),
+			TaskLedger: taskstate.NewStoreWithRoot(t.TempDir()),
 		},
 	}
 	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
@@ -108,10 +108,10 @@ func TestRequestContext_CurrentTaskStateContextIncludesSnapshotWithoutMutatingHi
 		t.Fatalf("Name = %q, want %q", got[0].Name, currentTaskStateActiveContextName)
 	}
 	for _, want := range []string{
-		ledger.CurrentTaskStateStartMarker,
+		taskstate.CurrentTaskStateStartMarker,
 		"Last passed tests:",
-		"go test ./internal/ledger",
-		ledger.CurrentTaskStateEndMarker,
+		"go test ./internal/taskstate",
+		taskstate.CurrentTaskStateEndMarker,
 	} {
 		if !strings.Contains(got[0].Content, want) {
 			t.Fatalf("active context content missing %q:\n%s", want, got[0].Content)

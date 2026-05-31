@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -158,10 +158,10 @@ type providerHistoryEvidenceItem struct {
 	Excerpt    string
 }
 
-func providerHistoryTaskLedgerWithEvidence(t *testing.T, items ...providerHistoryEvidenceItem) *ledger.Store {
+func providerHistoryTaskLedgerWithEvidence(t *testing.T, items ...providerHistoryEvidenceItem) *taskstate.Store {
 	t.Helper()
 	root := t.TempDir()
-	store := ledger.NewStoreWithRoot(root)
+	store := taskstate.NewStoreWithRoot(root)
 	for _, item := range items {
 		endLine := item.EndLine
 		if endLine == 0 {
@@ -171,7 +171,7 @@ func providerHistoryTaskLedgerWithEvidence(t *testing.T, items ...providerHistor
 		if excerpt == "" {
 			excerpt = "evidence"
 		}
-		store.Recorder().RecordToolObservation(ledger.ToolObservation{
+		store.Recorder().RecordToolObservation(taskstate.ToolObservation{
 			ToolName:   item.ToolName,
 			ToolCallID: item.ToolCallID,
 			Structured: &tools.RuntimeObservation{

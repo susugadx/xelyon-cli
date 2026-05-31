@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 const (
@@ -14,7 +14,7 @@ const (
 	ledgerCommandRehydratePlanLimit = 5
 )
 
-func renderLedgerCommandOutput(out io.Writer, state ledger.RuntimeTaskState) {
+func renderLedgerCommandOutput(out io.Writer, state taskstate.RuntimeTaskState) {
 	_, _ = fmt.Fprintln(out, "Runtime task ledger")
 	_, _ = fmt.Fprintln(out)
 
@@ -64,7 +64,7 @@ func renderLedgerRecommendedReadsSection[T ledgerRecommendedReadItem](out io.Wri
 	_, _ = fmt.Fprintln(out)
 }
 
-func renderLedgerTestResultsSection(out io.Writer, title string, results []ledger.TestResult, emptyMessage string) {
+func renderLedgerTestResultsSection(out io.Writer, title string, results []taskstate.TestResult, emptyMessage string) {
 	_, _ = fmt.Fprintf(out, "%s:\n", title)
 	if len(results) == 0 {
 		_, _ = fmt.Fprintf(out, "  %s\n\n", emptyMessage)
@@ -76,7 +76,7 @@ func renderLedgerTestResultsSection(out io.Writer, title string, results []ledge
 	_, _ = fmt.Fprintln(out)
 }
 
-func renderLedgerRehydratePlanSection(out io.Writer, plan ledger.RehydratePlan) {
+func renderLedgerRehydratePlanSection(out io.Writer, plan taskstate.RehydratePlan) {
 	if len(plan.Items) == 0 {
 		return
 	}
@@ -130,7 +130,7 @@ func ledgerRecommendedReadFields(item ledgerRecommendedReadItem) []string {
 	return parts
 }
 
-func ledgerTestResultFields(result ledger.TestResult) []string {
+func ledgerTestResultFields(result taskstate.TestResult) []string {
 	return []string{
 		"command: " + result.Command(),
 		"status: " + ledgerDisplayValue(result.Status(), "unknown"),
@@ -159,7 +159,7 @@ func ledgerSingleLineExcerpt(value string) string {
 	return string(runes[:ledgerCommandExcerptLimit-3]) + "..."
 }
 
-func ledgerRehydratePlanLineRange(item ledger.RehydratePlanItem) string {
+func ledgerRehydratePlanLineRange(item taskstate.RehydratePlanItem) string {
 	if item.EndLine > item.StartLine {
 		return fmt.Sprintf("L%d-L%d", item.StartLine, item.EndLine)
 	}

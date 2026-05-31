@@ -6,7 +6,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
@@ -33,7 +33,7 @@ func (a *Agent) buildCurrentTaskStateBlock() (api.ActiveContextBlock, bool) {
 		return api.ActiveContextBlock{}, false
 	}
 
-	content := ledger.RenderCurrentTaskStateSnapshot(state, ledger.DefaultSnapshotRenderOptions())
+	content := taskstate.RenderCurrentTaskStateSnapshot(state, taskstate.DefaultSnapshotRenderOptions())
 	if strings.TrimSpace(content) == "" {
 		return api.ActiveContextBlock{}, false
 	}

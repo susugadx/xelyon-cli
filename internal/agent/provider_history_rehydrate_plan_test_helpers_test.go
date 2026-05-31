@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 const (
@@ -11,13 +11,13 @@ const (
 	providerHistoryRehydrateTestToolCallID = "call_rehydrate"
 )
 
-func recordProviderHistoryRehydratePlanFixture(store *ledger.Store, path string, startLine, endLine int) ProviderHistoryProjectionReport {
+func recordProviderHistoryRehydratePlanFixture(store *taskstate.Store, path string, startLine, endLine int) ProviderHistoryProjectionReport {
 	if store != nil {
-		store.RecordEditReadinessObservation(ledger.EditReadinessObservation{
+		store.RecordEditReadinessObservation(taskstate.EditReadinessObservation{
 			Path:           path,
 			NormalizedPath: path,
-			Status:         ledger.EditReadinessStatusWarning,
-			Reasons:        []ledger.EditReadinessReason{ledger.EditReadinessReasonNoRecentRead},
+			Status:         taskstate.EditReadinessStatusWarning,
+			Reasons:        []taskstate.EditReadinessReason{taskstate.EditReadinessReasonNoRecentRead},
 		})
 	}
 	return ProviderHistoryProjectionReport{
@@ -32,7 +32,7 @@ func recordProviderHistoryRehydratePlanFixture(store *ledger.Store, path string,
 
 func installProviderHistoryRehydratePlanFixture(t *testing.T, agent *Agent, path string, startLine, endLine int) {
 	t.Helper()
-	store := ledger.NewStoreWithRoot(t.TempDir())
+	store := taskstate.NewStoreWithRoot(t.TempDir())
 	agent.Runtime.TaskLedger = store
 	agent.Runtime.LastProviderHistoryProjectionReport = recordProviderHistoryRehydratePlanFixture(store, path, startLine, endLine)
 }
@@ -42,13 +42,13 @@ func providerHistoryRehydratePlanTestCandidate(path string, startLine, endLine i
 		ToolName:           providerHistoryRehydrateTestToolName,
 		ToolCallID:         providerHistoryRehydrateTestToolCallID,
 		ReplacementApplied: true,
-		EvidencePointers: []ledger.EvidencePointer{{
+		EvidencePointers: []taskstate.EvidencePointer{{
 			Path:       path,
 			StartLine:  startLine,
 			EndLine:    endLine,
 			Source:     providerHistoryRehydrateTestToolName,
 			ToolCallID: providerHistoryRehydrateTestToolCallID,
-			PathBase:   ledger.EvidencePointerPathBaseRepoRoot,
+			PathBase:   taskstate.EvidencePointerPathBaseRepoRoot,
 		}},
 	}
 }

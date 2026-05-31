@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/susugadx/xelyon-cli/internal/ledger"
+import "github.com/susugadx/xelyon-cli/internal/taskstate"
 
 // handleLedgerCommand は runtime task ledger の現在値を表示する。
 func handleLedgerCommand(agent *Agent, args []string) bool {
@@ -15,9 +15,9 @@ func handleLedgerCommand(agent *Agent, args []string) bool {
 	return true
 }
 
-func ledgerCommandSnapshot(agent *Agent) ledger.RuntimeTaskState {
+func ledgerCommandSnapshot(agent *Agent) taskstate.RuntimeTaskState {
 	if agent == nil || agent.Runtime == nil || agent.Runtime.TaskLedger == nil {
-		return ledger.RuntimeTaskState{}
+		return taskstate.RuntimeTaskState{}
 	}
 	return agent.Runtime.TaskLedger.Snapshot()
 }

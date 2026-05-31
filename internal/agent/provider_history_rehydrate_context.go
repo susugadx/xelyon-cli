@@ -5,8 +5,8 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
 	"github.com/susugadx/xelyon-cli/internal/providerhistory"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 const providerHistoryRehydratedEvidenceActiveContextName = providerhistory.RehydratedEvidenceActiveContextName
@@ -21,7 +21,7 @@ func (a *Agent) providerHistoryRehydratedEvidenceActiveContextBlock(ctx context.
 		return api.ActiveContextBlock{}, false
 	}
 
-	executionReport := a.Runtime.TaskLedger.ExecuteRehydratePlan(ctx, plan, ledger.RehydratePlanExecutionOptions{})
+	executionReport := a.Runtime.TaskLedger.ExecuteRehydratePlan(ctx, plan, taskstate.RehydratePlanExecutionOptions{})
 	return providerhistory.RehydratedEvidenceActiveContextBlock(executionReport.Block)
 }
 

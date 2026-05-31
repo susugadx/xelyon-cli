@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 func resolveRuntimeInvocationCWD() string {
@@ -54,7 +54,7 @@ func (r *AgentRuntime) ensureTaskLedger() {
 	if r.TaskLedger != nil && r.taskLedgerInvocationCWD == cwd {
 		return
 	}
-	r.TaskLedger = ledger.NewStoreForInvocationCWD(cwd)
+	r.TaskLedger = taskstate.NewStoreForInvocationCWD(cwd)
 	r.managedTaskLedger = r.TaskLedger
 	r.taskLedgerInvocationCWD = cwd
 }

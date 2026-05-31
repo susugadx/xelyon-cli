@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 func TestProjectDryRunDetectsReductionCandidatesAndReportMetrics(t *testing.T) {
@@ -56,13 +56,13 @@ func TestProjectDryRunDetectsReductionCandidatesAndReportMetrics(t *testing.T) {
 func TestProjectApplyEvidenceReductionUsesPolicyPointersAndDefensiveCopies(t *testing.T) {
 	oldRead := strings.Repeat("important evidence line\n", 240)
 	history := providerHistoryTestReductionHistory("call_read_old", oldRead)
-	pointer := ledger.EvidencePointer{Path: "src/main.go", StartLine: 7, EndLine: 9, Source: "read_file", ToolCallID: "call_read_old"}
+	pointer := taskstate.EvidencePointer{Path: "src/main.go", StartLine: 7, EndLine: 9, Source: "read_file", ToolCallID: "call_read_old"}
 
 	result := Project(ProjectionInput{
 		Messages: history,
 		Policy: Policy{
 			Mode:             Apply,
-			EvidencePointers: []ledger.EvidencePointer{pointer},
+			EvidencePointers: []taskstate.EvidencePointer{pointer},
 		},
 	})
 
@@ -76,8 +76,8 @@ func TestProjectApplyEvidenceReductionUsesPolicyPointersAndDefensiveCopies(t *te
 		t.Fatalf("report = %#v, want one replacement and response chain disabled", result.Report)
 	}
 	applied := AppliedEvidencePointers(result.Report)
-	if !reflect.DeepEqual(applied, []ledger.EvidencePointer{pointer}) {
-		t.Fatalf("AppliedEvidencePointers() = %#v, want %#v", applied, []ledger.EvidencePointer{pointer})
+	if !reflect.DeepEqual(applied, []taskstate.EvidencePointer{pointer}) {
+		t.Fatalf("AppliedEvidencePointers() = %#v, want %#v", applied, []taskstate.EvidencePointer{pointer})
 	}
 	applied[0].Path = "mutated.go"
 	if result.Report.Candidates[0].EvidencePointers[0].Path != "src/main.go" {
@@ -104,7 +104,7 @@ func TestProjectApplyKeepsEvidenceReductionWhenActiveContextTransportUnsupported
 		Messages: history,
 		Policy: Policy{
 			Mode:                                   Apply,
-			EvidencePointers:                       []ledger.EvidencePointer{{Path: "src/main.go", StartLine: 1, Source: "read_file", ToolCallID: "call_read_old"}},
+			EvidencePointers:                       []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, Source: "read_file", ToolCallID: "call_read_old"}},
 			EvidenceReductionRequiresActiveContext: true,
 			ActiveContextTransportAvailable:        false,
 		},
@@ -163,7 +163,7 @@ func TestCloneProjectionReportCopiesNestedState(t *testing.T) {
 		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
 		Candidates: []ReductionCandidate{{
 			ToolName:         "read_file",
-			EvidencePointers: []ledger.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
+			EvidencePointers: []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
 		}},
 		CommandEditDryRun: CommandEditDryRunReport{
 			CandidateReasonCounts: map[string]int{"command_success_output": 1},
@@ -210,7 +210,7 @@ func TestSyntheticProjectionReportsSavedBytesAndTokens(t *testing.T) {
 		Messages: history,
 		Policy: Policy{
 			Mode:             Apply,
-			EvidencePointers: []ledger.EvidencePointer{{Path: "src/main.go", StartLine: 1, Source: "read_file", ToolCallID: "call_read_old"}},
+			EvidencePointers: []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, Source: "read_file", ToolCallID: "call_read_old"}},
 		},
 	})
 

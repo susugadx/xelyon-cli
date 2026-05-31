@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 func applyProviderHistoryReduction(report *ProjectionReport, projection []api.Message, policy Policy) {
@@ -104,11 +104,11 @@ func countProviderHistoryReductionEvidenceKeys(entrySets ...[]ReductionCandidate
 	return counts
 }
 
-func providerHistoryEvidencePointersForCandidate(pointers []ledger.EvidencePointer, candidate ReductionCandidate) []ledger.EvidencePointer {
+func providerHistoryEvidencePointersForCandidate(pointers []taskstate.EvidencePointer, candidate ReductionCandidate) []taskstate.EvidencePointer {
 	if len(pointers) == 0 {
 		return nil
 	}
-	matched := make([]ledger.EvidencePointer, 0, len(pointers))
+	matched := make([]taskstate.EvidencePointer, 0, len(pointers))
 	for _, pointer := range pointers {
 		if pointer.ToolCallID == candidate.ToolCallID && pointer.Source == candidate.ToolName {
 			matched = append(matched, pointer)
@@ -117,7 +117,7 @@ func providerHistoryEvidencePointersForCandidate(pointers []ledger.EvidencePoint
 	return matched
 }
 
-func buildProviderHistoryReplacement(candidate ReductionCandidate, evidencePointers []ledger.EvidencePointer) (string, string) {
+func buildProviderHistoryReplacement(candidate ReductionCandidate, evidencePointers []taskstate.EvidencePointer) (string, string) {
 	toolName := providerHistoryReductionSingleLine(candidate.ToolName)
 	replacementKind := providerHistoryReductionReplacementKind(toolName)
 	return replacementKind, fmt.Sprintf(
@@ -131,7 +131,7 @@ func providerHistoryReductionReplacementKind(toolName string) string {
 	return fmt.Sprintf("omit_old_%s_result", providerHistoryReductionSingleLine(toolName))
 }
 
-func providerHistoryEvidencePointerSummary(evidencePointers []ledger.EvidencePointer) string {
+func providerHistoryEvidencePointerSummary(evidencePointers []taskstate.EvidencePointer) string {
 	const maxInlineEvidencePointers = 3
 	if len(evidencePointers) == 0 {
 		return "missing"
@@ -156,7 +156,7 @@ func providerHistoryEvidencePointerSummary(evidencePointers []ledger.EvidencePoi
 	return strings.Join(parts, "; ")
 }
 
-func providerHistoryEvidencePointerLineRange(pointer ledger.EvidencePointer) string {
+func providerHistoryEvidencePointerLineRange(pointer taskstate.EvidencePointer) string {
 	if pointer.EndLine > pointer.StartLine {
 		return fmt.Sprintf("L%d-L%d", pointer.StartLine, pointer.EndLine)
 	}

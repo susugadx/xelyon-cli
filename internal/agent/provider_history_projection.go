@@ -2,8 +2,8 @@ package agent
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
 	"github.com/susugadx/xelyon-cli/internal/providerhistory"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 type providerHistoryProjectionResult struct {
@@ -105,9 +105,9 @@ func cloneProviderHistoryProjectionReport(report ProviderHistoryProjectionReport
 	return providerhistory.CloneProjectionReport(report)
 }
 
-func (a *Agent) providerHistoryReductionEvidencePointers() []ledger.EvidencePointer {
+func (a *Agent) providerHistoryReductionEvidencePointers() []taskstate.EvidencePointer {
 	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
 		return nil
 	}
-	return ledger.EvidencePointersFromState(a.Runtime.TaskLedger.Snapshot())
+	return taskstate.EvidencePointersFromState(a.Runtime.TaskLedger.Snapshot())
 }

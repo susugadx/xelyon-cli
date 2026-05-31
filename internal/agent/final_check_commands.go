@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 type finalCheckRunResult struct {
@@ -87,7 +87,7 @@ func (a *Agent) runFinalCheckCommands(changedFiles []string) finalCheckRunResult
 				exitCode = exitErr.ExitCode()
 			}
 
-			a.recordFinalCheckObservation(ledger.TestObservation{
+			a.recordFinalCheckObservation(taskstate.TestObservation{
 				Command:  cmd,
 				ExitCode: exitCode,
 				Status:   "failed",
@@ -112,7 +112,7 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 			}
 		}
 
-		a.recordFinalCheckObservation(ledger.TestObservation{
+		a.recordFinalCheckObservation(taskstate.TestObservation{
 			Command:  cmd,
 			ExitCode: 0,
 			Status:   "passed",
@@ -126,7 +126,7 @@ Please fix these errors before declaring completion. Do NOT skip these issues.`,
 	return finalCheckRunResult{}
 }
 
-func (a *Agent) recordFinalCheckObservation(observation ledger.TestObservation) {
+func (a *Agent) recordFinalCheckObservation(observation taskstate.TestObservation) {
 	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
 		return
 	}

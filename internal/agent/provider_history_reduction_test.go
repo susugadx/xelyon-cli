@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 func TestProviderHistoryReductionDryRunDetectsOldAllowedToolResults(t *testing.T) {
@@ -278,7 +278,7 @@ func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T
 		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
 		Candidates: []ProviderHistoryReductionCandidate{{
 			ToolName:         "read_file",
-			EvidencePointers: []ledger.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
+			EvidencePointers: []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
 		}},
 		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
 			CandidateReasonCounts: map[string]int{"command_success_output": 1},

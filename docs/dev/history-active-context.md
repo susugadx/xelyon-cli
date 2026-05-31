@@ -205,15 +205,15 @@ Raw storage is unchanged in all modes: runtime `Agent.History`, `Session.Message
 
 The provider history reduction synthetic harness exercises `off`, `dry_run`, and `apply` against fixed read/search/gather, command, edit, latest-tool, trailing-tool, and invalid-linkage fixtures. This lets safety and savings regressions be checked before live dogfood depends on a real provider transcript.
 
-`internal/ledger` owns the rehydrate planner dry-run. It plans which omitted old read/search/gather evidence ranges should be refreshed from current files, but the planner itself does not read files, inject provider input, append `Agent.History`, append `Session.Messages`, or change persisted JSONL.
+`internal/taskstate` owns the rehydrate planner dry-run. It plans which omitted old read/search/gather evidence ranges should be refreshed from current files, but the planner itself does not read files, inject provider input, append `Agent.History`, append `Session.Messages`, or change persisted JSONL.
 
-`internal/ledger` also owns the separate `ExecuteRehydratePlan` execution seam. Execution is not part of the dry-run planner contract: it reuses the existing evidence-pointer path safety policy, rejects unsafe plan paths before reading files, reads only current repo-root-relative file ranges, and returns a `RehydratedEvidenceBlock` plus diagnostic failures. Failed items are omitted from model input. The executor budget is bounded by item count, total lines, and rendered block bytes; if the next item would exceed the budget, it is omitted instead of partially rendered.
+`internal/taskstate` also owns the separate `ExecuteRehydratePlan` execution seam. Execution is not part of the dry-run planner contract: it reuses the existing evidence-pointer path safety policy, rejects unsafe plan paths before reading files, reads only current repo-root-relative file ranges, and returns a `RehydratedEvidenceBlock` plus diagnostic failures. Failed items are omitted from model input. The executor budget is bounded by item count, total lines, and rendered block bytes; if the next item would exceed the budget, it is omitted instead of partially rendered.
 
 The intended design is that runtime state refreshes needed evidence from current files instead of asking the model to rediscover raw history by itself.
 
 Apply-mode projection reports keep matched evidence pointers only on read/search/gather candidates whose provider-facing placeholder was actually applied. Command output and `write_file.content` replacements do not attach evidence pointers.
 
-The runtime can pass those applied read/search/gather `EvidencePointers` into `ledger.BuildRehydratePlan` as old evidence. `/ledger` shows non-empty rehydrate candidates after the normal task-ledger snapshot so the dry-run can be inspected during dogfood. `/ledger` remains a candidate diagnostic and does not show rehydrated file content.
+The runtime can pass those applied read/search/gather `EvidencePointers` into `taskstate.BuildRehydratePlan` as old evidence. `/ledger` shows non-empty rehydrate candidates after the normal task-ledger snapshot so the dry-run can be inspected during dogfood. `/ledger` remains a candidate diagnostic and does not show rehydrated file content.
 
 Command output replacement is backed by successful command summaries, and `write_file.content` replacement is backed by the successful write result plus retained path argument. Neither is an evidence pointer, so command/edit replacements are not rehydrate candidates.
 

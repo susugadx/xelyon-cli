@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
@@ -83,7 +83,7 @@ func (m *MutationTracker) recordLedgerToolObservation(record toolResultRecord) {
 	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
 		return
 	}
-	observation := ledger.ToolObservation{
+	observation := taskstate.ToolObservation{
 		InvocationCWD: a.Runtime.InvocationCWD,
 		Result:        record.result,
 		Change:        record.change,

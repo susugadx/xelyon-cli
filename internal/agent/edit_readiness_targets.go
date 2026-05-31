@@ -3,13 +3,13 @@ package agent
 import (
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/applypatch"
 )
 
 type editReadinessTargetExtraction struct {
-	targets []ledger.EditReadinessTarget
+	targets []taskstate.EditReadinessTarget
 	unknown bool
 }
 
@@ -32,7 +32,7 @@ func extractSinglePathEditReadinessTarget(toolCall *tools.ToolCall) editReadines
 	if path == "" {
 		return editReadinessTargetExtraction{unknown: true}
 	}
-	return editReadinessTargetExtraction{targets: []ledger.EditReadinessTarget{newEditReadinessTarget(toolCall, path)}}
+	return editReadinessTargetExtraction{targets: []taskstate.EditReadinessTarget{newEditReadinessTarget(toolCall, path)}}
 }
 
 func extractApplyPatchEditReadinessTargets(toolCall *tools.ToolCall) editReadinessTargetExtraction {
@@ -44,7 +44,7 @@ func extractApplyPatchEditReadinessTargets(toolCall *tools.ToolCall) editReadine
 	if err != nil || parsed == nil || len(parsed.Hunks) == 0 {
 		return editReadinessTargetExtraction{unknown: true}
 	}
-	targets := make([]ledger.EditReadinessTarget, 0, len(parsed.Hunks))
+	targets := make([]taskstate.EditReadinessTarget, 0, len(parsed.Hunks))
 	seen := make(map[string]struct{}, len(parsed.Hunks)*2)
 	addTarget := func(path string) {
 		path = strings.TrimSpace(path)
@@ -67,8 +67,8 @@ func extractApplyPatchEditReadinessTargets(toolCall *tools.ToolCall) editReadine
 	return editReadinessTargetExtraction{targets: targets}
 }
 
-func newEditReadinessTarget(toolCall *tools.ToolCall, path string) ledger.EditReadinessTarget {
-	return ledger.EditReadinessTarget{
+func newEditReadinessTarget(toolCall *tools.ToolCall, path string) taskstate.EditReadinessTarget {
+	return taskstate.EditReadinessTarget{
 		Path:       path,
 		ToolName:   toolCall.Tool,
 		ToolCallID: toolCall.ID,

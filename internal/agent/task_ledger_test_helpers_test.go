@@ -3,14 +3,14 @@ package agent
 import (
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
-func newTaskLedgerWithPassedTest(t *testing.T) *ledger.Store {
+func newTaskLedgerWithPassedTest(t *testing.T) *taskstate.Store {
 	t.Helper()
-	store := ledger.NewStoreWithRoot(t.TempDir())
-	store.Recorder().SetLastPassedTests([]ledger.TestResult{
-		ledger.NewTestResultWithExitCode("go test ./internal/ledger", 0, "passed", "ok"),
+	store := taskstate.NewStoreWithRoot(t.TempDir())
+	store.Recorder().SetLastPassedTests([]taskstate.TestResult{
+		taskstate.NewTestResultWithExitCode("go test ./internal/taskstate", 0, "passed", "ok"),
 	})
 	return store
 }

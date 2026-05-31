@@ -6,7 +6,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -33,10 +33,10 @@ type AgentRuntime struct {
 	UI                                  *ui.Runtime
 	AuditLogger                         audit.ToolLogger
 	SubAgentManager                     *subagent.Manager
-	TaskLedger                          *ledger.Store
+	TaskLedger                          *taskstate.Store
 	LastProviderHistoryProjectionReport ProviderHistoryProjectionReport
 
-	managedTaskLedger       *ledger.Store
+	managedTaskLedger       *taskstate.Store
 	taskLedgerInvocationCWD string
 }
 
