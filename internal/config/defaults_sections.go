@@ -8,7 +8,13 @@ func defaultGeneralConfig() GeneralConfig {
 }
 
 func defaultReviewConfig() ReviewConfig {
-	return ReviewConfig{}
+	return ReviewConfig{
+		WebSearchEvidence: ReviewWebSearchEvidenceConfig{
+			Enabled:            false,
+			MaxQueries:         3,
+			MaxResultsPerQuery: 3,
+		},
+	}
 }
 
 func defaultCompressionConfig() CompressionConfig {

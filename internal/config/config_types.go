@@ -57,8 +57,16 @@ type Config struct {
 
 // ReviewConfig は /review 専用モデルの設定。
 type ReviewConfig struct {
-	Provider string `yaml:"provider"` // /review 専用プロバイダー。空なら現在の provider/model を使う。
-	Model    string `yaml:"model"`    // /review 専用モデル。provider 設定時のみ有効。空なら provider の既定モデルを使う。
+	Provider          string                        `yaml:"provider"` // /review 専用プロバイダー。空なら現在の provider/model を使う。
+	Model             string                        `yaml:"model"`    // /review 専用モデル。provider 設定時のみ有効。空なら provider の既定モデルを使う。
+	WebSearchEvidence ReviewWebSearchEvidenceConfig `yaml:"web_search_evidence"`
+}
+
+// ReviewWebSearchEvidenceConfig は /review の外部 Web 検索 evidence 収集設定。
+type ReviewWebSearchEvidenceConfig struct {
+	Enabled            bool `yaml:"enabled"`               // /review の外部 Web 検索 evidence を有効化（デフォルト: false）
+	MaxQueries         int  `yaml:"max_queries"`           // 1 review run あたりの最大検索クエリ数
+	MaxResultsPerQuery int  `yaml:"max_results_per_query"` // 1 クエリあたりの最大検索結果数
 }
 
 func (c *Config) providerModelSectionState() providerModelSectionState {

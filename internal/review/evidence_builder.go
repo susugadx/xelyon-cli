@@ -5,12 +5,18 @@ import "context"
 // ReviewEvidenceBuilderOption は ReviewEvidenceBuilder の差し替え設定を表す。
 type ReviewEvidenceBuilderOption func(*ReviewEvidenceBuilder)
 
+// ReviewWebSearchEvidenceProvider は ReviewEvidenceBuilder が使う外部 Web 検索 evidence 境界。
+type ReviewWebSearchEvidenceProvider interface {
+	CollectWebSearchEvidence(context.Context, ReviewEvidenceBundle) ReviewWebSearchEvidence
+}
+
 // ReviewEvidenceBuilder は current_changes の一次情報を git と filesystem から収集する。
 type ReviewEvidenceBuilder struct {
-	repoRoot string
-	cwd      string
-	limits   ReviewEvidenceLimits
-	runner   ReviewEvidenceCommandRunner
+	repoRoot          string
+	cwd               string
+	limits            ReviewEvidenceLimits
+	runner            ReviewEvidenceCommandRunner
+	webSearchEvidence ReviewWebSearchEvidenceProvider
 }
 
 // WithReviewEvidenceLimits は EvidenceBuilder の resource budget を差し替える。
@@ -24,6 +30,13 @@ func WithReviewEvidenceLimits(limits ReviewEvidenceLimits) ReviewEvidenceBuilder
 func WithReviewEvidenceCommandRunner(runner ReviewEvidenceCommandRunner) ReviewEvidenceBuilderOption {
 	return func(b *ReviewEvidenceBuilder) {
 		b.runner = runner
+	}
+}
+
+// WithReviewWebSearchEvidenceProvider は外部 Web 検索 evidence 収集境界を差し替える。
+func WithReviewWebSearchEvidenceProvider(provider ReviewWebSearchEvidenceProvider) ReviewEvidenceBuilderOption {
+	return func(b *ReviewEvidenceBuilder) {
+		b.webSearchEvidence = provider
 	}
 }
 
@@ -82,6 +95,9 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 
 	bundle := buildReviewCurrentChangesBundle(repoRoot, cwd, gitEvidence, fileEvidence, b.limits)
 	bundle.GenericImpactCandidates = BuildReviewGenericImpactCandidates(bundle)
+	if b.webSearchEvidence != nil {
+		bundle.WebSearchEvidence = b.webSearchEvidence.CollectWebSearchEvidence(ctx, bundle)
+	}
 	return bundle, nil
 }
 

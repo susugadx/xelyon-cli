@@ -22,6 +22,11 @@ var (
 
 type usageCallbackContextKey struct{}
 
+type cleanupRegistrar interface {
+	Helper()
+	Cleanup(func())
+}
+
 // Register registers a provider-native web search implementation.
 func Register(providerName string, fn SearchFunc) {
 	if fn == nil {
@@ -39,18 +44,49 @@ func RegisterWithContext(providerName string, fn SearchFuncWithContext) {
 	}
 	registryMu.Lock()
 	defer registryMu.Unlock()
-	registry[strings.ToLower(strings.TrimSpace(providerName))] = fn
+	registry[normalizeProviderName(providerName)] = fn
+}
+
+// RegisterWithContextForTest はテスト用に登録を差し替え、終了時に元の registry 状態を復元する。
+func RegisterWithContextForTest(t cleanupRegistrar, providerName string, fn SearchFuncWithContext) {
+	if t != nil {
+		t.Helper()
+	}
+	if fn == nil {
+		return
+	}
+	key := normalizeProviderName(providerName)
+	registryMu.Lock()
+	previous, hadPrevious := registry[key]
+	registry[key] = fn
+	registryMu.Unlock()
+	if t == nil {
+		return
+	}
+	t.Cleanup(func() {
+		registryMu.Lock()
+		defer registryMu.Unlock()
+		if hadPrevious {
+			registry[key] = previous
+		} else {
+			delete(registry, key)
+		}
+	})
 }
 
 // SearchWithContext は request context を渡してネイティブ検索実装を実行する。
 func SearchWithContext(ctx context.Context, providerName, query, model string) (string, error) {
 	registryMu.RLock()
-	fn, ok := registry[strings.ToLower(strings.TrimSpace(providerName))]
+	fn, ok := registry[normalizeProviderName(providerName)]
 	registryMu.RUnlock()
 	if !ok {
 		return "", fmt.Errorf("native web search is not registered for provider %q", providerName)
 	}
 	return fn(ctx, query, model)
+}
+
+func normalizeProviderName(providerName string) string {
+	return strings.ToLower(strings.TrimSpace(providerName))
 }
 
 // WithUsageCallback は native web search request context に usage callback を埋め込む。

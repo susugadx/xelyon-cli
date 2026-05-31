@@ -29,7 +29,7 @@ func TestFinalizeReviewRunnerReportRejectsCleanReportWithBlockedTrustedProbe(t *
 					Status:          tt.status,
 					MutatedWorktree: tt.mutatedWorktree,
 				},
-			}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+			}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil), ReviewEvidenceBundle{})
 			if err == nil {
 				t.Fatal("finalizeReviewRunnerReport() error = nil, want clean trusted probe rejection")
 			}
@@ -59,7 +59,7 @@ func TestFinalizeReviewRunnerReportDowngradesVerifiedFindingsWithBlockedTrustedP
 			Mode:    ReviewProbeHostReadOnly,
 			Status:  ReviewProbeBlocked,
 		},
-	}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil), ReviewEvidenceBundle{})
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -119,7 +119,7 @@ func TestFinalizeReviewRunnerReportInjectsRedactedTrustedProbeSummaries(t *testi
 		},
 	})
 
-	got, err := finalizeReviewRunnerReport(newRunnerBlockedReportForTest(nil), newRunnerProbePlanForTest("probe-1"), trustedSummaries, redactor)
+	got, err := finalizeReviewRunnerReport(newRunnerBlockedReportForTest(nil), newRunnerProbePlanForTest("probe-1"), trustedSummaries, redactor, ReviewEvidenceBundle{})
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -149,7 +149,7 @@ func TestFinalizeReviewRunnerReportInjectsRedactedTrustedProbeSummaries(t *testi
 }
 
 func TestFinalizeReviewRunnerReportKeepsEmptyTrustedProbeSummariesNil(t *testing.T) {
-	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil), ReviewEvidenceBundle{})
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -163,7 +163,7 @@ func TestFinalizeReviewRunnerReportModelOutputRejectsComputedSummary(t *testing.
 	report.ComputedSummary = &ReviewReportComputedSummary{FindingCount: 99}
 	data := mustMarshalReviewReportForRunnerTest(t, report)
 
-	_, err := finalizeReviewRunnerReportModelOutput(string(data), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	_, err := finalizeReviewRunnerReportModelOutput(string(data), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil), ReviewEvidenceBundle{})
 	if err == nil {
 		t.Fatal("finalizeReviewRunnerReportModelOutput() error = nil, want computed_summary rejection")
 	}
@@ -173,7 +173,7 @@ func TestFinalizeReviewRunnerReportModelOutputRejectsComputedSummary(t *testing.
 }
 
 func TestFinalizeReviewRunnerReportComputesSummaryForCleanReport(t *testing.T) {
-	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	got, err := finalizeReviewRunnerReport(newRunnerCleanReportForTest(nil), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil), ReviewEvidenceBundle{})
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -185,7 +185,7 @@ func TestFinalizeReviewRunnerReportComputesSummaryForCleanReport(t *testing.T) {
 }
 
 func TestFinalizeReviewRunnerReportComputesSummaryForFindingRisk(t *testing.T) {
-	got, err := finalizeReviewRunnerReport(newPlanAwareHasFindingsReportForValidationTest(), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	got, err := finalizeReviewRunnerReport(newPlanAwareHasFindingsReportForValidationTest(), newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil), ReviewEvidenceBundle{})
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -205,7 +205,7 @@ func TestFinalizeReviewRunnerReportComputesBlockedProbeCount(t *testing.T) {
 			Mode:    ReviewProbeHostReadOnly,
 			Status:  ReviewProbeBlocked,
 		},
-	}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	}, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil), ReviewEvidenceBundle{})
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
@@ -225,7 +225,7 @@ func TestFinalizeReviewRunnerReportOverwritesPreexistingComputedSummary(t *testi
 		MutatedWorktreeProbeCount: 99,
 	}
 
-	got, err := finalizeReviewRunnerReport(report, newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil))
+	got, err := finalizeReviewRunnerReport(report, newRunnerProbePlanForTest("probe-1"), nil, newRunnerReportRedactorForTest(t, "/tmp/review-runner/repo", nil), ReviewEvidenceBundle{})
 	if err != nil {
 		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
 	}
