@@ -42,3 +42,14 @@ Phase 2-C 後の normal turn support と final check policy は次の owner に�
 `internal/turnsupport/package_boundaries_test.go` と `internal/finalcheck/package_boundaries_test.go` は、それぞれ `internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。Agent runtime state、provider payload、TUI 表示に触る必要が出た場合は、新 package 側へ wrapper を増やさず `internal/agent` 側で policy input に変換する。
 
 `internal/token/package_boundaries_test.go` は、shared token helper が `internal/agent`、`internal/tui`、Bubble Tea、Lip Gloss に依存しないことを固定する。
+
+## Phase 3-A: review report / artifact boundary
+
+Phase 3-A 後の `/review` report schema と artifact 保存境界は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、facade、runner / probe / evidence orchestration の owner。既存の `ReviewReport` / `ReviewRunArtifactWriter` などの public-ish 名は alias / wrapper として維持し、agent / TUI / cmd 側の import path を変えない。
+- `internal/review/domain`: report / probe / request が共有する最小 enum owner。`TargetKind`、`ReviewProbeMode`、`ReviewProbeStatus` だけを持ち、runner state、provider payload、UI 表示を持たない。
+- `internal/review/report`: review report schema DTO、evidence ref DTO、strict decode、report validation、Pass1 scope cross validation、computed summary、saturation check DTO / decode / validation の owner。`ReviewProbePlan` 全体には依存せず、facade が `PlanScope` へ変換する。
+- `internal/review/artifact`: review run artifact writer、artifact directory / name / repo-local path validation、buffered writer の owner。runner の保存制御、warning 出力、redaction 適用タイミングは `internal/review` に残す。
+
+`internal/review/report/package_boundaries_test.go` と `internal/review/domain/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。`internal/review/artifact/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、Bubble Tea、Lip Gloss への import を禁止する。evidence path / probe path policy は Phase 3-A では動かさず、repo root 内判定の owner を決める後続工程で扱う。

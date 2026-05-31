@@ -2,12 +2,6 @@ package review
 
 import "fmt"
 
-// ReviewRunArtifactWriter は /review runner の debug artifact 保存境界を表す。
-// nil の場合、runner は artifact を完全に無効化する。
-type ReviewRunArtifactWriter interface {
-	WriteReviewRunArtifact(name string, content []byte) error
-}
-
 func (r *ReviewRunner) saveReviewRunTextArtifact(name, content string, redactor reviewRunnerPromptRedactor) {
 	r.saveReviewRunArtifact(name, []byte(redactor.redactText(content)))
 }

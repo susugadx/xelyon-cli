@@ -2,26 +2,6 @@ package review
 
 import "time"
 
-// ReviewProbeStatus は probe 実行結果の状態を表す。
-type ReviewProbeStatus string
-
-const (
-	ReviewProbePassed          ReviewProbeStatus = "passed"
-	ReviewProbeFailed          ReviewProbeStatus = "failed"
-	ReviewProbeBlocked         ReviewProbeStatus = "blocked"
-	ReviewProbeTimedOut        ReviewProbeStatus = "timed_out"
-	ReviewProbeMutatedWorktree ReviewProbeStatus = "mutated_worktree"
-)
-
-func isKnownReviewProbeStatus(status ReviewProbeStatus) bool {
-	switch status {
-	case ReviewProbePassed, ReviewProbeFailed, ReviewProbeBlocked, ReviewProbeTimedOut, ReviewProbeMutatedWorktree:
-		return true
-	default:
-		return false
-	}
-}
-
 // ReviewProbeRequest は ProbeRunner.Run に渡す runtime 内部の検証実行要求を表す。
 // LLM から直接 decode する schema ではなく、将来の validated ReviewProbePlan から
 // 変換された後に runner が扱う契約として維持する。
