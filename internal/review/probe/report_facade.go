@@ -21,6 +21,12 @@ const (
 // ReviewEvidenceRef は probe plan の pre-probe evidence 参照を表す。
 type ReviewEvidenceRef = reviewreport.ReviewEvidenceRef
 
+// ReviewProbeSummary は ReviewProbeResult から report 用に切り出した要約。
+type ReviewProbeSummary = reviewreport.ReviewProbeSummary
+
+// ReviewProbeCommandSummary は report 用の probe command 要約。
+type ReviewProbeCommandSummary = reviewreport.ReviewProbeCommandSummary
+
 const (
 	// ReviewEvidenceKindProbeCommand は probe command evidence ref を表す。
 	ReviewEvidenceKindProbeCommand = reviewreport.ReviewEvidenceKindProbeCommand

@@ -85,3 +85,15 @@ Phase 3-D 後の external_doc と Web 検索 query 計画は次の owner に分�
 - `internal/review/analysis`: Pass1 evidence analysis、pressure signal、report / probe の external_doc ref cross validation の owner。Web search evidence と query DTO は `internal/review/externaldoc` の型を analysis 用 DTO として共有し、親 facade が runtime evidence から analysis input へコピーする。
 
 Phase 3-D では report schema、evidence JSON、probe behavior、external_doc official / third_party / unknown 判定基準、Web 検索 query 生成結果は変更しない。`internal/review/externaldoc/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import 禁止を維持する。
+
+## Phase 3-E: review evidence boundary
+
+Phase 3-E 後の review evidence 収集と render は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、facade、runner orchestration、model prompt / repair、progress / artifact / redaction、report / saturation flow の owner。既存の `ReviewEvidence*`、`ReviewEvidenceBuilder`、`ReviewEvidenceCommandRunner`、`ReviewWebSearchEvidenceCollector*` などの public-ish 名は alias / wrapper として維持し、agent / cmd 側の import path を変えない。
+- `internal/review/evidence`: current changes evidence bundle、git / file / rule / untracked / related context collection、generic impact expansion、evidence JSON / Markdown render、model input DTO、repo-root path display / redaction helper、analysis DTO への変換、review pressure signals、外部 Web 検索 evidence collector の owner。`internal/review/domain`、`internal/review/probe`、`internal/review/analysis`、`internal/review/externaldoc` には依存してよいが、親 `internal/review` には依存しない。
+- `internal/review/probe`: probe 実行後の mutation outcome canonicalization、mutation 後の skipped probe result 生成、probe result から report 用 `ReviewProbeSummary` への変換の owner。
+- `internal/review/report`: trusted probe summary の copy / canonicalization、blocked outcome に基づく report verification status normalization、report schema validation の owner。runner は redaction 適用、external_doc ref cross validation 呼び出し、error prefix 付与に集中する。
+- `internal/review/externaldoc`: Phase 3-D の Web 検索 query 計画と external_doc DTO / fetch request owner を維持する。Phase 3-D で親 package に残していた Web 検索 provider 実行と収集制御は、Phase 3-E から `internal/review/evidence` の collector owner へ移る。
+
+Phase 3-E では report schema、evidence markdown / JSON、probe behavior、external_doc behavior、runner 実行順は変更しない。`internal/review/evidence/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。

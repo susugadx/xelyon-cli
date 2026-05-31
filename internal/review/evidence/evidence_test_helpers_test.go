@@ -1,4 +1,4 @@
-package review
+package evidence
 
 import (
 	"os"
@@ -9,9 +9,7 @@ import (
 	"testing"
 )
 
-const (
-	probeTestModulePath = "example.com/reviewprobe"
-)
+const probeTestModulePath = "example.com/reviewprobe"
 
 type probeTestRepoConfig struct {
 	includeLargeFile bool
@@ -81,7 +79,7 @@ func readRepositoryGoVersionForProbeTests(t *testing.T) string {
 		t.Fatal("runtime.Caller(0) failed")
 	}
 
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", ".."))
 	goModPath := filepath.Join(repoRoot, "go.mod")
 	content, err := os.ReadFile(goModPath)
 	if err != nil {
@@ -169,6 +167,15 @@ func writeTestFile(t *testing.T, path string, content string) {
 	}
 }
 
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if filepath.ToSlash(item) == filepath.ToSlash(target) {
+			return true
+		}
+	}
+	return false
+}
+
 func createProbeTestScriptCommand(t *testing.T, binDir, name, scriptBody string) {
 	t.Helper()
 
@@ -184,4 +191,20 @@ func createProbeTestScriptCommand(t *testing.T, binDir, name, scriptBody string)
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
 	}
+}
+
+func createCommandResolverTestExecutable(t *testing.T, dir, base string) string {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("executable fixture uses Unix permission bits")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v", dir, err)
+	}
+	path := filepath.Join(dir, base)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+	return path
 }

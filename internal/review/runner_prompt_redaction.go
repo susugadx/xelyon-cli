@@ -155,7 +155,7 @@ func (r *reviewRunnerPromptRedactor) addReplacement(path, display string) {
 	if display == "" {
 		return
 	}
-	for _, variant := range reviewRunnerPromptReplacementPathVariants(path) {
+	for _, variant := range reviewEvidencePathReplacementVariants(path) {
 		r.addReplacementVariant(variant, display)
 	}
 }
@@ -194,23 +194,6 @@ func normalizeReviewRunnerPromptPath(path string) string {
 		return ""
 	}
 	return filepath.Clean(filepath.FromSlash(path))
-}
-
-func reviewRunnerPromptReplacementPathVariants(path string) []string {
-	cleaned := normalizeReviewRunnerPromptPath(path)
-	if cleaned == "" {
-		return nil
-	}
-
-	slashPath := reviewRunnerPromptSlashPath(cleaned)
-	variants := []string{slashPath}
-	if isReviewEvidenceWindowsAbsolutePath(cleaned) || isReviewEvidenceWindowsAbsolutePath(slashPath) {
-		nativePath := strings.ReplaceAll(slashPath, "/", `\`)
-		if nativePath != slashPath {
-			variants = append(variants, nativePath)
-		}
-	}
-	return variants
 }
 
 func reviewRunnerPromptSlashPath(path string) string {
