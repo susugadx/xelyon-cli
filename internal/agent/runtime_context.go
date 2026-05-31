@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )

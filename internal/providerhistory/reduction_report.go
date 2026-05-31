@@ -1,25 +1,25 @@
-package agent
+package providerhistory
 
 import (
 	"sort"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
-func buildProviderHistoryProjectionReport(original, projected []api.Message, policy ProviderHistoryReductionPolicy) ProviderHistoryProjectionReport {
-	policy = normalizeProviderHistoryReductionPolicy(policy)
-	if policy.Mode == ProviderHistoryReductionDisabled {
-		return ProviderHistoryProjectionReport{}
+func buildProjectionReport(original, projected []api.Message, policy Policy) ProjectionReport {
+	policy = normalizePolicy(policy)
+	if policy.Mode == Disabled {
+		return ProjectionReport{}
 	}
 
 	report := buildProviderHistoryReductionDetectionReport(original, projected, policy.Mode)
-	finalizeProviderHistoryProjectionReport(&report, original, projected)
+	finalizeProjectionReport(&report, original, projected)
 	return report
 }
 
-func finalizeProviderHistoryProjectionReport(report *ProviderHistoryProjectionReport, original, projected []api.Message) {
-	if report == nil || report.Mode == ProviderHistoryReductionDisabled {
+func finalizeProjectionReport(report *ProjectionReport, original, projected []api.Message) {
+	if report == nil || report.Mode == Disabled {
 		return
 	}
 	report.CandidateCount = len(report.Candidates)
@@ -39,10 +39,10 @@ func finalizeProviderHistoryProjectionReport(report *ProviderHistoryProjectionRe
 	}
 	report.ApproxSavedTokens = providerHistoryApproxSavedTokens(original, projected)
 	report.KeptReasonCounts = countProviderHistoryKeptReasons(report.Kept)
-	report.ResponsesChainDisabled = report.Mode == ProviderHistoryReductionApply && (report.ReplacedCount > 0 || report.CommandEditDryRun.CommandReplacedCount > 0 || report.CommandEditDryRun.EditArgReplacedCount > 0)
+	report.ResponsesChainDisabled = report.Mode == Apply && (report.ReplacedCount > 0 || report.CommandEditDryRun.CommandReplacedCount > 0 || report.CommandEditDryRun.EditArgReplacedCount > 0)
 }
 
-func countProviderHistoryReplacementApplied(candidates []ProviderHistoryReductionCandidate) int {
+func countProviderHistoryReplacementApplied(candidates []ReductionCandidate) int {
 	count := 0
 	for _, candidate := range candidates {
 		if candidate.ReplacementApplied {
@@ -77,7 +77,7 @@ func providerHistoryContentTokens(messages []api.Message) int {
 	return total
 }
 
-func countProviderHistoryKeptReasons(kept []ProviderHistoryReductionCandidate) map[string]int {
+func countProviderHistoryKeptReasons(kept []ReductionCandidate) map[string]int {
 	if len(kept) == 0 {
 		return nil
 	}

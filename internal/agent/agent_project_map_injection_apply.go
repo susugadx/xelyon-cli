@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/susugadx/xelyon-cli/internal/agent/token"
+import "github.com/susugadx/xelyon-cli/internal/token"
 
 func applyProjectMapCachedSection(agent *Agent, injectionCtx projectMapInjectionContext) bool {
 	if injectionCtx.rebuilt ||

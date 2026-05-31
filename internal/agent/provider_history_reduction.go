@@ -1,110 +1,40 @@
 package agent
 
-import "github.com/susugadx/xelyon-cli/internal/ledger"
+import "github.com/susugadx/xelyon-cli/internal/providerhistory"
 
 // ProviderHistoryReductionMode は provider-facing history reduction の動作を表す。
-type ProviderHistoryReductionMode int
+type ProviderHistoryReductionMode = providerhistory.Mode
 
 const (
-	// ProviderHistoryReductionDisabled は Phase 5b の no-op projection を維持する。
-	ProviderHistoryReductionDisabled ProviderHistoryReductionMode = iota
+	// ProviderHistoryReductionDisabled は provider-facing history reduction を無効化する。
+	ProviderHistoryReductionDisabled = providerhistory.Disabled
 	// ProviderHistoryReductionDryRun は provider payload を変えずに候補だけを記録する。
-	ProviderHistoryReductionDryRun
+	ProviderHistoryReductionDryRun = providerhistory.DryRun
 	// ProviderHistoryReductionApply は projection clone 上で安全な候補だけを置換する。
-	ProviderHistoryReductionApply
+	ProviderHistoryReductionApply = providerhistory.Apply
 	// ProviderHistoryReductionAuto は現時点では dry-run 相当の安全側実効 mode。
-	ProviderHistoryReductionAuto
+	ProviderHistoryReductionAuto = providerhistory.Auto
 )
 
 // ProviderHistoryReductionPolicy は provider-facing reduction の方針を選ぶ。
-type ProviderHistoryReductionPolicy struct {
-	Mode ProviderHistoryReductionMode
-}
+type ProviderHistoryReductionPolicy = providerhistory.Policy
 
 // ProviderHistoryReductionCandidate は dry-run detector が評価した tool result を表す。
-type ProviderHistoryReductionCandidate struct {
-	HistoryIndex             int
-	Role                     string
-	ToolName                 string
-	ToolCallID               string
-	EvidencePointers         []ledger.EvidencePointer
-	OriginalByteSize         int
-	OriginalRuneSize         int
-	Reason                   string
-	SuggestedReplacementKind string
-	SuggestedReplacementText string
-	KeepReason               string
-	ReplacementApplied       bool
-}
-
-func cloneProviderHistoryReductionCandidate(candidate ProviderHistoryReductionCandidate) ProviderHistoryReductionCandidate {
-	candidate.EvidencePointers = cloneProviderHistoryReductionEvidencePointers(candidate.EvidencePointers)
-	return candidate
-}
-
-func cloneProviderHistoryReductionEvidencePointers(pointers []ledger.EvidencePointer) []ledger.EvidencePointer {
-	if len(pointers) == 0 {
-		return nil
-	}
-	cloned := make([]ledger.EvidencePointer, len(pointers))
-	copy(cloned, pointers)
-	return cloned
-}
+type ProviderHistoryReductionCandidate = providerhistory.ReductionCandidate
 
 // ProviderHistoryCommandEditDryRunCandidate は command/edit 系の将来置換候補診断を表す。
-type ProviderHistoryCommandEditDryRunCandidate struct {
-	HistoryIndex         int
-	Role                 string
-	ToolName             string
-	ToolCallID           string
-	Kind                 string
-	OriginalByteSize     int
-	OriginalRuneSize     int
-	ApproxOriginalTokens int
-	Reason               string
-	KeepReason           string
-}
+type ProviderHistoryCommandEditDryRunCandidate = providerhistory.CommandEditDryRunCandidate
 
 // ProviderHistoryCommandEditDryRunReport は command/edit 系 dry-run 診断を表す。
-type ProviderHistoryCommandEditDryRunReport struct {
-	ReplacementStatus                   string
-	CommandCandidates                   int
-	EditArgCandidates                   int
-	CommandOriginalBytes                int
-	EditArgOriginalBytes                int
-	CommandReplacedCount                int
-	EditArgReplacedCount                int
-	CommandReplacementSavedBytes        int
-	EditArgReplacementSavedBytes        int
-	ApproxCommandSavedTokens            int
-	ApproxCommandReplacementSavedTokens int
-	ApproxEditArgSavedTokens            int
-	ApproxEditArgReplacementSavedTokens int
-	CandidateReasonCounts               map[string]int
-	KeptReasonCounts                    map[string]int
-	Candidates                          []ProviderHistoryCommandEditDryRunCandidate
-	Kept                                []ProviderHistoryCommandEditDryRunCandidate
-}
+type ProviderHistoryCommandEditDryRunReport = providerhistory.CommandEditDryRunReport
 
 // ProviderHistoryProjectionReport は provider-facing projection の構築結果を要約する。
-type ProviderHistoryProjectionReport struct {
-	Mode                   ProviderHistoryReductionMode
-	OriginalMessageCount   int
-	ProjectedMessageCount  int
-	ToolResultCount        int
-	CandidateCount         int
-	KeptCount              int
-	ReplacedCount          int
-	OriginalBytes          int
-	ProjectedBytes         int
-	EstimatedSavedBytes    int
-	ApproxSavedTokens      int
-	KeptReasonCounts       map[string]int
-	ResponsesChainDisabled bool
-	Candidates             []ProviderHistoryReductionCandidate
-	Kept                   []ProviderHistoryReductionCandidate
-	CommandEditDryRun      ProviderHistoryCommandEditDryRunReport
-}
+type ProviderHistoryProjectionReport = providerhistory.ProjectionReport
+
+const (
+	providerHistoryCommandEditReplacementStatusNotImplemented = "not_implemented"
+	providerHistoryCommandEditReplacementStatusPartialApply   = "partial_apply"
+)
 
 func normalizeProviderHistoryReductionPolicy(policy ProviderHistoryReductionPolicy) ProviderHistoryReductionPolicy {
 	switch policy.Mode {
@@ -115,4 +45,10 @@ func normalizeProviderHistoryReductionPolicy(policy ProviderHistoryReductionPoli
 		policy.Mode = ProviderHistoryReductionDisabled
 	}
 	return policy
+}
+
+func newProviderHistoryCommandEditDryRunReport() ProviderHistoryCommandEditDryRunReport {
+	return ProviderHistoryCommandEditDryRunReport{
+		ReplacementStatus: providerHistoryCommandEditReplacementStatusNotImplemented,
+	}
 }

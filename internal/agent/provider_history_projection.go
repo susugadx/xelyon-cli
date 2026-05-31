@@ -1,6 +1,10 @@
 package agent
 
-import "github.com/susugadx/xelyon-cli/internal/api"
+import (
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory"
+)
 
 type providerHistoryProjectionResult struct {
 	History []api.Message
@@ -44,9 +48,8 @@ func (a *Agent) tokenBudgetHistory() []api.Message {
 
 func (a *Agent) buildProviderHistoryProjection(policy ProviderHistoryReductionPolicy) providerHistoryProjectionResult {
 	if a == nil {
-		return providerHistoryProjectionResult{
-			Report: buildProviderHistoryProjectionReport(nil, nil, normalizeProviderHistoryReductionPolicy(policy)),
-		}
+		result := providerhistory.Project(providerhistory.ProjectionInput{Policy: normalizeProviderHistoryReductionPolicy(policy)})
+		return providerHistoryProjectionResult{History: result.History, Report: result.Report}
 	}
 	return a.buildProviderHistoryProjectionFromRaw(policy, a.cloneRawHistoryForProviderProjection())
 }
@@ -62,23 +65,27 @@ func (a *Agent) cloneRawHistoryForProviderProjection() []api.Message {
 }
 
 func (a *Agent) buildProviderHistoryProjectionFromRaw(policy ProviderHistoryReductionPolicy, raw []api.Message) providerHistoryProjectionResult {
-	policy = normalizeProviderHistoryReductionPolicy(policy)
-	projection := raw
-	if policy.Mode == ProviderHistoryReductionApply && len(raw) > 0 {
-		projection = api.CloneMessages(raw)
-		report := buildProviderHistoryReductionDetectionReport(raw, projection, policy.Mode)
-		a.applyProviderHistoryReduction(&report, projection)
-		finalizeProviderHistoryProjectionReport(&report, raw, projection)
-		return providerHistoryProjectionResult{
-			History: projection,
-			Report:  report,
-		}
-	}
-
+	result := providerhistory.Project(providerhistory.ProjectionInput{
+		Messages: raw,
+		Policy:   a.providerHistoryProjectionPolicy(policy),
+	})
 	return providerHistoryProjectionResult{
-		History: projection,
-		Report:  buildProviderHistoryProjectionReport(raw, projection, policy),
+		History: result.History,
+		Report:  result.Report,
 	}
+}
+
+func (a *Agent) providerHistoryProjectionPolicy(policy ProviderHistoryReductionPolicy) ProviderHistoryReductionPolicy {
+	policy = normalizeProviderHistoryReductionPolicy(policy)
+	if policy.Mode != ProviderHistoryReductionApply {
+		return policy
+	}
+	policy.EvidencePointers = a.providerHistoryReductionEvidencePointers()
+	if a != nil && a.Runtime != nil && a.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		policy.EvidenceReductionRequiresActiveContext = true
+		policy.ActiveContextTransportAvailable = a.providerActiveContextTransport() != api.ActiveContextTransportNone
+	}
+	return policy
 }
 
 func providerHistoryReductionPolicyForRuntime(runtime *AgentRuntime) ProviderHistoryReductionPolicy {
@@ -95,54 +102,12 @@ func (a *Agent) recordLastProviderHistoryProjectionReport(report ProviderHistory
 }
 
 func cloneProviderHistoryProjectionReport(report ProviderHistoryProjectionReport) ProviderHistoryProjectionReport {
-	if len(report.KeptReasonCounts) > 0 {
-		counts := make(map[string]int, len(report.KeptReasonCounts))
-		for reason, count := range report.KeptReasonCounts {
-			counts[reason] = count
-		}
-		report.KeptReasonCounts = counts
-	}
-	if len(report.Candidates) > 0 {
-		report.Candidates = cloneProviderHistoryReductionCandidates(report.Candidates)
-	}
-	if len(report.Kept) > 0 {
-		report.Kept = cloneProviderHistoryReductionCandidates(report.Kept)
-	}
-	report.CommandEditDryRun = cloneProviderHistoryCommandEditDryRunReport(report.CommandEditDryRun)
-	return report
+	return providerhistory.CloneProjectionReport(report)
 }
 
-func cloneProviderHistoryReductionCandidates(candidates []ProviderHistoryReductionCandidate) []ProviderHistoryReductionCandidate {
-	if len(candidates) == 0 {
+func (a *Agent) providerHistoryReductionEvidencePointers() []ledger.EvidencePointer {
+	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
 		return nil
 	}
-	cloned := make([]ProviderHistoryReductionCandidate, len(candidates))
-	for i, candidate := range candidates {
-		cloned[i] = cloneProviderHistoryReductionCandidate(candidate)
-	}
-	return cloned
-}
-
-func cloneProviderHistoryCommandEditDryRunReport(report ProviderHistoryCommandEditDryRunReport) ProviderHistoryCommandEditDryRunReport {
-	if len(report.CandidateReasonCounts) > 0 {
-		counts := make(map[string]int, len(report.CandidateReasonCounts))
-		for reason, count := range report.CandidateReasonCounts {
-			counts[reason] = count
-		}
-		report.CandidateReasonCounts = counts
-	}
-	if len(report.KeptReasonCounts) > 0 {
-		counts := make(map[string]int, len(report.KeptReasonCounts))
-		for reason, count := range report.KeptReasonCounts {
-			counts[reason] = count
-		}
-		report.KeptReasonCounts = counts
-	}
-	if len(report.Candidates) > 0 {
-		report.Candidates = append([]ProviderHistoryCommandEditDryRunCandidate(nil), report.Candidates...)
-	}
-	if len(report.Kept) > 0 {
-		report.Kept = append([]ProviderHistoryCommandEditDryRunCandidate(nil), report.Kept...)
-	}
-	return report
+	return ledger.EvidencePointersFromState(a.Runtime.TaskLedger.Snapshot())
 }

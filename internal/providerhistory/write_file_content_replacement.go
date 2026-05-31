@@ -1,4 +1,4 @@
-package agent
+package providerhistory
 
 import (
 	"encoding/json"
@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 var providerHistoryWriteFileSuccessPattern = regexp.MustCompile(`(?m)^Successfully wrote \d+ bytes \(\d+ lines?\) to (.+?)(?:\r?\n|$)`)
@@ -22,7 +22,7 @@ type providerHistoryWriteFileContentReplacement struct {
 	savedTokens     int
 }
 
-func applyProviderHistoryWriteFileContentReplacementCandidate(report *ProviderHistoryCommandEditDryRunReport, candidateIndex int, ref providerHistoryAssistantToolCallRef, toolResultContent string, projection []api.Message) {
+func applyProviderHistoryWriteFileContentReplacementCandidate(report *CommandEditDryRunReport, candidateIndex int, ref providerHistoryAssistantToolCallRef, toolResultContent string, projection []api.Message) {
 	if report == nil || candidateIndex < 0 || candidateIndex >= len(report.Candidates) {
 		return
 	}

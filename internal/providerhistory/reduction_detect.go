@@ -1,4 +1,4 @@
-package agent
+package providerhistory
 
 import (
 	"fmt"
@@ -8,12 +8,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-func buildProviderHistoryReductionDetectionReport(original, projected []api.Message, mode ProviderHistoryReductionMode) ProviderHistoryProjectionReport {
-	report := ProviderHistoryProjectionReport{
+func buildProviderHistoryReductionDetectionReport(original, projected []api.Message, mode Mode) ProjectionReport {
+	report := ProjectionReport{
 		Mode:                  mode,
 		OriginalMessageCount:  len(original),
 		ProjectedMessageCount: len(projected),
-		CommandEditDryRun:     newProviderHistoryCommandEditDryRunReport(),
+		CommandEditDryRun:     newCommandEditDryRunReport(),
 	}
 	if len(original) == 0 {
 		return report
@@ -22,7 +22,7 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 	assistantToolCallsByID := collectProviderHistoryAssistantToolCalls(original)
 	trailingToolStart := providerHistoryTrailingToolSuffixStart(original)
 	latestToolResultIndex := providerHistoryLatestToolResultIndex(original)
-	report.CommandEditDryRun = buildProviderHistoryCommandEditDryRunReport(original, projected, mode, assistantToolCallsByID, trailingToolStart, latestToolResultIndex)
+	report.CommandEditDryRun = buildCommandEditDryRunReport(original, projected, mode, assistantToolCallsByID, trailingToolStart, latestToolResultIndex)
 
 	for i, msg := range original {
 		if msg.Role != "tool" {
@@ -53,7 +53,7 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 			report.Kept = append(report.Kept, entry)
 			continue
 		}
-		if !isProviderHistoryReductionCandidateTool(toolName) {
+		if !isReductionCandidateTool(toolName) {
 			entry.KeepReason = "tool_not_in_reduction_allowlist"
 			report.Kept = append(report.Kept, entry)
 			continue
@@ -68,7 +68,7 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 		entry.SuggestedReplacementKind = providerHistoryReductionReplacementKind(toolName)
 		entry.SuggestedReplacementText = fmt.Sprintf("[omitted old %s result; see evidence pointer]", toolName)
 		report.Candidates = append(report.Candidates, entry)
-		if mode == ProviderHistoryReductionDryRun {
+		if mode == DryRun {
 			kept := entry
 			kept.KeepReason = "dry_run"
 			report.Kept = append(report.Kept, kept)
@@ -284,7 +284,7 @@ func isProviderHistoryReductionAlwaysKeptTool(toolName string) bool {
 	return tools.IsWriteTool(toolName)
 }
 
-func isProviderHistoryReductionCandidateTool(toolName string) bool {
+func isReductionCandidateTool(toolName string) bool {
 	switch toolName {
 	case "read_file", "search_code", "gather_context":
 		return true
@@ -293,8 +293,8 @@ func isProviderHistoryReductionCandidateTool(toolName string) bool {
 	}
 }
 
-func providerHistoryReductionEntry(historyIndex int, msg api.Message) ProviderHistoryReductionCandidate {
-	return ProviderHistoryReductionCandidate{
+func providerHistoryReductionEntry(historyIndex int, msg api.Message) ReductionCandidate {
+	return ReductionCandidate{
 		HistoryIndex:     historyIndex,
 		Role:             msg.Role,
 		ToolName:         msg.ToolName,

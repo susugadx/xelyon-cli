@@ -2,14 +2,14 @@ package agent
 
 import (
 	"context"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory"
 )
 
-const providerHistoryRehydratedEvidenceActiveContextName = "provider_history_rehydrated_evidence"
+const providerHistoryRehydratedEvidenceActiveContextName = providerhistory.RehydratedEvidenceActiveContextName
 
 func (a *Agent) providerHistoryRehydratedEvidenceActiveContextBlock(ctx context.Context, report ProviderHistoryProjectionReport) (api.ActiveContextBlock, bool) {
 	if !a.shouldBuildProviderHistoryRehydratedEvidenceActiveContext() {
@@ -22,14 +22,7 @@ func (a *Agent) providerHistoryRehydratedEvidenceActiveContextBlock(ctx context.
 	}
 
 	executionReport := a.Runtime.TaskLedger.ExecuteRehydratePlan(ctx, plan, ledger.RehydratePlanExecutionOptions{})
-	content := ledger.RenderRehydratedEvidenceBlock(executionReport.Block)
-	if strings.TrimSpace(content) == "" {
-		return api.ActiveContextBlock{}, false
-	}
-	return api.ActiveContextBlock{
-		Name:    providerHistoryRehydratedEvidenceActiveContextName,
-		Content: content,
-	}, true
+	return providerhistory.RehydratedEvidenceActiveContextBlock(executionReport.Block)
 }
 
 func (a *Agent) providerHistoryRehydratedEvidenceActiveContextBlocks(ctx context.Context, report ProviderHistoryProjectionReport) []api.ActiveContextBlock {
@@ -69,13 +62,6 @@ func (a *Agent) providerActiveContextTransport() api.ActiveContextTransport {
 		config.WithContext(context.Background(), cfg),
 		a.CurrentModel,
 	)
-}
-
-func (a *Agent) providerHistoryReductionRequiresActiveContextTransport() bool {
-	return a != nil &&
-		a.Runtime != nil &&
-		a.Runtime.Options.EnableProviderHistoryRehydrateContext &&
-		a.providerActiveContextTransport() == api.ActiveContextTransportNone
 }
 
 func appendProviderHistoryRehydratedEvidenceActiveContext(ctx context.Context, additions []api.ActiveContextBlock) context.Context {

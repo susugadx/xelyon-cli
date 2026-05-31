@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 func (a *Agent) currentModelTokenLimit(cfg *config.Config) int {

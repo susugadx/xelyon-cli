@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )

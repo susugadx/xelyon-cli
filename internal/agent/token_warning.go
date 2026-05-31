@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 // checkTokenWarning はトークン使用率をチェックして警告を表示

@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 type tokenLimitRetryOptions struct {

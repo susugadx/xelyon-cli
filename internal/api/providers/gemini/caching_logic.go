@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 // cacheEntry はモデル別キャッシュの状態を保持する

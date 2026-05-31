@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 func buildProjectMapSection(agent *Agent, injectionCtx projectMapInjectionContext) (projectMapSectionBuild, bool) {

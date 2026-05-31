@@ -1,6 +1,6 @@
 package repomap
 
-import agenttoken "github.com/susugadx/xelyon-cli/internal/agent/token"
+import agenttoken "github.com/susugadx/xelyon-cli/internal/token"
 
 const defaultMaxTokens = 4000
 

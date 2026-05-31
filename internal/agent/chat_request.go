@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 type chatRequest struct {

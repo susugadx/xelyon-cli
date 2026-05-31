@@ -3,9 +3,9 @@ package agent
 import (
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 type projectInstructionApplyOptions struct {

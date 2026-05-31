@@ -1,4 +1,4 @@
-package agent
+package providerhistory
 
 import (
 	"fmt"
@@ -8,39 +8,39 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ledger"
 )
 
-func (a *Agent) applyProviderHistoryReduction(report *ProviderHistoryProjectionReport, projection []api.Message) {
-	if report == nil || report.Mode != ProviderHistoryReductionApply || len(report.Candidates) == 0 {
+func applyProviderHistoryReduction(report *ProjectionReport, projection []api.Message, policy Policy) {
+	if report == nil || report.Mode != Apply || len(report.Candidates) == 0 {
 		return
 	}
-	if a.providerHistoryReductionRequiresActiveContextTransport() {
+	if policy.EvidenceReductionRequiresActiveContext && !policy.ActiveContextTransportAvailable {
 		for i := range report.Candidates {
-			keepProviderHistoryReductionCandidate(report, i, "active_context_transport_unsupported")
+			keepReductionCandidate(report, i, "active_context_transport_unsupported")
 		}
 		return
 	}
 
-	pointers := a.providerHistoryReductionEvidencePointers()
+	pointers := policy.EvidencePointers
 	evidenceKeyCounts := countProviderHistoryReductionEvidenceKeys(report.Candidates, report.Kept)
 	for i := range report.Candidates {
 		candidate := report.Candidates[i]
 		key := providerHistoryReductionEvidenceKeyForCandidate(candidate)
 		if evidenceKeyCounts[key] > 1 {
-			keepProviderHistoryReductionCandidate(report, i, "ambiguous_evidence_pointer")
+			keepReductionCandidate(report, i, "ambiguous_evidence_pointer")
 			continue
 		}
 
 		evidencePointers := providerHistoryEvidencePointersForCandidate(pointers, candidate)
 		if len(evidencePointers) == 0 {
-			keepProviderHistoryReductionCandidate(report, i, "missing_evidence_pointer")
+			keepReductionCandidate(report, i, "missing_evidence_pointer")
 			continue
 		}
 
 		if candidate.HistoryIndex < 0 || candidate.HistoryIndex >= len(projection) {
-			keepProviderHistoryReductionCandidate(report, i, "missing_projection_message")
+			keepReductionCandidate(report, i, "missing_projection_message")
 			continue
 		}
 		if !providerHistoryProjectionMessageMatchesCandidate(projection[candidate.HistoryIndex], candidate) {
-			keepProviderHistoryReductionCandidate(report, i, "mismatched_projection_message")
+			keepReductionCandidate(report, i, "mismatched_projection_message")
 			continue
 		}
 
@@ -48,21 +48,21 @@ func (a *Agent) applyProviderHistoryReduction(report *ProviderHistoryProjectionR
 		report.Candidates[i].SuggestedReplacementKind = replacementKind
 		report.Candidates[i].SuggestedReplacementText = replacementText
 		if len(replacementText) >= candidate.OriginalByteSize {
-			keepProviderHistoryReductionCandidate(report, i, "replacement_not_smaller")
+			keepReductionCandidate(report, i, "replacement_not_smaller")
 			continue
 		}
 
-		applyProviderHistoryReductionCandidateProjection(&projection[candidate.HistoryIndex], candidate, replacementText)
+		applyReductionCandidateProjection(&projection[candidate.HistoryIndex], candidate, replacementText)
 		report.Candidates[i].ReplacementApplied = true
 		report.Candidates[i].EvidencePointers = cloneProviderHistoryReductionEvidencePointers(evidencePointers)
 	}
 }
 
-func providerHistoryProjectionMessageMatchesCandidate(msg api.Message, candidate ProviderHistoryReductionCandidate) bool {
+func providerHistoryProjectionMessageMatchesCandidate(msg api.Message, candidate ReductionCandidate) bool {
 	return msg.Role == "tool" && msg.ToolCallID == candidate.ToolCallID
 }
 
-func applyProviderHistoryReductionCandidateProjection(msg *api.Message, candidate ProviderHistoryReductionCandidate, replacementText string) {
+func applyReductionCandidateProjection(msg *api.Message, candidate ReductionCandidate, replacementText string) {
 	if msg == nil {
 		return
 	}
@@ -72,14 +72,7 @@ func applyProviderHistoryReductionCandidateProjection(msg *api.Message, candidat
 	msg.Content = replacementText
 }
 
-func (a *Agent) providerHistoryReductionEvidencePointers() []ledger.EvidencePointer {
-	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
-		return nil
-	}
-	return ledger.EvidencePointersFromState(a.Runtime.TaskLedger.Snapshot())
-}
-
-func keepProviderHistoryReductionCandidate(report *ProviderHistoryProjectionReport, candidateIndex int, reason string) {
+func keepReductionCandidate(report *ProjectionReport, candidateIndex int, reason string) {
 	report.Candidates[candidateIndex].KeepReason = reason
 	report.Candidates[candidateIndex].ReplacementApplied = false
 	report.Kept = append(report.Kept, report.Candidates[candidateIndex])
@@ -90,14 +83,14 @@ type providerHistoryReductionEvidenceKey struct {
 	toolName   string
 }
 
-func providerHistoryReductionEvidenceKeyForCandidate(candidate ProviderHistoryReductionCandidate) providerHistoryReductionEvidenceKey {
+func providerHistoryReductionEvidenceKeyForCandidate(candidate ReductionCandidate) providerHistoryReductionEvidenceKey {
 	return providerHistoryReductionEvidenceKey{
 		toolCallID: candidate.ToolCallID,
 		toolName:   candidate.ToolName,
 	}
 }
 
-func countProviderHistoryReductionEvidenceKeys(entrySets ...[]ProviderHistoryReductionCandidate) map[providerHistoryReductionEvidenceKey]int {
+func countProviderHistoryReductionEvidenceKeys(entrySets ...[]ReductionCandidate) map[providerHistoryReductionEvidenceKey]int {
 	counts := make(map[providerHistoryReductionEvidenceKey]int)
 	for _, entries := range entrySets {
 		for _, entry := range entries {
@@ -111,7 +104,7 @@ func countProviderHistoryReductionEvidenceKeys(entrySets ...[]ProviderHistoryRed
 	return counts
 }
 
-func providerHistoryEvidencePointersForCandidate(pointers []ledger.EvidencePointer, candidate ProviderHistoryReductionCandidate) []ledger.EvidencePointer {
+func providerHistoryEvidencePointersForCandidate(pointers []ledger.EvidencePointer, candidate ReductionCandidate) []ledger.EvidencePointer {
 	if len(pointers) == 0 {
 		return nil
 	}
@@ -124,7 +117,7 @@ func providerHistoryEvidencePointersForCandidate(pointers []ledger.EvidencePoint
 	return matched
 }
 
-func buildProviderHistoryReplacement(candidate ProviderHistoryReductionCandidate, evidencePointers []ledger.EvidencePointer) (string, string) {
+func buildProviderHistoryReplacement(candidate ReductionCandidate, evidencePointers []ledger.EvidencePointer) (string, string) {
 	toolName := providerHistoryReductionSingleLine(candidate.ToolName)
 	replacementKind := providerHistoryReductionReplacementKind(toolName)
 	return replacementKind, fmt.Sprintf(

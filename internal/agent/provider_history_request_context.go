@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory"
 )
 
 func (a *Agent) providerFacingHistoryForRequest(ctx context.Context) (context.Context, []api.Message) {
@@ -36,7 +37,7 @@ func (a *Agent) providerFacingHistoryForRequestFromRaw(ctx context.Context, raw 
 }
 
 func providerHistoryProjectionDisablesResponseIDChain(report ProviderHistoryProjectionReport) bool {
-	return report.ResponsesChainDisabled
+	return providerhistory.ProjectionDisablesResponseIDChain(report)
 }
 
 func (a *Agent) clearResponseContextForProviderHistoryReductionRequest() {

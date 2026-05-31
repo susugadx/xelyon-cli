@@ -8,10 +8,16 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ledger"
+	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 const providerHistoryReductionPlaceholderPrefix = "[omitted old "
+
+const (
+	providerHistoryCommandReplacementMinSavedTokens = 128
+	providerHistoryEditArgReplacementMinSavedTokens = 128
+)
 
 func candidateTools(report ProviderHistoryProjectionReport) []string {
 	tools := make([]string, len(report.Candidates))
@@ -83,6 +89,31 @@ func assertProviderHistoryByteMetrics(t *testing.T, original, projected []api.Me
 	if report.ApproxSavedTokens != wantSavedTokens {
 		t.Fatalf("ApproxSavedTokens = %d, want %d", report.ApproxSavedTokens, wantSavedTokens)
 	}
+}
+
+func providerHistoryContentBytes(messages []api.Message) int {
+	total := 0
+	for _, msg := range messages {
+		total += len(msg.Content)
+	}
+	return total
+}
+
+func providerHistoryApproxSavedTokens(original, projected []api.Message) int {
+	originalTokens := providerHistoryContentTokens(original)
+	projectedTokens := providerHistoryContentTokens(projected)
+	if originalTokens <= projectedTokens {
+		return 0
+	}
+	return originalTokens - projectedTokens
+}
+
+func providerHistoryContentTokens(messages []api.Message) int {
+	total := 0
+	for _, msg := range messages {
+		total += token.EstimateTokenCount(msg.Content)
+	}
+	return total
 }
 
 func assertLastProviderHistoryProjectionReportPreserved(t *testing.T, runtime *AgentRuntime, want ProviderHistoryProjectionReport) {

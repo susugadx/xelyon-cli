@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 func TestEstimateTokens(t *testing.T) {

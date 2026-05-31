@@ -3,10 +3,10 @@ package agent
 import (
 	"context"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 const minProviderFallbackInputBudgetTokens = 8192

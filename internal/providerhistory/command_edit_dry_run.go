@@ -1,4 +1,4 @@
-package agent
+package providerhistory
 
 import (
 	"encoding/json"
@@ -8,9 +8,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 const (
@@ -43,8 +43,8 @@ var providerHistoryCommandReplacementReasonLabels = map[string]string{
 	"lint_success_output":  "successful lint command output",
 }
 
-func buildProviderHistoryCommandEditDryRunReport(original, projection []api.Message, mode ProviderHistoryReductionMode, assistantToolCallsByID map[string][]providerHistoryAssistantToolCallRef, trailingToolStart, latestToolResultIndex int) ProviderHistoryCommandEditDryRunReport {
-	report := newProviderHistoryCommandEditDryRunReport()
+func buildCommandEditDryRunReport(original, projection []api.Message, mode Mode, assistantToolCallsByID map[string][]providerHistoryAssistantToolCallRef, trailingToolStart, latestToolResultIndex int) CommandEditDryRunReport {
+	report := newCommandEditDryRunReport()
 	if len(original) == 0 {
 		return report
 	}
@@ -73,32 +73,32 @@ func buildProviderHistoryCommandEditDryRunReport(original, projection []api.Mess
 
 		if providerHistoryIsCommandOutputTool(linkage.ToolName) {
 			candidateIndex, ok := recordProviderHistoryCommandCandidate(&report, entry, linkage.Ref.arguments, msg.Content)
-			if ok && mode == ProviderHistoryReductionApply {
+			if ok && mode == Apply {
 				applyProviderHistoryCommandReplacementCandidate(&report, candidateIndex, linkage.Ref.arguments, projection)
 			}
 			continue
 		}
 		candidateIndex, ok := recordProviderHistoryEditArgCandidate(&report, entry, linkage.ToolName, linkage.Ref.arguments)
-		if ok && mode == ProviderHistoryReductionApply && linkage.ToolName == "write_file" {
+		if ok && mode == Apply && linkage.ToolName == "write_file" {
 			applyProviderHistoryWriteFileContentReplacementCandidate(&report, candidateIndex, linkage.Ref, msg.Content, projection)
 		}
 	}
 
-	finalizeProviderHistoryCommandEditDryRunReport(&report)
+	finalizeCommandEditDryRunReport(&report)
 	return report
 }
 
-func newProviderHistoryCommandEditDryRunReport() ProviderHistoryCommandEditDryRunReport {
-	return ProviderHistoryCommandEditDryRunReport{
+func newCommandEditDryRunReport() CommandEditDryRunReport {
+	return CommandEditDryRunReport{
 		ReplacementStatus: providerHistoryCommandEditReplacementStatusNotImplemented,
 	}
 }
 
-func providerHistoryCommandEditDryRunEntry(historyIndex int, msg api.Message, toolName string) ProviderHistoryCommandEditDryRunCandidate {
+func providerHistoryCommandEditDryRunEntry(historyIndex int, msg api.Message, toolName string) CommandEditDryRunCandidate {
 	if toolName == "" {
 		toolName = msg.ToolName
 	}
-	return ProviderHistoryCommandEditDryRunCandidate{
+	return CommandEditDryRunCandidate{
 		HistoryIndex: historyIndex,
 		Role:         msg.Role,
 		ToolName:     toolName,
@@ -140,7 +140,7 @@ func providerHistoryIsEditArgTool(toolName string) bool {
 	}
 }
 
-func recordProviderHistoryCommandCandidate(report *ProviderHistoryCommandEditDryRunReport, entry ProviderHistoryCommandEditDryRunCandidate, arguments, content string) (int, bool) {
+func recordProviderHistoryCommandCandidate(report *CommandEditDryRunReport, entry CommandEditDryRunCandidate, arguments, content string) (int, bool) {
 	if content == "" {
 		entry.Kind = "command_output"
 		entry.KeepReason = "empty_command_output"
@@ -156,7 +156,7 @@ func recordProviderHistoryCommandCandidate(report *ProviderHistoryCommandEditDry
 	return len(report.Candidates) - 1, true
 }
 
-func recordProviderHistoryEditArgCandidate(report *ProviderHistoryCommandEditDryRunReport, entry ProviderHistoryCommandEditDryRunCandidate, toolName, arguments string) (int, bool) {
+func recordProviderHistoryEditArgCandidate(report *CommandEditDryRunReport, entry CommandEditDryRunCandidate, toolName, arguments string) (int, bool) {
 	payload, keepReason := providerHistoryEditArgPayload(toolName, arguments)
 	entry.Kind = "edit_arguments"
 	if keepReason != "" {
@@ -611,7 +611,7 @@ func providerHistoryContainsZeroExitCode(lowerContent string) bool {
 	return false
 }
 
-func finalizeProviderHistoryCommandEditDryRunReport(report *ProviderHistoryCommandEditDryRunReport) {
+func finalizeCommandEditDryRunReport(report *CommandEditDryRunReport) {
 	if report == nil {
 		return
 	}
@@ -656,7 +656,7 @@ func clampProviderHistorySavedTokens(originalTokens, placeholderTokens int) int 
 	return originalTokens - placeholderTokens
 }
 
-func applyProviderHistoryCommandReplacementCandidate(report *ProviderHistoryCommandEditDryRunReport, candidateIndex int, arguments string, projection []api.Message) {
+func applyProviderHistoryCommandReplacementCandidate(report *CommandEditDryRunReport, candidateIndex int, arguments string, projection []api.Message) {
 	if report == nil || candidateIndex < 0 || candidateIndex >= len(report.Candidates) {
 		return
 	}
@@ -692,11 +692,11 @@ func providerHistoryCommandCandidateReasonAllowsReplacement(reason string) bool 
 	return ok
 }
 
-func providerHistoryCommandProjectionMessageMatchesCandidate(msg api.Message, candidate ProviderHistoryCommandEditDryRunCandidate) bool {
+func providerHistoryCommandProjectionMessageMatchesCandidate(msg api.Message, candidate CommandEditDryRunCandidate) bool {
 	return msg.Role == "tool" && msg.ToolCallID == candidate.ToolCallID
 }
 
-func applyProviderHistoryCommandReplacementProjection(msg *api.Message, candidate ProviderHistoryCommandEditDryRunCandidate, replacementText string) {
+func applyProviderHistoryCommandReplacementProjection(msg *api.Message, candidate CommandEditDryRunCandidate, replacementText string) {
 	if msg == nil {
 		return
 	}

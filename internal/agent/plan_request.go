@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
-	"github.com/susugadx/xelyon-cli/internal/agent/token"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 type planModeRequest struct {
