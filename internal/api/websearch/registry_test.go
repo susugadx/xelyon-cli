@@ -58,6 +58,34 @@ func TestRegisterWithContext_BasicSearch(t *testing.T) {
 	}
 }
 
+func TestRegisterWithContextForTestRestoresPreviousProvider(t *testing.T) {
+	resetRegistry(t)
+	RegisterWithContext("ctx-provider", func(ctx context.Context, query, model string) (string, error) {
+		return "original", nil
+	})
+
+	t.Run("override", func(t *testing.T) {
+		RegisterWithContextForTest(t, "ctx-provider", func(ctx context.Context, query, model string) (string, error) {
+			return "override", nil
+		})
+		result, err := SearchWithContext(context.Background(), "ctx-provider", "q", "m")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result != "override" {
+			t.Fatalf("got %q, want override", result)
+		}
+	})
+
+	result, err := SearchWithContext(context.Background(), "ctx-provider", "q", "m")
+	if err != nil {
+		t.Fatalf("unexpected error after cleanup: %v", err)
+	}
+	if result != "original" {
+		t.Fatalf("got %q, want restored original", result)
+	}
+}
+
 func TestUsageCallbackContext(t *testing.T) {
 	var got api.Usage
 	ctx := WithUsageCallback(context.Background(), func(usage api.Usage) {

@@ -279,6 +279,12 @@ func validateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID
 	if !isKnownReviewEvidenceKind(ref.Kind) {
 		return fmt.Errorf("%s.kind must be known enum value: got %q", field, ref.Kind)
 	}
+	if ref.Kind == ReviewEvidenceKindExternalDoc {
+		return validateExternalDocEvidenceRefShape(field, ref)
+	}
+	if hasExternalDocEvidenceRefFields(ref) {
+		return fmt.Errorf("%s external_doc fields are allowed only when kind=%q", field, ReviewEvidenceKindExternalDoc)
+	}
 
 	probeID, err := validateOptionalProbeID(field+".probe_id", ref.ProbeID)
 	if err != nil {

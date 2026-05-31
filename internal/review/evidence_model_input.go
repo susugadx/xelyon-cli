@@ -17,6 +17,7 @@ type ReviewEvidenceModelInput struct {
 	RelatedContextFiles []ReviewEvidenceContextFileInput      `json:"related_context_files"`
 	RelatedSearchHits   []ReviewEvidenceRelatedSearchHitInput `json:"related_search_hits"`
 	GenericImpact       ReviewEvidenceGenericImpactInput      `json:"generic_impact_candidates"`
+	WebSearchEvidence   ReviewWebSearchEvidence               `json:"web_search_evidence"`
 	RuleFiles           []ReviewEvidenceRuleFileInput         `json:"rule_files"`
 	Diffs               []ReviewEvidenceDiffInput             `json:"diffs"`
 	UntrackedFiles      []ReviewEvidenceUntrackedFileInput    `json:"untracked_files"`
@@ -143,6 +144,7 @@ type ReviewEvidenceTruncationFlagsInput struct {
 	UntrackedList       bool                                `json:"untracked_list"`
 	RelatedCandidates   bool                                `json:"related_candidates"`
 	RelatedSearch       bool                                `json:"related_search"`
+	WebSearchEvidence   bool                                `json:"web_search_evidence"`
 	UntrackedSnapshots  bool                                `json:"untracked_snapshots"`
 	UntrackedFiles      []ReviewEvidencePathTruncationInput `json:"untracked_files"`
 	RuleFiles           []ReviewEvidencePathTruncationInput `json:"rule_files"`
@@ -183,6 +185,7 @@ func BuildReviewEvidenceModelInput(bundle ReviewEvidenceBundle) ReviewEvidenceMo
 		RelatedContextFiles: buildReviewEvidenceContextFileInputs(repoRoot, bundle.RelatedContextFiles),
 		RelatedSearchHits:   buildReviewEvidenceRelatedSearchHitInputs(repoRoot, bundle.RelatedSearchHits),
 		GenericImpact:       buildReviewEvidenceGenericImpactInput(repoRoot, bundle.GenericImpactCandidates),
+		WebSearchEvidence:   bundle.WebSearchEvidence,
 		RuleFiles:           buildReviewEvidenceRuleFileInputs(repoRoot, bundle.RuleFiles),
 		Diffs:               buildReviewEvidenceDiffInputs(bundle.Diffs),
 		UntrackedFiles:      buildReviewEvidenceUntrackedFileInputs(repoRoot, bundle.UntrackedFiles),
@@ -359,6 +362,7 @@ func buildReviewEvidenceTruncationFlagsInput(repoRoot string, bundle ReviewEvide
 		UntrackedList:      bundle.UntrackedListTruncated,
 		RelatedCandidates:  bundle.RelatedCandidateListTruncated,
 		RelatedSearch:      bundle.RelatedSearchTruncated,
+		WebSearchEvidence:  bundle.WebSearchEvidence.Truncated,
 		UntrackedSnapshots: bundle.UntrackedSnapshotsTruncated,
 		UntrackedFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.UntrackedFiles, func(file ReviewUntrackedFile) (string, bool) {
 			return file.Path, file.Truncated

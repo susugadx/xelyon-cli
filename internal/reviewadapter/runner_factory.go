@@ -1,15 +1,24 @@
 package reviewadapter
 
 import (
+	"context"
 	"io"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	"github.com/susugadx/xelyon-cli/internal/tools"
+	searchtool "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
 // RunnerFactoryOptions は ReviewRunner の concrete 依存を組み立てる入力を表す。
 type RunnerFactoryOptions struct {
 	RepoRoot string
 	CWD      string
+	Config   *config.Config
+
+	MainProvider          string
+	MainProviderConfigKey string
+	MainModel             string
 
 	// Model は provider/agent 側で実装される必須境界。
 	Model review.ReviewModel
@@ -22,6 +31,7 @@ type RunnerFactoryOptions struct {
 	ArtifactWriter        review.ReviewRunArtifactWriter
 	ArtifactWarningWriter io.Writer
 	ProgressSink          review.ReviewProgressSink
+	UsageAttribution      tools.UsageAttributionCallback
 }
 
 // RunnerFactory は ReviewRunner の構築責務を review domain の外側で保持する。
@@ -38,7 +48,11 @@ func NewRunnerFactory(opts RunnerFactoryOptions) RunnerFactory {
 func (f RunnerFactory) NewReviewRunner() (*review.ReviewRunner, error) {
 	evidenceBuilder := f.opts.EvidenceBuilder
 	if evidenceBuilder == nil {
-		evidenceBuilder = review.NewReviewEvidenceBuilder(f.opts.RepoRoot, f.opts.CWD)
+		evidenceBuilder = review.NewReviewEvidenceBuilder(
+			f.opts.RepoRoot,
+			f.opts.CWD,
+			f.reviewEvidenceBuilderOptions()...,
+		)
 	}
 
 	probeRunner := f.opts.ProbeRunner
@@ -54,4 +68,65 @@ func (f RunnerFactory) NewReviewRunner() (*review.ReviewRunner, error) {
 		ArtifactWarningWriter: f.opts.ArtifactWarningWriter,
 		ProgressSink:          f.opts.ProgressSink,
 	})
+}
+
+func (f RunnerFactory) reviewEvidenceBuilderOptions() []review.ReviewEvidenceBuilderOption {
+	cfg := f.opts.Config
+	if cfg == nil || !cfg.Review.WebSearchEvidence.Enabled {
+		return nil
+	}
+	searcher := newReviewWebSearchRunner(f.opts)
+	collector := review.NewReviewWebSearchEvidenceCollector(review.ReviewWebSearchEvidenceCollectorOptions{
+		Enabled:            true,
+		MaxQueries:         cfg.Review.WebSearchEvidence.MaxQueries,
+		MaxResultsPerQuery: cfg.Review.WebSearchEvidence.MaxResultsPerQuery,
+		Searcher:           searcher,
+	})
+	return []review.ReviewEvidenceBuilderOption{
+		review.WithReviewWebSearchEvidenceProvider(collector),
+	}
+}
+
+type reviewWebSearchRunner struct {
+	cfg                   *config.Config
+	mainProvider          string
+	mainProviderConfigKey string
+	mainModel             string
+	usageAttribution      tools.UsageAttributionCallback
+}
+
+func newReviewWebSearchRunner(opts RunnerFactoryOptions) reviewWebSearchRunner {
+	return reviewWebSearchRunner{
+		cfg:                   opts.Config,
+		mainProvider:          opts.MainProvider,
+		mainProviderConfigKey: opts.MainProviderConfigKey,
+		mainModel:             opts.MainModel,
+		usageAttribution:      opts.UsageAttribution,
+	}
+}
+
+func (r reviewWebSearchRunner) SearchReviewWeb(ctx context.Context, query string, maxResults int) (review.ReviewWebSearchQueryResult, error) {
+	resp, err := searchtool.SearchWeb(ctx, searchtool.WebSearchRequest{
+		Config:                r.cfg,
+		MainProvider:          r.mainProvider,
+		MainProviderConfigKey: r.mainProviderConfigKey,
+		MainModel:             r.mainModel,
+		Query:                 query,
+		MaxResults:            maxResults,
+		UsageAttribution:      r.usageAttribution,
+	})
+	results := make([]review.ReviewWebSearchEvidenceResult, 0, len(resp.Results))
+	for _, result := range resp.Results {
+		results = append(results, review.ReviewWebSearchEvidenceResult{
+			Title:        result.Title,
+			URL:          result.URL,
+			Snippet:      result.Snippet,
+			SourceDomain: result.SourceDomain,
+		})
+	}
+	return review.ReviewWebSearchQueryResult{
+		Provider:  resp.Provider,
+		Results:   results,
+		Truncated: resp.ResultsTruncated,
+	}, err
 }

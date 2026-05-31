@@ -39,13 +39,19 @@ func (a *Agent) runReview(ctx context.Context, req review.ReviewRequest, opts re
 	}
 
 	artifactSink := a.newReviewRunArtifactSink(repoRoot)
+	cfg := a.cfg()
 	factory := reviewadapter.NewRunnerFactory(reviewadapter.RunnerFactoryOptions{
 		RepoRoot:              repoRoot,
 		CWD:                   cwd,
+		Config:                cfg,
+		MainProvider:          a.ProviderName,
+		MainProviderConfigKey: a.currentProviderConfigKey(),
+		MainModel:             a.CurrentModel,
 		Model:                 agentReviewModel{agent: a},
 		ArtifactWriter:        artifactSink.writer,
 		ArtifactWarningWriter: a.errorOutput(),
 		ProgressSink:          opts.ProgressSink,
+		UsageAttribution:      a.providerUsageAttributionCallback(),
 	})
 	runner, err := factory.NewReviewRunner()
 	if err != nil {

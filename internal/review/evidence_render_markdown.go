@@ -18,6 +18,7 @@ func RenderReviewEvidenceMarkdown(bundle ReviewEvidenceBundle) string {
 	appendReviewEvidenceMarkdownChangeInventory(&b, input)
 	appendReviewEvidenceMarkdownReviewPressureSignals(&b, input)
 	appendReviewEvidenceMarkdownGenericImpactCandidates(&b, input)
+	appendReviewEvidenceMarkdownWebSearchEvidence(&b, input)
 	appendReviewEvidenceMarkdownChangedFiles(&b, input)
 	appendReviewEvidenceMarkdownChangedFileContext(&b, input)
 	appendReviewEvidenceMarkdownRelatedContextFiles(&b, input)
@@ -68,6 +69,11 @@ func appendReviewEvidenceMarkdownReviewPressureSignals(b *strings.Builder, input
 func appendReviewEvidenceMarkdownGenericImpactCandidates(b *strings.Builder, input ReviewEvidenceModelInput) {
 	appendReviewEvidenceMarkdownSection(b, "generic impact candidates")
 	appendReviewEvidenceMarkdownJSONFence(b, input.GenericImpact)
+}
+
+func appendReviewEvidenceMarkdownWebSearchEvidence(b *strings.Builder, input ReviewEvidenceModelInput) {
+	appendReviewEvidenceMarkdownSection(b, "review web search evidence")
+	appendReviewEvidenceMarkdownJSONFence(b, input.WebSearchEvidence)
 }
 
 func appendReviewEvidenceMarkdownChangedFiles(b *strings.Builder, input ReviewEvidenceModelInput) {

@@ -87,7 +87,7 @@ func reviewReportRevisionSaturationGuardrails() string {
 Preserve review_report.v2 schema shape exactly. Do not output top-level "computed_summary".
 Preserve the trusted probe_summaries entries supplied for the report schema with the same count, same order, and same probe_id values.
 Do not convert failed, blocked, timed-out, or mutated_worktree probe outcomes into clean, checked, dismissed, or verified coverage. Represent them as a finding, residual_risk, unverified scope, or blocked status when the evidence requires it.
-Do not use shallow or empty related context/search evidence as proof of no impact. If truncation or evidence gaps prevent verification, reflect that as residual, unverified, or blocked within review_report.v2.`
+Do not use shallow or empty related context/search evidence as proof of no impact. Disabled, failed, truncated, or inconclusive review web search evidence is not external spec coverage. If truncation or evidence gaps prevent verification, reflect that as residual, unverified, or blocked within review_report.v2.`
 }
 
 func appendReviewReportRevisionPromptContext(b *strings.Builder, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, results []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck) {

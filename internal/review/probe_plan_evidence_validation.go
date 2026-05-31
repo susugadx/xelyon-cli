@@ -12,6 +12,9 @@ func ValidateReviewProbePlanAgainstEvidence(plan ReviewProbePlan, bundle ReviewE
 	if err := ValidateReviewProbePlan(plan); err != nil {
 		return err
 	}
+	if err := validateReviewProbePlanExternalDocRefsAgainstEvidence(plan, bundle); err != nil {
+		return err
+	}
 
 	input := BuildReviewEvidenceModelInput(bundle)
 	index := newReviewProbePlanImpactSurfaceEvidenceIndex(plan.ImpactSurfaces)

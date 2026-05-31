@@ -2,10 +2,14 @@ package agent
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/api/websearch"
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
@@ -79,6 +83,49 @@ func TestTUIAdapterRunReviewReturnsUsageSummaryAndRecordsLastReview(t *testing.T
 	}
 	if reviewCost != lastReviewCost {
 		t.Fatalf("ReviewAccumulatedCost = %f, want last review cost %f", reviewCost, lastReviewCost)
+	}
+}
+
+func TestTUIAdapterRunReviewIncludesWebSearchEvidenceUsage(t *testing.T) {
+	repo := setupReviewGitRepo(t)
+	t.Chdir(repo)
+	t.Setenv(reviewRunArtifactsEnv, "")
+	writeReviewWebSearchEvidenceTriggerForTest(t, repo)
+
+	searchCalls := registerReviewWebSearchUsageProviderForTest(t, "gemini", "gemini-3.1-pro-preview-customtools", api.Usage{
+		InputTokens:  7,
+		OutputTokens: 3,
+	})
+
+	provider := newReviewModelUsageProviderForTest(t, api.Usage{InputTokens: 10, OutputTokens: 1})
+	agent := newReviewAgentForTest(t, provider)
+	cfg := agent.cfg()
+	cfg.WebSearch.Provider = "gemini"
+	cfg.WebSearch.CacheEnabled = false
+	cfg.SetProviderModelConfig("gemini", config.ProviderModelConfig{DefaultModel: "gemini-3.1-pro-preview-customtools"})
+	cfg.Review.WebSearchEvidence.Enabled = true
+	cfg.Review.WebSearchEvidence.MaxQueries = 1
+	cfg.Review.WebSearchEvidence.MaxResultsPerQuery = 1
+
+	result, err := NewTUIAdapter(agent, nil).RunReview(context.Background(), review.NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("RunReview() error = %v", err)
+	}
+	if got := searchCalls(); got != 1 {
+		t.Fatalf("search calls = %d, want 1", got)
+	}
+	if result.Usage.Tokens != "43 tok" {
+		t.Fatalf("usage tokens = %q, want 43 tok including web search evidence", result.Usage.Tokens)
+	}
+
+	agent.statsMu.Lock()
+	lastReviewUsage := agent.Stats.LastReviewUsage
+	agent.statsMu.Unlock()
+	if lastReviewUsage == nil {
+		t.Fatal("LastReviewUsage = nil, want review run usage")
+	}
+	if lastReviewUsage.InputTokens != 37 || lastReviewUsage.OutputTokens != 6 {
+		t.Fatalf("LastReviewUsage = %+v, want model usage plus web search evidence usage", lastReviewUsage)
 	}
 }
 
@@ -168,6 +215,58 @@ func TestTUIAdapterRunReviewEmitsRunScopedProgress(t *testing.T) {
 	}
 	assertReviewProgressMessage(t, progressMessages, 42, "review:evidence", tui.ToolStatusRunning, "collecting current changes", "")
 	assertReviewProgressMessage(t, progressMessages, 42, "review:saturation_check", tui.ToolStatusOK, "coverage checked", string(review.ReviewSaturationStatusSaturated))
+}
+
+func writeReviewWebSearchEvidenceTriggerForTest(t *testing.T, repo string) {
+	t.Helper()
+	content := []byte("package main\n\nfunc main() { println(\"OpenAI web_search\") }\n")
+	if err := os.WriteFile(filepath.Join(repo, "main.go"), content, 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
+}
+
+func registerReviewWebSearchUsageProviderForTest(t *testing.T, provider, model string, usage api.Usage) func() int {
+	t.Helper()
+	calls := 0
+	websearch.RegisterWithContextForTest(t, provider, func(ctx context.Context, _ string, gotModel string) (string, error) {
+		calls++
+		if gotModel != model {
+			t.Fatalf("model = %q, want %q", gotModel, model)
+		}
+		callback := websearch.UsageCallbackFromContext(ctx)
+		if callback == nil {
+			t.Fatal("UsageCallbackFromContext() = nil, want callback")
+		}
+		callback(usage)
+		return "No URL-bearing external source was returned.", nil
+	})
+	return func() int { return calls }
+}
+
+func newReviewModelUsageProviderForTest(t *testing.T, usage api.Usage) *scriptedChatProvider {
+	t.Helper()
+	provider := &scriptedChatProvider{name: "openai"}
+	provider.chatWithToolsFn = func(call int, _ context.Context, _ string, _ []api.Message, _ string) (string, error) {
+		if provider.usageCallback == nil {
+			t.Fatal("provider usage callback was not configured")
+		}
+		provider.usageCallback(usage)
+		switch call {
+		case 0:
+			return mustMarshalReviewValueForAgentTest(t, newAgentNoProbeReviewPlanForTest(
+				"Agent review web search evidence usage path.",
+				"Agent runner could omit web search evidence usage from review usage.",
+			)), nil
+		case 1:
+			return mustMarshalReviewValueForAgentTest(t, newAgentCleanReviewReportForTest()), nil
+		case 2:
+			return mustMarshalReviewValueForAgentTest(t, newAgentSaturatedReviewCheckForTest()), nil
+		default:
+			t.Fatalf("unexpected provider call %d", call)
+			return "", nil
+		}
+	}
+	return provider
 }
 
 func assertReviewProgressToolMessage(t *testing.T, messages []tui.AppendToolResultMsg, id string, status tui.ToolStatus, name string, targetFragment string) {

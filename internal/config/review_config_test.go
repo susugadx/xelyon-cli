@@ -15,6 +15,15 @@ func TestDefaultConfig_ReviewConfigUsesCurrentProviderByDefault(t *testing.T) {
 	if cfg.Review.Model != "" {
 		t.Fatalf("Review.Model = %q, want empty", cfg.Review.Model)
 	}
+	if cfg.Review.WebSearchEvidence.Enabled {
+		t.Fatal("Review.WebSearchEvidence.Enabled = true, want false")
+	}
+	if cfg.Review.WebSearchEvidence.MaxQueries != 3 {
+		t.Fatalf("Review.WebSearchEvidence.MaxQueries = %d, want 3", cfg.Review.WebSearchEvidence.MaxQueries)
+	}
+	if cfg.Review.WebSearchEvidence.MaxResultsPerQuery != 3 {
+		t.Fatalf("Review.WebSearchEvidence.MaxResultsPerQuery = %d, want 3", cfg.Review.WebSearchEvidence.MaxResultsPerQuery)
+	}
 }
 
 func TestReviewConfigYAMLRoundTrip(t *testing.T) {
@@ -22,6 +31,11 @@ func TestReviewConfigYAMLRoundTrip(t *testing.T) {
 	cfg.Review = ReviewConfig{
 		Provider: "claude",
 		Model:    "claude-sonnet-4-6",
+		WebSearchEvidence: ReviewWebSearchEvidenceConfig{
+			Enabled:            true,
+			MaxQueries:         2,
+			MaxResultsPerQuery: 4,
+		},
 	}
 
 	data, err := yaml.Marshal(cfg)
@@ -39,6 +53,15 @@ func TestReviewConfigYAMLRoundTrip(t *testing.T) {
 	}
 	if got.Review.Model != "claude-sonnet-4-6" {
 		t.Fatalf("Review.Model = %q, want claude-sonnet-4-6", got.Review.Model)
+	}
+	if !got.Review.WebSearchEvidence.Enabled {
+		t.Fatal("Review.WebSearchEvidence.Enabled = false, want true")
+	}
+	if got.Review.WebSearchEvidence.MaxQueries != 2 {
+		t.Fatalf("Review.WebSearchEvidence.MaxQueries = %d, want 2", got.Review.WebSearchEvidence.MaxQueries)
+	}
+	if got.Review.WebSearchEvidence.MaxResultsPerQuery != 4 {
+		t.Fatalf("Review.WebSearchEvidence.MaxResultsPerQuery = %d, want 4", got.Review.WebSearchEvidence.MaxResultsPerQuery)
 	}
 }
 
@@ -76,6 +99,51 @@ func TestValidateConfig_ReviewProviderRejectsUnknown(t *testing.T) {
 	}
 	if !validationIssuesContain(result.Issues, "review.provider", "無効") {
 		t.Fatalf("issues = %#v, want review.provider invalid error", result.Issues)
+	}
+}
+
+func TestValidateConfig_ReviewWebSearchEvidenceBudgetRequiresPositiveValuesWhenEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Review.WebSearchEvidence = ReviewWebSearchEvidenceConfig{
+		Enabled:            true,
+		MaxQueries:         0,
+		MaxResultsPerQuery: -1,
+	}
+
+	result := ValidateConfig(cfg)
+	if result.Valid {
+		t.Fatal("ValidateConfig() valid = true, want false")
+	}
+	if !validationIssuesContain(result.Issues, "review.web_search_evidence.max_queries", "正の整数") {
+		t.Fatalf("issues = %#v, want max_queries error", result.Issues)
+	}
+	if !validationIssuesContain(result.Issues, "review.web_search_evidence.max_results_per_query", "正の整数") {
+		t.Fatalf("issues = %#v, want max_results_per_query error", result.Issues)
+	}
+}
+
+func TestValidateConfig_ReviewWebSearchEvidenceBudgetIgnoredWhenDisabled(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Review.WebSearchEvidence = ReviewWebSearchEvidenceConfig{
+		Enabled:            false,
+		MaxQueries:         0,
+		MaxResultsPerQuery: 0,
+	}
+
+	result := ValidateConfig(cfg)
+	if !result.Valid {
+		t.Fatalf("ValidateConfig() valid = false, issues = %#v", result.Issues)
+	}
+}
+
+func TestApplyEnvironmentOverrides_ReviewWebSearchEvidence(t *testing.T) {
+	t.Setenv(reviewWebSearchEvidenceEnv, "1")
+
+	cfg := DefaultConfig()
+	cfg.ApplyEnvironmentOverrides()
+
+	if !cfg.Review.WebSearchEvidence.Enabled {
+		t.Fatal("Review.WebSearchEvidence.Enabled = false, want true from env override")
 	}
 }
 

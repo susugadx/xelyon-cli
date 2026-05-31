@@ -72,6 +72,7 @@ func reviewProbePlanPromptContract() string {
 - Candidate risk severity must be one of %s. Candidate risk status must be one of %s.
 - Each impact surface and candidate risk requires either non-empty "evidence_summary" or at least one "evidence_refs" entry.
 - Scope evidence refs are pre-probe only: "kind" must be one of %s, and "probe", "probe_command", "probe_id", and "command_index" are forbidden in the probe plan.
+- "external_doc" refs require "doc_id", "snippet_id", "url", "fetched_at", and snippet "content_hash" copied from fetched external_docs snippets. Raw web search results are discovery-only and must not be cited as evidence refs.
 - Every changed file path, rename old path, deleted/renamed file path, and inventory category path shown in Evidence Markdown must appear literally in at least one impact surface "evidence_summary" or impact surface "evidence_refs[].path".
 - When the production, config, tests, docs, or generated inventory category is non-empty, impact surfaces must mention that category name or one path from that category.
 - When generic impact candidates are present, impact surfaces must cover each candidate role group by naming the role, one candidate path, or one candidate token. Literal coverage of every candidate path is not required.
@@ -182,7 +183,8 @@ func reviewReportPromptContract() string {
 - "overall_verification_status" and group "verification_status" must be one of %q, %q, %q, %q, %q.
 - Root cause groups use: {"id","title","summary","severity","verification_status","fix_strategy","do_not_fix_by","verification_plan","findings","checked_surfaces","unverified_surfaces","residual_risks"}. "id" and "title" are required. Group IDs must be unique and contain no whitespace. Severity must be one of %q, %q, %q, %q, %q.
 - Findings use: {"id","title","summary","evidence_refs","checked_surfaces","unverified_surfaces","residual_risks"}. "title" is required. In runner reports with root cause groups, finding IDs are required, must be unique, and must contain no whitespace so scope_coverage can reference them.
-- Evidence refs use: {"kind","summary","probe_id","command_index","path","line","snippet"}. "kind" must be one of %q, %q, %q, %q, %q, %q. "probe_command" refs require both "probe_id" and zero-based "command_index". "file", "diff", and "rule_file" refs require "path". "line" must be non-negative; line > 0 requires "path". Paths must be canonical repo-relative evidence paths.
+- Evidence refs use: {"kind","summary","probe_id","command_index","path","line","snippet","doc_id","snippet_id","url","fetched_at","content_hash"}. "kind" must be one of %q, %q, %q, %q, %q, %q, %q. "probe_command" refs require both "probe_id" and zero-based "command_index". "file", "diff", and "rule_file" refs require "path". "line" must be non-negative; line > 0 requires "path". Paths must be canonical repo-relative evidence paths.
+- "external_doc" refs require "doc_id", "snippet_id", "url", "fetched_at", and snippet "content_hash" copied from a fetched external_docs snippet in Evidence Markdown. Do not cite raw web search results; only fetched external_doc snippets are citation-capable.
 - Surface coverage entries use: {"surface_id","summary","evidence_refs"}. "surface_id" is required and must contain no whitespace.
 - Residual risks use: {"id","summary","suggested_mitigation","evidence_refs"}. "summary" is required.
 - Scope coverage is required in runner reports. It must classify every ID from the Decoded Probe Plan exactly once: "reviewed_impact_surfaces" must contain each "impact_surfaces[].id" as "surface_id", and "reviewed_candidate_risks" must contain each "candidate_risks[].id" as "risk_id". Unknown or duplicate IDs are invalid.
@@ -233,6 +235,7 @@ Verdict contract:
 		ReviewEvidenceKindDiff,
 		ReviewEvidenceKindGitStatus,
 		ReviewEvidenceKindRuleFile,
+		ReviewEvidenceKindExternalDoc,
 		quoteAndJoinSortedReviewPromptValues(reviewReportImpactSurfaceStatusPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewReportCandidateRiskStatusPromptValues()),
 		ReviewReportImpactSurfaceChecked,

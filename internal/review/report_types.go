@@ -128,6 +128,11 @@ type ReviewEvidenceRef struct {
 	Path         string `json:"path,omitempty"`
 	Line         int    `json:"line,omitempty"`
 	Snippet      string `json:"snippet,omitempty"`
+	DocID        string `json:"doc_id,omitempty"`
+	SnippetID    string `json:"snippet_id,omitempty"`
+	URL          string `json:"url,omitempty"`
+	FetchedAt    string `json:"fetched_at,omitempty"`
+	ContentHash  string `json:"content_hash,omitempty"`
 }
 
 const (
@@ -137,6 +142,7 @@ const (
 	ReviewEvidenceKindDiff         = "diff"
 	ReviewEvidenceKindGitStatus    = "git_status"
 	ReviewEvidenceKindRuleFile     = "rule_file"
+	ReviewEvidenceKindExternalDoc  = "external_doc"
 )
 
 var reviewEvidenceKinds = []string{
@@ -146,6 +152,7 @@ var reviewEvidenceKinds = []string{
 	ReviewEvidenceKindDiff,
 	ReviewEvidenceKindGitStatus,
 	ReviewEvidenceKindRuleFile,
+	ReviewEvidenceKindExternalDoc,
 }
 
 // ReviewCommandIndex は command index の明示値を返す。

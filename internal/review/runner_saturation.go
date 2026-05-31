@@ -5,8 +5,8 @@ import (
 	"fmt"
 )
 
-func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, report ReviewReport) (ReviewReport, error) {
-	check, err := r.completeReviewSaturationCheck(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report)
+func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, report ReviewReport, bundle ReviewEvidenceBundle) (ReviewReport, error) {
+	check, err := r.completeReviewSaturationCheck(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, bundle)
 	if err != nil {
 		return ReviewReport{}, err
 	}
@@ -17,11 +17,11 @@ func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req R
 	case ReviewSaturationStatusBlocked:
 		return ReviewReport{}, fmt.Errorf("review runner saturation check blocked: %s", check.CheckedSummary)
 	case ReviewSaturationStatusNeedsRevision:
-		revisedReport, err := r.completeReviewReportRevision(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, check)
+		revisedReport, err := r.completeReviewReportRevision(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, check, bundle)
 		if err != nil {
 			return ReviewReport{}, err
 		}
-		confirmation, err := r.completeReviewSaturationCheck(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, revisedReport)
+		confirmation, err := r.completeReviewSaturationCheck(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, revisedReport, bundle)
 		if err != nil {
 			return ReviewReport{}, err
 		}
@@ -40,7 +40,7 @@ func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req R
 	}
 }
 
-func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport) (ReviewSaturationCheck, error) {
+func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, bundle ReviewEvidenceBundle) (ReviewSaturationCheck, error) {
 	r.emitProgressRunning(reviewProgressSaturationCheckItem)
 	checkPrompt := buildReviewSaturationCheckPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, finalizedReport)
 	r.saveReviewRunTextArtifact("saturation_prompt.md", checkPrompt, redactor)
@@ -54,7 +54,7 @@ func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req Re
 	}
 	r.saveReviewRunTextArtifact("saturation_raw.json", checkResp.Content, redactor)
 
-	check, checkErr := finalizeReviewRunnerSaturationCheckModelOutput(checkResp.Content, plan, finalizedReport)
+	check, checkErr := finalizeReviewRunnerSaturationCheckModelOutput(checkResp.Content, plan, finalizedReport, bundle)
 	if checkErr == nil {
 		r.emitProgressOK(reviewProgressSaturationCheckItem, string(check.Status))
 		return check, nil
@@ -83,7 +83,7 @@ func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req Re
 	}
 	r.saveReviewRunTextArtifact("saturation_raw.json", repairResp.Content, redactor)
 
-	check, err = finalizeReviewRunnerSaturationCheckModelOutput(repairResp.Content, plan, finalizedReport)
+	check, err = finalizeReviewRunnerSaturationCheckModelOutput(repairResp.Content, plan, finalizedReport, bundle)
 	if err != nil {
 		r.emitProgressError(reviewProgressSaturationRepairItem, err)
 		return ReviewSaturationCheck{}, err
@@ -92,7 +92,7 @@ func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req Re
 	return check, nil
 }
 
-func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck) (ReviewReport, error) {
+func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck, bundle ReviewEvidenceBundle) (ReviewReport, error) {
 	r.emitProgressRunning(reviewProgressReportRevisionItem)
 	revisionPrompt := buildReviewReportRevisionPrompt(req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, finalizedReport, saturationCheck)
 	r.saveReviewRunTextArtifact("revision_prompt.md", revisionPrompt, redactor)
@@ -106,7 +106,7 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 	}
 	r.saveReviewRunTextArtifact("revision_raw.json", revisionResp.Content, redactor)
 
-	report, revisionErr := finalizeReviewRunnerReportModelOutput(revisionResp.Content, plan, probeSummaries, redactor)
+	report, revisionErr := finalizeReviewRunnerReportModelOutput(revisionResp.Content, plan, probeSummaries, redactor, bundle)
 	if revisionErr == nil {
 		r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
 		r.emitProgressOK(reviewProgressReportRevisionItem, "")
@@ -137,7 +137,7 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 	}
 	r.saveReviewRunTextArtifact("revision_raw.json", repairResp.Content, redactor)
 
-	report, err = finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor)
+	report, err = finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor, bundle)
 	if err != nil {
 		r.emitProgressError(reviewProgressReportRevisionRepairItem, err)
 		return ReviewReport{}, fmt.Errorf("review runner report revision repair: %w", err)
@@ -148,9 +148,12 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 	return report, nil
 }
 
-func finalizeReviewRunnerSaturationCheckModelOutput(content string, plan ReviewProbePlan, finalizedReport ReviewReport) (ReviewSaturationCheck, error) {
+func finalizeReviewRunnerSaturationCheckModelOutput(content string, plan ReviewProbePlan, finalizedReport ReviewReport, bundle ReviewEvidenceBundle) (ReviewSaturationCheck, error) {
 	check, err := DecodeReviewSaturationCheckJSON([]byte(content), plan, finalizedReport)
 	if err != nil {
+		return ReviewSaturationCheck{}, fmt.Errorf("review runner decode saturation check: %w", err)
+	}
+	if err := validateReviewSaturationExternalDocRefsAgainstEvidence(check, bundle); err != nil {
 		return ReviewSaturationCheck{}, fmt.Errorf("review runner decode saturation check: %w", err)
 	}
 	return check, nil

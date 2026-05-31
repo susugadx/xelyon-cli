@@ -2,7 +2,10 @@ package search
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +20,11 @@ import (
 )
 
 var (
+	webSearchURLRE               = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `\]\)}]+`)
+	webSearchResultIndexPrefixRE = regexp.MustCompile(`^\d+[.)]\s*`)
+)
+
+var (
 	webSearchCacheMu       sync.Mutex
 	webSearchCache         *cache.Cache
 	webSearchCacheSettings webSearchCacheConfig
@@ -26,6 +34,36 @@ type webSearchCacheConfig struct {
 	Enabled bool
 	Size    int
 	TTL     int
+}
+
+// WebSearchRequest は非対話 Web 検索 API の入力を表す。
+type WebSearchRequest struct {
+	Config                *config.Config
+	MainProvider          string
+	MainProviderConfigKey string
+	MainModel             string
+	Query                 string
+	MaxResults            int
+	UsageCallback         api.UsageCallback
+	UsageAttribution      tools.UsageAttributionCallback
+}
+
+// WebSearchResponse は非対話 Web 検索 API の結果を表す。
+type WebSearchResponse struct {
+	Provider         string
+	Model            string
+	Cached           bool
+	Raw              string
+	Results          []WebSearchResult
+	ResultsTruncated bool
+}
+
+// WebSearchResult は provider の検索回答から抽出した URL 付き検索結果。
+type WebSearchResult struct {
+	Title        string
+	URL          string
+	Snippet      string
+	SourceDomain string
 }
 
 // ExecuteWebSearch はネイティブ Web 検索を実行し、必要に応じて結果キャッシュを利用する。
@@ -69,6 +107,50 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	return result
 }
 
+// SearchWeb は provider 解決・cache・native web search registry を使って非対話検索を実行する。
+func SearchWeb(ctx context.Context, req WebSearchRequest) (WebSearchResponse, error) {
+	if strings.TrimSpace(req.Query) == "" {
+		return WebSearchResponse{}, fmt.Errorf("query is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	cfg := req.Config
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	searchProvider := resolveSearchProvider(cfg, req.MainProvider, req.MainProviderConfigKey)
+	if searchProvider == "" {
+		return WebSearchResponse{}, errors.New(webSearchProviderError())
+	}
+	searchModel := resolveSearchModel(cfg, searchProvider, req.MainProvider, req.MainModel)
+	requestCtx := tools.WithConfig(ctx, cfg)
+	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
+	if callback := webSearchProviderUsageCallback(req.UsageCallback, req.UsageAttribution, searchProvider, searchModel); callback != nil {
+		requestCtx = websearch.WithUsageCallback(requestCtx, callback)
+	}
+
+	raw, cached, err := searchWithCache(requestCtx, cfg, searchProvider, req.Query, searchModel)
+	if err != nil {
+		return WebSearchResponse{}, err
+	}
+
+	results := ParseWebSearchResults(raw)
+	resultsTruncated := req.MaxResults > 0 && len(results) > req.MaxResults
+	if resultsTruncated {
+		results = results[:req.MaxResults]
+	}
+	return WebSearchResponse{
+		Provider:         searchProvider,
+		Model:            searchModel,
+		Cached:           cached,
+		Raw:              raw,
+		Results:          results,
+		ResultsTruncated: resultsTruncated,
+	}, nil
+}
+
 func webSearchRequestContext(execCtx tools.ExecutionContext, cfg *config.Config, searchProvider, searchModel string) context.Context {
 	requestCtx := execCtx.EffectiveContext()
 	requestCtx = tools.WithRegistry(requestCtx, execCtx.EffectiveRegistry())
@@ -78,12 +160,109 @@ func webSearchRequestContext(execCtx tools.ExecutionContext, cfg *config.Config,
 }
 
 func webSearchUsageCallback(execCtx tools.ExecutionContext, provider, model string) api.UsageCallback {
-	if execCtx.UsageAttribution == nil {
+	return webSearchProviderUsageCallback(nil, execCtx.UsageAttribution, provider, model)
+}
+
+func webSearchProviderUsageCallback(legacy api.UsageCallback, attribution tools.UsageAttributionCallback, provider, model string) api.UsageCallback {
+	if legacy == nil && attribution == nil {
 		return nil
 	}
 	return func(usage api.Usage) {
-		execCtx.UsageAttribution(provider, model, usage)
+		if legacy != nil {
+			legacy(usage)
+		}
+		if attribution != nil {
+			attribution(provider, model, usage)
+		}
 	}
+}
+
+// ParseWebSearchResults は provider のテキスト回答から URL 付き検索結果を抽出する。
+func ParseWebSearchResults(raw string) []WebSearchResult {
+	lines := strings.Split(raw, "\n")
+	results := make([]WebSearchResult, 0)
+	seen := make(map[string]struct{})
+	for i, line := range lines {
+		urls := webSearchURLRE.FindAllString(line, -1)
+		for _, rawURL := range urls {
+			cleanURL := cleanWebSearchResultURL(rawURL)
+			if cleanURL == "" {
+				continue
+			}
+			if _, exists := seen[cleanURL]; exists {
+				continue
+			}
+			seen[cleanURL] = struct{}{}
+			results = append(results, WebSearchResult{
+				Title:        webSearchResultTitle(lines, i, cleanURL),
+				URL:          cleanURL,
+				Snippet:      webSearchResultSnippet(lines, i),
+				SourceDomain: webSearchResultDomain(cleanURL),
+			})
+		}
+	}
+	return results
+}
+
+func cleanWebSearchResultURL(rawURL string) string {
+	candidate := strings.TrimSpace(rawURL)
+	candidate = strings.TrimRight(candidate, ".,;:!?")
+	parsed, err := url.Parse(candidate)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+	default:
+		return ""
+	}
+	return parsed.String()
+}
+
+func webSearchResultTitle(lines []string, urlLine int, resultURL string) string {
+	for i := urlLine; i >= 0 && i >= urlLine-2; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if strings.Contains(line, "URL:") {
+			continue
+		}
+		line = strings.TrimSpace(webSearchResultIndexPrefixRE.ReplaceAllString(line, ""))
+		if line != "" && !strings.Contains(line, resultURL) {
+			return line
+		}
+	}
+	if domain := webSearchResultDomain(resultURL); domain != "" {
+		return domain
+	}
+	return resultURL
+}
+
+func webSearchResultSnippet(lines []string, urlLine int) string {
+	start := max(0, urlLine-1)
+	end := min(len(lines), urlLine+2)
+	parts := make([]string, 0, end-start)
+	for _, line := range lines[start:end] {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts = append(parts, line)
+	}
+	snippet := strings.Join(parts, " ")
+	if len(snippet) > 500 {
+		snippet = snippet[:500]
+	}
+	return snippet
+}
+
+func webSearchResultDomain(resultURL string) string {
+	parsed, err := url.Parse(resultURL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(parsed.Hostname())
 }
 
 func searchWithCache(ctx context.Context, cfg *config.Config, provider, query, model string) (string, bool, error) {

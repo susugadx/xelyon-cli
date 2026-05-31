@@ -81,7 +81,7 @@ func TestReviewRunnerRunSavesHappyPathArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewReviewRunDirectoryArtifactWriter() error = %v", err)
 	}
-	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
+	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleWithWebSearchArtifactForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
 	plan := newRunnerNoProbePlanForTest()
 	report := newRunnerCleanReportForTest(nil)
@@ -100,6 +100,7 @@ func TestReviewRunnerRunSavesHappyPathArtifacts(t *testing.T) {
 
 	assertReviewArtifactsExistForTest(t, dir,
 		"evidence.md",
+		"web_search_evidence.json",
 		"probe_plan_prompt.md",
 		"probe_plan_raw.json",
 		"probe_plan_final.json",
@@ -215,6 +216,16 @@ func TestReviewRunnerRunRedactsProbePathsBeforeSavingArtifacts(t *testing.T) {
 
 type failingReviewRunArtifactWriter struct {
 	err error
+}
+
+func newRunnerEvidenceBundleWithWebSearchArtifactForTest(repoRoot string) ReviewEvidenceBundle {
+	bundle := newRunnerEvidenceBundleForTest(repoRoot)
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled:  true,
+		Provider: "gemini",
+		Queries:  []ReviewWebSearchEvidenceQuery{{Query: "OpenAI API web_search documentation", Reason: "artifact test"}},
+	}
+	return bundle
 }
 
 func (w failingReviewRunArtifactWriter) WriteReviewRunArtifact(string, []byte) error {
