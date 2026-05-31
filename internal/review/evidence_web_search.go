@@ -33,9 +33,23 @@ type ReviewWebSearchQueryResult struct {
 	Truncated bool
 }
 
+// ReviewExternalDocFetchRequest は external_doc fetch 境界へ渡す検索結果 URL と snippet focus hint。
+// URL と DocID は required、FocusTerms は snippet 抽出用の任意 hint として扱う。
+type ReviewExternalDocFetchRequest struct {
+	URL        string
+	DocID      string
+	FocusTerms []ReviewExternalDocFocusTerm
+}
+
+// ReviewExternalDocFocusTerm は external_doc snippet で優先して引用範囲へ寄せる語句。
+type ReviewExternalDocFocusTerm struct {
+	Term   string
+	Reason string
+}
+
 // ReviewExternalDocFetcher は検索結果 URL から external_doc snippet を取得する境界。
 type ReviewExternalDocFetcher interface {
-	FetchExternalDoc(context.Context, string, string) ReviewExternalDocEvidence
+	FetchExternalDoc(context.Context, ReviewExternalDocFetchRequest) ReviewExternalDocEvidence
 }
 
 // ReviewWebSearchEvidenceCollector は /review 用の外部 Web 検索 evidence を収集する。
@@ -48,8 +62,10 @@ type ReviewWebSearchEvidenceCollector struct {
 }
 
 type reviewWebSearchEvidenceQueryCandidate struct {
-	query  string
-	reason string
+	query   string
+	reason  string
+	subject string
+	focus   string
 }
 
 // NewReviewWebSearchEvidenceCollector は外部 Web 検索 evidence collector を構築する。
@@ -130,7 +146,11 @@ func (c *ReviewWebSearchEvidenceCollector) CollectWebSearchEvidence(ctx context.
 		for _, searchResult := range queryEvidence.Results {
 			docID := fmt.Sprintf("external-doc-%d", docIndex)
 			docIndex++
-			doc := c.fetcher.FetchExternalDoc(ctx, searchResult.URL, docID)
+			doc := c.fetcher.FetchExternalDoc(ctx, ReviewExternalDocFetchRequest{
+				URL:        searchResult.URL,
+				DocID:      docID,
+				FocusTerms: buildReviewExternalDocFocusTerms(candidate, searchResult, bundle.GenericImpactCandidates.Tokens),
+			})
 			if doc.Truncated {
 				evidence.Truncated = true
 			}
@@ -191,8 +211,10 @@ func buildReviewWebSearchEvidenceQueryCandidates(bundle ReviewEvidenceBundle) []
 			}
 			seen[key] = struct{}{}
 			candidates = append(candidates, reviewWebSearchEvidenceQueryCandidate{
-				query:  query,
-				reason: "changed external contract token: " + subject + " / " + focus,
+				query:   query,
+				reason:  "changed external contract token: " + subject + " / " + focus,
+				subject: subject,
+				focus:   focus,
 			})
 			if len(candidates) >= defaultReviewWebSearchEvidenceMaxQueries*3 {
 				return candidates

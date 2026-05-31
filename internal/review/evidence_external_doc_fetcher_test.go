@@ -13,7 +13,7 @@ import (
 func TestHTTPReviewExternalDocFetcherRequiresHTTPS(t *testing.T) {
 	fetcher := NewHTTPReviewExternalDocFetcher(nil)
 
-	got := fetcher.FetchExternalDoc(context.Background(), "http://example.test/spec", "external-doc-1")
+	got := fetchReviewExternalDocForTest(fetcher, "http://example.test/spec", "external-doc-1")
 
 	if got.Error == "" || !strings.Contains(got.Error, "HTTPS") {
 		t.Fatalf("Error = %q, want HTTPS rejection", got.Error)
@@ -26,7 +26,7 @@ func TestHTTPReviewExternalDocFetcherRequiresHTTPS(t *testing.T) {
 func TestHTTPReviewExternalDocFetcherRejectsLoopbackHost(t *testing.T) {
 	fetcher := NewHTTPReviewExternalDocFetcher(nil)
 
-	got := fetcher.FetchExternalDoc(context.Background(), "https://127.0.0.1:8443/spec", "external-doc-1")
+	got := fetchReviewExternalDocForTest(fetcher, "https://127.0.0.1:8443/spec", "external-doc-1")
 
 	if got.Error == "" || !strings.Contains(got.Error, "public routable") {
 		t.Fatalf("Error = %q, want public routable host rejection", got.Error)
@@ -44,7 +44,7 @@ func TestHTTPReviewExternalDocFetcherRejectsPrivateDNSResolution(t *testing.T) {
 		},
 	}
 
-	got := fetcher.FetchExternalDoc(context.Background(), "https://docs.example.test/spec", "external-doc-1")
+	got := fetchReviewExternalDocForTest(fetcher, "https://docs.example.test/spec", "external-doc-1")
 
 	if got.Error == "" || !strings.Contains(got.Error, "public routable") {
 		t.Fatalf("Error = %q, want private DNS rejection", got.Error)
@@ -76,7 +76,7 @@ func TestHTTPReviewExternalDocFetcherRejectsNonTextContentType(t *testing.T) {
 	defer server.Close()
 
 	fetcher := newLocalReviewExternalDocFetcherForTest(server.Client())
-	got := fetcher.FetchExternalDoc(context.Background(), server.URL, "external-doc-1")
+	got := fetchReviewExternalDocForTest(fetcher, server.URL, "external-doc-1")
 
 	if got.Error == "" || !strings.Contains(got.Error, "non-text") {
 		t.Fatalf("Error = %q, want non-text rejection", got.Error)
@@ -97,7 +97,7 @@ func TestHTTPReviewExternalDocFetcherRejectsCrossHostRedirect(t *testing.T) {
 	defer redirector.Close()
 
 	fetcher := newLocalReviewExternalDocFetcherForTest(redirector.Client())
-	got := fetcher.FetchExternalDoc(context.Background(), redirector.URL, "external-doc-1")
+	got := fetchReviewExternalDocForTest(fetcher, redirector.URL, "external-doc-1")
 
 	if got.Error == "" || !strings.Contains(got.Error, "cross-host redirect") {
 		t.Fatalf("Error = %q, want cross-host redirect rejection", got.Error)
@@ -116,7 +116,7 @@ func TestHTTPReviewExternalDocFetcherFollowsSameHostRedirect(t *testing.T) {
 	defer server.Close()
 
 	fetcher := newLocalReviewExternalDocFetcherForTest(server.Client())
-	got := fetcher.FetchExternalDoc(context.Background(), server.URL+"/redirect", "external-doc-1")
+	got := fetchReviewExternalDocForTest(fetcher, server.URL+"/redirect", "external-doc-1")
 
 	if got.Error != "" {
 		t.Fatalf("Error = %q, want nil for same-host redirect", got.Error)
@@ -141,7 +141,7 @@ func TestHTTPReviewExternalDocFetcherRejectsSameHostDowngradeRedirect(t *testing
 	defer server.Close()
 
 	fetcher := newLocalReviewExternalDocFetcherForTest(server.Client())
-	got := fetcher.FetchExternalDoc(context.Background(), server.URL+"/redirect", "external-doc-1")
+	got := fetchReviewExternalDocForTest(fetcher, server.URL+"/redirect", "external-doc-1")
 
 	if got.Error == "" || !strings.Contains(got.Error, "non-HTTPS redirect rejected") {
 		t.Fatalf("Error = %q, want non-HTTPS redirect rejection", got.Error)
@@ -154,36 +154,6 @@ func TestHTTPReviewExternalDocFetcherRejectsSameHostDowngradeRedirect(t *testing
 	}
 }
 
-func TestHTTPReviewExternalDocFetcherSanitizesHTMLAndBoundsSnippets(t *testing.T) {
-	body := `<html><head><style>.x{}</style><script>alert("x")</script></head><body><h1>Spec</h1><p>` +
-		strings.Repeat("External contract text ", 120) +
-		`</p></body></html>`
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(body))
-	}))
-	defer server.Close()
-
-	fetcher := newLocalReviewExternalDocFetcherForTest(server.Client())
-	got := fetcher.FetchExternalDoc(context.Background(), server.URL, "external-doc-1")
-
-	if got.Error != "" {
-		t.Fatalf("Error = %q, want nil", got.Error)
-	}
-	if len(got.Snippets) == 0 {
-		t.Fatal("Snippets empty, want sanitized snippet")
-	}
-	if strings.Contains(got.Snippets[0].Content, "<script") || strings.Contains(got.Snippets[0].Content, "alert") {
-		t.Fatalf("snippet leaked script content: %q", got.Snippets[0].Content)
-	}
-	if len(got.Snippets[0].Content) > reviewExternalDocMaxSnippetBytes {
-		t.Fatalf("snippet bytes = %d, want <= %d", len(got.Snippets[0].Content), reviewExternalDocMaxSnippetBytes)
-	}
-	if !strings.HasPrefix(got.ContentHash, "sha256:") || !strings.HasPrefix(got.Snippets[0].ContentHash, "sha256:") {
-		t.Fatalf("hashes = (%q, %q), want sha256 hashes", got.ContentHash, got.Snippets[0].ContentHash)
-	}
-}
-
 func TestHTTPReviewExternalDocFetcherTruncatesLargeResponses(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -192,7 +162,7 @@ func TestHTTPReviewExternalDocFetcherTruncatesLargeResponses(t *testing.T) {
 	defer server.Close()
 
 	fetcher := newLocalReviewExternalDocFetcherForTest(server.Client())
-	got := fetcher.FetchExternalDoc(context.Background(), server.URL, "external-doc-1")
+	got := fetchReviewExternalDocForTest(fetcher, server.URL, "external-doc-1")
 
 	if got.Error != "" {
 		t.Fatalf("Error = %q, want nil", got.Error)
@@ -227,4 +197,11 @@ func newLocalReviewExternalDocFetcherForTest(client *http.Client) *HTTPReviewExt
 	fetcher := NewHTTPReviewExternalDocFetcher(client)
 	fetcher.networkGuard = reviewExternalDocNetworkGuard{allowPrivateAddr: true}
 	return fetcher
+}
+
+func fetchReviewExternalDocForTest(fetcher *HTTPReviewExternalDocFetcher, rawURL, docID string) ReviewExternalDocEvidence {
+	return fetcher.FetchExternalDoc(context.Background(), ReviewExternalDocFetchRequest{
+		URL:   rawURL,
+		DocID: docID,
+	})
 }

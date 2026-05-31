@@ -3,17 +3,13 @@ package review
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -28,11 +24,6 @@ const (
 )
 
 var (
-	reviewExternalDocScriptRE = regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script>`)
-	reviewExternalDocStyleRE  = regexp.MustCompile(`(?is)<style\b[^>]*>.*?</style>`)
-	reviewExternalDocTagRE    = regexp.MustCompile(`(?s)<[^>]+>`)
-	reviewExternalDocSpaceRE  = regexp.MustCompile(`\s+`)
-
 	reviewExternalDocBlockedIPPrefixes = mustReviewExternalDocBlockedIPPrefixes(
 		"0.0.0.0/8",
 		"10.0.0.0/8",
@@ -87,11 +78,11 @@ func NewHTTPReviewExternalDocFetcher(client *http.Client) *HTTPReviewExternalDoc
 }
 
 // FetchExternalDoc は検索結果 URL 由来の external_doc evidence を取得する。
-func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, rawURL, docID string) ReviewExternalDocEvidence {
+func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, fetchReq ReviewExternalDocFetchRequest) ReviewExternalDocEvidence {
 	doc := ReviewExternalDocEvidence{
-		DocID:        docID,
-		URL:          strings.TrimSpace(rawURL),
-		SourceDomain: reviewExternalDocSourceDomain(rawURL),
+		DocID:        fetchReq.DocID,
+		URL:          strings.TrimSpace(fetchReq.URL),
+		SourceDomain: reviewExternalDocSourceDomain(fetchReq.URL),
 		FetchedAt:    time.Now().UTC(),
 	}
 	parsed, err := url.Parse(doc.URL)
@@ -107,13 +98,13 @@ func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, raw
 		return doc
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
 		doc.Error = err.Error()
 		return doc
 	}
 	client := f.boundedClient(parsed.Host)
-	resp, err := client.Do(req)
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		doc.Error = err.Error()
 		return doc
@@ -149,7 +140,7 @@ func (f *HTTPReviewExternalDocFetcher) FetchExternalDoc(ctx context.Context, raw
 	}
 	doc.Truncated = truncated
 	doc.ContentHash = reviewExternalDocContentHash(sanitized)
-	doc.Snippets = buildReviewExternalDocSnippets(doc.DocID, sanitized, truncated)
+	doc.Snippets = buildReviewExternalDocSnippets(doc.DocID, sanitized, truncated, fetchReq.FocusTerms)
 	if len(doc.Snippets) == 0 {
 		doc.Error = "fetched document produced no snippets"
 	}
@@ -344,74 +335,6 @@ func readReviewExternalDocBody(body io.Reader) ([]byte, bool, error) {
 		return data[:reviewExternalDocMaxResponseBytes], true, nil
 	}
 	return data, false, nil
-}
-
-func reviewExternalDocAllowedContentType(contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		mediaType = strings.TrimSpace(strings.Split(contentType, ";")[0])
-	}
-	mediaType = strings.ToLower(mediaType)
-	return strings.HasPrefix(mediaType, "text/") ||
-		mediaType == "application/xhtml+xml" ||
-		mediaType == "application/xml" ||
-		mediaType == "application/json"
-}
-
-func sanitizeReviewExternalDocText(body []byte, contentType string) string {
-	text := string(body)
-	mediaType, _, _ := mime.ParseMediaType(contentType)
-	mediaType = strings.ToLower(mediaType)
-	if strings.Contains(mediaType, "html") || strings.Contains(text, "<html") || strings.Contains(text, "<!doctype html") {
-		text = reviewExternalDocScriptRE.ReplaceAllString(text, " ")
-		text = reviewExternalDocStyleRE.ReplaceAllString(text, " ")
-		text = reviewExternalDocTagRE.ReplaceAllString(text, " ")
-	}
-	text = strings.ReplaceAll(text, "\x00", "")
-	return strings.TrimSpace(reviewExternalDocSpaceRE.ReplaceAllString(text, " "))
-}
-
-func buildReviewExternalDocSnippets(docID, content string, sourceTruncated bool) []ReviewExternalDocSnippetEvidence {
-	var snippets []ReviewExternalDocSnippetEvidence
-	remaining := content
-	for i := 1; i <= reviewExternalDocMaxSnippets && strings.TrimSpace(remaining) != ""; i++ {
-		chunk := reviewExternalDocBoundedString(remaining, reviewExternalDocMaxSnippetBytes)
-		chunk = strings.TrimSpace(chunk)
-		if chunk == "" {
-			break
-		}
-		truncated := len(chunk) < len(remaining) || sourceTruncated
-		snippets = append(snippets, ReviewExternalDocSnippetEvidence{
-			SnippetID:   fmt.Sprintf("%s-snippet-%d", docID, i),
-			Content:     chunk,
-			ContentHash: reviewExternalDocContentHash(chunk),
-			Truncated:   truncated,
-		})
-		if len(chunk) >= len(remaining) {
-			break
-		}
-		remaining = strings.TrimSpace(remaining[len(chunk):])
-	}
-	return snippets
-}
-
-func reviewExternalDocBoundedString(value string, maxBytes int) string {
-	if len(value) <= maxBytes {
-		return value
-	}
-	cut := maxBytes
-	for cut > 0 && (value[cut]&0xc0) == 0x80 {
-		cut--
-	}
-	if cut <= 0 {
-		return value[:maxBytes]
-	}
-	return value[:cut]
-}
-
-func reviewExternalDocContentHash(content string) string {
-	sum := sha256.Sum256([]byte(content))
-	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func reviewExternalDocSourceDomain(rawURL string) string {

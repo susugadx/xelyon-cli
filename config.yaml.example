@@ -55,7 +55,7 @@ review:
     # /review 専用モデル（provider 設定時のみ有効。空で provider の既定モデル）
     model: ""
     web_search_evidence:
-        # /review の外部 Web 検索 evidence を有効化（デフォルト: false。XELYON_REVIEW_WEB_SEARCH=1 でも有効化）
+        # /review の外部 Web 検索 evidence を有効化（raw result は discovery-only、fetch 済み external_doc snippet は citation-capable。デフォルト: false。XELYON_REVIEW_WEB_SEARCH=1 でも有効化）
         enabled: false
         # 外部 Web 検索 evidence の最大クエリ数（デフォルト: 3）
         max_queries: 3

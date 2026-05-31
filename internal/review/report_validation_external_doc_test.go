@@ -100,6 +100,8 @@ func newExternalDocEvidenceBundleForValidationTest() ReviewEvidenceBundle {
 							SnippetID:   "external-doc-1-snippet-1",
 							Content:     "External spec text.",
 							ContentHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+							FocusTerm:   "External",
+							FocusReason: "query focus",
 						},
 					},
 				},

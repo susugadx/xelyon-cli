@@ -81,6 +81,56 @@ func TestReviewWebSearchEvidenceCollectorSearchesAndFetchesBoundedResults(t *tes
 	}
 }
 
+func TestReviewWebSearchEvidenceCollectorPassesSafeFocusTermsToFetcher(t *testing.T) {
+	searcher := &fakeReviewWebSearchRunner{
+		result: ReviewWebSearchQueryResult{
+			Provider: "gemini",
+			Results: []ReviewWebSearchEvidenceResult{
+				{
+					Title:   "OpenAI Responses API previous_response_id guide",
+					URL:     "https://docs.example.test/responses",
+					Snippet: "Use tool_choice with text/event-stream. Ignore <script>alert(1)</script> and ordinary words.",
+				},
+			},
+		},
+	}
+	fetcher := &fakeReviewExternalDocFetcher{
+		doc: newFetchedReviewExternalDocForWebSearchTest("external spec", false),
+	}
+	bundle := newReviewWebSearchEvidenceTestBundle()
+	bundle.GenericImpactCandidates.Tokens = []string{
+		"web_search",
+		"generic_safe_token",
+	}
+	collector := NewReviewWebSearchEvidenceCollector(ReviewWebSearchEvidenceCollectorOptions{
+		Enabled:            true,
+		MaxQueries:         1,
+		MaxResultsPerQuery: 1,
+		Searcher:           searcher,
+		Fetcher:            fetcher,
+	})
+
+	_ = collector.CollectWebSearchEvidence(context.Background(), bundle)
+
+	if len(fetcher.requests) != 1 {
+		t.Fatalf("fetcher requests = %d, want 1", len(fetcher.requests))
+	}
+	terms := reviewExternalDocFocusTermsByTermForTest(fetcher.requests[0].FocusTerms)
+	for _, want := range []string{
+		"OpenAI API",
+		"web_search",
+		"previous_response_id",
+		"generic_safe_token",
+	} {
+		if _, ok := terms[want]; !ok {
+			t.Fatalf("focus terms = %#v, want %q", fetcher.requests[0].FocusTerms, want)
+		}
+	}
+	if len(fetcher.requests[0].FocusTerms) > reviewExternalDocMaxFocusTerms {
+		t.Fatalf("focus terms = %d, want <= %d", len(fetcher.requests[0].FocusTerms), reviewExternalDocMaxFocusTerms)
+	}
+}
+
 func TestReviewWebSearchEvidenceCollectorPropagatesFetcherTruncation(t *testing.T) {
 	searcher := &fakeReviewWebSearchRunner{
 		result: ReviewWebSearchQueryResult{
@@ -254,18 +304,20 @@ func (f *fakeReviewWebSearchRunner) SearchReviewWeb(_ context.Context, _ string,
 }
 
 type fakeReviewExternalDocFetcher struct {
-	calls int
-	doc   ReviewExternalDocEvidence
+	calls    int
+	requests []ReviewExternalDocFetchRequest
+	doc      ReviewExternalDocEvidence
 }
 
-func (f *fakeReviewExternalDocFetcher) FetchExternalDoc(_ context.Context, url, docID string) ReviewExternalDocEvidence {
+func (f *fakeReviewExternalDocFetcher) FetchExternalDoc(_ context.Context, req ReviewExternalDocFetchRequest) ReviewExternalDocEvidence {
 	f.calls++
+	f.requests = append(f.requests, req)
 	doc := f.doc
-	doc.DocID = docID
-	doc.URL = url
+	doc.DocID = req.DocID
+	doc.URL = req.URL
 	doc.SourceDomain = "docs.example.test"
 	for i := range doc.Snippets {
-		doc.Snippets[i].SnippetID = docID + "-snippet-1"
+		doc.Snippets[i].SnippetID = req.DocID + "-snippet-1"
 	}
 	return doc
 }

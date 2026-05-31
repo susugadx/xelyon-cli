@@ -194,4 +194,6 @@ type ReviewExternalDocSnippetEvidence struct {
 	Content     string `json:"content"`
 	ContentHash string `json:"content_hash"`
 	Truncated   bool   `json:"truncated,omitempty"`
+	FocusTerm   string `json:"focus_term,omitempty"`
+	FocusReason string `json:"focus_reason,omitempty"`
 }
