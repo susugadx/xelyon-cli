@@ -43,6 +43,40 @@ type SnippetEvidence struct {
 	FocusReason string `json:"focus_reason,omitempty"`
 }
 
+// WebSearchEvidence は /review 用の外部 Web 検索 evidence を表す。
+type WebSearchEvidence struct {
+	Enabled      bool                     `json:"enabled"`
+	Provider     string                   `json:"provider,omitempty"`
+	Queries      []WebSearchEvidenceQuery `json:"queries,omitempty"`
+	ExternalDocs []Evidence               `json:"external_docs,omitempty"`
+	Error        string                   `json:"error,omitempty"`
+	Truncated    bool                     `json:"truncated,omitempty"`
+	Inconclusive bool                     `json:"inconclusive,omitempty"`
+}
+
+// WebSearchEvidenceQuery は 1 件の検索 query と結果を表す。
+type WebSearchEvidenceQuery struct {
+	Query   string                    `json:"query"`
+	Reason  string                    `json:"reason"`
+	Results []WebSearchEvidenceResult `json:"results,omitempty"`
+	Error   string                    `json:"error,omitempty"`
+}
+
+// WebSearchEvidenceResult は検索結果 URL と discovery-only snippet を表す。
+type WebSearchEvidenceResult struct {
+	Title        string `json:"title,omitempty"`
+	URL          string `json:"url"`
+	Snippet      string `json:"snippet,omitempty"`
+	SourceDomain string `json:"source_domain,omitempty"`
+}
+
+// WebSearchQueryResult は検索 provider と URL 付き結果を表す。
+type WebSearchQueryResult struct {
+	Provider  string
+	Results   []WebSearchEvidenceResult
+	Truncated bool
+}
+
 // FetchRequest は external_doc fetch 境界へ渡す検索結果 URL と判定 hint。
 // URL と DocID は required、FocusTerms は snippet 抽出用の任意 hint、
 // SearchResultTitle と QuerySubjectHint は信頼度判定用の任意 hint として扱う。
@@ -58,6 +92,20 @@ type FetchRequest struct {
 type FocusTerm struct {
 	Term   string
 	Reason string
+}
+
+// SearchQueryPlanningInput は review evidence から抽出した external doc 検索計画用の入力。
+type SearchQueryPlanningInput struct {
+	CorpusParts         []string
+	GenericImpactTokens []string
+}
+
+// SearchQueryCandidate は fetch に引き継ぐ subject / focus hint 付き検索 query。
+type SearchQueryCandidate struct {
+	Query   string
+	Reason  string
+	Subject string
+	Focus   string
 }
 
 // Fetcher は検索結果 URL から external_doc snippet を取得する境界。

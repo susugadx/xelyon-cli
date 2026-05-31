@@ -75,3 +75,13 @@ Phase 3-C 後の Pass1 evidence analysis と external_doc evidence helper は次
 - `internal/review/report`: report / saturation schema validation の owner。Pass1 probe plan 全体には依存せず、`internal/review/analysis` が作る `PlanScope` を受け取る。
 
 `internal/review/analysis/package_boundaries_test.go` と `internal/review/externaldoc/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。report schema、evidence schema、probe behavior、web search query quality、external_doc official / third_party / unknown 判定基準は Phase 3-C では変更しない。
+
+## Phase 3-D: review externaldoc / web search query boundary
+
+Phase 3-D 後の external_doc と Web 検索 query 計画は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、collector / runner orchestration、Web 検索 provider 実行境界、external doc fetcher 呼び出し、max query / max result 制御、error / truncated / inconclusive 集約、artifact / prompt / progress の owner。`ReviewEvidenceBundle` から `internal/review/externaldoc.SearchQueryPlanningInput` への変換もここに残す。Phase 3-C の「web search collector は親 package」方針は、provider 実行と収集制御が親 package の責務である、という意味で維持する。
+- `internal/review/externaldoc`: external_doc / external source / source credibility、Web search evidence DTO、`SearchQueryPlanningInput` / `SearchQueryCandidate`、`BuildSearchQueryCandidates`、`BuildFetchRequest` の owner。focus token selection、generic token concrete 判定、query dedupe、`official documentation` query 組み立て、candidate cap はここに閉じる。`ReviewEvidenceBundle`、provider 実行、artifact / prompt / progress には依存しない。
+- `internal/review/analysis`: Pass1 evidence analysis、pressure signal、report / probe の external_doc ref cross validation の owner。Web search evidence と query DTO は `internal/review/externaldoc` の型を analysis 用 DTO として共有し、親 facade が runtime evidence から analysis input へコピーする。
+
+Phase 3-D では report schema、evidence JSON、probe behavior、external_doc official / third_party / unknown 判定基準、Web 検索 query 生成結果は変更しない。`internal/review/externaldoc/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import 禁止を維持する。

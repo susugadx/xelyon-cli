@@ -146,30 +146,3 @@ type ReviewEvidenceLimits struct {
 	MaxSearchSnippetBytes      int64
 	CommandTimeout             time.Duration
 }
-
-// ReviewWebSearchEvidence は /review 用の外部 Web 検索 evidence を表す。
-type ReviewWebSearchEvidence struct {
-	Enabled      bool                           `json:"enabled"`
-	Provider     string                         `json:"provider,omitempty"`
-	Queries      []ReviewWebSearchEvidenceQuery `json:"queries,omitempty"`
-	ExternalDocs []ReviewExternalDocEvidence    `json:"external_docs,omitempty"`
-	Error        string                         `json:"error,omitempty"`
-	Truncated    bool                           `json:"truncated,omitempty"`
-	Inconclusive bool                           `json:"inconclusive,omitempty"`
-}
-
-// ReviewWebSearchEvidenceQuery は 1 件の検索 query と結果を表す。
-type ReviewWebSearchEvidenceQuery struct {
-	Query   string                          `json:"query"`
-	Reason  string                          `json:"reason"`
-	Results []ReviewWebSearchEvidenceResult `json:"results,omitempty"`
-	Error   string                          `json:"error,omitempty"`
-}
-
-// ReviewWebSearchEvidenceResult は検索結果 URL と discovery-only snippet を表す。
-type ReviewWebSearchEvidenceResult struct {
-	Title        string `json:"title,omitempty"`
-	URL          string `json:"url"`
-	Snippet      string `json:"snippet,omitempty"`
-	SourceDomain string `json:"source_domain,omitempty"`
-}

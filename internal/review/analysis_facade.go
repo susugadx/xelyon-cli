@@ -91,21 +91,10 @@ func buildReviewAnalysisChangeInventory(inventory ReviewEvidenceChangeInventoryI
 }
 
 func buildReviewAnalysisWebSearchEvidence(evidence ReviewWebSearchEvidence) reviewanalysis.WebSearchEvidence {
-	queries := make([]reviewanalysis.WebSearchQuery, 0, len(evidence.Queries))
-	for _, query := range evidence.Queries {
-		queries = append(queries, reviewanalysis.WebSearchQuery{
-			Query: query.Query,
-			Error: query.Error,
-		})
-	}
-	return reviewanalysis.WebSearchEvidence{
-		Enabled:      evidence.Enabled,
-		Queries:      queries,
-		ExternalDocs: append([]ReviewExternalDocEvidence(nil), evidence.ExternalDocs...),
-		Error:        evidence.Error,
-		Truncated:    evidence.Truncated,
-		Inconclusive: evidence.Inconclusive,
-	}
+	result := reviewanalysis.WebSearchEvidence(evidence)
+	result.Queries = append([]reviewanalysis.WebSearchQuery(nil), evidence.Queries...)
+	result.ExternalDocs = append([]ReviewExternalDocEvidence(nil), evidence.ExternalDocs...)
+	return result
 }
 
 func buildReviewAnalysisDiffs(diffs []ReviewEvidenceDiffInput) []reviewanalysis.Diff {

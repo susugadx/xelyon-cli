@@ -114,20 +114,10 @@ type PathTruncation struct {
 }
 
 // WebSearchEvidence は review web search evidence の analysis 用表現。
-type WebSearchEvidence struct {
-	Enabled      bool
-	Queries      []WebSearchQuery
-	ExternalDocs []externaldoc.Evidence
-	Error        string
-	Truncated    bool
-	Inconclusive bool
-}
+type WebSearchEvidence = externaldoc.WebSearchEvidence
 
 // WebSearchQuery は 1 件の検索 query と結果 error を表す。
-type WebSearchQuery struct {
-	Query string
-	Error string
-}
+type WebSearchQuery = externaldoc.WebSearchEvidenceQuery
 
 // PressureSignalOptions は review pressure signal 生成時に親 package が持つ source of truth を渡す。
 type PressureSignalOptions struct {

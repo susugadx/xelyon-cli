@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 )
 
 var _ ReviewProbeExecutor = (*ProbeRunner)(nil)
@@ -110,6 +112,45 @@ func TestReviewFacadeExternalDocCompatibility(t *testing.T) {
 	if NewHTTPReviewExternalDocFetcher(nil) == nil {
 		t.Fatal("NewHTTPReviewExternalDocFetcher() = nil")
 	}
+}
+
+func TestReviewFacadeWebSearchCompatibility(t *testing.T) {
+	evidence := ReviewWebSearchEvidence{
+		Enabled:  true,
+		Provider: "gemini",
+		Queries: []ReviewWebSearchEvidenceQuery{
+			{
+				Query:  "OpenAI API web_search official documentation",
+				Reason: "test",
+				Results: []ReviewWebSearchEvidenceResult{
+					{Title: "OpenAI docs", URL: "https://docs.example.test/spec"},
+				},
+			},
+		},
+	}
+	externalEvidence := acceptExternalWebSearchEvidenceForTest(evidence)
+	if externalEvidence.Queries[0].Results[0].URL != "https://docs.example.test/spec" {
+		t.Fatalf("web search evidence alias produced unexpected evidence = %#v", externalEvidence)
+	}
+
+	result := ReviewWebSearchQueryResult{
+		Provider: "gemini",
+		Results: []ReviewWebSearchEvidenceResult{
+			{Title: "OpenAI docs", URL: "https://docs.example.test/spec"},
+		},
+	}
+	externalResult := acceptExternalWebSearchQueryResultForTest(result)
+	if externalResult.Provider != "gemini" || len(externalResult.Results) != 1 {
+		t.Fatalf("web search query result alias produced unexpected result = %#v", externalResult)
+	}
+}
+
+func acceptExternalWebSearchEvidenceForTest(evidence externaldoc.WebSearchEvidence) externaldoc.WebSearchEvidence {
+	return evidence
+}
+
+func acceptExternalWebSearchQueryResultForTest(result externaldoc.WebSearchQueryResult) externaldoc.WebSearchQueryResult {
+	return result
 }
 
 func newReviewProbePlanEvidenceBundleForFacadeTest() ReviewEvidenceBundle {
