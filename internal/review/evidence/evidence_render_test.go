@@ -392,6 +392,7 @@ func TestRenderReviewEvidenceJSONUsesModelInputDTO(t *testing.T) {
 	for _, want := range []string{
 		`"repo_root": "<repo_root>"`,
 		`"cwd_display": "src/work"`,
+		`"external_support": {`,
 		`"command_timeout_ms": 1500`,
 	} {
 		if !strings.Contains(payload, want) {
@@ -408,6 +409,9 @@ func TestRenderReviewEvidenceJSONUsesModelInputDTO(t *testing.T) {
 	}
 	if input.Limits.CommandTimeoutMS != 1500 {
 		t.Fatalf("CommandTimeoutMS = %d, want 1500", input.Limits.CommandTimeoutMS)
+	}
+	if input.ExternalSupport.Level == "" {
+		t.Fatal("ExternalSupport.Level is empty, want summarized support level")
 	}
 }
 
@@ -431,6 +435,12 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 	}
 	if input.GenericImpact.Candidates == nil {
 		t.Fatal("GenericImpact.Candidates = nil, want empty slice")
+	}
+	if input.ExternalSupport.Warnings == nil {
+		t.Fatal("ExternalSupport.Warnings = nil, want stable empty-or-populated slice")
+	}
+	if input.ExternalSupport.Reasons == nil {
+		t.Fatal("ExternalSupport.Reasons = nil, want stable empty-or-populated slice")
 	}
 	if input.RuleFiles == nil {
 		t.Fatal("RuleFiles = nil, want empty slice")
@@ -470,6 +480,7 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 		`"generic_impact_candidates": {`,
 		`"tokens": []`,
 		`"candidates": []`,
+		`"external_support": {`,
 		`"rule_files": []`,
 		`"diffs": []`,
 		`"untracked_files": []`,
@@ -486,6 +497,7 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 		"## related tests/context files\n```json\n[]\n```",
 		"## related search hits\n```json\n[]\n```",
 		"## generic impact candidates\n```json\n",
+		"## external support summary\n```json\n",
 		"## diffs\n```json\n[]\n```",
 		"## untracked files\n```json\n[]\n```",
 	} {

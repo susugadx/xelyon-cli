@@ -1,6 +1,10 @@
 package evidence
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+)
 
 const (
 	// RepoRootPathDisplay は repo root を LLM 入力へ出すときの固定表現。
@@ -23,6 +27,7 @@ type ReviewEvidenceModelInput struct {
 	RelatedSearchHits   []ReviewEvidenceRelatedSearchHitInput `json:"related_search_hits"`
 	GenericImpact       ReviewEvidenceGenericImpactInput      `json:"generic_impact_candidates"`
 	WebSearchEvidence   ReviewWebSearchEvidence               `json:"web_search_evidence"`
+	ExternalSupport     externaldoc.ExternalSupportSummary    `json:"external_support"`
 	RuleFiles           []ReviewEvidenceRuleFileInput         `json:"rule_files"`
 	Diffs               []ReviewEvidenceDiffInput             `json:"diffs"`
 	UntrackedFiles      []ReviewEvidenceUntrackedFileInput    `json:"untracked_files"`
@@ -191,6 +196,7 @@ func BuildReviewEvidenceModelInput(bundle ReviewEvidenceBundle) ReviewEvidenceMo
 		RelatedSearchHits:   buildReviewEvidenceRelatedSearchHitInputs(repoRoot, bundle.RelatedSearchHits),
 		GenericImpact:       buildReviewEvidenceGenericImpactInput(repoRoot, bundle.GenericImpactCandidates),
 		WebSearchEvidence:   bundle.WebSearchEvidence,
+		ExternalSupport:     externaldoc.SummarizeExternalSupport(bundle.WebSearchEvidence),
 		RuleFiles:           buildReviewEvidenceRuleFileInputs(repoRoot, bundle.RuleFiles),
 		Diffs:               buildReviewEvidenceDiffInputs(bundle.Diffs),
 		UntrackedFiles:      buildReviewEvidenceUntrackedFileInputs(repoRoot, bundle.UntrackedFiles),

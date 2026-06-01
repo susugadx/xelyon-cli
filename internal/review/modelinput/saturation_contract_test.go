@@ -40,6 +40,10 @@ func TestBuildReviewSaturationCheckPromptIncludesStrictSchemaContract(t *testing
 		`Do not infer official or authoritative status from search query wording, source title, URL label, snippet wording, or "official documentation" text alone`,
 		`source_credibility is "unknown" or "third_party"`,
 		"source_credibility and the cited snippet content must both support that claim",
+		`external_support.level/official_confirmation must allow confirmed official status`,
+		`Treat external_support.level as the maximum external evidence confidence`,
+		`Levels "none", "weak", and "partial" are not confirmed external spec coverage`,
+		`external_support.official_confirmation=false means official confirmation is absent`,
 		"If source credibility is unclear, fetch failed, evidence is truncated, or review web search evidence is inconclusive",
 		"do not bias toward saturated/clean/verified",
 		"Trace review pressure signals from Evidence Markdown and the Decoded Probe Plan",
@@ -62,6 +66,7 @@ func TestBuildReviewSaturationCheckPromptIncludesStrictSchemaContract(t *testing
 			t.Fatalf("saturation check prompt missing %q:\n%s", want, prompt)
 		}
 	}
+	assertReviewRunnerPromptContainsExternalSupportGuardrails(t, prompt)
 	sample := extractReviewSaturationPromptTopLevelSampleForTest(t, prompt)
 	if strings.Contains(sample, `"probe_id": "probe-1"`) {
 		t.Fatalf("saturation prompt top-level sample contains dangling probe reference:\n%s", sample)
@@ -96,6 +101,7 @@ func TestBuildReviewSaturationCheckRepairPromptIncludesRepairContract(t *testing
 		`Source credibility values are "official_candidate", "third_party", and "unknown"`,
 		`only "official_candidate" may be treated as an official-source candidate`,
 		`source_credibility is "unknown" or "third_party"`,
+		`Treat external_support.level as the maximum external evidence confidence`,
 		"Use it when the Finalized Review Report escapes, omits, or downplays pressure signals",
 		"focus saturation repair",
 		"diff evidence",
@@ -110,6 +116,7 @@ func TestBuildReviewSaturationCheckRepairPromptIncludesRepairContract(t *testing
 			t.Fatalf("saturation check repair prompt missing %q:\n%s", want, prompt)
 		}
 	}
+	assertReviewRunnerPromptContainsExternalSupportGuardrails(t, prompt)
 }
 
 func TestBuildReviewSaturationAndRevisionPromptsIncludeStrictReviewerStance(t *testing.T) {
@@ -189,6 +196,10 @@ func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T)
 		`Do not infer official or authoritative status from search query wording, source title, URL label, snippet wording, or "official documentation" text alone`,
 		`source_credibility is "unknown" or "third_party"`,
 		"source_credibility and the cited snippet content must both support that claim",
+		`external_support.level/official_confirmation must allow confirmed official status`,
+		`Treat external_support.level as the maximum external evidence confidence`,
+		`Levels "none", "weak", and "partial" are not confirmed external spec coverage`,
+		`external_support.official_confirmation=false means official confirmation is absent`,
 		"## Original Finalized Review Report",
 		"## Saturation Check",
 		`"status": "needs_revision"`,
@@ -203,6 +214,7 @@ func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T)
 			t.Fatalf("report revision prompt missing %q:\n%s", want, prompt)
 		}
 	}
+	assertReviewRunnerPromptContainsExternalSupportGuardrails(t, prompt)
 }
 
 func TestBuildReviewReportRevisionRepairPromptIncludesRepairContract(t *testing.T) {
@@ -252,6 +264,7 @@ func TestBuildReviewReportRevisionRepairPromptIncludesRepairContract(t *testing.
 			t.Fatalf("report revision repair prompt missing %q:\n%s", want, prompt)
 		}
 	}
+	assertReviewRunnerPromptContainsExternalSupportGuardrails(t, prompt)
 }
 
 func needsRevisionCheckForPromptContractTest() reviewreport.ReviewSaturationCheck {

@@ -12,6 +12,16 @@ const (
 	reviewRunnerJSONRepairScopeInstruction   = "Repair only the JSON shape and values needed to satisfy the contract."
 )
 
+func reviewExternalSupportPromptGuardrails() string {
+	return `External support summary rules:
+- Evidence Markdown's "external support summary" is the source of truth for external evidence quality.
+- Treat external_support.level as the maximum external evidence confidence.
+- Levels "none", "weak", and "partial" are not confirmed external spec coverage.
+- external_support.official_confirmation=false means official confirmation is absent; do not imply a confirmed official spec.
+- Third-party or unknown-only evidence and one citation-capable snippet are not strong external evidence.
+- The "strong" level is reserved; do not infer strong support from source title, snippet wording, URL label, or query text.`
+}
+
 // ProbePlanPromptInput は probe plan 生成 prompt の入力 DTO。
 type ProbePlanPromptInput struct {
 	CustomInstructions string
@@ -166,8 +176,9 @@ Fetched external_doc snippets listed in Evidence Markdown are citation-capable e
 Source credibility values are "official_candidate", "third_party", and "unknown"; only "official_candidate" may be treated as an official-source candidate, not proof by itself.
 Do not infer official or authoritative status from search query wording, source title, URL label, snippet wording, or "official documentation" text alone.
 Do not treat an external_doc as a confirmed external spec when source_credibility is "unknown" or "third_party".
-Treat an external_doc as confirmed official documentation only when source_credibility is "official_candidate"; source_credibility and the cited snippet content must both support that claim.
+Official confirmation requires external_support.official_confirmation=true and cited snippet content that supports the claim; source_credibility="official_candidate" alone is not enough.
 If source credibility is unclear, fetch failed, evidence is truncated, or search is inconclusive, classify the scope as unverified, residual, or blocked instead of confirmed.
+` + reviewExternalSupportPromptGuardrails() + `
 ` + insufficientEvidenceGuidance + `
 
 Change inventory checklist:

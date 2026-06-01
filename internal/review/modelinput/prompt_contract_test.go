@@ -42,6 +42,10 @@ func TestBuildReviewProbePlanPromptIncludesStrictSchemaContract(t *testing.T) {
 		`Do not infer official or authoritative status from search query wording, source title, URL label, snippet wording, or "official documentation" text alone`,
 		`source_credibility is "unknown" or "third_party"`,
 		`source_credibility and the cited snippet content must both support that claim`,
+		`external_support.level/official_confirmation must allow confirmed official status`,
+		`Treat external_support.level as the maximum external evidence confidence`,
+		`Levels "none", "weak", and "partial" are not confirmed external spec coverage`,
+		`external_support.official_confirmation=false means official confirmation is absent`,
 		`Every changed file path, rename old path, deleted/renamed file path, and inventory category path shown in Evidence Markdown must appear literally`,
 		`production, config, tests, docs, or generated inventory category is non-empty`,
 		`Generic impact candidates in Evidence Markdown are review leads, not proof of impact`,
@@ -196,6 +200,10 @@ func TestBuildReviewReportPromptIncludesStrictSchemaContract(t *testing.T) {
 		`Do not infer official or authoritative status from search query wording, source title, URL label, snippet wording, or "official documentation" text alone`,
 		`source_credibility is "unknown" or "third_party"`,
 		`source_credibility and the cited snippet content must both support that claim`,
+		`external_support.level/official_confirmation must allow confirmed official status`,
+		`Treat external_support.level as the maximum external evidence confidence`,
+		`Levels "none", "weak", and "partial" are not confirmed external spec coverage`,
+		`external_support.official_confirmation=false means official confirmation is absent`,
 		`Do not output top-level "computed_summary"; runner computes it after validation`,
 		`Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries with the same count, same order, and same "probe_id" values`,
 		`Verdict contract`,
@@ -336,7 +344,7 @@ func assertReviewRunnerPromptContainsStrictReviewerStance(t *testing.T, prompt s
 		`Source credibility values are "official_candidate", "third_party", and "unknown"; only "official_candidate" may be treated as an official-source candidate, not proof by itself.`,
 		`Do not infer official or authoritative status from search query wording, source title, URL label, snippet wording, or "official documentation" text alone.`,
 		`Do not treat an external_doc as a confirmed external spec when source_credibility is "unknown" or "third_party".`,
-		`Treat an external_doc as confirmed official documentation only when source_credibility is "official_candidate"; source_credibility and the cited snippet content must both support that claim.`,
+		`Official confirmation requires external_support.official_confirmation=true and cited snippet content that supports the claim; source_credibility="official_candidate" alone is not enough.`,
 		"If source credibility is unclear, fetch failed, evidence is truncated, or search is inconclusive, classify the scope as unverified, residual, or blocked instead of confirmed.",
 		"production changes without nearby test changes may imply missing verification",
 		"config/schema/prompt/JSON contract changes may imply compatibility or validation risks",
@@ -348,6 +356,25 @@ func assertReviewRunnerPromptContainsStrictReviewerStance(t *testing.T, prompt s
 	for _, want := range wants {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt missing strict reviewer stance fragment %q:\n%s", want, prompt)
+		}
+	}
+	assertReviewRunnerPromptContainsExternalSupportGuardrails(t, prompt)
+}
+
+func assertReviewRunnerPromptContainsExternalSupportGuardrails(t *testing.T, prompt string) {
+	t.Helper()
+
+	wants := []string{
+		`Evidence Markdown's "external support summary" is the source of truth for external evidence quality.`,
+		`Treat external_support.level as the maximum external evidence confidence.`,
+		`Levels "none", "weak", and "partial" are not confirmed external spec coverage.`,
+		`external_support.official_confirmation=false means official confirmation is absent; do not imply a confirmed official spec.`,
+		`Third-party or unknown-only evidence and one citation-capable snippet are not strong external evidence.`,
+		`The "strong" level is reserved; do not infer strong support from source title, snippet wording, URL label, or query text.`,
+	}
+	for _, want := range wants {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt missing external support guardrail %q:\n%s", want, prompt)
 		}
 	}
 }

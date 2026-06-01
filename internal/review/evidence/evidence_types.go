@@ -27,6 +27,9 @@ type ReviewWebSearchEvidenceResult = externaldoc.WebSearchEvidenceResult
 // ReviewWebSearchQueryResult は検索 provider と URL 付き結果を表す。
 type ReviewWebSearchQueryResult = externaldoc.WebSearchQueryResult
 
+// ReviewExternalSupportSummary は external_doc evidence の外部根拠品質 summary。
+type ReviewExternalSupportSummary = externaldoc.ExternalSupportSummary
+
 // ReviewExternalDocEvidence は検索結果 URL から取得した引用可能 snippet 群を表す。
 type ReviewExternalDocEvidence = externaldoc.Evidence
 

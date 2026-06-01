@@ -2,7 +2,10 @@ package evidence
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -252,6 +255,85 @@ func TestReviewEvidenceMarkdownIncludesWebSearchEvidenceSection(t *testing.T) {
 	}
 }
 
+func TestBuildReviewEvidenceModelInputIncludesExternalSupportSummary(t *testing.T) {
+	bundle := newReviewWebSearchEvidenceTestBundle()
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled: true,
+		ExternalDocs: []ReviewExternalDocEvidence{
+			newReviewExternalSupportDocForEvidenceTest("external-doc-1", externaldoc.SourceCredibilityOfficialCandidate, "first official snippet"),
+			newReviewExternalSupportDocForEvidenceTest("external-doc-2", externaldoc.SourceCredibilityOfficialCandidate, "second official snippet"),
+		},
+	}
+
+	input := BuildReviewEvidenceModelInput(bundle)
+
+	if input.ExternalSupport.Level != externaldoc.ExternalSupportLevelAdequate {
+		t.Fatalf("ExternalSupport.Level = %q, want adequate", input.ExternalSupport.Level)
+	}
+	if !input.ExternalSupport.OfficialConfirmation {
+		t.Fatal("ExternalSupport.OfficialConfirmation = false, want true")
+	}
+	if input.ExternalSupport.OfficialCandidateCitationCapableDocCount != 2 {
+		t.Fatalf("OfficialCandidateCitationCapableDocCount = %d, want 2", input.ExternalSupport.OfficialCandidateCitationCapableDocCount)
+	}
+	if input.ExternalSupport.OfficialCandidateUniqueCitationCapableSourceCount != 2 {
+		t.Fatalf("OfficialCandidateUniqueCitationCapableSourceCount = %d, want 2", input.ExternalSupport.OfficialCandidateUniqueCitationCapableSourceCount)
+	}
+}
+
+func TestReviewEvidenceMarkdownIncludesExternalSupportSummary(t *testing.T) {
+	bundle := newReviewWebSearchEvidenceTestBundle()
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled: true,
+		ExternalDocs: []ReviewExternalDocEvidence{
+			newReviewExternalSupportDocForEvidenceTest("external-doc-1", externaldoc.SourceCredibilityOfficialCandidate, "first official snippet"),
+			newReviewExternalSupportDocForEvidenceTest("external-doc-2", externaldoc.SourceCredibilityOfficialCandidate, "second official snippet"),
+		},
+	}
+
+	got := RenderReviewEvidenceMarkdown(bundle)
+
+	for _, want := range []string{
+		"## external support summary",
+		`"level": "adequate"`,
+		`"citation_capable_doc_count": 2`,
+		`"official_candidate_citation_capable_doc_count": 2`,
+		`"official_candidate_unique_citation_capable_source_count": 2`,
+		`"official_confirmation": true`,
+		"## review web search evidence",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("markdown missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestExternalSupportSummaryDoesNotMutateWebSearchEvidence(t *testing.T) {
+	bundle := newReviewWebSearchEvidenceTestBundle()
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled: true,
+		Queries: []ReviewWebSearchEvidenceQuery{
+			{
+				Query: "OpenAI API web_search official documentation",
+				Results: []ReviewWebSearchEvidenceResult{
+					{Title: "OpenAI docs", URL: "https://platform.openai.com/docs"},
+				},
+			},
+		},
+		ExternalDocs: []ReviewExternalDocEvidence{
+			newReviewExternalSupportDocForEvidenceTest("external-doc-1", externaldoc.SourceCredibilityOfficialCandidate, "first official snippet"),
+		},
+	}
+	original := cloneReviewWebSearchEvidenceForTest(bundle.WebSearchEvidence)
+
+	_ = BuildReviewEvidenceModelInput(bundle)
+	_ = RenderReviewEvidenceMarkdown(bundle)
+
+	if !reflect.DeepEqual(bundle.WebSearchEvidence, original) {
+		t.Fatalf("WebSearchEvidence mutated:\n got %#v\nwant %#v", bundle.WebSearchEvidence, original)
+	}
+}
+
 func TestReviewPressureSignalsIncludeWebSearchEvidenceStates(t *testing.T) {
 	input := BuildReviewEvidenceModelInput(newReviewWebSearchEvidenceTestBundle())
 	disabledSignals := BuildReviewPressureSignalInputs(input)
@@ -317,6 +399,42 @@ func newFetchedReviewExternalDocForWebSearchTest(content string, truncated bool)
 			},
 		},
 	}
+}
+
+func newReviewExternalSupportDocForEvidenceTest(docID string, credibility externaldoc.SourceCredibility, content string) ReviewExternalDocEvidence {
+	return ReviewExternalDocEvidence{
+		DocID:             docID,
+		URL:               "https://platform.openai.com/docs/" + docID,
+		SourceDomain:      "platform.openai.com",
+		SourceCredibility: credibility,
+		FetchedAt:         time.Date(2026, time.May, 31, 0, 0, 0, 0, time.UTC),
+		ContentHash:       reviewExternalSupportHashForEvidenceTest("doc:" + docID),
+		Snippets: []ReviewExternalDocSnippetEvidence{
+			{
+				SnippetID:   docID + "-snippet-1",
+				Content:     content,
+				ContentHash: reviewExternalSupportHashForEvidenceTest("snippet:" + content),
+			},
+		},
+	}
+}
+
+func reviewExternalSupportHashForEvidenceTest(seed string) string {
+	sum := sha256.Sum256([]byte(seed))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func cloneReviewWebSearchEvidenceForTest(evidence ReviewWebSearchEvidence) ReviewWebSearchEvidence {
+	clone := evidence
+	clone.Queries = append([]ReviewWebSearchEvidenceQuery(nil), evidence.Queries...)
+	for i := range clone.Queries {
+		clone.Queries[i].Results = append([]ReviewWebSearchEvidenceResult(nil), evidence.Queries[i].Results...)
+	}
+	clone.ExternalDocs = append([]ReviewExternalDocEvidence(nil), evidence.ExternalDocs...)
+	for i := range clone.ExternalDocs {
+		clone.ExternalDocs[i].Snippets = append([]ReviewExternalDocSnippetEvidence(nil), evidence.ExternalDocs[i].Snippets...)
+	}
+	return clone
 }
 
 type fakeReviewWebSearchRunner struct {
