@@ -84,6 +84,9 @@ func TestReviewWebSearchEvidenceCollectorSearchesAndFetchesBoundedResults(t *tes
 	if got.Queries[0].Query != "OpenAI API web_search official documentation" {
 		t.Fatalf("query = %q, want OpenAI/web_search official docs query", got.Queries[0].Query)
 	}
+	if !strings.Contains(got.Queries[0].Reason, "intent=api_docs") || !strings.Contains(got.Queries[0].Reason, "expected_source_type=api_reference") {
+		t.Fatalf("query reason = %q, want intent metadata", got.Queries[0].Reason)
+	}
 }
 
 func TestReviewWebSearchEvidenceCollectorPassesSafeFocusTermsToFetcher(t *testing.T) {
@@ -438,13 +441,15 @@ func cloneReviewWebSearchEvidenceForTest(evidence ReviewWebSearchEvidence) Revie
 }
 
 type fakeReviewWebSearchRunner struct {
-	calls  int
-	result ReviewWebSearchQueryResult
-	err    error
+	calls   int
+	queries []string
+	result  ReviewWebSearchQueryResult
+	err     error
 }
 
-func (f *fakeReviewWebSearchRunner) SearchReviewWeb(_ context.Context, _ string, _ int) (ReviewWebSearchQueryResult, error) {
+func (f *fakeReviewWebSearchRunner) SearchReviewWeb(_ context.Context, query string, _ int) (ReviewWebSearchQueryResult, error) {
 	f.calls++
+	f.queries = append(f.queries, query)
 	return f.result, f.err
 }
 

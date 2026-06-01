@@ -94,18 +94,93 @@ type FocusTerm struct {
 	Reason string
 }
 
+// QueryIntent は external doc 検索 query の意図を表す。
+// source credibility や official confirmation の代替ではなく、query planning 用の分類だけを担う。
+type QueryIntent string
+
+const (
+	// QueryIntentOfficialDocs は公式 docs 候補を探す意図。
+	QueryIntentOfficialDocs QueryIntent = "official_docs"
+	// QueryIntentAPIDocs は API reference / API docs 候補を探す意図。
+	QueryIntentAPIDocs QueryIntent = "api_docs"
+	// QueryIntentSecurityAdvisory は security advisory / vulnerability notes 候補を探す意図。
+	QueryIntentSecurityAdvisory QueryIntent = "security_advisory"
+	// QueryIntentSpec は RFC や protocol specification 候補を探す意図。
+	QueryIntentSpec QueryIntent = "spec"
+	// QueryIntentFrameworkBehavior は framework / language runtime behavior docs 候補を探す意図。
+	QueryIntentFrameworkBehavior QueryIntent = "framework_behavior"
+	// QueryIntentFallback は weak input からの低信頼 fallback query 意図。
+	QueryIntentFallback QueryIntent = "fallback"
+)
+
+// QueryExpectedSourceType は query が期待する外部 source の種類を表す。
+type QueryExpectedSourceType string
+
+const (
+	// QueryExpectedSourceOfficialDocumentation は公式ドキュメントを期待する。
+	QueryExpectedSourceOfficialDocumentation QueryExpectedSourceType = "official_documentation"
+	// QueryExpectedSourceAPIReference は API reference を期待する。
+	QueryExpectedSourceAPIReference QueryExpectedSourceType = "api_reference"
+	// QueryExpectedSourceSecurityAdvisory は security advisory を期待する。
+	QueryExpectedSourceSecurityAdvisory QueryExpectedSourceType = "security_advisory"
+	// QueryExpectedSourceTechnicalSpecification は RFC / specification を期待する。
+	QueryExpectedSourceTechnicalSpecification QueryExpectedSourceType = "technical_specification"
+	// QueryExpectedSourceFrameworkDocumentation は framework / language docs を期待する。
+	QueryExpectedSourceFrameworkDocumentation QueryExpectedSourceType = "framework_documentation"
+	// QueryExpectedSourceGeneralReference は低信頼 fallback の一般 reference を期待する。
+	QueryExpectedSourceGeneralReference QueryExpectedSourceType = "general_reference"
+)
+
+// QueryConfidence は planner が query を作る根拠の強さを表す。
+type QueryConfidence string
+
+const (
+	// QueryConfidenceHigh は具体 entity と concrete focus が揃った query。
+	QueryConfidenceHigh QueryConfidence = "high"
+	// QueryConfidenceMedium は具体 entity はあるが focus がやや広い query。
+	QueryConfidenceMedium QueryConfidence = "medium"
+	// QueryConfidenceLow は fallback としてのみ使う query。
+	QueryConfidenceLow QueryConfidence = "low"
+)
+
 // SearchQueryPlanningInput は review evidence から抽出した external doc 検索計画用の入力。
 type SearchQueryPlanningInput struct {
 	CorpusParts         []string
 	GenericImpactTokens []string
+	ImpactSurfaces      []SearchQueryPlanImpactSurface
+	CandidateRisks      []SearchQueryPlanCandidateRisk
+}
+
+// SearchQueryPlanImpactSurface は Pass1 impact surface から externaldoc が受け取る query planning DTO。
+type SearchQueryPlanImpactSurface struct {
+	ID              string
+	Summary         string
+	Category        string
+	EvidenceSummary string
+	Reason          string
+}
+
+// SearchQueryPlanCandidateRisk は Pass1 candidate risk から externaldoc が受け取る query planning DTO。
+type SearchQueryPlanCandidateRisk struct {
+	ID                   string
+	Summary              string
+	Severity             string
+	SurfaceIDs           []string
+	EvidenceSummary      string
+	VerificationStrategy string
+	Status               string
 }
 
 // SearchQueryCandidate は fetch に引き継ぐ subject / focus hint 付き検索 query。
+// 候補は BuildSearchQueryCandidates が検証済みとして作り、外部 caller は accessor 経由で参照する。
 type SearchQueryCandidate struct {
-	Query   string
-	Reason  string
-	Subject string
-	Focus   string
+	query              string
+	reason             string
+	subject            string
+	focus              string
+	intent             QueryIntent
+	expectedSourceType QueryExpectedSourceType
+	confidence         QueryConfidence
 }
 
 // Fetcher は検索結果 URL から external_doc snippet を取得する境界。

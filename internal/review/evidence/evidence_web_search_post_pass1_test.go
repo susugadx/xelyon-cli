@@ -1,0 +1,178 @@
+package evidence
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+)
+
+func TestReviewWebSearchEvidenceCollectorPostPass1SearchesPlanDerivedQuery(t *testing.T) {
+	searcher := &fakeReviewWebSearchRunner{
+		result: ReviewWebSearchQueryResult{
+			Provider: "gemini",
+			Results: []ReviewWebSearchEvidenceResult{
+				{Title: "OAuth redirect URI spec", URL: "https://docs.example.test/oauth", SourceDomain: "docs.example.test"},
+			},
+		},
+	}
+	fetcher := &fakeReviewExternalDocFetcher{
+		doc: newFetchedReviewExternalDocForWebSearchTest("OAuth redirect URI external spec", false),
+	}
+	bundle := newReviewWebSearchEvidenceTestBundle()
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled: true,
+		Queries: []ReviewWebSearchEvidenceQuery{
+			{Query: "OpenAI API web_search official documentation", Reason: "pre-pass1"},
+		},
+		ExternalDocs: []ReviewExternalDocEvidence{
+			newReviewExternalSupportDocForEvidenceTest("external-doc-1", externaldoc.SourceCredibilityOfficialCandidate, "pre-pass1 snippet"),
+		},
+	}
+	collector := NewReviewWebSearchEvidenceCollector(ReviewWebSearchEvidenceCollectorOptions{
+		Enabled:            true,
+		MaxQueries:         3,
+		MaxResultsPerQuery: 1,
+		Searcher:           searcher,
+		Fetcher:            fetcher,
+	})
+
+	got := collector.CollectPostPass1WebSearchEvidence(context.Background(), bundle, newReviewWebSearchPostPass1OAuthPlanForTest())
+
+	if searcher.calls != 1 {
+		t.Fatalf("searcher calls = %d, want 1", searcher.calls)
+	}
+	if len(got.Queries) != 2 {
+		t.Fatalf("queries = %#v, want pre query plus post query", got.Queries)
+	}
+	if got.Queries[1].Query != "OAuth 2.0 redirect URI specification" {
+		t.Fatalf("post query = %q, want OAuth spec query", got.Queries[1].Query)
+	}
+	if !strings.Contains(got.Queries[1].Reason, "intent=spec") || !strings.Contains(got.Queries[1].Reason, "expected_source_type=technical_specification") {
+		t.Fatalf("post query reason = %q, want spec metadata", got.Queries[1].Reason)
+	}
+	if len(got.ExternalDocs) != 2 || got.ExternalDocs[1].DocID != "external-doc-2" {
+		t.Fatalf("external docs = %#v, want post doc with non-conflicting external-doc-2", got.ExternalDocs)
+	}
+	if got.Inconclusive {
+		t.Fatal("Inconclusive = true, want false with merged snippets")
+	}
+}
+
+func TestReviewWebSearchEvidenceCollectorPostPass1SkipsDuplicateQuery(t *testing.T) {
+	searcher := &fakeReviewWebSearchRunner{}
+	bundle := newReviewWebSearchEvidenceTestBundle()
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled: true,
+		Queries: []ReviewWebSearchEvidenceQuery{
+			{Query: "OAuth 2.0 redirect URI specification", Reason: "pre-pass1"},
+		},
+	}
+	collector := NewReviewWebSearchEvidenceCollector(ReviewWebSearchEvidenceCollectorOptions{
+		Enabled:            true,
+		MaxQueries:         3,
+		MaxResultsPerQuery: 1,
+		Searcher:           searcher,
+		Fetcher:            &fakeReviewExternalDocFetcher{},
+	})
+
+	got := collector.CollectPostPass1WebSearchEvidence(context.Background(), bundle, newReviewWebSearchPostPass1OAuthPlanForTest())
+
+	if searcher.calls != 0 {
+		t.Fatalf("searcher calls = %d, want 0 for duplicate post query", searcher.calls)
+	}
+	if len(got.Queries) != 1 {
+		t.Fatalf("queries = %#v, want only existing duplicate query", got.Queries)
+	}
+}
+
+func TestReviewWebSearchEvidenceCollectorPostPass1RespectsTotalQueryBudget(t *testing.T) {
+	searcher := &fakeReviewWebSearchRunner{}
+	bundle := newReviewWebSearchEvidenceTestBundle()
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled: true,
+		Queries: []ReviewWebSearchEvidenceQuery{
+			{Query: "OpenAI API web_search official documentation", Reason: "pre-pass1"},
+		},
+	}
+	collector := NewReviewWebSearchEvidenceCollector(ReviewWebSearchEvidenceCollectorOptions{
+		Enabled:            true,
+		MaxQueries:         1,
+		MaxResultsPerQuery: 1,
+		Searcher:           searcher,
+		Fetcher:            &fakeReviewExternalDocFetcher{},
+	})
+
+	got := collector.CollectPostPass1WebSearchEvidence(context.Background(), bundle, newReviewWebSearchPostPass1OAuthPlanForTest())
+
+	if searcher.calls != 0 {
+		t.Fatalf("searcher calls = %d, want 0 when pre-pass1 exhausted budget", searcher.calls)
+	}
+	if !got.Truncated {
+		t.Fatal("Truncated = false, want true when post-pass1 candidates exceed remaining budget")
+	}
+	if len(got.Queries) != 1 {
+		t.Fatalf("queries = %#v, want pre-pass1 query only", got.Queries)
+	}
+}
+
+func TestReviewWebSearchEvidenceCollectorPostPass1ErrorPreservesMergedSignals(t *testing.T) {
+	searcher := &fakeReviewWebSearchRunner{err: errors.New("post search failed")}
+	bundle := newReviewWebSearchEvidenceTestBundle()
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled: true,
+		Error:   "pre fetch failed",
+		ExternalDocs: []ReviewExternalDocEvidence{
+			newReviewExternalSupportDocForEvidenceTest("external-doc-1", externaldoc.SourceCredibilityUnknown, "pre-pass1 snippet"),
+		},
+	}
+	collector := NewReviewWebSearchEvidenceCollector(ReviewWebSearchEvidenceCollectorOptions{
+		Enabled:            true,
+		MaxQueries:         3,
+		MaxResultsPerQuery: 1,
+		Searcher:           searcher,
+		Fetcher:            &fakeReviewExternalDocFetcher{},
+	})
+
+	got := collector.CollectPostPass1WebSearchEvidence(context.Background(), bundle, newReviewWebSearchPostPass1OAuthPlanForTest())
+
+	if !strings.Contains(got.Error, "pre fetch failed") || !strings.Contains(got.Error, "post search failed") {
+		t.Fatalf("Error = %q, want pre and post errors preserved", got.Error)
+	}
+	if got.Inconclusive {
+		t.Fatal("Inconclusive = true, want false because merged docs have citation-capable snippet")
+	}
+	if len(got.ExternalDocs) != 1 {
+		t.Fatalf("external docs = %#v, want existing docs preserved", got.ExternalDocs)
+	}
+}
+
+func newReviewWebSearchPostPass1OAuthPlanForTest() reviewprobe.ReviewProbePlan {
+	return reviewprobe.ReviewProbePlan{
+		SchemaVersion: reviewprobe.ReviewProbePlanSchemaVersionV2,
+		TargetKind:    TargetCurrentChanges,
+		ImpactSurfaces: []reviewprobe.ReviewProbeImpactSurface{
+			{
+				ID:              "surface-oauth",
+				Summary:         "OAuth redirect URI validation changed.",
+				Category:        reviewprobe.ReviewProbeImpactSurfaceValidator,
+				EvidenceSummary: "Diff mentions redirect_uri and token exchange.",
+				Status:          reviewprobe.ReviewProbeImpactSurfaceUnverified,
+				Reason:          "External OAuth 2.0 specification should be checked.",
+			},
+		},
+		CandidateRisks: []reviewprobe.ReviewProbeCandidateRisk{
+			{
+				ID:                   "risk-oauth",
+				Summary:              "OAuth flow could be accepted with a mismatched redirect URI.",
+				Severity:             reviewprobe.ReviewGroupSeverityMedium,
+				SurfaceIDs:           []string{"surface-oauth"},
+				VerificationStrategy: "Confirm redirect URI requirements against OAuth 2.0 specification.",
+				Status:               reviewprobe.ReviewProbeCandidateRiskUnverified,
+			},
+		},
+	}
+}

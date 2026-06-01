@@ -1,6 +1,10 @@
 package evidence
 
-import "context"
+import (
+	"context"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+)
 
 // ReviewEvidenceBuilderOption は ReviewEvidenceBuilder の差し替え設定を表す。
 type ReviewEvidenceBuilderOption func(*ReviewEvidenceBuilder)
@@ -8,6 +12,11 @@ type ReviewEvidenceBuilderOption func(*ReviewEvidenceBuilder)
 // ReviewWebSearchEvidenceProvider は ReviewEvidenceBuilder が使う外部 Web 検索 evidence 境界。
 type ReviewWebSearchEvidenceProvider interface {
 	CollectWebSearchEvidence(context.Context, ReviewEvidenceBundle) ReviewWebSearchEvidence
+}
+
+// ReviewPostPass1WebSearchEvidenceProvider は Pass1 probe plan 後の追加 Web 検索 evidence 収集境界。
+type ReviewPostPass1WebSearchEvidenceProvider interface {
+	CollectPostPass1WebSearchEvidence(context.Context, ReviewEvidenceBundle, reviewprobe.ReviewProbePlan) ReviewWebSearchEvidence
 }
 
 // ReviewEvidenceBuilder は current_changes の一次情報を git と filesystem から収集する。
@@ -99,6 +108,21 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 		bundle.WebSearchEvidence = b.webSearchEvidence.CollectWebSearchEvidence(ctx, bundle)
 	}
 	return bundle, nil
+}
+
+// CollectPostPass1WebSearchEvidence は Pass1 probe plan から追加 Web 検索 evidence を収集する。
+func (b *ReviewEvidenceBuilder) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobe.ReviewProbePlan) ReviewWebSearchEvidence {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if b == nil || b.webSearchEvidence == nil {
+		return bundle.WebSearchEvidence
+	}
+	provider, ok := b.webSearchEvidence.(ReviewPostPass1WebSearchEvidenceProvider)
+	if !ok {
+		return bundle.WebSearchEvidence
+	}
+	return provider.CollectPostPass1WebSearchEvidence(ctx, bundle, plan)
 }
 
 func buildReviewCurrentChangesBundle(repoRoot, cwd string, git reviewCurrentChangesGitEvidence, files reviewCurrentChangesFileEvidence, limits ReviewEvidenceLimits) ReviewEvidenceBundle {

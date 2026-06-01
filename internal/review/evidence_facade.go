@@ -41,6 +41,9 @@ type ReviewEvidenceBuilderOption = reviewevidence.ReviewEvidenceBuilderOption
 // ReviewWebSearchEvidenceProvider は ReviewEvidenceBuilder が使う外部 Web 検索 evidence 境界。
 type ReviewWebSearchEvidenceProvider = reviewevidence.ReviewWebSearchEvidenceProvider
 
+// ReviewPostPass1WebSearchEvidenceProvider は Pass1 probe plan 後の追加 Web 検索 evidence 収集境界。
+type ReviewPostPass1WebSearchEvidenceProvider = reviewevidence.ReviewPostPass1WebSearchEvidenceProvider
+
 // ReviewEvidenceBuilder は current_changes の一次情報を git と filesystem から収集する。
 type ReviewEvidenceBuilder = reviewevidence.ReviewEvidenceBuilder
 

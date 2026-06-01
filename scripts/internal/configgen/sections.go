@@ -85,8 +85,8 @@ var Sections = map[string]SectionInfo{
 		Fields: map[string]string{
 			"provider":                        "/review 専用プロバイダー（空で現在の provider/model を使用）",
 			"model":                           "/review 専用モデル（provider 設定時のみ有効。空で provider の既定モデル）",
-			"web_search_evidence.enabled":     "/review の外部 Web 検索 evidence を有効化（raw result は discovery-only、fetch 済み external_doc snippet は citation-capable。デフォルト: false。XELYON_REVIEW_WEB_SEARCH=1 でも有効化）",
-			"web_search_evidence.max_queries": "外部 Web 検索 evidence の最大クエリ数（デフォルト: 3）",
+			"web_search_evidence.enabled":     "/review の外部 Web 検索 evidence を有効化（初期検索 + Pass1 後の追加検索。raw result は discovery-only、fetch 済み external_doc snippet は citation-capable。デフォルト: false。XELYON_REVIEW_WEB_SEARCH=1 でも有効化）",
+			"web_search_evidence.max_queries": "外部 Web 検索 evidence の最大クエリ数（初期検索 + Pass1 後追加検索の合計。デフォルト: 3）",
 			"web_search_evidence.max_results_per_query": "外部 Web 検索 evidence の 1 クエリあたり最大結果数（デフォルト: 3）",
 		},
 		FieldTypes: map[string]string{

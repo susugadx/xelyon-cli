@@ -25,8 +25,10 @@ func SearchSubjectsForCorpus(corpus string) []string {
 		{token: "groq", subject: "Groq API"},
 		{token: "openrouter", subject: "OpenRouter API"},
 		{token: "mcp", subject: "Model Context Protocol"},
-		{token: "oauth", subject: "OAuth"},
+		{token: "oauth", subject: "OAuth 2.0"},
 		{token: "cloudflare", subject: "Cloudflare Workers"},
+		{token: "path/filepath", subject: "Go filepath package"},
+		{token: "filepath.", subject: "Go filepath package"},
 	}
 	result := make([]string, 0)
 	seen := make(map[string]struct{})

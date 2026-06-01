@@ -18,6 +18,7 @@ func reviewExternalSupportPromptGuardrails() string {
 - Treat external_support.level as the maximum external evidence confidence.
 - Levels "none", "weak", and "partial" are not confirmed external spec coverage.
 - external_support.official_confirmation=false means official confirmation is absent; do not imply a confirmed official spec.
+- web_search_evidence.queries[].reason may include query intent, expected source type, and confidence; these are query-planning hints only, not source credibility or official confirmation.
 - Third-party or unknown-only evidence and one citation-capable snippet are not strong external evidence.
 - The "strong" level is reserved; do not infer strong support from source title, snippet wording, URL label, or query text.`
 }
@@ -175,6 +176,7 @@ Raw web search results are discovery-only and cannot be cited in final report ev
 Fetched external_doc snippets listed in Evidence Markdown are citation-capable evidence, but external_doc is not automatically official documentation.
 Source credibility values are "official_candidate", "third_party", and "unknown"; only "official_candidate" may be treated as an official-source candidate, not proof by itself.
 Do not infer official or authoritative status from search query wording, source title, URL label, snippet wording, or "official documentation" text alone.
+Query intent metadata in web_search_evidence.queries[].reason is not a source classifier; always use source_credibility and external_support summary for official confirmation.
 Do not treat an external_doc as a confirmed external spec when source_credibility is "unknown" or "third_party".
 Official confirmation requires external_support.official_confirmation=true and cited snippet content that supports the claim; source_credibility="official_candidate" alone is not enough.
 If source credibility is unclear, fetch failed, evidence is truncated, or search is inconclusive, classify the scope as unverified, residual, or blocked instead of confirmed.

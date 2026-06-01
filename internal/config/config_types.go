@@ -64,8 +64,8 @@ type ReviewConfig struct {
 
 // ReviewWebSearchEvidenceConfig は /review の外部 Web 検索 evidence 収集設定。
 type ReviewWebSearchEvidenceConfig struct {
-	Enabled            bool `yaml:"enabled"`               // /review の外部 Web 検索 evidence を有効化（デフォルト: false）
-	MaxQueries         int  `yaml:"max_queries"`           // 1 review run あたりの最大検索クエリ数
+	Enabled            bool `yaml:"enabled"`               // /review の外部 Web 検索 evidence を有効化（初期検索 + Pass1 後の追加検索。デフォルト: false）
+	MaxQueries         int  `yaml:"max_queries"`           // 初期検索 + Pass1 後追加検索の合計最大クエリ数
 	MaxResultsPerQuery int  `yaml:"max_results_per_query"` // 1 クエリあたりの最大検索結果数
 }
 

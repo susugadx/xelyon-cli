@@ -119,3 +119,14 @@ Phase 3-G 後の review model output decode / finalization は次の owner に�
 - `internal/review/report` / `internal/review/analysis` / `internal/review/externaldoc` / `internal/review/probe`: schema DTO、PlanScope 変換、external_doc ref 照合、probe plan DTO の owner を維持する。`modeloutput` はこれらを直接使い、親 `internal/review` facade には依存しない。
 
 Phase 3-G では prompt 文面、report / saturation schema、validation rule、trusted probe outcome normalization、saturation 判定、repair / retry 回数と順序、provider call は変更しない。`internal/review/modeloutput/package_boundaries_test.go` は、親 `internal/review`、`internal/review/evidence`、artifact、modelinput、agent / TUI / provider runtime、Bubble Tea、Lip Gloss への import を禁止する。
+
+## Phase 4-C: Post-Pass1 external doc query planning
+
+Phase 4-C 後の `/review` Web 検索 evidence は次の owner に分ける。
+
+- `internal/review/externaldoc`: query intent、expected source type、confidence、Pre-Pass1 / Post-Pass1 両対応の `SearchQueryPlanningInput`、query candidate validation、dedupe、generic query 抑制の owner。`ReviewProbePlan`、provider transport、runner、modelinput は import しない。query intent は検索意図であり、source credibility / official confirmation の source of truth ではない。
+- `internal/review/evidence`: `ReviewEvidenceBundle` と Pass1 `ReviewProbePlan` から externaldoc 用 DTO へ変換し、Web 検索 provider 実行、fetch、Pre/Post merge、`max_queries` 合計 budget、doc id 採番、error / truncated / inconclusive 集約を扱う owner。追加検索は既存 `WebSearchEvidence` へ append merge し、query 順序は Pre-Pass1 -> Post-Pass1 を維持する。
+- `internal/review`: Pass1 probe plan 生成後、report / saturation 前に optional な Post-Pass1 Web 検索を呼び出し、merged evidence markdown を report 系 prompt へ渡す orchestration owner。Pass1 probe plan prompt は初期 evidence のままにする。
+- `internal/review/modelinput`: query intent metadata を official 判定として扱わず、`source_credibility` と `external_support` summary を確認する prompt guardrail の owner。
+
+Phase 4-C では config schema、Web 検索 provider transport、report JSON schema、source credibility / support level の判定契約は変更しない。
