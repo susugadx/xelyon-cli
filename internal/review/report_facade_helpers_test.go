@@ -2,7 +2,6 @@ package review
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -149,21 +148,4 @@ func mustMarshalReviewSaturationCheckForTest(t *testing.T, check ReviewSaturatio
 		t.Fatalf("json.Marshal() error = %v, want nil", err)
 	}
 	return data
-}
-
-func assertReviewReportComputedSummaryPointerForTest(t *testing.T, got *ReviewReportComputedSummary, want ReviewReportComputedSummary) {
-	t.Helper()
-
-	if got == nil {
-		t.Fatal("ComputedSummary = nil, want runner computed summary")
-	}
-	assertReviewReportComputedSummaryValueForTest(t, *got, want)
-}
-
-func assertReviewReportComputedSummaryValueForTest(t *testing.T, got, want ReviewReportComputedSummary) {
-	t.Helper()
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("computed summary mismatch:\n got  = %#v\n want = %#v", got, want)
-	}
 }

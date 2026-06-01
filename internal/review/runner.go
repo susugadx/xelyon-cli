@@ -7,6 +7,7 @@ import (
 	"io"
 
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
 )
 
 var (
@@ -112,7 +113,7 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	redactor := newReviewRunnerPromptRedactor(bundle, probeResults)
 	r.saveReviewRunJSONArtifact("probe_results.json", reviewmodelinput.BuildProbeResultPromptContexts(probeResults, redactor), redactor)
 
-	return r.completeReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle)
+	return r.completeReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle.WebSearchEvidence.ExternalDocs)
 }
 
 func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRequest, evidenceMarkdown string, bundle ReviewEvidenceBundle) (ReviewProbePlan, error) {
@@ -172,18 +173,18 @@ func decodeReviewProbePlanJSONAgainstEvidence(content string, bundle ReviewEvide
 	return plan, nil
 }
 
-func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, bundle ReviewEvidenceBundle) (ReviewReport, error) {
+func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, externalDocs []ReviewExternalDocEvidence) (ReviewReport, error) {
 	r.emitProgressRunning(reviewProgressReportItem)
-	report, err := r.completeInitialReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle)
+	report, err := r.completeInitialReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, externalDocs)
 	if err != nil {
 		r.emitProgressError(reviewProgressReportItem, err)
 		return ReviewReport{}, err
 	}
 	r.emitProgressOK(reviewProgressReportItem, "")
-	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, bundle)
+	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, externalDocs)
 }
 
-func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, bundle ReviewEvidenceBundle) (ReviewReport, error) {
+func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, externalDocs []ReviewExternalDocEvidence) (ReviewReport, error) {
 	reportPrompt := reviewmodelinput.BuildReportPrompt(reviewmodelinput.ReportPromptInput{
 		CustomInstructions: req.CustomInstructions,
 		EvidenceMarkdown:   evidenceMarkdown,
@@ -202,7 +203,13 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 	}
 	r.saveReviewRunTextArtifact("report_raw.json", reportResp.Content, redactor)
 
-	report, reportErr := finalizeReviewRunnerReportModelOutput(reportResp.Content, plan, probeSummaries, redactor, bundle)
+	report, reportErr := reviewmodeloutput.FinalizeReportModelOutput(reviewmodeloutput.ReportModelOutputInput{
+		Content:               reportResp.Content,
+		Plan:                  plan,
+		TrustedProbeSummaries: probeSummaries,
+		Redactor:              redactor,
+		ExternalDocs:          externalDocs,
+	})
 	if reportErr == nil {
 		r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
 		return report, nil
@@ -228,23 +235,17 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 	}
 	r.saveReviewRunTextArtifact("report_raw.json", repairResp.Content, redactor)
 
-	report, err = finalizeReviewRunnerReportModelOutput(repairResp.Content, plan, probeSummaries, redactor, bundle)
+	report, err = reviewmodeloutput.FinalizeReportModelOutput(reviewmodeloutput.ReportModelOutputInput{
+		Content:               repairResp.Content,
+		Plan:                  plan,
+		TrustedProbeSummaries: probeSummaries,
+		Redactor:              redactor,
+		ExternalDocs:          externalDocs,
+	})
 	if err != nil {
 		return ReviewReport{}, err
 	}
 	r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
-	return report, nil
-}
-
-func finalizeReviewRunnerReportModelOutput(content string, plan ReviewProbePlan, trustedProbeSummaries []ReviewProbeSummary, redactor reviewRunnerPromptRedactor, bundle ReviewEvidenceBundle) (ReviewReport, error) {
-	report, err := decodeReviewReportModelStrictJSON([]byte(content))
-	if err != nil {
-		return ReviewReport{}, fmt.Errorf("review runner decode report: %w", err)
-	}
-	report, err = finalizeReviewRunnerReport(report, plan, trustedProbeSummaries, redactor, bundle)
-	if err != nil {
-		return ReviewReport{}, err
-	}
 	return report, nil
 }
 

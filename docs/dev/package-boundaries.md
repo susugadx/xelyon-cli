@@ -108,3 +108,14 @@ Phase 3-F 後の review model input assembly は次の owner に分ける。
 - `internal/review/report` / `internal/review/probe`: schema DTO、probe result DTO、trusted probe summary DTO の owner を維持する。`modelinput` はこれらを入力として prompt DTO へ写像するだけで、decode / validation / runtime 実行は持たない。
 
 Phase 3-F では prompt 文面、section order、JSON schema / validation、evidence markdown、probe behavior、external_doc behavior、runner の model phase / retry 制御は変更しない。`internal/review/modelinput/package_boundaries_test.go` は、親 `internal/review`、`internal/review/evidence`、artifact、agent / TUI / provider runtime、Bubble Tea、Lip Gloss への import を禁止する。
+
+## Phase 3-G: review model output boundary
+
+Phase 3-G 後の review model output decode / finalization は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、facade、runner orchestration、evidence 収集、probe 実行順、model phase 選択、`ReviewModelRequest` 送信、repair / revision / saturation の順序制御、artifact / progress、path replacement 発見の owner。既存の `ReviewRequest`、`ReviewRunner`、`ReviewModel` はここに残し、agent / cmd 側の import path を変えない。
+- `internal/review/modeloutput`: LLM raw output の strict decode、trusted probe summary の redacted copy 注入、report / saturation check の validation、external_doc ref cross validation、computed summary 注入の deterministic finalization owner。runner からは fetched external docs だけを受け取り、`ReviewEvidenceBundle`、artifact、modelinput、provider call には依存しない。
+- `internal/review/modelinput`: Phase 3-F の prompt / repair prompt assembly owner を維持する。decode / validation / finalization は持たない。
+- `internal/review/report` / `internal/review/analysis` / `internal/review/externaldoc` / `internal/review/probe`: schema DTO、PlanScope 変換、external_doc ref 照合、probe plan DTO の owner を維持する。`modeloutput` はこれらを直接使い、親 `internal/review` facade には依存しない。
+
+Phase 3-G では prompt 文面、report / saturation schema、validation rule、trusted probe outcome normalization、saturation 判定、repair / retry 回数と順序、provider call は変更しない。`internal/review/modeloutput/package_boundaries_test.go` は、親 `internal/review`、`internal/review/evidence`、artifact、modelinput、agent / TUI / provider runtime、Bubble Tea、Lip Gloss への import を禁止する。

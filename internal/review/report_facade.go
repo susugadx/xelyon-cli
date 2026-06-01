@@ -175,10 +175,6 @@ func DecodeReviewReportJSON(data []byte) (ReviewReport, error) {
 	return reviewreport.DecodeReviewReportJSON(data)
 }
 
-func decodeReviewReportModelStrictJSON(data []byte) (ReviewReport, error) {
-	return reviewreport.DecodeReviewReportModelStrictJSON(data)
-}
-
 // ValidateReviewReport は schema v2 の review report 契約を検証する。
 func ValidateReviewReport(report ReviewReport) error {
 	return reviewreport.ValidateReviewReport(report)
