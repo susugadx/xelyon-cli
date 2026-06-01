@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 )
 
 func TestReviewWebSearchEvidenceCollectorDisabledDoesNotCallDependencies(t *testing.T) {
@@ -217,11 +219,33 @@ func TestReviewEvidenceMarkdownIncludesWebSearchEvidenceSection(t *testing.T) {
 		Enabled:  true,
 		Provider: "gemini",
 		Queries:  []ReviewWebSearchEvidenceQuery{{Query: "OpenAI API web_search official documentation", Reason: "test"}},
+		ExternalDocs: []ReviewExternalDocEvidence{
+			{
+				DocID:                   "external-doc-1",
+				URL:                     "https://example.test/openai-reference",
+				SourceDomain:            "example.test",
+				SourceCredibility:       externaldoc.SourceCredibilityUnknown,
+				SourceCredibilityReason: "unknown: source domain does not match trusted domains for the query subject",
+				Snippets: []ReviewExternalDocSnippetEvidence{
+					{
+						SnippetID:   "external-doc-1-snippet-1",
+						Content:     "OpenAI API request example.",
+						ContentHash: "hash-1",
+					},
+				},
+			},
+		},
 	}
 
 	got := RenderReviewEvidenceMarkdown(bundle)
 
-	for _, want := range []string{"## review web search evidence", `"provider": "gemini"`, `"OpenAI API web_search official documentation"`} {
+	for _, want := range []string{
+		"## review web search evidence",
+		`"provider": "gemini"`,
+		`"OpenAI API web_search official documentation"`,
+		`"source_credibility": "unknown"`,
+		`"source_credibility_reason": "unknown: source domain does not match trusted domains for the query subject"`,
+	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("markdown missing %q:\n%s", want, got)
 		}

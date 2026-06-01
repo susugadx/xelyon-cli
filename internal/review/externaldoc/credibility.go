@@ -2,6 +2,7 @@ package externaldoc
 
 import (
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -15,8 +16,8 @@ func classifySourceCredibility(fetchReq FetchRequest, doc Evidence, content stri
 	subjectTokens := reviewExternalDocSubjectCredibilityTokens(fetchReq.QuerySubjectHint)
 	combined := strings.TrimSpace(source + " " + title + " " + body)
 
-	if reviewExternalDocHasThirdPartySignal(source, title) {
-		return SourceCredibilityThirdParty, "third_party: known third-party host or source metadata signal is present"
+	if reviewExternalDocHasThirdPartySignal(source, title, fetchReq.URL) {
+		return SourceCredibilityThirdParty, "third_party: known third-party host, source URL, or source metadata signal is present"
 	}
 	if combined == "" {
 		return SourceCredibilityUnknown, "unknown: source metadata and content are unavailable"
@@ -193,7 +194,7 @@ func reviewExternalDocContentHasReferenceSignal(body string) bool {
 	return false
 }
 
-func reviewExternalDocHasThirdPartySignal(sourceDomain, title string) bool {
+func reviewExternalDocHasThirdPartySignal(sourceDomain, title, sourceURL string) bool {
 	for _, thirdPartyDomain := range []string{
 		"blogspot.com",
 		"dev.to",
@@ -208,6 +209,9 @@ func reviewExternalDocHasThirdPartySignal(sourceDomain, title string) bool {
 		if reviewExternalDocSourceMatchesTrustedDomain(sourceDomain, thirdPartyDomain) {
 			return true
 		}
+	}
+	if reviewExternalDocHasGitHubThirdPartySignal(sourceDomain, title, sourceURL) {
+		return true
 	}
 	metadata := strings.TrimSpace(sourceDomain + " " + title)
 	for _, signal := range []string{
@@ -224,6 +228,40 @@ func reviewExternalDocHasThirdPartySignal(sourceDomain, title string) bool {
 		}
 	}
 	return reviewExternalDocMetadataHasThirdPartySourceType(metadata)
+}
+
+func reviewExternalDocHasGitHubThirdPartySignal(sourceDomain, title, sourceURL string) bool {
+	if !reviewExternalDocSourceMatchesTrustedDomain(sourceDomain, "github.com") {
+		return false
+	}
+	path := reviewExternalDocCredibilityURLPath(sourceURL)
+	for _, signal := range []string{"/issues/", "/pull/", "/discussions/"} {
+		if strings.Contains(path, signal) {
+			return true
+		}
+	}
+	metadata := " " + title + " "
+	for _, signal := range []string{
+		" github issue ",
+		" github discussion ",
+		" github pull request ",
+		" issue #",
+		" discussion #",
+		" pull request #",
+	} {
+		if strings.Contains(metadata, signal) {
+			return true
+		}
+	}
+	return false
+}
+
+func reviewExternalDocCredibilityURLPath(sourceURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(sourceURL))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(parsed.Path)
 }
 
 func reviewExternalDocMetadataHasThirdPartySourceType(metadata string) bool {

@@ -97,6 +97,48 @@ func TestClassifySourceCredibilityThirdPartyTitleMetadata(t *testing.T) {
 	}
 }
 
+func TestClassifySourceCredibilityGitHubCollaborationSourcesAreThirdParty(t *testing.T) {
+	tests := []struct {
+		name  string
+		url   string
+		title string
+	}{
+		{
+			name:  "issue path",
+			url:   "https://github.com/openai/openai-python/issues/123",
+			title: "OpenAI API official issue thread",
+		},
+		{
+			name:  "discussion path",
+			url:   "https://github.com/openai/openai-python/discussions/456",
+			title: "OpenAI API discussion",
+		},
+		{
+			name:  "pull request title",
+			url:   "https://github.com/openai/openai-python/pull/789",
+			title: "OpenAI API GitHub pull request",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, reason := classifySourceCredibility(
+				FetchRequest{
+					URL:               tt.url,
+					SearchResultTitle: tt.title,
+					QuerySubjectHint:  "OpenAI API",
+				},
+				Evidence{SourceDomain: "github.com"},
+				"OpenAI API request examples and responses.",
+			)
+
+			if got != SourceCredibilityThirdParty {
+				t.Fatalf("credibility = %q, want third_party; reason=%q", got, reason)
+			}
+		})
+	}
+}
+
 func TestClassifySourceCredibilityUnknown(t *testing.T) {
 	got, reason := classifySourceCredibility(
 		FetchRequest{
@@ -112,6 +154,55 @@ func TestClassifySourceCredibilityUnknown(t *testing.T) {
 	}
 	if !strings.Contains(reason, "does not match trusted domains") {
 		t.Fatalf("reason = %q, want trusted domain mismatch explanation", reason)
+	}
+}
+
+func TestClassifySourceCredibilityUnknownWhenSourceMetadataIsMissingOrMalformed(t *testing.T) {
+	tests := []struct {
+		name         string
+		url          string
+		sourceDomain string
+	}{
+		{name: "missing URL and source domain"},
+		{name: "malformed URL", url: "://not-a-url"},
+		{name: "malformed source URL", sourceDomain: "https://[bad-host"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, reason := classifySourceCredibility(
+				FetchRequest{
+					URL:               tt.url,
+					SearchResultTitle: "Official OpenAI API Reference",
+					QuerySubjectHint:  "OpenAI API",
+				},
+				Evidence{SourceDomain: tt.sourceDomain},
+				"OpenAI API reference documentation for request parameters, responses, and authentication.",
+			)
+
+			if got != SourceCredibilityUnknown {
+				t.Fatalf("credibility = %q, want unknown; reason=%q", got, reason)
+			}
+		})
+	}
+}
+
+func TestClassifySourceCredibilityTitleSayingOfficialDoesNotOverrideUntrustedDomain(t *testing.T) {
+	got, reason := classifySourceCredibility(
+		FetchRequest{
+			URL:               "https://openai-docs.example.test/reference",
+			SearchResultTitle: "Official OpenAI API Reference",
+			QuerySubjectHint:  "OpenAI API",
+		},
+		Evidence{SourceDomain: "openai-docs.example.test"},
+		"OpenAI API reference documentation for request parameters, responses, and authentication.",
+	)
+
+	if got == SourceCredibilityOfficialCandidate {
+		t.Fatalf("credibility = %q, want not official_candidate; reason=%q", got, reason)
+	}
+	if got != SourceCredibilityUnknown {
+		t.Fatalf("credibility = %q, want unknown for untrusted domain; reason=%q", got, reason)
 	}
 }
 

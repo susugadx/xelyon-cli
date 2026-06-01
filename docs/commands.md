@@ -394,7 +394,7 @@ preset の `Review current changes` は追加指示なしの通常レビュー�
 custom focus は対象ファイルや差分範囲を絞るものではありません。特定 finding だけの再検証や focused verification mode はまだ未実装です。
 `/review` は `evidence -> probe plan -> probe results -> report -> saturation` の段階を持つ監査可能な review harness です。Go-first の evidence augmentation はありますが、共通 harness は全言語で雑な clean 判定を抑制します。
 `XELYON_REVIEW_RUN_ARTIFACTS=1` を設定すると、各段階の debug artifact を実行中はメモリに保持し、終了後に `.xelyon/review-runs/<UTC timestamp>/` へ保存します。保存先 component が symlink の場合は repo 外へ書かず warning にします。artifact には evidence や probe output が含まれ得るため、必要な場合だけ明示的に有効化してください。
-`review.web_search_evidence.enabled` を有効化した場合、raw web search results は discovery-only で、URL fetch 済みの `external_doc` snippet だけが citation-capable evidence になります。ただし `external_doc` は自動的に公式仕様とは扱わず、`source_credibility` と snippet 内容が明確に支える場合だけ confirmed external spec として扱います。`source_credibility` が `unknown` / `third_party`、fetch failed、truncated、inconclusive の場合は unverified / residual / blocked として分類します。
+`review.web_search_evidence.enabled` を有効化した場合、raw web search results は discovery-only で、URL fetch 済みの `external_doc` snippet だけが citation-capable evidence になります。ただし `external_doc` は自動的に公式仕様とは扱わず、`source_credibility` が `official_candidate` で、かつ snippet 内容が明確に支える場合だけ confirmed external spec として扱います。`official_candidate` も公式確定ではなく公式候補です。`source_credibility` が `unknown` / `third_party`、fetch failed、truncated、inconclusive の場合は unverified / residual / blocked として分類します。
 
 ```
 > /review

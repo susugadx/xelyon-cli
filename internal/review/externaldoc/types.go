@@ -9,7 +9,7 @@ import (
 type SourceCredibility string
 
 const (
-	// SourceCredibilityOfficialCandidate は公式 docs らしさを複数 signal で確認できた候補。
+	// SourceCredibilityOfficialCandidate は公式 docs らしさを複数 signal で確認できた候補。公式確定ではない。
 	SourceCredibilityOfficialCandidate SourceCredibility = "official_candidate"
 	// SourceCredibilityThirdParty は非公式・community・tutorial などの signal が明確な出典。
 	SourceCredibilityThirdParty SourceCredibility = "third_party"
