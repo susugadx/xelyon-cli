@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func TestReviewRunnerRunStopsProbeExecutionAfterMutatedWorktree(t *testing.T) {
@@ -51,13 +53,13 @@ func TestReviewRunnerRunStopsProbeExecutionAfterMutatedWorktree(t *testing.T) {
 					ID:     "probe-b",
 					Mode:   ReviewProbeHostReadOnly,
 					Status: ReviewProbeBlocked,
-					Error:  reviewRunnerProbeSkippedAfterMutationError("probe-a"),
+					Error:  reviewprobe.ProbeSkippedAfterMutationError("probe-a"),
 				},
 				{
 					ID:     "probe-c",
 					Mode:   ReviewProbeHostReadOnly,
 					Status: ReviewProbeBlocked,
-					Error:  reviewRunnerProbeSkippedAfterMutationError("probe-a"),
+					Error:  reviewprobe.ProbeSkippedAfterMutationError("probe-a"),
 				},
 			}
 			expectedSummaries := newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, expectedProbeResults)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 // runReviewProbesSequentially は plan から作った probe request を順序通りに実行する。
@@ -37,7 +39,7 @@ func (r *ReviewRunner) runReviewProbesSequentially(ctx context.Context, probeReq
 		probeResults = append(probeResults, result)
 		if isReviewProbeResultMutationOutcome(result) {
 			skippedProbeRequests := probeRequests[i+1:]
-			skippedResults := buildReviewRunnerSkippedProbeResultsAfterMutation(skippedProbeRequests, result.ID)
+			skippedResults := reviewprobe.BuildSkippedProbeResultsAfterMutation(skippedProbeRequests, result.ID)
 			for skippedIndex, skipped := range skippedResults {
 				r.emitProbeResultProgress(reviewProgressProbeScopeForRequest(skippedProbeRequests[skippedIndex]), skipped, time.Time{})
 			}
@@ -75,25 +77,4 @@ func (r *ReviewRunner) emitProbeResultProgress(progressScope reviewProgressProbe
 			Duration: command.Duration,
 		})
 	}
-}
-
-func buildReviewRunnerSkippedProbeResultsAfterMutation(probeRequests []ReviewProbeRequest, mutatedProbeID string) []ReviewProbeResult {
-	if len(probeRequests) == 0 {
-		return nil
-	}
-
-	results := make([]ReviewProbeResult, 0, len(probeRequests))
-	for _, probeReq := range probeRequests {
-		results = append(results, ReviewProbeResult{
-			ID:     probeReq.ID,
-			Mode:   probeReq.Mode,
-			Status: ReviewProbeBlocked,
-			Error:  reviewRunnerProbeSkippedAfterMutationError(mutatedProbeID),
-		})
-	}
-	return results
-}
-
-func reviewRunnerProbeSkippedAfterMutationError(mutatedProbeID string) string {
-	return fmt.Sprintf("probe skipped because probe %q mutated the working tree", mutatedProbeID)
 }

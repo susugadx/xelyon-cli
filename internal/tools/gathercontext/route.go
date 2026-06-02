@@ -13,7 +13,7 @@ func buildRoutePlan(execCtx tools.ExecutionContext, req request) routePlan {
 		search: newSearchPlan(req),
 	}
 
-	if !req.naturalSearchIntent {
+	if !req.searchRouteIntent {
 		if locatorPriority := classifyLocatorQuery(req.query, execCtx.EffectiveLocatorRegistry()); locatorPriority.ShouldRouteLocator() {
 			plan.kind = routeLocatorRead
 			plan.locatorQuery = req.query
@@ -36,15 +36,16 @@ func buildRoutePlan(execCtx tools.ExecutionContext, req request) routePlan {
 		}
 	}
 
-	plan.search.preferImpact = search.ShouldPreferImpactIntent(plan.search.query)
+	plan.search.preferImpact = !req.literalSearchPattern && search.ShouldPreferImpactIntent(plan.search.query)
 	return plan
 }
 
 func newSearchPlan(req request) searchPlan {
 	return searchPlan{
-		query:      req.searchQuery,
-		path:       req.searchPath,
-		fileFilter: req.fileFilter,
+		query:          req.searchQuery,
+		path:           req.searchPath,
+		fileFilter:     req.fileFilter,
+		literalPattern: req.literalSearchPattern,
 	}
 }
 

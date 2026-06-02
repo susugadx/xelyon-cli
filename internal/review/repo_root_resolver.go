@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 // ResolveReviewRepoRoot は /review 起動 cwd から review 対象 Git repo root を解決する。
@@ -24,7 +26,7 @@ func ResolveReviewRepoRoot(ctx context.Context, cwd string) (string, error) {
 
 	lookupRoot := findReviewRepoLookupRoot(resolvedCWD)
 	env := buildReviewEvidenceGitEnv(os.Environ())
-	gitPath, err := resolveCommandPath("git", commandResolutionContext{
+	gitPath, err := reviewprobe.ResolveCommandPath("git", reviewprobe.CommandResolutionContext{
 		RepoRoot: lookupRoot,
 		WorkDir:  lookupRoot,
 		Env:      env,

@@ -10,8 +10,9 @@ func newValidPlanScopeForTest() PlanScope {
 		},
 		CandidateRisks: []PlanCandidateRisk{
 			{
-				ID:     "risk-1",
-				Status: PlanCandidateRiskNeedsProbe,
+				ID:       "risk-1",
+				Status:   PlanCandidateRiskNeedsProbe,
+				Severity: ReviewGroupSeverityMedium,
 			},
 		},
 		Probes: []PlanProbe{

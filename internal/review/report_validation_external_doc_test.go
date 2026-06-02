@@ -32,46 +32,6 @@ func TestValidateReviewReportExternalDocEvidenceRefShape(t *testing.T) {
 	}
 }
 
-func TestFinalizeReviewRunnerReportAllowsFetchedExternalDocSnippetRef(t *testing.T) {
-	bundle := newExternalDocEvidenceBundleForValidationTest()
-	report := newRunnerCleanReportForTest(nil)
-	ref := newExternalDocEvidenceRefForValidationTest(bundle)
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-
-	if _, err := finalizeReviewRunnerReport(report, newRunnerNoProbePlanForTest(), nil, newRunnerReportRedactorForTest(t, "/tmp/repo", nil), bundle); err != nil {
-		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
-	}
-}
-
-func TestFinalizeReviewRunnerReportExternalDocRefIgnoresCredibilityMetadata(t *testing.T) {
-	bundle := newExternalDocEvidenceBundleForValidationTest()
-	bundle.WebSearchEvidence.ExternalDocs[0].SourceCredibility = ReviewExternalDocSourceCredibilityThirdParty
-	bundle.WebSearchEvidence.ExternalDocs[0].SourceCredibilityReason = "third_party: test metadata"
-	report := newRunnerCleanReportForTest(nil)
-	ref := newExternalDocEvidenceRefForValidationTest(bundle)
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-
-	if _, err := finalizeReviewRunnerReport(report, newRunnerNoProbePlanForTest(), nil, newRunnerReportRedactorForTest(t, "/tmp/repo", nil), bundle); err != nil {
-		t.Fatalf("finalizeReviewRunnerReport() error = %v, want nil", err)
-	}
-}
-
-func TestFinalizeReviewRunnerReportRejectsUnknownExternalDocSnippetRef(t *testing.T) {
-	bundle := newExternalDocEvidenceBundleForValidationTest()
-	report := newRunnerCleanReportForTest(nil)
-	ref := newExternalDocEvidenceRefForValidationTest(bundle)
-	ref.SnippetID = "external-doc-1-snippet-missing"
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-
-	_, err := finalizeReviewRunnerReport(report, newRunnerNoProbePlanForTest(), nil, newRunnerReportRedactorForTest(t, "/tmp/repo", nil), bundle)
-	if err == nil || !strings.Contains(err.Error(), "unknown fetched external_doc snippet") {
-		t.Fatalf("finalizeReviewRunnerReport() error = %v, want unknown external_doc snippet error", err)
-	}
-}
-
 func TestValidateReviewProbePlanAgainstEvidenceValidatesExternalDocRefs(t *testing.T) {
 	bundle := newExternalDocEvidenceBundleForValidationTest()
 	bundle.ChangedFiles = []ReviewChangedFile{{Path: "internal/api/providers/openai/web_search.go", Status: "M"}}

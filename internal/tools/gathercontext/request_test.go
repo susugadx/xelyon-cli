@@ -63,6 +63,61 @@ func TestParseRequestArgs_NormalizesQuotedPatternInstruction(t *testing.T) {
 	}
 }
 
+func TestParseRequestArgs_NormalizesQuotedPatternField(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{
+			name:  "colon",
+			query: `pattern:"func main"`,
+		},
+		{
+			name:  "space",
+			query: `pattern "func main"`,
+		},
+		{
+			name:  "colon with space",
+			query: `pattern: "func main"`,
+		},
+		{
+			name:  "equals",
+			query: `pattern = "func main"`,
+		},
+		{
+			name:  "single quote",
+			query: `pattern:'func main'`,
+		},
+		{
+			name:  "capitalized",
+			query: `Pattern:"func main"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, errResult := parseRequestArgs(map[string]string{
+				"query": tt.query,
+			})
+			if errResult != "" {
+				t.Fatalf("unexpected parse error: %q", errResult)
+			}
+			if req.query != "func main" {
+				t.Fatalf("req.query = %q, want quoted pattern", req.query)
+			}
+			if req.searchQuery != "func main" {
+				t.Fatalf("req.searchQuery = %q, want quoted pattern", req.searchQuery)
+			}
+			if !req.literalSearchPattern {
+				t.Fatal("expected literal search pattern metadata")
+			}
+			if !req.searchRouteIntent {
+				t.Fatal("expected search route intent")
+			}
+		})
+	}
+}
+
 func TestParseRequestArgs_KeepsAmbiguousQuotedPatternInstruction(t *testing.T) {
 	req, errResult := parseRequestArgs(map[string]string{
 		"query": `Search for patterns "func main" and "func init"`,
@@ -85,8 +140,11 @@ func TestParseRequestArgs_PreservesUnwrappedQuotedOrPatternAcrossNormalization(t
 	if req.query != "foo or bar" {
 		t.Fatalf("req.query = %q, want quoted pattern", req.query)
 	}
-	if !req.quotedPattern {
-		t.Fatal("expected quoted pattern metadata")
+	if !req.literalSearchPattern {
+		t.Fatal("expected literal search pattern metadata")
+	}
+	if !req.searchRouteIntent {
+		t.Fatal("expected search route intent")
 	}
 	if req.searchQuery != "foo or bar" {
 		t.Fatalf("req.searchQuery = %q, want quoted pattern", req.searchQuery)
@@ -99,8 +157,11 @@ func TestParseRequestArgs_PreservesUnwrappedQuotedOrPatternAcrossNormalization(t
 	if again.searchQuery != "foo or bar" {
 		t.Fatalf("renormalized searchQuery = %q, want exact quoted pattern", again.searchQuery)
 	}
-	if !again.quotedPattern {
-		t.Fatal("expected quoted pattern metadata to survive renormalization")
+	if !again.literalSearchPattern {
+		t.Fatal("expected literal search pattern metadata to survive renormalization")
+	}
+	if !again.searchRouteIntent {
+		t.Fatal("expected search route intent to survive renormalization")
 	}
 }
 
@@ -111,10 +172,18 @@ func TestGatherContext_SearchRouteNormalizesQuotedPatternInstruction(t *testing.
 		filepath.Join(root, "main.go"): "package main\n\nfunc main() {}\n",
 	})
 
-	result, _ := runGatherContext(t, newGatherContextExecCtx(root), map[string]string{
-		"query":       `Search for the exact pattern "func main" and report all file paths that contain it.`,
-		"file_filter": "go",
-	})
+	for _, query := range []string{
+		`Search for the exact pattern "func main" and report all file paths that contain it.`,
+		`pattern:"func main"`,
+		`pattern "func main"`,
+	} {
+		t.Run(query, func(t *testing.T) {
+			result, _ := runGatherContext(t, newGatherContextExecCtx(root), map[string]string{
+				"query":       query,
+				"file_filter": "go",
+			})
 
-	assertGatherContextContainsAll(t, result, "Route: Auto search", "main.go")
+			assertGatherContextContainsAll(t, result, "Route: Auto search", "main.go")
+		})
+	}
 }

@@ -21,8 +21,8 @@ func TestParseRequestArgs_NormalizesInlineSearchScope(t *testing.T) {
 	if req.searchPath != "docs" {
 		t.Fatalf("req.searchPath = %q, want inline docs scope", req.searchPath)
 	}
-	if !req.naturalSearchIntent {
-		t.Fatal("expected natural search intent")
+	if !req.searchRouteIntent {
+		t.Fatal("expected search route intent")
 	}
 }
 
@@ -100,8 +100,8 @@ func TestParseRequestArgs_StripsLeadingSearchIntentFromInlineScope(t *testing.T)
 			if req.searchPath != tt.wantPath {
 				t.Fatalf("req.searchPath = %q, want inline scope", req.searchPath)
 			}
-			if !req.naturalSearchIntent {
-				t.Fatal("expected natural search intent")
+			if !req.searchRouteIntent {
+				t.Fatal("expected search route intent")
 			}
 		})
 	}
@@ -123,8 +123,8 @@ func TestParseRequestArgs_DoesNotScopePlainPrepositionalSearch(t *testing.T) {
 	if req.searchPath != "" {
 		t.Fatalf("req.searchPath = %q, want no inline path scope", req.searchPath)
 	}
-	if !req.naturalSearchIntent {
-		t.Fatal("expected natural search intent")
+	if !req.searchRouteIntent {
+		t.Fatal("expected search route intent")
 	}
 }
 
@@ -154,8 +154,8 @@ func TestParseRequestArgs_NormalizesInlineScopeOnlyForPathLikeScope(t *testing.T
 			if req.searchPath != tt.wantPath {
 				t.Fatalf("req.searchPath = %q, want path-like inline scope", req.searchPath)
 			}
-			if !req.naturalSearchIntent {
-				t.Fatal("expected natural search intent")
+			if !req.searchRouteIntent {
+				t.Fatal("expected search route intent")
 			}
 		})
 	}
@@ -180,8 +180,8 @@ func TestParseRequestArgs_NormalizesAndInlineSearchScope(t *testing.T) {
 	if req.searchPath != "docs" {
 		t.Fatalf("req.searchPath = %q, want inline docs scope", req.searchPath)
 	}
-	if !req.naturalSearchIntent {
-		t.Fatal("expected natural search intent")
+	if !req.searchRouteIntent {
+		t.Fatal("expected search route intent")
 	}
 }
 
@@ -205,7 +205,7 @@ func TestParseRequestArgs_ExplicitPathWinsOverInlineSearchScope(t *testing.T) {
 	if req.searchPath != "pkg" {
 		t.Fatalf("req.searchPath = %q, want explicit search path", req.searchPath)
 	}
-	if !req.naturalSearchIntent {
-		t.Fatal("expected natural search intent")
+	if !req.searchRouteIntent {
+		t.Fatal("expected search route intent")
 	}
 }

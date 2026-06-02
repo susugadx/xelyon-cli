@@ -15,8 +15,8 @@ func TestParseRequestArgs_StripsLeadingSearchIntentFromUnscopedSearch(t *testing
 	if req.searchQuery != "foo,quux" {
 		t.Fatalf("req.searchQuery = %q, want normalized search query", req.searchQuery)
 	}
-	if !req.naturalSearchIntent {
-		t.Fatal("expected natural search intent")
+	if !req.searchRouteIntent {
+		t.Fatal("expected search route intent")
 	}
 }
 
@@ -64,8 +64,8 @@ func TestParseRequestArgs_PreservesQuotedOrPhrase(t *testing.T) {
 			if req.searchPath != tt.wantPath {
 				t.Fatalf("req.searchPath = %q, want %q", req.searchPath, tt.wantPath)
 			}
-			if !req.naturalSearchIntent {
-				t.Fatal("expected natural search intent")
+			if !req.searchRouteIntent {
+				t.Fatal("expected search route intent")
 			}
 		})
 	}
@@ -91,8 +91,8 @@ func TestParseRequestArgs_PreservesPunctuationDelimitedOrLiterals(t *testing.T) 
 			if req.searchQuery != query {
 				t.Fatalf("req.searchQuery = %q, want literal search query unchanged", req.searchQuery)
 			}
-			if req.naturalSearchIntent {
-				t.Fatal("punctuation-delimited literal should not be natural search intent")
+			if req.searchRouteIntent {
+				t.Fatal("punctuation-delimited literal should not be search route intent")
 			}
 		})
 	}
@@ -112,7 +112,7 @@ func TestParseRequestArgs_PreservesCommaSeparatedSearchPatternsBeforeOrNormaliza
 	if req.searchQuery != query {
 		t.Fatalf("req.searchQuery = %q, want comma-separated search patterns unchanged", req.searchQuery)
 	}
-	if !req.naturalSearchIntent {
-		t.Fatal("expected natural search intent from first comma-separated entry")
+	if !req.searchRouteIntent {
+		t.Fatal("expected search route intent from first comma-separated entry")
 	}
 }

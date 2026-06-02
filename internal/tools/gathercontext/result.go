@@ -34,10 +34,11 @@ type directPlan struct {
 }
 
 type searchPlan struct {
-	query        string
-	path         string
-	fileFilter   string
-	preferImpact bool
+	query          string
+	path           string
+	fileFilter     string
+	preferImpact   bool
+	literalPattern bool
 }
 
 type directExecution struct {

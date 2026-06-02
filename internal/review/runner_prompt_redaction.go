@@ -109,6 +109,11 @@ func (r reviewRunnerPromptRedactor) redactText(text string) string {
 	return redacted
 }
 
+// RedactText は prompt/model input 向けに text 内の path を表示用 path へ置き換える。
+func (r reviewRunnerPromptRedactor) RedactText(text string) string {
+	return r.redactText(text)
+}
+
 func (r reviewRunnerPromptRedactor) redactPath(path string) string {
 	if path == "" {
 		return ""
@@ -127,6 +132,11 @@ func (r reviewRunnerPromptRedactor) redactPath(path string) string {
 	return path
 }
 
+// RedactPath は prompt/model input 向けに path を安全な表示 path へ置き換える。
+func (r reviewRunnerPromptRedactor) RedactPath(path string) string {
+	return r.redactPath(path)
+}
+
 func (r reviewRunnerPromptRedactor) redactPaths(paths []string) []string {
 	if len(paths) == 0 {
 		return []string{}
@@ -137,6 +147,11 @@ func (r reviewRunnerPromptRedactor) redactPaths(paths []string) []string {
 		redacted = append(redacted, r.redactPath(path))
 	}
 	return redacted
+}
+
+// RedactPaths は prompt/model input 向けに path 配列を安全な表示 path 配列へ置き換える。
+func (r reviewRunnerPromptRedactor) RedactPaths(paths []string) []string {
+	return r.redactPaths(paths)
 }
 
 func (r reviewRunnerPromptRedactor) redactTexts(values []string) []string {
@@ -151,11 +166,16 @@ func (r reviewRunnerPromptRedactor) redactTexts(values []string) []string {
 	return redacted
 }
 
+// RedactTexts は prompt/model input 向けに text 配列内の path を表示用 path へ置き換える。
+func (r reviewRunnerPromptRedactor) RedactTexts(values []string) []string {
+	return r.redactTexts(values)
+}
+
 func (r *reviewRunnerPromptRedactor) addReplacement(path, display string) {
 	if display == "" {
 		return
 	}
-	for _, variant := range reviewRunnerPromptReplacementPathVariants(path) {
+	for _, variant := range reviewEvidencePathReplacementVariants(path) {
 		r.addReplacementVariant(variant, display)
 	}
 }
@@ -194,23 +214,6 @@ func normalizeReviewRunnerPromptPath(path string) string {
 		return ""
 	}
 	return filepath.Clean(filepath.FromSlash(path))
-}
-
-func reviewRunnerPromptReplacementPathVariants(path string) []string {
-	cleaned := normalizeReviewRunnerPromptPath(path)
-	if cleaned == "" {
-		return nil
-	}
-
-	slashPath := reviewRunnerPromptSlashPath(cleaned)
-	variants := []string{slashPath}
-	if isReviewEvidenceWindowsAbsolutePath(cleaned) || isReviewEvidenceWindowsAbsolutePath(slashPath) {
-		nativePath := strings.ReplaceAll(slashPath, "/", `\`)
-		if nativePath != slashPath {
-			variants = append(variants, nativePath)
-		}
-	}
-	return variants
 }
 
 func reviewRunnerPromptSlashPath(path string) string {

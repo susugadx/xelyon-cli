@@ -169,15 +169,6 @@ func writeTestFile(t *testing.T, path string, content string) {
 	}
 }
 
-func containsString(items []string, target string) bool {
-	for _, item := range items {
-		if filepath.ToSlash(item) == filepath.ToSlash(target) {
-			return true
-		}
-	}
-	return false
-}
-
 func createProbeTestScriptCommand(t *testing.T, binDir, name, scriptBody string) {
 	t.Helper()
 

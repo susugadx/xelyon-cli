@@ -1,6 +1,9 @@
 package review
 
-import reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
+import (
+	reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
+)
 
 const (
 	// ReviewReportSchemaVersionV1 は旧 `/review` report schema v1 の識別子。
@@ -55,8 +58,6 @@ const (
 	ReviewGroupSeverityInfo = reviewreport.ReviewGroupSeverityInfo
 )
 
-var reviewGroupSeverities = reviewreport.KnownReviewGroupSeverities()
-
 // ReviewReport は `/review` の最終 report schema を表す。
 type ReviewReport = reviewreport.ReviewReport
 
@@ -89,8 +90,6 @@ const (
 	ReviewEvidenceKindExternalDoc = reviewreport.ReviewEvidenceKindExternalDoc
 )
 
-var reviewEvidenceKinds = reviewreport.KnownReviewEvidenceKinds()
-
 // ReviewCommandIndex は command index の明示値を返す。
 func ReviewCommandIndex(i int) *int {
 	return reviewreport.ReviewCommandIndex(i)
@@ -116,8 +115,6 @@ const (
 	ReviewReportImpactSurfaceResidualRisk = reviewreport.ReviewReportImpactSurfaceResidualRisk
 )
 
-var reviewReportImpactSurfaceStatuses = reviewreport.KnownReviewReportImpactSurfaceStatuses()
-
 // ReviewReportCandidateRiskStatus は Pass2 での candidate risk 処理結果。
 type ReviewReportCandidateRiskStatus = reviewreport.ReviewReportCandidateRiskStatus
 
@@ -131,8 +128,6 @@ const (
 	// ReviewReportCandidateRiskResidualRisk は residual-risk candidate risk coverage を表す。
 	ReviewReportCandidateRiskResidualRisk = reviewreport.ReviewReportCandidateRiskResidualRisk
 )
-
-var reviewReportCandidateRiskStatuses = reviewreport.KnownReviewReportCandidateRiskStatuses()
 
 // ReviewReportImpactSurfaceCoverage は Pass1 impact surface 1 件の Pass2 処理結果。
 type ReviewReportImpactSurfaceCoverage = reviewreport.ReviewReportImpactSurfaceCoverage
@@ -180,10 +175,6 @@ func DecodeReviewReportJSON(data []byte) (ReviewReport, error) {
 	return reviewreport.DecodeReviewReportJSON(data)
 }
 
-func decodeReviewReportModelStrictJSON(data []byte) (ReviewReport, error) {
-	return reviewreport.DecodeReviewReportModelStrictJSON(data)
-}
-
 // ValidateReviewReport は schema v2 の review report 契約を検証する。
 func ValidateReviewReport(report ReviewReport) error {
 	return reviewreport.ValidateReviewReport(report)
@@ -191,7 +182,7 @@ func ValidateReviewReport(report ReviewReport) error {
 
 // ValidateReviewReportAgainstProbePlan は Pass2 report が Pass1 scope と trusted probe outcome を閉じていることを検証する。
 func ValidateReviewReportAgainstProbePlan(report ReviewReport, plan ReviewProbePlan, trustedProbeSummaries []ReviewProbeSummary) error {
-	return reviewreport.ValidateReviewReportAgainstPlanScope(report, reportPlanScopeFromProbePlan(plan), trustedProbeSummaries)
+	return reviewreport.ValidateReviewReportAgainstPlanScope(report, reviewanalysis.PlanScopeFromProbePlan(plan), trustedProbeSummaries)
 }
 
 // ComputeReviewReportComputedSummary は validated report と runner trusted probe summaries から
@@ -202,50 +193,10 @@ func ComputeReviewReportComputedSummary(report ReviewReport, probeSummaries []Re
 
 // DecodeReviewSaturationCheckJSON は strict JSON として saturation check を decode して検証する。
 func DecodeReviewSaturationCheckJSON(data []byte, plan ReviewProbePlan, finalizedReport ReviewReport) (ReviewSaturationCheck, error) {
-	return reviewreport.DecodeReviewSaturationCheckJSON(data, reportPlanScopeFromProbePlan(plan), finalizedReport)
+	return reviewreport.DecodeReviewSaturationCheckJSON(data, reviewanalysis.PlanScopeFromProbePlan(plan), finalizedReport)
 }
 
 // ValidateReviewSaturationCheck は runner 内部の final report saturation check 契約を検証する。
 func ValidateReviewSaturationCheck(check ReviewSaturationCheck, plan ReviewProbePlan, finalizedReport ReviewReport) error {
-	return reviewreport.ValidateReviewSaturationCheck(check, reportPlanScopeFromProbePlan(plan), finalizedReport)
-}
-
-func validateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID map[string]ReviewProbeSummary) error {
-	return reviewreport.ValidateEvidenceRef(field, ref, probeSummariesByID)
-}
-
-func isKnownReviewGroupSeverity(severity ReviewGroupSeverity) bool {
-	return reviewreport.IsKnownReviewGroupSeverity(severity)
-}
-
-func isKnownReviewEvidenceKind(kind string) bool {
-	return reviewreport.IsKnownReviewEvidenceKind(kind)
-}
-
-func reportPlanScopeFromProbePlan(plan ReviewProbePlan) reviewreport.PlanScope {
-	scope := reviewreport.PlanScope{
-		ImpactSurfaces: make([]reviewreport.PlanImpactSurface, 0, len(plan.ImpactSurfaces)),
-		CandidateRisks: make([]reviewreport.PlanCandidateRisk, 0, len(plan.CandidateRisks)),
-		Probes:         make([]reviewreport.PlanProbe, 0, len(plan.Probes)),
-	}
-	for _, surface := range plan.ImpactSurfaces {
-		scope.ImpactSurfaces = append(scope.ImpactSurfaces, reviewreport.PlanImpactSurface{
-			ID:     surface.ID,
-			Status: reviewreport.PlanImpactSurfaceStatus(surface.Status),
-		})
-	}
-	for _, risk := range plan.CandidateRisks {
-		scope.CandidateRisks = append(scope.CandidateRisks, reviewreport.PlanCandidateRisk{
-			ID:     risk.ID,
-			Status: reviewreport.PlanCandidateRiskStatus(risk.Status),
-		})
-	}
-	for _, probe := range plan.Probes {
-		scope.Probes = append(scope.Probes, reviewreport.PlanProbe{
-			ID:         probe.ID,
-			SurfaceIDs: append([]string(nil), probe.SurfaceIDs...),
-			RiskIDs:    append([]string(nil), probe.RiskIDs...),
-		})
-	}
-	return scope
+	return reviewreport.ValidateReviewSaturationCheck(check, reviewanalysis.PlanScopeFromProbePlan(plan), finalizedReport)
 }

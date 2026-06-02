@@ -58,6 +58,7 @@ type Match struct {
 // SearchOptions はコード検索のオプション
 type SearchOptions struct {
 	Pattern          string
+	PatternInput     PatternInput
 	Intent           string
 	Mode             string
 	Path             string
@@ -109,6 +110,7 @@ func ExecuteSearchCodeWithConfig(cfg *config.Config, cache tools.ToolCacheInterf
 }
 
 func prepareSearchOptionsForRuntime(cfg *config.Config, opts SearchOptions) (SearchOptions, string) {
+	opts = applyPatternInput(opts)
 	if opts.Pattern == "" {
 		return opts, "Error: pattern is required"
 	}

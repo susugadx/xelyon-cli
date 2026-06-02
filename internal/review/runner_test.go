@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
 )
 
 func TestReviewRunnerRunHappyPath(t *testing.T) {
@@ -1203,10 +1205,21 @@ func mustMarshalReviewReportForRunnerTest(t *testing.T, report ReviewReport) []b
 func newRedactedRunnerProbeSummariesForTest(t *testing.T, bundle ReviewEvidenceBundle, results []ReviewProbeResult) []ReviewProbeSummary {
 	t.Helper()
 
-	return redactReviewProbeSummaries(
-		BuildReviewProbeSummaries(results),
-		newReviewRunnerPromptRedactor(bundle, results),
-	)
+	summaries := BuildReviewProbeSummaries(results)
+	probeIDs := make([]string, 0, len(summaries))
+	for _, summary := range summaries {
+		probeIDs = append(probeIDs, summary.ProbeID)
+	}
+	finalized, err := reviewmodeloutput.FinalizeReport(reviewmodeloutput.ReportFinalizationInput{
+		Report:                newRunnerBlockedReportForTest(nil),
+		Plan:                  newRunnerProbePlanForTest(probeIDs...),
+		TrustedProbeSummaries: summaries,
+		Redactor:              newReviewRunnerPromptRedactor(bundle, results),
+	})
+	if err != nil {
+		t.Fatalf("FinalizeReport() error = %v, want nil", err)
+	}
+	return finalized.ProbeSummaries
 }
 
 func assertReviewReportDoesNotContainForRunnerTest(t *testing.T, report ReviewReport, leakedValues ...string) {

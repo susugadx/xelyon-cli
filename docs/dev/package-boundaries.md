@@ -53,3 +53,80 @@ Phase 3-A 後の `/review` report schema と artifact 保存境界は次の owne
 - `internal/review/artifact`: review run artifact writer、artifact directory / name / repo-local path validation、buffered writer の owner。runner の保存制御、warning 出力、redaction 適用タイミングは `internal/review` に残す。
 
 `internal/review/report/package_boundaries_test.go` と `internal/review/domain/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。`internal/review/artifact/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、Bubble Tea、Lip Gloss への import を禁止する。evidence path / probe path policy は Phase 3-A では動かさず、repo root 内判定の owner を決める後続工程で扱う。
+
+## Phase 3-B: review probe / path policy boundary
+
+Phase 3-B 後の probe plan / runtime と repo-root path policy は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、runner orchestration、model prompt、evidence cross validation、progress / artifact / redaction、report / saturation flow の owner。既存の probe plan / runtime public-ish 名は alias / wrapper として維持し、agent / cmd 側の import path を変えない。
+- `internal/review/probe`: probe plan DTO / strict decode / basic validation / request conversion、probe runtime request/result DTO、`ProbeRunner`、host_readonly / scratch_only / repo_sandbox executor、command allowlist、sandbox policy、generated file / worktree snapshot / Go toolchain helper、review Git args/env policy、probe result mutation outcome helper の owner。`internal/review/domain` と `internal/review/report` には依存してよいが、親 `internal/review` には依存しない。
+- `internal/review/pathpolicy`: repo-root containment の lexical / symlink helper owner。evidence path schema や sandbox-specific error contract は持たず、caller がそれぞれの error message / `errors.Is` contract に変換する。
+- `internal/review/report`: probe result から report schema への assembly は持たない。runner facade が `ReviewProbeResult` を `ReviewProbeSummary` に変換し、report package は report schema validation に集中する。
+
+`internal/review/probe/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、Bubble Tea、Lip Gloss への import を禁止する。`internal/review/pathpolicy/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。probe 実行順、mutation 後 skip、timeout / failure / blocked / mutation outcome、allowed / denied command、report / evidence JSON schema は Phase 3-B では変更しない。
+
+## Phase 3-C: review analysis / external doc boundary
+
+Phase 3-C 後の Pass1 evidence analysis と external_doc evidence helper は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、runner orchestration、evidence collection、web search collector、model prompt / repair、progress / artifact / redaction、report / saturation flow の owner。既存の `ReviewExternalDoc*`、`ValidateReviewProbePlanAgainstEvidence`、report / saturation validation entrypoint は alias / wrapper として維持し、agent / cmd 側の import path を変えない。
+- `internal/review/analysis`: Pass1 probe plan と evidence input からの deterministic analysis owner。material path / inventory category / untracked / generic impact / truncation / no-probe related evidence coverage、review pressure signals、Pass1 plan から report `PlanScope` への変換、external_doc evidence ref と fetched snippet の照合を扱う。親 `internal/review` は import せず、親 facade が `ReviewEvidenceModelInput` / `ReviewEvidenceBundle` から analysis 用 DTO へ変換する。
+- `internal/review/externaldoc`: external documentation source DTO、source credibility classification、focus term sanitation、snippet construction、bounded HTTPS fetcher、external-document search subject helper の owner。Web search provider 呼び出しや bundle 依存の query collection orchestration は持たず、`internal/review` の collector が caller として扱う。
+- `internal/review/report`: report / saturation schema validation の owner。Pass1 probe plan 全体には依存せず、`internal/review/analysis` が作る `PlanScope` を受け取る。
+
+`internal/review/analysis/package_boundaries_test.go` と `internal/review/externaldoc/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。report schema、evidence schema、probe behavior、web search query quality、external_doc official / third_party / unknown 判定基準は Phase 3-C では変更しない。
+
+## Phase 3-D: review externaldoc / web search query boundary
+
+Phase 3-D 後の external_doc と Web 検索 query 計画は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、collector / runner orchestration、Web 検索 provider 実行境界、external doc fetcher 呼び出し、max query / max result 制御、error / truncated / inconclusive 集約、artifact / prompt / progress の owner。`ReviewEvidenceBundle` から `internal/review/externaldoc.SearchQueryPlanningInput` への変換もここに残す。Phase 3-C の「web search collector は親 package」方針は、provider 実行と収集制御が親 package の責務である、という意味で維持する。
+- `internal/review/externaldoc`: external_doc / external source / source credibility、Web search evidence DTO、`SearchQueryPlanningInput` / `SearchQueryCandidate`、`BuildSearchQueryCandidates`、`BuildFetchRequest` の owner。focus token selection、generic token concrete 判定、query dedupe、`official documentation` query 組み立て、candidate cap はここに閉じる。`ReviewEvidenceBundle`、provider 実行、artifact / prompt / progress には依存しない。
+- `internal/review/analysis`: Pass1 evidence analysis、pressure signal、report / probe の external_doc ref cross validation の owner。Web search evidence と query DTO は `internal/review/externaldoc` の型を analysis 用 DTO として共有し、親 facade が runtime evidence から analysis input へコピーする。
+
+Phase 3-D では report schema、evidence JSON、probe behavior、external_doc official / third_party / unknown 判定基準、Web 検索 query 生成結果は変更しない。`internal/review/externaldoc/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import 禁止を維持する。
+
+## Phase 3-E: review evidence boundary
+
+Phase 3-E 後の review evidence 収集と render は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、facade、runner orchestration、model prompt / repair、progress / artifact / redaction、report / saturation flow の owner。既存の `ReviewEvidence*`、`ReviewEvidenceBuilder`、`ReviewEvidenceCommandRunner`、`ReviewWebSearchEvidenceCollector*` などの public-ish 名は alias / wrapper として維持し、agent / cmd 側の import path を変えない。
+- `internal/review/evidence`: current changes evidence bundle、git / file / rule / untracked / related context collection、generic impact expansion、evidence JSON / Markdown render、model input DTO、repo-root path display / redaction helper、analysis DTO への変換、review pressure signals、外部 Web 検索 evidence collector の owner。`internal/review/domain`、`internal/review/probe`、`internal/review/analysis`、`internal/review/externaldoc` には依存してよいが、親 `internal/review` には依存しない。
+- `internal/review/probe`: probe 実行後の mutation outcome canonicalization、mutation 後の skipped probe result 生成、probe result から report 用 `ReviewProbeSummary` への変換の owner。
+- `internal/review/report`: trusted probe summary の copy / canonicalization、blocked outcome に基づく report verification status normalization、report schema validation の owner。runner は redaction 適用、external_doc ref cross validation 呼び出し、error prefix 付与に集中する。
+- `internal/review/externaldoc`: Phase 3-D の Web 検索 query 計画と external_doc DTO / fetch request owner を維持する。Phase 3-D で親 package に残していた Web 検索 provider 実行と収集制御は、Phase 3-E から `internal/review/evidence` の collector owner へ移る。
+
+Phase 3-E では report schema、evidence markdown / JSON、probe behavior、external_doc behavior、runner 実行順は変更しない。`internal/review/evidence/package_boundaries_test.go` は、`internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。
+
+## Phase 3-F: review model input assembly boundary
+
+Phase 3-F 後の review model input assembly は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、facade、runner orchestration、evidence 収集、probe 実行順、model phase 選択、`ReviewModelRequest` 送信、strict decode / validation / finalize、external_doc ref cross validation、artifact / progress、path replacement 発見と final report/probe summary redaction の owner。既存の `ReviewRequest`、`ReviewRunner`、`ReviewModel` はここに残し、agent / cmd 側の import path を変えない。
+- `internal/review/modelinput`: probe plan / report / saturation check / report revision の prompt text、JSON contract text、repair prompt、probe result prompt DTO、output budget limiter、prompt section / fence / JSON formatter の deterministic assembly owner。`internal/review/domain`、`internal/review/probe`、`internal/review/report` の型・定数を直接受け取り、親 `internal/review`、evidence collection、artifact、provider runtime、UI には依存しない。
+- `internal/review/evidence`: evidence bundle と markdown render の owner を維持する。`modelinput` には rendered markdown string として渡し、evidence package の型を prompt assembly に漏らさない。
+- `internal/review/report` / `internal/review/probe`: schema DTO、probe result DTO、trusted probe summary DTO の owner を維持する。`modelinput` はこれらを入力として prompt DTO へ写像するだけで、decode / validation / runtime 実行は持たない。
+
+Phase 3-F では prompt 文面、section order、JSON schema / validation、evidence markdown、probe behavior、external_doc behavior、runner の model phase / retry 制御は変更しない。`internal/review/modelinput/package_boundaries_test.go` は、親 `internal/review`、`internal/review/evidence`、artifact、agent / TUI / provider runtime、Bubble Tea、Lip Gloss への import を禁止する。
+
+## Phase 3-G: review model output boundary
+
+Phase 3-G 後の review model output decode / finalization は次の owner に分ける。
+
+- `internal/review`: `/review` の外部入口、facade、runner orchestration、evidence 収集、probe 実行順、model phase 選択、`ReviewModelRequest` 送信、repair / revision / saturation の順序制御、artifact / progress、path replacement 発見の owner。既存の `ReviewRequest`、`ReviewRunner`、`ReviewModel` はここに残し、agent / cmd 側の import path を変えない。
+- `internal/review/modeloutput`: LLM raw output の strict decode、trusted probe summary の redacted copy 注入、report / saturation check の validation、external_doc ref cross validation、computed summary 注入の deterministic finalization owner。runner からは fetched external docs だけを受け取り、`ReviewEvidenceBundle`、artifact、modelinput、provider call には依存しない。
+- `internal/review/modelinput`: Phase 3-F の prompt / repair prompt assembly owner を維持する。decode / validation / finalization は持たない。
+- `internal/review/report` / `internal/review/analysis` / `internal/review/externaldoc` / `internal/review/probe`: schema DTO、PlanScope 変換、external_doc ref 照合、probe plan DTO の owner を維持する。`modeloutput` はこれらを直接使い、親 `internal/review` facade には依存しない。
+
+Phase 3-G では prompt 文面、report / saturation schema、validation rule、trusted probe outcome normalization、saturation 判定、repair / retry 回数と順序、provider call は変更しない。`internal/review/modeloutput/package_boundaries_test.go` は、親 `internal/review`、`internal/review/evidence`、artifact、modelinput、agent / TUI / provider runtime、Bubble Tea、Lip Gloss への import を禁止する。
+
+## Phase 4-C: Post-Pass1 external doc query planning
+
+Phase 4-C 後の `/review` Web 検索 evidence は次の owner に分ける。
+
+- `internal/review/externaldoc`: query intent、expected source type、confidence、Pre-Pass1 / Post-Pass1 両対応の `SearchQueryPlanningInput`、query candidate validation、dedupe、generic query 抑制の owner。`ReviewProbePlan`、provider transport、runner、modelinput は import しない。query intent は検索意図であり、source credibility / official confirmation の source of truth ではない。
+- `internal/review/evidence`: `ReviewEvidenceBundle` と Pass1 `ReviewProbePlan` から externaldoc 用 DTO へ変換し、Web 検索 provider 実行、fetch、Pre/Post merge、`max_queries` 合計 budget、doc id 採番、error / truncated / inconclusive 集約を扱う owner。追加検索は既存 `WebSearchEvidence` へ append merge し、query 順序は Pre-Pass1 -> Post-Pass1 を維持する。
+- `internal/review`: Pass1 probe plan 生成後、report / saturation 前に optional な Post-Pass1 Web 検索を呼び出し、merged evidence markdown を report 系 prompt へ渡す orchestration owner。Pass1 probe plan prompt は初期 evidence のままにする。
+- `internal/review/modelinput`: query intent metadata を official 判定として扱わず、`source_credibility` と `external_support` summary を確認する prompt guardrail の owner。
+
+Phase 4-C では config schema、Web 検索 provider transport、report JSON schema、source credibility / support level の判定契約は変更しない。

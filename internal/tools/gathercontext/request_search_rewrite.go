@@ -1,11 +1,11 @@
 package gathercontext
 
 type searchRouteRewritePlan struct {
-	apply               bool
-	query               string
-	path                string
-	useInlinePath       bool
-	naturalSearchIntent bool
+	apply             bool
+	query             string
+	path              string
+	useInlinePath     bool
+	searchRouteIntent bool
 }
 
 func normalizeSearchRouteFields(req request) request {
@@ -14,8 +14,8 @@ func normalizeSearchRouteFields(req request) request {
 		return req
 	}
 	req.searchQuery = plan.query
-	if plan.naturalSearchIntent {
-		req.naturalSearchIntent = true
+	if plan.searchRouteIntent {
+		req.searchRouteIntent = true
 	}
 	if plan.useInlinePath && req.path == "" {
 		req.searchPath = plan.path
@@ -33,11 +33,11 @@ func planSearchRouteRewrite(req request) searchRouteRewritePlan {
 	// either a direct batch or an explicit multi-pattern search string.
 	if scope, ok := parseTrailingInlineSearchScope(req.query); ok {
 		return searchRouteRewritePlan{
-			apply:               true,
-			query:               normalizeSearchPatternList(stripLeadingSearchIntent(scope.query)),
-			path:                scope.path,
-			useInlinePath:       true,
-			naturalSearchIntent: true,
+			apply:             true,
+			query:             normalizeSearchPatternList(stripLeadingSearchIntent(scope.query)),
+			path:              scope.path,
+			useInlinePath:     true,
+			searchRouteIntent: true,
 		}
 	}
 

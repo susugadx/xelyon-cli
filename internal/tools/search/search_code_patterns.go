@@ -61,7 +61,7 @@ func appendPatternIfMissing(patterns []string, pattern string) []string {
 }
 
 func effectiveSearchPatterns(opts SearchOptions) []string {
-	patterns := splitPatterns(opts.Pattern)
+	patterns := effectiveSearchPatternList(opts)
 	if !shouldExpandImpactSearchPatterns(opts, patterns) {
 		return patterns
 	}
@@ -105,7 +105,9 @@ func expandImpactPatterns(pattern string, opts SearchOptions) []string {
 }
 
 func shouldExecuteImpactSearch(opts SearchOptions) bool {
-	return strings.EqualFold(strings.TrimSpace(opts.Intent), "impact") && len(splitPatterns(opts.Pattern)) == 1
+	return !opts.PatternInput.isLiteral() &&
+		strings.EqualFold(strings.TrimSpace(opts.Intent), "impact") &&
+		len(effectiveSearchPatternList(opts)) == 1
 }
 
 func executeImpactSearch(cache tools.ToolCacheInterface, opts SearchOptions) string {
