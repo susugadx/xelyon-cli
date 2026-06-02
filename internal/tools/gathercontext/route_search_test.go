@@ -277,6 +277,32 @@ func TestBuildRoutePlan_PreservesQuotedOrPattern(t *testing.T) {
 	}
 }
 
+func TestBuildRoutePlan_PatternFieldSuppressesDirectRouteForFilenameLikePattern(t *testing.T) {
+	root := t.TempDir()
+	withGatherContextWorkingDir(t, root)
+	writeGatherContextFiles(t, map[string]string{
+		filepath.Join(root, "README.md"): "# README.md\n",
+	})
+
+	req, errResult := parseRequestArgs(map[string]string{
+		"query": `pattern:"README.md"`,
+	})
+	if errResult != "" {
+		t.Fatalf("unexpected parse error: %q", errResult)
+	}
+
+	plan := buildRoutePlan(newRoutePlanExecCtx(root), req)
+	if plan.kind != routeSearch {
+		t.Fatalf("plan.kind = %q, want %q", plan.kind, routeSearch)
+	}
+	if plan.search.query != "README.md" {
+		t.Fatalf("plan.search.query = %q, want literal pattern", plan.search.query)
+	}
+	if plan.search.preferImpact {
+		t.Fatal("literal pattern field should not prefer impact search")
+	}
+}
+
 func TestBuildRoutePlan_PreservesPunctuationDelimitedOrLiteral(t *testing.T) {
 	for _, query := range []string{"error-or-warning", "foo/or/bar"} {
 		t.Run(query, func(t *testing.T) {

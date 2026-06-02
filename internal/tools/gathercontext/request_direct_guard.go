@@ -13,7 +13,7 @@ type requestQueryShape struct {
 }
 
 func classifyRequestQueryShape(req request) requestQueryShape {
-	if req.quotedPattern {
+	if req.literalSearchPattern {
 		return requestQueryShape{
 			rewriteProtected: true,
 			singleEntry:      true,

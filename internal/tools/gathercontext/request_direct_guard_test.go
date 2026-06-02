@@ -21,8 +21,8 @@ func TestParseRequestArgs_PreservesDirectBatchContainingOrFilename(t *testing.T)
 			if req.searchQuery != query {
 				t.Fatalf("req.searchQuery = %q, want direct batch search fallback unchanged", req.searchQuery)
 			}
-			if req.naturalSearchIntent {
-				t.Fatal("direct batch should not be natural search intent")
+			if req.searchRouteIntent {
+				t.Fatal("direct batch should not be search route intent")
 			}
 		})
 	}
@@ -46,8 +46,8 @@ func TestParseRequestArgs_PreservesExplicitPathContainingInlineScopeWords(t *tes
 			if req.path != "" {
 				t.Fatalf("req.path = %q, want empty path", req.path)
 			}
-			if req.naturalSearchIntent {
-				t.Fatal("explicit path should not be natural search intent")
+			if req.searchRouteIntent {
+				t.Fatal("explicit path should not be search route intent")
 			}
 		})
 	}
@@ -69,8 +69,8 @@ func TestParseRequestArgs_PreservesDirectoryContainingWeakScopeWords(t *testing.
 	if req.path != "" {
 		t.Fatalf("req.path = %q, want empty path", req.path)
 	}
-	if req.naturalSearchIntent {
-		t.Fatal("directory query should not be natural search intent")
+	if req.searchRouteIntent {
+		t.Fatal("directory query should not be search route intent")
 	}
 
 	underReq, errResult := parseRequestArgs(map[string]string{
@@ -88,8 +88,8 @@ func TestParseRequestArgs_PreservesDirectoryContainingWeakScopeWords(t *testing.
 	if underReq.path != "" {
 		t.Fatalf("under req.path = %q, want empty path", underReq.path)
 	}
-	if underReq.naturalSearchIntent {
-		t.Fatal("under directory query should not be natural search intent")
+	if underReq.searchRouteIntent {
+		t.Fatal("under directory query should not be search route intent")
 	}
 
 	orReq, errResult := parseRequestArgs(map[string]string{
@@ -107,8 +107,8 @@ func TestParseRequestArgs_PreservesDirectoryContainingWeakScopeWords(t *testing.
 	if orReq.path != "" {
 		t.Fatalf("or req.path = %q, want empty path", orReq.path)
 	}
-	if orReq.naturalSearchIntent {
-		t.Fatal("or directory query should not be natural search intent")
+	if orReq.searchRouteIntent {
+		t.Fatal("or directory query should not be search route intent")
 	}
 
 	punctuationReq, errResult := parseRequestArgs(map[string]string{
@@ -126,7 +126,7 @@ func TestParseRequestArgs_PreservesDirectoryContainingWeakScopeWords(t *testing.
 	if punctuationReq.path != "" {
 		t.Fatalf("punctuation req.path = %q, want empty path", punctuationReq.path)
 	}
-	if punctuationReq.naturalSearchIntent {
-		t.Fatal("punctuation directory query should not be natural search intent")
+	if punctuationReq.searchRouteIntent {
+		t.Fatal("punctuation directory query should not be search route intent")
 	}
 }

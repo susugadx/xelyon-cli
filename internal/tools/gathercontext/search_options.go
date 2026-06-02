@@ -24,6 +24,9 @@ func buildSearchOptions(execCtx tools.ExecutionContext, plan searchPlan) search.
 	if plan.preferImpact {
 		opts.Intent = "impact"
 	}
+	if plan.literalPattern {
+		opts.PatternInput = search.NewLiteralPatternInput(plan.query)
+	}
 
 	opts.FileType, opts.FilePattern = filefilter.Parse(plan.fileFilter)
 	attachSearchLSPAdapter(&opts, execCtx)

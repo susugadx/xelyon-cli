@@ -8,13 +8,13 @@ import (
 )
 
 type request struct {
-	query               string
-	path                string
-	fileFilter          string
-	searchQuery         string
-	searchPath          string
-	naturalSearchIntent bool
-	quotedPattern       bool
+	query                string
+	path                 string
+	fileFilter           string
+	searchQuery          string
+	searchPath           string
+	searchRouteIntent    bool
+	literalSearchPattern bool
 }
 
 func normalizeRequest(req request) request {
@@ -23,13 +23,13 @@ func normalizeRequest(req request) request {
 	path := strings.TrimSpace(req.path)
 
 	normalized := request{
-		query:               normalizedQuery.text,
-		path:                path,
-		fileFilter:          strings.TrimSpace(req.fileFilter),
-		searchQuery:         strings.TrimSpace(req.searchQuery),
-		searchPath:          strings.TrimSpace(req.searchPath),
-		naturalSearchIntent: req.naturalSearchIntent || filequery.LooksLikeNaturalLanguageSearchIntent(rawQuery),
-		quotedPattern:       req.quotedPattern || normalizedQuery.quoted,
+		query:                normalizedQuery.text,
+		path:                 path,
+		fileFilter:           strings.TrimSpace(req.fileFilter),
+		searchQuery:          strings.TrimSpace(req.searchQuery),
+		searchPath:           strings.TrimSpace(req.searchPath),
+		searchRouteIntent:    req.searchRouteIntent || filequery.LooksLikeNaturalLanguageSearchIntent(rawQuery) || normalizedQuery.searchRouteIntent,
+		literalSearchPattern: req.literalSearchPattern || normalizedQuery.literalPattern,
 	}
 	if normalized.searchQuery == "" {
 		normalized.searchQuery = normalized.query
@@ -41,15 +41,44 @@ func normalizeRequest(req request) request {
 }
 
 type normalizedQueryText struct {
-	text   string
-	quoted bool
+	text              string
+	literalPattern    bool
+	searchRouteIntent bool
 }
 
 func normalizeQueryTextWithMetadata(query string) normalizedQueryText {
+	if pattern, ok := extractQuotedPatternField(query); ok {
+		return normalizedQueryText{text: pattern, literalPattern: true, searchRouteIntent: true}
+	}
 	if pattern, ok := extractQuotedSearchPattern(query); ok {
-		return normalizedQueryText{text: pattern, quoted: true}
+		return normalizedQueryText{text: pattern, literalPattern: true, searchRouteIntent: true}
 	}
 	return normalizedQueryText{text: query}
+}
+
+func extractQuotedPatternField(query string) (string, bool) {
+	query = strings.TrimSpace(query)
+	lower := strings.ToLower(query)
+	if !strings.HasPrefix(lower, "pattern") || !isQueryWordBoundary(lower, len("pattern")) {
+		return "", false
+	}
+
+	rest := strings.TrimSpace(query[len("pattern"):])
+	if rest == "" {
+		return "", false
+	}
+	if rest[0] == ':' || rest[0] == '=' {
+		rest = strings.TrimSpace(rest[1:])
+	}
+	if rest == "" || (rest[0] != '"' && rest[0] != '\'') {
+		return "", false
+	}
+
+	pattern, end, ok := firstQuotedSegment(rest)
+	if !ok || strings.TrimSpace(rest[end:]) != "" {
+		return "", false
+	}
+	return pattern, true
 }
 
 func extractQuotedSearchPattern(query string) (string, bool) {
@@ -134,8 +163,15 @@ func parseRequestArgs(args map[string]string) (request, string) {
 	if req.query == "" {
 		return request{}, "Error: query is required"
 	}
-	if !search.HasEffectivePatternList(req.searchQuery) {
+	if !hasEffectiveSearchPattern(req) {
 		return request{}, "Error: query must include at least one non-empty term"
 	}
 	return req, ""
+}
+
+func hasEffectiveSearchPattern(req request) bool {
+	if req.literalSearchPattern {
+		return strings.TrimSpace(req.searchQuery) != ""
+	}
+	return search.HasEffectivePatternList(req.searchQuery)
 }
