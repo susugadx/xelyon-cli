@@ -16,7 +16,7 @@ func auditExternalEvidenceCoverage(input CoverageAuditInput) []CoverageIssue {
 }
 
 func auditUnsupportedExternalConfirmation(input CoverageAuditInput) []CoverageIssue {
-	if !input.ExternalSupport.weakOrNoOfficialConfirmation() || !reportClaimsConfirmedExternalSpec(input.Report) {
+	if input.ExternalSupport.hasConfirmedOfficialSupport() || !reportClaimsConfirmedExternalSpec(input.Report) {
 		return nil
 	}
 
@@ -42,27 +42,45 @@ func auditUnreflectedExternalEvidence(input CoverageAuditInput) []CoverageIssue 
 		return nil
 	}
 
-	surfaceIDs, riskIDs := unreflectedExternalEvidenceScopeIDs(input.Report.ScopeCoverage, requirements)
-	if len(surfaceIDs)+len(riskIDs) == 0 {
-		return nil
+	unreflected := unreflectedExternalEvidenceScopeIDs(input.Report.ScopeCoverage, requirements, input.ExternalSupport)
+	var issues []CoverageIssue
+	if len(unreflected.highSurfaceIDs)+len(unreflected.highRiskIDs) > 0 {
+		issues = append(issues, newUnreflectedExternalEvidenceIssue(
+			CoverageIssueSeverityHigh,
+			unreflected.highSurfaceIDs,
+			unreflected.highRiskIDs,
+			delta,
+		))
 	}
-	return []CoverageIssue{{
+	if len(unreflected.mediumSurfaceIDs)+len(unreflected.mediumRiskIDs) > 0 {
+		issues = append(issues, newUnreflectedExternalEvidenceIssue(
+			CoverageIssueSeverityMedium,
+			unreflected.mediumSurfaceIDs,
+			unreflected.mediumRiskIDs,
+			delta,
+		))
+	}
+	return issues
+}
+
+func newUnreflectedExternalEvidenceIssue(severity CoverageIssueSeverity, surfaceIDs, riskIDs []string, delta CoverageExternalEvidenceDelta) CoverageIssue {
+	return CoverageIssue{
 		Kind:                CoverageIssueKindUnreflectedExternalEvidence,
-		Severity:            CoverageIssueSeverityMedium,
+		Severity:            severity,
 		SurfaceIDs:          surfaceIDs,
 		RiskIDs:             riskIDs,
 		Summary:             unreflectedExternalEvidenceSummary(delta),
 		RevisionInstruction: "Revisit the specific Post-Pass1 external evidence delta and reflect its added docs, failed/no-result queries, or inconclusive support as a finding, a no-finding rationale in scope_coverage, residual/unverified status, or blocked status. Weak external evidence is revision feedback only and must not be auto-promoted into a finding.",
-	}}
+	}
 }
 
-func (support CoverageExternalSupport) weakOrNoOfficialConfirmation() bool {
+func (support CoverageExternalSupport) hasConfirmedOfficialSupport() bool {
 	if !support.OfficialConfirmation {
-		return true
+		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(support.Level)) {
-	case "", "none", "weak", "partial":
-		return true
+	case "adequate", "strong":
+		return support.OfficialCandidateCitationCapableDocs > 0
 	default:
 		return false
 	}
@@ -145,29 +163,49 @@ func buildCoverageExternalReflectionRequirements(delta CoverageExternalEvidenceD
 	return requirements
 }
 
-func unreflectedExternalEvidenceScopeIDs(coverage *ReviewReportScopeCoverage, requirements []coverageExternalReflectionRequirement) ([]string, []string) {
+type coverageExternalEvidenceUnreflectedScopeIDs struct {
+	highSurfaceIDs   []string
+	highRiskIDs      []string
+	mediumSurfaceIDs []string
+	mediumRiskIDs    []string
+}
+
+func unreflectedExternalEvidenceScopeIDs(coverage *ReviewReportScopeCoverage, requirements []coverageExternalReflectionRequirement, support CoverageExternalSupport) coverageExternalEvidenceUnreflectedScopeIDs {
 	if coverage == nil {
-		return nil, nil
+		return coverageExternalEvidenceUnreflectedScopeIDs{}
 	}
-	var surfaceIDs []string
+	var result coverageExternalEvidenceUnreflectedScopeIDs
 	for _, surface := range coverage.ReviewedImpactSurfaces {
 		if surface.Status != ReviewReportImpactSurfaceChecked {
 			continue
 		}
 		if !scopeCoverageItemReflectsExternalEvidence(surface.Summary, surface.EvidenceRefs, requirements) {
-			surfaceIDs = append(surfaceIDs, surface.SurfaceID)
+			if scopeCoverageRepositoryEvidenceRefsCoverExternalDocNonCitation(surface.EvidenceRefs, requirements) {
+				continue
+			}
+			if support.hasConfirmedOfficialSupport() && !scopeCoverageHasRepositoryEvidenceRef(surface.EvidenceRefs) {
+				result.highSurfaceIDs = append(result.highSurfaceIDs, surface.SurfaceID)
+				continue
+			}
+			result.mediumSurfaceIDs = append(result.mediumSurfaceIDs, surface.SurfaceID)
 		}
 	}
-	var riskIDs []string
 	for _, risk := range coverage.ReviewedCandidateRisks {
 		if risk.Status != ReviewReportCandidateRiskDismissed {
 			continue
 		}
 		if !scopeCoverageItemReflectsExternalEvidence(risk.Summary, risk.EvidenceRefs, requirements) {
-			riskIDs = append(riskIDs, risk.RiskID)
+			if scopeCoverageRepositoryEvidenceRefsCoverExternalDocNonCitation(risk.EvidenceRefs, requirements) {
+				continue
+			}
+			if support.hasConfirmedOfficialSupport() && !scopeCoverageHasRepositoryEvidenceRef(risk.EvidenceRefs) {
+				result.highRiskIDs = append(result.highRiskIDs, risk.RiskID)
+				continue
+			}
+			result.mediumRiskIDs = append(result.mediumRiskIDs, risk.RiskID)
 		}
 	}
-	return surfaceIDs, riskIDs
+	return result
 }
 
 func scopeCoverageItemReflectsExternalEvidence(summary string, refs []ReviewEvidenceRef, requirements []coverageExternalReflectionRequirement) bool {
@@ -197,6 +235,35 @@ func evidenceRefsReflectExternalDocRequirement(refs []ReviewEvidenceRef, require
 			continue
 		}
 		if stringSliceContains(requirement.docIDs, strings.TrimSpace(ref.DocID)) {
+			return true
+		}
+	}
+	return false
+}
+
+func scopeCoverageRepositoryEvidenceRefsCoverExternalDocNonCitation(refs []ReviewEvidenceRef, requirements []coverageExternalReflectionRequirement) bool {
+	if !coverageExternalRequirementsOnlyAddedDocs(requirements) {
+		return false
+	}
+	return scopeCoverageHasRepositoryEvidenceRef(refs)
+}
+
+func coverageExternalRequirementsOnlyAddedDocs(requirements []coverageExternalReflectionRequirement) bool {
+	if len(requirements) == 0 {
+		return false
+	}
+	for _, requirement := range requirements {
+		if requirement.kind != coverageExternalReflectionRequirementAddedDocs {
+			return false
+		}
+	}
+	return true
+}
+
+func scopeCoverageHasRepositoryEvidenceRef(refs []ReviewEvidenceRef) bool {
+	for _, ref := range refs {
+		switch ref.Kind {
+		case ReviewEvidenceKindFile, ReviewEvidenceKindDiff, ReviewEvidenceKindGitStatus, ReviewEvidenceKindRuleFile, ReviewEvidenceKindProbe, ReviewEvidenceKindProbeCommand:
 			return true
 		}
 	}

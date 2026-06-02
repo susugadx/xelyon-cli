@@ -31,6 +31,8 @@ const (
 type PlanCandidateRisk struct {
 	ID     string
 	Status PlanCandidateRiskStatus
+	// Severity は deterministic coverage audit の優先度判定だけで使う内部 metadata。
+	Severity ReviewGroupSeverity
 }
 
 // PlanCandidateRiskStatus は report validation が参照する Pass1 candidate risk status。

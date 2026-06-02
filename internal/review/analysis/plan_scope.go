@@ -20,8 +20,9 @@ func PlanScopeFromProbePlan(plan reviewprobe.ReviewProbePlan) reviewreport.PlanS
 	}
 	for _, risk := range plan.CandidateRisks {
 		scope.CandidateRisks = append(scope.CandidateRisks, reviewreport.PlanCandidateRisk{
-			ID:     risk.ID,
-			Status: reviewreport.PlanCandidateRiskStatus(risk.Status),
+			ID:       risk.ID,
+			Status:   reviewreport.PlanCandidateRiskStatus(risk.Status),
+			Severity: reviewreport.ReviewGroupSeverity(risk.Severity),
 		})
 	}
 	for _, probe := range plan.Probes {

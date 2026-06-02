@@ -26,6 +26,24 @@ func TestAuditReviewReportCoverageReportsIgnoredNonPassingLinkedProbe(t *testing
 
 			assertCoverageIssueForTest(t, issues, CoverageIssueKindUnreflectedProbeOutcome, "surface-1", "")
 			assertCoverageIssueForTest(t, issues, CoverageIssueKindUnreflectedProbeOutcome, "", "risk-1")
+			assertCoverageIssueSeverityForTest(t, issues, CoverageIssueKindUnreflectedProbeOutcome, "surface-1", "", CoverageIssueSeverityHigh)
 		})
+	}
+}
+
+func TestAuditReviewReportCoverageDoesNotReportPassedLinkedProbe(t *testing.T) {
+	report := newPlanAwareCleanReportForValidationTest()
+	probeSummary := newTrustedProbeSummaryForReportValidationTest(ReviewProbePassed)
+
+	issues := AuditReviewReportCoverage(CoverageAuditInput{
+		Plan:                  newValidPlanScopeForTest(),
+		Report:                report,
+		TrustedProbeSummaries: []ReviewProbeSummary{probeSummary},
+	})
+
+	assertNoCoverageIssueKindForTest(t, issues, CoverageIssueKindUnreflectedProbeOutcome)
+	merged := MergeCoverageIssuesIntoSaturationCheck(newSaturatedReviewSaturationCheckForTest(), issues)
+	if len(merged.AdditionalFindingCandidates) != 0 {
+		t.Fatalf("AdditionalFindingCandidates = %#v, want none for passed probe", merged.AdditionalFindingCandidates)
 	}
 }

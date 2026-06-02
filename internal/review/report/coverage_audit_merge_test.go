@@ -28,14 +28,14 @@ func TestMergeCoverageIssuesIntoSaturationCheckDoesNotPromoteWeakExternalEvidenc
 	}
 
 	merged := MergeCoverageIssuesIntoSaturationCheck(newSaturatedReviewSaturationCheckForTest(), issues)
-	if merged.Status != ReviewSaturationStatusNeedsRevision {
-		t.Fatalf("merged Status = %q, want %q", merged.Status, ReviewSaturationStatusNeedsRevision)
+	if merged.Status != ReviewSaturationStatusSaturated {
+		t.Fatalf("merged Status = %q, want %q", merged.Status, ReviewSaturationStatusSaturated)
 	}
 	if len(merged.AdditionalFindingCandidates) != 0 {
 		t.Fatalf("AdditionalFindingCandidates = %#v, want none for weak external evidence alone", merged.AdditionalFindingCandidates)
 	}
-	if !strings.Contains(merged.RevisionInstructions, "Weak external evidence is revision feedback only") {
-		t.Fatalf("RevisionInstructions = %q, want weak external evidence guardrail", merged.RevisionInstructions)
+	if strings.TrimSpace(merged.RevisionInstructions) != "" {
+		t.Fatalf("RevisionInstructions = %q, want none for medium-only saturated check", merged.RevisionInstructions)
 	}
 }
 
@@ -82,6 +82,89 @@ func TestMergeCoverageIssuesIntoSaturationCheckAddsDeterministicRevisionFeedback
 		if !strings.Contains(merged.RevisionInstructions, want) {
 			t.Fatalf("RevisionInstructions missing %q:\n%s", want, merged.RevisionInstructions)
 		}
+	}
+}
+
+func TestMergeCoverageIssuesIntoSaturationCheckAddsMediumContextOnlyWhenModelAlreadyNeedsRevision(t *testing.T) {
+	check := ReviewSaturationCheck{
+		SchemaVersion:        ReviewSaturationCheckSchemaVersionV1,
+		Status:               ReviewSaturationStatusNeedsRevision,
+		CheckedSummary:       "model found risk-1 incomplete",
+		MissingRiskIDs:       []string{"risk-1"},
+		RevisionInstructions: "Revise risk-1.",
+	}
+	issues := []CoverageIssue{{
+		Kind:                CoverageIssueKindUnreflectedExternalEvidence,
+		Severity:            CoverageIssueSeverityMedium,
+		SurfaceIDs:          []string{"surface-1"},
+		RevisionInstruction: "Weak external evidence is advisory context.",
+	}}
+
+	merged := MergeCoverageIssuesIntoSaturationCheck(check, issues)
+
+	if merged.Status != ReviewSaturationStatusNeedsRevision {
+		t.Fatalf("Status = %q, want %q", merged.Status, ReviewSaturationStatusNeedsRevision)
+	}
+	if got, want := strings.Join(merged.MissingSurfaceIDs, ","), ""; got != want {
+		t.Fatalf("MissingSurfaceIDs = %q, want %q for medium advisory", got, want)
+	}
+	for _, want := range []string{
+		"Revise risk-1.",
+		"Deterministic coverage audit advisory context",
+		"unreflected_external_evidence (medium)",
+	} {
+		if !strings.Contains(merged.RevisionInstructions, want) {
+			t.Fatalf("RevisionInstructions missing %q:\n%s", want, merged.RevisionInstructions)
+		}
+	}
+}
+
+func TestMergeCoverageIssuesIntoSaturationCheckDedupesAndOrdersHighBeforeMediumContext(t *testing.T) {
+	issues := []CoverageIssue{
+		{
+			Kind:                CoverageIssueKindUnreflectedExternalEvidence,
+			Severity:            CoverageIssueSeverityMedium,
+			SurfaceIDs:          []string{"surface-1"},
+			RevisionInstruction: "Review weak external evidence context.",
+		},
+		{
+			Kind:                CoverageIssueKindMissingCandidateRiskCoverage,
+			Severity:            CoverageIssueSeverityHigh,
+			RiskIDs:             []string{"risk-1"},
+			RevisionInstruction: "Add risk-1 to scope coverage.",
+		},
+		{
+			Kind:                CoverageIssueKindMissingCandidateRiskCoverage,
+			Severity:            CoverageIssueSeverityHigh,
+			RiskIDs:             []string{"risk-1"},
+			RevisionInstruction: "Add risk-1 to scope coverage.",
+		},
+		{
+			Kind:                CoverageIssueKindUnreflectedExternalEvidence,
+			Severity:            CoverageIssueSeverityMedium,
+			SurfaceIDs:          []string{"surface-1"},
+			RevisionInstruction: "Review weak external evidence context.",
+		},
+	}
+
+	merged := MergeCoverageIssuesIntoSaturationCheck(newSaturatedReviewSaturationCheckForTest(), issues)
+
+	if merged.Status != ReviewSaturationStatusNeedsRevision {
+		t.Fatalf("Status = %q, want %q", merged.Status, ReviewSaturationStatusNeedsRevision)
+	}
+	if got, want := strings.Join(merged.MissingRiskIDs, ","), "risk-1"; got != want {
+		t.Fatalf("MissingRiskIDs = %q, want %q", got, want)
+	}
+	if strings.Count(merged.RevisionInstructions, "Add risk-1 to scope coverage.") != 1 {
+		t.Fatalf("RevisionInstructions did not dedupe high issue:\n%s", merged.RevisionInstructions)
+	}
+	if strings.Count(merged.RevisionInstructions, "Review weak external evidence context.") != 1 {
+		t.Fatalf("RevisionInstructions did not dedupe medium issue:\n%s", merged.RevisionInstructions)
+	}
+	highIndex := strings.Index(merged.RevisionInstructions, "missing_candidate_risk_coverage (high)")
+	mediumIndex := strings.Index(merged.RevisionInstructions, "unreflected_external_evidence (medium)")
+	if highIndex < 0 || mediumIndex < 0 || highIndex > mediumIndex {
+		t.Fatalf("RevisionInstructions = %q, want high context before medium context", merged.RevisionInstructions)
 	}
 }
 
