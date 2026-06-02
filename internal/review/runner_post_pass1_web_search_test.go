@@ -45,6 +45,8 @@ func TestReviewRunnerRunUsesPostPass1WebSearchEvidenceForReport(t *testing.T) {
 	}
 	plan := newRunnerNoProbePlanForTest()
 	report := newRunnerCleanReportForTest(nil)
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].Summary = "surface-1 checked after reviewing weak external evidence external-doc-post; no confirmed external spec."
+	report.ScopeCoverage.ReviewedCandidateRisks[0].Summary = "risk-1 dismissed after reviewing weak external evidence external-doc-post; no confirmed external spec."
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},

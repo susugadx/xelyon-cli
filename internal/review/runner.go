@@ -97,7 +97,7 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 		r.emitProgressError(reviewProgressProbePlanItem, err)
 		return ReviewReport{}, err
 	}
-	bundle, evidenceMarkdown, evidenceRedactor = r.collectPostPass1WebSearchEvidence(ctx, bundle, plan, evidenceMarkdown, evidenceRedactor)
+	bundle, evidenceMarkdown, evidenceRedactor, coverageAuditContext := r.collectPostPass1WebSearchEvidence(ctx, bundle, plan, evidenceMarkdown, evidenceRedactor)
 	probeRequests, err := BuildReviewProbeRequestsFromPlan(plan)
 	if err != nil {
 		r.emitProgressError(reviewProgressProbePlanItem, err)
@@ -114,23 +114,24 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	redactor := newReviewRunnerPromptRedactor(bundle, probeResults)
 	r.saveReviewRunJSONArtifact("probe_results.json", reviewmodelinput.BuildProbeResultPromptContexts(probeResults, redactor), redactor)
 
-	return r.completeReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle.WebSearchEvidence.ExternalDocs)
+	return r.completeReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle.WebSearchEvidence.ExternalDocs, coverageAuditContext)
 }
 
-func (r *ReviewRunner) collectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan ReviewProbePlan, evidenceMarkdown string, redactor reviewRunnerPromptRedactor) (ReviewEvidenceBundle, string, reviewRunnerPromptRedactor) {
+func (r *ReviewRunner) collectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan ReviewProbePlan, evidenceMarkdown string, redactor reviewRunnerPromptRedactor) (ReviewEvidenceBundle, string, reviewRunnerPromptRedactor, reviewCoverageAuditContext) {
 	if !bundle.WebSearchEvidence.Enabled {
-		return bundle, evidenceMarkdown, redactor
+		return bundle, evidenceMarkdown, redactor, reviewCoverageAuditContext{}
 	}
 	provider, ok := r.evidenceBuilder.(ReviewPostPass1WebSearchEvidenceProvider)
 	if !ok {
-		return bundle, evidenceMarkdown, redactor
+		return bundle, evidenceMarkdown, redactor, buildReviewCoverageAuditContext(bundle.WebSearchEvidence, bundle)
 	}
+	before := bundle.WebSearchEvidence
 	bundle.WebSearchEvidence = provider.CollectPostPass1WebSearchEvidence(ctx, bundle, plan)
 	evidenceMarkdown = RenderReviewEvidenceMarkdown(bundle)
 	redactor = newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("evidence_post_pass1.md", evidenceMarkdown, redactor)
 	r.saveReviewRunJSONArtifact("web_search_evidence_post_pass1.json", bundle.WebSearchEvidence, redactor)
-	return bundle, evidenceMarkdown, redactor
+	return bundle, evidenceMarkdown, redactor, buildReviewCoverageAuditContext(before, bundle)
 }
 
 func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRequest, evidenceMarkdown string, bundle ReviewEvidenceBundle) (ReviewProbePlan, error) {
@@ -190,7 +191,7 @@ func decodeReviewProbePlanJSONAgainstEvidence(content string, bundle ReviewEvide
 	return plan, nil
 }
 
-func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, externalDocs []ReviewExternalDocEvidence) (ReviewReport, error) {
+func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, externalDocs []ReviewExternalDocEvidence, coverageAuditContext reviewCoverageAuditContext) (ReviewReport, error) {
 	r.emitProgressRunning(reviewProgressReportItem)
 	report, err := r.completeInitialReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, externalDocs)
 	if err != nil {
@@ -198,7 +199,7 @@ func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewReque
 		return ReviewReport{}, err
 	}
 	r.emitProgressOK(reviewProgressReportItem, "")
-	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, externalDocs)
+	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, externalDocs, coverageAuditContext)
 }
 
 func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, externalDocs []ReviewExternalDocEvidence) (ReviewReport, error) {

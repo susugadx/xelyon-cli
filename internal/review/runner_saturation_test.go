@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReviewRunnerRunReturnsInitialReportWhenSaturationIsSatisfied(t *testing.T) {
@@ -119,6 +120,130 @@ func TestReviewRunnerRunRevisesReportWhenSaturationHasAdditionalCandidate(t *tes
 	if !strings.Contains(model.requests[3].Prompt, `"additional_finding_candidates"`) {
 		t.Fatalf("revision prompt missing additional finding candidates:\n%s", model.requests[3].Prompt)
 	}
+}
+
+func TestReviewRunnerRunRevisesReportWhenCoverageAuditFindsExternalEvidenceGap(t *testing.T) {
+	evidence := &runnerPostPass1WebSearchEvidenceBuilder{
+		runnerFakeEvidenceBuilder: runnerFakeEvidenceBuilder{
+			bundle: newRunnerEvidenceBundleWithWebSearchForSaturationAuditTest("/tmp/review-runner/repo"),
+		},
+		postEvidence: newRunnerPostPass1WeakExternalEvidenceForSaturationAuditTest(),
+	}
+	probes := &runnerFakeProbeRunner{}
+	plan := newRunnerNoProbePlanForTest()
+	initialReport := newRunnerCleanReportForTest(nil)
+	initialReport.ScopeCoverage.ReviewedImpactSurfaces[0].Summary = "surface-1 checked for OAuth redirect URI validation."
+	initialReport.ScopeCoverage.ReviewedCandidateRisks[0].Summary = "risk-1 dismissed for OAuth redirect URI validation."
+	revisedReport := newRunnerCleanReportForTest(nil)
+	revisedReport.ScopeCoverage.ReviewedImpactSurfaces[0].Summary = "surface-1 checked after reviewing weak external evidence external-doc-post; official confirmation is absent."
+	revisedReport.ScopeCoverage.ReviewedCandidateRisks[0].Summary = "risk-1 dismissed after reviewing weak external evidence external-doc-post; official confirmation is absent."
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, initialReport))},
+			saturatedRunnerModelResponseForTest(t),
+			{content: string(mustMarshalReviewReportForRunnerTest(t, revisedReport))},
+			saturatedRunnerModelResponseForTest(t),
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	got, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	want := withComputedSummaryForRunnerTest(revisedReport, nil)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Run() report = %#v, want revised %#v", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
+		ReviewModelPhaseReportRevision,
+		ReviewModelPhaseSaturationCheck,
+	})
+	revisionPrompt := model.requests[3].Prompt
+	for _, wantText := range []string{
+		"Deterministic coverage audit requires revision",
+		"unreflected_external_evidence",
+		"Weak external evidence is revision feedback only",
+	} {
+		if !strings.Contains(revisionPrompt, wantText) {
+			t.Fatalf("revision prompt missing coverage audit feedback %q:\n%s", wantText, revisionPrompt)
+		}
+	}
+}
+
+func TestReviewRunnerRunPreservesExternalSupportWithoutPostPass1Provider(t *testing.T) {
+	evidence := &runnerFakeEvidenceBuilder{
+		bundle: newRunnerEvidenceBundleWithAdequateWebSearchSupportForSaturationAuditTest("/tmp/review-runner/repo"),
+	}
+	probes := &runnerFakeProbeRunner{}
+	plan := newRunnerNoProbePlanForTest()
+	report := newRunnerCleanReportForTest(nil)
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].Summary = "surface-1 checked; official documentation confirms this behavior."
+	report.ScopeCoverage.ReviewedCandidateRisks[0].Summary = "risk-1 dismissed; confirmed external spec coverage applies."
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, report))},
+			saturatedRunnerModelResponseForTest(t),
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	got, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	want := withComputedSummaryForRunnerTest(report, nil)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Run() report = %#v, want %#v", got, want)
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
+	})
+}
+
+func TestReviewRunnerRunStopsWhenCoverageAuditStillNeedsRevisionAfterOneRevision(t *testing.T) {
+	evidence := &runnerPostPass1WebSearchEvidenceBuilder{
+		runnerFakeEvidenceBuilder: runnerFakeEvidenceBuilder{
+			bundle: newRunnerEvidenceBundleWithWebSearchForSaturationAuditTest("/tmp/review-runner/repo"),
+		},
+		postEvidence: newRunnerPostPass1WeakExternalEvidenceForSaturationAuditTest(),
+	}
+	probes := &runnerFakeProbeRunner{}
+	plan := newRunnerNoProbePlanForTest()
+	model := &runnerFakeModel{
+		responses: []runnerFakeModelResponse{
+			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			saturatedRunnerModelResponseForTest(t),
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+			saturatedRunnerModelResponseForTest(t),
+			{content: string(mustMarshalReviewReportForRunnerTest(t, newRunnerCleanReportForTest(nil)))},
+		},
+	}
+	runner := newReviewRunnerForTest(t, evidence, probes, model)
+
+	_, err := runner.Run(context.Background(), NewCurrentChangesRequest(""))
+	if err == nil {
+		t.Fatal("Run() error = nil, want post-revision coverage audit error")
+	}
+	if !strings.Contains(err.Error(), "still needs revision after one revision") ||
+		!strings.Contains(err.Error(), "unreflected_external_evidence") {
+		t.Fatalf("Run() error = %q, want coverage audit no-loop error", err.Error())
+	}
+	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
+		ReviewModelPhaseProbePlan,
+		ReviewModelPhaseReport,
+		ReviewModelPhaseSaturationCheck,
+		ReviewModelPhaseReportRevision,
+		ReviewModelPhaseSaturationCheck,
+	})
 }
 
 func TestReviewRunnerRunRepairsInvalidSaturationJSONOnce(t *testing.T) {
@@ -365,5 +490,82 @@ func needsRevisionAdditionalCandidateCheckForRunnerTest() ReviewSaturationCheck 
 			},
 		},
 		RevisionInstructions: "Revise the report to include or explicitly dismiss the file-backed candidate.",
+	}
+}
+
+func newRunnerEvidenceBundleWithWebSearchForSaturationAuditTest(repoRoot string) ReviewEvidenceBundle {
+	bundle := newRunnerEvidenceBundleForTest(repoRoot)
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled:      true,
+		Inconclusive: true,
+	}
+	return bundle
+}
+
+func newRunnerEvidenceBundleWithAdequateWebSearchSupportForSaturationAuditTest(repoRoot string) ReviewEvidenceBundle {
+	bundle := newRunnerEvidenceBundleForTest(repoRoot)
+	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+		Enabled: true,
+		ExternalDocs: []ReviewExternalDocEvidence{
+			newRunnerOfficialCandidateExternalDocForSaturationAuditTest(
+				"external-doc-official-1",
+				"https://docs.example.test/oauth",
+				"OAuth redirect URI official behavior.",
+				"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			),
+			newRunnerOfficialCandidateExternalDocForSaturationAuditTest(
+				"external-doc-official-2",
+				"https://reference.example.test/oauth",
+				"OAuth redirect URI reference behavior.",
+				"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			),
+		},
+	}
+	return bundle
+}
+
+func newRunnerOfficialCandidateExternalDocForSaturationAuditTest(docID, url, content, contentHash string) ReviewExternalDocEvidence {
+	return ReviewExternalDocEvidence{
+		DocID:             docID,
+		URL:               url,
+		SourceCredibility: ReviewExternalDocSourceCredibilityOfficialCandidate,
+		FetchedAt:         time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+		ContentHash:       contentHash,
+		Snippets: []ReviewExternalDocSnippetEvidence{
+			{
+				SnippetID:   docID + "-snippet-1",
+				Content:     content,
+				ContentHash: contentHash,
+			},
+		},
+	}
+}
+
+func newRunnerPostPass1WeakExternalEvidenceForSaturationAuditTest() ReviewWebSearchEvidence {
+	return ReviewWebSearchEvidence{
+		Enabled: true,
+		Queries: []ReviewWebSearchEvidenceQuery{
+			{
+				Query:  "OAuth 2.0 redirect URI specification",
+				Reason: "intent=spec; expected_source_type=technical_specification; confidence=high; reason=pass1 plan protocol/spec signal",
+				Results: []ReviewWebSearchEvidenceResult{
+					{Title: "OAuth 2.0 redirect URI specification", URL: "https://docs.example.test/oauth"},
+				},
+			},
+		},
+		ExternalDocs: []ReviewExternalDocEvidence{
+			{
+				DocID:             "external-doc-post",
+				URL:               "https://docs.example.test/oauth",
+				SourceCredibility: ReviewExternalDocSourceCredibilityUnknown,
+				Snippets: []ReviewExternalDocSnippetEvidence{
+					{
+						SnippetID:   "external-doc-post-snippet-1",
+						Content:     "Post-pass1 OAuth redirect URI snippet.",
+						ContentHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+					},
+				},
+			},
+		},
 	}
 }

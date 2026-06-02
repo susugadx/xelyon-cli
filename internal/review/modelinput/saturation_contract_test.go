@@ -189,6 +189,7 @@ func TestBuildReviewReportRevisionPromptIncludesSaturationContract(t *testing.T)
 		"Preserve review_report.v2 schema shape exactly",
 		"Preserve the trusted probe_summaries entries supplied for the report schema with the same count, same order, and same probe_id values",
 		"Do not convert failed, blocked, timed-out, or mutated_worktree probe outcomes into clean, checked, dismissed, or verified coverage",
+		"Deterministic coverage audit feedback in saturation_check is not a mandate to create a finding",
 		"Raw web search results are discovery-only",
 		"Fetched external_doc snippets are citation-capable evidence, but are not automatically official documentation or confirmed external specs",
 		`Source credibility values are "official_candidate", "third_party", and "unknown"`,
