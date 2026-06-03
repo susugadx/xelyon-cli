@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 func TestProjectDryRunDetectsReductionCandidatesAndReportMetrics(t *testing.T) {
@@ -44,6 +45,9 @@ func TestProjectDryRunDetectsReductionCandidatesAndReportMetrics(t *testing.T) {
 	if report.ToolResultCount != 4 || report.CandidateCount != 3 || report.ReplacedCount != 0 || report.KeptCount != 4 {
 		t.Fatalf("report counts = tool %d candidates %d replaced %d kept %d, want 4/3/0/4", report.ToolResultCount, report.CandidateCount, report.ReplacedCount, report.KeptCount)
 	}
+	if report.ReplacementStatus != providerHistoryReplacementStatusNotImplemented {
+		t.Fatalf("ReplacementStatus = %q, want not_implemented for dry-run", report.ReplacementStatus)
+	}
 	if got, want := providerHistoryTestCandidateTools(report), []string{"read_file", "search_code", "gather_context"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("candidate tools = %#v, want %#v", got, want)
 	}
@@ -74,6 +78,9 @@ func TestProjectApplyEvidenceReductionUsesPolicyPointersAndDefensiveCopies(t *te
 	}
 	if result.Report.ReplacedCount != 1 || !result.Report.ResponsesChainDisabled {
 		t.Fatalf("report = %#v, want one replacement and response chain disabled", result.Report)
+	}
+	if result.Report.ReplacementStatus != providerHistoryReplacementStatusApply {
+		t.Fatalf("ReplacementStatus = %q, want apply when all candidates are replaced", result.Report.ReplacementStatus)
 	}
 	applied := AppliedEvidencePointers(result.Report)
 	if !reflect.DeepEqual(applied, []taskstate.EvidencePointer{pointer}) {
@@ -123,6 +130,9 @@ func TestProjectApplyKeepsEvidenceReductionWhenActiveContextTransportUnsupported
 	if result.Report.CommandEditDryRun.CommandReplacedCount != 1 || !result.Report.ResponsesChainDisabled {
 		t.Fatalf("command report = %#v, want command replacement and response chain disabled", result.Report.CommandEditDryRun)
 	}
+	if result.Report.ReplacementStatus != providerHistoryReplacementStatusPartialApply {
+		t.Fatalf("ReplacementStatus = %q, want partial_apply when read candidate is kept and command is replaced", result.Report.ReplacementStatus)
+	}
 }
 
 func TestProjectReplacesOldWriteFileContentOnlyAfterSuccessfulMatchingResult(t *testing.T) {
@@ -138,6 +148,10 @@ func TestProjectReplacesOldWriteFileContentOnlyAfterSuccessfulMatchingResult(t *
 	if result.Report.CommandEditDryRun.EditArgReplacedCount != 1 || !result.Report.ResponsesChainDisabled {
 		t.Fatalf("command/edit report = %#v, want one write_file.content replacement", result.Report.CommandEditDryRun)
 	}
+	if result.Report.EstimatedSavedBytes != result.Report.CommandEditDryRun.EditArgReplacementSavedBytes ||
+		result.Report.ApproxSavedTokens != result.Report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens {
+		t.Fatalf("top-level savings = bytes %d tokens %d, want write_file.content savings %d/%d", result.Report.EstimatedSavedBytes, result.Report.ApproxSavedTokens, result.Report.CommandEditDryRun.EditArgReplacementSavedBytes, result.Report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens)
+	}
 	replacement := providerHistoryTestWriteFileContentArgument(t, result.History[0].ToolCalls[0].Function.Arguments, "src/generated.go")
 	if replacement == content || !strings.HasPrefix(replacement, "[omitted old write_file.content; path=src/generated.go]") {
 		t.Fatalf("projected write_file.content = %q, want placeholder", replacement)
@@ -145,6 +159,68 @@ func TestProjectReplacesOldWriteFileContentOnlyAfterSuccessfulMatchingResult(t *
 	if history[0].ToolCalls[0].Function.Arguments != args {
 		t.Fatalf("raw write_file arguments mutated to %s", history[0].ToolCalls[0].Function.Arguments)
 	}
+}
+
+func TestProjectDryRunEstimatesEditArgSavingsWithoutChangingPayload(t *testing.T) {
+	content := strings.Repeat("package dryrun\n\nfunc generated() string { return \"x\" }\n", 260)
+	args := providerHistoryTestJSONArguments(t, map[string]string{"path": "src/dryrun.go", "content": content})
+	history := providerHistoryTestWriteFileHistory("call_write", args, providerHistoryTestWriteFileSuccess(content, "src/dryrun.go"))
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy:   Policy{Mode: DryRun},
+	})
+
+	if !reflect.DeepEqual(result.History, history) {
+		t.Fatalf("dry-run projection changed history:\n got %#v\nwant %#v", result.History, history)
+	}
+	report := result.Report.CommandEditDryRun
+	if report.EditArgCandidates != 1 ||
+		report.EditArgReplacedCount != 0 ||
+		report.EditArgEstimatedSavedBytes <= 0 ||
+		report.ApproxEditArgSavedTokens < providerHistoryEditArgReplacementMinSavedTokens ||
+		result.Report.ResponsesChainDisabled {
+		t.Fatalf("dry-run report = %#v / top-level %#v, want edit-arg estimate without replacement", report, result.Report)
+	}
+	if result.Report.EstimatedSavedBytes != report.EditArgEstimatedSavedBytes ||
+		result.Report.ApproxSavedTokens != report.ApproxEditArgSavedTokens {
+		t.Fatalf("top-level dry-run savings = bytes %d tokens %d, want edit estimate %d/%d", result.Report.EstimatedSavedBytes, result.Report.ApproxSavedTokens, report.EditArgEstimatedSavedBytes, report.ApproxEditArgSavedTokens)
+	}
+}
+
+func TestProjectApplyTotalsContentAndEditArgSavingsWithoutDoubleCounting(t *testing.T) {
+	oldRead := strings.Repeat("old evidence line for provider projection\n", 240)
+	writeContent := strings.Repeat("package generated\n\nfunc value() string { return \"x\" }\n", 260)
+	writeArgs := providerHistoryTestJSONArguments(t, map[string]string{"path": "src/generated.go", "content": writeContent})
+	history := []api.Message{
+		providerHistoryTestAssistantToolCall("call_read", "read_file"),
+		providerHistoryTestToolResult("call_read", "read_file", oldRead),
+		{Role: "assistant", Content: "read done"},
+		providerHistoryTestAssistantToolCalls(providerHistoryTestToolCallWithArguments("call_write", "write_file", writeArgs)),
+		providerHistoryTestToolResult("call_write", "write_file", providerHistoryTestWriteFileSuccess(writeContent, "src/generated.go")),
+		{Role: "assistant", Content: "write done"},
+		providerHistoryTestAssistantToolCall("call_latest", "read_file"),
+		providerHistoryTestToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "done"},
+	}
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy: Policy{
+			Mode:             Apply,
+			EvidencePointers: []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, Source: "read_file", ToolCallID: "call_read"}},
+		},
+	})
+
+	if result.Report.ReplacedCount != 1 || result.Report.CommandEditDryRun.EditArgReplacedCount != 1 {
+		t.Fatalf("report = %#v, want one content and one edit-arg replacement", result.Report)
+	}
+	wantBytes := result.Report.ContentReplacementSavedBytes + result.Report.CommandEditDryRun.EditArgReplacementSavedBytes
+	wantTokens := result.Report.ApproxContentReplacementSavedTokens + result.Report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens
+	if result.Report.EstimatedSavedBytes != wantBytes || result.Report.ApproxSavedTokens != wantTokens {
+		t.Fatalf("top-level savings = bytes %d tokens %d, want content+edit %d/%d", result.Report.EstimatedSavedBytes, result.Report.ApproxSavedTokens, wantBytes, wantTokens)
+	}
+	providerHistoryTestAssertByteMetrics(t, history, result.History, result.Report)
 }
 
 func TestProjectPreservesNilAndEmptyInputShape(t *testing.T) {
@@ -345,15 +421,54 @@ func providerHistoryTestAssertByteMetrics(t *testing.T, original, projected []ap
 	if report.OriginalBytes != originalBytes || report.ProjectedBytes != projectedBytes {
 		t.Fatalf("byte metrics = original %d projected %d, want %d/%d", report.OriginalBytes, report.ProjectedBytes, originalBytes, projectedBytes)
 	}
-	wantSaved := 0
-	if originalBytes > projectedBytes {
-		wantSaved = originalBytes - projectedBytes
+	wantContentSaved, wantContentTokens := providerHistoryTestContentReplacementSavings(original, report)
+	if report.ContentReplacementSavedBytes != wantContentSaved {
+		t.Fatalf("ContentReplacementSavedBytes = %d, want %d", report.ContentReplacementSavedBytes, wantContentSaved)
 	}
-	if report.EstimatedSavedBytes != wantSaved {
-		t.Fatalf("EstimatedSavedBytes = %d, want %d", report.EstimatedSavedBytes, wantSaved)
+	if report.ApproxContentReplacementSavedTokens != wantContentTokens {
+		t.Fatalf("ApproxContentReplacementSavedTokens = %d, want %d", report.ApproxContentReplacementSavedTokens, wantContentTokens)
 	}
-	wantSavedTokens := providerHistoryApproxSavedTokens(original, projected)
-	if report.ApproxSavedTokens != wantSavedTokens {
-		t.Fatalf("ApproxSavedTokens = %d, want %d", report.ApproxSavedTokens, wantSavedTokens)
+	wantTotalSaved := wantContentSaved
+	wantTotalTokens := wantContentTokens
+	switch report.Mode {
+	case Apply:
+		wantTotalSaved += report.CommandEditDryRun.CommandReplacementSavedBytes + report.CommandEditDryRun.EditArgReplacementSavedBytes
+		wantTotalTokens += report.CommandEditDryRun.ApproxCommandReplacementSavedTokens + report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens
+	case DryRun:
+		wantTotalSaved += report.CommandEditDryRun.CommandEstimatedSavedBytes + report.CommandEditDryRun.EditArgEstimatedSavedBytes
+		wantTotalTokens += report.CommandEditDryRun.ApproxCommandSavedTokens + report.CommandEditDryRun.ApproxEditArgSavedTokens
 	}
+	if report.EstimatedSavedBytes != wantTotalSaved {
+		t.Fatalf("EstimatedSavedBytes = %d, want provider-facing total %d", report.EstimatedSavedBytes, wantTotalSaved)
+	}
+	if report.ApproxSavedTokens != wantTotalTokens {
+		t.Fatalf("ApproxSavedTokens = %d, want provider-facing total %d", report.ApproxSavedTokens, wantTotalTokens)
+	}
+}
+
+func providerHistoryTestContentReplacementSavings(original []api.Message, report ProjectionReport) (int, int) {
+	if report.Mode != Apply && report.Mode != DryRun {
+		return 0, 0
+	}
+	totalBytes := 0
+	totalTokens := 0
+	for _, candidate := range report.Candidates {
+		if report.Mode == Apply && !candidate.ReplacementApplied {
+			continue
+		}
+		if candidate.SuggestedReplacementText == "" || candidate.HistoryIndex < 0 || candidate.HistoryIndex >= len(original) {
+			continue
+		}
+		originalContent := original[candidate.HistoryIndex].Content
+		if len(originalContent) <= len(candidate.SuggestedReplacementText) {
+			continue
+		}
+		totalBytes += len(originalContent) - len(candidate.SuggestedReplacementText)
+		originalTokens := token.EstimateTokenCount(originalContent)
+		replacementTokens := token.EstimateTokenCount(candidate.SuggestedReplacementText)
+		if originalTokens > replacementTokens {
+			totalTokens += originalTokens - replacementTokens
+		}
+	}
+	return totalBytes, totalTokens
 }

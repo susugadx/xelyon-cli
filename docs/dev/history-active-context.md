@@ -51,7 +51,7 @@ XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=false xelyon
 
 ### 見る場所
 
-- `/status`: provider history reduction の mode、candidate / replacement summary、`rehydrate_context=on|off`、`active_context_transport=...` を確認します。
+- `/status`: provider history reduction の mode、component replacement summary、`rehydrate_context=on|off`、`active_context_transport=...` を確認します。
 - `/tokens`: 通常の token 見積もりを見る場所です。provider history reduction diagnostics は混ぜません。
 - `/ledger`: read/search/gather replacement から作れる rehydrate candidates を確認します。rehydrated file content 自体は表示しません。
 
@@ -133,7 +133,7 @@ Phase 5b-3 adds gated actual replacement mode behind the internal projection pol
 - Replacement text is a single-line placeholder such as `[omitted old read_file result; evidence: README.md:L1-L80 source=read_file; +2 more]`.
 - Message shape is preserved: role, tool call id, assistant tool calls, reasoning content, provider state, and continuation metadata are not changed. If a replaced tool result is missing `ToolName`, apply mode copies the tool name inferred from the matching assistant tool call onto the projection clone so provider adapters can keep function-response continuity.
 - Raw storage remains unchanged: `Agent.History`, `history.Session.Messages`, session tool execution audit entries, audit logs, and change records continue to store the raw conversation/audit data.
-- The projection report records detected candidates, kept candidates, replacement count, original/projected content bytes, estimated saved bytes, approximate saved tokens, kept reason counts, command/edit replacement diagnostics, and whether a replacement disabled Responses continuation.
+- The projection report records detected candidates, kept candidates, replacement counts, original/projected message content bytes, component provider-facing saved bytes/tokens, command/edit replacement diagnostics, and whether a replacement disabled Responses continuation. `OriginalBytes` and `ProjectedBytes` remain message-content diagnostics; they are not the source for the top-level provider-facing savings total.
 - Phase 5b-4 can enable this policy on a limited request path without adding a new storage migration.
 
 Phase 5b-4 enables replacement on user-facing provider request paths behind an internal runtime option.
@@ -149,9 +149,21 @@ Phase 5b-4 enables replacement on user-facing provider request paths behind an i
 Phase 5c exposes the last provider history reduction projection as a `/status` runtime diagnostic only.
 
 - `/status` shows a `Provider history reduction` section only when the runtime mode is not `off` without a report, or when `AgentRuntime.LastProviderHistoryProjectionReport` contains a non-empty report.
-- With a non-`off` runtime mode and no report yet, `/status` prints the configured mode, for example `mode=apply; no report yet`.
-- With a report, `/status` prints a deterministic count/byte summary such as `mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B; approx_saved_tokens=42; kept_reasons=dry_run:1, missing_evidence_pointer:2; responses_chain_disabled=true`.
-- The diagnostic reports counts, bytes, approximate saved tokens, kept reason counts, and whether the Responses continuation chain was disabled. It does not add cost estimates, config, CLI flags, generated config, `/config`, or `/tokens` output.
+- With a non-`off` runtime mode and no report yet, `/status` prints the configured mode, for example `provider history reduction: apply; no report yet`.
+- With a report, `/status` prints a deterministic component summary:
+
+```text
+provider history reduction: apply
+replacement_status=partial_apply
+content_replacements=2; content_saved=750 B; approx_content_saved_tokens=42
+command_output_replacements=1; command_output_saved=1,500 B; approx_command_output_saved_tokens=90
+edit_arg_replacements=1; edit_arg_saved=700 B; approx_edit_arg_saved_tokens=55
+total_provider_facing_saved=2,950 B; approx_total_provider_facing_saved_tokens=187
+responses_chain_disabled=true
+rehydrate_context=on; active_context_transport=ephemeral_system_message; active_context_rehydrated_evidence=true; count=2
+```
+
+- The diagnostic reports component replacement counts, provider-facing saved bytes, approximate saved tokens, rehydrated-evidence availability, and whether the Responses continuation chain was disabled. It does not add cost estimates, config, CLI flags, generated config, `/config`, or `/tokens` output.
 - The diagnostic remains runtime-only: it is not appended to `Agent.History`, `history.Session.Messages`, tool execution audit entries, audit logs, change records, compacted state, model input, or persisted session JSONL.
 
 Phase 5d adds an experimental project-local mode selector for controlled rollout.
@@ -161,7 +173,7 @@ Phase 5d adds an experimental project-local mode selector for controlled rollout
 - `/config`, generated `config.yaml` metadata, and `docs/config.md` remain unchanged because this is not a stable global config surface. README may point developers to this dogfood note as an experimental feature overview.
 - `dry_run` updates `AgentRuntime.LastProviderHistoryProjectionReport` but sends raw provider payload and keeps any OpenAI/Azure Responses `previous_response_id` chain unchanged.
 - `apply` uses the existing safe replacement path and disables the Responses continuation chain only when a replacement is actually applied.
-- `auto` is accepted as an enum but currently resolves to the safe `dry_run` effective mode. `/status` reports the configured mode separately, for example `mode=auto; effective=dry_run; report: mode=dry_run; ...`.
+- `auto` is accepted as an enum but currently resolves to the safe `dry_run` effective mode. `/status` reports the configured mode separately, for example `provider history reduction: auto; effective=dry_run`.
 - Raw storage remains unchanged in every mode: `Agent.History`, `history.Session.Messages`, session tool execution audit entries, audit logs, change records, compacted state, and persisted session JSONL keep the original conversation/audit data.
 
 ## Provider History Reduction Dogfood
@@ -191,13 +203,14 @@ XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=false xelyon
 
 In `dry_run`, inspect `/status` after a provider-facing request:
 
-- `candidates`, `replaced`, and `kept` show detector and replacement counts.
-- `saved` shows estimated content bytes saved; `approx_saved_tokens` is a diagnostic-only token estimate, not billing usage.
-- `kept_reasons` shows sorted keep reason counts using the internal reason strings.
+- `replacement_status=not_implemented` means provider payload remains raw.
+- `content_saved`, `command_output_saved`, `edit_arg_saved`, and `total_provider_facing_saved` are potential provider-facing savings estimates.
+- `approx_content_saved_tokens`, `approx_command_output_saved_tokens`, `approx_edit_arg_saved_tokens`, and `approx_total_provider_facing_saved_tokens` are diagnostic-only token estimates, not billing usage.
 - `responses_chain_disabled` should stay `false` in `dry_run` and `auto` because provider payload remains raw.
-- `command/edit` is a separate diagnostic line for old `bash`/`command` outputs and edit tool arguments. In `dry_run`, `replacement=not_implemented` means provider payload remains raw; the byte/token numbers are diagnostic estimates only and are not billing usage. In `apply`, `edit_arg_replaced` and `edit_arg_replacement_saved` cover only applied `write_file.content` argument replacement.
 
-Switch to `apply` only after dry-run candidates and kept reasons look expected, and test on a limited task where repeated command/read/search calls do not increase and answer quality does not regress. `apply` replaces only safe old successful `bash`/`command` outputs for single actual test/build/lint commands with explicit success evidence, and safe old successful `write_file.content` arguments with repo-relative paths and successful write results. Both replacements apply only when the placeholder is smaller and saves at least the internal token threshold. Failure logs, ambiguous build summaries, mixed passing/failing test output, lint output with errors/issues/problems/warnings, interrupted or partial command output, compound shell or command-substitution output, `git diff` output, generic successful command output, unsupported edit tool arguments, unsafe write paths, invalid write arguments, and latest/trailing/incompletely linked tool results remain raw. When any provider-facing replacement is applied, `/status` reports `replacement=partial_apply` for command/edit replacement and `responses_chain_disabled=true`; OpenAI/Azure Responses requests may drop the `previous_response_id` continuation chain. `apply` with zero replacements keeps the chain.
+In `apply`, `EstimatedSavedBytes` and `ApproxSavedTokens` are the actual provider-facing total: applied read/search/gather content replacement plus applied safe command output replacement plus applied edit argument replacement. In `dry_run`, the same top-level fields are potential estimates only.
+
+Switch to `apply` only after dry-run candidates and kept reasons look expected, and test on a limited task where repeated command/read/search calls do not increase and answer quality does not regress. `apply` replaces only safe old successful `bash`/`command` outputs for single actual test/build/lint commands with explicit success evidence, and safe old successful edit arguments for `write_file.content`, `apply_patch.patch`, `str_replace old_str/new_str`, and `str_replace edits` when the result confirms the matching path. Replacements apply only when the placeholder is smaller and saves at least the internal token threshold. Failure logs, ambiguous build summaries, mixed passing/failing test output, lint output with errors/issues/problems/warnings, interrupted or partial command output, compound shell or command-substitution output, `git diff` output, generic successful command output, `delete_file`, unsupported edit tool arguments, unsafe paths, invalid arguments, and latest/trailing/incompletely linked tool results remain raw. When any provider-facing replacement is applied, `/status` reports `replacement_status=apply` if all detected candidates were replaced, or `replacement_status=partial_apply` if only some were replaced, and `responses_chain_disabled=true`; OpenAI/Azure Responses requests may drop the `previous_response_id` continuation chain. `apply` with zero replacements keeps the chain.
 
 Raw storage is unchanged in all modes: runtime `Agent.History`, `Session.Messages`, audit entries, change records, and persisted JSONL keep the original content and original tool arguments.
 
@@ -215,7 +228,7 @@ Apply-mode projection reports keep matched evidence pointers only on read/search
 
 The runtime can pass those applied read/search/gather `EvidencePointers` into `taskstate.BuildRehydratePlan` as old evidence. `/ledger` shows non-empty rehydrate candidates after the normal task-ledger snapshot so the dry-run can be inspected during dogfood. `/ledger` remains a candidate diagnostic and does not show rehydrated file content.
 
-Command output replacement is backed by successful command summaries, and `write_file.content` replacement is backed by the successful write result plus retained path argument. Neither is an evidence pointer, so command/edit replacements are not rehydrate candidates.
+Command output replacement is backed by successful command summaries. Edit argument replacement is backed by the matching successful write/patch/replace result plus retained path or patch metadata. Neither is an evidence pointer, so command/edit replacements are not rehydrate candidates.
 
 Provider-input injection is available behind `RuntimeOptions.EnableProviderHistoryRehydrateContext`. The gate defaults to false and can be enabled for dogfood with `experimental.provider_history_reduction.rehydrate_context: true` in `xelyon.yaml` or overridden for one run with `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false`. This remains an experimental project-local surface only: it is still not exposed as stable config in `/config`, `docs/config.md`, or generated config metadata.
 

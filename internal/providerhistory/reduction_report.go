@@ -33,11 +33,9 @@ func finalizeProjectionReport(report *ProjectionReport, original, projected []ap
 	})
 	report.OriginalBytes = providerHistoryContentBytes(original)
 	report.ProjectedBytes = providerHistoryContentBytes(projected)
-	report.EstimatedSavedBytes = 0
-	if report.OriginalBytes > report.ProjectedBytes {
-		report.EstimatedSavedBytes = report.OriginalBytes - report.ProjectedBytes
-	}
-	report.ApproxSavedTokens = providerHistoryApproxSavedTokens(original, projected)
+	report.ContentReplacementSavedBytes, report.ApproxContentReplacementSavedTokens = providerHistoryContentReplacementSavings(original, report.Candidates, report.Mode)
+	report.EstimatedSavedBytes, report.ApproxSavedTokens = providerHistoryProviderFacingSavings(report)
+	report.ReplacementStatus = providerHistoryProjectionReplacementStatus(report)
 	report.KeptReasonCounts = countProviderHistoryKeptReasons(report.Kept)
 	report.ResponsesChainDisabled = report.Mode == Apply && (report.ReplacedCount > 0 || report.CommandEditDryRun.CommandReplacedCount > 0 || report.CommandEditDryRun.EditArgReplacedCount > 0)
 }
@@ -60,21 +58,84 @@ func providerHistoryContentBytes(messages []api.Message) int {
 	return total
 }
 
-func providerHistoryApproxSavedTokens(original, projected []api.Message) int {
-	originalTokens := providerHistoryContentTokens(original)
-	projectedTokens := providerHistoryContentTokens(projected)
-	if originalTokens <= projectedTokens {
-		return 0
+func providerHistoryContentReplacementSavings(original []api.Message, candidates []ReductionCandidate, mode Mode) (int, int) {
+	if mode != DryRun && mode != Apply {
+		return 0, 0
 	}
-	return originalTokens - projectedTokens
+	totalBytes := 0
+	totalTokens := 0
+	for _, candidate := range candidates {
+		if mode == Apply && !candidate.ReplacementApplied {
+			continue
+		}
+		if candidate.SuggestedReplacementText == "" || candidate.HistoryIndex < 0 || candidate.HistoryIndex >= len(original) {
+			continue
+		}
+		originalContent := original[candidate.HistoryIndex].Content
+		savedBytes := clampProviderHistorySavedBytes(len(originalContent), len(candidate.SuggestedReplacementText))
+		if savedBytes == 0 {
+			continue
+		}
+		totalBytes += savedBytes
+		totalTokens += clampProviderHistorySavedTokens(
+			token.EstimateTokenCount(originalContent),
+			token.EstimateTokenCount(candidate.SuggestedReplacementText),
+		)
+	}
+	return totalBytes, totalTokens
 }
 
-func providerHistoryContentTokens(messages []api.Message) int {
-	total := 0
-	for _, msg := range messages {
-		total += token.EstimateTokenCount(msg.Content)
+func providerHistoryProviderFacingSavings(report *ProjectionReport) (int, int) {
+	if report == nil {
+		return 0, 0
 	}
-	return total
+	contentBytes := report.ContentReplacementSavedBytes
+	contentTokens := report.ApproxContentReplacementSavedTokens
+	commandBytes, commandTokens := providerHistoryCommandOutputSavings(report.CommandEditDryRun, report.Mode)
+	editBytes, editTokens := providerHistoryEditArgSavings(report.CommandEditDryRun, report.Mode)
+	return contentBytes + commandBytes + editBytes, contentTokens + commandTokens + editTokens
+}
+
+func providerHistoryCommandOutputSavings(report CommandEditDryRunReport, mode Mode) (int, int) {
+	if mode == Apply {
+		return report.CommandReplacementSavedBytes, report.ApproxCommandReplacementSavedTokens
+	}
+	if mode == DryRun {
+		return report.CommandEstimatedSavedBytes, report.ApproxCommandSavedTokens
+	}
+	return 0, 0
+}
+
+func providerHistoryEditArgSavings(report CommandEditDryRunReport, mode Mode) (int, int) {
+	if mode == Apply {
+		return report.EditArgReplacementSavedBytes, report.ApproxEditArgReplacementSavedTokens
+	}
+	if mode == DryRun {
+		return report.EditArgEstimatedSavedBytes, report.ApproxEditArgSavedTokens
+	}
+	return 0, 0
+}
+
+func providerHistoryProjectionReplacementStatus(report *ProjectionReport) string {
+	if report == nil || report.Mode != Apply {
+		return providerHistoryReplacementStatusNotImplemented
+	}
+	actualReplacements := report.ReplacedCount + report.CommandEditDryRun.CommandReplacedCount + report.CommandEditDryRun.EditArgReplacedCount
+	if actualReplacements == 0 {
+		return providerHistoryReplacementStatusNotImplemented
+	}
+	detectedCandidates := report.CandidateCount + report.CommandEditDryRun.CommandCandidates + report.CommandEditDryRun.EditArgCandidates
+	if actualReplacements == detectedCandidates {
+		return providerHistoryReplacementStatusApply
+	}
+	return providerHistoryReplacementStatusPartialApply
+}
+
+func clampProviderHistorySavedBytes(originalBytes, replacementBytes int) int {
+	if originalBytes <= replacementBytes {
+		return 0
+	}
+	return originalBytes - replacementBytes
 }
 
 func countProviderHistoryKeptReasons(kept []ReductionCandidate) map[string]int {

@@ -46,10 +46,10 @@ func TestProviderHistorySyntheticMeasurementHarnessComparesModes(t *testing.T) {
 	if dryRun.Report.Mode != ProviderHistoryReductionDryRun ||
 		dryRun.Report.CandidateCount != 3 ||
 		dryRun.Report.ReplacedCount != 0 ||
-		dryRun.Report.EstimatedSavedBytes != 0 ||
-		dryRun.Report.ApproxSavedTokens != 0 ||
+		dryRun.Report.EstimatedSavedBytes <= 0 ||
+		dryRun.Report.ApproxSavedTokens <= 0 ||
 		dryRun.Report.ResponsesChainDisabled {
-		t.Fatalf("dry-run report = %#v, want three diagnostics without replacement", dryRun.Report)
+		t.Fatalf("dry-run report = %#v, want three diagnostics with provider-facing estimates and without replacement", dryRun.Report)
 	}
 	if dryRun.Report.KeptReasonCounts["dry_run"] != 3 ||
 		dryRun.Report.KeptReasonCounts["latest_tool_result"] != 1 ||
@@ -220,9 +220,10 @@ func assertProviderHistorySyntheticCommandDiagnostics(t *testing.T, report Provi
 		report.CommandOriginalBytes <= 0 ||
 		report.EditArgOriginalBytes <= 0 ||
 		report.ApproxCommandSavedTokens <= 0 ||
-		report.ApproxEditArgSavedTokens <= 0 ||
+		report.EditArgEstimatedSavedBytes != 0 ||
+		report.ApproxEditArgSavedTokens != 0 ||
 		report.CommandReplacedCount != wantReplaced {
-		t.Fatalf("CommandEditDryRun = %#v, want six command and three edit diagnostics with %d replacements", report, wantReplaced)
+		t.Fatalf("CommandEditDryRun = %#v, want six command and three edit diagnostics with %d command replacements and no edit estimates", report, wantReplaced)
 	}
 	wantReasons := map[string]int{
 		"test_success_output":    1,

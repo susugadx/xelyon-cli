@@ -78,40 +78,62 @@ func assertProviderHistoryByteMetrics(t *testing.T, original, projected []api.Me
 	if report.OriginalBytes != originalBytes || report.ProjectedBytes != projectedBytes {
 		t.Fatalf("byte metrics = original %d projected %d, want %d/%d", report.OriginalBytes, report.ProjectedBytes, originalBytes, projectedBytes)
 	}
-	wantSaved := 0
-	if originalBytes > projectedBytes {
-		wantSaved = originalBytes - projectedBytes
+	wantContentSaved, wantContentTokens := providerHistoryContentReplacementSavingsForTest(original, report)
+	if report.ContentReplacementSavedBytes != wantContentSaved {
+		t.Fatalf("ContentReplacementSavedBytes = %d, want %d", report.ContentReplacementSavedBytes, wantContentSaved)
 	}
-	if report.EstimatedSavedBytes != wantSaved {
-		t.Fatalf("EstimatedSavedBytes = %d, want %d", report.EstimatedSavedBytes, wantSaved)
+	if report.ApproxContentReplacementSavedTokens != wantContentTokens {
+		t.Fatalf("ApproxContentReplacementSavedTokens = %d, want %d", report.ApproxContentReplacementSavedTokens, wantContentTokens)
 	}
-	wantSavedTokens := providerHistoryApproxSavedTokens(original, projected)
-	if report.ApproxSavedTokens != wantSavedTokens {
-		t.Fatalf("ApproxSavedTokens = %d, want %d", report.ApproxSavedTokens, wantSavedTokens)
+	wantTotalSaved := wantContentSaved
+	wantTotalTokens := wantContentTokens
+	switch report.Mode {
+	case ProviderHistoryReductionApply:
+		wantTotalSaved += report.CommandEditDryRun.CommandReplacementSavedBytes + report.CommandEditDryRun.EditArgReplacementSavedBytes
+		wantTotalTokens += report.CommandEditDryRun.ApproxCommandReplacementSavedTokens + report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens
+	case ProviderHistoryReductionDryRun:
+		wantTotalSaved += report.CommandEditDryRun.CommandEstimatedSavedBytes + report.CommandEditDryRun.EditArgEstimatedSavedBytes
+		wantTotalTokens += report.CommandEditDryRun.ApproxCommandSavedTokens + report.CommandEditDryRun.ApproxEditArgSavedTokens
 	}
+	if report.EstimatedSavedBytes != wantTotalSaved {
+		t.Fatalf("EstimatedSavedBytes = %d, want provider-facing total %d", report.EstimatedSavedBytes, wantTotalSaved)
+	}
+	if report.ApproxSavedTokens != wantTotalTokens {
+		t.Fatalf("ApproxSavedTokens = %d, want provider-facing total %d", report.ApproxSavedTokens, wantTotalTokens)
+	}
+}
+
+func providerHistoryContentReplacementSavingsForTest(original []api.Message, report ProviderHistoryProjectionReport) (int, int) {
+	if report.Mode != ProviderHistoryReductionApply && report.Mode != ProviderHistoryReductionDryRun {
+		return 0, 0
+	}
+	totalBytes := 0
+	totalTokens := 0
+	for _, candidate := range report.Candidates {
+		if report.Mode == ProviderHistoryReductionApply && !candidate.ReplacementApplied {
+			continue
+		}
+		if candidate.SuggestedReplacementText == "" || candidate.HistoryIndex < 0 || candidate.HistoryIndex >= len(original) {
+			continue
+		}
+		originalContent := original[candidate.HistoryIndex].Content
+		if len(originalContent) <= len(candidate.SuggestedReplacementText) {
+			continue
+		}
+		totalBytes += len(originalContent) - len(candidate.SuggestedReplacementText)
+		originalTokens := token.EstimateTokenCount(originalContent)
+		replacementTokens := token.EstimateTokenCount(candidate.SuggestedReplacementText)
+		if originalTokens > replacementTokens {
+			totalTokens += originalTokens - replacementTokens
+		}
+	}
+	return totalBytes, totalTokens
 }
 
 func providerHistoryContentBytes(messages []api.Message) int {
 	total := 0
 	for _, msg := range messages {
 		total += len(msg.Content)
-	}
-	return total
-}
-
-func providerHistoryApproxSavedTokens(original, projected []api.Message) int {
-	originalTokens := providerHistoryContentTokens(original)
-	projectedTokens := providerHistoryContentTokens(projected)
-	if originalTokens <= projectedTokens {
-		return 0
-	}
-	return originalTokens - projectedTokens
-}
-
-func providerHistoryContentTokens(messages []api.Message) int {
-	total := 0
-	for _, msg := range messages {
-		total += token.EstimateTokenCount(msg.Content)
 	}
 	return total
 }

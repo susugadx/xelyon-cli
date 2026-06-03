@@ -53,6 +53,58 @@ func TestProjectReplacesOldApplyPatchAndStrReplaceArgsAfterSuccessfulMatchingRes
 		!result.Report.ResponsesChainDisabled {
 		t.Fatalf("report = %#v / top-level %#v, want two edit arg replacements with response chain disabled", report, result.Report)
 	}
+	if result.Report.EstimatedSavedBytes != report.EditArgReplacementSavedBytes ||
+		result.Report.ApproxSavedTokens != report.ApproxEditArgReplacementSavedTokens {
+		t.Fatalf("top-level savings = bytes %d tokens %d, want apply_patch/str_replace edit savings %d/%d", result.Report.EstimatedSavedBytes, result.Report.ApproxSavedTokens, report.EditArgReplacementSavedBytes, report.ApproxEditArgReplacementSavedTokens)
+	}
+}
+
+func TestProjectReplacesOldStrReplaceEditsArgAfterSuccessfulMatchingResult(t *testing.T) {
+	replacePath := "internal/providerhistory/batch_replace.go"
+	edits := make([]map[string]string, 0, 160)
+	for i := 0; i < 160; i++ {
+		edits = append(edits, map[string]string{
+			"old_str": strings.Repeat("old batch line with enough content to compact\n", 8),
+			"new_str": strings.Repeat("new batch line with enough content to compact\n", 8),
+		})
+	}
+	editsBytes, err := json.Marshal(edits)
+	if err != nil {
+		t.Fatalf("json.Marshal(edits) error = %v", err)
+	}
+	editsPayload := string(editsBytes)
+	args := providerHistoryTestJSONAnyArguments(t, map[string]any{"path": replacePath, "edits": editsPayload})
+	replaceSuccess := "Successfully applied 160 edits to " + replacePath
+	history := []api.Message{
+		providerHistoryTestAssistantToolCalls(providerHistoryTestToolCallWithArguments("call_edits", "str_replace", args)),
+		providerHistoryTestToolResult("call_edits", "str_replace", replaceSuccess),
+		{Role: "assistant", Content: "batch edit completed"},
+		providerHistoryTestAssistantToolCall("call_latest", "read_file"),
+		providerHistoryTestToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "done"},
+	}
+	raw := api.CloneMessages(history)
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy:   Policy{Mode: Apply},
+	})
+
+	projectedEdits := providerHistoryTestStringArgument(t, result.History[0].ToolCalls[0].Function.Arguments, "edits")
+	if projectedEdits == editsPayload || !strings.Contains(projectedEdits, "[omitted old str_replace.edits[0].old_str; path="+replacePath+"]") {
+		t.Fatalf("projected str_replace edits = %q, want compacted edit placeholders", projectedEdits)
+	}
+	if !reflect.DeepEqual(history, raw) {
+		t.Fatalf("raw history changed after str_replace edits projection:\n got %#v\nwant %#v", history, raw)
+	}
+	report := result.Report.CommandEditDryRun
+	if report.EditArgReplacedCount != 1 || report.EditArgReplacementSavedBytes <= 0 || !result.Report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v / top-level %#v, want one str_replace edits replacement", report, result.Report)
+	}
+	if result.Report.EstimatedSavedBytes != report.EditArgReplacementSavedBytes ||
+		result.Report.ApproxSavedTokens != report.ApproxEditArgReplacementSavedTokens {
+		t.Fatalf("top-level savings = bytes %d tokens %d, want str_replace edits savings %d/%d", result.Report.EstimatedSavedBytes, result.Report.ApproxSavedTokens, report.EditArgReplacementSavedBytes, report.ApproxEditArgReplacementSavedTokens)
+	}
 }
 
 func TestProjectEditArgReplacementSyncsAnthropicProviderState(t *testing.T) {

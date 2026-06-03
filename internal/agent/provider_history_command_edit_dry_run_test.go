@@ -23,8 +23,11 @@ func TestProviderHistoryCommandEditDryRunDetectsOldCommandOutput(t *testing.T) {
 	if report.ReplacementStatus != providerHistoryCommandEditReplacementStatusNotImplemented {
 		t.Fatalf("ReplacementStatus = %q, want not_implemented", report.ReplacementStatus)
 	}
-	if report.CommandCandidates != 1 || report.CommandOriginalBytes != len(output) || report.ApproxCommandSavedTokens <= 0 {
-		t.Fatalf("command dry-run metrics = candidates %d bytes %d tokens %d, want one command candidate with savings", report.CommandCandidates, report.CommandOriginalBytes, report.ApproxCommandSavedTokens)
+	if report.CommandCandidates != 1 || report.CommandOriginalBytes != len(output) {
+		t.Fatalf("command dry-run metrics = candidates %d bytes %d, want one command candidate with original bytes %d", report.CommandCandidates, report.CommandOriginalBytes, len(output))
+	}
+	if report.CommandEstimatedSavedBytes != 0 || report.ApproxCommandSavedTokens != 0 {
+		t.Fatalf("command dry-run safe estimate = bytes %d tokens %d, want zero for failed test output", report.CommandEstimatedSavedBytes, report.ApproxCommandSavedTokens)
 	}
 	if got := report.CandidateReasonCounts["test_failure_output"]; got != 1 {
 		t.Fatalf("CandidateReasonCounts = %#v, want test_failure_output:1", report.CandidateReasonCounts)
@@ -226,8 +229,11 @@ func TestProviderHistoryCommandEditDryRunDetectsEditArguments(t *testing.T) {
 	)
 
 	wantBytes := len(writeContent) + len(patch) + len(oldStr) + len(newStr) + len(edits) + len(deletePath)
-	if report.EditArgCandidates != 5 || report.EditArgOriginalBytes != wantBytes || report.ApproxEditArgSavedTokens <= 0 {
-		t.Fatalf("edit dry-run metrics = candidates %d bytes %d tokens %d, want 5/%d/positive", report.EditArgCandidates, report.EditArgOriginalBytes, report.ApproxEditArgSavedTokens, wantBytes)
+	if report.EditArgCandidates != 5 || report.EditArgOriginalBytes != wantBytes {
+		t.Fatalf("edit dry-run metrics = candidates %d bytes %d, want 5/%d", report.EditArgCandidates, report.EditArgOriginalBytes, wantBytes)
+	}
+	if report.EditArgEstimatedSavedBytes != 0 || report.ApproxEditArgSavedTokens != 0 {
+		t.Fatalf("edit dry-run replacement estimate = bytes %d tokens %d, want zero without successful matching edit results", report.EditArgEstimatedSavedBytes, report.ApproxEditArgSavedTokens)
 	}
 	wantReasons := map[string]int{
 		"write_file_content":  1,

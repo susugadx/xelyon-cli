@@ -32,7 +32,7 @@ func TestPhase5DStatusDiagnosticUsesLastProviderFacingRequestReport(t *testing.T
 	}
 	out.Reset()
 	statusOutput := renderProviderHistoryStatusCommand(t, agent, &out)
-	for _, want := range []string{"Provider history reduction", "mode=apply", "candidates=1", "replaced=1", "saved=", "approx_saved_tokens=", "kept_reasons=", "responses_chain_disabled=true"} {
+	for _, want := range []string{"Provider history reduction", "provider history reduction: apply", "content_replacements=1", "total_provider_facing_saved=", "approx_total_provider_facing_saved_tokens=", "responses_chain_disabled=true"} {
 		if !strings.Contains(statusOutput, want) {
 			t.Fatalf("/status output missing %q:\n%s", want, statusOutput)
 		}
@@ -70,7 +70,7 @@ func TestPhase5DStatusDiagnosticUsesLastProviderFacingRequestReport(t *testing.T
 	if !handleTokensCommand(agent) {
 		t.Fatal("handleTokensCommand() = false, want true")
 	}
-	for _, reject := range []string{"Provider history reduction", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled"} {
+	for _, reject := range []string{"Provider history reduction", "content_replacements", "total_provider_facing_saved", "approx_total_provider_facing_saved_tokens", "responses_chain_disabled"} {
 		if strings.Contains(out.String(), reject) {
 			t.Fatalf("/tokens output should not contain %q:\n%s", reject, out.String())
 		}

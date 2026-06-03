@@ -37,9 +37,6 @@ func TestProviderHistoryCommandEditApplyReplacesOldSuccessfulWriteFileContent(t 
 	if report.ReplacedCount != 0 || !report.ResponsesChainDisabled {
 		t.Fatalf("projection report = %#v, want edit-arg-only replacement to disable response chain", report)
 	}
-	if report.EstimatedSavedBytes != 0 || report.ApproxSavedTokens != 0 {
-		t.Fatalf("top-level content savings = bytes %d tokens %d, want unchanged for arg-only replacement", report.EstimatedSavedBytes, report.ApproxSavedTokens)
-	}
 	commandReport := report.CommandEditDryRun
 	if commandReport.ReplacementStatus != providerHistoryCommandEditReplacementStatusPartialApply ||
 		commandReport.EditArgCandidates != 1 ||
@@ -50,6 +47,10 @@ func TestProviderHistoryCommandEditApplyReplacesOldSuccessfulWriteFileContent(t 
 	}
 	if got := commandReport.CandidateReasonCounts["write_file_content"]; got != 1 {
 		t.Fatalf("CandidateReasonCounts = %#v, want write_file_content:1", commandReport.CandidateReasonCounts)
+	}
+	if report.EstimatedSavedBytes != commandReport.EditArgReplacementSavedBytes ||
+		report.ApproxSavedTokens != commandReport.ApproxEditArgReplacementSavedTokens {
+		t.Fatalf("top-level provider-facing savings = bytes %d tokens %d, want edit-arg savings %d/%d", report.EstimatedSavedBytes, report.ApproxSavedTokens, commandReport.EditArgReplacementSavedBytes, commandReport.ApproxEditArgReplacementSavedTokens)
 	}
 }
 

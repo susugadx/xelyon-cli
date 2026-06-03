@@ -51,44 +51,70 @@ func providerHistoryProjectionModeLabel(mode ProviderHistoryReductionMode) strin
 }
 
 func formatProviderHistoryProjectionReportSummary(report ProviderHistoryProjectionReport) string {
-	return fmt.Sprintf(
-		"mode=%s; candidates=%s; replaced=%s; kept=%s; original=%s B; projected=%s B; saved=%s B; approx_saved_tokens=%s; kept_reasons=%s; responses_chain_disabled=%t",
-		providerHistoryProjectionModeLabel(report.Mode),
-		formatNumber(report.CandidateCount),
-		formatNumber(report.ReplacedCount),
-		formatNumber(report.KeptCount),
-		formatNumber(report.OriginalBytes),
-		formatNumber(report.ProjectedBytes),
-		formatNumber(report.EstimatedSavedBytes),
-		formatNumber(report.ApproxSavedTokens),
-		formatProviderHistoryReasonCounts(report.KeptReasonCounts),
-		report.ResponsesChainDisabled,
+	return formatProviderHistoryProjectionReportSummaryWithModeLine(
+		report,
+		fmt.Sprintf("provider history reduction: %s", providerHistoryProjectionModeLabel(report.Mode)),
 	)
 }
 
-func formatProviderHistoryCommandEditDryRunReportSummary(report ProviderHistoryCommandEditDryRunReport) string {
-	replacementStatus := report.ReplacementStatus
-	if replacementStatus == "" {
-		replacementStatus = providerHistoryCommandEditReplacementStatusNotImplemented
+func formatProviderHistoryProjectionReportSummaryWithModeLine(report ProviderHistoryProjectionReport, modeLine string) string {
+	commandSavedBytes, commandSavedTokens := providerHistoryCommandOutputSavingsForStatus(report)
+	editSavedBytes, editSavedTokens := providerHistoryEditArgSavingsForStatus(report)
+	return strings.Join([]string{
+		modeLine,
+		fmt.Sprintf("replacement_status=%s", providerHistoryReplacementStatusForStatus(report)),
+		fmt.Sprintf(
+			"content_replacements=%s; content_saved=%s B; approx_content_saved_tokens=%s",
+			formatNumber(report.ReplacedCount),
+			formatNumber(report.ContentReplacementSavedBytes),
+			formatNumber(report.ApproxContentReplacementSavedTokens),
+		),
+		fmt.Sprintf(
+			"command_output_replacements=%s; command_output_saved=%s B; approx_command_output_saved_tokens=%s",
+			formatNumber(report.CommandEditDryRun.CommandReplacedCount),
+			formatNumber(commandSavedBytes),
+			formatNumber(commandSavedTokens),
+		),
+		fmt.Sprintf(
+			"edit_arg_replacements=%s; edit_arg_saved=%s B; approx_edit_arg_saved_tokens=%s",
+			formatNumber(report.CommandEditDryRun.EditArgReplacedCount),
+			formatNumber(editSavedBytes),
+			formatNumber(editSavedTokens),
+		),
+		fmt.Sprintf(
+			"total_provider_facing_saved=%s B; approx_total_provider_facing_saved_tokens=%s",
+			formatNumber(report.EstimatedSavedBytes),
+			formatNumber(report.ApproxSavedTokens),
+		),
+		fmt.Sprintf("responses_chain_disabled=%t", report.ResponsesChainDisabled),
+	}, "\n")
+}
+
+func providerHistoryReplacementStatusForStatus(report ProviderHistoryProjectionReport) string {
+	if strings.TrimSpace(report.ReplacementStatus) != "" {
+		return report.ReplacementStatus
 	}
-	return fmt.Sprintf(
-		"command/edit: replacement=%s; command_candidates=%s; command_replaced=%s; edit_arg_candidates=%s; edit_arg_replaced=%s; command_original_bytes=%s B; edit_arg_original_bytes=%s B; command_replacement_saved=%s B; edit_arg_replacement_saved=%s B; approx_command_saved_tokens=%s; approx_command_replacement_saved_tokens=%s; approx_edit_arg_saved_tokens=%s; approx_edit_arg_replacement_saved_tokens=%s; candidate_reasons=%s; kept_reasons=%s",
-		replacementStatus,
-		formatNumber(report.CommandCandidates),
-		formatNumber(report.CommandReplacedCount),
-		formatNumber(report.EditArgCandidates),
-		formatNumber(report.EditArgReplacedCount),
-		formatNumber(report.CommandOriginalBytes),
-		formatNumber(report.EditArgOriginalBytes),
-		formatNumber(report.CommandReplacementSavedBytes),
-		formatNumber(report.EditArgReplacementSavedBytes),
-		formatNumber(report.ApproxCommandSavedTokens),
-		formatNumber(report.ApproxCommandReplacementSavedTokens),
-		formatNumber(report.ApproxEditArgSavedTokens),
-		formatNumber(report.ApproxEditArgReplacementSavedTokens),
-		formatProviderHistoryReasonCounts(report.CandidateReasonCounts),
-		formatProviderHistoryReasonCounts(report.KeptReasonCounts),
-	)
+	return providerHistoryCommandEditReplacementStatusNotImplemented
+}
+
+func providerHistoryCommandOutputSavingsForStatus(report ProviderHistoryProjectionReport) (int, int) {
+	if report.Mode == ProviderHistoryReductionApply {
+		return report.CommandEditDryRun.CommandReplacementSavedBytes, report.CommandEditDryRun.ApproxCommandReplacementSavedTokens
+	}
+	if report.Mode == ProviderHistoryReductionDryRun {
+		return report.CommandEditDryRun.CommandEstimatedSavedBytes, report.CommandEditDryRun.ApproxCommandSavedTokens
+	}
+	return 0, 0
+}
+
+func providerHistoryEditArgSavingsForStatus(report ProviderHistoryProjectionReport) (int, int) {
+	if report.Mode == ProviderHistoryReductionApply {
+		return report.CommandEditDryRun.EditArgReplacementSavedBytes, report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens
+	}
+	if report.Mode == ProviderHistoryReductionDryRun {
+		return report.CommandEditDryRun.EditArgEstimatedSavedBytes, report.CommandEditDryRun.ApproxEditArgSavedTokens
+	}
+	return 0, 0
 }
 
 func formatProviderHistoryReasonCounts(counts map[string]int) string {
@@ -122,27 +148,31 @@ func providerHistoryReductionStatusSummary(runtime *AgentRuntime) (string, bool)
 	resolution := providerHistoryReductionModeResolutionForRuntime(runtime)
 
 	if resolution.configured == ProviderHistoryReductionAuto {
-		prefix := fmt.Sprintf("mode=auto; effective=%s", providerHistoryProjectionModeLabel(resolution.effective))
 		if hasReport {
-			return fmt.Sprintf("%s; report: %s", prefix, formatProviderHistoryProjectionReportSummary(report)), true
+			modeLine := fmt.Sprintf("provider history reduction: auto; effective=%s", providerHistoryProjectionModeLabel(resolution.effective))
+			return formatProviderHistoryProjectionReportSummaryWithModeLine(report, modeLine), true
 		}
-		return prefix + "; no report yet", true
+		return fmt.Sprintf("provider history reduction: auto; effective=%s; no report yet", providerHistoryProjectionModeLabel(resolution.effective)), true
 	}
 
 	if hasReport {
 		return formatProviderHistoryProjectionReportSummary(report), true
 	}
 	if resolution.specified && resolution.configured != ProviderHistoryReductionDisabled {
-		return fmt.Sprintf("mode=%s; no report yet", providerHistoryProjectionModeLabel(resolution.configured)), true
+		return fmt.Sprintf("provider history reduction: %s; no report yet", providerHistoryProjectionModeLabel(resolution.configured)), true
 	}
 	return "", false
 }
 
 func providerHistoryRehydrateContextStatusSummary(agent *Agent) string {
+	transport := providerHistoryActiveContextTransportForStatus(agent)
+	evidenceCount := providerHistoryRehydratedEvidenceCountForStatus(agent)
 	return fmt.Sprintf(
-		"rehydrate_context=%s; active_context_transport=%s",
+		"rehydrate_context=%s; active_context_transport=%s; active_context_rehydrated_evidence=%t; count=%s",
 		onOffProviderHistoryRehydrateContext(providerHistoryRehydrateContextEnabled(agent)),
-		providerHistoryActiveContextTransportForStatus(agent),
+		transport,
+		providerHistoryRehydrateContextEnabled(agent) && transport != "none" && evidenceCount > 0,
+		formatNumber(evidenceCount),
 	)
 }
 
@@ -166,13 +196,16 @@ func onOffProviderHistoryRehydrateContext(enabled bool) string {
 	return "off"
 }
 
-func providerHistoryCommandEditDryRunStatusSummary(runtime *AgentRuntime) (string, bool) {
-	if runtime == nil {
-		return "", false
+func providerHistoryRehydratedEvidenceCountForStatus(agent *Agent) int {
+	if agent == nil || agent.Runtime == nil {
+		return 0
 	}
-	report := runtime.LastProviderHistoryProjectionReport
-	if providerHistoryProjectionReportIsEmpty(report) || providerHistoryCommandEditDryRunReportIsEmpty(report.CommandEditDryRun) {
-		return "", false
+	return len(providerHistoryAppliedEvidencePointers(agent.Runtime.LastProviderHistoryProjectionReport))
+}
+
+func providerHistoryStatusSummaryLines(summary string) []string {
+	if strings.TrimSpace(summary) == "" {
+		return nil
 	}
-	return formatProviderHistoryCommandEditDryRunReportSummary(report.CommandEditDryRun), true
+	return strings.Split(summary, "\n")
 }

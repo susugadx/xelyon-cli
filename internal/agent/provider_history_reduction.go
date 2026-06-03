@@ -33,6 +33,7 @@ type ProviderHistoryProjectionReport = providerhistory.ProjectionReport
 
 const (
 	providerHistoryCommandEditReplacementStatusNotImplemented = "not_implemented"
+	providerHistoryReplacementStatusApply                     = "apply"
 	providerHistoryCommandEditReplacementStatusPartialApply   = "partial_apply"
 )
 

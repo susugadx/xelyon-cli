@@ -16,6 +16,12 @@ const (
 	Auto
 )
 
+const (
+	providerHistoryReplacementStatusNotImplemented = "not_implemented"
+	providerHistoryReplacementStatusApply          = "apply"
+	providerHistoryReplacementStatusPartialApply   = "partial_apply"
+)
+
 // Policy は provider-facing reduction の方針を選ぶ。
 type Policy struct {
 	Mode                                   Mode
@@ -75,6 +81,8 @@ type CommandEditDryRunReport struct {
 	EditArgCandidates                   int
 	CommandOriginalBytes                int
 	EditArgOriginalBytes                int
+	CommandEstimatedSavedBytes          int
+	EditArgEstimatedSavedBytes          int
 	CommandReplacedCount                int
 	EditArgReplacedCount                int
 	CommandReplacementSavedBytes        int
@@ -91,22 +99,25 @@ type CommandEditDryRunReport struct {
 
 // ProjectionReport は provider-facing projection の構築結果を要約する。
 type ProjectionReport struct {
-	Mode                   Mode
-	OriginalMessageCount   int
-	ProjectedMessageCount  int
-	ToolResultCount        int
-	CandidateCount         int
-	KeptCount              int
-	ReplacedCount          int
-	OriginalBytes          int
-	ProjectedBytes         int
-	EstimatedSavedBytes    int
-	ApproxSavedTokens      int
-	KeptReasonCounts       map[string]int
-	ResponsesChainDisabled bool
-	Candidates             []ReductionCandidate
-	Kept                   []ReductionCandidate
-	CommandEditDryRun      CommandEditDryRunReport
+	Mode                                Mode
+	OriginalMessageCount                int
+	ProjectedMessageCount               int
+	ToolResultCount                     int
+	CandidateCount                      int
+	KeptCount                           int
+	ReplacedCount                       int
+	OriginalBytes                       int
+	ProjectedBytes                      int
+	EstimatedSavedBytes                 int
+	ApproxSavedTokens                   int
+	ContentReplacementSavedBytes        int
+	ApproxContentReplacementSavedTokens int
+	ReplacementStatus                   string
+	KeptReasonCounts                    map[string]int
+	ResponsesChainDisabled              bool
+	Candidates                          []ReductionCandidate
+	Kept                                []ReductionCandidate
+	CommandEditDryRun                   CommandEditDryRunReport
 }
 
 func normalizePolicy(policy Policy) Policy {

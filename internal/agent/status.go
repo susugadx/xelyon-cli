@@ -190,11 +190,12 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 		_, _ = fmt.Fprintln(out)
 		green.Fprintln(out, "🧾 Provider history reduction")
 		if ok {
-			_, _ = fmt.Fprintf(out, "  %s\n", summary)
+			for _, line := range providerHistoryStatusSummaryLines(summary) {
+				_, _ = fmt.Fprintf(out, "  %s\n", line)
+			}
 		}
-		_, _ = fmt.Fprintf(out, "  %s\n", providerHistoryRehydrateContextStatusSummary(agent))
-		if commandEditSummary, ok := providerHistoryCommandEditDryRunStatusSummary(agent.Runtime); ok {
-			_, _ = fmt.Fprintf(out, "  %s\n", commandEditSummary)
+		for _, line := range providerHistoryStatusSummaryLines(providerHistoryRehydrateContextStatusSummary(agent)) {
+			_, _ = fmt.Fprintf(out, "  %s\n", line)
 		}
 	}
 

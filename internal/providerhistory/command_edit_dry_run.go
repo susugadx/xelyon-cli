@@ -15,13 +15,11 @@ import (
 )
 
 const (
-	providerHistoryCommandEditReplacementStatusNotImplemented = "not_implemented"
-	providerHistoryCommandEditReplacementStatusPartialApply   = "partial_apply"
+	providerHistoryCommandEditReplacementStatusNotImplemented = providerHistoryReplacementStatusNotImplemented
+	providerHistoryCommandEditReplacementStatusPartialApply   = providerHistoryReplacementStatusPartialApply
 	providerHistoryCommandReplacementMinSavedTokens           = 128
 	providerHistoryEditArgReplacementMinSavedTokens           = 128
 	providerHistoryCommandPlaceholderCommandMaxRunes          = 120
-	providerHistoryCommandPlaceholder                         = "[omitted old command output; replacement not implemented]"
-	providerHistoryEditArgPlaceholder                         = "[omitted old edit arguments; replacement not implemented]"
 )
 
 var (
@@ -79,7 +77,7 @@ func buildCommandEditDryRunReport(original, projection []api.Message, mode Mode,
 			}
 			continue
 		}
-		candidateIndex, ok := recordProviderHistoryEditArgCandidate(&report, entry, linkage.ToolName, linkage.Ref.arguments)
+		candidateIndex, ok := recordProviderHistoryEditArgCandidate(&report, entry, linkage.ToolName, linkage.Ref.arguments, msg.Content)
 		if ok && mode == Apply {
 			applyProviderHistoryEditArgReplacementCandidate(&report, candidateIndex, linkage.ToolName, linkage.Ref, msg.Content, projection)
 		}
@@ -148,11 +146,15 @@ func recordProviderHistoryCommandCandidate(report *CommandEditDryRunReport, entr
 	entry.OriginalRuneSize = utf8.RuneCountInString(content)
 	entry.ApproxOriginalTokens = token.EstimateTokenCount(content)
 	entry.Reason = classifyProviderHistoryCommandCandidateReason(arguments, content)
+	if savedBytes, savedTokens, ok := estimateProviderHistoryCommandReplacement(entry, arguments); ok {
+		report.CommandEstimatedSavedBytes += savedBytes
+		report.ApproxCommandSavedTokens += savedTokens
+	}
 	report.Candidates = append(report.Candidates, entry)
 	return len(report.Candidates) - 1, true
 }
 
-func recordProviderHistoryEditArgCandidate(report *CommandEditDryRunReport, entry CommandEditDryRunCandidate, toolName, arguments string) (int, bool) {
+func recordProviderHistoryEditArgCandidate(report *CommandEditDryRunReport, entry CommandEditDryRunCandidate, toolName, arguments, toolResultContent string) (int, bool) {
 	payload, keepReason := editargs.Payload(toolName, arguments)
 	entry.Kind = "edit_arguments"
 	if keepReason != "" {
@@ -164,8 +166,31 @@ func recordProviderHistoryEditArgCandidate(report *CommandEditDryRunReport, entr
 	entry.OriginalRuneSize = payload.Runes
 	entry.ApproxOriginalTokens = payload.Tokens
 	entry.Reason = payload.Reason
+	if replacement, ok := editargs.BuildReplacement(editargs.ReplacementRequest{
+		ToolName:          toolName,
+		Arguments:         arguments,
+		ToolResultContent: toolResultContent,
+	}); ok {
+		report.EditArgEstimatedSavedBytes += replacement.SavedBytes
+		report.ApproxEditArgSavedTokens += replacement.SavedTokens
+	}
 	report.Candidates = append(report.Candidates, entry)
 	return len(report.Candidates) - 1, true
+}
+
+func estimateProviderHistoryCommandReplacement(candidate CommandEditDryRunCandidate, arguments string) (int, int, bool) {
+	if candidate.Kind != "command_output" || !providerHistoryCommandCandidateReasonAllowsReplacement(candidate.Reason) {
+		return 0, 0, false
+	}
+	replacementText := buildProviderHistoryCommandReplacement(candidate.Reason, providerHistoryCommandArgument(arguments))
+	if len(replacementText) >= candidate.OriginalByteSize {
+		return 0, 0, false
+	}
+	savedTokens := clampProviderHistorySavedTokens(candidate.ApproxOriginalTokens, token.EstimateTokenCount(replacementText))
+	if savedTokens < providerHistoryCommandReplacementMinSavedTokens {
+		return 0, 0, false
+	}
+	return candidate.OriginalByteSize - len(replacementText), savedTokens, true
 }
 
 func providerHistoryCommandArgumentFields(arguments string) (map[string]json.RawMessage, error) {
@@ -545,8 +570,6 @@ func finalizeCommandEditDryRunReport(report *CommandEditDryRunReport) {
 	if report.CommandReplacedCount > 0 || report.EditArgReplacedCount > 0 {
 		report.ReplacementStatus = providerHistoryCommandEditReplacementStatusPartialApply
 	}
-	commandPlaceholderTokens := token.EstimateTokenCount(providerHistoryCommandPlaceholder)
-	editPlaceholderTokens := token.EstimateTokenCount(providerHistoryEditArgPlaceholder)
 	for _, candidate := range report.Candidates {
 		if candidate.Reason != "" {
 			if report.CandidateReasonCounts == nil {
@@ -558,11 +581,9 @@ func finalizeCommandEditDryRunReport(report *CommandEditDryRunReport) {
 		case "command_output":
 			report.CommandCandidates++
 			report.CommandOriginalBytes += candidate.OriginalByteSize
-			report.ApproxCommandSavedTokens += clampProviderHistorySavedTokens(candidate.ApproxOriginalTokens, commandPlaceholderTokens)
 		case "edit_arguments":
 			report.EditArgCandidates++
 			report.EditArgOriginalBytes += candidate.OriginalByteSize
-			report.ApproxEditArgSavedTokens += clampProviderHistorySavedTokens(candidate.ApproxOriginalTokens, editPlaceholderTokens)
 		}
 	}
 	for _, kept := range report.Kept {

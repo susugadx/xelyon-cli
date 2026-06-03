@@ -77,7 +77,7 @@ func TestPhase5DOpenAIResponsesReductionForcesFullHistoryAndKeepsTrailingToolOut
 	if !report.ResponsesChainDisabled {
 		t.Fatalf("ResponsesChainDisabled = false, want true after replacement")
 	}
-	if report.EstimatedSavedBytes <= 0 || !strings.Contains(formatProviderHistoryProjectionReportSummary(report), "saved=") {
+	if report.EstimatedSavedBytes <= 0 || !strings.Contains(formatProviderHistoryProjectionReportSummary(report), "total_provider_facing_saved=") {
 		t.Fatalf("status projection report = %#v, want saved bytes for payload that contains placeholder", report)
 	}
 }
