@@ -57,7 +57,7 @@ func assertProviderHistoryApplyPatchArgReplacement(t *testing.T, args, path, ori
 	if !ok {
 		t.Fatalf("projected apply_patch.patch = %#v, want string", fields["patch"])
 	}
-	if replacement == "" || replacement == originalPatch || !strings.HasPrefix(replacement, "[omitted old apply_patch.patch; files="+path+"]") {
+	if replacement == "" || replacement == originalPatch || !strings.HasPrefix(replacement, "[omitted old apply_patch.patch; files="+path+"; result=success]") {
 		t.Fatalf("projected apply_patch.patch = %q, want placeholder for %s", replacement, path)
 	}
 	return replacement

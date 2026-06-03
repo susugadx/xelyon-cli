@@ -200,7 +200,7 @@ func TestProviderHistoryEditArgsBuildReplacementRewritesApplyPatchWithMultiFileS
 	if fields["note"] != "preserve" {
 		t.Fatalf("replacement fields = %#v, want extra fields preserved", fields)
 	}
-	want := "[omitted old apply_patch.patch; files=generated/a.go, generated/b.go, generated/c.go, +2 more]"
+	want := "[omitted old apply_patch.patch; files=generated/a.go, generated/b.go, generated/c.go, +2 more; result=success]"
 	if got := stringField(t, fields, "patch"); got != want {
 		t.Fatalf("apply_patch replacement = %q, want %q", got, want)
 	}
@@ -225,7 +225,7 @@ func TestProviderHistoryEditArgsBuildReplacementRewritesApplyPatchMoveTarget(t *
 		t.Fatal("BuildReplacement(apply_patch move) returned false")
 	}
 	fields := argumentFields(t, replacement.Arguments)
-	want := "[omitted old apply_patch.patch; files=" + movePath + "]"
+	want := "[omitted old apply_patch.patch; files=" + movePath + "; result=success]"
 	if got := stringField(t, fields, "patch"); got != want {
 		t.Fatalf("apply_patch move replacement = %q, want %q", got, want)
 	}
@@ -297,6 +297,24 @@ func TestProviderHistoryEditArgsBuildReplacementRewritesStrReplaceSingleAndBatch
 	assertStrReplacePlaceholder(t, singleFields["old_str"], "old_str", singlePath)
 	assertStrReplacePlaceholder(t, singleFields["new_str"], "new_str", singlePath)
 
+	lineRangePath := "internal/providerhistory/line_range_replace.go"
+	lineRangeArgs := jsonAnyArgs(t, map[string]any{
+		"path":    lineRangePath,
+		"old_str": oldStr,
+		"new_str": newStr,
+	})
+	lineRange, ok := editargs.BuildReplacement(editargs.ReplacementRequest{
+		ToolName:          "str_replace",
+		Arguments:         lineRangeArgs,
+		ToolResultContent: "Successfully replaced lines 12-40 in " + lineRangePath + " (new range: 12-41)",
+	})
+	if !ok {
+		t.Fatal("BuildReplacement(str_replace line range single) returned false")
+	}
+	lineRangeFields := argumentFields(t, lineRange.Arguments)
+	assertStrReplacePlaceholder(t, lineRangeFields["old_str"], "old_str", lineRangePath)
+	assertStrReplacePlaceholder(t, lineRangeFields["new_str"], "new_str", lineRangePath)
+
 	staleEditsArgs := jsonAnyArgs(t, map[string]any{
 		"path":    singlePath,
 		"old_str": oldStr,
@@ -322,16 +340,28 @@ func TestProviderHistoryEditArgsBuildReplacementRewritesStrReplaceSingleAndBatch
 	stringPath := "internal/providerhistory/batch_string.go"
 	arrayArgs := jsonAnyArgs(t, map[string]any{
 		"path": arrayPath,
-		"edits": []map[string]any{{
-			"old_str": largeStrReplaceText("array old"),
-			"new_str": largeStrReplaceText("array new"),
-			"note":    "preserve me",
-		}},
+		"edits": []map[string]any{
+			{
+				"old_str": largeStrReplaceText("array old"),
+				"new_str": largeStrReplaceText("array new"),
+				"note":    "preserve me",
+			},
+			{
+				"old_str": largeStrReplaceText("array old second"),
+				"new_str": largeStrReplaceText("array new second"),
+			},
+		},
 	})
-	stringEdits := jsonAnyString(t, []map[string]any{{
-		"old_str": largeStrReplaceText("string old"),
-		"new_str": largeStrReplaceText("string new"),
-	}})
+	stringEdits := jsonAnyString(t, []map[string]any{
+		{
+			"old_str": largeStrReplaceText("string old"),
+			"new_str": largeStrReplaceText("string new"),
+		},
+		{
+			"old_str": largeStrReplaceText("string old second"),
+			"new_str": largeStrReplaceText("string new second"),
+		},
+	})
 	stringArgs := jsonAnyArgs(t, map[string]any{
 		"path":  stringPath,
 		"edits": stringEdits,
@@ -340,14 +370,14 @@ func TestProviderHistoryEditArgsBuildReplacementRewritesStrReplaceSingleAndBatch
 	arrayReplacement, ok := editargs.BuildReplacement(editargs.ReplacementRequest{
 		ToolName:          "str_replace",
 		Arguments:         arrayArgs,
-		ToolResultContent: "Successfully applied 1 edits to " + arrayPath,
+		ToolResultContent: "Successfully applied 2 edits to " + arrayPath,
 	})
 	if !ok {
 		t.Fatal("BuildReplacement(str_replace array edits) returned false")
 	}
 	arrayFields := argumentFields(t, arrayReplacement.Arguments)
 	arrayEdits, ok := arrayFields["edits"].([]any)
-	if !ok || len(arrayEdits) != 1 {
+	if !ok || len(arrayEdits) != 2 {
 		t.Fatalf("array edits = %#v, want JSON array shape", arrayFields["edits"])
 	}
 	arrayEdit := arrayEdits[0].(map[string]any)
@@ -360,7 +390,7 @@ func TestProviderHistoryEditArgsBuildReplacementRewritesStrReplaceSingleAndBatch
 	stringReplacement, ok := editargs.BuildReplacement(editargs.ReplacementRequest{
 		ToolName:          "str_replace",
 		Arguments:         stringArgs,
-		ToolResultContent: "Successfully applied 1 edits to " + stringPath,
+		ToolResultContent: "Successfully applied 2 edits to " + stringPath,
 	})
 	if !ok {
 		t.Fatal("BuildReplacement(str_replace string edits) returned false")
@@ -374,6 +404,9 @@ func TestProviderHistoryEditArgsBuildReplacementRewritesStrReplaceSingleAndBatch
 	if err := json.Unmarshal([]byte(stringReplacementPayload), &parsedStringEdits); err != nil {
 		t.Fatalf("projected edits string is not JSON array: %v\nedits=%s", err, stringReplacementPayload)
 	}
+	if len(parsedStringEdits) != 2 {
+		t.Fatalf("projected edits string length = %d, want 2", len(parsedStringEdits))
+	}
 	assertStrReplacePlaceholder(t, parsedStringEdits[0]["old_str"], "old_str", stringPath)
 	assertStrReplacePlaceholder(t, parsedStringEdits[0]["new_str"], "new_str", stringPath)
 }
@@ -382,6 +415,12 @@ func TestProviderHistoryEditArgsBuildReplacementKeepsNonReplaceableStrReplaceCas
 	path := "internal/providerhistory/replace.go"
 	args := strReplaceSingleArgs(t, path)
 	success := "Successfully replaced lines 5-6 in " + path + " (new range: 5-7)"
+	batchEdits := []map[string]any{
+		{"old_str": largeStrReplaceText("batch old"), "new_str": largeStrReplaceText("batch new")},
+		{"old_str": largeStrReplaceText("batch old second"), "new_str": largeStrReplaceText("batch new second")},
+	}
+	batchArrayArgs := jsonAnyArgs(t, map[string]any{"path": path, "edits": batchEdits})
+	batchStringArgs := jsonAnyArgs(t, map[string]any{"path": path, "edits": jsonAnyString(t, batchEdits)})
 
 	tests := []struct {
 		name   string
@@ -398,6 +437,11 @@ func TestProviderHistoryEditArgsBuildReplacementKeepsNonReplaceableStrReplaceCas
 		{name: "unsafe path", args: strReplaceSingleArgs(t, "../outside.go"), result: success},
 		{name: "malformed edits string", args: jsonAnyArgs(t, map[string]any{"path": path, "edits": `[{`}), result: "Successfully applied 1 edits to " + path},
 		{name: "missing old_str in edits", args: jsonAnyArgs(t, map[string]any{"path": path, "edits": []map[string]any{{"new_str": largeStrReplaceText("new")}}}), result: "Successfully applied 1 edits to " + path},
+		{name: "batch array count mismatch", args: batchArrayArgs, result: "Successfully applied 1 edits to " + path},
+		{name: "batch string count mismatch", args: batchStringArgs, result: "Successfully applied 1 edits to " + path},
+		{name: "batch args with single success result", args: batchArrayArgs, result: success},
+		{name: "batch result path mismatch", args: batchArrayArgs, result: "Successfully applied 2 edits to internal/providerhistory/other.go"},
+		{name: "single args with batch success result", args: args, result: "Successfully applied 1 edits to " + path},
 	}
 
 	for _, tt := range tests {

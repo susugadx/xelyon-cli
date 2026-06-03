@@ -61,13 +61,7 @@ func TestProjectReplacesOldApplyPatchAndStrReplaceArgsAfterSuccessfulMatchingRes
 
 func TestProjectReplacesOldStrReplaceEditsArgAfterSuccessfulMatchingResult(t *testing.T) {
 	replacePath := "internal/providerhistory/batch_replace.go"
-	edits := make([]map[string]string, 0, 160)
-	for i := 0; i < 160; i++ {
-		edits = append(edits, map[string]string{
-			"old_str": strings.Repeat("old batch line with enough content to compact\n", 8),
-			"new_str": strings.Repeat("new batch line with enough content to compact\n", 8),
-		})
-	}
+	edits := providerHistoryTestLargeStrReplaceEdits(160)
 	editsBytes, err := json.Marshal(edits)
 	if err != nil {
 		t.Fatalf("json.Marshal(edits) error = %v", err)
@@ -104,6 +98,128 @@ func TestProjectReplacesOldStrReplaceEditsArgAfterSuccessfulMatchingResult(t *te
 	if result.Report.EstimatedSavedBytes != report.EditArgReplacementSavedBytes ||
 		result.Report.ApproxSavedTokens != report.ApproxEditArgReplacementSavedTokens {
 		t.Fatalf("top-level savings = bytes %d tokens %d, want str_replace edits savings %d/%d", result.Report.EstimatedSavedBytes, result.Report.ApproxSavedTokens, report.EditArgReplacementSavedBytes, report.ApproxEditArgReplacementSavedTokens)
+	}
+}
+
+func TestProjectReplacesOldStrReplaceEditsArrayArgAfterSuccessfulMatchingResult(t *testing.T) {
+	replacePath := "internal/providerhistory/batch_array_replace.go"
+	edits := providerHistoryTestLargeStrReplaceEdits(2)
+	args := providerHistoryTestJSONAnyArguments(t, map[string]any{"path": replacePath, "edits": edits})
+	replaceSuccess := "Successfully applied 2 edits to " + replacePath
+	history := []api.Message{
+		providerHistoryTestAssistantToolCalls(providerHistoryTestToolCallWithArguments("call_edits_array", "str_replace", args)),
+		providerHistoryTestToolResult("call_edits_array", "str_replace", replaceSuccess),
+		{Role: "assistant", Content: "batch edit completed"},
+		providerHistoryTestAssistantToolCall("call_latest", "read_file"),
+		providerHistoryTestToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "done"},
+	}
+	raw := api.CloneMessages(history)
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy:   Policy{Mode: Apply},
+	})
+
+	fields := providerHistoryTestArgumentFields(t, result.History[0].ToolCalls[0].Function.Arguments)
+	projectedEdits, ok := fields["edits"].([]any)
+	if !ok || len(projectedEdits) != 2 {
+		t.Fatalf("projected str_replace edits = %#v, want compacted JSON array", fields["edits"])
+	}
+	firstEdit, ok := projectedEdits[0].(map[string]any)
+	oldReplacement, oldOK := firstEdit["old_str"].(string)
+	if !ok || !oldOK || !strings.Contains(oldReplacement, "[omitted old str_replace.edits[0].old_str; path="+replacePath+"]") {
+		t.Fatalf("projected first edit = %#v, want compacted edit placeholders", projectedEdits[0])
+	}
+	if !reflect.DeepEqual(history, raw) {
+		t.Fatalf("raw history changed after str_replace edits array projection:\n got %#v\nwant %#v", history, raw)
+	}
+	report := result.Report.CommandEditDryRun
+	if report.EditArgReplacedCount != 1 || report.EditArgReplacementSavedBytes <= 0 || !result.Report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v / top-level %#v, want one str_replace edits array replacement", report, result.Report)
+	}
+}
+
+func TestProjectKeepsStrReplaceEditsArgsWhenSuccessfulEditCountMismatches(t *testing.T) {
+	replacePath := "internal/providerhistory/batch_mismatch.go"
+	edits := providerHistoryTestLargeStrReplaceEdits(2)
+	editsBytes, err := json.Marshal(edits)
+	if err != nil {
+		t.Fatalf("json.Marshal(edits) error = %v", err)
+	}
+	editsPayload := string(editsBytes)
+	args := providerHistoryTestJSONAnyArguments(t, map[string]any{"path": replacePath, "edits": editsPayload})
+	replaceSuccess := "Successfully applied 1 edits to " + replacePath
+	history := []api.Message{
+		providerHistoryTestAssistantToolCalls(providerHistoryTestToolCallWithArguments("call_edits_mismatch", "str_replace", args)),
+		providerHistoryTestToolResult("call_edits_mismatch", "str_replace", replaceSuccess),
+		{Role: "assistant", Content: "batch edit completed"},
+		providerHistoryTestAssistantToolCall("call_latest", "read_file"),
+		providerHistoryTestToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "done"},
+	}
+	raw := api.CloneMessages(history)
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy:   Policy{Mode: Apply},
+	})
+
+	if result.History[0].ToolCalls[0].Function.Arguments != args {
+		t.Fatalf("projected str_replace args = %q, want original args", result.History[0].ToolCalls[0].Function.Arguments)
+	}
+	if !reflect.DeepEqual(result.History, raw) {
+		t.Fatalf("projection changed history for count mismatch:\n got %#v\nwant %#v", result.History, raw)
+	}
+	if !reflect.DeepEqual(history, raw) {
+		t.Fatalf("raw history changed after count mismatch projection:\n got %#v\nwant %#v", history, raw)
+	}
+	report := result.Report.CommandEditDryRun
+	if report.EditArgCandidates != 1 ||
+		report.CandidateReasonCounts["str_replace_edits"] != 1 ||
+		report.EditArgReplacedCount != 0 ||
+		result.Report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v / top-level %#v, want str_replace edits candidate without replacement", report, result.Report)
+	}
+}
+
+func TestProjectKeepsStrReplaceEditsArgsAndAnthropicInputWhenSuccessfulEditCountMismatches(t *testing.T) {
+	replacePath := "internal/providerhistory/claude_batch_mismatch.go"
+	edits := providerHistoryTestLargeStrReplaceEdits(2)
+	args := providerHistoryTestJSONAnyArguments(t, map[string]any{"path": replacePath, "edits": edits})
+	assistant := providerHistoryTestAssistantToolCalls(providerHistoryTestToolCallWithArguments("call_claude_edits", "str_replace", args))
+	assistant.SetAnthropicContentBlocks([]api.AnthropicContentBlock{
+		{Type: "thinking", Thinking: "private thought", Signature: "sig"},
+		{Type: "tool_use", ID: "call_claude_edits", Name: "str_replace", Input: map[string]any{"path": replacePath, "edits": edits}},
+	})
+	replaceSuccess := "Successfully applied 1 edits to " + replacePath
+	history := []api.Message{
+		assistant,
+		providerHistoryTestToolResult("call_claude_edits", "str_replace", replaceSuccess),
+		{Role: "assistant", Content: "batch edit completed"},
+		providerHistoryTestAssistantToolCall("call_latest", "read_file"),
+		providerHistoryTestToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "done"},
+	}
+	raw := api.CloneMessages(history)
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy:   Policy{Mode: Apply},
+	})
+
+	if result.History[0].ToolCalls[0].Function.Arguments != args {
+		t.Fatalf("projected ToolCalls arguments = %q, want original args", result.History[0].ToolCalls[0].Function.Arguments)
+	}
+	blocks := result.History[0].AnthropicContentBlocks()
+	if !reflect.DeepEqual(blocks, raw[0].AnthropicContentBlocks()) {
+		t.Fatalf("projected AnthropicContentBlocks = %#v, want original blocks %#v", blocks, raw[0].AnthropicContentBlocks())
+	}
+	if !reflect.DeepEqual(result.History, raw) {
+		t.Fatalf("projection changed history for Anthropic count mismatch:\n got %#v\nwant %#v", result.History, raw)
+	}
+	if result.Report.CommandEditDryRun.EditArgReplacedCount != 0 || result.Report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v, want replacement skipped for Anthropic count mismatch", result.Report)
 	}
 }
 
@@ -276,6 +392,17 @@ func providerHistoryTestLargeStrReplaceText(prefix string) string {
 	return strings.Repeat(prefix+" with enough content to pass replacement threshold\n", 220)
 }
 
+func providerHistoryTestLargeStrReplaceEdits(count int) []map[string]string {
+	edits := make([]map[string]string, 0, count)
+	for i := 0; i < count; i++ {
+		edits = append(edits, map[string]string{
+			"old_str": strings.Repeat("old batch line with enough content to compact\n", 8),
+			"new_str": strings.Repeat("new batch line with enough content to compact\n", 8),
+		})
+	}
+	return edits
+}
+
 func providerHistoryTestApplyPatchSuccess(added, modified, deleted []string) string {
 	return "✓ Patch applied successfully.\nAdded: " + providerHistoryTestApplyPatchPathList(added) +
 		"\nModified: " + providerHistoryTestApplyPatchPathList(modified) +
@@ -320,7 +447,7 @@ func providerHistoryTestStringArgument(t *testing.T, args, key string) string {
 func assertProviderHistoryTestApplyPatchReplacement(t *testing.T, args, path, originalPatch string) {
 	t.Helper()
 	replacement := providerHistoryTestStringArgument(t, args, "patch")
-	if replacement == "" || replacement == originalPatch || !strings.HasPrefix(replacement, "[omitted old apply_patch.patch; files="+path+"]") {
+	if replacement == "" || replacement == originalPatch || !strings.HasPrefix(replacement, "[omitted old apply_patch.patch; files="+path+"; result=success]") {
 		t.Fatalf("projected apply_patch.patch = %q, want placeholder for %s", replacement, path)
 	}
 }

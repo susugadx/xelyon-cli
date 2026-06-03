@@ -353,6 +353,81 @@ func TestNormalModeRequestApplyReplacesSuccessfulApplyPatchAndStrReplaceArgsOnly
 	}
 }
 
+func TestNormalModeRequestKeepsStrReplaceBatchArgsWhenSuccessfulEditCountMismatches(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{responseID: "resp_old"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.session.ResponseID = "resp_old"
+	replacePath := "generated/request_batch_mismatch.go"
+	edits := []map[string]any{
+		{
+			"old_str": providerHistoryLargeStrReplaceText("old request batch"),
+			"new_str": providerHistoryLargeStrReplaceText("new request batch"),
+		},
+		{
+			"old_str": providerHistoryLargeStrReplaceText("old request batch second"),
+			"new_str": providerHistoryLargeStrReplaceText("new request batch second"),
+		},
+	}
+	replaceArgs := providerHistoryJSONAnyArguments(t, map[string]any{"path": replacePath, "edits": edits})
+	replaceResult := "Successfully applied 1 edits to " + replacePath
+	agent.Runtime.Options.EnableProviderHistoryReduction = true
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect batch edit history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithArguments("call_replace_batch", "str_replace", replaceArgs)),
+		providerHistoryToolResult("call_replace_batch", "str_replace", replaceResult),
+		{Role: "assistant", Content: "batch edit done"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	for _, msg := range agent.History {
+		agent.session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+	beforeHistory := api.CloneMessages(agent.History)
+	beforeSession := append(agent.session.Messages[:0:0], agent.session.Messages...)
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if provider.capturedHistory[1].ToolCalls[0].Function.Arguments != replaceArgs {
+		t.Fatalf("provider str_replace args = %q, want raw args", provider.capturedHistory[1].ToolCalls[0].Function.Arguments)
+	}
+	if provider.capturedHistory[2].Content != replaceResult {
+		t.Fatalf("provider str_replace result = %q, want raw success output", provider.capturedHistory[2].Content)
+	}
+	if provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context disabled response ID chain for count-mismatched str_replace batch")
+	}
+	if provider.GetResponseID() != "resp_old" {
+		t.Fatalf("provider response ID = %q, want retained cached response ID", provider.GetResponseID())
+	}
+	if agent.session.ResponseID != "resp_old" {
+		t.Fatalf("session.ResponseID = %q, want retained cached response ID", agent.session.ResponseID)
+	}
+	for i, want := range beforeHistory {
+		if !reflect.DeepEqual(agent.History[i], want) {
+			t.Fatalf("Agent.History[%d] changed after count-mismatch edit request:\n got %#v\nwant %#v", i, agent.History[i], want)
+		}
+	}
+	for i, want := range beforeSession {
+		if !reflect.DeepEqual(agent.session.Messages[i], want) {
+			t.Fatalf("session.Messages[%d] changed after count-mismatch edit request:\n got %#v\nwant %#v", i, agent.session.Messages[i], want)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionApply ||
+		report.ReplacedCount != 0 ||
+		report.CommandEditDryRun.EditArgCandidates != 1 ||
+		report.CommandEditDryRun.EditArgReplacedCount != 0 ||
+		report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want str_replace edits candidate without replacement or chain disable", report)
+	}
+}
+
 func TestNormalModeRequestAutoUsesDryRunEffectiveMode(t *testing.T) {
 	disableColors(t)
 

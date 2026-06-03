@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -22,11 +23,23 @@ var (
 	writeFileSuccessPattern              = regexp.MustCompile(`(?m)^Successfully wrote \d+ bytes \(\d+ lines?\) to (.+?)(?:\r?\n|$)`)
 	strReplaceTextSuccessPattern         = regexp.MustCompile(`(?m)^Successfully replaced text in (.+?) \(lines \d+-\d+`)
 	strReplaceLineRangeSuccessPattern    = regexp.MustCompile(`(?m)^Successfully replaced lines \d+-\d+ in (.+?) \(new range: \d+-\d+\)`)
-	strReplaceBatchSuccessPattern        = regexp.MustCompile(`(?m)^Successfully applied \d+ edits to (.+?)(?:\r?\n|$)`)
-	strReplaceSuccessResultPathPatterns  = []*regexp.Regexp{strReplaceTextSuccessPattern, strReplaceLineRangeSuccessPattern, strReplaceBatchSuccessPattern}
+	strReplaceBatchSuccessPattern        = regexp.MustCompile(`(?m)^Successfully applied (\d+) edits to (.+?)(?:\r?\n|$)`)
 	applyPatchSuccessResultLinePrefixes  = []string{"Added: ", "Modified: ", "Deleted: "}
 	applyPatchSuccessResultRequiredLines = map[string]struct{}{"Added: ": {}, "Modified: ": {}, "Deleted: ": {}}
 )
+
+type strReplaceSuccessKind string
+
+const (
+	strReplaceSingleSuccess strReplaceSuccessKind = "single"
+	strReplaceBatchSuccess  strReplaceSuccessKind = "batch"
+)
+
+type strReplaceSuccessResult struct {
+	kind  strReplaceSuccessKind
+	path  string
+	count int
+}
 
 // PayloadSummary は edit tool の古い引数 payload 計測結果を表す。
 type PayloadSummary struct {
@@ -215,12 +228,15 @@ func buildStrReplaceReplacement(arguments, toolResultContent string) (Replacemen
 		return Replacement{}, false
 	}
 	path, ok := taskstate.NormalizeRepoRelativePath(rawPath)
-	if !ok || !strReplaceResultSucceededForPath(toolResultContent, path) {
+	if !ok {
 		return Replacement{}, false
 	}
 
 	if raw, ok := strReplaceBatchEditsArgument(fields); ok {
-		return buildStrReplaceBatchReplacement(fields, raw, path)
+		return buildStrReplaceBatchReplacement(fields, raw, path, toolResultContent)
+	}
+	if !strReplaceSingleResultSucceededForPath(toolResultContent, path) {
+		return Replacement{}, false
 	}
 	return buildStrReplaceSingleReplacement(fields, path)
 }
@@ -291,10 +307,13 @@ func buildStrReplaceSingleReplacement(fields map[string]json.RawMessage, path st
 	}, true
 }
 
-func buildStrReplaceBatchReplacement(fields map[string]json.RawMessage, raw json.RawMessage, path string) (Replacement, bool) {
+func buildStrReplaceBatchReplacement(fields map[string]json.RawMessage, raw json.RawMessage, path, toolResultContent string) (Replacement, bool) {
 	originalFields := cloneRawFields(fields)
 	edits, originalPayload, editsFieldWasString, ok := parseStrReplaceEditsPayload(raw)
 	if !ok || len(edits) == 0 {
+		return Replacement{}, false
+	}
+	if !strReplaceBatchResultSucceededForPathAndCount(toolResultContent, path, len(edits)) {
 		return Replacement{}, false
 	}
 
@@ -556,26 +575,50 @@ func collectResultPaths(value string, paths map[string]struct{}) bool {
 	return true
 }
 
-func strReplaceResultSucceededForPath(content, path string) bool {
-	resultPath, ok := strReplaceSuccessResultPath(content)
+func strReplaceSingleResultSucceededForPath(content, path string) bool {
+	results := strReplaceSuccessResults(content)
+	if len(results) != 1 || results[0].kind != strReplaceSingleSuccess {
+		return false
+	}
+	resultPath, ok := taskstate.NormalizeRepoRelativePath(results[0].path)
 	return ok && resultPath == path
 }
 
-func strReplaceSuccessResultPath(content string) (string, bool) {
-	var matchedPaths []string
-	for _, pattern := range strReplaceSuccessResultPathPatterns {
+func strReplaceBatchResultSucceededForPathAndCount(content, path string, editCount int) bool {
+	if editCount <= 0 {
+		return false
+	}
+	results := strReplaceSuccessResults(content)
+	if len(results) != 1 || results[0].kind != strReplaceBatchSuccess || results[0].count != editCount {
+		return false
+	}
+	resultPath, ok := taskstate.NormalizeRepoRelativePath(results[0].path)
+	return ok && resultPath == path
+}
+
+func strReplaceSuccessResults(content string) []strReplaceSuccessResult {
+	var results []strReplaceSuccessResult
+	for _, pattern := range []*regexp.Regexp{strReplaceTextSuccessPattern, strReplaceLineRangeSuccessPattern} {
 		matches := pattern.FindAllStringSubmatch(content, -1)
 		for _, match := range matches {
 			if len(match) < 2 {
 				continue
 			}
-			matchedPaths = append(matchedPaths, strings.TrimSpace(match[1]))
+			results = append(results, strReplaceSuccessResult{kind: strReplaceSingleSuccess, path: strings.TrimSpace(match[1])})
 		}
 	}
-	if len(matchedPaths) != 1 {
-		return "", false
+	matches := strReplaceBatchSuccessPattern.FindAllStringSubmatch(content, -1)
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		count, err := strconv.Atoi(match[1])
+		if err != nil {
+			continue
+		}
+		results = append(results, strReplaceSuccessResult{kind: strReplaceBatchSuccess, path: strings.TrimSpace(match[2]), count: count})
 	}
-	return taskstate.NormalizeRepoRelativePath(matchedPaths[0])
+	return results
 }
 
 func parseStrReplaceEditsPayload(raw json.RawMessage) ([]map[string]json.RawMessage, string, bool, bool) {
@@ -644,7 +687,7 @@ func buildWriteFileContentPlaceholder(path string) string {
 }
 
 func buildApplyPatchPlaceholder(paths []string) string {
-	return fmt.Sprintf("[omitted old apply_patch.patch; files=%s]", pathSummary(paths))
+	return fmt.Sprintf("[omitted old apply_patch.patch; files=%s; result=success]", pathSummary(paths))
 }
 
 func buildStrReplacePlaceholder(path, field string, editIndex int) string {
