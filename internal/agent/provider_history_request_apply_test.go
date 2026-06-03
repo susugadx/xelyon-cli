@@ -278,6 +278,81 @@ func TestNormalModeRequestApplyReplacesSuccessfulWriteFileContentOnlyInProviderP
 	}
 }
 
+func TestNormalModeRequestApplyReplacesSuccessfulApplyPatchAndStrReplaceArgsOnlyInProviderPayload(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{responseID: "resp_old"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.session.ResponseID = "resp_old"
+	patchPath := "generated/request_patch.go"
+	replacePath := "generated/request_replace.go"
+	patch := providerHistoryLargeApplyPatch(patchPath)
+	oldStr := providerHistoryLargeStrReplaceText("old request line")
+	newStr := providerHistoryLargeStrReplaceText("new request line")
+	patchArgs := providerHistoryJSONAnyArguments(t, map[string]any{"patch": patch})
+	replaceArgs := providerHistoryStrReplaceArguments(t, replacePath, oldStr, newStr)
+	patchResult := providerHistoryApplyPatchSuccess(nil, []string{patchPath}, nil)
+	replaceResult := "Successfully replaced text in " + replacePath + " (lines 3-20 → 3-21)"
+	agent.Runtime.Options.EnableProviderHistoryReduction = true
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect edit history"},
+		providerHistoryAssistantToolCalls(
+			providerHistoryToolCallWithArguments("call_patch", "apply_patch", patchArgs),
+			providerHistoryToolCallWithArguments("call_replace", "str_replace", replaceArgs),
+		),
+		providerHistoryToolResult("call_patch", "apply_patch", patchResult),
+		providerHistoryToolResult("call_replace", "str_replace", replaceResult),
+		{Role: "assistant", Content: "edits done"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	for _, msg := range agent.History {
+		agent.session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+	beforeHistory := api.CloneMessages(agent.History)
+	beforeSession := append(agent.session.Messages[:0:0], agent.session.Messages...)
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	assertProviderHistoryApplyPatchArgReplacement(t, provider.capturedHistory[1].ToolCalls[0].Function.Arguments, patchPath, patch)
+	assertProviderHistoryStrReplaceArgReplacement(t, provider.capturedHistory[1].ToolCalls[1].Function.Arguments, replacePath, oldStr, newStr)
+	if provider.capturedHistory[2].Content != patchResult || provider.capturedHistory[3].Content != replaceResult {
+		t.Fatalf("provider edit results = %q / %q, want raw success outputs", provider.capturedHistory[2].Content, provider.capturedHistory[3].Content)
+	}
+	if !provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context did not disable response ID chain for edit argument replacements")
+	}
+	if provider.GetResponseID() != "" {
+		t.Fatalf("provider response ID = %q, want cleared before edit argument replacement request", provider.GetResponseID())
+	}
+	if agent.session.ResponseID != "" {
+		t.Fatalf("session.ResponseID = %q, want cleared before edit argument replacement request is saved", agent.session.ResponseID)
+	}
+	for i, want := range beforeHistory {
+		if !reflect.DeepEqual(agent.History[i], want) {
+			t.Fatalf("Agent.History[%d] changed after edit argument replacement request:\n got %#v\nwant %#v", i, agent.History[i], want)
+		}
+	}
+	for i, want := range beforeSession {
+		if !reflect.DeepEqual(agent.session.Messages[i], want) {
+			t.Fatalf("session.Messages[%d] changed after edit argument replacement request:\n got %#v\nwant %#v", i, agent.session.Messages[i], want)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.Mode != ProviderHistoryReductionApply ||
+		report.ReplacedCount != 0 ||
+		report.CommandEditDryRun.EditArgReplacedCount != 2 ||
+		report.CommandEditDryRun.EditArgReplacementSavedBytes <= 0 ||
+		report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens < providerHistoryEditArgReplacementMinSavedTokens*2 ||
+		!report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want two edit-arg replacements with response chain disabled", report)
+	}
+}
+
 func TestNormalModeRequestAutoUsesDryRunEffectiveMode(t *testing.T) {
 	disableColors(t)
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory/editargs"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
@@ -79,8 +80,8 @@ func buildCommandEditDryRunReport(original, projection []api.Message, mode Mode,
 			continue
 		}
 		candidateIndex, ok := recordProviderHistoryEditArgCandidate(&report, entry, linkage.ToolName, linkage.Ref.arguments)
-		if ok && mode == Apply && linkage.ToolName == "write_file" {
-			applyProviderHistoryWriteFileContentReplacementCandidate(&report, candidateIndex, linkage.Ref, msg.Content, projection)
+		if ok && mode == Apply {
+			applyProviderHistoryEditArgReplacementCandidate(&report, candidateIndex, linkage.ToolName, linkage.Ref, msg.Content, projection)
 		}
 	}
 
@@ -132,12 +133,7 @@ func providerHistoryIsCommandOutputTool(toolName string) bool {
 }
 
 func providerHistoryIsEditArgTool(toolName string) bool {
-	switch toolName {
-	case "write_file", "apply_patch", "str_replace", "delete_file":
-		return true
-	default:
-		return false
-	}
+	return editargs.IsTool(toolName)
 }
 
 func recordProviderHistoryCommandCandidate(report *CommandEditDryRunReport, entry CommandEditDryRunCandidate, arguments, content string) (int, bool) {
@@ -157,54 +153,22 @@ func recordProviderHistoryCommandCandidate(report *CommandEditDryRunReport, entr
 }
 
 func recordProviderHistoryEditArgCandidate(report *CommandEditDryRunReport, entry CommandEditDryRunCandidate, toolName, arguments string) (int, bool) {
-	payload, keepReason := providerHistoryEditArgPayload(toolName, arguments)
+	payload, keepReason := editargs.Payload(toolName, arguments)
 	entry.Kind = "edit_arguments"
 	if keepReason != "" {
 		entry.KeepReason = keepReason
 		report.Kept = append(report.Kept, entry)
 		return -1, false
 	}
-	entry.OriginalByteSize = payload.bytes
-	entry.OriginalRuneSize = payload.runes
-	entry.ApproxOriginalTokens = payload.tokens
-	entry.Reason = payload.reason
+	entry.OriginalByteSize = payload.Bytes
+	entry.OriginalRuneSize = payload.Runes
+	entry.ApproxOriginalTokens = payload.Tokens
+	entry.Reason = payload.Reason
 	report.Candidates = append(report.Candidates, entry)
 	return len(report.Candidates) - 1, true
 }
 
-type providerHistoryEditArgPayloadSummary struct {
-	reason string
-	bytes  int
-	runes  int
-	tokens int
-}
-
-func providerHistoryEditArgPayload(toolName, arguments string) (providerHistoryEditArgPayloadSummary, string) {
-	fields, err := providerHistoryToolCallArgumentFields(arguments)
-	if err != nil {
-		return providerHistoryEditArgPayloadSummary{}, "invalid_tool_call_arguments"
-	}
-	switch toolName {
-	case "write_file":
-		return providerHistoryStringFieldsPayload("write_file_content", fields, "content")
-	case "apply_patch":
-		return providerHistoryStringFieldsPayload("apply_patch_patch", fields, "patch")
-	case "str_replace":
-		if raw, ok := fields["edits"]; ok && len(raw) > 0 && string(raw) != "null" {
-			return providerHistoryRawOrStringFieldPayload("str_replace_edits", raw)
-		}
-		return providerHistoryStringFieldsPayload("str_replace_strings", fields, "old_str", "new_str")
-	case "delete_file":
-		if value, ok := providerHistoryJSONStringArgument(fields, "path"); ok && value != "" {
-			return providerHistoryValuesPayload("delete_file_path", []string{value}), ""
-		}
-		return providerHistoryEditArgPayloadSummary{}, "missing_edit_argument_payload"
-	default:
-		return providerHistoryEditArgPayloadSummary{}, "tool_not_in_command_edit_allowlist"
-	}
-}
-
-func providerHistoryToolCallArgumentFields(arguments string) (map[string]json.RawMessage, error) {
+func providerHistoryCommandArgumentFields(arguments string) (map[string]json.RawMessage, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(arguments), &fields); err != nil {
 		return nil, err
@@ -215,34 +179,7 @@ func providerHistoryToolCallArgumentFields(arguments string) (map[string]json.Ra
 	return fields, nil
 }
 
-func providerHistoryStringFieldsPayload(reason string, fields map[string]json.RawMessage, keys ...string) (providerHistoryEditArgPayloadSummary, string) {
-	var values []string
-	for _, key := range keys {
-		value, ok := providerHistoryJSONStringArgument(fields, key)
-		if !ok {
-			continue
-		}
-		values = append(values, value)
-	}
-	if len(values) == 0 {
-		return providerHistoryEditArgPayloadSummary{}, "missing_edit_argument_payload"
-	}
-	return providerHistoryValuesPayload(reason, values), ""
-}
-
-func providerHistoryRawOrStringFieldPayload(reason string, raw json.RawMessage) (providerHistoryEditArgPayloadSummary, string) {
-	var value string
-	if err := json.Unmarshal(raw, &value); err == nil {
-		return providerHistoryValuesPayload(reason, []string{value}), ""
-	}
-	rawValue := strings.TrimSpace(string(raw))
-	if rawValue == "" {
-		return providerHistoryEditArgPayloadSummary{}, "missing_edit_argument_payload"
-	}
-	return providerHistoryValuesPayload(reason, []string{rawValue}), ""
-}
-
-func providerHistoryJSONStringArgument(fields map[string]json.RawMessage, key string) (string, bool) {
+func providerHistoryCommandJSONStringArgument(fields map[string]json.RawMessage, key string) (string, bool) {
 	raw, ok := fields[key]
 	if !ok {
 		return "", false
@@ -252,16 +189,6 @@ func providerHistoryJSONStringArgument(fields map[string]json.RawMessage, key st
 		return "", false
 	}
 	return value, true
-}
-
-func providerHistoryValuesPayload(reason string, values []string) providerHistoryEditArgPayloadSummary {
-	summary := providerHistoryEditArgPayloadSummary{reason: reason}
-	for _, value := range values {
-		summary.bytes += len(value)
-		summary.runes += utf8.RuneCountInString(value)
-		summary.tokens += token.EstimateTokenCount(value)
-	}
-	return summary
 }
 
 func classifyProviderHistoryCommandCandidateReason(arguments, content string) string {
@@ -288,11 +215,11 @@ func classifyProviderHistoryCommandCandidateReason(arguments, content string) st
 }
 
 func providerHistoryCommandArgument(arguments string) string {
-	fields, err := providerHistoryToolCallArgumentFields(arguments)
+	fields, err := providerHistoryCommandArgumentFields(arguments)
 	if err != nil {
 		return ""
 	}
-	value, _ := providerHistoryJSONStringArgument(fields, "command")
+	value, _ := providerHistoryCommandJSONStringArgument(fields, "command")
 	return value
 }
 
