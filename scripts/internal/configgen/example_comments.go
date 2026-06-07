@@ -25,6 +25,7 @@ func annotateExampleSectionComments(mapping *yaml.Node) {
 			continue
 		}
 		annotateExampleFieldComments(valueNode, info.Fields, "")
+		annotateExampleCommentedFields(valueNode, info.Fields, info.Example.CommentedFields)
 	}
 }
 
@@ -57,6 +58,109 @@ func annotateExampleFieldComments(mapping *yaml.Node, fields map[string]string, 
 			annotateExampleFieldComments(valueNode, fields, path)
 		}
 	}
+}
+
+func annotateExampleCommentedFields(mapping *yaml.Node, fields map[string]string, commentedFields map[string]CommentedExampleField) {
+	if mapping == nil || mapping.Kind != yaml.MappingNode || len(commentedFields) == 0 {
+		return
+	}
+	for path, field := range commentedFields {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if findExampleKeyNodeByPath(mapping, path) != nil {
+			continue
+		}
+		anchorKey := findExampleCommentAnchor(mapping, path, strings.TrimSpace(field.Before))
+		if anchorKey == nil {
+			continue
+		}
+		comment := buildCommentedExampleFieldComment(path, fields[path], field.Value)
+		anchorKey.HeadComment = mergeNodeHeadComment(comment, anchorKey.HeadComment)
+	}
+}
+
+func buildCommentedExampleFieldComment(path, fieldComment, value string) string {
+	var lines []string
+	if fieldComment = strings.TrimSpace(fieldComment); fieldComment != "" {
+		lines = append(lines, fieldComment)
+	}
+	key := path
+	if parts := strings.Split(path, "."); len(parts) > 0 {
+		key = parts[len(parts)-1]
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		lines = append(lines, key+":")
+	} else {
+		lines = append(lines, key+": "+value)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func findExampleCommentAnchor(mapping *yaml.Node, path, beforePath string) *yaml.Node {
+	if beforePath != "" {
+		if keyNode := findExampleKeyNodeByPath(mapping, beforePath); keyNode != nil {
+			return keyNode
+		}
+	}
+	parentPath, _ := splitExampleFieldPath(path)
+	parent := findExampleMappingByPath(mapping, parentPath)
+	if parent == nil || parent.Kind != yaml.MappingNode || len(parent.Content) == 0 {
+		return nil
+	}
+	return parent.Content[0]
+}
+
+func findExampleKeyNodeByPath(mapping *yaml.Node, path string) *yaml.Node {
+	parentPath, key := splitExampleFieldPath(path)
+	parent := findExampleMappingByPath(mapping, parentPath)
+	if parent == nil || parent.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			return parent.Content[i]
+		}
+	}
+	return nil
+}
+
+func findExampleMappingByPath(mapping *yaml.Node, path []string) *yaml.Node {
+	current := mapping
+	for _, part := range path {
+		if current == nil || current.Kind != yaml.MappingNode {
+			return nil
+		}
+		var next *yaml.Node
+		for i := 0; i+1 < len(current.Content); i += 2 {
+			if current.Content[i].Value == part {
+				next = current.Content[i+1]
+				break
+			}
+		}
+		current = next
+	}
+	return current
+}
+
+func splitExampleFieldPath(path string) ([]string, string) {
+	parts := strings.Split(path, ".")
+	if len(parts) == 0 {
+		return nil, ""
+	}
+	cleaned := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			cleaned = append(cleaned, part)
+		}
+	}
+	if len(cleaned) == 0 {
+		return nil, ""
+	}
+	return cleaned[:len(cleaned)-1], cleaned[len(cleaned)-1]
 }
 
 func buildExampleSectionHeaderComment(info SectionInfo) string {

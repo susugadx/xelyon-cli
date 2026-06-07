@@ -20,6 +20,7 @@ type providerFacingHistoryMutationProbe struct {
 	response                        string
 	responseID                      string
 	capturedHistory                 []api.Message
+	capturedActiveContextBlocks     []api.ActiveContextBlock
 	capturedResponseIDChainDisabled bool
 	imageUserMessage                string
 	imageCalls                      int
@@ -79,6 +80,7 @@ func (p *providerFacingHistoryMutationProbe) capture(messages []api.Message) {
 
 func (p *providerFacingHistoryMutationProbe) captureContext(ctx context.Context) {
 	p.capturedResponseIDChainDisabled = api.ResponseIDChainDisabledFromContext(ctx)
+	p.capturedActiveContextBlocks = api.ActiveContextBlocksFromContext(ctx)
 }
 
 func providerHistoryMessageContents(messages []api.Message) []string {
@@ -104,8 +106,9 @@ func mutateProviderFacingHistoryForTest(messages []api.Message) {
 
 func seedProviderHistoryReductionRequestFixture(t *testing.T, agent *Agent, callID string) string {
 	t.Helper()
-	oldRead := strings.Repeat("old provider-facing read_file output\n", 5)
-	agent.Runtime.Options.EnableProviderHistoryReduction = true
+	oldRead := strings.Repeat("old provider-facing read_file output\n", 240)
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionApply
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
 	agent.Runtime.TaskLedger = providerHistoryTaskLedgerWithEvidence(t,
 		providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: callID, Path: providerHistoryRequestEvidencePath, StartLine: 1, EndLine: 3},
 	)
@@ -114,8 +117,9 @@ func seedProviderHistoryReductionRequestFixture(t *testing.T, agent *Agent, call
 }
 
 func seedProviderHistoryReductionRequestFixtureWithoutEvidence(agent *Agent, callID string) string {
-	oldRead := strings.Repeat("old provider-facing read_file output without evidence\n", 5)
-	agent.Runtime.Options.EnableProviderHistoryReduction = true
+	oldRead := strings.Repeat("old provider-facing read_file output without evidence\n", 240)
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionApply
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
 	agent.History = providerHistoryReductionRequestHistory(callID, oldRead)
 	return oldRead
 }

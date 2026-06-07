@@ -12,6 +12,7 @@ func handleLedgerCommand(agent *Agent, args []string) bool {
 
 	renderLedgerCommandOutput(out, ledgerCommandSnapshot(agent))
 	renderLedgerRehydratePlanSection(out, agent.buildProviderHistoryRehydratePlan(nil))
+	renderLedgerProviderHistoryRawOutputSection(out, ledgerProviderHistoryProjectionReport(agent))
 	return true
 }
 
@@ -20,4 +21,11 @@ func ledgerCommandSnapshot(agent *Agent) taskstate.RuntimeTaskState {
 		return taskstate.RuntimeTaskState{}
 	}
 	return agent.Runtime.TaskLedger.Snapshot()
+}
+
+func ledgerProviderHistoryProjectionReport(agent *Agent) ProviderHistoryProjectionReport {
+	if agent == nil || agent.Runtime == nil {
+		return ProviderHistoryProjectionReport{}
+	}
+	return agent.Runtime.LastProviderHistoryProjectionReport
 }

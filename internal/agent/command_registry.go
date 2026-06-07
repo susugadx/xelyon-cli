@@ -35,10 +35,11 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 				allowOverwritePrompt: commandSurface != commandcatalog.CommandSurfaceTUI,
 			})
 		},
-		"/tokens":   func(_ []string) bool { return handleTokensCommand(agent) },
-		"/ledger":   func(args []string) bool { return handleLedgerCommand(agent, args) },
-		"/thinking": func(args []string) bool { return handleThinkingCommand(agent, args) },
-		"/think":    func(args []string) bool { return handleThinkingCommand(agent, args) },
+		"/tokens":     func(_ []string) bool { return handleTokensCommand(agent) },
+		"/ledger":     func(args []string) bool { return handleLedgerCommand(agent, args) },
+		"/rawoutputs": func(args []string) bool { return handleRawOutputsCommand(agent, args) },
+		"/thinking":   func(args []string) bool { return handleThinkingCommand(agent, args) },
+		"/think":      func(args []string) bool { return handleThinkingCommand(agent, args) },
 	}
 }
 

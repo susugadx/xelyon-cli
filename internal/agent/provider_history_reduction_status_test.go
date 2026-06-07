@@ -8,11 +8,26 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-const providerHistoryStatusSummaryFixture = "mode=apply; candidates=3; replaced=2; kept=1; original=1,000 B; projected=250 B; saved=750 B; approx_saved_tokens=42; kept_reasons=dry_run:1, missing_evidence_pointer:2; responses_chain_disabled=true"
-const providerHistoryCommandEditStatusSummaryFixture = "command/edit: replacement=partial_apply; command_candidates=2; command_replaced=1; edit_arg_candidates=1; edit_arg_replaced=1; command_original_bytes=4,096 B; edit_arg_original_bytes=2,048 B; command_replacement_saved=1,500 B; edit_arg_replacement_saved=700 B; approx_command_saved_tokens=120; approx_command_replacement_saved_tokens=90; approx_edit_arg_saved_tokens=60; approx_edit_arg_replacement_saved_tokens=55; candidate_reasons=command_exit_nonzero:1, git_diff_output:1, write_file_content:1; kept_reasons=latest_tool_result:1, trailing_tool_suffix:2"
+const providerHistoryStatusSummaryFixture = `provider history reduction: apply
+replacement_status=partial_apply
+content_replacements=2; content_saved=750 B; approx_content_saved_tokens=42
+command_output_replacements=0; command_output_saved=0 B; approx_command_output_saved_tokens=0
+edit_arg_replacements=0; edit_arg_saved=0 B; approx_edit_arg_saved_tokens=0
+total_provider_facing_saved=750 B; approx_total_provider_facing_saved_tokens=42
+responses_chain_disabled=true`
+
+const providerHistoryStatusSummaryWithCommandEditFixture = `provider history reduction: apply
+replacement_status=partial_apply
+content_replacements=2; content_saved=750 B; approx_content_saved_tokens=42
+command_output_replacements=1; command_output_saved=1,500 B; approx_command_output_saved_tokens=90
+command_output_tools=validation:1
+edit_arg_replacements=1; edit_arg_saved=700 B; approx_edit_arg_saved_tokens=55
+total_provider_facing_saved=2,950 B; approx_total_provider_facing_saved_tokens=187
+responses_chain_disabled=true`
 
 func TestProviderHistoryProjectionReportStatusSummaryFormat(t *testing.T) {
 	report := providerHistoryStatusTestReport()
@@ -20,6 +35,108 @@ func TestProviderHistoryProjectionReportStatusSummaryFormat(t *testing.T) {
 	got := formatProviderHistoryProjectionReportSummary(report)
 	if got != providerHistoryStatusSummaryFixture {
 		t.Fatalf("formatProviderHistoryProjectionReportSummary() = %q, want %q", got, providerHistoryStatusSummaryFixture)
+	}
+}
+
+func TestProviderHistoryProjectionReportStatusSummaryIncludesContentToolBreakdown(t *testing.T) {
+	report := providerHistoryStatusTestReport()
+	report.ContentReplacementToolCounts = map[string]int{"list_dir": 1, "read_file": 2}
+
+	got := formatProviderHistoryProjectionReportSummary(report)
+	if !strings.Contains(got, "content_replacement_tools=list_dir:1, read_file:2") {
+		t.Fatalf("formatProviderHistoryProjectionReportSummary() = %q, want content tool breakdown", got)
+	}
+}
+
+func TestProviderHistoryProjectionReportStatusSummaryIncludesRawOutputArtifacts(t *testing.T) {
+	report := providerHistoryStatusTestReport()
+	report.RawOutputRefCount = 2
+	report.RawOutputArtifactCount = 1
+	report.DataBearingCandidateCount = 2
+	report.ArtifactBackedEstimatedSavedBytes = 8192
+	report.ApproxArtifactBackedEstimatedSavedTokens = 2048
+	report.ArtifactBackedActualSavedBytes = 4096
+	report.ApproxArtifactBackedActualSavedTokens = 1024
+	report.CommandEditDryRun.ArtifactBackedCommandCandidates = 2
+	report.CommandEditDryRun.ArtifactBackedCommandApplyEligible = 1
+	report.CommandEditDryRun.ArtifactBackedCommandReplacedCount = 1
+	report.CommandEditDryRun.ArtifactBackedKeptReasonCounts = map[string]int{"raw_output_rehydrate_unsupported": 1}
+
+	got := formatProviderHistoryProjectionReportSummary(report)
+	for _, want := range []string{
+		"raw_output_refs=2; raw_output_artifacts=1; data_bearing_candidates=2",
+		"artifact_backed_command_candidates=2; artifact_backed_command_apply_eligible=1; artifact_backed_command_replacements=1",
+		"artifact_backed_estimated_saved=8,192 B; approx_artifact_backed_estimated_saved_tokens=2,048",
+		"artifact_backed_saved=4,096 B; approx_artifact_backed_saved_tokens=1,024",
+		"artifact_backed_command_kept_reasons=raw_output_rehydrate_unsupported:1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("formatProviderHistoryProjectionReportSummary() missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestProviderHistoryProjectionReportStatusSummaryKeepsFutureFamilyReasonsScoped(t *testing.T) {
+	report := providerHistoryStatusTestReport()
+	report.FutureFamilyCandidateCounts = map[string]int{"wait_agent": 1}
+	report.FutureFamilyKeptReasonCounts = map[string]int{"wait_agent_freeform_output_keep": 1}
+	report.KeptReasonCounts = map[string]int{
+		"latest_tool_result":              1,
+		"wait_agent_freeform_output_keep": 1,
+	}
+
+	got := formatProviderHistoryProjectionReportSummary(report)
+	if !strings.Contains(got, "future_family_kept_reasons=wait_agent_freeform_output_keep:1") {
+		t.Fatalf("formatProviderHistoryProjectionReportSummary() = %q, want scoped future kept reasons", got)
+	}
+	if strings.Contains(got, "future_family_kept_reasons=latest_tool_result") ||
+		strings.Contains(got, "latest_tool_result:1") {
+		t.Fatalf("formatProviderHistoryProjectionReportSummary() leaked generic kept reason into future family line:\n%s", got)
+	}
+}
+
+func TestReviewPromptReductionStatusSummaryFormat(t *testing.T) {
+	report := review.ReviewPromptReductionReport{
+		Mode:                             review.ReviewPromptReductionModeApply,
+		CandidateCount:                   3,
+		ReplacedCount:                    2,
+		StateSummaryCount:                2,
+		AbsorbedItemCount:                1,
+		RawOutputLedgerCount:             1,
+		RawOutputRequiredRefCount:        2,
+		RawOutputRehydratedRefCount:      1,
+		RawOutputMissingRefCount:         1,
+		RawOutputBudgetExhaustedRefCount: 1,
+		EstimatedSavedBytes:              4096,
+		ApproxEstimatedSavedTokens:       512,
+		ReplacementSavedBytes:            2048,
+		ApproxReplacementSavedTokens:     256,
+		ClassifierCounts:                 map[string]int{"git_diff": 1, "validation": 2},
+		FamilyCounts:                     map[string]int{"probe_result": 1, "external_doc": 1},
+		StatusCounts:                     map[string]int{"absorbed": 2},
+		KeptReasonCounts:                 map[string]int{"review_state_summary_current_only": 1},
+		QualityFloorPreserved:            true,
+	}
+
+	got, ok := reviewPromptReductionStatusSummary(&AgentRuntime{LastReviewPromptReductionReport: report})
+	if !ok {
+		t.Fatal("reviewPromptReductionStatusSummary() ok = false, want true")
+	}
+	for _, want := range []string{
+		"review prompt reduction: apply",
+		"review_history_candidates=3; review_history_replacements=2",
+		"review_state_summaries=2; absorbed_intermediate=1; quality_floor=preserved",
+		"review_history_estimated_saved=4,096 B; approx_review_history_estimated_saved_tokens=512",
+		"review_history_saved=2,048 B; approx_review_history_saved_tokens=256",
+		"review_raw_output_ledgers=1; required_refs=2; rehydrated_refs=1; missing_refs=1; budget_exhausted_refs=1",
+		"review_history_tools=git_diff:1, validation:2",
+		"review_history_families=external_doc:1, probe_result:1",
+		"review_history_statuses=absorbed:2",
+		"review_history_kept_reasons=review_state_summary_current_only:1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("summary missing %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -31,15 +148,6 @@ func TestFormatProviderHistoryReasonCountsSortsReasons(t *testing.T) {
 	want := "dry_run:1, missing_evidence_pointer:2"
 	if got != want {
 		t.Fatalf("formatProviderHistoryReasonCounts() = %q, want %q", got, want)
-	}
-}
-
-func TestProviderHistoryCommandEditDryRunStatusSummaryFormat(t *testing.T) {
-	report := providerHistoryStatusTestCommandEditReport()
-
-	got := formatProviderHistoryCommandEditDryRunReportSummary(report)
-	if got != providerHistoryCommandEditStatusSummaryFixture {
-		t.Fatalf("formatProviderHistoryCommandEditDryRunReportSummary() = %q, want %q", got, providerHistoryCommandEditStatusSummaryFixture)
 	}
 }
 
@@ -116,7 +224,7 @@ func TestHandleStatusCommandShowsProviderHistoryReductionEnabledWithoutReport(t 
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
 	for _, want := range []string{
 		"Provider history reduction",
-		"mode=apply; no report yet",
+		"provider history reduction: apply; no report yet",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -134,8 +242,8 @@ func TestHandleStatusCommandShowsProviderHistoryReductionDryRunWithoutReport(t *
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
 	for _, want := range []string{
 		"Provider history reduction",
-		"mode=dry_run; no report yet",
-		"rehydrate_context=off; active_context_transport=ephemeral_system_message",
+		"provider history reduction: dry_run; no report yet",
+		"rehydrate_context=off; active_context_transport=ephemeral_system_message; active_context_rehydrated_evidence=false; count=0",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -152,7 +260,7 @@ func TestHandleStatusCommandShowsProviderHistoryRehydrateContextEnabledWithoutRe
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
 	for _, want := range []string{
 		"Provider history reduction",
-		"rehydrate_context=on; active_context_transport=ephemeral_system_message",
+		"rehydrate_context=on; active_context_transport=ephemeral_system_message; active_context_rehydrated_evidence=false; count=0",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -169,7 +277,7 @@ func TestHandleStatusCommandShowsProviderHistoryRehydrateContextUnsupportedTrans
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
 	for _, want := range []string{
 		"Provider history reduction",
-		"rehydrate_context=on; active_context_transport=none",
+		"rehydrate_context=on; active_context_transport=none; active_context_rehydrated_evidence=false; count=0",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -186,10 +294,8 @@ func TestHandleStatusCommandShowsProviderHistoryReductionReportSummary(t *testin
 	agent.Runtime.LastProviderHistoryProjectionReport = report
 
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
-	for _, want := range []string{
-		"Provider history reduction",
-		providerHistoryStatusSummaryFixture,
-	} {
+	wants := append([]string{"Provider history reduction"}, providerHistoryStatusSummaryLines(providerHistoryStatusSummaryFixture)...)
+	for _, want := range wants {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
 		}
@@ -199,22 +305,47 @@ func TestHandleStatusCommandShowsProviderHistoryReductionReportSummary(t *testin
 	}
 }
 
-func TestHandleStatusCommandShowsProviderHistoryReductionCommandEditDryRunSummary(t *testing.T) {
+func TestHandleStatusCommandShowsReviewPromptReductionSummary(t *testing.T) {
 	var out bytes.Buffer
 	agent := newProviderHistoryStatusTestAgent(t, &out)
-	report := providerHistoryStatusTestReport()
-	report.CommandEditDryRun = providerHistoryStatusTestCommandEditReport()
-	agent.Runtime.LastProviderHistoryProjectionReport = report
+	agent.Runtime.LastReviewPromptReductionReport = review.ReviewPromptReductionReport{
+		Mode:                       review.ReviewPromptReductionModeDryRun,
+		CandidateCount:             1,
+		EstimatedSavedBytes:        1500,
+		ApproxEstimatedSavedTokens: 90,
+		ClassifierCounts:           map[string]int{"validation": 1},
+	}
 
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
 	for _, want := range []string{
 		"Provider history reduction",
-		providerHistoryStatusSummaryFixture,
-		providerHistoryCommandEditStatusSummaryFixture,
+		"review prompt reduction: dry_run",
+		"review_history_candidates=1; review_history_replacements=0",
+		"review_history_estimated_saved=1,500 B; approx_review_history_estimated_saved_tokens=90",
+		"review_history_saved=0 B; approx_review_history_saved_tokens=0",
+		"review_history_tools=validation:1",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestHandleStatusCommandShowsProviderHistoryReductionCommandEditDryRunSummary(t *testing.T) {
+	var out bytes.Buffer
+	agent := newProviderHistoryStatusTestAgent(t, &out)
+	report := providerHistoryStatusTestReportWithCommandEdit()
+	agent.Runtime.LastProviderHistoryProjectionReport = report
+
+	output := renderProviderHistoryStatusCommand(t, agent, &out)
+	wants := append([]string{"Provider history reduction"}, providerHistoryStatusSummaryLines(providerHistoryStatusSummaryWithCommandEditFixture)...)
+	for _, want := range wants {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "command/edit:") {
+		t.Fatalf("status output should use component summary instead of old command/edit diagnostics:\n%s", output)
 	}
 }
 
@@ -230,8 +361,8 @@ func TestHandleStatusCommandShowsProviderHistoryReductionAutoAndEffectiveReport(
 	output := renderProviderHistoryStatusCommand(t, agent, &out)
 	for _, want := range []string{
 		"Provider history reduction",
-		"mode=auto; effective=dry_run",
-		"report: mode=dry_run; candidates=3; replaced=2; kept=1",
+		"provider history reduction: auto; effective=dry_run",
+		"content_replacements=2; content_saved=750 B",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
@@ -286,7 +417,7 @@ func TestHandleTokensCommandOmitsProviderHistoryReductionDiagnostics(t *testing.
 	}
 
 	output := out.String()
-	for _, reject := range []string{"Provider history reduction", "Rehydrate candidates", "rehydrate_context", "active_context_transport", "command/edit", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled", "command_candidates", "command_replaced", "edit_arg_candidates", "edit_arg_replaced", "command_replacement_saved", "edit_arg_replacement_saved", "approx_command_saved_tokens", "approx_command_replacement_saved_tokens", "approx_edit_arg_saved_tokens", "approx_edit_arg_replacement_saved_tokens", "replacement=not_implemented", "replacement=partial_apply"} {
+	for _, reject := range []string{"Provider history reduction", "Rehydrate candidates", "rehydrate_context", "active_context_transport", "active_context_rehydrated_evidence", "command/edit", "content_replacements", "command_output_replacements", "edit_arg_replacements", "content_saved", "command_output_saved", "edit_arg_saved", "total_provider_facing_saved", "approx_content_saved_tokens", "approx_command_output_saved_tokens", "approx_edit_arg_saved_tokens", "approx_total_provider_facing_saved_tokens", "responses_chain_disabled", "command_candidates", "command_replaced", "edit_arg_candidates", "edit_arg_replaced", "command_replacement_saved", "edit_arg_replacement_saved", "approx_command_saved_tokens", "approx_command_replacement_saved_tokens", "approx_edit_arg_replacement_saved_tokens", "replacement_status=not_implemented", "replacement_status=partial_apply"} {
 		if strings.Contains(output, reject) {
 			t.Fatalf("/tokens output should not contain %q:\n%s", reject, output)
 		}
@@ -295,17 +426,28 @@ func TestHandleTokensCommandOmitsProviderHistoryReductionDiagnostics(t *testing.
 
 func providerHistoryStatusTestReport() ProviderHistoryProjectionReport {
 	return ProviderHistoryProjectionReport{
-		Mode:                   ProviderHistoryReductionApply,
-		CandidateCount:         3,
-		ReplacedCount:          2,
-		KeptCount:              1,
-		OriginalBytes:          1000,
-		ProjectedBytes:         250,
-		EstimatedSavedBytes:    750,
-		ApproxSavedTokens:      42,
-		KeptReasonCounts:       map[string]int{"missing_evidence_pointer": 2, "dry_run": 1},
-		ResponsesChainDisabled: true,
+		Mode:                                ProviderHistoryReductionApply,
+		CandidateCount:                      3,
+		ReplacedCount:                       2,
+		KeptCount:                           1,
+		OriginalBytes:                       1000,
+		ProjectedBytes:                      250,
+		EstimatedSavedBytes:                 750,
+		ApproxSavedTokens:                   42,
+		ContentReplacementSavedBytes:        750,
+		ApproxContentReplacementSavedTokens: 42,
+		ReplacementStatus:                   providerHistoryCommandEditReplacementStatusPartialApply,
+		KeptReasonCounts:                    map[string]int{"missing_evidence_pointer": 2, "dry_run": 1},
+		ResponsesChainDisabled:              true,
 	}
+}
+
+func providerHistoryStatusTestReportWithCommandEdit() ProviderHistoryProjectionReport {
+	report := providerHistoryStatusTestReport()
+	report.CommandEditDryRun = providerHistoryStatusTestCommandEditReport()
+	report.EstimatedSavedBytes = 2950
+	report.ApproxSavedTokens = 187
+	return report
 }
 
 func providerHistoryStatusTestCommandEditReport() ProviderHistoryCommandEditDryRunReport {
@@ -323,7 +465,8 @@ func providerHistoryStatusTestCommandEditReport() ProviderHistoryCommandEditDryR
 		ApproxCommandReplacementSavedTokens: 90,
 		ApproxEditArgSavedTokens:            60,
 		ApproxEditArgReplacementSavedTokens: 55,
-		CandidateReasonCounts:               map[string]int{"write_file_content": 1, "git_diff_output": 1, "command_exit_nonzero": 1},
+		CandidateReasonCounts:               map[string]int{"write_file_content": 1, "git_diff": 1, "unknown_failure": 1},
+		CommandReplacementClassifierCounts:  map[string]int{"validation": 1},
 		KeptReasonCounts:                    map[string]int{"trailing_tool_suffix": 2, "latest_tool_result": 1},
 	}
 }

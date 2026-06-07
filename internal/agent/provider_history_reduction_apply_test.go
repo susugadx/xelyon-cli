@@ -9,9 +9,9 @@ import (
 )
 
 func TestProviderHistoryReductionApplyReplacesAllowedToolResultsWithEvidencePointers(t *testing.T) {
-	oldReadOutput := strings.Repeat("old read_file output\n", 12)
-	oldSearchOutput := strings.Repeat("old search_code output\n", 8)
-	oldGatherOutput := strings.Repeat("old gather_context output\n", 8)
+	oldReadOutput := strings.Repeat("old read_file output\n", 240)
+	oldSearchOutput := strings.Repeat("old search_code output\n", 240)
+	oldGatherOutput := strings.Repeat("old gather_context output\n", 240)
 	taskLedger := providerHistoryTaskLedgerWithEvidence(t,
 		providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: "call_read_old", Path: "README.md", StartLine: 1, EndLine: 80},
 		providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: "call_read_old", Path: "internal/a.go", StartLine: 2},

@@ -5,22 +5,32 @@ import "testing"
 func TestFieldTypeMap(t *testing.T) {
 	// FieldTypeMap に重要なフィールドが含まれていることを確認
 	requiredFields := map[string]ConfigFieldType{
-		"default_provider":                  FieldTypeSelect,
-		"default_model":                     FieldTypeString,
-		"general.ui_language":               FieldTypeSelect,
-		"compression.enabled":               FieldTypeBool,
-		"compression.trigger_percent":       FieldTypeInt,
-		"compression.keep_recent":           FieldTypeInt,
-		"execution.mode":                    FieldTypeSelect,
-		"output.assistant_updates":          FieldTypeSelect,
-		"project_map.context_ratio":         FieldTypeFloat,
-		"agent_instructions.project.mode":   FieldTypeSelect,
-		"agent_instructions.max_file_bytes": FieldTypeInt,
-		"provider_models":                   FieldTypeStructMap,
-		"review.provider":                   FieldTypeSelect,
-		"review.model":                      FieldTypeString,
-		"gemini.service_tier":               FieldTypeSelect,
-		"sub_agent.max_concurrent":          FieldTypeInt,
+		"default_provider":                                                                 FieldTypeSelect,
+		"default_model":                                                                    FieldTypeString,
+		"general.ui_language":                                                              FieldTypeSelect,
+		"compression.enabled":                                                              FieldTypeBool,
+		"compression.trigger_percent":                                                      FieldTypeInt,
+		"compression.keep_recent":                                                          FieldTypeInt,
+		"provider_history_reduction.mode":                                                  FieldTypeSelect,
+		"provider_history_reduction.rehydrate_context":                                     FieldTypeBool,
+		"provider_history_reduction.raw_output_artifacts.mode":                             FieldTypeSelect,
+		"provider_history_reduction.raw_output_artifacts.root":                             FieldTypeString,
+		"provider_history_reduction.raw_output_artifacts.max_artifact_bytes":               FieldTypeInt,
+		"provider_history_reduction.raw_output_artifacts.session_quota_bytes":              FieldTypeInt,
+		"provider_history_reduction.raw_output_artifacts.chunk_bytes":                      FieldTypeInt,
+		"provider_history_reduction.raw_output_artifacts.active_context_budget_tokens":     FieldTypeInt,
+		"provider_history_reduction.raw_output_artifacts.active_context_budget_max_tokens": FieldTypeInt,
+		"provider_history_reduction.raw_output_artifacts.retention":                        FieldTypeSelect,
+		"execution.mode":                                                                   FieldTypeSelect,
+		"output.assistant_updates":                                                         FieldTypeSelect,
+		"project_map.context_ratio":                                                        FieldTypeFloat,
+		"agent_instructions.project.mode":                                                  FieldTypeSelect,
+		"agent_instructions.max_file_bytes":                                                FieldTypeInt,
+		"provider_models":                                                                  FieldTypeStructMap,
+		"review.provider":                                                                  FieldTypeSelect,
+		"review.model":                                                                     FieldTypeString,
+		"gemini.service_tier":                                                              FieldTypeSelect,
+		"sub_agent.max_concurrent":                                                         FieldTypeInt,
 	}
 
 	for path, expectedType := range requiredFields {
@@ -44,6 +54,9 @@ func TestSelectOptions(t *testing.T) {
 		{"default_provider", 6},    // deepseek, claude, openai, gemini, groq, ollama
 		{"web_search.provider", 4}, // openai, gemini, claude, anthropic
 		{"execution.mode", 3},      // balanced, trusted, full_auto
+		{"provider_history_reduction.mode", 3},
+		{"provider_history_reduction.raw_output_artifacts.mode", 3},
+		{"provider_history_reduction.raw_output_artifacts.retention", 1},
 		{"agent_instructions.project.mode", 3},
 		{"output.assistant_updates", 4},
 		{"review.provider", 11}, // empty + display providers
@@ -58,6 +71,22 @@ func TestSelectOptions(t *testing.T) {
 		}
 		if len(opts) < tt.minOpts {
 			t.Errorf("SelectOptions[%s] has %d options, want at least %d", tt.path, len(opts), tt.minOpts)
+		}
+	}
+}
+
+func TestSelectOptionsProviderHistoryReductionModeDoesNotExposeAuto(t *testing.T) {
+	opts, ok := SelectOptions["provider_history_reduction.mode"]
+	if !ok {
+		t.Fatal("SelectOptions missing field: provider_history_reduction.mode")
+	}
+	want := []string{"off", "dry_run", "apply"}
+	if len(opts) != len(want) {
+		t.Fatalf("SelectOptions[provider_history_reduction.mode] = %v, want %v", opts, want)
+	}
+	for i := range want {
+		if opts[i] != want[i] {
+			t.Fatalf("SelectOptions[provider_history_reduction.mode] = %v, want %v", opts, want)
 		}
 	}
 }
@@ -91,6 +120,11 @@ func TestFieldDescriptions(t *testing.T) {
 		"compression.enabled",
 		"compression.trigger_percent",
 		"compression.keep_recent",
+		"provider_history_reduction.mode",
+		"provider_history_reduction.rehydrate_context",
+		"provider_history_reduction.raw_output_artifacts.mode",
+		"provider_history_reduction.raw_output_artifacts.root",
+		"provider_history_reduction.raw_output_artifacts.active_context_budget_tokens",
 		"execution.mode",
 		"output.assistant_updates",
 		"project_map.context_ratio",

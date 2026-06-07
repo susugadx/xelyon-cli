@@ -50,8 +50,9 @@ func TestCloneProjectConfigDeepCopiesSlices(t *testing.T) {
 		},
 		Experimental: ProjectExperimentalConfig{
 			ProviderHistoryReduction: ProjectProviderHistoryReductionConfig{
-				Mode:             ProjectProviderHistoryReductionModeDryRun,
-				RehydrateContext: true,
+				Mode:                ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext:    true,
+				RehydrateContextSet: true,
 			},
 		},
 	}

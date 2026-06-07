@@ -46,10 +46,10 @@ func TestProviderHistorySyntheticMeasurementHarnessComparesModes(t *testing.T) {
 	if dryRun.Report.Mode != ProviderHistoryReductionDryRun ||
 		dryRun.Report.CandidateCount != 3 ||
 		dryRun.Report.ReplacedCount != 0 ||
-		dryRun.Report.EstimatedSavedBytes != 0 ||
-		dryRun.Report.ApproxSavedTokens != 0 ||
+		dryRun.Report.EstimatedSavedBytes <= 0 ||
+		dryRun.Report.ApproxSavedTokens <= 0 ||
 		dryRun.Report.ResponsesChainDisabled {
-		t.Fatalf("dry-run report = %#v, want three diagnostics without replacement", dryRun.Report)
+		t.Fatalf("dry-run report = %#v, want three diagnostics with provider-facing estimates and without replacement", dryRun.Report)
 	}
 	if dryRun.Report.KeptReasonCounts["dry_run"] != 3 ||
 		dryRun.Report.KeptReasonCounts["latest_tool_result"] != 1 ||
@@ -70,12 +70,12 @@ func TestProviderHistorySyntheticMeasurementHarnessComparesModes(t *testing.T) {
 		!apply.Report.ResponsesChainDisabled {
 		t.Fatalf("apply report = %#v, want read/search/gather replacements with savings and chain disabled", apply.Report)
 	}
-	if apply.Report.CommandEditDryRun.CommandReplacedCount != 3 ||
+	if apply.Report.CommandEditDryRun.CommandReplacedCount != 4 ||
 		apply.Report.CommandEditDryRun.CommandReplacementSavedBytes <= 0 ||
-		apply.Report.CommandEditDryRun.ApproxCommandReplacementSavedTokens < providerHistoryCommandReplacementMinSavedTokens*3 {
-		t.Fatalf("apply command/edit report = %#v, want three command replacements with savings", apply.Report.CommandEditDryRun)
+		apply.Report.CommandEditDryRun.ApproxCommandReplacementSavedTokens < providerHistoryCommandReplacementMinSavedTokens*4 {
+		t.Fatalf("apply command/edit report = %#v, want four command replacements with savings", apply.Report.CommandEditDryRun)
 	}
-	assertProviderHistorySyntheticCommandDiagnostics(t, apply.Report.CommandEditDryRun, 3)
+	assertProviderHistorySyntheticCommandDiagnostics(t, apply.Report.CommandEditDryRun, 4)
 	assertProviderHistorySyntheticReadSearchGatherApplied(t, fixture, apply)
 	assertProviderHistorySyntheticCommandProjection(t, fixture, apply)
 	assertProviderHistorySyntheticEditArgsRaw(t, fixture, apply)
@@ -220,20 +220,19 @@ func assertProviderHistorySyntheticCommandDiagnostics(t *testing.T, report Provi
 		report.CommandOriginalBytes <= 0 ||
 		report.EditArgOriginalBytes <= 0 ||
 		report.ApproxCommandSavedTokens <= 0 ||
-		report.ApproxEditArgSavedTokens <= 0 ||
+		report.EditArgEstimatedSavedBytes != 0 ||
+		report.ApproxEditArgSavedTokens != 0 ||
 		report.CommandReplacedCount != wantReplaced {
-		t.Fatalf("CommandEditDryRun = %#v, want six command and three edit diagnostics with %d replacements", report, wantReplaced)
+		t.Fatalf("CommandEditDryRun = %#v, want six command and three edit diagnostics with %d command replacements and no edit estimates", report, wantReplaced)
 	}
 	wantReasons := map[string]int{
-		"test_success_output":    1,
-		"build_success_output":   1,
-		"lint_success_output":    1,
-		"git_diff_output":        1,
-		"test_failure_output":    1,
-		"command_success_output": 1,
-		"write_file_content":     1,
-		"apply_patch_patch":      1,
-		"str_replace_strings":    1,
+		"validation_success":                               3,
+		"evidence_bearing_git_diff_command_output_keep":    1,
+		"validation_failure":                               1,
+		"evidence_bearing_observation_command_output_keep": 1,
+		"write_file_content":                               1,
+		"apply_patch_patch":                                1,
+		"str_replace_strings":                              1,
 	}
 	for reason, want := range wantReasons {
 		if got := report.CandidateReasonCounts[reason]; got != want {
@@ -278,9 +277,20 @@ func assertProviderHistorySyntheticCommandProjection(t *testing.T, fixture provi
 	} {
 		assertProviderHistoryCommandContentReplacement(t, result.History[item.index].Content, fixture.rawHistory[item.index].Content, item.label)
 	}
-	for _, index := range []int{fixture.diffIndex, fixture.failIndex, fixture.genericIndex} {
+	for _, item := range []struct {
+		index int
+		want  string
+	}{
+		{index: fixture.failIndex, want: "classifier=validation_failure"},
+	} {
+		got := result.History[item.index].Content
+		if got == fixture.rawHistory[item.index].Content || !strings.Contains(got, item.want) {
+			t.Fatalf("command at history[%d] = %q, want compact containing %q", item.index, got, item.want)
+		}
+	}
+	for _, index := range []int{fixture.diffIndex, fixture.genericIndex} {
 		if result.History[index].Content != fixture.rawHistory[index].Content {
-			t.Fatalf("unsafe/generic command at history[%d] changed:\n got %q\nwant %q", index, result.History[index].Content, fixture.rawHistory[index].Content)
+			t.Fatalf("evidence command at history[%d] was compacted without raw artifact rehydrate gate", index)
 		}
 	}
 }

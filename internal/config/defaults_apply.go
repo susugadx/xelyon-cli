@@ -48,6 +48,9 @@ var nestedDefaultAppliers = []nestedDefaultApplier{
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyLoopDetectionDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyAPIRetryDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyCompressionDefaults(cfg, defaults) },
+	func(cfg *Config, defaults *Config, _ defaultApplyOptions) {
+		applyProviderHistoryReductionDefaults(cfg, defaults)
+	},
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyPasteDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyStreamingDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, options defaultApplyOptions) {
@@ -85,6 +88,16 @@ func applyCompressionDefaults(cfg *Config, defaults *Config) {
 	if cfg.Compression.KeepRecent == 0 {
 		cfg.Compression.KeepRecent = defaults.Compression.KeepRecent
 	}
+}
+
+func applyProviderHistoryReductionDefaults(cfg *Config, defaults *Config) {
+	if cfg.ProviderHistoryReduction.Mode == "" {
+		cfg.ProviderHistoryReduction.Mode = defaults.ProviderHistoryReduction.Mode
+	}
+	cfg.ProviderHistoryReduction.RawOutputArtifacts = mergeProviderHistoryRawOutputArtifactsConfig(
+		defaults.ProviderHistoryReduction.RawOutputArtifacts,
+		cfg.ProviderHistoryReduction.RawOutputArtifacts,
+	)
 }
 
 func applyPasteDefaults(cfg *Config, defaults *Config) {

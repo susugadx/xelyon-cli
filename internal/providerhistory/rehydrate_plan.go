@@ -26,7 +26,7 @@ func AppliedEvidencePointers(report ProjectionReport) []taskstate.EvidencePointe
 	pointers := make([]taskstate.EvidencePointer, 0, len(report.Candidates))
 	seen := make(map[providerHistoryEvidencePointerKey]struct{})
 	for _, candidate := range report.Candidates {
-		if !candidate.ReplacementApplied || len(candidate.EvidencePointers) == 0 || !isReductionCandidateTool(candidate.ToolName) {
+		if !candidate.ReplacementApplied || len(candidate.EvidencePointers) == 0 || !isEvidenceBackedReductionTool(candidate.ToolName) {
 			continue
 		}
 		for _, pointer := range candidate.EvidencePointers {

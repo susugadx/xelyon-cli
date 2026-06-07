@@ -23,13 +23,16 @@ func TestProviderHistoryCommandEditDryRunDetectsOldCommandOutput(t *testing.T) {
 	if report.ReplacementStatus != providerHistoryCommandEditReplacementStatusNotImplemented {
 		t.Fatalf("ReplacementStatus = %q, want not_implemented", report.ReplacementStatus)
 	}
-	if report.CommandCandidates != 1 || report.CommandOriginalBytes != len(output) || report.ApproxCommandSavedTokens <= 0 {
-		t.Fatalf("command dry-run metrics = candidates %d bytes %d tokens %d, want one command candidate with savings", report.CommandCandidates, report.CommandOriginalBytes, report.ApproxCommandSavedTokens)
+	if report.CommandCandidates != 1 || report.CommandOriginalBytes != len(output) {
+		t.Fatalf("command dry-run metrics = candidates %d bytes %d, want one command candidate with original bytes %d", report.CommandCandidates, report.CommandOriginalBytes, len(output))
 	}
-	if got := report.CandidateReasonCounts["test_failure_output"]; got != 1 {
-		t.Fatalf("CandidateReasonCounts = %#v, want test_failure_output:1", report.CandidateReasonCounts)
+	if report.CommandEstimatedSavedBytes != 0 || report.ApproxCommandSavedTokens != 0 {
+		t.Fatalf("command dry-run safe estimate = bytes %d tokens %d, want zero for failed test output", report.CommandEstimatedSavedBytes, report.ApproxCommandSavedTokens)
 	}
-	if len(report.Candidates) != 1 || report.Candidates[0].ToolName != "bash" || report.Candidates[0].Reason != "test_failure_output" {
+	if got := report.CandidateReasonCounts["validation_failure"]; got != 1 {
+		t.Fatalf("CandidateReasonCounts = %#v, want validation_failure:1", report.CandidateReasonCounts)
+	}
+	if len(report.Candidates) != 1 || report.Candidates[0].ToolName != "bash" || report.Candidates[0].Reason != "validation_failure" {
 		t.Fatalf("Candidates = %#v, want bash test failure candidate", report.Candidates)
 	}
 }
@@ -109,43 +112,43 @@ func TestProviderHistoryCommandEditDryRunClassifiesCommandReasons(t *testing.T) 
 		output  string
 		want    string
 	}{
-		{name: "git diff", command: "git diff -- internal/agent", output: "diff --git a/a.go b/a.go\n", want: "git_diff_output"},
-		{name: "test failure", command: "go test ./...", output: "--- FAIL: TestX\nFAIL\t./pkg\n", want: "test_failure_output"},
-		{name: "build failure", command: "go build ./...", output: "undefined: missingSymbol\n", want: "build_failure_output"},
-		{name: "nonzero exit", command: "ls missing", output: "Error: exit status 2", want: "command_exit_nonzero"},
-		{name: "nonzero exit code", command: "run-task", output: "Process exited with code 2", want: "command_exit_nonzero"},
-		{name: "test success", command: "go test ./...", output: "ok\t./internal/agent\t0.1s\n", want: "test_success_output"},
-		{name: "build success", command: "go build ./...", output: "build completed successfully\n", want: "build_success_output"},
-		{name: "lint success", command: "npm run lint", output: "lint clean\n", want: "lint_success_output"},
-		{name: "test command without success evidence", command: "go test ./...", output: "running tests\n", want: "command_success_output"},
-		{name: "interrupted test command with partial success output", command: "go test ./...", output: "Command interrupted.\nPartial output:\nok\t./internal/agent\t0.1s\n", want: "command_success_output"},
-		{name: "grep containing test command", command: "grep 'go test' README.md", output: "ok\t./internal/agent\t0.1s\n", want: "command_success_output"},
-		{name: "compound test command", command: "go test ./... && cat coverage.out", output: "ok\t./internal/agent\t0.1s\n", want: "command_success_output"},
-		{name: "piped lint command", command: "npm run lint | tee lint.log", output: "lint clean\n", want: "command_success_output"},
-		{name: "redirected test command", command: "go test ./... > coverage.out", output: "ok\t./internal/agent\t0.1s\n", want: "command_success_output"},
-		{name: "newline separated test command", command: "go test ./...\ncat coverage.out", output: "ok\t./internal/agent\t0.1s\n", want: "command_success_output"},
-		{name: "double quoted command substitution test command", command: `go test "$(go list ./...)"`, output: "ok\t./internal/agent\t0.1s\n", want: "command_success_output"},
-		{name: "double quoted backtick substitution test command", command: "go test \"`go list ./...`\"", output: "ok\t./internal/agent\t0.1s\n", want: "command_success_output"},
-		{name: "test command with quoted regex pipe", command: "go test ./... -run 'TestA|TestB'", output: "ok\t./internal/agent\t0.1s\n", want: "test_success_output"},
-		{name: "partial passing mocha test output", command: "npm test", output: "1 passing\n1 failing\n", want: "test_failure_output"},
-		{name: "mixed cargo suite test output", command: "cargo test", output: "test result: ok. 1 passed; 0 failed\nfailures:\n    suite_x\ntest result: FAILED. 0 passed; 1 failed\n", want: "test_failure_output"},
-		{name: "mixed pytest summary test output", command: "pytest", output: "1 failed, 1 passed in 0.12s\n", want: "test_failure_output"},
-		{name: "build completed with errors", command: "npm run build", output: "Build completed with errors\n", want: "build_failure_output"},
-		{name: "ambiguous build complete", command: "npm run build", output: "build complete\n", want: "command_success_output"},
-		{name: "lint warning summary", command: "npm run lint", output: "0 errors, 3 warnings\n", want: "command_success_output"},
-		{name: "lint nonzero errors summary", command: "npm run lint", output: "10 errors\n", want: "command_success_output"},
-		{name: "lint nonzero problems summary", command: "npm run lint", output: "10 problems\n", want: "command_success_output"},
-		{name: "lint warning summary with zero exit", command: "npm run lint", output: "0 errors, 3 warnings\nProcess exited with code 0\n", want: "command_success_output"},
-		{name: "lint uncounted error with zero exit", command: "npm run lint", output: "error: unexpected console statement\nProcess exited with code 0\n", want: "command_success_output"},
-		{name: "lint warnings found with zero exit", command: "npm run lint", output: "Warnings found\nProcess exited with code 0\n", want: "command_success_output"},
-		{name: "lint issue count with zero exit", command: "npm run lint", output: "1 issue found\nProcess exited with code 0\n", want: "command_success_output"},
-		{name: "lint issues summary with zero exit", command: "npm run lint", output: "2 issues\nProcess exited with code 0\n", want: "command_success_output"},
-		{name: "lint clean summary", command: "npm run lint", output: "0 errors, 0 warnings\n", want: "lint_success_output"},
-		{name: "lint zero exit only", command: "npm run lint", output: "Process exited with code 0\n", want: "lint_success_output"},
-		{name: "zero exit status", command: "run-task", output: "exit status 0", want: "command_success_output"},
-		{name: "zero exit code", command: "run-task", output: "exit code 0", want: "command_success_output"},
-		{name: "process exited with zero code", command: "run-task", output: "Process exited with code 0", want: "command_success_output"},
-		{name: "fallback", command: "ls", output: "file.txt\n", want: "command_success_output"},
+		{name: "git diff", command: "git diff -- internal/agent", output: "diff --git a/a.go b/a.go\n", want: "evidence_bearing_git_diff_command_output_keep"},
+		{name: "test failure", command: "go test ./...", output: "--- FAIL: TestX\nFAIL\t./pkg\n", want: "validation_failure"},
+		{name: "build failure", command: "go build ./...", output: "undefined: missingSymbol\n", want: "build_failure"},
+		{name: "nonzero exit", command: "ls missing", output: "Error: exit status 2", want: "unknown_failure"},
+		{name: "nonzero exit code", command: "run-task", output: "Process exited with code 2", want: "unknown_failure"},
+		{name: "test success", command: "go test ./...", output: "ok\t./internal/agent\t0.1s\n", want: "validation_success"},
+		{name: "build success", command: "go build ./...", output: "build completed successfully\n", want: "validation_success"},
+		{name: "lint success", command: "npm run lint", output: "lint clean\n", want: "validation_success"},
+		{name: "test command without success evidence", command: "go test ./...", output: "running tests\n", want: "command_output_unknown_skip"},
+		{name: "interrupted test command with partial success output", command: "go test ./...", output: "Command interrupted.\nPartial output:\nok\t./internal/agent\t0.1s\n", want: "validation_failure"},
+		{name: "grep containing test command", command: "grep 'go test' README.md", output: "ok\t./internal/agent\t0.1s\n", want: "evidence_bearing_observation_command_output_keep"},
+		{name: "compound test command", command: "go test ./... && cat coverage.out", output: "ok\t./internal/agent\t0.1s\n", want: "command_output_unknown_skip"},
+		{name: "piped lint command", command: "npm run lint | tee lint.log", output: "lint clean\n", want: "command_output_unknown_skip"},
+		{name: "redirected test command", command: "go test ./... > coverage.out", output: "ok\t./internal/agent\t0.1s\n", want: "command_output_unknown_skip"},
+		{name: "newline separated test command", command: "go test ./...\ncat coverage.out", output: "ok\t./internal/agent\t0.1s\n", want: "command_output_unknown_skip"},
+		{name: "double quoted command substitution test command", command: `go test "$(go list ./...)"`, output: "ok\t./internal/agent\t0.1s\n", want: "command_output_unknown_skip"},
+		{name: "double quoted backtick substitution test command", command: "go test \"`go list ./...`\"", output: "ok\t./internal/agent\t0.1s\n", want: "command_output_unknown_skip"},
+		{name: "test command with quoted regex pipe", command: "go test ./... -run 'TestA|TestB'", output: "ok\t./internal/agent\t0.1s\n", want: "validation_success"},
+		{name: "partial passing mocha test output", command: "npm test", output: "1 passing\n1 failing\n", want: "validation_failure"},
+		{name: "mixed cargo suite test output", command: "cargo test", output: "test result: ok. 1 passed; 0 failed\nfailures:\n    suite_x\ntest result: FAILED. 0 passed; 1 failed\n", want: "validation_failure"},
+		{name: "mixed pytest summary test output", command: "pytest", output: "1 failed, 1 passed in 0.12s\n", want: "validation_failure"},
+		{name: "build completed with errors", command: "npm run build", output: "Build completed with errors\n", want: "build_failure"},
+		{name: "ambiguous build complete", command: "npm run build", output: "build complete\n", want: "command_output_unknown_skip"},
+		{name: "lint warning summary", command: "npm run lint", output: "0 errors, 3 warnings\n", want: "lint_failure"},
+		{name: "lint nonzero errors summary", command: "npm run lint", output: "10 errors\n", want: "lint_failure"},
+		{name: "lint nonzero problems summary", command: "npm run lint", output: "10 problems\n", want: "lint_failure"},
+		{name: "lint warning summary with zero exit", command: "npm run lint", output: "0 errors, 3 warnings\nProcess exited with code 0\n", want: "lint_failure"},
+		{name: "lint uncounted error with zero exit", command: "npm run lint", output: "error: unexpected console statement\nProcess exited with code 0\n", want: "lint_failure"},
+		{name: "lint warnings found with zero exit", command: "npm run lint", output: "Warnings found\nProcess exited with code 0\n", want: "lint_failure"},
+		{name: "lint issue count with zero exit", command: "npm run lint", output: "1 issue found\nProcess exited with code 0\n", want: "lint_failure"},
+		{name: "lint issues summary with zero exit", command: "npm run lint", output: "2 issues\nProcess exited with code 0\n", want: "lint_failure"},
+		{name: "lint clean summary", command: "npm run lint", output: "0 errors, 0 warnings\n", want: "validation_success"},
+		{name: "lint zero exit only", command: "npm run lint", output: "Process exited with code 0\n", want: "validation_success"},
+		{name: "zero exit status", command: "run-task", output: "exit status 0", want: "command_output_unknown_skip"},
+		{name: "zero exit code", command: "run-task", output: "exit code 0", want: "command_output_unknown_skip"},
+		{name: "process exited with zero code", command: "run-task", output: "Process exited with code 0", want: "command_output_unknown_skip"},
+		{name: "fallback", command: "ls", output: "file.txt\n", want: "evidence_bearing_observation_command_output_keep"},
 	}
 
 	for _, tt := range tests {
@@ -226,8 +229,11 @@ func TestProviderHistoryCommandEditDryRunDetectsEditArguments(t *testing.T) {
 	)
 
 	wantBytes := len(writeContent) + len(patch) + len(oldStr) + len(newStr) + len(edits) + len(deletePath)
-	if report.EditArgCandidates != 5 || report.EditArgOriginalBytes != wantBytes || report.ApproxEditArgSavedTokens <= 0 {
-		t.Fatalf("edit dry-run metrics = candidates %d bytes %d tokens %d, want 5/%d/positive", report.EditArgCandidates, report.EditArgOriginalBytes, report.ApproxEditArgSavedTokens, wantBytes)
+	if report.EditArgCandidates != 5 || report.EditArgOriginalBytes != wantBytes {
+		t.Fatalf("edit dry-run metrics = candidates %d bytes %d, want 5/%d", report.EditArgCandidates, report.EditArgOriginalBytes, wantBytes)
+	}
+	if report.EditArgEstimatedSavedBytes != 0 || report.ApproxEditArgSavedTokens != 0 {
+		t.Fatalf("edit dry-run replacement estimate = bytes %d tokens %d, want zero without successful matching edit results", report.EditArgEstimatedSavedBytes, report.ApproxEditArgSavedTokens)
 	}
 	wantReasons := map[string]int{
 		"write_file_content":  1,
@@ -305,13 +311,16 @@ func TestProviderHistoryCommandEditApplyReplacesOldSuccessfulCommandOutputs(t *t
 		commandReport.ApproxCommandReplacementSavedTokens < providerHistoryCommandReplacementMinSavedTokens*3 {
 		t.Fatalf("CommandEditDryRun = %#v, want three partial_apply command replacements with savings", commandReport)
 	}
-	wantReasons := map[string]int{"test_success_output": 1, "build_success_output": 1, "lint_success_output": 1}
+	wantReasons := map[string]int{"validation_success": 3}
 	if !reflect.DeepEqual(commandReport.CandidateReasonCounts, wantReasons) {
 		t.Fatalf("CandidateReasonCounts = %#v, want %#v", commandReport.CandidateReasonCounts, wantReasons)
 	}
+	if got := commandReport.CommandReplacementClassifierCounts["validation"]; got != 3 {
+		t.Fatalf("CommandReplacementClassifierCounts = %#v, want validation:3", commandReport.CommandReplacementClassifierCounts)
+	}
 }
 
-func TestProviderHistoryCommandEditApplyKeepsUnsafeAndGenericCommandOutputs(t *testing.T) {
+func TestProviderHistoryCommandEditApplyKeepsEvidenceOutputsRawAndCompactsFailures(t *testing.T) {
 	agent := &Agent{History: []api.Message{
 		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_diff", "bash", map[string]string{"command": "git diff"})),
 		providerHistoryToolResult("call_diff", "bash", providerHistoryLargeCommandOutput("diff --git a/a.go b/a.go\n")),
@@ -336,28 +345,42 @@ func TestProviderHistoryCommandEditApplyKeepsUnsafeAndGenericCommandOutputs(t *t
 
 	result := agent.buildProviderHistoryProjection(ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionApply})
 
-	assertProviderHistoryCommandProjectionUnchanged(t, result, raw)
-	if result.Report.ResponsesChainDisabled {
-		t.Fatalf("ResponsesChainDisabled = true, want false without command replacements")
+	if !reflect.DeepEqual(agent.History, raw) {
+		t.Fatalf("Agent.History changed after command compact:\n got %#v\nwant %#v", agent.History, raw)
+	}
+	for _, index := range []int{4, 7, 10} {
+		if result.History[index].Content == raw[index].Content {
+			t.Fatalf("history[%d] command output was not compacted", index)
+		}
+	}
+	for _, index := range []int{1, 13} {
+		if result.History[index].Content != raw[index].Content {
+			t.Fatalf("history[%d] evidence output was compacted without raw artifact rehydrate gate", index)
+		}
+	}
+	if !result.Report.ResponsesChainDisabled {
+		t.Fatalf("ResponsesChainDisabled = false, want true after command compacts")
 	}
 	commandReport := result.Report.CommandEditDryRun
 	if commandReport.CommandCandidates != 5 {
-		t.Fatalf("CommandCandidates = %d, want five unreplaced command diagnostics", commandReport.CommandCandidates)
+		t.Fatalf("CommandCandidates = %d, want five command diagnostics", commandReport.CommandCandidates)
 	}
-	assertProviderHistoryCommandReportNoReplacement(t, commandReport)
+	if commandReport.CommandReplacedCount != 3 {
+		t.Fatalf("CommandReplacedCount = %d, want three failure replacements in %#v", commandReport.CommandReplacedCount, commandReport)
+	}
 	wantReasons := map[string]int{
-		"git_diff_output":        1,
-		"test_failure_output":    1,
-		"build_failure_output":   1,
-		"command_exit_nonzero":   1,
-		"command_success_output": 1,
+		"evidence_bearing_git_diff_command_output_keep":    1,
+		"validation_failure":                               1,
+		"build_failure":                                    1,
+		"unknown_failure":                                  1,
+		"evidence_bearing_observation_command_output_keep": 1,
 	}
 	if !reflect.DeepEqual(commandReport.CandidateReasonCounts, wantReasons) {
 		t.Fatalf("CandidateReasonCounts = %#v, want %#v", commandReport.CandidateReasonCounts, wantReasons)
 	}
 }
 
-func TestProviderHistoryCommandEditApplyKeepsAmbiguousBuildAndLintOutputs(t *testing.T) {
+func TestProviderHistoryCommandEditApplyCompactsBuildAndLintFailureOutputs(t *testing.T) {
 	buildOutput := providerHistoryLargeCommandOutput("Build completed with errors\n")
 	lintOutput := providerHistoryLargeCommandOutput("0 errors, 3 warnings\n")
 	lintErrorCountOutput := providerHistoryLargeCommandOutput("10 errors\n")
@@ -399,18 +422,27 @@ func TestProviderHistoryCommandEditApplyKeepsAmbiguousBuildAndLintOutputs(t *tes
 
 	result := agent.buildProviderHistoryProjection(ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionApply})
 
-	assertProviderHistoryCommandProjectionUnchanged(t, result, raw)
-	if result.Report.ResponsesChainDisabled {
-		t.Fatal("ResponsesChainDisabled = true, want false without command replacements")
+	if !reflect.DeepEqual(agent.History, raw) {
+		t.Fatalf("Agent.History changed after command compact:\n got %#v\nwant %#v", agent.History, raw)
+	}
+	for _, index := range []int{1, 4, 7, 10, 13, 16, 19, 22} {
+		if result.History[index].Content == raw[index].Content {
+			t.Fatalf("history[%d] command output was not compacted", index)
+		}
+	}
+	if !result.Report.ResponsesChainDisabled {
+		t.Fatal("ResponsesChainDisabled = false, want true after command replacements")
 	}
 	commandReport := result.Report.CommandEditDryRun
 	if commandReport.CommandCandidates != 8 {
-		t.Fatalf("CommandCandidates = %d, want eight unreplaced command diagnostics", commandReport.CommandCandidates)
+		t.Fatalf("CommandCandidates = %d, want eight command diagnostics", commandReport.CommandCandidates)
 	}
-	assertProviderHistoryCommandReportNoReplacement(t, commandReport)
+	if commandReport.CommandReplacedCount != 8 {
+		t.Fatalf("CommandReplacedCount = %d, want eight compacted command outputs in %#v", commandReport.CommandReplacedCount, commandReport)
+	}
 	wantReasons := map[string]int{
-		"build_failure_output":   1,
-		"command_success_output": 7,
+		"build_failure": 1,
+		"lint_failure":  7,
 	}
 	if !reflect.DeepEqual(commandReport.CandidateReasonCounts, wantReasons) {
 		t.Fatalf("CandidateReasonCounts = %#v, want %#v", commandReport.CandidateReasonCounts, wantReasons)
@@ -420,10 +452,10 @@ func TestProviderHistoryCommandEditApplyKeepsAmbiguousBuildAndLintOutputs(t *tes
 func TestProviderHistoryCommandEditApplyKeepsUnprovenSuccessfulCommandOutputs(t *testing.T) {
 	agent := &Agent{History: []api.Message{
 		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_interrupted", "bash", map[string]string{"command": providerHistorySuccessfulTestCommand})),
-		providerHistoryToolResult("call_interrupted", "bash", providerHistoryLargeInterruptedCommandOutput()),
+		providerHistoryToolResult("call_interrupted", "bash", "Command interrupted.\nPartial output:\nok\t./internal/agent\t0.1s\n"),
 		api.Message{Role: "assistant", Content: "tests interrupted"},
 		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_grep", "bash", map[string]string{"command": "grep 'go test' README.md"})),
-		providerHistoryToolResult("call_grep", "bash", providerHistoryLargeSuccessfulTestOutput()),
+		providerHistoryToolResult("call_grep", "bash", "ok\t./internal/agent\t0.1s\n"),
 		api.Message{Role: "assistant", Content: "grep done"},
 		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_no_evidence", "bash", map[string]string{"command": providerHistorySuccessfulTestCommand})),
 		providerHistoryToolResult("call_no_evidence", "bash", providerHistoryLargeCommandOutput("running tests\n")),
@@ -460,12 +492,17 @@ func TestProviderHistoryCommandEditApplyKeepsUnprovenSuccessfulCommandOutputs(t 
 		t.Fatalf("CommandCandidates = %d, want eight command diagnostics", commandReport.CommandCandidates)
 	}
 	assertProviderHistoryCommandReportNoReplacement(t, commandReport)
-	if got := commandReport.CandidateReasonCounts["command_success_output"]; got != 8 {
-		t.Fatalf("CandidateReasonCounts = %#v, want eight generic command diagnostics without success replacement", commandReport.CandidateReasonCounts)
+	wantReasons := map[string]int{
+		"validation_failure": 1,
+		"evidence_bearing_observation_command_output_keep": 1,
+		"command_output_unknown_skip":                      6,
+	}
+	if !reflect.DeepEqual(commandReport.CandidateReasonCounts, wantReasons) {
+		t.Fatalf("CandidateReasonCounts = %#v, want %#v", commandReport.CandidateReasonCounts, wantReasons)
 	}
 }
 
-func TestProviderHistoryCommandEditApplyKeepsMixedFailedTestOutputs(t *testing.T) {
+func TestProviderHistoryCommandEditApplyCompactsMixedFailedTestOutputs(t *testing.T) {
 	mochaOutput := providerHistoryLargeCommandOutput("1 passing\n1 failing\n")
 	cargoOutput := providerHistoryLargeCommandOutput("test result: ok. 1 passed; 0 failed\nfailures:\n    suite_x\ntest result: FAILED. 0 passed; 1 failed\n")
 	pytestOutput := providerHistoryLargeCommandOutput("1 failed, 1 passed in 0.12s\n")
@@ -487,16 +524,25 @@ func TestProviderHistoryCommandEditApplyKeepsMixedFailedTestOutputs(t *testing.T
 
 	result := agent.buildProviderHistoryProjection(ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionApply})
 
-	assertProviderHistoryCommandProjectionUnchanged(t, result, raw)
-	if result.Report.ResponsesChainDisabled {
-		t.Fatal("ResponsesChainDisabled = true, want false without command replacements")
+	if !reflect.DeepEqual(agent.History, raw) {
+		t.Fatalf("Agent.History changed after failure compact:\n got %#v\nwant %#v", agent.History, raw)
+	}
+	for _, index := range []int{1, 4, 7} {
+		if result.History[index].Content == raw[index].Content {
+			t.Fatalf("history[%d] failure output was not compacted", index)
+		}
+	}
+	if !result.Report.ResponsesChainDisabled {
+		t.Fatal("ResponsesChainDisabled = false, want true after failure command replacements")
 	}
 	commandReport := result.Report.CommandEditDryRun
 	if commandReport.CommandCandidates != 3 {
 		t.Fatalf("CommandCandidates = %d, want three failed test diagnostics", commandReport.CommandCandidates)
 	}
-	assertProviderHistoryCommandReportNoReplacement(t, commandReport)
-	if got := commandReport.CandidateReasonCounts["test_failure_output"]; got != 3 {
+	if commandReport.CommandReplacedCount != 3 {
+		t.Fatalf("CommandReplacedCount = %d, want three compacted test failures in %#v", commandReport.CommandReplacedCount, commandReport)
+	}
+	if got := commandReport.CandidateReasonCounts["validation_failure"]; got != 3 {
 		t.Fatalf("CandidateReasonCounts = %#v, want three failed test diagnostics", commandReport.CandidateReasonCounts)
 	}
 }

@@ -10,3 +10,80 @@ func TestValidateModel(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateProviderHistoryReductionMode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ProviderHistoryReduction.Mode = ProviderHistoryReductionMode("auto")
+
+	result := ValidateConfig(cfg)
+	if len(result.Issues) != 1 {
+		t.Fatalf("ValidateConfig() issues = %#v, want one provider history reduction issue", result.Issues)
+	}
+	issue := result.Issues[0]
+	if issue.Field != "provider_history_reduction.mode" || issue.Severity != ValidationSeverityError || !issue.CanAutoFix || issue.FixedValue != ProviderHistoryReductionModeDryRun {
+		t.Fatalf("provider history reduction issue = %#v, want error autofix to dry_run", issue)
+	}
+
+	if fixed := ApplyAutoFixes(cfg, result); fixed != 1 {
+		t.Fatalf("ApplyAutoFixes() = %d, want 1", fixed)
+	}
+	if cfg.ProviderHistoryReduction.Mode != ProviderHistoryReductionModeDryRun {
+		t.Fatalf("ProviderHistoryReduction.Mode = %q, want dry_run", cfg.ProviderHistoryReduction.Mode)
+	}
+}
+
+func TestValidateProviderHistoryRawOutputArtifacts(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ProviderHistoryReduction.RawOutputArtifacts.Mode = ProviderHistoryRawOutputArtifactsMode("auto")
+	cfg.ProviderHistoryReduction.RawOutputArtifacts.SessionQuotaBytes = 1
+	cfg.ProviderHistoryReduction.RawOutputArtifacts.ActiveContextBudgetMaxTokens = 1
+	cfg.ProviderHistoryReduction.RawOutputArtifacts.Retention = ProviderHistoryRawOutputArtifactsRetention("forever")
+
+	result := ValidateConfig(cfg)
+	if len(result.Issues) != 4 {
+		t.Fatalf("ValidateConfig() issues = %#v, want four raw_output_artifacts issues", result.Issues)
+	}
+	for _, want := range []string{
+		"provider_history_reduction.raw_output_artifacts.mode",
+		"provider_history_reduction.raw_output_artifacts.session_quota_bytes",
+		"provider_history_reduction.raw_output_artifacts.active_context_budget_max_tokens",
+		"provider_history_reduction.raw_output_artifacts.retention",
+	} {
+		found := false
+		for _, issue := range result.Issues {
+			if issue.Field == want && issue.Severity == ValidationSeverityError && issue.CanAutoFix {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("issues = %#v, want autofixable error for %s", result.Issues, want)
+		}
+	}
+
+	if fixed := ApplyAutoFixes(cfg, result); fixed != 4 {
+		t.Fatalf("ApplyAutoFixes() = %d, want 4", fixed)
+	}
+	if cfg.ProviderHistoryReduction.RawOutputArtifacts.Mode != ProviderHistoryRawOutputArtifactsModeDryRun ||
+		cfg.ProviderHistoryReduction.RawOutputArtifacts.SessionQuotaBytes != defaultRawOutputArtifactSessionQuotaBytes ||
+		cfg.ProviderHistoryReduction.RawOutputArtifacts.ActiveContextBudgetMaxTokens != defaultRawOutputArtifactActiveContextBudgetMax ||
+		cfg.ProviderHistoryReduction.RawOutputArtifacts.Retention != ProviderHistoryRawOutputArtifactsRetentionSession {
+		t.Fatalf("RawOutputArtifacts after autofix = %#v", cfg.ProviderHistoryReduction.RawOutputArtifacts)
+	}
+}
+
+func TestValidateProviderHistoryRawOutputArtifactsRoot(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ProviderHistoryReduction.RawOutputArtifacts.Root = "relative/rawoutputs"
+
+	result := ValidateConfig(cfg)
+	if len(result.Issues) != 1 {
+		t.Fatalf("ValidateConfig() issues = %#v, want one root issue", result.Issues)
+	}
+	issue := result.Issues[0]
+	if issue.Field != "provider_history_reduction.raw_output_artifacts.root" ||
+		issue.Severity != ValidationSeverityError ||
+		issue.CanAutoFix {
+		t.Fatalf("root issue = %#v, want non-autofixable error", issue)
+	}
+}

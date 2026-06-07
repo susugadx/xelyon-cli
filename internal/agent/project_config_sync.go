@@ -32,7 +32,7 @@ func (a *Agent) syncRuntimeProjectConfig(pc *config.ProjectConfig) error {
 }
 
 func (a *Agent) resolveRuntimeProjectConfig(pc *config.ProjectConfig) (runtimeProjectConfigResolution, error) {
-	providerHistory, err := resolveProviderHistoryRuntimeConfigFromProjectConfig(pc)
+	providerHistory, err := resolveProviderHistoryRuntimeConfig(a.cfg(), pc)
 	if err != nil {
 		return runtimeProjectConfigResolution{}, err
 	}

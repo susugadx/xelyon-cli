@@ -44,6 +44,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 
 	appendValidationIssues(&result, validateProviderIssues(cfg))
 	appendValidationIssues(&result, validateReviewIssues(cfg))
+	appendValidationIssues(&result, validateProviderHistoryReductionIssues(cfg))
 	appendValidationIssues(&result, validateNumericRangeIssues(cfg))
 	appendValidationIssues(&result, validateBashSafetyLevelIssues(cfg))
 	appendValidationIssues(&result, validateAgentInstructionIssues(cfg))
@@ -141,8 +142,20 @@ func applyConfigAutoFix(cfg *Config, issue ValidationIssue) bool {
 type configAutoFixer func(*Config, any) bool
 
 var configAutoFixers = map[string]configAutoFixer{
-	"default_provider": stringAutoFixer(func(cfg *Config, v string) { cfg.DefaultProvider = v }),
-	"review.provider":  stringAutoFixer(func(cfg *Config, v string) { cfg.Review.Provider = v }),
+	"default_provider":                                     stringAutoFixer(func(cfg *Config, v string) { cfg.DefaultProvider = v }),
+	"review.provider":                                      stringAutoFixer(func(cfg *Config, v string) { cfg.Review.Provider = v }),
+	"provider_history_reduction.mode":                      providerHistoryReductionModeAutoFixer(),
+	"provider_history_reduction.raw_output_artifacts.mode": providerHistoryRawOutputArtifactsModeAutoFixer(),
+	"provider_history_reduction.raw_output_artifacts.max_artifact_bytes":  intAutoFixer(func(cfg *Config, v int) { cfg.ProviderHistoryReduction.RawOutputArtifacts.MaxArtifactBytes = v }),
+	"provider_history_reduction.raw_output_artifacts.session_quota_bytes": intAutoFixer(func(cfg *Config, v int) { cfg.ProviderHistoryReduction.RawOutputArtifacts.SessionQuotaBytes = v }),
+	"provider_history_reduction.raw_output_artifacts.chunk_bytes":         intAutoFixer(func(cfg *Config, v int) { cfg.ProviderHistoryReduction.RawOutputArtifacts.ChunkBytes = v }),
+	"provider_history_reduction.raw_output_artifacts.active_context_budget_tokens": intAutoFixer(func(cfg *Config, v int) {
+		cfg.ProviderHistoryReduction.RawOutputArtifacts.ActiveContextBudgetTokens = v
+	}),
+	"provider_history_reduction.raw_output_artifacts.active_context_budget_max_tokens": intAutoFixer(func(cfg *Config, v int) {
+		cfg.ProviderHistoryReduction.RawOutputArtifacts.ActiveContextBudgetMaxTokens = v
+	}),
+	"provider_history_reduction.raw_output_artifacts.retention": providerHistoryRawOutputArtifactsRetentionAutoFixer(),
 	"compression.trigger_percent": intAutoFixer(func(cfg *Config, v int) {
 		cfg.Compression.TriggerPercent = v
 	}),

@@ -9,52 +9,68 @@ import (
 
 // SaturationCheckPromptInput は final report saturation check prompt の入力 DTO。
 type SaturationCheckPromptInput struct {
-	CustomInstructions string
-	EvidenceMarkdown   string
-	Plan               reviewprobe.ReviewProbePlan
-	ProbeSummaries     []reviewreport.ReviewProbeSummary
-	ProbeResults       []reviewprobe.ReviewProbeResult
-	Redactor           Redactor
-	FinalizedReport    reviewreport.ReviewReport
+	CustomInstructions          string
+	ReviewStateSummary          string
+	EvidenceMarkdown            string
+	Plan                        reviewprobe.ReviewProbePlan
+	ProbeSummaries              []reviewreport.ReviewProbeSummary
+	ProbeResults                []reviewprobe.ReviewProbeResult
+	Redactor                    Redactor
+	ProbeResultOptions          ProbeResultPromptContextOptions
+	ReviewProbeRawOutputContext string
+	ReviewProbeRawOutputLedger  any
+	FinalizedReport             reviewreport.ReviewReport
 }
 
 // SaturationCheckRepairPromptInput は saturation check repair prompt の入力 DTO。
 type SaturationCheckRepairPromptInput struct {
-	CustomInstructions    string
-	EvidenceMarkdown      string
-	Plan                  reviewprobe.ReviewProbePlan
-	ProbeSummaries        []reviewreport.ReviewProbeSummary
-	ProbeResults          []reviewprobe.ReviewProbeResult
-	Redactor              Redactor
-	FinalizedReport       reviewreport.ReviewReport
-	InvalidOutput         string
-	DecodeOrValidationErr error
+	CustomInstructions          string
+	ReviewStateSummary          string
+	EvidenceMarkdown            string
+	Plan                        reviewprobe.ReviewProbePlan
+	ProbeSummaries              []reviewreport.ReviewProbeSummary
+	ProbeResults                []reviewprobe.ReviewProbeResult
+	Redactor                    Redactor
+	ProbeResultOptions          ProbeResultPromptContextOptions
+	ReviewProbeRawOutputContext string
+	ReviewProbeRawOutputLedger  any
+	FinalizedReport             reviewreport.ReviewReport
+	InvalidOutput               string
+	DecodeOrValidationErr       error
 }
 
 // ReportRevisionPromptInput は saturation check 後の report revision prompt 入力 DTO。
 type ReportRevisionPromptInput struct {
-	CustomInstructions string
-	EvidenceMarkdown   string
-	Plan               reviewprobe.ReviewProbePlan
-	ProbeSummaries     []reviewreport.ReviewProbeSummary
-	ProbeResults       []reviewprobe.ReviewProbeResult
-	Redactor           Redactor
-	FinalizedReport    reviewreport.ReviewReport
-	SaturationCheck    reviewreport.ReviewSaturationCheck
+	CustomInstructions          string
+	ReviewStateSummary          string
+	EvidenceMarkdown            string
+	Plan                        reviewprobe.ReviewProbePlan
+	ProbeSummaries              []reviewreport.ReviewProbeSummary
+	ProbeResults                []reviewprobe.ReviewProbeResult
+	Redactor                    Redactor
+	ProbeResultOptions          ProbeResultPromptContextOptions
+	ReviewProbeRawOutputContext string
+	ReviewProbeRawOutputLedger  any
+	FinalizedReport             reviewreport.ReviewReport
+	SaturationCheck             reviewreport.ReviewSaturationCheck
 }
 
 // ReportRevisionRepairPromptInput は report revision repair prompt の入力 DTO。
 type ReportRevisionRepairPromptInput struct {
-	CustomInstructions    string
-	EvidenceMarkdown      string
-	Plan                  reviewprobe.ReviewProbePlan
-	ProbeSummaries        []reviewreport.ReviewProbeSummary
-	ProbeResults          []reviewprobe.ReviewProbeResult
-	Redactor              Redactor
-	FinalizedReport       reviewreport.ReviewReport
-	SaturationCheck       reviewreport.ReviewSaturationCheck
-	InvalidRevisionOutput string
-	DecodeOrValidationErr error
+	CustomInstructions          string
+	ReviewStateSummary          string
+	EvidenceMarkdown            string
+	Plan                        reviewprobe.ReviewProbePlan
+	ProbeSummaries              []reviewreport.ReviewProbeSummary
+	ProbeResults                []reviewprobe.ReviewProbeResult
+	Redactor                    Redactor
+	ProbeResultOptions          ProbeResultPromptContextOptions
+	ReviewProbeRawOutputContext string
+	ReviewProbeRawOutputLedger  any
+	FinalizedReport             reviewreport.ReviewReport
+	SaturationCheck             reviewreport.ReviewSaturationCheck
+	InvalidRevisionOutput       string
+	DecodeOrValidationErr       error
 }
 
 // BuildSaturationCheckPrompt は final report saturation check 用の deterministic prompt を組み立てる。
@@ -71,10 +87,13 @@ func BuildSaturationCheckPrompt(input SaturationCheckPromptInput) string {
 	appendReviewRunnerPromptStrictReviewerStance(&b, reviewRunnerPromptPostProbeInsufficientEvidenceGuidance)
 	appendReviewRunnerPromptTextSection(&b, "Saturation Check JSON Contract", reviewSaturationCheckPromptContract())
 	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptOptionalTextSection(&b, "Review State Summary", input.ReviewStateSummary)
 	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", input.EvidenceMarkdown)
 	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", input.Plan)
 	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(input.ProbeSummaries, redactor))
-	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContexts(input.ProbeResults, redactor))
+	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContextsWithOptions(input.ProbeResults, redactor, input.ProbeResultOptions))
+	appendReviewRunnerPromptOptionalTextSection(&b, "Review Probe Raw Output Context", input.ReviewProbeRawOutputContext)
+	appendReviewRunnerPromptOptionalJSONSection(&b, "Review Probe Raw Output Rehydrate Ledger", input.ReviewProbeRawOutputLedger)
 	appendReviewRunnerPromptRedactedJSONSection(&b, "Finalized Review Report", input.FinalizedReport, redactor)
 	if input.FinalizedReport.ComputedSummary != nil {
 		appendReviewRunnerPromptJSONSection(&b, "Computed Summary", input.FinalizedReport.ComputedSummary)
@@ -98,10 +117,13 @@ func BuildSaturationCheckRepairPrompt(input SaturationCheckRepairPromptInput) st
 	appendReviewRunnerPromptStrictReviewerStance(&b, reviewRunnerPromptPostProbeInsufficientEvidenceGuidance)
 	appendReviewRunnerPromptTextSection(&b, "Saturation Check JSON Contract", reviewSaturationCheckPromptContract())
 	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptOptionalTextSection(&b, "Review State Summary", input.ReviewStateSummary)
 	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", input.EvidenceMarkdown)
 	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", input.Plan)
 	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(input.ProbeSummaries, redactor))
-	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContexts(input.ProbeResults, redactor))
+	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContextsWithOptions(input.ProbeResults, redactor, input.ProbeResultOptions))
+	appendReviewRunnerPromptOptionalTextSection(&b, "Review Probe Raw Output Context", input.ReviewProbeRawOutputContext)
+	appendReviewRunnerPromptOptionalJSONSection(&b, "Review Probe Raw Output Rehydrate Ledger", input.ReviewProbeRawOutputLedger)
 	appendReviewRunnerPromptRedactedJSONSection(&b, "Finalized Review Report", input.FinalizedReport, redactor)
 	if input.FinalizedReport.ComputedSummary != nil {
 		appendReviewRunnerPromptJSONSection(&b, "Computed Summary", input.FinalizedReport.ComputedSummary)
@@ -142,14 +164,18 @@ func BuildReportRevisionRepairPrompt(input ReportRevisionRepairPromptInput) stri
 	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
 	appendReviewRunnerPromptTextSection(&b, "Saturation Revision Guardrails", reviewReportRevisionSaturationGuardrails())
 	appendReviewReportRevisionPromptContext(&b, ReportRevisionPromptInput{
-		CustomInstructions: input.CustomInstructions,
-		EvidenceMarkdown:   input.EvidenceMarkdown,
-		Plan:               input.Plan,
-		ProbeSummaries:     input.ProbeSummaries,
-		ProbeResults:       input.ProbeResults,
-		Redactor:           redactor,
-		FinalizedReport:    input.FinalizedReport,
-		SaturationCheck:    input.SaturationCheck,
+		CustomInstructions:          input.CustomInstructions,
+		EvidenceMarkdown:            input.EvidenceMarkdown,
+		Plan:                        input.Plan,
+		ProbeSummaries:              input.ProbeSummaries,
+		ProbeResults:                input.ProbeResults,
+		Redactor:                    redactor,
+		ProbeResultOptions:          input.ProbeResultOptions,
+		ReviewProbeRawOutputContext: input.ReviewProbeRawOutputContext,
+		ReviewProbeRawOutputLedger:  input.ReviewProbeRawOutputLedger,
+		FinalizedReport:             input.FinalizedReport,
+		SaturationCheck:             input.SaturationCheck,
+		ReviewStateSummary:          input.ReviewStateSummary,
 	})
 	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", redactor.RedactText(input.InvalidRevisionOutput))
 	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", redactor.RedactText(reviewRunnerPromptErrorText(input.DecodeOrValidationErr)))
@@ -169,10 +195,13 @@ Do not use shallow or empty related context/search evidence as proof of no impac
 func appendReviewReportRevisionPromptContext(b *strings.Builder, input ReportRevisionPromptInput) {
 	redactor := normalizeRedactor(input.Redactor)
 	appendReviewRunnerPromptTextSection(b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptOptionalTextSection(b, "Review State Summary", input.ReviewStateSummary)
 	appendReviewRunnerPromptMarkdownSection(b, "Evidence Markdown", input.EvidenceMarkdown)
 	appendReviewRunnerPromptJSONSection(b, "Decoded Probe Plan", input.Plan)
 	appendReviewRunnerPromptJSONSection(b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(input.ProbeSummaries, redactor))
-	appendReviewRunnerPromptJSONSection(b, "Probe Result Context", BuildProbeResultPromptContexts(input.ProbeResults, redactor))
+	appendReviewRunnerPromptJSONSection(b, "Probe Result Context", BuildProbeResultPromptContextsWithOptions(input.ProbeResults, redactor, input.ProbeResultOptions))
+	appendReviewRunnerPromptOptionalTextSection(b, "Review Probe Raw Output Context", input.ReviewProbeRawOutputContext)
+	appendReviewRunnerPromptOptionalJSONSection(b, "Review Probe Raw Output Rehydrate Ledger", input.ReviewProbeRawOutputLedger)
 	appendReviewRunnerPromptRedactedJSONSection(b, "Original Finalized Review Report", input.FinalizedReport, redactor)
 	appendReviewRunnerPromptJSONSection(b, "Saturation Check", input.SaturationCheck)
 }

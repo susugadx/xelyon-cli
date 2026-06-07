@@ -37,8 +37,9 @@ func newProviderHistoryRuntimeProjectConfig(mode config.ProjectProviderHistoryRe
 	return &config.ProjectConfig{
 		Experimental: config.ProjectExperimentalConfig{
 			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
-				Mode:             mode,
-				RehydrateContext: config.ProjectProviderHistoryRehydrateContext(rehydrateContext),
+				Mode:                mode,
+				RehydrateContext:    config.ProjectProviderHistoryRehydrateContext(rehydrateContext),
+				RehydrateContextSet: true,
 			},
 		},
 	}

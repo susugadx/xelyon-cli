@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
+	"time"
 
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
@@ -37,6 +39,14 @@ type ReviewRunnerOptions struct {
 	ArtifactWriter        ReviewRunArtifactWriter
 	ArtifactWarningWriter io.Writer
 	ProgressSink          ReviewProgressSink
+	PromptReductionMode   ReviewPromptReductionMode
+
+	RawOutputArtifactsMode            ReviewRawOutputArtifactsMode
+	RawOutputArtifactStore            ReviewRawOutputArtifactStore
+	RawOutputSessionID                string
+	ReviewRunID                       string
+	RawOutputRehydrateBudgetTokens    int
+	RawOutputRehydrateBudgetMaxTokens int
 }
 
 // ReviewRunner は /review current_changes の evidence、model、probe、report を順に束ねる。
@@ -45,9 +55,18 @@ type ReviewRunner struct {
 	probeRunner     ReviewProbeExecutor
 	model           ReviewModel
 
-	artifactWriter        ReviewRunArtifactWriter
-	artifactWarningWriter io.Writer
-	progressSink          ReviewProgressSink
+	artifactWriter                    ReviewRunArtifactWriter
+	artifactWarningWriter             io.Writer
+	progressSink                      ReviewProgressSink
+	promptReductionMode               ReviewPromptReductionMode
+	rawOutputArtifactsMode            ReviewRawOutputArtifactsMode
+	rawOutputArtifactStore            ReviewRawOutputArtifactStore
+	rawOutputSessionID                string
+	reviewRunID                       string
+	rawOutputRehydrateBudgetTokens    int
+	rawOutputRehydrateBudgetMaxTokens int
+	promptReductionStats              *reviewPromptReductionStats
+	promptReductionState              *ReviewPromptReductionState
 }
 
 // NewReviewRunner は ReviewRunner を構築し、必須依存を検証する。
@@ -56,12 +75,19 @@ func NewReviewRunner(opts ReviewRunnerOptions) (*ReviewRunner, error) {
 		return nil, err
 	}
 	return &ReviewRunner{
-		evidenceBuilder:       opts.EvidenceBuilder,
-		probeRunner:           opts.ProbeRunner,
-		model:                 opts.Model,
-		artifactWriter:        opts.ArtifactWriter,
-		artifactWarningWriter: opts.ArtifactWarningWriter,
-		progressSink:          opts.ProgressSink,
+		evidenceBuilder:                   opts.EvidenceBuilder,
+		probeRunner:                       opts.ProbeRunner,
+		model:                             opts.Model,
+		artifactWriter:                    opts.ArtifactWriter,
+		artifactWarningWriter:             opts.ArtifactWarningWriter,
+		progressSink:                      opts.ProgressSink,
+		promptReductionMode:               normalizeReviewPromptReductionMode(opts.PromptReductionMode),
+		rawOutputArtifactsMode:            normalizeReviewRawOutputArtifactsMode(opts.RawOutputArtifactsMode),
+		rawOutputArtifactStore:            opts.RawOutputArtifactStore,
+		rawOutputSessionID:                strings.TrimSpace(opts.RawOutputSessionID),
+		reviewRunID:                       normalizeReviewRunID(opts.ReviewRunID),
+		rawOutputRehydrateBudgetTokens:    opts.RawOutputRehydrateBudgetTokens,
+		rawOutputRehydrateBudgetMaxTokens: opts.RawOutputRehydrateBudgetMaxTokens,
 	}, nil
 }
 
@@ -73,6 +99,7 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	if err := r.validate(); err != nil {
 		return ReviewReport{}, err
 	}
+	r.resetPromptReductionStats()
 	if req.TargetKind != TargetCurrentChanges {
 		return ReviewReport{}, fmt.Errorf("review runner target_kind must be %q: got %q", TargetCurrentChanges, req.TargetKind)
 	}
@@ -114,7 +141,8 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	redactor := newReviewRunnerPromptRedactor(bundle, probeResults)
 	r.saveReviewRunJSONArtifact("probe_results.json", reviewmodelinput.BuildProbeResultPromptContexts(probeResults, redactor), redactor)
 
-	return r.completeReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle.WebSearchEvidence.ExternalDocs, coverageAuditContext)
+	reportEvidenceMarkdown := r.reviewPromptEvidenceMarkdown(bundle, evidenceMarkdown)
+	return r.completeReviewReport(ctx, req, reportEvidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle, coverageAuditContext)
 }
 
 func (r *ReviewRunner) collectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan ReviewProbePlan, evidenceMarkdown string, redactor reviewRunnerPromptRedactor) (ReviewEvidenceBundle, string, reviewRunnerPromptRedactor, reviewCoverageAuditContext) {
@@ -191,25 +219,33 @@ func decodeReviewProbePlanJSONAgainstEvidence(content string, bundle ReviewEvide
 	return plan, nil
 }
 
-func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, externalDocs []ReviewExternalDocEvidence, coverageAuditContext reviewCoverageAuditContext) (ReviewReport, error) {
+func (r *ReviewRunner) completeReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, bundle ReviewEvidenceBundle, coverageAuditContext reviewCoverageAuditContext) (ReviewReport, error) {
 	r.emitProgressRunning(reviewProgressReportItem)
-	report, err := r.completeInitialReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, externalDocs)
+	report, err := r.completeInitialReviewReport(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, bundle)
 	if err != nil {
 		r.emitProgressError(reviewProgressReportItem, err)
 		return ReviewReport{}, err
 	}
 	r.emitProgressOK(reviewProgressReportItem, "")
-	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, externalDocs, coverageAuditContext)
+	return r.completeReviewReportSaturation(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, bundle, coverageAuditContext)
 }
 
-func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, externalDocs []ReviewExternalDocEvidence) (ReviewReport, error) {
+func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, bundle ReviewEvidenceBundle) (ReviewReport, error) {
+	stateSummary := r.reviewStateSummaryPrompt(reviewStateSummaryInput{
+		bundle:         bundle,
+		plan:           plan,
+		probeSummaries: probeSummaries,
+		phase:          ReviewModelPhaseReport,
+	})
 	reportPrompt := reviewmodelinput.BuildReportPrompt(reviewmodelinput.ReportPromptInput{
 		CustomInstructions: req.CustomInstructions,
+		ReviewStateSummary: stateSummary,
 		EvidenceMarkdown:   evidenceMarkdown,
 		Plan:               plan,
 		ProbeSummaries:     probeSummaries,
 		ProbeResults:       probeResults,
 		Redactor:           redactor,
+		ProbeResultOptions: r.probeResultPromptContextOptions(),
 	})
 	r.saveReviewRunTextArtifact("report_prompt.md", reportPrompt, redactor)
 	reportResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
@@ -226,7 +262,7 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 		Plan:                  plan,
 		TrustedProbeSummaries: probeSummaries,
 		Redactor:              redactor,
-		ExternalDocs:          externalDocs,
+		ExternalDocs:          bundle.WebSearchEvidence.ExternalDocs,
 	})
 	if reportErr == nil {
 		r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
@@ -235,11 +271,13 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 
 	repairPrompt := reviewmodelinput.BuildReportRepairPrompt(reviewmodelinput.ReportRepairPromptInput{
 		CustomInstructions:    req.CustomInstructions,
+		ReviewStateSummary:    stateSummary,
 		EvidenceMarkdown:      evidenceMarkdown,
 		Plan:                  plan,
 		ProbeSummaries:        probeSummaries,
 		ProbeResults:          probeResults,
 		Redactor:              redactor,
+		ProbeResultOptions:    r.probeResultPromptContextOptions(),
 		InvalidOutput:         reportResp.Content,
 		DecodeOrValidationErr: reportErr,
 	})
@@ -258,13 +296,95 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 		Plan:                  plan,
 		TrustedProbeSummaries: probeSummaries,
 		Redactor:              redactor,
-		ExternalDocs:          externalDocs,
+		ExternalDocs:          bundle.WebSearchEvidence.ExternalDocs,
 	})
 	if err != nil {
 		return ReviewReport{}, err
 	}
 	r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
 	return report, nil
+}
+
+func (r *ReviewRunner) probeResultPromptContextOptions() reviewmodelinput.ProbeResultPromptContextOptions {
+	if r == nil {
+		return reviewmodelinput.ProbeResultPromptContextOptions{}
+	}
+	mode := normalizeReviewPromptReductionMode(r.promptReductionMode)
+	if mode == ReviewPromptReductionModeOff {
+		return reviewmodelinput.ProbeResultPromptContextOptions{}
+	}
+	if r.promptReductionStats == nil {
+		r.promptReductionStats = newReviewPromptReductionStats(mode)
+	}
+	return reviewmodelinput.ProbeResultPromptContextOptions{
+		CommandOutputCompactor: newReviewPromptCommandOutputCompactor(mode, r.promptReductionStats),
+	}
+}
+
+func (r *ReviewRunner) resetPromptReductionStats() {
+	if r == nil {
+		return
+	}
+	r.promptReductionStats = newReviewPromptReductionStats(r.promptReductionMode)
+	r.promptReductionState = &ReviewPromptReductionState{
+		Mode:   normalizeReviewPromptReductionMode(r.promptReductionMode),
+		Report: r.promptReductionStats.reportValue(),
+	}
+}
+
+func normalizeReviewRunID(id string) string {
+	id = strings.TrimSpace(id)
+	if id != "" {
+		return id
+	}
+	return "review-" + time.Now().UTC().Format("20060102T150405.000000000Z")
+}
+
+func (r *ReviewRunner) recordPromptReductionItem(item ReviewPromptReductionItem) {
+	if r == nil || normalizeReviewPromptReductionMode(r.promptReductionMode) == ReviewPromptReductionModeOff {
+		return
+	}
+	if r.promptReductionState == nil {
+		r.promptReductionState = &ReviewPromptReductionState{Mode: normalizeReviewPromptReductionMode(r.promptReductionMode)}
+	}
+	r.promptReductionState.Items = append(r.promptReductionState.Items, item)
+	if r.promptReductionStats != nil {
+		r.promptReductionStats.recordItem(item)
+		r.promptReductionState.Report = r.promptReductionStats.reportValue()
+	}
+}
+
+// PromptReductionReport は直近 Run の review prompt 削減集計を返す。
+func (r *ReviewRunner) PromptReductionReport() ReviewPromptReductionReport {
+	if r == nil {
+		return ReviewPromptReductionReport{}
+	}
+	return r.promptReductionStats.reportValue()
+}
+
+func (r *ReviewRunner) reviewStateSummaryPrompt(input reviewStateSummaryInput) string {
+	if r == nil || normalizeReviewPromptReductionMode(r.promptReductionMode) != ReviewPromptReductionModeApply {
+		return ""
+	}
+	if r.promptReductionStats == nil {
+		r.promptReductionStats = newReviewPromptReductionStats(r.promptReductionMode)
+	}
+	summary := buildReviewStateSummary(input)
+	text := summary.PromptText()
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	absorbedCount := len(summary.AbsorbedIntermediateRefs)
+	r.promptReductionStats.recordStateSummary(absorbedCount)
+	if absorbedCount == 0 {
+		r.promptReductionStats.recordKeepReason("review_state_summary_current_only")
+	}
+	if r.promptReductionState == nil {
+		r.promptReductionState = &ReviewPromptReductionState{Mode: normalizeReviewPromptReductionMode(r.promptReductionMode)}
+	}
+	r.promptReductionState.Summary = summary
+	r.promptReductionState.Report = r.promptReductionStats.reportValue()
+	return text
 }
 
 func (r *ReviewRunner) validate() error {

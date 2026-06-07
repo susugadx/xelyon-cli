@@ -160,6 +160,8 @@ func TestGenerateExampleFile(t *testing.T) {
 		"# XELYON CLI 設定例",
 		"# デフォルトで使用するモデル",
 		"# プロバイダーごとのモデル設定",
+		"# raw output artifact store root path（env: XELYON_RAW_OUTPUT_ARTIFACT_ROOT）",
+		"# root: /absolute/path/to/rawoutputs",
 		"provider: gemini",
 		"lsp:",
 		"agent_instructions:",
@@ -174,5 +176,8 @@ func TestGenerateExampleFile(t *testing.T) {
 		if strings.Contains(text, unexpected) {
 			t.Fatalf("unexpected internal section in generated example: %q", unexpected)
 		}
+	}
+	if strings.Contains(text, "\n        root: /absolute/path/to/rawoutputs") {
+		t.Fatal("raw_output_artifacts.root should be a commented example, not an active config value")
 	}
 }

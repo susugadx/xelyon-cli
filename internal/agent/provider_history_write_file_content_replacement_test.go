@@ -37,9 +37,6 @@ func TestProviderHistoryCommandEditApplyReplacesOldSuccessfulWriteFileContent(t 
 	if report.ReplacedCount != 0 || !report.ResponsesChainDisabled {
 		t.Fatalf("projection report = %#v, want edit-arg-only replacement to disable response chain", report)
 	}
-	if report.EstimatedSavedBytes != 0 || report.ApproxSavedTokens != 0 {
-		t.Fatalf("top-level content savings = bytes %d tokens %d, want unchanged for arg-only replacement", report.EstimatedSavedBytes, report.ApproxSavedTokens)
-	}
 	commandReport := report.CommandEditDryRun
 	if commandReport.ReplacementStatus != providerHistoryCommandEditReplacementStatusPartialApply ||
 		commandReport.EditArgCandidates != 1 ||
@@ -50,6 +47,10 @@ func TestProviderHistoryCommandEditApplyReplacesOldSuccessfulWriteFileContent(t 
 	}
 	if got := commandReport.CandidateReasonCounts["write_file_content"]; got != 1 {
 		t.Fatalf("CandidateReasonCounts = %#v, want write_file_content:1", commandReport.CandidateReasonCounts)
+	}
+	if report.EstimatedSavedBytes != commandReport.EditArgReplacementSavedBytes ||
+		report.ApproxSavedTokens != commandReport.ApproxEditArgReplacementSavedTokens {
+		t.Fatalf("top-level provider-facing savings = bytes %d tokens %d, want edit-arg savings %d/%d", report.EstimatedSavedBytes, report.ApproxSavedTokens, commandReport.EditArgReplacementSavedBytes, commandReport.ApproxEditArgReplacementSavedTokens)
 	}
 }
 
@@ -146,7 +147,7 @@ func TestProviderHistoryWriteFileContentApplyKeepsNonReplaceableCases(t *testing
 	}
 }
 
-func TestProviderHistoryEditArgApplyKeepsNonWriteFileToolsRaw(t *testing.T) {
+func TestProviderHistoryEditArgApplyKeepsUnsuccessfulPatchReplaceAndDeleteFileCandidateOnlyRaw(t *testing.T) {
 	patch := strings.Repeat("*** Begin Patch\n*** Update File: a.go\n+line\n*** End Patch\n", 40)
 	oldStr := strings.Repeat("old line\n", 180)
 	newStr := strings.Repeat("new line\n", 180)
@@ -170,12 +171,20 @@ func TestProviderHistoryEditArgApplyKeepsNonWriteFileToolsRaw(t *testing.T) {
 	result := agent.buildProviderHistoryProjection(ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionApply})
 
 	if !reflect.DeepEqual(result.History, raw) {
-		t.Fatalf("apply projection changed non-write edit tool args:\n got %#v\nwant %#v", result.History, raw)
+		t.Fatalf("apply projection changed unsuccessful/candidate-only edit tool args:\n got %#v\nwant %#v", result.History, raw)
 	}
 	if result.Report.CommandEditDryRun.EditArgCandidates != 3 ||
 		result.Report.CommandEditDryRun.EditArgReplacedCount != 0 ||
 		result.Report.ResponsesChainDisabled {
-		t.Fatalf("report = %#v, want edit diagnostics without replacement", result.Report)
+		t.Fatalf("report = %#v, want edit diagnostics without replacement or response chain disable", result.Report)
+	}
+	wantReasons := map[string]int{
+		"apply_patch_patch":   1,
+		"str_replace_strings": 1,
+		"delete_file_path":    1,
+	}
+	if !reflect.DeepEqual(result.Report.CommandEditDryRun.CandidateReasonCounts, wantReasons) {
+		t.Fatalf("CandidateReasonCounts = %#v, want %#v", result.Report.CommandEditDryRun.CandidateReasonCounts, wantReasons)
 	}
 }
 

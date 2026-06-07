@@ -33,6 +33,10 @@ func (a *Agent) SyncWithRuntimeConfig() {
 	cfg := a.cfg()
 	out := a.output()
 
+	if err := a.syncProviderHistoryRuntimeConfigFromCurrentProject(); err != nil {
+		yellow.Fprintf(out, "Warning: Failed to sync provider history reduction config: %v\n", err)
+	}
+
 	a.syncRuntimeProviderConfig(cfg, out)
 
 	// Model: プロバイダーの現在モデルとして設定に追従

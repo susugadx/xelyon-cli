@@ -26,14 +26,35 @@ func (a *Agent) providerFacingHistoryExcludingLatestMessageForRequest(ctx contex
 }
 
 func (a *Agent) providerFacingHistoryForRequestFromRaw(ctx context.Context, raw []api.Message) (context.Context, []api.Message) {
-	result := a.providerFacingHistoryProjectionFromRaw(raw)
+	result, rawOutputContext := a.providerHistoryProjectionForRequest(ctx, raw)
 	a.recordLastProviderHistoryProjectionReport(result.Report)
 	if providerHistoryProjectionDisablesResponseIDChain(result.Report) {
 		ctx = api.WithResponseIDChainDisabled(ctx)
 		a.clearResponseContextForProviderHistoryReductionRequest()
 	}
 	ctx = appendProviderHistoryRehydratedEvidenceActiveContext(ctx, a.providerHistoryRehydratedEvidenceActiveContextBlocks(ctx, result.Report))
+	ctx = appendProviderHistoryRawOutputActiveContext(ctx, rawOutputContext.Blocks)
 	return ctx, result.History
+}
+
+func (a *Agent) providerHistoryProjectionForRequest(ctx context.Context, raw []api.Message) (providerHistoryProjectionResult, providerHistoryRawOutputActiveContextBuild) {
+	result := a.providerFacingHistoryProjectionFromRaw(raw)
+	rawOutputContext := a.buildProviderHistoryRawOutputActiveContext(ctx, result.Report, raw)
+	if rawOutputContext.missingRequiredRefs() {
+		result = a.buildProviderHistoryProjectionFromRawWithRawOutputApplyDisabledReason(raw, rawOutputContext.failClosedReason())
+		rawOutputContext = a.buildProviderHistoryRawOutputActiveContext(ctx, result.Report, raw)
+	}
+	return result, rawOutputContext
+}
+
+func (a *Agent) providerHistoryProjectionForTokenBudget(ctx context.Context, raw []api.Message) (providerHistoryProjectionResult, providerHistoryRawOutputActiveContextBuild) {
+	result := a.buildProviderHistoryProjectionFromRawForTokenBudget(raw)
+	rawOutputContext := a.buildProviderHistoryRawOutputActiveContext(ctx, result.Report, raw)
+	if rawOutputContext.missingRequiredRefs() {
+		result = a.buildProviderHistoryProjectionFromRawForTokenBudget(raw)
+		rawOutputContext = a.buildProviderHistoryRawOutputActiveContext(ctx, result.Report, raw)
+	}
+	return result, rawOutputContext
 }
 
 func providerHistoryProjectionDisablesResponseIDChain(report ProviderHistoryProjectionReport) bool {

@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 )
 
 func TestSaveAndSyncConfig_ProviderOverride_NotOverwritten(t *testing.T) {
@@ -34,6 +37,94 @@ func TestSaveAndSyncConfig_ProviderOverride_NotOverwritten(t *testing.T) {
 	// 呼ばなければ provider override は維持される
 	if cfg.ProviderModels["openai"].DefaultModel != "provider-override" {
 		t.Fatal("provider override should not be modified without SyncDefaultModelToProvider")
+	}
+}
+
+func TestSaveAndSyncConfigRefreshesProviderHistoryRuntimeOptions(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	cfg := config.DefaultConfig()
+	cfg.ProviderHistoryReduction.Mode = config.ProviderHistoryReductionModeApply
+	cfg.ProviderHistoryReduction.RehydrateContext = false
+	cfg.ProviderHistoryReduction.RawOutputArtifacts = config.ProviderHistoryRawOutputArtifactsConfig{
+		Mode:                         config.ProviderHistoryRawOutputArtifactsModeApply,
+		MaxArtifactBytes:             8192,
+		SessionQuotaBytes:            16384,
+		ChunkBytes:                   4096,
+		ActiveContextBudgetTokens:    2048,
+		ActiveContextBudgetMaxTokens: 4096,
+		Retention:                    config.ProviderHistoryRawOutputArtifactsRetentionSession,
+	}
+	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
+	store, err := rawoutputs.OpenStore(rawoutputs.Root(t.TempDir()), rawoutputs.StoreOptions{})
+	if err != nil {
+		t.Fatalf("rawoutputs.OpenStore() error = %v", err)
+	}
+	runtime.RawOutputArtifactStore = store
+	agent := &Agent{Runtime: runtime, ProviderName: "openai", CurrentModel: "gpt-test"}
+
+	if err := agent.SaveAndSyncConfig(cfg); err != nil {
+		t.Fatalf("SaveAndSyncConfig() error = %v", err)
+	}
+
+	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionApply, false)
+	if agent.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext = true, want global false")
+	}
+	raw := agent.Runtime.Options.ProviderHistoryRawOutputArtifacts
+	if raw.Mode != config.ProviderHistoryRawOutputArtifactsModeApply ||
+		raw.MaxArtifactBytes != 8192 ||
+		raw.SessionQuotaBytes != 16384 ||
+		raw.ChunkBytes != 4096 ||
+		raw.ActiveContextBudgetTokens != 2048 ||
+		raw.ActiveContextBudgetMaxTokens != 4096 ||
+		raw.Retention != config.ProviderHistoryRawOutputArtifactsRetentionSession {
+		t.Fatalf("runtime raw_output_artifacts = %#v, want saved global config", raw)
+	}
+	if agent.Runtime.RawOutputArtifactStore != nil {
+		t.Fatal("runtime RawOutputArtifactStore was not invalidated after /config raw_output_artifacts edit")
+	}
+}
+
+func TestSaveAndSyncConfigKeepsProviderHistoryProjectOverride(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	projectDir := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatalf("Chdir(projectDir) error = %v", err)
+	}
+	projectConfig := []byte("provider_history_reduction:\n  mode: apply\n  rehydrate_context: false\n  raw_output_artifacts:\n    mode: apply\n    active_context_budget_tokens: 2048\n    active_context_budget_max_tokens: 4096\n")
+	if err := os.WriteFile(filepath.Join(projectDir, "xelyon.yaml"), projectConfig, 0o644); err != nil {
+		t.Fatalf("WriteFile(xelyon.yaml) error = %v", err)
+	}
+	cfg := config.DefaultConfig()
+	cfg.ProviderHistoryReduction.Mode = config.ProviderHistoryReductionModeOff
+	cfg.ProviderHistoryReduction.RehydrateContext = true
+	cfg.ProviderHistoryReduction.RawOutputArtifacts.Mode = config.ProviderHistoryRawOutputArtifactsModeOff
+	agent := &Agent{
+		Runtime:      NewAgentRuntimeWithConfig(config.DefaultConfig()),
+		ProviderName: "openai",
+		CurrentModel: "gpt-test",
+	}
+
+	if err := agent.SaveAndSyncConfig(cfg); err != nil {
+		t.Fatalf("SaveAndSyncConfig() error = %v", err)
+	}
+
+	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionApply, true)
+	if agent.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext = true, want project override false")
+	}
+	if got := agent.Runtime.Options.ProviderHistoryRawOutputArtifacts.Mode; got != config.ProviderHistoryRawOutputArtifactsModeApply {
+		t.Fatalf("runtime raw_output_artifacts.mode = %q, want project override apply", got)
+	}
+	if !agent.Runtime.Options.ProviderHistoryRawOutputArtifactsSet {
+		t.Fatal("runtime ProviderHistoryRawOutputArtifactsSet = false, want project override set")
 	}
 }
 

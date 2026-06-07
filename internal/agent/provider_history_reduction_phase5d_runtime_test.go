@@ -32,7 +32,7 @@ func TestPhase5DStatusDiagnosticUsesLastProviderFacingRequestReport(t *testing.T
 	}
 	out.Reset()
 	statusOutput := renderProviderHistoryStatusCommand(t, agent, &out)
-	for _, want := range []string{"Provider history reduction", "mode=apply", "candidates=1", "replaced=1", "saved=", "approx_saved_tokens=", "kept_reasons=", "responses_chain_disabled=true"} {
+	for _, want := range []string{"Provider history reduction", "provider history reduction: apply", "content_replacements=1", "total_provider_facing_saved=", "approx_total_provider_facing_saved_tokens=", "responses_chain_disabled=true"} {
 		if !strings.Contains(statusOutput, want) {
 			t.Fatalf("/status output missing %q:\n%s", want, statusOutput)
 		}
@@ -70,7 +70,7 @@ func TestPhase5DStatusDiagnosticUsesLastProviderFacingRequestReport(t *testing.T
 	if !handleTokensCommand(agent) {
 		t.Fatal("handleTokensCommand() = false, want true")
 	}
-	for _, reject := range []string{"Provider history reduction", "candidates=", "approx_saved_tokens", "kept_reasons", "responses_chain_disabled"} {
+	for _, reject := range []string{"Provider history reduction", "content_replacements", "total_provider_facing_saved", "approx_total_provider_facing_saved_tokens", "responses_chain_disabled"} {
 		if strings.Contains(out.String(), reject) {
 			t.Fatalf("/tokens output should not contain %q:\n%s", reject, out.String())
 		}
@@ -94,11 +94,10 @@ func TestPhase5DRawStorageStaysRawAcrossRequestSurfaces(t *testing.T) {
 		}
 
 		assertProviderRequestHistoryReductionApplied(t, agent, provider, oldRead, "next request")
-		if agent.session.Messages[1].Content != oldRead ||
-			agent.session.Messages[2].ToolExecution == nil ||
-			agent.session.Messages[2].ToolExecution.ResultPreview != oldRead {
-			t.Fatalf("session raw storage = %#v, want raw tool content and raw tool execution", agent.session.Messages)
+		if agent.session.Messages[1].Content != oldRead {
+			t.Fatalf("session raw tool content = %q, want raw old read", agent.session.Messages[1].Content)
 		}
+		assertProviderHistoryToolExecutionPreviewPreservesRaw(t, agent.session.Messages[2].ToolExecution, "read_file", oldRead)
 	})
 
 	t.Run("image headless and plan preserve raw runtime history", func(t *testing.T) {

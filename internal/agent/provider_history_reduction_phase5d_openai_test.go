@@ -77,7 +77,7 @@ func TestPhase5DOpenAIResponsesReductionForcesFullHistoryAndKeepsTrailingToolOut
 	if !report.ResponsesChainDisabled {
 		t.Fatalf("ResponsesChainDisabled = false, want true after replacement")
 	}
-	if report.EstimatedSavedBytes <= 0 || !strings.Contains(formatProviderHistoryProjectionReportSummary(report), "saved=") {
+	if report.EstimatedSavedBytes <= 0 || !strings.Contains(formatProviderHistoryProjectionReportSummary(report), "total_provider_facing_saved=") {
 		t.Fatalf("status projection report = %#v, want saved bytes for payload that contains placeholder", report)
 	}
 }
@@ -215,6 +215,79 @@ func TestPhase5DOpenAIResponsesWriteFileContentReplacementDisablesContinuation(t
 	report := agent.Runtime.LastProviderHistoryProjectionReport
 	if report.ReplacedCount != 0 || report.CommandEditDryRun.EditArgReplacedCount != 1 || !report.ResponsesChainDisabled {
 		t.Fatalf("report = %#v, want write_file.content-only replacement with response chain disabled", report)
+	}
+}
+
+func TestPhase5DOpenAIResponsesEditArgReplacementDisablesContinuationAndUsesProjectedFullInput(t *testing.T) {
+	patchPath := "generated/responses_patch.go"
+	replacePath := "generated/responses_replace.go"
+	patch := providerHistoryLargeApplyPatch(patchPath)
+	oldStr := providerHistoryLargeStrReplaceText("old responses line")
+	newStr := providerHistoryLargeStrReplaceText("new responses line")
+	patchArgs := providerHistoryJSONAnyArguments(t, map[string]any{"patch": patch})
+	replaceArgs := providerHistoryStrReplaceArguments(t, replacePath, oldStr, newStr)
+	patchResult := providerHistoryApplyPatchSuccess(nil, []string{patchPath}, nil)
+	replaceResult := "Successfully replaced text in " + replacePath + " (lines 4-18 → 4-19)"
+	agent := &Agent{
+		Runtime: &AgentRuntime{
+			Options: RuntimeOptions{EnableProviderHistoryReduction: true},
+		},
+		History: []api.Message{
+			{Role: "user", Content: "edit generated files"},
+			providerHistoryAssistantToolCalls(
+				providerHistoryToolCallWithArguments("call_old_patch", "apply_patch", patchArgs),
+				providerHistoryToolCallWithArguments("call_old_replace", "str_replace", replaceArgs),
+			),
+			providerHistoryToolResult("call_old_patch", "apply_patch", patchResult),
+			providerHistoryToolResult("call_old_replace", "str_replace", replaceResult),
+			{Role: "assistant", Content: "edits completed"},
+			providerHistoryAssistantToolCall("call_latest", "read_file"),
+			providerHistoryToolResult("call_latest", "read_file", "latest raw output"),
+			{Role: "assistant", Content: "done"},
+		},
+	}
+	rawBefore := api.CloneMessages(agent.History)
+
+	requestCtx, history := agent.providerFacingHistoryForRequest(context.Background())
+	req := openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
+		Base:               openairesponses.BaseRequestOptions{Model: openairesponses.NewModelIdentity("gpt-5.4", ""), Store: true},
+		RequestContext:     requestCtx,
+		SystemPrompt:       "system",
+		History:            history,
+		PreviousResponseID: "resp_prev",
+	})
+
+	if !api.ResponseIDChainDisabledFromContext(requestCtx) {
+		t.Fatal("request context did not disable response ID chain after edit argument replacements")
+	}
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty after edit argument replacements", req.PreviousResponseID)
+	}
+	items := phase5DResponsesInputItems(t, req.Input)
+	patchItem := phase5DFindResponsesFunctionCall(t, items, "call_old_patch")
+	if patchItem == nil {
+		t.Fatalf("full input apply_patch function_call is missing: %#v", items)
+	}
+	assertProviderHistoryApplyPatchArgReplacement(t, patchItem.Arguments, patchPath, patch)
+	replaceItem := phase5DFindResponsesFunctionCall(t, items, "call_old_replace")
+	if replaceItem == nil {
+		t.Fatalf("full input str_replace function_call is missing: %#v", items)
+	}
+	assertProviderHistoryStrReplaceArgReplacement(t, replaceItem.Arguments, replacePath, oldStr, newStr)
+	patchOutput := phase5DFindResponsesFunctionOutput(t, items, "call_old_patch")
+	if patchOutput == nil || patchOutput.Output != patchResult {
+		t.Fatalf("full input apply_patch function_call_output = %#v, want raw success output", patchOutput)
+	}
+	replaceOutput := phase5DFindResponsesFunctionOutput(t, items, "call_old_replace")
+	if replaceOutput == nil || replaceOutput.Output != replaceResult {
+		t.Fatalf("full input str_replace function_call_output = %#v, want raw success output", replaceOutput)
+	}
+	if !reflect.DeepEqual(agent.History, rawBefore) {
+		t.Fatalf("Agent.History changed after edit argument projection:\n got %#v\nwant %#v", agent.History, rawBefore)
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.ReplacedCount != 0 || report.CommandEditDryRun.EditArgReplacedCount != 2 || !report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v, want two edit-argument replacements with response chain disabled", report)
 	}
 }
 

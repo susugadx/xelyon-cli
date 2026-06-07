@@ -45,6 +45,19 @@ func TestInitializeProjectInstructionsSyncsProviderHistoryReductionEnvWithoutPro
 	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionApply, true)
 }
 
+func TestInitializeProjectInstructionsUsesProviderHistoryReductionPublicDefault(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+	agent := newProviderHistoryReductionStartupTestAgent(t, t.TempDir())
+
+	if err := initializeProjectInstructions(agent, projectInstructionApplyOptions{injectProjectMap: false}); err != nil {
+		t.Fatalf("initializeProjectInstructions() error = %v", err)
+	}
+	assertProviderHistoryReductionRuntimeMode(t, agent.Runtime, ProviderHistoryReductionDryRun, false)
+	if !agent.Runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext = false, want public default true")
+	}
+}
+
 func TestInitializeProjectInstructionsReturnsInvalidExperimentalProviderHistoryReductionMode(t *testing.T) {
 	unsetProviderHistoryRuntimeConfigEnv(t)
 	dir := t.TempDir()

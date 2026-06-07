@@ -145,7 +145,7 @@ func TestProviderFacingHistoryRecordsEmptyReportWhenRuntimeGateDisabled(t *testi
 }
 
 func TestProviderFacingHistoryAppliesRuntimeGateAndRecordsReport(t *testing.T) {
-	oldRead := strings.Repeat("old read_file output\n", 12)
+	oldRead := strings.Repeat("old read_file output\n", 240)
 	runtime := &AgentRuntime{
 		Options: RuntimeOptions{EnableProviderHistoryReduction: true},
 		TaskLedger: providerHistoryTaskLedgerWithEvidence(t,
@@ -179,7 +179,7 @@ func TestProviderFacingHistoryAppliesRuntimeGateAndRecordsReport(t *testing.T) {
 }
 
 func TestProviderFacingHistoryAppliesRuntimeGateAndPreservesInferredToolName(t *testing.T) {
-	oldRead := strings.Repeat("old read_file output without stored tool name\n", 12)
+	oldRead := strings.Repeat("old read_file output without stored tool name\n", 240)
 	runtime := &AgentRuntime{
 		Options: RuntimeOptions{EnableProviderHistoryReduction: true},
 		TaskLedger: providerHistoryTaskLedgerWithEvidence(t,
@@ -217,7 +217,7 @@ func TestProviderFacingHistoryAppliesRuntimeGateAndPreservesInferredToolName(t *
 }
 
 func TestProviderFacingHistoryExcludingLatestMessageReportsProjectedPastHistory(t *testing.T) {
-	oldRead := strings.Repeat("old image read output\n", 12)
+	oldRead := strings.Repeat("old image read output\n", 240)
 	runtime := &AgentRuntime{
 		Options: RuntimeOptions{EnableProviderHistoryReduction: true},
 		TaskLedger: providerHistoryTaskLedgerWithEvidence(t,

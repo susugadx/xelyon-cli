@@ -39,6 +39,26 @@ func defaultCompressionProviderThresholds() map[string]int {
 	return map[string]int{}
 }
 
+func defaultProviderHistoryReductionConfig() ProviderHistoryReductionConfig {
+	return ProviderHistoryReductionConfig{
+		Mode:               ProviderHistoryReductionModeDryRun,
+		RehydrateContext:   true,
+		RawOutputArtifacts: defaultProviderHistoryRawOutputArtifactsConfig(),
+	}
+}
+
+func defaultProviderHistoryRawOutputArtifactsConfig() ProviderHistoryRawOutputArtifactsConfig {
+	return ProviderHistoryRawOutputArtifactsConfig{
+		Mode:                         ProviderHistoryRawOutputArtifactsModeDryRun,
+		MaxArtifactBytes:             defaultRawOutputArtifactMaxBytes,
+		SessionQuotaBytes:            defaultRawOutputArtifactSessionQuotaBytes,
+		ChunkBytes:                   defaultRawOutputArtifactChunkBytes,
+		ActiveContextBudgetTokens:    defaultRawOutputArtifactActiveContextBudgetTokens,
+		ActiveContextBudgetMaxTokens: defaultRawOutputArtifactActiveContextBudgetMax,
+		Retention:                    ProviderHistoryRawOutputArtifactsRetentionSession,
+	}
+}
+
 func defaultLoopDetectionConfig() LoopDetectionConfig {
 	return LoopDetectionConfig{
 		Threshold: 3,
