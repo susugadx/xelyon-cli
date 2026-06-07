@@ -971,3 +971,18 @@ xelyon
 - [Search optimization and structured impact](search.md)
 - [LSP連携](lsp.md)
 - [MCP連携](mcp.md)
+
+### `/rawoutputs`
+
+raw output artifact store の read-only diagnostics を表示します。provider history reduction の `raw_output_artifacts` が作成した refs / artifacts / verify 状態 / GC 見込みを、raw body を表示せずに確認するためのコマンドです。
+
+```
+> /rawoutputs [summary|verify|refs|gc --dry-run]
+```
+
+- `/rawoutputs` または `/rawoutputs summary`: 有効 mode、artifact root、root source、session、refs/artifacts/bytes、live ref source 数を表示します。
+- `/rawoutputs verify`: manifest と object を読み、missing object、hash mismatch、decrypt failure、path failure、quarantine/tombstone/collected refs の件数を表示します。
+- `/rawoutputs refs`: 最大 20 件の ref metadata を表示します。raw output body は表示しません。
+- `/rawoutputs gc --dry-run`: 現在 runtime が把握している caller-provided live refs だけを source of truth として、tombstone / collect / keep の見込み件数を表示します。
+
+`/rawoutputs gc --apply`、`delete`、`repair` は実装していません。このコマンドは状態確認専用で、store や history を変更しません。

@@ -145,6 +145,8 @@ provider_history_reduction:
     raw_output_artifacts:
         # data-bearing raw output artifact-backed compact mode（off / dry_run / apply）
         mode: dry_run
+        # raw output artifact store root path（env: XELYON_RAW_OUTPUT_ARTIFACT_ROOT）
+        # root: /absolute/path/to/rawoutputs
         # raw output artifact 1件あたりの最大保存 byte 数
         max_artifact_bytes: 67108864
         # session 単位の raw output artifact 保存上限 byte 数
@@ -423,7 +425,7 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
 
 ### Provider History Reduction 設定 (`provider_history_reduction`)
 
-Provider History Reduction は、ローカルの raw history / session / audit / persisted JSONL を消さず、provider に送る request 用 history だけを軽量化します。古い `read_file` / `search_code` / `gather_context` evidence、成功済み command output、git output、edit payload などは、parse・安全性・古さ・threshold の gate を満たす場合だけ placeholder または compact text に置き換えられます。`curl` / `wget` / `sqlite3` / `psql` など、取得結果や query result 自体が後続判断の証拠になり得る data-bearing command output は、artifact pointer で再取得できる設計が入るまでは apply でも raw のまま保持します。
+Provider History Reduction は、ローカルの raw history / session / audit / persisted JSONL を消さず、provider に送る request 用 history だけを軽量化します。古い `read_file` / `search_code` / `gather_context` evidence、成功済み command output、git output、edit payload などは、parse・安全性・古さ・threshold の gate を満たす場合だけ placeholder または compact text に置き換えられます。`curl` / `wget` / `sqlite3` / `psql`、XELYON `web_search`、MCP tool result など、取得結果や query result 自体が後続判断の証拠になり得る data-bearing output は、raw output artifact に保存され、`raw_output_ref` と active context rehydrate gate が成立する場合だけ provider-facing apply compact の対象になります。
 
 デフォルトは report-only の `dry_run` です。provider-facing payload は変更せず、`/status` で削減見込みを確認できます。
 
@@ -431,6 +433,15 @@ Provider History Reduction は、ローカルの raw history / session / audit /
 provider_history_reduction:
   mode: dry_run
   rehydrate_context: true
+  raw_output_artifacts:
+    mode: dry_run
+    root: /absolute/path/to/rawoutputs
+    max_artifact_bytes: 67108864
+    session_quota_bytes: 1073741824
+    chunk_bytes: 1048576
+    active_context_budget_tokens: 4096
+    active_context_budget_max_tokens: 8192
+    retention: session
 ```
 
 #### `mode`
@@ -453,6 +464,20 @@ provider_history_reduction:
 - **環境変数**: `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT`
 
 `true` の場合、placeholder 化された古い evidence が現在の task に必要と判断されると、request-local active context として現在ファイルから戻します。rehydrated evidence は history へ保存されません。active context transport が使えない provider では、evidence-backed replacement は安全側で skip されます。
+
+#### `raw_output_artifacts`
+- **型**: object
+- **デフォルト**: `mode: dry_run`
+
+data-bearing command output / tool result を provider-facing history 上で短い placeholder にするための raw artifact 設定です。artifact は session-local manifest と content-addressed object として保存され、raw history / session / audit / persisted JSONL は削除されません。
+
+`mode` は `off` / `dry_run` / `apply` です。`dry_run` は artifact-backed candidate と savings 見込みだけを記録し、provider payload は変更しません。`apply` は persisted `raw_output_ref`、artifact verify、active context rehydrate transport、threshold、安全分類がすべて成立する場合だけ compact を適用します。
+
+`root` は raw output artifact store の absolute path です。省略時は `~/.xelyon/history/rawoutputs` を使います。環境変数 `XELYON_RAW_OUTPUT_ARTIFACT_ROOT` が設定されている場合は config より優先されます。relative path と filesystem root は拒否されます。既存 parent directory に symlink が含まれる root も hard error で拒否されるため、移設したい場合は symlink ではなく `root` または env override を使ってください。
+
+`max_artifact_bytes` は 1 artifact の保存上限、`session_quota_bytes` は session 単位の保存上限、`chunk_bytes` は streaming write chunk size です。`active_context_budget_tokens` / `active_context_budget_max_tokens` は保存サイズではなく、provider request に戻す raw output context の token budget です。`retention` は現状 `session` のみです。
+
+保存済み artifact の透明性確認には `/rawoutputs summary`、`/rawoutputs verify`、`/rawoutputs refs`、`/rawoutputs gc --dry-run` を使います。これらは read-only diagnostics で、raw body は表示せず、削除・修復・GC apply は行いません。
 
 #### project-local override
 

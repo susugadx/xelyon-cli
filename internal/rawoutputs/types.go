@@ -49,14 +49,16 @@ const (
 )
 
 const (
-	recordTypeCreated     = "raw_output_artifact_created"
-	recordTypeQuarantined = "raw_output_artifact_quarantined"
-	recordTypeTombstoned  = "raw_output_artifact_tombstoned"
-	recordTypeGCCollected = "raw_output_artifact_gc_collected"
-	hashAlgorithmSHA256   = "sha256"
-	storageEncodingRaw    = "raw"
-	storageEncodingEncV1  = "enc:aes256gcm:v1"
-	retentionSession      = "session"
+	recordTypeCreated          = "raw_output_artifact_created"
+	recordTypeQuarantined      = "raw_output_artifact_quarantined"
+	recordTypeTombstoned       = "raw_output_artifact_tombstoned"
+	recordTypeGCCollected      = "raw_output_artifact_gc_collected"
+	hashAlgorithmSHA256        = "sha256"
+	storageEncodingRaw         = "raw"
+	storageEncodingEncV1       = "enc:aes256gcm:v1"
+	storageEncodingEncStreamV1 = "enc:stream:aes256gcm:v1"
+	storageEncodingEncStreamV2 = "enc:stream:aes256gcm:v2"
+	retentionSession           = "session"
 )
 
 // StoreOptions は raw output artifact store の lifecycle 設定。
@@ -199,6 +201,47 @@ type GCResult struct {
 	KeptArtifactIDs      []string
 }
 
+// DiagnosticsRequest は read-only store diagnostics の入力。
+type DiagnosticsRequest struct {
+	SessionID       string
+	LiveRefs        []RawOutputRef
+	IncludeVerify   bool
+	IncludeRefs     bool
+	RefLimit        int
+	IncludeGCDryRun bool
+}
+
+// DiagnosticsResult は raw output store の read-only diagnostics 結果。
+type DiagnosticsResult struct {
+	Root                      string
+	SessionID                 string
+	StoreExists               bool
+	RefCount                  int
+	ArtifactCount             int
+	LiveRefSourceCount        int
+	ByteSize                  int64
+	MissingObjects            int
+	HashMismatches            int
+	DecryptFailures           int
+	PathFailures              int
+	QuarantinedRefs           int
+	TombstonedRefs            int
+	CollectedRefs             int
+	Refs                      []RefDiagnostic
+	GCDryRun                  GCResult
+	GCDryRunAvailable         bool
+	GCDryRunUnavailableReason string
+}
+
+// RefDiagnostic は raw output ref 単位の read-only diagnostics 結果。
+type RefDiagnostic struct {
+	Ref          RawOutputRef
+	Artifact     RawOutputArtifact
+	Lifecycle    string
+	LiveStatus   string
+	VerifyReason Reason
+}
+
 // IndexResult は manifest から rebuild した index summary。
 type IndexResult struct {
 	RecordCount int
@@ -213,7 +256,12 @@ type Store struct {
 
 // OpenStore は raw output artifact store を開く。
 func OpenStore(root Root, opts StoreOptions) (*Store, error) {
-	return openStore(root, opts)
+	return openStore(root, opts, true)
+}
+
+// OpenStoreReadOnly は root や session directory を作らず raw output artifact store を開く。
+func OpenStoreReadOnly(root Root, opts StoreOptions) (*Store, error) {
+	return openStore(root, opts, false)
 }
 
 // Create は raw body を content-addressed artifact として保存する。
@@ -244,4 +292,9 @@ func (s *Store) CollectGarbage(ctx context.Context, req GCRequest) (GCResult, er
 // RebuildIndex は manifest から rebuildable index を再作成する。
 func (s *Store) RebuildIndex(ctx context.Context) (IndexResult, error) {
 	return s.rebuildIndex(ctx)
+}
+
+// Diagnostics は manifest と object 状態を read-only で集計する。
+func (s *Store) Diagnostics(ctx context.Context, req DiagnosticsRequest) (DiagnosticsResult, error) {
+	return s.diagnostics(ctx, req)
 }

@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"os"
 	"path/filepath"
@@ -168,6 +169,157 @@ func TestDecryptShortData(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSessionStreamEncryptionRoundTrip(t *testing.T) {
+	plaintext := strings.Repeat("stream-body-", 1024)
+	var encrypted bytes.Buffer
+	writer, err := NewSessionStreamEncryptWriter(&encrypted, "stream-pass")
+	if err != nil {
+		t.Fatalf("NewSessionStreamEncryptWriter() error = %v", err)
+	}
+	for _, chunk := range []string{plaintext[:17], plaintext[17:2048], plaintext[2048:]} {
+		if _, err := writer.Write([]byte(chunk)); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if bytes.Contains(encrypted.Bytes(), []byte(plaintext[:64])) {
+		t.Fatal("encrypted stream contains plaintext")
+	}
+	if !IsSessionStreamEncrypted(encrypted.Bytes()) {
+		t.Fatal("IsSessionStreamEncrypted() = false, want true")
+	}
+
+	var decrypted bytes.Buffer
+	if err := DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(encrypted.Bytes()), "stream-pass"); err != nil {
+		t.Fatalf("DecryptSessionStream() error = %v", err)
+	}
+	if decrypted.String() != plaintext {
+		t.Fatalf("decrypted stream mismatch")
+	}
+}
+
+func TestSessionStreamDecryptRejectsTamperedCiphertext(t *testing.T) {
+	var encrypted bytes.Buffer
+	writer, err := NewSessionStreamEncryptWriter(&encrypted, "stream-pass")
+	if err != nil {
+		t.Fatalf("NewSessionStreamEncryptWriter() error = %v", err)
+	}
+	if _, err := writer.Write([]byte("stream-secret")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	tampered := append([]byte(nil), encrypted.Bytes()...)
+	tampered[len(tampered)-2] ^= 0xff
+
+	var decrypted bytes.Buffer
+	if err := DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(tampered), "stream-pass"); err == nil {
+		t.Fatal("DecryptSessionStream(tampered) error = nil, want failure")
+	}
+}
+
+func TestSessionStreamEncryptionRoundTripEmpty(t *testing.T) {
+	var encrypted bytes.Buffer
+	writer, err := NewSessionStreamEncryptWriter(&encrypted, "stream-pass")
+	if err != nil {
+		t.Fatalf("NewSessionStreamEncryptWriter() error = %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	var decrypted bytes.Buffer
+	if err := DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(encrypted.Bytes()), "stream-pass"); err != nil {
+		t.Fatalf("DecryptSessionStream(empty) error = %v", err)
+	}
+	if decrypted.String() != "" {
+		t.Fatalf("decrypted empty stream = %q, want empty", decrypted.String())
+	}
+}
+
+func TestSessionStreamDecryptRejectsTrailingBytesAfterFinalRecord(t *testing.T) {
+	encrypted := encryptSessionStreamForTest(t, "stream-secret", "stream-pass")
+	tampered := append(append([]byte(nil), encrypted...), []byte("trailing")...)
+
+	var decrypted bytes.Buffer
+	if err := DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(tampered), "stream-pass"); err == nil {
+		t.Fatal("DecryptSessionStream(trailing bytes) error = nil, want failure")
+	}
+}
+
+func TestSessionStreamDecryptRejectsTruncatedFinalRecord(t *testing.T) {
+	encrypted := encryptSessionStreamForTest(t, "stream-secret", "stream-pass")
+	truncated := append([]byte(nil), encrypted[:len(encrypted)-1]...)
+
+	var decrypted bytes.Buffer
+	if err := DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(truncated), "stream-pass"); err == nil {
+		t.Fatal("DecryptSessionStream(truncated final record) error = nil, want failure")
+	}
+}
+
+func TestSessionStreamDecryptRejectsWrongPassphrase(t *testing.T) {
+	encrypted := encryptSessionStreamForTest(t, "stream-secret", "stream-pass")
+
+	var decrypted bytes.Buffer
+	if err := DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(encrypted), "wrong-pass"); err == nil {
+		t.Fatal("DecryptSessionStream(wrong passphrase) error = nil, want failure")
+	}
+}
+
+func TestSessionStreamDecryptRejectsLegacyTrailingBytesAfterTerminator(t *testing.T) {
+	legacy := legacySessionStreamForTest(t, "legacy-secret", "stream-pass")
+	tampered := append(append([]byte(nil), legacy...), 'x')
+
+	var decrypted bytes.Buffer
+	if err := DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(tampered), "stream-pass"); err == nil {
+		t.Fatal("DecryptSessionStream(legacy trailing bytes) error = nil, want failure")
+	}
+}
+
+func encryptSessionStreamForTest(t *testing.T, plaintext, passphrase string) []byte {
+	t.Helper()
+	var encrypted bytes.Buffer
+	writer, err := NewSessionStreamEncryptWriter(&encrypted, passphrase)
+	if err != nil {
+		t.Fatalf("NewSessionStreamEncryptWriter() error = %v", err)
+	}
+	if _, err := writer.Write([]byte(plaintext)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	return encrypted.Bytes()
+}
+
+func legacySessionStreamForTest(t *testing.T, plaintext, passphrase string) []byte {
+	t.Helper()
+	var encrypted bytes.Buffer
+	salt := bytes.Repeat([]byte{0x42}, saltSize)
+	gcm, err := newSessionStreamGCM(passphrase, salt)
+	if err != nil {
+		t.Fatalf("newSessionStreamGCM() error = %v", err)
+	}
+	if _, err := encrypted.Write([]byte(sessionStreamEncryptionMagicV1)); err != nil {
+		t.Fatalf("write legacy magic: %v", err)
+	}
+	if _, err := encrypted.Write(salt); err != nil {
+		t.Fatalf("write legacy salt: %v", err)
+	}
+	nonce := bytes.Repeat([]byte{0x24}, gcm.NonceSize())
+	ciphertext := gcm.Seal(nil, nonce, []byte(plaintext), sessionStreamChunkAAD(0))
+	if err := writeSessionStreamRecordV1(&encrypted, nonce, ciphertext); err != nil {
+		t.Fatalf("write legacy record: %v", err)
+	}
+	if _, err := encrypted.Write([]byte{0, 0, 0, 0}); err != nil {
+		t.Fatalf("write legacy terminator: %v", err)
+	}
+	return encrypted.Bytes()
 }
 
 func TestGetOrCreatePassphrase(t *testing.T) {

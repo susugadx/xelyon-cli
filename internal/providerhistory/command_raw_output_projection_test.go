@@ -289,10 +289,44 @@ func TestProjectApplyKeepsArtifactBackedCommandRawWhenChildModeDryRun(t *testing
 	}
 }
 
+func TestProjectCommandRawOutputUsesLegacyMaterializeExactSource(t *testing.T) {
+	commandOutput := providerHistoryTestNumberedLines("api-result", 6000)
+	store := providerHistoryTestRawOutputSpyStore(t)
+	history := []api.Message{
+		providerHistoryTestAssistantToolCalls(providerHistoryTestToolCallWithJSONArguments(t, "call_curl", "bash", map[string]string{"command": "curl https://api.example.test/items"})),
+		providerHistoryTestToolResult("call_curl", "bash", commandOutput),
+		{Role: "assistant", Content: "api data reviewed"},
+		providerHistoryTestAssistantToolCall("call_latest", "read_file"),
+		providerHistoryTestToolResult("call_latest", "read_file", "latest"),
+		{Role: "assistant", Content: "done"},
+	}
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy: Policy{
+			Mode:                             DryRun,
+			RawOutputArtifactsMode:           RawOutputArtifactsDryRun,
+			RawOutputArtifactStore:           store,
+			SessionID:                        "session-command-legacy-materialize",
+			RawOutputRehydrateContextEnabled: true,
+			ActiveContextTransportAvailable:  true,
+		},
+	})
+
+	if result.Report.RawOutputRefCount != 1 {
+		t.Fatalf("RawOutputRefCount = %d, want one command raw output ref", result.Report.RawOutputRefCount)
+	}
+	assertProviderHistoryLegacyMaterialize(t, store, rawoutputs.SurfaceCommandOutput)
+}
+
 type panicRawOutputArtifactStore struct{}
 
 func (panicRawOutputArtifactStore) Create(context.Context, rawoutputs.CreateRequest) (rawoutputs.CreateResult, error) {
 	panic("Create must not be called for read-only projection")
+}
+
+func (panicRawOutputArtifactStore) MaterializeLegacy(context.Context, rawoutputs.LegacyMaterializeRequest) (rawoutputs.CreateResult, error) {
+	panic("MaterializeLegacy must not be called for read-only projection")
 }
 
 func (panicRawOutputArtifactStore) Verify(context.Context, rawoutputs.RawOutputRef) (rawoutputs.VerifyResult, error) {

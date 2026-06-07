@@ -33,9 +33,17 @@ const (
 
 // ExampleSectionPolicy は config.yaml.example 生成時の section 別ポリシー。
 type ExampleSectionPolicy struct {
-	FilterMode    ExampleFilterMode
-	OmittedFields map[string]bool
-	Overrides     map[string]any
+	FilterMode      ExampleFilterMode
+	OmittedFields   map[string]bool
+	Overrides       map[string]any
+	CommentedFields map[string]CommentedExampleField
+}
+
+// CommentedExampleField は空 default などで YAML から省略される optional field を
+// example 上ではコメント付きの記入例として表示する。
+type CommentedExampleField struct {
+	Value  string
+	Before string
 }
 
 // Sections is the canonical section metadata shared by config generators.
@@ -156,9 +164,10 @@ var Sections = map[string]SectionInfo{
 			"raw history / session / audit / persisted JSONL は保持",
 		},
 		Fields: map[string]string{
-			"mode":                      "provider-facing history reduction mode（off / dry_run / apply。env: XELYON_PROVIDER_HISTORY_REDUCTION）",
-			"rehydrate_context":         "省略した古い evidence を必要時に request-local active context として戻す（env: XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT）",
-			"raw_output_artifacts.mode": "data-bearing raw output artifact-backed compact mode（off / dry_run / apply）",
+			"mode":                                                  "provider-facing history reduction mode（off / dry_run / apply。env: XELYON_PROVIDER_HISTORY_REDUCTION）",
+			"rehydrate_context":                                     "省略した古い evidence を必要時に request-local active context として戻す（env: XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT）",
+			"raw_output_artifacts.mode":                             "data-bearing raw output artifact-backed compact mode（off / dry_run / apply）",
+			"raw_output_artifacts.root":                             "raw output artifact store root path（env: XELYON_RAW_OUTPUT_ARTIFACT_ROOT）",
 			"raw_output_artifacts.max_artifact_bytes":               "raw output artifact 1件あたりの最大保存 byte 数",
 			"raw_output_artifacts.session_quota_bytes":              "session 単位の raw output artifact 保存上限 byte 数",
 			"raw_output_artifacts.chunk_bytes":                      "raw output artifact 書き込み chunk byte 数",
@@ -167,9 +176,10 @@ var Sections = map[string]SectionInfo{
 			"raw_output_artifacts.retention":                        "raw output artifact retention policy（現状 session のみ）",
 		},
 		FieldTypes: map[string]string{
-			"mode":                      "select",
-			"rehydrate_context":         "bool",
-			"raw_output_artifacts.mode": "select",
+			"mode":                                                  "select",
+			"rehydrate_context":                                     "bool",
+			"raw_output_artifacts.mode":                             "select",
+			"raw_output_artifacts.root":                             "string",
 			"raw_output_artifacts.max_artifact_bytes":               "int",
 			"raw_output_artifacts.session_quota_bytes":              "int",
 			"raw_output_artifacts.chunk_bytes":                      "int",
@@ -181,6 +191,14 @@ var Sections = map[string]SectionInfo{
 			"mode":                           config.ProviderHistoryReductionModeValues(),
 			"raw_output_artifacts.mode":      config.ProviderHistoryRawOutputArtifactsModeValues(),
 			"raw_output_artifacts.retention": {string(config.ProviderHistoryRawOutputArtifactsRetentionSession)},
+		},
+		Example: ExampleSectionPolicy{
+			CommentedFields: map[string]CommentedExampleField{
+				"raw_output_artifacts.root": {
+					Value:  "/absolute/path/to/rawoutputs",
+					Before: "raw_output_artifacts.max_artifact_bytes",
+				},
+			},
 		},
 	},
 	"execution": {

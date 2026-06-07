@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 )
 
 func TestProjectApplyCompactsOnlyDuplicateOldWebSearchResult(t *testing.T) {
@@ -59,6 +60,40 @@ func TestProjectApplyCompactsOnlyDuplicateOldWebSearchResult(t *testing.T) {
 		candidate.RawOutputRefID == "" {
 		t.Fatalf("web_search candidate = %#v, want applied artifact-backed candidate", candidate)
 	}
+}
+
+func TestProjectWebSearchRawOutputUsesLegacyMaterializeExactSource(t *testing.T) {
+	query := "OpenAI Responses API previous_response_id documentation"
+	raw := providerHistoryTestLargeWebSearchResult()
+	store := providerHistoryTestRawOutputSpyStore(t)
+	history := []api.Message{
+		providerHistoryTestAssistantToolCalls(providerHistoryTestToolCallWithJSONArguments(t, "call_web_old", "web_search", map[string]string{"query": query})),
+		providerHistoryTestToolResult("call_web_old", "web_search", raw),
+		{Role: "assistant", Content: "old search reviewed"},
+		providerHistoryTestAssistantToolCalls(providerHistoryTestToolCallWithJSONArguments(t, "call_web_dup", "web_search", map[string]string{"query": query})),
+		providerHistoryTestToolResult("call_web_dup", "web_search", raw),
+		{Role: "assistant", Content: "duplicate raw result remains available"},
+		providerHistoryTestAssistantToolCall("call_latest", "read_file"),
+		providerHistoryTestToolResult("call_latest", "read_file", "latest"),
+		{Role: "assistant", Content: "done"},
+	}
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy: Policy{
+			Mode:                             DryRun,
+			RawOutputArtifactsMode:           RawOutputArtifactsDryRun,
+			RawOutputArtifactStore:           store,
+			SessionID:                        "session-web-search-legacy-materialize",
+			RawOutputRehydrateContextEnabled: true,
+			ActiveContextTransportAvailable:  true,
+		},
+	})
+
+	if result.Report.RawOutputRefCount != 1 {
+		t.Fatalf("RawOutputRefCount = %d, want one web_search raw output ref", result.Report.RawOutputRefCount)
+	}
+	assertProviderHistoryLegacyMaterialize(t, store, rawoutputs.SurfaceXelyonWebSearchToolResult)
 }
 
 func TestProjectApplyRedactsWebSearchURLQueryAndFragmentInPlaceholder(t *testing.T) {

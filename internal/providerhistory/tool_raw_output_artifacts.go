@@ -62,13 +62,19 @@ func recordProviderHistoryDataBearingToolArtifactCandidate(report *ProjectionRep
 		return
 	}
 
-	createResult, err := policy.RawOutputArtifactStore.Create(context.Background(), rawoutputs.CreateRequest{
+	createReq := rawoutputs.CreateRequest{
 		Surface:        spec.Surface,
 		SessionID:      policy.SessionID,
 		Source:         spec.Source,
 		Classification: spec.Classification,
 		Body:           strings.NewReader(content),
 		SizeHintBytes:  int64(len(content)),
+	}
+	exactSourceID, ambiguous := providerHistoryLegacyRawOutputExactSourceID(policy.SessionID, spec.Surface, spec.Source, content)
+	createResult, err := policy.RawOutputArtifactStore.MaterializeLegacy(context.Background(), rawoutputs.LegacyMaterializeRequest{
+		CreateRequest: createReq,
+		ExactSourceID: exactSourceID,
+		Ambiguous:     ambiguous,
 	})
 	if err != nil {
 		reason := providerHistoryRawOutputCreateFailureReason(err)

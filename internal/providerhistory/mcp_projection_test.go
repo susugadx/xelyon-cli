@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 )
 
 func TestProjectDryRunReportsArtifactBackedMCPToolResultCandidate(t *testing.T) {
@@ -49,6 +51,29 @@ func TestProjectDryRunReportsArtifactBackedMCPToolResultCandidate(t *testing.T) 
 		!strings.Contains(candidate.SuggestedReplacementText, "[compacted old MCP tool result;") {
 		t.Fatalf("MCP replacement = %q, want raw ref placeholder", candidate.SuggestedReplacementText)
 	}
+}
+
+func TestProjectMCPRawOutputUsesLegacyMaterializeExactSource(t *testing.T) {
+	content := providerHistoryTestLargeSafeMCPResult()
+	history := providerHistoryTestMCPHistory("call_mcp_docs", content)
+	store := providerHistoryTestRawOutputSpyStore(t)
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy: Policy{
+			Mode:                             DryRun,
+			RawOutputArtifactsMode:           RawOutputArtifactsDryRun,
+			RawOutputArtifactStore:           store,
+			SessionID:                        "session-mcp-legacy-materialize",
+			RawOutputRehydrateContextEnabled: true,
+			ActiveContextTransportAvailable:  true,
+		},
+	})
+
+	if result.Report.RawOutputRefCount != 1 {
+		t.Fatalf("RawOutputRefCount = %d, want one MCP raw output ref", result.Report.RawOutputRefCount)
+	}
+	assertProviderHistoryLegacyMaterialize(t, store, rawoutputs.SurfaceMCPToolResult)
 }
 
 func TestProjectApplyCompactsArtifactBackedMCPToolResultWithRefAndRehydrateGate(t *testing.T) {

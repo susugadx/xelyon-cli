@@ -67,6 +67,9 @@ func (s *Store) materializeLegacy(ctx context.Context, req LegacyMaterializeRequ
 	}
 	result, err := s.create(ctx, req.CreateRequest)
 	if err != nil {
+		if ReasonOf(err) != "" {
+			return CreateResult{}, err
+		}
 		return CreateResult{}, Error{Reason: ReasonArtifactMaterializationFailed, Err: err}
 	}
 	return result, nil

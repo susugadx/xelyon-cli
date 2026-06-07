@@ -423,6 +423,10 @@ func (s createVerifyOnlyRawOutputArtifactStore) Create(ctx context.Context, req 
 	return s.inner.Create(ctx, req)
 }
 
+func (s createVerifyOnlyRawOutputArtifactStore) MaterializeLegacy(ctx context.Context, req rawoutputs.LegacyMaterializeRequest) (rawoutputs.CreateResult, error) {
+	return s.inner.MaterializeLegacy(ctx, req)
+}
+
 func (s createVerifyOnlyRawOutputArtifactStore) Verify(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.VerifyResult, error) {
 	return s.inner.Verify(ctx, ref)
 }
@@ -436,6 +440,11 @@ type countingRawOutputArtifactStore struct {
 func (s *countingRawOutputArtifactStore) Create(ctx context.Context, req rawoutputs.CreateRequest) (rawoutputs.CreateResult, error) {
 	s.createCalls++
 	return s.inner.Create(ctx, req)
+}
+
+func (s *countingRawOutputArtifactStore) MaterializeLegacy(ctx context.Context, req rawoutputs.LegacyMaterializeRequest) (rawoutputs.CreateResult, error) {
+	s.createCalls++
+	return s.inner.MaterializeLegacy(ctx, req)
 }
 
 func (s *countingRawOutputArtifactStore) Verify(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.VerifyResult, error) {

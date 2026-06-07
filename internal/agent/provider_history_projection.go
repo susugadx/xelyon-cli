@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -179,13 +180,9 @@ func openProviderHistoryRawOutputArtifactStore(runtime *AgentRuntime) (providerh
 	if runtime == nil {
 		return nil, nil
 	}
-	root := runtime.RawOutputArtifactRoot
-	if root == "" {
-		resolved, err := defaultProviderHistoryRawOutputArtifactRoot()
-		if err != nil {
-			return nil, err
-		}
-		root = resolved
+	root, err := resolveProviderHistoryRawOutputArtifactRoot(runtime)
+	if err != nil {
+		return nil, err
 	}
 	opts := providerHistoryRawOutputStoreOptions(runtime.Options.ProviderHistoryRawOutputArtifacts)
 	if os.Getenv("XELYON_ENCRYPT_HISTORY") == "1" {
@@ -196,7 +193,34 @@ func openProviderHistoryRawOutputArtifactStore(runtime *AgentRuntime) (providerh
 		opts.EncryptionEnabled = true
 		opts.Passphrase = passphrase
 	}
-	return rawoutputs.OpenStore(rawoutputs.Root(root), opts)
+	return rawoutputs.OpenStore(rawoutputs.Root(root.Root), opts)
+}
+
+type providerHistoryRawOutputArtifactRootResolution struct {
+	Root   string
+	Source string
+}
+
+func resolveProviderHistoryRawOutputArtifactRoot(runtime *AgentRuntime) (providerHistoryRawOutputArtifactRootResolution, error) {
+	if rawRoot, ok := os.LookupEnv(config.ProviderHistoryRawOutputArtifactRootEnvVar); ok && strings.TrimSpace(rawRoot) != "" {
+		return providerHistoryRawOutputArtifactRootResolution{
+			Root:   strings.TrimSpace(rawRoot),
+			Source: "env:" + config.ProviderHistoryRawOutputArtifactRootEnvVar,
+		}, nil
+	}
+	if runtime != nil {
+		if root := strings.TrimSpace(runtime.Options.ProviderHistoryRawOutputArtifacts.Root); root != "" {
+			return providerHistoryRawOutputArtifactRootResolution{Root: root, Source: "config"}, nil
+		}
+		if root := strings.TrimSpace(runtime.RawOutputArtifactRoot); root != "" {
+			return providerHistoryRawOutputArtifactRootResolution{Root: root, Source: "runtime"}, nil
+		}
+	}
+	root, err := defaultProviderHistoryRawOutputArtifactRoot()
+	if err != nil {
+		return providerHistoryRawOutputArtifactRootResolution{}, err
+	}
+	return providerHistoryRawOutputArtifactRootResolution{Root: root, Source: "default"}, nil
 }
 
 func defaultProviderHistoryRawOutputArtifactRoot() (string, error) {

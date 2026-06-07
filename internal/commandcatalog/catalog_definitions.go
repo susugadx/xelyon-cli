@@ -92,6 +92,7 @@ var Commands = []CommandInfo{
 	commandStatus(),
 	commandTokens(),
 	commandLedger(),
+	commandRawOutputs(),
 	commandCopy(),
 	commandAttach(),
 	commandDetach(),
@@ -167,6 +168,19 @@ func commandTokens() CommandInfo {
 
 func commandLedger() CommandInfo {
 	cmd := legacyDiscoverableCommand("/ledger", "", "Show runtime task ledger", "タスク台帳を表示", CommandCategoryContext, 65)
+	cmd.Owner = CommandOwnerAgent
+	return cmd
+}
+
+func commandRawOutputs() CommandInfo {
+	cmd := legacyDiscoverableCommand(
+		"/rawoutputs",
+		"[summary|verify|refs|gc --dry-run]",
+		"Inspect raw output artifact store diagnostics",
+		"raw output artifact store の診断を表示",
+		CommandCategoryContext,
+		75,
+	)
 	cmd.Owner = CommandOwnerAgent
 	return cmd
 }

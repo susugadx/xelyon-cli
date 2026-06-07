@@ -15,10 +15,41 @@ const (
 
 func secureCleanRoot(root string) (string, error) {
 	clean := filepath.Clean(root)
-	if clean == "." || clean == string(filepath.Separator) {
+	if clean == "." || clean == string(filepath.Separator) || !filepath.IsAbs(clean) {
 		return "", reasonError(ReasonPathInvalid, "invalid root %q", root)
 	}
 	return clean, nil
+}
+
+func rejectSymlinkedRootParents(root string) error {
+	clean := filepath.Clean(root)
+	volume := filepath.VolumeName(clean)
+	rest := strings.TrimPrefix(clean, volume)
+	separator := string(filepath.Separator)
+	current := volume + separator
+	if volume == "" {
+		current = separator
+	}
+	if err := checkExistingDirIsNotSymlink(current); err != nil {
+		return err
+	}
+	for _, component := range pathComponents(strings.TrimPrefix(rest, separator)) {
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return reasonError(ReasonPathInvalid, "stat directory %s: %w", current, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return reasonError(ReasonPathInvalid, "directory path contains symlink: %s", current)
+		}
+		if !info.IsDir() {
+			return reasonError(ReasonPathInvalid, "path component is not a directory: %s", current)
+		}
+	}
+	return nil
 }
 
 func validateSessionID(sessionID string) error {

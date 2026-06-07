@@ -46,6 +46,7 @@ const (
 // RawOutputArtifactStore は providerhistory が使う rawoutputs store の最小 surface。
 type RawOutputArtifactStore interface {
 	Create(ctx context.Context, req rawoutputs.CreateRequest) (rawoutputs.CreateResult, error)
+	MaterializeLegacy(ctx context.Context, req rawoutputs.LegacyMaterializeRequest) (rawoutputs.CreateResult, error)
 	Verify(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.VerifyResult, error)
 }
 

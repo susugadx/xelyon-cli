@@ -3,10 +3,14 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// ProviderHistoryRawOutputArtifactRootEnvVar は raw output artifact store root を上書きする環境変数名。
+const ProviderHistoryRawOutputArtifactRootEnvVar = "XELYON_RAW_OUTPUT_ARTIFACT_ROOT"
 
 const (
 	stableProviderHistoryReductionModeErrorSuffix     = "expected: off, dry_run, apply"
@@ -200,6 +204,7 @@ func ParseProviderHistoryRawOutputArtifactsRetention(raw string) (ProviderHistor
 // ProviderHistoryRawOutputArtifactsConfig は data-bearing raw output artifact-backed compact の設定。
 type ProviderHistoryRawOutputArtifactsConfig struct {
 	Mode                         ProviderHistoryRawOutputArtifactsMode      `yaml:"mode,omitempty"`
+	Root                         string                                     `yaml:"root,omitempty"`
 	MaxArtifactBytes             int                                        `yaml:"max_artifact_bytes,omitempty"`
 	SessionQuotaBytes            int                                        `yaml:"session_quota_bytes,omitempty"`
 	ChunkBytes                   int                                        `yaml:"chunk_bytes,omitempty"`
@@ -216,6 +221,7 @@ func DefaultProviderHistoryRawOutputArtifactsConfig() ProviderHistoryRawOutputAr
 // IsZero は raw_output_artifacts が省略可能かを返す。
 func (c ProviderHistoryRawOutputArtifactsConfig) IsZero() bool {
 	return c.Mode == "" &&
+		strings.TrimSpace(c.Root) == "" &&
 		c.MaxArtifactBytes == 0 &&
 		c.SessionQuotaBytes == 0 &&
 		c.ChunkBytes == 0 &&
@@ -241,6 +247,10 @@ func (c *ProviderHistoryRawOutputArtifactsConfig) UnmarshalYAML(value *yaml.Node
 		switch key {
 		case "mode":
 			if err := child.Decode(&parsed.Mode); err != nil {
+				return err
+			}
+		case "root":
+			if err := child.Decode(&parsed.Root); err != nil {
 				return err
 			}
 		case "max_artifact_bytes":
@@ -289,6 +299,9 @@ func decodePositiveProviderHistoryInt(node *yaml.Node, key string, out *int) err
 }
 
 func validateProviderHistoryRawOutputArtifactsConfig(cfg ProviderHistoryRawOutputArtifactsConfig) error {
+	if err := validateProviderHistoryRawOutputArtifactRoot(cfg.Root); err != nil {
+		return err
+	}
 	if cfg.SessionQuotaBytes > 0 && cfg.MaxArtifactBytes > 0 && cfg.SessionQuotaBytes < cfg.MaxArtifactBytes {
 		return fmt.Errorf("invalid provider_history_reduction.raw_output_artifacts.session_quota_bytes %d (expected: >= max_artifact_bytes)", cfg.SessionQuotaBytes)
 	}
@@ -307,6 +320,18 @@ func validateProviderHistoryRawOutputArtifactsConfig(cfg ProviderHistoryRawOutpu
 		if _, err := ParseProviderHistoryRawOutputArtifactsMode(string(cfg.Mode)); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateProviderHistoryRawOutputArtifactRoot(root string) error {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return nil
+	}
+	clean := filepath.Clean(root)
+	if clean == "." || clean == string(filepath.Separator) || !filepath.IsAbs(clean) {
+		return fmt.Errorf("invalid provider_history_reduction.raw_output_artifacts.root %q (expected: absolute path below a directory)", root)
 	}
 	return nil
 }
@@ -453,8 +478,13 @@ func ResolveProviderHistoryRehydrateContext(globalCfg *Config, projectCfg *Proje
 	return enabled, nil
 }
 
-// ResolveProviderHistoryRawOutputArtifactsConfig は stable project > global/default の順で raw_output_artifacts を解決する。
+// ResolveProviderHistoryRawOutputArtifactsConfig は env > stable project > global/default の順で raw_output_artifacts を解決する。
 func ResolveProviderHistoryRawOutputArtifactsConfig(globalCfg *Config, projectCfg *ProjectConfig) (ProviderHistoryRawOutputArtifactsConfig, bool, error) {
+	return ResolveProviderHistoryRawOutputArtifactsConfigWithEnv(globalCfg, projectCfg, nil)
+}
+
+// ResolveProviderHistoryRawOutputArtifactsConfigWithEnv は env > stable project > global/default の順で raw_output_artifacts を解決する。
+func ResolveProviderHistoryRawOutputArtifactsConfigWithEnv(globalCfg *Config, projectCfg *ProjectConfig, lookupEnv func(string) (string, bool)) (ProviderHistoryRawOutputArtifactsConfig, bool, error) {
 	resolved := defaultProviderHistoryRawOutputArtifactsConfig()
 	if globalCfg != nil {
 		resolved = normalizeProviderHistoryRawOutputArtifactsConfig(globalCfg.ProviderHistoryReduction.RawOutputArtifacts)
@@ -463,6 +493,15 @@ func ResolveProviderHistoryRawOutputArtifactsConfig(globalCfg *Config, projectCf
 	if projectCfg != nil && !projectCfg.ProviderHistoryReduction.RawOutputArtifacts.IsZero() {
 		resolved = mergeProviderHistoryRawOutputArtifactsConfig(resolved, projectCfg.ProviderHistoryReduction.RawOutputArtifacts)
 		specified = true
+	}
+	if lookupEnv == nil {
+		lookupEnv = os.LookupEnv
+	}
+	if rawRoot, ok := lookupEnv(ProviderHistoryRawOutputArtifactRootEnvVar); ok {
+		if root := strings.TrimSpace(rawRoot); root != "" {
+			resolved.Root = root
+			specified = true
+		}
 	}
 	if err := validateProviderHistoryRawOutputArtifactsConfig(resolved); err != nil {
 		return ProviderHistoryRawOutputArtifactsConfig{}, false, err
@@ -474,10 +513,18 @@ func normalizeProviderHistoryRawOutputArtifactsConfig(cfg ProviderHistoryRawOutp
 	return mergeProviderHistoryRawOutputArtifactsConfig(defaultProviderHistoryRawOutputArtifactsConfig(), cfg)
 }
 
+// NormalizeProviderHistoryRawOutputArtifactsConfig は raw_output_artifacts を stable default で補完する。
+func NormalizeProviderHistoryRawOutputArtifactsConfig(cfg ProviderHistoryRawOutputArtifactsConfig) ProviderHistoryRawOutputArtifactsConfig {
+	return normalizeProviderHistoryRawOutputArtifactsConfig(cfg)
+}
+
 func mergeProviderHistoryRawOutputArtifactsConfig(base, override ProviderHistoryRawOutputArtifactsConfig) ProviderHistoryRawOutputArtifactsConfig {
 	out := base
 	if override.Mode != "" {
 		out.Mode = override.Mode
+	}
+	if strings.TrimSpace(override.Root) != "" {
+		out.Root = strings.TrimSpace(override.Root)
 	}
 	if override.MaxArtifactBytes > 0 {
 		out.MaxArtifactBytes = override.MaxArtifactBytes
@@ -576,6 +623,14 @@ func validateProviderHistoryRawOutputArtifactsIssues(cfg ProviderHistoryRawOutpu
 	issues = append(issues, validateProviderHistoryPositiveIntIssue("provider_history_reduction.raw_output_artifacts.active_context_budget_max_tokens", cfg.ActiveContextBudgetMaxTokens, defaultRawOutputArtifactActiveContextBudgetMax)...)
 	if cfg.SessionQuotaBytes > 0 && cfg.MaxArtifactBytes > 0 && cfg.SessionQuotaBytes < cfg.MaxArtifactBytes {
 		issues = append(issues, providerHistoryRawOutputArtifactsIssue("provider_history_reduction.raw_output_artifacts.session_quota_bytes", cfg.SessionQuotaBytes, "session_quota_bytes は max_artifact_bytes 以上にしてください", defaultRawOutputArtifactSessionQuotaBytes))
+	}
+	if err := validateProviderHistoryRawOutputArtifactRoot(cfg.Root); err != nil {
+		issues = append(issues, ValidationIssue{
+			Field:    "provider_history_reduction.raw_output_artifacts.root",
+			Value:    strings.TrimSpace(cfg.Root),
+			Message:  "raw output artifact root は absolute path を指定してください",
+			Severity: ValidationSeverityError,
+		})
 	}
 	if cfg.ChunkBytes > 0 && cfg.MaxArtifactBytes > 0 && cfg.ChunkBytes > cfg.MaxArtifactBytes {
 		issues = append(issues, providerHistoryRawOutputArtifactsIssue("provider_history_reduction.raw_output_artifacts.chunk_bytes", cfg.ChunkBytes, "chunk_bytes は max_artifact_bytes 以下にしてください", defaultRawOutputArtifactChunkBytes))

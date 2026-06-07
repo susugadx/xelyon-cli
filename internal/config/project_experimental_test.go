@@ -97,12 +97,14 @@ func TestLoadProjectConfigWithStableProviderHistoryReduction(t *testing.T) {
 
 func TestLoadProjectConfigWithStableProviderHistoryRawOutputArtifacts(t *testing.T) {
 	tmp := t.TempDir()
+	rawOutputRoot := filepath.Join(tmp, "rawoutputs")
 	path := filepath.Join(tmp, "xelyon.yaml")
 	yamlContent := strings.Join([]string{
 		"provider_history_reduction:",
 		"  mode: apply",
 		"  raw_output_artifacts:",
 		"    mode: apply",
+		"    root: " + rawOutputRoot,
 		"    max_artifact_bytes: 1024",
 		"    session_quota_bytes: 4096",
 		"    chunk_bytes: 512",
@@ -121,6 +123,7 @@ func TestLoadProjectConfigWithStableProviderHistoryRawOutputArtifacts(t *testing
 	}
 	raw := pc.ProviderHistoryReduction.RawOutputArtifacts
 	if raw.Mode != ProviderHistoryRawOutputArtifactsModeApply ||
+		raw.Root != rawOutputRoot ||
 		raw.MaxArtifactBytes != 1024 ||
 		raw.SessionQuotaBytes != 4096 ||
 		raw.ChunkBytes != 512 ||
@@ -136,6 +139,85 @@ func TestLoadProjectConfigWithStableProviderHistoryRawOutputArtifacts(t *testing
 	}
 	if !specified || resolved != raw {
 		t.Fatalf("ResolveProviderHistoryRawOutputArtifactsConfig() = (%#v, %v), want project override %#v", resolved, specified, raw)
+	}
+}
+
+func TestResolveProviderHistoryRawOutputArtifactsRootEnvOverridesProjectAndGlobal(t *testing.T) {
+	tmp := t.TempDir()
+	globalRoot := filepath.Join(tmp, "global")
+	projectRoot := filepath.Join(tmp, "project")
+	envRoot := filepath.Join(tmp, "env")
+	globalCfg := DefaultConfig()
+	globalCfg.ProviderHistoryReduction.RawOutputArtifacts.Root = globalRoot
+	projectCfg := &ProjectConfig{}
+	projectCfg.ProviderHistoryReduction.RawOutputArtifacts.Root = projectRoot
+
+	resolved, specified, err := ResolveProviderHistoryRawOutputArtifactsConfigWithEnv(globalCfg, projectCfg, func(key string) (string, bool) {
+		if key != ProviderHistoryRawOutputArtifactRootEnvVar {
+			return "", false
+		}
+		return envRoot, true
+	})
+	if err != nil {
+		t.Fatalf("ResolveProviderHistoryRawOutputArtifactsConfigWithEnv() error = %v", err)
+	}
+	if !specified || resolved.Root != envRoot {
+		t.Fatalf("resolved root = %q specified=%v, want env root %q", resolved.Root, specified, envRoot)
+	}
+}
+
+func TestResolveProviderHistoryRawOutputArtifactsRootBlankEnvKeepsProjectRoot(t *testing.T) {
+	tmp := t.TempDir()
+	projectRoot := filepath.Join(tmp, "project")
+	projectCfg := &ProjectConfig{}
+	projectCfg.ProviderHistoryReduction.RawOutputArtifacts.Root = projectRoot
+
+	resolved, specified, err := ResolveProviderHistoryRawOutputArtifactsConfigWithEnv(DefaultConfig(), projectCfg, func(key string) (string, bool) {
+		if key != ProviderHistoryRawOutputArtifactRootEnvVar {
+			return "", false
+		}
+		return "   ", true
+	})
+	if err != nil {
+		t.Fatalf("ResolveProviderHistoryRawOutputArtifactsConfigWithEnv() error = %v", err)
+	}
+	if !specified || resolved.Root != projectRoot {
+		t.Fatalf("resolved root = %q specified=%v, want project root %q", resolved.Root, specified, projectRoot)
+	}
+}
+
+func TestResolveProviderHistoryRawOutputArtifactsRootBlankEnvKeepsGlobalRoot(t *testing.T) {
+	tmp := t.TempDir()
+	globalRoot := filepath.Join(tmp, "global")
+	globalCfg := DefaultConfig()
+	globalCfg.ProviderHistoryReduction.RawOutputArtifacts.Root = globalRoot
+
+	resolved, _, err := ResolveProviderHistoryRawOutputArtifactsConfigWithEnv(globalCfg, nil, func(key string) (string, bool) {
+		if key != ProviderHistoryRawOutputArtifactRootEnvVar {
+			return "", false
+		}
+		return "", true
+	})
+	if err != nil {
+		t.Fatalf("ResolveProviderHistoryRawOutputArtifactsConfigWithEnv() error = %v", err)
+	}
+	if resolved.Root != globalRoot {
+		t.Fatalf("resolved root = %q, want global root %q", resolved.Root, globalRoot)
+	}
+}
+
+func TestResolveProviderHistoryRawOutputArtifactsRootRejectsRelativeEnv(t *testing.T) {
+	_, _, err := ResolveProviderHistoryRawOutputArtifactsConfigWithEnv(DefaultConfig(), nil, func(key string) (string, bool) {
+		if key != ProviderHistoryRawOutputArtifactRootEnvVar {
+			return "", false
+		}
+		return "relative/rawoutputs", true
+	})
+	if err == nil {
+		t.Fatal("ResolveProviderHistoryRawOutputArtifactsConfigWithEnv() error = nil, want relative root rejection")
+	}
+	if !strings.Contains(err.Error(), "provider_history_reduction.raw_output_artifacts.root") {
+		t.Fatalf("error = %q, want raw_output_artifacts.root", err.Error())
 	}
 }
 

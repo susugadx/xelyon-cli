@@ -166,6 +166,7 @@ func TestLoadConfig_ProviderHistoryReductionExplicitFalse(t *testing.T) {
 func TestLoadConfig_ProviderHistoryRawOutputArtifacts(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
+	rawOutputRoot := filepath.Join(tmpDir, "rawoutputs")
 
 	configDir := filepath.Join(tmpDir, ".xelyon")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
@@ -178,6 +179,7 @@ func TestLoadConfig_ProviderHistoryRawOutputArtifacts(t *testing.T) {
 		"  rehydrate_context: true",
 		"  raw_output_artifacts:",
 		"    mode: apply",
+		"    root: " + rawOutputRoot,
 		"    max_artifact_bytes: 1048576",
 		"    session_quota_bytes: 2097152",
 		"    chunk_bytes: 524288",
@@ -197,6 +199,7 @@ func TestLoadConfig_ProviderHistoryRawOutputArtifacts(t *testing.T) {
 	}
 	raw := cfg.ProviderHistoryReduction.RawOutputArtifacts
 	if raw.Mode != ProviderHistoryRawOutputArtifactsModeApply ||
+		raw.Root != rawOutputRoot ||
 		raw.MaxArtifactBytes != 1048576 ||
 		raw.SessionQuotaBytes != 2097152 ||
 		raw.ChunkBytes != 524288 ||
@@ -204,6 +207,30 @@ func TestLoadConfig_ProviderHistoryRawOutputArtifacts(t *testing.T) {
 		raw.ActiveContextBudgetMaxTokens != 4096 ||
 		raw.Retention != ProviderHistoryRawOutputArtifactsRetentionSession {
 		t.Fatalf("RawOutputArtifacts = %#v, want explicit values", raw)
+	}
+}
+
+func TestLoadConfig_ProviderHistoryRawOutputArtifactsRejectsRelativeRoot(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("provider_history_reduction:\n  raw_output_artifacts:\n    root: relative/rawoutputs\n"), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want invalid raw_output_artifacts.root error")
+	}
+	want := "provider_history_reduction.raw_output_artifacts.root"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("LoadConfig() error = %q, want containing %q", err.Error(), want)
 	}
 }
 

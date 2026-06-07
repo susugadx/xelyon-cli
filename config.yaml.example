@@ -93,6 +93,8 @@ provider_history_reduction:
     raw_output_artifacts:
         # data-bearing raw output artifact-backed compact mode（off / dry_run / apply）
         mode: dry_run
+        # raw output artifact store root path（env: XELYON_RAW_OUTPUT_ARTIFACT_ROOT）
+        # root: /absolute/path/to/rawoutputs
         # raw output artifact 1件あたりの最大保存 byte 数
         max_artifact_bytes: 67108864
         # session 単位の raw output artifact 保存上限 byte 数

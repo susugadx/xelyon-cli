@@ -1,7 +1,6 @@
 package rawoutputs
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"strings"
@@ -21,16 +20,14 @@ func (s *Store) create(ctx context.Context, req CreateRequest) (CreateResult, er
 		return CreateResult{}, reasonError(ReasonArtifactTooLarge, "size hint %d > max %d", req.SizeHintBytes, s.opts.MaxArtifactBytes)
 	}
 
-	var (
-		stats tempWriteStats
-		err   error
-	)
-	plainBody, stats, err := s.readPlainObjectToMemory(ctx, req.Body)
+	tempPath, stats, err := s.writeTempPreparedObject(ctx, req.SessionID, req.Body)
 	if err != nil {
 		return CreateResult{}, err
 	}
-	if LooksSensitiveContent(string(plainBody)) {
-		return CreateResult{}, reasonError(ReasonSensitiveArtifactForbidden, "sensitive output is not stored in normal raw output artifact store")
+	if tempPath != "" {
+		defer func() {
+			_ = os.Remove(tempPath)
+		}()
 	}
 	if err := s.ensureSessionDirs(req.SessionID); err != nil {
 		return CreateResult{}, err
@@ -51,7 +48,7 @@ func (s *Store) create(ctx context.Context, req CreateRequest) (CreateResult, er
 		if err := validateRefMatchesRecord(ref, existing.created); err != nil {
 			return CreateResult{}, err
 		}
-		if err := s.ensureArtifactObject(ctx, req.SessionID, plainBody, existing.created.Artifact); err != nil {
+		if err := s.ensureArtifactObject(req.SessionID, tempPath, existing.created.Artifact); err != nil {
 			return CreateResult{}, err
 		}
 		return CreateResult{Ref: existing.created.Ref, Artifact: existing.created.Artifact, Record: existing.created}, nil
@@ -66,7 +63,7 @@ func (s *Store) create(ctx context.Context, req CreateRequest) (CreateResult, er
 		return CreateResult{}, reasonError(ReasonSessionQuotaExceeded, "session quota exceeded: %d + %d > %d", used, additionalBytes, s.opts.SessionQuotaBytes)
 	}
 
-	if err := s.ensureArtifactObject(ctx, req.SessionID, plainBody, artifact); err != nil {
+	if err := s.ensureArtifactObject(req.SessionID, tempPath, artifact); err != nil {
 		return CreateResult{}, err
 	}
 
@@ -79,7 +76,7 @@ func (s *Store) create(ctx context.Context, req CreateRequest) (CreateResult, er
 	return CreateResult{Ref: ref, Artifact: artifact, Record: record}, nil
 }
 
-func (s *Store) ensureArtifactObject(ctx context.Context, sessionID string, plainBody []byte, artifact RawOutputArtifact) error {
+func (s *Store) ensureArtifactObject(sessionID, tempPath string, artifact RawOutputArtifact) error {
 	objectExists, err := s.artifactObjectExists(sessionID, artifact)
 	if err != nil {
 		return err
@@ -87,19 +84,10 @@ func (s *Store) ensureArtifactObject(ctx context.Context, sessionID string, plai
 	if objectExists {
 		return nil
 	}
-	if artifact.Encrypted {
-		return s.commitEncryptedObject(sessionID, plainBody, artifact)
+	if strings.TrimSpace(tempPath) == "" {
+		return reasonError(ReasonArtifactMissing, "prepared object is missing")
 	}
-	temp, _, err := s.writeTempPlainObject(ctx, sessionID, bytes.NewReader(plainBody))
-	if err != nil {
-		return err
-	}
-	if temp != "" {
-		defer func() {
-			_ = os.Remove(temp)
-		}()
-	}
-	return s.commitObject(sessionID, temp, artifact)
+	return s.commitPreparedObject(sessionID, tempPath, artifact)
 }
 
 func (s *Store) createdRecordForRequest(req CreateRequest, stats tempWriteStats) (RawOutputRef, RawOutputArtifact, ManifestRecord) {
@@ -114,7 +102,7 @@ func (s *Store) createdRecordForRequest(req CreateRequest, stats tempWriteStats)
 		RelativePath:    objectRelativePath(stats.sha256Hex),
 	}
 	if s.opts.EncryptionEnabled {
-		artifact.StorageEncoding = storageEncodingEncV1
+		artifact.StorageEncoding = storageEncodingEncStreamV2
 		artifact.Encrypted = true
 	}
 	ref := RawOutputRef{

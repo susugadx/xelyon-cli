@@ -67,7 +67,7 @@ func recordProviderHistoryArtifactBackedCommandCandidate(report *CommandEditDryR
 		return
 	}
 
-	createResult, err := policy.RawOutputArtifactStore.Create(context.Background(), rawoutputs.CreateRequest{
+	createReq := rawoutputs.CreateRequest{
 		Surface:   rawoutputs.SurfaceCommandOutput,
 		SessionID: policy.SessionID,
 		Source: rawoutputs.SourceMetadata{
@@ -86,6 +86,12 @@ func recordProviderHistoryArtifactBackedCommandCandidate(report *CommandEditDryR
 		},
 		Body:          strings.NewReader(content),
 		SizeHintBytes: int64(len(content)),
+	}
+	exactSourceID, ambiguous := providerHistoryLegacyRawOutputExactSourceID(policy.SessionID, rawoutputs.SurfaceCommandOutput, createReq.Source, content)
+	createResult, err := policy.RawOutputArtifactStore.MaterializeLegacy(context.Background(), rawoutputs.LegacyMaterializeRequest{
+		CreateRequest: createReq,
+		ExactSourceID: exactSourceID,
+		Ambiguous:     ambiguous,
 	})
 	if err != nil {
 		reason := providerHistoryRawOutputCreateFailureReason(err)

@@ -71,3 +71,19 @@ func TestValidateProviderHistoryRawOutputArtifacts(t *testing.T) {
 		t.Fatalf("RawOutputArtifacts after autofix = %#v", cfg.ProviderHistoryReduction.RawOutputArtifacts)
 	}
 }
+
+func TestValidateProviderHistoryRawOutputArtifactsRoot(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ProviderHistoryReduction.RawOutputArtifacts.Root = "relative/rawoutputs"
+
+	result := ValidateConfig(cfg)
+	if len(result.Issues) != 1 {
+		t.Fatalf("ValidateConfig() issues = %#v, want one root issue", result.Issues)
+	}
+	issue := result.Issues[0]
+	if issue.Field != "provider_history_reduction.raw_output_artifacts.root" ||
+		issue.Severity != ValidationSeverityError ||
+		issue.CanAutoFix {
+		t.Fatalf("root issue = %#v, want non-autofixable error", issue)
+	}
+}

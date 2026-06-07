@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/crypto"
 )
 
 func TestStoreCreateResolveAndVerify(t *testing.T) {
@@ -111,6 +113,15 @@ func TestStoreRejectsSensitiveOversizedAndUnsafeRefs(t *testing.T) {
 	}
 }
 
+func TestStoreRejectsSensitiveBodyAcrossChunkBoundary(t *testing.T) {
+	store := newTestStore(t, StoreOptions{ChunkBytes: 8, MaxArtifactBytes: 1024})
+	body := "safe\nAuthorization: Bearer secret-value\n"
+
+	if _, err := store.Create(context.Background(), testCreateRequest("session-chunk-secret", "call-secret", body)); ReasonOf(err) != ReasonSensitiveArtifactForbidden {
+		t.Fatalf("Create(chunk boundary sensitive body) error = %v, want %s", err, ReasonSensitiveArtifactForbidden)
+	}
+}
+
 func TestStoreCreateRejectsSymlinkedPlainObjectParent(t *testing.T) {
 	store := newTestStore(t, StoreOptions{})
 	sessionID := "session-symlink-object"
@@ -132,6 +143,42 @@ func TestOpenStoreRejectsSymlinkedRoot(t *testing.T) {
 
 	if _, err := OpenStore(Root(root), StoreOptions{}); ReasonOf(err) != ReasonPathInvalid {
 		t.Fatalf("OpenStore(symlink root) error = %v, want %s", err, ReasonPathInvalid)
+	}
+}
+
+func TestOpenStoreRejectsSymlinkedRootParent(t *testing.T) {
+	target := t.TempDir()
+	parent := filepath.Join(t.TempDir(), "xelyon-link")
+	if err := os.Symlink(target, parent); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	root := filepath.Join(parent, "history", "rawoutputs")
+
+	if _, err := OpenStore(Root(root), StoreOptions{}); ReasonOf(err) != ReasonPathInvalid {
+		t.Fatalf("OpenStore(symlink parent) error = %v, want %s", err, ReasonPathInvalid)
+	}
+	if entries, err := os.ReadDir(target); err != nil {
+		t.Fatalf("read symlink target: %v", err)
+	} else if len(entries) != 0 {
+		t.Fatalf("symlink target entries = %#v, want empty rejected store root", entries)
+	}
+}
+
+func TestOpenStoreReadOnlyDoesNotCreateMissingRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "missing", "rawoutputs")
+	store, err := OpenStoreReadOnly(Root(root), StoreOptions{})
+	if err != nil {
+		t.Fatalf("OpenStoreReadOnly() error = %v", err)
+	}
+	diagnostics, err := store.Diagnostics(context.Background(), DiagnosticsRequest{SessionID: "session-ro"})
+	if err != nil {
+		t.Fatalf("Diagnostics() error = %v", err)
+	}
+	if diagnostics.StoreExists {
+		t.Fatalf("Diagnostics().StoreExists = true, want false")
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("OpenStoreReadOnly created root or unexpected stat error: %v", err)
 	}
 }
 
@@ -490,6 +537,13 @@ func TestStoreEncryptionDoesNotLeavePlaintextArtifactsManifestOrIndex(t *testing
 	}
 	if got != body {
 		t.Fatalf("resolved encrypted body = %q, want %q", got, body)
+	}
+	if result.Artifact.StorageEncoding != storageEncodingEncStreamV2 {
+		t.Fatalf("StorageEncoding = %q, want %q", result.Artifact.StorageEncoding, storageEncodingEncStreamV2)
+	}
+	rawObject := readFile(t, objectPath)
+	if !bytes.HasPrefix(rawObject, []byte(crypto.SessionStreamEncryptionMagic)) {
+		t.Fatalf("encrypted object does not use streaming envelope magic")
 	}
 }
 

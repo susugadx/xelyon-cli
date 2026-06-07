@@ -81,6 +81,7 @@ func applyProviderHistoryRuntimeConfigToRuntime(runtime *AgentRuntime, resolutio
 	runtime.Options.EnableProviderHistoryRehydrateContext = resolution.rehydrateContext
 	runtime.Options.ProviderHistoryRawOutputArtifacts = resolution.rawOutputArtifacts
 	runtime.Options.ProviderHistoryRawOutputArtifactsSet = resolution.rawOutputSet
+	runtime.RawOutputArtifactRoot = resolution.rawOutputArtifacts.Root
 }
 
 func applyProviderHistoryReductionModeToRuntime(runtime *AgentRuntime, mode ProviderHistoryReductionMode, specified bool) {

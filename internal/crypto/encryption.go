@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -98,22 +99,32 @@ func DecryptSession(encrypted []byte, passphrase string) ([]byte, error) {
 	return plaintext, nil
 }
 
+// GetExistingPassphrase は既存のセッション暗号化パスフレーズだけを読み込む。
+func GetExistingPassphrase() (string, error) {
+	keyFile, _, err := sessionKeyPaths()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(keyFile)
+	if err != nil {
+		return "", err
+	}
+	decoded, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil || len(decoded) != 32 {
+		return "", fmt.Errorf("invalid session key")
+	}
+	return string(decoded), nil
+}
+
 // GetOrCreatePassphrase はパスフレーズをファイルから取得（なければ生成）
 func GetOrCreatePassphrase() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	keyFile, xelyonDir, err := sessionKeyPaths()
 	if err != nil {
 		return "", err
 	}
 
-	xelyonDir := homeDir + "/.xelyon"
-	keyFile := xelyonDir + "/.session_key"
-
-	// 既存ファイルがあれば読み込み
-	if data, err := os.ReadFile(keyFile); err == nil {
-		decoded, err := base64.StdEncoding.DecodeString(string(data))
-		if err == nil && len(decoded) == 32 {
-			return string(decoded), nil
-		}
+	if passphrase, err := GetExistingPassphrase(); err == nil {
+		return passphrase, nil
 	}
 
 	// .xelyonディレクトリが存在しない場合は作成
@@ -134,4 +145,15 @@ func GetOrCreatePassphrase() (string, error) {
 	}
 
 	return string(key), nil
+}
+
+func sessionKeyPaths() (string, string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", err
+	}
+
+	xelyonDir := filepath.Join(homeDir, ".xelyon")
+	keyFile := filepath.Join(xelyonDir, ".session_key")
+	return keyFile, xelyonDir, nil
 }

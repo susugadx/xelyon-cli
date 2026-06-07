@@ -1,6 +1,7 @@
 package providerhistory
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -448,6 +449,54 @@ func providerHistoryTestRawOutputStore(t *testing.T) RawOutputArtifactStore {
 		t.Fatalf("rawoutputs.OpenStore() error = %v", err)
 	}
 	return store
+}
+
+func providerHistoryTestRawOutputSpyStore(t *testing.T) *providerHistoryMaterializeSpyStore {
+	t.Helper()
+	store, err := rawoutputs.OpenStore(rawoutputs.Root(t.TempDir()), rawoutputs.StoreOptions{})
+	if err != nil {
+		t.Fatalf("rawoutputs.OpenStore() error = %v", err)
+	}
+	return &providerHistoryMaterializeSpyStore{inner: store}
+}
+
+type providerHistoryMaterializeSpyStore struct {
+	inner            *rawoutputs.Store
+	createCalls      int
+	materializeCalls int
+	lastLegacy       rawoutputs.LegacyMaterializeRequest
+}
+
+func (s *providerHistoryMaterializeSpyStore) Create(ctx context.Context, req rawoutputs.CreateRequest) (rawoutputs.CreateResult, error) {
+	s.createCalls++
+	return s.inner.Create(ctx, req)
+}
+
+func (s *providerHistoryMaterializeSpyStore) MaterializeLegacy(ctx context.Context, req rawoutputs.LegacyMaterializeRequest) (rawoutputs.CreateResult, error) {
+	s.materializeCalls++
+	s.lastLegacy = req
+	return s.inner.MaterializeLegacy(ctx, req)
+}
+
+func (s *providerHistoryMaterializeSpyStore) Verify(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.VerifyResult, error) {
+	return s.inner.Verify(ctx, ref)
+}
+
+func assertProviderHistoryLegacyMaterialize(t *testing.T, store *providerHistoryMaterializeSpyStore, surface rawoutputs.Surface) {
+	t.Helper()
+	if store.createCalls != 0 || store.materializeCalls != 1 {
+		t.Fatalf("raw output materialization calls = create %d legacy %d, want Create=0 MaterializeLegacy=1", store.createCalls, store.materializeCalls)
+	}
+	if store.lastLegacy.Ambiguous || strings.TrimSpace(store.lastLegacy.ExactSourceID) == "" {
+		t.Fatalf("legacy source identity = %q ambiguous=%t, want exact non-ambiguous", store.lastLegacy.ExactSourceID, store.lastLegacy.Ambiguous)
+	}
+	if store.lastLegacy.Surface != surface {
+		t.Fatalf("legacy materialize surface = %s, want %s", store.lastLegacy.Surface, surface)
+	}
+	if strings.TrimSpace(store.lastLegacy.Source.ToolCallID) == "" ||
+		strings.TrimSpace(store.lastLegacy.Source.ToolName) == "" {
+		t.Fatalf("legacy source metadata = %#v, want tool identity", store.lastLegacy.Source)
+	}
 }
 
 func providerHistoryTestAssertByteMetrics(t *testing.T, original, projected []api.Message, report ProjectionReport) {

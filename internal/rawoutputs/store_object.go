@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,42 +21,100 @@ type tempWriteStats struct {
 	runeSize  int
 }
 
-func (s *Store) writeTempPlainObject(ctx context.Context, sessionID string, body io.Reader) (string, tempWriteStats, error) {
-	tmpDir, err := s.ensureSafeSessionDir(sessionID, rawOutputTmpRelativeDir)
-	if err != nil {
-		return "", tempWriteStats{}, reasonError(ReasonPathInvalid, "create temp dir: %w", err)
-	}
-	tmp, err := os.CreateTemp(tmpDir, "rawout-*.tmp")
-	if err != nil {
-		return "", tempWriteStats{}, reasonError(ReasonPathInvalid, "create temp object: %w", err)
-	}
-	tempPath := tmp.Name()
-	defer tmp.Close()
+type artifactContentScanner struct {
+	hash     hash.Hash
+	detector sensitiveStreamDetector
+	maxBytes int64
+	total    int64
+	runes    int
+}
 
-	hash := sha256.New()
+func newArtifactContentScanner(maxBytes int64) *artifactContentScanner {
+	return &artifactContentScanner{
+		hash:     sha256.New(),
+		maxBytes: maxBytes,
+	}
+}
+
+func (s *artifactContentScanner) Scan(chunk []byte) error {
+	if len(chunk) == 0 {
+		return nil
+	}
+	s.total += int64(len(chunk))
+	if s.total > s.maxBytes {
+		return reasonError(ReasonArtifactTooLarge, "artifact %d > max %d", s.total, s.maxBytes)
+	}
+	s.runes += utf8.RuneCount(chunk)
+	if s.detector.Write(chunk) {
+		return reasonError(ReasonSensitiveArtifactForbidden, "sensitive output is not stored in normal raw output artifact store")
+	}
+	if _, err := s.hash.Write(chunk); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *artifactContentScanner) Stats() tempWriteStats {
+	return tempWriteStats{
+		sha256Hex: hex.EncodeToString(s.hash.Sum(nil)),
+		byteSize:  s.total,
+		runeSize:  s.runes,
+	}
+}
+
+type preparedObjectWriter struct {
+	file      *os.File
+	tempPath  string
+	encrypted io.WriteCloser
+}
+
+func (s *Store) writeTempPreparedObject(ctx context.Context, sessionID string, body io.Reader) (string, tempWriteStats, error) {
+	scanner := newArtifactContentScanner(s.opts.MaxArtifactBytes)
 	buf := make([]byte, s.opts.ChunkBytes)
-	var total int64
-	var runes int
+	n, firstReadErr := body.Read(buf)
+	firstChunk := append([]byte(nil), buf[:n]...)
+	if n > 0 {
+		if err := scanner.Scan(firstChunk); err != nil {
+			return "", tempWriteStats{}, err
+		}
+	}
+	if firstReadErr != nil && firstReadErr != io.EOF {
+		return "", tempWriteStats{}, firstReadErr
+	}
+
+	writer, err := s.newPreparedObjectWriter(sessionID)
+	if err != nil {
+		return "", tempWriteStats{}, err
+	}
+	keepTemp := false
+	defer func() {
+		if !keepTemp {
+			writer.abort()
+		}
+	}()
+	if n > 0 {
+		if err := writer.write(firstChunk); err != nil {
+			return "", tempWriteStats{}, reasonError(ReasonPathInvalid, "write temp object: %w", err)
+		}
+	}
+	if firstReadErr == io.EOF {
+		if err := writer.closePayload(); err != nil {
+			return "", tempWriteStats{}, err
+		}
+		keepTemp = true
+		return s.finalizeTempObject(writer.file, writer.tempPath, scanner.Stats())
+	}
 	for {
 		if err := ctx.Err(); err != nil {
-			_ = os.Remove(tempPath)
 			return "", tempWriteStats{}, err
 		}
 		n, readErr := body.Read(buf)
 		if n > 0 {
 			chunk := buf[:n]
-			total += int64(n)
-			if total > s.opts.MaxArtifactBytes {
-				_ = os.Remove(tempPath)
-				return "", tempWriteStats{}, reasonError(ReasonArtifactTooLarge, "artifact %d > max %d", total, s.opts.MaxArtifactBytes)
-			}
-			runes += utf8.RuneCount(chunk)
-			if _, err := hash.Write(chunk); err != nil {
-				_ = os.Remove(tempPath)
+			if err := scanner.Scan(chunk); err != nil {
 				return "", tempWriteStats{}, err
 			}
-			if _, err := tmp.Write(chunk); err != nil {
-				_ = os.Remove(tempPath)
+			if err := writer.write(chunk); err != nil {
 				return "", tempWriteStats{}, reasonError(ReasonPathInvalid, "write temp object: %w", err)
 			}
 		}
@@ -63,60 +122,95 @@ func (s *Store) writeTempPlainObject(ctx context.Context, sessionID string, body
 			break
 		}
 		if readErr != nil {
-			_ = os.Remove(tempPath)
 			return "", tempWriteStats{}, readErr
 		}
 	}
+	if err := writer.closePayload(); err != nil {
+		return "", tempWriteStats{}, err
+	}
+	keepTemp = true
+	return s.finalizeTempObject(writer.file, writer.tempPath, scanner.Stats())
+}
+
+func (s *Store) newPreparedObjectWriter(sessionID string) (*preparedObjectWriter, error) {
+	tmpDir, err := s.ensureSafeSessionDir(sessionID, rawOutputTmpRelativeDir)
+	if err != nil {
+		return nil, reasonError(ReasonPathInvalid, "create temp dir: %w", err)
+	}
+	tmp, err := os.CreateTemp(tmpDir, "rawout-*.tmp")
+	if err != nil {
+		return nil, reasonError(ReasonPathInvalid, "create temp object: %w", err)
+	}
+	writer := &preparedObjectWriter{
+		file:     tmp,
+		tempPath: tmp.Name(),
+	}
+	if s.opts.EncryptionEnabled {
+		encryptedWriter, err := crypto.NewSessionStreamEncryptWriter(tmp, s.opts.Passphrase)
+		if err != nil {
+			writer.abort()
+			return nil, reasonError(ReasonEncryptionRequired, "create encrypted stream: %w", err)
+		}
+		writer.encrypted = encryptedWriter
+	}
+	return writer, nil
+}
+
+func (w *preparedObjectWriter) write(chunk []byte) error {
+	dst := io.Writer(w.file)
+	if w.encrypted != nil {
+		dst = w.encrypted
+	}
+	_, err := dst.Write(chunk)
+	return err
+}
+
+func (w *preparedObjectWriter) closePayload() error {
+	if w.encrypted == nil {
+		return nil
+	}
+	if err := w.encrypted.Close(); err != nil {
+		return reasonError(ReasonEncryptionRequired, "close encrypted stream: %w", err)
+	}
+	w.encrypted = nil
+	return nil
+}
+
+func (w *preparedObjectWriter) abort() {
+	if w == nil {
+		return
+	}
+	if w.encrypted != nil {
+		_ = w.encrypted.Close()
+		w.encrypted = nil
+	}
+	if w.file != nil {
+		_ = w.file.Close()
+	}
+	if w.tempPath != "" {
+		_ = os.Remove(w.tempPath)
+	}
+}
+
+func (s *Store) finalizeTempObject(tmp *os.File, tempPath string, stats tempWriteStats) (string, tempWriteStats, error) {
 	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
 		_ = os.Remove(tempPath)
 		return "", tempWriteStats{}, reasonError(ReasonPathInvalid, "chmod temp object: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
 		_ = os.Remove(tempPath)
 		return "", tempWriteStats{}, reasonError(ReasonPathInvalid, "sync temp object: %w", err)
 	}
-	return tempPath, tempWriteStats{sha256Hex: hex.EncodeToString(hash.Sum(nil)), byteSize: total, runeSize: runes}, nil
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return "", tempWriteStats{}, reasonError(ReasonPathInvalid, "close temp object: %w", err)
+	}
+	return tempPath, stats, nil
 }
 
-func (s *Store) readPlainObjectToMemory(ctx context.Context, body io.Reader) ([]byte, tempWriteStats, error) {
-	hash := sha256.New()
-	var buf bytes.Buffer
-	chunkBuf := make([]byte, s.opts.ChunkBytes)
-	var total int64
-	var runes int
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, tempWriteStats{}, err
-		}
-		n, readErr := body.Read(chunkBuf)
-		if n > 0 {
-			chunk := chunkBuf[:n]
-			total += int64(n)
-			if total > s.opts.MaxArtifactBytes {
-				return nil, tempWriteStats{}, reasonError(ReasonArtifactTooLarge, "artifact %d > max %d", total, s.opts.MaxArtifactBytes)
-			}
-			runes += utf8.RuneCount(chunk)
-			if _, err := hash.Write(chunk); err != nil {
-				return nil, tempWriteStats{}, err
-			}
-			if _, err := buf.Write(chunk); err != nil {
-				return nil, tempWriteStats{}, err
-			}
-		}
-		if readErr == io.EOF {
-			break
-		}
-		if readErr != nil {
-			return nil, tempWriteStats{}, readErr
-		}
-	}
-	return buf.Bytes(), tempWriteStats{sha256Hex: hex.EncodeToString(hash.Sum(nil)), byteSize: total, runeSize: runes}, nil
-}
-
-func (s *Store) commitObject(sessionID, tempPath string, artifact RawOutputArtifact) error {
-	if artifact.Encrypted {
-		return reasonError(ReasonEncryptionRequired, "encrypted artifact must use encrypted commit path")
-	}
+func (s *Store) commitPreparedObject(sessionID, tempPath string, artifact RawOutputArtifact) error {
 	finalPath, err := s.ensureSafeSessionFileParent(sessionID, artifact.RelativePath)
 	if err != nil {
 		return reasonError(ReasonPathInvalid, "create object dir: %w", err)
@@ -128,51 +222,6 @@ func (s *Store) commitObject(sessionID, tempPath string, artifact RawOutputArtif
 	}
 	if err := os.Rename(tempPath, finalPath); err != nil {
 		return reasonError(ReasonPathInvalid, "commit object: %w", err)
-	}
-	return os.Chmod(finalPath, 0o600)
-}
-
-func (s *Store) commitEncryptedObject(sessionID string, plain []byte, artifact RawOutputArtifact) error {
-	finalPath, err := s.ensureSafeSessionFileParent(sessionID, artifact.RelativePath)
-	if err != nil {
-		return reasonError(ReasonPathInvalid, "create object dir: %w", err)
-	}
-	if _, err := os.Lstat(finalPath); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return reasonError(ReasonPathInvalid, "stat object: %w", err)
-	}
-	encrypted, err := crypto.EncryptSession(plain, s.opts.Passphrase)
-	if err != nil {
-		return reasonError(ReasonEncryptionRequired, "encrypt object: %w", err)
-	}
-	tmpEncrypted, err := os.CreateTemp(filepath.Dir(finalPath), "rawout-enc-*.tmp")
-	if err != nil {
-		return reasonError(ReasonPathInvalid, "create encrypted temp object: %w", err)
-	}
-	encryptedPath := tmpEncrypted.Name()
-	if _, err := tmpEncrypted.Write(encrypted); err != nil {
-		_ = tmpEncrypted.Close()
-		_ = os.Remove(encryptedPath)
-		return reasonError(ReasonPathInvalid, "write encrypted object: %w", err)
-	}
-	if err := tmpEncrypted.Chmod(0o600); err != nil {
-		_ = tmpEncrypted.Close()
-		_ = os.Remove(encryptedPath)
-		return reasonError(ReasonPathInvalid, "chmod encrypted object: %w", err)
-	}
-	if err := tmpEncrypted.Sync(); err != nil {
-		_ = tmpEncrypted.Close()
-		_ = os.Remove(encryptedPath)
-		return reasonError(ReasonPathInvalid, "sync encrypted object: %w", err)
-	}
-	if err := tmpEncrypted.Close(); err != nil {
-		_ = os.Remove(encryptedPath)
-		return reasonError(ReasonPathInvalid, "close encrypted object: %w", err)
-	}
-	if err := os.Rename(encryptedPath, finalPath); err != nil {
-		_ = os.Remove(encryptedPath)
-		return reasonError(ReasonPathInvalid, "commit encrypted object: %w", err)
 	}
 	return os.Chmod(finalPath, 0o600)
 }
@@ -198,11 +247,19 @@ func (s *Store) readAndVerifyObject(record ManifestRecord) ([]byte, error) {
 	}
 	body := stored
 	if record.Artifact.Encrypted {
-		decrypted, err := crypto.DecryptSession(stored, s.opts.Passphrase)
-		if err != nil {
-			return nil, reasonError(ReasonDecryptFailed, "decrypt object: %w", err)
+		if crypto.IsSessionStreamEncrypted(stored) {
+			var decrypted bytes.Buffer
+			if err := crypto.DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(stored), s.opts.Passphrase); err != nil {
+				return nil, reasonError(ReasonDecryptFailed, "decrypt object: %w", err)
+			}
+			body = decrypted.Bytes()
+		} else {
+			decrypted, err := crypto.DecryptSession(stored, s.opts.Passphrase)
+			if err != nil {
+				return nil, reasonError(ReasonDecryptFailed, "decrypt object: %w", err)
+			}
+			body = decrypted
 		}
-		body = decrypted
 	}
 	hash := sha256.Sum256(body)
 	got := "sha256:" + hex.EncodeToString(hash[:])
