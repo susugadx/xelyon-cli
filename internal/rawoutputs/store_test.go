@@ -396,6 +396,23 @@ func TestStoreCreateDoesNotDoubleChargeQuotaForExistingArtifactWithDifferentRef(
 	}
 }
 
+func TestStoreCreateRefreshesOnlyTargetSessionIndex(t *testing.T) {
+	store := newTestStore(t, StoreOptions{})
+	writeCorruptManifestForTest(t, store, "session-corrupt")
+
+	result, err := store.Create(context.Background(), testCreateRequest("session-good", "call-good", "good body\n"))
+	if err != nil {
+		t.Fatalf("Create(good session with unrelated corrupt session) error = %v", err)
+	}
+	index := string(readFile(t, store.indexPath("session-good")))
+	if !strings.Contains(index, result.Ref.RefID) {
+		t.Fatalf("good session index missing created ref %q:\n%s", result.Ref.RefID, index)
+	}
+	if _, err := store.RebuildIndex(context.Background()); ReasonOf(err) != ReasonManifestCorrupt {
+		t.Fatalf("RebuildIndex() error = %v, want %s for unrelated corrupt session", err, ReasonManifestCorrupt)
+	}
+}
+
 func TestStoreCreateDoesNotReuseDeadRef(t *testing.T) {
 	store := newTestStore(t, StoreOptions{})
 	sessionID := "session-dead-ref"
@@ -413,6 +430,34 @@ func TestStoreCreateDoesNotReuseDeadRef(t *testing.T) {
 
 	if _, err := store.Create(context.Background(), testCreateRequest(sessionID, "call-a", "body\n")); ReasonOf(err) != ReasonArtifactTombstoned {
 		t.Fatalf("Create(dead ref) error = %v, want %s", err, ReasonArtifactTombstoned)
+	}
+}
+
+func TestStoreGCRefreshesOnlyTargetSessionIndex(t *testing.T) {
+	store := newTestStore(t, StoreOptions{})
+	sessionID := "session-gc-good"
+	first, err := store.Create(context.Background(), testCreateRequest(sessionID, "call-live", "live body\n"))
+	if err != nil {
+		t.Fatalf("Create(first) error = %v", err)
+	}
+	second, err := store.Create(context.Background(), testCreateRequest(sessionID, "call-dead", "dead body\n"))
+	if err != nil {
+		t.Fatalf("Create(second) error = %v", err)
+	}
+	writeCorruptManifestForTest(t, store, "session-gc-corrupt")
+
+	if _, err := store.CollectGarbage(context.Background(), GCRequest{SessionID: sessionID, LiveRefs: []RawOutputRef{first.Ref}}); err != nil {
+		t.Fatalf("CollectGarbage(good session with unrelated corrupt session) error = %v", err)
+	}
+	index := string(readFile(t, store.indexPath(sessionID)))
+	if !strings.Contains(index, first.Ref.RefID) {
+		t.Fatalf("good session index missing live ref %q:\n%s", first.Ref.RefID, index)
+	}
+	if strings.Contains(index, second.Ref.RefID) {
+		t.Fatalf("good session index kept tombstoned ref %q:\n%s", second.Ref.RefID, index)
+	}
+	if _, err := store.RebuildIndex(context.Background()); ReasonOf(err) != ReasonManifestCorrupt {
+		t.Fatalf("RebuildIndex() error = %v, want %s for unrelated corrupt session", err, ReasonManifestCorrupt)
 	}
 }
 
@@ -637,6 +682,16 @@ func manifestRecords(t *testing.T, store *Store, sessionID string) []ManifestRec
 		records = append(records, record)
 	}
 	return records
+}
+
+func writeCorruptManifestForTest(t *testing.T, store *Store, sessionID string) {
+	t.Helper()
+	if err := store.ensureSessionDirs(sessionID); err != nil {
+		t.Fatalf("ensureSessionDirs(%q): %v", sessionID, err)
+	}
+	if err := os.WriteFile(store.manifestPath(sessionID), []byte("{not-json}\n"), 0o600); err != nil {
+		t.Fatalf("write corrupt manifest: %v", err)
+	}
 }
 
 func newTestStore(t *testing.T, opts StoreOptions) *Store {

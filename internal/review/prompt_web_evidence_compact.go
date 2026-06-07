@@ -55,17 +55,34 @@ func (r *ReviewRunner) reviewPromptEvidenceMarkdownForAbsorbedReport(phase Revie
 	}
 
 	baseBundle := bundle
-	if compacted, _, _, ok := compactReviewWebSearchDiscoveryEvidence(bundle); ok {
+	discoverySavedBytes := 0
+	discoverySavedTokens := 0
+	discoveryOK := false
+	if compacted, savedBytes, savedTokens, ok := compactReviewWebSearchDiscoveryEvidence(bundle); ok {
 		baseBundle = compacted
+		discoverySavedBytes = savedBytes
+		discoverySavedTokens = savedTokens
+		discoveryOK = true
 	}
 	compactedBundle, items, savedBytes, savedTokens, ok := compactReviewExternalDocAbsorbedEvidence(phase, baseBundle, report)
-	if !ok {
-		return rawMarkdown
-	}
 	if r.promptReductionStats == nil {
 		r.promptReductionStats = newReviewPromptReductionStats(r.promptReductionMode)
 	}
 	applied := mode == ReviewPromptReductionModeApply
+	if discoveryOK {
+		discoveryMarkdown := RenderReviewEvidenceMarkdown(baseBundle)
+		if applied && discoveryMarkdown != rawMarkdown {
+			r.promptReductionStats.record("review_web_search_discovery", discoverySavedBytes, discoverySavedTokens, applied)
+			if !ok {
+				return discoveryMarkdown
+			}
+		} else if applied && !ok {
+			return rawMarkdown
+		}
+	}
+	if !ok {
+		return rawMarkdown
+	}
 	r.promptReductionStats.record("review_external_doc_absorbed", savedBytes, savedTokens, applied)
 	for _, item := range items {
 		r.recordPromptReductionItem(item)

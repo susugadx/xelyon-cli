@@ -109,6 +109,37 @@ func TestReviewRunnerSaturationCompactsAbsorbedExternalDocSnippet(t *testing.T) 
 	}
 }
 
+func TestReviewPromptEvidenceMarkdownForAbsorbedReportPreservesDiscoveryCompactionWithoutAbsorption(t *testing.T) {
+	rawDiscoverySnippet := strings.Repeat("RAW_DISCOVERY_SNIPPET_MUST_NOT_REEXPAND_WHEN_ABSORPTION_UNAVAILABLE ", 400)
+	bundle := newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")
+	bundle.WebSearchEvidence = reviewWebSearchDiscoveryCompactEvidenceForTest(rawDiscoverySnippet, []ReviewExternalDocEvidence{
+		reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official-1", ReviewExternalDocSourceCredibilityOfficialCandidate, false, "official source snippet 1"),
+		reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official-2", ReviewExternalDocSourceCredibilityOfficialCandidate, false, "official source snippet 2"),
+	})
+	rawMarkdown := RenderReviewEvidenceMarkdown(bundle)
+	report := newRunnerCleanReportForTest(nil)
+	runner := &ReviewRunner{promptReductionMode: ReviewPromptReductionModeApply}
+
+	got := runner.reviewPromptEvidenceMarkdownForAbsorbedReport(ReviewModelPhaseSaturationCheck, bundle, rawMarkdown, report)
+
+	if strings.Contains(got, rawDiscoverySnippet) {
+		t.Fatalf("absorbed report prompt re-expanded raw discovery snippet:\n%s", got)
+	}
+	if !strings.Contains(got, "[compacted discovery-only web_search snippet") ||
+		!strings.Contains(got, "raw_result_preserved=review_artifact") {
+		t.Fatalf("absorbed report prompt missing discovery compact placeholder:\n%s", got)
+	}
+	if strings.Contains(got, "compacted absorbed external_doc snippet") {
+		t.Fatalf("absorbed report prompt compacted external docs without absorbable refs:\n%s", got)
+	}
+	reductionReport := runner.PromptReductionReport()
+	if reductionReport.ClassifierCounts["review_web_search_discovery"] != 1 ||
+		reductionReport.ClassifierCounts["review_external_doc_absorbed"] != 0 ||
+		reductionReport.ReplacedCount != 1 {
+		t.Fatalf("PromptReductionReport() = %#v, want one discovery replacement only", reductionReport)
+	}
+}
+
 func TestReviewExternalDocAbsorptionKeepsFindingEvidenceSnippet(t *testing.T) {
 	rawSnippet := strings.Repeat("FINDING_EXTERNAL_DOC_RAW_SNIPPET_MUST_STAY ", 180)
 	doc := newRunnerOfficialCandidateExternalDocForSaturationAuditTest(

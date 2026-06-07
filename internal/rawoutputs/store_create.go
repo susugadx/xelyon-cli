@@ -70,7 +70,7 @@ func (s *Store) create(ctx context.Context, req CreateRequest) (CreateResult, er
 	if err := s.appendManifestRecord(record); err != nil {
 		return CreateResult{}, err
 	}
-	if _, err := s.rebuildIndex(ctx); err != nil {
+	if _, err := s.rebuildSessionIndex(ctx, req.SessionID); err != nil {
 		return CreateResult{}, err
 	}
 	return CreateResult{Ref: ref, Artifact: artifact, Record: record}, nil

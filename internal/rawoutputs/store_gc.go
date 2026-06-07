@@ -75,7 +75,7 @@ func (s *Store) collectGarbage(ctx context.Context, req GCRequest) (GCResult, er
 			return GCResult{}, err
 		}
 	}
-	_, err = s.rebuildIndex(ctx)
+	_, err = s.rebuildSessionIndex(ctx, req.SessionID)
 	return result, err
 }
 
@@ -89,26 +89,40 @@ func (s *Store) rebuildIndex(ctx context.Context) (IndexResult, error) {
 	}
 	var total IndexResult
 	for _, sessionID := range sessionDirs {
-		states, err := s.loadLifecycle(sessionID)
+		result, err := s.rebuildSessionIndex(ctx, sessionID)
 		if err != nil {
 			return IndexResult{}, err
 		}
-		records := make([]ManifestRecord, 0, len(states))
-		for _, state := range states {
-			if state.created.RecordType == "" {
-				continue
-			}
-			total.RecordCount++
-			if err := lifecycleUsable(state); err == nil {
-				total.LiveRefs++
-				records = append(records, state.created)
-			}
-		}
-		if err := s.writeIndex(sessionID, records); err != nil {
-			return IndexResult{}, err
-		}
+		total.RecordCount += result.RecordCount
+		total.LiveRefs += result.LiveRefs
 	}
 	return total, nil
+}
+
+func (s *Store) rebuildSessionIndex(ctx context.Context, sessionID string) (IndexResult, error) {
+	if err := ctx.Err(); err != nil {
+		return IndexResult{}, err
+	}
+	states, err := s.loadLifecycle(sessionID)
+	if err != nil {
+		return IndexResult{}, err
+	}
+	records := make([]ManifestRecord, 0, len(states))
+	result := IndexResult{}
+	for _, state := range states {
+		if state.created.RecordType == "" {
+			continue
+		}
+		result.RecordCount++
+		if err := lifecycleUsable(state); err == nil {
+			result.LiveRefs++
+			records = append(records, state.created)
+		}
+	}
+	if err := s.writeIndex(sessionID, records); err != nil {
+		return IndexResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Store) appendLifecycleRecord(ref RawOutputRef, artifact RawOutputArtifact, recordType, reason string) error {
