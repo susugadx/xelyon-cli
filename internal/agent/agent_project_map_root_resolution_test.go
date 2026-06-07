@@ -42,6 +42,20 @@ func TestProjectMapRoot_UsesGitRootWithoutXelyonYAML(t *testing.T) {
 	}
 }
 
+func TestProjectMapRoot_SkipsCwdFallbackWithoutProjectRoot(t *testing.T) {
+	cwd := t.TempDir()
+
+	bundle, err := config.LoadProjectInstructionBundleForDir(config.DefaultConfig(), cwd)
+	if err != nil {
+		t.Fatalf("LoadProjectInstructionBundleForDir() error = %v", err)
+	}
+
+	got := resolveProjectMapSourceRootPath(cwd, bundle)
+	if got != "" {
+		t.Fatalf("project map root = %q, want empty when only cwd fallback is available", got)
+	}
+}
+
 func TestProjectMapRoot_UsesGuidanceRootWithoutGitOrXelyon(t *testing.T) {
 	root := t.TempDir()
 	cwd := filepath.Join(root, "a", "b")

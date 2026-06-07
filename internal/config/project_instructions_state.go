@@ -47,13 +47,15 @@ func ComputeProjectInstructionBundleFingerprintForDir(cfg *Config, cwd string, p
 	if strings.TrimSpace(xelyonPath) != "" {
 		projectCfg = &ProjectConfig{FilePath: xelyonPath}
 	}
-	rootPath := resolveBundleRootPath(cwd, projectCfg, gitRoot, aiCfg)
-	if strings.TrimSpace(rootPath) == "" && previous != nil {
-		rootPath = previous.RootPath
+	root := resolveBundleRoot(cwd, projectCfg, gitRoot, aiCfg)
+	if strings.TrimSpace(root.RootPath) == "" && previous != nil {
+		root.RootPath = previous.RootPath
+		root.Source = previous.RootSource
 	}
-	builder.Add("root", normalizedAbsolutePath(rootPath))
+	builder.Add("root", normalizedAbsolutePath(root.RootPath))
+	builder.Add("root_source", string(root.Source))
 
-	fingerprintBundle := loadGuidanceBundleForFingerprint(aiCfg, projectCfg, rootPath, gitRoot)
+	fingerprintBundle := loadGuidanceBundleForFingerprint(aiCfg, projectCfg, root.RootPath, root.Source, gitRoot)
 	appendLoadedGuidanceToFingerprint(builder, "project", fingerprintBundle.ProjectGuidance)
 	appendLoadedGuidanceToFingerprint(builder, "global", fingerprintBundle.GlobalGuidance)
 	appendGuidanceWarningsToFingerprint(builder, fingerprintBundle.WarningEntries)
@@ -61,10 +63,11 @@ func ComputeProjectInstructionBundleFingerprintForDir(cfg *Config, cwd string, p
 	return builder.Sum()
 }
 
-func loadGuidanceBundleForFingerprint(aiCfg AgentInstructionsConfig, projectCfg *ProjectConfig, rootPath, gitRoot string) *ProjectInstructionBundle {
+func loadGuidanceBundleForFingerprint(aiCfg AgentInstructionsConfig, projectCfg *ProjectConfig, rootPath string, rootSource ProjectInstructionRootSource, gitRoot string) *ProjectInstructionBundle {
 	bundle := &ProjectInstructionBundle{
 		ProjectConfig: projectCfg,
 		RootPath:      rootPath,
+		RootSource:    rootSource,
 	}
 	budget := newInstructionByteBudget(aiCfg)
 	mode := normalizeAgentInstructionProjectMode(aiCfg.Project.Mode)

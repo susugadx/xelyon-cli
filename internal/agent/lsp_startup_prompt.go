@@ -2,6 +2,7 @@ package agent
 
 import (
 	"io"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -24,11 +25,19 @@ func checkLSPInstallPrompt(agent *Agent, commandSurface commandcatalog.CommandSu
 		return
 	}
 
-	cwd, err := lspStartupGetwd()
-	if err != nil {
+	cwd := strings.TrimSpace(agent.invocationCWD())
+	if cwd == "" {
+		var err error
+		cwd, err = lspStartupGetwd()
+		if err != nil {
+			return
+		}
+	}
+	rootDir, ok := resolveLSPStartupProjectRoot(cfg, cwd)
+	if !ok {
 		return
 	}
-	languages, err := lspDetectProjectLanguages(cwd)
+	languages, err := lspDetectProjectLanguages(rootDir)
 	if err != nil || len(languages) == 0 {
 		return
 	}

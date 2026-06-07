@@ -1,10 +1,46 @@
 package config
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 )
+
+func TestLoadProjectInstructionBundle_NoMarkersUsesCwdFallbackSource(t *testing.T) {
+	dir := t.TempDir()
+
+	bundle := loadProjectInstructionBundleForDirOrFatal(t, DefaultConfig(), dir)
+	if bundle.RootPath != dir {
+		t.Fatalf("RootPath = %q, want cwd %q", bundle.RootPath, dir)
+	}
+	if bundle.RootSource != ProjectInstructionRootSourceFallbackCWD {
+		t.Fatalf("RootSource = %q, want %q", bundle.RootSource, ProjectInstructionRootSourceFallbackCWD)
+	}
+	if bundle.HasProjectRoot() {
+		t.Fatal("HasProjectRoot() = true, want false for cwd fallback")
+	}
+}
+
+func TestLoadProjectInstructionBundle_GuidanceRootSource(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "nested")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "# guidance\n")
+
+	bundle := loadProjectInstructionBundleForDirOrFatal(t, DefaultConfig(), cwd)
+	if bundle.RootPath != root {
+		t.Fatalf("RootPath = %q, want guidance root %q", bundle.RootPath, root)
+	}
+	if bundle.RootSource != ProjectInstructionRootSourceGuidance {
+		t.Fatalf("RootSource = %q, want %q", bundle.RootSource, ProjectInstructionRootSourceGuidance)
+	}
+	if got, ok := bundle.ProjectRootPath(); !ok || got != root {
+		t.Fatalf("ProjectRootPath() = %q, %v; want %q, true", got, ok, root)
+	}
+}
 
 func TestGitRootResolver_DoesNotCacheMiss(t *testing.T) {
 	r := &gitRootResolver{}

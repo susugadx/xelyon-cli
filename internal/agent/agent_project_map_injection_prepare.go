@@ -20,13 +20,33 @@ type projectMapSourceResolveOptions struct {
 }
 
 func prepareProjectMapInjection(agent *Agent, input string) (projectMapInjectionContext, bool) {
-	sources, _, ok := resolveProjectMapInjectionSources(agent, projectMapSourceResolveOptions{
+	sources, reason, ok := resolveProjectMapInjectionSources(agent, projectMapSourceResolveOptions{
 		allowBundleLoad: true,
 	})
 	if !ok {
+		clearProjectMapStateForUnavailableSource(agent, reason)
 		return projectMapInjectionContext{}, false
 	}
 	return buildProjectMapInjectionContext(agent, input, sources)
+}
+
+func clearProjectMapStateForUnavailableSource(agent *Agent, reason projectPromptRefreshReason) {
+	if agent == nil {
+		return
+	}
+	if !isProjectMapSourceUnavailableReason(reason) {
+		return
+	}
+	agent.clearProjectMapState(false)
+}
+
+func isProjectMapSourceUnavailableReason(reason projectPromptRefreshReason) bool {
+	switch reason {
+	case refreshReasonProjectMapDisabled, refreshReasonRipgrepUnavailable, refreshReasonCWDUnavailable, refreshReasonProjectRootUnavailable:
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveProjectMapInjectionSources(agent *Agent, opts projectMapSourceResolveOptions) (projectMapInjectionSources, projectPromptRefreshReason, bool) {
@@ -51,6 +71,9 @@ func resolveProjectMapInjectionSources(agent *Agent, opts projectMapSourceResolv
 		bundle = agent.loadProjectInstructionBundleCached(false)
 	}
 	rootPath := resolveProjectMapSourceRootPathWithFallback(cwd, bundle, agent.projectMapRootPath)
+	if strings.TrimSpace(rootPath) == "" {
+		return projectMapInjectionSources{}, refreshReasonProjectRootUnavailable, false
+	}
 	ignorePatterns := resolveProjectMapIgnorePatterns(cfg, bundle)
 
 	return projectMapInjectionSources{

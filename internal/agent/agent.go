@@ -78,6 +78,13 @@ func (s *agentProjectPromptState) resetProjectMapState() {
 	if s == nil {
 		return
 	}
+	s.clearProjectMapState(true)
+}
+
+func (s *agentProjectPromptState) clearProjectMapState(dirty bool) {
+	if s == nil {
+		return
+	}
 	s.projectMap = nil
 	s.projectMapRootPath = ""
 	s.projectMapIgnoreKey = ""
@@ -88,7 +95,27 @@ func (s *agentProjectPromptState) resetProjectMapState() {
 	s.projectMapSection = ""
 	s.projectMapBaseKey = ""
 	s.projectMapFocusKey = ""
-	s.projectMapDirty = true
+	s.projectMapFileCount = 0
+	s.projectMapSymbolCount = 0
+	s.projectMapDirty = dirty
+}
+
+func (s *agentProjectPromptState) hasProjectMapState() bool {
+	if s == nil {
+		return false
+	}
+	return s.projectMap != nil ||
+		s.projectMapRootPath != "" ||
+		s.projectMapIgnoreKey != "" ||
+		s.projectMapStateKey != "" ||
+		len(s.projectMapWatchDirs) != 0 ||
+		s.projectMapBaseSection != "" ||
+		s.projectMapFocusSection != "" ||
+		s.projectMapSection != "" ||
+		s.projectMapBaseKey != "" ||
+		s.projectMapFocusKey != "" ||
+		s.projectMapFileCount != 0 ||
+		s.projectMapSymbolCount != 0
 }
 
 // Agent は CLI エージェントの高レベル owner。

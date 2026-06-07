@@ -41,6 +41,9 @@ func (m *PromptManager) ProjectPromptRefreshDecision(input string) projectPrompt
 		allowBundleLoad: false,
 	})
 	if !ok {
+		if isProjectMapSourceUnavailableReason(reason) && a.hasProjectMapState() {
+			return projectPromptRefreshDecision{NeedRefresh: true, Reason: reason}
+		}
 		return projectPromptRefreshDecision{Reason: reason}
 	}
 

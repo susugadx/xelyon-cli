@@ -17,17 +17,23 @@ func resolveProjectMapSourceCWD(agent *Agent) (string, bool) {
 	return cwd, true
 }
 
-func resolveProjectMapSourceRootPath(cwd string, bundle *config.ProjectInstructionBundle) string {
-	if bundle == nil || strings.TrimSpace(bundle.RootPath) == "" {
-		return cwd
+func resolveProjectMapSourceRootPath(_ string, bundle *config.ProjectInstructionBundle) string {
+	if bundle == nil {
+		return ""
 	}
-	return bundle.RootPath
+	if rootPath, ok := bundle.ProjectRootPath(); ok {
+		return rootPath
+	}
+	return ""
 }
 
 func resolveProjectMapSourceRootPathWithFallback(cwd string, bundle *config.ProjectInstructionBundle, fallbackRootPath string) string {
 	rootPath := resolveProjectMapSourceRootPath(cwd, bundle)
+	if strings.TrimSpace(rootPath) != "" {
+		return rootPath
+	}
 	if bundle == nil && strings.TrimSpace(fallbackRootPath) != "" {
 		return fallbackRootPath
 	}
-	return rootPath
+	return ""
 }

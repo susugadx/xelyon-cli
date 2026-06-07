@@ -82,6 +82,7 @@ func TestSaveAndSyncProjectConfigRefreshesProjectMapIgnorePatterns(t *testing.T)
 	if err := os.Chdir(projectDir); err != nil {
 		t.Fatalf("Chdir() error = %v", err)
 	}
+	markProjectMapTestRoot(t, projectDir)
 	if err := os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(main.go) error = %v", err)
 	}

@@ -596,6 +596,7 @@ func TestRunHeadlessWithConfig_ProjectMapAddsQueryFocusOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	nested := filepath.Join(root, "internal", "agent", "compress.go")
 	if err := os.MkdirAll(filepath.Dir(nested), 0755); err != nil {

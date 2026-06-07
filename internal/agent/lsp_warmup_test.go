@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 )
 
@@ -55,5 +56,33 @@ func TestLSPWarmupTargets_SkipsUnavailableAndDisabledServers(t *testing.T) {
 
 	if len(targets) != 0 {
 		t.Fatalf("lspWarmupTargets() = %#v, want no targets", targets)
+	}
+}
+
+func TestResolveLSPStartupProjectRoot_SkipsCwdFallback(t *testing.T) {
+	workdir := withTempWorkdir(t)
+	if err := os.WriteFile(filepath.Join(workdir, "main.go"), []byte("package main\n"), 0600); err != nil {
+		t.Fatalf("WriteFile(main.go) error = %v", err)
+	}
+
+	got, ok := resolveLSPStartupProjectRoot(config.DefaultConfig(), workdir)
+	if ok || got != "" {
+		t.Fatalf("resolveLSPStartupProjectRoot() = %q, %v; want empty, false", got, ok)
+	}
+}
+
+func TestResolveLSPStartupProjectRoot_UsesProjectConfigRoot(t *testing.T) {
+	root := withTempWorkdir(t)
+	subdir := filepath.Join(root, "nested")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "xelyon.yaml"), []byte("context: test\n"), 0600); err != nil {
+		t.Fatalf("WriteFile(xelyon.yaml) error = %v", err)
+	}
+
+	got, ok := resolveLSPStartupProjectRoot(config.DefaultConfig(), subdir)
+	if !ok || got != root {
+		t.Fatalf("resolveLSPStartupProjectRoot() = %q, %v; want %q, true", got, ok, root)
 	}
 }

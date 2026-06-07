@@ -9,7 +9,8 @@ import (
 // ProjectInstructionBundle は project instruction 注入用の統合データ。
 // xelyon.yaml の mandatory policy と AGENTS/CLAUDE guidance を分離して保持する。
 type ProjectInstructionBundle struct {
-	RootPath string
+	RootPath   string
+	RootSource ProjectInstructionRootSource
 
 	ProjectConfig *ProjectConfig
 
@@ -17,6 +18,45 @@ type ProjectInstructionBundle struct {
 	GlobalGuidance  []InstructionFile
 
 	WarningEntries []ProjectInstructionWarning
+}
+
+// ProjectInstructionRootSource は RootPath を決めた根拠を表す。
+type ProjectInstructionRootSource string
+
+const (
+	// ProjectInstructionRootSourceProjectConfig は xelyon.yaml の場所を root とした状態。
+	ProjectInstructionRootSourceProjectConfig ProjectInstructionRootSource = "project_config"
+	// ProjectInstructionRootSourceGit は Git repository root を root とした状態。
+	ProjectInstructionRootSourceGit ProjectInstructionRootSource = "git"
+	// ProjectInstructionRootSourceGuidance は project guidance ファイルの場所を root とした状態。
+	ProjectInstructionRootSourceGuidance ProjectInstructionRootSource = "guidance"
+	// ProjectInstructionRootSourceFallbackCWD は project root 根拠がなく cwd に fallback した状態。
+	ProjectInstructionRootSourceFallbackCWD ProjectInstructionRootSource = "fallback_cwd"
+)
+
+// HasProjectRoot は bundle が明示的な project root 根拠を持つかを返す。
+func (b *ProjectInstructionBundle) HasProjectRoot() bool {
+	if b == nil || strings.TrimSpace(b.RootPath) == "" {
+		return false
+	}
+	return b.RootSource.hasProjectRoot()
+}
+
+// ProjectRootPath は project-level scan に使ってよい root path を返す。
+func (b *ProjectInstructionBundle) ProjectRootPath() (string, bool) {
+	if !b.HasProjectRoot() {
+		return "", false
+	}
+	return b.RootPath, true
+}
+
+func (s ProjectInstructionRootSource) hasProjectRoot() bool {
+	switch s {
+	case ProjectInstructionRootSourceProjectConfig, ProjectInstructionRootSourceGit, ProjectInstructionRootSourceGuidance:
+		return true
+	default:
+		return false
+	}
 }
 
 // ProjectInstructionWarningCode は guidance 読み込み時の warning 種別。
@@ -79,9 +119,11 @@ func LoadProjectInstructionBundleForDir(cfg *Config, cwd string) (*ProjectInstru
 	}
 
 	gitRoot := findGitRoot(cwd)
+	root := resolveBundleRoot(cwd, projectCfg, gitRoot, cfgForLoad.AgentInstructions)
 	bundle := &ProjectInstructionBundle{
 		ProjectConfig: projectCfg,
-		RootPath:      resolveBundleRootPath(cwd, projectCfg, gitRoot, cfgForLoad.AgentInstructions),
+		RootPath:      root.RootPath,
+		RootSource:    root.Source,
 	}
 
 	mode := normalizeAgentInstructionProjectMode(cfgForLoad.AgentInstructions.Project.Mode)

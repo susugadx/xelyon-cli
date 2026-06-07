@@ -15,21 +15,59 @@ type gitRootResolver struct {
 
 var defaultGitRootResolver gitRootResolver
 
+type projectInstructionRootResolution struct {
+	RootPath string
+	Source   ProjectInstructionRootSource
+}
+
 func loadProjectConfigForDir(cwd string) (*ProjectConfig, error) {
 	return LoadProjectConfigForDirWithError(cwd)
 }
 
-func resolveBundleRootPath(cwd string, projectCfg *ProjectConfig, gitRoot string, aiCfg AgentInstructionsConfig) string {
+// ResolveProjectInstructionProjectRootForDir は project-level scan に使ってよい root path を返す。
+func ResolveProjectInstructionProjectRootForDir(cfg *Config, cwd string) (string, bool) {
+	if strings.TrimSpace(cwd) == "" {
+		return "", false
+	}
+	cfgForLoad := cfg
+	if cfgForLoad == nil {
+		cfgForLoad = DefaultConfig()
+	}
+	projectCfg, err := loadProjectConfigForDir(cwd)
+	if err != nil {
+		return "", false
+	}
+	gitRoot := findGitRoot(cwd)
+	root := resolveBundleRoot(cwd, projectCfg, gitRoot, cfgForLoad.AgentInstructions)
+	if !root.Source.hasProjectRoot() || strings.TrimSpace(root.RootPath) == "" {
+		return "", false
+	}
+	return root.RootPath, true
+}
+
+func resolveBundleRoot(cwd string, projectCfg *ProjectConfig, gitRoot string, aiCfg AgentInstructionsConfig) projectInstructionRootResolution {
 	if projectCfg != nil && strings.TrimSpace(projectCfg.FilePath) != "" {
-		return filepath.Dir(projectCfg.FilePath)
+		return projectInstructionRootResolution{
+			RootPath: filepath.Dir(projectCfg.FilePath),
+			Source:   ProjectInstructionRootSourceProjectConfig,
+		}
 	}
 	if gitRoot != "" {
-		return gitRoot
+		return projectInstructionRootResolution{
+			RootPath: gitRoot,
+			Source:   ProjectInstructionRootSourceGit,
+		}
 	}
 	if guidanceRoot := findGuidanceRootUpward(cwd, aiCfg.Project.Files, aiCfg.IncludeLocalFiles); guidanceRoot != "" {
-		return guidanceRoot
+		return projectInstructionRootResolution{
+			RootPath: guidanceRoot,
+			Source:   ProjectInstructionRootSourceGuidance,
+		}
 	}
-	return cwd
+	return projectInstructionRootResolution{
+		RootPath: cwd,
+		Source:   ProjectInstructionRootSourceFallbackCWD,
+	}
 }
 
 func findGuidanceRootUpward(cwd string, files []string, includeLocal bool) string {

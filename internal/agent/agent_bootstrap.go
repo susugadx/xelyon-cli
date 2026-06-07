@@ -50,7 +50,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	storage := newAgentHistoryStorage(out)
 	changeStorage := newAgentChangeStorage(out)
 	mcpManager := setupMCPManager(cfg, headless, out, errOut, runtime.effectiveRegistry())
-	lspClient := newAgentLSPClient(cfg, errOut)
+	lspClient := newAgentLSPClient(cfg, runtime.effectiveInvocationCWD(), errOut)
 	providerRuntimeName := providerRuntimeNameFromProvider(provider)
 	providerConfigKey := providerConfigKeyFromProvider(provider)
 	toolVisibility := resolveToolVisibilityPolicyWithConfig(providerRuntimeName, model, cfg, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
@@ -154,17 +154,26 @@ func buildAgentSystemPrompt(provider api.Provider, model string, cfg *config.Con
 	return prompt.BuildProviderSystemPromptWithConfig(systemPrompt, providerName, model, cfg)
 }
 
-func newAgentLSPClient(cfg *config.Config, errOut io.Writer) *lsp.Client {
+func newAgentLSPClient(cfg *config.Config, invocationCWD string, errOut io.Writer) *lsp.Client {
 	if cfg == nil || !cfg.LSP.Enabled {
 		return nil
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil
+	cwd := invocationCWD
+	if cwd == "" {
+		var err error
+		cwd, err = os.Getwd()
+		if err != nil {
+			return nil
+		}
+	}
+	clientRoot := cwd
+	warmupRoot, hasProjectRoot := resolveLSPStartupProjectRoot(cfg, cwd)
+	if hasProjectRoot {
+		clientRoot = warmupRoot
 	}
 
-	client := lsp.NewClient(cwd)
+	client := lsp.NewClient(clientRoot)
 	client.SetOutput(errOut)
 	client.SetErrorOutput(errOut)
 
@@ -178,11 +187,15 @@ func newAgentLSPClient(cfg *config.Config, errOut io.Writer) *lsp.Client {
 	}
 	client.SetConfigs(servers)
 
-	if !shouldSkipLSPWarmup() {
-		go warmupLSPClient(client, cwd, servers, errOut)
+	if hasProjectRoot && !shouldSkipLSPWarmup() {
+		go warmupLSPClient(client, warmupRoot, servers, errOut)
 	}
 
 	return client
+}
+
+func resolveLSPStartupProjectRoot(cfg *config.Config, cwd string) (string, bool) {
+	return config.ResolveProjectInstructionProjectRootForDir(cfg, cwd)
 }
 
 func setUsageReporter(agent *Agent, provider api.Provider) {

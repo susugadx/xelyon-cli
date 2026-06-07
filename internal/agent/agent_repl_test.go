@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -30,6 +31,13 @@ func testProjectMapHasFile(agent *Agent, relPath string) bool {
 		}
 	}
 	return false
+}
+
+func markProjectMapTestRoot(t *testing.T, root string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(root, "xelyon.yaml"), []byte("context: test\n"), 0644); err != nil {
+		t.Fatalf("WriteFile(xelyon.yaml) error = %v", err)
+	}
 }
 
 func TestCheckRipgrepAvailability_NoRg(t *testing.T) {
@@ -89,6 +97,7 @@ func TestInjectProjectMap_AppendsProjectManifestAndKeepsFullRuntimeMap(t *testin
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc Build() {}\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -154,6 +163,7 @@ func TestInjectProjectMap_AddsFocusOverlayForNestedInputPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	nested := filepath.Join(root, "internal", "agent", "compress.go")
 	if err := os.MkdirAll(filepath.Dir(nested), 0755); err != nil {
@@ -198,6 +208,7 @@ func TestInjectProjectMap_ExcludesImportPathFromFocusOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -238,6 +249,7 @@ func TestInjectProjectMap_DoesNotUseRecentToolPathsForFocusOverlay(t *testing.T)
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	recentRead := filepath.Join(root, "pkg", "recent_read.go")
 	recentEdit := filepath.Join(root, "pkg", "recent_edit.go")
@@ -295,6 +307,7 @@ func TestRefreshProjectPrompt_ReusesCachedProjectMapWithoutRelogging(t *testing.
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc Build() {}\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -344,6 +357,7 @@ func TestRefreshProjectPrompt_UpdatesOnlyFocusOverlayWhenQueryChanges(t *testing
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	mainPath := filepath.Join(root, "main.go")
 	nestedPath := filepath.Join(root, "internal", "agent", "compress.go")
@@ -510,6 +524,7 @@ func TestRefreshProjectPrompt_ProjectMapStaysInDynamicSystemBlock(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc Build() {}\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -656,6 +671,7 @@ func TestRefreshProjectPrompt_RebuildsProjectMapWhenNonGitNestedFileAdded(t *tes
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	if err := os.MkdirAll(filepath.Join(root, "pkg"), 0755); err != nil {
 		t.Fatal(err)
@@ -686,6 +702,126 @@ func TestRefreshProjectPrompt_RebuildsProjectMapWhenNonGitNestedFileAdded(t *tes
 	}
 	if !testProjectMapHasFile(agent, "pkg/extra.go") {
 		t.Fatalf("expected runtime project map to include pkg/extra.go")
+	}
+}
+
+func TestRefreshProjectPrompt_ClearsProjectMapStateWhenProjectRootDisappears(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
+
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	agent := &Agent{
+		Runtime:      runtime,
+		SystemPrompt: "base prompt",
+		CurrentModel: "deepseek-chat",
+	}
+
+	injectProjectMap(agent, "")
+	if agent.projectMap == nil {
+		t.Fatal("expected initial project map")
+	}
+	if agent.projectMapRootPath != root {
+		t.Fatalf("initial projectMapRootPath = %q, want %q", agent.projectMapRootPath, root)
+	}
+	if !strings.Contains(agent.SystemPrompt, "## Project Map") {
+		t.Fatalf("expected initial prompt to include project map:\n%s", agent.SystemPrompt)
+	}
+
+	if err := os.Remove(filepath.Join(root, "xelyon.yaml")); err != nil {
+		t.Fatal(err)
+	}
+
+	agent.refreshProjectPrompt("main.go を見て")
+	execCtx := agent.toolExecutionContext(context.Background(), nil, nil, nil)
+
+	if strings.Contains(agent.SystemPrompt, "## Project Map") {
+		t.Fatalf("expected prompt project map to be stripped after root disappears:\n%s", agent.SystemPrompt)
+	}
+	if agent.projectMap != nil {
+		t.Fatal("expected stale runtime project map to be cleared")
+	}
+	if agent.projectMapRootPath != "" || agent.projectMapStateKey != "" || len(agent.projectMapWatchDirs) != 0 {
+		t.Fatalf("expected project map runtime roots to be cleared, root=%q state=%q watch=%v", agent.projectMapRootPath, agent.projectMapStateKey, agent.projectMapWatchDirs)
+	}
+	if agent.projectMapFileCount != 0 || agent.projectMapSymbolCount != 0 {
+		t.Fatalf("expected project map counters to be cleared, files=%d symbols=%d", agent.projectMapFileCount, agent.projectMapSymbolCount)
+	}
+	if agent.projectMapDirty {
+		t.Fatal("expected unavailable project map state not to stay dirty")
+	}
+	if execCtx.ProjectMap != nil || execCtx.ProjectMapRootPath != "" || execCtx.ProjectMapStateKey != "" {
+		t.Fatalf("expected tool execution context not to expose stale project map, root=%q state=%q map=%v", execCtx.ProjectMapRootPath, execCtx.ProjectMapStateKey, execCtx.ProjectMap)
+	}
+}
+
+func TestRefreshProjectPromptIfDirty_ClearsProjectMapStateWhenProjectMapDisabled(t *testing.T) {
+	common.ResetRipgrepAvailabilityForTest()
+	t.Cleanup(common.ResetRipgrepAvailabilityForTest)
+
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("ripgrep (rg) not available")
+	}
+
+	root := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
+
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
+	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	agent := &Agent{
+		Runtime:      runtime,
+		SystemPrompt: "base prompt",
+		CurrentModel: "deepseek-chat",
+	}
+
+	injectProjectMap(agent, "")
+	if agent.projectMap == nil {
+		t.Fatal("expected initial project map")
+	}
+	agent.cfg().ProjectMap.Enabled = false
+	agent.refreshProjectPromptIfDirty("main.go を見て")
+
+	if strings.Contains(agent.SystemPrompt, "## Project Map") {
+		t.Fatalf("expected prompt project map to be stripped after project map is disabled:\n%s", agent.SystemPrompt)
+	}
+	if agent.projectMap != nil || agent.projectMapRootPath != "" || agent.projectMapStateKey != "" {
+		t.Fatalf("expected disabled project map to clear runtime state, root=%q state=%q map=%v", agent.projectMapRootPath, agent.projectMapStateKey, agent.projectMap)
+	}
+	if agent.projectMapDirty {
+		t.Fatal("expected disabled project map state not to stay dirty")
 	}
 }
 
@@ -774,6 +910,7 @@ func TestRefreshProjectPromptIfDirty_RebuildsProjectMapAfterToolMutation(t *test
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+	markProjectMapTestRoot(t, root)
 
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0644); err != nil {
 		t.Fatal(err)

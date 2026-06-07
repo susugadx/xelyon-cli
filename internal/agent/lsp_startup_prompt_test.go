@@ -16,6 +16,21 @@ import (
 
 func newLSPStartupPromptTestAgent(t *testing.T, workdir string, cfgServers map[string]lsp.ServerConfig) (*Agent, *bytes.Buffer) {
 	t.Helper()
+	return newLSPStartupPromptTestAgentWithProjectMarker(t, workdir, cfgServers, true)
+}
+
+func newLSPStartupPromptTestAgentWithoutProjectRoot(t *testing.T, workdir string, cfgServers map[string]lsp.ServerConfig) (*Agent, *bytes.Buffer) {
+	t.Helper()
+	return newLSPStartupPromptTestAgentWithProjectMarker(t, workdir, cfgServers, false)
+}
+
+func newLSPStartupPromptTestAgentWithProjectMarker(t *testing.T, workdir string, cfgServers map[string]lsp.ServerConfig, markProjectRoot bool) (*Agent, *bytes.Buffer) {
+	t.Helper()
+	if markProjectRoot {
+		if err := os.WriteFile(filepath.Join(workdir, "xelyon.yaml"), []byte("context: test\n"), 0600); err != nil {
+			t.Fatalf("WriteFile(xelyon.yaml) error = %v", err)
+		}
+	}
 
 	var out bytes.Buffer
 	cfg := newProjectMapDisabledConfig()
@@ -116,6 +131,25 @@ func TestCheckLSPInstallPrompt_SkipsWhenLSPDisabled(t *testing.T) {
 
 	if out.Len() != 0 {
 		t.Fatalf("expected no output when lsp.enabled is false, got:\n%s", out.String())
+	}
+}
+
+func TestCheckLSPInstallPrompt_SkipsWithoutProjectRoot(t *testing.T) {
+	disableColors(t)
+
+	workdir := withTempWorkdir(t)
+	if err := os.WriteFile(filepath.Join(workdir, "main.go"), []byte("package main\n"), 0600); err != nil {
+		t.Fatalf("WriteFile(main.go) error = %v", err)
+	}
+
+	agent, out := newLSPStartupPromptTestAgentWithoutProjectRoot(t, workdir, map[string]lsp.ServerConfig{
+		"go": {Command: "xelyon-missing-gopls"},
+	})
+
+	checkLSPInstallPrompt(agent, commandcatalog.CommandSurfaceClassic)
+
+	if out.Len() != 0 {
+		t.Fatalf("expected no output without project root, got:\n%s", out.String())
 	}
 }
 

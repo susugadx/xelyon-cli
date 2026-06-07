@@ -11,14 +11,17 @@ func TestResolveProjectMapSourceRootPath_UsesBundleRoot(t *testing.T) {
 	cwd := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "workspace"))
 	rootPath := filepath.Join(cwd, "nested")
 
-	got := resolveProjectMapSourceRootPath(cwd, &config.ProjectInstructionBundle{RootPath: rootPath})
+	got := resolveProjectMapSourceRootPath(cwd, &config.ProjectInstructionBundle{
+		RootPath:   rootPath,
+		RootSource: config.ProjectInstructionRootSourceGit,
+	})
 	want := rootPath
 	if got != want {
 		t.Fatalf("resolveProjectMapSourceRootPath() = %q, want %q", got, want)
 	}
 }
 
-func TestResolveProjectMapSourceRootPath_FallsBackToCWD(t *testing.T) {
+func TestResolveProjectMapSourceRootPath_SkipsWithoutProjectRoot(t *testing.T) {
 	cwd := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "workspace"))
 
 	tests := []struct {
@@ -27,13 +30,14 @@ func TestResolveProjectMapSourceRootPath_FallsBackToCWD(t *testing.T) {
 	}{
 		{name: "nil bundle", b: nil},
 		{name: "blank root path", b: &config.ProjectInstructionBundle{RootPath: "   "}},
+		{name: "cwd fallback", b: &config.ProjectInstructionBundle{RootPath: cwd, RootSource: config.ProjectInstructionRootSourceFallbackCWD}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := resolveProjectMapSourceRootPath(cwd, tt.b)
-			if got != cwd {
-				t.Fatalf("resolveProjectMapSourceRootPath() = %q, want %q", got, cwd)
+			if got != "" {
+				t.Fatalf("resolveProjectMapSourceRootPath() = %q, want empty root", got)
 			}
 		})
 	}
@@ -54,7 +58,10 @@ func TestResolveProjectMapSourceRootPathWithFallback_PrefersBundleRootPath(t *te
 	bundleRootPath := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "project"))
 	fallbackRootPath := filepath.Clean(filepath.Join(string(filepath.Separator), "tmp", "workspace-root"))
 
-	got := resolveProjectMapSourceRootPathWithFallback(cwd, &config.ProjectInstructionBundle{RootPath: bundleRootPath}, fallbackRootPath)
+	got := resolveProjectMapSourceRootPathWithFallback(cwd, &config.ProjectInstructionBundle{
+		RootPath:   bundleRootPath,
+		RootSource: config.ProjectInstructionRootSourceProjectConfig,
+	}, fallbackRootPath)
 	if got != bundleRootPath {
 		t.Fatalf("resolveProjectMapSourceRootPathWithFallback() = %q, want %q", got, bundleRootPath)
 	}

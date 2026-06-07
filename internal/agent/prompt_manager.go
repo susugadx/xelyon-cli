@@ -34,17 +34,18 @@ type systemPromptRebuildRequest struct {
 type projectPromptRefreshReason string
 
 const (
-	refreshReasonNoAgent              projectPromptRefreshReason = "no_agent"
-	refreshReasonDirtyFlag            projectPromptRefreshReason = "dirty_flag"
-	refreshReasonInstructionChanged   projectPromptRefreshReason = "instruction_changed"
-	refreshReasonProjectMapDisabled   projectPromptRefreshReason = "project_map_disabled"
-	refreshReasonRipgrepUnavailable   projectPromptRefreshReason = "ripgrep_unavailable"
-	refreshReasonCWDUnavailable       projectPromptRefreshReason = "cwd_unavailable"
-	refreshReasonStateKeyChanged      projectPromptRefreshReason = "state_key_changed"
-	refreshReasonBaseKeyChanged       projectPromptRefreshReason = "base_key_changed"
-	refreshReasonFocusKeyChanged      projectPromptRefreshReason = "focus_key_changed"
-	refreshReasonMissingCachedSection projectPromptRefreshReason = "missing_cached_section"
-	refreshReasonNoChange             projectPromptRefreshReason = "no_change"
+	refreshReasonNoAgent                projectPromptRefreshReason = "no_agent"
+	refreshReasonDirtyFlag              projectPromptRefreshReason = "dirty_flag"
+	refreshReasonInstructionChanged     projectPromptRefreshReason = "instruction_changed"
+	refreshReasonProjectMapDisabled     projectPromptRefreshReason = "project_map_disabled"
+	refreshReasonRipgrepUnavailable     projectPromptRefreshReason = "ripgrep_unavailable"
+	refreshReasonCWDUnavailable         projectPromptRefreshReason = "cwd_unavailable"
+	refreshReasonProjectRootUnavailable projectPromptRefreshReason = "project_root_unavailable"
+	refreshReasonStateKeyChanged        projectPromptRefreshReason = "state_key_changed"
+	refreshReasonBaseKeyChanged         projectPromptRefreshReason = "base_key_changed"
+	refreshReasonFocusKeyChanged        projectPromptRefreshReason = "focus_key_changed"
+	refreshReasonMissingCachedSection   projectPromptRefreshReason = "missing_cached_section"
+	refreshReasonNoChange               projectPromptRefreshReason = "no_change"
 )
 
 type projectPromptRefreshDecision struct {
