@@ -469,7 +469,9 @@ final_checks:
 
 ## 開発に参加する
 
-xelyon-cli の開発に参加したい方向け：
+### 開発版をビルドして試す
+
+xelyon-cli の開発版をその場で試す場合は、リポジトリルートでビルドして起動します。
 
 ```bash
 git clone https://github.com/susugadx/xelyon-cli.git
@@ -477,6 +479,32 @@ cd xelyon-cli
 make build
 ./xelyon
 ```
+
+`make build` は `go.mod` があるリポジトリルートで実行してください。`./xelyon` はこのディレクトリ内のビルド済みバイナリを直接起動します。
+
+### 開発版を普段使いする
+
+別のプロジェクトや任意のディレクトリから開発版を使いたい場合は、ビルド済みバイナリを PATH 上に配置します。
+
+```bash
+cd ~/dev/projects/xelyon-cli
+make build
+install -m 755 xelyon ~/.local/bin/xelyon
+hash -r
+which xelyon
+```
+
+`which xelyon` が `~/.local/bin/xelyon` を指していれば、どのディレクトリからでも `xelyon` で開発版を起動できます。
+
+安定版と分けたい場合は、別名で配置します。
+
+```bash
+install -m 755 xelyon ~/.local/bin/xelyon-dev
+```
+
+更新したソースを使うには、再度 `make build` と `install` を実行してください。
+
+`go: go.mod file not found` が出る場合は、`go build` を別ディレクトリで実行しています。`cd xelyon-cli` してから `make build` を実行してください。
 
 > ⚠️ このリポジトリの `xelyon.yaml` は xelyon-cli 開発用です。
 
