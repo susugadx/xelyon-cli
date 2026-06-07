@@ -266,6 +266,8 @@ xelyon
 
 `/review` は現在の作業ツリー差分全体をレビューします。通常は現在の provider/model を使いますが、`review.provider` と `review.model` を設定すると `/review` だけ別の provider/model で実行できます。`review.provider` だけを設定した場合はその provider の既定モデルを使い、`review.model` を設定する場合は `review.provider` も必須です。review モデル呼び出しには通常会話履歴を渡しません。
 
+`review.thinking.mode` は `/review` の thinking 方針です。既定の `inherit` は現在の `/thinking` 状態を引き継ぎます。`off` は `/review` だけ thinking を無効化し、`on` は `/review` だけ thinking を有効化します。`review.thinking.level` は `low` / `medium` / `high` / `xhigh` を指定でき、空の場合は現在の `/thinking` level を使います。
+
 preset の `Review current changes` は追加指示なしの通常レビューで、`Review current changes with custom focus` は同じ current changes 全体に追加の観点・重点項目を渡します。custom focus は対象ファイルや差分範囲を絞るものではありません。特定 finding だけの再検証や focused verification mode はまだ未実装です。
 
 `/review` は `evidence -> probe plan -> probe results -> report -> saturation` の段階を持つ監査可能な review harness です。Go-first の evidence augmentation を使いつつ、共通 harness は全言語で雑な clean 判定を抑制します。`XELYON_REVIEW_RUN_ARTIFACTS=1` を設定すると、各段階の debug artifact を実行中はメモリに保持し、終了後にリポジトリ配下の `.xelyon/review-runs/<UTC timestamp>/` へ保存します。保存先 component が symlink の場合は repo 外へ書かず warning にします。artifact には evidence や probe output が含まれ得るため、必要な場合だけ明示的に有効化してください。

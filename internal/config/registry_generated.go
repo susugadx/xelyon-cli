@@ -27,7 +27,7 @@ type CategoryDef struct {
 // CategoryDefinitions はカテゴリ定義リスト
 var CategoryDefinitions = []CategoryDef{
 	{Name: "provider", DisplayName: "Provider & Model", Icon: "🤖", Fields: []string{"default_model", "default_provider", "gemini.service_tier", "provider_models"}},
-	{Name: "review", DisplayName: "Review", Icon: "🔎", Fields: []string{"review.model", "review.provider", "review.web_search_evidence.enabled", "review.web_search_evidence.max_queries", "review.web_search_evidence.max_results_per_query"}},
+	{Name: "review", DisplayName: "Review", Icon: "🔎", Fields: []string{"review.model", "review.provider", "review.thinking.level", "review.thinking.mode", "review.web_search_evidence.enabled", "review.web_search_evidence.max_queries", "review.web_search_evidence.max_results_per_query"}},
 	{Name: "general", DisplayName: "General", Icon: "⚙️", Fields: []string{"general.ui_language"}},
 	{Name: "execution", DisplayName: "Execution Mode", Icon: "🛡️", Fields: []string{"execution.always_confirm", "execution.mode", "execution.safe_shell_commands"}},
 	{Name: "compression", DisplayName: "Compression", Icon: "📦", Fields: []string{"compression.enabled", "compression.keep_recent", "compression.trigger_percent"}},
@@ -90,6 +90,8 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"provider_models":                                  FieldTypeStructMap,
 	"review.model":                                     FieldTypeString,
 	"review.provider":                                  FieldTypeSelect,
+	"review.thinking.level":                            FieldTypeSelect,
+	"review.thinking.mode":                             FieldTypeSelect,
 	"review.web_search_evidence.enabled":               FieldTypeBool,
 	"review.web_search_evidence.max_queries":           FieldTypeInt,
 	"review.web_search_evidence.max_results_per_query": FieldTypeInt,
@@ -115,6 +117,8 @@ var SelectOptions = map[string][]string{
 	"provider_history_reduction.raw_output_artifacts.mode":      {"off", "dry_run", "apply"},
 	"provider_history_reduction.raw_output_artifacts.retention": {"session"},
 	"review.provider":                                           {"", "deepseek", "kimi", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"review.thinking.level":                                     {"", "low", "medium", "high", "xhigh"},
+	"review.thinking.mode":                                      {"inherit", "off", "on"},
 	"sub_agent.default_effort":                                  {"off", "low", "medium", "high"},
 	"web_search.provider":                                       {"kimi", "moonshot", "openai", "gemini", "claude", "anthropic"},
 }
@@ -166,6 +170,8 @@ var FieldDescriptions = map[string]string{
 	"provider_models":                                  "プロバイダーごとのモデル設定",
 	"review.model":                                     "/review 専用モデル（provider 設定時のみ有効。空で provider の既定モデル）",
 	"review.provider":                                  "/review 専用プロバイダー（空で現在の provider/model を使用）",
+	"review.thinking.level":                            "/review の thinking level override（空で現在の /thinking level を使用）",
+	"review.thinking.mode":                             "/review の thinking override（inherit=現在の /thinking 状態、off=review だけ無効、on=review だけ有効）",
 	"review.web_search_evidence.enabled":               "/review の外部 Web 検索 evidence を有効化（初期検索 + Pass1 後の追加検索。raw result は discovery-only、fetch 済み external_doc snippet は citation-capable。デフォルト: false。XELYON_REVIEW_WEB_SEARCH=1 でも有効化）",
 	"review.web_search_evidence.max_queries":           "外部 Web 検索 evidence の最大クエリ数（初期検索 + Pass1 後追加検索の合計。デフォルト: 3）",
 	"review.web_search_evidence.max_results_per_query": "外部 Web 検索 evidence の 1 クエリあたり最大結果数（デフォルト: 3）",

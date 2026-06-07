@@ -60,7 +60,26 @@ type Config struct {
 type ReviewConfig struct {
 	Provider          string                        `yaml:"provider"` // /review 専用プロバイダー。空なら現在の provider/model を使う。
 	Model             string                        `yaml:"model"`    // /review 専用モデル。provider 設定時のみ有効。空なら provider の既定モデルを使う。
+	Thinking          ReviewThinkingConfig          `yaml:"thinking"` // /review の thinking override。mode=inherit なら現在の /thinking 状態を使う。
 	WebSearchEvidence ReviewWebSearchEvidenceConfig `yaml:"web_search_evidence"`
+}
+
+// ReviewThinkingMode は /review の thinking override 方針。
+type ReviewThinkingMode string
+
+const (
+	// ReviewThinkingModeInherit は現在の /thinking 状態を /review に引き継ぐ。
+	ReviewThinkingModeInherit ReviewThinkingMode = "inherit"
+	// ReviewThinkingModeOff は /review で thinking を無効化する。
+	ReviewThinkingModeOff ReviewThinkingMode = "off"
+	// ReviewThinkingModeOn は /review で thinking を有効化する。
+	ReviewThinkingModeOn ReviewThinkingMode = "on"
+)
+
+// ReviewThinkingConfig は /review の thinking override 設定。
+type ReviewThinkingConfig struct {
+	Mode  ReviewThinkingMode `yaml:"mode"`  // inherit/off/on。inherit は現在の /thinking 状態を引き継ぐ。
+	Level string             `yaml:"level"` // low/medium/high/xhigh。空なら現在の /thinking level を使う。
 }
 
 // ReviewWebSearchEvidenceConfig は /review の外部 Web 検索 evidence 収集設定。

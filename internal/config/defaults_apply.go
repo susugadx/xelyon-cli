@@ -45,6 +45,7 @@ func applyNestedSectionDefaults(cfg *Config, defaults *Config, options defaultAp
 type nestedDefaultApplier func(cfg *Config, defaults *Config, options defaultApplyOptions)
 
 var nestedDefaultAppliers = []nestedDefaultApplier{
+	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyReviewDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyLoopDetectionDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyAPIRetryDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyCompressionDefaults(cfg, defaults) },
@@ -62,6 +63,12 @@ var nestedDefaultAppliers = []nestedDefaultApplier{
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) {
 		applyAgentInstructionDefaults(cfg, defaults)
 	},
+}
+
+func applyReviewDefaults(cfg *Config, defaults *Config) {
+	if strings.TrimSpace(string(cfg.Review.Thinking.Mode)) == "" {
+		cfg.Review.Thinking.Mode = defaults.Review.Thinking.Mode
+	}
 }
 
 func applyLoopDetectionDefaults(cfg *Config, defaults *Config) {

@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"reflect"
+	"strings"
+)
 
 type registryFieldResolver struct {
 	current *Config
@@ -61,6 +64,10 @@ func registryFieldType(fieldPath string) ConfigFieldType {
 
 func buildRegistryField(meta registryFieldMeta, resolver registryFieldResolver) ConfigField {
 	currentVal, defaultVal := resolver.resolve(meta.path)
+	if meta.fieldType == FieldTypeSelect {
+		currentVal = normalizeSelectRegistryValue(currentVal)
+		defaultVal = normalizeSelectRegistryValue(defaultVal)
+	}
 	return ConfigField{
 		Path:        meta.path,
 		DisplayName: meta.displayName,
@@ -71,6 +78,17 @@ func buildRegistryField(meta registryFieldMeta, resolver registryFieldResolver) 
 		Current:     currentVal,
 		Default:     defaultVal,
 	}
+}
+
+func normalizeSelectRegistryValue(value interface{}) interface{} {
+	if value == nil {
+		return ""
+	}
+	rv := reflect.ValueOf(value)
+	if rv.IsValid() && rv.Kind() == reflect.String {
+		return rv.String()
+	}
+	return value
 }
 
 func buildConfigCategory(catDef CategoryDef, resolver registryFieldResolver) ConfigCategory {

@@ -144,6 +144,7 @@ type configAutoFixer func(*Config, any) bool
 var configAutoFixers = map[string]configAutoFixer{
 	"default_provider":                                     stringAutoFixer(func(cfg *Config, v string) { cfg.DefaultProvider = v }),
 	"review.provider":                                      stringAutoFixer(func(cfg *Config, v string) { cfg.Review.Provider = v }),
+	"review.thinking.mode":                                 stringAutoFixer(func(cfg *Config, v string) { cfg.Review.Thinking.Mode = ReviewThinkingMode(v) }),
 	"provider_history_reduction.mode":                      providerHistoryReductionModeAutoFixer(),
 	"provider_history_reduction.raw_output_artifacts.mode": providerHistoryRawOutputArtifactsModeAutoFixer(),
 	"provider_history_reduction.raw_output_artifacts.max_artifact_bytes":  intAutoFixer(func(cfg *Config, v int) { cfg.ProviderHistoryReduction.RawOutputArtifacts.MaxArtifactBytes = v }),

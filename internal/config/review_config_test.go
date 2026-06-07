@@ -15,6 +15,12 @@ func TestDefaultConfig_ReviewConfigUsesCurrentProviderByDefault(t *testing.T) {
 	if cfg.Review.Model != "" {
 		t.Fatalf("Review.Model = %q, want empty", cfg.Review.Model)
 	}
+	if cfg.Review.Thinking.Mode != ReviewThinkingModeInherit {
+		t.Fatalf("Review.Thinking.Mode = %q, want inherit", cfg.Review.Thinking.Mode)
+	}
+	if cfg.Review.Thinking.Level != "" {
+		t.Fatalf("Review.Thinking.Level = %q, want empty", cfg.Review.Thinking.Level)
+	}
 	if cfg.Review.WebSearchEvidence.Enabled {
 		t.Fatal("Review.WebSearchEvidence.Enabled = true, want false")
 	}
@@ -31,6 +37,10 @@ func TestReviewConfigYAMLRoundTrip(t *testing.T) {
 	cfg.Review = ReviewConfig{
 		Provider: "claude",
 		Model:    "claude-sonnet-4-6",
+		Thinking: ReviewThinkingConfig{
+			Mode:  ReviewThinkingModeOn,
+			Level: "high",
+		},
 		WebSearchEvidence: ReviewWebSearchEvidenceConfig{
 			Enabled:            true,
 			MaxQueries:         2,
@@ -54,6 +64,12 @@ func TestReviewConfigYAMLRoundTrip(t *testing.T) {
 	if got.Review.Model != "claude-sonnet-4-6" {
 		t.Fatalf("Review.Model = %q, want claude-sonnet-4-6", got.Review.Model)
 	}
+	if got.Review.Thinking.Mode != ReviewThinkingModeOn {
+		t.Fatalf("Review.Thinking.Mode = %q, want on", got.Review.Thinking.Mode)
+	}
+	if got.Review.Thinking.Level != "high" {
+		t.Fatalf("Review.Thinking.Level = %q, want high", got.Review.Thinking.Level)
+	}
 	if !got.Review.WebSearchEvidence.Enabled {
 		t.Fatal("Review.WebSearchEvidence.Enabled = false, want true")
 	}
@@ -62,6 +78,29 @@ func TestReviewConfigYAMLRoundTrip(t *testing.T) {
 	}
 	if got.Review.WebSearchEvidence.MaxResultsPerQuery != 4 {
 		t.Fatalf("Review.WebSearchEvidence.MaxResultsPerQuery = %d, want 4", got.Review.WebSearchEvidence.MaxResultsPerQuery)
+	}
+}
+
+func TestApplyDefaults_ReviewThinkingModeDefaultsToInherit(t *testing.T) {
+	tests := []struct {
+		name string
+		mode ReviewThinkingMode
+	}{
+		{name: "unset", mode: ""},
+		{name: "blank", mode: "   "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			cfg.Review.Thinking.Mode = tt.mode
+
+			applyDefaults(cfg)
+
+			if cfg.Review.Thinking.Mode != ReviewThinkingModeInherit {
+				t.Fatalf("Review.Thinking.Mode = %q, want inherit", cfg.Review.Thinking.Mode)
+			}
+		})
 	}
 }
 
@@ -99,6 +138,99 @@ func TestValidateConfig_ReviewProviderRejectsUnknown(t *testing.T) {
 	}
 	if !validationIssuesContain(result.Issues, "review.provider", "無効") {
 		t.Fatalf("issues = %#v, want review.provider invalid error", result.Issues)
+	}
+}
+
+func TestValidateConfig_ReviewThinkingRejectsInvalidMode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Review.Thinking.Mode = "auto"
+
+	result := ValidateConfig(cfg)
+	if result.Valid {
+		t.Fatal("ValidateConfig() valid = true, want false")
+	}
+	if !validationIssuesContain(result.Issues, "review.thinking.mode", "inherit/off/on") {
+		t.Fatalf("issues = %#v, want review.thinking.mode invalid error", result.Issues)
+	}
+}
+
+func TestValidateConfig_ReviewThinkingRejectsInvalidLevel(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Review.Thinking.Level = "max"
+
+	result := ValidateConfig(cfg)
+	if result.Valid {
+		t.Fatal("ValidateConfig() valid = true, want false")
+	}
+	if !validationIssuesContain(result.Issues, "review.thinking.level", "low/medium/high/xhigh") {
+		t.Fatalf("issues = %#v, want review.thinking.level invalid error", result.Issues)
+	}
+}
+
+func TestValidateConfig_ReviewThinkingAllowsEmptyLevel(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Review.Thinking = ReviewThinkingConfig{
+		Mode:  ReviewThinkingModeOn,
+		Level: "",
+	}
+
+	result := ValidateConfig(cfg)
+	if !result.Valid {
+		t.Fatalf("ValidateConfig() valid = false, issues = %#v", result.Issues)
+	}
+}
+
+func TestResolveReviewThinkingConfigAppliesLevelOverrideForInherit(t *testing.T) {
+	base := ThinkingConfig{Enabled: true, Level: "low"}
+	review := ReviewThinkingConfig{
+		Mode:  ReviewThinkingModeInherit,
+		Level: "HIGH",
+	}
+
+	got := ResolveReviewThinkingConfig(base, review)
+
+	if !got.Enabled {
+		t.Fatal("Enabled = false, want inherited true")
+	}
+	if got.Level != "high" {
+		t.Fatalf("Level = %q, want high", got.Level)
+	}
+	if base.Level != "low" {
+		t.Fatalf("base Level mutated to %q, want low", base.Level)
+	}
+}
+
+func TestResolveReviewThinkingConfigEmptyLevelFallsBackToRuntimeLevel(t *testing.T) {
+	base := ThinkingConfig{Enabled: false, Level: "xhigh"}
+	review := ReviewThinkingConfig{
+		Mode:  ReviewThinkingModeOn,
+		Level: "",
+	}
+
+	got := ResolveReviewThinkingConfig(base, review)
+
+	if !got.Enabled {
+		t.Fatal("Enabled = false, want on override")
+	}
+	if got.Level != "xhigh" {
+		t.Fatalf("Level = %q, want runtime xhigh", got.Level)
+	}
+}
+
+func TestResolveReviewThinkingConfigOffIgnoresLevelOverride(t *testing.T) {
+	base := ThinkingConfig{Enabled: true, Level: "xhigh"}
+	review := ReviewThinkingConfig{
+		Mode:  ReviewThinkingModeOff,
+		Level: "high",
+	}
+
+	got := ResolveReviewThinkingConfig(base, review)
+
+	if got.Enabled {
+		t.Fatal("Enabled = true, want off override")
+	}
+	if got.Level != "xhigh" {
+		t.Fatalf("Level = %q, want runtime xhigh", got.Level)
 	}
 }
 
@@ -161,6 +293,23 @@ func TestApplyAutoFixes_ReviewProviderTypo(t *testing.T) {
 	}
 	if cfg.Review.Provider != "deepseek" {
 		t.Fatalf("Review.Provider = %q, want deepseek", cfg.Review.Provider)
+	}
+}
+
+func TestApplyAutoFixes_ReviewThinkingMode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Review.Thinking.Mode = "auto"
+
+	result := ValidateConfig(cfg)
+	if result.Valid {
+		t.Fatal("ValidateConfig() valid = true, want false")
+	}
+
+	if fixed := ApplyAutoFixes(cfg, result); fixed != 1 {
+		t.Fatalf("ApplyAutoFixes() = %d, want 1", fixed)
+	}
+	if cfg.Review.Thinking.Mode != ReviewThinkingModeInherit {
+		t.Fatalf("Review.Thinking.Mode = %q, want inherit", cfg.Review.Thinking.Mode)
 	}
 }
 

@@ -142,13 +142,24 @@ func (a *Agent) reviewModelRequestContext(ctx context.Context) context.Context {
 	}
 	ctx = api.WithoutActiveContextBlocks(ctx)
 	ctx = tools.WithRegistry(ctx, a.registry())
-	ctx = tools.WithConfig(ctx, a.cfg())
+	ctx = tools.WithConfig(ctx, a.reviewModelRequestConfig())
 	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	ctx = api.WithProviderCacheNamespace(ctx, reviewModelProviderCacheNamespace)
 	ctx = api.WithToolUseDisabled(ctx)
 	ctx = api.WithToolDefinitions(ctx, nil)
 	return api.WithAdditionalToolDefinitionsDisabled(ctx)
+}
+
+func (a *Agent) reviewModelRequestConfig() *config.Config {
+	cfg := a.cfg()
+	effectiveThinking := config.ResolveReviewThinkingConfig(cfg.Thinking, cfg.Review.Thinking)
+	if effectiveThinking == cfg.Thinking {
+		return cfg
+	}
+	reviewCfg := config.CloneConfig(cfg)
+	reviewCfg.Thinking = effectiveThinking
+	return reviewCfg
 }
 
 func suspendReviewModelResponseContinuation(provider api.Provider) func() {
