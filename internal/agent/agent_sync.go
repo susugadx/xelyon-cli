@@ -44,9 +44,10 @@ func (a *Agent) SyncWithRuntimeConfig() {
 	modelLookupProvider := a.sessionProviderConfigKey(cfg)
 	resolvedModel := cfg.GetSelectedModelForProvider(modelLookupProvider)
 	if resolvedModel != "" {
-		a.setCurrentModelAndSync(resolvedModel)
+		a.applyRuntimeModelSelection(resolvedModel, shouldResetResponseContinuationForModelSwitch(a.CurrentModel, resolvedModel))
+	} else {
+		a.reconcileSessionForCurrentRuntime()
 	}
-	a.reconcileSessionForCurrentRuntime()
 }
 
 func (a *Agent) syncRuntimeProviderConfig(cfg *config.Config, out io.Writer) {
@@ -76,4 +77,5 @@ func (a *Agent) syncRuntimeProviderConfig(cfg *config.Config, out io.Writer) {
 	// Agent / provider が参照する config key を差し替えて反映する。
 	a.ProviderConfigKey = nextProviderConfigKey
 	syncProviderConfigKeyToProvider(a.CurrentProvider, nextProviderConfigKey)
+	a.clearResponseContinuationContext()
 }

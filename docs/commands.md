@@ -485,6 +485,8 @@ custom focus は対象ファイルや差分範囲を絞るものではありま�
 
 プロバイダーとモデルを動的に切り替えます。TUI で引数なしの `/provider` を実行すると provider picker を開きます。`/use` は legacy alias です。
 
+切り替え後もローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側の continuation state は、新しい provider/model と混ざらないよう切り替え時にリセットされます。文脈自体を切りたい場合は `/clear` か新しい session を使います。
+
 ```
 > /provider
 > /provider deepseek

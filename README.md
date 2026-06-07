@@ -264,6 +264,8 @@ xelyon
 /exit       # 終了
 ```
 
+`/model` / `/use` / `/provider` で provider や model を切り替えても、ローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側 continuation state は切り替え時にリセットされます。文脈を切る場合は `/clear` か新しい session を使います。
+
 `/review` は現在の作業ツリー差分全体をレビューします。通常は現在の provider/model を使いますが、`review.provider` と `review.model` を設定すると `/review` だけ別の provider/model で実行できます。`review.provider` だけを設定した場合はその provider の既定モデルを使い、`review.model` を設定する場合は `review.provider` も必須です。review モデル呼び出しには通常会話履歴を渡しません。
 
 `review.thinking.mode` は `/review` の thinking 方針です。既定の `inherit` は現在の `/thinking` 状態を引き継ぎます。`off` は `/review` だけ thinking を無効化し、`on` は `/review` だけ thinking を有効化します。`review.thinking.level` は `low` / `medium` / `high` / `xhigh` を指定でき、空の場合は現在の `/thinking` level を使います。

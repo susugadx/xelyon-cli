@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	azureprovider "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
@@ -447,7 +448,7 @@ func TestAppendSessionMessage_InvalidatesSavedResponseContextOnlyAfterDivergingT
 	}
 }
 
-func TestHandleModelCommand_RestoresSavedResponseIDWhenReturningToMatchingModel(t *testing.T) {
+func TestHandleModelCommand_ClearsSavedResponseIDWhenSwitchingModel(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	withConfigCommandHooks(t)
 	cfg := newProjectMapDisabledConfig()
@@ -465,18 +466,36 @@ func TestHandleModelCommand_RestoresSavedResponseIDWhenReturningToMatchingModel(
 		ProviderConfigKey: "openai",
 		CurrentProvider:   &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}},
 		Runtime:           NewAgentRuntimeWithConfig(cfg),
+		History: []api.Message{
+			{Role: "user", Content: "old task"},
+		},
 		agentConversationState: agentConversationState{
 			session: newResponseContextSession("saved-model", "openai", "openai", "resp_saved"),
 		},
 	}
+	agent.session.AddMessage("user", "old task", "different-model")
 	agent.Runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
 
 	if !handleModelCommand(agent, []string{"saved-model"}) {
 		t.Fatal("handleModelCommand() = false, want true")
 	}
 
-	if ridProvider, ok := agent.CurrentProvider.(*mockResponseIDProvider); !ok || ridProvider.responseID != "resp_saved" {
-		t.Fatalf("provider responseID = %#v, want restored saved response id", agent.CurrentProvider)
+	if ridProvider, ok := agent.CurrentProvider.(*mockResponseIDProvider); !ok || ridProvider.responseID != "" {
+		t.Fatalf("provider responseID = %#v, want cleared saved response id", agent.CurrentProvider)
+	}
+	if agent.session.ResponseID != "" || agent.session.ResponseModel != "" || agent.session.ResponseProviderName != "" || agent.session.ResponseProviderConfigKey != "" {
+		t.Fatalf("session response context = (%q, %q, %q, %q), want cleared",
+			agent.session.ResponseID,
+			agent.session.ResponseModel,
+			agent.session.ResponseProviderName,
+			agent.session.ResponseProviderConfigKey,
+		)
+	}
+	if len(agent.History) != 1 || len(agent.session.Messages) != 1 {
+		t.Fatalf("conversation should be kept, got history=%d session=%d", len(agent.History), len(agent.session.Messages))
+	}
+	if !strings.Contains(out.String(), "Context kept locally; provider remote continuation reset") {
+		t.Fatalf("output = %q, want context kept notice", out.String())
 	}
 }
 

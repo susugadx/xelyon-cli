@@ -37,6 +37,23 @@ func (m *MockProvider) ChatWithImage(ctx context.Context, systemPrompt string, h
 }
 func (m *MockProvider) IsFunctionCallingEnabled() bool { return false }
 
+type responseIDConfigKeyProvider struct {
+	MockProvider
+	responseID string
+}
+
+func (p *responseIDConfigKeyProvider) HasCachedResponseID() bool {
+	return p.responseID != ""
+}
+
+func (p *responseIDConfigKeyProvider) SetResponseID(id string) {
+	p.responseID = id
+}
+
+func (p *responseIDConfigKeyProvider) GetResponseID() string {
+	return p.responseID
+}
+
 func TestSyncWithRuntimeConfig_ModelUpdate(t *testing.T) {
 	// Setup
 	cfg := newProjectMapDisabledConfig()
@@ -348,6 +365,54 @@ func TestSyncWithRuntimeConfig_RebindsAliasOwnerWithinSameRuntimeIdentity(t *tes
 	}
 }
 
+func TestSyncWithRuntimeConfig_ClearsSavedResponseIDWhenAliasOwnerChanges(t *testing.T) {
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "anthropic"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "same-model"},
+		"claude":    {DefaultModel: "same-model"},
+	})
+
+	provider := &responseIDConfigKeyProvider{
+		MockProvider: MockProvider{name: "claude", configKey: "claude"},
+		responseID:   "resp_saved",
+	}
+	a := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "claude",
+		CurrentModel:      "same-model",
+		CurrentProvider:   provider,
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: newResponseContextSession("same-model", "claude", "claude", "resp_saved"),
+		},
+	}
+
+	a.SyncWithRuntimeConfig()
+
+	if a.ProviderConfigKey != "anthropic" {
+		t.Fatalf("ProviderConfigKey = %q, want anthropic", a.ProviderConfigKey)
+	}
+	if provider.ProviderConfigKey() != "anthropic" {
+		t.Fatalf("provider config key = %q, want anthropic", provider.ProviderConfigKey())
+	}
+	if provider.GetResponseID() != "" {
+		t.Fatalf("provider response ID = %q, want cleared", provider.GetResponseID())
+	}
+	if a.session.ResponseID != "" || a.session.ResponseModel != "" || a.session.ResponseProviderName != "" || a.session.ResponseProviderConfigKey != "" {
+		t.Fatalf("session response context = (%q, %q, %q, %q), want cleared",
+			a.session.ResponseID,
+			a.session.ResponseModel,
+			a.session.ResponseProviderName,
+			a.session.ResponseProviderConfigKey,
+		)
+	}
+}
+
 func TestSyncWithRuntimeConfig_CanonicalizesDisplayNameDefaultProviderOwner(t *testing.T) {
 	var out bytes.Buffer
 	cfg := newProjectMapDisabledConfig()
@@ -452,7 +517,7 @@ func TestSyncWithRuntimeConfig_PrefersSessionProviderConfigKeyWhenDefaultProvide
 	}
 }
 
-func TestSyncWithRuntimeConfig_RestoresSavedResponseIDWhenRuntimeReturnsToMatchingContext(t *testing.T) {
+func TestSyncWithRuntimeConfig_ClearsSavedResponseIDWhenRuntimeModelChanges(t *testing.T) {
 	cfg := newProjectMapDisabledConfig()
 	cfg.DefaultProvider = "openai"
 	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{DefaultModel: "saved-model"})
@@ -483,8 +548,16 @@ func TestSyncWithRuntimeConfig_RestoresSavedResponseIDWhenRuntimeReturnsToMatchi
 	if a.CurrentModel != "saved-model" {
 		t.Fatalf("CurrentModel = %q, want %q", a.CurrentModel, "saved-model")
 	}
-	if provider.responseID != "resp_saved" {
-		t.Fatalf("provider.responseID = %q, want restored saved response id", provider.responseID)
+	if provider.responseID != "" {
+		t.Fatalf("provider.responseID = %q, want cleared saved response id", provider.responseID)
+	}
+	if a.session.ResponseID != "" || a.session.ResponseModel != "" || a.session.ResponseProviderName != "" || a.session.ResponseProviderConfigKey != "" {
+		t.Fatalf("session response context = (%q, %q, %q, %q), want cleared",
+			a.session.ResponseID,
+			a.session.ResponseModel,
+			a.session.ResponseProviderName,
+			a.session.ResponseProviderConfigKey,
+		)
 	}
 	if a.session.Model != "saved-model" {
 		t.Fatalf("session.Model = %q, want reconciled runtime model", a.session.Model)

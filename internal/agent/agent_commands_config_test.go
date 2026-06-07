@@ -268,11 +268,14 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 	if agent.Stats == nil || agent.Stats.Model != "qwen2.5-coder:14b" {
 		t.Fatalf("Stats.Model = %q, want %q", agent.Stats.Model, "qwen2.5-coder:14b")
 	}
-	if len(agent.History) != 0 {
-		t.Fatalf("len(agent.History) = %d, want 0", len(agent.History))
+	if len(agent.History) != 2 {
+		t.Fatalf("len(agent.History) = %d, want 2", len(agent.History))
 	}
-	if !strings.Contains(out.String(), "History cleared after provider switch") {
-		t.Fatalf("expected output to contain history cleared notification, got %q", out.String())
+	if !strings.Contains(out.String(), "Context kept locally; provider remote continuation reset") {
+		t.Fatalf("expected output to contain context kept notification, got %q", out.String())
+	}
+	if strings.Contains(out.String(), "History cleared after provider switch") {
+		t.Fatalf("output should not contain history cleared notification, got %q", out.String())
 	}
 }
 

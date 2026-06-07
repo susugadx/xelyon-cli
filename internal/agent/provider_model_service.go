@@ -20,6 +20,7 @@ type ModelSwitchOutcome struct {
 	OldModel      string
 	NewModel      string
 	ConfigSaved   bool
+	ContextNotice RuntimeSwitchContextNotice
 	ValidationErr error
 	LoadConfigErr error
 	SaveConfigErr error
@@ -34,7 +35,7 @@ type ProviderSwitchOutcome struct {
 	NewProviderConfigKey string
 	OldModel             string
 	NewModel             string
-	HistoryCleared       bool
+	ContextNotice        RuntimeSwitchContextNotice
 }
 
 // CurrentProviderModelState は現在の provider/model 選択状態を返す。
@@ -66,7 +67,7 @@ func (a *Agent) SwitchModelForCurrentProvider(newModel string) ModelSwitchOutcom
 	cfg, err := loadConfigForCommand()
 	if err != nil {
 		a.clearCurrentProviderCache()
-		a.setCurrentModelAndSync(newModel)
+		outcome.ContextNotice = a.applyRuntimeModelSelection(newModel, shouldResetResponseContinuationForModelSwitch(outcome.OldModel, newModel))
 		outcome.LoadConfigErr = err
 		return outcome
 	}
@@ -83,7 +84,7 @@ func (a *Agent) SwitchModelForCurrentProvider(newModel string) ModelSwitchOutcom
 	}
 
 	a.clearCurrentProviderCache()
-	a.setCurrentModelAndSync(newModel)
+	outcome.ContextNotice = a.applyRuntimeModelSelection(newModel, shouldResetResponseContinuationForModelSwitch(outcome.OldModel, newModel))
 
 	if err := saveConfigForCommand(cfg); err != nil {
 		outcome.SaveConfigErr = err
@@ -245,19 +246,18 @@ func (a *Agent) switchProviderModelWithConfig(providerName, requestedModel strin
 
 	a.clearCurrentProviderCache()
 
-	if outcome.OldProvider != "" && !config.SameProviderRuntimeIdentity(outcome.OldProvider, runtimeProviderName) {
-		// プロバイダー切り替え時は tool_calls のフォーマットが互換でない場合があるため、履歴を破棄する
-		hadConversation := a.hasConversationState()
-		if err := a.resetConversationState(); err != nil {
-			return outcome, fmt.Errorf("failed to reset conversation state during provider switch: %w", err)
-		}
-		outcome.HistoryCleared = hadConversation
-	}
-
 	a.CurrentProvider = provider
 	a.ProviderName = runtimeProviderName
 	a.ProviderConfigKey = nextProviderConfigKey
-	a.setCurrentModel(newModel)
+	resetResponseContinuation := shouldResetResponseContinuationForRuntimeSwitch(
+		outcome.OldProvider,
+		outcome.OldProviderConfigKey,
+		outcome.OldModel,
+		runtimeProviderName,
+		nextProviderConfigKey,
+		newModel,
+	)
+	outcome.ContextNotice = a.applyRuntimeModelSelection(newModel, resetResponseContinuation)
 
 	// 統計情報をリセット（プロバイダー切り替え時）
 	if a.Stats != nil {
@@ -286,6 +286,36 @@ func (a *Agent) switchProviderModelWithConfig(providerName, requestedModel strin
 	outcome.NewProviderConfigKey = nextProviderConfigKey
 	outcome.NewModel = newModel
 	return outcome, nil
+}
+
+func (a *Agent) applyRuntimeModelSelection(model string, resetResponseContinuation bool) RuntimeSwitchContextNotice {
+	if a == nil {
+		return RuntimeSwitchContextNotice{}
+	}
+	a.setCurrentModel(model)
+	a.syncCurrentDerivedRuntimeState()
+	if resetResponseContinuation {
+		a.clearResponseContinuationContext()
+	} else {
+		a.reconcileSessionForCurrentRuntime()
+	}
+	return a.runtimeSwitchContextNotice(resetResponseContinuation)
+}
+
+func shouldResetResponseContinuationForModelSwitch(oldModel, newModel string) bool {
+	return strings.TrimSpace(oldModel) != "" && strings.TrimSpace(oldModel) != strings.TrimSpace(newModel)
+}
+
+func shouldResetResponseContinuationForRuntimeSwitch(oldProvider, oldProviderConfigKey, oldModel, newProvider, newProviderConfigKey, newModel string) bool {
+	if strings.TrimSpace(oldModel) != "" && strings.TrimSpace(oldModel) != strings.TrimSpace(newModel) {
+		return true
+	}
+	if strings.TrimSpace(oldProvider) != "" && !config.SameProviderRuntimeIdentity(oldProvider, newProvider) {
+		return true
+	}
+	oldKey := config.ActiveProviderConfigKey(oldProviderConfigKey)
+	newKey := config.ActiveProviderConfigKey(newProviderConfigKey)
+	return oldKey != "" && newKey != "" && oldKey != newKey
 }
 
 func (a *Agent) clearCurrentProviderCache() {
