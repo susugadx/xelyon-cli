@@ -18,26 +18,27 @@ type providerModelStore struct {
 
 // Config はXELYON CLIの設定
 type Config struct {
-	DefaultProvider   string                         `yaml:"default_provider"`
-	DefaultModel      string                         `yaml:"default_model"`
-	ProviderModels    map[string]ProviderModelConfig `yaml:"provider_models"`
-	Review            ReviewConfig                   `yaml:"review"`
-	General           GeneralConfig                  `yaml:"general"`
-	Compression       CompressionConfig              `yaml:"compression"`
-	LoopDetection     LoopDetectionConfig            `yaml:"loop_detection"`
-	APIRetry          APIRetryConfig                 `yaml:"api_retry"`
-	Diff              DiffConfig                     `yaml:"diff"`
-	Execution         ExecutionConfig                `yaml:"execution"`
-	ToolConfirm       ToolConfirmConfig              `yaml:"tool_confirm"`
-	CommandAliases    map[string]string              `yaml:"command_aliases,omitempty"` // 互換読み込み用。slash alias は command catalog を source of truth とする。
-	PromptCache       PromptCacheConfig              `yaml:"prompt_cache"`
-	Paste             PasteConfig                    `yaml:"paste"`
-	Responses         ResponsesConfig                `yaml:"responses"`
-	Streaming         StreamingConfig                `yaml:"streaming"`
-	Bash              BashConfig                     `yaml:"bash"`
-	ListDir           ListDirConfig                  `yaml:"list_dir"`
-	ProjectMap        ProjectMapConfig               `yaml:"project_map"`
-	AgentInstructions AgentInstructionsConfig        `yaml:"agent_instructions"`
+	DefaultProvider          string                         `yaml:"default_provider"`
+	DefaultModel             string                         `yaml:"default_model"`
+	ProviderModels           map[string]ProviderModelConfig `yaml:"provider_models"`
+	Review                   ReviewConfig                   `yaml:"review"`
+	General                  GeneralConfig                  `yaml:"general"`
+	Compression              CompressionConfig              `yaml:"compression"`
+	ProviderHistoryReduction ProviderHistoryReductionConfig `yaml:"provider_history_reduction"`
+	LoopDetection            LoopDetectionConfig            `yaml:"loop_detection"`
+	APIRetry                 APIRetryConfig                 `yaml:"api_retry"`
+	Diff                     DiffConfig                     `yaml:"diff"`
+	Execution                ExecutionConfig                `yaml:"execution"`
+	ToolConfirm              ToolConfirmConfig              `yaml:"tool_confirm"`
+	CommandAliases           map[string]string              `yaml:"command_aliases,omitempty"` // 互換読み込み用。slash alias は command catalog を source of truth とする。
+	PromptCache              PromptCacheConfig              `yaml:"prompt_cache"`
+	Paste                    PasteConfig                    `yaml:"paste"`
+	Responses                ResponsesConfig                `yaml:"responses"`
+	Streaming                StreamingConfig                `yaml:"streaming"`
+	Bash                     BashConfig                     `yaml:"bash"`
+	ListDir                  ListDirConfig                  `yaml:"list_dir"`
+	ProjectMap               ProjectMapConfig               `yaml:"project_map"`
+	AgentInstructions        AgentInstructionsConfig        `yaml:"agent_instructions"`
 
 	GitStage            GitStageConfig     `yaml:"git_stage"`
 	LSP                 LSPConfig          `yaml:"lsp"`

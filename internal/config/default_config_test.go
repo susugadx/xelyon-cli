@@ -51,6 +51,33 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Compression.KeepRecent != 20 {
 		t.Errorf("Compression.KeepRecent = %d, want 20", cfg.Compression.KeepRecent)
 	}
+	if cfg.ProviderHistoryReduction.Mode != ProviderHistoryReductionModeDryRun {
+		t.Errorf("ProviderHistoryReduction.Mode = %q, want dry_run", cfg.ProviderHistoryReduction.Mode)
+	}
+	if !cfg.ProviderHistoryReduction.RehydrateContext {
+		t.Error("ProviderHistoryReduction.RehydrateContext should default to true")
+	}
+	if got := cfg.ProviderHistoryReduction.RawOutputArtifacts.Mode; got != ProviderHistoryRawOutputArtifactsModeDryRun {
+		t.Errorf("RawOutputArtifacts.Mode = %q, want dry_run", got)
+	}
+	if got := cfg.ProviderHistoryReduction.RawOutputArtifacts.MaxArtifactBytes; got != defaultRawOutputArtifactMaxBytes {
+		t.Errorf("RawOutputArtifacts.MaxArtifactBytes = %d, want %d", got, defaultRawOutputArtifactMaxBytes)
+	}
+	if got := cfg.ProviderHistoryReduction.RawOutputArtifacts.SessionQuotaBytes; got != defaultRawOutputArtifactSessionQuotaBytes {
+		t.Errorf("RawOutputArtifacts.SessionQuotaBytes = %d, want %d", got, defaultRawOutputArtifactSessionQuotaBytes)
+	}
+	if got := cfg.ProviderHistoryReduction.RawOutputArtifacts.ChunkBytes; got != defaultRawOutputArtifactChunkBytes {
+		t.Errorf("RawOutputArtifacts.ChunkBytes = %d, want %d", got, defaultRawOutputArtifactChunkBytes)
+	}
+	if got := cfg.ProviderHistoryReduction.RawOutputArtifacts.ActiveContextBudgetTokens; got != defaultRawOutputArtifactActiveContextBudgetTokens {
+		t.Errorf("RawOutputArtifacts.ActiveContextBudgetTokens = %d, want %d", got, defaultRawOutputArtifactActiveContextBudgetTokens)
+	}
+	if got := cfg.ProviderHistoryReduction.RawOutputArtifacts.ActiveContextBudgetMaxTokens; got != defaultRawOutputArtifactActiveContextBudgetMax {
+		t.Errorf("RawOutputArtifacts.ActiveContextBudgetMaxTokens = %d, want %d", got, defaultRawOutputArtifactActiveContextBudgetMax)
+	}
+	if got := cfg.ProviderHistoryReduction.RawOutputArtifacts.Retention; got != ProviderHistoryRawOutputArtifactsRetentionSession {
+		t.Errorf("RawOutputArtifacts.Retention = %q, want session", got)
+	}
 	if cfg.Compression.PreferCompactAPI != true {
 		t.Error("Compression.PreferCompactAPI should default to true")
 	}

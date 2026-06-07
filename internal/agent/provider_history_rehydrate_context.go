@@ -35,11 +35,18 @@ func (a *Agent) providerHistoryRehydratedEvidenceActiveContextBlocks(ctx context
 
 func (a *Agent) providerFacingActiveContextBlocksForTokenBudget(ctx context.Context) []api.ActiveContextBlock {
 	blocks := a.providerFacingActiveContextBlocks()
-	if !a.shouldBuildProviderHistoryRehydratedEvidenceActiveContext() {
+	buildEvidence := a.shouldBuildProviderHistoryRehydratedEvidenceActiveContext()
+	buildRawOutput := a.shouldBuildProviderHistoryRawOutputActiveContext()
+	if !buildEvidence && !buildRawOutput {
 		return blocks
 	}
-	result := a.providerFacingHistoryProjectionFromRaw(a.cloneRawHistoryForProviderProjection())
-	blocks = append(blocks, a.providerHistoryRehydratedEvidenceActiveContextBlocks(ctx, result.Report)...)
+	result, rawOutputContext := a.providerHistoryProjectionForTokenBudget(ctx, a.cloneRawHistoryForProviderProjection())
+	if buildEvidence {
+		blocks = append(blocks, a.providerHistoryRehydratedEvidenceActiveContextBlocks(ctx, result.Report)...)
+	}
+	if buildRawOutput {
+		blocks = append(blocks, rawOutputContext.Blocks...)
+	}
 	return blocks
 }
 
@@ -65,6 +72,15 @@ func (a *Agent) providerActiveContextTransport() api.ActiveContextTransport {
 }
 
 func appendProviderHistoryRehydratedEvidenceActiveContext(ctx context.Context, additions []api.ActiveContextBlock) context.Context {
+	if len(additions) == 0 {
+		return ctx
+	}
+	blocks := api.ActiveContextBlocksFromContext(ctx)
+	blocks = append(blocks, additions...)
+	return api.WithActiveContextBlocks(ctx, blocks)
+}
+
+func appendProviderHistoryRawOutputActiveContext(ctx context.Context, additions []api.ActiveContextBlock) context.Context {
 	if len(additions) == 0 {
 		return ctx
 	}

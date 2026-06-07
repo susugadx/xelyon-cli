@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -15,6 +16,7 @@ import (
 const providerHistoryReductionPlaceholderPrefix = "[omitted old "
 
 const (
+	providerHistoryContentReplacementMinSavedTokens = 128
 	providerHistoryCommandReplacementMinSavedTokens = 128
 	providerHistoryEditArgReplacementMinSavedTokens = 128
 )
@@ -120,12 +122,17 @@ func providerHistoryContentReplacementSavingsForTest(original []api.Message, rep
 		if len(originalContent) <= len(candidate.SuggestedReplacementText) {
 			continue
 		}
-		totalBytes += len(originalContent) - len(candidate.SuggestedReplacementText)
 		originalTokens := token.EstimateTokenCount(originalContent)
 		replacementTokens := token.EstimateTokenCount(candidate.SuggestedReplacementText)
-		if originalTokens > replacementTokens {
-			totalTokens += originalTokens - replacementTokens
+		if originalTokens <= replacementTokens {
+			continue
 		}
+		savedTokens := originalTokens - replacementTokens
+		if savedTokens < providerHistoryContentReplacementMinSavedTokens {
+			continue
+		}
+		totalTokens += savedTokens
+		totalBytes += len(originalContent) - len(candidate.SuggestedReplacementText)
 	}
 	return totalBytes, totalTokens
 }
@@ -145,6 +152,22 @@ func assertLastProviderHistoryProjectionReportPreserved(t *testing.T, runtime *A
 	}
 	if !reflect.DeepEqual(runtime.LastProviderHistoryProjectionReport, want) {
 		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want preserved stale report %#v", runtime.LastProviderHistoryProjectionReport, want)
+	}
+}
+
+func assertProviderHistoryToolExecutionPreviewPreservesRaw(t *testing.T, entry *history.ToolExecutionEntry, toolName, raw string) {
+	t.Helper()
+	if entry == nil {
+		t.Fatalf("tool execution is nil, want raw %s audit entry", toolName)
+	}
+	if entry.Name != toolName {
+		t.Fatalf("tool execution name = %q, want %q: %#v", entry.Name, toolName, entry)
+	}
+	if !strings.HasPrefix(raw, entry.ResultPreview) {
+		t.Fatalf("tool execution preview = %q, want prefix of raw %s result", entry.ResultPreview, toolName)
+	}
+	if strings.Contains(entry.ResultPreview, providerHistoryReductionPlaceholderPrefix) {
+		t.Fatalf("tool execution preview = %q, want raw preview without provider-facing placeholder", entry.ResultPreview)
 	}
 }
 

@@ -11,12 +11,13 @@ import (
 
 // ProjectConfig はプロジェクト固有の設定（xelyon.yaml）
 type ProjectConfig struct {
-	Context      string                    `yaml:"context"`                // AI に注入するプロジェクトコンテキスト
-	Rules        []string                  `yaml:"rules"`                  // 必須ルール（番号付きで system prompt に注入）
-	Conditional  []ProjectConditionalBlock `yaml:"conditional,omitempty"`  // 条件付きで注入する rules/context
-	Ignore       ProjectIgnoreConfig       `yaml:"ignore,omitempty"`       // repomap/list_dir/search_code で共有する ignore 設定
-	FinalChecks  *FinalChecksConfig        `yaml:"final_checks,omitempty"` // 明示完了時 final checks（config.yaml の final_checks を上書き）
-	Experimental ProjectExperimentalConfig `yaml:"experimental,omitempty"` // 実験的な project-local 設定
+	Context                  string                                      `yaml:"context"`                              // AI に注入するプロジェクトコンテキスト
+	Rules                    []string                                    `yaml:"rules"`                                // 必須ルール（番号付きで system prompt に注入）
+	Conditional              []ProjectConditionalBlock                   `yaml:"conditional,omitempty"`                // 条件付きで注入する rules/context
+	Ignore                   ProjectIgnoreConfig                         `yaml:"ignore,omitempty"`                     // repomap/list_dir/search_code で共有する ignore 設定
+	FinalChecks              *FinalChecksConfig                          `yaml:"final_checks,omitempty"`               // 明示完了時 final checks（config.yaml の final_checks を上書き）
+	ProviderHistoryReduction ProjectStableProviderHistoryReductionConfig `yaml:"provider_history_reduction,omitempty"` // provider-facing history reduction の project-local stable 設定
+	Experimental             ProjectExperimentalConfig                   `yaml:"experimental,omitempty"`               // 実験的な project-local 設定
 
 	FilePath string `yaml:"-"` // ロード元ファイルパス
 }

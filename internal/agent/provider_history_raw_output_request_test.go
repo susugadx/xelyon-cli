@@ -1,0 +1,489 @@
+package agent
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
+)
+
+func TestNormalModeRequestApplyCompactsDataBearingCommandAndInjectsRawOutputContext(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	commandOutput := providerHistoryNumberedLines("api-result", 6000)
+	command := "curl 'https://api.example.test/items?foo=bar#frag'"
+	agent.Runtime.RawOutputArtifactStore = store
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect api history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_curl", "bash", map[string]string{"command": command})),
+		providerHistoryToolResult("call_curl", "bash", commandOutput),
+		{Role: "assistant", Content: "api data reviewed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+	beforeHistory := api.CloneMessages(agent.History)
+	beforeSession := append(agent.session.Messages[:0:0], agent.session.Messages...)
+
+	if err := agent.chatInternal("show api-result-3000", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	projected := provider.capturedHistory[2].Content
+	if projected == commandOutput ||
+		!strings.Contains(projected, "[compacted old data-bearing command output;") ||
+		!strings.Contains(projected, "raw_output_ref=") {
+		t.Fatalf("provider command output = %q, want artifact-backed placeholder", projected)
+	}
+	if !provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context did not disable response ID chain for artifact-backed command replacement")
+	}
+	if len(provider.capturedActiveContextBlocks) != 1 {
+		t.Fatalf("active context blocks = %#v, want one raw output block", provider.capturedActiveContextBlocks)
+	}
+	block := provider.capturedActiveContextBlocks[0]
+	if block.Name != providerHistoryRawOutputActiveContextName {
+		t.Fatalf("active context block name = %q, want %q", block.Name, providerHistoryRawOutputActiveContextName)
+	}
+	for _, want := range []string{
+		providerHistoryRawOutputContextHeader,
+		"ref: rawout_",
+		"surface: command_output",
+		"tool_name: bash",
+		"?redacted",
+		"#redacted",
+		"family: network",
+		"classifier: network_response",
+		"matched raw output excerpt",
+		"api-result-3000",
+	} {
+		if !strings.Contains(block.Content, want) {
+			t.Fatalf("raw output active context missing %q:\n%s", want, block.Content)
+		}
+	}
+	for _, reject := range []string{"foo=bar", "#frag", "api-result-0001", "api-result-6000"} {
+		if strings.Contains(block.Content, reject) {
+			t.Fatalf("raw output active context leaked %q:\n%s", reject, block.Content)
+		}
+	}
+	for i, want := range beforeHistory {
+		if !reflect.DeepEqual(agent.History[i], want) {
+			t.Fatalf("Agent.History[%d] changed after raw output artifact request:\n got %#v\nwant %#v", i, agent.History[i], want)
+		}
+	}
+	for i, want := range beforeSession {
+		if !reflect.DeepEqual(agent.session.Messages[i], want) {
+			t.Fatalf("session.Messages[%d] changed after raw output artifact request:\n got %#v\nwant %#v", i, agent.session.Messages[i], want)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.CommandEditDryRun.ArtifactBackedCommandReplacedCount != 1 ||
+		report.RawOutputRefCount != 1 ||
+		!report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want artifact-backed command replacement report", report)
+	}
+}
+
+func TestTokenBudgetHistoryDoesNotMaterializeRawOutputArtifacts(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	countingStore := &countingRawOutputArtifactStore{inner: store}
+	commandOutput := providerHistoryNumberedLines("api-result", 6000)
+	agent.Runtime.RawOutputArtifactStore = countingStore
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect api history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_curl", "bash", map[string]string{"command": "curl https://api.example.test/items"})),
+		providerHistoryToolResult("call_curl", "bash", commandOutput),
+		{Role: "assistant", Content: "api data reviewed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+
+	projectedForBudget := agent.tokenBudgetHistory()
+	if projectedForBudget[2].Content != commandOutput {
+		t.Fatalf("token budget history command output = %q, want raw output without artifact materialization", projectedForBudget[2].Content)
+	}
+	if blocks := agent.providerFacingActiveContextBlocksForTokenBudget(context.Background()); len(blocks) != 0 {
+		t.Fatalf("token budget active context blocks = %#v, want none without artifact materialization", blocks)
+	}
+	if countingStore.createCalls != 0 || countingStore.verifyCalls != 0 {
+		t.Fatalf("token budget artifact calls = create:%d verify:%d, want no side effects", countingStore.createCalls, countingStore.verifyCalls)
+	}
+
+	if err := agent.chatInternal("show api-result-3000", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+	if countingStore.createCalls == 0 || countingStore.verifyCalls == 0 {
+		t.Fatalf("request artifact calls = create:%d verify:%d, want materialization during provider request", countingStore.createCalls, countingStore.verifyCalls)
+	}
+	if projected := provider.capturedHistory[2].Content; projected == commandOutput || !strings.Contains(projected, "raw_output_ref=") {
+		t.Fatalf("provider command output = %q, want artifact-backed placeholder during request", projected)
+	}
+}
+
+func TestNormalModeRequestApplyKeepsDataBearingCommandRawWhenRawOutputContextCoverageInsufficient(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	commandOutput := providerHistoryNumberedLines("api-result", 6000)
+	agent.Runtime.RawOutputArtifactStore = store
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect api history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_curl", "bash", map[string]string{"command": "curl https://api.example.test/items"})),
+		providerHistoryToolResult("call_curl", "bash", commandOutput),
+		{Role: "assistant", Content: "api data reviewed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+
+	if err := agent.chatInternal("next request", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if got := provider.capturedHistory[2].Content; got != commandOutput {
+		t.Fatalf("provider command output = %q, want raw output when active context coverage is insufficient", got)
+	}
+	if len(provider.capturedActiveContextBlocks) != 0 {
+		t.Fatalf("active context blocks = %#v, want none after coverage fail-closed fallback", provider.capturedActiveContextBlocks)
+	}
+	if provider.capturedResponseIDChainDisabled {
+		t.Fatal("response ID chain disabled despite no provider-facing replacement")
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.CommandEditDryRun.ArtifactBackedCommandReplacedCount != 0 ||
+		report.CommandEditDryRun.ArtifactBackedCommandApplyEligible != 0 ||
+		report.CommandEditDryRun.ArtifactBackedCommandCandidates != 1 ||
+		report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want raw-output dry-run candidate without apply", report)
+	}
+	if got := report.CommandEditDryRun.ArtifactBackedKeptReasonCounts[providerHistoryRawOutputActiveContextCoverageInsufficientReason]; got != 1 {
+		t.Fatalf("ArtifactBackedKeptReasonCounts = %#v, want active context coverage insufficient", report.CommandEditDryRun.ArtifactBackedKeptReasonCounts)
+	}
+}
+
+func TestTokenBudgetHistoryDoesNotOpenRawOutputArtifactStore(t *testing.T) {
+	agent, _, _ := newProviderHistoryRawOutputRequestAgent(t)
+	commandOutput := providerHistoryNumberedLines("api-result", 6000)
+	root := filepath.Join(t.TempDir(), "rawoutputs")
+	agent.Runtime.RawOutputArtifactStore = nil
+	agent.Runtime.RawOutputArtifactRoot = root
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect api history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_curl", "bash", map[string]string{"command": "curl https://api.example.test/items"})),
+		providerHistoryToolResult("call_curl", "bash", commandOutput),
+		{Role: "assistant", Content: "api data reviewed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+
+	projectedForBudget := agent.tokenBudgetHistory()
+	if projectedForBudget[2].Content != commandOutput {
+		t.Fatalf("token budget history command output = %q, want raw output without opening artifact store", projectedForBudget[2].Content)
+	}
+	if agent.Runtime.RawOutputArtifactStore != nil {
+		t.Fatalf("runtime RawOutputArtifactStore = %#v, want nil after token budget estimate", agent.Runtime.RawOutputArtifactStore)
+	}
+	if _, err := os.Stat(root); err == nil {
+		t.Fatalf("raw output artifact root %s exists after token budget estimate, want no store I/O", root)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("Stat(raw output artifact root) error = %v", err)
+	}
+}
+
+func TestNormalModeRequestApplyKeepsDataBearingCommandRawWhenRawOutputContextCannotResolve(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	commandOutput := providerHistoryNumberedLines("api-result", 6000)
+	agent.Runtime.RawOutputArtifactStore = createVerifyOnlyRawOutputArtifactStore{inner: store}
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect api history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_curl", "bash", map[string]string{"command": "curl https://api.example.test/items"})),
+		providerHistoryToolResult("call_curl", "bash", commandOutput),
+		{Role: "assistant", Content: "api data reviewed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+
+	if projectedForBudget := agent.tokenBudgetHistory(); projectedForBudget[2].Content != commandOutput {
+		t.Fatalf("token budget history command output = %q, want raw output when raw context cannot resolve required ref", projectedForBudget[2].Content)
+	}
+	if blocks := agent.providerFacingActiveContextBlocksForTokenBudget(context.Background()); len(blocks) != 0 {
+		t.Fatalf("token budget active context blocks = %#v, want none after raw-output budget fail-closed fallback", blocks)
+	}
+
+	if err := agent.chatInternal("show api-result-3000", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if got := provider.capturedHistory[2].Content; got != commandOutput {
+		t.Fatalf("provider command output = %q, want raw output when raw context cannot resolve", got)
+	}
+	if len(provider.capturedActiveContextBlocks) != 0 {
+		t.Fatalf("active context blocks = %#v, want none after raw-output fail-closed fallback", provider.capturedActiveContextBlocks)
+	}
+	if provider.capturedResponseIDChainDisabled {
+		t.Fatal("response ID chain disabled despite no provider-facing replacement")
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.CommandEditDryRun.ArtifactBackedCommandReplacedCount != 0 ||
+		report.CommandEditDryRun.ArtifactBackedCommandApplyEligible != 0 ||
+		report.CommandEditDryRun.ArtifactBackedCommandCandidates != 1 ||
+		report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want raw-output dry-run candidate without apply", report)
+	}
+	if got := report.CommandEditDryRun.ArtifactBackedKeptReasonCounts["raw_output_active_context_required_refs_missing"]; got != 1 {
+		t.Fatalf("ArtifactBackedKeptReasonCounts = %#v, want active context required refs missing", report.CommandEditDryRun.ArtifactBackedKeptReasonCounts)
+	}
+}
+
+func TestNormalModeRequestApplyKeepsDataBearingCommandRawWhenRawOutputContextBudgetCannotFit(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	commandOutput := providerHistoryNumberedLines("api-result", 6000)
+	agent.Runtime.RawOutputArtifactStore = store
+	configureProviderHistoryRawOutputRequestApply(agent, 1, 1)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect api history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_curl", "bash", map[string]string{"command": "curl https://api.example.test/items"})),
+		providerHistoryToolResult("call_curl", "bash", commandOutput),
+		{Role: "assistant", Content: "api data reviewed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+
+	if projectedForBudget := agent.tokenBudgetHistory(); projectedForBudget[2].Content != commandOutput {
+		t.Fatalf("token budget history command output = %q, want raw output when active context budget cannot fit required ref", projectedForBudget[2].Content)
+	}
+	if blocks := agent.providerFacingActiveContextBlocksForTokenBudget(context.Background()); len(blocks) != 0 {
+		t.Fatalf("token budget active context blocks = %#v, want none after raw-output budget fail-closed fallback", blocks)
+	}
+
+	if err := agent.chatInternal("show api-result-3000", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if got := provider.capturedHistory[2].Content; got != commandOutput {
+		t.Fatalf("provider command output = %q, want raw output when raw context budget cannot fit required ref", got)
+	}
+	if len(provider.capturedActiveContextBlocks) != 0 {
+		t.Fatalf("active context blocks = %#v, want none after raw-output budget fail-closed fallback", provider.capturedActiveContextBlocks)
+	}
+	if provider.capturedResponseIDChainDisabled {
+		t.Fatal("response ID chain disabled despite no provider-facing replacement")
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.CommandEditDryRun.ArtifactBackedCommandReplacedCount != 0 ||
+		report.CommandEditDryRun.ArtifactBackedCommandApplyEligible != 0 ||
+		report.CommandEditDryRun.ArtifactBackedCommandCandidates != 1 ||
+		report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want raw-output dry-run candidate without apply", report)
+	}
+	if got := report.CommandEditDryRun.ArtifactBackedKeptReasonCounts["raw_output_active_context_required_refs_missing"]; got != 1 {
+		t.Fatalf("ArtifactBackedKeptReasonCounts = %#v, want active context required refs missing", report.CommandEditDryRun.ArtifactBackedKeptReasonCounts)
+	}
+}
+
+func TestNormalModeRequestApplyCompactsMCPResultAndInjectsRawOutputContext(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	mcpOutput := providerHistoryLargeSafeMCPResult()
+	agent.Runtime.RawOutputArtifactStore = store
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect mcp history"},
+		providerHistoryAssistantToolCall("call_mcp_docs", "mcp_context7_get_library_docs"),
+		providerHistoryToolResult("call_mcp_docs", "mcp_context7_get_library_docs", mcpOutput),
+		{Role: "assistant", Content: "mcp data reviewed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+
+	if err := agent.chatInternal("show safe documentation result", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	projected := provider.capturedHistory[2].Content
+	if projected == mcpOutput ||
+		!strings.Contains(projected, "[compacted old MCP tool result;") ||
+		!strings.Contains(projected, "raw_output_ref=") {
+		t.Fatalf("provider MCP output = %q, want artifact-backed placeholder", projected)
+	}
+	if len(provider.capturedActiveContextBlocks) != 1 {
+		t.Fatalf("active context blocks = %#v, want one raw output block", provider.capturedActiveContextBlocks)
+	}
+	block := provider.capturedActiveContextBlocks[0]
+	for _, want := range []string{
+		"surface: mcp_tool_result",
+		"tool_name: mcp_context7_get_library_docs",
+		"family: mcp",
+		"classifier: mcp_json_result",
+		"safe documentation result",
+	} {
+		if !strings.Contains(block.Content, want) {
+			t.Fatalf("raw output active context missing %q:\n%s", want, block.Content)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.ReplacedCount != 1 ||
+		report.RawOutputRefCount != 1 ||
+		report.DataBearingCandidateCount != 1 ||
+		!report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want applied MCP artifact report", report)
+	}
+}
+
+func TestNormalModeRequestApplyCompactsWebSearchResultAndInjectsRedactedRawOutputContext(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	webOutput := providerHistoryLargeSafeWebSearchResult()
+	query := "OpenAI Responses API previous_response_id documentation"
+	agent.Runtime.RawOutputArtifactStore = store
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect web search history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_web_old", "web_search", map[string]string{"query": query})),
+		providerHistoryToolResult("call_web_old", "web_search", webOutput),
+		{Role: "assistant", Content: "web data reviewed"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_web_dup", "web_search", map[string]string{"query": query})),
+		providerHistoryToolResult("call_web_dup", "web_search", webOutput),
+		{Role: "assistant", Content: "duplicate raw web result remains"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+
+	if err := agent.chatInternal("show response ids", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	projected := provider.capturedHistory[2].Content
+	if projected == webOutput ||
+		!strings.Contains(projected, "[compacted old XELYON web_search tool result;") ||
+		!strings.Contains(projected, "raw_output_ref=") ||
+		strings.Contains(projected, "utm_campaign=private") ||
+		strings.Contains(projected, "private-fragment") {
+		t.Fatalf("provider web_search output = %q, want artifact-backed redacted placeholder", projected)
+	}
+	if provider.capturedHistory[5].Content != webOutput {
+		t.Fatalf("later duplicate web_search output changed")
+	}
+	if len(provider.capturedActiveContextBlocks) != 1 {
+		t.Fatalf("active context blocks = %#v, want one raw output block", provider.capturedActiveContextBlocks)
+	}
+	block := provider.capturedActiveContextBlocks[0]
+	for _, want := range []string{
+		"surface: xelyon_web_search_tool_result",
+		"tool_name: web_search",
+		"command_preview: web_search query=OpenAI Responses API previous_response_id documentation",
+		"family: web_search",
+		"classifier: web_search_result",
+		"https://example.test/docs/responses?redacted#redacted",
+		"safe web search snippet",
+	} {
+		if !strings.Contains(block.Content, want) {
+			t.Fatalf("raw output active context missing %q:\n%s", want, block.Content)
+		}
+	}
+	for _, reject := range []string{"utm_campaign=private", "private-fragment"} {
+		if strings.Contains(block.Content, reject) {
+			t.Fatalf("raw output active context leaked %q:\n%s", reject, block.Content)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.ReplacedCount != 1 ||
+		report.RawOutputRefCount != 1 ||
+		report.DataBearingCandidateCount != 1 ||
+		!report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want applied web_search artifact report", report)
+	}
+}
+
+type createVerifyOnlyRawOutputArtifactStore struct {
+	inner *rawoutputs.Store
+}
+
+func (s createVerifyOnlyRawOutputArtifactStore) Create(ctx context.Context, req rawoutputs.CreateRequest) (rawoutputs.CreateResult, error) {
+	return s.inner.Create(ctx, req)
+}
+
+func (s createVerifyOnlyRawOutputArtifactStore) Verify(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.VerifyResult, error) {
+	return s.inner.Verify(ctx, ref)
+}
+
+type countingRawOutputArtifactStore struct {
+	inner       *rawoutputs.Store
+	createCalls int
+	verifyCalls int
+}
+
+func (s *countingRawOutputArtifactStore) Create(ctx context.Context, req rawoutputs.CreateRequest) (rawoutputs.CreateResult, error) {
+	s.createCalls++
+	return s.inner.Create(ctx, req)
+}
+
+func (s *countingRawOutputArtifactStore) Verify(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.VerifyResult, error) {
+	s.verifyCalls++
+	return s.inner.Verify(ctx, ref)
+}
+
+func (s *countingRawOutputArtifactStore) Resolve(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.ResolvedArtifact, error) {
+	return s.inner.Resolve(ctx, ref)
+}
+
+func newProviderHistoryRawOutputRequestAgent(t *testing.T) (*Agent, *providerFacingHistoryMutationProbe, *rawoutputs.Store) {
+	t.Helper()
+	disableColors(t)
+	var out bytes.Buffer
+	provider := &providerFacingHistoryMutationProbe{}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	applyActiveContextProviderFixture(agent, activeContextOpenAIResponses)
+	store, err := rawoutputs.OpenStore(rawoutputs.Root(t.TempDir()), rawoutputs.StoreOptions{})
+	if err != nil {
+		t.Fatalf("rawoutputs.OpenStore() error = %v", err)
+	}
+	return agent, provider, store
+}
+
+func configureProviderHistoryRawOutputRequestApply(agent *Agent, budgetTokens, maxBudgetTokens int) {
+	agent.Runtime.Options.ProviderHistoryReductionMode = ProviderHistoryReductionApply
+	agent.Runtime.Options.ProviderHistoryReductionModeSet = true
+	agent.Runtime.Options.EnableProviderHistoryRehydrateContext = true
+	agent.Runtime.Options.ProviderHistoryRawOutputArtifacts = config.ProviderHistoryRawOutputArtifactsConfig{
+		Mode:                         config.ProviderHistoryRawOutputArtifactsModeApply,
+		ActiveContextBudgetTokens:    budgetTokens,
+		ActiveContextBudgetMaxTokens: maxBudgetTokens,
+	}
+}
+
+func syncProviderHistoryRawOutputRequestSession(agent *Agent) {
+	for _, msg := range agent.History {
+		agent.session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+}
+
+func providerHistoryLargeSafeWebSearchResult() string {
+	return strings.Repeat(`1. OpenAI Responses API guide
+URL: https://example.test/docs/responses?utm_campaign=private#private-fragment
+safe web search snippet about response ids and follow-up calls.
+2. OpenAI API reference
+URL: https://platform.openai.com/docs/api-reference/responses
+safe web search snippet about response fields.
+`, 180)
+}

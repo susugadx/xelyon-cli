@@ -1,7 +1,7 @@
 # Provider History Reduction / Active Context
 
-このページは、provider history reduction と rehydrated evidence active context の開発者向け dogfood メモです。
-まだ stable public config ではありません。`/config`、`docs/config.md`、generated config metadata には出しません。
+このページは、provider history reduction と rehydrated evidence active context の開発者向けメモです。
+現在は stable public config として `provider_history_reduction` を公開しています。user-facing 設定の source of truth は [docs/config.md](../config.md#provider-history-reduction-設定-provider_history_reduction) です。
 
 ## 早見表
 
@@ -21,23 +21,22 @@ XELYON の raw history を消さずに、provider へ送る履歴だけを reque
 - 古い evidence を完全に捨てるのではなく、必要な範囲を現在ファイルから読み直して active context に戻せます。
 - provider adapter ごとの既存 active-context transport を使うため、request assembly の責務を provider 側に閉じ込められます。
 
-### dogfood 設定例
+### 設定例
 
-`xelyon.yaml` に project-local experimental 設定として書きます。default は `off` / `false` です。
+`~/.xelyon/config.yaml` または `xelyon.yaml` に stable 設定として書きます。default は `dry_run` / `true` です。
 
 ```yaml
-experimental:
-  provider_history_reduction:
-    mode: apply
-    rehydrate_context: true
+provider_history_reduction:
+  mode: apply
+  rehydrate_context: true
 ```
 
-`mode` は `off` / `dry_run` / `apply` / `auto` を受け付けます。`auto` は現時点では safe な `dry_run` として動きます。
+stable `mode` は `off` / `dry_run` / `apply` を受け付けます。`auto` は stable config / `/config` には出しません。既存の experimental config または env 互換入力では受け付け、effective `dry_run` として扱います。
 `rehydrate_context: true` は mode とは別の gate です。`mode: off` や `dry_run` と同時に指定しても設定としては有効ですが、実際に rehydrated block が出るのは read/search/gather evidence replacement が apply され、現在の provider route に active context transport がある場合だけです。
 
 ### env override
 
-一時的に dogfood する場合は env で project config を上書きできます。
+一時的に動作を変える場合は env で config を上書きできます。
 
 ```sh
 XELYON_PROVIDER_HISTORY_REDUCTION=dry_run xelyon
@@ -63,7 +62,6 @@ XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=false xelyon
 - `write_file.content` replacement は evidence pointer ではないため、rehydrate 対象には入りません。
 - active context transport がない unsupported provider では、read/search/gather evidence replacement を skip し、`active_context_transport_unsupported` として保持します。
 - internal calls / compact / compression / Gemini repair / review model には active context を入れません。
-- これは stable config ではありません。README には experimental 概要だけを置き、通常設定表、`/config`、`docs/config.md`、generated config metadata にはまだ出しません。
 - default ON ではありません。コスト削減率も固定値としては約束しません。
 
 ## 詳細メモ
@@ -93,9 +91,9 @@ This document is descriptive. It does not change retention, compression, provide
   - `CompactedInput`, copied from current compacted runtime state.
   - `ActiveContextBlocks`, selected by `activeContextInputPolicy`.
 - `activeContextInputPolicy` keeps the current behavior:
-  - default is off.
+  - provider-history reduction defaults to `dry_run`.
   - the current task state block is built only when `RuntimeOptions.EnableCurrentTaskStateContext` is true.
-  - provider-history rehydrated evidence is built only when `RuntimeOptions.EnableProviderHistoryRehydrateContext` is true. The runtime gate defaults to false and is dogfooded through the experimental project-local config/env described below.
+  - provider-history rehydrated evidence is built only when `RuntimeOptions.EnableProviderHistoryRehydrateContext` is true. The runtime gate defaults to true through stable config, and can be overridden by project config or env.
   - sent only when `internal/api` reports a provider active-context transport for the runtime provider/model.
   - unsupported providers keep active context out of the request context.
 - Active context is only injected into provider request context. It is not appended to `Agent.History` or `Session.Messages`.
@@ -156,6 +154,7 @@ Phase 5c exposes the last provider history reduction projection as a `/status` r
 provider history reduction: apply
 replacement_status=partial_apply
 content_replacements=2; content_saved=750 B; approx_content_saved_tokens=42
+content_replacement_tools=list_dir:1, read_file:1
 command_output_replacements=1; command_output_saved=1,500 B; approx_command_output_saved_tokens=90
 edit_arg_replacements=1; edit_arg_saved=700 B; approx_edit_arg_saved_tokens=55
 total_provider_facing_saved=2,950 B; approx_total_provider_facing_saved_tokens=187
@@ -166,26 +165,42 @@ rehydrate_context=on; active_context_transport=ephemeral_system_message; active_
 - The diagnostic reports component replacement counts, provider-facing saved bytes, approximate saved tokens, rehydrated-evidence availability, and whether the Responses continuation chain was disabled. It does not add cost estimates, config, CLI flags, generated config, `/config`, or `/tokens` output.
 - The diagnostic remains runtime-only: it is not appended to `Agent.History`, `history.Session.Messages`, tool execution audit entries, audit logs, change records, compacted state, model input, or persisted session JSONL.
 
-Phase 5d adds an experimental project-local mode selector for controlled rollout.
+Phase 5d first added an experimental project-local mode selector for controlled rollout. The current public surface is stable `provider_history_reduction`.
 
-- The default remains `off`. `xelyon.yaml` can opt in with `experimental.provider_history_reduction.mode: off|dry_run|apply|auto`; `XELYON_PROVIDER_HISTORY_REDUCTION` overrides the project file with the same values.
-- `experimental.provider_history_reduction.rehydrate_context: true` enables request-local rehydrated evidence active-context injection for dogfood. `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false` overrides the project file. The default is false.
-- `/config`, generated `config.yaml` metadata, and `docs/config.md` remain unchanged because this is not a stable global config surface. README may point developers to this dogfood note as an experimental feature overview.
+- The public default is `dry_run` / `rehydrate_context=true`. `~/.xelyon/config.yaml` and `xelyon.yaml` can use `provider_history_reduction.mode: off|dry_run|apply`.
+- `XELYON_PROVIDER_HISTORY_REDUCTION` overrides config and still accepts `off|dry_run|apply|auto` for compatibility. `auto` resolves to effective `dry_run`.
+- `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false` overrides config.
+- Existing `experimental.provider_history_reduction` is still read as a compatibility input. If both stable and experimental project config are present, stable project config wins. Experimental `rehydrate_context` keeps its old omitted default of false.
+- `/config`, generated `config.yaml` metadata, `docs/config.md`, and README expose only the stable three-mode surface; `auto` is not shown as a stable option.
 - `dry_run` updates `AgentRuntime.LastProviderHistoryProjectionReport` but sends raw provider payload and keeps any OpenAI/Azure Responses `previous_response_id` chain unchanged.
 - `apply` uses the existing safe replacement path and disables the Responses continuation chain only when a replacement is actually applied.
 - `auto` is accepted as an enum but currently resolves to the safe `dry_run` effective mode. `/status` reports the configured mode separately, for example `provider history reduction: auto; effective=dry_run`.
 - Raw storage remains unchanged in every mode: `Agent.History`, `history.Session.Messages`, session tool execution audit entries, audit logs, change records, compacted state, and persisted session JSONL keep the original conversation/audit data.
 
-## Provider History Reduction Dogfood
+## Provider History Reduction Runtime Config
 
-This mode is experimental runtime dogfood only. Do not expose it as a stable public config in `/config`, generated config metadata, or `docs/config.md` until the public config contract is decided. README may link here as an experimental developer feature overview.
+Stable config:
 
-Project-local dry-run:
+```yaml
+provider_history_reduction:
+  mode: dry_run
+  rehydrate_context: true
+```
+
+Project-local stable override:
+
+```yaml
+provider_history_reduction:
+  mode: apply
+  rehydrate_context: true
+```
+
+Compatibility input:
 
 ```yaml
 experimental:
   provider_history_reduction:
-    mode: dry_run
+    mode: apply
     rehydrate_context: true
 ```
 
@@ -210,7 +225,7 @@ In `dry_run`, inspect `/status` after a provider-facing request:
 
 In `apply`, `EstimatedSavedBytes` and `ApproxSavedTokens` are the actual provider-facing total: applied read/search/gather content replacement plus applied safe command output replacement plus applied edit argument replacement. In `dry_run`, the same top-level fields are potential estimates only.
 
-Switch to `apply` only after dry-run candidates and kept reasons look expected, and test on a limited task where repeated command/read/search calls do not increase and answer quality does not regress. `apply` replaces only safe old successful `bash`/`command` outputs for single actual test/build/lint commands with explicit success evidence, and safe old successful edit arguments for `write_file.content`, `apply_patch.patch`, `str_replace old_str/new_str`, and `str_replace edits` when the result confirms the matching path. Replacements apply only when the placeholder is smaller and saves at least the internal token threshold. Failure logs, ambiguous build summaries, mixed passing/failing test output, lint output with errors/issues/problems/warnings, interrupted or partial command output, compound shell or command-substitution output, `git diff` output, generic successful command output, `delete_file`, unsupported edit tool arguments, unsafe paths, invalid arguments, and latest/trailing/incompletely linked tool results remain raw. When any provider-facing replacement is applied, `/status` reports `replacement_status=apply` if all detected candidates were replaced, or `replacement_status=partial_apply` if only some were replaced, and `responses_chain_disabled=true`; OpenAI/Azure Responses requests may drop the `previous_response_id` continuation chain. `apply` with zero replacements keeps the chain.
+Switch to `apply` only after dry-run candidates and kept reasons look expected, and test on a limited task where repeated command/read/search calls do not increase and answer quality does not regress. `apply` replaces only safe old outputs or arguments that pass the tool-specific parser, safety gate, latest-suffix gate, and token-saving threshold. Unknown command output, unsafe output, data-bearing network/database command output, unsupported edit tool arguments, unsafe paths, invalid arguments, and latest/trailing/incompletely linked tool results remain raw. When any provider-facing replacement is applied, `/status` reports `replacement_status=apply` if all detected candidates were replaced, or `replacement_status=partial_apply` if only some were replaced, and `responses_chain_disabled=true`; OpenAI/Azure Responses requests may drop the `previous_response_id` continuation chain. `apply` with zero replacements keeps the chain.
 
 Raw storage is unchanged in all modes: runtime `Agent.History`, `Session.Messages`, audit entries, change records, and persisted JSONL keep the original content and original tool arguments.
 
@@ -228,9 +243,9 @@ Apply-mode projection reports keep matched evidence pointers only on read/search
 
 The runtime can pass those applied read/search/gather `EvidencePointers` into `taskstate.BuildRehydratePlan` as old evidence. `/ledger` shows non-empty rehydrate candidates after the normal task-ledger snapshot so the dry-run can be inspected during dogfood. `/ledger` remains a candidate diagnostic and does not show rehydrated file content.
 
-Command output replacement is backed by successful command summaries. Edit argument replacement is backed by the matching successful write/patch/replace result plus retained path or patch metadata. Neither is an evidence pointer, so command/edit replacements are not rehydrate candidates.
+Command output replacement is backed by successful command summaries. Edit argument replacement is backed by the matching successful write/patch/replace result plus retained path or patch metadata. Neither is an evidence pointer, so command/edit replacements are not rehydrate candidates. Data-bearing network/database command output is kept raw until a durable artifact pointer and rehydrate path can restore the omitted body.
 
-Provider-input injection is available behind `RuntimeOptions.EnableProviderHistoryRehydrateContext`. The gate defaults to false and can be enabled for dogfood with `experimental.provider_history_reduction.rehydrate_context: true` in `xelyon.yaml` or overridden for one run with `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false`. This remains an experimental project-local surface only: it is still not exposed as stable config in `/config`, `docs/config.md`, or generated config metadata.
+Provider-input injection is available behind `RuntimeOptions.EnableProviderHistoryRehydrateContext`. The gate defaults to true through stable `provider_history_reduction.rehydrate_context`, can be overridden in `xelyon.yaml`, and can be overridden for one run with `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT=1|true|0|false`.
 
 When the gate is true, provider-facing request assembly uses the projection report from the same request, builds a rehydrate plan from applied read/search/gather replacements, executes it against current files, renders `<rehydrated_evidence>`, and appends it as a dynamic active context block named `provider_history_rehydrated_evidence`. This happens only for provider request paths that already use `providerFacingHistoryForRequest` and only when `internal/api.ProviderActiveContextTransportForRequest` reports a supported transport. The active context core contract is provider-independent and request-local; provider adapters own the transport-specific placement.
 
@@ -242,7 +257,7 @@ Supported transports:
 - Gemini text, function-calling, and multimodal requests add active context as request-local user content immediately before the latest user request sent to Gemini. Cached `systemInstruction` is not modified.
 - Bedrock Converse adds active context as a separate `System` content block.
 
-If the rehydrate gate is true but a provider has no active-context transport, read/search/gather evidence replacement is skipped for that request and the projection report keeps those candidates with `active_context_transport_unsupported`. Successful command output and `write_file.content` replacement keep their safe replacement behavior because they do not require rehydrated evidence.
+If the rehydrate gate is true but a provider has no active-context transport, read/search/gather evidence replacement is skipped for that request and the projection report keeps those candidates with `active_context_transport_unsupported`. Successful validation/git/observation command output and `write_file.content` replacement keep their safe replacement behavior because they do not require rehydrated evidence; data-bearing network/database command output remains raw for the same reason it is not rehydratable.
 
 The same request-local rehydrated block is included in provider-facing token estimates, `/tokens`, token warnings, and local auto-compress decisions. Token estimation does not update `AgentRuntime.LastProviderHistoryProjectionReport`.
 

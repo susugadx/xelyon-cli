@@ -2,14 +2,15 @@ package providerhistory
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
-	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 func TestProjectDryRunDetectsReductionCandidatesAndReportMetrics(t *testing.T) {
@@ -124,7 +125,7 @@ func TestProjectApplyKeepsEvidenceReductionWhenActiveContextTransportUnsupported
 	if result.History[1].Content != oldRead {
 		t.Fatalf("read projection changed to %q, want original old read", result.History[1].Content)
 	}
-	if result.History[4].Content == commandOutput || !strings.Contains(result.History[4].Content, "successful test command output") {
+	if result.History[4].Content == commandOutput || !strings.Contains(result.History[4].Content, "successful validation command output") {
 		t.Fatalf("command output = %q, want successful command placeholder", result.History[4].Content)
 	}
 	if result.Report.CommandEditDryRun.CommandReplacedCount != 1 || !result.Report.ResponsesChainDisabled {
@@ -236,30 +237,39 @@ func TestProjectPreservesNilAndEmptyInputShape(t *testing.T) {
 
 func TestCloneProjectionReportCopiesNestedState(t *testing.T) {
 	report := ProjectionReport{
-		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
+		KeptReasonCounts:             map[string]int{"missing_evidence_pointer": 1},
+		ContentReplacementToolCounts: map[string]int{"list_dir": 1},
+		FutureFamilyKeptReasonCounts: map[string]int{"wait_agent_freeform_output_keep": 1},
 		Candidates: []ReductionCandidate{{
 			ToolName:         "read_file",
 			EvidencePointers: []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
 		}},
 		CommandEditDryRun: CommandEditDryRunReport{
-			CandidateReasonCounts: map[string]int{"command_success_output": 1},
-			KeptReasonCounts:      map[string]int{"latest_tool_result": 1},
-			Candidates:            []CommandEditDryRunCandidate{{ToolName: "bash"}},
-			Kept:                  []CommandEditDryRunCandidate{{ToolName: "write_file"}},
+			CandidateReasonCounts:              map[string]int{"validation_success": 1},
+			CommandReplacementClassifierCounts: map[string]int{"validation": 1},
+			KeptReasonCounts:                   map[string]int{"latest_tool_result": 1},
+			Candidates:                         []CommandEditDryRunCandidate{{ToolName: "bash"}},
+			Kept:                               []CommandEditDryRunCandidate{{ToolName: "write_file"}},
 		},
 	}
 
 	cloned := CloneProjectionReport(report)
 	cloned.KeptReasonCounts["missing_evidence_pointer"] = 2
+	cloned.ContentReplacementToolCounts["list_dir"] = 2
+	cloned.FutureFamilyKeptReasonCounts["wait_agent_freeform_output_keep"] = 2
 	cloned.Candidates[0].EvidencePointers[0].Path = "mutated.go"
-	cloned.CommandEditDryRun.CandidateReasonCounts["command_success_output"] = 2
+	cloned.CommandEditDryRun.CandidateReasonCounts["validation_success"] = 2
+	cloned.CommandEditDryRun.CommandReplacementClassifierCounts["validation"] = 2
 	cloned.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] = 2
 	cloned.CommandEditDryRun.Candidates[0].ToolName = "command"
 	cloned.CommandEditDryRun.Kept[0].ToolName = "apply_patch"
 
 	if report.KeptReasonCounts["missing_evidence_pointer"] != 1 ||
+		report.ContentReplacementToolCounts["list_dir"] != 1 ||
+		report.FutureFamilyKeptReasonCounts["wait_agent_freeform_output_keep"] != 1 ||
 		report.Candidates[0].EvidencePointers[0].Path != "src/main.go" ||
-		report.CommandEditDryRun.CandidateReasonCounts["command_success_output"] != 1 ||
+		report.CommandEditDryRun.CandidateReasonCounts["validation_success"] != 1 ||
+		report.CommandEditDryRun.CommandReplacementClassifierCounts["validation"] != 1 ||
 		report.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] != 1 ||
 		report.CommandEditDryRun.Candidates[0].ToolName != "bash" ||
 		report.CommandEditDryRun.Kept[0].ToolName != "write_file" {
@@ -372,6 +382,14 @@ func providerHistoryTestLargeSuccessfulTestOutput() string {
 	return strings.Repeat("ok\tgithub.com/susugadx/xelyon-cli/internal/providerhistory\t0.001s\n", 260)
 }
 
+func providerHistoryTestNumberedLines(prefix string, count int) string {
+	var b strings.Builder
+	for i := 1; i <= count; i++ {
+		fmt.Fprintf(&b, "%s-%03d\n", prefix, i)
+	}
+	return b.String()
+}
+
 func providerHistoryTestWriteFileSuccess(content, path string) string {
 	return "Successfully wrote " + strconv.Itoa(len(content)) + " bytes (" + strconv.Itoa(strings.Count(content, "\n")+1) + " lines) to " + path
 }
@@ -414,6 +432,24 @@ func providerHistoryTestKeptByToolCallID(report ProjectionReport, id string) *Re
 	return nil
 }
 
+func providerHistoryTestCommandCandidateByToolCallID(report CommandEditDryRunReport, id string) *CommandEditDryRunCandidate {
+	for i := range report.Candidates {
+		if report.Candidates[i].ToolCallID == id {
+			return &report.Candidates[i]
+		}
+	}
+	return nil
+}
+
+func providerHistoryTestRawOutputStore(t *testing.T) RawOutputArtifactStore {
+	t.Helper()
+	store, err := rawoutputs.OpenStore(rawoutputs.Root(t.TempDir()), rawoutputs.StoreOptions{})
+	if err != nil {
+		t.Fatalf("rawoutputs.OpenStore() error = %v", err)
+	}
+	return store
+}
+
 func providerHistoryTestAssertByteMetrics(t *testing.T, original, projected []api.Message, report ProjectionReport) {
 	t.Helper()
 	originalBytes := providerHistoryContentBytes(original)
@@ -432,8 +468,8 @@ func providerHistoryTestAssertByteMetrics(t *testing.T, original, projected []ap
 	wantTotalTokens := wantContentTokens
 	switch report.Mode {
 	case Apply:
-		wantTotalSaved += report.CommandEditDryRun.CommandReplacementSavedBytes + report.CommandEditDryRun.EditArgReplacementSavedBytes
-		wantTotalTokens += report.CommandEditDryRun.ApproxCommandReplacementSavedTokens + report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens
+		wantTotalSaved += report.CommandEditDryRun.CommandReplacementSavedBytes + report.CommandEditDryRun.EditArgReplacementSavedBytes + report.CommandEditDryRun.ArtifactBackedCommandReplacementSavedBytes
+		wantTotalTokens += report.CommandEditDryRun.ApproxCommandReplacementSavedTokens + report.CommandEditDryRun.ApproxEditArgReplacementSavedTokens + report.CommandEditDryRun.ApproxArtifactBackedCommandReplacementSavedTokens
 	case DryRun:
 		wantTotalSaved += report.CommandEditDryRun.CommandEstimatedSavedBytes + report.CommandEditDryRun.EditArgEstimatedSavedBytes
 		wantTotalTokens += report.CommandEditDryRun.ApproxCommandSavedTokens + report.CommandEditDryRun.ApproxEditArgSavedTokens
@@ -460,15 +496,12 @@ func providerHistoryTestContentReplacementSavings(original []api.Message, report
 			continue
 		}
 		originalContent := original[candidate.HistoryIndex].Content
-		if len(originalContent) <= len(candidate.SuggestedReplacementText) {
+		savedBytes, savedTokens, _, ok := providerHistoryContentReplacementEligibility(originalContent, candidate.SuggestedReplacementText)
+		if !ok {
 			continue
 		}
-		totalBytes += len(originalContent) - len(candidate.SuggestedReplacementText)
-		originalTokens := token.EstimateTokenCount(originalContent)
-		replacementTokens := token.EstimateTokenCount(candidate.SuggestedReplacementText)
-		if originalTokens > replacementTokens {
-			totalTokens += originalTokens - replacementTokens
-		}
+		totalBytes += savedBytes
+		totalTokens += savedTokens
 	}
 	return totalBytes, totalTokens
 }

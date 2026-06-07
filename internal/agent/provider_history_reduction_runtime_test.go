@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory"
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
+	"github.com/susugadx/xelyon-cli/internal/review"
 )
 
 func TestSyncProviderHistoryRuntimeConfigFromProjectConfig(t *testing.T) {
@@ -22,15 +25,138 @@ func TestSyncProviderHistoryRuntimeConfigFromProjectConfig(t *testing.T) {
 	if !runtime.Options.EnableProviderHistoryRehydrateContext {
 		t.Fatal("runtime EnableProviderHistoryRehydrateContext = false, want true")
 	}
+	if got := runtime.Options.ProviderHistoryRawOutputArtifacts.Mode; got != config.ProviderHistoryRawOutputArtifactsModeDryRun {
+		t.Fatalf("runtime raw_output_artifacts.mode = %q, want dry_run", got)
+	}
 
 	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, nil); err != nil {
 		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig(nil) error = %v", err)
 	}
-	if runtime.Options.ProviderHistoryReductionMode != ProviderHistoryReductionDisabled || runtime.Options.ProviderHistoryReductionModeSet {
-		t.Fatalf("runtime provider history reduction mode after nil project = (%v, %v), want off unset", runtime.Options.ProviderHistoryReductionMode, runtime.Options.ProviderHistoryReductionModeSet)
+	if runtime.Options.ProviderHistoryReductionMode != ProviderHistoryReductionDryRun || runtime.Options.ProviderHistoryReductionModeSet {
+		t.Fatalf("runtime provider history reduction mode after nil project = (%v, %v), want dry-run unset", runtime.Options.ProviderHistoryReductionMode, runtime.Options.ProviderHistoryReductionModeSet)
+	}
+	if !runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext after nil project = false, want true")
+	}
+	if got := runtime.Options.ProviderHistoryRawOutputArtifacts.Mode; got != config.ProviderHistoryRawOutputArtifactsModeDryRun {
+		t.Fatalf("runtime raw_output_artifacts.mode after nil project = %q, want global/default dry_run", got)
+	}
+}
+
+func TestSyncProviderHistoryRuntimeConfigUsesStableGlobalConfig(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+	cfg := newProjectMapDisabledConfig()
+	cfg.ProviderHistoryReduction.Mode = config.ProviderHistoryReductionModeApply
+	cfg.ProviderHistoryReduction.RehydrateContext = false
+	runtime := NewAgentRuntimeWithConfig(cfg)
+
+	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, nil); err != nil {
+		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
+	}
+	if runtime.Options.ProviderHistoryReductionMode != ProviderHistoryReductionApply || runtime.Options.ProviderHistoryReductionModeSet {
+		t.Fatalf("runtime provider history reduction mode = (%v, %v), want apply unset", runtime.Options.ProviderHistoryReductionMode, runtime.Options.ProviderHistoryReductionModeSet)
 	}
 	if runtime.Options.EnableProviderHistoryRehydrateContext {
-		t.Fatal("runtime EnableProviderHistoryRehydrateContext after nil project = true, want false")
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext = true, want global false")
+	}
+	if got := runtime.Options.ProviderHistoryRawOutputArtifacts.Mode; got != config.ProviderHistoryRawOutputArtifactsModeDryRun {
+		t.Fatalf("runtime raw_output_artifacts.mode = %q, want global/default dry_run", got)
+	}
+}
+
+func TestSyncProviderHistoryRuntimeConfigUsesRawOutputArtifactsProjectOverride(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+	runtime := NewAgentRuntime()
+	projectCfg := &config.ProjectConfig{
+		ProviderHistoryReduction: config.ProjectStableProviderHistoryReductionConfig{
+			Mode: config.ProviderHistoryReductionModeApply,
+			RawOutputArtifacts: config.ProviderHistoryRawOutputArtifactsConfig{
+				Mode:                         config.ProviderHistoryRawOutputArtifactsModeApply,
+				MaxArtifactBytes:             8192,
+				SessionQuotaBytes:            16384,
+				ChunkBytes:                   4096,
+				ActiveContextBudgetTokens:    2048,
+				ActiveContextBudgetMaxTokens: 4096,
+				Retention:                    config.ProviderHistoryRawOutputArtifactsRetentionSession,
+			},
+		},
+	}
+
+	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, projectCfg); err != nil {
+		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
+	}
+	raw := runtime.Options.ProviderHistoryRawOutputArtifacts
+	if !runtime.Options.ProviderHistoryRawOutputArtifactsSet ||
+		raw.Mode != config.ProviderHistoryRawOutputArtifactsModeApply ||
+		raw.MaxArtifactBytes != 8192 ||
+		raw.SessionQuotaBytes != 16384 ||
+		raw.ChunkBytes != 4096 ||
+		raw.ActiveContextBudgetTokens != 2048 ||
+		raw.ActiveContextBudgetMaxTokens != 4096 ||
+		raw.Retention != config.ProviderHistoryRawOutputArtifactsRetentionSession {
+		t.Fatalf("runtime raw_output_artifacts = (%#v, set=%v), want project override", raw, runtime.Options.ProviderHistoryRawOutputArtifactsSet)
+	}
+	policy := providerHistoryReductionPolicyForRuntime(runtime)
+	if policy.RawOutputArtifactsMode != providerhistory.RawOutputArtifactsApply ||
+		!policy.RawOutputRehydrateContextEnabled {
+		t.Fatalf("providerHistoryReductionPolicyForRuntime() = %#v, want raw output apply mode and rehydrate gate", policy)
+	}
+}
+
+func TestSyncProviderHistoryRuntimeConfigInvalidatesRawOutputArtifactStoreOnConfigChange(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+	runtime := NewAgentRuntime()
+	store, err := rawoutputs.OpenStore(rawoutputs.Root(t.TempDir()), rawoutputs.StoreOptions{})
+	if err != nil {
+		t.Fatalf("rawoutputs.OpenStore() error = %v", err)
+	}
+	runtime.RawOutputArtifactStore = store
+	projectCfg := &config.ProjectConfig{
+		ProviderHistoryReduction: config.ProjectStableProviderHistoryReductionConfig{
+			RawOutputArtifacts: config.ProviderHistoryRawOutputArtifactsConfig{
+				Mode:                         config.ProviderHistoryRawOutputArtifactsModeApply,
+				MaxArtifactBytes:             8192,
+				SessionQuotaBytes:            16384,
+				ChunkBytes:                   4096,
+				ActiveContextBudgetTokens:    2048,
+				ActiveContextBudgetMaxTokens: 4096,
+				Retention:                    config.ProviderHistoryRawOutputArtifactsRetentionSession,
+			},
+		},
+	}
+
+	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, projectCfg); err != nil {
+		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
+	}
+	if runtime.RawOutputArtifactStore != nil {
+		t.Fatal("runtime RawOutputArtifactStore was not invalidated after raw_output_artifacts config changed")
+	}
+}
+
+func TestSyncProviderHistoryRuntimeConfigStableProjectOverridesExperimental(t *testing.T) {
+	unsetProviderHistoryRuntimeConfigEnv(t)
+	runtime := NewAgentRuntime()
+	projectCfg := &config.ProjectConfig{
+		ProviderHistoryReduction: config.ProjectStableProviderHistoryReductionConfig{
+			Mode: config.ProviderHistoryReductionModeApply,
+		},
+		Experimental: config.ProjectExperimentalConfig{
+			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
+				Mode:                config.ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext:    false,
+				RehydrateContextSet: true,
+			},
+		},
+	}
+
+	if err := syncProviderHistoryRuntimeConfigFromProjectConfig(runtime, projectCfg); err != nil {
+		t.Fatalf("syncProviderHistoryRuntimeConfigFromProjectConfig() error = %v", err)
+	}
+	if runtime.Options.ProviderHistoryReductionMode != ProviderHistoryReductionApply || !runtime.Options.ProviderHistoryReductionModeSet {
+		t.Fatalf("runtime provider history reduction mode = (%v, %v), want stable apply set", runtime.Options.ProviderHistoryReductionMode, runtime.Options.ProviderHistoryReductionModeSet)
+	}
+	if !runtime.Options.EnableProviderHistoryRehydrateContext {
+		t.Fatal("runtime EnableProviderHistoryRehydrateContext = false, want stable default true")
 	}
 }
 
@@ -164,5 +290,79 @@ func TestProviderHistoryReductionPolicyForRuntimeModeResolution(t *testing.T) {
 				t.Fatalf("providerHistoryReductionPolicyForRuntime().Mode = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestReviewPromptReductionModeUsesEffectiveProviderHistoryMode(t *testing.T) {
+	tests := []struct {
+		name string
+		opts RuntimeOptions
+		want review.ReviewPromptReductionMode
+	}{
+		{
+			name: "off",
+			want: review.ReviewPromptReductionModeOff,
+		},
+		{
+			name: "apply",
+			opts: RuntimeOptions{
+				ProviderHistoryReductionMode:    ProviderHistoryReductionApply,
+				ProviderHistoryReductionModeSet: true,
+			},
+			want: review.ReviewPromptReductionModeApply,
+		},
+		{
+			name: "dry run does not alter review prompt",
+			opts: RuntimeOptions{
+				ProviderHistoryReductionMode:    ProviderHistoryReductionDryRun,
+				ProviderHistoryReductionModeSet: true,
+			},
+			want: review.ReviewPromptReductionModeDryRun,
+		},
+		{
+			name: "auto remains dry run for review prompt",
+			opts: RuntimeOptions{
+				ProviderHistoryReductionMode:    ProviderHistoryReductionAuto,
+				ProviderHistoryReductionModeSet: true,
+			},
+			want: review.ReviewPromptReductionModeDryRun,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &Agent{Runtime: &AgentRuntime{Options: tt.opts}}
+			if got := agent.reviewPromptReductionMode(); got != tt.want {
+				t.Fatalf("reviewPromptReductionMode() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReviewRawOutputArtifactsModeUsesStableDefault(t *testing.T) {
+	agent := &Agent{Runtime: &AgentRuntime{}}
+	if got := agent.reviewRawOutputArtifactsMode(); got != review.ReviewRawOutputArtifactsModeDryRun {
+		t.Fatalf("reviewRawOutputArtifactsMode() = %q, want default dry_run", got)
+	}
+
+	resolved := reviewRawOutputArtifactsConfigForRuntime(&AgentRuntime{})
+	defaults := config.DefaultProviderHistoryRawOutputArtifactsConfig()
+	if resolved.Mode != defaults.Mode ||
+		resolved.ActiveContextBudgetTokens != defaults.ActiveContextBudgetTokens ||
+		resolved.ActiveContextBudgetMaxTokens != defaults.ActiveContextBudgetMaxTokens {
+		t.Fatalf("reviewRawOutputArtifactsConfigForRuntime() = %#v, want defaults %#v", resolved, defaults)
+	}
+}
+
+func TestReviewRawOutputArtifactStoreSkipsWhenPromptReductionOff(t *testing.T) {
+	agent := &Agent{Runtime: &AgentRuntime{}}
+	if got := agent.reviewPromptReductionMode(); got != review.ReviewPromptReductionModeOff {
+		t.Fatalf("reviewPromptReductionMode() = %q, want off", got)
+	}
+	if store := agent.reviewRawOutputArtifactStore(); store != nil {
+		t.Fatalf("reviewRawOutputArtifactStore() = %#v, want nil when review prompt reduction is off", store)
+	}
+	if agent.Runtime.RawOutputArtifactStore != nil {
+		t.Fatalf("runtime RawOutputArtifactStore = %#v, want unopened", agent.Runtime.RawOutputArtifactStore)
 	}
 }

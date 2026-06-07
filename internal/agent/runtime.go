@@ -6,6 +6,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory"
+	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
@@ -19,6 +21,8 @@ type RuntimeOptions struct {
 	EnableProviderHistoryReduction        bool
 	ProviderHistoryReductionMode          ProviderHistoryReductionMode
 	ProviderHistoryReductionModeSet       bool
+	ProviderHistoryRawOutputArtifacts     config.ProviderHistoryRawOutputArtifactsConfig
+	ProviderHistoryRawOutputArtifactsSet  bool
 }
 
 // AgentRuntime は agent/session 単位で保持する実行時 state を束ねる。
@@ -34,7 +38,10 @@ type AgentRuntime struct {
 	AuditLogger                         audit.ToolLogger
 	SubAgentManager                     *subagent.Manager
 	TaskLedger                          *taskstate.Store
+	RawOutputArtifactRoot               string
+	RawOutputArtifactStore              providerhistory.RawOutputArtifactStore
 	LastProviderHistoryProjectionReport ProviderHistoryProjectionReport
+	LastReviewPromptReductionReport     review.ReviewPromptReductionReport
 
 	managedTaskLedger       *taskstate.Store
 	taskLedgerInvocationCWD string

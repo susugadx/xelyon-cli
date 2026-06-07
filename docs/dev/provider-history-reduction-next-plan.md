@@ -674,8 +674,9 @@ successful command output は command output classifier で以下に分類する
 - file dump success: `first/last compact`
 - git state success: `git-specific owner に dispatch`
 - sensitive/config/auth success: `safe placeholder`, never first/last compact
-- package/network/install/deploy success: `safe placeholder`, never first/last compact
-- database output success: classifier confidence が高い場合のみ `safe placeholder`, never first/last compact
+- package/install/deploy success: `safe placeholder`, never first/last compact
+- network fetch success: `skip/keep raw` until artifact pointer rehydrate exists, never first/last compact
+- database output success: `skip/keep raw` until artifact pointer rehydrate exists, never first/last compact
 - unknown success: `skip`
 
 共通条件:
@@ -816,35 +817,25 @@ tree ...
 
 full omission しない。
 
-古い成功済み output が大きい場合だけ compact する。
+observation output は検索結果・一覧・照合結果そのものが evidence になるため、apply mode では inline first/last compact しない。
 
-large observation threshold:
+削る場合は raw output artifact-backed compact に限定する。
 
-- original line count が 80 lines 以上、または original bytes が 16 KiB 以上
-- compact 後の saved tokens が command output replacement threshold 以上
+- raw artifact を materialize できる
+- `raw_output_ref` を provider-facing placeholder に載せられる
+- artifact verify が通る
+- active context rehydrate transport が有効
+- artifact-backed replacement threshold を満たす
 
-compact には最低限以下を残す。
+上記を満たさない場合は raw keep する。first/last excerpt だけを残して middle evidence を不可逆に落とさない。
 
-- command
-- classifier: `observation`
-- total lines
-- total bytes
-- first 20 lines
-- last 20 lines
-- omitted line count
-
-compact 例:
+artifact-backed compact 例:
 
 ```text
-[compacted old successful observation command output; command="rg ProviderHistory"; classifier=observation; lines=240; bytes=18320]
-<first 20 lines>
-...
-[omitted 200 lines]
-...
-<last 20 lines>
+[compacted old data-bearing command output; raw_output_ref=rawout_ab12cd34ef56; surface=xelyon_command_output; family=observation; classifier=observation; bytes=18320; tokens≈4580; sha256=...]
+excerpt:
+<bounded first/last excerpt only>
 ```
-
-20 行より少ない side がある場合も、同じ line を重複して残さない。omitted line count が 0 になる output は compact しない。
 
 observation command でも、command family または output が sensitive / config / auth / package / network / install / deploy / database 系に該当する場合は generic first/last compact から除外し、該当 family の safe placeholder 方針へ送る。
 
@@ -866,26 +857,9 @@ bat file.go
 
 #### compact 方針
 
-full omission しない。
+full omission しない。file dump output は file content evidence そのものなので、apply mode では observation と同じ raw output artifact-backed compact に限定する。
 
-`read_file` と違って evidence pointer がないため、placeholder 化もしない。
-
-巨大な古い file dump output は observation compact と同じ first/last compact にする。
-
-large file dump threshold:
-
-- original line count が 80 lines 以上、または original bytes が 16 KiB 以上
-- compact 後の saved tokens が command output replacement threshold 以上
-
-compact には以下を残す。
-
-- command
-- classifier: `file_dump`
-- total lines
-- total bytes
-- first 20 lines
-- last 20 lines
-- omitted line count
+`read_file` と違って active file pointer だけでは当時の command output を復元できないため、`raw_output_ref` と artifact verify と active context rehydrate gate が揃わない場合は raw keep する。
 
 file dump target path または command が secret / env / credential / config dump 系に該当する場合は generic first/last compact から除外する。
 
@@ -905,14 +879,19 @@ git branch
 
 #### 方針
 
-successful command classifier では git family として検出するが、具体 compact は `## 3. git diff / git show / git status output compact` の owner に委譲する。
+successful command classifier では git family として検出するが、具体 compact は output 種別で分ける。
+
+`git diff` / `git show` は diff hunk 自体が evidence になるため、apply mode では raw output artifact-backed compact に限定する。`raw_output_ref` と active context rehydrate gate が揃わない場合は raw keep する。
+
+`git status` / `git log` / `git branch` / `git ls-files` は構造化 summary が raw body を概ね代替できるため、git-specific inline compact を維持できる。
 
 この章で決めること:
 
 - git 系 output を unknown success として扱わない
 - git 系 output を validation success として placeholder 化しない
-- git 系 output は git-specific compact path に dispatch する
-- git compact owner が利用できない場合は skip する
+- `git diff` / `git show` は raw artifact-backed path に dispatch する
+- summary 系 git output は git-specific compact path に dispatch する
+- compact owner が利用できない場合は skip / raw keep する
 
 ### 5. sensitive/config/auth success
 
@@ -988,13 +967,14 @@ firebase deploy
 
 package / network / install / deploy success は generic first/last compact から除外する。
 
-古い成功済み output で安全条件を満たす場合は、raw output の行を残さない safe placeholder 化を行う。
+package / install / deploy の古い成功済み output で安全条件を満たす場合は、raw output の行を残さない safe placeholder 化を行う。
+
+network fetch success は取得結果そのものが後続判断の evidence になり得るため、artifact pointer / active context rehydrate の設計が入るまでは apply でも raw のまま保持する。dry-run / report では `data_bearing_network_command_output_keep` として keep reason を残し、savings には計上しない。
 
 placeholder 例:
 
 ```text
 [omitted old successful side-effect command output; command_family=package_install; exit=0]
-[omitted old successful external-state command output; command_family=network_fetch; exit=0]
 ```
 
 never first/last compact:
@@ -1002,7 +982,8 @@ never first/last compact:
 - side effect や network state が絡む
 - output に重要な warning / URL / token / auth / publish result が含まれる可能性がある
 - 成功 output でも後続判断に必要な場合がある
-- package / network / install / deploy 系の raw output 行は provider-facing placeholder に残さない
+- package / install / deploy 系の raw output 行は provider-facing placeholder に残さない
+- network fetch output は placeholder にも compact にもせず raw を保持する
 
 safe placeholder の条件:
 
@@ -1037,9 +1018,9 @@ prisma db execute ...
 
 database output success は generic first/last compact から除外する。
 
-classifier confidence が高く、古い成功済み output で安全条件を満たす場合だけ、raw output の行を残さない safe placeholder 化を行う。
+database query / dump output は query result 自体が後続判断の evidence であり、provider-facing replacement から再取得できない。artifact pointer / active context rehydrate の設計が入るまでは apply でも raw のまま保持する。dry-run / report では `data_bearing_database_command_output_keep` として keep reason を残し、savings には計上しない。
 
-placeholder 例:
+将来の artifact pointer 対応後の placeholder 例:
 
 ```text
 [omitted old successful database command output; command_family=database; exit=0]
@@ -1051,7 +1032,7 @@ never first/last compact:
 - query / dump output は first / last lines だけでも provider-facing に残すリスクがある
 - database 系の raw output 行は provider-facing placeholder に残さない
 
-safe placeholder の条件:
+将来 safe placeholder を有効化する条件:
 
 - exit code 0
 - old result
@@ -1101,7 +1082,7 @@ safe placeholder もしない。
 
 このリストは provider-facing optimization そのものからの除外ではない。
 
-family を高信頼に分類でき、safe placeholder 条件を満たす sensitive / package / network / install / deploy / database 系 output は、first/last compact ではなく safe placeholder にする。
+family を高信頼に分類でき、safe placeholder 条件を満たす sensitive / package / install / deploy 系 output は、first/last compact ではなく safe placeholder にする。network / database 系の successful output は data-bearing として raw を保持する。
 
 unknown success は分類できないため、safe placeholder もしない。
 
@@ -1111,8 +1092,8 @@ generic first/last compact から除外された command output は `KeptReason`
 
 - `command_output_safe_placeholder_sensitive`
 - `command_output_safe_placeholder_package_install`
-- `command_output_safe_placeholder_network_fetch`
-- `command_output_safe_placeholder_database`
+- `data_bearing_network_command_output_keep`
+- `data_bearing_database_command_output_keep`
 - `command_output_unknown_skip`
 
 ### safe placeholder 共通条件
@@ -1135,22 +1116,24 @@ placeholder 例:
 ```text
 [omitted old successful sensitive command output; command_family=env_config; exit=0]
 [omitted old successful side-effect command output; command_family=package_install; exit=0]
-[omitted old successful external-state command output; command_family=network_fetch; exit=0]
 ```
 
-secret / env / config / auth / package / network / install / deploy / database 系では、raw output の first / last lines を provider-facing に絶対に残さない。
+secret / env / config / auth / package / install / deploy 系では、raw output の first / last lines を provider-facing に絶対に残さない。network / database 系では artifact pointer がない限り raw を保持し、placeholder / first-last compact で evidence を落とさない。
 
 ### active context / rehydrate_context
 
-successful command output compact は rehydrate_context evidence 対象外。
+successful command output compact は、semantic role によって rehydrate_context 依存を分ける。
 
 理由:
 
-- command output は `read_file` / `search_code` / `gather_context` のような evidence pointer 管理対象ではない
-- 古い command output は再実行できるものと再実行できないものが混ざる
-- rehydrate ではなく compact text を provider-facing に残す
+- validation log や package/deploy operation log は、raw body そのものではなく成否・分類が evidence になるため inline placeholder でよい
+- `git status` / `git log` / `git branch` / `git ls-files` は構造化 summary が raw body を概ね代替できるため inline compact でよい
+- observation / file dump / `git diff` / `git show` / network response / database query result は raw body 自体が evidence になるため、apply compact には raw artifact と active context rehydrate が必須
+- artifact pointer / verify / active context rehydrate が揃わない data-bearing output は raw keep する
 
-successful command output compact は active context transport availability に依存しない。
+inline compact は active context transport availability に依存しない。
+
+artifact-backed data-bearing compact は active context transport availability に依存する。
 
 ### report / status
 
@@ -1219,12 +1202,12 @@ no replacement の場合は chain を保持する。
 #### safe placeholder / generic first/last compact exclusion
 
 - `npm install` success output は first/last compact されず、safe placeholder 化される
-- `curl` success output は first/last compact されず、safe placeholder 化される
+- `curl` success output は first/last compact されず、artifact pointer がない限り raw のまま保持される
 - `env` / `printenv` output は first/last compact されず、safe placeholder 化される
 - `gh auth status` output は first/last compact されず、safe placeholder 化される
 - `docker info` / `kubectl config view` output は first/last compact されず、safe placeholder 化される
-- database command output は classifier confidence が高い場合だけ safe placeholder 化される
-- sensitive / config / auth / package / network / install / deploy / database 系 placeholder は raw output の first / last lines を含まない
+- database command output は first/last compact されず、artifact pointer がない限り raw のまま保持される
+- sensitive / config / auth / package / install / deploy 系 placeholder は raw output の first / last lines を含まない
 
 #### unknown success
 
@@ -1535,7 +1518,9 @@ file ごと:
 
 #### changed line sample policy
 
-diff は first/last of raw output ではなく、file / hunk 構造を保って compact する。
+patch body を含む `git diff` は evidence body として扱う。apply mode では file / hunk 構造 compact を raw artifact なしで provider-facing history に直置きしない。
+
+file / hunk 構造 compact は、artifact-backed placeholder の bounded excerpt、dry-run report、または active context rehydrate 後の selected excerpt としてだけ使う。
 
 固定 caps:
 
@@ -1548,40 +1533,24 @@ changed sample line は `+` / `-` lines を対象にする。`+++` / `---` file 
 
 context lines は原則残さない。ただし hunk header に trailing context がある場合はそのまま残す。
 
-compact 例:
+artifact-backed compact 例:
 
 ```text
-[compacted old git diff output; command="git diff"; classifier=git_diff; files=12; hunks=31; +342 -128]
-file: internal/providerhistory/reduction_apply.go (modified; hunks=4; +42 -18)
-  @@ -120,15 +120,31 @@ func applyProviderHistoryReduction(...)
-    - old changed line sample
-    + new changed line sample
-    + another changed line sample
-    [omitted 21 changed lines in hunk]
-  @@ -240,8 +256,14 @@ func buildReplacement(...)
-    - old sample
-    + new sample
-    [omitted 10 changed lines in hunk]
-  [omitted 2 hunks in file]
-
-file: internal/providerhistory/toolresults/list_dir.go (added; hunks=3; +180 -0)
-  @@ -0,0 +1,80 @@
-    + package toolresults
-    + ...
-    [omitted 72 changed lines in hunk]
-
-[omitted 9 files]
+[compacted old data-bearing command output; raw_output_ref=rawout_ab12cd34ef56; surface=xelyon_command_output; family=git_diff; classifier=git_diff; bytes=98231; tokens≈24557; sha256=...]
+excerpt:
+<bounded diff excerpt only; full diff is recoverable by raw_output_ref>
 ```
 
 #### binary diff
 
 Binary diff は raw binary patch を provider-facing に残さない。
 
-compact 例:
+artifact-backed compact 例:
 
 ```text
-[compacted old git diff output; command="git diff"; classifier=git_diff; files=1; binary=1]
-file: assets/logo.png (binary; changed)
+[compacted old data-bearing command output; raw_output_ref=rawout_cd34ef56ab12; surface=xelyon_command_output; family=git_diff; classifier=git_diff; bytes=73420; tokens≈18355; sha256=...]
+excerpt:
+Binary files assets/logo.png differ
 ```
 
 `GIT binary patch` body は省略する。
@@ -1625,7 +1594,7 @@ list-style compact に残す情報:
 
 #### 方針
 
-`git show` は commit metadata と diff body を分けて compact する。
+`git show` は commit metadata と diff body を含む evidence body として扱う。apply mode では raw artifact-backed compact に限定し、inline compact しない。
 
 残す metadata:
 
@@ -1637,18 +1606,15 @@ list-style compact に残す情報:
 
 author email は provider-facing compact output に必須ではないため、原則残さない。author line を残す場合は既存 raw output に存在していた情報から最小限にする。安全側では author name / email を omit してよい。
 
-patch body がある場合は `git diff compact` と同じルールで compact する。
+patch body がある場合は `git diff` と同じく、raw artifact-backed placeholder と active context rehydrate で復元可能にする。
 
-compact 例:
+artifact-backed compact 例:
 
 ```text
-[compacted old git show output; command="git show abc123"; classifier=git_show; commit=abc123; subject="provider履歴の圧縮を改善"; files=5; hunks=12; +220 -80]
-diff:
-file: internal/providerhistory/reduction.go (modified; hunks=2; +20 -10)
-  @@ -42,7 +42,9 @@ ...
-    - old sample
-    + new sample
-    [omitted 18 changed lines in hunk]
+[compacted old data-bearing command output; raw_output_ref=rawout_ef56ab12cd34; surface=xelyon_command_output; family=git_show; classifier=git_show; bytes=54210; tokens≈13552; sha256=...]
+excerpt:
+commit abc123...
+<bounded commit/diff excerpt only; full show output is recoverable by raw_output_ref>
 ```
 
 `git show --stat` / `--name-only` / `--name-status` は list-style compact として扱う。
@@ -1763,14 +1729,15 @@ status 例:
 
 ```text
 git_output_replacements=3
-git_output_tools=git_diff:1, git_status:1, git_show:1
+git_output_tools=git_status:1, git_log:1, git_branch:1
+artifact_backed_command_tools=git_diff:1, git_show:1
 ```
 
 section 2 の command output report に含める場合でも、git-specific breakdown は dogfood 観測できるようにする。
 
 ### Responses `previous_response_id` chain
 
-apply mode で git-specific compact が 1 件でも実際に起きた場合、既存契約どおり Responses `previous_response_id` chain を disabled にする。
+apply mode で git-specific inline compact または artifact-backed git evidence compact が 1 件でも実際に起きた場合、既存契約どおり Responses `previous_response_id` chain を disabled にする。
 
 dry-run で candidate があるだけの場合は chain disabled にしない。
 
@@ -1778,16 +1745,18 @@ no replacement の場合は chain を保持する。
 
 ### active context / rehydrate_context
 
-git-specific compact は rehydrate_context evidence 対象外。
+git-specific compact は、output 種別で rehydrate_context 依存を分ける。
 
 理由:
 
-- git command output は `read_file` / `search_code` / `gather_context` の evidence pointer 管理対象ではない
-- repo state は時間とともに変わる
-- 古い git output は rehydrate ではなく compact text として残す
-- 必要なら agent は git command を再実行できる
+- `git status` / `git log` / `git branch` / `git ls-files` は構造化 summary が raw body を概ね代替できるため inline compact でよい
+- `git diff` / `git show` は patch body そのものが evidence なので、raw artifact と active context rehydrate が揃う場合だけ apply compact する
+- repo state は時間とともに変わるため、古い diff/show は「再実行すれば戻る」と扱わない
+- raw artifact / verify / rehydrate gate が揃わない `git diff` / `git show` は raw keep する
 
-git-specific compact は active context transport availability に依存しない。
+summary 系 git compact は active context transport availability に依存しない。
+
+artifact-backed `git diff` / `git show` compact は active context transport availability に依存する。
 
 ### テスト方針
 
@@ -2951,6 +2920,335 @@ review command optimization でも、以下を守る。
 - dry-run mode では provider-facing payload を変更しない
 - apply mode では provider-facing projection 上だけ変更する
 
+### review quality floor
+
+section 7 では、レビュー品質を入力トークン削減よりも優先する。
+
+この section の optimization は、レビューが読むべき対象を減らす機能ではない。
+目的は、review runner が既に読み、後続の current state / evidence ref / latest report に吸収済みの中間成果物を、provider-facing prompt 上で再送し続けないことである。
+
+品質を落とさないため、以下を hard contract とする。
+
+- review pass 数を減らさない
+- probe 数を削減しない
+- evidence collection を省略しない
+- current diff summary を削らない
+- current impact surfaces を削らない
+- current candidate risks を削らない
+- current unresolved risks / questions を削らない
+- latest report / final report / final findings を削らない
+- finding evidence excerpt / file path / line range を削らない
+- unresolved / not-yet-absorbed evidence を compact しない
+- compact 可否が不明な evidence は provider-facing でも保持する
+- token 削減のためだけに review prompt の指示、severity 基準、scope coverage 基準を弱めない
+
+この契約により、section 7 の削減対象は「relevance が低い情報」ではなく「後続 state に吸収済みで、かつ raw artifact と evidence ref で再検証できる重複情報」に限定する。
+
+### maximum optimization strategy without quality loss
+
+品質を落とさず最大限削減するため、section 7 は以下の順に最適化する。
+
+1. duplicated provider-facing payload を減らす
+2. obsolete intermediate を placeholder / summary / evidence ref に置き換える
+3. raw command / git output は section 2〜4 の command output compact owner を再利用する
+4. external_doc / web evidence は content hash / source kind / short summary / used_for ref を残し、raw snippet の重複送信だけを避ける
+5. report draft / revision input は latest report に吸収済みの場合だけ compact する
+6. scope coverage intermediate は current scope coverage に吸収済みの場合だけ compact する
+
+逆に、以下は token 削減のために行わない。
+
+- current evidence の hard cap を下げる
+- review prompt の指示文を短縮して検出基準を曖昧にする
+- probe output のうち finding / unresolved risk と関係し得る部分を summary だけにする
+- raw artifact の保存量を減らす
+- model call 数や saturation check を省略する
+
+### absorption-before-compaction rule
+
+review-specific compact は、対象の中間成果物が後続 state に吸収されたことを示せる場合だけ適用する。
+
+最低限、compact 対象ごとに以下を持つ。
+
+- `family`: `probe_plan` / `probe_result` / `related_context` / `external_doc` / `report_draft` / `scope_coverage` / `git_output`
+- `status`: `current` / `absorbed` / `unresolved` / `finding_evidence` / `unknown`
+- `absorbed_by`: `review_state_summary` / `latest_report` / `scope_coverage` / `finding_evidence_ref` / `dismissed_risk_summary` など
+- `refs`: compact 後も残す evidence / finding / risk / file / command refs
+- `summary`: provider-facing に残す短い説明
+- `raw_artifact_ref`: raw artifact / persisted record を再確認するための参照
+
+`status` が `current` / `unresolved` / `finding_evidence` / `unknown` の場合は compact しない。
+`status=absorbed` で、かつ `absorbed_by` と `refs` が provider-facing prompt に残る場合だけ compact できる。
+
+この rule は review 品質を守る source of truth であり、単なる byte / token threshold より優先する。
+
+### review prompt payload の対象範囲
+
+section 7 の対象は、通常 chat history ではない。
+
+対象は `ReviewRunner` が各 review model call で provider に送る review prompt payload である。
+現行実装では `reviewModelPromptHistory(req.Prompt)` の単一 user prompt として provider に渡るため、通常の `Agent.History` / `Session.Messages` projection とは owner が異なる。
+
+責務境界:
+
+- `internal/review` は review lifecycle、pass 間 state、obsolete / absorbed 判定、review reduction report の owner
+- `internal/review/modelinput` は provider-facing prompt DTO / rendering / compact hook の owner
+- `internal/commandoutputs` は command / git / failure output compact policy の owner
+- `internal/agent` は mode 解決、review runner への mode 注入、`/status` 表示、provider adapter state 連携の owner
+- `internal/providerhistory` は通常 chat history projection の owner であり、section 7 の review lifecycle state を持たない
+
+### `ReviewPromptReductionState` と `ReviewStateSummary`
+
+section 7 の中心 owner は `internal/review` の `ReviewPromptReductionState` とする。
+
+`ReviewPromptReductionState` は、provider-facing prompt を軽量化するための runtime-local state であり、raw artifact / persisted review evidence の代替ではない。
+`ReviewRunner.Run` の 1 回の実行中だけ生存し、pass が進むたびに current state と absorbed intermediate を更新する。
+
+候補構造:
+
+```go
+type ReviewPromptReductionState struct {
+    Mode ReviewPromptReductionMode
+    Summary ReviewStateSummary
+    Items []ReviewPromptReductionItem
+    Report ReviewPromptReductionReport
+}
+```
+
+`ReviewStateSummary` は、古い中間成果物を provider-facing prompt 上で compact しても、レビュー判断に必要な現在状態が残っていることを保証する deterministic summary である。
+model に生成させる summary ではなく、review runner が既に持つ decoded plan / trusted probe summaries / finalized report / saturation check / coverage audit / external evidence metadata から作る。
+
+`ReviewStateSummary` の必須フィールド:
+
+- `target`: review target kind、base/head/diff range、workspace root redaction 済み表示
+- `changed_files`: changed / untracked / deleted / generated などの file summary
+- `impact_surfaces`: decoded probe plan の impact surfaces と current coverage status
+- `candidate_risks`: decoded probe plan の candidate risks と current status
+- `unresolved_risks`: unresolved / residual / blocked / unverified な risks と理由
+- `confirmed_findings`: latest report の findings summary と severity
+- `finding_evidence_refs`: finding が参照する file / probe / external_doc refs
+- `dismissed_risks`: dismissed / false-positive risks と dismiss reason
+- `scope_coverage`: covered / uncovered / unresolved surfaces
+- `external_evidence`: source kind、official confirmation、content hash、used_for refs、freshness
+- `latest_report_status`: latest report の schema version、finding count、coverage status
+- `saturation_status`: saturation check の status、revision instructions、blocked reason
+- `next_probe_focus`: 追加確認が必要な focus。pass 追加をしない場合は residual として扱う
+- `absorbed_intermediate_refs`: compact 可能になった old item と、吸収先 summary / report / evidence ref
+
+`ReviewStateSummary` は、次のような文字列として prompt に入る。
+
+```text
+## Review State Summary
+
+target: current_changes
+changed_files: 12 modified, 2 untracked, 1 generated
+current_scope:
+- surface provider_history_projection: covered by probes probe-1, probe-3
+- surface review_prompt_reduction: unresolved risk risk-review-2
+confirmed_findings:
+- finding-1 high: provider-facing compact can hide unresolved probe output
+unresolved_risks:
+- risk-review-2: saturation asked for revision; latest report has not resolved this risk
+absorbed_intermediate:
+- probe_plan pass1 -> decoded_probe_plan + scope_coverage
+- report_draft pass2_attempt1 -> latest_report revision1
+```
+
+この summary は raw evidence の substitute ではない。
+provider-facing prompt で古い中間物を再送しないための current state index であり、finding evidence / unresolved risk / latest report は別途保持する。
+
+### reduction item state machine
+
+review prompt reduction は、対象 payload ごとに `ReviewPromptReductionItem` を作る。
+
+候補構造:
+
+```go
+type ReviewPromptReductionItem struct {
+    ID string
+    Family ReviewPromptReductionFamily
+    Phase ReviewModelPhase
+    Status ReviewPromptReductionItemStatus
+    AbsorbedBy []ReviewPromptAbsorptionRef
+    EvidenceRefs []ReviewEvidenceRef
+    RawArtifactRef string
+    PromptArtifactRef string
+    Summary string
+    OriginalBytes int
+    ReplacementBytes int
+}
+```
+
+`Status` は以下に限定する。
+
+- `current`: 現在の prompt で必要。compact 禁止
+- `absorbed`: 後続 state に吸収済み。summary/ref 置換可
+- `unresolved`: 未解決 risk / uncovered scope と関係する。compact 禁止
+- `finding_evidence`: finding evidence として使われている。compact 禁止
+- `unknown`: 判定不能。compact 禁止
+
+状態遷移:
+
+```text
+unknown -> current
+current -> absorbed
+current -> unresolved
+current -> finding_evidence
+unresolved -> absorbed
+finding_evidence -> absorbed は原則禁止
+absorbed -> current は、latest report / coverage audit が再度 raw context を必要とした場合だけ許可
+```
+
+compact は `Status=absorbed` の item にだけ適用できる。
+`absorbed` でも、`AbsorbedBy` が provider-facing prompt に残らない場合は compact しない。
+
+### prompt phase policy
+
+review の各 model phase で、compact 可能な範囲を分ける。
+
+#### Pass1: probe plan
+
+Pass1 はまだ後続 state が存在しないため、原則 compact しない。
+
+保持するもの:
+
+- strict reviewer stance
+- custom instructions
+- current evidence markdown
+- current external support summary
+- current changed file / diff / related context evidence
+
+許可する最適化:
+
+- evidence markdown 内に同じ external_doc snippet / git output が重複している場合、raw artifact を保持したうえで deterministic duplicate collapse を検討できる
+- ただし duplicate 判定が不確実なら保持する
+
+禁止:
+
+- evidence hard cap を下げる
+- candidate risk / impact surface 抽出に必要な raw evidence を summary のみにする
+- prompt 指示を短くして review stance を弱める
+
+#### Pass2: report
+
+Pass2 は report 生成の本体なので、probe result は current evidence として扱う。
+
+保持するもの:
+
+- current evidence markdown
+- decoded probe plan
+- trusted probe summaries
+- current probe result context
+- external_doc citation-capable snippets
+
+許可する最適化:
+
+- successful validation command output など、詳細 raw output が review 判断に不要な command result は `internal/commandoutputs` policy で compact できる
+- failure output は error-focused compact に限定し、key error lines / first/last lines / exit code を保持する
+- git diff / show / status output は section 3 の git compact を使い、changed files / hunks / samples / binary / rename 情報を残す
+
+禁止:
+
+- probe result 全体を obsolete 扱いすること
+- finding になり得る failure output を placeholder だけにすること
+- unresolved probe output を summary だけにすること
+
+#### Saturation check
+
+Saturation は latest report が生成された後に走る。
+ここから `ReviewStateSummary` を使って、latest report / scope coverage に吸収済みの古い raw payload を compact できる。
+
+保持するもの:
+
+- latest finalized report
+- current scope coverage
+- unresolved risks / questions
+- saturation が検証するために必要な finding evidence refs
+- coverage audit context
+
+compact できるもの:
+
+- latest report に反映済みの old probe output raw body
+- latest scope coverage に反映済みの old probe plan details
+- latest report と重複する report draft
+- duplicated git / diff / status output
+
+禁止:
+
+- saturation が未解決として扱う risk の evidence
+- latest report の finding evidence excerpt
+- coverage audit が unresolved / blocked とした external evidence
+
+#### Report revision
+
+Revision は saturation が `needs_revision` を返した場合だけ走る。
+この phase では、saturation instructions と latest report が current state である。
+
+保持するもの:
+
+- latest report
+- saturation check result / revision instructions
+- unresolved risks
+- revision 対象の scope coverage
+- revision の根拠になる evidence refs
+
+compact できるもの:
+
+- revision によって supersede された old report draft
+- latest report に吸収済みの old probe result raw body
+- duplicate diff / git / external_doc snippets
+
+禁止:
+
+- `InvalidRevisionOutput` / decode error など、JSON repair に必要な current invalid output
+- revision instructions
+- unresolved risk と関係する raw evidence
+
+#### Repair prompts
+
+Repair prompt は schema repair が目的なので、invalid output / decode error は current payload として扱う。
+修復対象の JSON を compact すると contract repair の成功率が落ちるため、原則 compact しない。
+
+許可するのは、repair prompt に再添付される evidence / probe result のうち、既に `absorbed` と判定済みの重複 payload だけである。
+
+### artifact policy
+
+raw artifact と provider-facing prompt artifact を分ける。
+
+raw artifact:
+
+- `probe_plan_raw.json`
+- `probe_plan_final.json`
+- `probe_requests.json`
+- `probe_results.json`
+- `report_raw.json`
+- `report_final.json`
+- `saturation_raw.json`
+- `revision_raw.json`
+- `web_search_evidence*.json`
+- `evidence*.md`
+
+これらは compact しない。
+repair / revision で複数 attempt がある場合は、将来的には attempt suffix を付けて上書きを避けることを検討する。
+少なくとも section 7 の実装は raw artifact の保存量を減らさない。
+
+provider-facing prompt artifact:
+
+- `probe_plan_prompt.md`
+- `report_prompt.md`
+- `saturation_prompt.md`
+- `revision_prompt.md`
+
+apply mode では、これらは実際に provider に送った compact 後 prompt を保存する。
+dry-run mode では provider に送る prompt を変更しないため、prompt artifact も raw provider-facing prompt と同じになる。
+
+必要に応じて、観測用に以下を追加できる。
+
+- `<phase>_prompt_reduction_report.json`
+- `<phase>_prompt_raw.md`
+- `<phase>_prompt_compacted.md`
+
+ただし raw artifact preservation を弱める目的で追加してはいけない。
+
 ### 現在確認できた review request / artifact representation
 
 最新ソースで確認できた現状。
@@ -3018,32 +3316,57 @@ review command の provider-facing history は、以下の 3 層に分けて扱�
 - previous revision input
 - duplicated related context candidate list
 
-### review state summary
+### review state summary rendering
 
-review command は、pass が進むごとに provider-facing 用の `review state summary` を作る。
+`ReviewStateSummary` は `internal/review` が構築し、`internal/review/modelinput` が provider-facing prompt section として rendering する。
 
-`review state summary` には最低限以下を含める。
+rendering 方針:
 
-- review target
-- base / head / diff range が分かる場合はその情報
-- changed files summary
-- impact surfaces summary
-- candidate risks summary
-- confirmed findings summary
-- dismissed / false-positive risks summary
-- unresolved risks / questions
-- scope coverage summary
-- external evidence summary
-- latest report status
-- next probe focus
+- prompt 内では独立した `Review State Summary` section として入れる
+- JSON schema repair prompt では、repair 対象 JSON の前に current state として入れる
+- latest report / saturation check / revision instructions を置き換えない
+- finding evidence excerpt / unresolved risk detail を summary に畳まない
+- compact した item は `absorbed_intermediate` として必ず表示する
+- `absorbed_intermediate` には `family`、`id`、`absorbed_by`、`refs`、`raw_artifact_ref` を含める
 
-この summary は raw evidence の代替ではない。raw evidence は保持しつつ、provider-facing では現在のレビュー状態を短く再提示するためのもの。
+`ReviewStateSummary` は raw evidence の代替ではない。
+raw evidence は artifact / persisted data として保持し、provider-facing prompt では current review state と absorbed refs を短く再提示する。
 
 ### replacement / compact 対象
+
+#### 0. current-safe command / git output compact
+
+Pass2 report などで probe result が current evidence の場合でも、command output の一部は safe compact できる。
+これは obsolete compact ではなく、section 2〜4 の command output policy を review prompt DTO に適用する current-safe compact である。
+
+対象:
+
+- successful validation command output
+- large observation / file dump output
+- git status / diff / show / log / branch / ls-files output
+- failure output の error-focused compact
+
+条件:
+
+- `internal/commandoutputs` の classifier が safe replacement / compact を返す
+- key error lines、exit code、changed files、diff summary、first/last context など review 判断に必要な情報を残す
+- saved token threshold を満たす
+- compact 後の DTO に `output_compacted=true` と classifier を残す
+- raw probe result artifact は compact しない
+
+禁止:
+
+- unknown command output を current-safe compact すること
+- finding evidence / unresolved risk と関係し得る raw output を placeholder だけにすること
+- command classifier が unsafe / unknown の場合に fallback compact すること
 
 #### 1. obsolete probe plan
 
 古い probe plan は、後続の probe result / scope coverage / current state summary に吸収された場合、provider-facing で compact できる。
+
+Pass1 の current probe plan prompt では compact しない。
+Pass2 report では decoded probe plan は current input なので原則保持する。
+Saturation / revision で latest report と scope coverage に plan details が吸収済みの場合だけ、old raw plan / old plan prompt の再送を placeholder 化できる。
 
 placeholder 例:
 
@@ -3062,6 +3385,10 @@ placeholder 例:
 
 古い probe result の raw body は、finding / dismissed risk / scope coverage に反映済みなら compact できる。
 
+Pass2 report では probe result は current evidence なので、probe result 全体を obsolete と扱わない。
+Pass2 で許可されるのは `current-safe command / git output compact` のみである。
+Saturation / revision では、latest report / scope coverage / dismissed risk summary に吸収済みの old probe result raw body だけ compact できる。
+
 compact 例:
 
 ```text
@@ -3072,6 +3399,7 @@ summary:
 ```
 
 finding に使われた probe result は、finding evidence reference を残す。finding evidence そのものは消さない。
+unresolved risk と関係する probe result は、latest report / saturation check が unresolved と扱っている限り compact しない。
 
 #### 3. related context search results
 
@@ -3086,6 +3414,8 @@ finding に使われた probe result は、finding evidence reference を残す�
 - reason summary
 
 raw list 全量は provider-facing に再送しない。
+ただし Pass1 evidence markdown の current related context は、impact surface / candidate risk 抽出の入力なので compact しない。
+Pass2 以降で selected evidence refs / dismissed reason / scope coverage に吸収済みの場合だけ compact できる。
 
 #### 4. web / external_doc evidence
 
@@ -3101,6 +3431,114 @@ web / external_doc evidence は、raw snippet を重複送信しない。
 - freshness if available
 
 official / external の判定根拠は保持する。非公式サイトを official 扱いしない。
+Pass1 evidence markdown では current external evidence と external support summary を保持する。
+Pass2 report では finding citation に使える external_doc snippet を保持する。
+Saturation / revision では latest report / external support summary / coverage audit に吸収済みの duplicate snippet だけ compact できる。
+official confirmation が不明、fetch failed、truncated、inconclusive の場合は compact せず unresolved / residual として残す。
+
+web search evidence は 2 種類に分けて扱う。
+
+1. `web_search_evidence.queries[].results[]`
+
+   raw web search result。discovery-only であり、final report の citation evidence にはしない。
+   provider-facing prompt では、Pass1 / Pass2 では query intent と discovered URL を current evidence として保持する。
+   Saturation / revision では、fetched external_doc / external_support / coverage audit に吸収済みの query result だけ compact できる。
+
+2. `web_search_evidence.external_docs[].snippets[]`
+
+   fetched external_doc snippet。citation-capable evidence になり得る。
+   source credibility、content hash、snippet id、truncation、error、external support summary と一体で扱う。
+   finding evidence / unresolved external support / official confirmation 判定に関係する snippet は compact しない。
+
+`ReviewWebSearchEvidence` の raw JSON は artifact として保持する。
+provider-facing prompt では phase に応じて、full DTO か compact DTO を rendering する。
+
+compact DTO の候補:
+
+```json
+{
+  "enabled": true,
+  "provider": "web",
+  "external_support": {
+    "level": "partial",
+    "official_confirmation": false,
+    "warnings": ["single_official_candidate_source"]
+  },
+  "queries": [
+    {
+      "query": "OpenAI Responses API previous_response_id official docs",
+      "reason": "post-pass1 risk risk-2",
+      "result_count": 3,
+      "selected_doc_ids": ["external-doc-1"],
+      "omitted_result_count": 2,
+      "absorbed_by": ["external_support", "external_doc:external-doc-1"]
+    }
+  ],
+  "external_docs": [
+    {
+      "doc_id": "external-doc-1",
+      "url": "https://platform.openai.com/docs/...",
+      "source_domain": "platform.openai.com",
+      "source_credibility": "official_candidate",
+      "content_hash": "sha256:...",
+      "snippet_count": 2,
+      "citation_capable_snippet_ids": ["external-doc-1-snippet-1"],
+      "used_for": ["risk-2"],
+      "truncated": false,
+      "absorbed_by": ["external_support", "scope_coverage"]
+    }
+  ],
+  "raw_artifact_ref": "web_search_evidence_post_pass1.json"
+}
+```
+
+compact 後も残す必須フィールド:
+
+- `enabled`
+- `provider`
+- query text / reason
+- result count / selected doc ids / omitted count
+- `doc_id`
+- URL
+- source domain
+- source credibility
+- source credibility reason
+- content hash
+- snippet ids
+- snippet content hash
+- snippet truncation
+- doc truncation
+- fetch/search errors
+- `external_support.level`
+- `external_support.official_confirmation`
+- external support warnings / reasons
+- used_for finding / risk / scope refs
+- raw artifact ref
+
+compact してよい条件:
+
+- raw search result が fetched external_doc / selected evidence / dismissed reason に吸収済み
+- duplicate external_doc snippet が同じ `doc_id` / `snippet_id` / `content_hash` で再送されている
+- latest report / scope coverage / external support summary が、snippet の意味を保持している
+- `source_credibility` と `official_confirmation` が prompt に残る
+- compact 後も final report が `external_doc` evidence ref を解決できる
+
+compact 禁止:
+
+- Pass1 の current web search evidence
+- Pass2 report で citation-capable snippet が finding / risk 判断に必要な場合
+- `source_credibility=unknown`
+- `source_credibility=third_party` で external support が weak / inconclusive の場合
+- `web_search_evidence.error` がある場合
+- query error がある場合
+- doc error がある場合
+- evidence / doc / snippet が truncated の場合
+- `external_support.official_confirmation=false` で、外部仕様確認が unresolved の場合
+- coverage audit が blocked / unverified / residual として扱っている external evidence
+- content hash が空、または duplicate 判定できない場合
+
+この compact は「公式確認できた」と見せるための summary ではない。
+むしろ compact 後も `official_confirmation=false` / warnings / inconclusive を明示し、review model が残リスクとして扱えるようにする。
 
 #### 5. report draft / revision input
 
@@ -3113,6 +3551,8 @@ placeholder 例:
 ```
 
 ただし final report / latest report は compact しない。
+JSON repair の current invalid output は report draft ではなく repair target なので compact しない。
+revision instructions も current state なので compact しない。
 
 #### 6. scope coverage intermediate
 
@@ -3125,11 +3565,16 @@ placeholder 例:
 - unresolved risks
 - saturation status
 
+current scope coverage は compact しない。
+uncovered / unresolved / blocked surfaces は、latest report と saturation check の両方で解決済みにならない限り compact しない。
+
 #### 7. duplicated diff / git output
 
 review command 内で同じ diff / status / show output が複数回 provider-facing に出る場合、古いものは section 3 の git-specific compact を使う。
 
 current diff summary は残す。古い raw diff 全量を再送しない。
+同一性は command family、repo root、diff range、content hash、redacted path set で判定する。
+content hash が一致しない diff / status は duplicate と扱わない。
 
 ### compact 禁止対象
 
@@ -3158,6 +3603,12 @@ review command cost optimization の結果を report / status に出す。
 - saved bytes
 - approx saved tokens
 - compact family breakdown
+- kept count
+- kept reason breakdown
+- current / absorbed / unresolved / finding_evidence / unknown の state breakdown
+- quality floor により compact 禁止になった count
+- raw artifact preservation status
+- provider-facing prompt artifact status
 
 例:
 
@@ -3165,9 +3616,15 @@ review command cost optimization の結果を report / status に出す。
 review_history_replacements=6
 review_history_tools=probe_plan:1, probe_result:2, report_draft:1, related_context:2
 review_history_saved_tokens≈4200
+review_history_kept=9
+review_history_kept_reasons=current:4, unresolved:2, finding_evidence:2, unknown:1
+review_history_quality_floor=preserved
 ```
 
 通常の provider history reduction report に合算する場合でも、review-specific breakdown は dogfood 観測できるようにする。
+
+report schema では、削減結果だけでなく「なぜ compact しなかったか」も保持する。
+これにより、review 品質保護が token 削減より優先されたことを検証できる。
 
 ### active context / rehydrate_context
 
@@ -3192,9 +3649,273 @@ no replacement の場合は chain を保持する。
 
 現行 review model adapter は review model call 中に response continuation を suspend している。実装時は `suspendReviewModelResponseContinuation` と二重の state owner を作らず、review-specific compact による chain disable の status / report 表示と runtime response-id handling の責務を整理する。
 
+実装方針:
+
+- review adapter の existing continuation suspension を runtime owner として尊重する
+- section 7 は「compact が起きたため chain continuation を使わなかった」ことを report/status に記録する
+- review call が元々 continuation suspended の場合、二重 disable state を追加しない
+- 通常 chat history の provider history reduction chain disable と、review prompt reduction の chain status を混同しない
+
+### section 7 implementation phases
+
+section 7 は、以下の phase を完了条件として扱う。
+一部だけ実装して `make ci-check` が通っても、section 7 全体完了とは扱わない。
+
+#### Phase 7.0: state foundation / no behavior change
+
+目的:
+
+- `ReviewPromptReductionState`
+- `ReviewStateSummary`
+- `ReviewPromptReductionItem`
+- `ReviewPromptReductionReport`
+- state machine / absorption rule
+
+を `internal/review` に追加する。
+
+この phase では provider-facing prompt を変更しない。
+既存 runner flow に state collection hook だけを入れ、dry-run report が取れる状態にする。
+
+検証:
+
+- state が Run ごとに reset される
+- nil / off mode で既存 prompt が byte-for-byte 変わらない
+- raw artifact 保存が変わらない
+- current / unknown item は compact candidate にならない
+
+#### Phase 7.1: current-safe command / git output compact
+
+目的:
+
+- 既存実装済みの probe command output compact を section 7 の正式 phase として整理する
+- `internal/commandoutputs` policy を review prompt DTO から使う
+- command / git / failure output の safe compact を report / saturation / revision prompt で一貫させる
+
+この phase は obsolete 判定に依存しない。
+ただし current evidence を消すのではなく、command output policy が review 判断に必要な情報を残せる場合だけ compact する。
+
+検証:
+
+- validation success は compact される
+- failure output は error-focused context を残す
+- unknown / sensitive unsafe command は compact されない
+- dry-run は stats だけ記録し prompt を変えない
+- raw `probe_results.json` は compact されない
+
+#### Phase 7.2: prompt phase integration
+
+目的:
+
+- `BuildReportPrompt`
+- `BuildReportRepairPrompt`
+- `BuildSaturationCheckPrompt`
+- `BuildSaturationCheckRepairPrompt`
+- `BuildReportRevisionPrompt`
+- `BuildReportRevisionRepairPrompt`
+
+に `ReviewStateSummary` / compact options を渡す。
+
+方針:
+
+- Pass1 probe plan は原則 compact しない
+- Pass2 report は current probe result を保持し、current-safe output compact だけ許可する
+- Saturation / revision から absorbed intermediate compact を許可する
+- Repair prompt の invalid output / decode error は current payload として保持する
+
+検証:
+
+- prompt contract tests で phase ごとの compact 禁止対象を固定する
+- strict reviewer stance / schema contract / custom instructions が消えない
+- latest report / saturation instructions が compact されない
+
+#### Phase 7.3: absorbed probe plan / probe result compact
+
+目的:
+
+- decoded plan / trusted probe summaries / latest report / scope coverage から absorption refs を作る
+- saturation / revision prompt で old probe plan / old probe result raw body を summary/ref に置換する
+
+compact 条件:
+
+- `Status=absorbed`
+- `AbsorbedBy` が prompt に残る
+- unresolved / finding_evidence / unknown ではない
+- raw artifact ref が残る
+
+検証:
+
+- Pass2 report では probe result 全体は compact されない
+- Saturation では latest report に吸収済みの no-finding probe result が compact される
+- finding evidence probe result は compact されない
+- unresolved probe result は compact されない
+- absorbed refs が prompt に残る
+
+#### Phase 7.4: related context / external_doc compact
+
+目的:
+
+- selected evidence / dismissed reason / external support summary / content hash / used_for refs を残し、duplicate raw snippet の再送を避ける
+- raw web search result は discovery-only として扱い、citation-capable external_doc snippet と混同しない
+- review web search evidence の raw JSON artifact を保持したまま、provider-facing prompt の重複だけを compact する
+
+compact 条件:
+
+- selected / dismissed / used_for / unresolved の分類が確定している
+- official confirmation / source credibility / content hash が prompt に残る
+- fetch failed / truncated / inconclusive / unknown credibility は unresolved として保持する
+- search result URL が fetched external_doc / dismissed reason / external support summary に吸収済み
+- duplicate external_doc snippet は `doc_id` / `snippet_id` / `content_hash` が一致する
+- `external_support` summary が prompt に残る
+- `raw_artifact_ref` が残る
+
+検証:
+
+- non-official source を official 扱いしない
+- citation-capable snippet used by finding は compact されない
+- duplicate external_doc snippet は saturation / revision で compact される
+- external support summary が残る
+- raw `web_search_evidence*.json` は compact されない
+- raw web search result は final evidence ref として扱われない
+- `official_confirmation=false` は compact 後も残る
+- truncated / inconclusive / error evidence は compact されない
+
+#### Phase 7.5: report draft / revision / scope coverage compact
+
+目的:
+
+- latest report に supersede された old report draft
+- revision 後に吸収済みの old revision input
+- current scope coverage に吸収済みの old scope coverage intermediate
+
+を provider-facing prompt 上で placeholder / summary 化する。
+
+compact 禁止:
+
+- latest report
+- final report
+- current saturation check
+- current revision instructions
+- repair target invalid output
+- current unresolved scope coverage
+
+検証:
+
+- latest report は compact されない
+- repair invalid output は compact されない
+- superseded report draft だけ compact される
+- unresolved coverage は保持される
+
+#### Phase 7.6: observability / artifacts / status
+
+目的:
+
+- review prompt reduction report を phase / family / status / kept reason 別に出す
+- `/status` に review-specific breakdown を出す
+- raw artifact preservation と provider-facing prompt artifact の違いを確認できるようにする
+
+検証:
+
+- dry-run では candidates / kept / estimated saved だけ出る
+- apply では replacements / actual saved が出る
+- quality floor preserved が status / report で確認できる
+- raw artifact は compact されない
+
+#### Phase 7 Final-A: impact audit / review-hole sweep
+
+section 7 実装後、以下を read-through する。
+
+- `internal/review`
+- `internal/review/modelinput`
+- `internal/review/report`
+- `internal/review/probe`
+- `internal/review/evidence`
+- `internal/review/externaldoc`
+- `internal/agent` review adapter / status
+- `internal/providerhistory` との境界
+
+確認すること:
+
+- compact 禁止対象が漏れていない
+- current / absorbed / unresolved / finding_evidence / unknown の判定が全 family にある
+- raw artifact / persisted data を触っていない
+- prompt artifact と raw artifact の意味が混ざっていない
+- status / report / tests が全 family を観測できる
+
+#### Phase 7 Final-B: comprehensive refactor including tests
+
+実装完了後、production code と test code を対象に mandatory refactor を行う。
+
+見る観点:
+
+- `internal/review` に state lifecycle が自然に閉じているか
+- `modelinput` が lifecycle 判定を持っていないか
+- `commandoutputs` への依存が review-specific policy を侵食していないか
+- test helper が production contract を複製しすぎていないか
+- report/status の source of truth が重複していないか
+- naming が `provider_history` と `review_prompt` を混同していないか
+
+Final-B が終わるまで section 7 は完了扱いにしない。
+
+### section 7 completion criteria
+
+section 7 は、以下を満たしたときだけ完了とみなす。
+
+- `ReviewPromptReductionState` / `ReviewStateSummary` / item state machine が実装されている
+- Pass1 / Pass2 / saturation / revision / repair の phase policy が test で固定されている
+- current-safe command / git output compact が review prompt DTO に統合されている
+- absorbed probe plan / probe result compact が saturation / revision で動く
+- related context / external_doc duplicate compact が source credibility / content hash / used_for refs を保持する
+- report draft / revision / scope coverage compact が latest/current payload を壊さない
+- dry-run と apply の provider-facing prompt 差分が test で固定されている
+- raw review artifacts / raw evidence / final report / final findings が compact されない
+- `/status` と reduction report が review-specific family / status / kept reason を表示する
+- `make ci-check` が通る
+- Phase 7 Final-A / Final-B が完了している
+
+以下の状態で止めない。
+
+- command output compact だけが実装済み
+- dry-run stats だけが実装済み
+- `ReviewStateSummary` があるが absorption refs がない
+- compact は動くが kept reason / quality floor report がない
+- raw artifact と provider-facing prompt artifact の意味が曖昧
+
+### implementation discretion
+
+実装者に委ねるもの:
+
+- Go type / file 名の最終形
+- `ReviewStateSummary` rendering の exact formatting
+- prompt artifact の追加ファイル名
+- attempt suffix の導入を同じ section 7 に含めるか、別 refactor に分けるか
+- saved token estimation の内部 helper 名
+
+実装者に委ねないもの:
+
+- quality floor
+- raw artifact preservation
+- absorption-before-compaction rule
+- compact 禁止対象
+- `internal/review` を lifecycle owner にすること
+- `modelinput` を rendering owner に留めること
+- `providerhistory` に review lifecycle state を持たせないこと
+
 ### テスト方針
 
 最低限、以下をテストする。
+
+#### quality floor
+
+- strict reviewer stance は全 prompt phase で保持される
+- custom instructions は compact されない
+- current impact surfaces は compact されない
+- current candidate risks は compact されない
+- current unresolved risks / questions は compact されない
+- latest report / final report は compact されない
+- final findings は compact されない
+- finding evidence excerpt / file path / line range は compact されない
+- `Status=unknown` の item は compact されない
+- `Status=absorbed` でも `AbsorbedBy` が prompt に残らない item は compact されない
 
 #### raw preservation
 
@@ -3224,6 +3945,14 @@ no replacement の場合は chain を保持する。
 - source kind / content hash / summary は残る
 - official / external の区別は保持される
 - non-official source を official 扱いしない
+- raw web search results は discovery-only として扱われ、final evidence ref には使われない
+- fetched external_doc snippet は citation-capable evidence として、finding / unresolved risk で使われる場合は compact されない
+- compact DTO には query text / reason / selected doc ids / omitted count が残る
+- compact DTO には `doc_id` / URL / source credibility / content hash / snippet id / snippet hash が残る
+- `external_support.level` / `official_confirmation` / warnings / reasons が残る
+- `official_confirmation=false` を compact 後に true 扱いしない
+- query error / doc error / truncated / inconclusive は compact されない
+- duplicate 判定で `content_hash` が空の場合は compact されない
 
 #### report draft / revision
 
@@ -3332,6 +4061,692 @@ providerhistory integration point。通常会話 history projection とは別 ow
 - `internal/providerhistory/reduction_report.go`
 - `internal/agent/provider_history_reduction_status.go`
 - `internal/agent/provider_history_reduction_status_test.go`
+
+## 7.5. generic `web_search` tool result replacement / compact
+
+### 目的
+
+通常 chat history に残る汎用 `web_search` tool result を、raw history / session / audit / persisted JSONL を保持したまま、provider-facing projection 上だけ compact / replacement する。
+
+review command の web/external_doc evidence とは owner と安全条件が異なる。
+section 7 の review-specific external_doc compact を先に固め、その source credibility / content hash / unresolved handling を通常履歴の `web_search` に展開する。
+
+### 非目的
+
+- search を実行しないこと
+- search result を raw history から削除すること
+- citations / evidence / URL を消すこと
+- current / latest facts を古い summary で上書きすること
+- web result の source credibility を過大評価すること
+- user-visible answer の根拠を削ること
+
+### 最重要契約
+
+- raw `Agent.History` / `Session.Messages` / audit / persisted JSONL は保持する
+- provider-facing projection だけを軽量化する
+- search query、timestamp / fetched_at 相当、URL、source domain、title、snippet hash、result count は残す
+- user answer / final finding / current task state が参照している web result は compact しない
+- freshness が重要な query は、freshness marker を残す
+- `latest` / `today` / `current` / price / law / policy / version / news など temporal query は、安全な current-state summary がない限り compact しない
+- source credibility が不明な result を official / authoritative として要約しない
+- compact 可否が不明なら provider-facing でも保持する
+
+### section 7 との関係
+
+review command の web search は `ReviewWebSearchEvidence` / `externaldoc.Evidence` / `ExternalSupportSummary` を持つ。
+通常 chat の `web_search` tool result は、review の decoded report / scope coverage / external support summary のような absorption owner を必ずしも持たない。
+
+そのため、通常履歴の generic `web_search` compact は section 7 の後に実装する。
+
+reuse する policy:
+
+- content hash / source domain / URL / snippet id 相当を残す
+- source credibility を過大評価しない
+- error / truncated / inconclusive は保持または明示する
+- raw artifact / raw history preservation を守る
+- report/status に family breakdown と kept reason を出す
+
+reuse しないもの:
+
+- `ReviewStateSummary`
+- review-specific `scope_coverage`
+- review-specific `finding_evidence_ref`
+- review-specific `external_support.official_confirmation`
+
+### compact 対象候補
+
+#### 1. old duplicate web search result
+
+同じ query / normalized URL set / content hash の old result が複数回 provider-facing history に出ている場合、古いものを compact できる。
+
+残す情報:
+
+- query
+- result count
+- selected URL count
+- omitted count
+- URL / source domain list
+- content hash / snippet hash
+- fetched_at / observed_at
+- duplicate_of tool call id
+
+#### 2. old broad discovery search
+
+後続の `read_file` / `external_doc` / user answer / current state に吸収済みの broad discovery search は compact できる。
+
+残す情報:
+
+- query
+- reason if available
+- selected URLs
+- dismissed count
+- absorbed_by marker
+- raw tool call id
+
+#### 3. failed / truncated search
+
+failed / truncated search は、failure state と query / error summary を残して compact できる可能性がある。
+
+ただし、失敗自体が current decision の根拠の場合は保持する。
+
+残す情報:
+
+- query
+- error class
+- provider
+- result count if any
+- truncated / timeout / blocked flags
+
+### compact 禁止対象
+
+- current turn の latest web search result
+- user が明示的に参照している search result
+- final answer の citation / source として使われた result
+- `latest` / `today` / `current` / `breaking` / price / exchange rate / law / policy / API version / docs version / news query
+- source credibility が判断できないのに official 扱いされそうな result
+- truncated / inconclusive で、後続 state に吸収されていない result
+- search result の URL / date / source が missing している result
+- prompt injection / hostile content が含まれ、summary 化で危険文脈が失われる result
+
+### placeholder / compact 例
+
+```text
+[compacted old web_search result; query="OpenAI Responses API previous_response_id"; results=8; selected_urls=2; omitted=6; observed_at=2026-06-05T10:22:00Z; raw_tool_call_id=call_web_12]
+selected_sources:
+- platform.openai.com/docs/... (domain=platform.openai.com; snippet_hash=sha256:...)
+- github.com/openai/... (domain=github.com; snippet_hash=sha256:...)
+notes:
+- raw result preserved in history/audit
+- source credibility is not upgraded by this compact summary
+```
+
+### implementation order
+
+generic `web_search` compact は、section 7 の review web/external_doc compact 後に実装する。
+
+推奨順:
+
+1. actual `web_search` tool result format を current source / snapshots から確認する
+2. `internal/providerhistory` に generic web search result classifier / compact builder を追加するか、web-specific subpackage に分ける
+3. current / old / duplicate / temporal query / referenced result の gates を実装する
+4. report/status に `web_search` family breakdown と kept reason を追加する
+5. raw preservation / temporal query / citation preservation tests を追加する
+
+### Open decisions
+
+- 汎用 `web_search` の actual tool result format と tool name variants
+- search result が final answer / active context に参照されたことをどう検出するか
+- temporal query 判定の source of truth
+- source credibility を review `externaldoc` と共有するか、通常履歴用に簡略 policy を持つか
+- prompt injection / hostile page text を summary 化する時の warning 表示
+
+## 7.6. generic provider history remaining gap audit
+
+### 目的
+
+section 1〜6 と 7.5 以外に、通常 chat history の provider-facing projection でまだ最適化していない汎用 tool family を棚卸しする。
+
+現行 `internal/providerhistory` の tool result allowlist は以下に限定されている。
+
+- evidence-backed: `read_file` / `search_code` / `gather_context`
+- structured: `list_dir`
+- command/edit dry-run/apply: `bash` output と write/edit args
+
+それ以外の tool result は、原則 `tool_not_in_reduction_allowlist` または write/command keep になり、provider-facing projection 上でも raw output が残る。
+
+この section は、すぐ実装する対象と、actual format / owner 調査が必要な対象を分けるための backlog である。
+
+### confirmed not-yet-optimized generic families
+
+#### 1. `web_search`
+
+section 7.5 で扱う。
+
+優先度: high。
+
+理由:
+
+- provider-facing token が大きくなりやすい
+- temporal / source credibility / citation preservation の安全条件が必要
+- review command の external_doc policy と一部共通化できる
+
+#### 2. MCP tool results
+
+tool name は `mcp_<server>_<tool>` の形式で provider に渡る。
+actual result format は tool ごとに異なるため、汎用 compact は危険。
+
+優先度: medium。
+
+決定:
+
+- combined Goal では MCP tool result の apply replacement は実装しない
+- detector / report / kept reason まで実装する
+- known-safe schema registry / allowlist は次 Goal に分ける
+
+理由:
+
+- MCP result は server / tool ごとに schema と機密性が違う
+- URL / title / summary に見える field があっても、private issue、email、customer data、secret-adjacent text を含む可能性がある
+- provider-facing に出してよい metadata の source of truth がまだない
+
+方針:
+
+- default は keep
+- JSON object result で `id` / `url` / `title` / `summary` / `status` など安全 metadata を抽出できる場合だけ candidate にする
+- secrets / auth / account / customer data / private message / issue body / email body などは compact しない
+- MCP server / tool name / result schema / content hash / raw tool call id を残す
+- trusted schema がない MCP result は `mcp_unknown_schema_keep`
+
+実装前に必要な調査:
+
+- MCP result が `api.Message.ToolName` にどう入るか
+- result JSON / text の代表例
+- provider-facing に出してよい source domain / object id の範囲
+
+#### 3. sub-agent outputs: `spawn_agent` / `wait_agent`
+
+`spawn_agent` は通常小さいが、`wait_agent` は sub-agent の調査結果や編集結果を大きく返す可能性がある。
+
+優先度: medium。
+
+決定:
+
+- combined Goal では `wait_agent` apply replacement は実装しない
+- detector / report / kept reason まで実装する
+- `spawn_agent` は small running response なので keep by design
+
+理由:
+
+- `WaitResult.Output` は free-form string で、sub-agent の final findings / file refs / test results / user-visible decisions を構造化して持っていない
+- current task state へ吸収済みかどうかの deterministic owner がまだない
+- summary 化すると sub-agent が見つけた唯一の finding を落とす可能性がある
+
+方針:
+
+- `spawn_agent` の running response は小さいため基本 keep
+- `wait_agent` は agent id / status / output byte size / likely summary markers / likely file refs / test result markers を detector で観測する
+- sub-agent final findings / file refs / test results / user-visible decisions は compact しない
+- failed / blocked sub-agent result は error context を残す
+
+注意:
+
+- sub-agent output は review / implementation の判断根拠になりやすい
+- current task state に吸収済みかどうかの owner が必要
+- raw sub-agent transcript / result persistence がある場合は保持する
+
+#### 4. skill outputs: `activate_skill` / `run_skill_script`
+
+`activate_skill` は skill 本文を返す read-only output で、大きくなり得る。
+`run_skill_script` は script 実行結果で、実質 command output に近い。
+
+優先度: medium-low。
+
+決定:
+
+- `activate_skill` は duplicate old activation だけ apply replacement 対象にする
+- latest activation per skill は keep
+- content hash が一致しない activation は keep
+- current behavior contract として使われている可能性がある skill body は keep
+- `run_skill_script` は combined Goal では detector / report までに留め、apply replacement には昇格しない
+
+方針:
+
+- `activate_skill`: old duplicate skill body は skill name / content hash / raw size / duplicate_of tool call id を残して compact する
+- current active skill instruction は compact しない
+- skill body が current task の behavior contract として使われている場合は keep
+- `run_skill_script`: `internal/commandoutputs` policy に寄せられるかは観測だけ行い、apply 判断は次 Goal に分ける
+
+注意:
+
+- skill 本文は agent behavior contract なので、雑に省略すると task quality が落ちる
+- compact するなら、current active skill set / activated skill names を state として残す必要がある
+
+#### 5. `ask_user_question`
+
+ユーザーへの質問と回答を JSON で返す。
+
+優先度: low。
+
+決定:
+
+- combined Goal では apply replacement しない
+- keep by design とし、kept reason を明示する
+
+理由:
+
+- user answer は user message に近い contract であり、後続挙動の制約や承認を含み得る
+- result は通常小さい
+- 省略による token 削減効果より、user intent を曖昧化する risk が大きい
+
+方針:
+
+- 原則 keep
+- old answered question でも、combined Goal では compact しない
+- detector は question type / answer byte size / approval-looking answer を観測してもよい
+- user answer は user intent と同等に扱い、削除・曖昧化しない
+
+compact 禁止:
+
+- current unresolved user decision
+- user-provided constraint / approval / refusal / preference
+- safety / permission / destructive action approval
+
+#### 6. provider-native built-in web search replay
+
+XELYON の `web_search` tool は、内部では provider-native web search registry を使う。
+たとえば Kimi では built-in `$web_search`、OpenAI / Claude / Gemini では各 provider の native web search route/tool を使う。
+
+ここでいう provider-native built-in tool replay は、XELYON の outer `web_search` tool result とは別の message shape / replay contract を指す。
+「ネイティブ検索ではない」という意味ではない。
+
+区別:
+
+- XELYON outer tool result: assistant が `web_search` を呼び、XELYON が provider-native search を実行し、その戻り値を通常 tool result として history に入れる
+- provider-native replay: provider request 内で `$web_search` などの built-in tool call / tool result を replay する必要がある provider-specific message
+
+通常 provider history reduction が触る主対象は outer `web_search` tool result である。
+provider-native replay は provider request builder / provider adapter の contract に関わるため、同じ placeholder policy をそのまま適用しない。
+
+優先度: medium。
+
+決定:
+
+- combined Goal では apply replacement しない
+- providerhistory が outer `web_search` tool result を compact しても、provider-native replay message は触らない
+- provider request builder / provider adapter tests で replay contract が守られていることを確認する
+
+方針:
+
+- provider-native built-in tool call/result の message shape を確認する
+- usage / cost accounting と provider replay contract を壊さない
+- provider-native tool result を compact して provider replay が壊れるなら keep
+- raw usage observation は保持する
+
+### likely keep-by-design families
+
+以下は provider-facing compact の候補にしないか、かなり後回しにする。
+
+- write tools: `write_file` / `str_replace` / `apply_patch` / `delete_file`
+- current tool suffix / latest tool result
+- missing / ambiguous tool linkage
+- unknown custom tool result
+- safety / permission / approval result
+- tool output that contains user-provided constraints
+
+### combined Goal priority
+
+今回まとめて実装する Goal では、apply replacement と candidate-only / dry-run first を分ける。
+
+apply replacement まで進める順:
+
+1. section 7 review prompt reduction
+2. section 7 review web/external_doc compact
+3. section 7.5 generic outer `web_search`
+4. duplicate old `activate_skill` body compact
+
+candidate-only / dry-run first で固定する順:
+
+1. `wait_agent`
+2. `run_skill_script`
+3. MCP tool results
+4. `ask_user_question`
+5. provider-native built-in replay
+
+### Deferred decisions outside this combined Goal
+
+以下は、今回の combined Goal では apply replacement に昇格しない。
+必要なら次 Goal で別途設計する。
+
+- `wait_agent` result の structured output / raw persistence / current task absorption owner
+- MCP known-safe schema registry または tool name allowlist
+- `ask_user_question` result を user message preservation contract と分けて扱う方法
+- provider-native built-in replay を provider adapter 側で軽量化できるか
+- `run_skill_script` result を `internal/commandoutputs` policy に統合できるか
+
+## 7.7. combined implementation scope proposal
+
+### 目的
+
+section 7 / 7.5 / 7.6 を、別々の小パッチではなく 1 つの implementation Goal として扱う。
+
+ただし、全 family を同じ強さで apply replacement するわけではない。
+source of truth / raw preservation / absorption owner が明確なものだけ apply 対象にし、owner が曖昧な family は candidate-only / dry-run observability から始める。
+
+### combined Goal の完了条件
+
+combined Goal は、以下をすべて含める。
+
+1. review prompt reduction の full section 7
+2. review web/external_doc compact
+3. generic outer `web_search` tool result compact
+4. duplicate old `activate_skill` result compact
+5. generic remaining families の detector / report / kept reason 整備
+6. unsafe / unknown family は candidate-only または keep reason を明示
+7. `/status` / report / docs / tests / Final-A / Final-B
+
+「全部を placeholder 化する」ことは goal ではない。
+「全 family の現状が観測でき、apply できるものは apply し、できないものは理由付きで保持する」ことを goal にする。
+
+candidate-only / dry-run first と決めた family は、combined Goal 内で自動昇格しない。
+実装中に safe owner が見えた場合でも、今回の Goal では report に `future_apply_candidate` として出し、apply replacement は次 Goal に分ける。
+
+### hard in-scope apply families
+
+以下は combined Goal 内で apply replacement まで実装する。
+
+#### 1. review prompt reduction
+
+範囲:
+
+- `ReviewPromptReductionState`
+- `ReviewStateSummary`
+- current-safe command / git output compact
+- absorbed probe plan / probe result compact
+- related context / external_doc compact
+- report draft / revision / scope coverage compact
+- review-specific report/status
+
+条件:
+
+- quality floor を満たす
+- raw artifacts を保持する
+- `Status=absorbed` だけ compact する
+
+#### 2. review web/external_doc evidence
+
+範囲:
+
+- raw web search result と fetched external_doc snippet の分離
+- compact DTO rendering
+- external support summary preservation
+- citation-capable snippet preservation
+- duplicate / absorbed snippet compact
+
+条件:
+
+- `official_confirmation=false` を true 扱いしない
+- source credibility / content hash / warning / error / truncation を残す
+- error / truncated / inconclusive / unresolved は keep
+
+#### 3. generic outer `web_search` tool result
+
+範囲:
+
+- XELYON outer `web_search` tool result の actual format parser
+- old duplicate result compact
+- broad discovery result compact
+- failure/truncated summary compact
+- temporal query / citation / referenced result keep gates
+- report/status breakdown
+
+条件:
+
+- current/latest temporal query は keep
+- final answer / active context が参照した result は keep
+- provider-native replay とは分ける
+- raw history / session / audit は保持する
+
+#### 4. duplicate old `activate_skill` result
+
+範囲:
+
+- `activate_skill` result の skill name / content hash / byte size を記録する
+- 同じ skill name かつ同じ content hash の activation が後続にある場合、古い duplicate body だけ placeholder 化する
+- latest activation per skill は keep する
+
+条件:
+
+- content hash が一致する
+- later duplicate activation がある
+- current tool suffix / latest tool result ではない
+- replacement 後も skill name / content hash / duplicate_of tool call id / raw size が残る
+- skill activation error は compact しない
+
+### candidate-only / dry-run first families
+
+以下は combined Goal 内で detector / report / kept reason を実装してよい。
+ただし combined Goal では原則 apply replacement しない。
+safe owner が実装中に証明できても、下記で apply 禁止と決めた family は次 Goal に分ける。
+
+#### 1. `wait_agent`
+
+candidate-only で見るもの:
+
+- large result
+- completed / failed / blocked status
+- changed files / findings / test results の存在
+- summary 抽出可能性
+
+combined Goal での決定:
+
+- apply replacement しない
+- kept reason: `wait_agent_freeform_output_keep`
+- future task で structured sub-agent result / absorption owner ができた場合だけ再検討する
+
+#### 2. `run_skill_script`
+
+candidate-only で見るもの:
+
+- skill name
+- script path
+- output size
+- command-like classifier
+- success / failure
+
+combined Goal での決定:
+
+- apply replacement しない
+- kept reason: `run_skill_script_command_owner_unconfirmed`
+- future task で `internal/commandoutputs` に safely bridge できるなら再検討する
+
+#### 3. MCP tool results
+
+candidate-only で見るもの:
+
+- `mcp_<server>_<tool>` tool name
+- result size
+- JSON parse 可否
+- URL / id / title / status / summary metadata の有無
+- sensitive-looking fields
+
+combined Goal での決定:
+
+- apply replacement しない
+- kept reason: `mcp_unknown_schema_keep`
+- known-safe schema registry は次 Goal に分ける
+
+#### 4. `ask_user_question`
+
+candidate-only で見るもの:
+
+- old answered question
+- answer size
+- later assistant absorption
+
+combined Goal での決定:
+
+- apply replacement しない
+- kept reason: `user_answer_contract_keep`
+- answer が approval / refusal / preference に見える場合は separate counter に出す
+
+#### 5. provider-native built-in replay
+
+candidate-only で見るもの:
+
+- provider-specific built-in replay が provider request history に現れるか
+- compact すると provider request builder が壊れるか
+- usage / cost accounting と関係するか
+
+combined Goal での決定:
+
+- apply replacement しない
+- kept reason: `provider_native_replay_contract_keep`
+- provider request builder tests で outer `web_search` compact が replay を壊さないことだけ確認する
+
+### combined acceptance tests / fixed contracts
+
+combined Goal では、以下を focused tests または provider-facing projection contract tests で固定する。
+
+#### 1. candidate-only no-apply tests
+
+apply mode でも、candidate-only / dry-run first family は provider-facing payload を置換しない。
+
+必須ケース:
+
+- `wait_agent` large completed result は detector / report に出るが、payload body は置換されない
+- `wait_agent` failed / blocked result は error context を保持し、置換されない
+- `run_skill_script` large success / failure result は detector / report に出るが、置換されない
+- `mcp_<server>_<tool>` JSON object result は candidate metadata を出せても、置換されない
+- MCP result に URL / title / summary field があっても、trusted schema registry がない限り置換されない
+- `ask_user_question` answered result は古くても置換されない
+- `ask_user_question` answer が approval / refusal / preference に見える場合は separate counter に出る
+- provider-native built-in replay message は outer `web_search` compact の影響を受けず、置換されない
+
+これらの failure mode は「置換し忘れ」ではなく、品質保持のための intentional keep として扱う。
+
+#### 2. `activate_skill` duplicate compact tests
+
+`activate_skill` は、duplicate old body だけ apply replacement する。
+
+必須ケース:
+
+- same skill name + same content hash + later duplicate activation がある古い result body は compact される
+- compact replacement には skill name / content hash / duplicate_of tool call id / raw size が残る
+- latest activation per skill は compact されない
+- content hash mismatch は compact されない
+- activation error は compact されない
+- current tool suffix / latest tool result に含まれる activation は compact されない
+- current behavior contract として参照される可能性がある activation は compact されない
+
+この test 群は、skill 本文を削るのではなく、同一本文の再送だけを省くことを固定する。
+
+#### 3. generic `web_search` conservative defaults
+
+generic outer `web_search` compact は、判断不能なら keep を default にする。
+
+必須ケース:
+
+- actual result format が parse できない場合は keep
+- query が temporal か判断できない場合は keep
+- result が final answer / active context に参照されたか判断できない場合は keep
+- source credibility が判断できない場合は keep
+- URL / domain / title / snippet hash / observed_at が欠落している場合は keep
+- truncated / timeout / blocked / inconclusive が後続 state に吸収済みと証明できない場合は keep
+- prompt injection / hostile content warning が summary で失われる場合は keep
+
+`web_search` は freshness / citation / credibility の誤りが回答品質へ直結するため、token saving より conservative keep を優先する。
+
+#### 4. fixed report / status reason names
+
+candidate-only / keep-by-design family は、report / status で理由名を曖昧にしない。
+
+必須 kept reason:
+
+- `wait_agent_freeform_output_keep`
+- `wait_agent_error_context_keep`
+- `run_skill_script_command_owner_unconfirmed`
+- `mcp_unknown_schema_keep`
+- `mcp_sensitive_or_private_result_keep`
+- `user_answer_contract_keep`
+- `user_answer_approval_refusal_preference_keep`
+- `provider_native_replay_contract_keep`
+- `provider_native_replay_usage_accounting_keep`
+- `web_search_unknown_format_keep`
+- `web_search_temporal_or_current_keep`
+- `web_search_citation_or_referenced_result_keep`
+- `web_search_unknown_credibility_keep`
+- `activate_skill_latest_activation_keep`
+- `activate_skill_hash_mismatch_keep`
+- `activate_skill_current_behavior_contract_keep`
+- `activate_skill_error_keep`
+
+report / status は、candidate count、applied count、kept count、kept reason breakdown、future_apply_candidate count を分ける。
+future_apply_candidate は apply replacement ではないため、saved token estimate に過大計上しない。
+
+### combined implementation order
+
+1. inventory tests: actual tool result format snapshots を追加する
+2. providerhistory report model を family / status / kept reason に拡張する
+3. review prompt reduction state を実装する
+4. review web/external_doc compact を実装する
+5. generic outer `web_search` compact を実装する
+6. duplicate old `activate_skill` compact を実装する
+7. candidate-only detectors for `wait_agent` / `run_skill_script` / MCP / `ask_user_question` / provider-native replay を追加する
+8. `/status` / docs / generated config への影響を確認する
+9. focused tests
+10. `make ci-check`
+11. Phase Final-A impact audit
+12. Phase Final-B comprehensive refactor including tests
+
+### combined report / status
+
+通常 content replacement、command replacement、review prompt reduction、generic future-family candidates を分けて表示する。
+
+例:
+
+```text
+provider_history_reduction=apply
+content_replacement_tools=read_file:2, list_dir:1, web_search:1
+command_output_tools=validation:3, git_diff:1
+review_history_tools=probe_result:2, external_doc:1, report_draft:1
+skill_replacement_tools=activate_skill_duplicate:1
+future_family_candidates=wait_agent:1, run_skill_script:1, mcp:2
+future_family_kept_reasons=unknown_schema:2, user_answer_contract:1, no_absorption_owner:1
+quality_floor=preserved
+```
+
+### combined safety stop conditions
+
+実装中に以下へ当たった場合、同じ diff で apply replacement へ進めない。
+candidate-only / keep reason に落とす。
+
+- actual result format が安定していない
+- raw preservation owner が見つからない
+- current task state / active context absorption owner がない
+- final answer / user answer / finding evidence との参照関係を判定できない
+- provider-native replay contract が provider-specific request tests で固定されていない
+- compact 後に source credibility / freshness / truncation / error が失われる
+- replacement が品質を落とす可能性があり、focused test で否定できない
+
+### combined Goal handoff prompt
+
+Goal に渡す場合は、以下の短い prompt でよい。
+
+```text
+docs/dev/provider-history-reduction-next-plan.md の section 7, 7.5, 7.6, 7.7 を source of truth として、review prompt reduction と generic web_search provider history reduction をまとめて実装してください。
+
+raw Agent.History / Session.Messages / audit / persisted JSONL / review raw artifacts は保持し、provider-facing projection / review prompt payload だけを軽量化してください。
+
+review quality floor、absorption-before-compaction rule、temporal web_search keep gates、source credibility preservation、skill behavior contract preservation を弱めないでください。
+
+duplicate old activate_skill result は apply replacement 対象です。content hash が一致し、後続に同一 skill の同一本文 activation がある古い body だけ compact してください。latest activation / content hash mismatch / activation error / current behavior contract は keep してください。
+
+wait_agent / run_skill_script / MCP / ask_user_question / provider-native replay は detector/report/kept reason までを必須とし、この Goal では apply replacement に昇格しないでください。safe owner が見えた場合も `future_apply_candidate` として報告し、次 Goal に分けてください。
+
+combined acceptance tests / fixed contracts を実装し、candidate-only no-apply、activate_skill duplicate compact、generic web_search conservative defaults、fixed report/status reason names を focused tests で固定してください。
+
+実装後は focused tests、make ci-check、Phase Final-A impact audit、Phase Final-B comprehensive refactor including tests を必ず実施してください。commit は作らないでください。
+```
 
 ## 8. `/config` / docs / generated config metadata 公開方針
 
@@ -4051,7 +5466,8 @@ default ON 前に、ユーザーが「なぜ削られたか / なぜ削られな
 
 - active context transport が使える provider では `rehydrate_context` が機能する
 - active context transport が使えない provider では evidence-backed replacement が安全側で skip される
-- structured/list_dir/command/git/failure/review compact は active context transport availability に依存しない
+- structured/list_dir/validation/operation/git-summary/failure/review inline compact は active context transport availability に依存しない
+- data-bearing command output、network/database body、`git diff` / `git show` などの artifact-backed compact は active context transport availability に依存する
 - provider-specific message shape が壊れない
 - Anthropic tool_use / OpenAI-style ToolCalls の同期契約が壊れない
 

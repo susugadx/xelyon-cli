@@ -5,10 +5,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory/toolresults"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
-func buildProviderHistoryReductionDetectionReport(original, projected []api.Message, mode Mode) ProjectionReport {
+func buildProviderHistoryReductionDetectionReport(original, projected []api.Message, policy Policy) ProjectionReport {
+	policy = normalizePolicy(policy)
+	mode := policy.Mode
 	report := ProjectionReport{
 		Mode:                  mode,
 		OriginalMessageCount:  len(original),
@@ -22,7 +25,7 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 	assistantToolCallsByID := collectProviderHistoryAssistantToolCalls(original)
 	trailingToolStart := providerHistoryTrailingToolSuffixStart(original)
 	latestToolResultIndex := providerHistoryLatestToolResultIndex(original)
-	report.CommandEditDryRun = buildCommandEditDryRunReport(original, projected, mode, assistantToolCallsByID, trailingToolStart, latestToolResultIndex)
+	report.CommandEditDryRun = buildCommandEditDryRunReport(original, projected, policy, assistantToolCallsByID, trailingToolStart, latestToolResultIndex)
 
 	for i, msg := range original {
 		if msg.Role != "tool" {
@@ -53,7 +56,26 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 			report.Kept = append(report.Kept, entry)
 			continue
 		}
-		if !isReductionCandidateTool(toolName) {
+		if toolName == "web_search" {
+			recordProviderHistoryWebSearchArtifactCandidate(&report, policy, entry, linkage.Ref.arguments, msg.Content, original)
+			continue
+		}
+		if providerHistoryIsMCPToolResult(toolName) {
+			if recordProviderHistoryMCPArtifactCandidate(&report, policy, entry, msg.Content) {
+				continue
+			}
+		}
+		if isProviderHistoryCandidateOnlyTool(toolName) {
+			entry.CandidateOnly = true
+			entry.FutureApplyCandidate = providerHistoryFutureApplyCandidate(toolName, msg.Content)
+			entry.KeepReason = providerHistoryCandidateOnlyKeepReason(toolName, msg.Content)
+			entry.Reason = "candidate_only_" + providerHistoryFutureFamilyName(toolName)
+			entry.SuggestedReplacementKind = "candidate_only_keep"
+			report.Candidates = append(report.Candidates, entry)
+			report.Kept = append(report.Kept, entry)
+			continue
+		}
+		if !isToolResultReductionCandidateTool(toolName) {
 			entry.KeepReason = "tool_not_in_reduction_allowlist"
 			report.Kept = append(report.Kept, entry)
 			continue
@@ -64,9 +86,9 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 			continue
 		}
 
-		entry.Reason = "old_tool_result_after_assistant_turn"
+		entry.Reason = providerHistoryReductionCandidateReason(toolName)
 		entry.SuggestedReplacementKind = providerHistoryReductionReplacementKind(toolName)
-		entry.SuggestedReplacementText = fmt.Sprintf("[omitted old %s result; see evidence pointer]", toolName)
+		entry.SuggestedReplacementText = providerHistoryReductionSuggestedReplacementText(entry, linkage.Ref.arguments, msg.Content, original)
 		report.Candidates = append(report.Candidates, entry)
 		if mode == DryRun {
 			kept := entry
@@ -119,6 +141,10 @@ func resolveProviderHistoryToolResultLinkage(messages []api.Message, historyInde
 		return linkage
 	}
 	if historyIndex == latestToolResultIndex {
+		if linkage.ToolName == "activate_skill" {
+			linkage.KeepReason = "activate_skill_latest_activation_keep"
+			return linkage
+		}
 		linkage.KeepReason = "latest_tool_result"
 		return linkage
 	}
@@ -284,13 +310,50 @@ func isProviderHistoryReductionAlwaysKeptTool(toolName string) bool {
 	return tools.IsWriteTool(toolName)
 }
 
-func isReductionCandidateTool(toolName string) bool {
+func isEvidenceBackedReductionTool(toolName string) bool {
 	switch toolName {
 	case "read_file", "search_code", "gather_context":
 		return true
 	default:
 		return false
 	}
+}
+
+func isStructuredToolResultReductionTool(toolName string) bool {
+	switch toolName {
+	case "list_dir", "activate_skill":
+		return true
+	default:
+		return false
+	}
+}
+
+func isToolResultReductionCandidateTool(toolName string) bool {
+	return isEvidenceBackedReductionTool(toolName) || isStructuredToolResultReductionTool(toolName)
+}
+
+func providerHistoryReductionCandidateReason(toolName string) string {
+	if toolName == "activate_skill" {
+		return "old_duplicate_activate_skill_result"
+	}
+	if toolName == "web_search" {
+		return "old_duplicate_web_search_result"
+	}
+	if isStructuredToolResultReductionTool(toolName) {
+		return "old_successful_" + toolName + "_result"
+	}
+	return "old_tool_result_after_assistant_turn"
+}
+
+func providerHistoryReductionSuggestedReplacementText(candidate ReductionCandidate, arguments, content string, messages []api.Message) string {
+	if isStructuredToolResultReductionTool(candidate.ToolName) {
+		replacement, _, ok := toolresults.BuildStructuredReplacement(toolresults.NewReplacementRequestWithMessages(candidate.ToolName, arguments, content, candidate.ToolCallID, candidate.HistoryIndex, messages))
+		if !ok {
+			return ""
+		}
+		return replacement.Text()
+	}
+	return fmt.Sprintf("[omitted old %s result; see evidence pointer]", candidate.ToolName)
 }
 
 func providerHistoryReductionEntry(historyIndex int, msg api.Message) ReductionCandidate {

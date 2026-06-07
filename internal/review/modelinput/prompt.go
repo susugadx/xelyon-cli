@@ -1,6 +1,7 @@
 package modelinput
 
 import (
+	"reflect"
 	"strings"
 
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
@@ -40,21 +41,25 @@ type ProbePlanRepairPromptInput struct {
 // ReportPromptInput は final report 生成 prompt の入力 DTO。
 type ReportPromptInput struct {
 	CustomInstructions string
+	ReviewStateSummary string
 	EvidenceMarkdown   string
 	Plan               reviewprobe.ReviewProbePlan
 	ProbeSummaries     []reviewreport.ReviewProbeSummary
 	ProbeResults       []reviewprobe.ReviewProbeResult
 	Redactor           Redactor
+	ProbeResultOptions ProbeResultPromptContextOptions
 }
 
 // ReportRepairPromptInput は final report repair prompt の入力 DTO。
 type ReportRepairPromptInput struct {
 	CustomInstructions    string
+	ReviewStateSummary    string
 	EvidenceMarkdown      string
 	Plan                  reviewprobe.ReviewProbePlan
 	ProbeSummaries        []reviewreport.ReviewProbeSummary
 	ProbeResults          []reviewprobe.ReviewProbeResult
 	Redactor              Redactor
+	ProbeResultOptions    ProbeResultPromptContextOptions
 	InvalidOutput         string
 	DecodeOrValidationErr error
 }
@@ -109,10 +114,11 @@ func BuildReportPrompt(input ReportPromptInput) string {
 	appendReviewRunnerPromptStrictReviewerStance(&b, reviewRunnerPromptPostProbeInsufficientEvidenceGuidance)
 	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
 	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptOptionalTextSection(&b, "Review State Summary", input.ReviewStateSummary)
 	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", input.EvidenceMarkdown)
 	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", input.Plan)
 	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(input.ProbeSummaries, redactor))
-	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContexts(input.ProbeResults, redactor))
+	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContextsWithOptions(input.ProbeResults, redactor, input.ProbeResultOptions))
 	return b.String()
 }
 
@@ -132,10 +138,11 @@ func BuildReportRepairPrompt(input ReportRepairPromptInput) string {
 	appendReviewRunnerPromptStrictReviewerStance(&b, reviewRunnerPromptPostProbeInsufficientEvidenceGuidance)
 	appendReviewRunnerPromptTextSection(&b, "Review Report JSON Contract", reviewReportPromptContract())
 	appendReviewRunnerPromptTextSection(&b, "Custom Instructions", input.CustomInstructions)
+	appendReviewRunnerPromptOptionalTextSection(&b, "Review State Summary", input.ReviewStateSummary)
 	appendReviewRunnerPromptMarkdownSection(&b, "Evidence Markdown", input.EvidenceMarkdown)
 	appendReviewRunnerPromptJSONSection(&b, "Decoded Probe Plan", input.Plan)
 	appendReviewRunnerPromptJSONSection(&b, "Probe Summaries For Report Schema", redactReviewProbeSummariesForPrompt(input.ProbeSummaries, redactor))
-	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContexts(input.ProbeResults, redactor))
+	appendReviewRunnerPromptJSONSection(&b, "Probe Result Context", BuildProbeResultPromptContextsWithOptions(input.ProbeResults, redactor, input.ProbeResultOptions))
 	appendReviewRunnerPromptTextSection(&b, "Invalid Model Output", redactor.RedactText(input.InvalidOutput))
 	appendReviewRunnerPromptTextSection(&b, "Decode Or Validation Error", redactor.RedactText(reviewRunnerPromptErrorText(input.DecodeOrValidationErr)))
 	return b.String()
@@ -197,6 +204,13 @@ func appendReviewRunnerPromptTextSection(b *strings.Builder, title, content stri
 	appendReviewRunnerPromptFence(b, "text", content)
 }
 
+func appendReviewRunnerPromptOptionalTextSection(b *strings.Builder, title, content string) {
+	if strings.TrimSpace(content) == "" {
+		return
+	}
+	appendReviewRunnerPromptTextSection(b, title, content)
+}
+
 func appendReviewRunnerPromptMarkdownSection(b *strings.Builder, title, content string) {
 	appendReviewRunnerPromptSection(b, title)
 	appendReviewRunnerPromptFence(b, "markdown", content)
@@ -210,6 +224,20 @@ func appendReviewRunnerPromptJSONSection(b *strings.Builder, title string, value
 		return
 	}
 	appendReviewRunnerPromptFence(b, "json", string(data))
+}
+
+func appendReviewRunnerPromptOptionalJSONSection(b *strings.Builder, title string, value any) {
+	if value == nil {
+		return
+	}
+	typed := reflect.ValueOf(value)
+	switch typed.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		if typed.IsNil() {
+			return
+		}
+	}
+	appendReviewRunnerPromptJSONSection(b, title, value)
 }
 
 func appendReviewRunnerPromptSection(b *strings.Builder, title string) {

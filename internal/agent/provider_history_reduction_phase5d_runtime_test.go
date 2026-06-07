@@ -94,11 +94,10 @@ func TestPhase5DRawStorageStaysRawAcrossRequestSurfaces(t *testing.T) {
 		}
 
 		assertProviderRequestHistoryReductionApplied(t, agent, provider, oldRead, "next request")
-		if agent.session.Messages[1].Content != oldRead ||
-			agent.session.Messages[2].ToolExecution == nil ||
-			agent.session.Messages[2].ToolExecution.ResultPreview != oldRead {
-			t.Fatalf("session raw storage = %#v, want raw tool content and raw tool execution", agent.session.Messages)
+		if agent.session.Messages[1].Content != oldRead {
+			t.Fatalf("session raw tool content = %q, want raw old read", agent.session.Messages[1].Content)
 		}
+		assertProviderHistoryToolExecutionPreviewPreservesRaw(t, agent.session.Messages[2].ToolExecution, "read_file", oldRead)
 	})
 
 	t.Run("image headless and plan preserve raw runtime history", func(t *testing.T) {

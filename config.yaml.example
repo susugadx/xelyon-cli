@@ -81,6 +81,32 @@ compression:
     keep_recent: 20
 
 # ============================================================
+# Provider History Reduction
+# ============================================================
+# 古い tool result / command output / edit payload を provider-facing projection 上だけで軽量化
+# raw history / session / audit / persisted JSONL は保持
+provider_history_reduction:
+    # provider-facing history reduction mode（off / dry_run / apply。env: XELYON_PROVIDER_HISTORY_REDUCTION）
+    mode: dry_run
+    # 省略した古い evidence を必要時に request-local active context として戻す（env: XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT）
+    rehydrate_context: true
+    raw_output_artifacts:
+        # data-bearing raw output artifact-backed compact mode（off / dry_run / apply）
+        mode: dry_run
+        # raw output artifact 1件あたりの最大保存 byte 数
+        max_artifact_bytes: 67108864
+        # session 単位の raw output artifact 保存上限 byte 数
+        session_quota_bytes: 1073741824
+        # raw output artifact 書き込み chunk byte 数
+        chunk_bytes: 1048576
+        # request-local raw output active context の既定 token budget
+        active_context_budget_tokens: 4096
+        # request-local raw output active context の最大 token budget
+        active_context_budget_max_tokens: 8192
+        # raw output artifact retention policy（現状 session のみ）
+        retention: session
+
+# ============================================================
 # 実行モード設定
 # ============================================================
 # ツール実行の承認モードを制御

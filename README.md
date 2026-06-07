@@ -167,12 +167,13 @@ XELYON は raw history / session / audit / JSONL を保持したまま、provide
 
 - 古い `read_file` / `search_code` / `gather_context` 結果は、条件を満たすと evidence pointer placeholder に置き換えられます
 - 成功した test / build / lint command output は、安全条件付きで summary 化できます
+- `curl` / `sqlite3` など取得データそのものが証拠になる command output は、再取得 pointer がない限り provider-facing apply でも raw のまま保持します
 - 古い成功済み `write_file.content` も、raw storage を保ったまま provider-facing projection だけで省略できます
 - 必要な evidence は現在ファイルから rehydrate し、request-local active context として provider 入力へ戻せます
 - active context は OpenAI Responses、Chat Completions 系、Claude、Gemini、Bedrock など既存の provider transport に対応します
 - raw storage は変更せず、rehydrated evidence も history へ保存しません
 
-この provider history reduction / rehydrate context はまだ experimental dogfood 機能です。設定例と内部契約は [docs/dev/history-active-context.md](docs/dev/history-active-context.md) を参照してください。
+デフォルトは `provider_history_reduction.mode: dry_run` で、provider payload を変えずに `/status` へ削減見込みを表示します。実際に provider-facing projection へ適用する場合は `/config` または `config.yaml` で `mode: apply` に変更します。詳細は [docs/config.md](docs/config.md#provider-history-reduction-設定-provider_history_reduction) を参照してください。
 
 ### 📈 リアルタイムトークン表示
 API実測値に基づくトークン使用量とコストをリアルタイム表示。

@@ -378,6 +378,7 @@ func TestProjectDeleteFilePathCandidateOnlyDoesNotReplaceOrDisableResponseChain(
 	report := result.Report.CommandEditDryRun
 	if report.EditArgCandidates != 1 ||
 		report.CandidateReasonCounts["delete_file_path"] != 1 ||
+		report.KeptReasonCounts["delete_file_path_kept_context"] != 1 ||
 		report.EditArgReplacedCount != 0 ||
 		result.Report.ResponsesChainDisabled {
 		t.Fatalf("report = %#v / top-level %#v, want candidate-only delete_file_path", report, result.Report)

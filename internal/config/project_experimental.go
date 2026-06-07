@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -29,13 +28,14 @@ func (c ProjectExperimentalConfig) IsZero() bool {
 
 // ProjectProviderHistoryReductionConfig は provider-facing history reduction の実験設定。
 type ProjectProviderHistoryReductionConfig struct {
-	Mode             ProjectProviderHistoryReductionMode    `yaml:"mode,omitempty"`
-	RehydrateContext ProjectProviderHistoryRehydrateContext `yaml:"rehydrate_context,omitempty"`
+	Mode                ProjectProviderHistoryReductionMode    `yaml:"mode,omitempty"`
+	RehydrateContext    ProjectProviderHistoryRehydrateContext `yaml:"rehydrate_context,omitempty"`
+	RehydrateContextSet bool                                   `yaml:"-"`
 }
 
 // IsZero は provider_history_reduction が省略可能かを返す。
 func (c ProjectProviderHistoryReductionConfig) IsZero() bool {
-	return c.Mode == "" && !bool(c.RehydrateContext)
+	return c.Mode == "" && !c.RehydrateContextSet
 }
 
 // ProjectProviderHistoryReductionMode は xelyon.yaml/env で指定できる実験 mode。
@@ -88,6 +88,50 @@ func (r *ProjectProviderHistoryRehydrateContext) UnmarshalYAML(value *yaml.Node)
 	return nil
 }
 
+// UnmarshalYAML は experimental provider_history_reduction を読み、明示 false を記録する。
+func (c *ProjectProviderHistoryReductionConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil || value.Tag == "!!null" {
+		*c = ProjectProviderHistoryReductionConfig{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("invalid experimental provider_history_reduction section")
+	}
+
+	var parsed ProjectProviderHistoryReductionConfig
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		child := value.Content[i+1]
+		switch key {
+		case "mode":
+			if err := child.Decode(&parsed.Mode); err != nil {
+				return err
+			}
+		case "rehydrate_context":
+			if err := child.Decode(&parsed.RehydrateContext); err != nil {
+				return err
+			}
+			parsed.RehydrateContextSet = true
+		}
+	}
+	*c = parsed
+	return nil
+}
+
+// MarshalYAML は明示 false の experimental rehydrate_context を省略せずに保存する。
+func (c ProjectProviderHistoryReductionConfig) MarshalYAML() (interface{}, error) {
+	type projectProviderHistoryReductionYAML struct {
+		Mode             ProjectProviderHistoryReductionMode     `yaml:"mode,omitempty"`
+		RehydrateContext *ProjectProviderHistoryRehydrateContext `yaml:"rehydrate_context,omitempty"`
+	}
+	out := projectProviderHistoryReductionYAML{Mode: c.Mode}
+	if c.RehydrateContextSet || bool(c.RehydrateContext) {
+		rehydrateContext := c.RehydrateContext
+		out.RehydrateContext = &rehydrateContext
+	}
+	return out, nil
+}
+
 // ParseProjectProviderHistoryReductionMode は project/env の provider history reduction mode を検証する。
 func ParseProjectProviderHistoryReductionMode(raw string) (ProjectProviderHistoryReductionMode, error) {
 	value := strings.TrimSpace(raw)
@@ -127,52 +171,12 @@ func NormalizeProjectProviderHistoryReductionMode(mode ProjectProviderHistoryRed
 	return parsed, true, nil
 }
 
-// ResolveProjectProviderHistoryReductionMode は env > xelyon.yaml > default off の順で mode を解決する。
+// ResolveProjectProviderHistoryReductionMode は env > xelyon.yaml > default の順で mode を解決する。
 func ResolveProjectProviderHistoryReductionMode(projectCfg *ProjectConfig, lookupEnv func(string) (string, bool)) (ProjectProviderHistoryReductionMode, bool, error) {
-	mode := ProjectProviderHistoryReductionModeOff
-	specified := false
-
-	if projectCfg != nil {
-		resolved, ok, err := NormalizeProjectProviderHistoryReductionMode(projectCfg.Experimental.ProviderHistoryReduction.Mode)
-		if err != nil {
-			return "", false, err
-		}
-		if ok {
-			mode = resolved
-			specified = true
-		}
-	}
-
-	if lookupEnv == nil {
-		lookupEnv = os.LookupEnv
-	}
-	if raw, ok := lookupEnv(ProviderHistoryReductionEnvVar); ok {
-		resolved, err := ParseProjectProviderHistoryReductionMode(raw)
-		if err != nil {
-			return "", false, err
-		}
-		return resolved, true, nil
-	}
-
-	return mode, specified, nil
+	return ResolveProviderHistoryReductionMode(nil, projectCfg, lookupEnv)
 }
 
-// ResolveProjectProviderHistoryRehydrateContext は env > xelyon.yaml > default false の順で rehydrate context gate を解決する。
+// ResolveProjectProviderHistoryRehydrateContext は env > xelyon.yaml > default の順で rehydrate context gate を解決する。
 func ResolveProjectProviderHistoryRehydrateContext(projectCfg *ProjectConfig, lookupEnv func(string) (string, bool)) (bool, error) {
-	enabled := false
-	if projectCfg != nil {
-		enabled = bool(projectCfg.Experimental.ProviderHistoryReduction.RehydrateContext)
-	}
-
-	if lookupEnv == nil {
-		lookupEnv = os.LookupEnv
-	}
-	if raw, ok := lookupEnv(ProviderHistoryRehydrateContextEnvVar); ok {
-		if strings.TrimSpace(raw) == "" {
-			return enabled, nil
-		}
-		return ParseProjectProviderHistoryRehydrateContext(raw)
-	}
-
-	return enabled, nil
+	return ResolveProviderHistoryRehydrateContext(nil, projectCfg, lookupEnv)
 }

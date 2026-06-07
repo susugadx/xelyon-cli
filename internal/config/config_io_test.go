@@ -122,6 +122,137 @@ func TestLoadConfig_Partial(t *testing.T) {
 	if cfg.Compression.Model != "" {
 		t.Errorf("Compression.Model should default to empty string, got %q", cfg.Compression.Model)
 	}
+	if cfg.ProviderHistoryReduction.Mode != ProviderHistoryReductionModeDryRun {
+		t.Errorf("ProviderHistoryReduction.Mode should default to dry_run, got %q", cfg.ProviderHistoryReduction.Mode)
+	}
+	if !cfg.ProviderHistoryReduction.RehydrateContext {
+		t.Error("ProviderHistoryReduction.RehydrateContext should default to true")
+	}
+	if cfg.ProviderHistoryReduction.RawOutputArtifacts.Mode != ProviderHistoryRawOutputArtifactsModeDryRun {
+		t.Errorf("ProviderHistoryReduction.RawOutputArtifacts.Mode should default to dry_run, got %q", cfg.ProviderHistoryReduction.RawOutputArtifacts.Mode)
+	}
+}
+
+func TestLoadConfig_ProviderHistoryReductionExplicitFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configYAML := "provider_history_reduction:\n  mode: apply\n  rehydrate_context: false\n"
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.ProviderHistoryReduction.Mode != ProviderHistoryReductionModeApply {
+		t.Fatalf("ProviderHistoryReduction.Mode = %q, want apply", cfg.ProviderHistoryReduction.Mode)
+	}
+	if cfg.ProviderHistoryReduction.RehydrateContext {
+		t.Fatal("ProviderHistoryReduction.RehydrateContext = true, want explicit false")
+	}
+	if cfg.ProviderHistoryReduction.RawOutputArtifacts.Mode != ProviderHistoryRawOutputArtifactsModeDryRun {
+		t.Fatalf("RawOutputArtifacts.Mode = %q, want default dry_run", cfg.ProviderHistoryReduction.RawOutputArtifacts.Mode)
+	}
+}
+
+func TestLoadConfig_ProviderHistoryRawOutputArtifacts(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configYAML := strings.Join([]string{
+		"provider_history_reduction:",
+		"  mode: apply",
+		"  rehydrate_context: true",
+		"  raw_output_artifacts:",
+		"    mode: apply",
+		"    max_artifact_bytes: 1048576",
+		"    session_quota_bytes: 2097152",
+		"    chunk_bytes: 524288",
+		"    active_context_budget_tokens: 2048",
+		"    active_context_budget_max_tokens: 4096",
+		"    retention: session",
+		"",
+	}, "\n")
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	raw := cfg.ProviderHistoryReduction.RawOutputArtifacts
+	if raw.Mode != ProviderHistoryRawOutputArtifactsModeApply ||
+		raw.MaxArtifactBytes != 1048576 ||
+		raw.SessionQuotaBytes != 2097152 ||
+		raw.ChunkBytes != 524288 ||
+		raw.ActiveContextBudgetTokens != 2048 ||
+		raw.ActiveContextBudgetMaxTokens != 4096 ||
+		raw.Retention != ProviderHistoryRawOutputArtifactsRetentionSession {
+		t.Fatalf("RawOutputArtifacts = %#v, want explicit values", raw)
+	}
+}
+
+func TestLoadConfig_ProviderHistoryRawOutputArtifactsRejectsInvalidBudget(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("provider_history_reduction:\n  raw_output_artifacts:\n    max_artifact_bytes: 0\n"), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want invalid raw_output_artifacts budget error")
+	}
+	want := "provider_history_reduction.raw_output_artifacts.max_artifact_bytes"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("LoadConfig() error = %q, want containing %q", err.Error(), want)
+	}
+}
+
+func TestLoadConfig_ProviderHistoryReductionRejectsStableAuto(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("provider_history_reduction:\n  mode: auto\n"), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want stable auto error")
+	}
+	want := `invalid provider history reduction mode "auto" (expected: off, dry_run, apply)`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("LoadConfig() error = %q, want containing %q", err.Error(), want)
+	}
 }
 
 func TestLoadConfig_InvalidYAML(t *testing.T) {

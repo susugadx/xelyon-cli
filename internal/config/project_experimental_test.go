@@ -67,6 +67,95 @@ func TestLoadProjectConfigWithInvalidExperimentalProviderHistoryRehydrateContext
 	}
 }
 
+func TestLoadProjectConfigWithStableProviderHistoryReduction(t *testing.T) {
+	for _, mode := range []ProviderHistoryReductionMode{
+		ProviderHistoryReductionModeOff,
+		ProviderHistoryReductionModeDryRun,
+		ProviderHistoryReductionModeApply,
+	} {
+		t.Run(string(mode), func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "xelyon.yaml")
+			yamlContent := "provider_history_reduction:\n  mode: " + string(mode) + "\n  rehydrate_context: false\n"
+			if err := os.WriteFile(path, []byte(yamlContent), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			pc, err := loadProjectConfigFromYAML(path)
+			if err != nil {
+				t.Fatalf("loadProjectConfigFromYAML() error = %v", err)
+			}
+			if got := pc.ProviderHistoryReduction.Mode; got != mode {
+				t.Fatalf("provider_history_reduction.mode = %q, want %q", got, mode)
+			}
+			if !pc.ProviderHistoryReduction.RehydrateContextSet || bool(pc.ProviderHistoryReduction.RehydrateContext) {
+				t.Fatalf("provider_history_reduction.rehydrate_context = (%v, set=%v), want false set", pc.ProviderHistoryReduction.RehydrateContext, pc.ProviderHistoryReduction.RehydrateContextSet)
+			}
+		})
+	}
+}
+
+func TestLoadProjectConfigWithStableProviderHistoryRawOutputArtifacts(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "xelyon.yaml")
+	yamlContent := strings.Join([]string{
+		"provider_history_reduction:",
+		"  mode: apply",
+		"  raw_output_artifacts:",
+		"    mode: apply",
+		"    max_artifact_bytes: 1024",
+		"    session_quota_bytes: 4096",
+		"    chunk_bytes: 512",
+		"    active_context_budget_tokens: 256",
+		"    active_context_budget_max_tokens: 512",
+		"    retention: session",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	pc, err := loadProjectConfigFromYAML(path)
+	if err != nil {
+		t.Fatalf("loadProjectConfigFromYAML() error = %v", err)
+	}
+	raw := pc.ProviderHistoryReduction.RawOutputArtifacts
+	if raw.Mode != ProviderHistoryRawOutputArtifactsModeApply ||
+		raw.MaxArtifactBytes != 1024 ||
+		raw.SessionQuotaBytes != 4096 ||
+		raw.ChunkBytes != 512 ||
+		raw.ActiveContextBudgetTokens != 256 ||
+		raw.ActiveContextBudgetMaxTokens != 512 ||
+		raw.Retention != ProviderHistoryRawOutputArtifactsRetentionSession {
+		t.Fatalf("RawOutputArtifacts = %#v, want explicit project values", raw)
+	}
+
+	resolved, specified, err := ResolveProviderHistoryRawOutputArtifactsConfig(DefaultConfig(), pc)
+	if err != nil {
+		t.Fatalf("ResolveProviderHistoryRawOutputArtifactsConfig() error = %v", err)
+	}
+	if !specified || resolved != raw {
+		t.Fatalf("ResolveProviderHistoryRawOutputArtifactsConfig() = (%#v, %v), want project override %#v", resolved, specified, raw)
+	}
+}
+
+func TestLoadProjectConfigRejectsStableProviderHistoryReductionAuto(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "xelyon.yaml")
+	if err := os.WriteFile(path, []byte("provider_history_reduction:\n  mode: auto\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadProjectConfigFromYAML(path)
+	if err == nil {
+		t.Fatal("loadProjectConfigFromYAML() error = nil, want stable auto error")
+	}
+	want := `invalid provider history reduction mode "auto" (expected: off, dry_run, apply)`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want containing %q", err.Error(), want)
+	}
+}
+
 func TestResolveProjectProviderHistoryReductionModePrecedence(t *testing.T) {
 	projectCfg := &ProjectConfig{
 		Experimental: ProjectExperimentalConfig{
@@ -86,13 +175,28 @@ func TestResolveProjectProviderHistoryReductionModePrecedence(t *testing.T) {
 		wantError string
 	}{
 		{
-			name:     "default off is not explicit",
-			wantMode: ProjectProviderHistoryReductionModeOff,
+			name:     "default dry-run is not explicit",
+			wantMode: ProjectProviderHistoryReductionModeDryRun,
 		},
 		{
 			name:     "project mode",
 			project:  projectCfg,
 			wantMode: ProjectProviderHistoryReductionModeDryRun,
+			wantSet:  true,
+		},
+		{
+			name: "stable project overrides experimental",
+			project: &ProjectConfig{
+				ProviderHistoryReduction: ProjectStableProviderHistoryReductionConfig{
+					Mode: ProviderHistoryReductionModeApply,
+				},
+				Experimental: ProjectExperimentalConfig{
+					ProviderHistoryReduction: ProjectProviderHistoryReductionConfig{
+						Mode: ProjectProviderHistoryReductionModeDryRun,
+					},
+				},
+			},
+			wantMode: ProjectProviderHistoryReductionModeApply,
 			wantSet:  true,
 		},
 		{
@@ -156,7 +260,27 @@ func TestResolveProjectProviderHistoryRehydrateContextPrecedence(t *testing.T) {
 	projectFalse := &ProjectConfig{
 		Experimental: ProjectExperimentalConfig{
 			ProviderHistoryReduction: ProjectProviderHistoryReductionConfig{
-				RehydrateContext: false,
+				RehydrateContext:    false,
+				RehydrateContextSet: true,
+			},
+		},
+	}
+	projectExperimentalModeOnly := &ProjectConfig{
+		Experimental: ProjectExperimentalConfig{
+			ProviderHistoryReduction: ProjectProviderHistoryReductionConfig{
+				Mode: ProjectProviderHistoryReductionModeApply,
+			},
+		},
+	}
+	projectStableModeOnly := &ProjectConfig{
+		ProviderHistoryReduction: ProjectStableProviderHistoryReductionConfig{
+			Mode: ProviderHistoryReductionModeApply,
+		},
+		Experimental: ProjectExperimentalConfig{
+			ProviderHistoryReduction: ProjectProviderHistoryReductionConfig{
+				Mode:                ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext:    false,
+				RehydrateContextSet: true,
 			},
 		},
 	}
@@ -170,7 +294,8 @@ func TestResolveProjectProviderHistoryRehydrateContextPrecedence(t *testing.T) {
 		wantError string
 	}{
 		{
-			name: "default false",
+			name: "default true",
+			want: true,
 		},
 		{
 			name:    "project true",
@@ -180,6 +305,15 @@ func TestResolveProjectProviderHistoryRehydrateContextPrecedence(t *testing.T) {
 		{
 			name:    "project false",
 			project: projectFalse,
+		},
+		{
+			name:    "experimental mode only keeps legacy false default",
+			project: projectExperimentalModeOnly,
+		},
+		{
+			name:    "stable mode only ignores experimental and keeps stable true default",
+			project: projectStableModeOnly,
+			want:    true,
 		},
 		{
 			name:     "env true overrides project false",
@@ -241,8 +375,9 @@ func TestSaveProjectConfigWithExperimentalProviderHistoryReductionRoundTrip(t *t
 		Context: "test",
 		Experimental: ProjectExperimentalConfig{
 			ProviderHistoryReduction: ProjectProviderHistoryReductionConfig{
-				Mode:             ProjectProviderHistoryReductionModeDryRun,
-				RehydrateContext: true,
+				Mode:                ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext:    true,
+				RehydrateContextSet: true,
 			},
 		},
 		FilePath: filepath.Join(dir, "xelyon.yaml"),
@@ -270,6 +405,43 @@ func TestSaveProjectConfigWithExperimentalProviderHistoryReductionRoundTrip(t *t
 	}
 	if got := bool(loaded.Experimental.ProviderHistoryReduction.RehydrateContext); !got {
 		t.Fatalf("loaded provider_history_reduction.rehydrate_context = %v, want true", got)
+	}
+}
+
+func TestSaveProjectConfigWithStableProviderHistoryReductionFalseRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	pc := &ProjectConfig{
+		Context: "test",
+		ProviderHistoryReduction: ProjectStableProviderHistoryReductionConfig{
+			Mode:                ProviderHistoryReductionModeApply,
+			RehydrateContext:    false,
+			RehydrateContextSet: true,
+		},
+		FilePath: filepath.Join(dir, "xelyon.yaml"),
+	}
+
+	if err := SaveProjectConfig(pc); err != nil {
+		t.Fatalf("SaveProjectConfig() error = %v", err)
+	}
+	data, err := os.ReadFile(pc.FilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"provider_history_reduction:", "mode: apply", "rehydrate_context: false"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("saved xelyon.yaml missing %q:\n%s", want, string(data))
+		}
+	}
+
+	loaded, err := loadProjectConfigFromYAML(pc.FilePath)
+	if err != nil {
+		t.Fatalf("loadProjectConfigFromYAML() error = %v", err)
+	}
+	if got := loaded.ProviderHistoryReduction.Mode; got != ProviderHistoryReductionModeApply {
+		t.Fatalf("loaded provider_history_reduction.mode = %q", got)
+	}
+	if !loaded.ProviderHistoryReduction.RehydrateContextSet || bool(loaded.ProviderHistoryReduction.RehydrateContext) {
+		t.Fatalf("loaded provider_history_reduction.rehydrate_context = (%v, set=%v), want false set", loaded.ProviderHistoryReduction.RehydrateContext, loaded.ProviderHistoryReduction.RehydrateContextSet)
 	}
 }
 

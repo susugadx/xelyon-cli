@@ -8,7 +8,7 @@ import (
 )
 
 func phase5DOutput(label string) string {
-	return strings.Repeat(label+"\n", 12)
+	return strings.Repeat(label+"\n", 240)
 }
 
 func phase5DToolResultByID(t *testing.T, history []api.Message, callID string) api.Message {

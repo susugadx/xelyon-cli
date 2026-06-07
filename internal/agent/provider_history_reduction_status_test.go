@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
+	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -23,6 +24,7 @@ const providerHistoryStatusSummaryWithCommandEditFixture = `provider history red
 replacement_status=partial_apply
 content_replacements=2; content_saved=750 B; approx_content_saved_tokens=42
 command_output_replacements=1; command_output_saved=1,500 B; approx_command_output_saved_tokens=90
+command_output_tools=validation:1
 edit_arg_replacements=1; edit_arg_saved=700 B; approx_edit_arg_saved_tokens=55
 total_provider_facing_saved=2,950 B; approx_total_provider_facing_saved_tokens=187
 responses_chain_disabled=true`
@@ -33,6 +35,108 @@ func TestProviderHistoryProjectionReportStatusSummaryFormat(t *testing.T) {
 	got := formatProviderHistoryProjectionReportSummary(report)
 	if got != providerHistoryStatusSummaryFixture {
 		t.Fatalf("formatProviderHistoryProjectionReportSummary() = %q, want %q", got, providerHistoryStatusSummaryFixture)
+	}
+}
+
+func TestProviderHistoryProjectionReportStatusSummaryIncludesContentToolBreakdown(t *testing.T) {
+	report := providerHistoryStatusTestReport()
+	report.ContentReplacementToolCounts = map[string]int{"list_dir": 1, "read_file": 2}
+
+	got := formatProviderHistoryProjectionReportSummary(report)
+	if !strings.Contains(got, "content_replacement_tools=list_dir:1, read_file:2") {
+		t.Fatalf("formatProviderHistoryProjectionReportSummary() = %q, want content tool breakdown", got)
+	}
+}
+
+func TestProviderHistoryProjectionReportStatusSummaryIncludesRawOutputArtifacts(t *testing.T) {
+	report := providerHistoryStatusTestReport()
+	report.RawOutputRefCount = 2
+	report.RawOutputArtifactCount = 1
+	report.DataBearingCandidateCount = 2
+	report.ArtifactBackedEstimatedSavedBytes = 8192
+	report.ApproxArtifactBackedEstimatedSavedTokens = 2048
+	report.ArtifactBackedActualSavedBytes = 4096
+	report.ApproxArtifactBackedActualSavedTokens = 1024
+	report.CommandEditDryRun.ArtifactBackedCommandCandidates = 2
+	report.CommandEditDryRun.ArtifactBackedCommandApplyEligible = 1
+	report.CommandEditDryRun.ArtifactBackedCommandReplacedCount = 1
+	report.CommandEditDryRun.ArtifactBackedKeptReasonCounts = map[string]int{"raw_output_rehydrate_unsupported": 1}
+
+	got := formatProviderHistoryProjectionReportSummary(report)
+	for _, want := range []string{
+		"raw_output_refs=2; raw_output_artifacts=1; data_bearing_candidates=2",
+		"artifact_backed_command_candidates=2; artifact_backed_command_apply_eligible=1; artifact_backed_command_replacements=1",
+		"artifact_backed_estimated_saved=8,192 B; approx_artifact_backed_estimated_saved_tokens=2,048",
+		"artifact_backed_saved=4,096 B; approx_artifact_backed_saved_tokens=1,024",
+		"artifact_backed_command_kept_reasons=raw_output_rehydrate_unsupported:1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("formatProviderHistoryProjectionReportSummary() missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestProviderHistoryProjectionReportStatusSummaryKeepsFutureFamilyReasonsScoped(t *testing.T) {
+	report := providerHistoryStatusTestReport()
+	report.FutureFamilyCandidateCounts = map[string]int{"wait_agent": 1}
+	report.FutureFamilyKeptReasonCounts = map[string]int{"wait_agent_freeform_output_keep": 1}
+	report.KeptReasonCounts = map[string]int{
+		"latest_tool_result":              1,
+		"wait_agent_freeform_output_keep": 1,
+	}
+
+	got := formatProviderHistoryProjectionReportSummary(report)
+	if !strings.Contains(got, "future_family_kept_reasons=wait_agent_freeform_output_keep:1") {
+		t.Fatalf("formatProviderHistoryProjectionReportSummary() = %q, want scoped future kept reasons", got)
+	}
+	if strings.Contains(got, "future_family_kept_reasons=latest_tool_result") ||
+		strings.Contains(got, "latest_tool_result:1") {
+		t.Fatalf("formatProviderHistoryProjectionReportSummary() leaked generic kept reason into future family line:\n%s", got)
+	}
+}
+
+func TestReviewPromptReductionStatusSummaryFormat(t *testing.T) {
+	report := review.ReviewPromptReductionReport{
+		Mode:                             review.ReviewPromptReductionModeApply,
+		CandidateCount:                   3,
+		ReplacedCount:                    2,
+		StateSummaryCount:                2,
+		AbsorbedItemCount:                1,
+		RawOutputLedgerCount:             1,
+		RawOutputRequiredRefCount:        2,
+		RawOutputRehydratedRefCount:      1,
+		RawOutputMissingRefCount:         1,
+		RawOutputBudgetExhaustedRefCount: 1,
+		EstimatedSavedBytes:              4096,
+		ApproxEstimatedSavedTokens:       512,
+		ReplacementSavedBytes:            2048,
+		ApproxReplacementSavedTokens:     256,
+		ClassifierCounts:                 map[string]int{"git_diff": 1, "validation": 2},
+		FamilyCounts:                     map[string]int{"probe_result": 1, "external_doc": 1},
+		StatusCounts:                     map[string]int{"absorbed": 2},
+		KeptReasonCounts:                 map[string]int{"review_state_summary_current_only": 1},
+		QualityFloorPreserved:            true,
+	}
+
+	got, ok := reviewPromptReductionStatusSummary(&AgentRuntime{LastReviewPromptReductionReport: report})
+	if !ok {
+		t.Fatal("reviewPromptReductionStatusSummary() ok = false, want true")
+	}
+	for _, want := range []string{
+		"review prompt reduction: apply",
+		"review_history_candidates=3; review_history_replacements=2",
+		"review_state_summaries=2; absorbed_intermediate=1; quality_floor=preserved",
+		"review_history_estimated_saved=4,096 B; approx_review_history_estimated_saved_tokens=512",
+		"review_history_saved=2,048 B; approx_review_history_saved_tokens=256",
+		"review_raw_output_ledgers=1; required_refs=2; rehydrated_refs=1; missing_refs=1; budget_exhausted_refs=1",
+		"review_history_tools=git_diff:1, validation:2",
+		"review_history_families=external_doc:1, probe_result:1",
+		"review_history_statuses=absorbed:2",
+		"review_history_kept_reasons=review_state_summary_current_only:1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("summary missing %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -201,6 +305,32 @@ func TestHandleStatusCommandShowsProviderHistoryReductionReportSummary(t *testin
 	}
 }
 
+func TestHandleStatusCommandShowsReviewPromptReductionSummary(t *testing.T) {
+	var out bytes.Buffer
+	agent := newProviderHistoryStatusTestAgent(t, &out)
+	agent.Runtime.LastReviewPromptReductionReport = review.ReviewPromptReductionReport{
+		Mode:                       review.ReviewPromptReductionModeDryRun,
+		CandidateCount:             1,
+		EstimatedSavedBytes:        1500,
+		ApproxEstimatedSavedTokens: 90,
+		ClassifierCounts:           map[string]int{"validation": 1},
+	}
+
+	output := renderProviderHistoryStatusCommand(t, agent, &out)
+	for _, want := range []string{
+		"Provider history reduction",
+		"review prompt reduction: dry_run",
+		"review_history_candidates=1; review_history_replacements=0",
+		"review_history_estimated_saved=1,500 B; approx_review_history_estimated_saved_tokens=90",
+		"review_history_saved=0 B; approx_review_history_saved_tokens=0",
+		"review_history_tools=validation:1",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+}
+
 func TestHandleStatusCommandShowsProviderHistoryReductionCommandEditDryRunSummary(t *testing.T) {
 	var out bytes.Buffer
 	agent := newProviderHistoryStatusTestAgent(t, &out)
@@ -335,7 +465,8 @@ func providerHistoryStatusTestCommandEditReport() ProviderHistoryCommandEditDryR
 		ApproxCommandReplacementSavedTokens: 90,
 		ApproxEditArgSavedTokens:            60,
 		ApproxEditArgReplacementSavedTokens: 55,
-		CandidateReasonCounts:               map[string]int{"write_file_content": 1, "git_diff_output": 1, "command_exit_nonzero": 1},
+		CandidateReasonCounts:               map[string]int{"write_file_content": 1, "git_diff": 1, "unknown_failure": 1},
+		CommandReplacementClassifierCounts:  map[string]int{"validation": 1},
 		KeptReasonCounts:                    map[string]int{"trailing_tool_suffix": 2, "latest_tool_result": 1},
 	}
 }

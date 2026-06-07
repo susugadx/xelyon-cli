@@ -12,7 +12,7 @@ func TestProviderHistoryReductionApplyDoesNotMutateRawHistoryOrSession(t *testin
 	taskLedger := providerHistoryTaskLedgerWithEvidence(t,
 		providerHistoryEvidenceItem{ToolName: "read_file", ToolCallID: "call_old", Path: "README.md", StartLine: 1, EndLine: 2},
 	)
-	rawReadResult := strings.Repeat("raw read result ", 8)
+	rawReadResult := strings.Repeat("raw read result\n", 240)
 	assistant := providerHistoryAssistantToolCall("call_old", "read_file")
 	toolResult := providerHistoryToolResult("call_old", "read_file", rawReadResult)
 	agent := &Agent{
@@ -45,9 +45,5 @@ func TestProviderHistoryReductionApplyDoesNotMutateRawHistoryOrSession(t *testin
 	if agent.session.Messages[1].Content != rawReadResult {
 		t.Fatalf("session conversation tool content = %q, want raw read result", agent.session.Messages[1].Content)
 	}
-	if agent.session.Messages[2].ToolExecution == nil ||
-		agent.session.Messages[2].ToolExecution.Name != "read_file" ||
-		agent.session.Messages[2].ToolExecution.ResultPreview != rawReadResult {
-		t.Fatalf("session tool execution = %#v, want raw read_file audit entry", agent.session.Messages[2].ToolExecution)
-	}
+	assertProviderHistoryToolExecutionPreviewPreservesRaw(t, agent.session.Messages[2].ToolExecution, "read_file", rawReadResult)
 }

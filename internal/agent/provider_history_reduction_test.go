@@ -123,7 +123,7 @@ func TestProviderHistoryReductionDryRunAllowsRepeatedRescueIDsAcrossTurns(t *tes
 	}
 }
 
-func TestProviderHistoryReductionDryRunKeepsWriteCommandAndNonAllowlistedTools(t *testing.T) {
+func TestProviderHistoryReductionDryRunKeepsWriteCommandAndCandidateOnlyTools(t *testing.T) {
 	agent := &Agent{History: []api.Message{
 		providerHistoryAssistantToolCall("call_patch", "apply_patch"),
 		providerHistoryToolResult("call_patch", "apply_patch", "patched"),
@@ -134,9 +134,9 @@ func TestProviderHistoryReductionDryRunKeepsWriteCommandAndNonAllowlistedTools(t
 		providerHistoryAssistantToolCall("call_bash", "bash"),
 		providerHistoryToolResult("call_bash", "bash", "status"),
 		{Role: "assistant", Content: "checked"},
-		providerHistoryAssistantToolCall("call_list", "list_dir"),
-		providerHistoryToolResult("call_list", "list_dir", "files"),
-		{Role: "assistant", Content: "listed"},
+		providerHistoryAssistantToolCall("call_question", "ask_user_question"),
+		providerHistoryToolResult("call_question", "ask_user_question", "answer"),
+		{Role: "assistant", Content: "asked"},
 		providerHistoryAssistantToolCall("call_latest", "read_file"),
 		providerHistoryToolResult("call_latest", "read_file", "latest"),
 		{Role: "assistant", Content: "done"},
@@ -144,8 +144,8 @@ func TestProviderHistoryReductionDryRunKeepsWriteCommandAndNonAllowlistedTools(t
 
 	report := agent.buildProviderHistoryProjection(ProviderHistoryReductionPolicy{Mode: ProviderHistoryReductionDryRun}).Report
 
-	if len(report.Candidates) != 0 {
-		t.Fatalf("Candidates = %#v, want none", report.Candidates)
+	if got, want := candidateTools(report), []string{"ask_user_question"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("candidate tools = %#v, want candidate-only %#v", got, want)
 	}
 	for _, id := range []string{"call_patch", "call_replace", "call_bash"} {
 		entry := keptByToolCallID(report, id)
@@ -153,9 +153,9 @@ func TestProviderHistoryReductionDryRunKeepsWriteCommandAndNonAllowlistedTools(t
 			t.Fatalf("kept entry for %s = %#v, want write_or_command_tool", id, entry)
 		}
 	}
-	entry := keptByToolCallID(report, "call_list")
-	if entry == nil || entry.KeepReason != "tool_not_in_reduction_allowlist" {
-		t.Fatalf("list_dir kept entry = %#v, want tool_not_in_reduction_allowlist", entry)
+	entry := keptByToolCallID(report, "call_question")
+	if entry == nil || !entry.CandidateOnly || entry.KeepReason != "user_answer_contract_keep" {
+		t.Fatalf("candidate-only kept entry = %#v, want user_answer_contract_keep", entry)
 	}
 }
 
@@ -281,17 +281,19 @@ func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T
 			EvidencePointers: []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
 		}},
 		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
-			CandidateReasonCounts: map[string]int{"command_success_output": 1},
-			KeptReasonCounts:      map[string]int{"latest_tool_result": 1},
-			Candidates:            []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "bash"}},
-			Kept:                  []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "write_file"}},
+			CandidateReasonCounts:              map[string]int{"validation_success": 1},
+			CommandReplacementClassifierCounts: map[string]int{"validation": 1},
+			KeptReasonCounts:                   map[string]int{"latest_tool_result": 1},
+			Candidates:                         []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "bash"}},
+			Kept:                               []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "write_file"}},
 		},
 	}
 
 	cloned := cloneProviderHistoryProjectionReport(report)
 	cloned.KeptReasonCounts["missing_evidence_pointer"] = 2
 	cloned.Candidates[0].EvidencePointers[0].Path = "mutated.go"
-	cloned.CommandEditDryRun.CandidateReasonCounts["command_success_output"] = 2
+	cloned.CommandEditDryRun.CandidateReasonCounts["validation_success"] = 2
+	cloned.CommandEditDryRun.CommandReplacementClassifierCounts["validation"] = 2
 	cloned.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] = 2
 	cloned.CommandEditDryRun.Candidates[0].ToolName = "command"
 	cloned.CommandEditDryRun.Kept[0].ToolName = "apply_patch"
@@ -302,8 +304,11 @@ func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T
 	if report.Candidates[0].EvidencePointers[0].Path != "src/main.go" {
 		t.Fatalf("original candidate EvidencePointers mutated: %#v", report.Candidates)
 	}
-	if report.CommandEditDryRun.CandidateReasonCounts["command_success_output"] != 1 {
+	if report.CommandEditDryRun.CandidateReasonCounts["validation_success"] != 1 {
 		t.Fatalf("original command/edit CandidateReasonCounts mutated: %#v", report.CommandEditDryRun.CandidateReasonCounts)
+	}
+	if report.CommandEditDryRun.CommandReplacementClassifierCounts["validation"] != 1 {
+		t.Fatalf("original command/edit CommandReplacementClassifierCounts mutated: %#v", report.CommandEditDryRun.CommandReplacementClassifierCounts)
 	}
 	if report.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] != 1 {
 		t.Fatalf("original command/edit KeptReasonCounts mutated: %#v", report.CommandEditDryRun.KeptReasonCounts)

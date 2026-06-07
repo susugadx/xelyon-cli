@@ -133,6 +133,32 @@ compression:
     keep_recent: 20
 
 # ============================================================
+# Provider History Reduction
+# ============================================================
+# 古い tool result / command output / edit payload を provider-facing projection 上だけで軽量化
+# raw history / session / audit / persisted JSONL は保持
+provider_history_reduction:
+    # provider-facing history reduction mode（off / dry_run / apply。env: XELYON_PROVIDER_HISTORY_REDUCTION）
+    mode: dry_run
+    # 省略した古い evidence を必要時に request-local active context として戻す（env: XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT）
+    rehydrate_context: true
+    raw_output_artifacts:
+        # data-bearing raw output artifact-backed compact mode（off / dry_run / apply）
+        mode: dry_run
+        # raw output artifact 1件あたりの最大保存 byte 数
+        max_artifact_bytes: 67108864
+        # session 単位の raw output artifact 保存上限 byte 数
+        session_quota_bytes: 1073741824
+        # raw output artifact 書き込み chunk byte 数
+        chunk_bytes: 1048576
+        # request-local raw output active context の既定 token budget
+        active_context_budget_tokens: 4096
+        # request-local raw output active context の最大 token budget
+        active_context_budget_max_tokens: 8192
+        # raw output artifact retention policy（現状 session のみ）
+        retention: session
+
+# ============================================================
 # 実行モード設定
 # ============================================================
 # ツール実行の承認モードを制御
@@ -394,6 +420,55 @@ Context Window（コンテキストウィンドウ）を管理し、トークン
    Before: 162,000 tokens → After: 45,000 tokens
    💡 Disable by setting compression.enabled: false in config.yaml
 ```
+
+### Provider History Reduction 設定 (`provider_history_reduction`)
+
+Provider History Reduction は、ローカルの raw history / session / audit / persisted JSONL を消さず、provider に送る request 用 history だけを軽量化します。古い `read_file` / `search_code` / `gather_context` evidence、成功済み command output、git output、edit payload などは、parse・安全性・古さ・threshold の gate を満たす場合だけ placeholder または compact text に置き換えられます。`curl` / `wget` / `sqlite3` / `psql` など、取得結果や query result 自体が後続判断の証拠になり得る data-bearing command output は、artifact pointer で再取得できる設計が入るまでは apply でも raw のまま保持します。
+
+デフォルトは report-only の `dry_run` です。provider-facing payload は変更せず、`/status` で削減見込みを確認できます。
+
+```yaml
+provider_history_reduction:
+  mode: dry_run
+  rehydrate_context: true
+```
+
+#### `mode`
+- **型**: select
+- **デフォルト**: `dry_run`
+- **選択肢**: `off`, `dry_run`, `apply`
+- **環境変数**: `XELYON_PROVIDER_HISTORY_REDUCTION`
+
+`off` は provider-facing history reduction を無効化します。
+
+`dry_run` は削減候補と見込み savings だけを記録します。provider に送る payload は変えず、Responses `previous_response_id` chain もこの機能では無効化しません。
+
+`apply` は安全条件を満たした replacement / compaction を provider-facing projection 上だけに適用します。実 replacement が 1 件以上ある request では、古い provider-side response state と payload が食い違わないよう、Responses `previous_response_id` chain をその request では無効化します。
+
+`auto` は stable config / `/config` の選択肢ではありません。既存の experimental config または env 互換入力として受けた場合は、configured `auto` / effective `dry_run` として扱われます。
+
+#### `rehydrate_context`
+- **型**: boolean
+- **デフォルト**: `true`
+- **環境変数**: `XELYON_PROVIDER_HISTORY_REHYDRATE_CONTEXT`
+
+`true` の場合、placeholder 化された古い evidence が現在の task に必要と判断されると、request-local active context として現在ファイルから戻します。rehydrated evidence は history へ保存されません。active context transport が使えない provider では、evidence-backed replacement は安全側で skip されます。
+
+#### project-local override
+
+プロジェクトごとに変えたい場合は `xelyon.yaml` の stable key を使います。stable key は旧 experimental key より優先されます。
+
+```yaml
+provider_history_reduction:
+  mode: apply
+  rehydrate_context: true
+```
+
+既存互換として `experimental.provider_history_reduction` も読み取りますが、新規設定では stable key を使ってください。
+
+#### 状態確認
+
+`/status` では configured/effective mode、`rehydrate_context`、content / command output / edit arg の replacement 数、family breakdown、推定 saved tokens、Responses chain disabled の有無を確認できます。小さい payload、parse 不能、unknown / unsafe command、data-bearing command、latest suffix、直近の no-later-assistant result は savings に過大計上せず保持されます。
 
 ### ストリーミング設定 (`streaming`)
 

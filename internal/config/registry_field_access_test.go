@@ -41,6 +41,10 @@ func TestSetFieldValue(t *testing.T) {
 		{"set string", "default_model", "new-model", false},
 		{"set bool", "thinking.enabled", true, false},
 		{"set int", "compression.keep_recent", 5, false},
+		{"set provider history mode", "provider_history_reduction.mode", "apply", false},
+		{"set provider history rehydrate", "provider_history_reduction.rehydrate_context", false, false},
+		{"set raw output artifacts mode", "provider_history_reduction.raw_output_artifacts.mode", "apply", false},
+		{"set raw output artifacts budget", "provider_history_reduction.raw_output_artifacts.active_context_budget_tokens", 2048, false},
 		{"invalid path", "nonexistent.field", "value", true},
 	}
 
@@ -56,6 +60,18 @@ func TestSetFieldValue(t *testing.T) {
 
 			if !tt.wantErr {
 				gotVal, _ := GetFieldValue(cfg, tt.path)
+				if tt.path == "provider_history_reduction.mode" {
+					if gotVal != ProviderHistoryReductionMode(tt.value.(string)) {
+						t.Errorf("SetFieldValue(%s) value = %v, want %v", tt.path, gotVal, tt.value)
+					}
+					return
+				}
+				if tt.path == "provider_history_reduction.raw_output_artifacts.mode" {
+					if gotVal != ProviderHistoryRawOutputArtifactsMode(tt.value.(string)) {
+						t.Errorf("SetFieldValue(%s) value = %v, want %v", tt.path, gotVal, tt.value)
+					}
+					return
+				}
 				if gotVal != tt.value {
 					t.Errorf("SetFieldValue(%s) value = %v, want %v", tt.path, gotVal, tt.value)
 				}

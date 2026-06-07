@@ -186,8 +186,9 @@ func TestSaveAndSyncProjectConfigKeepsRuntimeOnInvalidProviderHistoryRehydrateCo
 		Context: "new context",
 		Experimental: config.ProjectExperimentalConfig{
 			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
-				Mode:             config.ProjectProviderHistoryReductionModeDryRun,
-				RehydrateContext: false,
+				Mode:                config.ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext:    false,
+				RehydrateContextSet: true,
 			},
 		},
 		FinalChecks: &config.FinalChecksConfig{
@@ -240,8 +241,9 @@ func TestSaveAndSyncProjectConfigKeepsProviderHistoryModeWhenFinalChecksFallback
 		Context: "new context",
 		Experimental: config.ProjectExperimentalConfig{
 			ProviderHistoryReduction: config.ProjectProviderHistoryReductionConfig{
-				Mode:             config.ProjectProviderHistoryReductionModeDryRun,
-				RehydrateContext: true,
+				Mode:                config.ProjectProviderHistoryReductionModeDryRun,
+				RehydrateContext:    true,
+				RehydrateContextSet: true,
 			},
 		},
 		FilePath: filepath.Join(projectDir, "xelyon.yaml"),

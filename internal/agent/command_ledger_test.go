@@ -11,6 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 	"github.com/susugadx/xelyon-cli/internal/stdio"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -168,6 +169,101 @@ func TestLedgerCommand_RendersProviderHistoryRehydrateCandidates(t *testing.T) {
 		"source: read_file | reason: edit_target_missing_recent_evidence | stale: false",
 	)
 	assertLedgerOutputOmits(t, output, "ACTUAL_REHYDRATED_CONTENT")
+}
+
+func TestLedgerCommand_RendersSanitizedProviderHistoryRawOutputCandidates(t *testing.T) {
+	store := newLedgerCommandStore(t)
+	agent, out := newLedgerCommandTestAgent(store)
+	agent.Runtime.LastProviderHistoryProjectionReport = ProviderHistoryProjectionReport{
+		RawOutputRefs: []rawoutputs.RawOutputRef{
+			{
+				RefID:          "rawout_command",
+				Surface:        "command_output",
+				ToolName:       "bash",
+				ToolCallID:     "call_curl",
+				CommandPreview: "curl https://api.example.test/items?redacted#redacted",
+				Family:         "network",
+				SemanticRole:   "data_bearing",
+				Classifier:     "network_response",
+				ContentHash:    "sha256:abcdef1234567890",
+				ByteSize:       48231,
+				ApproxTokens:   12000,
+			},
+			{
+				RefID:        "rawout_mcp",
+				Surface:      "mcp_tool_result",
+				ToolName:     "mcp_context7_get_library_docs",
+				ToolCallID:   "call_mcp",
+				Family:       "mcp",
+				SemanticRole: "data_bearing",
+				Classifier:   "mcp_json_result",
+				ContentHash:  "sha256:123456abcdef7890",
+				ByteSize:     32768,
+				ApproxTokens: 8000,
+			},
+		},
+		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
+			Candidates: []ProviderHistoryCommandEditDryRunCandidate{{
+				HistoryIndex:                2,
+				ToolName:                    "bash",
+				ToolCallID:                  "call_curl",
+				RawOutputRefID:              "rawout_command",
+				ArtifactBackedCandidate:     true,
+				ArtifactBackedApplyEligible: true,
+				ArtifactGateStatus:          "verified",
+				RehydrateGateStatus:         "available",
+				ThresholdStatus:             "passed",
+				SafetyStatus:                "safe",
+				EstimatedSavedBytes:         40000,
+				ApproxEstimatedSavedTokens:  10000,
+				SuggestedReplacementText:    "/home/user/.xelyon/history/rawoutputs/sessions/session/objects/sha256/ab/cd/raw",
+			}},
+		},
+		Candidates: []ProviderHistoryReductionCandidate{{
+			HistoryIndex:                          4,
+			ToolName:                              "mcp_context7_get_library_docs",
+			ToolCallID:                            "call_mcp",
+			RawOutputRefID:                        "rawout_mcp",
+			ArtifactBackedCandidate:               true,
+			ReplacementApplied:                    true,
+			ArtifactGateStatus:                    "verified",
+			RehydrateGateStatus:                   "available",
+			ThresholdStatus:                       "passed",
+			SafetyStatus:                          "safe",
+			EstimatedSavedBytes:                   30000,
+			ApproxEstimatedSavedTokens:            7000,
+			ArtifactBackedActualSavedBytes:        30000,
+			ApproxArtifactBackedActualSavedTokens: 7000,
+			SuggestedReplacementText:              "https://api.example.test/items?token=secret-value#frag",
+		}},
+	}
+
+	if !handleSpecialCommandForSurface("/ledger", agent, commandcatalog.CommandSurfaceClassic) {
+		t.Fatal("/ledger was not handled")
+	}
+
+	output := out.String()
+	assertLedgerOutputContains(t, output,
+		"Provider history raw output candidates:",
+		"source_kind: command_output",
+		"raw_output_ref: rawout_command",
+		"surface: command_output",
+		"semantic_role: data_bearing",
+		"family: network",
+		"classifier: network_response",
+		"apply_state: apply_eligible",
+		"source_kind: tool_result",
+		"raw_output_ref: rawout_mcp",
+		"surface: mcp_tool_result",
+		"apply_state: applied",
+		"actual_saved: 30000 B/7000 tok",
+	)
+	assertLedgerOutputOmits(t, output,
+		"api.example.test/items",
+		"token=secret-value",
+		"#frag",
+		"objects/sha256",
+	)
 }
 
 func populateLedgerCommandStore(store *taskstate.Store) {

@@ -29,9 +29,7 @@ func TestNormalModeRequestAppliesProviderHistoryReductionWhenRuntimeGateEnabled(
 	if agent.session.Messages[1].Content != oldRead {
 		t.Fatalf("session conversation tool content = %q, want raw old read", agent.session.Messages[1].Content)
 	}
-	if agent.session.Messages[2].ToolExecution == nil || agent.session.Messages[2].ToolExecution.ResultPreview != oldRead {
-		t.Fatalf("session tool execution = %#v, want raw old read audit entry", agent.session.Messages[2].ToolExecution)
-	}
+	assertProviderHistoryToolExecutionPreviewPreservesRaw(t, agent.session.Messages[2].ToolExecution, "read_file", oldRead)
 }
 
 func TestNormalModeRequestKeepsReductionCandidateWithoutEvidencePointer(t *testing.T) {

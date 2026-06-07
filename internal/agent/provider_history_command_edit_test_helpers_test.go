@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,9 +14,9 @@ const (
 	providerHistorySuccessfulBuildCommand = "go build ./cmd/xelyon"
 	providerHistorySuccessfulLintCommand  = "npm run lint"
 
-	providerHistorySuccessfulTestReplacementLabel  = "successful test command output"
-	providerHistorySuccessfulBuildReplacementLabel = "successful build command output"
-	providerHistorySuccessfulLintReplacementLabel  = "successful lint command output"
+	providerHistorySuccessfulTestReplacementLabel  = "successful validation command output"
+	providerHistorySuccessfulBuildReplacementLabel = "successful validation command output"
+	providerHistorySuccessfulLintReplacementLabel  = "successful validation command output"
 )
 
 func providerHistoryUnsafeFormattedTestCommand() string {
@@ -34,12 +35,20 @@ func providerHistoryLargeSuccessfulLintOutput() string {
 	return strings.Repeat("lint clean\n", 320)
 }
 
-func providerHistoryLargeInterruptedCommandOutput() string {
-	return "Command interrupted.\nPartial output:\n" + strings.Repeat("ok\tgithub.com/susugadx/xelyon-cli/internal/agent\t0.001s\n", 260)
-}
-
 func providerHistoryLargeCommandOutput(line string) string {
 	return strings.Repeat(line, 240)
+}
+
+func providerHistoryNumberedLines(prefix string, count int) string {
+	var b strings.Builder
+	for i := 1; i <= count; i++ {
+		fmt.Fprintf(&b, "%s-%04d\n", prefix, i)
+	}
+	return b.String()
+}
+
+func providerHistoryLargeSafeMCPResult() string {
+	return `{"items":[` + strings.Repeat(`{"title":"public metadata","value":"safe documentation result","score":1},`, 2600) + `{"title":"tail","value":"safe"}]}`
 }
 
 func assertProviderHistoryCommandReplacement(t *testing.T, result providerHistoryProjectionResult, historyIndex int, original, wantLabel string) {
@@ -52,8 +61,8 @@ func assertProviderHistoryCommandContentReplacement(t *testing.T, got, original,
 	if got == original || !strings.Contains(got, wantLabel) {
 		t.Fatalf("command output content = %q, want replacement containing %q", got, wantLabel)
 	}
-	if strings.ContainsAny(got, "\n\t\"") {
-		t.Fatalf("command output content = %q, want single-line quote-normalized placeholder", got)
+	if strings.ContainsAny(got, "\n\t") {
+		t.Fatalf("command output content = %q, want single-line normalized placeholder", got)
 	}
 }
 

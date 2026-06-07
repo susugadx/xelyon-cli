@@ -28,10 +28,16 @@ type RunnerFactoryOptions struct {
 	EvidenceBuilder review.ReviewEvidenceProvider
 	ProbeRunner     review.ReviewProbeExecutor
 
-	ArtifactWriter        review.ReviewRunArtifactWriter
-	ArtifactWarningWriter io.Writer
-	ProgressSink          review.ReviewProgressSink
-	UsageAttribution      tools.UsageAttributionCallback
+	ArtifactWriter                    review.ReviewRunArtifactWriter
+	ArtifactWarningWriter             io.Writer
+	ProgressSink                      review.ReviewProgressSink
+	UsageAttribution                  tools.UsageAttributionCallback
+	PromptReductionMode               review.ReviewPromptReductionMode
+	RawOutputArtifactsMode            review.ReviewRawOutputArtifactsMode
+	RawOutputArtifactStore            review.ReviewRawOutputArtifactStore
+	RawOutputSessionID                string
+	RawOutputRehydrateBudgetTokens    int
+	RawOutputRehydrateBudgetMaxTokens int
 }
 
 // RunnerFactory は ReviewRunner の構築責務を review domain の外側で保持する。
@@ -61,12 +67,18 @@ func (f RunnerFactory) NewReviewRunner() (*review.ReviewRunner, error) {
 	}
 
 	return review.NewReviewRunner(review.ReviewRunnerOptions{
-		EvidenceBuilder:       evidenceBuilder,
-		ProbeRunner:           probeRunner,
-		Model:                 f.opts.Model,
-		ArtifactWriter:        f.opts.ArtifactWriter,
-		ArtifactWarningWriter: f.opts.ArtifactWarningWriter,
-		ProgressSink:          f.opts.ProgressSink,
+		EvidenceBuilder:                   evidenceBuilder,
+		ProbeRunner:                       probeRunner,
+		Model:                             f.opts.Model,
+		ArtifactWriter:                    f.opts.ArtifactWriter,
+		ArtifactWarningWriter:             f.opts.ArtifactWarningWriter,
+		ProgressSink:                      f.opts.ProgressSink,
+		PromptReductionMode:               f.opts.PromptReductionMode,
+		RawOutputArtifactsMode:            f.opts.RawOutputArtifactsMode,
+		RawOutputArtifactStore:            f.opts.RawOutputArtifactStore,
+		RawOutputSessionID:                f.opts.RawOutputSessionID,
+		RawOutputRehydrateBudgetTokens:    f.opts.RawOutputRehydrateBudgetTokens,
+		RawOutputRehydrateBudgetMaxTokens: f.opts.RawOutputRehydrateBudgetMaxTokens,
 	})
 }
 
