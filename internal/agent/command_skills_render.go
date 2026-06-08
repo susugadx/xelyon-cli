@@ -119,6 +119,8 @@ func skillSourceLabel(source agentskills.Source) string {
 		return "project"
 	case agentskills.SourceHome:
 		return "home"
+	case agentskills.SourceXelyon:
+		return "xelyon"
 	default:
 		if strings.TrimSpace(string(source)) == "" {
 			return "unknown"
@@ -136,6 +138,7 @@ func skillOverviewGroups(skills []agentskills.ParsedSkill) []skillOverviewGroup 
 	groups := []skillOverviewGroup{
 		{label: "Project skills"},
 		{label: "Home skills"},
+		{label: "XELYON skills"},
 		{label: "Other skills"},
 	}
 	for _, skill := range skills {
@@ -144,8 +147,10 @@ func skillOverviewGroups(skills []agentskills.ParsedSkill) []skillOverviewGroup 
 			groups[0].skills = append(groups[0].skills, skill)
 		case agentskills.SourceHome:
 			groups[1].skills = append(groups[1].skills, skill)
-		default:
+		case agentskills.SourceXelyon:
 			groups[2].skills = append(groups[2].skills, skill)
+		default:
+			groups[3].skills = append(groups[3].skills, skill)
 		}
 	}
 	return groups

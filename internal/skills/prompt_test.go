@@ -64,3 +64,26 @@ func TestBuildPromptCatalog_SanitizesSkillMetadata(t *testing.T) {
 		t.Fatalf("sanitized catalog entry missing:\n%s", got)
 	}
 }
+
+func TestBuildPromptCatalog_PinsSkillCreatorWhenCatalogIsCapped(t *testing.T) {
+	catalog := SkillCatalog{Skills: []ParsedSkill{
+		{Name: "alpha", Description: "alpha desc"},
+		{Name: "beta", Description: "beta desc"},
+		{Name: "skill-creator", Description: "create skill desc"},
+	}}
+
+	got := BuildPromptCatalog(catalog, 2)
+
+	if !strings.Contains(got, "- skill-creator: create skill desc") {
+		t.Fatalf("prompt catalog should include pinned skill-creator:\n%s", got)
+	}
+	if !strings.Contains(got, "- alpha: alpha desc") {
+		t.Fatalf("prompt catalog should keep normal entries after pinned entries:\n%s", got)
+	}
+	if strings.Contains(got, "- beta: beta desc") {
+		t.Fatalf("prompt catalog should respect max entry cap:\n%s", got)
+	}
+	if !strings.Contains(got, "- ... and 1 more skills") {
+		t.Fatalf("prompt catalog should report omitted skills:\n%s", got)
+	}
+}

@@ -143,13 +143,13 @@ func TestHandleSkillsCommand_OverviewShowsDiagnosticsWhenNoSkillsParse(t *testin
 		t.Fatal("/skills overview should be handled")
 	}
 	got := out.String()
-	for _, fragment := range []string{"Agent Skills Overview", "Skills: 0", "No skills found.", "Diagnostics: 1 issue(s). Run /skills doctor."} {
+	for _, fragment := range []string{"Agent Skills Overview", "Skills: 1", "XELYON skills", "skill-creator", "Diagnostics: 1 issue(s). Run /skills doctor."} {
 		if !strings.Contains(got, fragment) {
 			t.Fatalf("/skills overview output missing %q:\n%s", fragment, got)
 		}
 	}
-	if strings.Contains(got, "Project skills") {
-		t.Fatalf("/skills overview should not render skill groups when no skills parse:\n%s", got)
+	if strings.Contains(got, "No skills found.") {
+		t.Fatalf("/skills overview should render built-in skills when project skills fail to parse:\n%s", got)
 	}
 }
 

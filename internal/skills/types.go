@@ -6,6 +6,7 @@ type Source string
 const (
 	SourceProject Source = "project"
 	SourceHome    Source = "home"
+	SourceXelyon  Source = "xelyon"
 )
 
 // DiscoverOptions は skill discover の入力オプション。

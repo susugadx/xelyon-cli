@@ -40,7 +40,7 @@ func CatalogWithContentCache(discover DiscoverResult, skillContents map[string][
 
 func catalogWithParser(discover DiscoverResult, parser discoveredSkillParser) SkillCatalog {
 	catalog := SkillCatalog{
-		Skills:      make([]ParsedSkill, 0, len(discover.Skills)),
+		Skills:      make([]ParsedSkill, 0, len(discover.Skills)+len(xelyonBuiltinSkills())),
 		Diagnostics: append([]Diagnostic(nil), discover.Diagnostics...),
 	}
 
@@ -69,6 +69,7 @@ func catalogWithParser(discover DiscoverResult, parser discoveredSkillParser) Sk
 		nameIndex[parsed.Name] = len(catalog.Skills)
 		catalog.Skills = append(catalog.Skills, parsed)
 	}
+	appendXelyonBuiltinSkills(&catalog, nameIndex)
 
 	sort.SliceStable(catalog.Skills, func(i, j int) bool {
 		left := catalog.Skills[i]
@@ -85,6 +86,19 @@ func catalogWithParser(discover DiscoverResult, parser discoveredSkillParser) Sk
 	})
 
 	return catalog
+}
+
+func appendXelyonBuiltinSkills(catalog *SkillCatalog, nameIndex map[string]int) {
+	if catalog == nil {
+		return
+	}
+	for _, skill := range xelyonBuiltinSkills() {
+		if _, exists := nameIndex[skill.Name]; exists {
+			continue
+		}
+		nameIndex[skill.Name] = len(catalog.Skills)
+		catalog.Skills = append(catalog.Skills, skill)
+	}
 }
 
 // SkillNames は catalog の skill 名一覧を返す。

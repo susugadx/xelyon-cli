@@ -552,7 +552,7 @@ global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対
 
 ### `/skills`
 
-Agent Skills を選択・確認・診断します。TUI では `/skills` から skill 名を選ぶと、対応する skill 利用文を入力欄に貼り付けます。`/skills overview` は検出済み skill catalog の概要を会話ログに出力し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。`/skills doctor` は parse error や重複名などの診断を表示します。互換性のため `/skills list` も overview の alias として受け付けます。
+Agent Skills を選択・確認・診断します。TUI では `/skills` から skill 名を選ぶと、対応する skill 利用文を入力欄に貼り付けます。`/skills overview` は検出済み skill catalog の概要を会話ログに出力し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。`/skills doctor` は parse error や重複名などの診断を表示します。skill catalog は project `.agents/skills`、home `~/.agents/skills`、XELYON 内蔵 skills を読みます。互換性のため `/skills list` も overview の alias として受け付けます。
 
 ```
 > /skills overview
