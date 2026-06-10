@@ -193,6 +193,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&legacyNoTUI, "no-tui", false, "Use deprecated legacy classic REPL instead of the primary TUI")
 
 	rootCmd.AddCommand(newDoctorCommand())
+	rootCmd.AddCommand(newAuthCommand())
 }
 
 func printLegacyNoTUIWarning() {

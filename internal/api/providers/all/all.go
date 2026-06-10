@@ -11,5 +11,6 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/kimi"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openai_subscription"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openrouter"
 )

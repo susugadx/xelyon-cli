@@ -101,6 +101,22 @@ func TestNewProvider_UnknownProvider(t *testing.T) {
 	}
 }
 
+func TestNewProvider_OpenAISubscriptionDoesNotRequireOpenAIAPIKey(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+
+	for _, providerName := range []string{"openai_subscription", "openai-subscription", "chatgpt", "codex-subscription"} {
+		t.Run(providerName, func(t *testing.T) {
+			provider, err := api.NewProvider(providerName)
+			if err != nil {
+				t.Fatalf("NewProvider(%q) error = %v, want nil", providerName, err)
+			}
+			if provider.Name() != "OpenAI Subscription" {
+				t.Fatalf("NewProvider(%q).Name() = %q, want OpenAI Subscription", providerName, provider.Name())
+			}
+		})
+	}
+}
+
 func TestNewProvider_AzureRequiresBaseURL(t *testing.T) {
 	t.Setenv("AZURE_OPENAI_API_KEY", "test-azure-key")
 	t.Setenv("AZURE_OPENAI_AUTH_TOKEN", "")
@@ -314,7 +330,7 @@ func TestNewProvider_SuccessPaths(t *testing.T) {
 
 func TestIsRegisteredProvider(t *testing.T) {
 	// 全 LLM プロバイダーが登録されていること
-	registered := []string{"deepseek", "kimi", "moonshot", "claude", "anthropic", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"}
+	registered := []string{"deepseek", "kimi", "moonshot", "claude", "anthropic", "openai", "openai_subscription", "openai-subscription", "chatgpt", "codex-subscription", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"}
 	for _, name := range registered {
 		if !api.IsRegisteredProvider(name) {
 			t.Errorf("IsRegisteredProvider(%q) = false, want true", name)
@@ -348,7 +364,7 @@ func TestListProviders(t *testing.T) {
 	providers := api.ListProviders()
 
 	// 全 LLM プロバイダーが含まれること
-	required := []string{"azure", "bedrock", "claude", "deepseek", "gemini", "groq", "kimi", "ollama", "openai", "openrouter"}
+	required := []string{"azure", "bedrock", "claude", "deepseek", "gemini", "groq", "kimi", "ollama", "openai", "openai_subscription", "openrouter"}
 	for _, name := range required {
 		found := false
 		for _, p := range providers {

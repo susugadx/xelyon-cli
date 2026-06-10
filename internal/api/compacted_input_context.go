@@ -43,6 +43,7 @@ func cloneInputItem(item InputItem) InputItem {
 	cloned := item
 	cloned.Content = cloneInputItemContent(item.Content)
 	cloned.ThoughtParts = cloneInputItemThoughtParts(item.ThoughtParts)
+	cloned.Summary = cloneInputItemSummary(item.Summary)
 	return cloned
 }
 
@@ -65,6 +66,20 @@ func cloneInputItemThoughtParts(parts []map[string]any) []map[string]any {
 			continue
 		}
 		cloned[i] = cloneAnyMap(part)
+	}
+	return cloned
+}
+
+func cloneInputItemSummary(summary []map[string]any) []map[string]any {
+	if len(summary) == 0 {
+		return nil
+	}
+	cloned := make([]map[string]any, len(summary))
+	for i, item := range summary {
+		if item == nil {
+			continue
+		}
+		cloned[i] = cloneAnyMap(item)
 	}
 	return cloned
 }

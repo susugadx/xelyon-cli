@@ -94,6 +94,36 @@ func TestProjectApplyEvidenceReductionUsesPolicyPointersAndDefensiveCopies(t *te
 	}
 }
 
+func TestProjectApplyEvidenceReductionSyncsOpenAIResponsesReplayOutput(t *testing.T) {
+	oldRead := strings.Repeat("important evidence line\n", 240)
+	history := providerHistoryTestReductionHistory("call_read_old", oldRead)
+	history[1].SetOpenAIResponsesInputItems([]api.InputItem{{
+		Type:   "function_call_output",
+		CallID: "call_read_old",
+		Output: oldRead,
+	}})
+	pointer := taskstate.EvidencePointer{Path: "src/main.go", StartLine: 7, EndLine: 9, Source: "read_file", ToolCallID: "call_read_old"}
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy: Policy{
+			Mode:             Apply,
+			EvidencePointers: []taskstate.EvidencePointer{pointer},
+		},
+	})
+
+	items := result.History[1].OpenAIResponsesInputItems()
+	if len(items) != 1 {
+		t.Fatalf("len(OpenAIResponsesInputItems) = %d, want 1", len(items))
+	}
+	if items[0].Output == oldRead || items[0].Output != result.History[1].Content {
+		t.Fatalf("replay function_call_output = %q, want projected content %q", items[0].Output, result.History[1].Content)
+	}
+	if history[1].OpenAIResponsesInputItems()[0].Output != oldRead {
+		t.Fatalf("raw history replay metadata was mutated: %#v", history[1].OpenAIResponsesInputItems())
+	}
+}
+
 func TestProjectApplyKeepsEvidenceReductionWhenActiveContextTransportUnsupportedButAppliesCommand(t *testing.T) {
 	oldRead := strings.Repeat("old read output\n", 220)
 	commandOutput := providerHistoryTestLargeSuccessfulTestOutput()

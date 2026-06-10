@@ -14,7 +14,6 @@ var providerTypos = map[string]string{
 	"deepseak":    "deepseek",
 	"deepseek2":   "deepseek",
 	"gpt":         "openai",
-	"chatgpt":     "openai",
 	"gpt4":        "openai",
 	"aoai":        "azure",
 	"azureai":     "azure",

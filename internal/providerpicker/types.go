@@ -4,10 +4,12 @@ package providerpicker
 type ProviderCredentialStatus string
 
 const (
-	ProviderCredentialConfigured ProviderCredentialStatus = "configured"
-	ProviderCredentialMissingKey ProviderCredentialStatus = "missing key"
-	ProviderCredentialLocal      ProviderCredentialStatus = "local"
-	ProviderCredentialAWSAuth    ProviderCredentialStatus = "aws auth"
+	ProviderCredentialConfigured    ProviderCredentialStatus = "configured"
+	ProviderCredentialLoggedIn      ProviderCredentialStatus = "logged in"
+	ProviderCredentialMissingKey    ProviderCredentialStatus = "missing key"
+	ProviderCredentialLoginRequired ProviderCredentialStatus = "login required"
+	ProviderCredentialLocal         ProviderCredentialStatus = "local"
+	ProviderCredentialAWSAuth       ProviderCredentialStatus = "aws auth"
 )
 
 // ProviderCandidate は provider picker の 1 行を表す。

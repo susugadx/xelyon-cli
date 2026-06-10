@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
+	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -117,7 +118,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 
 	toolCallsOutput := openaicompatstream.BuildToolCallJSON(
 		streamResult.ToolCalls,
-		ConvertToolCallToToolJSON,
+		openairesponses.ConvertToolCallToToolJSON,
 	)
 
 	// tool_calls がある場合はそれを返す

@@ -105,3 +105,32 @@ func TestMessageMarshalOmitAnthropicThinkingBlocks(t *testing.T) {
 		t.Fatalf("AnthropicThinkingBlocks() returned mutable state, got %q", got)
 	}
 }
+
+func TestMessageMarshalOmitOpenAIResponsesReplayItems(t *testing.T) {
+	msg := Message{Role: "assistant", Content: "visible answer"}
+	msg.SetOpenAIResponsesInputItems([]InputItem{
+		{Type: "reasoning", ID: "rs_1", EncryptedContent: "encrypted-provider-state"},
+		{Type: "message", Role: "assistant", Content: "visible answer"},
+	})
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("json.Marshal(Message) error = %v", err)
+	}
+
+	payload := string(data)
+	if strings.Contains(payload, "openai_responses") ||
+		strings.Contains(payload, "encrypted-provider-state") ||
+		strings.Contains(payload, "rs_1") {
+		t.Fatalf("marshaled Message leaked Responses replay state: %s", payload)
+	}
+
+	items := msg.OpenAIResponsesInputItems()
+	if len(items) != 2 {
+		t.Fatalf("len(OpenAIResponsesInputItems()) = %d, want 2", len(items))
+	}
+	items[0].EncryptedContent = "mutated"
+	if got := msg.OpenAIResponsesInputItems()[0].EncryptedContent; got != "encrypted-provider-state" {
+		t.Fatalf("OpenAIResponsesInputItems() returned mutable state, got %q", got)
+	}
+}

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
@@ -70,7 +69,7 @@ func (p *Provider) newBaseResponsesRequestOptions(
 		SkipLocalAutoCompressionAfterResponse: serverCompactionDecision.ShouldSkipLocalAutoCompression,
 	}
 	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
-		options.Tools = openai.GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools)
+		options.Tools = openairesponses.BuildToolDefinitionsWithContext(ctx, p.mcpTools)
 		options.ToolChoice = openairesponses.BuildFunctionToolChoice(p.toolChoice)
 	}
 
@@ -89,7 +88,7 @@ func azureResponsesReasoningConfig(ctx context.Context, model modelIdentity) *op
 	cfg := config.FromContext(ctx)
 	if api.IsThinkingEnabled(ctx) {
 		return &openairesponses.ReasoningConfig{
-			Effort: openai.LevelToReasoningEffort(cfg.Thinking.Level),
+			Effort: openairesponses.ReasoningEffortFromThinkingLevel(cfg.Thinking.Level),
 		}
 	}
 

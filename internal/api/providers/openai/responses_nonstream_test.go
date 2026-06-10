@@ -84,6 +84,59 @@ func TestHandleResponsesNonStreaming_TextAndFunctionCall(t *testing.T) {
 	}
 }
 
+func TestHandleResponsesNonStreaming_CapturesReplayItems(t *testing.T) {
+	p := New("test-key")
+	resp := newResponsesNonStreamingHTTPResponse(`{
+		"id": "resp_replay",
+		"status": "completed",
+		"output": [
+			{
+				"type": "reasoning",
+				"id": "rs_1",
+				"status": "completed",
+				"summary": [{"text": "checked context"}],
+				"encrypted_content": "encrypted-state"
+			},
+			{
+				"type": "message",
+				"id": "msg_1",
+				"status": "completed",
+				"content": [{"type":"output_text","text":"Need a file"}]
+			},
+			{
+				"type": "function_call",
+				"id": "fc_1",
+				"status": "completed",
+				"call_id": "call_1",
+				"name": "read_file",
+				"arguments": "{\"path\":\"README.md\"}"
+			}
+		]
+	}`)
+	defer resp.Body.Close()
+
+	content, _, err := p.handleResponsesNonStreaming(newOpenAITestContext(t, false), resp, nil)
+	if err != nil {
+		t.Fatalf("handleResponsesNonStreaming() error = %v", err)
+	}
+	if !strings.Contains(content, "Need a file") || !strings.Contains(content, `"tool":"read_file"`) {
+		t.Fatalf("content = %q, want text + internal tool JSON", content)
+	}
+	replayItems := p.LastOpenAIResponsesInputItems()
+	if len(replayItems) != 3 {
+		t.Fatalf("len(replayItems) = %d, want 3: %#v", len(replayItems), replayItems)
+	}
+	if replayItems[0].Type != "reasoning" || replayItems[0].EncryptedContent != "encrypted-state" {
+		t.Fatalf("reasoning replay item = %#v, want encrypted reasoning item", replayItems[0])
+	}
+	if replayItems[1].Type != "message" || replayItems[1].ID != "msg_1" || replayItems[1].Content != "Need a file" {
+		t.Fatalf("message replay item = %#v, want output message", replayItems[1])
+	}
+	if replayItems[2].Type != "function_call" || replayItems[2].CallID != "call_1" || replayItems[2].Name != "read_file" {
+		t.Fatalf("function_call replay item = %#v, want read_file call", replayItems[2])
+	}
+}
+
 func TestHandleResponsesNonStreaming_IgnoresCompactionAndUnknownOutputItems(t *testing.T) {
 	p := New("test-key")
 	resp := newResponsesNonStreamingHTTPResponse(`{
@@ -320,6 +373,25 @@ func TestChatWithResponses_StoreFalseOmitsPreviousAndDoesNotCacheResponseID(t *t
 	}
 	if p.GetResponseID() != "" {
 		t.Fatalf("GetResponseID() = %q, want empty when responses.store=false", p.GetResponseID())
+	}
+}
+
+func TestChatWithResponses_RequestStartClearsStaleReplayItemsOnError(t *testing.T) {
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":{"message":"server failed"}}`))
+	})
+	t.Setenv("OPENAI_RESPONSES_URL", server.URL)
+
+	p := New("test-key")
+	p.setLastOpenAIResponsesInputItems([]api.InputItem{{Type: "message", Role: "assistant", Content: "stale"}})
+
+	_, err := p.chatWithResponses(newOpenAITestContext(t, false), "system", []api.Message{{Role: "user", Content: "hi"}}, "gpt-5.5-pro")
+	if err == nil {
+		t.Fatal("chatWithResponses() error = nil, want HTTP error")
+	}
+	if got := p.LastOpenAIResponsesInputItems(); len(got) != 0 {
+		t.Fatalf("LastOpenAIResponsesInputItems() = %#v, want cleared before failed Responses request", got)
 	}
 }
 

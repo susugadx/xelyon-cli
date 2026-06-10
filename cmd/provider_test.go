@@ -176,7 +176,6 @@ func TestCreateProvider_UnknownProvider(t *testing.T) {
 		"unknown",
 		"invalid",
 		"gpt",
-		"chatgpt",
 		"",
 	}
 
@@ -188,6 +187,18 @@ func TestCreateProvider_UnknownProvider(t *testing.T) {
 				t.Errorf("createProvider(%q) expected error for unknown provider, got nil", providerName)
 			}
 		})
+	}
+}
+
+func TestCreateProvider_OpenAISubscriptionAliasDoesNotRequireOpenAIAPIKey(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+
+	provider, err := createProvider("chatgpt")
+	if err != nil {
+		t.Fatalf("createProvider(chatgpt) error = %v, want nil", err)
+	}
+	if provider.Name() != "OpenAI Subscription" {
+		t.Fatalf("provider.Name() = %q, want OpenAI Subscription", provider.Name())
 	}
 }
 

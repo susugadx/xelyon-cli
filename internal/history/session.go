@@ -60,6 +60,7 @@ type MessageEntry struct {
 type MessageProviderMetadata struct {
 	AnthropicContentBlocks  []api.AnthropicContentBlock  `json:"anthropic_content_blocks,omitempty"`
 	AnthropicThinkingBlocks []api.AnthropicThinkingBlock `json:"anthropic_thinking_blocks,omitempty"` // legacy metadata
+	OpenAIResponsesItems    []api.InputItem              `json:"openai_responses_items,omitempty"`
 }
 
 // ToolExecutionEntry はツール実行の監査情報です。

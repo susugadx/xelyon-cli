@@ -1,4 +1,4 @@
-package openai
+package openairesponses
 
 import "github.com/susugadx/xelyon-cli/internal/api"
 

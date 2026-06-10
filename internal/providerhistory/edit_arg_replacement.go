@@ -56,6 +56,9 @@ func applyProviderHistoryEditArgReplacementProjection(msg *api.Message, toolCall
 	if !syncProviderHistoryEditArgAnthropicState(msg, toolCallID, replacement) {
 		return false
 	}
+	if !msg.ReplaceOpenAIResponsesFunctionCallArguments(toolCallID, replacement.ToolName, replacement.Arguments) {
+		return false
+	}
 
 	msg.ToolCalls[toolCallIndex].Function.Arguments = replacement.Arguments
 	return true

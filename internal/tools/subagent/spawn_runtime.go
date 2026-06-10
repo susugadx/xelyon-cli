@@ -143,7 +143,10 @@ func inferSubAgentModel(cfg *config.Config, provider string) string {
 
 func inferSubAgentModelSelection(cfg *config.Config, provider, providerConfigKey, currentModel string) subAgentModelSelection {
 	if model := config.ProviderDefaultSubAgentModel(provider); model != "" {
-		return subAgentModelSelection{model: model}
+		return subAgentModelSelection{
+			model:             model,
+			providerConfigKey: providerConfigKeyForSubAgentSelection(provider, providerConfigKey),
+		}
 	}
 	if cfg == nil {
 		return subAgentModelSelection{}

@@ -12,36 +12,38 @@ type ProviderModelDefaults struct {
 
 // ProviderDescriptor は LLM provider の静的メタ情報を表す。
 type ProviderDescriptor struct {
-	Key                  string
-	DisplayName          string
-	Aliases              []string
-	CredentialKind       string
-	APIKeyEnv            string
-	BaseURLEnv           string
-	DefaultBaseURL       string
-	CredentialEnvVars    []string
-	CredentialEnvVarSets [][]string
-	StaticCredential     string
-	SetupInstructions    []string
-	DefaultSubAgentModel string
-	SupportsImages       bool
-	NativeWebSearch      bool
-	SupportsResponsesAPI bool
-	PricingFamily        string
-	RuntimeFamily        string
-	PromptFamily         string
-	EditToolFamily       string
-	CapabilityFamily     string
-	ModelCatalogFamily   string
-	DoctorPolicyFamily   string
-	CompressionModel     string
-	ModelDefaults        ProviderModelDefaults
+	Key                          string
+	DisplayName                  string
+	Aliases                      []string
+	CanonicalizeAliasesForConfig bool
+	CredentialKind               string
+	APIKeyEnv                    string
+	BaseURLEnv                   string
+	DefaultBaseURL               string
+	CredentialEnvVars            []string
+	CredentialEnvVarSets         [][]string
+	StaticCredential             string
+	SetupInstructions            []string
+	DefaultSubAgentModel         string
+	SupportsImages               bool
+	NativeWebSearch              bool
+	SupportsResponsesAPI         bool
+	PricingFamily                string
+	RuntimeFamily                string
+	PromptFamily                 string
+	EditToolFamily               string
+	CapabilityFamily             string
+	ModelCatalogFamily           string
+	DoctorPolicyFamily           string
+	CompressionModel             string
+	ModelDefaults                ProviderModelDefaults
 }
 
 var providerOrder = []string{
 	"deepseek",
 	"kimi",
 	"openai",
+	"openai_subscription",
 	"azure",
 	"gemini",
 	"claude",
@@ -56,6 +58,7 @@ var displayProviderOrder = []string{
 	"kimi",
 	"claude",
 	"openai",
+	"openai_subscription",
 	"azure",
 	"gemini",
 	"groq",
@@ -132,6 +135,28 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		ModelDefaults: ProviderModelDefaults{
 			DefaultModel:    "gpt-5.4",
 			MaxOutputTokens: 16384,
+		},
+	},
+	"openai_subscription": {
+		Key:                          "openai_subscription",
+		DisplayName:                  "OpenAI Subscription",
+		Aliases:                      []string{"openai-subscription", "chatgpt", "codex-subscription"},
+		CanonicalizeAliasesForConfig: true,
+		CredentialKind:               "oauth",
+		SetupInstructions:            []string{"xelyon auth openai-subscription login"},
+		DefaultSubAgentModel:         "gpt-5.4-mini",
+		SupportsResponsesAPI:         true,
+		PricingFamily:                "openai_subscription",
+		RuntimeFamily:                "openai_subscription",
+		PromptFamily:                 "openai",
+		EditToolFamily:               "apply_patch",
+		CapabilityFamily:             "openai_subscription",
+		ModelCatalogFamily:           "openai_subscription",
+		DoctorPolicyFamily:           "openai_subscription",
+		CompressionModel:             "gpt-5.4-mini",
+		ModelDefaults: ProviderModelDefaults{
+			DefaultModel:    "gpt-5.5",
+			MaxOutputTokens: 0,
 		},
 	},
 	"azure": {
@@ -308,15 +333,27 @@ func CanonicalProviderKey(name string) string {
 }
 
 // ProviderConfigKey は provider_models/session owner に使う config key を返す。
-// 表示名は永続化キーではないため canonical key に寄せ、明示 alias はそのまま保持する。
+// 表示名は永続化キーではないため canonical key に寄せる。
+// 明示 alias は既定では保持するが、descriptor が要求する provider は canonical key に寄せる。
 func ProviderConfigKey(name string) string {
 	normalized := NormalizeProviderKey(name)
 	if normalized == "" {
 		return ""
 	}
 	for _, key := range providerOrder {
-		if normalized == NormalizeProviderKey(providerDescriptors[key].DisplayName) {
+		entry := providerDescriptors[key]
+		if normalized == NormalizeProviderKey(entry.DisplayName) {
 			return key
+		}
+		if entry.CanonicalizeAliasesForConfig && normalized == key {
+			return key
+		}
+		if entry.CanonicalizeAliasesForConfig {
+			for _, alias := range entry.Aliases {
+				if normalized == NormalizeProviderKey(alias) {
+					return key
+				}
+			}
 		}
 	}
 	return normalized
@@ -416,6 +453,9 @@ func ProviderModelLookupKeys(provider string) []string {
 
 	keys := []string{normalized}
 	canonical := CanonicalProviderKey(normalized)
+	if entry, ok := providerDescriptors[canonical]; ok && entry.CanonicalizeAliasesForConfig {
+		return []string{canonical}
+	}
 	if canonical == "" || canonical == normalized {
 		if entry, ok := providerDescriptors[canonical]; ok {
 			keys = append(keys, entry.Aliases...)

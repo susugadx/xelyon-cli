@@ -92,6 +92,9 @@ provider_models:
     openai:
         default_model: gpt-5.4
         max_output_tokens: 16384
+    openai_subscription:
+        default_model: gpt-5.5
+        max_output_tokens: 0
     openrouter:
         default_model: anthropic/claude-sonnet-4.6
         max_output_tokens: 64000
@@ -306,6 +309,10 @@ final_checks:
     timeout: 600
 ```
 <!-- CONFIG-EXAMPLE-END -->
+
+`openai_subscription.max_output_tokens: 0` は subscription backend の既定に任せるため、Responses request には `max_output_tokens` を送らないことを意味します。2026-06-08 時点の live smoke では subscription endpoint が `max_output_tokens` を `Unsupported parameter: max_output_tokens` として拒否したため、`openai_subscription` は provider / model override で非 0 が設定されていてもこの parameter を送りません。これは `openai` provider の API key 経路とは別の provider 固有契約です。
+
+`openai_subscription` の `/compress --compact` と `compression.prefer_compact_api` は ChatGPT/Codex subscription Compact endpoint（既定: `https://chatgpt.com/backend-api/codex/responses/compact`）を使います。`XELYON_OPENAI_SUBSCRIPTION_COMPACT_ENDPOINT` で検証先を差し替えられ、空文字に明示設定した場合は compact runtime は unsupported として local compression fallback へ戻ります。OpenAI Platform Compact API と `OPENAI_API_KEY` には fallback しません。
 
 ## 設定項目詳細
 

@@ -154,6 +154,10 @@ func TestStorage_SaveLoad_RestoresProviderMetadata(t *testing.T) {
 		{Type: "tool_use", ID: "toolu_01XYZ", Name: "read_file", Input: map[string]any{"path": "README.md"}},
 		{Type: "redacted_thinking", Data: "opaque"},
 	})
+	msg.SetOpenAIResponsesInputItems([]api.InputItem{
+		{Type: "reasoning", ID: "rs_1", EncryptedContent: "encrypted-replay-state"},
+		{Type: "function_call", CallID: "toolu_01XYZ", Name: "read_file", Arguments: `{"path":"README.md"}`},
+	})
 	session.AddMessageFromAPI(msg, "claude-test")
 
 	if err := storage.Save(session); err != nil {
@@ -165,7 +169,9 @@ func TestStorage_SaveLoad_RestoresProviderMetadata(t *testing.T) {
 		t.Fatalf("ReadFile failed: %v", err)
 	}
 	rawJSON := string(raw)
-	if !strings.Contains(rawJSON, "provider_metadata") || !strings.Contains(rawJSON, "anthropic_content_blocks") {
+	if !strings.Contains(rawJSON, "provider_metadata") ||
+		!strings.Contains(rawJSON, "anthropic_content_blocks") ||
+		!strings.Contains(rawJSON, "openai_responses_items") {
 		t.Fatalf("stored JSONL = %s, want provider metadata persisted", rawJSON)
 	}
 
@@ -193,6 +199,16 @@ func TestStorage_SaveLoad_RestoresProviderMetadata(t *testing.T) {
 	}
 	if contentBlocks[1].Type != "tool_use" || contentBlocks[1].ID != "toolu_01XYZ" {
 		t.Fatalf("restored content blocks = %#v, want ordered thinking/tool_use/redacted blocks", contentBlocks)
+	}
+	openAIItems := restored[0].OpenAIResponsesInputItems()
+	if len(openAIItems) != 2 {
+		t.Fatalf("len(restored OpenAIResponsesInputItems) = %d, want 2", len(openAIItems))
+	}
+	if openAIItems[0].Type != "reasoning" || openAIItems[0].EncryptedContent != "encrypted-replay-state" {
+		t.Fatalf("restored OpenAI reasoning replay item = %#v, want encrypted replay state", openAIItems[0])
+	}
+	if openAIItems[1].Type != "function_call" || openAIItems[1].CallID != "toolu_01XYZ" {
+		t.Fatalf("restored OpenAI function_call item = %#v, want call toolu_01XYZ", openAIItems[1])
 	}
 }
 

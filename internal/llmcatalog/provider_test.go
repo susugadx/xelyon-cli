@@ -96,6 +96,9 @@ func TestProviderConfigKey_CanonicalizesDisplayNameButPreservesAlias(t *testing.
 		{name: "azure display name normalized", provider: " azure openai ", want: "azure"},
 		{name: "anthropic alias is an owner key", provider: "anthropic", want: "anthropic"},
 		{name: "moonshot alias is an owner key", provider: "moonshot", want: "moonshot"},
+		{name: "subscription dashed alias canonicalizes", provider: "openai-subscription", want: "openai_subscription"},
+		{name: "subscription chatgpt alias canonicalizes", provider: "chatgpt", want: "openai_subscription"},
+		{name: "subscription codex alias canonicalizes", provider: "codex-subscription", want: "openai_subscription"},
 		{name: "canonical key", provider: "claude", want: "claude"},
 	}
 
@@ -123,11 +126,19 @@ func TestProviderModelLookupKeys_CanonicalizesDisplayNameButPreservesAlias(t *te
 	if !reflect.DeepEqual(moonshotKeys, []string{"moonshot", "kimi"}) {
 		t.Fatalf("ProviderModelLookupKeys(moonshot) = %v, want [moonshot kimi]", moonshotKeys)
 	}
+
+	subscriptionKeys := ProviderModelLookupKeys("chatgpt")
+	if !reflect.DeepEqual(subscriptionKeys, []string{"openai_subscription"}) {
+		t.Fatalf("ProviderModelLookupKeys(chatgpt) = %v, want [openai_subscription]", subscriptionKeys)
+	}
 }
 
 func TestProviderSupportsResponsesAPI(t *testing.T) {
 	if !ProviderSupportsResponsesAPI("openai") {
 		t.Fatal("ProviderSupportsResponsesAPI(openai) = false, want true")
+	}
+	if !ProviderSupportsResponsesAPI("chatgpt") {
+		t.Fatal("ProviderSupportsResponsesAPI(chatgpt) = false, want true")
 	}
 	if !ProviderSupportsResponsesAPI("azure") {
 		t.Fatal("ProviderSupportsResponsesAPI(azure) = false, want true")
@@ -137,6 +148,34 @@ func TestProviderSupportsResponsesAPI(t *testing.T) {
 	}
 	if ProviderSupportsResponsesAPI("kimi") {
 		t.Fatal("ProviderSupportsResponsesAPI(kimi) = true, want false")
+	}
+}
+
+func TestProviderDescriptorFor_OpenAISubscription(t *testing.T) {
+	desc, ok := ProviderDescriptorFor("openai-subscription")
+	if !ok {
+		t.Fatal("ProviderDescriptorFor(openai-subscription) ok = false, want true")
+	}
+	if desc.Key != "openai_subscription" {
+		t.Fatalf("Key = %q, want openai_subscription", desc.Key)
+	}
+	if desc.DisplayName != "OpenAI Subscription" {
+		t.Fatalf("DisplayName = %q, want OpenAI Subscription", desc.DisplayName)
+	}
+	if desc.CredentialKind != "oauth" {
+		t.Fatalf("CredentialKind = %q, want oauth", desc.CredentialKind)
+	}
+	if desc.APIKeyEnv != "" {
+		t.Fatalf("APIKeyEnv = %q, want empty", desc.APIKeyEnv)
+	}
+	if desc.DefaultSubAgentModel != "gpt-5.4-mini" {
+		t.Fatalf("DefaultSubAgentModel = %q, want gpt-5.4-mini", desc.DefaultSubAgentModel)
+	}
+	if desc.PricingFamily != "openai_subscription" {
+		t.Fatalf("PricingFamily = %q, want openai_subscription", desc.PricingFamily)
+	}
+	if desc.ModelDefaults.DefaultModel != "gpt-5.5" || desc.ModelDefaults.MaxOutputTokens != 0 {
+		t.Fatalf("ModelDefaults = %#v, want gpt-5.5 / 0", desc.ModelDefaults)
 	}
 }
 

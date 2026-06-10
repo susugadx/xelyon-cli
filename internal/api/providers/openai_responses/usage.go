@@ -1,8 +1,9 @@
-package openai
+package openairesponses
 
 import "github.com/susugadx/xelyon-cli/internal/api"
 
-func responsesUsageToAPIUsage(usage *ResponsesUsage) *api.Usage {
+// UsageToAPIUsage は Responses API usage を XELYON 共通 usage に変換する。
+func UsageToAPIUsage(usage *Usage) *api.Usage {
 	if usage == nil {
 		return nil
 	}
@@ -17,4 +18,8 @@ func responsesUsageToAPIUsage(usage *ResponsesUsage) *api.Usage {
 	}
 	apiUsage := api.UsageFromOutputTokensIncludingThinking(usage.InputTokens, usage.OutputTokens, cachedTokens, reasoningTokens)
 	return &apiUsage
+}
+
+func responsesUsageToAPIUsage(usage *Usage) *api.Usage {
+	return UsageToAPIUsage(usage)
 }

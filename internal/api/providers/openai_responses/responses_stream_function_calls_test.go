@@ -1,4 +1,4 @@
-package openai
+package openairesponses
 
 import (
 	"io"
@@ -11,11 +11,11 @@ func TestResponsesStreamState_HandleFunctionCallAdded_DoesNotControlSpinner(t *t
 	spinner := ui.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
-	state.handleFunctionCallAdded(&ResponsesItem{
+	state.handleFunctionCallAdded(&Item{
 		Type:   "function_call",
 		CallID: "call_1",
 		Name:   "read_file",
-	})
+	}, nil)
 
 	if spinner.IsActive() {
 		t.Fatal("handleFunctionCallAdded() should not start spinner")
@@ -29,7 +29,7 @@ func TestResponsesStreamState_ShowFunctionCallSpinner_StartsSpinner(t *testing.T
 	spinner := ui.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
-	state.showFunctionCallSpinner(&ResponsesItem{
+	state.showFunctionCallSpinner(&Item{
 		Type: "function_call",
 		Name: "read_file",
 	})
@@ -43,7 +43,7 @@ func TestResponsesStreamState_ShowFunctionCallSpinner_IgnoresNonFunctionCall(t *
 	spinner := ui.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
-	state.showFunctionCallSpinner(&ResponsesItem{
+	state.showFunctionCallSpinner(&Item{
 		Type: "message",
 		Name: "ignored",
 	})
