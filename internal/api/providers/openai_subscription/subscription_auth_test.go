@@ -53,6 +53,21 @@ func TestValidateSubscriptionOAuthCallbackState(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "invalid OAuth state") {
 		t.Fatalf("state mismatch error = %v, want invalid OAuth state", err)
 	}
+	_, err = validateSubscriptionOAuthCallback(url.Values{
+		"state": {"wrong"},
+		"error": {"access_denied"},
+	}, "expected")
+	if err == nil || !strings.Contains(err.Error(), "invalid OAuth state") {
+		t.Fatalf("state mismatch with error = %v, want invalid OAuth state", err)
+	}
+	_, err = validateSubscriptionOAuthCallback(url.Values{
+		"state":             {"expected"},
+		"error":             {"access_denied"},
+		"error_description": {"user denied login"},
+	}, "expected")
+	if err == nil || !strings.Contains(err.Error(), "OAuth returned error") {
+		t.Fatalf("valid-state OAuth error = %v, want OAuth returned error", err)
+	}
 }
 
 func TestExtractSubscriptionAccountIDClaims(t *testing.T) {
@@ -489,6 +504,19 @@ func TestRunSubscriptionBrowserLoginStoresTokenWithoutPrintingSecrets(t *testing
 	}
 	if !strings.Contains(capturedAuthURL, "originator=xelyon") {
 		t.Fatalf("auth URL = %s, want originator=xelyon", capturedAuthURL)
+	}
+	capturedParsed, err := url.Parse(capturedAuthURL)
+	if err != nil {
+		t.Fatalf("Parse captured auth URL: %v", err)
+	}
+	scopeSet := map[string]struct{}{}
+	for _, scope := range strings.Fields(capturedParsed.Query().Get("scope")) {
+		scopeSet[scope] = struct{}{}
+	}
+	for _, scope := range []string{"openid", "profile", "email", "offline_access", "api.connectors.read", "api.connectors.invoke"} {
+		if _, ok := scopeSet[scope]; !ok {
+			t.Fatalf("auth URL scope = %q, missing %q", capturedParsed.Query().Get("scope"), scope)
+		}
 	}
 	output := out.String()
 	for _, leaked := range []string{"browser-refresh-secret", "browser-code"} {

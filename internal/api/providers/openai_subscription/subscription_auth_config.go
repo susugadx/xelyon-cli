@@ -27,6 +27,7 @@ const (
 	subscriptionDefaultClientID   = "app_EMoamEEZ73f0CkXaXp7hrann"
 	subscriptionDefaultOriginator = "xelyon"
 
+	subscriptionOAuthScope         = "openid profile email offline_access api.connectors.read api.connectors.invoke"
 	subscriptionOAuthCallbackPath  = "/auth/callback"
 	subscriptionLoginTimeout       = 5 * time.Minute
 	subscriptionDeviceLoginTimeout = 15 * time.Minute

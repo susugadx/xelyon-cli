@@ -111,6 +111,56 @@ func TestHandleStreaming_CapturesReplayItems(t *testing.T) {
 	}
 }
 
+func TestHandleStreaming_RoutesParallelFunctionArgumentsByItemID(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_parallel"}}`,
+		``,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_read","call_id":"call_read","name":"read_file","status":"in_progress"}}`,
+		``,
+		`data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_search","call_id":"call_search","name":"search_code","status":"in_progress"}}`,
+		``,
+		`data: {"type":"response.function_call_arguments.delta","item_id":"fc_search","output_index":1,"delta":"{\"query\":\"main\"}"}`,
+		``,
+		`data: {"type":"response.function_call_arguments.delta","item_id":"fc_read","output_index":0,"delta":"{\"path\":\"README.md\"}"}`,
+		``,
+		`data: {"type":"response.completed","response":{"id":"resp_parallel","usage":{"input_tokens":10,"output_tokens":4}}}`,
+		``,
+	}, "\n")
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	var replayItems []api.InputItem
+	content, responseID, err := HandleStreaming(context.Background(), resp, nil, StreamingOptions{
+		ProviderName: "OpenAI",
+		DebugWriter:  io.Discard,
+		ReplayItemsCallback: func(items []api.InputItem) {
+			replayItems = api.CloneInputItems(items)
+		},
+	})
+	if err != nil {
+		t.Fatalf("HandleStreaming() error = %v", err)
+	}
+	if responseID != "resp_parallel" {
+		t.Fatalf("responseID = %q, want resp_parallel", responseID)
+	}
+	for _, want := range []string{`"tool":"read_file"`, `"tool":"search_code"`} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("content = %q, want %s", content, want)
+		}
+	}
+	if len(replayItems) != 2 {
+		t.Fatalf("len(replayItems) = %d, want 2: %#v", len(replayItems), replayItems)
+	}
+	if replayItems[0].CallID != "call_read" || replayItems[0].Arguments != `{"path":"README.md"}` {
+		t.Fatalf("first replay item = %#v, want read_file args", replayItems[0])
+	}
+	if replayItems[1].CallID != "call_search" || replayItems[1].Arguments != `{"query":"main"}` {
+		t.Fatalf("second replay item = %#v, want search_code args", replayItems[1])
+	}
+}
+
 func TestHandleStreaming_CapturesReasoningReplayItemsInOutputOrder(t *testing.T) {
 	body := strings.Join([]string{
 		`data: {"type":"response.created","response":{"id":"resp_1"}}`,

@@ -32,23 +32,25 @@ type responsesStreamStateOptions struct {
 }
 
 type responsesStreamState struct {
-	providerName             string
-	debugName                string
-	spinner                  *ui.Spinner
-	errOut                   io.Writer
-	debug                    bool
-	responseID               string
-	textOut                  strings.Builder
-	messages                 map[string]*responsesMessageAccumulator
-	currentMessageKey        string
-	messageKeysByOutputIndex map[int]string
-	reasoningItems           map[string]api.InputItem
-	functionCalls            map[string]*responsesFunctionCallAccumulator
-	callOrder                []string
-	replayOrder              []responsesReplayRef
-	replayOrderSeen          map[string]struct{}
-	toolCallsOut             strings.Builder
-	lastUsage                *api.Usage
+	providerName              string
+	debugName                 string
+	spinner                   *ui.Spinner
+	errOut                    io.Writer
+	debug                     bool
+	responseID                string
+	textOut                   strings.Builder
+	messages                  map[string]*responsesMessageAccumulator
+	currentMessageKey         string
+	messageKeysByOutputIndex  map[int]string
+	reasoningItems            map[string]api.InputItem
+	functionCalls             map[string]*responsesFunctionCallAccumulator
+	functionKeysByItemID      map[string]string
+	functionKeysByOutputIndex map[int]string
+	callOrder                 []string
+	replayOrder               []responsesReplayRef
+	replayOrderSeen           map[string]struct{}
+	toolCallsOut              strings.Builder
+	lastUsage                 *api.Usage
 }
 
 func newResponsesStreamState(spinner *ui.Spinner, errOut io.Writer) *responsesStreamState {
@@ -69,16 +71,18 @@ func newResponsesStreamStateWithOptions(spinner *ui.Spinner, errOut io.Writer, o
 		debugName = providerName
 	}
 	return &responsesStreamState{
-		providerName:             providerName,
-		debugName:                debugName,
-		spinner:                  spinner,
-		errOut:                   errOut,
-		debug:                    options.debug,
-		messages:                 make(map[string]*responsesMessageAccumulator),
-		messageKeysByOutputIndex: make(map[int]string),
-		reasoningItems:           make(map[string]api.InputItem),
-		functionCalls:            make(map[string]*responsesFunctionCallAccumulator),
-		replayOrderSeen:          make(map[string]struct{}),
+		providerName:              providerName,
+		debugName:                 debugName,
+		spinner:                   spinner,
+		errOut:                    errOut,
+		debug:                     options.debug,
+		messages:                  make(map[string]*responsesMessageAccumulator),
+		messageKeysByOutputIndex:  make(map[int]string),
+		reasoningItems:            make(map[string]api.InputItem),
+		functionCalls:             make(map[string]*responsesFunctionCallAccumulator),
+		functionKeysByItemID:      make(map[string]string),
+		functionKeysByOutputIndex: make(map[int]string),
+		replayOrderSeen:           make(map[string]struct{}),
 	}
 }
 

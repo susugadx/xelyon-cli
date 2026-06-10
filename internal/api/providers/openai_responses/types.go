@@ -121,7 +121,11 @@ type Error struct {
 type StreamChunk struct {
 	Type        string            `json:"type"`
 	Delta       string            `json:"delta,omitempty"`
+	ItemID      string            `json:"item_id,omitempty"`
 	OutputIndex *int              `json:"output_index,omitempty"`
+	CallID      string            `json:"call_id,omitempty"`
+	Name        string            `json:"name,omitempty"`
+	Arguments   string            `json:"arguments,omitempty"`
 	Response    *ResponseMetadata `json:"response,omitempty"`
 	Item        *Item             `json:"item,omitempty"`
 	Usage       *Usage            `json:"usage,omitempty"`

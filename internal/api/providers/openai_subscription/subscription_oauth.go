@@ -230,15 +230,15 @@ func listenSubscriptionOAuthCallback(port int) (net.Listener, error) {
 }
 
 func validateSubscriptionOAuthCallback(query url.Values, expectedState string) (string, error) {
+	if query.Get("state") != expectedState {
+		return "", subscriptionAuthError(SubscriptionAuthStateLoginRequired, "invalid OAuth state", nil)
+	}
 	if errParam := strings.TrimSpace(query.Get("error")); errParam != "" {
 		description := strings.TrimSpace(query.Get("error_description"))
 		if description == "" {
 			description = errParam
 		}
 		return "", subscriptionAuthError(SubscriptionAuthStateLoginRequired, "OAuth returned error: "+RedactSubscriptionSecrets(description), nil)
-	}
-	if query.Get("state") != expectedState {
-		return "", subscriptionAuthError(SubscriptionAuthStateLoginRequired, "invalid OAuth state", nil)
 	}
 	code := strings.TrimSpace(query.Get("code"))
 	if code == "" {
@@ -272,7 +272,7 @@ func buildSubscriptionAuthorizeURL(config SubscriptionAuthConfig, redirectURI st
 	query.Set("response_type", "code")
 	query.Set("client_id", config.ClientID)
 	query.Set("redirect_uri", redirectURI)
-	query.Set("scope", "openid profile email offline_access")
+	query.Set("scope", subscriptionOAuthScope)
 	query.Set("code_challenge", pkce.Challenge)
 	query.Set("code_challenge_method", "S256")
 	query.Set("id_token_add_organizations", "true")

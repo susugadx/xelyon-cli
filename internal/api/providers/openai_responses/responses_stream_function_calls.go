@@ -34,6 +34,7 @@ func (s *responsesStreamState) handleFunctionCallAdded(item *Item, outputIndex *
 		s.functionCalls[key] = acc
 		s.callOrder = append(s.callOrder, key)
 		s.addReplayOrder(responsesReplayKindFunctionCall, key)
+		s.registerFunctionCallAliases(key, item, outputIndex)
 		return
 	}
 	if item.ID != "" {
@@ -48,9 +49,20 @@ func (s *responsesStreamState) handleFunctionCallAdded(item *Item, outputIndex *
 	if item.Status != "" {
 		acc.Status = item.Status
 	}
+	s.registerFunctionCallAliases(key, item, outputIndex)
 }
 
 func (s *responsesStreamState) functionCallReplayKey(item *Item, outputIndex *int) string {
+	if item != nil && item.ID != "" {
+		if key := s.functionKeysByItemID[item.ID]; key != "" {
+			return key
+		}
+	}
+	if outputIndex != nil {
+		if key := s.functionKeysByOutputIndex[*outputIndex]; key != "" {
+			return key
+		}
+	}
 	if item != nil && item.CallID != "" {
 		return item.CallID
 	}
@@ -64,15 +76,11 @@ func (s *responsesStreamState) functionCallReplayKey(item *Item, outputIndex *in
 }
 
 func (s *responsesStreamState) handleFunctionCallArgumentsDelta(chunk StreamChunk) {
-	callID := ""
-	if chunk.Item != nil {
-		callID = chunk.Item.CallID
-	}
-
-	if callID != "" {
-		if acc, ok := s.functionCalls[callID]; ok {
-			acc.Arguments.WriteString(chunk.Delta)
-		}
+	key := s.functionCallKeyFromChunk(chunk)
+	if key != "" {
+		acc := s.functionCalls[key]
+		s.registerFunctionCallChunkAliases(key, chunk)
+		acc.Arguments.WriteString(chunk.Delta)
 		return
 	}
 
@@ -86,15 +94,115 @@ func (s *responsesStreamState) handleFunctionCallArgumentsDelta(chunk StreamChun
 }
 
 func (s *responsesStreamState) handleFunctionCallArgumentsDone(chunk StreamChunk) {
-	if chunk.Item == nil {
+	key := s.functionCallKeyFromChunk(chunk)
+	if key == "" {
+		if len(s.functionCalls) != 1 {
+			return
+		}
+		for onlyKey := range s.functionCalls {
+			key = onlyKey
+			break
+		}
+	}
+	acc, ok := s.functionCalls[key]
+	if !ok {
 		return
 	}
-	acc, ok := s.functionCalls[chunk.Item.CallID]
-	if !ok || chunk.Item.Arguments == "" {
+	s.registerFunctionCallChunkAliases(key, chunk)
+	s.updateFunctionCallAccumulatorFromChunk(acc, chunk)
+	arguments := chunk.Arguments
+	if chunk.Item != nil && chunk.Item.Arguments != "" {
+		arguments = chunk.Item.Arguments
+	}
+	if arguments == "" {
 		return
 	}
 	acc.Arguments.Reset()
-	acc.Arguments.WriteString(chunk.Item.Arguments)
+	acc.Arguments.WriteString(arguments)
+}
+
+func (s *responsesStreamState) functionCallKeyFromChunk(chunk StreamChunk) string {
+	if chunk.Item != nil && chunk.Item.CallID != "" {
+		if _, ok := s.functionCalls[chunk.Item.CallID]; ok {
+			return chunk.Item.CallID
+		}
+	}
+	if chunk.CallID != "" {
+		if _, ok := s.functionCalls[chunk.CallID]; ok {
+			return chunk.CallID
+		}
+	}
+	if chunk.Item != nil && chunk.Item.ID != "" {
+		if key := s.functionKeysByItemID[chunk.Item.ID]; key != "" {
+			return key
+		}
+		if key := "item:" + chunk.Item.ID; s.functionCalls[key] != nil {
+			return key
+		}
+	}
+	if chunk.ItemID != "" {
+		if key := s.functionKeysByItemID[chunk.ItemID]; key != "" {
+			return key
+		}
+		if key := "item:" + chunk.ItemID; s.functionCalls[key] != nil {
+			return key
+		}
+	}
+	if chunk.OutputIndex != nil {
+		if key := s.functionKeysByOutputIndex[*chunk.OutputIndex]; key != "" {
+			return key
+		}
+		if key := "index:" + strconv.Itoa(*chunk.OutputIndex); s.functionCalls[key] != nil {
+			return key
+		}
+	}
+	return ""
+}
+
+func (s *responsesStreamState) registerFunctionCallAliases(key string, item *Item, outputIndex *int) {
+	if key == "" {
+		return
+	}
+	if item != nil && item.ID != "" {
+		s.functionKeysByItemID[item.ID] = key
+	}
+	if outputIndex != nil {
+		s.functionKeysByOutputIndex[*outputIndex] = key
+	}
+}
+
+func (s *responsesStreamState) registerFunctionCallChunkAliases(key string, chunk StreamChunk) {
+	if chunk.ItemID != "" {
+		s.functionKeysByItemID[chunk.ItemID] = key
+	}
+	s.registerFunctionCallAliases(key, chunk.Item, chunk.OutputIndex)
+}
+
+func (s *responsesStreamState) updateFunctionCallAccumulatorFromChunk(acc *responsesFunctionCallAccumulator, chunk StreamChunk) {
+	if chunk.ItemID != "" && acc.ID == "" {
+		acc.ID = chunk.ItemID
+	}
+	if chunk.CallID != "" {
+		acc.CallID = chunk.CallID
+	}
+	if chunk.Name != "" {
+		acc.Name = chunk.Name
+	}
+	if chunk.Item == nil {
+		return
+	}
+	if chunk.Item.ID != "" {
+		acc.ID = chunk.Item.ID
+	}
+	if chunk.Item.CallID != "" {
+		acc.CallID = chunk.Item.CallID
+	}
+	if chunk.Item.Name != "" {
+		acc.Name = chunk.Item.Name
+	}
+	if chunk.Item.Status != "" {
+		acc.Status = chunk.Item.Status
+	}
 }
 
 func (s *responsesStreamState) appendFunctionCallsToOutput() {
