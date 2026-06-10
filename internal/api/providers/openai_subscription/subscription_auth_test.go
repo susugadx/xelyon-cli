@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -498,6 +499,142 @@ func TestRunSubscriptionBrowserLoginStoresTokenWithoutPrintingSecrets(t *testing
 	status := ReadSubscriptionAuthStatus(config)
 	if status.AccountIDMasked != "acct_****abcd" {
 		t.Fatalf("status account = %q, want acct_****abcd", status.AccountIDMasked)
+	}
+}
+
+func TestRunSubscriptionBrowserLoginFallsBackWhenDefaultCallbackPortBusy(t *testing.T) {
+	config := subscriptionAuthTestConfig(t)
+	config.OAuthPort = subscriptionDefaultOAuthPort
+	busy := listenSubscriptionOAuthTestPort(t, subscriptionDefaultOAuthPort)
+	defer busy.Close()
+	requireSubscriptionOAuthTestPortAvailable(t, subscriptionFallbackOAuthPort)
+
+	wantRedirectURI := fmt.Sprintf("http://localhost:%d%s", subscriptionFallbackOAuthPort, subscriptionOAuthCallbackPath)
+	allowedRedirects := map[string]struct{}{
+		fmt.Sprintf("http://localhost:%d%s", subscriptionDefaultOAuthPort, subscriptionOAuthCallbackPath):  {},
+		fmt.Sprintf("http://localhost:%d%s", subscriptionFallbackOAuthPort, subscriptionOAuthCallbackPath): {},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/oauth/token" {
+			t.Fatalf("token path = %q, want /oauth/token", r.URL.Path)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm() error = %v", err)
+		}
+		redirectURI := r.Form.Get("redirect_uri")
+		if _, ok := allowedRedirects[redirectURI]; !ok {
+			t.Errorf("redirect_uri = %q, want registered OAuth redirect URI", redirectURI)
+			http.Error(w, "invalid redirect_uri", http.StatusBadRequest)
+			return
+		}
+		if redirectURI != wantRedirectURI {
+			t.Fatalf("redirect_uri = %q, want fallback redirect URI %q", redirectURI, wantRedirectURI)
+		}
+		if r.Form.Get("grant_type") != "authorization_code" || r.Form.Get("code") != "fallback-browser-code" {
+			t.Fatalf("token form = %#v", r.Form)
+		}
+		writeJSON(t, w, map[string]any{
+			"id_token":      fakeSubscriptionJWT(t, map[string]any{"chatgpt_account_id": "acct_fallbackabcd", "exp": time.Now().Add(time.Hour).Unix()}),
+			"access_token":  fakeSubscriptionJWT(t, map[string]any{"exp": time.Now().Add(time.Hour).Unix()}),
+			"refresh_token": "fallback-refresh-secret",
+		})
+	}))
+	defer server.Close()
+	config.Issuer = server.URL
+	var out strings.Builder
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := RunSubscriptionBrowserLogin(ctx, SubscriptionBrowserLoginOptions{
+		Config:     config,
+		Output:     &out,
+		HTTPClient: server.Client(),
+		OpenBrowser: func(rawURL string) error {
+			parsed, err := url.Parse(rawURL)
+			if err != nil {
+				return err
+			}
+			redirectURI := parsed.Query().Get("redirect_uri")
+			if redirectURI != wantRedirectURI {
+				return fmt.Errorf("redirect_uri = %q, want fallback redirect URI %q", redirectURI, wantRedirectURI)
+			}
+			state := parsed.Query().Get("state")
+			go func() {
+				callbackURL := redirectURI + "?state=" + url.QueryEscape(state) + "&code=fallback-browser-code"
+				_, _ = server.Client().Get(callbackURL)
+			}()
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunSubscriptionBrowserLogin() error = %v\noutput:\n%s", err, out.String())
+	}
+	status := ReadSubscriptionAuthStatus(config)
+	if status.AccountIDMasked != "acct_****abcd" {
+		t.Fatalf("status account = %q, want acct_****abcd", status.AccountIDMasked)
+	}
+}
+
+func TestStartSubscriptionOAuthCallbackServerDoesNotFallbackFromExplicitBusyPort(t *testing.T) {
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+	defer busy.Close()
+	tcpAddr, ok := busy.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("listener addr = %T, want *net.TCPAddr", busy.Addr())
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, _, shutdown, err := startSubscriptionOAuthCallbackServer(ctx, tcpAddr.Port, "state")
+	if shutdown != nil {
+		shutdown()
+	}
+	if err == nil {
+		t.Fatalf("startSubscriptionOAuthCallbackServer() error = nil, want explicit busy port failure")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("port %d", tcpAddr.Port)) {
+		t.Fatalf("error = %q, want explicit port detail", err.Error())
+	}
+}
+
+func TestStartSubscriptionOAuthCallbackServerFailsWhenRegisteredFallbackPortBusy(t *testing.T) {
+	busyDefault := listenSubscriptionOAuthTestPort(t, subscriptionDefaultOAuthPort)
+	defer busyDefault.Close()
+	busyFallback := listenSubscriptionOAuthTestPort(t, subscriptionFallbackOAuthPort)
+	defer busyFallback.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, _, shutdown, err := startSubscriptionOAuthCallbackServer(ctx, subscriptionDefaultOAuthPort, "state")
+	if shutdown != nil {
+		shutdown()
+	}
+	if err == nil {
+		t.Fatal("startSubscriptionOAuthCallbackServer() error = nil, want busy registered fallback port failure")
+	}
+	for _, port := range []int{subscriptionDefaultOAuthPort, subscriptionFallbackOAuthPort} {
+		if !strings.Contains(err.Error(), fmt.Sprintf("port %d", port)) {
+			t.Fatalf("error = %q, want port %d detail", err.Error(), port)
+		}
+	}
+}
+
+func listenSubscriptionOAuthTestPort(t *testing.T, port int) net.Listener {
+	t.Helper()
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		t.Skipf("OAuth callback port %d is unavailable before test setup: %v", port, err)
+	}
+	return listener
+}
+
+func requireSubscriptionOAuthTestPortAvailable(t *testing.T, port int) {
+	t.Helper()
+	listener := listenSubscriptionOAuthTestPort(t, port)
+	if err := listener.Close(); err != nil {
+		t.Fatalf("failed to release OAuth callback port %d after availability probe: %v", port, err)
 	}
 }
 

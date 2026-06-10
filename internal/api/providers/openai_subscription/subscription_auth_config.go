@@ -22,8 +22,10 @@ const (
 	subscriptionDefaultEndpointURL     = "https://chatgpt.com/backend-api/codex/responses"
 	subscriptionDefaultCompactEndpoint = "https://chatgpt.com/backend-api/codex/responses/compact"
 	subscriptionDefaultOAuthPort       = 1455
-	subscriptionDefaultClientID        = "app_EMoamEEZ73f0CkXaXp7hrann"
-	subscriptionDefaultOriginator      = "xelyon"
+	// subscriptionFallbackOAuthPort は Codex OAuth client の登録済み redirect URI と同期する。
+	subscriptionFallbackOAuthPort = 1457
+	subscriptionDefaultClientID   = "app_EMoamEEZ73f0CkXaXp7hrann"
+	subscriptionDefaultOriginator = "xelyon"
 
 	subscriptionOAuthCallbackPath  = "/auth/callback"
 	subscriptionLoginTimeout       = 5 * time.Minute

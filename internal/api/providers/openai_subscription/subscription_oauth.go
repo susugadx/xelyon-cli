@@ -161,9 +161,9 @@ func RunSubscriptionDeviceLogin(ctx context.Context, options SubscriptionDeviceL
 
 func startSubscriptionOAuthCallbackServer(ctx context.Context, port int, expectedState string) (string, <-chan subscriptionOAuthCallbackResult, func(), error) {
 	callbacks := make(chan subscriptionOAuthCallbackResult, 1)
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	listener, err := listenSubscriptionOAuthCallback(port)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("failed to listen on OAuth callback port %d: %w", port, err)
+		return "", nil, nil, err
 	}
 	actualPort := port
 	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
@@ -212,6 +212,21 @@ func startSubscriptionOAuthCallbackServer(ctx context.Context, port int, expecte
 		shutdown()
 	}()
 	return redirectURI, callbacks, shutdown, nil
+}
+
+func listenSubscriptionOAuthCallback(port int) (net.Listener, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err == nil {
+		return listener, nil
+	}
+	if port != subscriptionDefaultOAuthPort {
+		return nil, fmt.Errorf("failed to listen on OAuth callback port %d: %w", port, err)
+	}
+	fallback, fallbackErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", subscriptionFallbackOAuthPort))
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("failed to listen on OAuth callback port %d: %w; fallback OAuth callback port %d also failed: %v", port, err, subscriptionFallbackOAuthPort, fallbackErr)
+	}
+	return fallback, nil
 }
 
 func validateSubscriptionOAuthCallback(query url.Values, expectedState string) (string, error) {
