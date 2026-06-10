@@ -293,6 +293,8 @@ func commandSkills() CommandInfo {
 	cmd.SubCommands = []SubCommand{
 		{Name: "/skills overview", Description: "Print skill catalog overview"},
 		{Name: "/skills show <name>", Description: "Show SKILL.md body and resource listings"},
+		{Name: "/skills suggest <text>", Description: "Preview ranked Skill Router recommendations"},
+		{Name: "/skills usage", Description: "Show local Skill Router usage diagnostics"},
 		{Name: "/skills doctor", Description: "Show parsing/duplicate diagnostics"},
 	}
 	return cmd

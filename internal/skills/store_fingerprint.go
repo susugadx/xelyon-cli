@@ -22,6 +22,7 @@ func buildCatalogFingerprintWithContent(discover DiscoverResult) (string, map[st
 	}
 	for _, skill := range discover.Skills {
 		writeCatalogFingerprintEntry(hasher, "skill", cleanAbsPathOrFallback(skill.SkillPath), skillContents)
+		writeCatalogFingerprintEntry(hasher, "xelyon_metadata", xelyonRoutingMetadataPath(skill.Directory), nil)
 		for _, group := range skillResourceGroupOrder {
 			writeCatalogResourceListingFingerprint(hasher, cleanAbsPathOrFallback(skill.Directory), group.String())
 		}

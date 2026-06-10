@@ -22,6 +22,7 @@ type planResponseContextProvider struct {
 	responses               []string
 	responseID              string
 	usedPreviousResponseIDs []string
+	systemPrompts           []string
 	histories               [][]api.Message
 }
 
@@ -45,6 +46,7 @@ func (p *planResponseContextProvider) GetResponseID() string {
 
 func (p *planResponseContextProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	p.usedPreviousResponseIDs = append(p.usedPreviousResponseIDs, p.responseID)
+	p.systemPrompts = append(p.systemPrompts, systemPrompt)
 	snapshot := append([]api.Message(nil), history...)
 	p.histories = append(p.histories, snapshot)
 
@@ -123,6 +125,17 @@ func assertImplementationHistoryOmitsInvestigationContext(t *testing.T, history 
 				t.Fatalf("implementation history must not contain investigation context %q, got %q", fragment, msg.Content)
 			}
 		}
+	}
+}
+
+func assertImplementationSystemPromptOmitsPlanModePrompt(t *testing.T, provider *planResponseContextProvider) {
+	t.Helper()
+	assertPlanAndImplementationProviderCalls(t, provider)
+	if len(provider.systemPrompts) != 2 {
+		t.Fatalf("len(provider.systemPrompts) = %d, want 2", len(provider.systemPrompts))
+	}
+	if strings.Contains(provider.systemPrompts[1], "You are in Plan Mode - producing a text plan") {
+		t.Fatalf("implementation system prompt should not contain planning prompt:\n%s", provider.systemPrompts[1])
 	}
 }
 
@@ -256,6 +269,7 @@ func TestChatCore_PlanModeApproval_StartsImplementationWithApprovedPlan(t *testi
 	}
 	assertImplementationHistoryContainsApprovedPlanHandoff(t, implementationHistory)
 	assertImplementationHistoryOmitsInvestigationContext(t, implementationHistory)
+	assertImplementationSystemPromptOmitsPlanModePrompt(t, provider)
 	if len(agent.History) != 2 {
 		t.Fatalf("len(agent.History) = %d, want 2 for handoff user + implementation response", len(agent.History))
 	}

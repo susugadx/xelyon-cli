@@ -231,6 +231,22 @@ agent_instructions:
     max_total_bytes: 60000
 
 # ============================================================
+# Agent Skills 設定
+# ============================================================
+# Skill Router の runtime hint と local usage ledger を制御
+# v1 は hint-only。full SKILL.md の自動読み込みは行いません
+skills:
+    router:
+        # Skill Router の runtime hint injection を有効化
+        enabled: true
+        # runtime skill recommendation 方針（off / hint。v1 は auto 未対応）
+        activation: hint
+        # local-only routing usage ledger を保存
+        usage_ledger: true
+        # usage ledger retention days（1-365。無効化は usage_ledger=false）
+        usage_retention_days: 30
+
+# ============================================================
 # LSP連携設定
 # ============================================================
 # 23言語のデフォルト設定が内蔵済み。通常は変更不要です。

@@ -24,6 +24,7 @@ func DefaultConfig() *Config {
 		ListDir:                  defaultListDirConfig(),
 		ProjectMap:               defaultProjectMapConfig(),
 		AgentInstructions:        defaultAgentInstructionsConfig(),
+		Skills:                   defaultSkillsConfig(),
 		GitStage:                 defaultGitStageConfig(),
 		LSP:                      defaultLSPConfig(),
 		OpenAI:                   defaultOpenAIConfig(),

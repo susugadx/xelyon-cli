@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	defaultPromptCatalogMaxEntries = 24
+	// DefaultPromptCatalogMaxEntries は system prompt に載せる skill metadata 件数の既定値。
+	DefaultPromptCatalogMaxEntries = 24
 	defaultPromptDescriptionLimit  = 96
 )
 
@@ -22,7 +23,7 @@ func BuildPromptCatalog(catalog SkillCatalog, maxEntries int) string {
 	}
 
 	if maxEntries <= 0 {
-		maxEntries = defaultPromptCatalogMaxEntries
+		maxEntries = DefaultPromptCatalogMaxEntries
 	}
 	descLimit := defaultPromptDescriptionLimit
 
@@ -36,7 +37,7 @@ func BuildPromptCatalog(catalog SkillCatalog, maxEntries int) string {
 
 	entries := promptCatalogSkills(catalog.Skills, maxEntries)
 	for _, skill := range entries {
-		name := SanitizeCatalogPromptValue(skill.Name)
+		name := SanitizePromptLineValue(skill.Name)
 		if name == "" {
 			name = "(invalid-skill-name)"
 		}
@@ -60,7 +61,7 @@ func promptCatalogSkills(skills []ParsedSkill, maxEntries int) []ParsedSkill {
 		return nil
 	}
 	if maxEntries <= 0 {
-		maxEntries = defaultPromptCatalogMaxEntries
+		maxEntries = DefaultPromptCatalogMaxEntries
 	}
 
 	entries := make([]ParsedSkill, 0, minInt(maxEntries, len(skills)))
@@ -131,8 +132,8 @@ func truncateRunes(value string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit])) + "..."
 }
 
-// SanitizeCatalogPromptValue は skill metadata を prompt / composer 用の 1 行テキストに正規化する。
-func SanitizeCatalogPromptValue(value string) string {
+// SanitizePromptLineValue は skill metadata を prompt / composer 用の 1 行テキストに正規化する。
+func SanitizePromptLineValue(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return ""
@@ -149,5 +150,10 @@ func SanitizeCatalogPromptValue(value string) string {
 	}, value)
 	flattened = strings.ReplaceAll(flattened, "<!--", "&lt;!--")
 	flattened = strings.ReplaceAll(flattened, "-->", "--&gt;")
-	return strings.Join(strings.Fields(flattened), " ")
+	return strings.TrimSpace(flattened)
+}
+
+// SanitizeCatalogPromptValue は skill metadata を空白正規化済みの prompt / composer 用テキストにする。
+func SanitizeCatalogPromptValue(value string) string {
+	return strings.Join(strings.Fields(SanitizePromptLineValue(value)), " ")
 }

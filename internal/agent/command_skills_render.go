@@ -50,12 +50,12 @@ func printSkillDiagnosticsSummary(out io.Writer, catalog agentskills.SkillCatalo
 }
 
 func printSkillDetail(out io.Writer, skill agentskills.ParsedSkill) {
-	printCommandHeaderToWriter(out, fmt.Sprintf("Agent Skill: %s", skill.Name))
+	printCommandHeaderToWriter(out, fmt.Sprintf("Agent Skill: %s", sanitizeSkillDisplayLine(skill.Name, "(invalid-skill-name)")))
 	_, _ = fmt.Fprintln(out)
 
-	green.Fprintf(out, "Name: %s\n", skill.Name)
+	green.Fprintf(out, "Name: %s\n", sanitizeSkillDisplayLine(skill.Name, "(invalid-skill-name)"))
 	dim.Fprintf(out, "Source: %s\n", skillSourceLabel(skill.Source))
-	dim.Fprintf(out, "Directory: %s\n", skill.Directory)
+	dim.Fprintf(out, "Directory: %s\n", sanitizeSkillDisplayLine(skill.Directory, "(unknown-directory)"))
 	if resources := agentskills.ResourceSummary(skill); resources != "" {
 		dim.Fprintf(out, "Resources: %s\n", resources)
 	}
@@ -108,7 +108,7 @@ func printSkillResourceListings(out io.Writer, skill agentskills.ParsedSkill) {
 		}
 		dim.Fprintf(out, "%s\n", group.label)
 		for _, item := range group.items {
-			_, _ = fmt.Fprintf(out, "  - %s\n", item)
+			_, _ = fmt.Fprintf(out, "  - %s\n", sanitizeSkillDisplayLine(item, "(invalid-resource)"))
 		}
 	}
 }
@@ -157,7 +157,7 @@ func skillOverviewGroups(skills []agentskills.ParsedSkill) []skillOverviewGroup 
 }
 
 func printSkillOverviewRow(out io.Writer, skill agentskills.ParsedSkill) {
-	name := strings.TrimSpace(skill.Name)
+	name := sanitizeSkillDisplayLine(skill.Name, "(invalid-skill-name)")
 	description := normalizeOverviewText(skill.Description)
 	if description == "" {
 		description = "No description"
@@ -174,7 +174,15 @@ func printSkillOverviewRow(out io.Writer, skill agentskills.ParsedSkill) {
 }
 
 func normalizeOverviewText(value string) string {
-	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	return agentskills.SanitizeCatalogPromptValue(value)
+}
+
+func sanitizeSkillDisplayLine(value, fallback string) string {
+	value = agentskills.SanitizePromptLineValue(value)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func wrapDisplayWidth(value string, limit int) []string {

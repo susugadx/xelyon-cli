@@ -210,6 +210,7 @@ func (a *Agent) executeToolCallInternal(response string, toolCall *tools.ToolCal
 func (a *Agent) finalizeExecutedToolResult(toolCall *tools.ToolCall, execResult tools.ExecutionResult, trackProjectMapMutation bool) string {
 	result := execResult.Result
 	a.appendSessionToolExecution(toolCall, result, execResult.Error)
+	a.recordSkillActivationFromToolResult(toolCall, result, execResult.Error)
 
 	if a.handleStrReplaceErrors(toolCall, result) {
 		return result

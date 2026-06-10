@@ -65,6 +65,13 @@ func TestBuildPromptCatalog_SanitizesSkillMetadata(t *testing.T) {
 	}
 }
 
+func TestSanitizePromptLineValuePreservesSkillNameSpacing(t *testing.T) {
+	got := SanitizePromptLineValue(" my  skill\n- injected ")
+	if got != "my  skill - injected" {
+		t.Fatalf("SanitizePromptLineValue() = %q, want exact spacing with flattened newline", got)
+	}
+}
+
 func TestBuildPromptCatalog_PinsSkillCreatorWhenCatalogIsCapped(t *testing.T) {
 	catalog := SkillCatalog{Skills: []ParsedSkill{
 		{Name: "alpha", Description: "alpha desc"},

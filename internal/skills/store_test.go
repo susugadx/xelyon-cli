@@ -103,6 +103,74 @@ func TestSkillCatalogStore_Load_DetectsSkillContentChangeEvenWithSameSizeAndMTim
 	}
 }
 
+func TestSkillCatalogStore_Load_InvalidatesOnXelyonMetadataAddRemoveAndContentChange(t *testing.T) {
+	workspace := t.TempDir()
+	home := t.TempDir()
+	skillDir := filepath.Join(workspace, ".agents", "skills", "demo")
+	mustWriteSkill(t, skillDir, validSkill("demo", "desc", "# body"))
+
+	buildCalls := 0
+	buildFn := func(discover DiscoverResult) SkillCatalog {
+		buildCalls++
+		return Catalog(discover)
+	}
+
+	store := NewSkillCatalogStoreWithDeps(defaultSkillCatalogStoreMaxEntries, Discover, buildFn, nil)
+	opts := testDiscoverOptions(workspace, home)
+
+	first := store.Load(opts)
+	if buildCalls != 1 {
+		t.Fatalf("first Load() should build once, buildCalls=%d", buildCalls)
+	}
+	skill, ok := findParsedSkill(first.Skills, "demo")
+	if !ok || skill.Routing != nil {
+		t.Fatalf("initial skill = %#v, want no routing metadata", skill)
+	}
+
+	metadataPath := filepath.Join(skillDir, "agents", "xelyon.yaml")
+	mustWriteFile(t, metadataPath, `version: 1
+intents:
+  - code-review
+role: primary
+`)
+	withMetadata := store.Load(opts)
+	if buildCalls != 2 {
+		t.Fatalf("adding sidecar should rebuild, buildCalls=%d", buildCalls)
+	}
+	skill, ok = findParsedSkill(withMetadata.Skills, "demo")
+	if !ok || skill.Routing == nil || len(skill.Routing.Intents) != 1 || skill.Routing.Intents[0] != "code-review" {
+		t.Fatalf("with metadata skill = %#v", skill)
+	}
+
+	if err := os.WriteFile(metadataPath, []byte(`version: 1
+intents:
+  - bug-investigation
+role: supporting
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(metadata) error = %v", err)
+	}
+	updated := store.Load(opts)
+	if buildCalls != 3 {
+		t.Fatalf("changing sidecar should rebuild, buildCalls=%d", buildCalls)
+	}
+	skill, ok = findParsedSkill(updated.Skills, "demo")
+	if !ok || skill.Routing == nil || len(skill.Routing.Intents) != 1 || skill.Routing.Intents[0] != "bug-investigation" {
+		t.Fatalf("updated metadata skill = %#v", skill)
+	}
+
+	if err := os.Remove(metadataPath); err != nil {
+		t.Fatalf("Remove(metadata) error = %v", err)
+	}
+	removed := store.Load(opts)
+	if buildCalls != 4 {
+		t.Fatalf("removing sidecar should rebuild, buildCalls=%d", buildCalls)
+	}
+	skill, ok = findParsedSkill(removed.Skills, "demo")
+	if !ok || skill.Routing != nil {
+		t.Fatalf("removed metadata skill = %#v, want no routing metadata", skill)
+	}
+}
+
 func TestSkillCatalogStore_Load_ReusesDiscoverWhenRootStateUnchanged(t *testing.T) {
 	workspace := t.TempDir()
 	home := t.TempDir()

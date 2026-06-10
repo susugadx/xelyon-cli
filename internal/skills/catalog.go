@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-type discoveredSkillParser func(found DiscoveredSkill) (ParsedSkill, error)
+type discoveredSkillParser func(found DiscoveredSkill) (ParsedSkill, []Diagnostic, error)
 
 // LoadCatalogForInvocationCWD は invocation cwd を指定して skill catalog を読み込む。
 func LoadCatalogForInvocationCWD(invocationCWD string) SkillCatalog {
@@ -20,21 +20,22 @@ func LoadCatalog(opts DiscoverOptions) SkillCatalog {
 
 // Catalog は discover 結果を解析し、重複名を deterministic に解決した catalog を返す。
 func Catalog(discover DiscoverResult) SkillCatalog {
-	return catalogWithParser(discover, func(found DiscoveredSkill) (ParsedSkill, error) {
-		return ParseSKILL(found.SkillPath)
+	return catalogWithParser(discover, func(found DiscoveredSkill) (ParsedSkill, []Diagnostic, error) {
+		parsed, diagnostics, err := ParseSKILLWithDiagnostics(found.SkillPath)
+		return parsed, diagnostics, err
 	})
 }
 
 // CatalogWithContentCache は SKILL.md の内容キャッシュを優先利用して catalog を構築する。
 func CatalogWithContentCache(discover DiscoverResult, skillContents map[string][]byte) SkillCatalog {
-	return catalogWithParser(discover, func(found DiscoveredSkill) (ParsedSkill, error) {
+	return catalogWithParser(discover, func(found DiscoveredSkill) (ParsedSkill, []Diagnostic, error) {
 		skillPath := cleanAbsPathOrFallback(found.SkillPath)
 		if len(skillContents) > 0 {
 			if data, ok := skillContents[skillPath]; ok {
-				return parseSKILLContent(skillPath, data)
+				return parseSKILLContentWithDiagnostics(skillPath, data)
 			}
 		}
-		return ParseSKILL(skillPath)
+		return ParseSKILLWithDiagnostics(skillPath)
 	})
 }
 
@@ -46,7 +47,8 @@ func catalogWithParser(discover DiscoverResult, parser discoveredSkillParser) Sk
 
 	nameIndex := make(map[string]int)
 	for _, found := range discover.Skills {
-		parsed, err := parser(found)
+		parsed, diagnostics, err := parser(found)
+		catalog.Diagnostics = append(catalog.Diagnostics, diagnostics...)
 		if err != nil {
 			catalog.Diagnostics = append(catalog.Diagnostics, newDiagnostic(SeverityError, "parse_skill_failed", found.SkillPath, err.Error()))
 			continue

@@ -41,6 +41,7 @@ type ParsedSkill struct {
 	Directory   string
 	SkillPath   string
 	Source      Source
+	Routing     *RoutingMetadata
 	Scripts     []string
 	References  []string
 	Assets      []string
@@ -73,6 +74,7 @@ type ActivatedSkillPayload struct {
 type DiagnosticSeverity string
 
 const (
+	SeverityInfo    DiagnosticSeverity = "info"
 	SeverityWarning DiagnosticSeverity = "warning"
 	SeverityError   DiagnosticSeverity = "error"
 )

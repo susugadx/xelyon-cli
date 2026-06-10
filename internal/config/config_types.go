@@ -39,6 +39,7 @@ type Config struct {
 	ListDir                  ListDirConfig                  `yaml:"list_dir"`
 	ProjectMap               ProjectMapConfig               `yaml:"project_map"`
 	AgentInstructions        AgentInstructionsConfig        `yaml:"agent_instructions"`
+	Skills                   SkillsConfig                   `yaml:"skills"`
 
 	GitStage            GitStageConfig     `yaml:"git_stage"`
 	LSP                 LSPConfig          `yaml:"lsp"`
@@ -87,6 +88,29 @@ type ReviewWebSearchEvidenceConfig struct {
 	Enabled            bool `yaml:"enabled"`               // /review の外部 Web 検索 evidence を有効化（初期検索 + Pass1 後の追加検索。デフォルト: false）
 	MaxQueries         int  `yaml:"max_queries"`           // 初期検索 + Pass1 後追加検索の合計最大クエリ数
 	MaxResultsPerQuery int  `yaml:"max_results_per_query"` // 1 クエリあたりの最大検索結果数
+}
+
+// SkillsRouterActivation は Skill Router の runtime hint 方針。
+type SkillsRouterActivation string
+
+const (
+	// SkillsRouterActivationOff は runtime skill hint injection を無効化する。
+	SkillsRouterActivationOff SkillsRouterActivation = "off"
+	// SkillsRouterActivationHint は bounded skill recommendation hint を注入する。
+	SkillsRouterActivationHint SkillsRouterActivation = "hint"
+)
+
+// SkillsConfig は Agent Skills の runtime 補助設定。
+type SkillsConfig struct {
+	Router SkillsRouterConfig `yaml:"router"`
+}
+
+// SkillsRouterConfig は Skill Router の user-facing 設定。
+type SkillsRouterConfig struct {
+	Enabled            bool                   `yaml:"enabled"`              // runtime skill routing hint injection を有効化
+	Activation         SkillsRouterActivation `yaml:"activation"`           // off/hint。v1 は auto を受け付けない
+	UsageLedger        bool                   `yaml:"usage_ledger"`         // local-only routing usage ledger を保存
+	UsageRetentionDays int                    `yaml:"usage_retention_days"` // usage ledger retention days（1-365）
 }
 
 func (c *Config) providerModelSectionState() providerModelSectionState {

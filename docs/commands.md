@@ -546,18 +546,33 @@ global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対
 | []string | 項目追加/削除 | `execution.safe_shell_commands` |
 | map[string]struct | サブメニューで編集 | `provider_models`, `lsp.servers` |
 
-**主なカテゴリ:** Provider & Model, Execution Mode, Compression, Paste Mode, Project Map, Agent Instructions, LSP Servers, Output, Web Search, Sub-agent, MCP Servers, Final Checks など
+**主なカテゴリ:** Provider & Model, Execution Mode, Compression, Paste Mode, Project Map, Agent Instructions, Agent Skills, LSP Servers, Output, Web Search, Sub-agent, MCP Servers, Final Checks など
 
 **変更は即座に保存:** `~/.xelyon/config.yaml` に自動保存されます。
 
 ### `/skills`
 
-Agent Skills を選択・確認・診断します。TUI では `/skills` から skill 名を選ぶと、対応する skill 利用文を入力欄に貼り付けます。`/skills overview` は検出済み skill catalog の概要を会話ログに出力し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。`/skills doctor` は parse error や重複名などの診断を表示します。skill catalog は project `.agents/skills`、home `~/.agents/skills`、XELYON 内蔵 skills を読みます。互換性のため `/skills list` も overview の alias として受け付けます。
+Agent Skills を選択・確認・診断します。skill catalog は project `.agents/skills`、home `~/.agents/skills`、XELYON 内蔵 skills を読みます。Codex / Claude など他 runtime の system skills は読みません。
+
+`/skills overview` は検出済み skill catalog の概要を会話ログに出力し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。互換性のため `/skills list` も overview の alias として受け付けます。
+
+Skill Router は通常の依頼時に bounded hint を model へ渡します。v1 の既定は hint-only で、full `SKILL.md` body は自動読み込みしません。必要な場合だけ model が `activate_skill(name)` を呼びます。
+
+`agents/xelyon.yaml` がある skill は routing metadata として使われます。既存の `SKILL.md` frontmatter は `name` / `description` だけで valid のままです。plain `/skills doctor` は legacy skill に sidecar がないだけでは警告しません。routing metadata や sidecar completeness を見る場合は `/skills doctor --routing` を使います。
+
+`/skills suggest <text>` は debug / authoring 用に Skill Router の full ranked list を表示します。通常ユーザーが毎回使う導線ではありません。v1 は human-readable output のみで、`--json` schema は公開しません。
+
+`/skills usage` は local-only routing usage ledger の要約を表示します。ledger は raw prompt、raw response、diff、file content、secret を保存しません。保存先は `~/.xelyon/skills/router/usage/` 配下で、repo key は project root の hash です。`/skills usage clear` で current repo、`/skills usage clear --all` で全 skill router usage ledger を削除できます。v1 は human-readable output のみです。
 
 ```
 > /skills overview
 > /skills show imagegen
 > /skills doctor
+> /skills doctor --routing
+> /skills suggest "review provider runtime changes"
+> /skills usage
+> /skills usage clear
+> /skills usage clear --all
 ```
 
 ### `/init`

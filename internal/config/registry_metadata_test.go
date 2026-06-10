@@ -33,6 +33,10 @@ func TestFieldTypeMap(t *testing.T) {
 		"review.thinking.level":                                                            FieldTypeSelect,
 		"gemini.service_tier":                                                              FieldTypeSelect,
 		"sub_agent.max_concurrent":                                                         FieldTypeInt,
+		"skills.router.enabled":                                                            FieldTypeBool,
+		"skills.router.activation":                                                         FieldTypeSelect,
+		"skills.router.usage_ledger":                                                       FieldTypeBool,
+		"skills.router.usage_retention_days":                                               FieldTypeInt,
 	}
 
 	for path, expectedType := range requiredFields {
@@ -65,6 +69,7 @@ func TestSelectOptions(t *testing.T) {
 		{"review.thinking.mode", 3},
 		{"review.thinking.level", 5},
 		{"gemini.service_tier", 3},
+		{"skills.router.activation", 2},
 	}
 
 	for _, tt := range tests {
@@ -138,6 +143,10 @@ func TestFieldDescriptions(t *testing.T) {
 		"review.thinking.level",
 		"gemini.service_tier",
 		"sub_agent.default_model",
+		"skills.router.enabled",
+		"skills.router.activation",
+		"skills.router.usage_ledger",
+		"skills.router.usage_retention_days",
 	}
 
 	for _, path := range requiredFields {

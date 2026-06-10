@@ -13,6 +13,8 @@ func TestMatchPrefixMatchesNameAliasAndSubcommand(t *testing.T) {
 		{prefix: "/co", want: "/copy"},
 		{prefix: "/q", want: "/exit"},
 		{prefix: "/config m", want: "/config"},
+		{prefix: "/skills s", want: "/skills"},
+		{prefix: "/skills u", want: "/skills"},
 		{prefix: "/rev", want: "/review"},
 	}
 

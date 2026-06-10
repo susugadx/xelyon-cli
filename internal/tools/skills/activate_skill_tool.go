@@ -49,9 +49,10 @@ func (t *ActivateSkillTool) Run(execCtx tools.ExecutionContext, args map[string]
 }
 
 func activateSkillErrorMessage(catalog skillcatalog.SkillCatalog, err error) string {
-	available := strings.Join(skillcatalog.SkillNames(catalog), ", ")
+	available := strings.Join(sanitizedSkillNames(catalog), ", ")
+	errMessage := sanitizeSkillToolLine(err.Error(), "skill activation failed")
 	if available == "" {
 		return "Error: no skills are available"
 	}
-	return fmt.Sprintf("Error: %v. Available skills: %s", err, available)
+	return fmt.Sprintf("Error: %s. Available skills: %s", errMessage, available)
 }

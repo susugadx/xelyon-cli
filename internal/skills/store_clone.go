@@ -23,6 +23,14 @@ func cloneSkillCatalog(catalog SkillCatalog) SkillCatalog {
 
 func cloneParsedSkill(skill ParsedSkill) ParsedSkill {
 	cloned := skill
+	if skill.Routing != nil {
+		routing := *skill.Routing
+		routing.Intents = append([]string(nil), skill.Routing.Intents...)
+		routing.Modes = append([]string(nil), skill.Routing.Modes...)
+		routing.Triggers = append([]string(nil), skill.Routing.Triggers...)
+		routing.Conflicts = append([]string(nil), skill.Routing.Conflicts...)
+		cloned.Routing = &routing
+	}
 	for _, group := range skillResourceGroupOrder {
 		items := append([]string(nil), skillResourceItems(skill, group)...)
 		setSkillResourceItems(&cloned, group, items)

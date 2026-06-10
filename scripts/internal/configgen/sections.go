@@ -291,6 +291,30 @@ var Sections = map[string]SectionInfo{
 			"project.mode": {"off", "fallback", "always"},
 		},
 	},
+	"skills": {
+		StructName: "SkillsConfig",
+		Title:      "Agent Skills 設定",
+		Icon:       "🧭",
+		Comments: []string{
+			"Skill Router の runtime hint と local usage ledger を制御",
+			"v1 は hint-only。full SKILL.md の自動読み込みは行いません",
+		},
+		Fields: map[string]string{
+			"router.enabled":              "Skill Router の runtime hint injection を有効化",
+			"router.activation":           "runtime skill recommendation 方針（off / hint。v1 は auto 未対応）",
+			"router.usage_ledger":         "local-only routing usage ledger を保存",
+			"router.usage_retention_days": "usage ledger retention days（1-365。無効化は usage_ledger=false）",
+		},
+		FieldTypes: map[string]string{
+			"router.enabled":              "bool",
+			"router.activation":           "select",
+			"router.usage_ledger":         "bool",
+			"router.usage_retention_days": "int",
+		},
+		SelectOpts: map[string][]string{
+			"router.activation": config.SkillsRouterActivationValues(),
+		},
+	},
 	"lsp": {
 		StructName: "LSPConfig",
 		Title:      "LSP連携設定",
@@ -442,6 +466,7 @@ var sectionCatalog = []sectionCatalogEntry{
 	{Name: "paste", Category: "paste"},
 	{Name: "project_map", Category: "project_map"},
 	{Name: "agent_instructions", Category: "agent_instructions"},
+	{Name: "skills", Category: "skills"},
 	{Name: "lsp", Category: "lsp"},
 	{Name: "output", Category: "output"},
 	{Name: "web_search", Category: "web_search"},
@@ -471,6 +496,7 @@ var categoryCatalog = []categoryCatalogEntry{
 	{Name: "paste", Info: CategoryInfo{DisplayName: "Paste Mode", Icon: "📋"}},
 	{Name: "project_map", Info: CategoryInfo{DisplayName: "Project Map", Icon: "🗺️"}},
 	{Name: "agent_instructions", Info: CategoryInfo{DisplayName: "Agent Instructions", Icon: "📚"}},
+	{Name: "skills", Info: CategoryInfo{DisplayName: "Agent Skills", Icon: "🧭"}},
 	{Name: "lsp", Info: CategoryInfo{DisplayName: "LSP Servers", Icon: "🔧"}},
 	{Name: "output", Info: CategoryInfo{DisplayName: "Output", Icon: "📤"}},
 	{Name: "web_search", Info: CategoryInfo{DisplayName: "Web Search", Icon: "🔍"}},

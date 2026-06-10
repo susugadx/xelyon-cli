@@ -193,8 +193,8 @@ func TestSlashSuggestions_SkillsPromptCandidatesAppearBeforeSubcommands(t *testi
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills ")
 
-	if got := len(m.slashSuggestions.suggestions); got != 5 {
-		t.Fatalf("skills suggestions len = %d, want 5", got)
+	if got := len(m.slashSuggestions.suggestions); got != 7 {
+		t.Fatalf("skills suggestions len = %d, want 7", got)
 	}
 	if got := []string{
 		m.slashSuggestions.suggestions[0].Label,
@@ -206,8 +206,10 @@ func TestSlashSuggestions_SkillsPromptCandidatesAppearBeforeSubcommands(t *testi
 		m.slashSuggestions.suggestions[2].Label,
 		m.slashSuggestions.suggestions[3].Label,
 		m.slashSuggestions.suggestions[4].Label,
-	}; strings.Join(got, ",") != "overview,show <name>,doctor" {
-		t.Fatalf("subcommand labels = %#v, want overview/show/doctor after skills", got)
+		m.slashSuggestions.suggestions[5].Label,
+		m.slashSuggestions.suggestions[6].Label,
+	}; strings.Join(got, ",") != "overview,show <name>,suggest <text>,usage,doctor" {
+		t.Fatalf("subcommand labels = %#v, want overview/show/suggest/usage/doctor after skills", got)
 	}
 	suggestion := m.slashSuggestions.suggestions[0]
 	if suggestion.Label != "bug-investigation" || suggestion.InsertText != "Use the bug-investigation skill. " {

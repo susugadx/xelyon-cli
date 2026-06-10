@@ -49,6 +49,7 @@ func ValidateConfig(cfg *Config) ValidationResult {
 	appendValidationIssues(&result, validateBashSafetyLevelIssues(cfg))
 	appendValidationIssues(&result, validateAgentInstructionIssues(cfg))
 	appendValidationIssues(&result, validateGeminiIssues(cfg))
+	appendValidationIssues(&result, validateSkillsIssues(cfg))
 
 	return result
 }
@@ -180,6 +181,12 @@ var configAutoFixers = map[string]configAutoFixer{
 	}),
 	"agent_instructions.max_total_bytes": intAutoFixer(func(cfg *Config, v int) {
 		cfg.AgentInstructions.MaxTotalBytes = v
+	}),
+	"skills.router.activation": stringAutoFixer(func(cfg *Config, v string) {
+		cfg.Skills.Router.Activation = SkillsRouterActivation(v)
+	}),
+	"skills.router.usage_retention_days": intAutoFixer(func(cfg *Config, v int) {
+		cfg.Skills.Router.UsageRetentionDays = v
 	}),
 }
 

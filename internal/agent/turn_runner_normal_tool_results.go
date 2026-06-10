@@ -32,6 +32,7 @@ func (h *normalModeToolResultHandler) Handle(tc *tools.ToolCall, execResult tool
 	a := h.runner.agent
 	result := execResult.Result
 	a.appendSessionToolExecution(tc, result, execResult.Error)
+	a.recordSkillActivationFromToolResult(tc, result, execResult.Error)
 
 	if a.handleStrReplaceErrors(tc, result) {
 		return
