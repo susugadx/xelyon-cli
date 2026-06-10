@@ -20,6 +20,7 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 | `ollama` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OLLAMA_BASE_URL` is a base URL; concrete `/api/chat` or `/api/tags` endpoints fail | local zero-cost token usage when returned |
 | `openrouter` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OPENROUTER_API_URL` is Chat Completions / proxy; Anthropic Skin `/v1/messages` is derived | selected route token usage and cost when returned |
 | `openai` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OPENAI_API_URL` is Chat Completions; `OPENAI_RESPONSES_URL` is Responses | response ID, token usage, cost, and retention chain metadata when returned |
+| `openai-subscription` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke`, `--cache-smoke`, `--compact-smoke`, `--thinking-smoke` | `--capabilities`, `--require-capability` | `--print-request` | ChatGPT/Codex OAuth subscription endpoint; full-payload Responses-shaped runtime only | streaming usage when returned; cost is N/A (ChatGPT subscription) |
 | `azure` | `--deployment`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability`, `--print-config` | `--print-request` | `AZURE_OPENAI_BASE_URL` is a resource v1 base URL; smoke uses `<normalized_base_url>/responses` | response ID, token usage, cost, and retention chain metadata when returned |
 | `bedrock` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke` | `--capabilities`, `--require-capability` | `--print-request` | AWS region / credentials select Bedrock runtime route; request preview is credential-independent | AWS request ID, token usage, and cost when returned; partial usage makes total cost unavailable |
 
@@ -210,6 +211,30 @@ xelyon doctor openai --json
 ```
 
 手元で doctor 経路だけを実 OpenAI 環境で確認する場合は、`OPENAI_API_KEY` を設定して `make openai-doctor-smoke` を実行します。既定では `gpt-5.4` で text / tool / retention smoke をまとめて実行し、必要なら `OPENAI_DOCTOR_SMOKE_MODEL` で変更できます。
+
+### `xelyon doctor openai-subscription`
+
+OpenAI Subscription provider の local auth、endpoint、originator、provider 登録、model / `catalog_model` 解決、billing / cost、v2 full-payload runtime policy を確認します。default doctor は local-only で、token refresh や live request は行いません。`--capabilities` は Responses streaming / function calling / thinking / unsupported chain capability を live request なしで表示し、`--require-capability` は shared capability 名を local gate として評価します。
+
+この provider は ChatGPT/Codex OAuth を使う experimental provider で、OpenAI Platform API key provider ではありません。`OPENAI_API_KEY`、OpenCode auth cache、Codex auth cache は使いません。runtime は `store=false` / full payload / `prompt_cache_key` / streaming / tool loop / subscription Compact API で動作し、`previous_response_id` と `context_management` は expected unsupported / disabled として表示します。cost は `N/A (ChatGPT subscription)` です。
+
+```bash
+xelyon doctor openai-subscription
+xelyon doctor openai-subscription --model gpt-5.4-mini
+xelyon doctor openai-subscription --capabilities
+xelyon doctor openai-subscription --require-capability responses_streaming --require-capability function_calling
+xelyon doctor openai-subscription --print-request
+xelyon doctor openai-subscription --tool-smoke --print-request
+xelyon doctor openai-subscription --smoke
+xelyon doctor openai-subscription --cache-smoke
+xelyon doctor openai-subscription --compact-smoke
+xelyon doctor openai-subscription --thinking-smoke
+xelyon doctor openai-subscription --retention-smoke
+xelyon doctor openai-subscription --tool-smoke
+xelyon doctor openai-subscription --json
+```
+
+`--smoke` / `--tool-smoke` / `--cache-smoke` / `--thinking-smoke` は live subscription request を送ります。`--compact-smoke` は既定で live verified された subscription Compact endpoint（`https://chatgpt.com/backend-api/codex/responses/compact`）を検証します。`XELYON_OPENAI_SUBSCRIPTION_COMPACT_ENDPOINT` で検証先を差し替えられ、空文字に明示設定した場合は WARN skip し、runtime の `/compress --compact` も unsupported 扱いになります。`openai_subscription` の `/compress --compact` と `compression.prefer_compact_api` はこの subscription Compact endpoint を使い、OpenAI Platform Compact API や `OPENAI_API_KEY` には fallback しません。unsupported は basic provider failure ではなく WARN です。`--retention-smoke` は v2 runtime が chain を使わず full payload fallback を維持していることを確認します。`--print-request` は live request を送らず、Authorization、account ID、token-like strings、raw prompt body を出さない structural preview を表示します。
 
 ### `xelyon doctor azure`
 

@@ -3,11 +3,14 @@ package agent
 import (
 	"bytes"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaisubscription "github.com/susugadx/xelyon-cli/internal/api/providers/openai_subscription"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -267,6 +270,7 @@ func TestProviderCandidates_DisplayOrderCurrentAndCredentialStatus(t *testing.T)
 	t.Setenv("MOONSHOT_API_KEY", "")
 	t.Setenv("AZURE_OPENAI_API_KEY", "")
 	t.Setenv("AZURE_OPENAI_BASE_URL", "")
+	t.Setenv("XELYON_OPENAI_SUBSCRIPTION_AUTH_DIR", filepath.Join(t.TempDir(), "auth"))
 
 	agent := &Agent{
 		ProviderName:      "openai",
@@ -279,7 +283,7 @@ func TestProviderCandidates_DisplayOrderCurrentAndCredentialStatus(t *testing.T)
 	if len(got) < 4 {
 		t.Fatalf("ProviderCandidates len = %d, want provider list", len(got))
 	}
-	wantPrefix := []string{"deepseek", "kimi", "claude", "openai", "azure", "gemini"}
+	wantPrefix := []string{"deepseek", "kimi", "claude", "openai", "openai_subscription", "azure", "gemini"}
 	for i, want := range wantPrefix {
 		if got[i].Key != want {
 			t.Fatalf("ProviderCandidates[%d].Key = %q, want %q; all=%#v", i, got[i].Key, want, got)
@@ -296,6 +300,9 @@ func TestProviderCandidates_DisplayOrderCurrentAndCredentialStatus(t *testing.T)
 	if byKey["openai"].CredentialStatus != ProviderCredentialConfigured {
 		t.Fatalf("openai status = %q, want configured", byKey["openai"].CredentialStatus)
 	}
+	if byKey["openai_subscription"].CredentialStatus != ProviderCredentialLoginRequired {
+		t.Fatalf("openai_subscription status = %q, want login required", byKey["openai_subscription"].CredentialStatus)
+	}
 	if byKey["azure"].CredentialStatus != ProviderCredentialMissingKey {
 		t.Fatalf("azure status = %q, want missing key", byKey["azure"].CredentialStatus)
 	}
@@ -305,6 +312,29 @@ func TestProviderCandidates_DisplayOrderCurrentAndCredentialStatus(t *testing.T)
 	if byKey["bedrock"].CredentialStatus != ProviderCredentialAWSAuth {
 		t.Fatalf("bedrock status = %q, want aws auth", byKey["bedrock"].CredentialStatus)
 	}
+}
+
+func TestProviderCandidates_OpenAISubscriptionLoggedInStatus(t *testing.T) {
+	t.Setenv("XELYON_OPENAI_SUBSCRIPTION_AUTH_DIR", filepath.Join(t.TempDir(), "auth"))
+	if err := openaisubscription.SaveSubscriptionCredential(openaisubscription.DefaultSubscriptionAuthConfig(), openaisubscription.SubscriptionCredential{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+		AccountID:    "acct_1234abcd",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+	agent := &Agent{Runtime: NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())}
+	got := agent.ProviderCandidates()
+	for _, candidate := range got {
+		if candidate.Key == "openai_subscription" {
+			if candidate.CredentialStatus != ProviderCredentialLoggedIn {
+				t.Fatalf("openai_subscription status = %q, want logged in", candidate.CredentialStatus)
+			}
+			return
+		}
+	}
+	t.Fatalf("openai_subscription candidate missing: %#v", got)
 }
 
 func TestProviderCandidates_AppendsCurrentAliasOwner(t *testing.T) {
@@ -361,6 +391,31 @@ func TestModelCandidates_KnownDefaultCurrentCustomStableDedupe(t *testing.T) {
 	}
 	if c := candidateByName(got, "gpt-custom-default"); !c.Default {
 		t.Fatalf("gpt-custom-default candidate = %#v, want default", c)
+	}
+	last := got[len(got)-1]
+	if !last.Custom || last.Name != "Custom model..." {
+		t.Fatalf("last candidate = %#v, want custom model row", last)
+	}
+}
+
+func TestModelCandidates_OpenAISubscriptionAllowlist(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai_subscription"
+	agent := &Agent{
+		ProviderName:      "openai_subscription",
+		ProviderConfigKey: "openai_subscription",
+		CurrentModel:      "gpt-5.4-mini",
+		Runtime:           NewAgentRuntimeWithConfig(cfg),
+	}
+
+	got := agent.ModelCandidates("chatgpt")
+	names := modelCandidateNames(got)
+	wantPrefix := []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"}
+	if len(names) < len(wantPrefix) || !reflect.DeepEqual(names[:len(wantPrefix)], wantPrefix) {
+		t.Fatalf("subscription model prefix = %v, want %v; all=%v", names[:min(len(names), len(wantPrefix))], wantPrefix, names)
+	}
+	if c := candidateByName(got, "gpt-5.4-mini"); !c.Current {
+		t.Fatalf("gpt-5.4-mini candidate = %#v, want current", c)
 	}
 	last := got[len(got)-1]
 	if !last.Custom || last.Name != "Custom model..." {

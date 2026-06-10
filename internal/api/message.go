@@ -15,6 +15,7 @@ type Message struct {
 type messageProviderState struct {
 	anthropicContentBlocks  []AnthropicContentBlock
 	anthropicThinkingBlocks []AnthropicThinkingBlock
+	openAIResponsesItems    []InputItem
 }
 
 // AnthropicThinkingBlock は Claude extended thinking の再送が必要なブロックを表す。
@@ -69,6 +70,68 @@ func (m *Message) SetAnthropicThinkingBlocks(blocks []AnthropicThinkingBlock) {
 	m.providerState.anthropicThinkingBlocks = make([]AnthropicThinkingBlock, len(blocks))
 	copy(m.providerState.anthropicThinkingBlocks, blocks)
 	m.providerState.anthropicContentBlocks = nil
+}
+
+// OpenAIResponsesInputItems は Responses full-payload replay 用の provider-facing items を返す。
+func (m Message) OpenAIResponsesInputItems() []InputItem {
+	return CloneInputItems(m.providerState.openAIResponsesItems)
+}
+
+// SetOpenAIResponsesInputItems は Responses full-payload replay 用の provider-facing items を設定する。
+func (m *Message) SetOpenAIResponsesInputItems(items []InputItem) {
+	m.providerState.openAIResponsesItems = CloneInputItems(items)
+}
+
+// ReplaceOpenAIResponsesFunctionCallArguments は replay metadata 内の function_call arguments を同期する。
+func (m *Message) ReplaceOpenAIResponsesFunctionCallArguments(callID, name, arguments string) bool {
+	items := m.OpenAIResponsesInputItems()
+	if len(items) == 0 {
+		return true
+	}
+
+	hasFunctionCall := false
+	updated := false
+	for i := range items {
+		if items[i].Type != "function_call" {
+			continue
+		}
+		hasFunctionCall = true
+		if items[i].CallID != callID {
+			continue
+		}
+		if items[i].Name != "" && items[i].Name != name {
+			return false
+		}
+		items[i].Name = name
+		items[i].Arguments = arguments
+		updated = true
+	}
+	if hasFunctionCall && !updated {
+		return false
+	}
+	m.SetOpenAIResponsesInputItems(items)
+	return true
+}
+
+// ReplaceOpenAIResponsesFunctionCallOutput は replay metadata 内の function_call_output を同期する。
+func (m *Message) ReplaceOpenAIResponsesFunctionCallOutput(callID, output string) {
+	items := m.OpenAIResponsesInputItems()
+	if len(items) == 0 {
+		return
+	}
+
+	updated := false
+	for i := range items {
+		if items[i].Type != "function_call_output" || items[i].CallID != callID {
+			continue
+		}
+		items[i].Output = output
+		items[i] = NormalizeInputItemOutput(items[i])
+		updated = true
+	}
+	if updated {
+		m.SetOpenAIResponsesInputItems(items)
+	}
 }
 
 // AnthropicThinkingBlocksFromContentBlocks は ordered content blocks から thinking 系 block だけを抽出する。
@@ -221,6 +284,17 @@ func GetAnthropicContentBlocks(provider Provider) []AnthropicContentBlock {
 			}
 		}
 		return out
+	}
+	return nil
+}
+
+// GetOpenAIResponsesInputItems は provider から最後の Responses replay items を取得する。
+func GetOpenAIResponsesInputItems(provider Provider) []InputItem {
+	if provider == nil {
+		return nil
+	}
+	if rp, ok := provider.(OpenAIResponsesReplayProvider); ok {
+		return CloneInputItems(rp.LastOpenAIResponsesInputItems())
 	}
 	return nil
 }

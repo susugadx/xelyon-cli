@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaisubscription "github.com/susugadx/xelyon-cli/internal/api/providers/openai_subscription"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
@@ -14,10 +15,12 @@ type ProviderCredentialStatus = providerpicker.ProviderCredentialStatus
 type ModelCandidate = providerpicker.ModelCandidate
 
 const (
-	ProviderCredentialConfigured = providerpicker.ProviderCredentialConfigured
-	ProviderCredentialMissingKey = providerpicker.ProviderCredentialMissingKey
-	ProviderCredentialLocal      = providerpicker.ProviderCredentialLocal
-	ProviderCredentialAWSAuth    = providerpicker.ProviderCredentialAWSAuth
+	ProviderCredentialConfigured    = providerpicker.ProviderCredentialConfigured
+	ProviderCredentialLoggedIn      = providerpicker.ProviderCredentialLoggedIn
+	ProviderCredentialMissingKey    = providerpicker.ProviderCredentialMissingKey
+	ProviderCredentialLoginRequired = providerpicker.ProviderCredentialLoginRequired
+	ProviderCredentialLocal         = providerpicker.ProviderCredentialLocal
+	ProviderCredentialAWSAuth       = providerpicker.ProviderCredentialAWSAuth
 )
 
 var listOllamaModelsForCandidates = func(agent *Agent, provider string) ([]string, error) {
@@ -95,6 +98,12 @@ func currentProviderConfigKeyCandidate(state ProviderModelState, displayKeys []s
 
 func providerCredentialStatus(provider string) ProviderCredentialStatus {
 	switch config.CanonicalProviderName(provider) {
+	case "openai_subscription":
+		status := openaisubscription.ReadSubscriptionAuthStatus(openaisubscription.DefaultSubscriptionAuthConfig())
+		if status.State == openaisubscription.SubscriptionAuthStateLoggedIn {
+			return ProviderCredentialLoggedIn
+		}
+		return ProviderCredentialLoginRequired
 	case "ollama":
 		return ProviderCredentialLocal
 	case "bedrock":

@@ -1,4 +1,4 @@
-package openai
+package openairesponses
 
 import (
 	"encoding/json"
@@ -18,10 +18,10 @@ func parseResponsesSSEDataLine(line string) (data string, done bool, handled boo
 	return data, false, true
 }
 
-func decodeResponsesStreamChunk(data string) (ResponsesStreamChunk, error) {
-	var chunk ResponsesStreamChunk
+func decodeStreamChunk(data string) (StreamChunk, error) {
+	var chunk StreamChunk
 	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-		return ResponsesStreamChunk{}, err
+		return StreamChunk{}, err
 	}
 	return chunk, nil
 }

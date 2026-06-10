@@ -119,20 +119,31 @@ type Error struct {
 
 // StreamChunk は Responses API のストリーミングチャンクを表す。
 type StreamChunk struct {
-	Type     string            `json:"type"`
-	Delta    string            `json:"delta,omitempty"`
-	Response *ResponseMetadata `json:"response,omitempty"`
-	Item     *Item             `json:"item,omitempty"`
-	Usage    *Usage            `json:"usage,omitempty"`
-	Error    *Error            `json:"error,omitempty"`
+	Type        string            `json:"type"`
+	Delta       string            `json:"delta,omitempty"`
+	ItemID      string            `json:"item_id,omitempty"`
+	OutputIndex *int              `json:"output_index,omitempty"`
+	CallID      string            `json:"call_id,omitempty"`
+	Name        string            `json:"name,omitempty"`
+	Arguments   string            `json:"arguments,omitempty"`
+	Response    *ResponseMetadata `json:"response,omitempty"`
+	Item        *Item             `json:"item,omitempty"`
+	Usage       *Usage            `json:"usage,omitempty"`
+	Error       *Error            `json:"error,omitempty"`
 }
 
 // Item は Responses API の output item を表す。
 type Item struct {
-	Type      string `json:"type,omitempty"`
-	Name      string `json:"name,omitempty"`
-	CallID    string `json:"call_id,omitempty"`
-	Arguments string `json:"arguments,omitempty"`
+	Type             string           `json:"type,omitempty"`
+	ID               string           `json:"id,omitempty"`
+	Status           string           `json:"status,omitempty"`
+	Name             string           `json:"name,omitempty"`
+	CallID           string           `json:"call_id,omitempty"`
+	Arguments        string           `json:"arguments,omitempty"`
+	Output           string           `json:"output,omitempty"`
+	Content          interface{}      `json:"content,omitempty"`
+	Summary          []map[string]any `json:"summary,omitempty"`
+	EncryptedContent string           `json:"encrypted_content,omitempty"`
 }
 
 // Result は Responses API の抽出済み結果を表す。

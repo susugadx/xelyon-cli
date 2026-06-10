@@ -22,6 +22,9 @@ func (s *Session) ToAPIMessages() []api.Message {
 			ToolName:         m.ToolName,
 		}
 		if m.ProviderMetadata != nil {
+			if len(m.ProviderMetadata.OpenAIResponsesItems) > 0 {
+				msg.SetOpenAIResponsesInputItems(m.ProviderMetadata.OpenAIResponsesItems)
+			}
 			if len(m.ProviderMetadata.AnthropicContentBlocks) > 0 {
 				msg.SetAnthropicContentBlocks(m.ProviderMetadata.AnthropicContentBlocks)
 			} else {
@@ -34,19 +37,22 @@ func (s *Session) ToAPIMessages() []api.Message {
 }
 
 func providerMetadataFromAPIMessage(msg api.Message) *MessageProviderMetadata {
+	openAIResponsesItems := msg.OpenAIResponsesInputItems()
 	contentBlocks := msg.AnthropicContentBlocks()
 	if len(contentBlocks) > 0 {
 		return &MessageProviderMetadata{
 			AnthropicContentBlocks: contentBlocks,
+			OpenAIResponsesItems:   openAIResponsesItems,
 		}
 	}
 
 	thinkingBlocks := msg.AnthropicThinkingBlocks()
-	if len(thinkingBlocks) == 0 {
+	if len(thinkingBlocks) == 0 && len(openAIResponsesItems) == 0 {
 		return nil
 	}
 	return &MessageProviderMetadata{
 		AnthropicThinkingBlocks: thinkingBlocks,
+		OpenAIResponsesItems:    openAIResponsesItems,
 	}
 }
 

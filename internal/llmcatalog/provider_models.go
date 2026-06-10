@@ -35,6 +35,12 @@ var knownProviderModels = map[string][]string{
 		"o3-mini",
 		"o1",
 	},
+	"openai_subscription": {
+		"gpt-5.5",
+		"gpt-5.4",
+		"gpt-5.4-mini",
+		"gpt-5.3-codex-spark",
+	},
 	"gemini": {
 		"gemini-3.5-flash",
 		"gemini-3.1-flash-lite",

@@ -31,6 +31,11 @@ func GenerateExampleFile(cfg *config.Config) ([]byte, error) {
 		return nil, err
 	}
 
+	data, err = applyExampleExplicitProviderModelFields(data)
+	if err != nil {
+		return nil, err
+	}
+
 	output := AddComments(string(data))
 	return []byte(configExampleFileHeader + output), nil
 }
@@ -50,6 +55,51 @@ func FilterInternalFields(data []byte) ([]byte, error) {
 	}
 
 	return yaml.Marshal(&raw)
+}
+
+func applyExampleExplicitProviderModelFields(data []byte) ([]byte, error) {
+	var raw yaml.Node
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	if raw.Kind != yaml.DocumentNode || len(raw.Content) == 0 {
+		return data, nil
+	}
+	providerModels := findMappingValue(raw.Content[0], "provider_models")
+	openAISubscription := findMappingValue(providerModels, "openai_subscription")
+	if openAISubscription == nil || openAISubscription.Kind != yaml.MappingNode {
+		return yaml.Marshal(&raw)
+	}
+	setMappingScalar(openAISubscription, "max_output_tokens", "0")
+	return yaml.Marshal(&raw)
+}
+
+func findMappingValue(mapping *yaml.Node, key string) *yaml.Node {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func setMappingScalar(mapping *yaml.Node, key, value string) {
+	if mapping == nil || mapping.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: value}
+			return
+		}
+	}
+	mapping.Content = append(mapping.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: value},
+	)
 }
 
 // AddComments injects section and field comments into the example YAML.

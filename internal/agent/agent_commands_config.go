@@ -424,6 +424,10 @@ func providerCredentialStatusDisplay(status ProviderCredentialStatus) string {
 	switch status {
 	case ProviderCredentialConfigured:
 		return "(credential configured)"
+	case ProviderCredentialLoggedIn:
+		return "(logged in)"
+	case ProviderCredentialLoginRequired:
+		return "(login required)"
 	case ProviderCredentialLocal:
 		return "(local)"
 	case ProviderCredentialAWSAuth:

@@ -191,6 +191,14 @@ func doctorProviderContractMatrixEntries() []doctorProviderContractMatrixEntry {
 			capabilityContractRow: "| OpenAI | route | route+catalog | route | config | model | model+route | route+config | route+config | route+config | route+config | no |",
 		},
 		{
+			provider:              "openai-subscription",
+			newCommand:            newOpenAISubscriptionDoctorCommand,
+			requiredFlags:         withCommonModel("tool-smoke", "retention-smoke", "cache-smoke", "compact-smoke", "thinking-smoke", "capabilities", "require-capability"),
+			forbiddenFlags:        []string{"deployment", "image-smoke", "web-search-smoke", "print-config"},
+			docsRow:               "| `openai-subscription` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke`, `--cache-smoke`, `--compact-smoke`, `--thinking-smoke` | `--capabilities`, `--require-capability` | `--print-request` | ChatGPT/Codex OAuth subscription endpoint; full-payload Responses-shaped runtime only | streaming usage when returned; cost is N/A (ChatGPT subscription) |",
+			capabilityContractRow: "| OpenAI Subscription | yes | yes | no | yes | no | no | config | no | no | no | no |",
+		},
+		{
 			provider:              "azure",
 			newCommand:            newAzureDoctorCommand,
 			requiredFlags:         []string{"deployment", "catalog-model", "json", "print-request", "smoke", "tool-smoke", "retention-smoke", "capabilities", "require-capability", "timeout", "print-config"},

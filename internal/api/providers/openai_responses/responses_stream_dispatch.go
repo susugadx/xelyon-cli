@@ -1,4 +1,4 @@
-package openai
+package openairesponses
 
 type responsesChunkActionResult struct {
 	textDelta string
@@ -6,40 +6,46 @@ type responsesChunkActionResult struct {
 	err       error
 }
 
-type responsesChunkAction func(*responsesStreamState, ResponsesStreamChunk) responsesChunkActionResult
+type responsesChunkAction func(*responsesStreamState, StreamChunk) responsesChunkActionResult
 
-func responsesErrorAction(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+func responsesErrorAction(s *responsesStreamState, chunk StreamChunk) responsesChunkActionResult {
 	done, err := s.handleErrorEvent(chunk)
 	return responsesChunkActionResult{done: done, err: err}
 }
 
-func responsesCompletionAction(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+func responsesCompletionAction(s *responsesStreamState, chunk StreamChunk) responsesChunkActionResult {
 	s.handleCompletionEvent(chunk)
 	return responsesChunkActionResult{done: true}
 }
 
-func responsesFunctionCallAddedAction(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+func responsesFunctionCallAddedAction(s *responsesStreamState, chunk StreamChunk) responsesChunkActionResult {
 	s.showFunctionCallSpinner(chunk.Item)
-	s.handleFunctionCallAdded(chunk.Item)
+	s.handleOutputItemAdded(chunk)
 	return responsesChunkActionResult{}
 }
 
-func responsesFunctionCallArgumentsDeltaAction(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+func responsesOutputItemDoneAction(s *responsesStreamState, chunk StreamChunk) responsesChunkActionResult {
+	s.handleOutputItemDone(chunk)
+	return responsesChunkActionResult{}
+}
+
+func responsesFunctionCallArgumentsDeltaAction(s *responsesStreamState, chunk StreamChunk) responsesChunkActionResult {
 	s.handleFunctionCallArgumentsDelta(chunk)
 	return responsesChunkActionResult{}
 }
 
-func responsesFunctionCallArgumentsDoneAction(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+func responsesFunctionCallArgumentsDoneAction(s *responsesStreamState, chunk StreamChunk) responsesChunkActionResult {
 	s.handleFunctionCallArgumentsDone(chunk)
 	return responsesChunkActionResult{}
 }
 
-func responsesCreatedAction(s *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+func responsesCreatedAction(s *responsesStreamState, chunk StreamChunk) responsesChunkActionResult {
 	s.captureResponseID(chunk)
 	return responsesChunkActionResult{}
 }
 
-func responsesTextDeltaAction(_ *responsesStreamState, chunk ResponsesStreamChunk) responsesChunkActionResult {
+func responsesTextDeltaAction(s *responsesStreamState, chunk StreamChunk) responsesChunkActionResult {
+	s.handleTextDelta(chunk)
 	return responsesChunkActionResult{textDelta: chunk.Delta}
 }
 
@@ -48,6 +54,7 @@ var responsesChunkActionTable = map[string]responsesChunkAction{
 	"error":                                  responsesErrorAction,
 	"response.failed":                        responsesErrorAction,
 	"response.output_item.added":             responsesFunctionCallAddedAction,
+	"response.output_item.done":              responsesOutputItemDoneAction,
 	"response.function_call_arguments.delta": responsesFunctionCallArgumentsDeltaAction,
 	"response.function_call_arguments.done":  responsesFunctionCallArgumentsDoneAction,
 	"response.output_text.delta":             responsesTextDeltaAction,

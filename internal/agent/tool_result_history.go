@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -19,6 +20,13 @@ func (a *Agent) appendToolResultToHistoryWithContent(toolCall *tools.ToolCall, f
 
 	decision := toolResultRetentionDecisionFor(toolCall)
 	msg := toolruntime.BuildToolResultMessage(toolCall, functionContent, textContent)
+	if toolCall.ID != "" {
+		msg.SetOpenAIResponsesInputItems([]api.InputItem{{
+			Type:   "function_call_output",
+			CallID: toolCall.ID,
+			Output: functionContent,
+		}})
+	}
 	if decision.KeepHistory {
 		a.History = append(a.History, msg)
 	}

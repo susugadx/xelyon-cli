@@ -1,12 +1,12 @@
-package openai
+package openairesponses
 
-func (s *responsesStreamState) handleCompletionEvent(chunk ResponsesStreamChunk) {
+func (s *responsesStreamState) handleCompletionEvent(chunk StreamChunk) {
 	s.captureUsage(chunk)
 	s.appendFunctionCallsToOutput()
 }
 
-func (s *responsesStreamState) captureUsage(chunk ResponsesStreamChunk) {
-	var usage *ResponsesUsage
+func (s *responsesStreamState) captureUsage(chunk StreamChunk) {
+	var usage *Usage
 	if chunk.Response != nil && chunk.Response.Usage != nil {
 		usage = chunk.Response.Usage
 	} else if chunk.Usage != nil {

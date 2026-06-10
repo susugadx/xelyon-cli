@@ -21,6 +21,9 @@ var pricingResolvers = map[string]pricingResolver{
 	"openai": func(req pricingRequest) PricingInfo {
 		return getOpenAIPricing(req.Model, req.PromptTokenCount)
 	},
+	"openai_subscription": func(pricingRequest) PricingInfo {
+		return pricingUnavailableInfo()
+	},
 	"claude": func(req pricingRequest) PricingInfo {
 		return getClaudePricing(req.Model, req.PromptTokenCount)
 	},

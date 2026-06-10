@@ -47,6 +47,9 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	if got := ProviderCredentialEnvVars("ollama"); len(got) != 0 {
 		t.Fatalf("ProviderCredentialEnvVars(ollama) = %v, want empty", got)
 	}
+	if got := ProviderCredentialEnvVars("openai_subscription"); len(got) != 0 {
+		t.Fatalf("ProviderCredentialEnvVars(openai_subscription) = %v, want empty", got)
+	}
 	if got := ProviderAPIKeyEnv("kimi"); got != "MOONSHOT_API_KEY" {
 		t.Fatalf("ProviderAPIKeyEnv(kimi) = %q, want MOONSHOT_API_KEY", got)
 	}
@@ -90,6 +93,10 @@ func TestProviderCredentialEnvVarsAndAvailability(t *testing.T) {
 	if !ProviderHasAvailableCredential("ollama") {
 		t.Fatal("ProviderHasAvailableCredential(ollama) = false, want true with default base URL")
 	}
+	t.Setenv("OPENAI_API_KEY", "")
+	if !ProviderHasAvailableCredential("openai_subscription") {
+		t.Fatal("ProviderHasAvailableCredential(openai_subscription) = false, want true because OAuth login is checked by subscription auth boundary")
+	}
 }
 
 func TestProviderSupportsResponsesAPI(t *testing.T) {
@@ -98,6 +105,9 @@ func TestProviderSupportsResponsesAPI(t *testing.T) {
 	}
 	if !ProviderSupportsResponsesAPI("azure") {
 		t.Fatal("ProviderSupportsResponsesAPI(azure) = false, want true")
+	}
+	if !ProviderSupportsResponsesAPI("openai-subscription") {
+		t.Fatal("ProviderSupportsResponsesAPI(openai-subscription) = false, want true")
 	}
 	if ProviderSupportsResponsesAPI("groq") {
 		t.Fatal("ProviderSupportsResponsesAPI(groq) = true, want false")

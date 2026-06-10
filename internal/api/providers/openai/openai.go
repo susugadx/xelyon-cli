@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -27,6 +28,7 @@ type Provider struct {
 	usageCallback                  api.UsageCallback    // トークン使用量コールバック
 	toolChoice                     *string              // tool_choice 強制用
 	responsesRequestObserver       func(ResponsesRequest)
+	lastResponsesInputItems        []api.InputItem
 }
 
 // New は新しいProviderを作成
@@ -48,18 +50,7 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // LevelToReasoningEffort は Thinking Level を OpenAI reasoning_effort に変換
 func LevelToReasoningEffort(level string) string {
-	switch level {
-	case "low":
-		return "low"
-	case "medium":
-		return "medium"
-	case "high":
-		return "high"
-	case "xhigh":
-		return "xhigh"
-	default:
-		return "medium"
-	}
+	return openairesponses.ReasoningEffortFromThinkingLevel(level)
 }
 
 // ChatWithTools は Provider interface の実装（context対応）
@@ -76,6 +67,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 	if isResponses {
 		return p.chatWithResponses(ctx, systemPrompt, history, model)
 	}
+	p.clearLastOpenAIResponsesInputItems()
 	return p.chatWithCompletions(ctx, systemPrompt, history, model)
 }
 
@@ -103,6 +95,7 @@ func (p *Provider) ClearResponseID() {
 func (p *Provider) ClearCache() {
 	p.ClearResponseID()
 	p.responsesLocalAutoCompressSkip = false
+	p.clearLastOpenAIResponsesInputItems()
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Function Calling用）
@@ -142,6 +135,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 		return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
 	}
 
+	p.clearLastOpenAIResponsesInputItems()
 	return p.chatWithImageCompletions(ctx, systemPrompt, history, userMessage, image, model)
 }
 
@@ -149,4 +143,26 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 // 直近の Responses request 判定に基づき local auto-compress を抑止するか返す。
 func (p *Provider) ShouldSkipLocalAutoCompressionForServerCompaction() bool {
 	return p.responsesLocalAutoCompressSkip
+}
+
+// LastOpenAIResponsesInputItems は最後の Responses 応答から得た replay items を返す。
+func (p *Provider) LastOpenAIResponsesInputItems() []api.InputItem {
+	if p == nil {
+		return nil
+	}
+	return api.CloneInputItems(p.lastResponsesInputItems)
+}
+
+func (p *Provider) setLastOpenAIResponsesInputItems(items []api.InputItem) {
+	if p == nil {
+		return
+	}
+	p.lastResponsesInputItems = api.CloneInputItems(items)
+}
+
+func (p *Provider) clearLastOpenAIResponsesInputItems() {
+	if p == nil {
+		return
+	}
+	p.lastResponsesInputItems = nil
 }

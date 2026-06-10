@@ -1,4 +1,4 @@
-package openai
+package openairesponses
 
 import (
 	"context"
@@ -12,16 +12,17 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-// ResponsesStreamingOptions は Responses API streaming 解析時の provider 差分を表す。
-type ResponsesStreamingOptions struct {
+// StreamingOptions は Responses API streaming 解析時の provider 差分を表す。
+type StreamingOptions struct {
 	ProviderName string
 	DebugName    string
 	Debug        bool
 	// DebugOverride が non-nil の場合はその値を優先する。
 	// nil の場合は後方互換のため Debug=true を優先し、未指定時は環境変数で判定する。
-	DebugOverride *bool
-	DebugWriter   io.Writer
-	UsageCallback api.UsageCallback
+	DebugOverride       *bool
+	DebugWriter         io.Writer
+	UsageCallback       api.UsageCallback
+	ReplayItemsCallback func([]api.InputItem)
 }
 
 type responsesStreamStateOptions struct {
@@ -31,16 +32,25 @@ type responsesStreamStateOptions struct {
 }
 
 type responsesStreamState struct {
-	providerName  string
-	debugName     string
-	spinner       *ui.Spinner
-	errOut        io.Writer
-	debug         bool
-	responseID    string
-	functionCalls map[string]*responsesFunctionCallAccumulator
-	callOrder     []string
-	toolCallsOut  strings.Builder
-	lastUsage     *api.Usage
+	providerName              string
+	debugName                 string
+	spinner                   *ui.Spinner
+	errOut                    io.Writer
+	debug                     bool
+	responseID                string
+	textOut                   strings.Builder
+	messages                  map[string]*responsesMessageAccumulator
+	currentMessageKey         string
+	messageKeysByOutputIndex  map[int]string
+	reasoningItems            map[string]api.InputItem
+	functionCalls             map[string]*responsesFunctionCallAccumulator
+	functionKeysByItemID      map[string]string
+	functionKeysByOutputIndex map[int]string
+	callOrder                 []string
+	replayOrder               []responsesReplayRef
+	replayOrderSeen           map[string]struct{}
+	toolCallsOut              strings.Builder
+	lastUsage                 *api.Usage
 }
 
 func newResponsesStreamState(spinner *ui.Spinner, errOut io.Writer) *responsesStreamState {
@@ -61,12 +71,18 @@ func newResponsesStreamStateWithOptions(spinner *ui.Spinner, errOut io.Writer, o
 		debugName = providerName
 	}
 	return &responsesStreamState{
-		providerName:  providerName,
-		debugName:     debugName,
-		spinner:       spinner,
-		errOut:        errOut,
-		debug:         options.debug,
-		functionCalls: make(map[string]*responsesFunctionCallAccumulator),
+		providerName:              providerName,
+		debugName:                 debugName,
+		spinner:                   spinner,
+		errOut:                    errOut,
+		debug:                     options.debug,
+		messages:                  make(map[string]*responsesMessageAccumulator),
+		messageKeysByOutputIndex:  make(map[int]string),
+		reasoningItems:            make(map[string]api.InputItem),
+		functionCalls:             make(map[string]*responsesFunctionCallAccumulator),
+		functionKeysByItemID:      make(map[string]string),
+		functionKeysByOutputIndex: make(map[int]string),
+		replayOrderSeen:           make(map[string]struct{}),
 	}
 }
 
@@ -83,7 +99,7 @@ func (s *responsesStreamState) parseLine(line string) (string, bool, error) {
 		return "", true, nil
 	}
 
-	chunk, err := decodeResponsesStreamChunk(data)
+	chunk, err := decodeStreamChunk(data)
 	if err != nil {
 		return "", false, nil // パースエラーはスキップ
 	}
@@ -98,7 +114,7 @@ func (s *responsesStreamState) debugf(format string, args ...interface{}) {
 	fmt.Fprintf(s.errOut, format, args...)
 }
 
-func (s *responsesStreamState) handleChunk(chunk ResponsesStreamChunk, rawData string) (string, bool, error) {
+func (s *responsesStreamState) handleChunk(chunk StreamChunk, rawData string) (string, bool, error) {
 	s.logChunkEvent(chunk, rawData)
 	action, ok := responsesChunkActionTable[chunk.Type]
 	if !ok {
@@ -109,20 +125,20 @@ func (s *responsesStreamState) handleChunk(chunk ResponsesStreamChunk, rawData s
 	return result.textDelta, result.done, result.err
 }
 
-func (s *responsesStreamState) logChunkEvent(chunk ResponsesStreamChunk, rawData string) {
+func (s *responsesStreamState) logChunkEvent(chunk StreamChunk, rawData string) {
 	s.debugf("[DEBUG %s Responses] event: %s\n", s.debugName, chunk.Type)
 	if chunk.Type == "response.completed" {
 		s.debugf("[DEBUG %s Responses] raw data: %s\n", s.debugName, rawData)
 	}
 }
 
-func (s *responsesStreamState) captureResponseID(chunk ResponsesStreamChunk) {
+func (s *responsesStreamState) captureResponseID(chunk StreamChunk) {
 	if chunk.Type == "response.created" && chunk.Response != nil {
 		s.responseID = chunk.Response.ID
 	}
 }
 
-func (s *responsesStreamState) handleErrorEvent(chunk ResponsesStreamChunk) (bool, error) {
+func (s *responsesStreamState) handleErrorEvent(chunk StreamChunk) (bool, error) {
 	if chunk.Type == "error" {
 		errMsg := fmt.Sprintf("%s API error", s.providerName)
 		if chunk.Error != nil {
@@ -142,9 +158,9 @@ func (s *responsesStreamState) handleErrorEvent(chunk ResponsesStreamChunk) (boo
 	return false, nil
 }
 
-// HandleResponsesStreaming は Responses API のストリーミングを処理する。
+// HandleStreaming は Responses API のストリーミングを処理する。
 // Response ID も抽出して返却する（content, responseID, error）。
-func HandleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner, options ResponsesStreamingOptions) (string, string, error) {
+func HandleStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner, options StreamingOptions) (string, string, error) {
 	errOut := options.DebugWriter
 	if errOut == nil {
 		errOut = api.ErrorWriterFromContext(ctx)
@@ -163,10 +179,13 @@ func HandleResponsesStreaming(ctx context.Context, resp *http.Response, spinner 
 		debug:        resolveResponsesStreamingDebug(options),
 	})
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, state.parseLine)
+	if err == nil && options.ReplayItemsCallback != nil {
+		options.ReplayItemsCallback(state.openAIResponsesReplayItems())
+	}
 	return newResponsesStreamFinalizePolicy(state, options.UsageCallback).finalize(content, err)
 }
 
-func resolveResponsesStreamingDebug(options ResponsesStreamingOptions) bool {
+func resolveResponsesStreamingDebug(options StreamingOptions) bool {
 	if options.DebugOverride != nil {
 		return *options.DebugOverride
 	}
@@ -174,17 +193,4 @@ func resolveResponsesStreamingDebug(options ResponsesStreamingOptions) bool {
 		return true
 	}
 	return os.Getenv("XELYON_DEBUG_OPENAI") == "1"
-}
-
-// handleResponsesStreaming は OpenAI provider 用の Responses API streaming handler。
-func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
-	debugEnabled := os.Getenv("XELYON_DEBUG_OPENAI") == "1"
-	return HandleResponsesStreaming(ctx, resp, spinner, ResponsesStreamingOptions{
-		ProviderName:  "OpenAI",
-		DebugName:     "OpenAI",
-		Debug:         debugEnabled,
-		DebugOverride: &debugEnabled,
-		DebugWriter:   api.ErrorWriterFromContext(ctx),
-		UsageCallback: p.usageCallback,
-	})
 }

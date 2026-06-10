@@ -40,6 +40,9 @@ provider_models:
     openai:
         default_model: gpt-5.4
         max_output_tokens: 16384
+    openai_subscription:
+        default_model: gpt-5.5
+        max_output_tokens: 0
     openrouter:
         default_model: anthropic/claude-sonnet-4.6
         max_output_tokens: 64000

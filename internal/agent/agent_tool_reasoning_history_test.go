@@ -19,6 +19,15 @@ func (m *reasoningMockProvider) LastReasoningContent() string {
 	return m.reasoning
 }
 
+type responsesReplayMockProvider struct {
+	mockProvider
+	items []api.InputItem
+}
+
+func (m *responsesReplayMockProvider) LastOpenAIResponsesInputItems() []api.InputItem {
+	return api.CloneInputItems(m.items)
+}
+
 func TestAgentToolLoopHistoryPersistsReasoningForOpenAICompatReplay(t *testing.T) {
 	provider := &reasoningMockProvider{
 		mockProvider: mockProvider{name: "test"},
@@ -106,6 +115,53 @@ func TestAgentToolLoopHistoryKeepsReasoningToolCallsAndToolResultInMemory(t *tes
 	toolResult := agent.History[1]
 	if toolResult.Role != "tool" || toolResult.ToolCallID != "call_1" || toolResult.ToolName != "read_file" || toolResult.Content != "README contents" {
 		t.Fatalf("tool result history = %+v, want role=tool with tool_call_id/name/content", toolResult)
+	}
+}
+
+func TestAgentToolLoopHistoryKeepsOpenAIResponsesReplayItems(t *testing.T) {
+	provider := &responsesReplayMockProvider{
+		mockProvider: mockProvider{name: "test"},
+		items: []api.InputItem{
+			{Type: "message", Role: "assistant", ID: "msg_1", Content: "I'll inspect README."},
+			{Type: "function_call", ID: "fc_1", CallID: "call_1", Name: "read_file", Arguments: `{"path":"README.md"}`},
+		},
+	}
+	agent := &Agent{
+		CurrentProvider: provider,
+		CurrentModel:    "test-model",
+		agentConversationState: agentConversationState{
+			session: history.NewSession("test-model"),
+		},
+	}
+	toolCall := &tools.ToolCall{
+		ID:      "call_1",
+		Tool:    "read_file",
+		Args:    map[string]string{"path": "README.md"},
+		RawArgs: map[string]any{"path": "README.md"},
+	}
+
+	agent.addToolCallsToHistory("I'll inspect README.", []*tools.ToolCall{toolCall})
+	agent.appendToolResultToHistory(toolCall, "README contents")
+
+	if len(agent.History) != 2 {
+		t.Fatalf("len(agent.History) = %d, want assistant + tool result", len(agent.History))
+	}
+	assistantReplay := agent.History[0].OpenAIResponsesInputItems()
+	if len(assistantReplay) != 2 || assistantReplay[0].ID != "msg_1" || assistantReplay[1].CallID != "call_1" {
+		t.Fatalf("assistant replay items = %#v, want provider replay message + function_call", assistantReplay)
+	}
+	toolReplay := agent.History[1].OpenAIResponsesInputItems()
+	if len(toolReplay) != 1 || toolReplay[0].Type != "function_call_output" || toolReplay[0].CallID != "call_1" || toolReplay[0].Output != "README contents" {
+		t.Fatalf("tool replay items = %#v, want function_call_output", toolReplay)
+	}
+
+	restored := agent.session.ToAPIMessages()
+	items := api.ConvertHistoryToInputItems(restored)
+	if len(items) != 3 {
+		t.Fatalf("len(ConvertHistoryToInputItems(restored)) = %d, want replay message/function_call/function_call_output", len(items))
+	}
+	if items[0].ID != "msg_1" || items[1].CallID != "call_1" || items[2].Type != "function_call_output" {
+		t.Fatalf("converted replay items = %#v", items)
 	}
 }
 

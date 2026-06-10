@@ -491,6 +491,44 @@ func TestManagerSpawn_DefaultModelFollowsMainProvider(t *testing.T) {
 	}
 }
 
+func TestManagerSpawn_OpenAISubscriptionProviderDefaultKeepsSubscriptionProvider(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SubAgent.DefaultModel = ""
+	provider := &managerTestProvider{name: "OpenAI Subscription", configKey: "openai_subscription"}
+	createdProvider := &managerTestProvider{name: "OpenAI Subscription", configKey: "openai_subscription"}
+
+	var gotModel string
+	var gotProvider api.Provider
+	var factoryProviderName string
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, model string, provider api.Provider, _ *config.Config) *RunResult {
+			gotModel = model
+			gotProvider = provider
+			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			factoryProviderName = providerName
+			return createdProvider, nil
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	if factoryProviderName != "openai_subscription" {
+		t.Fatalf("ProviderFactory providerName = %q, want openai_subscription", factoryProviderName)
+	}
+	if gotModel != "gpt-5.4-mini" {
+		t.Fatalf("resolved model = %q, want gpt-5.4-mini", gotModel)
+	}
+	if gotProvider != createdProvider {
+		t.Fatal("expected subscription provider factory result to be used")
+	}
+}
+
 func TestManagerSpawn_PreservesAnthropicAliasOwnerForClaudeRuntimeSubAgent(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Thinking.Enabled = false

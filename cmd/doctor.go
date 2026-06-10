@@ -11,36 +11,41 @@ import (
 )
 
 var (
-	doctorDeploymentFlag           string
-	doctorCatalogModelFlag         string
-	doctorBedrockModelFlag         string
-	doctorClaudeModelFlag          string
-	doctorDeepSeekModelFlag        string
-	doctorGeminiModelFlag          string
-	doctorGroqModelFlag            string
-	doctorKimiModelFlag            string
-	doctorOllamaModelFlag          string
-	doctorOpenAIModelFlag          string
-	doctorOpenRouterModelFlag      string
-	doctorSmokeFlag                bool
-	doctorToolSmokeFlag            bool
-	doctorCapabilitiesFlag         bool
-	doctorRequiredCapabilityFlags  []string
-	doctorAzureRetentionSmokeFlag  bool
-	doctorOpenAIRetentionSmokeFlag bool
-	doctorBedrockImageSmokeFlag    bool
-	doctorBedrockThinkingSmokeFlag bool
-	doctorClaudeImageSmokeFlag     bool
-	doctorClaudeThinkingSmokeFlag  bool
-	doctorClaudeWebSearchSmokeFlag bool
-	doctorGeminiImageSmokeFlag     bool
-	doctorGeminiWebSearchSmokeFlag bool
-	doctorKimiImageSmokeFlag       bool
-	doctorKimiWebSearchSmokeFlag   bool
-	doctorTimeoutFlag              = defaultDoctorTimeout
-	doctorJSONFlag                 bool
-	doctorPrintConfigFlag          bool
-	doctorPrintRequestFlag         bool
+	doctorDeploymentFlag                       string
+	doctorCatalogModelFlag                     string
+	doctorBedrockModelFlag                     string
+	doctorClaudeModelFlag                      string
+	doctorDeepSeekModelFlag                    string
+	doctorGeminiModelFlag                      string
+	doctorGroqModelFlag                        string
+	doctorKimiModelFlag                        string
+	doctorOllamaModelFlag                      string
+	doctorOpenAIModelFlag                      string
+	doctorOpenAISubscriptionModelFlag          string
+	doctorOpenRouterModelFlag                  string
+	doctorSmokeFlag                            bool
+	doctorToolSmokeFlag                        bool
+	doctorCapabilitiesFlag                     bool
+	doctorRequiredCapabilityFlags              []string
+	doctorAzureRetentionSmokeFlag              bool
+	doctorOpenAIRetentionSmokeFlag             bool
+	doctorOpenAISubscriptionRetentionSmokeFlag bool
+	doctorOpenAISubscriptionCacheSmokeFlag     bool
+	doctorOpenAISubscriptionCompactSmokeFlag   bool
+	doctorOpenAISubscriptionThinkingSmokeFlag  bool
+	doctorBedrockImageSmokeFlag                bool
+	doctorBedrockThinkingSmokeFlag             bool
+	doctorClaudeImageSmokeFlag                 bool
+	doctorClaudeThinkingSmokeFlag              bool
+	doctorClaudeWebSearchSmokeFlag             bool
+	doctorGeminiImageSmokeFlag                 bool
+	doctorGeminiWebSearchSmokeFlag             bool
+	doctorKimiImageSmokeFlag                   bool
+	doctorKimiWebSearchSmokeFlag               bool
+	doctorTimeoutFlag                          = defaultDoctorTimeout
+	doctorJSONFlag                             bool
+	doctorPrintConfigFlag                      bool
+	doctorPrintRequestFlag                     bool
 )
 
 func newDoctorCommand() *cobra.Command {
@@ -61,6 +66,7 @@ func newDoctorCommand() *cobra.Command {
 	cmd.AddCommand(newKimiDoctorCommand())
 	cmd.AddCommand(newOllamaDoctorCommand())
 	cmd.AddCommand(newOpenAIDoctorCommand())
+	cmd.AddCommand(newOpenAISubscriptionDoctorCommand())
 	cmd.AddCommand(newOpenRouterDoctorCommand())
 	return cmd
 }
