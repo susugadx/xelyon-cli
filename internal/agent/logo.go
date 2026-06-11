@@ -2,79 +2,166 @@ package agent
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/version"
+	"golang.org/x/term"
 )
 
 const (
-	logoForegroundReset = "\033[39m"
+	logoStyleReset         = "\033[0m"
+	logoBorderColor        = "\033[38;5;240m"
+	logoDimColor           = "\033[38;5;245m"
+	logoTextColor          = "\033[38;5;255m"
+	logoReadyColor         = "\033[38;2;0;215;255m"
+	logoCommandAccentColor = "\033[38;5;228m"
+	startupPanelInnerWidth = 57
 )
 
-type logoColorSegment struct {
-	start int
-	end   int
-	color string
-}
-
-var logoColorSegments = []logoColorSegment{
-	{start: 0, end: 8, color: "\033[38;2;0;109;255m"},
-	{start: 8, end: 16, color: "\033[38;2;0;128;255m"},
-	{start: 16, end: 24, color: "\033[38;2;0;146;255m"},
-	{start: 24, end: 34, color: "\033[38;2;0;160;245m"},
-	{start: 34, end: 42, color: "\033[38;2;0;169;238m"},
-	{start: 42, end: 52, color: "\033[38;2;0;178;232m"},
-}
-
-// logoLines は oh-my-logo で生成した XELYON ロゴ。
-// 色は buildLogo で左側ロゴ色に寄せた6文字分のグラデーションを付与する。
-//
-// 再生成コマンド:
-//
-//	NO_COLOR=1 npx oh-my-logo "XELYON" --filled --letter-spacing 0 -d horizontal
-var logoLines = []string{
-	"██╗  ██╗███████╗██╗     ██╗   ██╗ ██████╗ ███╗   ██╗",
-	"╚██╗██╔╝██╔════╝██║     ╚██╗ ██╔╝██╔═══██╗████╗  ██║",
-	" ╚███╔╝ █████╗  ██║      ╚████╔╝ ██║   ██║██╔██╗ ██║",
-	" ██╔██╗ ██╔══╝  ██║       ╚██╔╝  ██║   ██║██║╚██╗██║",
-	"██╔╝ ██╗███████╗███████╗   ██║   ╚██████╔╝██║ ╚████║",
-	"╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═══╝",
-}
-
 func buildLogo() string {
-	colored := make([]string, 0, len(logoLines))
-	for _, line := range logoLines {
-		colored = append(colored, colorizeLogoLine(line))
-	}
-	return strings.Join(colored, "\n")
+	return buildStartupPanelForWidth(detectedTerminalWidth())
 }
 
-func colorizeLogoLine(line string) string {
-	runes := []rune(line)
+func buildStartupPanelForWidth(width int) string {
+	colorEnabled := logoANSIEnabled()
+	if width > 0 && width < startupPanelWidth() {
+		return strings.Join(compactStartupPanelLines(colorEnabled), "\n")
+	}
+
+	return strings.Join(startupPanelLines(colorEnabled), "\n")
+}
+
+func startupPanelLines(colorEnabled bool) []string {
+	return []string{
+		startupPanelTopLine(colorEnabled),
+		startupPanelBodyLine(
+			fmt.Sprintf(" v%s · code-guided agent runtime", version.GetVersion()),
+			colorize(" ", logoDimColor, colorEnabled)+startupVersionLine(colorEnabled),
+			colorEnabled,
+		),
+		startupPanelBodyLine("", "", colorEnabled),
+		startupPanelBodyLine(
+			"  Built to keep agents grounded in your codebase.",
+			colorize("  Built to keep agents grounded in your codebase.", logoTextColor, colorEnabled),
+			colorEnabled,
+		),
+		startupPanelBodyLine("", "", colorEnabled),
+		startupPanelBodyLine(
+			"  Ready · / opens commands · /exit quits",
+			startupReadyLine("  ", colorEnabled),
+			colorEnabled,
+		),
+		startupPanelBottomLine(colorEnabled),
+	}
+}
+
+func compactStartupPanelLines(colorEnabled bool) []string {
+	return []string{
+		startupWordmark(colorEnabled),
+		startupVersionLine(colorEnabled),
+		colorize("Built to keep agents grounded in your codebase.", logoTextColor, colorEnabled),
+		startupReadyLine("", colorEnabled),
+	}
+}
+
+func startupPanelTopLine(colorEnabled bool) string {
+	titlePrefix := "╭─ "
+	titleSuffix := " " + strings.Repeat("─", startupPanelInnerWidth-visibleWidth("─ XELYON "))
+	return colorize(titlePrefix, logoBorderColor, colorEnabled) +
+		startupWordmark(colorEnabled) +
+		colorize(titleSuffix+"╮", logoBorderColor, colorEnabled)
+}
+
+func startupPanelBottomLine(colorEnabled bool) string {
+	return colorize("╰"+strings.Repeat("─", startupPanelInnerWidth)+"╯", logoBorderColor, colorEnabled)
+}
+
+func startupPanelBodyLine(plain, styled string, colorEnabled bool) string {
+	if styled == "" {
+		styled = plain
+	}
+	padding := startupPanelInnerWidth - visibleWidth(plain)
+	if padding < 0 {
+		padding = 0
+	}
+	return colorize("│", logoBorderColor, colorEnabled) +
+		styled +
+		strings.Repeat(" ", padding) +
+		colorize("│", logoBorderColor, colorEnabled)
+}
+
+func startupVersionLine(colorEnabled bool) string {
+	return colorize(fmt.Sprintf("v%s · ", version.GetVersion()), logoDimColor, colorEnabled) +
+		colorize("code-guided agent runtime", logoTextColor, colorEnabled)
+}
+
+func startupReadyLine(indent string, colorEnabled bool) string {
+	return colorize(indent+"Ready", logoReadyColor, colorEnabled) +
+		colorize(" · ", logoDimColor, colorEnabled) +
+		colorize("/", logoCommandAccentColor, colorEnabled) +
+		colorize(" opens commands · ", logoDimColor, colorEnabled) +
+		colorize("/exit", logoCommandAccentColor, colorEnabled) +
+		colorize(" quits", logoDimColor, colorEnabled)
+}
+
+func startupWordmark(colorEnabled bool) string {
+	if !colorEnabled {
+		return "XELYON"
+	}
+	colors := []string{
+		"\033[38;2;0;74;255m",
+		"\033[38;2;0;103;255m",
+		"\033[38;2;0;132;255m",
+		"\033[38;2;0;161;255m",
+		"\033[38;2;0;194;255m",
+		"\033[38;2;0;215;255m",
+	}
+	letters := []rune("XELYON")
 	var b strings.Builder
-	cursor := 0
-	for _, segment := range logoColorSegments {
-		if segment.start >= len(runes) {
-			continue
-		}
-		if segment.start > cursor {
-			b.WriteString(string(runes[cursor:segment.start]))
-		}
-		end := min(segment.end, len(runes))
-		b.WriteString(segment.color)
-		b.WriteString(string(runes[segment.start:end]))
-		cursor = end
+	for i, r := range letters {
+		b.WriteString(colors[i])
+		b.WriteRune(r)
 	}
-	if cursor < len(runes) {
-		b.WriteString(string(runes[cursor:]))
-	}
-	b.WriteString(logoForegroundReset)
+	b.WriteString(logoStyleReset)
 	return b.String()
 }
 
-// buildGradientHeader はロゴ + サブテキストのヘッダーを構築する。
+func colorize(text, color string, enabled bool) string {
+	if !enabled || text == "" {
+		return text
+	}
+	return color + text + logoStyleReset
+}
+
+func startupPanelWidth() int {
+	return startupPanelInnerWidth + 2
+}
+
+func visibleWidth(text string) int {
+	return len([]rune(text))
+}
+
+func logoANSIEnabled() bool {
+	return os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+}
+
+func detectedTerminalWidth() int {
+	if columns := strings.TrimSpace(os.Getenv("COLUMNS")); columns != "" {
+		width, err := strconv.Atoi(columns)
+		if err == nil && width > 0 {
+			return width
+		}
+	}
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return 0
+	}
+	return width
+}
+
+// buildGradientHeader は interactive surface の起動パネルを構築する。
 func buildGradientHeader() string {
-	return "\n" + buildLogo() + "\n" +
-		fmt.Sprintf("  \033[38;5;245mv%s · AI-powered coding agent\033[0m\n", version.GetVersion()) +
-		"  \033[38;5;228mType / for commands, /exit to quit\033[0m\n\n"
+	return "\n" + buildLogo() + "\n\n"
 }
