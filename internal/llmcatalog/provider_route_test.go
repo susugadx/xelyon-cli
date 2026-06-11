@@ -34,6 +34,16 @@ func TestResolveProviderRoute_DescriptorDefaults(t *testing.T) {
 			wantDoctorPolicy: "azure",
 		},
 		{
+			provider:         "openai_subscription",
+			wantRuntime:      "openai_subscription",
+			wantPrompt:       "openai",
+			wantEdit:         "apply_patch",
+			wantCapability:   "openai_subscription",
+			wantModelCatalog: "openai_subscription",
+			wantPricing:      "openai_subscription",
+			wantDoctorPolicy: "openai_subscription",
+		},
+		{
 			provider:         "groq",
 			wantRuntime:      "openai_compatible",
 			wantPrompt:       "groq",

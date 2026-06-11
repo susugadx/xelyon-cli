@@ -17,6 +17,7 @@ func cloneMessage(msg Message) Message {
 	cloned.ToolCalls = cloneOpenAIToolCalls(msg.ToolCalls)
 	cloned.providerState.anthropicContentBlocks = CloneAnthropicContentBlocks(msg.providerState.anthropicContentBlocks)
 	cloned.providerState.anthropicThinkingBlocks = cloneAnthropicThinkingBlocks(msg.providerState.anthropicThinkingBlocks)
+	cloned.providerState.openAIResponsesItems = CloneInputItems(msg.providerState.openAIResponsesItems)
 	return cloned
 }
 

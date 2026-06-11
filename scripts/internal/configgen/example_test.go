@@ -202,3 +202,16 @@ func yamlHasTopLevelKey(t *testing.T, data []byte, key string) bool {
 	_, exists := out[key]
 	return exists
 }
+
+func TestGenerateExampleFileKeepsOpenAISubscriptionMaxOutputZero(t *testing.T) {
+	output, err := GenerateExampleFile(config.DefaultConfig())
+	if err != nil {
+		t.Fatalf("GenerateExampleFile returned error: %v", err)
+	}
+
+	text := string(output)
+	expected := "    openai_subscription:\n        default_model: gpt-5.5\n        max_output_tokens: 0\n"
+	if !strings.Contains(text, expected) {
+		t.Fatalf("expected generated example to contain openai_subscription explicit max_output_tokens zero, got:\n%s", text)
+	}
+}

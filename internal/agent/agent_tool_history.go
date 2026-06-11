@@ -71,7 +71,15 @@ func appendAssistantToolCallsHistoryMessage(agent *Agent, explanation, reasoning
 		ToolCalls:        toolCalls,
 	}
 	msg.SetAnthropicContentBlocks(contentBlocks)
+	msg.SetOpenAIResponsesInputItems(agent.getLastOpenAIResponsesInputItems())
 	agent.History = append(agent.History, msg)
+}
+
+func (a *Agent) getLastOpenAIResponsesInputItems() []api.InputItem {
+	if a == nil {
+		return nil
+	}
+	return api.GetOpenAIResponsesInputItems(a.CurrentProvider)
 }
 
 // executeToolOnly はツールを実行して結果を履歴に追加する（assistant メッセージは追加しない）。

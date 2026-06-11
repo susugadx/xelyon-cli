@@ -676,9 +676,38 @@ func TestOpenAIProvider_SetGetResponseID(t *testing.T) {
 	}
 
 	// ClearCache also clears
+	p.setLastOpenAIResponsesInputItems([]api.InputItem{{Type: "message", Role: "assistant", Content: "stale"}})
 	p.ClearCache()
 	if p.GetResponseID() != "" {
 		t.Errorf("GetResponseID() after ClearCache = %q, want empty", p.GetResponseID())
+	}
+	if got := p.LastOpenAIResponsesInputItems(); len(got) != 0 {
+		t.Fatalf("LastOpenAIResponsesInputItems() after ClearCache = %#v, want empty", got)
+	}
+}
+
+func TestOpenAIProvider_ChatCompletionsRouteClearsResponsesReplayItems(t *testing.T) {
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("path = %q, want Chat Completions", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"chat route"}}]}`))
+	})
+	t.Setenv("OPENAI_API_URL", server.URL+"/v1/chat/completions")
+
+	p := New("test-key")
+	p.setLastOpenAIResponsesInputItems([]api.InputItem{{Type: "message", Role: "assistant", Content: "stale"}})
+
+	content, err := p.ChatWithTools(context.Background(), "System", []api.Message{{Role: "user", Content: "hi"}}, "gpt-4-turbo")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if content != "chat route" {
+		t.Fatalf("content = %q, want chat route", content)
+	}
+	if got := p.LastOpenAIResponsesInputItems(); len(got) != 0 {
+		t.Fatalf("LastOpenAIResponsesInputItems() = %#v, want cleared on Chat Completions route", got)
 	}
 }
 

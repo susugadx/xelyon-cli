@@ -18,6 +18,7 @@ type BaseRequestOptions struct {
 	Reasoning                             *ReasoningConfig
 	PromptCacheKey                        string
 	PromptCacheRetention                  string
+	Instructions                          string
 	ContextManagement                     []ContextManagementSetting
 	SkipLocalAutoCompressionAfterResponse bool
 }
@@ -155,6 +156,7 @@ func BuildBaseRequest(options BaseRequestOptions) Request {
 		Reasoning:                             options.Reasoning,
 		PromptCacheKey:                        options.PromptCacheKey,
 		PromptCacheRetention:                  options.PromptCacheRetention,
+		Instructions:                          options.Instructions,
 		ContextManagement:                     options.ContextManagement,
 		SkipLocalAutoCompressionAfterResponse: options.SkipLocalAutoCompressionAfterResponse,
 	}
@@ -179,11 +181,11 @@ func BuildTrailingToolOutputs(history []api.Message) []InputItem {
 	toolMessages := history[toolStart+1:]
 	toolOutputs := make([]InputItem, 0, len(toolMessages))
 	for _, msg := range toolMessages {
-		toolOutputs = append(toolOutputs, InputItem{
+		toolOutputs = append(toolOutputs, api.NormalizeInputItemOutput(InputItem{
 			Type:   "function_call_output",
 			CallID: msg.ToolCallID,
 			Output: msg.Content,
-		})
+		}))
 	}
 	return toolOutputs
 }

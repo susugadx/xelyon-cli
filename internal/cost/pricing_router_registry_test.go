@@ -85,3 +85,12 @@ func TestPricingResolverRegistry_UnknownFamilyUnavailable(t *testing.T) {
 		t.Fatalf("resolvePricingByFamily(unknown).PricingUnavailable = false, want true: %#v", got)
 	}
 }
+
+func TestPricingResolverRegistry_OpenAISubscriptionUnavailable(t *testing.T) {
+	got := resolvePricingByFamily("openai_subscription", pricingRequest{
+		Model: "gpt-5.5",
+	})
+	if !got.PricingUnavailable {
+		t.Fatalf("resolvePricingByFamily(openai_subscription).PricingUnavailable = false, want true: %#v", got)
+	}
+}

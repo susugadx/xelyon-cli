@@ -75,6 +75,7 @@ func resetRootFlagsForTest() {
 	doctorKimiModelFlag = ""
 	doctorOllamaModelFlag = ""
 	doctorOpenAIModelFlag = ""
+	doctorOpenAISubscriptionModelFlag = ""
 	doctorOpenRouterModelFlag = ""
 	doctorSmokeFlag = false
 	doctorToolSmokeFlag = false
@@ -82,6 +83,10 @@ func resetRootFlagsForTest() {
 	doctorRequiredCapabilityFlags = nil
 	doctorAzureRetentionSmokeFlag = false
 	doctorOpenAIRetentionSmokeFlag = false
+	doctorOpenAISubscriptionRetentionSmokeFlag = false
+	doctorOpenAISubscriptionCacheSmokeFlag = false
+	doctorOpenAISubscriptionCompactSmokeFlag = false
+	doctorOpenAISubscriptionThinkingSmokeFlag = false
 	doctorBedrockImageSmokeFlag = false
 	doctorBedrockThinkingSmokeFlag = false
 	doctorClaudeImageSmokeFlag = false

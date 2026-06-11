@@ -200,6 +200,7 @@ func applyReductionCandidateProjection(msg *api.Message, candidate ReductionCand
 		msg.ToolName = candidate.ToolName
 	}
 	msg.Content = replacementText
+	msg.ReplaceOpenAIResponsesFunctionCallOutput(candidate.ToolCallID, replacementText)
 }
 
 func keepReductionCandidate(report *ProjectionReport, candidateIndex int, reason string) {

@@ -158,6 +158,15 @@ func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
 	}
 }
 
+func TestProviderCredentialStatusDisplayIncludesSubscriptionStates(t *testing.T) {
+	if got := providerCredentialStatusDisplay(ProviderCredentialLoggedIn); got != "(logged in)" {
+		t.Fatalf("logged in display = %q, want logged in", got)
+	}
+	if got := providerCredentialStatusDisplay(ProviderCredentialLoginRequired); got != "(login required)" {
+		t.Fatalf("login required display = %q, want login required", got)
+	}
+}
+
 func TestHandleProvidersCommand_MarksOnlyClaudeOwnerAsCurrent(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{

@@ -18,19 +18,14 @@ func resolveResponsesAPIURL() string {
 }
 
 func (p *Provider) buildChatResponsesRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) ResponsesRequest {
-	modelIdentity := newOpenAIResponsesModelIdentity(ctx, model)
-	activeContext := openairesponses.ActiveContextFromContext(ctx)
-	previousResponseID := previousResponseIDForRequest(ctx, p.lastResponseID)
-	previousResponseID = openairesponses.PreviousResponseIDForRequestContext(ctx, previousResponseID, activeContext)
-	serverCompactionDecision := openairesponses.ResolveServerCompactionDecision(ctx, "openai", modelIdentity, previousResponseID)
-	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
-		Base:               p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity, serverCompactionDecision),
-		RequestContext:     ctx,
-		SystemPrompt:       systemPrompt,
-		CompactedInput:     api.CompactedInputItemsFromContext(ctx),
-		ActiveContext:      activeContext,
-		History:            history,
-		PreviousResponseID: previousResponseID,
+	return buildChatResponsesRequestWithProfile(ctx, openAIResponsesRuntimeProfile(), responsesRequestBuilderInputs{
+		SystemPrompt:    systemPrompt,
+		History:         history,
+		Model:           model,
+		ResponseID:      p.lastResponseID,
+		MCPTools:        p.mcpTools,
+		ToolChoice:      p.toolChoice,
+		FunctionCalling: p.IsFunctionCallingEnabled(),
 	})
 }
 
@@ -42,43 +37,98 @@ func (p *Provider) buildImageResponsesRequest(
 	image *api.ImageData,
 	model string,
 ) ResponsesRequest {
-	modelIdentity := newOpenAIResponsesModelIdentity(ctx, model)
-	return openairesponses.BuildImageRequest(openairesponses.ImageRequestOptions{
-		Base:           p.newBaseResponsesRequestOptions(ctx, systemPrompt, modelIdentity, openairesponses.ServerCompactionDecision{}),
-		SystemPrompt:   systemPrompt,
-		CompactedInput: api.CompactedInputItemsFromContext(ctx),
-		ActiveContext:  openairesponses.ActiveContextFromContext(ctx),
-		History:        history,
-		UserMessage:    userMessage,
-		Image:          image,
+	return buildImageResponsesRequestWithProfile(ctx, openAIResponsesRuntimeProfile(), responsesImageRequestBuilderInputs{
+		SystemPrompt:    systemPrompt,
+		History:         history,
+		UserMessage:     userMessage,
+		Image:           image,
+		Model:           model,
+		MCPTools:        p.mcpTools,
+		ToolChoice:      p.toolChoice,
+		FunctionCalling: p.IsFunctionCallingEnabled(),
 	})
 }
 
 func newOpenAIResponsesModelIdentity(ctx context.Context, model string) openairesponses.ModelIdentity {
-	cfg := config.FromContext(ctx)
-	return openairesponses.NewModelIdentity(model, cfg.ModelCatalogName("openai", model))
+	return openAIResponsesRuntimeProfile().modelIdentity(ctx, model)
 }
 
-func (p *Provider) newBaseResponsesRequestOptions(
+type responsesRequestBuilderInputs struct {
+	SystemPrompt    string
+	History         []api.Message
+	Model           string
+	ResponseID      string
+	MCPTools        []api.ToolDefinition
+	ToolChoice      *string
+	FunctionCalling bool
+}
+
+type responsesImageRequestBuilderInputs struct {
+	SystemPrompt    string
+	History         []api.Message
+	UserMessage     string
+	Image           *api.ImageData
+	Model           string
+	MCPTools        []api.ToolDefinition
+	ToolChoice      *string
+	FunctionCalling bool
+}
+
+func buildChatResponsesRequestWithProfile(ctx context.Context, profile responsesRuntimeProfile, inputs responsesRequestBuilderInputs) ResponsesRequest {
+	modelIdentity := profile.modelIdentity(ctx, inputs.Model)
+	activeContext := openairesponses.ActiveContextFromContext(ctx)
+	previousResponseID := profile.previousResponseID(ctx, inputs.ResponseID, activeContext)
+	serverCompactionDecision := profile.serverCompactionDecision(ctx, modelIdentity, previousResponseID)
+	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
+		Base:               newBaseResponsesRequestOptions(ctx, profile, inputs.SystemPrompt, modelIdentity, serverCompactionDecision, inputs.MCPTools, inputs.ToolChoice, inputs.FunctionCalling),
+		RequestContext:     ctx,
+		SystemPrompt:       inputs.SystemPrompt,
+		CompactedInput:     api.CompactedInputItemsFromContext(ctx),
+		ActiveContext:      activeContext,
+		History:            inputs.History,
+		PreviousResponseID: previousResponseID,
+	})
+}
+
+func buildImageResponsesRequestWithProfile(ctx context.Context, profile responsesRuntimeProfile, inputs responsesImageRequestBuilderInputs) ResponsesRequest {
+	modelIdentity := profile.modelIdentity(ctx, inputs.Model)
+	return openairesponses.BuildImageRequest(openairesponses.ImageRequestOptions{
+		Base:           newBaseResponsesRequestOptions(ctx, profile, inputs.SystemPrompt, modelIdentity, openairesponses.ServerCompactionDecision{}, inputs.MCPTools, inputs.ToolChoice, inputs.FunctionCalling),
+		SystemPrompt:   inputs.SystemPrompt,
+		CompactedInput: api.CompactedInputItemsFromContext(ctx),
+		ActiveContext:  openairesponses.ActiveContextFromContext(ctx),
+		History:        inputs.History,
+		UserMessage:    inputs.UserMessage,
+		Image:          inputs.Image,
+	})
+}
+
+func newBaseResponsesRequestOptions(
 	ctx context.Context,
+	profile responsesRuntimeProfile,
 	systemPrompt string,
 	model openairesponses.ModelIdentity,
 	serverCompactionDecision openairesponses.ServerCompactionDecision,
+	mcpTools []api.ToolDefinition,
+	toolChoice *string,
+	functionCallingEnabled bool,
 ) openairesponses.BaseRequestOptions {
-	cfg := config.FromContext(ctx)
 	options := openairesponses.BaseRequestOptions{
 		Model:                                 model,
-		MaxOutputTokens:                       api.GetMaxOutputTokens(ctx, "openai", model.RequestName()),
-		Stream:                                shouldStreamResponses(model.CatalogName()),
-		Store:                                 cfg.ResponsesStoreEnabled(),
+		MaxOutputTokens:                       profile.maxOutputTokens(ctx, model),
+		Stream:                                profile.stream(model),
+		Store:                                 profile.store(ctx),
 		PromptCacheKey:                        BuildPromptCacheKey(model.RequestName(), systemPrompt),
-		PromptCacheRetention:                  "24h",
+		PromptCacheRetention:                  profile.promptCacheRetention(),
 		ContextManagement:                     serverCompactionDecision.ContextManagement,
 		SkipLocalAutoCompressionAfterResponse: serverCompactionDecision.ShouldSkipLocalAutoCompression,
 	}
-	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
-		options.Tools = GetResponsesToolDefinitionsWithContext(ctx, p.mcpTools)
-		options.ToolChoice = openairesponses.BuildFunctionToolChoice(p.toolChoice)
+	if profile.IncludeInstructions {
+		options.Instructions = systemPrompt
+	}
+	if api.ShouldSendToolPayload(ctx, functionCallingEnabled) {
+		options.Tools = openairesponses.BuildToolDefinitionsWithContext(ctx, mcpTools)
+		options.ToolChoice = openairesponses.BuildFunctionToolChoice(toolChoice)
 	}
 
 	options.Reasoning = responsesReasoningConfig(ctx, model)
@@ -96,7 +146,7 @@ func responsesReasoningConfig(ctx context.Context, model openairesponses.ModelId
 	cfg := config.FromContext(ctx)
 	if api.IsThinkingEnabled(ctx) {
 		return &ReasoningConfig{
-			Effort: LevelToReasoningEffort(cfg.Thinking.Level),
+			Effort: openairesponses.ReasoningEffortFromThinkingLevel(cfg.Thinking.Level),
 		}
 	}
 

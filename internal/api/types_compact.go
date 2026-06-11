@@ -19,6 +19,10 @@ type InputItem struct {
 	// 圧縮済みアイテム用
 	Data string `json:"data,omitempty"` // 暗号化データ（type="compacted"の場合）
 
+	// Responses replay 用 provider state
+	Summary          []map[string]any `json:"summary,omitempty"`
+	EncryptedContent string           `json:"encrypted_content,omitempty"`
+
 	// Function Calling 用（type="function_call"の場合）
 	CallID    string `json:"call_id,omitempty"`   // ツール呼び出しID
 	Name      string `json:"name,omitempty"`      // ツール名
@@ -67,6 +71,10 @@ type CompactUsage struct {
 func ConvertHistoryToInputItems(history []Message) []InputItem {
 	items := make([]InputItem, 0, len(history))
 	for _, msg := range history {
+		if replayItems := msg.OpenAIResponsesInputItems(); len(replayItems) > 0 {
+			items = append(items, normalizeOpenAIResponsesReplayItemsForMessage(msg, replayItems)...)
+			continue
+		}
 		if msg.Role == "tool" {
 			// Function Calling 結果は function_call_output 形式
 			items = append(items, NormalizeInputItemOutput(InputItem{
@@ -99,4 +107,22 @@ func ConvertHistoryToInputItems(history []Message) []InputItem {
 		}
 	}
 	return items
+}
+
+func normalizeOpenAIResponsesReplayItemsForMessage(msg Message, replayItems []InputItem) []InputItem {
+	items := CloneInputItems(replayItems)
+	for i := range items {
+		if msg.Role == "tool" && items[i].Type == "function_call_output" && openAIResponsesReplayOutputMatchesMessage(items[i], msg) {
+			items[i].Output = msg.Content
+		}
+		items[i] = NormalizeInputItemOutput(items[i])
+	}
+	return items
+}
+
+func openAIResponsesReplayOutputMatchesMessage(item InputItem, msg Message) bool {
+	if msg.ToolCallID == "" {
+		return true
+	}
+	return item.CallID == msg.ToolCallID
 }

@@ -113,7 +113,7 @@ var FieldTypeMap = map[string]ConfigFieldType{
 // SelectOptions は選択型フィールドの選択肢
 var SelectOptions = map[string][]string{
 	"agent_instructions.project.mode":                           {"off", "fallback", "always"},
-	"default_provider":                                          {"deepseek", "kimi", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"default_provider":                                          {"deepseek", "kimi", "claude", "openai", "openai_subscription", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 	"execution.mode":                                            {"balanced", "trusted", "full_auto"},
 	"gemini.service_tier":                                       {"standard", "flex", "priority"},
 	"general.ui_language":                                       {"auto", "ja", "en"},
@@ -121,7 +121,7 @@ var SelectOptions = map[string][]string{
 	"provider_history_reduction.mode":                           {"off", "dry_run", "apply"},
 	"provider_history_reduction.raw_output_artifacts.mode":      {"off", "dry_run", "apply"},
 	"provider_history_reduction.raw_output_artifacts.retention": {"session"},
-	"review.provider":                                           {"", "deepseek", "kimi", "claude", "openai", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
+	"review.provider":                                           {"", "deepseek", "kimi", "claude", "openai", "openai_subscription", "azure", "gemini", "groq", "ollama", "openrouter", "bedrock"},
 	"review.thinking.level":                                     {"", "low", "medium", "high", "xhigh"},
 	"review.thinking.mode":                                      {"inherit", "off", "on"},
 	"skills.router.activation":                                  {"off", "hint"},

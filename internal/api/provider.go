@@ -197,6 +197,12 @@ type AnthropicContentBlockProvider interface {
 	LastAnthropicContentBlocks() []AnthropicContentBlock
 }
 
+// OpenAIResponsesReplayProvider は Responses full-payload replay items の継続再送に対応する。
+type OpenAIResponsesReplayProvider interface {
+	// LastOpenAIResponsesInputItems は最後の API 呼び出しで返された provider-facing items を返す。
+	LastOpenAIResponsesInputItems() []InputItem
+}
+
 // CacheClearable はモデル/プロバイダー切り替え時にキャッシュをクリア可能なプロバイダーのオプショナルインターフェース
 type CacheClearable interface {
 	// ClearCache はプロバイダーが保持するキャッシュ（リモート/ローカル）をクリアする

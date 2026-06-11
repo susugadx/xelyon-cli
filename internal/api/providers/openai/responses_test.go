@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	toolsreg "github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 
@@ -233,12 +234,12 @@ func TestConvertHistoryToResponsesInput(t *testing.T) {
 // TestGetResponsesToolDefinitions は Responses API 用ツール定義のテスト
 func TestGetResponsesToolDefinitions(t *testing.T) {
 	// MCPツールなし
-	tools := GetResponsesToolDefinitions(nil)
+	tools := openairesponses.BuildToolDefinitionsWithContext(context.Background(), nil)
 
 	// ツール数の確認（Registry に登録されている数）
 	expectedCount := len(toolsreg.DefaultRegistry.GetToolDefinitions())
 	if len(tools) != expectedCount {
-		t.Errorf("GetResponsesToolDefinitions() returned %d tools, want %d", len(tools), expectedCount)
+		t.Errorf("BuildToolDefinitionsWithContext() returned %d tools, want %d", len(tools), expectedCount)
 	}
 
 	// 各ツールの形式を確認
@@ -284,11 +285,11 @@ func TestGetResponsesToolDefinitions_WithMCPTools(t *testing.T) {
 		},
 	}
 
-	tools := GetResponsesToolDefinitions(mcpTools)
+	tools := openairesponses.BuildToolDefinitionsWithContext(context.Background(), mcpTools)
 
 	expectedCount := len(toolsreg.DefaultRegistry.GetToolDefinitions()) + 1
 	if len(tools) != expectedCount {
-		t.Errorf("GetResponsesToolDefinitions() with MCP returned %d tools, want %d", len(tools), expectedCount)
+		t.Errorf("BuildToolDefinitionsWithContext() with MCP returned %d tools, want %d", len(tools), expectedCount)
 	}
 
 	// MCP ツールが含まれていることを確認
@@ -309,10 +310,10 @@ func TestGetResponsesToolDefinitions_WithMCPTools(t *testing.T) {
 
 // TestResponsesToolFormat は ResponsesTool の JSON 形式をテスト
 func TestResponsesToolFormat(t *testing.T) {
-	tools := GetResponsesToolDefinitions(nil)
+	tools := openairesponses.BuildToolDefinitionsWithContext(context.Background(), nil)
 
 	// read_file ツールを探す
-	var readFileTool *ResponsesTool
+	var readFileTool *openairesponses.Tool
 	for i := range tools {
 		if tools[i].Name == "read_file" {
 			readFileTool = &tools[i]
@@ -422,7 +423,7 @@ func TestConvertToolCallToToolJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ConvertToolCallToToolJSON(tt.toolCall)
+			result, err := openairesponses.ConvertToolCallToToolJSON(tt.toolCall)
 
 			if tt.wantError {
 				if err == nil {
@@ -666,7 +667,7 @@ func TestResponsesUsageReasoningTokensToAPIUsage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			apiUsage := responsesUsageToAPIUsage(&tt.usage)
+			apiUsage := openairesponses.UsageToAPIUsage(&tt.usage)
 			if apiUsage.OutputTokens != tt.wantOutputTokens {
 				t.Errorf("OutputTokens = %d, want %d", apiUsage.OutputTokens, tt.wantOutputTokens)
 			}
@@ -803,7 +804,7 @@ func TestHandleResponsesStreaming_DefaultDebugFollowsEnvWhenNotSpecified(t *test
 	}
 
 	var debugOut strings.Builder
-	_, _, err := HandleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)), ResponsesStreamingOptions{
+	_, _, err := openairesponses.HandleStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)), openairesponses.StreamingOptions{
 		DebugWriter: &debugOut,
 	})
 	if err != nil {
@@ -830,7 +831,7 @@ func TestHandleResponsesStreaming_DebugOverrideFalseDisablesEnvDebug(t *testing.
 
 	var debugOut strings.Builder
 	debugEnabled := false
-	_, _, err := HandleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)), ResponsesStreamingOptions{
+	_, _, err := openairesponses.HandleStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)), openairesponses.StreamingOptions{
 		DebugOverride: &debugEnabled,
 		DebugWriter:   &debugOut,
 	})

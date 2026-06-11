@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -137,7 +136,7 @@ func (p *Provider) runResponsesRequest(ctx context.Context, options responsesReq
 		if reqBody.Stream {
 			return p.handleResponsesStreaming(ctx, resp, spinner)
 		}
-		return openai.HandleResponsesNonStreaming(ctx, resp, spinner, openai.ResponsesNonStreamingOptions{
+		return openairesponses.HandleNonStreaming(ctx, resp, spinner, openairesponses.NonStreamingOptions{
 			ProviderName:  p.Name(),
 			UsageCallback: p.usageCallback,
 		})
@@ -158,24 +157,7 @@ func (p *Provider) executeLongRunningResponsesRequest(req *http.Request) (*http.
 }
 
 func newLongRunningResponsesHTTPClient(base *http.Client) *http.Client {
-	if base == nil {
-		base = &http.Client{}
-	}
-	client := *base
-
-	transport := base.Transport
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
-	if httpTransport, ok := transport.(*http.Transport); ok {
-		cloned := httpTransport.Clone()
-		cloned.ResponseHeaderTimeout = 0
-		client.Transport = cloned
-		return &client
-	}
-
-	client.Transport = transport
-	return &client
+	return openairesponses.NewLongRunningHTTPClient(base)
 }
 
 func writeResponsesDebugRequest(options responsesRequestRunOptions, payload []byte) {
@@ -227,7 +209,7 @@ func (p *Provider) newAuthJSONRequest(ctx context.Context, url string, payload [
 
 func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
 	debugEnabled := os.Getenv("XELYON_DEBUG_AZURE") == "1"
-	return openai.HandleResponsesStreaming(ctx, resp, spinner, openai.ResponsesStreamingOptions{
+	return openairesponses.HandleStreaming(ctx, resp, spinner, openairesponses.StreamingOptions{
 		ProviderName:  p.Name(),
 		DebugName:     "Azure",
 		Debug:         debugEnabled,

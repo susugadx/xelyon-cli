@@ -69,6 +69,7 @@ func (a *Agent) appendAssistantResponse(prepared assistantResponse, opts assista
 		Content:          prepared.raw,
 		ReasoningContent: a.getLastReasoningContent(),
 	}
+	msg.SetOpenAIResponsesInputItems(a.getLastOpenAIResponsesInputItems())
 	a.History = append(a.History, msg)
 
 	if opts.incrementStats && a.Stats != nil {

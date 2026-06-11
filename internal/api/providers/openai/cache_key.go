@@ -4,17 +4,17 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
+	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 )
 
 // BuildPromptCacheKey はプロジェクト・モデル・プロンプトに基づく動的キャッシュキーを生成する。
 func BuildPromptCacheKey(model, systemPrompt string) string {
-	return openaicompat.BuildPromptCacheKey(model, systemPrompt)
+	return openairesponses.BuildPromptCacheKey(model, systemPrompt)
 }
 
 // buildPromptCacheKeyWithCwd はテスト用に cwd を引数で受け取るバージョン。
 func buildPromptCacheKeyWithCwd(cwd, model, systemPrompt string) string {
-	return openaicompat.BuildPromptCacheKeyWithCwd(cwd, model, systemPrompt)
+	return openairesponses.BuildPromptCacheKeyWithCwd(cwd, model, systemPrompt)
 }
 
 // shortHash は入力文字列の SHA-256 先頭8文字を返す。

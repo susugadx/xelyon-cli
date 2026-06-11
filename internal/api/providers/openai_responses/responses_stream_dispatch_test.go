@@ -1,4 +1,4 @@
-package openai
+package openairesponses
 
 import (
 	"io"
@@ -11,7 +11,7 @@ import (
 func TestHandleChunk_DispatchesResponseCreated(t *testing.T) {
 	state := newResponsesStreamState(nil, io.Discard)
 
-	textDelta, done, err := state.handleChunk(ResponsesStreamChunk{
+	textDelta, done, err := state.handleChunk(StreamChunk{
 		Type: "response.created",
 		Response: &ResponseMetadata{
 			ID: "resp_123",
@@ -34,20 +34,20 @@ func TestHandleChunk_DispatchesResponseCreated(t *testing.T) {
 func TestHandleChunk_DispatchesErrorEvents(t *testing.T) {
 	tests := []struct {
 		name        string
-		chunk       ResponsesStreamChunk
+		chunk       StreamChunk
 		wantErrPart string
 	}{
 		{
 			name: "error event",
-			chunk: ResponsesStreamChunk{
+			chunk: StreamChunk{
 				Type:  "error",
-				Error: &ResponsesError{Message: "quota exceeded"},
+				Error: &Error{Message: "quota exceeded"},
 			},
 			wantErrPart: "quota exceeded",
 		},
 		{
 			name: "response failed event",
-			chunk: ResponsesStreamChunk{
+			chunk: StreamChunk{
 				Type: "response.failed",
 			},
 			wantErrPart: "OpenAI Responses API request failed",
@@ -74,9 +74,9 @@ func TestHandleChunk_DispatchesErrorEvents(t *testing.T) {
 func TestHandleChunk_DispatchesFunctionCallAndCompletion(t *testing.T) {
 	state := newResponsesStreamState(nil, io.Discard)
 
-	_, done, err := state.handleChunk(ResponsesStreamChunk{
+	_, done, err := state.handleChunk(StreamChunk{
 		Type: "response.output_item.added",
-		Item: &ResponsesItem{
+		Item: &Item{
 			Type:   "function_call",
 			CallID: "call_1",
 			Name:   "read_file",
@@ -89,9 +89,9 @@ func TestHandleChunk_DispatchesFunctionCallAndCompletion(t *testing.T) {
 		t.Fatal("handleChunk(add) done = true, want false")
 	}
 
-	_, done, err = state.handleChunk(ResponsesStreamChunk{
+	_, done, err = state.handleChunk(StreamChunk{
 		Type: "response.function_call_arguments.done",
-		Item: &ResponsesItem{
+		Item: &Item{
 			CallID:    "call_1",
 			Arguments: `{"path":"main.go"}`,
 		},
@@ -103,10 +103,10 @@ func TestHandleChunk_DispatchesFunctionCallAndCompletion(t *testing.T) {
 		t.Fatal("handleChunk(arguments.done) done = true, want false")
 	}
 
-	textDelta, done, err := state.handleChunk(ResponsesStreamChunk{
+	textDelta, done, err := state.handleChunk(StreamChunk{
 		Type: "response.completed",
 		Response: &ResponseMetadata{
-			Usage: &ResponsesUsage{
+			Usage: &Usage{
 				InputTokens:  10,
 				OutputTokens: 4,
 			},
@@ -132,7 +132,7 @@ func TestHandleChunk_DispatchesFunctionCallAndCompletion(t *testing.T) {
 func TestHandleChunk_DispatchesOutputTextDelta(t *testing.T) {
 	state := newResponsesStreamState(nil, io.Discard)
 
-	textDelta, done, err := state.handleChunk(ResponsesStreamChunk{
+	textDelta, done, err := state.handleChunk(StreamChunk{
 		Type:  "response.output_text.delta",
 		Delta: "hello",
 	}, "")
@@ -151,9 +151,9 @@ func TestHandleChunk_FunctionCallAddedStartsSpinnerViaDisplayState(t *testing.T)
 	spinner := ui.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
-	_, done, err := state.handleChunk(ResponsesStreamChunk{
+	_, done, err := state.handleChunk(StreamChunk{
 		Type: "response.output_item.added",
-		Item: &ResponsesItem{
+		Item: &Item{
 			Type:   "function_call",
 			CallID: "call_1",
 			Name:   "read_file",
@@ -175,9 +175,9 @@ func TestHandleChunk_OutputItemAddedWithCompactionTypeDoesNotBreakStreamingParse
 	spinner := ui.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
-	textDelta, done, err := state.handleChunk(ResponsesStreamChunk{
+	textDelta, done, err := state.handleChunk(StreamChunk{
 		Type: "response.output_item.added",
-		Item: &ResponsesItem{
+		Item: &Item{
 			Type: "compaction",
 		},
 	}, "")
@@ -198,7 +198,7 @@ func TestHandleChunk_OutputItemAddedWithCompactionTypeDoesNotBreakStreamingParse
 func TestHandleChunk_UnknownStreamingEventDoesNotBreakParser(t *testing.T) {
 	state := newResponsesStreamState(nil, io.Discard)
 
-	textDelta, done, err := state.handleChunk(ResponsesStreamChunk{
+	textDelta, done, err := state.handleChunk(StreamChunk{
 		Type: "response.future_event.unknown",
 	}, "")
 	if err != nil {

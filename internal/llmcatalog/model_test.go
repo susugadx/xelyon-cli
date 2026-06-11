@@ -102,6 +102,16 @@ func TestKnownModelNamesForProvider_AzureDoesNotUseCatalogModels(t *testing.T) {
 	}
 }
 
+func TestKnownModelNamesForProvider_OpenAISubscriptionExactAllowlist(t *testing.T) {
+	want := []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"}
+	if got := KnownModelNamesForProvider("openai_subscription"); !slices.Equal(got, want) {
+		t.Fatalf("KnownModelNamesForProvider(openai_subscription) = %v, want %v", got, want)
+	}
+	if got := RecommendedModelNamesForProvider("chatgpt"); !slices.Equal(got, want) {
+		t.Fatalf("RecommendedModelNamesForProvider(chatgpt) = %v, want %v", got, want)
+	}
+}
+
 func TestKnownAndRecommendedModelNamesForProviderDoNotDuplicateModels(t *testing.T) {
 	for provider := range knownProviderModels {
 		t.Run(provider+"/known", func(t *testing.T) {
@@ -291,6 +301,10 @@ func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
 		{provider: "kimi", model: "kimi-k2-custom", want: true},
 		{provider: "kimi", model: "moonshotai.kimi-k2.5", want: false},
 		{provider: "openai", model: "gpt-5.4", want: true},
+		{provider: "openai_subscription", model: "gpt-5.5", want: true},
+		{provider: "openai_subscription", model: "gpt-5.3-codex-spark", want: true},
+		{provider: "openai_subscription", model: "gpt-5.3-codex", want: false},
+		{provider: "openai_subscription", model: "gpt-5.2", want: false},
 		{provider: "openai", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: false},
 		{provider: "gemini", model: "gemini-3.1-pro", want: true},
 		{provider: "gemini", model: "gemini-3-pro-preview", want: true},

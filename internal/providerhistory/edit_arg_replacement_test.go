@@ -240,6 +240,10 @@ func TestProjectEditArgReplacementSyncsAnthropicProviderState(t *testing.T) {
 		{Type: "tool_use", ID: "call_patch", Name: "apply_patch", Input: map[string]any{"patch": patch}},
 		{Type: "tool_use", ID: "call_replace", Name: "str_replace", Input: map[string]any{"path": replacePath, "old_str": oldStr, "new_str": newStr}},
 	})
+	assistant.SetOpenAIResponsesInputItems([]api.InputItem{
+		{Type: "function_call", CallID: "call_patch", Name: "apply_patch", Arguments: patchArgs},
+		{Type: "function_call", CallID: "call_replace", Name: "str_replace", Arguments: replaceArgs},
+	})
 	history := []api.Message{
 		assistant,
 		providerHistoryTestToolResult("call_patch", "apply_patch", providerHistoryTestApplyPatchSuccess(nil, []string{patchPath}, nil)),
@@ -264,6 +268,12 @@ func TestProjectEditArgReplacementSyncsAnthropicProviderState(t *testing.T) {
 		blocks[2].Input["old_str"] != replaceFields["old_str"] ||
 		blocks[2].Input["new_str"] != replaceFields["new_str"] {
 		t.Fatalf("projected AnthropicContentBlocks = %#v, want matching edit arg replacements", blocks)
+	}
+	openAIItems := result.History[0].OpenAIResponsesInputItems()
+	if len(openAIItems) != 2 ||
+		openAIItems[0].Arguments != result.History[0].ToolCalls[0].Function.Arguments ||
+		openAIItems[1].Arguments != result.History[0].ToolCalls[1].Function.Arguments {
+		t.Fatalf("projected OpenAI Responses items = %#v, want matching edit arg replacements", openAIItems)
 	}
 	if !reflect.DeepEqual(history, raw) {
 		t.Fatalf("raw history changed after Anthropic edit arg projection:\n got %#v\nwant %#v", history, raw)

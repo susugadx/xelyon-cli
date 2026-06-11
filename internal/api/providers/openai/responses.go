@@ -63,6 +63,7 @@ type ResponsesResult = openairesponses.Result
 // chatWithResponses は Responses API でチャット
 // previous_response_id を使用してキャッシュを活用
 func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	p.clearLastOpenAIResponsesInputItems()
 	errOut := api.ErrorWriterFromContext(ctx)
 	if os.Getenv("XELYON_DEBUG_OPENAI") == "1" {
 		fmt.Fprintf(errOut, "[DEBUG OpenAI] chatWithResponses called, model=%s\n", model)
@@ -95,6 +96,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 // chatWithImageResponses は Responses API で画像付きメッセージを処理
 // NOTE: 画像付きの場合は previous_response_id を使用しない（キャッシュ動作が不明瞭なため）
 func (p *Provider) chatWithImageResponses(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	p.clearLastOpenAIResponsesInputItems()
 	chainPolicy := openairesponses.ResponseIDChainPolicyFromContext(ctx)
 	content, responseID, err := p.runResponsesRequest(ctx, responsesRequestRunOptions{
 		URL: resolveResponsesAPIURL(),
