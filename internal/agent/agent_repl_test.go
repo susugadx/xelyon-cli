@@ -14,6 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -514,6 +515,10 @@ func TestRefreshProjectPrompt_ProjectMapStaysInDynamicSystemBlock(t *testing.T) 
 	if _, err := exec.LookPath("rg"); err != nil {
 		t.Skip("ripgrep (rg) not available")
 	}
+
+	oldLoader := loadSkillCatalogForAgent
+	loadSkillCatalogForAgent = func(_ string) agentskills.SkillCatalog { return agentskills.SkillCatalog{} }
+	t.Cleanup(func() { loadSkillCatalogForAgent = oldLoader })
 
 	root := t.TempDir()
 	oldwd, err := os.Getwd()

@@ -9,6 +9,10 @@ func defaultGeneralConfig() GeneralConfig {
 
 func defaultReviewConfig() ReviewConfig {
 	return ReviewConfig{
+		Thinking: ReviewThinkingConfig{
+			Mode:  ReviewThinkingModeInherit,
+			Level: "",
+		},
 		WebSearchEvidence: ReviewWebSearchEvidenceConfig{
 			Enabled:            false,
 			MaxQueries:         3,

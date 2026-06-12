@@ -87,3 +87,36 @@ func TestValidateProviderHistoryRawOutputArtifactsRoot(t *testing.T) {
 		t.Fatalf("root issue = %#v, want non-autofixable error", issue)
 	}
 }
+
+func TestValidateSkillsRouterConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Skills.Router.Activation = SkillsRouterActivation("auto")
+	cfg.Skills.Router.UsageRetentionDays = 0
+
+	result := ValidateConfig(cfg)
+	if len(result.Issues) != 2 {
+		t.Fatalf("ValidateConfig() issues = %#v, want two skills issues", result.Issues)
+	}
+	for _, want := range []string{"skills.router.activation", "skills.router.usage_retention_days"} {
+		found := false
+		for _, issue := range result.Issues {
+			if issue.Field == want && issue.Severity == ValidationSeverityError && issue.CanAutoFix {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("issues = %#v, want autofixable error for %s", result.Issues, want)
+		}
+	}
+
+	if fixed := ApplyAutoFixes(cfg, result); fixed != 2 {
+		t.Fatalf("ApplyAutoFixes() = %d, want 2", fixed)
+	}
+	if cfg.Skills.Router.Activation != SkillsRouterActivationHint {
+		t.Fatalf("Skills.Router.Activation = %q, want hint", cfg.Skills.Router.Activation)
+	}
+	if cfg.Skills.Router.UsageRetentionDays != defaultSkillsRouterUsageRetentionDays {
+		t.Fatalf("Skills.Router.UsageRetentionDays = %d, want %d", cfg.Skills.Router.UsageRetentionDays, defaultSkillsRouterUsageRetentionDays)
+	}
+}

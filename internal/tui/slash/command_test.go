@@ -289,6 +289,8 @@ func TestSuggestionsSkillsSubcommands(t *testing.T) {
 	for _, fragment := range []string{
 		"overview: Print skill catalog overview",
 		"show <name>: Show SKILL.md body and resource listings",
+		"suggest <text>: Preview ranked Skill Router recommendations",
+		"usage: Show local Skill Router usage diagnostics",
 		"doctor: Show parsing/duplicate diagnostics",
 	} {
 		if !strings.Contains(root[0].Detail, fragment) {
@@ -297,16 +299,16 @@ func TestSuggestionsSkillsSubcommands(t *testing.T) {
 	}
 
 	matches := Suggestions("/skills ")
-	if len(matches) != 3 {
-		t.Fatalf("Suggestions(/skills ) returned %d matches, want 3", len(matches))
+	if len(matches) != 5 {
+		t.Fatalf("Suggestions(/skills ) returned %d matches, want 5", len(matches))
 	}
 
-	wantLabels := []string{"overview", "show <name>", "doctor"}
+	wantLabels := []string{"overview", "show <name>", "suggest <text>", "usage", "doctor"}
 	for i, want := range wantLabels {
 		if matches[i].Label != want {
 			t.Fatalf("matches[%d].Label = %q, want %q", i, matches[i].Label, want)
 		}
-		if want != "show <name>" && !matches[i].SubmitOnEnter {
+		if want != "show <name>" && want != "suggest <text>" && !matches[i].SubmitOnEnter {
 			t.Fatalf("matches[%d].SubmitOnEnter = false, want true", i)
 		}
 	}
@@ -323,17 +325,35 @@ func TestSuggestionsSkillsSubcommands(t *testing.T) {
 	if matches[1].SubmitOnEnter {
 		t.Fatal("show suggestion should expand before submit because it requires <name>")
 	}
+	if got := matches[2].InsertText; got != "/skills suggest" {
+		t.Fatalf("suggest InsertText = %q, want /skills suggest", got)
+	}
+	if !matches[2].HasArgs {
+		t.Fatal("suggest suggestion should keep HasArgs for Tab trailing space")
+	}
+	if !matches[2].ExpandOnEnter {
+		t.Fatal("suggest suggestion should expand on Enter because it requires <text>")
+	}
+	if matches[2].SubmitOnEnter {
+		t.Fatal("suggest suggestion should expand before submit because it requires <text>")
+	}
 	if got := matches[0].InsertText; got != "/skills overview" {
 		t.Fatalf("overview InsertText = %q, want /skills overview", got)
 	}
 	if matches[0].ExpandOnEnter {
 		t.Fatal("overview suggestion should submit on Enter")
 	}
-	if matches[2].ExpandOnEnter {
+	if matches[3].ExpandOnEnter {
+		t.Fatal("usage suggestion should submit on Enter")
+	}
+	if matches[4].ExpandOnEnter {
 		t.Fatal("doctor suggestion should submit on Enter")
 	}
 	if got := matches[1].CompletionText(true); got != "/skills show " {
 		t.Fatalf("show CompletionText(true) = %q, want '/skills show '", got)
+	}
+	if got := matches[2].CompletionText(true); got != "/skills suggest " {
+		t.Fatalf("suggest CompletionText(true) = %q, want '/skills suggest '", got)
 	}
 }
 
@@ -346,6 +366,28 @@ func TestSuggestionsSkillsSubcommandPrefix(t *testing.T) {
 		t.Fatalf("InsertText = %q, want /skills doctor", got)
 	}
 	if got := matches[0].Description; got != "Show parsing/duplicate diagnostics" {
+		t.Fatalf("Description = %q", got)
+	}
+
+	matches = Suggestions("/skills s")
+	if len(matches) != 2 {
+		t.Fatalf("Suggestions(/skills s) returned %d matches, want 2", len(matches))
+	}
+	wantSuggestLabels := []string{"show <name>", "suggest <text>"}
+	for i, want := range wantSuggestLabels {
+		if got := matches[i].Label; got != want {
+			t.Fatalf("matches[%d].Label = %q, want %q", i, got, want)
+		}
+	}
+
+	matches = Suggestions("/skills u")
+	if len(matches) != 1 {
+		t.Fatalf("Suggestions(/skills u) returned %d matches, want 1", len(matches))
+	}
+	if got := matches[0].InsertText; got != "/skills usage" {
+		t.Fatalf("InsertText = %q, want /skills usage", got)
+	}
+	if got := matches[0].Description; got != "Show local Skill Router usage diagnostics" {
 		t.Fatalf("Description = %q", got)
 	}
 }

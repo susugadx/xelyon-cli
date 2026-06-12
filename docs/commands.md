@@ -414,6 +414,7 @@ TUI で現在の入力ドラフトにファイルまたは画像を 1 件添付�
 
 TUIモードで、現在の作業ツリー差分全体をレビューする preset 画面を開きます。
 通常は現在の provider/model を使いますが、`review.provider` と `review.model` を設定すると `/review` だけ別の provider/model で実行できます。`review.provider` だけを設定した場合はその provider の既定モデルを使い、`review.model` を設定する場合は `review.provider` も必須です。review モデル呼び出しには通常会話履歴を渡しません。
+`review.thinking.mode` は `/review` の thinking 方針です。既定の `inherit` は現在の `/thinking` 状態を引き継ぎます。`off` は `/review` だけ thinking を無効化し、`on` は `/review` だけ thinking を有効化します。`review.thinking.level` は `low` / `medium` / `high` / `xhigh` を指定でき、空の場合は現在の `/thinking` level を使います。
 preset の `Review current changes` は追加指示なしの通常レビューです。`Review current changes with custom focus` は同じ current changes 全体に追加の観点・重点項目を渡します。
 引数を付けた場合は、そのテキストを custom focus として current changes 全体レビューを即時実行します。
 custom focus は対象ファイルや差分範囲を絞るものではありません。特定 finding だけの再検証や focused verification mode はまだ未実装です。
@@ -509,6 +510,8 @@ custom focus は対象ファイルや差分範囲を絞るものではありま�
 
 プロバイダーとモデルを動的に切り替えます。TUI で引数なしの `/provider` を実行すると provider picker を開きます。`/use` は legacy alias です。
 
+切り替え後もローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側の continuation state は、新しい provider/model と混ざらないよう切り替え時にリセットされます。文脈自体を切りたい場合は `/clear` か新しい session を使います。
+
 ```
 > /provider
 > /provider deepseek
@@ -568,18 +571,33 @@ global config (`~/.xelyon/config.yaml`) を確認・変更します。TUI の対
 | []string | 項目追加/削除 | `execution.safe_shell_commands` |
 | map[string]struct | サブメニューで編集 | `provider_models`, `lsp.servers` |
 
-**主なカテゴリ:** Provider & Model, Execution Mode, Compression, Paste Mode, Project Map, Agent Instructions, LSP Servers, Output, Web Search, Sub-agent, MCP Servers, Final Checks など
+**主なカテゴリ:** Provider & Model, Execution Mode, Compression, Paste Mode, Project Map, Agent Instructions, Agent Skills, LSP Servers, Output, Web Search, Sub-agent, MCP Servers, Final Checks など
 
 **変更は即座に保存:** `~/.xelyon/config.yaml` に自動保存されます。
 
 ### `/skills`
 
-Agent Skills を選択・確認・診断します。TUI では `/skills` から skill 名を選ぶと、対応する skill 利用文を入力欄に貼り付けます。`/skills overview` は検出済み skill catalog の概要を会話ログに出力し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。`/skills doctor` は parse error や重複名などの診断を表示します。互換性のため `/skills list` も overview の alias として受け付けます。
+Agent Skills を選択・確認・診断します。skill catalog は project `.agents/skills`、home `~/.agents/skills`、XELYON 内蔵 skills を読みます。Codex / Claude など他 runtime の system skills は読みません。
+
+`/skills overview` は検出済み skill catalog の概要を会話ログに出力し、`/skills show <name>` は対象の `SKILL.md` 本文と resource 一覧を表示します。互換性のため `/skills list` も overview の alias として受け付けます。
+
+Skill Router は通常の依頼時に bounded hint を model へ渡します。v1 の既定は hint-only で、full `SKILL.md` body は自動読み込みしません。必要な場合だけ model が `activate_skill(name)` を呼びます。
+
+`agents/xelyon.yaml` がある skill は routing metadata として使われます。既存の `SKILL.md` frontmatter は `name` / `description` だけで valid のままです。plain `/skills doctor` は legacy skill に sidecar がないだけでは警告しません。routing metadata や sidecar completeness を見る場合は `/skills doctor --routing` を使います。
+
+`/skills suggest <text>` は debug / authoring 用に Skill Router の full ranked list を表示します。通常ユーザーが毎回使う導線ではありません。v1 は human-readable output のみで、`--json` schema は公開しません。
+
+`/skills usage` は local-only routing usage ledger の要約を表示します。ledger は raw prompt、raw response、diff、file content、secret を保存しません。保存先は `~/.xelyon/skills/router/usage/` 配下で、repo key は project root の hash です。`/skills usage clear` で current repo、`/skills usage clear --all` で全 skill router usage ledger を削除できます。v1 は human-readable output のみです。
 
 ```
 > /skills overview
 > /skills show imagegen
 > /skills doctor
+> /skills doctor --routing
+> /skills suggest "review provider runtime changes"
+> /skills usage
+> /skills usage clear
+> /skills usage clear --all
 ```
 
 ### `/init`

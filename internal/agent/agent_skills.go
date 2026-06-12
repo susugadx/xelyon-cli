@@ -4,7 +4,7 @@ import (
 	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 )
 
-const promptSkillCatalogMaxEntries = 24
+const promptSkillCatalogMaxEntries = agentskills.DefaultPromptCatalogMaxEntries
 
 var loadSkillCatalogForAgent = func(invocationCWD string) agentskills.SkillCatalog {
 	return agentskills.LoadCatalogForInvocationCWD(invocationCWD)

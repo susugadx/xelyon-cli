@@ -164,6 +164,7 @@ func (r *planModeRequest) runInvestigation() (*plan.Plan, bool, error) {
 	a.History = append(a.History, api.Message{Role: "user", Content: r.investigationPrompt})
 
 	p, err := a.runInvestigationPhaseWithOptions(r.ctx, planInvestigationOptions{
+		taskText:        r.preparedUserRequest,
 		autoCompression: r.investigationAutoCompression(),
 	})
 	if err != nil {

@@ -24,12 +24,14 @@ type planInvestigationRunner struct {
 	agent           *Agent
 	ctx             context.Context
 	hardLimit       int
+	taskText        string
 	lastToolCall    *tools.ToolCall
 	sameCallCount   int
 	autoCompression planInvestigationAutoCompression
 }
 
 type planInvestigationOptions struct {
+	taskText        string
 	autoCompression planInvestigationAutoCompression
 }
 
@@ -87,6 +89,7 @@ func newPlanInvestigationRunnerWithOptions(agent *Agent, ctx context.Context, op
 		agent:           agent,
 		ctx:             ctx,
 		hardLimit:       normalizeToolLoopLimit(cfg.General.ToolLoopLimit),
+		taskText:        opts.taskText,
 		autoCompression: opts.autoCompression,
 	}
 }
@@ -97,7 +100,7 @@ func (r *planInvestigationRunner) Run() (*plan.Plan, error) {
 			return nil, err
 		}
 
-		response, err := r.requestResponse()
+		response, err := r.requestResponseForIteration(iteration)
 		if err != nil {
 			return nil, err
 		}
@@ -136,10 +139,15 @@ func (r *planInvestigationRunner) beforeIteration(iteration int) error {
 }
 
 func (r *planInvestigationRunner) requestResponse() (string, error) {
+	return r.requestResponseForIteration(0)
+}
+
+func (r *planInvestigationRunner) requestResponseForIteration(iteration int) (string, error) {
 	requestCtx, history := r.agent.providerFacingHistoryForRequest(r.agent.requestContext(r.ctx))
+	effectivePrompt := r.agent.planModeSystemPromptForInvestigationRequest(r.ctx, r.taskText, iteration == 0)
 	response, err := r.agent.CurrentProvider.ChatWithTools(
 		requestCtx,
-		r.agent.SystemPrompt,
+		effectivePrompt,
 		history,
 		r.agent.CurrentModel,
 	)

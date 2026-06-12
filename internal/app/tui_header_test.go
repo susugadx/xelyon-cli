@@ -9,9 +9,10 @@ func TestBuildTUIHeader_ContainsGradientLogoAndSubtext(t *testing.T) {
 	header := buildTUIHeader()
 
 	checks := []string{
-		"██╗",                     // ロゴのブロック文字
-		"AI-powered coding agent", // サブテキスト
-		"Type / for commands",     // コマンド候補の案内
+		"╭─ XELYON",                                       // 起動パネルのタイトル
+		"code-guided agent runtime",                       // XELYON の説明
+		"Built to keep agents grounded in your codebase.", // プロダクト約束
+		"Ready · / opens commands · /exit quits",          // コマンド候補の案内
 	}
 	// ANSI コードを除去してテキスト検証
 	stripped := stripANSI(header)

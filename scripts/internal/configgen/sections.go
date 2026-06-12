@@ -93,6 +93,8 @@ var Sections = map[string]SectionInfo{
 		Fields: map[string]string{
 			"provider":                        "/review 専用プロバイダー（空で現在の provider/model を使用）",
 			"model":                           "/review 専用モデル（provider 設定時のみ有効。空で provider の既定モデル）",
+			"thinking.mode":                   "/review の thinking override（inherit=現在の /thinking 状態、off=review だけ無効、on=review だけ有効）",
+			"thinking.level":                  "/review の thinking level override（空で現在の /thinking level を使用）",
 			"web_search_evidence.enabled":     "/review の外部 Web 検索 evidence を有効化（初期検索 + Pass1 後の追加検索。raw result は discovery-only、fetch 済み external_doc snippet は citation-capable。デフォルト: false。XELYON_REVIEW_WEB_SEARCH=1 でも有効化）",
 			"web_search_evidence.max_queries": "外部 Web 検索 evidence の最大クエリ数（初期検索 + Pass1 後追加検索の合計。デフォルト: 3）",
 			"web_search_evidence.max_results_per_query": "外部 Web 検索 evidence の 1 クエリあたり最大結果数（デフォルト: 3）",
@@ -100,12 +102,16 @@ var Sections = map[string]SectionInfo{
 		FieldTypes: map[string]string{
 			"provider":                        "select",
 			"model":                           "string",
+			"thinking.mode":                   "select",
+			"thinking.level":                  "select",
 			"web_search_evidence.enabled":     "bool",
 			"web_search_evidence.max_queries": "int",
 			"web_search_evidence.max_results_per_query": "int",
 		},
 		SelectOpts: map[string][]string{
-			"provider": reviewProviderSelectOptions(),
+			"provider":       reviewProviderSelectOptions(),
+			"thinking.mode":  config.ReviewThinkingModeValues(),
+			"thinking.level": config.ReviewThinkingLevelValues(),
 		},
 	},
 	"gemini": {
@@ -285,6 +291,30 @@ var Sections = map[string]SectionInfo{
 			"project.mode": {"off", "fallback", "always"},
 		},
 	},
+	"skills": {
+		StructName: "SkillsConfig",
+		Title:      "Agent Skills 設定",
+		Icon:       "🧭",
+		Comments: []string{
+			"Skill Router の runtime hint と local usage ledger を制御",
+			"v1 は hint-only。full SKILL.md の自動読み込みは行いません",
+		},
+		Fields: map[string]string{
+			"router.enabled":              "Skill Router の runtime hint injection を有効化",
+			"router.activation":           "runtime skill recommendation 方針（off / hint。v1 は auto 未対応）",
+			"router.usage_ledger":         "local-only routing usage ledger を保存",
+			"router.usage_retention_days": "usage ledger retention days（1-365。無効化は usage_ledger=false）",
+		},
+		FieldTypes: map[string]string{
+			"router.enabled":              "bool",
+			"router.activation":           "select",
+			"router.usage_ledger":         "bool",
+			"router.usage_retention_days": "int",
+		},
+		SelectOpts: map[string][]string{
+			"router.activation": config.SkillsRouterActivationValues(),
+		},
+	},
 	"lsp": {
 		StructName: "LSPConfig",
 		Title:      "LSP連携設定",
@@ -436,6 +466,7 @@ var sectionCatalog = []sectionCatalogEntry{
 	{Name: "paste", Category: "paste"},
 	{Name: "project_map", Category: "project_map"},
 	{Name: "agent_instructions", Category: "agent_instructions"},
+	{Name: "skills", Category: "skills"},
 	{Name: "lsp", Category: "lsp"},
 	{Name: "output", Category: "output"},
 	{Name: "web_search", Category: "web_search"},
@@ -465,6 +496,7 @@ var categoryCatalog = []categoryCatalogEntry{
 	{Name: "paste", Info: CategoryInfo{DisplayName: "Paste Mode", Icon: "📋"}},
 	{Name: "project_map", Info: CategoryInfo{DisplayName: "Project Map", Icon: "🗺️"}},
 	{Name: "agent_instructions", Info: CategoryInfo{DisplayName: "Agent Instructions", Icon: "📚"}},
+	{Name: "skills", Info: CategoryInfo{DisplayName: "Agent Skills", Icon: "🧭"}},
 	{Name: "lsp", Info: CategoryInfo{DisplayName: "LSP Servers", Icon: "🔧"}},
 	{Name: "output", Info: CategoryInfo{DisplayName: "Output", Icon: "📤"}},
 	{Name: "web_search", Info: CategoryInfo{DisplayName: "Web Search", Icon: "🔍"}},

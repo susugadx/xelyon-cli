@@ -34,8 +34,44 @@ func validateReviewIssues(cfg *Config) []ValidationIssue {
 		})
 	}
 
+	issues = append(issues, validateReviewThinkingIssues(cfg)...)
 	issues = append(issues, validateReviewWebSearchEvidenceIssues(cfg)...)
 
+	return issues
+}
+
+func validateReviewThinkingIssues(cfg *Config) []ValidationIssue {
+	if cfg == nil {
+		return nil
+	}
+
+	var issues []ValidationIssue
+	mode := NormalizeReviewThinkingMode(cfg.Review.Thinking.Mode)
+	switch mode {
+	case ReviewThinkingModeInherit, ReviewThinkingModeOff, ReviewThinkingModeOn:
+	default:
+		issues = append(issues, ValidationIssue{
+			Field:      "review.thinking.mode",
+			Value:      strings.TrimSpace(string(cfg.Review.Thinking.Mode)),
+			Message:    "review.thinking.mode は inherit/off/on のいずれかを指定してください",
+			Suggestion: string(ReviewThinkingModeInherit),
+			Severity:   ValidationSeverityError,
+			CanAutoFix: true,
+			FixedValue: string(ReviewThinkingModeInherit),
+		})
+	}
+
+	level := strings.TrimSpace(cfg.Review.Thinking.Level)
+	if !IsValidReviewThinkingLevel(level) {
+		issues = append(issues, ValidationIssue{
+			Field:      "review.thinking.level",
+			Value:      level,
+			Message:    "review.thinking.level は空、または low/medium/high/xhigh のいずれかを指定してください",
+			Suggestion: "",
+			Severity:   ValidationSeverityError,
+			CanAutoFix: false,
+		})
+	}
 	return issues
 }
 

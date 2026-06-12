@@ -20,15 +20,17 @@ type StreamingOptions struct {
 	// DebugOverride が non-nil の場合はその値を優先する。
 	// nil の場合は後方互換のため Debug=true を優先し、未指定時は環境変数で判定する。
 	DebugOverride       *bool
+	DebugRawPayload     *bool
 	DebugWriter         io.Writer
 	UsageCallback       api.UsageCallback
 	ReplayItemsCallback func([]api.InputItem)
 }
 
 type responsesStreamStateOptions struct {
-	providerName string
-	debugName    string
-	debug        bool
+	providerName    string
+	debugName       string
+	debug           bool
+	debugRawPayload bool
 }
 
 type responsesStreamState struct {
@@ -37,6 +39,7 @@ type responsesStreamState struct {
 	spinner                   *ui.Spinner
 	errOut                    io.Writer
 	debug                     bool
+	debugRawPayload           bool
 	responseID                string
 	textOut                   strings.Builder
 	messages                  map[string]*responsesMessageAccumulator
@@ -55,9 +58,10 @@ type responsesStreamState struct {
 
 func newResponsesStreamState(spinner *ui.Spinner, errOut io.Writer) *responsesStreamState {
 	return newResponsesStreamStateWithOptions(spinner, errOut, responsesStreamStateOptions{
-		providerName: "OpenAI",
-		debugName:    "OpenAI",
-		debug:        os.Getenv("XELYON_DEBUG_OPENAI") == "1",
+		providerName:    "OpenAI",
+		debugName:       "OpenAI",
+		debug:           os.Getenv("XELYON_DEBUG_OPENAI") == "1",
+		debugRawPayload: true,
 	})
 }
 
@@ -76,6 +80,7 @@ func newResponsesStreamStateWithOptions(spinner *ui.Spinner, errOut io.Writer, o
 		spinner:                   spinner,
 		errOut:                    errOut,
 		debug:                     options.debug,
+		debugRawPayload:           options.debugRawPayload,
 		messages:                  make(map[string]*responsesMessageAccumulator),
 		messageKeysByOutputIndex:  make(map[int]string),
 		reasoningItems:            make(map[string]api.InputItem),
@@ -87,7 +92,7 @@ func newResponsesStreamStateWithOptions(spinner *ui.Spinner, errOut io.Writer, o
 }
 
 func (s *responsesStreamState) parseLine(line string) (string, bool, error) {
-	if s.debug && line != "" {
+	if s.debug && s.debugRawPayload && line != "" {
 		s.debugf("[DEBUG %s Responses] SSE line: %s\n", s.debugName, line)
 	}
 
@@ -127,7 +132,7 @@ func (s *responsesStreamState) handleChunk(chunk StreamChunk, rawData string) (s
 
 func (s *responsesStreamState) logChunkEvent(chunk StreamChunk, rawData string) {
 	s.debugf("[DEBUG %s Responses] event: %s\n", s.debugName, chunk.Type)
-	if chunk.Type == "response.completed" {
+	if s.debugRawPayload && chunk.Type == "response.completed" {
 		s.debugf("[DEBUG %s Responses] raw data: %s\n", s.debugName, rawData)
 	}
 }
@@ -174,9 +179,10 @@ func HandleStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinn
 		debugName = providerName
 	}
 	state := newResponsesStreamStateWithOptions(spinner, errOut, responsesStreamStateOptions{
-		providerName: providerName,
-		debugName:    debugName,
-		debug:        resolveResponsesStreamingDebug(options),
+		providerName:    providerName,
+		debugName:       debugName,
+		debug:           resolveResponsesStreamingDebug(options),
+		debugRawPayload: resolveResponsesStreamingDebugRawPayload(options),
 	})
 	content, err := api.ParseStreamingResponse(ctx, resp, spinner, state.parseLine)
 	if err == nil && options.ReplayItemsCallback != nil {
@@ -193,4 +199,11 @@ func resolveResponsesStreamingDebug(options StreamingOptions) bool {
 		return true
 	}
 	return os.Getenv("XELYON_DEBUG_OPENAI") == "1"
+}
+
+func resolveResponsesStreamingDebugRawPayload(options StreamingOptions) bool {
+	if options.DebugRawPayload != nil {
+		return *options.DebugRawPayload
+	}
+	return true
 }

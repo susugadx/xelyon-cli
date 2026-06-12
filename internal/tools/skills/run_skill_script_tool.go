@@ -107,7 +107,8 @@ func parseRunSkillScriptRequest(args map[string]string) (runSkillScriptRequest, 
 }
 
 func runSkillUnknownSkillMessage(catalog skillcatalog.SkillCatalog, skillName string) string {
-	available := strings.Join(skillcatalog.SkillNames(catalog), ", ")
+	skillName = sanitizeSkillToolLine(skillName, "(invalid-skill-name)")
+	available := strings.Join(sanitizedSkillNames(catalog), ", ")
 	if available == "" {
 		return fmt.Sprintf("Error: unknown skill: %s", skillName)
 	}

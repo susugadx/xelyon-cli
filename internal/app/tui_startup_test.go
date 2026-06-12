@@ -145,7 +145,7 @@ func TestRunTUIWithConfig_InitializesTUIAgentAndHeader(t *testing.T) {
 	}
 
 	stripped := stripANSI(gotInitialContent)
-	for _, fragment := range []string{"AI-powered coding agent", "Type / for commands"} {
+	for _, fragment := range []string{"code-guided agent runtime", "Ready · / opens commands"} {
 		if !strings.Contains(stripped, fragment) {
 			t.Fatalf("initialContent missing %q:\n%s", fragment, stripped)
 		}

@@ -46,9 +46,14 @@ thinking:
 	}
 
 	text := string(filtered)
-	for _, unexpected := range []string{"loop_detection:", "thinking:", "internal_only:", "hidden:", "servers: {}"} {
+	for _, unexpected := range []string{"internal_only:", "hidden:", "servers: {}"} {
 		if strings.Contains(text, unexpected) {
 			t.Fatalf("unexpected field remained after filtering: %q in %s", unexpected, text)
+		}
+	}
+	for _, unexpectedTopLevel := range []string{"loop_detection", "thinking"} {
+		if yamlHasTopLevelKey(t, filtered, unexpectedTopLevel) {
+			t.Fatalf("unexpected top-level section remained after filtering: %q in %s", unexpectedTopLevel, text)
 		}
 	}
 
@@ -172,14 +177,30 @@ func TestGenerateExampleFile(t *testing.T) {
 			t.Fatalf("expected generated example to contain %q", expected)
 		}
 	}
-	for _, unexpected := range []string{"loop_detection:", "responses:", "thinking:", "servers: {}"} {
+	for _, unexpected := range []string{"servers: {}"} {
 		if strings.Contains(text, unexpected) {
 			t.Fatalf("unexpected internal section in generated example: %q", unexpected)
+		}
+	}
+	for _, unexpectedTopLevel := range []string{"loop_detection", "responses", "thinking"} {
+		if yamlHasTopLevelKey(t, output, unexpectedTopLevel) {
+			t.Fatalf("unexpected internal top-level section in generated example: %q", unexpectedTopLevel)
 		}
 	}
 	if strings.Contains(text, "\n        root: /absolute/path/to/rawoutputs") {
 		t.Fatal("raw_output_artifacts.root should be a commented example, not an active config value")
 	}
+}
+
+func yamlHasTopLevelKey(t *testing.T, data []byte, key string) bool {
+	t.Helper()
+
+	var out map[string]interface{}
+	if err := yaml.Unmarshal(data, &out); err != nil {
+		t.Fatalf("unmarshal yaml: %v", err)
+	}
+	_, exists := out[key]
+	return exists
 }
 
 func TestGenerateExampleFileKeepsOpenAISubscriptionMaxOutputZero(t *testing.T) {

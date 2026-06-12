@@ -30,6 +30,7 @@ type RunOptions struct {
 	DebugName                string
 	Debug                    bool
 	DebugWriter              io.Writer
+	DebugRequestPreview      func(Request) []byte
 	DebugPayloadRedactor     func([]byte) []byte
 }
 
@@ -97,7 +98,7 @@ func RunResponsesRequest(ctx context.Context, options RunOptions) (string, strin
 		if err != nil {
 			return "", "", fmt.Errorf("failed to marshal request: %w", err)
 		}
-		writeResponsesDebugRequest(options, payload)
+		writeResponsesDebugRequest(options, reqBody, payload)
 
 		req, err := options.PrepareRequest(ctx, options.URL, payload)
 		if err != nil {
@@ -132,7 +133,7 @@ func RunResponsesRequest(ctx context.Context, options RunOptions) (string, strin
 	return "", "", fmt.Errorf("responses API retry exhausted")
 }
 
-func writeResponsesDebugRequest(options RunOptions, payload []byte) {
+func writeResponsesDebugRequest(options RunOptions, req Request, payload []byte) {
 	if !options.Debug || options.DebugWriter == nil {
 		return
 	}
@@ -140,7 +141,11 @@ func writeResponsesDebugRequest(options RunOptions, payload []byte) {
 	if debugName == "" {
 		debugName = "Responses"
 	}
-	if options.DebugPayloadRedactor != nil {
+	if options.DebugRequestPreview != nil {
+		payload = options.DebugRequestPreview(req)
+		fmt.Fprintf(options.DebugWriter, "[DEBUG %s Responses] Request preview:\n%s\n", debugName, string(payload))
+		return
+	} else if options.DebugPayloadRedactor != nil {
 		payload = options.DebugPayloadRedactor(payload)
 	}
 	fmt.Fprintf(options.DebugWriter, "[DEBUG %s Responses] Request body:\n%s\n", debugName, string(payload))

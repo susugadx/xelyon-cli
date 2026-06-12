@@ -109,6 +109,11 @@ review:
     provider: ""
     # /review 専用モデル（provider 設定時のみ有効。空で provider の既定モデル）
     model: ""
+    thinking:
+        # /review の thinking override（inherit=現在の /thinking 状態、off=review だけ無効、on=review だけ有効）
+        mode: inherit
+        # /review の thinking level override（空で現在の /thinking level を使用）
+        level: ""
     web_search_evidence:
         # /review の外部 Web 検索 evidence を有効化（初期検索 + Pass1 後の追加検索。raw result は discovery-only、fetch 済み external_doc snippet は citation-capable。デフォルト: false。XELYON_REVIEW_WEB_SEARCH=1 でも有効化）
         enabled: false
@@ -227,6 +232,22 @@ agent_instructions:
     max_file_bytes: 20000
     # guidance 全体の最大読み込みバイト数
     max_total_bytes: 60000
+
+# ============================================================
+# Agent Skills 設定
+# ============================================================
+# Skill Router の runtime hint と local usage ledger を制御
+# v1 は hint-only。full SKILL.md の自動読み込みは行いません
+skills:
+    router:
+        # Skill Router の runtime hint injection を有効化
+        enabled: true
+        # runtime skill recommendation 方針（off / hint。v1 は auto 未対応）
+        activation: hint
+        # local-only routing usage ledger を保存
+        usage_ledger: true
+        # usage ledger retention days（1-365。無効化は usage_ledger=false）
+        usage_retention_days: 30
 
 # ============================================================
 # LSP連携設定
@@ -381,10 +402,15 @@ Kimi K2.6 / K2.5 は 256K context / 最大 32K output です。`kimi-k2-thinking
 
 `review.model` は `review.provider` と一緒に設定してください。`review.provider` だけを設定した場合は、その provider の `provider_models.<provider>.default_model` または組み込み既定モデルを使います。
 
+`review.thinking.mode` は `/review` の thinking 方針です。既定の `inherit` は現在の `/thinking` 状態を引き継ぎます。`off` は `/review` だけ thinking を無効化し、`on` は `/review` だけ thinking を有効化します。`review.thinking.level` は `low` / `medium` / `high` / `xhigh` を指定でき、空の場合は現在の `/thinking` level を使います。
+
 ```yaml
 review:
   provider: claude
   model: claude-sonnet-4-6
+  thinking:
+    mode: on
+    level: high
 ```
 
 ### 会話履歴圧縮設定 (`compression`)

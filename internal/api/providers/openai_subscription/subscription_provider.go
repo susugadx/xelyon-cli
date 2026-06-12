@@ -175,7 +175,7 @@ func (p *SubscriptionProvider) chatWithResponses(ctx context.Context, systemProm
 		DebugName:                subscriptionDisplayName,
 		Debug:                    subscriptionDebugEnabled(),
 		DebugWriter:              api.ErrorWriterFromContext(ctx),
-		DebugPayloadRedactor:     redactSubscriptionDebugPayload,
+		DebugRequestPreview:      subscriptionDebugRequestPreview,
 	})
 	return content, err
 }
@@ -216,11 +216,13 @@ func (p *SubscriptionProvider) executeSubscriptionLongRunningRequest(req *http.R
 
 func (p *SubscriptionProvider) handleSubscriptionResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
 	debugEnabled := subscriptionDebugEnabled()
+	debugRawPayload := false
 	return openairesponses.HandleStreaming(ctx, resp, spinner, openairesponses.StreamingOptions{
 		ProviderName:        subscriptionDisplayName,
 		DebugName:           subscriptionDisplayName,
 		Debug:               debugEnabled,
 		DebugOverride:       &debugEnabled,
+		DebugRawPayload:     &debugRawPayload,
 		DebugWriter:         api.ErrorWriterFromContext(ctx),
 		UsageCallback:       p.usageCallback,
 		ReplayItemsCallback: p.setLastOpenAIResponsesInputItems,
@@ -261,10 +263,6 @@ func subscriptionResponsesReasoningConfig(ctx context.Context, model openairespo
 
 func subscriptionDebugEnabled() bool {
 	return os.Getenv("XELYON_DEBUG_OPENAI_SUBSCRIPTION") == "1"
-}
-
-func redactSubscriptionDebugPayload(payload []byte) []byte {
-	return []byte(RedactSubscriptionSecrets(string(payload)))
 }
 
 func (p *SubscriptionProvider) handleSubscriptionResponsesNonStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {

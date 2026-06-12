@@ -859,7 +859,7 @@ func TestSwitchProviderModel_ReturnsOutcomeWithoutPrinting(t *testing.T) {
 
 	cfg := newProjectMapDisabledConfig()
 	var out bytes.Buffer
-	oldProvider := &mockCacheClearableProviderForModel{name: "openai"}
+	oldProvider := &mockCacheClearableProvider{name: "openai"}
 	agent := &Agent{
 		ProviderName:      "openai",
 		ProviderConfigKey: "openai",
@@ -878,6 +878,7 @@ func TestSwitchProviderModel_ReturnsOutcomeWithoutPrinting(t *testing.T) {
 		},
 	}
 	agent.session.AddMessage("user", "old task", agent.CurrentModel)
+	agent.session.ApplyResponseContext("resp_old", "gpt-old", "openai", "openai")
 
 	outcome, err := agent.SwitchProviderModel("ollama", "qwen2.5-coder:14b")
 	if err != nil {
@@ -889,8 +890,8 @@ func TestSwitchProviderModel_ReturnsOutcomeWithoutPrinting(t *testing.T) {
 	if outcome.OldModel != "gpt-old" || outcome.NewModel != "qwen2.5-coder:14b" {
 		t.Fatalf("outcome models = (%q, %q), want (gpt-old, qwen2.5-coder:14b)", outcome.OldModel, outcome.NewModel)
 	}
-	if !outcome.HistoryCleared {
-		t.Fatal("HistoryCleared = false, want true")
+	if !outcome.ContextNotice.LocalContextKept || !outcome.ContextNotice.ResponseContinuationReset {
+		t.Fatalf("ContextNotice = %#v, want local context kept with response continuation reset", outcome.ContextNotice)
 	}
 	if out.String() != "" {
 		t.Fatalf("SwitchProviderModel() wrote output %q, want no user-facing output", out.String())
@@ -901,10 +902,82 @@ func TestSwitchProviderModel_ReturnsOutcomeWithoutPrinting(t *testing.T) {
 	if agent.ProviderName != "ollama" || agent.ProviderConfigKey != "ollama" || agent.CurrentModel != "qwen2.5-coder:14b" {
 		t.Fatalf("agent provider/model = (%q, %q, %q), want (ollama, ollama, qwen2.5-coder:14b)", agent.ProviderName, agent.ProviderConfigKey, agent.CurrentModel)
 	}
-	if len(agent.History) != 0 || len(agent.session.Messages) != 0 {
-		t.Fatalf("conversation should be reset, got history=%d session=%d", len(agent.History), len(agent.session.Messages))
+	if len(agent.History) != 1 || len(agent.session.Messages) != 1 {
+		t.Fatalf("conversation should be kept, got history=%d session=%d", len(agent.History), len(agent.session.Messages))
+	}
+	if agent.session.ResponseID != "" || agent.session.ResponseModel != "" || agent.session.ResponseProviderName != "" || agent.session.ResponseProviderConfigKey != "" {
+		t.Fatalf("response context = (%q, %q, %q, %q), want cleared",
+			agent.session.ResponseID,
+			agent.session.ResponseModel,
+			agent.session.ResponseProviderName,
+			agent.session.ResponseProviderConfigKey,
+		)
 	}
 	if agent.Stats.Provider != "ollama" || agent.Stats.Model != "qwen2.5-coder:14b" {
 		t.Fatalf("stats provider/model = (%q, %q), want (ollama, qwen2.5-coder:14b)", agent.Stats.Provider, agent.Stats.Model)
+	}
+}
+
+func TestSwitchModelForCurrentProvider_ClearsRemoteContinuationButKeepsContext(t *testing.T) {
+	withConfigCommandHooks(t)
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.DefaultModel = "gpt-old"
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{DefaultModel: "gpt-old"})
+	loadConfigForCommand = func() (*config.Config, error) {
+		return config.CloneConfig(cfg), nil
+	}
+	saveConfigForCommand = func(*config.Config) error {
+		return nil
+	}
+
+	var out bytes.Buffer
+	provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "resp_old"}
+	agent := &Agent{
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentModel:      "gpt-old",
+		CurrentProvider:   provider,
+		History: []api.Message{
+			{Role: "user", Content: "old task"},
+		},
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: newResponseContextSession("gpt-old", "openai", "openai", "resp_old"),
+		},
+	}
+	agent.session.AddMessage("user", "old task", agent.CurrentModel)
+
+	outcome := agent.SwitchModelForCurrentProvider("gpt-new")
+	if outcome.ValidationErr != nil || outcome.LoadConfigErr != nil || outcome.SaveConfigErr != nil {
+		t.Fatalf("SwitchModelForCurrentProvider() errors = validation:%v load:%v save:%v",
+			outcome.ValidationErr,
+			outcome.LoadConfigErr,
+			outcome.SaveConfigErr,
+		)
+	}
+	if !outcome.ContextNotice.LocalContextKept || !outcome.ContextNotice.ResponseContinuationReset {
+		t.Fatalf("ContextNotice = %#v, want local context kept with response continuation reset", outcome.ContextNotice)
+	}
+	if provider.GetResponseID() != "" {
+		t.Fatalf("provider response ID = %q, want cleared", provider.GetResponseID())
+	}
+	if agent.session.ResponseID != "" || agent.session.ResponseModel != "" || agent.session.ResponseProviderName != "" || agent.session.ResponseProviderConfigKey != "" {
+		t.Fatalf("response context = (%q, %q, %q, %q), want cleared",
+			agent.session.ResponseID,
+			agent.session.ResponseModel,
+			agent.session.ResponseProviderName,
+			agent.session.ResponseProviderConfigKey,
+		)
+	}
+	if len(agent.History) != 1 || len(agent.session.Messages) != 1 {
+		t.Fatalf("conversation should be kept, got history=%d session=%d", len(agent.History), len(agent.session.Messages))
+	}
+	if out.String() != "" {
+		t.Fatalf("SwitchModelForCurrentProvider() wrote output %q, want no user-facing output", out.String())
 	}
 }

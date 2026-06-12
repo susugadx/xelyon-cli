@@ -120,8 +120,12 @@ func (r *headlessRunner) requestAssistantResponse(ctx context.Context, iteration
 		r.agent.refreshProjectPromptIfDirty(r.query)
 	}
 
+	effectivePrompt := r.agent.SystemPrompt
+	if strings.TrimSpace(r.agent.cfg().SubAgentPrompt) == "" {
+		effectivePrompt = r.agent.normalModeSystemPromptForRequest(reqCtx, r.query, iteration == 0)
+	}
 	requestCtx, history := r.agent.providerFacingHistoryForRequest(r.agent.requestContext(reqCtx))
-	return r.provider.ChatWithTools(requestCtx, r.agent.SystemPrompt, history, r.model)
+	return r.provider.ChatWithTools(requestCtx, effectivePrompt, history, r.model)
 }
 
 func (r *headlessRunner) handleAssistantResponse(ctx context.Context, response string) bool {
@@ -160,6 +164,7 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 	execResult := r.agent.executeQuietToolResult(ctx, tc, strings.NewReader(""), io.Discard, io.Discard, true)
 	output, change := execResult.Result, execResult.Change
 	r.agent.noteProjectMapMutation(tc, change)
+	r.agent.recordSkillActivationFromToolResult(tc, output, execResult.Error)
 
 	success := isHeadlessToolCallSuccess(execResult)
 	if r.agent.Stats != nil {

@@ -24,6 +24,8 @@ const GeneratedHelpCommandsText = `Commands:
   /skills                   - Pick skills or inspect the Agent Skills catalog
                             /skills overview - Print skill catalog overview
                             /skills show <name> - Show SKILL.md body and resource listings
+                            /skills suggest <text> - Preview ranked Skill Router recommendations
+                            /skills usage - Show local Skill Router usage diagnostics
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
   /init                     - Create xelyon.yaml project template
@@ -59,6 +61,8 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /skills                   - Pick skills or inspect the Agent Skills catalog
                             /skills overview - Print skill catalog overview
                             /skills show <name> - Show SKILL.md body and resource listings
+                            /skills suggest <text> - Preview ranked Skill Router recommendations
+                            /skills usage - Show local Skill Router usage diagnostics
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
   /init                     - Create xelyon.yaml project template

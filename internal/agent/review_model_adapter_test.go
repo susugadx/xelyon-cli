@@ -136,6 +136,166 @@ func TestAgentReviewModelCompleteReviewRestoresResponseID(t *testing.T) {
 	}
 }
 
+func TestAgentReviewModelThinkingInheritsRuntimeConfig(t *testing.T) {
+	var captured struct {
+		enabled bool
+		level   string
+	}
+	provider := &scriptedChatProvider{
+		name: "openai",
+		chatWithToolsFn: func(_ int, ctx context.Context, _ string, _ []api.Message, _ string) (string, error) {
+			captured.enabled = api.IsThinkingEnabled(ctx)
+			captured.level = config.FromContext(ctx).Thinking.Level
+			return `{"ok":true}`, nil
+		},
+	}
+	agent := newReviewAgentForTest(t, provider)
+	cfg := agent.cfg()
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+	cfg.Review.Thinking = config.ReviewThinkingConfig{Mode: config.ReviewThinkingModeInherit}
+	agent.setRuntimeConfig(cfg)
+
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
+		Phase:  review.ReviewModelPhaseReport,
+		Prompt: "report",
+	}); err != nil {
+		t.Fatalf("CompleteReview() error = %v", err)
+	}
+	if !captured.enabled {
+		t.Fatal("review thinking enabled = false, want inherited true")
+	}
+	if captured.level != "xhigh" {
+		t.Fatalf("review thinking level = %q, want inherited xhigh", captured.level)
+	}
+}
+
+func TestAgentReviewModelThinkingInheritAppliesLevelOverrideWithoutMutatingRuntimeConfig(t *testing.T) {
+	var captured struct {
+		enabled bool
+		level   string
+	}
+	provider := &scriptedChatProvider{
+		name: "openai",
+		chatWithToolsFn: func(_ int, ctx context.Context, _ string, _ []api.Message, _ string) (string, error) {
+			captured.enabled = api.IsThinkingEnabled(ctx)
+			captured.level = config.FromContext(ctx).Thinking.Level
+			return `{"ok":true}`, nil
+		},
+	}
+	agent := newReviewAgentForTest(t, provider)
+	cfg := agent.cfg()
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "low"
+	cfg.Review.Thinking = config.ReviewThinkingConfig{
+		Mode:  config.ReviewThinkingModeInherit,
+		Level: "high",
+	}
+	agent.setRuntimeConfig(cfg)
+
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
+		Phase:  review.ReviewModelPhaseReport,
+		Prompt: "report",
+	}); err != nil {
+		t.Fatalf("CompleteReview() error = %v", err)
+	}
+	if !captured.enabled {
+		t.Fatal("review thinking enabled = false, want inherited true")
+	}
+	if captured.level != "high" {
+		t.Fatalf("review thinking level = %q, want review override high", captured.level)
+	}
+	if agent.cfg().Thinking.Level != "low" {
+		t.Fatalf("runtime Thinking.Level = %q, want low", agent.cfg().Thinking.Level)
+	}
+}
+
+func TestAgentReviewModelThinkingOffOverridesWithoutMutatingRuntimeConfig(t *testing.T) {
+	var captured struct {
+		enabled bool
+		level   string
+	}
+	provider := &scriptedChatProvider{
+		name: "openai",
+		chatWithToolsFn: func(_ int, ctx context.Context, _ string, _ []api.Message, _ string) (string, error) {
+			captured.enabled = api.IsThinkingEnabled(ctx)
+			captured.level = config.FromContext(ctx).Thinking.Level
+			return `{"ok":true}`, nil
+		},
+	}
+	agent := newReviewAgentForTest(t, provider)
+	cfg := agent.cfg()
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+	cfg.Review.Thinking = config.ReviewThinkingConfig{
+		Mode:  config.ReviewThinkingModeOff,
+		Level: "high",
+	}
+	agent.setRuntimeConfig(cfg)
+
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
+		Phase:  review.ReviewModelPhaseReport,
+		Prompt: "report",
+	}); err != nil {
+		t.Fatalf("CompleteReview() error = %v", err)
+	}
+	if captured.enabled {
+		t.Fatal("review thinking enabled = true, want off override")
+	}
+	if captured.level != "xhigh" {
+		t.Fatalf("review thinking level = %q, want runtime xhigh when mode=off", captured.level)
+	}
+	if !agent.cfg().Thinking.Enabled {
+		t.Fatal("runtime Thinking.Enabled mutated to false")
+	}
+	if agent.cfg().Thinking.Level != "xhigh" {
+		t.Fatalf("runtime Thinking.Level = %q, want xhigh", agent.cfg().Thinking.Level)
+	}
+}
+
+func TestAgentReviewModelThinkingOnOverridesLevelWithoutMutatingRuntimeConfig(t *testing.T) {
+	var captured struct {
+		enabled bool
+		level   string
+	}
+	provider := &scriptedChatProvider{
+		name: "openai",
+		chatWithToolsFn: func(_ int, ctx context.Context, _ string, _ []api.Message, _ string) (string, error) {
+			captured.enabled = api.IsThinkingEnabled(ctx)
+			captured.level = config.FromContext(ctx).Thinking.Level
+			return `{"ok":true}`, nil
+		},
+	}
+	agent := newReviewAgentForTest(t, provider)
+	cfg := agent.cfg()
+	cfg.Thinking.Enabled = false
+	cfg.Thinking.Level = "low"
+	cfg.Review.Thinking = config.ReviewThinkingConfig{
+		Mode:  config.ReviewThinkingModeOn,
+		Level: "high",
+	}
+	agent.setRuntimeConfig(cfg)
+
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
+		Phase:  review.ReviewModelPhaseReport,
+		Prompt: "report",
+	}); err != nil {
+		t.Fatalf("CompleteReview() error = %v", err)
+	}
+	if !captured.enabled {
+		t.Fatal("review thinking enabled = false, want on override")
+	}
+	if captured.level != "high" {
+		t.Fatalf("review thinking level = %q, want review override high", captured.level)
+	}
+	if agent.cfg().Thinking.Enabled {
+		t.Fatal("runtime Thinking.Enabled mutated to true")
+	}
+	if agent.cfg().Thinking.Level != "low" {
+		t.Fatalf("runtime Thinking.Level = %q, want low", agent.cfg().Thinking.Level)
+	}
+}
+
 func TestAgentReviewModelUsesConfiguredProviderModelWithoutMutatingSession(t *testing.T) {
 	currentProvider := &reviewResponseIDProvider{}
 	currentProvider.name = "openai"

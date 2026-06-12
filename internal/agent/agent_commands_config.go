@@ -68,6 +68,7 @@ func switchModelForCurrentProviderWithOutput(agent *Agent, newModel string) erro
 	}
 
 	green.Fprintf(out, "✅ Model switched: %s → %s\n", outcome.OldModel, outcome.NewModel)
+	printRuntimeSwitchContextNotice(agent, outcome.ContextNotice)
 	if agent.CurrentProvider != nil {
 		printContextSize(agent)
 	}

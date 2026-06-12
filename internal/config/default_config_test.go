@@ -150,4 +150,16 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.AgentInstructions.MaxTotalBytes != 60000 {
 		t.Errorf("AgentInstructions.MaxTotalBytes = %d, want 60000", cfg.AgentInstructions.MaxTotalBytes)
 	}
+	if !cfg.Skills.Router.Enabled {
+		t.Error("Skills.Router.Enabled should default to true")
+	}
+	if cfg.Skills.Router.Activation != SkillsRouterActivationHint {
+		t.Errorf("Skills.Router.Activation = %q, want hint", cfg.Skills.Router.Activation)
+	}
+	if !cfg.Skills.Router.UsageLedger {
+		t.Error("Skills.Router.UsageLedger should default to true")
+	}
+	if cfg.Skills.Router.UsageRetentionDays != 30 {
+		t.Errorf("Skills.Router.UsageRetentionDays = %d, want 30", cfg.Skills.Router.UsageRetentionDays)
+	}
 }

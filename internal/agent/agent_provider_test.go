@@ -110,7 +110,7 @@ func TestAgent_SwitchProvider_ClearCache(t *testing.T) {
 	assert.Equal(t, agent.CurrentModel, agent.session.Model)
 }
 
-func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
+func TestAgent_SwitchProvider_KeepsContextClearsRemoteContinuationAndNotifies(t *testing.T) {
 	// APIキー存在チェックのため、OLLAMA_BASE_URL を用意
 	t.Setenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
@@ -126,7 +126,7 @@ func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
 	agent := &Agent{
 		ProviderName:    "mock",
 		CurrentModel:    "mock-model",
-		CurrentProvider: &mockCacheClearableProvider{},
+		CurrentProvider: &mockCacheClearableProvider{responseID: "resp_old", cachedResponseID: true},
 		Runtime:         runtime,
 		History: []api.Message{
 			{
@@ -158,18 +158,22 @@ func TestAgent_SwitchProvider_ClearHistoryAndNotify(t *testing.T) {
 	agent.session.AddMessage("user", "old task", agent.CurrentModel)
 	agent.session.CompactedItems = []history.CompactedItem{{Type: "compacted", Data: "compressed"}}
 	agent.session.IsCompactedMode = true
-	agent.session.ResponseID = "resp_old"
+	agent.session.ApplyResponseContext("resp_old", "mock-model", "mock", "mock")
 	agent.persistSession()
 
 	err := agent.SwitchProvider("ollama")
 	assert.NoError(t, err)
 
-	assert.Equal(t, 0, len(agent.History))
-	assert.Empty(t, agent.session.Messages)
-	assert.False(t, agent.session.IsCompactedMode)
-	assert.Empty(t, agent.session.CompactedItems)
+	assert.Equal(t, 2, len(agent.History))
+	assert.Len(t, agent.session.Messages, 1)
+	assert.True(t, agent.session.IsCompactedMode)
+	assert.Equal(t, []history.CompactedItem{{Type: "compacted", Data: "compressed"}}, agent.session.CompactedItems)
 	assert.Empty(t, agent.session.ResponseID)
-	assert.Contains(t, out.String(), "History cleared after provider switch")
+	assert.Empty(t, agent.session.ResponseModel)
+	assert.Empty(t, agent.session.ResponseProviderName)
+	assert.Empty(t, agent.session.ResponseProviderConfigKey)
+	assert.Contains(t, out.String(), "Context kept locally; provider remote continuation reset")
+	assert.NotContains(t, out.String(), "History cleared after provider switch")
 }
 
 func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {

@@ -2,32 +2,166 @@ package agent
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/version"
+	"golang.org/x/term"
 )
 
-// logoLines は oh-my-logo で生成した XELYON ロゴ（ANSI 256色グラデーション付き）。
-// シアン(#00ffff)→ブルー(#0040ff) の水平グラデーション。
-//
-// 再生成コマンド:
-//
-//	FORCE_COLOR=1 npx oh-my-logo "XELYON" --filled --letter-spacing 0 \
-//	  --palette-colors '["#00ffff","#00e0ff","#00c0ff","#0080ff","#0040ff"]' -d horizontal
-//
-// Each line is a raw byte literal with ANSI color codes.
-var logoLines = []string{
-	"\x1b[38;5;51m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\xe2\x96\x88\xe2\x96\x88\x1b[38;5;45m\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97     \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \x1b[38;5;39m  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\x1b[38;5;33m\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97   \x1b[38;5;27m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\x1b[39m",
-	"\x1b[38;5;51m\xe2\x95\x9a\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x9d\xe2\x96\x88\xe2\x96\x88\x1b[38;5;45m\xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91     \xe2\x95\x9a\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\x1b[38;5;39m \xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x9d\xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\x1b[38;5;33m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97  \x1b[38;5;27m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91\x1b[39m",
-	"\x1b[38;5;51m \xe2\x95\x9a\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x9d \xe2\x96\x88\xe2\x96\x88\x1b[38;5;45m\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91      \xe2\x95\x9a\xe2\x96\x88\xe2\x96\x88\x1b[38;5;39m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x9d \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91   \x1b[38;5;33m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91\xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \x1b[38;5;27m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91\x1b[39m",
-	"\x1b[38;5;51m \xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\x1b[38;5;45m\xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91       \xe2\x95\x9a\xe2\x96\x88\x1b[38;5;39m\xe2\x96\x88\xe2\x95\x94\xe2\x95\x9d  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91   \x1b[38;5;33m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91\xe2\x95\x9a\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\x1b[38;5;27m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91\x1b[39m",
-	"\x1b[38;5;51m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x9d \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\xe2\x96\x88\xe2\x96\x88\x1b[38;5;45m\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97   \xe2\x96\x88\x1b[38;5;39m\xe2\x96\x88\xe2\x95\x91   \xe2\x95\x9a\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\x1b[38;5;33m\xe2\x96\x88\xe2\x95\x94\xe2\x95\x9d\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x95\x9a\xe2\x96\x88\xe2\x96\x88\x1b[38;5;27m\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91\x1b[39m",
-	"\x1b[38;5;51m\xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d\xe2\x95\x9a\xe2\x95\x90\x1b[38;5;45m\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d\xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d   \xe2\x95\x9a\x1b[38;5;39m\xe2\x95\x90\xe2\x95\x9d    \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\x1b[38;5;33m\xe2\x95\x90\xe2\x95\x9d \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d  \xe2\x95\x9a\xe2\x95\x90\x1b[38;5;27m\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d\x1b[39m",
+const (
+	logoStyleReset         = "\033[0m"
+	logoBorderColor        = "\033[38;5;240m"
+	logoDimColor           = "\033[38;5;245m"
+	logoTextColor          = "\033[38;5;255m"
+	logoReadyColor         = "\033[38;2;0;215;255m"
+	logoCommandAccentColor = "\033[38;5;228m"
+	startupPanelInnerWidth = 57
+)
+
+func buildLogo() string {
+	return buildStartupPanelForWidth(detectedTerminalWidth())
 }
 
-// buildGradientHeader はグラデーションロゴ + サブテキストのヘッダーを構築する。
+func buildStartupPanelForWidth(width int) string {
+	colorEnabled := logoANSIEnabled()
+	if width > 0 && width < startupPanelWidth() {
+		return strings.Join(compactStartupPanelLines(colorEnabled), "\n")
+	}
+
+	return strings.Join(startupPanelLines(colorEnabled), "\n")
+}
+
+func startupPanelLines(colorEnabled bool) []string {
+	return []string{
+		startupPanelTopLine(colorEnabled),
+		startupPanelBodyLine(
+			fmt.Sprintf(" v%s · code-guided agent runtime", version.GetVersion()),
+			colorize(" ", logoDimColor, colorEnabled)+startupVersionLine(colorEnabled),
+			colorEnabled,
+		),
+		startupPanelBodyLine("", "", colorEnabled),
+		startupPanelBodyLine(
+			"  Built to keep agents grounded in your codebase.",
+			colorize("  Built to keep agents grounded in your codebase.", logoTextColor, colorEnabled),
+			colorEnabled,
+		),
+		startupPanelBodyLine("", "", colorEnabled),
+		startupPanelBodyLine(
+			"  Ready · / opens commands · /exit quits",
+			startupReadyLine("  ", colorEnabled),
+			colorEnabled,
+		),
+		startupPanelBottomLine(colorEnabled),
+	}
+}
+
+func compactStartupPanelLines(colorEnabled bool) []string {
+	return []string{
+		startupWordmark(colorEnabled),
+		startupVersionLine(colorEnabled),
+		colorize("Built to keep agents grounded in your codebase.", logoTextColor, colorEnabled),
+		startupReadyLine("", colorEnabled),
+	}
+}
+
+func startupPanelTopLine(colorEnabled bool) string {
+	titlePrefix := "╭─ "
+	titleSuffix := " " + strings.Repeat("─", startupPanelInnerWidth-visibleWidth("─ XELYON "))
+	return colorize(titlePrefix, logoBorderColor, colorEnabled) +
+		startupWordmark(colorEnabled) +
+		colorize(titleSuffix+"╮", logoBorderColor, colorEnabled)
+}
+
+func startupPanelBottomLine(colorEnabled bool) string {
+	return colorize("╰"+strings.Repeat("─", startupPanelInnerWidth)+"╯", logoBorderColor, colorEnabled)
+}
+
+func startupPanelBodyLine(plain, styled string, colorEnabled bool) string {
+	if styled == "" {
+		styled = plain
+	}
+	padding := startupPanelInnerWidth - visibleWidth(plain)
+	if padding < 0 {
+		padding = 0
+	}
+	return colorize("│", logoBorderColor, colorEnabled) +
+		styled +
+		strings.Repeat(" ", padding) +
+		colorize("│", logoBorderColor, colorEnabled)
+}
+
+func startupVersionLine(colorEnabled bool) string {
+	return colorize(fmt.Sprintf("v%s · ", version.GetVersion()), logoDimColor, colorEnabled) +
+		colorize("code-guided agent runtime", logoTextColor, colorEnabled)
+}
+
+func startupReadyLine(indent string, colorEnabled bool) string {
+	return colorize(indent+"Ready", logoReadyColor, colorEnabled) +
+		colorize(" · ", logoDimColor, colorEnabled) +
+		colorize("/", logoCommandAccentColor, colorEnabled) +
+		colorize(" opens commands · ", logoDimColor, colorEnabled) +
+		colorize("/exit", logoCommandAccentColor, colorEnabled) +
+		colorize(" quits", logoDimColor, colorEnabled)
+}
+
+func startupWordmark(colorEnabled bool) string {
+	if !colorEnabled {
+		return "XELYON"
+	}
+	colors := []string{
+		"\033[38;2;0;74;255m",
+		"\033[38;2;0;103;255m",
+		"\033[38;2;0;132;255m",
+		"\033[38;2;0;161;255m",
+		"\033[38;2;0;194;255m",
+		"\033[38;2;0;215;255m",
+	}
+	letters := []rune("XELYON")
+	var b strings.Builder
+	for i, r := range letters {
+		b.WriteString(colors[i])
+		b.WriteRune(r)
+	}
+	b.WriteString(logoStyleReset)
+	return b.String()
+}
+
+func colorize(text, color string, enabled bool) string {
+	if !enabled || text == "" {
+		return text
+	}
+	return color + text + logoStyleReset
+}
+
+func startupPanelWidth() int {
+	return startupPanelInnerWidth + 2
+}
+
+func visibleWidth(text string) int {
+	return len([]rune(text))
+}
+
+func logoANSIEnabled() bool {
+	return os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+}
+
+func detectedTerminalWidth() int {
+	if columns := strings.TrimSpace(os.Getenv("COLUMNS")); columns != "" {
+		width, err := strconv.Atoi(columns)
+		if err == nil && width > 0 {
+			return width
+		}
+	}
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return 0
+	}
+	return width
+}
+
+// buildGradientHeader は interactive surface の起動パネルを構築する。
 func buildGradientHeader() string {
-	return "\n" + strings.Join(logoLines, "\n") + "\n" +
-		fmt.Sprintf("  \033[38;5;245mv%s · AI-powered coding agent\033[0m\n", version.GetVersion()) +
-		"  \033[38;5;228mType / for commands, /exit to quit\033[0m\n\n"
+	return "\n" + buildLogo() + "\n\n"
 }

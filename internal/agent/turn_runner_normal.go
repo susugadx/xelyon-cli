@@ -7,7 +7,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/finalcheck"
-	"github.com/susugadx/xelyon-cli/internal/prompt"
 	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
@@ -41,7 +40,7 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 	if iteration == 0 {
 		r.promptManager().RefreshProjectPromptIfDirty(input)
 	}
-	effectivePrompt := prompt.StripPlanningReferences(a.SystemPrompt)
+	effectivePrompt := a.normalModeSystemPromptForRequest(r.ctx, input, iteration == 0)
 
 	requestCtx := a.requestContext(r.ctx)
 	if iteration == 0 && image != nil {

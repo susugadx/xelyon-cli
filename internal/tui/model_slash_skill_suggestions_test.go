@@ -27,8 +27,8 @@ func TestSlashSuggestions_EnterOnSkillsCommandOpensSubcommandSuggestions(t *test
 	if !m.slashSuggestions.selectionActive {
 		t.Fatal("Enter-expanded skills suggestions should keep selection active")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 3 {
-		t.Fatalf("skills subcommand suggestions len = %d, want 3", got)
+	if got := len(m.slashSuggestions.suggestions); got != 5 {
+		t.Fatalf("skills subcommand suggestions len = %d, want 5", got)
 	}
 	if got := len(agent.handledInputs); got != 0 {
 		t.Fatalf("handledInputs length = %d, want 0", got)

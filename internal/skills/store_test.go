@@ -21,7 +21,7 @@ func TestSkillCatalogStore_Load_ReusesCacheUntilFingerprintChanges(t *testing.T)
 	}
 
 	store := NewSkillCatalogStoreWithDeps(defaultSkillCatalogStoreMaxEntries, Discover, buildFn, nil)
-	opts := DiscoverOptions{InvocationCWD: workspace, HomeDir: home}
+	opts := testDiscoverOptions(workspace, home)
 
 	first := store.Load(opts)
 	if buildCalls != 1 {
@@ -50,7 +50,8 @@ func TestSkillCatalogStore_Load_ReusesCacheUntilFingerprintChanges(t *testing.T)
 	if buildCalls != 2 {
 		t.Fatalf("Load() after fingerprint change should rebuild once, buildCalls=%d", buildCalls)
 	}
-	if len(updated.Skills) != 1 || updated.Skills[0].Description != "desc updated" {
+	skill, ok := findParsedSkill(updated.Skills, "demo")
+	if !ok || skill.Description != "desc updated" {
 		t.Fatalf("updated catalog = %#v", updated.Skills)
 	}
 }
@@ -68,14 +69,15 @@ func TestSkillCatalogStore_Load_DetectsSkillContentChangeEvenWithSameSizeAndMTim
 	}
 
 	store := NewSkillCatalogStoreWithDeps(defaultSkillCatalogStoreMaxEntries, Discover, buildFn, nil)
-	opts := DiscoverOptions{InvocationCWD: workspace, HomeDir: home}
+	opts := testDiscoverOptions(workspace, home)
 
 	first := store.Load(opts)
-	if len(first.Skills) != 1 {
-		t.Fatalf("initial catalog skills = %d, want 1", len(first.Skills))
+	skill, ok := findParsedSkill(first.Skills, "demo")
+	if !ok {
+		t.Fatalf("initial catalog missing demo skill: %#v", first.Skills)
 	}
-	if first.Skills[0].Description != "descAA" {
-		t.Fatalf("initial description = %q, want descAA", first.Skills[0].Description)
+	if skill.Description != "descAA" {
+		t.Fatalf("initial description = %q, want descAA", skill.Description)
 	}
 
 	skillPath := filepath.Join(skillDir, "SKILL.md")
@@ -95,8 +97,77 @@ func TestSkillCatalogStore_Load_DetectsSkillContentChangeEvenWithSameSizeAndMTim
 	if buildCalls != 2 {
 		t.Fatalf("content change should rebuild even with same mtime, buildCalls=%d", buildCalls)
 	}
-	if len(second.Skills) != 1 || second.Skills[0].Description != "descBB" {
+	skill, ok = findParsedSkill(second.Skills, "demo")
+	if !ok || skill.Description != "descBB" {
 		t.Fatalf("updated catalog = %#v", second.Skills)
+	}
+}
+
+func TestSkillCatalogStore_Load_InvalidatesOnXelyonMetadataAddRemoveAndContentChange(t *testing.T) {
+	workspace := t.TempDir()
+	home := t.TempDir()
+	skillDir := filepath.Join(workspace, ".agents", "skills", "demo")
+	mustWriteSkill(t, skillDir, validSkill("demo", "desc", "# body"))
+
+	buildCalls := 0
+	buildFn := func(discover DiscoverResult) SkillCatalog {
+		buildCalls++
+		return Catalog(discover)
+	}
+
+	store := NewSkillCatalogStoreWithDeps(defaultSkillCatalogStoreMaxEntries, Discover, buildFn, nil)
+	opts := testDiscoverOptions(workspace, home)
+
+	first := store.Load(opts)
+	if buildCalls != 1 {
+		t.Fatalf("first Load() should build once, buildCalls=%d", buildCalls)
+	}
+	skill, ok := findParsedSkill(first.Skills, "demo")
+	if !ok || skill.Routing != nil {
+		t.Fatalf("initial skill = %#v, want no routing metadata", skill)
+	}
+
+	metadataPath := filepath.Join(skillDir, "agents", "xelyon.yaml")
+	mustWriteFile(t, metadataPath, `version: 1
+intents:
+  - code-review
+role: primary
+`)
+	withMetadata := store.Load(opts)
+	if buildCalls != 2 {
+		t.Fatalf("adding sidecar should rebuild, buildCalls=%d", buildCalls)
+	}
+	skill, ok = findParsedSkill(withMetadata.Skills, "demo")
+	if !ok || skill.Routing == nil || len(skill.Routing.Intents) != 1 || skill.Routing.Intents[0] != "code-review" {
+		t.Fatalf("with metadata skill = %#v", skill)
+	}
+
+	if err := os.WriteFile(metadataPath, []byte(`version: 1
+intents:
+  - bug-investigation
+role: supporting
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(metadata) error = %v", err)
+	}
+	updated := store.Load(opts)
+	if buildCalls != 3 {
+		t.Fatalf("changing sidecar should rebuild, buildCalls=%d", buildCalls)
+	}
+	skill, ok = findParsedSkill(updated.Skills, "demo")
+	if !ok || skill.Routing == nil || len(skill.Routing.Intents) != 1 || skill.Routing.Intents[0] != "bug-investigation" {
+		t.Fatalf("updated metadata skill = %#v", skill)
+	}
+
+	if err := os.Remove(metadataPath); err != nil {
+		t.Fatalf("Remove(metadata) error = %v", err)
+	}
+	removed := store.Load(opts)
+	if buildCalls != 4 {
+		t.Fatalf("removing sidecar should rebuild, buildCalls=%d", buildCalls)
+	}
+	skill, ok = findParsedSkill(removed.Skills, "demo")
+	if !ok || skill.Routing != nil {
+		t.Fatalf("removed metadata skill = %#v, want no routing metadata", skill)
 	}
 }
 
@@ -113,7 +184,7 @@ func TestSkillCatalogStore_Load_ReusesDiscoverWhenRootStateUnchanged(t *testing.
 	}
 
 	store := NewSkillCatalogStoreWithDeps(defaultSkillCatalogStoreMaxEntries, discoverFn, Catalog, nil)
-	opts := DiscoverOptions{InvocationCWD: workspace, HomeDir: home}
+	opts := testDiscoverOptions(workspace, home)
 
 	_ = store.Load(opts)
 	_ = store.Load(opts)
@@ -139,6 +210,43 @@ func TestSkillCatalogStore_Load_ReusesDiscoverWhenRootStateUnchanged(t *testing.
 	}
 }
 
+func TestSkillCatalogStore_Load_IgnoresCodexSkillRoot(t *testing.T) {
+	workspace := t.TempDir()
+	home := t.TempDir()
+	codexSystemDir := filepath.Join(home, ".codex", "skills", ".system")
+	if err := os.MkdirAll(codexSystemDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	discoverCalls := 0
+	discoverFn := func(opts DiscoverOptions) DiscoverResult {
+		discoverCalls++
+		return Discover(opts)
+	}
+
+	store := NewSkillCatalogStoreWithDeps(defaultSkillCatalogStoreMaxEntries, discoverFn, Catalog, nil)
+	opts := testDiscoverOptions(workspace, home)
+
+	first := store.Load(opts)
+	if len(first.Skills) != 1 || first.Skills[0].Name != xelyonBuiltinSkillCreatorName || first.Skills[0].Source != SourceXelyon {
+		t.Fatalf("initial catalog skills = %#v, want built-in skill-creator", first.Skills)
+	}
+	if discoverCalls != 1 {
+		t.Fatalf("initial discoverCalls = %d, want 1", discoverCalls)
+	}
+
+	time.Sleep(2 * time.Millisecond)
+	mustWriteSkill(t, filepath.Join(codexSystemDir, "skill-creator"), validSkill("skill-creator", "create desc", "# body"))
+
+	second := store.Load(opts)
+	if discoverCalls != 1 {
+		t.Fatalf("ignored codex skill should not rerun discover, discoverCalls=%d", discoverCalls)
+	}
+	if len(second.Skills) != 1 || second.Skills[0].Name != xelyonBuiltinSkillCreatorName || second.Skills[0].Source != SourceXelyon {
+		t.Fatalf("updated catalog skills = %#v, want built-in skill-creator", second.Skills)
+	}
+}
+
 func TestSkillCatalogStore_LRUEviction(t *testing.T) {
 	base := t.TempDir()
 	home := t.TempDir()
@@ -160,16 +268,16 @@ func TestSkillCatalogStore_LRUEviction(t *testing.T) {
 	}
 
 	store := NewSkillCatalogStoreWithDeps(2, Discover, buildFn, nil)
-	_ = store.Load(DiscoverOptions{InvocationCWD: workspaceA, HomeDir: home}) // build 1
-	_ = store.Load(DiscoverOptions{InvocationCWD: workspaceB, HomeDir: home}) // build 2
-	_ = store.Load(DiscoverOptions{InvocationCWD: workspaceA, HomeDir: home}) // hit + A を最新化
-	_ = store.Load(DiscoverOptions{InvocationCWD: workspaceC, HomeDir: home}) // build 3, B がevict対象
+	_ = store.Load(testDiscoverOptions(workspaceA, home)) // build 1
+	_ = store.Load(testDiscoverOptions(workspaceB, home)) // build 2
+	_ = store.Load(testDiscoverOptions(workspaceA, home)) // hit + A を最新化
+	_ = store.Load(testDiscoverOptions(workspaceC, home)) // build 3, B がevict対象
 
 	if buildCalls != 3 {
 		t.Fatalf("buildCalls after filling LRU = %d, want 3", buildCalls)
 	}
 
-	_ = store.Load(DiscoverOptions{InvocationCWD: workspaceB, HomeDir: home}) // B はevictされているので再build
+	_ = store.Load(testDiscoverOptions(workspaceB, home)) // B はevictされているので再build
 	if buildCalls != 4 {
 		t.Fatalf("evicted workspace should rebuild on next load, buildCalls=%d", buildCalls)
 	}
@@ -177,6 +285,7 @@ func TestSkillCatalogStore_LRUEviction(t *testing.T) {
 
 func TestSkillCatalogStore_Clear_DropsCachedEntries(t *testing.T) {
 	workspace := t.TempDir()
+	home := t.TempDir()
 	skillDir := filepath.Join(workspace, ".agents", "skills", "demo")
 	mustWriteSkill(t, skillDir, validSkill("demo", "desc", "# body"))
 
@@ -187,7 +296,7 @@ func TestSkillCatalogStore_Clear_DropsCachedEntries(t *testing.T) {
 	}
 
 	store := NewSkillCatalogStoreWithDeps(defaultSkillCatalogStoreMaxEntries, Discover, buildFn, nil)
-	opts := DiscoverOptions{InvocationCWD: workspace}
+	opts := testDiscoverOptions(workspace, home)
 
 	_ = store.Load(opts)
 	_ = store.Load(opts)
@@ -208,11 +317,11 @@ func TestBuildCatalogFingerprint_TracksResourceListing(t *testing.T) {
 	skillDir := filepath.Join(workspace, ".agents", "skills", "demo")
 	mustWriteSkill(t, skillDir, validSkill("demo", "desc", "# body"))
 
-	discover := Discover(DiscoverOptions{InvocationCWD: workspace, HomeDir: home})
+	discover := Discover(testDiscoverOptions(workspace, home))
 	first := buildCatalogFingerprint(discover)
 
 	mustWriteFile(t, filepath.Join(skillDir, "scripts", "run.sh"), "echo run")
-	secondDiscover := Discover(DiscoverOptions{InvocationCWD: workspace, HomeDir: home})
+	secondDiscover := Discover(testDiscoverOptions(workspace, home))
 	second := buildCatalogFingerprint(secondDiscover)
 	if first == second {
 		t.Fatalf("fingerprint should change when resource listing changes: %s", first)
@@ -230,7 +339,7 @@ func TestCatalogWithContentCache_UsesCachedSkillContent(t *testing.T) {
 	mustWriteSkill(t, skillDir, validSkill("demo", "desc", "# body"))
 	skillPath := filepath.Join(skillDir, "SKILL.md")
 
-	discover := Discover(DiscoverOptions{InvocationCWD: workspace, HomeDir: home})
+	discover := Discover(testDiscoverOptions(workspace, home))
 	content, err := os.ReadFile(skillPath)
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
@@ -247,7 +356,7 @@ func TestCatalogWithContentCache_UsesCachedSkillContent(t *testing.T) {
 	if len(catalog.Diagnostics) != 0 {
 		t.Fatalf("CatalogWithContentCache() diagnostics = %#v", catalog.Diagnostics)
 	}
-	if len(catalog.Skills) != 1 || catalog.Skills[0].Name != "demo" {
+	if _, ok := findParsedSkill(catalog.Skills, "demo"); !ok {
 		t.Fatalf("CatalogWithContentCache() skills = %#v", catalog.Skills)
 	}
 }

@@ -25,11 +25,9 @@ func (a *Agent) switchProvider(providerName, requestedModel string) error {
 
 func printProviderSwitchOutcome(agent *Agent, outcome ProviderSwitchOutcome) {
 	out := agent.output()
-	if outcome.HistoryCleared {
-		yellow.Fprintln(out, "🗑️  History cleared after provider switch to avoid incompatible tool-call history")
-	}
 	green.Fprintf(out, "✅ Provider: %s → %s\n", outcome.OldProvider, outcome.NewProvider)
 	green.Fprintf(out, "✅ Model: %s → %s\n", outcome.OldModel, outcome.NewModel)
+	printRuntimeSwitchContextNotice(agent, outcome.ContextNotice)
 }
 
 func validateProviderModelSelection(cfg *config.Config, runtimeProviderName, providerConfigKey, model string, explicitModel bool) error {

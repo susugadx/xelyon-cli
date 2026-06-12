@@ -39,6 +39,7 @@ type Config struct {
 	ListDir                  ListDirConfig                  `yaml:"list_dir"`
 	ProjectMap               ProjectMapConfig               `yaml:"project_map"`
 	AgentInstructions        AgentInstructionsConfig        `yaml:"agent_instructions"`
+	Skills                   SkillsConfig                   `yaml:"skills"`
 
 	GitStage            GitStageConfig     `yaml:"git_stage"`
 	LSP                 LSPConfig          `yaml:"lsp"`
@@ -60,7 +61,26 @@ type Config struct {
 type ReviewConfig struct {
 	Provider          string                        `yaml:"provider"` // /review 専用プロバイダー。空なら現在の provider/model を使う。
 	Model             string                        `yaml:"model"`    // /review 専用モデル。provider 設定時のみ有効。空なら provider の既定モデルを使う。
+	Thinking          ReviewThinkingConfig          `yaml:"thinking"` // /review の thinking override。mode=inherit なら現在の /thinking 状態を使う。
 	WebSearchEvidence ReviewWebSearchEvidenceConfig `yaml:"web_search_evidence"`
+}
+
+// ReviewThinkingMode は /review の thinking override 方針。
+type ReviewThinkingMode string
+
+const (
+	// ReviewThinkingModeInherit は現在の /thinking 状態を /review に引き継ぐ。
+	ReviewThinkingModeInherit ReviewThinkingMode = "inherit"
+	// ReviewThinkingModeOff は /review で thinking を無効化する。
+	ReviewThinkingModeOff ReviewThinkingMode = "off"
+	// ReviewThinkingModeOn は /review で thinking を有効化する。
+	ReviewThinkingModeOn ReviewThinkingMode = "on"
+)
+
+// ReviewThinkingConfig は /review の thinking override 設定。
+type ReviewThinkingConfig struct {
+	Mode  ReviewThinkingMode `yaml:"mode"`  // inherit/off/on。inherit は現在の /thinking 状態を引き継ぐ。
+	Level string             `yaml:"level"` // low/medium/high/xhigh。空なら現在の /thinking level を使う。
 }
 
 // ReviewWebSearchEvidenceConfig は /review の外部 Web 検索 evidence 収集設定。
@@ -68,6 +88,29 @@ type ReviewWebSearchEvidenceConfig struct {
 	Enabled            bool `yaml:"enabled"`               // /review の外部 Web 検索 evidence を有効化（初期検索 + Pass1 後の追加検索。デフォルト: false）
 	MaxQueries         int  `yaml:"max_queries"`           // 初期検索 + Pass1 後追加検索の合計最大クエリ数
 	MaxResultsPerQuery int  `yaml:"max_results_per_query"` // 1 クエリあたりの最大検索結果数
+}
+
+// SkillsRouterActivation は Skill Router の runtime hint 方針。
+type SkillsRouterActivation string
+
+const (
+	// SkillsRouterActivationOff は runtime skill hint injection を無効化する。
+	SkillsRouterActivationOff SkillsRouterActivation = "off"
+	// SkillsRouterActivationHint は bounded skill recommendation hint を注入する。
+	SkillsRouterActivationHint SkillsRouterActivation = "hint"
+)
+
+// SkillsConfig は Agent Skills の runtime 補助設定。
+type SkillsConfig struct {
+	Router SkillsRouterConfig `yaml:"router"`
+}
+
+// SkillsRouterConfig は Skill Router の user-facing 設定。
+type SkillsRouterConfig struct {
+	Enabled            bool                   `yaml:"enabled"`              // runtime skill routing hint injection を有効化
+	Activation         SkillsRouterActivation `yaml:"activation"`           // off/hint。v1 は auto を受け付けない
+	UsageLedger        bool                   `yaml:"usage_ledger"`         // local-only routing usage ledger を保存
+	UsageRetentionDays int                    `yaml:"usage_retention_days"` // usage ledger retention days（1-365）
 }
 
 func (c *Config) providerModelSectionState() providerModelSectionState {

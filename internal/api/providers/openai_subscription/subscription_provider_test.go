@@ -1,6 +1,7 @@
 package openaisubscription
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 var _ api.CompactCapable = (*SubscriptionProvider)(nil)
@@ -259,6 +261,110 @@ func TestSubscriptionProviderResponsesRequestUsesOAuthTransportAndV2Shape(t *tes
 		replayItems[0].Role != "assistant" ||
 		replayItems[0].Content != "hello subscription" {
 		t.Fatalf("LastOpenAIResponsesInputItems() = %#v, want assistant replay text", replayItems)
+	}
+}
+
+func TestSubscriptionProviderDebugOutputUsesStructuralPreview(t *testing.T) {
+	authDir := t.TempDir()
+	t.Setenv(subscriptionAuthDirEnv, authDir)
+	t.Setenv("XELYON_DEBUG_OPENAI_SUBSCRIPTION", "1")
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`data: {"type":"response.created","response":{"id":"resp_sub_debug"}}`,
+			``,
+			`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_debug","encrypted_content":"stream-encrypted-secret"}}`,
+			``,
+			`data: {"type":"response.output_text.delta","output_index":1,"delta":"stream-text-secret"}`,
+			``,
+			`data: {"type":"response.completed","response":{"usage":{"input_tokens":11,"output_tokens":3}}}`,
+			``,
+			`data: [DONE]`,
+		}, "\n")))
+	})
+	t.Setenv(subscriptionEndpointEnv, server.URL)
+	if err := SaveSubscriptionCredential(DefaultSubscriptionAuthConfig(), SubscriptionCredential{
+		AccessToken:  "oauth-access-token",
+		RefreshToken: "oauth-refresh-token",
+		AccountID:    "acct_1234abcd",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+
+	var debugOut bytes.Buffer
+	runtime := ui.NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &debugOut)
+	ctx := ui.WithRuntime(context.Background(), runtime)
+	ctx = config.WithContext(ctx, config.DefaultConfig())
+	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
+
+	assistant := api.Message{Role: "assistant", Content: "assistant-content-secret"}
+	assistant.SetOpenAIResponsesInputItems([]api.InputItem{
+		{Type: "reasoning", ID: "rs_1", EncryptedContent: "request-encrypted-secret"},
+		{Type: "function_call", CallID: "call_1", Name: "debug_tool", Arguments: `{"value":"request-argument-secret"}`},
+	})
+	toolResult := api.Message{Role: "tool", ToolCallID: "call_1", ToolName: "debug_tool", Content: "tool-output-secret"}
+	toolResult.SetOpenAIResponsesInputItems([]api.InputItem{
+		{Type: "function_call_output", CallID: "call_1", Output: "tool-output-secret"},
+	})
+
+	provider := NewSubscription()
+	provider.SetMCPTools([]api.ToolDefinition{{
+		Name:        "debug_tool",
+		Description: "tool-description-secret",
+		Parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"value": map[string]interface{}{"type": "string"},
+			},
+		},
+	}})
+
+	content, err := provider.ChatWithTools(ctx, "system-prompt-secret", []api.Message{
+		{Role: "user", Content: "user-prompt-secret"},
+		assistant,
+		toolResult,
+		{Role: "user", Content: "followup-user-secret"},
+	}, "gpt-5.5")
+	if err != nil {
+		t.Fatalf("ChatWithTools() error = %v", err)
+	}
+	if !strings.Contains(content, "stream-text-secret") {
+		t.Fatalf("content = %q, want streamed text", content)
+	}
+
+	debug := debugOut.String()
+	for _, want := range []string{
+		"[DEBUG OpenAI Subscription Responses] Request preview:",
+		`"instructions": "present"`,
+		`"content": "present"`,
+		`"encrypted": "present"`,
+		`"arguments": "present"`,
+		`"output": "present"`,
+		"[DEBUG OpenAI Subscription Responses] event: response.output_text.delta",
+	} {
+		if !strings.Contains(debug, want) {
+			t.Fatalf("debug output missing %q:\n%s", want, debug)
+		}
+	}
+	for _, leaked := range []string{
+		"system-prompt-secret",
+		"user-prompt-secret",
+		"followup-user-secret",
+		"assistant-content-secret",
+		"request-encrypted-secret",
+		"request-argument-secret",
+		"tool-output-secret",
+		"tool-description-secret",
+		"stream-encrypted-secret",
+		"stream-text-secret",
+		"SSE line:",
+		"raw data:",
+	} {
+		if strings.Contains(debug, leaked) {
+			t.Fatalf("debug output leaked %q:\n%s", leaked, debug)
+		}
 	}
 }
 

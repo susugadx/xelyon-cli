@@ -7,11 +7,14 @@ import (
 )
 
 const (
-	defaultPromptCatalogMaxEntries = 24
+	// DefaultPromptCatalogMaxEntries は system prompt に載せる skill metadata 件数の既定値。
+	DefaultPromptCatalogMaxEntries = 24
 	defaultPromptDescriptionLimit  = 96
 )
 
 var promptCatalogBlockRe = regexp.MustCompile(`(?s)\n?<!-- SKILLS_CATALOG_START -->.*?<!-- SKILLS_CATALOG_END -->\n?`)
+
+var promptCatalogPinnedSkillNames = []string{"skill-creator"}
 
 // BuildPromptCatalog は system prompt 注入用の skill catalog テキストを返す。
 func BuildPromptCatalog(catalog SkillCatalog, maxEntries int) string {
@@ -20,7 +23,7 @@ func BuildPromptCatalog(catalog SkillCatalog, maxEntries int) string {
 	}
 
 	if maxEntries <= 0 {
-		maxEntries = defaultPromptCatalogMaxEntries
+		maxEntries = DefaultPromptCatalogMaxEntries
 	}
 	descLimit := defaultPromptDescriptionLimit
 
@@ -32,13 +35,9 @@ func BuildPromptCatalog(catalog SkillCatalog, maxEntries int) string {
 	b.WriteString("\n")
 	b.WriteString("Available skills (metadata only):\n")
 
-	limit := maxEntries
-	if len(catalog.Skills) < limit {
-		limit = len(catalog.Skills)
-	}
-	for i := 0; i < limit; i++ {
-		skill := catalog.Skills[i]
-		name := SanitizeCatalogPromptValue(skill.Name)
+	entries := promptCatalogSkills(catalog.Skills, maxEntries)
+	for _, skill := range entries {
+		name := SanitizePromptLineValue(skill.Name)
 		if name == "" {
 			name = "(invalid-skill-name)"
 		}
@@ -48,13 +47,63 @@ func BuildPromptCatalog(catalog SkillCatalog, maxEntries int) string {
 		}
 		fmt.Fprintf(&b, "- %s: %s\n", name, desc)
 	}
-	if remaining := len(catalog.Skills) - limit; remaining > 0 {
+	if remaining := len(catalog.Skills) - len(entries); remaining > 0 {
 		fmt.Fprintf(&b, "- ... and %d more skills\n", remaining)
 	}
 	b.WriteString("\n")
 	b.WriteString("If a task needs one of these, call activate_skill(name) to load full SKILL.md content.\n")
 	b.WriteString("<!-- SKILLS_CATALOG_END -->")
 	return b.String()
+}
+
+func promptCatalogSkills(skills []ParsedSkill, maxEntries int) []ParsedSkill {
+	if len(skills) == 0 {
+		return nil
+	}
+	if maxEntries <= 0 {
+		maxEntries = DefaultPromptCatalogMaxEntries
+	}
+
+	entries := make([]ParsedSkill, 0, minInt(maxEntries, len(skills)))
+	seen := make(map[string]struct{}, maxEntries)
+	appendSkill := func(skill ParsedSkill) bool {
+		if len(entries) >= maxEntries {
+			return false
+		}
+		key := strings.ToLower(strings.TrimSpace(skill.Name))
+		if key != "" {
+			if _, ok := seen[key]; ok {
+				return true
+			}
+			seen[key] = struct{}{}
+		}
+		entries = append(entries, skill)
+		return true
+	}
+
+	for _, pinned := range promptCatalogPinnedSkillNames {
+		for _, skill := range skills {
+			if strings.EqualFold(strings.TrimSpace(skill.Name), pinned) {
+				if !appendSkill(skill) {
+					return entries
+				}
+				break
+			}
+		}
+	}
+	for _, skill := range skills {
+		if !appendSkill(skill) {
+			return entries
+		}
+	}
+	return entries
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
 }
 
 // InjectPromptCatalog は prompt の skills catalog ブロックを差し替える。
@@ -83,8 +132,8 @@ func truncateRunes(value string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit])) + "..."
 }
 
-// SanitizeCatalogPromptValue は skill metadata を prompt / composer 用の 1 行テキストに正規化する。
-func SanitizeCatalogPromptValue(value string) string {
+// SanitizePromptLineValue は skill metadata を prompt / composer 用の 1 行テキストに正規化する。
+func SanitizePromptLineValue(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return ""
@@ -101,5 +150,10 @@ func SanitizeCatalogPromptValue(value string) string {
 	}, value)
 	flattened = strings.ReplaceAll(flattened, "<!--", "&lt;!--")
 	flattened = strings.ReplaceAll(flattened, "-->", "--&gt;")
-	return strings.Join(strings.Fields(flattened), " ")
+	return strings.TrimSpace(flattened)
+}
+
+// SanitizeCatalogPromptValue は skill metadata を空白正規化済みの prompt / composer 用テキストにする。
+func SanitizeCatalogPromptValue(value string) string {
+	return strings.Join(strings.Fields(SanitizePromptLineValue(value)), " ")
 }

@@ -17,32 +17,38 @@ type skillFrontmatter struct {
 
 // ParseSKILL は SKILL.md を解析し、frontmatter と本文・resource 一覧を返す。
 func ParseSKILL(skillPath string) (ParsedSkill, error) {
+	parsed, _, err := ParseSKILLWithDiagnostics(skillPath)
+	return parsed, err
+}
+
+// ParseSKILLWithDiagnostics は SKILL.md と optional XELYON routing sidecar を解析する。
+func ParseSKILLWithDiagnostics(skillPath string) (ParsedSkill, []Diagnostic, error) {
 	skillPath = cleanAbsPathOrFallback(skillPath)
 	data, err := os.ReadFile(skillPath)
 	if err != nil {
-		return ParsedSkill{}, fmt.Errorf("failed to read SKILL.md: %w", err)
+		return ParsedSkill{}, nil, fmt.Errorf("failed to read SKILL.md: %w", err)
 	}
-	return parseSKILLContent(skillPath, data)
+	return parseSKILLContentWithDiagnostics(skillPath, data)
 }
 
-func parseSKILLContent(skillPath string, data []byte) (ParsedSkill, error) {
+func parseSKILLContentWithDiagnostics(skillPath string, data []byte) (ParsedSkill, []Diagnostic, error) {
 	frontmatterRaw, body, err := splitSkillFrontmatter(string(data))
 	if err != nil {
-		return ParsedSkill{}, err
+		return ParsedSkill{}, nil, err
 	}
 
 	meta := skillFrontmatter{}
 	if err := yaml.Unmarshal([]byte(frontmatterRaw), &meta); err != nil {
-		return ParsedSkill{}, fmt.Errorf("invalid YAML frontmatter: %w", err)
+		return ParsedSkill{}, nil, fmt.Errorf("invalid YAML frontmatter: %w", err)
 	}
 
 	meta.Name = strings.TrimSpace(meta.Name)
 	meta.Description = strings.TrimSpace(meta.Description)
 	if meta.Name == "" {
-		return ParsedSkill{}, fmt.Errorf("missing required frontmatter field: name")
+		return ParsedSkill{}, nil, fmt.Errorf("missing required frontmatter field: name")
 	}
 	if meta.Description == "" {
-		return ParsedSkill{}, fmt.Errorf("missing required frontmatter field: description")
+		return ParsedSkill{}, nil, fmt.Errorf("missing required frontmatter field: description")
 	}
 
 	dir := filepath.Dir(skillPath)
@@ -56,12 +62,14 @@ func parseSKILLContent(skillPath string, data []byte) (ParsedSkill, error) {
 	for _, group := range skillResourceGroupOrder {
 		items, err := listDirectFiles(filepath.Join(dir, group.String()), group.String())
 		if err != nil {
-			return ParsedSkill{}, err
+			return ParsedSkill{}, nil, err
 		}
 		setSkillResourceItems(&parsed, group, items)
 	}
+	routing, diagnostics := loadXelyonRoutingMetadata(dir)
+	parsed.Routing = routing
 
-	return parsed, nil
+	return parsed, diagnostics, nil
 }
 
 func splitSkillFrontmatter(content string) (frontmatter string, body string, err error) {

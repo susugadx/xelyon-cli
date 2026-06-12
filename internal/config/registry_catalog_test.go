@@ -41,6 +41,28 @@ func TestRegistryFieldResolver_ProviderModelsDefaultUsesAdapterOverride(t *testi
 	}
 }
 
+func TestBuildConfigRegistry_SelectCurrentNormalizesNamedStringTypes(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Review.Thinking.Mode = ReviewThinkingModeOff
+	categories := BuildConfigRegistry(cfg)
+
+	field := findConfigFieldForTest(t, categories, "review.thinking.mode")
+	current, ok := field.Current.(string)
+	if !ok {
+		t.Fatalf("review.thinking.mode Current type = %T, want string", field.Current)
+	}
+	if current != string(ReviewThinkingModeOff) {
+		t.Fatalf("review.thinking.mode Current = %q, want %q", current, ReviewThinkingModeOff)
+	}
+	def, ok := field.Default.(string)
+	if !ok {
+		t.Fatalf("review.thinking.mode Default type = %T, want string", field.Default)
+	}
+	if def != string(ReviewThinkingModeInherit) {
+		t.Fatalf("review.thinking.mode Default = %q, want %q", def, ReviewThinkingModeInherit)
+	}
+}
+
 func TestBuildConfigRegistry(t *testing.T) {
 	cfg := DefaultConfig()
 	categories := BuildConfigRegistry(cfg)
@@ -109,4 +131,17 @@ func TestBuildConfigRegistry(t *testing.T) {
 			t.Errorf("Review category missing field: %s", expected)
 		}
 	}
+}
+
+func findConfigFieldForTest(t *testing.T, categories []ConfigCategory, path string) ConfigField {
+	t.Helper()
+	for _, cat := range categories {
+		for _, field := range cat.Fields {
+			if field.Path == path {
+				return field
+			}
+		}
+	}
+	t.Fatalf("config field %q not found", path)
+	return ConfigField{}
 }
