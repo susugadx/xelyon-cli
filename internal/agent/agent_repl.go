@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -172,21 +173,25 @@ func RunLegacyInteractiveWithResumeWithConfig(model string, provider api.Provide
 	defer cleanup()
 
 	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
-	session, err := agent.ResumeLastSession(history.ResumeListOptions{})
+	session, err := agent.ResumeStartupLastSession(history.ResumeListOptions{})
 	if err != nil {
-		if strings.Contains(err.Error(), "load session") {
+		if errors.Is(err, history.ErrNoResumeSessions) {
+			yellow.Fprintln(env.runtimeUI.Output(), "No previous session found, starting new session")
+		} else if strings.Contains(err.Error(), "load session") {
 			red.Fprintf(env.runtimeUI.Output(), "Failed to load session: %v\n", err)
 		} else if strings.Contains(err.Error(), "history storage not available") {
 			red.Fprintf(env.runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
 		} else {
-			yellow.Fprintln(env.runtimeUI.Output(), "No previous session found, starting new session")
+			red.Fprintf(env.runtimeUI.Output(), "Failed to resume session: %v\n", err)
 		}
+		agent.restoreSessionConversation(nil)
+		agent.Cleanup()
 		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
 		return
 	}
 	defer agent.Cleanup() // グレースフルシャットダウン
 
-	printHeaderToWriter(env.runtimeUI.Output(), model, provider)
+	printHeaderToWriter(env.runtimeUI.Output(), agent.CurrentModel, agent.CurrentProvider)
 	printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
 	green.Fprintf(env.runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", session.ID, len(session.ToAPIMessages()))
 

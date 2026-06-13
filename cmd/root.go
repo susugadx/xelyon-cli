@@ -114,7 +114,7 @@ Examples:
 				printLegacyNoTUIWarning()
 				runLegacyInteractiveWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			} else {
-				runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
+				return runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			}
 			return nil
 		case executionModeInteractive:

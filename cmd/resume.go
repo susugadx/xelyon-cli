@@ -44,8 +44,7 @@ func newResumeCommand() *cobra.Command {
 				return nil
 			}
 			if last {
-				runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
-				return nil
+				return runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			}
 			if len(args) > 0 {
 				return runTUIWithResumeDirect(runtime.model, runtime.provider, runtime.cfg, autoApprove, args[0])

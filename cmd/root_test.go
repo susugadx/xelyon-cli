@@ -159,7 +159,7 @@ type rootCommandRunners struct {
 	runLegacyInteractiveWithResume func(string, api.Provider, *config.Config, bool)
 	runLegacyInteractiveWithImage  func(string, string, api.Provider, string, *config.Config, bool) error
 	runTUI                         func(string, api.Provider, *config.Config, bool)
-	runTUIWithResume               func(string, api.Provider, *config.Config, bool)
+	runTUIWithResume               func(string, api.Provider, *config.Config, bool) error
 	runTUIWithResumeDirect         func(string, api.Provider, *config.Config, bool, string) error
 	runTUIWithResumePicker         func(string, api.Provider, *config.Config, bool, bool)
 	runTUIWithImage                func(string, string, api.Provider, string, *config.Config, bool) error
@@ -397,8 +397,9 @@ func TestRootCommand_ResumeUsesTUIPath(t *testing.T) {
 
 	tuiCalled := false
 	legacyCalled := false
-	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
 		tuiCalled = true
+		return nil
 	}
 	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		legacyCalled = true
@@ -417,13 +418,31 @@ func TestRootCommand_ResumeUsesTUIPath(t *testing.T) {
 	}
 }
 
+func TestRootCommand_ResumePropagatesTUIError(t *testing.T) {
+	withRootCommandTest(t)
+
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		return fmt.Errorf("resume failed")
+	}
+
+	rootCmd.SetArgs([]string{"--resume", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected --resume error")
+	}
+	if !strings.Contains(err.Error(), "resume failed") {
+		t.Fatalf("error = %v, want resume failed", err)
+	}
+}
+
 func TestRootCommand_NoTUIResumeUsesLegacyPath(t *testing.T) {
 	withRootCommandTest(t)
 
 	tuiCalled := false
 	legacyCalled := false
-	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
 		tuiCalled = true
+		return nil
 	}
 	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		legacyCalled = true
@@ -487,8 +506,9 @@ func TestResumeCommand_LastUsesResumePath(t *testing.T) {
 	withRootCommandTest(t)
 
 	var resumeCalled bool
-	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
 		resumeCalled = true
+		return nil
 	}
 
 	rootCmd.SetArgs([]string{"resume", "--last", "--provider", "ollama", "--no-update-check"})
@@ -497,6 +517,23 @@ func TestResumeCommand_LastUsesResumePath(t *testing.T) {
 	}
 	if !resumeCalled {
 		t.Fatal("expected resume --last to use last-session path")
+	}
+}
+
+func TestResumeCommand_LastPropagatesResumeError(t *testing.T) {
+	withRootCommandTest(t)
+
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		return fmt.Errorf("resume last failed")
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--last", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected resume --last error")
+	}
+	if !strings.Contains(err.Error(), "resume last failed") {
+		t.Fatalf("error = %v, want resume last failed", err)
 	}
 }
 

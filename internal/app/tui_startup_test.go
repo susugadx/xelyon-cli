@@ -216,7 +216,9 @@ func TestRunTUIWithResumeWithConfig_LoadsLastSession(t *testing.T) {
 		return tuiagent.NewTUIAdapter(ag, sendMsg)
 	}
 
-	RunTUIWithResumeWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false)
+	if err := RunTUIWithResumeWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false); err != nil {
+		t.Fatalf("RunTUIWithResumeWithConfig() error = %v", err)
+	}
 
 	if gotAgent == nil {
 		t.Fatal("expected TUI adapter and agent")
@@ -226,6 +228,96 @@ func TestRunTUIWithResumeWithConfig_LoadsLastSession(t *testing.T) {
 	}
 	if !strings.Contains(stripANSI(gotInitialContent), "Resumed session") {
 		t.Fatalf("initial content missing resume message:\n%s", stripANSI(gotInitialContent))
+	}
+}
+
+func TestRunTUIWithResumeWithConfig_NoSessionsStartsBlankTUI(t *testing.T) {
+	disableColors(t)
+	withTempWorkdir(t)
+	t.Setenv("HOME", t.TempDir())
+
+	originalRunner := runTUIProgram
+	defer func() { runTUIProgram = originalRunner }()
+	originalAdapterFactory := newTUIAdapter
+	defer func() { newTUIAdapter = originalAdapterFactory }()
+
+	var runnerCalled atomic.Int32
+	var gotInitialContent string
+	runTUIProgram = func(agent tui.AgentInterface, initialContent string, onProgram func(*tea.Program)) {
+		runnerCalled.Add(1)
+		gotInitialContent = initialContent
+	}
+	newTUIAdapter = func(ag *agentpkg.Agent, sendMsg func(tui.AppendMessageMsg)) *tuiagent.TUIAdapter {
+		return tuiagent.NewTUIAdapter(ag, sendMsg)
+	}
+
+	if err := RunTUIWithResumeWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false); err != nil {
+		t.Fatalf("RunTUIWithResumeWithConfig() error = %v", err)
+	}
+	if runnerCalled.Load() != 1 {
+		t.Fatalf("runTUIProgram called %d times, want 1", runnerCalled.Load())
+	}
+	if !strings.Contains(stripANSI(gotInitialContent), "No previous session found") {
+		t.Fatalf("initial content missing no-session fallback:\n%s", stripANSI(gotInitialContent))
+	}
+}
+
+func TestRunTUIWithResumeWithConfig_LoadFailureReturnsErrorBeforeStartingTUI(t *testing.T) {
+	disableColors(t)
+	withTempWorkdir(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	storage, err := history.NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+	session := history.NewSession("test-model")
+	session.AddMessage("user", "previous question", "test-model")
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(home, ".xelyon", "history", session.ID+".jsonl")); err != nil {
+		t.Fatalf("Remove(session body) error = %v", err)
+	}
+
+	originalRunner := runTUIProgram
+	defer func() { runTUIProgram = originalRunner }()
+	originalAdapterFactory := newTUIAdapter
+	defer func() { newTUIAdapter = originalAdapterFactory }()
+	originalCleanup := cleanupTUIAgent
+	defer func() { cleanupTUIAgent = originalCleanup }()
+
+	var runnerCalled atomic.Int32
+	var adapterCalled atomic.Int32
+	var cleanupCalled atomic.Int32
+	runTUIProgram = func(agent tui.AgentInterface, initialContent string, onProgram func(*tea.Program)) {
+		runnerCalled.Add(1)
+	}
+	newTUIAdapter = func(ag *agentpkg.Agent, sendMsg func(tui.AppendMessageMsg)) *tuiagent.TUIAdapter {
+		adapterCalled.Add(1)
+		return tuiagent.NewTUIAdapter(ag, sendMsg)
+	}
+	cleanupTUIAgent = func(ag *agentpkg.Agent) {
+		cleanupCalled.Add(1)
+		ag.Cleanup()
+	}
+
+	err = RunTUIWithResumeWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false)
+	if err == nil {
+		t.Fatal("expected resume load error")
+	}
+	if !strings.Contains(err.Error(), "failed to resume session") || !strings.Contains(err.Error(), "load session") {
+		t.Fatalf("error = %v, want failed resume load session", err)
+	}
+	if runnerCalled.Load() != 0 {
+		t.Fatalf("runTUIProgram called %d times, want 0", runnerCalled.Load())
+	}
+	if adapterCalled.Load() != 0 {
+		t.Fatalf("newTUIAdapter called %d times, want 0", adapterCalled.Load())
+	}
+	if cleanupCalled.Load() != 1 {
+		t.Fatalf("cleanupTUIAgent called %d times, want 1", cleanupCalled.Load())
 	}
 }
 

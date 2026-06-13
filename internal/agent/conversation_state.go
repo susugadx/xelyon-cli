@@ -131,6 +131,18 @@ func (a *Agent) ResumeStartupSession(sessionID string) (*history.Session, error)
 	return session, nil
 }
 
+// ResumeStartupLastSession は startup の bootstrap session を保存せず resume scope 内の最新 session を再開する。
+func (a *Agent) ResumeStartupLastSession(opts history.ResumeListOptions) (*history.Session, error) {
+	if a == nil || a.storage == nil {
+		return nil, fmt.Errorf("history storage not available")
+	}
+	sessionID, err := a.storage.GetLastResumeSession(opts)
+	if err != nil {
+		return nil, err
+	}
+	return a.ResumeStartupSession(sessionID)
+}
+
 // ResumeLastSession は resume scope 内の最新 session を再開する。
 func (a *Agent) ResumeLastSession(opts history.ResumeListOptions) (*history.Session, error) {
 	if a == nil || a.storage == nil {

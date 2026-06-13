@@ -60,16 +60,13 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 
 func handleResumeCommand(agent *Agent, args []string) bool {
 	out := agent.output()
-	opts, sessionID, ok := parseResumeCommandArgs(args)
-	if !ok {
-		yellow.Fprintln(out, "Usage: /resume [--last|--all|session-id]")
+	opts, sessionID, err := parseResumeCommandArgs(args)
+	if err != nil {
+		yellow.Fprintf(out, "%v\n", err)
 		return true
 	}
 
-	var (
-		session *history.Session
-		err     error
-	)
+	var session *history.Session
 	if sessionID != "" {
 		session, err = agent.ResumeSession(sessionID)
 	} else {
@@ -119,9 +116,10 @@ func handleSessionsCommand(agent *Agent) bool {
 	return true
 }
 
-func parseResumeCommandArgs(args []string) (history.ResumeListOptions, string, bool) {
+func parseResumeCommandArgs(args []string) (history.ResumeListOptions, string, error) {
 	var opts history.ResumeListOptions
 	var sessionID string
+	last := false
 	for _, arg := range args {
 		arg = strings.TrimSpace(arg)
 		switch arg {
@@ -130,13 +128,23 @@ func parseResumeCommandArgs(args []string) (history.ResumeListOptions, string, b
 		case "--all":
 			opts.All = true
 		case "--last":
+			last = true
 			continue
 		default:
 			if strings.HasPrefix(arg, "-") || sessionID != "" {
-				return opts, "", false
+				return opts, "", fmt.Errorf("usage: /resume [--last|--all|session-id]")
 			}
 			sessionID = arg
 		}
 	}
-	return opts, sessionID, true
+	if last && opts.All {
+		return opts, "", fmt.Errorf("--last cannot be used with --all")
+	}
+	if last && sessionID != "" {
+		return opts, "", fmt.Errorf("--last cannot be used with a session ID")
+	}
+	if opts.All && sessionID != "" {
+		return opts, "", fmt.Errorf("--all cannot be used with a session ID")
+	}
+	return opts, sessionID, nil
 }

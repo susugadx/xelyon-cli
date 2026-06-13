@@ -1,10 +1,13 @@
 package history
 
 import (
-	"fmt"
+	"errors"
 	"path/filepath"
 	"strings"
 )
+
+// ErrNoResumeSessions は resume 対象の session が見つからないことを表す。
+var ErrNoResumeSessions = errors.New("no sessions found")
 
 // ResumeListOptions は resume 候補の絞り込み条件です。
 type ResumeListOptions struct {
@@ -43,7 +46,7 @@ func (st *Storage) GetLastResumeSession(opts ResumeListOptions) (string, error) 
 		return "", err
 	}
 	if len(sessions) == 0 {
-		return "", fmt.Errorf("no sessions found")
+		return "", ErrNoResumeSessions
 	}
 	return sessions[0].ID, nil
 }

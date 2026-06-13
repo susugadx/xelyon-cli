@@ -38,8 +38,8 @@ func RunTUIWithConfig(model string, provider api.Provider, cfg *config.Config, a
 }
 
 // RunTUIWithResumeWithConfig は前回セッションを再開して TUI モードを起動する。
-func RunTUIWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
-	_ = runTUIWithOptions(model, provider, cfg, autoApprove, tuiRunOptions{resumeLastSession: true})
+func RunTUIWithResumeWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+	return runTUIWithOptions(model, provider, cfg, autoApprove, tuiRunOptions{resumeLastSession: true})
 }
 
 // RunTUIWithResumePickerWithConfig は session picker を開いた状態で TUI モードを起動する。
@@ -91,7 +91,9 @@ func runTUIWithOptions(model string, provider api.Provider, cfg *config.Config, 
 	ag.SetExitHook(lifecycle.RestoreTerminal)
 
 	if opts.resumeLastSession {
-		ag.LoadLastSessionForInteractive()
+		if err := ag.LoadLastSessionForInteractive(); err != nil {
+			return fmt.Errorf("failed to resume session: %w", err)
+		}
 	}
 	if opts.resumeSessionID != "" {
 		if _, err := ag.ResumeStartupSession(opts.resumeSessionID); err != nil {

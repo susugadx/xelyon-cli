@@ -3,6 +3,9 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -286,6 +289,68 @@ func TestAgent_ResumeStartupSession_SuccessPersistsOnlyLoadedSessionOnCleanup(t 
 	}
 	if sessions[0].ID != loadedSession.ID {
 		t.Fatalf("sessions[0].ID = %q, want loaded session %q", sessions[0].ID, loadedSession.ID)
+	}
+}
+
+func TestAgent_ResumeStartupLastSession_SuccessDoesNotPersistBootstrapSession(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+	bootstrapID := agent.session.ID
+
+	loadedSession := history.NewSession("gpt-5.4")
+	loadedSession.AddMessage("user", "saved request", "gpt-5.4")
+	if err := agent.storage.Save(loadedSession); err != nil {
+		t.Fatalf("Save(loadedSession) error = %v", err)
+	}
+
+	resumed, err := agent.ResumeStartupLastSession(history.ResumeListOptions{})
+	if err != nil {
+		t.Fatalf("ResumeStartupLastSession() error = %v", err)
+	}
+	if resumed.ID != loadedSession.ID {
+		t.Fatalf("resumed.ID = %q, want %q", resumed.ID, loadedSession.ID)
+	}
+	agent.Cleanup()
+
+	sessions, err := agent.storage.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != loadedSession.ID {
+		t.Fatalf("sessions = %#v, want only loaded session %s; bootstrap %s must not persist", sessions, loadedSession.ID, bootstrapID)
+	}
+}
+
+func TestAgent_ResumeStartupLastSession_LoadFailureIsNotNoSessions(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+
+	missingBodySession := history.NewSession("gpt-5.4")
+	missingBodySession.AddMessage("user", "saved request", "gpt-5.4")
+	if err := agent.storage.Save(missingBodySession); err != nil {
+		t.Fatalf("Save(missingBodySession) error = %v", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir() error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(home, ".xelyon", "history", missingBodySession.ID+".jsonl")); err != nil {
+		t.Fatalf("Remove(session body) error = %v", err)
+	}
+
+	_, err = agent.ResumeStartupLastSession(history.ResumeListOptions{})
+	if err == nil {
+		t.Fatal("ResumeStartupLastSession() error = nil, want load failure")
+	}
+	if errors.Is(err, history.ErrNoResumeSessions) {
+		t.Fatalf("ResumeStartupLastSession() error = %v, must not be ErrNoResumeSessions when metadata exists but load fails", err)
+	}
+	if !strings.Contains(err.Error(), "load session") {
+		t.Fatalf("ResumeStartupLastSession() error = %v, want load session", err)
 	}
 }
 

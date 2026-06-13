@@ -112,6 +112,66 @@ func TestResumeCommandRejectsConflictingLastArgs(t *testing.T) {
 	}
 }
 
+func TestSessionLifecycleCommandsRejectWhileAgentBusy(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{name: "new", input: "/new"},
+		{name: "clear", input: "/clear"},
+		{name: "resume picker", input: "/resume"},
+		{name: "resume last", input: "/resume --last"},
+		{name: "resume id", input: "/resume session-42"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &stubAgent{
+				statusLine:           "ready",
+				lastSessionCandidate: SessionCandidate{ID: "last-session"},
+				sessionCandidates: []SessionCandidate{
+					{ID: "session-1", Preview: "first", Model: "gpt-test", ProviderName: "openai", LastModified: time.Now()},
+				},
+			}
+			m := newModelWithViewport(agent)
+			m.beginAgentActivity()
+			firstBlock := m.agentActivity.block
+
+			updated, cmd := m.handleCommandSubmission(composerSubmission{
+				kind:         composerSubmissionCommand,
+				commandInput: tt.input,
+				payload:      tt.input,
+			})
+			m = updated.(Model)
+
+			if cmd != nil {
+				t.Fatalf("cmd = %T, want nil", cmd)
+			}
+			if m.transientStatus != agentTurnBusyStatus {
+				t.Fatalf("transientStatus = %q, want %q", m.transientStatus, agentTurnBusyStatus)
+			}
+			if m.agentActivity.block != firstBlock {
+				t.Fatalf("agent activity block changed from %#v to %#v", firstBlock, m.agentActivity.block)
+			}
+			if len(agent.startedSessionIDs) != 0 {
+				t.Fatalf("startedSessionIDs = %#v, want none", agent.startedSessionIDs)
+			}
+			if agent.resumeLastCalls != 0 {
+				t.Fatalf("resumeLastCalls = %d, want 0", agent.resumeLastCalls)
+			}
+			if len(agent.resumedSessionIDs) != 0 {
+				t.Fatalf("resumedSessionIDs = %#v, want none", agent.resumedSessionIDs)
+			}
+			if len(agent.handledInputs) != 0 {
+				t.Fatalf("handledInputs = %#v, want no agent command dispatch", agent.handledInputs)
+			}
+			if m.sessionPicker != nil {
+				t.Fatal("session picker should not open while agent is busy")
+			}
+		})
+	}
+}
+
 func TestNewAndClearSessionVisibility(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 

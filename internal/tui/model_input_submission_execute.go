@@ -44,6 +44,9 @@ func (m Model) handleCommandSubmission(sub composerSubmission) (tea.Model, tea.C
 		m.setTransientStatus("Invalid command syntax: " + decision.errorDetail)
 		return m, nil
 	case commandSubmissionDecisionLocalAction:
+		if localActionRequiresIdleAgent(decision.action) && m.rejectAgentTurnWhileBusy() {
+			return m, nil
+		}
 		handler := localCommandActionHandlers[decision.action]
 		return handler(m, command, sub)
 	case commandSubmissionDecisionDispatchAgent:
@@ -67,6 +70,15 @@ func (m Model) handleAgentCommandSubmission(sub composerSubmission, command slas
 }
 
 type localCommandActionHandler func(Model, slash.Command, composerSubmission) (tea.Model, tea.Cmd)
+
+func localActionRequiresIdleAgent(action commandrouter.Action) bool {
+	switch action {
+	case commandrouter.ActionNewSession, commandrouter.ActionOpenSessionPicker:
+		return true
+	default:
+		return false
+	}
+}
 
 var localCommandActionHandlers = map[commandrouter.Action]localCommandActionHandler{
 	commandrouter.ActionCopyMouseSelection: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {

@@ -1,6 +1,7 @@
 package history
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -44,6 +45,20 @@ func TestListResumeSessions_FiltersByWorkingDirAndIncludesLegacy(t *testing.T) {
 	}
 	if got := resumeSessionModels(all); !sameStringSet(got, []string{"legacy-model", "other-model", "current-model"}) {
 		t.Fatalf("all models = %#v, want all non-empty sessions", got)
+	}
+}
+
+func TestGetLastResumeSession_NoSessionsUsesSentinelError(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	storage, err := NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+
+	_, err = storage.GetLastResumeSession(ResumeListOptions{})
+	if !errors.Is(err, ErrNoResumeSessions) {
+		t.Fatalf("GetLastResumeSession() error = %v, want ErrNoResumeSessions", err)
 	}
 }
 
