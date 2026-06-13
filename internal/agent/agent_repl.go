@@ -171,38 +171,24 @@ func RunLegacyInteractiveWithResumeWithConfig(model string, provider api.Provide
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
 
-	storage, err := history.NewStorage()
-	if err != nil {
-		red.Fprintf(env.runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
-		cleanup()
-		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
-		return
-	}
-
-	sessionID, err := storage.GetLastSession()
-	if err != nil {
-		yellow.Fprintln(env.runtimeUI.Output(), "No previous session found, starting new session")
-		cleanup()
-		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
-		return
-	}
-
-	session, err := storage.Load(sessionID)
-	if err != nil {
-		red.Fprintf(env.runtimeUI.Output(), "Failed to load session: %v\n", err)
-		cleanup()
-		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
-		return
-	}
-
-	// ロード済みセッションでAgent作成
 	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
-	agent.applyLoadedSession(session)
+	session, err := agent.ResumeLastSession(history.ResumeListOptions{})
+	if err != nil {
+		if strings.Contains(err.Error(), "load session") {
+			red.Fprintf(env.runtimeUI.Output(), "Failed to load session: %v\n", err)
+		} else if strings.Contains(err.Error(), "history storage not available") {
+			red.Fprintf(env.runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
+		} else {
+			yellow.Fprintln(env.runtimeUI.Output(), "No previous session found, starting new session")
+		}
+		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
+		return
+	}
 	defer agent.Cleanup() // グレースフルシャットダウン
 
 	printHeaderToWriter(env.runtimeUI.Output(), model, provider)
 	printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
-	green.Fprintf(env.runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
+	green.Fprintf(env.runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", session.ID, len(session.ToAPIMessages()))
 
 	// コンテキストサイズ表示（ツリー形式）
 	printContextSize(agent)

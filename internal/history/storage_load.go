@@ -23,6 +23,7 @@ func (st *Storage) Load(sessionID string) (*Session, error) {
 		Model:                     meta.Model,
 		ProviderName:              meta.ProviderName,
 		ProviderConfigKey:         meta.ProviderConfigKey,
+		WorkingDir:                meta.WorkingDir,
 		StartTime:                 meta.StartTime,
 		LastModified:              meta.LastModified,
 		Messages:                  []MessageEntry{},

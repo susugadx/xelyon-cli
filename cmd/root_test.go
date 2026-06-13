@@ -160,6 +160,8 @@ type rootCommandRunners struct {
 	runLegacyInteractiveWithImage  func(string, string, api.Provider, string, *config.Config, bool) error
 	runTUI                         func(string, api.Provider, *config.Config, bool)
 	runTUIWithResume               func(string, api.Provider, *config.Config, bool)
+	runTUIWithResumeDirect         func(string, api.Provider, *config.Config, bool, string) error
+	runTUIWithResumePicker         func(string, api.Provider, *config.Config, bool, bool)
 	runTUIWithImage                func(string, string, api.Provider, string, *config.Config, bool) error
 	runHeadless                    func(context.Context, string, string, api.Provider, *config.Config) *agent.HeadlessResult
 	runOnce                        func(string, string, api.Provider, *config.Config, bool, bool) error
@@ -173,6 +175,8 @@ func snapshotRootCommandRunners() rootCommandRunners {
 		runLegacyInteractiveWithImage:  runLegacyInteractiveWithImage,
 		runTUI:                         runTUI,
 		runTUIWithResume:               runTUIWithResume,
+		runTUIWithResumeDirect:         runTUIWithResumeDirect,
+		runTUIWithResumePicker:         runTUIWithResumePicker,
 		runTUIWithImage:                runTUIWithImage,
 		runHeadless:                    runHeadless,
 		runOnce:                        runOnce,
@@ -186,6 +190,8 @@ func restoreRootCommandRunners(r rootCommandRunners) {
 	runLegacyInteractiveWithImage = r.runLegacyInteractiveWithImage
 	runTUI = r.runTUI
 	runTUIWithResume = r.runTUIWithResume
+	runTUIWithResumeDirect = r.runTUIWithResumeDirect
+	runTUIWithResumePicker = r.runTUIWithResumePicker
 	runTUIWithImage = r.runTUIWithImage
 	runHeadless = r.runHeadless
 	runOnce = r.runOnce
@@ -433,6 +439,112 @@ func TestRootCommand_NoTUIResumeUsesLegacyPath(t *testing.T) {
 	}
 	if tuiCalled {
 		t.Fatal("TUI resume path must not be executed when --no-tui is set")
+	}
+}
+
+func TestResumeCommand_DefaultOpensPicker(t *testing.T) {
+	withRootCommandTest(t)
+
+	var pickerCalled bool
+	var pickerAll bool
+	runTUIWithResumePicker = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, all bool) {
+		pickerCalled = true
+		pickerAll = all
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !pickerCalled {
+		t.Fatal("expected resume to open picker")
+	}
+	if pickerAll {
+		t.Fatal("resume without --all should use cwd-scoped picker")
+	}
+}
+
+func TestResumeCommand_AllOpensAllSessionPicker(t *testing.T) {
+	withRootCommandTest(t)
+
+	var pickerCalled bool
+	var pickerAll bool
+	runTUIWithResumePicker = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, all bool) {
+		pickerCalled = true
+		pickerAll = all
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--all", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !pickerCalled || !pickerAll {
+		t.Fatalf("pickerCalled=%v pickerAll=%v, want all picker", pickerCalled, pickerAll)
+	}
+}
+
+func TestResumeCommand_LastUsesResumePath(t *testing.T) {
+	withRootCommandTest(t)
+
+	var resumeCalled bool
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		resumeCalled = true
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--last", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !resumeCalled {
+		t.Fatal("expected resume --last to use last-session path")
+	}
+}
+
+func TestResumeCommand_SessionIDUsesDirectPath(t *testing.T) {
+	withRootCommandTest(t)
+
+	var gotSessionID string
+	runTUIWithResumeDirect = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, sessionID string) error {
+		gotSessionID = sessionID
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"resume", "session-42", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if gotSessionID != "session-42" {
+		t.Fatalf("sessionID = %q, want session-42", gotSessionID)
+	}
+}
+
+func TestResumeCommand_DirectPathPropagatesError(t *testing.T) {
+	withRootCommandTest(t)
+
+	runTUIWithResumeDirect = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, sessionID string) error {
+		return fmt.Errorf("resume failed")
+	}
+
+	rootCmd.SetArgs([]string{"resume", "missing-session", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected direct resume error")
+	}
+	if !strings.Contains(err.Error(), "resume failed") {
+		t.Fatalf("error = %v, want resume failed", err)
+	}
+}
+
+func TestResumeCommand_RejectsAllWithSessionID(t *testing.T) {
+	withRootCommandTest(t)
+
+	rootCmd.SetArgs([]string{"resume", "--all", "session-42", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --all with session ID")
+	}
+	if !strings.Contains(err.Error(), "--all cannot be used with a session ID") {
+		t.Fatalf("error = %v, want --all/session-id conflict", err)
 	}
 }
 

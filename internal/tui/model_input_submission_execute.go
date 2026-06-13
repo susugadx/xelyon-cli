@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -108,6 +109,57 @@ var localCommandActionHandlers = map[commandrouter.Action]localCommandActionHand
 		updated, cmd := m.openCurrentProviderModelPicker()
 		return updated, cmd
 	},
+	commandrouter.ActionNewSession: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		return m.startNewSessionFromCommand(command.ResolvedName == "/clear")
+	},
+	commandrouter.ActionOpenSessionPicker: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
+		m.recordHandledCommand(command.Input)
+		return m.handleResumeCommandSubmission(command)
+	},
+}
+
+func (m Model) handleResumeCommandSubmission(command slash.Command) (tea.Model, tea.Cmd) {
+	all := false
+	last := false
+	sessionID := ""
+	for _, arg := range command.Args {
+		switch arg {
+		case "--all":
+			all = true
+		case "--last":
+			last = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				m.setTransientStatus("Unknown resume option: " + arg)
+				return m, nil
+			}
+			if sessionID != "" {
+				m.setTransientStatus("Resume accepts one session ID")
+				return m, nil
+			}
+			sessionID = arg
+		}
+	}
+	if last && all {
+		m.setTransientStatus("--last cannot be used with --all")
+		return m, nil
+	}
+	if last && sessionID != "" {
+		m.setTransientStatus("--last cannot be used with a session ID")
+		return m, nil
+	}
+	if all && sessionID != "" {
+		m.setTransientStatus("--all cannot be used with a session ID")
+		return m, nil
+	}
+	if last {
+		return m.resumeLastSession(all)
+	}
+	if sessionID != "" {
+		return m.resumeSessionByID(sessionID)
+	}
+	return m.openSessionPicker(all)
 }
 
 func (m Model) handleChatSubmission(sub composerSubmission) (tea.Model, tea.Cmd) {

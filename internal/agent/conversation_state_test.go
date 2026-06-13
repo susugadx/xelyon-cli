@@ -231,6 +231,64 @@ func TestAgent_ApplyLoadedSession_PreservesTaskLedgerWhenCurrentTaskStateContext
 	}
 }
 
+func TestAgent_ResumeStartupSession_FailureDoesNotPersistBootstrapSessionOnCleanup(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+	bootstrapID := agent.session.ID
+
+	if _, err := agent.ResumeStartupSession("missing-session"); err == nil {
+		t.Fatal("ResumeStartupSession() error = nil, want missing session error")
+	}
+	agent.Cleanup()
+
+	sessions, err := agent.storage.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("len(ListSessions()) = %d, want 0; bootstrap session %s should not be persisted", len(sessions), bootstrapID)
+	}
+}
+
+func TestAgent_ResumeStartupSession_SuccessPersistsOnlyLoadedSessionOnCleanup(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+	bootstrapID := agent.session.ID
+
+	loadedSession := history.NewSession("gpt-5.4")
+	loadedSession.AddMessage("user", "saved request", "gpt-5.4")
+	if err := agent.storage.Save(loadedSession); err != nil {
+		t.Fatalf("Save(loadedSession) error = %v", err)
+	}
+
+	resumed, err := agent.ResumeStartupSession(loadedSession.ID)
+	if err != nil {
+		t.Fatalf("ResumeStartupSession() error = %v", err)
+	}
+	if resumed.ID != loadedSession.ID {
+		t.Fatalf("resumed.ID = %q, want %q", resumed.ID, loadedSession.ID)
+	}
+	if agent.session.ID != loadedSession.ID {
+		t.Fatalf("agent.session.ID = %q, want loaded session %q", agent.session.ID, loadedSession.ID)
+	}
+	agent.Cleanup()
+
+	sessions, err := agent.storage.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("len(ListSessions()) = %d, want only loaded session; bootstrap session %s should not be persisted", len(sessions), bootstrapID)
+	}
+	if sessions[0].ID != loadedSession.ID {
+		t.Fatalf("sessions[0].ID = %q, want loaded session %q", sessions[0].ID, loadedSession.ID)
+	}
+}
+
 func TestAgent_RestoreSessionConversation_ReplacesRuntimeMirrors(t *testing.T) {
 	disableColors(t)
 

@@ -9,6 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -193,20 +194,13 @@ func (a *Agent) LoadLastSessionForInteractive() {
 		return
 	}
 
-	sessionID, err := a.storage.GetLastSession()
+	session, err := a.ResumeLastSession(history.ResumeListOptions{})
 	if err != nil {
 		yellow.Fprintln(out, "No previous session found, starting new session")
 		return
 	}
 
-	session, err := a.storage.Load(sessionID)
-	if err != nil {
-		red.Fprintf(out, "Failed to load session: %v\n", err)
-		return
-	}
-
-	a.applyLoadedSession(session)
-	green.Fprintf(out, "📂 Resumed session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
+	green.Fprintf(out, "📂 Resumed session %s (%d messages)\n", session.ID, len(session.ToAPIMessages()))
 }
 
 // PrintLoadedImage は読み込み済み画像の情報を Agent の出力へ表示する。

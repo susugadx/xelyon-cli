@@ -101,14 +101,17 @@ func TestSlashSuggestions_FilterOnPrefix(t *testing.T) {
 	if !m.slashSuggestions.visible() {
 		t.Fatal("slash suggestions should be visible after typing /r")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 2 {
-		t.Fatalf("suggestions len = %d, want 2", got)
+	if got := len(m.slashSuggestions.suggestions); got != 3 {
+		t.Fatalf("suggestions len = %d, want 3", got)
 	}
 	if got := m.slashSuggestions.suggestions[0].InsertText; got != "/review" {
 		t.Fatalf("suggestion = %q, want /review", got)
 	}
 	if got := m.slashSuggestions.suggestions[1].InsertText; got != "/rawoutputs" {
 		t.Fatalf("second suggestion = %q, want /rawoutputs", got)
+	}
+	if got := m.slashSuggestions.suggestions[2].InsertText; got != "/resume" {
+		t.Fatalf("third suggestion = %q, want /resume", got)
 	}
 }
 

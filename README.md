@@ -262,10 +262,13 @@ xelyon
 /project    # xelyon.yaml を対話式で編集
 /init       # xelyon.yaml テンプレート作成
 /review [instructions] # 現在の変更レビューを開く（引数は追加観点として即時実行）
+/new        # 新しい session を開始（画面は残す）
+/clear      # 画面を消して新しい session を開始
+/resume     # 現在の作業ディレクトリの session picker を開く
 /exit       # 終了
 ```
 
-`/model` / `/use` / `/provider` で provider や model を切り替えても、ローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側 continuation state は切り替え時にリセットされます。文脈を切る場合は `/clear` か新しい session を使います。
+`/model` / `/use` / `/provider` で provider や model を切り替えても、ローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側 continuation state は切り替え時にリセットされます。文脈を切る場合は `/new`、画面も消す場合は `/clear` を使います。保存済み session は `/resume` または `xelyon resume` で再開できます。
 
 `/review` は現在の作業ツリー差分全体をレビューします。通常は現在の provider/model を使いますが、`review.provider` と `review.model` を設定すると `/review` だけ別の provider/model で実行できます。`review.provider` だけを設定した場合はその provider の既定モデルを使い、`review.model` を設定する場合は `review.provider` も必須です。review モデル呼び出しには通常会話履歴を渡しません。
 

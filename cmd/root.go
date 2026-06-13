@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/app"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -37,6 +38,8 @@ var (
 	runLegacyInteractiveWithImage  = app.RunLegacyInteractiveWithImageWithConfig
 	runTUI                         = app.RunTUIWithConfig
 	runTUIWithResume               = app.RunTUIWithResumeWithConfig
+	runTUIWithResumeDirect         = app.RunTUIWithResumeSessionWithConfig
+	runTUIWithResumePicker         = app.RunTUIWithResumePickerWithConfig
 	runTUIWithImage                = app.RunTUIWithImageWithConfig
 	runHeadless                    = app.RunHeadlessWithConfig
 	runOnce                        = app.RunOnceWithConfig
@@ -86,29 +89,8 @@ Examples:
 			}
 		}
 
-		// 設定を読み込み
-		cfg, err := config.LoadConfig()
+		runtime, err := loadInteractiveRuntimeSelection(cmd)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to load config: %v\n", err)
-			cfg = config.DefaultConfig()
-		}
-
-		// 環境変数で上書き
-		cfg.ApplyEnvironmentOverrides()
-
-		// CLIフラグで上書き（明示的に指定されたもののみ）
-		var loopPtr, diffPtr *int
-		if cmd.Flags().Changed("loop-threshold") {
-			loopPtr = &loopThreshold
-		}
-		if cmd.Flags().Changed("diff-lines") {
-			diffPtr = &diffLines
-		}
-		cfg.ApplyFlagOverrides(loopPtr, diffPtr)
-
-		model := getModel(cfg)
-		provider := getProvider(cfg)
-		if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
 			return err
 		}
 		query := strings.Join(args, " ")
@@ -118,7 +100,7 @@ Examples:
 			if query == "" {
 				return fmt.Errorf("query argument is required in headless mode")
 			}
-			result := runHeadless(cmd.Context(), query, model, provider, cfg)
+			result := runHeadless(cmd.Context(), query, runtime.model, runtime.provider, runtime.cfg)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
 			if result.Status == app.HeadlessStatusError {
@@ -126,31 +108,31 @@ Examples:
 			}
 			return nil
 		case executionModeOnce:
-			return runOnce(query, model, provider, cfg, autoApprove, quiet)
+			return runOnce(query, runtime.model, runtime.provider, runtime.cfg, autoApprove, quiet)
 		case executionModeResume:
 			if legacyNoTUI {
 				printLegacyNoTUIWarning()
-				runLegacyInteractiveWithResume(model, provider, cfg, autoApprove)
+				runLegacyInteractiveWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			} else {
-				runTUIWithResume(model, provider, cfg, autoApprove)
+				runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			}
 			return nil
 		case executionModeInteractive:
 			if legacyNoTUI {
 				printLegacyNoTUIWarning()
-				runLegacyInteractive(model, provider, cfg, autoApprove)
+				runLegacyInteractive(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			} else {
-				runTUI(model, provider, cfg, autoApprove)
+				runTUI(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			}
 			return nil
 		case executionModeOnceImage:
-			return runOnceWithImage(query, model, provider, imageFlag, cfg, autoApprove, quiet)
+			return runOnceWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove, quiet)
 		case executionModeInteractiveImage:
 			if legacyNoTUI {
 				printLegacyNoTUIWarning()
-				return runLegacyInteractiveWithImage(query, model, provider, imageFlag, cfg, autoApprove)
+				return runLegacyInteractiveWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
 			}
-			return runTUIWithImage(query, model, provider, imageFlag, cfg, autoApprove)
+			return runTUIWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
 		default:
 			return fmt.Errorf("unsupported execution mode: %s", mode)
 		}
@@ -194,6 +176,43 @@ func init() {
 
 	rootCmd.AddCommand(newDoctorCommand())
 	rootCmd.AddCommand(newAuthCommand())
+	rootCmd.AddCommand(newResumeCommand())
+}
+
+type interactiveRuntimeSelection struct {
+	cfg      *config.Config
+	model    string
+	provider api.Provider
+}
+
+func loadInteractiveRuntimeSelection(cmd *cobra.Command) (interactiveRuntimeSelection, error) {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to load config: %v\n", err)
+		cfg = config.DefaultConfig()
+	}
+
+	cfg.ApplyEnvironmentOverrides()
+
+	var loopPtr, diffPtr *int
+	if cmd.Flags().Changed("loop-threshold") {
+		loopPtr = &loopThreshold
+	}
+	if cmd.Flags().Changed("diff-lines") {
+		diffPtr = &diffLines
+	}
+	cfg.ApplyFlagOverrides(loopPtr, diffPtr)
+
+	model := getModel(cfg)
+	provider := getProvider(cfg)
+	if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
+		return interactiveRuntimeSelection{}, err
+	}
+	return interactiveRuntimeSelection{
+		cfg:      cfg,
+		model:    model,
+		provider: provider,
+	}, nil
 }
 
 func printLegacyNoTUIWarning() {

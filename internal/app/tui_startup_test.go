@@ -229,6 +229,62 @@ func TestRunTUIWithResumeWithConfig_LoadsLastSession(t *testing.T) {
 	}
 }
 
+func TestRunTUIWithResumeSessionWithConfig_ReturnsErrorBeforeStartingTUI(t *testing.T) {
+	disableColors(t)
+	withTempWorkdir(t)
+	t.Setenv("HOME", t.TempDir())
+
+	originalRunner := runTUIProgram
+	defer func() { runTUIProgram = originalRunner }()
+	originalAdapterFactory := newTUIAdapter
+	defer func() { newTUIAdapter = originalAdapterFactory }()
+
+	var runnerCalled atomic.Int32
+	var adapterCalled atomic.Int32
+	var cleanupCalled atomic.Int32
+	runTUIProgram = func(agent tui.AgentInterface, initialContent string, onProgram func(*tea.Program)) {
+		runnerCalled.Add(1)
+	}
+	newTUIAdapter = func(ag *agentpkg.Agent, sendMsg func(tui.AppendMessageMsg)) *tuiagent.TUIAdapter {
+		adapterCalled.Add(1)
+		return tuiagent.NewTUIAdapter(ag, sendMsg)
+	}
+	originalCleanup := cleanupTUIAgent
+	defer func() { cleanupTUIAgent = originalCleanup }()
+	cleanupTUIAgent = func(ag *agentpkg.Agent) {
+		cleanupCalled.Add(1)
+		ag.Cleanup()
+	}
+
+	err := RunTUIWithResumeSessionWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false, "missing-session")
+	if err == nil {
+		t.Fatal("expected resume error")
+	}
+	if !strings.Contains(err.Error(), "failed to resume session") {
+		t.Fatalf("error = %v, want failed to resume session", err)
+	}
+	if runnerCalled.Load() != 0 {
+		t.Fatalf("runTUIProgram called %d times, want 0", runnerCalled.Load())
+	}
+	if adapterCalled.Load() != 0 {
+		t.Fatalf("newTUIAdapter called %d times, want 0", adapterCalled.Load())
+	}
+	if cleanupCalled.Load() != 1 {
+		t.Fatalf("cleanupTUIAgent called %d times, want 1", cleanupCalled.Load())
+	}
+	storage, err := history.NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+	sessions, err := storage.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("len(ListSessions()) = %d, want 0 after failed direct resume", len(sessions))
+	}
+}
+
 func TestRunTUIWithImageWithConfig_RunsInitialImageTurn(t *testing.T) {
 	disableColors(t)
 	workdir := withTempWorkdir(t)
