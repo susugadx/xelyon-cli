@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestProbeRunner_HostReadOnlySandboxBlocksRepoMutation(t *testing.T) {
@@ -17,7 +16,7 @@ func TestProbeRunner_HostReadOnlySandboxBlocksRepoMutation(t *testing.T) {
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-mutation",
 		Mode:           ReviewProbeHostReadOnly,
-		Timeout:        10 * time.Second,
+		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
 			{Command: "go", Args: []string{"test", "-count=1", "./probe", "-run", "^TestProbeMutate$"}},
@@ -46,7 +45,7 @@ func TestProbeRunner_HostReadOnlySandboxBlocksRepoMutation_DirtyWorktreeUntouche
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-mutation-dirty",
 		Mode:           ReviewProbeHostReadOnly,
-		Timeout:        10 * time.Second,
+		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
 			{Command: "go", Args: []string{"test", "-count=1", "./probe", "-run", "^TestProbeMutate$"}},
@@ -78,7 +77,7 @@ func TestProbeRunner_HostReadOnlySandboxBlocksDirtyExistingPathMutation(t *testi
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-mutation-dirty-existing-path",
 		Mode:           ReviewProbeHostReadOnly,
-		Timeout:        10 * time.Second,
+		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
 			{Command: "go", Args: []string{"test", "-count=1", "./probe", "-run", "^TestProbeMutateDirtyExistingPath$"}},
@@ -127,7 +126,7 @@ func TestCannotReadHostEtcPasswd(t *testing.T) {
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-host-file-read",
 		Mode:           ReviewProbeHostReadOnly,
-		Timeout:        10 * time.Second,
+		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 2048,
 		Commands: []ReviewProbeCommand{
 			{Command: "go", Args: []string{"test", "-count=1", "./probe", "-run", "^TestCannotReadHostEtcPasswd$"}},

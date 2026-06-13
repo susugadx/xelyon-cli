@@ -6,7 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+const probeNestedGoTestTimeout = 45 * time.Second
 
 type probeModeBlockedCase struct {
 	name          string
