@@ -179,10 +179,7 @@ func (s *stubAgent) CreateProjectConfigTemplate() (*config.ProjectConfig, error)
 	if s.projectCreateErr != nil {
 		return nil, s.projectCreateErr
 	}
-	s.projectConfig = &config.ProjectConfig{
-		Context: "template context",
-		Rules:   []string{"template rule"},
-	}
+	s.projectConfig = &config.ProjectConfig{}
 	return config.CloneProjectConfig(s.projectConfig), nil
 }
 func (s *stubAgent) GetProviderName() string {

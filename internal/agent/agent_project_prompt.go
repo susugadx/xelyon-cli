@@ -160,10 +160,10 @@ func renderProjectInstructionStatus(agent *Agent, bundle *config.ProjectInstruct
 	if bundle.ProjectConfig != nil {
 		green.Fprintln(agent.output(), "📋 xelyon.yaml loaded")
 	}
-	if labels := joinInstructionLabels(bundle.ProjectGuidance); labels != "" {
+	if labels := joinInstructionLabels(bundle.ProjectGuidance, bundle.ProjectGuidanceStatus); labels != "" {
 		green.Fprintf(agent.output(), "📋 Project guidance loaded: %s\n", labels)
 	}
-	if labels := joinInstructionLabels(bundle.GlobalGuidance); labels != "" {
+	if labels := joinInstructionLabels(bundle.GlobalGuidance, bundle.GlobalGuidanceStatus); labels != "" {
 		green.Fprintf(agent.output(), "📋 Global guidance loaded: %s\n", labels)
 	}
 	for _, warning := range bundle.WarningMessages() {
@@ -174,15 +174,32 @@ func renderProjectInstructionStatus(agent *Agent, bundle *config.ProjectInstruct
 	}
 }
 
-func joinInstructionLabels(files []config.InstructionFile) string {
-	if len(files) == 0 {
+func joinInstructionLabels(files []config.InstructionFile, statuses []config.InstructionFileStatus) string {
+	if len(files) == 0 && len(statuses) == 0 {
 		return ""
 	}
-	labels := make([]string, 0, len(files))
-	seen := make(map[string]struct{}, len(files))
+	labels := make([]string, 0, len(files)+len(statuses))
+	seen := make(map[string]struct{}, len(files)+len(statuses))
 	for _, file := range files {
 		label := strings.TrimSpace(file.Label)
 		if label == "" {
+			continue
+		}
+		if _, ok := seen[label]; ok {
+			continue
+		}
+		seen[label] = struct{}{}
+		labels = append(labels, label)
+	}
+	for _, status := range statuses {
+		label := strings.TrimSpace(status.Label)
+		if label == "" {
+			continue
+		}
+		switch status.Status {
+		case config.InstructionFileStatusEmpty:
+			label += " (empty)"
+		default:
 			continue
 		}
 		if _, ok := seen[label]; ok {

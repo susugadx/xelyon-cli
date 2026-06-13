@@ -22,6 +22,10 @@ func (m Model) renderConfigSelectDetail(addLine func(string), field *config.Conf
 
 func (m Model) renderConfigSliceDetail(addLine func(string)) {
 	cs := m.configScreen
+	if field := cs.selectedField(); field != nil && cs.editingGuidanceFileChoices(field.Path) {
+		m.renderGuidanceFileChoiceDetail(addLine, field)
+		return
+	}
 	addLine(theme.Config.FgCyan + "  Items: (" + fmt.Sprintf("%d", len(cs.editSliceItems)) + ")")
 	for i, item := range cs.editSliceItems {
 		prefix := "    "

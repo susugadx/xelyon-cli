@@ -257,14 +257,14 @@ func TestTUIAdapter_InitCreatesTemplateWhenMissing(t *testing.T) {
 		t.Fatal("HandleCommand(/init) = false, want true")
 	}
 
-	if _, err := os.Stat(filepath.Join(tmpDir, "xelyon.yaml")); err != nil {
-		t.Fatalf("xelyon.yaml should be created: %v", err)
+	if _, err := os.Stat(filepath.Join(tmpDir, "AGENTS.md")); err != nil {
+		t.Fatalf("AGENTS.md should be created: %v", err)
 	}
 	got := out.String()
 	if strings.Contains(got, "not available in TUI mode") {
 		t.Fatalf("/init should not be blocked in TUI:\n%s", got)
 	}
-	if !strings.Contains(got, "xelyon.yaml template created") {
+	if !strings.Contains(got, "AGENTS.md created") {
 		t.Fatalf("output missing created message:\n%s", got)
 	}
 }
@@ -281,7 +281,7 @@ func TestTUIAdapter_InitDoesNotPromptOverwrite(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Chdir() error = %v", err)
 	}
-	existingPath := filepath.Join(tmpDir, "xelyon.yaml")
+	existingPath := filepath.Join(tmpDir, "AGENTS.md")
 	const existing = "existing: true\n"
 	if err := os.WriteFile(existingPath, []byte(existing), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -299,13 +299,13 @@ func TestTUIAdapter_InitDoesNotPromptOverwrite(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	if string(data) != existing {
-		t.Fatalf("xelyon.yaml was overwritten unexpectedly: %q", string(data))
+		t.Fatalf("AGENTS.md was overwritten unexpectedly: %q", string(data))
 	}
 	got := out.String()
 	if strings.Contains(got, "Overwrite?") {
 		t.Fatalf("TUI /init should not prompt for overwrite:\n%s", got)
 	}
-	if !strings.Contains(got, "Not overwriting from TUI mode") {
+	if !strings.Contains(got, "AGENTS.md already exists. Left unchanged.") {
 		t.Fatalf("output missing non-overwrite message:\n%s", got)
 	}
 }

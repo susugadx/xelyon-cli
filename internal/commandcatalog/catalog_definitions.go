@@ -324,7 +324,7 @@ func commandModel() CommandInfo {
 }
 
 func commandInit() CommandInfo {
-	return legacyDiscoverableCommand("/init", "", "Create xelyon.yaml project template", "xelyon.yamlテンプレートを作成", CommandCategoryConfig, 180)
+	return legacyDiscoverableCommand("/init", "", "Create project AGENTS.md guidance file", "AGENTS.md ガイダンスを作成", CommandCategoryConfig, 180)
 }
 
 func commandProject() CommandInfo {

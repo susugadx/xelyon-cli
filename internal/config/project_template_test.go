@@ -28,12 +28,35 @@ func TestCreateProjectConfigTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if !strings.Contains(string(data), filepath.Base(tmpDir)+" - Project Configuration") {
+	if !strings.Contains(string(data), "XELYON repo config for "+filepath.Base(tmpDir)) {
 		t.Fatalf("template does not include project name:\n%s", string(data))
+	}
+	if strings.Contains(string(data), "AI 用コンテキスト") || strings.Contains(string(data), "context:") || strings.Contains(string(data), "rules:") {
+		t.Fatalf("template should not recommend legacy context/rules guidance:\n%s", string(data))
 	}
 
 	if err := CreateProjectConfigTemplate("", false); !errors.Is(err, ErrProjectConfigExists) {
 		t.Fatalf("CreateProjectConfigTemplate(existing) error = %v, want ErrProjectConfigExists", err)
+	}
+}
+
+func TestCreateProjectAgentInstructionsTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "AGENTS.md")
+
+	if err := CreateProjectAgentInstructionsTemplate(path); err != nil {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), "# AGENTS.md") {
+		t.Fatalf("template missing AGENTS heading:\n%s", string(data))
+	}
+
+	if err := CreateProjectAgentInstructionsTemplate(path); !errors.Is(err, ErrProjectAgentInstructionsExists) {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate(existing) error = %v, want ErrProjectAgentInstructionsExists", err)
 	}
 }
 

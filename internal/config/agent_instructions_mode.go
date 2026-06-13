@@ -20,7 +20,7 @@ func isValidAgentInstructionProjectMode(mode string) bool {
 func normalizeAgentInstructionProjectMode(mode string) string {
 	normalized := strings.ToLower(strings.TrimSpace(mode))
 	if !isValidAgentInstructionProjectMode(normalized) {
-		return AgentInstructionProjectModeFallback
+		return AgentInstructionProjectModeAlways
 	}
 	return normalized
 }

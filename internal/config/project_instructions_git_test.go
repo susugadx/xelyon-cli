@@ -40,7 +40,10 @@ func TestLoadProjectInstructionBundle_TrackedCLAUDEWithoutXelyon(t *testing.T) {
 	initGitRepo(t, root)
 	runGit(t, root, "add", "CLAUDE.md")
 
-	bundle := loadProjectInstructionBundleForDirOrFatal(t, DefaultConfig(), root)
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Files = []string{"CLAUDE.md"}
+
+	bundle := loadProjectInstructionBundleForDirOrFatal(t, cfg, root)
 	if len(bundle.ProjectGuidance) != 1 {
 		t.Fatalf("ProjectGuidance len = %d, want 1", len(bundle.ProjectGuidance))
 	}

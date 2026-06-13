@@ -17,6 +17,9 @@ type ProjectInstructionBundle struct {
 	ProjectGuidance []InstructionFile
 	GlobalGuidance  []InstructionFile
 
+	ProjectGuidanceStatus []InstructionFileStatus
+	GlobalGuidanceStatus  []InstructionFileStatus
+
 	WarningEntries []ProjectInstructionWarning
 }
 
@@ -92,6 +95,22 @@ type InstructionFile struct {
 	Truncated  bool
 	GitTracked bool
 }
+
+// InstructionFileStatus は prompt に注入しない guidance 候補の状態表示用情報。
+type InstructionFileStatus struct {
+	Path   string
+	Label  string
+	Scope  string
+	Status InstructionFileStatusKind
+}
+
+// InstructionFileStatusKind は guidance 候補の状態種別。
+type InstructionFileStatusKind string
+
+const (
+	// InstructionFileStatusEmpty は guidance ファイルが存在するが空である状態。
+	InstructionFileStatusEmpty InstructionFileStatusKind = "empty"
+)
 
 // LoadProjectInstructionBundle は現在 cwd を基準に instruction bundle を解決する。
 func LoadProjectInstructionBundle(cfg *Config) (*ProjectInstructionBundle, error) {
@@ -233,9 +252,33 @@ func loadGuidanceFileFromPlan(bundle *ProjectInstructionBundle, budget *instruct
 		if loadResult.SkipReason == instructionLoadSkipNoContentInBudget && budget.exhausted() {
 			return InstructionFile{}, false, true
 		}
+		if loadResult.SkipReason == instructionLoadSkipNoContentInBudget {
+			appendInstructionFileStatus(bundle, InstructionFileStatus{
+				Path:   plan.LoadOptions.FullPath,
+				Label:  plan.LoadOptions.DisplayLabel,
+				Scope:  plan.LoadOptions.Scope,
+				Status: InstructionFileStatusEmpty,
+			})
+		}
 		return InstructionFile{}, false, false
 	}
 	return loadResult.File, true, false
+}
+
+func appendInstructionFileStatus(bundle *ProjectInstructionBundle, status InstructionFileStatus) {
+	if bundle == nil || strings.TrimSpace(status.Label) == "" || status.Status == "" {
+		return
+	}
+	target := &bundle.ProjectGuidanceStatus
+	if status.Scope == "global" {
+		target = &bundle.GlobalGuidanceStatus
+	}
+	for _, existing := range *target {
+		if existing.Label == status.Label && existing.Scope == status.Scope && existing.Status == status.Status {
+			return
+		}
+	}
+	*target = append(*target, status)
 }
 
 func resolveProjectGuidanceLoadPlan(rootPath, resolvedRootPath, path string, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget, gitTrackedLookup func(fullPath string) (tracked bool, known bool)) guidanceLoadPlan {

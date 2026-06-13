@@ -59,6 +59,9 @@ func configStatusHint(cs *configScreen) string {
 		if cs.editSliceAdding || cs.editSliceEditing {
 			return "Enter:confirm  Esc:cancel"
 		}
+		if field := cs.selectedField(); field != nil && cs.editingGuidanceFileChoices(field.Path) {
+			return "Space:toggle  a:custom  d:delete custom  Esc:done"
+		}
 		return "a:add  d:delete  Enter:edit  Esc:done"
 	case cs.editMode == editStructMap:
 		switch {

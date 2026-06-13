@@ -23,7 +23,7 @@ func TestHandleInitCommand_UsesRuntimeUI(t *testing.T) {
 		t.Fatalf("Chdir() error = %v", err)
 	}
 
-	existingPath := filepath.Join(tmpDir, "xelyon.yaml")
+	existingPath := filepath.Join(tmpDir, "AGENTS.md")
 	const existing = "existing: true\n"
 	if err := os.WriteFile(existingPath, []byte(existing), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -49,10 +49,10 @@ func TestHandleInitCommand_UsesRuntimeUI(t *testing.T) {
 	}
 
 	output := out.String()
-	if !strings.Contains(output, "Overwrite? (y/n): ") {
-		t.Fatalf("expected injected output to contain overwrite prompt, got %q", output)
+	if strings.Contains(output, "Overwrite?") {
+		t.Fatalf("did not expect overwrite prompt, got %q", output)
 	}
-	if !strings.Contains(output, "Cancelled") {
-		t.Fatalf("expected injected output to contain cancellation message, got %q", output)
+	if !strings.Contains(output, "AGENTS.md already exists. Left unchanged.") {
+		t.Fatalf("expected injected output to contain no-overwrite message, got %q", output)
 	}
 }

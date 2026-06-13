@@ -10,42 +10,37 @@ import (
 // ErrProjectConfigExists は xelyon.yaml が既に存在する場合のエラー。
 var ErrProjectConfigExists = errors.New("xelyon.yaml already exists")
 
-const projectYAMLTemplate = `# %s - Project Configuration
-# AI 用コンテキスト。ドキュメントではありません。
-# AI が許可なくこのファイルを肥大化させることを禁止します。
+// ErrProjectAgentInstructionsExists は AGENTS.md が既に存在する場合のエラー。
+var ErrProjectAgentInstructionsExists = errors.New("AGENTS.md already exists")
 
-# プロジェクトの概要・背景情報（AI に注入されるコンテキスト）
-context: |
-  # %s
-  ここにプロジェクトの概要を記述してください。
+const projectYAMLTemplate = `# XELYON repo config for %s
 
-# 必須ルール（AI は必ずこれに従う）
-rules:
-  - "コード変更後は必ず go fmt ./... && go build ./... を実行すること"
-  - "テストが通ることを確認してからコミットすること"
-
-# 条件付きルール/コンテキスト（対象パスが会話に出た時だけ注入）
-# conditional:
-#   - name: Go backend
-#     paths:
-#       - "cmd/**/*.go"
-#       - "internal/**/*.go"
-#     rules:
-#       - "公開関数・型には日本語コメントを付けること"
-#     context: |
-#       context.Context を先頭引数に取り、table-driven test を優先します。
-#
 # Project Map / list_dir / search_code で共有する ignore パターン
 # ignore:
 #   patterns:
-#     - "dist"
-#     - "*.min.js"
+#     - dist
+#     - generated
 #
 # 明示完了時の final checks（省略時は config.yaml の final_checks を使用）
 # final_checks:
 #   commands:
-#     - "go fmt ./... && go build ./... && go test ./..."
+#     - make ci-check
 #   timeout: 600
+`
+
+const projectAgentInstructionsTemplate = `# AGENTS.md
+
+## Project Overview
+- TODO: このリポジトリの目的を短く書く。
+
+## Commands
+- Test: TODO
+- Lint: TODO
+- Build: TODO
+
+## Working Rules
+- 既存の設計、命名、テスト方針に合わせる。
+- 変更後は関係するテストまたはチェックを実行する。
 `
 
 // CreateProjectConfigTemplate は xelyon.yaml のテンプレートを作成する。
@@ -58,9 +53,23 @@ func CreateProjectConfigTemplate(path string, overwrite bool) error {
 	}
 
 	projectName := projectNameForTemplate(path)
-	content := fmt.Sprintf(projectYAMLTemplate, projectName, projectName)
+	content := fmt.Sprintf(projectYAMLTemplate, projectName)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("failed to write xelyon.yaml: %w", err)
+	}
+	return nil
+}
+
+// CreateProjectAgentInstructionsTemplate は repo-local AGENTS.md の雛形を作成する。
+func CreateProjectAgentInstructionsTemplate(path string) error {
+	if path == "" {
+		path = "AGENTS.md"
+	}
+	if _, err := os.Stat(path); err == nil {
+		return ErrProjectAgentInstructionsExists
+	}
+	if err := os.WriteFile(path, []byte(projectAgentInstructionsTemplate), 0o644); err != nil {
+		return fmt.Errorf("failed to write AGENTS.md: %w", err)
 	}
 	return nil
 }
