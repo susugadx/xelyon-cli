@@ -1029,3 +1029,15 @@ raw output artifact store の read-only diagnostics を表示します。provide
 - `/rawoutputs gc --dry-run`: 現在 runtime が把握している caller-provided live refs だけを source of truth として、tombstone / collect / keep の見込み件数を表示します。
 
 `/rawoutputs gc --apply`、`delete`、`repair` は実装していません。このコマンドは状態確認専用で、store や history を変更しません。
+
+## 未ドキュメント化コマンド（自動追加）
+
+<!-- TODO: 以下のコマンドに詳細な説明を追加してください -->
+
+### `/setup`
+
+Show first-run setup checklist
+
+```
+> /setup
+```

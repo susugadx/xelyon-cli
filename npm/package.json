@@ -1,0 +1,22 @@
+{
+  "name": "xelyon",
+  "version": "0.0.0",
+  "description": "XELYON CLI npm wrapper",
+  "license": "MIT",
+  "bin": {
+    "xelyon": "bin/xelyon.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "vendor/",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

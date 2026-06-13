@@ -6,6 +6,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/setup"
 )
 
 // ProviderModelState は現在の provider/model 選択状態の read-only snapshot。
@@ -213,8 +214,8 @@ func (a *Agent) switchProviderModelWithConfig(providerName, requestedModel strin
 	}
 
 	// API キー存在チェック
-	if !IsAPIKeyAvailable(runtimeProviderName) {
-		return outcome, fmt.Errorf("%s のAPIキーが設定されていません", requestedProviderName)
+	if setup.ProviderSetupRequired(runtimeProviderName) {
+		return outcome, fmt.Errorf("%s", setup.ProviderSetupRequiredMessage(runtimeProviderName))
 	}
 
 	// プロバイダーインスタンス作成

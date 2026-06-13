@@ -16,6 +16,8 @@ const (
 	HeadlessErrorTypeCancelled = "cancelled"
 	// HeadlessErrorTypeAPI は provider request 失敗の headless error type。
 	HeadlessErrorTypeAPI = "api_error"
+	// HeadlessErrorTypeProviderSetupRequired は provider credential setup 未完了の headless error type。
+	HeadlessErrorTypeProviderSetupRequired = "provider_setup_required"
 	// HeadlessErrorTypeToolLoopLimit は tool loop limit 到達時の headless error type。
 	HeadlessErrorTypeToolLoopLimit = "tool_loop_limit"
 )

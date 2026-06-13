@@ -9,6 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	"github.com/susugadx/xelyon-cli/internal/setup"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -83,8 +84,8 @@ func (a *Agent) configuredReviewModelTarget(cfg *config.Config, requestedProvide
 	if providerConfigKey == "" {
 		providerConfigKey = runtimeProviderName
 	}
-	if !IsAPIKeyAvailable(runtimeProviderName) {
-		return reviewModelTarget{}, fmt.Errorf("%s のAPIキーが設定されていません", requestedProvider)
+	if setup.ProviderSetupRequired(runtimeProviderName) {
+		return reviewModelTarget{}, fmt.Errorf("%s", setup.ProviderSetupRequiredMessage(runtimeProviderName))
 	}
 
 	provider, err := newReviewModelProvider(providerConfigKey)

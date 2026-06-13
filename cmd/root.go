@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/app"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -107,9 +108,15 @@ Examples:
 		cfg.ApplyFlagOverrides(loopPtr, diffPtr)
 
 		model := getModel(cfg)
-		provider := getProvider(cfg)
-		if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
+		providerName := resolveProviderName(providerFlag, cfg.DefaultProvider)
+		provider, err := resolveProviderForExecutionMode(providerName, mode, model)
+		if err != nil {
 			return err
+		}
+		if !api.IsProviderSetupRequired(provider) {
+			if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
+				return err
+			}
 		}
 		query := strings.Join(args, " ")
 
@@ -157,6 +164,32 @@ Examples:
 	},
 }
 
+func resolveProviderForExecutionMode(providerName string, mode executionMode, model string) (api.Provider, error) {
+	if executionModeIsInteractive(mode) {
+		return resolveInteractiveProvider(providerName)
+	}
+	provider, err := resolveRequiredProvider(providerName)
+	if err == nil {
+		return provider, nil
+	}
+	if mode == executionModeHeadless && isProviderSetupError(providerName, err) {
+		result := app.NewHeadlessProviderSetupRequiredResult(providerName, model, err.Error())
+		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(jsonBytes))
+		return nil, fmt.Errorf("headless execution failed")
+	}
+	return nil, err
+}
+
+func executionModeIsInteractive(mode executionMode) bool {
+	switch mode {
+	case executionModeInteractive, executionModeResume, executionModeInteractiveImage:
+		return true
+	default:
+		return false
+	}
+}
+
 func init() {
 	// バージョン表示のカスタマイズ
 	rootCmd.SetVersionTemplate(version.GetFullVersion() + "\n")
@@ -194,6 +227,7 @@ func init() {
 
 	rootCmd.AddCommand(newDoctorCommand())
 	rootCmd.AddCommand(newAuthCommand())
+	rootCmd.AddCommand(newSetupCommand())
 }
 
 func printLegacyNoTUIWarning() {

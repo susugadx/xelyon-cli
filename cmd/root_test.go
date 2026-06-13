@@ -534,6 +534,68 @@ func TestRootCommand_OnceErrorPropagation(t *testing.T) {
 	}
 }
 
+func TestRootCommand_InteractiveMissingProviderCredentialStartsTUIWithPlaceholder(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	var gotProvider api.Provider
+	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		gotProvider = provider
+	}
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
+		t.Fatal("one-shot path must not run for interactive provider setup")
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--interactive", "--provider", "openai", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if gotProvider == nil {
+		t.Fatal("expected TUI provider")
+	}
+	if !api.IsProviderSetupRequired(gotProvider) {
+		t.Fatalf("provider = %T, want setup placeholder", gotProvider)
+	}
+	msg, ok := api.ProviderSetupRequiredMessage(gotProvider)
+	if !ok {
+		t.Fatal("expected provider setup message")
+	}
+	for _, fragment := range []string{"provider setup required", "OPENAI_API_KEY", "xelyon setup"} {
+		if !strings.Contains(msg, fragment) {
+			t.Fatalf("setup message missing %q:\n%s", fragment, msg)
+		}
+	}
+}
+
+func TestRootCommand_OneShotMissingProviderCredentialReturnsSetupGuidance(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	onceCalled := false
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
+		onceCalled = true
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--provider", "openai", "--no-update-check", "hello"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected setup guidance error")
+	}
+	if onceCalled {
+		t.Fatal("one-shot runner must not be called without provider credential")
+	}
+	for _, fragment := range []string{"provider setup required", "OPENAI_API_KEY", "xelyon setup"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("error missing %q:\n%s", fragment, err.Error())
+		}
+	}
+}
+
 func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	withRootCommandTest(t)
 
@@ -568,6 +630,107 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	}
 	if interactiveCalled {
 		t.Fatal("interactive path must not be executed in JSON mode")
+	}
+}
+
+func TestRootCommand_HeadlessMissingProviderCredentialPrintsJSONSetupError(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		headlessCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
+
+	rootCmd.SetArgs([]string{"--headless", "--provider", "openai", "--no-update-check", "hello"})
+	execErr := rootCmd.Execute()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if execErr == nil {
+		t.Fatal("expected headless execution error")
+	}
+	if !strings.Contains(execErr.Error(), "headless execution failed") {
+		t.Fatalf("unexpected error: %v", execErr)
+	}
+	if headlessCalled {
+		t.Fatal("headless runner must not be called without provider credential")
+	}
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := strings.TrimSpace(buf.String())
+
+	var parsed agent.HeadlessResult
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("stdout is not headless JSON: %v\noutput=%q", err, output)
+	}
+	if parsed.Status != agent.HeadlessStatusError {
+		t.Fatalf("status = %q, want %q", parsed.Status, agent.HeadlessStatusError)
+	}
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeProviderSetupRequired {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeProviderSetupRequired)
+	}
+	for _, fragment := range []string{"OPENAI_API_KEY", "xelyon setup"} {
+		if !strings.Contains(parsed.Error.Message, fragment) {
+			t.Fatalf("setup JSON error missing %q:\n%s", fragment, parsed.Error.Message)
+		}
+	}
+}
+
+func TestRootCommand_HeadlessUnknownProviderReturnsCommandErrorWithoutSetupJSON(t *testing.T) {
+	withRootCommandTest(t)
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		headlessCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+	})
+
+	rootCmd.SetArgs([]string{"--headless", "--provider", "not-a-provider", "--no-update-check", "hello"})
+	execErr := rootCmd.Execute()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if execErr == nil {
+		t.Fatal("expected unknown provider error")
+	}
+	if !strings.Contains(execErr.Error(), "unknown provider") {
+		t.Fatalf("error = %v, want unknown provider", execErr)
+	}
+	if strings.Contains(execErr.Error(), "headless execution failed") {
+		t.Fatalf("error = %v, must not be headless setup wrapper", execErr)
+	}
+	if headlessCalled {
+		t.Fatal("headless runner must not be called with unknown provider")
+	}
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := strings.TrimSpace(buf.String())
+	if strings.Contains(output, agent.HeadlessErrorTypeProviderSetupRequired) {
+		t.Fatalf("stdout must not contain provider setup JSON: %q", output)
+	}
+	if output != "" {
+		t.Fatalf("stdout = %q, want empty output", output)
 	}
 }
 
@@ -854,6 +1017,37 @@ func TestRootCommand_InteractiveWithImageUsesInteractiveImagePath(t *testing.T) 
 	}
 	if imageOnceCalled {
 		t.Fatal("image one-shot path must not be executed for --interactive --image")
+	}
+}
+
+func TestRootCommand_InteractiveImageMissingProviderCredentialUsesPlaceholder(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	imageInteractiveCalled := false
+	runTUIWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+		imageInteractiveCalled = true
+		if !api.IsProviderSetupRequired(provider) {
+			t.Fatalf("provider = %T, want setup placeholder", provider)
+		}
+		if imagePath != "/tmp/image.png" {
+			t.Fatalf("imagePath = %q, want /tmp/image.png", imagePath)
+		}
+		return nil
+	}
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
+		t.Fatal("image one-shot path must not run for --interactive --image")
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--interactive", "--image", "/tmp/image.png", "--provider", "openai", "--no-update-check", "describe"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !imageInteractiveCalled {
+		t.Fatal("expected interactive image path")
 	}
 }
 

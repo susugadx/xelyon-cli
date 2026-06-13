@@ -102,6 +102,7 @@ var Commands = []CommandInfo{
 	commandProvider(),
 	commandUse(),
 	commandProviders(),
+	commandSetup(),
 	commandConfig(),
 	commandSkills(),
 	commandModel(),
@@ -270,6 +271,10 @@ func commandProvider() CommandInfo {
 
 func commandProviders() CommandInfo {
 	return legacyHiddenCommand("/providers", "", "Show provider credential status", "プロバイダー認証状態を表示", CommandCategoryModel, 30)
+}
+
+func commandSetup() CommandInfo {
+	return legacyDiscoverableCommand("/setup", "", "Show first-run setup checklist", "初回セットアップ状況を表示", CommandCategoryConfig, 85)
 }
 
 func commandConfig() CommandInfo {

@@ -5,6 +5,7 @@
 ## 目次
 
 - [複数行入力](#複数行入力)
+- [初回セットアップ](#初回セットアップ)
 - [添付（ファイル・画像）](#添付ファイル画像)
 - [NAVモード](#navモード)
 - [画像入力（マルチモーダル）](#画像入力マルチモーダル)
@@ -14,6 +15,28 @@
 - [状態表示](#状態表示)
 
 ---
+
+## 初回セットアップ
+
+`install -> xelyon` の流れで起動できます。provider credential が未設定でも TUI は開きます。
+
+```bash
+xelyon
+xelyon setup
+```
+
+`xelyon setup` と TUI の `/setup` は同じ checklist を表示します。
+
+- Global setup: provider/auth、default provider/model、`rg`、`git`
+- Project recommendations: `xelyon.yaml`、検出言語に対応する未導入 LSP server、final checks
+
+XELYON は API key を config に保存しません。API provider は環境変数、OpenAI Subscription は `xelyon auth openai-subscription login`、ローカル実行は Ollama を使います。
+
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+xelyon auth openai-subscription login
+ollama serve
+```
 
 ## 複数行入力
 

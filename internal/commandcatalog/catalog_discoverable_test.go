@@ -18,6 +18,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/review",
 		"/rawoutputs",
 		"/project",
+		"/setup",
 		"/config",
 		"/skills",
 		"/copy",
@@ -74,6 +75,9 @@ func TestDiscoverablePrefixFiltering(t *testing.T) {
 	}
 	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceClassic); len(got) != 0 {
 		t.Fatalf("classic discoverable /project = %#v, want no matches", got)
+	}
+	if got := MatchDiscoverablePrefixForSurface("/setup", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/setup" {
+		t.Fatalf("TUI discoverable /setup = %#v, want /setup", got)
 	}
 	if got := MatchDiscoverablePrefixForSurface("/use", CommandSurfaceTUI); len(got) != 0 {
 		t.Fatalf("TUI discoverable /use = %#v, want no matches", got)

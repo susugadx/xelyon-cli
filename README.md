@@ -221,22 +221,39 @@ final_checks:             # config.yaml の final_checks を上書き
 ## インストール
 
 ```bash
-# Homebrew (macOS)
+# Linux / macOS installer
+curl -fsSL https://raw.githubusercontent.com/susugadx/xelyon-cli/main/install.sh | bash -s -- --yes
+
+# Homebrew
 brew install susugadx/tap/xelyon
 
-# または GitHub Releases からダウンロード
+# npm wrapper
+npm install -g xelyon
+
+# Windows PowerShell
+iwr https://raw.githubusercontent.com/susugadx/xelyon-cli/main/install.ps1 -UseB | iex
+
+# Manual fallback
 # https://github.com/susugadx/xelyon-cli/releases
 ```
 
 ## クイックスタート
 
-### 1. APIキーを設定
+### 1. 起動
 
 ```bash
-export DEEPSEEK_API_KEY="sk-..."  # または他のプロバイダー
+xelyon
 ```
 
-### 2. 起動
+API key や OAuth が未設定でも TUI は起動します。XELYON は API key を config に保存しません。必要な provider setup は `/setup` または `xelyon setup` で確認し、環境変数、`xelyon auth openai-subscription login`、またはローカル Ollama を使って設定してください。
+
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+xelyon auth openai-subscription login
+ollama serve
+```
+
+### 2. 対話する
 
 通常の対話セッションは TUI が primary surface です。`--no-tui` は legacy classic REPL の fallback として残していますが、新しい対話型コマンドは TUI 側に追加します。
 
@@ -258,6 +275,7 @@ xelyon
 /thinking high # Extended Thinking 有効化
 /attach ./notes.txt # 現在の入力ドラフトへ添付（1ドラフト最大12件）
 /detach 1   # 指定添付を外す
+/setup      # provider/env/LSP/project recommendation を表示
 /config     # global config を対話式で編集
 /project    # xelyon.yaml を対話式で編集
 /init       # xelyon.yaml テンプレート作成

@@ -41,6 +41,7 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	agent.setAutoApprove(autoApprove)
+	printProviderSetupRequiredNotice(agent)
 
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
@@ -131,6 +132,18 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 func RunLegacyInteractiveWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
+
+	if api.IsProviderSetupRequired(provider) {
+		agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
+		defer agent.Cleanup()
+
+		printHeaderToWriter(env.runtimeUI.Output(), agent.Model, provider)
+		printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
+		printContextSize(agent)
+		agent.setPromptReader(env.mlReader)
+		runREPLLoop(agent, env.mlReader)
+		return nil
+	}
 
 	if !provider.SupportsImages() {
 		return fmt.Errorf("provider %q does not support image input", provider.Name())
