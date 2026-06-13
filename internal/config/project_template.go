@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ErrProjectConfigExists は xelyon.yaml が既に存在する場合のエラー。
@@ -63,7 +64,11 @@ func CreateProjectConfigTemplate(path string, overwrite bool) error {
 // CreateProjectAgentInstructionsTemplate は repo-local AGENTS.md の雛形を作成する。
 func CreateProjectAgentInstructionsTemplate(path string) error {
 	if path == "" {
-		path = "AGENTS.md"
+		resolvedPath, err := ResolveProjectAgentInstructionsTemplatePathForDir("")
+		if err != nil {
+			return err
+		}
+		path = resolvedPath
 	}
 	if _, err := os.Stat(path); err == nil {
 		return ErrProjectAgentInstructionsExists
@@ -72,6 +77,41 @@ func CreateProjectAgentInstructionsTemplate(path string) error {
 		return fmt.Errorf("failed to write AGENTS.md: %w", err)
 	}
 	return nil
+}
+
+// CreateDefaultProjectAgentInstructionsTemplate は loader と同じ project root に AGENTS.md の雛形を作成する。
+func CreateDefaultProjectAgentInstructionsTemplate() (string, error) {
+	path, err := ResolveProjectAgentInstructionsTemplatePathForDir("")
+	if err != nil {
+		return "", err
+	}
+	return path, CreateProjectAgentInstructionsTemplate(path)
+}
+
+// ResolveProjectAgentInstructionsTemplatePathForDir は /init の既定 AGENTS.md 作成先を返す。
+func ResolveProjectAgentInstructionsTemplatePathForDir(cwd string) (string, error) {
+	dir, err := resolveProjectSearchDir(cwd)
+	if err != nil {
+		return "", err
+	}
+	projectCfg, err := projectConfigRootOnlyForDir(dir)
+	if err != nil {
+		return "", err
+	}
+	gitRoot := findGitRoot(dir)
+	root := resolveBundleRoot(dir, projectCfg, gitRoot, DefaultConfig().AgentInstructions)
+	if strings.TrimSpace(root.RootPath) == "" {
+		root.RootPath = dir
+	}
+	return filepath.Join(root.RootPath, "AGENTS.md"), nil
+}
+
+func projectConfigRootOnlyForDir(cwd string) (*ProjectConfig, error) {
+	path, ok, err := ResolveProjectConfigPathForDir(cwd)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return &ProjectConfig{FilePath: path}, nil
 }
 
 func projectNameForTemplate(path string) string {

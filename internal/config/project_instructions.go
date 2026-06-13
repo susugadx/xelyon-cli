@@ -149,7 +149,7 @@ func LoadProjectInstructionBundleForDir(cfg *Config, cwd string) (*ProjectInstru
 	budget := newInstructionByteBudget(cfgForLoad.AgentInstructions)
 
 	if shouldLoadProjectGuidance(mode, projectCfg != nil) {
-		strength := resolveProjectGuidanceStrength(projectCfg != nil)
+		strength := resolveProjectGuidanceStrength(projectCfg)
 		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, cfgForLoad.AgentInstructions, gitRoot, strength, &budget)
 	}
 
@@ -173,11 +173,29 @@ func shouldLoadProjectGuidance(mode string, hasProjectConfig bool) bool {
 	}
 }
 
-func resolveProjectGuidanceStrength(hasProjectConfig bool) InstructionStrength {
-	if hasProjectConfig {
+func resolveProjectGuidanceStrength(projectCfg *ProjectConfig) InstructionStrength {
+	if projectConfigHasUnconditionalLegacyInstructions(projectCfg) {
 		return InstructionStrengthAdvisory
 	}
 	return InstructionStrengthProjectGuidance
+}
+
+func projectConfigHasUnconditionalLegacyInstructions(projectCfg *ProjectConfig) bool {
+	if projectCfg == nil {
+		return false
+	}
+	if strings.TrimSpace(projectCfg.Context) != "" || len(dedupeNonEmpty(projectCfg.Rules)) > 0 {
+		return true
+	}
+	for _, block := range projectCfg.Conditional {
+		if len(block.Paths) != 0 {
+			continue
+		}
+		if strings.TrimSpace(block.Context) != "" || len(dedupeNonEmpty(block.Rules)) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 type guidanceLoadPlan struct {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
@@ -18,10 +19,12 @@ func handleInitCommand(agent *Agent) bool {
 	cyan.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	_, _ = fmt.Fprintln(out)
 
-	err := config.CreateProjectAgentInstructionsTemplate("")
+	agentsPath, err := config.CreateDefaultProjectAgentInstructionsTemplate()
 	if errors.Is(err, config.ErrProjectAgentInstructionsExists) {
+		displayPath := displayInitPath(agentsPath)
 		yellow.Fprintln(out, "⚠️  AGENTS.md already exists. Left unchanged.")
-		yellow.Fprintln(out, "   Edit AGENTS.md directly, or use /config to choose additional guidance files.")
+		yellow.Fprintf(out, "   Path: %s\n", displayPath)
+		yellow.Fprintln(out, "   Edit it directly, or use /config to choose additional guidance files.")
 		return true
 	}
 	if err != nil {
@@ -33,13 +36,16 @@ func handleInitCommand(agent *Agent) bool {
 	green.Fprintln(out, "✅ AGENTS.md created!")
 	green.Fprintln(out, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	_, _ = fmt.Fprintln(out)
-	if fileExists("CLAUDE.md") || fileExists(".claude/CLAUDE.md") {
+	displayPath := displayInitPath(agentsPath)
+	yellow.Fprintf(out, "Path: %s\n", displayPath)
+	if initRootFileExists(agentsPath, "CLAUDE.md") || initRootFileExists(agentsPath, ".claude/CLAUDE.md") {
 		yellow.Fprintln(out, "Existing CLAUDE guidance was left unchanged. Use /config to include it when needed.")
 	}
 	yellow.Fprintln(out, "Next steps:")
-	yellow.Fprintln(out, "  1. Edit AGENTS.md with repo guidance for agents")
-	yellow.Fprintln(out, "  2. Use /config to choose project/global guidance files")
-	yellow.Fprintln(out, "  3. Use /project when you need XELYON-specific repo config such as ignore or final_checks")
+	yellow.Fprintf(out, "  1. Edit %s with repo guidance for agents\n", displayPath)
+	yellow.Fprintf(out, "  2. If this repository uses git, run: git add %s\n", displayPath)
+	yellow.Fprintln(out, "  3. Use /config to choose project/global guidance files")
+	yellow.Fprintln(out, "  4. Use /project when you need XELYON-specific repo config such as ignore or final_checks")
 
 	return true
 }
@@ -48,4 +54,26 @@ func handleInitCommand(agent *Agent) bool {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func initRootFileExists(agentsPath, relativePath string) bool {
+	if agentsPath == "" {
+		return fileExists(relativePath)
+	}
+	return fileExists(filepath.Join(filepath.Dir(agentsPath), filepath.FromSlash(relativePath)))
+}
+
+func displayInitPath(path string) string {
+	if path == "" {
+		return "AGENTS.md"
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return path
+	}
+	rel, err := filepath.Rel(cwd, path)
+	if err != nil || rel == "" {
+		return path
+	}
+	return filepath.ToSlash(rel)
 }

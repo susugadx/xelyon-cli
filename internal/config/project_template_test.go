@@ -60,6 +60,95 @@ func TestCreateProjectAgentInstructionsTemplate(t *testing.T) {
 	}
 }
 
+func TestCreateProjectAgentInstructionsTemplate_DefaultUsesGitRoot(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	subdir := filepath.Join(root, "subdir")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	initGitRepo(t, root)
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWd)
+	})
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	if err := CreateProjectAgentInstructionsTemplate(""); err != nil {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); err != nil {
+		t.Fatalf("repo-root AGENTS.md should be created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(subdir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("subdir AGENTS.md should not be created, stat err = %v", err)
+	}
+}
+
+func TestCreateProjectAgentInstructionsTemplate_DefaultUsesXelyonRoot(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "subdir")
+	writeFile(t, filepath.Join(root, "xelyon.yaml"), "final_checks:\n  commands:\n    - make test\n")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWd)
+	})
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	if err := CreateProjectAgentInstructionsTemplate(""); err != nil {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); err != nil {
+		t.Fatalf("xelyon-root AGENTS.md should be created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(subdir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("subdir AGENTS.md should not be created, stat err = %v", err)
+	}
+}
+
+func TestCreateProjectAgentInstructionsTemplate_DefaultUsesInvalidXelyonRoot(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "subdir")
+	writeFile(t, filepath.Join(root, "xelyon.yaml"), ":\n")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWd)
+	})
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	if err := CreateProjectAgentInstructionsTemplate(""); err != nil {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); err != nil {
+		t.Fatalf("xelyon-root AGENTS.md should be created even when xelyon.yaml is invalid: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(subdir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("subdir AGENTS.md should not be created, stat err = %v", err)
+	}
+}
+
 func TestCloneProjectConfigDeepCopiesSlices(t *testing.T) {
 	original := &ProjectConfig{
 		Rules: []string{"rule"},

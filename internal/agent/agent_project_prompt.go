@@ -73,12 +73,11 @@ func buildProjectInstructionBlock(bundle *config.ProjectInstructionBundle, input
 	}
 
 	return prompt.BuildProjectInstructionBlock(prompt.ProjectInstructionBlockInput{
-		HasProjectConfig: bundle.ProjectConfig != nil,
-		MandatoryRules:   selection.Rules,
-		ProjectContexts:  selection.Contexts,
-		ProjectGuidance:  toPromptInstructionEntries(bundle.ProjectGuidance),
-		GlobalGuidance:   toPromptInstructionEntries(bundle.GlobalGuidance),
-		Warnings:         bundle.WarningMessages(),
+		MandatoryRules:  selection.Rules,
+		ProjectContexts: selection.Contexts,
+		ProjectGuidance: toPromptInstructionEntries(bundle.ProjectGuidance),
+		GlobalGuidance:  toPromptInstructionEntries(bundle.GlobalGuidance),
+		Warnings:        bundle.WarningMessages(),
 	})
 }
 

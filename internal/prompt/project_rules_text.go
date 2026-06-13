@@ -8,14 +8,15 @@ var projectInstructionPrecedenceLines = []string{
 	"- AGENTS.md is the primary project guidance file.",
 	"- Legacy xelyon.yaml rules are mandatory project policy when present.",
 	"- CLAUDE.md files are compatibility project guidance when selected.",
-	"- Project guidance files are advisory guidance when legacy xelyon.yaml rules exist and project.mode=always is enabled.",
+	"- Project guidance files are advisory guidance only when legacy xelyon.yaml rules/context are injected for this turn.",
 	"- Global guidance is personal preference and lower priority than repo-local guidance.",
 }
 
 const (
 	projectGuidanceWithConfigText = `xelyon.yaml was found for this workspace.
-The following project guidance files are treated as advisory guidance. Use them when relevant, but do not override xelyon.yaml mandatory rules, XELYON internal rules, or the current user request.`
-	projectGuidanceWithoutConfigText = `No xelyon.yaml was found for this workspace.
+Legacy xelyon.yaml rules/context are active for this turn.
+The following project guidance files are treated as advisory guidance. Use them when relevant, but do not override xelyon.yaml mandatory rules/context, XELYON internal rules, or the current user request.`
+	projectGuidanceWithoutConfigText = `No legacy xelyon.yaml rules/context are active for this turn.
 The following files are treated as authoritative project guidance for this workspace.
 Follow them when they are clear and relevant, but do not override XELYON internal rules or the current user request.`
 	globalGuidanceText = "Global guidance is advisory personal preference."
