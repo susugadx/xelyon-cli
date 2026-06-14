@@ -89,14 +89,14 @@ Examples:
 			}
 		}
 
-		runtime, err := loadInteractiveRuntimeSelection(cmd)
-		if err != nil {
-			return err
-		}
 		query := strings.Join(args, " ")
 
 		switch mode {
 		case executionModeHeadless:
+			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			if err != nil {
+				return err
+			}
 			if query == "" {
 				return fmt.Errorf("query argument is required in headless mode")
 			}
@@ -108,16 +108,32 @@ Examples:
 			}
 			return nil
 		case executionModeOnce:
+			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			if err != nil {
+				return err
+			}
 			return runOnce(query, runtime.model, runtime.provider, runtime.cfg, autoApprove, quiet)
 		case executionModeResume:
 			if legacyNoTUI {
+				runtime, err := loadInteractiveRuntimeSelection(cmd)
+				if err != nil {
+					return err
+				}
 				printLegacyNoTUIWarning()
 				runLegacyInteractiveWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			} else {
+				runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{last: true})
+				if err != nil {
+					return err
+				}
 				return runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			}
 			return nil
 		case executionModeInteractive:
+			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			if err != nil {
+				return err
+			}
 			if legacyNoTUI {
 				printLegacyNoTUIWarning()
 				runLegacyInteractive(runtime.model, runtime.provider, runtime.cfg, autoApprove)
@@ -126,8 +142,16 @@ Examples:
 			}
 			return nil
 		case executionModeOnceImage:
+			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			if err != nil {
+				return err
+			}
 			return runOnceWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove, quiet)
 		case executionModeInteractiveImage:
+			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			if err != nil {
+				return err
+			}
 			if legacyNoTUI {
 				printLegacyNoTUIWarning()
 				return runLegacyInteractiveWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
@@ -186,33 +210,8 @@ type interactiveRuntimeSelection struct {
 }
 
 func loadInteractiveRuntimeSelection(cmd *cobra.Command) (interactiveRuntimeSelection, error) {
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to load config: %v\n", err)
-		cfg = config.DefaultConfig()
-	}
-
-	cfg.ApplyEnvironmentOverrides()
-
-	var loopPtr, diffPtr *int
-	if cmd.Flags().Changed("loop-threshold") {
-		loopPtr = &loopThreshold
-	}
-	if cmd.Flags().Changed("diff-lines") {
-		diffPtr = &diffLines
-	}
-	cfg.ApplyFlagOverrides(loopPtr, diffPtr)
-
-	model := getModel(cfg)
-	provider := getProvider(cfg)
-	if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
-		return interactiveRuntimeSelection{}, err
-	}
-	return interactiveRuntimeSelection{
-		cfg:      cfg,
-		model:    model,
-		provider: provider,
-	}, nil
+	cfg := loadInteractiveConfigSelection(cmd)
+	return selectInteractiveRuntime(cfg)
 }
 
 func printLegacyNoTUIWarning() {

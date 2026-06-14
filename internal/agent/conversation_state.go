@@ -9,6 +9,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 )
 
+var beforeStartNewSessionMetadataSaveForTest func()
+
 func (a *Agent) restoreSessionConversation(session *history.Session) {
 	if a == nil {
 		return
@@ -52,6 +54,16 @@ func (a *Agent) resetConversationState() error {
 	return nil
 }
 
+func (a *Agent) syncRuntimeIdentityToSession(session *history.Session) {
+	if a == nil || session == nil {
+		return
+	}
+
+	session.Model = a.CurrentModel
+	session.ProviderName = config.CanonicalProviderName(a.ProviderName)
+	session.ProviderConfigKey = a.currentProviderConfigKey()
+}
+
 // StartNewSession は現在の session を保存してから、新しい session ID の会話を開始する。
 func (a *Agent) StartNewSession() (*history.Session, error) {
 	if a == nil {
@@ -65,18 +77,21 @@ func (a *Agent) StartNewSession() (*history.Session, error) {
 	}
 
 	session := history.NewSession(a.CurrentModel)
+	a.syncRuntimeIdentityToSession(session)
+	if a.storage != nil {
+		if beforeStartNewSessionMetadataSaveForTest != nil {
+			beforeStartNewSessionMetadataSaveForTest()
+		}
+		if err := a.storage.Save(session); err != nil {
+			return nil, fmt.Errorf("save new session metadata: %w", err)
+		}
+	}
+
 	a.restoreSessionConversation(session)
-	a.syncSessionRuntimeIdentity()
-	a.restoreProviderResponseID("")
 	if a.Stats != nil {
 		a.statsMu.Lock()
 		a.Stats = NewSessionStats(a.ProviderName, a.CurrentModel)
 		a.statsMu.Unlock()
-	}
-	if a.storage != nil {
-		if err := a.storage.Save(a.session); err != nil {
-			return nil, fmt.Errorf("save new session metadata: %w", err)
-		}
 	}
 	a.SetStatus(StateWaitingInput, "Ready for input", "入力待ち", "Type your request or / for commands", "リクエスト、または / でコマンド候補を入力")
 	return session, nil
@@ -101,7 +116,7 @@ func (a *Agent) ResumeSession(sessionID string) (*history.Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load session: %w", err)
 	}
-	if err := a.switchRuntimeForLoadedSession(session); err != nil {
+	if err := a.switchRuntimeForLoadedSessionWithActiveSessionDetached(session); err != nil {
 		return nil, err
 	}
 	a.applyLoadedSession(session)
@@ -123,7 +138,7 @@ func (a *Agent) ResumeStartupSession(sessionID string) (*history.Session, error)
 	if err != nil {
 		return nil, fmt.Errorf("load session: %w", err)
 	}
-	if err := a.switchRuntimeForLoadedSession(session); err != nil {
+	if err := a.switchRuntimeForLoadedSessionWithActiveSessionDetached(session); err != nil {
 		return nil, err
 	}
 	a.applyLoadedSession(session)
@@ -161,6 +176,19 @@ func (a *Agent) ResumeSessionCandidates(opts history.ResumeListOptions) ([]histo
 		return nil, fmt.Errorf("history storage not available")
 	}
 	return a.storage.ListResumeSessions(opts)
+}
+
+func (a *Agent) switchRuntimeForLoadedSessionWithActiveSessionDetached(session *history.Session) error {
+	if a == nil {
+		return nil
+	}
+
+	activeSession := a.session
+	a.session = nil
+	defer func() {
+		a.session = activeSession
+	}()
+	return a.switchRuntimeForLoadedSession(session)
 }
 
 func (a *Agent) switchRuntimeForLoadedSession(session *history.Session) error {

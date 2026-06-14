@@ -8,12 +8,14 @@ type sessionPickerState struct {
 	filtering  bool
 	selected   int
 	all        bool
+	startup    bool
 }
 
-func newSessionPickerState(candidates []SessionCandidate, all bool) *sessionPickerState {
+func newSessionPickerState(candidates []SessionCandidate, all bool, startup bool) *sessionPickerState {
 	return &sessionPickerState{
 		candidates: append([]SessionCandidate(nil), candidates...),
 		all:        all,
+		startup:    startup,
 	}
 }
 

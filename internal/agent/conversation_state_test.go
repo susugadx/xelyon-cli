@@ -15,10 +15,16 @@ import (
 )
 
 type conversationStateTestProvider struct {
+	name       string
 	responseID string
 }
 
-func (p *conversationStateTestProvider) Name() string { return "test" }
+func (p *conversationStateTestProvider) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return "test"
+}
 
 func (p *conversationStateTestProvider) SupportsImages() bool { return false }
 
@@ -104,6 +110,54 @@ func TestAgent_ResetConversationState_ClearsRuntimeAndSessionState(t *testing.T)
 	}
 }
 
+func TestAgent_StartNewSession_SaveFailurePreservesActiveRuntimeState(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{name: "openai"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldSession := agent.session
+	oldSessionID := oldSession.ID
+	oldStats := agent.Stats
+	agent.History = []api.Message{{Role: "user", Content: "active request"}}
+	provider.SetResponseID("resp_active")
+
+	beforeStartNewSessionMetadataSaveForTest = func() {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
+		metadataDir := filepath.Join(home, ".xelyon", "history", "metadata")
+		if err := os.RemoveAll(metadataDir); err != nil {
+			t.Fatalf("RemoveAll(metadataDir) error = %v", err)
+		}
+		if err := os.WriteFile(metadataDir, []byte("not a directory"), 0o600); err != nil {
+			t.Fatalf("WriteFile(metadataDir) error = %v", err)
+		}
+	}
+	t.Cleanup(func() { beforeStartNewSessionMetadataSaveForTest = nil })
+
+	_, err := agent.StartNewSession()
+	if err == nil {
+		t.Fatal("StartNewSession() error = nil, want metadata save failure")
+	}
+	if !strings.Contains(err.Error(), "save new session metadata") {
+		t.Fatalf("StartNewSession() error = %v, want save new session metadata", err)
+	}
+	if agent.session != oldSession || agent.session.ID != oldSessionID {
+		t.Fatalf("agent.session = %#v, want old session %s", agent.session, oldSessionID)
+	}
+	if len(agent.History) != 1 || agent.History[0].Content != "active request" {
+		t.Fatalf("agent.History = %#v, want active request preserved", agent.History)
+	}
+	if got := provider.GetResponseID(); got != "resp_active" {
+		t.Fatalf("provider response ID = %q, want resp_active", got)
+	}
+	if agent.Stats != oldStats {
+		t.Fatal("agent.Stats pointer changed after failed StartNewSession")
+	}
+}
+
 func TestAgent_ResetConversationState_ClearsModelFacingTaskLedger(t *testing.T) {
 	disableColors(t)
 
@@ -161,6 +215,51 @@ func TestAgent_ResetConversationState_PreservesTaskLedgerWhenCurrentTaskStateCon
 	}
 	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
 		t.Fatal("task ledger was reset even though current task state context is disabled")
+	}
+}
+
+func TestAgent_ResumeSession_ModelSwitchPreservesOutgoingSessionResponseContext(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{name: "openai"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	outgoingID := agent.session.ID
+	agent.session.AddMessage("user", "current request", agent.CurrentModel)
+	provider.SetResponseID("resp_current")
+
+	target := history.NewSession("gpt-5.5")
+	target.ProviderName = "openai"
+	target.ProviderConfigKey = "openai"
+	target.AddMessage("user", "saved request", "gpt-5.5")
+	if err := agent.storage.Save(target); err != nil {
+		t.Fatalf("Save(target) error = %v", err)
+	}
+
+	if _, err := agent.ResumeSession(target.ID); err != nil {
+		t.Fatalf("ResumeSession() error = %v", err)
+	}
+
+	outgoing, err := agent.storage.Load(outgoingID)
+	if err != nil {
+		t.Fatalf("Load(outgoing) error = %v", err)
+	}
+	if outgoing.Model != "gpt-5.4" || outgoing.ProviderName != "openai" || outgoing.ProviderConfigKey != "openai" {
+		t.Fatalf("outgoing identity = (%q, %q, %q), want openai/gpt-5.4", outgoing.ProviderName, outgoing.ProviderConfigKey, outgoing.Model)
+	}
+	if outgoing.ResponseID != "resp_current" ||
+		outgoing.ResponseModel != "gpt-5.4" ||
+		outgoing.ResponseProviderName != "openai" ||
+		outgoing.ResponseProviderConfigKey != "openai" {
+		t.Fatalf("outgoing response context = (%q, %q, %q, %q), want resp_current/openai/gpt-5.4",
+			outgoing.ResponseID,
+			outgoing.ResponseModel,
+			outgoing.ResponseProviderName,
+			outgoing.ResponseProviderConfigKey,
+		)
+	}
+	if agent.session == nil || agent.session.ID != target.ID {
+		t.Fatalf("agent.session.ID = %q, want target %s", agent.session.ID, target.ID)
 	}
 }
 

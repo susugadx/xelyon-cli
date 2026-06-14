@@ -11,7 +11,7 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		"/save":      func(_ []string) bool { return handleSaveCommand(agent) },
 		"/load":      func(args []string) bool { return handleLoadCommand(agent, args) },
 		"/sessions":  func(_ []string) bool { return handleSessionsCommand(agent) },
-		"/new":       func(_ []string) bool { return handleNewCommand(agent) },
+		"/new":       func(args []string) bool { return handleNewCommand(agent, args) },
 		"/resume":    func(args []string) bool { return handleResumeCommand(agent, args) },
 		"/config":    func(args []string) bool { return handleConfigCommandForSurface(agent, args, commandSurface) },
 		"/stats":     func(_ []string) bool { return handleStatsCommandForSurface(agent, commandSurface) },
@@ -45,7 +45,12 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 	}
 }
 
-func handleClearCommand(agent *Agent, _ []string) bool {
+func handleClearCommand(agent *Agent, args []string) bool {
+	if len(args) > 0 {
+		yellow.Fprintln(agent.output(), "usage: /clear")
+		return true
+	}
+
 	session, err := agent.StartNewSession()
 	if err != nil {
 		red.Fprintf(agent.output(), "Failed to start new session: %v\n", err)
@@ -55,7 +60,12 @@ func handleClearCommand(agent *Agent, _ []string) bool {
 	return true
 }
 
-func handleNewCommand(agent *Agent) bool {
+func handleNewCommand(agent *Agent, args []string) bool {
+	if len(args) > 0 {
+		yellow.Fprintln(agent.output(), "usage: /new")
+		return true
+	}
+
 	if session, err := agent.StartNewSession(); err != nil {
 		red.Fprintf(agent.output(), "Failed to start new session: %v\n", err)
 	} else if session != nil {

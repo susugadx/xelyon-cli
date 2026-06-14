@@ -31,11 +31,11 @@ func newResumeCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			runtime, err := loadInteractiveRuntimeSelection(cmd)
-			if err != nil {
-				return err
-			}
 			if legacyNoTUI {
+				runtime, err := loadInteractiveRuntimeSelection(cmd)
+				if err != nil {
+					return err
+				}
 				printLegacyNoTUIWarning()
 				if len(args) > 0 || all {
 					return fmt.Errorf("resume session picker and direct session IDs require TUI")
@@ -44,11 +44,20 @@ func newResumeCommand() *cobra.Command {
 				return nil
 			}
 			if last {
+				runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{last: true})
+				if err != nil {
+					return err
+				}
 				return runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			}
 			if len(args) > 0 {
+				runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{sessionID: args[0]})
+				if err != nil {
+					return err
+				}
 				return runTUIWithResumeDirect(runtime.model, runtime.provider, runtime.cfg, autoApprove, args[0])
 			}
+			runtime := loadResumePickerRuntimeSelection(cmd)
 			runTUIWithResumePicker(runtime.model, runtime.provider, runtime.cfg, autoApprove, all)
 			return nil
 		},

@@ -123,6 +123,10 @@ var localCommandActionHandlers = map[commandrouter.Action]localCommandActionHand
 	},
 	commandrouter.ActionNewSession: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
 		m.recordHandledCommand(command.Input)
+		if len(command.Args) > 0 {
+			m.setTransientStatus("Usage: " + command.ResolvedName)
+			return m, nil
+		}
 		return m.startNewSessionFromCommand(command.ResolvedName == "/clear")
 	},
 	commandrouter.ActionOpenSessionPicker: func(m Model, command slash.Command, _ composerSubmission) (tea.Model, tea.Cmd) {
@@ -171,7 +175,7 @@ func (m Model) handleResumeCommandSubmission(command slash.Command) (tea.Model, 
 	if sessionID != "" {
 		return m.resumeSessionByID(sessionID)
 	}
-	return m.openSessionPicker(all)
+	return m.openSessionPicker(all, false)
 }
 
 func (m Model) handleChatSubmission(sub composerSubmission) (tea.Model, tea.Cmd) {

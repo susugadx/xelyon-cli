@@ -64,6 +64,7 @@ type SessionAgent interface {
 	ResumeSessionCandidates(SessionResumeOptions) ([]SessionCandidate, error)
 	ResumeLastSession(SessionResumeOptions) (SessionCandidate, error)
 	ResumeSession(id string) error
+	ResumeStartupSession(id string) error
 	StartNewSession() (string, error)
 }
 

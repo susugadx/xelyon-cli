@@ -30,7 +30,7 @@ func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		updated, cmd := m.handleCancelPromptMsg(msg)
 		return updated, cmd, true
 	case openSessionPickerMsg:
-		updated, cmd := m.openSessionPicker(msg.all)
+		updated, cmd := m.openSessionPicker(msg.all, msg.startup)
 		return updated, cmd, true
 	}
 	if m.prompt != nil {

@@ -177,6 +177,16 @@ func (a *TUIAdapter) ResumeSession(id string) error {
 	return nil
 }
 
+// ResumeStartupSession は起動直後の bootstrap session を保存せず指定 session を復元する。
+func (a *TUIAdapter) ResumeStartupSession(id string) error {
+	if _, err := a.agent.ResumeStartupSession(id); err != nil {
+		a.flushCapture()
+		return err
+	}
+	a.flushCapture()
+	return nil
+}
+
 func sessionCandidateFromMetadata(session history.SessionMetadata) tui.SessionCandidate {
 	return tui.SessionCandidate{
 		ID:           session.ID,

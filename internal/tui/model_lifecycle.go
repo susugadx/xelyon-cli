@@ -111,7 +111,7 @@ func (m Model) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 	if m.startupPicker != nil {
-		cmds = append(cmds, openSessionPickerCmd(m.startupPicker.All))
+		cmds = append(cmds, openSessionPickerCmd(m.startupPicker.All, true))
 	}
 	return tea.Batch(cmds...)
 }

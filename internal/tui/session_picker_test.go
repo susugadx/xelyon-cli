@@ -118,7 +118,9 @@ func TestSessionLifecycleCommandsRejectWhileAgentBusy(t *testing.T) {
 		input string
 	}{
 		{name: "new", input: "/new"},
+		{name: "new with args", input: "/new typo"},
 		{name: "clear", input: "/clear"},
+		{name: "clear with args", input: "/clear typo"},
 		{name: "resume picker", input: "/resume"},
 		{name: "resume last", input: "/resume --last"},
 		{name: "resume id", input: "/resume session-42"},
@@ -169,6 +171,75 @@ func TestSessionLifecycleCommandsRejectWhileAgentBusy(t *testing.T) {
 				t.Fatal("session picker should not open while agent is busy")
 			}
 		})
+	}
+}
+
+func TestNewAndClearCommandsRejectArgsWhileIdle(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantStatus string
+	}{
+		{name: "new", input: "/new typo", wantStatus: "Usage: /new"},
+		{name: "clear", input: "/clear typo", wantStatus: "Usage: /clear"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &stubAgent{statusLine: "ready"}
+			m := newModelWithViewport(agent)
+			m.textInput.SetValue(tt.input)
+
+			updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			m = updated.(Model)
+			if cmd != nil {
+				t.Fatalf("cmd = %T, want nil", cmd)
+			}
+			if len(agent.startedSessionIDs) != 0 {
+				t.Fatalf("startedSessionIDs = %#v, want none", agent.startedSessionIDs)
+			}
+			if len(agent.handledInputs) != 0 {
+				t.Fatalf("handledInputs = %#v, want no agent dispatch", agent.handledInputs)
+			}
+			if m.transientStatus != tt.wantStatus {
+				t.Fatalf("transientStatus = %q, want %q", m.transientStatus, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestStartupSessionPickerSelectionUsesStartupResume(t *testing.T) {
+	agent := &stubAgent{
+		statusLine: "ready",
+		sessionCandidates: []SessionCandidate{
+			{ID: "session-startup", Preview: "first", Model: "gpt-test", ProviderName: "openai", LastModified: time.Now()},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m.appendSystemNotice("bootstrap transcript")
+
+	var cmd tea.Cmd
+	m, cmd = m.openSessionPicker(false, true)
+	if cmd != nil {
+		t.Fatalf("openSessionPicker cmd = %T, want nil", cmd)
+	}
+	if m.sessionPicker == nil || !m.sessionPicker.startup {
+		t.Fatalf("sessionPicker = %#v, want startup picker", m.sessionPicker)
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatalf("resume selection cmd = %T, want nil", cmd)
+	}
+	if len(agent.startupResumedSessionIDs) != 1 || agent.startupResumedSessionIDs[0] != "session-startup" {
+		t.Fatalf("startupResumedSessionIDs = %#v, want session-startup", agent.startupResumedSessionIDs)
+	}
+	if len(agent.resumedSessionIDs) != 0 {
+		t.Fatalf("resumedSessionIDs = %#v, want normal resume unused", agent.resumedSessionIDs)
+	}
+	if containsMessage(m.messages, "bootstrap transcript") {
+		t.Fatalf("startup resume should reset visible transcript, got %#v", m.messages)
 	}
 }
 

@@ -394,6 +394,8 @@ func TestRootCommand_ResumeWithPositionalQueryReturnsError(t *testing.T) {
 
 func TestRootCommand_ResumeUsesTUIPath(t *testing.T) {
 	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	seedOllamaResumeSession(t, "qwen2.5-coder:14b")
 
 	tuiCalled := false
 	legacyCalled := false
@@ -420,6 +422,8 @@ func TestRootCommand_ResumeUsesTUIPath(t *testing.T) {
 
 func TestRootCommand_ResumePropagatesTUIError(t *testing.T) {
 	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	seedOllamaResumeSession(t, "qwen2.5-coder:14b")
 
 	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
 		return fmt.Errorf("resume failed")
@@ -539,6 +543,8 @@ func TestResumeCommand_LastPropagatesResumeError(t *testing.T) {
 
 func TestResumeCommand_SessionIDUsesDirectPath(t *testing.T) {
 	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	sessionID := seedOllamaResumeSession(t, "qwen2.5-coder:14b")
 
 	var gotSessionID string
 	runTUIWithResumeDirect = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, sessionID string) error {
@@ -546,23 +552,25 @@ func TestResumeCommand_SessionIDUsesDirectPath(t *testing.T) {
 		return nil
 	}
 
-	rootCmd.SetArgs([]string{"resume", "session-42", "--provider", "ollama", "--no-update-check"})
+	rootCmd.SetArgs([]string{"resume", sessionID, "--provider", "ollama", "--no-update-check"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if gotSessionID != "session-42" {
-		t.Fatalf("sessionID = %q, want session-42", gotSessionID)
+	if gotSessionID != sessionID {
+		t.Fatalf("sessionID = %q, want %q", gotSessionID, sessionID)
 	}
 }
 
 func TestResumeCommand_DirectPathPropagatesError(t *testing.T) {
 	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	sessionID := seedOllamaResumeSession(t, "qwen2.5-coder:14b")
 
 	runTUIWithResumeDirect = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, sessionID string) error {
 		return fmt.Errorf("resume failed")
 	}
 
-	rootCmd.SetArgs([]string{"resume", "missing-session", "--provider", "ollama", "--no-update-check"})
+	rootCmd.SetArgs([]string{"resume", sessionID, "--provider", "ollama", "--no-update-check"})
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected direct resume error")

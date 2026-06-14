@@ -8,16 +8,17 @@ import (
 )
 
 type openSessionPickerMsg struct {
-	all bool
+	all     bool
+	startup bool
 }
 
-func openSessionPickerCmd(all bool) tea.Cmd {
+func openSessionPickerCmd(all bool, startup bool) tea.Cmd {
 	return func() tea.Msg {
-		return openSessionPickerMsg{all: all}
+		return openSessionPickerMsg{all: all, startup: startup}
 	}
 }
 
-func (m Model) openSessionPicker(all bool) (Model, tea.Cmd) {
+func (m Model) openSessionPicker(all bool, startup bool) (Model, tea.Cmd) {
 	m.switchToComposerInput()
 	candidates, err := m.sessions.ResumeSessionCandidates(SessionResumeOptions{All: all})
 	if err != nil {
@@ -28,7 +29,7 @@ func (m Model) openSessionPicker(all bool) (Model, tea.Cmd) {
 		m.setTransientStatus("No sessions found")
 		return m, nil
 	}
-	m.sessionPicker = newSessionPickerState(candidates, all)
+	m.sessionPicker = newSessionPickerState(candidates, all, startup)
 	m.clearSlashSuggestions()
 	m.chromeDirty = true
 	return m, nil
@@ -113,7 +114,12 @@ func (m Model) resumeSessionByID(sessionID string) (Model, tea.Cmd) {
 		m.setTransientStatus("Session ID is required")
 		return m, nil
 	}
-	if err := m.sessions.ResumeSession(sessionID); err != nil {
+	if m.sessionPicker != nil && m.sessionPicker.startup {
+		if err := m.sessions.ResumeStartupSession(sessionID); err != nil {
+			m.setTransientStatus(err.Error())
+			return m, nil
+		}
+	} else if err := m.sessions.ResumeSession(sessionID); err != nil {
 		m.setTransientStatus(err.Error())
 		return m, nil
 	}

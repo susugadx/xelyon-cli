@@ -45,6 +45,7 @@ type stubAgent struct {
 	lastSessionCandidate      SessionCandidate
 	resumeLastCalls           int
 	resumedSessionIDs         []string
+	startupResumedSessionIDs  []string
 	startedSessionIDs         []string
 	sessionErr                error
 	configuredAzure           []azureDeploymentSetupCall
@@ -123,6 +124,15 @@ func (s *stubAgent) ResumeSession(id string) error {
 		return s.sessionErr
 	}
 	s.resumedSessionIDs = append(s.resumedSessionIDs, id)
+	return nil
+}
+func (s *stubAgent) ResumeStartupSession(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessionErr != nil {
+		return s.sessionErr
+	}
+	s.startupResumedSessionIDs = append(s.startupResumedSessionIDs, id)
 	return nil
 }
 func (s *stubAgent) StartNewSession() (string, error) {

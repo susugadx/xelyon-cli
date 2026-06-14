@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -204,6 +205,37 @@ func TestParseResumeCommandArgs_ValidForms(t *testing.T) {
 			}
 			if sessionID != tt.wantSessionID {
 				t.Fatalf("sessionID = %q, want %q", sessionID, tt.wantSessionID)
+			}
+		})
+	}
+}
+
+func TestHandleNewAndClearCommandsRejectArgs(t *testing.T) {
+	disableColors(t)
+
+	tests := []struct {
+		name      string
+		input     string
+		wantUsage string
+	}{
+		{name: "new", input: "/new typo", wantUsage: "usage: /new"},
+		{name: "clear", input: "/clear typo", wantUsage: "usage: /clear"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			agent := newChatRequestTestAgent(t, &mockProvider{name: "openai"}, &out)
+			sessionID := agent.session.ID
+
+			if !handleSpecialCommandForSurface(tt.input, agent, commandcatalog.CommandSurfaceTUI) {
+				t.Fatalf("handleSpecialCommandForSurface(%q) = false, want true", tt.input)
+			}
+			if agent.session.ID != sessionID {
+				t.Fatalf("agent.session.ID = %q, want unchanged %q", agent.session.ID, sessionID)
+			}
+			if !strings.Contains(out.String(), tt.wantUsage) {
+				t.Fatalf("output = %q, want %q", out.String(), tt.wantUsage)
 			}
 		})
 	}
