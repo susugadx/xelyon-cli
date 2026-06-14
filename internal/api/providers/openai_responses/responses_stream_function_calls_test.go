@@ -2,8 +2,10 @@ package openairesponses
 
 import (
 	"io"
+	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -116,5 +118,153 @@ func TestResponsesStreamState_ShowFunctionCallSpinner_IgnoresNonFunctionCall(t *
 	})
 	if spinner.IsActive() {
 		t.Fatal("showFunctionCallSpinner() should ignore non-function_call item")
+	}
+}
+
+func TestResponsesStreamState_OpenAIResponsesReplayItemsPreserveProviderOutputOrder(t *testing.T) {
+	state := newResponsesStreamState(nil, io.Discard)
+	messageIndex := 0
+	reasoningIndex := 1
+	functionIndex := 2
+
+	state.handleOutputItemDone(StreamChunk{
+		Type:        "response.output_item.done",
+		OutputIndex: &messageIndex,
+		Item: &Item{
+			Type:   "message",
+			ID:     "msg_1",
+			Status: "completed",
+		},
+	})
+	state.handleTextDelta(StreamChunk{
+		Type:        "response.output_text.delta",
+		OutputIndex: &messageIndex,
+		Delta:       "Need README",
+	})
+	state.handleOutputItemDone(StreamChunk{
+		Type:        "response.output_item.done",
+		OutputIndex: &reasoningIndex,
+		Item: &Item{
+			Type:             "reasoning",
+			ID:               "rs_1",
+			Status:           "completed",
+			Summary:          []map[string]any{{"text": "checked context"}},
+			EncryptedContent: "encrypted-state",
+		},
+	})
+	state.handleOutputItemDone(StreamChunk{
+		Type:        "response.output_item.done",
+		OutputIndex: &functionIndex,
+		Item: &Item{
+			Type:      "function_call",
+			ID:        "fc_1",
+			CallID:    "call_1",
+			Name:      "read_file",
+			Status:    "completed",
+			Arguments: `{"path":"README.md"}`,
+		},
+	})
+
+	items := state.openAIResponsesReplayItems()
+	if len(items) != 3 {
+		t.Fatalf("len(items) = %d, want 3: %#v", len(items), items)
+	}
+	assertReplayItem(t, items[0], "message", "msg_1", "completed")
+	if items[0].Role != "assistant" || items[0].Content != "Need README" {
+		t.Fatalf("message item = %#v, want assistant text", items[0])
+	}
+	assertReplayItem(t, items[1], "reasoning", "rs_1", "completed")
+	if items[1].EncryptedContent != "encrypted-state" || len(items[1].Summary) != 1 || items[1].Summary[0]["text"] != "checked context" {
+		t.Fatalf("reasoning item = %#v, want summary and encrypted content", items[1])
+	}
+	assertReplayItem(t, items[2], "function_call", "fc_1", "completed")
+	if items[2].CallID != "call_1" || items[2].Name != "read_file" || items[2].Arguments != `{"path":"README.md"}` {
+		t.Fatalf("function call item = %#v, want read_file replay item", items[2])
+	}
+}
+
+func TestResponsesStreamState_OpenAIResponsesReplayItemsUseStableFallbackOrder(t *testing.T) {
+	state := newResponsesStreamState(nil, io.Discard)
+	state.textOut.WriteString("legacy text")
+	state.functionCalls["z_call"] = &responsesFunctionCallAccumulator{
+		ID:     "fc_z",
+		CallID: "z_call",
+		Name:   "search_code",
+	}
+	state.functionCalls["a_call"] = &responsesFunctionCallAccumulator{
+		ID:     "fc_a",
+		CallID: "a_call",
+		Name:   "read_file",
+	}
+
+	items := state.openAIResponsesReplayItems()
+	if len(items) != 3 {
+		t.Fatalf("len(items) = %d, want legacy message + 2 calls: %#v", len(items), items)
+	}
+	if items[0].Type != "message" || items[0].Content != "legacy text" {
+		t.Fatalf("legacy message = %#v, want text output replay", items[0])
+	}
+	if items[1].CallID != "a_call" || items[2].CallID != "z_call" {
+		t.Fatalf("fallback function call order = [%s %s], want sorted by call key", items[1].CallID, items[2].CallID)
+	}
+}
+
+func TestResponsesStreamState_OpenAIResponsesReplayItemsAppendUnorderedFunctionsAfterKnownOrder(t *testing.T) {
+	state := newResponsesStreamState(nil, io.Discard)
+	firstIndex := 0
+	state.handleFunctionCallAdded(&Item{
+		Type:   "function_call",
+		ID:     "fc_known",
+		CallID: "known_call",
+		Name:   "read_file",
+	}, &firstIndex)
+	state.functionCalls["a_late"] = &responsesFunctionCallAccumulator{
+		ID:     "fc_late_a",
+		CallID: "a_late",
+		Name:   "search_code",
+	}
+	state.functionCalls["z_late"] = &responsesFunctionCallAccumulator{
+		ID:     "fc_late_z",
+		CallID: "z_late",
+		Name:   "list_files",
+	}
+
+	items := state.openAIResponsesReplayItems()
+	if len(items) != 3 {
+		t.Fatalf("len(items) = %d, want 3 function calls: %#v", len(items), items)
+	}
+	if items[0].CallID != "known_call" || items[1].CallID != "a_late" || items[2].CallID != "z_late" {
+		t.Fatalf("replay order = [%s %s %s], want known order then sorted fallback", items[0].CallID, items[1].CallID, items[2].CallID)
+	}
+}
+
+func TestResponsesStreamState_AppendFunctionCallsToOutputUsesStableFallbackOrder(t *testing.T) {
+	state := newResponsesStreamState(nil, io.Discard)
+	state.functionCalls["z_call"] = &responsesFunctionCallAccumulator{
+		CallID:    "z_call",
+		Name:      "search_code",
+		Arguments: strings.Builder{},
+	}
+	state.functionCalls["a_call"] = &responsesFunctionCallAccumulator{
+		CallID: "a_call",
+		Name:   "read_file",
+	}
+	state.functionCalls["a_call"].Arguments.WriteString(`{"path":"README.md"}`)
+	state.functionCalls["z_call"].Arguments.WriteString(`{"query":"main"}`)
+
+	state.appendFunctionCallsToOutput()
+
+	output := state.toolCallsOut.String()
+	first := strings.Index(output, `"tool":"read_file"`)
+	second := strings.Index(output, `"tool":"search_code"`)
+	if first < 0 || second < 0 || first > second {
+		t.Fatalf("tool call output = %q, want read_file before search_code", output)
+	}
+}
+
+func assertReplayItem(t *testing.T, item api.InputItem, wantType, wantID, wantStatus string) {
+	t.Helper()
+	if item.Type != wantType || item.ID != wantID || item.Status != wantStatus {
+		t.Fatalf("item = %#v, want type=%s id=%s status=%s", item, wantType, wantID, wantStatus)
 	}
 }

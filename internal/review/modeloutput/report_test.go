@@ -318,6 +318,61 @@ func TestFinalizeReportRejectsUnknownExternalDocSnippetRef(t *testing.T) {
 	}
 }
 
+func TestFinalizeReportRejectsMismatchedExternalDocSnippetMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*reviewreport.ReviewEvidenceRef)
+		wantErr string
+	}{
+		{
+			name: "url",
+			mutate: func(ref *reviewreport.ReviewEvidenceRef) {
+				ref.URL = "https://docs.example.test/other"
+			},
+			wantErr: "url does not match fetched external_doc URL",
+		},
+		{
+			name: "fetched_at",
+			mutate: func(ref *reviewreport.ReviewEvidenceRef) {
+				ref.FetchedAt = time.Date(2026, time.May, 31, 13, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+			},
+			wantErr: "fetched_at does not match fetched external_doc timestamp",
+		},
+		{
+			name: "content_hash",
+			mutate: func(ref *reviewreport.ReviewEvidenceRef) {
+				ref.ContentHash = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+			},
+			wantErr: "content_hash does not match fetched external_doc snippet hash",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			docs := newExternalDocsForModelOutputTest()
+			report := newCleanReportForModelOutputTest()
+			ref := newExternalDocEvidenceRefForModelOutputTest(docs)
+			tt.mutate(&ref)
+			report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
+			report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
+
+			_, err := reviewmodeloutput.FinalizeReport(reviewmodeloutput.ReportFinalizationInput{
+				Report:       report,
+				Plan:         newNoProbePlanForModelOutputTest(),
+				ExternalDocs: docs,
+			})
+			if err == nil {
+				t.Fatal("FinalizeReport() error = nil, want external_doc metadata mismatch")
+			}
+			for _, want := range []string{"review runner finalize report", tt.wantErr} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("FinalizeReport() error = %q, want %q", err.Error(), want)
+				}
+			}
+		})
+	}
+}
+
 func newProbePlanForModelOutputTest(ids ...string) reviewprobe.ReviewProbePlan {
 	probes := make([]reviewprobe.ReviewPlannedProbe, 0, len(ids))
 	for _, id := range ids {
