@@ -58,8 +58,8 @@ func TestApplyDefaults_AgentInstructionsFallbacks(t *testing.T) {
 
 	applyDefaults(cfg)
 
-	if cfg.AgentInstructions.Project.Mode != "fallback" {
-		t.Fatalf("Mode = %q, want fallback", cfg.AgentInstructions.Project.Mode)
+	if cfg.AgentInstructions.Project.Mode != "always" {
+		t.Fatalf("Mode = %q, want always", cfg.AgentInstructions.Project.Mode)
 	}
 	if len(cfg.AgentInstructions.Project.Files) == 0 {
 		t.Fatal("Project.Files should be defaulted")

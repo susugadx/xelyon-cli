@@ -100,9 +100,9 @@ type projectSectionInfo struct {
 }
 
 var projectSections = []projectSectionInfo{
-	{section: projectSectionContext, title: "Context", description: "Project context injected into prompts"},
-	{section: projectSectionRules, title: "Rules", description: "Required rules injected into prompts"},
-	{section: projectSectionConditional, title: "Conditional", description: "Path-scoped rules and context preview"},
+	{section: projectSectionContext, title: "Legacy context", description: "Legacy xelyon.yaml context; prefer AGENTS.md for guidance"},
+	{section: projectSectionRules, title: "Legacy rules", description: "Legacy mandatory rules; prefer AGENTS.md for guidance"},
+	{section: projectSectionConditional, title: "Legacy conditional", description: "Path-scoped legacy rules/context preview"},
 	{section: projectSectionIgnore, title: "Ignore patterns", description: "Shared ignore patterns for project map/search"},
 	{section: projectSectionFinalCommands, title: "Final check commands", description: "Commands for completed-with-changes checks"},
 	{section: projectSectionFinalTimeout, title: "Final check timeout", description: "Timeout in seconds for final checks"},

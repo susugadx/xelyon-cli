@@ -170,7 +170,7 @@ func SaveProjectConfig(pc *ProjectConfig) error {
 		}
 	}
 
-	header := fmt.Sprintf("# %s - Project Configuration\n# AI 用コンテキスト。ドキュメントではありません。\n\n", projectName)
+	header := fmt.Sprintf("# XELYON repo config for %s\n\n", projectName)
 	fullData := []byte(header + string(data))
 
 	if err := os.WriteFile(path, fullData, 0644); err != nil {

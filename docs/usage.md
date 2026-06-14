@@ -9,7 +9,7 @@
 - [添付（ファイル・画像）](#添付ファイル画像)
 - [NAVモード](#navモード)
 - [画像入力（マルチモーダル）](#画像入力マルチモーダル)
-- [プロジェクト設定ファイル（xelyon.yaml）](#プロジェクト設定ファイルxelyonyaml)
+- [プロジェクト guidance と repo 設定](#プロジェクト-guidance-と-repo-設定)
 - [サブエージェント委譲](#サブエージェント委譲)
 - [確認UI（y/n/c）](#確認uiync)
 - [状態表示](#状態表示)
@@ -168,9 +168,11 @@ xelyon --image screenshot.png --provider kimi "この画面を説明して"
 
 ---
 
-## プロジェクト設定ファイル（xelyon.yaml）
+## プロジェクト guidance と repo 設定
 
-プロジェクトルートに `xelyon.yaml` を置くと、起動時に自動で読み込まれ、AIのコンテキストとして使用されます。
+標準の project guidance は repo 直下の `AGENTS.md` に書きます。`/init` は `AGENTS.md` を作成します。
+
+`xelyon.yaml` は repo-local の XELYON 設定ファイルです。ignore pattern や final checks など、XELYON の実行設定を project ごとに変えたい場合に使います。
 
 ### 作成
 
@@ -178,18 +180,20 @@ xelyon --image screenshot.png --provider kimi "この画面を説明して"
 > /init
 ```
 
+### AGENTS.md について
+
+`AGENTS.md` は agent が読む repo guidance です。既存の `CLAUDE.md` / `.claude/CLAUDE.md` を併用したい場合は `/config` の Agent Instructions で選択できます。
+
 ### xelyon.yaml について
 
-xelyon.yaml は AI 用の構造化設定ファイルです。
+xelyon.yaml は XELYON 用の repo 設定ファイルです。
 
 **書くべきこと:**
-- `context`: プロジェクトの概要（1-2行）
-- `rules`: 開発ルール・コーディング規約
-- `conditional`: 特定パスにだけ適用したい rules/context
 - `ignore`: Project Map / `list_dir` / `search_code` で共有したい ignore パターン
 - `final_checks`: 明示完了時の final checks（変更後に実行する検証コマンド）
 
 **書かないこと:**
+- agent guidance の本文（`AGENTS.md` に書く）
 - ディレクトリ構造やコードマップの詳細
 - 詳細なドキュメント
 
@@ -198,27 +202,7 @@ xelyon.yaml は AI 用の構造化設定ファイルです。
 ### xelyon.yaml の例
 
 ```yaml
-# my-project - Project Configuration
-# AI 用コンテキスト。ドキュメントではありません。
-# AI が許可なくこのファイルを肥大化させることを禁止します。
-
-context: |
-  Webアプリケーションのバックエンドサーバー
-
-rules:
-  - "変数名はキャメルケース"
-  - "関数コメント必須"
-  - "コミットメッセージは日本語で"
-
-conditional:
-  - name: API handlers
-    paths:
-      - "internal/handlers/**/*.go"
-      - "internal/api/**/*.go"
-    rules:
-      - "公開関数・型には日本語コメント必須"
-    context: |
-      HTTP handler は timeout と error handling を必須にします。
+# XELYON repo config
 
 ignore:
   patterns:
@@ -232,6 +216,8 @@ final_checks:
 ```
 
 > **Note:** `final_checks.commands` を定義すると、AI が `completed_with_changes` の完了候補で自動実行します。省略時は `config.yaml` の final_checks 設定が使われます。旧 `verification` も互換入力として読み取られます。
+
+既存 `xelyon.yaml` の `context` / `rules` / `conditional` は互換のため読み込みますが、新規 project guidance は `AGENTS.md` を推奨します。
 
 ---
 

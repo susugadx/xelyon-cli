@@ -289,6 +289,71 @@ func TestBuildReport_LSPRecommendationsUseProjectRootWithoutXelyonYAML(t *testin
 	}
 }
 
+func TestBuildReport_MissingProjectConfigUsesManualInstructionByDefault(t *testing.T) {
+	withReportHooks(t)
+
+	loadProjectConfig = func(cwd string) (*config.ProjectConfig, error) {
+		return nil, nil
+	}
+	resolveProjectRoot = func(cfg *config.Config, cwd string) (string, bool) {
+		return "", false
+	}
+	lookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+
+	report := BuildReport(Options{
+		Config:   config.DefaultConfig(),
+		CWD:      "/repo",
+		Provider: "ollama",
+	})
+
+	xelyonItem := findReportItem(report.Project, "xelyon_yaml")
+	if xelyonItem.Status != "todo" {
+		t.Fatalf("xelyon_yaml item = %+v, want todo", xelyonItem)
+	}
+	if !strings.Contains(xelyonItem.Instruction, "Create xelyon.yaml") {
+		t.Fatalf("xelyon_yaml instruction = %q, want manual create guidance", xelyonItem.Instruction)
+	}
+	for _, forbidden := range []string{"/init", "/project"} {
+		if strings.Contains(xelyonItem.Instruction, forbidden) {
+			t.Fatalf("xelyon_yaml instruction = %q, must not contain %s", xelyonItem.Instruction, forbidden)
+		}
+	}
+}
+
+func TestBuildReport_MissingProjectConfigUsesTUIProjectInstruction(t *testing.T) {
+	withReportHooks(t)
+
+	loadProjectConfig = func(cwd string) (*config.ProjectConfig, error) {
+		return nil, nil
+	}
+	resolveProjectRoot = func(cfg *config.Config, cwd string) (string, bool) {
+		return "", false
+	}
+	lookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+
+	report := BuildReport(Options{
+		Config:                       config.DefaultConfig(),
+		CWD:                          "/repo",
+		Provider:                     "ollama",
+		ProjectConfigInstructionMode: ProjectConfigInstructionTUI,
+	})
+
+	xelyonItem := findReportItem(report.Project, "xelyon_yaml")
+	if xelyonItem.Status != "todo" {
+		t.Fatalf("xelyon_yaml item = %+v, want todo", xelyonItem)
+	}
+	if !strings.Contains(xelyonItem.Instruction, "/project") {
+		t.Fatalf("xelyon_yaml instruction = %q, want /project guidance", xelyonItem.Instruction)
+	}
+	if strings.Contains(xelyonItem.Instruction, "/init") {
+		t.Fatalf("xelyon_yaml instruction = %q, must not contain /init", xelyonItem.Instruction)
+	}
+}
+
 func findReportItem(items []Item, key string) Item {
 	for _, item := range items {
 		if item.Key == key {

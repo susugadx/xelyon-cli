@@ -58,6 +58,9 @@ type configScreen struct {
 	editSliceAdding  bool
 	editSliceEditing bool
 
+	editGuidanceChoices []guidanceFileChoice
+	editGuidanceIndex   int
+
 	editStructKeys   []string
 	editStructIndex  int
 	editStructInput  textinput.Model
@@ -87,4 +90,9 @@ type structEntryField struct {
 	Name  string
 	Type  string
 	Value interface{}
+}
+
+type guidanceFileChoice struct {
+	Path   string
+	Preset bool
 }

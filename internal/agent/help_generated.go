@@ -29,7 +29,7 @@ const GeneratedHelpCommandsText = `Commands:
                             /skills usage - Show local Skill Router usage diagnostics
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
-  /init                     - Create xelyon.yaml project template
+  /init                     - Create project AGENTS.md guidance file
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
   /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
@@ -67,7 +67,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
                             /skills usage - Show local Skill Router usage diagnostics
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
-  /init                     - Create xelyon.yaml project template
+  /init                     - Create project AGENTS.md guidance file
   /project                  - Edit project xelyon.yaml interactively
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
   /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)

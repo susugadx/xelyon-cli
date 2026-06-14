@@ -291,7 +291,7 @@ xelyon doctor bedrock --json
 TUI が primary surface です。`--no-tui` の classic REPL は deprecated legacy fallback として残しており、新しい対話型 UI コマンドは TUI 側だけに追加します。
 TUI では入力欄で `/` または `/r` のような prefix を入力すると command 候補が表示され、Enter で選択中の command を実行し、Tab で入力欄へ補完できます。
 
-設定系コマンドの責務は分かれています。`/config` は global config (`~/.xelyon/config.yaml`) の編集、`/project` は project config (`xelyon.yaml`) の編集、`/init` は `xelyon.yaml` テンプレート作成だけを担当します。TUI で `xelyon.yaml` を管理する通常導線は `/project` です。
+設定系コマンドの責務は分かれています。`/config` は global config (`~/.xelyon/config.yaml`) の編集、`/project` は project config (`xelyon.yaml`) の編集、`/init` は repo-local guidance (`AGENTS.md`) の雛形作成だけを担当します。TUI で `xelyon.yaml` を管理する通常導線は `/project` です。
 
 ### `/help`
 
@@ -602,23 +602,15 @@ Skill Router は通常の依頼時に bounded hint を model へ渡します。v
 
 ### `/init`
 
-project config (`xelyon.yaml`) のテンプレートを作成します。既存ファイルの編集は `/project` が通常導線です。
+repo-local guidance (`AGENTS.md`) の雛形を作成します。既存 `AGENTS.md` がある場合は上書きしません。
 
 ```
 > /init
 ```
 
-**テンプレートに含まれるフィールド:**
-- `context` — プロジェクトの概要・背景情報
-- `rules` — 必須ルール（AI が必ず従うルール）
-- `conditional` — `paths` に一致した時だけ注入する rules/context
-- `ignore` — Project Map / `list_dir` / `search_code` で共有する ignore パターン
-- `final_checks` — 明示完了時の final checks（省略時は config.yaml の final_checks を使用）
+`CLAUDE.md` / `.claude/CLAUDE.md` が既にある repo でもコピーや上書きは行いません。必要な場合は `/config` の Agent Instructions で追加選択できます。
 
-**注意:**
-- コード構造の詳細な記載は不要
-- Project Map は起動時に軽量 manifest を自動注入するため、ファイル一覧や関数目次は書かない
-- `final_checks.commands` を定義すると、AIが `completed_with_changes` の完了候補で必ず実行します
+XELYON 固有の repo config (`xelyon.yaml`) は `/project` が通常導線です。
 
 ### `/project`
 

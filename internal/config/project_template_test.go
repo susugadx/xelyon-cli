@@ -28,12 +28,124 @@ func TestCreateProjectConfigTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if !strings.Contains(string(data), filepath.Base(tmpDir)+" - Project Configuration") {
+	if !strings.Contains(string(data), "XELYON repo config for "+filepath.Base(tmpDir)) {
 		t.Fatalf("template does not include project name:\n%s", string(data))
+	}
+	if strings.Contains(string(data), "AI 用コンテキスト") || strings.Contains(string(data), "context:") || strings.Contains(string(data), "rules:") {
+		t.Fatalf("template should not recommend legacy context/rules guidance:\n%s", string(data))
 	}
 
 	if err := CreateProjectConfigTemplate("", false); !errors.Is(err, ErrProjectConfigExists) {
 		t.Fatalf("CreateProjectConfigTemplate(existing) error = %v, want ErrProjectConfigExists", err)
+	}
+}
+
+func TestCreateProjectAgentInstructionsTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "AGENTS.md")
+
+	if err := CreateProjectAgentInstructionsTemplate(path); err != nil {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), "# AGENTS.md") {
+		t.Fatalf("template missing AGENTS heading:\n%s", string(data))
+	}
+
+	if err := CreateProjectAgentInstructionsTemplate(path); !errors.Is(err, ErrProjectAgentInstructionsExists) {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate(existing) error = %v, want ErrProjectAgentInstructionsExists", err)
+	}
+}
+
+func TestCreateProjectAgentInstructionsTemplate_DefaultUsesGitRoot(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	subdir := filepath.Join(root, "subdir")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	initGitRepo(t, root)
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWd)
+	})
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	if err := CreateProjectAgentInstructionsTemplate(""); err != nil {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); err != nil {
+		t.Fatalf("repo-root AGENTS.md should be created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(subdir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("subdir AGENTS.md should not be created, stat err = %v", err)
+	}
+}
+
+func TestCreateProjectAgentInstructionsTemplate_DefaultUsesXelyonRoot(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "subdir")
+	writeFile(t, filepath.Join(root, "xelyon.yaml"), "final_checks:\n  commands:\n    - make test\n")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWd)
+	})
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	if err := CreateProjectAgentInstructionsTemplate(""); err != nil {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); err != nil {
+		t.Fatalf("xelyon-root AGENTS.md should be created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(subdir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("subdir AGENTS.md should not be created, stat err = %v", err)
+	}
+}
+
+func TestCreateProjectAgentInstructionsTemplate_DefaultUsesInvalidXelyonRoot(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "subdir")
+	writeFile(t, filepath.Join(root, "xelyon.yaml"), ":\n")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWd)
+	})
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	if err := CreateProjectAgentInstructionsTemplate(""); err != nil {
+		t.Fatalf("CreateProjectAgentInstructionsTemplate() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); err != nil {
+		t.Fatalf("xelyon-root AGENTS.md should be created even when xelyon.yaml is invalid: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(subdir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("subdir AGENTS.md should not be created, stat err = %v", err)
 	}
 }
 

@@ -16,11 +16,22 @@ import (
 
 // Options は setup checklist の入力状態を表す。
 type Options struct {
-	Config   *config.Config
-	CWD      string
-	Provider string
-	Model    string
+	Config                       *config.Config
+	CWD                          string
+	Provider                     string
+	Model                        string
+	ProjectConfigInstructionMode ProjectConfigInstructionMode
 }
+
+// ProjectConfigInstructionMode は xelyon.yaml 不在時の案内 surface を表す。
+type ProjectConfigInstructionMode string
+
+const (
+	// ProjectConfigInstructionManual は CLI/classic 向けに手動作成だけを案内する。
+	ProjectConfigInstructionManual ProjectConfigInstructionMode = ""
+	// ProjectConfigInstructionTUI は TUI 向けに /project も案内する。
+	ProjectConfigInstructionTUI ProjectConfigInstructionMode = "tui"
+)
 
 // Report は first-run setup と project recommendation の診断結果を表す。
 type Report struct {
@@ -88,7 +99,7 @@ func BuildReport(opts Options) Report {
 		toolAvailabilityItem("git", "git", "Install git to enable repository-aware context."),
 	)
 
-	report.Project = projectItems(cfg, opts.CWD)
+	report.Project = projectItems(cfg, opts.CWD, opts.ProjectConfigInstructionMode)
 	return report
 }
 
@@ -203,7 +214,7 @@ func ProviderSetupRequiredMessage(provider string) string {
 	return strings.Join(lines, "\n")
 }
 
-func projectItems(cfg *config.Config, cwd string) []Item {
+func projectItems(cfg *config.Config, cwd string, instructionMode ProjectConfigInstructionMode) []Item {
 	if strings.TrimSpace(cwd) == "" {
 		if current, err := getwd(); err == nil {
 			cwd = current
@@ -219,7 +230,7 @@ func projectItems(cfg *config.Config, cwd string) []Item {
 	}
 	if projectCfg == nil {
 		items := []Item{
-			{Key: "xelyon_yaml", Status: "todo", Message: "xelyon.yaml", Detail: "not found", Instruction: "Run /init in TUI or create xelyon.yaml when project-specific rules are needed."},
+			{Key: "xelyon_yaml", Status: "todo", Message: "xelyon.yaml", Detail: "not found", Instruction: missingProjectConfigInstruction(instructionMode)},
 		}
 		if root, ok := resolveProjectRoot(cfg, cwd); ok {
 			items = append(items, lspRecommendationItems(cfg, root)...)
@@ -237,6 +248,13 @@ func projectItems(cfg *config.Config, cwd string) []Item {
 	items = append(items, lspRecommendationItems(cfg, root)...)
 	items = append(items, finalChecksItem(cfg, projectCfg))
 	return items
+}
+
+func missingProjectConfigInstruction(mode ProjectConfigInstructionMode) string {
+	if mode == ProjectConfigInstructionTUI {
+		return "Run /project in TUI or create xelyon.yaml when XELYON-specific repo settings are needed."
+	}
+	return "Create xelyon.yaml when XELYON-specific repo settings are needed."
 }
 
 func lspRecommendationItems(cfg *config.Config, root string) []Item {

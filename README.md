@@ -185,22 +185,13 @@ API実測値に基づくトークン使用量とコストをリアルタイム�
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
 - **圧縮閾値**: `compression.trigger_percent`（デフォルト80%）超過時に自動圧縮/警告
 
-### 📝 プロジェクト設定（xelyon.yaml）
-プロジェクト固有のルール・コンテキストを構造化 YAML で管理。`/init` でテンプレート作成。
+### 📝 Project guidance と repo 設定
+project guidance は repo 直下の `AGENTS.md` を標準にします。`/init` で雛形を作成し、既存 `AGENTS.md` は上書きしません。
+
+`xelyon.yaml` は XELYON 固有の repo-local 設定です。Project Map / search の ignore pattern や final checks を project ごとに変えたい場合に使います。
 
 ```yaml
 # xelyon.yaml（プロジェクトルートに配置）
-context: "Go製CLIツール。Cobraベース。"
-rules:
-  - "変更後は make ci-check を実行"
-  - "公開関数にはコメント必須"
-conditional:
-  - name: Agent internals
-    paths:
-      - "internal/agent/**/*.go"
-    rules:
-      - "公開関数・型には日本語コメント必須"
-    context: "トークン推定は共通推定器を使う"
 ignore:
   patterns:
     - "dist"
@@ -211,9 +202,8 @@ final_checks:             # config.yaml の final_checks を上書き
   timeout: 120
 ```
 
-- **context**: AI に注入するプロジェクト説明
-- **rules**: 番号付きで system prompt に注入される必須ルール
-- **conditional**: `paths` に一致した時だけ注入する rules/context
+- **AGENTS.md**: agent が読む repo guidance
+- **CLAUDE.md / .claude/CLAUDE.md**: `/config` で選択できる互換 guidance
 - **ignore**: Project Map / `list_dir` / `search_code` で共有する ignore パターン
 - **final_checks**: 明示完了時の final checks（`config.yaml` の final_checks より優先）
 - **Project Map**: 起動時は軽量 manifest が自動生成されるため、`xelyon.yaml` にファイル一覧や関数目次は書かない
@@ -278,7 +268,7 @@ xelyon
 /setup      # provider/env/LSP/project recommendation を表示
 /config     # global config を対話式で編集
 /project    # xelyon.yaml を対話式で編集
-/init       # xelyon.yaml テンプレート作成
+/init       # AGENTS.md 雛形作成
 /review [instructions] # 現在の変更レビューを開く（引数は追加観点として即時実行）
 /exit       # 終了
 ```

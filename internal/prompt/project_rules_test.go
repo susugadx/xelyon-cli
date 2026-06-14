@@ -161,7 +161,6 @@ func TestBuildRulesBlockFromList_Multiple(t *testing.T) {
 
 func TestBuildProjectInstructionBlock_NoXelyonUsesProjectGuidanceLanguage(t *testing.T) {
 	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
-		HasProjectConfig: false,
 		ProjectGuidance: []ProjectInstructionEntry{
 			{Label: "AGENTS.md", Content: "Follow repo guidance strictly.", Strength: "project_guidance"},
 		},
@@ -173,20 +172,37 @@ func TestBuildProjectInstructionBlock_NoXelyonUsesProjectGuidanceLanguage(t *tes
 	if strings.Contains(block, "PROJECT-SPECIFIC RULES (MANDATORY)") {
 		t.Fatal("mandatory block should not be generated when xelyon.yaml rules are absent")
 	}
-	if !strings.Contains(block, "No xelyon.yaml was found for this workspace.") {
-		t.Fatal("missing no-xelyon guidance explanation")
+	if !strings.Contains(block, "No legacy xelyon.yaml rules/context are active for this turn.") {
+		t.Fatal("missing no-legacy guidance explanation")
 	}
 	if !strings.Contains(block, "### AGENTS.md") {
 		t.Fatal("missing guidance heading")
 	}
 }
 
+func TestBuildProjectInstructionBlock_NoLegacyInstructionsKeepProjectGuidanceLanguage(t *testing.T) {
+	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
+		ProjectGuidance: []ProjectInstructionEntry{
+			{Label: "AGENTS.md", Content: "Follow repo guidance strictly.", Strength: "project_guidance"},
+		},
+	})
+
+	if !strings.Contains(block, "No legacy xelyon.yaml rules/context are active for this turn.") {
+		t.Fatal("missing no-legacy guidance explanation")
+	}
+	if strings.Contains(block, "The following project guidance files are treated as advisory guidance.") {
+		t.Fatalf("no legacy instructions should not render advisory guidance explanation:\n%s", block)
+	}
+	if !strings.Contains(block, "### AGENTS.md (project guidance)") {
+		t.Fatalf("project guidance heading missing:\n%s", block)
+	}
+}
+
 func TestBuildProjectInstructionBlock_XelyonRulesRemainMandatory(t *testing.T) {
 	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
-		HasProjectConfig: true,
-		MandatoryRules:   []string{"Run go test ./..."},
+		MandatoryRules: []string{"Run go test ./..."},
 		ProjectGuidance: []ProjectInstructionEntry{
-			{Label: "CLAUDE.md", Content: "Advisory style note.", Strength: "advisory"},
+			{Label: "CLAUDE.md", Content: "Advisory style note.", Strength: "project_guidance"},
 		},
 	})
 
@@ -202,7 +218,7 @@ func TestBuildProjectInstructionBlock_XelyonRulesRemainMandatory(t *testing.T) {
 	if strings.Contains(block, "1. Advisory style note.") {
 		t.Fatal("guidance content should not be converted into mandatory numbered rules")
 	}
-	if !strings.Contains(block, "### CLAUDE.md") {
+	if !strings.Contains(block, "### CLAUDE.md (advisory)") {
 		t.Fatal("missing CLAUDE.md heading")
 	}
 }
@@ -227,7 +243,6 @@ func TestBuildProjectInstructionBlock_GlobalGuidanceIsAdvisory(t *testing.T) {
 
 func TestBuildProjectInstructionBlock_RendersStrengthAndWarnings(t *testing.T) {
 	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
-		HasProjectConfig: false,
 		ProjectGuidance: []ProjectInstructionEntry{
 			{Label: "AGENTS.md", Content: "Follow strict policy.", Strength: "project_guidance"},
 		},
