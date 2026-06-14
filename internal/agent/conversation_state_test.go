@@ -263,6 +263,74 @@ func TestAgent_ResumeSession_ModelSwitchPreservesOutgoingSessionResponseContext(
 	}
 }
 
+func TestAgent_ResumeSession_SameProviderResetsSessionStats(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{name: "openai"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.Stats.AddTokens(123, 456)
+	agent.Stats.AddToolExecution("read_file")
+	agent.Stats.AccumulatedCost = 42
+
+	target := history.NewSession("gpt-5.4")
+	target.ProviderName = "openai"
+	target.ProviderConfigKey = "openai"
+	target.AddMessage("user", "saved request", "gpt-5.4")
+	if err := agent.storage.Save(target); err != nil {
+		t.Fatalf("Save(target) error = %v", err)
+	}
+
+	if _, err := agent.ResumeSession(target.ID); err != nil {
+		t.Fatalf("ResumeSession() error = %v", err)
+	}
+
+	if agent.Stats == nil {
+		t.Fatal("agent.Stats = nil")
+	}
+	if agent.Stats.Provider != "openai" || agent.Stats.Model != "gpt-5.4" {
+		t.Fatalf("Stats provider/model = (%q, %q), want openai/gpt-5.4", agent.Stats.Provider, agent.Stats.Model)
+	}
+	if agent.Stats.InputTokens != 0 || agent.Stats.OutputTokens != 0 || agent.Stats.AccumulatedCost != 0 {
+		t.Fatalf("Stats usage = input %d output %d cost %.2f, want reset", agent.Stats.InputTokens, agent.Stats.OutputTokens, agent.Stats.AccumulatedCost)
+	}
+	if len(agent.Stats.ToolExecutions) != 0 {
+		t.Fatalf("Stats.ToolExecutions = %#v, want reset", agent.Stats.ToolExecutions)
+	}
+}
+
+func TestAgent_ResumeSession_SameProviderValidatesSavedModel(t *testing.T) {
+	disableColors(t)
+	t.Setenv("HOME", t.TempDir())
+
+	runtime := NewAgentRuntimeWithConfig(newChatRequestTestConfig())
+	agent := NewAgentWithRuntime("gemini-3.5-flash", &mockProvider{name: "gemini"}, false, runtime)
+	bootstrapID := agent.session.ID
+
+	target := history.NewSession("gemini-2.0-flash-lite")
+	target.ProviderName = "gemini"
+	target.ProviderConfigKey = "gemini"
+	target.AddMessage("user", "saved request", "gemini-2.0-flash-lite")
+	if err := agent.storage.Save(target); err != nil {
+		t.Fatalf("Save(target) error = %v", err)
+	}
+
+	_, err := agent.ResumeSession(target.ID)
+	if err == nil {
+		t.Fatal("ResumeSession() error = nil, want Gemini model validation error")
+	}
+	if !strings.Contains(err.Error(), "switch to session provider/model") ||
+		!strings.Contains(err.Error(), "gemini-3.1-flash-lite") {
+		t.Fatalf("ResumeSession() error = %v, want Gemini replacement guidance", err)
+	}
+	if agent.session == nil || agent.session.ID != bootstrapID {
+		t.Fatalf("agent.session.ID = %q, want bootstrap %s", agent.session.ID, bootstrapID)
+	}
+	if agent.CurrentModel != "gemini-3.5-flash" {
+		t.Fatalf("CurrentModel = %q, want unchanged gemini-3.5-flash", agent.CurrentModel)
+	}
+}
+
 func TestAgent_ApplyLoadedSession_ClearsModelFacingTaskLedger(t *testing.T) {
 	disableColors(t)
 
@@ -343,6 +411,9 @@ func TestAgent_ResumeStartupSession_FailureDoesNotPersistBootstrapSessionOnClean
 	if _, err := agent.ResumeStartupSession("missing-session"); err == nil {
 		t.Fatal("ResumeStartupSession() error = nil, want missing session error")
 	}
+	if agent.session == nil || agent.session.ID != bootstrapID {
+		t.Fatalf("agent.session.ID = %q, want bootstrap %s preserved after failure", agent.session.ID, bootstrapID)
+	}
 	agent.Cleanup()
 
 	sessions, err := agent.storage.ListSessions()
@@ -351,6 +422,40 @@ func TestAgent_ResumeStartupSession_FailureDoesNotPersistBootstrapSessionOnClean
 	}
 	if len(sessions) != 0 {
 		t.Fatalf("len(ListSessions()) = %d, want 0; bootstrap session %s should not be persisted", len(sessions), bootstrapID)
+	}
+}
+
+func TestAgent_ResumeStartupSession_SwitchFailurePreservesBootstrapForMutation(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+	bootstrapID := agent.session.ID
+
+	loadedSession := history.NewSession("saved-model")
+	loadedSession.ProviderName = "not-a-provider"
+	loadedSession.ProviderConfigKey = "not-a-provider"
+	loadedSession.AddMessage("user", "saved request", "saved-model")
+	if err := agent.storage.Save(loadedSession); err != nil {
+		t.Fatalf("Save(loadedSession) error = %v", err)
+	}
+
+	_, err := agent.ResumeStartupSession(loadedSession.ID)
+	if err == nil {
+		t.Fatal("ResumeStartupSession() error = nil, want runtime switch failure")
+	}
+	if agent.session == nil || agent.session.ID != bootstrapID {
+		t.Fatalf("agent.session.ID = %q, want bootstrap %s preserved after switch failure", agent.session.ID, bootstrapID)
+	}
+
+	agent.appendSessionMessage("user", "after failed startup resume", agent.CurrentModel)
+	loadedBootstrap, err := agent.storage.Load(bootstrapID)
+	if err != nil {
+		t.Fatalf("Load(bootstrap) error = %v", err)
+	}
+	messages := loadedBootstrap.ToAPIMessages()
+	if len(messages) != 1 || messages[0].Content != "after failed startup resume" {
+		t.Fatalf("loaded bootstrap messages = %#v, want mutation persisted", messages)
 	}
 }
 
@@ -388,6 +493,48 @@ func TestAgent_ResumeStartupSession_SuccessPersistsOnlyLoadedSessionOnCleanup(t 
 	}
 	if sessions[0].ID != loadedSession.ID {
 		t.Fatalf("sessions[0].ID = %q, want loaded session %q", sessions[0].ID, loadedSession.ID)
+	}
+}
+
+func TestAgent_ResumeSessionCandidatesAndLastExcludeActiveSession(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{name: "openai"}, &out)
+
+	other := history.NewSession("gpt-5.4")
+	other.ProviderName = "openai"
+	other.ProviderConfigKey = "openai"
+	other.AddMessage("user", "other session", "gpt-5.4")
+	if err := agent.storage.Save(other); err != nil {
+		t.Fatalf("Save(other) error = %v", err)
+	}
+
+	activeID := agent.session.ID
+	agent.session.AddMessage("user", "active session", agent.CurrentModel)
+	if err := agent.storage.Save(agent.session); err != nil {
+		t.Fatalf("Save(active) error = %v", err)
+	}
+
+	candidates, err := agent.ResumeSessionCandidates(history.ResumeListOptions{All: true})
+	if err != nil {
+		t.Fatalf("ResumeSessionCandidates() error = %v", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.ID == activeID {
+			t.Fatalf("ResumeSessionCandidates() included active session %s: %#v", activeID, candidates)
+		}
+	}
+	if len(candidates) != 1 || candidates[0].ID != other.ID {
+		t.Fatalf("ResumeSessionCandidates() = %#v, want only other session %s", candidates, other.ID)
+	}
+
+	resumed, err := agent.ResumeLastSession(history.ResumeListOptions{All: true})
+	if err != nil {
+		t.Fatalf("ResumeLastSession() error = %v", err)
+	}
+	if resumed.ID != other.ID {
+		t.Fatalf("ResumeLastSession().ID = %q, want %q", resumed.ID, other.ID)
 	}
 }
 

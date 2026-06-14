@@ -133,7 +133,6 @@ func (a *Agent) ResumeStartupSession(sessionID string) (*history.Session, error)
 		return nil, fmt.Errorf("history storage not available")
 	}
 
-	a.restoreSessionConversation(nil)
 	session, err := a.storage.Load(strings.TrimSpace(sessionID))
 	if err != nil {
 		return nil, fmt.Errorf("load session: %w", err)
@@ -163,6 +162,7 @@ func (a *Agent) ResumeLastSession(opts history.ResumeListOptions) (*history.Sess
 	if a == nil || a.storage == nil {
 		return nil, fmt.Errorf("history storage not available")
 	}
+	opts = a.excludeActiveSessionFromResumeOptions(opts)
 	sessionID, err := a.storage.GetLastResumeSession(opts)
 	if err != nil {
 		return nil, err
@@ -175,7 +175,16 @@ func (a *Agent) ResumeSessionCandidates(opts history.ResumeListOptions) ([]histo
 	if a == nil || a.storage == nil {
 		return nil, fmt.Errorf("history storage not available")
 	}
+	opts = a.excludeActiveSessionFromResumeOptions(opts)
 	return a.storage.ListResumeSessions(opts)
+}
+
+func (a *Agent) excludeActiveSessionFromResumeOptions(opts history.ResumeListOptions) history.ResumeListOptions {
+	if a == nil || a.session == nil || strings.TrimSpace(opts.ExcludeSessionID) != "" {
+		return opts
+	}
+	opts.ExcludeSessionID = a.session.ID
+	return opts
 }
 
 func (a *Agent) switchRuntimeForLoadedSessionWithActiveSessionDetached(session *history.Session) error {
@@ -206,7 +215,13 @@ func (a *Agent) switchRuntimeForLoadedSession(session *history.Session) error {
 	currentKey := config.ActiveProviderConfigKey(a.currentProviderConfigKey())
 	targetKey := config.ActiveProviderConfigKey(providerKey)
 	if targetKey != "" && currentKey != "" && targetKey == currentKey {
-		if model != "" && model != a.CurrentModel {
+		if model == "" {
+			return nil
+		}
+		if err := validateProviderModelSelection(a.cfg(), a.ProviderName, targetKey, model, true); err != nil {
+			return fmt.Errorf("switch to session provider/model: %w", err)
+		}
+		if model != a.CurrentModel {
 			a.applyRuntimeModelSelection(model, shouldResetResponseContinuationForModelSwitch(a.CurrentModel, model))
 		}
 		return nil

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +59,37 @@ func TestResumeCommandWithIDResumesDirectly(t *testing.T) {
 	}
 	if m.sessionPicker != nil {
 		t.Fatal("session picker should not open for direct ID")
+	}
+}
+
+func TestResumeAllPickerResumesDifferentWorkingDir(t *testing.T) {
+	currentDir := filepath.Join(t.TempDir(), "current")
+	otherDir := filepath.Join(t.TempDir(), "other")
+	agent := &stubAgent{
+		statusLine: "ready",
+		sessionCandidates: []SessionCandidate{
+			{ID: "other-session", Preview: "other", WorkingDir: otherDir, LastModified: time.Now()},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m.workingDir = currentDir
+
+	var cmd tea.Cmd
+	m, cmd = m.openSessionPicker(true, false)
+	if cmd != nil {
+		t.Fatalf("openSessionPicker cmd = %T, want nil", cmd)
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatalf("resume selection cmd = %T, want nil", cmd)
+	}
+	if len(agent.resumedSessionIDs) != 1 || agent.resumedSessionIDs[0] != "other-session" {
+		t.Fatalf("resumedSessionIDs = %#v, want other-session", agent.resumedSessionIDs)
+	}
+	if m.sessionPicker != nil {
+		t.Fatal("session picker should close after --all resume")
 	}
 }
 
@@ -240,6 +272,40 @@ func TestStartupSessionPickerSelectionUsesStartupResume(t *testing.T) {
 	}
 	if containsMessage(m.messages, "bootstrap transcript") {
 		t.Fatalf("startup resume should reset visible transcript, got %#v", m.messages)
+	}
+}
+
+func TestStartupResumeAllPickerResumesDifferentWorkingDir(t *testing.T) {
+	currentDir := filepath.Join(t.TempDir(), "current")
+	otherDir := filepath.Join(t.TempDir(), "other")
+	agent := &stubAgent{
+		statusLine: "ready",
+		sessionCandidates: []SessionCandidate{
+			{ID: "session-startup", Preview: "first", WorkingDir: otherDir, LastModified: time.Now()},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m.workingDir = currentDir
+
+	var cmd tea.Cmd
+	m, cmd = m.openSessionPicker(true, true)
+	if cmd != nil {
+		t.Fatalf("openSessionPicker cmd = %T, want nil", cmd)
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatalf("resume selection cmd = %T, want nil", cmd)
+	}
+	if len(agent.startupResumedSessionIDs) != 1 || agent.startupResumedSessionIDs[0] != "session-startup" {
+		t.Fatalf("startupResumedSessionIDs = %#v, want session-startup", agent.startupResumedSessionIDs)
+	}
+	if len(agent.resumedSessionIDs) != 0 {
+		t.Fatalf("resumedSessionIDs = %#v, want none", agent.resumedSessionIDs)
+	}
+	if m.sessionPicker != nil {
+		t.Fatal("startup session picker should close after --all resume")
 	}
 }
 
