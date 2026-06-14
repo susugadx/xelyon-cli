@@ -80,6 +80,42 @@ func TestProviderDescriptorFor_ClonesCredentialEnvVars(t *testing.T) {
 	}
 }
 
+func TestProviderCredentialEnvVarSets_AllProviders(t *testing.T) {
+	want := map[string][][]string{
+		"deepseek":            {{"DEEPSEEK_API_KEY"}},
+		"kimi":                {{"MOONSHOT_API_KEY"}},
+		"openai":              {{"OPENAI_API_KEY"}},
+		"openai_subscription": nil,
+		"azure": {
+			{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL"},
+			{"AZURE_OPENAI_AUTH_TOKEN", "AZURE_OPENAI_BASE_URL"},
+			{"AZURE_OPENAI_AUTH_TOKEN_COMMAND", "AZURE_OPENAI_BASE_URL"},
+		},
+		"gemini":     {{"GEMINI_API_KEY"}},
+		"claude":     {{"ANTHROPIC_API_KEY"}},
+		"ollama":     nil,
+		"groq":       {{"GROQ_API_KEY"}},
+		"openrouter": {{"OPENROUTER_API_KEY"}},
+		"bedrock":    nil,
+	}
+
+	providers := ProviderKeys(false)
+	if len(providers) != len(want) {
+		t.Fatalf("ProviderKeys(false) = %v, want %d providers covered by credential set drift test", providers, len(want))
+	}
+	for _, provider := range providers {
+		t.Run(provider, func(t *testing.T) {
+			expected, ok := want[provider]
+			if !ok {
+				t.Fatalf("provider %q missing from credential set drift test", provider)
+			}
+			if got := ProviderCredentialEnvVarSets(provider); !reflect.DeepEqual(got, expected) {
+				t.Fatalf("ProviderCredentialEnvVarSets(%q) = %v, want %v", provider, got, expected)
+			}
+		})
+	}
+}
+
 func TestCanonicalProviderKey_ResolvesDisplayName(t *testing.T) {
 	if got := CanonicalProviderKey("Azure OpenAI"); got != "azure" {
 		t.Fatalf("CanonicalProviderKey(%q) = %q, want azure", "Azure OpenAI", got)

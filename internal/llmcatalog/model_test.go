@@ -77,6 +77,33 @@ func TestIsKnownModelName(t *testing.T) {
 	}
 }
 
+func TestInferProviderFromModel_KnownRoutedAndUnknown(t *testing.T) {
+	tests := []struct {
+		model string
+		want  string
+	}{
+		{model: " GPT-5.4 ", want: "openai"},
+		{model: "o3-mini", want: "openai"},
+		{model: "gemini-3.1-pro-preview", want: "gemini"},
+		{model: "claude-sonnet-4-6", want: "claude"},
+		{model: "deepseek-v4-flash", want: "deepseek"},
+		{model: "kimi-k2.6", want: "kimi"},
+		{model: "global.anthropic.claude-sonnet-4-6", want: "bedrock"},
+		{model: "openai/gpt-5.4", want: "openrouter"},
+		{model: "vendor/model", want: "openrouter"},
+		{model: "unknown-model", want: ""},
+		{model: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := InferProviderFromModel(tt.model); got != tt.want {
+				t.Fatalf("InferProviderFromModel(%q) = %q, want %q", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestKnownModelNamesForProvider_ReturnsStableClonedProviderModels(t *testing.T) {
 	models := KnownModelNamesForProvider("openai")
 	if len(models) < 3 {
