@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -51,7 +52,14 @@ func (m *Manager) Connect(ctx context.Context) error {
 
 	client := m.newClient()
 
-	for name, serverConfig := range m.config.MCPServers {
+	serverNames := make([]string, 0, len(m.config.MCPServers))
+	for name := range m.config.MCPServers {
+		serverNames = append(serverNames, name)
+	}
+	sort.Strings(serverNames)
+
+	for _, name := range serverNames {
+		serverConfig := m.config.MCPServers[name]
 		if serverConfig.Disabled {
 			fmt.Fprintf(m.out(), "⏭️  MCP server '%s' is disabled, skipping\n", name)
 			continue
@@ -70,15 +78,17 @@ func (m *Manager) Connect(ctx context.Context) error {
 			continue
 		}
 
-		previous := m.swapServerSession(name, session)
-		if previous != nil && previous != session {
-			_ = previous.Close()
-		}
-
-		summary, err := m.refreshServerTools(ctx, name, session, serverConfig.Tools, true)
+		serverTools, summary, err := m.refreshServerTools(ctx, name, session, serverConfig.Tools)
 		if err != nil {
+			_ = session.Close()
 			fmt.Fprintf(m.out(), "⚠️  Failed to list tools from '%s': %v\n", name, err)
 			continue
+		}
+
+		previous := m.swapServerSession(name, session)
+		m.replaceServerTools(name, serverTools)
+		if previous != nil && previous != session {
+			_ = previous.Close()
 		}
 
 		m.markServerHealthy(name)
@@ -100,7 +110,16 @@ func (m *Manager) openServerSession(ctx context.Context, client *mcp.Client, ser
 	cmd.Env = sanitizeEnv(serverConfig.Env)
 
 	transport := &mcp.CommandTransport{Command: cmd}
-	return client.Connect(ctx, transport, nil)
+	connectCtx, cancel := mcpServerOperationContext(ctx)
+	defer cancel()
+	return client.Connect(connectCtx, transport, nil)
+}
+
+func mcpServerOperationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(ctx, defaultMCPServerOperationTimeout)
 }
 
 func (m *Manager) swapServerSession(serverName string, session *mcp.ClientSession) *mcp.ClientSession {
@@ -148,23 +167,22 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 		return fmt.Errorf("server '%s' blocked: %w", serverName, err)
 	}
 
-	m.removeServerSession(serverName)
-	m.removeServerTools(serverName)
-
 	client := m.newClient()
 	session, err := m.openServerSession(ctx, client, serverConfig)
 	if err != nil {
 		return fmt.Errorf("reconnection failed: %w", err)
 	}
 
-	previous := m.swapServerSession(serverName, session)
-	if previous != nil && previous != session {
-		_ = previous.Close()
+	serverTools, summary, err := m.refreshServerTools(ctx, serverName, session, serverConfig.Tools)
+	if err != nil {
+		_ = session.Close()
+		return fmt.Errorf("failed to list tools: %w", err)
 	}
 
-	summary, err := m.refreshServerTools(ctx, serverName, session, serverConfig.Tools, true)
-	if err != nil {
-		return fmt.Errorf("failed to list tools: %w", err)
+	previous := m.swapServerSession(serverName, session)
+	m.replaceServerTools(serverName, serverTools)
+	if previous != nil && previous != session {
+		_ = previous.Close()
 	}
 
 	m.markServerHealthy(serverName)

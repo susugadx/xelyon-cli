@@ -105,6 +105,45 @@ func TestConfigureMCPTools_SetMCPToolsCalledOnceAndConverted(t *testing.T) {
 	}
 }
 
+func TestConfigureMCPTools_SkipsDuplicateExportedNames(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{
+			ServerName:  "github-server",
+			Name:        "get.issue",
+			Description: "First",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		},
+		{
+			ServerName:  "github_server",
+			Name:        "get_issue",
+			Description: "Second",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		},
+		{
+			ServerName:  "github",
+			Name:        "list_issues",
+			Description: "List",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		},
+	}
+	p := &mockMCPProvider{name: "openai"}
+
+	configureMCPTools(p, mcpTools, nil)
+
+	if p.setMCPToolsCalls != 1 {
+		t.Fatalf("SetMCPTools calls = %d, want 1", p.setMCPToolsCalls)
+	}
+	if len(p.lastTools) != 2 {
+		t.Fatalf("registered tools = %d, want 2: %#v", len(p.lastTools), p.lastTools)
+	}
+	if p.lastTools[0].Name != "mcp_github_server_get_issue" || p.lastTools[0].Description != "First" {
+		t.Fatalf("first tool = %#v, want first duplicate to win", p.lastTools[0])
+	}
+	if p.lastTools[1].Name != "mcp_github_list_issues" {
+		t.Fatalf("second tool = %#v, want list_issues", p.lastTools[1])
+	}
+}
+
 func TestConfigureMCPTools_DebugLoggingByProvider(t *testing.T) {
 	inputSchema := json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}`)
 	mcpTools := []mcp.MCPTool{

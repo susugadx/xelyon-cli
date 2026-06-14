@@ -3,12 +3,14 @@ package mcptool
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
@@ -41,6 +43,9 @@ func RegisterToRegistry(registry *tools.Registry, caller ToolCaller, definitions
 			InputSchema: tool.InputSchema,
 		})
 
+		if registry.HasTool(wrapper.Name()) {
+			continue
+		}
 		registry.Register(wrapper)
 	}
 }
@@ -79,22 +84,7 @@ func NewWrapper(opts WrapperOptions) *Wrapper {
 
 // Name はツール名を返す（mcp_<server>_<tool> 形式、特殊文字を置換）
 func (w *Wrapper) Name() string {
-	// 特殊文字をアンダースコアに置換
-	safeServer := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			return r
-		}
-		return '_'
-	}, w.serverName)
-
-	safeTool := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			return r
-		}
-		return '_'
-	}, w.toolName)
-
-	return fmt.Sprintf("mcp_%s_%s", safeServer, safeTool)
+	return mcpnames.ExportedToolName(w.serverName, w.toolName)
 }
 
 // Description はツールの説明を返す
@@ -170,16 +160,29 @@ func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (s
 	anyArgs := w.convertArgsWithSchema(args)
 
 	callTimeout := w.callTimeoutDuration()
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	parentCtx := execCtx.EffectiveContext()
+	ctx, cancel := context.WithTimeout(parentCtx, callTimeout)
 	defer cancel()
 
 	result, err := w.manager.CallTool(ctx, w.serverName, w.toolName, anyArgs)
 	if err != nil {
-		// タイムアウトエラーの場合
-		if ctx.Err() == context.DeadlineExceeded {
+		switch {
+		case errors.Is(parentCtx.Err(), context.Canceled):
+			return "Error: Tool execution canceled by request context",
+				nil,
+				fmt.Errorf("tool execution canceled by request context: %w", parentCtx.Err())
+		case errors.Is(parentCtx.Err(), context.DeadlineExceeded):
+			return "Error: Tool execution stopped by request deadline",
+				nil,
+				fmt.Errorf("tool execution stopped by request deadline: %w", parentCtx.Err())
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
 			return fmt.Sprintf("Error: Tool execution timed out after %s", formatTimeoutDuration(callTimeout)),
 				nil,
-				fmt.Errorf("tool execution timed out")
+				fmt.Errorf("tool execution timed out: %w", ctx.Err())
+		case errors.Is(ctx.Err(), context.Canceled):
+			return "Error: Tool execution canceled",
+				nil,
+				fmt.Errorf("tool execution canceled: %w", ctx.Err())
 		}
 		return fmt.Sprintf("Error: %v", err), nil, err
 	}
@@ -234,6 +237,11 @@ func (w *Wrapper) convertArgsWithSchema(args map[string]string) map[string]any {
 					case "boolean":
 						if boolVal, err := strconv.ParseBool(v); err == nil {
 							anyArgs[k] = boolVal
+							converted = true
+						}
+					case "array", "object":
+						if structured, err := parseStructuredArg(propType, k, v); err == nil {
+							anyArgs[k] = structured
 							converted = true
 						}
 					}
@@ -306,6 +314,10 @@ func (w *Wrapper) validateArgs(out io.Writer, args map[string]string) error {
 				}
 			}
 		}
+
+		if err := validateStructuredArgs(properties, args); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -335,6 +347,47 @@ func validateTopLevelRequiredArgs(out io.Writer, toolName string, schema map[str
 	}
 
 	return nil
+}
+
+func validateStructuredArgs(properties map[string]any, args map[string]string) error {
+	for argName, rawValue := range args {
+		propMap, ok := properties[argName].(map[string]any)
+		if !ok || propMap == nil {
+			continue
+		}
+		propType, ok := propMap["type"].(string)
+		if !ok || (propType != "array" && propType != "object") {
+			continue
+		}
+		if _, err := parseStructuredArg(propType, argName, rawValue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parseStructuredArg(propType, argName, rawValue string) (any, error) {
+	var decoded any
+	if err := json.Unmarshal([]byte(rawValue), &decoded); err != nil {
+		return nil, fmt.Errorf("argument '%s' must be valid JSON %s: %w", argName, propType, err)
+	}
+
+	switch propType {
+	case "array":
+		arrayValue, ok := decoded.([]any)
+		if !ok {
+			return nil, fmt.Errorf("argument '%s' must be a JSON array", argName)
+		}
+		return arrayValue, nil
+	case "object":
+		objectValue, ok := decoded.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("argument '%s' must be a JSON object", argName)
+		}
+		return objectValue, nil
+	default:
+		return rawValue, nil
+	}
 }
 
 // ValidateArgs は MCP tool 実行前の簡易 argument validation を行う。

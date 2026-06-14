@@ -214,14 +214,15 @@ MCPサーバーが提供するツールの中から、使用するツールを�
 | `tools.exclude` | ブラックリスト。指定したツールを除外（`include` 未設定時のみ有効） |
 
 > **Note**: `include` と `exclude` を両方設定した場合は `include` が優先されます。
-> ツール名はMCPサーバーが公開する名前をそのまま使用します（`mcp_` プレフィックスなし）。
+> `include` / `exclude` のツール名はMCPサーバーが公開する raw name をそのまま使用します（`mcp_` プレフィックスなし）。
+> XELYON がプロンプトと provider に公開する実行名は `mcp_<server>_<tool>` 形式です。同じ実行名に正規化される重複ツールは先に見つかったものを登録し、後続は skipped として扱います。
 
 #### 利用可能なツール名の確認
 
 MCPサーバーが提供するツール一覧はXELYON起動時のログで確認できます:
 
 ```
-🔌 MCP server 'github' connected (5 tools, 25 filtered out)
+🔌 MCP server 'github' connected (5 tools, 25 skipped)
 ```
 
 全ツールを確認するには、フィルタなしで一度起動してください。
@@ -456,13 +457,19 @@ AIが応答でMCPツールを含めない場合は、SystemPromptに正しくツ
 
 ### タイムアウトエラー
 
-MCPサーバーの応答が遅い場合は、タイムアウトを延長できます（デフォルト30秒）。
+MCPのタイムアウトは現在どちらもデフォルト30秒です。
 
-**現在の実装ではハードコード**されており、設定変更はコードの修正が必要です:
+- ツール実行 timeout: `internal/mcptool` が `tools.ExecutionContext.EffectiveContext()` を親にして管理します。ユーザー操作の cancel や request deadline が先に来た場合は、30秒の tool timeout より優先されます。
+- 起動時の connect / `ListTools` timeout: `internal/mcp` がサーバーごとの接続と tool listing を管理します。caller context の deadline が30秒より短い場合はそちらが優先されます。
+
+設定項目はまだありません。変更する場合はコード修正が必要です:
 
 ```go
+// internal/mcptool/wrapper.go
+const defaultMCPToolCallTimeout = 30 * time.Second
+
 // internal/mcp/client.go
-ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+const defaultMCPServerOperationTimeout = 30 * time.Second
 ```
 
 ## セキュリティ

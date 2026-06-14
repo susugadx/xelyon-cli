@@ -9,6 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/mcptool"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
@@ -46,9 +47,9 @@ func mcpToolDefinitions(mcpTools []mcp.MCPTool) []mcptool.Definition {
 	return defs
 }
 
-// sanitizeToolName はツール名から特殊文字を除去する（prompt.SanitizeToolName のエイリアス）
+// sanitizeToolName はツール名から特殊文字を除去する。
 func sanitizeToolName(name string) string {
-	return prompt.SanitizeToolName(name)
+	return mcpnames.SanitizePart(name)
 }
 
 // configureMCPTools は MCP ツール定義を provider に 1 回だけ登録する（debugは OpenAI / Gemini のみ）
@@ -81,9 +82,14 @@ func configureMCPTools(provider api.Provider, mcpTools []mcp.MCPTool, errOut io.
 	}
 
 	toolDefs := make([]api.ToolDefinition, 0, len(mcpTools))
+	seen := make(map[string]bool, len(mcpTools))
 	for _, t := range mcpTools {
 		// ツール名: mcp_{serverName}_{toolName}
-		name := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(t.ServerName), sanitizeToolName(t.Name))
+		name := mcpnames.ExportedToolName(t.ServerName, t.Name)
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
 
 		if debugEnabled && errOut != nil {
 			_, _ = fmt.Fprintf(errOut, "[DEBUG %s] MCP tool registered: %s\n", debugLabel, name)

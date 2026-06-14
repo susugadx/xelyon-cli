@@ -47,7 +47,8 @@ type Manager struct {
 }
 
 const (
-	toolCallMaxAttempts = 2
+	defaultMCPServerOperationTimeout = 30 * time.Second
+	toolCallMaxAttempts              = 2
 )
 
 type toolRegistrationSummary struct {

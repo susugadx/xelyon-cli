@@ -3,8 +3,10 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 )
 
 // shouldIncludeTool はツールがフィルタを通過するか判定
@@ -41,28 +43,27 @@ func (m *Manager) refreshServerTools(
 	serverName string,
 	session *mcp.ClientSession,
 	filter *ToolsFilter,
-	replace bool,
-) (toolRegistrationSummary, error) {
-	toolsResult, err := session.ListTools(ctx, nil)
+) ([]MCPTool, toolRegistrationSummary, error) {
+	listCtx, cancel := mcpServerOperationContext(ctx)
+	defer cancel()
+
+	toolsResult, err := session.ListTools(listCtx, nil)
 	if err != nil {
-		return toolRegistrationSummary{}, err
+		return nil, toolRegistrationSummary{}, err
 	}
 
-	summary := m.storeServerTools(serverName, session, toolsResult.Tools, filter, replace)
-	return summary, nil
+	serverTools, summary := m.buildServerTools(serverName, session, toolsResult.Tools, filter)
+	return serverTools, summary, nil
 }
 
-func (m *Manager) storeServerTools(
+func (m *Manager) buildServerTools(
 	serverName string,
 	session *mcp.ClientSession,
 	toolDefs []*mcp.Tool,
 	filter *ToolsFilter,
-	replace bool,
-) toolRegistrationSummary {
-	if replace {
-		m.removeServerTools(serverName)
-	}
-
+) ([]MCPTool, toolRegistrationSummary) {
+	seenExportedNames := m.existingExportedToolNames(serverName)
+	serverTools := make([]MCPTool, 0, len(toolDefs))
 	summary := toolRegistrationSummary{}
 	for _, tool := range toolDefs {
 		if tool == nil {
@@ -73,8 +74,16 @@ func (m *Manager) storeServerTools(
 			continue
 		}
 
+		exportedName := mcpnames.ExportedToolName(serverName, tool.Name)
+		if seenExportedNames[exportedName] {
+			fmt.Fprintf(m.out(), "⚠️  MCP tool '%s' from server '%s' skipped: exported name %q already registered\n", tool.Name, serverName, exportedName)
+			summary.skipped++
+			continue
+		}
+		seenExportedNames[exportedName] = true
+
 		schemaBytes, _ := json.Marshal(tool.InputSchema)
-		m.tools = append(m.tools, MCPTool{
+		serverTools = append(serverTools, MCPTool{
 			ServerName:  serverName,
 			Name:        tool.Name,
 			Description: tool.Description,
@@ -84,7 +93,23 @@ func (m *Manager) storeServerTools(
 		summary.registered++
 	}
 
-	return summary
+	return serverTools, summary
+}
+
+func (m *Manager) existingExportedToolNames(excludeServerName string) map[string]bool {
+	seen := make(map[string]bool, len(m.tools))
+	for _, tool := range m.tools {
+		if tool.ServerName == excludeServerName {
+			continue
+		}
+		seen[mcpnames.ExportedToolName(tool.ServerName, tool.Name)] = true
+	}
+	return seen
+}
+
+func (m *Manager) replaceServerTools(serverName string, serverTools []MCPTool) {
+	m.removeServerTools(serverName)
+	m.tools = append(m.tools, serverTools...)
 }
 
 func (m *Manager) removeServerTools(serverName string) {

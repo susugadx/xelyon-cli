@@ -26,7 +26,7 @@ func (m *Manager) printServerConnectionStatus(serverName string, summary toolReg
 	}
 
 	if summary.skipped > 0 {
-		fmt.Fprintf(m.out(), "🔌 MCP server '%s' %s (%d tools, %d filtered out)\n", serverName, status, summary.registered, summary.skipped)
+		fmt.Fprintf(m.out(), "🔌 MCP server '%s' %s (%d tools, %d skipped)\n", serverName, status, summary.registered, summary.skipped)
 		return
 	}
 	fmt.Fprintf(m.out(), "🔌 MCP server '%s' %s (%d tools)\n", serverName, status, summary.registered)

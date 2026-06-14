@@ -1,8 +1,9 @@
 package prompt
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 )
 
 // MCPTool represents an MCP tool for prompt generation.
@@ -15,12 +16,7 @@ type MCPTool struct {
 
 // SanitizeToolName removes special characters from tool names.
 func SanitizeToolName(name string) string {
-	return strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			return r
-		}
-		return '_'
-	}, name)
+	return mcpnames.SanitizePart(name)
 }
 
 // BuildMCPToolsPrompt generates the MCP tools section for the system prompt.
@@ -51,10 +47,16 @@ func BuildMCPToolsPrompt(tools []MCPTool) string {
 
 	// 各サーバーのツールを列挙
 	for serverName, serverToolList := range serverTools {
-		fmt.Fprintf(&sb, "### %s Server\n", serverName)
+		sb.WriteString("### ")
+		sb.WriteString(serverName)
+		sb.WriteString(" Server\n")
 		for _, t := range serverToolList {
-			toolName := fmt.Sprintf("mcp_%s_%s", SanitizeToolName(serverName), SanitizeToolName(t.Name))
-			fmt.Fprintf(&sb, "- **%s**: %s\n", toolName, t.Description)
+			toolName := mcpnames.ExportedToolName(serverName, t.Name)
+			sb.WriteString("- **")
+			sb.WriteString(toolName)
+			sb.WriteString("**: ")
+			sb.WriteString(t.Description)
+			sb.WriteByte('\n')
 		}
 		sb.WriteString("\n")
 	}
