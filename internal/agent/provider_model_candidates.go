@@ -100,7 +100,7 @@ func providerCredentialStatus(provider string) ProviderCredentialStatus {
 	switch config.CanonicalProviderName(provider) {
 	case "openai_subscription":
 		status := openaisubscription.ReadSubscriptionAuthStatus(openaisubscription.DefaultSubscriptionAuthConfig())
-		if status.State == openaisubscription.SubscriptionAuthStateLoggedIn {
+		if status.AllowsRequestAttempt() {
 			return ProviderCredentialLoggedIn
 		}
 		return ProviderCredentialLoginRequired

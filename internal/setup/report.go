@@ -148,7 +148,7 @@ func ProviderCredentialStatus(provider string) ProviderStatus {
 	switch provider {
 	case "openai_subscription":
 		authStatus := openaisubscription.ReadSubscriptionAuthStatus(openaisubscription.DefaultSubscriptionAuthConfig())
-		status.Ready = authStatus.LoggedIn
+		status.Ready = authStatus.AllowsRequestAttempt()
 		if authStatus.LoggedIn {
 			status.Detail = "logged in"
 		} else if strings.TrimSpace(authStatus.Message) != "" {

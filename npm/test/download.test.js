@@ -128,6 +128,19 @@ test("remote downloads reject IPv6 link-local addresses from DNS array lookups",
   });
 });
 
+test("remote downloads reject private IPv4-mapped IPv6 addresses from DNS array lookups", async () => {
+  await withMockDNSLookup([
+    { address: "203.0.113.10", family: 4 },
+    { address: "::ffff:7f00:1", family: 6 },
+  ], async () => {
+    await withMockHTTPS({
+      "/checksums.txt": { statusCode: 200, body: "ignored", lookupOptions: { all: true } },
+    }, async () => {
+      await assert.rejects(() => fetchText("https://downloads.example.test/checksums.txt"), /Refusing private or local IP address/);
+    });
+  });
+});
+
 test("downloadFile accepts public addresses from DNS array lookups", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "xelyon-npm-public-dns-"));
   const dest = path.join(dir, "asset.bin");
@@ -143,11 +156,27 @@ test("downloadFile accepts public addresses from DNS array lookups", async () =>
   assert.equal(fs.readFileSync(dest, "utf8"), "public dns payload");
 });
 
+test("downloadFile accepts public IPv4-mapped IPv6 addresses from DNS array lookups", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "xelyon-npm-public-mapped-dns-"));
+  const dest = path.join(dir, "asset.bin");
+
+  await withMockDNSLookup([{ address: "::ffff:cb00:710a", family: 6 }], async () => {
+    await withMockHTTPS({
+      "/asset": { statusCode: 200, body: "public mapped payload", lookupOptions: { all: true } },
+    }, async () => {
+      await downloadFile("https://downloads.example.test/asset", dest);
+    });
+  });
+
+  assert.equal(fs.readFileSync(dest, "utf8"), "public mapped payload");
+});
+
 test("remote downloads reject non-HTTPS URLs", async () => {
   await assert.rejects(() => fetchText("http://example.test/checksums.txt"), /Refusing non-HTTPS URL/);
   await assert.rejects(() => downloadFile("http://example.test/asset.tar.gz", path.join(os.tmpdir(), "xelyon-http-reject")), /Refusing non-HTTPS URL/);
   await assert.rejects(() => fetchText("https://localhost/checksums.txt"), /Refusing local hostname/);
   await assert.rejects(() => downloadFile("https://127.0.0.1/asset.tar.gz", path.join(os.tmpdir(), "xelyon-local-reject")), /Refusing private or local IP address/);
+  await assert.rejects(() => fetchText("https://[::ffff:127.0.0.1]/checksums.txt"), /Refusing private or local IP address/);
   await assert.rejects(() => fetchText("https://[fe81::1]/checksums.txt"), /Refusing private or local IP address/);
 });
 

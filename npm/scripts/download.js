@@ -368,6 +368,10 @@ function lookupAddressRecords(address, family, hostname) {
 function isBlockedIPAddress(address) {
   const normalized = normalizeHostname(address);
   const version = net.isIP(normalized);
+  const mappedIPv4 = ipv4FromMappedIPv6(normalized);
+  if (mappedIPv4) {
+    return isBlockedIPAddress(mappedIPv4);
+  }
   if (version === 4) {
     const parts = normalized.split(".").map((part) => Number(part));
     if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
@@ -394,12 +398,83 @@ function isBlockedIPAddress(address) {
     if (normalized.startsWith("fc") || normalized.startsWith("fd")) {
       return true;
     }
-    const ipv4Mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (ipv4Mapped) {
-      return isBlockedIPAddress(ipv4Mapped[1]);
-    }
   }
   return false;
+}
+
+function ipv4FromMappedIPv6(address) {
+  let normalized = normalizeHostname(address);
+  const dotted = normalized.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if (dotted) {
+    const octets = parseIPv4Octets(dotted[2]);
+    if (!octets) {
+      return "";
+    }
+    normalized = `${dotted[1]}${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`;
+  }
+
+  const hextets = expandIPv6Hextets(normalized);
+  if (
+    hextets.length !== 8 ||
+    hextets[0] !== 0 ||
+    hextets[1] !== 0 ||
+    hextets[2] !== 0 ||
+    hextets[3] !== 0 ||
+    hextets[4] !== 0 ||
+    hextets[5] !== 0xffff
+  ) {
+    return "";
+  }
+  return [
+    hextets[6] >> 8,
+    hextets[6] & 0xff,
+    hextets[7] >> 8,
+    hextets[7] & 0xff,
+  ].join(".");
+}
+
+function parseIPv4Octets(address) {
+  const parts = String(address).split(".");
+  if (parts.length !== 4) {
+    return null;
+  }
+  const octets = parts.map((part) => Number(part));
+  if (octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return null;
+  }
+  return octets;
+}
+
+function expandIPv6Hextets(address) {
+  if (!address.includes(":")) {
+    return [];
+  }
+  const halves = address.split("::");
+  if (halves.length > 2) {
+    return [];
+  }
+  const left = splitIPv6Hextets(halves[0]);
+  const right = halves.length === 2 ? splitIPv6Hextets(halves[1]) : [];
+  if (left === null || right === null) {
+    return [];
+  }
+  const missing = halves.length === 2 ? 8 - left.length - right.length : 0;
+  if ((halves.length === 2 && missing < 1) || (halves.length === 1 && left.length !== 8)) {
+    return [];
+  }
+  const pieces = halves.length === 2 ? [...left, ...Array(missing).fill(0), ...right] : left;
+  return pieces.length === 8 ? pieces : [];
+}
+
+function splitIPv6Hextets(value) {
+  if (value === "") {
+    return [];
+  }
+  const parts = value.split(":");
+  if (parts.some((part) => !/^[0-9a-f]{1,4}$/.test(part))) {
+    return null;
+  }
+  return parts.map((part) => Number.parseInt(part, 16));
 }
 
 function isIPv6LinkLocalAddress(address) {

@@ -337,6 +337,32 @@ func TestProviderCandidates_OpenAISubscriptionLoggedInStatus(t *testing.T) {
 	t.Fatalf("openai_subscription candidate missing: %#v", got)
 }
 
+func TestProviderCandidates_OpenAISubscriptionExpiredTokenIsNotLoginRequired(t *testing.T) {
+	t.Setenv("XELYON_OPENAI_SUBSCRIPTION_AUTH_DIR", filepath.Join(t.TempDir(), "auth"))
+	if err := openaisubscription.SaveSubscriptionCredential(openaisubscription.DefaultSubscriptionAuthConfig(), openaisubscription.SubscriptionCredential{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+		AccountID:    "acct_1234abcd",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+	agent := &Agent{Runtime: NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())}
+	got := agent.ProviderCandidates()
+	for _, candidate := range got {
+		if candidate.Key == "openai_subscription" {
+			if candidate.CredentialStatus == ProviderCredentialLoginRequired {
+				t.Fatalf("openai_subscription status = %q, want request-attempt allowed", candidate.CredentialStatus)
+			}
+			if candidate.CredentialStatus != ProviderCredentialLoggedIn {
+				t.Fatalf("openai_subscription status = %q, want logged in display for refreshable expired token", candidate.CredentialStatus)
+			}
+			return
+		}
+	}
+	t.Fatalf("openai_subscription candidate missing: %#v", got)
+}
+
 func TestProviderCandidates_AppendsCurrentAliasOwner(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	agent := &Agent{

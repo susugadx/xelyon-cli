@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	openaisubscription "github.com/susugadx/xelyon-cli/internal/api/providers/openai_subscription"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 )
@@ -107,6 +109,50 @@ func TestBuildReport_ConfiguredProviderCredentialHidesSetupInstructions(t *testi
 	}
 	if strings.Contains(rendered, "export OPENAI_API_KEY=your-api-key") {
 		t.Fatalf("rendered report includes setup instruction for configured provider:\n%s", rendered)
+	}
+}
+
+func TestBuildReport_OpenAISubscriptionExpiredTokenIsReadyForRequestAttempt(t *testing.T) {
+	withReportHooks(t)
+	t.Setenv("XELYON_OPENAI_SUBSCRIPTION_AUTH_DIR", filepath.Join(t.TempDir(), "auth"))
+	if err := openaisubscription.SaveSubscriptionCredential(openaisubscription.DefaultSubscriptionAuthConfig(), openaisubscription.SubscriptionCredential{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+		AccountID:    "acct_123456abcd",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+
+	loadProjectConfig = func(cwd string) (*config.ProjectConfig, error) {
+		return nil, nil
+	}
+	resolveProjectRoot = func(cfg *config.Config, cwd string) (string, bool) {
+		return "", false
+	}
+	lookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+
+	report := BuildReport(Options{
+		Config:   config.DefaultConfig(),
+		CWD:      "/repo",
+		Provider: "openai_subscription",
+		Model:    "gpt-5.4-mini",
+	})
+
+	if !report.Provider.Ready {
+		t.Fatalf("provider status = %+v, want ready for request attempt", report.Provider)
+	}
+	providerItem := findReportItem(report.Global, "provider")
+	if providerItem.Status != "ok" {
+		t.Fatalf("provider item = %+v, want ok", providerItem)
+	}
+	if providerItem.Instruction != "" {
+		t.Fatalf("provider instruction = %q, want empty for refreshable expired token", providerItem.Instruction)
+	}
+	if !strings.Contains(providerItem.Detail, "token is expired") {
+		t.Fatalf("provider detail = %q, want expired-token detail", providerItem.Detail)
 	}
 }
 
