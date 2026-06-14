@@ -16,6 +16,11 @@ const (
 	HeadlessStatusError = agent.HeadlessStatusError
 )
 
+// NewHeadlessProviderSetupRequiredResult は provider setup 未完了の headless JSON error を作る。
+func NewHeadlessProviderSetupRequiredResult(provider, model, message string) *HeadlessResult {
+	return agent.NewErrorResult(provider, model, agent.HeadlessErrorTypeProviderSetupRequired, message, 0)
+}
+
 // RunLegacyInteractiveWithConfig は legacy classic REPL を実行する。
 func RunLegacyInteractiveWithConfig(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 	agent.RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)

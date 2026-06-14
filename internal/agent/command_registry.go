@@ -19,6 +19,7 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		"/provider":   func(args []string) bool { return handleProviderCommand(agent, args) },
 		"/use":        func(args []string) bool { return handleUseCommand(agent, args) },
 		"/providers":  func(_ []string) bool { return handleProvidersCommand(agent) },
+		"/setup":      func(_ []string) bool { return handleSetupCommandForSurface(agent, commandSurface) },
 		"/skills":     func(args []string) bool { return handleSkillsCommand(agent, args) },
 		"/exit":       func(_ []string) bool { handleExitCommand(agent); return true },
 		"/quit":       func(_ []string) bool { handleExitCommand(agent); return true },

@@ -18,6 +18,7 @@ const GeneratedHelpCommandsText = `Commands:
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider/model picker or switch directly
   /providers                - Show provider credential status
+  /setup                    - Show first-run setup checklist
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
@@ -55,6 +56,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider/model picker or switch directly
   /providers                - Show provider credential status
+  /setup                    - Show first-run setup checklist
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model

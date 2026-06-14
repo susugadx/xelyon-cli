@@ -53,6 +53,50 @@ func TestSpecialCommandDispatch_UsesCatalogAliasesOnly(t *testing.T) {
 	}
 }
 
+func TestSetupCommandProjectConfigInstructionMatchesSurface(t *testing.T) {
+	disableColors(t)
+
+	tests := []struct {
+		name        string
+		surface     commandcatalog.CommandSurface
+		wantText    string
+		rejectTexts []string
+	}{
+		{
+			name:        "classic setup uses manual xelyon.yaml guidance",
+			surface:     commandcatalog.CommandSurfaceClassic,
+			wantText:    "Create xelyon.yaml",
+			rejectTexts: []string{"/init", "/project"},
+		},
+		{
+			name:        "TUI setup uses project command guidance",
+			surface:     commandcatalog.CommandSurfaceTUI,
+			wantText:    "/project",
+			rejectTexts: []string{"/init"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent, out := newSurfaceDispatchTestAgent(t)
+			agent.ProviderName = "ollama"
+			if !handleSpecialCommandForSurface("/setup", agent, tt.surface) {
+				t.Fatalf("handleSpecialCommandForSurface(/setup, %s) = false, want true", tt.surface)
+			}
+
+			output := out.String()
+			if !strings.Contains(output, tt.wantText) {
+				t.Fatalf("/setup output missing %q:\n%s", tt.wantText, output)
+			}
+			for _, reject := range tt.rejectTexts {
+				if strings.Contains(output, reject) {
+					t.Fatalf("/setup output should not contain %q:\n%s", reject, output)
+				}
+			}
+		})
+	}
+}
+
 func TestResolveConfigCommandSurfacePolicy(t *testing.T) {
 	tests := []struct {
 		name    string
