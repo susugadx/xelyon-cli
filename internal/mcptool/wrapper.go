@@ -136,7 +136,8 @@ func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (s
 		return fmt.Sprintf("Validation Error: %v", err), nil, err
 	}
 
-	// MCP ツールは常に確認を要求（外部プロセス実行のため）
+	// MCP tool は動的登録され SafetyLow として扱われる。
+	// 通常 mode では確認し、full_auto や --auto-approve では実行ポリシーに従って自動承認される。
 	toolName := w.Name()
 	message := fmt.Sprintf("Execute MCP tool: %s (server: %s)", w.toolName, w.serverName)
 
@@ -286,7 +287,11 @@ func (w *Wrapper) validateArgs(out io.Writer, args map[string]string) error {
 		return nil
 	}
 
-	// 必須パラメータのチェック（簡易実装）
+	if err := validateTopLevelRequiredArgs(out, w.toolName, schema, args); err != nil {
+		return err
+	}
+
+	// 旧互換: properties.<name>.required=true も必須パラメータとして扱う。
 	if properties, ok := schema["properties"].(map[string]any); ok && properties != nil {
 		for propName, propInfo := range properties {
 			propMap, ok := propInfo.(map[string]any)
@@ -300,6 +305,32 @@ func (w *Wrapper) validateArgs(out io.Writer, args map[string]string) error {
 					return fmt.Errorf("required argument '%s' is missing", propName)
 				}
 			}
+		}
+	}
+
+	return nil
+}
+
+func validateTopLevelRequiredArgs(out io.Writer, toolName string, schema map[string]any, args map[string]string) error {
+	requiredRaw, ok := schema["required"]
+	if !ok {
+		return nil
+	}
+
+	requiredList, ok := requiredRaw.([]any)
+	if !ok {
+		fmt.Fprintf(out, "⚠️  Warning: Invalid required schema for tool %s\n", toolName)
+		return nil
+	}
+
+	for _, requiredArg := range requiredList {
+		argName, ok := requiredArg.(string)
+		if !ok || argName == "" {
+			fmt.Fprintf(out, "⚠️  Warning: Invalid required argument entry for tool %s\n", toolName)
+			continue
+		}
+		if _, hasArg := args[argName]; !hasArg {
+			return fmt.Errorf("required argument '%s' is missing", argName)
 		}
 	}
 

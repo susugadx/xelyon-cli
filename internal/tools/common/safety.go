@@ -68,7 +68,8 @@ func mapToolMetaSafety(level toolmeta.SafetyLevel) ToolSafety {
 // 定義されていないツールは SafetyMedium（中レベル）として扱う
 func GetToolSafety(toolName string) ToolSafety {
 	// MCP tools are registered dynamically with names like "mcp_<server>_<tool>".
-	// Treat them as SafetyLow by default so they are never auto-approved.
+	// Treat them as SafetyLow by default: balanced/trusted prompt, while full_auto
+	// and --auto-approve follow the same auto-approval path as other SafetyLow tools.
 	// NOTE: This only affects call sites that consult GetToolSafety (e.g. ConfirmWithAutoApproveDecision).
 	if strings.HasPrefix(toolName, "mcp_") {
 		return SafetyLow

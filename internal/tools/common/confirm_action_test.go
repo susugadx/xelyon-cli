@@ -177,3 +177,82 @@ func TestConfirmToolAction_DecisionMatrix(t *testing.T) {
 		}
 	})
 }
+
+func TestConfirmToolAction_MCPDynamicToolPolicy(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
+
+	t.Run("balanced prompts", func(t *testing.T) {
+		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionBalanced)})
+		var out strings.Builder
+		dec := ConfirmToolAction(
+			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			ConfirmOptions{Policy: &policy},
+			"mcp_github_get_issue",
+			"Run MCP tool?",
+			ToolConfirmContext{},
+		)
+
+		if dec.Action != ConfirmNo {
+			t.Fatalf("Action = %q, want %q", dec.Action, ConfirmNo)
+		}
+		if strings.Contains(out.String(), "Auto-approved") {
+			t.Fatalf("output = %q, want prompt path", out.String())
+		}
+	})
+
+	t.Run("trusted prompts", func(t *testing.T) {
+		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionTrusted)})
+		var out strings.Builder
+		dec := ConfirmToolAction(
+			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			ConfirmOptions{Policy: &policy},
+			"mcp_github_get_issue",
+			"Run MCP tool?",
+			ToolConfirmContext{},
+		)
+
+		if dec.Action != ConfirmNo {
+			t.Fatalf("Action = %q, want %q", dec.Action, ConfirmNo)
+		}
+		if strings.Contains(out.String(), "Auto-approved") {
+			t.Fatalf("output = %q, want prompt path", out.String())
+		}
+	})
+
+	t.Run("full auto approves", func(t *testing.T) {
+		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionFullAuto)})
+		var out strings.Builder
+		dec := ConfirmToolAction(
+			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			ConfirmOptions{Policy: &policy},
+			"mcp_github_get_issue",
+			"Run MCP tool?",
+			ToolConfirmContext{},
+		)
+
+		if dec.Action != ConfirmYes {
+			t.Fatalf("Action = %q, want %q", dec.Action, ConfirmYes)
+		}
+		if !strings.Contains(out.String(), "Full auto") {
+			t.Fatalf("output = %q, want full auto auto-approve message", out.String())
+		}
+	})
+
+	t.Run("auto approve flag approves", func(t *testing.T) {
+		var out strings.Builder
+		dec := ConfirmToolAction(
+			ui.NewPromptIO(strings.NewReader(""), &out, io.Discard, nil),
+			ConfirmOptions{AutoApprove: true},
+			"mcp_github_get_issue",
+			"Run MCP tool?",
+			ToolConfirmContext{},
+		)
+
+		if dec.Action != ConfirmYes {
+			t.Fatalf("Action = %q, want %q", dec.Action, ConfirmYes)
+		}
+		if !strings.Contains(out.String(), "Auto-approved") {
+			t.Fatalf("output = %q, want auto-approve message", out.String())
+		}
+	})
+}
