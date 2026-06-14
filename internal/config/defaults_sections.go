@@ -162,12 +162,12 @@ func defaultProjectMapConfig() ProjectMapConfig {
 func defaultAgentInstructionsConfig() AgentInstructionsConfig {
 	return AgentInstructionsConfig{
 		Project: AgentInstructionsProjectConfig{
-			Mode:              "fallback",
+			Mode:              AgentInstructionProjectModeAlways,
 			Files:             defaultAgentInstructionProjectFiles(),
 			IncludeGitignored: false,
 		},
 		Global: AgentInstructionsGlobalConfig{
-			Enabled: false,
+			Enabled: true,
 			Files:   defaultAgentInstructionGlobalFiles(),
 		},
 		IncludeLocalFiles: false,
@@ -178,11 +178,11 @@ func defaultAgentInstructionsConfig() AgentInstructionsConfig {
 }
 
 func defaultAgentInstructionProjectFiles() []string {
-	return []string{"AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md"}
+	return []string{"AGENTS.md"}
 }
 
 func defaultAgentInstructionGlobalFiles() []string {
-	return []string{"~/.xelyon/AGENTS.md", "~/.xelyon/CLAUDE.md"}
+	return []string{"~/.xelyon/AGENTS.md"}
 }
 
 func defaultGitStageConfig() GitStageConfig {

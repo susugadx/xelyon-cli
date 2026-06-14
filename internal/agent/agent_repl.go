@@ -343,7 +343,13 @@ func buildContextSizeBlock(agent *Agent) string {
 		}
 	}
 	if projectTokens > 0 {
-		lines = append(lines, fmt.Sprintf("Project instructions: ~%s", FormatTokens(projectTokens)))
+		line := fmt.Sprintf("Project instructions: ~%s", FormatTokens(projectTokens))
+		if labels := projectInstructionStatusLabels(agent.projectInstructionBundleIfLoaded()); labels != "" {
+			line += " (" + labels + ")"
+		}
+		lines = append(lines, line)
+	} else if labels := projectInstructionStatusLabels(agent.projectInstructionBundleIfLoaded()); labels != "" {
+		lines = append(lines, "Project instructions: ~0 ("+labels+")")
 	}
 
 	for i, line := range lines {
@@ -355,6 +361,20 @@ func buildContextSizeBlock(agent *Agent) string {
 	}
 
 	return buf.String()
+}
+
+func projectInstructionStatusLabels(bundle *config.ProjectInstructionBundle) string {
+	if bundle == nil {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if labels := joinInstructionLabels(bundle.ProjectGuidance, bundle.ProjectGuidanceStatus); labels != "" {
+		parts = append(parts, "project: "+labels)
+	}
+	if labels := joinInstructionLabels(bundle.GlobalGuidance, bundle.GlobalGuidanceStatus); labels != "" {
+		parts = append(parts, "global: "+labels)
+	}
+	return strings.Join(parts, "; ")
 }
 
 func estimateProjectMapTokens(systemPrompt string) int {

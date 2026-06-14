@@ -16,10 +16,10 @@ func validateAgentInstructionIssues(cfg *Config) []ValidationIssue {
 			Field:      "agent_instructions.project.mode",
 			Value:      cfg.AgentInstructions.Project.Mode,
 			Message:    fmt.Sprintf("無効な値です (有効: %s / %s / %s)", AgentInstructionProjectModeOff, AgentInstructionProjectModeFallback, AgentInstructionProjectModeAlways),
-			Suggestion: AgentInstructionProjectModeFallback,
+			Suggestion: AgentInstructionProjectModeAlways,
 			Severity:   ValidationSeverityWarning,
 			CanAutoFix: true,
-			FixedValue: AgentInstructionProjectModeFallback,
+			FixedValue: AgentInstructionProjectModeAlways,
 		})
 	}
 

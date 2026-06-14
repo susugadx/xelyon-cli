@@ -124,7 +124,7 @@ provider_models:
 }
 
 func TestAddComments(t *testing.T) {
-	input := "general:\n    ui_language: auto\nagent_instructions:\n    project:\n        mode: fallback\n"
+	input := "general:\n    ui_language: auto\nagent_instructions:\n    project:\n        mode: always\n"
 	output := AddComments(input)
 
 	for _, expected := range []string{
@@ -134,8 +134,8 @@ func TestAddComments(t *testing.T) {
 		"    ui_language: auto",
 		"# Agent Instructions 設定",
 		"    project:",
-		"        # project-local guidance の読み込みモード（off / fallback / always）",
-		"        mode: fallback",
+		"        # project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）",
+		"        mode: always",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("expected output to contain %q, got %s", expected, output)
@@ -171,7 +171,7 @@ func TestGenerateExampleFile(t *testing.T) {
 		"lsp:",
 		"agent_instructions:",
 		"project:",
-		"mode: fallback",
+		"mode: always",
 	} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("expected generated example to contain %q", expected)

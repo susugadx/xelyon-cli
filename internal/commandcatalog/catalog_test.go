@@ -262,7 +262,7 @@ func TestConfigProjectInitCommandBoundaries(t *testing.T) {
 		},
 		{
 			name:        "/init",
-			wantDesc:    "Create xelyon.yaml project template",
+			wantDesc:    "Create project AGENTS.md guidance file",
 			wantTUI:     true,
 			wantClassic: true,
 			wantOwner:   CommandOwnerAgent,

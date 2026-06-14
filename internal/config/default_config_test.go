@@ -132,17 +132,23 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.SubAgent.MaxConcurrent != 1 {
 		t.Errorf("SubAgent.MaxConcurrent = %d, want 1", cfg.SubAgent.MaxConcurrent)
 	}
-	if cfg.AgentInstructions.Project.Mode != "fallback" {
-		t.Errorf("AgentInstructions.Project.Mode = %q, want fallback", cfg.AgentInstructions.Project.Mode)
+	if cfg.AgentInstructions.Project.Mode != "always" {
+		t.Errorf("AgentInstructions.Project.Mode = %q, want always", cfg.AgentInstructions.Project.Mode)
 	}
-	if cfg.AgentInstructions.Global.Enabled {
-		t.Error("AgentInstructions.Global.Enabled should default to false")
+	if !cfg.AgentInstructions.Global.Enabled {
+		t.Error("AgentInstructions.Global.Enabled should default to true")
 	}
 	if len(cfg.AgentInstructions.Project.Files) == 0 {
 		t.Error("AgentInstructions.Project.Files should have defaults")
 	}
+	if got, want := cfg.AgentInstructions.Project.Files, []string{"AGENTS.md"}; len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("AgentInstructions.Project.Files = %#v, want %#v", got, want)
+	}
 	if len(cfg.AgentInstructions.Global.Files) == 0 {
 		t.Error("AgentInstructions.Global.Files should have defaults")
+	}
+	if got, want := cfg.AgentInstructions.Global.Files, []string{"~/.xelyon/AGENTS.md"}; len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("AgentInstructions.Global.Files = %#v, want %#v", got, want)
 	}
 	if cfg.AgentInstructions.MaxFileBytes != 20000 {
 		t.Errorf("AgentInstructions.MaxFileBytes = %d, want 20000", cfg.AgentInstructions.MaxFileBytes)

@@ -40,6 +40,28 @@ func TestLoadProjectInstructionBundle_GlobalEnabledLoadsAdvisory(t *testing.T) {
 	}
 }
 
+func TestLoadProjectInstructionBundle_EmptyGlobalGuidanceReportsStatusOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeFile(t, filepath.Join(home, ".xelyon", "AGENTS.md"), "")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Global.Enabled = true
+	cfg.AgentInstructions.Project.Mode = "off"
+
+	bundle := loadProjectInstructionBundleForDirOrFatal(t, cfg, t.TempDir())
+	if len(bundle.GlobalGuidance) != 0 {
+		t.Fatalf("GlobalGuidance len = %d, want 0", len(bundle.GlobalGuidance))
+	}
+	if len(bundle.GlobalGuidanceStatus) != 1 {
+		t.Fatalf("GlobalGuidanceStatus len = %d, want 1", len(bundle.GlobalGuidanceStatus))
+	}
+	status := bundle.GlobalGuidanceStatus[0]
+	if status.Label != "~/.xelyon/AGENTS.md" || status.Status != InstructionFileStatusEmpty {
+		t.Fatalf("GlobalGuidanceStatus[0] = %#v, want ~/.xelyon/AGENTS.md empty", status)
+	}
+}
+
 func TestLoadProjectInstructionBundle_LocalFilesSkippedByDefault(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "AGENTS.md"), "# guidance\n")
@@ -87,6 +109,7 @@ func TestLoadProjectInstructionBundle_MaxTotalBytesTruncatesAcrossFiles(t *testi
 	writeFile(t, filepath.Join(root, "CLAUDE.md"), strings.Repeat("b", 30))
 
 	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Files = []string{"AGENTS.md", "CLAUDE.md"}
 	cfg.AgentInstructions.Project.IncludeGitignored = true
 	cfg.AgentInstructions.MaxFileBytes = 40
 	cfg.AgentInstructions.MaxTotalBytes = 50
