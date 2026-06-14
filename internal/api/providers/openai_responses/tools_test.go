@@ -2,6 +2,8 @@ package openairesponses
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -44,5 +46,35 @@ func TestBuildToolDefinitionsWithContextPreservesMCPToolDefinition(t *testing.T)
 	}
 	if _, ok := properties["query"]; !ok {
 		t.Fatalf("Tool.Parameters[properties] = %#v, want query property", properties)
+	}
+}
+
+func TestBuildToolDefinitionsWithContextSerializesMCPEmptySchema(t *testing.T) {
+	tools := BuildToolDefinitionsWithContext(
+		api.WithToolDefinitions(context.Background(), nil),
+		[]api.ToolDefinition{api.ConvertMCPToolToToolDefinition("mcp_server_ping", "Ping server", []byte(`null`))},
+	)
+
+	if len(tools) != 1 {
+		t.Fatalf("len(tools) = %d, want 1: %#v", len(tools), tools)
+	}
+	params := tools[0].Parameters
+	if params["type"] != "object" {
+		t.Fatalf("Parameters = %#v, want object schema", params)
+	}
+	props, ok := params["properties"].(map[string]interface{})
+	if !ok || len(props) != 0 {
+		t.Fatalf("Parameters[properties] = %#v, want empty map", params["properties"])
+	}
+	if params["additionalProperties"] != false {
+		t.Fatalf("Parameters[additionalProperties] = %#v, want false", params["additionalProperties"])
+	}
+
+	raw, err := json.Marshal(tools)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if !strings.Contains(string(raw), `"parameters"`) {
+		t.Fatalf("serialized tools = %s, want parameters field", raw)
 	}
 }

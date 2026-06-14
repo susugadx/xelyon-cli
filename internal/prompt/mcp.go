@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
@@ -35,9 +36,18 @@ func BuildMCPToolsPrompt(tools []MCPTool) string {
 	for _, t := range tools {
 		serverTools[t.ServerName] = append(serverTools[t.ServerName], t)
 	}
+	serverNames := make([]string, 0, len(serverTools))
+	for serverName := range serverTools {
+		serverNames = append(serverNames, serverName)
+	}
+	sort.Strings(serverNames)
 
 	// 各サーバーのツールを列挙
-	for serverName, serverToolList := range serverTools {
+	for _, serverName := range serverNames {
+		serverToolList := serverTools[serverName]
+		sort.SliceStable(serverToolList, func(i, j int) bool {
+			return serverToolList[i].Name < serverToolList[j].Name
+		})
 		sb.WriteString("### ")
 		sb.WriteString(serverName)
 		sb.WriteString(" Server\n")

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -97,24 +98,7 @@ func (w *Wrapper) Description() string {
 
 // Parameters はツールのパラメータ定義を返す
 func (w *Wrapper) Parameters() map[string]interface{} {
-	// inputSchemaをそのままmap[string]interface{}に変換
-	if len(w.inputSchema) == 0 || string(w.inputSchema) == "null" {
-		return map[string]interface{}{
-			"type":                 "object",
-			"properties":           map[string]interface{}{},
-			"additionalProperties": false,
-		}
-	}
-
-	var params map[string]interface{}
-	if err := json.Unmarshal(w.inputSchema, &params); err != nil {
-		return map[string]interface{}{
-			"type":                 "object",
-			"properties":           map[string]interface{}{},
-			"additionalProperties": false,
-		}
-	}
-	return params
+	return api.MCPInputSchemaParameters(w.inputSchema)
 }
 
 // Run はツールを実行

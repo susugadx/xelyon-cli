@@ -11,7 +11,7 @@ Model Context Protocol（MCP）は、AIアシスタントが外部のツール�
 - **プラグイン方式**: 外部プロセス（MCPサーバー）としてツールを実行
 - **stdioトランスポート**: 標準入出力でJSON-RPC 2.0通信
 - **動的登録**: 起動時にMCPサーバーからツール一覧を自動取得
-- **セキュリティ**: API キーなどの機密情報は自動的に除外
+- **セキュリティ**: 実行コマンドを allowlist で制限し、system env は安全なキーだけ継承
 
 ## 設定
 
@@ -36,6 +36,8 @@ mcp:
 ### 1. 設定ファイルの作成
 
 `~/.xelyon/mcp.json` にMCPサーバーを定義します。
+初回起動時にファイルがない場合は、無効化された filesystem のサンプル設定が作成されます。
+使う場合は `disabled: true` を削除または `false` に変更し、対象ディレクトリを実パスに置き換えてください。
 
 ```json
 {
@@ -92,7 +94,7 @@ xelyon
 
 ### `command` (必須)
 
-実行するコマンド。npx, node, python, sh など。
+実行するコマンド。安全のため、現在は `npx`, `node`, `python`, `python3`, `uvx`, `docker` のみ許可されます。
 
 ```json
 {
@@ -124,7 +126,9 @@ xelyon
 
 ### `env` (オプション)
 
-MCPサーバーに渡す環境変数。
+MCPサーバーに明示的に渡す環境変数。
+`env` に書いた値は `${VAR}` 形式の展開後に渡されます。
+system env から自動継承されるのは `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `NODE_OPTIONS`, `PYTHONPATH` のみです。
 
 ```json
 {
@@ -141,12 +145,8 @@ MCPサーバーに渡す環境変数。
 }
 ```
 
-**セキュリティ**: 以下のパターンに一致する環境変数は**自動的に除外**されます。
-- `*_KEY`
-- `*_TOKEN`
-- `*_SECRET`
-- `*_PASSWORD`
-- `*_API_KEY`
+**注意**: `env` に明示した値はMCPサーバーへ渡されます。
+API token などの secret は必要なサーバーにだけ渡し、不要な値を `env` に書かないでください。
 
 ### サーバーの無効化
 
@@ -474,14 +474,9 @@ const defaultMCPServerOperationTimeout = 30 * time.Second
 
 ### 環境変数のサニタイズ
 
-XELYONは以下の機密情報を自動的にMCPサーバーに渡しません:
-
-- `DEEPSEEK_API_KEY`
-- `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GROQ_API_KEY`
-- その他 `*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_API_KEY` パターン
+XELYONはsystem envから `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `NODE_OPTIONS`, `PYTHONPATH` だけを継承します。
+`OPENAI_API_KEY` や `GITHUB_TOKEN` のような値はsystem envからは自動継承されません。
+ただし、`mcp.json` の `env` に明示した値は `${VAR}` 展開後にMCPサーバーへ渡されます。
 
 ### 推奨事項
 

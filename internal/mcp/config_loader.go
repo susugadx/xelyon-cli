@@ -81,11 +81,12 @@ func readMCPConfig(configPath string) (*Config, error) {
 func newDefaultMCPConfig() Config {
 	return Config{
 		MCPServers: map[string]ServerConfig{
-			// 例: filesystemサーバー
+			// 例: filesystemサーバー。初回起動時に placeholder へ接続しないよう無効化する。
 			"filesystem": {
-				Command: "npx",
-				Args:    []string{"@modelcontextprotocol/server-filesystem", "/path/to/directory"},
-				Env:     map[string]string{"NODE_OPTIONS": "--no-warnings"},
+				Command:  "npx",
+				Args:     []string{"@modelcontextprotocol/server-filesystem", "/path/to/directory"},
+				Env:      map[string]string{"NODE_OPTIONS": "--no-warnings"},
+				Disabled: true,
 			},
 		},
 	}

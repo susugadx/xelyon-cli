@@ -1299,6 +1299,30 @@ func TestConvertOpenAIToolToClaude(t *testing.T) {
 	}
 }
 
+func TestConvertOpenAIToolToClaude_PreservesMCPEmptySchema(t *testing.T) {
+	claudeTool := ConvertOpenAIToolToClaude(
+		api.ConvertMCPToolToToolDefinition("mcp_server_ping", "Ping server", []byte(`{invalid json`)),
+	)
+
+	if claudeTool.InputSchema["type"] != "object" {
+		t.Fatalf("InputSchema = %#v, want object schema", claudeTool.InputSchema)
+	}
+	props, ok := claudeTool.InputSchema["properties"].(map[string]interface{})
+	if !ok || len(props) != 0 {
+		t.Fatalf("InputSchema[properties] = %#v, want empty map", claudeTool.InputSchema["properties"])
+	}
+	if claudeTool.InputSchema["additionalProperties"] != false {
+		t.Fatalf("InputSchema[additionalProperties] = %#v, want false", claudeTool.InputSchema["additionalProperties"])
+	}
+	raw, err := json.Marshal(claudeTool)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if !strings.Contains(string(raw), `"input_schema"`) {
+		t.Fatalf("serialized tool = %s, want input_schema field", raw)
+	}
+}
+
 func TestConvertToolUseToToolJSON(t *testing.T) {
 	input := map[string]interface{}{
 		"path": "/test.txt",

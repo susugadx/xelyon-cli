@@ -1,6 +1,9 @@
 package api
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+)
 
 // OpenAITool は OpenAI Chat Completions API 用のツール形式
 // リクエストの tools[] フィールドに使用
@@ -15,6 +18,15 @@ type ToolDefinition struct {
 	Description string                 `json:"description,omitempty"`
 	Parameters  map[string]interface{} `json:"parameters,omitempty"`
 	Strict      bool                   `json:"strict,omitempty"`
+}
+
+// EmptyObjectToolParameters は引数なしツール用の JSON Schema object を返す。
+func EmptyObjectToolParameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"properties":           map[string]interface{}{},
+		"additionalProperties": false,
+	}
 }
 
 // OpenAIToolCall はレスポンスの tool_calls フィールド
@@ -37,30 +49,22 @@ type OpenAIToolCallFunction struct {
 // ConvertMCPToolToToolDefinition はMCPツールをOpenAI Function形式に変換
 // MCPのInputSchemaはJSON Schema形式でOpenAIと互換性がある
 func ConvertMCPToolToToolDefinition(name, description string, inputSchema []byte) ToolDefinition {
-	// スキーマが空またはnullの場合
-	if len(inputSchema) == 0 || string(inputSchema) == "null" {
-		return ToolDefinition{
-			Name:        name,
-			Description: description,
-			Parameters:  nil,
-		}
-	}
-
-	// MCP InputSchema をそのまま map[string]interface{} として使用
-	// OpenAI は JSON Schema 形式をそのまま受け入れる
-	var params map[string]interface{}
-	if err := json.Unmarshal(inputSchema, &params); err != nil {
-		// パースエラー時は空のパラメータで続行
-		return ToolDefinition{
-			Name:        name,
-			Description: description,
-			Parameters:  nil,
-		}
-	}
-
 	return ToolDefinition{
 		Name:        name,
 		Description: description,
-		Parameters:  params,
+		Parameters:  MCPInputSchemaParameters(inputSchema),
 	}
+}
+
+// MCPInputSchemaParameters は MCP inputSchema を provider 共通の parameters map に変換する。
+func MCPInputSchemaParameters(inputSchema []byte) map[string]interface{} {
+	if len(bytes.TrimSpace(inputSchema)) == 0 {
+		return EmptyObjectToolParameters()
+	}
+
+	var params map[string]interface{}
+	if err := json.Unmarshal(inputSchema, &params); err != nil || len(params) == 0 {
+		return EmptyObjectToolParameters()
+	}
+	return params
 }

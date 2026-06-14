@@ -96,6 +96,32 @@ func TestBuildMCPToolsPrompt_Empty(t *testing.T) {
 	}
 }
 
+func TestBuildMCPToolsPrompt_SortsServersAndTools(t *testing.T) {
+	tools := []MCPTool{
+		{ServerName: "zeta", Name: "beta", Description: "second server beta"},
+		{ServerName: "alpha", Name: "zulu", Description: "first server zulu"},
+		{ServerName: "zeta", Name: "alpha", Description: "second server alpha"},
+		{ServerName: "alpha", Name: "alpha", Description: "first server alpha"},
+	}
+
+	result := BuildMCPToolsPrompt(tools)
+
+	assertBefore := func(first, second string) {
+		t.Helper()
+		firstIndex := strings.Index(result, first)
+		secondIndex := strings.Index(result, second)
+		if firstIndex < 0 || secondIndex < 0 {
+			t.Fatalf("result missing %q or %q:\n%s", first, second, result)
+		}
+		if firstIndex > secondIndex {
+			t.Fatalf("%q appears after %q:\n%s", first, second, result)
+		}
+	}
+	assertBefore("### alpha Server", "### zeta Server")
+	assertBefore("mcp_alpha_alpha", "mcp_alpha_zulu")
+	assertBefore("mcp_zeta_alpha", "mcp_zeta_beta")
+}
+
 func TestBuildMCPToolsPrompt_NoGitHub(t *testing.T) {
 	tools := []MCPTool{
 		{ServerName: "slack", Name: "send_message", Description: "Send a message"},

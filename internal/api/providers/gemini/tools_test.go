@@ -270,7 +270,7 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			toolName:     "mcp_server_simple",
 			description:  "Simple tool with no params",
 			inputSchema:  json.RawMessage(`{}`),
-			expectParams: false,
+			expectParams: true,
 			expectPath:   false,
 			expectReq:    nil,
 		},
@@ -279,7 +279,7 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			toolName:     "mcp_server_null",
 			description:  "Tool with null schema",
 			inputSchema:  json.RawMessage(`null`),
-			expectParams: false,
+			expectParams: true,
 			expectPath:   false,
 			expectReq:    nil,
 		},
@@ -332,11 +332,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 				if decl.Parameters.Type != "object" {
 					t.Errorf("Expected type=object, got %s", decl.Parameters.Type)
 				}
-			} else {
-				// 空のスキーマの場合、Parametersはnilまたは空
-				if decl.Parameters != nil && len(decl.Parameters.Properties) > 0 {
-					t.Errorf("Expected no parameters, got %+v", decl.Parameters)
-				}
 			}
 
 			if tc.expectReq != nil && decl.Parameters != nil {
@@ -355,8 +350,8 @@ func TestConvertMCPToolToGeminiDeclaration_InvalidJSON(t *testing.T) {
 	if decl.Name != "mcp_test" {
 		t.Errorf("Expected name=mcp_test, got %s", decl.Name)
 	}
-	if decl.Parameters != nil {
-		t.Errorf("Expected nil parameters for invalid JSON, got %+v", decl.Parameters)
+	if decl.Parameters == nil || decl.Parameters.Type != "object" {
+		t.Errorf("Expected object parameters for invalid JSON, got %+v", decl.Parameters)
 	}
 }
 
@@ -908,5 +903,40 @@ func TestGetCombinedToolDefinitions_JSONSerializable(t *testing.T) {
 	}
 	if !found {
 		t.Error("MCP tool not found after JSON round-trip")
+	}
+}
+
+func TestGetCombinedToolDefinitions_MCPEmptySchemaHasObjectParameters(t *testing.T) {
+	tools := GetCombinedToolDefinitionsWithContext(
+		api.WithToolDefinitions(context.Background(), nil),
+		[]api.ToolDefinition{api.ConvertMCPToolToToolDefinition("mcp_test_ping", "Ping", nil)},
+	)
+
+	if len(tools) != 1 {
+		t.Fatalf("len(tools) = %d, want 1", len(tools))
+	}
+	var found *api.GeminiFunctionDeclaration
+	for i := range tools[0].FunctionDeclarations {
+		if tools[0].FunctionDeclarations[i].Name == "mcp_test_ping" {
+			found = &tools[0].FunctionDeclarations[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("mcp_test_ping declaration not found: %+v", tools[0].FunctionDeclarations)
+	}
+	if found.Parameters == nil || found.Parameters.Type != "object" {
+		t.Fatalf("Parameters = %+v, want object schema", found.Parameters)
+	}
+	if len(found.Parameters.Properties) != 0 {
+		t.Fatalf("Parameters.Properties = %+v, want empty", found.Parameters.Properties)
+	}
+
+	raw, err := json.Marshal(tools)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if !strings.Contains(string(raw), `"parameters"`) {
+		t.Fatalf("serialized tools = %s, want parameters field", raw)
 	}
 }

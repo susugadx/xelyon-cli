@@ -144,7 +144,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 		inputSchema json.RawMessage
 		wantName    string
 		wantDesc    string
-		hasParams   bool
 		wantReq     []string // expected required fields
 	}{
 		{
@@ -154,7 +153,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			inputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"File path"}},"required":["path"]}`),
 			wantName:    "read_file",
 			wantDesc:    "Read a file",
-			hasParams:   true,
 			wantReq:     []string{"path"},
 		},
 		{
@@ -164,7 +162,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			inputSchema: json.RawMessage{},
 			wantName:    "list",
 			wantDesc:    "List items",
-			hasParams:   false,
 		},
 		{
 			name:        "tool with null schema",
@@ -173,7 +170,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			inputSchema: json.RawMessage("null"),
 			wantName:    "ping",
 			wantDesc:    "Ping server",
-			hasParams:   false,
 		},
 		{
 			name:        "tool with invalid JSON",
@@ -182,7 +178,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			inputSchema: json.RawMessage("{invalid}"),
 			wantName:    "broken",
 			wantDesc:    "Broken tool",
-			hasParams:   false,
 		},
 		{
 			name:        "tool with multiple properties and required",
@@ -191,7 +186,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			inputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"line":{"type":"number"}},"required":["path","content"]}`),
 			wantName:    "edit_file",
 			wantDesc:    "Edit a file",
-			hasParams:   true,
 			wantReq:     []string{"path", "content"},
 		},
 		{
@@ -201,7 +195,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			inputSchema: json.RawMessage(`{"type":"object","properties":{"paths":{"type":"array","items":{"type":"string"}}},"required":["paths"]}`),
 			wantName:    "multi_read",
 			wantDesc:    "Read multiple files",
-			hasParams:   true,
 			wantReq:     []string{"paths"},
 		},
 		{
@@ -211,7 +204,6 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			inputSchema: json.RawMessage(`{"type":"object"}`),
 			wantName:    "empty_schema",
 			wantDesc:    "Empty schema tool",
-			hasParams:   false, // properties なしなので geminiParams は nil
 		},
 	}
 
@@ -228,14 +220,11 @@ func TestConvertMCPToolToGeminiDeclaration(t *testing.T) {
 			if got.Description != tt.wantDesc {
 				t.Errorf("ConvertMCPToolToGeminiDeclaration() Description = %q, want %q", got.Description, tt.wantDesc)
 			}
-			if tt.hasParams && got.Parameters == nil {
+			if got.Parameters == nil {
 				t.Error("ConvertMCPToolToGeminiDeclaration() Parameters should not be nil")
 			}
-			if !tt.hasParams && got.Parameters != nil {
-				t.Errorf("ConvertMCPToolToGeminiDeclaration() Parameters should be nil, got %+v", got.Parameters)
-			}
 
-			if tt.hasParams && got.Parameters != nil {
+			if got.Parameters != nil {
 				// Type が "object" であることを確認
 				if got.Parameters.Type != "object" {
 					t.Errorf("ConvertMCPToolToGeminiDeclaration() Parameters.Type = %q, want %q", got.Parameters.Type, "object")

@@ -65,6 +65,50 @@ func TestBuildChatCompletionsRequest_BuildsStandardPayloadWithExtras(t *testing.
 	}
 }
 
+func TestBuildChatCompletionsRequest_SerializesMCPEmptySchema(t *testing.T) {
+	mcpDef := api.ConvertMCPToolToToolDefinition("mcp_server_ping", "Ping server", nil)
+	req := BuildChatCompletionsRequest(ChatCompletionsRequestOptions{
+		Model:    "provider/model",
+		Messages: []api.Message{{Role: "user", Content: "hello"}},
+		Stream:   true,
+		FunctionCalling: &FunctionCallingOptions{
+			Tools: []api.OpenAITool{{
+				Type:     "function",
+				Function: &mcpDef,
+			}},
+		},
+	})
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var body struct {
+		Tools []struct {
+			Function struct {
+				Parameters map[string]any `json:"parameters"`
+			} `json:"function"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if len(body.Tools) != 1 {
+		t.Fatalf("tools = %#v, want one tool", body.Tools)
+	}
+	params := body.Tools[0].Function.Parameters
+	if params["type"] != "object" {
+		t.Fatalf("parameters = %#v, want object schema", params)
+	}
+	props, ok := params["properties"].(map[string]any)
+	if !ok || len(props) != 0 {
+		t.Fatalf("parameters.properties = %#v, want empty map", params["properties"])
+	}
+	if params["additionalProperties"] != false {
+		t.Fatalf("parameters.additionalProperties = %#v, want false", params["additionalProperties"])
+	}
+}
+
 func TestBuildChatMessages_StandardMessagesPayloadUnchanged(t *testing.T) {
 	messages := BuildChatMessages("system", []api.Message{
 		{Role: "user", Content: "hello"},
