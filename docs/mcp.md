@@ -56,7 +56,9 @@ mcp:
       "command": "npx",
       "args": [
         "@modelcontextprotocol/server-puppeteer"
-      ]
+      ],
+      "startupTimeoutSeconds": 120,
+      "toolTimeoutSeconds": 600
     },
     "sequential-thinking": {
       "command": "npx",
@@ -140,6 +142,43 @@ system env から自動継承されるのは `PATH`, `HOME`, `USER`, `LANG`, `LC
         "DEBUG": "true",
         "PORT": "8080"
       }
+    }
+  }
+}
+```
+
+### `startupTimeoutSeconds` (オプション)
+
+MCPサーバーの起動、接続、`tools/list` に使う timeout 秒数。
+未指定、`0`、負値の場合はデフォルトの120秒を使います。
+最大値は3600秒で、それより大きい値は3600秒に丸められます。
+
+```json
+{
+  "mcpServers": {
+    "slow-start-server": {
+      "command": "npx",
+      "args": ["-y", "@example/slow-start-mcp"],
+      "startupTimeoutSeconds": 180
+    }
+  }
+}
+```
+
+### `toolTimeoutSeconds` (オプション)
+
+MCPツール実行に使う timeout 秒数。
+未指定、`0`、負値の場合はデフォルトの600秒を使います。
+最大値は3600秒で、それより大きい値は3600秒に丸められます。
+ユーザー操作の cancel や request deadline が先に来た場合は、そちらが優先されます。
+
+```json
+{
+  "mcpServers": {
+    "browser": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "toolTimeoutSeconds": 900
     }
   }
 }
@@ -455,20 +494,11 @@ AIが応答でMCPツールを含めない場合は、SystemPromptに正しくツ
 
 ### タイムアウトエラー
 
-MCPのタイムアウトは現在どちらもデフォルト30秒です。
+MCPのデフォルト timeout は、起動・接続・`tools/list` が120秒、ツール実行が600秒です。
 
-- ツール実行 timeout: `internal/mcptool` が `tools.ExecutionContext.EffectiveContext()` を親にして管理します。ユーザー操作の cancel や request deadline が先に来た場合は、30秒の tool timeout より優先されます。
-- 起動時の connect / `ListTools` timeout: `internal/mcp` がサーバーごとの接続と tool listing を管理します。caller context の deadline が30秒より短い場合はそちらが優先されます。
-
-設定項目はまだありません。変更する場合はコード修正が必要です:
-
-```go
-// internal/mcptool/wrapper.go
-const defaultMCPToolCallTimeout = 30 * time.Second
-
-// internal/mcp/client.go
-const defaultMCPServerOperationTimeout = 30 * time.Second
-```
+- ツール実行 timeout: `internal/mcptool` が `tools.ExecutionContext.EffectiveContext()` を親にして管理します。ユーザー操作の cancel や request deadline が先に来た場合は、`toolTimeoutSeconds` より優先されます。
+- 起動時の connect / `ListTools` timeout: `internal/mcp` がサーバーごとの接続と tool listing を管理します。caller context の deadline が `startupTimeoutSeconds` より短い場合はそちらが優先されます。
+- `startupTimeoutSeconds` / `toolTimeoutSeconds` はサーバーごとに設定できます。未指定時は上記デフォルト、最大値は3600秒です。
 
 ## セキュリティ
 

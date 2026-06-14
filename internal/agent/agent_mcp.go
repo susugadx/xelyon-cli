@@ -41,6 +41,7 @@ func mcpToolDefinitions(mcpTools []mcp.MCPTool) []mcptool.Definition {
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
+			CallTimeout: tool.CallTimeout,
 		})
 	}
 	return defs

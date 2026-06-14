@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
@@ -42,9 +43,9 @@ func (m *Manager) refreshServerTools(
 	ctx context.Context,
 	serverName string,
 	session *mcp.ClientSession,
-	filter *ToolsFilter,
+	serverConfig ServerConfig,
 ) ([]MCPTool, toolRegistrationSummary, error) {
-	listCtx, cancel := mcpServerOperationContext(ctx)
+	listCtx, cancel := mcpServerOperationContext(ctx, serverConfig.startupTimeoutDuration())
 	defer cancel()
 
 	toolsResult, err := session.ListTools(listCtx, nil)
@@ -52,7 +53,7 @@ func (m *Manager) refreshServerTools(
 		return nil, toolRegistrationSummary{}, err
 	}
 
-	serverTools, summary := m.buildServerTools(serverName, session, toolsResult.Tools, filter)
+	serverTools, summary := m.buildServerTools(serverName, session, toolsResult.Tools, serverConfig.Tools, serverConfig.toolTimeoutDuration())
 	return serverTools, summary, nil
 }
 
@@ -61,6 +62,7 @@ func (m *Manager) buildServerTools(
 	session *mcp.ClientSession,
 	toolDefs []*mcp.Tool,
 	filter *ToolsFilter,
+	callTimeout time.Duration,
 ) ([]MCPTool, toolRegistrationSummary) {
 	seenExportedNames := m.existingExportedToolNames(serverName)
 	serverTools := make([]MCPTool, 0, len(toolDefs))
@@ -89,6 +91,7 @@ func (m *Manager) buildServerTools(
 			Description: tool.Description,
 			InputSchema: schemaBytes,
 			Session:     session,
+			CallTimeout: callTimeout,
 		})
 		summary.registered++
 	}

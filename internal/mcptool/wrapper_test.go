@@ -28,6 +28,7 @@ func TestRegisterToRegistry(t *testing.T) {
 		Name:        "tool-one",
 		Description: "First tool",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		CallTimeout: 7 * time.Minute,
 	}})
 
 	tool := registry.GetTool("mcp_server_a_tool_one")
@@ -36,6 +37,25 @@ func TestRegisterToRegistry(t *testing.T) {
 	}
 	if tool.Description() != "First tool" {
 		t.Fatalf("Description() = %q", tool.Description())
+	}
+	wrapper, ok := tool.(*Wrapper)
+	if !ok {
+		t.Fatalf("registered tool type = %T, want *Wrapper", tool)
+	}
+	if wrapper.callTimeoutDuration() != 7*time.Minute {
+		t.Fatalf("callTimeoutDuration() = %v, want 7m", wrapper.callTimeoutDuration())
+	}
+}
+
+func TestWrapperCallTimeoutDurationUsesLongDefault(t *testing.T) {
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:     testCaller{},
+		ServerName: "server",
+		ToolName:   "tool",
+	})
+
+	if got := wrapper.callTimeoutDuration(); got != 600*time.Second {
+		t.Fatalf("callTimeoutDuration() = %v, want 600s", got)
 	}
 }
 

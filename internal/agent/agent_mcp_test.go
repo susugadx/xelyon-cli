@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
@@ -143,6 +144,23 @@ func TestMCPExportedNameConsistentAcrossPromptProviderAndRegistry(t *testing.T) 
 	mcptool.RegisterToRegistry(registry, mcpSurfaceTestCaller{}, mcpToolDefinitions(mcpTools))
 	if registry.GetTool(wantName) == nil {
 		t.Fatalf("registry missing exported MCP tool %s", wantName)
+	}
+}
+
+func TestMCPToolDefinitionsPreserveCallTimeoutForRegistry(t *testing.T) {
+	mcpTools := []mcp.MCPTool{{
+		ServerName:  "github",
+		Name:        "slow",
+		Description: "Slow tool",
+		CallTimeout: 7 * time.Minute,
+	}}
+
+	defs := mcpToolDefinitions(mcpTools)
+	if len(defs) != 1 {
+		t.Fatalf("definitions = %d, want 1", len(defs))
+	}
+	if defs[0].CallTimeout != 7*time.Minute {
+		t.Fatalf("CallTimeout = %v, want 7m", defs[0].CallTimeout)
 	}
 }
 

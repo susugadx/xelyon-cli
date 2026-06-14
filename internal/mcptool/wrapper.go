@@ -16,7 +16,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-const defaultMCPToolCallTimeout = 30 * time.Second
+const defaultMCPToolCallTimeout = 600 * time.Second
 
 // Definition は MCP server から取得した tool metadata を tools.Registry 用に表す。
 type Definition struct {
@@ -24,6 +24,7 @@ type Definition struct {
 	Name        string
 	Description string
 	InputSchema json.RawMessage
+	CallTimeout time.Duration
 }
 
 // ToolCaller は integration 層が必要とする最小契約。
@@ -42,6 +43,7 @@ func RegisterToRegistry(registry *tools.Registry, caller ToolCaller, definitions
 			ToolName:    tool.Name,
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
+			CallTimeout: tool.CallTimeout,
 		})
 
 		if registry.HasTool(wrapper.Name()) {

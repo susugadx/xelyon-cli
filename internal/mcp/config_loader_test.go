@@ -81,8 +81,10 @@ func TestLoadMCPConfig_ReadsExisting(t *testing.T) {
 	existing := Config{
 		MCPServers: map[string]ServerConfig{
 			"custom": {
-				Command: "npx",
-				Args:    []string{"@custom/server"},
+				Command:               "npx",
+				Args:                  []string{"@custom/server"},
+				StartupTimeoutSeconds: 45,
+				ToolTimeoutSeconds:    300,
 			},
 		},
 	}
@@ -105,8 +107,15 @@ func TestLoadMCPConfig_ReadsExisting(t *testing.T) {
 	if result.config == nil {
 		t.Fatal("config = nil, want non-nil")
 	}
-	if _, ok := result.config.MCPServers["custom"]; !ok {
+	server, ok := result.config.MCPServers["custom"]
+	if !ok {
 		t.Fatalf("custom MCP server missing: %+v", result.config.MCPServers)
+	}
+	if server.StartupTimeoutSeconds != 45 {
+		t.Fatalf("StartupTimeoutSeconds = %d, want 45", server.StartupTimeoutSeconds)
+	}
+	if server.ToolTimeoutSeconds != 300 {
+		t.Fatalf("ToolTimeoutSeconds = %d, want 300", server.ToolTimeoutSeconds)
 	}
 	if result.configPath != configPath {
 		t.Fatalf("configPath = %q, want %q", result.configPath, configPath)

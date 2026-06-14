@@ -78,7 +78,7 @@ func (m *Manager) Connect(ctx context.Context) error {
 			continue
 		}
 
-		serverTools, summary, err := m.refreshServerTools(ctx, name, session, serverConfig.Tools)
+		serverTools, summary, err := m.refreshServerTools(ctx, name, session, serverConfig)
 		if err != nil {
 			_ = session.Close()
 			fmt.Fprintf(m.out(), "⚠️  Failed to list tools from '%s': %v\n", name, err)
@@ -110,16 +110,19 @@ func (m *Manager) openServerSession(ctx context.Context, client *mcp.Client, ser
 	cmd.Env = sanitizeEnv(serverConfig.Env)
 
 	transport := &mcp.CommandTransport{Command: cmd}
-	connectCtx, cancel := mcpServerOperationContext(ctx)
+	connectCtx, cancel := mcpServerOperationContext(ctx, serverConfig.startupTimeoutDuration())
 	defer cancel()
 	return client.Connect(connectCtx, transport, nil)
 }
 
-func mcpServerOperationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+func mcpServerOperationContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return context.WithTimeout(ctx, defaultMCPServerOperationTimeout)
+	if timeout <= 0 {
+		timeout = defaultMCPServerOperationTimeout
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (m *Manager) swapServerSession(serverName string, session *mcp.ClientSession) *mcp.ClientSession {
@@ -173,7 +176,7 @@ func (m *Manager) Reconnect(ctx context.Context, serverName string) error {
 		return fmt.Errorf("reconnection failed: %w", err)
 	}
 
-	serverTools, summary, err := m.refreshServerTools(ctx, serverName, session, serverConfig.Tools)
+	serverTools, summary, err := m.refreshServerTools(ctx, serverName, session, serverConfig)
 	if err != nil {
 		_ = session.Close()
 		return fmt.Errorf("failed to list tools: %w", err)
