@@ -36,15 +36,6 @@ func BuildMCPToolsPrompt(tools []MCPTool) string {
 		serverTools[t.ServerName] = append(serverTools[t.ServerName], t)
 	}
 
-	// GitHub MCPツールがあるかチェック
-	hasGitHub := false
-	for serverName := range serverTools {
-		if strings.Contains(strings.ToLower(serverName), "github") {
-			hasGitHub = true
-			break
-		}
-	}
-
 	// 各サーバーのツールを列挙
 	for serverName, serverToolList := range serverTools {
 		sb.WriteString("### ")
@@ -61,33 +52,5 @@ func BuildMCPToolsPrompt(tools []MCPTool) string {
 		sb.WriteString("\n")
 	}
 
-	// GitHub専用ガイドを追加
-	if hasGitHub {
-		sb.WriteString(BuildGitHubMCPGuide())
-	}
-
 	return sb.String()
-}
-
-// BuildGitHubMCPGuide generates the GitHub MCP usage guide.
-func BuildGitHubMCPGuide() string {
-	return `### GitHub MCP Usage Guide
-
-**CONTEXT INFERENCE:** Infer owner/repo from git remote, project config, or directory name. NEVER ask "which repository?"
-
-**CRITICAL: Array arguments (labels, assignees) must be [] not string:**
-` + "```" + `json
-// ✅ CORRECT
-{"tool": "mcp_github_create_issue", "args": {"owner": "o", "repo": "r", "title": "Bug", "body": "...", "labels": ["bug"], "assignees": ["user"]}}
-// ❌ WRONG
-{"tool": "mcp_github_create_issue", "args": {"labels": "bug"}}
-` + "```" + `
-
-**RULES:**
-- NEVER use MCP tools to inspect or edit local repo files - use the visible local tools in this session instead
-- For repo-local investigation, prefer gather_context first. Lower-level local investigation tools are expert overrides only when they are actually exposed.
-- ALWAYS use MCP tools for GitHub operations - never say "use GitHub web UI"
-- Information-only requests (get, show, list): display result and STOP. Do NOT start implementing
-- If a tool fails, report the error and suggest alternatives
-`
 }

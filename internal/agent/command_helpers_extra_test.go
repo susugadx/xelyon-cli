@@ -150,7 +150,7 @@ func TestPrintHelpToWriterForSurface_TUICommands(t *testing.T) {
 	}
 }
 
-func TestBuildMCPToolsPromptAndGitHubHint(t *testing.T) {
+func TestBuildMCPToolsPromptWithoutGitHubSpecificHint(t *testing.T) {
 	manager := mcp.NewManager()
 	setManagerToolsForTest(t, manager, []mcp.MCPTool{
 		{ServerName: "github", Name: "list_issues", Description: "List GitHub issues"},
@@ -161,45 +161,26 @@ func TestBuildMCPToolsPromptAndGitHubHint(t *testing.T) {
 	for _, fragment := range []string{
 		"mcp_github_list_issues",
 		"List GitHub issues",
-		"GitHub MCP Usage Guide",
 	} {
 		if !strings.Contains(promptText, fragment) {
 			t.Fatalf("buildMCPToolsPrompt() missing %q:\n%s", fragment, promptText)
 		}
 	}
-
-	agent := &Agent{mcpManager: manager}
-	if !agent.HasGitHubMCP() {
-		t.Fatal("HasGitHubMCP() = false, want true")
-	}
-
-	hinted := agent.AddGitHubHint("Open PR status")
-	if !strings.Contains(hinted, "SYSTEM HINT: Use MCP GitHub tools for this request") {
-		t.Fatalf("AddGitHubHint() = %q, want GitHub system hint", hinted)
-	}
-
-	unrelated := agent.AddGitHubHint("Fix the formatter")
-	if unrelated != "Fix the formatter" {
-		t.Fatalf("AddGitHubHint() unrelated = %q, want unchanged input", unrelated)
+	for _, fragment := range []string{
+		"GitHub MCP Usage Guide",
+		"SYSTEM HINT",
+		"Array arguments",
+	} {
+		if strings.Contains(promptText, fragment) {
+			t.Fatalf("buildMCPToolsPrompt() should not include GitHub-specific hint %q:\n%s", fragment, promptText)
+		}
 	}
 }
 
-func TestBuildMCPToolsPrompt_EmptyAndHasGitHubMCP_False(t *testing.T) {
+func TestBuildMCPToolsPrompt_Empty(t *testing.T) {
 	manager := mcp.NewManager()
 	if got := buildMCPToolsPrompt(manager); got != "" {
 		t.Fatalf("buildMCPToolsPrompt() = %q, want empty string", got)
-	}
-
-	agent := &Agent{mcpManager: manager}
-	if agent.HasGitHubMCP() {
-		t.Fatal("HasGitHubMCP() = true, want false")
-	}
-
-	setManagerToolsForTest(t, manager, []mcp.MCPTool{
-		{ServerName: "slack", Name: "send_message", Description: "Send a Slack message"},
-	})
-	if agent.HasGitHubMCP() {
-		t.Fatal("HasGitHubMCP() = true, want false for non-github tools")
 	}
 }
 

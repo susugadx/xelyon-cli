@@ -75,9 +75,12 @@ func TestBuildMCPToolsPrompt(t *testing.T) {
 		t.Error("result should contain send_message description")
 	}
 
-	// GitHub MCPツールがあるのでガイドが含まれること
-	if !strings.Contains(result, "GitHub MCP Usage Guide") {
-		t.Error("result should contain GitHub MCP guide when github tools are present")
+	// GitHub MCPツールでも専用ガイドは追加しないこと
+	if strings.Contains(result, "GitHub MCP Usage Guide") {
+		t.Error("result should not contain GitHub-specific guide")
+	}
+	if strings.Contains(result, "Array arguments") {
+		t.Error("result should not contain GitHub-specific argument workaround")
 	}
 }
 
@@ -102,33 +105,5 @@ func TestBuildMCPToolsPrompt_NoGitHub(t *testing.T) {
 
 	if strings.Contains(result, "GitHub MCP Usage Guide") {
 		t.Error("result should not contain GitHub guide when no github tools are present")
-	}
-}
-
-func TestBuildGitHubMCPGuide(t *testing.T) {
-	guide := BuildGitHubMCPGuide()
-
-	if guide == "" {
-		t.Fatal("expected non-empty guide")
-	}
-
-	keywords := []string{
-		"GitHub MCP Usage Guide",
-		"CONTEXT INFERENCE",
-		"owner/repo",
-		"Array arguments",
-		"RULES",
-		"MCP tools",
-	}
-	for _, kw := range keywords {
-		if !strings.Contains(guide, kw) {
-			t.Errorf("guide should contain keyword %q", kw)
-		}
-	}
-	if strings.Contains(guide, "read_file or bash") {
-		t.Error("guide should not recommend hidden local tools like read_file or bash for repo-local inspection")
-	}
-	if !strings.Contains(guide, "gather_context") {
-		t.Error("guide should recommend gather_context-first local investigation guidance")
 	}
 }

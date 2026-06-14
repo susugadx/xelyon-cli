@@ -57,7 +57,6 @@ func (a *Agent) prepareChatRequest(req *chatRequest) {
 	a.resetSearchCodeTurnObservability()
 	a.beginTaskTracking()
 
-	req.input = a.AddGitHubHint(req.input)
 	a.refreshProjectPrompt(req.input)
 	a.clearResponseContextForActiveContextRequest()
 

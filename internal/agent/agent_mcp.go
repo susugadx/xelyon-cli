@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -45,11 +44,6 @@ func mcpToolDefinitions(mcpTools []mcp.MCPTool) []mcptool.Definition {
 		})
 	}
 	return defs
-}
-
-// sanitizeToolName はツール名から特殊文字を除去する。
-func sanitizeToolName(name string) string {
-	return mcpnames.SanitizePart(name)
 }
 
 // configureMCPTools は MCP ツール定義を provider に 1 回だけ登録する（debugは OpenAI / Gemini のみ）
@@ -101,46 +95,4 @@ func configureMCPTools(provider api.Provider, mcpTools []mcp.MCPTool, errOut io.
 
 	// SetMCPTools は 1 回だけ呼ぶ
 	mcpProvider.SetMCPTools(toolDefs)
-}
-
-// detectGitHubIntent はユーザー入力にGitHub関連キーワードがあるか検出する
-func detectGitHubIntent(input string) bool {
-	keywords := []string{
-		"issue", "イシュー", "issues",
-		"pull request", "pr", "プルリクエスト", "プルリク",
-		"actions", "アクション", "ci", "workflow", "ワークフロー",
-		"github", "ギットハブ", "gh",
-		"repository", "リポジトリ", "repo",
-	}
-	lower := strings.ToLower(input)
-	for _, kw := range keywords {
-		if strings.Contains(lower, strings.ToLower(kw)) {
-			return true
-		}
-	}
-	return false
-}
-
-// HasGitHubMCP はGitHub MCPサーバーが接続されているか確認する
-func (a *Agent) HasGitHubMCP() bool {
-	if a.mcpManager == nil {
-		return false
-	}
-	for _, t := range a.mcpManager.GetTools() {
-		if strings.Contains(strings.ToLower(t.ServerName), "github") {
-			return true
-		}
-	}
-	return false
-}
-
-// AddGitHubHint はGitHub関連リクエストにシステムヒントを追加する
-func (a *Agent) AddGitHubHint(input string) string {
-	if !a.HasGitHubMCP() {
-		return input
-	}
-	if detectGitHubIntent(input) {
-		return input + "\n\n[SYSTEM HINT: Use MCP GitHub tools for this request. Do NOT suggest using the web UI.]"
-	}
-	return input
 }
