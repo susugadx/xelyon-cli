@@ -184,6 +184,8 @@ xelyon --image screenshot.png --provider kimi "この画面を説明して"
 
 `AGENTS.md` は agent が読む repo guidance です。既存の `CLAUDE.md` / `.claude/CLAUDE.md` を併用したい場合は `/config` の Agent Instructions で選択できます。
 
+公開 repo に含まれる `AGENTS.md` は、その repo の maintainer や contributor 向けの作業方針を含む場合があります。fork や別環境で使う場合は、内容をそのまま必須ルールとして扱わず、自分の agent 環境や開発フローに合わせて調整してください。個人用の方針は `~/.xelyon/AGENTS.md` などの global guidance に置くこともできます。
+
 ### xelyon.yaml について
 
 xelyon.yaml は XELYON 用の repo 設定ファイルです。
