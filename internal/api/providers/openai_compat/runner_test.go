@@ -78,3 +78,38 @@ func TestRunChatCompletions_PrefixesRequestError(t *testing.T) {
 		t.Fatalf("RunChatCompletions() error = %v, want prefixed network error", err)
 	}
 }
+
+func TestSimpleProviderSetMCPToolsAndMCPTools(t *testing.T) {
+	provider := NewSimpleProvider("test-key", SimpleProviderSpec{
+		DisplayName: "Compat",
+		DefaultURL:  "https://example.test/v1/chat/completions",
+	})
+	tools := []api.ToolDefinition{{
+		Name:        "mcp_github_get_issue",
+		Description: "Get a GitHub issue",
+		Parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"id": map[string]interface{}{"type": "string"},
+			},
+		},
+	}}
+
+	provider.SetMCPTools(tools)
+	got := provider.MCPTools()
+	if len(got) != 1 {
+		t.Fatalf("len(MCPTools()) = %d, want 1", len(got))
+	}
+	if got[0].Name != "mcp_github_get_issue" || got[0].Description != "Get a GitHub issue" {
+		t.Fatalf("MCPTools()[0] = %#v, want stored MCP definition", got[0])
+	}
+	if got[0].Parameters["type"] != "object" {
+		t.Fatalf("MCPTools()[0].Parameters = %#v, want object schema", got[0].Parameters)
+	}
+
+	got[0].Name = "mutated"
+	again := provider.MCPTools()
+	if again[0].Name != "mcp_github_get_issue" {
+		t.Fatalf("MCPTools() returned mutable slice alias: %#v", again)
+	}
+}

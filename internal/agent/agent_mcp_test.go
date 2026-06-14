@@ -9,6 +9,9 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcptool"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 type mockMCPProvider struct {
@@ -39,6 +42,12 @@ func (p *mockMCPProvider) SetMCPEnabled(_ bool) {}
 func (p *mockMCPProvider) SetMCPTools(tools []api.ToolDefinition) {
 	p.setMCPToolsCalls++
 	p.lastTools = tools
+}
+
+type mcpSurfaceTestCaller struct{}
+
+func (mcpSurfaceTestCaller) CallTool(context.Context, string, string, map[string]any) (string, error) {
+	return "ok", nil
 }
 
 func TestConfigureMCPTools_SetMCPToolsCalledOnceAndConverted(t *testing.T) {
@@ -102,6 +111,38 @@ func TestConfigureMCPTools_SetMCPToolsCalledOnceAndConverted(t *testing.T) {
 				t.Fatalf("tool parameters['required'] should include 'id'")
 			}
 		})
+	}
+}
+
+func TestMCPExportedNameConsistentAcrossPromptProviderAndRegistry(t *testing.T) {
+	const wantName = "mcp_github_server_create_issue"
+	inputSchema := json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"}}}`)
+	mcpTools := []mcp.MCPTool{{
+		ServerName:  "github.server",
+		Name:        "create-issue",
+		Description: "Create issue",
+		InputSchema: inputSchema,
+	}}
+
+	promptText := prompt.BuildMCPToolsPrompt([]prompt.MCPTool{{
+		ServerName:  mcpTools[0].ServerName,
+		Name:        mcpTools[0].Name,
+		Description: mcpTools[0].Description,
+	}})
+	if !strings.Contains(promptText, "**"+wantName+"**: Create issue") {
+		t.Fatalf("prompt = %q, want exported MCP name %s", promptText, wantName)
+	}
+
+	provider := &mockMCPProvider{name: "openai"}
+	configureMCPTools(provider, mcpTools, nil)
+	if len(provider.lastTools) != 1 || provider.lastTools[0].Name != wantName {
+		t.Fatalf("provider tools = %#v, want exported MCP name %s", provider.lastTools, wantName)
+	}
+
+	registry := tools.NewRegistry()
+	mcptool.RegisterToRegistry(registry, mcpSurfaceTestCaller{}, mcpToolDefinitions(mcpTools))
+	if registry.GetTool(wantName) == nil {
+		t.Fatalf("registry missing exported MCP tool %s", wantName)
 	}
 }
 

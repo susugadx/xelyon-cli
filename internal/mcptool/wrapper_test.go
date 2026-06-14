@@ -180,6 +180,16 @@ func (p *recordingPrompter) Prompt(context.Context, ui.PromptRequest) (ui.Prompt
 	return ui.PromptResponse{Action: ui.PromptActionYes}, nil
 }
 
+type responsePrompter struct {
+	calls int
+	resp  ui.PromptResponse
+}
+
+func (p *responsePrompter) Prompt(context.Context, ui.PromptRequest) (ui.PromptResponse, error) {
+	p.calls++
+	return p.resp, nil
+}
+
 func TestWrapperRunValidationErrorBeforePromptAndCaller(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
 
@@ -264,6 +274,46 @@ func TestWrapperRunInvalidStructuredArgBeforePromptAndCaller(t *testing.T) {
 	}
 }
 
+func TestWrapperRunInvalidObjectArgBeforePromptAndCaller(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+
+	caller := &recordingCaller{}
+	prompter := &recordingPrompter{}
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:     caller,
+		ServerName: "github",
+		ToolName:   "upsert_issue",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{"payload":{"type":"object"}}
+		}`),
+	})
+	var stdout bytes.Buffer
+	runtime := ui.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
+	runtime.SetPrompter(prompter)
+
+	result, _, err := wrapper.Run(tools.ExecutionContext{
+		Context: context.Background(),
+		Stdin:   runtime.Input(),
+		Stdout:  runtime.Output(),
+		Stderr:  runtime.ErrorOutput(),
+		Runtime: runtime,
+		Config:  config.DefaultConfig(),
+	}, map[string]string{"payload": `[1,2]`})
+	if err == nil || !strings.Contains(err.Error(), "must be a JSON object") {
+		t.Fatalf("Run() error = %v, want structured object validation error", err)
+	}
+	if !strings.Contains(result, "Validation Error: argument 'payload' must be a JSON object") {
+		t.Fatalf("result = %q, want structured object validation message", result)
+	}
+	if prompter.calls != 0 {
+		t.Fatalf("prompt calls = %d, want 0", prompter.calls)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("caller calls = %d, want 0", caller.calls)
+	}
+}
+
 type argsRecordingCaller struct {
 	calls int
 	args  map[string]any
@@ -323,6 +373,109 @@ func TestWrapperRunPassesSchemaStructuredArgs(t *testing.T) {
 	}
 	if caller.args["title"] != "Fix MCP" {
 		t.Fatalf("title = %#v, want original string", caller.args["title"])
+	}
+}
+
+func TestWrapperConvertArgsKeepsScalarWhenSchemaParseFails(t *testing.T) {
+	wrapper := NewWrapper(WrapperOptions{
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"count":{"type":"integer"},
+				"enabled":{"type":"boolean"},
+				"ratio":{"type":"number"}
+			}
+		}`),
+	})
+
+	got := wrapper.ConvertArgsWithSchema(map[string]string{
+		"count":   "not-an-int",
+		"enabled": "not-a-bool",
+		"ratio":   "not-a-number",
+	})
+
+	for key, want := range map[string]string{
+		"count":   "not-an-int",
+		"enabled": "not-a-bool",
+		"ratio":   "not-a-number",
+	} {
+		if got[key] != want {
+			t.Fatalf("converted[%s] = %#v, want scalar fallback %q", key, got[key], want)
+		}
+	}
+}
+
+func TestWrapperDefaultsForDescriptionParametersAndEmptyResult(t *testing.T) {
+	wrapper := NewWrapper(WrapperOptions{
+		ServerName: "github",
+		ToolName:   "list_issues",
+	})
+
+	if got := wrapper.Description(); got != "MCP tool: list_issues from server github" {
+		t.Fatalf("Description() = %q, want default description", got)
+	}
+	params := wrapper.Parameters()
+	if params["type"] != "object" {
+		t.Fatalf("Parameters()[type] = %#v, want object", params["type"])
+	}
+	props, ok := params["properties"].(map[string]interface{})
+	if !ok || len(props) != 0 {
+		t.Fatalf("Parameters()[properties] = %#v, want empty map", params["properties"])
+	}
+	if params["additionalProperties"] != false {
+		t.Fatalf("Parameters()[additionalProperties] = %#v, want false", params["additionalProperties"])
+	}
+	if got := wrapper.FormatResult(""); got != "Tool executed successfully (no output)" {
+		t.Fatalf("FormatResult(\"\") = %q, want empty-result default", got)
+	}
+}
+
+func TestWrapperRunRejectAndCommentDoNotCallCaller(t *testing.T) {
+	tests := []struct {
+		name       string
+		resp       ui.PromptResponse
+		wantResult string
+	}{
+		{
+			name:       "reject",
+			resp:       ui.PromptResponse{Action: ui.PromptActionNo},
+			wantResult: "User rejected MCP tool execution",
+		},
+		{
+			name:       "comment",
+			resp:       ui.PromptResponse{Action: ui.PromptActionComment, Text: "use a narrower query"},
+			wantResult: "User provided feedback: use a narrower query",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+			caller := &recordingCaller{}
+			prompter := &responsePrompter{resp: tt.resp}
+			wrapper := NewWrapper(WrapperOptions{
+				Caller:     caller,
+				ServerName: "github",
+				ToolName:   "search_issues",
+			})
+
+			result, fileChange, err := wrapper.Run(newPromptedExecutionContext(context.Background(), prompter), map[string]string{"query": "bug"})
+			if err != nil {
+				t.Fatalf("Run() error = %v, want nil", err)
+			}
+			if fileChange != nil {
+				t.Fatalf("fileChange = %#v, want nil", fileChange)
+			}
+			if result != tt.wantResult {
+				t.Fatalf("result = %q, want %q", result, tt.wantResult)
+			}
+			if prompter.calls != 1 {
+				t.Fatalf("prompt calls = %d, want 1", prompter.calls)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("caller calls = %d, want 0", caller.calls)
+			}
+		})
 	}
 }
 
@@ -392,6 +545,32 @@ func TestWrapperRunUsesParentDeadlineBeforeWrapperTimeout(t *testing.T) {
 	}
 }
 
+func TestWrapperRunUsesWrapperTimeoutWhenParentStillActive(t *testing.T) {
+	caller := &contextWaitingCaller{}
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:      caller,
+		ServerName:  "github",
+		ToolName:    "slow",
+		CallTimeout: 20 * time.Millisecond,
+	})
+
+	started := time.Now()
+	result, _, err := wrapper.Run(newAutoApprovedExecutionContext(context.Background()), map[string]string{})
+	elapsed := time.Since(started)
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run() error = %v, want context.DeadlineExceeded", err)
+	}
+	if !strings.Contains(result, "timed out after 20ms") {
+		t.Fatalf("result = %q, want wrapper timeout message", result)
+	}
+	if caller.calls != 1 {
+		t.Fatalf("caller calls = %d, want 1", caller.calls)
+	}
+	if elapsed >= 500*time.Millisecond {
+		t.Fatalf("Run() elapsed = %v, want wrapper timeout before long wait", elapsed)
+	}
+}
+
 func newAutoApprovedExecutionContext(ctx context.Context) tools.ExecutionContext {
 	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	return tools.ExecutionContext{
@@ -402,5 +581,19 @@ func newAutoApprovedExecutionContext(ctx context.Context) tools.ExecutionContext
 		Runtime:     runtime,
 		Config:      config.DefaultConfig(),
 		AutoApprove: true,
+	}
+}
+
+func newPromptedExecutionContext(ctx context.Context, prompter ui.Prompter) tools.ExecutionContext {
+	var stdout bytes.Buffer
+	runtime := ui.NewRuntime(strings.NewReader(""), &stdout, &stdout)
+	runtime.SetPrompter(prompter)
+	return tools.ExecutionContext{
+		Context: ctx,
+		Stdin:   runtime.Input(),
+		Stdout:  runtime.Output(),
+		Stderr:  runtime.ErrorOutput(),
+		Runtime: runtime,
+		Config:  config.DefaultConfig(),
 	}
 }

@@ -38,6 +38,55 @@ func TestManagerBuildServerToolsSkipsSanitizedNameCollision(t *testing.T) {
 	}
 }
 
+func TestManagerBuildServerToolsFiltersRawToolNameBeforeExportedCollision(t *testing.T) {
+	t.Run("include uses raw tool name and then collision skips", func(t *testing.T) {
+		manager := NewManager()
+		manager.tools = []MCPTool{{
+			ServerName:  "server_a",
+			Name:        "tool_one",
+			Description: "existing",
+		}}
+
+		got, summary := manager.buildServerTools("server-a", nil, []*sdkmcp.Tool{
+			{Name: "tool.one", Description: "raw included but exported duplicate"},
+			{Name: "tool_two", Description: "raw not included"},
+		}, &ToolsFilter{Include: []string{"tool.one"}})
+
+		if len(got) != 0 {
+			t.Fatalf("buildServerTools() = %#v, want no registered tools", got)
+		}
+		if summary.registered != 0 || summary.skipped != 2 {
+			t.Fatalf("summary = %+v, want registered=0 skipped=2", summary)
+		}
+	})
+
+	t.Run("exclude uses raw tool name before collision check", func(t *testing.T) {
+		manager := NewManager()
+		var output bytes.Buffer
+		manager.SetOutput(&output)
+		manager.tools = []MCPTool{{
+			ServerName:  "server_a",
+			Name:        "tool_one",
+			Description: "existing",
+		}}
+
+		got, summary := manager.buildServerTools("server-a", nil, []*sdkmcp.Tool{
+			{Name: "tool.one", Description: "raw excluded duplicate"},
+			{Name: "tool_two", Description: "kept"},
+		}, &ToolsFilter{Exclude: []string{"tool.one"}})
+
+		if len(got) != 1 || got[0].Name != "tool_two" {
+			t.Fatalf("buildServerTools() = %#v, want only raw non-excluded tool", got)
+		}
+		if summary.registered != 1 || summary.skipped != 1 {
+			t.Fatalf("summary = %+v, want registered=1 skipped=1", summary)
+		}
+		if strings.Contains(output.String(), "already registered") {
+			t.Fatalf("warning output = %q, want raw excluded duplicate to skip collision warning", output.String())
+		}
+	})
+}
+
 func TestMCPServerOperationContextUsesDefaultAndCallerDeadline(t *testing.T) {
 	defaultCtx, defaultCancel := mcpServerOperationContext(context.Background())
 	defer defaultCancel()

@@ -265,3 +265,7 @@ func providerHistoryTestMCPHistory(callID, content string) []api.Message {
 func providerHistoryTestLargeSafeMCPResult() string {
 	return `{"items":[` + strings.Repeat(`{"title":"public metadata","value":"safe documentation result","score":1},`, 2600) + `{"title":"tail","value":"safe"}]}`
 }
+
+func providerHistoryTestLargeSensitiveMCPResult() string {
+	return `{"items":[` + strings.Repeat(`{"title":"private issue body","email":"customer@example.test","token":"secret-token","value":"customer private message body"},`, 2600) + `{"title":"tail","value":"private customer"}]}`
+}
