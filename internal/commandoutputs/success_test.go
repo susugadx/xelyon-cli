@@ -139,6 +139,141 @@ func TestBuildReplacementDataBearingSuccessKeepsRawOutput(t *testing.T) {
 	}
 }
 
+func TestBuildReplacementDatabaseOperationSuccessPlaceholder(t *testing.T) {
+	tests := []struct {
+		name      string
+		command   string
+		output    string
+		subfamily DatabaseSubfamily
+		role      SemanticRole
+	}{
+		{
+			name:      "migration success",
+			command:   "npx prisma migrate deploy",
+			output:    strings.Repeat("Migration 20260101000000_init applied\nProcess exited with code 0\n", 90),
+			subfamily: DatabaseSubfamilyMigrationLog,
+			role:      SemanticRoleSideEffect,
+		},
+		{
+			name:      "operation success",
+			command:   `sqlite3 app.db "vacuum"`,
+			output:    strings.Repeat("database operation completed successfully\nProcess exited with code 0\n", 90),
+			subfamily: DatabaseSubfamilyOperationLog,
+			role:      SemanticRoleOperationLog,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision := Decide(NewRequest(tt.command, tt.output))
+			replacement, reason, ok := BuildReplacement(NewRequest(tt.command, tt.output))
+
+			if !ok || reason != "" {
+				t.Fatalf("BuildReplacement() = (%#v, %q, %v), want database operation success placeholder", replacement, reason, ok)
+			}
+			if replacement.Kind() != "omit_successful_database_operation_command_output" ||
+				replacement.Reason() != "database_operation_success" ||
+				replacement.Classifier() != "database_operation" {
+				t.Fatalf("replacement = %#v, want database operation success placeholder", replacement)
+			}
+			if decision.Action != DecisionInlineCompact ||
+				decision.SemanticRole != tt.role ||
+				decision.Subfamily != string(tt.subfamily) ||
+				decision.Evidence.SuccessSignal != "success" {
+				t.Fatalf("Decision = %#v, want %s success inline compact", decision, tt.subfamily)
+			}
+		})
+	}
+}
+
+func TestBuildReplacementDatabaseOperationSmallFailureLogKeepsRawOutput(t *testing.T) {
+	output := "migration started\npartial output: command interrupted before completion\n"
+
+	replacement, reason, ok := BuildReplacement(NewRequest("prisma migrate deploy", output))
+
+	if ok || reason != "database_failure_not_large" {
+		t.Fatalf("BuildReplacement() = (%#v, %q, %v), want small database failure keep", replacement, reason, ok)
+	}
+	if replacement.Text() != "" || replacement.SavedBytes() != 0 || replacement.SavedTokens() != 0 {
+		t.Fatalf("replacement = %#v, want empty replacement for small failure", replacement)
+	}
+}
+
+func TestBuildReplacementSideEffectSuccessPlaceholder(t *testing.T) {
+	tests := []struct {
+		name       string
+		command    string
+		output     string
+		kind       string
+		reason     string
+		classifier string
+	}{
+		{
+			name:       "package install",
+			command:    "npm install",
+			output:     strings.Repeat("added 120 packages\nProcess exited with code 0\n", 90),
+			kind:       "omit_successful_package_command_output",
+			reason:     "package_success",
+			classifier: "package_install",
+		},
+		{
+			name:       "deploy",
+			command:    "vercel deploy",
+			output:     strings.Repeat("deployment completed successfully\nProcess exited with code 0\n", 90),
+			kind:       "omit_successful_deploy_command_output",
+			reason:     "deploy_success",
+			classifier: "deploy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			replacement, reason, ok := BuildReplacement(NewRequest(tt.command, tt.output))
+
+			if !ok || reason != "" {
+				t.Fatalf("BuildReplacement() = (%#v, %q, %v), want side-effect success placeholder", replacement, reason, ok)
+			}
+			if replacement.Kind() != tt.kind ||
+				replacement.Reason() != tt.reason ||
+				replacement.Classifier() != tt.classifier {
+				t.Fatalf("replacement = %#v, want %s/%s/%s", replacement, tt.kind, tt.reason, tt.classifier)
+			}
+		})
+	}
+}
+
+func TestBuildReplacementSideEffectSmallFailureLogKeepsRawOutput(t *testing.T) {
+	tests := []struct {
+		name       string
+		command    string
+		output     string
+		wantReason string
+	}{
+		{
+			name:       "package interrupted",
+			command:    "npm install",
+			output:     "resolving packages\ncommand interrupted before completion\n",
+			wantReason: "package_failure_not_large",
+		},
+		{
+			name:       "deploy partial",
+			command:    "vercel deploy",
+			output:     "uploading deployment\npartial output: connection closed\n",
+			wantReason: "deploy_failure_not_large",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			replacement, reason, ok := BuildReplacement(NewRequest(tt.command, tt.output))
+
+			if ok || reason != tt.wantReason {
+				t.Fatalf("BuildReplacement() = (%#v, %q, %v), want small side-effect failure keep %q", replacement, reason, ok, tt.wantReason)
+			}
+		})
+	}
+}
+
 func TestBuildReplacementUnknownSuccessSkips(t *testing.T) {
 	_, reason, ok := BuildReplacement(NewRequest("custom-tool --dump", strings.Repeat("important domain output\n", 200)))
 	if ok || reason != "command_output_unknown_skip" {
