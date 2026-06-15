@@ -361,7 +361,7 @@ final_checks:
     - **用途**: 既知モデルマップにないモデル、deployment 名、デフォルト値を上書きしたい場合に指定
     - **サブキー**: `max_output_tokens`, `catalog_model`
     - **優先度**: `model_overrides[model].max_output_tokens` > `catalog_model` を含む既知モデルマップ > `max_output_tokens`
-    - **補足**: 既知モデル（`deepseek-v4-flash`, `deepseek-v4-pro`, `kimi-k2.6`, `gpt-5.2`, `gemini-2.5-flash` 等）は自動解決されるため、通常は設定不要
+    - **補足**: 既知モデル（`deepseek-v4-flash`, `deepseek-v4-pro`, `kimi-k2.7-code`, `kimi-k2.6`, `gpt-5.2`, `gemini-2.5-flash` 等）は自動解決されるため、通常は設定不要
 - **例**:
   ```yaml
   provider_models:
@@ -382,7 +382,7 @@ final_checks:
       catalog_model: gpt-5.4
   ```
 
-料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Gemini alias では Gemini の実モデル名を指定すると、token / pricing に加えて thinkingLevel、SSE timeout policy、function calling capability もその family に揃います。既知の function calling 非対応 Gemini を `provider_models.gemini.default_model`、`provider_models.gemini.catalog_model`、`provider_models.gemini.model_overrides.*.catalog_model` に設定すると config validation は error にし、既知の代替 model へ autofix できます。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
+料金表にない provider/model は別モデルの料金で概算せず、`/status` などでは `N/A (pricing unavailable)` と表示されます。deployment 名や alias で料金表示を有効にしたい場合は `catalog_model` を指定してください。`catalog_model` は provider の pricing family で解決できる既知モデル名を指定します。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Gemini alias では Gemini の実モデル名を指定すると、token / pricing に加えて thinkingLevel、SSE timeout policy、function calling capability もその family に揃います。既知の function calling 非対応 Gemini を `provider_models.gemini.default_model`、`provider_models.gemini.catalog_model`、`provider_models.gemini.model_overrides.*.catalog_model` に設定すると config validation は error にし、既知の代替 model へ autofix できます。Native Kimi alias では `kimi-k2.7-code` / `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 
 DeepSeek の推奨モデル:
 - `deepseek-v4-flash`: 低コスト・高速・普段使い向き
@@ -391,10 +391,11 @@ DeepSeek の推奨モデル:
 `deepseek-chat` / `deepseek-reasoner` は `deepseek-v4-flash` 相当の legacy alias です。2026-07-24 廃止予定のため、新規設定では `deepseek-v4-flash` / `deepseek-v4-pro` を使用してください。DeepSeek V4 は 1M context / 最大 384K output です。
 
 Kimi の推奨モデル:
+- `kimi-k2.7-code`: code-focused thinking model。長いコード編集/agentic coding 向き
 - `kimi-k2.6`: native Kimi provider の既定モデル。高品質な編集/設計向き
 - `kimi-k2.5`: サブエージェント既定モデル。低コストな軽作業向き
 
-Kimi K2.6 / K2.5 は 256K context / 最大 32K output です。`kimi-k2-thinking` は明示指定時のみ同じ上限の legacy/compat thinking model として扱います。`moonshot` は `kimi` provider の alias として扱われます。
+Kimi K2.7 Code / K2.6 / K2.5 は 256K context / 最大 32K output です。K2.7 Code は thinking 常時有効で、`/thinking off` でも disabled request は送りません。`kimi-k2-thinking` は明示指定時のみ同じ上限の legacy/compat thinking model として扱います。`moonshot` は `kimi` provider の alias として扱われます。
 
 ### レビュー設定 (`review`)
 
@@ -747,7 +748,7 @@ lsp:
 - **OpenAI**: GPT-5 系（GPT-5.5 / GPT-5.5 Pro を含む）
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
 - **DeepSeek**: V4 の `thinking` field で制御します。`/thinking off` は `thinking.disabled`、`/thinking on` は `thinking.enabled` + `reasoning_effort` を送ります。`/thinking xhigh` は DeepSeek では `max` に変換されます。
-- **Kimi**: K2.6 / K2.5 は `thinking` field で制御します。`/thinking off` は `thinking.disabled`、`/thinking on` は K2.6 へ `thinking.enabled` + `keep: all`、K2.5 へ `thinking.enabled` を送ります。`kimi-k2-thinking` が明示指定された場合は forced thinking model として扱い、`/thinking off` でも `thinking.disabled` は送信しません。新規利用では `kimi-k2.6` を推奨します。
+- **Kimi**: K2.6 / K2.5 は `thinking` field で制御します。`/thinking off` は `thinking.disabled`、`/thinking on` は K2.6 へ `thinking.enabled` + `keep: all`、K2.5 へ `thinking.enabled` を送ります。K2.7 Code は thinking 常時有効のため `thinking` field を送らず、forced tool choice は `auto` に丸めます。`kimi-k2-thinking` が明示指定された場合は forced thinking model として扱い、`/thinking off` でも `thinking.disabled` は送信しません。
 
 **コマンドで切り替え（正規ルート）:**
 
@@ -855,7 +856,7 @@ export GROQ_API_KEY=gsk_...
 - **`web_search.provider` 設定あり**: 指定した検索プロバイダーを使用
 - **メインが非対応**: DeepSeek / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
 
-Gemini native web search は API の `usageMetadata` が返る場合、通常の token usage / cost として表示します。Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。Moonshot は `$web_search` call fee と token 使用量を別々に課金します。XELYON は API が返す token usage と `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。call fee は `finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合だけ観測し、`finish_reason = "stop"` で tool call がない response には加算しません。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、表示用に観測しても token totals へは二重加算しません。
+Gemini native web search は API の `usageMetadata` が返る場合、通常の token usage / cost として表示します。Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。K2.7 Code は thinking を無効化できないため、K2.7 Code 選択中の Kimi built-in `$web_search` は検索 request だけ `kimi-k2.6` に自動 fallback し、usage / cost / 実行ログも `kimi-k2.6` として記録します。Moonshot は `$web_search` call fee と token 使用量を別々に課金します。XELYON は API が返す token usage と `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。call fee は `finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合だけ観測し、`finish_reason = "stop"` で tool call がない response には加算しません。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、表示用に観測しても token totals へは二重加算しません。
 
 #### 設定例
 

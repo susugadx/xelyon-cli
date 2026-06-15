@@ -13,6 +13,9 @@ func kimiThinkingConfig(ctx context.Context, providerConfigKey, requestedModel s
 }
 
 func kimiThinkingConfigForResolved(options kimiResolvedRequestOptions) (map[string]any, bool, string) {
+	if isKimiAlwaysThinkingModel(options.requestedModel) || isKimiAlwaysThinkingModel(options.catalogModel) {
+		return nil, true, "Reasoner"
+	}
 	if isKimiForcedThinkingModel(options.requestedModel) || isKimiForcedThinkingModel(options.catalogModel) {
 		if api.IsThinkingEnabled(options.ctx) {
 			return kimiThinkingEnabledField(kimiThinkingPayloadModel(options.requestedModel, options.catalogModel)), true, "Reasoner"
@@ -69,6 +72,10 @@ func isKimiConfigurableThinkingModel(model string) bool {
 	default:
 		return false
 	}
+}
+
+func isKimiAlwaysThinkingModel(model string) bool {
+	return strings.EqualFold(strings.TrimSpace(model), "kimi-k2.7-code")
 }
 
 func isKimiForcedThinkingModel(model string) bool {

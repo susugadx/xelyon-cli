@@ -36,6 +36,11 @@ type webSearchCacheConfig struct {
 	TTL     int
 }
 
+type webSearchModelResolution struct {
+	Model        string
+	AdjustedFrom string
+}
+
 // WebSearchRequest は非対話 Web 検索 API の入力を表す。
 type WebSearchRequest struct {
 	Config                *config.Config
@@ -91,17 +96,18 @@ func ExecuteWebSearch(execCtx tools.ExecutionContext, query string) string {
 	}
 	searchModel := resolveSearchModel(cfg, searchProvider, execCtx.ProviderName, execCtx.Model)
 
-	requestCtx := webSearchRequestContext(execCtx, cfg, searchProvider, searchModel)
+	requestCtx := webSearchRequestContext(execCtx, cfg, searchProvider, searchModel.Model)
 
-	result, cached, err := searchWithCache(requestCtx, cfg, searchProvider, query, searchModel)
+	result, cached, err := searchWithCache(requestCtx, cfg, searchProvider, query, searchModel.Model)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err)
 	}
 
+	ownerLabel := webSearchOwnerLabel(searchProvider, searchModel)
 	if cached {
-		out.Green.Printf("🔍 Web search (cached): %s\n", query)
+		out.Green.Printf("🔍 Web search (cached, %s): %s\n", ownerLabel, query)
 	} else {
-		out.Green.Printf("🔍 Searching the web (%s): %s\n", searchProvider, query)
+		out.Green.Printf("🔍 Searching the web (%s): %s\n", ownerLabel, query)
 	}
 
 	return result
@@ -127,11 +133,11 @@ func SearchWeb(ctx context.Context, req WebSearchRequest) (WebSearchResponse, er
 	searchModel := resolveSearchModel(cfg, searchProvider, req.MainProvider, req.MainModel)
 	requestCtx := tools.WithConfig(ctx, cfg)
 	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
-	if callback := webSearchProviderUsageCallback(req.UsageCallback, req.UsageAttribution, searchProvider, searchModel); callback != nil {
+	if callback := webSearchProviderUsageCallback(req.UsageCallback, req.UsageAttribution, searchProvider, searchModel.Model); callback != nil {
 		requestCtx = websearch.WithUsageCallback(requestCtx, callback)
 	}
 
-	raw, cached, err := searchWithCache(requestCtx, cfg, searchProvider, req.Query, searchModel)
+	raw, cached, err := searchWithCache(requestCtx, cfg, searchProvider, req.Query, searchModel.Model)
 	if err != nil {
 		return WebSearchResponse{}, err
 	}
@@ -143,7 +149,7 @@ func SearchWeb(ctx context.Context, req WebSearchRequest) (WebSearchResponse, er
 	}
 	return WebSearchResponse{
 		Provider:         searchProvider,
-		Model:            searchModel,
+		Model:            searchModel.Model,
 		Cached:           cached,
 		Raw:              raw,
 		Results:          results,
@@ -358,14 +364,49 @@ func resolveSearchProvider(cfg *config.Config, mainProvider, mainProviderConfigK
 	return ""
 }
 
-func resolveSearchModel(cfg *config.Config, searchProvider, mainProvider, mainModel string) string {
+func resolveSearchModel(cfg *config.Config, searchProvider, mainProvider, mainModel string) webSearchModelResolution {
+	model := ""
 	if config.SameProviderRuntimeIdentity(searchProvider, mainProvider) {
-		return mainModel
+		model = strings.TrimSpace(mainModel)
+		if model == "" && cfg != nil {
+			model = cfg.GetSelectedModelForProvider(searchProvider)
+		}
+	} else if cfg != nil {
+		model = cfg.GetSelectedModelForProvider(searchProvider)
 	}
-	if cfg == nil {
-		return ""
+	return applyNativeWebSearchModelPolicy(cfg, searchProvider, model)
+}
+
+func applyNativeWebSearchModelPolicy(cfg *config.Config, searchProvider, model string) webSearchModelResolution {
+	resolved := webSearchModelResolution{Model: model}
+	if !config.SameProviderRuntimeIdentity(searchProvider, "kimi") {
+		return resolved
 	}
-	return cfg.GetEffectiveModelForProvider(searchProvider)
+	catalogModel := ""
+	if cfg != nil {
+		catalogModel = cfg.ModelCatalogName(searchProvider, model)
+	}
+	requestModel, adjusted := llmcatalog.KimiBuiltinWebSearchRequestModel(model, catalogModel)
+	if !adjusted {
+		return resolved
+	}
+	resolved.Model = requestModel
+	resolved.AdjustedFrom = strings.TrimSpace(model)
+	if resolved.AdjustedFrom == "" {
+		resolved.AdjustedFrom = strings.TrimSpace(catalogModel)
+	}
+	return resolved
+}
+
+func webSearchOwnerLabel(provider string, model webSearchModelResolution) string {
+	label := provider
+	if strings.TrimSpace(model.Model) != "" {
+		label += "/" + strings.TrimSpace(model.Model)
+	}
+	if strings.TrimSpace(model.AdjustedFrom) != "" {
+		label += ", adjusted from " + strings.TrimSpace(model.AdjustedFrom) + " for Kimi $web_search"
+	}
+	return label
 }
 
 func isNativeSearchProvider(provider string) bool {

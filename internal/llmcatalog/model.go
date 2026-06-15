@@ -17,6 +17,7 @@ var knownModelMaxOutputTokens = map[string]int{
 	"kimi-k2":                               32768,
 	"kimi-k2.5":                             32768,
 	"kimi-k2.6":                             32768,
+	"kimi-k2.7-code":                        32768,
 	"kimi-k2-thinking":                      32768,
 	"claude-sonnet-4-6":                     64000,
 	"claude-sonnet-4.6":                     64000,
@@ -128,6 +129,7 @@ var modelContextLimits = map[string]int{
 
 	"kimi-k2.5":        256000,
 	"kimi-k2.6":        256000,
+	"kimi-k2.7-code":   256000,
 	"kimi-k2-thinking": 256000,
 
 	"llama-3.3-70b-versatile": 128000,
@@ -333,6 +335,20 @@ func ModelContextLimit(model string) int {
 		return limit
 	}
 	return modelContextLimits["default"]
+}
+
+// KimiBuiltinWebSearchRequestModel は Kimi built-in $web_search 用の実 request model を返す。
+func KimiBuiltinWebSearchRequestModel(model, catalogModel string) (string, bool) {
+	model = strings.TrimSpace(model)
+	if IsKimiK27CodeModel(model) || IsKimiK27CodeModel(catalogModel) {
+		return "kimi-k2.6", true
+	}
+	return model, false
+}
+
+// IsKimiK27CodeModel は model が Kimi K2.7 Code か返す。
+func IsKimiK27CodeModel(model string) bool {
+	return normalizeModelName(model) == "kimi-k2.7-code"
 }
 
 // IsOpenAIResponsesModel はモデルが OpenAI Responses API を使うか返す。

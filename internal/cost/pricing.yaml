@@ -630,6 +630,7 @@ kimi:
       - kimi-k2
       - kimi-k2.5
       - kimi-k2.6
+      - kimi-k2.7-code
       - kimi-k2-thinking
   default:
     inputcostperm: 0.95
@@ -637,6 +638,12 @@ kimi:
     cachedinputcostperm: 0.16
     cachecreationcostperm: 0.95
   rules:
+    - contains: ["k2.7-code"]
+      pricing:
+        inputcostperm: 0.95
+        outputcostperm: 4.00
+        cachedinputcostperm: 0.19
+        cachecreationcostperm: 0.95
     - contains: ["k2.6"]
       pricing:
         inputcostperm: 0.95

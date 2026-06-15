@@ -28,7 +28,7 @@ DeepSeek, Kimi, OpenAI, OpenAI Subscription, Azure OpenAI, Gemini, Claude, Ollam
 **OpenAI Subscription experimental provider**: `xelyon auth openai-subscription login` で ChatGPT/Codex OAuth にログインし、`openai_subscription` provider から subscription backend の Responses-shaped endpoint を使えます。OpenAI Platform API ではなく、API key / API pricing は使いません。request は `originator: xelyon` と `xelyon/<version>` User-Agent で XELYON として識別し、OpenCode や official Codex CLI を偽装しません。runtime は `store=false` / full payload / `prompt_cache_key` / streaming / tool loop / subscription Compact API で動作し、`/compress --compact` と auto-compress の Compact 優先経路にも対応します。cost は `N/A (ChatGPT subscription)` として表示します。
 **プロバイダー診断**: `xelyon doctor <provider> --capabilities` は model / deployment 能力を live request なしで確認し、`--require-capability responses_api` などで必要な capability を gate できます。DeepSeek / Groq / OpenRouter などの Chat Completions 系も共通 capability DTO、request preview、smoke を確認できます。OpenRouter は Claude 系 model で Anthropic Skin route も表示します。`--smoke` は usage / cost を text / JSON に出力し、対応 provider では response ID も表示します。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
-**Kimi Native Provider 対応**: Moonshot の Chat Completions API で `kimi-k2.6` / `kimi-k2.5` の streaming、tool calls、thinking、`reasoning_content` に対応。
+**Kimi Native Provider 対応**: Moonshot の Chat Completions API で `kimi-k2.7-code` / `kimi-k2.6` / `kimi-k2.5` の streaming、tool calls、thinking、`reasoning_content` に対応。
 **プロバイダー別プロンプト最適化**: OpenAI / Gemini では短い実況を促し、Gemini など特定モデルのルール遵守を強化するプレフィックスを自動注入。
 **Gemini FCリトライ**: FC失敗時にテキストモードではなくFCモードでリトライ（キャッシュ汚染防止）。idle timeout / thinking timeout / 一般エラーそれぞれで上限付きリトライ。
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
@@ -308,7 +308,7 @@ xelyon --provider gemini --model gemini-2.5-flash
 
 ### Web検索
 
-`web_search` は Kimi / OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが Kimi の場合は Moonshot Chat Completions の built-in `$web_search` をそのまま使えます。DeepSeek / Groq / Ollama / OpenRouter / Bedrock などの検索非対応 provider では、`web_search.provider` で検索専用プロバイダーを指定してください。
+`web_search` は Kimi / OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが Kimi の場合は Moonshot Chat Completions の built-in `$web_search` を使えます。`kimi-k2.7-code` 選択中の Kimi built-in `$web_search` は、公式仕様に合わせて検索 request だけ `kimi-k2.6` に自動 fallback し、usage / cost / 実行ログも `kimi-k2.6` として記録します。DeepSeek / Groq / Ollama / OpenRouter / Bedrock などの検索非対応 provider では、`web_search.provider` で検索専用プロバイダーを指定してください。
 
 ```yaml
 # ~/.xelyon/config.yaml

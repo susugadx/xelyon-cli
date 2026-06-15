@@ -228,6 +228,7 @@ func TestGetKimiPricing_K2Models(t *testing.T) {
 		wantCached float64
 		wantCreate float64
 	}{
+		{name: "k2.7 code", model: "kimi-k2.7-code", wantInput: 0.95, wantOutput: 4.00, wantCached: 0.19, wantCreate: 0.95},
 		{name: "k2.6", model: "kimi-k2.6", wantInput: 0.95, wantOutput: 4.00, wantCached: 0.16, wantCreate: 0.95},
 		{name: "k2.5", model: "kimi-k2.5", wantInput: 0.60, wantOutput: 3.00, wantCached: 0.10, wantCreate: 0.60},
 		{name: "k2-thinking legacy fallback", model: "kimi-k2-thinking", wantInput: 0.60, wantOutput: 2.50, wantCached: 0.06, wantCreate: 0.60},

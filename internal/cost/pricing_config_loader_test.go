@@ -25,6 +25,14 @@ func TestGetPricingInfo_FallbackToHardcodedWhenYAMLUnavailable(t *testing.T) {
 	if pricing.InputCostPerM != 1.25 || pricing.OutputCostPerM != 10.00 {
 		t.Fatalf("fallback pricing mismatch: got input=%f output=%f", pricing.InputCostPerM, pricing.OutputCostPerM)
 	}
+
+	pricing = GetPricingInfo("kimi", "kimi-k2.7-code")
+	if pricing.InputCostPerM != 0.95 ||
+		pricing.OutputCostPerM != 4.00 ||
+		pricing.CachedInputCostPerM != 0.19 ||
+		pricing.CacheCreationCostPerM != 0.95 {
+		t.Fatalf("Kimi K2.7 hardcoded fallback pricing = %+v, want input=0.95 output=4.00 cached=0.19 create=0.95", pricing)
+	}
 }
 
 func TestPricingFamilyHasKnownModelUsesExactAllowlist(t *testing.T) {
@@ -44,6 +52,7 @@ func TestPricingFamilyHasKnownModelUsesExactAllowlist(t *testing.T) {
 		{name: "bedrock legacy exact", family: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1", want: true},
 		{name: "bedrock legacy versioned exact", family: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1:0", want: true},
 		{name: "bedrock alias contains claude", family: "bedrock", model: "corp-claude-prod", want: false},
+		{name: "kimi k2.7 exact", family: "kimi", model: "kimi-k2.7-code", want: true},
 		{name: "kimi exact", family: "kimi", model: "kimi-k2.6", want: true},
 		{name: "kimi thinking exact", family: "kimi", model: "kimi-k2-thinking", want: true},
 		{name: "kimi alias contains exact", family: "kimi", model: "corp-kimi-k2.6-prod", want: false},

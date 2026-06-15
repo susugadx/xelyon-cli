@@ -90,6 +90,30 @@ func TestDiagnoseKimi_RequiredThinkingFollowsRequestPolicy(t *testing.T) {
 	if !hasKimiDiagnosticCheck(forced, providerdiag.RequiredCapabilityCheckName, DiagnosticStatusOK) {
 		t.Fatalf("required_capability check missing or not ok for forced thinking model: %#v", forced.Checks)
 	}
+
+	for _, tt := range []struct {
+		name         string
+		model        string
+		catalogModel string
+	}{
+		{name: "direct k2.7 code", model: "kimi-k2.7-code", catalogModel: "kimi-k2.7-code"},
+		{name: "catalog k2.7 code", model: "corp-kimi-code", catalogModel: "kimi-k2.7-code"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			report := Diagnose(context.Background(), DiagnosticOptions{
+				Config:               config.DefaultConfig(),
+				Model:                tt.model,
+				CatalogModel:         tt.catalogModel,
+				RequiredCapabilities: []string{providerdiag.RequiredCapabilityThinking},
+			})
+			if report.HasFailures() {
+				t.Fatalf("HasFailures() = true, want K2.7 Code to satisfy thinking without request toggle: %#v", report.Checks)
+			}
+			if !hasKimiDiagnosticCheck(report, providerdiag.RequiredCapabilityCheckName, DiagnosticStatusOK) {
+				t.Fatalf("required_capability check missing or not ok for K2.7 Code: %#v", report.Checks)
+			}
+		})
+	}
 }
 
 func TestDiagnoseKimi_RequiredCapabilityOnlyDoesNotValidateEndpoint(t *testing.T) {

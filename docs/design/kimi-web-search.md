@@ -19,6 +19,8 @@ Kimi `$web_search` request は Chat Completions streaming payload のまま送�
 - `max_completion_tokens` を送る
 - `max_tokens` と `tool_choice` は送らない
 
+`kimi-k2.7-code` は thinking を無効化できないため、K2.7 Code または K2.7 Code を指す `catalog_model` が選択されている場合、Kimi `$web_search` request だけ `kimi-k2.6` へ fallback する。`tools/search` 側の model 解決も同じ source of truth を使い、実行ログ、headless/noninteractive response、usage attribution、cost attribution は `kimi-k2.6` として記録する。
+
 通常 function tools はこの route に入れない。画像 / video / file upload / memory / code runner とも混ぜない。
 
 ## Tool Loop
