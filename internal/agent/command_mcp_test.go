@@ -41,6 +41,14 @@ func TestHandleMCPCommand_PrintsSnapshotOnlyStatus(t *testing.T) {
 				"mcp_alpha_list (auto)",
 				"Omitted: 1",
 				"mcp_beta_big (token_budget_exceeded)",
+				"MCP tool surface",
+				"Top omitted reasons: token_budget_exceeded=1",
+				"Top heavy servers",
+				"Largest schema tools",
+				"Highest estimated token tools",
+				"Recommendations",
+				"mcpServers fragment",
+				"\"beta\": {\"tools\": {\"include\": [\"<needed_tool>\"]}}",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("%s output missing %q:\n%s", input, want, got)
@@ -124,8 +132,22 @@ func newMCPStatusTestAgent(t *testing.T, out *bytes.Buffer) *Agent {
 	}
 	setManagerToolsForTest(t, agent.mcpManager, tools)
 	agent.mcpSurface = mcpToolSurfaceSelection{
-		selected:        []mcp.MCPTool{tools[0]},
-		omitted:         []mcpToolSurfaceOmission{{exportedName: "mcp_beta_big", serverName: "beta", toolName: "big", reason: "token_budget_exceeded"}},
+		selected: []mcp.MCPTool{tools[0]},
+		selectedMetrics: []mcpToolSurfaceMetric{{
+			exportedName:    "mcp_alpha_list",
+			serverName:      "alpha",
+			toolName:        "list",
+			schemaBytes:     len(tools[0].InputSchema),
+			estimatedTokens: 42,
+		}},
+		omitted: []mcpToolSurfaceOmission{{
+			exportedName:    "mcp_beta_big",
+			serverName:      "beta",
+			toolName:        "big",
+			reason:          "token_budget_exceeded",
+			schemaBytes:     len(tools[1].InputSchema),
+			estimatedTokens: 100,
+		}},
 		total:           len(tools),
 		estimatedTokens: 42,
 	}

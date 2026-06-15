@@ -9,6 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
+	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
@@ -26,8 +27,17 @@ type mcpToolSurfaceBudget struct {
 
 type mcpToolSurfaceSelection struct {
 	selected        []mcp.MCPTool
+	selectedMetrics []mcpToolSurfaceMetric
 	omitted         []mcpToolSurfaceOmission
 	total           int
+	estimatedTokens int
+}
+
+type mcpToolSurfaceMetric struct {
+	exportedName    string
+	serverName      string
+	toolName        string
+	schemaBytes     int
 	estimatedTokens int
 }
 
@@ -111,6 +121,13 @@ func selectMCPToolSurfaceWithBudget(model string, tools []mcp.MCPTool, budget mc
 		}
 
 		selection.selected = append(selection.selected, tool)
+		selection.selectedMetrics = append(selection.selectedMetrics, mcpToolSurfaceMetric{
+			exportedName:    exportedName,
+			serverName:      tool.ServerName,
+			toolName:        tool.Name,
+			schemaBytes:     schemaBytes,
+			estimatedTokens: estimatedTokens,
+		})
 		selection.estimatedTokens = projectedTokens
 	}
 
@@ -197,6 +214,50 @@ func (s mcpToolSurfaceSelection) omittedExportedNames() []string {
 
 func (s mcpToolSurfaceSelection) hasOmissions() bool {
 	return len(s.omitted) > 0
+}
+
+func (s mcpToolSurfaceSelection) analysis() mcpsurface.Report {
+	return mcpsurface.Analyze(s.analysisTools(), mcpsurface.Options{})
+}
+
+func (s mcpToolSurfaceSelection) analysisTools() []mcpsurface.Tool {
+	tools := make([]mcpsurface.Tool, 0, len(s.selected)+len(s.omitted))
+	selectedMetrics := s.selectedMetrics
+	if len(selectedMetrics) == 0 && len(s.selected) > 0 {
+		selectedMetrics = make([]mcpToolSurfaceMetric, 0, len(s.selected))
+		for _, tool := range s.selected {
+			selectedMetrics = append(selectedMetrics, mcpToolSurfaceMetric{
+				exportedName: mcpnames.ExportedToolName(tool.ServerName, tool.Name),
+				serverName:   tool.ServerName,
+				toolName:     tool.Name,
+				schemaBytes:  len(tool.InputSchema),
+			})
+		}
+	}
+	for _, metric := range selectedMetrics {
+		tools = append(tools, mcpsurface.Tool{
+			ServerName:      metric.serverName,
+			ToolName:        metric.toolName,
+			ExportedName:    metric.exportedName,
+			Registered:      true,
+			Visible:         true,
+			SchemaBytes:     metric.schemaBytes,
+			EstimatedTokens: metric.estimatedTokens,
+		})
+	}
+	for _, omission := range s.omitted {
+		tools = append(tools, mcpsurface.Tool{
+			ServerName:      omission.serverName,
+			ToolName:        omission.toolName,
+			ExportedName:    omission.exportedName,
+			Registered:      true,
+			Visible:         false,
+			OmittedReason:   omission.reason,
+			SchemaBytes:     omission.schemaBytes,
+			EstimatedTokens: omission.estimatedTokens,
+		})
+	}
+	return tools
 }
 
 func emitMCPToolSurfaceBudgetWarning(selection mcpToolSurfaceSelection, errOut io.Writer) {

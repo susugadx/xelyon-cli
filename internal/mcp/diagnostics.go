@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,11 @@ import (
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
+	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 // DiagnosticStatus は MCP doctor check の結果を表す。
@@ -81,18 +86,19 @@ type DiagnosticServerReport struct {
 
 // DiagnosticConnectionReport は --connect 時の initialize/tools-list 診断結果を表す。
 type DiagnosticConnectionReport struct {
-	Attempted            bool     `json:"attempted"`
-	Status               string   `json:"status"`
-	RawToolCount         int      `json:"raw_tool_count,omitempty"`
-	RegisteredToolCount  int      `json:"registered_tool_count,omitempty"`
-	SkippedToolCount     int      `json:"skipped_tool_count,omitempty"`
-	FilteredToolCount    int      `json:"filtered_tool_count,omitempty"`
-	DeniedToolCount      int      `json:"denied_tool_count,omitempty"`
-	CollisionToolCount   int      `json:"collision_tool_count,omitempty"`
-	UnknownToolApprovals []string `json:"unknown_tool_approvals,omitempty"`
-	UnknownIncludes      []string `json:"unknown_includes,omitempty"`
-	UnknownExcludes      []string `json:"unknown_excludes,omitempty"`
-	Error                string   `json:"error,omitempty"`
+	Attempted            bool               `json:"attempted"`
+	Status               string             `json:"status"`
+	RawToolCount         int                `json:"raw_tool_count,omitempty"`
+	RegisteredToolCount  int                `json:"registered_tool_count,omitempty"`
+	SkippedToolCount     int                `json:"skipped_tool_count,omitempty"`
+	FilteredToolCount    int                `json:"filtered_tool_count,omitempty"`
+	DeniedToolCount      int                `json:"denied_tool_count,omitempty"`
+	CollisionToolCount   int                `json:"collision_tool_count,omitempty"`
+	UnknownToolApprovals []string           `json:"unknown_tool_approvals,omitempty"`
+	UnknownIncludes      []string           `json:"unknown_includes,omitempty"`
+	UnknownExcludes      []string           `json:"unknown_excludes,omitempty"`
+	ToolSurface          *mcpsurface.Report `json:"tool_surface,omitempty"`
+	Error                string             `json:"error,omitempty"`
 }
 
 // DiagnosticToolReport は --tools 指定時の MCP tool 表示項目を表す。
@@ -451,6 +457,7 @@ func populateConnectionDiagnostics(
 	addUnknownToolReferenceChecks(serverReport, connection)
 
 	decisions, _ := manager.planServerToolRegistration(serverName, listedTools, serverConfig)
+	toolSurfaceTools := make([]mcpsurface.Tool, 0, len(decisions))
 	for _, decision := range decisions {
 		switch decision.skipReason {
 		case toolSkipFiltered:
@@ -463,6 +470,11 @@ func populateConnectionDiagnostics(
 		if includeTools {
 			serverReport.Tools = append(serverReport.Tools, diagnosticToolReport(decision))
 		}
+		toolSurfaceTools = append(toolSurfaceTools, diagnosticToolSurfaceTool(serverName, decision))
+	}
+	if len(toolSurfaceTools) > 0 {
+		report := mcpsurface.Analyze(toolSurfaceTools, mcpsurface.Options{})
+		connection.ToolSurface = &report
 	}
 }
 
@@ -493,6 +505,59 @@ func diagnosticToolReport(decision toolRegistrationDecision) DiagnosticToolRepor
 		report.HiddenReason = string(decision.skipReason)
 	}
 	return report
+}
+
+func diagnosticToolSurfaceTool(serverName string, decision toolRegistrationDecision) mcpsurface.Tool {
+	exportedName := diagnosticDecisionExportedName(serverName, decision)
+	inputSchema := diagnosticToolInputSchemaBytes(decision.tool)
+	visible := decision.registered()
+	reason := ""
+	if !visible {
+		reason = string(decision.skipReason)
+	}
+	toolName := ""
+	if decision.tool != nil {
+		toolName = decision.tool.Name
+	}
+	return mcpsurface.Tool{
+		ServerName:      serverName,
+		ToolName:        toolName,
+		ExportedName:    exportedName,
+		Registered:      decision.registered(),
+		Visible:         visible,
+		OmittedReason:   reason,
+		SchemaBytes:     len(inputSchema),
+		EstimatedTokens: diagnosticToolEstimatedTokens(exportedName, decision.tool, inputSchema),
+	}
+}
+
+func diagnosticDecisionExportedName(serverName string, decision toolRegistrationDecision) string {
+	if strings.TrimSpace(decision.exportedName) != "" {
+		return decision.exportedName
+	}
+	if decision.tool == nil {
+		return ""
+	}
+	return mcpnames.ExportedToolName(serverName, decision.tool.Name)
+}
+
+func diagnosticToolInputSchemaBytes(tool *sdkmcp.Tool) []byte {
+	if tool == nil || tool.InputSchema == nil {
+		return nil
+	}
+	schemaBytes, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		return nil
+	}
+	return schemaBytes
+}
+
+func diagnosticToolEstimatedTokens(exportedName string, tool *sdkmcp.Tool, inputSchema []byte) int {
+	if tool == nil {
+		return 0
+	}
+	definition := api.ConvertMCPToolToToolDefinition(exportedName, tool.Description, inputSchema)
+	return token.EstimateStructuredValueTokenCount(definition)
 }
 
 func sortedUnknownKeys(values map[string]string, known map[string]bool) []string {

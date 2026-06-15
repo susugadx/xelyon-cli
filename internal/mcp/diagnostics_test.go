@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 func TestDiagnoseToolsWithoutConnectWarns(t *testing.T) {
@@ -95,6 +97,25 @@ func TestDiagnoseConnectReportsToolVisibilityAndUnknownReferences(t *testing.T) 
 	if server.Connection.FilteredToolCount != 1 {
 		t.Fatalf("FilteredToolCount = %d, want 1", server.Connection.FilteredToolCount)
 	}
+	if server.Connection.ToolSurface == nil {
+		t.Fatal("ToolSurface = nil, want live tool surface analysis")
+	}
+	if server.Connection.ToolSurface.TotalTools != 2 || server.Connection.ToolSurface.RegisteredTools != server.Connection.RegisteredToolCount || server.Connection.ToolSurface.VisibleTools != 1 || server.Connection.ToolSurface.OmittedTools != 1 {
+		t.Fatalf("ToolSurface counts = %+v, want total=2 registered=%d visible=1 omitted=1", *server.Connection.ToolSurface, server.Connection.RegisteredToolCount)
+	}
+	if len(server.Connection.ToolSurface.Servers) != 1 {
+		t.Fatalf("ToolSurface servers = %#v, want one helper summary", server.Connection.ToolSurface.Servers)
+	}
+	surfaceServer := server.Connection.ToolSurface.Servers[0]
+	if surfaceServer.TotalTools != 2 || surfaceServer.RegisteredTools != 1 || surfaceServer.VisibleTools != 1 || surfaceServer.OmittedTools != 1 {
+		t.Fatalf("ToolSurface server counts = %+v, want total=2 registered=1 visible=1 omitted=1", surfaceServer)
+	}
+	if len(server.Connection.ToolSurface.OmittedReasons) != 1 || server.Connection.ToolSurface.OmittedReasons[0].Reason != string(toolSkipFiltered) {
+		t.Fatalf("ToolSurface omitted reasons = %#v, want filtered", server.Connection.ToolSurface.OmittedReasons)
+	}
+	if len(server.Connection.ToolSurface.Recommendations) != 1 || server.Connection.ToolSurface.Recommendations[0].ServerName != "helper" {
+		t.Fatalf("ToolSurface recommendations = %#v, want helper recommendation", server.Connection.ToolSurface.Recommendations)
+	}
 	if len(server.Connection.UnknownToolApprovals) != 1 || server.Connection.UnknownToolApprovals[0] != "missing_tool" {
 		t.Fatalf("UnknownToolApprovals = %#v, want missing_tool", server.Connection.UnknownToolApprovals)
 	}
@@ -135,6 +156,22 @@ func TestPopulateConnectionDiagnosticsMarksDuplicateToolCollisionHidden(t *testi
 	if connection.RawToolCount != 2 || connection.RegisteredToolCount != 1 || connection.SkippedToolCount != 1 || connection.CollisionToolCount != 1 {
 		t.Fatalf("Connection counts = %+v, want raw=2 registered=1 skipped=1 collision=1", *connection)
 	}
+	if connection.ToolSurface == nil {
+		t.Fatal("ToolSurface = nil, want duplicate visibility analysis")
+	}
+	if connection.ToolSurface.TotalTools != 2 || connection.ToolSurface.RegisteredTools != connection.RegisteredToolCount || connection.ToolSurface.VisibleTools != 1 || connection.ToolSurface.OmittedTools != 1 {
+		t.Fatalf("ToolSurface counts = %+v, want total=2 registered=%d visible=1 omitted=1", *connection.ToolSurface, connection.RegisteredToolCount)
+	}
+	if len(connection.ToolSurface.Servers) != 1 {
+		t.Fatalf("ToolSurface servers = %#v, want one helper summary", connection.ToolSurface.Servers)
+	}
+	surfaceServer := connection.ToolSurface.Servers[0]
+	if surfaceServer.TotalTools != 2 || surfaceServer.RegisteredTools != 1 || surfaceServer.VisibleTools != 1 || surfaceServer.OmittedTools != 1 {
+		t.Fatalf("ToolSurface server counts = %+v, want total=2 registered=1 visible=1 omitted=1", surfaceServer)
+	}
+	if len(connection.ToolSurface.OmittedReasons) != 1 || connection.ToolSurface.OmittedReasons[0].Reason != string(toolSkipCollision) {
+		t.Fatalf("ToolSurface omitted reasons = %#v, want collision", connection.ToolSurface.OmittedReasons)
+	}
 	if len(serverReport.Tools) != 2 {
 		t.Fatalf("Tools = %#v, want two duplicate entries", serverReport.Tools)
 	}
@@ -145,6 +182,57 @@ func TestPopulateConnectionDiagnosticsMarksDuplicateToolCollisionHidden(t *testi
 	second := serverReport.Tools[1]
 	if second.Name != "dup" || second.ExportedName != "mcp_helper_dup" || second.Approval != "auto" || second.Visible || second.HiddenReason != string(toolSkipCollision) {
 		t.Fatalf("second tool = %+v, want hidden duplicate collision", second)
+	}
+}
+
+func TestPopulateConnectionDiagnosticsEstimatesTokensFromActualProviderSchemaWithoutLeakingIt(t *testing.T) {
+	manager := NewManager()
+	manager.SetOutput(io.Discard)
+	inputSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"payload": map[string]any{
+				"type":        "string",
+				"description": strings.Repeat("SECRET_SCHEMA ", 30),
+			},
+		},
+	}
+	listedTools := []*sdkmcp.Tool{{
+		Name:        "heavy",
+		Description: "SECRET_DESCRIPTION",
+		InputSchema: inputSchema,
+	}}
+	schemaBytes, err := json.Marshal(inputSchema)
+	if err != nil {
+		t.Fatalf("json.Marshal(schema) error = %v", err)
+	}
+	expectedTokens := token.EstimateStructuredValueTokenCount(api.ConvertMCPToolToToolDefinition(
+		"mcp_helper_heavy",
+		"SECRET_DESCRIPTION",
+		schemaBytes,
+	))
+	connection := &DiagnosticConnectionReport{RegisteredToolCount: 1}
+	serverReport := &DiagnosticServerReport{Name: "helper"}
+
+	populateConnectionDiagnostics(manager, "helper", ServerConfig{}, listedTools, connection, serverReport, true)
+
+	if connection.ToolSurface == nil {
+		t.Fatal("ToolSurface = nil, want tool surface analysis")
+	}
+	if len(connection.ToolSurface.HighestEstimatedTokenTools) == 0 {
+		t.Fatalf("HighestEstimatedTokenTools = %#v, want heavy tool", connection.ToolSurface.HighestEstimatedTokenTools)
+	}
+	if got := connection.ToolSurface.HighestEstimatedTokenTools[0].EstimatedTokens; got != expectedTokens {
+		t.Fatalf("estimated tokens = %d, want provider-definition estimate %d", got, expectedTokens)
+	}
+	data, err := json.Marshal(connection)
+	if err != nil {
+		t.Fatalf("json.Marshal(connection) error = %v", err)
+	}
+	for _, leaked := range []string{"SECRET_SCHEMA", "SECRET_DESCRIPTION"} {
+		if strings.Contains(string(data), leaked) {
+			t.Fatalf("diagnostic tool surface leaked %q:\n%s", leaked, string(data))
+		}
 	}
 }
 

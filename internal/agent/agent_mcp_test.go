@@ -287,6 +287,38 @@ func TestMCPToolSurfaceBudgetCanOmitAllToolsWhenTokenBudgetExceeded(t *testing.T
 	}
 }
 
+func TestMCPToolSurfaceAnalysisReportsMetricsAndRecommendations(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "alpha", Name: "one", Description: "One", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{ServerName: "alpha", Name: "two", Description: "Two", InputSchema: json.RawMessage(`{"type":"object"}`)},
+	}
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		maxTools:           1,
+		maxEstimatedTokens: 32000,
+		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+	})
+
+	report := selection.analysis()
+	if report.TotalTools != 2 || report.RegisteredTools != 2 || report.VisibleTools != 1 || report.OmittedTools != 1 {
+		t.Fatalf("surface report counts = %+v, want total=2 registered=2 visible=1 omitted=1", report)
+	}
+	if report.EstimatedTokens <= 0 {
+		t.Fatalf("EstimatedTokens = %d, want selected tool estimate", report.EstimatedTokens)
+	}
+	if len(report.Servers) != 1 || report.Servers[0].ServerName != "alpha" || report.Servers[0].OmittedTools != 1 {
+		t.Fatalf("server summaries = %#v, want alpha omitted summary", report.Servers)
+	}
+	if len(report.OmittedReasons) != 1 || report.OmittedReasons[0].Reason != "tool_count_budget_exceeded" {
+		t.Fatalf("omitted reasons = %#v, want tool_count_budget_exceeded", report.OmittedReasons)
+	}
+	if len(report.LargestSchemaTools) == 0 || report.LargestSchemaTools[0].ExportedName == "" {
+		t.Fatalf("largest schema tools = %#v, want exported metric names", report.LargestSchemaTools)
+	}
+	if len(report.Recommendations) != 1 || report.Recommendations[0].ServerName != "alpha" {
+		t.Fatalf("recommendations = %#v, want alpha narrowing recommendation", report.Recommendations)
+	}
+}
+
 func TestMCPExportedNameConsistentAcrossPromptProviderAndRegistry(t *testing.T) {
 	const wantName = "mcp_github_server_create_issue"
 	inputSchema := json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"}}}`)

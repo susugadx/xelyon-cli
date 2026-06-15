@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	mcpdiag "github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
 )
 
 func newMCPDoctorCommand() *cobra.Command {
@@ -162,6 +163,9 @@ func renderMCPDoctorConnection(w io.Writer, connection mcpdiag.DiagnosticConnect
 	if strings.TrimSpace(connection.Error) != "" {
 		fmt.Fprintf(w, "  connection error: %s\n", connection.Error)
 	}
+	if connection.ToolSurface != nil {
+		renderMCPDoctorToolSurface(w, *connection.ToolSurface)
+	}
 }
 
 func renderMCPDoctorTool(w io.Writer, tool mcpdiag.DiagnosticToolReport) {
@@ -170,6 +174,40 @@ func renderMCPDoctorTool(w io.Writer, tool mcpdiag.DiagnosticToolReport) {
 		return
 	}
 	fmt.Fprintf(w, "    SKIP %s reason=%s\n", tool.Name, tool.HiddenReason)
+}
+
+func renderMCPDoctorToolSurface(w io.Writer, report mcpsurface.Report) {
+	fmt.Fprintf(
+		w,
+		"  tool surface: visible=%d registered=%d total=%d omitted=%d estimated_tokens=%d schema=%s\n",
+		report.VisibleTools,
+		report.RegisteredTools,
+		report.TotalTools,
+		report.OmittedTools,
+		report.EstimatedTokens,
+		mcpsurface.FormatBytes(report.SchemaBytes),
+	)
+	fmt.Fprintf(w, "  top omitted reasons: %s\n", mcpsurface.FormatReasonCounts(report.OmittedReasons, 0))
+	if len(report.LargestSchemaTools) > 0 {
+		fmt.Fprintln(w, "  largest schema tools:")
+		for _, metric := range report.LargestSchemaTools {
+			fmt.Fprintf(w, "    - %s: %s schema\n", mcpsurface.MetricName(metric), mcpsurface.FormatBytes(metric.SchemaBytes))
+		}
+	}
+	if len(report.HighestEstimatedTokenTools) > 0 {
+		fmt.Fprintln(w, "  highest estimated token tools:")
+		for _, metric := range report.HighestEstimatedTokenTools {
+			fmt.Fprintf(w, "    - %s: %d tokens\n", mcpsurface.MetricName(metric), metric.EstimatedTokens)
+		}
+	}
+	if len(report.Recommendations) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "  recommendations:")
+	for _, recommendation := range report.Recommendations {
+		fmt.Fprintf(w, "    - %s: %s\n", recommendation.ServerName, recommendation.Reason)
+		fmt.Fprintf(w, "      ~/.xelyon/mcp.json mcpServers fragment: %s\n", mcpsurface.IncludeSnippet(recommendation))
+	}
 }
 
 func mcpDoctorCheckLines(checks []mcpdiag.DiagnosticCheck) []doctorCheckLine {

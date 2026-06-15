@@ -108,12 +108,14 @@ xelyon doctor mcp --connect
 xelyon doctor mcp --connect --tools
 ```
 
-`doctor mcp` は env value と raw args を表示しません。表示するのは command、arg 数、env key 名、timeout、approval、tool 名です。
+`doctor mcp --connect` は live `tools/list` の結果から tool surface summary、server 別の total / registered / visible / omitted 数、schema bytes、estimated tokens、omitted reason、絞り込み提案も表示します。
+estimated tokens は analysis に含めた tool の provider tool definition 相当から推定した合計です。schema body は表示しません。
+`doctor mcp` は env value と raw args を表示しません。表示するのは command、arg 数、env key 名、timeout、approval、tool 名、集計済みの token / schema byte 数です。schema body や description 全文は表示しません。
 
 対話中に現在セッションへ読み込まれている MCP runtime 状態を確認する場合は `/mcp status` を使います。
 `/mcp status` は snapshot-only で、MCP server process の起動、再接続、`tools/list`、`tools/call` は行いません。
-表示するのは runtime 有効状態、読み込み済み config の有無、server 状態、visible / omitted tool 数、tool surface のサンプルです。
-env value、raw args、server error detail は表示しません。
+表示するのは runtime 有効状態、読み込み済み config の有無、server 状態、registered / visible / omitted tool 数、tool surface のサンプル、server 別 token / schema byte 数、omitted reason、絞り込み提案です。
+env value、raw args、server error detail、tool schema body、description 全文は表示しません。
 
 ```text
 > /mcp status
@@ -349,15 +351,36 @@ XELYON は MCP サーバーへ接続して取得したツールのうち、モ�
 省略が発生した場合は stderr に warning を出します。
 必要なツールが省略される場合は、新しい設定項目ではなく `tools.include` / `tools.exclude` で MCP サーバー側の公開ツールを絞ってください。
 
+#### tool が多いときの確認手順
+
+1. 対話中なら `/mcp status` を実行し、`Top omitted reasons`、`Top heavy servers`、`Largest schema tools`、`Highest estimated token tools`、`Recommendations` を確認します。
+2. 起動前や別 HOME の設定を確認する場合は `xelyon doctor mcp --connect` を実行します。raw tool name まで確認したい場合は `--tools` を付けます。
+3. `Recommendations` に出る `mcpServers` 断片を参考に、必要な raw tool name だけを `tools.include` に入れます。`tools.exclude` は除外したい少数の tool が明確な場合だけ使います。
+4. もう一度 `/mcp status` または `xelyon doctor mcp --connect` を実行し、visible / omitted 数と estimated tokens が下がったことを確認します。
+
+例:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "tools": {
+        "include": ["list_issues", "get_issue", "create_issue"]
+      }
+    }
+  }
+}
+```
+
 #### 利用可能なツール名の確認
 
-MCPサーバーが提供するツール一覧はXELYON起動時のログで確認できます:
+MCPサーバーが提供するツール一覧は `xelyon doctor mcp --connect --tools` または XELYON 起動時のログで確認できます:
 
 ```
 🔌 MCP server 'github' connected (5 tools, 25 skipped)
 ```
 
-全ツールを確認するには、フィルタなしで一度起動してください。
+全ツールを確認するには、フィルタなしで `xelyon doctor mcp --connect --tools` を実行してください。
 
 ## 利用可能な公式MCPサーバー
 

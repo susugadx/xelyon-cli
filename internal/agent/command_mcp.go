@@ -10,10 +10,12 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
+	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 const mcpStatusSampleLimit = 10
+const mcpStatusSurfaceLimit = 5
 
 type mcpStatusToolSample struct {
 	exportedName string
@@ -41,9 +43,11 @@ func printMCPStatus(agent *Agent) {
 
 	snapshot := mcpStatusSnapshot(agent)
 	surface := agent.currentMCPToolSurface()
-	_, _ = fmt.Fprint(out, buildMCPStatusSummaryTable(agent, snapshot, surface).RenderCompact())
-	printMCPStatusServerTable(out, snapshot, surface)
+	analysis := surface.analysis()
+	_, _ = fmt.Fprint(out, buildMCPStatusSummaryTable(agent, snapshot, surface, analysis).RenderCompact())
+	printMCPStatusServerTable(out, snapshot, surface, analysis)
 	printMCPStatusToolSamples(out, surface)
+	printMCPStatusToolSurfaceAnalysis(out, analysis)
 	_, _ = fmt.Fprintln(out)
 }
 
@@ -54,7 +58,7 @@ func mcpStatusSnapshot(agent *Agent) mcp.StatusSnapshot {
 	return agent.mcpManager.StatusSnapshot()
 }
 
-func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection) *ui.Table {
+func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection, analysis mcpsurface.Report) *ui.Table {
 	budget := defaultMCPToolSurfaceBudget()
 	return ui.NewTable().
 		AddRow("Runtime", mcpRuntimeStatusText(agent)).
@@ -78,11 +82,16 @@ func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surfa
 			surface.estimatedTokens,
 			budget.maxTools,
 			budget.maxEstimatedTokens,
-			formatMCPStatusBytes(budget.maxSchemaBytes),
+			mcpsurface.FormatBytes(budget.maxSchemaBytes),
+		)).
+		AddRow("Surface", fmt.Sprintf(
+			"%s schema across %d server(s)",
+			mcpsurface.FormatBytes(analysis.SchemaBytes),
+			len(analysis.Servers),
 		))
 }
 
-func printMCPStatusServerTable(out io.Writer, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection) {
+func printMCPStatusServerTable(out io.Writer, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection, analysis mcpsurface.Report) {
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "🔌 MCP servers")
 	if len(snapshot.Servers) == 0 {
@@ -91,12 +100,17 @@ func printMCPStatusServerTable(out io.Writer, snapshot mcp.StatusSnapshot, surfa
 	}
 
 	visibleByServer, omittedByServer := mcpStatusSurfaceCounts(surface)
-	table := ui.NewTable().SetHeaders("Server", "State", "Tools", "Approval", "Timeouts", "Last healthy")
+	surfaceByServer := mcpStatusServerSurfaceByName(analysis)
+	table := ui.NewTable().SetHeaders("Server", "State", "Tools", "Tokens", "Schema", "Omitted reasons", "Approval", "Timeouts", "Last healthy")
 	for _, server := range snapshot.Servers {
+		serverSurface := surfaceByServer[server.Name]
 		table.AddRow(
 			server.Name,
 			string(server.State),
 			mcpStatusServerToolText(server, visibleByServer[server.Name], omittedByServer[server.Name]),
+			mcpStatusServerTokensText(serverSurface),
+			mcpStatusServerSchemaText(serverSurface),
+			mcpsurface.FormatReasonCounts(serverSurface.OmittedReasons, mcpStatusSurfaceLimit),
 			mcpStatusApprovalText(server),
 			fmt.Sprintf("startup %ds / tool %ds", server.StartupTimeoutSeconds, server.ToolTimeoutSeconds),
 			mcpStatusLastHealthyText(server),
@@ -124,6 +138,89 @@ func printMCPStatusVisibleSamples(out io.Writer, surface mcpToolSurfaceSelection
 	}
 	if remaining := len(surface.selected) - len(samples); remaining > 0 {
 		_, _ = fmt.Fprintf(out, "    ... %d more visible MCP tools\n", remaining)
+	}
+}
+
+func printMCPStatusToolSurfaceAnalysis(out io.Writer, analysis mcpsurface.Report) {
+	_, _ = fmt.Fprintln(out)
+	green.Fprintln(out, "📊 MCP tool surface")
+	if analysis.TotalTools == 0 {
+		dim.Fprintln(out, "  No MCP tool surface is visible in this session")
+		return
+	}
+	_, _ = fmt.Fprintf(
+		out,
+		"  Summary: %d visible / %d registered / %d total, %d omitted, %d estimated tokens (all analyzed), %s schema\n",
+		analysis.VisibleTools,
+		analysis.RegisteredTools,
+		analysis.TotalTools,
+		analysis.OmittedTools,
+		analysis.EstimatedTokens,
+		mcpsurface.FormatBytes(analysis.SchemaBytes),
+	)
+	printMCPStatusTopServers(out, analysis)
+	_, _ = fmt.Fprintf(out, "  Top omitted reasons: %s\n", mcpsurface.FormatReasonCounts(analysis.OmittedReasons, mcpStatusSurfaceLimit))
+	printMCPStatusToolMetrics(out, "Largest schema tools", analysis.LargestSchemaTools, true)
+	printMCPStatusToolMetrics(out, "Highest estimated token tools", analysis.HighestEstimatedTokenTools, false)
+	printMCPStatusRecommendations(out, analysis)
+}
+
+func printMCPStatusTopServers(out io.Writer, analysis mcpsurface.Report) {
+	servers := append([]mcpsurface.ServerSummary(nil), analysis.Servers...)
+	sort.SliceStable(servers, func(i, j int) bool {
+		if servers[i].EstimatedTokens != servers[j].EstimatedTokens {
+			return servers[i].EstimatedTokens > servers[j].EstimatedTokens
+		}
+		if servers[i].SchemaBytes != servers[j].SchemaBytes {
+			return servers[i].SchemaBytes > servers[j].SchemaBytes
+		}
+		if servers[i].RegisteredTools != servers[j].RegisteredTools {
+			return servers[i].RegisteredTools > servers[j].RegisteredTools
+		}
+		return servers[i].ServerName < servers[j].ServerName
+	})
+	if len(servers) > mcpStatusSurfaceLimit {
+		servers = servers[:mcpStatusSurfaceLimit]
+	}
+	_, _ = fmt.Fprintln(out, "  Top heavy servers:")
+	for _, server := range servers {
+		_, _ = fmt.Fprintf(
+			out,
+			"    - %s: %d tokens, %s schema, %d visible / %d omitted\n",
+			server.ServerName,
+			server.EstimatedTokens,
+			mcpsurface.FormatBytes(server.SchemaBytes),
+			server.VisibleTools,
+			server.OmittedTools,
+		)
+	}
+}
+
+func printMCPStatusToolMetrics(out io.Writer, label string, metrics []mcpsurface.ToolMetric, schema bool) {
+	_, _ = fmt.Fprintf(out, "  %s:\n", label)
+	if len(metrics) == 0 {
+		dim.Fprintln(out, "    none")
+		return
+	}
+	for _, metric := range metrics {
+		name := mcpsurface.MetricName(metric)
+		if schema {
+			_, _ = fmt.Fprintf(out, "    - %s: %s schema\n", name, mcpsurface.FormatBytes(metric.SchemaBytes))
+			continue
+		}
+		_, _ = fmt.Fprintf(out, "    - %s: %d tokens\n", name, metric.EstimatedTokens)
+	}
+}
+
+func printMCPStatusRecommendations(out io.Writer, analysis mcpsurface.Report) {
+	_, _ = fmt.Fprintln(out, "  Recommendations:")
+	if len(analysis.Recommendations) == 0 {
+		dim.Fprintln(out, "    none")
+		return
+	}
+	for _, recommendation := range analysis.Recommendations {
+		_, _ = fmt.Fprintf(out, "    - %s: %s\n", recommendation.ServerName, recommendation.Reason)
+		_, _ = fmt.Fprintf(out, "      ~/.xelyon/mcp.json mcpServers fragment: %s\n", mcpsurface.IncludeSnippet(recommendation))
 	}
 }
 
@@ -200,12 +297,34 @@ func mcpStatusSurfaceCounts(surface mcpToolSurfaceSelection) (map[string]int, ma
 	return visible, omitted
 }
 
+func mcpStatusServerSurfaceByName(analysis mcpsurface.Report) map[string]mcpsurface.ServerSummary {
+	byName := make(map[string]mcpsurface.ServerSummary, len(analysis.Servers))
+	for _, server := range analysis.Servers {
+		byName[server.ServerName] = server
+	}
+	return byName
+}
+
 func mcpStatusServerToolText(server mcp.ServerStatusSnapshot, visible, omitted int) string {
 	text := fmt.Sprintf("%d visible / %d registered", visible, server.RegisteredToolCount)
 	if omitted > 0 {
 		text += fmt.Sprintf(", %d omitted", omitted)
 	}
 	return text
+}
+
+func mcpStatusServerTokensText(server mcpsurface.ServerSummary) string {
+	if server.RegisteredTools == 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%d", server.EstimatedTokens)
+}
+
+func mcpStatusServerSchemaText(server mcpsurface.ServerSummary) string {
+	if server.RegisteredTools == 0 {
+		return "-"
+	}
+	return mcpsurface.FormatBytes(server.SchemaBytes)
 }
 
 func mcpStatusApprovalText(server mcp.ServerStatusSnapshot) string {
@@ -264,11 +383,4 @@ func mcpStatusInlineSummary(agent *Agent) string {
 		snapshot.RegisteredToolCount,
 		len(surface.omitted),
 	)
-}
-
-func formatMCPStatusBytes(bytes int) string {
-	if bytes >= 1024 && bytes%1024 == 0 {
-		return fmt.Sprintf("%d KiB", bytes/1024)
-	}
-	return fmt.Sprintf("%d bytes", bytes)
 }

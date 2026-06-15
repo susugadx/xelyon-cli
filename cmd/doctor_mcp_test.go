@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	mcpdiag "github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
 )
 
 func TestMCPDoctorCommandFlags(t *testing.T) {
@@ -145,6 +146,73 @@ func TestRenderMCPDoctorTextMarksUnresolvedConfigPath(t *testing.T) {
 	text := out.String()
 	if !strings.Contains(text, "Config: (unresolved) (missing)") {
 		t.Fatalf("output = %q, want unresolved config path", text)
+	}
+}
+
+func TestRenderMCPDoctorTextIncludesToolSurfaceSummary(t *testing.T) {
+	var out strings.Builder
+
+	renderMCPDoctorText(&out, mcpdiag.DiagnosticReport{
+		Target:         "mcp",
+		RuntimeEnabled: true,
+		ConfigExists:   true,
+		Connect:        true,
+		Checks: []mcpdiag.DiagnosticCheck{{
+			Name:    "mcp_config",
+			Status:  mcpdiag.DiagnosticStatusOK,
+			Message: "ok",
+		}},
+		Servers: []mcpdiag.DiagnosticServerReport{{
+			Name: "sample",
+			Connection: &mcpdiag.DiagnosticConnectionReport{
+				Attempted:           true,
+				Status:              "ok",
+				RawToolCount:        2,
+				RegisteredToolCount: 1,
+				SkippedToolCount:    1,
+				ToolSurface: &mcpsurface.Report{
+					TotalTools:      2,
+					RegisteredTools: 1,
+					VisibleTools:    1,
+					OmittedTools:    1,
+					EstimatedTokens: 12,
+					SchemaBytes:     34,
+					OmittedReasons: []mcpsurface.ReasonCount{{
+						Reason: "token_budget_exceeded",
+						Count:  1,
+					}},
+					LargestSchemaTools: []mcpsurface.ToolMetric{{
+						ExportedName: "mcp_sample_heavy",
+						SchemaBytes:  34,
+					}},
+					HighestEstimatedTokenTools: []mcpsurface.ToolMetric{{
+						ExportedName:    "mcp_sample_heavy",
+						EstimatedTokens: 12,
+					}},
+					Recommendations: []mcpsurface.Recommendation{{
+						ServerName:   "sample",
+						Reason:       "tools are omitted; narrow the server tool surface",
+						IncludeTools: []string{"safe"},
+					}},
+				},
+			},
+		}},
+	})
+
+	text := out.String()
+	for _, want := range []string{
+		"tool surface: visible=1 registered=1 total=2 omitted=1 estimated_tokens=12 schema=34 bytes",
+		"top omitted reasons: token_budget_exceeded=1",
+		"largest schema tools:",
+		"mcp_sample_heavy: 34 bytes schema",
+		"highest estimated token tools:",
+		"mcp_sample_heavy: 12 tokens",
+		"recommendations:",
+		"\"sample\": {\"tools\": {\"include\": [\"safe\"]}}",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output = %q, want substring %q", text, want)
+		}
 	}
 }
 
