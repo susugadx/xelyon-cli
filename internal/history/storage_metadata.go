@@ -40,6 +40,7 @@ func buildSessionMetadata(session *Session) SessionMetadata {
 		Model:                     session.Model,
 		ProviderName:              session.ProviderName,
 		ProviderConfigKey:         session.ProviderConfigKey,
+		WorkingDir:                session.WorkingDir,
 		StartTime:                 session.StartTime,
 		LastModified:              session.LastModified,
 		MessageCount:              session.conversationMessageCount(),

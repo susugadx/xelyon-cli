@@ -78,6 +78,9 @@ var exitProcess = os.Exit
 
 // Cleanup はエージェントのリソースをクリーンアップ
 func (a *Agent) Cleanup() {
+	if a != nil && a.signalCleanup != nil {
+		a.signalCleanup()
+	}
 	if cleanupHook != nil {
 		cleanupHook()
 	}
@@ -92,5 +95,15 @@ func (a *Agent) Cleanup() {
 			yellow.Fprintf(a.output(), "Warning: Failed to save tool cache: %v\n", err)
 		}
 	}
+	if !a.activeSessionHasPersistableContent() {
+		return
+	}
 	a.saveSessionWithWarning("Warning: Failed to save session: %v\n")
+}
+
+func (a *Agent) activeSessionHasPersistableContent() bool {
+	if a == nil || a.session == nil {
+		return false
+	}
+	return len(a.session.Messages) > 0 || len(a.session.CompactedItems) > 0
 }

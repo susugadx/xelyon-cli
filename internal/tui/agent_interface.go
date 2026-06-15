@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
@@ -40,6 +41,31 @@ type CommandAgent interface {
 	// HandleCommand は /status, /use, /clear 等のコマンドを処理する。
 	// 処理した場合 true を返す。
 	HandleCommand(cmd string) bool
+}
+
+// SessionCandidate は TUI の session picker に表示する再開候補を表す。
+type SessionCandidate struct {
+	ID           string
+	Preview      string
+	ProviderName string
+	Model        string
+	WorkingDir   string
+	LastModified time.Time
+	MessageCount int
+}
+
+// SessionResumeOptions は session picker/resume の候補範囲を表す。
+type SessionResumeOptions struct {
+	All bool
+}
+
+// SessionAgent は session の新規作成と再開を TUI に提供する。
+type SessionAgent interface {
+	ResumeSessionCandidates(SessionResumeOptions) ([]SessionCandidate, error)
+	ResumeLastSession(SessionResumeOptions) (SessionCandidate, error)
+	ResumeSession(id string) error
+	ResumeStartupSession(id string) error
+	StartNewSession() (string, error)
 }
 
 // ClipboardAgent は TUI から利用する clipboard 操作を提供する。
@@ -97,7 +123,7 @@ type ProjectAgent interface {
 	// SaveProjectConfig は xelyon.yaml に project config を保存する。
 	SaveProjectConfig(pc *config.ProjectConfig) error
 
-	// CreateProjectConfigTemplate は xelyon.yaml のテンプレートを作成して読み込む。
+	// CreateProjectConfigTemplate は xelyon.yaml の repo config template を作成して読み込む。
 	CreateProjectConfigTemplate() (*config.ProjectConfig, error)
 }
 
@@ -119,5 +145,6 @@ type AgentInterface interface {
 	ClipboardAgent
 	ConfigAgent
 	ProviderModelAgent
+	SessionAgent
 	ProjectAgent
 }

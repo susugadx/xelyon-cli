@@ -204,26 +204,23 @@ project_map:
 # ============================================================
 # Agent Instructions 設定
 # ============================================================
-# AGENTS.md / CLAUDE.md 互換ガイダンス読み込み設定
-# xelyon.yaml の rules とは別レイヤーで扱われます
+# AGENTS.md first の guidance 読み込み設定
+# CLAUDE.md は互換候補として選択できます
 agent_instructions:
     project:
-        # project-local guidance の読み込みモード（off / fallback / always）
-        mode: fallback
-        # project-local guidance ファイル候補
+        # project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）
+        mode: always
+        # project-local guidance ファイル候補（既定は AGENTS.md）
         files:
             - AGENTS.md
-            - CLAUDE.md
-            - .claude/CLAUDE.md
         # gitignored / untracked guidance を許可
         include_gitignored: false
     global:
         # global guidance 読み込みを有効化
-        enabled: false
-        # global guidance ファイル候補
+        enabled: true
+        # global guidance ファイル候補（既定は ~/.xelyon/AGENTS.md）
         files:
             - ~/.xelyon/AGENTS.md
-            - ~/.xelyon/CLAUDE.md
     # CLAUDE.local.md / AGENTS.local.md など local 系 guidance を許可
     include_local_files: false
     # @path import 行を展開して読み込む（相対パスは当該 guidance file 基準）
@@ -684,7 +681,7 @@ responses:
 - `compact_threshold=0` は auto 解決を意味し、API payload に `0` は送信しません。
 - `compact_threshold` の正数指定は `1000` 以上のみ有効です（`1..999` は validation error）。
 
-`/clear` はローカル履歴とローカルに保持している response ID を消しますが、provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
+`/new` と `/clear` は新しい session を開始し、ローカルで保持している response ID を新 session に引き継ぎません。`/clear` は TUI の表示 transcript も消します。ただし provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
 
 ### LSP連携設定 (`lsp`)
 

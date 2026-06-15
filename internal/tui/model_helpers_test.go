@@ -41,6 +41,13 @@ type stubAgent struct {
 	azureCatalogModelRequests []string
 	switchedProviders         []providerModelSwitchCall
 	switchedModels            []string
+	sessionCandidates         []SessionCandidate
+	lastSessionCandidate      SessionCandidate
+	resumeLastCalls           int
+	resumedSessionIDs         []string
+	startupResumedSessionIDs  []string
+	startedSessionIDs         []string
+	sessionErr                error
 	configuredAzure           []azureDeploymentSetupCall
 	switchProviderErr         error
 	switchModelErr            error
@@ -89,6 +96,54 @@ func (s *stubAgent) HandleCommand(cmd string) bool {
 	defer s.mu.Unlock()
 	s.handledInputs = append(s.handledInputs, cmd)
 	return s.handledCommands[cmd]
+}
+func (s *stubAgent) ResumeSessionCandidates(_ SessionResumeOptions) ([]SessionCandidate, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.sessionErr != nil {
+		return nil, s.sessionErr
+	}
+	return append([]SessionCandidate(nil), s.sessionCandidates...), nil
+}
+func (s *stubAgent) ResumeLastSession(_ SessionResumeOptions) (SessionCandidate, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessionErr != nil {
+		return SessionCandidate{}, s.sessionErr
+	}
+	s.resumeLastCalls++
+	if s.lastSessionCandidate.ID != "" {
+		return s.lastSessionCandidate, nil
+	}
+	return SessionCandidate{ID: "last-session"}, nil
+}
+func (s *stubAgent) ResumeSession(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessionErr != nil {
+		return s.sessionErr
+	}
+	s.resumedSessionIDs = append(s.resumedSessionIDs, id)
+	return nil
+}
+func (s *stubAgent) ResumeStartupSession(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessionErr != nil {
+		return s.sessionErr
+	}
+	s.startupResumedSessionIDs = append(s.startupResumedSessionIDs, id)
+	return nil
+}
+func (s *stubAgent) StartNewSession() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessionErr != nil {
+		return "", s.sessionErr
+	}
+	id := fmt.Sprintf("session-%d", len(s.startedSessionIDs)+1)
+	s.startedSessionIDs = append(s.startedSessionIDs, id)
+	return id, nil
 }
 func (s *stubAgent) GetStatusLine() string {
 	s.mu.RLock()
@@ -179,10 +234,7 @@ func (s *stubAgent) CreateProjectConfigTemplate() (*config.ProjectConfig, error)
 	if s.projectCreateErr != nil {
 		return nil, s.projectCreateErr
 	}
-	s.projectConfig = &config.ProjectConfig{
-		Context: "template context",
-		Rules:   []string{"template rule"},
-	}
+	s.projectConfig = &config.ProjectConfig{}
 	return config.CloneProjectConfig(s.projectConfig), nil
 }
 func (s *stubAgent) GetProviderName() string {

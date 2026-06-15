@@ -54,9 +54,11 @@ Language Server Protocol (LSP) は、エディタとプログラミング言語�
 | Bash | bash-language-server | `npm i -g bash-language-server` |
 | Markdown | marksman | `brew install marksman` |
 
-## セットアップ
+## セットアップと recommendation
 
-XELYON は起動時にプロジェクト内の対応言語を検出し、`lsp.enabled: true` なら導入済みの LSP サーバーを起動準備します。未導入の LSP サーバーがあれば shell で実行するインストールコマンドを案内します。不要な場合は `lsp.skip_install_prompt: true` で非表示にできます。
+XELYON は LSP を global 初回 setup ではなく project recommendation として扱います。`xelyon.yaml` などの project root が見つかる場合に、プロジェクト内の対応言語を検出し、`lsp.enabled: true` なら導入済みの LSP サーバーを起動準備します。未導入の LSP サーバーがあれば shell で実行するインストールコマンドを案内します。
+
+同じ内容は `xelyon setup` または TUI の `/setup` でも確認できます。不要な場合は global config の `lsp.skip_install_prompt: true` で非表示にできます。project-local suppress は tracked `xelyon.yaml` へ自動追記しません。
 
 ### 1. LSPサーバーのインストール
 

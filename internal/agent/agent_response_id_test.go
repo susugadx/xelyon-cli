@@ -373,8 +373,8 @@ func TestHandleLoadCommand_PreservesSavedResponseContextAcrossMismatchedLoad(t *
 	}
 
 	ridProvider := agent.CurrentProvider.(*mockResponseIDProvider)
-	if ridProvider.responseID != "" {
-		t.Fatalf("provider.responseID = %q, want cleared for mismatched runtime", ridProvider.responseID)
+	if ridProvider.responseID != "resp_saved" {
+		t.Fatalf("provider.responseID = %q, want restored saved response id", ridProvider.responseID)
 	}
 	if agent.session.ResponseID != "resp_saved" {
 		t.Fatalf("session.ResponseID = %q, want preserved saved response id", agent.session.ResponseID)
@@ -382,8 +382,8 @@ func TestHandleLoadCommand_PreservesSavedResponseContextAcrossMismatchedLoad(t *
 	if agent.session.ResponseModel != "saved-model" {
 		t.Fatalf("session.ResponseModel = %q, want preserved saved model", agent.session.ResponseModel)
 	}
-	if agent.session.Model != "different-model" {
-		t.Fatalf("session.Model = %q, want reconciled current runtime model", agent.session.Model)
+	if agent.session.Model != "saved-model" {
+		t.Fatalf("session.Model = %q, want restored saved runtime model", agent.session.Model)
 	}
 
 	agent.Cleanup()
@@ -398,8 +398,8 @@ func TestHandleLoadCommand_PreservesSavedResponseContextAcrossMismatchedLoad(t *
 	if reloaded.ResponseModel != "saved-model" {
 		t.Fatalf("reloaded.ResponseModel = %q, want preserved saved model", reloaded.ResponseModel)
 	}
-	if reloaded.Model != "different-model" {
-		t.Fatalf("reloaded.Model = %q, want persisted current runtime model", reloaded.Model)
+	if reloaded.Model != "saved-model" {
+		t.Fatalf("reloaded.Model = %q, want persisted saved runtime model", reloaded.Model)
 	}
 
 	var out2 bytes.Buffer

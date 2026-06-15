@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/app"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/version"
@@ -37,6 +38,8 @@ var (
 	runLegacyInteractiveWithImage  = app.RunLegacyInteractiveWithImageWithConfig
 	runTUI                         = app.RunTUIWithConfig
 	runTUIWithResume               = app.RunTUIWithResumeWithConfig
+	runTUIWithResumeDirect         = app.RunTUIWithResumeSessionWithConfig
+	runTUIWithResumePicker         = app.RunTUIWithResumePickerWithConfig
 	runTUIWithImage                = app.RunTUIWithImageWithConfig
 	runHeadless                    = app.RunHeadlessWithConfig
 	runOnce                        = app.RunOnceWithConfig
@@ -86,75 +89,108 @@ Examples:
 			}
 		}
 
-		// 設定を読み込み
-		cfg, err := config.LoadConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to load config: %v\n", err)
-			cfg = config.DefaultConfig()
-		}
-
-		// 環境変数で上書き
-		cfg.ApplyEnvironmentOverrides()
-
-		// CLIフラグで上書き（明示的に指定されたもののみ）
-		var loopPtr, diffPtr *int
-		if cmd.Flags().Changed("loop-threshold") {
-			loopPtr = &loopThreshold
-		}
-		if cmd.Flags().Changed("diff-lines") {
-			diffPtr = &diffLines
-		}
-		cfg.ApplyFlagOverrides(loopPtr, diffPtr)
-
-		model := getModel(cfg)
-		provider := getProvider(cfg)
-		if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
-			return err
-		}
 		query := strings.Join(args, " ")
 
 		switch mode {
 		case executionModeHeadless:
+			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
+			if err != nil {
+				return err
+			}
 			if query == "" {
 				return fmt.Errorf("query argument is required in headless mode")
 			}
-			result := runHeadless(cmd.Context(), query, model, provider, cfg)
+			result := runHeadless(cmd.Context(), query, runtime.model, runtime.provider, runtime.cfg)
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
 			if result.Status == app.HeadlessStatusError {
+				cmd.SilenceUsage = true
 				return fmt.Errorf("headless execution failed")
 			}
 			return nil
 		case executionModeOnce:
-			return runOnce(query, model, provider, cfg, autoApprove, quiet)
+			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
+			if err != nil {
+				return err
+			}
+			return runOnce(query, runtime.model, runtime.provider, runtime.cfg, autoApprove, quiet)
 		case executionModeResume:
 			if legacyNoTUI {
+				runtime, err := loadInteractiveRuntimeSelection(cmd)
+				if err != nil {
+					return err
+				}
 				printLegacyNoTUIWarning()
-				runLegacyInteractiveWithResume(model, provider, cfg, autoApprove)
+				runLegacyInteractiveWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			} else {
-				runTUIWithResume(model, provider, cfg, autoApprove)
+				runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{last: true})
+				if err != nil {
+					return err
+				}
+				return runTUIForResumeRuntime(runtime, autoApprove)
 			}
 			return nil
 		case executionModeInteractive:
+			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			if err != nil {
+				return err
+			}
 			if legacyNoTUI {
 				printLegacyNoTUIWarning()
-				runLegacyInteractive(model, provider, cfg, autoApprove)
+				runLegacyInteractive(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			} else {
-				runTUI(model, provider, cfg, autoApprove)
+				runTUI(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 			}
 			return nil
 		case executionModeOnceImage:
-			return runOnceWithImage(query, model, provider, imageFlag, cfg, autoApprove, quiet)
+			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
+			if err != nil {
+				return err
+			}
+			return runOnceWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove, quiet)
 		case executionModeInteractiveImage:
+			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			if err != nil {
+				return err
+			}
 			if legacyNoTUI {
 				printLegacyNoTUIWarning()
-				return runLegacyInteractiveWithImage(query, model, provider, imageFlag, cfg, autoApprove)
+				return runLegacyInteractiveWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
 			}
-			return runTUIWithImage(query, model, provider, imageFlag, cfg, autoApprove)
+			return runTUIWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
 		default:
 			return fmt.Errorf("unsupported execution mode: %s", mode)
 		}
 	},
+}
+
+func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mode executionMode, model string) (api.Provider, error) {
+	if executionModeIsInteractive(mode) {
+		return resolveInteractiveProvider(providerName)
+	}
+	provider, err := resolveRequiredProvider(providerName)
+	if err == nil {
+		return provider, nil
+	}
+	if mode == executionModeHeadless && isProviderSetupError(providerName, err) {
+		result := app.NewHeadlessProviderSetupRequiredResult(providerName, model, err.Error())
+		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(jsonBytes))
+		if cmd != nil {
+			cmd.SilenceUsage = true
+		}
+		return nil, fmt.Errorf("headless execution failed")
+	}
+	return nil, err
+}
+
+func executionModeIsInteractive(mode executionMode) bool {
+	switch mode {
+	case executionModeInteractive, executionModeResume, executionModeInteractiveImage:
+		return true
+	default:
+		return false
+	}
 }
 
 func init() {
@@ -194,6 +230,8 @@ func init() {
 
 	rootCmd.AddCommand(newDoctorCommand())
 	rootCmd.AddCommand(newAuthCommand())
+	rootCmd.AddCommand(newResumeCommand())
+	rootCmd.AddCommand(newSetupCommand())
 }
 
 func printLegacyNoTUIWarning() {

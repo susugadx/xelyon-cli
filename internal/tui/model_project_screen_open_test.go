@@ -84,8 +84,8 @@ func TestProjectScreen_MissingConfigCreatesTemplate(t *testing.T) {
 	if m.projectScreen.missing {
 		t.Fatal("projectScreen should no longer be missing")
 	}
-	if m.projectScreen.pc.Context != "template context" {
-		t.Fatalf("template context = %q", m.projectScreen.pc.Context)
+	if m.projectScreen.pc.Context != "" {
+		t.Fatalf("template context = %q, want empty", m.projectScreen.pc.Context)
 	}
 	if view := m.View(); !strings.Contains(view, "template created") {
 		t.Fatalf("View() missing template-created status: %q", view)

@@ -291,7 +291,7 @@ xelyon doctor bedrock --json
 TUI が primary surface です。`--no-tui` の classic REPL は deprecated legacy fallback として残しており、新しい対話型 UI コマンドは TUI 側だけに追加します。
 TUI では入力欄で `/` または `/r` のような prefix を入力すると command 候補が表示され、Enter で選択中の command を実行し、Tab で入力欄へ補完できます。
 
-設定系コマンドの責務は分かれています。`/config` は global config (`~/.xelyon/config.yaml`) の編集、`/project` は project config (`xelyon.yaml`) の編集、`/init` は `xelyon.yaml` テンプレート作成だけを担当します。TUI で `xelyon.yaml` を管理する通常導線は `/project` です。
+設定系コマンドの責務は分かれています。`/config` は global config (`~/.xelyon/config.yaml`) の編集、`/project` は project config (`xelyon.yaml`) の編集、`/init` は repo-local guidance (`AGENTS.md`) の雛形作成だけを担当します。TUI で `xelyon.yaml` を管理する通常導線は `/project` です。
 
 ### `/help`
 
@@ -314,38 +314,36 @@ Gemini では `Service Tier` 行に configured tier、request body tier、pricin
 > /stats   # alias
 ```
 
-### `/save`
+### `/new`
 
-現在のセッションを保存します。
-
-```
-> /save
-```
-
-### `/load`
-
-保存されたセッションを読み込みます。引数なしで最後のセッションを読み込みます。
+現在の session を保存して、新しい session を開始します。TUI の表示 transcript は残すため、画面上で直前の流れを見ながら文脈だけ切り替えたい場合に使います。
 
 ```
-> /load              # 最後のセッションを読み込み
-> /load <session-id> # 指定したセッションを読み込み
-```
-
-### `/sessions`
-
-保存されたセッション一覧を表示します（最新10件）。
-
-```
-> /sessions
+> /new
 ```
 
 ### `/clear`
 
-会話履歴をクリアします。
+現在の session を保存して、新しい session を開始します。TUI では表示 transcript、viewport、tool block、agent activity も消します。
 
 ```
 > /clear
 ```
+
+### `/resume`
+
+保存済み session を再開します。引数なしでは現在の作業ディレクトリの session picker を開きます。`--all` は他の作業ディレクトリの session も候補に含め、`--last` は現在の作業ディレクトリの最新 session を直接再開します。保存済み provider/model がある session は、global config を保存せずに runtime だけその provider/model へ切り替えます。
+
+```
+> /resume
+> /resume --all
+> /resume --last
+> /resume <session-id>
+```
+
+### Legacy session commands
+
+`/save`、`/load`、`/sessions` は互換用に残っていますが、TUI の候補と通常 help には表示しません。新しい導線では `/new`、`/clear`、`/resume` を使ってください。
 
 ### `/history`
 
@@ -510,7 +508,7 @@ custom focus は対象ファイルや差分範囲を絞るものではありま�
 
 プロバイダーとモデルを動的に切り替えます。TUI で引数なしの `/provider` を実行すると provider picker を開きます。`/use` は legacy alias です。
 
-切り替え後もローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側の continuation state は、新しい provider/model と混ざらないよう切り替え時にリセットされます。文脈自体を切りたい場合は `/clear` か新しい session を使います。
+切り替え後もローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側の continuation state は、新しい provider/model と混ざらないよう切り替え時にリセットされます。文脈自体を切りたい場合は `/new`、画面も消す場合は `/clear` を使います。
 
 ```
 > /provider
@@ -602,23 +600,15 @@ Skill Router は通常の依頼時に bounded hint を model へ渡します。v
 
 ### `/init`
 
-project config (`xelyon.yaml`) のテンプレートを作成します。既存ファイルの編集は `/project` が通常導線です。
+repo-local guidance (`AGENTS.md`) の雛形を作成します。既存 `AGENTS.md` がある場合は上書きしません。
 
 ```
 > /init
 ```
 
-**テンプレートに含まれるフィールド:**
-- `context` — プロジェクトの概要・背景情報
-- `rules` — 必須ルール（AI が必ず従うルール）
-- `conditional` — `paths` に一致した時だけ注入する rules/context
-- `ignore` — Project Map / `list_dir` / `search_code` で共有する ignore パターン
-- `final_checks` — 明示完了時の final checks（省略時は config.yaml の final_checks を使用）
+`CLAUDE.md` / `.claude/CLAUDE.md` が既にある repo でもコピーや上書きは行いません。必要な場合は `/config` の Agent Instructions で追加選択できます。
 
-**注意:**
-- コード構造の詳細な記載は不要
-- Project Map は起動時に軽量 manifest を自動注入するため、ファイル一覧や関数目次は書かない
-- `final_checks.commands` を定義すると、AIが `completed_with_changes` の完了候補で必ず実行します
+XELYON 固有の repo config (`xelyon.yaml`) は `/project` が通常導線です。
 
 ### `/project`
 
@@ -796,7 +786,13 @@ xelyon --interactive "この続きから相談したい"
 # one-shot のヘッダー/ステータス表示を抑制
 xelyon --quiet "短く要約して"
 
-# セッション再開（最後のセッションのみ）
+# セッション再開（picker / 最新 / 全作業ディレクトリ / ID指定）
+xelyon resume
+xelyon resume --last
+xelyon resume --all
+xelyon resume <session-id>
+
+# 互換 alias: 最後のセッションのみ
 xelyon --resume
 
 # ツール確認を自動承認
@@ -813,7 +809,7 @@ xelyon --no-update-check
 xelyon --no-tui
 ```
 
-`--resume` は最後のセッションを再開します。session ID は受け取らず、query 引数や `--image` とは併用できません。`--once` とも併用できません。
+`xelyon resume` は TUI の session picker を開きます。既定では現在の作業ディレクトリに紐づく session と、古い形式で作業ディレクトリ情報を持たない session だけを表示します。`--all` は全作業ディレクトリの session を表示し、`--last` は picker を開かず最新 session を再開します。`--resume` は互換 alias として `xelyon resume --last` 相当です。query 引数や `--image` とは併用できません。`--once` とも併用できません。
 
 `--quiet` は one-shot 実行専用です。`--interactive` や通常の対話セッションでは使用できません。
 
@@ -1029,3 +1025,15 @@ raw output artifact store の read-only diagnostics を表示します。provide
 - `/rawoutputs gc --dry-run`: 現在 runtime が把握している caller-provided live refs だけを source of truth として、tombstone / collect / keep の見込み件数を表示します。
 
 `/rawoutputs gc --apply`、`delete`、`repair` は実装していません。このコマンドは状態確認専用で、store や history を変更しません。
+
+## 未ドキュメント化コマンド（自動追加）
+
+<!-- TODO: 以下のコマンドに詳細な説明を追加してください -->
+
+### `/setup`
+
+Show first-run setup checklist
+
+```
+> /setup
+```

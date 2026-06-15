@@ -36,6 +36,8 @@ func saveConfig(cfg *Config) error {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
+	_ = ensureDefaultGlobalAgentInstructionsFile()
+
 	return nil
 }
 

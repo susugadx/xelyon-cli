@@ -337,6 +337,32 @@ func TestProviderCandidates_OpenAISubscriptionLoggedInStatus(t *testing.T) {
 	t.Fatalf("openai_subscription candidate missing: %#v", got)
 }
 
+func TestProviderCandidates_OpenAISubscriptionExpiredTokenIsNotLoginRequired(t *testing.T) {
+	t.Setenv("XELYON_OPENAI_SUBSCRIPTION_AUTH_DIR", filepath.Join(t.TempDir(), "auth"))
+	if err := openaisubscription.SaveSubscriptionCredential(openaisubscription.DefaultSubscriptionAuthConfig(), openaisubscription.SubscriptionCredential{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+		AccountID:    "acct_1234abcd",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+	agent := &Agent{Runtime: NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())}
+	got := agent.ProviderCandidates()
+	for _, candidate := range got {
+		if candidate.Key == "openai_subscription" {
+			if candidate.CredentialStatus == ProviderCredentialLoginRequired {
+				t.Fatalf("openai_subscription status = %q, want request-attempt allowed", candidate.CredentialStatus)
+			}
+			if candidate.CredentialStatus != ProviderCredentialLoggedIn {
+				t.Fatalf("openai_subscription status = %q, want logged in display for refreshable expired token", candidate.CredentialStatus)
+			}
+			return
+		}
+	}
+	t.Fatalf("openai_subscription candidate missing: %#v", got)
+}
+
 func TestProviderCandidates_AppendsCurrentAliasOwner(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	agent := &Agent{
@@ -915,6 +941,41 @@ func TestSwitchProviderModel_ReturnsOutcomeWithoutPrinting(t *testing.T) {
 	}
 	if agent.Stats.Provider != "ollama" || agent.Stats.Model != "qwen2.5-coder:14b" {
 		t.Fatalf("stats provider/model = (%q, %q), want (ollama, qwen2.5-coder:14b)", agent.Stats.Provider, agent.Stats.Model)
+	}
+}
+
+func TestSwitchProviderModel_RejectsSetupRequiredProvider(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+
+	cfg := newProjectMapDisabledConfig()
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName:      "ollama",
+		ProviderConfigKey: "ollama",
+		CurrentModel:      "qwen2.5-coder:14b",
+		CurrentProvider:   &mockProvider{name: "ollama"},
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("qwen2.5-coder:14b"),
+		},
+	}
+
+	_, err := agent.SwitchProviderModel("openai", "gpt-5.2")
+	if err == nil {
+		t.Fatal("SwitchProviderModel() error = nil, want setup-required error")
+	}
+	if !strings.Contains(err.Error(), "OPENAI_API_KEY") || !strings.Contains(err.Error(), "xelyon setup") {
+		t.Fatalf("SwitchProviderModel() error = %v, want setup guidance", err)
+	}
+	if agent.ProviderName != "ollama" || agent.ProviderConfigKey != "ollama" || agent.CurrentModel != "qwen2.5-coder:14b" {
+		t.Fatalf("runtime identity = (%q, %q, %q), want unchanged ollama/ollama/qwen2.5-coder:14b",
+			agent.ProviderName,
+			agent.ProviderConfigKey,
+			agent.CurrentModel,
+		)
 	}
 }
 

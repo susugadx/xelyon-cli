@@ -2,6 +2,9 @@ package history
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -22,6 +25,7 @@ type Session struct {
 	Model                     string
 	ProviderName              string
 	ProviderConfigKey         string
+	WorkingDir                string
 	StartTime                 time.Time
 	LastModified              time.Time
 	Messages                  []MessageEntry
@@ -77,6 +81,7 @@ type SessionMetadata struct {
 	Model                     string    `json:"model"`
 	ProviderName              string    `json:"provider_name,omitempty"`
 	ProviderConfigKey         string    `json:"provider_config_key,omitempty"`
+	WorkingDir                string    `json:"working_dir,omitempty"`
 	StartTime                 time.Time `json:"start_time"`
 	LastModified              time.Time `json:"last_modified"`
 	MessageCount              int       `json:"message_count"`
@@ -92,10 +97,25 @@ type SessionMetadata struct {
 
 // NewSession は新しいセッションを作成
 func NewSession(model string) *Session {
+	return newSession(model, currentWorkingDirForSession())
+}
+
+// NewSessionWithWorkingDir は指定した作業ディレクトリに紐づくセッションを作成する。
+func NewSessionWithWorkingDir(model, workingDir string) *Session {
+	if strings.TrimSpace(workingDir) == "" {
+		workingDir = currentWorkingDirForSession()
+	} else {
+		workingDir = normalizeWorkingDirForSession(workingDir)
+	}
+	return newSession(model, workingDir)
+}
+
+func newSession(model, workingDir string) *Session {
 	now := time.Now()
 	return &Session{
 		ID:           newSessionID(now),
 		Model:        model,
+		WorkingDir:   workingDir,
 		StartTime:    now,
 		LastModified: now,
 		Messages:     []MessageEntry{},
@@ -105,6 +125,25 @@ func NewSession(model string) *Session {
 func newSessionID(now time.Time) string {
 	sequence := atomic.AddUint64(&sessionIDCounter, 1)
 	return fmt.Sprintf("%d-%d", now.UnixNano(), sequence)
+}
+
+func currentWorkingDirForSession() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return normalizeWorkingDirForSession(cwd)
+}
+
+func normalizeWorkingDirForSession(cwd string) string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(cwd); err == nil {
+		cwd = abs
+	}
+	return filepath.Clean(cwd)
 }
 
 // AddMessage はメッセージをセッションに追加

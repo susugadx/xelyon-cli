@@ -64,10 +64,22 @@ func TestDecideCommandSubmission(t *testing.T) {
 			wantAction: commandrouter.ActionDispatchAgent,
 		},
 		{
-			name:       "dispatch agent command",
+			name:       "clear starts local new session",
 			input:      "/clear",
-			wantKind:   commandSubmissionDecisionDispatchAgent,
-			wantAction: commandrouter.ActionDispatchAgent,
+			wantKind:   commandSubmissionDecisionLocalAction,
+			wantAction: commandrouter.ActionNewSession,
+		},
+		{
+			name:       "clear with args stays local for usage error",
+			input:      "/clear typo",
+			wantKind:   commandSubmissionDecisionLocalAction,
+			wantAction: commandrouter.ActionNewSession,
+		},
+		{
+			name:       "new with args stays local for usage error",
+			input:      "/new typo",
+			wantKind:   commandSubmissionDecisionLocalAction,
+			wantAction: commandrouter.ActionNewSession,
 		},
 		{
 			name:              "copy without selection dispatches",

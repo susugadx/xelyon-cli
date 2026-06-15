@@ -10,12 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openaisubscription "github.com/susugadx/xelyon-cli/internal/api/providers/openai_subscription"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
@@ -159,7 +161,9 @@ type rootCommandRunners struct {
 	runLegacyInteractiveWithResume func(string, api.Provider, *config.Config, bool)
 	runLegacyInteractiveWithImage  func(string, string, api.Provider, string, *config.Config, bool) error
 	runTUI                         func(string, api.Provider, *config.Config, bool)
-	runTUIWithResume               func(string, api.Provider, *config.Config, bool)
+	runTUIWithResume               func(string, api.Provider, *config.Config, bool) error
+	runTUIWithResumeDirect         func(string, api.Provider, *config.Config, bool, string) error
+	runTUIWithResumePicker         func(string, api.Provider, *config.Config, bool, bool)
 	runTUIWithImage                func(string, string, api.Provider, string, *config.Config, bool) error
 	runHeadless                    func(context.Context, string, string, api.Provider, *config.Config) *agent.HeadlessResult
 	runOnce                        func(string, string, api.Provider, *config.Config, bool, bool) error
@@ -173,6 +177,8 @@ func snapshotRootCommandRunners() rootCommandRunners {
 		runLegacyInteractiveWithImage:  runLegacyInteractiveWithImage,
 		runTUI:                         runTUI,
 		runTUIWithResume:               runTUIWithResume,
+		runTUIWithResumeDirect:         runTUIWithResumeDirect,
+		runTUIWithResumePicker:         runTUIWithResumePicker,
 		runTUIWithImage:                runTUIWithImage,
 		runHeadless:                    runHeadless,
 		runOnce:                        runOnce,
@@ -186,6 +192,8 @@ func restoreRootCommandRunners(r rootCommandRunners) {
 	runLegacyInteractiveWithImage = r.runLegacyInteractiveWithImage
 	runTUI = r.runTUI
 	runTUIWithResume = r.runTUIWithResume
+	runTUIWithResumeDirect = r.runTUIWithResumeDirect
+	runTUIWithResumePicker = r.runTUIWithResumePicker
 	runTUIWithImage = r.runTUIWithImage
 	runHeadless = r.runHeadless
 	runOnce = r.runOnce
@@ -388,11 +396,14 @@ func TestRootCommand_ResumeWithPositionalQueryReturnsError(t *testing.T) {
 
 func TestRootCommand_ResumeUsesTUIPath(t *testing.T) {
 	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	seedOllamaResumeSession(t, "qwen2.5-coder:14b")
 
 	tuiCalled := false
 	legacyCalled := false
-	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
 		tuiCalled = true
+		return nil
 	}
 	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		legacyCalled = true
@@ -411,13 +422,33 @@ func TestRootCommand_ResumeUsesTUIPath(t *testing.T) {
 	}
 }
 
+func TestRootCommand_ResumePropagatesTUIError(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	seedOllamaResumeSession(t, "qwen2.5-coder:14b")
+
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		return fmt.Errorf("resume failed")
+	}
+
+	rootCmd.SetArgs([]string{"--resume", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected --resume error")
+	}
+	if !strings.Contains(err.Error(), "resume failed") {
+		t.Fatalf("error = %v, want resume failed", err)
+	}
+}
+
 func TestRootCommand_NoTUIResumeUsesLegacyPath(t *testing.T) {
 	withRootCommandTest(t)
 
 	tuiCalled := false
 	legacyCalled := false
-	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
 		tuiCalled = true
+		return nil
 	}
 	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		legacyCalled = true
@@ -433,6 +464,134 @@ func TestRootCommand_NoTUIResumeUsesLegacyPath(t *testing.T) {
 	}
 	if tuiCalled {
 		t.Fatal("TUI resume path must not be executed when --no-tui is set")
+	}
+}
+
+func TestResumeCommand_DefaultOpensPicker(t *testing.T) {
+	withRootCommandTest(t)
+
+	var pickerCalled bool
+	var pickerAll bool
+	runTUIWithResumePicker = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, all bool) {
+		pickerCalled = true
+		pickerAll = all
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !pickerCalled {
+		t.Fatal("expected resume to open picker")
+	}
+	if pickerAll {
+		t.Fatal("resume without --all should use cwd-scoped picker")
+	}
+}
+
+func TestResumeCommand_AllOpensAllSessionPicker(t *testing.T) {
+	withRootCommandTest(t)
+
+	var pickerCalled bool
+	var pickerAll bool
+	runTUIWithResumePicker = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, all bool) {
+		pickerCalled = true
+		pickerAll = all
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--all", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !pickerCalled || !pickerAll {
+		t.Fatalf("pickerCalled=%v pickerAll=%v, want all picker", pickerCalled, pickerAll)
+	}
+}
+
+func TestResumeCommand_LastUsesResumePath(t *testing.T) {
+	withRootCommandTest(t)
+
+	var resumeCalled bool
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		resumeCalled = true
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--last", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !resumeCalled {
+		t.Fatal("expected resume --last to use last-session path")
+	}
+}
+
+func TestResumeCommand_LastPropagatesResumeError(t *testing.T) {
+	withRootCommandTest(t)
+
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		return fmt.Errorf("resume last failed")
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--last", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected resume --last error")
+	}
+	if !strings.Contains(err.Error(), "resume last failed") {
+		t.Fatalf("error = %v, want resume last failed", err)
+	}
+}
+
+func TestResumeCommand_SessionIDUsesDirectPath(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	sessionID := seedOllamaResumeSession(t, "qwen2.5-coder:14b")
+
+	var gotSessionID string
+	runTUIWithResumeDirect = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, sessionID string) error {
+		gotSessionID = sessionID
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"resume", sessionID, "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if gotSessionID != sessionID {
+		t.Fatalf("sessionID = %q, want %q", gotSessionID, sessionID)
+	}
+}
+
+func TestResumeCommand_DirectPathPropagatesError(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	sessionID := seedOllamaResumeSession(t, "qwen2.5-coder:14b")
+
+	runTUIWithResumeDirect = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, sessionID string) error {
+		return fmt.Errorf("resume failed")
+	}
+
+	rootCmd.SetArgs([]string{"resume", sessionID, "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected direct resume error")
+	}
+	if !strings.Contains(err.Error(), "resume failed") {
+		t.Fatalf("error = %v, want resume failed", err)
+	}
+}
+
+func TestResumeCommand_RejectsAllWithSessionID(t *testing.T) {
+	withRootCommandTest(t)
+
+	rootCmd.SetArgs([]string{"resume", "--all", "session-42", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --all with session ID")
+	}
+	if !strings.Contains(err.Error(), "--all cannot be used with a session ID") {
+		t.Fatalf("error = %v, want --all/session-id conflict", err)
 	}
 }
 
@@ -534,6 +693,93 @@ func TestRootCommand_OnceErrorPropagation(t *testing.T) {
 	}
 }
 
+func TestRootCommand_InteractiveMissingProviderCredentialStartsTUIWithPlaceholder(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	var gotProvider api.Provider
+	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		gotProvider = provider
+	}
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
+		t.Fatal("one-shot path must not run for interactive provider setup")
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--interactive", "--provider", "openai", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if gotProvider == nil {
+		t.Fatal("expected TUI provider")
+	}
+	if !api.IsProviderSetupRequired(gotProvider) {
+		t.Fatalf("provider = %T, want setup placeholder", gotProvider)
+	}
+	msg, ok := api.ProviderSetupRequiredMessage(gotProvider)
+	if !ok {
+		t.Fatal("expected provider setup message")
+	}
+	for _, fragment := range []string{"provider setup required", "OPENAI_API_KEY", "xelyon setup"} {
+		if !strings.Contains(msg, fragment) {
+			t.Fatalf("setup message missing %q:\n%s", fragment, msg)
+		}
+	}
+}
+
+func TestRootCommand_OneShotMissingProviderCredentialReturnsSetupGuidance(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	onceCalled := false
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
+		onceCalled = true
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--provider", "openai", "--no-update-check", "hello"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected setup guidance error")
+	}
+	if onceCalled {
+		t.Fatal("one-shot runner must not be called without provider credential")
+	}
+	for _, fragment := range []string{"provider setup required", "OPENAI_API_KEY", "xelyon setup"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("error missing %q:\n%s", fragment, err.Error())
+		}
+	}
+}
+
+func TestRootCommand_OneShotOpenAISubscriptionExpiredTokenReachesRunner(t *testing.T) {
+	withRootCommandTest(t)
+	saveExpiredOpenAISubscriptionCredentialForRootTest(t)
+
+	onceCalled := false
+	runOnce = func(query string, model string, provider api.Provider, cfg *config.Config, autoApprove bool, quiet bool) error {
+		onceCalled = true
+		if api.IsProviderSetupRequired(provider) {
+			t.Fatalf("provider = %T, want executable subscription provider", provider)
+		}
+		if query != "hello" {
+			t.Fatalf("query = %q, want hello", query)
+		}
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--provider", "openai_subscription", "--model", "gpt-5.4-mini", "--no-update-check", "hello"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !onceCalled {
+		t.Fatal("one-shot runner was not called")
+	}
+}
+
 func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	withRootCommandTest(t)
 
@@ -568,6 +814,168 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	}
 	if interactiveCalled {
 		t.Fatal("interactive path must not be executed in JSON mode")
+	}
+}
+
+func TestRootCommand_HeadlessOpenAISubscriptionExpiredTokenReachesRunner(t *testing.T) {
+	withRootCommandTest(t)
+	saveExpiredOpenAISubscriptionCredentialForRootTest(t)
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		headlessCalled = true
+		if api.IsProviderSetupRequired(provider) {
+			t.Fatalf("provider = %T, want executable subscription provider", provider)
+		}
+		if query != "hello" {
+			t.Fatalf("query = %q, want hello", query)
+		}
+		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
+	}
+
+	rootCmd.SetArgs([]string{"--headless", "--provider", "openai_subscription", "--model", "gpt-5.4-mini", "--no-update-check", "hello"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !headlessCalled {
+		t.Fatal("headless runner was not called")
+	}
+}
+
+func saveExpiredOpenAISubscriptionCredentialForRootTest(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XELYON_OPENAI_SUBSCRIPTION_AUTH_DIR", filepath.Join(t.TempDir(), "auth"))
+	if err := openaisubscription.SaveSubscriptionCredential(openaisubscription.DefaultSubscriptionAuthConfig(), openaisubscription.SubscriptionCredential{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+		AccountID:    "acct_1234abcd",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+}
+
+func TestRootCommand_HeadlessMissingProviderCredentialPrintsJSONSetupError(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		headlessCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	var stderr bytes.Buffer
+	rootCmd.SetOut(&stderr)
+	rootCmd.SetErr(&stderr)
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+	})
+
+	rootCmd.SetArgs([]string{"--headless", "--provider", "openai", "--no-update-check", "hello"})
+	execErr := rootCmd.Execute()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if execErr == nil {
+		t.Fatal("expected headless execution error")
+	}
+	if !strings.Contains(execErr.Error(), "headless execution failed") {
+		t.Fatalf("unexpected error: %v", execErr)
+	}
+	if headlessCalled {
+		t.Fatal("headless runner must not be called without provider credential")
+	}
+	if !rootCmd.SilenceUsage {
+		t.Fatal("rootCmd.SilenceUsage = false, want true after printing headless setup JSON")
+	}
+	if strings.Contains(stderr.String(), "Usage:") {
+		t.Fatalf("stderr contains Cobra usage after headless setup JSON:\n%s", stderr.String())
+	}
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := strings.TrimSpace(buf.String())
+
+	var parsed agent.HeadlessResult
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("stdout is not headless JSON: %v\noutput=%q", err, output)
+	}
+	if parsed.Status != agent.HeadlessStatusError {
+		t.Fatalf("status = %q, want %q", parsed.Status, agent.HeadlessStatusError)
+	}
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeProviderSetupRequired {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeProviderSetupRequired)
+	}
+	for _, fragment := range []string{"OPENAI_API_KEY", "xelyon setup"} {
+		if !strings.Contains(parsed.Error.Message, fragment) {
+			t.Fatalf("setup JSON error missing %q:\n%s", fragment, parsed.Error.Message)
+		}
+	}
+}
+
+func TestRootCommand_HeadlessUnknownProviderReturnsCommandErrorWithoutSetupJSON(t *testing.T) {
+	withRootCommandTest(t)
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+		headlessCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
+	}
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	var stderr bytes.Buffer
+	rootCmd.SetOut(&stderr)
+	rootCmd.SetErr(&stderr)
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+	})
+
+	rootCmd.SetArgs([]string{"--headless", "--provider", "not-a-provider", "--no-update-check", "hello"})
+	execErr := rootCmd.Execute()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if execErr == nil {
+		t.Fatal("expected unknown provider error")
+	}
+	if !strings.Contains(execErr.Error(), "unknown provider") {
+		t.Fatalf("error = %v, want unknown provider", execErr)
+	}
+	if strings.Contains(execErr.Error(), "headless execution failed") {
+		t.Fatalf("error = %v, must not be headless setup wrapper", execErr)
+	}
+	if headlessCalled {
+		t.Fatal("headless runner must not be called with unknown provider")
+	}
+	if rootCmd.SilenceUsage {
+		t.Fatal("rootCmd.SilenceUsage = true, want false for non-JSON command error")
+	}
+	if !strings.Contains(stderr.String(), "Usage:") {
+		t.Fatalf("stderr = %q, want Cobra usage for non-JSON command error", stderr.String())
+	}
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := strings.TrimSpace(buf.String())
+	if strings.Contains(output, agent.HeadlessErrorTypeProviderSetupRequired) {
+		t.Fatalf("stdout must not contain provider setup JSON: %q", output)
+	}
+	if output != "" {
+		t.Fatalf("stdout = %q, want empty output", output)
 	}
 }
 
@@ -689,8 +1097,13 @@ func TestRootCommand_HeadlessErrorReturnsErrorAfterPrintingJSON(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+	var stderr bytes.Buffer
+	rootCmd.SetOut(&stderr)
+	rootCmd.SetErr(&stderr)
 	t.Cleanup(func() {
 		os.Stdout = oldStdout
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
 	})
 
 	rootCmd.SetArgs([]string{"--headless", "--provider", "ollama", "--no-update-check", "hello"})
@@ -704,6 +1117,12 @@ func TestRootCommand_HeadlessErrorReturnsErrorAfterPrintingJSON(t *testing.T) {
 	}
 	if !strings.Contains(execErr.Error(), "headless execution failed") {
 		t.Fatalf("unexpected error: %v", execErr)
+	}
+	if !rootCmd.SilenceUsage {
+		t.Fatal("rootCmd.SilenceUsage = false, want true after printing headless error JSON")
+	}
+	if strings.Contains(stderr.String(), "Usage:") {
+		t.Fatalf("stderr contains Cobra usage after headless error JSON:\n%s", stderr.String())
 	}
 
 	var buf bytes.Buffer
@@ -854,6 +1273,37 @@ func TestRootCommand_InteractiveWithImageUsesInteractiveImagePath(t *testing.T) 
 	}
 	if imageOnceCalled {
 		t.Fatal("image one-shot path must not be executed for --interactive --image")
+	}
+}
+
+func TestRootCommand_InteractiveImageMissingProviderCredentialUsesPlaceholder(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	imageInteractiveCalled := false
+	runTUIWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+		imageInteractiveCalled = true
+		if !api.IsProviderSetupRequired(provider) {
+			t.Fatalf("provider = %T, want setup placeholder", provider)
+		}
+		if imagePath != "/tmp/image.png" {
+			t.Fatalf("imagePath = %q, want /tmp/image.png", imagePath)
+		}
+		return nil
+	}
+	runOnceWithImage = func(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool, quiet bool) error {
+		t.Fatal("image one-shot path must not run for --interactive --image")
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--interactive", "--image", "/tmp/image.png", "--provider", "openai", "--no-update-check", "describe"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !imageInteractiveCalled {
+		t.Fatal("expected interactive image path")
 	}
 }
 

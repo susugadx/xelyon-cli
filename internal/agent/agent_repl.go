@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -41,6 +42,7 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	agent.setAutoApprove(autoApprove)
+	printProviderSetupRequiredNotice(agent)
 
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
@@ -132,6 +134,18 @@ func RunLegacyInteractiveWithImageWithConfig(query string, model string, provide
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
 
+	if api.IsProviderSetupRequired(provider) {
+		agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
+		defer agent.Cleanup()
+
+		printHeaderToWriter(env.runtimeUI.Output(), agent.Model, provider)
+		printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
+		printContextSize(agent)
+		agent.setPromptReader(env.mlReader)
+		runREPLLoop(agent, env.mlReader)
+		return nil
+	}
+
 	if !provider.SupportsImages() {
 		return fmt.Errorf("provider %q does not support image input", provider.Name())
 	}
@@ -171,38 +185,29 @@ func RunLegacyInteractiveWithResumeWithConfig(model string, provider api.Provide
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
 
-	storage, err := history.NewStorage()
-	if err != nil {
-		red.Fprintf(env.runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
-		cleanup()
-		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
-		return
-	}
-
-	sessionID, err := storage.GetLastSession()
-	if err != nil {
-		yellow.Fprintln(env.runtimeUI.Output(), "No previous session found, starting new session")
-		cleanup()
-		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
-		return
-	}
-
-	session, err := storage.Load(sessionID)
-	if err != nil {
-		red.Fprintf(env.runtimeUI.Output(), "Failed to load session: %v\n", err)
-		cleanup()
-		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
-		return
-	}
-
-	// ロード済みセッションでAgent作成
 	agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
-	agent.applyLoadedSession(session)
+	session, err := agent.ResumeStartupLastSession(history.ResumeListOptions{})
+	if err != nil {
+		if errors.Is(err, history.ErrNoResumeSessions) {
+			yellow.Fprintln(env.runtimeUI.Output(), "No previous session found, starting new session")
+		} else if strings.Contains(err.Error(), "load session") {
+			red.Fprintf(env.runtimeUI.Output(), "Failed to load session: %v\n", err)
+		} else if strings.Contains(err.Error(), "history storage not available") {
+			red.Fprintf(env.runtimeUI.Output(), "Failed to initialize storage: %v\n", err)
+		} else {
+			red.Fprintf(env.runtimeUI.Output(), "Failed to resume session: %v\n", err)
+		}
+		agent.restoreSessionConversation(nil)
+		agent.Cleanup()
+		cleanup()
+		RunLegacyInteractiveWithConfig(model, provider, cfg, autoApprove)
+		return
+	}
 	defer agent.Cleanup() // グレースフルシャットダウン
 
-	printHeaderToWriter(env.runtimeUI.Output(), model, provider)
+	printHeaderToWriter(env.runtimeUI.Output(), agent.CurrentModel, agent.CurrentProvider)
 	printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
-	green.Fprintf(env.runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
+	green.Fprintf(env.runtimeUI.Output(), "📂 Resumed session %s (%d messages)\n", session.ID, len(session.ToAPIMessages()))
 
 	// コンテキストサイズ表示（ツリー形式）
 	printContextSize(agent)
@@ -265,19 +270,38 @@ func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
 	}
 }
 
-// setupSignalHandler はシグナルハンドラーを設定する
-func setupSignalHandler(agent *Agent) {
+// setupSignalHandler はシグナルハンドラーを設定する。
+func setupSignalHandler(agent *Agent) func() {
+	if agent == nil {
+		return func() {}
+	}
+
 	sigChan := make(chan os.Signal, 1)
+	done := make(chan struct{})
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	var lastInterrupt time.Time
 	var interruptMu sync.Mutex
+	var cleanupOnce sync.Once
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			signal.Stop(sigChan)
+			close(done)
+		})
+	}
+	agent.signalCleanup = cleanup
 	go func() {
-		for sig := range sigChan {
-			interruptMu.Lock()
-			handleSignalInterrupt(agent, &lastInterrupt, sig)
-			interruptMu.Unlock()
+		for {
+			select {
+			case sig := <-sigChan:
+				interruptMu.Lock()
+				handleSignalInterrupt(agent, &lastInterrupt, sig)
+				interruptMu.Unlock()
+			case <-done:
+				return
+			}
 		}
 	}()
+	return cleanup
 }
 
 // checkRipgrepAvailability は ripgrep の有無をチェックし、未インストール時に案内を表示する。
@@ -343,7 +367,13 @@ func buildContextSizeBlock(agent *Agent) string {
 		}
 	}
 	if projectTokens > 0 {
-		lines = append(lines, fmt.Sprintf("Project instructions: ~%s", FormatTokens(projectTokens)))
+		line := fmt.Sprintf("Project instructions: ~%s", FormatTokens(projectTokens))
+		if labels := projectInstructionStatusLabels(agent.projectInstructionBundleIfLoaded()); labels != "" {
+			line += " (" + labels + ")"
+		}
+		lines = append(lines, line)
+	} else if labels := projectInstructionStatusLabels(agent.projectInstructionBundleIfLoaded()); labels != "" {
+		lines = append(lines, "Project instructions: ~0 ("+labels+")")
 	}
 
 	for i, line := range lines {
@@ -355,6 +385,20 @@ func buildContextSizeBlock(agent *Agent) string {
 	}
 
 	return buf.String()
+}
+
+func projectInstructionStatusLabels(bundle *config.ProjectInstructionBundle) string {
+	if bundle == nil {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if labels := joinInstructionLabels(bundle.ProjectGuidance, bundle.ProjectGuidanceStatus); labels != "" {
+		parts = append(parts, "project: "+labels)
+	}
+	if labels := joinInstructionLabels(bundle.GlobalGuidance, bundle.GlobalGuidanceStatus); labels != "" {
+		parts = append(parts, "global: "+labels)
+	}
+	return strings.Join(parts, "; ")
 }
 
 func estimateProjectMapTokens(systemPrompt string) int {

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -55,12 +56,28 @@ func TestValidateSelectedProviderModel(t *testing.T) {
 		if err == nil {
 			t.Fatal("validateSelectedProviderModel() error = nil, want Azure deployment guidance")
 		}
+		if !strings.Contains(err.Error(), "provider_models.azure.default_model") ||
+			!strings.Contains(err.Error(), "pass --model <deployment>") {
+			t.Fatalf("validateSelectedProviderModel() error = %v, want config and CLI model guidance", err)
+		}
 	})
 
 	t.Run("azure placeholder with explicit model flag passes", func(t *testing.T) {
 		modelFlag = "azure-gpt-5.4"
 		if err := validateSelectedProviderModel(config.DefaultConfig(), &providerValidationTestProvider{name: "Azure OpenAI"}, "azure-gpt-5.4"); err != nil {
 			t.Fatalf("validateSelectedProviderModel() error = %v, want nil with explicit --model", err)
+		}
+	})
+
+	t.Run("azure placeholder with explicit saved session model passes", func(t *testing.T) {
+		modelFlag = ""
+		_ = os.Unsetenv("XELYON_MODEL")
+		err := validateSelectedProviderModelWithContext(config.DefaultConfig(), &providerValidationTestProvider{name: "Azure OpenAI"}, "azure-gpt-5.4", selectedProviderModelValidationContext{
+			explicitModel:     true,
+			providerConfigKey: "azure",
+		})
+		if err != nil {
+			t.Fatalf("validateSelectedProviderModelWithContext() error = %v, want nil with saved session model", err)
 		}
 	})
 

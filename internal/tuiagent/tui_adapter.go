@@ -13,6 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
@@ -135,6 +136,80 @@ func (a *TUIAdapter) HandleCommand(cmd string) bool {
 	return a.agent.HandleCommandForSurface(cmd, commandcatalog.CommandSurfaceTUI)
 }
 
+// ResumeSessionCandidates は TUI picker 用の再開候補を返す。
+func (a *TUIAdapter) ResumeSessionCandidates(opts tui.SessionResumeOptions) ([]tui.SessionCandidate, error) {
+	sessions, err := a.agent.ResumeSessionCandidates(history.ResumeListOptions{All: opts.All})
+	if err != nil {
+		return nil, err
+	}
+	candidates := make([]tui.SessionCandidate, 0, len(sessions))
+	for _, session := range sessions {
+		candidates = append(candidates, sessionCandidateFromMetadata(session))
+	}
+	return candidates, nil
+}
+
+// ResumeLastSession は resume scope 内の最新 session を復元する。
+func (a *TUIAdapter) ResumeLastSession(opts tui.SessionResumeOptions) (tui.SessionCandidate, error) {
+	session, err := a.agent.ResumeLastSession(history.ResumeListOptions{All: opts.All})
+	if err != nil {
+		a.flushCapture()
+		return tui.SessionCandidate{}, err
+	}
+	a.flushCapture()
+	return tui.SessionCandidate{
+		ID:           session.ID,
+		ProviderName: session.ProviderName,
+		Model:        session.Model,
+		WorkingDir:   session.WorkingDir,
+		LastModified: session.LastModified,
+		MessageCount: len(session.ToAPIMessages()),
+	}, nil
+}
+
+// ResumeSession は指定 session を現在の interactive runtime に復元する。
+func (a *TUIAdapter) ResumeSession(id string) error {
+	if _, err := a.agent.ResumeSession(id); err != nil {
+		a.flushCapture()
+		return err
+	}
+	a.flushCapture()
+	return nil
+}
+
+// ResumeStartupSession は起動直後の bootstrap session を保存せず指定 session を復元する。
+func (a *TUIAdapter) ResumeStartupSession(id string) error {
+	if _, err := a.agent.ResumeStartupSession(id); err != nil {
+		a.flushCapture()
+		return err
+	}
+	a.flushCapture()
+	return nil
+}
+
+func sessionCandidateFromMetadata(session history.SessionMetadata) tui.SessionCandidate {
+	return tui.SessionCandidate{
+		ID:           session.ID,
+		Preview:      session.Preview,
+		ProviderName: session.ProviderName,
+		Model:        session.Model,
+		WorkingDir:   session.WorkingDir,
+		LastModified: session.LastModified,
+		MessageCount: session.MessageCount,
+	}
+}
+
+// StartNewSession は新しい interactive session を開始する。
+func (a *TUIAdapter) StartNewSession() (string, error) {
+	session, err := a.agent.StartNewSession()
+	if err != nil {
+		a.flushCapture()
+		return "", err
+	}
+	a.flushCapture()
+	return session.ID, nil
+}
+
 // SkillCatalog は TUI の /skills 補完に現在の skill catalog を提供する。
 func (a *TUIAdapter) SkillCatalog() agentskills.SkillCatalog {
 	if a == nil || a.agent == nil {
@@ -228,7 +303,7 @@ func (a *TUIAdapter) SaveProjectConfig(pc *config.ProjectConfig) error {
 	return a.agent.SaveAndSyncProjectConfig(pc)
 }
 
-// CreateProjectConfigTemplate は xelyon.yaml template を作成し、編集用に読み込む。
+// CreateProjectConfigTemplate は xelyon.yaml の repo config template を作成し、編集用に読み込む。
 func (a *TUIAdapter) CreateProjectConfigTemplate() (*config.ProjectConfig, error) {
 	if err := config.CreateProjectConfigTemplate("", false); err != nil {
 		return nil, err

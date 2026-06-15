@@ -5,11 +5,10 @@ package agent
 // GeneratedHelpCommandsText は自動生成された Classic ヘルプのコマンド一覧。
 const GeneratedHelpCommandsText = `Commands:
   /exit, /quit, /q          - Exit the CLI
-  /clear                    - Clear conversation history
+  /new                      - Start a new session
+  /clear                    - Clear transcript and start a new session
   /history                  - Show conversation history
-  /save                     - Save current session
-  /load [id]                - Load session (or last if no ID)
-  /sessions                 - List recent sessions
+  /resume [--last|--all|id] - Resume a saved session
   /status, /stats           - Show current state, last request, and session statistics
   /tokens                   - Show token usage and context window status
   /ledger                   - Show runtime task ledger
@@ -18,6 +17,7 @@ const GeneratedHelpCommandsText = `Commands:
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider/model picker or switch directly
   /providers                - Show provider credential status
+  /setup                    - Show first-run setup checklist
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
@@ -28,7 +28,7 @@ const GeneratedHelpCommandsText = `Commands:
                             /skills usage - Show local Skill Router usage diagnostics
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
-  /init                     - Create xelyon.yaml project template
+  /init                     - Create project AGENTS.md guidance file
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
   /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
@@ -38,11 +38,10 @@ const GeneratedHelpCommandsText = `Commands:
 // GeneratedTUIHelpCommandsText は自動生成された TUI ヘルプのコマンド一覧。
 const GeneratedTUIHelpCommandsText = `Commands:
   /exit, /quit, /q          - Exit the CLI
-  /clear                    - Clear conversation history
+  /new                      - Start a new session
+  /clear                    - Clear transcript and start a new session
   /history                  - Show conversation history
-  /save                     - Save current session
-  /load [id]                - Load session (or last if no ID)
-  /sessions                 - List recent sessions
+  /resume [--last|--all|id] - Resume a saved session
   /status, /stats           - Show current state, last request, and session statistics
   /tokens                   - Show token usage and context window status
   /ledger                   - Show runtime task ledger
@@ -55,6 +54,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider/model picker or switch directly
   /providers                - Show provider credential status
+  /setup                    - Show first-run setup checklist
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
@@ -65,7 +65,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
                             /skills usage - Show local Skill Router usage diagnostics
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
-  /init                     - Create xelyon.yaml project template
+  /init                     - Create project AGENTS.md guidance file
   /project                  - Edit project xelyon.yaml interactively
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
   /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)

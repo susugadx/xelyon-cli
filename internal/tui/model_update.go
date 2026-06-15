@@ -29,6 +29,9 @@ func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	case CancelPromptMsg:
 		updated, cmd := m.handleCancelPromptMsg(msg)
 		return updated, cmd, true
+	case openSessionPickerMsg:
+		updated, cmd := m.openSessionPicker(msg.all, msg.startup)
+		return updated, cmd, true
 	}
 	if m.prompt != nil {
 		updated, cmd := m.updateWithPromptOpen(msg)
@@ -36,6 +39,10 @@ func (m Model) handleRootMessage(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	}
 	if m.providerPicker != nil {
 		updated, cmd := m.updateWithProviderPickerOpen(msg)
+		return updated, cmd, true
+	}
+	if m.sessionPicker != nil {
+		updated, cmd := m.updateWithSessionPickerOpen(msg)
 		return updated, cmd, true
 	}
 	if _, ok := msg.(OpenConfigScreenMsg); ok {

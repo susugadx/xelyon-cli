@@ -55,8 +55,7 @@ func TestComposer_SendBuildsPayloadInOrder(t *testing.T) {
 
 func TestComposer_EnterHandlesSlashCommandWithFoldedPaste(t *testing.T) {
 	agent := &stubAgent{
-		statusLine:      "ready",
-		handledCommands: map[string]bool{"/clear": true},
+		statusLine: "ready",
 	}
 	m := newModelWithViewport(agent)
 
@@ -67,12 +66,14 @@ func TestComposer_EnterHandlesSlashCommandWithFoldedPaste(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 
-	requireAgentDoneCmd(t, cmd)
-	if got := len(agent.handledInputs); got != 1 {
-		t.Fatalf("handledInputs length = %d, want 1", got)
+	if cmd != nil {
+		t.Fatalf("cmd = %T, want nil for local clear", cmd)
 	}
-	if got := agent.handledInputs[0]; got != "/clear" {
-		t.Fatalf("handledInputs[0] = %q, want %q", got, "/clear")
+	if got := len(agent.handledInputs); got != 0 {
+		t.Fatalf("handledInputs length = %d, want 0", got)
+	}
+	if got := len(agent.startedSessionIDs); got != 1 {
+		t.Fatalf("startedSessionIDs length = %d, want 1", got)
 	}
 	if got := agent.lastChatInput(); got != "" {
 		t.Fatalf("lastChatInput() = %q, want empty", got)
@@ -86,8 +87,8 @@ func TestComposer_EnterHandlesSlashCommandWithFoldedPaste(t *testing.T) {
 	if got := m.buildComposerPayload(); got != "line1\nline2" {
 		t.Fatalf("buildComposerPayload() after handled command = %q, want %q", got, "line1\nline2")
 	}
-	if len(m.messages) == 0 || m.messages[len(m.messages)-1].Content != "/clear" {
-		t.Fatalf("last message should be command text, got %#v", m.messages)
+	if len(m.messages) == 0 || !strings.Contains(m.messages[len(m.messages)-1].Content, "Started new session") {
+		t.Fatalf("last message should be new session notice, got %#v", m.messages)
 	}
 }
 

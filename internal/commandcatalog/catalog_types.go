@@ -81,6 +81,8 @@ const (
 	TUILocalActionOpenProject        TUILocalAction = "open_project"
 	TUILocalActionOpenProviderPicker TUILocalAction = "open_provider_picker"
 	TUILocalActionOpenModelPicker    TUILocalAction = "open_model_picker"
+	TUILocalActionNewSession         TUILocalAction = "new_session"
+	TUILocalActionOpenSessionPicker  TUILocalAction = "open_session_picker"
 )
 
 // TUILocalWhen は TUI ローカル action の実行前提条件を表す。

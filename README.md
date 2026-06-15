@@ -186,22 +186,13 @@ API実測値に基づくトークン使用量とコストをリアルタイム�
 - **Ollama対応**: ローカル実行時はコスト表示を非表示
 - **圧縮閾値**: `compression.trigger_percent`（デフォルト80%）超過時に自動圧縮/警告
 
-### 📝 プロジェクト設定（xelyon.yaml）
-プロジェクト固有のルール・コンテキストを構造化 YAML で管理。`/init` でテンプレート作成。
+### 📝 Project guidance と repo 設定
+project guidance は repo 直下の `AGENTS.md` を標準にします。`/init` で雛形を作成し、既存 `AGENTS.md` は上書きしません。
+
+`xelyon.yaml` は XELYON 固有の repo-local 設定です。Project Map / search の ignore pattern や final checks を project ごとに変えたい場合に使います。
 
 ```yaml
 # xelyon.yaml（プロジェクトルートに配置）
-context: "Go製CLIツール。Cobraベース。"
-rules:
-  - "変更後は make ci-check を実行"
-  - "公開関数にはコメント必須"
-conditional:
-  - name: Agent internals
-    paths:
-      - "internal/agent/**/*.go"
-    rules:
-      - "公開関数・型には日本語コメント必須"
-    context: "トークン推定は共通推定器を使う"
 ignore:
   patterns:
     - "dist"
@@ -212,9 +203,8 @@ final_checks:             # config.yaml の final_checks を上書き
   timeout: 120
 ```
 
-- **context**: AI に注入するプロジェクト説明
-- **rules**: 番号付きで system prompt に注入される必須ルール
-- **conditional**: `paths` に一致した時だけ注入する rules/context
+- **AGENTS.md**: agent が読む repo guidance
+- **CLAUDE.md / .claude/CLAUDE.md**: `/config` で選択できる互換 guidance
 - **ignore**: Project Map / `list_dir` / `search_code` で共有する ignore パターン
 - **final_checks**: 明示完了時の final checks（`config.yaml` の final_checks より優先）
 - **Project Map**: 起動時は軽量 manifest が自動生成されるため、`xelyon.yaml` にファイル一覧や関数目次は書かない
@@ -222,22 +212,39 @@ final_checks:             # config.yaml の final_checks を上書き
 ## インストール
 
 ```bash
-# Homebrew (macOS)
+# Linux / macOS installer
+curl -fsSL https://raw.githubusercontent.com/susugadx/xelyon-cli/main/install.sh | bash -s -- --yes
+
+# Homebrew
 brew install susugadx/tap/xelyon
 
-# または GitHub Releases からダウンロード
+# npm wrapper
+npm install -g xelyon
+
+# Windows PowerShell
+iwr https://raw.githubusercontent.com/susugadx/xelyon-cli/main/install.ps1 -UseB | iex
+
+# Manual fallback
 # https://github.com/susugadx/xelyon-cli/releases
 ```
 
 ## クイックスタート
 
-### 1. APIキーを設定
+### 1. 起動
 
 ```bash
-export DEEPSEEK_API_KEY="sk-..."  # または他のプロバイダー
+xelyon
 ```
 
-### 2. 起動
+API key や OAuth が未設定でも TUI は起動します。XELYON は API key を config に保存しません。必要な provider setup は `/setup` または `xelyon setup` で確認し、環境変数、`xelyon auth openai-subscription login`、またはローカル Ollama を使って設定してください。
+
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+xelyon auth openai-subscription login
+ollama serve
+```
+
+### 2. 対話する
 
 通常の対話セッションは TUI が primary surface です。`--no-tui` は legacy classic REPL の fallback として残していますが、新しい対話型コマンドは TUI 側に追加します。
 
@@ -259,14 +266,18 @@ xelyon
 /thinking high # Extended Thinking 有効化
 /attach ./notes.txt # 現在の入力ドラフトへ添付（1ドラフト最大12件）
 /detach 1   # 指定添付を外す
+/setup      # provider/env/LSP/project recommendation を表示
 /config     # global config を対話式で編集
 /project    # xelyon.yaml を対話式で編集
-/init       # xelyon.yaml テンプレート作成
+/init       # AGENTS.md 雛形作成
 /review [instructions] # 現在の変更レビューを開く（引数は追加観点として即時実行）
+/new        # 新しい session を開始（画面は残す）
+/clear      # 画面を消して新しい session を開始
+/resume     # 現在の作業ディレクトリの session picker を開く
 /exit       # 終了
 ```
 
-`/model` / `/use` / `/provider` で provider や model を切り替えても、ローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側 continuation state は切り替え時にリセットされます。文脈を切る場合は `/clear` か新しい session を使います。
+`/model` / `/use` / `/provider` で provider や model を切り替えても、ローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側 continuation state は切り替え時にリセットされます。文脈を切る場合は `/new`、画面も消す場合は `/clear` を使います。保存済み session は `/resume` または `xelyon resume` で再開できます。
 
 `/review` は現在の作業ツリー差分全体をレビューします。通常は現在の provider/model を使いますが、`review.provider` と `review.model` を設定すると `/review` だけ別の provider/model で実行できます。`review.provider` だけを設定した場合はその provider の既定モデルを使い、`review.model` を設定する場合は `review.provider` も必須です。review モデル呼び出しには通常会話履歴を渡しません。
 
