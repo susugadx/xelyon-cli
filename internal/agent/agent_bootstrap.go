@@ -73,6 +73,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		History:           []api.Message{},
 		mcpManager:        mcpManager,
 		mcpSurface:        mcpSurface,
+		Headless:          headless,
 		lspClient:         lspClient,
 		SystemPrompt:      systemPrompt,
 		Stats:             NewSessionStats(providerRuntimeName, model),

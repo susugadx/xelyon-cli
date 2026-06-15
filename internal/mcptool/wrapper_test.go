@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -29,6 +30,7 @@ func TestRegisterToRegistry(t *testing.T) {
 		Description: "First tool",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 		CallTimeout: 7 * time.Minute,
+		Approval:    mcpapproval.ModeAuto,
 	}})
 
 	tool := registry.GetTool("mcp_server_a_tool_one")
@@ -67,12 +69,14 @@ func TestRegisterToRegistrySkipsDuplicateExportedNames(t *testing.T) {
 			Name:        "tool.one",
 			Description: "First tool",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+			Approval:    mcpapproval.ModeAuto,
 		},
 		{
 			ServerName:  "server_a",
 			Name:        "tool_one",
 			Description: "Second tool",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+			Approval:    mcpapproval.ModeAuto,
 		},
 	})
 
@@ -334,6 +338,180 @@ func TestWrapperRunInvalidObjectArgBeforePromptAndCaller(t *testing.T) {
 	}
 }
 
+func TestWrapperRunDefaultConfirmIgnoresGlobalAutoApprove(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+	caller := &recordingCaller{}
+	prompter := &responsePrompter{resp: ui.PromptResponse{Action: ui.PromptActionNo}}
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:     caller,
+		ServerName: "github",
+		ToolName:   "list_issues",
+	})
+
+	execCtx := newPromptedExecutionContext(context.Background(), prompter)
+	execCtx.AutoApprove = true
+	result, fileChange, err := wrapper.Run(execCtx, map[string]string{})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil user rejection", err)
+	}
+	if fileChange != nil {
+		t.Fatalf("fileChange = %#v, want nil", fileChange)
+	}
+	if result != "User rejected MCP tool execution" {
+		t.Fatalf("result = %q, want user rejection", result)
+	}
+	if prompter.calls != 1 {
+		t.Fatalf("prompt calls = %d, want 1 because MCP default confirm ignores global auto approve", prompter.calls)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("caller calls = %d, want 0 because MCP default confirm ignores global auto approve", caller.calls)
+	}
+}
+
+func TestWrapperRunDefaultConfirmIgnoresFullAutoExecutionMode(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+	caller := &recordingCaller{}
+	prompter := &responsePrompter{resp: ui.PromptResponse{Action: ui.PromptActionNo}}
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:     caller,
+		ServerName: "github",
+		ToolName:   "list_issues",
+	})
+	cfg := config.DefaultConfig()
+	cfg.Execution.Mode = string(config.ExecutionFullAuto)
+	execCtx := newPromptedExecutionContext(context.Background(), prompter)
+	execCtx.AutoApprove = false
+	execCtx.Config = cfg
+
+	result, _, err := wrapper.Run(execCtx, map[string]string{})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil user rejection", err)
+	}
+	if result != "User rejected MCP tool execution" {
+		t.Fatalf("result = %q, want user rejection", result)
+	}
+	if prompter.calls != 1 {
+		t.Fatalf("prompt calls = %d, want 1 because MCP confirm ignores full_auto", prompter.calls)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("caller calls = %d, want 0 because MCP confirm ignores full_auto", caller.calls)
+	}
+}
+
+func TestWrapperRunAutoApprovalSkipsPromptAndCallsMCP(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+	caller := &recordingCaller{}
+	prompter := &recordingPrompter{}
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:     caller,
+		ServerName: "github",
+		ToolName:   "list_issues",
+		Approval:   mcpapproval.ModeAuto,
+	})
+
+	result, fileChange, err := wrapper.Run(newPromptedExecutionContext(context.Background(), prompter), map[string]string{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if fileChange != nil {
+		t.Fatalf("fileChange = %#v, want nil", fileChange)
+	}
+	if result != "called" {
+		t.Fatalf("result = %q, want called", result)
+	}
+	if prompter.calls != 0 {
+		t.Fatalf("prompt calls = %d, want 0 for explicit MCP auto", prompter.calls)
+	}
+	if caller.calls != 1 {
+		t.Fatalf("caller calls = %d, want 1", caller.calls)
+	}
+}
+
+func TestWrapperRunDenyDoesNotValidatePromptOrCall(t *testing.T) {
+	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
+	caller := &recordingCaller{}
+	prompter := &recordingPrompter{}
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:     caller,
+		ServerName: "github",
+		ToolName:   "delete_repository",
+		Approval:   mcpapproval.ModeDeny,
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"properties":{"owner":{"type":"string"}},
+			"required":["owner"]
+		}`),
+	})
+
+	result, fileChange, err := wrapper.Run(newPromptedExecutionContext(context.Background(), prompter), map[string]string{})
+	if !errors.Is(err, ErrApprovalDenied) {
+		t.Fatalf("Run() error = %v, want ErrApprovalDenied", err)
+	}
+	if fileChange != nil {
+		t.Fatalf("fileChange = %#v, want nil", fileChange)
+	}
+	if !strings.Contains(result, "MCP tool execution denied by approval policy") {
+		t.Fatalf("result = %q, want denied policy message", result)
+	}
+	if prompter.calls != 0 {
+		t.Fatalf("prompt calls = %d, want 0 for denied MCP tool", prompter.calls)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("caller calls = %d, want 0 for denied MCP tool", caller.calls)
+	}
+}
+
+func TestWrapperRunHeadlessConfirmRequiresApproval(t *testing.T) {
+	caller := &recordingCaller{}
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:     caller,
+		ServerName: "github",
+		ToolName:   "list_issues",
+	})
+	execCtx := newAutoApprovedExecutionContext(context.Background())
+	execCtx.Headless = true
+
+	result, fileChange, err := wrapper.Run(execCtx, map[string]string{})
+	if !errors.Is(err, ErrApprovalRequired) {
+		t.Fatalf("Run() error = %v, want ErrApprovalRequired", err)
+	}
+	if fileChange != nil {
+		t.Fatalf("fileChange = %#v, want nil", fileChange)
+	}
+	if !strings.Contains(result, "approval_required") {
+		t.Fatalf("result = %q, want approval_required marker", result)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("caller calls = %d, want 0 for headless confirm MCP tool", caller.calls)
+	}
+}
+
+func TestWrapperRunHeadlessAutoCallsMCP(t *testing.T) {
+	caller := &recordingCaller{}
+	wrapper := NewWrapper(WrapperOptions{
+		Caller:     caller,
+		ServerName: "github",
+		ToolName:   "list_issues",
+		Approval:   mcpapproval.ModeAuto,
+	})
+	execCtx := newAutoApprovedExecutionContext(context.Background())
+	execCtx.Headless = true
+
+	result, fileChange, err := wrapper.Run(execCtx, map[string]string{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if fileChange != nil {
+		t.Fatalf("fileChange = %#v, want nil", fileChange)
+	}
+	if result != "called" {
+		t.Fatalf("result = %q, want called", result)
+	}
+	if caller.calls != 1 {
+		t.Fatalf("caller calls = %d, want 1 for headless explicit MCP auto", caller.calls)
+	}
+}
+
 type argsRecordingCaller struct {
 	calls int
 	args  map[string]any
@@ -351,6 +529,7 @@ func TestWrapperRunPassesSchemaStructuredArgs(t *testing.T) {
 		Caller:     caller,
 		ServerName: "github",
 		ToolName:   "create_issue",
+		Approval:   mcpapproval.ModeAuto,
 		InputSchema: json.RawMessage(`{
 			"type":"object",
 			"properties":{
@@ -516,6 +695,7 @@ func TestWrapperRunUsesParentCancellationBeforeWrapperTimeout(t *testing.T) {
 		ServerName:  "github",
 		ToolName:    "slow",
 		CallTimeout: time.Second,
+		Approval:    mcpapproval.ModeAuto,
 	})
 	parentCtx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -544,6 +724,7 @@ func TestWrapperRunUsesParentDeadlineBeforeWrapperTimeout(t *testing.T) {
 		ServerName:  "github",
 		ToolName:    "slow",
 		CallTimeout: time.Second,
+		Approval:    mcpapproval.ModeAuto,
 	})
 	parentCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
@@ -572,6 +753,7 @@ func TestWrapperRunUsesWrapperTimeoutWhenParentStillActive(t *testing.T) {
 		ServerName:  "github",
 		ToolName:    "slow",
 		CallTimeout: 20 * time.Millisecond,
+		Approval:    mcpapproval.ModeAuto,
 	})
 
 	started := time.Now()

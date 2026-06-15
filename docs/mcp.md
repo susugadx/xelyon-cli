@@ -30,6 +30,7 @@ mcp:
 | `headless` | `true` にすると `--headless` モードでもMCPツールが使える。 | `false` |
 
 `enabled: false` にしても `~/.xelyon/mcp.json` の設定はそのまま残るため、再度 `enabled: true` にすれば復活します。
+`headless: true` はMCPツールの公開を許可するだけで、承認を自動化しません。headless でMCPツールを実行するには、対象サーバーまたはツールに `approval: "auto"` を明示してください。
 
 ## セットアップ
 
@@ -50,13 +51,15 @@ mcp:
       ],
       "env": {
         "NODE_OPTIONS": "--no-warnings"
-      }
+      },
+      "approval": "confirm"
     },
     "puppeteer": {
       "command": "npx",
       "args": [
         "@modelcontextprotocol/server-puppeteer"
       ],
+      "approval": "confirm",
       "startupTimeoutSeconds": 120,
       "toolTimeoutSeconds": 600
     },
@@ -187,6 +190,60 @@ MCPツール実行に使う timeout 秒数。
 **注意**: `env` に明示した値はMCPサーバーへ渡されます。
 API token などの secret は必要なサーバーにだけ渡し、不要な値を `env` に書かないでください。
 
+### `approval` (オプション)
+
+MCPサーバーのツール実行承認ポリシー。
+未指定時は `confirm` です。
+
+| 値 | 説明 |
+|---|---|
+| `confirm` | 実行前に確認する。デフォルト |
+| `auto` | 確認なしで実行する。信頼できるMCPサーバーにだけ使う |
+| `deny` | ツールをモデルに公開せず、実行も拒否する |
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },
+      "approval": "confirm"
+    }
+  }
+}
+```
+
+`--auto-approve` や `execution.mode: full_auto` を使っていても、MCPツールは `approval: "auto"` を明示しない限り自動実行されません。
+
+### `toolApprovals` (オプション)
+
+ツール単位で `approval` を上書きできます。
+key はMCPサーバーが公開する raw tool name です。XELYON の実行名 `mcp_<server>_<tool>` ではありません。
+ただし、サーバーの `approval` が `deny` の場合は server 全体の拒否が優先され、`toolApprovals` では解除できません。
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },
+      "approval": "confirm",
+      "toolApprovals": {
+        "get_issue": "auto",
+        "list_issues": "auto",
+        "create_issue": "confirm",
+        "delete_repository": "deny"
+      }
+    }
+  }
+}
+```
+
+評価順は `disabled`、`tools.include` / `tools.exclude`、サーバーの `approval: "deny"`、`toolApprovals`、サーバーの `approval`、デフォルト `confirm` です。
+不正な値は warning を出して `confirm` として扱います。
+
 ### サーバーの無効化
 
 特定のMCPサーバーを一時的に無効化できます:
@@ -251,6 +308,8 @@ MCPサーバーが提供するツールの中から、使用するツールを�
 | `disabled` | `true` でサーバー全体を無効化。設定は保持される |
 | `tools.include` | ホワイトリスト。指定したツールのみ登録 |
 | `tools.exclude` | ブラックリスト。指定したツールを除外（`include` 未設定時のみ有効） |
+| `approval` | サーバー単位の承認ポリシー。`confirm` / `auto` / `deny` |
+| `toolApprovals` | raw tool name ごとの承認ポリシー上書き |
 
 > **Note**: `include` と `exclude` を両方設定した場合は `include` が優先されます。
 > `include` / `exclude` のツール名はMCPサーバーが公開する raw name をそのまま使用します（`mcp_` プレフィックスなし）。
@@ -302,7 +361,8 @@ Anthropicが公開しているMCPサーバー一覧: https://github.com/modelcon
       "args": [
         "@modelcontextprotocol/server-filesystem",
         "/home/user/documents"
-      ]
+      ],
+      "approval": "confirm"
     }
   }
 }
@@ -312,7 +372,7 @@ Anthropicが公開しているMCPサーバー一覧: https://github.com/modelcon
 xelyon
 > /home/user/documents 配下のファイル一覧を取得して
 
-# AIがMCPツールを自動で使用
+# AIがMCPツールを提案し、確認後に使用
 ```
 
 ### 2. Puppeteerサーバー（Web自動化）
@@ -322,7 +382,8 @@ xelyon
   "mcpServers": {
     "puppeteer": {
       "command": "npx",
-      "args": ["@modelcontextprotocol/server-puppeteer"]
+      "args": ["@modelcontextprotocol/server-puppeteer"],
+      "approval": "confirm"
     }
   }
 }
@@ -332,7 +393,7 @@ xelyon
 xelyon
 > https://example.com のスクリーンショットを撮って
 
-# AIがPuppeteerを使ってスクリーンショット取得
+# AIがPuppeteerを使うMCPツールを提案し、確認後に実行
 ```
 
 ### 3. PostgreSQLサーバー（データベース操作）
@@ -343,6 +404,7 @@ xelyon
     "postgres": {
       "command": "npx",
       "args": ["@modelcontextprotocol/server-postgres"],
+      "approval": "confirm",
       "env": {
         "POSTGRES_CONNECTION_STRING": "postgresql://user:password@localhost/mydb"
       }
@@ -355,7 +417,7 @@ xelyon
 xelyon
 > usersテーブルの件数を教えて
 
-# AIがPostgreSQLに接続してクエリ実行
+# AIがPostgreSQL用MCPツールを提案し、確認後に実行
 ```
 
 ### 4. GitHubサーバー（GitHub連携）
@@ -370,6 +432,13 @@ GitHub MCPサーバーを使用すると、AIがGitHub操作を直接実行で�
       "args": ["-y", "@modelcontextprotocol/server-github"],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxxxxxxxxx"
+      },
+      "approval": "confirm",
+      "toolApprovals": {
+        "get_issue": "auto",
+        "list_issues": "auto",
+        "create_issue": "confirm",
+        "delete_repository": "deny"
       }
     }
   }
@@ -463,7 +532,8 @@ main();
   "mcpServers": {
     "my-custom-server": {
       "command": "node",
-      "args": ["/path/to/my-custom-server.js"]
+      "args": ["/path/to/my-custom-server.js"],
+      "approval": "confirm"
     }
   }
 }
@@ -533,9 +603,11 @@ XELYONはsystem envから `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `NODE_OPTION
 ### 推奨事項
 
 1. **最小権限の原則**: MCPサーバーには必要最小限のアクセス権限のみを与える
-2. **信頼できるサーバーのみ**: 公式サーバーまたは信頼できるソースからのみインストール
-3. **定期的な更新**: MCPサーバーを最新版に保つ
-4. **ログ確認**: 異常な動作がないか定期的に確認
+2. **承認ポリシー**: デフォルトの `confirm` を基本にし、`auto` は信頼できる read-only 系ツールなどに限定する
+3. **危険なツールの拒否**: 使わない破壊的ツールは `toolApprovals` で `deny` にする
+4. **信頼できるサーバーのみ**: 公式サーバーまたは信頼できるソースからのみインストール
+5. **定期的な更新**: MCPサーバーを最新版に保つ
+6. **ログ確認**: 異常な動作がないか定期的に確認
 
 ## 関連ドキュメント
 

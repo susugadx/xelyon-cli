@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 )
 
@@ -53,7 +53,7 @@ func (m *Manager) refreshServerTools(
 		return nil, toolRegistrationSummary{}, err
 	}
 
-	serverTools, summary := m.buildServerTools(serverName, session, toolsResult.Tools, serverConfig.Tools, serverConfig.toolTimeoutDuration())
+	serverTools, summary := m.buildServerTools(serverName, session, toolsResult.Tools, serverConfig)
 	return serverTools, summary, nil
 }
 
@@ -61,17 +61,29 @@ func (m *Manager) buildServerTools(
 	serverName string,
 	session *mcp.ClientSession,
 	toolDefs []*mcp.Tool,
-	filter *ToolsFilter,
-	callTimeout time.Duration,
+	serverConfig ServerConfig,
 ) ([]MCPTool, toolRegistrationSummary) {
 	seenExportedNames := m.existingExportedToolNames(serverName)
 	serverTools := make([]MCPTool, 0, len(toolDefs))
 	summary := toolRegistrationSummary{}
+	serverApproval := m.normalizedServerApproval(serverName, serverConfig.Approval)
+	callTimeout := serverConfig.toolTimeoutDuration()
 	for _, tool := range toolDefs {
 		if tool == nil {
 			continue
 		}
-		if !shouldIncludeTool(tool.Name, filter) {
+		if !shouldIncludeTool(tool.Name, serverConfig.Tools) {
+			summary.skipped++
+			continue
+		}
+
+		if serverApproval == mcpapproval.ModeDeny {
+			summary.skipped++
+			continue
+		}
+
+		approval := m.effectiveToolApproval(serverName, tool.Name, serverApproval, serverConfig.ToolApprovals)
+		if approval == mcpapproval.ModeDeny {
 			summary.skipped++
 			continue
 		}
@@ -92,11 +104,35 @@ func (m *Manager) buildServerTools(
 			InputSchema: schemaBytes,
 			Session:     session,
 			CallTimeout: callTimeout,
+			Approval:    approval,
 		})
 		summary.registered++
 	}
 
 	return serverTools, summary
+}
+
+func (m *Manager) normalizedServerApproval(serverName string, raw string) mcpapproval.Mode {
+	mode, valid := mcpapproval.Normalize(raw)
+	if !valid {
+		fmt.Fprintf(m.out(), "⚠️  MCP server '%s' has invalid approval %q; using %q\n", serverName, raw, mcpapproval.ModeConfirm)
+	}
+	return mode
+}
+
+func (m *Manager) effectiveToolApproval(serverName, toolName string, serverMode mcpapproval.Mode, toolApprovals map[string]string) mcpapproval.Mode {
+	if toolApprovals == nil {
+		return mcpapproval.Effective(serverMode)
+	}
+	raw, ok := toolApprovals[toolName]
+	if !ok {
+		return mcpapproval.Effective(serverMode)
+	}
+	mode, valid := mcpapproval.Normalize(raw)
+	if !valid {
+		fmt.Fprintf(m.out(), "⚠️  MCP tool '%s' from server '%s' has invalid approval %q; using %q\n", toolName, serverName, raw, mcpapproval.ModeConfirm)
+	}
+	return mode
 }
 
 func (m *Manager) existingExportedToolNames(excludeServerName string) map[string]bool {

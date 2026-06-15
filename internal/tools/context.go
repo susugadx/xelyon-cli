@@ -65,6 +65,7 @@ type ExecutionContext struct {
 	ProjectMapStateKey string
 	InvocationCWD      string
 	AutoApprove        bool
+	Headless           bool
 	AuditLogger        audit.ToolLogger
 	LocatorRegistry    *locator.Registry
 	UsageAttribution   UsageAttributionCallback
@@ -107,6 +108,12 @@ func (ctx ExecutionContext) ConfirmOptions() common.ConfirmOptions {
 		AutoApprove: normalized.AutoApprove,
 		Config:      normalized.Config,
 	}
+}
+
+// IsHeadless は headless runner 由来の tool execution かどうかを返す。
+func (ctx ExecutionContext) IsHeadless() bool {
+	normalized := normalizeExecutionContext(ctx)
+	return normalized.Headless
 }
 
 // EffectiveRegistry は実行時に使う Tool Registry を返す。

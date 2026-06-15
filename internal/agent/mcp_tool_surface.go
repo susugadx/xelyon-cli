@@ -56,6 +56,7 @@ func selectMCPToolSurface(model string, tools []mcp.MCPTool) mcpToolSurfaceSelec
 
 func selectMCPToolSurfaceWithBudget(model string, tools []mcp.MCPTool, budget mcpToolSurfaceBudget) mcpToolSurfaceSelection {
 	budget = normalizeMCPToolSurfaceBudget(budget)
+	tools = visibleMCPTools(tools)
 	ordered := orderMCPToolsRoundRobin(tools)
 	selection := mcpToolSurfaceSelection{total: len(tools)}
 	seen := make(map[string]struct{}, len(ordered))

@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
 	"github.com/susugadx/xelyon-cli/internal/mcptool"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -16,6 +17,7 @@ type MCPToolWrapper struct {
 	desc        string
 	inputSchema json.RawMessage
 	callTimeout time.Duration
+	approval    mcpapproval.Mode
 }
 
 func (w *MCPToolWrapper) wrapper() *mcptool.Wrapper {
@@ -26,6 +28,7 @@ func (w *MCPToolWrapper) wrapper() *mcptool.Wrapper {
 		Description: w.desc,
 		InputSchema: w.inputSchema,
 		CallTimeout: w.callTimeout,
+		Approval:    w.approval,
 	})
 }
 
@@ -70,6 +73,7 @@ func mcpDefinitionsForTest(tools []MCPTool) []mcptool.Definition {
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
 			CallTimeout: tool.CallTimeout,
+			Approval:    tool.ApprovalMode(),
 		})
 	}
 	return defs

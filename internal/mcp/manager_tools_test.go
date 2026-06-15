@@ -8,6 +8,7 @@ import (
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
 )
 
 func TestManagerBuildServerToolsSkipsSanitizedNameCollision(t *testing.T) {
@@ -25,7 +26,7 @@ func TestManagerBuildServerToolsSkipsSanitizedNameCollision(t *testing.T) {
 	got, summary := manager.buildServerTools("server_a", nil, []*sdkmcp.Tool{
 		{Name: "tool_one", Description: "duplicate"},
 		{Name: "kept", Description: "kept"},
-	}, nil, defaultMCPToolCallTimeout)
+	}, ServerConfig{})
 
 	if summary.registered != 1 || summary.skipped != 1 {
 		t.Fatalf("summary = %+v, want registered=1 skipped=1", summary)
@@ -50,7 +51,7 @@ func TestManagerBuildServerToolsFiltersRawToolNameBeforeExportedCollision(t *tes
 		got, summary := manager.buildServerTools("server-a", nil, []*sdkmcp.Tool{
 			{Name: "tool.one", Description: "raw included but exported duplicate"},
 			{Name: "tool_two", Description: "raw not included"},
-		}, &ToolsFilter{Include: []string{"tool.one"}}, defaultMCPToolCallTimeout)
+		}, ServerConfig{Tools: &ToolsFilter{Include: []string{"tool.one"}}})
 
 		if len(got) != 0 {
 			t.Fatalf("buildServerTools() = %#v, want no registered tools", got)
@@ -73,7 +74,7 @@ func TestManagerBuildServerToolsFiltersRawToolNameBeforeExportedCollision(t *tes
 		got, summary := manager.buildServerTools("server-a", nil, []*sdkmcp.Tool{
 			{Name: "tool.one", Description: "raw excluded duplicate"},
 			{Name: "tool_two", Description: "kept"},
-		}, &ToolsFilter{Exclude: []string{"tool.one"}}, defaultMCPToolCallTimeout)
+		}, ServerConfig{Tools: &ToolsFilter{Exclude: []string{"tool.one"}}})
 
 		if len(got) != 1 || got[0].Name != "tool_two" {
 			t.Fatalf("buildServerTools() = %#v, want only raw non-excluded tool", got)
@@ -85,6 +86,124 @@ func TestManagerBuildServerToolsFiltersRawToolNameBeforeExportedCollision(t *tes
 			t.Fatalf("warning output = %q, want raw excluded duplicate to skip collision warning", output.String())
 		}
 	})
+}
+
+func TestManagerBuildServerToolsResolvesApprovalPolicy(t *testing.T) {
+	manager := NewManager()
+	var output bytes.Buffer
+	manager.SetOutput(&output)
+
+	got, summary := manager.buildServerTools("github", nil, []*sdkmcp.Tool{
+		{Name: "list_issues", Description: "list"},
+		{Name: "create_issue", Description: "create"},
+		{Name: "delete_repository", Description: "delete"},
+		{Name: "invalid_override", Description: "invalid"},
+	}, ServerConfig{
+		Approval: "auto",
+		ToolApprovals: map[string]string{
+			"create_issue":      "confirm",
+			"delete_repository": "deny",
+			"invalid_override":  "prompt",
+		},
+	})
+
+	if summary.registered != 3 || summary.skipped != 1 {
+		t.Fatalf("summary = %+v, want registered=3 skipped=1", summary)
+	}
+	gotModes := map[string]mcpapproval.Mode{}
+	for _, tool := range got {
+		gotModes[tool.Name] = tool.ApprovalMode()
+	}
+	wantModes := map[string]mcpapproval.Mode{
+		"list_issues":      mcpapproval.ModeAuto,
+		"create_issue":     mcpapproval.ModeConfirm,
+		"invalid_override": mcpapproval.ModeConfirm,
+	}
+	if len(gotModes) != len(wantModes) {
+		t.Fatalf("tools = %#v, want modes %#v", gotModes, wantModes)
+	}
+	for name, want := range wantModes {
+		if gotModes[name] != want {
+			t.Fatalf("approval for %s = %q, want %q; all=%#v", name, gotModes[name], want, gotModes)
+		}
+	}
+	if strings.Contains(strings.Join(toolNamesForTest(got), ","), "delete_repository") {
+		t.Fatalf("denied tool should not be registered: %#v", got)
+	}
+	if !strings.Contains(output.String(), `invalid approval "prompt"`) {
+		t.Fatalf("warning output = %q, want invalid approval warning", output.String())
+	}
+}
+
+func TestManagerBuildServerToolsFiltersDenyAfterIncludeExclude(t *testing.T) {
+	manager := NewManager()
+
+	got, summary := manager.buildServerTools("github", nil, []*sdkmcp.Tool{
+		{Name: "delete_repository", Description: "delete"},
+		{Name: "list_issues", Description: "list"},
+	}, ServerConfig{
+		Tools: &ToolsFilter{Include: []string{"delete_repository"}},
+		ToolApprovals: map[string]string{
+			"delete_repository": "deny",
+		},
+	})
+
+	if len(got) != 0 {
+		t.Fatalf("buildServerTools() = %#v, want no visible tools", got)
+	}
+	if summary.registered != 0 || summary.skipped != 2 {
+		t.Fatalf("summary = %+v, want registered=0 skipped=2", summary)
+	}
+}
+
+func TestManagerBuildServerToolsServerDenyCannotBeOverridden(t *testing.T) {
+	manager := NewManager()
+
+	got, summary := manager.buildServerTools("github", nil, []*sdkmcp.Tool{
+		{Name: "list_issues", Description: "list"},
+		{Name: "create_issue", Description: "create"},
+	}, ServerConfig{
+		Approval: "deny",
+		ToolApprovals: map[string]string{
+			"list_issues":  "auto",
+			"create_issue": "confirm",
+		},
+	})
+
+	if len(got) != 0 {
+		t.Fatalf("buildServerTools() = %#v, want no visible tools when server approval is deny", got)
+	}
+	if summary.registered != 0 || summary.skipped != 2 {
+		t.Fatalf("summary = %+v, want registered=0 skipped=2", summary)
+	}
+}
+
+func TestManagerBuildServerToolsInvalidServerApprovalFallsBackToConfirm(t *testing.T) {
+	manager := NewManager()
+	var output bytes.Buffer
+	manager.SetOutput(&output)
+
+	got, summary := manager.buildServerTools("github", nil, []*sdkmcp.Tool{
+		{Name: "list_issues", Description: "list"},
+	}, ServerConfig{Approval: "prompt"})
+
+	if summary.registered != 1 || summary.skipped != 0 {
+		t.Fatalf("summary = %+v, want registered=1 skipped=0", summary)
+	}
+	if got[0].ApprovalMode() != mcpapproval.ModeConfirm {
+		t.Fatalf("ApprovalMode = %q, want confirm", got[0].ApprovalMode())
+	}
+	if !strings.Contains(output.String(), `MCP server 'github' has invalid approval "prompt"`) {
+		t.Fatalf("warning output = %q, want invalid server approval warning", output.String())
+	}
+}
+
+func toolNamesForTest(tools []MCPTool) []string {
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.Name)
+	}
+	return names
 }
 
 func TestMCPServerOperationContextUsesDefaultAndCallerDeadline(t *testing.T) {
@@ -185,7 +304,7 @@ func TestManagerBuildServerToolsCarriesConfiguredCallTimeout(t *testing.T) {
 	manager := NewManager()
 	got, summary := manager.buildServerTools("server", nil, []*sdkmcp.Tool{
 		{Name: "slow", Description: "slow"},
-	}, nil, 5*time.Minute)
+	}, ServerConfig{ToolTimeoutSeconds: 300})
 
 	if summary.registered != 1 || summary.skipped != 0 {
 		t.Fatalf("summary = %+v, want registered=1 skipped=0", summary)

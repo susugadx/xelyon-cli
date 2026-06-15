@@ -11,6 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/mcptool"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
@@ -132,6 +133,42 @@ func TestConfigureMCPToolsClearsProviderWhenNoMCPToolsSelected(t *testing.T) {
 	}
 	if len(p.lastTools) != 0 {
 		t.Fatalf("registered tools = %#v, want empty MCP provider surface", p.lastTools)
+	}
+}
+
+func TestDeniedMCPToolsDoNotReachPromptProviderOrRegistrySurface(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "github", Name: "list_issues", Description: "List issues", Approval: mcpapproval.ModeAuto},
+		{ServerName: "github", Name: "delete_repository", Description: "Delete repository", Approval: mcpapproval.ModeDeny},
+	}
+
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		maxTools:           10,
+		maxEstimatedTokens: 32000,
+		maxSchemaBytes:     1024,
+	})
+	if got := exportedMCPToolNamesForTest(selection.selected); !reflect.DeepEqual(got, []string{"mcp_github_list_issues"}) {
+		t.Fatalf("selected MCP tools = %#v, want only allowed tool", got)
+	}
+
+	promptText := buildMCPToolsPromptForTools(mcpTools)
+	if strings.Contains(promptText, "mcp_github_delete_repository") {
+		t.Fatalf("prompt contains denied MCP tool:\n%s", promptText)
+	}
+
+	provider := &mockMCPProvider{name: "openai"}
+	configureMCPTools(provider, mcpTools, nil)
+	if got := toolDefinitionNamesForTest(provider.lastTools); !reflect.DeepEqual(got, []string{"mcp_github_list_issues"}) {
+		t.Fatalf("provider MCP tools = %#v, want only allowed tool", got)
+	}
+
+	registry := tools.NewRegistry()
+	mcptool.RegisterToRegistry(registry, mcpSurfaceTestCaller{}, mcpToolDefinitions(mcpTools))
+	if registry.GetTool("mcp_github_delete_repository") != nil {
+		t.Fatal("registry should not contain denied MCP tool")
+	}
+	if registry.GetTool("mcp_github_list_issues") == nil {
+		t.Fatal("registry should contain allowed MCP tool")
 	}
 }
 

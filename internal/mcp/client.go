@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
 )
 
 // ServerConfig はMCPサーバーの設定
@@ -15,6 +16,8 @@ type ServerConfig struct {
 	Env                   map[string]string `json:"env,omitempty"`
 	Disabled              bool              `json:"disabled,omitempty"`              // サーバー全体を無効化
 	Tools                 *ToolsFilter      `json:"tools,omitempty"`                 // ツール単位フィルタ
+	Approval              string            `json:"approval,omitempty"`              // MCP tool 実行承認ポリシー
+	ToolApprovals         map[string]string `json:"toolApprovals,omitempty"`         // raw tool name ごとの承認ポリシー
 	StartupTimeoutSeconds int               `json:"startupTimeoutSeconds,omitempty"` // 起動・接続・tools/list timeout
 	ToolTimeoutSeconds    int               `json:"toolTimeoutSeconds,omitempty"`    // tools/call timeout
 }
@@ -38,6 +41,17 @@ type MCPTool struct {
 	InputSchema json.RawMessage
 	Session     *mcp.ClientSession
 	CallTimeout time.Duration
+	Approval    mcpapproval.Mode
+}
+
+// ApprovalMode は MCP tool の実効承認ポリシーを返す。
+func (t MCPTool) ApprovalMode() mcpapproval.Mode {
+	return mcpapproval.Effective(t.Approval)
+}
+
+// ApprovalDenied は MCP tool が実効ポリシーで拒否されるかを返す。
+func (t MCPTool) ApprovalDenied() bool {
+	return t.ApprovalMode() == mcpapproval.ModeDeny
 }
 
 // Manager はMCPサーバーの接続を管理

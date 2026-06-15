@@ -33,6 +33,9 @@ func TestLoadMCPConfig_CreatesDefault(t *testing.T) {
 	if !server.Disabled {
 		t.Fatalf("default filesystem server Disabled = false, want true")
 	}
+	if server.Approval != "confirm" {
+		t.Fatalf("default filesystem server Approval = %q, want confirm", server.Approval)
+	}
 	if _, err := os.Stat(result.configPath); err != nil {
 		t.Fatalf("default config path not created: %v", err)
 	}
@@ -83,6 +86,8 @@ func TestLoadMCPConfig_ReadsExisting(t *testing.T) {
 			"custom": {
 				Command:               "npx",
 				Args:                  []string{"@custom/server"},
+				Approval:              "auto",
+				ToolApprovals:         map[string]string{"danger": "deny"},
 				StartupTimeoutSeconds: 45,
 				ToolTimeoutSeconds:    300,
 			},
@@ -113,6 +118,12 @@ func TestLoadMCPConfig_ReadsExisting(t *testing.T) {
 	}
 	if server.StartupTimeoutSeconds != 45 {
 		t.Fatalf("StartupTimeoutSeconds = %d, want 45", server.StartupTimeoutSeconds)
+	}
+	if server.Approval != "auto" {
+		t.Fatalf("Approval = %q, want auto", server.Approval)
+	}
+	if server.ToolApprovals["danger"] != "deny" {
+		t.Fatalf("ToolApprovals[danger] = %q, want deny", server.ToolApprovals["danger"])
 	}
 	if server.ToolTimeoutSeconds != 300 {
 		t.Fatalf("ToolTimeoutSeconds = %d, want 300", server.ToolTimeoutSeconds)

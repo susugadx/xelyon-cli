@@ -87,6 +87,7 @@ func newDefaultMCPConfig() Config {
 				Args:     []string{"@modelcontextprotocol/server-filesystem", "/path/to/directory"},
 				Env:      map[string]string{"NODE_OPTIONS": "--no-warnings"},
 				Disabled: true,
+				Approval: "confirm",
 			},
 		},
 	}

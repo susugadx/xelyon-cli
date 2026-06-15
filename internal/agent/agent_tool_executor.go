@@ -45,6 +45,7 @@ func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdou
 		ProjectMapStateKey: a.projectMapStateKey,
 		InvocationCWD:      invocationCWD,
 		AutoApprove:        a.autoApprove(),
+		Headless:           a.Headless,
 		AuditLogger:        a.auditLogger(),
 		LocatorRegistry:    a.LocatorRegistry,
 	}

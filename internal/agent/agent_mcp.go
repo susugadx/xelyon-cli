@@ -20,6 +20,7 @@ func buildMCPToolsPrompt(mcpManager *mcp.Manager) string {
 }
 
 func buildMCPToolsPromptForTools(mcpTools []mcp.MCPTool) string {
+	mcpTools = visibleMCPTools(mcpTools)
 	if len(mcpTools) == 0 {
 		return ""
 	}
@@ -38,6 +39,7 @@ func buildMCPToolsPromptForTools(mcpTools []mcp.MCPTool) string {
 }
 
 func mcpToolDefinitions(mcpTools []mcp.MCPTool) []mcptool.Definition {
+	mcpTools = visibleMCPTools(mcpTools)
 	defs := make([]mcptool.Definition, 0, len(mcpTools))
 	for _, tool := range mcpTools {
 		defs = append(defs, mcptool.Definition{
@@ -46,9 +48,24 @@ func mcpToolDefinitions(mcpTools []mcp.MCPTool) []mcptool.Definition {
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
 			CallTimeout: tool.CallTimeout,
+			Approval:    tool.ApprovalMode(),
 		})
 	}
 	return defs
+}
+
+func visibleMCPTools(mcpTools []mcp.MCPTool) []mcp.MCPTool {
+	if len(mcpTools) == 0 {
+		return nil
+	}
+	visible := make([]mcp.MCPTool, 0, len(mcpTools))
+	for _, tool := range mcpTools {
+		if tool.ApprovalDenied() {
+			continue
+		}
+		visible = append(visible, tool)
+	}
+	return visible
 }
 
 // configureMCPTools は MCP ツール定義を provider に 1 回だけ登録する（debugは OpenAI / Gemini のみ）
@@ -82,7 +99,7 @@ func configureMCPTools(provider api.Provider, mcpTools []mcp.MCPTool, errOut io.
 
 	toolDefs := make([]api.ToolDefinition, 0, len(mcpTools))
 	seen := make(map[string]bool, len(mcpTools))
-	for _, t := range mcpTools {
+	for _, t := range visibleMCPTools(mcpTools) {
 		// ツール名: mcp_{serverName}_{toolName}
 		name := mcpnames.ExportedToolName(t.ServerName, t.Name)
 		if seen[name] {

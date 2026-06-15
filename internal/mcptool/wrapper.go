@@ -11,12 +11,20 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 const defaultMCPToolCallTimeout = 600 * time.Second
+
+var (
+	// ErrApprovalDenied は MCP approval policy により実行が拒否されたことを表す。
+	ErrApprovalDenied = errors.New("MCP tool execution denied by approval policy")
+	// ErrApprovalRequired は headless 実行で MCP tool の承認確認が必要だったことを表す。
+	ErrApprovalRequired = errors.New("approval_required")
+)
 
 // Definition は MCP server から取得した tool metadata を tools.Registry 用に表す。
 type Definition struct {
@@ -25,6 +33,7 @@ type Definition struct {
 	Description string
 	InputSchema json.RawMessage
 	CallTimeout time.Duration
+	Approval    mcpapproval.Mode
 }
 
 // ToolCaller は integration 層が必要とする最小契約。
@@ -37,6 +46,9 @@ type ToolCaller interface {
 func RegisterToRegistry(registry *tools.Registry, caller ToolCaller, definitions []Definition) {
 	for _, definition := range definitions {
 		tool := definition
+		if mcpapproval.Effective(tool.Approval) == mcpapproval.ModeDeny {
+			continue
+		}
 		wrapper := NewWrapper(WrapperOptions{
 			Caller:      caller,
 			ServerName:  tool.ServerName,
@@ -44,8 +56,8 @@ func RegisterToRegistry(registry *tools.Registry, caller ToolCaller, definitions
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
 			CallTimeout: tool.CallTimeout,
+			Approval:    tool.Approval,
 		})
-
 		if registry.HasTool(wrapper.Name()) {
 			continue
 		}
@@ -61,6 +73,7 @@ type Wrapper struct {
 	desc        string
 	inputSchema json.RawMessage // JSONスキーマ情報
 	callTimeout time.Duration
+	approval    mcpapproval.Mode
 }
 
 // WrapperOptions は Wrapper 作成時の依存と metadata をまとめる。
@@ -71,6 +84,7 @@ type WrapperOptions struct {
 	Description string
 	InputSchema json.RawMessage
 	CallTimeout time.Duration
+	Approval    mcpapproval.Mode
 }
 
 // NewWrapper は MCP tool metadata から tools.Tool 実装を作る。
@@ -82,6 +96,7 @@ func NewWrapper(opts WrapperOptions) *Wrapper {
 		desc:        opts.Description,
 		inputSchema: opts.InputSchema,
 		callTimeout: opts.CallTimeout,
+		approval:    mcpapproval.Effective(opts.Approval),
 	}
 }
 
@@ -106,15 +121,18 @@ func (w *Wrapper) Parameters() map[string]interface{} {
 // Run はツールを実行
 func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	out := execCtx.Output()
+	toolName := w.Name()
+
+	if w.approvalMode() == mcpapproval.ModeDeny {
+		err := fmt.Errorf("%w: %s", ErrApprovalDenied, toolName)
+		return "Error: " + err.Error(), nil, err
+	}
 
 	// 引数バリデーション（簡易版）
 	if err := w.validateArgs(out.StdoutWriter(), args); err != nil {
 		return fmt.Sprintf("Validation Error: %v", err), nil, err
 	}
 
-	// MCP tool は動的登録され SafetyLow として扱われる。
-	// 通常 mode では確認し、full_auto や --auto-approve では実行ポリシーに従って自動承認される。
-	toolName := w.Name()
 	message := fmt.Sprintf("Execute MCP tool: %s (server: %s)", w.toolName, w.serverName)
 
 	// 引数がある場合は表示
@@ -132,14 +150,22 @@ func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (s
 			w.toolName, w.serverName, strings.Join(argsDisplay, ", "))
 	}
 
-	decision := common.ConfirmWithAutoApproveDecisionAndOptions(execCtx.PromptIO(), execCtx.ConfirmOptions(), toolName, message)
-	switch decision.Action {
-	case common.ConfirmNo:
-		return "User rejected MCP tool execution", nil, nil
-	case common.ConfirmComment:
-		// コメントがある場合はフィードバックとして返す
-		feedback := "User provided feedback: " + decision.Comment
-		return feedback, nil, nil
+	switch w.approvalMode() {
+	case mcpapproval.ModeConfirm:
+		if execCtx.IsHeadless() {
+			err := fmt.Errorf("%w: MCP tool execution requires approval by MCP approval policy: %s", ErrApprovalRequired, toolName)
+			return "Error: " + err.Error(), nil, err
+		}
+		decision := common.ConfirmWithIO(execCtx.PromptIO(), message)
+		switch decision.Action {
+		case common.ConfirmNo:
+			return "User rejected MCP tool execution", nil, nil
+		case common.ConfirmComment:
+			feedback := "User provided feedback: " + decision.Comment
+			return feedback, nil, nil
+		}
+	case mcpapproval.ModeAuto:
+		out.Green.Printf("Auto-approved (MCP config): %s\n", toolName)
 	}
 
 	// スキーマに基づいて型変換（string → number/integer/boolean）
@@ -176,6 +202,10 @@ func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (s
 	// 結果をフォーマット
 	formattedResult := w.formatResult(result)
 	return formattedResult, nil, nil
+}
+
+func (w *Wrapper) approvalMode() mcpapproval.Mode {
+	return mcpapproval.Effective(w.approval)
 }
 
 // convertArgsWithSchema はスキーマに基づいて引数の型を変換する
