@@ -72,7 +72,7 @@ func loadGuidanceBundleForFingerprint(aiCfg AgentInstructionsConfig, projectCfg 
 	budget := newInstructionByteBudget(aiCfg)
 	mode := normalizeAgentInstructionProjectMode(aiCfg.Project.Mode)
 	if shouldLoadProjectGuidance(mode, projectCfg != nil) {
-		strength := resolveProjectGuidanceStrength(projectCfg != nil)
+		strength := resolveProjectGuidanceStrength(projectCfg)
 		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, aiCfg, gitRoot, strength, &budget)
 	}
 	if aiCfg.Global.Enabled {

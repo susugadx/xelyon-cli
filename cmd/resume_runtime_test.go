@@ -59,6 +59,23 @@ func seedAzureResumeSession(t *testing.T, model string) string {
 	return session.ID
 }
 
+func seedOpenAIResumeSession(t *testing.T, model string) string {
+	t.Helper()
+
+	storage, err := history.NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+	session := history.NewSession(model)
+	session.ProviderName = "OpenAI"
+	session.ProviderConfigKey = "openai"
+	session.AddMessage("user", "saved openai question", model)
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save(session) error = %v", err)
+	}
+	return session.ID
+}
+
 func seedMetadataLessResumeSession(t *testing.T, model string) string {
 	t.Helper()
 
@@ -113,11 +130,102 @@ func assertAzureResumeRuntime(t *testing.T, model string, provider api.Provider)
 	}
 }
 
+func assertOpenAISetupPlaceholderResumeRuntime(t *testing.T, model string, provider api.Provider) {
+	t.Helper()
+	if model != "gpt-5.2" {
+		t.Fatalf("model = %q, want saved OpenAI model", model)
+	}
+	if provider == nil {
+		t.Fatal("provider = nil, want setup placeholder")
+	}
+	if !api.IsProviderSetupRequired(provider) {
+		t.Fatalf("provider = %T %q, want setup placeholder", provider, providerNameForTest(provider))
+	}
+	msg, ok := api.ProviderSetupRequiredMessage(provider)
+	if !ok {
+		t.Fatal("provider setup message missing")
+	}
+	for _, fragment := range []string{"provider setup required", "OPENAI_API_KEY", "xelyon setup"} {
+		if !strings.Contains(msg, fragment) {
+			t.Fatalf("setup message missing %q:\n%s", fragment, msg)
+		}
+	}
+}
+
 func providerNameForTest(provider api.Provider) string {
 	if provider == nil {
 		return ""
 	}
 	return provider.Name()
+}
+
+func TestResumeCommandDirectUsesSetupPlaceholderForSavedProviderWithoutCredential(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	sessionID := seedOpenAIResumeSession(t, "gpt-5.2")
+
+	var directCalled bool
+	runTUIWithResumeDirect = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, gotSessionID string) error {
+		directCalled = true
+		assertOpenAISetupPlaceholderResumeRuntime(t, model, provider)
+		if gotSessionID != sessionID {
+			t.Fatalf("sessionID = %q, want %q", gotSessionID, sessionID)
+		}
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"resume", sessionID, "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !directCalled {
+		t.Fatal("expected direct resume path")
+	}
+}
+
+func TestResumeCommandLastUsesSetupPlaceholderForSavedProviderWithoutCredential(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	seedOpenAIResumeSession(t, "gpt-5.2")
+
+	var resumeCalled bool
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		resumeCalled = true
+		assertOpenAISetupPlaceholderResumeRuntime(t, model, provider)
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--last", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !resumeCalled {
+		t.Fatal("expected last resume path")
+	}
+}
+
+func TestRootResumeUsesSetupPlaceholderForSavedProviderWithoutCredential(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	seedOpenAIResumeSession(t, "gpt-5.2")
+
+	var resumeCalled bool
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		resumeCalled = true
+		assertOpenAISetupPlaceholderResumeRuntime(t, model, provider)
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--resume", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !resumeCalled {
+		t.Fatal("expected root --resume path")
+	}
 }
 
 func TestResumeCommandDirectUsesSavedRuntimeWhenDefaultConfigInvalid(t *testing.T) {

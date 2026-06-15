@@ -17,6 +17,7 @@ const GeneratedHelpCommandsText = `Commands:
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider/model picker or switch directly
   /providers                - Show provider credential status
+  /setup                    - Show first-run setup checklist
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
@@ -27,7 +28,7 @@ const GeneratedHelpCommandsText = `Commands:
                             /skills usage - Show local Skill Router usage diagnostics
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
-  /init                     - Create xelyon.yaml project template
+  /init                     - Create project AGENTS.md guidance file
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
   /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)
   /version                  - Show version information
@@ -53,6 +54,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider/model picker or switch directly
   /providers                - Show provider credential status
+  /setup                    - Show first-run setup checklist
   /config                   - Edit global config.yaml settings
                             /config show - Show all settings with diff from defaults
                             /config model <name> - Change default model
@@ -63,7 +65,7 @@ const GeneratedTUIHelpCommandsText = `Commands:
                             /skills usage - Show local Skill Router usage diagnostics
                             /skills doctor - Show parsing/duplicate diagnostics
   /model [name]             - Open model picker or switch current provider model
-  /init                     - Create xelyon.yaml project template
+  /init                     - Create project AGENTS.md guidance file
   /project                  - Edit project xelyon.yaml interactively
   /plan [on|off|toggle|status] - Toggle Plan Mode (investigation -> plan -> approval -> implementation)
   /thinking <on|off|level>  - Set Extended Thinking mode (level: low/medium/high/xhigh=max)

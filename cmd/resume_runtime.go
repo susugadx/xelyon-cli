@@ -17,6 +17,12 @@ type resumeRuntimeTarget struct {
 	last      bool
 }
 
+type interactiveRuntimeSelection struct {
+	cfg      *config.Config
+	model    string
+	provider api.Provider
+}
+
 func loadInteractiveConfigSelection(cmd *cobra.Command) *config.Config {
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -35,6 +41,15 @@ func loadInteractiveConfigSelection(cmd *cobra.Command) *config.Config {
 	}
 	cfg.ApplyFlagOverrides(loopPtr, diffPtr)
 	return cfg
+}
+
+func loadRuntimeSelectionForMode(cmd *cobra.Command, mode executionMode) (interactiveRuntimeSelection, error) {
+	cfg := loadInteractiveConfigSelection(cmd)
+	return selectRuntime(cmd, cfg, mode)
+}
+
+func loadInteractiveRuntimeSelection(cmd *cobra.Command) (interactiveRuntimeSelection, error) {
+	return loadRuntimeSelectionForMode(cmd, executionModeInteractive)
 }
 
 func loadResumeRuntimeSelection(cmd *cobra.Command, target resumeRuntimeTarget) (interactiveRuntimeSelection, error) {
@@ -62,15 +77,17 @@ func loadResumeRuntimeSelection(cmd *cobra.Command, target resumeRuntimeTarget) 
 		model = cfg.GetSelectedModelForProvider(providerName)
 	}
 
-	provider, err := createProvider(providerName)
+	provider, err := resolveInteractiveProvider(providerName)
 	if err != nil {
 		return interactiveRuntimeSelection{}, err
 	}
-	if err := validateSelectedProviderModelWithContext(cfg, provider, model, selectedProviderModelValidationContext{
-		explicitModel:     savedModelExplicit,
-		providerConfigKey: providerName,
-	}); err != nil {
-		return interactiveRuntimeSelection{}, err
+	if !api.IsProviderSetupRequired(provider) {
+		if err := validateSelectedProviderModelWithContext(cfg, provider, model, selectedProviderModelValidationContext{
+			explicitModel:     savedModelExplicit,
+			providerConfigKey: providerName,
+		}); err != nil {
+			return interactiveRuntimeSelection{}, err
+		}
 	}
 
 	return interactiveRuntimeSelection{
@@ -81,14 +98,20 @@ func loadResumeRuntimeSelection(cmd *cobra.Command, target resumeRuntimeTarget) 
 }
 
 func selectInteractiveRuntime(cfg *config.Config) (interactiveRuntimeSelection, error) {
+	return selectRuntime(nil, cfg, executionModeInteractive)
+}
+
+func selectRuntime(cmd *cobra.Command, cfg *config.Config, mode executionMode) (interactiveRuntimeSelection, error) {
 	model := getModel(cfg)
 	providerName := resolveProviderName(providerFlag, cfg.DefaultProvider)
-	provider, err := createProvider(providerName)
+	provider, err := resolveProviderForExecutionMode(cmd, providerName, mode, model)
 	if err != nil {
 		return interactiveRuntimeSelection{}, err
 	}
-	if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
-		return interactiveRuntimeSelection{}, err
+	if !api.IsProviderSetupRequired(provider) {
+		if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
+			return interactiveRuntimeSelection{}, err
+		}
 	}
 	return interactiveRuntimeSelection{
 		cfg:      cfg,

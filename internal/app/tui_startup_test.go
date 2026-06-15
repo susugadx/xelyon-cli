@@ -428,3 +428,41 @@ func TestRunTUIWithImageWithConfig_RunsInitialImageTurn(t *testing.T) {
 		}
 	}
 }
+
+func TestRunTUIWithImageWithConfig_ProviderSetupRequiredSkipsImageLoad(t *testing.T) {
+	disableColors(t)
+	t.Setenv("HOME", t.TempDir())
+
+	originalRunner := runTUIProgram
+	defer func() { runTUIProgram = originalRunner }()
+	originalStartupRunner := runTUIProgramWithStartupSubmission
+	defer func() { runTUIProgramWithStartupSubmission = originalStartupRunner }()
+
+	var called atomic.Int32
+	var gotInitialContent string
+	runTUIProgram = func(agent tui.AgentInterface, initialContent string, onProgram func(*tea.Program)) {
+		called.Add(1)
+		gotInitialContent = initialContent
+		onProgram(nil)
+	}
+	runTUIProgramWithStartupSubmission = func(agent tui.AgentInterface, initialContent string, startupSubmission *tui.StartupSubmission, onProgram func(*tea.Program)) {
+		t.Fatal("startup image submission must not run when provider setup is required")
+	}
+
+	provider := api.NewUnavailableProvider("openai", "provider setup required for openai: missing OPENAI_API_KEY")
+	missingImagePath := filepath.Join(t.TempDir(), "missing.png")
+	if err := RunTUIWithImageWithConfig("describe", "test-model", provider, missingImagePath, newProjectMapDisabledConfig(), false); err != nil {
+		t.Fatalf("RunTUIWithImageWithConfig() error = %v", err)
+	}
+
+	if called.Load() != 1 {
+		t.Fatalf("runTUIProgram called %d times, want 1", called.Load())
+	}
+	stripped := stripANSI(gotInitialContent)
+	if !strings.Contains(stripped, "provider setup required for openai") {
+		t.Fatalf("initial content missing setup guidance:\n%s", stripped)
+	}
+	if strings.Contains(stripped, "Image loaded:") {
+		t.Fatalf("initial content must not report loaded image:\n%s", stripped)
+	}
+}

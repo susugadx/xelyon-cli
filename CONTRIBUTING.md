@@ -31,6 +31,14 @@ export DEEPSEEK_API_KEY="your-api-key"
 ./xelyon
 ```
 
+## Agent guidance
+
+このリポジトリには、maintainer が XELYON / Codex で開発するための `AGENTS.md` を置いています。
+
+`AGENTS.md` は、このリポジトリを XELYON で開いたときに project guidance として読まれます。一部の内容は maintainer 個人の global instructions、Skill、worktree / PR 運用に依存します。
+
+fork や別環境で使う場合は、そのまま必須ルールとして扱わず、自分の agent 環境や開発フローに合わせて調整してください。個人用の方針は `~/.xelyon/AGENTS.md` などの global guidance に置くこともできます。
+
 ## コミットルール
 
 ### コミットメッセージ形式

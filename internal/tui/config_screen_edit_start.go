@@ -119,6 +119,8 @@ func (cs *configScreen) beginSliceEdit(targetPane configPane, field *config.Conf
 	cs.editSliceIndex = 0
 	cs.editSliceAdding = false
 	cs.editSliceEditing = false
+	cs.editGuidanceChoices = guidanceFileChoicesForField(field.Path, cs.editSliceItems)
+	cs.editGuidanceIndex = 0
 	cs.activePane = targetPane
 }
 

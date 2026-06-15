@@ -123,7 +123,7 @@ type ProjectAgent interface {
 	// SaveProjectConfig は xelyon.yaml に project config を保存する。
 	SaveProjectConfig(pc *config.ProjectConfig) error
 
-	// CreateProjectConfigTemplate は xelyon.yaml のテンプレートを作成して読み込む。
+	// CreateProjectConfigTemplate は xelyon.yaml の repo config template を作成して読み込む。
 	CreateProjectConfigTemplate() (*config.ProjectConfig, error)
 }
 

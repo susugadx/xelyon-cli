@@ -75,6 +75,8 @@ func (cs *configScreen) closeFieldSliceEdit(field *config.ConfigField) {
 	if err := config.SetFieldValue(cs.cfg, field.Path, cs.editSliceItems); err == nil && !sliceEqual(cs.editSliceItems, field.Current) {
 		cs.markModified()
 	}
+	cs.editGuidanceChoices = nil
+	cs.editGuidanceIndex = 0
 	cs.editMode = editNone
 }
 

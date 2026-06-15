@@ -67,6 +67,16 @@ type SubscriptionAuthStatus struct {
 	Suggestion      string
 }
 
+// AllowsRequestAttempt は status/report の local state から request path に進めるか返します。
+func (s SubscriptionAuthStatus) AllowsRequestAttempt() bool {
+	switch s.State {
+	case SubscriptionAuthStateLoggedIn, SubscriptionAuthStateTokenExpired:
+		return true
+	default:
+		return false
+	}
+}
+
 // SubscriptionCredential は request transport が使う OAuth credential DTO です。
 type SubscriptionCredential struct {
 	AccessToken  string

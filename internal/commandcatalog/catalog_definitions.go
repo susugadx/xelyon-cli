@@ -104,6 +104,7 @@ var Commands = []CommandInfo{
 	commandProvider(),
 	commandUse(),
 	commandProviders(),
+	commandSetup(),
 	commandConfig(),
 	commandSkills(),
 	commandModel(),
@@ -318,6 +319,10 @@ func commandProviders() CommandInfo {
 	return legacyHiddenCommand("/providers", "", "Show provider credential status", "プロバイダー認証状態を表示", CommandCategoryModel, 30)
 }
 
+func commandSetup() CommandInfo {
+	return legacyDiscoverableCommand("/setup", "", "Show first-run setup checklist", "初回セットアップ状況を表示", CommandCategoryConfig, 85)
+}
+
 func commandConfig() CommandInfo {
 	return legacyAgentTUILocalCommand(
 		"/config",
@@ -370,7 +375,7 @@ func commandModel() CommandInfo {
 }
 
 func commandInit() CommandInfo {
-	return legacyDiscoverableCommand("/init", "", "Create xelyon.yaml project template", "xelyon.yamlテンプレートを作成", CommandCategoryConfig, 180)
+	return legacyDiscoverableCommand("/init", "", "Create project AGENTS.md guidance file", "AGENTS.md ガイダンスを作成", CommandCategoryConfig, 180)
 }
 
 func commandProject() CommandInfo {

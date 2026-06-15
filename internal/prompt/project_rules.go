@@ -57,12 +57,11 @@ type ProjectInstructionEntry struct {
 
 // ProjectInstructionBlockInput は project instruction block 生成入力 DTO。
 type ProjectInstructionBlockInput struct {
-	HasProjectConfig bool
-	MandatoryRules   []string
-	ProjectContexts  []string
-	ProjectGuidance  []ProjectInstructionEntry
-	GlobalGuidance   []ProjectInstructionEntry
-	Warnings         []string
+	MandatoryRules  []string
+	ProjectContexts []string
+	ProjectGuidance []ProjectInstructionEntry
+	GlobalGuidance  []ProjectInstructionEntry
+	Warnings        []string
 }
 
 // BuildProjectInstructionBlock は xelyon.yaml mandatory rules と imported guidance を
@@ -71,6 +70,7 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	rulesBlock := BuildRulesBlockFromList(input.MandatoryRules)
 	contextParts := normalizeProjectContexts(input.ProjectContexts)
 	warnings := normalizeProjectWarnings(input.Warnings)
+	hasLegacyInstructions := rulesBlock != "" || len(contextParts) > 0
 
 	hasProjectGuidance := len(input.ProjectGuidance) > 0
 	hasGlobalGuidance := len(input.GlobalGuidance) > 0
@@ -94,10 +94,12 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	}
 	if hasProjectGuidance {
 		sectionText := projectGuidanceWithoutConfigText
-		if input.HasProjectConfig {
+		projectGuidance := input.ProjectGuidance
+		if hasLegacyInstructions {
 			sectionText = projectGuidanceWithConfigText
+			projectGuidance = guidanceEntriesWithStrength(input.ProjectGuidance, "advisory")
 		}
-		appendGuidanceSection(&b, "## Imported Project Guidance", sectionText, input.ProjectGuidance)
+		appendGuidanceSection(&b, "## Imported Project Guidance", sectionText, projectGuidance)
 	}
 	if hasGlobalGuidance {
 		appendGuidanceSection(&b, "## Enabled Global Guidance", globalGuidanceText, input.GlobalGuidance)
@@ -111,6 +113,18 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	}
 	b.WriteString("\n<!-- PROJECT_CONFIG_END -->")
 	return b.String()
+}
+
+func guidanceEntriesWithStrength(entries []ProjectInstructionEntry, strength string) []ProjectInstructionEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	next := make([]ProjectInstructionEntry, len(entries))
+	copy(next, entries)
+	for i := range next {
+		next[i].Strength = strength
+	}
+	return next
 }
 
 func appendGuidanceSection(b *strings.Builder, heading string, intro string, entries []ProjectInstructionEntry) {

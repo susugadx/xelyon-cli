@@ -12,6 +12,9 @@ func (cs *configScreen) handleSliceEdit(msg tea.KeyMsg) (configCommand, tea.Cmd)
 		cs.editMode = editNone
 		return configCommandNone, nil
 	}
+	if cs.editingGuidanceFileChoices(field.Path) {
+		return cs.handleGuidanceFileChoiceKey(msg, field)
+	}
 	return cs.handleFieldSliceListKey(msg, field)
 }
 

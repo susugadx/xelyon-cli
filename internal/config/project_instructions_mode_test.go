@@ -66,6 +66,27 @@ func TestLoadProjectInstructionBundle_AlwaysModeLoadsAdvisoryWithXelyon(t *testi
 	}
 }
 
+func TestLoadProjectInstructionBundle_AlwaysModeKeepsProjectGuidanceWithConfigOnlyXelyon(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "xelyon.yaml"), "final_checks:\n  commands:\n    - make test\n")
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "# tracked agents\n")
+	initGitRepo(t, root)
+	runGit(t, root, "add", "AGENTS.md", "xelyon.yaml")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = "always"
+
+	bundle := loadProjectInstructionBundleForDirOrFatal(t, cfg, root)
+	if len(bundle.ProjectGuidance) != 1 {
+		t.Fatalf("ProjectGuidance len = %d, want 1", len(bundle.ProjectGuidance))
+	}
+	if bundle.ProjectGuidance[0].Strength != InstructionStrengthProjectGuidance {
+		t.Fatalf("Strength = %q, want %q", bundle.ProjectGuidance[0].Strength, InstructionStrengthProjectGuidance)
+	}
+}
+
 func TestLoadProjectInstructionBundle_OffModeSkipsProjectGuidance(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "AGENTS.md"), "# guidance\n")

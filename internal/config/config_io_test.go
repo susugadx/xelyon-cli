@@ -28,6 +28,15 @@ func TestLoadConfig_NotExists(t *testing.T) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Error("LoadConfig() did not create config file")
 	}
+
+	agentsPath := filepath.Join(tmpDir, ".xelyon", "AGENTS.md")
+	info, err := os.Stat(agentsPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() did not create AGENTS.md: %v", err)
+	}
+	if info.Size() != 0 {
+		t.Fatalf("AGENTS.md size = %d, want empty file", info.Size())
+	}
 }
 
 func TestLoadConfig_Exists(t *testing.T) {
@@ -334,6 +343,41 @@ func TestSaveConfig_NewFile(t *testing.T) {
 	}
 	if !strings.Contains(content, "# XELYON CLI 設定") {
 		t.Error("SaveConfig() should include header comment")
+	}
+
+	agentsPath := filepath.Join(tmpDir, ".xelyon", "AGENTS.md")
+	info, err := os.Stat(agentsPath)
+	if err != nil {
+		t.Fatalf("SaveConfig() did not create AGENTS.md: %v", err)
+	}
+	if info.Size() != 0 {
+		t.Fatalf("AGENTS.md size = %d, want empty file", info.Size())
+	}
+}
+
+func TestSaveConfig_DoesNotOverwriteGlobalAgentInstructions(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	agentsPath := filepath.Join(tmpDir, ".xelyon", "AGENTS.md")
+	if err := os.MkdirAll(filepath.Dir(agentsPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	const existing = "# existing global guidance\n"
+	if err := os.WriteFile(agentsPath, []byte(existing), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if err := SaveConfig(DefaultConfig()); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+
+	data, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if string(data) != existing {
+		t.Fatalf("AGENTS.md was overwritten:\n%s", string(data))
 	}
 }
 

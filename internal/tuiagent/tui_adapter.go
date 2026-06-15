@@ -303,7 +303,7 @@ func (a *TUIAdapter) SaveProjectConfig(pc *config.ProjectConfig) error {
 	return a.agent.SaveAndSyncProjectConfig(pc)
 }
 
-// CreateProjectConfigTemplate は xelyon.yaml template を作成し、編集用に読み込む。
+// CreateProjectConfigTemplate は xelyon.yaml の repo config template を作成し、編集用に読み込む。
 func (a *TUIAdapter) CreateProjectConfigTemplate() (*config.ProjectConfig, error) {
 	if err := config.CreateProjectConfigTemplate("", false); err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -541,6 +542,16 @@ func TestSaveProjectConfig(t *testing.T) {
 
 	if err := SaveProjectConfig(pc); err != nil {
 		t.Fatalf("SaveProjectConfig() error: %v", err)
+	}
+	data, err := os.ReadFile(pc.FilePath)
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+	if !strings.Contains(string(data), "# XELYON repo config for "+filepath.Base(dir)) {
+		t.Fatalf("saved header should describe repo config:\n%s", string(data))
+	}
+	if strings.Contains(string(data), "AI 用コンテキスト") {
+		t.Fatalf("saved header should not include legacy AI context comment:\n%s", string(data))
 	}
 
 	// 再読み込みして一致確認

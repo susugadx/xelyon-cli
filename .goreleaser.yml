@@ -78,13 +78,23 @@ release:
 
     ### インストール方法
     ```bash
-    # macOS (Homebrew)
+    # Linux / macOS installer
+    curl -fsSL https://raw.githubusercontent.com/susugadx/xelyon-cli/main/install.sh | bash -s -- --yes
+
+    # Homebrew
     brew install susugadx/tap/xelyon
 
-    # 手動インストール（全OS対応）
-    # 1. 下記のAssetsから環境に合ったファイルをダウンロード
-    # 2. 解凍してPATHに配置
+    # npm wrapper
+    npm install -g xelyon
+
+    # Windows PowerShell
+    iwr https://raw.githubusercontent.com/susugadx/xelyon-cli/main/install.ps1 -UseB | iex
+
+    # Manual fallback:
+    # Download the matching asset below, verify checksums.txt, and place xelyon on PATH.
     ```
+
+    `xelyon` は provider credential 未設定でも TUI を起動します。API key は config に保存せず、環境変数、`xelyon auth openai-subscription login`、または Ollama を使って設定してください。
 
     ### サポート環境
     - **Linux**: amd64, arm64

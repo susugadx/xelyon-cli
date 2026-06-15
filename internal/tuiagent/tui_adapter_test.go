@@ -257,15 +257,61 @@ func TestTUIAdapter_InitCreatesTemplateWhenMissing(t *testing.T) {
 		t.Fatal("HandleCommand(/init) = false, want true")
 	}
 
-	if _, err := os.Stat(filepath.Join(tmpDir, "xelyon.yaml")); err != nil {
-		t.Fatalf("xelyon.yaml should be created: %v", err)
+	if _, err := os.Stat(filepath.Join(tmpDir, "AGENTS.md")); err != nil {
+		t.Fatalf("AGENTS.md should be created: %v", err)
 	}
 	got := out.String()
 	if strings.Contains(got, "not available in TUI mode") {
 		t.Fatalf("/init should not be blocked in TUI:\n%s", got)
 	}
-	if !strings.Contains(got, "xelyon.yaml template created") {
+	if !strings.Contains(got, "AGENTS.md created") {
 		t.Fatalf("output missing created message:\n%s", got)
+	}
+	if !strings.Contains(got, "git add AGENTS.md") {
+		t.Fatalf("output missing git add guidance:\n%s", got)
+	}
+}
+
+func TestTUIAdapter_InitUsesTemplateRootForClaudeNotice(t *testing.T) {
+	root := t.TempDir()
+	subdir := filepath.Join(root, "subdir")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "xelyon.yaml"), []byte("final_checks:\n  commands:\n    - make test\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(xelyon.yaml) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("# Claude guidance\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(CLAUDE.md) error = %v", err)
+	}
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWd)
+	})
+	if err := os.Chdir(subdir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+
+	agent, out := newTUIAdapterTestAgent(t)
+	adapter := NewTUIAdapter(agent, nil)
+
+	if !adapter.HandleCommand("/init") {
+		t.Fatal("HandleCommand(/init) = false, want true")
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); err != nil {
+		t.Fatalf("root AGENTS.md should be created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(subdir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("subdir AGENTS.md should not be created, stat err = %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "Existing CLAUDE guidance was left unchanged.") {
+		t.Fatalf("output missing root CLAUDE guidance notice:\n%s", got)
 	}
 }
 
@@ -281,7 +327,7 @@ func TestTUIAdapter_InitDoesNotPromptOverwrite(t *testing.T) {
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Chdir() error = %v", err)
 	}
-	existingPath := filepath.Join(tmpDir, "xelyon.yaml")
+	existingPath := filepath.Join(tmpDir, "AGENTS.md")
 	const existing = "existing: true\n"
 	if err := os.WriteFile(existingPath, []byte(existing), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -299,13 +345,13 @@ func TestTUIAdapter_InitDoesNotPromptOverwrite(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	if string(data) != existing {
-		t.Fatalf("xelyon.yaml was overwritten unexpectedly: %q", string(data))
+		t.Fatalf("AGENTS.md was overwritten unexpectedly: %q", string(data))
 	}
 	got := out.String()
 	if strings.Contains(got, "Overwrite?") {
 		t.Fatalf("TUI /init should not prompt for overwrite:\n%s", got)
 	}
-	if !strings.Contains(got, "Not overwriting from TUI mode") {
+	if !strings.Contains(got, "AGENTS.md already exists. Left unchanged.") {
 		t.Fatalf("output missing non-overwrite message:\n%s", got)
 	}
 }

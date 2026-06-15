@@ -54,8 +54,10 @@ func (cs *configScreen) finishSliceInput(apply bool) {
 			if cs.editSliceAdding {
 				cs.editSliceItems = append(cs.editSliceItems, val)
 				cs.editSliceIndex = len(cs.editSliceItems) - 1
+				cs.syncGuidanceChoicesForCurrentField()
 			} else if cs.editSliceEditing && cs.editSliceIndex < len(cs.editSliceItems) {
 				cs.editSliceItems[cs.editSliceIndex] = val
+				cs.syncGuidanceChoicesForCurrentField()
 			}
 		}
 	}

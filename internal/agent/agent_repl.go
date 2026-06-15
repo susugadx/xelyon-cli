@@ -42,6 +42,7 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	agent.setAutoApprove(autoApprove)
+	printProviderSetupRequiredNotice(agent)
 
 	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
@@ -132,6 +133,18 @@ func RunInteractiveWithConfig(model string, provider api.Provider, cfg *config.C
 func RunLegacyInteractiveWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
 	env, cleanup := prepareInteractiveREPLEnvironment(cfg, autoApprove)
 	defer cleanup()
+
+	if api.IsProviderSetupRequired(provider) {
+		agent := initInteractiveAgentWithRuntime(env.runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceClassic)
+		defer agent.Cleanup()
+
+		printHeaderToWriter(env.runtimeUI.Output(), agent.Model, provider)
+		printModeInfoToWriter(env.runtimeUI.Output(), autoApprove, false)
+		printContextSize(agent)
+		agent.setPromptReader(env.mlReader)
+		runREPLLoop(agent, env.mlReader)
+		return nil
+	}
 
 	if !provider.SupportsImages() {
 		return fmt.Errorf("provider %q does not support image input", provider.Name())
@@ -334,7 +347,13 @@ func buildContextSizeBlock(agent *Agent) string {
 		}
 	}
 	if projectTokens > 0 {
-		lines = append(lines, fmt.Sprintf("Project instructions: ~%s", FormatTokens(projectTokens)))
+		line := fmt.Sprintf("Project instructions: ~%s", FormatTokens(projectTokens))
+		if labels := projectInstructionStatusLabels(agent.projectInstructionBundleIfLoaded()); labels != "" {
+			line += " (" + labels + ")"
+		}
+		lines = append(lines, line)
+	} else if labels := projectInstructionStatusLabels(agent.projectInstructionBundleIfLoaded()); labels != "" {
+		lines = append(lines, "Project instructions: ~0 ("+labels+")")
 	}
 
 	for i, line := range lines {
@@ -346,6 +365,20 @@ func buildContextSizeBlock(agent *Agent) string {
 	}
 
 	return buf.String()
+}
+
+func projectInstructionStatusLabels(bundle *config.ProjectInstructionBundle) string {
+	if bundle == nil {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if labels := joinInstructionLabels(bundle.ProjectGuidance, bundle.ProjectGuidanceStatus); labels != "" {
+		parts = append(parts, "project: "+labels)
+	}
+	if labels := joinInstructionLabels(bundle.GlobalGuidance, bundle.GlobalGuidanceStatus); labels != "" {
+		parts = append(parts, "global: "+labels)
+	}
+	return strings.Join(parts, "; ")
 }
 
 func estimateProjectMapTokens(systemPrompt string) int {

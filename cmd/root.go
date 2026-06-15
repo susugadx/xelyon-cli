@@ -93,7 +93,7 @@ Examples:
 
 		switch mode {
 		case executionModeHeadless:
-			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
 			if err != nil {
 				return err
 			}
@@ -104,11 +104,12 @@ Examples:
 			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(jsonBytes))
 			if result.Status == app.HeadlessStatusError {
+				cmd.SilenceUsage = true
 				return fmt.Errorf("headless execution failed")
 			}
 			return nil
 		case executionModeOnce:
-			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
 			if err != nil {
 				return err
 			}
@@ -142,7 +143,7 @@ Examples:
 			}
 			return nil
 		case executionModeOnceImage:
-			runtime, err := loadInteractiveRuntimeSelection(cmd)
+			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
 			if err != nil {
 				return err
 			}
@@ -161,6 +162,35 @@ Examples:
 			return fmt.Errorf("unsupported execution mode: %s", mode)
 		}
 	},
+}
+
+func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mode executionMode, model string) (api.Provider, error) {
+	if executionModeIsInteractive(mode) {
+		return resolveInteractiveProvider(providerName)
+	}
+	provider, err := resolveRequiredProvider(providerName)
+	if err == nil {
+		return provider, nil
+	}
+	if mode == executionModeHeadless && isProviderSetupError(providerName, err) {
+		result := app.NewHeadlessProviderSetupRequiredResult(providerName, model, err.Error())
+		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(jsonBytes))
+		if cmd != nil {
+			cmd.SilenceUsage = true
+		}
+		return nil, fmt.Errorf("headless execution failed")
+	}
+	return nil, err
+}
+
+func executionModeIsInteractive(mode executionMode) bool {
+	switch mode {
+	case executionModeInteractive, executionModeResume, executionModeInteractiveImage:
+		return true
+	default:
+		return false
+	}
 }
 
 func init() {
@@ -201,17 +231,7 @@ func init() {
 	rootCmd.AddCommand(newDoctorCommand())
 	rootCmd.AddCommand(newAuthCommand())
 	rootCmd.AddCommand(newResumeCommand())
-}
-
-type interactiveRuntimeSelection struct {
-	cfg      *config.Config
-	model    string
-	provider api.Provider
-}
-
-func loadInteractiveRuntimeSelection(cmd *cobra.Command) (interactiveRuntimeSelection, error) {
-	cfg := loadInteractiveConfigSelection(cmd)
-	return selectInteractiveRuntime(cfg)
+	rootCmd.AddCommand(newSetupCommand())
 }
 
 func printLegacyNoTUIWarning() {

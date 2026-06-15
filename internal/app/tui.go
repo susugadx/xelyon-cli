@@ -57,6 +57,9 @@ func RunTUIWithResumeSessionWithConfig(model string, provider api.Provider, cfg 
 
 // RunTUIWithImageWithConfig は画像付きの初回ターンを実行して TUI モードを起動する。
 func RunTUIWithImageWithConfig(query string, model string, provider api.Provider, imagePath string, cfg *config.Config, autoApprove bool) error {
+	if api.IsProviderSetupRequired(provider) {
+		return runTUIWithOptions(model, provider, cfg, autoApprove, tuiRunOptions{})
+	}
 	if !provider.SupportsImages() {
 		return fmt.Errorf("provider %q does not support image input", provider.Name())
 	}
