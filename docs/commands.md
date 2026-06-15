@@ -972,6 +972,21 @@ XELYONはMCP（Model Context Protocol）に対応しており、`~/.xelyon/mcp.j
 
 詳細は [MCP連携ガイド](mcp.md) を参照してください。
 
+### `/mcp`
+
+現在の対話セッションに読み込まれている MCP runtime 状態を表示します。
+`/mcp` と `/mcp status` は同じ表示です。
+このコマンドは snapshot-only で、MCP server process の起動、再接続、`tools/list`、`tools/call` は行いません。
+
+```bash
+> /mcp
+> /mcp status
+```
+
+表示するのは runtime 有効状態、読み込み済み config の有無、server 数、接続済み server、disabled / blocked / not connected server、visible / omitted tool 数、tool surface のサンプルです。
+env value、raw args、server error detail は表示しません。
+設定ファイルそのものや live 接続を確認する場合は `xelyon doctor mcp`、実際に initialize / `tools/list` まで確認する場合は `xelyon doctor mcp --connect` を使います。
+
 ## 高度な機能
 
 ### Headlessモード

@@ -93,6 +93,7 @@ var Commands = []CommandInfo{
 	commandTokens(),
 	commandLedger(),
 	commandRawOutputs(),
+	commandMCP(),
 	commandCopy(),
 	commandAttach(),
 	commandDetach(),
@@ -182,6 +183,15 @@ func commandRawOutputs() CommandInfo {
 		75,
 	)
 	cmd.Owner = CommandOwnerAgent
+	return cmd
+}
+
+func commandMCP() CommandInfo {
+	cmd := legacyDiscoverableCommand("/mcp", "[status]", "Show MCP runtime status", "MCP実行状態を表示", CommandCategoryContext, 78)
+	cmd.Owner = CommandOwnerAgent
+	cmd.SubCommands = []SubCommand{
+		{Name: "/mcp status", Description: "Show current MCP session servers and tool surface"},
+	}
 	return cmd
 }
 

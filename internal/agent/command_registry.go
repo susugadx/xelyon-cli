@@ -34,6 +34,7 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		"/tokens":     func(_ []string) bool { return handleTokensCommand(agent) },
 		"/ledger":     func(args []string) bool { return handleLedgerCommand(agent, args) },
 		"/rawoutputs": func(args []string) bool { return handleRawOutputsCommand(agent, args) },
+		"/mcp":        func(args []string) bool { return handleMCPCommand(agent, args) },
 		"/thinking":   func(args []string) bool { return handleThinkingCommand(agent, args) },
 		"/think":      func(args []string) bool { return handleThinkingCommand(agent, args) },
 	}

@@ -110,6 +110,15 @@ xelyon doctor mcp --connect --tools
 
 `doctor mcp` は env value と raw args を表示しません。表示するのは command、arg 数、env key 名、timeout、approval、tool 名です。
 
+対話中に現在セッションへ読み込まれている MCP runtime 状態を確認する場合は `/mcp status` を使います。
+`/mcp status` は snapshot-only で、MCP server process の起動、再接続、`tools/list`、`tools/call` は行いません。
+表示するのは runtime 有効状態、読み込み済み config の有無、server 状態、visible / omitted tool 数、tool surface のサンプルです。
+env value、raw args、server error detail は表示しません。
+
+```text
+> /mcp status
+```
+
 ## 設定項目
 
 ### `command` (必須)
