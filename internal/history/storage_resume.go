@@ -2,8 +2,9 @@ package history
 
 import (
 	"errors"
-	"path/filepath"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/resumecwd"
 )
 
 // ErrNoResumeSessions は resume 対象の session が見つからないことを表す。
@@ -23,7 +24,7 @@ func (st *Storage) ListResumeSessions(opts ResumeListOptions) ([]SessionMetadata
 		return nil, err
 	}
 
-	workingDir := normalizeSessionWorkingDir(opts.WorkingDir)
+	workingDir := strings.TrimSpace(opts.WorkingDir)
 	if workingDir == "" {
 		workingDir = currentWorkingDirForSession()
 	}
@@ -65,23 +66,5 @@ func resumeCandidateExcluded(session SessionMetadata, excludeSessionID string) b
 }
 
 func resumeCandidateMatchesWorkingDir(session SessionMetadata, workingDir string) bool {
-	sessionWorkingDir := normalizeSessionWorkingDir(session.WorkingDir)
-	if sessionWorkingDir == "" {
-		return true
-	}
-	if workingDir == "" {
-		return true
-	}
-	return sessionWorkingDir == workingDir
-}
-
-func normalizeSessionWorkingDir(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	if abs, err := filepath.Abs(path); err == nil {
-		path = abs
-	}
-	return filepath.Clean(path)
+	return resumecwd.Matches(session.WorkingDir, workingDir)
 }

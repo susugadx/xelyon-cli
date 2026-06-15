@@ -50,7 +50,7 @@ func TestCatalogPolicyDetailsPreserveProviderFormatting(t *testing.T) {
 	}
 
 	claudePolicy := ClaudeCatalogPolicy(cfg, "claude-sonnet-4-6", "claude-sonnet-4-6")
-	if got, want := claudePolicy.ClaudeDetail(), "catalog_model=claude-sonnet-4-6, context_window=200000, max_output_tokens=64000, pricing=input $3.00/M cached $0.300/M output $15.00/M"; got != want {
+	if got, want := claudePolicy.ClaudeDetail(), "catalog_model=claude-sonnet-4-6, context_window=1000000, max_output_tokens=64000, pricing=input $3.00/M cached $0.300/M output $15.00/M"; got != want {
 		t.Fatalf("ClaudeDetail() = %q, want %q", got, want)
 	}
 

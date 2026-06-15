@@ -5,6 +5,7 @@ const dns = require("node:dns");
 const { EventEmitter } = require("node:events");
 const fs = require("node:fs");
 const https = require("node:https");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const { Readable } = require("node:stream");
@@ -88,6 +89,16 @@ test("downloadFile rejects HTTPS redirect loops without deleting an existing des
   assert.equal(fs.readFileSync(dest, "utf8"), "existing payload");
 });
 
+test("downloadFile rejects HTTPS redirects to expanded IPv6 local literals", async () => {
+  const dest = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "xelyon-npm-local-redirect-")), "asset.bin");
+
+  await withMockHTTPS({
+    "/redirect": { statusCode: 302, headers: { location: "https://[0:0:0:0:0:0:0:1]/asset" } },
+  }, async () => {
+    await assert.rejects(() => downloadFile("https://downloads.example.test/redirect", dest), /Refusing private or local IP address/);
+  });
+});
+
 test("downloadFile rejects oversized HTTPS responses without deleting an existing destination", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "xelyon-npm-large-download-"));
   const dest = path.join(dir, "asset.bin");
@@ -122,6 +133,42 @@ test("remote downloads reject IPv6 link-local addresses from DNS array lookups",
   ], async () => {
     await withMockHTTPS({
       "/checksums.txt": { statusCode: 200, body: "ignored", lookupOptions: { all: true } },
+    }, async () => {
+      await assert.rejects(() => fetchText("https://downloads.example.test/checksums.txt"), /Refusing private or local IP address/);
+    });
+  });
+});
+
+test("remote downloads reject expanded IPv6 loopback addresses from DNS array lookups", async () => {
+  await withMockDNSLookup([
+    { address: "203.0.113.10", family: 4 },
+    { address: "0:0:0:0:0:0:0:1", family: 6 },
+  ], async () => {
+    await withMockHTTPS({
+      "/checksums.txt": { statusCode: 200, body: "ignored", lookupOptions: { all: true } },
+    }, async () => {
+      await assert.rejects(() => fetchText("https://downloads.example.test/checksums.txt"), /Refusing private or local IP address/);
+    });
+  });
+});
+
+test("remote downloads reject expanded IPv6 unspecified addresses from DNS array lookups", async () => {
+  await withMockDNSLookup([
+    { address: "203.0.113.10", family: 4 },
+    { address: "0:0:0:0:0:0:0:0", family: 6 },
+  ], async () => {
+    await withMockHTTPS({
+      "/checksums.txt": { statusCode: 200, body: "ignored", lookupOptions: { all: true } },
+    }, async () => {
+      await assert.rejects(() => fetchText("https://downloads.example.test/checksums.txt"), /Refusing private or local IP address/);
+    });
+  });
+});
+
+test("remote downloads reject expanded IPv6 loopback addresses from single DNS lookups", async () => {
+  await withMockDNSLookup("0:0:0:0:0:0:0:1", async () => {
+    await withMockHTTPS({
+      "/checksums.txt": { statusCode: 200, body: "ignored", lookupOptions: {} },
     }, async () => {
       await assert.rejects(() => fetchText("https://downloads.example.test/checksums.txt"), /Refusing private or local IP address/);
     });
@@ -232,7 +279,7 @@ async function withMockDNSLookup(result, fn) {
   const originalLookup = dns.lookup;
   dns.lookup = (_hostname, _options, callback) => {
     process.nextTick(() => {
-      callback(null, result, Array.isArray(result) ? undefined : 4);
+      callback(null, result, Array.isArray(result) ? undefined : net.isIP(result) || 4);
     });
   };
   try {

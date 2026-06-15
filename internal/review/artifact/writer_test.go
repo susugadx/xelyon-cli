@@ -208,6 +208,95 @@ func TestBufferedReviewRunArtifactWriterFlushesToDirectoryWriter(t *testing.T) {
 	assertReviewArtifactFileForTest(t, filepath.Join(dir, "evidence_2.md"), "second")
 }
 
+func TestBufferedReviewRunArtifactWriterLenNilAndFlushOrder(t *testing.T) {
+	var nilBuffer *BufferedReviewRunArtifactWriter
+	if got := nilBuffer.Len(); got != 0 {
+		t.Fatalf("nil Len() = %d, want 0", got)
+	}
+	if err := nilBuffer.WriteReviewRunArtifact("evidence.md", []byte("content")); err == nil {
+		t.Fatal("nil WriteReviewRunArtifact() error = nil, want nil writer error")
+	}
+	if err := nilBuffer.FlushTo(&recordingReviewRunArtifactWriter{}); err == nil {
+		t.Fatal("nil FlushTo() error = nil, want nil writer error")
+	}
+
+	buffer := NewBufferedReviewRunArtifactWriter()
+	for _, artifact := range []struct {
+		name    string
+		content string
+	}{
+		{name: "first.md", content: "first"},
+		{name: "second.md", content: "second"},
+	} {
+		if err := buffer.WriteReviewRunArtifact(artifact.name, []byte(artifact.content)); err != nil {
+			t.Fatalf("WriteReviewRunArtifact(%s) error = %v", artifact.name, err)
+		}
+	}
+	if got := buffer.Len(); got != 2 {
+		t.Fatalf("Len() = %d, want 2", got)
+	}
+	if err := buffer.FlushTo(nil); err == nil {
+		t.Fatal("FlushTo(nil) error = nil, want destination error")
+	}
+
+	recorder := &recordingReviewRunArtifactWriter{}
+	if err := buffer.FlushTo(recorder); err != nil {
+		t.Fatalf("FlushTo(recorder) error = %v", err)
+	}
+	if got, want := len(recorder.artifacts), 2; got != want {
+		t.Fatalf("recorded artifacts len = %d, want %d", got, want)
+	}
+	if recorder.artifacts[0].name != "first.md" || string(recorder.artifacts[0].content) != "first" ||
+		recorder.artifacts[1].name != "second.md" || string(recorder.artifacts[1].content) != "second" {
+		t.Fatalf("recorded artifacts = %#v, want flush order preserved", recorder.artifacts)
+	}
+}
+
+func TestReviewRunArtifactWriterRejectsInvalidNamesAndRepoInputs(t *testing.T) {
+	buffer := NewBufferedReviewRunArtifactWriter()
+	for _, name := range []string{"", ".", "..", "../evidence.md", "nested/evidence.md", `nested\evidence.md`} {
+		t.Run("invalid artifact name "+name, func(t *testing.T) {
+			if err := buffer.WriteReviewRunArtifact(name, []byte("content")); err == nil {
+				t.Fatalf("WriteReviewRunArtifact(%q) error = nil, want validation error", name)
+			}
+		})
+	}
+
+	repo := t.TempDir()
+	for _, runID := range []string{"", ".", "..", "../run", "nested/run", `nested\run`} {
+		t.Run("invalid run id "+runID, func(t *testing.T) {
+			if _, err := NewReviewRunRepoArtifactWriter(repo, runID); err == nil {
+				t.Fatalf("NewReviewRunRepoArtifactWriter(%q) error = nil, want validation error", runID)
+			}
+		})
+	}
+
+	repoFile := filepath.Join(t.TempDir(), "repo-as-file")
+	if err := os.WriteFile(repoFile, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("WriteFile(repo-as-file) error = %v", err)
+	}
+	if _, err := NewReviewRunRepoArtifactWriter(repoFile, "20260101T000000.000000000Z"); err == nil {
+		t.Fatal("NewReviewRunRepoArtifactWriter(file repoRoot) error = nil, want directory validation error")
+	}
+}
+
+type recordingReviewRunArtifact struct {
+	name    string
+	content []byte
+}
+
+type recordingReviewRunArtifactWriter struct {
+	artifacts []recordingReviewRunArtifact
+}
+
+func (w *recordingReviewRunArtifactWriter) WriteReviewRunArtifact(name string, content []byte) error {
+	w.artifacts = append(w.artifacts, recordingReviewRunArtifact{
+		name:    name,
+		content: append([]byte(nil), content...),
+	})
+	return nil
+}
+
 func createReviewArtifactSymlinkForTest(t *testing.T, oldname, newname string) {
 	t.Helper()
 

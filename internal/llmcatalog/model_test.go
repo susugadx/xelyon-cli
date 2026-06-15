@@ -5,14 +5,21 @@ import (
 	"testing"
 )
 
-func TestKnownMaxOutputTokens_ClaudeOpus47(t *testing.T) {
+func TestKnownMaxOutputTokens_ClaudeOneMillionModels(t *testing.T) {
 	for _, model := range []string{
+		"claude-opus-4-8",
+		"claude-opus-4.8",
+		"anthropic/claude-opus-4-8",
+		"anthropic/claude-opus-4.8",
 		"claude-opus-4-7",
 		"claude-opus-4.7",
+		"claude-opus-4-6",
+		"claude-opus-4.6",
 		"global.anthropic.claude-opus-4-7-v1",
 		"global.anthropic.claude-opus-4-7-v1:0",
 		"us.anthropic.claude-opus-4-7-v1:0",
 		"anthropic/claude-opus-4-7",
+		"claude-fable-5",
 	} {
 		t.Run(model, func(t *testing.T) {
 			got, ok := KnownMaxOutputTokens(model)
@@ -52,6 +59,9 @@ func TestIsKnownModelName(t *testing.T) {
 		{model: "gpt-5.5", want: true},
 		{model: "claude-sonnet-4-6", want: true},
 		{model: "claude-sonnet-4.6", want: true},
+		{model: "claude-opus-4-8", want: true},
+		{model: "claude-opus-4.8", want: true},
+		{model: "claude-fable-5", want: true},
 		{model: "global.anthropic.claude-sonnet-4-6", want: true},
 		{model: "eu.anthropic.claude-sonnet-4-6", want: true},
 		{model: "au.anthropic.claude-sonnet-4-6", want: true},
@@ -61,6 +71,7 @@ func TestIsKnownModelName(t *testing.T) {
 		{model: "gemini-3.1-pro", want: true},
 		{model: "kimi-k2.6", want: true},
 		{model: "kimi-k2.5", want: true},
+		{model: "kimi-k2.7-code", want: true},
 		{model: "kimi-k2-thinking", want: true},
 		{model: "amazon.nova-pro-v1:0", want: true},
 		{model: "corp-gpt-5-prod", want: false},
@@ -72,6 +83,36 @@ func TestIsKnownModelName(t *testing.T) {
 		t.Run(tt.model, func(t *testing.T) {
 			if got := IsKnownModelName(tt.model); got != tt.want {
 				t.Fatalf("IsKnownModelName(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInferProviderFromModel_KnownRoutedAndUnknown(t *testing.T) {
+	tests := []struct {
+		model string
+		want  string
+	}{
+		{model: " GPT-5.4 ", want: "openai"},
+		{model: "o3-mini", want: "openai"},
+		{model: "gemini-3.1-pro-preview", want: "gemini"},
+		{model: "claude-sonnet-4-6", want: "claude"},
+		{model: "claude-opus-4-8", want: "claude"},
+		{model: "claude-fable-5", want: "claude"},
+		{model: "deepseek-v4-flash", want: "deepseek"},
+		{model: "kimi-k2.6", want: "kimi"},
+		{model: "kimi-k2.7-code", want: "kimi"},
+		{model: "global.anthropic.claude-sonnet-4-6", want: "bedrock"},
+		{model: "openai/gpt-5.4", want: "openrouter"},
+		{model: "vendor/model", want: "openrouter"},
+		{model: "unknown-model", want: ""},
+		{model: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := InferProviderFromModel(tt.model); got != tt.want {
+				t.Fatalf("InferProviderFromModel(%q) = %q, want %q", tt.model, got, tt.want)
 			}
 		})
 	}
@@ -109,6 +150,25 @@ func TestKnownModelNamesForProvider_OpenAISubscriptionExactAllowlist(t *testing.
 	}
 	if got := RecommendedModelNamesForProvider("chatgpt"); !slices.Equal(got, want) {
 		t.Fatalf("RecommendedModelNamesForProvider(chatgpt) = %v, want %v", got, want)
+	}
+}
+
+func TestRecommendedModelNamesForProvider_IncludesLatestClaudeModels(t *testing.T) {
+	models := RecommendedModelNamesForProvider("claude")
+	for _, model := range []string{"claude-opus-4-8", "claude-fable-5"} {
+		if !slices.Contains(models, model) {
+			t.Fatalf("RecommendedModelNamesForProvider(claude) = %v, want %q for /model picker", models, model)
+		}
+	}
+}
+
+func TestKnownAndRecommendedModelNamesForProvider_OpenRouterExcludesFableUntilReplaySupport(t *testing.T) {
+	const model = "anthropic/claude-fable-5"
+	if slices.Contains(KnownModelNamesForProvider("openrouter"), model) {
+		t.Fatalf("KnownModelNamesForProvider(openrouter) should not expose %q before replay support", model)
+	}
+	if slices.Contains(RecommendedModelNamesForProvider("openrouter"), model) {
+		t.Fatalf("RecommendedModelNamesForProvider(openrouter) should not expose %q before replay support", model)
 	}
 }
 
@@ -306,6 +366,8 @@ func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
 		{provider: "openai_subscription", model: "gpt-5.3-codex", want: false},
 		{provider: "openai_subscription", model: "gpt-5.2", want: false},
 		{provider: "openai", model: "meta-llama/llama-4-scout-17b-16e-instruct", want: false},
+		{provider: "openrouter", model: "anthropic/claude-sonnet-4.6", want: true},
+		{provider: "openrouter", model: "anthropic/claude-fable-5", want: false},
 		{provider: "gemini", model: "gemini-3.1-pro", want: true},
 		{provider: "gemini", model: "gemini-3-pro-preview", want: true},
 		{provider: "gemini", model: "gemini-2.0-flash", want: true},
@@ -323,14 +385,22 @@ func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
 	}
 }
 
-func TestModelContextLimit_ClaudeOpus47(t *testing.T) {
+func TestModelContextLimit_ClaudeOneMillionModels(t *testing.T) {
 	for _, model := range []string{
+		"claude-opus-4-8",
+		"claude-opus-4.8",
+		"anthropic/claude-opus-4-8",
+		"anthropic/claude-opus-4.8",
 		"claude-opus-4-7",
 		"claude-opus-4.7",
 		"global.anthropic.claude-opus-4-7-v1",
 		"global.anthropic.claude-opus-4-7-v1:0",
 		"us.anthropic.claude-opus-4-7-v1:0",
 		"anthropic/claude-opus-4-7",
+		"claude-fable-5",
+		"claude-sonnet-4-6",
+		"claude-sonnet-4.6",
+		"anthropic/claude-sonnet-4-6",
 	} {
 		t.Run(model, func(t *testing.T) {
 			if got := ModelContextLimit(model); got != 1000000 {
@@ -347,6 +417,8 @@ func TestModelContextLimit_BedrockClaudeProfiles(t *testing.T) {
 		"us.anthropic.claude-sonnet-4-6",
 		"eu.anthropic.claude-sonnet-4-6",
 		"au.anthropic.claude-sonnet-4-6",
+		"global.anthropic.claude-sonnet-4-6-v1",
+		"global.anthropic.claude-sonnet-4-6-v1:0",
 	} {
 		t.Run(model, func(t *testing.T) {
 			if got := ModelContextLimit(model); got != 200000 {
@@ -365,10 +437,16 @@ func TestKnownModelContextLimit(t *testing.T) {
 		{model: "gpt-5.4", want: 1000000, ok: true},
 		{model: "gemini-3.5-flash", want: 1048576, ok: true},
 		{model: "gemini-3.1-flash-lite", want: 1000000, ok: true},
-		{model: "claude-sonnet-4-6", want: 200000, ok: true},
+		{model: "claude-sonnet-4-6", want: 1000000, ok: true},
+		{model: "claude-opus-4-8", want: 1000000, ok: true},
+		{model: "claude-opus-4-6", want: 1000000, ok: true},
+		{model: "claude-fable-5", want: 1000000, ok: true},
+		{model: "global.anthropic.claude-sonnet-4-6-v1", want: 200000, ok: true},
+		{model: "global.anthropic.claude-sonnet-4-6-v1:0", want: 200000, ok: true},
 		{model: "deepseek-v4-custom", want: 1000000, ok: true},
 		{model: "kimi-k2.6", want: 256000, ok: true},
 		{model: "kimi-k2.5", want: 256000, ok: true},
+		{model: "kimi-k2.7-code", want: 256000, ok: true},
 		{model: "kimi-k2-thinking", want: 256000, ok: true},
 		{model: "corp-gpt-deployment", ok: false},
 		{model: "", ok: false},
@@ -393,8 +471,10 @@ func TestKnownModelLimits_OpenRouterDelegatedModels(t *testing.T) {
 		wantContext   int
 		wantMaxOutput int
 	}{
-		{model: "anthropic/claude-sonnet-4.6", wantContext: 200000, wantMaxOutput: 64000},
-		{model: "anthropic/claude-sonnet-4-6", wantContext: 200000, wantMaxOutput: 64000},
+		{model: "anthropic/claude-opus-4.8", wantContext: 1000000, wantMaxOutput: 128000},
+		{model: "anthropic/claude-opus-4.6", wantContext: 1000000, wantMaxOutput: 128000},
+		{model: "anthropic/claude-sonnet-4.6", wantContext: 1000000, wantMaxOutput: 64000},
+		{model: "anthropic/claude-sonnet-4-6", wantContext: 1000000, wantMaxOutput: 64000},
 		{model: "google/gemini-3.1-pro", wantContext: 1000000, wantMaxOutput: 65536},
 		{model: "deepseek/deepseek-v4-flash", wantContext: 1000000, wantMaxOutput: 384000},
 		{model: "moonshotai/kimi-k2.6", wantContext: 256000, wantMaxOutput: 32768},
@@ -422,6 +502,19 @@ func TestKnownModelLimits_OpenRouterDelegatedModels(t *testing.T) {
 	}
 }
 
+func TestKnownModelLimits_OpenRouterFableUnsupportedUntilReplaySupport(t *testing.T) {
+	const model = "anthropic/claude-fable-5"
+	if got, ok := KnownModelContextLimit(model); ok || got != 0 {
+		t.Fatalf("KnownModelContextLimit(%q) = %d, %v; want 0, false", model, got, ok)
+	}
+	if got, ok := KnownMaxOutputTokens(model); ok || got != 0 {
+		t.Fatalf("KnownMaxOutputTokens(%q) = %d, %v; want 0, false", model, got, ok)
+	}
+	if IsKnownModelName(model) {
+		t.Fatalf("IsKnownModelName(%q) = true, want false", model)
+	}
+}
+
 func TestInferProviderFromModel_KimiThinkingCompatibility(t *testing.T) {
 	tests := []struct {
 		model string
@@ -445,6 +538,7 @@ func TestKnownMaxOutputTokens_Kimi(t *testing.T) {
 	for _, model := range []string{
 		"kimi-k2.6",
 		"kimi-k2.5",
+		"kimi-k2.7-code",
 		"kimi-k2",
 		"kimi-k2-thinking",
 	} {
@@ -455,6 +549,31 @@ func TestKnownMaxOutputTokens_Kimi(t *testing.T) {
 			}
 			if got != 32768 {
 				t.Fatalf("KnownMaxOutputTokens(%q) = %d, want 32768", model, got)
+			}
+		})
+	}
+}
+
+func TestKimiBuiltinWebSearchRequestModel(t *testing.T) {
+	tests := []struct {
+		name         string
+		model        string
+		catalogModel string
+		wantModel    string
+		wantAdjusted bool
+	}{
+		{name: "k2.7 request model falls back to k2.6", model: "kimi-k2.7-code", wantModel: "kimi-k2.6", wantAdjusted: true},
+		{name: "k2.7 catalog model falls back to k2.6", model: "corp-kimi", catalogModel: "kimi-k2.7-code", wantModel: "kimi-k2.6", wantAdjusted: true},
+		{name: "k2.6 stays unchanged", model: "kimi-k2.6", wantModel: "kimi-k2.6"},
+		{name: "empty model stays empty", wantModel: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotModel, gotAdjusted := KimiBuiltinWebSearchRequestModel(tt.model, tt.catalogModel)
+			if gotModel != tt.wantModel || gotAdjusted != tt.wantAdjusted {
+				t.Fatalf("KimiBuiltinWebSearchRequestModel(%q, %q) = %q, %t; want %q, %t",
+					tt.model, tt.catalogModel, gotModel, gotAdjusted, tt.wantModel, tt.wantAdjusted)
 			}
 		})
 	}
@@ -527,6 +646,8 @@ func TestKnownMaxOutputTokens_BedrockClaudeProfiles(t *testing.T) {
 		{model: "us.anthropic.claude-sonnet-4-6", want: 64000},
 		{model: "eu.anthropic.claude-sonnet-4-6", want: 64000},
 		{model: "au.anthropic.claude-sonnet-4-6", want: 64000},
+		{model: "global.anthropic.claude-sonnet-4-6-v1", want: 64000},
+		{model: "global.anthropic.claude-sonnet-4-6-v1:0", want: 64000},
 	}
 
 	for _, tt := range tests {

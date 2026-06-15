@@ -29,6 +29,14 @@ func TestDecideDataBearingPrecedesFailureCompact(t *testing.T) {
 			wantSubfamily: string(DatabaseSubfamilyQueryResult),
 			wantKeep:      databaseDataBearingKeepReason,
 		},
+		{
+			name:          "row-like database output without select command",
+			command:       "psql app",
+			output:        strings.Repeat("id | status | note\n1 | failed | domain error fixture\n2 | ok | Error: expected row value\n", 80),
+			wantFamily:    "database",
+			wantSubfamily: string(DatabaseSubfamilyQueryResult),
+			wantKeep:      databaseDataBearingKeepReason,
+		},
 	}
 
 	for _, tt := range tests {

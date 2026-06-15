@@ -15,6 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
@@ -194,6 +195,41 @@ func TestNewAgentWithRuntime_PreservesExplicitInvocationCWD(t *testing.T) {
 	execCtx := agent.toolExecutionContext(context.Background(), nil, nil, nil)
 	if got := execCtx.InvocationCWD; got != explicitCWD {
 		t.Fatalf("tool execution invocation cwd = %q, want %q", got, explicitCWD)
+	}
+}
+
+func TestNewAgentWithRuntime_UsesInvocationCWDForSessionScope(t *testing.T) {
+	processCWD := runtimeTestWorkspace(t)
+	t.Setenv("HOME", t.TempDir())
+	explicitCWD := t.TempDir()
+
+	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
+	runtime.InvocationCWD = explicitCWD
+	agent := newRuntimeTestAgent(t, runtime)
+
+	if got := agent.session.WorkingDir; got != explicitCWD {
+		t.Fatalf("session.WorkingDir = %q, want invocation cwd %q", got, explicitCWD)
+	}
+
+	agent.session.AddMessage("user", "scoped request", agent.CurrentModel)
+	if err := agent.storage.Save(agent.session); err != nil {
+		t.Fatalf("Save(session) error = %v", err)
+	}
+
+	scoped, err := agent.storage.ListResumeSessions(history.ResumeListOptions{WorkingDir: explicitCWD})
+	if err != nil {
+		t.Fatalf("ListResumeSessions(invocation cwd) error = %v", err)
+	}
+	if len(scoped) != 1 || scoped[0].ID != agent.session.ID {
+		t.Fatalf("invocation-scoped sessions = %#v, want active session %s", scoped, agent.session.ID)
+	}
+
+	processScoped, err := agent.storage.ListResumeSessions(history.ResumeListOptions{WorkingDir: processCWD})
+	if err != nil {
+		t.Fatalf("ListResumeSessions(process cwd) error = %v", err)
+	}
+	if len(processScoped) != 0 {
+		t.Fatalf("process-cwd sessions = %#v, want none for invocation-scoped session", processScoped)
 	}
 }
 

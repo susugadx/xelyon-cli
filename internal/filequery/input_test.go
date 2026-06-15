@@ -66,6 +66,127 @@ func TestParseEntry_PreservesDirectSyntaxForPathLikeQueries(t *testing.T) {
 	}
 }
 
+func TestParseInputMultiEntryAndMalformedQueries(t *testing.T) {
+	input, ok := ParseInput("./main.go:10, internal/filequery/input.go, Makefile")
+	if !ok {
+		t.Fatal("ParseInput(multi-entry) ok = false, want true")
+	}
+	if len(input.Entries) != 3 {
+		t.Fatalf("entries len = %d, want 3", len(input.Entries))
+	}
+	if input.Entries[0].RawPath != "./main.go" ||
+		input.Entries[0].StartLine != 10 ||
+		input.Entries[0].Syntax != SyntaxExplicitPath {
+		t.Fatalf("first entry = %#v, want explicit ./main.go:10", input.Entries[0])
+	}
+	if input.Entries[1].Syntax != SyntaxPathCandidate ||
+		input.Entries[2].Syntax != SyntaxBareNamedFileCandidate {
+		t.Fatalf("entry syntaxes = %#v, want path candidate then bare named file", input.Entries)
+	}
+
+	for _, query := range []string{"", "   ", "main.go,", ",main.go", "main.go,,README.md"} {
+		t.Run(query, func(t *testing.T) {
+			if input, ok := ParseInput(query); ok {
+				t.Fatalf("ParseInput(%q) = (%#v, true), want false", query, input)
+			}
+		})
+	}
+}
+
+func TestParseInputKeepsNaturalLanguageSearchIntentOutOfDirectRouting(t *testing.T) {
+	input, ok := ParseInput("search provider history compaction")
+	if !ok {
+		t.Fatal("ParseInput(search intent) ok = false, want parsed non-direct entry")
+	}
+	if len(input.Entries) != 1 || input.Entries[0].Syntax != SyntaxNone {
+		t.Fatalf("entries = %#v, want single SyntaxNone search intent", input.Entries)
+	}
+	if InputHasOnlyExplicitPathSyntax(input) ||
+		InputHasOnlyCandidateDirectSyntax(input, true) ||
+		InputHasOnlyDirectReadCandidates(input, true) ||
+		InputHasStrictScopedDirectIntent(input) ||
+		InputHasOnlyScopedExactBatchIntent(input) {
+		t.Fatalf("search intent input was accepted by a direct routing helper: %#v", input)
+	}
+}
+
+func TestInputAggregateRoutingContracts(t *testing.T) {
+	tests := []struct {
+		name             string
+		query            string
+		allowNamedBare   bool
+		wantExplicitOnly bool
+		wantCandidate    bool
+		wantDirectRead   bool
+		wantStrictScoped bool
+		wantScopedBatch  bool
+		wantContainsPath bool
+	}{
+		{
+			name:             "explicit only",
+			query:            "./main.go:1, ../README.md",
+			wantExplicitOnly: true,
+			wantDirectRead:   true,
+			wantStrictScoped: false,
+		},
+		{
+			name:             "candidate only exact files",
+			query:            "internal/filequery/input.go, README.md",
+			wantCandidate:    true,
+			wantStrictScoped: true,
+			wantScopedBatch:  true,
+			wantContainsPath: true,
+		},
+		{
+			name:             "direct read allows explicit plus bare file",
+			query:            "./internal/filequery/input.go, README.md",
+			wantDirectRead:   true,
+			wantStrictScoped: false,
+		},
+		{
+			name:             "named bare files require opt in",
+			query:            "internal/filequery/input.go, Makefile",
+			allowNamedBare:   true,
+			wantCandidate:    true,
+			wantScopedBatch:  true,
+			wantStrictScoped: true,
+			wantContainsPath: true,
+		},
+		{
+			name:             "directory candidate is not exact scoped batch",
+			query:            "internal/filequery",
+			wantContainsPath: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input, ok := ParseInput(tt.query)
+			if !ok {
+				t.Fatalf("ParseInput(%q) ok = false", tt.query)
+			}
+			if got := InputHasOnlyExplicitPathSyntax(input); got != tt.wantExplicitOnly {
+				t.Fatalf("InputHasOnlyExplicitPathSyntax() = %v, want %v", got, tt.wantExplicitOnly)
+			}
+			if got := InputHasOnlyCandidateDirectSyntax(input, tt.allowNamedBare); got != tt.wantCandidate {
+				t.Fatalf("InputHasOnlyCandidateDirectSyntax() = %v, want %v", got, tt.wantCandidate)
+			}
+			if got := InputHasOnlyDirectReadCandidates(input, tt.allowNamedBare); got != tt.wantDirectRead {
+				t.Fatalf("InputHasOnlyDirectReadCandidates() = %v, want %v", got, tt.wantDirectRead)
+			}
+			if got := InputHasStrictScopedDirectIntent(input); got != tt.wantStrictScoped {
+				t.Fatalf("InputHasStrictScopedDirectIntent() = %v, want %v", got, tt.wantStrictScoped)
+			}
+			if got := InputHasOnlyScopedExactBatchIntent(input); got != tt.wantScopedBatch {
+				t.Fatalf("InputHasOnlyScopedExactBatchIntent() = %v, want %v", got, tt.wantScopedBatch)
+			}
+			if got := InputContainsPathCandidateSyntax(input); got != tt.wantContainsPath {
+				t.Fatalf("InputContainsPathCandidateSyntax() = %v, want %v", got, tt.wantContainsPath)
+			}
+		})
+	}
+}
+
 func TestLooksLikeNaturalLanguageSearchIntent(t *testing.T) {
 	tests := []struct {
 		query string

@@ -1,6 +1,7 @@
 package token
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -12,9 +13,16 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		expected int
 	}{
 		// Claude models
+		{"claude-opus-4-8", 1000000},
+		{"anthropic/claude-opus-4-8", 1000000},
+		{"claude-fable-5", 1000000},
 		{"claude-opus-4-7", 1000000},
 		{"anthropic/claude-opus-4-7", 1000000},
 		{"us.anthropic.claude-opus-4-7-v1:0", 1000000},
+		{"claude-opus-4-6", 1000000},
+		{"claude-sonnet-4-6", 1000000},
+		{"global.anthropic.claude-sonnet-4-6-v1", 200000},
+		{"global.anthropic.claude-sonnet-4-6-v1:0", 200000},
 		{"claude-sonnet-4-20250514", 200000},
 		{"claude-3-5-sonnet-20241022", 200000},
 		{"claude-3-opus-20240229", 200000},
@@ -82,6 +90,58 @@ func TestGetModelTokenLimitForConfig_UsesCatalogModel(t *testing.T) {
 	}
 	if got := GetModelTokenLimitForConfig(cfg, "openai", "mini-deployment"); got != 400000 {
 		t.Fatalf("GetModelTokenLimitForConfig(model override) = %d, want 400000", got)
+	}
+}
+
+func TestGetKnownModelTokenLimit_KnownAndUnknown(t *testing.T) {
+	tests := []struct {
+		model     string
+		wantLimit int
+		wantKnown bool
+	}{
+		{model: "gpt-5.4", wantLimit: 1000000, wantKnown: true},
+		{model: "openai/gpt-5.4-mini", wantLimit: 400000, wantKnown: true},
+		{model: "global.anthropic.claude-sonnet-4-6-v1:0", wantLimit: 200000, wantKnown: true},
+		{model: "anthropic/claude-fable-5", wantKnown: false},
+		{model: "unknown-model", wantKnown: false},
+		{model: "", wantKnown: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			gotLimit, gotKnown := GetKnownModelTokenLimit(tt.model)
+			if gotKnown != tt.wantKnown || gotLimit != tt.wantLimit {
+				t.Fatalf("GetKnownModelTokenLimit(%q) = %d, %v; want %d, %v", tt.model, gotLimit, gotKnown, tt.wantLimit, tt.wantKnown)
+			}
+		})
+	}
+}
+
+func TestGetKnownModelTokenLimitForConfig_UsesCatalogModelAndFallsBack(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openai", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt-deployment",
+		CatalogModel: "gpt-5.4",
+		ModelOverrides: map[string]config.ModelOverride{
+			"mini-deployment": {CatalogModel: "gpt-5.4-mini"},
+			"raw-deployment":  {},
+		},
+	})
+
+	got, known := GetKnownModelTokenLimitForConfig(cfg, "openai", "corp-gpt-deployment")
+	if !known || got != 1000000 {
+		t.Fatalf("GetKnownModelTokenLimitForConfig(default deployment) = %d, %v; want 1000000, true", got, known)
+	}
+	got, known = GetKnownModelTokenLimitForConfig(cfg, "openai", "mini-deployment")
+	if !known || got != 400000 {
+		t.Fatalf("GetKnownModelTokenLimitForConfig(model override) = %d, %v; want 400000, true", got, known)
+	}
+	got, known = GetKnownModelTokenLimitForConfig(cfg, "openai", "raw-deployment")
+	if known || got != 0 {
+		t.Fatalf("GetKnownModelTokenLimitForConfig(raw deployment) = %d, %v; want 0, false", got, known)
+	}
+	if got := GetModelTokenLimitForConfig(cfg, "openai", "raw-deployment"); got != 100000 {
+		t.Fatalf("GetModelTokenLimitForConfig(raw deployment) = %d, want default 100000", got)
 	}
 }
 
@@ -253,6 +313,30 @@ func TestEstimateStructuredValueTokenCount(t *testing.T) {
 	}
 }
 
+func TestEstimateStructuredValueTokenCount_NestedValuesUseJSONBoundary(t *testing.T) {
+	value := map[string]any{
+		"active": true,
+		"count":  3,
+		"items": []any{
+			"alpha",
+			map[string]any{
+				"missing": nil,
+				"score":   1.5,
+			},
+		},
+		"name": "demo",
+	}
+
+	wantJSON := `{"active":true,"count":3,"items":["alpha",{"missing":null,"score":1.5}],"name":"demo"}`
+	want := EstimateTokenCountForModel("gpt-4o", wantJSON)
+	if got := EstimateStructuredValueTokenCountForModel("gpt-4o", value); got != want {
+		t.Fatalf("EstimateStructuredValueTokenCountForModel(nested) = %d, want JSON estimate %d", got, want)
+	}
+	if got := EstimateStructuredValueTokenCountForModel("gpt-4o", nil); got != 0 {
+		t.Fatalf("EstimateStructuredValueTokenCountForModel(nil) = %d, want 0", got)
+	}
+}
+
 func TestEstimateTokenCount_Consistency(t *testing.T) {
 	// Same input should always produce same output
 	text := "This is a test string for token estimation."
@@ -291,5 +375,44 @@ func TestModelTokenLimitPolicy_ReturnsPositiveLimitsForRepresentatives(t *testin
 		if limit := GetModelTokenLimit(model); limit <= 0 {
 			t.Errorf("GetModelTokenLimit(%q) = %d, want positive", model, limit)
 		}
+	}
+}
+
+func TestIsTokenLimitErrorRecognizesProviderMarkers(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "openai input tokens exceed marker",
+			err:  errors.New("input tokens exceed the model context window"),
+			want: true,
+		},
+		{
+			name: "context length marker",
+			err:  errors.New("This model's context length is 128000 tokens"),
+			want: true,
+		},
+		{
+			name: "maximum context marker",
+			err:  errors.New("maximum context exceeded for request"),
+			want: true,
+		},
+		{
+			name: "rate limit is not token limit",
+			err:  errors.New("rate limit exceeded"),
+		},
+		{
+			name: "nil error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsTokenLimitError(tt.err); got != tt.want {
+				t.Fatalf("IsTokenLimitError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
 	}
 }

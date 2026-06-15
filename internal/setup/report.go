@@ -73,13 +73,7 @@ func BuildReport(opts Options) Report {
 		cfg = config.DefaultConfig()
 	}
 
-	provider := config.CanonicalProviderName(opts.Provider)
-	if provider == "" {
-		provider = config.CanonicalProviderName(cfg.DefaultProvider)
-	}
-	if provider == "" {
-		provider = "deepseek"
-	}
+	provider := resolveSetupProviderName(opts.Provider, cfg.DefaultProvider)
 	model := strings.TrimSpace(opts.Model)
 	if model == "" {
 		model = cfg.GetSelectedModelForProvider(provider)
@@ -94,7 +88,7 @@ func BuildReport(opts Options) Report {
 	}
 	report.Global = append(report.Global,
 		Item{Key: "provider", Status: statusLabel(report.Provider.Ready), Message: "Provider credential", Detail: report.Provider.Detail, Instruction: providerInstruction},
-		Item{Key: "default_model", Status: "ok", Message: "Default provider/model", Detail: fmt.Sprintf("%s / %s", provider, model)},
+		defaultModelItem(cfg, provider, model),
 		toolAvailabilityItem("rg", "ripgrep", "Install ripgrep for faster project map and search_code."),
 		toolAvailabilityItem("git", "git", "Install git to enable repository-aware context."),
 	)
@@ -132,10 +126,7 @@ func RenderString(report Report) string {
 
 // ProviderCredentialStatus は provider descriptor と既存 auth state から credential 状態を返す。
 func ProviderCredentialStatus(provider string) ProviderStatus {
-	provider = config.CanonicalProviderName(provider)
-	if provider == "" {
-		provider = strings.TrimSpace(provider)
-	}
+	provider = setupProviderName(provider)
 
 	entry, ok := config.ProviderCatalogEntryFor(provider)
 	if !ok {
@@ -196,6 +187,30 @@ func ProviderCredentialStatus(provider string) ProviderStatus {
 	return status
 }
 
+func resolveSetupProviderName(requested, fallback string) string {
+	if provider := setupProviderName(requested); provider != "" {
+		return provider
+	}
+	if provider := setupProviderName(fallback); provider != "" {
+		return provider
+	}
+	return "deepseek"
+}
+
+func setupProviderName(provider string) string {
+	normalized := config.NormalizeProviderName(provider)
+	if strings.TrimSpace(normalized) == "" {
+		return ""
+	}
+	canonical := config.CanonicalProviderName(normalized)
+	if strings.TrimSpace(canonical) != "" {
+		if _, ok := config.ProviderCatalogEntryFor(canonical); ok {
+			return canonical
+		}
+	}
+	return normalized
+}
+
 // ProviderSetupRequired は provider が request 前 setup を必要としているか返す。
 func ProviderSetupRequired(provider string) bool {
 	return !ProviderCredentialStatus(provider).Ready
@@ -212,6 +227,39 @@ func ProviderSetupRequiredMessage(provider string) string {
 	}
 	lines = append(lines, "  xelyon setup")
 	return strings.Join(lines, "\n")
+}
+
+func defaultModelItem(cfg *config.Config, provider, model string) Item {
+	item := Item{
+		Key:     "default_model",
+		Status:  "ok",
+		Message: "Default provider/model",
+		Detail:  fmt.Sprintf("%s / %s", provider, model),
+	}
+	if err := validateSetupDefaultModel(cfg, provider, model); err != nil {
+		item.Status = "todo"
+		item.Detail = fmt.Sprintf("%s / %s: %s", provider, model, err)
+		item.Instruction = defaultModelInstruction(provider)
+	}
+	return item
+}
+
+func validateSetupDefaultModel(cfg *config.Config, provider, model string) error {
+	if config.CanonicalProviderName(provider) != "azure" {
+		return nil
+	}
+	providerConfigKey := config.ActiveProviderConfigKey(provider)
+	if providerConfigKey == "" {
+		providerConfigKey = "azure"
+	}
+	return config.ValidateAzureDeploymentSelection(cfg, providerConfigKey, model, false)
+}
+
+func defaultModelInstruction(provider string) string {
+	if config.CanonicalProviderName(provider) == "azure" {
+		return "Set provider_models.azure.default_model to your Azure deployment name, or run /provider azure <deployment> in TUI."
+	}
+	return ""
 }
 
 func projectItems(cfg *config.Config, cwd string, instructionMode ProjectConfigInstructionMode) []Item {

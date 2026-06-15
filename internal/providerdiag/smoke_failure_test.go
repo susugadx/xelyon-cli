@@ -231,6 +231,19 @@ func TestSmokeFailureContextsExtractFailedRequestFeature(t *testing.T) {
 			wantFeature: SmokeFailureFeatureThinking,
 			wantDetail:  []string{"request=thinking"},
 		},
+		{
+			name: "outer error fallback when no failed request",
+			ctx: TextToolSmokeFailureContext(
+				SmokeFailureContextOptions{Provider: "Gemini"},
+				TextToolSmokeResult{Requests: []TextToolSmokeRequestResult{{
+					Name:          "text",
+					Ran:           true,
+					UsageObserved: true,
+				}}},
+				errors.New("outer smoke transport failed"),
+			),
+			wantDetail: []string{"outer smoke transport failed"},
+		},
 	}
 
 	for _, tt := range tests {

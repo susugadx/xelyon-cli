@@ -37,8 +37,8 @@ func TestCalcProjectMapBudget_Auto_SmallContext(t *testing.T) {
 }
 
 func TestCalcProjectMapBudget_Auto_MediumContext(t *testing.T) {
-	// claude-opus-4-6: 200K context × 2% = 4000
-	agent := &Agent{CurrentModel: "claude-opus-4-6"}
+	// claude-sonnet-4-5: 200K context × 2% = 4000
+	agent := &Agent{CurrentModel: "claude-sonnet-4-5"}
 	cfg := config.DefaultConfig()
 	cfg.ProjectMap.ContextRatio = 0.02
 
@@ -49,7 +49,7 @@ func TestCalcProjectMapBudget_Auto_MediumContext(t *testing.T) {
 }
 
 func TestCalcProjectMapBudget_InvalidRatio(t *testing.T) {
-	agent := &Agent{CurrentModel: "claude-opus-4-6"}
+	agent := &Agent{CurrentModel: "claude-sonnet-4-5"}
 	cfg := config.DefaultConfig()
 
 	tests := []struct {
@@ -76,8 +76,8 @@ func TestCalcProjectMapBudget_InvalidRatio(t *testing.T) {
 }
 
 func TestCalcProjectMapBudget_RatioOverride(t *testing.T) {
-	// claude-opus-4-6: 200K × 5% = 10000
-	agent := &Agent{CurrentModel: "claude-opus-4-6"}
+	// claude-sonnet-4-5: 200K × 5% = 10000
+	agent := &Agent{CurrentModel: "claude-sonnet-4-5"}
 	cfg := config.DefaultConfig()
 	cfg.ProjectMap.ContextRatio = 0.05
 

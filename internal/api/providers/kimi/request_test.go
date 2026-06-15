@@ -128,6 +128,13 @@ func TestChatWithTools_ThinkingAndToolChoicePolicy(t *testing.T) {
 			wantAutoTool:   true,
 		},
 		{
+			name:           "k2.7 code never sends disabled and rounds forced tool choice to auto",
+			model:          "kimi-k2.7-code",
+			thinking:       false,
+			wantNoThinking: true,
+			wantAutoTool:   true,
+		},
+		{
 			name:         "forced thinking model can send explicit enabled",
 			model:        "kimi-k2-thinking",
 			thinking:     true,
@@ -211,6 +218,27 @@ func TestKimiThinkingConfig_UsesCatalogModelPayloadShape(t *testing.T) {
 	}
 	if _, ok := thinking["keep"]; ok {
 		t.Fatalf("thinking.keep = %#v, want absent for kimi-k2.5 catalog model", thinking["keep"])
+	}
+}
+
+func TestKimiThinkingConfig_K27CatalogModelOmitsThinkingField(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = false
+	cfg.SetProviderModelConfig("moonshot", config.ProviderModelConfig{
+		DefaultModel: "corp-kimi-code",
+		CatalogModel: "kimi-k2.7-code",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+
+	extraFields, thinkingActive, spinnerSuffix := kimiThinkingConfig(ctx, "moonshot", "corp-kimi-code")
+	if !thinkingActive {
+		t.Fatal("thinkingActive = false, want true")
+	}
+	if spinnerSuffix != "Reasoner" {
+		t.Fatalf("spinnerSuffix = %q, want Reasoner", spinnerSuffix)
+	}
+	if extraFields != nil {
+		t.Fatalf("extraFields = %#v, want nil for kimi-k2.7-code catalog model", extraFields)
 	}
 }
 

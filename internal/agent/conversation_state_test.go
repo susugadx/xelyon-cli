@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
@@ -155,6 +156,107 @@ func TestAgent_StartNewSession_SaveFailurePreservesActiveRuntimeState(t *testing
 	}
 	if agent.Stats != oldStats {
 		t.Fatal("agent.Stats pointer changed after failed StartNewSession")
+	}
+}
+
+func TestAgent_StartNewSession_UsesInvocationCWDForSessionScope(t *testing.T) {
+	disableColors(t)
+	processCWD := runtimeTestWorkspace(t)
+	t.Setenv("HOME", t.TempDir())
+	explicitCWD := t.TempDir()
+
+	runtime := NewAgentRuntimeWithConfig(newChatRequestTestConfig())
+	runtime.InvocationCWD = explicitCWD
+	agent := NewAgentWithRuntime("gpt-5.4", &conversationStateTestProvider{name: "openai"}, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	agent.session.AddMessage("user", "old request", agent.CurrentModel)
+	session, err := agent.StartNewSession()
+	if err != nil {
+		t.Fatalf("StartNewSession() error = %v", err)
+	}
+	if got := session.WorkingDir; got != explicitCWD {
+		t.Fatalf("new session WorkingDir = %q, want invocation cwd %q", got, explicitCWD)
+	}
+
+	session.AddMessage("user", "new request", agent.CurrentModel)
+	if err := agent.storage.Save(session); err != nil {
+		t.Fatalf("Save(new session) error = %v", err)
+	}
+
+	scoped, err := agent.storage.ListResumeSessions(history.ResumeListOptions{WorkingDir: explicitCWD})
+	if err != nil {
+		t.Fatalf("ListResumeSessions(invocation cwd) error = %v", err)
+	}
+	if !resumeMetadataContains(scoped, session.ID) {
+		t.Fatalf("invocation-scoped sessions = %#v, want new session %s", scoped, session.ID)
+	}
+
+	processScoped, err := agent.storage.ListResumeSessions(history.ResumeListOptions{WorkingDir: processCWD})
+	if err != nil {
+		t.Fatalf("ListResumeSessions(process cwd) error = %v", err)
+	}
+	if resumeMetadataContains(processScoped, session.ID) {
+		t.Fatalf("process-cwd sessions = %#v, must not include invocation-scoped session %s", processScoped, session.ID)
+	}
+}
+
+func TestAgent_ResumeDefaultsToInvocationCWDForCandidatesAndLast(t *testing.T) {
+	disableColors(t)
+	processCWD := runtimeTestWorkspace(t)
+	t.Setenv("HOME", t.TempDir())
+	explicitCWD := t.TempDir()
+
+	runtime := NewAgentRuntimeWithConfig(newChatRequestTestConfig())
+	runtime.InvocationCWD = explicitCWD
+	agent := NewAgentWithRuntime("gpt-5.4", &conversationStateTestProvider{name: "openai"}, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	baseTime := time.Now().Add(-time.Hour)
+	invocationSession := saveResumeScopeTestSession(t, agent, explicitCWD, "invocation session", baseTime)
+	processSession := saveResumeScopeTestSession(t, agent, processCWD, "process session", baseTime.Add(time.Minute))
+
+	candidates, err := agent.ResumeSessionCandidates(history.ResumeListOptions{})
+	if err != nil {
+		t.Fatalf("ResumeSessionCandidates() error = %v", err)
+	}
+	if !resumeMetadataContains(candidates, invocationSession.ID) {
+		t.Fatalf("ResumeSessionCandidates() = %#v, want invocation-scoped session %s", candidates, invocationSession.ID)
+	}
+	if resumeMetadataContains(candidates, processSession.ID) {
+		t.Fatalf("ResumeSessionCandidates() = %#v, must not include process-cwd session %s", candidates, processSession.ID)
+	}
+
+	resumed, err := agent.ResumeLastSession(history.ResumeListOptions{})
+	if err != nil {
+		t.Fatalf("ResumeLastSession() error = %v", err)
+	}
+	if resumed.ID != invocationSession.ID {
+		t.Fatalf("ResumeLastSession().ID = %q, want invocation-scoped session %q", resumed.ID, invocationSession.ID)
+	}
+}
+
+func TestAgent_ResumeStartupLastSessionDefaultsToInvocationCWD(t *testing.T) {
+	disableColors(t)
+	processCWD := runtimeTestWorkspace(t)
+	t.Setenv("HOME", t.TempDir())
+	explicitCWD := t.TempDir()
+
+	runtime := NewAgentRuntimeWithConfig(newChatRequestTestConfig())
+	runtime.InvocationCWD = explicitCWD
+	agent := NewAgentWithRuntime("gpt-5.4", &conversationStateTestProvider{name: "openai"}, false, runtime)
+	t.Cleanup(agent.Cleanup)
+
+	baseTime := time.Now().Add(-time.Hour)
+	invocationSession := saveResumeScopeTestSession(t, agent, explicitCWD, "startup invocation session", baseTime)
+	processSession := saveResumeScopeTestSession(t, agent, processCWD, "startup process session", baseTime.Add(time.Minute))
+
+	resumed, err := agent.ResumeStartupLastSession(history.ResumeListOptions{})
+	if err != nil {
+		t.Fatalf("ResumeStartupLastSession() error = %v", err)
+	}
+	if resumed.ID != invocationSession.ID {
+		t.Fatalf("ResumeStartupLastSession().ID = %q, want invocation-scoped session %q; process-cwd session %s must stay out of default scope", resumed.ID, invocationSession.ID, processSession.ID)
 	}
 }
 
@@ -726,4 +828,27 @@ func TestAgent_RestoreSessionConversation_PreservesRichCompactedInputItems(t *te
 	if !reflect.DeepEqual(agent.GetCompactedItems(), []api.InputItem(items)) {
 		t.Fatalf("GetCompactedItems() = %#v, want %#v", agent.GetCompactedItems(), items)
 	}
+}
+
+func saveResumeScopeTestSession(t *testing.T, agent *Agent, workingDir, message string, lastModified time.Time) *history.Session {
+	t.Helper()
+
+	session := history.NewSessionWithWorkingDir("gpt-5.4", workingDir)
+	session.ProviderName = "openai"
+	session.ProviderConfigKey = "openai"
+	session.AddMessage("user", message, "gpt-5.4")
+	session.LastModified = lastModified
+	if err := agent.storage.Save(session); err != nil {
+		t.Fatalf("Save(%s) error = %v", message, err)
+	}
+	return session
+}
+
+func resumeMetadataContains(sessions []history.SessionMetadata, sessionID string) bool {
+	for _, session := range sessions {
+		if session.ID == sessionID {
+			return true
+		}
+	}
+	return false
 }

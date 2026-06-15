@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -115,6 +116,37 @@ func TestHandleLoadCommand_RestoresResponseIDAndListsEmptySessions(t *testing.T)
 	}
 	if !strings.Contains(out.String(), "No sessions found") {
 		t.Fatalf("output = %q, want no sessions message", out.String())
+	}
+}
+
+func TestHandleLoadCommand_DefaultsToInvocationCWD(t *testing.T) {
+	processCWD := runtimeTestWorkspace(t)
+	t.Setenv("HOME", t.TempDir())
+	explicitCWD := t.TempDir()
+
+	var out bytes.Buffer
+	agent := newSessionCommandTestAgent(&out)
+	agent.Runtime.InvocationCWD = explicitCWD
+	agent.CurrentModel = "gpt-5.4"
+	agent.ProviderName = "openai"
+	agent.ProviderConfigKey = "openai"
+	agent.CurrentProvider = &mockProvider{name: "openai"}
+
+	storage, err := history.NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+	agent.storage = storage
+
+	baseTime := time.Now().Add(-time.Hour)
+	invocationSession := saveResumeScopeTestSession(t, agent, explicitCWD, "load invocation session", baseTime)
+	processSession := saveResumeScopeTestSession(t, agent, processCWD, "load process session", baseTime.Add(time.Minute))
+
+	if !handleLoadCommand(agent, nil) {
+		t.Fatal("handleLoadCommand() = false, want true")
+	}
+	if agent.session == nil || agent.session.ID != invocationSession.ID {
+		t.Fatalf("loaded session = %#v, want invocation-scoped session %s; process-cwd session %s must stay out of default scope", agent.session, invocationSession.ID, processSession.ID)
 	}
 }
 

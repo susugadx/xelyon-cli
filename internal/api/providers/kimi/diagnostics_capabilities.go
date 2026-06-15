@@ -50,21 +50,16 @@ func kimiDiagnosticCapabilitySnapshot(cfg *config.Config, report DiagnosticRepor
 	}
 }
 
-func kimiDiagnosticThinkingSupported(report DiagnosticReport) bool {
-	return isKimiConfigurableThinkingModel(report.Model) ||
-		isKimiConfigurableThinkingModel(report.CatalogModel) ||
-		isKimiForcedThinkingModel(report.Model) ||
-		isKimiForcedThinkingModel(report.CatalogModel)
-}
-
 func kimiDiagnosticThinkingAvailability(cfg *config.Config, report DiagnosticReport) providerdiag.CapabilityAvailability {
-	if !kimiDiagnosticThinkingSupported(report) {
-		return providerdiag.KnownCapabilityAvailability(false)
-	}
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
-	_, thinkingActive, _ := kimiThinkingConfig(config.WithContext(context.Background(), cfg), "kimi", report.Model)
+	_, thinkingActive, _ := kimiThinkingConfigForResolved(kimiResolvedRequestOptions{
+		ctx:               config.WithContext(context.Background(), cfg),
+		providerConfigKey: "kimi",
+		requestedModel:    report.Model,
+		catalogModel:      report.CatalogModel,
+	})
 	return providerdiag.KnownCapabilityAvailability(thinkingActive)
 }
 

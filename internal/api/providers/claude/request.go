@@ -49,8 +49,13 @@ func IsAdaptiveThinkingModel(model string) bool {
 	return llmcatalog.IsAdaptiveClaudeThinkingModel(model)
 }
 
+// IsAlwaysOnThinkingModel は thinking を無効化できない Claude モデルか判定する。
+func IsAlwaysOnThinkingModel(model string) bool {
+	return llmcatalog.IsAlwaysOnClaudeThinkingModel(model)
+}
+
 // LevelToEffort は thinking level を Claude effort パラメータに変換する。
-// xhigh は Opus 4.7 では xhigh、Opus 4.6 では max、Sonnet 4.6 では high にする。
+// xhigh は Opus 4.8 / 4.7 / Fable 5 では xhigh、Opus 4.6 では max、Sonnet 4.6 では high にする。
 func LevelToEffort(level, model string) string {
 	switch level {
 	case "low":
@@ -60,7 +65,7 @@ func LevelToEffort(level, model string) string {
 	case "high":
 		return "high"
 	case "xhigh":
-		if isClaudeOpus47Model(model) {
+		if isClaudeOpusXHighEffortModel(model) {
 			return "xhigh"
 		}
 		if isClaudeOpus46Model(model) {
@@ -76,9 +81,11 @@ func levelToEffort(level, model string) string {
 	return LevelToEffort(level, model)
 }
 
-func isClaudeOpus47Model(model string) bool {
+func isClaudeOpusXHighEffortModel(model string) bool {
 	m := strings.ToLower(model)
-	return strings.Contains(m, "claude-opus-4-7") || strings.Contains(m, "claude-opus-4.7")
+	return strings.Contains(m, "claude-opus-4-8") || strings.Contains(m, "claude-opus-4.8") ||
+		strings.Contains(m, "claude-opus-4-7") || strings.Contains(m, "claude-opus-4.7") ||
+		strings.Contains(m, "claude-fable-5")
 }
 
 func isClaudeOpus46Model(model string) bool {

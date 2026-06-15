@@ -135,6 +135,7 @@ func looksLikeAuthorizationScheme(value string) bool {
 
 func sanitizeCommandForHeader(command string) string {
 	command = sanitizeHeaderValue(command)
+	command = redactSecrets(command)
 	if command == "" {
 		return ""
 	}

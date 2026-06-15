@@ -48,7 +48,7 @@ xelyon doctor deepseek --json
 
 ### `xelyon doctor kimi`
 
-Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、token / pricing metadata、未対応機能、`prompt_cache_key` request shape を確認します。`KIMI_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 Moonshot endpoint は `/v1/chat/completions` で終わります。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になります。`--catalog-model` は alias の underlying Kimi model として token / pricing 判定に使います。non-Kimi `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は token / pricing / capability 判定に使いません。`--print-request` は live request を送らず、redacted bearer header と request body を `request_preview` に表示します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。web search smoke は `web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`cached_input_tokens`、検索結果 token 観測値を text / JSON に出します。
+Kimi native provider の `MOONSHOT_API_KEY`、`KIMI_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、token / pricing metadata、未対応機能、`prompt_cache_key` request shape を確認します。`KIMI_API_URL` は Chat Completions まで含む完全な endpoint override で、公式 Moonshot endpoint は `/v1/chat/completions` で終わります。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になります。`--catalog-model` は alias の underlying Kimi model として token / pricing 判定に使います。non-Kimi `catalog_model` は warn になり、OpenAI / OpenRouter など別 owner の metadata は token / pricing / capability 判定に使いません。`--print-request` は live request を送らず、redacted bearer header と request body を `request_preview` に表示します。`--smoke` を付けると live Chat Completions request を送信し、streaming、thinking on/off、同一 session の prompt cache key、usage callback を確認します。画像入力の実 API 受理を確認する場合は `--image-smoke` を使い、1x1 PNG を base64 image request として送信します。function calling まで確認する場合は `--tool-smoke`、built-in `$web_search` まで確認する場合は `--web-search-smoke` を使います。K2.7 Code 選択中の built-in `$web_search` smoke / preview は検索 request だけ `kimi-k2.6` に fallback し、usage / cost / 実行ログも `kimi-k2.6` として扱います。web search smoke は `web_search_call_count`、`web_search_call_fee_estimate`、`web_search_usage_observed`、`cached_input_tokens`、検索結果 token 観測値を text / JSON に出します。
 
 `--print-request` は `MOONSHOT_API_KEY` なしで実行でき、text / tool / image / built-in `$web_search` の request body と実 request URL を送信前に確認できます。`--capabilities` は静的 / catalog ベースの capability snapshot を表示し、`--require-capability` は live request なしで shared capability 名を検証します。`--smoke` / `--image-smoke` / `--tool-smoke` / `--web-search-smoke` は live API request を送るため、通常 CI では使いません。`cached_tokens` は Moonshot API が返した場合だけ観測され、0 でも smoke は成功扱いです。`--web-search-smoke` は実検索 call fee が発生し、`$web_search` tool call が 1 件以上観測された場合だけ成功扱いになります。通常の `stop` response で tool call がない場合、request 自体が返っていても smoke は fail します。call fee は token cost とは別料金で、検索結果 tokens は次 request の `prompt_tokens` に含まれるため二重加算しません。endpoint の token usage が返らない場合は `usage` check が warn になり、web search の fee / call count 観測だけでは token usage 観測済みとは扱いません。
 
@@ -687,7 +687,7 @@ TUI では `/thinking` を選ぶと `on/off/low/medium/high/xhigh` の候補を�
 
 | プロバイダー | 対応 | 動作 |
 |-------------|------|------|
-| Claude | ✅ | Opus 4.7 / Opus 4.6 / Sonnet 4.6: adaptive thinking + effort / 4.5以前: budget_tokens |
+| Claude | ✅ | Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Fable 5: adaptive thinking + effort / 4.5以前: budget_tokens |
 | OpenAI | ✅ | reasoning_effort パラメータ |
 | Gemini | ✅ | thinkingConfig.thinkingBudget |
 | DeepSeek | ✅ | V4 `thinking` field + `reasoning_effort` |
@@ -695,7 +695,7 @@ TUI では `/thinking` を選ぶと `on/off/low/medium/high/xhigh` の候補を�
 | Ollama | ⚠️ | モデル依存（R1/QwQ推奨） |
 
 **対応モデル:**
-- **Claude**: Sonnet 4 以降（Opus 4.7 / Opus 4.6 / Sonnet 4.6 は adaptive thinking。Opus 4.7 の `/thinking xhigh` は `xhigh` effort）
+- **Claude**: Sonnet 4 以降（Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Fable 5 は adaptive thinking。`/thinking xhigh` は Opus 4.8 / Opus 4.7 / Fable 5 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 で `high` effort）
 - **OpenAI**: gpt-5.2 系
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
 - **DeepSeek**: モデル名は維持し、`/thinking off` は `thinking.disabled`、`/thinking on` は `thinking.enabled` + `reasoning_effort` を送ります。`/thinking xhigh` は DeepSeek では `max` に変換されます。`reasoning_content` は💭で表示し、ツール実行フローでも保持します。
@@ -895,7 +895,7 @@ bash: git checkout -b feature-branch
 | `gather_context` | 既定の調査入口。symbol-like query では structured impact route を試し、`search_code(intent=impact)` が返す `RecommendedReads` を compact evidence として prefetch する。diagnostics の `resolved_by` / `confidence` / `truncated` / `budget_limit_hit` に応じて prefetch 件数を絞り、ambiguous の場合は speculative prefetch しない | `query`, `path`, `file_filter` |
 | `search_code` | 低レベルの expert 検索ツール。通常は `gather_context` を優先し、明示的に search route を制御したい場合だけ使う。`mode=auto` は symbol-aware / literal / regex を language-aware に routing する。`intent=impact` は shared-change impact analysis の入口で、Go、TypeScript `.ts` / `.d.ts`、対象を絞った TSX `.tsx`、JavaScript `.js` / JSX `.jsx` で構造化 impact を優先する。`file_filter=typescript` / `javascript` は broad fallback scope で、targeted structured impact には `ts` / `tsx` / `js` / `jsx` や direct path / glob を使う。結果の diagnostics summary で `resolved_by`、`confidence`、fallback / truncation / budget 状態を確認できる | `pattern`, `intent`, `mode`, `path`, `file_filter` 等 |
 | `web_search` | ネイティブWeb検索（`web_search.provider` で Kimi / OpenAI / Gemini / Claude を選択可能） | `query` |
-**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。メインプロバイダーが Kimi の場合は provider 指定なしで Moonshot built-in `$web_search` を使います。Kimi で `$web_search` が起動すると call fee が発生し、XELYON は token usage と別枠で観測します。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
+**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。メインプロバイダーが Kimi の場合は provider 指定なしで Moonshot built-in `$web_search` を使います。K2.7 Code 選択中の Kimi built-in `$web_search` は検索 request だけ `kimi-k2.6` に fallback し、usage / cost / 実行ログも `kimi-k2.6` として扱います。Kimi で `$web_search` が起動すると call fee が発生し、XELYON は token usage と別枠で観測します。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 
 ### 開発支援
 

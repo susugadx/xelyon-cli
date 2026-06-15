@@ -1,10 +1,12 @@
 package search
 
 import (
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/filefilter"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 func TestSearchCodeToolParameters_RemoveUnusedSearchParams(t *testing.T) {
@@ -54,6 +56,42 @@ func TestSearchCodeToolParameters_ModeSchema(t *testing.T) {
 		if enumVals[i] != v {
 			t.Fatalf("mode.enum[%d] = %q, want %q", i, enumVals[i], v)
 		}
+	}
+}
+
+func TestSearchCodeToolRunWrapsRunResultOutput(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/app.go": "package app\n\nfunc BuildUser() string { return \"ok\" }\n",
+	})
+	execCtx := tools.ExecutionContext{
+		InvocationCWD: dir,
+		Stdout:        io.Discard,
+		Stderr:        io.Discard,
+	}
+	args := map[string]string{
+		"pattern": "BuildUser",
+		"path":    dir,
+		"mode":    "literal",
+	}
+
+	tool := &SearchCodeTool{}
+	structured, err := tool.RunResult(execCtx, args)
+	if err != nil {
+		t.Fatalf("RunResult() error = %v", err)
+	}
+	output, change, err := tool.Run(execCtx, args)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if output != structured.Output {
+		t.Fatalf("Run() output and RunResult().Output diverged:\nRun:\n%s\nRunResult:\n%s", output, structured.Output)
+	}
+	if change != structured.Change {
+		t.Fatalf("Run() change = %#v, RunResult().Change = %#v", change, structured.Change)
+	}
+	if !strings.Contains(output, "BuildUser") {
+		t.Fatalf("Run() output should include match, got:\n%s", output)
 	}
 }
 

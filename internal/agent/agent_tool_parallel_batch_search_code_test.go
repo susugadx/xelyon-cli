@@ -49,6 +49,47 @@ func TestExecuteToolCallsWithParallel_SearchCodeBatchPreservesPatternObservation
 	assertObservationHasResolvedPath(t, observed["beta_token"], betaPath)
 }
 
+func TestExecuteToolCallsWithParallel_SearchCodeBatchDoesNotMisdeliverNoMatchObservation(t *testing.T) {
+	dir := t.TempDir()
+	alphaPath := filepath.Join(dir, "alpha.go")
+	if err := os.WriteFile(alphaPath, []byte("package main\n\nfunc alpha_token() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agent := NewAgent("test-model", &mockProvider{name: "test"}, false)
+	agent.registry().ClearExcludedTools()
+	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
+	toolCalls := []*tools.ToolCall{
+		{
+			ID:      "alpha",
+			Tool:    "search_code",
+			Args:    map[string]string{"pattern": "alpha_token", "path": dir, "mode": "literal"},
+			RawArgs: map[string]any{"pattern": "alpha_token", "path": dir, "mode": "literal"},
+		},
+		{
+			ID:      "missing",
+			Tool:    "search_code",
+			Args:    map[string]string{"pattern": "missing_token", "path": dir, "mode": "literal"},
+			RawArgs: map[string]any{"pattern": "missing_token", "path": dir, "mode": "literal"},
+		},
+	}
+
+	results := make(map[string]toolruntime.Result)
+	callback := func(_ int, tc *tools.ToolCall, result toolruntime.Result) {
+		results[tc.Args["pattern"]] = result
+	}
+	agent.executeToolCallsWithParallel(context.Background(), toolCalls, nil, nil, callback)
+
+	assertObservationHasResolvedPath(t, results["alpha_token"].Observation, alphaPath)
+	missing := results["missing_token"]
+	if missing.Observation != nil && len(missing.Observation.TouchedFiles) > 0 {
+		t.Fatalf("missing pattern observation = %#v, want no matched file observation", missing.Observation)
+	}
+	if missing.Error {
+		t.Fatalf("missing pattern Error = true, want no-match delivered as non-error result: %q", missing.Result)
+	}
+}
+
 func assertObservationHasResolvedPath(t *testing.T, observation *tools.RuntimeObservation, want string) {
 	t.Helper()
 	if observation == nil {

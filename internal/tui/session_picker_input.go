@@ -2,10 +2,11 @@ package tui
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/susugadx/xelyon-cli/internal/resumecwd"
 )
 
 type openSessionPickerMsg struct {
@@ -116,25 +117,12 @@ func (m *Model) rejectCrossWorkingDirSessionSelection(row SessionCandidate) bool
 	if m.sessionPicker == nil || m.sessionPicker.all {
 		return false
 	}
-	currentDir := normalizeSessionPickerWorkingDir(m.workingDir)
-	sessionDir := normalizeSessionPickerWorkingDir(row.WorkingDir)
-	if currentDir == "" || sessionDir == "" || currentDir == sessionDir {
+	if resumecwd.Matches(row.WorkingDir, m.workingDir) {
 		return false
 	}
 	m.setTransientStatus("Cannot resume session from a different working directory: " + row.WorkingDir)
 	m.chromeDirty = true
 	return true
-}
-
-func normalizeSessionPickerWorkingDir(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	if abs, err := filepath.Abs(path); err == nil {
-		path = abs
-	}
-	return filepath.Clean(path)
 }
 
 func (m Model) resumeSessionByID(sessionID string) (Model, tea.Cmd) {

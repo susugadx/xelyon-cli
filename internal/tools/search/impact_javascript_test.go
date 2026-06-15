@@ -283,6 +283,31 @@ func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactIgnoresCo
 	}
 }
 
+func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactIgnoresTemplatedCommonJSDefinition(t *testing.T) {
+	dir := setupMultiLangDir(t, map[string]string{
+		"src/build.js": "export function buildUser(id) { return id }\n",
+		"src/template.js": "const fixture = `\n" +
+			"exports.buildUser = function() { return 'template' }\n" +
+			"`\n",
+		"src/app.js": "import { buildUser } from './build.js'\nbuildUser('real')\n",
+	})
+
+	artifact := ExecuteSearchCodeArtifactWithConfig(nil, nil, newJavaScriptImpactSearchOptions(dir, "buildUser"))
+
+	assertJavaScriptStructuredImpactArtifact(t, artifact, "buildUser", "function")
+	if strings.Contains(artifact.Rendered, "Multiple definitions") {
+		t.Fatalf("templated CommonJS export should not make impact ambiguous:\n%s", artifact.Rendered)
+	}
+	callers := symbolBundleSectionItems(artifact.Metadata.Bundle, "callers")
+	if !symbolBundleItemsContainSnippet(callers, "buildUser('real')") {
+		t.Fatalf("callers = %+v, want real caller", callers)
+	}
+	imports := symbolBundleSectionItems(artifact.Metadata.Bundle, "imports")
+	if symbolBundleItemsContainFile(imports, "src/template.js") {
+		t.Fatalf("imports = %+v, did not want templated CommonJS definition evidence", imports)
+	}
+}
+
 func TestExecuteSearchCodeArtifactWithConfig_JavaScriptStructuredImpactRelatedTestsOrder(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"src/build.js":                "export function buildUser(id) { return id }\n",

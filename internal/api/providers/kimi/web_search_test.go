@@ -248,6 +248,76 @@ func TestBuildKimiWebSearchRequest_OmitsDisabledThinkingForForcedCatalogModel(t 
 	}
 }
 
+func TestBuildKimiWebSearchRequest_K27FallsBackToK26(t *testing.T) {
+	ctx, _, _ := newKimiTestContext(t, false)
+	req := buildKimiWebSearchRequest(ctx, initialKimiWebSearchMessages("k2.7 search"), "kimi-k2.7-code", "kimi")
+	if req.Model != "kimi-k2.6" {
+		t.Fatalf("model = %q, want kimi-k2.6 fallback", req.Model)
+	}
+	if req.Thinking == nil || req.Thinking["type"] != "disabled" {
+		t.Fatalf("thinking = %#v, want disabled for Kimi built-in web_search fallback request", req.Thinking)
+	}
+}
+
+func TestBuildKimiWebSearchRequest_K27FallbackUsesK26PromptCacheKey(t *testing.T) {
+	ctx, _, _ := newKimiTestContext(t, false)
+	ctx = api.WithPromptCacheScope(ctx, api.PromptCacheScope{SessionID: "k2.7-web-search-cache-session"})
+
+	req := buildKimiWebSearchRequest(ctx, initialKimiWebSearchMessages("k2.7 cache key"), "kimi-k2.7-code", "kimi")
+	wantKey := buildKimiPromptCacheKey(ctx, "kimi-k2.6", kimiWebSearchSystemPrompt)
+	k27Key := buildKimiPromptCacheKey(ctx, "kimi-k2.7-code", kimiWebSearchSystemPrompt)
+
+	if req.Model != "kimi-k2.6" {
+		t.Fatalf("model = %q, want kimi-k2.6 fallback", req.Model)
+	}
+	if req.PromptCacheKey != wantKey {
+		t.Fatalf("prompt_cache_key = %q, want K2.6 key %q", req.PromptCacheKey, wantKey)
+	}
+	if req.PromptCacheKey == k27Key {
+		t.Fatalf("prompt_cache_key = %q, must not reuse K2.7 key for K2.6 fallback request", req.PromptCacheKey)
+	}
+}
+
+func TestBuildKimiWebSearchRequest_K27CatalogAliasFallbackUsesK26PromptCacheKey(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("moonshot", config.ProviderModelConfig{
+		DefaultModel: "corp-kimi-code",
+		CatalogModel: "kimi-k2.7-code",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+	ctx = api.WithPromptCacheScope(ctx, api.PromptCacheScope{SessionID: "k2.7-catalog-web-search-cache-session"})
+
+	req := buildKimiWebSearchRequest(ctx, initialKimiWebSearchMessages("k2.7 catalog cache key"), "corp-kimi-code", "moonshot")
+	wantKey := buildKimiPromptCacheKey(ctx, "kimi-k2.6", kimiWebSearchSystemPrompt)
+	aliasKey := buildKimiPromptCacheKey(ctx, "corp-kimi-code", kimiWebSearchSystemPrompt)
+
+	if req.Model != "kimi-k2.6" {
+		t.Fatalf("model = %q, want kimi-k2.6 fallback", req.Model)
+	}
+	if req.PromptCacheKey != wantKey {
+		t.Fatalf("prompt_cache_key = %q, want K2.6 key %q", req.PromptCacheKey, wantKey)
+	}
+	if req.PromptCacheKey == aliasKey {
+		t.Fatalf("prompt_cache_key = %q, must not reuse alias key for K2.6 fallback request", req.PromptCacheKey)
+	}
+}
+
+func TestBuildKimiWebSearchRequest_K27CatalogFallsBackToK26(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("moonshot", config.ProviderModelConfig{
+		DefaultModel: "corp-kimi-code",
+		CatalogModel: "kimi-k2.7-code",
+	})
+	ctx := config.WithContext(context.Background(), cfg)
+	req := buildKimiWebSearchRequest(ctx, initialKimiWebSearchMessages("catalog k2.7 search"), "corp-kimi-code", "moonshot")
+	if req.Model != "kimi-k2.6" {
+		t.Fatalf("model = %q, want kimi-k2.6 fallback for kimi-k2.7-code catalog model", req.Model)
+	}
+	if req.Thinking == nil || req.Thinking["type"] != "disabled" {
+		t.Fatalf("thinking = %#v, want disabled for Kimi built-in web_search fallback request", req.Thinking)
+	}
+}
+
 func TestWebSearchWithContext_ErrorsAfterMaxToolLoops(t *testing.T) {
 	t.Setenv(kimiAPIKeyEnv, "test-key")
 	requests := 0

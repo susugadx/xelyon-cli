@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -54,6 +55,10 @@ func TestValidateSelectedProviderModel(t *testing.T) {
 		err := validateSelectedProviderModel(config.DefaultConfig(), &providerValidationTestProvider{name: "Azure OpenAI"}, "azure-gpt-5.4")
 		if err == nil {
 			t.Fatal("validateSelectedProviderModel() error = nil, want Azure deployment guidance")
+		}
+		if !strings.Contains(err.Error(), "provider_models.azure.default_model") ||
+			!strings.Contains(err.Error(), "pass --model <deployment>") {
+			t.Fatalf("validateSelectedProviderModel() error = %v, want config and CLI model guidance", err)
 		}
 	})
 

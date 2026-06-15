@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -36,25 +37,23 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 		return true
 	}
 
-	sessionID := ""
+	var session *history.Session
+	var err error
 	if len(args) > 0 {
-		sessionID = args[0]
+		session, err = agent.ResumeSession(args[0])
 	} else {
-		lastID, err := agent.storage.GetLastResumeSession(history.ResumeListOptions{})
-		if err != nil {
+		session, err = agent.ResumeLastSession(history.ResumeListOptions{})
+		if errors.Is(err, history.ErrNoResumeSessions) {
 			red.Fprintf(out, "No sessions found: %v\n", err)
 			return true
 		}
-		sessionID = lastID
 	}
-
-	session, err := agent.ResumeSession(sessionID)
 	if err != nil {
 		red.Fprintf(out, "Failed to load session: %v\n", err)
 		return true
 	}
 
-	green.Fprintf(out, "📂 Loaded session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
+	green.Fprintf(out, "📂 Loaded session %s (%d messages)\n", session.ID, len(session.ToAPIMessages()))
 	return true
 }
 

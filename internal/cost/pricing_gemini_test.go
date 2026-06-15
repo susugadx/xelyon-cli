@@ -180,6 +180,55 @@ func TestEstimateRequestCostWithCacheForConfig_GeminiBillingServiceTierOverride(
 	assertCostApprox(t, estimate.Cost, 1.75)
 }
 
+func TestEstimateRequestCostWithCacheForConfig_GeminiBillingServiceTierOverrideBoundaries(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Gemini.ServiceTier = config.GeminiServiceTierPriority
+
+	tests := []struct {
+		name     string
+		cfg      *config.Config
+		provider string
+		model    string
+		usage    api.Usage
+		wantCost float64
+	}{
+		{
+			name:     "nil config accepts observed standard tier",
+			cfg:      nil,
+			provider: "gemini",
+			model:    "gemini-3.1-flash-lite",
+			usage:    api.Usage{InputTokens: 1000000, OutputTokens: 1000000, BillingServiceTier: config.GeminiServiceTierStandard},
+			wantCost: 1.75,
+		},
+		{
+			name:     "invalid observed tier keeps configured priority",
+			cfg:      cfg,
+			provider: "gemini",
+			model:    "gemini-3.1-flash-lite",
+			usage:    api.Usage{InputTokens: 1000000, OutputTokens: 1000000, BillingServiceTier: "turbo"},
+			wantCost: 3.15,
+		},
+		{
+			name:     "non-Gemini ignores Gemini billing tier field",
+			cfg:      cfg,
+			provider: "openai",
+			model:    "gpt-5.4-mini",
+			usage:    api.Usage{InputTokens: 1000000, OutputTokens: 1000000, BillingServiceTier: config.GeminiServiceTierStandard},
+			wantCost: 5.25,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := EstimateRequestCostWithCacheForConfig(tt.cfg, tt.provider, tt.model, tt.usage)
+			if got.PricingUnavailable {
+				t.Fatalf("PricingUnavailable = true, want false")
+			}
+			assertCostApprox(t, got.Cost, tt.wantCost)
+		})
+	}
+}
+
 func TestEstimateCacheStorageCost_GeminiModelRates(t *testing.T) {
 	tests := []struct {
 		name       string

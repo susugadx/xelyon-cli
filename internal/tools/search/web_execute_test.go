@@ -1,6 +1,7 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,9 +15,123 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/kimi"
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/openai"
+	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
+
+func TestExecuteWebSearch_KimiK27FallsBackToK26ForBuiltinSearch(t *testing.T) {
+	resetWebSearchCacheForTest()
+
+	query := "kimi-k27-web-search-fallback-" + t.Name()
+	websearch.RegisterWithContextForTest(t, "kimi", func(ctx context.Context, gotQuery, model string) (string, error) {
+		if gotQuery != query {
+			t.Fatalf("query = %q, want %q", gotQuery, query)
+		}
+		if model != "kimi-k2.6" {
+			t.Fatalf("model = %q, want kimi-k2.6 fallback", model)
+		}
+		callback := websearch.UsageCallbackFromContext(ctx)
+		if callback == nil {
+			t.Fatal("UsageCallbackFromContext() = nil, want callback")
+		}
+		callback(api.Usage{InputTokens: 13, OutputTokens: 4, CachedInputTokens: 2})
+		return "Kimi fallback web search succeeded.", nil
+	})
+
+	var stdout bytes.Buffer
+	var gotUsageProvider string
+	var gotUsageModel string
+	var gotUsage api.Usage
+	result := ExecuteWebSearch(tools.ExecutionContext{
+		ProviderName: "kimi",
+		Model:        "kimi-k2.7-code",
+		Stdout:       &stdout,
+		Stderr:       io.Discard,
+		Config:       config.DefaultConfig(),
+		AutoApprove:  true,
+		UsageAttribution: func(provider, model string, usage api.Usage) {
+			gotUsageProvider = provider
+			gotUsageModel = model
+			gotUsage = usage
+		},
+	}, query)
+
+	if !strings.Contains(result, "Kimi fallback web search succeeded.") {
+		t.Fatalf("result = %q, want fallback web search result", result)
+	}
+	if gotUsageProvider != "kimi" || gotUsageModel != "kimi-k2.6" {
+		t.Fatalf("usage owner = %s/%s, want kimi/kimi-k2.6", gotUsageProvider, gotUsageModel)
+	}
+	if gotUsage.InputTokens != 13 || gotUsage.OutputTokens != 4 || gotUsage.CachedInputTokens != 2 {
+		t.Fatalf("usage = %+v, want attributed fallback token usage", gotUsage)
+	}
+	log := stdout.String()
+	if !strings.Contains(log, "kimi/kimi-k2.6") || !strings.Contains(log, "adjusted from kimi-k2.7-code") {
+		t.Fatalf("stdout = %q, want explicit K2.7 -> K2.6 web_search fallback log", log)
+	}
+}
+
+func TestExecuteWebSearch_KimiK27ConfigDefaultFallsBackToK26ForBuiltinSearch(t *testing.T) {
+	resetWebSearchCacheForTest()
+
+	query := "kimi-k27-config-default-web-search-fallback-" + t.Name()
+	websearch.RegisterWithContextForTest(t, "kimi", func(ctx context.Context, gotQuery, model string) (string, error) {
+		if gotQuery != query {
+			t.Fatalf("query = %q, want %q", gotQuery, query)
+		}
+		if model != "kimi-k2.6" {
+			t.Fatalf("model = %q, want kimi-k2.6 fallback from configured K2.7 default", model)
+		}
+		callback := websearch.UsageCallbackFromContext(ctx)
+		if callback == nil {
+			t.Fatal("UsageCallbackFromContext() = nil, want callback")
+		}
+		callback(api.Usage{InputTokens: 19, OutputTokens: 6, CachedInputTokens: 3})
+		return "Kimi config default fallback web search succeeded.", nil
+	})
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("kimi", config.ProviderModelConfig{DefaultModel: "kimi-k2.7-code"})
+
+	var stdout bytes.Buffer
+	var gotUsageProvider string
+	var gotUsageModel string
+	var gotUsage api.Usage
+	result := ExecuteWebSearch(tools.ExecutionContext{
+		ProviderName: "kimi",
+		Stdout:       &stdout,
+		Stderr:       io.Discard,
+		Config:       cfg,
+		AutoApprove:  true,
+		UsageAttribution: func(provider, model string, usage api.Usage) {
+			gotUsageProvider = provider
+			gotUsageModel = model
+			gotUsage = usage
+		},
+	}, query)
+
+	if !strings.Contains(result, "Kimi config default fallback web search succeeded.") {
+		t.Fatalf("result = %q, want fallback web search result", result)
+	}
+	if gotUsageProvider != "kimi" || gotUsageModel != "kimi-k2.6" {
+		t.Fatalf("usage owner = %s/%s, want kimi/kimi-k2.6", gotUsageProvider, gotUsageModel)
+	}
+	if gotUsage.InputTokens != 19 || gotUsage.OutputTokens != 6 || gotUsage.CachedInputTokens != 3 {
+		t.Fatalf("usage = %+v, want attributed config-driven fallback token usage", gotUsage)
+	}
+	log := stdout.String()
+	if !strings.Contains(log, "kimi/kimi-k2.6") || !strings.Contains(log, "adjusted from kimi-k2.7-code") {
+		t.Fatalf("stdout = %q, want explicit configured K2.7 -> K2.6 web_search fallback log", log)
+	}
+}
+
+func TestResolveSearchModel_DoesNotApplyKimiK27FallbackOutsideKimi(t *testing.T) {
+	got := resolveSearchModel(config.DefaultConfig(), "gemini", "gemini", "kimi-k2.7-code")
+	if got.Model != "kimi-k2.7-code" || got.AdjustedFrom != "" {
+		t.Fatalf("resolveSearchModel() = %+v, want non-Kimi search provider unchanged", got)
+	}
+}
 
 func TestExecuteWebSearch_UsesSearchProviderModelWhenProviderOverrideDiffers(t *testing.T) {
 	resetWebSearchCacheForTest()

@@ -156,6 +156,152 @@ func TestBuildReport_OpenAISubscriptionExpiredTokenIsReadyForRequestAttempt(t *t
 	}
 }
 
+func TestBuildReport_InvalidRequestedProviderIsReportedAsUnknown(t *testing.T) {
+	withReportHooks(t)
+
+	loadProjectConfig = func(cwd string) (*config.ProjectConfig, error) {
+		return nil, nil
+	}
+	resolveProjectRoot = func(cfg *config.Config, cwd string) (string, bool) {
+		return "", false
+	}
+	lookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "deepseek"
+	report := BuildReport(Options{
+		Config:   cfg,
+		CWD:      "/repo",
+		Provider: " TypoCloud ",
+	})
+
+	if report.Provider.Provider != "typocloud" {
+		t.Fatalf("report.Provider.Provider = %q, want typocloud", report.Provider.Provider)
+	}
+	if report.Provider.Ready {
+		t.Fatal("invalid requested provider should not be ready")
+	}
+	if !strings.Contains(report.Provider.Detail, `unknown provider "typocloud"`) {
+		t.Fatalf("provider detail = %q, want unknown provider typocloud", report.Provider.Detail)
+	}
+	defaultModel := findReportItem(report.Global, "default_model")
+	if !strings.Contains(defaultModel.Detail, "typocloud /") {
+		t.Fatalf("default_model detail = %q, want typocloud provider", defaultModel.Detail)
+	}
+	if strings.Contains(defaultModel.Detail, "deepseek") {
+		t.Fatalf("default_model detail = %q, must not fall back to deepseek", defaultModel.Detail)
+	}
+}
+
+func TestBuildReport_InvalidDefaultProviderIsReportedAsUnknown(t *testing.T) {
+	withReportHooks(t)
+
+	loadProjectConfig = func(cwd string) (*config.ProjectConfig, error) {
+		return nil, nil
+	}
+	resolveProjectRoot = func(cfg *config.Config, cwd string) (string, bool) {
+		return "", false
+	}
+	lookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "TypoCloud"
+	report := BuildReport(Options{
+		Config: cfg,
+		CWD:    "/repo",
+	})
+
+	if report.Provider.Provider != "typocloud" {
+		t.Fatalf("report.Provider.Provider = %q, want typocloud", report.Provider.Provider)
+	}
+	if report.Provider.Ready {
+		t.Fatal("invalid default provider should not be ready")
+	}
+	if !strings.Contains(report.Provider.Detail, `unknown provider "typocloud"`) {
+		t.Fatalf("provider detail = %q, want unknown provider typocloud", report.Provider.Detail)
+	}
+}
+
+func TestBuildReport_AzurePlaceholderDefaultModelRequiresDeployment(t *testing.T) {
+	withReportHooks(t)
+	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	loadProjectConfig = func(cwd string) (*config.ProjectConfig, error) {
+		return nil, nil
+	}
+	resolveProjectRoot = func(cfg *config.Config, cwd string) (string, bool) {
+		return "", false
+	}
+	lookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "azure"
+	report := BuildReport(Options{
+		Config: cfg,
+		CWD:    "/repo",
+	})
+
+	if !report.Provider.Ready {
+		t.Fatalf("provider status = %+v, want ready credentials", report.Provider)
+	}
+	defaultModel := findReportItem(report.Global, "default_model")
+	if defaultModel.Status != "todo" {
+		t.Fatalf("default_model item = %+v, want todo", defaultModel)
+	}
+	if !strings.Contains(defaultModel.Detail, "azure / azure-gpt-5.4") ||
+		!strings.Contains(defaultModel.Detail, "deployment is not configured") {
+		t.Fatalf("default_model detail = %q, want Azure deployment guidance", defaultModel.Detail)
+	}
+	if !strings.Contains(defaultModel.Instruction, "provider_models.azure.default_model") {
+		t.Fatalf("default_model instruction = %q, want provider_models guidance", defaultModel.Instruction)
+	}
+}
+
+func TestBuildReport_AzureConfiguredDeploymentDefaultModelIsReady(t *testing.T) {
+	withReportHooks(t)
+	t.Setenv("AZURE_OPENAI_API_KEY", "azure-key")
+	t.Setenv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1")
+
+	loadProjectConfig = func(cwd string) (*config.ProjectConfig, error) {
+		return nil, nil
+	}
+	resolveProjectRoot = func(cfg *config.Config, cwd string) (string, bool) {
+		return "", false
+	}
+	lookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "azure"
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+	report := BuildReport(Options{
+		Config: cfg,
+		CWD:    "/repo",
+	})
+
+	defaultModel := findReportItem(report.Global, "default_model")
+	if defaultModel.Status != "ok" {
+		t.Fatalf("default_model item = %+v, want ok", defaultModel)
+	}
+	if defaultModel.Detail != "azure / corp-gpt55-deployment" {
+		t.Fatalf("default_model detail = %q, want configured Azure deployment", defaultModel.Detail)
+	}
+	if defaultModel.Instruction != "" {
+		t.Fatalf("default_model instruction = %q, want empty", defaultModel.Instruction)
+	}
+}
+
 func TestBuildReport_ProjectRecommendationsShowDetectedMissingLSP(t *testing.T) {
 	withReportHooks(t)
 	root := t.TempDir()

@@ -4,8 +4,8 @@ import (
 	"strings"
 )
 
-// getClaudePricing はモデル名からClaude料金を返す
-// promptTokenCount は200Kティア判定に使用（Geminiと同様）
+// getClaudePricing はモデル名からClaude料金を返す。
+// Claude API の Fable 5 / Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 は 1M context でも標準単価。
 func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 	lm := strings.ToLower(model)
 	if pricing, ok := resolveProviderPricingFromLoadedConfig("claude", lm, promptTokenCount, true); ok {
@@ -13,9 +13,15 @@ func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 	}
 
 	switch {
+	case strings.Contains(lm, "fable"):
+		return PricingInfo{
+			InputCostPerM:         10.00,
+			OutputCostPerM:        50.00,
+			CachedInputCostPerM:   1.00,
+			CacheCreationCostPerM: 12.50,
+		}
 	case strings.Contains(lm, "opus"):
-		if promptTokenCount > 200000 {
-			// Opus long context (>200K): $10/$37.50 per million tokens
+		if promptTokenCount > 200000 && !claudeOpusUsesStandardLongContextPricing(lm) {
 			return PricingInfo{
 				InputCostPerM:         10.00,
 				OutputCostPerM:        37.50,
@@ -23,7 +29,6 @@ func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 				CacheCreationCostPerM: 12.50,
 			}
 		}
-		// Opus 4.5/4.6: $5/$25 per million tokens
 		return PricingInfo{
 			InputCostPerM:         5.00,
 			OutputCostPerM:        25.00,
@@ -38,9 +43,15 @@ func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 			CachedInputCostPerM:   0.10, // 90% off
 			CacheCreationCostPerM: 1.25, // 25% premium
 		}
-	case lm == "" || strings.Contains(lm, "sonnet"):
-		if promptTokenCount > 200000 {
-			// Sonnet long context (>200K): $6/$22.50 per million tokens
+	case lm == "":
+		return PricingInfo{
+			InputCostPerM:         3.00,
+			OutputCostPerM:        15.00,
+			CachedInputCostPerM:   0.30, // 90% off
+			CacheCreationCostPerM: 3.75, // 25% premium
+		}
+	case strings.Contains(lm, "sonnet"):
+		if promptTokenCount > 200000 && !claudeSonnetUsesStandardLongContextPricing(lm) {
 			return PricingInfo{
 				InputCostPerM:         6.00,
 				OutputCostPerM:        22.50,
@@ -48,7 +59,6 @@ func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 				CacheCreationCostPerM: 7.50,
 			}
 		}
-		// Sonnet 4.5/4.6（デフォルト）: $3/$15 per million tokens
 		return PricingInfo{
 			InputCostPerM:         3.00,
 			OutputCostPerM:        15.00,
@@ -58,4 +68,18 @@ func getClaudePricing(model string, promptTokenCount int) PricingInfo {
 	default:
 		return pricingUnavailableInfo()
 	}
+}
+
+func claudeOpusUsesStandardLongContextPricing(lm string) bool {
+	return strings.Contains(lm, "opus-4-8") ||
+		strings.Contains(lm, "opus-4.8") ||
+		strings.Contains(lm, "opus-4-7") ||
+		strings.Contains(lm, "opus-4.7") ||
+		strings.Contains(lm, "opus-4-6") ||
+		strings.Contains(lm, "opus-4.6")
+}
+
+func claudeSonnetUsesStandardLongContextPricing(lm string) bool {
+	return strings.Contains(lm, "sonnet-4-6") ||
+		strings.Contains(lm, "sonnet-4.6")
 }

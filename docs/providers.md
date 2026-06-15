@@ -72,6 +72,7 @@ xelyon doctor deepseek --json
 export MOONSHOT_API_KEY=sk-...
 
 # 使用例
+xelyon --provider kimi --model kimi-k2.7-code
 xelyon --provider kimi --model kimi-k2.6
 xelyon --provider moonshot --model kimi-k2.5
 ```
@@ -79,17 +80,17 @@ xelyon --provider moonshot --model kimi-k2.5
 **特徴:**
 - Moonshot Chat Completions API を native provider として使用
 - streaming / tool calls / JSON output / thinking modes 対応
-- 256K context / 最大 32K output（K2.6 / K2.5）
+- 256K context / 最大 32K output（K2.7 Code / K2.6 / K2.5）
 - 画像入力対応。`--image` / `image:` から渡された PNG / JPEG / WebP / GIF を `data:image/...;base64,...` の multimodal `image_url` part として送信します。
 - `web_search.provider = kimi` / `moonshot`、またはメイン provider が Kimi の場合、Moonshot Chat Completions の built-in `$web_search` を使います。
-- `/thinking off`: K2.6 / K2.5 は `thinking: {"type":"disabled"}` を送信します。`kimi-k2-thinking` には disabled を送信しません。
-- `/thinking on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信し、forced tool choice は `auto` に丸めます。
+- `/thinking off`: K2.6 / K2.5 は `thinking: {"type":"disabled"}` を送信します。K2.7 Code と `kimi-k2-thinking` には disabled を送信しません。
+- `/thinking on`: K2.6 は `thinking: {"type":"enabled","keep":"all"}`、K2.5 は `thinking: {"type":"enabled"}` を送信します。K2.7 Code は thinking 常時有効のため `thinking` field を送らず、forced tool choice は `auto` に丸めます。
 - `reasoning_content`（思考内容）はストリーミング表示され、ツール実行時も保持されます。
 - `KIMI_API_URL` は `/v1/chat/completions` まで含む完全な endpoint override として扱います。別 path の proxy endpoint も指定できますが、doctor では意図的な proxy path として warn になります。
 
-`kimi-k2-thinking` は明示指定された場合のみ 256K context / 最大 32K output の legacy/compat thinking model として扱います。新規利用では thinking on/off が可能な `kimi-k2.6` を推奨します。
+`kimi-k2.7-code` は code-focused thinking model として扱います。新規の汎用利用では thinking on/off が可能な `kimi-k2.6`、コード/agentic coding では `kimi-k2.7-code` を推奨します。`kimi-k2-thinking` は明示指定された場合のみ 256K context / 最大 32K output の legacy/compat thinking model として扱います。
 
-Kimi built-in `$web_search` は通常 function tools とは別の `web_search` 専用 route で使います。request には `tools[].type = "builtin_function"` / `function.name = "$web_search"` を入れ、検索 turn では `thinking: {"type":"disabled"}` を送信します。`tool_choice` は送らず、モデルの自動選択に任せます。Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金し、検索結果トークンも次 request の入力 tokens に含まれます。XELYON は API が返す token usage / `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。`finish_reason = "stop"` で `$web_search` tool call が返らない response は call fee なしとして扱います。検索結果 tokens は `tool_call.function.arguments` から best-effort で表示用に読むだけで、`InputTokens` へ二重加算しません。
+Kimi built-in `$web_search` は通常 function tools とは別の `web_search` 専用 route で使います。request には `tools[].type = "builtin_function"` / `function.name = "$web_search"` を入れ、検索 turn では `thinking: {"type":"disabled"}` を送信します。K2.7 Code は thinking を無効化できないため、K2.7 Code 選択中の Kimi built-in `$web_search` は検索 request だけ `kimi-k2.6` に自動 fallback し、usage / cost / 実行ログも `kimi-k2.6` として記録します。`tool_choice` は送らず、モデルの自動選択に任せます。Moonshot は `$web_search` call fee と Chat Completions token 使用量を別々に課金し、検索結果トークンも次 request の入力 tokens に含まれます。XELYON は API が返す token usage / `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。`finish_reason = "stop"` で `$web_search` tool call が返らない response は call fee なしとして扱います。検索結果 tokens は `tool_call.function.arguments` から best-effort で表示用に読むだけで、`InputTokens` へ二重加算しません。
 
 Memory / code runner、video 入力、file upload / `ms://` 参照は現在の native provider では未対応です。URL 画像は Kimi 公式仕様でも未対応のため、XELYON はローカル画像ファイルを base64 data URL として送ります。
 
@@ -461,7 +462,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 # 使用例
 xelyon --provider claude --model claude-sonnet-4-6
+xelyon --provider claude --model claude-opus-4-8
 xelyon --provider claude --model claude-opus-4-7
+xelyon --provider claude --model claude-fable-5
 xelyon --provider claude --model claude-opus-4-6
 ```
 
@@ -471,10 +474,12 @@ xelyon --provider claude --model claude-opus-4-6
 - 画像入力対応
 
 **Extended Thinking:**
-- Opus 4.7 / Opus 4.6 / Sonnet 4.6: `type: "adaptive"` + `output_config.effort`
+- Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Fable 5: `type: "adaptive"` + `output_config.effort`
 - それ以前のモデル: `type: "enabled"` + `budget_tokens`
-- `xhigh` レベルは Opus 4.7 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
-- Claude Compaction は Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
+- `xhigh` レベルは Opus 4.8 / Opus 4.7 / Fable 5 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
+- Claude Compaction は Fable 5 / Opus 4.8 / Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
+- Fable 5 は thinking が常時有効で無効化できません。`/thinking off` でも XELYON は `thinking: {"type":"disabled"}` を送らず、履歴 replay と doctor capability では thinking active として扱います。
+- Fable 5 は Anthropic 側で 30-day data retention が必要です。zero data retention 環境などで API が拒否する場合、XELYON は別モデルへの自動 fallback は行いません。
 
 設定の到達性は CLI から診断できます。`doctor claude` は `ANTHROPIC_API_KEY`、`ANTHROPIC_API_URL`、provider 登録、model / `catalog_model` 解決、Anthropic Messages route、function calling、画像入力、thinking request config、context management、Claude compaction、native web search、token / pricing metadata を確認します。`--catalog-model` は alias の underlying Claude model として token / pricing / thinking / context management 判定に使います。`--print-request` は live request を送らず、redacted `x-api-key` header、`anthropic-version` / `anthropic-beta`、request body を `request_preview` に表示します。`--smoke` を付けると live Messages request を送って usage / cost を観測します。画像入力は `--image-smoke`、function calling は `--tool-smoke`、thinking request は `--thinking-smoke`、native web search は `--web-search-smoke` を使います。
 
@@ -733,7 +738,7 @@ xelyon
 長い会話でのコスト効率を重視する場合:
 
 1. **DeepSeek V4 Flash** - 低コスト + キャッシュ安定
-2. **Kimi K2.6 / K2.5** - 低コスト + Chat Completions の prompt cache key 対応
+2. **Kimi K2.7 Code / K2.6 / K2.5** - 低コスト + Chat Completions の prompt cache key 対応
 3. **Bedrock（Claude）** - プロンプトキャッシュが確実に効く + AWS 直接契約で中間マージンなし
 4. **Claude（直接）** - プロンプトキャッシュが確実に効く
 5. **OpenAI** - 高コスト + キャッシュ不安定のため、コスト重視なら非推奨
@@ -742,7 +747,7 @@ xelyon
 
 `/status`、ステータスバー、headless JSON の `cost` は `internal/cost/pricing.yaml` と組み込みの既知ルールに基づく推定値です。価格表にない provider/model は別モデルの料金で代用せず、UI では `N/A (pricing unavailable)`、ステータスバーでは `cost N/A` と表示します。headless JSON では `pricing_unavailable: true` を返します。Gemini は `gemini.service_tier` に応じて `standard` / `flex` / `priority` の同期 inference 料金を使い、Batch API 料金は使いません。`/status` の Gemini `Service Tier` 行は configured tier、request body tier、pricing family を表示し、直近 usage に実課金 tier がある場合は billing tier と billing pricing family も表示します。Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含め、Kimi `$web_search` の call fee など token 料金とは別枠の固定費は `cost` に含めますが、検索結果 tokens は token totals に再加算しません。headless JSON では Kimi web search の観測値を `web_search` object の `calls`、`fee_estimate`、`result_tokens` にも分けて出します。
 
-カスタム deployment 名や社内 alias を使う場合は、`provider_models.<provider>.catalog_model` または `model_overrides.<model>.catalog_model` に provider の pricing family で解決できる既知モデル名を指定すると、そのモデルの token limit / pricing / context 判定を使えます。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Gemini alias では Gemini の実モデル名を指定すると、Gemini 3 thinkingLevel と response-start / SSE idle timeout policy もその family に揃います。Native Kimi alias では `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
+カスタム deployment 名や社内 alias を使う場合は、`provider_models.<provider>.catalog_model` または `model_overrides.<model>.catalog_model` に provider の pricing family で解決できる既知モデル名を指定すると、そのモデルの token limit / pricing / context 判定を使えます。OpenRouter alias では `openai/gpt-5.4` のような OpenRouter model ID、Bedrock Claude alias では Bedrock の Claude model ID または Claude catalog model 名を指定してください。Native Gemini alias では Gemini の実モデル名を指定すると、Gemini 3 thinkingLevel と response-start / SSE idle timeout policy もその family に揃います。Native Kimi alias では `kimi-k2.7-code` / `kimi-k2.6` / `kimi-k2.5` のような Kimi catalog model 名を指定します。`pricing.yaml` の `known_models.exact` にある実モデル ID だけが `catalog_model` なしで料金表示され、`rules.contains` は価格選択専用です。OpenRouter の `provider/model` 形式も OpenRouter 側の exact allowlist にある ID だけを料金表示します。
 
 Bedrock は AWS Price List の US East (N. Virginia) text token 価格が確認できた exact model ID / inference profile ID だけ料金表示します。`global.*` ID は AWS が別料金を出している場合、Global Cross-region の text token 価格を使います。Bedrock の Claude direct / inference profile ID は Bedrock 料金を優先し、`claude-sonnet-4-6` のような抽象 catalog 名だけ Claude 料金へ委譲します。Amazon Nova、Anthropic Claude、Meta Llama、Mistral、Cohere Command R、AI21 Jamba、Writer Palmyra、DeepSeek、Qwen、MiniMax、NVIDIA Nemotron、OpenAI gpt-oss、Google Gemma、Moonshot Kimi、Z.AI GLM の対応済み ID は料金表示されます。embedding / image / video / query 単価の inference profile は text token 料金ではないため `N/A` のままです。リージョン別価格、Batch / Flex / Priority / Provisioned Throughput、画像・音声・動画 token、query/unit ベースの rerank はまだ推定対象外です。
 

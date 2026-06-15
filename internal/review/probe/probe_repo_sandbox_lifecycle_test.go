@@ -76,7 +76,7 @@ func TestProbeRunner_RepoSandbox_GeneratedPassingAndFailingTests(t *testing.T) {
 			result, err := runner.Run(context.Background(), ReviewProbeRequest{
 				ID:             "repo-sandbox-generated-test",
 				Mode:           ReviewProbeRepoSandbox,
-				Timeout:        15 * time.Second,
+				Timeout:        probeNestedGoTestTimeout,
 				MaxOutputBytes: 8 * 1024,
 				Files:          []ReviewProbeFile{tt.file},
 				Commands: []ReviewProbeCommand{
@@ -106,7 +106,7 @@ func TestProbeRunner_RepoSandbox_RelativeWorkDirAndSandboxMutationDoNotMarkOrigi
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "repo-sandbox-workdir",
 		Mode:           ReviewProbeRepoSandbox,
-		Timeout:        15 * time.Second,
+		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 4 * 1024,
 		Files: []ReviewProbeFile{{
 			Path: "probe/sandbox_mutate_test.go",

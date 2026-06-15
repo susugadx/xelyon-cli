@@ -1,6 +1,7 @@
 package filefilter
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -86,5 +87,108 @@ func TestPathBasis(t *testing.T) {
 	basis := ResolveSearchPathBasisWithWorkspace(filepath.Join(root, "pkg"), root)
 	if basis.Workdir != root || basis.Target != "pkg" || basis.MatchRoot != root {
 		t.Fatalf("ResolveSearchPathBasisWithWorkspace() = %+v, want root-scoped pkg basis", basis)
+	}
+}
+
+func TestWorkspaceRelativePath(t *testing.T) {
+	root := t.TempDir()
+	inside := filepath.Join(root, "pkg", "service.go")
+	outside := filepath.Join(t.TempDir(), "pkg", "service.go")
+
+	tests := []struct {
+		name          string
+		filePath      string
+		workspaceRoot string
+		want          string
+	}{
+		{
+			name:          "workspace absolute path becomes relative",
+			filePath:      inside,
+			workspaceRoot: root,
+			want:          "pkg/service.go",
+		},
+		{
+			name:          "outside absolute path is preserved",
+			filePath:      outside,
+			workspaceRoot: root,
+			want:          filepath.ToSlash(filepath.Clean(outside)),
+		},
+		{
+			name:          "relative path stays relative",
+			filePath:      filepath.Join("pkg", "service.go"),
+			workspaceRoot: root,
+			want:          "pkg/service.go",
+		},
+		{
+			name:          "empty workspace keeps absolute basis",
+			filePath:      inside,
+			workspaceRoot: "",
+			want:          filepath.ToSlash(filepath.Clean(inside)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := WorkspaceRelativePath(tt.filePath, tt.workspaceRoot); got != tt.want {
+				t.Fatalf("WorkspaceRelativePath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveSearchPathBasisWithWorkspace(t *testing.T) {
+	root := t.TempDir()
+	existingDir := filepath.Join(root, "pkg")
+	if err := os.Mkdir(existingDir, 0o700); err != nil {
+		t.Fatalf("Mkdir(pkg) error = %v", err)
+	}
+	existingFile := filepath.Join(existingDir, "service.go")
+	if err := os.WriteFile(existingFile, []byte("package pkg\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(service.go) error = %v", err)
+	}
+	missingAbsolute := filepath.Join(root, "missing", "service.go")
+
+	tests := []struct {
+		name          string
+		searchPath    string
+		workspaceRoot string
+		want          SearchPathBasis
+	}{
+		{
+			name:          "workspace root absolute path scopes to dot",
+			searchPath:    root,
+			workspaceRoot: root,
+			want:          SearchPathBasis{Workdir: root, Target: ".", MatchRoot: root},
+		},
+		{
+			name:          "workspace child absolute path scopes to relative target",
+			searchPath:    existingFile,
+			workspaceRoot: root,
+			want:          SearchPathBasis{Workdir: root, Target: "pkg/service.go", MatchRoot: root},
+		},
+		{
+			name:       "existing directory without workspace is its own workdir",
+			searchPath: existingDir,
+			want:       SearchPathBasis{Workdir: existingDir, Target: ".", MatchRoot: existingDir},
+		},
+		{
+			name:       "existing file without workspace uses parent workdir",
+			searchPath: existingFile,
+			want:       SearchPathBasis{Workdir: existingDir, Target: "service.go", MatchRoot: existingDir},
+		},
+		{
+			name:       "missing absolute path falls back to target",
+			searchPath: missingAbsolute,
+			want:       SearchPathBasis{Target: filepath.Clean(missingAbsolute)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveSearchPathBasisWithWorkspace(tt.searchPath, tt.workspaceRoot)
+			if got != tt.want {
+				t.Fatalf("ResolveSearchPathBasisWithWorkspace() = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }

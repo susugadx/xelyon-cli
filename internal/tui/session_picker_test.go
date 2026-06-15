@@ -128,6 +128,38 @@ func TestResumePickerRejectsDifferentWorkingDirWhenNotAll(t *testing.T) {
 	}
 }
 
+func TestResumePickerAllowsEquivalentWorkingDirWhenNotAll(t *testing.T) {
+	root := t.TempDir()
+	currentDir := filepath.Join(root, "repo", "child", "..")
+	sessionDir := filepath.Join(root, "repo", ".")
+	agent := &stubAgent{
+		statusLine: "ready",
+		sessionCandidates: []SessionCandidate{
+			{ID: "current-session", Preview: "current", WorkingDir: sessionDir, LastModified: time.Now()},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m.workingDir = currentDir
+
+	var cmd tea.Cmd
+	m, cmd = m.openSessionPicker(false, false)
+	if cmd != nil {
+		t.Fatalf("openSessionPicker cmd = %T, want nil", cmd)
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatalf("resume selection cmd = %T, want nil", cmd)
+	}
+	if len(agent.resumedSessionIDs) != 1 || agent.resumedSessionIDs[0] != "current-session" {
+		t.Fatalf("resumedSessionIDs = %#v, want current-session", agent.resumedSessionIDs)
+	}
+	if m.sessionPicker != nil {
+		t.Fatal("session picker should close after same-working-dir resume")
+	}
+}
+
 func TestResumeCommandWithIDClearsPendingAttachmentsOnSuccess(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)

@@ -14,6 +14,7 @@ var knownProviderModels = map[string][]string{
 		"kimi-k2",
 		"kimi-k2.5",
 		"kimi-k2.6",
+		"kimi-k2.7-code",
 		"kimi-k2-thinking",
 	},
 	"openai": {
@@ -66,8 +67,11 @@ var knownProviderModels = map[string][]string{
 	"claude": {
 		"claude-sonnet-4-6",
 		"claude-sonnet-4.6",
+		"claude-opus-4-8",
+		"claude-opus-4.8",
 		"claude-opus-4-7",
 		"claude-opus-4.7",
+		"claude-fable-5",
 		"claude-sonnet-4-5",
 		"claude-sonnet-4.5",
 		"claude-opus-4-6",
@@ -98,6 +102,7 @@ var knownProviderModels = map[string][]string{
 	},
 	"openrouter": {
 		"anthropic/claude-sonnet-4.6",
+		"anthropic/claude-opus-4.8",
 		"anthropic/claude-opus-4.7",
 		"openai/gpt-5.5",
 		"openai/gpt-5.4",

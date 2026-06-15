@@ -174,7 +174,7 @@ func TestDiagnoseOpenRouter_CapabilitiesUseTrustedPolicyCatalogForRoutedModel(t 
 	if got, want := report.Capabilities.CatalogModel, "anthropic/claude-sonnet-4.6"; got != want {
 		t.Fatalf("capability catalog_model = %q, want trusted policy catalog %q", got, want)
 	}
-	if !report.Capabilities.ContextWindowKnown || report.Capabilities.ContextWindowTokens != 200000 {
+	if !report.Capabilities.ContextWindowKnown || report.Capabilities.ContextWindowTokens != 1000000 {
 		t.Fatalf("capability context = %d known=%t, want Claude metadata", report.Capabilities.ContextWindowTokens, report.Capabilities.ContextWindowKnown)
 	}
 	if !report.Capabilities.MaxOutputTokensKnown || report.Capabilities.MaxOutputTokens != 64000 {
@@ -184,8 +184,7 @@ func TestDiagnoseOpenRouter_CapabilitiesUseTrustedPolicyCatalogForRoutedModel(t 
 		t.Fatalf("capability pricing = %+v, want Claude pricing", report.Capabilities.Pricing)
 	}
 	capabilityCheck := requireOpenRouterDiagnosticCheckStatus(t, report, "capabilities", DiagnosticStatusOK)
-	if strings.Contains(capabilityCheck.Detail, "context_window=1000000") ||
-		strings.Contains(capabilityCheck.Detail, "pricing=input $2.50/M") {
+	if strings.Contains(capabilityCheck.Detail, "pricing=input $2.50/M") {
 		t.Fatalf("capabilities detail = %q, want no requested OpenAI catalog metadata", capabilityCheck.Detail)
 	}
 }

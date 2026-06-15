@@ -389,7 +389,7 @@ function isBlockedIPAddress(address) {
     );
   }
   if (version === 6) {
-    if (normalized === "::1" || normalized === "::") {
+    if (isIPv6LoopbackOrUnspecifiedAddress(normalized)) {
       return true;
     }
     if (isIPv6LinkLocalAddress(normalized)) {
@@ -400,6 +400,15 @@ function isBlockedIPAddress(address) {
     }
   }
   return false;
+}
+
+function isIPv6LoopbackOrUnspecifiedAddress(address) {
+  const hextets = expandIPv6Hextets(address);
+  if (hextets.length !== 8) {
+    return false;
+  }
+  const firstSevenZero = hextets.slice(0, 7).every((part) => part === 0);
+  return firstSevenZero && (hextets[7] === 0 || hextets[7] === 1);
 }
 
 function ipv4FromMappedIPv6(address) {

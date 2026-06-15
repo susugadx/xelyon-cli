@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -96,11 +97,25 @@ type SessionMetadata struct {
 
 // NewSession は新しいセッションを作成
 func NewSession(model string) *Session {
+	return newSession(model, currentWorkingDirForSession())
+}
+
+// NewSessionWithWorkingDir は指定した作業ディレクトリに紐づくセッションを作成する。
+func NewSessionWithWorkingDir(model, workingDir string) *Session {
+	if strings.TrimSpace(workingDir) == "" {
+		workingDir = currentWorkingDirForSession()
+	} else {
+		workingDir = normalizeWorkingDirForSession(workingDir)
+	}
+	return newSession(model, workingDir)
+}
+
+func newSession(model, workingDir string) *Session {
 	now := time.Now()
 	return &Session{
 		ID:           newSessionID(now),
 		Model:        model,
-		WorkingDir:   currentWorkingDirForSession(),
+		WorkingDir:   workingDir,
 		StartTime:    now,
 		LastModified: now,
 		Messages:     []MessageEntry{},
@@ -115,6 +130,14 @@ func newSessionID(now time.Time) string {
 func currentWorkingDirForSession() string {
 	cwd, err := os.Getwd()
 	if err != nil {
+		return ""
+	}
+	return normalizeWorkingDirForSession(cwd)
+}
+
+func normalizeWorkingDirForSession(cwd string) string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
 		return ""
 	}
 	if abs, err := filepath.Abs(cwd); err == nil {

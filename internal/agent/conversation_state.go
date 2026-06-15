@@ -76,7 +76,7 @@ func (a *Agent) StartNewSession() (*history.Session, error) {
 		}
 	}
 
-	session := history.NewSession(a.CurrentModel)
+	session := history.NewSessionWithWorkingDir(a.CurrentModel, a.invocationCWD())
 	a.syncRuntimeIdentityToSession(session)
 	if a.storage != nil {
 		if beforeStartNewSessionMetadataSaveForTest != nil {
@@ -150,6 +150,7 @@ func (a *Agent) ResumeStartupLastSession(opts history.ResumeListOptions) (*histo
 	if a == nil || a.storage == nil {
 		return nil, fmt.Errorf("history storage not available")
 	}
+	opts = a.resumeListOptions(opts, false)
 	sessionID, err := a.storage.GetLastResumeSession(opts)
 	if err != nil {
 		return nil, err
@@ -162,7 +163,7 @@ func (a *Agent) ResumeLastSession(opts history.ResumeListOptions) (*history.Sess
 	if a == nil || a.storage == nil {
 		return nil, fmt.Errorf("history storage not available")
 	}
-	opts = a.excludeActiveSessionFromResumeOptions(opts)
+	opts = a.resumeListOptions(opts, true)
 	sessionID, err := a.storage.GetLastResumeSession(opts)
 	if err != nil {
 		return nil, err
@@ -175,8 +176,18 @@ func (a *Agent) ResumeSessionCandidates(opts history.ResumeListOptions) ([]histo
 	if a == nil || a.storage == nil {
 		return nil, fmt.Errorf("history storage not available")
 	}
-	opts = a.excludeActiveSessionFromResumeOptions(opts)
+	opts = a.resumeListOptions(opts, true)
 	return a.storage.ListResumeSessions(opts)
+}
+
+func (a *Agent) resumeListOptions(opts history.ResumeListOptions, excludeActive bool) history.ResumeListOptions {
+	if strings.TrimSpace(opts.WorkingDir) == "" {
+		opts.WorkingDir = a.invocationCWD()
+	}
+	if excludeActive {
+		opts = a.excludeActiveSessionFromResumeOptions(opts)
+	}
+	return opts
 }
 
 func (a *Agent) excludeActiveSessionFromResumeOptions(opts history.ResumeListOptions) history.ResumeListOptions {

@@ -77,7 +77,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		LocatorRegistry:   locator.NewRegistry(),
 		status:            statusHolder{status: defaultStatus()},
 		agentConversationState: agentConversationState{
-			session:     history.NewSession(model),
+			session:     history.NewSessionWithWorkingDir(model, runtime.effectiveInvocationCWD()),
 			storage:     storage,
 			lastOutputs: []string{},
 		},

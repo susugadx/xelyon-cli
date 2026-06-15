@@ -32,11 +32,10 @@ type claudeRequestFeatures struct {
 
 func (p *Provider) buildMessagesRequest(ctx context.Context, systemPrompt string, history []api.Message, model string) claudeMessagesRequestBuild {
 	model = api.ResolveProviderRequestModel(ctx, model, "claude")
-	messages := ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
-	logClaudeRequestConversionDebug(ctx, history, messages)
-
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	catalogModel := cfg.ModelCatalogName(p.configLookupKey(), model)
+	messages := ConvertToAnthropicMessagesWithThinking(history, claudeThinkingActiveForModel(ctx, catalogModel))
+	logClaudeRequestConversionDebug(ctx, history, messages)
 	features := p.buildRequestFeatures(ctx, cfg, systemPrompt, model, catalogModel)
 
 	return claudeMessagesRequestBuild{
@@ -59,10 +58,9 @@ func (p *Provider) buildMessagesRequest(ctx context.Context, systemPrompt string
 
 func (p *Provider) buildMultimodalRequest(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) claudeMultimodalRequestBuild {
 	model = api.ResolveProviderRequestModel(ctx, model, "claude")
-	converted := ConvertToAnthropicMessagesWithThinking(history, api.IsThinkingEnabled(ctx))
-
 	cfg := config.ResolveContext(ctx, p.effectiveConfig())
 	catalogModel := cfg.ModelCatalogName(p.configLookupKey(), model)
+	converted := ConvertToAnthropicMessagesWithThinking(history, claudeThinkingActiveForModel(ctx, catalogModel))
 	features := p.buildRequestFeatures(ctx, cfg, systemPrompt, model, catalogModel)
 
 	messages := make([]interface{}, 0, len(converted)+1)
@@ -116,6 +114,10 @@ func (p *Provider) buildRequestFeatures(ctx context.Context, cfg *config.Config,
 		features.ToolChoice = buildClaudeToolChoice(p.toolChoice)
 	}
 	return features
+}
+
+func claudeThinkingActiveForModel(ctx context.Context, catalogModel string) bool {
+	return api.IsThinkingEnabled(ctx) || IsAlwaysOnThinkingModel(catalogModel)
 }
 
 func buildClaudeToolChoice(toolChoice *string) *ClaudeToolChoice {

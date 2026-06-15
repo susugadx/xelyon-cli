@@ -109,6 +109,100 @@ func TestSearchWebReportsResolvedUsageAttributionAndLegacyCallback(t *testing.T)
 	}
 }
 
+func TestSearchWeb_KimiK27FallsBackToK26ForUsageAttribution(t *testing.T) {
+	resetWebSearchCacheForTest()
+	query := "noninteractive kimi k2.7 fallback"
+	websearch.RegisterWithContextForTest(t, "kimi", func(ctx context.Context, gotQuery, model string) (string, error) {
+		if gotQuery != query {
+			t.Fatalf("query = %q, want %q", gotQuery, query)
+		}
+		if model != "kimi-k2.6" {
+			t.Fatalf("model = %q, want kimi-k2.6 fallback", model)
+		}
+		callback := websearch.UsageCallbackFromContext(ctx)
+		if callback == nil {
+			t.Fatal("UsageCallbackFromContext() = nil, want callback")
+		}
+		callback(api.Usage{InputTokens: 23, OutputTokens: 8, CachedInputTokens: 5})
+		return "1. Kimi\n   URL: https://platform.kimi.ai/docs/guide/use-web-search", nil
+	})
+
+	var attributedProvider string
+	var attributedModel string
+	var attributedUsage api.Usage
+	got, err := SearchWeb(context.Background(), WebSearchRequest{
+		Config:       config.DefaultConfig(),
+		MainProvider: "kimi",
+		MainModel:    "kimi-k2.7-code",
+		Query:        query,
+		UsageAttribution: func(provider, model string, usage api.Usage) {
+			attributedProvider = provider
+			attributedModel = model
+			attributedUsage = usage
+		},
+	})
+	if err != nil {
+		t.Fatalf("SearchWeb() error = %v", err)
+	}
+	if got.Model != "kimi-k2.6" {
+		t.Fatalf("SearchWeb().Model = %q, want kimi-k2.6 fallback", got.Model)
+	}
+	if attributedProvider != "kimi" || attributedModel != "kimi-k2.6" {
+		t.Fatalf("usage owner = %s/%s, want kimi/kimi-k2.6", attributedProvider, attributedModel)
+	}
+	if attributedUsage.InputTokens != 23 || attributedUsage.OutputTokens != 8 || attributedUsage.CachedInputTokens != 5 {
+		t.Fatalf("attributed usage = %+v, want fallback model usage", attributedUsage)
+	}
+}
+
+func TestSearchWeb_KimiK27ConfigDefaultFallsBackToK26ForUsageAttribution(t *testing.T) {
+	resetWebSearchCacheForTest()
+	query := "noninteractive kimi config default k2.7 fallback"
+	websearch.RegisterWithContextForTest(t, "kimi", func(ctx context.Context, gotQuery, model string) (string, error) {
+		if gotQuery != query {
+			t.Fatalf("query = %q, want %q", gotQuery, query)
+		}
+		if model != "kimi-k2.6" {
+			t.Fatalf("model = %q, want kimi-k2.6 fallback from configured K2.7 default", model)
+		}
+		callback := websearch.UsageCallbackFromContext(ctx)
+		if callback == nil {
+			t.Fatal("UsageCallbackFromContext() = nil, want callback")
+		}
+		callback(api.Usage{InputTokens: 29, OutputTokens: 11, CachedInputTokens: 7})
+		return "1. Kimi\n   URL: https://platform.kimi.ai/docs/guide/use-web-search", nil
+	})
+
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("kimi", config.ProviderModelConfig{DefaultModel: "kimi-k2.7-code"})
+
+	var attributedProvider string
+	var attributedModel string
+	var attributedUsage api.Usage
+	got, err := SearchWeb(context.Background(), WebSearchRequest{
+		Config:       cfg,
+		MainProvider: "kimi",
+		Query:        query,
+		UsageAttribution: func(provider, model string, usage api.Usage) {
+			attributedProvider = provider
+			attributedModel = model
+			attributedUsage = usage
+		},
+	})
+	if err != nil {
+		t.Fatalf("SearchWeb() error = %v", err)
+	}
+	if got.Model != "kimi-k2.6" {
+		t.Fatalf("SearchWeb().Model = %q, want kimi-k2.6 fallback", got.Model)
+	}
+	if attributedProvider != "kimi" || attributedModel != "kimi-k2.6" {
+		t.Fatalf("usage owner = %s/%s, want kimi/kimi-k2.6", attributedProvider, attributedModel)
+	}
+	if attributedUsage.InputTokens != 29 || attributedUsage.OutputTokens != 11 || attributedUsage.CachedInputTokens != 7 {
+		t.Fatalf("attributed usage = %+v, want config-driven fallback model usage", attributedUsage)
+	}
+}
+
 func TestSearchWebUsesCache(t *testing.T) {
 	resetWebSearchCacheForTest()
 	provider := "gemini"

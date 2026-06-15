@@ -49,6 +49,30 @@ func TestListResumeSessions_FiltersByWorkingDirAndIncludesLegacy(t *testing.T) {
 	}
 }
 
+func TestListResumeSessions_MatchesEquivalentWorkingDir(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	storage, err := NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+
+	root := t.TempDir()
+	sessionDir := filepath.Join(root, "repo", ".")
+	currentDir := filepath.Join(root, "repo", "child", "..")
+	if err := saveResumeTestSession(storage, "current-model", sessionDir, "current"); err != nil {
+		t.Fatalf("save current session: %v", err)
+	}
+
+	filtered, err := storage.ListResumeSessions(ResumeListOptions{WorkingDir: currentDir})
+	if err != nil {
+		t.Fatalf("ListResumeSessions() error = %v", err)
+	}
+	if got := resumeSessionModels(filtered); !sameStringSet(got, []string{"current-model"}) {
+		t.Fatalf("filtered models = %#v, want current-model", got)
+	}
+}
+
 func TestGetLastResumeSession_NoSessionsUsesSentinelError(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

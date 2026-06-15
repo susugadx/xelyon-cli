@@ -9,8 +9,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-const azureDefaultPlaceholderDeployment = "azure-gpt-5.4"
-
 type selectedProviderModelValidationContext struct {
 	explicitModel     bool
 	providerConfigKey string
@@ -38,30 +36,16 @@ func validateSelectedProviderModelWithContext(cfg *config.Config, provider api.P
 		return nil
 	}
 
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or pass --model <deployment>")
-	}
-	if !strings.EqualFold(model, azureDefaultPlaceholderDeployment) {
-		return nil
-	}
+	err := config.ValidateAzureDeploymentSelection(cfg, validation.providerConfigKey, model, hasExplicitSelectedModel(validation))
+	return selectedProviderModelValidationError(err)
+}
 
-	if hasExplicitSelectedModel(validation) {
+func selectedProviderModelValidationError(err error) error {
+	if err == nil {
 		return nil
 	}
-	if cfg == nil {
-		return fmt.Errorf("azure OpenAI deployment is not configured. Set provider_models.azure.default_model or pass --model <deployment>")
-	}
-	if providerKey := strings.TrimSpace(validation.providerConfigKey); providerKey != "" {
-		if explicit := strings.TrimSpace(cfg.GetExplicitProviderDefaultModel(providerKey)); explicit != "" {
-			return nil
-		}
-	}
-	if explicit := strings.TrimSpace(cfg.GetExplicitProviderDefaultModel("azure")); explicit != "" {
-		return nil
-	}
-
-	return fmt.Errorf("azure OpenAI deployment is not configured. Set provider_models.azure.default_model or pass --model <deployment>")
+	message := strings.TrimSuffix(err.Error(), ".")
+	return fmt.Errorf("%s or pass --model <deployment>", message)
 }
 
 func hasExplicitSelectedModel(validation selectedProviderModelValidationContext) bool {
