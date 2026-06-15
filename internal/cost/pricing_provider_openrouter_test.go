@@ -9,6 +9,8 @@ func TestResolveOpenRouterDelegatedProviderPricing(t *testing.T) {
 		want  PricingInfo
 	}{
 		{name: "claude delegated", model: "anthropic/claude-sonnet-4.6", want: getClaudePricing("claude-sonnet-4.6", 250000)},
+		{name: "claude sonnet 4.5 delegated", model: "anthropic/claude-sonnet-4.5", want: getClaudePricing("claude-sonnet-4.5", 250000)},
+		{name: "claude opus 4.8 delegated", model: "anthropic/claude-opus-4.8", want: getClaudePricing("claude-opus-4.8", 250000)},
 		{name: "openai delegated", model: "openai/gpt-5.4", want: getOpenAIPricing("gpt-5.4", 250000)},
 		{name: "openai gpt-5.5 delegated", model: "openai/gpt-5.5", want: getOpenAIPricing("gpt-5.5", 250000)},
 		{name: "openai gpt-5.5-pro delegated", model: "openai/gpt-5.5-pro", want: getOpenAIPricing("gpt-5.5-pro", 250000)},
@@ -129,5 +131,12 @@ func TestGetOpenRouterPricing_NonAllowlistedDelegatedIDUnavailable(t *testing.T)
 	got := getOpenRouterPricing("openai/gpt-5.3", 0)
 	if !got.PricingUnavailable {
 		t.Fatalf("getOpenRouterPricing(non-allowlisted delegated ID).PricingUnavailable = false, want true: %#v", got)
+	}
+}
+
+func TestGetOpenRouterPricing_FableUnavailableUntilReplaySupport(t *testing.T) {
+	got := getOpenRouterPricing("anthropic/claude-fable-5", 0)
+	if !got.PricingUnavailable {
+		t.Fatalf("getOpenRouterPricing(fable).PricingUnavailable = false, want true: %#v", got)
 	}
 }

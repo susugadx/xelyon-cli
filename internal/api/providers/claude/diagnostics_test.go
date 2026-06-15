@@ -108,18 +108,29 @@ func TestDiagnoseClaude_NonClaudeCatalogModelDoesNotUseGlobalMetadata(t *testing
 func TestDiagnoseClaude_CatalogModelsKnownByPricingMetadata(t *testing.T) {
 	setClaudeDiagnosticTestEnv(t, "", "claude-key")
 
-	for _, catalogModel := range []string{"claude-sonnet-4-20250514", "claude-3-opus-20240229"} {
-		t.Run(catalogModel, func(t *testing.T) {
+	tests := []struct {
+		catalogModel string
+		wantContext  int
+		wantMaxOut   int
+	}{
+		{catalogModel: "claude-opus-4-8", wantContext: 1000000, wantMaxOut: 128000},
+		{catalogModel: "claude-fable-5", wantContext: 1000000, wantMaxOut: 128000},
+		{catalogModel: "claude-sonnet-4-20250514", wantContext: 200000, wantMaxOut: 64000},
+		{catalogModel: "claude-3-opus-20240229", wantContext: 200000, wantMaxOut: 64000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.catalogModel, func(t *testing.T) {
 			report := Diagnose(context.Background(), DiagnosticOptions{
 				Config:       config.DefaultConfig(),
 				Model:        "corp-claude-model",
-				CatalogModel: catalogModel,
+				CatalogModel: tt.catalogModel,
 			})
-			if report.CatalogModel != catalogModel || report.CatalogModelSource != "--catalog-model" {
-				t.Fatalf("catalog_model = %q (%s), want explicit %s", report.CatalogModel, report.CatalogModelSource, catalogModel)
+			if report.CatalogModel != tt.catalogModel || report.CatalogModelSource != "--catalog-model" {
+				t.Fatalf("catalog_model = %q (%s), want explicit %s", report.CatalogModel, report.CatalogModelSource, tt.catalogModel)
 			}
-			if report.ContextWindowTokens != 200000 || report.MaxOutputTokens == 0 {
-				t.Fatalf("token policy = context %d max %d, want Claude metadata", report.ContextWindowTokens, report.MaxOutputTokens)
+			if report.ContextWindowTokens != tt.wantContext || report.MaxOutputTokens != tt.wantMaxOut {
+				t.Fatalf("token policy = context %d max %d, want context %d max %d", report.ContextWindowTokens, report.MaxOutputTokens, tt.wantContext, tt.wantMaxOut)
 			}
 			requireClaudeDiagnosticCheckStatus(t, report, "catalog_model", DiagnosticStatusOK)
 			requireClaudeDiagnosticCheckStatus(t, report, "catalog_policy", DiagnosticStatusOK)

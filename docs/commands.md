@@ -697,7 +697,7 @@ TUI では `/thinking` を選ぶと `on/off/low/medium/high/xhigh` の候補を�
 
 | プロバイダー | 対応 | 動作 |
 |-------------|------|------|
-| Claude | ✅ | Opus 4.7 / Opus 4.6 / Sonnet 4.6: adaptive thinking + effort / 4.5以前: budget_tokens |
+| Claude | ✅ | Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Fable 5: adaptive thinking + effort / 4.5以前: budget_tokens |
 | OpenAI | ✅ | reasoning_effort パラメータ |
 | Gemini | ✅ | thinkingConfig.thinkingBudget |
 | DeepSeek | ✅ | V4 `thinking` field + `reasoning_effort` |
@@ -705,7 +705,7 @@ TUI では `/thinking` を選ぶと `on/off/low/medium/high/xhigh` の候補を�
 | Ollama | ⚠️ | モデル依存（R1/QwQ推奨） |
 
 **対応モデル:**
-- **Claude**: Sonnet 4 以降（Opus 4.7 / Opus 4.6 / Sonnet 4.6 は adaptive thinking。Opus 4.7 の `/thinking xhigh` は `xhigh` effort）
+- **Claude**: Sonnet 4 以降（Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Fable 5 は adaptive thinking。`/thinking xhigh` は Opus 4.8 / Opus 4.7 / Fable 5 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 で `high` effort）
 - **OpenAI**: gpt-5.2 系
 - **Gemini**: 2.5 Pro 系（Flash は非対応）
 - **DeepSeek**: モデル名は維持し、`/thinking off` は `thinking.disabled`、`/thinking on` は `thinking.enabled` + `reasoning_effort` を送ります。`/thinking xhigh` は DeepSeek では `max` に変換されます。`reasoning_content` は💭で表示し、ツール実行フローでも保持します。

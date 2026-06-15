@@ -27,6 +27,7 @@ DeepSeek, Kimi, OpenAI, OpenAI Subscription, Azure OpenAI, Gemini, Claude, Ollam
 **OpenAI / Azure OpenAI Responses API 対応**: `gpt-5.3-codex` などの Codex モデルを自動検出し、Azure OpenAI は API key と Microsoft Entra ID bearer token の両方に対応。
 **OpenAI Subscription experimental provider**: `xelyon auth openai-subscription login` で ChatGPT/Codex OAuth にログインし、`openai_subscription` provider から subscription backend の Responses-shaped endpoint を使えます。OpenAI Platform API ではなく、API key / API pricing は使いません。request は `originator: xelyon` と `xelyon/<version>` User-Agent で XELYON として識別し、OpenCode や official Codex CLI を偽装しません。runtime は `store=false` / full payload / `prompt_cache_key` / streaming / tool loop / subscription Compact API で動作し、`/compress --compact` と auto-compress の Compact 優先経路にも対応します。cost は `N/A (ChatGPT subscription)` として表示します。
 **プロバイダー診断**: `xelyon doctor <provider> --capabilities` は model / deployment 能力を live request なしで確認し、`--require-capability responses_api` などで必要な capability を gate できます。DeepSeek / Groq / OpenRouter などの Chat Completions 系も共通 capability DTO、request preview、smoke を確認できます。OpenRouter は Claude 系 model で Anthropic Skin route も表示します。`--smoke` は usage / cost を text / JSON に出力し、対応 provider では response ID も表示します。
+**Claude 最新モデル対応**: Claude provider は `claude-opus-4-8` / `claude-fable-5` を catalog、token limit、adaptive thinking、料金表示、`/model` 候補で扱えます。Fable 5 は Anthropic 側の retention 制約により、利用環境によって API が拒否する場合があります。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
 **Kimi Native Provider 対応**: Moonshot の Chat Completions API で `kimi-k2.7-code` / `kimi-k2.6` / `kimi-k2.5` の streaming、tool calls、thinking、`reasoning_content` に対応。
 **プロバイダー別プロンプト最適化**: OpenAI / Gemini では短い実況を促し、Gemini など特定モデルのルール遵守を強化するプレフィックスを自動注入。
@@ -160,7 +161,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **ツール結果の自動truncate**: 3ターン以上前のツール結果（50行超）を送信時に自動圧縮（先頭20行+末尾5行を保持）。元の履歴は保持され、API送信時にのみ適用
 - **Claude系の server-side tool clearing**: Claude / Bedrock(Claude) / OpenRouter(Claude models) では `clear_tool_uses` により古い `tool_use` / `tool_result` ペア構造をサーバー側で削減し、compaction 発動前に入力トークンを節約
 - **プロンプトキャッシュ最適化**: Claude/Bedrock(Claude) 利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置
-- **Long Context 料金自動判定**: Claude/Gemini Pro で200Kトークン超のリクエスト時、long context 料金ティアを自動適用。キャッシュトークン（cache_read + cache_creation）も含めた総入力トークンでティア判定
+- **Long Context 料金自動判定**: Gemini Pro など long context 料金ティアを持つ provider/model では、キャッシュトークン（cache_read + cache_creation）も含めた総入力トークンでティア判定。Claude API の Fable 5 / Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 は 1M context でも標準単価
 - **Gemini service tier**: `gemini.service_tier` で Gemini BYOK の `standard` / `flex` / `priority` 同期 inference と料金表示を切り替え
 
 ### 🧠 履歴を消さずに、AIへ渡す文脈だけ軽くする

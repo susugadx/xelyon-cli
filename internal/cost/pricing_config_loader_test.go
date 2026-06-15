@@ -33,6 +33,38 @@ func TestGetPricingInfo_FallbackToHardcodedWhenYAMLUnavailable(t *testing.T) {
 		pricing.CacheCreationCostPerM != 0.95 {
 		t.Fatalf("Kimi K2.7 hardcoded fallback pricing = %+v, want input=0.95 output=4.00 cached=0.19 create=0.95", pricing)
 	}
+
+	pricing = GetPricingInfo("claude", "claude-sonnet-4-5", 250000)
+	if pricing.InputCostPerM != 6.00 ||
+		pricing.OutputCostPerM != 22.50 ||
+		pricing.CachedInputCostPerM != 0.60 ||
+		pricing.CacheCreationCostPerM != 7.50 {
+		t.Fatalf("Claude Sonnet 4.5 hardcoded fallback long pricing = %+v, want input=6.00 output=22.50 cached=0.60 create=7.50", pricing)
+	}
+
+	pricing = GetPricingInfo("claude", "claude-opus-4-5", 250000)
+	if pricing.InputCostPerM != 10.00 ||
+		pricing.OutputCostPerM != 37.50 ||
+		pricing.CachedInputCostPerM != 1.00 ||
+		pricing.CacheCreationCostPerM != 12.50 {
+		t.Fatalf("Claude Opus 4.5 hardcoded fallback long pricing = %+v, want input=10.00 output=37.50 cached=1.00 create=12.50", pricing)
+	}
+
+	pricing = GetPricingInfo("claude", "claude-fable-5", 250000)
+	if pricing.InputCostPerM != 10.00 ||
+		pricing.OutputCostPerM != 50.00 ||
+		pricing.CachedInputCostPerM != 1.00 ||
+		pricing.CacheCreationCostPerM != 12.50 {
+		t.Fatalf("Claude Fable 5 hardcoded fallback pricing = %+v, want input=10.00 output=50.00 cached=1.00 create=12.50", pricing)
+	}
+
+	pricing = GetPricingInfo("claude", "claude-opus-4-8", 250000)
+	if pricing.InputCostPerM != 5.00 ||
+		pricing.OutputCostPerM != 25.00 ||
+		pricing.CachedInputCostPerM != 0.50 ||
+		pricing.CacheCreationCostPerM != 6.25 {
+		t.Fatalf("Claude Opus 4.8 hardcoded fallback pricing = %+v, want input=5.00 output=25.00 cached=0.50 create=6.25", pricing)
+	}
 }
 
 func TestPricingFamilyHasKnownModelUsesExactAllowlist(t *testing.T) {
@@ -56,7 +88,10 @@ func TestPricingFamilyHasKnownModelUsesExactAllowlist(t *testing.T) {
 		{name: "kimi exact", family: "kimi", model: "kimi-k2.6", want: true},
 		{name: "kimi thinking exact", family: "kimi", model: "kimi-k2-thinking", want: true},
 		{name: "kimi alias contains exact", family: "kimi", model: "corp-kimi-k2.6-prod", want: false},
+		{name: "claude fable exact", family: "claude", model: "claude-fable-5", want: true},
 		{name: "openrouter exact", family: "openrouter", model: "openai/gpt-5.4", want: true},
+		{name: "openrouter claude opus 4.8 exact", family: "openrouter", model: "anthropic/claude-opus-4.8", want: true},
+		{name: "openrouter claude fable unsupported", family: "openrouter", model: "anthropic/claude-fable-5", want: false},
 		{name: "openrouter gpt-5.3-codex exact", family: "openrouter", model: "openai/gpt-5.3-codex", want: true},
 		{name: "openrouter non-existent delegated id", family: "openrouter", model: "openai/gpt-5.3", want: false},
 	}
@@ -195,11 +230,14 @@ func TestBedrockKnownPricingModelsInferBedrockProvider(t *testing.T) {
 func TestDocumentedCatalogClaudeModelsAreKnownPricingModels(t *testing.T) {
 	models := []string{
 		"claude-sonnet-4-20250514",
+		"claude-sonnet-4-6",
 		"claude-sonnet-4-5-20250514",
 		"claude-sonnet-4-5-20250929",
 		"claude-haiku-4-5-20251001",
 		"claude-opus-4-20250514",
+		"claude-opus-4-8",
 		"claude-opus-4-5-20251101",
+		"claude-fable-5",
 	}
 
 	for _, model := range models {

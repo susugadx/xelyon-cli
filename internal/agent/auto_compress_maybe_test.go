@@ -141,7 +141,7 @@ func TestAutoCompress_OpenRouterDelegatedClaudeUsesKnownContextLimit(t *testing.
 	model := "anthropic/claude-sonnet-4.6"
 	agent, _ := newCompressionTestAgent(t, provider, model, cfg)
 	agent.History = []api.Message{
-		{Role: "user", Content: strings.Repeat("あ", 150000)},
+		{Role: "user", Content: strings.Repeat("あ", 850000)},
 		{Role: "assistant", Content: "latest message"},
 	}
 

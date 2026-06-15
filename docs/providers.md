@@ -462,7 +462,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 # 使用例
 xelyon --provider claude --model claude-sonnet-4-6
+xelyon --provider claude --model claude-opus-4-8
 xelyon --provider claude --model claude-opus-4-7
+xelyon --provider claude --model claude-fable-5
 xelyon --provider claude --model claude-opus-4-6
 ```
 
@@ -472,10 +474,12 @@ xelyon --provider claude --model claude-opus-4-6
 - 画像入力対応
 
 **Extended Thinking:**
-- Opus 4.7 / Opus 4.6 / Sonnet 4.6: `type: "adaptive"` + `output_config.effort`
+- Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Fable 5: `type: "adaptive"` + `output_config.effort`
 - それ以前のモデル: `type: "enabled"` + `budget_tokens`
-- `xhigh` レベルは Opus 4.7 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
-- Claude Compaction は Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
+- `xhigh` レベルは Opus 4.8 / Opus 4.7 / Fable 5 で `xhigh`、Opus 4.6 で `max`、Sonnet 4.6 では `high` にフォールバック
+- Claude Compaction は Fable 5 / Opus 4.8 / Opus 4.7 / Opus 4.6 / Opus 4.5 / Sonnet 4.6 で有効化対象
+- Fable 5 は thinking が常時有効で無効化できません。`/thinking off` でも XELYON は `thinking: {"type":"disabled"}` を送らず、履歴 replay と doctor capability では thinking active として扱います。
+- Fable 5 は Anthropic 側で 30-day data retention が必要です。zero data retention 環境などで API が拒否する場合、XELYON は別モデルへの自動 fallback は行いません。
 
 設定の到達性は CLI から診断できます。`doctor claude` は `ANTHROPIC_API_KEY`、`ANTHROPIC_API_URL`、provider 登録、model / `catalog_model` 解決、Anthropic Messages route、function calling、画像入力、thinking request config、context management、Claude compaction、native web search、token / pricing metadata を確認します。`--catalog-model` は alias の underlying Claude model として token / pricing / thinking / context management 判定に使います。`--print-request` は live request を送らず、redacted `x-api-key` header、`anthropic-version` / `anthropic-beta`、request body を `request_preview` に表示します。`--smoke` を付けると live Messages request を送って usage / cost を観測します。画像入力は `--image-smoke`、function calling は `--tool-smoke`、thinking request は `--thinking-smoke`、native web search は `--web-search-smoke` を使います。
 

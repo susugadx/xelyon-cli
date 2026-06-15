@@ -198,26 +198,49 @@ func TestSessionStats_EstimatedCost_OpenAI(t *testing.T) {
 
 func TestSessionStats_EstimatedCost_Claude(t *testing.T) {
 	// デフォルト（model=""）は Sonnet 料金
-	// 1M input > 200K → long context 料金 ($6/$22.50)
+	// Sonnet 4.6 は 1M context でも標準単価。
 	stats := NewSessionStats("claude")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 6.00 + 22.50 // Sonnet long context
+	expected := 3.00 + 15.00
 	if cost != expected {
-		t.Errorf("EstimatedCost() for claude (sonnet long context) = %f, want %f", cost, expected)
+		t.Errorf("EstimatedCost() for claude (sonnet standard pricing) = %f, want %f", cost, expected)
 	}
 }
 
 func TestSessionStats_EstimatedCost_Claude_Opus(t *testing.T) {
-	// 1M input > 200K → long context 料金 ($10/$37.50)
-	stats := NewSessionStats("claude", "claude-opus-4-5-20251101")
+	// 旧 Opus は 200K 超で long context 料金。
+	stats := NewSessionStats("claude", "claude-opus-4-5")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 10.00 + 37.50 // Opus long context
+	expected := 10.00 + 37.50
 	if cost != expected {
 		t.Errorf("EstimatedCost() for claude opus long context = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_Claude_Opus48(t *testing.T) {
+	// Opus 4.8 は 1M context でも標準単価。
+	stats := NewSessionStats("claude", "claude-opus-4-8")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 5.00 + 25.00
+	if cost != expected {
+		t.Errorf("EstimatedCost() for claude opus 4.8 standard pricing = %f, want %f", cost, expected)
+	}
+}
+
+func TestSessionStats_EstimatedCost_Claude_Fable(t *testing.T) {
+	stats := NewSessionStats("claude", "claude-fable-5")
+	stats.AddTokens(1000000, 1000000)
+
+	cost := stats.EstimatedCost()
+	expected := 10.00 + 50.00
+	if cost != expected {
+		t.Errorf("EstimatedCost() for claude fable = %f, want %f", cost, expected)
 	}
 }
 
@@ -281,12 +304,12 @@ func TestSessionStats_EstimatedCost_Groq(t *testing.T) {
 }
 
 func TestSessionStats_EstimatedCost_OpenRouter_Claude(t *testing.T) {
-	// 1M input > 200K → Sonnet long context 料金 ($6/$22.50)
+	// OpenRouter delegated Claude も Claude API の旧 Sonnet long context 料金を使う。
 	stats := NewSessionStats("openrouter", "anthropic/claude-sonnet-4.5")
 	stats.AddTokens(1000000, 1000000)
 
 	cost := stats.EstimatedCost()
-	expected := 6.00 + 22.50 // Sonnet long context pricing
+	expected := 6.00 + 22.50
 	if cost < expected-0.001 || cost > expected+0.001 {
 		t.Errorf("EstimatedCost() for openrouter claude = %f, want %f", cost, expected)
 	}
@@ -580,9 +603,15 @@ func TestCalculateRequestCost(t *testing.T) {
 		{"deepseek", "", 1000000, 1000000, 0.70},
 		// Unknown: 料金表未対応なので旧fallbackで概算しない
 		{"unknown", "", 1000000, 1000000, 0.0},
-		// Claude Sonnet（1M input > 200K → long context 料金）
+		// Claude Sonnet（1M context でも標準単価）
+		{"claude", "claude-sonnet-4-6", 1000000, 1000000, 3.00 + 15.00},
+		// Claude Opus（1M context でも標準単価）
+		{"claude", "claude-opus-4-8", 1000000, 1000000, 5.00 + 25.00},
+		// Claude Fable（1M context でも標準単価）
+		{"claude", "claude-fable-5", 1000000, 1000000, 10.00 + 50.00},
+		// 旧 Claude Sonnet（1M input > 200K → long context 料金）
 		{"claude", "claude-sonnet-4-5-20250929", 1000000, 1000000, 6.00 + 22.50},
-		// Claude Opus（1M input > 200K → long context 料金）
+		// 旧 Claude Opus（1M input > 200K → long context 料金）
 		{"claude", "claude-opus-4-5", 1000000, 1000000, 10.00 + 37.50},
 		// Claude Haiku（long context なし）
 		{"claude", "claude-haiku-4-5", 1000000, 1000000, 1.00 + 5.00},
@@ -755,10 +784,17 @@ func TestGetClaudePricing(t *testing.T) {
 		{"claude-sonnet-4-20250514", 0, 3.00, 15.00},
 		{"", 0, 3.00, 15.00}, // 空文字列はSonnetデフォルト
 
-		// Long context (>200K)
-		{"claude-opus-4-6", 250000, 10.00, 37.50},
+		// 1M context でも標準単価
+		{"claude-opus-4-8", 250000, 5.00, 25.00},
+		{"claude-opus-4-7", 250000, 5.00, 25.00},
+		{"claude-opus-4-6", 250000, 5.00, 25.00},
+		{"claude-sonnet-4-6", 250000, 3.00, 15.00},
+		{"claude-fable-5", 250000, 10.00, 50.00},
+		{"", 250000, 3.00, 15.00}, // Sonnet デフォルト
+
+		// 旧 Opus/Sonnet は long context 料金
+		{"claude-opus-4-5", 250000, 10.00, 37.50},
 		{"claude-sonnet-4-5-20250929", 250000, 6.00, 22.50},
-		{"", 250000, 6.00, 22.50}, // Sonnet デフォルト long context
 
 		// Haiku は long context なし
 		{"claude-haiku-4-5-20251001", 250000, 1.00, 5.00},
@@ -848,22 +884,29 @@ func TestGetDeepSeekPricing_V4AndLegacyAliases(t *testing.T) {
 	}
 }
 
-// === 新規テスト: Claude long context 200K超 ===
+// === 新規テスト: Claude 1M context 標準単価 ===
 
-func TestGetClaudePricing_LongContext(t *testing.T) {
-	// Sonnet: >200K → $6/$22.50
-	p := cost.GetPricingInfo("claude", "claude-sonnet-4-5-20250929", 250000)
-	if p.InputCostPerM != 6.00 || p.OutputCostPerM != 22.50 {
-		t.Errorf("Sonnet long context: got input=%f output=%f, want 6.00/22.50", p.InputCostPerM, p.OutputCostPerM)
+func TestGetClaudePricing_OneMillionContextUsesStandardPricing(t *testing.T) {
+	// Sonnet 4.6: >200K でも $3/$15
+	p := cost.GetPricingInfo("claude", "claude-sonnet-4-6", 250000)
+	if p.InputCostPerM != 3.00 || p.OutputCostPerM != 15.00 {
+		t.Errorf("Sonnet standard context: got input=%f output=%f, want 3.00/15.00", p.InputCostPerM, p.OutputCostPerM)
 	}
-	if p.CachedInputCostPerM != 0.60 {
-		t.Errorf("Sonnet long context cached: got %f, want 0.60", p.CachedInputCostPerM)
+	if p.CachedInputCostPerM != 0.30 {
+		t.Errorf("Sonnet standard context cached: got %f, want 0.30", p.CachedInputCostPerM)
 	}
 
-	// Opus: >200K → $10/$37.50
-	p2 := cost.GetPricingInfo("claude", "claude-opus-4-6", 250000)
-	if p2.InputCostPerM != 10.00 || p2.OutputCostPerM != 37.50 {
-		t.Errorf("Opus long context: got input=%f output=%f, want 10.00/37.50", p2.InputCostPerM, p2.OutputCostPerM)
+	for _, model := range []string{"claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6"} {
+		p2 := cost.GetPricingInfo("claude", model, 250000)
+		if p2.InputCostPerM != 5.00 || p2.OutputCostPerM != 25.00 {
+			t.Errorf("%s standard context: got input=%f output=%f, want 5.00/25.00", model, p2.InputCostPerM, p2.OutputCostPerM)
+		}
+	}
+
+	// Fable 5: >200K でも $10/$50
+	pFable := cost.GetPricingInfo("claude", "claude-fable-5", 250000)
+	if pFable.InputCostPerM != 10.00 || pFable.OutputCostPerM != 50.00 {
+		t.Errorf("Fable standard context: got input=%f output=%f, want 10.00/50.00", pFable.InputCostPerM, pFable.OutputCostPerM)
 	}
 
 	// Haiku: long context なし
@@ -873,17 +916,38 @@ func TestGetClaudePricing_LongContext(t *testing.T) {
 	}
 }
 
-// === 新規テスト: 200Kティア判定がキャッシュトークンを含む ===
+func TestGetClaudePricing_OldOpusSonnetUseLongContextTier(t *testing.T) {
+	tests := []struct {
+		model      string
+		wantInput  float64
+		wantOutput float64
+		wantCached float64
+	}{
+		{"claude-opus-4-5", 10.00, 37.50, 1.00},
+		{"claude-sonnet-4-5-20250929", 6.00, 22.50, 0.60},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			p := cost.GetPricingInfo("claude", tt.model, 250000)
+			if p.InputCostPerM != tt.wantInput || p.OutputCostPerM != tt.wantOutput || p.CachedInputCostPerM != tt.wantCached {
+				t.Fatalf("GetPricingInfo(%q) = %+v, want input=%f output=%f cached=%f", tt.model, p, tt.wantInput, tt.wantOutput, tt.wantCached)
+			}
+		})
+	}
+}
+
+// === 新規テスト: 旧 Claude はキャッシュ込みで long tier 判定する ===
 
 func TestCalculateRequestCostWithCache_TierIncludesCachedTokens(t *testing.T) {
-	// Claude Sonnet: 通常input 150K + cached 60K = 210K → long context 料金
+	// Claude Sonnet 4.5: 通常input 150K + cached 60K = 210K → long context 料金
 	gotCost := cost.CalculateRequestCostWithCache("claude", "claude-sonnet-4-5", api.Usage{
 		InputTokens:       150000,
 		OutputTokens:      10000,
 		CachedInputTokens: 60000,
 	})
 	// totalInputForTier = 150K + 60K + 0 = 210K → long context ($6/$22.50)
-	// uncached: (150K-60K)/1M * $6.00 = 90K * 0.000006 = $0.54
+	// uncached: (150K-60K)/1M * $6.00 = $0.54
 	// cached:   60K/1M * $0.60 = $0.036
 	// output:   10K/1M * $22.50 = $0.225
 	// total: $0.801

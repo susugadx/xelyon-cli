@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
@@ -154,7 +153,7 @@ func Diagnose(ctx context.Context, options DiagnosticOptions) DiagnosticReport {
 
 	provider := New("diagnostic-key")
 	contextManagement := buildContextManagementForModel(policyCfg.ModelCatalogName("claude", model), policyCfg.Compression)
-	thinkingEnabled := api.IsThinkingEnabled(configCtx)
+	thinkingEnabled := claudeThinkingActiveForModel(configCtx, catalogModel)
 
 	report := DiagnosticReport{
 		Provider:                  "claude",

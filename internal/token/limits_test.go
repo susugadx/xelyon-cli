@@ -13,9 +13,16 @@ func TestGetModelTokenLimit_ExactMatch(t *testing.T) {
 		expected int
 	}{
 		// Claude models
+		{"claude-opus-4-8", 1000000},
+		{"anthropic/claude-opus-4-8", 1000000},
+		{"claude-fable-5", 1000000},
 		{"claude-opus-4-7", 1000000},
 		{"anthropic/claude-opus-4-7", 1000000},
 		{"us.anthropic.claude-opus-4-7-v1:0", 1000000},
+		{"claude-opus-4-6", 1000000},
+		{"claude-sonnet-4-6", 1000000},
+		{"global.anthropic.claude-sonnet-4-6-v1", 200000},
+		{"global.anthropic.claude-sonnet-4-6-v1:0", 200000},
 		{"claude-sonnet-4-20250514", 200000},
 		{"claude-3-5-sonnet-20241022", 200000},
 		{"claude-3-opus-20240229", 200000},
@@ -94,6 +101,8 @@ func TestGetKnownModelTokenLimit_KnownAndUnknown(t *testing.T) {
 	}{
 		{model: "gpt-5.4", wantLimit: 1000000, wantKnown: true},
 		{model: "openai/gpt-5.4-mini", wantLimit: 400000, wantKnown: true},
+		{model: "global.anthropic.claude-sonnet-4-6-v1:0", wantLimit: 200000, wantKnown: true},
+		{model: "anthropic/claude-fable-5", wantKnown: false},
 		{model: "unknown-model", wantKnown: false},
 		{model: "", wantKnown: false},
 	}

@@ -78,11 +78,18 @@ func TestGetClaudePricing_AllModels(t *testing.T) {
 		wantOutput float64
 		wantCached float64
 	}{
+		{name: "opus 4.8 normal", model: "claude-opus-4-8", ptc: 0, wantInput: 5.00, wantOutput: 25.00, wantCached: 0.50},
 		{name: "opus normal", model: "claude-opus-4-6", ptc: 0, wantInput: 5.00, wantOutput: 25.00, wantCached: 0.50},
+		{name: "fable normal", model: "claude-fable-5", ptc: 0, wantInput: 10.00, wantOutput: 50.00, wantCached: 1.00},
 		{name: "sonnet normal", model: "claude-sonnet-4-5", ptc: 0, wantInput: 3.00, wantOutput: 15.00, wantCached: 0.30},
 		{name: "haiku normal", model: "claude-haiku-4-5", ptc: 0, wantInput: 1.00, wantOutput: 5.00, wantCached: 0.10},
-		{name: "opus long context", model: "claude-opus-4-6", ptc: 250000, wantInput: 10.00, wantOutput: 37.50, wantCached: 1.00},
-		{name: "sonnet long context", model: "claude-sonnet-4-6", ptc: 250000, wantInput: 6.00, wantOutput: 22.50, wantCached: 0.60},
+		{name: "opus 4.8 long context stays standard", model: "claude-opus-4-8", ptc: 250000, wantInput: 5.00, wantOutput: 25.00, wantCached: 0.50},
+		{name: "opus 4.7 long context stays standard", model: "claude-opus-4-7", ptc: 250000, wantInput: 5.00, wantOutput: 25.00, wantCached: 0.50},
+		{name: "opus 4.6 long context stays standard", model: "claude-opus-4-6", ptc: 250000, wantInput: 5.00, wantOutput: 25.00, wantCached: 0.50},
+		{name: "opus 4.5 long context uses legacy tier", model: "claude-opus-4-5", ptc: 250000, wantInput: 10.00, wantOutput: 37.50, wantCached: 1.00},
+		{name: "fable long context stays standard", model: "claude-fable-5", ptc: 250000, wantInput: 10.00, wantOutput: 50.00, wantCached: 1.00},
+		{name: "sonnet 4.6 long context stays standard", model: "claude-sonnet-4-6", ptc: 250000, wantInput: 3.00, wantOutput: 15.00, wantCached: 0.30},
+		{name: "sonnet 4.5 long context uses legacy tier", model: "claude-sonnet-4-5-20250929", ptc: 250000, wantInput: 6.00, wantOutput: 22.50, wantCached: 0.60},
 		{name: "haiku ignores long context", model: "claude-haiku-4-5", ptc: 250000, wantInput: 1.00, wantOutput: 5.00, wantCached: 0.10},
 	}
 
@@ -264,8 +271,8 @@ func TestGetBedrockPricing_ClaudeCatalogAliasDelegation(t *testing.T) {
 	if got.PricingUnavailable {
 		t.Fatalf("getBedrockPricing() = %#v, want available Claude pricing", got)
 	}
-	if got.InputCostPerM != 6.00 || got.OutputCostPerM != 22.50 {
-		t.Fatalf("getBedrockPricing() = %#v, want long-context Sonnet pricing", got)
+	if got.InputCostPerM != 3.00 || got.OutputCostPerM != 15.00 {
+		t.Fatalf("getBedrockPricing() = %#v, want standard Sonnet pricing", got)
 	}
 }
 
@@ -665,6 +672,7 @@ func TestGetPricingInfoForConfig_ConfiguredOpenRouterModelIDWithoutCatalogStillP
 		wantOut   float64
 	}{
 		{name: "anthropic id", model: "anthropic/claude-sonnet-4.6", wantInput: 3.00, wantOut: 15.00},
+		{name: "anthropic opus 4.8 id", model: "anthropic/claude-opus-4.8", wantInput: 5.00, wantOut: 25.00},
 		{name: "openai id", model: "openai/gpt-5.4", wantInput: 2.50, wantOut: 15.00},
 		{name: "openai gpt-5.3-codex id", model: "openai/gpt-5.3-codex", wantInput: 1.75, wantOut: 14.00},
 		{name: "static id", model: "zhipu/glm-5", wantInput: 0.72, wantOut: 2.30},
@@ -685,6 +693,18 @@ func TestGetPricingInfoForConfig_ConfiguredOpenRouterModelIDWithoutCatalogStillP
 				t.Fatalf("configured OpenRouter model ID pricing = %#v, want input=%f output=%f", got, tt.wantInput, tt.wantOut)
 			}
 		})
+	}
+}
+
+func TestGetPricingInfoForConfig_OpenRouterFableUnavailableUntilReplaySupport(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("openrouter", config.ProviderModelConfig{
+		DefaultModel: "anthropic/claude-fable-5",
+	})
+
+	got := GetPricingInfoForConfig(cfg, "openrouter", "anthropic/claude-fable-5")
+	if !got.PricingUnavailable {
+		t.Fatalf("OpenRouter Fable pricing = %#v, want unavailable until replay support", got)
 	}
 }
 
@@ -832,6 +852,18 @@ func TestCalculateRequestCostWithCache_ClaudeStillUsesCacheTokensForLongInputTie
 	// Anthropic は input + cache_read + cache_creation の合計で 200K tier 判定する。
 	// uncached: 90K * $6.00 = $0.54, cached: 50K * $0.60 = $0.03, creation: 10K * $7.50 = $0.075
 	assertCostApprox(t, cost, 0.645)
+}
+
+func TestCalculateRequestCostWithCache_ClaudeSonnet46IgnoresLongInputTier(t *testing.T) {
+	cost := CalculateRequestCostWithCache("claude", "claude-sonnet-4-6", api.Usage{
+		InputTokens:         150000,
+		CachedInputTokens:   50000,
+		CacheCreationTokens: 10000,
+	})
+
+	// Sonnet 4.6 は同じ token mix でも標準単価に固定する。
+	// uncached: 90K * $3.00 = $0.27, cached: 50K * $0.30 = $0.015, creation: 10K * $3.75 = $0.0375
+	assertCostApprox(t, cost, 0.3225)
 }
 
 func TestCalculateRequestCostWithCache_OllamaZero(t *testing.T) {

@@ -182,7 +182,7 @@ func (r *DiagnosticReport) addThinkingCheck() {
 		detail += ", thinking_type=" + r.ThinkingType
 	}
 	if r.ThinkingEnabled {
-		r.addCheck(DiagnosticStatusOK, "thinking", "Claude thinking request config is enabled", detail, "")
+		r.addCheck(DiagnosticStatusOK, "thinking", "Claude thinking is enabled by request config or model policy", detail, "")
 		return
 	}
 	r.addCheck(DiagnosticStatusOK, "thinking", "Claude thinking request config is disabled", detail, "")
