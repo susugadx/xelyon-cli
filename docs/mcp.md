@@ -453,6 +453,9 @@ async function main() {
 main();
 ```
 
+`inputSchema` の必須引数は JSON Schema 標準の top-level `required` 配列で指定してください。
+`properties.<name>.required=true` のような property 内の marker は必須判定には使われません。
+
 ### XELYONでの使用
 
 ```json

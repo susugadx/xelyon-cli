@@ -106,7 +106,7 @@ func TestWrapperValidateArgs(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy property required missing returns error", func(t *testing.T) {
+	t.Run("property required marker is ignored", func(t *testing.T) {
 		wrapper := NewWrapper(WrapperOptions{
 			ToolName: "echo",
 			InputSchema: json.RawMessage(`{
@@ -116,8 +116,8 @@ func TestWrapperValidateArgs(t *testing.T) {
 		})
 
 		err := wrapper.ValidateArgs(io.Discard, map[string]string{})
-		if err == nil || !strings.Contains(err.Error(), "required argument 'path' is missing") {
-			t.Fatalf("ValidateArgs() error = %v, want legacy missing required argument", err)
+		if err != nil {
+			t.Fatalf("ValidateArgs() error = %v, want nil because required belongs at schema top-level", err)
 		}
 	})
 

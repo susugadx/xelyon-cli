@@ -285,21 +285,8 @@ func (w *Wrapper) validateArgs(out io.Writer, args map[string]string) error {
 		return err
 	}
 
-	// 旧互換: properties.<name>.required=true も必須パラメータとして扱う。
 	if properties, ok := schema["properties"].(map[string]any); ok && properties != nil {
-		for propName, propInfo := range properties {
-			propMap, ok := propInfo.(map[string]any)
-			if !ok || propMap == nil {
-				// プロパティスキーマが不正な場合は警告してスキップ
-				fmt.Fprintf(out, "⚠️  Warning: Invalid property schema for %s in tool %s\n", propName, w.toolName)
-				continue
-			}
-			if required, ok := propMap["required"].(bool); ok && required {
-				if _, hasArg := args[propName]; !hasArg {
-					return fmt.Errorf("required argument '%s' is missing", propName)
-				}
-			}
-		}
+		warnInvalidPropertySchemas(out, w.toolName, properties)
 
 		if err := validateStructuredArgs(properties, args); err != nil {
 			return err
@@ -307,6 +294,15 @@ func (w *Wrapper) validateArgs(out io.Writer, args map[string]string) error {
 	}
 
 	return nil
+}
+
+func warnInvalidPropertySchemas(out io.Writer, toolName string, properties map[string]any) {
+	for propName, propInfo := range properties {
+		propMap, ok := propInfo.(map[string]any)
+		if !ok || propMap == nil {
+			fmt.Fprintf(out, "⚠️  Warning: Invalid property schema for %s in tool %s\n", propName, toolName)
+		}
+	}
 }
 
 func validateTopLevelRequiredArgs(out io.Writer, toolName string, schema map[string]any, args map[string]string) error {
