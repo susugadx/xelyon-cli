@@ -5,11 +5,10 @@ package agent
 // GeneratedHelpCommandsText は自動生成された Classic ヘルプのコマンド一覧。
 const GeneratedHelpCommandsText = `Commands:
   /exit, /quit, /q          - Exit the CLI
-  /clear                    - Clear conversation history
+  /new                      - Start a new session
+  /clear                    - Clear transcript and start a new session
   /history                  - Show conversation history
-  /save                     - Save current session
-  /load [id]                - Load session (or last if no ID)
-  /sessions                 - List recent sessions
+  /resume [--last|--all|id] - Resume a saved session
   /status, /stats           - Show current state, last request, and session statistics
   /tokens                   - Show token usage and context window status
   /ledger                   - Show runtime task ledger
@@ -39,11 +38,10 @@ const GeneratedHelpCommandsText = `Commands:
 // GeneratedTUIHelpCommandsText は自動生成された TUI ヘルプのコマンド一覧。
 const GeneratedTUIHelpCommandsText = `Commands:
   /exit, /quit, /q          - Exit the CLI
-  /clear                    - Clear conversation history
+  /new                      - Start a new session
+  /clear                    - Clear transcript and start a new session
   /history                  - Show conversation history
-  /save                     - Save current session
-  /load [id]                - Load session (or last if no ID)
-  /sessions                 - List recent sessions
+  /resume [--last|--all|id] - Resume a saved session
   /status, /stats           - Show current state, last request, and session statistics
   /tokens                   - Show token usage and context window status
   /ledger                   - Show runtime task ledger

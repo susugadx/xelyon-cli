@@ -24,7 +24,7 @@ $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
   default { throw "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE" }
 }
 
-$release = Invoke-RestMethod -Uri (Get-ReleaseApiUrl) -TimeoutSec 120 -Headers @{ "User-Agent" = "xelyon-installer" }
+$release = Invoke-RestMethod -Uri (Get-ReleaseApiUrl) -UseBasicParsing -TimeoutSec 120 -Headers @{ "User-Agent" = "xelyon-installer" }
 $asset = $release.assets | Where-Object { $_.name -match "_windows_$arch\.zip$" } | Select-Object -First 1
 $checksums = $release.assets | Where-Object { $_.name -eq "checksums.txt" } | Select-Object -First 1
 if (-not $asset -or -not $checksums) {
@@ -54,8 +54,8 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 try {
   $archivePath = Join-Path $temp $asset.name
   $checksumsPath = Join-Path $temp "checksums.txt"
-  Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archivePath -TimeoutSec 120 -Headers @{ "User-Agent" = "xelyon-installer" }
-  Invoke-WebRequest -Uri $checksums.browser_download_url -OutFile $checksumsPath -TimeoutSec 120 -Headers @{ "User-Agent" = "xelyon-installer" }
+  Invoke-WebRequest -Uri $asset.browser_download_url -UseBasicParsing -OutFile $archivePath -TimeoutSec 120 -Headers @{ "User-Agent" = "xelyon-installer" }
+  Invoke-WebRequest -Uri $checksums.browser_download_url -UseBasicParsing -OutFile $checksumsPath -TimeoutSec 120 -Headers @{ "User-Agent" = "xelyon-installer" }
 
   $line = Get-Content $checksumsPath | Where-Object { $_ -match "\s$([regex]::Escape($asset.name))$" } | Select-Object -First 1
   if (-not $line) {

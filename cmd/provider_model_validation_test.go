@@ -64,6 +64,18 @@ func TestValidateSelectedProviderModel(t *testing.T) {
 		}
 	})
 
+	t.Run("azure placeholder with explicit saved session model passes", func(t *testing.T) {
+		modelFlag = ""
+		_ = os.Unsetenv("XELYON_MODEL")
+		err := validateSelectedProviderModelWithContext(config.DefaultConfig(), &providerValidationTestProvider{name: "Azure OpenAI"}, "azure-gpt-5.4", selectedProviderModelValidationContext{
+			explicitModel:     true,
+			providerConfigKey: "azure",
+		})
+		if err != nil {
+			t.Fatalf("validateSelectedProviderModelWithContext() error = %v, want nil with saved session model", err)
+		}
+	})
+
 	t.Run("gemini unsupported function calling model fails", func(t *testing.T) {
 		modelFlag = ""
 		err := validateSelectedProviderModel(config.DefaultConfig(), &providerValidationTestProvider{name: "gemini"}, "gemini-2.0-flash-lite")

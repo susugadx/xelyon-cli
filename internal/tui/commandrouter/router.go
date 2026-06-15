@@ -27,6 +27,10 @@ const (
 	ActionOpenProviderPicker Action = Action(commandcatalog.TUILocalActionOpenProviderPicker)
 	// ActionOpenModelPicker は current provider の model picker を開く処理を表す。
 	ActionOpenModelPicker Action = Action(commandcatalog.TUILocalActionOpenModelPicker)
+	// ActionNewSession は TUI 表示状態を考慮して新規 session を開始する処理を表す。
+	ActionNewSession Action = Action(commandcatalog.TUILocalActionNewSession)
+	// ActionOpenSessionPicker は resume session picker を開く処理を表す。
+	ActionOpenSessionPicker Action = Action(commandcatalog.TUILocalActionOpenSessionPicker)
 )
 
 // Context は command routing に必要な TUI 状態を保持する。
@@ -92,7 +96,9 @@ func isKnownLocalAction(action Action) bool {
 		ActionOpenReview,
 		ActionOpenProject,
 		ActionOpenProviderPicker,
-		ActionOpenModelPicker:
+		ActionOpenModelPicker,
+		ActionNewSession,
+		ActionOpenSessionPicker:
 		return true
 	default:
 		return false

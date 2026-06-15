@@ -3,6 +3,9 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,10 +15,16 @@ import (
 )
 
 type conversationStateTestProvider struct {
+	name       string
 	responseID string
 }
 
-func (p *conversationStateTestProvider) Name() string { return "test" }
+func (p *conversationStateTestProvider) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return "test"
+}
 
 func (p *conversationStateTestProvider) SupportsImages() bool { return false }
 
@@ -101,6 +110,54 @@ func TestAgent_ResetConversationState_ClearsRuntimeAndSessionState(t *testing.T)
 	}
 }
 
+func TestAgent_StartNewSession_SaveFailurePreservesActiveRuntimeState(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{name: "openai"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	oldSession := agent.session
+	oldSessionID := oldSession.ID
+	oldStats := agent.Stats
+	agent.History = []api.Message{{Role: "user", Content: "active request"}}
+	provider.SetResponseID("resp_active")
+
+	beforeStartNewSessionMetadataSaveForTest = func() {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
+		metadataDir := filepath.Join(home, ".xelyon", "history", "metadata")
+		if err := os.RemoveAll(metadataDir); err != nil {
+			t.Fatalf("RemoveAll(metadataDir) error = %v", err)
+		}
+		if err := os.WriteFile(metadataDir, []byte("not a directory"), 0o600); err != nil {
+			t.Fatalf("WriteFile(metadataDir) error = %v", err)
+		}
+	}
+	t.Cleanup(func() { beforeStartNewSessionMetadataSaveForTest = nil })
+
+	_, err := agent.StartNewSession()
+	if err == nil {
+		t.Fatal("StartNewSession() error = nil, want metadata save failure")
+	}
+	if !strings.Contains(err.Error(), "save new session metadata") {
+		t.Fatalf("StartNewSession() error = %v, want save new session metadata", err)
+	}
+	if agent.session != oldSession || agent.session.ID != oldSessionID {
+		t.Fatalf("agent.session = %#v, want old session %s", agent.session, oldSessionID)
+	}
+	if len(agent.History) != 1 || agent.History[0].Content != "active request" {
+		t.Fatalf("agent.History = %#v, want active request preserved", agent.History)
+	}
+	if got := provider.GetResponseID(); got != "resp_active" {
+		t.Fatalf("provider response ID = %q, want resp_active", got)
+	}
+	if agent.Stats != oldStats {
+		t.Fatal("agent.Stats pointer changed after failed StartNewSession")
+	}
+}
+
 func TestAgent_ResetConversationState_ClearsModelFacingTaskLedger(t *testing.T) {
 	disableColors(t)
 
@@ -158,6 +215,160 @@ func TestAgent_ResetConversationState_PreservesTaskLedgerWhenCurrentTaskStateCon
 	}
 	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
 		t.Fatal("task ledger was reset even though current task state context is disabled")
+	}
+}
+
+func TestAgent_ResumeSession_ModelSwitchPreservesOutgoingSessionResponseContext(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{name: "openai"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	outgoingID := agent.session.ID
+	agent.session.AddMessage("user", "current request", agent.CurrentModel)
+	provider.SetResponseID("resp_current")
+
+	target := history.NewSession("gpt-5.5")
+	target.ProviderName = "openai"
+	target.ProviderConfigKey = "openai"
+	target.AddMessage("user", "saved request", "gpt-5.5")
+	if err := agent.storage.Save(target); err != nil {
+		t.Fatalf("Save(target) error = %v", err)
+	}
+
+	if _, err := agent.ResumeSession(target.ID); err != nil {
+		t.Fatalf("ResumeSession() error = %v", err)
+	}
+
+	outgoing, err := agent.storage.Load(outgoingID)
+	if err != nil {
+		t.Fatalf("Load(outgoing) error = %v", err)
+	}
+	if outgoing.Model != "gpt-5.4" || outgoing.ProviderName != "openai" || outgoing.ProviderConfigKey != "openai" {
+		t.Fatalf("outgoing identity = (%q, %q, %q), want openai/gpt-5.4", outgoing.ProviderName, outgoing.ProviderConfigKey, outgoing.Model)
+	}
+	if outgoing.ResponseID != "resp_current" ||
+		outgoing.ResponseModel != "gpt-5.4" ||
+		outgoing.ResponseProviderName != "openai" ||
+		outgoing.ResponseProviderConfigKey != "openai" {
+		t.Fatalf("outgoing response context = (%q, %q, %q, %q), want resp_current/openai/gpt-5.4",
+			outgoing.ResponseID,
+			outgoing.ResponseModel,
+			outgoing.ResponseProviderName,
+			outgoing.ResponseProviderConfigKey,
+		)
+	}
+	if agent.session == nil || agent.session.ID != target.ID {
+		t.Fatalf("agent.session.ID = %q, want target %s", agent.session.ID, target.ID)
+	}
+}
+
+func TestAgent_ResumeSession_SameProviderResetsSessionStats(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	provider := &conversationStateTestProvider{name: "openai"}
+	agent := newChatRequestTestAgent(t, provider, &out)
+	agent.Stats.AddTokens(123, 456)
+	agent.Stats.AddToolExecution("read_file")
+	agent.Stats.AccumulatedCost = 42
+
+	target := history.NewSession("gpt-5.4")
+	target.ProviderName = "openai"
+	target.ProviderConfigKey = "openai"
+	target.AddMessage("user", "saved request", "gpt-5.4")
+	if err := agent.storage.Save(target); err != nil {
+		t.Fatalf("Save(target) error = %v", err)
+	}
+
+	if _, err := agent.ResumeSession(target.ID); err != nil {
+		t.Fatalf("ResumeSession() error = %v", err)
+	}
+
+	if agent.Stats == nil {
+		t.Fatal("agent.Stats = nil")
+	}
+	if agent.Stats.Provider != "openai" || agent.Stats.Model != "gpt-5.4" {
+		t.Fatalf("Stats provider/model = (%q, %q), want openai/gpt-5.4", agent.Stats.Provider, agent.Stats.Model)
+	}
+	if agent.Stats.InputTokens != 0 || agent.Stats.OutputTokens != 0 || agent.Stats.AccumulatedCost != 0 {
+		t.Fatalf("Stats usage = input %d output %d cost %.2f, want reset", agent.Stats.InputTokens, agent.Stats.OutputTokens, agent.Stats.AccumulatedCost)
+	}
+	if len(agent.Stats.ToolExecutions) != 0 {
+		t.Fatalf("Stats.ToolExecutions = %#v, want reset", agent.Stats.ToolExecutions)
+	}
+}
+
+func TestAgent_ResumeSession_SameProviderValidatesSavedModel(t *testing.T) {
+	disableColors(t)
+	t.Setenv("HOME", t.TempDir())
+
+	runtime := NewAgentRuntimeWithConfig(newChatRequestTestConfig())
+	agent := NewAgentWithRuntime("gemini-3.5-flash", &mockProvider{name: "gemini"}, false, runtime)
+	bootstrapID := agent.session.ID
+
+	target := history.NewSession("gemini-2.0-flash-lite")
+	target.ProviderName = "gemini"
+	target.ProviderConfigKey = "gemini"
+	target.AddMessage("user", "saved request", "gemini-2.0-flash-lite")
+	if err := agent.storage.Save(target); err != nil {
+		t.Fatalf("Save(target) error = %v", err)
+	}
+
+	_, err := agent.ResumeSession(target.ID)
+	if err == nil {
+		t.Fatal("ResumeSession() error = nil, want Gemini model validation error")
+	}
+	if !strings.Contains(err.Error(), "switch to session provider/model") ||
+		!strings.Contains(err.Error(), "gemini-3.1-flash-lite") {
+		t.Fatalf("ResumeSession() error = %v, want Gemini replacement guidance", err)
+	}
+	if agent.session == nil || agent.session.ID != bootstrapID {
+		t.Fatalf("agent.session.ID = %q, want bootstrap %s", agent.session.ID, bootstrapID)
+	}
+	if agent.CurrentModel != "gemini-3.5-flash" {
+		t.Fatalf("CurrentModel = %q, want unchanged gemini-3.5-flash", agent.CurrentModel)
+	}
+}
+
+func TestAgent_ResumeSession_SetupRequiredSavedProviderUsesUnavailableProvider(t *testing.T) {
+	disableColors(t)
+	t.Setenv("OPENAI_API_KEY", "")
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{name: "ollama"}, &out)
+	target := history.NewSession("gpt-5.2")
+	target.ProviderName = "OpenAI"
+	target.ProviderConfigKey = "openai"
+	target.AddMessage("user", "saved request", "gpt-5.2")
+	if err := agent.storage.Save(target); err != nil {
+		t.Fatalf("Save(target) error = %v", err)
+	}
+
+	resumed, err := agent.ResumeSession(target.ID)
+	if err != nil {
+		t.Fatalf("ResumeSession() error = %v", err)
+	}
+	if resumed.ID != target.ID {
+		t.Fatalf("resumed.ID = %q, want %q", resumed.ID, target.ID)
+	}
+	if agent.ProviderName != "openai" || agent.ProviderConfigKey != "openai" || agent.CurrentModel != "gpt-5.2" {
+		t.Fatalf("runtime identity = (%q, %q, %q), want openai/openai/gpt-5.2",
+			agent.ProviderName,
+			agent.ProviderConfigKey,
+			agent.CurrentModel,
+		)
+	}
+	if !api.IsProviderSetupRequired(agent.CurrentProvider) {
+		t.Fatalf("CurrentProvider = %T %q, want setup placeholder", agent.CurrentProvider, agent.CurrentProvider.Name())
+	}
+	msg, ok := api.ProviderSetupRequiredMessage(agent.CurrentProvider)
+	if !ok || !strings.Contains(msg, "OPENAI_API_KEY") || !strings.Contains(msg, "xelyon setup") {
+		t.Fatalf("setup message = %q, want OpenAI setup guidance", msg)
+	}
+	if _, err := agent.CurrentProvider.ChatWithTools(context.Background(), "", nil, agent.CurrentModel); err == nil ||
+		!strings.Contains(err.Error(), "provider setup required") {
+		t.Fatalf("placeholder ChatWithTools error = %v, want setup-required error", err)
 	}
 }
 
@@ -228,6 +439,205 @@ func TestAgent_ApplyLoadedSession_PreservesTaskLedgerWhenCurrentTaskStateContext
 
 	if agent.Runtime.TaskLedger.Snapshot().IsEmpty() {
 		t.Fatal("task ledger was reset on session load even though current task state context is disabled")
+	}
+}
+
+func TestAgent_ResumeStartupSession_FailureDoesNotPersistBootstrapSessionOnCleanup(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+	bootstrapID := agent.session.ID
+
+	if _, err := agent.ResumeStartupSession("missing-session"); err == nil {
+		t.Fatal("ResumeStartupSession() error = nil, want missing session error")
+	}
+	if agent.session == nil || agent.session.ID != bootstrapID {
+		t.Fatalf("agent.session.ID = %q, want bootstrap %s preserved after failure", agent.session.ID, bootstrapID)
+	}
+	agent.Cleanup()
+
+	sessions, err := agent.storage.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("len(ListSessions()) = %d, want 0; bootstrap session %s should not be persisted", len(sessions), bootstrapID)
+	}
+}
+
+func TestAgent_ResumeStartupSession_SwitchFailurePreservesBootstrapForMutation(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+	bootstrapID := agent.session.ID
+
+	loadedSession := history.NewSession("saved-model")
+	loadedSession.ProviderName = "not-a-provider"
+	loadedSession.ProviderConfigKey = "not-a-provider"
+	loadedSession.AddMessage("user", "saved request", "saved-model")
+	if err := agent.storage.Save(loadedSession); err != nil {
+		t.Fatalf("Save(loadedSession) error = %v", err)
+	}
+
+	_, err := agent.ResumeStartupSession(loadedSession.ID)
+	if err == nil {
+		t.Fatal("ResumeStartupSession() error = nil, want runtime switch failure")
+	}
+	if agent.session == nil || agent.session.ID != bootstrapID {
+		t.Fatalf("agent.session.ID = %q, want bootstrap %s preserved after switch failure", agent.session.ID, bootstrapID)
+	}
+
+	agent.appendSessionMessage("user", "after failed startup resume", agent.CurrentModel)
+	loadedBootstrap, err := agent.storage.Load(bootstrapID)
+	if err != nil {
+		t.Fatalf("Load(bootstrap) error = %v", err)
+	}
+	messages := loadedBootstrap.ToAPIMessages()
+	if len(messages) != 1 || messages[0].Content != "after failed startup resume" {
+		t.Fatalf("loaded bootstrap messages = %#v, want mutation persisted", messages)
+	}
+}
+
+func TestAgent_ResumeStartupSession_SuccessPersistsOnlyLoadedSessionOnCleanup(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+	bootstrapID := agent.session.ID
+
+	loadedSession := history.NewSession("gpt-5.4")
+	loadedSession.AddMessage("user", "saved request", "gpt-5.4")
+	if err := agent.storage.Save(loadedSession); err != nil {
+		t.Fatalf("Save(loadedSession) error = %v", err)
+	}
+
+	resumed, err := agent.ResumeStartupSession(loadedSession.ID)
+	if err != nil {
+		t.Fatalf("ResumeStartupSession() error = %v", err)
+	}
+	if resumed.ID != loadedSession.ID {
+		t.Fatalf("resumed.ID = %q, want %q", resumed.ID, loadedSession.ID)
+	}
+	if agent.session.ID != loadedSession.ID {
+		t.Fatalf("agent.session.ID = %q, want loaded session %q", agent.session.ID, loadedSession.ID)
+	}
+	agent.Cleanup()
+
+	sessions, err := agent.storage.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("len(ListSessions()) = %d, want only loaded session; bootstrap session %s should not be persisted", len(sessions), bootstrapID)
+	}
+	if sessions[0].ID != loadedSession.ID {
+		t.Fatalf("sessions[0].ID = %q, want loaded session %q", sessions[0].ID, loadedSession.ID)
+	}
+}
+
+func TestAgent_ResumeSessionCandidatesAndLastExcludeActiveSession(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{name: "openai"}, &out)
+
+	other := history.NewSession("gpt-5.4")
+	other.ProviderName = "openai"
+	other.ProviderConfigKey = "openai"
+	other.AddMessage("user", "other session", "gpt-5.4")
+	if err := agent.storage.Save(other); err != nil {
+		t.Fatalf("Save(other) error = %v", err)
+	}
+
+	activeID := agent.session.ID
+	agent.session.AddMessage("user", "active session", agent.CurrentModel)
+	if err := agent.storage.Save(agent.session); err != nil {
+		t.Fatalf("Save(active) error = %v", err)
+	}
+
+	candidates, err := agent.ResumeSessionCandidates(history.ResumeListOptions{All: true})
+	if err != nil {
+		t.Fatalf("ResumeSessionCandidates() error = %v", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.ID == activeID {
+			t.Fatalf("ResumeSessionCandidates() included active session %s: %#v", activeID, candidates)
+		}
+	}
+	if len(candidates) != 1 || candidates[0].ID != other.ID {
+		t.Fatalf("ResumeSessionCandidates() = %#v, want only other session %s", candidates, other.ID)
+	}
+
+	resumed, err := agent.ResumeLastSession(history.ResumeListOptions{All: true})
+	if err != nil {
+		t.Fatalf("ResumeLastSession() error = %v", err)
+	}
+	if resumed.ID != other.ID {
+		t.Fatalf("ResumeLastSession().ID = %q, want %q", resumed.ID, other.ID)
+	}
+}
+
+func TestAgent_ResumeStartupLastSession_SuccessDoesNotPersistBootstrapSession(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+	bootstrapID := agent.session.ID
+
+	loadedSession := history.NewSession("gpt-5.4")
+	loadedSession.AddMessage("user", "saved request", "gpt-5.4")
+	if err := agent.storage.Save(loadedSession); err != nil {
+		t.Fatalf("Save(loadedSession) error = %v", err)
+	}
+
+	resumed, err := agent.ResumeStartupLastSession(history.ResumeListOptions{})
+	if err != nil {
+		t.Fatalf("ResumeStartupLastSession() error = %v", err)
+	}
+	if resumed.ID != loadedSession.ID {
+		t.Fatalf("resumed.ID = %q, want %q", resumed.ID, loadedSession.ID)
+	}
+	agent.Cleanup()
+
+	sessions, err := agent.storage.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != loadedSession.ID {
+		t.Fatalf("sessions = %#v, want only loaded session %s; bootstrap %s must not persist", sessions, loadedSession.ID, bootstrapID)
+	}
+}
+
+func TestAgent_ResumeStartupLastSession_LoadFailureIsNotNoSessions(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{}, &out)
+
+	missingBodySession := history.NewSession("gpt-5.4")
+	missingBodySession.AddMessage("user", "saved request", "gpt-5.4")
+	if err := agent.storage.Save(missingBodySession); err != nil {
+		t.Fatalf("Save(missingBodySession) error = %v", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir() error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(home, ".xelyon", "history", missingBodySession.ID+".jsonl")); err != nil {
+		t.Fatalf("Remove(session body) error = %v", err)
+	}
+
+	_, err = agent.ResumeStartupLastSession(history.ResumeListOptions{})
+	if err == nil {
+		t.Fatal("ResumeStartupLastSession() error = nil, want load failure")
+	}
+	if errors.Is(err, history.ErrNoResumeSessions) {
+		t.Fatalf("ResumeStartupLastSession() error = %v, must not be ErrNoResumeSessions when metadata exists but load fails", err)
+	}
+	if !strings.Contains(err.Error(), "load session") {
+		t.Fatalf("ResumeStartupLastSession() error = %v, want load session", err)
 	}
 }
 

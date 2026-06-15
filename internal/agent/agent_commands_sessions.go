@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
@@ -39,7 +40,7 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 	if len(args) > 0 {
 		sessionID = args[0]
 	} else {
-		lastID, err := agent.storage.GetLastSession()
+		lastID, err := agent.storage.GetLastResumeSession(history.ResumeListOptions{})
 		if err != nil {
 			red.Fprintf(out, "No sessions found: %v\n", err)
 			return true
@@ -47,15 +48,35 @@ func handleLoadCommand(agent *Agent, args []string) bool {
 		sessionID = lastID
 	}
 
-	session, err := agent.storage.Load(sessionID)
+	session, err := agent.ResumeSession(sessionID)
 	if err != nil {
 		red.Fprintf(out, "Failed to load session: %v\n", err)
 		return true
 	}
 
-	agent.applyLoadedSession(session)
-
 	green.Fprintf(out, "📂 Loaded session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
+	return true
+}
+
+func handleResumeCommand(agent *Agent, args []string) bool {
+	out := agent.output()
+	opts, sessionID, err := parseResumeCommandArgs(args)
+	if err != nil {
+		yellow.Fprintf(out, "%v\n", err)
+		return true
+	}
+
+	var session *history.Session
+	if sessionID != "" {
+		session, err = agent.ResumeSession(sessionID)
+	} else {
+		session, err = agent.ResumeLastSession(opts)
+	}
+	if err != nil {
+		red.Fprintf(out, "Failed to resume session: %v\n", err)
+		return true
+	}
+	green.Fprintf(out, "📂 Resumed session %s (%d messages)\n", session.ID, len(session.ToAPIMessages()))
 	return true
 }
 
@@ -68,7 +89,7 @@ func handleSessionsCommand(agent *Agent) bool {
 		return true
 	}
 
-	sessions, err := agent.storage.ListSessions()
+	sessions, err := agent.storage.ListResumeSessions(history.ResumeListOptions{All: true})
 	if err != nil {
 		red.Fprintf(out, "Failed to list sessions: %v\n", err)
 		return true
@@ -93,4 +114,37 @@ func handleSessionsCommand(agent *Agent) bool {
 	}
 	_, _ = fmt.Fprintln(out)
 	return true
+}
+
+func parseResumeCommandArgs(args []string) (history.ResumeListOptions, string, error) {
+	var opts history.ResumeListOptions
+	var sessionID string
+	last := false
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		switch arg {
+		case "":
+			continue
+		case "--all":
+			opts.All = true
+		case "--last":
+			last = true
+			continue
+		default:
+			if strings.HasPrefix(arg, "-") || sessionID != "" {
+				return opts, "", fmt.Errorf("usage: /resume [--last|--all|session-id]")
+			}
+			sessionID = arg
+		}
+	}
+	if last && opts.All {
+		return opts, "", fmt.Errorf("--last cannot be used with --all")
+	}
+	if last && sessionID != "" {
+		return opts, "", fmt.Errorf("--last cannot be used with a session ID")
+	}
+	if opts.All && sessionID != "" {
+		return opts, "", fmt.Errorf("--all cannot be used with a session ID")
+	}
+	return opts, sessionID, nil
 }

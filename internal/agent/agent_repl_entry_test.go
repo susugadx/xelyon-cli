@@ -198,6 +198,41 @@ func TestRunInteractiveWithResumeWithConfig_ResumesLastSession(t *testing.T) {
 	}
 }
 
+func TestRunInteractiveWithResumeWithConfig_PrintsResumedRuntimeHeader(t *testing.T) {
+	disableColors(t)
+	withTempWorkdir(t)
+	t.Setenv("HOME", t.TempDir())
+
+	storage, err := history.NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage() error = %v", err)
+	}
+	session := history.NewSession("resumed-model")
+	session.ProviderName = "openai"
+	session.ProviderConfigKey = "openai"
+	session.AddMessage("user", "previous question", "resumed-model")
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	var out bytes.Buffer
+	withDefaultSTDIO(t, strings.NewReader(""), &out)
+
+	provider := &scriptedChatProvider{name: "openai", functionCalling: true}
+	cfg := newProjectMapDisabledConfig()
+	cfg.Paste.BracketedPaste = false
+
+	RunInteractiveWithResumeWithConfig("initial-model", provider, cfg, false)
+
+	output := out.String()
+	if !strings.Contains(output, "Provider: openai | Model: resumed-model") {
+		t.Fatalf("RunInteractiveWithResumeWithConfig() output = %q, want resumed runtime header", output)
+	}
+	if strings.Contains(output, "Provider: openai | Model: initial-model") {
+		t.Fatalf("RunInteractiveWithResumeWithConfig() output = %q, should not print bootstrap runtime header", output)
+	}
+}
+
 func TestRunInteractiveWithResumeWithConfig_FallsBackWhenNoSessionExists(t *testing.T) {
 	disableColors(t)
 	withTempWorkdir(t)
@@ -219,8 +254,8 @@ func TestRunInteractiveWithResumeWithConfig_FallsBackWhenNoSessionExists(t *test
 	if provider.callCount != 1 {
 		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
 	}
-	if cleanupCount.Load() != 1 {
-		t.Fatalf("cleanup count = %d, want 1", cleanupCount.Load())
+	if cleanupCount.Load() != 2 {
+		t.Fatalf("cleanup count = %d, want failed resume agent and fallback agent cleanup", cleanupCount.Load())
 	}
 	if !strings.Contains(out.String(), "No previous session found") {
 		t.Fatalf("RunInteractiveWithResumeWithConfig() output = %q, want fallback message", out.String())
@@ -253,8 +288,8 @@ func TestRunInteractiveWithResumeWithConfig_FallsBackWhenStorageInitFails(t *tes
 	if provider.callCount != 1 {
 		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
 	}
-	if cleanupCount.Load() != 1 {
-		t.Fatalf("cleanup count = %d, want 1", cleanupCount.Load())
+	if cleanupCount.Load() != 2 {
+		t.Fatalf("cleanup count = %d, want failed resume agent and fallback agent cleanup", cleanupCount.Load())
 	}
 	if !strings.Contains(out.String(), "Failed to initialize storage") {
 		t.Fatalf("RunInteractiveWithResumeWithConfig() output = %q, want storage init failure", out.String())
@@ -298,8 +333,8 @@ func TestRunInteractiveWithResumeWithConfig_FallsBackWhenSessionLoadFails(t *tes
 	if provider.callCount != 1 {
 		t.Fatalf("provider.callCount = %d, want 1", provider.callCount)
 	}
-	if cleanupCount.Load() != 1 {
-		t.Fatalf("cleanup count = %d, want 1", cleanupCount.Load())
+	if cleanupCount.Load() != 2 {
+		t.Fatalf("cleanup count = %d, want failed resume agent and fallback agent cleanup", cleanupCount.Load())
 	}
 	if !strings.Contains(out.String(), "Failed to load session") {
 		t.Fatalf("RunInteractiveWithResumeWithConfig() output = %q, want load failure", out.String())

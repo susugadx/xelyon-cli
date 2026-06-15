@@ -680,7 +680,7 @@ responses:
 - `compact_threshold=0` は auto 解決を意味し、API payload に `0` は送信しません。
 - `compact_threshold` の正数指定は `1000` 以上のみ有効です（`1..999` は validation error）。
 
-`/clear` はローカル履歴とローカルに保持している response ID を消しますが、provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
+`/new` と `/clear` は新しい session を開始し、ローカルで保持している response ID を新 session に引き継ぎません。`/clear` は TUI の表示 transcript も消します。ただし provider 側に既に保存された response object の remote delete は行いません。response state を provider 側に残したくない運用では、最初から `store: false` を設定してください。
 
 ### LSP連携設定 (`lsp`)
 

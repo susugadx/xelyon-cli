@@ -27,10 +27,9 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/detach-all",
 		"/compress",
 		"/plan",
-		"/save",
-		"/load",
-		"/sessions",
+		"/new",
 		"/clear",
+		"/resume",
 		"/history",
 		"/init",
 		"/exit",
@@ -44,7 +43,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		}
 	}
 
-	for _, hidden := range []string{"/providers", "/use", "/think", "/version", "/help"} {
+	for _, hidden := range []string{"/providers", "/use", "/think", "/version", "/help", "/save", "/load", "/sessions"} {
 		if containsCommandName(commands, hidden) {
 			t.Fatalf("%s should not be TUI-discoverable", hidden)
 		}

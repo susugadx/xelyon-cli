@@ -25,11 +25,27 @@ func (m Model) footerHeight() int {
 
 // NewModel は TUI Model を作成する。
 func NewModel(agent AgentInterface, initialContent string) Model {
-	return NewModelWithStartupSubmission(agent, initialContent, nil)
+	return NewModelWithStartupOptions(agent, initialContent, StartupOptions{})
 }
 
 // NewModelWithStartupSubmission は TUI 起動直後に送信する入力を持つ Model を作成する。
 func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, startupSubmission *StartupSubmission) Model {
+	return NewModelWithStartupOptions(agent, initialContent, StartupOptions{Submission: startupSubmission})
+}
+
+// StartupSessionPicker は TUI 起動直後に開く session picker の条件を表す。
+type StartupSessionPicker struct {
+	All bool
+}
+
+// StartupOptions は TUI 起動直後の追加動作を表す。
+type StartupOptions struct {
+	Submission    *StartupSubmission
+	SessionPicker *StartupSessionPicker
+}
+
+// NewModelWithStartupOptions は TUI 起動直後の追加動作を持つ Model を作成する。
+func NewModelWithStartupOptions(agent AgentInterface, initialContent string, opts StartupOptions) Model {
 	ti := textinput.New()
 	ti.Prompt = ""
 	ti.Placeholder = "Type your message..."
@@ -59,6 +75,7 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 		clipboard:      agent,
 		configAgent:    agent,
 		providerModels: agent,
+		sessions:       agent,
 		projectAgent:   agent,
 		reviewAgent:    reviewAgent,
 		skillCatalog:   skillCatalog,
@@ -77,7 +94,8 @@ func NewModelWithStartupSubmission(agent AgentInterface, initialContent string, 
 		statusLine:        statusSnapshot.LegacyLine,
 		statusSnapshot:    statusSnapshot,
 		workingDir:        currentWorkingDirForStatus(),
-		startupSubmission: startupSubmission,
+		startupSubmission: opts.Submission,
+		startupPicker:     opts.SessionPicker,
 	}
 }
 
@@ -91,6 +109,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if cmd := startupSubmissionCmd(m.startupSubmission); cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+	if m.startupPicker != nil {
+		cmds = append(cmds, openSessionPickerCmd(m.startupPicker.All, true))
 	}
 	return tea.Batch(cmds...)
 }
