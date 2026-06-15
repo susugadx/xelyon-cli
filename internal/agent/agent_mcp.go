@@ -16,6 +16,10 @@ import (
 // buildMCPToolsPrompt はMCPツール用のシステムプロンプトを構築する
 func buildMCPToolsPrompt(mcpManager *mcp.Manager) string {
 	mcpTools := mcpManager.GetTools()
+	return buildMCPToolsPromptForTools(mcpTools)
+}
+
+func buildMCPToolsPromptForTools(mcpTools []mcp.MCPTool) string {
 	if len(mcpTools) == 0 {
 		return ""
 	}
@@ -49,7 +53,7 @@ func mcpToolDefinitions(mcpTools []mcp.MCPTool) []mcptool.Definition {
 
 // configureMCPTools は MCP ツール定義を provider に 1 回だけ登録する（debugは OpenAI / Gemini のみ）
 func configureMCPTools(provider api.Provider, mcpTools []mcp.MCPTool, errOut io.Writer) {
-	if provider == nil || len(mcpTools) == 0 {
+	if provider == nil {
 		return
 	}
 

@@ -83,7 +83,7 @@ func (a *Agent) executeQuietToolResult(ctx context.Context, toolCall *tools.Tool
 	if repair {
 		execResult = a.maybeRepairGeminiApplyPatchExecution(ctx, toolCall, execResult, execCtx, true)
 	}
-	return execResult
+	return a.guardMCPToolExecutionResult(ctx, toolCall, execResult)
 }
 
 func (a *Agent) executeToolWithSpinner(ctx context.Context, toolCall *tools.ToolCall) (string, *tools.FileChange) {
@@ -145,11 +145,13 @@ func (a *Agent) executePublishedToolWithSpinner(ctx context.Context, toolCall *t
 		execResult := tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
 		a.ui().StopSpinner()
 		execResult = a.maybeRepairGeminiApplyPatchExecution(ctx, toolCall, execResult, execCtx, false)
+		execResult = a.guardMCPToolExecutionResult(ctx, toolCall, execResult)
 		tools.PublishResultWithContext(execCtx, toolCall, execResult)
 		return execResult
 	}
 
 	execResult := tools.ExecuteUnpublishedWithContext(execCtx, toolCall)
+	execResult = a.guardMCPToolExecutionResult(ctx, toolCall, execResult)
 	tools.PublishResultWithContext(execCtx, toolCall, execResult)
 	a.ui().StopSpinner()
 	return execResult

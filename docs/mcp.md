@@ -256,6 +256,16 @@ MCPサーバーが提供するツールの中から、使用するツールを�
 > `include` / `exclude` のツール名はMCPサーバーが公開する raw name をそのまま使用します（`mcp_` プレフィックスなし）。
 > XELYON がプロンプトと provider に公開する実行名は `mcp_<server>_<tool>` 形式です。同じ実行名に正規化される重複ツールは先に見つかったものを登録し、後続は skipped として扱います。
 
+### モデルに公開する MCP ツール数の上限
+
+XELYON は MCP サーバーへ接続して取得したツールのうち、モデルに公開する current surface を自動で絞ります。
+既定では最大80ツール、推定32,000トークン、1ツールあたり128KiBの schema までを provider 定義、system prompt、request context に載せます。
+上限を超えたツールは実行名も current surface から除外されるため、モデルから直接呼び出されません。
+
+選定はサーバー名とツール名で deterministic に並べ、複数サーバーがある場合はサーバー間で round-robin します。
+省略が発生した場合は stderr に warning を出します。
+必要なツールが省略される場合は、新しい設定項目ではなく `tools.include` / `tools.exclude` で MCP サーバー側の公開ツールを絞ってください。
+
 #### 利用可能なツール名の確認
 
 MCPサーバーが提供するツール一覧はXELYON起動時のログで確認できます:
@@ -499,6 +509,15 @@ MCPのデフォルト timeout は、起動・接続・`tools/list` が120秒、�
 - ツール実行 timeout: `internal/mcptool` が `tools.ExecutionContext.EffectiveContext()` を親にして管理します。ユーザー操作の cancel や request deadline が先に来た場合は、`toolTimeoutSeconds` より優先されます。
 - 起動時の connect / `ListTools` timeout: `internal/mcp` がサーバーごとの接続と tool listing を管理します。caller context の deadline が `startupTimeoutSeconds` より短い場合はそちらが優先されます。
 - `startupTimeoutSeconds` / `toolTimeoutSeconds` はサーバーごとに設定できます。未指定時は上記デフォルト、最大値は3600秒です。
+
+### MCP ツール結果が大きすぎる
+
+MCP ツール結果が64KiBを超える場合、XELYON は結果を履歴へ保存する前に compact します。
+履歴、session conversation、provider へ返す `function_call_output`、画面表示には redaction 済みの head/tail excerpt と metadata だけが残ります。
+全文は `provider_history_reduction.raw_output_artifacts.mode: apply` のときだけ、既存の raw output artifact store に `surface=mcp_tool_result` として保存を試みます。
+
+secret-like な内容、store disabled、quota 超過、artifact 作成失敗などでは全文保存を行わず、placeholder に `full_output_omitted_reason` を記録します。
+この runtime guard は provider history reduction より前に動作するため、大きな MCP 結果がそのまま履歴や provider payload に入り続けることを防ぎます。
 
 ## セキュリティ
 

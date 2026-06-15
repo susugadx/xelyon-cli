@@ -62,7 +62,7 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 	toolVisibility := resolveToolVisibilityPolicyWithConfig(agent.ProviderName, model, agent.cfg(), toolSurfacePhaseNormal, toolVisibilityOptions{
 		allowSubAgents: allowSubAgents,
 	})
-	agent.registry().SetExcludedTools(toolVisibility.excluded())
+	agent.registry().SetExcludedTools(agent.excludedToolsForVisibilityPolicy(toolVisibility))
 
 	// 初期ユーザーメッセージをHistoryに追加
 	agent.History = append(agent.History, api.Message{
