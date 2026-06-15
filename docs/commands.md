@@ -24,6 +24,23 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 | `azure` | `--deployment`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability`, `--print-config` | `--print-request` | `AZURE_OPENAI_BASE_URL` is a resource v1 base URL; smoke uses `<normalized_base_url>/responses` | response ID, token usage, cost, and retention chain metadata when returned |
 | `bedrock` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke` | `--capabilities`, `--require-capability` | `--print-request` | AWS region / credentials select Bedrock runtime route; request preview is credential-independent | AWS request ID, token usage, and cost when returned; partial usage makes total cost unavailable |
 
+### `xelyon doctor mcp`
+
+MCP の local config と tool discovery を診断します。デフォルトでは local-only で、`~/.xelyon/mcp.json` が存在する場合だけ読み、ファイル作成や MCP server process の起動は行いません。`mcp.enabled` / `mcp.headless`、server 数、command allowlist、timeout、approval、disabled、include / exclude を確認します。
+
+`--connect` を付けると、対象 MCP server を起動して initialize / `tools/list` まで確認します。MCP tool の `tools/call` は実行しません。`--tools` は `--connect` と組み合わせて raw tool name、XELYON の exported tool name、visible / skipped reason、approval を表示します。`--server` で 1 server に絞れます。JSON 出力は `--json` を使います。
+
+```bash
+xelyon doctor mcp
+xelyon doctor mcp --json
+xelyon doctor mcp --server github
+xelyon doctor mcp --connect
+xelyon doctor mcp --connect --tools
+xelyon doctor mcp --connect --server github --json
+```
+
+`doctor mcp` は env value と raw args を出力しません。表示するのは command、arg 数、env key 名、timeout、approval、tool 名です。
+
 ### `xelyon doctor deepseek`
 
 DeepSeek provider の `DEEPSEEK_API_KEY`、`DEEPSEEK_API_URL`、provider 登録、model / `catalog_model` 解決、Chat Completions route、thinking request config、function calling 設定、token / pricing metadata を確認します。route は常に `chat_completions` です。`--smoke` を付けると live text request を送信し、content、usage、概算 cost を表示します。function calling まで確認する場合は `--tool-smoke` を使い、dummy tool call を強制します。`--print-request` を付けると live request を送らず、選択した smoke request の endpoint、redacted headers、request body を `request_preview` に表示します。

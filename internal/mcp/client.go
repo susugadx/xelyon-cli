@@ -76,6 +76,27 @@ type toolRegistrationSummary struct {
 	skipped    int
 }
 
+type toolSkipReason string
+
+const (
+	toolSkipNone       toolSkipReason = ""
+	toolSkipFiltered   toolSkipReason = "filtered"
+	toolSkipServerDeny toolSkipReason = "server_deny"
+	toolSkipToolDeny   toolSkipReason = "tool_deny"
+	toolSkipCollision  toolSkipReason = "collision"
+)
+
+type toolRegistrationDecision struct {
+	tool         *mcp.Tool
+	exportedName string
+	approval     mcpapproval.Mode
+	skipReason   toolSkipReason
+}
+
+func (d toolRegistrationDecision) registered() bool {
+	return d.skipReason == toolSkipNone
+}
+
 func (c ServerConfig) startupTimeoutDuration() time.Duration {
 	return mcpTimeoutDuration(c.StartupTimeoutSeconds, defaultMCPServerOperationTimeout, maxMCPServerOperationTimeout)
 }

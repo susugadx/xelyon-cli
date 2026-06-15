@@ -42,6 +42,9 @@ var (
 	doctorGeminiWebSearchSmokeFlag             bool
 	doctorKimiImageSmokeFlag                   bool
 	doctorKimiWebSearchSmokeFlag               bool
+	doctorMCPConnectFlag                       bool
+	doctorMCPServerFlag                        string
+	doctorMCPToolsFlag                         bool
 	doctorTimeoutFlag                          = defaultDoctorTimeout
 	doctorJSONFlag                             bool
 	doctorPrintConfigFlag                      bool
@@ -64,6 +67,7 @@ func newDoctorCommand() *cobra.Command {
 	cmd.AddCommand(newGeminiDoctorCommand())
 	cmd.AddCommand(newGroqDoctorCommand())
 	cmd.AddCommand(newKimiDoctorCommand())
+	cmd.AddCommand(newMCPDoctorCommand())
 	cmd.AddCommand(newOllamaDoctorCommand())
 	cmd.AddCommand(newOpenAIDoctorCommand())
 	cmd.AddCommand(newOpenAISubscriptionDoctorCommand())

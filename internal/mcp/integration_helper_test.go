@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,6 +30,7 @@ func runMCPHelperServer() error {
 		Name:    "xelyon-mcp-helper",
 		Version: "test",
 	}, nil)
+	addMCPHelperFailureMiddleware(server)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "echo",
@@ -54,4 +56,28 @@ func runMCPHelperServer() error {
 	})
 
 	return server.Run(context.Background(), &sdkmcp.StdioTransport{})
+}
+
+func addMCPHelperFailureMiddleware(server *sdkmcp.Server) {
+	failMethod := os.Getenv("GO_WANT_XELYON_MCP_HELPER_FAIL")
+	if failMethod == "" {
+		return
+	}
+	server.AddReceivingMiddleware(func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
+		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
+			if method == failMethod {
+				return nil, fmt.Errorf("helper %s failed with arg %s env %s", method, mcpHelperSecretArg(), os.Getenv("MCP_SECRET_ENV"))
+			}
+			return next(ctx, method, req)
+		}
+	})
+}
+
+func mcpHelperSecretArg() string {
+	for _, arg := range os.Args {
+		if strings.HasPrefix(arg, "--secret=") {
+			return strings.TrimPrefix(arg, "--secret=")
+		}
+	}
+	return ""
 }

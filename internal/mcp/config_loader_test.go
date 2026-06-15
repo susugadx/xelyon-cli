@@ -41,6 +41,12 @@ func TestLoadMCPConfig_CreatesDefault(t *testing.T) {
 	}
 }
 
+func TestLoadMCPConfigRejectsEmptyHomeDir(t *testing.T) {
+	if _, err := loadMCPConfig(" "); err == nil {
+		t.Fatal("loadMCPConfig() error = nil, want empty home directory rejection")
+	}
+}
+
 func TestManagerLoadConfig_CreatedDefaultDoesNotConnectActiveServer(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)

@@ -95,6 +95,21 @@ xelyon
 # MCPツールが自動的に読み込まれて、AIに提示されます
 ```
 
+設定だけを確認する場合は `doctor mcp` を使います。
+
+```bash
+# local-only。mcp.json を新規作成せず、MCP server process も起動しない
+xelyon doctor mcp
+
+# initialize / tools/list まで確認する。tools/call は実行しない
+xelyon doctor mcp --connect
+
+# tool 名、exported name、visible / skipped reason、approval も表示
+xelyon doctor mcp --connect --tools
+```
+
+`doctor mcp` は env value と raw args を表示しません。表示するのは command、arg 数、env key 名、timeout、approval、tool 名です。
+
 ## 設定項目
 
 ### `command` (必須)

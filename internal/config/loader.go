@@ -18,6 +18,23 @@ func loadConfig() (*Config, error) {
 		return bootstrapMissingConfig()
 	}
 
+	return loadConfigFromPath(configPath)
+}
+
+func loadConfigReadOnly() (*Config, error) {
+	configPath, err := getConfigPath()
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return defaultMissingConfig(), nil
+	}
+
+	return loadConfigFromPath(configPath)
+}
+
+func loadConfigFromPath(configPath string) (*Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -27,13 +44,18 @@ func loadConfig() (*Config, error) {
 }
 
 func bootstrapMissingConfig() (*Config, error) {
-	cfg := DefaultConfig()
-	cfg.providerModelsStore = normalizeProviderModelStore(providerModelSectionStateAbsent, nil)
-	cfg.refreshEffectiveProviderModels()
+	cfg := defaultMissingConfig()
 	if err := SaveConfig(cfg); err != nil {
 		return cfg, nil
 	}
 	return cfg, nil
+}
+
+func defaultMissingConfig() *Config {
+	cfg := DefaultConfig()
+	cfg.providerModelsStore = normalizeProviderModelStore(providerModelSectionStateAbsent, nil)
+	cfg.refreshEffectiveProviderModels()
+	return cfg
 }
 
 func loadConfigFromData(data []byte) (*Config, error) {

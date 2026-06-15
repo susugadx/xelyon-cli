@@ -35,6 +35,11 @@ func LoadConfig() (*Config, error) {
 	return loadConfig()
 }
 
+// LoadConfigReadOnly は設定ファイルを読み込むが、存在しない場合もファイルを作成しない。
+func LoadConfigReadOnly() (*Config, error) {
+	return loadConfigReadOnly()
+}
+
 // LoadConfigWithValidation は設定ファイルを読み込み、バリデーションを実行
 // バリデーションエラーがあっても設定は返す（警告のみ）
 func LoadConfigWithValidation() (*Config, ValidationResult, error) {

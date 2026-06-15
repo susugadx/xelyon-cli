@@ -96,6 +96,9 @@ func resetRootFlagsForTest() {
 	doctorGeminiWebSearchSmokeFlag = false
 	doctorKimiImageSmokeFlag = false
 	doctorKimiWebSearchSmokeFlag = false
+	doctorMCPConnectFlag = false
+	doctorMCPServerFlag = ""
+	doctorMCPToolsFlag = false
 	doctorTimeoutFlag = defaultDoctorTimeout
 	doctorJSONFlag = false
 	doctorPrintConfigFlag = false
