@@ -78,6 +78,9 @@ var exitProcess = os.Exit
 
 // Cleanup はエージェントのリソースをクリーンアップ
 func (a *Agent) Cleanup() {
+	if a != nil && a.signalCleanup != nil {
+		a.signalCleanup()
+	}
 	if cleanupHook != nil {
 		cleanupHook()
 	}

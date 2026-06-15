@@ -400,6 +400,9 @@ func TestRootResumeWithNoSessionsStillStartsResumeTUI(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var resumeCalled bool
+	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		t.Fatalf("runTUI called with model %q, want resume preload path", model)
+	}
 	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
 		resumeCalled = true
 		assertExplicitOllamaRuntime(t, model, provider)
@@ -420,6 +423,9 @@ func TestResumeCommandLastWithNoSessionsStillStartsResumeTUI(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var resumeCalled bool
+	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		t.Fatalf("runTUI called with model %q, want resume preload path", model)
+	}
 	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
 		resumeCalled = true
 		assertExplicitOllamaRuntime(t, model, provider)
@@ -432,6 +438,78 @@ func TestResumeCommandLastWithNoSessionsStillStartsResumeTUI(t *testing.T) {
 	}
 	if !resumeCalled {
 		t.Fatal("expected resume --last to reach TUI resume path")
+	}
+}
+
+func TestRootResumeWithUnavailableStorageStartsBlankTUI(t *testing.T) {
+	withRootCommandTest(t)
+	homeFile := filepath.Join(t.TempDir(), "home-file")
+	if err := os.WriteFile(homeFile, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("WriteFile(homeFile) error = %v", err)
+	}
+	t.Setenv("HOME", homeFile)
+
+	var tuiCalled bool
+	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		tuiCalled = true
+		assertExplicitOllamaRuntime(t, model, provider)
+	}
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		t.Fatalf("runTUIWithResume called with model %q, want blank TUI path", model)
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"--resume", "--provider", "ollama", "--model", "qwen2.5-coder:14b", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !tuiCalled {
+		t.Fatal("expected root --resume to fall back to blank TUI path")
+	}
+}
+
+func TestResumeCommandLastWithUnavailableStorageStartsBlankTUI(t *testing.T) {
+	withRootCommandTest(t)
+	homeFile := filepath.Join(t.TempDir(), "home-file")
+	if err := os.WriteFile(homeFile, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("WriteFile(homeFile) error = %v", err)
+	}
+	t.Setenv("HOME", homeFile)
+
+	var tuiCalled bool
+	runTUI = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		tuiCalled = true
+		assertExplicitOllamaRuntime(t, model, provider)
+	}
+	runTUIWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) error {
+		t.Fatalf("runTUIWithResume called with model %q, want blank TUI path", model)
+		return nil
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--last", "--provider", "ollama", "--model", "qwen2.5-coder:14b", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !tuiCalled {
+		t.Fatal("expected resume --last to fall back to blank TUI path")
+	}
+}
+
+func TestResumeCommandDirectWithUnavailableStorageReturnsError(t *testing.T) {
+	withRootCommandTest(t)
+	homeFile := filepath.Join(t.TempDir(), "home-file")
+	if err := os.WriteFile(homeFile, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("WriteFile(homeFile) error = %v", err)
+	}
+	t.Setenv("HOME", homeFile)
+
+	rootCmd.SetArgs([]string{"resume", "session-42", "--provider", "ollama", "--model", "qwen2.5-coder:14b", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want unavailable storage error")
+	}
+	if !strings.Contains(err.Error(), "resume storage unavailable") {
+		t.Fatalf("Execute() error = %v, want resume storage unavailable", err)
 	}
 }
 

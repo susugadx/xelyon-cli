@@ -48,7 +48,7 @@ func newResumeCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
+				return runTUIForResumeRuntime(runtime, autoApprove)
 			}
 			if len(args) > 0 {
 				runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{sessionID: args[0]})

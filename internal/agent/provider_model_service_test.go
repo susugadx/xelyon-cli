@@ -944,6 +944,41 @@ func TestSwitchProviderModel_ReturnsOutcomeWithoutPrinting(t *testing.T) {
 	}
 }
 
+func TestSwitchProviderModel_RejectsSetupRequiredProvider(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+
+	cfg := newProjectMapDisabledConfig()
+	var out bytes.Buffer
+	agent := &Agent{
+		ProviderName:      "ollama",
+		ProviderConfigKey: "ollama",
+		CurrentModel:      "qwen2.5-coder:14b",
+		CurrentProvider:   &mockProvider{name: "ollama"},
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("qwen2.5-coder:14b"),
+		},
+	}
+
+	_, err := agent.SwitchProviderModel("openai", "gpt-5.2")
+	if err == nil {
+		t.Fatal("SwitchProviderModel() error = nil, want setup-required error")
+	}
+	if !strings.Contains(err.Error(), "OPENAI_API_KEY") || !strings.Contains(err.Error(), "xelyon setup") {
+		t.Fatalf("SwitchProviderModel() error = %v, want setup guidance", err)
+	}
+	if agent.ProviderName != "ollama" || agent.ProviderConfigKey != "ollama" || agent.CurrentModel != "qwen2.5-coder:14b" {
+		t.Fatalf("runtime identity = (%q, %q, %q), want unchanged ollama/ollama/qwen2.5-coder:14b",
+			agent.ProviderName,
+			agent.ProviderConfigKey,
+			agent.CurrentModel,
+		)
+	}
+}
+
 func TestSwitchModelForCurrentProvider_ClearsRemoteContinuationButKeepsContext(t *testing.T) {
 	withConfigCommandHooks(t)
 

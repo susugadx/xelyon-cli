@@ -127,7 +127,7 @@ Examples:
 				if err != nil {
 					return err
 				}
-				return runTUIWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
+				return runTUIForResumeRuntime(runtime, autoApprove)
 			}
 			return nil
 		case executionModeInteractive:

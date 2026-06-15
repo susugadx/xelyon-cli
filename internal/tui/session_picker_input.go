@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -105,7 +106,35 @@ func (m Model) submitSessionPickerSelection() (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	if m.rejectCrossWorkingDirSessionSelection(row) {
+		return m, nil
+	}
 	return m.resumeSessionByID(row.ID)
+}
+
+func (m *Model) rejectCrossWorkingDirSessionSelection(row SessionCandidate) bool {
+	if m.sessionPicker == nil || m.sessionPicker.all {
+		return false
+	}
+	currentDir := normalizeSessionPickerWorkingDir(m.workingDir)
+	sessionDir := normalizeSessionPickerWorkingDir(row.WorkingDir)
+	if currentDir == "" || sessionDir == "" || currentDir == sessionDir {
+		return false
+	}
+	m.setTransientStatus("Cannot resume session from a different working directory: " + row.WorkingDir)
+	m.chromeDirty = true
+	return true
+}
+
+func normalizeSessionPickerWorkingDir(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	return filepath.Clean(path)
 }
 
 func (m Model) resumeSessionByID(sessionID string) (Model, tea.Cmd) {
@@ -124,6 +153,7 @@ func (m Model) resumeSessionByID(sessionID string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.sessionPicker = nil
+	m.clearPendingAttachmentsForSessionSwitch()
 	m.resetVisibleTranscript()
 	m.appendSystemNotice("Resumed session " + shortSessionID(sessionID))
 	m.refreshStatusLine()
@@ -142,6 +172,7 @@ func (m Model) resumeLastSession(all bool) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.sessionPicker = nil
+	m.clearPendingAttachmentsForSessionSwitch()
 	m.resetVisibleTranscript()
 	m.appendSystemNotice("Resumed session " + shortSessionID(session.ID))
 	m.refreshStatusLine()
@@ -158,10 +189,16 @@ func (m Model) startNewSessionFromCommand(clearVisible bool) (Model, tea.Cmd) {
 	if clearVisible {
 		m.resetVisibleTranscript()
 	}
+	m.clearPendingAttachmentsForSessionSwitch()
 	m.appendSystemNotice("Started new session " + shortSessionID(sessionID))
 	m.refreshStatusLine()
 	m.setTransientStatus("New session started")
 	return m, nil
+}
+
+func (m *Model) clearPendingAttachmentsForSessionSwitch() {
+	m.clearAttachments()
+	m.syncComposerLayout()
 }
 
 func (m *Model) closeSessionPicker(status string) {

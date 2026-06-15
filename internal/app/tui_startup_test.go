@@ -182,6 +182,44 @@ func TestRunTUIWithConfig_PreservesAutoApproveArgument(t *testing.T) {
 	}
 }
 
+func TestRunTUIWithConfig_StorageUnavailableStartsBlankTUI(t *testing.T) {
+	disableColors(t)
+	homeFile := filepath.Join(t.TempDir(), "home-file")
+	if err := os.WriteFile(homeFile, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("WriteFile(homeFile) error = %v", err)
+	}
+	t.Setenv("HOME", homeFile)
+
+	originalRunner := runTUIProgram
+	defer func() { runTUIProgram = originalRunner }()
+	originalAdapterFactory := newTUIAdapter
+	defer func() { newTUIAdapter = originalAdapterFactory }()
+
+	var runnerCalled atomic.Int32
+	var gotInitialContent string
+	runTUIProgram = func(agent tui.AgentInterface, initialContent string, onProgram func(*tea.Program)) {
+		runnerCalled.Add(1)
+		gotInitialContent = initialContent
+		onProgram(nil)
+	}
+	newTUIAdapter = func(ag *agentpkg.Agent, sendMsg func(tui.AppendMessageMsg)) *tuiagent.TUIAdapter {
+		return tuiagent.NewTUIAdapter(ag, sendMsg)
+	}
+
+	RunTUIWithConfig("test-model", &mockProvider{name: "openai"}, newProjectMapDisabledConfig(), false)
+
+	if runnerCalled.Load() != 1 {
+		t.Fatalf("runTUIProgram called %d times, want 1", runnerCalled.Load())
+	}
+	stripped := stripANSI(gotInitialContent)
+	if !strings.Contains(stripped, "Ready · / opens commands") {
+		t.Fatalf("initial content missing blank TUI header:\n%s", stripped)
+	}
+	if strings.Contains(stripped, "No previous session found") {
+		t.Fatalf("initial content should not use resume preload fallback:\n%s", stripped)
+	}
+}
+
 func TestRunTUIWithResumeWithConfig_LoadsLastSession(t *testing.T) {
 	disableColors(t)
 	withTempWorkdir(t)

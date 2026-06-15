@@ -226,7 +226,7 @@ func (a *Agent) switchRuntimeForLoadedSession(session *history.Session) error {
 		}
 		return nil
 	}
-	outcome, err := a.SwitchProviderModel(providerKey, model)
+	outcome, err := a.switchProviderModelForResume(providerKey, model)
 	if err != nil {
 		return fmt.Errorf("switch to session provider/model: %w", err)
 	}

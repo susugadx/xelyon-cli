@@ -331,6 +331,47 @@ func TestAgent_ResumeSession_SameProviderValidatesSavedModel(t *testing.T) {
 	}
 }
 
+func TestAgent_ResumeSession_SetupRequiredSavedProviderUsesUnavailableProvider(t *testing.T) {
+	disableColors(t)
+	t.Setenv("OPENAI_API_KEY", "")
+
+	var out bytes.Buffer
+	agent := newChatRequestTestAgent(t, &conversationStateTestProvider{name: "ollama"}, &out)
+	target := history.NewSession("gpt-5.2")
+	target.ProviderName = "OpenAI"
+	target.ProviderConfigKey = "openai"
+	target.AddMessage("user", "saved request", "gpt-5.2")
+	if err := agent.storage.Save(target); err != nil {
+		t.Fatalf("Save(target) error = %v", err)
+	}
+
+	resumed, err := agent.ResumeSession(target.ID)
+	if err != nil {
+		t.Fatalf("ResumeSession() error = %v", err)
+	}
+	if resumed.ID != target.ID {
+		t.Fatalf("resumed.ID = %q, want %q", resumed.ID, target.ID)
+	}
+	if agent.ProviderName != "openai" || agent.ProviderConfigKey != "openai" || agent.CurrentModel != "gpt-5.2" {
+		t.Fatalf("runtime identity = (%q, %q, %q), want openai/openai/gpt-5.2",
+			agent.ProviderName,
+			agent.ProviderConfigKey,
+			agent.CurrentModel,
+		)
+	}
+	if !api.IsProviderSetupRequired(agent.CurrentProvider) {
+		t.Fatalf("CurrentProvider = %T %q, want setup placeholder", agent.CurrentProvider, agent.CurrentProvider.Name())
+	}
+	msg, ok := api.ProviderSetupRequiredMessage(agent.CurrentProvider)
+	if !ok || !strings.Contains(msg, "OPENAI_API_KEY") || !strings.Contains(msg, "xelyon setup") {
+		t.Fatalf("setup message = %q, want OpenAI setup guidance", msg)
+	}
+	if _, err := agent.CurrentProvider.ChatWithTools(context.Background(), "", nil, agent.CurrentModel); err == nil ||
+		!strings.Contains(err.Error(), "provider setup required") {
+		t.Fatalf("placeholder ChatWithTools error = %v, want setup-required error", err)
+	}
+}
+
 func TestAgent_ApplyLoadedSession_ClearsModelFacingTaskLedger(t *testing.T) {
 	disableColors(t)
 

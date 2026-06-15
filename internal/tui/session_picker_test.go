@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -62,7 +63,7 @@ func TestResumeCommandWithIDResumesDirectly(t *testing.T) {
 	}
 }
 
-func TestResumeAllPickerResumesDifferentWorkingDir(t *testing.T) {
+func TestResumeAllPickerAllowsDifferentWorkingDir(t *testing.T) {
 	currentDir := filepath.Join(t.TempDir(), "current")
 	otherDir := filepath.Join(t.TempDir(), "other")
 	agent := &stubAgent{
@@ -90,6 +91,92 @@ func TestResumeAllPickerResumesDifferentWorkingDir(t *testing.T) {
 	}
 	if m.sessionPicker != nil {
 		t.Fatal("session picker should close after --all resume")
+	}
+}
+
+func TestResumePickerRejectsDifferentWorkingDirWhenNotAll(t *testing.T) {
+	currentDir := filepath.Join(t.TempDir(), "current")
+	otherDir := filepath.Join(t.TempDir(), "other")
+	agent := &stubAgent{
+		statusLine: "ready",
+		sessionCandidates: []SessionCandidate{
+			{ID: "other-session", Preview: "other", WorkingDir: otherDir, LastModified: time.Now()},
+		},
+	}
+	m := newModelWithViewport(agent)
+	m.workingDir = currentDir
+
+	var cmd tea.Cmd
+	m, cmd = m.openSessionPicker(false, false)
+	if cmd != nil {
+		t.Fatalf("openSessionPicker cmd = %T, want nil", cmd)
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatalf("resume selection cmd = %T, want nil", cmd)
+	}
+	if len(agent.resumedSessionIDs) != 0 {
+		t.Fatalf("resumedSessionIDs = %#v, want none", agent.resumedSessionIDs)
+	}
+	if m.sessionPicker == nil {
+		t.Fatal("session picker should stay open after cross-working-dir rejection")
+	}
+	if !strings.Contains(m.transientStatus, "different working directory") || !strings.Contains(m.transientStatus, otherDir) {
+		t.Fatalf("transientStatus = %q, want cross-working-dir rejection for %q", m.transientStatus, otherDir)
+	}
+}
+
+func TestResumeCommandWithIDClearsPendingAttachmentsOnSuccess(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready"}
+	m := newModelWithViewport(agent)
+	dir := t.TempDir()
+	attachmentPath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
+	if ok := m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: attachmentPath}); !ok {
+		t.Fatal("appendAttachment() = false, want true")
+	}
+	m.textInput.SetValue("/resume session-42")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatalf("cmd = %T, want nil", cmd)
+	}
+	if len(agent.resumedSessionIDs) != 1 || agent.resumedSessionIDs[0] != "session-42" {
+		t.Fatalf("resumedSessionIDs = %#v, want session-42", agent.resumedSessionIDs)
+	}
+	if len(m.attachments) != 0 {
+		t.Fatalf("attachments len = %d, want cleared", len(m.attachments))
+	}
+	if got := m.textInput.Value(); got != "" {
+		t.Fatalf("textInput = %q, want cleared", got)
+	}
+}
+
+func TestResumeCommandFailureKeepsPendingAttachments(t *testing.T) {
+	agent := &stubAgent{statusLine: "ready", sessionErr: errors.New("resume failed")}
+	m := newModelWithViewport(agent)
+	dir := t.TempDir()
+	attachmentPath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
+	if ok := m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: attachmentPath}); !ok {
+		t.Fatal("appendAttachment() = false, want true")
+	}
+	m.textInput.SetValue("/resume session-42")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatalf("cmd = %T, want nil", cmd)
+	}
+	if len(agent.resumedSessionIDs) != 0 {
+		t.Fatalf("resumedSessionIDs = %#v, want none", agent.resumedSessionIDs)
+	}
+	if len(m.attachments) != 1 {
+		t.Fatalf("attachments len = %d, want preserved", len(m.attachments))
+	}
+	if got := m.textInput.Value(); got != "" {
+		t.Fatalf("textInput = %q, want handled command input cleared", got)
 	}
 }
 
@@ -275,7 +362,7 @@ func TestStartupSessionPickerSelectionUsesStartupResume(t *testing.T) {
 	}
 }
 
-func TestStartupResumeAllPickerResumesDifferentWorkingDir(t *testing.T) {
+func TestStartupResumeAllPickerAllowsDifferentWorkingDir(t *testing.T) {
 	currentDir := filepath.Join(t.TempDir(), "current")
 	otherDir := filepath.Join(t.TempDir(), "other")
 	agent := &stubAgent{
@@ -314,11 +401,18 @@ func TestNewAndClearSessionVisibility(t *testing.T) {
 
 	m := newModelWithViewport(agent)
 	m.appendSystemNotice("existing")
+	newAttachment := writeTempFile(t, t.TempDir(), "new.txt", []byte("pending"))
+	if ok := m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: newAttachment}); !ok {
+		t.Fatal("appendAttachment() = false, want true")
+	}
 	m.textInput.SetValue("/new")
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	if len(agent.startedSessionIDs) != 1 {
 		t.Fatalf("startedSessionIDs len = %d, want 1", len(agent.startedSessionIDs))
+	}
+	if len(m.attachments) != 0 {
+		t.Fatalf("/new should clear pending attachments, got %d", len(m.attachments))
 	}
 	if !containsMessage(m.messages, "existing") {
 		t.Fatalf("/new should preserve visible transcript, got %#v", m.messages)

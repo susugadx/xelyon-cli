@@ -12,6 +12,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 )
 
+var errResumeRuntimeStorageUnavailable = errors.New("resume storage unavailable")
+
 type resumeRuntimeTarget struct {
 	sessionID string
 	last      bool
@@ -21,6 +23,11 @@ type interactiveRuntimeSelection struct {
 	cfg      *config.Config
 	model    string
 	provider api.Provider
+}
+
+type resumeRuntimeSelection struct {
+	interactiveRuntimeSelection
+	preloadLastSession bool
 }
 
 func loadInteractiveConfigSelection(cmd *cobra.Command) *config.Config {
@@ -52,15 +59,26 @@ func loadInteractiveRuntimeSelection(cmd *cobra.Command) (interactiveRuntimeSele
 	return loadRuntimeSelectionForMode(cmd, executionModeInteractive)
 }
 
-func loadResumeRuntimeSelection(cmd *cobra.Command, target resumeRuntimeTarget) (interactiveRuntimeSelection, error) {
+func loadResumeRuntimeSelection(cmd *cobra.Command, target resumeRuntimeTarget) (resumeRuntimeSelection, error) {
 	cfg := loadInteractiveConfigSelection(cmd)
 
 	session, err := loadResumeRuntimeSession(target)
 	if err != nil {
 		if target.last && errors.Is(err, history.ErrNoResumeSessions) {
-			return selectInteractiveRuntime(cfg)
+			runtime, err := selectInteractiveRuntime(cfg)
+			return resumeRuntimeSelection{
+				interactiveRuntimeSelection: runtime,
+				preloadLastSession:          true,
+			}, err
 		}
-		return interactiveRuntimeSelection{}, err
+		if target.last && errors.Is(err, errResumeRuntimeStorageUnavailable) {
+			runtime, err := selectInteractiveRuntime(cfg)
+			return resumeRuntimeSelection{
+				interactiveRuntimeSelection: runtime,
+				preloadLastSession:          false,
+			}, err
+		}
+		return resumeRuntimeSelection{}, err
 	}
 
 	providerName := strings.TrimSpace(session.ProviderConfigKey)
@@ -68,7 +86,11 @@ func loadResumeRuntimeSelection(cmd *cobra.Command, target resumeRuntimeTarget) 
 		providerName = strings.TrimSpace(session.ProviderName)
 	}
 	if providerName == "" {
-		return selectInteractiveRuntime(cfg)
+		runtime, err := selectInteractiveRuntime(cfg)
+		return resumeRuntimeSelection{
+			interactiveRuntimeSelection: runtime,
+			preloadLastSession:          target.last,
+		}, err
 	}
 
 	model := strings.TrimSpace(session.Model)
@@ -79,22 +101,33 @@ func loadResumeRuntimeSelection(cmd *cobra.Command, target resumeRuntimeTarget) 
 
 	provider, err := resolveInteractiveProvider(providerName)
 	if err != nil {
-		return interactiveRuntimeSelection{}, err
+		return resumeRuntimeSelection{}, err
 	}
 	if !api.IsProviderSetupRequired(provider) {
 		if err := validateSelectedProviderModelWithContext(cfg, provider, model, selectedProviderModelValidationContext{
 			explicitModel:     savedModelExplicit,
 			providerConfigKey: providerName,
 		}); err != nil {
-			return interactiveRuntimeSelection{}, err
+			return resumeRuntimeSelection{}, err
 		}
 	}
 
-	return interactiveRuntimeSelection{
-		cfg:      cfg,
-		model:    model,
-		provider: provider,
+	return resumeRuntimeSelection{
+		interactiveRuntimeSelection: interactiveRuntimeSelection{
+			cfg:      cfg,
+			model:    model,
+			provider: provider,
+		},
+		preloadLastSession: target.last,
 	}, nil
+}
+
+func runTUIForResumeRuntime(selection resumeRuntimeSelection, autoApprove bool) error {
+	if selection.preloadLastSession {
+		return runTUIWithResume(selection.model, selection.provider, selection.cfg, autoApprove)
+	}
+	runTUI(selection.model, selection.provider, selection.cfg, autoApprove)
+	return nil
 }
 
 func selectInteractiveRuntime(cfg *config.Config) (interactiveRuntimeSelection, error) {
@@ -137,13 +170,16 @@ func loadResumePickerRuntimeSelection(cmd *cobra.Command) interactiveRuntimeSele
 func loadResumeRuntimeSession(target resumeRuntimeTarget) (*history.Session, error) {
 	storage, err := history.NewStorage()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", errResumeRuntimeStorageUnavailable, err)
 	}
 
 	sessionID := strings.TrimSpace(target.sessionID)
 	if target.last {
 		sessionID, err = storage.GetLastResumeSession(history.ResumeListOptions{})
 		if err != nil {
+			if !errors.Is(err, history.ErrNoResumeSessions) {
+				return nil, fmt.Errorf("%w: %v", errResumeRuntimeStorageUnavailable, err)
+			}
 			return nil, err
 		}
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/setup"
 )
 
@@ -191,6 +192,20 @@ func (a *Agent) SwitchProviderModel(providerName, requestedModel string) (Provid
 }
 
 func (a *Agent) switchProviderModelWithConfig(providerName, requestedModel string, cfg *config.Config) (ProviderSwitchOutcome, error) {
+	return a.switchProviderModelWithConfigOptions(providerName, requestedModel, cfg, providerSwitchOptions{})
+}
+
+type providerSwitchOptions struct {
+	allowSetupPlaceholder bool
+}
+
+func (a *Agent) switchProviderModelForResume(providerName, requestedModel string) (ProviderSwitchOutcome, error) {
+	return a.switchProviderModelWithConfigOptions(providerName, requestedModel, a.cfg(), providerSwitchOptions{
+		allowSetupPlaceholder: true,
+	})
+}
+
+func (a *Agent) switchProviderModelWithConfigOptions(providerName, requestedModel string, cfg *config.Config, opts providerSwitchOptions) (ProviderSwitchOutcome, error) {
 	outcome := ProviderSwitchOutcome{RequestedProvider: providerName}
 	if a == nil {
 		return outcome, fmt.Errorf("agent is nil")
@@ -209,13 +224,30 @@ func (a *Agent) switchProviderModelWithConfig(providerName, requestedModel strin
 	if runtimeProviderName == "" {
 		return outcome, fmt.Errorf("unknown provider: %s", requestedProviderName)
 	}
+	if !llmcatalog.IsKnownProvider(runtimeProviderName) {
+		return outcome, fmt.Errorf("unknown provider: %s", requestedProviderName)
+	}
 	if modelLookupProviderName == "" {
 		modelLookupProviderName = runtimeProviderName
 	}
 
 	// API キー存在チェック
 	if setup.ProviderSetupRequired(runtimeProviderName) {
-		return outcome, fmt.Errorf("%s", setup.ProviderSetupRequiredMessage(runtimeProviderName))
+		if !opts.allowSetupPlaceholder {
+			return outcome, fmt.Errorf("%s", setup.ProviderSetupRequiredMessage(runtimeProviderName))
+		}
+		provider := api.NewUnavailableProvider(modelLookupProviderName, setup.ProviderSetupRequiredMessage(runtimeProviderName))
+		nextProviderConfigKey := modelLookupProviderName
+		newModel := cfg.GetSelectedModelForProvider(nextProviderConfigKey)
+		requestedModel = strings.TrimSpace(requestedModel)
+		if requestedModel != "" {
+			newModel = requestedModel
+		}
+		if strings.TrimSpace(newModel) == "" {
+			return outcome, fmt.Errorf("resolved empty model")
+		}
+		a.applyProviderModelSwitch(&outcome, provider, runtimeProviderName, nextProviderConfigKey, newModel)
+		return outcome, nil
 	}
 
 	// プロバイダーインスタンス作成
@@ -245,8 +277,16 @@ func (a *Agent) switchProviderModelWithConfig(providerName, requestedModel strin
 		return outcome, err
 	}
 
-	a.clearCurrentProviderCache()
+	a.applyProviderModelSwitch(&outcome, provider, runtimeProviderName, nextProviderConfigKey, newModel)
+	return outcome, nil
+}
 
+func (a *Agent) applyProviderModelSwitch(outcome *ProviderSwitchOutcome, provider api.Provider, runtimeProviderName, nextProviderConfigKey, newModel string) {
+	if a == nil || outcome == nil {
+		return
+	}
+
+	a.clearCurrentProviderCache()
 	a.CurrentProvider = provider
 	a.ProviderName = runtimeProviderName
 	a.ProviderConfigKey = nextProviderConfigKey
@@ -286,7 +326,6 @@ func (a *Agent) switchProviderModelWithConfig(providerName, requestedModel strin
 	outcome.NewProvider = runtimeProviderName
 	outcome.NewProviderConfigKey = nextProviderConfigKey
 	outcome.NewModel = newModel
-	return outcome, nil
 }
 
 func (a *Agent) applyRuntimeModelSelection(model string, resetResponseContinuation bool) RuntimeSwitchContextNotice {
