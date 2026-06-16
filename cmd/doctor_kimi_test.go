@@ -196,6 +196,28 @@ func TestRootCommand_KimiDoctorCommandParsesFlags(t *testing.T) {
 	}
 }
 
+func TestRootCommand_KimiDoctorK27ThinkingRequiredCapabilityPasses(t *testing.T) {
+	setKimiDoctorCommandTestEnv(t, "")
+
+	out := newRootCommandExecutionTest(t)
+	rootCmd.SetArgs([]string{
+		"doctor", "kimi",
+		"--model", "kimi-k2.7-code",
+		"--catalog-model", "kimi-k2.7-code",
+		"--require-capability", "thinking",
+		"--json",
+	})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("root Execute() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[doctorJSONContractReport](t, out)
+	required := requireDoctorJSONCheck(t, report.Checks, "required_capability")
+	requireDoctorJSONCheckStatus(t, required, "ok")
+	requireDoctorJSONCheckDetailContains(t, required, "thinking=ok")
+}
+
 func TestRootCommand_KimiDoctorHelpShowsDoctorFlags(t *testing.T) {
 	out := newRootCommandExecutionTest(t)
 	rootCmd.SetArgs([]string{"doctor", "kimi", "--help"})

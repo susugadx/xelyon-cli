@@ -81,9 +81,27 @@ func TestShouldForceCompressForPricingCliff(t *testing.T) {
 			wantForce:     false,
 		},
 		{
-			name:          "Claude pricing cliff手前でforce compressになる",
+			name:          "旧Claude Sonnet pricing cliff手前でforce compressになる",
 			provider:      "claude",
 			model:         "claude-sonnet-4-5",
+			currentTokens: 199000,
+			stats:         &SessionStats{OutputTokens: 3000, AssistantMessages: 1},
+			wantProjected: 202000,
+			wantForce:     true,
+		},
+		{
+			name:          "Claude Sonnet 4.6はpricing cliff手前でもforce compressにならない",
+			provider:      "claude",
+			model:         "claude-sonnet-4-6",
+			currentTokens: 199000,
+			stats:         &SessionStats{OutputTokens: 3000, AssistantMessages: 1},
+			wantProjected: 202000,
+			wantForce:     false,
+		},
+		{
+			name:          "Gemini pricing cliff手前でforce compressになる",
+			provider:      "gemini",
+			model:         "gemini-3.1-pro",
 			currentTokens: 199000,
 			stats:         &SessionStats{OutputTokens: 3000, AssistantMessages: 1},
 			wantProjected: 202000,
@@ -127,8 +145,8 @@ func TestShouldForceCompressForPricingCliff(t *testing.T) {
 		},
 		{
 			name:          "projected tokens cross cliff",
-			provider:      "claude",
-			model:         "claude-sonnet-4-5",
+			provider:      "gemini",
+			model:         "gemini-3.1-pro",
 			currentTokens: 199000,
 			stats:         &SessionStats{OutputTokens: 5000, AssistantMessages: 1},
 			wantProjected: 204000,
@@ -175,7 +193,7 @@ func TestGetPricingInfo_PricingCliffBoundaries(t *testing.T) {
 		wantBase  float64
 		wantHigh  float64
 	}{
-		{name: "Claude 200K cliff", provider: "claude", model: "claude-sonnet-4-5", threshold: 200000, wantBase: 3.00, wantHigh: 6.00},
+		{name: "Claude Sonnet 4.5 200K cliff", provider: "claude", model: "claude-sonnet-4-5", threshold: 200000, wantBase: 3.00, wantHigh: 6.00},
 		{name: "Gemini 200K cliff", provider: "gemini", model: "gemini-3.1-pro", threshold: 200000, wantBase: 2.00, wantHigh: 4.00},
 		{name: "GPT-5.4 272K cliff", provider: "openai", model: "gpt-5.4", threshold: 272000, wantBase: 2.50, wantHigh: 5.00},
 	}

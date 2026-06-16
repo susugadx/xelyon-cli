@@ -84,8 +84,10 @@ func tuiRouterRawTextLocalCommand(name, args, description, descriptionJP string,
 // Commands はコマンド一覧
 var Commands = []CommandInfo{
 	commandExit(),
+	commandNew(),
 	commandClear(),
 	commandHistory(),
+	commandResume(),
 	commandSave(),
 	commandLoad(),
 	commandSessions(),
@@ -103,6 +105,7 @@ var Commands = []CommandInfo{
 	commandProvider(),
 	commandUse(),
 	commandProviders(),
+	commandSetup(),
 	commandConfig(),
 	commandSkills(),
 	commandModel(),
@@ -132,7 +135,51 @@ func commandExit() CommandInfo {
 }
 
 func commandClear() CommandInfo {
-	return legacyDiscoverableCommand("/clear", "", "Clear conversation history", "会話履歴をクリア", CommandCategorySession, 160)
+	return legacyAgentTUILocalCommand(
+		"/clear",
+		"",
+		"Clear transcript and start a new session",
+		"画面をクリアして新規セッション開始",
+		TUILocalActionNewSession,
+		TUILocalArgAllowAny,
+		TUILocalWhenNone,
+		CommandCategorySession,
+		135,
+		nil,
+		nil,
+	)
+}
+
+func commandNew() CommandInfo {
+	return legacyAgentTUILocalCommand(
+		"/new",
+		"",
+		"Start a new session",
+		"新規セッション開始",
+		TUILocalActionNewSession,
+		TUILocalArgAllowAny,
+		TUILocalWhenNone,
+		CommandCategorySession,
+		130,
+		nil,
+		nil,
+	)
+}
+
+func commandResume() CommandInfo {
+	return legacyAgentTUILocalCommand(
+		"/resume",
+		"[--last|--all|id]",
+		"Resume a saved session",
+		"保存済みセッションを再開",
+		TUILocalActionOpenSessionPicker,
+		TUILocalArgAllowAny,
+		TUILocalWhenNone,
+		CommandCategorySession,
+		140,
+		nil,
+		nil,
+	)
 }
 
 func commandHistory() CommandInfo {
@@ -140,15 +187,15 @@ func commandHistory() CommandInfo {
 }
 
 func commandSave() CommandInfo {
-	return legacyDiscoverableCommand("/save", "", "Save current session", "セッションを保存", CommandCategorySession, 130)
+	return legacyCompatibilityCommand("/save", "", "Save current session", "セッションを保存", CommandCategorySession, 930)
 }
 
 func commandLoad() CommandInfo {
-	return legacyDiscoverableCommand("/load", "[id]", "Load session (or last if no ID)", "セッションを読み込み", CommandCategorySession, 140)
+	return legacyCompatibilityCommand("/load", "[id]", "Load session (or last if no ID)", "セッションを読み込み", CommandCategorySession, 940)
 }
 
 func commandSessions() CommandInfo {
-	return legacyDiscoverableCommand("/sessions", "", "List recent sessions", "最近のセッション一覧", CommandCategorySession, 150)
+	return legacyCompatibilityCommand("/sessions", "", "List recent sessions", "最近のセッション一覧", CommandCategorySession, 950)
 }
 
 func commandStatus() CommandInfo {
@@ -280,6 +327,10 @@ func commandProvider() CommandInfo {
 
 func commandProviders() CommandInfo {
 	return legacyHiddenCommand("/providers", "", "Show provider credential status", "プロバイダー認証状態を表示", CommandCategoryModel, 30)
+}
+
+func commandSetup() CommandInfo {
+	return legacyDiscoverableCommand("/setup", "", "Show first-run setup checklist", "初回セットアップ状況を表示", CommandCategoryConfig, 85)
 }
 
 func commandConfig() CommandInfo {

@@ -163,6 +163,37 @@ func TestSaveSubscriptionCredentialWritesSafePermissionsAndStatusMasksAccount(t 
 	}
 }
 
+func TestSubscriptionAuthStatusAllowsRequestAttemptForExpiredToken(t *testing.T) {
+	config := subscriptionAuthTestConfig(t)
+	if err := SaveSubscriptionCredential(config, SubscriptionCredential{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+		AccountID:    "acct_123456abcd",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+
+	status := ReadSubscriptionAuthStatus(config)
+	if status.State != SubscriptionAuthStateTokenExpired {
+		t.Fatalf("status state = %q, want %q", status.State, SubscriptionAuthStateTokenExpired)
+	}
+	if !status.AllowsRequestAttempt() {
+		t.Fatalf("AllowsRequestAttempt() = false for %q, want true", status.State)
+	}
+
+	for _, state := range []SubscriptionAuthState{
+		SubscriptionAuthStateLoginRequired,
+		SubscriptionAuthStateRefreshFailed,
+		SubscriptionAuthStatePermissionUnsafe,
+		SubscriptionAuthStateMalformed,
+	} {
+		if (SubscriptionAuthStatus{State: state}).AllowsRequestAttempt() {
+			t.Fatalf("AllowsRequestAttempt() = true for %q, want false", state)
+		}
+	}
+}
+
 func TestSaveSubscriptionCredentialIgnoresStaleFixedTempFile(t *testing.T) {
 	config := subscriptionAuthTestConfig(t)
 	if err := os.MkdirAll(config.AuthDir, 0o700); err != nil {

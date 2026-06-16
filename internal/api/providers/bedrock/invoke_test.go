@@ -252,6 +252,54 @@ func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus47(t *testing.T) {
 	assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
 }
 
+func TestProvider_ChatWithTools_BuildsAdaptiveThinkingForOpus48(t *testing.T) {
+	for _, model := range []string{
+		"global.anthropic.claude-opus-4-8",
+		"jp.anthropic.claude-opus-4-8",
+	} {
+		t.Run(model, func(t *testing.T) {
+			mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("boom")}
+			p := &Provider{client: mockClient}
+
+			cfg := config.DefaultConfig()
+			cfg.ProviderModels["bedrock"] = config.ProviderModelConfig{
+				DefaultModel:    defaultModel,
+				MaxOutputTokens: 321,
+			}
+			cfg.Thinking.Enabled = true
+			cfg.Thinking.Level = "xhigh"
+			cfg.Compression.ClaudeCompaction = false
+
+			ctx := newBedrockTestContext(cfg)
+			_, err := p.ChatWithTools(ctx, "system prompt", []api.Message{{Role: "user", Content: "hello"}}, model)
+			if err == nil || !strings.Contains(err.Error(), "bedrock API error") {
+				t.Fatalf("ChatWithTools() error = %v, want wrapped bedrock API error", err)
+			}
+			if mockClient.lastInput == nil {
+				t.Fatal("InvokeModelWithResponseStream() should be called")
+			}
+
+			var req BedrockClaudeMessagesRequest
+			if err := json.Unmarshal(mockClient.lastInput.Body, &req); err != nil {
+				t.Fatalf("json.Unmarshal(request) error = %v", err)
+			}
+			if req.MaxTokens != 128000 {
+				t.Fatalf("MaxTokens = %d, want 128000 catalog limit without thinking budget addition", req.MaxTokens)
+			}
+			if req.Thinking == nil || req.Thinking.Type != "adaptive" {
+				t.Fatalf("Thinking = %#v, want adaptive", req.Thinking)
+			}
+			if req.OutputConfig == nil || req.OutputConfig.Effort != "xhigh" {
+				t.Fatalf("OutputConfig = %#v, want effort=xhigh", req.OutputConfig)
+			}
+			if !containsString(req.AnthropicBeta, bedrockEffortBetaHeader) {
+				t.Fatalf("AnthropicBeta = %v, want effort beta header", req.AnthropicBeta)
+			}
+			assertBedrockThinkingBudgetOmitted(t, mockClient.lastInput.Body)
+		})
+	}
+}
+
 func TestProvider_ChatWithTools_SelectsConverseRouteForNonClaudeBedrockModel(t *testing.T) {
 	mockClient := &mockInvokeModelWithResponseStreamClient{err: errors.New("should not call bedrock")}
 	mockConverse := &mockConverseStreamClient{err: errors.New("converse boom")}

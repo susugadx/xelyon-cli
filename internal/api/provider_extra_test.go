@@ -35,6 +35,26 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 		want  bool
 	}{
 		{
+			name:  "claude-opus-4-8 is adaptive",
+			model: "claude-opus-4-8",
+			want:  true,
+		},
+		{
+			name:  "claude-opus-4.8 dot notation is adaptive",
+			model: "claude-opus-4.8",
+			want:  true,
+		},
+		{
+			name:  "bedrock claude-opus-4-8 profile is adaptive",
+			model: "global.anthropic.claude-opus-4-8",
+			want:  true,
+		},
+		{
+			name:  "bedrock claude-opus-4-8 jp profile is adaptive",
+			model: "jp.anthropic.claude-opus-4-8",
+			want:  true,
+		},
+		{
 			name:  "claude-opus-4-7 is adaptive",
 			model: "claude-opus-4-7",
 			want:  true,
@@ -67,6 +87,11 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 		{
 			name:  "case insensitive Claude-Opus-4-6",
 			model: "Claude-Opus-4-6",
+			want:  true,
+		},
+		{
+			name:  "claude-fable-5 is adaptive",
+			model: "claude-fable-5",
 			want:  true,
 		},
 		{
@@ -106,13 +131,18 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 	}
 }
 
-func TestGetMaxOutputTokens_ClaudeOpus47FamilyUsesCatalogLimit(t *testing.T) {
+func TestGetMaxOutputTokens_ClaudeOneMillionFamilyUsesCatalogLimit(t *testing.T) {
 	tests := []struct {
 		provider string
 		model    string
 	}{
+		{provider: "claude", model: "claude-opus-4-8"},
+		{provider: "claude", model: "claude-fable-5"},
+		{provider: "bedrock", model: "global.anthropic.claude-opus-4-8"},
+		{provider: "bedrock", model: "jp.anthropic.claude-opus-4-8"},
 		{provider: "bedrock", model: "global.anthropic.claude-opus-4-7-v1:0"},
 		{provider: "bedrock", model: "us.anthropic.claude-opus-4-7-v1:0"},
+		{provider: "openrouter", model: "anthropic/claude-opus-4.8"},
 		{provider: "openrouter", model: "anthropic/claude-opus-4-7"},
 	}
 
@@ -131,6 +161,21 @@ func TestGetMaxOutputTokens_ClaudeOpus47FamilyUsesCatalogLimit(t *testing.T) {
 				t.Fatalf("GetMaxOutputTokens(%s, %q) = %d, want 128000", tt.provider, tt.model, got)
 			}
 		})
+	}
+}
+
+func TestGetMaxOutputTokens_OpenRouterFableUsesProviderDefaultUntilReplaySupport(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["openrouter"] = config.ProviderModelConfig{
+		DefaultModel:    "anthropic/claude-fable-5",
+		MaxOutputTokens: 64000,
+	}
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+
+	ctx := config.WithContext(context.Background(), cfg)
+	if got := GetMaxOutputTokens(ctx, "openrouter", "anthropic/claude-fable-5"); got != 64000 {
+		t.Fatalf("GetMaxOutputTokens(openrouter, fable) = %d, want provider default before replay support", got)
 	}
 }
 

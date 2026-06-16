@@ -982,8 +982,13 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{"claude-opus-4-8", true},
+		{"claude-opus-4.8", true},
+		{"global.anthropic.claude-opus-4-8", true},
+		{"jp.anthropic.claude-opus-4-8", true},
 		{"claude-opus-4-7", true},
 		{"claude-opus-4.7", true},
+		{"claude-fable-5", true},
 		{"claude-opus-4-6", true},
 		{"claude-sonnet-4-6", true},
 		{"claude-opus-4.6", true},
@@ -1012,8 +1017,11 @@ func TestLevelToEffort(t *testing.T) {
 		{"low", "claude-opus-4-6", "low"},
 		{"medium", "claude-opus-4-6", "medium"},
 		{"high", "claude-opus-4-6", "high"},
+		{"xhigh", "claude-opus-4-8", "xhigh"},
+		{"xhigh", "claude-opus-4.8", "xhigh"},
 		{"xhigh", "claude-opus-4-7", "xhigh"},
 		{"xhigh", "claude-opus-4.7", "xhigh"},
+		{"xhigh", "claude-fable-5", "xhigh"},
 		{"xhigh", "claude-opus-4-6", "max"},
 		{"xhigh", "claude-sonnet-4-6", "high"},
 		{"", "claude-opus-4-6", "medium"},
@@ -1033,6 +1041,9 @@ func TestIsCompactionSupportedModel(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{"claude-fable-5", true},
+		{"claude-opus-4-8", true},
+		{"claude-opus-4.8", true},
 		{"claude-opus-4-7", true},
 		{"claude-opus-4.7", true},
 		{"Claude-Opus-4-7", true},

@@ -37,7 +37,7 @@ func TestDiagnoseOpenRouter_DefaultModelUsesAnthropicMessagesRoute(t *testing.T)
 	if report.UpstreamProvider != "anthropic" || report.UpstreamModel != "claude-sonnet-4.6" {
 		t.Fatalf("upstream = %s/%s, want anthropic/claude-sonnet-4.6", report.UpstreamProvider, report.UpstreamModel)
 	}
-	if report.MaxOutputTokens != 64000 || report.ContextWindowTokens != 200000 {
+	if report.MaxOutputTokens != 64000 || report.ContextWindowTokens != 1000000 {
 		t.Fatalf("token policy = max %d context %d, want Claude metadata", report.MaxOutputTokens, report.ContextWindowTokens)
 	}
 	for _, name := range []string{"auth", "endpoint", "provider_registration", "model", "catalog_model", "route", "catalog_policy", "function_calling", "image_input"} {
@@ -194,14 +194,14 @@ func TestDiagnoseOpenRouter_RoutedModelWarnsMismatchedCatalogModel(t *testing.T)
 	if report.UpstreamProvider != "anthropic" || report.UpstreamModel != "claude-sonnet-4.6" {
 		t.Fatalf("upstream = %s/%s, want actual routed request model", report.UpstreamProvider, report.UpstreamModel)
 	}
-	if report.ContextWindowTokens != 200000 || report.MaxOutputTokens != 64000 {
+	if report.ContextWindowTokens != 1000000 || report.MaxOutputTokens != 64000 {
 		t.Fatalf("token policy = max %d context %d, want request model metadata", report.MaxOutputTokens, report.ContextWindowTokens)
 	}
 	requireOpenRouterDiagnosticCheckStatus(t, report, "catalog_model", DiagnosticStatusWarn)
 	catalogPolicy := requireOpenRouterDiagnosticCheckStatus(t, report, "catalog_policy", DiagnosticStatusWarn)
 	if !strings.Contains(catalogPolicy.Detail, "requested_catalog_model=openai/gpt-5.4") ||
 		!strings.Contains(catalogPolicy.Detail, "policy_catalog_model=anthropic/claude-sonnet-4.6") ||
-		!strings.Contains(catalogPolicy.Detail, "context_window=200000") ||
+		!strings.Contains(catalogPolicy.Detail, "context_window=1000000") ||
 		!strings.Contains(catalogPolicy.Detail, "pricing=input $3.00/M") ||
 		strings.Contains(catalogPolicy.Detail, "pricing=input $2.50/M") {
 		t.Fatalf("catalog_policy detail = %q, want request model policy and no OpenAI pricing", catalogPolicy.Detail)

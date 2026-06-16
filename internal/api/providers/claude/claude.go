@@ -238,13 +238,15 @@ func (p *Provider) SetRuntimeConfig(cfg *config.Config) {
 }
 
 // ThinkingConfig は Extended Thinking の設定
-// Opus 4.7 / Opus 4.6 / Sonnet 4.6: type="adaptive"（budget_tokens 不要）
+// Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 / Fable 5: type="adaptive"（budget_tokens 不要）
 // それ以前: type="enabled" + budget_tokens
 
 // IsCompactionSupportedModel は Claude Compaction API 対応モデルか判定する。
 func IsCompactionSupportedModel(model string) bool {
 	m := strings.ToLower(strings.TrimSpace(model))
-	return strings.Contains(m, "opus-4-7") || strings.Contains(m, "opus-4.7") ||
+	return strings.Contains(m, "fable-5") ||
+		strings.Contains(m, "opus-4-8") || strings.Contains(m, "opus-4.8") ||
+		strings.Contains(m, "opus-4-7") || strings.Contains(m, "opus-4.7") ||
 		strings.Contains(m, "opus-4-6") || strings.Contains(m, "opus-4.6") ||
 		strings.Contains(m, "opus-4-5") || strings.Contains(m, "opus-4.5") ||
 		strings.Contains(m, "sonnet-4-6") || strings.Contains(m, "sonnet-4.6")

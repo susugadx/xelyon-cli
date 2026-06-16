@@ -11,6 +11,8 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		"/save":       func(_ []string) bool { return handleSaveCommand(agent) },
 		"/load":       func(args []string) bool { return handleLoadCommand(agent, args) },
 		"/sessions":   func(_ []string) bool { return handleSessionsCommand(agent) },
+		"/new":        func(args []string) bool { return handleNewCommand(agent, args) },
+		"/resume":     func(args []string) bool { return handleResumeCommand(agent, args) },
 		"/config":     func(args []string) bool { return handleConfigCommandForSurface(agent, args, commandSurface) },
 		"/stats":      func(_ []string) bool { return handleStatsCommandForSurface(agent, commandSurface) },
 		"/status":     func(_ []string) bool { return handleStatusCommandForSurface(agent, commandSurface) },
@@ -19,6 +21,7 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 		"/provider":   func(args []string) bool { return handleProviderCommand(agent, args) },
 		"/use":        func(args []string) bool { return handleUseCommand(agent, args) },
 		"/providers":  func(_ []string) bool { return handleProvidersCommand(agent) },
+		"/setup":      func(_ []string) bool { return handleSetupCommandForSurface(agent, commandSurface) },
 		"/skills":     func(args []string) bool { return handleSkillsCommand(agent, args) },
 		"/exit":       func(_ []string) bool { handleExitCommand(agent); return true },
 		"/quit":       func(_ []string) bool { handleExitCommand(agent); return true },
@@ -40,12 +43,32 @@ func specialCommandRegistry(agent *Agent, commandSurface commandcatalog.CommandS
 	}
 }
 
-func handleClearCommand(agent *Agent, _ []string) bool {
-	if err := agent.resetConversationState(); err != nil {
-		red.Fprintf(agent.output(), "Failed to clear history: %v\n", err)
+func handleClearCommand(agent *Agent, args []string) bool {
+	if len(args) > 0 {
+		yellow.Fprintln(agent.output(), "usage: /clear")
 		return true
 	}
-	green.Fprintln(agent.output(), "🗑️  History cleared")
+
+	session, err := agent.StartNewSession()
+	if err != nil {
+		red.Fprintf(agent.output(), "Failed to start new session: %v\n", err)
+		return true
+	}
+	green.Fprintf(agent.output(), "🗑️  History cleared; started new session %s\n", session.ID)
+	return true
+}
+
+func handleNewCommand(agent *Agent, args []string) bool {
+	if len(args) > 0 {
+		yellow.Fprintln(agent.output(), "usage: /new")
+		return true
+	}
+
+	if session, err := agent.StartNewSession(); err != nil {
+		red.Fprintf(agent.output(), "Failed to start new session: %v\n", err)
+	} else if session != nil {
+		green.Fprintf(agent.output(), "🆕 Started new session %s\n", session.ID)
+	}
 	return true
 }
 

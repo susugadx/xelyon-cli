@@ -39,6 +39,9 @@ func (m Model) View() string {
 	if m.providerPicker != nil {
 		return m.renderProviderPickerOverlay(base)
 	}
+	if m.sessionPicker != nil {
+		return m.renderSessionPickerOverlay(base)
+	}
 	return base
 }
 

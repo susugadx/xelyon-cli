@@ -27,8 +27,9 @@ DeepSeek, Kimi, OpenAI, OpenAI Subscription, Azure OpenAI, Gemini, Claude, Ollam
 **OpenAI / Azure OpenAI Responses API 対応**: `gpt-5.3-codex` などの Codex モデルを自動検出し、Azure OpenAI は API key と Microsoft Entra ID bearer token の両方に対応。
 **OpenAI Subscription experimental provider**: `xelyon auth openai-subscription login` で ChatGPT/Codex OAuth にログインし、`openai_subscription` provider から subscription backend の Responses-shaped endpoint を使えます。OpenAI Platform API ではなく、API key / API pricing は使いません。request は `originator: xelyon` と `xelyon/<version>` User-Agent で XELYON として識別し、OpenCode や official Codex CLI を偽装しません。runtime は `store=false` / full payload / `prompt_cache_key` / streaming / tool loop / subscription Compact API で動作し、`/compress --compact` と auto-compress の Compact 優先経路にも対応します。cost は `N/A (ChatGPT subscription)` として表示します。
 **プロバイダー診断**: `xelyon doctor <provider> --capabilities` は model / deployment 能力を live request なしで確認し、`--require-capability responses_api` などで必要な capability を gate できます。DeepSeek / Groq / OpenRouter などの Chat Completions 系も共通 capability DTO、request preview、smoke を確認できます。OpenRouter は Claude 系 model で Anthropic Skin route も表示します。`--smoke` は usage / cost を text / JSON に出力し、対応 provider では response ID も表示します。MCP は `xelyon doctor mcp` で local-only 診断でき、`--connect` を付けた場合だけ MCP server を起動して `tools/list` まで確認します。
+**Claude 最新モデル対応**: Claude provider は `claude-opus-4-8` / `claude-fable-5` を catalog、token limit、adaptive thinking、料金表示、`/model` 候補で扱えます。Fable 5 は Anthropic 側の retention 制約により、利用環境によって API が拒否する場合があります。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
-**Kimi Native Provider 対応**: Moonshot の Chat Completions API で `kimi-k2.6` / `kimi-k2.5` の streaming、tool calls、thinking、`reasoning_content` に対応。
+**Kimi Native Provider 対応**: Moonshot の Chat Completions API で `kimi-k2.7-code` / `kimi-k2.6` / `kimi-k2.5` の streaming、tool calls、thinking、`reasoning_content` に対応。
 **プロバイダー別プロンプト最適化**: OpenAI / Gemini では短い実況を促し、Gemini など特定モデルのルール遵守を強化するプレフィックスを自動注入。
 **Gemini FCリトライ**: FC失敗時にテキストモードではなくFCモードでリトライ（キャッシュ汚染防止）。idle timeout / thinking timeout / 一般エラーそれぞれで上限付きリトライ。
 **FC rescue JSON修復**: テキストモードで抽出されたツールJSONに生制御文字（改行・タブ等）が含まれる場合、自動修復してパース成功させる。
@@ -160,7 +161,7 @@ Language Server Protocol (LSP) を活用してIDE並みのコード理解を実�
 - **ツール結果の自動truncate**: 3ターン以上前のツール結果（50行超）を送信時に自動圧縮（先頭20行+末尾5行を保持）。元の履歴は保持され、API送信時にのみ適用
 - **Claude系の server-side tool clearing**: Claude / Bedrock(Claude) / OpenRouter(Claude models) では `clear_tool_uses` により古い `tool_use` / `tool_result` ペア構造をサーバー側で削減し、compaction 発動前に入力トークンを節約
 - **プロンプトキャッシュ最適化**: Claude/Bedrock(Claude) 利用時、安定区間の末尾userメッセージにBPを配置し、古い履歴のキャッシュHIT率を向上（`prompt_cache.enabled: true`で有効）。Opus 4.6の最低キャッシュトークン数（4096）に対応するため、system promptの最終ブロックにcache_controlを配置
-- **Long Context 料金自動判定**: Claude/Gemini Pro で200Kトークン超のリクエスト時、long context 料金ティアを自動適用。キャッシュトークン（cache_read + cache_creation）も含めた総入力トークンでティア判定
+- **Long Context 料金自動判定**: Gemini Pro など long context 料金ティアを持つ provider/model では、キャッシュトークン（cache_read + cache_creation）も含めた総入力トークンでティア判定。Claude API の Fable 5 / Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 4.6 は 1M context でも標準単価
 - **Gemini service tier**: `gemini.service_tier` で Gemini BYOK の `standard` / `flex` / `priority` 同期 inference と料金表示を切り替え
 
 ### 🧠 履歴を消さずに、AIへ渡す文脈だけ軽くする
@@ -211,22 +212,39 @@ final_checks:             # config.yaml の final_checks を上書き
 ## インストール
 
 ```bash
-# Homebrew (macOS)
+# Linux / macOS installer
+curl -fsSL https://raw.githubusercontent.com/susugadx/xelyon-cli/main/install.sh | bash -s -- --yes
+
+# Homebrew
 brew install susugadx/tap/xelyon
 
-# または GitHub Releases からダウンロード
+# npm wrapper
+npm install -g xelyon
+
+# Windows PowerShell
+iwr https://raw.githubusercontent.com/susugadx/xelyon-cli/main/install.ps1 -UseB | iex
+
+# Manual fallback
 # https://github.com/susugadx/xelyon-cli/releases
 ```
 
 ## クイックスタート
 
-### 1. APIキーを設定
+### 1. 起動
 
 ```bash
-export DEEPSEEK_API_KEY="sk-..."  # または他のプロバイダー
+xelyon
 ```
 
-### 2. 起動
+API key や OAuth が未設定でも TUI は起動します。XELYON は API key を config に保存しません。必要な provider setup は `/setup` または `xelyon setup` で確認し、環境変数、`xelyon auth openai-subscription login`、またはローカル Ollama を使って設定してください。
+
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+xelyon auth openai-subscription login
+ollama serve
+```
+
+### 2. 対話する
 
 通常の対話セッションは TUI が primary surface です。`--no-tui` は legacy classic REPL の fallback として残していますが、新しい対話型コマンドは TUI 側に追加します。
 
@@ -248,14 +266,18 @@ xelyon
 /thinking high # Extended Thinking 有効化
 /attach ./notes.txt # 現在の入力ドラフトへ添付（1ドラフト最大12件）
 /detach 1   # 指定添付を外す
+/setup      # provider/env/LSP/project recommendation を表示
 /config     # global config を対話式で編集
 /project    # xelyon.yaml を対話式で編集
 /init       # AGENTS.md 雛形作成
 /review [instructions] # 現在の変更レビューを開く（引数は追加観点として即時実行）
+/new        # 新しい session を開始（画面は残す）
+/clear      # 画面を消して新しい session を開始
+/resume     # 現在の作業ディレクトリの session picker を開く
 /exit       # 終了
 ```
 
-`/model` / `/use` / `/provider` で provider や model を切り替えても、ローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側 continuation state は切り替え時にリセットされます。文脈を切る場合は `/clear` か新しい session を使います。
+`/model` / `/use` / `/provider` で provider や model を切り替えても、ローカルの会話履歴と session context は保持されます。OpenAI / Azure OpenAI Responses API の `previous_response_id` など provider 側 continuation state は切り替え時にリセットされます。文脈を切る場合は `/new`、画面も消す場合は `/clear` を使います。保存済み session は `/resume` または `xelyon resume` で再開できます。
 
 `/review` は現在の作業ツリー差分全体をレビューします。通常は現在の provider/model を使いますが、`review.provider` と `review.model` を設定すると `/review` だけ別の provider/model で実行できます。`review.provider` だけを設定した場合はその provider の既定モデルを使い、`review.model` を設定する場合は `review.provider` も必須です。review モデル呼び出しには通常会話履歴を渡しません。
 
@@ -298,7 +320,7 @@ xelyon --provider gemini --model gemini-2.5-flash
 
 ### Web検索
 
-`web_search` は Kimi / OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが Kimi の場合は Moonshot Chat Completions の built-in `$web_search` をそのまま使えます。DeepSeek / Groq / Ollama / OpenRouter / Bedrock などの検索非対応 provider では、`web_search.provider` で検索専用プロバイダーを指定してください。
+`web_search` は Kimi / OpenAI / Gemini / Claude のネイティブ検索を使います。メインプロバイダーが Kimi の場合は Moonshot Chat Completions の built-in `$web_search` を使えます。`kimi-k2.7-code` 選択中の Kimi built-in `$web_search` は、公式仕様に合わせて検索 request だけ `kimi-k2.6` に自動 fallback し、usage / cost / 実行ログも `kimi-k2.6` として記録します。DeepSeek / Groq / Ollama / OpenRouter / Bedrock などの検索非対応 provider では、`web_search.provider` で検索専用プロバイダーを指定してください。
 
 ```yaml
 # ~/.xelyon/config.yaml

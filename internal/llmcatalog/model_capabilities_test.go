@@ -25,6 +25,13 @@ func TestKnownImageInputSupport(t *testing.T) {
 			wantSupports: false,
 		},
 		{
+			name:         "azure delegates image support to openai catalog model",
+			provider:     "azure",
+			model:        "gpt-5.4",
+			wantKnown:    true,
+			wantSupports: true,
+		},
+		{
 			name:      "openai unknown model",
 			provider:  "openai",
 			model:     "gpt-next-custom",
@@ -48,6 +55,12 @@ func TestKnownImageInputSupport(t *testing.T) {
 			name:      "openrouter unknown routed owner",
 			provider:  "openrouter",
 			model:     "vendor/model",
+			wantKnown: false,
+		},
+		{
+			name:      "unknown provider",
+			provider:  "custom-provider",
+			model:     "gpt-5.4",
 			wantKnown: false,
 		},
 	}
@@ -111,11 +124,24 @@ func TestKnownWebSearchSupport(t *testing.T) {
 			wantSupports: true,
 		},
 		{
+			name:         "openrouter provider-prefixed model has known unsupported native web search",
+			provider:     "openrouter",
+			model:        "openai/gpt-5.4",
+			wantKnown:    true,
+			wantSupports: false,
+		},
+		{
 			name:         "bedrock has no native web search",
 			provider:     "bedrock",
 			model:        "global.anthropic.claude-sonnet-4-6",
 			wantKnown:    true,
 			wantSupports: false,
+		},
+		{
+			name:      "unknown provider",
+			provider:  "custom-provider",
+			model:     "gpt-5.4",
+			wantKnown: false,
 		},
 	}
 

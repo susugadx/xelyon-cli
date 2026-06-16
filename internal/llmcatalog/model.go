@@ -17,6 +17,7 @@ var knownModelMaxOutputTokens = map[string]int{
 	"kimi-k2":                               32768,
 	"kimi-k2.5":                             32768,
 	"kimi-k2.6":                             32768,
+	"kimi-k2.7-code":                        32768,
 	"kimi-k2-thinking":                      32768,
 	"claude-sonnet-4-6":                     64000,
 	"claude-sonnet-4.6":                     64000,
@@ -24,13 +25,24 @@ var knownModelMaxOutputTokens = map[string]int{
 	"global.anthropic.claude-sonnet-4-6":    64000,
 	"us.anthropic.claude-sonnet-4-6":        64000,
 	"eu.anthropic.claude-sonnet-4-6":        64000,
+	"jp.anthropic.claude-sonnet-4-6":        64000,
 	"au.anthropic.claude-sonnet-4-6":        64000,
 	"claude-sonnet-4-5":                     64000,
 	"claude-sonnet-4.5":                     64000,
+	"claude-opus-4-8":                       128000,
+	"claude-opus-4.8":                       128000,
+	"anthropic.claude-opus-4-8":             128000,
+	"global.anthropic.claude-opus-4-8":      128000,
+	"us.anthropic.claude-opus-4-8":          128000,
+	"eu.anthropic.claude-opus-4-8":          128000,
+	"jp.anthropic.claude-opus-4-8":          128000,
+	"au.anthropic.claude-opus-4-8":          128000,
 	"claude-opus-4-7":                       128000,
 	"claude-opus-4.7":                       128000,
 	"global.anthropic.claude-opus-4-7-v1":   128000,
 	"global.anthropic.claude-opus-4-7-v1:0": 128000,
+	"us.anthropic.claude-opus-4-7-v1:0":     128000,
+	"claude-fable-5":                        128000,
 	"claude-opus-4-6":                       128000,
 	"claude-opus-4-5":                       64000,
 	"gpt-5.5":                               128000,
@@ -48,12 +60,16 @@ var knownModelMaxOutputTokens = map[string]int{
 }
 
 var modelContextLimits = map[string]int{
+	"claude-opus-4-8":            1000000,
+	"claude-opus-4.8":            1000000,
 	"claude-opus-4-7":            1000000,
 	"claude-opus-4.7":            1000000,
-	"claude-sonnet-4-6":          200000,
-	"claude-sonnet-4.6":          200000,
+	"claude-fable-5":             1000000,
+	"claude-sonnet-4-6":          1000000,
+	"claude-sonnet-4.6":          1000000,
+	"claude-opus-4-6":            1000000,
+	"claude-opus-4.6":            1000000,
 	"claude-sonnet-4.5":          200000,
-	"claude-opus-4-6":            200000,
 	"claude-sonnet-4-20250514":   200000,
 	"claude-sonnet-4-5-20250514": 200000,
 	"claude-opus-4-20250514":     200000,
@@ -63,13 +79,21 @@ var modelContextLimits = map[string]int{
 	"claude-3-sonnet-20240229":   200000,
 	"claude-3-haiku-20240307":    200000,
 
-	"global.anthropic.claude-sonnet-4-6":               200000,
-	"us.anthropic.claude-sonnet-4-6":                   200000,
-	"eu.anthropic.claude-sonnet-4-6":                   200000,
-	"au.anthropic.claude-sonnet-4-6":                   200000,
+	"global.anthropic.claude-sonnet-4-6":               1000000,
+	"us.anthropic.claude-sonnet-4-6":                   1000000,
+	"eu.anthropic.claude-sonnet-4-6":                   1000000,
+	"jp.anthropic.claude-sonnet-4-6":                   1000000,
+	"au.anthropic.claude-sonnet-4-6":                   1000000,
+	"anthropic.claude-opus-4-8":                        1000000,
+	"global.anthropic.claude-opus-4-8":                 1000000,
+	"us.anthropic.claude-opus-4-8":                     1000000,
+	"eu.anthropic.claude-opus-4-8":                     1000000,
+	"jp.anthropic.claude-opus-4-8":                     1000000,
+	"au.anthropic.claude-opus-4-8":                     1000000,
 	"global.anthropic.claude-opus-4-7-v1":              1000000,
 	"global.anthropic.claude-opus-4-7-v1:0":            1000000,
-	"anthropic.claude-sonnet-4-6":                      200000,
+	"us.anthropic.claude-opus-4-7-v1:0":                1000000,
+	"anthropic.claude-sonnet-4-6":                      1000000,
 	"global.anthropic.claude-opus-4-5-20251101-v1:0":   200000,
 	"us.anthropic.claude-sonnet-4-20250514-v1:0":       200000,
 	"us.anthropic.claude-haiku-4-5-20251001-v1:0":      200000,
@@ -128,6 +152,7 @@ var modelContextLimits = map[string]int{
 
 	"kimi-k2.5":        256000,
 	"kimi-k2.6":        256000,
+	"kimi-k2.7-code":   256000,
 	"kimi-k2-thinking": 256000,
 
 	"llama-3.3-70b-versatile": 128000,
@@ -158,6 +183,7 @@ var modelMaxOutputTokenPrefixes = []ModelLimit{
 var modelContextLimitPrefixes = []ModelLimit{
 	{Pattern: "us.anthropic.claude", Limit: 200000},
 	{Pattern: "eu.anthropic.claude", Limit: 200000},
+	{Pattern: "jp.anthropic.claude", Limit: 200000},
 	{Pattern: "au.anthropic.claude", Limit: 200000},
 	{Pattern: "anthropic.claude", Limit: 200000},
 	{Pattern: "global.anthropic.claude", Limit: 200000},
@@ -261,6 +287,9 @@ func modelLimitLookupCandidates(model string) []string {
 	if model == "" || model == "default" {
 		return nil
 	}
+	if isUnsupportedModelLimitName(model) {
+		return nil
+	}
 
 	candidates := []string{model}
 	if _, delegatedModel, ok := strings.Cut(model, "/"); ok {
@@ -277,7 +306,10 @@ func knownMaxOutputTokensForModel(model string) (int, bool) {
 	if ok {
 		return tokens, true
 	}
-	if isClaudeOpus47ModelName(model) {
+	if isClaude64KOutputModelName(model) {
+		return 64000, true
+	}
+	if isClaude128KOutputModelName(model) {
 		return 128000, true
 	}
 	if tokens, ok := knownBedrockMaxOutputTokens(model); ok {
@@ -295,7 +327,7 @@ func knownModelContextLimitForModel(model string) (int, bool) {
 	if limit, ok := modelContextLimits[model]; ok {
 		return limit, true
 	}
-	if isClaudeOpus47ModelName(model) {
+	if isClaudeOneMillionContextModelName(model) {
 		return 1000000, true
 	}
 
@@ -318,7 +350,7 @@ func isKnownModelLimitName(model string) bool {
 	if _, ok := modelContextLimits[model]; ok {
 		return true
 	}
-	if isClaudeOpus47ModelName(model) {
+	if isClaudeOneMillionContextModelName(model) || isClaude128KOutputModelName(model) {
 		return true
 	}
 	if _, ok := knownBedrockMaxOutputTokens(model); ok {
@@ -333,6 +365,20 @@ func ModelContextLimit(model string) int {
 		return limit
 	}
 	return modelContextLimits["default"]
+}
+
+// KimiBuiltinWebSearchRequestModel は Kimi built-in $web_search 用の実 request model を返す。
+func KimiBuiltinWebSearchRequestModel(model, catalogModel string) (string, bool) {
+	model = strings.TrimSpace(model)
+	if IsKimiK27CodeModel(model) || IsKimiK27CodeModel(catalogModel) {
+		return "kimi-k2.6", true
+	}
+	return model, false
+}
+
+// IsKimiK27CodeModel は model が Kimi K2.7 Code か返す。
+func IsKimiK27CodeModel(model string) bool {
+	return normalizeModelName(model) == "kimi-k2.7-code"
 }
 
 // IsOpenAIResponsesModel はモデルが OpenAI Responses API を使うか返す。
@@ -357,11 +403,18 @@ func IsOpenAIResponsesModel(model string, extraModels []string) bool {
 // IsAdaptiveClaudeThinkingModel は adaptive thinking を使う Claude モデルか返す。
 func IsAdaptiveClaudeThinkingModel(model string) bool {
 	m := normalizeModelName(model)
-	return isClaudeOpus47ModelName(m) ||
+	return isClaudeOpus48ModelName(m) ||
+		isClaudeOneMillionContextModelName(m) ||
+		isClaudeOpus47ModelName(m) ||
 		strings.Contains(m, "claude-opus-4-6") ||
-		strings.Contains(m, "claude-sonnet-4-6") ||
 		strings.Contains(m, "claude-opus-4.6") ||
+		strings.Contains(m, "claude-sonnet-4-6") ||
 		strings.Contains(m, "claude-sonnet-4.6")
+}
+
+// IsAlwaysOnClaudeThinkingModel は thinking を無効化できない Claude モデルか返す。
+func IsAlwaysOnClaudeThinkingModel(model string) bool {
+	return isClaudeFable5ModelName(normalizeModelName(model))
 }
 
 func normalizeModelName(model string) string {
@@ -371,6 +424,67 @@ func normalizeModelName(model string) string {
 func isClaudeOpus47ModelName(model string) bool {
 	return strings.Contains(model, "claude-opus-4-7") ||
 		strings.Contains(model, "claude-opus-4.7")
+}
+
+func isClaudeOpus48ModelName(model string) bool {
+	return strings.Contains(model, "claude-opus-4-8") ||
+		strings.Contains(model, "claude-opus-4.8")
+}
+
+func isClaudeFable5ModelName(model string) bool {
+	return strings.Contains(model, "claude-fable-5")
+}
+
+func isClaudeSonnet46ModelName(model string) bool {
+	return strings.Contains(model, "claude-sonnet-4-6") ||
+		strings.Contains(model, "claude-sonnet-4.6")
+}
+
+func isClaudeOpus46ModelName(model string) bool {
+	return strings.Contains(model, "claude-opus-4-6") ||
+		strings.Contains(model, "claude-opus-4.6")
+}
+
+func isClaudeOneMillionContextModelName(model string) bool {
+	if !isClaudeOwnedModelName(model) {
+		return false
+	}
+	return isClaudeOpus48ModelName(model) ||
+		isClaudeOpus47ModelName(model) ||
+		isClaudeOpus46ModelName(model) ||
+		isClaudeFable5ModelName(model) ||
+		isClaudeSonnet46ModelName(model)
+}
+
+func isClaude128KOutputModelName(model string) bool {
+	if !isClaudeOwnedModelName(model) {
+		return false
+	}
+	return isClaudeOpus48ModelName(model) ||
+		isClaudeOpus47ModelName(model) ||
+		isClaudeOpus46ModelName(model) ||
+		isClaudeFable5ModelName(model)
+}
+
+func isClaude64KOutputModelName(model string) bool {
+	if !isClaudeOwnedModelName(model) {
+		return false
+	}
+	return isClaudeSonnet46ModelName(model)
+}
+
+func isClaudeOwnedModelName(model string) bool {
+	if strings.HasPrefix(model, "claude-") {
+		return true
+	}
+	if owner, routedModel, ok := strings.Cut(model, "/"); ok {
+		return owner == "anthropic" && strings.HasPrefix(routedModel, "claude-")
+	}
+	return strings.HasPrefix(trimBedrockInferenceProfilePrefix(model), "anthropic.claude-")
+}
+
+func isUnsupportedModelLimitName(model string) bool {
+	return model == "anthropic/claude-fable-5"
 }
 
 func isOpenAIReasoningModelName(model string) bool {

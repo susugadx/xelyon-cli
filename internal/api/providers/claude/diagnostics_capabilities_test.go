@@ -70,6 +70,20 @@ func TestDiagnoseClaude_RequiredThinkingFollowsRequestConfig(t *testing.T) {
 	if !strings.Contains(check.Detail, "thinking=ok") {
 		t.Fatalf("required_capability detail = %q, want ok thinking", check.Detail)
 	}
+
+	alwaysOn := Diagnose(context.Background(), DiagnosticOptions{
+		Config:               config.DefaultConfig(),
+		Model:                "claude-fable-5",
+		CatalogModel:         "claude-fable-5",
+		RequiredCapabilities: []string{providerdiag.RequiredCapabilityThinking},
+	})
+	if alwaysOn.HasFailures() {
+		t.Fatalf("HasFailures() = true, want Fable 5 model policy to satisfy thinking even when request config disables thinking: %#v", alwaysOn.Checks)
+	}
+	check = requireClaudeDiagnosticCheckStatus(t, alwaysOn, providerdiag.RequiredCapabilityCheckName, DiagnosticStatusOK)
+	if !strings.Contains(check.Detail, "thinking=ok") || alwaysOn.ThinkingType != "adaptive" {
+		t.Fatalf("Fable 5 required_capability detail = %q thinking_type=%q, want adaptive thinking ok", check.Detail, alwaysOn.ThinkingType)
+	}
 }
 
 func TestDiagnoseClaude_RequiredWebSearchRequiresTrustedClaudeCatalog(t *testing.T) {

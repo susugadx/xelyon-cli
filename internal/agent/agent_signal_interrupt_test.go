@@ -79,3 +79,17 @@ func TestHandleSignalInterrupt_SecondSignalRunsExitPath(t *testing.T) {
 		t.Fatalf("output = %q, want shutdown message", out.String())
 	}
 }
+
+func TestAgentCleanupRunsSignalCleanup(t *testing.T) {
+	var out bytes.Buffer
+	agent := newSignalInterruptTestAgent(&out)
+
+	var signalCleanupCount atomic.Int32
+	agent.signalCleanup = func() { signalCleanupCount.Add(1) }
+
+	agent.Cleanup()
+
+	if signalCleanupCount.Load() != 1 {
+		t.Fatalf("signal cleanup count = %d, want 1", signalCleanupCount.Load())
+	}
+}

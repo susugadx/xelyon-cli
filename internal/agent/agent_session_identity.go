@@ -149,4 +149,14 @@ func (a *Agent) applyLoadedSession(session *history.Session) {
 
 	a.restoreSessionConversation(session)
 	a.reconcileSessionForCurrentRuntime()
+	a.resetSessionStatsForCurrentRuntime()
+}
+
+func (a *Agent) resetSessionStatsForCurrentRuntime() {
+	if a == nil || a.Stats == nil {
+		return
+	}
+	a.statsMu.Lock()
+	a.Stats = NewSessionStats(a.ProviderName, a.CurrentModel)
+	a.statsMu.Unlock()
 }

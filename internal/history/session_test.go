@@ -2,6 +2,7 @@ package history
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -145,5 +146,16 @@ func TestNewSession_GeneratesUniqueIDs(t *testing.T) {
 			t.Fatalf("duplicate session ID generated: %q", session.ID)
 		}
 		seen[session.ID] = struct{}{}
+	}
+}
+
+func TestNewSessionWithWorkingDir_NormalizesExplicitWorkingDir(t *testing.T) {
+	root := t.TempDir()
+	workingDir := filepath.Join(root, "repo", "child", "..")
+
+	session := NewSessionWithWorkingDir("test-model", workingDir)
+
+	if got, want := session.WorkingDir, filepath.Join(root, "repo"); got != want {
+		t.Fatalf("WorkingDir = %q, want %q", got, want)
 	}
 }

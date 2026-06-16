@@ -170,6 +170,49 @@ func TestBuildReplacementDirectLintErrorWithZeroExitStillFailure(t *testing.T) {
 	}
 }
 
+func TestBuildReplacementLintFailureMarkersDoNotBecomeValidationSuccess(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+	}{
+		{
+			name: "nonzero problem count",
+			output: strings.Join([]string{
+				"ESLint found too many warnings",
+				"2 problems found",
+				"Process exited with code 0",
+				strings.Repeat("lint detail\n", 90),
+			}, "\n"),
+		},
+		{
+			name: "lint failed marker",
+			output: strings.Join([]string{
+				"lint failed",
+				"0 errors",
+				"Process exited with code 0",
+				strings.Repeat("lint detail\n", 90),
+			}, "\n"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			replacement, reason, ok := BuildReplacement(NewRequest("npm run lint", tt.output))
+
+			if !ok || reason != "" {
+				t.Fatalf("BuildReplacement() = (%#v, %q, %v), want lint failure compact", replacement, reason, ok)
+			}
+			if replacement.Classifier() != "lint_failure" {
+				t.Fatalf("Classifier = %q, want lint_failure", replacement.Classifier())
+			}
+			if strings.Contains(replacement.Text(), "validation_success") ||
+				strings.Contains(replacement.Text(), "classifier=validation") {
+				t.Fatalf("lint failure was mislabeled as validation success:\n%s", replacement.Text())
+			}
+		})
+	}
+}
+
 func TestBuildReplacementValidationFailureWithTracebackAndNonzeroExit(t *testing.T) {
 	output := strings.Join([]string{
 		"Traceback (most recent call last):",

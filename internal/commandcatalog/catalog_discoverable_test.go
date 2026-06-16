@@ -19,6 +19,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/rawoutputs",
 		"/mcp",
 		"/project",
+		"/setup",
 		"/config",
 		"/skills",
 		"/copy",
@@ -27,10 +28,9 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		"/detach-all",
 		"/compress",
 		"/plan",
-		"/save",
-		"/load",
-		"/sessions",
+		"/new",
 		"/clear",
+		"/resume",
 		"/history",
 		"/init",
 		"/exit",
@@ -44,7 +44,7 @@ func TestDiscoverableCommandsForTUISurface(t *testing.T) {
 		}
 	}
 
-	for _, hidden := range []string{"/providers", "/use", "/think", "/version", "/help"} {
+	for _, hidden := range []string{"/providers", "/use", "/think", "/version", "/help", "/save", "/load", "/sessions"} {
 		if containsCommandName(commands, hidden) {
 			t.Fatalf("%s should not be TUI-discoverable", hidden)
 		}
@@ -75,6 +75,9 @@ func TestDiscoverablePrefixFiltering(t *testing.T) {
 	}
 	if got := MatchDiscoverablePrefixForSurface("/project", CommandSurfaceClassic); len(got) != 0 {
 		t.Fatalf("classic discoverable /project = %#v, want no matches", got)
+	}
+	if got := MatchDiscoverablePrefixForSurface("/setup", CommandSurfaceTUI); len(got) != 1 || got[0].Name != "/setup" {
+		t.Fatalf("TUI discoverable /setup = %#v, want /setup", got)
 	}
 	if got := MatchDiscoverablePrefixForSurface("/use", CommandSurfaceTUI); len(got) != 0 {
 		t.Fatalf("TUI discoverable /use = %#v, want no matches", got)

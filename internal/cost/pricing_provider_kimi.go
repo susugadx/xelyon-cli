@@ -11,6 +11,15 @@ func getKimiPricing(model string) PricingInfo {
 		return pricing
 	}
 
+	if strings.Contains(lm, "k2.7-code") {
+		// Kimi K2.7 Code: $0.95/$4.00 per million tokens
+		return PricingInfo{
+			InputCostPerM:         0.95,
+			OutputCostPerM:        4.00,
+			CachedInputCostPerM:   0.19,
+			CacheCreationCostPerM: 0.95,
+		}
+	}
 	if strings.Contains(lm, "k2.6") {
 		// Kimi K2.6: $0.95/$4.00 per million tokens
 		return PricingInfo{

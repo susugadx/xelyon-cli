@@ -54,6 +54,9 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 	}
 
 	// プロバイダーが画像対応かチェック
+	if msg, ok := api.ProviderSetupRequiredMessage(provider); ok {
+		return fmt.Errorf("%s", msg)
+	}
 	if !provider.SupportsImages() {
 		return fmt.Errorf("provider %q does not support image input", provider.Name())
 	}

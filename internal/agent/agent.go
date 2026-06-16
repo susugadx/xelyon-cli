@@ -153,6 +153,8 @@ type Agent struct {
 
 	// exitHook は os.Exit 前に呼ばれるフック（TUI モードのターミナル復旧等）
 	exitHook func()
+	// signalCleanup は legacy REPL の signal.Notify goroutine を停止する。
+	signalCleanup func()
 
 	// tuiToolResultCh は TUI モードでツール実行結果を構造化データとして送信するチャネル。
 	// nil の場合は従来の stdout 出力を使用する。

@@ -63,6 +63,30 @@ func TestChatWithTools_SetsThinkingConfigByModel(t *testing.T) {
 		t.Fatalf("opus 4.7 output_config = %+v, want effort=xhigh", opus47Req["output_config"])
 	}
 
+	opus48Req, _ := captureClaudeRawRequest(t, cfg, "claude-opus-4-8")
+	opus48Thinking, ok := opus48Req["thinking"].(map[string]any)
+	if !ok || opus48Thinking["type"] != "adaptive" {
+		t.Fatalf("opus 4.8 thinking = %+v, want adaptive type", opus48Req["thinking"])
+	}
+	if _, ok := opus48Thinking["budget_tokens"]; ok {
+		t.Fatalf("opus 4.8 thinking should omit budget_tokens, got %+v", opus48Thinking)
+	}
+	opus48OutputConfig, ok := opus48Req["output_config"].(map[string]any)
+	if !ok || opus48OutputConfig["effort"] != "xhigh" {
+		t.Fatalf("opus 4.8 output_config = %+v, want effort=xhigh", opus48Req["output_config"])
+	}
+
+	fableReq, _ := captureClaudeRequest(t, cfg, "claude-fable-5")
+	if fableReq.Thinking == nil || fableReq.Thinking.Type != "adaptive" {
+		t.Fatalf("fable Thinking = %+v, want adaptive type", fableReq.Thinking)
+	}
+	if fableReq.Thinking.BudgetTokens != 0 {
+		t.Fatalf("fable Thinking.BudgetTokens = %d, want omitted", fableReq.Thinking.BudgetTokens)
+	}
+	if fableReq.OutputConfig == nil || fableReq.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("fable OutputConfig = %+v, want effort=xhigh", fableReq.OutputConfig)
+	}
+
 	adaptiveReq, _ := captureClaudeRequest(t, cfg, "claude-opus-4-6")
 	if adaptiveReq.Thinking == nil || adaptiveReq.Thinking.Type != "adaptive" {
 		t.Fatalf("adaptive Thinking = %+v, want adaptive type", adaptiveReq.Thinking)

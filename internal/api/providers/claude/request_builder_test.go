@@ -62,6 +62,46 @@ func TestBuildRequestFeatures_DefaultsNilConfig(t *testing.T) {
 	}
 }
 
+func TestBuildMessagesRequest_ReplaysThinkingForAlwaysOnFable(t *testing.T) {
+	p := New("test-key")
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = false
+	ctx := api.WithToolUseDisabled(config.WithContext(context.Background(), cfg))
+
+	assistantMessage := api.Message{
+		Role: "assistant",
+		ToolCalls: []api.OpenAIToolCall{{
+			ID:   "toolu_fable",
+			Type: "function",
+			Function: api.OpenAIToolCallFunction{
+				Name:      "read_file",
+				Arguments: `{"path":"/tmp/a.txt"}`,
+			},
+		}},
+	}
+	assistantMessage.SetAnthropicThinkingBlocks([]api.AnthropicThinkingBlock{{
+		Type:      "thinking",
+		Thinking:  "need the file",
+		Signature: "sig_fable",
+	}})
+
+	built := p.buildMessagesRequest(ctx, "System", []api.Message{
+		{Role: "user", Content: "Read a file"},
+		assistantMessage,
+	}, "claude-fable-5")
+
+	if built.Request.Thinking != nil || built.Request.OutputConfig != nil {
+		t.Fatalf("explicit thinking payload = %+v output_config=%+v, want omitted when config disables thinking", built.Request.Thinking, built.Request.OutputConfig)
+	}
+	if len(built.Request.Messages) != 2 || len(built.Request.Messages[1].Content) == 0 {
+		t.Fatalf("messages = %#v, want assistant content with replayed thinking", built.Request.Messages)
+	}
+	first := built.Request.Messages[1].Content[0]
+	if first.Type != "thinking" || first.Signature != "sig_fable" {
+		t.Fatalf("first assistant content = %#v, want replayed Fable thinking block", first)
+	}
+}
+
 func TestBuildMessagesRequest_AddsActiveContextToDynamicSystemSuffix(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.PromptCache.Enabled = true

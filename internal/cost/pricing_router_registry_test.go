@@ -41,6 +41,7 @@ func TestPricingResolverRegistry_KimiFamilyReadyForFutureProviderDescriptor(t *t
 		wantOutput float64
 		wantCached float64
 	}{
+		{model: "kimi-k2.7-code", wantInput: 0.95, wantOutput: 4.00, wantCached: 0.19},
 		{model: "kimi-k2.6", wantInput: 0.95, wantOutput: 4.00, wantCached: 0.16},
 		{model: "kimi-k2.5", wantInput: 0.60, wantOutput: 3.00, wantCached: 0.10},
 		{model: "kimi-k2-thinking", wantInput: 0.60, wantOutput: 2.50, wantCached: 0.06},

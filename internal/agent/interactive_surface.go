@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/ui"
@@ -186,27 +188,24 @@ func (a *Agent) CopyLastOutput() (string, error) {
 }
 
 // LoadLastSessionForInteractive は最後の session を読み込み、結果を Agent の出力へ表示する。
-func (a *Agent) LoadLastSessionForInteractive() {
+func (a *Agent) LoadLastSessionForInteractive() error {
 	out := a.output()
 	if a.storage == nil {
 		red.Fprintln(out, "History storage not available")
-		return
+		return fmt.Errorf("history storage not available")
 	}
 
-	sessionID, err := a.storage.GetLastSession()
+	session, err := a.ResumeStartupLastSession(history.ResumeListOptions{})
 	if err != nil {
-		yellow.Fprintln(out, "No previous session found, starting new session")
-		return
+		if errors.Is(err, history.ErrNoResumeSessions) {
+			yellow.Fprintln(out, "No previous session found, starting new session")
+			return nil
+		}
+		return err
 	}
 
-	session, err := a.storage.Load(sessionID)
-	if err != nil {
-		red.Fprintf(out, "Failed to load session: %v\n", err)
-		return
-	}
-
-	a.applyLoadedSession(session)
-	green.Fprintf(out, "📂 Resumed session %s (%d messages)\n", sessionID, len(session.ToAPIMessages()))
+	green.Fprintf(out, "📂 Resumed session %s (%d messages)\n", session.ID, len(session.ToAPIMessages()))
+	return nil
 }
 
 // PrintLoadedImage は読み込み済み画像の情報を Agent の出力へ表示する。

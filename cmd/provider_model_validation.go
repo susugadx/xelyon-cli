@@ -9,37 +9,49 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-const azureDefaultPlaceholderDeployment = "azure-gpt-5.4"
+type selectedProviderModelValidationContext struct {
+	explicitModel     bool
+	providerConfigKey string
+}
 
 func validateSelectedProviderModel(cfg *config.Config, provider api.Provider, model string) error {
+	return validateSelectedProviderModelWithContext(cfg, provider, model, selectedProviderModelValidationContext{
+		explicitModel: hasExplicitCLIModelSelection(),
+	})
+}
+
+func validateSelectedProviderModelWithContext(cfg *config.Config, provider api.Provider, model string, validation selectedProviderModelValidationContext) error {
 	if provider == nil {
 		return nil
 	}
 	runtimeProvider := config.CanonicalProviderName(provider.Name())
 	if runtimeProvider == "gemini" {
-		return config.ValidateGeminiFunctionCallingSelection(cfg, runtimeProvider, model)
+		providerKey := strings.TrimSpace(validation.providerConfigKey)
+		if providerKey == "" {
+			providerKey = runtimeProvider
+		}
+		return config.ValidateGeminiFunctionCallingSelection(cfg, providerKey, model)
 	}
 	if runtimeProvider != "azure" {
 		return nil
 	}
 
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return fmt.Errorf("azure OpenAI deployment is required: set provider_models.azure.default_model or pass --model <deployment>")
-	}
-	if !strings.EqualFold(model, azureDefaultPlaceholderDeployment) {
-		return nil
-	}
+	err := config.ValidateAzureDeploymentSelection(cfg, validation.providerConfigKey, model, hasExplicitSelectedModel(validation))
+	return selectedProviderModelValidationError(err)
+}
 
-	if strings.TrimSpace(modelFlag) != "" || strings.TrimSpace(os.Getenv("XELYON_MODEL")) != "" {
+func selectedProviderModelValidationError(err error) error {
+	if err == nil {
 		return nil
 	}
-	if cfg == nil {
-		return fmt.Errorf("azure OpenAI deployment is not configured. Set provider_models.azure.default_model or pass --model <deployment>")
-	}
-	if explicit := strings.TrimSpace(cfg.GetExplicitProviderDefaultModel("azure")); explicit != "" {
-		return nil
-	}
+	message := strings.TrimSuffix(err.Error(), ".")
+	return fmt.Errorf("%s or pass --model <deployment>", message)
+}
 
-	return fmt.Errorf("azure OpenAI deployment is not configured. Set provider_models.azure.default_model or pass --model <deployment>")
+func hasExplicitSelectedModel(validation selectedProviderModelValidationContext) bool {
+	return validation.explicitModel || hasExplicitCLIModelSelection()
+}
+
+func hasExplicitCLIModelSelection() bool {
+	return strings.TrimSpace(modelFlag) != "" || strings.TrimSpace(os.Getenv("XELYON_MODEL")) != ""
 }

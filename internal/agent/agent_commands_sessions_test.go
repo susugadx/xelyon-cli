@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
@@ -131,5 +132,111 @@ func TestHandleLoadCommand_DoesNotInjectLegacyPlanMarker(t *testing.T) {
 	lastUserMessage := capturedHistories[0][len(capturedHistories[0])-1].Content
 	if strings.Contains(lastUserMessage, "[APPROVED PLAN HANDOFF]") {
 		t.Fatalf("normal mode request should not inject legacy plan marker after /load, got %#v", capturedHistories[0])
+	}
+}
+
+func TestParseResumeCommandArgs_RejectsConflictingOptions(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "last all",
+			args:    []string{"--last", "--all"},
+			wantErr: "--last cannot be used with --all",
+		},
+		{
+			name:    "last id",
+			args:    []string{"--last", "session-1"},
+			wantErr: "--last cannot be used with a session ID",
+		},
+		{
+			name:    "all id",
+			args:    []string{"--all", "session-1"},
+			wantErr: "--all cannot be used with a session ID",
+		},
+		{
+			name:    "duplicate ids",
+			args:    []string{"session-1", "session-2"},
+			wantErr: "usage: /resume [--last|--all|session-id]",
+		},
+		{
+			name:    "unknown option",
+			args:    []string{"--unknown"},
+			wantErr: "usage: /resume [--last|--all|session-id]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := parseResumeCommandArgs(tt.args)
+			if err == nil {
+				t.Fatal("parseResumeCommandArgs() error = nil, want error")
+			}
+			if got := err.Error(); got != tt.wantErr {
+				t.Fatalf("parseResumeCommandArgs() error = %q, want %q", got, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParseResumeCommandArgs_ValidForms(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		wantAll       bool
+		wantSessionID string
+	}{
+		{name: "empty"},
+		{name: "last", args: []string{"--last"}},
+		{name: "all", args: []string{"--all"}, wantAll: true},
+		{name: "id", args: []string{"session-1"}, wantSessionID: "session-1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, sessionID, err := parseResumeCommandArgs(tt.args)
+			if err != nil {
+				t.Fatalf("parseResumeCommandArgs() error = %v", err)
+			}
+			if opts.All != tt.wantAll {
+				t.Fatalf("opts.All = %v, want %v", opts.All, tt.wantAll)
+			}
+			if sessionID != tt.wantSessionID {
+				t.Fatalf("sessionID = %q, want %q", sessionID, tt.wantSessionID)
+			}
+		})
+	}
+}
+
+func TestHandleNewAndClearCommandsRejectArgs(t *testing.T) {
+	disableColors(t)
+
+	tests := []struct {
+		name      string
+		input     string
+		wantUsage string
+	}{
+		{name: "new", input: "/new typo", wantUsage: "usage: /new"},
+		{name: "clear", input: "/clear typo", wantUsage: "usage: /clear"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			agent := newChatRequestTestAgent(t, &mockProvider{name: "openai"}, &out)
+			sessionID := agent.session.ID
+
+			if !handleSpecialCommandForSurface(tt.input, agent, commandcatalog.CommandSurfaceTUI) {
+				t.Fatalf("handleSpecialCommandForSurface(%q) = false, want true", tt.input)
+			}
+			if agent.session.ID != sessionID {
+				t.Fatalf("agent.session.ID = %q, want unchanged %q", agent.session.ID, sessionID)
+			}
+			if !strings.Contains(out.String(), tt.wantUsage) {
+				t.Fatalf("output = %q, want %q", out.String(), tt.wantUsage)
+			}
+		})
 	}
 }

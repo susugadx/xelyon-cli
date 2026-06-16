@@ -115,6 +115,7 @@ type Model struct {
 	clipboard         ClipboardAgent
 	configAgent       ConfigAgent
 	providerModels    ProviderModelAgent
+	sessions          SessionAgent
 	projectAgent      ProjectAgent
 	reviewAgent       ReviewAgent
 	skillCatalog      SkillCatalogAgent
@@ -157,4 +158,6 @@ type Model struct {
 	slashSuggestions  slashSuggestionState
 	prompt            *promptModalState
 	providerPicker    *providerPickerState
+	sessionPicker     *sessionPickerState
+	startupPicker     *StartupSessionPicker
 }

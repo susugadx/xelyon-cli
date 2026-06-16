@@ -13,6 +13,7 @@ import (
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
+	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
 const (
@@ -153,15 +154,20 @@ func completeKimiWebSearchContent(result kimiWebSearchStreamResult) string {
 
 func buildKimiWebSearchRequest(ctx context.Context, messages []kimiWebSearchMessage, model, providerConfigKey string) kimiWebSearchRequest {
 	resolved := resolveKimiRequestOptions(ctx, providerConfigKey, model, kimiWebSearchSystemPrompt)
+	requestModel, adjusted := llmcatalog.KimiBuiltinWebSearchRequestModel(resolved.requestedModel, resolved.catalogModel)
+	promptCacheKey := resolved.promptCacheKey
+	if adjusted {
+		promptCacheKey = buildKimiPromptCacheKey(ctx, requestModel, kimiWebSearchSystemPrompt)
+	}
 
 	return kimiWebSearchRequest{
-		Model:               resolved.requestedModel,
+		Model:               requestModel,
 		Messages:            messages,
 		MaxCompletionTokens: resolved.maxCompletionTokens,
 		Stream:              true,
 		StreamOptions:       &api.StreamOptions{IncludeUsage: true},
 		Tools:               kimiWebSearchTools(),
-		PromptCacheKey:      resolved.promptCacheKey,
+		PromptCacheKey:      promptCacheKey,
 		Thinking:            kimiWebSearchThinkingField(resolved),
 	}
 }
