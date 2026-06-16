@@ -117,6 +117,7 @@ var knownProviderModels = map[string][]string{
 		"global.anthropic.claude-sonnet-4-6",
 		"us.anthropic.claude-sonnet-4-6",
 		"eu.anthropic.claude-sonnet-4-6",
+		"jp.anthropic.claude-sonnet-4-6",
 		"au.anthropic.claude-sonnet-4-6",
 		"anthropic.claude-opus-4-8",
 		"global.anthropic.claude-opus-4-8",
@@ -227,9 +228,6 @@ func IsKnownModelNameForProvider(provider, model string) bool {
 	}
 
 	normalized := strings.ToLower(model)
-	if key == "bedrock" && isUnsupportedModelLimitName(normalized) {
-		return false
-	}
 	if key == "bedrock" && IsBedrockModelID(normalized) {
 		return true
 	}

@@ -25,6 +25,7 @@ var knownModelMaxOutputTokens = map[string]int{
 	"global.anthropic.claude-sonnet-4-6":    64000,
 	"us.anthropic.claude-sonnet-4-6":        64000,
 	"eu.anthropic.claude-sonnet-4-6":        64000,
+	"jp.anthropic.claude-sonnet-4-6":        64000,
 	"au.anthropic.claude-sonnet-4-6":        64000,
 	"claude-sonnet-4-5":                     64000,
 	"claude-sonnet-4.5":                     64000,
@@ -78,10 +79,11 @@ var modelContextLimits = map[string]int{
 	"claude-3-sonnet-20240229":   200000,
 	"claude-3-haiku-20240307":    200000,
 
-	"global.anthropic.claude-sonnet-4-6":               200000,
-	"us.anthropic.claude-sonnet-4-6":                   200000,
-	"eu.anthropic.claude-sonnet-4-6":                   200000,
-	"au.anthropic.claude-sonnet-4-6":                   200000,
+	"global.anthropic.claude-sonnet-4-6":               1000000,
+	"us.anthropic.claude-sonnet-4-6":                   1000000,
+	"eu.anthropic.claude-sonnet-4-6":                   1000000,
+	"jp.anthropic.claude-sonnet-4-6":                   1000000,
+	"au.anthropic.claude-sonnet-4-6":                   1000000,
 	"anthropic.claude-opus-4-8":                        1000000,
 	"global.anthropic.claude-opus-4-8":                 1000000,
 	"us.anthropic.claude-opus-4-8":                     1000000,
@@ -91,7 +93,7 @@ var modelContextLimits = map[string]int{
 	"global.anthropic.claude-opus-4-7-v1":              1000000,
 	"global.anthropic.claude-opus-4-7-v1:0":            1000000,
 	"us.anthropic.claude-opus-4-7-v1:0":                1000000,
-	"anthropic.claude-sonnet-4-6":                      200000,
+	"anthropic.claude-sonnet-4-6":                      1000000,
 	"global.anthropic.claude-opus-4-5-20251101-v1:0":   200000,
 	"us.anthropic.claude-sonnet-4-20250514-v1:0":       200000,
 	"us.anthropic.claude-haiku-4-5-20251001-v1:0":      200000,
@@ -304,6 +306,9 @@ func knownMaxOutputTokensForModel(model string) (int, bool) {
 	if ok {
 		return tokens, true
 	}
+	if isClaude64KOutputModelName(model) {
+		return 64000, true
+	}
 	if isClaude128KOutputModelName(model) {
 		return 128000, true
 	}
@@ -441,7 +446,7 @@ func isClaudeOpus46ModelName(model string) bool {
 }
 
 func isClaudeOneMillionContextModelName(model string) bool {
-	if !isDirectOrRoutedClaudeModelName(model) {
+	if !isClaudeOwnedModelName(model) {
 		return false
 	}
 	return isClaudeOpus48ModelName(model) ||
@@ -452,7 +457,7 @@ func isClaudeOneMillionContextModelName(model string) bool {
 }
 
 func isClaude128KOutputModelName(model string) bool {
-	if !isDirectOrRoutedClaudeModelName(model) {
+	if !isClaudeOwnedModelName(model) {
 		return false
 	}
 	return isClaudeOpus48ModelName(model) ||
@@ -461,23 +466,25 @@ func isClaude128KOutputModelName(model string) bool {
 		isClaudeFable5ModelName(model)
 }
 
-func isDirectOrRoutedClaudeModelName(model string) bool {
+func isClaude64KOutputModelName(model string) bool {
+	if !isClaudeOwnedModelName(model) {
+		return false
+	}
+	return isClaudeSonnet46ModelName(model)
+}
+
+func isClaudeOwnedModelName(model string) bool {
 	if strings.HasPrefix(model, "claude-") {
 		return true
 	}
-	owner, routedModel, ok := strings.Cut(model, "/")
-	return ok && owner == "anthropic" && strings.HasPrefix(routedModel, "claude-")
+	if owner, routedModel, ok := strings.Cut(model, "/"); ok {
+		return owner == "anthropic" && strings.HasPrefix(routedModel, "claude-")
+	}
+	return strings.HasPrefix(trimBedrockInferenceProfilePrefix(model), "anthropic.claude-")
 }
 
 func isUnsupportedModelLimitName(model string) bool {
-	return model == "anthropic/claude-fable-5" ||
-		isUnsupportedBedrockSonnet46VersionedName(model)
-}
-
-func isUnsupportedBedrockSonnet46VersionedName(model string) bool {
-	trimmed := trimBedrockInferenceProfilePrefix(model)
-	return trimmed == "anthropic.claude-sonnet-4-6-v1" ||
-		strings.HasPrefix(trimmed, "anthropic.claude-sonnet-4-6-v1:")
+	return model == "anthropic/claude-fable-5"
 }
 
 func isOpenAIReasoningModelName(model string) bool {

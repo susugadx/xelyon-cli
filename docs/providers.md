@@ -655,11 +655,12 @@ Bedrock smoke test は `XELYON_BEDROCK_SMOKE=1` のときだけ実 API を呼び
 |--------|------------------|
 | Claude Opus 4.5 | `global.anthropic.claude-opus-4-5-20251101-v1:0` |
 | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
+| Claude Sonnet 4.6 (JP) | `jp.anthropic.claude-sonnet-4-6` |
 | Claude Haiku 4.5 | `us.anthropic.claude-haiku-4-5-20251001-v1:0` |
 | Amazon Nova Pro | `amazon.nova-pro-v1:0` |
 | Moonshot Kimi K2.5 | `moonshotai.kimi-k2.5` |
 
-Claude Sonnet 4.6 は `global.anthropic.claude-sonnet-4-6` のほか、`us.anthropic.claude-sonnet-4-6` / `eu.anthropic.claude-sonnet-4-6` / `au.anthropic.claude-sonnet-4-6` の Geo Inference Profile ID も利用できます。
+Claude Sonnet 4.6 は `global.anthropic.claude-sonnet-4-6` のほか、`us.anthropic.claude-sonnet-4-6` / `eu.anthropic.claude-sonnet-4-6` / `jp.anthropic.claude-sonnet-4-6` / `au.anthropic.claude-sonnet-4-6` の Geo Inference Profile ID も利用できます。
 
 料金表にある Bedrock モデルでも、streaming tool use が未確認または非対応の Converse モデルは xelyon runtime では unsupported として扱います。Text response や non-streaming tool use が可能なだけでは agent 実行対象として自動 fallback しません。
 

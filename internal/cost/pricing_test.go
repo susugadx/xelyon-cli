@@ -286,7 +286,12 @@ func TestGetBedrockPricing_BedrockClaudeModelsFromAWSPriceList(t *testing.T) {
 	}{
 		{name: "global sonnet 4.6", model: "global.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
 		{name: "geo sonnet 4.6", model: "us.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{name: "jp sonnet 4.6", model: "jp.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
 		{name: "direct sonnet 4.6", model: "anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{name: "global sonnet 4.6 v1", model: "global.anthropic.claude-sonnet-4-6-v1", wantInput: 3.00, wantOut: 15.00},
+		{name: "global sonnet 4.6 v1 versioned", model: "global.anthropic.claude-sonnet-4-6-v1:0", wantInput: 3.00, wantOut: 15.00},
+		{name: "direct sonnet 4.6 v1", model: "anthropic.claude-sonnet-4-6-v1", wantInput: 3.30, wantOut: 16.50},
+		{name: "jp sonnet 4.6 v1 versioned", model: "jp.anthropic.claude-sonnet-4-6-v1:0", wantInput: 3.30, wantOut: 16.50},
 		{name: "global sonnet 4.5 long context", model: "global.anthropic.claude-sonnet-4-5-20250929-v1:0", prompt: 250000, wantInput: 6.00, wantOut: 22.50},
 		{name: "direct sonnet 4.5 long context", model: "anthropic.claude-sonnet-4-5-20250929-v1:0", prompt: 250000, wantInput: 6.60, wantOut: 24.75},
 		{name: "direct sonnet 4", model: "anthropic.claude-sonnet-4-20250514-v1:0", wantInput: 3.00, wantOut: 15.00},
@@ -601,7 +606,11 @@ func TestGetPricingInfoForConfig_ConfiguredKnownExactModelsAcrossProvidersStillP
 		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6", wantInput: 3.00, wantOut: 15.00},
 		{provider: "bedrock", model: "us.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
 		{provider: "bedrock", model: "eu.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{provider: "bedrock", model: "jp.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
 		{provider: "bedrock", model: "au.anthropic.claude-sonnet-4-6", wantInput: 3.30, wantOut: 16.50},
+		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1", wantInput: 3.00, wantOut: 15.00},
+		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1:0", wantInput: 3.00, wantOut: 15.00},
+		{provider: "bedrock", model: "jp.anthropic.claude-sonnet-4-6-v1:0", wantInput: 3.30, wantOut: 16.50},
 		{provider: "bedrock", model: "global.anthropic.claude-opus-4-8", wantInput: 5.00, wantOut: 25.00},
 		{provider: "bedrock", model: "jp.anthropic.claude-opus-4-8", wantInput: 5.50, wantOut: 27.50},
 		{provider: "bedrock", model: "amazon.nova-pro-v1:0", wantInput: 0.80, wantOut: 3.20},
@@ -626,20 +635,28 @@ func TestGetPricingInfoForConfig_ConfiguredKnownExactModelsAcrossProvidersStillP
 	}
 }
 
-func TestGetPricingInfoForConfig_ConfiguredInvalidBedrockSonnet46VersionedIsUnavailable(t *testing.T) {
-	for _, model := range []string{
-		"global.anthropic.claude-sonnet-4-6-v1",
-		"global.anthropic.claude-sonnet-4-6-v1:0",
+func TestGetPricingInfoForConfig_ConfiguredBedrockSonnet46VersionedPrices(t *testing.T) {
+	for _, tt := range []struct {
+		model     string
+		wantInput float64
+		wantOut   float64
+	}{
+		{model: "global.anthropic.claude-sonnet-4-6-v1", wantInput: 3.00, wantOut: 15.00},
+		{model: "global.anthropic.claude-sonnet-4-6-v1:0", wantInput: 3.00, wantOut: 15.00},
+		{model: "jp.anthropic.claude-sonnet-4-6-v1:0", wantInput: 3.30, wantOut: 16.50},
 	} {
-		t.Run(model, func(t *testing.T) {
+		t.Run(tt.model, func(t *testing.T) {
 			cfg := config.DefaultConfig()
 			cfg.SetProviderModelConfig("bedrock", config.ProviderModelConfig{
-				DefaultModel: model,
+				DefaultModel: tt.model,
 			})
 
-			got := GetPricingInfoForConfig(cfg, "bedrock", model)
-			if !got.PricingUnavailable {
-				t.Fatalf("configured invalid Bedrock Sonnet 4.6 pricing = %#v, want unavailable", got)
+			got := GetPricingInfoForConfig(cfg, "bedrock", tt.model)
+			if got.PricingUnavailable {
+				t.Fatalf("configured Bedrock Sonnet 4.6 versioned pricing = %#v, want available", got)
+			}
+			if got.InputCostPerM != tt.wantInput || got.OutputCostPerM != tt.wantOut {
+				t.Fatalf("configured Bedrock Sonnet 4.6 versioned pricing = %#v, want input=%f output=%f", got, tt.wantInput, tt.wantOut)
 			}
 		})
 	}
