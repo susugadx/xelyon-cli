@@ -8,7 +8,7 @@ type WriteFileTool struct{}
 func (t *WriteFileTool) Name() string { return "write_file" }
 
 func (t *WriteFileTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *WriteFileTool) Parameters() map[string]interface{} {
@@ -23,15 +23,12 @@ func (t *WriteFileTool) Run(execCtx tools.ExecutionContext, args map[string]stri
 	if err != nil {
 		return details.result.message, nil, err
 	}
-	if !details.result.ShouldRecordChange() {
-		return details.result.message, nil, nil
-	}
-	return details.result.message, newFileChange(
-		args["path"],
-		details.resolvedPath,
-		"write_file",
-		"Wrote file "+args["path"],
-		countLines(args["content"]),
-		0,
-	), nil
+	change := fileChangeForAppliedMutation(details.result, fileMutationChangeSpec{
+		displayPath:  args["path"],
+		resolvedPath: details.resolvedPath,
+		toolName:     "write_file",
+		description:  "Wrote file " + args["path"],
+		linesAdded:   countLines(args["content"]),
+	})
+	return details.result.message, change, nil
 }

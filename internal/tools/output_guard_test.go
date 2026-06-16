@@ -20,9 +20,10 @@ func TestToolPackages_AvoidDirectProcessOutput(t *testing.T) {
 	root := filepath.Dir(currentFile)
 
 	allowedFiles := map[string]bool{
-		"common/output.go": true,
-		"context.go":       true,
-		"execute.go":       true,
+		"common/output.go":   true,
+		"context.go":         true,
+		"execute_preview.go": true,
+		"execute_publish.go": true,
 	}
 
 	fset := token.NewFileSet()

@@ -8,7 +8,7 @@ type DeleteFileTool struct{}
 func (t *DeleteFileTool) Name() string { return "delete_file" }
 
 func (t *DeleteFileTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *DeleteFileTool) Parameters() map[string]interface{} {
@@ -22,15 +22,11 @@ func (t *DeleteFileTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	if err != nil {
 		return details.result.message, nil, err
 	}
-	if !details.result.ShouldRecordChange() {
-		return details.result.message, nil, nil
-	}
-	return details.result.message, newFileChange(
-		args["path"],
-		details.resolvedPath,
-		"delete_file",
-		"Deleted file "+args["path"],
-		0,
-		0,
-	), nil
+	change := fileChangeForAppliedMutation(details.result, fileMutationChangeSpec{
+		displayPath:  args["path"],
+		resolvedPath: details.resolvedPath,
+		toolName:     "delete_file",
+		description:  "Deleted file " + args["path"],
+	})
+	return details.result.message, change, nil
 }

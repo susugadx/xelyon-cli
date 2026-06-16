@@ -10,6 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/tools/dev"
 )
 
@@ -252,8 +253,8 @@ func (r *planInvestigationRunner) afterToolResults() error {
 }
 
 func (r *planInvestigationRunner) isAllowedTool(tc *tools.ToolCall) bool {
-	safety := tools.GetToolSafety(tc.Tool)
-	if safety == tools.SafetyHigh {
+	safety := common.GetToolSafety(tc.Tool)
+	if safety == common.SafetyHigh {
 		return true
 	}
 

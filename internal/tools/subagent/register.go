@@ -36,7 +36,7 @@ func NewSpawnAgentTool(manager subAgentSpawner) *SpawnAgentTool {
 func (t *SpawnAgentTool) Name() string { return "spawn_agent" }
 
 func (t *SpawnAgentTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *SpawnAgentTool) Parameters() map[string]interface{} {
@@ -127,7 +127,7 @@ func NewWaitAgentTool(manager subAgentWaiter) *WaitAgentTool {
 func (t *WaitAgentTool) Name() string { return "wait_agent" }
 
 func (t *WaitAgentTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *WaitAgentTool) Parameters() map[string]interface{} {

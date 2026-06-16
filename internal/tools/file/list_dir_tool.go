@@ -12,7 +12,7 @@ type ListDirTool struct{}
 func (t *ListDirTool) Name() string { return "list_dir" }
 
 func (t *ListDirTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *ListDirTool) Parameters() map[string]interface{} {
