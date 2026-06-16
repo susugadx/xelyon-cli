@@ -67,11 +67,14 @@ func (s *Spinner) Start(message string) {
 		return
 	}
 
-	s.stopChan = make(chan struct{})
-	s.doneChan = make(chan struct{})
+	stopChan := make(chan struct{})
+	doneChan := make(chan struct{})
+	startTime := s.startTime
+	s.stopChan = stopChan
+	s.doneChan = doneChan
 	s.mu.Unlock()
 
-	go s.spin(message)
+	go s.spin(message, stopChan, doneChan, startTime)
 }
 
 // IsActive はスピナーが動作中かどうかを返す
@@ -170,16 +173,9 @@ func (s *Spinner) GetStatus() string {
 }
 
 // spin はアニメーションループ（goroutine内で実行）
-func (s *Spinner) spin(message string) {
+func (s *Spinner) spin(message string, stopChan <-chan struct{}, doneChan chan<- struct{}, startTime time.Time) {
 	ticker := time.NewTicker(80 * time.Millisecond)
 	defer ticker.Stop()
-
-	// stopChan, doneChan, startTimeをローカルに保存（競合対策）
-	s.mu.Lock()
-	stopChan := s.stopChan
-	startTime := s.startTime
-	doneChan := s.doneChan
-	s.mu.Unlock()
 
 	// goroutine終了をStop()に通知
 	defer func() {
