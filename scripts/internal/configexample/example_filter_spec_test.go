@@ -1,13 +1,14 @@
-package configgen
+package configexample
 
 import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/scripts/internal/configmeta"
 )
 
 func TestBuildExampleFilterSpec(t *testing.T) {
-	spec := buildExampleFilterSpec(Sections)
+	spec := buildExampleFilterSpec(configmeta.Sections)
 	if len(spec.allowedSections) == 0 {
 		t.Fatal("expected allowed sections in filter spec")
 	}
@@ -16,7 +17,7 @@ func TestBuildExampleFilterSpec(t *testing.T) {
 	if !ok {
 		t.Fatal("expected lsp filter spec")
 	}
-	if lsp.mode != ExampleFilterModeFields {
+	if lsp.mode != configmeta.ExampleFilterModeFields {
 		t.Fatalf("unexpected lsp filter mode: %q", lsp.mode)
 	}
 	if !lsp.omittedFields["servers"] {
@@ -27,7 +28,7 @@ func TestBuildExampleFilterSpec(t *testing.T) {
 	if !ok {
 		t.Fatal("expected provider_models filter spec")
 	}
-	if providerModels.mode != ExampleFilterModeKeepAll {
+	if providerModels.mode != configmeta.ExampleFilterModeKeepAll {
 		t.Fatalf("unexpected provider_models mode: %q", providerModels.mode)
 	}
 }

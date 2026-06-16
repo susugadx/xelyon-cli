@@ -1,4 +1,6 @@
-package configgen
+package configexample
+
+import "github.com/susugadx/xelyon-cli/scripts/internal/configmeta"
 
 type compiledExampleFilterSpec struct {
 	allowedSections map[string]bool
@@ -6,13 +8,13 @@ type compiledExampleFilterSpec struct {
 }
 
 type sectionFieldFilterSpec struct {
-	mode           ExampleFilterMode
+	mode           configmeta.ExampleFilterMode
 	topLevelFields map[string]bool
 	fieldTree      *fieldPathNode
 	omittedFields  map[string]bool
 }
 
-func buildExampleFilterSpec(sections map[string]SectionInfo) compiledExampleFilterSpec {
+func buildExampleFilterSpec(sections map[string]configmeta.SectionInfo) compiledExampleFilterSpec {
 	spec := compiledExampleFilterSpec{
 		allowedSections: make(map[string]bool, len(sections)),
 		sectionFilters:  make(map[string]sectionFieldFilterSpec, len(sections)),
@@ -28,7 +30,7 @@ func buildExampleFilterSpec(sections map[string]SectionInfo) compiledExampleFilt
 			mode:          mode,
 			omittedFields: omitted,
 		}
-		if mode == ExampleFilterModeFields {
+		if mode == configmeta.ExampleFilterModeFields {
 			topLevelFields := make(map[string]bool, len(info.Fields))
 			for fieldName := range info.Fields {
 				topLevelFields[fieldName] = true
@@ -41,14 +43,14 @@ func buildExampleFilterSpec(sections map[string]SectionInfo) compiledExampleFilt
 	return spec
 }
 
-func resolveExampleFilterMode(info SectionInfo) ExampleFilterMode {
+func resolveExampleFilterMode(info configmeta.SectionInfo) configmeta.ExampleFilterMode {
 	if info.Example.FilterMode != "" {
 		return info.Example.FilterMode
 	}
 	if sectionHasOnlyMapLikeFieldTypes(info.FieldTypes) {
-		return ExampleFilterModeKeepAll
+		return configmeta.ExampleFilterModeKeepAll
 	}
-	return ExampleFilterModeFields
+	return configmeta.ExampleFilterModeFields
 }
 
 func sectionHasOnlyMapLikeFieldTypes(fieldTypes map[string]string) bool {

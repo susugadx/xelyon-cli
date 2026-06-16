@@ -1,4 +1,4 @@
-package configgen
+package configdocs
 
 import (
 	"fmt"
@@ -14,21 +14,21 @@ const (
 
 // ReplaceConfigExampleBlock は docs/config.md の CONFIG-EXAMPLE ブロックを更新する。
 func ReplaceConfigExampleBlock(content, exampleYAML string) (string, error) {
-	updated, replaced := ReplaceMarkerContent(content, configExampleStartMarker, configExampleEndMarker, FormatConfigExample(exampleYAML))
+	updated, replaced := replaceMarkerContent(content, configExampleStartMarker, configExampleEndMarker, formatConfigExample(exampleYAML))
 	if !replaced {
 		return "", fmt.Errorf("missing CONFIG-EXAMPLE markers")
 	}
 	return updated, nil
 }
 
-// HasConfigDetailsMarkers は docs/config.md が詳細ブロック更新に対応しているかを返す。
-func HasConfigDetailsMarkers(content string) bool {
+// hasConfigDetailsMarkers は docs/config.md が詳細ブロック更新に対応しているかを返す。
+func hasConfigDetailsMarkers(content string) bool {
 	return containsAll(content, configDetailsStartMarker, configDetailsEndMarker)
 }
 
-// ReplaceConfigDetailsBlock は docs/config.md の CONFIG-DETAILS ブロックを更新する。
-func ReplaceConfigDetailsBlock(content, details string) string {
-	updated, _ := ReplaceMarkerContent(content, configDetailsStartMarker, configDetailsEndMarker, details)
+// replaceConfigDetailsBlock は docs/config.md の CONFIG-DETAILS ブロックを更新する。
+func replaceConfigDetailsBlock(content, details string) string {
+	updated, _ := replaceMarkerContent(content, configDetailsStartMarker, configDetailsEndMarker, details)
 	return updated
 }
 

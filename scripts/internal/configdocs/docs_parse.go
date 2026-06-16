@@ -1,4 +1,4 @@
-package configgen
+package configdocs
 
 import (
 	"fmt"
@@ -12,15 +12,15 @@ import (
 	"strings"
 )
 
-// ParseConfigTypes parses struct comments and YAML-tagged fields from a config package dir.
-func ParseConfigTypes(dir string) ([]StructInfo, error) {
+// parseConfigTypes は config package dir から struct コメントと YAML tag 付き field を解析する。
+func parseConfigTypes(dir string) ([]structInfo, error) {
 	fset := token.NewFileSet()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	structMap := make(map[string]StructInfo)
+	structMap := make(map[string]structInfo)
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -37,7 +37,7 @@ func ParseConfigTypes(dir string) ([]StructInfo, error) {
 		}
 	}
 
-	var structs []StructInfo
+	var structs []structInfo
 	for _, info := range structMap {
 		structs = append(structs, info)
 	}
@@ -47,7 +47,7 @@ func ParseConfigTypes(dir string) ([]StructInfo, error) {
 	return structs, nil
 }
 
-func collectStructInfoFromFile(file *ast.File, fset *token.FileSet, structMap map[string]StructInfo) error {
+func collectStructInfoFromFile(file *ast.File, fset *token.FileSet, structMap map[string]structInfo) error {
 	var parseErr error
 	ast.Inspect(file, func(n ast.Node) bool {
 		if parseErr != nil {
@@ -72,7 +72,7 @@ func collectStructInfoFromFile(file *ast.File, fset *token.FileSet, structMap ma
 			parseErr = fmt.Errorf("struct %s: %w", typeSpec.Name.Name, err)
 			return false
 		}
-		structMap[typeSpec.Name.Name] = StructInfo{
+		structMap[typeSpec.Name.Name] = structInfo{
 			Name:    typeSpec.Name.Name,
 			Comment: structComment,
 			Fields:  fields,
@@ -82,8 +82,8 @@ func collectStructInfoFromFile(file *ast.File, fset *token.FileSet, structMap ma
 	return parseErr
 }
 
-func collectFieldInfo(structType *ast.StructType, fset *token.FileSet) ([]FieldInfo, error) {
-	fields := make([]FieldInfo, 0, len(structType.Fields.List))
+func collectFieldInfo(structType *ast.StructType, fset *token.FileSet) ([]fieldInfo, error) {
+	fields := make([]fieldInfo, 0, len(structType.Fields.List))
 	for _, field := range structType.Fields.List {
 		if len(field.Names) == 0 {
 			continue
@@ -120,7 +120,7 @@ func collectFieldInfo(structType *ast.StructType, fset *token.FileSet) ([]FieldI
 			if strings.TrimSpace(fieldName) == "" {
 				continue
 			}
-			fields = append(fields, FieldInfo{
+			fields = append(fields, fieldInfo{
 				Name:       fieldName,
 				Type:       fieldType,
 				YAMLTag:    yamlTag,

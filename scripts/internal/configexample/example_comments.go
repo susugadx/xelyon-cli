@@ -1,8 +1,9 @@
-package configgen
+package configexample
 
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/scripts/internal/configmeta"
 	"gopkg.in/yaml.v3"
 )
 
@@ -11,7 +12,7 @@ func annotateExampleSectionComments(mapping *yaml.Node) {
 		keyNode := mapping.Content[i]
 		valueNode := mapping.Content[i+1]
 
-		info, ok := Sections[keyNode.Value]
+		info, ok := configmeta.Sections[keyNode.Value]
 		if !ok {
 			continue
 		}
@@ -29,7 +30,7 @@ func annotateExampleSectionComments(mapping *yaml.Node) {
 	}
 }
 
-func topLevelFieldComment(info SectionInfo, key string) string {
+func topLevelFieldComment(info configmeta.SectionInfo, key string) string {
 	if len(info.Fields) == 0 {
 		return ""
 	}
@@ -60,7 +61,7 @@ func annotateExampleFieldComments(mapping *yaml.Node, fields map[string]string, 
 	}
 }
 
-func annotateExampleCommentedFields(mapping *yaml.Node, fields map[string]string, commentedFields map[string]CommentedExampleField) {
+func annotateExampleCommentedFields(mapping *yaml.Node, fields map[string]string, commentedFields map[string]configmeta.CommentedExampleField) {
 	if mapping == nil || mapping.Kind != yaml.MappingNode || len(commentedFields) == 0 {
 		return
 	}
@@ -163,7 +164,7 @@ func splitExampleFieldPath(path string) ([]string, string) {
 	return cleaned[:len(cleaned)-1], cleaned[len(cleaned)-1]
 }
 
-func buildExampleSectionHeaderComment(info SectionInfo) string {
+func buildExampleSectionHeaderComment(info configmeta.SectionInfo) string {
 	var lines []string
 	if title := strings.TrimSpace(info.Title); title != "" {
 		lines = append(lines, "============================================================")
