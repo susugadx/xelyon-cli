@@ -1,5 +1,17 @@
 # Package Boundaries
 
+## CLI root/runtime boundary
+
+CLI root wiring は次の owner に分ける。
+
+- `cmd`: Cobra command tree、flag binding、stdout/stderr 選択、process exit、root command から app runner を呼ぶ orchestration の owner。Cobra と user-visible help text はここに閉じる。
+- `internal/climode`: root flags / args から execution mode と output format を決める pure policy owner。Cobra、config、app、provider runtime を import しない。
+- `internal/cliruntime`: config load、environment override、flag override、provider/model selection、provider setup-required classification、resume session lookup の owner。Cobra、cmd、app、TUI を import しない。
+- `internal/authcli`: provider-specific auth command action / rendering の owner。Cobra binding は `cmd` に残し、OpenAI Subscription auth の read/login/logout/render policy はここに閉じる。
+- `internal/clidoctor`: `xelyon doctor` の provider/MCP diagnostic action、config load fallback、diagnostic option assembly、text/JSON render、Azure config snippet render の owner。Cobra、`cmd`、`internal/app`、TUI を import しない。`cmd` は subcommand ごとの flags から `clidoctor.*Options` を作り、`Run*Doctor(ctx, out, opts)` の `silenceUsage` だけを Cobra command に反映する。
+
+`internal/climode/package_boundaries_test.go`、`internal/cliruntime/package_boundaries_test.go`、`internal/authcli/package_boundaries_test.go`、`internal/clidoctor/package_boundaries_test.go` は、それぞれ上記の import direction を固定する。`cmd.Execute()` は `main.go` 用の stable entrypoint として維持する。
+
 ## Phase 1: agent / TUI boundary
 
 Phase 1 後の対話実行と TUI の依存方向は次の owner に分ける。
