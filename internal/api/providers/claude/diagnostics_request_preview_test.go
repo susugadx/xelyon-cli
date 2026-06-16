@@ -129,13 +129,68 @@ func TestClaudeDiagnosticRequestPreviewBodiesMatchRuntimeBuilders(t *testing.T) 
 	provider.SetMCPTools(nil)
 	for i, request := range requests {
 		requestCtx := newClaudeDiagnosticRequestContext(context.Background(), previewCfg, request, nil)
-		wantBody, _ := buildClaudeDiagnosticRequestBody(requestCtx, provider, report.Model, request)
+		wantBody, _ := buildClaudeDiagnosticRequestBody(requestCtx, provider, report, request)
 		if got, want := canonicalClaudeDiagnosticJSON(t, preview.Requests[i].Body), canonicalClaudeDiagnosticJSON(t, wantBody); got != want {
 			t.Fatalf("%s preview body drifted from diagnostic body builder:\ngot:  %s\nwant: %s", request.Name, got, want)
 		}
 		if got, want := preview.Requests[i].Route, claudeDiagnosticRequestRoute(request); got != want {
 			t.Fatalf("%s route = %q, want %q", request.Name, got, want)
 		}
+	}
+}
+
+func TestDiagnoseClaude_PrintRequestFableToolSmokeUsesAutoToolChoice(t *testing.T) {
+	setClaudeDiagnosticTestEnv(t, "", "")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "claude-fable-5",
+		CatalogModel: "claude-fable-5",
+		PrintRequest: true,
+		ToolSmoke:    true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 1 {
+		t.Fatalf("RequestPreview = %#v, want only tool request", report.RequestPreview)
+	}
+	body, ok := report.RequestPreview.Requests[0].Body.(Request)
+	if !ok {
+		t.Fatalf("tool body type = %T, want Request", report.RequestPreview.Requests[0].Body)
+	}
+	if len(body.Tools) != 1 || body.Tools[0].Name != claudeDiagnosticToolName {
+		t.Fatalf("Tools = %#v, want diagnostic tool payload", body.Tools)
+	}
+	if body.ToolChoice != nil {
+		t.Fatalf("ToolChoice = %#v, want omitted for always-on thinking model", body.ToolChoice)
+	}
+}
+
+func TestDiagnoseClaude_PrintRequestThinkingToolSmokeUsesAutoToolChoice(t *testing.T) {
+	setClaudeDiagnosticTestEnv(t, "", "")
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = true
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       cfg,
+		Model:        defaultClaudeModel,
+		CatalogModel: defaultClaudeModel,
+		PrintRequest: true,
+		ToolSmoke:    true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	body, ok := report.RequestPreview.Requests[0].Body.(Request)
+	if !ok {
+		t.Fatalf("tool body type = %T, want Request", report.RequestPreview.Requests[0].Body)
+	}
+	if body.Thinking == nil || body.Thinking.Type != "adaptive" {
+		t.Fatalf("Thinking = %#v, want adaptive thinking request", body.Thinking)
+	}
+	if body.ToolChoice != nil {
+		t.Fatalf("ToolChoice = %#v, want omitted when thinking is enabled", body.ToolChoice)
 	}
 }
 

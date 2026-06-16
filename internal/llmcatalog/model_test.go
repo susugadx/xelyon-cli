@@ -11,6 +11,12 @@ func TestKnownMaxOutputTokens_ClaudeOneMillionModels(t *testing.T) {
 		"claude-opus-4.8",
 		"anthropic/claude-opus-4-8",
 		"anthropic/claude-opus-4.8",
+		"anthropic.claude-opus-4-8",
+		"global.anthropic.claude-opus-4-8",
+		"us.anthropic.claude-opus-4-8",
+		"eu.anthropic.claude-opus-4-8",
+		"jp.anthropic.claude-opus-4-8",
+		"au.anthropic.claude-opus-4-8",
 		"claude-opus-4-7",
 		"claude-opus-4.7",
 		"claude-opus-4-6",
@@ -62,7 +68,10 @@ func TestIsKnownModelName(t *testing.T) {
 		{model: "claude-opus-4-8", want: true},
 		{model: "claude-opus-4.8", want: true},
 		{model: "claude-fable-5", want: true},
+		{model: "global.anthropic.claude-opus-4-8", want: true},
 		{model: "global.anthropic.claude-sonnet-4-6", want: true},
+		{model: "global.anthropic.claude-sonnet-4-6-v1", want: false},
+		{model: "global.anthropic.claude-sonnet-4-6-v1:0", want: false},
 		{model: "eu.anthropic.claude-sonnet-4-6", want: true},
 		{model: "au.anthropic.claude-sonnet-4-6", want: true},
 		{model: "claude-sonnet-4.5", want: true},
@@ -99,6 +108,7 @@ func TestInferProviderFromModel_KnownRoutedAndUnknown(t *testing.T) {
 		{model: "claude-sonnet-4-6", want: "claude"},
 		{model: "claude-opus-4-8", want: "claude"},
 		{model: "claude-fable-5", want: "claude"},
+		{model: "jp.anthropic.claude-opus-4-8", want: "bedrock"},
 		{model: "deepseek-v4-flash", want: "deepseek"},
 		{model: "kimi-k2.6", want: "kimi"},
 		{model: "kimi-k2.7-code", want: "kimi"},
@@ -159,6 +169,25 @@ func TestRecommendedModelNamesForProvider_IncludesLatestClaudeModels(t *testing.
 		if !slices.Contains(models, model) {
 			t.Fatalf("RecommendedModelNamesForProvider(claude) = %v, want %q for /model picker", models, model)
 		}
+	}
+}
+
+func TestKnownAndRecommendedModelNamesForProvider_BedrockIncludesOpus48Profiles(t *testing.T) {
+	models := KnownModelNamesForProvider("bedrock")
+	for _, model := range []string{
+		"anthropic.claude-opus-4-8",
+		"global.anthropic.claude-opus-4-8",
+		"us.anthropic.claude-opus-4-8",
+		"eu.anthropic.claude-opus-4-8",
+		"jp.anthropic.claude-opus-4-8",
+		"au.anthropic.claude-opus-4-8",
+	} {
+		if !slices.Contains(models, model) {
+			t.Fatalf("KnownModelNamesForProvider(bedrock) = %v, want %q", models, model)
+		}
+	}
+	if slices.Contains(models, "global.anthropic.claude-sonnet-4-6-v1") {
+		t.Fatalf("KnownModelNamesForProvider(bedrock) should not expose invalid Sonnet 4.6 v1 ID: %v", models)
 	}
 }
 
@@ -372,6 +401,9 @@ func TestIsKnownModelNameForProvider_UsesProviderScopedCatalog(t *testing.T) {
 		{provider: "gemini", model: "gemini-3-pro-preview", want: true},
 		{provider: "gemini", model: "gemini-2.0-flash", want: true},
 		{provider: "azure", model: "gpt-5.4", want: false},
+		{provider: "bedrock", model: "global.anthropic.claude-opus-4-8", want: true},
+		{provider: "bedrock", model: "jp.anthropic.claude-opus-4-8", want: true},
+		{provider: "bedrock", model: "global.anthropic.claude-sonnet-4-6-v1", want: false},
 		{provider: "bedrock", model: "meta.llama3-3-70b-instruct-v1:0", want: true},
 		{provider: "bedrock", model: "gpt-5.4", want: false},
 	}
@@ -391,6 +423,12 @@ func TestModelContextLimit_ClaudeOneMillionModels(t *testing.T) {
 		"claude-opus-4.8",
 		"anthropic/claude-opus-4-8",
 		"anthropic/claude-opus-4.8",
+		"anthropic.claude-opus-4-8",
+		"global.anthropic.claude-opus-4-8",
+		"us.anthropic.claude-opus-4-8",
+		"eu.anthropic.claude-opus-4-8",
+		"jp.anthropic.claude-opus-4-8",
+		"au.anthropic.claude-opus-4-8",
 		"claude-opus-4-7",
 		"claude-opus-4.7",
 		"global.anthropic.claude-opus-4-7-v1",
@@ -417,8 +455,6 @@ func TestModelContextLimit_BedrockClaudeProfiles(t *testing.T) {
 		"us.anthropic.claude-sonnet-4-6",
 		"eu.anthropic.claude-sonnet-4-6",
 		"au.anthropic.claude-sonnet-4-6",
-		"global.anthropic.claude-sonnet-4-6-v1",
-		"global.anthropic.claude-sonnet-4-6-v1:0",
 	} {
 		t.Run(model, func(t *testing.T) {
 			if got := ModelContextLimit(model); got != 200000 {
@@ -439,10 +475,11 @@ func TestKnownModelContextLimit(t *testing.T) {
 		{model: "gemini-3.1-flash-lite", want: 1000000, ok: true},
 		{model: "claude-sonnet-4-6", want: 1000000, ok: true},
 		{model: "claude-opus-4-8", want: 1000000, ok: true},
+		{model: "global.anthropic.claude-opus-4-8", want: 1000000, ok: true},
 		{model: "claude-opus-4-6", want: 1000000, ok: true},
 		{model: "claude-fable-5", want: 1000000, ok: true},
-		{model: "global.anthropic.claude-sonnet-4-6-v1", want: 200000, ok: true},
-		{model: "global.anthropic.claude-sonnet-4-6-v1:0", want: 200000, ok: true},
+		{model: "global.anthropic.claude-sonnet-4-6-v1", ok: false},
+		{model: "global.anthropic.claude-sonnet-4-6-v1:0", ok: false},
 		{model: "deepseek-v4-custom", want: 1000000, ok: true},
 		{model: "kimi-k2.6", want: 256000, ok: true},
 		{model: "kimi-k2.5", want: 256000, ok: true},
@@ -512,6 +549,30 @@ func TestKnownModelLimits_OpenRouterFableUnsupportedUntilReplaySupport(t *testin
 	}
 	if IsKnownModelName(model) {
 		t.Fatalf("IsKnownModelName(%q) = true, want false", model)
+	}
+}
+
+func TestKnownModelLimits_BedrockSonnet46VersionedUnsupported(t *testing.T) {
+	for _, model := range []string{
+		"anthropic.claude-sonnet-4-6-v1",
+		"global.anthropic.claude-sonnet-4-6-v1",
+		"global.anthropic.claude-sonnet-4-6-v1:0",
+		"jp.anthropic.claude-sonnet-4-6-v1:0",
+	} {
+		t.Run(model, func(t *testing.T) {
+			if got, ok := KnownModelContextLimit(model); ok || got != 0 {
+				t.Fatalf("KnownModelContextLimit(%q) = %d, %v; want 0, false", model, got, ok)
+			}
+			if got, ok := KnownMaxOutputTokens(model); ok || got != 0 {
+				t.Fatalf("KnownMaxOutputTokens(%q) = %d, %v; want 0, false", model, got, ok)
+			}
+			if IsKnownModelName(model) {
+				t.Fatalf("IsKnownModelName(%q) = true, want false", model)
+			}
+			if IsKnownModelNameForProvider("bedrock", model) {
+				t.Fatalf("IsKnownModelNameForProvider(bedrock, %q) = true, want false", model)
+			}
+		})
 	}
 }
 
@@ -646,8 +707,12 @@ func TestKnownMaxOutputTokens_BedrockClaudeProfiles(t *testing.T) {
 		{model: "us.anthropic.claude-sonnet-4-6", want: 64000},
 		{model: "eu.anthropic.claude-sonnet-4-6", want: 64000},
 		{model: "au.anthropic.claude-sonnet-4-6", want: 64000},
-		{model: "global.anthropic.claude-sonnet-4-6-v1", want: 64000},
-		{model: "global.anthropic.claude-sonnet-4-6-v1:0", want: 64000},
+		{model: "anthropic.claude-opus-4-8", want: 128000},
+		{model: "global.anthropic.claude-opus-4-8", want: 128000},
+		{model: "us.anthropic.claude-opus-4-8", want: 128000},
+		{model: "eu.anthropic.claude-opus-4-8", want: 128000},
+		{model: "jp.anthropic.claude-opus-4-8", want: 128000},
+		{model: "au.anthropic.claude-opus-4-8", want: 128000},
 	}
 
 	for _, tt := range tests {
@@ -724,6 +789,8 @@ func TestIsAdaptiveClaudeThinkingModel_Opus47(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{"global.anthropic.claude-opus-4-8", true},
+		{"jp.anthropic.claude-opus-4-8", true},
 		{"claude-opus-4-7", true},
 		{"claude-opus-4.7", true},
 		{"global.anthropic.claude-opus-4-7-v1:0", true},

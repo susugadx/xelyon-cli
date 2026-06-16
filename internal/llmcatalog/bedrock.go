@@ -80,7 +80,7 @@ func knownBedrockMaxOutputTokens(model string) (int, bool) {
 
 func trimBedrockInferenceProfilePrefix(model string) string {
 	model = strings.ToLower(strings.TrimSpace(model))
-	for _, prefix := range []string{"global.", "us.", "eu.", "apac."} {
+	for _, prefix := range []string{"global.", "us.", "eu.", "jp.", "au.", "apac."} {
 		if strings.HasPrefix(model, prefix) {
 			return strings.TrimPrefix(model, prefix)
 		}
@@ -117,6 +117,7 @@ var bedrockModelIDPrefixes = []string{
 	"global.anthropic.",
 	"us.anthropic.",
 	"eu.anthropic.",
+	"jp.anthropic.",
 	"au.anthropic.",
 	"apac.anthropic.",
 	"amazon.nova",

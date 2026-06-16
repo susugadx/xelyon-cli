@@ -118,6 +118,12 @@ var knownProviderModels = map[string][]string{
 		"us.anthropic.claude-sonnet-4-6",
 		"eu.anthropic.claude-sonnet-4-6",
 		"au.anthropic.claude-sonnet-4-6",
+		"anthropic.claude-opus-4-8",
+		"global.anthropic.claude-opus-4-8",
+		"us.anthropic.claude-opus-4-8",
+		"eu.anthropic.claude-opus-4-8",
+		"jp.anthropic.claude-opus-4-8",
+		"au.anthropic.claude-opus-4-8",
 		"global.anthropic.claude-opus-4-7-v1",
 		"global.anthropic.claude-opus-4-7-v1:0",
 		"amazon.nova-pro-v1:0",
@@ -221,6 +227,9 @@ func IsKnownModelNameForProvider(provider, model string) bool {
 	}
 
 	normalized := strings.ToLower(model)
+	if key == "bedrock" && isUnsupportedModelLimitName(normalized) {
+		return false
+	}
 	if key == "bedrock" && IsBedrockModelID(normalized) {
 		return true
 	}

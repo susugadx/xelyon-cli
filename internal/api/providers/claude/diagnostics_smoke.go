@@ -114,7 +114,7 @@ func runClaudeDiagnosticSmokeRequest(
 }
 
 func runClaudeDiagnosticSmokePayload(ctx context.Context, provider *Provider, report DiagnosticReport, request claudeDiagnosticRequest) (string, error) {
-	applyClaudeDiagnosticToolChoice(provider, request)
+	applyClaudeDiagnosticToolChoice(ctx, provider, request, report.CatalogModel)
 
 	switch {
 	case request.ImagePayload:

@@ -9,49 +9,53 @@ type ModelLimit struct {
 }
 
 var knownModelMaxOutputTokens = map[string]int{
-	"deepseek-chat":                           384000,
-	"deepseek-coder":                          16384,
-	"deepseek-reasoner":                       384000,
-	"deepseek-v4-flash":                       384000,
-	"deepseek-v4-pro":                         384000,
-	"kimi-k2":                                 32768,
-	"kimi-k2.5":                               32768,
-	"kimi-k2.6":                               32768,
-	"kimi-k2.7-code":                          32768,
-	"kimi-k2-thinking":                        32768,
-	"claude-sonnet-4-6":                       64000,
-	"claude-sonnet-4.6":                       64000,
-	"anthropic.claude-sonnet-4-6":             64000,
-	"global.anthropic.claude-sonnet-4-6":      64000,
-	"us.anthropic.claude-sonnet-4-6":          64000,
-	"eu.anthropic.claude-sonnet-4-6":          64000,
-	"au.anthropic.claude-sonnet-4-6":          64000,
-	"global.anthropic.claude-sonnet-4-6-v1":   64000,
-	"global.anthropic.claude-sonnet-4-6-v1:0": 64000,
-	"claude-sonnet-4-5":                       64000,
-	"claude-sonnet-4.5":                       64000,
-	"claude-opus-4-8":                         128000,
-	"claude-opus-4.8":                         128000,
-	"claude-opus-4-7":                         128000,
-	"claude-opus-4.7":                         128000,
-	"global.anthropic.claude-opus-4-7-v1":     128000,
-	"global.anthropic.claude-opus-4-7-v1:0":   128000,
-	"us.anthropic.claude-opus-4-7-v1:0":       128000,
-	"claude-fable-5":                          128000,
-	"claude-opus-4-6":                         128000,
-	"claude-opus-4-5":                         64000,
-	"gpt-5.5":                                 128000,
-	"gpt-5.5-2026-04-23":                      128000,
-	"gpt-5.5-pro":                             128000,
-	"gpt-5.5-pro-2026-04-23":                  128000,
-	"gpt-5.3-codex":                           128000,
-	"gpt-5.2":                                 16384,
-	"gemini-2.5-flash":                        65536,
-	"gemini-3.5-flash":                        65536,
-	"gemini-3.1-flash-lite":                   65536,
-	"gemini-3.1-pro":                          65536,
-	"gemini-3.1-pro-preview":                  65536,
-	"gemini-3.1-pro-preview-customtools":      65536,
+	"deepseek-chat":                         384000,
+	"deepseek-coder":                        16384,
+	"deepseek-reasoner":                     384000,
+	"deepseek-v4-flash":                     384000,
+	"deepseek-v4-pro":                       384000,
+	"kimi-k2":                               32768,
+	"kimi-k2.5":                             32768,
+	"kimi-k2.6":                             32768,
+	"kimi-k2.7-code":                        32768,
+	"kimi-k2-thinking":                      32768,
+	"claude-sonnet-4-6":                     64000,
+	"claude-sonnet-4.6":                     64000,
+	"anthropic.claude-sonnet-4-6":           64000,
+	"global.anthropic.claude-sonnet-4-6":    64000,
+	"us.anthropic.claude-sonnet-4-6":        64000,
+	"eu.anthropic.claude-sonnet-4-6":        64000,
+	"au.anthropic.claude-sonnet-4-6":        64000,
+	"claude-sonnet-4-5":                     64000,
+	"claude-sonnet-4.5":                     64000,
+	"claude-opus-4-8":                       128000,
+	"claude-opus-4.8":                       128000,
+	"anthropic.claude-opus-4-8":             128000,
+	"global.anthropic.claude-opus-4-8":      128000,
+	"us.anthropic.claude-opus-4-8":          128000,
+	"eu.anthropic.claude-opus-4-8":          128000,
+	"jp.anthropic.claude-opus-4-8":          128000,
+	"au.anthropic.claude-opus-4-8":          128000,
+	"claude-opus-4-7":                       128000,
+	"claude-opus-4.7":                       128000,
+	"global.anthropic.claude-opus-4-7-v1":   128000,
+	"global.anthropic.claude-opus-4-7-v1:0": 128000,
+	"us.anthropic.claude-opus-4-7-v1:0":     128000,
+	"claude-fable-5":                        128000,
+	"claude-opus-4-6":                       128000,
+	"claude-opus-4-5":                       64000,
+	"gpt-5.5":                               128000,
+	"gpt-5.5-2026-04-23":                    128000,
+	"gpt-5.5-pro":                           128000,
+	"gpt-5.5-pro-2026-04-23":                128000,
+	"gpt-5.3-codex":                         128000,
+	"gpt-5.2":                               16384,
+	"gemini-2.5-flash":                      65536,
+	"gemini-3.5-flash":                      65536,
+	"gemini-3.1-flash-lite":                 65536,
+	"gemini-3.1-pro":                        65536,
+	"gemini-3.1-pro-preview":                65536,
+	"gemini-3.1-pro-preview-customtools":    65536,
 }
 
 var modelContextLimits = map[string]int{
@@ -78,8 +82,12 @@ var modelContextLimits = map[string]int{
 	"us.anthropic.claude-sonnet-4-6":                   200000,
 	"eu.anthropic.claude-sonnet-4-6":                   200000,
 	"au.anthropic.claude-sonnet-4-6":                   200000,
-	"global.anthropic.claude-sonnet-4-6-v1":            200000,
-	"global.anthropic.claude-sonnet-4-6-v1:0":          200000,
+	"anthropic.claude-opus-4-8":                        1000000,
+	"global.anthropic.claude-opus-4-8":                 1000000,
+	"us.anthropic.claude-opus-4-8":                     1000000,
+	"eu.anthropic.claude-opus-4-8":                     1000000,
+	"jp.anthropic.claude-opus-4-8":                     1000000,
+	"au.anthropic.claude-opus-4-8":                     1000000,
 	"global.anthropic.claude-opus-4-7-v1":              1000000,
 	"global.anthropic.claude-opus-4-7-v1:0":            1000000,
 	"us.anthropic.claude-opus-4-7-v1:0":                1000000,
@@ -173,6 +181,7 @@ var modelMaxOutputTokenPrefixes = []ModelLimit{
 var modelContextLimitPrefixes = []ModelLimit{
 	{Pattern: "us.anthropic.claude", Limit: 200000},
 	{Pattern: "eu.anthropic.claude", Limit: 200000},
+	{Pattern: "jp.anthropic.claude", Limit: 200000},
 	{Pattern: "au.anthropic.claude", Limit: 200000},
 	{Pattern: "anthropic.claude", Limit: 200000},
 	{Pattern: "global.anthropic.claude", Limit: 200000},
@@ -276,7 +285,7 @@ func modelLimitLookupCandidates(model string) []string {
 	if model == "" || model == "default" {
 		return nil
 	}
-	if isUnsupportedRoutedModelLimitName(model) {
+	if isUnsupportedModelLimitName(model) {
 		return nil
 	}
 
@@ -389,7 +398,8 @@ func IsOpenAIResponsesModel(model string, extraModels []string) bool {
 // IsAdaptiveClaudeThinkingModel は adaptive thinking を使う Claude モデルか返す。
 func IsAdaptiveClaudeThinkingModel(model string) bool {
 	m := normalizeModelName(model)
-	return isClaudeOneMillionContextModelName(m) ||
+	return isClaudeOpus48ModelName(m) ||
+		isClaudeOneMillionContextModelName(m) ||
 		isClaudeOpus47ModelName(m) ||
 		strings.Contains(m, "claude-opus-4-6") ||
 		strings.Contains(m, "claude-opus-4.6") ||
@@ -459,8 +469,15 @@ func isDirectOrRoutedClaudeModelName(model string) bool {
 	return ok && owner == "anthropic" && strings.HasPrefix(routedModel, "claude-")
 }
 
-func isUnsupportedRoutedModelLimitName(model string) bool {
-	return model == "anthropic/claude-fable-5"
+func isUnsupportedModelLimitName(model string) bool {
+	return model == "anthropic/claude-fable-5" ||
+		isUnsupportedBedrockSonnet46VersionedName(model)
+}
+
+func isUnsupportedBedrockSonnet46VersionedName(model string) bool {
+	trimmed := trimBedrockInferenceProfilePrefix(model)
+	return trimmed == "anthropic.claude-sonnet-4-6-v1" ||
+		strings.HasPrefix(trimmed, "anthropic.claude-sonnet-4-6-v1:")
 }
 
 func isOpenAIReasoningModelName(model string) bool {

@@ -63,7 +63,7 @@ func buildClaudeDiagnosticRequestPreviewRequest(
 	report DiagnosticReport,
 	request claudeDiagnosticRequest,
 ) (DiagnosticRequestPreviewRequest, error) {
-	body, contextManagement := buildClaudeDiagnosticRequestBody(ctx, provider, report.Model, request)
+	body, contextManagement := buildClaudeDiagnosticRequestBody(ctx, provider, report, request)
 	headers := provider.anthropicHeaders(ctx, report.Model, contextManagement)
 	if request.WebSearchPayload {
 		headers = provider.anthropicHeaders(ctx, report.Model, nil, webSearchBetaHeader)
@@ -76,22 +76,22 @@ func buildClaudeDiagnosticRequestPreviewRequest(
 	}), nil
 }
 
-func buildClaudeDiagnosticRequestBody(ctx context.Context, provider *Provider, model string, request claudeDiagnosticRequest) (any, *ContextManagement) {
-	applyClaudeDiagnosticToolChoice(provider, request)
+func buildClaudeDiagnosticRequestBody(ctx context.Context, provider *Provider, report DiagnosticReport, request claudeDiagnosticRequest) (any, *ContextManagement) {
+	applyClaudeDiagnosticToolChoice(ctx, provider, request, report.CatalogModel)
 
 	switch {
 	case request.ImagePayload:
-		built := provider.buildMultimodalRequest(ctx, request.SystemPrompt, nil, request.UserContent, claudeDiagnosticImage(), model)
+		built := provider.buildMultimodalRequest(ctx, request.SystemPrompt, nil, request.UserContent, claudeDiagnosticImage(), report.Model)
 		return built.Request, built.Request.ContextManagement
 	case request.WebSearchPayload:
-		built := provider.buildWebSearchRequest(ctx, request.UserContent, model)
+		built := provider.buildWebSearchRequest(ctx, request.UserContent, report.Model)
 		return built.Request, nil
 	default:
 		built := provider.buildMessagesRequest(
 			ctx,
 			request.SystemPrompt,
 			[]api.Message{{Role: "user", Content: request.UserContent}},
-			model,
+			report.Model,
 		)
 		return built.Request, built.Request.ContextManagement
 	}

@@ -164,15 +164,22 @@ func claudeDiagnosticSmokeToolDefinitions() []api.ToolDefinition {
 	return providerdiag.NoopDiagnosticToolDefinitions(claudeDiagnosticToolName, "Claude")
 }
 
-func applyClaudeDiagnosticToolChoice(provider *Provider, request claudeDiagnosticRequest) {
+func applyClaudeDiagnosticToolChoice(ctx context.Context, provider *Provider, request claudeDiagnosticRequest, catalogModel string) {
 	if provider == nil {
 		return
 	}
-	if request.ToolPayload {
+	if request.ToolPayload && claudeDiagnosticForcedToolChoiceAllowed(ctx, catalogModel) {
 		provider.SetToolChoice(claudeDiagnosticToolName)
 		return
 	}
 	provider.ClearToolChoice()
+}
+
+func claudeDiagnosticForcedToolChoiceAllowed(ctx context.Context, catalogModel string) bool {
+	if IsAlwaysOnThinkingModel(catalogModel) {
+		return false
+	}
+	return !api.IsThinkingEnabled(ctx)
 }
 
 func newClaudeDiagnosticSkippedToolPreviewRequest(request claudeDiagnosticRequest) DiagnosticRequestPreviewRequest {

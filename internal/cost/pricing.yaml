@@ -140,8 +140,6 @@ claude:
       - us.anthropic.claude-sonnet-4-6
       - eu.anthropic.claude-sonnet-4-6
       - au.anthropic.claude-sonnet-4-6
-      - global.anthropic.claude-sonnet-4-6-v1
-      - global.anthropic.claude-sonnet-4-6-v1:0
       - global.anthropic.claude-sonnet-4-5-20250929-v1:0
       - us.anthropic.claude-sonnet-4-20250514-v1:0
       - claude-haiku-4-5
@@ -692,8 +690,6 @@ bedrock:
       - eu.anthropic.claude-sonnet-4-6
       - au.anthropic.claude-sonnet-4-6
       - anthropic.claude-sonnet-4-6
-      - global.anthropic.claude-sonnet-4-6-v1
-      - global.anthropic.claude-sonnet-4-6-v1:0
       - anthropic.claude-sonnet-4-5-20250929-v1:0
       - global.anthropic.claude-sonnet-4-5-20250929-v1:0
       - anthropic.claude-sonnet-4-20250514-v1:0
@@ -731,6 +727,12 @@ bedrock:
       - global.anthropic.claude-opus-4-7-v1:0
       - us.anthropic.claude-opus-4-7
       - us.anthropic.claude-opus-4-7-v1:0
+      - anthropic.claude-opus-4-8
+      - global.anthropic.claude-opus-4-8
+      - us.anthropic.claude-opus-4-8
+      - eu.anthropic.claude-opus-4-8
+      - jp.anthropic.claude-opus-4-8
+      - au.anthropic.claude-opus-4-8
       - global.amazon.nova-2-lite-v1:0
       - us.amazon.nova-2-lite-v1:0
       - amazon.nova-2-lite-v1:0
@@ -826,7 +828,7 @@ bedrock:
   rules:
     # US East (N. Virginia) text token prices from AWS Price List API.
     # global.* IDs use the matching Global Cross-region rows when AWS publishes separate rates.
-    - contains: ["global.anthropic.claude-sonnet-4-6", "global.anthropic.claude-sonnet-4-6-v1"]
+    - contains: ["global.anthropic.claude-sonnet-4-6"]
       pricing:
         inputcostperm: 3.00
         outputcostperm: 15.00
@@ -919,13 +921,13 @@ bedrock:
         outputcostperm: 75.00
         cachedinputcostperm: 15.00
         cachecreationcostperm: 15.00
-    - contains: ["global.anthropic.claude-opus-4-7", "global.anthropic.claude-opus-4-6", "global.anthropic.claude-opus-4-5"]
+    - contains: ["global.anthropic.claude-opus-4-8", "global.anthropic.claude-opus-4-7", "global.anthropic.claude-opus-4-6", "global.anthropic.claude-opus-4-5"]
       pricing:
         inputcostperm: 5.00
         outputcostperm: 25.00
         cachedinputcostperm: 0.50
         cachecreationcostperm: 6.25
-    - contains: ["us.anthropic.claude-opus-4-7", "anthropic.claude-opus-4-7", "anthropic.claude-opus-4-6", "anthropic.claude-opus-4-5"]
+    - contains: ["us.anthropic.claude-opus-4-8", "eu.anthropic.claude-opus-4-8", "jp.anthropic.claude-opus-4-8", "au.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8", "us.anthropic.claude-opus-4-7", "anthropic.claude-opus-4-7", "anthropic.claude-opus-4-6", "anthropic.claude-opus-4-5"]
       pricing:
         inputcostperm: 5.50
         outputcostperm: 27.50

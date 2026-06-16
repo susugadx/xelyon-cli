@@ -713,6 +713,13 @@ func TestBuildBedrockThinkingConfig(t *testing.T) {
 		wantEffort string
 	}{
 		{
+			name:       "opus 4.8 xhigh uses adaptive xhigh",
+			model:      "global.anthropic.claude-opus-4-8",
+			level:      "xhigh",
+			wantType:   "adaptive",
+			wantEffort: "xhigh",
+		},
+		{
 			name:       "opus 4.7 xhigh uses adaptive xhigh",
 			model:      "global.anthropic.claude-opus-4-7-v1:0",
 			level:      "xhigh",
