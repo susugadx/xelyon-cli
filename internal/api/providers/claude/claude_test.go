@@ -984,6 +984,8 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 	}{
 		{"claude-opus-4-8", true},
 		{"claude-opus-4.8", true},
+		{"global.anthropic.claude-opus-4-8", true},
+		{"jp.anthropic.claude-opus-4-8", true},
 		{"claude-opus-4-7", true},
 		{"claude-opus-4.7", true},
 		{"claude-fable-5", true},

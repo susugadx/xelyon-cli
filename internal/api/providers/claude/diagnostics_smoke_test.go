@@ -90,6 +90,41 @@ func TestDiagnoseClaude_ToolSmokeRequiresToolCall(t *testing.T) {
 	requireClaudeToolChoice(t, captured.ToolChoice, claudeDiagnosticToolName)
 }
 
+func TestDiagnoseClaude_FableToolSmokeUsesAutoToolChoice(t *testing.T) {
+	var captured Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		writeClaudeDiagnosticJSON(t, w, []Content{{
+			Type:  "tool_use",
+			ID:    "toolu_doctor",
+			Name:  claudeDiagnosticToolName,
+			Input: map[string]interface{}{"value": "claude-tool-ok"},
+		}}, StreamUsage{InputTokens: 8, OutputTokens: 4})
+	}))
+	defer server.Close()
+
+	setClaudeDiagnosticTestEnv(t, server.URL, "claude-key")
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:       config.DefaultConfig(),
+		Model:        "claude-fable-5",
+		CatalogModel: "claude-fable-5",
+		RunSmoke:     true,
+		ToolSmoke:    true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if len(captured.Tools) != 1 || captured.Tools[0].Name != claudeDiagnosticToolName {
+		t.Fatalf("tools = %#v, want diagnostic Claude tool", captured.Tools)
+	}
+	if captured.ToolChoice != nil {
+		t.Fatalf("ToolChoice = %#v, want omitted for always-on thinking model", captured.ToolChoice)
+	}
+}
+
 func TestDiagnoseClaude_SmokeAuthFailureUsesCommonClassifier(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

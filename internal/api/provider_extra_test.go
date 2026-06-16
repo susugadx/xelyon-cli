@@ -45,6 +45,16 @@ func TestIsAdaptiveThinkingModel(t *testing.T) {
 			want:  true,
 		},
 		{
+			name:  "bedrock claude-opus-4-8 profile is adaptive",
+			model: "global.anthropic.claude-opus-4-8",
+			want:  true,
+		},
+		{
+			name:  "bedrock claude-opus-4-8 jp profile is adaptive",
+			model: "jp.anthropic.claude-opus-4-8",
+			want:  true,
+		},
+		{
 			name:  "claude-opus-4-7 is adaptive",
 			model: "claude-opus-4-7",
 			want:  true,
@@ -128,6 +138,8 @@ func TestGetMaxOutputTokens_ClaudeOneMillionFamilyUsesCatalogLimit(t *testing.T)
 	}{
 		{provider: "claude", model: "claude-opus-4-8"},
 		{provider: "claude", model: "claude-fable-5"},
+		{provider: "bedrock", model: "global.anthropic.claude-opus-4-8"},
+		{provider: "bedrock", model: "jp.anthropic.claude-opus-4-8"},
 		{provider: "bedrock", model: "global.anthropic.claude-opus-4-7-v1:0"},
 		{provider: "bedrock", model: "us.anthropic.claude-opus-4-7-v1:0"},
 		{provider: "openrouter", model: "anthropic/claude-opus-4.8"},
