@@ -596,10 +596,12 @@ func TestBuildConverseToolConfig_CombinesContextAndMCPTools(t *testing.T) {
 			},
 		},
 	})
+	customLookup := api.ConvertMCPToolToToolDefinition("custom_lookup", "lookup", nil)
+	customLookup.Strict = true
 
 	toolConfig := buildConverseToolConfig(ctx, []api.ToolDefinition{
 		{Name: "read_file", Description: "duplicate should be ignored"},
-		{Name: "custom_lookup", Strict: true},
+		customLookup,
 	})
 	if toolConfig == nil || len(toolConfig.Tools) != 2 {
 		t.Fatalf("ToolConfig = %#v, want 2 merged tools", toolConfig)
@@ -621,6 +623,13 @@ func TestBuildConverseToolConfig_CombinesContextAndMCPTools(t *testing.T) {
 	}
 	if schema["type"] != "object" {
 		t.Fatalf("empty schema fallback = %#v, want object schema", schema)
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok || len(props) != 0 {
+		t.Fatalf("empty schema properties = %#v, want empty map", schema["properties"])
+	}
+	if schema["additionalProperties"] != false {
+		t.Fatalf("empty schema additionalProperties = %#v, want false", schema["additionalProperties"])
 	}
 }
 

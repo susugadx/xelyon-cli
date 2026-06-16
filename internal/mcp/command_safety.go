@@ -6,14 +6,21 @@ import (
 	"strings"
 )
 
+var allowedMCPCommandList = []string{"npx", "node", "python", "python3", "uvx", "docker"}
+
 // 安全なMCPコマンドのホワイトリスト
-var allowedMCPCommands = map[string]bool{
-	"npx":     true,
-	"node":    true,
-	"python":  true,
-	"python3": true,
-	"uvx":     true,
-	"docker":  true,
+var allowedMCPCommands = newAllowedMCPCommandSet(allowedMCPCommandList)
+
+func newAllowedMCPCommandSet(commands []string) map[string]bool {
+	allowed := make(map[string]bool, len(commands))
+	for _, command := range commands {
+		allowed[command] = true
+	}
+	return allowed
+}
+
+func allowedMCPCommandsText() string {
+	return strings.Join(allowedMCPCommandList, ", ")
 }
 
 // validateMCPCommand はMCPコマンドの安全性を検証
@@ -24,7 +31,7 @@ func validateMCPCommand(command string) error {
 
 	// ホワイトリストチェック
 	if !allowedMCPCommands[command] {
-		return fmt.Errorf("command '%s' is not in the allowed list. Allowed: npx, node, python, python3, uvx, docker", command)
+		return fmt.Errorf("command '%s' is not in the allowed list. Allowed: %s", command, allowedMCPCommandsText())
 	}
 
 	// パストラバーサルチェック

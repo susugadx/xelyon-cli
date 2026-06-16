@@ -22,7 +22,7 @@ type doctorProviderContractMatrixEntry struct {
 
 func TestDoctorProviderContractMatrixCommands(t *testing.T) {
 	doctor := newDoctorCommand()
-	requireDoctorSubcommands(t, doctor, doctorProviderContractMatrixNames())
+	requireDoctorSubcommands(t, doctor, doctorSubcommandNames())
 
 	for _, entry := range doctorProviderContractMatrixEntries() {
 		t.Run(entry.provider, func(t *testing.T) {
@@ -223,6 +223,12 @@ func doctorProviderContractMatrixNames() []string {
 	for _, entry := range entries {
 		names = append(names, entry.provider)
 	}
+	sort.Strings(names)
+	return names
+}
+
+func doctorSubcommandNames() []string {
+	names := append(doctorProviderContractMatrixNames(), "mcp")
 	sort.Strings(names)
 	return names
 }

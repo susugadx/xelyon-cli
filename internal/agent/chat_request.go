@@ -57,7 +57,6 @@ func (a *Agent) prepareChatRequest(req *chatRequest) {
 	a.resetSearchCodeTurnObservability()
 	a.beginTaskTracking()
 
-	req.input = a.AddGitHubHint(req.input)
 	a.refreshProjectPrompt(req.input)
 	a.clearResponseContextForActiveContextRequest()
 
@@ -117,7 +116,14 @@ func (a *Agent) runPlanModeChatRequest(ctx context.Context, req *chatRequest) er
 
 func (a *Agent) applyChatRequestToolVisibility(phase toolSurfacePhase) {
 	toolVisibility := a.toolVisibilityPolicy(phase, toolVisibilityOptions{allowSubAgents: true})
-	a.registry().SetExcludedTools(toolVisibility.excluded())
+	previousBudgetExcluded := a.mcpSurface.omittedExportedNames()
+	a.refreshMCPToolSurface()
+	a.registry().SetExcludedTools(mergeSurfaceManagedExcludedToolsWithRuntimeExclusions(
+		a.registry().GetExcludedTools(),
+		toolVisibility,
+		previousBudgetExcluded,
+		a.currentMCPBudgetExcludedToolNames(),
+	))
 }
 
 func (a *Agent) executeApprovedPlanHandoff(ctx context.Context, req *chatRequest, handoff *planModeImplementationHandoff) error {

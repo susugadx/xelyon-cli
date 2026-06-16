@@ -159,28 +159,10 @@ func convertGeminiRequired(value any) []string {
 // XELYON_DEBUG_GEMINI=1 でデバッグログを debugOut に出力
 func ConvertMCPToolToGeminiDeclaration(name, description string, inputSchema json.RawMessage, debugOut io.Writer) GeminiFunctionDeclaration {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
-	// スキーマが空またはnullの場合
-	if len(inputSchema) == 0 || string(inputSchema) == "null" {
-		return GeminiFunctionDeclaration{
-			Name:        name,
-			Description: description,
-			Parameters:  nil,
-		}
-	}
+	schema := MCPInputSchemaParameters(inputSchema)
 
-	var schema map[string]any
-	if err := json.Unmarshal(inputSchema, &schema); err != nil {
-		// パースエラー時は空のパラメータで続行
-		return GeminiFunctionDeclaration{
-			Name:        name,
-			Description: description,
-			Parameters:  nil,
-		}
-	}
-
-	var geminiParams *GeminiParameterSchema
+	geminiParams := ConvertJSONSchemaToGeminiParameterSchema(schema)
 	if props, ok := schema["properties"].(map[string]any); ok {
-		geminiParams = ConvertJSONSchemaToGeminiParameterSchema(schema)
 		for propName := range props {
 			def := geminiParams.Properties[propName]
 

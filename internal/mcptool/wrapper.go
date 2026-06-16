@@ -3,17 +3,28 @@ package mcptool
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
-const defaultMCPToolCallTimeout = 30 * time.Second
+const defaultMCPToolCallTimeout = 600 * time.Second
+
+var (
+	// ErrApprovalDenied は MCP approval policy により実行が拒否されたことを表す。
+	ErrApprovalDenied = errors.New("MCP tool execution denied by approval policy")
+	// ErrApprovalRequired は headless 実行で MCP tool の承認確認が必要だったことを表す。
+	ErrApprovalRequired = errors.New("approval_required")
+)
 
 // Definition は MCP server から取得した tool metadata を tools.Registry 用に表す。
 type Definition struct {
@@ -21,6 +32,8 @@ type Definition struct {
 	Name        string
 	Description string
 	InputSchema json.RawMessage
+	CallTimeout time.Duration
+	Approval    mcpapproval.Mode
 }
 
 // ToolCaller は integration 層が必要とする最小契約。
@@ -33,14 +46,21 @@ type ToolCaller interface {
 func RegisterToRegistry(registry *tools.Registry, caller ToolCaller, definitions []Definition) {
 	for _, definition := range definitions {
 		tool := definition
+		if mcpapproval.Effective(tool.Approval) == mcpapproval.ModeDeny {
+			continue
+		}
 		wrapper := NewWrapper(WrapperOptions{
 			Caller:      caller,
 			ServerName:  tool.ServerName,
 			ToolName:    tool.Name,
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
+			CallTimeout: tool.CallTimeout,
+			Approval:    tool.Approval,
 		})
-
+		if registry.HasTool(wrapper.Name()) {
+			continue
+		}
 		registry.Register(wrapper)
 	}
 }
@@ -53,6 +73,7 @@ type Wrapper struct {
 	desc        string
 	inputSchema json.RawMessage // JSONスキーマ情報
 	callTimeout time.Duration
+	approval    mcpapproval.Mode
 }
 
 // WrapperOptions は Wrapper 作成時の依存と metadata をまとめる。
@@ -63,6 +84,7 @@ type WrapperOptions struct {
 	Description string
 	InputSchema json.RawMessage
 	CallTimeout time.Duration
+	Approval    mcpapproval.Mode
 }
 
 // NewWrapper は MCP tool metadata から tools.Tool 実装を作る。
@@ -74,27 +96,13 @@ func NewWrapper(opts WrapperOptions) *Wrapper {
 		desc:        opts.Description,
 		inputSchema: opts.InputSchema,
 		callTimeout: opts.CallTimeout,
+		approval:    mcpapproval.Effective(opts.Approval),
 	}
 }
 
 // Name はツール名を返す（mcp_<server>_<tool> 形式、特殊文字を置換）
 func (w *Wrapper) Name() string {
-	// 特殊文字をアンダースコアに置換
-	safeServer := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			return r
-		}
-		return '_'
-	}, w.serverName)
-
-	safeTool := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			return r
-		}
-		return '_'
-	}, w.toolName)
-
-	return fmt.Sprintf("mcp_%s_%s", safeServer, safeTool)
+	return mcpnames.ExportedToolName(w.serverName, w.toolName)
 }
 
 // Description はツールの説明を返す
@@ -107,37 +115,24 @@ func (w *Wrapper) Description() string {
 
 // Parameters はツールのパラメータ定義を返す
 func (w *Wrapper) Parameters() map[string]interface{} {
-	// inputSchemaをそのままmap[string]interface{}に変換
-	if len(w.inputSchema) == 0 || string(w.inputSchema) == "null" {
-		return map[string]interface{}{
-			"type":                 "object",
-			"properties":           map[string]interface{}{},
-			"additionalProperties": false,
-		}
-	}
-
-	var params map[string]interface{}
-	if err := json.Unmarshal(w.inputSchema, &params); err != nil {
-		return map[string]interface{}{
-			"type":                 "object",
-			"properties":           map[string]interface{}{},
-			"additionalProperties": false,
-		}
-	}
-	return params
+	return api.MCPInputSchemaParameters(w.inputSchema)
 }
 
 // Run はツールを実行
 func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (string, *tools.FileChange, error) {
 	out := execCtx.Output()
+	toolName := w.Name()
+
+	if w.approvalMode() == mcpapproval.ModeDeny {
+		err := fmt.Errorf("%w: %s", ErrApprovalDenied, toolName)
+		return "Error: " + err.Error(), nil, err
+	}
 
 	// 引数バリデーション（簡易版）
 	if err := w.validateArgs(out.StdoutWriter(), args); err != nil {
 		return fmt.Sprintf("Validation Error: %v", err), nil, err
 	}
 
-	// MCP ツールは常に確認を要求（外部プロセス実行のため）
-	toolName := w.Name()
 	message := fmt.Sprintf("Execute MCP tool: %s (server: %s)", w.toolName, w.serverName)
 
 	// 引数がある場合は表示
@@ -155,30 +150,51 @@ func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (s
 			w.toolName, w.serverName, strings.Join(argsDisplay, ", "))
 	}
 
-	decision := common.ConfirmWithAutoApproveDecisionAndOptions(execCtx.PromptIO(), execCtx.ConfirmOptions(), toolName, message)
-	switch decision.Action {
-	case common.ConfirmNo:
-		return "User rejected MCP tool execution", nil, nil
-	case common.ConfirmComment:
-		// コメントがある場合はフィードバックとして返す
-		feedback := "User provided feedback: " + decision.Comment
-		return feedback, nil, nil
+	switch w.approvalMode() {
+	case mcpapproval.ModeConfirm:
+		if execCtx.IsHeadless() {
+			err := fmt.Errorf("%w: MCP tool execution requires approval by MCP approval policy: %s", ErrApprovalRequired, toolName)
+			return "Error: " + err.Error(), nil, err
+		}
+		decision := common.ConfirmWithIO(execCtx.PromptIO(), message)
+		switch decision.Action {
+		case common.ConfirmNo:
+			return "User rejected MCP tool execution", nil, nil
+		case common.ConfirmComment:
+			feedback := "User provided feedback: " + decision.Comment
+			return feedback, nil, nil
+		}
+	case mcpapproval.ModeAuto:
+		out.Green.Printf("Auto-approved (MCP config): %s\n", toolName)
 	}
 
 	// スキーマに基づいて型変換（string → number/integer/boolean）
 	anyArgs := w.convertArgsWithSchema(args)
 
 	callTimeout := w.callTimeoutDuration()
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	parentCtx := execCtx.EffectiveContext()
+	ctx, cancel := context.WithTimeout(parentCtx, callTimeout)
 	defer cancel()
 
 	result, err := w.manager.CallTool(ctx, w.serverName, w.toolName, anyArgs)
 	if err != nil {
-		// タイムアウトエラーの場合
-		if ctx.Err() == context.DeadlineExceeded {
+		switch {
+		case errors.Is(parentCtx.Err(), context.Canceled):
+			return "Error: Tool execution canceled by request context",
+				nil,
+				fmt.Errorf("tool execution canceled by request context: %w", parentCtx.Err())
+		case errors.Is(parentCtx.Err(), context.DeadlineExceeded):
+			return "Error: Tool execution stopped by request deadline",
+				nil,
+				fmt.Errorf("tool execution stopped by request deadline: %w", parentCtx.Err())
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
 			return fmt.Sprintf("Error: Tool execution timed out after %s", formatTimeoutDuration(callTimeout)),
 				nil,
-				fmt.Errorf("tool execution timed out")
+				fmt.Errorf("tool execution timed out: %w", ctx.Err())
+		case errors.Is(ctx.Err(), context.Canceled):
+			return "Error: Tool execution canceled",
+				nil,
+				fmt.Errorf("tool execution canceled: %w", ctx.Err())
 		}
 		return fmt.Sprintf("Error: %v", err), nil, err
 	}
@@ -186,6 +202,10 @@ func (w *Wrapper) Run(execCtx tools.ExecutionContext, args map[string]string) (s
 	// 結果をフォーマット
 	formattedResult := w.formatResult(result)
 	return formattedResult, nil, nil
+}
+
+func (w *Wrapper) approvalMode() mcpapproval.Mode {
+	return mcpapproval.Effective(w.approval)
 }
 
 // convertArgsWithSchema はスキーマに基づいて引数の型を変換する
@@ -233,6 +253,11 @@ func (w *Wrapper) convertArgsWithSchema(args map[string]string) map[string]any {
 					case "boolean":
 						if boolVal, err := strconv.ParseBool(v); err == nil {
 							anyArgs[k] = boolVal
+							converted = true
+						}
+					case "array", "object":
+						if structured, err := parseStructuredArg(propType, k, v); err == nil {
+							anyArgs[k] = structured
 							converted = true
 						}
 					}
@@ -286,24 +311,95 @@ func (w *Wrapper) validateArgs(out io.Writer, args map[string]string) error {
 		return nil
 	}
 
-	// 必須パラメータのチェック（簡易実装）
+	if err := validateTopLevelRequiredArgs(out, w.toolName, schema, args); err != nil {
+		return err
+	}
+
 	if properties, ok := schema["properties"].(map[string]any); ok && properties != nil {
-		for propName, propInfo := range properties {
-			propMap, ok := propInfo.(map[string]any)
-			if !ok || propMap == nil {
-				// プロパティスキーマが不正な場合は警告してスキップ
-				fmt.Fprintf(out, "⚠️  Warning: Invalid property schema for %s in tool %s\n", propName, w.toolName)
-				continue
-			}
-			if required, ok := propMap["required"].(bool); ok && required {
-				if _, hasArg := args[propName]; !hasArg {
-					return fmt.Errorf("required argument '%s' is missing", propName)
-				}
-			}
+		warnInvalidPropertySchemas(out, w.toolName, properties)
+
+		if err := validateStructuredArgs(properties, args); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func warnInvalidPropertySchemas(out io.Writer, toolName string, properties map[string]any) {
+	for propName, propInfo := range properties {
+		propMap, ok := propInfo.(map[string]any)
+		if !ok || propMap == nil {
+			fmt.Fprintf(out, "⚠️  Warning: Invalid property schema for %s in tool %s\n", propName, toolName)
+		}
+	}
+}
+
+func validateTopLevelRequiredArgs(out io.Writer, toolName string, schema map[string]any, args map[string]string) error {
+	requiredRaw, ok := schema["required"]
+	if !ok {
+		return nil
+	}
+
+	requiredList, ok := requiredRaw.([]any)
+	if !ok {
+		fmt.Fprintf(out, "⚠️  Warning: Invalid required schema for tool %s\n", toolName)
+		return nil
+	}
+
+	for _, requiredArg := range requiredList {
+		argName, ok := requiredArg.(string)
+		if !ok || argName == "" {
+			fmt.Fprintf(out, "⚠️  Warning: Invalid required argument entry for tool %s\n", toolName)
+			continue
+		}
+		if _, hasArg := args[argName]; !hasArg {
+			return fmt.Errorf("required argument '%s' is missing", argName)
+		}
+	}
+
+	return nil
+}
+
+func validateStructuredArgs(properties map[string]any, args map[string]string) error {
+	for argName, rawValue := range args {
+		propMap, ok := properties[argName].(map[string]any)
+		if !ok || propMap == nil {
+			continue
+		}
+		propType, ok := propMap["type"].(string)
+		if !ok || (propType != "array" && propType != "object") {
+			continue
+		}
+		if _, err := parseStructuredArg(propType, argName, rawValue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parseStructuredArg(propType, argName, rawValue string) (any, error) {
+	var decoded any
+	if err := json.Unmarshal([]byte(rawValue), &decoded); err != nil {
+		return nil, fmt.Errorf("argument '%s' must be valid JSON %s: %w", argName, propType, err)
+	}
+
+	switch propType {
+	case "array":
+		arrayValue, ok := decoded.([]any)
+		if !ok {
+			return nil, fmt.Errorf("argument '%s' must be a JSON array", argName)
+		}
+		return arrayValue, nil
+	case "object":
+		objectValue, ok := decoded.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("argument '%s' must be a JSON object", argName)
+		}
+		return objectValue, nil
+	default:
+		return rawValue, nil
+	}
 }
 
 // ValidateArgs は MCP tool 実行前の簡易 argument validation を行う。

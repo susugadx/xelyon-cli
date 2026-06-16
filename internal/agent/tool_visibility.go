@@ -119,11 +119,17 @@ func (a *Agent) currentToolSurfacePhase() toolSurfacePhase {
 // Surface sync owns only phase-managed exclusions; it must not re-expose tools
 // that runtime code intentionally hid for other reasons.
 func mergeSurfaceManagedExcludedTools(runtimeExcluded []string, policy toolVisibilityPolicy) []string {
+	return mergeSurfaceManagedExcludedToolsWithRuntimeExclusions(runtimeExcluded, policy, nil, nil)
+}
+
+func mergeSurfaceManagedExcludedToolsWithRuntimeExclusions(runtimeExcluded []string, policy toolVisibilityPolicy, previousManaged []string, currentExtra []string) []string {
+	managed := appendUniqueStrings(surfaceManagedExcludedToolNames(), previousManaged...)
 	extraRuntimeExcluded := filterStrings(
 		append([]string(nil), runtimeExcluded...),
-		surfaceManagedExcludedToolNames()...,
+		managed...,
 	)
-	return appendUniqueStrings(extraRuntimeExcluded, policy.excluded()...)
+	excluded := appendUniqueStrings(extraRuntimeExcluded, policy.excluded()...)
+	return appendUniqueStrings(excluded, currentExtra...)
 }
 
 func surfaceManagedExcludedToolNames() []string {
@@ -148,8 +154,22 @@ func (a *Agent) syncCurrentSurfaceToolVisibility() {
 	if a == nil {
 		return
 	}
+	previousBudgetExcluded := a.mcpSurface.omittedExportedNames()
+	a.refreshMCPToolSurface()
+	a.syncCurrentSurfaceToolVisibilityWithPreviousBudget(previousBudgetExcluded)
+}
+
+func (a *Agent) syncCurrentSurfaceToolVisibilityWithPreviousBudget(previousBudgetExcluded []string) {
+	if a == nil {
+		return
+	}
 	policy := a.toolVisibilityPolicy(a.currentToolSurfacePhase(), toolVisibilityOptions{allowSubAgents: true})
-	a.registry().SetExcludedTools(mergeSurfaceManagedExcludedTools(a.registry().GetExcludedTools(), policy))
+	a.registry().SetExcludedTools(mergeSurfaceManagedExcludedToolsWithRuntimeExclusions(
+		a.registry().GetExcludedTools(),
+		policy,
+		previousBudgetExcluded,
+		a.currentMCPBudgetExcludedToolNames(),
+	))
 }
 
 func (a *Agent) toolVisibilityPolicy(phase toolSurfacePhase, opts toolVisibilityOptions) toolVisibilityPolicy {

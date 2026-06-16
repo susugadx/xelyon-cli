@@ -74,6 +74,11 @@ func TestGetToolSafety(t *testing.T) {
 			want:     SafetyLow,
 		},
 		{
+			name:     "dynamic MCP tool is SafetyLow",
+			toolName: "mcp_github_get_issue",
+			want:     SafetyLow,
+		},
+		{
 			name:     "unknown tool defaults to SafetyMedium",
 			toolName: "unknown_tool",
 			want:     SafetyMedium,

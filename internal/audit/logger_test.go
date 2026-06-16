@@ -197,6 +197,37 @@ func TestLogToolExecution_OutputTruncation(t *testing.T) {
 	}
 }
 
+func TestLogToolExecution_RedactsOutputSecretsBeforeTruncation(t *testing.T) {
+	testutil.SetupTempHome(t)
+	logger, err := NewDefaultLogger(true)
+	if err != nil {
+		t.Fatalf("NewDefaultLogger(true) error = %v", err)
+	}
+
+	logger.LogToolExecution(
+		"mcp_docs_search",
+		map[string]string{"query": "safe"},
+		"prefix api_key=secret-value suffix",
+		nil,
+		false,
+	)
+
+	logFiles, _ := filepath.Glob(filepath.Join(os.Getenv("HOME"), ".xelyon", "audit", "audit_*.jsonl"))
+	data, _ := os.ReadFile(logFiles[0])
+
+	var entry LogEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("unmarshal log entry: %v", err)
+	}
+
+	if strings.Contains(entry.Output, "secret-value") {
+		t.Fatalf("audit output leaked secret: %q", entry.Output)
+	}
+	if !strings.Contains(entry.Output, "api_key=[redacted]") {
+		t.Fatalf("audit output = %q, want redacted api_key", entry.Output)
+	}
+}
+
 func TestLogToolExecution_Concurrent(t *testing.T) {
 	tmpHome := testutil.SetupTempHome(t)
 	logger, err := NewDefaultLogger(true)

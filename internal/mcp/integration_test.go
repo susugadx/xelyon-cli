@@ -64,8 +64,8 @@ func TestManager_Connect_RegistersFilteredTools(t *testing.T) {
 	if result != "Hello tester\nFrom helper\n" {
 		t.Fatalf("CallTool() = %q, want %q", result, "Hello tester\nFrom helper\n")
 	}
-	if !strings.Contains(output.String(), "filtered out") {
-		t.Fatalf("Connect output = %q, want filtered out message", output.String())
+	if !strings.Contains(output.String(), "skipped") {
+		t.Fatalf("Connect output = %q, want skipped message", output.String())
 	}
 
 	status := manager.HealthStatus()
@@ -139,6 +139,55 @@ func TestManager_Reconnect_ReplacesServerToolsAndUpdatesHealth(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "reconnected") {
 		t.Fatalf("Reconnect output = %q, want reconnected message", output.String())
+	}
+}
+
+func TestManager_ReconnectFailureKeepsExistingState(t *testing.T) {
+	command, args := mcpHelperCommand(t)
+
+	manager := NewManager()
+	manager.config = &Config{
+		MCPServers: map[string]ServerConfig{
+			"helper": {
+				Command: command,
+				Args:    args,
+				Env: map[string]string{
+					"GO_WANT_XELYON_MCP_HELPER": "1",
+				},
+			},
+		},
+	}
+	t.Cleanup(manager.Close)
+
+	if err := manager.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	oldSession := manager.sessions["helper"]
+	oldTools := append([]MCPTool(nil), manager.tools...)
+	oldHealth := manager.healthCheck["helper"]
+
+	manager.config.MCPServers["helper"] = ServerConfig{
+		Command: command,
+		Args:    args,
+	}
+
+	err := manager.Reconnect(context.Background(), "helper")
+	if err == nil {
+		t.Fatal("Reconnect() error = nil, want failure")
+	}
+	if manager.sessions["helper"] != oldSession {
+		t.Fatal("Reconnect failure replaced existing session")
+	}
+	if len(manager.tools) != len(oldTools) {
+		t.Fatalf("len(tools) after failed Reconnect = %d, want %d", len(manager.tools), len(oldTools))
+	}
+	for i := range oldTools {
+		if manager.tools[i].ServerName != oldTools[i].ServerName || manager.tools[i].Name != oldTools[i].Name {
+			t.Fatalf("tools after failed Reconnect = %#v, want %#v", manager.tools, oldTools)
+		}
+	}
+	if !manager.healthCheck["helper"].Equal(oldHealth) {
+		t.Fatal("Reconnect failure changed health state")
 	}
 }
 

@@ -26,7 +26,7 @@ DeepSeek, Kimi, OpenAI, OpenAI Subscription, Azure OpenAI, Gemini, Claude, Ollam
 
 **OpenAI / Azure OpenAI Responses API 対応**: `gpt-5.3-codex` などの Codex モデルを自動検出し、Azure OpenAI は API key と Microsoft Entra ID bearer token の両方に対応。
 **OpenAI Subscription experimental provider**: `xelyon auth openai-subscription login` で ChatGPT/Codex OAuth にログインし、`openai_subscription` provider から subscription backend の Responses-shaped endpoint を使えます。OpenAI Platform API ではなく、API key / API pricing は使いません。request は `originator: xelyon` と `xelyon/<version>` User-Agent で XELYON として識別し、OpenCode や official Codex CLI を偽装しません。runtime は `store=false` / full payload / `prompt_cache_key` / streaming / tool loop / subscription Compact API で動作し、`/compress --compact` と auto-compress の Compact 優先経路にも対応します。cost は `N/A (ChatGPT subscription)` として表示します。
-**プロバイダー診断**: `xelyon doctor <provider> --capabilities` は model / deployment 能力を live request なしで確認し、`--require-capability responses_api` などで必要な capability を gate できます。DeepSeek / Groq / OpenRouter などの Chat Completions 系も共通 capability DTO、request preview、smoke を確認できます。OpenRouter は Claude 系 model で Anthropic Skin route も表示します。`--smoke` は usage / cost を text / JSON に出力し、対応 provider では response ID も表示します。
+**プロバイダー診断**: `xelyon doctor <provider> --capabilities` は model / deployment 能力を live request なしで確認し、`--require-capability responses_api` などで必要な capability を gate できます。DeepSeek / Groq / OpenRouter などの Chat Completions 系も共通 capability DTO、request preview、smoke を確認できます。OpenRouter は Claude 系 model で Anthropic Skin route も表示します。`--smoke` は usage / cost を text / JSON に出力し、対応 provider では response ID も表示します。MCP は `xelyon doctor mcp` で local-only 診断でき、`--connect` を付けた場合だけ MCP server を起動して `tools/list` まで確認します。
 **Claude 最新モデル対応**: Claude provider は `claude-opus-4-8` / `claude-fable-5` を catalog、token limit、adaptive thinking、料金表示、`/model` 候補で扱えます。Fable 5 は Anthropic 側の retention 制約により、利用環境によって API が拒否する場合があります。
 **DeepSeek Reasoner 対応**: `reasoning_content`（思考内容）のストリーミング表示・ツール実行フローでの保持に対応。
 **Kimi Native Provider 対応**: Moonshot の Chat Completions API で `kimi-k2.7-code` / `kimi-k2.6` / `kimi-k2.5` の streaming、tool calls、thinking、`reasoning_content` に対応。
@@ -434,6 +434,7 @@ mcp:
 `enabled: false` にするとMCPサーバーへの接続をスキップし、トークン消費を削減できます。
 `~/.xelyon/mcp.json` の設定はそのまま残るため、再度 `enabled: true` にすれば復活します。
 - **ツール単位フィルタリング**: MCPサーバーのツールを `include`/`exclude` で制御。不要なツールを除外してトークン消費を最適化
+- **実行中ステータス**: 対話中は `/mcp status` で現在セッションの MCP server / tool surface を確認。設定診断や live 接続確認は `xelyon doctor mcp` を使用
 
 ### Final Checks
 

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/mcp"
 	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 )
 
@@ -117,6 +118,39 @@ func TestSyncCurrentDerivedRuntimeState_PreservesRuntimeSpecificExclusions(t *te
 	}
 	if !toolNameInList(excluded, "apply_patch") {
 		t.Fatalf("legacy model-driven mode should still exclude apply_patch, got %v", excluded)
+	}
+}
+
+func TestSyncCurrentDerivedRuntimeState_ReplacesPreviousMCPBudgetExclusions(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	manager := mcp.NewManager()
+	setManagerToolsForTest(t, manager, []mcp.MCPTool{
+		{ServerName: "alpha", Name: "small", Description: "Small"},
+	})
+	agent := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-5.4",
+		CurrentProvider: &mockCacheClearableProviderForModel{name: "openai"},
+		Runtime:         runtime,
+		mcpManager:      manager,
+		mcpSurface: mcpToolSurfaceSelection{
+			total: 1,
+			omitted: []mcpToolSurfaceOmission{{
+				exportedName: "mcp_alpha_old",
+			}},
+		},
+	}
+
+	agent.registry().SetExcludedTools([]string{"read_file", "mcp_alpha_old"})
+	agent.syncCurrentDerivedRuntimeState()
+
+	excluded := agent.registry().GetExcludedTools()
+	if toolNameInList(excluded, "mcp_alpha_old") {
+		t.Fatalf("derived-state sync should remove previous MCP budget exclusion, got %v", excluded)
+	}
+	if !toolNameInList(excluded, "read_file") {
+		t.Fatalf("derived-state sync should preserve unrelated runtime exclusion, got %v", excluded)
 	}
 }
 

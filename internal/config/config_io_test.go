@@ -39,6 +39,32 @@ func TestLoadConfig_NotExists(t *testing.T) {
 	}
 }
 
+func TestLoadConfigReadOnly_NotExistsDoesNotCreateFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	cfg, err := LoadConfigReadOnly()
+	if err != nil {
+		t.Fatalf("LoadConfigReadOnly() error = %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("LoadConfigReadOnly() returned nil")
+	}
+	if cfg.DefaultProvider != "deepseek" {
+		t.Errorf("DefaultProvider = %v, want deepseek", cfg.DefaultProvider)
+	}
+
+	configPath := filepath.Join(tmpDir, ".xelyon", "config.yaml")
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("LoadConfigReadOnly() should not create config.yaml: %v", err)
+	}
+
+	agentsPath := filepath.Join(tmpDir, ".xelyon", "AGENTS.md")
+	if _, err := os.Stat(agentsPath); !os.IsNotExist(err) {
+		t.Fatalf("LoadConfigReadOnly() should not create AGENTS.md: %v", err)
+	}
+}
+
 func TestLoadConfig_Exists(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
@@ -80,6 +106,66 @@ func TestLoadConfig_Exists(t *testing.T) {
 	}
 	if cfg.LoopDetection.Threshold != 5 {
 		t.Errorf("LoopDetection.Threshold = %v, want 5", cfg.LoopDetection.Threshold)
+	}
+}
+
+func TestLoadConfigReadOnly_Exists(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configYAML := "default_provider: claude\nmcp:\n  enabled: false\n"
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfigReadOnly()
+	if err != nil {
+		t.Fatalf("LoadConfigReadOnly() error = %v", err)
+	}
+	if cfg.DefaultProvider != "claude" {
+		t.Errorf("DefaultProvider = %v, want claude", cfg.DefaultProvider)
+	}
+	if cfg.MCP.Enabled {
+		t.Error("MCP.Enabled = true, want explicit false from config.yaml")
+	}
+
+	agentsPath := filepath.Join(tmpDir, ".xelyon", "AGENTS.md")
+	if _, err := os.Stat(agentsPath); !os.IsNotExist(err) {
+		t.Fatalf("LoadConfigReadOnly() should not create AGENTS.md: %v", err)
+	}
+}
+
+func TestLoadConfigReadOnly_InvalidYAMLDoesNotWriteFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	invalidYAML := "default_provider: openai\n  broken: - [\n"
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(invalidYAML), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	if _, err := LoadConfigReadOnly(); err == nil {
+		t.Fatal("LoadConfigReadOnly() error = nil, want invalid YAML error")
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if string(data) != invalidYAML {
+		t.Fatalf("LoadConfigReadOnly() rewrote invalid config:\n%s", string(data))
 	}
 }
 

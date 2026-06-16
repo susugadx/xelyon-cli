@@ -53,6 +53,49 @@ func TestProjectDryRunReportsArtifactBackedMCPToolResultCandidate(t *testing.T) 
 	}
 }
 
+func TestProjectApplyKeepsSensitiveLargeMCPToolResultCandidateOnly(t *testing.T) {
+	content := providerHistoryTestLargeSensitiveMCPResult()
+	history := providerHistoryTestMCPHistory("call_mcp_sensitive", content)
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy: Policy{
+			Mode:                             Apply,
+			RawOutputArtifactsMode:           RawOutputArtifactsApply,
+			RawOutputArtifactStore:           providerHistoryTestRawOutputStore(t),
+			SessionID:                        "session-mcp-sensitive",
+			RawOutputRehydrateContextEnabled: true,
+			ActiveContextTransportAvailable:  true,
+		},
+	})
+
+	if !reflect.DeepEqual(result.History, history) {
+		t.Fatalf("sensitive MCP projection changed payload:\n got %#v\nwant %#v", result.History, history)
+	}
+	candidate := providerHistoryTestCandidateByToolCallID(result.Report, "call_mcp_sensitive")
+	if candidate == nil ||
+		!candidate.CandidateOnly ||
+		!candidate.FutureApplyCandidate ||
+		candidate.ArtifactBackedCandidate ||
+		candidate.RawOutputRefID != "" ||
+		candidate.ReplacementApplied ||
+		candidate.KeepReason != "mcp_sensitive_or_private_result_keep" {
+		t.Fatalf("MCP sensitive candidate = %#v, want candidate-only sensitive keep", candidate)
+	}
+	if result.Report.RawOutputRefCount != 0 ||
+		result.Report.DataBearingCandidateCount != 0 ||
+		result.Report.ReplacedCount != 0 ||
+		result.Report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v, want no raw output ref or replacement for sensitive MCP payload", result.Report)
+	}
+	if got := result.Report.FutureFamilyCandidateCounts["mcp"]; got != 1 {
+		t.Fatalf("FutureFamilyCandidateCounts[mcp] = %d in %#v, want 1", got, result.Report.FutureFamilyCandidateCounts)
+	}
+	if got := result.Report.FutureFamilyKeptReasonCounts["mcp_sensitive_or_private_result_keep"]; got != 1 {
+		t.Fatalf("FutureFamilyKeptReasonCounts = %#v, want sensitive keep count", result.Report.FutureFamilyKeptReasonCounts)
+	}
+}
+
 func TestProjectMCPRawOutputUsesLegacyMaterializeExactSource(t *testing.T) {
 	content := providerHistoryTestLargeSafeMCPResult()
 	history := providerHistoryTestMCPHistory("call_mcp_docs", content)

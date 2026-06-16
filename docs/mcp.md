@@ -11,7 +11,7 @@ Model Context Protocol（MCP）は、AIアシスタントが外部のツール�
 - **プラグイン方式**: 外部プロセス（MCPサーバー）としてツールを実行
 - **stdioトランスポート**: 標準入出力でJSON-RPC 2.0通信
 - **動的登録**: 起動時にMCPサーバーからツール一覧を自動取得
-- **セキュリティ**: API キーなどの機密情報は自動的に除外
+- **セキュリティ**: 実行コマンドを allowlist で制限し、system env は安全なキーだけ継承
 
 ## 設定
 
@@ -30,12 +30,15 @@ mcp:
 | `headless` | `true` にすると `--headless` モードでもMCPツールが使える。 | `false` |
 
 `enabled: false` にしても `~/.xelyon/mcp.json` の設定はそのまま残るため、再度 `enabled: true` にすれば復活します。
+`headless: true` はMCPツールの公開を許可するだけで、承認を自動化しません。headless でMCPツールを実行するには、対象サーバーまたはツールに `approval: "auto"` を明示してください。
 
 ## セットアップ
 
 ### 1. 設定ファイルの作成
 
 `~/.xelyon/mcp.json` にMCPサーバーを定義します。
+初回起動時にファイルがない場合は、無効化された filesystem のサンプル設定が作成されます。
+使う場合は `disabled: true` を削除または `false` に変更し、対象ディレクトリを実パスに置き換えてください。
 
 ```json
 {
@@ -48,13 +51,17 @@ mcp:
       ],
       "env": {
         "NODE_OPTIONS": "--no-warnings"
-      }
+      },
+      "approval": "confirm"
     },
     "puppeteer": {
       "command": "npx",
       "args": [
         "@modelcontextprotocol/server-puppeteer"
-      ]
+      ],
+      "approval": "confirm",
+      "startupTimeoutSeconds": 120,
+      "toolTimeoutSeconds": 600
     },
     "sequential-thinking": {
       "command": "npx",
@@ -88,11 +95,37 @@ xelyon
 # MCPツールが自動的に読み込まれて、AIに提示されます
 ```
 
+設定だけを確認する場合は `doctor mcp` を使います。
+
+```bash
+# local-only。mcp.json を新規作成せず、MCP server process も起動しない
+xelyon doctor mcp
+
+# initialize / tools/list まで確認する。tools/call は実行しない
+xelyon doctor mcp --connect
+
+# tool 名、exported name、visible / skipped reason、approval も表示
+xelyon doctor mcp --connect --tools
+```
+
+`doctor mcp --connect` は live `tools/list` の結果から tool surface summary、server 別の total / registered / visible / omitted 数、schema bytes、estimated tokens、omitted reason、絞り込み提案も表示します。
+estimated tokens は analysis に含めた tool の provider tool definition 相当から推定した合計です。schema body は表示しません。
+`doctor mcp` は env value と raw args を表示しません。表示するのは command、arg 数、env key 名、timeout、approval、tool 名、集計済みの token / schema byte 数です。schema body や description 全文は表示しません。
+
+対話中に現在セッションへ読み込まれている MCP runtime 状態を確認する場合は `/mcp status` を使います。
+`/mcp status` は snapshot-only で、MCP server process の起動、再接続、`tools/list`、`tools/call` は行いません。
+表示するのは runtime 有効状態、読み込み済み config の有無、server 状態、registered / visible / omitted tool 数、tool surface のサンプル、server 別 token / schema byte 数、omitted reason、絞り込み提案です。
+env value、raw args、server error detail、tool schema body、description 全文は表示しません。
+
+```text
+> /mcp status
+```
+
 ## 設定項目
 
 ### `command` (必須)
 
-実行するコマンド。npx, node, python, sh など。
+実行するコマンド。安全のため、現在は `npx`, `node`, `python`, `python3`, `uvx`, `docker` のみ許可されます。
 
 ```json
 {
@@ -124,7 +157,9 @@ xelyon
 
 ### `env` (オプション)
 
-MCPサーバーに渡す環境変数。
+MCPサーバーに明示的に渡す環境変数。
+`env` に書いた値は `${VAR}` 形式の展開後に渡されます。
+system env から自動継承されるのは `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `NODE_OPTIONS`, `PYTHONPATH` のみです。
 
 ```json
 {
@@ -141,12 +176,99 @@ MCPサーバーに渡す環境変数。
 }
 ```
 
-**セキュリティ**: 以下のパターンに一致する環境変数は**自動的に除外**されます。
-- `*_KEY`
-- `*_TOKEN`
-- `*_SECRET`
-- `*_PASSWORD`
-- `*_API_KEY`
+### `startupTimeoutSeconds` (オプション)
+
+MCPサーバーの起動、接続、`tools/list` に使う timeout 秒数。
+未指定、`0`、負値の場合はデフォルトの120秒を使います。
+最大値は3600秒で、それより大きい値は3600秒に丸められます。
+
+```json
+{
+  "mcpServers": {
+    "slow-start-server": {
+      "command": "npx",
+      "args": ["-y", "@example/slow-start-mcp"],
+      "startupTimeoutSeconds": 180
+    }
+  }
+}
+```
+
+### `toolTimeoutSeconds` (オプション)
+
+MCPツール実行に使う timeout 秒数。
+未指定、`0`、負値の場合はデフォルトの600秒を使います。
+最大値は3600秒で、それより大きい値は3600秒に丸められます。
+ユーザー操作の cancel や request deadline が先に来た場合は、そちらが優先されます。
+
+```json
+{
+  "mcpServers": {
+    "browser": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "toolTimeoutSeconds": 900
+    }
+  }
+}
+```
+
+**注意**: `env` に明示した値はMCPサーバーへ渡されます。
+API token などの secret は必要なサーバーにだけ渡し、不要な値を `env` に書かないでください。
+
+### `approval` (オプション)
+
+MCPサーバーのツール実行承認ポリシー。
+未指定時は `confirm` です。
+
+| 値 | 説明 |
+|---|---|
+| `confirm` | 実行前に確認する。デフォルト |
+| `auto` | 確認なしで実行する。信頼できるMCPサーバーにだけ使う |
+| `deny` | ツールをモデルに公開せず、実行も拒否する |
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },
+      "approval": "confirm"
+    }
+  }
+}
+```
+
+`--auto-approve` や `execution.mode: full_auto` を使っていても、MCPツールは `approval: "auto"` を明示しない限り自動実行されません。
+
+### `toolApprovals` (オプション)
+
+ツール単位で `approval` を上書きできます。
+key はMCPサーバーが公開する raw tool name です。XELYON の実行名 `mcp_<server>_<tool>` ではありません。
+ただし、サーバーの `approval` が `deny` の場合は server 全体の拒否が優先され、`toolApprovals` では解除できません。
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" },
+      "approval": "confirm",
+      "toolApprovals": {
+        "get_issue": "auto",
+        "list_issues": "auto",
+        "create_issue": "confirm",
+        "delete_repository": "deny"
+      }
+    }
+  }
+}
+```
+
+評価順は `disabled`、`tools.include` / `tools.exclude`、サーバーの `approval: "deny"`、`toolApprovals`、サーバーの `approval`、デフォルト `confirm` です。
+不正な値は warning を出して `confirm` として扱います。
 
 ### サーバーの無効化
 
@@ -212,19 +334,53 @@ MCPサーバーが提供するツールの中から、使用するツールを�
 | `disabled` | `true` でサーバー全体を無効化。設定は保持される |
 | `tools.include` | ホワイトリスト。指定したツールのみ登録 |
 | `tools.exclude` | ブラックリスト。指定したツールを除外（`include` 未設定時のみ有効） |
+| `approval` | サーバー単位の承認ポリシー。`confirm` / `auto` / `deny` |
+| `toolApprovals` | raw tool name ごとの承認ポリシー上書き |
 
 > **Note**: `include` と `exclude` を両方設定した場合は `include` が優先されます。
-> ツール名はMCPサーバーが公開する名前をそのまま使用します（`mcp_` プレフィックスなし）。
+> `include` / `exclude` のツール名はMCPサーバーが公開する raw name をそのまま使用します（`mcp_` プレフィックスなし）。
+> XELYON がプロンプトと provider に公開する実行名は `mcp_<server>_<tool>` 形式です。同じ実行名に正規化される重複ツールは先に見つかったものを登録し、後続は skipped として扱います。
+
+### モデルに公開する MCP ツール数の上限
+
+XELYON は MCP サーバーへ接続して取得したツールのうち、モデルに公開する current surface を自動で絞ります。
+既定では最大80ツール、推定32,000トークン、1ツールあたり128KiBの schema までを provider 定義、system prompt、request context に載せます。
+上限を超えたツールは実行名も current surface から除外されるため、モデルから直接呼び出されません。
+
+選定はサーバー名とツール名で deterministic に並べ、複数サーバーがある場合はサーバー間で round-robin します。
+省略が発生した場合は stderr に warning を出します。
+必要なツールが省略される場合は、新しい設定項目ではなく `tools.include` / `tools.exclude` で MCP サーバー側の公開ツールを絞ってください。
+
+#### tool が多いときの確認手順
+
+1. 対話中なら `/mcp status` を実行し、`Top omitted reasons`、`Top heavy servers`、`Largest schema tools`、`Highest estimated token tools`、`Recommendations` を確認します。
+2. 起動前や別 HOME の設定を確認する場合は `xelyon doctor mcp --connect` を実行します。raw tool name まで確認したい場合は `--tools` を付けます。
+3. `Recommendations` に出る `mcpServers` 断片を参考に、必要な raw tool name だけを `tools.include` に入れます。`tools.exclude` は除外したい少数の tool が明確な場合だけ使います。
+4. もう一度 `/mcp status` または `xelyon doctor mcp --connect` を実行し、visible / omitted 数と estimated tokens が下がったことを確認します。
+
+例:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "tools": {
+        "include": ["list_issues", "get_issue", "create_issue"]
+      }
+    }
+  }
+}
+```
 
 #### 利用可能なツール名の確認
 
-MCPサーバーが提供するツール一覧はXELYON起動時のログで確認できます:
+MCPサーバーが提供するツール一覧は `xelyon doctor mcp --connect --tools` または XELYON 起動時のログで確認できます:
 
 ```
-🔌 MCP server 'github' connected (5 tools, 25 filtered out)
+🔌 MCP server 'github' connected (5 tools, 25 skipped)
 ```
 
-全ツールを確認するには、フィルタなしで一度起動してください。
+全ツールを確認するには、フィルタなしで `xelyon doctor mcp --connect --tools` を実行してください。
 
 ## 利用可能な公式MCPサーバー
 
@@ -252,7 +408,8 @@ Anthropicが公開しているMCPサーバー一覧: https://github.com/modelcon
       "args": [
         "@modelcontextprotocol/server-filesystem",
         "/home/user/documents"
-      ]
+      ],
+      "approval": "confirm"
     }
   }
 }
@@ -262,7 +419,7 @@ Anthropicが公開しているMCPサーバー一覧: https://github.com/modelcon
 xelyon
 > /home/user/documents 配下のファイル一覧を取得して
 
-# AIがMCPツールを自動で使用
+# AIがMCPツールを提案し、確認後に使用
 ```
 
 ### 2. Puppeteerサーバー（Web自動化）
@@ -272,7 +429,8 @@ xelyon
   "mcpServers": {
     "puppeteer": {
       "command": "npx",
-      "args": ["@modelcontextprotocol/server-puppeteer"]
+      "args": ["@modelcontextprotocol/server-puppeteer"],
+      "approval": "confirm"
     }
   }
 }
@@ -282,7 +440,7 @@ xelyon
 xelyon
 > https://example.com のスクリーンショットを撮って
 
-# AIがPuppeteerを使ってスクリーンショット取得
+# AIがPuppeteerを使うMCPツールを提案し、確認後に実行
 ```
 
 ### 3. PostgreSQLサーバー（データベース操作）
@@ -293,6 +451,7 @@ xelyon
     "postgres": {
       "command": "npx",
       "args": ["@modelcontextprotocol/server-postgres"],
+      "approval": "confirm",
       "env": {
         "POSTGRES_CONNECTION_STRING": "postgresql://user:password@localhost/mydb"
       }
@@ -305,7 +464,7 @@ xelyon
 xelyon
 > usersテーブルの件数を教えて
 
-# AIがPostgreSQLに接続してクエリ実行
+# AIがPostgreSQL用MCPツールを提案し、確認後に実行
 ```
 
 ### 4. GitHubサーバー（GitHub連携）
@@ -320,6 +479,13 @@ GitHub MCPサーバーを使用すると、AIがGitHub操作を直接実行で�
       "args": ["-y", "@modelcontextprotocol/server-github"],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxxxxxxxxx"
+      },
+      "approval": "confirm",
+      "toolApprovals": {
+        "get_issue": "auto",
+        "list_issues": "auto",
+        "create_issue": "confirm",
+        "delete_repository": "deny"
       }
     }
   }
@@ -350,9 +516,7 @@ xelyon
 # AIがmcp_github_get_issueツールを使用
 ```
 
-**特徴**: GitHub MCPサーバーが接続されている場合、XELYONは以下の機能を提供します：
-- ユーザーの質問にGitHub関連キーワード（issue, PR, CI等）が含まれる場合、AIに自動でMCPツール使用を促すヒントを付加
-- 「GitHubにアクセスできません」「Web UIから行ってください」といった回避的回答を防止
+**特徴**: GitHub MCPサーバーのツールは通常のMCPツールと同じく `mcp_<server>_<tool>` 形式で登録され、AIは公開されたツール定義と入力スキーマに従って呼び出します。
 
 ## カスタムMCPサーバーの作成
 
@@ -405,6 +569,9 @@ async function main() {
 main();
 ```
 
+`inputSchema` の必須引数は JSON Schema 標準の top-level `required` 配列で指定してください。
+`properties.<name>.required=true` のような property 内の marker は必須判定には使われません。
+
 ### XELYONでの使用
 
 ```json
@@ -412,7 +579,8 @@ main();
   "mcpServers": {
     "my-custom-server": {
       "command": "node",
-      "args": ["/path/to/my-custom-server.js"]
+      "args": ["/path/to/my-custom-server.js"],
+      "approval": "confirm"
     }
   }
 }
@@ -456,34 +624,37 @@ AIが応答でMCPツールを含めない場合は、SystemPromptに正しくツ
 
 ### タイムアウトエラー
 
-MCPサーバーの応答が遅い場合は、タイムアウトを延長できます（デフォルト30秒）。
+MCPのデフォルト timeout は、起動・接続・`tools/list` が120秒、ツール実行が600秒です。
 
-**現在の実装ではハードコード**されており、設定変更はコードの修正が必要です:
+- ツール実行 timeout: `internal/mcptool` が `tools.ExecutionContext.EffectiveContext()` を親にして管理します。ユーザー操作の cancel や request deadline が先に来た場合は、`toolTimeoutSeconds` より優先されます。
+- 起動時の connect / `ListTools` timeout: `internal/mcp` がサーバーごとの接続と tool listing を管理します。caller context の deadline が `startupTimeoutSeconds` より短い場合はそちらが優先されます。
+- `startupTimeoutSeconds` / `toolTimeoutSeconds` はサーバーごとに設定できます。未指定時は上記デフォルト、最大値は3600秒です。
 
-```go
-// internal/mcp/client.go
-ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-```
+### MCP ツール結果が大きすぎる
+
+MCP ツール結果が64KiBを超える場合、XELYON は結果を履歴へ保存する前に compact します。
+履歴、session conversation、provider へ返す `function_call_output`、画面表示には redaction 済みの head/tail excerpt と metadata だけが残ります。
+全文は `provider_history_reduction.raw_output_artifacts.mode: apply` のときだけ、既存の raw output artifact store に `surface=mcp_tool_result` として保存を試みます。
+
+secret-like な内容、store disabled、quota 超過、artifact 作成失敗などでは全文保存を行わず、placeholder に `full_output_omitted_reason` を記録します。
+この runtime guard は provider history reduction より前に動作するため、大きな MCP 結果がそのまま履歴や provider payload に入り続けることを防ぎます。
 
 ## セキュリティ
 
 ### 環境変数のサニタイズ
 
-XELYONは以下の機密情報を自動的にMCPサーバーに渡しません:
-
-- `DEEPSEEK_API_KEY`
-- `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GROQ_API_KEY`
-- その他 `*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_API_KEY` パターン
+XELYONはsystem envから `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `NODE_OPTIONS`, `PYTHONPATH` だけを継承します。
+`OPENAI_API_KEY` や `GITHUB_TOKEN` のような値はsystem envからは自動継承されません。
+ただし、`mcp.json` の `env` に明示した値は `${VAR}` 展開後にMCPサーバーへ渡されます。
 
 ### 推奨事項
 
 1. **最小権限の原則**: MCPサーバーには必要最小限のアクセス権限のみを与える
-2. **信頼できるサーバーのみ**: 公式サーバーまたは信頼できるソースからのみインストール
-3. **定期的な更新**: MCPサーバーを最新版に保つ
-4. **ログ確認**: 異常な動作がないか定期的に確認
+2. **承認ポリシー**: デフォルトの `confirm` を基本にし、`auto` は信頼できる read-only 系ツールなどに限定する
+3. **危険なツールの拒否**: 使わない破壊的ツールは `toolApprovals` で `deny` にする
+4. **信頼できるサーバーのみ**: 公式サーバーまたは信頼できるソースからのみインストール
+5. **定期的な更新**: MCPサーバーを最新版に保つ
+6. **ログ確認**: 異常な動作がないか定期的に確認
 
 ## 関連ドキュメント
 

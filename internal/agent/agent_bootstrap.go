@@ -54,11 +54,13 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	providerRuntimeName := providerRuntimeNameFromProvider(provider)
 	providerConfigKey := providerConfigKeyFromProvider(provider)
 	toolVisibility := resolveToolVisibilityPolicyWithConfig(providerRuntimeName, model, cfg, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
+	mcpSurface := selectMCPToolSurface(model, mcpManager.GetTools())
 
-	configureMCPTools(provider, mcpManager.GetTools(), errOut)
-	runtime.effectiveRegistry().SetExcludedTools(toolVisibility.excluded())
+	configureMCPTools(provider, mcpSurface.selectedTools(), errOut)
+	emitMCPToolSurfaceBudgetWarning(mcpSurface, errOut)
+	runtime.effectiveRegistry().SetExcludedTools(appendUniqueStrings(toolVisibility.excluded(), mcpSurface.omittedExportedNames()...))
 
-	systemPrompt := buildAgentSystemPrompt(provider, model, cfg, mcpManager, runtime.effectiveInvocationCWD())
+	systemPrompt := buildAgentSystemPrompt(provider, model, cfg, mcpSurface, runtime.effectiveInvocationCWD())
 	toolCache := runtime.effectiveToolCache()
 
 	agent := &Agent{
@@ -70,6 +72,8 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 		Runtime:           runtime,
 		History:           []api.Message{},
 		mcpManager:        mcpManager,
+		mcpSurface:        mcpSurface,
+		Headless:          headless,
 		lspClient:         lspClient,
 		SystemPrompt:      systemPrompt,
 		Stats:             NewSessionStats(providerRuntimeName, model),
@@ -142,11 +146,11 @@ func setupMCPManager(cfg *config.Config, headless bool, out, errOut io.Writer, r
 	return manager
 }
 
-func buildAgentSystemPrompt(provider api.Provider, model string, cfg *config.Config, manager *mcp.Manager, invocationCWD string) string {
+func buildAgentSystemPrompt(provider api.Provider, model string, cfg *config.Config, mcpSurface mcpToolSurfaceSelection, invocationCWD string) string {
 	providerName := providerRuntimeNameFromProvider(provider)
 	systemPrompt := prompt.GetSystemPromptForProviderWithConfig(providerName, model, cfg)
-	if manager != nil && len(manager.GetTools()) > 0 {
-		systemPrompt += buildMCPToolsPrompt(manager)
+	if len(mcpSurface.selected) > 0 {
+		systemPrompt += buildMCPToolsPromptForTools(mcpSurface.selectedTools())
 	}
 	systemPrompt = injectSkillCatalogPrompt(systemPrompt, invocationCWD)
 

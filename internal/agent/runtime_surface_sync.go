@@ -8,6 +8,8 @@ func (a *Agent) syncCurrentDerivedRuntimeState() {
 	if a == nil {
 		return
 	}
+	previousBudgetExcluded := a.mcpSurface.omittedExportedNames()
+	a.refreshMCPToolSurface()
 	a.rebuildSystemPromptForCurrentProvider()
-	a.syncCurrentSurfaceToolVisibility()
+	a.syncCurrentSurfaceToolVisibilityWithPreviousBudget(previousBudgetExcluded)
 }

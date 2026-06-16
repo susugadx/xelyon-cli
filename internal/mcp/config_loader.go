@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type mcpConfigLoadResult struct {
@@ -14,8 +15,10 @@ type mcpConfigLoadResult struct {
 }
 
 func loadMCPConfig(homeDir string) (*mcpConfigLoadResult, error) {
-	xelyonDir := filepath.Join(homeDir, ".xelyon")
-	configPath := filepath.Join(xelyonDir, "mcp.json")
+	xelyonDir, configPath, err := resolveMCPConfigPaths(homeDir)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := ensureMCPConfigDir(xelyonDir); err != nil {
 		return nil, err
@@ -41,6 +44,20 @@ func loadMCPConfig(homeDir string) (*mcpConfigLoadResult, error) {
 		config:     cfg,
 		configPath: configPath,
 	}, nil
+}
+
+func resolveMCPConfigPaths(homeDir string) (string, string, error) {
+	homeDir = strings.TrimSpace(homeDir)
+	if homeDir == "" {
+		return "", "", fmt.Errorf("MCP home directory is unavailable")
+	}
+	xelyonDir, configPath := mcpConfigPaths(homeDir)
+	return xelyonDir, configPath, nil
+}
+
+func mcpConfigPaths(homeDir string) (string, string) {
+	xelyonDir := filepath.Join(homeDir, ".xelyon")
+	return xelyonDir, filepath.Join(xelyonDir, "mcp.json")
 }
 
 func ensureMCPConfigDir(path string) error {
@@ -81,11 +98,13 @@ func readMCPConfig(configPath string) (*Config, error) {
 func newDefaultMCPConfig() Config {
 	return Config{
 		MCPServers: map[string]ServerConfig{
-			// 例: filesystemサーバー
+			// 例: filesystemサーバー。初回起動時に placeholder へ接続しないよう無効化する。
 			"filesystem": {
-				Command: "npx",
-				Args:    []string{"@modelcontextprotocol/server-filesystem", "/path/to/directory"},
-				Env:     map[string]string{"NODE_OPTIONS": "--no-warnings"},
+				Command:  "npx",
+				Args:     []string{"@modelcontextprotocol/server-filesystem", "/path/to/directory"},
+				Env:      map[string]string{"NODE_OPTIONS": "--no-warnings"},
+				Disabled: true,
+				Approval: "confirm",
 			},
 		},
 	}

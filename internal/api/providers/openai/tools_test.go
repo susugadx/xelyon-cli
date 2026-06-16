@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -42,6 +43,34 @@ func TestGetCombinedOpenAITools_DeduplicatesMCPTools(t *testing.T) {
 	}
 	if !foundCustom {
 		t.Fatal("custom_tool should be included")
+	}
+}
+
+func TestGetCombinedOpenAITools_SerializesMCPEmptySchema(t *testing.T) {
+	mcpTool := api.ConvertMCPToolToToolDefinition("mcp_server_ping", "Ping server", nil)
+
+	tools := GetCombinedOpenAIToolsWithContext(api.WithToolDefinitions(context.Background(), nil), []api.ToolDefinition{mcpTool})
+	if len(tools) != 1 || tools[0].Function == nil {
+		t.Fatalf("tools = %#v, want one MCP function tool", tools)
+	}
+	params := tools[0].Function.Parameters
+	if params["type"] != "object" {
+		t.Fatalf("Parameters = %#v, want object schema", params)
+	}
+	props, ok := params["properties"].(map[string]interface{})
+	if !ok || len(props) != 0 {
+		t.Fatalf("Parameters[properties] = %#v, want empty map", params["properties"])
+	}
+	if params["additionalProperties"] != false {
+		t.Fatalf("Parameters[additionalProperties] = %#v, want false", params["additionalProperties"])
+	}
+
+	raw, err := json.Marshal(tools)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if !strings.Contains(string(raw), `"parameters"`) {
+		t.Fatalf("serialized tools = %s, want parameters field", raw)
 	}
 }
 

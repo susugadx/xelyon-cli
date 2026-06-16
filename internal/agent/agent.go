@@ -132,6 +132,8 @@ type Agent struct {
 	History           []api.Message
 	SystemPrompt      string
 	mcpManager        *mcp.Manager
+	mcpSurface        mcpToolSurfaceSelection
+	Headless          bool
 	lspClient         *lsp.Client       // LSPクライアント
 	AutoApprove       bool              // --auto-approve フラグ
 	Stats             *SessionStats     // セッション統計情報

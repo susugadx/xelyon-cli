@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 )
 
 // LogEntry は監査ログのエントリ
@@ -87,9 +89,10 @@ func (l *Logger) LogToolExecution(tool string, args map[string]string, output st
 		Success:     err == nil,
 	}
 
-	// 出力は最初の500文字のみ記録（ログサイズ削減）
-	if len(output) > 500 {
-		entry.Output = output[:500] + "... (truncated)"
+	// 出力は secret-like 値を伏せたうえで最初の500文字のみ記録（ログサイズ削減）
+	output = rawoutputs.RedactDisplaySecrets(output)
+	if len([]rune(output)) > 500 {
+		entry.Output = string([]rune(output)[:500]) + "... (truncated)"
 	} else {
 		entry.Output = output
 	}

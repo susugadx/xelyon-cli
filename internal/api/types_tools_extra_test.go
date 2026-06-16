@@ -7,13 +7,13 @@ import (
 
 func TestConvertMCPToolToToolDefinition(t *testing.T) {
 	tests := []struct {
-		name        string
-		toolName    string
-		description string
-		inputSchema []byte
-		wantName    string
-		wantDesc    string
-		wantParams  bool // パラメータが設定されるか
+		name         string
+		toolName     string
+		description  string
+		inputSchema  []byte
+		wantName     string
+		wantDesc     string
+		wantFallback bool
 	}{
 		{
 			name:        "basic tool with schema",
@@ -22,34 +22,42 @@ func TestConvertMCPToolToToolDefinition(t *testing.T) {
 			inputSchema: []byte(`{"type":"object","properties":{"path":{"type":"string","description":"File path"}},"required":["path"]}`),
 			wantName:    "read_file",
 			wantDesc:    "Read a file from disk",
-			wantParams:  true,
 		},
 		{
-			name:        "tool with empty schema",
-			toolName:    "list_tools",
-			description: "List available tools",
-			inputSchema: []byte{},
-			wantName:    "list_tools",
-			wantDesc:    "List available tools",
-			wantParams:  false,
+			name:         "tool with empty schema",
+			toolName:     "list_tools",
+			description:  "List available tools",
+			inputSchema:  []byte{},
+			wantName:     "list_tools",
+			wantDesc:     "List available tools",
+			wantFallback: true,
 		},
 		{
-			name:        "tool with null schema",
-			toolName:    "ping",
-			description: "Ping the server",
-			inputSchema: []byte("null"),
-			wantName:    "ping",
-			wantDesc:    "Ping the server",
-			wantParams:  false,
+			name:         "tool with null schema",
+			toolName:     "ping",
+			description:  "Ping the server",
+			inputSchema:  []byte("null"),
+			wantName:     "ping",
+			wantDesc:     "Ping the server",
+			wantFallback: true,
 		},
 		{
-			name:        "tool with invalid JSON schema",
-			toolName:    "broken",
-			description: "Broken tool",
-			inputSchema: []byte("{invalid json}"),
-			wantName:    "broken",
-			wantDesc:    "Broken tool",
-			wantParams:  false,
+			name:         "tool with invalid JSON schema",
+			toolName:     "broken",
+			description:  "Broken tool",
+			inputSchema:  []byte("{invalid json}"),
+			wantName:     "broken",
+			wantDesc:     "Broken tool",
+			wantFallback: true,
+		},
+		{
+			name:         "tool with empty object schema",
+			toolName:     "empty_object",
+			description:  "Empty object tool",
+			inputSchema:  []byte(`{}`),
+			wantName:     "empty_object",
+			wantDesc:     "Empty object tool",
+			wantFallback: true,
 		},
 		{
 			name:        "tool with complex schema",
@@ -58,16 +66,15 @@ func TestConvertMCPToolToToolDefinition(t *testing.T) {
 			inputSchema: []byte(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"line":{"type":"number"}},"required":["path","content"]}`),
 			wantName:    "edit_file",
 			wantDesc:    "Edit a file",
-			wantParams:  true,
 		},
 		{
-			name:        "tool with nil schema",
-			toolName:    "no_schema",
-			description: "No schema tool",
-			inputSchema: nil,
-			wantName:    "no_schema",
-			wantDesc:    "No schema tool",
-			wantParams:  false,
+			name:         "tool with nil schema",
+			toolName:     "no_schema",
+			description:  "No schema tool",
+			inputSchema:  nil,
+			wantName:     "no_schema",
+			wantDesc:     "No schema tool",
+			wantFallback: true,
 		},
 	}
 
@@ -81,18 +88,23 @@ func TestConvertMCPToolToToolDefinition(t *testing.T) {
 			if got.Description != tt.wantDesc {
 				t.Errorf("ConvertMCPToolToToolDefinition() Description = %q, want %q", got.Description, tt.wantDesc)
 			}
-			if tt.wantParams && got.Parameters == nil {
+			if got.Parameters == nil {
 				t.Error("ConvertMCPToolToToolDefinition() Parameters should not be nil")
 			}
-			if !tt.wantParams && got.Parameters != nil {
-				t.Errorf("ConvertMCPToolToToolDefinition() Parameters should be nil, got %v", got.Parameters)
-			}
 
-			// スキーマが正しくパースされた場合、properties が含まれることを確認
-			if tt.wantParams {
-				if _, ok := got.Parameters["properties"]; !ok {
-					t.Error("ConvertMCPToolToToolDefinition() Parameters should contain 'properties'")
+			if tt.wantFallback {
+				if got.Parameters["type"] != "object" {
+					t.Errorf("fallback Parameters[type] = %#v, want object", got.Parameters["type"])
 				}
+				props, ok := got.Parameters["properties"].(map[string]interface{})
+				if !ok || len(props) != 0 {
+					t.Errorf("fallback Parameters[properties] = %#v, want empty map", got.Parameters["properties"])
+				}
+				if got.Parameters["additionalProperties"] != false {
+					t.Errorf("fallback Parameters[additionalProperties] = %#v, want false", got.Parameters["additionalProperties"])
+				}
+			} else if _, ok := got.Parameters["properties"]; !ok {
+				t.Error("ConvertMCPToolToToolDefinition() Parameters should contain 'properties'")
 			}
 
 			// JSON にマーシャルできることを確認

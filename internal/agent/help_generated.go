@@ -13,6 +13,8 @@ const GeneratedHelpCommandsText = `Commands:
   /tokens                   - Show token usage and context window status
   /ledger                   - Show runtime task ledger
   /rawoutputs [summary|verify|refs|gc --dry-run] - Inspect raw output artifact store diagnostics
+  /mcp [status]             - Show MCP runtime status
+                            /mcp status - Show current MCP session servers and tool surface
   /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /compress [N] [-c]        - Compress history (keep recent N, -c: use OpenAI Compact API)
   /provider [provider] [model] - Open provider/model picker or switch directly
@@ -46,6 +48,8 @@ const GeneratedTUIHelpCommandsText = `Commands:
   /tokens                   - Show token usage and context window status
   /ledger                   - Show runtime task ledger
   /rawoutputs [summary|verify|refs|gc --dry-run] - Inspect raw output artifact store diagnostics
+  /mcp [status]             - Show MCP runtime status
+                            /mcp status - Show current MCP session servers and tool surface
   /copy [code] [-n N]       - Copy last AI output to clipboard (code=code blocks only, -n=N-th last output)
   /attach <path>            - Attach a file or image to the current composer draft (combined limit: up to 12 attachments per draft)
   /detach <index>           - Detach one attachment by index

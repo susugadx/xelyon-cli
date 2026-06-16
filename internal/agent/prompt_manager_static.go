@@ -46,8 +46,9 @@ func (m *PromptManager) baseStaticPrompt() string {
 	}
 	providerName := resolvePromptProviderName(a)
 	staticPrompt := prompt.GetSystemPromptForProviderWithConfig(providerName, a.CurrentModel, a.cfg())
-	if a.mcpManager != nil && len(a.mcpManager.GetTools()) > 0 {
-		staticPrompt += buildMCPToolsPrompt(a.mcpManager)
+	mcpSurface := a.currentMCPToolSurface()
+	if len(mcpSurface.selected) > 0 {
+		staticPrompt += buildMCPToolsPromptForTools(mcpSurface.selectedTools())
 	}
 	return staticPrompt
 }

@@ -24,5 +24,6 @@ func (a *Agent) setCurrentModelAndSync(model string) {
 	}
 	a.setCurrentModel(model)
 	a.syncCurrentDerivedRuntimeState()
+	a.configureCurrentProviderMCPTools()
 	a.reconcileSessionForCurrentRuntime()
 }

@@ -70,8 +70,9 @@ func TestMCPToolWrapper_ValidateArgs(t *testing.T) {
 			inputSchema: json.RawMessage(`{
 				"type":"object",
 				"properties":{
-					"path":{"type":"string","required":true}
-				}
+					"path":{"type":"string"}
+				},
+				"required":["path"]
 			}`),
 		}
 
@@ -129,7 +130,8 @@ func TestMCPToolWrapper_Run(t *testing.T) {
 			toolName:   "echo",
 			inputSchema: json.RawMessage(`{
 				"type":"object",
-				"properties":{"path":{"type":"string","required":true}}
+				"properties":{"path":{"type":"string"}},
+				"required":["path"]
 			}`),
 		}
 

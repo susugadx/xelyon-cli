@@ -316,13 +316,6 @@ func (a *Agent) applyProviderModelSwitch(outcome *ProviderSwitchOutcome, provide
 		})
 	}
 
-	// MCPToolProviderインターフェースを実装するプロバイダーにMCPツールを設定
-	if a.mcpManager != nil {
-		configureMCPTools(provider, a.mcpManager.GetTools(), a.errorOutput())
-	}
-
-	a.syncCurrentDerivedRuntimeState()
-
 	outcome.NewProvider = runtimeProviderName
 	outcome.NewProviderConfigKey = nextProviderConfigKey
 	outcome.NewModel = newModel
@@ -334,6 +327,7 @@ func (a *Agent) applyRuntimeModelSelection(model string, resetResponseContinuati
 	}
 	a.setCurrentModel(model)
 	a.syncCurrentDerivedRuntimeState()
+	a.configureCurrentProviderMCPTools()
 	if resetResponseContinuation {
 		a.clearResponseContinuationContext()
 	} else {

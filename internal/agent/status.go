@@ -176,7 +176,8 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 		AddRow("Next", statusNextForSurface(status, commandSurface)).
 		AddRow("Mode", modeText).
 		AddRow("Provider", agent.ProviderName).
-		AddRow("Model", agent.CurrentModel)
+		AddRow("Model", agent.CurrentModel).
+		AddRow("MCP", mcpStatusInlineSummary(agent))
 	if detail := geminiServiceTierStatusDetail(cfg, agent.activeModelProviderConfigKey(cfg), nil); detail != "" {
 		statusTable.AddRow("Service Tier", detail)
 	}

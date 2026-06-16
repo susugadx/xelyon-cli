@@ -3,8 +3,11 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 )
 
 // shouldIncludeTool はツールがフィルタを通過するか判定
@@ -40,51 +43,134 @@ func (m *Manager) refreshServerTools(
 	ctx context.Context,
 	serverName string,
 	session *mcp.ClientSession,
-	filter *ToolsFilter,
-	replace bool,
-) (toolRegistrationSummary, error) {
-	toolsResult, err := session.ListTools(ctx, nil)
+	serverConfig ServerConfig,
+) ([]MCPTool, toolRegistrationSummary, error) {
+	listCtx, cancel := mcpServerOperationContext(ctx, serverConfig.startupTimeoutDuration())
+	defer cancel()
+
+	toolsResult, err := session.ListTools(listCtx, nil)
 	if err != nil {
-		return toolRegistrationSummary{}, err
+		return nil, toolRegistrationSummary{}, err
 	}
 
-	summary := m.storeServerTools(serverName, session, toolsResult.Tools, filter, replace)
-	return summary, nil
+	serverTools, summary := m.buildServerTools(serverName, session, toolsResult.Tools, serverConfig)
+	return serverTools, summary, nil
 }
 
-func (m *Manager) storeServerTools(
+func (m *Manager) buildServerTools(
 	serverName string,
 	session *mcp.ClientSession,
 	toolDefs []*mcp.Tool,
-	filter *ToolsFilter,
-	replace bool,
-) toolRegistrationSummary {
-	if replace {
-		m.removeServerTools(serverName)
-	}
-
-	summary := toolRegistrationSummary{}
-	for _, tool := range toolDefs {
-		if tool == nil {
+	serverConfig ServerConfig,
+) ([]MCPTool, toolRegistrationSummary) {
+	decisions, summary := m.planServerToolRegistration(serverName, toolDefs, serverConfig)
+	serverTools := make([]MCPTool, 0, summary.registered)
+	callTimeout := serverConfig.toolTimeoutDuration()
+	for _, decision := range decisions {
+		if !decision.registered() {
 			continue
 		}
-		if !shouldIncludeTool(tool.Name, filter) {
-			summary.skipped++
-			continue
-		}
-
+		tool := decision.tool
 		schemaBytes, _ := json.Marshal(tool.InputSchema)
-		m.tools = append(m.tools, MCPTool{
+		serverTools = append(serverTools, MCPTool{
 			ServerName:  serverName,
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: schemaBytes,
 			Session:     session,
+			CallTimeout: callTimeout,
+			Approval:    decision.approval,
 		})
+	}
+
+	return serverTools, summary
+}
+
+func (m *Manager) planServerToolRegistration(
+	serverName string,
+	toolDefs []*mcp.Tool,
+	serverConfig ServerConfig,
+) ([]toolRegistrationDecision, toolRegistrationSummary) {
+	seenExportedNames := m.existingExportedToolNames(serverName)
+	decisions := make([]toolRegistrationDecision, 0, len(toolDefs))
+	summary := toolRegistrationSummary{}
+	serverApproval := m.normalizedServerApproval(serverName, serverConfig.Approval)
+	for _, tool := range toolDefs {
+		if tool == nil {
+			continue
+		}
+		if !shouldIncludeTool(tool.Name, serverConfig.Tools) {
+			decisions = append(decisions, toolRegistrationDecision{tool: tool, skipReason: toolSkipFiltered})
+			summary.skipped++
+			continue
+		}
+
+		if serverApproval == mcpapproval.ModeDeny {
+			decisions = append(decisions, toolRegistrationDecision{tool: tool, approval: serverApproval, skipReason: toolSkipServerDeny})
+			summary.skipped++
+			continue
+		}
+
+		approval := m.effectiveToolApproval(serverName, tool.Name, serverApproval, serverConfig.ToolApprovals)
+		if approval == mcpapproval.ModeDeny {
+			decisions = append(decisions, toolRegistrationDecision{tool: tool, approval: approval, skipReason: toolSkipToolDeny})
+			summary.skipped++
+			continue
+		}
+
+		exportedName := mcpnames.ExportedToolName(serverName, tool.Name)
+		if seenExportedNames[exportedName] {
+			fmt.Fprintf(m.out(), "⚠️  MCP tool '%s' from server '%s' skipped: exported name %q already registered\n", tool.Name, serverName, exportedName)
+			decisions = append(decisions, toolRegistrationDecision{tool: tool, exportedName: exportedName, approval: approval, skipReason: toolSkipCollision})
+			summary.skipped++
+			continue
+		}
+		seenExportedNames[exportedName] = true
+
+		decisions = append(decisions, toolRegistrationDecision{tool: tool, exportedName: exportedName, approval: approval})
 		summary.registered++
 	}
 
-	return summary
+	return decisions, summary
+}
+
+func (m *Manager) normalizedServerApproval(serverName string, raw string) mcpapproval.Mode {
+	mode, valid := mcpapproval.Normalize(raw)
+	if !valid {
+		fmt.Fprintf(m.out(), "⚠️  MCP server '%s' has invalid approval %q; using %q\n", serverName, raw, mcpapproval.ModeConfirm)
+	}
+	return mode
+}
+
+func (m *Manager) effectiveToolApproval(serverName, toolName string, serverMode mcpapproval.Mode, toolApprovals map[string]string) mcpapproval.Mode {
+	if toolApprovals == nil {
+		return mcpapproval.Effective(serverMode)
+	}
+	raw, ok := toolApprovals[toolName]
+	if !ok {
+		return mcpapproval.Effective(serverMode)
+	}
+	mode, valid := mcpapproval.Normalize(raw)
+	if !valid {
+		fmt.Fprintf(m.out(), "⚠️  MCP tool '%s' from server '%s' has invalid approval %q; using %q\n", toolName, serverName, raw, mcpapproval.ModeConfirm)
+	}
+	return mode
+}
+
+func (m *Manager) existingExportedToolNames(excludeServerName string) map[string]bool {
+	seen := make(map[string]bool, len(m.tools))
+	for _, tool := range m.tools {
+		if tool.ServerName == excludeServerName {
+			continue
+		}
+		seen[mcpnames.ExportedToolName(tool.ServerName, tool.Name)] = true
+	}
+	return seen
+}
+
+func (m *Manager) replaceServerTools(serverName string, serverTools []MCPTool) {
+	m.removeServerTools(serverName)
+	m.tools = append(m.tools, serverTools...)
 }
 
 func (m *Manager) removeServerTools(serverName string) {

@@ -4,11 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
+	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
+	"github.com/susugadx/xelyon-cli/internal/mcptool"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 type mockMCPProvider struct {
@@ -39,6 +46,12 @@ func (p *mockMCPProvider) SetMCPEnabled(_ bool) {}
 func (p *mockMCPProvider) SetMCPTools(tools []api.ToolDefinition) {
 	p.setMCPToolsCalls++
 	p.lastTools = tools
+}
+
+type mcpSurfaceTestCaller struct{}
+
+func (mcpSurfaceTestCaller) CallTool(context.Context, string, string, map[string]any) (string, error) {
+	return "ok", nil
 }
 
 func TestConfigureMCPTools_SetMCPToolsCalledOnceAndConverted(t *testing.T) {
@@ -102,6 +115,311 @@ func TestConfigureMCPTools_SetMCPToolsCalledOnceAndConverted(t *testing.T) {
 				t.Fatalf("tool parameters['required'] should include 'id'")
 			}
 		})
+	}
+}
+
+func TestConfigureMCPToolsClearsProviderWhenNoMCPToolsSelected(t *testing.T) {
+	p := &mockMCPProvider{
+		name: "openai",
+		lastTools: []api.ToolDefinition{{
+			Name: "mcp_stale_tool",
+		}},
+	}
+
+	configureMCPTools(p, nil, nil)
+
+	if p.setMCPToolsCalls != 1 {
+		t.Fatalf("SetMCPTools calls = %d, want 1", p.setMCPToolsCalls)
+	}
+	if len(p.lastTools) != 0 {
+		t.Fatalf("registered tools = %#v, want empty MCP provider surface", p.lastTools)
+	}
+}
+
+func TestDeniedMCPToolsDoNotReachPromptProviderOrRegistrySurface(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "github", Name: "list_issues", Description: "List issues", Approval: mcpapproval.ModeAuto},
+		{ServerName: "github", Name: "delete_repository", Description: "Delete repository", Approval: mcpapproval.ModeDeny},
+	}
+
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		maxTools:           10,
+		maxEstimatedTokens: 32000,
+		maxSchemaBytes:     1024,
+	})
+	if got := exportedMCPToolNamesForTest(selection.selected); !reflect.DeepEqual(got, []string{"mcp_github_list_issues"}) {
+		t.Fatalf("selected MCP tools = %#v, want only allowed tool", got)
+	}
+
+	promptText := buildMCPToolsPromptForTools(mcpTools)
+	if strings.Contains(promptText, "mcp_github_delete_repository") {
+		t.Fatalf("prompt contains denied MCP tool:\n%s", promptText)
+	}
+
+	provider := &mockMCPProvider{name: "openai"}
+	configureMCPTools(provider, mcpTools, nil)
+	if got := toolDefinitionNamesForTest(provider.lastTools); !reflect.DeepEqual(got, []string{"mcp_github_list_issues"}) {
+		t.Fatalf("provider MCP tools = %#v, want only allowed tool", got)
+	}
+
+	registry := tools.NewRegistry()
+	mcptool.RegisterToRegistry(registry, mcpSurfaceTestCaller{}, mcpToolDefinitions(mcpTools))
+	if registry.GetTool("mcp_github_delete_repository") != nil {
+		t.Fatal("registry should not contain denied MCP tool")
+	}
+	if registry.GetTool("mcp_github_list_issues") == nil {
+		t.Fatal("registry should contain allowed MCP tool")
+	}
+}
+
+func TestSelectMCPToolSurfaceRoundRobinBudget(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "zeta", Name: "z3", Description: "z3"},
+		{ServerName: "alpha", Name: "a2", Description: "a2"},
+		{ServerName: "zeta", Name: "z1", Description: "z1"},
+		{ServerName: "alpha", Name: "a1", Description: "a1"},
+		{ServerName: "beta", Name: "b1", Description: "b1"},
+	}
+
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		maxTools:           4,
+		maxEstimatedTokens: 32000,
+		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+	})
+
+	got := exportedMCPToolNamesForTest(selection.selected)
+	want := []string{
+		"mcp_alpha_a1",
+		"mcp_beta_b1",
+		"mcp_zeta_z1",
+		"mcp_alpha_a2",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected tools = %#v, want %#v", got, want)
+	}
+	omitted := selection.omittedExportedNames()
+	if !reflect.DeepEqual(omitted, []string{"mcp_zeta_z3"}) {
+		t.Fatalf("omitted tools = %#v, want zeta z3", omitted)
+	}
+}
+
+func TestMCPToolSurfaceBudgetExcludesProviderPromptAndRegistrySurface(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "alpha", Name: "one", Description: "One"},
+		{ServerName: "alpha", Name: "two", Description: "Two"},
+		{ServerName: "alpha", Name: "three", Description: "Three"},
+	}
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		maxTools:           2,
+		maxEstimatedTokens: 32000,
+		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+	})
+
+	provider := &mockMCPProvider{name: "openai"}
+	configureMCPTools(provider, selection.selectedTools(), nil)
+	if got := toolDefinitionNamesForTest(provider.lastTools); !reflect.DeepEqual(got, []string{"mcp_alpha_one", "mcp_alpha_three"}) {
+		t.Fatalf("provider MCP tools = %#v, want selected only", got)
+	}
+
+	promptText := buildMCPToolsPromptForTools(selection.selectedTools())
+	if strings.Contains(promptText, "mcp_alpha_two") {
+		t.Fatalf("prompt should omit budget-excluded tool:\n%s", promptText)
+	}
+	for _, want := range []string{"mcp_alpha_one", "mcp_alpha_three"} {
+		if !strings.Contains(promptText, want) {
+			t.Fatalf("prompt missing selected tool %q:\n%s", want, promptText)
+		}
+	}
+
+	registry := tools.NewRegistry()
+	mcptool.RegisterToRegistry(registry, mcpSurfaceTestCaller{}, mcpToolDefinitions(mcpTools))
+	registry.SetExcludedTools(selection.omittedExportedNames())
+	if got := toolDefinitionNamesForTest(registry.GetAPIToolDefinitions()); !reflect.DeepEqual(got, []string{"mcp_alpha_one", "mcp_alpha_three"}) {
+		t.Fatalf("registry API tools = %#v, want selected only", got)
+	}
+	if result := registry.ExecuteDetailedWithContext(tools.ExecutionContext{}, &tools.ToolCall{Tool: "mcp_alpha_two"}); !result.Error {
+		t.Fatalf("budget-excluded MCP tool execution result = %#v, want error", result)
+	}
+}
+
+func TestMCPToolSurfaceBudgetOmitsOversizedSchema(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "alpha", Name: "small", Description: "Small", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{ServerName: "alpha", Name: "huge", Description: "Huge", InputSchema: json.RawMessage(strings.Repeat("x", 200))},
+	}
+
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		maxTools:           10,
+		maxEstimatedTokens: 32000,
+		maxSchemaBytes:     64,
+	})
+
+	if got := exportedMCPToolNamesForTest(selection.selected); !reflect.DeepEqual(got, []string{"mcp_alpha_small"}) {
+		t.Fatalf("selected tools = %#v, want small only", got)
+	}
+	if got := selection.omittedExportedNames(); !reflect.DeepEqual(got, []string{"mcp_alpha_huge"}) {
+		t.Fatalf("omitted tools = %#v, want huge only", got)
+	}
+	if selection.omitted[0].reason != "schema_too_large" {
+		t.Fatalf("omission reason = %q, want schema_too_large", selection.omitted[0].reason)
+	}
+}
+
+func TestMCPToolSurfaceBudgetCanOmitAllToolsWhenTokenBudgetExceeded(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "alpha", Name: "huge", Description: strings.Repeat("large description ", 50)},
+	}
+
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		maxTools:           10,
+		maxEstimatedTokens: 1,
+		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+	})
+
+	if len(selection.selected) != 0 {
+		t.Fatalf("selected tools = %#v, want empty when first tool exceeds token budget", exportedMCPToolNamesForTest(selection.selected))
+	}
+	if got := selection.omittedExportedNames(); !reflect.DeepEqual(got, []string{"mcp_alpha_huge"}) {
+		t.Fatalf("omitted tools = %#v, want huge only", got)
+	}
+	if selection.omitted[0].reason != "token_budget_exceeded" {
+		t.Fatalf("omission reason = %q, want token_budget_exceeded", selection.omitted[0].reason)
+	}
+}
+
+func TestMCPToolSurfaceAnalysisReportsMetricsAndRecommendations(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "alpha", Name: "one", Description: "One", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{ServerName: "alpha", Name: "two", Description: "Two", InputSchema: json.RawMessage(`{"type":"object"}`)},
+	}
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		maxTools:           1,
+		maxEstimatedTokens: 32000,
+		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+	})
+
+	report := selection.analysis()
+	if report.TotalTools != 2 || report.RegisteredTools != 2 || report.VisibleTools != 1 || report.OmittedTools != 1 {
+		t.Fatalf("surface report counts = %+v, want total=2 registered=2 visible=1 omitted=1", report)
+	}
+	if report.EstimatedTokens <= 0 {
+		t.Fatalf("EstimatedTokens = %d, want selected tool estimate", report.EstimatedTokens)
+	}
+	if len(report.Servers) != 1 || report.Servers[0].ServerName != "alpha" || report.Servers[0].OmittedTools != 1 {
+		t.Fatalf("server summaries = %#v, want alpha omitted summary", report.Servers)
+	}
+	if len(report.OmittedReasons) != 1 || report.OmittedReasons[0].Reason != "tool_count_budget_exceeded" {
+		t.Fatalf("omitted reasons = %#v, want tool_count_budget_exceeded", report.OmittedReasons)
+	}
+	if len(report.LargestSchemaTools) == 0 || report.LargestSchemaTools[0].ExportedName == "" {
+		t.Fatalf("largest schema tools = %#v, want exported metric names", report.LargestSchemaTools)
+	}
+	if len(report.Recommendations) != 1 || report.Recommendations[0].ServerName != "alpha" {
+		t.Fatalf("recommendations = %#v, want alpha narrowing recommendation", report.Recommendations)
+	}
+}
+
+func TestMCPExportedNameConsistentAcrossPromptProviderAndRegistry(t *testing.T) {
+	const wantName = "mcp_github_server_create_issue"
+	inputSchema := json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"}}}`)
+	mcpTools := []mcp.MCPTool{{
+		ServerName:  "github.server",
+		Name:        "create-issue",
+		Description: "Create issue",
+		InputSchema: inputSchema,
+	}}
+
+	promptText := prompt.BuildMCPToolsPrompt([]prompt.MCPTool{{
+		ServerName:  mcpTools[0].ServerName,
+		Name:        mcpTools[0].Name,
+		Description: mcpTools[0].Description,
+	}})
+	if !strings.Contains(promptText, "**"+wantName+"**: Create issue") {
+		t.Fatalf("prompt = %q, want exported MCP name %s", promptText, wantName)
+	}
+
+	provider := &mockMCPProvider{name: "openai"}
+	configureMCPTools(provider, mcpTools, nil)
+	if len(provider.lastTools) != 1 || provider.lastTools[0].Name != wantName {
+		t.Fatalf("provider tools = %#v, want exported MCP name %s", provider.lastTools, wantName)
+	}
+
+	registry := tools.NewRegistry()
+	mcptool.RegisterToRegistry(registry, mcpSurfaceTestCaller{}, mcpToolDefinitions(mcpTools))
+	if registry.GetTool(wantName) == nil {
+		t.Fatalf("registry missing exported MCP tool %s", wantName)
+	}
+}
+
+func exportedMCPToolNamesForTest(mcpTools []mcp.MCPTool) []string {
+	names := make([]string, 0, len(mcpTools))
+	for _, tool := range mcpTools {
+		names = append(names, mcpnames.ExportedToolName(tool.ServerName, tool.Name))
+	}
+	return names
+}
+
+func toolDefinitionNamesForTest(defs []api.ToolDefinition) []string {
+	names := make([]string, 0, len(defs))
+	for _, def := range defs {
+		names = append(names, def.Name)
+	}
+	return names
+}
+
+func TestMCPToolDefinitionsPreserveCallTimeoutForRegistry(t *testing.T) {
+	mcpTools := []mcp.MCPTool{{
+		ServerName:  "github",
+		Name:        "slow",
+		Description: "Slow tool",
+		CallTimeout: 7 * time.Minute,
+	}}
+
+	defs := mcpToolDefinitions(mcpTools)
+	if len(defs) != 1 {
+		t.Fatalf("definitions = %d, want 1", len(defs))
+	}
+	if defs[0].CallTimeout != 7*time.Minute {
+		t.Fatalf("CallTimeout = %v, want 7m", defs[0].CallTimeout)
+	}
+}
+
+func TestConfigureMCPTools_SkipsDuplicateExportedNames(t *testing.T) {
+	mcpTools := []mcp.MCPTool{
+		{
+			ServerName:  "github-server",
+			Name:        "get.issue",
+			Description: "First",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		},
+		{
+			ServerName:  "github_server",
+			Name:        "get_issue",
+			Description: "Second",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		},
+		{
+			ServerName:  "github",
+			Name:        "list_issues",
+			Description: "List",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+		},
+	}
+	p := &mockMCPProvider{name: "openai"}
+
+	configureMCPTools(p, mcpTools, nil)
+
+	if p.setMCPToolsCalls != 1 {
+		t.Fatalf("SetMCPTools calls = %d, want 1", p.setMCPToolsCalls)
+	}
+	if len(p.lastTools) != 2 {
+		t.Fatalf("registered tools = %d, want 2: %#v", len(p.lastTools), p.lastTools)
+	}
+	if p.lastTools[0].Name != "mcp_github_server_get_issue" || p.lastTools[0].Description != "First" {
+		t.Fatalf("first tool = %#v, want first duplicate to win", p.lastTools[0])
+	}
+	if p.lastTools[1].Name != "mcp_github_list_issues" {
+		t.Fatalf("second tool = %#v, want list_issues", p.lastTools[1])
 	}
 }
 
@@ -181,84 +499,5 @@ func TestConfigureMCPTools_NoPanicWithNilWriter(t *testing.T) {
 	configureMCPTools(p, mcpTools, nil)
 	if p.setMCPToolsCalls != 1 {
 		t.Fatalf("SetMCPTools calls = %d, want 1", p.setMCPToolsCalls)
-	}
-}
-
-// --- detectGitHubIntent additional tests ---
-
-func TestDetectGitHubIntent_Keywords(t *testing.T) {
-	positives := []struct {
-		name  string
-		input string
-	}{
-		{name: "issue", input: "create an issue for this"},
-		{name: "PR", input: "open a PR for this change"},
-		{name: "pull request", input: "review the pull request"},
-		{name: "プルリクエスト", input: "プルリクエストを作成して"},
-		{name: "プルリク", input: "プルリクを確認して"},
-		{name: "イシュー", input: "イシューを作って"},
-		{name: "actions", input: "check GitHub Actions"},
-		{name: "workflow", input: "the workflow is failing"},
-		{name: "ワークフロー", input: "ワークフローを確認"},
-		{name: "CI", input: "CI is broken"},
-		{name: "repo", input: "list my repos"},
-		{name: "repository", input: "clone the repository"},
-		{name: "リポジトリ", input: "リポジトリを確認"},
-		{name: "github", input: "check github"},
-		{name: "ギットハブ", input: "ギットハブを見て"},
-		{name: "gh", input: "use gh to list issues"},
-		{name: "issues plural", input: "show all issues"},
-	}
-
-	for _, tt := range positives {
-		t.Run(tt.name, func(t *testing.T) {
-			if !detectGitHubIntent(tt.input) {
-				t.Errorf("detectGitHubIntent(%q) = false, want true", tt.input)
-			}
-		})
-	}
-}
-
-func TestDetectGitHubIntent_NegativeCases(t *testing.T) {
-	negatives := []struct {
-		name  string
-		input string
-	}{
-		{name: "code fix", input: "fix the bug in main.go"},
-		{name: "code review", input: "review my code changes"},
-		{name: "read file", input: "read the config file"},
-		{name: "empty", input: ""},
-		{name: "generic", input: "hello, how are you?"},
-		{name: "build", input: "build the binary"},
-		{name: "test", input: "run all tests"},
-	}
-
-	for _, tt := range negatives {
-		t.Run(tt.name, func(t *testing.T) {
-			if detectGitHubIntent(tt.input) {
-				t.Errorf("detectGitHubIntent(%q) = true, want false", tt.input)
-			}
-		})
-	}
-}
-
-func TestDetectGitHubIntent_CaseInsensitive(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{name: "GITHUB uppercase", input: "GITHUB actions status", want: true},
-		{name: "Issue mixed case", input: "Get Issue #123", want: true},
-		{name: "Pr uppercase", input: "Create a PR", want: true},
-		{name: "ci lowercase", input: "ci is failing", want: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := detectGitHubIntent(tt.input); got != tt.want {
-				t.Errorf("detectGitHubIntent(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
 	}
 }
