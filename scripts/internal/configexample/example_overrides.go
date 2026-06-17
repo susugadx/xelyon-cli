@@ -1,12 +1,15 @@
-package configgen
+package configexample
 
-import "github.com/susugadx/xelyon-cli/internal/config"
+import (
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/scripts/internal/configmeta"
+)
 
 func applyExampleOverrides(cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
-	for sectionName, section := range Sections {
+	for sectionName, section := range configmeta.Sections {
 		if len(section.Example.Overrides) == 0 {
 			continue
 		}

@@ -1,9 +1,11 @@
-package configgen
+package configdocs
 
 import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/scripts/internal/configmeta"
 )
 
 type valueSliceFormatMode int
@@ -15,17 +17,17 @@ const (
 
 var defaultValueAnnotationRe = regexp.MustCompile(`\s*[\(（]デフォルト[：:][^)）]+[)）]`)
 
-// GenerateConfigDetails builds the docs section details from parsed struct info and defaults.
-func GenerateConfigDetails(structs []StructInfo, defaults map[string]interface{}) string {
+// generateConfigDetails は解析済み struct 情報と default から docs の詳細 section を生成する。
+func generateConfigDetails(structs []structInfo, defaults map[string]interface{}) string {
 	var sb strings.Builder
 
-	structMap := make(map[string]StructInfo, len(structs))
+	structMap := make(map[string]structInfo, len(structs))
 	for _, structInfo := range structs {
 		structMap[structInfo.Name] = structInfo
 	}
 
-	for _, sectionKey := range SectionOrder {
-		section, ok := Sections[sectionKey]
+	for _, sectionKey := range configmeta.SectionOrder {
+		section, ok := configmeta.Sections[sectionKey]
 		if !ok || strings.TrimSpace(section.StructName) == "" {
 			continue
 		}
@@ -48,8 +50,8 @@ func GenerateConfigDetails(structs []StructInfo, defaults map[string]interface{}
 	return sb.String()
 }
 
-func filterVisibleDocFields(fields []FieldInfo) []FieldInfo {
-	visible := make([]FieldInfo, 0, len(fields))
+func filterVisibleDocFields(fields []fieldInfo) []fieldInfo {
+	visible := make([]fieldInfo, 0, len(fields))
 	for _, field := range fields {
 		if field.YAMLTag == "" || field.YAMLTag == "-" {
 			continue
@@ -77,7 +79,7 @@ func appendStructSummary(builder *strings.Builder, structComment string) {
 	builder.WriteString(lines[0] + "\n\n")
 }
 
-func appendSectionYAMLExample(builder *strings.Builder, sectionKey string, fields []FieldInfo, defaults map[string]interface{}) {
+func appendSectionYAMLExample(builder *strings.Builder, sectionKey string, fields []fieldInfo, defaults map[string]interface{}) {
 	builder.WriteString("```yaml\n")
 	fmt.Fprintf(builder, "%s:\n", sectionKey)
 	for _, field := range fields {
@@ -91,7 +93,7 @@ func appendSectionYAMLExample(builder *strings.Builder, sectionKey string, field
 	builder.WriteString("```\n\n")
 }
 
-func appendSectionFieldDetails(builder *strings.Builder, sectionKey string, fields []FieldInfo, defaults map[string]interface{}) {
+func appendSectionFieldDetails(builder *strings.Builder, sectionKey string, fields []fieldInfo, defaults map[string]interface{}) {
 	for _, field := range fields {
 		fmt.Fprintf(builder, "#### `%s`\n", field.YAMLTag)
 		fmt.Fprintf(builder, "- **型**: %s\n", mapGoTypeToDisplay(field.Type))

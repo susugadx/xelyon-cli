@@ -1,4 +1,4 @@
-package configgen
+package configdocs
 
 import (
 	"go/ast"
@@ -7,11 +7,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
+
+const testConfigExampleFileHeader = `# XELYON CLI 設定例
+# 設定ファイルの場所: ~/.xelyon/config.yaml
+# 初回起動時に自動的に作成されます
+# 詳細は docs/config.md を参照してください
+
+`
 
 func TestReplaceMarkerContent(t *testing.T) {
 	input := "before\n<!-- START -->\nold\n<!-- END -->\nafter\n"
-	got, ok := ReplaceMarkerContent(input, "<!-- START -->", "<!-- END -->", "new")
+	got, ok := replaceMarkerContent(input, "<!-- START -->", "<!-- END -->", "new")
 	if !ok {
 		t.Fatal("expected marker replacement to succeed")
 	}
@@ -21,7 +30,7 @@ func TestReplaceMarkerContent(t *testing.T) {
 }
 
 func TestReplaceMarkerContentMissingMarker(t *testing.T) {
-	got, ok := ReplaceMarkerContent("no markers", "<!-- START -->", "<!-- END -->", "new")
+	got, ok := replaceMarkerContent("no markers", "<!-- START -->", "<!-- END -->", "new")
 	if ok {
 		t.Fatal("expected missing marker replacement to fail")
 	}
@@ -68,9 +77,9 @@ type IgnoredConfig struct {
 		t.Fatalf("write ignored_test.go: %v", err)
 	}
 
-	structs, err := ParseConfigTypes(dir)
+	structs, err := parseConfigTypes(dir)
 	if err != nil {
-		t.Fatalf("ParseConfigTypes returned error: %v", err)
+		t.Fatalf("parseConfigTypes returned error: %v", err)
 	}
 	if len(structs) != 3 {
 		t.Fatalf("unexpected struct count: %#v", structs)
@@ -98,9 +107,9 @@ type CommentConfig struct {
 		t.Fatalf("write comment.go: %v", err)
 	}
 
-	structs, err := ParseConfigTypes(dir)
+	structs, err := parseConfigTypes(dir)
 	if err != nil {
-		t.Fatalf("ParseConfigTypes returned error: %v", err)
+		t.Fatalf("parseConfigTypes returned error: %v", err)
 	}
 	if len(structs) != 1 || len(structs[0].Fields) != 1 {
 		t.Fatalf("unexpected parsed structs: %#v", structs)
@@ -121,8 +130,8 @@ type InvalidConfig struct {
 	if err := os.WriteFile(filepath.Join(dir, "invalid.go"), []byte(source), 0o644); err != nil {
 		t.Fatalf("write invalid.go: %v", err)
 	}
-	if _, err := ParseConfigTypes(dir); err == nil {
-		t.Fatal("expected ParseConfigTypes to fail for unsupported type")
+	if _, err := parseConfigTypes(dir); err == nil {
+		t.Fatal("expected parseConfigTypes to fail for unsupported type")
 	}
 }
 
@@ -138,9 +147,9 @@ type MultiFieldConfig struct {
 		t.Fatalf("write multi.go: %v", err)
 	}
 
-	structs, err := ParseConfigTypes(dir)
+	structs, err := parseConfigTypes(dir)
 	if err != nil {
-		t.Fatalf("ParseConfigTypes returned error: %v", err)
+		t.Fatalf("parseConfigTypes returned error: %v", err)
 	}
 	if len(structs) != 1 {
 		t.Fatalf("unexpected struct count: %#v", structs)
@@ -154,11 +163,11 @@ type MultiFieldConfig struct {
 }
 
 func TestGenerateConfigDetails(t *testing.T) {
-	structs := []StructInfo{
+	structs := []structInfo{
 		{
 			Name:    "GeneralConfig",
 			Comment: "General config comment\nSecond line",
-			Fields: []FieldInfo{
+			Fields: []fieldInfo{
 				{Name: "UILanguage", Type: "string", YAMLTag: "ui_language", Comment: "表示言語"},
 				{Name: "Hidden", Type: "string", YAMLTag: "hidden", Comment: "内部: omit"},
 			},
@@ -171,7 +180,7 @@ func TestGenerateConfigDetails(t *testing.T) {
 		},
 	}
 
-	output := GenerateConfigDetails(structs, defaults)
+	output := generateConfigDetails(structs, defaults)
 	for _, expected := range []string{
 		"### 一般設定 (`general`)",
 		"General config comment",
@@ -189,11 +198,11 @@ func TestGenerateConfigDetails(t *testing.T) {
 }
 
 func TestGenerateConfigDetailsHandlesMapAndUnknownDefaults(t *testing.T) {
-	structs := []StructInfo{
+	structs := []structInfo{
 		{
 			Name:    "WebSearchConfig",
 			Comment: "Web search settings",
-			Fields: []FieldInfo{
+			Fields: []fieldInfo{
 				{Name: "Provider", Type: "string", YAMLTag: "provider", Comment: "Provider description (デフォルト: openai)"},
 				{Name: "Headers", Type: "map[string]string", YAMLTag: "headers", Comment: "Header map"},
 				{Name: "Skip", Type: "string", YAMLTag: "-", Comment: "ignored"},
@@ -207,7 +216,7 @@ func TestGenerateConfigDetailsHandlesMapAndUnknownDefaults(t *testing.T) {
 		},
 	}
 
-	output := GenerateConfigDetails(structs, defaults)
+	output := generateConfigDetails(structs, defaults)
 	for _, expected := range []string{
 		"### Web検索設定 (`web_search`)",
 		"headers: { ... }",
@@ -225,8 +234,8 @@ func TestGenerateConfigDetailsHandlesMapAndUnknownDefaults(t *testing.T) {
 }
 
 func TestFormatConfigExample(t *testing.T) {
-	input := configExampleFileHeader + "# ============================================================\n# 一般設定\n# ============================================================\ngeneral:\n  ui_language: auto\n"
-	got := FormatConfigExample(input)
+	input := testConfigExampleFileHeader + "# ============================================================\n# 一般設定\n# ============================================================\ngeneral:\n  ui_language: auto\n"
+	got := formatConfigExample(input)
 	if strings.Contains(got, "# XELYON CLI 設定例") {
 		t.Fatalf("expected file header comments to be removed: %s", got)
 	}
@@ -245,8 +254,8 @@ func TestFormatConfigExample(t *testing.T) {
 }
 
 func TestParseConfigTypesError(t *testing.T) {
-	if _, err := ParseConfigTypes(filepath.Join(t.TempDir(), "missing")); err == nil {
-		t.Fatal("expected ParseConfigTypes to return an error for missing dir")
+	if _, err := parseConfigTypes(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("expected parseConfigTypes to return an error for missing dir")
 	}
 }
 
@@ -348,5 +357,75 @@ func TestDocsHelperFunctions(t *testing.T) {
 	}
 	if got := extractDescription("説明文 (デフォルト: 123)"); got != "説明文" {
 		t.Fatalf("unexpected extracted description: %q", got)
+	}
+}
+
+func TestUpdateConfigDetailsContentSkipsWhenDetailsMarkersAreAbsent(t *testing.T) {
+	content := strings.Join([]string{
+		"before",
+		configExampleStartMarker,
+		"old",
+		configExampleEndMarker,
+		"after",
+	}, "\n")
+
+	withExample, err := ReplaceConfigExampleBlock(content, "mcp:\n  enabled: true\n")
+	if err != nil {
+		t.Fatalf("ReplaceConfigExampleBlock error: %v", err)
+	}
+	got, err := UpdateConfigDetailsContent(withExample, config.DefaultConfig(), filepath.Join(t.TempDir(), "missing"))
+	if err != nil {
+		t.Fatalf("UpdateConfigDetailsContent error: %v", err)
+	}
+	if !strings.Contains(got, "mcp:\n    enabled: true") {
+		t.Fatalf("updated docs should contain formatted MCP example, got:\n%s", got)
+	}
+	if !strings.Contains(got, "after") {
+		t.Fatalf("updated docs should preserve content outside markers, got:\n%s", got)
+	}
+}
+
+func TestUpdateConfigDetailsContentRendersMCPDetailsWhenMarkersExist(t *testing.T) {
+	dir := t.TempDir()
+	source := `package config
+
+// MCPConfig は MCP (Model Context Protocol) サーバー接続の設定
+type MCPConfig struct {
+	// MCP接続を有効化（デフォルト: true）
+	Enabled bool ` + "`yaml:\"enabled\"`" + `
+	// Headlessモードでも接続（デフォルト: false）
+	Headless bool ` + "`yaml:\"headless\"`" + `
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "mcp.go"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write mcp.go: %v", err)
+	}
+
+	content := strings.Join([]string{
+		configExampleStartMarker,
+		"old example",
+		configExampleEndMarker,
+		configDetailsStartMarker,
+		"old details",
+		configDetailsEndMarker,
+	}, "\n")
+
+	withExample, err := ReplaceConfigExampleBlock(content, "mcp:\n  enabled: true\n")
+	if err != nil {
+		t.Fatalf("ReplaceConfigExampleBlock error: %v", err)
+	}
+	got, err := UpdateConfigDetailsContent(withExample, config.DefaultConfig(), dir)
+	if err != nil {
+		t.Fatalf("UpdateConfigDetailsContent error: %v", err)
+	}
+	for _, expected := range []string{
+		"### MCP設定 (`mcp`)",
+		"#### `enabled`",
+		"- **説明**: MCP接続を有効化",
+		"#### `headless`",
+	} {
+		if !strings.Contains(got, expected) {
+			t.Fatalf("updated docs missing %q in:\n%s", expected, got)
+		}
 	}
 }

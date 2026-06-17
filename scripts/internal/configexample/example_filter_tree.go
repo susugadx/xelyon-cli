@@ -1,8 +1,9 @@
-package configgen
+package configexample
 
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/scripts/internal/configmeta"
 	"gopkg.in/yaml.v3"
 )
 
@@ -79,9 +80,9 @@ func filterExampleRootMapping(mapping *yaml.Node, spec compiledExampleFilterSpec
 		sectionSpec, hasFilter := spec.sectionFilters[sectionKey]
 		if hasFilter && valueNode.Kind == yaml.MappingNode {
 			switch sectionSpec.mode {
-			case ExampleFilterModeKeepAll:
+			case configmeta.ExampleFilterModeKeepAll:
 				filterOmittedTopLevelFields(valueNode, sectionSpec.omittedFields)
-			case ExampleFilterModeFields:
+			case configmeta.ExampleFilterModeFields:
 				ctx := fieldTreeFilterContext{
 					tree:            sectionSpec.fieldTree,
 					topLevelAllowed: sectionSpec.topLevelFields,

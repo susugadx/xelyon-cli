@@ -1,13 +1,14 @@
-package configgen
+package configdocs
 
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/scripts/internal/configexample"
 	"gopkg.in/yaml.v3"
 )
 
-// ReplaceMarkerContent replaces the content between two markers.
-func ReplaceMarkerContent(content, startMarker, endMarker, newContent string) (string, bool) {
+// replaceMarkerContent は 2 つの marker に挟まれた内容を置き換える。
+func replaceMarkerContent(content, startMarker, endMarker, newContent string) (string, bool) {
 	startIdx := strings.Index(content, startMarker)
 	if startIdx < 0 {
 		return content, false
@@ -31,8 +32,8 @@ var configExampleHeaderCommentPrefixes = []string{
 	"詳細は docs/config.md を参照してください",
 }
 
-// FormatConfigExample strips the file header and wraps the example in a YAML code block.
-func FormatConfigExample(example string) string {
+// formatConfigExample は file header を除去し、example を YAML code block で包む。
+func formatConfigExample(example string) string {
 	if formatted, ok := formatConfigExampleFromYAML(example); ok {
 		return formatted
 	}
@@ -57,7 +58,7 @@ func formatConfigExampleFromYAML(example string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return "```yaml\n" + formatExampleOutput(string(out)) + "```", true
+	return "```yaml\n" + configexample.FormatExampleOutput(string(out)) + "```", true
 }
 
 func stripConfigExampleHeaderComment(comment string) string {

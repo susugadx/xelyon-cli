@@ -1,4 +1,4 @@
-package configgen
+package configmeta
 
 import (
 	"reflect"
@@ -17,6 +17,15 @@ func TestOrderedSectionsForCategory(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("unexpected section order: got=%v want=%v", got, want)
 		}
+	}
+}
+
+func TestCanonicalFieldPath(t *testing.T) {
+	if got := CanonicalFieldPath("general", "ui_language"); got != "general.ui_language" {
+		t.Fatalf("unexpected canonical path: %s", got)
+	}
+	if got := CanonicalFieldPath("default_provider", "default_provider"); got != "default_provider" {
+		t.Fatalf("unexpected top-level canonical path: %s", got)
 	}
 }
 

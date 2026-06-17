@@ -1,4 +1,4 @@
-package configgen
+package configexample
 
 import (
 	"strings"
@@ -40,9 +40,9 @@ thinking:
   enabled: true
 `)
 
-	filtered, err := FilterInternalFields(input)
+	filtered, err := filterInternalFields(input)
 	if err != nil {
-		t.Fatalf("FilterInternalFields returned error: %v", err)
+		t.Fatalf("filterInternalFields returned error: %v", err)
 	}
 
 	text := string(filtered)
@@ -104,9 +104,9 @@ provider_models:
   openai:
     default_model: gpt-5.4
 `)
-	filtered, err := FilterInternalFields(input)
+	filtered, err := filterInternalFields(input)
 	if err != nil {
-		t.Fatalf("FilterInternalFields returned error: %v", err)
+		t.Fatalf("filterInternalFields returned error: %v", err)
 	}
 
 	expected := `general:
@@ -125,7 +125,7 @@ provider_models:
 
 func TestAddComments(t *testing.T) {
 	input := "general:\n    ui_language: auto\nagent_instructions:\n    project:\n        mode: always\n"
-	output := AddComments(input)
+	output := addComments(input)
 
 	for _, expected := range []string{
 		"# 一般設定",
@@ -144,7 +144,7 @@ func TestAddComments(t *testing.T) {
 }
 
 func TestAddCommentsSeparatesTopLevelSections(t *testing.T) {
-	output := AddComments("general:\n    ui_language: auto\ncompression:\n    enabled: true\n")
+	output := addComments("general:\n    ui_language: auto\ncompression:\n    enabled: true\n")
 
 	if !strings.Contains(output, "ui_language: auto\n\n# ============================================================") {
 		t.Fatalf("expected blank line before next section, got %s", output)
