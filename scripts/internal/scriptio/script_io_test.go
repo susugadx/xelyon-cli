@@ -1,4 +1,4 @@
-package configgen
+package scriptio
 
 import (
 	"os"

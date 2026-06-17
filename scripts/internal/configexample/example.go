@@ -1,9 +1,10 @@
-package configgen
+package configexample
 
 import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/scripts/internal/configmeta"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,9 +15,9 @@ const configExampleFileHeader = `# XELYON CLI 設定例
 
 `
 
-var defaultExampleFilterSpec = buildExampleFilterSpec(Sections)
+var defaultExampleFilterSpec = buildExampleFilterSpec(configmeta.Sections)
 
-// GenerateExampleFile builds the canonical config.yaml.example content.
+// GenerateExampleFile は canonical な config.yaml.example の内容を生成する。
 func GenerateExampleFile(cfg *config.Config) ([]byte, error) {
 	cfgCopy := *cfg
 	applyExampleOverrides(&cfgCopy)
@@ -26,7 +27,7 @@ func GenerateExampleFile(cfg *config.Config) ([]byte, error) {
 		return nil, err
 	}
 
-	data, err = FilterInternalFields(data)
+	data, err = filterInternalFields(data)
 	if err != nil {
 		return nil, err
 	}
@@ -36,12 +37,12 @@ func GenerateExampleFile(cfg *config.Config) ([]byte, error) {
 		return nil, err
 	}
 
-	output := AddComments(string(data))
+	output := addComments(string(data))
 	return []byte(configExampleFileHeader + output), nil
 }
 
-// FilterInternalFields removes internal-only config fields from marshaled YAML.
-func FilterInternalFields(data []byte) ([]byte, error) {
+// filterInternalFields は marshal 済み YAML から internal-only config field を除去する。
+func filterInternalFields(data []byte) ([]byte, error) {
 	var raw yaml.Node
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, err
@@ -102,8 +103,8 @@ func setMappingScalar(mapping *yaml.Node, key, value string) {
 	)
 }
 
-// AddComments injects section and field comments into the example YAML.
-func AddComments(yamlStr string) string {
+// addComments は example YAML に section と field のコメントを注入する。
+func addComments(yamlStr string) string {
 	var raw yaml.Node
 	if err := yaml.Unmarshal([]byte(yamlStr), &raw); err != nil {
 		return strings.TrimRight(yamlStr, "\n") + "\n"
@@ -123,10 +124,11 @@ func AddComments(yamlStr string) string {
 	if err != nil {
 		return strings.TrimRight(yamlStr, "\n") + "\n"
 	}
-	return formatExampleOutput(string(out))
+	return FormatExampleOutput(string(out))
 }
 
-func formatExampleOutput(output string) string {
+// FormatExampleOutput は example YAML の section header 間に安定した空行を入れる。
+func FormatExampleOutput(output string) string {
 	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 	var formatted []string
 	for i, line := range lines {

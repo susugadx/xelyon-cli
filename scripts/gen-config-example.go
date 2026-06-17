@@ -13,19 +13,20 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	configgen "github.com/susugadx/xelyon-cli/scripts/internal/configgen"
+	"github.com/susugadx/xelyon-cli/scripts/internal/configexample"
+	"github.com/susugadx/xelyon-cli/scripts/internal/scriptio"
 )
 
 func main() {
-	output, err := configgen.GenerateExampleFile(config.DefaultConfig())
+	output, err := configexample.GenerateExampleFile(config.DefaultConfig())
 	if err != nil {
-		configgen.ExitWithError("Error generating config example: %v", err)
+		scriptio.ExitWithError("Error generating config example: %v", err)
 	}
 
-	outputPath := configgen.OutputPathFromArgs(os.Args, "config.yaml.example")
+	outputPath := scriptio.OutputPathFromArgs(os.Args, "config.yaml.example")
 
 	if err := os.WriteFile(outputPath, output, 0644); err != nil {
-		configgen.ExitWithError("Error writing file: %v", err)
+		scriptio.ExitWithError("Error writing file: %v", err)
 	}
 
 	fmt.Printf("Generated %s\n", outputPath)

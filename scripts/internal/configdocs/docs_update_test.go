@@ -1,4 +1,4 @@
-package configgen
+package configdocs
 
 import (
 	"strings"
@@ -7,20 +7,20 @@ import (
 
 func TestReplaceConfigExampleBlock(t *testing.T) {
 	content := "<!-- CONFIG-EXAMPLE-START -->\nold\n<!-- CONFIG-EXAMPLE-END -->"
-	updated, err := ReplaceConfigExampleBlock(content, configExampleFileHeader+"general:\n  ui_language: auto\n")
+	updated, err := ReplaceConfigExampleBlock(content, testConfigExampleFileHeader+"general:\n  ui_language: auto\n")
 	if err != nil {
 		t.Fatalf("ReplaceConfigExampleBlock returned error: %v", err)
 	}
 	if updated == content {
 		t.Fatal("expected config example block to be replaced")
 	}
-	if contains := HasConfigDetailsMarkers(updated); contains {
+	if contains := hasConfigDetailsMarkers(updated); contains {
 		t.Fatal("unexpected details marker detection")
 	}
 }
 
 func TestReplaceConfigExampleBlockKeepsSectionSpacing(t *testing.T) {
-	example := configExampleFileHeader + `# ============================================================
+	example := testConfigExampleFileHeader + `# ============================================================
 # 一般設定
 # ============================================================
 general:
@@ -51,10 +51,10 @@ func TestReplaceConfigExampleBlockMissingMarkers(t *testing.T) {
 
 func TestConfigDetailsMarkerHelpers(t *testing.T) {
 	content := "<!-- CONFIG-DETAILS-START -->\nold\n<!-- CONFIG-DETAILS-END -->"
-	if !HasConfigDetailsMarkers(content) {
+	if !hasConfigDetailsMarkers(content) {
 		t.Fatal("expected details markers to be detected")
 	}
-	updated := ReplaceConfigDetailsBlock(content, "new")
+	updated := replaceConfigDetailsBlock(content, "new")
 	if updated == content {
 		t.Fatal("expected details block to be replaced")
 	}
