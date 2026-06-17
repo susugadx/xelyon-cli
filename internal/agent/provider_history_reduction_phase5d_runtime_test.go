@@ -9,6 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory"
 )
 
 func TestPhase5DStatusDiagnosticUsesLastProviderFacingRequestReport(t *testing.T) {
@@ -26,7 +27,7 @@ func TestPhase5DStatusDiagnosticUsesLastProviderFacingRequestReport(t *testing.T
 		t.Fatalf("chatInternal() error = %v", err)
 	}
 
-	reportAfterRequest := cloneProviderHistoryProjectionReport(agent.Runtime.LastProviderHistoryProjectionReport)
+	reportAfterRequest := providerhistory.CloneProjectionReport(agent.Runtime.LastProviderHistoryProjectionReport)
 	if reportAfterRequest.Mode != ProviderHistoryReductionApply || reportAfterRequest.ReplacedCount != 1 {
 		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want normal request apply report", reportAfterRequest)
 	}

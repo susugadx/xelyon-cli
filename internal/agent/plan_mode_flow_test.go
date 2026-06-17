@@ -425,10 +425,10 @@ Here is the approved plan:
 {
   "plan": {
     "summary": "Ship summarized plan handoff",
-    "findings": ["plan_handoff.go owns implementation handoff"],
+    "findings": ["plan/handoff.go owns implementation handoff"],
     "evidence": [
-      "internal/agent/plan_handoff.go: normalModeInput",
-      "internal/agent/plan_handoff_test.go: TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan"
+      "internal/agent/plan/handoff.go: ImplementationHandoff.NormalModeInput",
+      "internal/agent/plan/handoff_test.go: TestImplementationHandoff_NormalModeInputIncludesApprovedPlan"
     ],
     "constraints": ["Do not carry raw investigation history"],
     "steps": [
@@ -436,7 +436,7 @@ Here is the approved plan:
         "id": 1,
         "description": "Update handoff summary fields",
         "tools": ["str_replace"],
-        "files": ["internal/agent/plan_handoff.go"]
+        "files": ["internal/agent/plan/handoff.go"]
       }
     ]
   }
@@ -456,10 +456,10 @@ Here is the approved plan:
 	handoffContent := implementationHistory[len(implementationHistory)-1].Content
 	for _, want := range []string{
 		"Findings:",
-		" - plan_handoff.go owns implementation handoff",
+		" - plan/handoff.go owns implementation handoff",
 		"Evidence:",
-		" - internal/agent/plan_handoff.go: normalModeInput",
-		" - internal/agent/plan_handoff_test.go: TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan",
+		" - internal/agent/plan/handoff.go: ImplementationHandoff.NormalModeInput",
+		" - internal/agent/plan/handoff_test.go: TestImplementationHandoff_NormalModeInputIncludesApprovedPlan",
 		"Constraints:",
 		" - Do not carry raw investigation history",
 	} {

@@ -1,41 +1,41 @@
-package agent
+package plan
 
 import (
 	"fmt"
 	"strings"
-
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 )
 
-type planModeImplementationHandoff struct {
+// ImplementationHandoff は承認済み plan を通常実装ターンへ渡すための pure projection を保持する。
+type ImplementationHandoff struct {
 	originalUserRequest string
-	approvedPlan        plan.Plan
+	approvedPlan        Plan
 }
 
-type planHandoffFileGroup struct {
+type handoffFileGroup struct {
 	label string
 	files []string
 }
 
-func newPlanModeImplementationHandoff(originalUserRequest string, approvedPlan *plan.Plan) *planModeImplementationHandoff {
+// NewImplementationHandoff は承認済み plan から通常実装ターン用の handoff を作る。
+func NewImplementationHandoff(originalUserRequest string, approvedPlan *Plan) *ImplementationHandoff {
 	if approvedPlan == nil || len(approvedPlan.Steps) == 0 {
 		return nil
 	}
-	return &planModeImplementationHandoff{
+	return &ImplementationHandoff{
 		originalUserRequest: strings.TrimSpace(originalUserRequest),
 		approvedPlan:        clonePlanForHandoff(approvedPlan),
 	}
 }
 
-func clonePlanForHandoff(src *plan.Plan) plan.Plan {
+func clonePlanForHandoff(src *Plan) Plan {
 	if src == nil {
-		return plan.Plan{}
+		return Plan{}
 	}
 	dst := *src
 	dst.Findings = append([]string(nil), src.Findings...)
 	dst.Evidence = append([]string(nil), src.Evidence...)
 	dst.Constraints = append([]string(nil), src.Constraints...)
-	dst.Steps = make([]plan.PlanStep, len(src.Steps))
+	dst.Steps = make([]PlanStep, len(src.Steps))
 	for i := range src.Steps {
 		dst.Steps[i] = src.Steps[i]
 		dst.Steps[i].Tools = append([]string(nil), src.Steps[i].Tools...)
@@ -49,7 +49,8 @@ func clonePlanForHandoff(src *plan.Plan) plan.Plan {
 	return dst
 }
 
-func (h *planModeImplementationHandoff) normalModeInput() string {
+// NormalModeInput は承認済み plan を通常実装ターンの user input 文字列へ変換する。
+func (h *ImplementationHandoff) NormalModeInput() string {
 	if h == nil {
 		return ""
 	}
@@ -91,7 +92,7 @@ func (h *planModeImplementationHandoff) normalModeInput() string {
 			b.WriteString(strings.Join(step.Tools, ", "))
 			b.WriteString("\n")
 		}
-		if verification := compactHandoffValues(step.Verification, nil); len(verification) > 0 {
+		if verification := CompactVerificationHints(step.Verification); len(verification) > 0 {
 			b.WriteString("   Verification: ")
 			b.WriteString(strings.Join(verification, ", "))
 			b.WriteString("\n")
@@ -109,25 +110,43 @@ func (h *planModeImplementationHandoff) normalModeInput() string {
 	return b.String()
 }
 
-func handoffStepFileGroups(step plan.PlanStep) []planHandoffFileGroup {
+// VerificationHints は承認済み plan の検証項目を重複なしで返す。
+func (h *ImplementationHandoff) VerificationHints() []string {
+	if h == nil {
+		return nil
+	}
+
+	values := make([]string, 0)
+	for _, step := range h.approvedPlan.Steps {
+		values = append(values, step.Verification...)
+	}
+	return CompactVerificationHints(values)
+}
+
+// CompactVerificationHints は plan 由来の検証項目を表示順を保って正規化する。
+func CompactVerificationHints(values []string) []string {
+	return compactHandoffValues(values, nil)
+}
+
+func handoffStepFileGroups(step PlanStep) []handoffFileGroup {
 	targetFiles := compactHandoffFiles(step.TargetFiles, nil)
 	readFiles := compactHandoffFiles(step.ReadFiles, nil)
 	writeFiles := compactHandoffFiles(step.WriteFiles, nil)
 	structuredFiles := handoffFileSet(targetFiles, readFiles, writeFiles)
 	relatedFiles := compactHandoffFiles(step.Files, structuredFiles)
 
-	groups := make([]planHandoffFileGroup, 0, 4)
+	groups := make([]handoffFileGroup, 0, 4)
 	if len(targetFiles) > 0 {
-		groups = append(groups, planHandoffFileGroup{label: "Target files", files: targetFiles})
+		groups = append(groups, handoffFileGroup{label: "Target files", files: targetFiles})
 	}
 	if len(readFiles) > 0 {
-		groups = append(groups, planHandoffFileGroup{label: "Read files", files: readFiles})
+		groups = append(groups, handoffFileGroup{label: "Read files", files: readFiles})
 	}
 	if len(writeFiles) > 0 {
-		groups = append(groups, planHandoffFileGroup{label: "Write files", files: writeFiles})
+		groups = append(groups, handoffFileGroup{label: "Write files", files: writeFiles})
 	}
 	if len(relatedFiles) > 0 {
-		groups = append(groups, planHandoffFileGroup{label: "Related files", files: relatedFiles})
+		groups = append(groups, handoffFileGroup{label: "Related files", files: relatedFiles})
 	}
 	return groups
 }

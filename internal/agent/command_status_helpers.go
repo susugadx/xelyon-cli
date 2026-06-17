@@ -124,19 +124,11 @@ func printSessionSections(agent *Agent) {
 	renderSessionSections(agent)
 }
 
-func formatUSD(value float64) string {
-	return viewfmt.USD(value)
-}
-
-func formatUSDWithSuffix(value float64) string {
-	return viewfmt.USDWithSuffix(value)
-}
-
 func formatCostEstimate(estimate cost.CostEstimate) string {
 	if estimate.PricingUnavailable {
 		return "N/A (pricing unavailable)"
 	}
-	return formatUSDWithSuffix(estimate.Cost)
+	return viewfmt.USDWithSuffix(estimate.Cost)
 }
 
 func formatCompactCostEstimate(estimate cost.CostEstimate) string {
@@ -157,7 +149,7 @@ func formatParentCost(providerName string, estimate cost.CostEstimate) string {
 	if shouldSuppressLocalCostDisplay(providerName, estimate) {
 		return "Free (local)"
 	}
-	return formatUSDWithSuffix(estimate.Cost)
+	return viewfmt.USDWithSuffix(estimate.Cost)
 }
 
 func formatSubAgentNumber(value int, pending bool) string {
@@ -174,7 +166,7 @@ func formatSubAgentCost(estimate cost.CostEstimate, pending bool) string {
 	if estimate.PricingUnavailable {
 		return "N/A"
 	}
-	return formatUSD(estimate.Cost)
+	return viewfmt.USD(estimate.Cost)
 }
 
 func formatSubAgentError(status, message string) string {
@@ -184,19 +176,11 @@ func formatSubAgentError(status, message string) string {
 	if status != "error" {
 		return ""
 	}
-	message = firstStatusLine(strings.TrimSpace(message))
+	message = viewfmt.FirstLine(strings.TrimSpace(message))
 	if message == "" {
 		return "unknown error"
 	}
-	return truncateStatusText(message, 120)
-}
-
-func firstStatusLine(s string) string {
-	return viewfmt.FirstLine(s)
-}
-
-func truncateStatusText(s string, maxLen int) string {
-	return viewfmt.Truncate(s, maxLen)
+	return viewfmt.Truncate(message, 120)
 }
 
 func printSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
@@ -210,9 +194,4 @@ func printToolObservabilitySection(out io.Writer, stats *SessionStats) {
 
 func handleStatsCommandForSurface(agent *Agent, commandSurface commandcatalog.CommandSurface) bool {
 	return handleStatusCommandForSurface(agent, commandSurface)
-}
-
-// formatNumber はカンマ区切りの数値を返す
-func formatNumber(n int) string {
-	return viewfmt.Number(n)
 }

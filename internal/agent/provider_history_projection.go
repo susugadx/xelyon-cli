@@ -243,11 +243,7 @@ func (a *Agent) recordLastProviderHistoryProjectionReport(report ProviderHistory
 	if a == nil || a.Runtime == nil {
 		return
 	}
-	a.Runtime.LastProviderHistoryProjectionReport = cloneProviderHistoryProjectionReport(report)
-}
-
-func cloneProviderHistoryProjectionReport(report ProviderHistoryProjectionReport) ProviderHistoryProjectionReport {
-	return providerhistory.CloneProjectionReport(report)
+	a.Runtime.LastProviderHistoryProjectionReport = providerhistory.CloneProjectionReport(report)
 }
 
 func (a *Agent) providerHistoryReductionEvidencePointers() []taskstate.EvidencePointer {

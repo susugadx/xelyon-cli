@@ -2,222 +2,14 @@ package agent
 
 import (
 	"bytes"
-	"context"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/susugadx/xelyon-cli/internal/api"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
-	_ "github.com/susugadx/xelyon-cli/internal/api/providers/ollama"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
-
-// mockCacheClearableProviderForModel はキャッシュクリアと Provider を実装したモック（モデルコマンド用）
-type mockCacheClearableProviderForModel struct {
-	cleared bool
-	name    string
-}
-
-func (m *mockCacheClearableProviderForModel) Name() string {
-	if m.name != "" {
-		return m.name
-	}
-	return "mock-cache"
-}
-
-func (m *mockCacheClearableProviderForModel) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	return "", nil
-}
-
-func (m *mockCacheClearableProviderForModel) SupportsImages() bool {
-	return false
-}
-
-func (m *mockCacheClearableProviderForModel) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	return "", nil
-}
-
-func (m *mockCacheClearableProviderForModel) IsFunctionCallingEnabled() bool {
-	return false
-}
-
-func (m *mockCacheClearableProviderForModel) ClearCache() {
-	m.cleared = true
-}
-
-func TestHandleModelCommand_ClearCache(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	cfg := newProjectMapDisabledConfig()
-	if err := config.SaveConfig(cfg); err != nil {
-		t.Fatalf("failed to save config: %v", err)
-	}
-
-	agent := &Agent{
-		ProviderName: "mock",
-		CurrentModel: "old-model",
-		Stats:        NewSessionStats("mock", "old-model"),
-		Runtime:      NewAgentRuntimeWithConfig(cfg),
-		agentConversationState: agentConversationState{
-			session: history.NewSession("old-model"),
-		},
-	}
-
-	mockProvider := &mockCacheClearableProviderForModel{}
-	agent.CurrentProvider = mockProvider
-
-	// /model new-model をシミュレート
-	args := []string{"new-model"}
-	result := handleModelCommand(agent, args)
-
-	// コマンドが正常に処理されたことを確認
-	assert.True(t, result)
-	// モデルが切り替わったことを確認
-	assert.Equal(t, "new-model", agent.CurrentModel)
-	assert.Equal(t, "new-model", agent.session.Model)
-	assert.Equal(t, "new-model", agent.Stats.Model)
-	// ClearCacheが呼ばれたことを確認
-	assert.True(t, mockProvider.cleared, "ClearCache should be called when switching model")
-}
-
-func TestHandleModelCommand_RebuildsClaudePromptForOpus(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	cfg := newProjectMapDisabledConfig()
-	cfg.PromptCache.Enabled = true
-	if err := config.SaveConfig(cfg); err != nil {
-		t.Fatalf("failed to save config: %v", err)
-	}
-	runtime := NewAgentRuntimeWithConfig(cfg)
-
-	agent := &Agent{
-		ProviderName:    "claude",
-		CurrentModel:    "claude-sonnet-4-6",
-		CurrentProvider: &mockCacheClearableProviderForModel{name: "claude"},
-		SystemPrompt:    prompt.BuildProviderSystemPromptWithConfig(prompt.SystemPrompt, "claude", "claude-sonnet-4-6", cfg),
-		Runtime:         runtime,
-	}
-
-	result := handleModelCommand(agent, []string{"claude-opus-4-6"})
-
-	assert.True(t, result)
-	assert.Contains(t, agent.SystemPrompt, "## Workflow Rules")
-}
-
-func TestHandleModelCommand_NoArgs_UsesRuntimeOutput(t *testing.T) {
-	var out bytes.Buffer
-	agent := &Agent{
-		ProviderName:    "mock",
-		CurrentModel:    "test-model",
-		CurrentProvider: &mockCacheClearableProviderForModel{name: "mock"},
-		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
-		},
-	}
-
-	result := handleModelCommand(agent, nil)
-	if !result {
-		t.Fatal("handleModelCommand() = false, want true")
-	}
-
-	output := out.String()
-	if !strings.Contains(output, "Current model: test-model") {
-		t.Fatalf("expected runtime output to contain current model, got %q", output)
-	}
-	if !strings.Contains(output, "Usage: /model <model-name>") {
-		t.Fatalf("expected runtime output to contain usage, got %q", output)
-	}
-}
-
-func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
-	var out bytes.Buffer
-	agent := &Agent{
-		ProviderName: "ollama",
-		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
-		},
-	}
-
-	result := handleProvidersCommand(agent)
-	if !result {
-		t.Fatal("handleProvidersCommand() = false, want true")
-	}
-
-	output := out.String()
-	if !strings.Contains(output, "Provider credential status") {
-		t.Fatalf("expected runtime output to contain providers header, got %q", output)
-	}
-	if !strings.Contains(output, "/provider [provider] [model]") {
-		t.Fatalf("expected runtime output to contain usage hint, got %q", output)
-	}
-	if !strings.Contains(output, "openai") {
-		t.Fatalf("expected runtime output to contain provider list, got %q", output)
-	}
-}
-
-func TestProviderCredentialStatusDisplayIncludesSubscriptionStates(t *testing.T) {
-	if got := providerCredentialStatusDisplay(ProviderCredentialLoggedIn); got != "(logged in)" {
-		t.Fatalf("logged in display = %q, want logged in", got)
-	}
-	if got := providerCredentialStatusDisplay(ProviderCredentialLoginRequired); got != "(login required)" {
-		t.Fatalf("login required display = %q, want login required", got)
-	}
-}
-
-func TestHandleProvidersCommand_MarksOnlyClaudeOwnerAsCurrent(t *testing.T) {
-	var out bytes.Buffer
-	agent := &Agent{
-		ProviderName:      "claude",
-		ProviderConfigKey: "claude",
-		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
-		},
-	}
-
-	if result := handleProvidersCommand(agent); !result {
-		t.Fatal("handleProvidersCommand() = false, want true")
-	}
-
-	output := out.String()
-	if strings.Count(output, "✓ ") != 1 {
-		t.Fatalf("expected exactly one current marker, got output %q", output)
-	}
-	if !strings.Contains(output, "✓ claude") {
-		t.Fatalf("expected claude to be marked current, got %q", output)
-	}
-	if strings.Contains(output, "✓ anthropic") {
-		t.Fatalf("anthropic should not be marked current when claude owns the session, got %q", output)
-	}
-}
-
-func TestHandleProvidersCommand_MarksOnlyAnthropicOwnerAsCurrent(t *testing.T) {
-	var out bytes.Buffer
-	agent := &Agent{
-		ProviderName:      "claude",
-		ProviderConfigKey: "anthropic",
-		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
-		},
-	}
-
-	if result := handleProvidersCommand(agent); !result {
-		t.Fatal("handleProvidersCommand() = false, want true")
-	}
-
-	output := out.String()
-	if strings.Count(output, "✓ ") != 1 {
-		t.Fatalf("expected exactly one current marker, got output %q", output)
-	}
-	if !strings.Contains(output, "✓ anthropic") {
-		t.Fatalf("expected anthropic to be marked current, got %q", output)
-	}
-	if strings.Contains(output, "✓ claude") {
-		t.Fatalf("claude should not be marked current when anthropic owns the session, got %q", output)
-	}
-}
 
 func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
@@ -453,5 +245,194 @@ func TestHandleUseCommand_AzureWithExplicitDeploymentAllowsPlaceholderName(t *te
 	}
 	if agent.CurrentModel != "azure-gpt-5.4" {
 		t.Fatalf("CurrentModel = %q, want explicit deployment name", agent.CurrentModel)
+	}
+}
+
+func TestHandleUseCommand_HelpAndErrorBranches(t *testing.T) {
+	t.Run("usage without args", func(t *testing.T) {
+		var out bytes.Buffer
+		agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+		if !handleUseCommand(agent, nil) {
+			t.Fatal("handleUseCommand() = false, want true")
+		}
+		if !strings.Contains(out.String(), "Usage: /use <provider> [model]") {
+			t.Fatalf("output = %q, want usage", out.String())
+		}
+	})
+
+	t.Run("unknown provider is reported", func(t *testing.T) {
+		var out bytes.Buffer
+		agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+		if !handleUseCommand(agent, []string{"unknown-provider"}) {
+			t.Fatal("handleUseCommand() = false, want true")
+		}
+		if !strings.Contains(out.String(), "Unknown provider") {
+			t.Fatalf("output = %q, want unknown provider message", out.String())
+		}
+	})
+
+	t.Run("already using provider without model prints hint", func(t *testing.T) {
+		var out bytes.Buffer
+		agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+		agent.ProviderName = "openai"
+		agent.ProviderConfigKey = "openai"
+		agent.CurrentModel = "gpt-current"
+		if !handleUseCommand(agent, []string{"openai"}) {
+			t.Fatal("handleUseCommand() = false, want true")
+		}
+		if !strings.Contains(out.String(), "Already using openai") || !strings.Contains(out.String(), "Hint: Use '/use <provider> <model>'") {
+			t.Fatalf("output = %q, want already-using hint", out.String())
+		}
+	})
+
+	t.Run("provider switch failure prints setup hint", func(t *testing.T) {
+		t.Setenv("OPENAI_API_KEY", "")
+
+		var out bytes.Buffer
+		agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+		if !handleUseCommand(agent, []string{"openai"}) {
+			t.Fatal("handleUseCommand() = false, want true")
+		}
+		if !strings.Contains(out.String(), "OPENAI_API_KEY") {
+			t.Fatalf("output = %q, want OPENAI_API_KEY setup hint", out.String())
+		}
+	})
+}
+
+func TestHandleProviderCommand_HelpAndAlreadyUsingHintUseProviderName(t *testing.T) {
+	t.Run("usage without args", func(t *testing.T) {
+		var out bytes.Buffer
+		agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+		if !handleProviderCommand(agent, nil) {
+			t.Fatal("handleProviderCommand() = false, want true")
+		}
+		if !strings.Contains(out.String(), "Usage: /provider <provider> [model]") {
+			t.Fatalf("output = %q, want provider usage", out.String())
+		}
+	})
+
+	t.Run("already using provider without model prints provider hint", func(t *testing.T) {
+		var out bytes.Buffer
+		agent := newConfigCommandTestAgent(newProjectMapDisabledConfig(), &out)
+		agent.ProviderName = "openai"
+		agent.ProviderConfigKey = "openai"
+		agent.CurrentModel = "gpt-current"
+		if !handleProviderCommand(agent, []string{"openai"}) {
+			t.Fatal("handleProviderCommand() = false, want true")
+		}
+		if !strings.Contains(out.String(), "Already using openai") || !strings.Contains(out.String(), "Hint: Use '/provider <provider> <model>'") {
+			t.Fatalf("output = %q, want provider already-using hint", out.String())
+		}
+	})
+}
+
+func TestHandleProviderAndUseCommands_ShareSwitchOutcome(t *testing.T) {
+	t.Setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+	newAgent := func(out *bytes.Buffer) *Agent {
+		cfg := newProjectMapDisabledConfig()
+		return &Agent{
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentModel:      "gpt-old",
+			CurrentProvider:   &mockCacheClearableProviderForModel{name: "openai"},
+			Stats:             NewSessionStats("openai", "gpt-old"),
+			Runtime: &AgentRuntime{
+				Config: cfg,
+				UI:     ui.NewRuntime(strings.NewReader(""), out, out),
+			},
+			agentConversationState: agentConversationState{
+				session: history.NewSession("gpt-old"),
+			},
+		}
+	}
+
+	var providerOut bytes.Buffer
+	providerAgent := newAgent(&providerOut)
+	if !handleProviderCommand(providerAgent, []string{"ollama", "qwen2.5-coder:14b"}) {
+		t.Fatal("handleProviderCommand() = false, want true")
+	}
+
+	var useOut bytes.Buffer
+	useAgent := newAgent(&useOut)
+	if !handleUseCommand(useAgent, []string{"ollama", "qwen2.5-coder:14b"}) {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+
+	if providerAgent.ProviderName != useAgent.ProviderName ||
+		providerAgent.ProviderConfigKey != useAgent.ProviderConfigKey ||
+		providerAgent.CurrentModel != useAgent.CurrentModel ||
+		providerAgent.session.Model != useAgent.session.Model {
+		t.Fatalf("provider state = (%q,%q,%q,%q), use state = (%q,%q,%q,%q)",
+			providerAgent.ProviderName, providerAgent.ProviderConfigKey, providerAgent.CurrentModel, providerAgent.session.Model,
+			useAgent.ProviderName, useAgent.ProviderConfigKey, useAgent.CurrentModel, useAgent.session.Model)
+	}
+}
+
+func TestHandleUseThenModelCommand_PersistsAnthropicAliasOwnerModel(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.DefaultProvider = "claude"
+	cfg.SetProviderModelsForEdit(map[string]config.ProviderModelConfig{
+		"anthropic": {DefaultModel: "anthropic-old"},
+		"claude":    {DefaultModel: "claude-old"},
+	})
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("Failed to save initial config: %v", err)
+	}
+
+	var out bytes.Buffer
+	a := &Agent{
+		ProviderName:      "claude",
+		ProviderConfigKey: "claude",
+		CurrentModel:      "claude-old",
+		CurrentProvider:   &MockProvider{name: "claude"},
+		Runtime: &AgentRuntime{
+			Config: cfg,
+			UI:     ui.NewRuntime(nil, &out, &out),
+		},
+		agentConversationState: agentConversationState{
+			session: history.NewSession("claude-old"),
+		},
+	}
+
+	if !handleUseCommand(a, []string{"anthropic"}) {
+		t.Fatal("handleUseCommand() = false, want true")
+	}
+	if a.ProviderConfigKey != "anthropic" {
+		t.Fatalf("ProviderConfigKey = %q, want %q after /use", a.ProviderConfigKey, "anthropic")
+	}
+
+	handleModelCommand(a, []string{"anthropic-new"})
+
+	if a.CurrentModel != "anthropic-new" {
+		t.Fatalf("Agent.CurrentModel = %q, want %q", a.CurrentModel, "anthropic-new")
+	}
+	if a.session == nil || a.session.Model != "anthropic-new" {
+		t.Fatalf("session.Model = %q, want %q", a.session.Model, "anthropic-new")
+	}
+
+	loadedCfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	pmAnthropic, ok := loadedCfg.ProviderModelsForSave()["anthropic"]
+	if !ok {
+		t.Fatal("ProviderModelsForSave()['anthropic'] missing")
+	}
+	if pmAnthropic.DefaultModel != "anthropic-new" {
+		t.Fatalf("ProviderModelsForSave()['anthropic'].DefaultModel = %q, want %q", pmAnthropic.DefaultModel, "anthropic-new")
+	}
+
+	pmClaude, ok := loadedCfg.ProviderModelsForSave()["claude"]
+	if !ok {
+		t.Fatal("ProviderModelsForSave()['claude'] missing")
+	}
+	if pmClaude.DefaultModel != "claude-old" {
+		t.Fatalf("ProviderModelsForSave()['claude'].DefaultModel = %q, want %q", pmClaude.DefaultModel, "claude-old")
 	}
 }

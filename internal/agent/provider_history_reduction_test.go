@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 func TestProviderHistoryReductionDryRunDetectsOldAllowedToolResults(t *testing.T) {
@@ -270,53 +269,5 @@ func TestProviderHistoryReductionProjectionAndReportAreDefensiveCopies(t *testin
 	}
 	if agent.History[1].Content != "old read" {
 		t.Fatalf("Agent.History tool content = %q, want old read", agent.History[1].Content)
-	}
-}
-
-func TestCloneProviderHistoryProjectionReportCopiesKeptReasonCounts(t *testing.T) {
-	report := ProviderHistoryProjectionReport{
-		KeptReasonCounts: map[string]int{"missing_evidence_pointer": 1},
-		Candidates: []ProviderHistoryReductionCandidate{{
-			ToolName:         "read_file",
-			EvidencePointers: []taskstate.EvidencePointer{{Path: "src/main.go", StartLine: 1, EndLine: 2}},
-		}},
-		CommandEditDryRun: ProviderHistoryCommandEditDryRunReport{
-			CandidateReasonCounts:              map[string]int{"validation_success": 1},
-			CommandReplacementClassifierCounts: map[string]int{"validation": 1},
-			KeptReasonCounts:                   map[string]int{"latest_tool_result": 1},
-			Candidates:                         []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "bash"}},
-			Kept:                               []ProviderHistoryCommandEditDryRunCandidate{{ToolName: "write_file"}},
-		},
-	}
-
-	cloned := cloneProviderHistoryProjectionReport(report)
-	cloned.KeptReasonCounts["missing_evidence_pointer"] = 2
-	cloned.Candidates[0].EvidencePointers[0].Path = "mutated.go"
-	cloned.CommandEditDryRun.CandidateReasonCounts["validation_success"] = 2
-	cloned.CommandEditDryRun.CommandReplacementClassifierCounts["validation"] = 2
-	cloned.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] = 2
-	cloned.CommandEditDryRun.Candidates[0].ToolName = "command"
-	cloned.CommandEditDryRun.Kept[0].ToolName = "apply_patch"
-
-	if report.KeptReasonCounts["missing_evidence_pointer"] != 1 {
-		t.Fatalf("original KeptReasonCounts mutated: %#v", report.KeptReasonCounts)
-	}
-	if report.Candidates[0].EvidencePointers[0].Path != "src/main.go" {
-		t.Fatalf("original candidate EvidencePointers mutated: %#v", report.Candidates)
-	}
-	if report.CommandEditDryRun.CandidateReasonCounts["validation_success"] != 1 {
-		t.Fatalf("original command/edit CandidateReasonCounts mutated: %#v", report.CommandEditDryRun.CandidateReasonCounts)
-	}
-	if report.CommandEditDryRun.CommandReplacementClassifierCounts["validation"] != 1 {
-		t.Fatalf("original command/edit CommandReplacementClassifierCounts mutated: %#v", report.CommandEditDryRun.CommandReplacementClassifierCounts)
-	}
-	if report.CommandEditDryRun.KeptReasonCounts["latest_tool_result"] != 1 {
-		t.Fatalf("original command/edit KeptReasonCounts mutated: %#v", report.CommandEditDryRun.KeptReasonCounts)
-	}
-	if report.CommandEditDryRun.Candidates[0].ToolName != "bash" {
-		t.Fatalf("original command/edit Candidates mutated: %#v", report.CommandEditDryRun.Candidates)
-	}
-	if report.CommandEditDryRun.Kept[0].ToolName != "write_file" {
-		t.Fatalf("original command/edit Kept mutated: %#v", report.CommandEditDryRun.Kept)
 	}
 }

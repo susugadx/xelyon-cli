@@ -6,8 +6,8 @@ func TestParsePlan_V2FormatPreservesHandoffFields(t *testing.T) {
 	jsonStr := `{
 		"plan": {
 			"summary": "Test plan",
-			"findings": ["plan_handoff.go owns implementation handoff"],
-			"evidence": ["internal/agent/plan_handoff.go: normalModeInput"],
+			"findings": ["plan/handoff.go owns implementation handoff"],
+			"evidence": ["internal/agent/plan/handoff.go: ImplementationHandoff.NormalModeInput"],
 			"constraints": ["Do not carry raw investigation history"],
 			"steps": [
 				{"id": 1, "description": "Update handoff files"}
@@ -20,8 +20,8 @@ func TestParsePlan_V2FormatPreservesHandoffFields(t *testing.T) {
 		t.Fatalf("ParsePlan failed: %v", err)
 	}
 
-	assertStringSliceEqual(t, "Plan.Findings", plan.Findings, []string{"plan_handoff.go owns implementation handoff"})
-	assertStringSliceEqual(t, "Plan.Evidence", plan.Evidence, []string{"internal/agent/plan_handoff.go: normalModeInput"})
+	assertStringSliceEqual(t, "Plan.Findings", plan.Findings, []string{"plan/handoff.go owns implementation handoff"})
+	assertStringSliceEqual(t, "Plan.Evidence", plan.Evidence, []string{"internal/agent/plan/handoff.go: ImplementationHandoff.NormalModeInput"})
 	assertStringSliceEqual(t, "Plan.Constraints", plan.Constraints, []string{"Do not carry raw investigation history"})
 }
 

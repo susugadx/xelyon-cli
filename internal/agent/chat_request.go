@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/token"
@@ -126,13 +127,13 @@ func (a *Agent) applyChatRequestToolVisibility(phase toolSurfacePhase) {
 	))
 }
 
-func (a *Agent) executeApprovedPlanHandoff(ctx context.Context, req *chatRequest, handoff *planModeImplementationHandoff) error {
-	input := strings.TrimSpace(handoff.normalModeInput())
+func (a *Agent) executeApprovedPlanHandoff(ctx context.Context, req *chatRequest, handoff *plan.ImplementationHandoff) error {
+	input := strings.TrimSpace(handoff.NormalModeInput())
 	if input == "" {
 		return nil
 	}
 
-	a.setTaskPlanVerification(handoff.verificationHints())
+	a.setTaskPlanVerification(handoff.VerificationHints())
 	req.input = input
 	if a.session != nil {
 		a.appendSessionMessage("user", req.input, a.CurrentModel)
