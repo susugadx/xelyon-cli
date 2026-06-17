@@ -136,9 +136,7 @@ func (a *Agent) executeImmediateToolResult(ctx context.Context, toolCall *tools.
 }
 
 func (a *Agent) executePublishedToolWithSpinner(ctx context.Context, toolCall *tools.ToolCall) tools.ExecutionResult {
-	spinner := a.ui().NewSpinner()
-	spinner.Start(ui.SpinnerMessageForTool(toolCall.Tool))
-	a.ui().SetSpinner(spinner)
+	a.ui().StartSpinner(ui.SpinnerMessageForTool(toolCall.Tool))
 
 	execCtx := a.toolExecutionContext(ctx, nil, nil, nil)
 	a.observeEditReadinessBeforeTool(ctx, toolCall)

@@ -1,15 +1,16 @@
 package agent
 
 import (
-	"fmt"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
-	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // initInteractiveAgentWithRuntime は、事前に用意した runtime を使ってインタラクティブ用 Agent を初期化する。
@@ -35,7 +36,10 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 	agent.setAutoApprove(autoApprove)
 	printProviderSetupRequiredNotice(agent)
 
+	// シグナルハンドリング（Ctrl+C 2回で終了、1回目はAI応答中断）
 	setupSignalHandler(agent)
+
+	// プロジェクト instruction 読み込み（xelyon.yaml + guidance）
 	if err := initializeProjectInstructions(agent, projectInstructionApplyOptions{
 		showStatus:       true,
 		injectProjectMap: true,
@@ -48,44 +52,51 @@ func initInteractiveAgentWithRuntime(runtime *AgentRuntime, model string, provid
 	return agent
 }
 
-type interactiveREPLEnvironment struct {
-	runtime   *AgentRuntime
-	runtimeUI *ui.Runtime
-	mlReader  *ui.MultilineReader
-}
-
-// prepareInteractiveREPLEnvironment は REPL 起動に必要な runtime/UI/reader を初期化する。
-func prepareInteractiveREPLEnvironment(cfg *config.Config, autoApprove bool) (*interactiveREPLEnvironment, func()) {
-	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.AutoApprove = autoApprove
-
-	runtimeUI := runtime.effectiveUI()
-	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
-	runtimeUI.SetPromptReader(mlReader)
-	runtimeCfg := runtime.effectiveConfig()
-
-	// Bracketed Paste Mode を最初に有効化（Windows Terminal の警告回避のため）
-	// 他の出力より前に送信する必要がある
-	if os.Getenv("XELYON_DEBUG_PASTE") == "1" {
-		_, _ = fmt.Fprintf(runtimeUI.ErrorOutput(), "[DEBUG] cfg.Paste.BracketedPaste = %v\n", runtimeCfg.Paste.BracketedPaste)
+// setupSignalHandler は interactive agent のシグナルハンドラーを設定する。
+func setupSignalHandler(agent *Agent) func() {
+	if agent == nil {
+		return func() {}
 	}
 
+	sigChan := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	var lastInterrupt time.Time
+	var interruptMu sync.Mutex
 	var cleanupOnce sync.Once
 	cleanup := func() {
 		cleanupOnce.Do(func() {
-			if runtimeCfg.Paste.BracketedPaste {
-				mlReader.DisableBracketedPaste()
-			}
+			signal.Stop(sigChan)
+			close(done)
 		})
 	}
+	agent.signalCleanup = cleanup
+	go func() {
+		for {
+			select {
+			case sig := <-sigChan:
+				interruptMu.Lock()
+				handleSignalInterrupt(agent, &lastInterrupt, sig)
+				interruptMu.Unlock()
+			case <-done:
+				return
+			}
+		}
+	}()
+	return cleanup
+}
 
-	if runtimeCfg.Paste.BracketedPaste {
-		mlReader.EnableBracketedPaste()
+// checkRipgrepAvailability は ripgrep の有無をチェックし、未インストール時に案内を表示する。
+func checkRipgrepAvailability(agent *Agent) {
+	if agent == nil || common.IsRipgrepAvailable() {
+		return
 	}
 
-	return &interactiveREPLEnvironment{
-		runtime:   runtime,
-		runtimeUI: runtimeUI,
-		mlReader:  mlReader,
-	}, cleanup
+	out := agent.output()
+	yellow.Fprintln(out, "⚠️  ripgrep (rg) not found — Project Map disabled, search_code using grep fallback")
+	dim.Fprintln(out, "   Install for better performance:")
+	dim.Fprintln(out, "     Ubuntu/Debian : sudo apt install ripgrep")
+	dim.Fprintln(out, "     macOS         : brew install ripgrep")
+	dim.Fprintln(out, "     Windows       : winget install BurntSushi.ripgrep")
+	dim.Fprintln(out, "     Other         : https://github.com/BurntSushi/ripgrep#installation")
 }

@@ -450,6 +450,64 @@ func TestResumeCommand_AllOpensAllSessionPicker(t *testing.T) {
 	}
 }
 
+func TestResumeCommand_NoTUIUsesLegacyPath(t *testing.T) {
+	withRootCommandTest(t)
+
+	var legacyCalled bool
+	var pickerCalled bool
+	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		legacyCalled = true
+	}
+	runTUIWithResumePicker = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool, all bool) {
+		pickerCalled = true
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--no-tui", "--provider", "ollama", "--no-update-check"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !legacyCalled {
+		t.Fatal("expected resume --no-tui to use legacy resume path")
+	}
+	if pickerCalled {
+		t.Fatal("resume picker must not run when --no-tui is set")
+	}
+}
+
+func TestResumeCommand_NoTUIRejectsDirectSessionID(t *testing.T) {
+	withRootCommandTest(t)
+
+	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		t.Fatal("legacy resume path must not run for direct session ID")
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--no-tui", "session-42", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected resume --no-tui direct session ID error")
+	}
+	if !strings.Contains(err.Error(), "resume session picker and direct session IDs require TUI") {
+		t.Fatalf("error = %v, want TUI-required message", err)
+	}
+}
+
+func TestResumeCommand_NoTUIRejectsAllSessionPicker(t *testing.T) {
+	withRootCommandTest(t)
+
+	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
+		t.Fatal("legacy resume path must not run for --all picker")
+	}
+
+	rootCmd.SetArgs([]string{"resume", "--no-tui", "--all", "--provider", "ollama", "--no-update-check"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected resume --no-tui --all error")
+	}
+	if !strings.Contains(err.Error(), "resume session picker and direct session IDs require TUI") {
+		t.Fatalf("error = %v, want TUI-required message", err)
+	}
+}
+
 func TestResumeCommand_LastUsesResumePath(t *testing.T) {
 	withRootCommandTest(t)
 

@@ -32,16 +32,11 @@ func newResumeCommand() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if legacyNoTUI {
-				runtime, err := loadInteractiveRuntimeSelection(cmd)
-				if err != nil {
-					return err
+				request := legacyNoTUIResumeRequest{all: all}
+				if len(args) > 0 {
+					request.sessionID = args[0]
 				}
-				printLegacyNoTUIWarning()
-				if len(args) > 0 || all {
-					return fmt.Errorf("resume session picker and direct session IDs require TUI")
-				}
-				runLegacyInteractiveWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
-				return nil
+				return runLegacyNoTUIResumeMode(cmd, request)
 			}
 			if last {
 				runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{last: true})

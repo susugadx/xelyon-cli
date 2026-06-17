@@ -822,11 +822,13 @@ xelyon --output-format json "バグを修正して"
 # バージョンチェックを無効化
 xelyon --no-update-check
 
-# legacy classic REPL を使う（deprecated）
+# legacy classic REPL を使う（deprecated / 互換確認用）
 xelyon --no-tui
 ```
 
 `xelyon resume` は TUI の session picker を開きます。既定では現在の作業ディレクトリに紐づく session と、古い形式で作業ディレクトリ情報を持たない session だけを表示します。`--all` は全作業ディレクトリの session を表示し、`--last` は picker を開かず最新 session を再開します。`--resume` は互換 alias として `xelyon resume --last` 相当です。query 引数や `--image` とは併用できません。`--once` とも併用できません。
+
+`--no-tui` は古い classic REPL との互換確認用です。通常の対話利用では TUI を使ってください。classic REPL には新しい対話型機能や表示更新を追加しません。
 
 `--quiet` は one-shot 実行専用です。`--interactive` や通常の対話セッションでは使用できません。
 

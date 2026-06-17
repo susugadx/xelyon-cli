@@ -9,7 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
-// printContextSize はコンテキストサイズをツリー形式で表示
+// printContextSize は interactive surface のコンテキストサイズをツリー形式で表示する。
 func printContextSize(agent *Agent) {
 	out := agent.output()
 	dim.Fprint(out, buildContextSizeBlock(agent))

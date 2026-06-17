@@ -143,18 +143,12 @@ func HandleNonStreamingResponse(ctx context.Context, resp *http.Response, spinne
 
 // StartSpinner はスピナーを開始
 func StartSpinner(message string) *ui.Spinner {
-	spinner := ui.NewSpinner()
-	spinner.Start(message)
-	return spinner
+	return ui.DefaultRuntime().StartSpinner(message)
 }
 
 // StartSpinnerWithMessage は request context に紐づく出力先で spinner を開始する。
 func StartSpinnerWithMessage(ctx context.Context, message string) *ui.Spinner {
-	runtime := uiRuntimeFromContext(ctx)
-	spinner := runtime.NewSpinner()
-	spinner.Start(message)
-	runtime.SetSpinner(spinner)
-	return spinner
+	return uiRuntimeFromContext(ctx).StartSpinner(message)
 }
 
 // StopSpinner はスピナーを停止（nilセーフ）

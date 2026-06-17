@@ -120,31 +120,22 @@ Examples:
 				return runOnce(query, runtime.model, runtime.provider, runtime.cfg, autoApprove, quiet)
 			case executionModeResume:
 				if legacyNoTUI {
-					runtime, err := loadInteractiveRuntimeSelection(cmd)
-					if err != nil {
-						return err
-					}
-					printLegacyNoTUIWarning()
-					runLegacyInteractiveWithResume(runtime.model, runtime.provider, runtime.cfg, autoApprove)
-				} else {
-					runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{last: true})
-					if err != nil {
-						return err
-					}
-					return runTUIForResumeRuntime(runtime, autoApprove)
+					return runLegacyNoTUIResumeMode(cmd, legacyNoTUIResumeRequest{})
 				}
-				return nil
+				runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{last: true})
+				if err != nil {
+					return err
+				}
+				return runTUIForResumeRuntime(runtime, autoApprove)
 			case executionModeInteractive:
+				if legacyNoTUI {
+					return runLegacyNoTUIInteractiveMode(cmd)
+				}
 				runtime, err := loadInteractiveRuntimeSelection(cmd)
 				if err != nil {
 					return err
 				}
-				if legacyNoTUI {
-					printLegacyNoTUIWarning()
-					runLegacyInteractive(runtime.model, runtime.provider, runtime.cfg, autoApprove)
-				} else {
-					runTUI(runtime.model, runtime.provider, runtime.cfg, autoApprove)
-				}
+				runTUI(runtime.model, runtime.provider, runtime.cfg, autoApprove)
 				return nil
 			case executionModeOnceImage:
 				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
@@ -153,13 +144,12 @@ Examples:
 				}
 				return runOnceWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove, quiet)
 			case executionModeInteractiveImage:
+				if legacyNoTUI {
+					return runLegacyNoTUIInteractiveImageMode(cmd, query)
+				}
 				runtime, err := loadInteractiveRuntimeSelection(cmd)
 				if err != nil {
 					return err
-				}
-				if legacyNoTUI {
-					printLegacyNoTUIWarning()
-					return runLegacyInteractiveWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
 				}
 				return runTUIWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
 			default:
@@ -230,10 +220,6 @@ func configureRootCommand(rootCmd *cobra.Command) {
 	rootCmd.AddCommand(newAuthCommand())
 	rootCmd.AddCommand(newResumeCommand())
 	rootCmd.AddCommand(newSetupCommand())
-}
-
-func printLegacyNoTUIWarning() {
-	fmt.Fprintln(os.Stderr, "Warning: --no-tui is deprecated; TUI is the primary interactive surface.")
 }
 
 func Execute() {

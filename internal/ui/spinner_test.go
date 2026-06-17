@@ -26,16 +26,19 @@ func (b *lockedBuffer) String() string {
 }
 
 func startAnimatedSpinnerForTest(s *Spinner, message string) {
+	stopChan := make(chan struct{})
+	doneChan := make(chan struct{})
+	startTime := time.Now()
 	s.mu.Lock()
 	s.active = true
 	s.animated = true
-	s.startTime = time.Now()
+	s.startTime = startTime
 	s.message = message
 	s.status = ""
-	s.stopChan = make(chan struct{})
-	s.doneChan = make(chan struct{})
+	s.stopChan = stopChan
+	s.doneChan = doneChan
 	s.mu.Unlock()
-	go s.spin(message)
+	go s.spin(message, stopChan, doneChan, startTime)
 }
 
 func TestNewSpinner(t *testing.T) {
@@ -158,6 +161,62 @@ func TestSpinner_StopTwice(t *testing.T) {
 
 	if active {
 		t.Error("Spinner should not be active after Stop")
+	}
+}
+
+func TestSpinner_StopDoesNotWaitForTimeoutWhenSpinStartsAfterStop(t *testing.T) {
+	s := NewSpinner()
+	buf := &lockedBuffer{}
+	s.writer = buf
+
+	stopChan := make(chan struct{})
+	doneChan := make(chan struct{})
+	startTime := time.Now()
+	s.mu.Lock()
+	s.active = true
+	s.animated = true
+	s.startTime = startTime
+	s.message = "Testing"
+	s.status = ""
+	s.stopChan = stopChan
+	s.doneChan = doneChan
+	s.mu.Unlock()
+
+	stopped := make(chan time.Duration, 1)
+	go func() {
+		started := time.Now()
+		s.Stop()
+		stopped <- time.Since(started)
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	go s.spin("Testing", stopChan, doneChan, startTime)
+
+	select {
+	case elapsed := <-stopped:
+		if elapsed > 100*time.Millisecond {
+			t.Fatalf("Stop() waited %s, want it to return without the 200ms timeout", elapsed)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Stop() did not return")
+	}
+}
+
+func TestSpinner_SpinClosesDoneWhenStopAlreadyClosed(t *testing.T) {
+	s := NewSpinner()
+	buf := &lockedBuffer{}
+	s.writer = buf
+
+	stopChan := make(chan struct{})
+	doneChan := make(chan struct{})
+	close(stopChan)
+
+	go s.spin("Testing", stopChan, doneChan, time.Now())
+
+	select {
+	case <-doneChan:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("spin() did not close doneChan after stopChan was already closed")
 	}
 }
 

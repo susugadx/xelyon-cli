@@ -55,9 +55,7 @@ func (a *Agent) runParallelSafeToolsPhase(ctx context.Context, state *toolruntim
 		return
 	}
 
-	parallelSpinner := a.ui().NewSpinner()
-	parallelSpinner.Start(parallelGroupSpinnerMessage(state.AllToolCalls, state.ParallelEntries))
-	a.ui().SetSpinner(parallelSpinner)
+	a.ui().StartSpinner(parallelGroupSpinnerMessage(state.AllToolCalls, state.ParallelEntries))
 	// panic 経路でも spinner が残留しないよう、最終的な停止を保証する。
 	defer a.ui().StopSpinner()
 

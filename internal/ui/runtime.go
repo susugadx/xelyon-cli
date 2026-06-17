@@ -213,6 +213,16 @@ func (r *Runtime) NewSpinner() *Spinner {
 	return NewSpinnerWithWriter(r.Output())
 }
 
+// StartSpinner は runtime の current spinner として spinner を開始する。
+func (r *Runtime) StartSpinner(message string) *Spinner {
+	rt := runtimeOrDefault(r)
+	rt.StopSpinner()
+	spinner := rt.NewSpinner()
+	spinner.Start(message)
+	rt.SetSpinner(spinner)
+	return spinner
+}
+
 // SetSpinner は runtime に紐づく現在の spinner を設定する。
 func (r *Runtime) SetSpinner(spinner *Spinner) {
 	if r == nil {
