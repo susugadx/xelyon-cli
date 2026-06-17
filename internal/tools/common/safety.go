@@ -67,19 +67,27 @@ func mapToolMetaSafety(level toolmeta.SafetyLevel) ToolSafety {
 // GetToolSafety は指定されたツールの安全性レベルを返す
 // 定義されていないツールは SafetyMedium（中レベル）として扱う
 func GetToolSafety(toolName string) ToolSafety {
-	// MCP tools are registered dynamically with names like "mcp_<server>_<tool>".
-	// Treat them as SafetyLow by default: balanced/trusted prompt, while full_auto
-	// and --auto-approve follow the same auto-approval path as other SafetyLow tools.
-	// NOTE: This only affects call sites that consult GetToolSafety (e.g. ConfirmWithAutoApproveDecision).
-	if strings.HasPrefix(toolName, "mcp_") {
-		return SafetyLow
-	}
-
-	if level, ok := ToolSafetyLevels[toolName]; ok {
+	if level, ok := lookupToolSafety(toolName); ok {
 		return level
 	}
-	// デフォルトは SafetyMedium（慎重に）
 	return SafetyMedium
+}
+
+func lookupToolSafety(toolName string) (ToolSafety, bool) {
+	if isDynamicMCPToolName(toolName) {
+		return SafetyLow, true
+	}
+	if level, ok := ToolSafetyLevels[toolName]; ok {
+		return level, true
+	}
+	return SafetyMedium, false
+}
+
+func isDynamicMCPToolName(toolName string) bool {
+	// MCP ツールは "mcp_<server>_<tool>" 形式で動的登録される。
+	// full_auto / --auto-approve では他の SafetyLow ツールと同じ承認経路に乗せる。
+	// この判定は GetToolSafety を参照する caller にだけ影響する。
+	return strings.HasPrefix(toolName, "mcp_")
 }
 
 // IsAutoApprovable は --auto-approve フラグで自動承認可能かを判定

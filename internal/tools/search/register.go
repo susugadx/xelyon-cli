@@ -19,7 +19,7 @@ func (t *WebSearchTool) Name() string {
 }
 
 func (t *WebSearchTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *WebSearchTool) Parameters() map[string]interface{} {
@@ -45,7 +45,7 @@ type SearchCodeTool struct{}
 func (t *SearchCodeTool) Name() string { return "search_code" }
 
 func (t *SearchCodeTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *SearchCodeTool) Parameters() map[string]interface{} {

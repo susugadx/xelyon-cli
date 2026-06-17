@@ -19,6 +19,23 @@ func (m *MockTool) Run(_ ExecutionContext, args map[string]string) (string, *Fil
 	return "Success", nil, nil
 }
 
+type StructuredMockTool struct {
+	name   string
+	result ToolRunResult
+}
+
+func (m *StructuredMockTool) Name() string        { return m.name }
+func (m *StructuredMockTool) Description() string { return "Structured mock description" }
+func (m *StructuredMockTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{"type": "object"}
+}
+func (m *StructuredMockTool) Run(_ ExecutionContext, args map[string]string) (string, *FileChange, error) {
+	return m.result.Output, m.result.Change, nil
+}
+func (m *StructuredMockTool) RunResult(_ ExecutionContext, args map[string]string) (ToolRunResult, error) {
+	return m.result, nil
+}
+
 func TestRegistry(t *testing.T) {
 	r := NewRegistry()
 	tool := &MockTool{name: "test_tool"}
@@ -124,5 +141,83 @@ func TestRegistry_GetToolDefinitions_SortedByName(t *testing.T) {
 	want := []string{"a_tool", "m_tool", "z_tool"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("GetToolDefinitions() names = %v, want %v", got, want)
+	}
+}
+
+func TestRegistry_GetExcludedTools_SortedByName(t *testing.T) {
+	r := NewRegistry()
+	r.SetExcludedTools([]string{"z_tool", "a_tool", "m_tool"})
+
+	got := r.GetExcludedTools()
+	want := []string{"a_tool", "m_tool", "z_tool"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("GetExcludedTools() = %v, want %v", got, want)
+	}
+}
+
+func TestRegistry_GetAPIToolDefinitions_AppliesExcludedToolsAndSortsByName(t *testing.T) {
+	r := NewRegistry()
+	r.Register(&MockTool{name: "z_tool"})
+	r.Register(&MockTool{name: "a_tool"})
+	r.Register(&MockTool{name: "m_tool"})
+	r.SetExcludedTools([]string{"m_tool"})
+
+	defs := r.GetAPIToolDefinitions()
+	got := make([]string, 0, len(defs))
+	for _, def := range defs {
+		got = append(got, def.Name)
+		if def.Description == "" {
+			t.Fatalf("GetAPIToolDefinitions() description for %q is empty", def.Name)
+		}
+		if !reflect.DeepEqual(def.Parameters, map[string]interface{}{"type": "object"}) {
+			t.Fatalf("GetAPIToolDefinitions() parameters for %q = %#v, want mock object schema", def.Name, def.Parameters)
+		}
+	}
+	want := []string{"a_tool", "z_tool"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("GetAPIToolDefinitions() names = %v, want %v", got, want)
+	}
+}
+
+func TestRegistry_ExecuteDetailedWithContext_ClonesStructuredObservations(t *testing.T) {
+	observation := &RuntimeObservation{
+		TouchedFiles: []ObservationPath{{Path: "pkg/source.go", ResolvedPath: "/repo/pkg/source.go"}},
+	}
+	groupObservation := &RuntimeObservation{
+		Evidence: []ObservationEvidence{{
+			Path:      "pkg/source.go",
+			StartLine: 10,
+			Excerpt:   "target()",
+		}},
+	}
+	r := NewRegistry()
+	r.Register(&StructuredMockTool{
+		name: "structured_tool",
+		result: ToolRunResult{
+			Output:      "ok",
+			Observation: observation,
+			ObservationGroups: map[string]*RuntimeObservation{
+				"pattern": groupObservation,
+			},
+		},
+	})
+
+	result := r.ExecuteDetailedWithContext(ExecutionContext{}, &ToolCall{Tool: "structured_tool"})
+
+	if result.Observation == nil || result.Observation == observation {
+		t.Fatalf("ExecuteDetailedWithContext() observation pointer = %#v, want cloned observation", result.Observation)
+	}
+	if result.ObservationGroups["pattern"] == nil || result.ObservationGroups["pattern"] == groupObservation {
+		t.Fatalf("ExecuteDetailedWithContext() observation group pointer = %#v, want cloned observation", result.ObservationGroups["pattern"])
+	}
+
+	observation.TouchedFiles[0].Path = "mutated.go"
+	groupObservation.Evidence[0].Excerpt = "mutated()"
+
+	if got := result.Observation.TouchedFiles[0].Path; got != "pkg/source.go" {
+		t.Fatalf("result observation path = %q, want original path", got)
+	}
+	if got := result.ObservationGroups["pattern"].Evidence[0].Excerpt; got != "target()" {
+		t.Fatalf("result observation group excerpt = %q, want original excerpt", got)
 	}
 }

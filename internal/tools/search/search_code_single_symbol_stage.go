@@ -54,16 +54,6 @@ func resolvedSinglePatternSymbolRoute(route searchRouteTrace) searchRouteTrace {
 	return route
 }
 
-func resolveMultiSymbolAffectedFiles(resolved symbolResolveResult, opts SearchOptions) []string {
-	affectedFiles := append([]string(nil), resolved.AffectedFiles...)
-	affectedFiles = append(affectedFiles, collectPrimaryAffectedFilePathsFromOutput(resolved.Output, opts)...)
-	affectedFiles = dedupePaths(affectedFiles)
-	if len(affectedFiles) > 0 {
-		return affectedFiles
-	}
-	return deriveAffectedFilesFromCachedResult(nil, resolved.Output, opts)
-}
-
 func newSinglePatternSymbolExecution(pattern string, output string, route searchRouteTrace, bundle *SymbolBundle, affectedFiles []string, observation *tools.RuntimeObservation) singlePatternExecution {
 	return singlePatternExecution{
 		Pattern:       pattern,
@@ -73,16 +63,4 @@ func newSinglePatternSymbolExecution(pattern string, output string, route search
 		AffectedFiles: affectedFiles,
 		Observation:   tools.CloneRuntimeObservation(observation),
 	}
-}
-
-func writeSingleSymbolPatternCache(cache tools.ToolCacheInterface, ctx singlePatternExecutionContext, resolved symbolResolveResult, affectedFiles []string) {
-	observation := resolved.Observation
-	if observation == nil {
-		observation = observationForSymbolBundle(resolved.Bundle, ctx.Opts)
-	}
-	writeSinglePatternSearchCache(cache, ctx, resolved.Output, affectedFiles, observation)
-	if cache == nil || resolved.Bundle == nil {
-		return
-	}
-	storeSinglePatternBundle(ctx.Pattern, ctx.CacheKey, resolved.Bundle)
 }

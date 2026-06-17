@@ -8,7 +8,7 @@ type Tool struct{}
 func (t *Tool) Name() string { return "gather_context" }
 
 func (t *Tool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *Tool) Parameters() map[string]interface{} {

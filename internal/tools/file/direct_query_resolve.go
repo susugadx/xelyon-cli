@@ -51,16 +51,6 @@ func resolveDirectQueryInput(execCtx tools.ExecutionContext, input directQueryIn
 	}, ""
 }
 
-// resolveImplicitDirectFileQuery resolves bare no-extension file queries without
-// stealing directory or scoped symbol search flows.
-func resolveImplicitDirectFileQuery(execCtx tools.ExecutionContext, query string) ([]DirectQueryTarget, bool) {
-	input, ok := parseDirectQueryInput(query)
-	if !ok || !inputHasOnlyNamedBareFileCandidates(input) {
-		return nil, false
-	}
-	return resolveExistingDirectReadTargets(execCtx, input)
-}
-
 func resolveDirectQueryTarget(execCtx tools.ExecutionContext, input directQueryEntryInput) (DirectQueryTarget, string) {
 	if strings.TrimSpace(input.CleanedPath) == "" {
 		return DirectQueryTarget{}, "Error: direct query target is empty"

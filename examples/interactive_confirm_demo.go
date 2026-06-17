@@ -6,7 +6,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // このデモはinteractive confirm機能を示します
@@ -23,7 +23,7 @@ func main() {
 	fmt.Println()
 
 	// デモ：対話的確認
-	result := tools.ConfirmInteractive("Would you like to proceed with this demo?")
+	result := common.ConfirmInteractive("Would you like to proceed with this demo?")
 
 	switch result.Action {
 	case "yes":
