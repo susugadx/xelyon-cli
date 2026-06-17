@@ -2,6 +2,8 @@ package tools
 
 import (
 	"strconv"
+
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 // parseInt は文字列を整数に変換するヘルパー関数
@@ -40,7 +42,7 @@ func (t *FileModifyingTool) Run(_ ExecutionContext, args map[string]string) (str
 	}
 	return result, &FileChange{
 		FilePath:    t.getFilePath(args),
-		Timestamp:   getCurrentTime(),
+		Timestamp:   common.GetCurrentTime(),
 		Tool:        t.name,
 		Description: t.description(args),
 	}, nil

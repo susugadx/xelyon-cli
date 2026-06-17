@@ -13,7 +13,7 @@ type BashTool struct{}
 func (t *BashTool) Name() string { return "bash" }
 
 func (t *BashTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *BashTool) Parameters() map[string]interface{} {

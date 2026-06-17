@@ -12,8 +12,8 @@ import (
 
 var commandHeadingTokenRE = regexp.MustCompile("`?(/[a-z][a-z0-9_-]*)`?")
 
-// FindExistingCommands は docs/commands.md の見出しから documented な slash command token を抽出する。
-func FindExistingCommands(content string) map[string]bool {
+// findExistingCommands は docs/commands.md の見出しから documented な slash command token を抽出する。
+func findExistingCommands(content string) map[string]bool {
 	existing := make(map[string]bool)
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
@@ -32,8 +32,8 @@ func FindExistingCommands(content string) map[string]bool {
 	return existing
 }
 
-// MissingCommands は command catalog のうち docs に見出しがない command を返す。
-func MissingCommands(commands []commandcatalog.CommandInfo, documented map[string]bool) []commandcatalog.CommandInfo {
+// missingCommands は command catalog のうち docs に見出しがない command を返す。
+func missingCommands(commands []commandcatalog.CommandInfo, documented map[string]bool) []commandcatalog.CommandInfo {
 	var missing []commandcatalog.CommandInfo
 	for _, cmd := range commands {
 		if cmd.HiddenFromHelp {
@@ -47,8 +47,8 @@ func MissingCommands(commands []commandcatalog.CommandInfo, documented map[strin
 	return missing
 }
 
-// RenderMissingCommandSkeleton は未記載 command の追記用 Markdown 骨格を生成する。
-func RenderMissingCommandSkeleton(commands []commandcatalog.CommandInfo) string {
+// renderMissingCommandSkeleton は未記載 command の追記用 Markdown 骨格を生成する。
+func renderMissingCommandSkeleton(commands []commandcatalog.CommandInfo) string {
 	if len(commands) == 0 {
 		return ""
 	}
@@ -83,6 +83,16 @@ func RenderMissingCommandSkeleton(commands []commandcatalog.CommandInfo) string 
 	}
 
 	return buf.String()
+}
+
+// AppendMissingCommandSkeleton は docs content の末尾へ不足 command の skeleton を追記する。
+func AppendMissingCommandSkeleton(content string, commands []commandcatalog.CommandInfo) (string, []commandcatalog.CommandInfo) {
+	existingCommands := findExistingCommands(content)
+	missingCommands := missingCommands(commands, existingCommands)
+	if len(missingCommands) == 0 {
+		return content, nil
+	}
+	return content + renderMissingCommandSkeleton(missingCommands), missingCommands
 }
 
 func commandDocumented(cmd commandcatalog.CommandInfo, documented map[string]bool) bool {

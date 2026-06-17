@@ -97,8 +97,8 @@ func runRegisteredTool(execCtx ExecutionContext, tool Tool, args map[string]stri
 		return ExecutionResult{
 			Result:            result.Output,
 			Change:            result.Change,
-			Observation:       result.Observation,
-			ObservationGroups: result.ObservationGroups,
+			Observation:       CloneRuntimeObservation(result.Observation),
+			ObservationGroups: CloneRuntimeObservationGroups(result.ObservationGroups),
 		}, err
 	}
 	output, change, err := tool.Run(execCtx, args)
@@ -162,6 +162,7 @@ func (r *Registry) GetExcludedTools() []string {
 	for n := range r.excludedTools {
 		names = append(names, n)
 	}
+	sort.Strings(names)
 	return names
 }
 

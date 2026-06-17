@@ -50,3 +50,36 @@ func TestMergeRuntimeObservations_NormalizesEvidenceBeforeDedupe(t *testing.T) {
 		t.Fatalf("merged evidence range = %d-%d, want 12-12", evidence.StartLine, evidence.EndLine)
 	}
 }
+
+func TestCloneRuntimeObservationGroups_ClonesNonEmptyObservations(t *testing.T) {
+	source := map[string]*RuntimeObservation{
+		"alpha": {
+			TouchedFiles: []ObservationPath{{Path: "pkg/a.go", ResolvedPath: "/repo/pkg/a.go"}},
+			Evidence: []ObservationEvidence{{
+				Path:      "pkg/a.go",
+				StartLine: 3,
+				Excerpt:   "target()",
+			}},
+		},
+		"empty": {},
+	}
+
+	cloned := CloneRuntimeObservationGroups(source)
+
+	if len(cloned) != 1 {
+		t.Fatalf("CloneRuntimeObservationGroups() length = %d, want 1: %#v", len(cloned), cloned)
+	}
+	if cloned["alpha"] == source["alpha"] {
+		t.Fatal("CloneRuntimeObservationGroups() should clone observation pointers")
+	}
+
+	source["alpha"].TouchedFiles[0].Path = "mutated.go"
+	source["alpha"].Evidence[0].Excerpt = "mutated()"
+
+	if got := cloned["alpha"].TouchedFiles[0].Path; got != "pkg/a.go" {
+		t.Fatalf("cloned touched path = %q, want original path", got)
+	}
+	if got := cloned["alpha"].Evidence[0].Excerpt; got != "target()" {
+		t.Fatalf("cloned evidence excerpt = %q, want original excerpt", got)
+	}
+}

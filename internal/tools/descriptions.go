@@ -2,8 +2,8 @@ package tools
 
 import "github.com/susugadx/xelyon-cli/internal/toolmeta"
 
-// ToolDescriptions は全ビルトインツールの Description を一元管理する。
-// GetToolDefinitions() 経由で JSON schema の description に使用。
+// ToolDescriptions は全ビルトインツールの Description snapshot を返す互換 surface。
+// 新規 caller は ToolDescription を使い、toolmeta を source of truth として参照する。
 var ToolDescriptions = toolmeta.DescriptionMap()
 
 // ToolDescription は指定ツールの説明文を返す。

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
 type toolArgPreviewPrinter func(io.Writer, *ToolCall)
@@ -38,7 +40,7 @@ var gitToolNamesForPreview = []string{
 }
 
 func printGatherContextArgs(w io.Writer, tc *ToolCall) {
-	_, _ = fmt.Fprintf(w, "   Query: %s\n", truncate(tc.Args["query"], 60))
+	_, _ = fmt.Fprintf(w, "   Query: %s\n", common.Truncate(tc.Args["query"], 60))
 	if tc.Args["path"] != "" {
 		_, _ = fmt.Fprintf(w, "   Path: %s\n", tc.Args["path"])
 	}
@@ -66,7 +68,7 @@ func printStrReplaceArgs(w io.Writer, tc *ToolCall) {
 }
 
 func printBashArgs(w io.Writer, tc *ToolCall) {
-	_, _ = fmt.Fprintf(w, "   Command: %s\n", truncate(tc.Args["command"], 60))
+	_, _ = fmt.Fprintf(w, "   Command: %s\n", common.Truncate(tc.Args["command"], 60))
 }
 
 func printListDirArgs(w io.Writer, tc *ToolCall) {
@@ -80,7 +82,7 @@ func printListDirArgs(w io.Writer, tc *ToolCall) {
 func printGitToolArgs(w io.Writer, tc *ToolCall) {
 	for k, v := range tc.Args {
 		if v != "" {
-			_, _ = fmt.Fprintf(w, "   %s: %s\n", k, truncate(v, 60))
+			_, _ = fmt.Fprintf(w, "   %s: %s\n", k, common.Truncate(v, 60))
 		}
 	}
 }
@@ -126,6 +128,6 @@ func printGenericToolArgs(w io.Writer, tc *ToolCall) {
 		return
 	}
 	for k, v := range tc.Args {
-		_, _ = fmt.Fprintf(w, "   %s: %s\n", k, truncate(v, 60))
+		_, _ = fmt.Fprintf(w, "   %s: %s\n", k, common.Truncate(v, 60))
 	}
 }
