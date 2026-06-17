@@ -14,7 +14,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaisubscription "github.com/susugadx/xelyon-cli/internal/api/providers/openai_subscription"
@@ -67,46 +66,8 @@ func resetRootFlagsForTest() {
 	noUpdateCheck = false
 	imageFlag = ""
 	legacyNoTUI = false
-	doctorDeploymentFlag = ""
-	doctorCatalogModelFlag = ""
-	doctorBedrockModelFlag = ""
-	doctorClaudeModelFlag = ""
-	doctorDeepSeekModelFlag = ""
-	doctorGeminiModelFlag = ""
-	doctorGroqModelFlag = ""
-	doctorKimiModelFlag = ""
-	doctorOllamaModelFlag = ""
-	doctorOpenAIModelFlag = ""
-	doctorOpenAISubscriptionModelFlag = ""
-	doctorOpenRouterModelFlag = ""
-	doctorSmokeFlag = false
-	doctorToolSmokeFlag = false
-	doctorCapabilitiesFlag = false
-	doctorRequiredCapabilityFlags = nil
-	doctorAzureRetentionSmokeFlag = false
-	doctorOpenAIRetentionSmokeFlag = false
-	doctorOpenAISubscriptionRetentionSmokeFlag = false
-	doctorOpenAISubscriptionCacheSmokeFlag = false
-	doctorOpenAISubscriptionCompactSmokeFlag = false
-	doctorOpenAISubscriptionThinkingSmokeFlag = false
-	doctorBedrockImageSmokeFlag = false
-	doctorBedrockThinkingSmokeFlag = false
-	doctorClaudeImageSmokeFlag = false
-	doctorClaudeThinkingSmokeFlag = false
-	doctorClaudeWebSearchSmokeFlag = false
-	doctorGeminiImageSmokeFlag = false
-	doctorGeminiWebSearchSmokeFlag = false
-	doctorKimiImageSmokeFlag = false
-	doctorKimiWebSearchSmokeFlag = false
-	doctorMCPConnectFlag = false
-	doctorMCPServerFlag = ""
-	doctorMCPToolsFlag = false
-	doctorTimeoutFlag = defaultDoctorTimeout
-	doctorJSONFlag = false
-	doctorPrintConfigFlag = false
-	doctorPrintRequestFlag = false
-	resetCommandFlagsForTest(rootCmd)
-	doctorRequiredCapabilityFlags = nil
+	openAISubscriptionAuthDeviceFlag = false
+	rootCmd = newRootCommand()
 }
 
 func newDoctorSubcommandTest(t *testing.T, newCommand func() *cobra.Command) (*cobra.Command, *bytes.Buffer) {
@@ -135,28 +96,6 @@ func newRootCommandExecutionTest(t *testing.T) *bytes.Buffer {
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	return &out
-}
-
-func resetCommandFlagsForTest(cmd *cobra.Command) {
-	if cmd == nil {
-		return
-	}
-	cmd.SilenceUsage = false
-	resetFlagSetForTest(cmd.Flags())
-	resetFlagSetForTest(cmd.PersistentFlags())
-	resetFlagSetForTest(cmd.InheritedFlags())
-	for _, child := range cmd.Commands() {
-		resetCommandFlagsForTest(child)
-	}
-}
-
-func resetFlagSetForTest(flags interface {
-	VisitAll(fn func(*pflag.Flag))
-}) {
-	flags.VisitAll(func(flag *pflag.Flag) {
-		flag.Changed = false
-		_ = flag.Value.Set(flag.DefValue)
-	})
 }
 
 type rootCommandRunners struct {

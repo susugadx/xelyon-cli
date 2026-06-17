@@ -8,11 +8,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/cliruntime"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 )
 
-var errResumeRuntimeStorageUnavailable = errors.New("resume storage unavailable")
+var errResumeRuntimeStorageUnavailable = cliruntime.ErrResumeRuntimeStorageUnavailable
 
 type resumeRuntimeTarget struct {
 	sessionID string
@@ -31,23 +32,16 @@ type resumeRuntimeSelection struct {
 }
 
 func loadInteractiveConfigSelection(cmd *cobra.Command) *config.Config {
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: Failed to load config: %v\n", err)
-		cfg = config.DefaultConfig()
-	}
-
-	cfg.ApplyEnvironmentOverrides()
-
-	var loopPtr, diffPtr *int
+	overrides := cliruntime.ConfigOverrides{}
 	if flag := cmd.Flags().Lookup("loop-threshold"); flag != nil && flag.Changed {
-		loopPtr = &loopThreshold
+		overrides.LoopThresholdChanged = true
+		overrides.LoopThreshold = loopThreshold
 	}
 	if flag := cmd.Flags().Lookup("diff-lines"); flag != nil && flag.Changed {
-		diffPtr = &diffLines
+		overrides.DiffLinesChanged = true
+		overrides.DiffLines = diffLines
 	}
-	cfg.ApplyFlagOverrides(loopPtr, diffPtr)
-	return cfg
+	return cliruntime.LoadConfigSelection(cmd.ErrOrStderr(), overrides)
 }
 
 func loadRuntimeSelectionForMode(cmd *cobra.Command, mode executionMode) (interactiveRuntimeSelection, error) {
@@ -168,30 +162,10 @@ func loadResumePickerRuntimeSelection(cmd *cobra.Command) interactiveRuntimeSele
 }
 
 func loadResumeRuntimeSession(target resumeRuntimeTarget) (*history.Session, error) {
-	storage, err := history.NewStorage()
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errResumeRuntimeStorageUnavailable, err)
-	}
-
-	sessionID := strings.TrimSpace(target.sessionID)
-	if target.last {
-		sessionID, err = storage.GetLastResumeSession(history.ResumeListOptions{})
-		if err != nil {
-			if !errors.Is(err, history.ErrNoResumeSessions) {
-				return nil, fmt.Errorf("%w: %v", errResumeRuntimeStorageUnavailable, err)
-			}
-			return nil, err
-		}
-	}
-	if sessionID == "" {
-		return nil, fmt.Errorf("resume session ID is required")
-	}
-
-	session, err := storage.Load(sessionID)
-	if err != nil {
-		return nil, fmt.Errorf("load resume session: %w", err)
-	}
-	return session, nil
+	return cliruntime.LoadResumeSession(cliruntime.ResumeTarget{
+		SessionID: target.sessionID,
+		Last:      target.last,
+	})
 }
 
 type resumeBootstrapProvider struct {
