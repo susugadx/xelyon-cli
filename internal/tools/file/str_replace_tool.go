@@ -10,7 +10,7 @@ type StrReplaceTool struct{}
 func (t *StrReplaceTool) Name() string { return "str_replace" }
 
 func (t *StrReplaceTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *StrReplaceTool) Parameters() map[string]interface{} {
@@ -29,18 +29,15 @@ func (t *StrReplaceTool) Run(execCtx tools.ExecutionContext, args map[string]str
 	if err != nil {
 		return outcome.result.message, nil, err
 	}
-	if !outcome.result.ShouldRecordChange() {
-		return outcome.result.message, nil, nil
-	}
-
-	return outcome.result.message, newFileChange(
-		outcome.displayPath,
-		outcome.resolvedPath,
-		"str_replace",
-		outcome.fileChangeDescription,
-		outcome.linesAdded,
-		outcome.linesRemoved,
-	), nil
+	change := fileChangeForAppliedMutation(outcome.result, fileMutationChangeSpec{
+		displayPath:  outcome.displayPath,
+		resolvedPath: outcome.resolvedPath,
+		toolName:     "str_replace",
+		description:  outcome.fileChangeDescription,
+		linesAdded:   outcome.linesAdded,
+		linesRemoved: outcome.linesRemoved,
+	})
+	return outcome.result.message, change, nil
 }
 
 type strReplaceToolRunOutcome struct {

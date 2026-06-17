@@ -8,6 +8,29 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 )
 
+type fileMutationChangeSpec struct {
+	displayPath  string
+	resolvedPath string
+	toolName     string
+	description  string
+	linesAdded   int
+	linesRemoved int
+}
+
+func fileChangeForAppliedMutation(result fileMutationResult, spec fileMutationChangeSpec) *tools.FileChange {
+	if !result.ShouldRecordChange() {
+		return nil
+	}
+	return newFileChange(
+		spec.displayPath,
+		spec.resolvedPath,
+		spec.toolName,
+		spec.description,
+		spec.linesAdded,
+		spec.linesRemoved,
+	)
+}
+
 func newFileChange(displayPath, resolvedPath, toolName, description string, linesAdded, linesRemoved int) *tools.FileChange {
 	change := &tools.FileChange{
 		FilePath:     displayPath,

@@ -10,7 +10,7 @@ Use exactly one JSON object in this shape:
       "Important investigation fact that implementation mode should know"
     ],
     "evidence": [
-      "internal/agent/plan_handoff.go: normalModeInput builds the implementation handoff"
+      "internal/agent/plan/handoff.go: ImplementationHandoff.NormalModeInput builds the implementation handoff"
     ],
     "constraints": [
       "Do not carry raw investigation history into implementation mode"
@@ -22,8 +22,8 @@ Use exactly one JSON object in this shape:
         "purpose": "Why this step is needed or what risk/contract it closes",
         "tools": ["read_file", "str_replace"],
         "files": [
-          "internal/agent/plan_handoff.go",
-          "internal/agent/plan_handoff_test.go"
+          "internal/agent/plan/handoff.go",
+          "internal/agent/plan/handoff_test.go"
         ],
         "verification": ["go test ./internal/agent"]
       }

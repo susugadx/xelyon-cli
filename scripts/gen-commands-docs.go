@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/scripts/internal/commanddocs"
+	"github.com/susugadx/xelyon-cli/scripts/internal/scriptio"
 )
 
 func main() {
@@ -15,29 +16,17 @@ func main() {
 	inputPath := "docs/commands.md"
 	content, err := os.ReadFile(inputPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", inputPath, err)
-		os.Exit(1)
+		scriptio.ExitWithError("Error reading %s: %v", inputPath, err)
 	}
 
-	// 既存のコマンドセクションを検出
-	existingCommands := commanddocs.FindExistingCommands(string(content))
-
-	// 不足しているコマンドを検出
-	missingCommands := commanddocs.MissingCommands(commandcatalog.Commands, existingCommands)
-
+	newContent, missingCommands := commanddocs.AppendMissingCommandSkeleton(string(content), commandcatalog.Commands)
 	if len(missingCommands) == 0 {
 		fmt.Println("All commands are documented in docs/commands.md")
 		return
 	}
 
-	// 骨格を生成
-	skeleton := commanddocs.RenderMissingCommandSkeleton(missingCommands)
-
-	// ファイルに追記
-	newContent := string(content) + skeleton
 	if err := os.WriteFile(inputPath, []byte(newContent), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
-		os.Exit(1)
+		scriptio.ExitWithError("Error writing file: %v", err)
 	}
 
 	fmt.Printf("Added %d missing command(s) to %s:\n", len(missingCommands), inputPath)

@@ -19,7 +19,7 @@ func (t *AskUserQuestionTool) Name() string {
 
 // Description はツールの説明を返す
 func (t *AskUserQuestionTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 // Parameters はツールのパラメータ定義を返す

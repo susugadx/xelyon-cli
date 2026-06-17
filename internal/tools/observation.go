@@ -70,6 +70,25 @@ func CloneRuntimeObservation(item *RuntimeObservation) *RuntimeObservation {
 	}
 }
 
+// CloneRuntimeObservationGroups は pattern 別 observation map を呼び出し元で安全に保持できるよう複製する。
+func CloneRuntimeObservationGroups(groups map[string]*RuntimeObservation) map[string]*RuntimeObservation {
+	if len(groups) == 0 {
+		return nil
+	}
+	cloned := make(map[string]*RuntimeObservation, len(groups))
+	for key, observation := range groups {
+		clonedObservation := CloneRuntimeObservation(observation)
+		if clonedObservation == nil {
+			continue
+		}
+		cloned[key] = clonedObservation
+	}
+	if len(cloned) == 0 {
+		return nil
+	}
+	return cloned
+}
+
 // MergeRuntimeObservations は複数 tool observation を表示順を保って重複排除する。
 func MergeRuntimeObservations(items ...*RuntimeObservation) *RuntimeObservation {
 	merged := &RuntimeObservation{}

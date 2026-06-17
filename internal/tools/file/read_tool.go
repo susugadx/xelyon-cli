@@ -8,7 +8,7 @@ type ReadFileTool struct{}
 func (t *ReadFileTool) Name() string { return "read_file" }
 
 func (t *ReadFileTool) Description() string {
-	return tools.ToolDescriptions[t.Name()]
+	return tools.ToolDescription(t.Name())
 }
 
 func (t *ReadFileTool) Parameters() map[string]interface{} {

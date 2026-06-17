@@ -95,6 +95,52 @@ func TestGetToolSafety(t *testing.T) {
 	}
 }
 
+func TestLookupToolSafetyReportsSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		toolName string
+		want     ToolSafety
+		wantOK   bool
+	}{
+		{
+			name:     "builtin",
+			toolName: "read_file",
+			want:     SafetyHigh,
+			wantOK:   true,
+		},
+		{
+			name:     "legacy alias",
+			toolName: "git_push",
+			want:     SafetyLow,
+			wantOK:   true,
+		},
+		{
+			name:     "dynamic MCP",
+			toolName: "mcp_github_get_issue",
+			want:     SafetyLow,
+			wantOK:   true,
+		},
+		{
+			name:     "unknown",
+			toolName: "unknown_tool",
+			want:     SafetyMedium,
+			wantOK:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := lookupToolSafety(tt.toolName)
+			if ok != tt.wantOK {
+				t.Fatalf("lookupToolSafety(%q) ok = %v, want %v", tt.toolName, ok, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Fatalf("lookupToolSafety(%q) = %v, want %v", tt.toolName, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsAutoApprovable(t *testing.T) {
 	tests := []struct {
 		name        string

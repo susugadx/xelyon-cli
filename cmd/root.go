@@ -45,11 +45,15 @@ var (
 	runOnce                        = app.RunOnceWithConfig
 	runOnceWithImage               = app.RunOnceWithImageWithConfig
 )
-var rootCmd = &cobra.Command{
-	Use:     "xelyon [query]",
-	Short:   "XELYON CLI - AI-powered coding agent",
-	Version: version.GetVersion(),
-	Long: `XELYON CLI is an AI coding agent that helps you with development tasks.
+
+var rootCmd = newRootCommand()
+
+func newRootCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "xelyon [query]",
+		Short:   "XELYON CLI - AI-powered coding agent",
+		Version: version.GetVersion(),
+		Long: `XELYON CLI is an AI coding agent that helps you with development tasks.
 
 Examples:
   xelyon                                           # Interactive mode (DeepSeek Chat)
@@ -67,91 +71,94 @@ Examples:
   xelyon doctor kimi --smoke                       # Diagnose Kimi native provider
   xelyon doctor openrouter --smoke                 # Diagnose OpenRouter provider
   xelyon -p deepseek -m deepseek-chat             # Short flags`,
-	Args: cobra.ArbitraryArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		resolvedOutputFormat, err := resolveOutputFormat(outputFormat, headless)
-		if err != nil {
-			return err
-		}
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedOutputFormat, err := resolveOutputFormat(outputFormat, headless)
+			if err != nil {
+				return err
+			}
 
-		mode, err := resolveExecutionMode(args, resolvedOutputFormat)
-		if err != nil {
-			return err
-		}
+			mode, err := resolveExecutionMode(args, resolvedOutputFormat)
+			if err != nil {
+				return err
+			}
 
-		// バージョンチェック（--no-update-check または JSON 出力でない場合）
-		if !noUpdateCheck && resolvedOutputFormat != outputFormatJSON {
-			if home, err := os.UserHomeDir(); err == nil {
-				configDir := filepath.Join(home, ".xelyon")
-				if result, _ := version.CheckForUpdates(configDir); result != nil {
-					fmt.Print(version.FormatUpdateNotification(result))
+			// バージョンチェック（--no-update-check または JSON 出力でない場合）
+			if !noUpdateCheck && resolvedOutputFormat != outputFormatJSON {
+				if home, err := os.UserHomeDir(); err == nil {
+					configDir := filepath.Join(home, ".xelyon")
+					if result, _ := version.CheckForUpdates(configDir); result != nil {
+						fmt.Print(version.FormatUpdateNotification(result))
+					}
 				}
 			}
-		}
 
-		query := strings.Join(args, " ")
+			query := strings.Join(args, " ")
 
-		switch mode {
-		case executionModeHeadless:
-			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
-			if err != nil {
-				return err
+			switch mode {
+			case executionModeHeadless:
+				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
+				if err != nil {
+					return err
+				}
+				if query == "" {
+					return fmt.Errorf("query argument is required in headless mode")
+				}
+				result := runHeadless(cmd.Context(), query, runtime.model, runtime.provider, runtime.cfg)
+				jsonBytes, _ := json.MarshalIndent(result, "", "  ")
+				fmt.Println(string(jsonBytes))
+				if result.Status == app.HeadlessStatusError {
+					cmd.SilenceUsage = true
+					return fmt.Errorf("headless execution failed")
+				}
+				return nil
+			case executionModeOnce:
+				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
+				if err != nil {
+					return err
+				}
+				return runOnce(query, runtime.model, runtime.provider, runtime.cfg, autoApprove, quiet)
+			case executionModeResume:
+				if legacyNoTUI {
+					return runLegacyNoTUIResumeMode(cmd, legacyNoTUIResumeRequest{})
+				}
+				runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{last: true})
+				if err != nil {
+					return err
+				}
+				return runTUIForResumeRuntime(runtime, autoApprove)
+			case executionModeInteractive:
+				if legacyNoTUI {
+					return runLegacyNoTUIInteractiveMode(cmd)
+				}
+				runtime, err := loadInteractiveRuntimeSelection(cmd)
+				if err != nil {
+					return err
+				}
+				runTUI(runtime.model, runtime.provider, runtime.cfg, autoApprove)
+				return nil
+			case executionModeOnceImage:
+				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
+				if err != nil {
+					return err
+				}
+				return runOnceWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove, quiet)
+			case executionModeInteractiveImage:
+				if legacyNoTUI {
+					return runLegacyNoTUIInteractiveImageMode(cmd, query)
+				}
+				runtime, err := loadInteractiveRuntimeSelection(cmd)
+				if err != nil {
+					return err
+				}
+				return runTUIWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
+			default:
+				return fmt.Errorf("unsupported execution mode: %s", mode)
 			}
-			if query == "" {
-				return fmt.Errorf("query argument is required in headless mode")
-			}
-			result := runHeadless(cmd.Context(), query, runtime.model, runtime.provider, runtime.cfg)
-			jsonBytes, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(jsonBytes))
-			if result.Status == app.HeadlessStatusError {
-				cmd.SilenceUsage = true
-				return fmt.Errorf("headless execution failed")
-			}
-			return nil
-		case executionModeOnce:
-			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
-			if err != nil {
-				return err
-			}
-			return runOnce(query, runtime.model, runtime.provider, runtime.cfg, autoApprove, quiet)
-		case executionModeResume:
-			if legacyNoTUI {
-				return runLegacyNoTUIResumeMode(cmd, legacyNoTUIResumeRequest{})
-			}
-			runtime, err := loadResumeRuntimeSelection(cmd, resumeRuntimeTarget{last: true})
-			if err != nil {
-				return err
-			}
-			return runTUIForResumeRuntime(runtime, autoApprove)
-		case executionModeInteractive:
-			if legacyNoTUI {
-				return runLegacyNoTUIInteractiveMode(cmd)
-			}
-			runtime, err := loadInteractiveRuntimeSelection(cmd)
-			if err != nil {
-				return err
-			}
-			runTUI(runtime.model, runtime.provider, runtime.cfg, autoApprove)
-			return nil
-		case executionModeOnceImage:
-			runtime, err := loadRuntimeSelectionForMode(cmd, mode)
-			if err != nil {
-				return err
-			}
-			return runOnceWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove, quiet)
-		case executionModeInteractiveImage:
-			if legacyNoTUI {
-				return runLegacyNoTUIInteractiveImageMode(cmd, query)
-			}
-			runtime, err := loadInteractiveRuntimeSelection(cmd)
-			if err != nil {
-				return err
-			}
-			return runTUIWithImage(query, runtime.model, runtime.provider, imageFlag, runtime.cfg, autoApprove)
-		default:
-			return fmt.Errorf("unsupported execution mode: %s", mode)
-		}
-	},
+		},
+	}
+	configureRootCommand(cmd)
+	return cmd
 }
 
 func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mode executionMode, model string) (api.Provider, error) {
@@ -174,16 +181,7 @@ func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mo
 	return nil, err
 }
 
-func executionModeIsInteractive(mode executionMode) bool {
-	switch mode {
-	case executionModeInteractive, executionModeResume, executionModeInteractiveImage:
-		return true
-	default:
-		return false
-	}
-}
-
-func init() {
+func configureRootCommand(rootCmd *cobra.Command) {
 	// バージョン表示のカスタマイズ
 	rootCmd.SetVersionTemplate(version.GetFullVersion() + "\n")
 
