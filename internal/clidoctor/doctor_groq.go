@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunGroqDoctor runs Groq diagnostics and renders the selected output.
+// RunGroqDoctor は Groq の診断を実行し、選択された形式で出力する。
 func RunGroqDoctor(ctx context.Context, out io.Writer, options GroqOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

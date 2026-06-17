@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunOpenRouterDoctor runs OpenRouter diagnostics and renders the selected output.
+// RunOpenRouterDoctor は OpenRouter の診断を実行し、選択された形式で出力する。
 func RunOpenRouterDoctor(ctx context.Context, out io.Writer, options OpenRouterOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

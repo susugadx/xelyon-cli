@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunBedrockDoctor runs Bedrock diagnostics and renders the selected output.
+// RunBedrockDoctor は Bedrock の診断を実行し、選択された形式で出力する。
 func RunBedrockDoctor(ctx context.Context, out io.Writer, options BedrockOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

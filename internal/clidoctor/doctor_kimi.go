@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunKimiDoctor runs Kimi diagnostics and renders the selected output.
+// RunKimiDoctor は Kimi の診断を実行し、選択された形式で出力する。
 func RunKimiDoctor(ctx context.Context, out io.Writer, options KimiOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunDeepSeekDoctor runs DeepSeek diagnostics and renders the selected output.
+// RunDeepSeekDoctor は DeepSeek の診断を実行し、選択された形式で出力する。
 func RunDeepSeekDoctor(ctx context.Context, out io.Writer, options DeepSeekOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

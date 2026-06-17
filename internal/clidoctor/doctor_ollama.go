@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunOllamaDoctor runs Ollama diagnostics and renders the selected output.
+// RunOllamaDoctor は Ollama の診断を実行し、選択された形式で出力する。
 func RunOllamaDoctor(ctx context.Context, out io.Writer, options OllamaOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

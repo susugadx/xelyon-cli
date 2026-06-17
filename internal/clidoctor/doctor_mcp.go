@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
 )
 
-// RunMCPDoctor runs MCP diagnostics and renders the selected output.
+// RunMCPDoctor は MCP の診断を実行し、選択された形式で出力する。
 func RunMCPDoctor(ctx context.Context, out io.Writer, options MCPOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfigReadOnly()
 	if loadErr != nil {

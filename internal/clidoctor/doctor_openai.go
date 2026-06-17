@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunOpenAIDoctor runs OpenAI diagnostics and renders the selected output.
+// RunOpenAIDoctor は OpenAI の診断を実行し、選択された形式で出力する。
 func RunOpenAIDoctor(ctx context.Context, out io.Writer, options OpenAIOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

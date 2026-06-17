@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunClaudeDoctor runs Claude diagnostics and renders the selected output.
+// RunClaudeDoctor は Claude の診断を実行し、選択された形式で出力する。
 func RunClaudeDoctor(ctx context.Context, out io.Writer, options ClaudeOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

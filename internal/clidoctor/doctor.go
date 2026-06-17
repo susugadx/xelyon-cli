@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunAzureDoctor runs Azure OpenAI diagnostics and renders the selected output.
+// RunAzureDoctor は Azure OpenAI の診断を実行し、選択された形式で出力する。
 func RunAzureDoctor(ctx context.Context, out io.Writer, options AzureOptions) (bool, error) {
 	if options.PrintConfig {
 		if err := renderAzureDoctorConfigSnippet(out, azureDoctorConfigSnippetOptions{

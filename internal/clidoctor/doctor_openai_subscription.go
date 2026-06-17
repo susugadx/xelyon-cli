@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
 
-// RunOpenAISubscriptionDoctor runs OpenAI Subscription diagnostics and renders the selected output.
+// RunOpenAISubscriptionDoctor は OpenAI Subscription の診断を実行し、選択された形式で出力する。
 func RunOpenAISubscriptionDoctor(ctx context.Context, out io.Writer, options OpenAISubscriptionOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {

@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-// RunGeminiDoctor runs Gemini diagnostics and renders the selected output.
+// RunGeminiDoctor は Gemini の診断を実行し、選択された形式で出力する。
 func RunGeminiDoctor(ctx context.Context, out io.Writer, options GeminiOptions) (bool, error) {
 	cfg, loadErr := config.LoadConfig()
 	if loadErr != nil {
