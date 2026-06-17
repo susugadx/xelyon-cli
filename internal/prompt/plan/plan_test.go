@@ -33,6 +33,24 @@ func TestPlanJSONSchemaInstructions_ContainsFilesContract(t *testing.T) {
 	})
 }
 
+func TestPlanJSONSchemaInstructions_UsesCurrentHandoffOwnerExample(t *testing.T) {
+	schema := PlanJSONSchemaInstructions()
+	assertContainsAll(t, "plan schema", schema, []string{
+		"internal/agent/plan/handoff.go: ImplementationHandoff.NormalModeInput builds the implementation handoff",
+		"internal/agent/plan/handoff.go",
+		"internal/agent/plan/handoff_test.go",
+	})
+	for _, stale := range []string{
+		"internal/agent/plan_handoff.go",
+		"internal/agent/plan_handoff_test.go",
+		"normalModeInput",
+	} {
+		if strings.Contains(schema, stale) {
+			t.Fatalf("plan schema should not contain stale handoff owner reference %q:\n%s", stale, schema)
+		}
+	}
+}
+
 func TestBuildPlanningPrompt_ContainsPlanMode(t *testing.T) {
 	prompt := BuildPlanningPrompt()
 	if !strings.Contains(prompt, "Plan Mode") {

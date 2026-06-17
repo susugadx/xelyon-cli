@@ -1,19 +1,17 @@
-package agent
+package plan
 
 import (
 	"strings"
 	"testing"
-
-	"github.com/susugadx/xelyon-cli/internal/agent/plan"
 )
 
-func TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *testing.T) {
-	handoff := newPlanModeImplementationHandoff("implement feature", &plan.Plan{
+func TestImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *testing.T) {
+	handoff := NewImplementationHandoff("implement feature", &Plan{
 		Summary:     "Ship a small change",
-		Findings:    []string{"plan_handoff.go owns implementation input"},
-		Evidence:    []string{"internal/agent/plan_handoff.go: normalModeInput", "internal/agent/plan_handoff_test.go: handoff tests"},
+		Findings:    []string{"plan handoff owns implementation input"},
+		Evidence:    []string{"internal/agent/plan/handoff.go: NormalModeInput", "internal/agent/plan/handoff_test.go: handoff tests"},
 		Constraints: []string{"Do not carry raw investigation history"},
-		Steps: []plan.PlanStep{{
+		Steps: []PlanStep{{
 			ID:           1,
 			Description:  "Update foo.go and tests",
 			Purpose:      "Close the approval contract",
@@ -29,17 +27,17 @@ func TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *te
 		t.Fatal("handoff = nil")
 	}
 
-	input := handoff.normalModeInput()
+	input := handoff.NormalModeInput()
 	for _, want := range []string{
 		"Implement the approved plan now.",
 		"Original request:",
 		"implement feature",
 		"Summary: Ship a small change",
 		"Findings:",
-		" - plan_handoff.go owns implementation input",
+		" - plan handoff owns implementation input",
 		"Evidence:",
-		" - internal/agent/plan_handoff.go: normalModeInput",
-		" - internal/agent/plan_handoff_test.go: handoff tests",
+		" - internal/agent/plan/handoff.go: NormalModeInput",
+		" - internal/agent/plan/handoff_test.go: handoff tests",
 		"Constraints:",
 		" - Do not carry raw investigation history",
 		"1. Update foo.go and tests",
@@ -53,18 +51,18 @@ func TestPlanModeImplementationHandoff_NormalModeInputIncludesApprovedPlan(t *te
 		"Use the plan as guidance",
 	} {
 		if !strings.Contains(input, want) {
-			t.Fatalf("normalModeInput() = %q, want fragment %q", input, want)
+			t.Fatalf("NormalModeInput() = %q, want fragment %q", input, want)
 		}
 	}
 }
 
-func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
-	p := &plan.Plan{
+func TestImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
+	p := &Plan{
 		Summary:     "Ship a small change",
 		Findings:    []string{"original finding"},
 		Evidence:    []string{"original evidence"},
 		Constraints: []string{"original constraint"},
-		Steps: []plan.PlanStep{{
+		Steps: []PlanStep{{
 			ID:           1,
 			Description:  "Update foo.go and tests",
 			Purpose:      "Keep approval behavior stable",
@@ -76,7 +74,7 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 			Verification: []string{"go test ./internal/agent"},
 		}},
 	}
-	handoff := newPlanModeImplementationHandoff("implement feature", p)
+	handoff := NewImplementationHandoff("implement feature", p)
 	if handoff == nil {
 		t.Fatal("handoff = nil")
 	}
@@ -94,7 +92,7 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 	p.Steps[0].Files[0] = "mutated_related.go"
 	p.Steps[0].Verification[0] = "mutated verification"
 
-	input := handoff.normalModeInput()
+	input := handoff.NormalModeInput()
 	for _, want := range []string{
 		"Summary: Ship a small change",
 		" - original finding",
@@ -110,19 +108,19 @@ func TestPlanModeImplementationHandoff_ClonesApprovedPlan(t *testing.T) {
 		"Related files: README.md",
 	} {
 		if !strings.Contains(input, want) {
-			t.Fatalf("normalModeInput() = %q, want original fragment %q", input, want)
+			t.Fatalf("NormalModeInput() = %q, want original fragment %q", input, want)
 		}
 	}
 	for _, notWant := range []string{"mutated summary", "mutated finding", "mutated evidence", "mutated constraint", "mutated description", "mutated purpose", "mutated_tool", "mutated.go", "mutated_read.go", "mutated_write.go", "mutated_related.go", "mutated verification"} {
 		if strings.Contains(input, notWant) {
-			t.Fatalf("normalModeInput() = %q, should not contain mutated fragment %q", input, notWant)
+			t.Fatalf("NormalModeInput() = %q, should not contain mutated fragment %q", input, notWant)
 		}
 	}
 }
 
-func TestPlanModeImplementationHandoff_FileGroupsNormalizeAndPreserveRoles(t *testing.T) {
-	handoff := newPlanModeImplementationHandoff("implement feature", &plan.Plan{
-		Steps: []plan.PlanStep{{
+func TestImplementationHandoff_FileGroupsNormalizeAndPreserveRoles(t *testing.T) {
+	handoff := NewImplementationHandoff("implement feature", &Plan{
+		Steps: []PlanStep{{
 			ID:          1,
 			Description: "Update files",
 			TargetFiles: []string{" foo.go ", "foo.go", ""},
@@ -135,7 +133,7 @@ func TestPlanModeImplementationHandoff_FileGroupsNormalizeAndPreserveRoles(t *te
 		t.Fatal("handoff = nil")
 	}
 
-	input := handoff.normalModeInput()
+	input := handoff.NormalModeInput()
 	for _, want := range []string{
 		"Target files: foo.go",
 		"Read files: foo.go, bar.go",
@@ -143,7 +141,7 @@ func TestPlanModeImplementationHandoff_FileGroupsNormalizeAndPreserveRoles(t *te
 		"Related files: baz.go",
 	} {
 		if !strings.Contains(input, want) {
-			t.Fatalf("normalModeInput() = %q, want fragment %q", input, want)
+			t.Fatalf("NormalModeInput() = %q, want fragment %q", input, want)
 		}
 	}
 	for _, notWant := range []string{
@@ -153,7 +151,30 @@ func TestPlanModeImplementationHandoff_FileGroupsNormalizeAndPreserveRoles(t *te
 		"Related files: bar.go",
 	} {
 		if strings.Contains(input, notWant) {
-			t.Fatalf("normalModeInput() = %q, should not contain fragment %q", input, notWant)
+			t.Fatalf("NormalModeInput() = %q, should not contain fragment %q", input, notWant)
+		}
+	}
+}
+
+func TestImplementationHandoff_VerificationHintsTrimsAndDedupes(t *testing.T) {
+	handoff := NewImplementationHandoff("implement feature", &Plan{
+		Steps: []PlanStep{
+			{ID: 1, Description: "Update code", Verification: []string{" go test ./internal/agent ", "make ci-check"}},
+			{ID: 2, Description: "Update tests", Verification: []string{"go test ./internal/agent", "", "go test ./internal/agent/plan"}},
+		},
+	})
+	if handoff == nil {
+		t.Fatal("handoff = nil")
+	}
+
+	want := []string{"go test ./internal/agent", "make ci-check", "go test ./internal/agent/plan"}
+	got := handoff.VerificationHints()
+	if len(got) != len(want) {
+		t.Fatalf("VerificationHints() = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("VerificationHints() = %#v, want %#v", got, want)
 		}
 	}
 }

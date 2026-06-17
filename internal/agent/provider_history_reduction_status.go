@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/providerhistory"
 	"github.com/susugadx/xelyon-cli/internal/review"
 )
 
@@ -393,7 +394,7 @@ func providerHistoryRehydratedEvidenceCountForStatus(agent *Agent) int {
 	if agent == nil || agent.Runtime == nil {
 		return 0
 	}
-	return len(providerHistoryAppliedEvidencePointers(agent.Runtime.LastProviderHistoryProjectionReport))
+	return len(providerhistory.AppliedEvidencePointers(agent.Runtime.LastProviderHistoryProjectionReport))
 }
 
 func providerHistoryStatusSummaryLines(summary string) []string {

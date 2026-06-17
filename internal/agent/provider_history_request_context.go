@@ -28,7 +28,7 @@ func (a *Agent) providerFacingHistoryExcludingLatestMessageForRequest(ctx contex
 func (a *Agent) providerFacingHistoryForRequestFromRaw(ctx context.Context, raw []api.Message) (context.Context, []api.Message) {
 	result, rawOutputContext := a.providerHistoryProjectionForRequest(ctx, raw)
 	a.recordLastProviderHistoryProjectionReport(result.Report)
-	if providerHistoryProjectionDisablesResponseIDChain(result.Report) {
+	if providerhistory.ProjectionDisablesResponseIDChain(result.Report) {
 		ctx = api.WithResponseIDChainDisabled(ctx)
 		a.clearResponseContextForProviderHistoryReductionRequest()
 	}
@@ -55,10 +55,6 @@ func (a *Agent) providerHistoryProjectionForTokenBudget(ctx context.Context, raw
 		rawOutputContext = a.buildProviderHistoryRawOutputActiveContext(ctx, result.Report, raw)
 	}
 	return result, rawOutputContext
-}
-
-func providerHistoryProjectionDisablesResponseIDChain(report ProviderHistoryProjectionReport) bool {
-	return providerhistory.ProjectionDisablesResponseIDChain(report)
 }
 
 func (a *Agent) clearResponseContextForProviderHistoryReductionRequest() {

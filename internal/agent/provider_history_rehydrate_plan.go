@@ -5,10 +5,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
-func providerHistoryAppliedEvidencePointers(report ProviderHistoryProjectionReport) []taskstate.EvidencePointer {
-	return providerhistory.AppliedEvidencePointers(report)
-}
-
 func (a *Agent) buildProviderHistoryRehydratePlan(targetPaths []string) taskstate.RehydratePlan {
 	if a == nil || a.Runtime == nil {
 		return taskstate.RehydratePlan{}

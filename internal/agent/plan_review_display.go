@@ -86,30 +86,13 @@ func planReviewPlanVerification(p *plan.Plan) []string {
 		return nil
 	}
 
-	seen := make(map[string]bool)
 	verification := make([]string, 0)
 	for _, step := range p.Steps {
-		for _, item := range planReviewStepVerification(step) {
-			if seen[item] {
-				continue
-			}
-			seen[item] = true
-			verification = append(verification, item)
-		}
+		verification = append(verification, step.Verification...)
 	}
-	return verification
+	return plan.CompactVerificationHints(verification)
 }
 
 func planReviewStepVerification(step plan.PlanStep) []string {
-	seen := make(map[string]bool)
-	verification := make([]string, 0, len(step.Verification))
-	for _, item := range step.Verification {
-		item = strings.TrimSpace(item)
-		if item == "" || seen[item] {
-			continue
-		}
-		seen[item] = true
-		verification = append(verification, item)
-	}
-	return verification
+	return plan.CompactVerificationHints(step.Verification)
 }

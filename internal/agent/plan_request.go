@@ -19,7 +19,7 @@ type planModeRequest struct {
 	investigationPrompt string
 	checkpoint          planModeCheckpoint
 	approved            bool
-	handoff             *planModeImplementationHandoff
+	handoff             *plan.ImplementationHandoff
 	autoCompression     *autoCompressionTurnState
 }
 
@@ -201,7 +201,7 @@ func (r *planModeRequest) handleInvestigationResult(p *plan.Plan) (bool, error) 
 	approved, feedback := r.confirmPlanApproval()
 	if approved {
 		r.approved = true
-		r.handoff = newPlanModeImplementationHandoff(r.originalUserRequest, p)
+		r.handoff = plan.NewImplementationHandoff(r.originalUserRequest, p)
 		green.Fprintln(out, "✓ Plan approved. Plan Mode complete.")
 		r.exitPlanModeReview()
 		return true, nil
