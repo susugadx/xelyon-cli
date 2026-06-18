@@ -147,15 +147,20 @@ func appendGuidanceSection(b *strings.Builder, heading string, intro string, ent
 	}
 }
 
-// InjectProjectConfigBlock は SystemPrompt の Workflow Rules 内に project config ブロックを埋め込む。
-// Rule #10 (Verification Protocol) の直後に挿入する。
+// InjectProjectConfigBlock は SystemPrompt の marker 位置に project config ブロックを埋め込む。
+// marker のない custom prompt では legacy Verification Protocol 境界に挿入する。
 // projectBlock が空の場合は systemPrompt をそのまま返す。
 func InjectProjectConfigBlock(systemPrompt, projectBlock string) string {
 	if projectBlock == "" {
 		return systemPrompt
 	}
 
-	// 優先: Rule #10 ブロック境界を正規表現で見つけて、その直後に挿入する。
+	if idx := strings.Index(systemPrompt, projectConfigAnchorMarker); idx >= 0 {
+		insertPos := idx + len(projectConfigAnchorMarker)
+		return systemPrompt[:insertPos] + projectBlock + systemPrompt[insertPos:]
+	}
+
+	// 後方互換: custom prompt の Rule #10 ブロック境界を正規表現で見つけて、その直後に挿入する。
 	if match := verificationRuleBlockRe.FindStringSubmatchIndex(systemPrompt); len(match) >= 4 {
 		insertPos := match[3]
 		return systemPrompt[:insertPos] + projectBlock + systemPrompt[insertPos:]

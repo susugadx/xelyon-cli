@@ -42,7 +42,7 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 	}
 	effectivePrompt := a.normalModeSystemPromptForRequest(r.ctx, input, iteration == 0)
 
-	requestCtx := a.requestContext(r.ctx)
+	requestCtx := a.prepareResponseContextForPrompt(a.requestContext(r.ctx), effectivePrompt)
 	if iteration == 0 && image != nil {
 		requestCtx, history := a.providerFacingHistoryExcludingLatestMessageForRequest(requestCtx)
 		response, err := a.CurrentProvider.ChatWithImage(
@@ -52,6 +52,7 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 			a.ui().StopSpinner()
 			return "", fmt.Errorf("API call failed: %w", err)
 		}
+		a.recordResponseContextForPrompt(effectivePrompt)
 		return response, nil
 	}
 
@@ -69,6 +70,7 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 		a.ui().StopSpinner()
 		return "", fmt.Errorf("API call failed: %w", err)
 	}
+	a.recordResponseContextForPrompt(effectivePrompt)
 	return response, nil
 }
 

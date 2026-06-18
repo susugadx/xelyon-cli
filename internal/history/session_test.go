@@ -112,6 +112,7 @@ func TestSession_ResetConversation(t *testing.T) {
 	session.CompactedItems = []CompactedItem{{Type: "compacted", Data: "compressed"}}
 	session.IsCompactedMode = true
 	session.ResponseID = "resp_123"
+	session.ResponsePromptFingerprint = "fingerprint-1"
 	session.markPersisted()
 
 	session.ResetConversation()
@@ -127,6 +128,9 @@ func TestSession_ResetConversation(t *testing.T) {
 	}
 	if session.ResponseID != "" {
 		t.Fatalf("ResponseID = %q, want empty", session.ResponseID)
+	}
+	if session.ResponsePromptFingerprint != "" {
+		t.Fatalf("ResponsePromptFingerprint = %q, want empty", session.ResponsePromptFingerprint)
 	}
 	if session.persistedCount != 0 {
 		t.Fatalf("persistedCount = %d, want 0", session.persistedCount)

@@ -35,7 +35,7 @@ func (m *mockProvider) IsFunctionCallingEnabled() bool {
 }
 
 func (m *mockProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-	return "mock response", nil
+	return compressionSummaryResponseForHistory(history, "mock response"), nil
 }
 
 func (m *mockProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
@@ -59,11 +59,11 @@ func (m *sequenceMockProvider) IsFunctionCallingEnabled() bool { return true }
 func (m *sequenceMockProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	m.contexts = append(m.contexts, ctx)
 	if m.callCount >= len(m.responses) {
-		return m.responses[len(m.responses)-1], nil
+		return compressionSummaryResponseForHistory(history, m.responses[len(m.responses)-1]), nil
 	}
 	resp := m.responses[m.callCount]
 	m.callCount++
-	return resp, nil
+	return compressionSummaryResponseForHistory(history, resp), nil
 }
 
 func (m *sequenceMockProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {

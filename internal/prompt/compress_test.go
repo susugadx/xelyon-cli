@@ -102,6 +102,9 @@ func TestBuildSummaryPrompt_IncludesConversationAndInstruction(t *testing.T) {
 	if !strings.Contains(result, "Summarize") {
 		t.Fatal("BuildSummaryPrompt() should contain summary instruction")
 	}
+	if !strings.Contains(result, "Return strict JSON only") || !strings.Contains(result, "do_not_repeat") {
+		t.Fatal("BuildSummaryPrompt() should contain JSON continuation contract")
+	}
 }
 
 func TestBuildSummaryPrompt_TruncatesLongMessage(t *testing.T) {
@@ -111,5 +114,45 @@ func TestBuildSummaryPrompt_TruncatesLongMessage(t *testing.T) {
 
 	if !strings.Contains(result, strings.Repeat("a", 500)+"...") {
 		t.Fatalf("BuildSummaryPrompt() should truncate long messages, got: %s", result)
+	}
+}
+
+func TestBuildSummaryPrompt_TruncatesLongMessageRuneSafe(t *testing.T) {
+	result := BuildSummaryPrompt([]Message{
+		{Role: "user", Content: strings.Repeat("あ", 600)},
+	}, 500)
+
+	want := strings.Repeat("あ", 500) + "..."
+	if !strings.Contains(result, want) {
+		t.Fatalf("BuildSummaryPrompt() should truncate by runes, got: %s", result)
+	}
+}
+
+func TestParseSummaryContinuation(t *testing.T) {
+	raw := `{"continuation_context":{"current_task":"fix compression","progress_status":"tests pending","key_decisions":["assistant summary"],"files_changed":["internal/prompt/compress.go"],"remaining_work":["run tests"],"do_not_repeat":["bad command"]}}`
+
+	record, err := ParseSummaryContinuation(raw)
+	if err != nil {
+		t.Fatalf("ParseSummaryContinuation() error = %v", err)
+	}
+	if record.CurrentTask != "fix compression" || len(record.DoNotRepeat) != 1 {
+		t.Fatalf("record = %#v, want parsed continuation", record)
+	}
+
+	formatted := FormatSummaryContinuationMessage(record)
+	if !strings.Contains(formatted, "authority: data-only") || !strings.Contains(formatted, "bad command") {
+		t.Fatalf("formatted continuation = %q, want data-only label and do_not_repeat", formatted)
+	}
+}
+
+func TestParseSummaryContinuation_InvalidJSON(t *testing.T) {
+	if _, err := ParseSummaryContinuation(`{"continuation_context":{"current_task":"x","extra":true}}`); err == nil {
+		t.Fatal("ParseSummaryContinuation() error = nil, want unknown field error")
+	}
+	if _, err := ParseSummaryContinuation(`{"continuation_context":{"current_task":"x","progress_status":"","key_decisions":[],"files_changed":[],"remaining_work":[]}}`); err == nil {
+		t.Fatal("ParseSummaryContinuation() error = nil, want missing key error")
+	}
+	if _, err := ParseSummaryContinuation(`not json`); err == nil {
+		t.Fatal("ParseSummaryContinuation() error = nil, want decode error")
 	}
 }

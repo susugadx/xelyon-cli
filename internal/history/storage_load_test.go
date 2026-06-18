@@ -49,6 +49,24 @@ func TestStorage_Load_MetadataOnlySession(t *testing.T) {
 	}
 }
 
+func TestStorage_Load_ResponsePromptFingerprint(t *testing.T) {
+	storage := newStorageLoadTestStorage(t)
+
+	session := NewSession("gpt-5")
+	session.ApplyResponseContextWithFingerprint("resp_123", "gpt-5", "openai", "openai", "fingerprint-1")
+	if err := storage.Rewrite(session); err != nil {
+		t.Fatalf("Rewrite failed: %v", err)
+	}
+
+	loaded, err := storage.Load(session.ID)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if loaded.ResponsePromptFingerprint != "fingerprint-1" {
+		t.Fatalf("loaded.ResponsePromptFingerprint = %q, want fingerprint-1", loaded.ResponsePromptFingerprint)
+	}
+}
+
 func TestStorage_Load_CompactedStatePreservesFullInputItemShape(t *testing.T) {
 	storage := newStorageLoadTestStorage(t)
 

@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -62,9 +63,9 @@ func (m *compressionTestProvider) ChatWithTools(ctx context.Context, _ string, h
 		return "", m.chatErr
 	}
 	if m.summary != "" {
-		return m.summary, nil
+		return compressionSummaryResponseForHistory(history, m.summary), nil
 	}
-	return "summary", nil
+	return compressionSummaryResponseForHistory(history, "summary"), nil
 }
 
 func (m *compressionTestProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, _ *api.ImageData, _ string) (string, error) {
@@ -128,6 +129,41 @@ func newCompressionTestAgent(t *testing.T, provider *compressionTestProvider, mo
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	t.Cleanup(agent.Cleanup)
 	return agent, &out
+}
+
+func compressionSummaryContinuationJSON(summary string) string {
+	trimmed := strings.TrimSpace(summary)
+	if strings.HasPrefix(trimmed, "{") {
+		return summary
+	}
+	payload := map[string]any{
+		"continuation_context": map[string]any{
+			"current_task":    summary,
+			"progress_status": "",
+			"key_decisions":   []string{},
+			"files_changed":   []string{},
+			"remaining_work":  []string{},
+			"do_not_repeat":   []string{},
+		},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
+}
+
+func compressionSummaryResponseForHistory(history []api.Message, response string) string {
+	if isCompressionSummaryRequest(history) {
+		return compressionSummaryContinuationJSON(response)
+	}
+	return response
+}
+
+func isCompressionSummaryRequest(history []api.Message) bool {
+	return len(history) == 1 &&
+		history[0].Role == "user" &&
+		strings.Contains(history[0].Content, "continuation_context")
 }
 
 func oversizedCompressionHistory() []api.Message {

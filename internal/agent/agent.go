@@ -32,6 +32,7 @@ type agentConversationState struct {
 	lastOutputs     []string
 	compactedItems  []api.InputItem
 	isCompactedMode bool
+	responseContext responseContextSnapshot
 }
 
 type agentRequestState struct {

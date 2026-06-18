@@ -117,6 +117,25 @@ Check references before changes`
 	}
 }
 
+func TestInjectProjectConfigBlock_UsesSystemPromptMarker(t *testing.T) {
+	block := BuildProjectConfigBlock([]string{"Always run tests"}, nil)
+
+	result := InjectProjectConfigBlock(SystemPrompt, block)
+	idxMarker := strings.Index(result, projectConfigAnchorMarker)
+	idxBlock := strings.Index(result, "PROJECT_CONFIG_START")
+	idxRecovery := strings.Index(result, "### 7. Recovery and Output")
+
+	if idxMarker < 0 {
+		t.Fatal("SystemPrompt marker missing")
+	}
+	if idxBlock < 0 {
+		t.Fatal("project config block was not injected")
+	}
+	if idxBlock < idxMarker || idxRecovery < idxBlock {
+		t.Fatalf("project block should be injected after marker and before recovery section:\n%s", result)
+	}
+}
+
 func TestBuildRulesBlockFromList_Empty(t *testing.T) {
 	result := BuildRulesBlockFromList(nil)
 	if result != "" {

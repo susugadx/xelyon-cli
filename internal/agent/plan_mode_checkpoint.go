@@ -15,6 +15,7 @@ type planModeCheckpoint struct {
 	responseModel       string
 	responseProvider    string
 	responseProviderKey string
+	responsePromptHash  string
 	systemPrompt        string
 	restored            bool
 }
@@ -45,12 +46,7 @@ func capturePlanModeCheckpoint(a *Agent, currentRequest string) planModeCheckpoi
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok && a.responsesStoreEnabled() {
 		checkpoint.responseID = ridProvider.GetResponseID()
 		if checkpoint.responseID != "" {
-			checkpoint.applyResponseContextSnapshot(responseContextSnapshotFromRuntime(
-				a.CurrentModel,
-				a.ProviderName,
-				a.currentProviderConfigKey(),
-				checkpoint.responseID,
-			))
+			checkpoint.applyResponseContextSnapshot(a.responseContextSnapshotForCurrentProvider(ridProvider))
 		}
 	}
 	return checkpoint
@@ -130,9 +126,11 @@ func (c *planModeCheckpoint) restoreProviderResponseContext(a *Agent) {
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
 		if !a.responsesStoreEnabled() {
 			ridProvider.SetResponseID("")
+			a.responseContext = responseContextSnapshot{}
 			return
 		}
 		ridProvider.SetResponseID(strings.TrimSpace(c.responseID))
+		a.responseContext = c.responseContextSnapshot()
 	}
 }
 
@@ -149,6 +147,7 @@ func (c *planModeCheckpoint) responseContextSnapshot() responseContextSnapshot {
 		model:             strings.TrimSpace(c.responseModel),
 		providerName:      strings.TrimSpace(c.responseProvider),
 		providerConfigKey: strings.TrimSpace(c.responseProviderKey),
+		promptFingerprint: strings.TrimSpace(c.responsePromptHash),
 	}
 }
 
@@ -160,6 +159,7 @@ func (c *planModeCheckpoint) applyResponseContextSnapshot(snapshot responseConte
 	c.responseModel = strings.TrimSpace(snapshot.model)
 	c.responseProvider = config.CanonicalProviderName(snapshot.providerName)
 	c.responseProviderKey = config.ActiveProviderConfigKey(snapshot.providerConfigKey)
+	c.responsePromptHash = strings.TrimSpace(snapshot.promptFingerprint)
 }
 
 func shouldExcludeCurrentPlanRequest(session *history.Session, currentRequest string) bool {

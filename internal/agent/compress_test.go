@@ -99,11 +99,11 @@ func TestAgent_CompressHistory_Success(t *testing.T) {
 	if len(agent.History) != expectedLen {
 		t.Errorf("CompressHistory() history length = %d, want %d", len(agent.History), expectedLen)
 	}
-	if agent.History[0].Role != "system" {
-		t.Errorf("CompressHistory() first message role = %v, want 'system'", agent.History[0].Role)
+	if agent.History[0].Role != "assistant" {
+		t.Errorf("CompressHistory() first message role = %v, want 'assistant'", agent.History[0].Role)
 	}
-	if !strings.Contains(agent.History[0].Content, "Summary") && !strings.Contains(agent.History[0].Content, "mock") {
-		t.Errorf("CompressHistory() first message should be summary, got: %s", agent.History[0].Content)
+	if !strings.Contains(agent.History[0].Content, "Conversation continuation data") && !strings.Contains(agent.History[0].Content, "mock") {
+		t.Errorf("CompressHistory() first message should be continuation data, got: %s", agent.History[0].Content)
 	}
 	if len(agent.History) >= initialLen {
 		t.Errorf("CompressHistory() did not reduce history length: before=%d, after=%d", initialLen, len(agent.History))

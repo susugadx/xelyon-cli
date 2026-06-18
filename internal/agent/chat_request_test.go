@@ -42,9 +42,13 @@ func (p *scriptedChatProvider) ChatWithTools(ctx context.Context, systemPrompt s
 	call := p.callCount
 	p.callCount++
 	if p.chatWithToolsFn != nil {
-		return p.chatWithToolsFn(call, ctx, systemPrompt, history, model)
+		response, err := p.chatWithToolsFn(call, ctx, systemPrompt, history, model)
+		if err != nil {
+			return "", err
+		}
+		return compressionSummaryResponseForHistory(history, response), nil
 	}
-	return "done", nil
+	return compressionSummaryResponseForHistory(history, "done"), nil
 }
 
 func (p *scriptedChatProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {

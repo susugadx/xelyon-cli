@@ -166,11 +166,18 @@ func (a *Agent) compressHistoryWithSplit(
 		a.finishCompressionDisplay(display, 0, wrapped)
 		return wrapped
 	}
+	continuation, err := prompt.ParseSummaryContinuation(summary)
+	if err != nil {
+		finishResponseContext(false, nil)
+		wrapped := fmt.Errorf("サマリー生成結果が不正です: %w", err)
+		a.finishCompressionDisplay(display, 0, wrapped)
+		return wrapped
+	}
 
 	// 新しい履歴を構築
 	summaryMessage := api.Message{
-		Role:    "system",
-		Content: fmt.Sprintf("[Summary of previous conversation]\n\n%s", summary),
+		Role:    "assistant",
+		Content: prompt.FormatSummaryContinuationMessage(continuation),
 	}
 	newHistory := []api.Message{summaryMessage}
 	newHistory = append(newHistory, toKeep...)

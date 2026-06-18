@@ -15,6 +15,8 @@ import (
 // Normal Mode では Registry から除外される
 var PlanningToolNames = []string{"ask_user_question"}
 
+const projectConfigAnchorMarker = "<!-- PROJECT_CONFIG_ANCHOR -->"
+
 // BuildSystemPrompt はシステムプロンプトを構築する。
 // planModeEnabled が true の場合、Planning Tools のガイドラインを追加する。
 func BuildSystemPrompt(basePrompt string, planModeEnabled bool) string {
@@ -263,6 +265,7 @@ For tasks requiring sub-agents:
 - Prefer targeted verification first.
 - Do not rerun the same failing command without a code change in between.
 - Run full CI when explicitly required or after targeted tests pass.
+<!-- PROJECT_CONFIG_ANCHOR -->
 ### 7. Recovery and Output
 - If a tool fails, analyze why and change approach; do not blindly rerun it.
 - If the user interrupts or changes direction, stop immediately and adjust.

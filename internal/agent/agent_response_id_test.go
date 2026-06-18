@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -21,6 +22,45 @@ func newResponseContextSession(model, providerName, providerConfigKey, responseI
 	session.ResponseProviderName = providerName
 	session.ResponseProviderConfigKey = providerConfigKey
 	return session
+}
+
+type responsePromptRequestProbe struct {
+	responseID        string
+	contexts          []context.Context
+	responseIDsAtCall []string
+	systemPrompts     []string
+	histories         [][]api.Message
+}
+
+func (p *responsePromptRequestProbe) Name() string { return "openai" }
+
+func (p *responsePromptRequestProbe) SupportsImages() bool { return false }
+
+func (p *responsePromptRequestProbe) IsFunctionCallingEnabled() bool { return true }
+
+func (p *responsePromptRequestProbe) HasCachedResponseID() bool {
+	return p.responseID != ""
+}
+
+func (p *responsePromptRequestProbe) SetResponseID(id string) {
+	p.responseID = id
+}
+
+func (p *responsePromptRequestProbe) GetResponseID() string {
+	return p.responseID
+}
+
+func (p *responsePromptRequestProbe) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	p.contexts = append(p.contexts, ctx)
+	p.responseIDsAtCall = append(p.responseIDsAtCall, p.responseID)
+	p.systemPrompts = append(p.systemPrompts, systemPrompt)
+	p.histories = append(p.histories, append([]api.Message(nil), history...))
+	p.responseID = "resp_after_request"
+	return "done", nil
+}
+
+func (p *responsePromptRequestProbe) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
 func TestSyncSavedResponseContextFromProvider(t *testing.T) {
@@ -102,6 +142,154 @@ func TestSyncSavedResponseContextFromProvider(t *testing.T) {
 				agent.session.ResponseProviderName,
 				agent.session.ResponseProviderConfigKey,
 			)
+		}
+	})
+}
+
+func TestRecordResponseContextForPromptPersistsFingerprint(t *testing.T) {
+	provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "resp_live"}
+	agent := &Agent{
+		CurrentModel:      "gpt-5",
+		ProviderName:      "openai",
+		ProviderConfigKey: "openai",
+		CurrentProvider:   provider,
+		agentConversationState: agentConversationState{
+			session: history.NewSession("gpt-5"),
+		},
+	}
+
+	agent.recordResponseContextForPrompt("system prompt v1")
+	agent.syncSavedResponseContextFromProvider()
+
+	want := responsePromptFingerprintFor("system prompt v1")
+	if agent.session.ResponsePromptFingerprint != want {
+		t.Fatalf("session.ResponsePromptFingerprint = %q, want %q", agent.session.ResponsePromptFingerprint, want)
+	}
+}
+
+func TestPrepareResponseContextForPromptFingerprint(t *testing.T) {
+	t.Run("matching fingerprint keeps response chain", func(t *testing.T) {
+		provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "resp_saved"}
+		session := newResponseContextSession("gpt-5", "openai", "openai", "resp_saved")
+		session.ResponsePromptFingerprint = responsePromptFingerprintFor("system prompt v1")
+		agent := &Agent{
+			CurrentModel:      "gpt-5",
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentProvider:   provider,
+			agentConversationState: agentConversationState{
+				session:         session,
+				responseContext: responseContextSnapshotFromSession(session),
+			},
+		}
+
+		ctx := agent.prepareResponseContextForPrompt(context.Background(), "system prompt v1")
+
+		if api.ResponseIDChainDisabledFromContext(ctx) {
+			t.Fatal("response chain disabled for matching fingerprint")
+		}
+		if provider.GetResponseID() != "resp_saved" || agent.session.ResponseID != "resp_saved" {
+			t.Fatalf("response context cleared unexpectedly: provider=%q session=%q", provider.GetResponseID(), agent.session.ResponseID)
+		}
+	})
+
+	t.Run("changed fingerprint clears response chain", func(t *testing.T) {
+		provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "resp_saved"}
+		session := newResponseContextSession("gpt-5", "openai", "openai", "resp_saved")
+		session.ResponsePromptFingerprint = responsePromptFingerprintFor("system prompt v1")
+		agent := &Agent{
+			CurrentModel:      "gpt-5",
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentProvider:   provider,
+			agentConversationState: agentConversationState{
+				session:         session,
+				responseContext: responseContextSnapshotFromSession(session),
+			},
+		}
+
+		ctx := agent.prepareResponseContextForPrompt(context.Background(), "system prompt v2")
+
+		if !api.ResponseIDChainDisabledFromContext(ctx) {
+			t.Fatal("response chain disabled = false, want true for changed prompt fingerprint")
+		}
+		if provider.GetResponseID() != "" || agent.session.ResponseID != "" {
+			t.Fatalf("response context after changed prompt = provider:%q session:%q, want cleared", provider.GetResponseID(), agent.session.ResponseID)
+		}
+	})
+
+	t.Run("legacy empty fingerprint clears response chain", func(t *testing.T) {
+		provider := &mockResponseIDProvider{mockProvider: mockProvider{name: "openai"}, responseID: "resp_legacy"}
+		session := newResponseContextSession("gpt-5", "openai", "openai", "resp_legacy")
+		agent := &Agent{
+			CurrentModel:      "gpt-5",
+			ProviderName:      "openai",
+			ProviderConfigKey: "openai",
+			CurrentProvider:   provider,
+			agentConversationState: agentConversationState{
+				session:         session,
+				responseContext: responseContextSnapshotFromSession(session),
+			},
+		}
+
+		ctx := agent.prepareResponseContextForPrompt(context.Background(), "system prompt v1")
+
+		if !api.ResponseIDChainDisabledFromContext(ctx) {
+			t.Fatal("response chain disabled = false, want true for legacy empty fingerprint")
+		}
+		if provider.GetResponseID() != "" || agent.session.ResponseID != "" {
+			t.Fatalf("legacy response context = provider:%q session:%q, want cleared", provider.GetResponseID(), agent.session.ResponseID)
+		}
+	})
+}
+
+func TestNormalModeRequestResponsePromptFingerprintGate(t *testing.T) {
+	t.Run("matching effective prompt keeps response chain", func(t *testing.T) {
+		var out bytes.Buffer
+		provider := &responsePromptRequestProbe{responseID: "resp_saved"}
+		agent := newChatRequestTestAgent(t, provider, &out)
+		agent.cfg().Skills.Router.Activation = config.SkillsRouterActivationOff
+		task := "next request"
+
+		agent.recordResponseContextForPrompt(agent.normalModeSystemPromptForRequest(context.Background(), task, true))
+		agent.syncSavedResponseContextFromProvider()
+
+		if _, err := newTurnRunner(agent, context.Background()).requestNormalModeResponse(task, nil, 0); err != nil {
+			t.Fatalf("requestNormalModeResponse() error = %v", err)
+		}
+		if len(provider.contexts) != 1 {
+			t.Fatalf("provider call count = %d, want 1", len(provider.contexts))
+		}
+		if api.ResponseIDChainDisabledFromContext(provider.contexts[0]) {
+			t.Fatal("response chain disabled for matching effective prompt")
+		}
+		if provider.responseIDsAtCall[0] != "resp_saved" {
+			t.Fatalf("responseID at call = %q, want resp_saved", provider.responseIDsAtCall[0])
+		}
+	})
+
+	t.Run("changed effective prompt clears response chain before provider call", func(t *testing.T) {
+		var out bytes.Buffer
+		provider := &responsePromptRequestProbe{responseID: "resp_saved"}
+		agent := newChatRequestTestAgent(t, provider, &out)
+		agent.cfg().Skills.Router.Activation = config.SkillsRouterActivationOff
+		task := "next request"
+
+		agent.recordResponseContextForPrompt(agent.normalModeSystemPromptForRequest(context.Background(), task, true))
+		agent.syncSavedResponseContextFromProvider()
+		agent.SystemPrompt += "\nProject instruction changed."
+
+		if _, err := newTurnRunner(agent, context.Background()).requestNormalModeResponse(task, nil, 0); err != nil {
+			t.Fatalf("requestNormalModeResponse() error = %v", err)
+		}
+		if len(provider.contexts) != 1 {
+			t.Fatalf("provider call count = %d, want 1", len(provider.contexts))
+		}
+		if !api.ResponseIDChainDisabledFromContext(provider.contexts[0]) {
+			t.Fatal("response chain disabled = false, want true for changed effective prompt")
+		}
+		if provider.responseIDsAtCall[0] != "" {
+			t.Fatalf("responseID at call = %q, want cleared", provider.responseIDsAtCall[0])
 		}
 	})
 }

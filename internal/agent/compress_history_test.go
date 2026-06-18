@@ -20,7 +20,7 @@ func (m *capturingMockProvider) IsFunctionCallingEnabled() bool { return true }
 func (m *capturingMockProvider) ChatWithTools(ctx context.Context, _ string, history []api.Message, _ string) (string, error) {
 	m.capturedContext = ctx
 	m.capturedHistory = history
-	return "Summary of conversation", nil
+	return compressionSummaryResponseForHistory(history, "Summary of conversation"), nil
 }
 func (m *capturingMockProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, _ *api.ImageData, _ string) (string, error) {
 	return "", nil

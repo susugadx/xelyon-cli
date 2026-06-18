@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -59,8 +60,8 @@ func TestCompressHistory_PersistsCompressedHistoryBeforeClearingResponseContext(
 	if len(loadedMessages) != 2 {
 		t.Fatalf("len(loaded.ToAPIMessages()) = %d, want 2", len(loadedMessages))
 	}
-	if loadedMessages[0].Role != "system" || !strings.Contains(loadedMessages[0].Content, "persisted summary") {
-		t.Fatalf("loaded first message = %#v, want compressed summary", loadedMessages[0])
+	if loadedMessages[0].Role != "assistant" || !strings.Contains(loadedMessages[0].Content, "persisted summary") {
+		t.Fatalf("loaded first message = %#v, want assistant continuation data", loadedMessages[0])
 	}
 	if strings.Contains(loadedMessages[0].Content, "old full context") {
 		t.Fatalf("loaded summary contains original full context: %q", loadedMessages[0].Content)
@@ -117,6 +118,38 @@ func TestCompressHistory_PersistsSessionHistoryWithoutNormalModePrompt(t *testin
 	}
 	if loadedMessages[1].Content != rawLatest {
 		t.Fatalf("loaded latest message = %q, want %q", loadedMessages[1].Content, rawLatest)
+	}
+}
+
+func TestCompressHistory_PersistsCompressedHistoryUTF8(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provider := &compressionTestProvider{name: "openai", summary: strings.Repeat("要約", 120)}
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", config.DefaultConfig())
+	agent.History = []api.Message{
+		{Role: "user", Content: strings.Repeat("古い文脈", 120)},
+		{Role: "assistant", Content: "古い応答"},
+		{Role: "user", Content: "最新の質問"},
+	}
+	for _, msg := range agent.History {
+		agent.session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+	agent.persistSession()
+
+	if err := agent.CompressHistory(1); err != nil {
+		t.Fatalf("CompressHistory() error = %v", err)
+	}
+
+	loaded, err := agent.storage.Load(agent.session.ID)
+	if err != nil {
+		t.Fatalf("storage.Load() error = %v", err)
+	}
+	loadedMessages := loaded.ToAPIMessages()
+	if len(loadedMessages) == 0 {
+		t.Fatal("loaded messages empty, want compressed summary")
+	}
+	if !utf8.ValidString(loadedMessages[0].Content) {
+		t.Fatalf("loaded compressed summary is invalid UTF-8: %q", loadedMessages[0].Content)
 	}
 }
 
@@ -183,6 +216,39 @@ func TestCompressHistory_RestoresResponseContextOnSummaryError(t *testing.T) {
 	}
 	if agent.session.ResponseID != "resp_old" {
 		t.Fatalf("session.ResponseID = %q, want preserved resp_old", agent.session.ResponseID)
+	}
+}
+
+func TestCompressHistory_RestoresStateOnInvalidSummaryJSON(t *testing.T) {
+	provider := &compressionTestProvider{name: "openai", summary: `{bad json`}
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", config.DefaultConfig())
+	originalHistory := []api.Message{
+		{Role: "user", Content: "old"},
+		{Role: "assistant", Content: "older"},
+		{Role: "user", Content: "latest"},
+	}
+	agent.History = append([]api.Message(nil), originalHistory...)
+	for _, msg := range originalHistory {
+		agent.session.AddMessageFromAPI(msg, agent.CurrentModel)
+	}
+	setCompressionTestResponseContext(agent, provider, "resp_old")
+
+	if err := agent.CompressHistory(1); err == nil || !strings.Contains(err.Error(), "不正") {
+		t.Fatalf("CompressHistory() error = %v, want invalid summary JSON error", err)
+	}
+	if provider.GetResponseID() != "resp_old" {
+		t.Fatalf("provider response ID = %q, want restored resp_old", provider.GetResponseID())
+	}
+	if agent.session.ResponseID != "resp_old" {
+		t.Fatalf("session.ResponseID = %q, want preserved resp_old", agent.session.ResponseID)
+	}
+	if len(agent.History) != len(originalHistory) {
+		t.Fatalf("len(agent.History) = %d, want original %d", len(agent.History), len(originalHistory))
+	}
+	for i := range originalHistory {
+		if agent.History[i].Role != originalHistory[i].Role || agent.History[i].Content != originalHistory[i].Content {
+			t.Fatalf("agent.History[%d] = %#v, want %#v", i, agent.History[i], originalHistory[i])
+		}
 	}
 }
 
@@ -289,5 +355,8 @@ func assertCompressionTestResponseContextCleared(t *testing.T, agent *Agent, pro
 	}
 	if agent.session.ResponseProviderConfigKey != "" {
 		t.Fatalf("session.ResponseProviderConfigKey = %q, want empty", agent.session.ResponseProviderConfigKey)
+	}
+	if agent.session.ResponsePromptFingerprint != "" {
+		t.Fatalf("session.ResponsePromptFingerprint = %q, want empty", agent.session.ResponsePromptFingerprint)
 	}
 }
