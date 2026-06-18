@@ -1,10 +1,7 @@
 package search
 
 import (
-	"fmt"
 	"regexp"
-
-	"github.com/susugadx/xelyon-cli/internal/locator"
 )
 
 const (
@@ -15,39 +12,21 @@ const (
 
 // resolveElixirSymbol は Elixir 向けの enhanced symbol fast path。
 func resolveElixirSymbol(symbol string, opts SearchOptions) genericResolveResult {
-	defs := findGenericDefinitions(symbol, opts)
-	if len(defs) == 0 {
-		return genericResolveResult{Status: genericSymbolNone}
-	}
-	if len(defs) > 1 {
-		return genericResolveResult{Output: formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts), Status: genericSymbolMultiple}
-	}
+	return resolveGenericEnhancedSymbol(symbol, opts, genericEnhancedSymbolSpec{
+		language:      "elixir",
+		buildSections: buildElixirSymbolSections,
+	})
+}
 
-	def := defs[0]
-	refs := findGenericReferences(symbol, opts)
-	filteredRefs := filterGenericRefs(refs, def)
-
-	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
-		if ref.IsTest {
-			testRefs = append(testRefs, ref)
-		} else {
-			normalRefs = append(normalRefs, ref)
-		}
-	}
-
+func buildElixirSymbolSections(normalRefs []genericSymbolRef, testRefs []genericSymbolRef, symbol string) []symbolBundleSectionInput {
 	aliases, callers, behaviours, otherRefs := classifyElixirRefs(normalRefs, symbol)
-	bundle := buildGenericSymbolBundle("elixir", symbol, def, []string{
-		fmt.Sprintf("%d: %s", def.Line, def.Signature),
-	}, []symbolBundleSectionInput{
+	return []symbolBundleSectionInput{
 		{Kind: "aliases", Title: "Aliases/Imports", Items: aliases, Limit: exAliasLimit},
 		{Kind: "callers", Title: "Callers", Items: callers, Limit: exCallerLimit},
 		{Kind: "behaviours", Title: "Behaviours", Items: behaviours, Limit: exBehaviourLimit},
 		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
-	})
-	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatElixirSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	}
 }
 
 // classifyElixirRefs は Elixir の参照を分類する。
@@ -71,9 +50,4 @@ func classifyElixirRefs(refs []genericSymbolRef, symbol string) (aliases, caller
 		}
 	}
 	return
-}
-
-// formatElixirSymbolResult は Elixir の分類済みシンボル結果をフォーマットする。
-func formatElixirSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
-	return formatSymbolBundle(bundle, reg, nil)
 }

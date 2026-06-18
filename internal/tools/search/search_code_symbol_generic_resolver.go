@@ -1,39 +1,18 @@
 package search
 
+type genericLanguageResolveFunc func(symbol string, opts SearchOptions) genericResolveResult
+
+type genericLanguageResolverSpec struct {
+	language string
+	resolve  genericLanguageResolveFunc
+}
+
 type genericLanguageResolver struct {
-	lang string
+	spec genericLanguageResolverSpec
 }
 
 func (r genericLanguageResolver) Resolve(symbol string, opts SearchOptions) symbolResolveResult {
-	var result genericResolveResult
-	switch r.lang {
-	case "js":
-		result = resolveJSFamilySymbol(symbol, opts)
-	case "python":
-		result = resolvePythonSymbol(symbol, opts)
-	case "rust":
-		result = resolveRustSymbol(symbol, opts)
-	case "java":
-		result = resolveJavaSymbol(symbol, opts)
-	case "csharp":
-		result = resolveCSharpSymbol(symbol, opts)
-	case "php":
-		result = resolvePHPSymbol(symbol, opts)
-	case "ruby":
-		result = resolveRubySymbol(symbol, opts)
-	case "swift":
-		result = resolveSwiftSymbol(symbol, opts)
-	case "scala":
-		result = resolveScalaSymbol(symbol, opts)
-	case "elixir":
-		result = resolveElixirSymbol(symbol, opts)
-	case "lua":
-		result = resolveLuaSymbol(symbol, opts)
-	case "cpp":
-		result = resolveCppSymbol(symbol, opts)
-	default:
-		result = resolveGenericSymbol(symbol, opts)
-	}
+	result := r.resolve(symbol, opts)
 
 	switch result.Status {
 	case genericSymbolSingle:
@@ -43,4 +22,11 @@ func (r genericLanguageResolver) Resolve(symbol string, opts SearchOptions) symb
 	default:
 		return symbolResolveResult{Status: symbolResolveNone}
 	}
+}
+
+func (r genericLanguageResolver) resolve(symbol string, opts SearchOptions) genericResolveResult {
+	if r.spec.resolve != nil {
+		return r.spec.resolve(symbol, opts)
+	}
+	return resolveGenericSymbol(symbol, opts)
 }

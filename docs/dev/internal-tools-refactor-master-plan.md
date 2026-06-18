@@ -409,14 +409,34 @@ make ci-check
   - `go test ./internal/tools/file/mutation ./internal/tools/file/...` を通過済み。
   - `go test ./internal/tools/...` を通過済み。
   - `go test ./internal/agent ./internal/toolruntime ./internal/taskstate ./internal/mcptool ./internal/reviewadapter` を通過済み。
-  - `go test ./internal/api/providers/...` を通過済み。
+ - `go test ./internal/api/providers/...` を通過済み。
   - `git diff --check` を通過済み。
   - `make ci-check` を通過済み。coverage は 83.2%。
+
+2026-06-18 search language-prep tranche:
+
+- Phase 0 source map refresh:
+  - `internal/tools/search` は tool schema / `SearchOptions` / artifact / `SymbolBundle` を変えず、言語追加前に private owner を整理する方針で確認した。
+  - `internal/tools/gathercontext` は production prefetch owner が既に policy / locator / read / observation / note に分かれていたため、今回 production logic は触らず test boundary を整理対象にした。
+  - `internal/filefilter` は search option tests から参照されていたが、file type/glob/path-basis contract の owner は `internal/filefilter` なので test 配置を戻す対象にした。
+- Phase 1 test boundary refactor:
+  - `search_code_options_test.go` から `filefilter` の純粋 contract tests を `internal/filefilter/filter_test.go` へ移し、search 側には `ExecuteSearchCode` / config ignore / `resolveSearchPathBasisForOptions` wrapper の挙動テストを残した。
+  - `gathercontext/prefetch_test.go` を削除し、prefetch read execution、diagnostics policy、observation merge、shared assertion helper を `prefetch_read_test.go`、`prefetch_policy_test.go`、`prefetch_observation_test.go`、`prefetch_test_helpers_test.go` に分割した。
+- Phase 2 production preparatory refactor:
+  - `resolverForLanguage` と `genericLanguageResolver.Resolve` の二重 switch をやめ、private `symbolResolverRegistry` / `genericLanguageResolverSpec` を dispatch source of truth にした。
+  - Go は `goSymbolResolver`、JS family は既存 `resolveJSFamilySymbol` の専用 resolver を維持し、Python / Rust / Java / C# / PHP / Ruby / Swift / Scala / Elixir / Lua / C++ / empty fallback は registry spec で固定した。
+  - Python / Rust / Java / C# / PHP / Ruby / Swift / Scala / Elixir / Lua / C++ の generic enhanced resolver flow を `resolveGenericEnhancedSymbol` に寄せ、言語別 file は section builder と classifier を owner にした。section 名、limit、判定順、output format は変えていない。
+  - Go structured impact は `impact_go.go` を resolve / inspect / plan orchestration に寄せ、Go impact metadata を `impact_go_metadata.go`、RecommendedReads item builder を `impact_go_recommended_reads.go`、bundle impact clone を `symbol_bundle_clone.go` に分けた。
+- Phase 3 package boundary map:
+  - 今回の整理は same-package private helper / file split で閉じた。`search` subpackage split は `SearchOptions`、`SymbolBundle`、navigation result、route/cache owner の export 増加が大きいため行っていない。
+  - `gathercontext` production owner は既存 split を維持し、test split のみに留めた。
+- Verification so far:
+  - `go test ./internal/filefilter ./internal/tools/search ./internal/tools/gathercontext ./internal/tools` を通過済み。
 
 残 scope:
 
 - Phase 4 は read request / locator access、direct route、mutation gate、locator test boundary、read/list/direct/mutation/schema/path policy の package boundary を整理済み。`list_dir` の further split は naming drift や次の list-specific finding が出た場合に限定する。
-- Phase 5 は web search owner、symbol resolver owner、structured impact production owner、gather_context 側の search route integration test boundary を整理済み。残る追加候補は `search_code_options_test.go` の option / path-basis / ignore-policy split と、`impact_go.go` の metadata / read-item builder split。どちらも今回の changed owner graph 外なので別 tranche 候補とする。
+- Phase 5 は web search owner、symbol resolver owner、generic language resolver owner、structured impact production owner、gather_context 側の search route integration test boundary を整理済み。残る追加候補は、次に言語追加や structured impact policy を変える時に package split / public surface を再評価すること。
 - Phase 6 は request pattern owner、prefetch policy / read / merge owner、direct / search orchestration owner、search integration test boundary を整理済み。残る追加候補は caller-visible observation merge contract の追加 regression を、次に observation semantics を変える場合に置くこと。
 - Root は execution core / publish-display / preview owner を整理済み。残る追加候補は `execute_cache_invalidation.go` を mutation `FileChange.Details` contract と一緒に扱う必要が出た場合に限る。
 - Subagent は manager test boundary と `manager.go` / `spawn_runtime.go` production owner split を整理済み。残る追加候補は `register.go` の tool parameter / execution adapter 境界を、schema owner と runtime adapter owner に分ける必要が出た場合に限る。

@@ -1,10 +1,7 @@
 package search
 
 import (
-	"fmt"
 	"regexp"
-
-	"github.com/susugadx/xelyon-cli/internal/locator"
 )
 
 const (
@@ -17,40 +14,22 @@ const (
 // resolveCSharpSymbol は C# 向けの enhanced symbol fast path。
 // 参照を using / caller / attribute / inheritance / other に分類する。
 func resolveCSharpSymbol(symbol string, opts SearchOptions) genericResolveResult {
-	defs := findGenericDefinitions(symbol, opts)
-	if len(defs) == 0 {
-		return genericResolveResult{Status: genericSymbolNone}
-	}
-	if len(defs) > 1 {
-		return genericResolveResult{Output: formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts), Status: genericSymbolMultiple}
-	}
+	return resolveGenericEnhancedSymbol(symbol, opts, genericEnhancedSymbolSpec{
+		language:      "csharp",
+		buildSections: buildCSharpSymbolSections,
+	})
+}
 
-	def := defs[0]
-	refs := findGenericReferences(symbol, opts)
-	filteredRefs := filterGenericRefs(refs, def)
-
-	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
-		if ref.IsTest {
-			testRefs = append(testRefs, ref)
-		} else {
-			normalRefs = append(normalRefs, ref)
-		}
-	}
-
+func buildCSharpSymbolSections(normalRefs []genericSymbolRef, testRefs []genericSymbolRef, symbol string) []symbolBundleSectionInput {
 	usings, callers, attributes, inheritance, otherRefs := classifyCSharpRefs(normalRefs, symbol)
-	bundle := buildGenericSymbolBundle("csharp", symbol, def, []string{
-		fmt.Sprintf("%d: %s", def.Line, def.Signature),
-	}, []symbolBundleSectionInput{
+	return []symbolBundleSectionInput{
 		{Kind: "usings", Title: "Usings", Items: usings, Limit: csUsingLimit},
 		{Kind: "callers", Title: "Callers", Items: callers, Limit: csCallerLimit},
 		{Kind: "attributes", Title: "Attributes", Items: attributes, Limit: csAttributeLimit},
 		{Kind: "inheritance", Title: "Inheritance", Items: inheritance, Limit: csInheritanceLimit},
 		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
-	})
-	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatCSharpSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	}
 }
 
 // classifyCSharpRefs は C# の参照を分類する。
@@ -78,9 +57,4 @@ func classifyCSharpRefs(refs []genericSymbolRef, symbol string) (usings, callers
 		}
 	}
 	return
-}
-
-// formatCSharpSymbolResult は C# の分類済みシンボル結果をフォーマットする。
-func formatCSharpSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
-	return formatSymbolBundle(bundle, reg, nil)
 }
