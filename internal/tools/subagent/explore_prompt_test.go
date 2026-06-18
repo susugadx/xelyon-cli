@@ -53,3 +53,18 @@ func TestExplorePromptForEditTool_LegacyKeepsLowLevelOverrides(t *testing.T) {
 		t.Fatal("legacy explore prompt should expose read_file guidance")
 	}
 }
+
+func TestExplorePrompt_AllowsBoundedAnalysisAndIndependentReview(t *testing.T) {
+	for _, want := range []string{
+		"Stay within the assigned scope",
+		"bounded analysis, independent review, and evidence-backed recommendations",
+		"callers, risks, contradictions, and uncertainty",
+	} {
+		if !strings.Contains(ExplorePrompt, want) {
+			t.Fatalf("ExplorePrompt should allow bounded analysis/review guidance %q", want)
+		}
+	}
+	if strings.Contains(ExplorePrompt, "Report only what was asked") {
+		t.Fatal("ExplorePrompt should not reduce explore sub-agents to fetch-only reporting")
+	}
+}

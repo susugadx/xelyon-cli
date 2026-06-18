@@ -212,28 +212,30 @@ Rules:
 func buildSystemPromptSuffix(surface investigation.Surface) string {
 	return `### 3A. Sub-agent Delegation
 #### When to use sub-agents
-- Prefer single-agent execution by default. Use sub-agents only when they clearly reduce turns by parallelizing fetch-heavy investigation.
+- Prefer single-agent execution by default. Use sub-agents only when they clearly reduce turns, isolate bounded analysis, or provide an independent check.
 - Skip sub-agents for simple tasks where you can read, edit, and verify directly.
-- Sub-agents are fetch tools, not decision-makers. Tell them WHAT to read and WHAT to report — never ask them to analyze or suggest.
+- Sub-agents may analyze and recommend within the assigned scope. The parent owns integration, tradeoff judgment, and final decisions.
 #### Sub-agent rules
-- task_type: explore (read-only data fetch), edit (execute YOUR pre-designed changes), verify (run build/test/lint).
+- task_type: explore (read-only investigation/analysis), edit (execute YOUR pre-designed changes), verify (run build/test/lint).
 - Sub-agents run in isolated context. Only their final report is returned to you.
-- Call ALL spawn_agent invocations in a SINGLE response as parallel tool calls. Do NOT spawn one agent per turn.
-- Use wait_agent to collect results before synthesizing your response.
+- Assume sub_agent.max_concurrent is 1 unless visible config or the user explicitly gives higher capacity.
+- When capacity is unknown or 1, spawn one agent, then wait_agent for that agent before spawning the next.
+- Call multiple spawn_agent invocations in one response only when tasks are independent and capacity greater than 1 is explicitly known.
+- Use wait_agent to collect results before synthesizing your response or launching dependent follow-up work.
 - ` + strings.TrimPrefix(promptfragments.DelegatedInvestigationWaitLine(surface), "- ") + `
 - Fall back to direct tool use ONLY when ALL sub-agents fail or their reports are clearly insufficient.
 #### Staged Delegation Protocol
 For tasks requiring sub-agents:
-1. **Fetch**: spawn(explore) with EXACT instructions — file paths, line ranges, search patterns, and what to report back.
-   Do: "gather_context(query=\"X.go:100-150\"), gather_context(query=\"FuncA\") and report callers with file:line"
-   Don't: "investigate how FuncA works and suggest improvements"
-2. **Design**: YOU design changes from fetch results. This is your core value — do not delegate design decisions.
+1. **Explore**: spawn(explore) with bounded instructions — file paths, line ranges, search patterns, risks/contradictions to check, and what recommendation would be useful.
+   Do: "gather_context(query=\"X.go:100-150\"), gather_context(query=\"FuncA\") and report callers, risks, contradictions, uncertainty, and a bounded recommendation with file:line evidence"
+   Don't: "make the final design decision for FuncA"
+2. **Design**: YOU design changes from the explored evidence and recommendations. This is your core value — do not delegate final design decisions.
 3. **Execute**: spawn(edit) with COMPLETE change spec — exact file, location, and code.
    Do: "apply_patch to X.go: after line 120, insert case branch for Y with values A, B, C"
    Don't: "add support for Y in X.go"
-4. **Verify + Review**: spawn(verify) + spawn(explore) in parallel. Verify runs build/test, explore reads modified files.
+4. **Verify + Review**: run verify and independent review. Use parallel spawn only when capacity greater than 1 is explicitly known; otherwise run them sequentially.
 5. **Judge**: Compare results against your design. Repeat from 3 if wrong.
-- NEVER skip step 1 (fetch) and go straight to step 3 (execute). Editing without fetching wastes money and risks incorrect changes.
+- NEVER skip step 1 (explore) and go straight to step 3 (execute). Editing without prior investigation wastes money and risks incorrect changes.
 - NEVER skip review in step 4. Do not blindly relay sub-agent reports without verifying via explore.
 ### 4. Efficient Execution
 - Do not upgrade from targeted read to full-file read unless it is necessary for the next edit or verification step.

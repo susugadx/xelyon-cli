@@ -51,3 +51,15 @@ func TestPromptForTaskType_EditUsesProviderResolvedMode(t *testing.T) {
 		t.Fatal("kimi edit prompt should mention str_replace")
 	}
 }
+
+func TestVerifyPrompt_RemainsReadOnlyVerificationOnly(t *testing.T) {
+	for _, want := range []string{
+		"Execute the verification command(s) described in the task message",
+		"Do NOT modify any files",
+		"Do not attempt to fix failures",
+	} {
+		if !strings.Contains(VerifyPrompt, want) {
+			t.Fatalf("VerifyPrompt should keep verification-only restriction %q", want)
+		}
+	}
+}

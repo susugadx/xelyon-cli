@@ -70,16 +70,30 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 	for _, want := range []string{
 		"Independent operations -> call multiple tools in one response",
 		"For shared changes, gather the target code and its callers/tests in parallel when independent",
-		"Sub-agents are fetch tools, not decision-makers",
+		"Sub-agents may analyze and recommend within the assigned scope",
+		"The parent owns integration, tradeoff judgment, and final decisions",
+		"Assume sub_agent.max_concurrent is 1 unless visible config or the user explicitly gives higher capacity",
+		"When capacity is unknown or 1, spawn one agent, then wait_agent for that agent before spawning the next",
+		"Call multiple spawn_agent invocations in one response only when tasks are independent and capacity greater than 1 is explicitly known",
 		"Use wait_agent to collect results before synthesizing your response",
 		"do NOT repeat the same investigation yourself with gather_context/read_file",
 		"Fall back to direct tool use ONLY when ALL sub-agents fail",
-		"SINGLE response as parallel tool calls",
 		"Skip sub-agents for simple tasks",
-		"Fetch",
+		"Explore",
 	} {
 		if !strings.Contains(SystemPrompt, want) {
 			t.Errorf("SystemPrompt missing consolidated parallel guidance %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"Sub-agents are fetch tools, not decision-makers",
+		"never ask them to analyze or suggest",
+		"Call ALL spawn_agent invocations in a SINGLE response",
+		"Do NOT spawn one agent per turn",
+		"SINGLE response as parallel tool calls",
+	} {
+		if strings.Contains(SystemPrompt, forbidden) {
+			t.Errorf("SystemPrompt should not keep obsolete sub-agent guidance %q", forbidden)
 		}
 	}
 }

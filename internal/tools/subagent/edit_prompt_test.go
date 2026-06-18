@@ -53,3 +53,15 @@ func TestEditPromptForEditTool_Legacy(t *testing.T) {
 		t.Error("legacy mode should keep low-level investigation override guidance")
 	}
 }
+
+func TestEditPrompt_StillRestrictsEditsToParentScope(t *testing.T) {
+	for _, want := range []string{
+		"Make ONLY the changes explicitly requested",
+		"Do not touch files not mentioned in the task",
+		"If the orchestrator already specified the impact surface or target files, do not re-investigate broadly",
+	} {
+		if !strings.Contains(editPromptBase, want) {
+			t.Fatalf("editPromptBase should keep parent-scope restriction %q", want)
+		}
+	}
+}
