@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 )
 
 const mcpStatusSampleLimit = 10
@@ -58,9 +58,9 @@ func mcpStatusSnapshot(agent *Agent) mcp.StatusSnapshot {
 	return agent.mcpManager.StatusSnapshot()
 }
 
-func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection, analysis mcpsurface.Report) *ui.Table {
+func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection, analysis mcpsurface.Report) *termtext.Table {
 	budget := defaultMCPToolSurfaceBudget()
-	return ui.NewTable().
+	return termtext.NewTable().
 		AddRow("Runtime", mcpRuntimeStatusText(agent)).
 		AddRow("Config", mcpStatusConfigText(snapshot)).
 		AddRow("Servers", fmt.Sprintf(
@@ -101,7 +101,7 @@ func printMCPStatusServerTable(out io.Writer, snapshot mcp.StatusSnapshot, surfa
 
 	visibleByServer, omittedByServer := mcpStatusSurfaceCounts(surface)
 	surfaceByServer := mcpStatusServerSurfaceByName(analysis)
-	table := ui.NewTable().SetHeaders("Server", "State", "Tools", "Tokens", "Schema", "Omitted reasons", "Approval", "Timeouts", "Last healthy")
+	table := termtext.NewTable().SetHeaders("Server", "State", "Tools", "Tokens", "Schema", "Omitted reasons", "Approval", "Timeouts", "Last healthy")
 	for _, server := range snapshot.Servers {
 		serverSurface := surfaceByServer[server.Name]
 		table.AddRow(

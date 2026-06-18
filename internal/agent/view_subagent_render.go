@@ -5,8 +5,8 @@ import (
 	"io"
 
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func renderSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
@@ -17,7 +17,7 @@ func renderSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "🤖 Sub-agents")
 
-	table := ui.NewTable().SetHeaders("ID", "Model", "Status", "Input", "Cached", "Output", "Thinking", "Cost", "Tools", "Error")
+	table := termtext.NewTable().SetHeaders("ID", "Model", "Status", "Input", "Cached", "Output", "Thinking", "Cost", "Tools", "Error")
 	for _, agentStats := range summary.Agents {
 		pending := agentStats.Status == "running"
 		model := agentStats.Model
@@ -73,7 +73,7 @@ func renderSubAgentStats(out io.Writer, summary subagent.SubAgentSummary) {
 				continue
 			}
 			_, _ = fmt.Fprintf(out, "  %s (%s):\n", agentStats.ID, agentStats.Model)
-			bdTable := ui.NewTable().SetHeaders("Tool", "✓", "✗", "Total")
+			bdTable := termtext.NewTable().SetHeaders("Tool", "✓", "✗", "Total")
 			for _, entry := range agentStats.ToolBreakdown {
 				total := entry.Success + entry.Failures
 				failStr := fmt.Sprintf("%d", entry.Failures)

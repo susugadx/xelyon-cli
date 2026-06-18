@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
 )
 
 const (
@@ -49,19 +49,19 @@ func showStrReplaceDiffPreview(ctx fileMutationContext, preview strReplaceDiffPr
 
 	w := ctx.out.StdoutWriter()
 	ctx.out.Println()
-	ui.FileOpHeader(w, "str_replace", preview.targetPath)
-	ui.FileOpStatsLine(w, preview.removedLines, preview.addedLines)
+	uifileview.FileOpHeader(w, "str_replace", preview.targetPath)
+	uifileview.FileOpStatsLine(w, preview.removedLines, preview.addedLines)
 
 	if strings.TrimSpace(preview.largeChangeWarning) != "" {
 		ctx.out.Yellow.Println(preview.largeChangeWarning)
 	}
 
-	opts := &ui.DiffOptions{
+	opts := &uifileview.DiffOptions{
 		ContextLines:  ctx.cfg.Diff.ContextLines,
 		ShowLineNums:  true,
 		InlineMode:    true,
 		MaxTotalLines: ctx.cfg.Diff.MaxTotalLines,
 		LineNumOffset: preview.lineNumOffset,
 	}
-	ui.ShowColoredDiffToWriter(ctx.out.StdoutWriter(), preview.before, preview.after, opts)
+	uifileview.ShowColoredDiffToWriter(ctx.out.StdoutWriter(), preview.before, preview.after, opts)
 }

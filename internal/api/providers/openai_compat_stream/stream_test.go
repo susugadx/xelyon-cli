@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestParseSSEDataLine(t *testing.T) {
@@ -240,7 +240,7 @@ func TestParseSSEStream_DefaultFlow(t *testing.T) {
 		}, "\n"))),
 	}
 
-	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
+	got, err := ParseSSEStream(context.Background(), resp, uiruntime.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
 	if err != nil {
 		t.Fatalf("ParseSSEStream() error = %v", err)
 	}
@@ -264,7 +264,7 @@ func TestParseSSEStream_UsesChoiceLevelUsage(t *testing.T) {
 		}, "\n"))),
 	}
 
-	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
+	got, err := ParseSSEStream(context.Background(), resp, uiruntime.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
 	if err != nil {
 		t.Fatalf("ParseSSEStream() error = %v", err)
 	}
@@ -281,7 +281,7 @@ func TestParseSSEStream_PrefersTopLevelUsage(t *testing.T) {
 		}, "\n"))),
 	}
 
-	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
+	got, err := ParseSSEStream(context.Background(), resp, uiruntime.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{})
 	if err != nil {
 		t.Fatalf("ParseSSEStream() error = %v", err)
 	}
@@ -301,7 +301,7 @@ func TestParseSSEStream_AccumulatesReasoningContentAndCallbacks(t *testing.T) {
 	}
 
 	var events []string
-	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
+	got, err := ParseSSEStream(context.Background(), resp, uiruntime.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
 		OnReasoningContent: func(content string, first bool) {
 			if first {
 				events = append(events, "first:"+content)
@@ -338,7 +338,7 @@ func TestParseSSEStream_ErrorCallbacksCanContinue(t *testing.T) {
 		}, "\n"))),
 	}
 
-	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
+	got, err := ParseSSEStream(context.Background(), resp, uiruntime.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
 		OnChunkDecodeError: func(error) error { return nil },
 		UsageDecoder: func(json.RawMessage) (*api.Usage, error) {
 			return nil, nil
@@ -360,7 +360,7 @@ func TestParseSSEStream_UsesCustomUsageDecoder(t *testing.T) {
 		}, "\n"))),
 	}
 
-	got, err := ParseSSEStream(context.Background(), resp, ui.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
+	got, err := ParseSSEStream(context.Background(), resp, uiruntime.NewSpinnerWithWriter(io.Discard), ParseSSEOptions{
 		UsageDecoder: func(raw json.RawMessage) (*api.Usage, error) {
 			var payload struct {
 				Input     int `json:"input"`

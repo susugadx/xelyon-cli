@@ -2,8 +2,9 @@ package tui
 
 import (
 	"fmt"
-	termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"strings"
+
+	termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
 
 func (m *Model) copyCursorLine() {

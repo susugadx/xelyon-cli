@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const normalModeDirectExecutionPromptFragment = "Do NOT output JSON directly"
@@ -220,7 +220,7 @@ func TestNormalMode_TextPlanHardFallback_DoesNotDuplicateAssistantHistory(t *tes
 		CurrentProvider: provider,
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &strings.Builder{}, &strings.Builder{}),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &strings.Builder{}, &strings.Builder{}),
 		},
 		History: []api.Message{},
 	}

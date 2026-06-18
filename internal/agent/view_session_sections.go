@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func renderSessionSections(agent *Agent) {
@@ -31,7 +31,7 @@ func renderSessionSections(agent *Agent) {
 	_, _ = fmt.Fprintln(out)
 	green.Fprintln(out, "🔧 Tool Executions")
 	if stats.TotalToolExecutions() > 0 {
-		toolTable := ui.NewTable()
+		toolTable := termtext.NewTable()
 		for tool, count := range stats.ToolExecutions {
 			toolTable.AddRow(tool, strconv.Itoa(count))
 		}
@@ -60,7 +60,7 @@ func renderSessionSections(agent *Agent) {
 	green.Fprintln(out, "⚡ Optimizations")
 	opt := stats.Optimizations
 	if opt.hasAny() {
-		optTable := ui.NewTable()
+		optTable := termtext.NewTable()
 		if opt.NegativeCacheHits > 0 {
 			optTable.AddRow("Negative cache", fmt.Sprintf("%d hits", opt.NegativeCacheHits))
 		}

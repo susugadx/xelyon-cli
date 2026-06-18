@@ -15,7 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func (r *SubscriptionDiagnosticReport) runSubscriptionSmokeIfReady(ctx context.Context, cfg *config.Config, options SubscriptionDiagnosticOptions) {
@@ -314,7 +314,7 @@ func newSubscriptionDiagnosticSmokeRequestContext(ctx context.Context, cfg *conf
 	if output == nil {
 		output = io.Discard
 	}
-	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
+	requestCtx := uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), output, output))
 	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
 	if request.ToolPayload {
 		requestCtx = api.WithToolDefinitions(requestCtx, providerdiag.NoopDiagnosticToolDefinitions(subscriptionDiagnosticSmokeToolName, subscriptionDisplayName))

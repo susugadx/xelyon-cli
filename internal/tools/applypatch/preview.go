@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
 )
 
 type patchPreviewBuilder struct {
@@ -15,21 +15,21 @@ type patchPreviewBuilder struct {
 type updatePreviewState struct {
 	hunk          Hunk
 	originalLines []string
-	preview       ui.PatchFilePreview
+	preview       uifileview.PatchFilePreview
 	lineIndex     int
 	lineDelta     int
 	prevChunkEnd  int
 }
 
 // BuildPatchPreview は apply_patch テキストから行番号付きプレビュー情報を構築する。
-func BuildPatchPreview(patchText string, readFile func(path string) ([]byte, error)) ([]ui.PatchFilePreview, error) {
+func BuildPatchPreview(patchText string, readFile func(path string) ([]byte, error)) ([]uifileview.PatchFilePreview, error) {
 	parsed, err := ParsePatch(patchText)
 	if err != nil {
 		return nil, err
 	}
 
 	builder := patchPreviewBuilder{readFile: readFile}
-	previews := make([]ui.PatchFilePreview, 0, len(parsed.Hunks))
+	previews := make([]uifileview.PatchFilePreview, 0, len(parsed.Hunks))
 	for _, hunk := range parsed.Hunks {
 		preview, err := builder.buildHunkPreview(hunk)
 		if err != nil {
@@ -41,7 +41,7 @@ func BuildPatchPreview(patchText string, readFile func(path string) ([]byte, err
 	return previews, nil
 }
 
-func (b patchPreviewBuilder) buildHunkPreview(hunk Hunk) (ui.PatchFilePreview, error) {
+func (b patchPreviewBuilder) buildHunkPreview(hunk Hunk) (uifileview.PatchFilePreview, error) {
 	switch hunk.Type {
 	case "add":
 		return buildAddFilePreview(hunk), nil
@@ -50,28 +50,28 @@ func (b patchPreviewBuilder) buildHunkPreview(hunk Hunk) (ui.PatchFilePreview, e
 	case "update":
 		return buildUpdateFilePreview(hunk, b.readFile)
 	default:
-		return ui.PatchFilePreview{}, fmt.Errorf("unsupported hunk type: %s", hunk.Type)
+		return uifileview.PatchFilePreview{}, fmt.Errorf("unsupported hunk type: %s", hunk.Type)
 	}
 }
 
-func buildAddFilePreview(hunk Hunk) ui.PatchFilePreview {
+func buildAddFilePreview(hunk Hunk) uifileview.PatchFilePreview {
 	lines := splitPreviewContentLines(hunk.Contents)
 
-	return ui.PatchFilePreview{
+	return uifileview.PatchFilePreview{
 		Path:   hunk.Path,
 		Action: hunk.Type,
 		Added:  len(lines),
-		Hunks: []ui.PatchHunkPreview{{
+		Hunks: []uifileview.PatchHunkPreview{{
 			StartLine: 1,
 			Lines:     buildAddPreviewLines(lines),
 		}},
 	}
 }
 
-func buildAddPreviewLines(lines []string) []ui.PatchPreviewLine {
-	previewLines := make([]ui.PatchPreviewLine, 0, len(lines))
+func buildAddPreviewLines(lines []string) []uifileview.PatchPreviewLine {
+	previewLines := make([]uifileview.PatchPreviewLine, 0, len(lines))
 	for i, line := range lines {
-		previewLines = append(previewLines, ui.PatchPreviewLine{
+		previewLines = append(previewLines, uifileview.PatchPreviewLine{
 			Type:    '+',
 			LineNum: i + 1,
 			Text:    line,
@@ -80,8 +80,8 @@ func buildAddPreviewLines(lines []string) []ui.PatchPreviewLine {
 	return previewLines
 }
 
-func buildDeleteFilePreview(hunk Hunk, readFile func(path string) ([]byte, error)) ui.PatchFilePreview {
-	preview := ui.PatchFilePreview{Path: hunk.Path, Action: hunk.Type}
+func buildDeleteFilePreview(hunk Hunk, readFile func(path string) ([]byte, error)) uifileview.PatchFilePreview {
+	preview := uifileview.PatchFilePreview{Path: hunk.Path, Action: hunk.Type}
 	contents, ok := readPreviewFile(hunk.Path, readFile)
 	if !ok {
 		return preview
@@ -107,10 +107,10 @@ func readPreviewFile(path string, readFile func(path string) ([]byte, error)) ([
 	return contents, true
 }
 
-func buildUpdateFilePreview(hunk Hunk, readFile func(path string) ([]byte, error)) (ui.PatchFilePreview, error) {
+func buildUpdateFilePreview(hunk Hunk, readFile func(path string) ([]byte, error)) (uifileview.PatchFilePreview, error) {
 	originalLines, err := readUpdatePreviewSourceLines(hunk.Path, readFile)
 	if err != nil {
-		return ui.PatchFilePreview{}, err
+		return uifileview.PatchFilePreview{}, err
 	}
 	state := newUpdatePreviewState(hunk, originalLines)
 	return state.build()
@@ -135,19 +135,19 @@ func newUpdatePreviewState(hunk Hunk, originalLines []string) *updatePreviewStat
 	return &updatePreviewState{
 		hunk:          hunk,
 		originalLines: originalLines,
-		preview: ui.PatchFilePreview{
+		preview: uifileview.PatchFilePreview{
 			Path:     hunk.Path,
 			Action:   hunk.Type,
 			MovePath: hunk.MovePath,
-			Hunks:    make([]ui.PatchHunkPreview, 0, len(hunk.Chunks)),
+			Hunks:    make([]uifileview.PatchHunkPreview, 0, len(hunk.Chunks)),
 		},
 	}
 }
 
-func (s *updatePreviewState) build() (ui.PatchFilePreview, error) {
+func (s *updatePreviewState) build() (uifileview.PatchFilePreview, error) {
 	for _, chunk := range s.hunk.Chunks {
 		if err := s.appendChunk(chunk); err != nil {
-			return ui.PatchFilePreview{}, err
+			return uifileview.PatchFilePreview{}, err
 		}
 	}
 	return s.preview, nil
@@ -172,8 +172,8 @@ func (s *updatePreviewState) appendChunk(chunk UpdateFileChunk) error {
 	return nil
 }
 
-func buildChunkPreview(startIdx, lineDelta int, lines []patchLine) ui.PatchHunkPreview {
-	previewLines := make([]ui.PatchPreviewLine, 0, len(lines))
+func buildChunkPreview(startIdx, lineDelta int, lines []patchLine) uifileview.PatchHunkPreview {
+	previewLines := make([]uifileview.PatchPreviewLine, 0, len(lines))
 	oldLine := startIdx + 1
 	newLine := startIdx + 1 + lineDelta
 
@@ -184,28 +184,28 @@ func buildChunkPreview(startIdx, lineDelta int, lines []patchLine) ui.PatchHunkP
 		newLine = nextNew
 	}
 
-	return ui.PatchHunkPreview{
+	return uifileview.PatchHunkPreview{
 		StartLine: resolveChunkStartLine(startIdx, lineDelta, previewLines),
 		Lines:     previewLines,
 	}
 }
 
-func toPreviewLine(line patchLine, oldLine int, newLine int) (ui.PatchPreviewLine, int, int) {
+func toPreviewLine(line patchLine, oldLine int, newLine int) (uifileview.PatchPreviewLine, int, int) {
 	switch line.Type {
 	case '-':
-		return ui.PatchPreviewLine{
+		return uifileview.PatchPreviewLine{
 			Type:    '-',
 			LineNum: oldLine,
 			Text:    line.Text,
 		}, oldLine + 1, newLine
 	case '+':
-		return ui.PatchPreviewLine{
+		return uifileview.PatchPreviewLine{
 			Type:    '+',
 			LineNum: newLine,
 			Text:    line.Text,
 		}, oldLine, newLine + 1
 	default:
-		return ui.PatchPreviewLine{
+		return uifileview.PatchPreviewLine{
 			Type:    ' ',
 			LineNum: newLine,
 			Text:    line.Text,
@@ -213,7 +213,7 @@ func toPreviewLine(line patchLine, oldLine int, newLine int) (ui.PatchPreviewLin
 	}
 }
 
-func resolveChunkStartLine(startIdx int, lineDelta int, previewLines []ui.PatchPreviewLine) int {
+func resolveChunkStartLine(startIdx int, lineDelta int, previewLines []uifileview.PatchPreviewLine) int {
 	if len(previewLines) > 0 {
 		return previewLines[0].LineNum
 	}

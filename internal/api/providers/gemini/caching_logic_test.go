@@ -15,7 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/token"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestEstimateTokens(t *testing.T) {
@@ -289,7 +289,7 @@ func TestProviderClearCache_UsesInjectedRuntime(t *testing.T) {
 
 	var errBuf bytes.Buffer
 	p := New("test-key")
-	p.SetUIRuntime(ui.NewRuntime(nil, io.Discard, &errBuf))
+	p.SetUIRuntime(uiruntime.NewRuntime(nil, io.Discard, &errBuf))
 	p.cacheMap = map[string]*cacheEntry{
 		"gemini-1.5-pro": {
 			name: "cachedContents/test-cache",

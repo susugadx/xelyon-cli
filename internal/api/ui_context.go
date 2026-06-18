@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type assistantUpdateModeKey struct{}
@@ -16,21 +16,21 @@ const (
 	AssistantUpdatesOff     = "off"
 )
 
-func uiRuntimeFromContext(ctx context.Context) *ui.Runtime {
-	return ui.RuntimeFromContext(ctx)
+func uiRuntimeFromContext(ctx context.Context) *uiruntime.Runtime {
+	return uiruntime.RuntimeFromContext(ctx)
 }
 
 // RuntimeFromContext は request context に紐づく UI runtime を返す。
-func RuntimeFromContext(ctx context.Context) *ui.Runtime {
+func RuntimeFromContext(ctx context.Context) *uiruntime.Runtime {
 	return uiRuntimeFromContext(ctx)
 }
 
 // RuntimeOrDefault は nil のとき process 互換の default runtime を返す。
-func RuntimeOrDefault(runtime *ui.Runtime) *ui.Runtime {
+func RuntimeOrDefault(runtime *uiruntime.Runtime) *uiruntime.Runtime {
 	if runtime != nil {
 		return runtime
 	}
-	return ui.DefaultRuntime()
+	return uiruntime.DefaultRuntime()
 }
 
 func outputWriterFromContext(ctx context.Context) io.Writer {
@@ -81,7 +81,7 @@ func normalizeAssistantUpdateMode(mode string) string {
 }
 
 // SpinnerFromContext は request context に紐づく spinner を返す。
-func SpinnerFromContext(ctx context.Context) *ui.Spinner {
+func SpinnerFromContext(ctx context.Context) *uiruntime.Spinner {
 	return uiRuntimeFromContext(ctx).CurrentSpinner()
 }
 

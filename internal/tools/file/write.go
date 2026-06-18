@@ -10,7 +10,8 @@ import (
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type writeExecutionDetails struct {
@@ -19,17 +20,17 @@ type writeExecutionDetails struct {
 }
 
 // ExecuteWriteFileWithPromptIOAndOptions は確認設定を指定してファイルに書き込む。
-func ExecuteWriteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string, content string) (string, error) {
+func ExecuteWriteFileWithPromptIOAndOptions(promptIO uiruntime.PromptIO, options common.ConfirmOptions, path string, content string) (string, error) {
 	return ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO, options, nil, path, content)
 }
 
 // ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient は確認設定と LSP client を指定してファイルに書き込む。
-func ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string, content string) (string, error) {
+func ExecuteWriteFileWithPromptIOAndOptionsAndLSPClient(promptIO uiruntime.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string, content string) (string, error) {
 	details, err := executeWriteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO, options, lspClient, path, content)
 	return details.result.message, err
 }
 
-func executeWriteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string, content string) (writeExecutionDetails, error) {
+func executeWriteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO uiruntime.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string, content string) (writeExecutionDetails, error) {
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is empty")
 	if result.message != "" || err != nil {
 		return writeExecutionDetails{result: result}, err
@@ -66,12 +67,12 @@ func executeWriteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO ui.Promp
 			w := out.StdoutWriter()
 			out.Println()
 			if exists {
-				ui.FileOpHeader(w, "write_file", path+" (overwrite)")
+				uifileview.FileOpHeader(w, "write_file", path+" (overwrite)")
 
 				oldContent, _ := os.ReadFile(absPath)
 				oldLines := strings.Split(string(oldContent), "\n")
-				added, removed := ui.CountDiffLines(oldLines, newLines)
-				ui.FileOpStatsLine(w, removed, added)
+				added, removed := uifileview.CountDiffLines(oldLines, newLines)
+				uifileview.FileOpStatsLine(w, removed, added)
 
 				lineDiff := len(newLines) - len(oldLines)
 				if lineDiff < 0 {
@@ -85,9 +86,9 @@ func executeWriteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO ui.Promp
 				return fileMutationResult{}
 			}
 
-			ui.FileOpHeader(w, "write_file", path+" (create)")
+			uifileview.FileOpHeader(w, "write_file", path+" (create)")
 			out.Dim.Printf("  new: %d lines, %d bytes\n", len(newLines), len(content))
-			showCappedSinglePatchPreview(out, ctx.cfg, ui.PatchFilePreview{
+			showCappedSinglePatchPreview(out, ctx.cfg, uifileview.PatchFilePreview{
 				Path:   path,
 				Action: "created",
 			}, newLines, '+')

@@ -9,7 +9,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // CancelMode は context cancel 時の部分応答返却方針。
@@ -41,7 +41,7 @@ var cancelWarnColor = color.New(color.FgYellow)
 func RunStreamingResponse(
 	ctx context.Context,
 	resp *http.Response,
-	spinner *ui.Spinner,
+	spinner *uiruntime.Spinner,
 	handler EventHandler,
 	opts RunnerOptions,
 ) (string, error) {

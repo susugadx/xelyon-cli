@@ -17,7 +17,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 func init() {
@@ -160,7 +161,7 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理（JSON Lines形式）
-func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
 	streamAssistantText := api.ShouldStreamAssistantText(ctx)
@@ -200,7 +201,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 						_, _ = fmt.Fprintln(out)
 						contentNewlineEmitted = true
 					}
-					spinner.Start(ui.SpinnerMessageForTool(toolName))
+					spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 				}
 			})
 		}

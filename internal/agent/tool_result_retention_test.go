@@ -8,7 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/turnsupport"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestToolResultRetentionPolicy_DefaultKeepsAllRawToolResultStores(t *testing.T) {
@@ -98,7 +98,7 @@ func newToolResultRetentionTestAgent(t *testing.T) *Agent {
 	return &Agent{
 		CurrentModel: "gpt-5.4",
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(nil, &out, &out),
+			UI: uiruntime.NewRuntime(nil, &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-5.4"),

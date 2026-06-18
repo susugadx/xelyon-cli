@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestChatWithTools_DefaultsModelWhenEmpty(t *testing.T) {
@@ -48,7 +48,7 @@ func TestChatWithTools_DebugHistoryDump(t *testing.T) {
 	t.Setenv("XELYON_DEBUG_CLAUDE", "1")
 
 	var out bytes.Buffer
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(bytes.NewReader(nil), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(bytes.NewReader(nil), &out, &out))
 	history := []api.Message{
 		{Role: "user", Content: "Read test.txt"},
 		{

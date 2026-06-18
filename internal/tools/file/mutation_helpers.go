@@ -6,11 +6,12 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type fileMutationContext struct {
-	promptIO ui.PromptIO
+	promptIO uiruntime.PromptIO
 	out      common.Output
 	cfg      *config.Config
 	path     string
@@ -22,8 +23,8 @@ type mutationConfirmHandlers struct {
 	onCancel  func() fileMutationResult
 }
 
-func prepareFileMutation(promptIO ui.PromptIO, options common.ConfirmOptions, path, emptyMessage string) (fileMutationContext, fileMutationResult, error) {
-	promptIO = ui.NormalizePromptIO(promptIO)
+func prepareFileMutation(promptIO uiruntime.PromptIO, options common.ConfirmOptions, path, emptyMessage string) (fileMutationContext, fileMutationResult, error) {
+	promptIO = uiruntime.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 
 	absPath, errResult := resolveValidatedPath(out, path, emptyMessage)
@@ -84,10 +85,10 @@ func confirmFileMutation(ctx fileMutationContext, options common.ConfirmOptions,
 	}
 }
 
-func showCappedSinglePatchPreview(out common.Output, cfg *config.Config, preview ui.PatchFilePreview, contentLines []string, lineType rune) {
+func showCappedSinglePatchPreview(out common.Output, cfg *config.Config, preview uifileview.PatchFilePreview, contentLines []string, lineType rune) {
 	capped := buildCappedPatchPreviewLines(contentLines, lineType, resolvePreviewLineCap(cfg))
 	if len(preview.Hunks) == 0 {
-		preview.Hunks = []ui.PatchHunkPreview{{
+		preview.Hunks = []uifileview.PatchHunkPreview{{
 			StartLine: 1,
 			Lines:     capped.lines,
 		}}
@@ -99,7 +100,7 @@ func showCappedSinglePatchPreview(out common.Output, cfg *config.Config, preview
 		preview.Removed = capped.totalLines
 	}
 
-	ui.ShowSinglePatchPreview(out.StdoutWriter(), preview)
+	uifileview.ShowSinglePatchPreview(out.StdoutWriter(), preview)
 	if capped.truncated {
 		out.Dim.Printf("  preview truncated: showing first %d of %d lines\n", len(capped.lines), capped.totalLines)
 		if capped.truncatedByBytes {

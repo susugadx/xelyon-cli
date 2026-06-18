@@ -6,18 +6,18 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 func TestPromptModal_ViewOverlaysTranscript(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
+	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newSizedPromptTestModel(&stubAgent{statusLine: "ready"}, 80, 20)
 	appendPromptTestLines(&m, 24)
 
 	updated, _ := m.Update(OpenPromptMsg{
 		ID: 1,
-		Request: ui.PromptRequest{
-			Kind:    ui.PromptKindConfirm,
+		Request: uiprompt.PromptRequest{
+			Kind:    uiprompt.PromptKindConfirm,
 			Message: "Run preview?",
 		},
 		Respond: ch,
@@ -35,8 +35,8 @@ func TestPromptModal_ViewOverlaysTranscript(t *testing.T) {
 }
 
 func TestPromptModal_ForwardsBackgroundStreamMessages(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"}, ch)
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"}, ch)
 
 	updated, _ := m.Update(AppendMessageMsg{
 		Message: ChatMessage{Role: "assistant", Content: "background assistant"},
@@ -69,11 +69,11 @@ func TestPromptModal_ForwardsBackgroundStreamMessages(t *testing.T) {
 
 func TestPromptModal_ForwardsStatusAndAgentDone(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready", processing: true}
-	ch := make(chan ui.PromptResponse, 1)
+	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newSizedPromptTestModel(agent, 60, 16)
 	updated, _ := m.Update(OpenPromptMsg{
 		ID:      1,
-		Request: ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"},
+		Request: uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"},
 		Respond: ch,
 	})
 	m = updated.(Model)
@@ -112,7 +112,7 @@ func TestPromptModal_ForwardsStatusAndAgentDone(t *testing.T) {
 }
 
 func TestPromptModal_OpenScrollsChatToBottom(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
+	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newSizedPromptTestModel(&stubAgent{statusLine: "ready"}, 60, 16)
 	appendPromptTestLines(&m, 40)
 	m.vp.scrollUp(8)
@@ -123,7 +123,7 @@ func TestPromptModal_OpenScrollsChatToBottom(t *testing.T) {
 
 	updated, _ := m.Update(OpenPromptMsg{
 		ID:      1,
-		Request: ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Approve?"},
+		Request: uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Approve?"},
 		Respond: ch,
 	})
 	m = updated.(Model)
@@ -140,13 +140,13 @@ func TestPromptModal_OpenScrollsChatToBottom(t *testing.T) {
 }
 
 func TestPromptModal_BackgroundScrollInputDoesNotMovePromptSelection(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
+	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newSizedPromptTestModel(&stubAgent{statusLine: "ready"}, 60, 16)
 	appendPromptTestLines(&m, 40)
 	updated, _ := m.Update(OpenPromptMsg{
 		ID: 1,
-		Request: ui.PromptRequest{
-			Kind:         ui.PromptKindConfirm,
+		Request: uiprompt.PromptRequest{
+			Kind:         uiprompt.PromptKindConfirm,
 			Message:      "Approve?",
 			AllowComment: true,
 		},
@@ -183,7 +183,7 @@ func TestPromptModal_BackgroundScrollInputDoesNotMovePromptSelection(t *testing.
 }
 
 func TestPromptModal_OpenFromNavigationModeRestoresComposerInput(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
+	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newSizedPromptTestModel(&stubAgent{statusLine: "ready"}, 60, 16)
 	appendPromptTestLines(&m, 12)
 
@@ -198,8 +198,8 @@ func TestPromptModal_OpenFromNavigationModeRestoresComposerInput(t *testing.T) {
 
 	updated, _ = m.Update(OpenPromptMsg{
 		ID: 1,
-		Request: ui.PromptRequest{
-			Kind:    ui.PromptKindConfirm,
+		Request: uiprompt.PromptRequest{
+			Kind:    uiprompt.PromptKindConfirm,
 			Message: "Approve?",
 		},
 		Respond: ch,
@@ -212,7 +212,7 @@ func TestPromptModal_OpenFromNavigationModeRestoresComposerInput(t *testing.T) {
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	resp := <-ch
-	if resp.Action != ui.PromptActionYes {
+	if resp.Action != uiprompt.PromptActionYes {
 		t.Fatalf("Action = %q, want yes", resp.Action)
 	}
 	if m.prompt != nil {

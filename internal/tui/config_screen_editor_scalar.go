@@ -1,11 +1,9 @@
 package tui
 
 import (
-	"math"
-	"strconv"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/configedit"
 )
 
 func (cs *configScreen) handleEditKey(msg tea.KeyMsg, providerConfigKey string) (configCommand, tea.Cmd) {
@@ -75,29 +73,29 @@ func (cs *configScreen) handleInputEdit(msg tea.KeyMsg, providerConfigKey string
 	case isEnterKey(msg):
 		raw := cs.editInput.Value()
 		var newVal interface{}
+		changed := false
 
 		switch field.FieldType {
 		case config.FieldTypeString:
 			newVal = raw
+			changed = true
 		case config.FieldTypeInt:
-			v, err := strconv.Atoi(raw)
-			if err != nil {
+			v, inputChanged, valid := configedit.ParseIntInput(raw, configedit.ExtractIntCurrentValue(field.Current))
+			if !valid || !inputChanged {
 				return configCommandNone, nil
 			}
 			newVal = v
+			changed = inputChanged
 		case config.FieldTypeFloat:
-			v, err := strconv.ParseFloat(raw, 64)
-			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
-				return configCommandNone, nil
-			}
-			if field.Path == "project_map.context_ratio" &&
-				(v < config.ProjectMapContextRatioMin || v > config.ProjectMapContextRatioMax) {
+			v, inputChanged, status := configedit.ParseFloatInput(raw, configedit.ExtractFloatCurrentValue(field.Current), field.Path)
+			if status != configedit.FloatInputValid || !inputChanged {
 				return configCommandNone, nil
 			}
 			newVal = v
+			changed = inputChanged
 		}
 
-		if newVal != nil {
+		if changed && newVal != nil {
 			if !cs.applyFieldValue(field.Path, newVal, providerConfigKey) {
 				return configCommandNone, nil
 			}

@@ -10,11 +10,12 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 // handleStreamingResponse はストリーミングレスポンスを処理する。
-func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
 	dim := color.New(color.Faint)
 	reasoningActive := false
@@ -46,7 +47,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		},
 		OnToolCallArguments: func(toolName string) {
 			if !spinner.IsActive() {
-				spinner.Start(ui.SpinnerMessageForTool(toolName))
+				spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 			}
 		},
 	})

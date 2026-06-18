@@ -12,8 +12,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
 func requestCacheMode(usage api.Usage) string {
@@ -42,7 +42,7 @@ func requestUsageCost(cfg *config.Config, provider, model string, usage api.Usag
 	return estimate
 }
 
-func buildLastRequestTable(cfg *config.Config, provider, model string, usage *api.Usage, costOverride *cost.CostEstimate) *ui.Table {
+func buildLastRequestTable(cfg *config.Config, provider, model string, usage *api.Usage, costOverride *cost.CostEstimate) *termtext.Table {
 	return renderLastRequestTable(cfg, provider, model, usage, costOverride)
 }
 
@@ -98,7 +98,7 @@ func sessionCacheHitRate(stats *SessionStats) float64 {
 	return float64(stats.CachedInputTokens) / float64(stats.InputTokens) * 100.0
 }
 
-func buildSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *ui.Table {
+func buildSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *termtext.Table {
 	return renderSessionTokenTable(agent, stats, subSummary)
 }
 

@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
-func (a *Agent) requestPromptIO(ctx context.Context) ui.PromptIO {
+func (a *Agent) requestPromptIO(ctx context.Context) uiruntime.PromptIO {
 	promptIO := a.ui().PromptIO()
 	promptIO.Context = ctx
 	return promptIO

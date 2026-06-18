@@ -13,7 +13,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type testCaller struct{}
@@ -199,17 +200,17 @@ type recordingPrompter struct {
 	calls int
 }
 
-func (p *recordingPrompter) Prompt(context.Context, ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *recordingPrompter) Prompt(context.Context, uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	p.calls++
-	return ui.PromptResponse{Action: ui.PromptActionYes}, nil
+	return uiprompt.PromptResponse{Action: uiprompt.PromptActionYes}, nil
 }
 
 type responsePrompter struct {
 	calls int
-	resp  ui.PromptResponse
+	resp  uiprompt.PromptResponse
 }
 
-func (p *responsePrompter) Prompt(context.Context, ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *responsePrompter) Prompt(context.Context, uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	p.calls++
 	return p.resp, nil
 }
@@ -230,7 +231,7 @@ func TestWrapperRunValidationErrorBeforePromptAndCaller(t *testing.T) {
 		}`),
 	})
 	var stdout bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
 	runtime.SetPrompter(prompter)
 
 	result, fileChange, err := wrapper.Run(tools.ExecutionContext{
@@ -273,7 +274,7 @@ func TestWrapperRunInvalidStructuredArgBeforePromptAndCaller(t *testing.T) {
 		}`),
 	})
 	var stdout bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
 	runtime.SetPrompter(prompter)
 
 	result, _, err := wrapper.Run(tools.ExecutionContext{
@@ -313,7 +314,7 @@ func TestWrapperRunInvalidObjectArgBeforePromptAndCaller(t *testing.T) {
 		}`),
 	})
 	var stdout bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
 	runtime.SetPrompter(prompter)
 
 	result, _, err := wrapper.Run(tools.ExecutionContext{
@@ -341,7 +342,7 @@ func TestWrapperRunInvalidObjectArgBeforePromptAndCaller(t *testing.T) {
 func TestWrapperRunDefaultConfirmIgnoresGlobalAutoApprove(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
 	caller := &recordingCaller{}
-	prompter := &responsePrompter{resp: ui.PromptResponse{Action: ui.PromptActionNo}}
+	prompter := &responsePrompter{resp: uiprompt.PromptResponse{Action: uiprompt.PromptActionNo}}
 	wrapper := NewWrapper(WrapperOptions{
 		Caller:     caller,
 		ServerName: "github",
@@ -371,7 +372,7 @@ func TestWrapperRunDefaultConfirmIgnoresGlobalAutoApprove(t *testing.T) {
 func TestWrapperRunDefaultConfirmIgnoresFullAutoExecutionMode(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
 	caller := &recordingCaller{}
-	prompter := &responsePrompter{resp: ui.PromptResponse{Action: ui.PromptActionNo}}
+	prompter := &responsePrompter{resp: uiprompt.PromptResponse{Action: uiprompt.PromptActionNo}}
 	wrapper := NewWrapper(WrapperOptions{
 		Caller:     caller,
 		ServerName: "github",
@@ -632,17 +633,17 @@ func TestWrapperDefaultsForDescriptionParametersAndEmptyResult(t *testing.T) {
 func TestWrapperRunRejectAndCommentDoNotCallCaller(t *testing.T) {
 	tests := []struct {
 		name       string
-		resp       ui.PromptResponse
+		resp       uiprompt.PromptResponse
 		wantResult string
 	}{
 		{
 			name:       "reject",
-			resp:       ui.PromptResponse{Action: ui.PromptActionNo},
+			resp:       uiprompt.PromptResponse{Action: uiprompt.PromptActionNo},
 			wantResult: "User rejected MCP tool execution",
 		},
 		{
 			name:       "comment",
-			resp:       ui.PromptResponse{Action: ui.PromptActionComment, Text: "use a narrower query"},
+			resp:       uiprompt.PromptResponse{Action: uiprompt.PromptActionComment, Text: "use a narrower query"},
 			wantResult: "User provided feedback: use a narrower query",
 		},
 	}
@@ -774,7 +775,7 @@ func TestWrapperRunUsesWrapperTimeoutWhenParentStillActive(t *testing.T) {
 }
 
 func newAutoApprovedExecutionContext(ctx context.Context) tools.ExecutionContext {
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	return tools.ExecutionContext{
 		Context:     ctx,
 		Stdin:       runtime.Input(),
@@ -786,9 +787,9 @@ func newAutoApprovedExecutionContext(ctx context.Context) tools.ExecutionContext
 	}
 }
 
-func newPromptedExecutionContext(ctx context.Context, prompter ui.Prompter) tools.ExecutionContext {
+func newPromptedExecutionContext(ctx context.Context, prompter uiprompt.Prompter) tools.ExecutionContext {
 	var stdout bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader(""), &stdout, &stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &stdout, &stdout)
 	runtime.SetPrompter(prompter)
 	return tools.ExecutionContext{
 		Context: ctx,

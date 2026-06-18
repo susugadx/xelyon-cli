@@ -7,7 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newSurfaceDispatchTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
@@ -22,7 +22,7 @@ func newSurfaceDispatchTestAgent(t *testing.T) (*Agent, *bytes.Buffer) {
 
 	out := &bytes.Buffer{}
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), out, out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), out, out)
 
 	return &Agent{
 		ProviderName:    "openai",

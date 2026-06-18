@@ -10,7 +10,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestCheckRipgrepAvailability_NoRg(t *testing.T) {
@@ -21,7 +21,7 @@ func TestCheckRipgrepAvailability_NoRg(t *testing.T) {
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{Runtime: runtime}
 
 	checkRipgrepAvailability(agent)
@@ -43,7 +43,7 @@ func TestCheckRipgrepAvailability_WithRg(t *testing.T) {
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{Runtime: runtime}
 
 	checkRipgrepAvailability(agent)

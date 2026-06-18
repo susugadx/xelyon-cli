@@ -14,7 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func init() {
@@ -44,7 +44,7 @@ type Provider struct {
 	mcpEnabled    bool                 // MCP有効時はテキストモードにフォールバック（レガシー）
 	mcpTools      []api.ToolDefinition // MCPツールの定義
 	usageCallback api.UsageCallback    // トークン使用量コールバック
-	runtime       *ui.Runtime          // 補助出力に使う UI runtime
+	runtime       *uiruntime.Runtime   // 補助出力に使う UI runtime
 
 	// Context Caching state（モデル別に管理）
 	cacheMap map[string]*cacheEntry // key = model名
@@ -172,7 +172,7 @@ func (p *Provider) SetUsageCallback(callback api.UsageCallback) {
 }
 
 // SetUIRuntime は provider が補助出力に使う UI runtime を設定する。
-func (p *Provider) SetUIRuntime(runtime *ui.Runtime) {
+func (p *Provider) SetUIRuntime(runtime *uiruntime.Runtime) {
 	p.runtime = runtime
 }
 

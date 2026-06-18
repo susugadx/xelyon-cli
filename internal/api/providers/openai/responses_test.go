@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	toolsreg "github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -689,7 +689,7 @@ func TestResponsesUsageReasoningTokensToAPIUsage(t *testing.T) {
 
 func TestHandleResponsesStreaming_TextToolCallsAndUsage(t *testing.T) {
 	var out strings.Builder
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	var gotUsage api.Usage
@@ -714,7 +714,7 @@ func TestHandleResponsesStreaming_TextToolCallsAndUsage(t *testing.T) {
 		}, "\n"))),
 	}
 
-	content, responseID, err := p.handleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)))
+	content, responseID, err := p.handleResponsesStreaming(ctx, resp, uiruntime.NewSpinnerWithRuntime(uiruntime.RuntimeFromContext(ctx)))
 	if err != nil {
 		t.Fatalf("handleResponsesStreaming() error = %v", err)
 	}
@@ -734,7 +734,7 @@ func TestHandleResponsesStreaming_TextToolCallsAndUsage(t *testing.T) {
 
 func TestHandleResponsesStreaming_PreservesFunctionCallOutputOrder(t *testing.T) {
 	var out strings.Builder
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	p := New("test-key")
@@ -754,7 +754,7 @@ func TestHandleResponsesStreaming_PreservesFunctionCallOutputOrder(t *testing.T)
 		}, "\n"))),
 	}
 
-	content, _, err := p.handleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)))
+	content, _, err := p.handleResponsesStreaming(ctx, resp, uiruntime.NewSpinnerWithRuntime(uiruntime.RuntimeFromContext(ctx)))
 	if err != nil {
 		t.Fatalf("handleResponsesStreaming() error = %v", err)
 	}
@@ -771,7 +771,7 @@ func TestHandleResponsesStreaming_PreservesFunctionCallOutputOrder(t *testing.T)
 
 func TestHandleResponsesStreaming_ErrorEvent(t *testing.T) {
 	var out strings.Builder
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	p := New("test-key")
@@ -783,7 +783,7 @@ func TestHandleResponsesStreaming_ErrorEvent(t *testing.T) {
 		}, "\n"))),
 	}
 
-	_, _, err := p.handleResponsesStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)))
+	_, _, err := p.handleResponsesStreaming(ctx, resp, uiruntime.NewSpinnerWithRuntime(uiruntime.RuntimeFromContext(ctx)))
 	if err == nil || !strings.Contains(err.Error(), "quota exceeded") {
 		t.Fatalf("handleResponsesStreaming() error = %v, want quota exceeded", err)
 	}
@@ -792,7 +792,7 @@ func TestHandleResponsesStreaming_ErrorEvent(t *testing.T) {
 func TestHandleResponsesStreaming_DefaultDebugFollowsEnvWhenNotSpecified(t *testing.T) {
 	t.Setenv("XELYON_DEBUG_OPENAI", "1")
 	var out strings.Builder
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	resp := &http.Response{
@@ -804,7 +804,7 @@ func TestHandleResponsesStreaming_DefaultDebugFollowsEnvWhenNotSpecified(t *test
 	}
 
 	var debugOut strings.Builder
-	_, _, err := openairesponses.HandleStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)), openairesponses.StreamingOptions{
+	_, _, err := openairesponses.HandleStreaming(ctx, resp, uiruntime.NewSpinnerWithRuntime(uiruntime.RuntimeFromContext(ctx)), openairesponses.StreamingOptions{
 		DebugWriter: &debugOut,
 	})
 	if err != nil {
@@ -818,7 +818,7 @@ func TestHandleResponsesStreaming_DefaultDebugFollowsEnvWhenNotSpecified(t *test
 func TestHandleResponsesStreaming_DebugOverrideFalseDisablesEnvDebug(t *testing.T) {
 	t.Setenv("XELYON_DEBUG_OPENAI", "1")
 	var out strings.Builder
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	resp := &http.Response{
@@ -831,7 +831,7 @@ func TestHandleResponsesStreaming_DebugOverrideFalseDisablesEnvDebug(t *testing.
 
 	var debugOut strings.Builder
 	debugEnabled := false
-	_, _, err := openairesponses.HandleStreaming(ctx, resp, ui.NewSpinnerWithRuntime(ui.RuntimeFromContext(ctx)), openairesponses.StreamingOptions{
+	_, _, err := openairesponses.HandleStreaming(ctx, resp, uiruntime.NewSpinnerWithRuntime(uiruntime.RuntimeFromContext(ctx)), openairesponses.StreamingOptions{
 		DebugOverride: &debugEnabled,
 		DebugWriter:   &debugOut,
 	})

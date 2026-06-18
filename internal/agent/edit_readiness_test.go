@@ -10,7 +10,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type editReadinessProbeTool struct {
@@ -324,7 +324,7 @@ func newEditReadinessProbeAgent(t *testing.T, store *taskstate.Store, tool tools
 	runtime.AutoApprove = true
 	runtime.ToolCache = nil
 	runtime.TaskLedger = store
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	if tool != nil {
 		runtime.Registry.Register(tool)
 	}

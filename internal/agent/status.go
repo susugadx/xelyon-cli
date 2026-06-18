@@ -9,7 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 )
 
 // AgentState represents the current interaction state.
@@ -169,7 +169,7 @@ func handleStatusCommandForSurface(agent *Agent, commandSurface commandcatalog.C
 		contextText = fmt.Sprintf("%s / %s (%.1f%%)", formatNumber(currentTokens), formatNumber(limit), float64(currentTokens)/float64(limit)*100)
 	}
 
-	statusTable := ui.NewTable().
+	statusTable := termtext.NewTable().
 		AddRow("State", string(status.State)).
 		AddRow("Surface", statusSurfaceSummary(commandSurface)).
 		AddRow("Reason", status.ReasonEN).

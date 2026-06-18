@@ -2,12 +2,13 @@ package agent
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // promptConfirmWithRuntime は slash command 用の確認を runtime の入出力で行う。
 // NOTE: コメント入力は AI ツール確認専用のため、ここではキャンセルとして扱う。
-func promptConfirmWithRuntime(runtime *ui.Runtime, prompt string) bool {
+func promptConfirmWithRuntime(runtime *uiruntime.Runtime, prompt string) bool {
 	if hasTUIRuntimePrompter(runtime) {
 		return true
 	}
@@ -19,10 +20,10 @@ func promptConfirmWithRuntime(runtime *ui.Runtime, prompt string) bool {
 	return result.Action == "yes"
 }
 
-func hasTUIRuntimePrompter(runtime *ui.Runtime) bool {
+func hasTUIRuntimePrompter(runtime *uiruntime.Runtime) bool {
 	if runtime == nil {
 		return false
 	}
-	_, ok := runtime.Prompter().(ui.CommandConfirmBypassPrompter)
+	_, ok := runtime.Prompter().(uiprompt.CommandConfirmBypassPrompter)
 	return ok
 }

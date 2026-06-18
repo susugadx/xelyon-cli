@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // setupTestMocks sets up test mocks (auto-approve)
@@ -18,7 +18,7 @@ func setupTestMocks(t *testing.T) {
 	common.SimpleConfirm = func(message string) bool {
 		return true
 	}
-	common.SimpleConfirmWithIO = func(_ ui.PromptIO, message string) bool {
+	common.SimpleConfirmWithIO = func(_ uiruntime.PromptIO, message string) bool {
 		return true
 	}
 	t.Cleanup(func() {
@@ -38,7 +38,7 @@ func setupTestConfirm(t *testing.T, approve bool) {
 	common.SimpleConfirm = func(message string) bool {
 		return approve
 	}
-	common.SimpleConfirmWithIO = func(_ ui.PromptIO, message string) bool {
+	common.SimpleConfirmWithIO = func(_ uiruntime.PromptIO, message string) bool {
 		return approve
 	}
 	t.Cleanup(func() {

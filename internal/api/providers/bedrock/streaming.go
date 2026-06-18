@@ -14,7 +14,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 	claudestream "github.com/susugadx/xelyon-cli/internal/api/providers/claude_stream"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 type bedrockStreamState struct {
@@ -23,10 +24,10 @@ type bedrockStreamState struct {
 	contentBlocks   *claudestream.ContentBlockCollector
 	toolCallsOutput strings.Builder
 	lastUsage       *api.Usage
-	spinner         *ui.Spinner
+	spinner         *uiruntime.Spinner
 }
 
-func newBedrockStreamState(spinner *ui.Spinner) *bedrockStreamState {
+func newBedrockStreamState(spinner *uiruntime.Spinner) *bedrockStreamState {
 	return &bedrockStreamState{
 		toolUses:      claudestream.NewToolUseCollector(),
 		compaction:    claudestream.NewCompactionCollector(),
@@ -52,7 +53,7 @@ func (s *bedrockStreamState) finalContent(content string) string {
 }
 
 // handleEventStream は AWS SDK イベントストリームを処理する
-func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime.InvokeModelWithResponseStreamOutput, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleEventStream(ctx context.Context, output *bedrockruntime.InvokeModelWithResponseStreamOutput, spinner *uiruntime.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
 	state := newBedrockStreamState(spinner)
 	var fullResponse strings.Builder
@@ -164,7 +165,7 @@ func (p *Provider) processChunk(data []byte, state *bedrockStreamState) (text st
 			if state.spinner != nil {
 				// スピナーを再表示（引数生成中）
 				if !state.spinner.IsActive() {
-					state.spinner.Start(ui.SpinnerMessageForTool(toolName))
+					state.spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 				}
 			}
 		}), false

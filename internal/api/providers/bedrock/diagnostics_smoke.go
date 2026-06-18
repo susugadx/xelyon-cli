@@ -12,7 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const defaultBedrockDiagnosticSmokeTimeout = 120 * time.Second
@@ -162,7 +162,7 @@ func newBedrockDiagnosticContext(ctx context.Context, cfg *config.Config, output
 	if output == nil {
 		output = io.Discard
 	}
-	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
+	requestCtx := uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), output, output))
 	requestCtx = config.WithContext(requestCtx, cfg)
 	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
 	return requestCtx

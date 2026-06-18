@@ -11,14 +11,14 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/locator"
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestExecutionContext_PromptIOUsesInjectedRuntime(t *testing.T) {
 	in := strings.NewReader("hello\n")
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	runtime := ui.NewRuntime(in, &out, &errOut)
+	runtime := uiruntime.NewRuntime(in, &out, &errOut)
 
 	promptIO := ExecutionContext{
 		Runtime: runtime,

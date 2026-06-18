@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const subscriptionLoginCommand = "xelyon auth openai-subscription login"
@@ -162,10 +162,10 @@ func (p *SubscriptionProvider) chatWithResponses(ctx context.Context, systemProm
 		},
 		PrepareRequest: p.prepareSubscriptionResponsesRequest,
 		ExecuteRequest: p.executeSubscriptionResponsesRequest,
-		HandleStreaming: func(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
+		HandleStreaming: func(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error) {
 			return p.handleSubscriptionResponsesStreaming(ctx, resp, spinner)
 		},
-		HandleNonStreaming: func(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
+		HandleNonStreaming: func(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error) {
 			return p.handleSubscriptionResponsesNonStreaming(ctx, resp, spinner)
 		},
 		HandleHTTPError:          handleSubscriptionHTTPError,
@@ -214,7 +214,7 @@ func (p *SubscriptionProvider) executeSubscriptionLongRunningRequest(req *http.R
 	return api.DoWithRetry(req.Context(), openairesponses.NewLongRunningHTTPClient(p.HTTPClient), req)
 }
 
-func (p *SubscriptionProvider) handleSubscriptionResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
+func (p *SubscriptionProvider) handleSubscriptionResponsesStreaming(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error) {
 	debugEnabled := subscriptionDebugEnabled()
 	debugRawPayload := false
 	return openairesponses.HandleStreaming(ctx, resp, spinner, openairesponses.StreamingOptions{
@@ -265,7 +265,7 @@ func subscriptionDebugEnabled() bool {
 	return os.Getenv("XELYON_DEBUG_OPENAI_SUBSCRIPTION") == "1"
 }
 
-func (p *SubscriptionProvider) handleSubscriptionResponsesNonStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
+func (p *SubscriptionProvider) handleSubscriptionResponsesNonStreaming(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error) {
 	return openairesponses.HandleNonStreaming(ctx, resp, spinner, openairesponses.NonStreamingOptions{
 		ProviderName:        subscriptionDisplayName,
 		UsageCallback:       p.usageCallback,

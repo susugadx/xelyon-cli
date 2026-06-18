@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
@@ -112,6 +113,66 @@ func TestConfigScreen_StringEdit(t *testing.T) {
 	cs = m.configScreen
 	if cs.editMode != editNone {
 		t.Fatalf("editMode after esc = %d, want editNone", cs.editMode)
+	}
+}
+
+func TestConfigScreen_NumericEmptyInputDoesNotApply(t *testing.T) {
+	tests := []struct {
+		name     string
+		category string
+		path     string
+	}{
+		{
+			name:     "int",
+			category: "compression",
+			path:     "compression.trigger_percent",
+		},
+		{
+			name:     "float",
+			category: "project_map",
+			path:     "project_map.context_ratio",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newConfigTestModel()
+			cs := m.configScreen
+			setConfigFieldSelection(t, cs, tt.category, tt.path)
+
+			before, err := config.GetFieldValue(cs.cfg, tt.path)
+			if err != nil {
+				t.Fatalf("GetFieldValue before: %v", err)
+			}
+
+			m = sendConfigKey(m, "enter")
+			cs = m.configScreen
+			if cs.editMode != editInput {
+				t.Fatalf("editMode = %d, want editInput(%d)", cs.editMode, editInput)
+			}
+
+			cs.editInput.SetValue("")
+			m = sendConfigKey(m, "enter")
+			cs = m.configScreen
+
+			if cs.editMode != editInput {
+				t.Fatalf("editMode after empty input = %d, want editInput(%d)", cs.editMode, editInput)
+			}
+			if cs.dirty {
+				t.Fatal("dirty should remain false after empty numeric input")
+			}
+			if cs.saveStatus != statusSaved {
+				t.Fatalf("saveStatus = %d, want statusSaved(%d)", cs.saveStatus, statusSaved)
+			}
+
+			after, err := config.GetFieldValue(cs.cfg, tt.path)
+			if err != nil {
+				t.Fatalf("GetFieldValue after: %v", err)
+			}
+			if !reflect.DeepEqual(after, before) {
+				t.Fatalf("value changed: before=%v after=%v", before, after)
+			}
+		})
 	}
 }
 

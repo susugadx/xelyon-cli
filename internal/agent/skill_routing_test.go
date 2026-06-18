@@ -15,7 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/skills/router"
 	"github.com/susugadx/xelyon-cli/internal/skills/usageledger"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestParseSkillRouterStatusPathsCapsAndParsesRenames(t *testing.T) {
@@ -274,7 +274,7 @@ func TestExecuteToolOnlyRecordsSkillActivation(t *testing.T) {
 	runtime := &AgentRuntime{
 		Config:        cfg,
 		InvocationCWD: repo,
-		UI:            ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard),
+		UI:            uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard),
 	}
 	agent := NewAgentWithRuntime("model", &mockProvider{name: "mock"}, false, runtime)
 
@@ -414,7 +414,7 @@ func TestPlanInvestigationInjectsSkillRouterHintPreservesPlanningPromptAndRecord
 	}
 	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.InvocationCWD = repo
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	runtime.Registry = tools.DefaultRegistry.Clone()
 	agent := NewAgentWithRuntime("model", provider, false, runtime)
 	agent.SystemPrompt += "\n\n" + promptplan.BuildPlanningPrompt()

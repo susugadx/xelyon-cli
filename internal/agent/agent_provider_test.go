@@ -13,7 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // mockCacheClearableProvider はキャッシュクリアと Provider を実装したモック
@@ -121,7 +121,7 @@ func TestAgent_SwitchProvider_KeepsContextClearsRemoteContinuationAndNotifies(t 
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 
 	agent := &Agent{
 		ProviderName:    "mock",

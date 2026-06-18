@@ -6,7 +6,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 	"github.com/susugadx/xelyon-cli/internal/tui/toolblock"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 func (m Model) toolBlockSummaryLine(blockIdx int) string {
@@ -44,11 +44,11 @@ func toolBlockDisplaySummary(tool ToolResult) string {
 
 func normalizeToolBlockSummary(summary string) string {
 	summary = termtext.SanitizeSingleLineANSI(strings.TrimSpace(summary))
-	return ui.StripToolDisplayIconPrefix(summary)
+	return uitoolview.StripToolDisplayIconPrefix(summary)
 }
 
 func normalizeToolBlockErrorSummary(summary string) string {
-	summary = ui.StripToolDisplayIconPrefix(summary)
+	summary = uitoolview.StripToolDisplayIconPrefix(summary)
 	for {
 		next := strings.TrimSpace(summary)
 		lower := strings.ToLower(next)

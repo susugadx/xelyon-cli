@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const (
@@ -1011,7 +1011,7 @@ func newDiagnosticSmokeRequestContext(ctx context.Context, cfg *config.Config, r
 	if output == nil {
 		output = io.Discard
 	}
-	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
+	requestCtx := uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), output, output))
 	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
 	if request.ToolPayload {
 		requestCtx = api.WithToolDefinitions(requestCtx, diagnosticSmokeToolDefinitions())

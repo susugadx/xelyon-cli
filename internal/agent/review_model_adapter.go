@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/setup"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const reviewModelProviderCacheNamespace = "review_model"
@@ -144,7 +144,7 @@ func (a *Agent) reviewModelRequestContext(ctx context.Context) context.Context {
 	ctx = api.WithoutActiveContextBlocks(ctx)
 	ctx = tools.WithRegistry(ctx, a.registry())
 	ctx = tools.WithConfig(ctx, a.reviewModelRequestConfig())
-	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
+	ctx = uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	ctx = api.WithProviderCacheNamespace(ctx, reviewModelProviderCacheNamespace)
 	ctx = api.WithToolUseDisabled(ctx)

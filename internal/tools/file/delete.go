@@ -8,7 +8,8 @@ import (
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	toolslsp "github.com/susugadx/xelyon-cli/internal/tools/lsp"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type deleteExecutionDetails struct {
@@ -17,17 +18,17 @@ type deleteExecutionDetails struct {
 }
 
 // ExecuteDeleteFileWithPromptIOAndOptions は確認設定を指定してファイルを削除する。
-func ExecuteDeleteFileWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path string) (string, error) {
+func ExecuteDeleteFileWithPromptIOAndOptions(promptIO uiruntime.PromptIO, options common.ConfirmOptions, path string) (string, error) {
 	return ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO, options, nil, path)
 }
 
 // ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient は確認設定と LSP client を指定してファイルを削除する。
-func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string) (string, error) {
+func ExecuteDeleteFileWithPromptIOAndOptionsAndLSPClient(promptIO uiruntime.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string) (string, error) {
 	details, err := executeDeleteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO, options, lspClient, path)
 	return details.result.message, err
 }
 
-func executeDeleteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO ui.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string) (deleteExecutionDetails, error) {
+func executeDeleteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO uiruntime.PromptIO, options common.ConfirmOptions, lspClient *lsplib.Client, path string) (deleteExecutionDetails, error) {
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is empty")
 	if result.message != "" || err != nil {
 		return deleteExecutionDetails{result: result}, err
@@ -80,10 +81,10 @@ func executeDeleteFileWithPromptIOAndOptionsAndLSPClientDetails(promptIO ui.Prom
 			}
 
 			w := out.StdoutWriter()
-			ui.FileOpHeader(w, "delete_file", fmt.Sprintf("%s (%d bytes, %d lines)", path, fileInfo.Size(), len(lines)))
+			uifileview.FileOpHeader(w, "delete_file", fmt.Sprintf("%s (%d bytes, %d lines)", path, fileInfo.Size(), len(lines)))
 			out.Red.Println("  DESTRUCTIVE: file will be permanently deleted")
 
-			showCappedSinglePatchPreview(out, options.Config, ui.PatchFilePreview{
+			showCappedSinglePatchPreview(out, options.Config, uifileview.PatchFilePreview{
 				Path:    path,
 				Action:  "deleted",
 				Removed: len(lines),

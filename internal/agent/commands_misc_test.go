@@ -12,7 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestIsCodexModel(t *testing.T) {
@@ -277,7 +277,7 @@ func TestPrintSessionSections_Optimizations(t *testing.T) {
 	agent := &Agent{
 		Stats: stats,
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -307,7 +307,7 @@ func TestPrintSessionSections_NoOptimizations(t *testing.T) {
 	agent := &Agent{
 		Stats: stats,
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -526,7 +526,7 @@ func TestHandleTokensCommand_UsesRuntimeOutput(t *testing.T) {
 	agent := &Agent{
 		CurrentModel: "gpt-5.2",
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 

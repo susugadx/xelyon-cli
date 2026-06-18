@@ -9,7 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type claudeDiagnosticRequest struct {
@@ -140,7 +140,7 @@ func newClaudeDiagnosticRequestContext(ctx context.Context, cfg *config.Config, 
 	if request.ThinkingPayload {
 		requestCfg.Thinking.Enabled = true
 	}
-	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
+	requestCtx := uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), output, output))
 	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
 	requestCtx = config.WithContext(requestCtx, requestCfg)
 

@@ -10,7 +10,7 @@ import (
 	"testing/iotest"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func runCancelCase(t *testing.T, mode CancelMode) (string, error) {
@@ -33,7 +33,7 @@ func runCancelCase(t *testing.T, mode CancelMode) (string, error) {
 
 	seenText := false
 
-	return RunStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard), func(event StreamEvent, _ string) (string, bool, error) {
+	return RunStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard), func(event StreamEvent, _ string) (string, bool, error) {
 		if event.Type == "content_block_delta" {
 			seenText = true
 			return event.Delta.Text, false, nil
@@ -72,7 +72,7 @@ func TestRunStreamingResponse_CancelModePartialAsError(t *testing.T) {
 
 func TestRunStreamingResponse_StopsSpinnerOnScannerError(t *testing.T) {
 	ctx := api.WithAssistantUpdateMode(context.Background(), api.AssistantUpdatesOff)
-	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner := uiruntime.NewSpinnerWithWriter(io.Discard)
 	spinner.Start("Waiting for stream...")
 
 	readErr := errors.New("boom")

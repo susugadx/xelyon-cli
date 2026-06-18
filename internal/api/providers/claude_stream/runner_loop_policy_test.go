@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newRunnerLoopPolicyTestState() *runnerOutputState {
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), out, errOut))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), out, errOut))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesPhase)
 	return newRunnerOutputState(ctx, nil)
 }

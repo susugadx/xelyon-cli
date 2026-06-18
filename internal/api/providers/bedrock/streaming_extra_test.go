@@ -10,7 +10,7 @@ import (
 	bedrocktypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleEventStream_ClosedStreamFlushesCompactionAndToolCalls(t *testing.T) {
@@ -45,10 +45,10 @@ func TestHandleEventStream_ClosedStreamFlushesCompactionAndToolCalls(t *testing.
 		usage = u
 	}}
 
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
-	got, err := p.handleEventStream(ctx, newBedrockStreamOutput(reader), ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleEventStream(ctx, newBedrockStreamOutput(reader), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleEventStream() error = %v", err)
 	}
@@ -85,7 +85,7 @@ func TestHandleEventStream_PreservesThinkingBlocks(t *testing.T) {
 	close(reader.events)
 
 	p := &Provider{}
-	_, err := p.handleEventStream(context.Background(), newBedrockStreamOutput(reader), ui.NewSpinnerWithWriter(io.Discard))
+	_, err := p.handleEventStream(context.Background(), newBedrockStreamOutput(reader), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleEventStream() error = %v", err)
 	}
@@ -123,7 +123,7 @@ func TestHandleEventStream_PreservesInterleavedThinkingToolOrder(t *testing.T) {
 	close(reader.events)
 
 	p := &Provider{}
-	_, err := p.handleEventStream(context.Background(), newBedrockStreamOutput(reader), ui.NewSpinnerWithWriter(io.Discard))
+	_, err := p.handleEventStream(context.Background(), newBedrockStreamOutput(reader), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleEventStream() error = %v", err)
 	}
@@ -154,7 +154,7 @@ func TestHandleEventStream_StreamErrorAfterClose(t *testing.T) {
 	close(reader.events)
 
 	p := &Provider{}
-	_, err := p.handleEventStream(context.Background(), newBedrockStreamOutput(reader), ui.NewSpinnerWithWriter(io.Discard))
+	_, err := p.handleEventStream(context.Background(), newBedrockStreamOutput(reader), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err == nil || !strings.Contains(err.Error(), "bedrock stream error") {
 		t.Fatalf("handleEventStream() error = %v, want wrapped stream error", err)
 	}
@@ -180,7 +180,7 @@ func TestHandleEventStream_ContextCanceledReturnsPartialContent(t *testing.T) {
 	}()
 
 	p := &Provider{}
-	got, err := p.handleEventStream(ctx, newBedrockStreamOutput(reader), ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleEventStream(ctx, newBedrockStreamOutput(reader), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != context.Canceled {
 		t.Fatalf("handleEventStream() error = %v, want %v", err, context.Canceled)
 	}

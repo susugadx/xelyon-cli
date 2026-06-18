@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // setupTestEnvironment は file tool テスト共通の環境変数を設定する。
@@ -50,7 +50,7 @@ func setupTestConfirm(t *testing.T, result bool) {
 	common.SimpleConfirm = func(msg string) bool {
 		return result
 	}
-	common.SimpleConfirmWithIO = func(_ ui.PromptIO, msg string) bool {
+	common.SimpleConfirmWithIO = func(_ uiruntime.PromptIO, msg string) bool {
 		return result
 	}
 	t.Cleanup(func() {
@@ -63,14 +63,14 @@ func testConfirmOptions() common.ConfirmOptions {
 	return common.ConfirmOptions{Config: config.DefaultConfig()}
 }
 
-func testPromptIO(stdout, stderr io.Writer) ui.PromptIO {
+func testPromptIO(stdout, stderr io.Writer) uiruntime.PromptIO {
 	if stdout == nil {
 		stdout = io.Discard
 	}
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	return ui.NewPromptIO(strings.NewReader(""), stdout, stderr, nil)
+	return uiruntime.NewPromptIO(strings.NewReader(""), stdout, stderr, nil)
 }
 
 func newTestToolExecContext() tools.ExecutionContext {

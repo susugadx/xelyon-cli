@@ -2,7 +2,7 @@ package file
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
 )
 
 const (
@@ -10,7 +10,7 @@ const (
 )
 
 type previewCapResult struct {
-	lines            []ui.PatchPreviewLine
+	lines            []uifileview.PatchPreviewLine
 	totalLines       int
 	truncated        bool
 	truncatedByBytes bool
@@ -22,7 +22,7 @@ func buildCappedPatchPreviewLines(contentLines []string, lineType rune, maxPrevi
 		capacity = min(capacity, maxPreviewLines)
 	}
 	result := previewCapResult{
-		lines:      make([]ui.PatchPreviewLine, 0, capacity),
+		lines:      make([]uifileview.PatchPreviewLine, 0, capacity),
 		totalLines: len(contentLines),
 	}
 
@@ -41,7 +41,7 @@ func buildCappedPatchPreviewLines(contentLines []string, lineType rune, maxPrevi
 			result.truncatedByBytes = true
 			break
 		}
-		result.lines = append(result.lines, ui.PatchPreviewLine{
+		result.lines = append(result.lines, uifileview.PatchPreviewLine{
 			Type:    lineType,
 			LineNum: i + 1,
 			Text:    line,

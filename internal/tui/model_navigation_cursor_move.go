@@ -1,8 +1,9 @@
 package tui
 
 import (
-	termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"unicode"
+
+	termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
 
 func (m *Model) moveCursorTo(line int) {

@@ -10,7 +10,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type loopTestTool struct{}
@@ -53,7 +53,7 @@ func newLoopTestAgent(provider *sequenceMockProvider, cfg *config.Config, out *b
 		Runtime: &AgentRuntime{
 			Config:   cfg,
 			Registry: registry,
-			UI:       ui.NewRuntime(strings.NewReader(""), out, out),
+			UI:       uiruntime.NewRuntime(strings.NewReader(""), out, out),
 		},
 	}
 }
@@ -156,7 +156,7 @@ func TestToolLoop_WarningAt100(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -173,7 +173,7 @@ func TestToolLoop_WarningAt200(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 

@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const (
@@ -307,7 +307,7 @@ func newGeminiRepairTestAgent(t *testing.T, provider *sequenceMockProvider) *Age
 	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
 	runtime.AutoApprove = true
 	runtime.ToolCache = nil
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 
 	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
 	t.Cleanup(agent.Cleanup)

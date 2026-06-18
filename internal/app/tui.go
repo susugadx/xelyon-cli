@@ -12,7 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tui"
 	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
 	"github.com/susugadx/xelyon-cli/internal/tuiagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 var runTUIProgram = tui.Run
@@ -84,7 +84,7 @@ func runTUIWithOptions(model string, provider api.Provider, cfg *config.Config, 
 	// Normal Screen に何も残さず、全てを Alt Screen の viewport に表示する。
 	var captureBuf bytes.Buffer
 	runtime := agent.NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(bytes.NewReader(nil), &captureBuf, &captureBuf)
+	runtime.UI = uiruntime.NewRuntime(bytes.NewReader(nil), &captureBuf, &captureBuf)
 	runtime.AutoApprove = autoApprove
 
 	ag := agent.NewInteractiveAgentWithRuntime(runtime, model, provider, autoApprove, commandcatalog.CommandSurfaceTUI)

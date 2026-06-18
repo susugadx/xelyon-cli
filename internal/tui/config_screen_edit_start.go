@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/configedit"
 )
 
 func (cs *configScreen) spaceToggle(providerConfigKey string) {
@@ -45,9 +46,9 @@ func (cs *configScreen) startFieldEdit(field *config.ConfigField, targetPane con
 	case config.FieldTypeString:
 		cs.beginInputEdit(targetPane, field.Current.(string))
 	case config.FieldTypeInt:
-		cs.beginInputEdit(targetPane, strconv.Itoa(configIntFieldValue(field.Current)))
+		cs.beginInputEdit(targetPane, strconv.Itoa(configedit.ExtractIntCurrentValue(field.Current)))
 	case config.FieldTypeFloat:
-		cs.beginInputEdit(targetPane, fmt.Sprintf("%g", configFloatFieldValue(field.Current)))
+		cs.beginInputEdit(targetPane, fmt.Sprintf("%g", configedit.ExtractFloatCurrentValue(field.Current)))
 	case config.FieldTypeStringSlice:
 		cs.beginSliceEdit(targetPane, field)
 	case config.FieldTypeStructMap:
@@ -59,32 +60,6 @@ func (cs *configScreen) startFieldEdit(field *config.ConfigField, targetPane con
 func (cs *configScreen) toggleBoolField(field *config.ConfigField, providerConfigKey string) {
 	current, _ := field.Current.(bool)
 	cs.applyFieldValue(field.Path, !current, providerConfigKey)
-}
-
-func configIntFieldValue(value interface{}) int {
-	switch v := value.(type) {
-	case int:
-		return v
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	default:
-		return 0
-	}
-}
-
-func configFloatFieldValue(value interface{}) float64 {
-	switch v := value.(type) {
-	case float64:
-		return v
-	case float32:
-		return float64(v)
-	case int:
-		return float64(v)
-	default:
-		return 0
-	}
 }
 
 func (cs *configScreen) beginSelectEdit(field *config.ConfigField, targetPane configPane) {

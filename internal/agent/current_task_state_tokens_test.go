@@ -8,7 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/token"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestEstimateTokens_IncludesModelFacingCurrentTaskStateContext(t *testing.T) {
@@ -73,7 +73,7 @@ func TestHandleTokensCommand_ShowsCurrentTaskStateContextTokens(t *testing.T) {
 		Runtime: &AgentRuntime{
 			Options:    RuntimeOptions{EnableCurrentTaskStateContext: true},
 			TaskLedger: newTaskLedgerWithPassedTest(t),
-			UI:         ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:         uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 

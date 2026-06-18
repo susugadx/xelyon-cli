@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiplanview"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestConfirmWithIO_InteractiveDecisionPaths(t *testing.T) {
@@ -15,7 +16,7 @@ func TestConfirmWithIO_InteractiveDecisionPaths(t *testing.T) {
 	t.Run("yes", func(t *testing.T) {
 		var out strings.Builder
 		dec := ConfirmWithIO(
-			ui.NewPromptIO(strings.NewReader("y\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("y\n"), &out, io.Discard, nil),
 			"Proceed?",
 		)
 
@@ -27,7 +28,7 @@ func TestConfirmWithIO_InteractiveDecisionPaths(t *testing.T) {
 	t.Run("no", func(t *testing.T) {
 		var out strings.Builder
 		dec := ConfirmWithIO(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			"Proceed?",
 		)
 
@@ -40,8 +41,8 @@ func TestConfirmWithIO_InteractiveDecisionPaths(t *testing.T) {
 func TestConfirmInteractiveRequestWithIO_ExplicitPolicyRePromptsBeforeFeedback(t *testing.T) {
 	var out strings.Builder
 	result := ConfirmInteractiveRequestWithIO(
-		ui.NewPromptIO(strings.NewReader("\n2\nneeds more context\n\n"), &out, io.Discard, nil),
-		ui.NewPlanApprovalPromptRequest(),
+		uiruntime.NewPromptIO(strings.NewReader("\n2\nneeds more context\n\n"), &out, io.Discard, nil),
+		uiplanview.NewPlanApprovalPromptRequest(),
 	)
 
 	if result.Action != string(ConfirmComment) {
@@ -61,7 +62,7 @@ func TestConfirmToolAction_DecisionMatrix(t *testing.T) {
 	t.Run("auto approve flag bypasses policy", func(t *testing.T) {
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{AutoApprove: true},
 			"delete_file",
 			"Delete file?",
@@ -80,7 +81,7 @@ func TestConfirmToolAction_DecisionMatrix(t *testing.T) {
 		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionBalanced)})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"read_file",
 			"Read file?",
@@ -99,7 +100,7 @@ func TestConfirmToolAction_DecisionMatrix(t *testing.T) {
 		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionFullAuto)})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"web_search",
 			"Search web?",
@@ -118,7 +119,7 @@ func TestConfirmToolAction_DecisionMatrix(t *testing.T) {
 		manualPolicy := config.ExecutionPolicy{Mode: config.ExecutionBalanced}
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{
 				Policy: &manualPolicy,
 				Config: &config.Config{ToolConfirm: config.ToolConfirmConfig{AutoApproveSafe: true}},
@@ -140,7 +141,7 @@ func TestConfirmToolAction_DecisionMatrix(t *testing.T) {
 		manualPolicy := config.ExecutionPolicy{Mode: config.ExecutionBalanced}
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{
 				Policy: &manualPolicy,
 				Config: &config.Config{ToolConfirm: config.ToolConfirmConfig{AutoApproveMedium: true}},
@@ -162,7 +163,7 @@ func TestConfirmToolAction_DecisionMatrix(t *testing.T) {
 		manualPolicy := config.ExecutionPolicy{Mode: config.ExecutionBalanced}
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &manualPolicy},
 			"write_file",
 			"Write file?",
@@ -185,7 +186,7 @@ func TestConfirmToolAction_MCPDynamicToolPolicy(t *testing.T) {
 		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionBalanced)})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"mcp_github_get_issue",
 			"Run MCP tool?",
@@ -204,7 +205,7 @@ func TestConfirmToolAction_MCPDynamicToolPolicy(t *testing.T) {
 		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionTrusted)})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"mcp_github_get_issue",
 			"Run MCP tool?",
@@ -223,7 +224,7 @@ func TestConfirmToolAction_MCPDynamicToolPolicy(t *testing.T) {
 		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionFullAuto)})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"mcp_github_get_issue",
 			"Run MCP tool?",
@@ -241,7 +242,7 @@ func TestConfirmToolAction_MCPDynamicToolPolicy(t *testing.T) {
 	t.Run("auto approve flag approves", func(t *testing.T) {
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader(""), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader(""), &out, io.Discard, nil),
 			ConfirmOptions{AutoApprove: true},
 			"mcp_github_get_issue",
 			"Run MCP tool?",

@@ -12,7 +12,8 @@ import (
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 // ContentPart はマルチモーダルコンテンツのパート
@@ -90,14 +91,14 @@ func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
-func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	streamResult, err := openaicompatstream.ParseSSEStream(ctx, resp, spinner, openaicompatstream.ParseSSEOptions{
 		UsageDecoder:          decodeOpenAICompatUsage,
 		StopOnToolCallsFinish: true,
 		OnToolCallArguments: func(toolName string) {
 			// tool_call arguments が届いた時のみ spinner を tool 名で再表示する。
 			if !spinner.IsActive() {
-				spinner.Start(ui.SpinnerMessageForTool(toolName))
+				spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 			}
 		},
 	})
@@ -146,7 +147,7 @@ func decodeOpenAICompatUsage(raw json.RawMessage) (*api.Usage, error) {
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
-func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	return api.HandleNonStreamingResponse(ctx, resp, spinner)
 }
 

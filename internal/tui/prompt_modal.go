@@ -2,7 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 type promptModalMode int
@@ -14,8 +14,8 @@ const (
 
 type promptModalState struct {
 	id       uint64
-	req      ui.PromptRequest
-	respond  chan<- ui.PromptResponse
+	req      uiprompt.PromptRequest
+	respond  chan<- uiprompt.PromptResponse
 	mode     promptModalMode
 	selected int
 	values   map[string]bool
@@ -33,7 +33,7 @@ func newPromptModalState(msg OpenPromptMsg) *promptModalState {
 		text:     newPromptTextState(msg.Request),
 	}
 
-	if msg.Request.Kind == ui.PromptKindText {
+	if msg.Request.Kind == uiprompt.PromptKindText {
 		state.mode = promptModalText
 		state.text.focus()
 	}
@@ -41,7 +41,7 @@ func newPromptModalState(msg OpenPromptMsg) *promptModalState {
 	for _, value := range msg.Request.DefaultValues {
 		state.values[value] = true
 	}
-	if msg.Request.Kind == ui.PromptKindSingleChoice && msg.Request.DefaultValue != "" {
+	if msg.Request.Kind == uiprompt.PromptKindSingleChoice && msg.Request.DefaultValue != "" {
 		for i, opt := range promptOptions(msg.Request) {
 			if opt.value == msg.Request.DefaultValue {
 				state.selected = i
@@ -88,7 +88,7 @@ func (m Model) handlePromptKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m Model) handlePromptChoiceKeyMsg(msg tea.KeyMsg) Model {
 	options := promptOptions(m.prompt.req)
 	if len(options) == 0 {
-		m.finishPrompt(ui.PromptResponse{Cancelled: true})
+		m.finishPrompt(uiprompt.PromptResponse{Cancelled: true})
 		return m
 	}
 	if action, ok := promptConfirmShortcutAction(m.prompt.req, options, msg); ok {
@@ -103,7 +103,7 @@ func (m Model) handlePromptChoiceKeyMsg(msg tea.KeyMsg) Model {
 		m.prompt.moveChoiceSelection(-1, len(options))
 	case msg.Type == tea.KeyDown || msg.String() == "j":
 		m.prompt.moveChoiceSelection(1, len(options))
-	case msg.Type == tea.KeySpace && m.prompt.req.Kind == ui.PromptKindMultiChoice:
+	case msg.Type == tea.KeySpace && m.prompt.req.Kind == uiprompt.PromptKindMultiChoice:
 		if opt, ok := m.prompt.selectedChoice(options); ok {
 			m.prompt.values[opt.value] = !m.prompt.values[opt.value]
 		}
@@ -130,31 +130,31 @@ func (m Model) handlePromptTextKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 func (m *Model) submitPromptChoice(opt promptOptionView, options []promptOptionView) {
 	switch m.prompt.req.Kind {
-	case ui.PromptKindConfirm:
+	case uiprompt.PromptKindConfirm:
 		m.submitPromptConfirmAction(opt.action)
-	case ui.PromptKindSingleChoice:
-		m.finishPrompt(ui.PromptResponse{Value: opt.value})
-	case ui.PromptKindMultiChoice:
+	case uiprompt.PromptKindSingleChoice:
+		m.finishPrompt(uiprompt.PromptResponse{Value: opt.value})
+	case uiprompt.PromptKindMultiChoice:
 		values := make([]string, 0, len(options))
 		for _, option := range options {
 			if m.prompt.values[option.value] {
 				values = append(values, option.value)
 			}
 		}
-		m.finishPrompt(ui.PromptResponse{Values: values})
+		m.finishPrompt(uiprompt.PromptResponse{Values: values})
 	}
 }
 
-func (m *Model) submitPromptConfirmAction(action ui.PromptAction) {
-	if action == ui.PromptActionComment {
+func (m *Model) submitPromptConfirmAction(action uiprompt.PromptAction) {
+	if action == uiprompt.PromptActionComment {
 		m.prompt.mode = promptModalText
 		m.prompt.text.beginComment(m.prompt.req.Placeholder)
 		return
 	}
-	m.finishPrompt(ui.PromptResponse{Action: action})
+	m.finishPrompt(uiprompt.PromptResponse{Action: action})
 }
 
-func (m *Model) finishPrompt(resp ui.PromptResponse) {
+func (m *Model) finishPrompt(resp uiprompt.PromptResponse) {
 	if m.prompt == nil {
 		return
 	}
@@ -177,9 +177,9 @@ func (m *Model) rebuildChromeAfterPromptRootChange() {
 	m.chromeDirty = false
 }
 
-func cancelPromptResponse(req ui.PromptRequest) ui.PromptResponse {
-	if req.Kind == ui.PromptKindConfirm {
-		return ui.PromptResponse{Action: ui.PromptActionNo, Cancelled: true}
+func cancelPromptResponse(req uiprompt.PromptRequest) uiprompt.PromptResponse {
+	if req.Kind == uiprompt.PromptKindConfirm {
+		return uiprompt.PromptResponse{Action: uiprompt.PromptActionNo, Cancelled: true}
 	}
-	return ui.PromptResponse{Cancelled: true}
+	return uiprompt.PromptResponse{Cancelled: true}
 }

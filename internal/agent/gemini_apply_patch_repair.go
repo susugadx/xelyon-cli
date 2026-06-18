@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const (
@@ -89,7 +89,7 @@ func (a *Agent) shouldRepairGeminiApplyPatch(tc *tools.ToolCall) bool {
 
 func (a *Agent) requestGeminiApplyPatchRepair(ctx context.Context, originalPatch, errorResult string) (string, error) {
 	ctx = a.requestContextWithoutActiveContext(ctx)
-	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
+	ctx = uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	ctx = api.WithProviderCacheNamespace(ctx, geminiApplyPatchRepairCacheNamespace)
 	response, err := a.CurrentProvider.ChatWithTools(

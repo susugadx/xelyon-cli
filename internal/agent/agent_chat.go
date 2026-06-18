@@ -8,7 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uisummary"
 )
 
 // chat はAIと対話する
@@ -65,19 +65,19 @@ func (a *Agent) showTaskSummary() {
 		return
 	}
 
-	ts := ui.NewTaskSummary()
+	ts := uisummary.NewTaskSummary()
 	for _, change := range taskChanges {
 		if len(change.Details) > 0 {
 			for _, detail := range change.Details {
 				action := detail.Action
 				if action == "" {
-					action = ui.InferAction(change.Tool)
+					action = uisummary.InferAction(change.Tool)
 				}
 				ts.AddChange(detail.FilePath, action, detail.LinesAdded, detail.LinesRemoved)
 			}
 			continue
 		}
-		action := ui.InferAction(change.Tool)
+		action := uisummary.InferAction(change.Tool)
 		ts.AddChange(change.FilePath, action, change.LinesAdded, change.LinesRemoved)
 	}
 	if a.taskTestResult != nil {

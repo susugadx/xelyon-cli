@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 func TestPromptModal_TextDefaultIsFallbackOnly(t *testing.T) {
@@ -24,9 +24,9 @@ func TestPromptModal_TextDefaultIsFallbackOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ch := make(chan ui.PromptResponse, 1)
-			m := newPromptTestModel(ui.PromptRequest{
-				Kind:         ui.PromptKindText,
+			ch := make(chan uiprompt.PromptResponse, 1)
+			m := newPromptTestModel(uiprompt.PromptRequest{
+				Kind:         uiprompt.PromptKindText,
 				Message:      "Describe it",
 				DefaultValue: "default answer",
 				Placeholder:  "Type answer",
@@ -61,11 +61,11 @@ func TestPromptModal_TextDefaultIsFallbackOnly(t *testing.T) {
 }
 
 func TestPromptModal_MultiChoiceToggleAndSubmit(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{
-		Kind:    ui.PromptKindMultiChoice,
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{
+		Kind:    uiprompt.PromptKindMultiChoice,
 		Message: "Pick",
-		Options: []ui.PromptOption{
+		Options: []uiprompt.PromptOption{
 			{Label: "Alpha", Value: "a"},
 			{Label: "Beta", Value: "b"},
 		},
@@ -90,9 +90,9 @@ func TestPromptModal_MultiChoiceToggleAndSubmit(t *testing.T) {
 }
 
 func TestPromptModal_CommentTextAndCancel(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{
-		Kind:         ui.PromptKindConfirm,
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{
+		Kind:         uiprompt.PromptKindConfirm,
 		Message:      "Approve?",
 		AllowComment: true,
 	}, ch)
@@ -112,13 +112,13 @@ func TestPromptModal_CommentTextAndCancel(t *testing.T) {
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	resp := <-ch
-	if resp.Action != ui.PromptActionComment || resp.Text != "needs context" {
+	if resp.Action != uiprompt.PromptActionComment || resp.Text != "needs context" {
 		t.Fatalf("response = %#v, want comment text", resp)
 	}
 
-	cancelCh := make(chan ui.PromptResponse, 1)
-	m = newPromptTestModel(ui.PromptRequest{
-		Kind:         ui.PromptKindConfirm,
+	cancelCh := make(chan uiprompt.PromptResponse, 1)
+	m = newPromptTestModel(uiprompt.PromptRequest{
+		Kind:         uiprompt.PromptKindConfirm,
 		Message:      "Approve?",
 		AllowComment: true,
 	}, cancelCh)
@@ -131,15 +131,15 @@ func TestPromptModal_CommentTextAndCancel(t *testing.T) {
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updated.(Model)
 	cancelResp := <-cancelCh
-	if cancelResp.Action != ui.PromptActionNo || !cancelResp.Cancelled {
+	if cancelResp.Action != uiprompt.PromptActionNo || !cancelResp.Cancelled {
 		t.Fatalf("cancel response = %#v, want cancelled no", cancelResp)
 	}
 }
 
 func TestPromptModal_PastedCommentTextRendersSingleLineAndSubmitsRaw(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{
-		Kind:         ui.PromptKindConfirm,
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{
+		Kind:         uiprompt.PromptKindConfirm,
 		Message:      "Approve?",
 		AllowComment: true,
 	}, ch)
@@ -173,7 +173,7 @@ func TestPromptModal_PastedCommentTextRendersSingleLineAndSubmitsRaw(t *testing.
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
 	resp := <-ch
-	if resp.Action != ui.PromptActionComment || resp.Text != pasted {
+	if resp.Action != uiprompt.PromptActionComment || resp.Text != pasted {
 		t.Fatalf("response = %#v, want raw pasted comment text", resp)
 	}
 }

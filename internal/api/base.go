@@ -12,7 +12,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // BaseProvider は各プロバイダーの共通基盤
@@ -94,7 +94,7 @@ func (b *BaseProvider) Name() string {
 }
 
 // HandleHTTPError はHTTPエラーレスポンスを処理
-func HandleHTTPError(resp *http.Response, spinner *ui.Spinner, providerName string) error {
+func HandleHTTPError(resp *http.Response, spinner *uiruntime.Spinner, providerName string) error {
 	if spinner != nil {
 		spinner.Stop()
 	}
@@ -117,7 +117,7 @@ func HandleHTTPError(resp *http.Response, spinner *ui.Spinner, providerName stri
 }
 
 // HandleNonStreamingResponse は非ストリーミングレスポンスを処理
-func HandleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func HandleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	var result ChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		if spinner != nil {
@@ -142,17 +142,17 @@ func HandleNonStreamingResponse(ctx context.Context, resp *http.Response, spinne
 }
 
 // StartSpinner はスピナーを開始
-func StartSpinner(message string) *ui.Spinner {
-	return ui.DefaultRuntime().StartSpinner(message)
+func StartSpinner(message string) *uiruntime.Spinner {
+	return uiruntime.DefaultRuntime().StartSpinner(message)
 }
 
 // StartSpinnerWithMessage は request context に紐づく出力先で spinner を開始する。
-func StartSpinnerWithMessage(ctx context.Context, message string) *ui.Spinner {
+func StartSpinnerWithMessage(ctx context.Context, message string) *uiruntime.Spinner {
 	return uiRuntimeFromContext(ctx).StartSpinner(message)
 }
 
 // StopSpinner はスピナーを停止（nilセーフ）
-func StopSpinner(spinner *ui.Spinner) {
+func StopSpinner(spinner *uiruntime.Spinner) {
 	if spinner != nil {
 		spinner.Stop()
 	}
@@ -187,7 +187,7 @@ func GetDefaultModelWithContext(ctx context.Context, model, providerName, fallba
 //   - forceDeep: optional override to show deep-thinking messaging even when config thinking is disabled
 //
 // Returns the started spinner (caller must call Stop()).
-func StartThinkingSpinner(ctx context.Context, isImage bool, customSuffix string, forceDeep ...bool) *ui.Spinner {
+func StartThinkingSpinner(ctx context.Context, isImage bool, customSuffix string, forceDeep ...bool) *uiruntime.Spinner {
 	deep := IsThinkingEnabled(ctx)
 	if len(forceDeep) > 0 && forceDeep[0] {
 		deep = true

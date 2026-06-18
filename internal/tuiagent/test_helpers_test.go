@@ -17,7 +17,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const reviewRunArtifactsEnv = "XELYON_REVIEW_RUN_ARTIFACTS"
@@ -53,7 +53,7 @@ func newChatRequestTestAgent(t *testing.T, provider api.Provider, out *bytes.Buf
 	t.Setenv("HOME", t.TempDir())
 
 	runtime := agentpkg.NewAgentRuntimeWithConfig(newChatRequestTestConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), out, out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), out, out)
 	runtime.Registry = tools.DefaultRegistry.Clone()
 	runtime.AutoApprove = true
 

@@ -5,7 +5,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 func (m Model) renderPromptOverlay(base string) string {
@@ -131,7 +131,7 @@ func (m Model) promptContentLines(width int) []string {
 			bg = palette.BgSelected
 			fg = palette.FgBright
 		}
-		if m.prompt.req.Kind == ui.PromptKindMultiChoice {
+		if m.prompt.req.Kind == uiprompt.PromptKindMultiChoice {
 			if m.prompt.values[opt.value] {
 				prefix = "  [x] "
 			} else {
@@ -150,20 +150,20 @@ func (m Model) promptContentLines(width int) []string {
 	}
 
 	hint := "  Up/Down/j/k:move  Enter:submit  Esc:cancel"
-	if m.prompt.req.Kind == ui.PromptKindMultiChoice {
+	if m.prompt.req.Kind == uiprompt.PromptKindMultiChoice {
 		hint = "  Up/Down/j/k:move  Space:toggle  Enter:submit  Esc:cancel"
 	}
 	lines = append(lines, "", palette.BgNormal+palette.FgDim+fitPlainPromptText(hint, width)+palette.Reset)
 	return lines
 }
 
-func promptDefaultTitle(kind ui.PromptKind) string {
+func promptDefaultTitle(kind uiprompt.PromptKind) string {
 	switch kind {
-	case ui.PromptKindConfirm:
+	case uiprompt.PromptKindConfirm:
 		return "Confirm"
-	case ui.PromptKindSingleChoice, ui.PromptKindMultiChoice:
+	case uiprompt.PromptKindSingleChoice, uiprompt.PromptKindMultiChoice:
 		return "Choose"
-	case ui.PromptKindText:
+	case uiprompt.PromptKindText:
 		return "Input"
 	default:
 		return "Prompt"

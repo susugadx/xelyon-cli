@@ -7,7 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleThinkingCommand_DeepSeekKeepsModelMirrorsAndSurfaceStable(t *testing.T) {
@@ -116,7 +116,7 @@ func TestHandleThinkingCommand_UsesCatalogModelForCodexMinimum(t *testing.T) {
 	cfg.Thinking.Level = "high"
 
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	agent := NewAgentWithRuntime("corp-codex-deployment", &mockProvider{name: "openai"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
 

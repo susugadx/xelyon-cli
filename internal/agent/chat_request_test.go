@@ -12,7 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type scriptedChatProvider struct {
@@ -65,7 +65,7 @@ func newChatRequestTestAgent(t *testing.T, provider api.Provider, out *bytes.Buf
 	t.Setenv("HOME", t.TempDir())
 
 	runtime := NewAgentRuntimeWithConfig(newChatRequestTestConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), out, out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), out, out)
 	runtime.Registry = tools.DefaultRegistry.Clone()
 
 	agent := NewAgentWithRuntime("gpt-5.4", provider, false, runtime)

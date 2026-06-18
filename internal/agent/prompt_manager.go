@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 

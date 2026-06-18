@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleChunk_DispatchesResponseCreated(t *testing.T) {
@@ -148,7 +148,7 @@ func TestHandleChunk_DispatchesOutputTextDelta(t *testing.T) {
 }
 
 func TestHandleChunk_FunctionCallAddedStartsSpinnerViaDisplayState(t *testing.T) {
-	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner := uiruntime.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
 	_, done, err := state.handleChunk(StreamChunk{
@@ -172,7 +172,7 @@ func TestHandleChunk_FunctionCallAddedStartsSpinnerViaDisplayState(t *testing.T)
 }
 
 func TestHandleChunk_OutputItemAddedWithCompactionTypeDoesNotBreakStreamingParser(t *testing.T) {
-	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner := uiruntime.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
 	textDelta, done, err := state.handleChunk(StreamChunk{

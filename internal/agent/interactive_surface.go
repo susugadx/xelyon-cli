@@ -13,7 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // InteractiveStatusSnapshot は interactive surface が表示する現在状態を表す。
@@ -43,9 +43,9 @@ func (a *Agent) Output() io.Writer {
 }
 
 // RuntimeUI は Agent が保持する UI runtime を返す。
-func (a *Agent) RuntimeUI() *ui.Runtime {
+func (a *Agent) RuntimeUI() *uiruntime.Runtime {
 	if a == nil {
-		return ui.DefaultRuntime()
+		return uiruntime.DefaultRuntime()
 	}
 	return a.ui()
 }

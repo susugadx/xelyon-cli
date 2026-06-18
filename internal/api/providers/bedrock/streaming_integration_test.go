@@ -13,7 +13,7 @@ import (
 	bedrocktypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type fakeResponseStreamReader struct {
@@ -89,10 +89,10 @@ func TestProvider_HandleEventStream_CombinesTextToolCallsAndUsage(t *testing.T) 
 	}
 
 	var out bytes.Buffer
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(bytes.NewReader(nil), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(bytes.NewReader(nil), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
-	content, err := p.handleEventStream(ctx, output, ui.NewSpinnerWithWriter(io.Discard))
+	content, err := p.handleEventStream(ctx, output, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleEventStream() error = %v", err)
 	}

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleStreamingResponse_ContentReasoningToolCallsAndUsage(t *testing.T) {
@@ -28,7 +28,7 @@ func TestHandleStreamingResponse_ContentReasoningToolCallsAndUsage(t *testing.T)
 	defer resp.Body.Close()
 
 	ctx, out, _ := newKimiTestContext(t, true)
-	got, err := p.handleStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleStreamingResponse() error = %v", err)
 	}

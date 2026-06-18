@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func openRouterStreamingResponse(body string) *http.Response {
@@ -34,7 +34,7 @@ func TestHandleStreamingResponse_EmitsToolCallsAndUsage(t *testing.T) {
 		`data: [DONE]`,
 	}, "\n\n") + "\n\n"
 
-	got, err := p.handleStreamingResponse(ctx, openRouterStreamingResponse(body), ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleStreamingResponse(ctx, openRouterStreamingResponse(body), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleStreamingResponse() error = %v", err)
 	}
@@ -59,7 +59,7 @@ func TestHandleStreamingResponse_ContextCanceled(t *testing.T) {
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	body := "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n"
-	got, err := p.handleStreamingResponse(ctx, openRouterStreamingResponse(body), ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleStreamingResponse(ctx, openRouterStreamingResponse(body), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != context.Canceled {
 		t.Fatalf("handleStreamingResponse() error = %v, want %v", err, context.Canceled)
 	}
@@ -85,7 +85,7 @@ func TestHandleClaudeStreamingResponse_ToolUseOnly(t *testing.T) {
 		`data: {"type":"message_stop"}`,
 	}, "\n\n") + "\n\n"
 
-	got, err := p.handleClaudeStreamingResponse(ctx, openRouterStreamingResponse(body), ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleClaudeStreamingResponse(ctx, openRouterStreamingResponse(body), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleClaudeStreamingResponse() error = %v", err)
 	}
@@ -124,7 +124,7 @@ func TestHandleClaudeStreamingResponse_ContextCanceledReturnsPartialAndError(t *
 		cancel()
 	}()
 
-	got, err := p.handleClaudeStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleClaudeStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != context.Canceled {
 		t.Fatalf("handleClaudeStreamingResponse() error = %v, want %v", err, context.Canceled)
 	}
@@ -162,7 +162,7 @@ func TestHandleClaudeStreamingResponse_ContextCanceledDoesNotEmitUsageCallback(t
 		cancel()
 	}()
 
-	got, err := p.handleClaudeStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleClaudeStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != context.Canceled {
 		t.Fatalf("handleClaudeStreamingResponse() error = %v, want %v", err, context.Canceled)
 	}

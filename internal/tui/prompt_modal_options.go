@@ -4,21 +4,21 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 type promptOptionView struct {
 	label       string
 	description string
 	value       string
-	action      ui.PromptAction
+	action      uiprompt.PromptAction
 }
 
-func promptOptions(req ui.PromptRequest) []promptOptionView {
+func promptOptions(req uiprompt.PromptRequest) []promptOptionView {
 	switch req.Kind {
-	case ui.PromptKindConfirm:
+	case uiprompt.PromptKindConfirm:
 		return promptConfirmOptions(req)
-	case ui.PromptKindSingleChoice, ui.PromptKindMultiChoice:
+	case uiprompt.PromptKindSingleChoice, uiprompt.PromptKindMultiChoice:
 		options := make([]promptOptionView, 0, len(req.Options))
 		for _, opt := range req.Options {
 			value := opt.Value
@@ -37,11 +37,11 @@ func promptOptions(req ui.PromptRequest) []promptOptionView {
 	}
 }
 
-func promptConfirmOptions(req ui.PromptRequest) []promptOptionView {
-	options := ui.ConfirmPromptOptions(req, defaultPromptConfirmOptions())
+func promptConfirmOptions(req uiprompt.PromptRequest) []promptOptionView {
+	options := uiprompt.ConfirmPromptOptions(req, defaultPromptConfirmOptions())
 	views := make([]promptOptionView, 0, len(options))
 	for _, opt := range options {
-		action, ok := ui.ConfirmPromptActionFromValue(opt.Value)
+		action, ok := uiprompt.ConfirmPromptActionFromValue(opt.Value)
 		if !ok {
 			continue
 		}
@@ -54,16 +54,16 @@ func promptConfirmOptions(req ui.PromptRequest) []promptOptionView {
 	return views
 }
 
-func defaultPromptConfirmOptions() []ui.PromptOption {
-	return []ui.PromptOption{
-		{Label: "Yes", Description: "Approve", Value: string(ui.PromptActionYes)},
-		{Label: "No", Description: "Cancel", Value: string(ui.PromptActionNo)},
-		{Label: "Comment", Description: "Send feedback", Value: string(ui.PromptActionComment)},
+func defaultPromptConfirmOptions() []uiprompt.PromptOption {
+	return []uiprompt.PromptOption{
+		{Label: "Yes", Description: "Approve", Value: string(uiprompt.PromptActionYes)},
+		{Label: "No", Description: "Cancel", Value: string(uiprompt.PromptActionNo)},
+		{Label: "Comment", Description: "Send feedback", Value: string(uiprompt.PromptActionComment)},
 	}
 }
 
-func promptConfirmShortcutAction(req ui.PromptRequest, options []promptOptionView, msg tea.KeyMsg) (ui.PromptAction, bool) {
-	if req.Kind != ui.PromptKindConfirm {
+func promptConfirmShortcutAction(req uiprompt.PromptRequest, options []promptOptionView, msg tea.KeyMsg) (uiprompt.PromptAction, bool) {
+	if req.Kind != uiprompt.PromptKindConfirm {
 		return "", false
 	}
 	input := strings.ToLower(strings.TrimSpace(msg.String()))
@@ -74,13 +74,13 @@ func promptConfirmShortcutAction(req ui.PromptRequest, options []promptOptionVie
 		}
 		return "", false
 	}
-	if action, ok := ui.ConfirmPromptActionShortcut(input); ok {
+	if action, ok := uiprompt.ConfirmPromptActionShortcut(input); ok {
 		return promptConfirmActionIfAvailable(options, action)
 	}
 	return "", false
 }
 
-func promptConfirmActionIfAvailable(options []promptOptionView, action ui.PromptAction) (ui.PromptAction, bool) {
+func promptConfirmActionIfAvailable(options []promptOptionView, action uiprompt.PromptAction) (uiprompt.PromptAction, bool) {
 	for _, opt := range options {
 		if opt.action == action {
 			return action, true

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // setupTestConfirm はSimpleConfirmをモックする
@@ -18,7 +18,7 @@ func setupTestConfirm(t *testing.T, result bool) {
 	SimpleConfirm = func(msg string) bool {
 		return result
 	}
-	SimpleConfirmWithIO = func(_ ui.PromptIO, msg string) bool {
+	SimpleConfirmWithIO = func(_ uiruntime.PromptIO, msg string) bool {
 		return result
 	}
 	t.Cleanup(func() {
@@ -129,7 +129,7 @@ func TestConfirmWithIO_UsesInjectedIO(t *testing.T) {
 	})
 
 	var out bytes.Buffer
-	dec := ConfirmWithIO(ui.NewPromptIO(strings.NewReader("y\n"), &out, io.Discard, nil), "Proceed?")
+	dec := ConfirmWithIO(uiruntime.NewPromptIO(strings.NewReader("y\n"), &out, io.Discard, nil), "Proceed?")
 	if dec.Action != ConfirmYes {
 		t.Fatalf("expected ConfirmYes, got %q", dec.Action)
 	}
@@ -154,7 +154,7 @@ func TestConfirmWithIO_DiscardDoesNotLeakProcessStdout(t *testing.T) {
 		os.Stdout = oldStdout
 	})
 
-	dec := ConfirmWithIO(ui.NewPromptIO(strings.NewReader("y\n"), io.Discard, io.Discard, nil), "Proceed?")
+	dec := ConfirmWithIO(uiruntime.NewPromptIO(strings.NewReader("y\n"), io.Discard, io.Discard, nil), "Proceed?")
 	_ = w.Close()
 
 	var buf bytes.Buffer

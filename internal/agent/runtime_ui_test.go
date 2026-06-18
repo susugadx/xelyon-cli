@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleInitCommand_UsesRuntimeUI(t *testing.T) {
@@ -32,7 +32,7 @@ func TestHandleInitCommand_UsesRuntimeUI(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader("n\n"), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader("n\n"), &out, &out),
 		},
 	}
 

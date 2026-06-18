@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // RuntimeOptions は一時的な内部 runtime gate を束ねる。
@@ -34,7 +34,7 @@ type AgentRuntime struct {
 	ProjectConfig                       *ProjectConfigStore
 	InvocationCWD                       string
 	AutoApprove                         bool
-	UI                                  *ui.Runtime
+	UI                                  *uiruntime.Runtime
 	AuditLogger                         audit.ToolLogger
 	SubAgentManager                     *subagent.Manager
 	TaskLedger                          *taskstate.Store
@@ -81,7 +81,7 @@ func normalizeAgentRuntime(runtime *AgentRuntime) *AgentRuntime {
 		runtime.InvocationCWD = resolveRuntimeInvocationCWD()
 	}
 	if runtime.UI == nil {
-		runtime.UI = ui.NewRuntime(nil, nil, nil)
+		runtime.UI = uiruntime.NewRuntime(nil, nil, nil)
 	}
 	if runtime.AuditLogger == nil {
 		runtime.AuditLogger = audit.NewDisabledLogger()
@@ -130,9 +130,9 @@ func (r *AgentRuntime) effectiveProjectConfigStore() *ProjectConfigStore {
 	return r.ProjectConfig
 }
 
-func (r *AgentRuntime) effectiveUI() *ui.Runtime {
+func (r *AgentRuntime) effectiveUI() *uiruntime.Runtime {
 	if r == nil || r.UI == nil {
-		return ui.NewRuntime(nil, nil, nil)
+		return uiruntime.NewRuntime(nil, nil, nil)
 	}
 	return r.UI
 }
@@ -274,9 +274,9 @@ func (a *Agent) autoApprove() bool {
 	return a.AutoApprove
 }
 
-func (a *Agent) ui() *ui.Runtime {
+func (a *Agent) ui() *uiruntime.Runtime {
 	if a == nil || a.Runtime == nil {
-		return ui.NewRuntime(nil, nil, nil)
+		return uiruntime.NewRuntime(nil, nil, nil)
 	}
 	return a.Runtime.effectiveUI()
 }

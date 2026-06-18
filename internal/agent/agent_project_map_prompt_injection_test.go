@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestInjectProjectMap_AppendsProjectManifestAndKeepsFullRuntimeMap(t *testing.T) {
@@ -43,7 +43,7 @@ func TestInjectProjectMap_AppendsProjectManifestAndKeepsFullRuntimeMap(t *testin
 	var out bytes.Buffer
 	cfg := config.DefaultConfig()
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -112,7 +112,7 @@ func TestInjectProjectMap_AddsFocusOverlayForNestedInputPath(t *testing.T) {
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -153,7 +153,7 @@ func TestInjectProjectMap_ExcludesImportPathFromFocusOverlay(t *testing.T) {
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -204,7 +204,7 @@ func TestInjectProjectMap_DoesNotUseRecentToolPathsForFocusOverlay(t *testing.T)
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	runtime.ToolCache = cache
 	agent := &Agent{
 		Runtime:      runtime,
@@ -290,7 +290,7 @@ func TestInjectProjectMap_RebuildsBaseManifestWhenBudgetShrinks(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.ProjectMap.ContextRatio = 0.05
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",

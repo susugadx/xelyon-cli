@@ -9,7 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // ErrThinkingTimeout はthought は流れているが actionable output が進まない場合のタイムアウトエラー
@@ -75,7 +75,7 @@ func geminiResponseBillingServiceTier(resp *http.Response, cfg *config.Config) s
 
 // handleSSEResponse は streamGenerateContent?alt=sse の SSE ストリームを処理する
 // thinkingMsg はSSEストリーム開始時にスピナーを切り替えるメッセージ（空なら切り替えなし）
-func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, thinkingMsg, model string) (string, error) {
+func (p *Provider) handleSSEResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner, thinkingMsg, model string) (string, error) {
 	debug := os.Getenv("XELYON_DEBUG_GEMINI") == "1"
 	state := newSSEInterpretState(ctx, spinner, thinkingMsg, debug)
 	// どの return 経路でもスピナー停止を保証し、描画崩れを防ぐ。

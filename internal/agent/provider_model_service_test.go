@@ -13,7 +13,7 @@ import (
 	openaisubscription "github.com/susugadx/xelyon-cli/internal/api/providers/openai_subscription"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestSwitchModelForCurrentProvider_ReturnsOutcomeAndPersistsConfig(t *testing.T) {
@@ -37,7 +37,7 @@ func TestSwitchModelForCurrentProvider_ReturnsOutcomeAndPersistsConfig(t *testin
 		Stats:             NewSessionStats("openai", "gpt-old"),
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-old"),
@@ -88,7 +88,7 @@ func TestSwitchModelForCurrentProvider_GeminiUnsupportedFunctionCallingModelFail
 		CurrentProvider:   provider,
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -132,7 +132,7 @@ func TestSwitchModelForCurrentProvider_GeminiValidatesSavedCandidateConfig(t *te
 		CurrentProvider:   provider,
 		Runtime: &AgentRuntime{
 			Config: config.CloneConfig(cfg),
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -183,7 +183,7 @@ func TestSwitchModelForCurrentProvider_AzureDeploymentChangeClearsStaleCatalogMo
 		CurrentProvider:   &mockProvider{name: "azure"},
 		Runtime: &AgentRuntime{
 			Config: newProjectMapDisabledConfig(),
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("dep-a"),
@@ -243,7 +243,7 @@ func TestSwitchModelForCurrentProvider_AzureSameDeploymentPreservesCatalogModel(
 		CurrentProvider:   &mockProvider{name: "azure"},
 		Runtime: &AgentRuntime{
 			Config: newProjectMapDisabledConfig(),
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("dep-a"),
@@ -775,7 +775,7 @@ func TestConfigureAndSwitchAzureDeployment_SwitchFailureDoesNotPersistConfig(t *
 		CurrentProvider:   &mockProvider{name: "openai"},
 		Runtime: &AgentRuntime{
 			Config: runtimeCfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-5.4"),
@@ -827,7 +827,7 @@ func TestConfigureAndSwitchAzureDeployment_PersistsAfterSuccessfulSwitch(t *test
 		Stats:             NewSessionStats("openai", "gpt-5.4"),
 		Runtime: &AgentRuntime{
 			Config: runtimeCfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-5.4"),
@@ -897,7 +897,7 @@ func TestSwitchProviderModel_ReturnsOutcomeWithoutPrinting(t *testing.T) {
 		},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-old"),
@@ -956,7 +956,7 @@ func TestSwitchProviderModel_RejectsSetupRequiredProvider(t *testing.T) {
 		CurrentProvider:   &mockProvider{name: "ollama"},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("qwen2.5-coder:14b"),
@@ -1005,7 +1005,7 @@ func TestSwitchModelForCurrentProvider_ClearsRemoteContinuationButKeepsContext(t
 		},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: newResponseContextSession("gpt-old", "openai", "openai", "resp_old"),

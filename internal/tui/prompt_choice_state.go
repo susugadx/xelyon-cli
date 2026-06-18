@@ -1,16 +1,16 @@
 package tui
 
-import "github.com/susugadx/xelyon-cli/internal/ui"
+import "github.com/susugadx/xelyon-cli/internal/uiprompt"
 
-func initialPromptSelectedIndex(req ui.PromptRequest) int {
+func initialPromptSelectedIndex(req uiprompt.PromptRequest) int {
 	if promptConfirmRequiresExplicitSelection(req) {
 		return -1
 	}
 	return 0
 }
 
-func promptConfirmRequiresExplicitSelection(req ui.PromptRequest) bool {
-	return req.Kind == ui.PromptKindConfirm && req.ConfirmSubmitPolicy == ui.PromptConfirmSubmitExplicit
+func promptConfirmRequiresExplicitSelection(req uiprompt.PromptRequest) bool {
+	return req.Kind == uiprompt.PromptKindConfirm && req.ConfirmSubmitPolicy == uiprompt.PromptConfirmSubmitExplicit
 }
 
 func (p *promptModalState) moveChoiceSelection(delta int, optionCount int) {

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type fakeChatCompletionsExecutor struct {
@@ -26,8 +26,8 @@ func (f *fakeChatCompletionsExecutor) Name() string {
 }
 
 func newRunnerTestContext() context.Context {
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
-	ctx := ui.WithRuntime(context.Background(), runtime)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	ctx := uiruntime.WithRuntime(context.Background(), runtime)
 	return api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 }
 
@@ -45,10 +45,10 @@ func TestRunChatCompletions_UsesStreamHandlerForEventStream(t *testing.T) {
 	}
 
 	got, err := RunChatCompletions(req.Context(), executor, req, ChatCompletionsRunOptions{
-		StreamHandler: func(context.Context, *http.Response, *ui.Spinner) (string, error) {
+		StreamHandler: func(context.Context, *http.Response, *uiruntime.Spinner) (string, error) {
 			return "stream", nil
 		},
-		NonStreamHandler: func(context.Context, *http.Response, *ui.Spinner) (string, error) {
+		NonStreamHandler: func(context.Context, *http.Response, *uiruntime.Spinner) (string, error) {
 			t.Fatal("non-stream handler should not be called")
 			return "", nil
 		},
@@ -70,7 +70,7 @@ func TestRunChatCompletions_PrefixesRequestError(t *testing.T) {
 
 	_, err = RunChatCompletions(req.Context(), executor, req, ChatCompletionsRunOptions{
 		RequestErrorPrefix: "Provider request failed",
-		StreamHandler: func(context.Context, *http.Response, *ui.Spinner) (string, error) {
+		StreamHandler: func(context.Context, *http.Response, *uiruntime.Spinner) (string, error) {
 			return "", nil
 		},
 	})

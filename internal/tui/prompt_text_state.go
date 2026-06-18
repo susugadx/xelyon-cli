@@ -6,17 +6,17 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 type promptTextState struct {
 	input          textinput.Model
 	value          string
-	responseAction ui.PromptAction
+	responseAction uiprompt.PromptAction
 	defaultValue   string
 }
 
-func newPromptTextState(req ui.PromptRequest) promptTextState {
+func newPromptTextState(req uiprompt.PromptRequest) promptTextState {
 	input := textinput.New()
 	input.Prompt = ""
 	input.Placeholder = req.Placeholder
@@ -34,7 +34,7 @@ func (s *promptTextState) focus() {
 }
 
 func (s *promptTextState) beginComment(placeholder string) {
-	s.responseAction = ui.PromptActionComment
+	s.responseAction = uiprompt.PromptActionComment
 	s.setValue("")
 	if placeholder == "" {
 		placeholder = "Type feedback. Use image:/path to attach an image."
@@ -43,13 +43,13 @@ func (s *promptTextState) beginComment(placeholder string) {
 	s.input.Focus()
 }
 
-func (s promptTextState) response() ui.PromptResponse {
+func (s promptTextState) response() uiprompt.PromptResponse {
 	text := s.value
 	if text == "" && s.defaultValue != "" {
 		text = s.defaultValue
 	}
 
-	resp := ui.PromptResponse{Text: text}
+	resp := uiprompt.PromptResponse{Text: text}
 	if s.responseAction != "" {
 		resp.Action = s.responseAction
 	}

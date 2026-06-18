@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 type agentActivityOptions struct {
@@ -174,7 +174,7 @@ func agentActivityToolErrorText(tool ToolResult) string {
 	tool = normalizeActivityTool(tool)
 	parts := []string{tool.Name, "failed"}
 	if tool.Duration > 0 {
-		parts = append(parts, "·", ui.FormatParallelElapsed(tool.Duration))
+		parts = append(parts, "·", uitoolview.FormatParallelElapsed(tool.Duration))
 	}
 	return strings.TrimSpace(strings.Join(parts, " "))
 }
@@ -333,13 +333,13 @@ func renderAgentActivityToolText(tool ToolResult) string {
 	case ToolStatusError:
 		parts := []string{"✕", agentActivityErrorLabel(AgentErrorTool), tool.Name, "failed"}
 		if tool.Duration > 0 {
-			parts = append(parts, "·", ui.FormatParallelElapsed(tool.Duration))
+			parts = append(parts, "·", uitoolview.FormatParallelElapsed(tool.Duration))
 		}
 		return strings.Join(parts, " ")
 	default:
 		parts := nonEmptyStrings("✓", tool.Name, tool.Target)
 		if tool.Duration > 0 {
-			parts = append(parts, "·", ui.FormatParallelElapsed(tool.Duration))
+			parts = append(parts, "·", uitoolview.FormatParallelElapsed(tool.Duration))
 		}
 		return strings.Join(parts, " ")
 	}

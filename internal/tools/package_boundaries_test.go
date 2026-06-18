@@ -23,7 +23,7 @@ var toolsForbiddenImportRules = []toolsArchitectureImportRule{
 	},
 	{
 		importRoot: "github.com/susugadx/xelyon-cli/internal/tui",
-		rule:       "internal/tools must not import internal/tui; tools may use internal/ui runtime contracts only",
+		rule:       "internal/tools must not import internal/tui; tools may use uiruntime/uiprompt contracts only",
 	},
 	{
 		importRoot: "github.com/susugadx/xelyon-cli/internal/tuiagent",
