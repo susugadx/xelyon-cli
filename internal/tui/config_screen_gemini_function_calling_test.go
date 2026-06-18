@@ -19,21 +19,21 @@ func TestConfigScreen_GeminiDefaultModelRejectsUnsupportedFunctionCallingModel(t
 	cfg := config.DefaultConfig()
 	cfg.DefaultProvider = "gemini"
 	m := newGeminiConfigScreenTestModel(cfg)
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 
-	setConfigFieldSelection(t, cs, "provider", "default_model")
+	selectConfigField(t, &m, "provider", "default_model")
 	previousDefault := cs.cfg.DefaultModel
 	previousGeminiDefault := cs.cfg.GetExplicitProviderDefaultModel("gemini")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editMode != editInput {
 		t.Fatalf("editMode = %d, want editInput", cs.editMode)
 	}
-	cs.editInput.SetValue("gemini-2.0-flash-lite")
+	setConfigInputValue(t, &m, "gemini-2.0-flash-lite")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if cs.cfg.DefaultModel != previousDefault {
 		t.Fatalf("DefaultModel = %q, want unchanged %q", cs.cfg.DefaultModel, previousDefault)
@@ -51,19 +51,19 @@ func TestConfigScreen_GeminiDefaultModelRejectsUnsupportedFunctionCallingModel(t
 
 func TestConfigScreen_GeminiProviderCatalogRejectsUnsupportedFunctionCallingModel(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "provider_models", "gemini")
-	cs := m.configScreen
-	setEntryFieldIndex(t, cs, "catalog_model")
+	cs := configTestScreen(t, m)
+	selectConfigEntryField(t, &m, "catalog_model")
 
 	previous := cs.cfg.ProviderModels["gemini"].CatalogModel
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "input" {
 		t.Fatalf("editEntryFieldEdit = %q, want input", cs.editEntryFieldEdit)
 	}
-	cs.editInput.SetValue("models/gemini-2.0-flash-lite")
+	setConfigInputValue(t, &m, "models/gemini-2.0-flash-lite")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if got := cs.cfg.ProviderModels["gemini"].CatalogModel; got != previous {
 		t.Fatalf("provider_models.gemini.catalog_model = %q, want unchanged %q", got, previous)
@@ -85,7 +85,7 @@ func TestConfigScreen_SaveRejectsUnsupportedGeminiConfigBeforeSync(t *testing.T)
 	})
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
-	m.configScreen.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = saveConfigAndWait(t, m)
 	cs := m.configScreen

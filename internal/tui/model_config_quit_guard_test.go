@@ -10,26 +10,11 @@ import (
 
 func TestConfigScreen_ConfirmQuitWithDirty_Discard(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-
-	for i, cat := range cs.categories {
-		if cat.Name == "compression" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "compression.enabled" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	selectConfigField(t, &m, "compression", "compression.enabled")
 	m = sendConfigKey(m, " ")
 
 	m = sendConfigKey(m, "q")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if !cs.confirmQuit {
 		t.Fatal("confirmQuit should be true")
 	}
@@ -125,17 +110,16 @@ func TestConfigScreen_CtrlC_DoesNotBypassDirtyOnDoublePress(t *testing.T) {
 
 func TestConfigScreen_ConfirmQuitCancel(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = sendConfigKey(m, "q")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if !cs.confirmQuit {
 		t.Fatal("confirmQuit should be true")
 	}
 
 	m = sendConfigKeys(m, "j", "j", "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.confirmQuit {
 		t.Fatal("confirmQuit should be false after cancel")
 	}
@@ -151,12 +135,8 @@ func TestConfigScreen_ConfirmQuit_CtrlC_StillCancelsProcessing(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
 
-	cs.dirty = true
-	cs.saveStatus = statusModified
-	cs.confirmQuit = true
-	cs.confirmIdx = 1
+	setConfigConfirmQuitForTest(t, &m, 1)
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m = updated.(Model)
@@ -184,12 +164,8 @@ func TestConfigScreen_ConfirmQuit_CtrlC_WhenIdle_DoesNotBreakQuitDialog(t *testi
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
 
-	cs.dirty = true
-	cs.saveStatus = statusModified
-	cs.confirmQuit = true
-	cs.confirmIdx = 0
+	setConfigConfirmQuitForTest(t, &m, 0)
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m = updated.(Model)

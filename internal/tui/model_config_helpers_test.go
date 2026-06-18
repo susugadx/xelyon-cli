@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -9,9 +8,12 @@ import (
 )
 
 func newConfigTestModel() Model {
+	return newConfigTestModelWithConfig(config.DefaultConfig())
+}
+
+func newConfigTestModelWithConfig(cfg *config.Config) Model {
 	agent := &stubAgent{}
 	m := newModelWithViewport(agent)
-	cfg := config.DefaultConfig()
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
 	return m
@@ -48,59 +50,6 @@ func sendConfigKeys(m Model, keys ...string) Model {
 	return m
 }
 
-func setConfigFieldSelection(t *testing.T, cs *configScreen, categoryName, fieldPath string) {
-	t.Helper()
-
-	for i, cat := range cs.categories {
-		if cat.Name == categoryName {
-			cs.catIndex = i
-			cs.activePane = paneField
-			for j, f := range cs.filteredFields() {
-				if f.Path == fieldPath {
-					cs.fieldIndex = j
-					return
-				}
-			}
-			t.Fatalf("field %q not found in category %q", fieldPath, categoryName)
-		}
-	}
-
-	t.Fatalf("category %q not found", categoryName)
-}
-
-func selectConfigOption(t *testing.T, m Model, categoryName, fieldPath, option string) Model {
-	t.Helper()
-
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, categoryName, fieldPath)
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editSelect {
-		t.Fatalf("editMode = %d, want editSelect", cs.editMode)
-	}
-
-	field := cs.selectedField()
-	if field == nil {
-		t.Fatal("selectedField is nil")
-	}
-
-	found := false
-	for i, candidate := range field.Options {
-		if candidate == option {
-			cs.editSelect = i
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("option %q not found in %s", option, fieldPath)
-	}
-
-	m = sendConfigKey(m, "enter")
-	return m
-}
-
 func saveConfigAndWait(t *testing.T, m Model) Model {
 	t.Helper()
 
@@ -115,80 +64,77 @@ func saveConfigAndWait(t *testing.T, m Model) Model {
 	return updated.(Model)
 }
 
-func enterStructMapEdit(t *testing.T, path string) Model {
+func configTestScreen(t *testing.T, m Model) *configScreen {
 	t.Helper()
-	m := newConfigTestModel()
-	cs := m.configScreen
-
-	parts := strings.SplitN(path, ".", 2)
-	catName := parts[0]
-	if path == "provider_models" {
-		catName = "provider"
+	if m.configScreen == nil {
+		t.Fatal("configScreen is nil")
 	}
-	for i, cat := range cs.categories {
-		if cat.Name == catName {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == path {
-			cs.fieldIndex = i
-			break
-		}
-	}
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
-	return m
+	return m.configScreen
 }
 
-func enterStructMapEntryForKey(t *testing.T, path, key string) Model {
-	t.Helper()
-	m := enterStructMapEdit(t, path)
-	cs := m.configScreen
-
-	for i, k := range cs.editStructKeys {
-		if k == key {
-			cs.editStructIndex = i
-			break
-		}
-	}
-	if cs.editStructKeys[cs.editStructIndex] != key {
-		t.Fatalf("key %q not found in editStructKeys", key)
-	}
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if !cs.editEntryActive {
-		t.Fatalf("editEntryActive should be true for key %q", key)
-	}
-	return m
+type configScreenTestSnapshot struct {
+	categoryIndex int
+	fieldIndex    int
+	fieldScroll   int
+	activePane    configPane
+	editMode      configEditMode
+	dirty         bool
+	saveStatus    configSaveStatus
+	saveError     string
+	confirmQuit   bool
+	pendingClose  bool
 }
 
-func setEntryFieldIndex(t *testing.T, cs *configScreen, name string) int {
+func configSnapshot(t *testing.T, m Model) configScreenTestSnapshot {
 	t.Helper()
-	for i, ef := range cs.editEntryFields {
-		if ef.Name == name {
-			cs.editEntryIndex = i
-			return i
-		}
+	cs := configTestScreen(t, m)
+	return configScreenTestSnapshot{
+		categoryIndex: cs.catIndex,
+		fieldIndex:    cs.fieldIndex,
+		fieldScroll:   cs.fieldScroll,
+		activePane:    cs.activePane,
+		editMode:      cs.editMode,
+		dirty:         cs.dirty,
+		saveStatus:    cs.saveStatus,
+		saveError:     cs.saveError,
+		confirmQuit:   cs.confirmQuit,
+		pendingClose:  cs.pendingClose,
 	}
-	t.Fatalf("entry field %q not found", name)
-	return -1
+}
+
+func setConfigDirtyForTest(t *testing.T, m *Model, dirty bool) {
+	t.Helper()
+	cs := configTestScreen(t, *m)
+	cs.dirty = dirty
+}
+
+func setConfigModifiedForTest(t *testing.T, m *Model) {
+	t.Helper()
+	cs := configTestScreen(t, *m)
+	cs.dirty = true
+	cs.saveStatus = statusModified
+}
+
+func setConfigConfirmQuitForTest(t *testing.T, m *Model, confirmIdx int) {
+	t.Helper()
+	cs := configTestScreen(t, *m)
+	cs.dirty = true
+	cs.saveStatus = statusModified
+	cs.confirmQuit = true
+	cs.confirmIdx = confirmIdx
+}
+
+func setConfigConfirmIndexForTest(t *testing.T, m *Model, confirmIdx int) {
+	t.Helper()
+	configTestScreen(t, *m).confirmIdx = confirmIdx
 }
 
 func makeConfigScreenDirty(t *testing.T, m Model) Model {
 	t.Helper()
 
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "compression", "compression.enabled")
+	selectConfigField(t, &m, "compression", "compression.enabled")
 	m = sendConfigKey(m, " ")
-	if !m.configScreen.dirty {
+	if !configSnapshot(t, m).dirty {
 		t.Fatal("dirty should be true after toggle")
 	}
 	return m

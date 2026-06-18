@@ -1,4 +1,4 @@
-package tui
+package projectscreen
 
 import (
 	"github.com/charmbracelet/bubbles/textarea"
@@ -49,18 +49,20 @@ const (
 	projectStatusFailed
 )
 
-type projectCommand int
+// Command は /project 画面が root orchestration に要求する処理を表す。
+type Command int
 
 const (
-	projectCommandNone projectCommand = iota
-	projectCommandClose
-	projectCommandSave
-	projectCommandSaveAndClose
-	projectCommandCreateTemplate
-	projectCommandDelegateCtrlC
+	CommandNone Command = iota
+	CommandClose
+	CommandSave
+	CommandSaveAndClose
+	CommandCreateTemplate
+	CommandDelegateCtrlC
 )
 
-type projectScreen struct {
+// Screen は /project 画面の state/input/render/save-result handling を保持する。
+type Screen struct {
 	screenID int
 
 	pc                    *config.ProjectConfig
@@ -93,6 +95,30 @@ type projectScreen struct {
 	saveQueued   bool
 }
 
+// Snapshot は root package や tests が参照する /project 画面状態の読み取り専用投影。
+type Snapshot struct {
+	ScreenID        int
+	Config          *config.ProjectConfig
+	Missing         bool
+	Dirty           bool
+	SaveStatus      string
+	SaveError       string
+	Message         string
+	ConfirmQuit     bool
+	PendingClose    bool
+	SaveInFlight    bool
+	SaveQueued      bool
+	Section         string
+	ActivePane      string
+	EditMode        string
+	ContextDraft    string
+	ContextValue    string
+	LineEditValue   string
+	SelectedIndex   int
+	SelectedItems   []string
+	FinalCheckSaved bool
+}
+
 type projectSectionInfo struct {
 	section     projectSection
 	title       string
@@ -108,7 +134,8 @@ var projectSections = []projectSectionInfo{
 	{section: projectSectionFinalTimeout, title: "Final check timeout", description: "Timeout in seconds for final checks"},
 }
 
-func newProjectScreen(pc *config.ProjectConfig) *projectScreen {
+// New は project config の編集画面 state を生成する。
+func New(pc *config.ProjectConfig, screenID int) *Screen {
 	ti := textinput.New()
 	ti.Prompt = ""
 	ti.CharLimit = 512
@@ -119,7 +146,8 @@ func newProjectScreen(pc *config.ProjectConfig) *projectScreen {
 	area.CharLimit = 0
 	area.SetHeight(8)
 
-	ps := &projectScreen{
+	ps := &Screen{
+		screenID:            screenID,
 		pc:                  config.CloneProjectConfig(pc),
 		missing:             pc == nil,
 		savedHasFinalChecks: pc != nil && pc.FinalChecks != nil,
@@ -131,14 +159,15 @@ func newProjectScreen(pc *config.ProjectConfig) *projectScreen {
 	return ps
 }
 
-func (ps *projectScreen) normalizeSize(width, height int) {
+// NormalizeSize は画面サイズに合わせて editor width/height を更新する。
+func (ps *Screen) NormalizeSize(width, height int) {
 	editorWidth := max(20, width-6)
 	ps.editInput.Width = editorWidth
 	ps.contextArea.SetWidth(editorWidth)
 	ps.contextArea.SetHeight(max(4, min(12, height-6)))
 }
 
-func (ps *projectScreen) selectedSection() projectSection {
+func (ps *Screen) selectedSection() projectSection {
 	if ps.sectionIndex < 0 {
 		ps.sectionIndex = 0
 	}
@@ -148,7 +177,7 @@ func (ps *projectScreen) selectedSection() projectSection {
 	return projectSections[ps.sectionIndex].section
 }
 
-func (ps *projectScreen) selectedSectionInfo() projectSectionInfo {
+func (ps *Screen) selectedSectionInfo() projectSectionInfo {
 	section := ps.selectedSection()
 	for _, info := range projectSections {
 		if info.section == section {
@@ -156,4 +185,85 @@ func (ps *projectScreen) selectedSectionInfo() projectSectionInfo {
 		}
 	}
 	return projectSections[0]
+}
+
+// Snapshot は外部 package から直接 field を読まずに状態を確認するための投影を返す。
+func (ps *Screen) Snapshot() Snapshot {
+	if ps == nil {
+		return Snapshot{}
+	}
+	return Snapshot{
+		ScreenID:        ps.screenID,
+		Config:          config.CloneProjectConfig(ps.pc),
+		Missing:         ps.missing,
+		Dirty:           ps.dirty,
+		SaveStatus:      ps.saveStatus.String(),
+		SaveError:       ps.saveError,
+		Message:         ps.message,
+		ConfirmQuit:     ps.confirmQuit,
+		PendingClose:    ps.pendingClose,
+		SaveInFlight:    ps.saveInFlight,
+		SaveQueued:      ps.saveQueued,
+		Section:         ps.selectedSection().String(),
+		ActivePane:      ps.activePane.String(),
+		EditMode:        ps.editMode.String(),
+		ContextDraft:    ps.contextDraft,
+		ContextValue:    ps.contextArea.Value(),
+		LineEditValue:   ps.editInput.Value(),
+		SelectedIndex:   ps.selectedItemIndex(),
+		SelectedItems:   append([]string(nil), ps.selectedItems()...),
+		FinalCheckSaved: ps.savedHasFinalChecks,
+	}
+}
+
+func (p projectPane) String() string {
+	switch p {
+	case projectPaneItem:
+		return "item"
+	default:
+		return "section"
+	}
+}
+
+func (s projectSection) String() string {
+	switch s {
+	case projectSectionContext:
+		return "context"
+	case projectSectionRules:
+		return "rules"
+	case projectSectionConditional:
+		return "conditional"
+	case projectSectionIgnore:
+		return "ignore"
+	case projectSectionFinalCommands:
+		return "final_commands"
+	case projectSectionFinalTimeout:
+		return "final_timeout"
+	default:
+		return "unknown"
+	}
+}
+
+func (m projectEditMode) String() string {
+	switch m {
+	case projectEditContext:
+		return "context"
+	case projectEditLine:
+		return "line"
+	default:
+		return "none"
+	}
+}
+
+func (s projectSaveStatus) String() string {
+	switch s {
+	case projectStatusModified:
+		return "modified"
+	case projectStatusSaving:
+		return "saving"
+	case projectStatusFailed:
+		return "failed"
+	default:
+		return "saved"
+	}
 }

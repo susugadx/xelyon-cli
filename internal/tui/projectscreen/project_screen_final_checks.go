@@ -1,15 +1,15 @@
-package tui
+package projectscreen
 
 import "github.com/susugadx/xelyon-cli/internal/config"
 
-func (ps *projectScreen) ensureFinalChecks() {
+func (ps *Screen) ensureFinalChecks() {
 	if ps.pc != nil && ps.pc.FinalChecks == nil {
 		ps.pc.FinalChecks = &config.FinalChecksConfig{}
 		ps.tuiCreatedFinalChecks = true
 	}
 }
 
-func (ps *projectScreen) clearTUIOnlyFinalChecksWithoutCommands() {
+func (ps *Screen) clearTUIOnlyFinalChecksWithoutCommands() {
 	if ps.pc == nil || ps.pc.FinalChecks == nil {
 		return
 	}
@@ -22,11 +22,11 @@ func (ps *projectScreen) clearTUIOnlyFinalChecksWithoutCommands() {
 	}
 }
 
-func (ps *projectScreen) hasProjectFinalCheckCommands() bool {
+func (ps *Screen) hasProjectFinalCheckCommands() bool {
 	return ps.pc != nil && ps.pc.FinalChecks != nil && len(ps.pc.FinalChecks.Commands) > 0
 }
 
-func (ps *projectScreen) finalChecksTimeoutForDisplay() int {
+func (ps *Screen) finalChecksTimeoutForDisplay() int {
 	if ps.pc == nil || ps.pc.FinalChecks == nil || ps.pc.FinalChecks.Timeout <= 0 {
 		return 600
 	}

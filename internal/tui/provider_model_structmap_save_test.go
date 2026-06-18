@@ -14,38 +14,14 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
 
-	cs := m.configScreen
-	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	for i, f := range cs.filteredFields() {
-		if f.Path == "provider_models" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	enterConfigStructMapEdit(t, &m, "provider_models")
+	selectConfigStructMapKey(t, &m, "openai")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
 
-	for i, k := range cs.editStructKeys {
-		if k == "openai" {
-			cs.editStructIndex = i
-			break
-		}
-	}
-
+	selectConfigEntryField(t, &m, "default_model")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	setEntryFieldIndex(t, cs, "default_model")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	cs.editInput.SetValue("save-test-model")
+	setConfigInputValue(t, &m, "save-test-model")
 	m = sendConfigKey(m, "enter")
 
 	m = sendConfigKey(m, "esc")
@@ -54,7 +30,7 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated2, saveCmd := m.Update(sMsg)
 	m = updated2.(Model)
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if cs.saveStatus != statusSaving {
 		t.Fatalf("saveStatus = %d, want statusSaving", cs.saveStatus)
 	}
@@ -66,7 +42,7 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 
 	updated3, _ := m.Update(resultMsg)
 	m = updated3.(Model)
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if cs.dirty {
 		t.Fatal("dirty should be false after save")
@@ -105,7 +81,7 @@ func TestConfigScreen_ProviderOverride_Save_NotOverwritten(t *testing.T) {
 		pm.DefaultModel = "provider-override"
 		cs.cfg.ProviderModels["openai"] = pm
 	}
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated, saveCmd := m.Update(sMsg)

@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tuicomposer "github.com/susugadx/xelyon-cli/internal/tui/composer"
+	"github.com/susugadx/xelyon-cli/internal/tui/projectscreen"
 	"github.com/susugadx/xelyon-cli/internal/tui/providerpickerscreen"
 	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
 	"github.com/susugadx/xelyon-cli/internal/tui/sessionpickerscreen"
@@ -122,14 +123,14 @@ type Model struct {
 	projectAgent      ProjectAgent
 	reviewAgent       ReviewAgent
 	skillCatalog      SkillCatalogAgent
-	screen            screenMode           // 現在の画面モード
-	configScreen      *configScreen        // /config 画面の状態（screenConfig 時のみ非 nil）
-	reviewScreen      *reviewscreen.Screen // /review 画面の状態（screenReview 時のみ非 nil）
-	reviewTimelineSeq int                  // /review timeline 実行の識別子
-	reviewTimelineRun *reviewRunContext    // /review timeline 実行中のみ非 nil
-	projectScreen     *projectScreen       // /project 画面の状態（screenProject 時のみ非 nil）
-	projectScreenSeq  int                  // /project 非同期メッセージの画面識別子
-	vp                lightViewport        // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
+	screen            screenMode            // 現在の画面モード
+	configScreen      *configScreen         // /config 画面の状態（screenConfig 時のみ非 nil）
+	reviewScreen      *reviewscreen.Screen  // /review 画面の状態（screenReview 時のみ非 nil）
+	reviewTimelineSeq int                   // /review timeline 実行の識別子
+	reviewTimelineRun *reviewRunContext     // /review timeline 実行中のみ非 nil
+	projectScreen     *projectscreen.Screen // /project 画面の状態（screenProject 時のみ非 nil）
+	projectScreenSeq  int                   // /project 非同期メッセージの画面識別子
+	vp                lightViewport         // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
 	textInput         textinput.Model
 	spinner           spinner.Model
 	messages          []ChatMessage

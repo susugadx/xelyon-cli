@@ -6,18 +6,18 @@ func TestConfigScreen_StructEntryInt_InvalidInput_DoesNotCloseOrDirty(t *testing
 	m := enterStructMapEntryForKey(t, "provider_models", "openai")
 	cs := m.configScreen
 
-	setEntryFieldIndex(t, cs, "max_output_tokens")
+	selectConfigEntryField(t, &m, "max_output_tokens")
 	original := cs.cfg.ProviderModels["openai"].MaxOutputTokens
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "input" {
 		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
 	}
 
-	cs.editInput.SetValue("not-a-number")
+	setConfigInputValue(t, &m, "not-a-number")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if cs.editEntryFieldEdit != "input" {
 		t.Fatalf("editEntryFieldEdit after invalid input = %q, want \"input\"", cs.editEntryFieldEdit)
@@ -35,18 +35,17 @@ func TestConfigScreen_StructEntryInt_InvalidInput_DoesNotCloseOrDirty(t *testing
 
 func TestConfigScreen_StructEntryInt_ValidInput_StillApplies(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "provider_models", "openai")
-	cs := m.configScreen
 
-	setEntryFieldIndex(t, cs, "max_output_tokens")
+	selectConfigEntryField(t, &m, "max_output_tokens")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "input" {
 		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
 	}
 
-	cs.editInput.SetValue("4321")
+	setConfigInputValue(t, &m, "4321")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if cs.editEntryFieldEdit != "" {
 		t.Fatalf("editEntryFieldEdit after valid input = %q, want empty", cs.editEntryFieldEdit)
@@ -64,18 +63,17 @@ func TestConfigScreen_StructEntryInt_ValidInput_StillApplies(t *testing.T) {
 
 func TestConfigScreen_LSPServers_CommandChange_Persists(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "lsp.servers", "go")
-	cs := m.configScreen
 
-	setEntryFieldIndex(t, cs, "command")
+	selectConfigEntryField(t, &m, "command")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "input" {
 		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
 	}
 
-	cs.editInput.SetValue("custom-gopls")
+	setConfigInputValue(t, &m, "custom-gopls")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	srv, ok := cs.cfg.LSP.Servers["go"]
 	if !ok {
@@ -88,25 +86,24 @@ func TestConfigScreen_LSPServers_CommandChange_Persists(t *testing.T) {
 
 func TestConfigScreen_LSPServers_ArgsChange_Persists(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "lsp.servers", "go")
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 
-	setEntryFieldIndex(t, cs, "args")
+	selectConfigEntryField(t, &m, "args")
 	origArgs := cs.cfg.LSP.Servers["go"].Args
 	origLen := len(origArgs)
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "slice" {
 		t.Fatalf("editEntryFieldEdit = %q, want \"slice\"", cs.editEntryFieldEdit)
 	}
 
 	m = sendConfigKey(m, "a")
-	cs = m.configScreen
-	cs.editSliceInput.SetValue("--extra-flag")
+	setConfigSliceInputValue(t, &m, "--extra-flag")
 	m = sendConfigKey(m, "enter")
 
 	m = sendConfigKey(m, "esc")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	srv := cs.cfg.LSP.Servers["go"]
 	if len(srv.Args) != origLen+1 {
@@ -126,20 +123,20 @@ func TestConfigScreen_LSPServers_ArgsChange_Persists(t *testing.T) {
 
 func TestConfigScreen_LSPServers_DisabledToggle_Persists(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "lsp.servers", "go")
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 
 	before := cs.cfg.LSP.Servers["go"].Disabled
-	setEntryFieldIndex(t, cs, "disabled")
+	selectConfigEntryField(t, &m, "disabled")
 
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	after := cs.cfg.LSP.Servers["go"].Disabled
 	if after == before {
 		t.Fatalf("Disabled should have toggled: before=%v, after=%v", before, after)
 	}
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	after2 := cs.cfg.LSP.Servers["go"].Disabled
 	if after2 != before {
 		t.Fatalf("Disabled should have toggled back: expected=%v, got=%v", before, after2)

@@ -12,27 +12,27 @@ func TestConfigScreen_DefaultProviderThenDefaultModelSyncsEditedProvider(t *test
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(config.DefaultConfig())
 
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 	cs.cfg.DefaultProvider = "deepseek"
 	cs.cfg.DefaultModel = "deepseek-chat"
 	cs.refreshCategories()
 
 	m = selectConfigOption(t, m, "provider", "default_provider", "openai")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.cfg.DefaultProvider != "openai" {
 		t.Fatalf("DefaultProvider = %q, want \"openai\"", cs.cfg.DefaultProvider)
 	}
 
-	setConfigFieldSelection(t, cs, "provider", "default_model")
+	selectConfigField(t, &m, "provider", "default_model")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editMode != editInput {
 		t.Fatalf("editMode = %d, want editInput", cs.editMode)
 	}
 
-	cs.editInput.SetValue("gpt-5.4")
+	setConfigInputValue(t, &m, "gpt-5.4")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if cs.cfg.DefaultModel != "gpt-5.4" {
 		t.Fatalf("DefaultModel = %q, want \"gpt-5.4\"", cs.cfg.DefaultModel)
@@ -73,7 +73,7 @@ func TestDefaultModelSync_UsesEditedProviderForEditAndReset(t *testing.T) {
 		m.screen = screenConfig
 		m.configScreen = newConfigScreen(config.DefaultConfig())
 
-		cs := m.configScreen
+		cs := configTestScreen(t, m)
 		cs.cfg.DefaultProvider = "deepseek"
 		cs.cfg.DefaultModel = "custom-global-model"
 
@@ -87,8 +87,7 @@ func TestDefaultModelSync_UsesEditedProviderForEditAndReset(t *testing.T) {
 		cs.refreshCategories()
 
 		m = selectConfigOption(t, m, "provider", "default_provider", "openai")
-		cs = m.configScreen
-		setConfigFieldSelection(t, cs, "provider", "default_model")
+		selectConfigField(t, &m, "provider", "default_model")
 
 		wantModel := "gpt-5.4"
 		if reset {
@@ -96,15 +95,15 @@ func TestDefaultModelSync_UsesEditedProviderForEditAndReset(t *testing.T) {
 			wantModel = config.DefaultConfig().DefaultModel
 		} else {
 			m = sendConfigKey(m, "enter")
-			cs = m.configScreen
+			cs = configTestScreen(t, m)
 			if cs.editMode != editInput {
 				t.Fatalf("editMode = %d, want editInput", cs.editMode)
 			}
-			cs.editInput.SetValue(wantModel)
+			setConfigInputValue(t, &m, wantModel)
 			m = sendConfigKey(m, "enter")
 		}
 
-		cs = m.configScreen
+		cs = configTestScreen(t, m)
 		if cs.cfg.DefaultModel != wantModel {
 			t.Fatalf("DefaultModel = %q, want %q", cs.cfg.DefaultModel, wantModel)
 		}
@@ -141,7 +140,7 @@ func TestConfigScreen_DefaultProviderThenResetDefaultModelSyncsEditedProvider(t 
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(config.DefaultConfig())
 
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 	cs.cfg.DefaultProvider = "deepseek"
 	cs.cfg.DefaultModel = "custom-global-model"
 	deepseekPM := cs.cfg.ProviderModels["deepseek"]
@@ -153,11 +152,10 @@ func TestConfigScreen_DefaultProviderThenResetDefaultModelSyncsEditedProvider(t 
 	cs.refreshCategories()
 
 	m = selectConfigOption(t, m, "provider", "default_provider", "openai")
-	cs = m.configScreen
-	setConfigFieldSelection(t, cs, "provider", "default_model")
+	selectConfigField(t, &m, "provider", "default_model")
 
 	m = sendConfigKey(m, "r")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	defaultCfg := config.DefaultConfig()
 	if cs.cfg.DefaultModel != defaultCfg.DefaultModel {

@@ -19,32 +19,22 @@ func TestConfigScreen_ProviderModels_EntryEdit(t *testing.T) {
 		t.Fatal("editEntryFields should not be empty")
 	}
 
-	found := false
-	for i, ef := range cs.editEntryFields {
-		if ef.Name == "default_model" {
-			cs.editEntryIndex = i
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("default_model field not found in entry")
-	}
+	selectConfigEntryField(t, &m, "default_model")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "input" {
 		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
 	}
 
 	m = sendConfigKey(m, "esc")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "" {
 		t.Fatalf("editEntryFieldEdit = %q after esc, want empty", cs.editEntryFieldEdit)
 	}
 
 	m = sendConfigKey(m, "esc")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editEntryActive {
 		t.Fatal("editEntryActive should be false after esc")
 	}
@@ -52,20 +42,19 @@ func TestConfigScreen_ProviderModels_EntryEdit(t *testing.T) {
 
 func TestConfigScreen_ProviderModels_ValueChange_Persists(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "provider_models", "openai")
-	cs := m.configScreen
 
-	setEntryFieldIndex(t, cs, "default_model")
+	selectConfigEntryField(t, &m, "default_model")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "input" {
 		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
 	}
 
-	cs.editInput.SetValue("gpt-99-turbo")
+	setConfigInputValue(t, &m, "gpt-99-turbo")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	pm, ok := cs.cfg.ProviderModels["openai"]
 	if !ok {
@@ -85,18 +74,17 @@ func TestConfigScreen_ProviderModels_ValueChange_Persists(t *testing.T) {
 
 func TestConfigScreen_ProviderModels_CatalogModelChange_Persists(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "provider_models", "openai")
-	cs := m.configScreen
 
-	setEntryFieldIndex(t, cs, "catalog_model")
+	selectConfigEntryField(t, &m, "catalog_model")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if cs.editEntryFieldEdit != "input" {
 		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
 	}
 
-	cs.editInput.SetValue("gpt-5.4")
+	setConfigInputValue(t, &m, "gpt-5.4")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if got := cs.cfg.ProviderModels["openai"].CatalogModel; got != "gpt-5.4" {
 		t.Fatalf("ProviderModels[openai].CatalogModel = %q, want gpt-5.4", got)

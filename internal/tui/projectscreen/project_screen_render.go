@@ -1,4 +1,4 @@
-package tui
+package projectscreen
 
 import (
 	"strings"
@@ -14,27 +14,28 @@ type projectBodyColumn struct {
 	lines []string
 }
 
-func (m Model) projectView() string {
-	if m.projectScreen == nil {
+// View は /project 画面を描画する。
+func (ps *Screen) View(width, height int) string {
+	if ps == nil {
 		return "Loading..."
 	}
-	if m.projectScreen.confirmQuit {
+	if ps.confirmQuit {
 		options := []string{"Save and quit", "Discard and quit", "Cancel"}
-		return confirmdialog.Render(m.width, m.height, "Unsaved project changes", options, m.projectScreen.confirmIdx, theme.Config)
+		return confirmdialog.Render(width, height, "Unsaved project changes", options, ps.confirmIdx, theme.Config)
 	}
 
-	bodyHeight := max(1, m.height-2)
-	header := m.renderProjectHeader(m.width)
-	body := m.renderProjectBody(bodyHeight)
-	status := m.renderProjectStatus(m.width)
+	bodyHeight := max(1, height-2)
+	header := ps.renderProjectHeader(width)
+	body := ps.renderProjectBody(width, bodyHeight)
+	status := ps.renderProjectStatus(width)
 	return header + "\n" + body + "\n" + status
 }
 
-func (m Model) renderProjectHeader(width int) string {
+func (ps *Screen) renderProjectHeader(width int) string {
 	titleText := "Project"
 	title := theme.Config.BgHeader + theme.Config.Bold + theme.Config.FgBright + " " + titleText + " " + theme.Config.Reset
 	hintText := "q:close  s:save  Enter:edit"
-	if m.projectScreen != nil && m.projectScreen.missing {
+	if ps != nil && ps.missing {
 		hintText = "Enter:create  Esc:back"
 	}
 	hints := theme.Config.FgDim + hintText + theme.Config.Reset
@@ -45,17 +46,16 @@ func (m Model) renderProjectHeader(width int) string {
 	return termtext.FillANSITextWidth(title+strings.Repeat(" ", padding)+hints, width, theme.Config.BgHeader)
 }
 
-func (m Model) renderProjectBody(height int) string {
-	ps := m.projectScreen
+func (ps *Screen) renderProjectBody(width, height int) string {
 	var columns []projectBodyColumn
-	if ps.missing || m.width < 62 || ps.editMode != projectEditNone {
-		columns = []projectBodyColumn{{width: m.width, lines: m.renderProjectDetailPane(m.width, height)}}
+	if ps.missing || width < 62 || ps.editMode != projectEditNone {
+		columns = []projectBodyColumn{{width: width, lines: ps.renderProjectDetailPane(width, height)}}
 	} else {
-		leftW := min(30, max(24, m.width/3))
-		rightW := max(0, m.width-leftW)
+		leftW := min(30, max(24, width/3))
+		rightW := max(0, width-leftW)
 		columns = []projectBodyColumn{
-			{width: leftW, lines: m.renderProjectSectionPane(leftW, height)},
-			{width: rightW, lines: m.renderProjectDetailPane(rightW, height)},
+			{width: leftW, lines: ps.renderProjectSectionPane(leftW, height)},
+			{width: rightW, lines: ps.renderProjectDetailPane(rightW, height)},
 		}
 	}
 

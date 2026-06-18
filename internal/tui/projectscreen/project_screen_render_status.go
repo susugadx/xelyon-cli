@@ -1,4 +1,4 @@
-package tui
+package projectscreen
 
 import (
 	"strings"
@@ -8,8 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
-func (m Model) renderProjectStatus(width int) string {
-	ps := m.projectScreen
+func (ps *Screen) renderProjectStatus(width int) string {
 	statusText := projectStatusText(ps)
 	left := " " + projectStatusColor(ps.saveStatus) + statusText + theme.Config.Reset
 	hint := projectStatusHint(ps)
@@ -18,10 +17,10 @@ func (m Model) renderProjectStatus(width int) string {
 	if padding < 1 {
 		return termtext.FillANSITextWidth(left, width, "")
 	}
-	return fitANSITextWidth(left+strings.Repeat(" ", padding)+right, width)
+	return termtext.FillANSITextWidth(left+strings.Repeat(" ", padding)+right, width, "")
 }
 
-func projectStatusText(ps *projectScreen) string {
+func projectStatusText(ps *Screen) string {
 	if ps == nil {
 		return "project"
 	}
@@ -56,7 +55,7 @@ func projectStatusColor(status projectSaveStatus) string {
 	}
 }
 
-func projectStatusHint(ps *projectScreen) string {
+func projectStatusHint(ps *Screen) string {
 	if ps == nil {
 		return ""
 	}

@@ -1,16 +1,17 @@
-package tui
+package projectscreen
 
 import tea "github.com/charmbracelet/bubbletea"
 
-func (ps *projectScreen) handleKey(msg tea.KeyMsg, agentProcessing bool) (projectCommand, tea.Cmd) {
+// HandleKey は /project 画面のキー入力を処理する。
+func (ps *Screen) HandleKey(msg tea.KeyMsg, agentProcessing bool) (Command, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		if agentProcessing {
-			return projectCommandDelegateCtrlC, nil
+			return CommandDelegateCtrlC, nil
 		}
 		if ps.dirty {
 			return ps.tryClose(), nil
 		}
-		return projectCommandDelegateCtrlC, nil
+		return CommandDelegateCtrlC, nil
 	}
 	if ps.confirmQuit {
 		return ps.handleConfirmKey(msg), nil

@@ -16,7 +16,7 @@ func TestConfigScreen_SaveSnapshot_Isolation(t *testing.T) {
 	cs := m.configScreen
 
 	cs.cfg.DefaultModel = "gpt-5.4"
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated, saveCmd := m.Update(sMsg)
@@ -66,7 +66,7 @@ func TestConfigScreen_SaveCmd_SnapshotIsolation(t *testing.T) {
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
 	m.configScreen.cfg.DefaultModel = "at-save-time"
-	m.configScreen.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated, saveCmd := m.Update(sMsg)

@@ -1,18 +1,18 @@
-package tui
+package projectscreen
 
 import (
 	"strconv"
 	"strings"
 )
 
-func (ps *projectScreen) setDirty() {
+func (ps *Screen) setDirty() {
 	ps.dirty = true
 	ps.saveStatus = projectStatusModified
 	ps.saveError = ""
 	ps.message = ""
 }
 
-func (ps *projectScreen) startContextEdit() {
+func (ps *Screen) startContextEdit() {
 	if ps.pc == nil {
 		return
 	}
@@ -24,7 +24,7 @@ func (ps *projectScreen) startContextEdit() {
 	ps.message = ""
 }
 
-func (ps *projectScreen) startListEdit(section projectSection, add bool) {
+func (ps *Screen) startListEdit(section projectSection, add bool) {
 	items := ps.itemsForSection(section)
 	value := ""
 	if !add && len(items) > 0 {
@@ -40,7 +40,7 @@ func (ps *projectScreen) startListEdit(section projectSection, add bool) {
 	ps.message = ""
 }
 
-func (ps *projectScreen) startTimeoutEdit() {
+func (ps *Screen) startTimeoutEdit() {
 	if !ps.hasProjectFinalCheckCommands() {
 		ps.message = "add a final check command before setting timeout"
 		return
@@ -55,7 +55,7 @@ func (ps *projectScreen) startTimeoutEdit() {
 	ps.message = ""
 }
 
-func (ps *projectScreen) applyContextEdit() {
+func (ps *Screen) applyContextEdit() {
 	if ps.pc == nil {
 		return
 	}
@@ -65,7 +65,7 @@ func (ps *projectScreen) applyContextEdit() {
 	ps.setDirty()
 }
 
-func (ps *projectScreen) applyLineEdit() {
+func (ps *Screen) applyLineEdit() {
 	switch ps.lineEditKind {
 	case projectLineEditList:
 		ps.applyListEdit()
@@ -74,7 +74,7 @@ func (ps *projectScreen) applyLineEdit() {
 	}
 }
 
-func (ps *projectScreen) applyListEdit() {
+func (ps *Screen) applyListEdit() {
 	value := strings.TrimSpace(ps.editInput.Value())
 	section := ps.lineEditSection
 	items := append([]string(nil), ps.itemsForSection(section)...)
@@ -93,7 +93,7 @@ func (ps *projectScreen) applyListEdit() {
 	ps.setDirty()
 }
 
-func (ps *projectScreen) applyTimeoutEdit() {
+func (ps *Screen) applyTimeoutEdit() {
 	if !ps.hasProjectFinalCheckCommands() {
 		ps.cancelEdit()
 		ps.message = "add a final check command before setting timeout"
@@ -110,7 +110,7 @@ func (ps *projectScreen) applyTimeoutEdit() {
 	ps.setDirty()
 }
 
-func (ps *projectScreen) finishLineEdit() {
+func (ps *Screen) finishLineEdit() {
 	ps.editInput.Blur()
 	ps.editMode = projectEditNone
 	ps.lineEditKind = projectLineEditNone
@@ -118,7 +118,7 @@ func (ps *projectScreen) finishLineEdit() {
 	ps.message = ""
 }
 
-func (ps *projectScreen) cancelEdit() {
+func (ps *Screen) cancelEdit() {
 	ps.editInput.Blur()
 	ps.contextArea.Blur()
 	ps.editMode = projectEditNone
@@ -127,11 +127,11 @@ func (ps *projectScreen) cancelEdit() {
 	ps.message = ""
 }
 
-func (ps *projectScreen) tryClose() projectCommand {
+func (ps *Screen) tryClose() Command {
 	if ps.dirty {
 		ps.confirmQuit = true
 		ps.confirmIdx = 0
-		return projectCommandNone
+		return CommandNone
 	}
-	return projectCommandClose
+	return CommandClose
 }

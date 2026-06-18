@@ -33,29 +33,9 @@ func TestAddStructMapKey_ProviderModelsAllowsAnthropicAndClaudeSiblings(t *testi
 
 func TestConfigScreen_StructMapOrder_ProviderModels(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
+	enterConfigStructMapEdit(t, &m, "provider_models")
 
-	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "provider_models" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
-
+	cs := configTestScreen(t, m)
 	keys := cs.editStructKeys
 	for i := 1; i < len(keys); i++ {
 		if keys[i] < keys[i-1] {
@@ -68,9 +48,9 @@ func TestConfigScreen_StructMapOrder_ProviderModels(t *testing.T) {
 	}
 	firstKey := keys[0]
 
-	cs.editStructIndex = 0
+	selectConfigStructMapKeyIndex(t, &m, 0)
 	m = sendConfigKey(m, "d")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	for _, k := range cs.editStructKeys {
 		if k == firstKey {
@@ -87,26 +67,21 @@ func TestConfigScreen_StructMapOrder_ProviderModels(t *testing.T) {
 
 func TestConfigScreen_ProviderModels_NilMap_AddEntry_DoesNotPanic(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 	cs.cfg.ProviderModels = nil
 	cs.refreshCategories()
 
-	setConfigFieldSelection(t, cs, "provider", "provider_models")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
+	enterConfigStructMapEdit(t, &m, "provider_models")
 
 	m = sendConfigKey(m, "a")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if !cs.editStructAdding {
 		t.Fatal("editStructAdding should be true")
 	}
 
-	cs.editStructInput.SetValue("nil_provider")
+	setConfigStructInputValue(t, &m, "nil_provider")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if cs.cfg.ProviderModels == nil {
 		t.Fatal("ProviderModels should be initialized after add")

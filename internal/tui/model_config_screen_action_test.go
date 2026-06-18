@@ -8,31 +8,17 @@ import (
 
 func TestConfigScreen_ResetToDefault(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
+	selectConfigField(t, &m, "compression", "compression.trigger_percent")
 
-	for i, cat := range cs.categories {
-		if cat.Name == "compression" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "compression.trigger_percent" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
+	cs := configTestScreen(t, m)
 	if err := config.SetFieldValue(cs.cfg, "compression.trigger_percent", 50); err != nil {
 		t.Fatalf("SetFieldValue failed: %v", err)
 	}
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 	cs.refreshCategories()
 
 	m = sendConfigKey(m, "r")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	val, _ := config.GetFieldValue(cs.cfg, "compression.trigger_percent")
 	defCfg := config.DefaultConfig()
@@ -44,17 +30,10 @@ func TestConfigScreen_ResetToDefault(t *testing.T) {
 
 func TestConfigScreen_FilterFields(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-
-	for i, cat := range cs.categories {
-		if cat.Name == "execution" {
-			cs.catIndex = i
-			break
-		}
-	}
+	selectConfigCategory(t, &m, "execution")
 
 	m = sendConfigKey(m, "/")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if !cs.filterMode {
 		t.Fatal("filterMode should be true")
 	}

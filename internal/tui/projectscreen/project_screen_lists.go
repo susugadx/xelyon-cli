@@ -1,6 +1,6 @@
-package tui
+package projectscreen
 
-func (ps *projectScreen) canUseItemPane() bool {
+func (ps *Screen) canUseItemPane() bool {
 	return projectSectionIsList(ps.selectedSection())
 }
 
@@ -13,11 +13,11 @@ func projectSectionIsList(section projectSection) bool {
 	}
 }
 
-func (ps *projectScreen) selectedItems() []string {
+func (ps *Screen) selectedItems() []string {
 	return ps.itemsForSection(ps.selectedSection())
 }
 
-func (ps *projectScreen) itemsForSection(section projectSection) []string {
+func (ps *Screen) itemsForSection(section projectSection) []string {
 	if ps.pc == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func (ps *projectScreen) itemsForSection(section projectSection) []string {
 	}
 }
 
-func (ps *projectScreen) setItemsForSection(section projectSection, items []string) {
+func (ps *Screen) setItemsForSection(section projectSection, items []string) {
 	if ps.pc == nil {
 		return
 	}
@@ -52,7 +52,7 @@ func (ps *projectScreen) setItemsForSection(section projectSection, items []stri
 	}
 }
 
-func (ps *projectScreen) selectedItemIndex() int {
+func (ps *Screen) selectedItemIndex() int {
 	section := ps.selectedSection()
 	items := ps.itemsForSection(section)
 	idx := ps.itemIndex[section]
@@ -68,7 +68,7 @@ func (ps *projectScreen) selectedItemIndex() int {
 	return idx
 }
 
-func (ps *projectScreen) deleteSelectedItem() {
+func (ps *Screen) deleteSelectedItem() {
 	section := ps.selectedSection()
 	items := append([]string(nil), ps.itemsForSection(section)...)
 	if len(items) == 0 {

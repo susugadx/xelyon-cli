@@ -1,14 +1,14 @@
-package tui
+package projectscreen
 
 import tea "github.com/charmbracelet/bubbletea"
 
-func (ps *projectScreen) handleConfirmKey(msg tea.KeyMsg) projectCommand {
+func (ps *Screen) handleConfirmKey(msg tea.KeyMsg) Command {
 	s := msg.String()
 	switch {
 	case msg.Type == tea.KeyEsc:
 		ps.confirmQuit = false
 		ps.pendingClose = false
-		return projectCommandNone
+		return CommandNone
 	case msg.Type == tea.KeyUp || s == "k":
 		if ps.confirmIdx > 0 {
 			ps.confirmIdx--
@@ -20,17 +20,17 @@ func (ps *projectScreen) handleConfirmKey(msg tea.KeyMsg) projectCommand {
 	case isEnterKey(msg):
 		switch ps.confirmIdx {
 		case 0:
-			return projectCommandSaveAndClose
+			return CommandSaveAndClose
 		case 1:
 			if ps.saveInFlight {
-				return projectCommandNone
+				return CommandNone
 			}
 			ps.confirmQuit = false
-			return projectCommandClose
+			return CommandClose
 		case 2:
 			ps.confirmQuit = false
 			ps.pendingClose = false
 		}
 	}
-	return projectCommandNone
+	return CommandNone
 }

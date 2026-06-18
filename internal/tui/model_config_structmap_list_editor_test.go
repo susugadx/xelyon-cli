@@ -4,28 +4,9 @@ import "testing"
 
 func TestConfigScreen_StructMapEdit(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
+	enterConfigStructMapEdit(t, &m, "lsp.servers")
 
-	for i, cat := range cs.categories {
-		if cat.Name == "lsp" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "lsp.servers" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap(%d)", cs.editMode, editStructMap)
-	}
+	cs := configTestScreen(t, m)
 	if len(cs.editStructKeys) == 0 {
 		t.Fatal("editStructKeys should not be empty for lsp.servers")
 	}
@@ -39,33 +20,9 @@ func TestConfigScreen_StructMapEdit(t *testing.T) {
 
 func TestConfigScreen_LSPServersEdit(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
+	enterConfigStructMapEdit(t, &m, "lsp.servers")
 
-	for i, cat := range cs.categories {
-		if cat.Name == "lsp" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	found := false
-	for i, f := range fields {
-		if f.Path == "lsp.servers" {
-			cs.fieldIndex = i
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("lsp.servers not found in lsp category fields")
-	}
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap(%d)", cs.editMode, editStructMap)
-	}
+	cs := configTestScreen(t, m)
 	if len(cs.editStructKeys) == 0 {
 		t.Fatal("editStructKeys should not be empty for lsp.servers")
 	}
@@ -73,29 +30,9 @@ func TestConfigScreen_LSPServersEdit(t *testing.T) {
 
 func TestConfigScreen_StructMapOrder_LSPServers(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
+	enterConfigStructMapEdit(t, &m, "lsp.servers")
 
-	for i, cat := range cs.categories {
-		if cat.Name == "lsp" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "lsp.servers" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
-
+	cs := configTestScreen(t, m)
 	keys := cs.editStructKeys
 	if len(keys) < 5 {
 		t.Fatalf("expected many LSP server keys, got %d", len(keys))
@@ -107,9 +44,9 @@ func TestConfigScreen_StructMapOrder_LSPServers(t *testing.T) {
 	}
 
 	target := keys[2]
-	cs.editStructIndex = 2
+	selectConfigStructMapKeyIndex(t, &m, 2)
 	m = sendConfigKey(m, "d")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	for _, k := range cs.editStructKeys {
 		if k == target {

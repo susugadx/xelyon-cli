@@ -12,7 +12,7 @@ func TestConfigScreen_ProviderModelDirectEditStillDoesNotGetOverwritten(t *testi
 		pm.DefaultModel = "openai-specific"
 		cs.cfg.ProviderModels["openai"] = pm
 	}
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = saveConfigAndWait(t, m)
 	cs = m.configScreen

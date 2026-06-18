@@ -14,15 +14,12 @@ func TestConfigScreen_DiscardAndQuit_DoesNotApplyInflightSave(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
-
-	cs.dirty = true
-	cs.saveStatus = statusModified
+	setConfigModifiedForTest(t, &m)
 
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated, saveCmd := m.Update(sMsg)
 	m = updated.(Model)
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 
 	if cs.saveStatus != statusSaving {
 		t.Fatalf("saveStatus = %d, want statusSaving(%d)", cs.saveStatus, statusSaving)
@@ -37,9 +34,9 @@ func TestConfigScreen_DiscardAndQuit_DoesNotApplyInflightSave(t *testing.T) {
 		t.Fatal("confirmQuit should be true")
 	}
 
-	cs.confirmIdx = 1
+	setConfigConfirmIndexForTest(t, &m, 1)
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if m.screen != screenConfig {
 		t.Fatal("discard should be blocked while save is in-flight; screen should remain screenConfig")
@@ -55,7 +52,7 @@ func TestConfigScreen_DiscardAndQuit_DoesNotApplyInflightSave(t *testing.T) {
 	updated, _ = m.Update(resultMsg)
 	m = updated.(Model)
 
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs == nil {
 		t.Fatal("configScreen should not be nil after save completes")
 	}
@@ -71,21 +68,18 @@ func TestConfigScreen_SaveAndQuit_StillAppliesInflightSave(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
-
-	cs.dirty = true
-	cs.saveStatus = statusModified
+	setConfigModifiedForTest(t, &m)
 
 	m = sendConfigKey(m, "q")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if !cs.confirmQuit {
 		t.Fatal("confirmQuit should be true")
 	}
 
-	cs.confirmIdx = 0
+	setConfigConfirmIndexForTest(t, &m, 0)
 	updated, saveCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if cs == nil {
 		t.Fatal("configScreen should not be nil yet")
@@ -122,7 +116,7 @@ func TestConfigScreen_SaveWhileSaveAndQuitInFlight_KeepsPendingClose(t *testing.
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
-	m.configScreen.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = sendConfigKey(m, "q")
 	updated, saveAndQuitCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

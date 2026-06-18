@@ -1,19 +1,19 @@
-package tui
+package projectscreen
 
 import tea "github.com/charmbracelet/bubbletea"
 
-func (ps *projectScreen) handleBrowseKey(msg tea.KeyMsg) projectCommand {
+func (ps *Screen) handleBrowseKey(msg tea.KeyMsg) Command {
 	s := msg.String()
 	switch {
 	case msg.Type == tea.KeyEsc || s == "q":
 		if ps.activePane == projectPaneItem {
 			ps.activePane = projectPaneSection
-			return projectCommandNone
+			return CommandNone
 		}
 		return ps.tryClose()
 	case s == "s":
 		if ps.dirty {
-			return projectCommandSave
+			return CommandSave
 		}
 		ps.message = "no changes"
 	case msg.Type == tea.KeyTab || msg.Type == tea.KeyRight || s == "l":
@@ -37,10 +37,10 @@ func (ps *projectScreen) handleBrowseKey(msg tea.KeyMsg) projectCommand {
 	case isEnterKey(msg):
 		ps.handleBrowseEnter()
 	}
-	return projectCommandNone
+	return CommandNone
 }
 
-func (ps *projectScreen) moveSelection(delta int) {
+func (ps *Screen) moveSelection(delta int) {
 	if ps.activePane == projectPaneItem && ps.canUseItemPane() {
 		section := ps.selectedSection()
 		total := len(ps.itemsForSection(section))
@@ -71,7 +71,7 @@ func (ps *projectScreen) moveSelection(delta int) {
 	}
 }
 
-func (ps *projectScreen) handleBrowseEnter() {
+func (ps *Screen) handleBrowseEnter() {
 	section := ps.selectedSection()
 	switch section {
 	case projectSectionContext:

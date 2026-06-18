@@ -13,7 +13,7 @@ func TestConfigScreen_StructMapDelete_AfterEdit(t *testing.T) {
 	firstKey := cs.editStructKeys[0]
 	m = sendConfigKey(m, "enter")
 	m = sendConfigKey(m, "esc")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editEntryActive {
 		t.Fatal("should be back to key list")
 	}
@@ -24,9 +24,9 @@ func TestConfigScreen_StructMapDelete_AfterEdit(t *testing.T) {
 		}
 	}
 
-	cs.editStructIndex = 0
+	selectConfigStructMapKeyIndex(t, &m, 0)
 	m = sendConfigKey(m, "d")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	for _, k := range cs.editStructKeys {
 		if k == firstKey {
@@ -37,26 +37,21 @@ func TestConfigScreen_StructMapDelete_AfterEdit(t *testing.T) {
 
 func TestConfigScreen_LSPServers_NilMap_AddEntry_DoesNotPanic(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 	cs.cfg.LSP.Servers = nil
 	cs.refreshCategories()
 
-	setConfigFieldSelection(t, cs, "lsp", "lsp.servers")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
+	enterConfigStructMapEdit(t, &m, "lsp.servers")
 
 	m = sendConfigKey(m, "a")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if !cs.editStructAdding {
 		t.Fatal("editStructAdding should be true")
 	}
 
-	cs.editStructInput.SetValue("nil_server")
+	setConfigStructInputValue(t, &m, "nil_server")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if cs.cfg.LSP.Servers == nil {
 		t.Fatal("LSP.Servers should be initialized after add")
@@ -80,10 +75,9 @@ func TestConfigScreen_StructMap_NonNil_AddEntry_BehaviorUnchanged(t *testing.T) 
 	initialDirty := cs.dirty
 
 	m = sendConfigKey(m, "a")
-	cs = m.configScreen
-	cs.editStructInput.SetValue("behavior_test_lsp")
+	setConfigStructInputValue(t, &m, "behavior_test_lsp")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if len(cs.editStructKeys) != initialLen+1 {
 		t.Fatalf("keys count = %d, want %d", len(cs.editStructKeys), initialLen+1)
@@ -100,10 +94,9 @@ func TestConfigScreen_StructMap_NonNil_AddEntry_BehaviorUnchanged(t *testing.T) 
 
 	addedLen := len(cs.editStructKeys)
 	m = sendConfigKey(m, "a")
-	cs = m.configScreen
-	cs.editStructInput.SetValue("behavior_test_lsp")
+	setConfigStructInputValue(t, &m, "behavior_test_lsp")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if len(cs.editStructKeys) != addedLen {
 		t.Fatalf("duplicate add changed key count: got %d, want %d", len(cs.editStructKeys), addedLen)
@@ -122,10 +115,9 @@ func TestConfigScreen_StructMap_DuplicateKey_NoUIAppend(t *testing.T) {
 	initialDirty := cs.dirty
 
 	m = sendConfigKey(m, "a")
-	cs = m.configScreen
-	cs.editStructInput.SetValue(existingKey)
+	setConfigStructInputValue(t, &m, existingKey)
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
 	if len(cs.editStructKeys) != initialLen {
 		t.Fatalf("editStructKeys length = %d after duplicate add, want %d", len(cs.editStructKeys), initialLen)

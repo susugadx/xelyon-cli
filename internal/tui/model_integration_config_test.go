@@ -27,9 +27,8 @@ func TestTUIIntegration_ConfigCommandToggleSaveAndCloseFlow(t *testing.T) {
 		t.Fatalf("last message = %#v, want original command /config", m.messages)
 	}
 
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "compression", "compression.enabled")
-	selected := cs.selectedField()
+	selectConfigField(t, &m, "compression", "compression.enabled")
+	selected := selectedConfigField(t, m)
 	before, ok := selected.Current.(bool)
 	if !ok {
 		t.Fatalf("selected field current = %T, want bool", selected.Current)
@@ -40,9 +39,10 @@ func TestTUIIntegration_ConfigCommandToggleSaveAndCloseFlow(t *testing.T) {
 	if !m.configScreen.dirty {
 		t.Fatal("configScreen should become dirty after toggle")
 	}
-	after, ok := m.configScreen.selectedField().Current.(bool)
+	afterField := selectedConfigField(t, m)
+	after, ok := afterField.Current.(bool)
 	if !ok {
-		t.Fatalf("selected field current after toggle = %T, want bool", m.configScreen.selectedField().Current)
+		t.Fatalf("selected field current after toggle = %T, want bool", afterField.Current)
 	}
 	if after == before {
 		t.Fatalf("compression.enabled = %v after toggle, want %v", after, !before)

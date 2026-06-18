@@ -1,12 +1,11 @@
-package tui
+package projectscreen
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
-func (m Model) renderProjectListLines(width, height int) []string {
-	ps := m.projectScreen
+func (ps *Screen) renderProjectListLines(width, height int) []string {
 	items := ps.selectedItems()
 	if len(items) == 0 {
 		return []string{
@@ -39,7 +38,7 @@ func (m Model) renderProjectListLines(width, height int) []string {
 }
 
 func projectListItemLine(item string, width int, selected, active bool) string {
-	bg, fg := configPaneColors(selected, active)
+	bg, fg := projectPaneColors(selected, active)
 	prefix := "  "
 	if selected {
 		prefix = "> "

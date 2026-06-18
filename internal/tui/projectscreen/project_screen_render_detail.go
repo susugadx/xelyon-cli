@@ -1,4 +1,4 @@
-package tui
+package projectscreen
 
 import (
 	"fmt"
@@ -8,12 +8,11 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
-func (m Model) renderProjectSectionPane(width, height int) []string {
-	ps := m.projectScreen
+func (ps *Screen) renderProjectSectionPane(width, height int) []string {
 	lines := make([]string, 0, height)
 	for i, info := range projectSections {
 		selected := i == ps.sectionIndex
-		bg, fg := configPaneColors(selected, ps.activePane == projectPaneSection)
+		bg, fg := projectPaneColors(selected, ps.activePane == projectPaneSection)
 		prefix := "  "
 		if selected {
 			prefix = "> "
@@ -24,13 +23,12 @@ func (m Model) renderProjectSectionPane(width, height int) []string {
 	return appendProjectPanePadding(lines, width, height, theme.Config.BgNormal)
 }
 
-func (m Model) renderProjectDetailPane(width, height int) []string {
-	ps := m.projectScreen
+func (ps *Screen) renderProjectDetailPane(width, height int) []string {
 	if ps.missing {
 		return appendProjectPanePadding(projectMissingLines(width), width, height, theme.Config.BgNormal)
 	}
 	if ps.editMode != projectEditNone {
-		return appendProjectPanePadding(m.renderProjectEditLines(width), width, height, theme.Config.BgNormal)
+		return appendProjectPanePadding(ps.renderProjectEditLines(width), width, height, theme.Config.BgNormal)
 	}
 
 	info := ps.selectedSectionInfo()
@@ -39,7 +37,7 @@ func (m Model) renderProjectDetailPane(width, height int) []string {
 		theme.Config.BgNormal + theme.Config.FgDim + " " + info.description + theme.Config.Reset,
 		theme.Config.BgNormal + theme.Config.FgDim + "" + theme.Config.Reset,
 	}
-	lines = append(lines, m.renderProjectSectionDetail(width, max(0, height-len(lines)))...)
+	lines = append(lines, ps.renderProjectSectionDetail(width, max(0, height-len(lines)))...)
 	return appendProjectPanePadding(lines, width, height, theme.Config.BgNormal)
 }
 
@@ -52,13 +50,12 @@ func projectMissingLines(width int) []string {
 	}
 }
 
-func (m Model) renderProjectSectionDetail(width, height int) []string {
-	ps := m.projectScreen
+func (ps *Screen) renderProjectSectionDetail(width, height int) []string {
 	switch ps.selectedSection() {
 	case projectSectionContext:
 		return projectContextLines(ps.pc.Context, width)
 	case projectSectionRules, projectSectionIgnore, projectSectionFinalCommands:
-		return m.renderProjectListLines(width, height)
+		return ps.renderProjectListLines(width, height)
 	case projectSectionConditional:
 		return projectConditionalLines(ps)
 	case projectSectionFinalTimeout:
@@ -96,7 +93,7 @@ func projectContextLines(context string, width int) []string {
 	return lines
 }
 
-func projectConditionalLines(ps *projectScreen) []string {
+func projectConditionalLines(ps *Screen) []string {
 	if ps.pc == nil || len(ps.pc.Conditional) == 0 {
 		return []string{
 			theme.Config.BgNormal + theme.Config.FgDim + " (empty)" + theme.Config.Reset,
@@ -116,8 +113,7 @@ func projectConditionalLines(ps *projectScreen) []string {
 	return lines
 }
 
-func (m Model) renderProjectEditLines(width int) []string {
-	ps := m.projectScreen
+func (ps *Screen) renderProjectEditLines(width int) []string {
 	switch ps.editMode {
 	case projectEditContext:
 		view := strings.ReplaceAll(ps.contextArea.View(), theme.Config.Reset, theme.Config.Reset+theme.Config.BgNormal)

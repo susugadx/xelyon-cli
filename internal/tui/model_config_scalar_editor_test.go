@@ -9,33 +9,14 @@ import (
 
 func TestConfigScreen_BoolToggle(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-	for i, cat := range cs.categories {
-		if cat.Name == "compression" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	cs.fieldIndex = 0
+	selectConfigField(t, &m, "compression", "compression.enabled")
 
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "compression.enabled" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	field := cs.selectedField()
-	if field == nil {
-		t.Fatal("selectedField is nil")
-	}
+	field := selectedConfigField(t, m)
 	current, _ := field.Current.(bool)
 
 	m = sendConfigKey(m, " ")
 
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	newVal, _ := config.GetFieldValue(cs.cfg, "compression.enabled")
 	if newVal.(bool) == current {
 		t.Fatalf("bool value did not toggle: still %v", current)
@@ -50,32 +31,10 @@ func TestConfigScreen_BoolToggle(t *testing.T) {
 
 func TestConfigScreen_SelectEdit(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-
-	for i, cat := range cs.categories {
-		if cat.Name == "execution" {
-			cs.catIndex = i
-			break
-		}
-	}
-
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "execution.mode" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editSelect {
-		t.Fatalf("editMode = %d, want editSelect(%d)", cs.editMode, editSelect)
-	}
+	openConfigSelectEditor(t, &m, "execution", "execution.mode")
 
 	m = sendConfigKeys(m, "j", "enter")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if cs.editMode != editNone {
 		t.Fatalf("editMode after select = %d, want editNone", cs.editMode)
 	}
@@ -86,31 +45,10 @@ func TestConfigScreen_SelectEdit(t *testing.T) {
 
 func TestConfigScreen_StringEdit(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-
-	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "default_model" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editInput {
-		t.Fatalf("editMode = %d, want editInput(%d)", cs.editMode, editInput)
-	}
+	openConfigInputEditor(t, &m, "provider", "default_model")
 
 	m = sendConfigKey(m, "esc")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if cs.editMode != editNone {
 		t.Fatalf("editMode after esc = %d, want editNone", cs.editMode)
 	}
@@ -137,23 +75,19 @@ func TestConfigScreen_NumericEmptyInputDoesNotApply(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newConfigTestModel()
-			cs := m.configScreen
-			setConfigFieldSelection(t, cs, tt.category, tt.path)
+			selectConfigField(t, &m, tt.category, tt.path)
 
+			cs := configTestScreen(t, m)
 			before, err := config.GetFieldValue(cs.cfg, tt.path)
 			if err != nil {
 				t.Fatalf("GetFieldValue before: %v", err)
 			}
 
-			m = sendConfigKey(m, "enter")
-			cs = m.configScreen
-			if cs.editMode != editInput {
-				t.Fatalf("editMode = %d, want editInput(%d)", cs.editMode, editInput)
-			}
+			openConfigInputEditor(t, &m, tt.category, tt.path)
 
-			cs.editInput.SetValue("")
+			setConfigInputValue(t, &m, "")
 			m = sendConfigKey(m, "enter")
-			cs = m.configScreen
+			cs = configTestScreen(t, m)
 
 			if cs.editMode != editInput {
 				t.Fatalf("editMode after empty input = %d, want editInput(%d)", cs.editMode, editInput)
@@ -178,21 +112,8 @@ func TestConfigScreen_NumericEmptyInputDoesNotApply(t *testing.T) {
 
 func TestConfigScreen_SpaceBoolOnly(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-
-	for i, cat := range cs.categories {
-		if cat.Name == "compression" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	for i, f := range cs.filteredFields() {
-		if f.Path == "compression.enabled" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	selectConfigField(t, &m, "compression", "compression.enabled")
+	cs := configTestScreen(t, m)
 	before, _ := config.GetFieldValue(cs.cfg, "compression.enabled")
 	m = sendConfigKey(m, " ")
 	after, _ := config.GetFieldValue(m.configScreen.cfg, "compression.enabled")
@@ -200,83 +121,30 @@ func TestConfigScreen_SpaceBoolOnly(t *testing.T) {
 		t.Fatal("Space should toggle bool")
 	}
 
-	cs = m.configScreen
-	for i, cat := range cs.categories {
-		if cat.Name == "execution" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.fieldIndex = 0
-	cs.fieldScroll = 0
-	for i, f := range cs.filteredFields() {
-		if f.Path == "execution.mode" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	selectConfigField(t, &m, "execution", "execution.mode")
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editMode != editNone {
 		t.Fatalf("Space on select should be no-op, but editMode = %d", cs.editMode)
 	}
 
-	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.fieldIndex = 0
-	cs.fieldScroll = 0
-	for i, f := range cs.filteredFields() {
-		if f.Path == "default_model" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	selectConfigField(t, &m, "provider", "default_model")
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editMode != editNone {
 		t.Fatalf("Space on string should be no-op, but editMode = %d", cs.editMode)
 	}
 
-	for i, cat := range cs.categories {
-		if cat.Name == "lsp" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.fieldIndex = 0
-	cs.fieldScroll = 0
-	for i, f := range cs.filteredFields() {
-		if f.Path == "lsp.servers" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	selectConfigField(t, &m, "lsp", "lsp.servers")
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editMode != editNone {
 		t.Fatalf("Space on structmap should be no-op, but editMode = %d", cs.editMode)
 	}
 
-	for i, cat := range cs.categories {
-		if cat.Name == "execution" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.fieldIndex = 0
-	cs.fieldScroll = 0
-	for i, f := range cs.filteredFields() {
-		if f.Path == "execution.mode" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	selectConfigField(t, &m, "execution", "execution.mode")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.editMode != editSelect {
 		t.Fatalf("Enter on select should start edit, but editMode = %d", cs.editMode)
 	}

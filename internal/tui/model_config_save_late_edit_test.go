@@ -13,11 +13,10 @@ func TestConfigScreen_SaveKeepsDirtyWhenEditedAfterSaveStarts(t *testing.T) {
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(config.DefaultConfig())
 
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "compression", "compression.enabled")
+	selectConfigField(t, &m, "compression", "compression.enabled")
 
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if !cs.dirty {
 		t.Fatal("dirty should be true after initial edit")
 	}
@@ -29,7 +28,7 @@ func TestConfigScreen_SaveKeepsDirtyWhenEditedAfterSaveStarts(t *testing.T) {
 	}
 
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if !cs.dirty {
 		t.Fatal("dirty should remain true after late edit")
 	}
@@ -40,7 +39,7 @@ func TestConfigScreen_SaveKeepsDirtyWhenEditedAfterSaveStarts(t *testing.T) {
 	resultMsg := saveCmd()
 	updated, _ = m.Update(resultMsg)
 	m = updated.(Model)
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if !cs.dirty {
 		t.Fatal("dirty should stay true when cfg changed after save started")
 	}
@@ -55,8 +54,7 @@ func TestConfigScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing.
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(config.DefaultConfig())
 
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "compression", "compression.enabled")
+	selectConfigField(t, &m, "compression", "compression.enabled")
 	m = sendConfigKey(m, " ")
 
 	m = sendConfigKey(m, "q")
@@ -66,7 +64,7 @@ func TestConfigScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing.
 		t.Fatal("saveCmd should not be nil")
 	}
 
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if !cs.pendingClose {
 		t.Fatal("pendingClose should be true while save and quit is in flight")
 	}
@@ -75,7 +73,7 @@ func TestConfigScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing.
 	}
 
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if !cs.dirty {
 		t.Fatal("dirty should stay true after late edit")
 	}
@@ -87,7 +85,7 @@ func TestConfigScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing.
 	if m.screen != screenConfig {
 		t.Fatalf("screen = %d, want screenConfig when late edits remain unsaved", m.screen)
 	}
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if cs.pendingClose {
 		t.Fatal("pendingClose should be cleared after successful save of an outdated snapshot")
 	}

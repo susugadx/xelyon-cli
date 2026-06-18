@@ -19,23 +19,10 @@ func TestConfigScreen_DirtyState(t *testing.T) {
 		t.Fatalf("saveStatus = %d, want statusSaved(%d)", cs.saveStatus, statusSaved)
 	}
 
-	for i, cat := range cs.categories {
-		if cat.Name == "compression" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "compression.enabled" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	selectConfigField(t, &m, "compression", "compression.enabled")
 
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 	if !cs.dirty {
 		t.Fatal("dirty should be true after edit")
 	}
@@ -63,8 +50,7 @@ func TestConfigScreen_DirtyState(t *testing.T) {
 
 func TestConfigScreen_SaveAndQuit_Success(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = sendConfigKey(m, "q")
 	updated, saveCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -73,7 +59,7 @@ func TestConfigScreen_SaveAndQuit_Success(t *testing.T) {
 		t.Fatal("saveCmd should not be nil")
 	}
 
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if !cs.pendingClose {
 		t.Fatal("pendingClose should be true")
 	}
@@ -101,8 +87,7 @@ func TestConfigScreen_SaveAndClose_RefreshesStatusLine(t *testing.T) {
 	m.configScreen = newConfigScreen(config.DefaultConfig())
 	m.statusLine = agent.GetStatusLine()
 
-	cs := m.configScreen
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = sendConfigKey(m, "q")
 	updated, saveCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -151,8 +136,7 @@ func TestConfigScreen_SaveAndQuit_Failure(t *testing.T) {
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
 	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = sendConfigKey(m, "q")
 	m = sendConfigKey(m, "enter")
@@ -163,7 +147,7 @@ func TestConfigScreen_SaveAndQuit_Failure(t *testing.T) {
 	if m.screen != screenConfig {
 		t.Fatalf("screen = %d after failed save, want screenConfig", m.screen)
 	}
-	cs = m.configScreen
+	cs := configTestScreen(t, m)
 	if cs.saveStatus != statusFailed {
 		t.Fatalf("saveStatus = %d, want statusFailed(%d)", cs.saveStatus, statusFailed)
 	}
