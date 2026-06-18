@@ -3,13 +3,12 @@ package mutation
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
 )
 
 func TestBuildStringReplacementFailure_MultipleMatchesMessage(t *testing.T) {
-	failure := stringReplacementFailure{
-		reason:     stringReplacementFailureMultipleMatches,
-		exactCount: 3,
-	}
+	failure := replaceengine.BuildStringExecution("foo\nbar\nfoo\nbaz\nfoo", "foo", "x").Failure()
 
 	message := buildStringReplacementFailure("test.txt", "foo\nbar\nfoo\nbaz\nfoo", "foo", failure)
 	if !strings.Contains(message, "Error: old_str appears 3 times in test.txt (must be unique).") {
@@ -27,9 +26,7 @@ func TestBuildStringReplacementFailure_MultipleMatchesMessage(t *testing.T) {
 }
 
 func TestBuildStringReplacementFailure_NotFoundMessage(t *testing.T) {
-	failure := stringReplacementFailure{
-		reason: stringReplacementFailureNotFound,
-	}
+	failure := replaceengine.BuildStringExecution("first\nsecond\nthird\nfourth", "missing", "x").Failure()
 
 	message := buildStringReplacementFailure("test.txt", "first\nsecond\nthird\nfourth", "missing", failure)
 	if !strings.Contains(message, "Error: old_str not found in test.txt (tried exact and normalized matching).") {
@@ -44,14 +41,14 @@ func TestBuildStringReplacementFailure_NotFoundMessage(t *testing.T) {
 }
 
 func TestBuildBatchStringReplacementFailure_MultipleMatchesMessage(t *testing.T) {
-	failure := batchStringReplacementFailure{
-		editIndex:  2,
-		oldContent: "foo\nbar\nfoo\nbaz\nfoo",
-		oldStr:     "foo",
-		failure: stringReplacementFailure{
-			reason:     stringReplacementFailureMultipleMatches,
-			exactCount: 3,
-		},
+	outcome := replaceengine.BuildBatchOutcome("foo\nbar\nfoo\nbaz\nfoo", []replaceengine.Edit{
+		{OldStr: "bar", NewStr: "bar"},
+		{OldStr: "baz", NewStr: "baz"},
+		{OldStr: "foo", NewStr: "x"},
+	})
+	failure, ok := outcome.Failure()
+	if !ok {
+		t.Fatal("expected batch failure")
 	}
 
 	message := buildBatchStringReplacementFailure("test.txt", failure)
@@ -67,13 +64,13 @@ func TestBuildBatchStringReplacementFailure_MultipleMatchesMessage(t *testing.T)
 }
 
 func TestBuildBatchStringReplacementFailure_NotFoundMessage(t *testing.T) {
-	failure := batchStringReplacementFailure{
-		editIndex:  1,
-		oldContent: "AAA\nbbb\nccc\nddd",
-		oldStr:     "missing",
-		failure: stringReplacementFailure{
-			reason: stringReplacementFailureNotFound,
-		},
+	outcome := replaceengine.BuildBatchOutcome("first\nbbb\nccc\nddd", []replaceengine.Edit{
+		{OldStr: "first", NewStr: "AAA"},
+		{OldStr: "missing", NewStr: "x"},
+	})
+	failure, ok := outcome.Failure()
+	if !ok {
+		t.Fatal("expected batch failure")
 	}
 
 	message := buildBatchStringReplacementFailure("test.txt", failure)
@@ -85,6 +82,19 @@ func TestBuildBatchStringReplacementFailure_NotFoundMessage(t *testing.T) {
 	}
 	if !strings.Contains(message, "Next: use read_file/search_code to copy the exact text for edits[1].old_str, then retry; split the batch if later edits depend on earlier changes.") {
 		t.Fatalf("unexpected guidance: %s", message)
+	}
+}
+
+func TestBuildAppliedStrReplaceResult(t *testing.T) {
+	execution := replaceengine.BuildStringExecution("one\n\tfoo\n\tbar", "  foo\n  bar", "x\ny\nz")
+	if execution.Failure().HasFailure() {
+		t.Fatalf("expected normalized success, got failure: %+v", execution.Failure())
+	}
+
+	result := buildAppliedStrReplaceResult("test.txt", execution.Plan())
+	expected := "Successfully replaced text in test.txt (lines 2-3 → 2-4, used normalized whitespace matching)"
+	if result != expected {
+		t.Fatalf("unexpected applied result:\nwant: %s\n got: %s", expected, result)
 	}
 }
 

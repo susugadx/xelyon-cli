@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -31,7 +32,7 @@ func executeBatchEditsWithPromptIOAndOptionsDetails(promptIO ui.PromptIO, option
 	return executeBatchEditsWithEntriesAndOptionsDetails(promptIO, options, path, edits)
 }
 
-func executeBatchEditsWithEntriesAndOptionsDetails(promptIO ui.PromptIO, options common.ConfirmOptions, path string, edits []EditEntry) (batchEditsExecutionDetails, error) {
+func executeBatchEditsWithEntriesAndOptionsDetails(promptIO ui.PromptIO, options common.ConfirmOptions, path string, edits []replaceengine.Edit) (batchEditsExecutionDetails, error) {
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is required")
 	if result.message != "" || err != nil {
 		return batchEditsExecutionDetails{result: result}, err
@@ -52,14 +53,14 @@ func executeBatchEditsWithEntriesAndOptionsDetails(promptIO ui.PromptIO, options
 
 	details := batchEditsExecutionDetails{resolvedPath: ctx.absPath}
 
-	var outcome batchStringReplacementOutcome
+	var outcome replaceengine.BatchOutcome
 	workflowResult, workflowErr := executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
 		toolName:       "str_replace",
 		confirmMessage: "Apply batch replacement? / バッチ置換を適用しますか？",
 		preview: func() fileMutationResult {
 			previewPlan := buildBatchStringReplacementPreviewPlan(path, oldContent, edits)
 			outcome = previewPlan.outcome
-			for _, editIndex := range outcome.plan.normalizedAttemptedEdits {
+			for _, editIndex := range outcome.Plan().NormalizedAttemptedEdits() {
 				if !ctx.out.SuppressStdout() {
 					ctx.out.Yellow.Printf("⚠️  edits[%d]: Exact match failed, trying normalized whitespace matching...\n", editIndex)
 				}
@@ -67,14 +68,16 @@ func executeBatchEditsWithEntriesAndOptionsDetails(promptIO ui.PromptIO, options
 			if previewPlan.terminalResult.IsTerminal() {
 				return previewPlan.terminalResult
 			}
-			details.linesAdded, details.linesRemoved = resolveBatchExecutionLineStats(oldContent, outcome.plan.newContent, edits, ctx.out.SuppressStdout())
-			showBatchReplacementPreview(ctx, oldContent, outcome.plan.newContent, path, len(edits), details.linesRemoved, details.linesAdded)
+			stats := replaceengine.ResolveBatchExecutionLineStats(oldContent, outcome.Plan().NewContent(), edits, ctx.out.SuppressStdout())
+			details.linesAdded = stats.LinesAdded
+			details.linesRemoved = stats.LinesRemoved
+			showBatchReplacementPreview(ctx, oldContent, outcome.Plan().NewContent(), path, len(edits), details.linesRemoved, details.linesAdded)
 			return fileMutationResult{}
 		},
 		confirm: buildStrReplaceConfirmHandlers(ctx.out, path, strReplaceModeBatch),
 		apply: func() (fileMutationResult, error) {
 			message := fmt.Sprintf("Successfully applied %d edits to %s", len(edits), path)
-			return applyStringReplaceMutation(ctx, outcome.plan.newContent, fmt.Sprintf("✅ Applied %d edits to: %s", len(edits), path), message)
+			return applyStringReplaceMutation(ctx, outcome.Plan().NewContent(), fmt.Sprintf("✅ Applied %d edits to: %s", len(edits), path), message)
 		},
 	})
 	details.result = workflowResult

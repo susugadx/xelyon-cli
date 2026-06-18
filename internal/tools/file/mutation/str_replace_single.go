@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
@@ -57,34 +58,35 @@ func executeStrReplaceWithPromptIOAndOptionsDetails(promptIO ui.PromptIO, option
 func executeLineRangeReplacement(ctx fileMutationContext, options common.ConfirmOptions, oldContent, newStr, startLineStr, endLineStr string) (fileMutationResult, error) {
 	path := ctx.path
 	out := ctx.out
-	var execution lineRangeReplacementExecution
+	var execution replaceengine.LineRangeExecution
 	return executeFileMutationWorkflow(ctx, options, fileMutationWorkflow{
 		toolName:       "str_replace",
 		confirmMessage: "Apply this replacement? / この置換を適用しますか？",
 		preview: func() fileMutationResult {
-			execution = buildLineRangeReplacementExecution(oldContent, newStr, startLineStr, endLineStr)
-			if execution.failure.hasFailure() {
-				return newErrorMutationResult(buildLineRangeReplacementFailure(path, execution.failure))
+			execution = replaceengine.BuildLineRangeExecution(oldContent, newStr, startLineStr, endLineStr)
+			if execution.Failure().HasFailure() {
+				return newErrorMutationResult(buildLineRangeReplacementFailure(path, execution.Failure()))
 			}
-			showLineRangeReplacementPreview(ctx, newStr, execution.plan)
+			showLineRangeReplacementPreview(ctx, newStr, execution.Plan())
 			return fileMutationResult{}
 		},
 		confirm: buildStrReplaceConfirmHandlers(out, path, strReplaceModeLineRange),
 		apply: func() (fileMutationResult, error) {
-			result := buildAppliedLineRangeStrReplaceResult(path, execution.plan)
+			plan := execution.Plan()
+			result := buildAppliedLineRangeStrReplaceResult(path, plan)
 			return applyStringReplaceMutation(
 				ctx,
-				execution.plan.newContent,
-				fmt.Sprintf("✅ Replaced lines %d-%d in: %s", execution.plan.startLine, execution.plan.endLine, path),
+				plan.NewContent(),
+				fmt.Sprintf("✅ Replaced lines %d-%d in: %s", plan.StartLine(), plan.EndLine(), path),
 				result,
 			)
 		},
 	})
 }
 
-func showLineRangeReplacementPreview(ctx fileMutationContext, newStr string, plan lineRangeReplacementPlan) {
+func showLineRangeReplacementPreview(ctx fileMutationContext, newStr string, plan replaceengine.LineRangePlan) {
 	out := ctx.out
-	if newStr != "" && !out.SuppressStdout() && hasNearbyLineRangeReplacementDuplicate(plan.lines, newStr, plan.startLine, plan.endLine) {
+	if newStr != "" && !out.SuppressStdout() && replaceengine.HasNearbyLineRangeDuplicate(plan.Lines(), newStr, plan.StartLine(), plan.EndLine()) {
 		out.Yellow.Println("⚠️  Warning: new_str already exists near the target range (±10 lines, possible duplication)")
 	}
 	if out.SuppressStdout() {
@@ -92,12 +94,12 @@ func showLineRangeReplacementPreview(ctx fileMutationContext, newStr string, pla
 	}
 
 	showStrReplaceDiffPreview(ctx, strReplaceDiffPreview{
-		targetPath:    fmt.Sprintf("%s (lines %d-%d)", ctx.path, plan.startLine, plan.endLine),
-		removedLines:  plan.oldLineCount,
-		addedLines:    plan.newLineCount,
-		before:        plan.beforeRange,
+		targetPath:    fmt.Sprintf("%s (lines %d-%d)", ctx.path, plan.StartLine(), plan.EndLine()),
+		removedLines:  plan.OldLineCount(),
+		addedLines:    plan.NewLineCount(),
+		before:        plan.BeforeRange(),
 		after:         newStr,
-		lineNumOffset: plan.startLine - 1,
+		lineNumOffset: plan.StartLine() - 1,
 	})
 }
 
@@ -110,7 +112,7 @@ func resolveSingleStrReplaceLineStats(oldStr, newStr, startLineStr, endLineStr s
 		return added, 0
 	}
 
-	startLine, endLine, err := parseLineRange(startLineStr, endLineStr)
+	startLine, endLine, err := replaceengine.ParseLineRange(startLineStr, endLineStr)
 	if err != nil {
 		return added, 0
 	}

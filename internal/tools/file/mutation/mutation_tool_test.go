@@ -145,7 +145,7 @@ func TestStrReplaceToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {
 
 	t.Run("batch success can force exact diff line stats when stdout is suppressed", func(t *testing.T) {
 		setupTestConfirm(t, true)
-		t.Setenv(envBatchExactLineStats, "1")
+		t.Setenv("XELYON_STR_REPLACE_BATCH_EXACT_LINE_STATS", "1")
 		tmpDir := t.TempDir()
 		testFile := filepath.Join(tmpDir, "batch-diff-suppressed-force-exact.txt")
 		testutil.CreateTempFile(t, tmpDir, "batch-diff-suppressed-force-exact.txt", "x")
@@ -168,14 +168,8 @@ func TestStrReplaceToolRun_FileChangeOnlyOnAppliedEdit(t *testing.T) {
 
 	t.Run("batch success falls back to lightweight line stats when exact diff is capped", func(t *testing.T) {
 		setupTestConfirm(t, true)
-		originalLimit := myersDiagonalStepLimit
-		originalMin := myersMinDiagonalStepLimit
-		myersDiagonalStepLimit = 1
-		myersMinDiagonalStepLimit = 1
-		t.Cleanup(func() {
-			myersDiagonalStepLimit = originalLimit
-			myersMinDiagonalStepLimit = originalMin
-		})
+		t.Setenv("XELYON_STR_REPLACE_MYERS_DIAGONAL_STEP_LIMIT", "1")
+		t.Setenv("XELYON_STR_REPLACE_MYERS_MIN_STEP_LIMIT", "1")
 
 		tmpDir := t.TempDir()
 		testFile := filepath.Join(tmpDir, "batch-diff-fallback.txt")

@@ -1,4 +1,4 @@
-package mutation
+package replaceengine
 
 func trimSharedLineEdges(oldLines, newLines []string) ([]string, []string) {
 	prefix := countCommonLinePrefix(oldLines, newLines)

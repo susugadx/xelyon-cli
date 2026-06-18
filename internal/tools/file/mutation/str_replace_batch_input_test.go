@@ -3,6 +3,8 @@ package mutation
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
 )
 
 func TestParseBatchEditEntriesResult_InvalidJSON(t *testing.T) {
@@ -39,7 +41,7 @@ func TestValidateBatchEditEntries_EmptyArray(t *testing.T) {
 }
 
 func TestValidateBatchEditEntries_EmptyOldStr(t *testing.T) {
-	result := validateBatchEditEntries("test.txt", []EditEntry{
+	result := validateBatchEditEntries("test.txt", []replaceengine.Edit{
 		{OldStr: "", NewStr: "x"},
 	})
 	if !result.IsTerminal() {
@@ -51,7 +53,7 @@ func TestValidateBatchEditEntries_EmptyOldStr(t *testing.T) {
 }
 
 func TestValidateBatchEditEntries_IdenticalOldAndNew(t *testing.T) {
-	result := validateBatchEditEntries("test.txt", []EditEntry{
+	result := validateBatchEditEntries("test.txt", []replaceengine.Edit{
 		{OldStr: "x", NewStr: "x"},
 	})
 	if !result.IsTerminal() {
@@ -63,7 +65,7 @@ func TestValidateBatchEditEntries_IdenticalOldAndNew(t *testing.T) {
 }
 
 func TestValidateBatchEditEntries_Success(t *testing.T) {
-	result := validateBatchEditEntries("test.txt", []EditEntry{
+	result := validateBatchEditEntries("test.txt", []replaceengine.Edit{
 		{OldStr: "a", NewStr: "b"},
 	})
 	if result.IsTerminal() {

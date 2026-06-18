@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/testutil"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
 )
 
 func TestExecuteBatchEdits_NormalizedWhitespaceFallback(t *testing.T) {
@@ -279,43 +280,19 @@ func TestExecuteBatchEdits_AmbiguousMatch_SummaryFirst(t *testing.T) {
 	}
 }
 
-func TestBuildBatchStringReplacementOutcome_NormalizedAttemptedEdits(t *testing.T) {
-	original := "func main() {\n\tfmt.Println(\"hello\")\n}\nmarker"
-	edits := []EditEntry{
-		{
-			OldStr: "func main() {\n    fmt.Println(\"hello\")\n}",
-			NewStr: "func main() {\n\tfmt.Println(\"world\")\n}",
-		},
-		{
-			OldStr: "marker",
-			NewStr: "done",
-		},
-	}
-
-	outcome := buildBatchStringReplacementOutcome(original, edits)
-	if outcome.failure != nil {
-		t.Fatalf("expected successful outcome, got failure: %+v", outcome.failure)
-	}
-	if len(outcome.plan.normalizedAttemptedEdits) != 1 || outcome.plan.normalizedAttemptedEdits[0] != 0 {
-		t.Fatalf("unexpected normalized-attempted edits: %+v", outcome.plan.normalizedAttemptedEdits)
-	}
-	if !strings.Contains(outcome.plan.newContent, "world") || !strings.Contains(outcome.plan.newContent, "done") {
-		t.Fatalf("unexpected new content: %q", outcome.plan.newContent)
-	}
-}
-
 func TestBuildBatchStringReplacementFailure_NotFound(t *testing.T) {
-	edits := []EditEntry{
+	edits := []replaceengine.Edit{
 		{OldStr: "aaa", NewStr: "AAA"},
 		{OldStr: "missing", NewStr: "XXX"},
 	}
 
-	outcome := buildBatchStringReplacementOutcome("aaa\nbbb\nccc", edits)
-	if outcome.failure == nil {
+	outcome := replaceengine.BuildBatchOutcome("aaa\nbbb\nccc", edits)
+	failure, ok := outcome.Failure()
+	if !ok {
 		t.Fatal("expected failure outcome")
 	}
 
-	msg := buildBatchStringReplacementFailure("test.txt", *outcome.failure)
+	msg := buildBatchStringReplacementFailure("test.txt", failure)
 	if !strings.Contains(msg, "Error: edits[1].old_str not found in test.txt (tried exact and normalized matching; batch aborted, no changes written).") {
 		t.Fatalf("unexpected failure summary: %s", msg)
 	}

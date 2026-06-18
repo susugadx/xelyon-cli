@@ -378,6 +378,37 @@ make ci-check
   - `go test ./internal/tools ./internal/tools/file/... ./internal/tools/gathercontext ./internal/agent ./internal/api/providers/gemini` を通過済み。
   - `go test ./internal/tools/...` を通過済み。
   - `go test ./internal/agent ./internal/toolruntime ./internal/taskstate ./internal/mcptool ./internal/reviewadapter` を通過済み。
+ - `go test ./internal/api/providers/...` を通過済み。
+  - `git diff --check` を通過済み。
+  - `make ci-check` を通過済み。coverage は 83.2%。
+
+2026-06-18 str_replace pure engine split tranche:
+
+- Phase 0 source map refresh:
+  - `internal/tools/file/mutation` の `str_replace` は、path validation、file I/O、preview、confirm、apply、syntax warning、failure/status 文言、`FileChange` gate を同一 workflow owner として維持する前提で確認した。
+  - pure planning / failure data / diff stats は `write_file` / `delete_file` と共有しないため、`mutation` package 内 file split だけでは private symbol 共有を止められないと判断した。
+- Phase 1 package boundary refactor:
+  - `internal/tools/file/mutation/replaceengine` を追加し、exact / normalized string replacement、line-range replacement、batch sequential planning、batch execution line stats、line range parsing、nearby duplicate detection を移した。
+  - `replaceengine` の dependency は stdlib と `internal/tools/common.FindWithNormalizedWhitespace` に限定した。file I/O、prompt/UI、config、schema、pathpolicy、LSP、`tools.FileChange`、mutation workflow は持たせていない。
+  - exported API は `Edit`、`BuildStringExecution` / `StringExecution` / `StringPlan` / `StringFailure`、`BuildLineRangeExecution` / `LineRangeExecution` / `LineRangePlan` / `LineRangeFailure` / `ParseLineRange`、`BuildBatchOutcome` / `BatchOutcome` / `BatchPlan` / `BatchFailure`、`ResolveBatchExecutionLineStats` / `BatchEditLineStats`、`FindAllOccurrencesLineRanges`、`HasNearbyStringDuplicate`、`HasNearbyLineRangeDuplicate` に限定した。
+  - failure reason enum や tuning policy は export せず、mutation は builder から返った plan / failure data を accessor 経由で消費する形にした。
+- Phase 2 mutation adapter:
+  - `str_replace_string.go`、`str_replace_single.go`、`str_replace_batch.go` は `replaceengine` の plan / failure を消費する orchestration に寄せた。
+  - batch JSON parse / validation、preview/noop decision、failure message wording、normalized-match warning、large-change warning、syntax warning、confirm handler、apply、`FileChange` recording は `mutation` に残した。
+  - `mutation.EditEntry` の alias / re-export は作らず、batch parse は `[]replaceengine.Edit` を返すようにした。
+- Phase 3 test boundary:
+  - exact replacement、normalized fallback、line range parse / planning、batch sequential planning、diff stats、env/tuning policy は `replaceengine` tests に移した。
+  - failure message wording、batch preview terminal result、tool execution、cancel/comment、syntax warning、`FileChange` recording は `mutation` tests に残した。
+- Boundary guard:
+  - `internal/tools/package_boundaries_test.go` を更新し、`replaceengine` が root `file`、`mutation`、`readtool`、`listtool`、`directquery`、`schema`、`pathpolicy`、root `internal/tools`、`internal/ui`、`internal/config`、LSP 系を import しないことを固定した。
+  - `mutation` 以外の file subpackage が `replaceengine` を直接 import しないことを固定した。
+- Verification so far:
+  - `go test ./internal/tools/file/mutation/replaceengine` を通過済み。
+  - `go test ./internal/tools/file/mutation` を通過済み。
+  - `go test ./internal/tools` を通過済み。
+  - `go test ./internal/tools/file/mutation ./internal/tools/file/...` を通過済み。
+  - `go test ./internal/tools/...` を通過済み。
+  - `go test ./internal/agent ./internal/toolruntime ./internal/taskstate ./internal/mcptool ./internal/reviewadapter` を通過済み。
   - `go test ./internal/api/providers/...` を通過済み。
   - `git diff --check` を通過済み。
   - `make ci-check` を通過済み。coverage は 83.2%。

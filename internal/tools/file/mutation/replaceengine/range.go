@@ -1,4 +1,4 @@
-package mutation
+package replaceengine
 
 import (
 	"fmt"
@@ -6,15 +6,34 @@ import (
 	"strings"
 )
 
-func batchEditLineStats(edits []EditEntry) (removed, added int) {
-	for _, edit := range edits {
-		removed += countLines(edit.OldStr)
-		added += countLines(edit.NewStr)
-	}
-	return removed, added
+// Edit は batch edits の 1 エントリを表す。
+type Edit struct {
+	OldStr string `json:"old_str"`
+	NewStr string `json:"new_str"`
 }
 
-func parseLineRange(startStr, endStr string) (start, end int, _ error) {
+func batchEditLineStats(edits []Edit) BatchEditLineStats {
+	stats := BatchEditLineStats{}
+	for _, edit := range edits {
+		stats.LinesRemoved += countEditLines(edit.OldStr)
+		stats.LinesAdded += countEditLines(edit.NewStr)
+	}
+	return stats
+}
+
+func countEditLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	parts := strings.Split(s, "\n")
+	if len(parts) > 0 && parts[len(parts)-1] == "" {
+		return len(parts) - 1
+	}
+	return len(parts)
+}
+
+// ParseLineRange は 1-indexed inclusive の start/end 行を parse する。
+func ParseLineRange(startStr, endStr string) (start, end int, _ error) {
 	start64, err := strconv.ParseInt(strings.TrimSpace(startStr), 10, 0)
 	if err != nil {
 		return 0, 0, fmt.Errorf("invalid start_line: %w", err)
@@ -35,14 +54,14 @@ func parseLineRange(startStr, endStr string) (start, end int, _ error) {
 	return start, end, nil
 }
 
-// findAllOccurrencesLineRanges finds up to max occurrences of needle in content and returns their 1-indexed line ranges.
+// FindAllOccurrencesLineRanges finds up to max occurrences of needle in content and returns their 1-indexed line ranges.
 // This is best-effort and used only for error messaging.
-func findAllOccurrencesLineRanges(content, needle string, maxEntries int) []lineRange {
+func FindAllOccurrencesLineRanges(content, needle string, maxEntries int) [][2]int {
 	if needle == "" || maxEntries <= 0 {
 		return nil
 	}
 
-	var res []lineRange
+	var res [][2]int
 	searchFrom := 0
 	for len(res) < maxEntries {
 		idx := strings.Index(content[searchFrom:], needle)
@@ -54,7 +73,7 @@ func findAllOccurrencesLineRanges(content, needle string, maxEntries int) []line
 
 		startLine := 1 + strings.Count(content[:absIdx], "\n")
 		endLine := 1 + strings.Count(content[:endIdx], "\n")
-		res = append(res, lineRange{StartLine: startLine, EndLine: endLine})
+		res = append(res, [2]int{startLine, endLine})
 
 		searchFrom = endIdx + 1
 		if searchFrom >= len(content) {

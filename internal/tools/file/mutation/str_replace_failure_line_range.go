@@ -2,27 +2,29 @@ package mutation
 
 import "fmt"
 
-func buildLineRangeReplacementFailure(path string, failure lineRangeReplacementFailure) string {
-	switch failure.reason {
-	case lineRangeReplacementFailureMissingRange:
+import "github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
+
+func buildLineRangeReplacementFailure(path string, failure replaceengine.LineRangeFailure) string {
+	switch {
+	case failure.IsMissingRange():
 		return "Error: old_str is required (or provide both start_line and end_line for line-range replacement)"
-	case lineRangeReplacementFailureIncompleteRange:
+	case failure.IsIncompleteRange():
 		return "Error: both start_line and end_line are required for line-range replacement (1-indexed inclusive)"
-	case lineRangeReplacementFailureInvalidRange:
+	case failure.IsInvalidRange():
 		return joinFailureResult(
-			fmt.Sprintf("Error: invalid line range in %s: %v", path, failure.parseErr),
+			fmt.Sprintf("Error: invalid line range in %s: %v", path, failure.ParseErr()),
 			"Next: use read_file to confirm start_line/end_line (1-indexed inclusive).",
 		)
-	case lineRangeReplacementFailureEmptyFile:
+	case failure.IsEmptyFile():
 		return fmt.Sprintf("Error: file is empty: %s", path)
-	case lineRangeReplacementFailureStartOutOfRange:
+	case failure.IsStartOutOfRange():
 		return joinFailureResult(
-			fmt.Sprintf("Error: start_line is out of range in %s (start_line=%d, file_lines=%d).", path, failure.startLine, failure.fileLines),
+			fmt.Sprintf("Error: start_line is out of range in %s (start_line=%d, file_lines=%d).", path, failure.StartLine(), failure.FileLines()),
 			"Next: use read_file to confirm the target range.",
 		)
-	case lineRangeReplacementFailureEndOutOfRange:
+	case failure.IsEndOutOfRange():
 		return joinFailureResult(
-			fmt.Sprintf("Error: end_line is out of range in %s (end_line=%d, file_lines=%d).", path, failure.endLine, failure.fileLines),
+			fmt.Sprintf("Error: end_line is out of range in %s (end_line=%d, file_lines=%d).", path, failure.EndLine(), failure.FileLines()),
 			"Next: use read_file to confirm the target range.",
 		)
 	default:
@@ -30,6 +32,6 @@ func buildLineRangeReplacementFailure(path string, failure lineRangeReplacementF
 	}
 }
 
-func buildAppliedLineRangeStrReplaceResult(path string, plan lineRangeReplacementPlan) string {
-	return fmt.Sprintf("Successfully replaced lines %d-%d in %s (new range: %d-%d)", plan.startLine, plan.endLine, path, plan.startLine, plan.replacedEndLine())
+func buildAppliedLineRangeStrReplaceResult(path string, plan replaceengine.LineRangePlan) string {
+	return fmt.Sprintf("Successfully replaced lines %d-%d in %s (new range: %d-%d)", plan.StartLine(), plan.EndLine(), path, plan.StartLine(), plan.ReplacedEndLine())
 }

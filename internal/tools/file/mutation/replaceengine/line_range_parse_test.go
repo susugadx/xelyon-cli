@@ -1,4 +1,4 @@
-package mutation
+package replaceengine
 
 import "testing"
 
@@ -20,7 +20,7 @@ func TestParseLineRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			start, end, err := parseLineRange(tt.startStr, tt.endStr)
+			start, end, err := ParseLineRange(tt.startStr, tt.endStr)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("Expected error")

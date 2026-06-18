@@ -17,7 +17,7 @@ func joinFailureResult(parts ...string) string {
 	return strings.Join(filtered, "\n")
 }
 
-func buildCandidateSummary(lines []string, cands []lineRange, total int) string {
+func buildCandidateSummary(lines []string, cands [][2]int, total int) string {
 	if total <= 0 {
 		return ""
 	}
@@ -29,7 +29,7 @@ func buildCandidateSummary(lines []string, cands []lineRange, total int) string 
 	}
 	for i := 0; i < shown; i++ {
 		c := cands[i]
-		fmt.Fprintf(&b, "\n- lines %d-%d: %s", c.StartLine, c.EndLine, buildInlinePreview(lines, c.StartLine, c.EndLine, 1))
+		fmt.Fprintf(&b, "\n- lines %d-%d: %s", c[0], c[1], buildInlinePreview(lines, c[0], c[1], 1))
 	}
 	if total > shown {
 		fmt.Fprintf(&b, "\n- ... %d more candidates", total-shown)

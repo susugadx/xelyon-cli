@@ -153,8 +153,9 @@ func TestFileToolPackageBoundaries(t *testing.T) {
 	}
 
 	rules := []struct {
-		dir       string
-		forbidden []string
+		dir            string
+		forbidden      []string
+		exactForbidden []string
 	}{
 		{
 			dir: "pathpolicy",
@@ -162,6 +163,7 @@ func TestFileToolPackageBoundaries(t *testing.T) {
 				"github.com/susugadx/xelyon-cli/internal/tools/file/directquery",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/listtool",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/readtool",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/schema",
 			},
@@ -172,6 +174,7 @@ func TestFileToolPackageBoundaries(t *testing.T) {
 				"github.com/susugadx/xelyon-cli/internal/tools/file/directquery",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/listtool",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/pathpolicy",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/readtool",
 			},
@@ -183,6 +186,7 @@ func TestFileToolPackageBoundaries(t *testing.T) {
 				"github.com/susugadx/xelyon-cli/internal/tools/file/directquery",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/listtool",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine",
 			},
 		},
 		{
@@ -191,6 +195,7 @@ func TestFileToolPackageBoundaries(t *testing.T) {
 				fileRootImport,
 				"github.com/susugadx/xelyon-cli/internal/tools/file/directquery",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/readtool",
 			},
 		},
@@ -204,10 +209,31 @@ func TestFileToolPackageBoundaries(t *testing.T) {
 			},
 		},
 		{
+			dir: "mutation/replaceengine",
+			forbidden: []string{
+				fileRootImport,
+				"github.com/susugadx/xelyon-cli/internal/ast",
+				"github.com/susugadx/xelyon-cli/internal/config",
+				"github.com/susugadx/xelyon-cli/internal/lsp",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/directquery",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/listtool",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/pathpolicy",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/readtool",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/schema",
+				"github.com/susugadx/xelyon-cli/internal/tools/lsp",
+				"github.com/susugadx/xelyon-cli/internal/ui",
+			},
+			exactForbidden: []string{
+				"github.com/susugadx/xelyon-cli/internal/tools",
+			},
+		},
+		{
 			dir: "directquery",
 			forbidden: []string{
 				fileRootImport,
 				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation",
+				"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine",
 				"github.com/susugadx/xelyon-cli/internal/tools/file/schema",
 			},
 		},
@@ -218,6 +244,14 @@ func TestFileToolPackageBoundaries(t *testing.T) {
 			imports, _, err := importsForPackageDir(filepath.Join(fileRoot, rule.dir), true)
 			if err != nil {
 				t.Fatal(err)
+			}
+			for _, importPath := range imports {
+				for _, forbidden := range rule.exactForbidden {
+					if importPath == forbidden {
+						relDir, _ := filepath.Rel(repoRoot, filepath.Join(fileRoot, rule.dir))
+						t.Fatalf("%s imports %q; violates file tool owner dependency direction", filepath.ToSlash(relDir), importPath)
+					}
+				}
 			}
 			for _, importPath := range imports {
 				for _, forbidden := range rule.forbidden {

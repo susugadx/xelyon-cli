@@ -3,16 +3,18 @@ package mutation
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
 )
 
 func TestBuildBatchStringReplacementPreviewPlan_Failure(t *testing.T) {
-	edits := []EditEntry{
+	edits := []replaceengine.Edit{
 		{OldStr: "aaa", NewStr: "AAA"},
 		{OldStr: "missing", NewStr: "XXX"},
 	}
 
 	plan := buildBatchStringReplacementPreviewPlan("test.txt", "aaa\nbbb\nccc", edits)
-	if plan.outcome.failure == nil {
+	if _, ok := plan.outcome.Failure(); !ok {
 		t.Fatal("expected failure outcome")
 	}
 	if plan.terminalResult.status != fileMutationStatusError {
@@ -24,14 +26,14 @@ func TestBuildBatchStringReplacementPreviewPlan_Failure(t *testing.T) {
 }
 
 func TestBuildBatchStringReplacementPreviewPlan_Noop(t *testing.T) {
-	edits := []EditEntry{
+	edits := []replaceengine.Edit{
 		{OldStr: "hello", NewStr: "hi"},
 		{OldStr: "hi", NewStr: "hello"},
 	}
 
 	plan := buildBatchStringReplacementPreviewPlan("test.txt", "hello world", edits)
-	if plan.outcome.failure != nil {
-		t.Fatalf("unexpected failure outcome: %+v", plan.outcome.failure)
+	if failure, ok := plan.outcome.Failure(); ok {
+		t.Fatalf("unexpected failure outcome: %+v", failure)
 	}
 	if plan.terminalResult.status != fileMutationStatusNoop {
 		t.Fatalf("expected noop terminal result, got status=%v", plan.terminalResult.status)
@@ -42,17 +44,17 @@ func TestBuildBatchStringReplacementPreviewPlan_Noop(t *testing.T) {
 }
 
 func TestBuildBatchStringReplacementPreviewPlan_Success(t *testing.T) {
-	plan := buildBatchStringReplacementPreviewPlan("test.txt", "hello world", []EditEntry{
+	plan := buildBatchStringReplacementPreviewPlan("test.txt", "hello world", []replaceengine.Edit{
 		{OldStr: "hello", NewStr: "hi"},
 	})
 
 	if plan.terminalResult.IsTerminal() {
 		t.Fatalf("expected non-terminal preview result, got: %+v", plan.terminalResult)
 	}
-	if plan.outcome.failure != nil {
-		t.Fatalf("unexpected failure outcome: %+v", plan.outcome.failure)
+	if failure, ok := plan.outcome.Failure(); ok {
+		t.Fatalf("unexpected failure outcome: %+v", failure)
 	}
-	if plan.outcome.plan.newContent != "hi world" {
-		t.Fatalf("unexpected new content: %q", plan.outcome.plan.newContent)
+	if plan.outcome.Plan().NewContent() != "hi world" {
+		t.Fatalf("unexpected new content: %q", plan.outcome.Plan().NewContent())
 	}
 }
