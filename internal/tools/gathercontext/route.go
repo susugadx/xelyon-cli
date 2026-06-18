@@ -2,7 +2,7 @@ package gathercontext
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/directquery"
 	"github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
@@ -20,16 +20,16 @@ func buildRoutePlan(execCtx tools.ExecutionContext, req request) routePlan {
 			return plan
 		}
 
-		switch directOutcome := filetool.PlanGatherContextDirectRoute(execCtx, req.query, filetool.GatherContextDirectRoutePolicy{
+		switch directOutcome := directquery.Plan(execCtx, req.query, directquery.Policy{
 			AllowImplicitBareFile: allowImplicitBareFile(req),
 			ScopedPath:            req.path,
 			FileFilter:            req.fileFilter,
 		}); directOutcome.Kind {
-		case filetool.GatherContextDirectRouteOutcomeResolved:
+		case directquery.OutcomeResolved:
 			plan.kind = routeDirect
 			plan.direct.route = directOutcome.Route
 			return plan
-		case filetool.GatherContextDirectRouteOutcomeError:
+		case directquery.OutcomeError:
 			plan.kind = routeDirectError
 			plan.direct.err = directOutcome.Error
 			return plan

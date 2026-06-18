@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/directquery"
 )
 
 func TestPlanRoute_DirectContracts(t *testing.T) {
@@ -17,14 +17,14 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 		path           string
 		fileFilter     string
 		wantKind       routeKind
-		wantDirectKind filetool.GatherContextDirectRouteKind
+		wantDirectKind directquery.RouteKind
 		wantReads      []string
 	}{
 		{
 			name:           "explicit range query uses exact range read route",
 			query:          "sample.go:10-20",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{"sample.go:10-20"},
 		},
 		{
@@ -40,7 +40,7 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			path:           "pkg",
 			fileFilter:     "go",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{"README.md"},
 		},
 		{
@@ -49,7 +49,7 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			path:           "pkg",
 			fileFilter:     "go",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{filepath.Join("pkg", "target.go")},
 		},
 		{
@@ -58,7 +58,7 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			path:           "pkg",
 			fileFilter:     "go",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{"target.go"},
 		},
 		{
@@ -67,7 +67,7 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			path:           "pkg",
 			fileFilter:     "go",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{"target.go:2-2"},
 		},
 		{
@@ -76,7 +76,7 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			path:           "pkg",
 			fileFilter:     "go",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{"target.go:2-2"},
 		},
 		{
@@ -85,7 +85,7 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			path:           "pkg",
 			fileFilter:     "go",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{filepath.Join("pkg", "impl.go"), filepath.Join("pkg", "impl_test.go")},
 		},
 		{
@@ -113,14 +113,14 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			name:           "explicit slash directory query uses list route",
 			query:          filepath.Join("internal", "tools") + string(os.PathSeparator),
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteDirectory,
+			wantDirectKind: directquery.RouteDirectory,
 			wantReads:      []string{filepath.Join("internal", "tools")},
 		},
 		{
 			name:           "explicit directory marker keeps directory route",
 			query:          "config/",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteDirectory,
+			wantDirectKind: directquery.RouteDirectory,
 			wantReads:      []string{"config"},
 		},
 		{
@@ -143,7 +143,7 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			path:           ".",
 			fileFilter:     "json",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{"package.json"},
 		},
 		{
@@ -151,7 +151,7 @@ func TestPlanRoute_DirectContracts(t *testing.T) {
 			query:          filepath.Join("node_modules", "dep", "package.json"),
 			fileFilter:     "json",
 			wantKind:       routeDirect,
-			wantDirectKind: filetool.GatherContextDirectRouteRead,
+			wantDirectKind: directquery.RouteRead,
 			wantReads:      []string{filepath.Join("node_modules", "dep", "package.json")},
 		},
 	}
@@ -231,8 +231,8 @@ func TestBuildRoutePlan_PreservesExplicitPathsContainingSearchWords(t *testing.T
 	if filePlan.kind != routeDirect {
 		t.Fatalf("filePlan.kind = %q, want %q", filePlan.kind, routeDirect)
 	}
-	if filePlan.direct.route.Kind != filetool.GatherContextDirectRouteRead {
-		t.Fatalf("filePlan.direct.route.Kind = %q, want %q", filePlan.direct.route.Kind, filetool.GatherContextDirectRouteRead)
+	if filePlan.direct.route.Kind != directquery.RouteRead {
+		t.Fatalf("filePlan.direct.route.Kind = %q, want %q", filePlan.direct.route.Kind, directquery.RouteRead)
 	}
 	if got := filePlan.direct.route.RawEntries(); len(got) != 1 || got[0] != "release notes in docs.md" {
 		t.Fatalf("unexpected explicit path entries: %+v", got)
@@ -244,8 +244,8 @@ func TestBuildRoutePlan_PreservesExplicitPathsContainingSearchWords(t *testing.T
 	if explicitRelativeDirPlan.kind != routeDirect {
 		t.Fatalf("explicitRelativeDirPlan.kind = %q, want %q", explicitRelativeDirPlan.kind, routeDirect)
 	}
-	if explicitRelativeDirPlan.direct.route.Kind != filetool.GatherContextDirectRouteDirectory {
-		t.Fatalf("explicitRelativeDirPlan.direct.route.Kind = %q, want %q", explicitRelativeDirPlan.direct.route.Kind, filetool.GatherContextDirectRouteDirectory)
+	if explicitRelativeDirPlan.direct.route.Kind != directquery.RouteDirectory {
+		t.Fatalf("explicitRelativeDirPlan.direct.route.Kind = %q, want %q", explicitRelativeDirPlan.direct.route.Kind, directquery.RouteDirectory)
 	}
 
 	batchPlan := buildRoutePlan(newRoutePlanExecCtx(root), request{
@@ -254,8 +254,8 @@ func TestBuildRoutePlan_PreservesExplicitPathsContainingSearchWords(t *testing.T
 	if batchPlan.kind != routeDirect {
 		t.Fatalf("batchPlan.kind = %q, want %q", batchPlan.kind, routeDirect)
 	}
-	if batchPlan.direct.route.Kind != filetool.GatherContextDirectRouteRead {
-		t.Fatalf("batchPlan.direct.route.Kind = %q, want %q", batchPlan.direct.route.Kind, filetool.GatherContextDirectRouteRead)
+	if batchPlan.direct.route.Kind != directquery.RouteRead {
+		t.Fatalf("batchPlan.direct.route.Kind = %q, want %q", batchPlan.direct.route.Kind, directquery.RouteRead)
 	}
 	if got := batchPlan.direct.route.RawEntries(); len(got) != 2 || got[0] != "red or blue.md" || got[1] != "README.md" {
 		t.Fatalf("unexpected direct batch entries: %+v", got)
@@ -281,8 +281,8 @@ func TestBuildRoutePlan_PreservesExplicitPathsContainingSearchWords(t *testing.T
 			if inlineScopeBatchPlan.kind != routeDirect {
 				t.Fatalf("inlineScopeBatchPlan.kind = %q, want %q", inlineScopeBatchPlan.kind, routeDirect)
 			}
-			if inlineScopeBatchPlan.direct.route.Kind != filetool.GatherContextDirectRouteRead {
-				t.Fatalf("inlineScopeBatchPlan.direct.route.Kind = %q, want %q", inlineScopeBatchPlan.direct.route.Kind, filetool.GatherContextDirectRouteRead)
+			if inlineScopeBatchPlan.direct.route.Kind != directquery.RouteRead {
+				t.Fatalf("inlineScopeBatchPlan.direct.route.Kind = %q, want %q", inlineScopeBatchPlan.direct.route.Kind, directquery.RouteRead)
 			}
 			got := inlineScopeBatchPlan.direct.route.RawEntries()
 			if len(got) != len(tt.want) {
@@ -304,8 +304,8 @@ func TestBuildRoutePlan_PreservesExplicitPathsContainingSearchWords(t *testing.T
 			if dirPlan.kind != routeDirect {
 				t.Fatalf("dirPlan.kind = %q, want %q", dirPlan.kind, routeDirect)
 			}
-			if dirPlan.direct.route.Kind != filetool.GatherContextDirectRouteDirectory {
-				t.Fatalf("dirPlan.direct.route.Kind = %q, want %q", dirPlan.direct.route.Kind, filetool.GatherContextDirectRouteDirectory)
+			if dirPlan.direct.route.Kind != directquery.RouteDirectory {
+				t.Fatalf("dirPlan.direct.route.Kind = %q, want %q", dirPlan.direct.route.Kind, directquery.RouteDirectory)
 			}
 		})
 	}
@@ -322,8 +322,8 @@ func TestPlanRoute_UsesImplicitDirectFileRouteOnlyWithoutSearchScope(t *testing.
 	if implicit.kind != routeDirect {
 		t.Fatalf("implicit.kind = %q, want %q", implicit.kind, routeDirect)
 	}
-	if implicit.direct.route.Kind != filetool.GatherContextDirectRouteRead {
-		t.Fatalf("implicit.direct.route.Kind = %q, want %q", implicit.direct.route.Kind, filetool.GatherContextDirectRouteRead)
+	if implicit.direct.route.Kind != directquery.RouteRead {
+		t.Fatalf("implicit.direct.route.Kind = %q, want %q", implicit.direct.route.Kind, directquery.RouteRead)
 	}
 	if gotReads := implicit.direct.route.RawEntries(); len(gotReads) != 1 || gotReads[0] != "Makefile" {
 		t.Fatalf("unexpected implicit read targets: %+v", gotReads)
@@ -389,8 +389,8 @@ func TestPlanRoute_ExplicitParentRelativeQueryStaysDirectWithinRepo(t *testing.T
 	if dirPlan.kind != routeDirect {
 		t.Fatalf("dirPlan.kind = %q, want %q", dirPlan.kind, routeDirect)
 	}
-	if dirPlan.direct.route.Kind != filetool.GatherContextDirectRouteDirectory {
-		t.Fatalf("dirPlan.direct.route.Kind = %q, want %q", dirPlan.direct.route.Kind, filetool.GatherContextDirectRouteDirectory)
+	if dirPlan.direct.route.Kind != directquery.RouteDirectory {
+		t.Fatalf("dirPlan.direct.route.Kind = %q, want %q", dirPlan.direct.route.Kind, directquery.RouteDirectory)
 	}
 
 	outsidePlan := buildRoutePlan(newRoutePlanExecCtx(root, withGatherContextInvocationCWD(subdir)), request{

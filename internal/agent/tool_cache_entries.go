@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/searchcache"
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/listtool"
 )
 
 // GetFile はファイル内容のキャッシュを取得
@@ -74,7 +74,7 @@ func (c *ToolCache) GetDir(path string) (string, bool) {
 	}
 
 	// ディレクトリの mtime をチェック
-	dirPath := filetool.ListDirCachePhysicalPath(path)
+	dirPath := listtool.CachePhysicalPath(path)
 	info, err := os.Stat(dirPath)
 	if err != nil {
 		c.InvalidateDir(path)
@@ -96,11 +96,11 @@ func (c *ToolCache) GetDir(path string) (string, bool) {
 
 // SetDir はディレクトリ一覧をキャッシュに保存
 func (c *ToolCache) SetDir(path, result string) {
-	key := filetool.NormalizeListDirCacheKey(path)
+	key := listtool.NormalizeCacheKey(path)
 	if key == "" {
 		return
 	}
-	dirPath := filetool.ListDirCachePhysicalPath(key)
+	dirPath := listtool.CachePhysicalPath(key)
 	info, err := os.Stat(dirPath)
 	if err != nil {
 		return
@@ -128,9 +128,9 @@ func (c *ToolCache) InvalidateFile(path string) {
 func (c *ToolCache) InvalidateDir(path string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	targetPath := filetool.ListDirCachePhysicalPath(path)
+	targetPath := listtool.CachePhysicalPath(path)
 	for key := range c.dirs {
-		if filetool.ListDirCachePhysicalPath(key) == targetPath {
+		if listtool.CachePhysicalPath(key) == targetPath {
 			delete(c.dirs, key)
 		}
 	}

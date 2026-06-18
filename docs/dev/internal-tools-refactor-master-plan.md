@@ -255,7 +255,7 @@ make ci-check
 2026-06-17 tranche:
 
 - Phase 4 file package boundary:
-  - `direct_query_route.go` を `PlanGatherContextDirectRoute` の public entrypoint に絞り、direct route plan / fallback mode / strict scoped error / execution adapter を `direct_query_route_plan.go`、`direct_query_route_fallback.go`、`direct_query_route_scoped_error.go`、`direct_query_route_execution.go` へ分離した。
+  - `direct_query_route.go` を direct route planning entrypoint に絞り、direct route plan / fallback mode / strict scoped error / execution adapter を `direct_query_route_plan.go`、`direct_query_route_fallback.go`、`direct_query_route_scoped_error.go`、`direct_query_route_execution.go` へ分離した。
   - `resolveImplicitDirectFileQuery` を path resolution owner の `direct_query_resolve.go` から direct route policy 側へ移し、`direct_query_resolve.go` は existing path / target resolution owner に絞った。
   - write / delete / str_replace の `FileChange` 生成条件を `fileMutationResult.ShouldRecordChange()` と `fileChangeForAppliedMutation` に寄せ、preview / confirm / apply / diagnostics の workflow と provider-facing `FileChange` gate を分けた。
 - Phase 5 search package boundary:
@@ -277,7 +277,7 @@ make ci-check
 - Phase 0 source map refresh:
   - `go list ./internal/tools/...` を取り直し、root / applypatch / file / search / gathercontext / skills / subagent の package owner は前回 tranche から維持されていることを確認した。
   - large file inventory では `internal/tools/applypatch/apply_test.go`、`internal/tools/search/web_test.go`、`internal/tools/skills/run_skill_script_test.go`、`internal/tools/file/direct_query_resolve_test.go`、`internal/tools/execute_test.go`、`internal/tools/parallel_test.go` が優先 test boundary 対象だった。
-  - public surface / caller refs は `ParseToolCalls`、`Execute*`、`RuntimeObservation`、`FileChange`、`PlanGatherContextDirectRoute`、`ExecuteWebSearch`、`RunSkillScriptTool`、`ApplyPatch` の既存 caller-visible semantics を維持する前提で確認した。
+  - public surface / caller refs は `ParseToolCalls`、`Execute*`、`RuntimeObservation`、`FileChange`、direct route planning、`ExecuteWebSearch`、`RunSkillScriptTool`、`ApplyPatch` の既存 caller-visible semantics を維持する前提で確認した。
 - Phase 1 test boundary refactor:
   - `internal/tools/applypatch/apply_test.go` は basic apply operation と parser/apply boundary を残し、chunk matching / preview consistency を `apply_matching_test.go`、shared fixture / assertion を `apply_test_helpers_test.go` に分けた。
   - `internal/tools/search/web_test.go` は削除し、provider runtime identity、Kimi native request / usage、incomplete cache rejection、Claude alias owner cache を `web_provider_identity_test.go`、`web_kimi_native_test.go`、`web_cache_incomplete_test.go`、`web_alias_owner_test.go` に分けた。
@@ -340,13 +340,51 @@ make ci-check
   - `go test ./internal/tools/gathercontext` を通過済み。
   - `go test ./internal/tools/...` を通過済み。
   - `go test ./internal/agent ./internal/toolruntime ./internal/taskstate ./internal/mcptool ./internal/reviewadapter` を通過済み。
+ - `go test ./internal/api/providers/...` を通過済み。
+ - `git diff --check` を通過済み。
+ - `make ci-check` を通過済み。coverage は 83.4%。
+
+2026-06-18 file package boundary split tranche:
+
+- Phase 0 source map refresh:
+  - `go list ./internal/tools/...` を取り直し、`internal/tools/file/{directquery,listtool,mutation,pathpolicy,readtool,schema}` が新しい package owner として追加されたことを確認した。
+  - caller refs は `internal/agent` の read batch が `readtool`、list_dir cache key が `listtool`、`internal/tools/gathercontext` の direct route が `directquery`、prefetch/locator read が `readtool` に移った。root `internal/tools/file` への non-test named import は残していない。
+  - provider tests の root `file` import は built-in tool 登録用 blank import として維持し、具体 tool 型への依存は `internal/api/providers/gemini` の `mutation.StrReplaceTool` へ移した。
+  - file package inventory は production 6,469 行 / tests 9,999 行。largest production は `directquery/direct_query_resolve.go` 256 行、largest test は `readtool/read_locator_resolution_test.go` 534 行で、今回差分で 800 行超の touched file は作っていない。
+- Phase 1 shared owner split:
+  - file-domain の path/root validation owner を `internal/tools/file/pathpolicy` に分離した。`ResolveValidatedPath*`、`NormalizeWorkspaceRoot`、`AppendUniqueString`、`IsPathWithinRoot` だけを caller-facing にし、ignore policy や tool policy は持たせていない。
+  - provider-facing parameter schema owner を `internal/tools/file/schema` に分離した。export は `ReadFileParameters`、`WriteFileParameters`、`DeleteFileParameters`、`StrReplaceParameters`、`ListDirParameters` の tool-specific builder に限定し、generic schema helper は private のまま。
+- Phase 2 readtool split:
+  - `read_file` / `read_files` / locator / detail / render / observation / read section owner を `internal/tools/file/readtool` に移した。
+  - agent read batching と gather_context prefetch/locator read は `readtool.ReadExecutionSection`、`ExecuteReadPathsWithDetailSections`、`ExecuteReadTargetsWithDetailSections`、`RenderReadExecutionSections`、`MergeReadExecutionSectionObservations` を直接使う。
+  - directquery から解決済み path/root を渡すため、`readtool.ResolvedRequest` と `ExecuteResolvedRequestsWithDetailSections` を追加した。read rendering と observation merge の owner は readtool のまま。
+- Phase 3 listtool split:
+  - `list_dir` execution、ignore / project-map / cache key / render / summary owner を `internal/tools/file/listtool` に移した。
+  - agent dir cache は `listtool.NormalizeCacheKey` / `CachePhysicalPath` に依存する。
+  - directquery から解決済み directory target を渡すため、`listtool.ResolvedTarget` と `ExecuteResolvedTarget` を追加した。ignore bypass の実装 owner は listtool に閉じた。
+- Phase 4 directquery split:
+  - gather_context direct route の parse/classify/resolve/execute owner を `internal/tools/file/directquery` に移した。
+  - caller-facing API は `directquery.Policy` / `Outcome` / `Route` / `Plan` / `ExecuteWithObservation` に絞った。
+  - `gathercontext` は root `file` ではなく `directquery` + `readtool` を import する。
+  - directquery は read/list 実行の private 実装に触れず、readtool/listtool の caller-facing API 経由で実行する。
+- Phase 5 mutation split:
+  - `write_file` / `delete_file` / `str_replace` の confirmation、preview、apply、diagnostics、`FileChange` gate を `internal/tools/file/mutation` に移した。
+  - str_replace は tool ごとの further split をせず、既存 workflow owner を package boundary で固定した。
+- Phase 6 root file facade:
+  - root `internal/tools/file` は `register.go` と provider schema drift guard test だけに縮めた。tool 型の re-export / wrapper / alias は残していない。
+  - `internal/tools/package_boundaries_test.go` を拡張し、root file が registration facade に留まること、`pathpolicy` / `schema` / `readtool` / `listtool` / `mutation` / `directquery` の依存方向を固定した。
+- Verification so far:
+  - `go test ./internal/tools/file/...` を通過済み。
+  - `go test ./internal/tools ./internal/tools/file/... ./internal/tools/gathercontext ./internal/agent ./internal/api/providers/gemini` を通過済み。
+  - `go test ./internal/tools/...` を通過済み。
+  - `go test ./internal/agent ./internal/toolruntime ./internal/taskstate ./internal/mcptool ./internal/reviewadapter` を通過済み。
   - `go test ./internal/api/providers/...` を通過済み。
   - `git diff --check` を通過済み。
-  - `make ci-check` を通過済み。coverage は 83.4%。
+  - `make ci-check` を通過済み。coverage は 83.2%。
 
 残 scope:
 
-- Phase 4 は read request / locator access、direct route、mutation gate、locator test boundary を整理済み。`list_dir` は現状の request / cache / render / runtime split が 800 行未満に閉じており、追加整理は naming drift や次の list-specific finding が出た場合に限定する。
+- Phase 4 は read request / locator access、direct route、mutation gate、locator test boundary、read/list/direct/mutation/schema/path policy の package boundary を整理済み。`list_dir` の further split は naming drift や次の list-specific finding が出た場合に限定する。
 - Phase 5 は web search owner、symbol resolver owner、structured impact production owner、gather_context 側の search route integration test boundary を整理済み。残る追加候補は `search_code_options_test.go` の option / path-basis / ignore-policy split と、`impact_go.go` の metadata / read-item builder split。どちらも今回の changed owner graph 外なので別 tranche 候補とする。
 - Phase 6 は request pattern owner、prefetch policy / read / merge owner、direct / search orchestration owner、search integration test boundary を整理済み。残る追加候補は caller-visible observation merge contract の追加 regression を、次に observation semantics を変える場合に置くこと。
 - Root は execution core / publish-display / preview owner を整理済み。残る追加候補は `execute_cache_invalidation.go` を mutation `FileChange.Details` contract と一緒に扱う必要が出た場合に限る。
