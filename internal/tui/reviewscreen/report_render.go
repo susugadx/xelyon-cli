@@ -1,4 +1,4 @@
-package tui
+package reviewscreen
 
 import (
 	"fmt"
@@ -8,20 +8,14 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
 
-func reviewReportTimelineMessage(report review.ReviewReport) string {
-	lines := reviewReportPlainLines(report)
+// TimelineMessage は review report を agent timeline 用の plain text に整形する。
+func TimelineMessage(report review.ReviewReport) string {
+	lines := PlainLines(report)
 	return strings.Join(lines, "\n")
 }
 
-func reviewRunTimelineMessage(result ReviewRunResult) string {
-	lines := reviewReportPlainLines(result.Report)
-	if usage := result.Usage.inlineText(); usage != "" {
-		lines = append(lines[:1], append([]string{"Usage: " + usage}, lines[1:]...)...)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func reviewReportPlainLines(report review.ReviewReport) []string {
+// PlainLines は review report を plain text 行に整形する。
+func PlainLines(report review.ReviewReport) []string {
 	summary := reviewReportComputedSummary(report)
 	lines := []string{
 		"Review result",

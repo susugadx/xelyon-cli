@@ -1,8 +1,9 @@
-package tui
+package reviewscreen
 
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/review"
 )
@@ -12,7 +13,7 @@ func TestReviewReportTimelineMessage_SanitizesGroupAndFindingTitles(t *testing.T
 	report.RootCauseGroups[0].Title = "request\nstate"
 	report.RootCauseGroups[0].Findings[0].Title = "stale\nresult"
 
-	message := reviewReportTimelineMessage(report)
+	message := TimelineMessage(report)
 	if strings.Contains(message, "request\nstate") || strings.Contains(message, "stale\nresult") {
 		t.Fatalf("timeline report contains unsanitized multiline title:\n%s", message)
 	}
@@ -40,7 +41,7 @@ func TestReviewReportTimelineMessage_RendersFindingSummaryAndEvidenceRefs(t *tes
 		CommandIndex: review.ReviewCommandIndex(0),
 	}}
 
-	message := reviewReportTimelineMessage(report)
+	message := TimelineMessage(report)
 	for _, want := range []string{
 		"Group summary: request state lifecycle is split",
 		"Fix strategy: centralize request lifecycle",
@@ -76,7 +77,7 @@ func TestReviewReportTimelineMessage_RendersComputedSummaryCounts(t *testing.T) 
 		MutatedWorktreeProbeCount: 19,
 	}
 
-	message := reviewReportTimelineMessage(report)
+	message := TimelineMessage(report)
 	for _, want := range []string{
 		"Root cause groups: 2  Findings: 3",
 		"Surfaces: checked 4  finding 5  unverified 6  residual 7",
@@ -87,5 +88,26 @@ func TestReviewReportTimelineMessage_RendersComputedSummaryCounts(t *testing.T) 
 		if !strings.Contains(message, want) {
 			t.Fatalf("review report message missing %q:\n%s", want, message)
 		}
+	}
+}
+
+func newTUITestReviewReport() review.ReviewReport {
+	return review.ReviewReport{
+		SchemaVersion:             review.ReviewReportSchemaVersionV2,
+		TargetKind:                review.TargetCurrentChanges,
+		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+		OverallVerificationStatus: review.ReviewVerificationVerified,
+		Verdict:                   review.ReviewVerdictHasFindings,
+		Summary:                   "Review found one issue.",
+		RootCauseGroups: []review.ReviewRootCauseGroup{{
+			ID:                 "request-state",
+			Title:              "request state",
+			Severity:           review.ReviewGroupSeverityMedium,
+			VerificationStatus: review.ReviewVerificationVerified,
+			Findings: []review.ReviewFinding{{
+				ID:    "stale-result",
+				Title: "stale result is ignored",
+			}},
+		}},
 	}
 }

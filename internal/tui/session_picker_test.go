@@ -374,7 +374,7 @@ func TestStartupSessionPickerSelectionUsesStartupResume(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("openSessionPicker cmd = %T, want nil", cmd)
 	}
-	if m.sessionPicker == nil || !m.sessionPicker.startup {
+	if m.sessionPicker == nil || !m.sessionPicker.Snapshot().Startup {
 		t.Fatalf("sessionPicker = %#v, want startup picker", m.sessionPicker)
 	}
 

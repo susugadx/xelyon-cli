@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
 )
 
 func TestReviewTimeline_RunReviewSuccessIsAsyncAndRendered(t *testing.T) {
@@ -20,7 +21,7 @@ func TestReviewTimeline_RunReviewSuccessIsAsyncAndRendered(t *testing.T) {
 	}
 
 	m.screen = screenReview
-	m.reviewScreen = newReviewScreen()
+	m.reviewScreen = reviewscreen.New(m.width)
 	req := review.NewCurrentChangesRequest("")
 	updated, cmd := m.startReviewTimeline(req)
 	m = updated.(Model)
@@ -240,7 +241,7 @@ func TestReviewTimeline_CtrlCCancelsRunningReview(t *testing.T) {
 	agent := newCancellableReviewAgent()
 	m := newModelWithViewport(agent)
 	m.screen = screenReview
-	m.reviewScreen = newReviewScreen()
+	m.reviewScreen = reviewscreen.New(m.width)
 
 	updated, cmd := m.startReviewTimeline(review.NewCurrentChangesRequest(""))
 	m = updated.(Model)
@@ -381,7 +382,7 @@ func TestReviewTimeline_RunReviewErrorIsRendered(t *testing.T) {
 	}
 	m := newModelWithViewport(agent)
 	m.screen = screenReview
-	m.reviewScreen = newReviewScreen()
+	m.reviewScreen = reviewscreen.New(m.width)
 
 	updated, cmd := m.startReviewTimeline(review.NewCurrentChangesRequest(""))
 	m = updated.(Model)

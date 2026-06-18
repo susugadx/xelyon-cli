@@ -1,4 +1,4 @@
-package tui
+package reviewscreen
 
 import (
 	"strings"
@@ -8,28 +8,29 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
-func (m Model) reviewView() string {
-	if m.reviewScreen == nil {
+// View は review screen 全体を描画する。
+func (rs *Screen) View(width, height int) string {
+	if rs == nil {
 		return "Loading..."
 	}
 
-	bodyHeight := m.reviewBodyHeight()
-	bodyLines := m.reviewBodyLines()
-	header := m.renderReviewHeader(m.width)
-	body := m.renderReviewBody(bodyLines, bodyHeight)
-	status := m.renderReviewStatus(m.width)
+	bodyHeight := reviewBodyHeight(height)
+	bodyLines := rs.bodyLines()
+	header := renderHeader(rs, width)
+	body := rs.bodyViewport.render(bodyLines, bodyHeight, width)
+	status := renderStatus(rs, width)
 
 	return header + "\n" + body + "\n" + status
 }
 
-func (m Model) reviewBodyHeight() int {
-	return max(1, m.height-2)
+func reviewBodyHeight(height int) int {
+	return max(1, height-2)
 }
 
-func (m Model) renderReviewHeader(width int) string {
+func renderHeader(rs *Screen, width int) string {
 	titleText := "Review"
 	title := theme.Config.BgHeader + theme.Config.Bold + theme.Config.FgBright + " " + titleText + " " + theme.Config.Reset
-	hintText := reviewHeaderHint(m.reviewScreen)
+	hintText := reviewHeaderHint(rs)
 	hint := theme.Config.FgDim + hintText + theme.Config.Reset
 	padding := width - lipgloss.Width(titleText) - 2 - lipgloss.Width(hintText)
 	if padding < 2 {
@@ -38,33 +39,28 @@ func (m Model) renderReviewHeader(width int) string {
 	return termtext.FillANSITextWidth(title+strings.Repeat(" ", padding)+hint, width, theme.Config.BgHeader)
 }
 
-func reviewHeaderHint(rs *reviewScreen) string {
+func reviewHeaderHint(rs *Screen) string {
 	if rs == nil {
 		return ""
 	}
 	switch rs.mode {
-	case reviewScreenCustom:
+	case ModeCustom:
 		return "Esc:presets"
 	default:
 		return "Esc:back"
 	}
 }
 
-func (m Model) renderReviewBody(lines []string, height int) string {
-	return m.reviewScreen.bodyViewport.render(lines, height, m.width)
-}
-
-func (m Model) reviewBodyLines() []string {
-	rs := m.reviewScreen
+func (rs *Screen) bodyLines() []string {
 	switch rs.mode {
-	case reviewScreenCustom:
-		return m.reviewCustomLines(rs)
+	case ModeCustom:
+		return reviewCustomLines(rs)
 	default:
 		return reviewPresetLines(rs)
 	}
 }
 
-func reviewPresetLines(rs *reviewScreen) []string {
+func reviewPresetLines(rs *Screen) []string {
 	lines := []string{
 		theme.Config.BgNormal + theme.Config.FgDim + " Select review preset" + theme.Config.Reset,
 	}
@@ -82,7 +78,7 @@ func reviewPresetLines(rs *reviewScreen) []string {
 	return lines
 }
 
-func (m Model) reviewCustomLines(rs *reviewScreen) []string {
+func reviewCustomLines(rs *Screen) []string {
 	inputView := strings.ReplaceAll(rs.customInput.View(), theme.Config.Reset, theme.Config.Reset+theme.Config.BgNormal)
 	lines := []string{
 		theme.Config.BgNormal + theme.Config.FgDim + " Review current changes with custom focus" + theme.Config.Reset,
@@ -98,15 +94,14 @@ func (m Model) reviewCustomLines(rs *reviewScreen) []string {
 	return lines
 }
 
-func appendReviewNoticeLine(lines []string, rs *reviewScreen) []string {
+func appendReviewNoticeLine(lines []string, rs *Screen) []string {
 	if rs == nil || rs.notice == "" {
 		return lines
 	}
 	return append(lines, theme.Config.BgNormal+theme.Config.FgYellow+"  "+rs.notice+theme.Config.Reset)
 }
 
-func (m Model) renderReviewStatus(width int) string {
-	rs := m.reviewScreen
+func renderStatus(rs *Screen, width int) string {
 	leftText := reviewStatusText(rs)
 	left := " " + theme.Config.FgGreen + leftText + theme.Config.Reset
 	hintText := reviewStatusHint(rs)
@@ -115,22 +110,22 @@ func (m Model) renderReviewStatus(width int) string {
 	if padding < 1 {
 		return termtext.FillANSITextWidth(left, width, "")
 	}
-	return fitANSITextWidth(left+strings.Repeat(" ", padding)+right, width)
+	return termtext.FillANSITextWidth(left+strings.Repeat(" ", padding)+right, width, "")
 }
 
-func reviewStatusText(rs *reviewScreen) string {
+func reviewStatusText(rs *Screen) string {
 	if rs == nil {
 		return "review"
 	}
 	return "review"
 }
 
-func reviewStatusHint(rs *reviewScreen) string {
+func reviewStatusHint(rs *Screen) string {
 	if rs == nil {
 		return ""
 	}
 	switch rs.mode {
-	case reviewScreenCustom:
+	case ModeCustom:
 		return "Enter:confirm  Esc:presets"
 	default:
 		return "j/k:move  Enter:select  Esc:back"
