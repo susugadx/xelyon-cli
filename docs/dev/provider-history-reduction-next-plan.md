@@ -4,17 +4,44 @@
 
 今後の設計相談で追記し、最後に Codex Goal へ渡して複数の追加最適化をまとめて実装するための master plan として使う。
 
+## Current-state note
+
+2026-06-19 時点の current code では、この文書の後半にある review prompt reduction / review web evidence compact / generic outer `web_search` compact / duplicate `activate_skill` compact / candidate-only family report は実装済みである。
+
+この文書は historical design note を含む。特に section 7.7 の古い combined Goal handoff は、そのまま新規実装指示として使わない。次の tranche は feature 追加ではなく、current code 前提で以下を behavior-preserving に整理する Phase 0 として扱う。
+
+- `internal/providerhistory` の detection / linkage / report 集計 owner を整理する
+- `internal/providerhistory/toolresults` の structured replacement dispatch を private registry / spec に寄せる
+- provider-facing projection、raw history、config、status 文言、kept reason、placeholder text、exported types は変えない
+- `wait_agent` / `run_skill_script` / MCP / `ask_user_question` / provider-native replay は candidate-only のまま維持する
+- 新しい compact family の apply 昇格は別の shared/provider-runtime change として扱う
+
 ## 現在実装済みの前提
 
 - provider-facing projection 上の old tool result replacement
   - `read_file`
   - `search_code`
   - `gather_context`
+  - `list_dir`
+  - generic outer `web_search` duplicate result
+  - duplicate old `activate_skill` result
 - safe successful test/build/lint command output replacement
 - old successful `write_file.content` replacement
 - old successful `apply_patch.patch` replacement
 - old successful `str_replace` `old_str` / `new_str` / `edits` replacement
 - `str_replace` batch `edits` の success count mismatch guard
+- review prompt reduction
+  - current-safe command output compact
+  - probe result / probe command candidate reporting
+  - raw output artifact-backed probe command absorption
+  - review web/external_doc discovery compact
+  - absorbed external_doc snippet compact
+- candidate-only family report / kept reason
+  - `wait_agent`
+  - `run_skill_script`
+  - MCP tool results
+  - `ask_user_question`
+  - provider-native built-in replay
 - provider-facing report / token accounting 改善
 - replacement が実際に起きた場合の Responses `previous_response_id` chain disable
 - raw `Agent.History` / `Session.Messages` / audit / change records / persisted JSONL を保持する契約
@@ -4200,7 +4227,7 @@ generic `web_search` compact は、section 7 の review web/external_doc compact
 - source credibility を review `externaldoc` と共有するか、通常履歴用に簡略 policy を持つか
 - prompt injection / hostile page text を summary 化する時の warning 表示
 
-## 7.6. generic provider history remaining gap audit
+## 7.6. historical generic provider history remaining gap audit
 
 ### 目的
 
@@ -4216,7 +4243,10 @@ section 1〜6 と 7.5 以外に、通常 chat history の provider-facing projec
 
 この section は、すぐ実装する対象と、actual format / owner 調査が必要な対象を分けるための backlog である。
 
-### confirmed not-yet-optimized generic families
+### historical candidate families
+
+この section は、section 7.7 の current-state note より前に書いた historical gap audit である。
+current code では、outer `web_search` duplicate compact、duplicate `activate_skill` compact、candidate-only family report は実装済みとして扱う。
 
 #### 1. `web_search`
 
@@ -4393,9 +4423,10 @@ provider-native replay は provider request builder / provider adapter の contr
 - safety / permission / approval result
 - tool output that contains user-provided constraints
 
-### combined Goal priority
+### historical combined Goal priority
 
-今回まとめて実装する Goal では、apply replacement と candidate-only / dry-run first を分ける。
+historical Goal では、apply replacement と candidate-only / dry-run first を分ける方針だった。
+current code ではこの実装は完了済みであり、次の Phase 0 は behavior-preserving refactor に限定する。
 
 apply replacement まで進める順:
 
@@ -4412,10 +4443,10 @@ candidate-only / dry-run first で固定する順:
 4. `ask_user_question`
 5. provider-native built-in replay
 
-### Deferred decisions outside this combined Goal
+### Deferred feature decisions after current implementation
 
-以下は、今回の combined Goal では apply replacement に昇格しない。
-必要なら次 Goal で別途設計する。
+以下は、current implementation 後も apply replacement に昇格しない。
+必要なら次 feature Goal で別途設計する。
 
 - `wait_agent` result の structured output / raw persistence / current task absorption owner
 - MCP known-safe schema registry または tool name allowlist
@@ -4423,36 +4454,91 @@ candidate-only / dry-run first で固定する順:
 - provider-native built-in replay を provider adapter 側で軽量化できるか
 - `run_skill_script` result を `internal/commandoutputs` policy に統合できるか
 
-## 7.7. combined implementation scope proposal
+## 7.7. current implementation status and Phase 0 refactor scope
 
 ### 目的
 
-section 7 / 7.5 / 7.6 を、別々の小パッチではなく 1 つの implementation Goal として扱う。
+section 7 / 7.5 / 7.6 の大きな実装 Goal は current code では完了済みとして扱う。
 
-ただし、全 family を同じ強さで apply replacement するわけではない。
-source of truth / raw preservation / absorption owner が明確なものだけ apply 対象にし、owner が曖昧な family は candidate-only / dry-run observability から始める。
+この section は、古い combined Goal handoff ではなく、実装済み contract の棚卸しと次の behavior-preserving Phase 0 refactor の source of truth として使う。
 
-### combined Goal の完了条件
+### 実装済み
 
-combined Goal は、以下をすべて含める。
+current code では、以下を実装済みとする。
 
-1. review prompt reduction の full section 7
-2. review web/external_doc compact
-3. generic outer `web_search` tool result compact
-4. duplicate old `activate_skill` result compact
-5. generic remaining families の detector / report / kept reason 整備
-6. unsafe / unknown family は candidate-only または keep reason を明示
-7. `/status` / report / docs / tests / Final-A / Final-B
+- review prompt reduction
+  - `ReviewPromptReductionState`
+  - `ReviewStateSummary`
+  - current-safe command output compact
+  - probe result / probe command candidate reporting
+  - raw output artifact-backed probe command absorption
+  - review prompt reduction report
+- review web/external_doc compact
+  - discovery-only web_search compact
+  - absorbed external_doc snippet compact
+  - citation-capable / finding evidence external_doc snippet preservation
+- generic outer `web_search` provider history compact
+  - later duplicate result only
+  - temporal / current / unknown / unsafe / non-duplicate result keep gates
+- duplicate old `activate_skill` compact
+  - same skill name + same content hash + later duplicate activation only
+  - latest activation / hash mismatch / activation error / missing name keep gates
+- candidate-only family report
+  - `wait_agent`
+  - `run_skill_script`
+  - MCP tool results
+  - `ask_user_question`
+  - provider-native built-in replay
 
-「全部を placeholder 化する」ことは goal ではない。
-「全 family の現状が観測でき、apply できるものは apply し、できないものは理由付きで保持する」ことを goal にする。
+### 残す scope
 
-candidate-only / dry-run first と決めた family は、combined Goal 内で自動昇格しない。
-実装中に safe owner が見えた場合でも、今回の Goal では report に `future_apply_candidate` として出し、apply replacement は次 Goal に分ける。
+次の Phase 0 では、以下を behavior-preserving に整理する。
 
-### hard in-scope apply families
+- `docs/dev/provider-history-reduction-next-plan.md` を current state に更新する
+- `internal/providerhistory` 同一 package 内で detection / linkage / policy / report 集計 owner を整理する
+- `internal/providerhistory/toolresults` の `list_dir` / `web_search` / `activate_skill` dispatch を private registry / spec に寄せる
+- `ProjectionReport` / `CommandEditDryRunReport` の clone・count・status 集計を private helper/file に分ける
+- `generic_tool_results_test.go` の混在を `activate_skill`、candidate-only family、shared fixture に分ける
+- review prompt reduction 関連 test を `runner_saturation_test.go` から owner-named test file へ寄せる
 
-以下は combined Goal 内で apply replacement まで実装する。
+以下は今回の Phase 0 では変えない。
+
+- provider-facing projection output
+- raw `Agent.History` / `Session.Messages` / audit / persisted JSONL
+- `provider_history_reduction` config schema/default
+- `rawoutputs` public API
+- CLI `/status` output wording
+- placeholder strings
+- kept reason names
+- tool schema
+- exported types
+  - `providerhistory.Policy`
+  - `ProjectionInput`
+  - `ProjectionResult`
+  - `ProjectionReport`
+  - `ReductionCandidate`
+  - `CommandEditDryRunReport`
+  - `ReviewPromptReduction*`
+
+### 次に feature 追加する場合の条件
+
+新しい family を apply replacement に昇格する場合は、Phase 0 refactor とは別 task として扱う。
+その task では、少なくとも以下を事前に固定する。
+
+- raw preservation owner
+- provider-facing placeholder の情報欠落 risk
+- current/latest/finding/user intent keep gate
+- source credibility / freshness / truncation / error preservation
+- Responses chain disable 条件
+- dry-run estimate と apply actual savings の整合
+- caller 経由 test
+- status/report/docs/generated/config への影響
+
+`wait_agent` / `run_skill_script` / MCP / `ask_user_question` / provider-native replay は、これらの owner が揃うまで candidate-only のまま維持する。
+
+### historical hard in-scope apply families
+
+以下は historical design note であり、current code では実装済み contract の説明として読む。
 
 #### 1. review prompt reduction
 
@@ -4522,7 +4608,7 @@ candidate-only / dry-run first と決めた family は、combined Goal 内で自
 - replacement 後も skill name / content hash / duplicate_of tool call id / raw size が残る
 - skill activation error は compact しない
 
-### candidate-only / dry-run first families
+### historical candidate-only / dry-run first families
 
 以下は combined Goal 内で detector / report / kept reason を実装してよい。
 ただし combined Goal では原則 apply replacement しない。
@@ -4603,9 +4689,9 @@ combined Goal での決定:
 - kept reason: `provider_native_replay_contract_keep`
 - provider request builder tests で outer `web_search` compact が replay を壊さないことだけ確認する
 
-### combined acceptance tests / fixed contracts
+### implemented acceptance tests / fixed contracts
 
-combined Goal では、以下を focused tests または provider-facing projection contract tests で固定する。
+current code では、以下を focused tests または provider-facing projection contract tests で固定している。
 
 #### 1. candidate-only no-apply tests
 
@@ -4683,7 +4769,7 @@ candidate-only / keep-by-design family は、report / status で理由名を曖�
 report / status は、candidate count、applied count、kept count、kept reason breakdown、future_apply_candidate count を分ける。
 future_apply_candidate は apply replacement ではないため、saved token estimate に過大計上しない。
 
-### combined implementation order
+### historical implementation order
 
 1. inventory tests: actual tool result format snapshots を追加する
 2. providerhistory report model を family / status / kept reason に拡張する
@@ -4698,7 +4784,7 @@ future_apply_candidate は apply replacement ではないため、saved token es
 11. Phase Final-A impact audit
 12. Phase Final-B comprehensive refactor including tests
 
-### combined report / status
+### implemented report / status shape
 
 通常 content replacement、command replacement、review prompt reduction、generic future-family candidates を分けて表示する。
 
@@ -4715,7 +4801,7 @@ future_family_kept_reasons=unknown_schema:2, user_answer_contract:1, no_absorpti
 quality_floor=preserved
 ```
 
-### combined safety stop conditions
+### future feature safety stop conditions
 
 実装中に以下へ当たった場合、同じ diff で apply replacement へ進めない。
 candidate-only / keep reason に落とす。
@@ -4728,24 +4814,26 @@ candidate-only / keep reason に落とす。
 - compact 後に source credibility / freshness / truncation / error が失われる
 - replacement が品質を落とす可能性があり、focused test で否定できない
 
-### combined Goal handoff prompt
+### current Phase 0 handoff prompt
 
-Goal に渡す場合は、以下の短い prompt でよい。
+current code 前提で Phase 0 refactor を Goal に渡す場合は、以下の短い prompt を使う。
 
 ```text
-docs/dev/provider-history-reduction-next-plan.md の section 7, 7.5, 7.6, 7.7 を source of truth として、review prompt reduction と generic web_search provider history reduction をまとめて実装してください。
+docs/dev/provider-history-reduction-next-plan.md の Current-state note と section 7.7 を source of truth として、providerhistory / raw-output reduction の current-state 棚卸しと Phase 0 behavior-preserving refactor を実装してください。
 
-raw Agent.History / Session.Messages / audit / persisted JSONL / review raw artifacts は保持し、provider-facing projection / review prompt payload だけを軽量化してください。
+今回の目的は feature 追加ではありません。review prompt reduction、review web/external_doc compact、generic outer web_search compact、duplicate activate_skill compact、candidate-only family report は current code で実装済みとして扱ってください。
 
-review quality floor、absorption-before-compaction rule、temporal web_search keep gates、source credibility preservation、skill behavior contract preservation を弱めないでください。
+provider-facing projection、raw Agent.History / Session.Messages / audit / persisted JSONL、config schema/default、status 文言、placeholder text、kept reason names、exported types は変えないでください。
 
-duplicate old activate_skill result は apply replacement 対象です。content hash が一致し、後続に同一 skill の同一本文 activation がある古い body だけ compact してください。latest activation / content hash mismatch / activation error / current behavior contract は keep してください。
+internal/providerhistory では tool-result linkage pure logic、candidate-only / kept reason / structured-vs-artifact-backed policy、ProjectionReport / CommandEditDryRunReport の clone・count・status 集計 owner を private helper/file に整理してください。新 package は作らず、同一 package 内に閉じてください。
 
-wait_agent / run_skill_script / MCP / ask_user_question / provider-native replay は detector/report/kept reason までを必須とし、この Goal では apply replacement に昇格しないでください。safe owner が見えた場合も `future_apply_candidate` として報告し、次 Goal に分けてください。
+internal/providerhistory/toolresults では BuildStructuredReplacement の public signature と output を維持し、list_dir / web_search / activate_skill dispatch を private registry/spec に寄せてください。
 
-combined acceptance tests / fixed contracts を実装し、candidate-only no-apply、activate_skill duplicate compact、generic web_search conservative defaults、fixed report/status reason names を focused tests で固定してください。
+test boundary は generic_tool_results_test.go を activate_skill、candidate-only family、shared fixture に分け、review prompt reduction 関連 test を runner_saturation_test.go から owner-named test file へ寄せてください。
 
-実装後は focused tests、make ci-check、Phase Final-A impact audit、Phase Final-B comprehensive refactor including tests を必ず実施してください。commit は作らないでください。
+wait_agent / run_skill_script / MCP / ask_user_question / provider-native replay は candidate-only のまま維持し、新しい compact family の apply 昇格はしないでください。
+
+focused tests、broader package tests、git diff --check、可能なら make ci-check まで実行してください。commit は作らないでください。
 ```
 
 ## 8. `/config` / docs / generated config metadata 公開方針
