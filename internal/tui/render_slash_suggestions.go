@@ -15,9 +15,8 @@ func (m Model) renderSlashSuggestionRows() []string {
 		return nil
 	}
 	lines := make([]string, 0, len(rows))
-	showCategory := slashSuggestionRowsHaveCategory(rows)
 	for _, row := range rows {
-		lines = append(lines, m.renderSlashSuggestionRenderRowWithCategory(row, showCategory))
+		lines = append(lines, m.renderSlashSuggestionRenderRow(row))
 	}
 	return lines
 }
@@ -27,16 +26,11 @@ func (m Model) renderSlashSuggestionRow(suggestion slash.Suggestion, selected bo
 }
 
 type slashSuggestionRowLayout struct {
-	categoryWidth    int
 	commandWidth     int
 	descriptionWidth int
 }
 
 func (m Model) renderSlashSuggestionRenderRow(row slashSuggestionRenderRow) string {
-	return m.renderSlashSuggestionRenderRowWithCategory(row, strings.TrimSpace(row.Category) != "")
-}
-
-func (m Model) renderSlashSuggestionRenderRowWithCategory(row slashSuggestionRenderRow, showCategory bool) string {
 	chrome := theme.Chrome
 	bg := chrome.SuggestionBg
 	prefix := "  "
@@ -51,14 +45,10 @@ func (m Model) renderSlashSuggestionRenderRowWithCategory(row slashSuggestionRen
 		descriptionFg = chrome.SuggestionSelectedDimFg
 	}
 
-	layout := slashSuggestionRowLayoutForWidthWithCategory(m.width, showCategory)
-	category := paddedPlainText(row.Category, layout.categoryWidth)
+	layout := slashSuggestionRowLayoutForWidth(m.width)
 	label := paddedPlainText(row.CommandLabel, layout.commandWidth)
 	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(row.Description), layout.descriptionWidth)
 	line := bg + prefixFg + prefix
-	if layout.categoryWidth > 0 {
-		line += descriptionFg + category + chrome.Reset + bg + prefixFg + "  " + chrome.Reset + bg
-	}
 	line += commandFg + label + chrome.Reset + bg
 	if layout.descriptionWidth > 0 {
 		line += prefixFg + "  " + chrome.Reset + bg + descriptionFg + description + chrome.Reset + bg
@@ -66,41 +56,13 @@ func (m Model) renderSlashSuggestionRenderRowWithCategory(row slashSuggestionRen
 	return termtext.FillANSITextWidth(line+chrome.Reset, m.width, bg)
 }
 
-func slashSuggestionRowsHaveCategory(rows []slashSuggestionRenderRow) bool {
-	for _, row := range rows {
-		if strings.TrimSpace(row.Category) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func slashSuggestionRowLayoutForWidth(width int) slashSuggestionRowLayout {
-	return slashSuggestionRowLayoutForWidthWithCategory(width, true)
-}
-
-func slashSuggestionRowLayoutForWidthWithCategory(width int, showCategory bool) slashSuggestionRowLayout {
-	categoryWidth := 0
-	if showCategory {
-		categoryWidth = slashSuggestionCategoryWidth(width)
-	}
 	commandWidth := slashSuggestionCommandWidth(width)
 	separatorWidth := 4
-	if categoryWidth > 0 {
-		separatorWidth = 6
-	}
 	return slashSuggestionRowLayout{
-		categoryWidth:    categoryWidth,
 		commandWidth:     commandWidth,
-		descriptionWidth: max(0, width-commandWidth-categoryWidth-separatorWidth),
+		descriptionWidth: max(0, width-commandWidth-separatorWidth),
 	}
-}
-
-func slashSuggestionCategoryWidth(width int) int {
-	if width <= 36 {
-		return 0
-	}
-	return 9
 }
 
 func slashSuggestionCommandWidth(width int) int {

@@ -80,6 +80,24 @@ func TestSlashSuggestions_RenderRowsCarryDisplayModel(t *testing.T) {
 	}
 }
 
+func TestSlashSuggestions_RenderRowStartsWithCommandLabel(t *testing.T) {
+	m := Model{width: 80}
+	suggestion := slash.Suggestion{
+		Label:       "/model [name]",
+		Description: "Switch model",
+		Category:    commandcatalog.CommandCategoryModel,
+	}
+
+	rendered := stripANSI(m.renderSlashSuggestionRenderRow(newSlashSuggestionRenderRow(suggestion, true)))
+
+	if !strings.HasPrefix(rendered, "› /model [name]") {
+		t.Fatalf("slash suggestion should start with selected command label, got %q", rendered)
+	}
+	if strings.Contains(rendered[:min(len(rendered), 12)], "llm") {
+		t.Fatalf("slash suggestion should not reserve a category column, got %q", rendered)
+	}
+}
+
 func TestSlashSuggestionRowLayoutForWidthPreservesCurrentWidths(t *testing.T) {
 	narrow := slashSuggestionRowLayoutForWidth(24)
 	if narrow.commandWidth != 20 || narrow.descriptionWidth != 0 {
@@ -87,8 +105,8 @@ func TestSlashSuggestionRowLayoutForWidthPreservesCurrentWidths(t *testing.T) {
 	}
 
 	wide := slashSuggestionRowLayoutForWidth(80)
-	if wide.categoryWidth != 9 || wide.commandWidth != 26 || wide.descriptionWidth != 39 {
-		t.Fatalf("wide layout = %#v, want category=9 command=26 description=39", wide)
+	if wide.commandWidth != 26 || wide.descriptionWidth != 50 {
+		t.Fatalf("wide layout = %#v, want command=26 description=50", wide)
 	}
 }
 
