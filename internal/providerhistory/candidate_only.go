@@ -7,7 +7,7 @@ import (
 
 func isProviderHistoryCandidateOnlyTool(toolName string) bool {
 	switch toolName {
-	case "wait_agent", "run_skill_script", "ask_user_question":
+	case "wait_agent", "ask_user_question":
 		return true
 	default:
 		return providerHistoryIsMCPToolResult(toolName) || providerHistoryIsProviderNativeReplayTool(toolName)
@@ -18,8 +18,6 @@ func providerHistoryFutureFamilyName(toolName string) string {
 	switch {
 	case toolName == "wait_agent":
 		return "wait_agent"
-	case toolName == "run_skill_script":
-		return "run_skill_script"
 	case providerHistoryIsMCPToolResult(toolName):
 		return "mcp"
 	case toolName == "ask_user_question":
@@ -35,8 +33,6 @@ func providerHistoryFutureApplyCandidate(toolName, content string) bool {
 	switch {
 	case toolName == "wait_agent":
 		return strings.TrimSpace(content) != ""
-	case toolName == "run_skill_script":
-		return strings.TrimSpace(content) != ""
 	case providerHistoryIsMCPToolResult(toolName):
 		return strings.TrimSpace(content) != ""
 	default:
@@ -51,8 +47,6 @@ func providerHistoryCandidateOnlyKeepReason(toolName, content string) string {
 			return "wait_agent_error_context_keep"
 		}
 		return "wait_agent_freeform_output_keep"
-	case toolName == "run_skill_script":
-		return "run_skill_script_command_owner_unconfirmed"
 	case providerHistoryIsMCPToolResult(toolName):
 		if providerHistoryMCPLooksSensitive(content) {
 			return "mcp_sensitive_or_private_result_keep"

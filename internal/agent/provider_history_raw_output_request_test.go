@@ -346,6 +346,87 @@ func TestNormalModeRequestApplyCompactsMCPResultAndInjectsRawOutputContext(t *te
 	}
 }
 
+func TestNormalModeRequestApplyCompactsRunSkillScriptResultAndInjectsRawOutputContext(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	output := providerHistoryNumberedLines("skill-script-output", 6000)
+	agent.Runtime.RawOutputArtifactStore = store
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect skill script history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_script", "run_skill_script", map[string]string{
+			"skill":     "coverage-audit",
+			"script":    "scripts/report.sh",
+			"args_json": `["--format","json","--path","internal/providerhistory"]`,
+		})),
+		providerHistoryToolResult("call_script", "run_skill_script", output),
+		{Role: "assistant", Content: "skill script data reviewed"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+	beforeHistory := api.CloneMessages(agent.History)
+	beforeSession := append(agent.session.Messages[:0:0], agent.session.Messages...)
+
+	if err := agent.chatInternal("show skill-script-output-3000", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	projected := provider.capturedHistory[2].Content
+	if projected == output ||
+		!strings.Contains(projected, "[compacted old run_skill_script result;") ||
+		!strings.Contains(projected, "raw_output_ref=") {
+		t.Fatalf("provider run_skill_script output = %q, want artifact-backed placeholder", projected)
+	}
+	for _, reject := range []string{"--format", "internal/providerhistory", "args_json"} {
+		if strings.Contains(projected, reject) {
+			t.Fatalf("provider run_skill_script placeholder leaked argument detail %q:\n%s", reject, projected)
+		}
+	}
+	if !provider.capturedResponseIDChainDisabled {
+		t.Fatal("provider request context did not disable response ID chain for run_skill_script artifact replacement")
+	}
+	if len(provider.capturedActiveContextBlocks) != 1 {
+		t.Fatalf("active context blocks = %#v, want one raw output block", provider.capturedActiveContextBlocks)
+	}
+	block := provider.capturedActiveContextBlocks[0]
+	for _, want := range []string{
+		"surface: command_output",
+		"tool_name: run_skill_script",
+		"command_preview: run_skill_script skill=coverage-audit script=scripts/report.sh",
+		"family: run_skill_script",
+		"classifier: skill_script_output",
+		"matched raw output excerpt",
+		"skill-script-output-3000",
+	} {
+		if !strings.Contains(block.Content, want) {
+			t.Fatalf("raw output active context missing %q:\n%s", want, block.Content)
+		}
+	}
+	for _, reject := range []string{"--format", "internal/providerhistory", "args_json"} {
+		if strings.Contains(block.Content, reject) {
+			t.Fatalf("raw output active context leaked argument detail %q:\n%s", reject, block.Content)
+		}
+	}
+	for i, want := range beforeHistory {
+		if !reflect.DeepEqual(agent.History[i], want) {
+			t.Fatalf("Agent.History[%d] changed after run_skill_script raw output request:\n got %#v\nwant %#v", i, agent.History[i], want)
+		}
+	}
+	for i, want := range beforeSession {
+		if !reflect.DeepEqual(agent.session.Messages[i], want) {
+			t.Fatalf("session.Messages[%d] changed after run_skill_script raw output request:\n got %#v\nwant %#v", i, agent.session.Messages[i], want)
+		}
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.ReplacedCount != 1 ||
+		report.RawOutputRefCount != 1 ||
+		report.DataBearingCandidateCount != 1 ||
+		!report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want applied run_skill_script artifact report", report)
+	}
+}
+
 func TestNormalModeRequestApplyCompactsWebSearchResultAndInjectsRedactedRawOutputContext(t *testing.T) {
 	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
 	webOutput := providerHistoryLargeSafeWebSearchResult()

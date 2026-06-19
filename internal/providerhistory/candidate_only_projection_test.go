@@ -16,9 +16,6 @@ func TestProjectApplyReportsCandidateOnlyFamiliesWithoutReplacingPayload(t *test
 		providerHistoryTestAssistantToolCall("call_wait_error", "wait_agent"),
 		providerHistoryTestToolResult("call_wait_error", "wait_agent", `{"status":"failed","error":"sub-agent failed"}`),
 		{Role: "assistant", Content: "wait error considered"},
-		providerHistoryTestAssistantToolCall("call_script", "run_skill_script"),
-		providerHistoryTestToolResult("call_script", "run_skill_script", strings.Repeat("ok script output\n", 220)),
-		{Role: "assistant", Content: "script considered"},
 		providerHistoryTestAssistantToolCall("call_mcp", "mcp_github_get_issue"),
 		providerHistoryTestToolResult("call_mcp", "mcp_github_get_issue", `{"url":"https://github.com/org/repo/issues/1","title":"bug","summary":"private customer email body"}`),
 		{Role: "assistant", Content: "mcp considered"},
@@ -53,7 +50,6 @@ func TestProjectApplyReportsCandidateOnlyFamiliesWithoutReplacingPayload(t *test
 	for id, want := range map[string]string{
 		"call_wait":            "wait_agent_freeform_output_keep",
 		"call_wait_error":      "wait_agent_error_context_keep",
-		"call_script":          "run_skill_script_command_owner_unconfirmed",
 		"call_mcp":             "mcp_sensitive_or_private_result_keep",
 		"call_mcp_unknown":     "mcp_unknown_schema_keep",
 		"call_ask":             "user_answer_approval_refusal_preference_keep",
@@ -68,7 +64,6 @@ func TestProjectApplyReportsCandidateOnlyFamiliesWithoutReplacingPayload(t *test
 	}
 	for family, want := range map[string]int{
 		"wait_agent":             2,
-		"run_skill_script":       1,
 		"mcp":                    2,
 		"ask_user_question":      2,
 		"provider_native_replay": 2,
@@ -80,7 +75,6 @@ func TestProjectApplyReportsCandidateOnlyFamiliesWithoutReplacingPayload(t *test
 	for reason, want := range map[string]int{
 		"wait_agent_freeform_output_keep":              1,
 		"wait_agent_error_context_keep":                1,
-		"run_skill_script_command_owner_unconfirmed":   1,
 		"mcp_sensitive_or_private_result_keep":         1,
 		"mcp_unknown_schema_keep":                      1,
 		"user_answer_approval_refusal_preference_keep": 1,

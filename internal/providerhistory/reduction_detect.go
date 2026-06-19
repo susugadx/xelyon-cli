@@ -49,6 +49,10 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 			report.Kept = append(report.Kept, entry)
 			continue
 		}
+		if toolName == "run_skill_script" {
+			recordProviderHistoryRunSkillScriptArtifactCandidate(&report, policy, entry, linkage.Ref.arguments, msg.Content, original)
+			continue
+		}
 		if toolName == "web_search" {
 			recordProviderHistoryWebSearchArtifactCandidate(&report, policy, entry, linkage.Ref.arguments, msg.Content, original)
 			continue

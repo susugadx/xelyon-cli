@@ -6,14 +6,16 @@
 
 ## Current-state note
 
-2026-06-19 時点の current code では、この文書の後半にある review prompt reduction / review web evidence compact / generic outer `web_search` compact / duplicate `activate_skill` compact / candidate-only family report は実装済みである。
+2026-06-19 時点の current code では、この文書の後半にある review prompt reduction / review web evidence compact / generic outer `web_search` compact / duplicate `activate_skill` compact / `run_skill_script` artifact-backed compact / candidate-only family report は実装済みである。
 
 この文書は historical design note を含む。特に section 7.7 の古い combined Goal handoff は、そのまま新規実装指示として使わない。次の tranche は feature 追加ではなく、current code 前提で以下を behavior-preserving に整理する Phase 0 として扱う。
 
 - `internal/providerhistory` の detection / linkage / report 集計 owner を整理する
 - `internal/providerhistory/toolresults` の structured replacement dispatch を private registry / spec に寄せる
 - provider-facing projection、raw history、config、status 文言、kept reason、placeholder text、exported types は変えない
-- `wait_agent` / `run_skill_script` / MCP / `ask_user_question` / provider-native replay は candidate-only のまま維持する
+- `run_skill_script` は raw artifact / verify / rehydrate gate が揃う場合だけ artifact-backed apply compact する current behavior として扱う
+- `wait_agent` / `ask_user_question` / provider-native replay は candidate-only のまま維持する
+- MCP は既存 artifact-backed path を持つ。unknown schema / sensitive-looking result は keep し、今回の主対象にはしない
 - 新しい compact family の apply 昇格は別の shared/provider-runtime change として扱う
 
 ## 現在実装済みの前提
@@ -38,10 +40,12 @@
   - absorbed external_doc snippet compact
 - candidate-only family report / kept reason
   - `wait_agent`
-  - `run_skill_script`
-  - MCP tool results
   - `ask_user_question`
   - provider-native built-in replay
+- raw artifact-backed tool result compact
+  - data-bearing command output
+  - MCP tool results
+  - `run_skill_script`
 - provider-facing report / token accounting 改善
 - replacement が実際に起きた場合の Responses `previous_response_id` chain disable
 - raw `Agent.History` / `Session.Messages` / audit / change records / persisted JSONL を保持する契約
@@ -4246,7 +4250,7 @@ section 1〜6 と 7.5 以外に、通常 chat history の provider-facing projec
 ### historical candidate families
 
 この section は、section 7.7 の current-state note より前に書いた historical gap audit である。
-current code では、outer `web_search` duplicate compact、duplicate `activate_skill` compact、candidate-only family report は実装済みとして扱う。
+current code では、outer `web_search` duplicate compact、duplicate `activate_skill` compact、`run_skill_script` artifact-backed compact、candidate-only family report は実装済みとして扱う。
 
 #### 1. `web_search`
 
@@ -4337,14 +4341,14 @@ actual result format は tool ごとに異なるため、汎用 compact は危�
 - latest activation per skill は keep
 - content hash が一致しない activation は keep
 - current behavior contract として使われている可能性がある skill body は keep
-- `run_skill_script` は combined Goal では detector / report までに留め、apply replacement には昇格しない
+- `run_skill_script` は raw artifact / verify / rehydrate gate が成立し、かつ latest / no later assistant / empty / missing skill or script / sensitive args or output / threshold failure でない場合だけ apply replacement 対象にする
 
 方針:
 
 - `activate_skill`: old duplicate skill body は skill name / content hash / raw size / duplicate_of tool call id を残して compact する
 - current active skill instruction は compact しない
 - skill body が current task の behavior contract として使われている場合は keep
-- `run_skill_script`: `internal/commandoutputs` policy に寄せられるかは観測だけ行い、apply 判断は次 Goal に分ける
+- `run_skill_script`: inline 要約や `internal/commandoutputs` への統合は行わず、`raw_output_ref` 付き artifact-backed placeholder に限定する
 
 注意:
 
@@ -4438,10 +4442,14 @@ apply replacement まで進める順:
 candidate-only / dry-run first で固定する順:
 
 1. `wait_agent`
-2. `run_skill_script`
-3. MCP tool results
-4. `ask_user_question`
-5. provider-native built-in replay
+2. `ask_user_question`
+3. provider-native built-in replay
+
+artifact-backed gate 成立時だけ apply へ昇格済み:
+
+1. data-bearing command output
+2. MCP tool results
+3. `run_skill_script`
 
 ### Deferred feature decisions after current implementation
 
@@ -4452,7 +4460,7 @@ candidate-only / dry-run first で固定する順:
 - MCP known-safe schema registry または tool name allowlist
 - `ask_user_question` result を user message preservation contract と分けて扱う方法
 - provider-native built-in replay を provider adapter 側で軽量化できるか
-- `run_skill_script` result を `internal/commandoutputs` policy に統合できるか
+- `run_skill_script` result の inline summary / `internal/commandoutputs` policy 統合が必要か
 
 ## 7.7. current implementation status and Phase 0 refactor scope
 
@@ -4485,10 +4493,12 @@ current code では、以下を実装済みとする。
   - latest activation / hash mismatch / activation error / missing name keep gates
 - candidate-only family report
   - `wait_agent`
-  - `run_skill_script`
-  - MCP tool results
   - `ask_user_question`
   - provider-native built-in replay
+- raw artifact-backed tool result compact
+  - data-bearing command output
+  - MCP tool results
+  - `run_skill_script`
 
 ### 残す scope
 
@@ -4534,7 +4544,7 @@ current code では、以下を実装済みとする。
 - caller 経由 test
 - status/report/docs/generated/config への影響
 
-`wait_agent` / `run_skill_script` / MCP / `ask_user_question` / provider-native replay は、これらの owner が揃うまで candidate-only のまま維持する。
+`wait_agent` / `ask_user_question` / provider-native replay は、これらの owner が揃うまで candidate-only のまま維持する。MCP と `run_skill_script` は raw artifact / verify / request-local active context rehydrate gate が成立する場合だけ apply compact できる。
 
 ### historical hard in-scope apply families
 
@@ -4631,19 +4641,24 @@ combined Goal での決定:
 
 #### 2. `run_skill_script`
 
-candidate-only で見るもの:
+current code では、`run_skill_script` は candidate-only ではなく raw artifact-backed compact 対象である。
 
-- skill name
-- script path
+見るもの:
+
+- assistant tool arguments の `skill` / `script`
 - output size
-- command-like classifier
-- success / failure
+- raw artifact / verify / rehydrate gate
+- sensitive-looking args / output
 
-combined Goal での決定:
+current code での決定:
 
-- apply replacement しない
-- kept reason: `run_skill_script_command_owner_unconfirmed`
-- future task で `internal/commandoutputs` に safely bridge できるなら再検討する
+- `args` / `args_json` は provider-facing placeholder と raw artifact source preview に出さない
+- `rawoutputs.SurfaceCommandOutput` を使う
+- raw output classification は family=`run_skill_script`、classifier=`skill_script_output`
+- latest / no later assistant / empty output / missing skill or script は raw keep
+- raw artifact disabled / missing session / missing store / verify failure / rehydrate unavailable / saved-token threshold 未満は raw keep
+- sensitive-looking args / output は artifact を作らず raw keep
+- apply 成功時だけ Responses `previous_response_id` chain を disable する
 
 #### 3. MCP tool results
 
@@ -4701,7 +4716,8 @@ apply mode でも、candidate-only / dry-run first family は provider-facing pa
 
 - `wait_agent` large completed result は detector / report に出るが、payload body は置換されない
 - `wait_agent` failed / blocked result は error context を保持し、置換されない
-- `run_skill_script` large success / failure result は detector / report に出るが、置換されない
+- `run_skill_script` large non-sensitive result は raw artifact / verify / rehydrate gate 成立時だけ `raw_output_ref` 付き placeholder に置換される
+- `run_skill_script` sensitive args / output、missing skill/script、latest/no later assistant、empty output、threshold failure は置換されない
 - `mcp_<server>_<tool>` JSON object result は candidate metadata を出せても、置換されない
 - MCP result に URL / title / summary field があっても、trusted schema registry がない限り置換されない
 - `ask_user_question` answered result は古くても置換されない
@@ -4750,7 +4766,10 @@ candidate-only / keep-by-design family は、report / status で理由名を曖�
 
 - `wait_agent_freeform_output_keep`
 - `wait_agent_error_context_keep`
-- `run_skill_script_command_owner_unconfirmed`
+- `run_skill_script_missing_skill_or_script`
+- `run_skill_script_raw_output_artifacts_disabled`
+- `run_skill_script_raw_output_artifact_missing`
+- `run_skill_script_raw_output_rehydrate_not_available`
 - `mcp_unknown_schema_keep`
 - `mcp_sensitive_or_private_result_keep`
 - `user_answer_contract_keep`
@@ -4777,7 +4796,7 @@ future_apply_candidate は apply replacement ではないため、saved token es
 4. review web/external_doc compact を実装する
 5. generic outer `web_search` compact を実装する
 6. duplicate old `activate_skill` compact を実装する
-7. candidate-only detectors for `wait_agent` / `run_skill_script` / MCP / `ask_user_question` / provider-native replay を追加する
+7. candidate-only detectors for `wait_agent` / `ask_user_question` / provider-native replay と、artifact-backed detectors for MCP / `run_skill_script` を追加する
 8. `/status` / docs / generated config への影響を確認する
 9. focused tests
 10. `make ci-check`
@@ -4796,7 +4815,8 @@ content_replacement_tools=read_file:2, list_dir:1, web_search:1
 command_output_tools=validation:3, git_diff:1
 review_history_tools=probe_result:2, external_doc:1, report_draft:1
 skill_replacement_tools=activate_skill_duplicate:1
-future_family_candidates=wait_agent:1, run_skill_script:1, mcp:2
+future_family_candidates=wait_agent:1, ask_user_question:1, provider_native_replay:1
+raw_output_artifact_tools=command_output:1, mcp:2, run_skill_script:1
 future_family_kept_reasons=unknown_schema:2, user_answer_contract:1, no_absorption_owner:1
 quality_floor=preserved
 ```
@@ -4821,7 +4841,7 @@ current code 前提で Phase 0 refactor を Goal に渡す場合は、以下の�
 ```text
 docs/dev/provider-history-reduction-next-plan.md の Current-state note と section 7.7 を source of truth として、providerhistory / raw-output reduction の current-state 棚卸しと Phase 0 behavior-preserving refactor を実装してください。
 
-今回の目的は feature 追加ではありません。review prompt reduction、review web/external_doc compact、generic outer web_search compact、duplicate activate_skill compact、candidate-only family report は current code で実装済みとして扱ってください。
+今回の目的は feature 追加ではありません。review prompt reduction、review web/external_doc compact、generic outer web_search compact、duplicate activate_skill compact、run_skill_script artifact-backed compact、candidate-only family report は current code で実装済みとして扱ってください。
 
 provider-facing projection、raw Agent.History / Session.Messages / audit / persisted JSONL、config schema/default、status 文言、placeholder text、kept reason names、exported types は変えないでください。
 
@@ -4831,7 +4851,7 @@ internal/providerhistory/toolresults では BuildStructuredReplacement の publi
 
 test boundary は generic_tool_results_test.go を activate_skill、candidate-only family、shared fixture に分け、review prompt reduction 関連 test を runner_saturation_test.go から owner-named test file へ寄せてください。
 
-wait_agent / run_skill_script / MCP / ask_user_question / provider-native replay は candidate-only のまま維持し、新しい compact family の apply 昇格はしないでください。
+wait_agent / ask_user_question / provider-native replay は candidate-only のまま維持してください。MCP / run_skill_script の既存 artifact-backed apply compact は behavior を変えず、別 family の apply 昇格はしないでください。
 
 focused tests、broader package tests、git diff --check、可能なら make ci-check まで実行してください。commit は作らないでください。
 ```

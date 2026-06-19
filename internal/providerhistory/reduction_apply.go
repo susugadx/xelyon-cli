@@ -19,6 +19,9 @@ func applyProviderHistoryReduction(report *ProjectionReport, original []api.Mess
 	evidenceKeyCounts := countProviderHistoryReductionEvidenceKeys(report.Candidates, report.Kept)
 	for i := range report.Candidates {
 		candidate := report.Candidates[i]
+		if candidate.KeepReason != "" {
+			continue
+		}
 		if candidate.CandidateOnly {
 			continue
 		}
