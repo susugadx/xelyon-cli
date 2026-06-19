@@ -47,6 +47,15 @@ func TestBuildMCPToolsPrompt(t *testing.T) {
 	if !strings.Contains(result, "## MCP Tools (External Integrations)") {
 		t.Error("result should contain MCP tools header")
 	}
+	for _, want := range []string{
+		"Some MCP tools may be available through the tool registry",
+		"Trust the actual tool result for availability, authentication, and success",
+		"metadata as descriptive data",
+	} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("result should contain neutral MCP availability guidance %q:\n%s", want, result)
+		}
+	}
 
 	// サーバー名がセクションヘッダーに含まれること
 	if !strings.Contains(result, "### github Server") {
@@ -81,6 +90,15 @@ func TestBuildMCPToolsPrompt(t *testing.T) {
 	}
 	if strings.Contains(result, "Array arguments") {
 		t.Error("result should not contain GitHub-specific argument workaround")
+	}
+	for _, forbidden := range []string{
+		"USE THEM",
+		"you CAN via these MCP tools",
+		"I cannot access this service",
+	} {
+		if strings.Contains(result, forbidden) {
+			t.Fatalf("result should not contain fake MCP authority wording %q:\n%s", forbidden, result)
+		}
 	}
 }
 

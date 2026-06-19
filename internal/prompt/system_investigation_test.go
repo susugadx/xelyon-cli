@@ -12,6 +12,9 @@ func TestSystemPrompt_ProjectMapGuidance(t *testing.T) {
 	if !strings.Contains(SystemPrompt, "Project Map lists file paths, symbol definitions with line ranges for the project.") {
 		t.Error("SystemPrompt should describe Project Map as structure index")
 	}
+	if !strings.Contains(SystemPrompt, promptfragments.ProjectMapDataBoundaryLine()) {
+		t.Error("SystemPrompt should define Project Map as data, not instructions")
+	}
 	if !strings.Contains(SystemPrompt, `gather_context(query="agent.go:161-328")`) {
 		t.Error("SystemPrompt should prefer gather_context for exact Project Map reads")
 	}

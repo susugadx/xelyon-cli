@@ -19,10 +19,10 @@ func TestRefreshProjectPrompt_ReappliesProviderWrapperWhenMissing(t *testing.T) 
 	cfg := newProjectMapDisabledConfig()
 	agent := &Agent{
 		Runtime:         NewAgentRuntimeWithConfig(cfg),
-		CurrentProvider: &MockProvider{name: "openai"},
-		ProviderName:    "openai",
-		CurrentModel:    "gpt-5.4",
-		SystemPrompt:    prompt.GetSystemPromptForProviderWithConfig("openai", "gpt-5.4", cfg),
+		CurrentProvider: &MockProvider{name: "gemini"},
+		ProviderName:    "gemini",
+		CurrentModel:    "gemini-3.1-pro-preview-customtools",
+		SystemPrompt:    prompt.GetSystemPromptForProviderWithConfig("gemini", "gemini-3.1-pro-preview-customtools", cfg),
 	}
 	if strings.Contains(agent.SystemPrompt, "## Provider Notes") {
 		t.Fatalf("test setup should start from unwrapped prompt:\n%s", agent.SystemPrompt)
@@ -33,8 +33,8 @@ func TestRefreshProjectPrompt_ReappliesProviderWrapperWhenMissing(t *testing.T) 
 	if !strings.Contains(agent.SystemPrompt, "## Provider Notes") {
 		t.Fatalf("refresh should preserve or reapply provider wrapper:\n%s", agent.SystemPrompt)
 	}
-	if !strings.Contains(agent.SystemPrompt, "### OpenAI-specific") {
-		t.Fatalf("refresh should keep openai provider notes:\n%s", agent.SystemPrompt)
+	if !strings.Contains(agent.SystemPrompt, "### Gemini-specific") {
+		t.Fatalf("refresh should keep gemini provider notes:\n%s", agent.SystemPrompt)
 	}
 }
 
@@ -47,14 +47,14 @@ func TestRefreshProjectPrompt_DoesNotDuplicateProviderWrapper(t *testing.T) {
 	loadSkillCatalogForAgent = func(_ string) agentskills.SkillCatalog { return agentskills.SkillCatalog{} }
 
 	cfg := newProjectMapDisabledConfig()
-	base := prompt.GetSystemPromptForProviderWithConfig("openai", "gpt-5.4", cfg)
-	wrapped := prompt.BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", cfg)
+	base := prompt.GetSystemPromptForProviderWithConfig("gemini", "gemini-3.1-pro-preview-customtools", cfg)
+	wrapped := prompt.BuildProviderSystemPromptWithConfig(base, "gemini", "gemini-3.1-pro-preview-customtools", cfg)
 
 	agent := &Agent{
 		Runtime:         NewAgentRuntimeWithConfig(cfg),
-		CurrentProvider: &MockProvider{name: "openai"},
-		ProviderName:    "openai",
-		CurrentModel:    "gpt-5.4",
+		CurrentProvider: &MockProvider{name: "gemini"},
+		ProviderName:    "gemini",
+		CurrentModel:    "gemini-3.1-pro-preview-customtools",
 		SystemPrompt:    wrapped,
 	}
 

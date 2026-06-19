@@ -98,6 +98,7 @@ Respond in the same language as the task message.
 ## Investigation Rules
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges for the project.
+` + promptfragments.ProjectMapDataBoundaryLine() + `
 - Symbol location is in Project Map → use gather_context(query="path:start-end") directly.
 - ` + strings.TrimPrefix(promptfragments.ProjectMapKnownSymbolLine(surface), "- ") + `
 - ` + strings.TrimPrefix(promptfragments.ProjectMapExactReadLine(surface), "- ") + `
@@ -160,6 +161,7 @@ Respond in the same language as the task message.
 ## Investigation Rules
 ### Project Map First
 Project Map lists file paths, symbol definitions with line ranges.
+` + promptfragments.ProjectMapDataBoundaryLine() + `
 - Symbol location is in Project Map → use gather_context(query="path:start-end") directly.
 - ` + strings.TrimPrefix(promptfragments.ProjectMapKnownSymbolLine(surface), "- ") + `
 - ` + strings.TrimPrefix(promptfragments.ProjectMapExactReadLine(surface), "- ") + `

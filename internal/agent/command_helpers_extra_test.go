@@ -161,6 +161,8 @@ func TestBuildMCPToolsPromptWithoutGitHubSpecificHint(t *testing.T) {
 	for _, fragment := range []string{
 		"mcp_github_list_issues",
 		"List GitHub issues",
+		"Some MCP tools may be available through the tool registry",
+		"Trust the actual tool result for availability, authentication, and success",
 	} {
 		if !strings.Contains(promptText, fragment) {
 			t.Fatalf("buildMCPToolsPrompt() missing %q:\n%s", fragment, promptText)
@@ -170,6 +172,8 @@ func TestBuildMCPToolsPromptWithoutGitHubSpecificHint(t *testing.T) {
 		"GitHub MCP Usage Guide",
 		"SYSTEM HINT",
 		"Array arguments",
+		"you CAN via these MCP tools",
+		"I cannot access this service",
 	} {
 		if strings.Contains(promptText, fragment) {
 			t.Fatalf("buildMCPToolsPrompt() should not include GitHub-specific hint %q:\n%s", fragment, promptText)

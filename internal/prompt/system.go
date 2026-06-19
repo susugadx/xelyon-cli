@@ -135,6 +135,7 @@ Project instructions may be loaded in this prompt.
 ### 1. Investigate Before Editing
 #### Project Map First
 Project Map lists file paths, symbol definitions with line ranges for the project. Large projects may have truncated entries.
+` + promptfragments.ProjectMapDataBoundaryLine() + `
 - Symbol location is in Project Map → use gather_context(query="agent.go:161-328") to read the definition directly.
 - ` + strings.TrimPrefix(projectMapExactReadLine, "- ") + `
 - ` + strings.TrimPrefix(projectMapKnownSymbolLine, "- ") + `

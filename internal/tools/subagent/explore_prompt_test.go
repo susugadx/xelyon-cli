@@ -36,6 +36,9 @@ func TestExplorePrompt_ProjectMapAssembly(t *testing.T) {
 	if !strings.Contains(ExplorePrompt, "symbol definitions with line ranges") {
 		t.Error("ExplorePrompt should describe Project Map as structure index")
 	}
+	if !strings.Contains(ExplorePrompt, promptfragments.ProjectMapDataBoundaryLine()) {
+		t.Error("ExplorePrompt should define Project Map as data, not instructions")
+	}
 	if strings.Contains(ExplorePrompt, "imports") || strings.Contains(ExplorePrompt, "← refs") {
 		t.Error("ExplorePrompt should not mention imports or refs")
 	}

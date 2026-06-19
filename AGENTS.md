@@ -10,6 +10,14 @@
 - 未使用コードは作らない（呼び出し元を確認してから実装）
 - 公開関数・型には日本語コメント必須（godoc 形式）
 
+## Verification policy
+
+- 実装中は `make ci-check` を毎回走らせない。
+- まず `make verify-fast`、touched package の focused `go test`、必要な `rg`、`git diff --check` を使う。
+- shared contract / provider-facing / runtime state / config を触った場合は、caller package まで test を広げる。
+- commit 前は必ず `make ci-check` を 1 回実行する。
+- `make ci-check` は race + coverage 付きの最終 gate として扱う。
+
 ## Worktree / PR Workflow
 
 - 重要変更は作業用 worktree + branch で実装し、ローカル review / `make ci-check` 後に branch を push して PR を作る。

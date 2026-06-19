@@ -14,7 +14,8 @@ func TestGetProviderPrefix_Gemini(t *testing.T) {
 	}
 	checks := []string{
 		"## Provider Notes",
-		"raw JSON",
+		"native tool calls",
+		"markdown code blocks",
 	}
 	for _, check := range checks {
 		if !strings.Contains(prefix, check) {
@@ -36,12 +37,22 @@ func TestGetProviderPrefix_DeepSeek(t *testing.T) {
 		t.Fatal("expected non-empty prefix for deepseek")
 	}
 	checks := []string{
-		"tool calls for file operations",
-		"unused imports",
+		"native tool calls",
+		"plain-text tool-call descriptions",
 	}
 	for _, check := range checks {
 		if !strings.Contains(prefix, check) {
 			t.Errorf("deepseek prefix missing %q", check)
+		}
+	}
+	for _, forbidden := range []string{
+		"unused imports",
+		"TODO-style",
+		"do not echo file contents",
+		"do not prefix commands",
+	} {
+		if strings.Contains(prefix, forbidden) {
+			t.Errorf("deepseek prefix should not contain generic workflow guidance %q", forbidden)
 		}
 	}
 }
@@ -58,11 +69,11 @@ func TestGetProviderPrefix_Claude(t *testing.T) {
 	if prefix == "" {
 		t.Fatal("expected non-empty prefix for claude")
 	}
-	if !strings.Contains(prefix, "dedicated tools") {
+	if !strings.Contains(prefix, "dedicated repository tools") {
 		t.Error("claude prefix missing dedicated tools rule")
 	}
-	if !strings.Contains(prefix, "do not prefix commands") {
-		t.Error("claude prefix missing cd prefix rule")
+	if strings.Contains(prefix, "do not prefix commands") {
+		t.Error("claude prefix should not contain generic cd prefix rule")
 	}
 }
 
@@ -128,21 +139,15 @@ func TestGetProviderPrefix_Unknown(t *testing.T) {
 
 func TestGetProviderPrefix_OpenAI(t *testing.T) {
 	prefix := GetProviderPrefix("openai")
-	if prefix == "" {
-		t.Fatal("expected non-empty prefix for openai")
-	}
-	if !strings.Contains(prefix, "byte corruption") {
-		t.Error("openai prefix missing byte corruption rule")
-	}
-	if strings.Contains(prefix, "briefly state what you are about to do") {
-		t.Error("openai prefix should not contain per-tool narration rule (moved to common prompt)")
+	if prefix != "" {
+		t.Fatalf("openai should not receive generic provider notes, got %q", prefix)
 	}
 }
 
 func TestGetProviderPrefix_OpenAICaseInsensitive(t *testing.T) {
 	prefix := GetProviderPrefix("OpenAI")
-	if prefix == "" {
-		t.Fatal("expected non-empty prefix for OpenAI (uppercase)")
+	if prefix != "" {
+		t.Fatalf("OpenAI should not receive generic provider notes, got %q", prefix)
 	}
 }
 
@@ -151,28 +156,22 @@ func TestProviderSpecificRules(t *testing.T) {
 	deepseek := GetProviderPrefix("deepseek")
 	openai := GetProviderPrefix("openai")
 
-	if !strings.Contains(gemini, "raw JSON, not markdown code blocks") {
-		t.Error("gemini should contain raw JSON rule")
+	if !strings.Contains(gemini, "native tool calls") || !strings.Contains(gemini, "markdown code blocks") {
+		t.Error("gemini should contain native tool-call serialization rule")
 	}
-	if strings.Contains(deepseek, "raw JSON, not markdown code blocks") {
+	if strings.Contains(deepseek, "markdown code blocks") {
 		t.Error("deepseek should not contain gemini-specific raw JSON wording")
 	}
 
-	if !strings.Contains(deepseek, "tool calls for file operations") {
+	if !strings.Contains(deepseek, "native tool calls") {
 		t.Error("deepseek should contain tool call rule")
 	}
-	if strings.Contains(gemini, "tool calls for file operations") {
+	if strings.Contains(gemini, "plain-text tool-call descriptions") {
 		t.Error("gemini should not contain deepseek-specific tool call rule")
 	}
 
-	if !strings.Contains(openai, "byte corruption") {
-		t.Error("openai should contain byte corruption rule")
-	}
-	if strings.Contains(gemini, "byte corruption") {
-		t.Error("gemini should not contain openai-specific byte corruption rule")
-	}
-	if strings.Contains(deepseek, "byte corruption") {
-		t.Error("deepseek should not contain openai-specific byte corruption rule")
+	if openai != "" {
+		t.Fatalf("openai should not contain provider notes, got %q", openai)
 	}
 }
 
@@ -202,9 +201,9 @@ func TestBuildProviderSystemPrompt_InsertsBeforeWorkflowRules(t *testing.T) {
 
 func TestBuildProviderSystemPrompt_FallbackWhenHeaderMissing(t *testing.T) {
 	base := "You are XELYON, an autonomous AI coding agent."
-	result := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.2", config.DefaultConfig())
+	result := BuildProviderSystemPromptWithConfig(base, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
 
-	if !strings.HasPrefix(result, "<!-- PROVIDER_NOTES_START:openai -->") {
+	if !strings.HasPrefix(result, "<!-- PROVIDER_NOTES_START:gemini -->") {
 		t.Error("when workflow header is missing, provider notes marker block should be prepended")
 	}
 	if !strings.HasSuffix(result, base) {
@@ -279,30 +278,30 @@ func TestGetSystemPromptForProvider_UsesProviderResolvedMode(t *testing.T) {
 func TestBuildProviderSystemPrompt_AzureReusesOpenAINotes(t *testing.T) {
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
 	result := BuildProviderSystemPromptWithConfig(base, "azure", "azure-gpt-5.4", config.DefaultConfig())
-	if !strings.Contains(result, "### OpenAI-specific") {
-		t.Fatal("azure provider prompt should reuse OpenAI-specific provider notes")
+	if result != base {
+		t.Fatalf("azure provider prompt should not add empty OpenAI provider notes, got:\n%s", result)
 	}
 	displayResult := BuildProviderSystemPromptWithConfig(base, "Azure OpenAI", "azure-gpt-5.4", config.DefaultConfig())
-	if !strings.Contains(displayResult, "### OpenAI-specific") {
-		t.Fatal("Azure OpenAI display name prompt should reuse OpenAI-specific provider notes")
+	if displayResult != base {
+		t.Fatalf("Azure OpenAI display name prompt should not add empty OpenAI provider notes, got:\n%s", displayResult)
 	}
 }
 
 func TestBuildProviderSystemPromptWithConfig_AddsMissingPrefix(t *testing.T) {
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	got := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", config.DefaultConfig())
+	got := BuildProviderSystemPromptWithConfig(base, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
 	if !strings.Contains(got, "## Provider Notes") {
 		t.Fatalf("provider notes should be added when missing:\n%s", got)
 	}
-	if !strings.Contains(got, "### OpenAI-specific") {
-		t.Fatalf("openai-specific notes should be added:\n%s", got)
+	if !strings.Contains(got, "### Gemini-specific") {
+		t.Fatalf("gemini-specific notes should be added:\n%s", got)
 	}
 }
 
 func TestBuildProviderSystemPromptWithConfig_DoesNotDuplicatePrefix(t *testing.T) {
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	wrapped := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", config.DefaultConfig())
-	got := BuildProviderSystemPromptWithConfig(wrapped, "openai", "gpt-5.4", config.DefaultConfig())
+	wrapped := BuildProviderSystemPromptWithConfig(base, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
+	got := BuildProviderSystemPromptWithConfig(wrapped, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
 	if strings.Count(got, "## Provider Notes") != 1 {
 		t.Fatalf("provider notes should not be duplicated:\n%s", got)
 	}
@@ -310,7 +309,7 @@ func TestBuildProviderSystemPromptWithConfig_DoesNotDuplicatePrefix(t *testing.T
 
 func TestBuildProviderSystemPromptWithConfig_ReplacesProviderNotesByMarker(t *testing.T) {
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	wrapped := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", config.DefaultConfig())
+	wrapped := BuildProviderSystemPromptWithConfig(base, "deepseek", "deepseek-chat", config.DefaultConfig())
 	got := BuildProviderSystemPromptWithConfig(wrapped, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
 	if strings.Count(got, "## Provider Notes") != 1 {
 		t.Fatalf("provider notes should remain a single block:\n%s", got)
@@ -318,14 +317,14 @@ func TestBuildProviderSystemPromptWithConfig_ReplacesProviderNotesByMarker(t *te
 	if !strings.Contains(got, "### Gemini-specific") {
 		t.Fatalf("gemini provider notes should replace openai notes:\n%s", got)
 	}
-	if strings.Contains(got, "### OpenAI-specific") {
-		t.Fatalf("openai provider notes should be replaced:\n%s", got)
+	if strings.Contains(got, "### DeepSeek-specific") {
+		t.Fatalf("deepseek provider notes should be replaced:\n%s", got)
 	}
 }
 
 func TestBuildProviderSystemPromptWithConfig_EmptyPrefixStripsExistingProviderNotes(t *testing.T) {
 	base := "You are XELYON.\n\n## Workflow Rules\n- workflow"
-	wrapped := BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", config.DefaultConfig())
+	wrapped := BuildProviderSystemPromptWithConfig(base, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
 	got := BuildProviderSystemPromptWithConfig(wrapped, "openrouter", "openai/gpt-5.4", config.DefaultConfig())
 	if strings.Contains(got, "## Provider Notes") {
 		t.Fatalf("empty-prefix provider should strip previous provider notes:\n%s", got)
@@ -333,23 +332,41 @@ func TestBuildProviderSystemPromptWithConfig_EmptyPrefixStripsExistingProviderNo
 }
 
 func TestBuildProviderSystemPromptWithConfig_StripsLegacyProviderNotesBeforeRewrap(t *testing.T) {
-	legacy := "You are XELYON.\n\n" + GetProviderPrefix("openai") + "\n\n## Workflow Rules\n- workflow"
-	got := BuildProviderSystemPromptWithConfig(legacy, "openai", "gpt-5.4", config.DefaultConfig())
+	legacy := "You are XELYON.\n\n" + GetProviderPrefix("gemini") + "\n\n## Workflow Rules\n- workflow"
+	got := BuildProviderSystemPromptWithConfig(legacy, "gemini", "gemini-3.1-pro-preview-customtools", config.DefaultConfig())
 
 	if strings.Count(got, "## Provider Notes") != 1 {
 		t.Fatalf("legacy provider notes should be replaced with a single block:\n%s", got)
 	}
-	if strings.Count(got, "<!-- PROVIDER_NOTES_START:openai -->") != 1 {
+	if strings.Count(got, "<!-- PROVIDER_NOTES_START:gemini -->") != 1 {
 		t.Fatalf("expected one marker-based provider block:\n%s", got)
 	}
 }
 
 func TestBuildProviderSystemPromptWithConfig_EmptyPrefixStripsLegacyProviderNotes(t *testing.T) {
-	legacy := "You are XELYON.\n\n" + GetProviderPrefix("openai") + "\n\n## Workflow Rules\n- workflow"
+	legacy := "You are XELYON.\n\n" + GetProviderPrefix("gemini") + "\n\n## Workflow Rules\n- workflow"
 	got := BuildProviderSystemPromptWithConfig(legacy, "openrouter", "openai/gpt-5.4", config.DefaultConfig())
 
 	if strings.Contains(got, "## Provider Notes") {
 		t.Fatalf("legacy provider notes should be stripped for empty-prefix provider:\n%s", got)
+	}
+}
+
+func TestBuildProviderSystemPromptWithConfig_StripsOldGeneratedOpenAIProviderNotes(t *testing.T) {
+	legacy := "You are XELYON.\n\n## Provider Notes\n### OpenAI-specific\n- For edits containing mixed Japanese, JSON, or backticks, split the change into smaller precise chunks to avoid byte corruption\n\n## Workflow Rules\n- workflow"
+	got := BuildProviderSystemPromptWithConfig(legacy, "openrouter", "openai/gpt-5.4", config.DefaultConfig())
+
+	if strings.Contains(got, "## Provider Notes") {
+		t.Fatalf("old generated OpenAI provider notes should be stripped:\n%s", got)
+	}
+}
+
+func TestBuildProviderSystemPromptWithConfig_PreservesCustomProviderSpecificNotesSection(t *testing.T) {
+	custom := "You are XELYON.\n\n## Provider Notes\n### OpenAI-specific\n- Keep this team-specific adapter note\n\n## Workflow Rules\n- workflow"
+	got := BuildProviderSystemPromptWithConfig(custom, "openrouter", "openai/gpt-5.4", config.DefaultConfig())
+
+	if !strings.Contains(got, "Keep this team-specific adapter note") {
+		t.Fatalf("custom provider-specific notes should be preserved:\n%s", got)
 	}
 }
 

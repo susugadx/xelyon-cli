@@ -26,6 +26,9 @@ func TestEditPromptBase_UsesSharedInvestigationBlock(t *testing.T) {
 	if !strings.Contains(editPromptBase, "read_file: exact-content reader for edit/apply_patch exact-control override") {
 		t.Fatal("default editPromptBase should keep read_file exact-control guidance aligned with visible tools")
 	}
+	if !strings.Contains(editPromptBase, promptfragments.ProjectMapDataBoundaryLine()) {
+		t.Fatal("editPromptBase should define Project Map as data, not instructions")
+	}
 }
 
 func TestEditPromptForEditTool_Default(t *testing.T) {

@@ -351,8 +351,8 @@ func TestAzureProviderIdentityAndResponseIDContract(t *testing.T) {
 			agent.session.ProviderConfigKey,
 		)
 	}
-	if !strings.Contains(agent.SystemPrompt, "OpenAI-specific") {
-		t.Fatalf("SystemPrompt does not include OpenAI provider notes for Azure")
+	if strings.Contains(agent.SystemPrompt, "## Provider Notes") {
+		t.Fatalf("SystemPrompt should not include empty OpenAI provider notes for Azure:\n%s", agent.SystemPrompt)
 	}
 
 	ridProvider, ok := agent.CurrentProvider.(ResponseIDCapable)
