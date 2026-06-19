@@ -57,12 +57,16 @@ func TestBuildMCPToolsPrompt(t *testing.T) {
 		}
 	}
 
-	// サーバー名がセクションヘッダーに含まれること
-	if !strings.Contains(result, "### github Server") {
-		t.Error("result should contain github server header")
+	if !strings.Contains(result, mcpToolsDataStartTag) || !strings.Contains(result, mcpToolsDataEndTag) {
+		t.Fatalf("result should wrap MCP names as data:\n%s", result)
 	}
-	if !strings.Contains(result, "### slack Server") {
-		t.Error("result should contain slack server header")
+
+	// サーバー名は sanitized grouping として含まれること
+	if !strings.Contains(result, "server: github") {
+		t.Error("result should contain sanitized github server grouping")
+	}
+	if !strings.Contains(result, "server: slack") {
+		t.Error("result should contain sanitized slack server grouping")
 	}
 
 	// ツール名がサニタイズされて含まれること
@@ -76,12 +80,15 @@ func TestBuildMCPToolsPrompt(t *testing.T) {
 		t.Error("result should contain sanitized slack tool name")
 	}
 
-	// 説明が含まれること
-	if !strings.Contains(result, "Create a GitHub issue") {
-		t.Error("result should contain create_issue description")
-	}
-	if !strings.Contains(result, "Send a Slack message") {
-		t.Error("result should contain send_message description")
+	// MCP description は provider tool schema 側だけの metadata として扱い、system text には出さない。
+	for _, forbidden := range []string{
+		"Create a GitHub issue",
+		"List repositories",
+		"Send a Slack message",
+	} {
+		if strings.Contains(result, forbidden) {
+			t.Fatalf("result should not contain raw MCP tool description %q:\n%s", forbidden, result)
+		}
 	}
 
 	// GitHub MCPツールでも専用ガイドは追加しないこと
@@ -135,9 +142,29 @@ func TestBuildMCPToolsPrompt_SortsServersAndTools(t *testing.T) {
 			t.Fatalf("%q appears after %q:\n%s", first, second, result)
 		}
 	}
-	assertBefore("### alpha Server", "### zeta Server")
+	assertBefore("server: alpha", "server: zeta")
 	assertBefore("mcp_alpha_alpha", "mcp_alpha_zulu")
 	assertBefore("mcp_zeta_alpha", "mcp_zeta_beta")
+}
+
+func TestBuildMCPToolsPrompt_SanitizesServerGrouping(t *testing.T) {
+	tools := []MCPTool{
+		{ServerName: "github.server", Name: "create-issue", Description: "description should stay out of system prompt"},
+	}
+
+	result := BuildMCPToolsPrompt(tools)
+	if !strings.Contains(result, "server: github_server") {
+		t.Fatalf("result should contain sanitized server grouping:\n%s", result)
+	}
+	if strings.Contains(result, "github.server") {
+		t.Fatalf("result should not contain raw server name:\n%s", result)
+	}
+	if !strings.Contains(result, "mcp_github_server_create_issue") {
+		t.Fatalf("result should contain exported tool name:\n%s", result)
+	}
+	if strings.Contains(result, "description should stay out of system prompt") {
+		t.Fatalf("result should not contain description:\n%s", result)
+	}
 }
 
 func TestBuildMCPToolsPrompt_NoGitHub(t *testing.T) {

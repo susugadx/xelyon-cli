@@ -10,6 +10,9 @@ func TestBuildProjectMapSection(t *testing.T) {
 	if !strings.Contains(got, ProjectMapStartMarker) || !strings.Contains(got, ProjectMapEndMarker) {
 		t.Fatalf("BuildProjectMapSection() should include markers:\n%s", got)
 	}
+	if !strings.Contains(got, projectMapDataStartTag) || !strings.Contains(got, projectMapDataEndTag) {
+		t.Fatalf("BuildProjectMapSection() should include data wrapper:\n%s", got)
+	}
 	if !strings.Contains(got, "## Project Map") {
 		t.Fatalf("BuildProjectMapSection() should include section body:\n%s", got)
 	}
@@ -39,6 +42,9 @@ func TestExtractProjectMapSection_MarkerBlock(t *testing.T) {
 	if strings.Contains(got, ProjectMapStartMarker) || strings.Contains(got, ProjectMapEndMarker) {
 		t.Fatalf("ExtractProjectMapSection() should not include markers:\n%s", got)
 	}
+	if strings.Contains(got, projectMapDataStartTag) || strings.Contains(got, projectMapDataEndTag) {
+		t.Fatalf("ExtractProjectMapSection() should not include data wrapper:\n%s", got)
+	}
 }
 
 func TestExtractProjectMapSection_NoLegacyFallback(t *testing.T) {
@@ -65,6 +71,40 @@ func TestStripProjectMapSection_MarkerBlock(t *testing.T) {
 	got := StripProjectMapSection(prompt)
 	if got != "base" {
 		t.Fatalf("StripProjectMapSection() = %q, want base", got)
+	}
+}
+
+func TestBuildProjectMapSection_NeutralizesDelimiterCollisions(t *testing.T) {
+	body := strings.Join([]string{
+		"## Project Map",
+		ProjectMapStartMarker,
+		ProjectMapEndMarker,
+		projectMapDataStartTag,
+		projectMapDataEndTag,
+		"- a.go",
+	}, "\n")
+
+	got := BuildProjectMapSection(body)
+	if strings.Count(got, ProjectMapStartMarker) != 1 || strings.Count(got, ProjectMapEndMarker) != 1 {
+		t.Fatalf("BuildProjectMapSection() should keep only structural markers:\n%s", got)
+	}
+	if strings.Count(got, projectMapDataStartTag) != 1 || strings.Count(got, projectMapDataEndTag) != 1 {
+		t.Fatalf("BuildProjectMapSection() should keep only structural data wrapper:\n%s", got)
+	}
+
+	extracted := ExtractProjectMapSection(got)
+	for _, forbidden := range []string{
+		ProjectMapStartMarker,
+		ProjectMapEndMarker,
+		projectMapDataStartTag,
+		projectMapDataEndTag,
+	} {
+		if strings.Contains(extracted, forbidden) {
+			t.Fatalf("ExtractProjectMapSection() should return neutralized body without raw delimiter %q:\n%s", forbidden, extracted)
+		}
+	}
+	if !strings.Contains(extracted, "- a.go") {
+		t.Fatalf("ExtractProjectMapSection() lost project map body:\n%s", extracted)
 	}
 }
 
