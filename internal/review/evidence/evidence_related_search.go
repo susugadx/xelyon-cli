@@ -95,7 +95,7 @@ func (c *reviewRelatedSearchCollector) markTruncated() {
 }
 
 func (c *reviewRelatedSearchCollector) readCandidate(relPath string) ([]byte, bool) {
-	if !isReviewContextRelatedGoPath(relPath) {
+	if _, ok := reviewEvidenceLanguageSpecForRelatedPath(relPath); !ok {
 		return nil, false
 	}
 	if _, changed := c.changedPaths[relPath]; changed {

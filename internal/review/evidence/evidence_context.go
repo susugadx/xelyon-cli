@@ -4,7 +4,6 @@ import (
 	"context"
 	pathpkg "path"
 	"sort"
-	"strings"
 )
 
 const (
@@ -51,13 +50,13 @@ type reviewContextRelatedCandidate struct {
 	priority int
 }
 
-type reviewContextChangedGoStem struct {
+type reviewContextChangedLanguageStem struct {
 	source bool
 	test   bool
 }
 
-type reviewContextChangedGoScope struct {
-	stemsByDir map[string]map[string]reviewContextChangedGoStem
+type reviewContextChangedLanguageScope struct {
+	stemsByDir map[string]map[string]reviewContextChangedLanguageStem
 }
 
 func buildReviewContextEvidence(ctx context.Context, repoRoot string, changedFiles []ReviewChangedFile, relatedCandidatePaths []string, limits ReviewEvidenceLimits) (reviewContextEvidence, error) {
@@ -117,7 +116,7 @@ func normalizeReviewRelatedCandidatePaths(paths []string) []string {
 		if err != nil {
 			continue
 		}
-		if !isReviewContextRelatedGoPath(relPath) {
+		if _, ok := reviewEvidenceLanguageSpecForRelatedPath(relPath); !ok {
 			continue
 		}
 		if _, ok := seen[relPath]; ok {
@@ -160,7 +159,7 @@ func (c *reviewContextEvidenceCollector) collectChangedFile(file ReviewChangedFi
 }
 
 func (c *reviewContextEvidenceCollector) collectRelatedContextFiles(changedFiles []ReviewChangedFile) []ReviewContextFileEvidence {
-	scope := c.changedGoScope(changedFiles)
+	scope := c.changedRelatedLanguageScope(changedFiles)
 
 	files := make([]ReviewContextFileEvidence, 0)
 	candidates := make([]reviewContextRelatedCandidate, 0)
@@ -169,7 +168,8 @@ func (c *reviewContextEvidenceCollector) collectRelatedContextFiles(changedFiles
 		if c.maxContextFilesExceededLogged || c.contextErr() != nil {
 			break
 		}
-		if !isReviewContextRelatedGoPath(relPath) {
+		language, ok := reviewEvidenceLanguageSpecForRelatedPath(relPath)
+		if !ok {
 			continue
 		}
 		if !scope.hasDir(pathpkg.Dir(relPath)) {
@@ -179,15 +179,10 @@ func (c *reviewContextEvidenceCollector) collectRelatedContextFiles(changedFiles
 			continue
 		}
 
-		role := reviewContextFileRoleRelatedGo
-		isTest := isReviewContextTestGoPath(relPath)
-		if isTest {
-			role = reviewContextFileRoleRelatedTest
-		}
 		candidates = append(candidates, reviewContextRelatedCandidate{
 			path:     relPath,
-			role:     role,
-			priority: scope.relatedCandidatePriority(relPath, isTest),
+			role:     language.relatedContextRole(relPath),
+			priority: scope.relatedCandidatePriority(relPath, language),
 		})
 	}
 
@@ -211,9 +206,10 @@ func (c *reviewContextEvidenceCollector) collectRelatedContextFiles(changedFiles
 	return files
 }
 
-func (s reviewContextChangedGoScope) relatedCandidatePriority(relPath string, isTest bool) int {
+func (s reviewContextChangedLanguageScope) relatedCandidatePriority(relPath string, language reviewEvidenceLanguageSpec) int {
 	dir := pathpkg.Dir(relPath)
-	stem := reviewContextGoStem(relPath)
+	stem := language.stem(relPath)
+	isTest := language.isTestPath(relPath)
 	sameSourceStem := s.hasSourceStem(dir, stem)
 	sameTestStem := s.hasTestStem(dir, stem)
 	switch {
@@ -230,9 +226,9 @@ func (s reviewContextChangedGoScope) relatedCandidatePriority(relPath string, is
 	}
 }
 
-func (c *reviewContextEvidenceCollector) changedGoScope(changedFiles []ReviewChangedFile) reviewContextChangedGoScope {
-	scope := reviewContextChangedGoScope{
-		stemsByDir: make(map[string]map[string]reviewContextChangedGoStem),
+func (c *reviewContextEvidenceCollector) changedRelatedLanguageScope(changedFiles []ReviewChangedFile) reviewContextChangedLanguageScope {
+	scope := reviewContextChangedLanguageScope{
+		stemsByDir: make(map[string]map[string]reviewContextChangedLanguageStem),
 	}
 	for _, file := range changedFiles {
 		scope.addPath(c.repoRoot, file.Path)
@@ -241,40 +237,40 @@ func (c *reviewContextEvidenceCollector) changedGoScope(changedFiles []ReviewCha
 	return scope
 }
 
-func (s reviewContextChangedGoScope) hasDir(dir string) bool {
+func (s reviewContextChangedLanguageScope) hasDir(dir string) bool {
 	_, ok := s.stemsByDir[dir]
 	return ok
 }
 
-func (s reviewContextChangedGoScope) hasSourceStem(dir, stem string) bool {
+func (s reviewContextChangedLanguageScope) hasSourceStem(dir, stem string) bool {
 	changed, ok := s.changedStem(dir, stem)
 	return ok && changed.source
 }
 
-func (s reviewContextChangedGoScope) hasTestStem(dir, stem string) bool {
+func (s reviewContextChangedLanguageScope) hasTestStem(dir, stem string) bool {
 	changed, ok := s.changedStem(dir, stem)
 	return ok && changed.test
 }
 
-func (s reviewContextChangedGoScope) changedStem(dir, stem string) (reviewContextChangedGoStem, bool) {
+func (s reviewContextChangedLanguageScope) changedStem(dir, stem string) (reviewContextChangedLanguageStem, bool) {
 	stems, ok := s.stemsByDir[dir]
 	if !ok {
-		return reviewContextChangedGoStem{}, false
+		return reviewContextChangedLanguageStem{}, false
 	}
 	changed, ok := stems[stem]
 	return changed, ok
 }
 
-func (s *reviewContextChangedGoScope) addPath(repoRoot, path string) {
-	dir, stem, isTest, ok := relatedContextChangedGoPath(repoRoot, path)
+func (s *reviewContextChangedLanguageScope) addPath(repoRoot, path string) {
+	dir, stem, isTest, ok := relatedContextChangedLanguagePath(repoRoot, path)
 	if !ok {
 		return
 	}
 	if s.stemsByDir == nil {
-		s.stemsByDir = make(map[string]map[string]reviewContextChangedGoStem)
+		s.stemsByDir = make(map[string]map[string]reviewContextChangedLanguageStem)
 	}
 	if _, ok := s.stemsByDir[dir]; !ok {
-		s.stemsByDir[dir] = make(map[string]reviewContextChangedGoStem)
+		s.stemsByDir[dir] = make(map[string]reviewContextChangedLanguageStem)
 	}
 	changed := s.stemsByDir[dir][stem]
 	if isTest {
@@ -285,15 +281,16 @@ func (s *reviewContextChangedGoScope) addPath(repoRoot, path string) {
 	s.stemsByDir[dir][stem] = changed
 }
 
-func relatedContextChangedGoPath(repoRoot, path string) (string, string, bool, bool) {
+func relatedContextChangedLanguagePath(repoRoot, path string) (string, string, bool, bool) {
 	_, relPath, err := resolveReviewEvidenceRepoPathLexically(repoRoot, path)
 	if err != nil {
 		return "", "", false, false
 	}
-	if !isReviewContextRelatedGoPath(relPath) {
+	language, ok := reviewEvidenceLanguageSpecForRelatedPath(relPath)
+	if !ok {
 		return "", "", false, false
 	}
-	return pathpkg.Dir(relPath), reviewContextGoStem(relPath), isReviewContextTestGoPath(relPath), true
+	return pathpkg.Dir(relPath), language.stem(relPath), language.isTestPath(relPath), true
 }
 
 func (c *reviewContextEvidenceCollector) collectContextFile(path, role string) (ReviewContextFileEvidence, bool) {
@@ -391,30 +388,4 @@ func markReviewContextFileSkipped(evidence ReviewContextFileEvidence, reason str
 	evidence.Skipped = true
 	evidence.SkipReason = reason
 	return evidence
-}
-
-func isReviewContextGeneratedPath(path string) bool {
-	return matchGeneratedReviewInventoryPath(newReviewInventoryPath(path))
-}
-
-func isReviewContextVendorPath(path string) bool {
-	return newReviewInventoryPath(path).hasDir("vendor")
-}
-
-func isReviewContextRelatedGoPath(relPath string) bool {
-	return pathpkg.Ext(relPath) == ".go" &&
-		!isReviewContextGeneratedPath(relPath) &&
-		!isReviewContextVendorPath(relPath)
-}
-
-func isReviewContextTestGoPath(relPath string) bool {
-	return strings.HasSuffix(strings.ToLower(pathpkg.Base(relPath)), "_test.go")
-}
-
-func reviewContextGoStem(relPath string) string {
-	base := pathpkg.Base(relPath)
-	if isReviewContextTestGoPath(relPath) {
-		return base[:len(base)-len("_test.go")]
-	}
-	return strings.TrimSuffix(base, pathpkg.Ext(base))
 }

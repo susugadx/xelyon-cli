@@ -2,7 +2,6 @@ package evidence
 
 import (
 	"context"
-	pathpkg "path"
 )
 
 type reviewFileEvidenceCollector struct {
@@ -69,7 +68,7 @@ func buildReviewContextSeedFiles(repoRoot string, changedFiles []ReviewChangedFi
 		if err != nil {
 			continue
 		}
-		if pathpkg.Ext(relPath) != ".go" {
+		if _, ok := reviewEvidenceLanguageSpecForPath(relPath); !ok {
 			continue
 		}
 		if _, ok := seen[relPath]; ok {

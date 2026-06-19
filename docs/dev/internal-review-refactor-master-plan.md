@@ -127,6 +127,38 @@ commit / push / PR 作成はユーザーの明示指示まで行わない。
   - `git diff --check`
   - `make ci-check`
 
+### 2026-06-19 evidence language catalog preparation
+
+- Split related evidence tests by owner:
+  - `evidence_context_test.go`: changed-file context, untracked context seeds, changed context skip reasons.
+  - `evidence_context_related_scope_test.go`: related context candidate scope, same-stem priority, ignored/generated/vendor related-path exclusion, deleted/renamed Go path scope.
+  - `evidence_related_search_test.go`: end-to-end collector integration for Go symbol/method/const/var hits.
+  - `evidence_related_search_terms_test.go`: Go AST term extraction and term-cap behavior.
+  - `evidence_related_search_scan_test.go`: related search file budget, missing candidates, file/hit/snippet truncation, package-declaration filtering.
+- Added private review-local language catalog files:
+  - `evidence_language.go`: catalog lookup, related path filtering, context role/stem helpers, related candidate pathspec aggregation.
+  - `evidence_language_go.go`: Go-only spec (`.go`, `_test.go`, `*.go`, `related_go`, `related_test`).
+  - `evidence_language_go_search.go`: Go AST term extraction for symbol, file-stem, and package search terms.
+- Moved Go-specific decisions out of generic collectors:
+  - `evidence_context.go` now asks the language spec for related path eligibility, test/source role, stem, and priority inputs.
+  - `evidence_related_search_terms.go` now dispatches term extraction through the language spec instead of parsing Go directly.
+  - `evidence_related_search.go`, `evidence_file_collect.go`, and `evidence_git_commands.go` use language catalog helpers for related candidate files and Go context seeds.
+- Behavior intentionally unchanged: Go-only related context/search, `related_go` / `related_test` role strings, prompt wording, report schema, JSON shape, provider/TUI/API behavior, generic impact, analysis pressure/probe-plan validation, and externaldoc/web evidence semantics.
+- Stop condition avoided: no `internal/tools/search` or `filefilter` dependency, no package split, no new exported API, no TS/JS/Python/Rust support.
+- Verification:
+  - `go test ./internal/review/evidence -run 'Test.*Related|Test.*Context|Test.*GenericImpact|Test.*Render' -count=1`
+  - `go test ./internal/review/analysis -run 'Test.*Pressure|Test.*ProbePlanEvidence' -count=1`
+  - `go test ./internal/review -run 'TestReviewRunner|TestReviewPrompt|TestReviewRun|TestNewReviewRunner' -count=1`
+  - `go test ./internal/review/evidence -run TestArchitectureBoundaries -count=1`
+  - `go list ./internal/review/...`
+  - `rg "internal/tools/search" internal/review/evidence internal/review/analysis`
+  - `rg "package .*helpers|package .*utils|package .*common" internal/review`
+  - `go test ./internal/review/...`
+  - `go test ./internal/agent ./internal/tui ./internal/tuiagent ./internal/app`
+  - `go test ./...`
+  - `git diff --check`
+  - `make ci-check`
+
 ## Completion checks
 
 - Focused tests for each touched package pass after its tranche.
@@ -145,4 +177,6 @@ commit / push / PR 作成はユーザーの明示指示まで行わない。
 ## Pending scope
 
 - `probe/probe_plan_test.go` は必要になった場合だけ test boundary 整理する。sandbox/path/security policy は別 task。
+- TS/JS/Python/Rust などの related context/search language support は別 task。追加時は `internal/review/evidence` の private language catalog に spec/extractor を足し、public schema と prompt/report behavior は別途 shared-contract 判定する。
+- `internal/tools/search` / `filefilter` と共有する言語 catalog 化は別 task。今回の review-local catalog を直接外部 owner に広げない。
 - Package split、facade removal、public API cleanup は今回の stop condition 外。
