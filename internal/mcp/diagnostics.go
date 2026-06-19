@@ -39,12 +39,13 @@ type DiagnosticCheck struct {
 
 // DiagnosticOptions は MCP doctor の実行オプションを表す。
 type DiagnosticOptions struct {
-	HomeDir      string
-	MCPEnabled   bool
-	MCPHeadless  bool
-	Connect      bool
-	Server       string
-	IncludeTools bool
+	HomeDir       string
+	MCPEnabled    bool
+	MCPHeadless   bool
+	Connect       bool
+	Server        string
+	IncludeTools  bool
+	SurfaceBudget mcpsurface.Budget
 }
 
 // DiagnosticReport は MCP doctor の構造化診断結果を表す。
@@ -58,6 +59,7 @@ type DiagnosticReport struct {
 	ServerFilter    string                   `json:"server_filter,omitempty"`
 	ServerCount     int                      `json:"server_count"`
 	Checks          []DiagnosticCheck        `json:"checks"`
+	ToolSurface     *mcpsurface.Report       `json:"tool_surface,omitempty"`
 	Servers         []DiagnosticServerReport `json:"servers,omitempty"`
 }
 
@@ -156,13 +158,19 @@ func diagnose(ctx context.Context, opts DiagnosticOptions, userHomeDir func() (s
 	manager.config = cfg
 	defer manager.Close()
 
+	connectionSurfaceTools := make(map[string][]mcpsurface.Tool)
 	for _, serverName := range serverNames {
 		serverConfig := cfg.MCPServers[serverName]
 		serverReport := diagnoseServerConfig(serverName, serverConfig)
 		if opts.Connect {
-			diagnoseServerConnection(ctx, manager, serverName, serverConfig, opts.IncludeTools, &serverReport)
+			if tools := diagnoseServerConnection(ctx, manager, serverName, serverConfig, opts.IncludeTools, &serverReport); len(tools) > 0 {
+				connectionSurfaceTools[serverName] = tools
+			}
 		}
 		report.Servers = append(report.Servers, serverReport)
+	}
+	if opts.Connect {
+		applyDiagnosticRuntimeToolSurface(&report, manager.GetTools(), opts.SurfaceBudget, opts.IncludeTools, connectionSurfaceTools)
 	}
 
 	return report
@@ -364,17 +372,17 @@ func diagnoseServerConnection(
 	serverConfig ServerConfig,
 	includeTools bool,
 	serverReport *DiagnosticServerReport,
-) {
+) []mcpsurface.Tool {
 	connection := &DiagnosticConnectionReport{Attempted: false, Status: "skipped"}
 	serverReport.Connection = connection
 
 	if serverConfig.Disabled {
 		connection.Error = "server disabled"
-		return
+		return nil
 	}
 	if err := validateMCPCommand(serverConfig.Command); err != nil {
 		connection.Error = err.Error()
-		return
+		return nil
 	}
 
 	connection.Attempted = true
@@ -385,7 +393,7 @@ func diagnoseServerConnection(
 		connection.Status = "fail"
 		connection.Error = detail
 		serverReport.addCheck(DiagnosticStatusFail, "connect", "MCP server connection failed", detail, "Check command, args, env, and startupTimeoutSeconds")
-		return
+		return nil
 	}
 
 	listCtx, cancel := mcpServerOperationContext(ctx, serverConfig.startupTimeoutDuration())
@@ -397,7 +405,7 @@ func diagnoseServerConnection(
 		connection.Status = "fail"
 		connection.Error = detail
 		serverReport.addCheck(DiagnosticStatusFail, "tools_list", "MCP server tools/list failed", detail, "Check the MCP server logs and startupTimeoutSeconds")
-		return
+		return nil
 	}
 	var listedTools []*sdkmcp.Tool
 	if toolsResult != nil {
@@ -418,7 +426,7 @@ func diagnoseServerConnection(
 	serverReport.addCheck(DiagnosticStatusOK, "connect", "MCP server connected", "", "")
 	serverReport.addCheck(DiagnosticStatusOK, "tools_list", "MCP server tools/list succeeded", fmt.Sprintf("registered=%d skipped=%d", summary.registered, summary.skipped), "")
 
-	populateConnectionDiagnostics(manager, serverName, serverConfig, listedTools, connection, serverReport, includeTools)
+	return populateConnectionDiagnostics(manager, serverName, serverConfig, listedTools, connection, serverReport, includeTools)
 }
 
 func diagnosticMCPServerErrorDetail(operation string, err error) string {
@@ -439,7 +447,7 @@ func populateConnectionDiagnostics(
 	connection *DiagnosticConnectionReport,
 	serverReport *DiagnosticServerReport,
 	includeTools bool,
-) {
+) []mcpsurface.Tool {
 	rawNames := make(map[string]bool, len(listedTools))
 	rawToolCount := 0
 	for _, tool := range listedTools {
@@ -467,15 +475,14 @@ func populateConnectionDiagnostics(
 		case toolSkipCollision:
 			connection.CollisionToolCount++
 		}
-		if includeTools {
-			serverReport.Tools = append(serverReport.Tools, diagnosticToolReport(decision))
-		}
 		toolSurfaceTools = append(toolSurfaceTools, diagnosticToolSurfaceTool(serverName, decision))
 	}
-	if len(toolSurfaceTools) > 0 {
-		report := mcpsurface.Analyze(toolSurfaceTools, mcpsurface.Options{})
-		connection.ToolSurface = &report
+	if includeTools {
+		for _, decision := range decisions {
+			serverReport.Tools = append(serverReport.Tools, diagnosticToolReport(decision))
+		}
 	}
+	return toolSurfaceTools
 }
 
 func addUnknownToolReferenceChecks(serverReport *DiagnosticServerReport, connection *DiagnosticConnectionReport) {
@@ -488,6 +495,20 @@ func addUnknownToolReferenceChecks(serverReport *DiagnosticServerReport, connect
 	if len(connection.UnknownExcludes) > 0 {
 		serverReport.addCheck(DiagnosticStatusWarn, "tool_filter", "tools.exclude contains unknown tool names", strings.Join(connection.UnknownExcludes, ", "), "Use raw tool names returned by the MCP server")
 	}
+}
+
+func diagnosticBudgetHiddenReasons(selection mcpsurface.BudgetSelection) map[string]string {
+	reasons := make(map[string]string)
+	for _, tool := range selection.Omitted {
+		if !tool.Registered || strings.TrimSpace(tool.ExportedName) == "" {
+			continue
+		}
+		switch tool.OmittedReason {
+		case mcpsurface.OmittedReasonSchemaTooLarge, mcpsurface.OmittedReasonToolCountBudgetExceeded, mcpsurface.OmittedReasonTokenBudgetExceeded:
+			reasons[tool.ExportedName] = tool.OmittedReason
+		}
+	}
+	return reasons
 }
 
 func diagnosticToolReport(decision toolRegistrationDecision) DiagnosticToolReport {
@@ -531,6 +552,81 @@ func diagnosticToolSurfaceTool(serverName string, decision toolRegistrationDecis
 	}
 }
 
+func applyDiagnosticRuntimeToolSurface(report *DiagnosticReport, tools []MCPTool, budget mcpsurface.Budget, includeTools bool, connectionSurfaceTools map[string][]mcpsurface.Tool) {
+	if report == nil {
+		return
+	}
+	effectiveBudget := mcpsurface.NormalizeBudget(budget)
+	hiddenReasons := map[string]string{}
+	if len(tools) > 0 {
+		surfaceTools := make([]mcpsurface.Tool, 0, len(tools))
+		for _, tool := range tools {
+			surfaceTools = append(surfaceTools, diagnosticRuntimeToolSurfaceTool(tool))
+		}
+		budgeted := mcpsurface.ApplyBudget(surfaceTools, effectiveBudget)
+		surface := mcpsurface.Analyze(budgeted.AnalysisTools(), mcpsurface.Options{Budget: budgeted.Budget})
+		report.ToolSurface = &surface
+		hiddenReasons = diagnosticBudgetHiddenReasons(budgeted)
+	}
+	applyDiagnosticConnectionToolSurfaces(report, connectionSurfaceTools, hiddenReasons, effectiveBudget)
+	if !includeTools {
+		return
+	}
+	for serverIndex := range report.Servers {
+		for toolIndex := range report.Servers[serverIndex].Tools {
+			tool := &report.Servers[serverIndex].Tools[toolIndex]
+			if reason := hiddenReasons[tool.ExportedName]; tool.Visible && reason != "" {
+				tool.Visible = false
+				tool.HiddenReason = reason
+			}
+		}
+	}
+}
+
+func applyDiagnosticConnectionToolSurfaces(report *DiagnosticReport, connectionSurfaceTools map[string][]mcpsurface.Tool, hiddenReasons map[string]string, budget mcpsurface.Budget) {
+	if report == nil || len(connectionSurfaceTools) == 0 {
+		return
+	}
+	for serverIndex := range report.Servers {
+		connection := report.Servers[serverIndex].Connection
+		if connection == nil {
+			continue
+		}
+		tools := connectionSurfaceTools[report.Servers[serverIndex].Name]
+		if len(tools) == 0 {
+			continue
+		}
+		projected := projectDiagnosticSurfaceTools(tools, hiddenReasons)
+		surface := mcpsurface.Analyze(projected, mcpsurface.Options{Budget: budget})
+		connection.ToolSurface = &surface
+	}
+}
+
+func projectDiagnosticSurfaceTools(tools []mcpsurface.Tool, hiddenReasons map[string]string) []mcpsurface.Tool {
+	projected := make([]mcpsurface.Tool, 0, len(tools))
+	for _, tool := range tools {
+		if reason := hiddenReasons[tool.ExportedName]; tool.Registered && tool.Visible && reason != "" {
+			tool.Visible = false
+			tool.OmittedReason = reason
+		}
+		projected = append(projected, tool)
+	}
+	return projected
+}
+
+func diagnosticRuntimeToolSurfaceTool(tool MCPTool) mcpsurface.Tool {
+	exportedName := mcpnames.ExportedToolName(tool.ServerName, tool.Name)
+	return mcpsurface.Tool{
+		ServerName:      tool.ServerName,
+		ToolName:        tool.Name,
+		ExportedName:    exportedName,
+		Registered:      true,
+		Visible:         true,
+		SchemaBytes:     len(tool.InputSchema),
+		EstimatedTokens: diagnosticMCPToolEstimatedTokens(exportedName, tool),
+	}
+}
+
 func diagnosticDecisionExportedName(serverName string, decision toolRegistrationDecision) string {
 	if strings.TrimSpace(decision.exportedName) != "" {
 		return decision.exportedName
@@ -557,6 +653,11 @@ func diagnosticToolEstimatedTokens(exportedName string, tool *sdkmcp.Tool, input
 		return 0
 	}
 	definition := api.ConvertMCPToolToToolDefinition(exportedName, tool.Description, inputSchema)
+	return token.EstimateStructuredValueTokenCount(definition)
+}
+
+func diagnosticMCPToolEstimatedTokens(exportedName string, tool MCPTool) int {
+	definition := api.ConvertMCPToolToToolDefinition(exportedName, tool.Description, tool.InputSchema)
 	return token.EstimateStructuredValueTokenCount(definition)
 }
 

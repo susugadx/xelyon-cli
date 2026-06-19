@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -151,6 +152,54 @@ func TestSyncCurrentDerivedRuntimeState_ReplacesPreviousMCPBudgetExclusions(t *t
 	}
 	if !toolNameInList(excluded, "read_file") {
 		t.Fatalf("derived-state sync should preserve unrelated runtime exclusion, got %v", excluded)
+	}
+}
+
+func TestApplyChatRequestToolVisibilityRefreshesMCPProviderAndPromptWhenBudgetChanges(t *testing.T) {
+	cfg := newProjectMapDisabledConfig()
+	cfg.MCP.SurfaceBudget.MaxTools = 2
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	manager := mcp.NewManager()
+	setManagerToolsForTest(t, manager, []mcp.MCPTool{
+		{ServerName: "alpha", Name: "one", Description: "One"},
+		{ServerName: "alpha", Name: "two", Description: "Two"},
+	})
+	provider := &mockMCPProvider{name: "openai"}
+	agent := &Agent{
+		ProviderName:    "openai",
+		CurrentModel:    "gpt-5.4",
+		CurrentProvider: provider,
+		Runtime:         runtime,
+		mcpManager:      manager,
+	}
+
+	agent.refreshMCPToolSurface()
+	agent.configureCurrentProviderMCPTools()
+	agent.rebuildSystemPromptForCurrentProvider()
+	if got := toolDefinitionNamesForTest(provider.lastTools); !reflect.DeepEqual(got, []string{"mcp_alpha_one", "mcp_alpha_two"}) {
+		t.Fatalf("initial provider MCP tools = %#v, want both tools", got)
+	}
+	for _, want := range []string{"mcp_alpha_one", "mcp_alpha_two"} {
+		if !strings.Contains(agent.SystemPrompt, want) {
+			t.Fatalf("initial system prompt missing %s:\n%s", want, agent.SystemPrompt)
+		}
+	}
+
+	cfg.MCP.SurfaceBudget.MaxTools = 1
+	agent.setRuntimeConfig(cfg)
+	agent.applyChatRequestToolVisibility(toolSurfacePhaseNormal)
+
+	if got := toolDefinitionNamesForTest(provider.lastTools); !reflect.DeepEqual(got, []string{"mcp_alpha_one"}) {
+		t.Fatalf("provider MCP tools after budget change = %#v, want selected budget surface only", got)
+	}
+	if !strings.Contains(agent.SystemPrompt, "mcp_alpha_one") {
+		t.Fatalf("system prompt missing selected MCP tool after budget change:\n%s", agent.SystemPrompt)
+	}
+	if strings.Contains(agent.SystemPrompt, "mcp_alpha_two") {
+		t.Fatalf("system prompt kept omitted MCP tool after budget change:\n%s", agent.SystemPrompt)
+	}
+	if !toolNameInList(agent.registry().GetExcludedTools(), "mcp_alpha_two") {
+		t.Fatalf("registry exclusions missing omitted MCP tool after budget change: %v", agent.registry().GetExcludedTools())
 	}
 }
 

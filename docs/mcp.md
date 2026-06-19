@@ -22,12 +22,19 @@ Model Context Protocol（MCP）は、AIアシスタントが外部のツール�
 mcp:
   enabled: true    # MCP機能のON/OFF（デフォルト: true）
   headless: false  # ヘッドレスモードでMCPを使うか（デフォルト: false）
+  surface_budget:
+    max_tools: 80
+    estimated_tokens: 32000
+    max_schema_bytes_per_tool: 131072
 ```
 
 | 設定 | 説明 | デフォルト |
 |------|------|-----------|
 | `enabled` | `false` にするとMCPサーバーへの接続をスキップ。トークン消費を削減。 | `true` |
 | `headless` | `true` にすると `--headless` モードでもMCPツールが使える。 | `false` |
+| `surface_budget.max_tools` | provider に公開する MCP tool 数の上限。 | `80` |
+| `surface_budget.estimated_tokens` | provider tool definitions 相当の推定 token 上限。 | `32000` |
+| `surface_budget.max_schema_bytes_per_tool` | 1 tool あたりの input schema byte 上限。 | `131072` |
 
 `enabled: false` にしても `~/.xelyon/mcp.json` の設定はそのまま残るため、再度 `enabled: true` にすれば復活します。
 `headless: true` はMCPツールの公開を許可するだけで、承認を自動化しません。headless でMCPツールを実行するには、対象サーバーまたはツールに `approval: "auto"` を明示してください。
@@ -108,13 +115,13 @@ xelyon doctor mcp --connect
 xelyon doctor mcp --connect --tools
 ```
 
-`doctor mcp --connect` は live `tools/list` の結果から tool surface summary、server 別の total / registered / visible / omitted 数、schema bytes、estimated tokens、omitted reason、絞り込み提案も表示します。
+`doctor mcp --connect` は live `tools/list` の結果から runtime 全体の tool surface summary、effective budget、server 別の total / registered / visible / omitted 数、schema bytes、estimated tokens、omitted reason、絞り込み提案も表示します。
 estimated tokens は analysis に含めた tool の provider tool definition 相当から推定した合計です。schema body は表示しません。
 `doctor mcp` は env value と raw args を表示しません。表示するのは command、arg 数、env key 名、timeout、approval、tool 名、集計済みの token / schema byte 数です。schema body や description 全文は表示しません。
 
 対話中に現在セッションへ読み込まれている MCP runtime 状態を確認する場合は `/mcp status` を使います。
 `/mcp status` は snapshot-only で、MCP server process の起動、再接続、`tools/list`、`tools/call` は行いません。
-表示するのは runtime 有効状態、読み込み済み config の有無、server 状態、registered / visible / omitted tool 数、tool surface のサンプル、server 別 token / schema byte 数、omitted reason、絞り込み提案です。
+表示するのは runtime 有効状態、読み込み済み config の有無、server 状態、registered / visible / omitted tool 数、effective budget、tool surface のサンプル、server 別 token / schema byte 数、omitted reason、絞り込み提案です。
 env value、raw args、server error detail、tool schema body、description 全文は表示しません。
 
 ```text
@@ -349,14 +356,17 @@ XELYON は MCP サーバーへ接続して取得したツールのうち、モ�
 
 選定はサーバー名とツール名で deterministic に並べ、複数サーバーがある場合はサーバー間で round-robin します。
 省略が発生した場合は stderr に warning を出します。
-必要なツールが省略される場合は、新しい設定項目ではなく `tools.include` / `tools.exclude` で MCP サーバー側の公開ツールを絞ってください。
+既定値は、大量の schema を常時 provider に渡して prompt 品質と latency を悪化させないために上げていません。
+必要なツールが省略される場合は、まず `~/.xelyon/mcp.json` の `mcpServers.<server>.tools.include` / `tools.exclude` で MCP サーバー側の公開ツールを絞ってください。
+その server が意図的に大きく、公開 tool を絞れない場合だけ `~/.xelyon/config.yaml` の `mcp.surface_budget` を上げます。
 
 #### tool が多いときの確認手順
 
 1. 対話中なら `/mcp status` を実行し、`Top omitted reasons`、`Top heavy servers`、`Largest schema tools`、`Highest estimated token tools`、`Recommendations` を確認します。
 2. 起動前や別 HOME の設定を確認する場合は `xelyon doctor mcp --connect` を実行します。raw tool name まで確認したい場合は `--tools` を付けます。
 3. `Recommendations` に出る `mcpServers` 断片を参考に、必要な raw tool name だけを `tools.include` に入れます。`tools.exclude` は除外したい少数の tool が明確な場合だけ使います。
-4. もう一度 `/mcp status` または `xelyon doctor mcp --connect` を実行し、visible / omitted 数と estimated tokens が下がったことを確認します。
+4. それでも意図した tool が省略される場合だけ、`mcp.surface_budget` を上げます。
+5. もう一度 `/mcp status` または `xelyon doctor mcp --connect` を実行し、visible / omitted 数と estimated tokens が意図通りになったことを確認します。
 
 例:
 
@@ -370,6 +380,16 @@ XELYON は MCP サーバーへ接続して取得したツールのうち、モ�
     }
   }
 }
+```
+
+意図的に大きい server の budget を上げる例:
+
+```yaml
+mcp:
+  surface_budget:
+    max_tools: 120
+    estimated_tokens: 48000
+    max_schema_bytes_per_tool: 131072
 ```
 
 #### 利用可能なツール名の確認

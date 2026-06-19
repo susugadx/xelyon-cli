@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
@@ -59,7 +60,14 @@ func mcpStatusSnapshot(agent *Agent) mcp.StatusSnapshot {
 }
 
 func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection, analysis mcpsurface.Report) *ui.Table {
-	budget := defaultMCPToolSurfaceBudget()
+	budget := surface.budget
+	if budget == (mcpsurface.Budget{}) {
+		var cfg *config.Config
+		if agent != nil {
+			cfg = agent.cfg()
+		}
+		budget = config.EffectiveMCPSurfaceBudget(cfg)
+	}
 	return ui.NewTable().
 		AddRow("Runtime", mcpRuntimeStatusText(agent)).
 		AddRow("Config", mcpStatusConfigText(snapshot)).
@@ -78,11 +86,9 @@ func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surfa
 			len(surface.omitted),
 		)).
 		AddRow("Budget", fmt.Sprintf(
-			"%d estimated tokens (max %d tools / %d tokens / %s schema)",
+			"%d estimated tokens (%s)",
 			surface.estimatedTokens,
-			budget.maxTools,
-			budget.maxEstimatedTokens,
-			mcpsurface.FormatBytes(budget.maxSchemaBytes),
+			mcpsurface.FormatBudget(budget),
 		)).
 		AddRow("Surface", fmt.Sprintf(
 			"%s schema across %d server(s)",
@@ -218,10 +224,17 @@ func printMCPStatusRecommendations(out io.Writer, analysis mcpsurface.Report) {
 		dim.Fprintln(out, "    none")
 		return
 	}
+	_, _ = fmt.Fprintln(out, "    1. Narrow ~/.xelyon/mcp.json mcpServers.<server>.tools.include/exclude:")
 	for _, recommendation := range analysis.Recommendations {
-		_, _ = fmt.Fprintf(out, "    - %s: %s\n", recommendation.ServerName, recommendation.Reason)
-		_, _ = fmt.Fprintf(out, "      ~/.xelyon/mcp.json mcpServers fragment: %s\n", mcpsurface.IncludeSnippet(recommendation))
+		_, _ = fmt.Fprintf(out, "      - %s: %s\n", recommendation.ServerName, recommendation.Reason)
+		_, _ = fmt.Fprintf(out, "        mcpServers fragment: %s\n", mcpsurface.IncludeSnippet(recommendation))
 	}
+	budget := mcpsurface.DefaultBudget()
+	if analysis.EffectiveBudget != nil {
+		budget = *analysis.EffectiveBudget
+	}
+	_, _ = fmt.Fprintln(out, "    2. If the server is intentionally large, raise ~/.xelyon/config.yaml mcp.surface_budget:")
+	_, _ = fmt.Fprintf(out, "       %s\n", mcpsurface.SurfaceBudgetSnippet(budget))
 }
 
 func printMCPStatusOmittedSamples(out io.Writer, surface mcpToolSurfaceSelection) {

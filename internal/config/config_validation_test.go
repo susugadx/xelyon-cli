@@ -120,3 +120,39 @@ func TestValidateSkillsRouterConfig(t *testing.T) {
 		t.Fatalf("Skills.Router.UsageRetentionDays = %d, want %d", cfg.Skills.Router.UsageRetentionDays, defaultSkillsRouterUsageRetentionDays)
 	}
 }
+
+func TestValidateMCPSurfaceBudgetRejectsNegativeValues(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MCP.SurfaceBudget.MaxTools = -1
+	cfg.MCP.SurfaceBudget.EstimatedTokens = -2
+	cfg.MCP.SurfaceBudget.MaxSchemaBytesPerTool = -3
+
+	result := ValidateConfig(cfg)
+	if len(result.Issues) != 3 {
+		t.Fatalf("ValidateConfig() issues = %#v, want three MCP surface budget issues", result.Issues)
+	}
+	for _, want := range []string{
+		"mcp.surface_budget.max_tools",
+		"mcp.surface_budget.estimated_tokens",
+		"mcp.surface_budget.max_schema_bytes_per_tool",
+	} {
+		found := false
+		for _, issue := range result.Issues {
+			if issue.Field == want && issue.Severity == ValidationSeverityError && issue.CanAutoFix {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("issues = %#v, want autofixable error for %s", result.Issues, want)
+		}
+	}
+
+	if fixed := ApplyAutoFixes(cfg, result); fixed != 3 {
+		t.Fatalf("ApplyAutoFixes() = %d, want 3", fixed)
+	}
+	defaults := defaultMCPSurfaceBudgetConfig()
+	if cfg.MCP.SurfaceBudget != defaults {
+		t.Fatalf("MCP.SurfaceBudget after autofix = %#v, want %#v", cfg.MCP.SurfaceBudget, defaults)
+	}
+}
