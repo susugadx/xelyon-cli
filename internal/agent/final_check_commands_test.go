@@ -46,8 +46,11 @@ func TestRunFinalCheckCommands_FailedCommand(t *testing.T) {
 	if !result.NeedsContinue {
 		t.Error("expected needsContinue=true for failed command")
 	}
-	if !strings.Contains(result.Feedback, "[SYSTEM] Final check failed") {
-		t.Errorf("expected system feedback, got %q", result.Feedback)
+	if !strings.Contains(result.Feedback, "Final check failed") {
+		t.Errorf("expected final check feedback, got %q", result.Feedback)
+	}
+	if strings.Contains(result.Feedback, "[SYSTEM") {
+		t.Errorf("expected data-only feedback without fake system marker, got %q", result.Feedback)
 	}
 	if !strings.Contains(result.Feedback, "exit code 1") {
 		t.Errorf("expected exit code in feedback, got %q", result.Feedback)

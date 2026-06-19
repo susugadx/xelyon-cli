@@ -126,7 +126,7 @@ func TestExecuteToolCallsWithParallel_LoopDetection_PreventsExecution(t *testing
 	// c3（ループ後）のスキップ結果が履歴にあること
 	found = false
 	for _, msg := range agent.History {
-		if msg.ToolCallID == "c3" && strings.Contains(msg.Content, "Skipped due to tool loop") {
+		if msg.ToolCallID == "c3" && strings.Contains(msg.Content, "triggered loop detection") {
 			found = true
 			break
 		}
@@ -252,7 +252,7 @@ func TestExecuteToolCallsWithParallel_LoopDetectBeforeSkip(t *testing.T) {
 	if addedMsgs[1].ToolCallID != "c2" || !strings.Contains(addedMsgs[1].Content, "loop detected") {
 		t.Errorf("addedMsgs[1] = {ID:%q, Content:%q}, want loop detection for c2", addedMsgs[1].ToolCallID, addedMsgs[1].Content)
 	}
-	if addedMsgs[2].ToolCallID != "c3" || !strings.Contains(addedMsgs[2].Content, "Skipped due to tool loop detection.") {
+	if addedMsgs[2].ToolCallID != "c3" || !strings.Contains(addedMsgs[2].Content, "triggered loop detection") {
 		t.Errorf("addedMsgs[2] = {ID:%q, Content:%q}, want loop skip for c3", addedMsgs[2].ToolCallID, addedMsgs[2].Content)
 	}
 }
@@ -551,7 +551,6 @@ func TestLoopDetection_FC_MessageConsistency(t *testing.T) {
 	agent.executeToolCallsWithParallel(context.Background(), toolCalls, loopDetectFn, nil,
 		func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 
-	// 旧実装と同じフォーマット: "[SYSTEM] Tool loop detected: read_file was called 2 times. ..."
 	msgs := agent.History[historyBefore:]
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 loop message, got %d", len(msgs))
@@ -563,14 +562,13 @@ func TestLoopDetection_FC_MessageConsistency(t *testing.T) {
 	if msg.ToolCallID != "c2" {
 		t.Errorf("loop message ToolCallID = %q, want 'c2'", msg.ToolCallID)
 	}
-	// 旧実装のフォーマット: "[SYSTEM] Tool loop detected: %s was called %d times. Stopping to prevent infinite loop."
-	expectedContent := "[SYSTEM] Tool loop detected: read_file was called 2 times. Stopping to prevent infinite loop."
+	expectedContent := "Tool loop detected: read_file was called 2 times. Execution stopped to prevent an infinite loop."
 	if msg.Content != expectedContent {
 		t.Errorf("loop message content = %q, want %q", msg.Content, expectedContent)
 	}
 }
 
-// --- Test: Text-based loop detection message matches old format ---
+// --- Test: Text-based loop detection message uses neutral user-role text ---
 
 func TestLoopDetection_TextBased_TriggerMessage(t *testing.T) {
 	provider := &mockProvider{name: "test"}
@@ -607,15 +605,14 @@ func TestLoopDetection_TextBased_TriggerMessage(t *testing.T) {
 		func(_ int, _ *tools.ToolCall, _ toolruntime.Result) {})
 
 	msgs := agent.History[historyBefore:]
-	// text-based trigger: role="user", "[SYSTEM WARNING] ..."
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 loop message, got %d", len(msgs))
 	}
 	if msgs[0].Role != "user" {
 		t.Errorf("text-based loop message role = %q, want 'user'", msgs[0].Role)
 	}
-	if !strings.Contains(msgs[0].Content, "[SYSTEM WARNING]") {
-		t.Errorf("text-based loop message should contain '[SYSTEM WARNING]', got %q", msgs[0].Content)
+	if !strings.Contains(msgs[0].Content, "Tool loop detected") || strings.Contains(msgs[0].Content, "[SYSTEM") {
+		t.Errorf("text-based loop message should be neutral warning text, got %q", msgs[0].Content)
 	}
 }
 

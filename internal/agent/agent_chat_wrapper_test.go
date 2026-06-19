@@ -11,11 +11,12 @@ import (
 )
 
 type imageCapableChatProvider struct {
-	name        string
-	chatCalls   int
-	imageCalls  int
-	lastMessage string
-	lastImage   *api.ImageData
+	name             string
+	chatCalls        int
+	imageCalls       int
+	lastSystemPrompt string
+	lastMessage      string
+	lastImage        *api.ImageData
 }
 
 func (p *imageCapableChatProvider) Name() string {
@@ -34,11 +35,12 @@ func (p *imageCapableChatProvider) ChatWithTools(context.Context, string, []api.
 	return "text response", nil
 }
 
-func (p *imageCapableChatProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, userMessage string, image *api.ImageData, _ string) (string, error) {
+func (p *imageCapableChatProvider) ChatWithImage(_ context.Context, systemPrompt string, _ []api.Message, userMessage string, image *api.ImageData, _ string) (string, error) {
 	if image == nil {
 		return "", fmt.Errorf("image is required")
 	}
 	p.imageCalls++
+	p.lastSystemPrompt = systemPrompt
 	p.lastMessage = userMessage
 	p.lastImage = image
 	return "image response", nil
@@ -75,11 +77,14 @@ func TestChatInternal_WithImageUsesImageProviderPath(t *testing.T) {
 	if provider.imageCalls != 1 {
 		t.Fatalf("provider.imageCalls = %d, want 1", provider.imageCalls)
 	}
-	if !strings.Contains(provider.lastMessage, "describe image") {
-		t.Fatalf("provider.lastMessage = %q, want to contain %q", provider.lastMessage, "describe image")
+	if provider.lastMessage != "describe image" {
+		t.Fatalf("provider.lastMessage = %q, want raw user input", provider.lastMessage)
 	}
-	if !strings.Contains(provider.lastMessage, "[NORMAL MODE]") {
-		t.Fatalf("provider.lastMessage = %q, want normal-mode directive", provider.lastMessage)
+	if strings.Contains(provider.lastMessage, "[NORMAL MODE]") {
+		t.Fatalf("provider.lastMessage = %q, should not contain normal-mode suffix", provider.lastMessage)
+	}
+	if !strings.Contains(provider.lastSystemPrompt, normalModeBaseRuntimeDirective) {
+		t.Fatalf("provider.lastSystemPrompt = %q, want normal-mode runtime directive", provider.lastSystemPrompt)
 	}
 }
 

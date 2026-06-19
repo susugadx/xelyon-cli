@@ -73,13 +73,13 @@ func TestBuildLoopAbortHistoryMessageUsesFunctionCallingWhenToolCallIDPresent(t 
 
 	after := &tools.ToolCall{ID: "call-after", Tool: "read_file"}
 	msg, ok = BuildLoopAbortHistoryMessage(after, 3, 2, 3)
-	if !ok || msg.Role != "tool" || msg.ToolCallID != "call-after" || msg.Content != "[SYSTEM] Skipped due to tool loop detection." {
+	if !ok || msg.Role != "tool" || msg.ToolCallID != "call-after" || msg.Content != "Skipped because a previous tool call in this batch triggered loop detection." {
 		t.Fatalf("post-trigger message = %#v ok=%v, want skipped tool message", msg, ok)
 	}
 
 	textOnly := &tools.ToolCall{Tool: "search_code"}
 	msg, ok = BuildLoopAbortHistoryMessage(textOnly, 2, 2, 3)
-	if !ok || msg.Role != "user" || !strings.Contains(msg.Content, "SYSTEM WARNING") {
+	if !ok || msg.Role != "user" || !strings.Contains(msg.Content, "Tool loop detected") || strings.Contains(msg.Content, "[SYSTEM") {
 		t.Fatalf("text-only trigger message = %#v ok=%v, want user warning", msg, ok)
 	}
 }

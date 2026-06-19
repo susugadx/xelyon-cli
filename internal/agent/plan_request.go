@@ -153,7 +153,7 @@ func (r *planModeRequest) prepareUserRequest(userRequest string) string {
 	}
 
 	yellow.Fprintln(r.agent.output(), warning)
-	return userRequest + "\n\n[SYSTEM NOTE: " + warning + " Please check existing code before creating new definitions.]"
+	return userRequest + "\n\nRuntime note: " + warning + " Please check existing code before creating new definitions."
 }
 
 func (r *planModeRequest) runInvestigation() (*plan.Plan, bool, error) {

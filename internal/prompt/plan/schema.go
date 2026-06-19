@@ -51,6 +51,6 @@ func PlanJSONSchemaInstructions() string {
 
 // BuildPlanJSONRetryMessage は Plan JSON 修復用のユーザーメッセージを生成する。
 func BuildPlanJSONRetryMessage() string {
-	return "[SYSTEM] Plan JSON を**必ず**次の schema に沿って、```json``` で囲んだ1つのJSONとして出力してください（箇条書き/番号付きリスト/文章のみは禁止）。\n\n" +
+	return "Plan JSON retry: 必ず次の schema に沿って、```json``` で囲んだ1つのJSONとして出力してください（箇条書き/番号付きリスト/文章のみは禁止）。\n\n" +
 		PlanJSONSchemaInstructions()
 }

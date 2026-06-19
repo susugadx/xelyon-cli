@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-const normalModeDirectExecutionPromptFragment = "Do NOT output JSON directly"
+const normalModeDirectExecutionPromptFragment = "do not output Plan JSON in normal mode"
 
 func TestNormalMode_MixedToolResponse_CountsAssistantOnce(t *testing.T) {
 	testFile := t.TempDir() + "/sample.txt"
@@ -42,10 +42,12 @@ func TestNormalMode_MixedToolResponse_CountsAssistantOnce(t *testing.T) {
 
 func TestNormalMode_PlanJSONFallback(t *testing.T) {
 	var capturedHistories [][]api.Message
+	var capturedSystemPrompts []string
 	provider := &scriptedChatProvider{
 		name:            "test",
 		functionCalling: true,
 		chatWithToolsFn: func(call int, ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+			capturedSystemPrompts = append(capturedSystemPrompts, systemPrompt)
 			snapshot := append([]api.Message(nil), history...)
 			capturedHistories = append(capturedHistories, snapshot)
 			if call == 0 {
@@ -66,8 +68,11 @@ func TestNormalMode_PlanJSONFallback(t *testing.T) {
 	if provider.callCount != 2 {
 		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
 	}
-	if got := capturedHistories[1][len(capturedHistories[1])-1].Content; !strings.Contains(got, normalModeDirectExecutionPromptFragment) {
-		t.Fatalf("expected direct execution recovery prompt, got %q", got)
+	if got := capturedSystemPrompts[1]; !strings.Contains(got, normalModeDirectExecutionPromptFragment) {
+		t.Fatalf("expected direct execution recovery directive in system prompt, got %q", got)
+	}
+	if len(capturedHistories[1]) != 2 || capturedHistories[1][0].Role != "user" || capturedHistories[1][1].Role != "assistant" {
+		t.Fatalf("second request history = %#v, want original user + assistant response without extra recovery user message", capturedHistories[1])
 	}
 	for _, msg := range agent.History {
 		if strings.Contains(msg.Content, "Switching to step-by-step") {
@@ -92,10 +97,12 @@ func TestNormalMode_PlanJSONFallback_IgnoresIDOnlyStepPlanJSON(t *testing.T) {
 
 func TestNormalMode_PlanJSONFallback_DetectsSchemaInvalidPlanJSON(t *testing.T) {
 	var capturedHistories [][]api.Message
+	var capturedSystemPrompts []string
 	provider := &scriptedChatProvider{
 		name:            "test",
 		functionCalling: true,
 		chatWithToolsFn: func(call int, ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+			capturedSystemPrompts = append(capturedSystemPrompts, systemPrompt)
 			snapshot := append([]api.Message(nil), history...)
 			capturedHistories = append(capturedHistories, snapshot)
 			if call == 0 {
@@ -114,8 +121,11 @@ func TestNormalMode_PlanJSONFallback_DetectsSchemaInvalidPlanJSON(t *testing.T) 
 	if provider.callCount != 2 {
 		t.Fatalf("provider.callCount = %d, want 2", provider.callCount)
 	}
-	if got := capturedHistories[1][len(capturedHistories[1])-1].Content; !strings.Contains(got, normalModeDirectExecutionPromptFragment) {
-		t.Fatalf("expected direct execution recovery prompt, got %q", got)
+	if got := capturedSystemPrompts[1]; !strings.Contains(got, normalModeDirectExecutionPromptFragment) {
+		t.Fatalf("expected direct execution recovery directive in system prompt, got %q", got)
+	}
+	if len(capturedHistories[1]) != 2 || capturedHistories[1][0].Role != "user" || capturedHistories[1][1].Role != "assistant" {
+		t.Fatalf("second request history = %#v, want original user + assistant response without extra recovery user message", capturedHistories[1])
 	}
 }
 

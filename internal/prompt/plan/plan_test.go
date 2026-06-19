@@ -116,8 +116,11 @@ func TestBuildPlanRequestMessage_ContainsPlanSchemaWithFiles(t *testing.T) {
 
 func TestBuildPlanJSONRetryMessage_ContainsPlanSchemaWithFiles(t *testing.T) {
 	msg := BuildPlanJSONRetryMessage()
-	if !strings.Contains(msg, "Plan JSON を**必ず**") {
+	if !strings.Contains(msg, "Plan JSON retry") {
 		t.Fatalf("expected retry message to contain retry instruction, got %q", msg)
+	}
+	if strings.Contains(msg, "[SYSTEM") {
+		t.Fatalf("retry message should not contain fake system marker, got %q", msg)
 	}
 	assertContainsPlanSchema(t, "retry message", msg)
 }

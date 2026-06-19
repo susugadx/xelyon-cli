@@ -13,7 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-const planJSONRetryPromptFragment = "Plan JSON を**必ず**"
+const planJSONRetryPromptFragment = "Plan JSON retry"
 
 type scriptedStreamingProvider struct {
 	name     string

@@ -20,6 +20,9 @@ func TestToolVisibilityPolicy_NormalModeRecoveryPrompt_DefaultSurface(t *testing
 		if containsAny(got, "str_replace") {
 			t.Fatalf("default recovery prompt should avoid hidden legacy edit tools, got %q", got)
 		}
+		if containsAny(got, "[SYSTEM]", "FIRST change", "One tool call") {
+			t.Fatalf("default recovery prompt should be neutral runtime directive text, got %q", got)
+		}
 	}
 }
 

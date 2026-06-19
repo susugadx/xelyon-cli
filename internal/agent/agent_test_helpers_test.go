@@ -44,10 +44,12 @@ func (m *mockProvider) ChatWithImage(ctx context.Context, systemPrompt string, h
 
 // sequenceMockProvider は呼び出しごとに異なるレスポンスを返すモックです。
 type sequenceMockProvider struct {
-	name      string
-	responses []string
-	contexts  []context.Context
-	callCount int
+	name          string
+	responses     []string
+	contexts      []context.Context
+	systemPrompts []string
+	histories     [][]api.Message
+	callCount     int
 }
 
 func (m *sequenceMockProvider) Name() string { return m.name }
@@ -58,6 +60,8 @@ func (m *sequenceMockProvider) IsFunctionCallingEnabled() bool { return true }
 
 func (m *sequenceMockProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	m.contexts = append(m.contexts, ctx)
+	m.systemPrompts = append(m.systemPrompts, systemPrompt)
+	m.histories = append(m.histories, append([]api.Message(nil), history...))
 	if m.callCount >= len(m.responses) {
 		return compressionSummaryResponseForHistory(history, m.responses[len(m.responses)-1]), nil
 	}

@@ -40,6 +40,7 @@ type agentRequestState struct {
 	requestCtx                           context.Context
 	requestPromptCancelCtx               context.Context
 	lastCancelReason                     string
+	runtimeDirectives                    []string
 	strReplaceErrorCount                 int
 	tokenLimitRetryCount                 int
 	autoCompressUnknownContextWarningKey string

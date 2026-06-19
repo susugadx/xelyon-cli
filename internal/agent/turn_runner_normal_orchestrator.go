@@ -3,7 +3,6 @@ package agent
 import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/turnsupport"
 )
@@ -60,7 +59,7 @@ func (o *normalModeTurnOrchestrator) Run() error {
 func (o *normalModeTurnOrchestrator) appendNormalModeInputToHistory() {
 	o.runner.agent.History = append(o.runner.agent.History, api.Message{
 		Role:    "user",
-		Content: o.input + promptnormal.NormalModePrompt,
+		Content: o.input,
 	})
 }
 

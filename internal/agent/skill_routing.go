@@ -210,8 +210,14 @@ func (a *Agent) recordSkillActivation(name string) {
 }
 
 func (a *Agent) normalModeSystemPromptForRequest(ctx context.Context, taskText string, recordUsage bool) string {
+	return a.normalModeSystemPromptForRequestWithDirectives(ctx, taskText, recordUsage, a.pendingRuntimeDirectives())
+}
+
+func (a *Agent) normalModeSystemPromptForRequestWithDirectives(ctx context.Context, taskText string, recordUsage bool, runtimeDirectives []string) string {
 	effectivePrompt := prompt.StripPlanningReferences(a.SystemPrompt)
-	return a.injectSkillRouterRuntimeHintWithOptions(ctx, effectivePrompt, taskText, skillRouterInputOptions{command: "chat"}, recordUsage)
+	effectivePrompt = a.injectSkillRouterRuntimeHintWithOptions(ctx, effectivePrompt, taskText, skillRouterInputOptions{command: "chat"}, recordUsage)
+	directives := append([]string{normalModeBaseRuntimeDirective}, runtimeDirectives...)
+	return appendRuntimeDirectivesToSystemPrompt(effectivePrompt, directives...)
 }
 
 func (a *Agent) planModeSystemPromptForInvestigationRequest(ctx context.Context, taskText string, recordUsage bool) string {

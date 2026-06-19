@@ -273,6 +273,6 @@ func (r *planInvestigationRunner) shouldAbortToolLoop(tc *tools.ToolCall) bool {
 func (r *planInvestigationRunner) rejectTool(tc *tools.ToolCall) {
 	r.agent.History = append(r.agent.History, api.Message{
 		Role:    "user",
-		Content: fmt.Sprintf("[SYSTEM] Tool '%s' is not allowed in investigation phase. Please only use read-only tools.", tc.Tool),
+		Content: fmt.Sprintf("Tool %q is not allowed in investigation phase. Please only use read-only tools.", tc.Tool),
 	})
 }

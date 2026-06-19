@@ -292,6 +292,34 @@ func TestNormalModeRequestResponsePromptFingerprintGate(t *testing.T) {
 			t.Fatalf("responseID at call = %q, want cleared", provider.responseIDsAtCall[0])
 		}
 	})
+
+	t.Run("runtime directive changes effective prompt and clears response chain", func(t *testing.T) {
+		var out bytes.Buffer
+		provider := &responsePromptRequestProbe{responseID: "resp_saved"}
+		agent := newChatRequestTestAgent(t, provider, &out)
+		agent.cfg().Skills.Router.Activation = config.SkillsRouterActivationOff
+		task := "next request"
+
+		agent.recordResponseContextForPrompt(agent.normalModeSystemPromptForRequest(context.Background(), task, true))
+		agent.syncSavedResponseContextFromProvider()
+		agent.queueRuntimeDirective(finalCheckFailureRuntimeDirective)
+
+		if _, err := newTurnRunner(agent, context.Background()).requestNormalModeResponse(task, nil, 0); err != nil {
+			t.Fatalf("requestNormalModeResponse() error = %v", err)
+		}
+		if len(provider.contexts) != 1 {
+			t.Fatalf("provider call count = %d, want 1", len(provider.contexts))
+		}
+		if !strings.Contains(provider.systemPrompts[0], finalCheckFailureRuntimeDirective) {
+			t.Fatalf("system prompt = %q, want runtime directive", provider.systemPrompts[0])
+		}
+		if !api.ResponseIDChainDisabledFromContext(provider.contexts[0]) {
+			t.Fatal("response chain disabled = false, want true for runtime directive prompt change")
+		}
+		if provider.responseIDsAtCall[0] != "" {
+			t.Fatalf("responseID at call = %q, want cleared", provider.responseIDsAtCall[0])
+		}
+	})
 }
 
 func TestAzureProviderIdentityAndResponseIDContract(t *testing.T) {

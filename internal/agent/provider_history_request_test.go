@@ -50,8 +50,11 @@ func TestNormalModeRequestUsesProviderFacingHistoryClone(t *testing.T) {
 	if provider.capturedHistory[2].Content != "previous assistant" {
 		t.Fatalf("provider previous assistant content = %q, want previous assistant", provider.capturedHistory[2].Content)
 	}
-	if !strings.Contains(provider.capturedHistory[3].Content, "next request") {
-		t.Fatalf("provider current user content = %q, want current request", provider.capturedHistory[3].Content)
+	if provider.capturedHistory[3].Content != "next request" {
+		t.Fatalf("provider current user content = %q, want raw current request", provider.capturedHistory[3].Content)
+	}
+	if strings.Contains(provider.capturedHistory[3].Content, "[NORMAL MODE]") {
+		t.Fatalf("provider current user content should not contain normal-mode suffix: %q", provider.capturedHistory[3].Content)
 	}
 	if agent.History[0].Content != "previous assistant" {
 		t.Fatalf("Agent.History[0].Content = %q, want previous assistant", agent.History[0].Content)
@@ -93,8 +96,11 @@ func TestImageRequestUsesProjectedPastHistoryAndCurrentPrompt(t *testing.T) {
 	if provider.capturedHistory[2].Content != "previous image context" {
 		t.Fatalf("image provider history[2] = %q, want previous image context", provider.capturedHistory[2].Content)
 	}
-	if !strings.Contains(provider.imageUserMessage, "describe image") || !strings.Contains(provider.imageUserMessage, "[NORMAL MODE]") {
-		t.Fatalf("image userMessage = %q, want current prompt with normal-mode directive", provider.imageUserMessage)
+	if provider.imageUserMessage != "describe image" {
+		t.Fatalf("image userMessage = %q, want raw current prompt", provider.imageUserMessage)
+	}
+	if strings.Contains(provider.imageUserMessage, "[NORMAL MODE]") {
+		t.Fatalf("image userMessage should not contain normal-mode suffix: %q", provider.imageUserMessage)
 	}
 	if agent.History[1].Content != "old image-history read_file result" {
 		t.Fatalf("Agent.History[1].Content = %q, want old image-history read_file result", agent.History[1].Content)
