@@ -4,35 +4,57 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func selectConfigCategory(t *testing.T, m *Model, categoryName string) {
 	t.Helper()
-	cs := configTestScreen(t, *m)
-	for i, cat := range cs.categories {
-		if cat.Name == categoryName {
-			cs.catIndex = i
-			cs.fieldIndex = 0
-			cs.fieldScroll = 0
-			return
+	for configSnapshot(t, *m).activePane != paneCategory {
+		*m = sendConfigKey(*m, "left")
+	}
+	snapshot := configTestScreen(t, *m).Snapshot()
+	target := -1
+	for i, name := range snapshot.CategoryNames {
+		if name == categoryName {
+			target = i
+			break
 		}
 	}
-	t.Fatalf("category %q not found", categoryName)
+	if target < 0 {
+		t.Fatalf("category %q not found", categoryName)
+	}
+	for configSnapshot(t, *m).categoryIndex < target {
+		*m = sendConfigKey(*m, "down")
+	}
+	for configSnapshot(t, *m).categoryIndex > target {
+		*m = sendConfigKey(*m, "up")
+	}
 }
 
 func selectConfigField(t *testing.T, m *Model, categoryName, fieldPath string) {
 	t.Helper()
 	selectConfigCategory(t, m, categoryName)
 
-	cs := configTestScreen(t, *m)
-	cs.activePane = paneField
-	for i, f := range cs.filteredFields() {
+	if configSnapshot(t, *m).activePane == paneCategory {
+		*m = sendConfigKey(*m, "right")
+	}
+	fields := configTestScreen(t, *m).Snapshot().FilteredFields
+	target := -1
+	for i, f := range fields {
 		if f.Path == fieldPath {
-			cs.fieldIndex = i
-			cs.fieldScroll = 0
-			return
+			target = i
+			break
 		}
+	}
+	if target >= 0 {
+		for configSnapshot(t, *m).fieldIndex < target {
+			*m = sendConfigKey(*m, "down")
+		}
+		for configSnapshot(t, *m).fieldIndex > target {
+			*m = sendConfigKey(*m, "up")
+		}
+		return
 	}
 	t.Fatalf("field %q not found in category %q", fieldPath, categoryName)
 }
@@ -54,7 +76,7 @@ func configCategoryForFieldPath(fieldPath string) string {
 
 func selectedConfigField(t *testing.T, m Model) config.ConfigField {
 	t.Helper()
-	field := configTestScreen(t, m).selectedField()
+	field := configTestScreen(t, m).Snapshot().SelectedField
 	if field == nil {
 		t.Fatal("selectedField is nil")
 	}
@@ -87,17 +109,26 @@ func openConfigSliceEditor(t *testing.T, m *Model, categoryName, fieldPath strin
 
 func setConfigInputValue(t *testing.T, m *Model, value string) {
 	t.Helper()
-	configTestScreen(t, *m).editInput.SetValue(value)
+	*m = sendConfigKeyMsg(*m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	if value != "" {
+		*m = sendConfigKeyMsg(*m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(value)})
+	}
 }
 
 func setConfigSliceInputValue(t *testing.T, m *Model, value string) {
 	t.Helper()
-	configTestScreen(t, *m).editSliceInput.SetValue(value)
+	*m = sendConfigKeyMsg(*m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	if value != "" {
+		*m = sendConfigKeyMsg(*m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(value)})
+	}
 }
 
 func setConfigStructInputValue(t *testing.T, m *Model, value string) {
 	t.Helper()
-	configTestScreen(t, *m).editStructInput.SetValue(value)
+	*m = sendConfigKeyMsg(*m, tea.KeyMsg{Type: tea.KeyCtrlU})
+	if value != "" {
+		*m = sendConfigKeyMsg(*m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(value)})
+	}
 }
 
 func selectConfigOption(t *testing.T, m Model, categoryName, fieldPath, option string) Model {
@@ -106,10 +137,17 @@ func selectConfigOption(t *testing.T, m Model, categoryName, fieldPath, option s
 	openConfigSelectEditor(t, &m, categoryName, fieldPath)
 	field := selectedConfigField(t, m)
 
-	cs := configTestScreen(t, m)
+	snapshot := configTestScreen(t, m).Snapshot()
 	for i, candidate := range field.Options {
 		if candidate == option {
-			cs.editSelect = i
+			for snapshot.EditSelect < i {
+				m = sendConfigKey(m, "down")
+				snapshot = configTestScreen(t, m).Snapshot()
+			}
+			for snapshot.EditSelect > i {
+				m = sendConfigKey(m, "up")
+				snapshot = configTestScreen(t, m).Snapshot()
+			}
 			return sendConfigKey(m, "enter")
 		}
 	}

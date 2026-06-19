@@ -11,20 +11,20 @@ func TestConfigScreen_SliceEdit(t *testing.T) {
 
 	m = sendConfigKey(m, "a")
 	cs := configTestScreen(t, m)
-	if !cs.editSliceAdding {
+	if !cs.Snapshot().EditSliceAdding {
 		t.Fatal("editSliceAdding should be true")
 	}
 
 	m = sendConfigKey(m, "esc")
 	cs = configTestScreen(t, m)
-	if cs.editSliceAdding {
+	if cs.Snapshot().EditSliceAdding {
 		t.Fatal("editSliceAdding should be false after esc")
 	}
 
 	m = sendConfigKey(m, "esc")
 	cs = configTestScreen(t, m)
-	if cs.editMode != editNone {
-		t.Fatalf("editMode after esc = %d, want editNone", cs.editMode)
+	if got := cs.Snapshot().EditMode; got != editNone {
+		t.Fatalf("editMode after esc = %d, want editNone", got)
 	}
 }
 
@@ -34,8 +34,9 @@ func TestConfigScreen_AgentInstructionProjectFilesChooser(t *testing.T) {
 
 	m = sendConfigKey(m, "enter")
 	cs := configTestScreen(t, m)
-	if cs.editMode != editSlice || len(cs.editGuidanceChoices) == 0 {
-		t.Fatalf("guidance chooser not opened: editMode=%d choices=%#v", cs.editMode, cs.editGuidanceChoices)
+	snapshot := cs.Snapshot()
+	if snapshot.EditMode != editSlice || len(snapshot.EditGuidanceChoices) == 0 {
+		t.Fatalf("guidance chooser not opened: editMode=%d choices=%#v", snapshot.EditMode, snapshot.EditGuidanceChoices)
 	}
 
 	m = sendConfigKey(m, " ")
@@ -43,7 +44,7 @@ func TestConfigScreen_AgentInstructionProjectFilesChooser(t *testing.T) {
 	m = sendConfigKey(m, " ")
 	m = sendConfigKey(m, "esc")
 
-	got := m.configScreen.cfg.AgentInstructions.Project.Files
+	got := m.configScreen.ConfigSnapshot().AgentInstructions.Project.Files
 	want := []string{"CLAUDE.md"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("project files = %#v, want %#v", got, want)
@@ -56,15 +57,16 @@ func TestConfigScreen_AgentInstructionGlobalFilesChooserAllowsCodexAsset(t *test
 
 	m = sendConfigKey(m, "enter")
 	cs := configTestScreen(t, m)
-	if cs.editMode != editSlice || len(cs.editGuidanceChoices) == 0 {
-		t.Fatalf("guidance chooser not opened: editMode=%d choices=%#v", cs.editMode, cs.editGuidanceChoices)
+	snapshot := cs.Snapshot()
+	if snapshot.EditMode != editSlice || len(snapshot.EditGuidanceChoices) == 0 {
+		t.Fatalf("guidance chooser not opened: editMode=%d choices=%#v", snapshot.EditMode, snapshot.EditGuidanceChoices)
 	}
 
 	m = sendConfigKey(m, "down")
 	m = sendConfigKey(m, " ")
 	m = sendConfigKey(m, "esc")
 
-	got := m.configScreen.cfg.AgentInstructions.Global.Files
+	got := m.configScreen.ConfigSnapshot().AgentInstructions.Global.Files
 	want := []string{"~/.xelyon/AGENTS.md", "~/.codex/AGENTS.md"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("global files = %#v, want %#v", got, want)

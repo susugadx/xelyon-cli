@@ -82,7 +82,7 @@ func TestConfigScreen_FieldScroll_FollowsCursor(t *testing.T) {
 	m = sendConfigKey(m, "enter")
 
 	cs := configTestScreen(t, m)
-	fields := cs.filteredFields()
+	fields := cs.Snapshot().FilteredFields
 	if len(fields) < 2 {
 		t.Skipf("final_checks category has %d fields, need >=2 for scroll test", len(fields))
 	}

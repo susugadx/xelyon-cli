@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 func attachTemporaryClipboardImage(t *testing.T, m *Model) string {
@@ -21,9 +22,9 @@ func attachTemporaryClipboardImage(t *testing.T, m *Model) string {
 	if err := os.WriteFile(imagePath, []byte("png"), 0644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", imagePath, err)
 	}
-	if ok := m.appendAttachment(composerAttachment{
-		Kind:   composerAttachmentImage,
-		Source: composerAttachmentSourceClipboardImage,
+	if ok := m.appendAttachment(tuiattachments.Attachment{
+		Kind:   tuiattachments.KindImage,
+		Source: tuiattachments.SourceClipboardImage,
 		Path:   imagePath,
 	}); !ok {
 		t.Fatal("appendAttachment() = false, want true")

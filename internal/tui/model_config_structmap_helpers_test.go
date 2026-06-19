@@ -20,10 +20,10 @@ func enterStructMapEdit(t *testing.T, path string) Model {
 
 func selectConfigStructMapKey(t *testing.T, m *Model, key string) {
 	t.Helper()
-	cs := configTestScreen(t, *m)
-	for i, candidate := range cs.editStructKeys {
+	snapshot := configTestScreen(t, *m).Snapshot()
+	for i, candidate := range snapshot.EditStructKeys {
 		if candidate == key {
-			cs.editStructIndex = i
+			selectConfigStructMapKeyIndex(t, m, i)
 			return
 		}
 	}
@@ -32,12 +32,19 @@ func selectConfigStructMapKey(t *testing.T, m *Model, key string) {
 
 func selectConfigStructMapKeyIndex(t *testing.T, m *Model, index int) string {
 	t.Helper()
-	cs := configTestScreen(t, *m)
-	if index < 0 || index >= len(cs.editStructKeys) {
-		t.Fatalf("editStructIndex %d out of range for %d keys", index, len(cs.editStructKeys))
+	snapshot := configTestScreen(t, *m).Snapshot()
+	if index < 0 || index >= len(snapshot.EditStructKeys) {
+		t.Fatalf("editStructIndex %d out of range for %d keys", index, len(snapshot.EditStructKeys))
 	}
-	cs.editStructIndex = index
-	return cs.editStructKeys[index]
+	for snapshot.EditStructIndex < index {
+		*m = sendConfigKey(*m, "down")
+		snapshot = configTestScreen(t, *m).Snapshot()
+	}
+	for snapshot.EditStructIndex > index {
+		*m = sendConfigKey(*m, "up")
+		snapshot = configTestScreen(t, *m).Snapshot()
+	}
+	return snapshot.EditStructKeys[index]
 }
 
 func enterStructMapEntryForKey(t *testing.T, path, key string) Model {
@@ -46,22 +53,29 @@ func enterStructMapEntryForKey(t *testing.T, path, key string) Model {
 	selectConfigStructMapKey(t, &m, key)
 
 	m = sendConfigKey(m, "enter")
-	cs := configTestScreen(t, m)
-	if !cs.editEntryActive {
+	snapshot := configTestScreen(t, m).Snapshot()
+	if !snapshot.EditEntryActive {
 		t.Fatalf("editEntryActive should be true for key %q", key)
 	}
-	if cs.editEntryKey != key {
-		t.Fatalf("editEntryKey = %q, want %q", cs.editEntryKey, key)
+	if snapshot.EditEntryKey != key {
+		t.Fatalf("editEntryKey = %q, want %q", snapshot.EditEntryKey, key)
 	}
 	return m
 }
 
 func selectConfigEntryField(t *testing.T, m *Model, name string) int {
 	t.Helper()
-	cs := configTestScreen(t, *m)
-	for i, ef := range cs.editEntryFields {
+	snapshot := configTestScreen(t, *m).Snapshot()
+	for i, ef := range snapshot.EditEntryFields {
 		if ef.Name == name {
-			cs.editEntryIndex = i
+			for snapshot.EditEntryIndex < i {
+				*m = sendConfigKey(*m, "down")
+				snapshot = configTestScreen(t, *m).Snapshot()
+			}
+			for snapshot.EditEntryIndex > i {
+				*m = sendConfigKey(*m, "up")
+				snapshot = configTestScreen(t, *m).Snapshot()
+			}
 			return i
 		}
 	}

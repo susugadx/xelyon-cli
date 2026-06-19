@@ -2,43 +2,10 @@ package tui
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
-)
 
-type composerAttachmentKind int
-
-const (
-	composerAttachmentFile composerAttachmentKind = iota
-	composerAttachmentImage
-)
-
-type composerAttachmentSource int
-
-const (
-	composerAttachmentSourceUnknown composerAttachmentSource = iota
-	composerAttachmentSourceDroppedPath
-	composerAttachmentSourceClipboardImage
-	composerAttachmentSourceCommand
-)
-
-type composerAttachment struct {
-	Kind   composerAttachmentKind
-	Source composerAttachmentSource
-	Path   string
-	Size   int64
-}
-
-const maxComposerAttachments = 12
-
-type appendAttachmentResult int
-
-const (
-	appendAttachmentAdded appendAttachmentResult = iota
-	appendAttachmentRejectedEmptyPath
-	appendAttachmentRejectedDuplicate
-	appendAttachmentRejectedLimit
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 type addAttachmentFromPathStatus int
@@ -54,7 +21,7 @@ const (
 
 type addAttachmentFromPathResult struct {
 	status     addAttachmentFromPathStatus
-	attachment composerAttachment
+	attachment tuiattachments.Attachment
 	err        error
 }
 
@@ -65,21 +32,6 @@ const (
 	attachmentAddDisplayClipboardImage
 )
 
-func (a composerAttachment) basename() string {
-	base := filepath.Base(a.Path)
-	if base == "." || base == string(filepath.Separator) {
-		return a.Path
-	}
-	return base
-}
-
-func (a composerAttachment) kindLabel() string {
-	if a.Kind == composerAttachmentImage {
-		return "image"
-	}
-	return "file"
-}
-
 func (m *Model) clearAttachments() {
 	for _, att := range m.attachments {
 		cleanupTemporaryAttachment(att)
@@ -87,12 +39,12 @@ func (m *Model) clearAttachments() {
 	m.attachments = nil
 }
 
-func (m *Model) detachAttachmentsWithoutCleanup() []composerAttachment {
+func (m *Model) detachAttachmentsWithoutCleanup() []tuiattachments.Attachment {
 	if len(m.attachments) == 0 {
 		return nil
 	}
 
-	out := make([]composerAttachment, len(m.attachments))
+	out := make([]tuiattachments.Attachment, len(m.attachments))
 	copy(out, m.attachments)
 	m.attachments = nil
 	return out
@@ -102,46 +54,33 @@ func (m Model) hasAttachments() bool {
 	return len(m.attachments) > 0
 }
 
-func (m Model) attachmentSnapshot() []composerAttachment {
+func (m Model) attachmentSnapshot() []tuiattachments.Attachment {
 	if len(m.attachments) == 0 {
 		return nil
 	}
-	out := make([]composerAttachment, len(m.attachments))
+	out := make([]tuiattachments.Attachment, len(m.attachments))
 	copy(out, m.attachments)
 	return out
 }
 
 func (m Model) attachmentLimit() int {
-	return maxComposerAttachments
+	return tuiattachments.MaxComposerAttachments
 }
 
-func (m Model) hasAttachmentCapacity() bool {
-	return len(m.attachments) < m.attachmentLimit()
+func (m *Model) appendAttachment(att tuiattachments.Attachment) bool {
+	return m.appendAttachmentWithResult(att) == tuiattachments.AppendAdded
 }
 
-func (m *Model) appendAttachment(att composerAttachment) bool {
-	return m.appendAttachmentWithResult(att) == appendAttachmentAdded
-}
-
-func (m *Model) appendAttachmentWithResult(att composerAttachment) appendAttachmentResult {
-	path := strings.TrimSpace(att.Path)
-	if path == "" {
-		return appendAttachmentRejectedEmptyPath
+func (m *Model) appendAttachmentWithResult(att tuiattachments.Attachment) tuiattachments.AppendResult {
+	prepared, result := tuiattachments.PrepareAppend(m.attachments, att, m.attachmentLimit())
+	if result != tuiattachments.AppendAdded {
+		return result
 	}
-	att.Path = path
-	for _, existing := range m.attachments {
-		if existing.Path == att.Path {
-			return appendAttachmentRejectedDuplicate
-		}
-	}
-	if !m.hasAttachmentCapacity() {
-		return appendAttachmentRejectedLimit
-	}
-	m.attachments = append(m.attachments, att)
-	return appendAttachmentAdded
+	m.attachments = append(m.attachments, prepared)
+	return result
 }
 
-func (m *Model) addAttachmentFromPath(path string, source composerAttachmentSource) addAttachmentFromPathResult {
+func (m *Model) addAttachmentFromPath(path string, source tuiattachments.Source) addAttachmentFromPathResult {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return addAttachmentFromPathResult{status: addAttachmentFromPathEmptyPath}
@@ -155,22 +94,22 @@ func (m *Model) addAttachmentFromPath(path string, source composerAttachmentSour
 		return addAttachmentFromPathResult{status: addAttachmentFromPathDirectory}
 	}
 
-	kind := composerAttachmentFile
+	kind := tuiattachments.KindFile
 	if isImageAttachmentPath(path) {
-		kind = composerAttachmentImage
+		kind = tuiattachments.KindImage
 	}
-	att := composerAttachment{
+	att := tuiattachments.Attachment{
 		Kind:   kind,
 		Source: source,
 		Path:   path,
 		Size:   info.Size(),
 	}
 	switch m.appendAttachmentWithResult(att) {
-	case appendAttachmentAdded:
+	case tuiattachments.AppendAdded:
 		return addAttachmentFromPathResult{status: addAttachmentFromPathAdded, attachment: att}
-	case appendAttachmentRejectedDuplicate:
+	case tuiattachments.AppendRejectedDuplicate:
 		return addAttachmentFromPathResult{status: addAttachmentFromPathDuplicate, attachment: att}
-	case appendAttachmentRejectedLimit:
+	case tuiattachments.AppendRejectedLimit:
 		return addAttachmentFromPathResult{status: addAttachmentFromPathLimit, attachment: att}
 	default:
 		return addAttachmentFromPathResult{status: addAttachmentFromPathEmptyPath}

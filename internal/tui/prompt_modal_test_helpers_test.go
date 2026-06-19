@@ -4,7 +4,13 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/promptmodal"
 	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+)
+
+const (
+	promptModalChoice = promptmodal.ModeChoice
+	promptModalText   = promptmodal.ModeText
 )
 
 func newPromptTestModel(req uiprompt.PromptRequest, ch chan uiprompt.PromptResponse) Model {

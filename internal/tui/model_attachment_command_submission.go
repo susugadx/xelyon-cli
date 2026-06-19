@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
@@ -61,7 +62,7 @@ func (m *Model) handleAttachCommand(command slash.Command) {
 		return
 	}
 
-	added := m.addAttachmentFromPath(normalized.path, composerAttachmentSourceCommand)
+	added := m.addAttachmentFromPath(normalized.path, tuiattachments.SourceCommand)
 	m.presentAttachmentAddResult(added, attachmentAddDisplayCommand, "")
 }
 
@@ -87,7 +88,7 @@ func (m *Model) handleDetachCommand(command slash.Command) {
 		return
 	}
 
-	m.setTransientStatus(fmt.Sprintf("Detached %s %s (#%d)", removed.kindLabel(), removed.basename(), index))
+	m.setTransientStatus(fmt.Sprintf("Detached %s %s (#%d)", removed.KindLabel(), removed.Basename(), index))
 }
 
 func (m *Model) handleDetachAllCommand(command slash.Command) {

@@ -7,20 +7,17 @@ import (
 )
 
 func TestConfigScreen_ResetToDefault(t *testing.T) {
-	m := newConfigTestModel()
-	selectConfigField(t, &m, "compression", "compression.trigger_percent")
-
-	cs := configTestScreen(t, m)
-	if err := config.SetFieldValue(cs.cfg, "compression.trigger_percent", 50); err != nil {
+	cfg := config.DefaultConfig()
+	if err := config.SetFieldValue(cfg, "compression.trigger_percent", 50); err != nil {
 		t.Fatalf("SetFieldValue failed: %v", err)
 	}
-	setConfigDirtyForTest(t, &m, true)
-	cs.refreshCategories()
+	m := newConfigTestModelWithConfig(cfg)
+	selectConfigField(t, &m, "compression", "compression.trigger_percent")
 
 	m = sendConfigKey(m, "r")
-	cs = configTestScreen(t, m)
+	cs := configTestScreen(t, m)
 
-	val, _ := config.GetFieldValue(cs.cfg, "compression.trigger_percent")
+	val, _ := config.GetFieldValue(cs.ConfigSnapshot(), "compression.trigger_percent")
 	defCfg := config.DefaultConfig()
 	defVal, _ := config.GetFieldValue(defCfg, "compression.trigger_percent")
 	if val != defVal {
@@ -34,13 +31,13 @@ func TestConfigScreen_FilterFields(t *testing.T) {
 
 	m = sendConfigKey(m, "/")
 	cs := configTestScreen(t, m)
-	if !cs.filterMode {
+	if !cs.Snapshot().FilterMode {
 		t.Fatal("filterMode should be true")
 	}
 
 	m = sendConfigKey(m, "esc")
 	cs = m.configScreen
-	if cs.filterMode {
+	if cs.Snapshot().FilterMode {
 		t.Fatal("filterMode should be false after esc")
 	}
 }

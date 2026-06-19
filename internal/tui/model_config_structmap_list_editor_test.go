@@ -7,14 +7,14 @@ func TestConfigScreen_StructMapEdit(t *testing.T) {
 	enterConfigStructMapEdit(t, &m, "lsp.servers")
 
 	cs := configTestScreen(t, m)
-	if len(cs.editStructKeys) == 0 {
+	if len(cs.Snapshot().EditStructKeys) == 0 {
 		t.Fatal("editStructKeys should not be empty for lsp.servers")
 	}
 
 	m = sendConfigKey(m, "esc")
 	cs = m.configScreen
-	if cs.editMode != editNone {
-		t.Fatalf("editMode after esc = %d, want editNone", cs.editMode)
+	if got := cs.Snapshot().EditMode; got != editNone {
+		t.Fatalf("editMode after esc = %d, want editNone", got)
 	}
 }
 
@@ -23,7 +23,7 @@ func TestConfigScreen_LSPServersEdit(t *testing.T) {
 	enterConfigStructMapEdit(t, &m, "lsp.servers")
 
 	cs := configTestScreen(t, m)
-	if len(cs.editStructKeys) == 0 {
+	if len(cs.Snapshot().EditStructKeys) == 0 {
 		t.Fatal("editStructKeys should not be empty for lsp.servers")
 	}
 }
@@ -33,7 +33,7 @@ func TestConfigScreen_StructMapOrder_LSPServers(t *testing.T) {
 	enterConfigStructMapEdit(t, &m, "lsp.servers")
 
 	cs := configTestScreen(t, m)
-	keys := cs.editStructKeys
+	keys := cs.Snapshot().EditStructKeys
 	if len(keys) < 5 {
 		t.Fatalf("expected many LSP server keys, got %d", len(keys))
 	}
@@ -47,14 +47,15 @@ func TestConfigScreen_StructMapOrder_LSPServers(t *testing.T) {
 	selectConfigStructMapKeyIndex(t, &m, 2)
 	m = sendConfigKey(m, "d")
 	cs = configTestScreen(t, m)
+	keys = cs.Snapshot().EditStructKeys
 
-	for _, k := range cs.editStructKeys {
+	for _, k := range keys {
 		if k == target {
 			t.Fatalf("key %q at index 2 should have been deleted", target)
 		}
 	}
-	for i := 1; i < len(cs.editStructKeys); i++ {
-		if cs.editStructKeys[i] < cs.editStructKeys[i-1] {
+	for i := 1; i < len(keys); i++ {
+		if keys[i] < keys[i-1] {
 			t.Fatalf("keys not sorted after delete")
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
 )
 
@@ -62,7 +63,7 @@ func (m *Model) tryAttachClipboardImage() bool {
 	}
 
 	m.switchToComposerInput()
-	added := m.addAttachmentFromPath(path, composerAttachmentSourceClipboardImage)
+	added := m.addAttachmentFromPath(path, tuiattachments.SourceClipboardImage)
 	m.presentAttachmentAddResult(added, attachmentAddDisplayClipboardImage, path)
 	return true
 }

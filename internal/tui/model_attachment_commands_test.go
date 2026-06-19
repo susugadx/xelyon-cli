@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 func TestComposer_AttachCommandAddsAttachment(t *testing.T) {
@@ -28,7 +29,7 @@ func TestComposer_AttachCommandAddsAttachment(t *testing.T) {
 	if got := len(m.attachments); got != 1 {
 		t.Fatalf("attachments length = %d, want 1", got)
 	}
-	if got := m.attachments[0].Source; got != composerAttachmentSourceCommand {
+	if got := m.attachments[0].Source; got != tuiattachments.SourceCommand {
 		t.Fatalf("attachments[0].Source = %v, want command source", got)
 	}
 	if got := m.attachments[0].Path; got != filePath {
@@ -69,7 +70,7 @@ func TestComposer_AttachCommandRespectsAttachmentLimit(t *testing.T) {
 	m := newModelWithViewport(agent)
 	dir := t.TempDir()
 
-	fillDroppedFileAttachments(t, &m, dir, maxComposerAttachments)
+	fillDroppedFileAttachments(t, &m, dir, tuiattachments.MaxComposerAttachments)
 
 	extra := writeTempFile(t, dir, "extra.txt", []byte("x"))
 	m.textInput.SetValue("/attach " + extra)
@@ -80,13 +81,13 @@ func TestComposer_AttachCommandRespectsAttachmentLimit(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("/attach limit error should be handled locally, got cmd=%v", cmd)
 	}
-	if got := len(m.attachments); got != maxComposerAttachments {
-		t.Fatalf("attachments length = %d, want %d", got, maxComposerAttachments)
+	if got := len(m.attachments); got != tuiattachments.MaxComposerAttachments {
+		t.Fatalf("attachments length = %d, want %d", got, tuiattachments.MaxComposerAttachments)
 	}
 	if got := agent.lastChatInput(); got != "" {
 		t.Fatalf("lastChatInput() = %q, want empty", got)
 	}
-	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", maxComposerAttachments)
+	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", tuiattachments.MaxComposerAttachments)
 	assertTransientStatus(t, m, wantStatus)
 }
 
@@ -134,9 +135,9 @@ func TestComposer_UnhandledMalformedSlashFallbackExcludesAttachments(t *testing.
 
 	dir := t.TempDir()
 	filePath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
-	if ok := m.appendAttachment(composerAttachment{
-		Kind:   composerAttachmentFile,
-		Source: composerAttachmentSourceDroppedPath,
+	if ok := m.appendAttachment(tuiattachments.Attachment{
+		Kind:   tuiattachments.KindFile,
+		Source: tuiattachments.SourceDroppedPath,
 		Path:   filePath,
 		Size:   5,
 	}); !ok {
@@ -167,15 +168,15 @@ func TestComposer_DetachCommandRemovesAttachmentByIndex(t *testing.T) {
 	dir := t.TempDir()
 	first := writeTempFile(t, dir, "a.txt", []byte("a"))
 	second := writeTempFile(t, dir, "b.txt", []byte("b"))
-	m.appendAttachment(composerAttachment{
-		Kind:   composerAttachmentFile,
-		Source: composerAttachmentSourceDroppedPath,
+	m.appendAttachment(tuiattachments.Attachment{
+		Kind:   tuiattachments.KindFile,
+		Source: tuiattachments.SourceDroppedPath,
 		Path:   first,
 		Size:   1,
 	})
-	m.appendAttachment(composerAttachment{
-		Kind:   composerAttachmentFile,
-		Source: composerAttachmentSourceDroppedPath,
+	m.appendAttachment(tuiattachments.Attachment{
+		Kind:   tuiattachments.KindFile,
+		Source: tuiattachments.SourceDroppedPath,
 		Path:   second,
 		Size:   1,
 	})
@@ -228,9 +229,9 @@ func TestComposer_DetachAllCommandRemovesClipboardTempAttachment(t *testing.T) {
 	if err := os.WriteFile(imagePath, []byte("png"), 0644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", imagePath, err)
 	}
-	if ok := m.appendAttachment(composerAttachment{
-		Kind:   composerAttachmentImage,
-		Source: composerAttachmentSourceClipboardImage,
+	if ok := m.appendAttachment(tuiattachments.Attachment{
+		Kind:   tuiattachments.KindImage,
+		Source: tuiattachments.SourceClipboardImage,
 		Path:   imagePath,
 	}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
@@ -257,9 +258,9 @@ func TestComposer_DetachAllCommandInvalidUsageDoesNotFallbackToChat(t *testing.T
 
 	dir := t.TempDir()
 	filePath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
-	if ok := m.appendAttachment(composerAttachment{
-		Kind:   composerAttachmentFile,
-		Source: composerAttachmentSourceDroppedPath,
+	if ok := m.appendAttachment(tuiattachments.Attachment{
+		Kind:   tuiattachments.KindFile,
+		Source: tuiattachments.SourceDroppedPath,
 		Path:   filePath,
 		Size:   5,
 	}); !ok {

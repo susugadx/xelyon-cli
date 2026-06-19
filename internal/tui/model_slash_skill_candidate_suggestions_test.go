@@ -32,13 +32,13 @@ func TestSlashSuggestions_ShowSkillNameCandidatesWithDescriptions(t *testing.T) 
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills show ")
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("skill name suggestions should be visible")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 2 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 2 {
 		t.Fatalf("skill suggestions len = %d, want 2", got)
 	}
-	suggestion := m.slashSuggestions.suggestions[0]
+	suggestion := m.slashSuggestions.Snapshot().Suggestions[0]
 	if suggestion.Label != "bug-investigation" || suggestion.InsertText != "/skills show bug-investigation" {
 		t.Fatalf("skill suggestion = %#v", suggestion)
 	}
@@ -81,7 +81,7 @@ func TestSlashSuggestions_SkillCandidateDetailSanitizesMultilineDescription(t *t
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills multi")
 
-	suggestion, ok := m.slashSuggestions.selectedSuggestion()
+	suggestion, ok := m.slashSuggestions.SelectedSuggestion()
 	if !ok {
 		t.Fatal("expected skill prompt suggestion")
 	}
@@ -114,7 +114,7 @@ func TestSlashSuggestions_SkillNameCandidateQuotesShowCommandArgument(t *testing
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills show my")
 
-	suggestion, ok := m.slashSuggestions.selectedSuggestion()
+	suggestion, ok := m.slashSuggestions.SelectedSuggestion()
 	if !ok {
 		t.Fatal("expected skill name suggestion")
 	}
@@ -193,25 +193,25 @@ func TestSlashSuggestions_SkillsPromptCandidatesAppearBeforeSubcommands(t *testi
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills ")
 
-	if got := len(m.slashSuggestions.suggestions); got != 7 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 7 {
 		t.Fatalf("skills suggestions len = %d, want 7", got)
 	}
 	if got := []string{
-		m.slashSuggestions.suggestions[0].Label,
-		m.slashSuggestions.suggestions[1].Label,
+		m.slashSuggestions.Snapshot().Suggestions[0].Label,
+		m.slashSuggestions.Snapshot().Suggestions[1].Label,
 	}; strings.Join(got, ",") != "bug-investigation,skill-creator" {
 		t.Fatalf("skill labels = %#v, want skill candidates first", got)
 	}
 	if got := []string{
-		m.slashSuggestions.suggestions[2].Label,
-		m.slashSuggestions.suggestions[3].Label,
-		m.slashSuggestions.suggestions[4].Label,
-		m.slashSuggestions.suggestions[5].Label,
-		m.slashSuggestions.suggestions[6].Label,
+		m.slashSuggestions.Snapshot().Suggestions[2].Label,
+		m.slashSuggestions.Snapshot().Suggestions[3].Label,
+		m.slashSuggestions.Snapshot().Suggestions[4].Label,
+		m.slashSuggestions.Snapshot().Suggestions[5].Label,
+		m.slashSuggestions.Snapshot().Suggestions[6].Label,
 	}; strings.Join(got, ",") != "overview,show <name>,suggest <text>,usage,doctor" {
 		t.Fatalf("subcommand labels = %#v, want overview/show/suggest/usage/doctor after skills", got)
 	}
-	suggestion := m.slashSuggestions.suggestions[0]
+	suggestion := m.slashSuggestions.Snapshot().Suggestions[0]
 	if suggestion.Label != "bug-investigation" || suggestion.InsertText != "Use the bug-investigation skill. " {
 		t.Fatalf("skill prompt suggestion = %#v", suggestion)
 	}
@@ -249,7 +249,7 @@ func TestSlashSuggestions_EnterOnSkillsSkillCandidatePastesReference(t *testing.
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills bug")
 
-	if suggestion, ok := m.slashSuggestions.selectedSuggestion(); !ok ||
+	if suggestion, ok := m.slashSuggestions.SelectedSuggestion(); !ok ||
 		suggestion.Label != "bug-investigation" ||
 		!suggestion.CompleteOnEnter {
 		t.Fatalf("selected suggestion = %#v, %v, want /skills skill prompt candidate", suggestion, ok)
@@ -264,7 +264,7 @@ func TestSlashSuggestions_EnterOnSkillsSkillCandidatePastesReference(t *testing.
 	if got := m.textInput.Value(); got != "Use the bug-investigation skill. " {
 		t.Fatalf("textInput after Enter = %q, want skill prompt reference", got)
 	}
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close after inserting skill prompt reference")
 	}
 	if got := len(agent.handledInputs); got != 0 {
@@ -288,7 +288,7 @@ func TestSlashSuggestions_EnterOnSkillsSkillCandidateSanitizesPromptReference(t 
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills safe")
 
-	if suggestion, ok := m.slashSuggestions.selectedSuggestion(); !ok ||
+	if suggestion, ok := m.slashSuggestions.SelectedSuggestion(); !ok ||
 		suggestion.Label != "safe\n- injected\tname\x00" ||
 		!suggestion.CompleteOnEnter {
 		t.Fatalf("selected suggestion = %#v, %v, want sanitized skill prompt candidate", suggestion, ok)

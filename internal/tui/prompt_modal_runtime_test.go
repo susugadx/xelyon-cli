@@ -154,15 +154,15 @@ func TestPromptModal_BackgroundScrollInputDoesNotMovePromptSelection(t *testing.
 	})
 	m = updated.(Model)
 	beforeOffset := m.vp.yOffset
-	beforeSelected := m.prompt.selected
+	beforeSelected := m.prompt.Snapshot().Selected
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 	m = updated.(Model)
 	if m.vp.yOffset >= beforeOffset {
 		t.Fatalf("PgUp should scroll background up, offset %d -> %d", beforeOffset, m.vp.yOffset)
 	}
-	if m.prompt.selected != beforeSelected {
-		t.Fatalf("prompt selected = %d, want unchanged %d after PgUp", m.prompt.selected, beforeSelected)
+	if m.prompt.Snapshot().Selected != beforeSelected {
+		t.Fatalf("prompt selected = %d, want unchanged %d after PgUp", m.prompt.Snapshot().Selected, beforeSelected)
 	}
 
 	offsetAfterPgUp := m.vp.yOffset
@@ -171,14 +171,14 @@ func TestPromptModal_BackgroundScrollInputDoesNotMovePromptSelection(t *testing.
 	if m.vp.yOffset <= offsetAfterPgUp {
 		t.Fatalf("wheel down should scroll background down, offset %d -> %d", offsetAfterPgUp, m.vp.yOffset)
 	}
-	if m.prompt.selected != beforeSelected {
-		t.Fatalf("prompt selected = %d, want unchanged %d after wheel", m.prompt.selected, beforeSelected)
+	if m.prompt.Snapshot().Selected != beforeSelected {
+		t.Fatalf("prompt selected = %d, want unchanged %d after wheel", m.prompt.Snapshot().Selected, beforeSelected)
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(Model)
-	if m.prompt.selected != beforeSelected+1 {
-		t.Fatalf("Down should still move prompt selection, selected=%d want %d", m.prompt.selected, beforeSelected+1)
+	if m.prompt.Snapshot().Selected != beforeSelected+1 {
+		t.Fatalf("Down should still move prompt selection, selected=%d want %d", m.prompt.Snapshot().Selected, beforeSelected+1)
 	}
 }
 

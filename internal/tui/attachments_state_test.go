@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 func TestComposer_ClearComposerRemovesTemporaryClipboardAttachment(t *testing.T) {
@@ -21,9 +23,9 @@ func TestComposer_ClearComposerRemovesTemporaryClipboardAttachment(t *testing.T)
 		t.Fatalf("WriteFile(%q) error = %v", imagePath, err)
 	}
 
-	if ok := m.appendAttachment(composerAttachment{
-		Kind:   composerAttachmentImage,
-		Source: composerAttachmentSourceClipboardImage,
+	if ok := m.appendAttachment(tuiattachments.Attachment{
+		Kind:   tuiattachments.KindImage,
+		Source: tuiattachments.SourceClipboardImage,
 		Path:   imagePath,
 	}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
@@ -43,8 +45,8 @@ func TestComposer_ClearComposerKeepsRegularFileAttachment(t *testing.T) {
 	dir := t.TempDir()
 	filePath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
 
-	if ok := m.appendAttachment(composerAttachment{
-		Kind: composerAttachmentFile,
+	if ok := m.appendAttachment(tuiattachments.Attachment{
+		Kind: tuiattachments.KindFile,
 		Path: filePath,
 	}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
@@ -64,9 +66,9 @@ func TestComposer_ClearComposerDoesNotRemoveDroppedClipboardNamedFile(t *testing
 	dir := t.TempDir()
 	filePath := writeTempFile(t, dir, clipboardAttachmentFileName, []byte("hello"))
 
-	if ok := m.appendAttachment(composerAttachment{
-		Kind:   composerAttachmentFile,
-		Source: composerAttachmentSourceDroppedPath,
+	if ok := m.appendAttachment(tuiattachments.Attachment{
+		Kind:   tuiattachments.KindFile,
+		Source: tuiattachments.SourceDroppedPath,
 		Path:   filePath,
 	}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
@@ -84,13 +86,13 @@ func TestComposer_AppendAttachmentRejectsWhenLimitReached(t *testing.T) {
 	m := newModelWithViewport(agent)
 	dir := t.TempDir()
 
-	fillDroppedFileAttachments(t, &m, dir, maxComposerAttachments)
+	fillDroppedFileAttachments(t, &m, dir, tuiattachments.MaxComposerAttachments)
 
 	extra := writeTempFile(t, dir, "extra.txt", []byte("x"))
-	if ok := m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: extra}); ok {
+	if ok := m.appendAttachment(tuiattachments.Attachment{Kind: tuiattachments.KindFile, Path: extra}); ok {
 		t.Fatal("appendAttachment() = true for 13th item, want false")
 	}
-	if got := len(m.attachments); got != maxComposerAttachments {
-		t.Fatalf("attachments length = %d, want %d", got, maxComposerAttachments)
+	if got := len(m.attachments); got != tuiattachments.MaxComposerAttachments {
+		t.Fatalf("attachments length = %d, want %d", got, tuiattachments.MaxComposerAttachments)
 	}
 }

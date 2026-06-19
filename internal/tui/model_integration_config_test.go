@@ -36,7 +36,7 @@ func TestTUIIntegration_ConfigCommandToggleSaveAndCloseFlow(t *testing.T) {
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	m = updated.(Model)
-	if !m.configScreen.dirty {
+	if !m.configScreen.Snapshot().Dirty {
 		t.Fatal("configScreen should become dirty after toggle")
 	}
 	afterField := selectedConfigField(t, m)
@@ -49,7 +49,7 @@ func TestTUIIntegration_ConfigCommandToggleSaveAndCloseFlow(t *testing.T) {
 	}
 
 	m = sendConfigKey(m, "q")
-	if !m.configScreen.confirmQuit {
+	if !m.configScreen.Snapshot().ConfirmQuit {
 		t.Fatal("confirmQuit should be shown for dirty config")
 	}
 
@@ -58,8 +58,8 @@ func TestTUIIntegration_ConfigCommandToggleSaveAndCloseFlow(t *testing.T) {
 	if saveCmd == nil {
 		t.Fatal("saveCmd should not be nil")
 	}
-	if m.configScreen.saveStatus != statusSaving {
-		t.Fatalf("saveStatus = %d, want statusSaving", m.configScreen.saveStatus)
+	if got := m.configScreen.Snapshot().SaveStatus; got != statusSaving {
+		t.Fatalf("saveStatus = %d, want statusSaving", got)
 	}
 
 	updated, _ = m.Update(saveCmd())

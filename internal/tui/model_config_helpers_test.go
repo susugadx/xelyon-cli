@@ -5,6 +5,26 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
+)
+
+type configPane = configscreen.Pane
+type configEditMode = configscreen.EditMode
+type configSaveStatus = configscreen.SaveStatus
+
+const (
+	paneCategory   = configscreen.PaneCategory
+	paneField      = configscreen.PaneField
+	paneDetail     = configscreen.PaneDetail
+	editNone       = configscreen.EditNone
+	editInput      = configscreen.EditInput
+	editSelect     = configscreen.EditSelect
+	editSlice      = configscreen.EditSlice
+	editStructMap  = configscreen.EditStructMap
+	statusSaved    = configscreen.StatusSaved
+	statusModified = configscreen.StatusModified
+	statusSaving   = configscreen.StatusSaving
+	statusFailed   = configscreen.StatusFailed
 )
 
 func newConfigTestModel() Model {
@@ -15,7 +35,7 @@ func newConfigTestModelWithConfig(cfg *config.Config) Model {
 	agent := &stubAgent{}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
+	m.configScreen = configscreen.New(cfg)
 	return m
 }
 
@@ -43,6 +63,11 @@ func sendConfigKey(m Model, s string) Model {
 	return updated.(Model)
 }
 
+func sendConfigKeyMsg(m Model, msg tea.KeyMsg) Model {
+	updated, _ := m.Update(msg)
+	return updated.(Model)
+}
+
 func sendConfigKeys(m Model, keys ...string) Model {
 	for _, k := range keys {
 		m = sendConfigKey(m, k)
@@ -64,7 +89,7 @@ func saveConfigAndWait(t *testing.T, m Model) Model {
 	return updated.(Model)
 }
 
-func configTestScreen(t *testing.T, m Model) *configScreen {
+func configTestScreen(t *testing.T, m Model) *configscreen.Screen {
 	t.Helper()
 	if m.configScreen == nil {
 		t.Fatal("configScreen is nil")
@@ -72,7 +97,7 @@ func configTestScreen(t *testing.T, m Model) *configScreen {
 	return m.configScreen
 }
 
-type configScreenTestSnapshot struct {
+type configStateTestSnapshot struct {
 	categoryIndex int
 	fieldIndex    int
 	fieldScroll   int
@@ -85,48 +110,55 @@ type configScreenTestSnapshot struct {
 	pendingClose  bool
 }
 
-func configSnapshot(t *testing.T, m Model) configScreenTestSnapshot {
+func configSnapshot(t *testing.T, m Model) configStateTestSnapshot {
 	t.Helper()
 	cs := configTestScreen(t, m)
-	return configScreenTestSnapshot{
-		categoryIndex: cs.catIndex,
-		fieldIndex:    cs.fieldIndex,
-		fieldScroll:   cs.fieldScroll,
-		activePane:    cs.activePane,
-		editMode:      cs.editMode,
-		dirty:         cs.dirty,
-		saveStatus:    cs.saveStatus,
-		saveError:     cs.saveError,
-		confirmQuit:   cs.confirmQuit,
-		pendingClose:  cs.pendingClose,
+	snapshot := cs.Snapshot()
+	return configStateTestSnapshot{
+		categoryIndex: snapshot.CategoryIndex,
+		fieldIndex:    snapshot.FieldIndex,
+		fieldScroll:   snapshot.FieldScroll,
+		activePane:    snapshot.ActivePane,
+		editMode:      snapshot.EditMode,
+		dirty:         snapshot.Dirty,
+		saveStatus:    snapshot.SaveStatus,
+		saveError:     snapshot.SaveError,
+		confirmQuit:   snapshot.ConfirmQuit,
+		pendingClose:  snapshot.PendingClose,
 	}
 }
 
 func setConfigDirtyForTest(t *testing.T, m *Model, dirty bool) {
 	t.Helper()
-	cs := configTestScreen(t, *m)
-	cs.dirty = dirty
+	if dirty {
+		*m = makeConfigScreenDirty(t, *m)
+		return
+	}
+	t.Fatal("setConfigDirtyForTest(false) no longer mutates screen internals")
 }
 
 func setConfigModifiedForTest(t *testing.T, m *Model) {
 	t.Helper()
-	cs := configTestScreen(t, *m)
-	cs.dirty = true
-	cs.saveStatus = statusModified
+	*m = makeConfigScreenDirty(t, *m)
 }
 
 func setConfigConfirmQuitForTest(t *testing.T, m *Model, confirmIdx int) {
 	t.Helper()
-	cs := configTestScreen(t, *m)
-	cs.dirty = true
-	cs.saveStatus = statusModified
-	cs.confirmQuit = true
-	cs.confirmIdx = confirmIdx
+	*m = makeConfigScreenDirty(t, *m)
+	*m = sendConfigKey(*m, "q")
+	for configTestScreen(t, *m).Snapshot().ConfirmIndex < confirmIdx {
+		*m = sendConfigKey(*m, "down")
+	}
 }
 
 func setConfigConfirmIndexForTest(t *testing.T, m *Model, confirmIdx int) {
 	t.Helper()
-	configTestScreen(t, *m).confirmIdx = confirmIdx
+	for configTestScreen(t, *m).Snapshot().ConfirmIndex < confirmIdx {
+		*m = sendConfigKey(*m, "down")
+	}
+	for configTestScreen(t, *m).Snapshot().ConfirmIndex > confirmIdx {
+		*m = sendConfigKey(*m, "up")
+	}
 }
 
 func makeConfigScreenDirty(t *testing.T, m Model) Model {

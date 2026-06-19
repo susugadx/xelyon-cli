@@ -5,19 +5,20 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestConfigScreen_SaveKeepsDirtyWhenEditedAfterSaveStarts(t *testing.T) {
 	agent := &stubAgent{}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
+	m.configScreen = configscreen.New(config.DefaultConfig())
 
 	selectConfigField(t, &m, "compression", "compression.enabled")
 
 	m = sendConfigKey(m, " ")
 	cs := configTestScreen(t, m)
-	if !cs.dirty {
+	if !cs.Snapshot().Dirty {
 		t.Fatal("dirty should be true after initial edit")
 	}
 
@@ -29,22 +30,24 @@ func TestConfigScreen_SaveKeepsDirtyWhenEditedAfterSaveStarts(t *testing.T) {
 
 	m = sendConfigKey(m, " ")
 	cs = configTestScreen(t, m)
-	if !cs.dirty {
+	snapshot := cs.Snapshot()
+	if !snapshot.Dirty {
 		t.Fatal("dirty should remain true after late edit")
 	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus after late edit = %d, want statusModified(%d)", cs.saveStatus, statusModified)
+	if snapshot.SaveStatus != statusModified {
+		t.Fatalf("saveStatus after late edit = %d, want statusModified(%d)", snapshot.SaveStatus, statusModified)
 	}
 
 	resultMsg := saveCmd()
 	updated, _ = m.Update(resultMsg)
 	m = updated.(Model)
 	cs = configTestScreen(t, m)
-	if !cs.dirty {
+	snapshot = cs.Snapshot()
+	if !snapshot.Dirty {
 		t.Fatal("dirty should stay true when cfg changed after save started")
 	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus after save completion = %d, want statusModified(%d)", cs.saveStatus, statusModified)
+	if snapshot.SaveStatus != statusModified {
+		t.Fatalf("saveStatus after save completion = %d, want statusModified(%d)", snapshot.SaveStatus, statusModified)
 	}
 }
 
@@ -52,7 +55,7 @@ func TestConfigScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing.
 	agent := &stubAgent{}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
+	m.configScreen = configscreen.New(config.DefaultConfig())
 
 	selectConfigField(t, &m, "compression", "compression.enabled")
 	m = sendConfigKey(m, " ")
@@ -65,16 +68,17 @@ func TestConfigScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing.
 	}
 
 	cs := configTestScreen(t, m)
-	if !cs.pendingClose {
+	snapshot := cs.Snapshot()
+	if !snapshot.PendingClose {
 		t.Fatal("pendingClose should be true while save and quit is in flight")
 	}
-	if cs.saveStatus != statusSaving {
-		t.Fatalf("saveStatus = %d, want statusSaving(%d)", cs.saveStatus, statusSaving)
+	if snapshot.SaveStatus != statusSaving {
+		t.Fatalf("saveStatus = %d, want statusSaving(%d)", snapshot.SaveStatus, statusSaving)
 	}
 
 	m = sendConfigKey(m, " ")
 	cs = configTestScreen(t, m)
-	if !cs.dirty {
+	if !cs.Snapshot().Dirty {
 		t.Fatal("dirty should stay true after late edit")
 	}
 
@@ -86,13 +90,14 @@ func TestConfigScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing.
 		t.Fatalf("screen = %d, want screenConfig when late edits remain unsaved", m.screen)
 	}
 	cs = configTestScreen(t, m)
-	if cs.pendingClose {
+	snapshot = cs.Snapshot()
+	if snapshot.PendingClose {
 		t.Fatal("pendingClose should be cleared after successful save of an outdated snapshot")
 	}
-	if !cs.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("dirty should remain true after outdated snapshot save completes")
 	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus after save completion = %d, want statusModified(%d)", cs.saveStatus, statusModified)
+	if snapshot.SaveStatus != statusModified {
+		t.Fatalf("saveStatus after save completion = %d, want statusModified(%d)", snapshot.SaveStatus, statusModified)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 	tuicomposer "github.com/susugadx/xelyon-cli/internal/tui/composer"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
@@ -82,8 +83,8 @@ func (m Model) visibleComposerDraftSummaryRows() []composerDraftSummaryRow {
 	return summaries
 }
 
-func (m Model) formatAttachmentChip(att composerAttachment, number int) string {
-	return fmt.Sprintf("[%s %s #%d]", att.kindLabel(), att.basename(), number)
+func (m Model) formatAttachmentChip(att tuiattachments.Attachment, number int) string {
+	return fmt.Sprintf("[%s %s #%d]", att.KindLabel(), att.Basename(), number)
 }
 
 func (m Model) formatPasteBlockChip(block tuicomposer.VisiblePasteBlock) string {

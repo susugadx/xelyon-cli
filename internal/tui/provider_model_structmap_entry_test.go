@@ -6,16 +6,17 @@ func TestConfigScreen_ProviderModels_EntryEdit(t *testing.T) {
 	m := enterStructMapEdit(t, "provider_models")
 	cs := m.configScreen
 
-	if len(cs.editStructKeys) == 0 {
+	if len(cs.Snapshot().EditStructKeys) == 0 {
 		t.Fatal("no provider_models keys")
 	}
 
 	m = sendConfigKey(m, "enter")
 	cs = m.configScreen
-	if !cs.editEntryActive {
+	snapshot := cs.Snapshot()
+	if !snapshot.EditEntryActive {
 		t.Fatal("editEntryActive should be true")
 	}
-	if len(cs.editEntryFields) == 0 {
+	if len(snapshot.EditEntryFields) == 0 {
 		t.Fatal("editEntryFields should not be empty")
 	}
 
@@ -23,19 +24,19 @@ func TestConfigScreen_ProviderModels_EntryEdit(t *testing.T) {
 
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", got)
 	}
 
 	m = sendConfigKey(m, "esc")
 	cs = configTestScreen(t, m)
-	if cs.editEntryFieldEdit != "" {
-		t.Fatalf("editEntryFieldEdit = %q after esc, want empty", cs.editEntryFieldEdit)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "" {
+		t.Fatalf("editEntryFieldEdit = %q after esc, want empty", got)
 	}
 
 	m = sendConfigKey(m, "esc")
 	cs = configTestScreen(t, m)
-	if cs.editEntryActive {
+	if cs.Snapshot().EditEntryActive {
 		t.Fatal("editEntryActive should be false after esc")
 	}
 }
@@ -47,8 +48,8 @@ func TestConfigScreen_ProviderModels_ValueChange_Persists(t *testing.T) {
 
 	m = sendConfigKey(m, "enter")
 	cs := configTestScreen(t, m)
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", got)
 	}
 
 	setConfigInputValue(t, &m, "gpt-99-turbo")
@@ -56,7 +57,7 @@ func TestConfigScreen_ProviderModels_ValueChange_Persists(t *testing.T) {
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
 
-	pm, ok := cs.cfg.ProviderModels["openai"]
+	pm, ok := cs.ConfigSnapshot().ProviderModels["openai"]
 	if !ok {
 		t.Fatal("openai not found in ProviderModels")
 	}
@@ -64,11 +65,12 @@ func TestConfigScreen_ProviderModels_ValueChange_Persists(t *testing.T) {
 		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want \"gpt-99-turbo\"", pm.DefaultModel)
 	}
 
-	if !cs.dirty {
+	snapshot := cs.Snapshot()
+	if !snapshot.Dirty {
 		t.Fatal("dirty should be true after value change")
 	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus = %d, want statusModified(%d)", cs.saveStatus, statusModified)
+	if snapshot.SaveStatus != statusModified {
+		t.Fatalf("saveStatus = %d, want statusModified(%d)", snapshot.SaveStatus, statusModified)
 	}
 }
 
@@ -78,18 +80,18 @@ func TestConfigScreen_ProviderModels_CatalogModelChange_Persists(t *testing.T) {
 	selectConfigEntryField(t, &m, "catalog_model")
 	m = sendConfigKey(m, "enter")
 	cs := configTestScreen(t, m)
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", got)
 	}
 
 	setConfigInputValue(t, &m, "gpt-5.4")
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
 
-	if got := cs.cfg.ProviderModels["openai"].CatalogModel; got != "gpt-5.4" {
+	if got := cs.ConfigSnapshot().ProviderModels["openai"].CatalogModel; got != "gpt-5.4" {
 		t.Fatalf("ProviderModels[openai].CatalogModel = %q, want gpt-5.4", got)
 	}
-	if !cs.dirty {
+	if !cs.Snapshot().Dirty {
 		t.Fatal("dirty should be true after catalog_model change")
 	}
 }

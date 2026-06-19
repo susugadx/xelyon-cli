@@ -3,6 +3,8 @@ package tui
 import (
 	"os"
 	"path/filepath"
+
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 const (
@@ -10,8 +12,8 @@ const (
 	clipboardAttachmentFileName      = "clipboard.png"
 )
 
-func cleanupTemporaryAttachment(att composerAttachment) {
-	if att.Source != composerAttachmentSourceClipboardImage || att.Path == "" {
+func cleanupTemporaryAttachment(att tuiattachments.Attachment) {
+	if att.Source != tuiattachments.SourceClipboardImage || att.Path == "" {
 		return
 	}
 

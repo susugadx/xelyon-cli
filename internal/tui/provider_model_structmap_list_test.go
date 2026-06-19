@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestAddStructMapKey_ProviderModelsAllowsAnthropicAndClaudeSiblings(t *testing.T) {
@@ -15,14 +16,14 @@ func TestAddStructMapKey_ProviderModelsAllowsAnthropicAndClaudeSiblings(t *testi
 		"anthropic": {DefaultModel: "anthropic-custom"},
 	})
 
-	cs := newConfigScreen(cfg)
+	cs := configscreen.New(cfg)
 	m.configScreen = cs
 
 	if !m.addStructMapKey("provider_models", "claude") {
 		t.Fatal("addStructMapKey(provider_models, claude) = false, want true")
 	}
 
-	saved := cs.cfg.ProviderModelsForEdit()
+	saved := cs.ConfigSnapshot().ProviderModelsForEdit()
 	if _, ok := saved["anthropic"]; !ok {
 		t.Fatalf("ProviderModelsForEdit() = %#v, want anthropic entry preserved", saved)
 	}
@@ -36,7 +37,7 @@ func TestConfigScreen_StructMapOrder_ProviderModels(t *testing.T) {
 	enterConfigStructMapEdit(t, &m, "provider_models")
 
 	cs := configTestScreen(t, m)
-	keys := cs.editStructKeys
+	keys := cs.Snapshot().EditStructKeys
 	for i := 1; i < len(keys); i++ {
 		if keys[i] < keys[i-1] {
 			t.Fatalf("editStructKeys not sorted: %q comes after %q", keys[i], keys[i-1])
@@ -51,31 +52,31 @@ func TestConfigScreen_StructMapOrder_ProviderModels(t *testing.T) {
 	selectConfigStructMapKeyIndex(t, &m, 0)
 	m = sendConfigKey(m, "d")
 	cs = configTestScreen(t, m)
+	keys = cs.Snapshot().EditStructKeys
 
-	for _, k := range cs.editStructKeys {
+	for _, k := range keys {
 		if k == firstKey {
 			t.Fatalf("key %q should have been deleted", firstKey)
 		}
 	}
 
-	for i := 1; i < len(cs.editStructKeys); i++ {
-		if cs.editStructKeys[i] < cs.editStructKeys[i-1] {
-			t.Fatalf("editStructKeys not sorted after delete: %q after %q", cs.editStructKeys[i], cs.editStructKeys[i-1])
+	for i := 1; i < len(keys); i++ {
+		if keys[i] < keys[i-1] {
+			t.Fatalf("editStructKeys not sorted after delete: %q after %q", keys[i], keys[i-1])
 		}
 	}
 }
 
 func TestConfigScreen_ProviderModels_NilMap_AddEntry_DoesNotPanic(t *testing.T) {
-	m := newConfigTestModel()
-	cs := configTestScreen(t, m)
-	cs.cfg.ProviderModels = nil
-	cs.refreshCategories()
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels = nil
+	m := newConfigTestModelWithConfig(cfg)
 
 	enterConfigStructMapEdit(t, &m, "provider_models")
 
 	m = sendConfigKey(m, "a")
-	cs = configTestScreen(t, m)
-	if !cs.editStructAdding {
+	cs := configTestScreen(t, m)
+	if !cs.Snapshot().EditStructAdding {
 		t.Fatal("editStructAdding should be true")
 	}
 
@@ -83,16 +84,18 @@ func TestConfigScreen_ProviderModels_NilMap_AddEntry_DoesNotPanic(t *testing.T) 
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
 
-	if cs.cfg.ProviderModels == nil {
+	cfgSnapshot := cs.ConfigSnapshot()
+	if cfgSnapshot.ProviderModels == nil {
 		t.Fatal("ProviderModels should be initialized after add")
 	}
-	if _, ok := cs.cfg.ProviderModels["nil_provider"]; !ok {
+	if _, ok := cfgSnapshot.ProviderModels["nil_provider"]; !ok {
 		t.Fatal("ProviderModels should contain the added key")
 	}
-	if !cs.dirty {
+	snapshot := cs.Snapshot()
+	if !snapshot.Dirty {
 		t.Fatal("dirty should be true after add")
 	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus = %d, want statusModified", cs.saveStatus)
+	if snapshot.SaveStatus != statusModified {
+		t.Fatalf("saveStatus = %d, want statusModified", snapshot.SaveStatus)
 	}
 }

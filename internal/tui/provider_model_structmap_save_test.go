@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
@@ -12,7 +13,7 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
+	m.configScreen = configscreen.New(cfg)
 
 	enterConfigStructMapEdit(t, &m, "provider_models")
 	selectConfigStructMapKey(t, &m, "openai")
@@ -31,8 +32,8 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 	updated2, saveCmd := m.Update(sMsg)
 	m = updated2.(Model)
 	cs := configTestScreen(t, m)
-	if cs.saveStatus != statusSaving {
-		t.Fatalf("saveStatus = %d, want statusSaving", cs.saveStatus)
+	if got := cs.Snapshot().SaveStatus; got != statusSaving {
+		t.Fatalf("saveStatus = %d, want statusSaving", got)
 	}
 
 	if saveCmd == nil {
@@ -44,11 +45,12 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 	m = updated3.(Model)
 	cs = configTestScreen(t, m)
 
-	if cs.dirty {
+	snapshot := cs.Snapshot()
+	if snapshot.Dirty {
 		t.Fatal("dirty should be false after save")
 	}
-	if cs.saveStatus != statusSaved {
-		t.Fatalf("saveStatus = %d, want statusSaved", cs.saveStatus)
+	if snapshot.SaveStatus != statusSaved {
+		t.Fatalf("saveStatus = %d, want statusSaved", snapshot.SaveStatus)
 	}
 
 	agent.mu.RLock()
@@ -71,16 +73,13 @@ func TestConfigScreen_ProviderOverride_Save_NotOverwritten(t *testing.T) {
 	agent := &stubAgent{}
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
-	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
-
-	cs.cfg.DefaultModel = "global-model"
-
-	if pm, ok := cs.cfg.ProviderModels["openai"]; ok {
+	cfg.DefaultModel = "global-model"
+	if pm, ok := cfg.ProviderModels["openai"]; ok {
 		pm.DefaultModel = "provider-override"
-		cs.cfg.ProviderModels["openai"] = pm
+		cfg.ProviderModels["openai"] = pm
 	}
+	m.screen = screenConfig
+	m.configScreen = configscreen.New(cfg)
 	setConfigDirtyForTest(t, &m, true)
 
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}

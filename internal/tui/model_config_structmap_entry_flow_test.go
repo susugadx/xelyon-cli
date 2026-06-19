@@ -11,27 +11,29 @@ func TestConfigScreen_LSPServers_EntryEdit(t *testing.T) {
 
 	m = sendConfigKey(m, "enter")
 	cs := configTestScreen(t, m)
-	if !cs.editEntryActive {
+	snapshot := cs.Snapshot()
+	if !snapshot.EditEntryActive {
 		t.Fatal("editEntryActive should be true")
 	}
-	if cs.editEntryKey != "go" {
-		t.Fatalf("editEntryKey = %q, want \"go\"", cs.editEntryKey)
+	if snapshot.EditEntryKey != "go" {
+		t.Fatalf("editEntryKey = %q, want \"go\"", snapshot.EditEntryKey)
 	}
 
 	argsIdx := selectConfigEntryField(t, &m, "args")
-	if got := cs.editEntryFields[argsIdx].Type; got != "[]string" {
+	snapshot = configTestScreen(t, m).Snapshot()
+	if got := snapshot.EditEntryFields[argsIdx].Type; got != "[]string" {
 		t.Fatalf("args type = %q, want []string", got)
 	}
 
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
-	if cs.editEntryFieldEdit != "slice" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"slice\"", cs.editEntryFieldEdit)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "slice" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"slice\"", got)
 	}
 
 	m = sendConfigKey(m, "esc")
 	cs = configTestScreen(t, m)
-	if cs.editEntryFieldEdit != "" {
+	if cs.Snapshot().EditEntryFieldEdit != "" {
 		t.Fatal("editEntryFieldEdit should be empty after esc from slice")
 	}
 }
@@ -40,11 +42,11 @@ func TestConfigScreen_StructMapAdd_ThenEdit(t *testing.T) {
 	m := enterStructMapEdit(t, "lsp.servers")
 	cs := configTestScreen(t, m)
 
-	initialLen := len(cs.editStructKeys)
+	initialLen := len(cs.Snapshot().EditStructKeys)
 
 	m = sendConfigKey(m, "a")
 	cs = configTestScreen(t, m)
-	if !cs.editStructAdding {
+	if !cs.Snapshot().EditStructAdding {
 		t.Fatal("editStructAdding should be true")
 	}
 
@@ -52,20 +54,22 @@ func TestConfigScreen_StructMapAdd_ThenEdit(t *testing.T) {
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
 
-	if len(cs.editStructKeys) != initialLen+1 {
-		t.Fatalf("keys count = %d, want %d", len(cs.editStructKeys), initialLen+1)
+	snapshot := cs.Snapshot()
+	if len(snapshot.EditStructKeys) != initialLen+1 {
+		t.Fatalf("keys count = %d, want %d", len(snapshot.EditStructKeys), initialLen+1)
 	}
-	if cs.editStructKeys[cs.editStructIndex] != "testlang" {
-		t.Fatalf("cursor on %q, want \"testlang\"", cs.editStructKeys[cs.editStructIndex])
+	if snapshot.EditStructKeys[snapshot.EditStructIndex] != "testlang" {
+		t.Fatalf("cursor on %q, want \"testlang\"", snapshot.EditStructKeys[snapshot.EditStructIndex])
 	}
 
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
-	if !cs.editEntryActive {
+	snapshot = cs.Snapshot()
+	if !snapshot.EditEntryActive {
 		t.Fatal("editEntryActive should be true for new key")
 	}
-	if cs.editEntryKey != "testlang" {
-		t.Fatalf("editEntryKey = %q, want \"testlang\"", cs.editEntryKey)
+	if snapshot.EditEntryKey != "testlang" {
+		t.Fatalf("editEntryKey = %q, want \"testlang\"", snapshot.EditEntryKey)
 	}
 }
 
@@ -88,7 +92,7 @@ func TestConfigScreen_StructMapEntryEdit_HintTransition(t *testing.T) {
 	}
 
 	m = sendConfigKey(m, "esc")
-	if m.configScreen.editEntryActive {
+	if m.configScreen.Snapshot().EditEntryActive {
 		t.Fatal("should be back to key list")
 	}
 }

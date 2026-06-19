@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestConfigScreen_ConfirmQuitWithDirty_Discard(t *testing.T) {
@@ -15,7 +16,7 @@ func TestConfigScreen_ConfirmQuitWithDirty_Discard(t *testing.T) {
 
 	m = sendConfigKey(m, "q")
 	cs := configTestScreen(t, m)
-	if !cs.confirmQuit {
+	if !cs.Snapshot().ConfirmQuit {
 		t.Fatal("confirmQuit should be true")
 	}
 
@@ -41,7 +42,7 @@ func TestConfigScreen_CtrlC_RespectsDirtyGuard(t *testing.T) {
 	if m.screen != screenConfig {
 		t.Fatalf("screen = %d after ctrl+c, want screenConfig", m.screen)
 	}
-	if !m.configScreen.confirmQuit {
+	if !m.configScreen.Snapshot().ConfirmQuit {
 		t.Fatal("confirmQuit should be true after ctrl+c with dirty config")
 	}
 	if m.quitting {
@@ -60,7 +61,7 @@ func TestConfigScreen_CtrlC_RespectsDirtyGuard(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("ctrl+c on confirm dialog should not quit")
 	}
-	if !m.configScreen.confirmQuit {
+	if !m.configScreen.Snapshot().ConfirmQuit {
 		t.Fatal("confirmQuit should remain true after second ctrl+c")
 	}
 	if m.screen != screenConfig {
@@ -82,7 +83,7 @@ func TestConfigScreen_CtrlC_DoesNotBypassDirtyOnDoublePress(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("ctrl+c with dirty config should not quit even if interrupt window is active")
 	}
-	if !m.configScreen.confirmQuit {
+	if !m.configScreen.Snapshot().ConfirmQuit {
 		t.Fatal("confirmQuit should be true after first ctrl+c")
 	}
 	if m.quitting {
@@ -100,10 +101,11 @@ func TestConfigScreen_CtrlC_DoesNotBypassDirtyOnDoublePress(t *testing.T) {
 	if m.screen != screenConfig {
 		t.Fatalf("screen = %d after double ctrl+c, want screenConfig", m.screen)
 	}
-	if !m.configScreen.dirty {
+	snapshot := m.configScreen.Snapshot()
+	if !snapshot.Dirty {
 		t.Fatal("dirty should remain true after double ctrl+c")
 	}
-	if !m.configScreen.confirmQuit {
+	if !snapshot.ConfirmQuit {
 		t.Fatal("confirmQuit should remain true after double ctrl+c")
 	}
 }
@@ -114,13 +116,13 @@ func TestConfigScreen_ConfirmQuitCancel(t *testing.T) {
 
 	m = sendConfigKey(m, "q")
 	cs := configTestScreen(t, m)
-	if !cs.confirmQuit {
+	if !cs.Snapshot().ConfirmQuit {
 		t.Fatal("confirmQuit should be true")
 	}
 
 	m = sendConfigKeys(m, "j", "j", "enter")
 	cs = configTestScreen(t, m)
-	if cs.confirmQuit {
+	if cs.Snapshot().ConfirmQuit {
 		t.Fatal("confirmQuit should be false after cancel")
 	}
 	if m.screen != screenConfig {
@@ -134,7 +136,7 @@ func TestConfigScreen_ConfirmQuit_CtrlC_StillCancelsProcessing(t *testing.T) {
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
+	m.configScreen = configscreen.New(cfg)
 
 	setConfigConfirmQuitForTest(t, &m, 1)
 
@@ -163,7 +165,7 @@ func TestConfigScreen_ConfirmQuit_CtrlC_WhenIdle_DoesNotBreakQuitDialog(t *testi
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
+	m.configScreen = configscreen.New(cfg)
 
 	setConfigConfirmQuitForTest(t, &m, 0)
 

@@ -4,44 +4,50 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
+
+func runtimeProviderSyncConfig() *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "deepseek"
+	cfg.DefaultModel = "custom-global-model"
+	openaiPM := cfg.ProviderModels["openai"]
+	openaiPM.DefaultModel = "stale-openai-model"
+	cfg.ProviderModels["openai"] = openaiPM
+	deepseekPM := cfg.ProviderModels["deepseek"]
+	deepseekPM.DefaultModel = "stale-deepseek-model"
+	cfg.ProviderModels["deepseek"] = deepseekPM
+	return cfg
+}
 
 func TestConfigScreen_ActiveSessionProviderThenDefaultModelSyncsRuntimeProvider(t *testing.T) {
 	agent := &stubAgent{providerName: "openai"}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
-
-	cs := configTestScreen(t, m)
-	cs.cfg.DefaultProvider = "deepseek"
-	cs.cfg.DefaultModel = "deepseek-chat"
-	openaiPM := cs.cfg.ProviderModels["openai"]
-	openaiPM.DefaultModel = "stale-openai-model"
-	cs.cfg.ProviderModels["openai"] = openaiPM
-	deepseekPM := cs.cfg.ProviderModels["deepseek"]
-	deepseekPM.DefaultModel = "stale-deepseek-model"
-	cs.cfg.ProviderModels["deepseek"] = deepseekPM
-	cs.refreshCategories()
+	cfg := runtimeProviderSyncConfig()
+	cfg.DefaultModel = "deepseek-chat"
+	m.configScreen = configscreen.New(cfg)
 
 	selectConfigField(t, &m, "provider", "default_model")
 	m = sendConfigKey(m, "enter")
-	cs = configTestScreen(t, m)
-	if cs.editMode != editInput {
-		t.Fatalf("editMode = %d, want editInput", cs.editMode)
+	cs := configTestScreen(t, m)
+	if got := cs.Snapshot().EditMode; got != editInput {
+		t.Fatalf("editMode = %d, want editInput", got)
 	}
 
 	setConfigInputValue(t, &m, "gpt-5.4")
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
+	cfgSnapshot := cs.ConfigSnapshot()
 
-	if cs.cfg.DefaultModel != "gpt-5.4" {
-		t.Fatalf("DefaultModel = %q, want \"gpt-5.4\"", cs.cfg.DefaultModel)
+	if cfgSnapshot.DefaultModel != "gpt-5.4" {
+		t.Fatalf("DefaultModel = %q, want \"gpt-5.4\"", cfgSnapshot.DefaultModel)
 	}
-	if cs.cfg.ProviderModels["openai"].DefaultModel != "gpt-5.4" {
-		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want \"gpt-5.4\"", cs.cfg.ProviderModels["openai"].DefaultModel)
+	if cfgSnapshot.ProviderModels["openai"].DefaultModel != "gpt-5.4" {
+		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want \"gpt-5.4\"", cfgSnapshot.ProviderModels["openai"].DefaultModel)
 	}
-	if cs.cfg.ProviderModels["deepseek"].DefaultModel == "gpt-5.4" {
-		t.Fatalf("ProviderModels[deepseek].DefaultModel = %q, should not be updated from runtime provider path", cs.cfg.ProviderModels["deepseek"].DefaultModel)
+	if cfgSnapshot.ProviderModels["deepseek"].DefaultModel == "gpt-5.4" {
+		t.Fatalf("ProviderModels[deepseek].DefaultModel = %q, should not be updated from runtime provider path", cfgSnapshot.ProviderModels["deepseek"].DefaultModel)
 	}
 
 	m = saveConfigAndWait(t, m)
@@ -67,20 +73,7 @@ func TestDefaultModelSync_UsesRuntimeProviderWhenDefaultProviderUnchanged(t *tes
 		agent := &stubAgent{providerName: "openai"}
 		m := newModelWithViewport(agent)
 		m.screen = screenConfig
-		m.configScreen = newConfigScreen(config.DefaultConfig())
-
-		cs := configTestScreen(t, m)
-		cs.cfg.DefaultProvider = "deepseek"
-		cs.cfg.DefaultModel = "custom-global-model"
-
-		openaiPM := cs.cfg.ProviderModels["openai"]
-		openaiPM.DefaultModel = "stale-openai-model"
-		cs.cfg.ProviderModels["openai"] = openaiPM
-
-		deepseekPM := cs.cfg.ProviderModels["deepseek"]
-		deepseekPM.DefaultModel = "stale-deepseek-model"
-		cs.cfg.ProviderModels["deepseek"] = deepseekPM
-		cs.refreshCategories()
+		m.configScreen = configscreen.New(runtimeProviderSyncConfig())
 
 		selectConfigField(t, &m, "provider", "default_model")
 
@@ -90,23 +83,24 @@ func TestDefaultModelSync_UsesRuntimeProviderWhenDefaultProviderUnchanged(t *tes
 			wantModel = config.DefaultConfig().DefaultModel
 		} else {
 			m = sendConfigKey(m, "enter")
-			cs = configTestScreen(t, m)
-			if cs.editMode != editInput {
-				t.Fatalf("editMode = %d, want editInput", cs.editMode)
+			cs := configTestScreen(t, m)
+			if got := cs.Snapshot().EditMode; got != editInput {
+				t.Fatalf("editMode = %d, want editInput", got)
 			}
 			setConfigInputValue(t, &m, wantModel)
 			m = sendConfigKey(m, "enter")
 		}
 
-		cs = configTestScreen(t, m)
-		if cs.cfg.DefaultModel != wantModel {
-			t.Fatalf("DefaultModel = %q, want %q", cs.cfg.DefaultModel, wantModel)
+		cs := configTestScreen(t, m)
+		cfgSnapshot := cs.ConfigSnapshot()
+		if cfgSnapshot.DefaultModel != wantModel {
+			t.Fatalf("DefaultModel = %q, want %q", cfgSnapshot.DefaultModel, wantModel)
 		}
-		if cs.cfg.ProviderModels["openai"].DefaultModel != wantModel {
-			t.Fatalf("ProviderModels[openai].DefaultModel = %q, want %q", cs.cfg.ProviderModels["openai"].DefaultModel, wantModel)
+		if cfgSnapshot.ProviderModels["openai"].DefaultModel != wantModel {
+			t.Fatalf("ProviderModels[openai].DefaultModel = %q, want %q", cfgSnapshot.ProviderModels["openai"].DefaultModel, wantModel)
 		}
-		if cs.cfg.ProviderModels["deepseek"].DefaultModel == wantModel {
-			t.Fatalf("ProviderModels[deepseek].DefaultModel = %q, should not be updated", cs.cfg.ProviderModels["deepseek"].DefaultModel)
+		if cfgSnapshot.ProviderModels["deepseek"].DefaultModel == wantModel {
+			t.Fatalf("ProviderModels[deepseek].DefaultModel = %q, should not be updated", cfgSnapshot.ProviderModels["deepseek"].DefaultModel)
 		}
 
 		m = saveConfigAndWait(t, m)
@@ -133,32 +127,22 @@ func TestConfigScreen_ActiveSessionProviderThenResetDefaultModelSyncsRuntimeProv
 	agent := &stubAgent{providerName: "openai"}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
-
-	cs := configTestScreen(t, m)
-	cs.cfg.DefaultProvider = "deepseek"
-	cs.cfg.DefaultModel = "custom-global-model"
-	openaiPM := cs.cfg.ProviderModels["openai"]
-	openaiPM.DefaultModel = "stale-openai-model"
-	cs.cfg.ProviderModels["openai"] = openaiPM
-	deepseekPM := cs.cfg.ProviderModels["deepseek"]
-	deepseekPM.DefaultModel = "stale-deepseek-model"
-	cs.cfg.ProviderModels["deepseek"] = deepseekPM
-	cs.refreshCategories()
+	m.configScreen = configscreen.New(runtimeProviderSyncConfig())
 
 	selectConfigField(t, &m, "provider", "default_model")
 	m = sendConfigKey(m, "r")
-	cs = configTestScreen(t, m)
+	cs := configTestScreen(t, m)
+	cfgSnapshot := cs.ConfigSnapshot()
 
 	defaultCfg := config.DefaultConfig()
-	if cs.cfg.DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("DefaultModel after reset = %q, want %q", cs.cfg.DefaultModel, defaultCfg.DefaultModel)
+	if cfgSnapshot.DefaultModel != defaultCfg.DefaultModel {
+		t.Fatalf("DefaultModel after reset = %q, want %q", cfgSnapshot.DefaultModel, defaultCfg.DefaultModel)
 	}
-	if cs.cfg.ProviderModels["openai"].DefaultModel != defaultCfg.DefaultModel {
-		t.Fatalf("ProviderModels[openai].DefaultModel after reset = %q, want %q", cs.cfg.ProviderModels["openai"].DefaultModel, defaultCfg.DefaultModel)
+	if cfgSnapshot.ProviderModels["openai"].DefaultModel != defaultCfg.DefaultModel {
+		t.Fatalf("ProviderModels[openai].DefaultModel after reset = %q, want %q", cfgSnapshot.ProviderModels["openai"].DefaultModel, defaultCfg.DefaultModel)
 	}
-	if cs.cfg.ProviderModels["deepseek"].DefaultModel == defaultCfg.DefaultModel {
-		t.Fatalf("ProviderModels[deepseek].DefaultModel after reset = %q, should not be updated from runtime provider path", cs.cfg.ProviderModels["deepseek"].DefaultModel)
+	if cfgSnapshot.ProviderModels["deepseek"].DefaultModel == defaultCfg.DefaultModel {
+		t.Fatalf("ProviderModels[deepseek].DefaultModel after reset = %q, should not be updated from runtime provider path", cfgSnapshot.ProviderModels["deepseek"].DefaultModel)
 	}
 
 	m = saveConfigAndWait(t, m)

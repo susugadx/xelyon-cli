@@ -20,8 +20,8 @@ func TestPromptModal_ConfirmNavigationAndSubmit(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	m = updated.(Model)
-	if m.prompt.selected != 2 {
-		t.Fatalf("selected = %d, want comment option", m.prompt.selected)
+	if m.prompt.Snapshot().Selected != 2 {
+		t.Fatalf("selected = %d, want comment option", m.prompt.Snapshot().Selected)
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
@@ -148,8 +148,8 @@ func TestPromptModal_ExplicitConfirmInitialEnterDoesNotSubmit(t *testing.T) {
 		ConfirmSubmitPolicy: uiprompt.PromptConfirmSubmitExplicit,
 	}, ch)
 
-	if m.prompt.selected != -1 {
-		t.Fatalf("selected = %d, want no initial selection", m.prompt.selected)
+	if m.prompt.Snapshot().Selected != -1 {
+		t.Fatalf("selected = %d, want no initial selection", m.prompt.Snapshot().Selected)
 	}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -193,8 +193,8 @@ func TestPromptModal_ExplicitConfirmMoveThenEnterSubmits(t *testing.T) {
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(Model)
-	if m.prompt.selected != 0 {
-		t.Fatalf("selected = %d, want yes after first Down", m.prompt.selected)
+	if m.prompt.Snapshot().Selected != 0 {
+		t.Fatalf("selected = %d, want yes after first Down", m.prompt.Snapshot().Selected)
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
@@ -219,7 +219,7 @@ func TestPromptModal_ConfirmCommentShortcutsEnterTextMode(t *testing.T) {
 
 			updated, _ := m.Update(promptRuneKey(input))
 			m = updated.(Model)
-			if m.prompt == nil || m.prompt.mode != promptModalText || m.prompt.text.responseAction != uiprompt.PromptActionComment {
+			if m.prompt == nil || m.prompt.Snapshot().Mode != promptModalText || m.prompt.Snapshot().TextResponseAction != uiprompt.PromptActionComment {
 				t.Fatalf("prompt state = %#v, want comment text mode", m.prompt)
 			}
 			select {
@@ -237,10 +237,10 @@ func TestPromptModal_ConfirmCustomOptionsUseRequestOrder(t *testing.T) {
 
 	updated, _ := m.Update(promptRuneKey("2"))
 	m = updated.(Model)
-	if m.prompt == nil || m.prompt.mode != promptModalText || m.prompt.text.responseAction != uiprompt.PromptActionComment {
+	if m.prompt == nil || m.prompt.Snapshot().Mode != promptModalText || m.prompt.Snapshot().TextResponseAction != uiprompt.PromptActionComment {
 		t.Fatalf("prompt state = %#v, want second custom option to enter feedback mode", m.prompt)
 	}
-	if got := m.prompt.text.input.Placeholder; got != "Describe what should change before implementation..." {
+	if got := m.prompt.Snapshot().TextPlaceholder; got != "Describe what should change before implementation..." {
 		t.Fatalf("comment placeholder = %q, want plan feedback placeholder", got)
 	}
 	select {
@@ -282,18 +282,18 @@ func TestPromptModal_ConfirmCommentShortcutsIgnoredWhenCommentDisabled(t *testin
 		t.Run(input, func(t *testing.T) {
 			ch := make(chan uiprompt.PromptResponse, 1)
 			m := newPromptTestModel(uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"}, ch)
-			selected := m.prompt.selected
+			selected := m.prompt.Snapshot().Selected
 
 			updated, _ := m.Update(promptRuneKey(input))
 			m = updated.(Model)
 			if m.prompt == nil {
 				t.Fatal("prompt should remain open when comment is disabled")
 			}
-			if m.prompt.mode != promptModalChoice {
-				t.Fatalf("mode = %v, want choice", m.prompt.mode)
+			if m.prompt.Snapshot().Mode != promptModalChoice {
+				t.Fatalf("mode = %v, want choice", m.prompt.Snapshot().Mode)
 			}
-			if m.prompt.selected != selected {
-				t.Fatalf("selected = %d, want unchanged %d", m.prompt.selected, selected)
+			if m.prompt.Snapshot().Selected != selected {
+				t.Fatalf("selected = %d, want unchanged %d", m.prompt.Snapshot().Selected, selected)
 			}
 			select {
 			case resp := <-ch:

@@ -32,13 +32,13 @@ func TestPromptModal_TextDefaultIsFallbackOnly(t *testing.T) {
 				Placeholder:  "Type answer",
 			}, ch)
 
-			if m.prompt == nil || m.prompt.mode != promptModalText {
+			if m.prompt == nil || m.prompt.Snapshot().Mode != promptModalText {
 				t.Fatalf("prompt state = %#v, want text mode", m.prompt)
 			}
-			if got := m.prompt.text.input.Value(); got != "" {
+			if got := m.prompt.Snapshot().TextDisplayValue; got != "" {
 				t.Fatalf("initial text input value = %q, want empty default fallback", got)
 			}
-			if got := m.prompt.text.input.Placeholder; got != "Type answer" {
+			if got := m.prompt.Snapshot().TextPlaceholder; got != "Type answer" {
 				t.Fatalf("placeholder = %q, want request placeholder", got)
 			}
 
@@ -103,7 +103,7 @@ func TestPromptModal_CommentTextAndCancel(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
-	if m.prompt == nil || m.prompt.mode != promptModalText {
+	if m.prompt == nil || m.prompt.Snapshot().Mode != promptModalText {
 		t.Fatal("comment option should switch to text mode")
 	}
 
@@ -155,10 +155,10 @@ func TestPromptModal_PastedCommentTextRendersSingleLineAndSubmitsRaw(t *testing.
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(pasted), Paste: true})
 	m = updated.(Model)
 
-	if got := m.prompt.text.value; got != pasted {
+	if got := m.prompt.Snapshot().TextValue; got != pasted {
 		t.Fatalf("raw prompt text value = %q, want pasted text", got)
 	}
-	if got := m.prompt.text.input.Value(); got != `needs context\nimage:/tmp/a.png` {
+	if got := m.prompt.Snapshot().TextDisplayValue; got != `needs context\nimage:/tmp/a.png` {
 		t.Fatalf("display text input value = %q, want literal newline marker", got)
 	}
 	view := stripANSI(m.View())

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 func TestResumeCommandOpensPickerAndResumesSelection(t *testing.T) {
@@ -165,7 +166,7 @@ func TestResumeCommandWithIDClearsPendingAttachmentsOnSuccess(t *testing.T) {
 	m := newModelWithViewport(agent)
 	dir := t.TempDir()
 	attachmentPath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
-	if ok := m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: attachmentPath}); !ok {
+	if ok := m.appendAttachment(tuiattachments.Attachment{Kind: tuiattachments.KindFile, Path: attachmentPath}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
 	}
 	m.textInput.SetValue("/resume session-42")
@@ -191,7 +192,7 @@ func TestResumeCommandFailureKeepsPendingAttachments(t *testing.T) {
 	m := newModelWithViewport(agent)
 	dir := t.TempDir()
 	attachmentPath := writeTempFile(t, dir, "notes.txt", []byte("hello"))
-	if ok := m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: attachmentPath}); !ok {
+	if ok := m.appendAttachment(tuiattachments.Attachment{Kind: tuiattachments.KindFile, Path: attachmentPath}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
 	}
 	m.textInput.SetValue("/resume session-42")
@@ -434,7 +435,7 @@ func TestNewAndClearSessionVisibility(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m.appendSystemNotice("existing")
 	newAttachment := writeTempFile(t, t.TempDir(), "new.txt", []byte("pending"))
-	if ok := m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: newAttachment}); !ok {
+	if ok := m.appendAttachment(tuiattachments.Attachment{Kind: tuiattachments.KindFile, Path: newAttachment}); !ok {
 		t.Fatal("appendAttachment() = false, want true")
 	}
 	m.textInput.SetValue("/new")

@@ -17,15 +17,16 @@ func TestConfigScreen_BoolToggle(t *testing.T) {
 	m = sendConfigKey(m, " ")
 
 	cs := configTestScreen(t, m)
-	newVal, _ := config.GetFieldValue(cs.cfg, "compression.enabled")
+	newVal, _ := config.GetFieldValue(cs.ConfigSnapshot(), "compression.enabled")
 	if newVal.(bool) == current {
 		t.Fatalf("bool value did not toggle: still %v", current)
 	}
-	if !cs.dirty {
+	snapshot := cs.Snapshot()
+	if !snapshot.Dirty {
 		t.Fatal("dirty should be true after toggle")
 	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus = %d, want statusModified(%d)", cs.saveStatus, statusModified)
+	if snapshot.SaveStatus != statusModified {
+		t.Fatalf("saveStatus = %d, want statusModified(%d)", snapshot.SaveStatus, statusModified)
 	}
 }
 
@@ -35,10 +36,11 @@ func TestConfigScreen_SelectEdit(t *testing.T) {
 
 	m = sendConfigKeys(m, "j", "enter")
 	cs := configTestScreen(t, m)
-	if cs.editMode != editNone {
-		t.Fatalf("editMode after select = %d, want editNone", cs.editMode)
+	snapshot := cs.Snapshot()
+	if snapshot.EditMode != editNone {
+		t.Fatalf("editMode after select = %d, want editNone", snapshot.EditMode)
 	}
-	if !cs.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("dirty should be true after select edit")
 	}
 }
@@ -49,8 +51,8 @@ func TestConfigScreen_StringEdit(t *testing.T) {
 
 	m = sendConfigKey(m, "esc")
 	cs := configTestScreen(t, m)
-	if cs.editMode != editNone {
-		t.Fatalf("editMode after esc = %d, want editNone", cs.editMode)
+	if got := cs.Snapshot().EditMode; got != editNone {
+		t.Fatalf("editMode after esc = %d, want editNone", got)
 	}
 }
 
@@ -78,7 +80,7 @@ func TestConfigScreen_NumericEmptyInputDoesNotApply(t *testing.T) {
 			selectConfigField(t, &m, tt.category, tt.path)
 
 			cs := configTestScreen(t, m)
-			before, err := config.GetFieldValue(cs.cfg, tt.path)
+			before, err := config.GetFieldValue(cs.ConfigSnapshot(), tt.path)
 			if err != nil {
 				t.Fatalf("GetFieldValue before: %v", err)
 			}
@@ -89,17 +91,18 @@ func TestConfigScreen_NumericEmptyInputDoesNotApply(t *testing.T) {
 			m = sendConfigKey(m, "enter")
 			cs = configTestScreen(t, m)
 
-			if cs.editMode != editInput {
-				t.Fatalf("editMode after empty input = %d, want editInput(%d)", cs.editMode, editInput)
+			snapshot := cs.Snapshot()
+			if snapshot.EditMode != editInput {
+				t.Fatalf("editMode after empty input = %d, want editInput(%d)", snapshot.EditMode, editInput)
 			}
-			if cs.dirty {
+			if snapshot.Dirty {
 				t.Fatal("dirty should remain false after empty numeric input")
 			}
-			if cs.saveStatus != statusSaved {
-				t.Fatalf("saveStatus = %d, want statusSaved(%d)", cs.saveStatus, statusSaved)
+			if snapshot.SaveStatus != statusSaved {
+				t.Fatalf("saveStatus = %d, want statusSaved(%d)", snapshot.SaveStatus, statusSaved)
 			}
 
-			after, err := config.GetFieldValue(cs.cfg, tt.path)
+			after, err := config.GetFieldValue(cs.ConfigSnapshot(), tt.path)
 			if err != nil {
 				t.Fatalf("GetFieldValue after: %v", err)
 			}
@@ -114,9 +117,9 @@ func TestConfigScreen_SpaceBoolOnly(t *testing.T) {
 	m := newConfigTestModel()
 	selectConfigField(t, &m, "compression", "compression.enabled")
 	cs := configTestScreen(t, m)
-	before, _ := config.GetFieldValue(cs.cfg, "compression.enabled")
+	before, _ := config.GetFieldValue(cs.ConfigSnapshot(), "compression.enabled")
 	m = sendConfigKey(m, " ")
-	after, _ := config.GetFieldValue(m.configScreen.cfg, "compression.enabled")
+	after, _ := config.GetFieldValue(m.configScreen.ConfigSnapshot(), "compression.enabled")
 	if before == after {
 		t.Fatal("Space should toggle bool")
 	}
@@ -124,28 +127,28 @@ func TestConfigScreen_SpaceBoolOnly(t *testing.T) {
 	selectConfigField(t, &m, "execution", "execution.mode")
 	m = sendConfigKey(m, " ")
 	cs = configTestScreen(t, m)
-	if cs.editMode != editNone {
-		t.Fatalf("Space on select should be no-op, but editMode = %d", cs.editMode)
+	if got := cs.Snapshot().EditMode; got != editNone {
+		t.Fatalf("Space on select should be no-op, but editMode = %d", got)
 	}
 
 	selectConfigField(t, &m, "provider", "default_model")
 	m = sendConfigKey(m, " ")
 	cs = configTestScreen(t, m)
-	if cs.editMode != editNone {
-		t.Fatalf("Space on string should be no-op, but editMode = %d", cs.editMode)
+	if got := cs.Snapshot().EditMode; got != editNone {
+		t.Fatalf("Space on string should be no-op, but editMode = %d", got)
 	}
 
 	selectConfigField(t, &m, "lsp", "lsp.servers")
 	m = sendConfigKey(m, " ")
 	cs = configTestScreen(t, m)
-	if cs.editMode != editNone {
-		t.Fatalf("Space on structmap should be no-op, but editMode = %d", cs.editMode)
+	if got := cs.Snapshot().EditMode; got != editNone {
+		t.Fatalf("Space on structmap should be no-op, but editMode = %d", got)
 	}
 
 	selectConfigField(t, &m, "execution", "execution.mode")
 	m = sendConfigKey(m, "enter")
 	cs = configTestScreen(t, m)
-	if cs.editMode != editSelect {
-		t.Fatalf("Enter on select should start edit, but editMode = %d", cs.editMode)
+	if got := cs.Snapshot().EditMode; got != editSelect {
+		t.Fatalf("Enter on select should start edit, but editMode = %d", got)
 	}
 }

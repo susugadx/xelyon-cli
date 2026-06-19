@@ -2,7 +2,6 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
@@ -14,7 +13,7 @@ func (m Model) openConfigScreen() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.activateModalScreen(screenConfig)
-	m.configScreen = newConfigScreen(cfg)
+	m.configScreen = configscreen.New(cfg)
 	return m, nil
 }
 
@@ -38,11 +37,11 @@ func (m Model) updateConfigScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.applyChatWindowSize(msg.Width, msg.Height)
-		cs.normalizePaneState(m.configLayout())
+		cs.NormalizePaneState(m.configLayout())
 		return m, nil
 
 	case ConfigSavedMsg:
-		shouldClose, saved := cs.handleSaveResult(msg)
+		shouldClose, saved := cs.HandleSaveResult(msg)
 		if shouldClose {
 			return m.closeConfigScreen()
 		}
@@ -52,15 +51,15 @@ func (m Model) updateConfigScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		action, cmd := cs.handleKey(msg, m.configLayout(), m.conversation.IsProcessing(), m.configAgent.GetProviderConfigKey())
+		action, cmd := cs.HandleKey(msg, m.configLayout(), m.conversation.IsProcessing(), m.configAgent.GetProviderConfigKey())
 		switch action {
-		case configCommandDelegateCtrlC:
+		case configscreen.CommandDelegateCtrlC:
 			return m.handleCtrlC()
-		case configCommandClose:
+		case configscreen.CommandClose:
 			return m.closeConfigScreen()
-		case configCommandSave:
+		case configscreen.CommandSave:
 			return m.beginConfigSave(false)
-		case configCommandSaveAndClose:
+		case configscreen.CommandSaveAndClose:
 			return m.beginConfigSave(true)
 		default:
 			return m, cmd
@@ -71,7 +70,7 @@ func (m Model) updateConfigScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.forwardMessageToChatFromModal(msg, screenConfig)
 	}
 }
-func (m Model) configLayout() configLayout {
+func (m Model) configLayout() configscreen.Layout {
 	return configscreen.NewLayout(m.width, m.height)
 }
 
@@ -80,19 +79,17 @@ func (m Model) beginConfigSave(closeOnSuccess bool) (tea.Model, tea.Cmd) {
 	if cs == nil {
 		return m, nil
 	}
-	cs.confirmQuit = false
-	cs.pendingClose = cs.pendingClose || closeOnSuccess
-	cs.saveStatus = statusSaving
+	cs.BeginSave(closeOnSuccess)
 	return m, m.saveConfigCmd()
 }
 
 // saveConfigCmd は非同期で設定を保存する tea.Cmd を返す。
 // Cmd クロージャには cfg の snapshot を渡し、非同期実行中に元 cfg が変更されても保存対象が変わらないようにする。
 func (m Model) saveConfigCmd() tea.Cmd {
-	snapshot := config.CloneConfig(m.configScreen.cfg)
+	snapshot := m.configScreen.ConfigSnapshot()
 	configAgent := m.configAgent
 	return func() tea.Msg {
-		if err := geminiFunctionCallingConfigSaveError(snapshot); err != nil {
+		if err := configscreen.ValidateSaveSnapshot(snapshot); err != nil {
 			return ConfigSavedMsg{Error: err, Snapshot: snapshot}
 		}
 		err := configAgent.SaveAndSyncConfig(snapshot)
@@ -105,7 +102,7 @@ func (m Model) syncEditedProviderDefaultModel() {
 	if m.configScreen == nil {
 		return
 	}
-	m.configScreen.syncEditedProviderDefaultModel(m.configAgent.GetProviderConfigKey())
+	m.configScreen.SyncEditedProviderDefaultModel(m.configAgent.GetProviderConfigKey())
 }
 
 // defaultModelSyncProvider は global default_model を同期する provider_models key を返す。
@@ -114,7 +111,7 @@ func (m Model) defaultModelSyncProvider() string {
 	if m.configScreen == nil {
 		return ""
 	}
-	return m.configScreen.defaultModelSyncProvider(m.configAgent.GetProviderConfigKey())
+	return m.configScreen.DefaultModelSyncProvider(m.configAgent.GetProviderConfigKey())
 }
 
 // addStructMapKey は structmap に空のキーを追加する。
@@ -123,5 +120,5 @@ func (m *Model) addStructMapKey(path, key string) bool {
 	if m.configScreen == nil {
 		return false
 	}
-	return m.configScreen.addStructMapKey(path, key)
+	return m.configScreen.AddStructMapKey(path, key)
 }
