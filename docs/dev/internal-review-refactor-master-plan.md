@@ -159,6 +159,34 @@ commit / push / PR 作成はユーザーの明示指示まで行わない。
   - `git diff --check`
   - `make ci-check`
 
+### 2026-06-19 runner saturation and probe plan test boundary
+
+- Split runner saturation production owner by file without changing runner API, prompt wording, report schema, JSON shape, or provider/TUI/API behavior:
+  - `runner_saturation.go`: top-level saturation orchestration and one-revision limit.
+  - `runner_saturation_check.go`: saturation-check prompt context, model call, repair call, model-output finalization, coverage merge acceptance, raw-output fail-closed application.
+  - `runner_saturation_revision.go`: report-revision prompt context, model call, repair call, and revision output finalization.
+  - `runner_saturation_coverage_audit.go`: post-Pass1 external evidence delta, external support projection, and deterministic coverage-audit merge.
+  - `runner_saturation_raw_output.go`: raw-output rehydration fail-closed decisions for saturation and revision prompt paths.
+- Split `runner_saturation_test.go` by contract:
+  - `runner_saturation_success_test.go`: saturated/no-revision paths and external-support preservation.
+  - `runner_saturation_externaldoc_test.go`: absorbed external-doc and discovery compaction contracts.
+  - `runner_saturation_revision_test.go`: model-request revision flow and one-revision no-loop behavior.
+  - `runner_saturation_coverage_audit_test.go`: deterministic coverage-audit revision feedback and unsupported official-confirmation handling.
+  - `runner_saturation_repair_test.go`: saturation/revision repair and blocked/error paths.
+  - `runner_saturation_test_support_test.go`: saturation-specific fixture/model-response helpers.
+- Split `probe/probe_plan_test.go` by contract:
+  - `probe_plan_decode_test.go`: strict JSON decode and trailing-token rejection.
+  - `probe_plan_validation_basic_test.go`: schema/target/probe-count/basic plan contract.
+  - `probe_plan_scope_analysis_test.go`: impact-surface/candidate-risk evidence and no-probe/no-risk scope rules.
+  - `probe_plan_path_mode_test.go`: path, mode, and generated-file contract.
+  - `probe_plan_command_contract_test.go`: command/workdir/arg validation.
+  - `probe_plan_request_conversion_test.go`: request conversion, copying, and decode/validate/convert determinism.
+  - `probe_plan_test_helpers_test.go`: shared probe-plan fixtures, JSON mutation helpers, and file-content fixtures.
+- Behavior intentionally unchanged: prompt/report semantics, probe policy, command contract, request conversion, JSON shape, and public facade/API names.
+- Verification so far:
+  - `go test ./internal/review -run 'TestReview.*Saturation|TestReview.*Revision|TestReviewRunner|TestReviewPrompt|TestReviewRun|TestNewReviewRunner' -count=1`
+  - `go test ./internal/review/probe -count=1`
+
 ## Completion checks
 
 - Focused tests for each touched package pass after its tranche.
@@ -176,7 +204,7 @@ commit / push / PR 作成はユーザーの明示指示まで行わない。
 
 ## Pending scope
 
-- `probe/probe_plan_test.go` は必要になった場合だけ test boundary 整理する。sandbox/path/security policy は別 task。
+- probe plan の巨大 test file 分割は完了。sandbox/path/security policy 自体の整理や production policy 変更は別 task。
 - TS/JS/Python/Rust などの related context/search language support は別 task。追加時は `internal/review/evidence` の private language catalog に spec/extractor を足し、public schema と prompt/report behavior は別途 shared-contract 判定する。
 - `internal/tools/search` / `filefilter` と共有する言語 catalog 化は別 task。今回の review-local catalog を直接外部 owner に広げない。
 - Package split、facade removal、public API cleanup は今回の stop condition 外。
