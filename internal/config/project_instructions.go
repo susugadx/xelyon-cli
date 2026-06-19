@@ -87,13 +87,14 @@ const (
 
 // InstructionFile は読み込んだ guidance ファイルの内容。
 type InstructionFile struct {
-	Path       string
-	Label      string
-	Scope      string
-	Strength   InstructionStrength
-	Content    string
-	Truncated  bool
-	GitTracked bool
+	Path            string
+	Label           string
+	Scope           string
+	RepositoryScope string
+	Strength        InstructionStrength
+	Content         string
+	Truncated       bool
+	GitTracked      bool
 }
 
 // InstructionFileStatus は prompt に注入しない guidance 候補の状態表示用情報。
@@ -123,6 +124,12 @@ func LoadProjectInstructionBundle(cfg *Config) (*ProjectInstructionBundle, error
 
 // LoadProjectInstructionBundleForDir は指定ディレクトリを基準に instruction bundle を解決する。
 func LoadProjectInstructionBundleForDir(cfg *Config, cwd string) (*ProjectInstructionBundle, error) {
+	return LoadProjectInstructionBundleForDirWithInputPaths(cfg, cwd, nil)
+}
+
+// LoadProjectInstructionBundleForDirWithInputPaths は指定ディレクトリと
+// 入力から参照された repo-relative path を基準に instruction bundle を解決する。
+func LoadProjectInstructionBundleForDirWithInputPaths(cfg *Config, cwd string, inputPaths []string) (*ProjectInstructionBundle, error) {
 	if strings.TrimSpace(cwd) == "" {
 		return nil, fmt.Errorf("cwd is empty")
 	}
@@ -149,8 +156,8 @@ func LoadProjectInstructionBundleForDir(cfg *Config, cwd string) (*ProjectInstru
 	budget := newInstructionByteBudget(cfgForLoad.AgentInstructions)
 
 	if shouldLoadProjectGuidance(mode, projectCfg != nil) {
-		strength := resolveProjectGuidanceStrength(projectCfg)
-		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, cfgForLoad.AgentInstructions, gitRoot, strength, &budget)
+		strength := resolveProjectGuidanceStrength()
+		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, cfgForLoad.AgentInstructions, gitRoot, strength, &budget, cwd, inputPaths)
 	}
 
 	if cfgForLoad.AgentInstructions.Global.Enabled {
@@ -173,29 +180,8 @@ func shouldLoadProjectGuidance(mode string, hasProjectConfig bool) bool {
 	}
 }
 
-func resolveProjectGuidanceStrength(projectCfg *ProjectConfig) InstructionStrength {
-	if projectConfigHasUnconditionalLegacyInstructions(projectCfg) {
-		return InstructionStrengthAdvisory
-	}
+func resolveProjectGuidanceStrength() InstructionStrength {
 	return InstructionStrengthProjectGuidance
-}
-
-func projectConfigHasUnconditionalLegacyInstructions(projectCfg *ProjectConfig) bool {
-	if projectCfg == nil {
-		return false
-	}
-	if strings.TrimSpace(projectCfg.Context) != "" || len(dedupeNonEmpty(projectCfg.Rules)) > 0 {
-		return true
-	}
-	for _, block := range projectCfg.Conditional {
-		if len(block.Paths) != 0 {
-			continue
-		}
-		if strings.TrimSpace(block.Context) != "" || len(dedupeNonEmpty(block.Rules)) > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 type guidanceLoadPlan struct {
@@ -299,7 +285,7 @@ func appendInstructionFileStatus(bundle *ProjectInstructionBundle, status Instru
 	*target = append(*target, status)
 }
 
-func resolveProjectGuidanceLoadPlan(rootPath, resolvedRootPath, path string, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget, gitTrackedLookup func(fullPath string) (tracked bool, known bool)) guidanceLoadPlan {
+func resolveProjectGuidanceLoadPlan(rootPath, resolvedRootPath, path string, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget, gitTrackedLookup func(fullPath string) (tracked bool, known bool), repositoryScope string) guidanceLoadPlan {
 	fullPath, ok := resolveProjectGuidancePath(rootPath, path)
 	if !ok {
 		return guidanceLoadPlan{
@@ -317,10 +303,11 @@ func resolveProjectGuidanceLoadPlan(rootPath, resolvedRootPath, path string, aiC
 		CandidatePath: path,
 		Valid:         true,
 		LoadOptions: instructionFileLoadOptions{
-			FullPath:     fullPath,
-			DisplayLabel: path,
-			Scope:        "project",
-			Strength:     strength,
+			FullPath:        fullPath,
+			DisplayLabel:    path,
+			Scope:           "project",
+			RepositoryScope: normalizeRepositoryInstructionScope(repositoryScope),
+			Strength:        strength,
 			Policy: instructionFileLoadPolicy{
 				RequireGitTracked:    !aiCfg.Project.IncludeGitignored,
 				IncludeGitignored:    aiCfg.Project.IncludeGitignored,
@@ -354,7 +341,7 @@ func resolveGlobalGuidanceLoadPlan(path string, budget *instructionByteBudget, e
 	}
 }
 
-func buildProjectGuidanceLoadPlans(rootPath string, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget) []guidanceLoadPlan {
+func buildProjectGuidanceLoadPlans(rootPath, cwd string, inputPaths []string, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget) []guidanceLoadPlan {
 	resolvedRootPath, _ := resolvePathForBoundaryComparison(rootPath)
 	trackedCache := map[string]struct {
 		tracked bool
@@ -371,9 +358,10 @@ func buildProjectGuidanceLoadPlans(rootPath string, aiCfg AgentInstructionsConfi
 		}{tracked: tracked, known: known}
 		return tracked, known
 	}
-	return buildGuidanceLoadPlans(aiCfg.Project.Files, aiCfg.IncludeLocalFiles, func(path string) guidanceLoadPlan {
-		return resolveProjectGuidanceLoadPlan(rootPath, resolvedRootPath, path, aiCfg, gitRoot, strength, budget, gitTrackedLookup)
+	plans := buildScopedProjectGuidanceLoadPlans(rootPath, cwd, inputPaths, aiCfg, func(path, repositoryScope string) guidanceLoadPlan {
+		return resolveProjectGuidanceLoadPlan(rootPath, resolvedRootPath, path, aiCfg, gitRoot, strength, budget, gitTrackedLookup, repositoryScope)
 	})
+	return plans
 }
 
 func buildGlobalGuidanceLoadPlans(aiCfg AgentInstructionsConfig, budget *instructionByteBudget) []guidanceLoadPlan {
@@ -382,8 +370,8 @@ func buildGlobalGuidanceLoadPlans(aiCfg AgentInstructionsConfig, budget *instruc
 	})
 }
 
-func loadProjectGuidanceFiles(bundle *ProjectInstructionBundle, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget) []InstructionFile {
-	plans := buildProjectGuidanceLoadPlans(bundle.RootPath, aiCfg, gitRoot, strength, budget)
+func loadProjectGuidanceFiles(bundle *ProjectInstructionBundle, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget, cwd string, inputPaths []string) []InstructionFile {
+	plans := buildProjectGuidanceLoadPlans(bundle.RootPath, cwd, inputPaths, aiCfg, gitRoot, strength, budget)
 	return loadGuidanceFiles(bundle, budget, plans)
 }
 

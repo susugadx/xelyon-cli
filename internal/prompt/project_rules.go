@@ -2,12 +2,13 @@ package prompt
 
 import (
 	"fmt"
+	"html"
 	"regexp"
 	"strings"
 )
 
 var projectConfigBlockRe = regexp.MustCompile(`(?s)\n?<!-- PROJECT_CONFIG_START -->.*?<!-- PROJECT_CONFIG_END -->\n?`)
-var verificationRuleBlockRe = regexp.MustCompile(`(?s)(### 10\. Verification Protocol \(MANDATORY\).*?)(\n### [0-9]+\.\s|\z)`)
+var trailingProjectConfigBlockRe = regexp.MustCompile(`(?s)\n?<!-- PROJECT_CONFIG_START -->.*?<!-- PROJECT_CONFIG_END -->\s*$`)
 
 // BuildRulesBlockFromList は []string のルールリストから mandatory rules ブロックを構築する。
 // xelyon.yaml の rules フィールド用。空リストの場合は空文字を返す。
@@ -51,6 +52,8 @@ func BuildProjectConfigBlock(rules []string, contexts []string) string {
 // ProjectInstructionEntry は imported guidance の注入用 DTO。
 type ProjectInstructionEntry struct {
 	Label    string
+	Scope    string
+	Source   string
 	Content  string
 	Strength string // project_guidance / advisory
 }
@@ -70,8 +73,6 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	rulesBlock := BuildRulesBlockFromList(input.MandatoryRules)
 	contextParts := normalizeProjectContexts(input.ProjectContexts)
 	warnings := normalizeProjectWarnings(input.Warnings)
-	hasLegacyInstructions := rulesBlock != "" || len(contextParts) > 0
-
 	hasProjectGuidance := len(input.ProjectGuidance) > 0
 	hasGlobalGuidance := len(input.GlobalGuidance) > 0
 	hasWarnings := len(warnings) > 0
@@ -89,17 +90,11 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 		b.WriteString(rulesBlock)
 	}
 	if len(contextParts) > 0 {
-		b.WriteString("\n\n## Project Context\n")
+		b.WriteString("\n\n## Legacy xelyon.yaml Context\n")
 		b.WriteString(strings.Join(contextParts, "\n\n"))
 	}
 	if hasProjectGuidance {
-		sectionText := projectGuidanceWithoutConfigText
-		projectGuidance := input.ProjectGuidance
-		if hasLegacyInstructions {
-			sectionText = projectGuidanceWithConfigText
-			projectGuidance = guidanceEntriesWithStrength(input.ProjectGuidance, "advisory")
-		}
-		appendGuidanceSection(&b, "## Imported Project Guidance", sectionText, projectGuidance)
+		appendRepositoryGuidanceSection(&b, "## Imported Project Guidance", projectGuidanceText, input.ProjectGuidance)
 	}
 	if hasGlobalGuidance {
 		appendGuidanceSection(&b, "## Enabled Global Guidance", globalGuidanceText, input.GlobalGuidance)
@@ -113,18 +108,6 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	}
 	b.WriteString("\n<!-- PROJECT_CONFIG_END -->")
 	return b.String()
-}
-
-func guidanceEntriesWithStrength(entries []ProjectInstructionEntry, strength string) []ProjectInstructionEntry {
-	if len(entries) == 0 {
-		return nil
-	}
-	next := make([]ProjectInstructionEntry, len(entries))
-	copy(next, entries)
-	for i := range next {
-		next[i].Strength = strength
-	}
-	return next
 }
 
 func appendGuidanceSection(b *strings.Builder, heading string, intro string, entries []ProjectInstructionEntry) {
@@ -147,8 +130,51 @@ func appendGuidanceSection(b *strings.Builder, heading string, intro string, ent
 	}
 }
 
+func appendRepositoryGuidanceSection(b *strings.Builder, heading string, intro string, entries []ProjectInstructionEntry) {
+	if b == nil || strings.TrimSpace(heading) == "" {
+		return
+	}
+	b.WriteString("\n\n")
+	b.WriteString(heading)
+	b.WriteString("\n\n")
+	b.WriteString(intro)
+	for _, entry := range entries {
+		content := strings.TrimSpace(entry.Content)
+		if content == "" {
+			continue
+		}
+		b.WriteString("\n\n<repository_instructions scope=\"")
+		b.WriteString(escapeInstructionAttribute(instructionEntryScope(entry)))
+		b.WriteString("\" source=\"")
+		b.WriteString(escapeInstructionAttribute(instructionEntrySource(entry)))
+		b.WriteString("\">\n")
+		b.WriteString(content)
+		b.WriteString("\n</repository_instructions>")
+	}
+}
+
+func instructionEntryScope(entry ProjectInstructionEntry) string {
+	scope := strings.TrimSpace(entry.Scope)
+	if scope == "" {
+		return "."
+	}
+	return scope
+}
+
+func instructionEntrySource(entry ProjectInstructionEntry) string {
+	source := strings.TrimSpace(entry.Source)
+	if source != "" {
+		return source
+	}
+	return strings.TrimSpace(entry.Label)
+}
+
+func escapeInstructionAttribute(value string) string {
+	return html.EscapeString(strings.TrimSpace(value))
+}
+
 // InjectProjectConfigBlock は SystemPrompt の marker 位置に project config ブロックを埋め込む。
-// marker のない custom prompt では legacy Verification Protocol 境界に挿入する。
+// marker のない custom prompt では末尾へ追加する。
 // projectBlock が空の場合は systemPrompt をそのまま返す。
 func InjectProjectConfigBlock(systemPrompt, projectBlock string) string {
 	if projectBlock == "" {
@@ -160,22 +186,7 @@ func InjectProjectConfigBlock(systemPrompt, projectBlock string) string {
 		return systemPrompt[:insertPos] + projectBlock + systemPrompt[insertPos:]
 	}
 
-	// 後方互換: custom prompt の Rule #10 ブロック境界を正規表現で見つけて、その直後に挿入する。
-	if match := verificationRuleBlockRe.FindStringSubmatchIndex(systemPrompt); len(match) >= 4 {
-		insertPos := match[3]
-		return systemPrompt[:insertPos] + projectBlock + systemPrompt[insertPos:]
-	}
-
-	// Rule #10 の末尾（"A task is NOT complete until verification passes"）を探す
-	marker := "A task is NOT complete until verification passes"
-	idx := strings.Index(systemPrompt, marker)
-	if idx < 0 {
-		// マーカーが見つからない場合は Workflow Rules の末尾に追加
-		return systemPrompt + projectBlock
-	}
-
-	insertPos := idx + len(marker)
-	return systemPrompt[:insertPos] + projectBlock + systemPrompt[insertPos:]
+	return systemPrompt + projectBlock
 }
 
 // InjectProjectRules は後方互換のため rules のみを注入する。
@@ -188,7 +199,11 @@ func InjectProjectRules(systemPrompt, rulesBlock string) string {
 
 // StripProjectConfigSections は以前注入した project config ブロックを除去する。
 func StripProjectConfigSections(systemPrompt string) string {
-	return projectConfigBlockRe.ReplaceAllString(systemPrompt, "")
+	stripped := projectConfigBlockRe.ReplaceAllString(systemPrompt, "")
+	if stripped != systemPrompt && trailingProjectConfigBlockRe.MatchString(systemPrompt) {
+		return strings.TrimRight(stripped, "\n")
+	}
+	return stripped
 }
 
 // ExtractProjectConfigBlock は system prompt から project config ブロックを抽出する。

@@ -2,6 +2,7 @@ package configmeta
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
@@ -92,6 +93,21 @@ func TestSectionMetadataFieldConsistency(t *testing.T) {
 		case "", ExampleFilterModeFields, ExampleFilterModeKeepAll:
 		default:
 			t.Fatalf("unknown example filter mode %q for %s", section.Example.FilterMode, sectionName)
+		}
+	}
+}
+
+func TestAgentInstructionsProjectFilesDescriptionDocumentsScopedGuidance(t *testing.T) {
+	description := Sections["agent_instructions"].Fields["project.files"]
+	for _, expected := range []string{
+		"basename",
+		"root→cwd",
+		"root→入力参照 path",
+		"scoped chain",
+		"root 相対 explicit file",
+	} {
+		if !strings.Contains(description, expected) {
+			t.Fatalf("project.files description missing %q: %s", expected, description)
 		}
 	}
 }

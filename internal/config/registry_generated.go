@@ -137,7 +137,7 @@ var FieldDescriptions = map[string]string{
 	"agent_instructions.include_local_files":        "CLAUDE.local.md / AGENTS.local.md など local 系 guidance を許可",
 	"agent_instructions.max_file_bytes":             "1ファイルあたりの最大読み込みバイト数",
 	"agent_instructions.max_total_bytes":            "guidance 全体の最大読み込みバイト数",
-	"agent_instructions.project.files":              "project-local guidance ファイル候補（既定は AGENTS.md）",
+	"agent_instructions.project.files":              "project-local guidance ファイル候補（basename は root→cwd / root→入力参照 path の scoped chain、/ を含む path は root 相対 explicit file。既定は AGENTS.md）",
 	"agent_instructions.project.include_gitignored": "gitignored / untracked guidance を許可",
 	"agent_instructions.project.mode":               "project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）",
 	"compression.enabled":                           "自動圧縮を有効化",

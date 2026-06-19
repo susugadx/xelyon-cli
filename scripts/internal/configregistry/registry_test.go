@@ -115,3 +115,20 @@ func TestGenerateRegistrySourceIncludesMCPMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateRegistrySourceIncludesProjectFilesScopedGuidanceDescription(t *testing.T) {
+	source, err := GenerateRegistrySource()
+	if err != nil {
+		t.Fatalf("GenerateRegistrySource error: %v", err)
+	}
+	text := string(source)
+	for _, expected := range []string{
+		`"agent_instructions.project.files":`,
+		"basename は root→cwd / root→入力参照 path の scoped chain",
+		"/ を含む path は root 相対 explicit file",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("generated registry source missing %q in:\n%s", expected, text)
+		}
+	}
+}

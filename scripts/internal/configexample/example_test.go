@@ -171,6 +171,7 @@ func TestGenerateExampleFile(t *testing.T) {
 		"lsp:",
 		"agent_instructions:",
 		"project:",
+		"# project-local guidance ファイル候補（basename は root→cwd / root→入力参照 path の scoped chain、/ を含む path は root 相対 explicit file。既定は AGENTS.md）",
 		"mode: always",
 	} {
 		if !strings.Contains(text, expected) {

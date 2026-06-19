@@ -14,6 +14,12 @@ import (
 // ComputeProjectInstructionBundleFingerprintForDir は guidance bundle の変更検知キーを返す。
 // 実際に bundle/prompt に反映される guidance 結果をベースに算出する。
 func ComputeProjectInstructionBundleFingerprintForDir(cfg *Config, cwd string, previous *ProjectInstructionBundle) string {
+	return ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, cwd, nil, previous)
+}
+
+// ComputeProjectInstructionBundleFingerprintForDirWithInputPaths は guidance bundle の
+// 入力 path 選択を含む変更検知キーを返す。
+func ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg *Config, cwd string, inputPaths []string, previous *ProjectInstructionBundle) string {
 	if strings.TrimSpace(cwd) == "" {
 		return ""
 	}
@@ -54,8 +60,9 @@ func ComputeProjectInstructionBundleFingerprintForDir(cfg *Config, cwd string, p
 	}
 	builder.Add("root", normalizedAbsolutePath(root.RootPath))
 	builder.Add("root_source", string(root.Source))
+	appendProjectInstructionInputScopesToFingerprint(builder, projectInstructionInputDirectoryScopes(root.RootPath, inputPaths))
 
-	fingerprintBundle := loadGuidanceBundleForFingerprint(aiCfg, projectCfg, root.RootPath, root.Source, gitRoot)
+	fingerprintBundle := loadGuidanceBundleForFingerprint(aiCfg, projectCfg, root.RootPath, root.Source, gitRoot, cwd, inputPaths)
 	appendLoadedGuidanceToFingerprint(builder, "project", fingerprintBundle.ProjectGuidance)
 	appendLoadedGuidanceToFingerprint(builder, "global", fingerprintBundle.GlobalGuidance)
 	appendGuidanceWarningsToFingerprint(builder, fingerprintBundle.WarningEntries)
@@ -63,7 +70,7 @@ func ComputeProjectInstructionBundleFingerprintForDir(cfg *Config, cwd string, p
 	return builder.Sum()
 }
 
-func loadGuidanceBundleForFingerprint(aiCfg AgentInstructionsConfig, projectCfg *ProjectConfig, rootPath string, rootSource ProjectInstructionRootSource, gitRoot string) *ProjectInstructionBundle {
+func loadGuidanceBundleForFingerprint(aiCfg AgentInstructionsConfig, projectCfg *ProjectConfig, rootPath string, rootSource ProjectInstructionRootSource, gitRoot string, cwd string, inputPaths []string) *ProjectInstructionBundle {
 	bundle := &ProjectInstructionBundle{
 		ProjectConfig: projectCfg,
 		RootPath:      rootPath,
@@ -72,13 +79,22 @@ func loadGuidanceBundleForFingerprint(aiCfg AgentInstructionsConfig, projectCfg 
 	budget := newInstructionByteBudget(aiCfg)
 	mode := normalizeAgentInstructionProjectMode(aiCfg.Project.Mode)
 	if shouldLoadProjectGuidance(mode, projectCfg != nil) {
-		strength := resolveProjectGuidanceStrength(projectCfg)
-		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, aiCfg, gitRoot, strength, &budget)
+		strength := resolveProjectGuidanceStrength()
+		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, aiCfg, gitRoot, strength, &budget, cwd, inputPaths)
 	}
 	if aiCfg.Global.Enabled {
 		bundle.GlobalGuidance = loadGlobalGuidanceFiles(bundle, aiCfg, &budget)
 	}
 	return bundle
+}
+
+func appendProjectInstructionInputScopesToFingerprint(builder *projectInstructionFingerprintBuilder, inputScopes []string) {
+	if builder == nil || len(inputScopes) == 0 {
+		return
+	}
+	for i, inputScope := range inputScopes {
+		builder.Add("input_scope."+strconv.Itoa(i), strings.TrimSpace(inputScope))
+	}
 }
 
 func appendLoadedGuidanceToFingerprint(builder *projectInstructionFingerprintBuilder, scope string, files []InstructionFile) {
@@ -107,6 +123,7 @@ func appendGuidanceFileToFingerprint(builder *projectInstructionFingerprintBuild
 	}
 	builder.Add(prefix+".path", normalizedAbsolutePath(file.Path))
 	builder.Add(prefix+".label", file.Label)
+	builder.Add(prefix+".repository_scope", file.RepositoryScope)
 	builder.Add(prefix+".strength", string(file.Strength))
 	builder.Add(prefix+".git_tracked", strconv.FormatBool(file.GitTracked))
 	builder.Add(prefix+".truncated", strconv.FormatBool(file.Truncated))

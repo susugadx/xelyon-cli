@@ -23,30 +23,40 @@ func loadProjectInstructionBundleForCWDWithError(cfg *config.Config, cwd string)
 	return config.LoadProjectInstructionBundleForDir(cfg, cwd)
 }
 
+func loadProjectInstructionBundleForCWDAndInputPathsWithError(cfg *config.Config, cwd string, inputPaths []string) (*config.ProjectInstructionBundle, error) {
+	return config.LoadProjectInstructionBundleForDirWithInputPaths(cfg, cwd, inputPaths)
+}
+
 func (a *Agent) loadProjectInstructionBundleCached(forceReload bool) *config.ProjectInstructionBundle {
 	bundle, _ := a.loadProjectInstructionBundleCachedWithError(forceReload)
 	return bundle
 }
 
 func (a *Agent) loadProjectInstructionBundleCachedWithError(forceReload bool) (*config.ProjectInstructionBundle, error) {
+	return a.loadProjectInstructionBundleCachedWithInputWithError(forceReload, "")
+}
+
+func (a *Agent) loadProjectInstructionBundleCachedWithInput(forceReload bool, input string) *config.ProjectInstructionBundle {
+	bundle, _ := a.loadProjectInstructionBundleCachedWithInputWithError(forceReload, input)
+	return bundle
+}
+
+func (a *Agent) loadProjectInstructionBundleCachedWithInputWithError(forceReload bool, input string) (*config.ProjectInstructionBundle, error) {
 	if a == nil {
 		return nil, nil
 	}
 	cache := newProjectInstructionBundleCache(a)
-	if decision := cache.decision(forceReload); decision.reuse {
+	if decision := cache.decision(forceReload, input); decision.reuse {
 		return a.projectInstructionBundle, nil
 	} else {
-		bundle, err := loadProjectInstructionBundleForCWDWithError(a.cfg(), a.invocationCWD())
+		inputPaths := projectInstructionInputPathsForAgent(a, input)
+		bundle, err := loadProjectInstructionBundleForCWDAndInputPathsWithError(a.cfg(), a.invocationCWD(), inputPaths)
 		if err != nil {
 			return nil, err
 		}
 		a.projectInstructionBundle = bundle
 		a.projectInstructionBundleLoaded = true
-		if decision.cacheKey != "" {
-			a.projectInstructionBundleKey = decision.cacheKey
-		} else {
-			a.projectInstructionBundleKey = cache.currentKey()
-		}
+		a.projectInstructionBundleKey = cache.currentKey(input)
 		return bundle, nil
 	}
 }
@@ -89,6 +99,8 @@ func toPromptInstructionEntries(files []config.InstructionFile) []prompt.Project
 	for _, file := range files {
 		entries = append(entries, prompt.ProjectInstructionEntry{
 			Label:    file.Label,
+			Scope:    file.RepositoryScope,
+			Source:   file.Label,
 			Content:  file.Content,
 			Strength: string(file.Strength),
 		})

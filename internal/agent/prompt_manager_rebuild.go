@@ -21,7 +21,7 @@ func (m *PromptManager) InitializeProjectInstructions(opts projectInstructionApp
 	if a == nil {
 		return nil
 	}
-	bundle, err := a.loadProjectInstructionBundleCachedWithError(true)
+	bundle, err := a.loadProjectInstructionBundleCachedWithInputWithError(true, opts.projectMapInput)
 	if err != nil {
 		return err
 	}
@@ -88,9 +88,9 @@ func (m *PromptManager) resolveBundleForRebuild(req systemPromptRebuildRequest) 
 	case systemPromptBundleResolveGiven:
 		return req.bundle
 	case systemPromptBundleResolveForced:
-		return a.loadProjectInstructionBundleCached(true)
+		return a.loadProjectInstructionBundleCachedWithInput(true, req.input)
 	default:
-		return a.loadProjectInstructionBundleCached(false)
+		return a.loadProjectInstructionBundleCachedWithInput(false, req.input)
 	}
 }
 

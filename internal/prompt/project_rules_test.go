@@ -8,8 +8,8 @@ import (
 func TestInjectProjectRules_Normal(t *testing.T) {
 	systemPrompt := `## Workflow Rules
 
-### 10. Verification Protocol (MANDATORY)
-A task is NOT complete until verification passes
+### 10. Custom Verification Section
+Checks must pass before completion
 
 ### 11. Impact Analysis
 Check references before changes`
@@ -18,8 +18,8 @@ Check references before changes`
 
 	result := InjectProjectRules(systemPrompt, rulesBlock)
 
-	// Rule #10 の直後に挿入されること
-	idx10 := strings.Index(result, "verification passes")
+	// marker がない custom prompt では旧 Rule #10 prose を anchor にせず末尾に追加する。
+	idx10 := strings.Index(result, "Checks must pass")
 	idxRules := strings.Index(result, "PROJECT-SPECIFIC RULES")
 	idx11 := strings.Index(result, "### 11. Impact Analysis")
 
@@ -29,8 +29,8 @@ Check references before changes`
 	if idxRules < idx10 {
 		t.Error("rules block should come AFTER Rule #10")
 	}
-	if idx11 < idxRules {
-		t.Error("rules block should come BEFORE Rule #11")
+	if idxRules < idx11 {
+		t.Error("rules block should be appended after custom prompt content")
 	}
 }
 
@@ -57,8 +57,8 @@ func TestBuildProjectConfigBlock(t *testing.T) {
 func TestInjectProjectConfigBlockAndStrip(t *testing.T) {
 	systemPrompt := `## Workflow Rules
 
-### 10. Verification Protocol (MANDATORY)
-A task is NOT complete until verification passes
+### 10. Custom Verification Section
+Checks must pass before completion
 
 ### 11. Impact Analysis
 Check references before changes`
@@ -94,10 +94,10 @@ func TestInjectProjectRules_MarkerNotFound(t *testing.T) {
 	}
 }
 
-func TestInjectProjectConfigBlock_UsesVerificationSectionAnchor(t *testing.T) {
+func TestInjectProjectConfigBlock_AppendsCustomPromptWithoutUsingVerificationProse(t *testing.T) {
 	systemPrompt := `## Workflow Rules
 
-### 10. Verification Protocol (MANDATORY)
+### 10. Custom Verification Section
 Verification section body changed and no legacy marker exists.
 
 ### 11. Impact Analysis
@@ -106,14 +106,14 @@ Check references before changes`
 
 	result := InjectProjectConfigBlock(systemPrompt, projectBlock)
 	idxRules := strings.Index(result, "PROJECT_CONFIG_START")
-	idxSection10 := strings.Index(result, "### 10. Verification Protocol")
+	idxSection10 := strings.Index(result, "### 10. Custom Verification Section")
 	idxSection11 := strings.Index(result, "### 11. Impact Analysis")
 
 	if idxRules < 0 {
 		t.Fatal("project block was not injected")
 	}
-	if idxRules < idxSection10 || idxSection11 < idxRules {
-		t.Fatalf("project block should be injected between section #10 and #11: %s", result)
+	if idxRules < idxSection10 || idxRules < idxSection11 {
+		t.Fatalf("project block should be appended after custom prompt content: %s", result)
 	}
 }
 
@@ -191,11 +191,11 @@ func TestBuildProjectInstructionBlock_NoXelyonUsesProjectGuidanceLanguage(t *tes
 	if strings.Contains(block, "PROJECT-SPECIFIC RULES (MANDATORY)") {
 		t.Fatal("mandatory block should not be generated when xelyon.yaml rules are absent")
 	}
-	if !strings.Contains(block, "No legacy xelyon.yaml rules/context are active for this turn.") {
-		t.Fatal("missing no-legacy guidance explanation")
+	if !strings.Contains(block, "root-to-nearest order") {
+		t.Fatal("missing scoped guidance explanation")
 	}
-	if !strings.Contains(block, "### AGENTS.md") {
-		t.Fatal("missing guidance heading")
+	if !strings.Contains(block, `<repository_instructions scope="." source="AGENTS.md">`) {
+		t.Fatal("missing repository instruction wrapper")
 	}
 }
 
@@ -206,14 +206,11 @@ func TestBuildProjectInstructionBlock_NoLegacyInstructionsKeepProjectGuidanceLan
 		},
 	})
 
-	if !strings.Contains(block, "No legacy xelyon.yaml rules/context are active for this turn.") {
-		t.Fatal("missing no-legacy guidance explanation")
-	}
 	if strings.Contains(block, "The following project guidance files are treated as advisory guidance.") {
 		t.Fatalf("no legacy instructions should not render advisory guidance explanation:\n%s", block)
 	}
-	if !strings.Contains(block, "### AGENTS.md (project guidance)") {
-		t.Fatalf("project guidance heading missing:\n%s", block)
+	if !strings.Contains(block, `<repository_instructions scope="." source="AGENTS.md">`) {
+		t.Fatalf("project guidance wrapper missing:\n%s", block)
 	}
 }
 
@@ -231,14 +228,14 @@ func TestBuildProjectInstructionBlock_XelyonRulesRemainMandatory(t *testing.T) {
 	if !strings.Contains(block, "1. Run go test ./...") {
 		t.Fatal("mandatory rule missing")
 	}
-	if !strings.Contains(block, "advisory guidance") {
-		t.Fatal("advisory explanation missing for project guidance with xelyon")
+	if strings.Contains(block, "advisory guidance") {
+		t.Fatalf("legacy xelyon.yaml should not downgrade repository guidance to advisory:\n%s", block)
 	}
 	if strings.Contains(block, "1. Advisory style note.") {
 		t.Fatal("guidance content should not be converted into mandatory numbered rules")
 	}
-	if !strings.Contains(block, "### CLAUDE.md (advisory)") {
-		t.Fatal("missing CLAUDE.md heading")
+	if !strings.Contains(block, `<repository_instructions scope="." source="CLAUDE.md">`) {
+		t.Fatal("missing CLAUDE.md repository wrapper")
 	}
 }
 
@@ -263,15 +260,15 @@ func TestBuildProjectInstructionBlock_GlobalGuidanceIsAdvisory(t *testing.T) {
 func TestBuildProjectInstructionBlock_RendersStrengthAndWarnings(t *testing.T) {
 	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
 		ProjectGuidance: []ProjectInstructionEntry{
-			{Label: "AGENTS.md", Content: "Follow strict policy.", Strength: "project_guidance"},
+			{Label: "internal/agent/AGENTS.md", Scope: "internal/agent", Source: "internal/agent/AGENTS.md", Content: "Follow strict policy.", Strength: "project_guidance"},
 		},
 		Warnings: []string{
 			"Skipped invalid project guidance path: ../outside.md",
 		},
 	})
 
-	if !strings.Contains(block, "### AGENTS.md (project guidance)") {
-		t.Fatal("project guidance strength label missing")
+	if !strings.Contains(block, `<repository_instructions scope="internal/agent" source="internal/agent/AGENTS.md">`) {
+		t.Fatal("repository guidance wrapper missing")
 	}
 	if !strings.Contains(block, "## Guidance Load Notes") {
 		t.Fatal("guidance load notes section missing")

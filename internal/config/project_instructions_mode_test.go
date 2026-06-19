@@ -45,7 +45,7 @@ func TestLoadProjectInstructionBundle_FallbackModeSkipsGuidanceWhenXelyonExists(
 	}
 }
 
-func TestLoadProjectInstructionBundle_AlwaysModeLoadsAdvisoryWithXelyon(t *testing.T) {
+func TestLoadProjectInstructionBundle_AlwaysModeKeepsProjectGuidanceWithLegacyXelyon(t *testing.T) {
 	requireGit(t)
 
 	root := t.TempDir()
@@ -61,8 +61,8 @@ func TestLoadProjectInstructionBundle_AlwaysModeLoadsAdvisoryWithXelyon(t *testi
 	if len(bundle.ProjectGuidance) != 1 {
 		t.Fatalf("ProjectGuidance len = %d, want 1", len(bundle.ProjectGuidance))
 	}
-	if bundle.ProjectGuidance[0].Strength != InstructionStrengthAdvisory {
-		t.Fatalf("Strength = %q, want %q", bundle.ProjectGuidance[0].Strength, InstructionStrengthAdvisory)
+	if bundle.ProjectGuidance[0].Strength != InstructionStrengthProjectGuidance {
+		t.Fatalf("Strength = %q, want %q", bundle.ProjectGuidance[0].Strength, InstructionStrengthProjectGuidance)
 	}
 }
 

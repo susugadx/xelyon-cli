@@ -158,7 +158,7 @@ agent_instructions:
     project:
         # project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）
         mode: always
-        # project-local guidance ファイル候補（既定は AGENTS.md）
+        # project-local guidance ファイル候補（basename は root→cwd / root→入力参照 path の scoped chain、/ を含む path は root 相対 explicit file。既定は AGENTS.md）
         files:
             - AGENTS.md
         # gitignored / untracked guidance を許可

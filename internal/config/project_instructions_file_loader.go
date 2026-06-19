@@ -23,12 +23,13 @@ type instructionImportTraversalState struct {
 }
 
 type instructionFileLoadOptions struct {
-	FullPath     string
-	DisplayLabel string
-	Scope        string
-	Strength     InstructionStrength
-	Policy       instructionFileLoadPolicy
-	Traversal    instructionImportTraversalState
+	FullPath        string
+	DisplayLabel    string
+	Scope           string
+	RepositoryScope string
+	Strength        InstructionStrength
+	Policy          instructionFileLoadPolicy
+	Traversal       instructionImportTraversalState
 }
 
 func (opts instructionFileLoadOptions) withImportPath(importPath string) instructionFileLoadOptions {
@@ -165,13 +166,14 @@ func buildInstructionLoadResult(opts instructionFileLoadOptions, data []byte, gi
 
 	return instructionLoadResult{
 		File: InstructionFile{
-			Path:       opts.FullPath,
-			Label:      opts.DisplayLabel,
-			Scope:      opts.Scope,
-			Strength:   opts.Strength,
-			Content:    content,
-			Truncated:  truncated,
-			GitTracked: gitTracked,
+			Path:            opts.FullPath,
+			Label:           opts.DisplayLabel,
+			Scope:           opts.Scope,
+			RepositoryScope: opts.RepositoryScope,
+			Strength:        opts.Strength,
+			Content:         content,
+			Truncated:       truncated,
+			GitTracked:      gitTracked,
 		},
 		Loaded: true,
 	}

@@ -267,7 +267,7 @@ var Sections = map[string]SectionInfo{
 		},
 		Fields: map[string]string{
 			"project.mode":               "project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）",
-			"project.files":              "project-local guidance ファイル候補（既定は AGENTS.md）",
+			"project.files":              "project-local guidance ファイル候補（basename は root→cwd / root→入力参照 path の scoped chain、/ を含む path は root 相対 explicit file。既定は AGENTS.md）",
 			"project.include_gitignored": "gitignored / untracked guidance を許可",
 			"global.enabled":             "global guidance 読み込みを有効化",
 			"global.files":               "global guidance ファイル候補（既定は ~/.xelyon/AGENTS.md）",
