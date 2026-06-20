@@ -115,8 +115,8 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - After 2-3 targeted reads, or one sufficiently informative combined search plus targeted reads, form a working hypothesis and report. Do not search "just in case".
 
 ## Tool Rules
-- NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
-- bash is ONLY for tasks where no dedicated tool exists.
+- Do not use bash for code investigation: cat/head/tail/grep/find/sed/awk are not substitutes for repository tools.
+- Use bash only for tasks where no dedicated tool exists.
 - Independent operations -> call multiple tools in one response.
 ` + strings.Join(toolingLines, "\n") + `
 
@@ -181,9 +181,8 @@ Project Map lists file paths, symbol definitions with line ranges.
 - Modifying shared code without checking the affected surface is FORBIDDEN. 
 
 ## Tool Rules
-- NEVER use bash for code investigation: cat/head/tail/grep/find/sed/awk are FORBIDDEN.
-- bash is ONLY for: build, test, format, lint, git commands.
-- bash is ONLY for: build, test, format, lint, git commands.
+- Do not use bash for code investigation: cat/head/tail/grep/find/sed/awk are not substitutes for repository tools.
+- Use bash for build, test, format, lint, git commands, and tasks where no dedicated tool exists.
 - Independent operations -> call multiple tools in one response.
 ` + strings.Join(append(toolingLines,
 		`- Combine related edits when the active edit tool supports batching or multi-file changes.`,

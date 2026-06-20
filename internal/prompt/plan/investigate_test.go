@@ -111,7 +111,7 @@ func TestBuildInvestigationPrompt_EditExactControlAllowedToolsStayGatherContextF
 	if !strings.Contains(prompt, promptfragments.InvestigationAllowedToolsLine(investigation.SurfaceEditExactControl)) {
 		t.Error("edit exact-control investigation prompt should list the visible gather_context/read_file surface")
 	}
-	if !strings.Contains(prompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+	if !strings.Contains(prompt, "read_file: exact-content override for known files or ranges when edit/apply_patch needs precise context") {
 		t.Error("edit exact-control investigation prompt should position read_file as exact-control only")
 	}
 }

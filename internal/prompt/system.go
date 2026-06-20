@@ -94,12 +94,8 @@ func buildSystemPromptPrefix(surface investigation.Surface) string {
 	}
 	if surface.AllowsLowLevelOverrides() {
 		impactLines = append(impactLines,
-			`- search_code(intent="impact", pattern="SymbolName") remains the expert override when you need exact low-level control over the search path.`,
-			`- Do not split definition, callers, references, and tests into separate serial searches unless the first combined search is clearly insufficient.`,
-			`- Before issuing a second search_code for the same change, check whether the first search should have been a combined multi-pattern search instead.`,
-			"Notes:",
-			`- search_code may automatically provide richer symbol-aware results for supported languages and repositories.`,
-			`- Treat those richer results as a bonus, not a reason to skip the default investigation flow.`,
+			`- search_code(intent="impact", pattern="SymbolName") is an expert override only when gather_context is insufficient and exact search control matters.`,
+			`- Prefer one combined gather_context/search_code query over serial definition/caller/test searches.`,
 		)
 	} else {
 		impactLines = append(impactLines,
@@ -136,8 +132,8 @@ func buildSystemPromptPrefix(surface investigation.Surface) string {
 ## Autonomy & Persistence
 - Once given a task, gather context -> implement -> verify without waiting for prompts.
 - Bias to action: make reasonable assumptions and proceed.
-<!-- PLANNING_REF alt="- If uncertain: proceed with a stated assumption" -->- If uncertain: proceed with a stated assumption. If multiple valid approaches exist: ask via ask_user_question<!-- /PLANNING_REF -->
-<!-- PLANNING_REF alt="- Use tools proactively: verify before modifying" -->- Use tools proactively: search before guessing, plan before complex changes, ask before ambiguous choices<!-- /PLANNING_REF -->
+<!-- PLANNING_REF alt="- If uncertain: proceed with a stated assumption when the choice is local and reversible" -->- If uncertain: proceed with a stated assumption when the choice is local and reversible. Ask via ask_user_question only when a requirement, public contract, destructive action, security boundary, or user-visible tradeoff needs user choice<!-- /PLANNING_REF -->
+<!-- PLANNING_REF alt="- Use tools proactively: verify before modifying" -->- Use tools proactively: search before guessing and plan before complex changes; do not ask for preferences that repo evidence can resolve<!-- /PLANNING_REF -->
 - Persist until complete, but STOP and reassess if 10+ tool calls show no progress.
 - STOP immediately for greetings, thanks, or casual chat: respond conversationally with no tool calls.
 - If the user asks a question without requesting changes, answer and stop.
@@ -167,7 +163,7 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 ` + promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
 		Surface:             surface,
 		SearchOverrideLabel: "an expert override",
-		SearchOverrideExtra: `Short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName") only when gather_context is clearly insufficient.`,
+		SearchOverrideExtra: `For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName") only when gather_context is clearly insufficient.`,
 		ReadOverrideExtra:   "Use line ranges from Project Map when exact manual control matters.",
 	}) + `
 - If the Project Map already gives an exact file, directory, or range, pass that direct target to gather_context instead of searching again.
@@ -186,8 +182,8 @@ Project Map lists file paths, symbol definitions with line ranges for the projec
 - Changed interface -> update all implementations.
 - Changed config types -> run generator commands if Project Context defines them.
 ### 3. Tool Strategy
-- NEVER use bash for code investigation: bash cat/head/tail/grep/find/sed/awk are FORBIDDEN for reading files, searching code, or exploring directories.
-- bash is ONLY for: build, test, format, lint, git commands, and tasks where no dedicated tool exists.
+- Do not use bash for code investigation: cat/head/tail/grep/find/sed/awk are not substitutes for repository tools.
+- Use bash for build, test, format, lint, git commands, package tooling, and tasks where no dedicated tool exists.
 ` + toolStrategyBlock + `
 - Independent operations -> call multiple tools in one response when the steps do not depend on each other.
 - For shared changes, gather the target code and its callers/tests in parallel when independent.

@@ -57,10 +57,10 @@ func TestRunHeadlessWithConfig_DefaultEditToolVisibility(t *testing.T) {
 
 	provider := runHeadlessToolSetProbe(t, "", "gpt-5.4")
 	assertHeadlessApplyPatchEditSurface(t, provider, "default headless mode")
-	if strings.Contains(provider.systemPrompt, "search_code: code discovery tool") {
+	if strings.Contains(provider.systemPrompt, "search_code: low-level exact-search tool") {
 		t.Fatal("default headless system prompt should not advertise hidden search_code")
 	}
-	if !strings.Contains(provider.systemPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+	if !strings.Contains(provider.systemPrompt, "read_file: exact-content override for known files or ranges when edit/apply_patch needs precise context") {
 		t.Fatal("default headless system prompt should keep read_file exact-control guidance")
 	}
 }

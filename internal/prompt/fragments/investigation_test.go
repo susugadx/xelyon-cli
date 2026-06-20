@@ -11,17 +11,16 @@ func TestBuildInvestigationToolingBlock_DefaultLines(t *testing.T) {
 	block := BuildInvestigationToolingBlock(InvestigationToolingOptions{})
 
 	for _, want := range []string{
-		"gather_context: default investigation tool",
-		"comma-separated gather_context item is an exact file or range",
-		`gather_context(query="A or B in docs/")`,
-		`gather_context(query="Makefile")`,
+		"gather_context: default repository investigation entry point",
+		"Batch exact files or ranges in one gather_context query",
 		`gather_context(query="./Makefile")`,
+		`gather_context(query="path:start-end")`,
 	} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("expected tooling block to contain %q, got:\n%s", want, block)
 		}
 	}
-	if strings.Contains(block, "search_code: code discovery tool") {
+	if strings.Contains(block, "search_code: low-level exact-search tool") {
 		t.Fatalf("default tooling block should not inject override lines without options, got:\n%s", block)
 	}
 }
@@ -39,12 +38,12 @@ func TestBuildInvestigationToolingBlock_OptionalOverrides(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"search_code: code discovery tool for a low-level override",
+		"search_code: low-level exact-search tool for a low-level override",
 		"Prefer mode=auto.",
-		"read_file: low-level exact-content reader for expert override",
+		"read_file: low-level exact-content override for known files or ranges",
 		"Use exact ranges only when needed.",
-		"read_file can batch them as an expert override",
-		"prefer one gather_context query or one search_code call with comma-separated patterns",
+		"Batch independent exact reads with read_file as an expert override",
+		"prefer one gather_context query or one search_code call instead of serial searches",
 		"Combine related patterns.",
 	} {
 		if !strings.Contains(block, want) {
@@ -59,11 +58,11 @@ func TestBuildInvestigationToolingBlock_EditExactControlSurface(t *testing.T) {
 		ReadOverrideExtra: "Use it only when you already know the exact file or range.",
 	})
 
-	if strings.Contains(block, "search_code: code discovery tool") {
+	if strings.Contains(block, "search_code: low-level exact-search tool") {
 		t.Fatalf("edit exact-control surface should not expose search_code, got:\n%s", block)
 	}
 	for _, want := range []string{
-		"read_file: exact-content reader for edit/apply_patch exact-control override",
+		"read_file: exact-content override for known files or ranges when edit/apply_patch needs precise context",
 		"Use it only when you already know the exact file or range.",
 	} {
 		if !strings.Contains(block, want) {

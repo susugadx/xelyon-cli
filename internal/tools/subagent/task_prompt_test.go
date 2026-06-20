@@ -13,7 +13,7 @@ func TestPromptForTaskType_EditUsesProviderResolvedMode(t *testing.T) {
 	if !strings.Contains(claudePrompt, "str_replace") {
 		t.Fatal("claude edit prompt should mention str_replace")
 	}
-	if !strings.Contains(claudePrompt, "search_code: code discovery tool") || !strings.Contains(claudePrompt, "read_file: low-level exact-content reader") {
+	if !strings.Contains(claudePrompt, "search_code: low-level exact-search tool") || !strings.Contains(claudePrompt, "read_file: low-level exact-content override") {
 		t.Fatal("claude edit prompt should expose low-level investigation overrides")
 	}
 	if !strings.Contains(claudePrompt, "Copy exact old_str and existing context from actual gather_context, read_file, or search_code output") {
@@ -36,10 +36,10 @@ func TestPromptForTaskType_EditUsesProviderResolvedMode(t *testing.T) {
 	if strings.Contains(openAIPrompt, "str_replace") {
 		t.Fatal("openai edit prompt should not mention str_replace")
 	}
-	if strings.Contains(openAIPrompt, "search_code: code discovery tool") || strings.Contains(openAIPrompt, "read_file: low-level exact-content reader") {
+	if strings.Contains(openAIPrompt, "search_code: low-level exact-search tool") || strings.Contains(openAIPrompt, "read_file: low-level exact-content override") {
 		t.Fatal("openai edit prompt should not advertise legacy low-level investigation tools")
 	}
-	if !strings.Contains(openAIPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+	if !strings.Contains(openAIPrompt, "read_file: exact-content override for known files or ranges when edit/apply_patch needs precise context") {
 		t.Fatal("openai edit prompt should keep read_file exact-control guidance when it stays visible")
 	}
 

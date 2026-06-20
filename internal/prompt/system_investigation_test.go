@@ -30,7 +30,7 @@ func TestSystemPrompt_UsesSharedInvestigationFragments(t *testing.T) {
 	toolingBlock := promptfragments.BuildInvestigationToolingBlock(promptfragments.InvestigationToolingOptions{
 		Surface:             investigation.SurfaceEditExactControl,
 		SearchOverrideLabel: "an expert override",
-		SearchOverrideExtra: `Short symbol queries when possible, and regex only when needed. For related code discovery, multi-pattern search is the default. For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName") only when gather_context is clearly insufficient.`,
+		SearchOverrideExtra: `For shared-change impact analysis starting from one symbol, prefer search_code(intent="impact", pattern="SymbolName") only when gather_context is clearly insufficient.`,
 		ReadOverrideExtra:   "Use line ranges from Project Map when exact manual control matters.",
 	})
 	for _, want := range []string{
@@ -48,8 +48,8 @@ func TestSystemPrompt_UsesSharedInvestigationFragments(t *testing.T) {
 
 func TestSystemPrompt_WorkflowRules(t *testing.T) {
 	checks := []string{
-		"NEVER use bash for code investigation",
-		"bash is ONLY for: build, test, format, lint, git",
+		"Do not use bash for code investigation",
+		"Use bash for build, test, format, lint, git commands",
 		"Local vs shared changes",
 		"Broad reference search is not required",
 		"Do not upgrade from targeted read to full-file read unless",
@@ -65,6 +65,25 @@ func TestSystemPrompt_WorkflowRules(t *testing.T) {
 	for _, check := range checks {
 		if !strings.Contains(SystemPrompt, check) {
 			t.Errorf("SystemPrompt missing workflow rule %q", check)
+		}
+	}
+}
+
+func TestSystemPrompt_AskPolicyIsConsequentialChoiceOnly(t *testing.T) {
+	for _, want := range []string{
+		"Ask via ask_user_question only when a requirement, public contract, destructive action, security boundary, or user-visible tradeoff needs user choice",
+		"do not ask for preferences that repo evidence can resolve",
+	} {
+		if !strings.Contains(SystemPrompt, want) {
+			t.Fatalf("SystemPrompt missing narrowed ask policy %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"If multiple valid approaches exist: ask via ask_user_question",
+		"ask before ambiguous choices",
+	} {
+		if strings.Contains(SystemPrompt, forbidden) {
+			t.Fatalf("SystemPrompt should not keep broad ask policy %q", forbidden)
 		}
 	}
 }
@@ -103,14 +122,14 @@ func TestSystemPrompt_ParallelGuidanceIsConsolidated(t *testing.T) {
 
 func TestSystemPrompt_DefaultSurfaceAvoidsHiddenLowLevelOverrides(t *testing.T) {
 	for _, forbidden := range []string{
-		"search_code: code discovery tool",
+		"search_code: low-level exact-search tool",
 		"search_code(intent=\"impact\"",
 	} {
 		if strings.Contains(SystemPrompt, forbidden) {
 			t.Fatalf("default SystemPrompt should not advertise hidden low-level investigation tool %q", forbidden)
 		}
 	}
-	if !strings.Contains(SystemPrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+	if !strings.Contains(SystemPrompt, "read_file: exact-content override for known files or ranges when edit/apply_patch needs precise context") {
 		t.Fatal("default SystemPrompt should keep read_file exact-control guidance aligned with visible tools")
 	}
 }

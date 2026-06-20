@@ -21,12 +21,12 @@ type InvestigationToolingOptions struct {
 
 // GatherContextDefaultInvestigationLine returns the shared default gather_context guidance.
 func GatherContextDefaultInvestigationLine() string {
-	return promptBullet("gather_context: default investigation tool. It routes direct reads, directory listing, auto search, or structured impact and may prefetch compact evidence automatically.")
+	return promptBullet("gather_context: default repository investigation entry point for direct targets, directory context, symbols, callers, tests, and impact evidence.")
 }
 
 // GatherContextFirstLine returns the shared gather_context-first investigation guidance.
 func GatherContextFirstLine(extra string) string {
-	core := "Start normal investigation with gather_context unless exact low-level control is clearly necessary."
+	core := "Start investigation with gather_context unless exact low-level control is clearly necessary."
 	return promptBulletWithExtra(core, extra)
 }
 
@@ -40,17 +40,17 @@ func ReviewInvestigationSentence(surface investigation.Surface) string {
 
 // GatherContextDirectMultiReadLine returns the shared direct multi-read guidance.
 func GatherContextDirectMultiReadLine() string {
-	return promptBullet(`If every comma-separated gather_context item is an exact file or range, the runtime treats it as one direct multi-read instead of search. Natural-language searches like gather_context(query="A or B in docs/") stay search queries.`)
+	return promptBullet("Batch exact files or ranges in one gather_context query when they are independent; natural-language queries remain searches.")
 }
 
 // GatherContextPathDisambiguationLine returns the shared path-vs-search precedence guidance.
 func GatherContextPathDisambiguationLine() string {
-	return promptBullet(`Bare no-extension files like Makefile can read directly via gather_context(query="Makefile"). If a name may collide with a symbol or you need scoped search, use an explicit path like gather_context(query="./Makefile").`)
+	return promptBullet(`Use explicit paths for ambiguous names, for example gather_context(query="./Makefile") or gather_context(query="path:start-end").`)
 }
 
 // SharedChangeGatherContextLine returns the shared shared-change investigation guidance.
 func SharedChangeGatherContextLine(extra string) string {
-	core := `For shared changes, gather_context(query="SymbolName") is the default path. Prefer one combined multi-pattern gather_context query before any low-level override search.`
+	core := "For shared changes, use one gather_context query for the symbol plus likely callers/tests before low-level overrides."
 	return promptBulletWithExtra(core, extra)
 }
 
@@ -101,16 +101,16 @@ func SearchCodeOverrideLine(overrideLabel string, extra string) string {
 	if strings.TrimSpace(overrideLabel) == "" {
 		overrideLabel = "an expert override"
 	}
-	core := fmt.Sprintf("search_code: code discovery tool for %s. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto.", strings.TrimSpace(overrideLabel))
+	core := fmt.Sprintf("search_code: low-level exact-search tool for %s. Use only when gather_context is insufficient; prefer mode=auto and combine related patterns.", strings.TrimSpace(overrideLabel))
 	return promptBulletWithExtra(core, extra)
 }
 
 // ReadFileOverrideLine returns the shared read_file override guidance with caller-specific detail.
 func ReadFileOverrideLine(surface investigation.Surface, extra string) string {
 	surface = investigation.NormalizeSurface(surface)
-	core := "read_file: exact-content reader for edit/apply_patch exact-control override."
+	core := "read_file: exact-content override for known files or ranges when edit/apply_patch needs precise context."
 	if surface.ReadFileRole() == investigation.ToolRoleLowLevelOverride {
-		core = "read_file: low-level exact-content reader for expert override."
+		core = "read_file: low-level exact-content override for known files or ranges."
 	}
 	return promptBulletWithExtra(core, extra)
 }
@@ -119,20 +119,20 @@ func ReadFileOverrideLine(surface investigation.Surface, extra string) string {
 func ReadFileBatchOverrideLine(surface investigation.Surface, overrideLabel string) string {
 	surface = investigation.NormalizeSurface(surface)
 	if surface.ReadFileRole() == investigation.ToolRoleEditExactControl {
-		return promptBullet("Reading 2+ independent exact files -> read_file can batch them when you need edit/apply_patch exact-control reads.")
+		return promptBullet("Batch independent exact reads with read_file when edit/apply_patch needs precise context.")
 	}
 	if strings.TrimSpace(overrideLabel) == "" {
 		overrideLabel = "an expert override"
 	}
-	return promptBullet(fmt.Sprintf("Reading 2+ independent exact files -> read_file can batch them as %s.", strings.TrimSpace(overrideLabel)))
+	return promptBullet(fmt.Sprintf("Batch independent exact reads with read_file as %s.", strings.TrimSpace(overrideLabel)))
 }
 
 // InvestigationMultiPatternLine returns the shared multi-pattern investigation guidance.
 func InvestigationMultiPatternLine(surface investigation.Surface, extra string) string {
 	surface = investigation.NormalizeSurface(surface)
-	core := "Searching multiple patterns -> prefer one gather_context query with comma-separated patterns instead of serial narrow searches."
+	core := "Multiple related patterns -> prefer one gather_context query instead of serial narrow searches."
 	if surface.AllowsLowLevelOverrides() {
-		core = "Searching multiple patterns -> prefer one gather_context query or one search_code call with comma-separated patterns instead of serial searches."
+		core = "Multiple related patterns -> prefer one gather_context query or one search_code call instead of serial searches."
 	}
 	return promptBulletWithExtra(core, extra)
 }
@@ -176,12 +176,12 @@ func BuildInvestigationToolingBlock(opts InvestigationToolingOptions) string {
 
 // DedicatedToolUsageSentence は dedicated tools を bash より優先する共有文言を返す。
 func DedicatedToolUsageSentence() string {
-	return "Always use dedicated tools (gather_context first; lower-level investigation tools only when they are exposed as expert overrides) instead of bash equivalents; tools provide caching, range tracking, and structured output"
+	return "Use dedicated investigation tools first; bash is not a code-discovery substitute"
 }
 
 // NoBashSubstituteSentence は code discovery で bash 代用を禁止する共有文言を返す。
 func NoBashSubstituteSentence() string {
-	return "During code discovery, do not use bash as a substitute for gather_context or other exposed investigation tools. Repository exploration, symbol lookup, related-test discovery, and dependency tracing must use the dedicated tools first."
+	return "During code discovery, do not use bash as a substitute for gather_context or exposed low-level investigation tools."
 }
 
 // InvestigationContextSourceLine returns the shared exact-context rule.

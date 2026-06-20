@@ -24,10 +24,10 @@ func TestExplorePrompt_UsesSharedInvestigationBlock(t *testing.T) {
 			t.Fatalf("ExplorePrompt should embed shared investigation fragment %q", want)
 		}
 	}
-	if strings.Contains(ExplorePrompt, "search_code: code discovery tool") || strings.Contains(ExplorePrompt, "read_file: low-level exact-content reader") {
+	if strings.Contains(ExplorePrompt, "search_code: low-level exact-search tool") || strings.Contains(ExplorePrompt, "read_file: low-level exact-content override") {
 		t.Fatal("default ExplorePrompt should not advertise legacy low-level investigation tools")
 	}
-	if !strings.Contains(ExplorePrompt, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+	if !strings.Contains(ExplorePrompt, "read_file: exact-content override for known files or ranges when edit/apply_patch needs precise context") {
 		t.Fatal("default ExplorePrompt should keep read_file exact-control guidance aligned with visible tools")
 	}
 }
@@ -49,10 +49,10 @@ func TestExplorePrompt_ProjectMapAssembly(t *testing.T) {
 
 func TestExplorePromptForEditTool_LegacyKeepsLowLevelOverrides(t *testing.T) {
 	prompt := ExplorePromptForEditTool("str_replace")
-	if !strings.Contains(prompt, "search_code: code discovery tool") {
+	if !strings.Contains(prompt, "search_code: low-level exact-search tool") {
 		t.Fatal("legacy explore prompt should expose search_code guidance")
 	}
-	if !strings.Contains(prompt, "read_file: low-level exact-content reader") {
+	if !strings.Contains(prompt, "read_file: low-level exact-content override") {
 		t.Fatal("legacy explore prompt should expose read_file guidance")
 	}
 }

@@ -66,14 +66,14 @@ func TestToolDescriptions_GatherContextIsPrimaryInvestigationTool(t *testing.T) 
 
 func TestToolDescriptions_ListDirMentionsCompactSummaryAndOverrideUsage(t *testing.T) {
 	desc := mustToolDescription(t, "list_dir")
-	if !strings.Contains(desc, "gather_context is the default front door") {
-		t.Error("list_dir description should mention gather_context as the directory front door")
+	if !strings.Contains(desc, "gather_context is the default for directory investigation") {
+		t.Error("list_dir description should mention gather_context as the directory investigation default")
 	}
-	if !strings.Contains(desc, "stays hidden on current gather_context-first agent surfaces") {
+	if !strings.Contains(desc, "stays hidden on gather_context-first agent surfaces") {
 		t.Error("list_dir description should describe its hidden-by-default agent surface")
 	}
-	if !strings.Contains(desc, "compact summary") {
-		t.Error("list_dir description should mention compact summary output")
+	if !strings.Contains(desc, "compact names, counts, and types") {
+		t.Error("list_dir description should mention compact directory output")
 	}
 }
 
@@ -135,15 +135,12 @@ func TestToolDescriptions_BashDoesNotAdvertiseAutoApprovedInvestigation(t *testi
 func TestToolDescriptions_StrReplaceEvidenceFirstContract(t *testing.T) {
 	desc := mustToolDescription(t, "str_replace")
 	for _, want := range []string{
-		"Copy exact old_str and existing context",
-		"actual gather_context, read_file, or search_code output",
-		"do not invent old_str",
-		"Write new_str as the intended replacement based on that verified context",
-		"same-file edits=[{old_str,new_str},...]",
+		"Copy old_str from current gather_context, read_file, or search_code output",
+		"do not invent it",
+		"Use new_str for the intended replacement",
+		"Batch same-file edits with edits=[{old_str,new_str},...]",
 		"advanced fallback",
-		"fresh tool output provides an exact range",
-		"do not guess line ranges",
-		"avoid evidence",
+		"fresh exact line output",
 	} {
 		if !strings.Contains(desc, want) {
 			t.Fatalf("str_replace description missing %q:\n%s", want, desc)

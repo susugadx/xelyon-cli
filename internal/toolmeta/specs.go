@@ -42,7 +42,7 @@ var builtinSpecs = []Spec{
 	},
 	{
 		Name:        "str_replace",
-		Description: "Precise edits to existing files. Copy exact old_str and existing context from actual gather_context, read_file, or search_code output; do not invent old_str. Write new_str as the intended replacement based on that verified context. For multiple edits in the same file, prefer same-file edits=[{old_str,new_str},...] based on actual content. Line-range mode (old_str empty + start_line/end_line) is an advanced fallback only when fresh tool output provides an exact range; do not guess line ranges or use it to avoid evidence.",
+		Description: "Precise edits to existing files. Copy old_str from current gather_context, read_file, or search_code output; do not invent it. Use new_str for the intended replacement. Batch same-file edits with edits=[{old_str,new_str},...] when practical. Line-range mode is an advanced fallback only with fresh exact line output.",
 		Safety:      SafetyMedium,
 		HelpSummary: "Precise same-file replacements from actual tool output",
 		HelpOrder:   100,
@@ -63,7 +63,7 @@ var builtinSpecs = []Spec{
 	},
 	{
 		Name:        "list_dir",
-		Description: "Low-level directory summary tool. gather_context is the default front door for directory investigation and direct routing. list_dir stays hidden on current gather_context-first agent surfaces; when directly exposed, treat it as a low-level/internal override. Returns a compact summary with representative names, counts, and types. Ignores .git, node_modules, vendor by default. Use depth parameter (1-3) for recursive listing.",
+		Description: "Low-level directory summary tool. gather_context is the default for directory investigation. list_dir stays hidden on gather_context-first agent surfaces; when exposed, it returns compact names, counts, and types.",
 		Safety:      SafetyHigh,
 		HelpOrder:   40,
 	},
