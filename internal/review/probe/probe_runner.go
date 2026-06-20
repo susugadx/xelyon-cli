@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 var (
@@ -40,11 +42,11 @@ func (r *ProbeRunner) Run(ctx context.Context, req ReviewProbeRequest) (ReviewPr
 	}
 
 	switch req.Mode {
-	case ReviewProbeHostReadOnly:
+	case domain.ReviewProbeHostReadOnly:
 		return newHostReadOnlyExecutor(repoRoot).run(ctx, req), nil
-	case ReviewProbeScratchOnly:
+	case domain.ReviewProbeScratchOnly:
 		return newScratchOnlyExecutor(repoRoot).run(ctx, req), nil
-	case ReviewProbeRepoSandbox:
+	case domain.ReviewProbeRepoSandbox:
 		return newRepoSandboxExecutor(repoRoot).run(ctx, req), nil
 	default:
 		result := newBlockedModeResult(req, fmt.Sprintf("probe mode %q is not supported", req.Mode))
@@ -56,7 +58,7 @@ func newBlockedModeResult(req ReviewProbeRequest, message string) ReviewProbeRes
 	return ReviewProbeResult{
 		ID:     req.ID,
 		Mode:   req.Mode,
-		Status: ReviewProbeBlocked,
+		Status: domain.ReviewProbeBlocked,
 		Error:  message,
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_HostReadOnlyPassed(t *testing.T) {
@@ -16,7 +18,7 @@ func TestProbeRunner_HostReadOnlyPassed(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-pass",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -26,8 +28,8 @@ func TestProbeRunner_HostReadOnlyPassed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if result.MutatedWorktree {
 		t.Fatalf("MutatedWorktree = true, want false")
@@ -35,8 +37,8 @@ func TestProbeRunner_HostReadOnlyPassed(t *testing.T) {
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
 	}
-	if result.CommandResults[0].Status != ReviewProbePassed {
-		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, ReviewProbePassed)
+	if result.CommandResults[0].Status != domain.ReviewProbePassed {
+		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, domain.ReviewProbePassed)
 	}
 }
 
@@ -46,7 +48,7 @@ func TestProbeRunner_HostReadOnlyPassed_GitGlobalOption(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-pass-git-global-option",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -56,8 +58,8 @@ func TestProbeRunner_HostReadOnlyPassed_GitGlobalOption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if result.MutatedWorktree {
 		t.Fatalf("MutatedWorktree = true, want false")
@@ -65,8 +67,8 @@ func TestProbeRunner_HostReadOnlyPassed_GitGlobalOption(t *testing.T) {
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
 	}
-	if result.CommandResults[0].Status != ReviewProbePassed {
-		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, ReviewProbePassed)
+	if result.CommandResults[0].Status != domain.ReviewProbePassed {
+		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, domain.ReviewProbePassed)
 	}
 }
 
@@ -113,7 +115,7 @@ func TestHostReadOnlyExecutor_ChildProcessUsesHardenedEnvAndCleansUp(t *testing.
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:             "host-readonly-env-child",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 4 * 1024,
 		Commands: []ReviewProbeCommand{
@@ -121,8 +123,8 @@ func TestHostReadOnlyExecutor_ChildProcessUsesHardenedEnvAndCleansUp(t *testing.
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	envMap := parseProbeKeyValueOutput(t, result.CommandResults[0].Output)
 	for _, key := range []string{
@@ -181,7 +183,7 @@ func TestHostReadOnlyExecutor_DoesNotInheritGitExternalDiff(t *testing.T) {
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:             "host-readonly-git-external-diff",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 4 * 1024,
 		Commands: []ReviewProbeCommand{
@@ -189,8 +191,8 @@ func TestHostReadOnlyExecutor_DoesNotInheritGitExternalDiff(t *testing.T) {
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("GIT_EXTERNAL_DIFF helper should not run, marker stat error = %v", err)
@@ -218,7 +220,7 @@ func TestHostReadOnlyExecutor_GoTestSeesHostModuleCacheReadOnly(t *testing.T) {
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:             "host-readonly-go-mod-cache",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 4 * 1024,
 		Commands: []ReviewProbeCommand{
@@ -226,8 +228,8 @@ func TestHostReadOnlyExecutor_GoTestSeesHostModuleCacheReadOnly(t *testing.T) {
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	if !strings.Contains(firstCommandOutput(result), "module-cache") {
 		t.Fatalf("output = %q, want host module cache marker", firstCommandOutput(result))
@@ -261,7 +263,7 @@ func TestHostReadOnlyExecutor_AppendsCleanupErrorWithoutChangingStatus(t *testin
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:             "host-readonly-cleanup-error",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -269,8 +271,8 @@ func TestHostReadOnlyExecutor_AppendsCleanupErrorWithoutChangingStatus(t *testin
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if !strings.Contains(result.Error, "failed to remove host_readonly runtime root") {
 		t.Fatalf("Error = %q, want cleanup error", result.Error)
@@ -283,7 +285,7 @@ func TestProbeRunner_HostReadOnlyTimedOut(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-timeout",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        100 * time.Millisecond,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -293,14 +295,14 @@ func TestProbeRunner_HostReadOnlyTimedOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeTimedOut {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeTimedOut, result.Error)
+	if result.Status != domain.ReviewProbeTimedOut {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeTimedOut, result.Error)
 	}
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
 	}
-	if result.CommandResults[0].Status != ReviewProbeTimedOut {
-		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, ReviewProbeTimedOut)
+	if result.CommandResults[0].Status != domain.ReviewProbeTimedOut {
+		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, domain.ReviewProbeTimedOut)
 	}
 }
 
@@ -310,7 +312,7 @@ func TestProbeRunner_HostReadOnlyOutputTruncated(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-truncate",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 32,
 		Commands: []ReviewProbeCommand{
@@ -320,8 +322,8 @@ func TestProbeRunner_HostReadOnlyOutputTruncated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbePassed)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q", result.Status, domain.ReviewProbePassed)
 	}
 	if !result.OutputTruncated {
 		t.Fatal("OutputTruncated = false, want true")
@@ -344,7 +346,7 @@ func TestProbeRunner_HostReadOnlyArgsDoNotUseShell(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-no-shell",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -354,8 +356,8 @@ func TestProbeRunner_HostReadOnlyArgsDoNotUseShell(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeFailed {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeFailed)
+	if result.Status != domain.ReviewProbeFailed {
+		t.Fatalf("Status = %q, want %q", result.Status, domain.ReviewProbeFailed)
 	}
 	if _, err := os.Stat(injectedPath); !os.IsNotExist(err) {
 		t.Fatalf("shell-like argument should not create %s, stat error = %v", injectedPath, err)

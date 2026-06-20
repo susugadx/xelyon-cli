@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
@@ -67,8 +67,8 @@ func TestMergeReviewCoverageAuditIntoSaturationCheckRevisesIgnoredNonPassingProb
 	plan := newRunnerProbePlanForTest("probe-1")
 	probeSummary := reviewreport.ReviewProbeSummary{
 		ProbeID: "probe-1",
-		Mode:    reviewprobe.ReviewProbeHostReadOnly,
-		Status:  reviewprobe.ReviewProbeFailed,
+		Mode:    domain.ReviewProbeHostReadOnly,
+		Status:  domain.ReviewProbeFailed,
 		Error:   "go test ./internal/review failed",
 	}
 	report := newRunnerCleanReportForTest([]reviewreport.ReviewProbeSummary{probeSummary})

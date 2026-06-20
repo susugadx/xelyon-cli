@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
@@ -55,8 +56,8 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:              "probe-1",
-		Mode:            reviewprobe.ReviewProbeHostReadOnly,
-		Status:          reviewprobe.ReviewProbeFailed,
+		Mode:            domain.ReviewProbeHostReadOnly,
+		Status:          domain.ReviewProbeFailed,
 		MutatedWorktree: true,
 		MutatedFiles:    []string{repoFile, filepath.Join(probeWorkDir, "mutated.txt"), scratchFile},
 		Error:           "probe failed at " + repoFile + " using " + probeRuntimeFile,
@@ -64,7 +65,7 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 			{
 				Command: "pwd",
 				WorkDir: repoRoot,
-				Status:  reviewprobe.ReviewProbeFailed,
+				Status:  domain.ReviewProbeFailed,
 				Output:  "repo path: " + repoFile,
 				Error:   "repo error: " + repoRoot,
 			},
@@ -72,7 +73,7 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 				Command: "cat",
 				Args:    []string{probeWorkFile, scratchFile},
 				WorkDir: probeWorkDir,
-				Status:  reviewprobe.ReviewProbeFailed,
+				Status:  domain.ReviewProbeFailed,
 				Output:  "probe path: " + probeWorkFile,
 				Error:   "probe runtime error: " + probeRuntimeFile,
 			},
@@ -124,7 +125,7 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("final report MutatedFiles = %#v, want %#v", got, want)
 	}
-	if got, want := got.ProbeSummaries[0].Status, reviewprobe.ReviewProbeMutatedWorktree; got != want {
+	if got, want := got.ProbeSummaries[0].Status, domain.ReviewProbeMutatedWorktree; got != want {
 		t.Fatalf("final report probe status = %q, want %q", got, want)
 	}
 	if !got.ProbeSummaries[0].MutatedWorktree {

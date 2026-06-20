@@ -3,27 +3,30 @@ package promptreduction
 import (
 	"crypto/sha256"
 	"encoding/hex"
+
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 )
 
-func cloneReviewEvidenceBundleForPromptCompact(bundle ReviewEvidenceBundle) ReviewEvidenceBundle {
+func cloneReviewEvidenceBundleForPromptCompact(bundle reviewevidence.ReviewEvidenceBundle) reviewevidence.ReviewEvidenceBundle {
 	clone := bundle
-	clone.ChangedFiles = append([]ReviewChangedFile(nil), bundle.ChangedFiles...)
-	clone.ChangedFileContext = append([]ReviewContextFileEvidence(nil), bundle.ChangedFileContext...)
-	clone.RelatedContextFiles = append([]ReviewContextFileEvidence(nil), bundle.RelatedContextFiles...)
-	clone.RelatedSearchHits = append([]ReviewRelatedSearchHit(nil), bundle.RelatedSearchHits...)
+	clone.ChangedFiles = append([]reviewevidence.ReviewChangedFile(nil), bundle.ChangedFiles...)
+	clone.ChangedFileContext = append([]reviewevidence.ReviewContextFileEvidence(nil), bundle.ChangedFileContext...)
+	clone.RelatedContextFiles = append([]reviewevidence.ReviewContextFileEvidence(nil), bundle.RelatedContextFiles...)
+	clone.RelatedSearchHits = append([]reviewevidence.ReviewRelatedSearchHit(nil), bundle.RelatedSearchHits...)
 	clone.GenericImpactCandidatePaths = append([]string(nil), bundle.GenericImpactCandidatePaths...)
 	clone.GenericImpactCandidates.Tokens = append([]string(nil), bundle.GenericImpactCandidates.Tokens...)
-	clone.GenericImpactCandidates.Candidates = append([]ReviewGenericImpactCandidate(nil), bundle.GenericImpactCandidates.Candidates...)
-	clone.UntrackedFiles = append([]ReviewUntrackedFile(nil), bundle.UntrackedFiles...)
-	clone.RuleFiles = append([]ReviewRuleFileEvidence(nil), bundle.RuleFiles...)
-	clone.Diffs = append([]ReviewDiffEvidence(nil), bundle.Diffs...)
+	clone.GenericImpactCandidates.Candidates = append([]reviewevidence.ReviewGenericImpactCandidate(nil), bundle.GenericImpactCandidates.Candidates...)
+	clone.UntrackedFiles = append([]reviewevidence.ReviewUntrackedFile(nil), bundle.UntrackedFiles...)
+	clone.RuleFiles = append([]reviewevidence.ReviewRuleFileEvidence(nil), bundle.RuleFiles...)
+	clone.Diffs = append([]reviewevidence.ReviewDiffEvidence(nil), bundle.Diffs...)
 	clone.Inventory = cloneReviewChangeInventory(bundle.Inventory)
 	clone.WebSearchEvidence = cloneReviewWebSearchEvidenceForPromptCompact(bundle.WebSearchEvidence)
 	return clone
 }
 
-func cloneReviewChangeInventory(inventory ReviewChangeInventory) ReviewChangeInventory {
-	return ReviewChangeInventory{
+func cloneReviewChangeInventory(inventory reviewevidence.ReviewChangeInventory) reviewevidence.ReviewChangeInventory {
+	return reviewevidence.ReviewChangeInventory{
 		Generated:    append([]string(nil), inventory.Generated...),
 		Tests:        append([]string(nil), inventory.Tests...),
 		Docs:         append([]string(nil), inventory.Docs...),
@@ -36,15 +39,15 @@ func cloneReviewChangeInventory(inventory ReviewChangeInventory) ReviewChangeInv
 	}
 }
 
-func cloneReviewWebSearchEvidenceForPromptCompact(evidence ReviewWebSearchEvidence) ReviewWebSearchEvidence {
+func cloneReviewWebSearchEvidenceForPromptCompact(evidence externaldoc.WebSearchEvidence) externaldoc.WebSearchEvidence {
 	clone := evidence
-	clone.Queries = append([]ReviewWebSearchEvidenceQuery(nil), evidence.Queries...)
+	clone.Queries = append([]externaldoc.WebSearchEvidenceQuery(nil), evidence.Queries...)
 	for i := range clone.Queries {
-		clone.Queries[i].Results = append([]ReviewWebSearchEvidenceResult(nil), evidence.Queries[i].Results...)
+		clone.Queries[i].Results = append([]externaldoc.WebSearchEvidenceResult(nil), evidence.Queries[i].Results...)
 	}
-	clone.ExternalDocs = append([]ReviewExternalDocEvidence(nil), evidence.ExternalDocs...)
+	clone.ExternalDocs = append([]externaldoc.Evidence(nil), evidence.ExternalDocs...)
 	for i := range clone.ExternalDocs {
-		clone.ExternalDocs[i].Snippets = append([]ReviewExternalDocSnippetEvidence(nil), evidence.ExternalDocs[i].Snippets...)
+		clone.ExternalDocs[i].Snippets = append([]externaldoc.SnippetEvidence(nil), evidence.ExternalDocs[i].Snippets...)
 	}
 	return clone
 }

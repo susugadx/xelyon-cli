@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
@@ -15,13 +16,13 @@ func TestReviewRunnerRunEmitsProgressEvents(t *testing.T) {
 	}
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command:  "go",
 				Args:     []string{"test", "./internal/review"},
-				Status:   reviewprobe.ReviewProbePassed,
+				Status:   domain.ReviewProbePassed,
 				Output:   "PASS runner",
 				Duration: 1500 * time.Millisecond,
 			},
@@ -85,7 +86,7 @@ func TestReviewRunnerRunEmitsProgressEvents(t *testing.T) {
 func TestReviewRunnerProbeProgressFinalizesBlockedBeforeExecutionUnderStartedID(t *testing.T) {
 	req := reviewprobe.ReviewProbeRequest{
 		ID:   "probe-blocked",
-		Mode: reviewprobe.ReviewProbeHostReadOnly,
+		Mode: domain.ReviewProbeHostReadOnly,
 		Commands: []reviewprobe.ReviewProbeCommand{
 			{Command: "go", Args: []string{"test", "./internal/review"}},
 		},
@@ -94,8 +95,8 @@ func TestReviewRunnerProbeProgressFinalizesBlockedBeforeExecutionUnderStartedID(
 		results: map[string]reviewprobe.ReviewProbeResult{
 			"probe-blocked": {
 				ID:     "probe-blocked",
-				Mode:   reviewprobe.ReviewProbeHostReadOnly,
-				Status: reviewprobe.ReviewProbeBlocked,
+				Mode:   domain.ReviewProbeHostReadOnly,
+				Status: domain.ReviewProbeBlocked,
 				Error:  "command policy blocked before execution",
 			},
 		},
@@ -113,7 +114,7 @@ func TestReviewRunnerProbeProgressFinalizesBlockedBeforeExecutionUnderStartedID(
 	if err != nil {
 		t.Fatalf("runReviewProbesSequentially() error = %v, want nil", err)
 	}
-	if len(results) != 1 || results[0].Status != reviewprobe.ReviewProbeBlocked {
+	if len(results) != 1 || results[0].Status != domain.ReviewProbeBlocked {
 		t.Fatalf("probe results = %#v, want one blocked result", results)
 	}
 

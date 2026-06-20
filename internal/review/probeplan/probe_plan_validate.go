@@ -1,14 +1,18 @@
 package probeplan
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+)
 
 // ValidateReviewProbePlan は LLM probe plan schema v2 の構造契約を検証する。
 func ValidateReviewProbePlan(plan ReviewProbePlan) error {
 	if plan.SchemaVersion != ReviewProbePlanSchemaVersionV2 {
 		return fmt.Errorf("schema_version must be %q: got %q", ReviewProbePlanSchemaVersionV2, plan.SchemaVersion)
 	}
-	if plan.TargetKind != TargetCurrentChanges {
-		return fmt.Errorf("target_kind must be %q: got %q", TargetCurrentChanges, plan.TargetKind)
+	if plan.TargetKind != domain.TargetCurrentChanges {
+		return fmt.Errorf("target_kind must be %q: got %q", domain.TargetCurrentChanges, plan.TargetKind)
 	}
 	surfaceIDs, err := validateReviewProbeImpactSurfaces(plan.ImpactSurfaces)
 	if err != nil {

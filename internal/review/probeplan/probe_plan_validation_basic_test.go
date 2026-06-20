@@ -3,6 +3,8 @@ package probeplan
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestValidateReviewProbePlanBasicContract(t *testing.T) {
@@ -28,7 +30,7 @@ func TestValidateReviewProbePlanBasicContract(t *testing.T) {
 			name: "invalid target_kind",
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
-				plan.TargetKind = TargetKind("workspace_snapshot")
+				plan.TargetKind = domain.TargetKind("workspace_snapshot")
 				return plan
 			},
 			errContains: "target_kind",
@@ -64,7 +66,7 @@ func TestValidateReviewProbePlanBasicContract(t *testing.T) {
 			name: "invalid mode",
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
-				plan.Probes[0].Mode = ReviewProbeMode("unknown")
+				plan.Probes[0].Mode = domain.ReviewProbeMode("unknown")
 				return plan
 			},
 			errContains: "probes[0].mode",

@@ -46,7 +46,7 @@ func newRunnerProbePlanForTest(ids ...string) reviewprobeplan.ReviewProbePlan {
 			SurfaceIDs: []string{"surface-1"},
 			RiskIDs:    []string{"risk-1"},
 			Purpose:    "Confirm or falsify risk-1 for surface-1 with focused review checks.",
-			Mode:       reviewprobeplan.ReviewProbeHostReadOnly,
+			Mode:       reviewdomain.ReviewProbeHostReadOnly,
 			Commands: []reviewprobeplan.ReviewPlannedProbeCommand{
 				{
 					Command: "go",
@@ -76,7 +76,7 @@ func newRunnerProbePlanForTest(ids ...string) reviewprobeplan.ReviewProbePlan {
 			{
 				ID:                   "risk-1",
 				Summary:              "A runner contract could regress.",
-				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
+				Severity:             reviewreport.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Runner tests cover probe orchestration.",
 				VerificationStrategy: "Execute the focused runner probe.",

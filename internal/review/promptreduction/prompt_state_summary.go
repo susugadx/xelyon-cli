@@ -3,22 +3,28 @@ package promptreduction
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 // ReviewStateSummaryInput は compact 後も残す review state summary の入力。
 type ReviewStateSummaryInput struct {
-	Bundle          ReviewEvidenceBundle
-	Plan            ReviewProbePlan
-	ProbeSummaries  []ReviewProbeSummary
-	FinalizedReport ReviewReport
-	SaturationCheck ReviewSaturationCheck
+	Bundle          reviewevidence.ReviewEvidenceBundle
+	Plan            reviewprobeplan.ReviewProbePlan
+	ProbeSummaries  []reviewreport.ReviewProbeSummary
+	FinalizedReport reviewreport.ReviewReport
+	SaturationCheck reviewreport.ReviewSaturationCheck
 	Phase           ReviewModelPhase
 }
 
 // BuildReviewStateSummary は compact 後も残す deterministic state summary を構築する。
 func BuildReviewStateSummary(input ReviewStateSummaryInput) ReviewStateSummary {
 	summary := ReviewStateSummary{
-		Target: string(TargetCurrentChanges),
+		Target: string(domain.TargetCurrentChanges),
 	}
 	summary.ChangedFiles = reviewStateChangedFiles(input.Bundle)
 	summary.ImpactSurfaces = reviewStateImpactSurfaces(input.Plan)
@@ -36,7 +42,7 @@ func BuildReviewStateSummary(input ReviewStateSummaryInput) ReviewStateSummary {
 	return summary
 }
 
-func reviewStateChangedFiles(bundle ReviewEvidenceBundle) []string {
+func reviewStateChangedFiles(bundle reviewevidence.ReviewEvidenceBundle) []string {
 	values := make([]string, 0, len(bundle.ChangedFiles)+len(bundle.UntrackedFiles))
 	for _, file := range bundle.ChangedFiles {
 		path := strings.TrimSpace(file.Path)
@@ -58,7 +64,7 @@ func reviewStateChangedFiles(bundle ReviewEvidenceBundle) []string {
 	return values
 }
 
-func reviewStateImpactSurfaces(plan ReviewProbePlan) []string {
+func reviewStateImpactSurfaces(plan reviewprobeplan.ReviewProbePlan) []string {
 	values := make([]string, 0, len(plan.ImpactSurfaces))
 	for _, surface := range plan.ImpactSurfaces {
 		id := strings.TrimSpace(surface.ID)
@@ -70,7 +76,7 @@ func reviewStateImpactSurfaces(plan ReviewProbePlan) []string {
 	return values
 }
 
-func reviewStateCandidateRisks(plan ReviewProbePlan) []string {
+func reviewStateCandidateRisks(plan reviewprobeplan.ReviewProbePlan) []string {
 	values := make([]string, 0, len(plan.CandidateRisks))
 	for _, risk := range plan.CandidateRisks {
 		id := strings.TrimSpace(risk.ID)
@@ -82,12 +88,12 @@ func reviewStateCandidateRisks(plan ReviewProbePlan) []string {
 	return values
 }
 
-func reviewStateUnresolvedRisks(plan ReviewProbePlan, report ReviewReport, check ReviewSaturationCheck) []string {
+func reviewStateUnresolvedRisks(plan reviewprobeplan.ReviewProbePlan, report reviewreport.ReviewReport, check reviewreport.ReviewSaturationCheck) []string {
 	values := make([]string, 0)
 	if report.ScopeCoverage != nil {
 		for _, risk := range report.ScopeCoverage.ReviewedCandidateRisks {
 			switch risk.Status {
-			case ReviewReportCandidateRiskUnverified, ReviewReportCandidateRiskResidualRisk:
+			case reviewreport.ReviewReportCandidateRiskUnverified, reviewreport.ReviewReportCandidateRiskResidualRisk:
 				values = append(values, fmt.Sprintf("%s status=%s summary=%s", risk.RiskID, risk.Status, oneLine(risk.Summary)))
 			}
 		}
@@ -97,7 +103,7 @@ func reviewStateUnresolvedRisks(plan ReviewProbePlan, report ReviewReport, check
 	}
 	for _, risk := range plan.CandidateRisks {
 		switch risk.Status {
-		case ReviewProbeCandidateRiskNeedsProbe, ReviewProbeCandidateRiskUnverified:
+		case reviewprobeplan.ReviewProbeCandidateRiskNeedsProbe, reviewprobeplan.ReviewProbeCandidateRiskUnverified:
 			values = append(values, fmt.Sprintf("%s pass1_status=%s summary=%s", risk.ID, risk.Status, oneLine(risk.Summary)))
 		}
 	}
@@ -109,7 +115,7 @@ func reviewStateUnresolvedRisks(plan ReviewProbePlan, report ReviewReport, check
 	return values
 }
 
-func reviewStateConfirmedFindings(report ReviewReport) []string {
+func reviewStateConfirmedFindings(report reviewreport.ReviewReport) []string {
 	values := make([]string, 0)
 	for _, group := range report.RootCauseGroups {
 		for _, finding := range group.Findings {
@@ -125,7 +131,7 @@ func reviewStateConfirmedFindings(report ReviewReport) []string {
 	return values
 }
 
-func reviewStateFindingEvidenceRefs(report ReviewReport) []string {
+func reviewStateFindingEvidenceRefs(report reviewreport.ReviewReport) []string {
 	values := make([]string, 0)
 	for _, group := range report.RootCauseGroups {
 		for _, finding := range group.Findings {
@@ -137,20 +143,20 @@ func reviewStateFindingEvidenceRefs(report ReviewReport) []string {
 	return values
 }
 
-func reviewStateDismissedRisks(report ReviewReport) []string {
+func reviewStateDismissedRisks(report reviewreport.ReviewReport) []string {
 	if report.ScopeCoverage == nil {
 		return nil
 	}
 	values := make([]string, 0)
 	for _, risk := range report.ScopeCoverage.ReviewedCandidateRisks {
-		if risk.Status == ReviewReportCandidateRiskDismissed {
+		if risk.Status == reviewreport.ReviewReportCandidateRiskDismissed {
 			values = append(values, fmt.Sprintf("%s dismissed summary=%s", risk.RiskID, oneLine(risk.Summary)))
 		}
 	}
 	return values
 }
 
-func reviewStateScopeCoverage(report ReviewReport) []string {
+func reviewStateScopeCoverage(report reviewreport.ReviewReport) []string {
 	if report.ScopeCoverage == nil {
 		return nil
 	}
@@ -164,7 +170,7 @@ func reviewStateScopeCoverage(report ReviewReport) []string {
 	return values
 }
 
-func reviewStateExternalEvidence(evidence ReviewWebSearchEvidence) []string {
+func reviewStateExternalEvidence(evidence externaldoc.WebSearchEvidence) []string {
 	if !evidence.Enabled {
 		return nil
 	}
@@ -181,7 +187,7 @@ func reviewStateExternalEvidence(evidence ReviewWebSearchEvidence) []string {
 	return values
 }
 
-func reviewStateLatestReportStatus(report ReviewReport) string {
+func reviewStateLatestReportStatus(report reviewreport.ReviewReport) string {
 	if strings.TrimSpace(report.SchemaVersion) == "" {
 		return ""
 	}
@@ -192,14 +198,14 @@ func reviewStateLatestReportStatus(report ReviewReport) string {
 	return fmt.Sprintf("schema=%s verdict=%s findings=%d", report.SchemaVersion, report.Verdict, findingCount)
 }
 
-func reviewStateSaturationStatus(check ReviewSaturationCheck) string {
+func reviewStateSaturationStatus(check reviewreport.ReviewSaturationCheck) string {
 	if strings.TrimSpace(string(check.Status)) == "" {
 		return ""
 	}
 	return fmt.Sprintf("status=%s missing_surfaces=%d missing_risks=%d", check.Status, len(check.MissingSurfaceIDs), len(check.MissingRiskIDs))
 }
 
-func reviewStateNextProbeFocus(plan ReviewProbePlan, check ReviewSaturationCheck) []string {
+func reviewStateNextProbeFocus(plan reviewprobeplan.ReviewProbePlan, check reviewreport.ReviewSaturationCheck) []string {
 	values := make([]string, 0)
 	for _, probe := range plan.Probes {
 		if strings.TrimSpace(probe.ID) != "" {
@@ -212,7 +218,7 @@ func reviewStateNextProbeFocus(plan ReviewProbePlan, check ReviewSaturationCheck
 	return values
 }
 
-func reviewStateAbsorbedIntermediateRefs(phase ReviewModelPhase, probeSummaries []ReviewProbeSummary, report ReviewReport) []string {
+func reviewStateAbsorbedIntermediateRefs(phase ReviewModelPhase, probeSummaries []reviewreport.ReviewProbeSummary, report reviewreport.ReviewReport) []string {
 	values := make([]string, 0)
 	switch phase {
 	case ReviewModelPhaseSaturationCheck, ReviewModelPhaseReportRevision:
@@ -226,7 +232,7 @@ func reviewStateAbsorbedIntermediateRefs(phase ReviewModelPhase, probeSummaries 
 	return values
 }
 
-func reviewStateEvidenceRefSummary(ref ReviewEvidenceRef) string {
+func reviewStateEvidenceRefSummary(ref reviewreport.ReviewEvidenceRef) string {
 	parts := []string{string(ref.Kind)}
 	if ref.ProbeID != "" {
 		parts = append(parts, "probe="+ref.ProbeID)

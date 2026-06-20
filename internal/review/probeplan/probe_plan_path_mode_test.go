@@ -3,6 +3,8 @@ package probeplan
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestValidateReviewProbePlanRejectsInvalidFilePath(t *testing.T) {
@@ -56,27 +58,27 @@ func TestValidateReviewProbePlanModeFileContract(t *testing.T) {
 		{
 			name: "host_readonly rejects generated files",
 			mutate: func(plan *ReviewProbePlan) {
-				plan.Probes[0].Mode = ReviewProbeHostReadOnly
+				plan.Probes[0].Mode = domain.ReviewProbeHostReadOnly
 			},
 			errContains: "probes[0].files",
 		},
 		{
 			name: "host_readonly allows empty files",
 			mutate: func(plan *ReviewProbePlan) {
-				plan.Probes[0].Mode = ReviewProbeHostReadOnly
+				plan.Probes[0].Mode = domain.ReviewProbeHostReadOnly
 				plan.Probes[0].Files = nil
 			},
 		},
 		{
 			name: "scratch_only allows generated files",
 			mutate: func(plan *ReviewProbePlan) {
-				plan.Probes[0].Mode = ReviewProbeScratchOnly
+				plan.Probes[0].Mode = domain.ReviewProbeScratchOnly
 			},
 		},
 		{
 			name: "repo_sandbox allows generated files",
 			mutate: func(plan *ReviewProbePlan) {
-				plan.Probes[0].Mode = ReviewProbeRepoSandbox
+				plan.Probes[0].Mode = domain.ReviewProbeRepoSandbox
 			},
 		},
 	}

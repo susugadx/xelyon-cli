@@ -1,5 +1,10 @@
 package probeplan
 
+import (
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	"github.com/susugadx/xelyon-cli/internal/review/report"
+)
+
 const (
 	// ReviewProbePlanSchemaVersionV1 は旧 probe plan schema v1 の識別子。
 	ReviewProbePlanSchemaVersionV1 = "review_probe_plan.v1"
@@ -28,7 +33,7 @@ const (
 // ProbeRunner が直接扱う runtime 契約ではなく、検証後に ReviewProbeRequest へ変換する。
 type ReviewProbePlan struct {
 	SchemaVersion         string                     `json:"schema_version"`
-	TargetKind            TargetKind                 `json:"target_kind"`
+	TargetKind            domain.TargetKind          `json:"target_kind"`
 	Summary               string                     `json:"summary,omitempty"`
 	ImpactSurfaces        []ReviewProbeImpactSurface `json:"impact_surfaces"`
 	CandidateRisks        []ReviewProbeCandidateRisk `json:"candidate_risks"`
@@ -43,7 +48,7 @@ type ReviewProbeImpactSurface struct {
 	Summary         string                           `json:"summary"`
 	Category        ReviewProbeImpactSurfaceCategory `json:"category"`
 	EvidenceSummary string                           `json:"evidence_summary,omitempty"`
-	EvidenceRefs    []ReviewEvidenceRef              `json:"evidence_refs,omitempty"`
+	EvidenceRefs    []report.ReviewEvidenceRef       `json:"evidence_refs,omitempty"`
 	Status          ReviewProbeImpactSurfaceStatus   `json:"status"`
 	Reason          string                           `json:"reason"`
 }
@@ -52,10 +57,10 @@ type ReviewProbeImpactSurface struct {
 type ReviewProbeCandidateRisk struct {
 	ID                   string                         `json:"id"`
 	Summary              string                         `json:"summary"`
-	Severity             ReviewGroupSeverity            `json:"severity"`
+	Severity             report.ReviewGroupSeverity     `json:"severity"`
 	SurfaceIDs           []string                       `json:"surface_ids"`
 	EvidenceSummary      string                         `json:"evidence_summary,omitempty"`
-	EvidenceRefs         []ReviewEvidenceRef            `json:"evidence_refs,omitempty"`
+	EvidenceRefs         []report.ReviewEvidenceRef     `json:"evidence_refs,omitempty"`
 	VerificationStrategy string                         `json:"verification_strategy"`
 	Status               ReviewProbeCandidateRiskStatus `json:"status"`
 }
@@ -150,7 +155,7 @@ type ReviewPlannedProbe struct {
 	SurfaceIDs     []string                    `json:"surface_ids,omitempty"`
 	RiskIDs        []string                    `json:"risk_ids,omitempty"`
 	Purpose        string                      `json:"purpose"`
-	Mode           ReviewProbeMode             `json:"mode"`
+	Mode           domain.ReviewProbeMode      `json:"mode"`
 	Commands       []ReviewPlannedProbeCommand `json:"commands,omitempty"`
 	Files          []ReviewPlannedProbeFile    `json:"files,omitempty"`
 	TimeoutSeconds int                         `json:"timeout_seconds,omitempty"`

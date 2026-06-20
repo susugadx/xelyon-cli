@@ -3,6 +3,8 @@ package probeplan
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestValidateReviewProbePlanReasonIDMentionContract(t *testing.T) {
@@ -103,7 +105,7 @@ func appendReviewProbePlanCheckedRiskForReasonMentionTest(plan ReviewProbePlan, 
 	plan.CandidateRisks = append(plan.CandidateRisks, ReviewProbeCandidateRisk{
 		ID:                   id,
 		Summary:              "Existing evidence already checks " + id + ".",
-		Severity:             ReviewGroupSeverityLow,
+		Severity:             report.ReviewGroupSeverityLow,
 		SurfaceIDs:           []string{surfaceID},
 		EvidenceSummary:      "Existing evidence is sufficient.",
 		VerificationStrategy: "No additional probe is needed for " + id + ".",

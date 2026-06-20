@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
@@ -68,8 +69,8 @@ func TestReviewRunnerPromptRedactorRedactsIsolatedRootFromResultWithoutCommandRe
 	scratchFile := filepath.Join(scratchRoot, "tmp/mutated.txt")
 	result := reviewprobe.ReviewProbeResult{
 		ID:           "probe-1",
-		Mode:         reviewprobe.ReviewProbeRepoSandbox,
-		Status:       reviewprobe.ReviewProbeBlocked,
+		Mode:         domain.ReviewProbeRepoSandbox,
+		Status:       domain.ReviewProbeBlocked,
 		MutatedFiles: []string{scratchFile},
 		Error:        "failed to prepare repo_sandbox at " + sandboxFile + ": copy failed",
 	}

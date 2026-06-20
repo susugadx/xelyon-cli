@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
@@ -21,8 +22,8 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:              "probe-1",
-		Mode:            reviewprobe.ReviewProbeHostReadOnly,
-		Status:          reviewprobe.ReviewProbeFailed,
+		Mode:            domain.ReviewProbeHostReadOnly,
+		Status:          domain.ReviewProbeFailed,
 		MutatedFiles:    []string{repoFile, probeFile},
 		OutputTruncated: true,
 		Error:           "probe failed at " + repoFile + " and " + probeFile,
@@ -31,7 +32,7 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 				Command:         "cat " + probeFile,
 				Args:            []string{repoFile, probeFile},
 				WorkDir:         probeWorkDir,
-				Status:          reviewprobe.ReviewProbeFailed,
+				Status:          domain.ReviewProbeFailed,
 				ExitCode:        1,
 				OutputTruncated: true,
 				Error:           "exit status 1 at " + probeFile,
@@ -42,8 +43,8 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 	modelReport := newRunnerBlockedReportForTest([]reviewreport.ReviewProbeSummary{
 		{
 			ProbeID:      "fake-probe",
-			Mode:         reviewprobe.ReviewProbeHostReadOnly,
-			Status:       reviewprobe.ReviewProbePassed,
+			Mode:         domain.ReviewProbeHostReadOnly,
+			Status:       domain.ReviewProbePassed,
 			MutatedFiles: []string{"/fake/model/path"},
 			Error:        "fake model summary must be ignored",
 		},
@@ -65,8 +66,8 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 	wantSummaries := []reviewreport.ReviewProbeSummary{
 		{
 			ProbeID:         "probe-1",
-			Mode:            reviewprobe.ReviewProbeHostReadOnly,
-			Status:          reviewprobe.ReviewProbeFailed,
+			Mode:            domain.ReviewProbeHostReadOnly,
+			Status:          domain.ReviewProbeFailed,
 			MutatedFiles:    []string{"internal/review/runner.go", "<probe_workdir>/output.txt"},
 			OutputTruncated: true,
 			Error:           "probe failed at <repo_root>/internal/review/runner.go and <probe_workdir>/output.txt",
@@ -75,7 +76,7 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 					Command:         "cat <probe_workdir>/output.txt",
 					Args:            []string{"<repo_root>/internal/review/runner.go", "<probe_workdir>/output.txt"},
 					WorkDir:         "<probe_workdir>",
-					Status:          reviewprobe.ReviewProbeFailed,
+					Status:          domain.ReviewProbeFailed,
 					ExitCode:        1,
 					OutputTruncated: true,
 					Error:           "exit status 1 at <probe_workdir>/output.txt",
@@ -96,14 +97,14 @@ func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *te
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "cat " + repoFile,
 				Args:    []string{repoFile},
 				WorkDir: repoRoot,
-				Status:  reviewprobe.ReviewProbePassed,
+				Status:  domain.ReviewProbePassed,
 			},
 		},
 	}
@@ -137,15 +138,15 @@ func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *te
 	wantSummaries := []reviewreport.ReviewProbeSummary{
 		{
 			ProbeID:      "probe-1",
-			Mode:         reviewprobe.ReviewProbeHostReadOnly,
-			Status:       reviewprobe.ReviewProbePassed,
+			Mode:         domain.ReviewProbeHostReadOnly,
+			Status:       domain.ReviewProbePassed,
 			MutatedFiles: []string{},
 			Commands: []reviewreport.ReviewProbeCommandSummary{
 				{
 					Command: "cat <repo_root>/internal/review/runner.go",
 					Args:    []string{"<repo_root>/internal/review/runner.go"},
 					WorkDir: ".",
-					Status:  reviewprobe.ReviewProbePassed,
+					Status:  domain.ReviewProbePassed,
 				},
 			},
 		},
@@ -166,24 +167,24 @@ func TestReviewRunnerRunRevalidatesReportAfterTrustedProbeSummaries(t *testing.T
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "go",
-				Status:  reviewprobe.ReviewProbePassed,
+				Status:  domain.ReviewProbePassed,
 			},
 		},
 	}
 	modelReport := newRunnerCleanReportForTest([]reviewreport.ReviewProbeSummary{
 		{
 			ProbeID: "fake-probe",
-			Mode:    reviewprobe.ReviewProbeHostReadOnly,
-			Status:  reviewprobe.ReviewProbePassed,
+			Mode:    domain.ReviewProbeHostReadOnly,
+			Status:  domain.ReviewProbePassed,
 			Commands: []reviewreport.ReviewProbeCommandSummary{
 				{
 					Command: "go",
-					Status:  reviewprobe.ReviewProbePassed,
+					Status:  domain.ReviewProbePassed,
 				},
 			},
 		},

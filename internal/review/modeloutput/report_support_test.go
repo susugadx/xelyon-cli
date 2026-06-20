@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
@@ -21,7 +22,7 @@ func newProbePlanForModelOutputTest(ids ...string) reviewprobeplan.ReviewProbePl
 			SurfaceIDs: []string{"surface-1"},
 			RiskIDs:    []string{"risk-1"},
 			Purpose:    "Confirm or falsify risk-1 for surface-1 with focused review checks.",
-			Mode:       reviewprobeplan.ReviewProbeHostReadOnly,
+			Mode:       domain.ReviewProbeHostReadOnly,
 			Commands: []reviewprobeplan.ReviewPlannedProbeCommand{
 				{Command: "go", Args: []string{"test", "./internal/review"}, WorkDir: "."},
 			},
@@ -31,7 +32,7 @@ func newProbePlanForModelOutputTest(ids ...string) reviewprobeplan.ReviewProbePl
 	}
 	return reviewprobeplan.ReviewProbePlan{
 		SchemaVersion: reviewprobeplan.ReviewProbePlanSchemaVersionV2,
-		TargetKind:    reviewprobeplan.TargetCurrentChanges,
+		TargetKind:    domain.TargetCurrentChanges,
 		Summary:       "Probe current changes.",
 		ImpactSurfaces: []reviewprobeplan.ReviewProbeImpactSurface{
 			{
@@ -47,7 +48,7 @@ func newProbePlanForModelOutputTest(ids ...string) reviewprobeplan.ReviewProbePl
 			{
 				ID:                   "risk-1",
 				Summary:              "A runner contract could regress.",
-				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
+				Severity:             reviewreport.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Runner tests cover probe orchestration.",
 				VerificationStrategy: "Execute the focused runner probe.",

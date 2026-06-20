@@ -3,6 +3,9 @@ package promptreduction
 import (
 	"strings"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 type reviewExternalDocAbsorptionRefSummary struct {
@@ -12,12 +15,12 @@ type reviewExternalDocAbsorptionRefSummary struct {
 	contentHashes map[string]struct{}
 }
 
-func reviewExternalDocAbsorptionRefs(report ReviewReport) (map[string]reviewExternalDocAbsorptionRefSummary, map[string]struct{}) {
+func reviewExternalDocAbsorptionRefs(report reviewreport.ReviewReport) (map[string]reviewExternalDocAbsorptionRefSummary, map[string]struct{}) {
 	safeRefs := make(map[string]reviewExternalDocAbsorptionRefSummary)
 	unsafeRefs := make(map[string]struct{})
-	addRefs := func(refs []ReviewEvidenceRef, owner string, safe bool) {
+	addRefs := func(refs []reviewreport.ReviewEvidenceRef, owner string, safe bool) {
 		for _, ref := range refs {
-			if ref.Kind != ReviewEvidenceKindExternalDoc {
+			if ref.Kind != reviewreport.ReviewEvidenceKindExternalDoc {
 				continue
 			}
 			key := reviewExternalDocSnippetAbsorptionKey(ref.DocID, ref.SnippetID)
@@ -49,11 +52,11 @@ func reviewExternalDocAbsorptionRefs(report ReviewReport) (map[string]reviewExte
 	if report.ScopeCoverage != nil {
 		for _, surface := range report.ScopeCoverage.ReviewedImpactSurfaces {
 			owner := "scope_coverage.surface." + strings.TrimSpace(surface.SurfaceID)
-			addRefs(surface.EvidenceRefs, owner, surface.Status == ReviewReportImpactSurfaceChecked)
+			addRefs(surface.EvidenceRefs, owner, surface.Status == reviewreport.ReviewReportImpactSurfaceChecked)
 		}
 		for _, risk := range report.ScopeCoverage.ReviewedCandidateRisks {
 			owner := "scope_coverage.risk." + strings.TrimSpace(risk.RiskID)
-			addRefs(risk.EvidenceRefs, owner, risk.Status == ReviewReportCandidateRiskDismissed)
+			addRefs(risk.EvidenceRefs, owner, risk.Status == reviewreport.ReviewReportCandidateRiskDismissed)
 		}
 		for _, finding := range report.ScopeCoverage.NewFindingsFromReportPass {
 			addRefs(finding.EvidenceRefs, "scope_coverage.new_finding", false)
@@ -100,7 +103,7 @@ func reviewExternalDocAbsorptionRefs(report ReviewReport) (map[string]reviewExte
 	return safeRefs, unsafeRefs
 }
 
-func (s reviewExternalDocAbsorptionRefSummary) matches(doc ReviewExternalDocEvidence, snippet ReviewExternalDocSnippetEvidence) bool {
+func (s reviewExternalDocAbsorptionRefSummary) matches(doc externaldoc.Evidence, snippet externaldoc.SnippetEvidence) bool {
 	if len(s.urls) == 0 || len(s.fetchedAt) == 0 || len(s.contentHashes) == 0 {
 		return false
 	}

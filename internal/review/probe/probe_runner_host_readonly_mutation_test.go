@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_HostReadOnlySandboxBlocksRepoMutation(t *testing.T) {
@@ -15,7 +17,7 @@ func TestProbeRunner_HostReadOnlySandboxBlocksRepoMutation(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-mutation",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -25,8 +27,8 @@ func TestProbeRunner_HostReadOnlySandboxBlocksRepoMutation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeFailed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbeFailed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbeFailed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbeFailed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatal("MutatedWorktree = true, want false")
@@ -44,7 +46,7 @@ func TestProbeRunner_HostReadOnlySandboxBlocksRepoMutation_DirtyWorktreeUntouche
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-mutation-dirty",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -54,8 +56,8 @@ func TestProbeRunner_HostReadOnlySandboxBlocksRepoMutation_DirtyWorktreeUntouche
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeFailed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbeFailed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbeFailed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbeFailed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatal("MutatedWorktree = true, want false")
@@ -76,7 +78,7 @@ func TestProbeRunner_HostReadOnlySandboxBlocksDirtyExistingPathMutation(t *testi
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-mutation-dirty-existing-path",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -86,8 +88,8 @@ func TestProbeRunner_HostReadOnlySandboxBlocksDirtyExistingPathMutation(t *testi
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeFailed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbeFailed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbeFailed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbeFailed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatal("MutatedWorktree = true, want false")
@@ -125,7 +127,7 @@ func TestCannotReadHostEtcPasswd(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-host-file-read",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 2048,
 		Commands: []ReviewProbeCommand{
@@ -135,8 +137,8 @@ func TestCannotReadHostEtcPasswd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatal("MutatedWorktree = true, want false")

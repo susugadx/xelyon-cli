@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 const (
@@ -37,7 +39,7 @@ type hostReadOnlyCommand struct {
 
 type hostReadOnlyRequest struct {
 	id             string
-	mode           ReviewProbeMode
+	mode           domain.ReviewProbeMode
 	timeout        time.Duration
 	maxOutputBytes int64
 	commands       []hostReadOnlyCommand
@@ -58,13 +60,13 @@ func newHostReadOnlyResultReducer(req ReviewProbeRequest) *hostReadOnlyResultRed
 		result: ReviewProbeResult{
 			ID:     req.ID,
 			Mode:   req.Mode,
-			Status: ReviewProbePassed,
+			Status: domain.ReviewProbePassed,
 		},
 	}
 }
 
 func (r *hostReadOnlyResultReducer) applyValidationError(err error) {
-	r.result.Status = ReviewProbeBlocked
+	r.result.Status = domain.ReviewProbeBlocked
 	r.result.Error = err.Error()
 }
 
@@ -74,7 +76,7 @@ func (r *hostReadOnlyResultReducer) applyNormalizedRequest(req hostReadOnlyReque
 }
 
 func (r *hostReadOnlyResultReducer) applySnapshotError(phase string, err error) {
-	r.result.Status = ReviewProbeBlocked
+	r.result.Status = domain.ReviewProbeBlocked
 	r.result.Error = appendError(r.result.Error, fmt.Sprintf("failed to capture worktree snapshot %s probe: %v", phase, err))
 }
 
@@ -98,7 +100,7 @@ func (r *hostReadOnlyResultReducer) applyMutation(mutatedFiles []string) {
 
 	r.result.MutatedWorktree = true
 	r.result.MutatedFiles = mutatedFiles
-	r.result.Status = ReviewProbeMutatedWorktree
+	r.result.Status = domain.ReviewProbeMutatedWorktree
 	r.result.Error = appendError(r.result.Error, "probe command changed the working tree")
 }
 

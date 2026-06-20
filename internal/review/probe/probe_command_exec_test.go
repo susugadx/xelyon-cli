@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestExecuteProbeCommand_BlocksWhenResolvedCommandPathMissing(t *testing.T) {
@@ -19,8 +21,8 @@ func TestExecuteProbeCommand_BlocksWhenResolvedCommandPathMissing(t *testing.T) 
 		workDir: t.TempDir(),
 	}, 2*time.Second, 1024)
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeBlocked)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q", result.Status, domain.ReviewProbeBlocked)
 	}
 	if result.ExitCode != -1 {
 		t.Fatalf("ExitCode = %d, want -1", result.ExitCode)
@@ -49,8 +51,8 @@ func TestExecuteProbeCommand_DoesNotRunLogicalCommandWithoutResolvedPath(t *test
 		env:     prependPathEnv(os.Environ(), binDir),
 	}, 2*time.Second, 1024)
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeBlocked)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q", result.Status, domain.ReviewProbeBlocked)
 	}
 	if !strings.Contains(result.Error, probeExecMissingResolvedPathError) {
 		t.Fatalf("Error = %q, want to contain %q", result.Error, probeExecMissingResolvedPathError)
@@ -72,8 +74,8 @@ func TestExecuteProbeCommand_RunsResolvedCommandPath(t *testing.T) {
 		workDir:     tempDir,
 	}, 2*time.Second, 1024)
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want 0 (error=%q)", result.ExitCode, result.Error)
@@ -109,8 +111,8 @@ func TestExecuteProbeCommand_SearchNoMatchesExitOnePasses(t *testing.T) {
 				env:         prependPathEnv(os.Environ(), binDir),
 			}, 2*time.Second, 1024)
 
-			if result.Status != ReviewProbePassed {
-				t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+			if result.Status != domain.ReviewProbePassed {
+				t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 			}
 			if result.ExitCode != 1 {
 				t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
@@ -138,8 +140,8 @@ func TestExecuteProbeCommand_SearchErrorExitTwoFails(t *testing.T) {
 		env:         prependPathEnv(os.Environ(), binDir),
 	}, 2*time.Second, 1024)
 
-	if result.Status != ReviewProbeFailed {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeFailed)
+	if result.Status != domain.ReviewProbeFailed {
+		t.Fatalf("Status = %q, want %q", result.Status, domain.ReviewProbeFailed)
 	}
 	if result.ExitCode != 2 {
 		t.Fatalf("ExitCode = %d, want 2", result.ExitCode)
@@ -173,8 +175,8 @@ func TestExecuteProbeCommand_NonSearchExitOneFails(t *testing.T) {
 				env:         prependPathEnv(os.Environ(), binDir),
 			}, 2*time.Second, 1024)
 
-			if result.Status != ReviewProbeFailed {
-				t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeFailed)
+			if result.Status != domain.ReviewProbeFailed {
+				t.Fatalf("Status = %q, want %q", result.Status, domain.ReviewProbeFailed)
 			}
 			if result.ExitCode != 1 {
 				t.Fatalf("ExitCode = %d, want 1", result.ExitCode)

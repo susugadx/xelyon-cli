@@ -4,23 +4,24 @@ import (
 	"fmt"
 	"strings"
 
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 // CompactReviewWebSearchDiscoveryEvidence は citation-capable external docs が揃った場合に discovery-only snippets を置換する。
-func CompactReviewWebSearchDiscoveryEvidence(bundle ReviewEvidenceBundle) (ReviewEvidenceBundle, int, int, bool) {
+func CompactReviewWebSearchDiscoveryEvidence(bundle reviewevidence.ReviewEvidenceBundle) (reviewevidence.ReviewEvidenceBundle, int, int, bool) {
 	evidence := bundle.WebSearchEvidence
 	if !evidence.Enabled ||
 		strings.TrimSpace(evidence.Error) != "" ||
 		evidence.Truncated ||
 		evidence.Inconclusive ||
 		len(evidence.ExternalDocs) == 0 {
-		return ReviewEvidenceBundle{}, 0, 0, false
+		return reviewevidence.ReviewEvidenceBundle{}, 0, 0, false
 	}
 	for _, query := range evidence.Queries {
 		if strings.TrimSpace(query.Error) != "" {
-			return ReviewEvidenceBundle{}, 0, 0, false
+			return reviewevidence.ReviewEvidenceBundle{}, 0, 0, false
 		}
 	}
 	support := externaldoc.SummarizeExternalSupport(evidence)
@@ -29,7 +30,7 @@ func CompactReviewWebSearchDiscoveryEvidence(bundle ReviewEvidenceBundle) (Revie
 		support.TruncatedDocCount > 0 ||
 		support.TruncatedSnippetCount > 0 ||
 		support.UnknownDocCount > 0 {
-		return ReviewEvidenceBundle{}, 0, 0, false
+		return reviewevidence.ReviewEvidenceBundle{}, 0, 0, false
 	}
 
 	compacted := cloneReviewEvidenceBundleForPromptCompact(bundle)
@@ -54,17 +55,17 @@ func CompactReviewWebSearchDiscoveryEvidence(bundle ReviewEvidenceBundle) (Revie
 		}
 	}
 	if !changed {
-		return ReviewEvidenceBundle{}, 0, 0, false
+		return reviewevidence.ReviewEvidenceBundle{}, 0, 0, false
 	}
 	savedBytes := originalBytes - replacementBytes
 	savedTokens := token.EstimateTokenCount(strings.Repeat("x", originalBytes)) - token.EstimateTokenCount(strings.Repeat("x", replacementBytes))
 	if savedBytes <= 0 || savedTokens < reviewWebSearchDiscoveryCompactMinSavedTokens {
-		return ReviewEvidenceBundle{}, 0, 0, false
+		return reviewevidence.ReviewEvidenceBundle{}, 0, 0, false
 	}
 	return compacted, savedBytes, savedTokens, true
 }
 
-func reviewWebSearchDiscoverySnippetPlaceholder(result ReviewWebSearchEvidenceResult) string {
+func reviewWebSearchDiscoverySnippetPlaceholder(result externaldoc.WebSearchEvidenceResult) string {
 	return fmt.Sprintf(
 		"[compacted discovery-only web_search snippet; url=%s; source_domain=%s; snippet_hash=%s; raw_result_preserved=review_artifact]",
 		oneLine(result.URL),

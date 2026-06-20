@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	"github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestBuildReviewProbeRequestsFromPlanConvertsValidPlan(t *testing.T) {
@@ -24,7 +26,7 @@ func TestBuildReviewProbeRequestsFromPlanConvertsValidPlan(t *testing.T) {
 	if got, want := req.ID, "probe-1"; got != want {
 		t.Fatalf("ID = %q, want %q", got, want)
 	}
-	if got, want := req.Mode, ReviewProbeRepoSandbox; got != want {
+	if got, want := req.Mode, domain.ReviewProbeRepoSandbox; got != want {
 		t.Fatalf("Mode = %q, want %q", got, want)
 	}
 	if got, want := req.Timeout, 30*time.Second; got != want {
@@ -122,7 +124,7 @@ func TestReviewProbePlanDecodeValidateConvertIsDeterministic(t *testing.T) {
 func newReviewProbePlanForRequestConversionTest() probeplan.ReviewProbePlan {
 	return probeplan.ReviewProbePlan{
 		SchemaVersion: probeplan.ReviewProbePlanSchemaVersionV2,
-		TargetKind:    probeplan.TargetCurrentChanges,
+		TargetKind:    domain.TargetCurrentChanges,
 		Summary:       "Probe plan covers validator behavior.",
 		ImpactSurfaces: []probeplan.ReviewProbeImpactSurface{
 			{
@@ -138,7 +140,7 @@ func newReviewProbePlanForRequestConversionTest() probeplan.ReviewProbePlan {
 			{
 				ID:                   "risk-1",
 				Summary:              "edge case may regress",
-				Severity:             probeplan.ReviewGroupSeverityMedium,
+				Severity:             report.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "related tests mention validator",
 				VerificationStrategy: "run focused test",
@@ -151,7 +153,7 @@ func newReviewProbePlanForRequestConversionTest() probeplan.ReviewProbePlan {
 				SurfaceIDs:     []string{"surface-1"},
 				RiskIDs:        []string{"risk-1"},
 				Purpose:        "run focused validation coverage",
-				Mode:           probeplan.ReviewProbeRepoSandbox,
+				Mode:           domain.ReviewProbeRepoSandbox,
 				TimeoutSeconds: 30,
 				MaxOutputBytes: 4096,
 				Commands: []probeplan.ReviewPlannedProbeCommand{

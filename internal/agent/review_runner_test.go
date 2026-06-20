@@ -458,7 +458,7 @@ func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review
 			{
 				ID:                   "risk-1",
 				Summary:              riskSummary,
-				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
+				Severity:             reviewreport.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Existing evidence covers the path.",
 				VerificationStrategy: "No additional probe is needed.",
@@ -486,7 +486,7 @@ func newAgentArtifactIsolationProbePlanForTest() reviewprobeplan.ReviewProbePlan
 			SurfaceIDs: []string{"surface-1"},
 			RiskIDs:    []string{"risk-1"},
 			Purpose:    "Verify debug review artifacts do not appear in the repository before probes complete.",
-			Mode:       reviewprobeplan.ReviewProbeHostReadOnly,
+			Mode:       reviewdomain.ReviewProbeHostReadOnly,
 			Commands: []reviewprobeplan.ReviewPlannedProbeCommand{
 				{
 					Command: "find",

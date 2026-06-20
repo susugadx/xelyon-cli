@@ -3,6 +3,8 @@ package probeplan
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func validateReviewProbePlanID(field, candidate string) (string, error) {
@@ -70,7 +72,7 @@ func IsReviewProbePlanPreProbeEvidenceKind(kind string) bool {
 		return false
 	}
 	switch kind {
-	case ReviewEvidenceKindProbe, ReviewEvidenceKindProbeCommand:
+	case report.ReviewEvidenceKindProbe, report.ReviewEvidenceKindProbeCommand:
 		return false
 	default:
 		return true

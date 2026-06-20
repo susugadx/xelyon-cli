@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestBuildScratchOnlyEnv_AllowlistAndOverrides(t *testing.T) {
@@ -114,7 +116,7 @@ func TestScratchOnlyExecutor_ChildProcessUsesHardenedEnv(t *testing.T) {
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-env-child",
-		Mode:           ReviewProbeScratchOnly,
+		Mode:           domain.ReviewProbeScratchOnly,
 		Timeout:        12 * time.Second,
 		MaxOutputBytes: 8 * 1024,
 		Files: []ReviewProbeFile{
@@ -138,8 +140,8 @@ func TestScratchOnlyExecutor_ChildProcessUsesHardenedEnv(t *testing.T) {
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))

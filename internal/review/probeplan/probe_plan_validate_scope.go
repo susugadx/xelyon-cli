@@ -3,6 +3,8 @@ package probeplan
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func validateReviewProbeImpactSurfaces(surfaces []ReviewProbeImpactSurface) (map[string]struct{}, error) {
@@ -86,14 +88,14 @@ func validateReviewProbeCandidateRisks(risks []ReviewProbeCandidateRisk, surface
 	return seenIDs, nil
 }
 
-func validateReviewProbePlanPreProbeEvidence(field, evidenceSummary string, refs []ReviewEvidenceRef) error {
+func validateReviewProbePlanPreProbeEvidence(field, evidenceSummary string, refs []report.ReviewEvidenceRef) error {
 	if strings.TrimSpace(evidenceSummary) == "" && len(refs) == 0 {
 		return fmt.Errorf("%s requires evidence_summary or evidence_refs", field)
 	}
 	return validateReviewProbePlanPreProbeEvidenceRefs(field+".evidence_refs", refs)
 }
 
-func validateReviewProbePlanPreProbeEvidenceRefs(field string, refs []ReviewEvidenceRef) error {
+func validateReviewProbePlanPreProbeEvidenceRefs(field string, refs []report.ReviewEvidenceRef) error {
 	for i, ref := range refs {
 		refField := fmt.Sprintf("%s[%d]", field, i)
 		if !isReviewProbePlanPreProbeEvidenceKind(ref.Kind) {

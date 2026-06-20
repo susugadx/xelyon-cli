@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_HostReadOnlyBlockedCommand(t *testing.T) {
@@ -20,7 +22,7 @@ func TestProbeRunner_HostReadOnlyBlockedCommand(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-blocked",
-		Mode:           ReviewProbeHostReadOnly,
+		Mode:           domain.ReviewProbeHostReadOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -110,7 +112,7 @@ func TestProbeRunner_HostReadOnlyBlockedCasesAreNotExecuted(t *testing.T) {
 
 			result, err := runner.Run(context.Background(), ReviewProbeRequest{
 				ID:             tt.id,
-				Mode:           ReviewProbeHostReadOnly,
+				Mode:           domain.ReviewProbeHostReadOnly,
 				Timeout:        2 * time.Second,
 				MaxOutputBytes: 1024,
 				Commands: []ReviewProbeCommand{
@@ -140,14 +142,14 @@ func TestHostReadOnlyExecutor_BlocksCommandResolvedInsideRepoRoot(t *testing.T) 
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:   "host-readonly-blocked-repo-bin",
-		Mode: ReviewProbeHostReadOnly,
+		Mode: domain.ReviewProbeHostReadOnly,
 		Commands: []ReviewProbeCommand{
 			{Command: "git", Args: []string{"status", "--short"}},
 		},
 	})
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeBlocked, result.Error)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
@@ -160,8 +162,8 @@ func assertHostReadOnlyBlockedWithoutExecution(t *testing.T, err error, result R
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbeBlocked)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q", result.Status, domain.ReviewProbeBlocked)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))

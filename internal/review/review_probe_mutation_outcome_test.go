@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
@@ -18,13 +19,13 @@ func TestCanonicalizeReviewProbeResultMutationOutcome(t *testing.T) {
 			name: "status only mutation canonicalizes flag",
 			in: reviewprobe.ReviewProbeResult{
 				ID:     "probe-1",
-				Mode:   reviewprobe.ReviewProbeHostReadOnly,
-				Status: reviewprobe.ReviewProbeMutatedWorktree,
+				Mode:   domain.ReviewProbeHostReadOnly,
+				Status: domain.ReviewProbeMutatedWorktree,
 			},
 			want: reviewprobe.ReviewProbeResult{
 				ID:              "probe-1",
-				Mode:            reviewprobe.ReviewProbeHostReadOnly,
-				Status:          reviewprobe.ReviewProbeMutatedWorktree,
+				Mode:            domain.ReviewProbeHostReadOnly,
+				Status:          domain.ReviewProbeMutatedWorktree,
 				MutatedWorktree: true,
 			},
 		},
@@ -32,14 +33,14 @@ func TestCanonicalizeReviewProbeResultMutationOutcome(t *testing.T) {
 			name: "flag only mutation canonicalizes status",
 			in: reviewprobe.ReviewProbeResult{
 				ID:              "probe-1",
-				Mode:            reviewprobe.ReviewProbeHostReadOnly,
-				Status:          reviewprobe.ReviewProbeFailed,
+				Mode:            domain.ReviewProbeHostReadOnly,
+				Status:          domain.ReviewProbeFailed,
 				MutatedWorktree: true,
 			},
 			want: reviewprobe.ReviewProbeResult{
 				ID:              "probe-1",
-				Mode:            reviewprobe.ReviewProbeHostReadOnly,
-				Status:          reviewprobe.ReviewProbeMutatedWorktree,
+				Mode:            domain.ReviewProbeHostReadOnly,
+				Status:          domain.ReviewProbeMutatedWorktree,
 				MutatedWorktree: true,
 			},
 		},
@@ -47,15 +48,15 @@ func TestCanonicalizeReviewProbeResultMutationOutcome(t *testing.T) {
 			name: "non mutation is unchanged",
 			in: reviewprobe.ReviewProbeResult{
 				ID:           "probe-1",
-				Mode:         reviewprobe.ReviewProbeHostReadOnly,
-				Status:       reviewprobe.ReviewProbeFailed,
+				Mode:         domain.ReviewProbeHostReadOnly,
+				Status:       domain.ReviewProbeFailed,
 				MutatedFiles: []string{"internal/review/runner.go"},
 				Error:        "exit status 1",
 			},
 			want: reviewprobe.ReviewProbeResult{
 				ID:           "probe-1",
-				Mode:         reviewprobe.ReviewProbeHostReadOnly,
-				Status:       reviewprobe.ReviewProbeFailed,
+				Mode:         domain.ReviewProbeHostReadOnly,
+				Status:       domain.ReviewProbeFailed,
 				MutatedFiles: []string{"internal/review/runner.go"},
 				Error:        "exit status 1",
 			},
@@ -82,13 +83,13 @@ func TestCanonicalizeReviewProbeSummaryMutationOutcome(t *testing.T) {
 			name: "status only mutation canonicalizes flag",
 			in: reviewreport.ReviewProbeSummary{
 				ProbeID: "probe-1",
-				Mode:    reviewprobe.ReviewProbeHostReadOnly,
-				Status:  reviewprobe.ReviewProbeMutatedWorktree,
+				Mode:    domain.ReviewProbeHostReadOnly,
+				Status:  domain.ReviewProbeMutatedWorktree,
 			},
 			want: reviewreport.ReviewProbeSummary{
 				ProbeID:         "probe-1",
-				Mode:            reviewprobe.ReviewProbeHostReadOnly,
-				Status:          reviewprobe.ReviewProbeMutatedWorktree,
+				Mode:            domain.ReviewProbeHostReadOnly,
+				Status:          domain.ReviewProbeMutatedWorktree,
 				MutatedWorktree: true,
 			},
 		},
@@ -96,14 +97,14 @@ func TestCanonicalizeReviewProbeSummaryMutationOutcome(t *testing.T) {
 			name: "flag only mutation canonicalizes status",
 			in: reviewreport.ReviewProbeSummary{
 				ProbeID:         "probe-1",
-				Mode:            reviewprobe.ReviewProbeHostReadOnly,
-				Status:          reviewprobe.ReviewProbeFailed,
+				Mode:            domain.ReviewProbeHostReadOnly,
+				Status:          domain.ReviewProbeFailed,
 				MutatedWorktree: true,
 			},
 			want: reviewreport.ReviewProbeSummary{
 				ProbeID:         "probe-1",
-				Mode:            reviewprobe.ReviewProbeHostReadOnly,
-				Status:          reviewprobe.ReviewProbeMutatedWorktree,
+				Mode:            domain.ReviewProbeHostReadOnly,
+				Status:          domain.ReviewProbeMutatedWorktree,
 				MutatedWorktree: true,
 			},
 		},
@@ -111,15 +112,15 @@ func TestCanonicalizeReviewProbeSummaryMutationOutcome(t *testing.T) {
 			name: "non mutation is unchanged",
 			in: reviewreport.ReviewProbeSummary{
 				ProbeID:      "probe-1",
-				Mode:         reviewprobe.ReviewProbeHostReadOnly,
-				Status:       reviewprobe.ReviewProbeFailed,
+				Mode:         domain.ReviewProbeHostReadOnly,
+				Status:       domain.ReviewProbeFailed,
 				MutatedFiles: []string{"internal/review/runner.go"},
 				Error:        "exit status 1",
 			},
 			want: reviewreport.ReviewProbeSummary{
 				ProbeID:      "probe-1",
-				Mode:         reviewprobe.ReviewProbeHostReadOnly,
-				Status:       reviewprobe.ReviewProbeFailed,
+				Mode:         domain.ReviewProbeHostReadOnly,
+				Status:       domain.ReviewProbeFailed,
 				MutatedFiles: []string{"internal/review/runner.go"},
 				Error:        "exit status 1",
 			},

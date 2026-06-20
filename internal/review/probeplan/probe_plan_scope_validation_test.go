@@ -3,6 +3,8 @@ package probeplan
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestValidateReviewProbePlanProbeLinkageContract(t *testing.T) {
@@ -92,7 +94,7 @@ func TestValidateReviewProbePlanProbeLinkageContract(t *testing.T) {
 				plan.CandidateRisks = append(plan.CandidateRisks, ReviewProbeCandidateRisk{
 					ID:                   "risk-checked",
 					Summary:              "Existing evidence already checks this risk.",
-					Severity:             ReviewGroupSeverityLow,
+					Severity:             report.ReviewGroupSeverityLow,
 					SurfaceIDs:           []string{"surface-checked"},
 					EvidenceSummary:      "Existing evidence is sufficient.",
 					VerificationStrategy: "No additional probe is needed for risk-checked.",

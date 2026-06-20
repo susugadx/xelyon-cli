@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
@@ -35,13 +36,13 @@ func TestReviewRunnerPromptReductionModeControlsProbeOutputCompaction(t *testing
 			evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 			probeResult := reviewprobe.ReviewProbeResult{
 				ID:     "probe-1",
-				Mode:   reviewprobe.ReviewProbeHostReadOnly,
-				Status: reviewprobe.ReviewProbePassed,
+				Mode:   domain.ReviewProbeHostReadOnly,
+				Status: domain.ReviewProbePassed,
 				CommandResults: []reviewprobe.ReviewProbeCommandResult{
 					{
 						Command: "go",
 						Args:    []string{"test", "./..."},
-						Status:  reviewprobe.ReviewProbePassed,
+						Status:  domain.ReviewProbePassed,
 						Output: strings.Join([]string{
 							"ok   github.com/susugadx/xelyon-cli/internal/review 0.123s",
 							strings.Repeat("verbose detail that should not be sent after compaction\n", 80),

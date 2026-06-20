@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_ScratchOnly_BlockedCasesAreNotExecuted(t *testing.T) {
@@ -143,5 +145,5 @@ func TestProbeRunner_ScratchOnly_BlockedCasesAreNotExecuted(t *testing.T) {
 		},
 	}
 
-	runProbeModeBlockedCases(t, ReviewProbeScratchOnly, tests)
+	runProbeModeBlockedCases(t, domain.ReviewProbeScratchOnly, tests)
 }

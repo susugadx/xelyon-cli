@@ -22,14 +22,14 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	}
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:              "probe-1",
-		Mode:            reviewprobe.ReviewProbeHostReadOnly,
-		Status:          reviewprobe.ReviewProbePassed,
+		Mode:            reviewdomain.ReviewProbeHostReadOnly,
+		Status:          reviewdomain.ReviewProbePassed,
 		OutputTruncated: true,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command:         "go",
 				Args:            []string{"test", "./internal/review"},
-				Status:          reviewprobe.ReviewProbePassed,
+				Status:          reviewdomain.ReviewProbePassed,
 				Output:          "PASS runner",
 				OutputTruncated: true,
 				Duration:        1500 * time.Millisecond,
@@ -419,9 +419,9 @@ func TestReviewRunnerRunsProbesInPlanOrder(t *testing.T) {
 	probes := &runnerFakeProbeRunner{}
 	plan := newRunnerProbePlanForTest("probe-a", "probe-b", "probe-c")
 	results := []reviewprobe.ReviewProbeResult{
-		{ID: "probe-a", Mode: reviewprobe.ReviewProbeHostReadOnly, Status: reviewprobe.ReviewProbePassed},
-		{ID: "probe-b", Mode: reviewprobe.ReviewProbeHostReadOnly, Status: reviewprobe.ReviewProbePassed},
-		{ID: "probe-c", Mode: reviewprobe.ReviewProbeHostReadOnly, Status: reviewprobe.ReviewProbePassed},
+		{ID: "probe-a", Mode: reviewdomain.ReviewProbeHostReadOnly, Status: reviewdomain.ReviewProbePassed},
+		{ID: "probe-b", Mode: reviewdomain.ReviewProbeHostReadOnly, Status: reviewdomain.ReviewProbePassed},
+		{ID: "probe-c", Mode: reviewdomain.ReviewProbeHostReadOnly, Status: reviewdomain.ReviewProbePassed},
 	}
 	probes.results = map[string]reviewprobe.ReviewProbeResult{
 		"probe-a": results[0],

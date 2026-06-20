@@ -3,7 +3,9 @@ package analysis
 import (
 	"path/filepath"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func newProbePlanEvidenceInputForValidationTest(repoRoot string) ReviewEvidenceBundle {
@@ -178,7 +180,7 @@ const (
 func newValidReviewProbePlanForTest() reviewprobeplan.ReviewProbePlan {
 	return reviewprobeplan.ReviewProbePlan{
 		SchemaVersion: reviewprobeplan.ReviewProbePlanSchemaVersionV2,
-		TargetKind:    reviewprobeplan.TargetCurrentChanges,
+		TargetKind:    domain.TargetCurrentChanges,
 		Summary:       "Probe current changes.",
 		ImpactSurfaces: []reviewprobeplan.ReviewProbeImpactSurface{
 			{
@@ -194,7 +196,7 @@ func newValidReviewProbePlanForTest() reviewprobeplan.ReviewProbePlan {
 			{
 				ID:                   "risk-1",
 				Summary:              "Validation could accept an invalid probe plan.",
-				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
+				Severity:             report.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Validation code owns the probe plan contract.",
 				VerificationStrategy: "Run focused review tests.",
@@ -207,7 +209,7 @@ func newValidReviewProbePlanForTest() reviewprobeplan.ReviewProbePlan {
 				SurfaceIDs:     []string{"surface-1"},
 				RiskIDs:        []string{"risk-1"},
 				Purpose:        "Confirm or falsify risk-1 for surface-1 by running focused review tests.",
-				Mode:           reviewprobeplan.ReviewProbeRepoSandbox,
+				Mode:           domain.ReviewProbeRepoSandbox,
 				TimeoutSeconds: 30,
 				MaxOutputBytes: 4096,
 				Commands: []reviewprobeplan.ReviewPlannedProbeCommand{

@@ -3,6 +3,8 @@ package probeplan
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
@@ -78,7 +80,7 @@ func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
 			name: "unknown risk severity",
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
-				plan.CandidateRisks[0].Severity = ReviewGroupSeverity("unknown")
+				plan.CandidateRisks[0].Severity = report.ReviewGroupSeverity("unknown")
 				return plan
 			},
 			errContains: "candidate_risks[0].severity",
@@ -117,7 +119,7 @@ func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
 				plan.ImpactSurfaces[0].EvidenceSummary = ""
-				plan.ImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{{Kind: ReviewEvidenceKindProbe}}
+				plan.ImpactSurfaces[0].EvidenceRefs = []report.ReviewEvidenceRef{{Kind: report.ReviewEvidenceKindProbe}}
 				return plan
 			},
 			errContains: "impact_surfaces[0].evidence_refs[0].kind",
@@ -127,7 +129,7 @@ func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
 				plan.ImpactSurfaces[0].EvidenceSummary = ""
-				plan.ImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{{Kind: ReviewEvidenceKindGitStatus, ProbeID: "probe-1"}}
+				plan.ImpactSurfaces[0].EvidenceRefs = []report.ReviewEvidenceRef{{Kind: report.ReviewEvidenceKindGitStatus, ProbeID: "probe-1"}}
 				return plan
 			},
 			errContains: "impact_surfaces[0].evidence_refs[0].probe_id",
@@ -137,7 +139,7 @@ func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
 				plan.ImpactSurfaces[0].EvidenceSummary = ""
-				plan.ImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{{Kind: ReviewEvidenceKindGitStatus, CommandIndex: ReviewCommandIndex(0)}}
+				plan.ImpactSurfaces[0].EvidenceRefs = []report.ReviewEvidenceRef{{Kind: report.ReviewEvidenceKindGitStatus, CommandIndex: report.ReviewCommandIndex(0)}}
 				return plan
 			},
 			errContains: "impact_surfaces[0].evidence_refs[0].command_index",
@@ -147,8 +149,8 @@ func TestValidateReviewProbePlanScopeAnalysisContract(t *testing.T) {
 			plan: func() ReviewProbePlan {
 				plan := newValidReviewProbePlanForTest()
 				plan.ImpactSurfaces[0].EvidenceSummary = ""
-				plan.ImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{{
-					Kind: ReviewEvidenceKindFile,
+				plan.ImpactSurfaces[0].EvidenceRefs = []report.ReviewEvidenceRef{{
+					Kind: report.ReviewEvidenceKindFile,
 					Path: "internal/review/probe_plan.go",
 					Line: 12,
 				}}

@@ -3,6 +3,8 @@ package probeplan
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func validateReviewPlannedProbe(index int, probe ReviewPlannedProbe, seenIDs map[string]struct{}, linkage reviewProbePlanProbeLinkageValidator) error {
@@ -83,9 +85,9 @@ func validateReviewPlannedProbeCommand(field string, command ReviewPlannedProbeC
 	return validateReviewProbePlanRelativePath(field+".work_dir", command.WorkDir)
 }
 
-func validateReviewPlannedProbeFiles(field string, mode ReviewProbeMode, files []ReviewPlannedProbeFile) error {
-	if mode == ReviewProbeHostReadOnly && len(files) > 0 {
-		return fmt.Errorf("%s must be empty when mode is %q", field, ReviewProbeHostReadOnly)
+func validateReviewPlannedProbeFiles(field string, mode domain.ReviewProbeMode, files []ReviewPlannedProbeFile) error {
+	if mode == domain.ReviewProbeHostReadOnly && len(files) > 0 {
+		return fmt.Errorf("%s must be empty when mode is %q", field, domain.ReviewProbeHostReadOnly)
 	}
 	if len(files) > MaxReviewProbePlanFiles {
 		return fmt.Errorf("%s must contain at most %d entries: got %d", field, MaxReviewProbePlanFiles, len(files))

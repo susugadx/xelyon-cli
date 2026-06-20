@@ -210,7 +210,7 @@ func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review
 			{
 				ID:                   "risk-1",
 				Summary:              riskSummary,
-				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
+				Severity:             reviewreport.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Existing evidence covers the path.",
 				VerificationStrategy: "No additional probe is needed.",

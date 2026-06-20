@@ -1,6 +1,10 @@
 package promptreduction
 
-import "strings"
+import (
+	"strings"
+
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
+)
 
 // ReviewPromptReductionMode は review model prompt 専用の provider-facing 削減 mode。
 type ReviewPromptReductionMode string
@@ -102,17 +106,17 @@ type ReviewPromptAbsorptionRef struct {
 
 // ReviewPromptReductionItem は review prompt payload 内の削減候補状態。
 type ReviewPromptReductionItem struct {
-	ID                string                          `json:"id"`
-	Family            ReviewPromptReductionFamily     `json:"family"`
-	Phase             ReviewModelPhase                `json:"phase"`
-	Status            ReviewPromptReductionItemStatus `json:"status"`
-	AbsorbedBy        []ReviewPromptAbsorptionRef     `json:"absorbed_by,omitempty"`
-	EvidenceRefs      []ReviewEvidenceRef             `json:"evidence_refs,omitempty"`
-	RawArtifactRef    string                          `json:"raw_artifact_ref,omitempty"`
-	PromptArtifactRef string                          `json:"prompt_artifact_ref,omitempty"`
-	Summary           string                          `json:"summary,omitempty"`
-	OriginalBytes     int                             `json:"original_bytes,omitempty"`
-	ReplacementBytes  int                             `json:"replacement_bytes,omitempty"`
+	ID                string                           `json:"id"`
+	Family            ReviewPromptReductionFamily      `json:"family"`
+	Phase             ReviewModelPhase                 `json:"phase"`
+	Status            ReviewPromptReductionItemStatus  `json:"status"`
+	AbsorbedBy        []ReviewPromptAbsorptionRef      `json:"absorbed_by,omitempty"`
+	EvidenceRefs      []reviewreport.ReviewEvidenceRef `json:"evidence_refs,omitempty"`
+	RawArtifactRef    string                           `json:"raw_artifact_ref,omitempty"`
+	PromptArtifactRef string                           `json:"prompt_artifact_ref,omitempty"`
+	Summary           string                           `json:"summary,omitempty"`
+	OriginalBytes     int                              `json:"original_bytes,omitempty"`
+	ReplacementBytes  int                              `json:"replacement_bytes,omitempty"`
 }
 
 // ReviewProbeRawOutputLedgerRef は review probe raw output ref の rehydrate ledger 行。

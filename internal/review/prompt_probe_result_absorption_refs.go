@@ -3,6 +3,7 @@ package review
 import (
 	"strings"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
@@ -137,14 +138,14 @@ func reviewProbeCommandResultKeyFromEvidenceRef(ref reviewreport.ReviewEvidenceR
 }
 
 func reviewProbeResultSafeForAbsorbedPrompt(result reviewprobe.ReviewProbeResult) bool {
-	return result.Status == reviewprobe.ReviewProbePassed &&
+	return result.Status == domain.ReviewProbePassed &&
 		!result.MutatedWorktree &&
 		!result.OutputTruncated &&
 		strings.TrimSpace(result.Error) == ""
 }
 
 func reviewProbeCommandResultSafeForAbsorbedPrompt(result reviewprobe.ReviewProbeCommandResult) bool {
-	return result.Status == reviewprobe.ReviewProbePassed &&
+	return result.Status == domain.ReviewProbePassed &&
 		!result.OutputTruncated &&
 		strings.TrimSpace(result.Error) == ""
 }

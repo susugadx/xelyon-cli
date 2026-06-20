@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
@@ -259,7 +261,7 @@ func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
 		},
 	}
 
-	runProbeModeBlockedCases(t, ReviewProbeRepoSandbox, tests)
+	runProbeModeBlockedCases(t, domain.ReviewProbeRepoSandbox, tests)
 }
 
 func TestProbeRunner_RepoSandbox_BlocksCommandPathUnderSymlinkEscape(t *testing.T) {
@@ -271,14 +273,14 @@ func TestProbeRunner_RepoSandbox_BlocksCommandPathUnderSymlinkEscape(t *testing.
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:       "repo-sandbox-blocked-command-symlink-parent",
-		Mode:     ReviewProbeRepoSandbox,
+		Mode:     domain.ReviewProbeRepoSandbox,
 		Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"build", "-o", "outside-link/probe-bin", "./probe"}}},
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeBlocked, result.Error)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
@@ -301,15 +303,15 @@ func TestProbeRunner_RepoSandbox_BlocksWhenGeneratedFileLimitsExceeded(t *testin
 	runner := NewProbeRunner(repo)
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:       "repo-sandbox-generated-file-limit",
-		Mode:     ReviewProbeRepoSandbox,
+		Mode:     domain.ReviewProbeRepoSandbox,
 		Files:    files,
 		Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeBlocked, result.Error)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
@@ -330,7 +332,7 @@ func TestRepoSandboxExecutor_CommandResolution(t *testing.T) {
 
 		result := executor.run(context.Background(), ReviewProbeRequest{
 			ID:       "repo-sandbox-resolve-safe",
-			Mode:     ReviewProbeRepoSandbox,
+			Mode:     domain.ReviewProbeRepoSandbox,
 			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
 		})
 		assertCommandResolutionPassed(t, result, "safe-cat")
@@ -348,7 +350,7 @@ func TestRepoSandboxExecutor_CommandResolution(t *testing.T) {
 
 		result := executor.run(context.Background(), ReviewProbeRequest{
 			ID:       "repo-sandbox-resolve-blocked-repo-bin",
-			Mode:     ReviewProbeRepoSandbox,
+			Mode:     domain.ReviewProbeRepoSandbox,
 			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
 		})
 		assertCommandResolutionBlocked(t, result)
@@ -370,7 +372,7 @@ func TestRepoSandboxExecutor_CommandResolution(t *testing.T) {
 
 		result := executor.run(context.Background(), ReviewProbeRequest{
 			ID:       "repo-sandbox-resolve-blocked-sandbox-bin",
-			Mode:     ReviewProbeRepoSandbox,
+			Mode:     domain.ReviewProbeRepoSandbox,
 			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
 		})
 		assertCommandResolutionBlocked(t, result)

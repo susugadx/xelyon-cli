@@ -19,7 +19,7 @@ func TestPlanScopeFromProbePlanKeepsCandidateRiskSeverity(t *testing.T) {
 			{
 				ID:       "risk-1",
 				Status:   reviewprobeplan.ReviewProbeCandidateRiskCheckedByEvidence,
-				Severity: reviewprobeplan.ReviewGroupSeverityHigh,
+				Severity: reviewreport.ReviewGroupSeverityHigh,
 			},
 		},
 	}

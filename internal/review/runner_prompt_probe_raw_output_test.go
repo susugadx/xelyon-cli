@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
@@ -17,19 +18,19 @@ func TestReviewRunnerSaturationAbsorbsProbeCommandWithReviewRawOutputContext(t *
 	keptOutput := strings.Repeat("UNREFERENCED_COMMAND_RAW_OUTPUT_STAYS_IN_PROBE_CONTEXT ", 120)
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "customtool",
 				Args:    []string{"--first"},
-				Status:  reviewprobe.ReviewProbePassed,
+				Status:  domain.ReviewProbePassed,
 				Output:  absorbedOutput,
 			},
 			{
 				Command: "customtool",
 				Args:    []string{"--second"},
-				Status:  reviewprobe.ReviewProbePassed,
+				Status:  domain.ReviewProbePassed,
 				Output:  keptOutput,
 			},
 		},
@@ -105,10 +106,10 @@ func TestReviewRunnerReviewRawOutputArtifactsDryRunDoesNotMutatePrompt(t *testin
 	rawOutput := strings.Repeat("DRY_RUN_REVIEW_RAW_OUTPUT_MUST_STAY_IN_PROBE_CONTEXT ", 120)
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
-			{Command: "customtool", Args: []string{"--inspect"}, Status: reviewprobe.ReviewProbePassed, Output: rawOutput},
+			{Command: "customtool", Args: []string{"--inspect"}, Status: domain.ReviewProbePassed, Output: rawOutput},
 		},
 	}
 	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
@@ -164,10 +165,10 @@ func TestReviewRunnerKeepsProbeCommandRawWhenReviewRawOutputBudgetCannotFit(t *t
 	rawOutput := strings.Repeat("BUDGET_STARVED_REVIEW_RAW_OUTPUT_MUST_STAY_RAW ", 120)
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
-			{Command: "customtool", Args: []string{"--budget"}, Status: reviewprobe.ReviewProbePassed, Output: rawOutput},
+			{Command: "customtool", Args: []string{"--budget"}, Status: domain.ReviewProbePassed, Output: rawOutput},
 		},
 	}
 	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
@@ -226,10 +227,10 @@ func TestReviewRunnerRevisionPromptRehydratesAbsorbedProbeCommandRef(t *testing.
 	rawOutput := strings.Repeat("REVISION_REHYDRATED_COMMAND_RAW_OUTPUT ", 120)
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
-			{Command: "customtool", Args: []string{"--revision"}, Status: reviewprobe.ReviewProbePassed, Output: rawOutput},
+			{Command: "customtool", Args: []string{"--revision"}, Status: domain.ReviewProbePassed, Output: rawOutput},
 		},
 	}
 	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}

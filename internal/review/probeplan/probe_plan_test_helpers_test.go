@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func newValidReviewProbePlanForTest() ReviewProbePlan {
 	return ReviewProbePlan{
 		SchemaVersion: ReviewProbePlanSchemaVersionV2,
-		TargetKind:    TargetCurrentChanges,
+		TargetKind:    domain.TargetCurrentChanges,
 		Summary:       "Probe current changes.",
 		ImpactSurfaces: []ReviewProbeImpactSurface{
 			{
@@ -25,7 +28,7 @@ func newValidReviewProbePlanForTest() ReviewProbePlan {
 			{
 				ID:                   "risk-1",
 				Summary:              "Validation could accept an invalid probe plan.",
-				Severity:             ReviewGroupSeverityMedium,
+				Severity:             report.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Validation code owns the probe plan contract.",
 				VerificationStrategy: "Run focused review tests.",
@@ -38,7 +41,7 @@ func newValidReviewProbePlanForTest() ReviewProbePlan {
 				SurfaceIDs:     []string{"surface-1"},
 				RiskIDs:        []string{"risk-1"},
 				Purpose:        "Confirm or falsify risk-1 for surface-1 by running focused review tests.",
-				Mode:           ReviewProbeRepoSandbox,
+				Mode:           domain.ReviewProbeRepoSandbox,
 				TimeoutSeconds: 30,
 				MaxOutputBytes: 4096,
 				Commands: []ReviewPlannedProbeCommand{

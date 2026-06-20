@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_ScratchOnly_FileAndCommandOutput(t *testing.T) {
@@ -15,7 +17,7 @@ func TestProbeRunner_ScratchOnly_FileAndCommandOutput(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-cat",
-		Mode:           ReviewProbeScratchOnly,
+		Mode:           domain.ReviewProbeScratchOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 1024,
 		Files: []ReviewProbeFile{{
@@ -30,8 +32,8 @@ func TestProbeRunner_ScratchOnly_FileAndCommandOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
@@ -49,7 +51,7 @@ func TestProbeRunner_ScratchOnly_Timeout(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-timeout",
-		Mode:           ReviewProbeScratchOnly,
+		Mode:           domain.ReviewProbeScratchOnly,
 		Timeout:        100 * time.Millisecond,
 		MaxOutputBytes: 1024,
 		Files: []ReviewProbeFile{{
@@ -66,14 +68,14 @@ func TestProbeRunner_ScratchOnly_Timeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeTimedOut {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeTimedOut, result.Error)
+	if result.Status != domain.ReviewProbeTimedOut {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeTimedOut, result.Error)
 	}
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
 	}
-	if result.CommandResults[0].Status != ReviewProbeTimedOut {
-		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, ReviewProbeTimedOut)
+	if result.CommandResults[0].Status != domain.ReviewProbeTimedOut {
+		t.Fatalf("CommandResults[0].Status = %q, want %q", result.CommandResults[0].Status, domain.ReviewProbeTimedOut)
 	}
 }
 
@@ -82,7 +84,7 @@ func TestProbeRunner_ScratchOnly_OutputCap(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-output-cap",
-		Mode:           ReviewProbeScratchOnly,
+		Mode:           domain.ReviewProbeScratchOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 32,
 		Files: []ReviewProbeFile{{
@@ -97,8 +99,8 @@ func TestProbeRunner_ScratchOnly_OutputCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q", result.Status, ReviewProbePassed)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q", result.Status, domain.ReviewProbePassed)
 	}
 	if !result.OutputTruncated {
 		t.Fatal("OutputTruncated = false, want true")
@@ -116,7 +118,7 @@ func TestProbeRunner_ScratchOnly_Cleanup(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-cleanup",
-		Mode:           ReviewProbeScratchOnly,
+		Mode:           domain.ReviewProbeScratchOnly,
 		Timeout:        12 * time.Second,
 		MaxOutputBytes: 2048,
 		Files: []ReviewProbeFile{{
@@ -136,8 +138,8 @@ func TestProbeRunner_ScratchOnly_Cleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
@@ -157,7 +159,7 @@ func TestProbeRunner_ScratchOnly_ProcessSandboxBlocksRepoMutation(t *testing.T) 
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-mutation",
-		Mode:           ReviewProbeScratchOnly,
+		Mode:           domain.ReviewProbeScratchOnly,
 		Timeout:        12 * time.Second,
 		MaxOutputBytes: 1024,
 		Files: []ReviewProbeFile{{
@@ -184,8 +186,8 @@ func TestProbeRunner_ScratchOnly_ProcessSandboxBlocksRepoMutation(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatal("MutatedWorktree = true, want false")
@@ -210,7 +212,7 @@ func TestProbeRunner_ScratchOnly_ProcessSandboxBlocksHostFileRead(t *testing.T) 
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "scratch-host-file-read",
-		Mode:           ReviewProbeScratchOnly,
+		Mode:           domain.ReviewProbeScratchOnly,
 		Timeout:        12 * time.Second,
 		MaxOutputBytes: 2048,
 		Files: []ReviewProbeFile{{
@@ -235,8 +237,8 @@ func TestProbeRunner_ScratchOnly_ProcessSandboxBlocksHostFileRead(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatal("MutatedWorktree = true, want false")

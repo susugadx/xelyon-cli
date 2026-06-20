@@ -1,6 +1,10 @@
 package probe
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+)
 
 // CanonicalizeReviewProbeResultMutationOutcome は mutation outcome の内部表現を揃える。
 // status と flag のどちらかが mutation を示す場合、両方を mutation として扱う。
@@ -8,7 +12,7 @@ func CanonicalizeReviewProbeResultMutationOutcome(result ReviewProbeResult) Revi
 	if !IsReviewProbeResultMutationOutcome(result) {
 		return result
 	}
-	result.Status = ReviewProbeMutatedWorktree
+	result.Status = domain.ReviewProbeMutatedWorktree
 	result.MutatedWorktree = true
 	return result
 }
@@ -19,8 +23,8 @@ func IsReviewProbeResultMutationOutcome(result ReviewProbeResult) bool {
 }
 
 // IsReviewProbeMutationOutcome は status/flag の組み合わせが mutation outcome かを返す。
-func IsReviewProbeMutationOutcome(status ReviewProbeStatus, mutatedWorktree bool) bool {
-	return status == ReviewProbeMutatedWorktree || mutatedWorktree
+func IsReviewProbeMutationOutcome(status domain.ReviewProbeStatus, mutatedWorktree bool) bool {
+	return status == domain.ReviewProbeMutatedWorktree || mutatedWorktree
 }
 
 // BuildSkippedProbeResultsAfterMutation は mutation 検出後に未実行 probe を blocked result として固定する。
@@ -34,7 +38,7 @@ func BuildSkippedProbeResultsAfterMutation(probeRequests []ReviewProbeRequest, m
 		results = append(results, ReviewProbeResult{
 			ID:     probeReq.ID,
 			Mode:   probeReq.Mode,
-			Status: ReviewProbeBlocked,
+			Status: domain.ReviewProbeBlocked,
 			Error:  ProbeSkippedAfterMutationError(mutatedProbeID),
 		})
 	}

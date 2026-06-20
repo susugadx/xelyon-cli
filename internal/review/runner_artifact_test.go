@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	reviewartifact "github.com/susugadx/xelyon-cli/internal/review/artifact"
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
@@ -175,8 +176,8 @@ func TestReviewRunnerRunRedactsProbePathsBeforeSavingArtifacts(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:              "probe-1",
-		Mode:            reviewprobe.ReviewProbeHostReadOnly,
-		Status:          reviewprobe.ReviewProbeFailed,
+		Mode:            domain.ReviewProbeHostReadOnly,
+		Status:          domain.ReviewProbeFailed,
 		MutatedFiles:    []string{repoFile, probeFile},
 		OutputTruncated: true,
 		Error:           "failed at " + repoFile + " and " + probeFile,
@@ -185,7 +186,7 @@ func TestReviewRunnerRunRedactsProbePathsBeforeSavingArtifacts(t *testing.T) {
 				Command:         "cat " + probeFile,
 				Args:            []string{repoFile, probeFile},
 				WorkDir:         probeWorkDir,
-				Status:          reviewprobe.ReviewProbeFailed,
+				Status:          domain.ReviewProbeFailed,
 				ExitCode:        1,
 				Output:          "output from " + repoFile + " and " + probeFile,
 				OutputTruncated: true,

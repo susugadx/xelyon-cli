@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
@@ -16,13 +17,13 @@ func TestReviewRunnerSaturationKeepsProbeResultRawUntilReviewRehydrateLedgerExis
 	rawOutput := strings.Repeat("ABSORBED_PROBE_RAW_OUTPUT_SHOULD_NOT_REACH_SATURATION_PROMPT ", 100)
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "customtool",
 				Args:    []string{"--inspect"},
-				Status:  reviewprobe.ReviewProbePassed,
+				Status:  domain.ReviewProbePassed,
 				Output:  rawOutput,
 			},
 		},
@@ -100,19 +101,19 @@ func TestReviewRunnerSaturationKeepsProbeCommandRawUntilReviewRehydrateLedgerExi
 	keptOutput := strings.Repeat("UNREFERENCED_COMMAND_RAW_OUTPUT_MUST_STAY_IN_SATURATION_PROMPT ", 120)
 	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "customtool",
 				Args:    []string{"--first"},
-				Status:  reviewprobe.ReviewProbePassed,
+				Status:  domain.ReviewProbePassed,
 				Output:  absorbedOutput,
 			},
 			{
 				Command: "customtool",
 				Args:    []string{"--second"},
-				Status:  reviewprobe.ReviewProbePassed,
+				Status:  domain.ReviewProbePassed,
 				Output:  keptOutput,
 			},
 		},
@@ -213,10 +214,10 @@ func TestReviewProbeResultAbsorptionKeepsFindingEvidenceProbe(t *testing.T) {
 	}
 	result := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
-			{Command: "customtool", Status: reviewprobe.ReviewProbePassed, Output: rawOutput},
+			{Command: "customtool", Status: domain.ReviewProbePassed, Output: rawOutput},
 		},
 	}
 
@@ -257,11 +258,11 @@ func TestReviewProbeResultAbsorptionKeepsFindingEvidenceCommandButAbsorbsSafeSib
 	}
 	result := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   reviewprobe.ReviewProbeHostReadOnly,
-		Status: reviewprobe.ReviewProbePassed,
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
 		CommandResults: []reviewprobe.ReviewProbeCommandResult{
-			{Command: "customtool", Args: []string{"--first"}, Status: reviewprobe.ReviewProbePassed, Output: strings.Repeat("finding command output ", 120)},
-			{Command: "customtool", Args: []string{"--second"}, Status: reviewprobe.ReviewProbePassed, Output: strings.Repeat("safe sibling command output ", 120)},
+			{Command: "customtool", Args: []string{"--first"}, Status: domain.ReviewProbePassed, Output: strings.Repeat("finding command output ", 120)},
+			{Command: "customtool", Args: []string{"--second"}, Status: domain.ReviewProbePassed, Output: strings.Repeat("safe sibling command output ", 120)},
 		},
 	}
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
@@ -53,7 +54,7 @@ func (r *runnerFakeProbeRunner) Run(_ context.Context, req reviewprobe.ReviewPro
 		return reviewprobe.ReviewProbeResult{
 			ID:     req.ID,
 			Mode:   req.Mode,
-			Status: reviewprobe.ReviewProbePassed,
+			Status: domain.ReviewProbePassed,
 		}, nil
 	}
 	if result.ID == "" {
@@ -63,7 +64,7 @@ func (r *runnerFakeProbeRunner) Run(_ context.Context, req reviewprobe.ReviewPro
 		result.Mode = req.Mode
 	}
 	if result.Status == "" {
-		result.Status = reviewprobe.ReviewProbePassed
+		result.Status = domain.ReviewProbePassed
 	}
 	return result, nil
 }

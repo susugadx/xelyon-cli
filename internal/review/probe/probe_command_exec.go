@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 type probeExecCommand struct {
@@ -22,13 +24,13 @@ func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time
 		Command:  cmd.command,
 		Args:     append([]string(nil), cmd.args...),
 		WorkDir:  cmd.workDir,
-		Status:   ReviewProbePassed,
+		Status:   domain.ReviewProbePassed,
 		ExitCode: -1,
 	}
 
 	execPath := strings.TrimSpace(cmd.commandPath)
 	if execPath == "" {
-		result.Status = ReviewProbeBlocked
+		result.Status = domain.ReviewProbeBlocked
 		result.Error = probeExecMissingResolvedPathError
 		return result
 	}
@@ -36,13 +38,13 @@ func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time
 	cmd = withProbeGoRootEnvForCommand(cmd)
 	execCmd, sandboxErr := buildProbeProcessSandboxExec(cmd)
 	if sandboxErr != nil {
-		result.Status = ReviewProbeBlocked
+		result.Status = domain.ReviewProbeBlocked
 		result.Error = sandboxErr.Error()
 		return result
 	}
 	execPath = strings.TrimSpace(execCmd.commandPath)
 	if execPath == "" {
-		result.Status = ReviewProbeBlocked
+		result.Status = domain.ReviewProbeBlocked
 		result.Error = probeExecMissingResolvedPathError
 		return result
 	}
@@ -81,7 +83,7 @@ func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time
 	}
 
 	if errors.Is(cmdCtx.Err(), context.DeadlineExceeded) {
-		result.Status = ReviewProbeTimedOut
+		result.Status = domain.ReviewProbeTimedOut
 		result.Error = cmdCtx.Err().Error()
 		return result
 	}
@@ -90,7 +92,7 @@ func executeProbeCommand(ctx context.Context, cmd probeExecCommand, timeout time
 		return result
 	}
 
-	result.Status = ReviewProbeFailed
+	result.Status = domain.ReviewProbeFailed
 	result.Error = err.Error()
 	return result
 }

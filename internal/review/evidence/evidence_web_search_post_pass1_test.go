@@ -8,6 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	"github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewWebSearchEvidenceCollectorPostPass1SearchesPlanDerivedQuery(t *testing.T) {
@@ -168,7 +169,7 @@ func newReviewWebSearchPostPass1OAuthPlanForTest() reviewprobeplan.ReviewProbePl
 			{
 				ID:                   "risk-oauth",
 				Summary:              "OAuth flow could be accepted with a mismatched redirect URI.",
-				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
+				Severity:             report.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-oauth"},
 				VerificationStrategy: "Confirm redirect URI requirements against OAuth 2.0 specification.",
 				Status:               reviewprobeplan.ReviewProbeCandidateRiskUnverified,

@@ -3,21 +3,23 @@ package promptreduction
 import (
 	"strings"
 
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 // CompactReviewExternalDocAbsorbedEvidence は report scope に吸収済みの external_doc snippet を placeholder 化する。
-func CompactReviewExternalDocAbsorbedEvidence(phase ReviewModelPhase, bundle ReviewEvidenceBundle, report ReviewReport) (ReviewEvidenceBundle, []ReviewPromptReductionItem, int, int, bool) {
+func CompactReviewExternalDocAbsorbedEvidence(phase ReviewModelPhase, bundle reviewevidence.ReviewEvidenceBundle, report reviewreport.ReviewReport) (reviewevidence.ReviewEvidenceBundle, []ReviewPromptReductionItem, int, int, bool) {
 	evidence := bundle.WebSearchEvidence
 	if !reviewWebSearchEvidenceSafeForExternalDocAbsorption(evidence) ||
 		strings.TrimSpace(report.SchemaVersion) == "" ||
 		report.ScopeCoverage == nil {
-		return ReviewEvidenceBundle{}, nil, 0, 0, false
+		return reviewevidence.ReviewEvidenceBundle{}, nil, 0, 0, false
 	}
 	safeRefs, unsafeRefs := reviewExternalDocAbsorptionRefs(report)
 	if len(safeRefs) == 0 {
-		return ReviewEvidenceBundle{}, nil, 0, 0, false
+		return reviewevidence.ReviewEvidenceBundle{}, nil, 0, 0, false
 	}
 
 	compacted := cloneReviewEvidenceBundleForPromptCompact(bundle)
@@ -67,17 +69,17 @@ func CompactReviewExternalDocAbsorbedEvidence(phase ReviewModelPhase, bundle Rev
 		}
 	}
 	if !changed {
-		return ReviewEvidenceBundle{}, nil, 0, 0, false
+		return reviewevidence.ReviewEvidenceBundle{}, nil, 0, 0, false
 	}
 	savedBytes := originalBytes - replacementBytes
 	savedTokens := token.EstimateTokenCount(strings.Repeat("x", originalBytes)) - token.EstimateTokenCount(strings.Repeat("x", replacementBytes))
 	if savedBytes <= 0 || savedTokens < reviewExternalDocAbsorbedCompactMinSavedTokens {
-		return ReviewEvidenceBundle{}, nil, 0, 0, false
+		return reviewevidence.ReviewEvidenceBundle{}, nil, 0, 0, false
 	}
 	return compacted, items, savedBytes, savedTokens, true
 }
 
-func reviewWebSearchEvidenceSafeForExternalDocAbsorption(evidence ReviewWebSearchEvidence) bool {
+func reviewWebSearchEvidenceSafeForExternalDocAbsorption(evidence externaldoc.WebSearchEvidence) bool {
 	if !evidence.Enabled ||
 		strings.TrimSpace(evidence.Error) != "" ||
 		evidence.Truncated ||
@@ -93,17 +95,17 @@ func reviewWebSearchEvidenceSafeForExternalDocAbsorption(evidence ReviewWebSearc
 		support.UnknownDocCount == 0
 }
 
-func reviewExternalDocSafeForAbsorbedPrompt(doc ReviewExternalDocEvidence) bool {
+func reviewExternalDocSafeForAbsorbedPrompt(doc externaldoc.Evidence) bool {
 	return strings.TrimSpace(doc.DocID) != "" &&
 		strings.TrimSpace(doc.URL) != "" &&
 		!doc.FetchedAt.IsZero() &&
 		strings.TrimSpace(doc.ContentHash) != "" &&
 		strings.TrimSpace(doc.Error) == "" &&
 		!doc.Truncated &&
-		doc.SourceCredibility == ReviewExternalDocSourceCredibilityOfficialCandidate
+		doc.SourceCredibility == externaldoc.SourceCredibilityOfficialCandidate
 }
 
-func reviewExternalDocSnippetSafeForAbsorbedPrompt(snippet ReviewExternalDocSnippetEvidence) bool {
+func reviewExternalDocSnippetSafeForAbsorbedPrompt(snippet externaldoc.SnippetEvidence) bool {
 	return strings.TrimSpace(snippet.SnippetID) != "" &&
 		strings.TrimSpace(snippet.Content) != "" &&
 		strings.TrimSpace(snippet.ContentHash) != "" &&
