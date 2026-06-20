@@ -51,6 +51,10 @@ func providerHistoryLargeSafeMCPResult() string {
 	return `{"items":[` + strings.Repeat(`{"title":"public metadata","value":"safe documentation result","score":1},`, 2600) + `{"title":"tail","value":"safe"}]}`
 }
 
+func providerHistoryLargePrivateLookingMCPRuntimeResult() string {
+	return "customer export begins\n" + strings.Repeat("safe customer email row\n", 7000) + "customer export tail\n"
+}
+
 func assertProviderHistoryCommandReplacement(t *testing.T, result providerHistoryProjectionResult, historyIndex int, original, wantLabel string) {
 	t.Helper()
 	assertProviderHistoryCommandContentReplacement(t, result.History[historyIndex].Content, original, wantLabel)

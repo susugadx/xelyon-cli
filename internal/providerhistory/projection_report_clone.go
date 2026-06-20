@@ -48,6 +48,12 @@ func CloneProjectionReport(report ProjectionReport) ProjectionReport {
 	if len(report.RawOutputRefs) > 0 {
 		report.RawOutputRefs = append([]rawoutputs.RawOutputRef(nil), report.RawOutputRefs...)
 	}
+	if len(report.RawOutputContextRefs) > 0 {
+		report.RawOutputContextRefs = append([]rawoutputs.RawOutputRef(nil), report.RawOutputContextRefs...)
+	}
+	if len(report.RawOutputContextMissingRefIDs) > 0 {
+		report.RawOutputContextMissingRefIDs = append([]string(nil), report.RawOutputContextMissingRefIDs...)
+	}
 	report.CommandEditDryRun = cloneCommandEditDryRunReport(report.CommandEditDryRun)
 	return report
 }

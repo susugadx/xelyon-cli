@@ -145,7 +145,9 @@ func providerHistoryRawOutputLiveRefsForAgent(agent *Agent, sessionID string) []
 	if agent == nil || agent.Runtime == nil {
 		return nil
 	}
-	refs := append([]rawoutputs.RawOutputRef(nil), agent.Runtime.LastProviderHistoryProjectionReport.RawOutputRefs...)
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	refs := append([]rawoutputs.RawOutputRef(nil), report.RawOutputRefs...)
+	refs = append(refs, report.RawOutputContextRefs...)
 	for _, ledger := range agent.Runtime.LastReviewPromptReductionReport.RawOutputLedgers {
 		refs = appendReviewRawOutputLedgerRefs(refs, sessionID, ledger.RequiredRefs)
 		refs = appendReviewRawOutputLedgerRefs(refs, sessionID, ledger.OptionalRefs)

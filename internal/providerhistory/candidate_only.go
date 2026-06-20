@@ -48,8 +48,8 @@ func providerHistoryCandidateOnlyKeepReason(toolName, content string) string {
 		}
 		return "wait_agent_freeform_output_keep"
 	case providerHistoryIsMCPToolResult(toolName):
-		if providerHistoryMCPLooksSensitive(content) {
-			return "mcp_sensitive_or_private_result_keep"
+		if reason := MCPRawOutputArtifactOmitReason(content); reason != "" {
+			return reason
 		}
 		return "mcp_unknown_schema_keep"
 	case toolName == "ask_user_question":
@@ -83,28 +83,6 @@ func providerHistoryIsProviderNativeReplayTool(toolName string) bool {
 func providerHistoryWaitAgentLooksErrorContext(content string) bool {
 	lower := strings.ToLower(content)
 	for _, marker := range []string{"\"status\":\"failed\"", "\"status\":\"blocked\"", "status: failed", "status: blocked", "error:", "failed", "blocked"} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func providerHistoryMCPLooksSensitive(content string) bool {
-	lower := strings.ToLower(content)
-	for _, marker := range []string{
-		"secret",
-		"token",
-		"api_key",
-		"apikey",
-		"authorization",
-		"password",
-		"customer",
-		"email",
-		"private",
-		"issue body",
-		"message body",
-	} {
 		if strings.Contains(lower, marker) {
 			return true
 		}

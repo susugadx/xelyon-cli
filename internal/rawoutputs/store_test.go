@@ -276,6 +276,7 @@ func TestLooksSensitiveContent(t *testing.T) {
 		{name: "private key block", value: "-----BEGIN PRIVATE KEY-----\nabcdef\n-----END PRIVATE KEY-----", want: true},
 		{name: "assignment", value: "token=secret-value", want: true},
 		{name: "json field", value: `{"access_token":"secret-value"}`, want: true},
+		{name: "quoted authorization json field", value: `{"Authorization":"Bearer abcdef"}`, want: true},
 		{name: "secret query", value: "https://example.test/items?token=secret-value", want: true},
 		{name: "signature query", value: "https://example.test/items?signature=abcdef", want: true},
 		{name: "url userinfo", value: "https://user:password@example.test/items", want: true},

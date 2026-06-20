@@ -82,12 +82,19 @@ func validateSurface(surface Surface) error {
 	}
 }
 
+func validateRefID(refID string) error {
+	if !strings.HasPrefix(refID, refIDPrefix) || !safeIDPattern.MatchString(refID) {
+		return reasonError(ReasonRefInvalid, "invalid ref ID")
+	}
+	return nil
+}
+
 func validateRef(ref RawOutputRef) error {
 	if err := validateSessionID(ref.SessionID); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(ref.RefID, refIDPrefix) || !safeIDPattern.MatchString(ref.RefID) {
-		return reasonError(ReasonRefInvalid, "invalid ref ID")
+	if err := validateRefID(ref.RefID); err != nil {
+		return err
 	}
 	if _, err := parseSHA256ID(ref.ArtifactID); err != nil {
 		return err

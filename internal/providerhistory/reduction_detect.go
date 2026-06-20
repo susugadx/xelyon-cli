@@ -32,6 +32,9 @@ func buildProviderHistoryReductionDetectionReport(original, projected []api.Mess
 			entry.ToolName = linkage.ToolName
 		}
 		if linkage.KeepReason != "" {
+			if recordProviderHistoryMCPRuntimePlaceholderCandidateFromContent(&report, policy, entry, msg.Content) {
+				continue
+			}
 			entry.KeepReason = linkage.KeepReason
 			report.Kept = append(report.Kept, entry)
 			continue

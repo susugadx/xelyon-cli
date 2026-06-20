@@ -111,10 +111,15 @@ func (a *Agent) providerHistoryProjectionPolicy(policy ProviderHistoryReductionP
 
 	policy.RawOutputArtifactsMode = providerHistoryRawOutputArtifactsModeForRuntime(a.Runtime)
 	policy.RawOutputRehydrateContextEnabled = a.Runtime.Options.EnableProviderHistoryRehydrateContext
-	if policy.RawOutputArtifactsMode != providerhistory.RawOutputArtifactsDisabled &&
-		policy.SideEffects != providerhistory.ProjectionSideEffectsReadOnly {
-		policy.SessionID = a.providerHistoryRawOutputArtifactSessionID()
-		policy.RawOutputArtifactStore = a.providerHistoryRawOutputArtifactStore()
+	if policy.RawOutputArtifactsMode != providerhistory.RawOutputArtifactsDisabled {
+		switch {
+		case policy.SideEffects != providerhistory.ProjectionSideEffectsReadOnly:
+			policy.SessionID = a.providerHistoryRawOutputArtifactSessionID()
+			policy.RawOutputArtifactStore = a.providerHistoryRawOutputArtifactStore()
+		case a.Runtime.RawOutputArtifactStore != nil:
+			policy.SessionID = a.providerHistoryRawOutputArtifactSessionID()
+			policy.RawOutputArtifactStore = a.Runtime.RawOutputArtifactStore
+		}
 	}
 	if a.Runtime.Options.EnableProviderHistoryRehydrateContext {
 		policy.ActiveContextTransportAvailable = a.providerActiveContextTransport() != api.ActiveContextTransportNone

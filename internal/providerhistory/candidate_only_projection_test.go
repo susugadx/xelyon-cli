@@ -22,6 +22,9 @@ func TestProjectApplyReportsCandidateOnlyFamiliesWithoutReplacingPayload(t *test
 		providerHistoryTestAssistantToolCall("call_mcp_unknown", "mcp_figma_get_file"),
 		providerHistoryTestToolResult("call_mcp_unknown", "mcp_figma_get_file", `{"url":"https://figma.example/file","title":"public frame","summary":"layout metadata only"}`),
 		{Role: "assistant", Content: "mcp unknown considered"},
+		providerHistoryTestAssistantToolCall("call_mcp_bare_secret", "mcp_figma_get_file"),
+		providerHistoryTestToolResult("call_mcp_bare_secret", "mcp_figma_get_file", `{"text":"token: ghp_secret"}`),
+		{Role: "assistant", Content: "mcp bare secret considered"},
 		providerHistoryTestAssistantToolCall("call_ask", "ask_user_question"),
 		providerHistoryTestToolResult("call_ask", "ask_user_question", `{"question":"Proceed?","answer":"approved"}`),
 		{Role: "assistant", Content: "answer considered"},
@@ -52,6 +55,7 @@ func TestProjectApplyReportsCandidateOnlyFamiliesWithoutReplacingPayload(t *test
 		"call_wait_error":      "wait_agent_error_context_keep",
 		"call_mcp":             "mcp_sensitive_or_private_result_keep",
 		"call_mcp_unknown":     "mcp_unknown_schema_keep",
+		"call_mcp_bare_secret": "sensitive_output_artifact_forbidden",
 		"call_ask":             "user_answer_approval_refusal_preference_keep",
 		"call_ask_contract":    "user_answer_contract_keep",
 		"call_native":          "provider_native_replay_usage_accounting_keep",
@@ -64,7 +68,7 @@ func TestProjectApplyReportsCandidateOnlyFamiliesWithoutReplacingPayload(t *test
 	}
 	for family, want := range map[string]int{
 		"wait_agent":             2,
-		"mcp":                    2,
+		"mcp":                    3,
 		"ask_user_question":      2,
 		"provider_native_replay": 2,
 	} {
@@ -77,6 +81,7 @@ func TestProjectApplyReportsCandidateOnlyFamiliesWithoutReplacingPayload(t *test
 		"wait_agent_error_context_keep":                1,
 		"mcp_sensitive_or_private_result_keep":         1,
 		"mcp_unknown_schema_keep":                      1,
+		"sensitive_output_artifact_forbidden":          1,
 		"user_answer_approval_refusal_preference_keep": 1,
 		"user_answer_contract_keep":                    1,
 		"provider_native_replay_usage_accounting_keep": 1,

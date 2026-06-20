@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
+	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 func TestNormalModeRequestApplyCompactsDataBearingCommandAndInjectsRawOutputContext(t *testing.T) {
@@ -122,6 +125,9 @@ func TestTokenBudgetHistoryDoesNotMaterializeRawOutputArtifacts(t *testing.T) {
 	}
 	if countingStore.createCalls == 0 || countingStore.verifyCalls == 0 {
 		t.Fatalf("request artifact calls = create:%d verify:%d, want materialization during provider request", countingStore.createCalls, countingStore.verifyCalls)
+	}
+	if countingStore.scanCalls == 0 {
+		t.Fatalf("request raw output scan calls = %d, want streaming active-context scan", countingStore.scanCalls)
 	}
 	if projected := provider.capturedHistory[2].Content; projected == commandOutput || !strings.Contains(projected, "raw_output_ref=") {
 		t.Fatalf("provider command output = %q, want artifact-backed placeholder during request", projected)
@@ -296,53 +302,54 @@ func TestNormalModeRequestApplyKeepsDataBearingCommandRawWhenRawOutputContextBud
 	}
 }
 
-func TestNormalModeRequestApplyCompactsMCPResultAndInjectsRawOutputContext(t *testing.T) {
-	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
-	mcpOutput := providerHistoryLargeSafeMCPResult()
+func TestBuildProviderHistoryRawOutputActiveContextShrinksPreRenderedExcerptAfterMetadataBudget(t *testing.T) {
+	agent, _, store := newProviderHistoryRawOutputRequestAgent(t)
+	term := "target-4242"
+	commandOutput, matchLine, matchIndex, totalLines := providerHistoryRawOutputTightBudgetFixture(term)
+	created, err := store.Create(context.Background(), rawoutputs.CreateRequest{
+		Surface:   rawoutputs.SurfaceCommandOutput,
+		SessionID: "session-tight-active-context",
+		Source: rawoutputs.SourceMetadata{
+			CommandHash:    "sha256:test-tight-budget",
+			CommandPreview: "curl https://api.example.test/items",
+			ToolName:       "bash",
+			ToolCallID:     "call_tight_budget",
+			EventID:        "tool_call:call_tight_budget",
+		},
+		Classification: rawoutputs.ClassificationMetadata{
+			SemanticRole: "data_bearing",
+			Family:       "network",
+			Classifier:   "network_response",
+		},
+		Body:          strings.NewReader(commandOutput),
+		SizeHintBytes: int64(len(commandOutput)),
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	agent.Runtime.RawOutputArtifactStore = store
-	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
-	agent.History = []api.Message{
-		{Role: "user", Content: "inspect mcp history"},
-		providerHistoryAssistantToolCall("call_mcp_docs", "mcp_context7_get_library_docs"),
-		providerHistoryToolResult("call_mcp_docs", "mcp_context7_get_library_docs", mcpOutput),
-		{Role: "assistant", Content: "mcp data reviewed"},
-		providerHistoryAssistantToolCall("call_latest", "read_file"),
-		providerHistoryToolResult("call_latest", "read_file", "latest read"),
-		{Role: "assistant", Content: "ready"},
-	}
-	syncProviderHistoryRawOutputRequestSession(agent)
+	raw := []api.Message{{Role: "user", Content: "show " + term}}
+	hints := providerHistoryRawOutputRehydrateHintsFromRaw(raw)
+	scannerBudget := providerHistoryRawOutputTightScannerBudget(t, commandOutput, created.Ref, hints, matchLine, matchIndex, totalLines)
+	totalBudget := token.EstimateTokenCount(providerHistoryRawOutputContextHeader) + scannerBudget
+	configureProviderHistoryRawOutputRequestApply(agent, totalBudget, totalBudget)
 
-	if err := agent.chatInternal("show safe documentation result", nil); err != nil {
-		t.Fatalf("chatInternal() error = %v", err)
-	}
+	build := agent.buildProviderHistoryRawOutputActiveContext(context.Background(), ProviderHistoryProjectionReport{
+		RawOutputContextRefs: []rawoutputs.RawOutputRef{created.Ref},
+	}, raw)
 
-	projected := provider.capturedHistory[2].Content
-	if projected == mcpOutput ||
-		!strings.Contains(projected, "[compacted old MCP tool result;") ||
-		!strings.Contains(projected, "raw_output_ref=") {
-		t.Fatalf("provider MCP output = %q, want artifact-backed placeholder", projected)
+	if build.missingRequiredRefs() {
+		t.Fatalf("active context build = %#v, want shrinkable matched excerpt injected", build)
 	}
-	if len(provider.capturedActiveContextBlocks) != 1 {
-		t.Fatalf("active context blocks = %#v, want one raw output block", provider.capturedActiveContextBlocks)
+	if len(build.Blocks) != 1 {
+		t.Fatalf("active context blocks = %#v, want one block", build.Blocks)
 	}
-	block := provider.capturedActiveContextBlocks[0]
-	for _, want := range []string{
-		"surface: mcp_tool_result",
-		"tool_name: mcp_context7_get_library_docs",
-		"family: mcp",
-		"classifier: mcp_json_result",
-		"safe documentation result",
-	} {
-		if !strings.Contains(block.Content, want) {
-			t.Fatalf("raw output active context missing %q:\n%s", want, block.Content)
-		}
+	content := build.Blocks[0].Content
+	if !strings.Contains(content, term) || !strings.Contains(content, "matched raw output excerpt") {
+		t.Fatalf("active context block missing shrunk matched excerpt:\n%s", content)
 	}
-	report := agent.Runtime.LastProviderHistoryProjectionReport
-	if report.ReplacedCount != 1 ||
-		report.RawOutputRefCount != 1 ||
-		report.DataBearingCandidateCount != 1 ||
-		!report.ResponsesChainDisabled {
-		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want applied MCP artifact report", report)
+	if strings.Contains(content, "context line 0001") || strings.Contains(content, "context line 0899") {
+		t.Fatalf("active context block retained far context instead of shrinking:\n%s", content)
 	}
 }
 
@@ -491,4 +498,50 @@ func TestNormalModeRequestApplyCompactsWebSearchResultAndInjectsRedactedRawOutpu
 		!report.ResponsesChainDisabled {
 		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want applied web_search artifact report", report)
 	}
+}
+
+func providerHistoryRawOutputTightBudgetFixture(term string) (string, string, int, int) {
+	const totalLines = 900
+	const matchIndex = 450
+	var b strings.Builder
+	matchLine := term + " stable matched payload"
+	for i := 0; i < totalLines; i++ {
+		if i == matchIndex {
+			b.WriteString(matchLine)
+			b.WriteByte('\n')
+			continue
+		}
+		fmt.Fprintf(&b, "context line %04d %s\n", i, strings.Repeat("context ", 10))
+	}
+	return b.String(), matchLine, matchIndex, totalLines
+}
+
+func providerHistoryRawOutputTightScannerBudget(t *testing.T, body string, ref rawoutputs.RawOutputRef, hints []string, matchLine string, matchIndex, totalLines int) int {
+	t.Helper()
+	if len(hints) == 0 {
+		t.Fatal("test setup invalid: missing raw output hints")
+	}
+	metadataTokens := token.EstimateTokenCount(providerHistoryRawOutputContextEntryMetadata(ref))
+	matchOnly := providerHistoryRawOutputRenderMatchedExcerpt([]string{matchLine}, hints[0], matchIndex, totalLines, matchIndex, matchIndex+1)
+	matchOnlyTokens := token.EstimateTokenCount(matchOnly)
+	for scannerBudget := metadataTokens + matchOnlyTokens + 1; scannerBudget <= metadataTokens+matchOnlyTokens+220; scannerBudget++ {
+		scanner := newProviderHistoryRawOutputContextScanner(hints, scannerBudget)
+		if err := scanner.Scan([]byte(body)); err != nil {
+			t.Fatalf("Scan() error = %v", err)
+		}
+		preRendered, reason := scanner.Body()
+		if reason != "" {
+			continue
+		}
+		reducedBodyBudget := scannerBudget - metadataTokens
+		preRenderedTokens := token.EstimateTokenCount(preRendered)
+		if reducedBodyBudget > 0 &&
+			preRenderedTokens <= scannerBudget &&
+			preRenderedTokens > reducedBodyBudget &&
+			matchOnlyTokens <= reducedBodyBudget {
+			return scannerBudget
+		}
+	}
+	t.Fatalf("failed to find tight scanner budget for metadata shrink regression")
+	return 0
 }

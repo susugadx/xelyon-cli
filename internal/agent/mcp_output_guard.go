@@ -45,8 +45,8 @@ func (a *Agent) createMCPRuntimeRawOutputArtifact(ctx context.Context, toolCall 
 	if providerHistoryRawOutputArtifactsModeForRuntime(a.Runtime) != providerhistory.RawOutputArtifactsApply {
 		return rawoutputs.RawOutputRef{}, mcpRuntimeRawOutputArtifactsDisabledReason(a.Runtime)
 	}
-	if rawoutputs.LooksSensitiveContent(result) {
-		return rawoutputs.RawOutputRef{}, string(rawoutputs.ReasonSensitiveArtifactForbidden)
+	if reason := providerhistory.MCPRawOutputArtifactOmitReason(result); reason != "" {
+		return rawoutputs.RawOutputRef{}, reason
 	}
 	sessionID := strings.TrimSpace(a.providerHistoryRawOutputArtifactSessionID())
 	if sessionID == "" {
@@ -193,11 +193,18 @@ func buildMCPRuntimeResultPlaceholder(ref rawoutputs.RawOutputRef, omittedReason
 		parts = append(parts, fmt.Sprintf("full_output_omitted_reason=%s;", omittedReason))
 	}
 	metadata := strings.Join(parts, "\n ") + "\n]"
+	if !mcpRuntimePlaceholderAllowsExcerpt(omittedReason) {
+		return metadata
+	}
 	excerpt := mcpRuntimeBoundedRedactedExcerpt(content, mcpRuntimeResultExcerptMaxRunes)
 	if excerpt == "" {
 		return metadata
 	}
 	return metadata + "\nexcerpt:\n" + excerpt
+}
+
+func mcpRuntimePlaceholderAllowsExcerpt(omittedReason string) bool {
+	return providerhistory.MCPRawOutputArtifactOmitReasonAllowsRuntimeExcerpt(omittedReason)
 }
 
 func mcpRuntimeContentHash(content string) string {

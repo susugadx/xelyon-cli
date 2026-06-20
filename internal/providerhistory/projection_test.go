@@ -512,6 +512,10 @@ func (s *providerHistoryMaterializeSpyStore) Verify(ctx context.Context, ref raw
 	return s.inner.Verify(ctx, ref)
 }
 
+func (s *providerHistoryMaterializeSpyStore) LookupRef(ctx context.Context, sessionID, refID string) (rawoutputs.RawOutputRef, error) {
+	return s.inner.LookupRef(ctx, sessionID, refID)
+}
+
 func assertProviderHistoryLegacyMaterialize(t *testing.T, store *providerHistoryMaterializeSpyStore, surface rawoutputs.Surface) {
 	t.Helper()
 	if store.createCalls != 0 || store.materializeCalls != 1 {

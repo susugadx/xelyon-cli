@@ -80,6 +80,14 @@ func providerHistoryTestLargeSafeMCPResult() string {
 	return `{"items":[` + strings.Repeat(`{"title":"public metadata","value":"safe documentation result","score":1},`, 2600) + `{"title":"tail","value":"safe"}]}`
 }
 
-func providerHistoryTestLargeSensitiveMCPResult() string {
-	return `{"items":[` + strings.Repeat(`{"title":"private issue body","email":"customer@example.test","token":"secret-token","value":"customer private message body"},`, 2600) + `{"title":"tail","value":"private customer"}]}`
+func providerHistoryTestLargeBareSecretMCPResult() string {
+	return `{"items":[` + strings.Repeat(`{"title":"public docs","value":"password: hunter2","summary":"safe public documentation text"},`, 2600) + `{"title":"tail","value":"public"}]}`
+}
+
+func providerHistoryTestLargeQuotedAuthorizationMCPResult() string {
+	return `{"items":[` + strings.Repeat(`{"title":"public docs","Authorization":"Bearer abc.def.ghi","summary":"safe public documentation text"},`, 2600) + `{"title":"tail","value":"public"}]}`
+}
+
+func providerHistoryTestLargePrivateMCPResult() string {
+	return `{"items":[` + strings.Repeat(`{"title":"private issue body","email":"customer@example.test","value":"customer private message body"},`, 2600) + `{"title":"tail","value":"private customer"}]}`
 }
