@@ -71,7 +71,7 @@ func TestReviewRunnerSaturationKeepsProbeResultRawUntilReviewRehydrateLedgerExis
 	reductionReport := runner.PromptReductionReport()
 	if reductionReport.ClassifierCounts["probe_result_absorption_candidate"] != 1 ||
 		reductionReport.ReplacedCount != 0 ||
-		reductionReport.KeptReasonCounts[reviewProbeRawOutputReasonArtifactMissing] != 1 {
+		reductionReport.KeptReasonCounts[reviewpromptreduction.ReviewProbeRawOutputReasonArtifactMissing] != 1 {
 		t.Fatalf("PromptReductionReport() = %#v, want probe result candidate with apply blocked", reductionReport)
 	}
 	if reductionReport.RawOutputLedgerCount != 0 {
@@ -171,7 +171,7 @@ func TestReviewRunnerSaturationKeepsProbeCommandRawUntilReviewRehydrateLedgerExi
 	reductionReport := runner.PromptReductionReport()
 	if reductionReport.ClassifierCounts["probe_command_result_absorption_candidate"] != 1 ||
 		reductionReport.ReplacedCount != 0 ||
-		reductionReport.KeptReasonCounts[reviewProbeRawOutputReasonArtifactMissing] != 1 {
+		reductionReport.KeptReasonCounts[reviewpromptreduction.ReviewProbeRawOutputReasonArtifactMissing] != 1 {
 		t.Fatalf("PromptReductionReport() = %#v, want one probe command candidate with apply blocked", reductionReport)
 	}
 	if reductionReport.RawOutputLedgerCount != 0 {

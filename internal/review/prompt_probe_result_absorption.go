@@ -114,7 +114,7 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 			ReplacementBytes: candidate.replacementBytes,
 		})
 	}
-	rawOutputLedger := reviewProbeRawOutputLedgerPtr(rawOutput.ledger)
+	rawOutputLedger := reviewpromptreduction.ReviewProbeRawOutputLedgerPtr(rawOutput.ledger)
 	if rawOutputLedger != nil {
 		r.promptReductionStats.RecordRawOutputLedger(*rawOutputLedger)
 		if r.promptReductionState != nil {

@@ -11,23 +11,24 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
 func (r *ReviewRunner) createReviewProbeRawOutputArtifact(ctx context.Context, phase ReviewModelPhase, source reviewProbeRawOutputSource) (rawoutputs.RawOutputRef, string, bool) {
 	if source.body == "" {
-		return rawoutputs.RawOutputRef{}, reviewProbeRawOutputReasonRequiredRefMissing, false
+		return rawoutputs.RawOutputRef{}, reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing, false
 	}
 	if reviewProbeRawOutputLooksSensitive(source.body) ||
 		reviewProbeRawOutputLooksSensitive(source.command.Command) ||
 		reviewProbeRawOutputLooksSensitive(strings.Join(source.command.Args, " ")) {
-		return rawoutputs.RawOutputRef{}, reviewProbeRawOutputReasonSensitiveOrPrivateKeep, false
+		return rawoutputs.RawOutputRef{}, reviewpromptreduction.ReviewProbeRawOutputReasonSensitiveOrPrivateKeep, false
 	}
 	req := rawoutputs.CreateRequest{
 		Surface:   rawoutputs.SurfaceReviewProbeResult,
 		SessionID: r.rawOutputSessionID,
 		Source: rawoutputs.SourceMetadata{
 			CommandHash:    reviewProbeRawOutputCommandHash(source),
-			CommandPreview: rawoutputs.SanitizeDisplayPreview(reviewProbeRawOutputCommandPreview(source), reviewProbeRawOutputCommandPreviewRunes),
+			CommandPreview: rawoutputs.SanitizeDisplayPreview(reviewProbeRawOutputCommandPreview(source), reviewpromptreduction.ReviewProbeRawOutputCommandPreviewRunes),
 			ToolName:       "review_probe_result",
 			ToolCallID:     reviewProbeRawOutputToolCallID(source),
 			EventID:        reviewProbeRawOutputEventID(r.reviewRunID, phase, source),
@@ -148,15 +149,15 @@ func reviewProbeRawOutputLooksSensitive(value string) bool {
 func reviewProbeRawOutputReasonFromRawOutputError(err error) string {
 	switch rawoutputs.ReasonOf(err) {
 	case rawoutputs.ReasonArtifactHashMismatch:
-		return reviewProbeRawOutputReasonRequiredRefHashInvalid
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefHashInvalid
 	case rawoutputs.ReasonArtifactQuarantined:
-		return reviewProbeRawOutputReasonRequiredRefQuarantined
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefQuarantined
 	case rawoutputs.ReasonSensitiveArtifactForbidden:
-		return reviewProbeRawOutputReasonSensitiveOrPrivateKeep
+		return reviewpromptreduction.ReviewProbeRawOutputReasonSensitiveOrPrivateKeep
 	case rawoutputs.ReasonArtifactTooLarge, rawoutputs.ReasonSessionQuotaExceeded:
-		return reviewProbeRawOutputReasonBudgetRequiresRevision
+		return reviewpromptreduction.ReviewProbeRawOutputReasonBudgetRequiresRevision
 	default:
-		return reviewProbeRawOutputReasonArtifactMissing
+		return reviewpromptreduction.ReviewProbeRawOutputReasonArtifactMissing
 	}
 }
 
@@ -166,25 +167,25 @@ func reviewProbeRawOutputVerifyReason(result rawoutputs.VerifyResult, err error)
 	}
 	switch result.Reason {
 	case rawoutputs.ReasonArtifactHashMismatch:
-		return reviewProbeRawOutputReasonRequiredRefHashInvalid
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefHashInvalid
 	case rawoutputs.ReasonArtifactQuarantined:
-		return reviewProbeRawOutputReasonRequiredRefQuarantined
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefQuarantined
 	case rawoutputs.ReasonArtifactTombstoned, rawoutputs.ReasonArtifactMissing:
-		return reviewProbeRawOutputReasonRequiredRefMissing
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing
 	default:
-		return reviewProbeRawOutputReasonArtifactMissing
+		return reviewpromptreduction.ReviewProbeRawOutputReasonArtifactMissing
 	}
 }
 
 func reviewProbeRawOutputResolveReason(err error) string {
 	switch rawoutputs.ReasonOf(err) {
 	case rawoutputs.ReasonArtifactHashMismatch:
-		return reviewProbeRawOutputReasonRequiredRefHashInvalid
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefHashInvalid
 	case rawoutputs.ReasonArtifactQuarantined:
-		return reviewProbeRawOutputReasonRequiredRefQuarantined
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefQuarantined
 	case rawoutputs.ReasonArtifactTombstoned, rawoutputs.ReasonArtifactMissing:
-		return reviewProbeRawOutputReasonRequiredRefMissing
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing
 	default:
-		return reviewProbeRawOutputReasonRequiredRefMissing
+		return reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing
 	}
 }

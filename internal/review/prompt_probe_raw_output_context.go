@@ -2,39 +2,25 @@ package review
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
-	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
 func (r *ReviewRunner) renderReviewProbeRawOutputContext(ctx context.Context, ledger reviewpromptreduction.ReviewProbeRawOutputLedger, sources []reviewProbeRawOutputSource, probeRefs map[string]rawoutputs.RawOutputRef, commandRefs map[reviewmodelinput.ProbeCommandResultKey]rawoutputs.RawOutputRef, redactor reviewmodelinput.Redactor) (string, reviewpromptreduction.ReviewProbeRawOutputLedger) {
 	if len(sources) == 0 {
 		return "", ledger
 	}
-	if redactor == nil {
-		redactor = reviewProbeRawOutputNoopRedactor{}
-	}
-	budget := ledger.BudgetTokens
-	if budget <= 0 {
-		budget = reviewProbeRawOutputDefaultBudgetTokens
-	}
-	metadataReserve := reviewProbeRawOutputMetadataReserve(budget)
-	ledger.MetadataReserveTokens = metadataReserve
-	ledger.BodyBudgetTokens = max(0, budget-metadataReserve)
-	remainingBodyTokens := ledger.BodyBudgetTokens
-	var b strings.Builder
-	b.WriteString(reviewProbeRawOutputContextHeader)
+	entries := make([]reviewpromptreduction.ReviewProbeRawOutputContextEntry, 0, len(sources))
 	for _, source := range sources {
+		contextSource := reviewProbeRawOutputContextSource(source)
 		ref, ok := reviewProbeRawOutputRefForSource(source, probeRefs, commandRefs)
 		if !ok {
-			ledger.FailClosedReason = reviewProbeRawOutputReasonRequiredRefMissing
+			ledger.FailClosedReason = reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing
 			ledger.CanAcceptSaturated = false
-			ledger.MissingRefs = append(ledger.MissingRefs, reviewProbeRawOutputLedgerRefFromSource(source, rawoutputs.RawOutputRef{
+			ledger.MissingRefs = append(ledger.MissingRefs, reviewpromptreduction.NewReviewProbeRawOutputLedgerRef(contextSource, rawoutputs.RawOutputRef{
 				Surface: string(rawoutputs.SurfaceReviewProbeResult),
 			}))
 			continue
@@ -44,119 +30,28 @@ func (r *ReviewRunner) renderReviewProbeRawOutputContext(ctx context.Context, le
 			reason := reviewProbeRawOutputResolveReason(err)
 			ledger.FailClosedReason = reason
 			ledger.CanAcceptSaturated = false
-			ledger.MissingRefs = append(ledger.MissingRefs, reviewProbeRawOutputLedgerRefWithStatus(reviewProbeRawOutputLedgerRefFromSource(source, ref), "missing", reason))
+			ledger.MissingRefs = append(ledger.MissingRefs, reviewpromptreduction.ReviewProbeRawOutputLedgerRefWithStatus(reviewpromptreduction.NewReviewProbeRawOutputLedgerRef(contextSource, ref), "missing", reason))
 			continue
 		}
 		body, readErr := io.ReadAll(resolved.Body)
 		_ = resolved.Body.Close()
 		if readErr != nil {
-			ledger.FailClosedReason = reviewProbeRawOutputReasonRequiredRefMissing
+			ledger.FailClosedReason = reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing
 			ledger.CanAcceptSaturated = false
-			ledger.MissingRefs = append(ledger.MissingRefs, reviewProbeRawOutputLedgerRefWithStatus(reviewProbeRawOutputLedgerRefFromSource(source, ref), "missing", reviewProbeRawOutputReasonRequiredRefMissing))
+			ledger.MissingRefs = append(ledger.MissingRefs, reviewpromptreduction.ReviewProbeRawOutputLedgerRefWithStatus(reviewpromptreduction.NewReviewProbeRawOutputLedgerRef(contextSource, ref), "missing", reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing))
 			continue
 		}
-		entry, bodyTokens, reason := renderReviewProbeRawOutputContextEntry(ref, source, string(body), remainingBodyTokens, len(sources) == 1, redactor)
-		ledgerRef := reviewProbeRawOutputLedgerRefFromSource(source, ref)
-		ledgerRef.BodyTokens = bodyTokens
-		switch {
-		case reason != "":
-			ledgerRef.Status = "budget_exhausted"
-			ledgerRef.Reason = reason
-			ledger.BudgetExhaustedRefs = append(ledger.BudgetExhaustedRefs, ledgerRef)
-			ledger.FailClosedReason = reason
-			ledger.CanAcceptSaturated = false
-		case strings.TrimSpace(entry) == "":
-			ledgerRef.Status = "metadata_only"
-			ledgerRef.Reason = reviewProbeRawOutputReasonRequiredRefMetadataOnly
-			ledger.MetadataOnlyRefs = append(ledger.MetadataOnlyRefs, ledgerRef)
-			ledger.FailClosedReason = reviewProbeRawOutputReasonRequiredRefMetadataOnly
-			ledger.CanAcceptSaturated = false
-		default:
-			b.WriteString("\n")
-			b.WriteString(entry)
-			remainingBodyTokens -= bodyTokens
-			ledgerRef.Status = "rehydrated"
-			ledger.RehydratedRefs = append(ledger.RehydratedRefs, ledgerRef)
-		}
+		entries = append(entries, reviewpromptreduction.ReviewProbeRawOutputContextEntry{
+			Ref:    ref,
+			Source: contextSource,
+			Body:   string(body),
+		})
 	}
-	if len(ledger.RehydratedRefs) == 0 {
-		ledger.CanAcceptSaturated = false
-		if ledger.FailClosedReason == "" {
-			ledger.FailClosedReason = reviewProbeRawOutputReasonRehydrateUnavailable
-		}
-		return "", ledger
-	}
-	return b.String(), ledger
-}
-
-func renderReviewProbeRawOutputContextEntry(ref rawoutputs.RawOutputRef, source reviewProbeRawOutputSource, body string, availableBodyTokens int, singleExplicitRef bool, redactor reviewmodelinput.Redactor) (string, int, string) {
-	if availableBodyTokens <= 0 {
-		return "", 0, reviewProbeRawOutputReasonRequiredRefBodyTooSmall
-	}
-	maxBodyTokens := reviewProbeRawOutputPerCommandBodyMaxTokens(availableBodyTokens)
-	if singleExplicitRef {
-		maxBodyTokens = reviewProbeRawOutputSingleExplicitRefMaxTokens(availableBodyTokens)
-	}
-	bodyBudget := min(availableBodyTokens, maxBodyTokens)
-	if bodyBudget < reviewProbeRawOutputRequiredRefBodyMinTokens && token.EstimateTokenCount(body) > bodyBudget {
-		return "", bodyBudget, reviewProbeRawOutputReasonRequiredRefBodyTooSmall
-	}
-	body = rawoutputs.RedactDisplaySecrets(redactor.RedactText(body))
-	excerpt := reviewProbeRawOutputBodyExcerpt(body, bodyBudget)
-	if strings.TrimSpace(excerpt) == "" {
-		return "", 0, reviewProbeRawOutputReasonRequiredRefMetadataOnly
-	}
-	bodyTokens := token.EstimateTokenCount(excerpt)
-	if token.EstimateTokenCount(body) > bodyTokens && bodyTokens < reviewProbeRawOutputRequiredRefBodyMinTokens {
-		return "", bodyTokens, reviewProbeRawOutputReasonRequiredRefBodyTooSmall
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "- ref: %s\n", ref.RefID)
-	fmt.Fprintf(&b, "  surface: %s\n", ref.Surface)
-	fmt.Fprintf(&b, "  probe_id: %s\n", source.probeID)
-	if source.commandIndex != nil {
-		fmt.Fprintf(&b, "  command_index: %d\n", *source.commandIndex)
-	}
-	fmt.Fprintf(&b, "  command_preview: %s\n", rawoutputs.SanitizeDisplayPreview(redactor.RedactText(reviewProbeRawOutputCommandPreview(source)), reviewProbeRawOutputCommandPreviewRunes))
-	fmt.Fprintf(&b, "  status: %s\n", source.command.Status)
-	fmt.Fprintf(&b, "  exit_code: %d\n", source.command.ExitCode)
-	fmt.Fprintf(&b, "  byte_size: %d\n", ref.ByteSize)
-	fmt.Fprintf(&b, "  content_hash: %s\n", ref.ContentHash)
-	fmt.Fprintf(&b, "  absorbed_by: %s\n", strings.Join(source.absorbedBy, ", "))
-	b.WriteString("  body:\n")
-	b.WriteString(indentReviewProbeRawOutputBody(excerpt))
-	return b.String(), bodyTokens, ""
-}
-
-func reviewProbeRawOutputBodyExcerpt(body string, budgetTokens int) string {
-	body = strings.TrimSpace(body)
-	if body == "" || budgetTokens <= 0 {
-		return ""
-	}
-	if token.EstimateTokenCount(body) <= budgetTokens {
-		return body
-	}
-	maxRunes := budgetTokens * 2
-	if maxRunes < 256 {
-		maxRunes = 256
-	}
-	runes := []rune(body)
-	if len(runes) <= maxRunes {
-		return body
-	}
-	headRunes := maxRunes / 2
-	tailRunes := maxRunes - headRunes
-	head := strings.TrimSpace(string(runes[:headRunes]))
-	tail := strings.TrimSpace(string(runes[len(runes)-tailRunes:]))
-	return head + "\n...\n" + tail
-}
-
-func indentReviewProbeRawOutputBody(body string) string {
-	lines := strings.Split(strings.TrimSpace(body), "\n")
-	for i, line := range lines {
-		lines[i] = "    " + line
-	}
-	return strings.Join(lines, "\n")
+	return reviewpromptreduction.RenderReviewProbeRawOutputContext(reviewpromptreduction.ReviewProbeRawOutputContextInput{
+		Ledger:   ledger,
+		Entries:  entries,
+		Redactor: redactor,
+	})
 }
 
 func reviewProbeRawOutputRefForSource(source reviewProbeRawOutputSource, probeRefs map[string]rawoutputs.RawOutputRef, commandRefs map[reviewmodelinput.ProbeCommandResultKey]rawoutputs.RawOutputRef) (rawoutputs.RawOutputRef, bool) {
@@ -168,78 +63,22 @@ func reviewProbeRawOutputRefForSource(source reviewProbeRawOutputSource, probeRe
 	return ref, ok
 }
 
-func reviewProbeRawOutputLedgerRefFromSource(source reviewProbeRawOutputSource, ref rawoutputs.RawOutputRef) reviewpromptreduction.ReviewProbeRawOutputLedgerRef {
-	return reviewpromptreduction.ReviewProbeRawOutputLedgerRef{
-		RefID:        ref.RefID,
-		ProbeID:      source.probeID,
-		CommandIndex: cloneReviewProbeCommandIndex(source.commandIndex),
-		ContentHash:  ref.ContentHash,
-		ByteSize:     ref.ByteSize,
-		ApproxTokens: ref.ApproxTokens,
+func reviewProbeRawOutputContextSource(source reviewProbeRawOutputSource) reviewpromptreduction.ReviewProbeRawOutputContextSource {
+	var commandIndex *int
+	if source.commandIndex != nil {
+		cloned := *source.commandIndex
+		commandIndex = &cloned
 	}
-}
-
-func cloneReviewProbeCommandIndex(index *int) *int {
-	if index == nil {
-		return nil
+	return reviewpromptreduction.ReviewProbeRawOutputContextSource{
+		ProbeID:        source.probeID,
+		CommandIndex:   commandIndex,
+		CommandPreview: reviewProbeRawOutputCommandPreview(source),
+		Status:         string(source.command.Status),
+		ExitCode:       source.command.ExitCode,
+		AbsorbedBy:     append([]string(nil), source.absorbedBy...),
 	}
-	cloned := *index
-	return &cloned
-}
-
-func reviewProbeRawOutputLedgerRefWithStatus(ref reviewpromptreduction.ReviewProbeRawOutputLedgerRef, status, reason string) reviewpromptreduction.ReviewProbeRawOutputLedgerRef {
-	ref.Status = status
-	ref.Reason = reason
-	return ref
 }
 
 func (r *ReviewRunner) reviewProbeRawOutputBudget() int {
-	budget := r.rawOutputRehydrateBudgetTokens
-	if budget <= 0 {
-		budget = reviewProbeRawOutputDefaultBudgetTokens
-	}
-	maxBudget := r.rawOutputRehydrateBudgetMaxTokens
-	if maxBudget <= 0 {
-		maxBudget = reviewProbeRawOutputDefaultBudgetMaxTokens
-	}
-	if budget > maxBudget {
-		return maxBudget
-	}
-	return budget
-}
-
-func reviewProbeRawOutputMetadataReserve(budget int) int {
-	percent := budget * reviewProbeRawOutputMetadataReservePercent / 100
-	if percent > reviewProbeRawOutputMetadataReserveTokens {
-		return percent
-	}
-	return reviewProbeRawOutputMetadataReserveTokens
-}
-
-func reviewProbeRawOutputPerCommandBodyMaxTokens(available int) int {
-	return max(1, available*reviewProbeRawOutputPerCommandBodyMaxPercent/100)
-}
-
-func reviewProbeRawOutputSingleExplicitRefMaxTokens(available int) int {
-	return max(1, available*reviewProbeRawOutputSingleExplicitRefMaxPercent/100)
-}
-
-type reviewProbeRawOutputNoopRedactor struct{}
-
-func (reviewProbeRawOutputNoopRedactor) RedactText(text string) string { return text }
-
-func (reviewProbeRawOutputNoopRedactor) RedactTexts(values []string) []string {
-	if len(values) == 0 {
-		return []string{}
-	}
-	return append([]string(nil), values...)
-}
-
-func (reviewProbeRawOutputNoopRedactor) RedactPath(path string) string { return path }
-
-func (reviewProbeRawOutputNoopRedactor) RedactPaths(paths []string) []string {
-	if len(paths) == 0 {
-		return []string{}
-	}
-	return append([]string(nil), paths...)
+	return reviewpromptreduction.NormalizeReviewProbeRawOutputBudget(r.rawOutputRehydrateBudgetTokens, r.rawOutputRehydrateBudgetMaxTokens)
 }

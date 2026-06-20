@@ -155,7 +155,7 @@ func TestReviewRunnerReviewRawOutputArtifactsDryRunDoesNotMutatePrompt(t *testin
 	if reductionReport.ReplacedCount != 0 ||
 		reductionReport.RawOutputLedgerCount != 1 ||
 		reductionReport.RawOutputRehydratedRefCount != 1 ||
-		reductionReport.KeptReasonCounts[reviewProbeRawOutputReasonArtifactsDryRun] != 1 {
+		reductionReport.KeptReasonCounts[reviewpromptreduction.ReviewProbeRawOutputReasonArtifactsDryRun] != 1 {
 		t.Fatalf("PromptReductionReport() = %#v, want dry-run ledger without prompt mutation", reductionReport)
 	}
 }
@@ -217,7 +217,7 @@ func TestReviewRunnerKeepsProbeCommandRawWhenReviewRawOutputBudgetCannotFit(t *t
 	if reductionReport.ReplacedCount != 0 ||
 		reductionReport.RawOutputLedgerCount != 1 ||
 		reductionReport.RawOutputBudgetExhaustedRefCount != 1 ||
-		reductionReport.KeptReasonCounts[reviewProbeRawOutputReasonRequiredRefBodyTooSmall] < 1 {
+		reductionReport.KeptReasonCounts[reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefBodyTooSmall] < 1 {
 		t.Fatalf("PromptReductionReport() = %#v, want raw keep with budget-exhausted ledger", reductionReport)
 	}
 }
@@ -362,18 +362,18 @@ func TestReviewRunnerRejectsSaturatedWhenReviewRawOutputLedgerFailsClosed(t *tes
 	runner := &ReviewRunner{promptReductionStats: reviewpromptreduction.NewStats(reviewpromptreduction.ReviewPromptReductionModeApply)}
 	check := newSaturatedReviewSaturationCheckForTest()
 	ledger := &reviewpromptreduction.ReviewProbeRawOutputLedger{
-		FailClosedReason:   reviewProbeRawOutputReasonRequiredRefMissing,
+		FailClosedReason:   reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing,
 		CanAcceptSaturated: false,
 	}
 
 	got := runner.failClosedReviewSaturationByRawOutputLedger(check, ledger)
 	if got.Status != reviewreport.ReviewSaturationStatusBlocked ||
-		!strings.Contains(got.CheckedSummary, reviewProbeRawOutputReasonRequiredRefMissing) {
+		!strings.Contains(got.CheckedSummary, reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing) {
 		t.Fatalf("failClosedReviewSaturationByRawOutputLedger() = %#v, want blocked with reason", got)
 	}
 	report := runner.PromptReductionReport()
-	if report.KeptReasonCounts[reviewProbeRawOutputReasonSaturatedRejected] != 1 ||
-		report.KeptReasonCounts[reviewProbeRawOutputReasonRequiredRefMissing] != 1 {
+	if report.KeptReasonCounts[reviewpromptreduction.ReviewProbeRawOutputReasonSaturatedRejected] != 1 ||
+		report.KeptReasonCounts[reviewpromptreduction.ReviewProbeRawOutputReasonRequiredRefMissing] != 1 {
 		t.Fatalf("PromptReductionReport() = %#v, want saturated rejection reasons", report)
 	}
 }

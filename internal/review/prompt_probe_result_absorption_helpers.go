@@ -17,24 +17,7 @@ func reviewProbeResultAbsorptionKeepReason(build reviewProbeRawOutputBuild) stri
 	if strings.TrimSpace(build.ledger.FailClosedReason) != "" {
 		return build.ledger.FailClosedReason
 	}
-	return reviewProbeRawOutputReasonRehydrateUnavailable
-}
-
-func reviewProbeRawOutputLedgerPtr(ledger reviewpromptreduction.ReviewProbeRawOutputLedger) *reviewpromptreduction.ReviewProbeRawOutputLedger {
-	if reviewProbeRawOutputLedgerEmpty(ledger) {
-		return nil
-	}
-	return &ledger
-}
-
-func reviewProbeRawOutputLedgerEmpty(ledger reviewpromptreduction.ReviewProbeRawOutputLedger) bool {
-	return len(ledger.RequiredRefs) == 0 &&
-		len(ledger.OptionalRefs) == 0 &&
-		len(ledger.RehydratedRefs) == 0 &&
-		len(ledger.MetadataOnlyRefs) == 0 &&
-		len(ledger.MissingRefs) == 0 &&
-		len(ledger.BudgetExhaustedRefs) == 0 &&
-		strings.TrimSpace(ledger.FailClosedReason) == ""
+	return reviewpromptreduction.ReviewProbeRawOutputReasonRehydrateUnavailable
 }
 
 func reviewProbeResultPromptOriginalBytes(result reviewprobe.ReviewProbeResult) int {

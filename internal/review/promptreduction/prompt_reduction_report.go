@@ -168,7 +168,7 @@ func (s *Stats) RecordKeepReason(reason string) {
 
 // RecordRawOutputLedger は raw output rehydrate ledger の集計を記録する。
 func (s *Stats) RecordRawOutputLedger(ledger ReviewProbeRawOutputLedger) {
-	if s == nil || ledger.empty() {
+	if s == nil || ReviewProbeRawOutputLedgerIsEmpty(ledger) {
 		return
 	}
 	s.report.RawOutputLedgerCount++

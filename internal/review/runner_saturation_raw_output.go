@@ -14,10 +14,10 @@ func (r *ReviewRunner) failClosedReviewSaturationByRawOutputLedger(check reviewr
 	}
 	reason := strings.TrimSpace(ledger.FailClosedReason)
 	if reason == "" {
-		reason = reviewProbeRawOutputReasonSaturatedRejected
+		reason = reviewpromptreduction.ReviewProbeRawOutputReasonSaturatedRejected
 	}
 	if r != nil && r.promptReductionStats != nil {
-		r.promptReductionStats.RecordKeepReason(reviewProbeRawOutputReasonSaturatedRejected)
+		r.promptReductionStats.RecordKeepReason(reviewpromptreduction.ReviewProbeRawOutputReasonSaturatedRejected)
 		r.promptReductionStats.RecordKeepReason(reason)
 	}
 	check.Status = reviewreport.ReviewSaturationStatusBlocked
@@ -38,7 +38,7 @@ func (r *ReviewRunner) failClosedReviewRevisionPromptByRawOutputLedger(check rev
 	}
 	reason := strings.TrimSpace(ledger.FailClosedReason)
 	if reason == "" {
-		reason = reviewProbeRawOutputReasonRehydrateUnavailable
+		reason = reviewpromptreduction.ReviewProbeRawOutputReasonRehydrateUnavailable
 	}
 	if r != nil && r.promptReductionStats != nil {
 		r.promptReductionStats.RecordKeepReason(reason)

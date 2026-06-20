@@ -101,7 +101,7 @@ func TestReviewRunnerPromptReductionModeControlsProbeOutputCompaction(t *testing
 			if reductionReport.CandidateCount != 2 || reductionReport.ReplacedCount != tt.wantReplaced ||
 				reductionReport.ClassifierCounts["validation"] != 1 ||
 				reductionReport.ClassifierCounts["probe_result_absorption_candidate"] != 1 ||
-				reductionReport.KeptReasonCounts[reviewProbeRawOutputReasonArtifactMissing] != 1 {
+				reductionReport.KeptReasonCounts[reviewpromptreduction.ReviewProbeRawOutputReasonArtifactMissing] != 1 {
 				t.Fatalf("PromptReductionReport() = %#v, want validation replacement and blocked probe candidate with %d replacements", reductionReport, tt.wantReplaced)
 			}
 			if tt.wantPromptCompact {

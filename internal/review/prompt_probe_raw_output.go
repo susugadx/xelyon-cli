@@ -10,31 +10,6 @@ import (
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
-const (
-	reviewProbeRawOutputContextHeader                 = "Review Probe Raw Output Context"
-	reviewProbeRawOutputDefaultBudgetTokens           = 4096
-	reviewProbeRawOutputDefaultBudgetMaxTokens        = 8192
-	reviewProbeRawOutputMetadataReserveTokens         = 512
-	reviewProbeRawOutputMetadataReservePercent        = 15
-	reviewProbeRawOutputRequiredRefBodyMinTokens      = 512
-	reviewProbeRawOutputOptionalRefBodyMinTokens      = 160
-	reviewProbeRawOutputPerCommandBodyMaxPercent      = 50
-	reviewProbeRawOutputSingleExplicitRefMaxPercent   = 80
-	reviewProbeRawOutputCommandPreviewRunes           = 160
-	reviewProbeRawOutputReasonArtifactMissing         = "review_probe_raw_output_artifact_missing"
-	reviewProbeRawOutputReasonRehydrateUnavailable    = "review_probe_raw_output_rehydrate_not_available"
-	reviewProbeRawOutputReasonRequiredRefMissing      = "review_probe_required_ref_missing"
-	reviewProbeRawOutputReasonRequiredRefMetadataOnly = "review_probe_required_ref_metadata_only"
-	reviewProbeRawOutputReasonRequiredRefBodyTooSmall = "review_probe_required_ref_body_budget_too_small"
-	reviewProbeRawOutputReasonRequiredRefHashInvalid  = "review_probe_required_ref_hash_invalid"
-	reviewProbeRawOutputReasonRequiredRefQuarantined  = "review_probe_required_ref_quarantined"
-	reviewProbeRawOutputReasonBudgetRequiresRevision  = "review_probe_budget_requires_blocked_or_needs_revision"
-	reviewProbeRawOutputReasonSaturatedRejected       = "review_probe_saturated_rejected_by_rehydrate_ledger"
-	reviewProbeRawOutputReasonArtifactsDryRun         = "review_probe_raw_output_artifacts_dry_run"
-	reviewProbeRawOutputReasonSensitiveOrPrivateKeep  = "review_probe_sensitive_or_private_keep"
-	reviewProbeRawOutputReasonUnreflectedEvidenceKeep = "review_probe_unreflected_evidence_keep"
-)
-
 type reviewProbeRawOutputBuild struct {
 	probeRefs      map[string]rawoutputs.RawOutputRef
 	commandRefs    map[reviewmodelinput.ProbeCommandResultKey]rawoutputs.RawOutputRef
@@ -64,7 +39,7 @@ func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Contex
 			Phase:                 reviewPromptReductionPhase(phase),
 			PromptKind:            promptKind,
 			BudgetTokens:          r.reviewProbeRawOutputBudget(),
-			MetadataReserveTokens: reviewProbeRawOutputMetadataReserve(r.reviewProbeRawOutputBudget()),
+			MetadataReserveTokens: reviewpromptreduction.ReviewProbeRawOutputMetadataReserve(r.reviewProbeRawOutputBudget()),
 			CanAcceptSaturated:    true,
 		},
 	}
@@ -73,22 +48,22 @@ func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Contex
 		return build
 	}
 	if reviewpromptreduction.NormalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == reviewpromptreduction.ReviewRawOutputArtifactsModeOff {
-		build.disabledReason = reviewProbeRawOutputReasonArtifactMissing
+		build.disabledReason = reviewpromptreduction.ReviewProbeRawOutputReasonArtifactMissing
 		return build
 	}
 	if strings.TrimSpace(r.rawOutputSessionID) == "" || r.rawOutputArtifactStore == nil {
-		build.disabledReason = reviewProbeRawOutputReasonArtifactMissing
+		build.disabledReason = reviewpromptreduction.ReviewProbeRawOutputReasonArtifactMissing
 		return build
 	}
 
 	sources := reviewProbeRawOutputSources(candidates, probeResults)
 	if len(sources) == 0 {
-		build.disabledReason = reviewProbeRawOutputReasonUnreflectedEvidenceKeep
+		build.disabledReason = reviewpromptreduction.ReviewProbeRawOutputReasonUnreflectedEvidenceKeep
 		return build
 	}
 	for _, source := range sources {
 		ref, reason, ok := r.createReviewProbeRawOutputArtifact(ctx, phase, source)
-		ledgerRef := reviewProbeRawOutputLedgerRefFromSource(source, ref)
+		ledgerRef := reviewpromptreduction.NewReviewProbeRawOutputLedgerRef(reviewProbeRawOutputContextSource(source), ref)
 		if !ok {
 			ledgerRef.Status = "missing"
 			ledgerRef.Reason = reason
@@ -121,7 +96,7 @@ func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Contex
 		reviewpromptreduction.NormalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == reviewpromptreduction.ReviewRawOutputArtifactsModeApply &&
 		strings.TrimSpace(build.context) != ""
 	if !build.applyAllowed && reviewpromptreduction.NormalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == reviewpromptreduction.ReviewRawOutputArtifactsModeDryRun {
-		build.disabledReason = reviewProbeRawOutputReasonArtifactsDryRun
+		build.disabledReason = reviewpromptreduction.ReviewProbeRawOutputReasonArtifactsDryRun
 	}
 	return build
 }
