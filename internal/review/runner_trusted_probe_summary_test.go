@@ -7,28 +7,31 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 	repoRoot := t.TempDir()
-	probeRoot := filepath.Join(t.TempDir(), reviewProbeSandboxTempPrefix+"trusted")
+	probeRoot := filepath.Join(t.TempDir(), reviewprobe.ReviewProbeSandboxTempPrefix+"trusted")
 	probeWorkDir := filepath.Join(probeRoot, "worktree")
 	repoFile := filepath.Join(repoRoot, "internal/review/runner.go")
 	probeFile := filepath.Join(probeWorkDir, "output.txt")
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:              "probe-1",
-		Mode:            ReviewProbeHostReadOnly,
-		Status:          ReviewProbeFailed,
+		Mode:            reviewprobe.ReviewProbeHostReadOnly,
+		Status:          reviewprobe.ReviewProbeFailed,
 		MutatedFiles:    []string{repoFile, probeFile},
 		OutputTruncated: true,
 		Error:           "probe failed at " + repoFile + " and " + probeFile,
-		CommandResults: []ReviewProbeCommandResult{
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command:         "cat " + probeFile,
 				Args:            []string{repoFile, probeFile},
 				WorkDir:         probeWorkDir,
-				Status:          ReviewProbeFailed,
+				Status:          reviewprobe.ReviewProbeFailed,
 				ExitCode:        1,
 				OutputTruncated: true,
 				Error:           "exit status 1 at " + probeFile,
@@ -36,16 +39,16 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 			},
 		},
 	}
-	modelReport := newRunnerBlockedReportForTest([]ReviewProbeSummary{
+	modelReport := newRunnerBlockedReportForTest([]reviewreport.ReviewProbeSummary{
 		{
 			ProbeID:      "fake-probe",
-			Mode:         ReviewProbeHostReadOnly,
-			Status:       ReviewProbePassed,
+			Mode:         reviewprobe.ReviewProbeHostReadOnly,
+			Status:       reviewprobe.ReviewProbePassed,
 			MutatedFiles: []string{"/fake/model/path"},
 			Error:        "fake model summary must be ignored",
 		},
 	})
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -59,20 +62,20 @@ func TestReviewRunnerRunUsesTrustedProbeSummaries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	wantSummaries := []ReviewProbeSummary{
+	wantSummaries := []reviewreport.ReviewProbeSummary{
 		{
 			ProbeID:         "probe-1",
-			Mode:            ReviewProbeHostReadOnly,
-			Status:          ReviewProbeFailed,
+			Mode:            reviewprobe.ReviewProbeHostReadOnly,
+			Status:          reviewprobe.ReviewProbeFailed,
 			MutatedFiles:    []string{"internal/review/runner.go", "<probe_workdir>/output.txt"},
 			OutputTruncated: true,
 			Error:           "probe failed at <repo_root>/internal/review/runner.go and <probe_workdir>/output.txt",
-			Commands: []ReviewProbeCommandSummary{
+			Commands: []reviewreport.ReviewProbeCommandSummary{
 				{
 					Command:         "cat <probe_workdir>/output.txt",
 					Args:            []string{"<repo_root>/internal/review/runner.go", "<probe_workdir>/output.txt"},
 					WorkDir:         "<probe_workdir>",
-					Status:          ReviewProbeFailed,
+					Status:          reviewprobe.ReviewProbeFailed,
 					ExitCode:        1,
 					OutputTruncated: true,
 					Error:           "exit status 1 at <probe_workdir>/output.txt",
@@ -91,33 +94,33 @@ func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *te
 	repoRoot := t.TempDir()
 	repoFile := filepath.Join(repoRoot, "internal/review/runner.go")
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   ReviewProbeHostReadOnly,
-		Status: ReviewProbePassed,
-		CommandResults: []ReviewProbeCommandResult{
+		Mode:   reviewprobe.ReviewProbeHostReadOnly,
+		Status: reviewprobe.ReviewProbePassed,
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "cat " + repoFile,
 				Args:    []string{repoFile},
 				WorkDir: repoRoot,
-				Status:  ReviewProbePassed,
+				Status:  reviewprobe.ReviewProbePassed,
 			},
 		},
 	}
 	modelReport := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")
-	modelReport.CheckedSurfaces = []ReviewSurfaceCoverage{
+	modelReport.CheckedSurfaces = []reviewreport.ReviewSurfaceCoverage{
 		{
 			SurfaceID: "surface-1",
-			EvidenceRefs: []ReviewEvidenceRef{
+			EvidenceRefs: []reviewreport.ReviewEvidenceRef{
 				{
-					Kind:         ReviewEvidenceKindProbeCommand,
+					Kind:         reviewreport.ReviewEvidenceKindProbeCommand,
 					ProbeID:      "probe-1",
-					CommandIndex: ReviewCommandIndex(0),
+					CommandIndex: reviewreport.ReviewCommandIndex(0),
 				},
 			},
 		},
 	}
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -131,18 +134,18 @@ func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *te
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	wantSummaries := []ReviewProbeSummary{
+	wantSummaries := []reviewreport.ReviewProbeSummary{
 		{
 			ProbeID:      "probe-1",
-			Mode:         ReviewProbeHostReadOnly,
-			Status:       ReviewProbePassed,
+			Mode:         reviewprobe.ReviewProbeHostReadOnly,
+			Status:       reviewprobe.ReviewProbePassed,
 			MutatedFiles: []string{},
-			Commands: []ReviewProbeCommandSummary{
+			Commands: []reviewreport.ReviewProbeCommandSummary{
 				{
 					Command: "cat <repo_root>/internal/review/runner.go",
 					Args:    []string{"<repo_root>/internal/review/runner.go"},
 					WorkDir: ".",
-					Status:  ReviewProbePassed,
+					Status:  reviewprobe.ReviewProbePassed,
 				},
 			},
 		},
@@ -161,43 +164,43 @@ func TestReviewRunnerRunInjectsTrustedProbeSummariesBeforeReportValidation(t *te
 
 func TestReviewRunnerRunRevalidatesReportAfterTrustedProbeSummaries(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   ReviewProbeHostReadOnly,
-		Status: ReviewProbePassed,
-		CommandResults: []ReviewProbeCommandResult{
+		Mode:   reviewprobe.ReviewProbeHostReadOnly,
+		Status: reviewprobe.ReviewProbePassed,
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "go",
-				Status:  ReviewProbePassed,
+				Status:  reviewprobe.ReviewProbePassed,
 			},
 		},
 	}
-	modelReport := newRunnerCleanReportForTest([]ReviewProbeSummary{
+	modelReport := newRunnerCleanReportForTest([]reviewreport.ReviewProbeSummary{
 		{
 			ProbeID: "fake-probe",
-			Mode:    ReviewProbeHostReadOnly,
-			Status:  ReviewProbePassed,
-			Commands: []ReviewProbeCommandSummary{
+			Mode:    reviewprobe.ReviewProbeHostReadOnly,
+			Status:  reviewprobe.ReviewProbePassed,
+			Commands: []reviewreport.ReviewProbeCommandSummary{
 				{
 					Command: "go",
-					Status:  ReviewProbePassed,
+					Status:  reviewprobe.ReviewProbePassed,
 				},
 			},
 		},
 	})
-	modelReport.CheckedSurfaces = []ReviewSurfaceCoverage{
+	modelReport.CheckedSurfaces = []reviewreport.ReviewSurfaceCoverage{
 		{
 			SurfaceID: "surface-1",
-			EvidenceRefs: []ReviewEvidenceRef{
+			EvidenceRefs: []reviewreport.ReviewEvidenceRef{
 				{
-					Kind:         ReviewEvidenceKindProbeCommand,
+					Kind:         reviewreport.ReviewEvidenceKindProbeCommand,
 					ProbeID:      "fake-probe",
-					CommandIndex: ReviewCommandIndex(0),
+					CommandIndex: reviewreport.ReviewCommandIndex(0),
 				},
 			},
 		},
 	}
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},

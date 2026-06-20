@@ -5,6 +5,9 @@ import (
 	"strings"
 
 	reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
@@ -13,8 +16,8 @@ type reviewCoverageAuditContext struct {
 	externalSupport           reviewreport.CoverageExternalSupport
 }
 
-func buildReviewCoverageAuditContext(before ReviewWebSearchEvidence, bundle ReviewEvidenceBundle) reviewCoverageAuditContext {
-	support := BuildReviewEvidenceModelInput(bundle).ExternalSupport
+func buildReviewCoverageAuditContext(before externaldoc.WebSearchEvidence, bundle reviewevidence.ReviewEvidenceBundle) reviewCoverageAuditContext {
+	support := reviewevidence.BuildReviewEvidenceModelInput(bundle).ExternalSupport
 	externalSupport := reviewreport.CoverageExternalSupport{
 		Level:                                string(support.Level),
 		DocCount:                             support.DocCount,
@@ -32,7 +35,7 @@ func buildReviewCoverageAuditContext(before ReviewWebSearchEvidence, bundle Revi
 	}
 }
 
-func buildReviewCoverageExternalEvidenceDelta(before, after ReviewWebSearchEvidence, support reviewreport.CoverageExternalSupport) reviewreport.CoverageExternalEvidenceDelta {
+func buildReviewCoverageExternalEvidenceDelta(before, after externaldoc.WebSearchEvidence, support reviewreport.CoverageExternalSupport) reviewreport.CoverageExternalEvidenceDelta {
 	delta := reviewreport.CoverageExternalEvidenceDelta{}
 
 	addedQueries := addedReviewWebSearchEvidenceQueries(before, after)
@@ -92,21 +95,21 @@ func buildReviewCoverageExternalEvidenceDelta(before, after ReviewWebSearchEvide
 	return delta
 }
 
-func addedReviewWebSearchEvidenceQueries(before, after ReviewWebSearchEvidence) []ReviewWebSearchEvidenceQuery {
+func addedReviewWebSearchEvidenceQueries(before, after externaldoc.WebSearchEvidence) []externaldoc.WebSearchEvidenceQuery {
 	if len(after.Queries) <= len(before.Queries) {
 		return nil
 	}
-	return append([]ReviewWebSearchEvidenceQuery(nil), after.Queries[len(before.Queries):]...)
+	return append([]externaldoc.WebSearchEvidenceQuery(nil), after.Queries[len(before.Queries):]...)
 }
 
-func addedReviewExternalDocs(before, after ReviewWebSearchEvidence) []ReviewExternalDocEvidence {
+func addedReviewExternalDocs(before, after externaldoc.WebSearchEvidence) []externaldoc.Evidence {
 	if len(after.ExternalDocs) <= len(before.ExternalDocs) {
 		return nil
 	}
-	return append([]ReviewExternalDocEvidence(nil), after.ExternalDocs[len(before.ExternalDocs):]...)
+	return append([]externaldoc.Evidence(nil), after.ExternalDocs[len(before.ExternalDocs):]...)
 }
 
-func mergeReviewCoverageAuditIntoSaturationCheck(check ReviewSaturationCheck, plan ReviewProbePlan, finalizedReport ReviewReport, probeSummaries []ReviewProbeSummary, auditContext reviewCoverageAuditContext) (ReviewSaturationCheck, error) {
+func mergeReviewCoverageAuditIntoSaturationCheck(check reviewreport.ReviewSaturationCheck, plan reviewprobeplan.ReviewProbePlan, finalizedReport reviewreport.ReviewReport, probeSummaries []reviewreport.ReviewProbeSummary, auditContext reviewCoverageAuditContext) (reviewreport.ReviewSaturationCheck, error) {
 	planScope := reviewanalysis.PlanScopeFromProbePlan(plan)
 	issues := reviewreport.AuditReviewReportCoverage(reviewreport.CoverageAuditInput{
 		Plan:                      planScope,
@@ -117,7 +120,7 @@ func mergeReviewCoverageAuditIntoSaturationCheck(check ReviewSaturationCheck, pl
 	})
 	merged := reviewreport.MergeCoverageIssuesIntoSaturationCheck(check, issues)
 	if err := reviewreport.ValidateReviewSaturationCheck(merged, planScope, finalizedReport); err != nil {
-		return ReviewSaturationCheck{}, fmt.Errorf("review runner merge coverage audit: %w", err)
+		return reviewreport.ReviewSaturationCheck{}, fmt.Errorf("review runner merge coverage audit: %w", err)
 	}
 	return merged, nil
 }

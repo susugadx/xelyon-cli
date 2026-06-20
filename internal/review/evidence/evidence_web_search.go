@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 const (
@@ -68,7 +68,7 @@ func (c *ReviewWebSearchEvidenceCollector) CollectWebSearchEvidence(ctx context.
 }
 
 // CollectPostPass1WebSearchEvidence は Pass1 probe plan から追加の外部仕様 evidence を収集し、既存 evidence に merge する。
-func (c *ReviewWebSearchEvidenceCollector) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobe.ReviewProbePlan) ReviewWebSearchEvidence {
+func (c *ReviewWebSearchEvidenceCollector) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) ReviewWebSearchEvidence {
 	return c.collectWebSearchEvidence(ctx, bundle, buildReviewPostPass1WebSearchQueryPlanningInput(plan), bundle.WebSearchEvidence)
 }
 
@@ -197,7 +197,7 @@ func buildReviewWebSearchQueryPlanningInput(bundle ReviewEvidenceBundle) externa
 	}
 }
 
-func buildReviewPostPass1WebSearchQueryPlanningInput(plan reviewprobe.ReviewProbePlan) externaldoc.SearchQueryPlanningInput {
+func buildReviewPostPass1WebSearchQueryPlanningInput(plan reviewprobeplan.ReviewProbePlan) externaldoc.SearchQueryPlanningInput {
 	surfaces := make([]externaldoc.SearchQueryPlanImpactSurface, 0, len(plan.ImpactSurfaces))
 	for _, surface := range plan.ImpactSurfaces {
 		surfaces = append(surfaces, externaldoc.SearchQueryPlanImpactSurface{

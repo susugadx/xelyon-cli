@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerRunRepairsInvalidProbePlanJSON(t *testing.T) {
@@ -24,8 +26,8 @@ func TestReviewRunnerRunRepairsInvalidProbePlanJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if got.Verdict != ReviewVerdictClean {
-		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	if got.Verdict != reviewreport.ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, reviewreport.ReviewVerdictClean)
 	}
 	if got, want := len(probes.calls), 1; got != want {
 		t.Fatalf("probe calls = %d, want %d", got, want)
@@ -128,8 +130,8 @@ func TestReviewRunnerRunRepairsInvalidReportJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if got.Verdict != ReviewVerdictClean {
-		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	if got.Verdict != reviewreport.ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, reviewreport.ReviewVerdictClean)
 	}
 	if got, want := len(probes.calls), 1; got != want {
 		t.Fatalf("probe calls = %d, want %d", got, want)
@@ -164,8 +166,8 @@ func TestReviewRunnerRunRepairsInvalidReportValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if got.Verdict != ReviewVerdictClean {
-		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	if got.Verdict != reviewreport.ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, reviewreport.ReviewVerdictClean)
 	}
 	if got, want := len(probes.calls), 1; got != want {
 		t.Fatalf("probe calls = %d, want %d", got, want)
@@ -202,8 +204,8 @@ func TestReviewRunnerRunRepairsReportScopeCoverageValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if got.Verdict != ReviewVerdictClean {
-		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	if got.Verdict != reviewreport.ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, reviewreport.ReviewVerdictClean)
 	}
 	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
 		ReviewModelPhaseProbePlan,

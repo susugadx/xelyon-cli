@@ -3,7 +3,7 @@ package analysis
 import (
 	"strings"
 
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 type reviewProbePlanImpactSurfaceEvidenceIndex struct {
@@ -12,7 +12,7 @@ type reviewProbePlanImpactSurfaceEvidenceIndex struct {
 	refPaths          map[string]struct{}
 }
 
-func newReviewProbePlanImpactSurfaceEvidenceIndex(surfaces []reviewprobe.ReviewProbeImpactSurface) reviewProbePlanImpactSurfaceEvidenceIndex {
+func newReviewProbePlanImpactSurfaceEvidenceIndex(surfaces []reviewprobeplan.ReviewProbeImpactSurface) reviewProbePlanImpactSurfaceEvidenceIndex {
 	index := reviewProbePlanImpactSurfaceEvidenceIndex{
 		evidenceSummaries: make([]string, 0, len(surfaces)),
 		surfaceTexts:      make([]string, 0, len(surfaces)*3),

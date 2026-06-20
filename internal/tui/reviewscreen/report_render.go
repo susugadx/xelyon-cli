@@ -4,18 +4,18 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
 
 // TimelineMessage は review report を agent timeline 用の plain text に整形する。
-func TimelineMessage(report review.ReviewReport) string {
+func TimelineMessage(report reviewreport.ReviewReport) string {
 	lines := PlainLines(report)
 	return strings.Join(lines, "\n")
 }
 
 // PlainLines は review report を plain text 行に整形する。
-func PlainLines(report review.ReviewReport) []string {
+func PlainLines(report reviewreport.ReviewReport) []string {
 	summary := reviewReportComputedSummary(report)
 	lines := []string{
 		"Review result",
@@ -45,7 +45,7 @@ func PlainLines(report review.ReviewReport) []string {
 	return lines
 }
 
-func reviewPlainGroupLines(group review.ReviewRootCauseGroup) []string {
+func reviewPlainGroupLines(group reviewreport.ReviewRootCauseGroup) []string {
 	lines := []string{
 		fmt.Sprintf("Group: %s [%s/%s]", reviewReportSingleLine(group.Title), group.Severity, group.VerificationStatus),
 	}
@@ -61,7 +61,7 @@ func reviewPlainGroupLines(group review.ReviewRootCauseGroup) []string {
 	return lines
 }
 
-func reviewPlainFindingLines(group review.ReviewRootCauseGroup, finding review.ReviewFinding) []string {
+func reviewPlainFindingLines(group reviewreport.ReviewRootCauseGroup, finding reviewreport.ReviewFinding) []string {
 	lines := []string{
 		fmt.Sprintf("Finding: %s [%s/%s]", reviewReportSingleLine(finding.Title), group.Severity, group.VerificationStatus),
 	}
@@ -74,7 +74,7 @@ func reviewPlainFindingLines(group review.ReviewRootCauseGroup, finding review.R
 	return lines
 }
 
-func reviewEvidenceRefLine(ref review.ReviewEvidenceRef) string {
+func reviewEvidenceRefLine(ref reviewreport.ReviewEvidenceRef) string {
 	segments := []string{"Evidence: " + reviewReportSingleLine(ref.Kind)}
 	details := make([]string, 0, 4)
 	if location := reviewEvidenceRefLocation(ref); location != "" {
@@ -95,7 +95,7 @@ func reviewEvidenceRefLine(ref review.ReviewEvidenceRef) string {
 	return strings.Join(segments, " - ")
 }
 
-func reviewEvidenceRefLocation(ref review.ReviewEvidenceRef) string {
+func reviewEvidenceRefLocation(ref reviewreport.ReviewEvidenceRef) string {
 	if strings.TrimSpace(ref.Path) == "" {
 		return ""
 	}
@@ -106,7 +106,7 @@ func reviewEvidenceRefLocation(ref review.ReviewEvidenceRef) string {
 	return path
 }
 
-func reviewEvidenceRefProbe(ref review.ReviewEvidenceRef) string {
+func reviewEvidenceRefProbe(ref reviewreport.ReviewEvidenceRef) string {
 	if strings.TrimSpace(ref.ProbeID) == "" {
 		return ""
 	}
@@ -121,9 +121,9 @@ func reviewReportSingleLine(text string) string {
 	return termtext.SanitizeSingleLineANSI(text)
 }
 
-func reviewReportComputedSummary(report review.ReviewReport) review.ReviewReportComputedSummary {
+func reviewReportComputedSummary(report reviewreport.ReviewReport) reviewreport.ReviewReportComputedSummary {
 	if report.ComputedSummary != nil {
 		return *report.ComputedSummary
 	}
-	return review.ComputeReviewReportComputedSummary(report, report.ProbeSummaries)
+	return reviewreport.ComputeReviewReportComputedSummary(report, report.ProbeSummaries)
 }

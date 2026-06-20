@@ -3,6 +3,11 @@ package review
 import (
 	"testing"
 	"time"
+
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func saturatedRunnerModelResponseForTest(t *testing.T) runnerFakeModelResponse {
@@ -13,25 +18,25 @@ func saturatedRunnerModelResponseForTest(t *testing.T) runnerFakeModelResponse {
 	}
 }
 
-func needsRevisionMissingRiskCheckForRunnerTest() ReviewSaturationCheck {
-	return ReviewSaturationCheck{
-		SchemaVersion:        ReviewSaturationCheckSchemaVersionV1,
-		Status:               ReviewSaturationStatusNeedsRevision,
+func needsRevisionMissingRiskCheckForRunnerTest() reviewreport.ReviewSaturationCheck {
+	return reviewreport.ReviewSaturationCheck{
+		SchemaVersion:        reviewreport.ReviewSaturationCheckSchemaVersionV1,
+		Status:               reviewreport.ReviewSaturationStatusNeedsRevision,
 		CheckedSummary:       "risk-1 was not fully represented in the finalized report.",
 		MissingRiskIDs:       []string{"risk-1"},
 		RevisionInstructions: "Revise the report so risk-1 is explicitly classified in scope_coverage.",
 	}
 }
 
-func needsRevisionAdditionalCandidateCheckForRunnerTest() ReviewSaturationCheck {
-	return ReviewSaturationCheck{
-		SchemaVersion:  ReviewSaturationCheckSchemaVersionV1,
-		Status:         ReviewSaturationStatusNeedsRevision,
+func needsRevisionAdditionalCandidateCheckForRunnerTest() reviewreport.ReviewSaturationCheck {
+	return reviewreport.ReviewSaturationCheck{
+		SchemaVersion:  reviewreport.ReviewSaturationCheckSchemaVersionV1,
+		Status:         reviewreport.ReviewSaturationStatusNeedsRevision,
 		CheckedSummary: "A file-backed candidate was not represented in the finalized report.",
-		AdditionalFindingCandidates: []ReviewSaturationAdditionalFindingCandidate{
+		AdditionalFindingCandidates: []reviewreport.ReviewSaturationAdditionalFindingCandidate{
 			{
 				Summary: "A report-pass finding candidate is grounded in existing file evidence.",
-				EvidenceRefs: []ReviewEvidenceRef{
+				EvidenceRefs: []reviewreport.ReviewEvidenceRef{
 					newFileEvidenceRefForValidationTest(),
 				},
 				Reason: "The candidate uses existing evidence only and does not require additional exploration.",
@@ -41,20 +46,20 @@ func needsRevisionAdditionalCandidateCheckForRunnerTest() ReviewSaturationCheck 
 	}
 }
 
-func newRunnerEvidenceBundleWithWebSearchForSaturationAuditTest(repoRoot string) ReviewEvidenceBundle {
+func newRunnerEvidenceBundleWithWebSearchForSaturationAuditTest(repoRoot string) reviewevidence.ReviewEvidenceBundle {
 	bundle := newRunnerEvidenceBundleForTest(repoRoot)
-	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled:      true,
 		Inconclusive: true,
 	}
 	return bundle
 }
 
-func newRunnerEvidenceBundleWithAdequateWebSearchSupportForSaturationAuditTest(repoRoot string) ReviewEvidenceBundle {
+func newRunnerEvidenceBundleWithAdequateWebSearchSupportForSaturationAuditTest(repoRoot string) reviewevidence.ReviewEvidenceBundle {
 	bundle := newRunnerEvidenceBundleForTest(repoRoot)
-	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled: true,
-		ExternalDocs: []ReviewExternalDocEvidence{
+		ExternalDocs: []externaldoc.Evidence{
 			newRunnerOfficialCandidateExternalDocForSaturationAuditTest(
 				"external-doc-official-1",
 				"https://docs.example.test/oauth",
@@ -72,14 +77,14 @@ func newRunnerEvidenceBundleWithAdequateWebSearchSupportForSaturationAuditTest(r
 	return bundle
 }
 
-func newRunnerOfficialCandidateExternalDocForSaturationAuditTest(docID, url, content, contentHash string) ReviewExternalDocEvidence {
-	return ReviewExternalDocEvidence{
+func newRunnerOfficialCandidateExternalDocForSaturationAuditTest(docID, url, content, contentHash string) externaldoc.Evidence {
+	return externaldoc.Evidence{
 		DocID:             docID,
 		URL:               url,
-		SourceCredibility: ReviewExternalDocSourceCredibilityOfficialCandidate,
+		SourceCredibility: externaldoc.SourceCredibilityOfficialCandidate,
 		FetchedAt:         time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 		ContentHash:       contentHash,
-		Snippets: []ReviewExternalDocSnippetEvidence{
+		Snippets: []externaldoc.SnippetEvidence{
 			{
 				SnippetID:   docID + "-snippet-1",
 				Content:     content,
@@ -89,10 +94,10 @@ func newRunnerOfficialCandidateExternalDocForSaturationAuditTest(docID, url, con
 	}
 }
 
-func newExternalDocEvidenceRefForSaturationCompactTest(doc ReviewExternalDocEvidence) ReviewEvidenceRef {
+func newExternalDocEvidenceRefForSaturationCompactTest(doc externaldoc.Evidence) reviewreport.ReviewEvidenceRef {
 	snippet := doc.Snippets[0]
-	return ReviewEvidenceRef{
-		Kind:        ReviewEvidenceKindExternalDoc,
+	return reviewreport.ReviewEvidenceRef{
+		Kind:        reviewreport.ReviewEvidenceKindExternalDoc,
 		DocID:       doc.DocID,
 		SnippetID:   snippet.SnippetID,
 		URL:         doc.URL,
@@ -101,36 +106,37 @@ func newExternalDocEvidenceRefForSaturationCompactTest(doc ReviewExternalDocEvid
 	}
 }
 
-func findReviewPromptReductionItemForTest(runner *ReviewRunner, id string, phase ReviewModelPhase) *ReviewPromptReductionItem {
+func findReviewPromptReductionItemForTest(runner *ReviewRunner, id string, phase ReviewModelPhase) *reviewpromptreduction.ReviewPromptReductionItem {
 	if runner == nil || runner.promptReductionState == nil {
 		return nil
 	}
+	reductionPhase := reviewPromptReductionPhase(phase)
 	for i := range runner.promptReductionState.Items {
-		if runner.promptReductionState.Items[i].ID == id && runner.promptReductionState.Items[i].Phase == phase {
+		if runner.promptReductionState.Items[i].ID == id && runner.promptReductionState.Items[i].Phase == reductionPhase {
 			return &runner.promptReductionState.Items[i]
 		}
 	}
 	return nil
 }
 
-func newRunnerPostPass1WeakExternalEvidenceForSaturationAuditTest() ReviewWebSearchEvidence {
-	return ReviewWebSearchEvidence{
+func newRunnerPostPass1WeakExternalEvidenceForSaturationAuditTest() externaldoc.WebSearchEvidence {
+	return externaldoc.WebSearchEvidence{
 		Enabled: true,
-		Queries: []ReviewWebSearchEvidenceQuery{
+		Queries: []externaldoc.WebSearchEvidenceQuery{
 			{
 				Query:  "OAuth 2.0 redirect URI specification",
 				Reason: "intent=spec; expected_source_type=technical_specification; confidence=high; reason=pass1 plan protocol/spec signal",
-				Results: []ReviewWebSearchEvidenceResult{
+				Results: []externaldoc.WebSearchEvidenceResult{
 					{Title: "OAuth 2.0 redirect URI specification", URL: "https://docs.example.test/oauth"},
 				},
 			},
 		},
-		ExternalDocs: []ReviewExternalDocEvidence{
+		ExternalDocs: []externaldoc.Evidence{
 			{
 				DocID:             "external-doc-post",
 				URL:               "https://docs.example.test/oauth",
-				SourceCredibility: ReviewExternalDocSourceCredibilityUnknown,
-				Snippets: []ReviewExternalDocSnippetEvidence{
+				SourceCredibility: externaldoc.SourceCredibilityUnknown,
+				Snippets: []externaldoc.SnippetEvidence{
 					{
 						SnippetID:   "external-doc-post-snippet-1",
 						Content:     "Post-pass1 OAuth redirect URI snippet.",

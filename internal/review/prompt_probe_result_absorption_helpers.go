@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
@@ -18,14 +20,24 @@ func reviewProbeResultAbsorptionKeepReason(build reviewProbeRawOutputBuild) stri
 	return reviewProbeRawOutputReasonRehydrateUnavailable
 }
 
-func reviewProbeRawOutputLedgerPtr(ledger ReviewProbeRawOutputLedger) *ReviewProbeRawOutputLedger {
-	if ledger.empty() {
+func reviewProbeRawOutputLedgerPtr(ledger reviewpromptreduction.ReviewProbeRawOutputLedger) *reviewpromptreduction.ReviewProbeRawOutputLedger {
+	if reviewProbeRawOutputLedgerEmpty(ledger) {
 		return nil
 	}
 	return &ledger
 }
 
-func reviewProbeResultPromptOriginalBytes(result ReviewProbeResult) int {
+func reviewProbeRawOutputLedgerEmpty(ledger reviewpromptreduction.ReviewProbeRawOutputLedger) bool {
+	return len(ledger.RequiredRefs) == 0 &&
+		len(ledger.OptionalRefs) == 0 &&
+		len(ledger.RehydratedRefs) == 0 &&
+		len(ledger.MetadataOnlyRefs) == 0 &&
+		len(ledger.MissingRefs) == 0 &&
+		len(ledger.BudgetExhaustedRefs) == 0 &&
+		strings.TrimSpace(ledger.FailClosedReason) == ""
+}
+
+func reviewProbeResultPromptOriginalBytes(result reviewprobe.ReviewProbeResult) int {
 	total := len(result.ID) + len(string(result.Mode)) + len(string(result.Status)) + len(result.Error)
 	for _, path := range result.MutatedFiles {
 		total += len(path)
@@ -43,7 +55,7 @@ func reviewProbeResultPromptOriginalBytes(result ReviewProbeResult) int {
 	return total
 }
 
-func reviewProbeCommandResultPromptOriginalBytes(command ReviewProbeCommandResult) int {
+func reviewProbeCommandResultPromptOriginalBytes(command reviewprobe.ReviewProbeCommandResult) int {
 	return len(command.Output) + len(command.Error)
 }
 
@@ -57,24 +69,6 @@ func reviewPromptAbsorptionSavings(originalBytes, replacementBytes int) (int, in
 		return 0, 0, false
 	}
 	return savedBytes, savedTokens, true
-}
-
-func dedupeSortedReviewPromptAbsorptionRefs(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		result = append(result, value)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func sortedReviewProbeAbsorptionProbeIDs(candidates map[string]reviewProbeResultAbsorptionCandidate) []string {

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func TestResolveReviewRepoRootResolvesRepoRoot(t *testing.T) {
@@ -44,7 +46,7 @@ func TestResolveReviewRepoRootBlocksCurrentDirFakeGitOnRelativePATH(t *testing.T
 	if err == nil {
 		t.Fatal("ResolveReviewRepoRoot() error = nil, want repo-controlled git to be blocked")
 	}
-	if !errors.Is(err, ErrHostReadOnlyBlocked) {
+	if !errors.Is(err, reviewprobe.ErrHostReadOnlyBlocked) {
 		t.Fatalf("ResolveReviewRepoRoot() error = %v, want ErrHostReadOnlyBlocked", err)
 	}
 	assertFileAbsent(t, marker)
@@ -63,7 +65,7 @@ func TestResolveReviewRepoRootBlocksRepoRelativeFakeGitFromSubdir(t *testing.T) 
 	if err == nil {
 		t.Fatal("ResolveReviewRepoRoot() error = nil, want repo-controlled git to be blocked")
 	}
-	if !errors.Is(err, ErrHostReadOnlyBlocked) {
+	if !errors.Is(err, reviewprobe.ErrHostReadOnlyBlocked) {
 		t.Fatalf("ResolveReviewRepoRoot() error = %v, want ErrHostReadOnlyBlocked", err)
 	}
 	assertFileAbsent(t, marker)

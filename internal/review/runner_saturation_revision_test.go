@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerRunRevisesReportWhenSaturationNeedsMissingRisk(t *testing.T) {
@@ -77,8 +79,8 @@ func TestReviewRunnerRunRevisesReportWhenSaturationHasAdditionalCandidate(t *tes
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if got.Verdict != ReviewVerdictHasFindings {
-		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictHasFindings)
+	if got.Verdict != reviewreport.ReviewVerdictHasFindings {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, reviewreport.ReviewVerdictHasFindings)
 	}
 	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
 		ReviewModelPhaseProbePlan,

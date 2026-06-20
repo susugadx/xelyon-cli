@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
@@ -16,7 +16,7 @@ type reviewExternalDocSnippetRefTarget struct {
 }
 
 // ValidateProbePlanExternalDocRefs は probe plan の external_doc evidence refs が取得済み snippet を指すことを検証する。
-func ValidateProbePlanExternalDocRefs(plan reviewprobe.ReviewProbePlan, docs []externaldoc.Evidence) error {
+func ValidateProbePlanExternalDocRefs(plan reviewprobeplan.ReviewProbePlan, docs []externaldoc.Evidence) error {
 	for i, surface := range plan.ImpactSurfaces {
 		if err := ValidateExternalDocEvidenceRefs(fmt.Sprintf("impact_surfaces[%d].evidence_refs", i), surface.EvidenceRefs, docs); err != nil {
 			return err

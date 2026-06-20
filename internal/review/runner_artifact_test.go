@@ -9,6 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	reviewartifact "github.com/susugadx/xelyon-cli/internal/review/artifact"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerRunIgnoresArtifactWriteFailureAndWarns(t *testing.T) {
@@ -39,7 +45,7 @@ func TestReviewRunnerRunIgnoresArtifactWriteFailureAndWarns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil despite artifact write failure", err)
 	}
-	if got.Verdict != ReviewVerdictClean {
+	if got.Verdict != reviewreport.ReviewVerdictClean {
 		t.Fatalf("Run() verdict = %q, want clean", got.Verdict)
 	}
 	for _, want := range []string{
@@ -77,9 +83,9 @@ func TestReviewRunnerRunWithNilArtifactWriterDoesNotWarn(t *testing.T) {
 
 func TestReviewRunnerRunSavesHappyPathArtifacts(t *testing.T) {
 	dir := t.TempDir()
-	writer, err := NewReviewRunDirectoryArtifactWriter(dir)
+	writer, err := reviewartifact.NewReviewRunDirectoryArtifactWriter(dir)
 	if err != nil {
-		t.Fatalf("NewReviewRunDirectoryArtifactWriter() error = %v", err)
+		t.Fatalf("reviewartifact.NewReviewRunDirectoryArtifactWriter() error = %v", err)
 	}
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleWithWebSearchArtifactForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
@@ -116,9 +122,9 @@ func TestReviewRunnerRunSavesHappyPathArtifacts(t *testing.T) {
 
 func TestReviewRunnerRunSavesRevisionRepairArtifactsWithFinalReportSuffix(t *testing.T) {
 	dir := t.TempDir()
-	writer, err := NewReviewRunDirectoryArtifactWriter(dir)
+	writer, err := reviewartifact.NewReviewRunDirectoryArtifactWriter(dir)
 	if err != nil {
-		t.Fatalf("NewReviewRunDirectoryArtifactWriter() error = %v", err)
+		t.Fatalf("reviewartifact.NewReviewRunDirectoryArtifactWriter() error = %v", err)
 	}
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
@@ -157,29 +163,29 @@ func TestReviewRunnerRunSavesRevisionRepairArtifactsWithFinalReportSuffix(t *tes
 
 func TestReviewRunnerRunRedactsProbePathsBeforeSavingArtifacts(t *testing.T) {
 	dir := t.TempDir()
-	writer, err := NewReviewRunDirectoryArtifactWriter(dir)
+	writer, err := reviewartifact.NewReviewRunDirectoryArtifactWriter(dir)
 	if err != nil {
-		t.Fatalf("NewReviewRunDirectoryArtifactWriter() error = %v", err)
+		t.Fatalf("reviewartifact.NewReviewRunDirectoryArtifactWriter() error = %v", err)
 	}
 	repoRoot := t.TempDir()
-	probeRoot := filepath.Join(t.TempDir(), reviewProbeSandboxTempPrefix+"artifact")
+	probeRoot := filepath.Join(t.TempDir(), reviewprobe.ReviewProbeSandboxTempPrefix+"artifact")
 	probeWorkDir := filepath.Join(probeRoot, "worktree")
 	repoFile := filepath.Join(repoRoot, "internal/review/runner.go")
 	probeFile := filepath.Join(probeWorkDir, "output.txt")
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:              "probe-1",
-		Mode:            ReviewProbeHostReadOnly,
-		Status:          ReviewProbeFailed,
+		Mode:            reviewprobe.ReviewProbeHostReadOnly,
+		Status:          reviewprobe.ReviewProbeFailed,
 		MutatedFiles:    []string{repoFile, probeFile},
 		OutputTruncated: true,
 		Error:           "failed at " + repoFile + " and " + probeFile,
-		CommandResults: []ReviewProbeCommandResult{
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command:         "cat " + probeFile,
 				Args:            []string{repoFile, probeFile},
 				WorkDir:         probeWorkDir,
-				Status:          ReviewProbeFailed,
+				Status:          reviewprobe.ReviewProbeFailed,
 				ExitCode:        1,
 				Output:          "output from " + repoFile + " and " + probeFile,
 				OutputTruncated: true,
@@ -187,7 +193,7 @@ func TestReviewRunnerRunRedactsProbePathsBeforeSavingArtifacts(t *testing.T) {
 			},
 		},
 	}
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -218,12 +224,12 @@ type failingReviewRunArtifactWriter struct {
 	err error
 }
 
-func newRunnerEvidenceBundleWithWebSearchArtifactForTest(repoRoot string) ReviewEvidenceBundle {
+func newRunnerEvidenceBundleWithWebSearchArtifactForTest(repoRoot string) reviewevidence.ReviewEvidenceBundle {
 	bundle := newRunnerEvidenceBundleForTest(repoRoot)
-	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled:  true,
 		Provider: "gemini",
-		Queries:  []ReviewWebSearchEvidenceQuery{{Query: "OpenAI API web_search official documentation", Reason: "artifact test"}},
+		Queries:  []externaldoc.WebSearchEvidenceQuery{{Query: "OpenAI API web_search official documentation", Reason: "artifact test"}},
 	}
 	return bundle
 }
@@ -232,7 +238,7 @@ func (w failingReviewRunArtifactWriter) WriteReviewRunArtifact(string, []byte) e
 	return w.err
 }
 
-func newReviewRunnerWithArtifactWriterForTest(t *testing.T, evidence ReviewEvidenceProvider, probes ReviewProbeExecutor, model ReviewModel, writer ReviewRunArtifactWriter, warningWriter io.Writer) *ReviewRunner {
+func newReviewRunnerWithArtifactWriterForTest(t *testing.T, evidence ReviewEvidenceProvider, probes ReviewProbeExecutor, model ReviewModel, writer reviewartifact.ReviewRunArtifactWriter, warningWriter io.Writer) *ReviewRunner {
 	t.Helper()
 
 	runner, err := NewReviewRunner(ReviewRunnerOptions{

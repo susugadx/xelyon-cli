@@ -3,23 +3,23 @@ package analysis
 import (
 	"testing"
 
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestPlanScopeFromProbePlanKeepsCandidateRiskSeverity(t *testing.T) {
-	plan := reviewprobe.ReviewProbePlan{
-		ImpactSurfaces: []reviewprobe.ReviewProbeImpactSurface{
+	plan := reviewprobeplan.ReviewProbePlan{
+		ImpactSurfaces: []reviewprobeplan.ReviewProbeImpactSurface{
 			{
 				ID:     "surface-1",
-				Status: reviewprobe.ReviewProbeImpactSurfaceChecked,
+				Status: reviewprobeplan.ReviewProbeImpactSurfaceChecked,
 			},
 		},
-		CandidateRisks: []reviewprobe.ReviewProbeCandidateRisk{
+		CandidateRisks: []reviewprobeplan.ReviewProbeCandidateRisk{
 			{
 				ID:       "risk-1",
-				Status:   reviewprobe.ReviewProbeCandidateRiskCheckedByEvidence,
-				Severity: reviewprobe.ReviewGroupSeverityHigh,
+				Status:   reviewprobeplan.ReviewProbeCandidateRiskCheckedByEvidence,
+				Severity: reviewprobeplan.ReviewGroupSeverityHigh,
 			},
 		},
 	}

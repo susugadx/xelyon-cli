@@ -3,6 +3,9 @@ package review
 import (
 	"path/filepath"
 	"strings"
+
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func normalizeReviewRunnerPromptPath(path string) string {
@@ -24,7 +27,7 @@ func reviewRunnerPromptIsolatedProbeRoot(path string) (string, bool) {
 
 	parts := strings.Split(reviewRunnerPromptSlashPath(cleaned), "/")
 	for i, part := range parts {
-		for _, prefix := range reviewProbeIsolatedTempRootPrefixes {
+		for _, prefix := range reviewprobe.ReviewProbeIsolatedTempRootPrefixes() {
 			if strings.HasPrefix(part, prefix) {
 				return filepath.FromSlash(strings.Join(parts[:i+1], "/")), true
 			}
@@ -40,7 +43,7 @@ func reviewRunnerPromptIsolatedProbeRootsInText(text string) []string {
 
 	seen := map[string]struct{}{}
 	var roots []string
-	for _, prefix := range reviewProbeIsolatedTempRootPrefixes {
+	for _, prefix := range reviewprobe.ReviewProbeIsolatedTempRootPrefixes() {
 		for searchStart := 0; searchStart < len(text); {
 			prefixOffset := strings.Index(text[searchStart:], prefix)
 			if prefixOffset < 0 {
@@ -81,7 +84,7 @@ func reviewRunnerPromptFreeTextPathEnd(text string, prefixEnd int) int {
 }
 
 func isReviewRunnerPromptAbsolutePath(path string) bool {
-	return filepath.IsAbs(path) || isReviewEvidenceWindowsAbsolutePath(path)
+	return filepath.IsAbs(path) || reviewevidence.IsReviewEvidenceWindowsAbsolutePath(path)
 }
 
 func isReviewRunnerPromptPathTokenByte(b byte) bool {

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/providerhistory"
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
 func providerHistoryProjectionReportIsEmpty(report ProviderHistoryProjectionReport) bool {
@@ -285,8 +285,8 @@ func reviewPromptReductionStatusSummary(runtime *AgentRuntime) (string, bool) {
 	if runtime == nil {
 		return "", false
 	}
-	report := review.CloneReviewPromptReductionReport(runtime.LastReviewPromptReductionReport)
-	if review.ReviewPromptReductionReportIsEmpty(report) {
+	report := reviewpromptreduction.CloneReviewPromptReductionReport(runtime.LastReviewPromptReductionReport)
+	if reviewpromptreduction.ReviewPromptReductionReportIsEmpty(report) {
 		return "", false
 	}
 
@@ -345,19 +345,19 @@ func reviewPromptReductionStatusSummary(runtime *AgentRuntime) (string, bool) {
 	return strings.Join(lines, "\n"), true
 }
 
-func reviewPromptReductionModeLabel(mode review.ReviewPromptReductionMode) string {
+func reviewPromptReductionModeLabel(mode reviewpromptreduction.ReviewPromptReductionMode) string {
 	switch mode {
-	case review.ReviewPromptReductionModeApply:
+	case reviewpromptreduction.ReviewPromptReductionModeApply:
 		return "apply"
-	case review.ReviewPromptReductionModeDryRun:
+	case reviewpromptreduction.ReviewPromptReductionModeDryRun:
 		return "dry_run"
 	default:
 		return "off"
 	}
 }
 
-func reviewPromptReductionSavingsForStatus(report review.ReviewPromptReductionReport) (int, int) {
-	if report.Mode != review.ReviewPromptReductionModeApply {
+func reviewPromptReductionSavingsForStatus(report reviewpromptreduction.ReviewPromptReductionReport) (int, int) {
+	if report.Mode != reviewpromptreduction.ReviewPromptReductionModeApply {
 		return 0, 0
 	}
 	return report.ReplacementSavedBytes, report.ApproxReplacementSavedTokens

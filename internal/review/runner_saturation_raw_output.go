@@ -3,10 +3,13 @@ package review
 import (
 	"fmt"
 	"strings"
+
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
-func (r *ReviewRunner) failClosedReviewSaturationByRawOutputLedger(check ReviewSaturationCheck, ledger *ReviewProbeRawOutputLedger) ReviewSaturationCheck {
-	if ledger == nil || check.Status != ReviewSaturationStatusSaturated || ledger.CanAcceptSaturated {
+func (r *ReviewRunner) failClosedReviewSaturationByRawOutputLedger(check reviewreport.ReviewSaturationCheck, ledger *reviewpromptreduction.ReviewProbeRawOutputLedger) reviewreport.ReviewSaturationCheck {
+	if ledger == nil || check.Status != reviewreport.ReviewSaturationStatusSaturated || ledger.CanAcceptSaturated {
 		return check
 	}
 	reason := strings.TrimSpace(ledger.FailClosedReason)
@@ -14,10 +17,10 @@ func (r *ReviewRunner) failClosedReviewSaturationByRawOutputLedger(check ReviewS
 		reason = reviewProbeRawOutputReasonSaturatedRejected
 	}
 	if r != nil && r.promptReductionStats != nil {
-		r.promptReductionStats.recordKeepReason(reviewProbeRawOutputReasonSaturatedRejected)
-		r.promptReductionStats.recordKeepReason(reason)
+		r.promptReductionStats.RecordKeepReason(reviewProbeRawOutputReasonSaturatedRejected)
+		r.promptReductionStats.RecordKeepReason(reason)
 	}
-	check.Status = ReviewSaturationStatusBlocked
+	check.Status = reviewreport.ReviewSaturationStatusBlocked
 	check.CheckedSummary = "saturation rejected because required review probe raw output was not rehydrated: " + reason
 	check.MissingSurfaceIDs = nil
 	check.MissingRiskIDs = nil
@@ -26,11 +29,11 @@ func (r *ReviewRunner) failClosedReviewSaturationByRawOutputLedger(check ReviewS
 	return check
 }
 
-func (r *ReviewRunner) failClosedReviewRevisionPromptByRawOutputLedger(check ReviewSaturationCheck, ledger *ReviewProbeRawOutputLedger) error {
+func (r *ReviewRunner) failClosedReviewRevisionPromptByRawOutputLedger(check reviewreport.ReviewSaturationCheck, ledger *reviewpromptreduction.ReviewProbeRawOutputLedger) error {
 	if ledger == nil || ledger.CanAcceptSaturated {
 		return nil
 	}
-	if check.Status != ReviewSaturationStatusNeedsRevision {
+	if check.Status != reviewreport.ReviewSaturationStatusNeedsRevision {
 		return nil
 	}
 	reason := strings.TrimSpace(ledger.FailClosedReason)
@@ -38,7 +41,7 @@ func (r *ReviewRunner) failClosedReviewRevisionPromptByRawOutputLedger(check Rev
 		reason = reviewProbeRawOutputReasonRehydrateUnavailable
 	}
 	if r != nil && r.promptReductionStats != nil {
-		r.promptReductionStats.recordKeepReason(reason)
+		r.promptReductionStats.RecordKeepReason(reason)
 	}
 	return fmt.Errorf("review runner revision prompt raw output rehydrate failed closed: %s", reason)
 }

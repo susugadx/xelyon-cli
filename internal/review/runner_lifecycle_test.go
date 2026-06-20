@@ -7,6 +7,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	reviewdomain "github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerRunHappyPath(t *testing.T) {
@@ -15,16 +20,16 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo"),
 		events: &events,
 	}
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:              "probe-1",
-		Mode:            ReviewProbeHostReadOnly,
-		Status:          ReviewProbePassed,
+		Mode:            reviewprobe.ReviewProbeHostReadOnly,
+		Status:          reviewprobe.ReviewProbePassed,
 		OutputTruncated: true,
-		CommandResults: []ReviewProbeCommandResult{
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command:         "go",
 				Args:            []string{"test", "./internal/review"},
-				Status:          ReviewProbePassed,
+				Status:          reviewprobe.ReviewProbePassed,
 				Output:          "PASS runner",
 				OutputTruncated: true,
 				Duration:        1500 * time.Millisecond,
@@ -32,11 +37,11 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		},
 	}
 	probes := &runnerFakeProbeRunner{
-		results: map[string]ReviewProbeResult{"probe-1": probeResult},
+		results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult},
 		events:  &events,
 	}
 	plan := newRunnerProbePlanForTest("probe-1")
-	probeResults := []ReviewProbeResult{probeResult}
+	probeResults := []reviewprobe.ReviewProbeResult{probeResult}
 	modelReport := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")
 	modelReport.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, probeResults)
 	model := &runnerFakeModel{
@@ -54,7 +59,7 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
 
-	wantReport := withComputedSummaryForRunnerTest(modelReport, BuildReviewProbeSummaries(probeResults))
+	wantReport := withComputedSummaryForRunnerTest(modelReport, reviewprobe.BuildReviewProbeSummaries(probeResults))
 	if !reflect.DeepEqual(got, wantReport) {
 		t.Fatalf("Run() report = %#v, want %#v", got, wantReport)
 	}
@@ -87,7 +92,7 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 		t.Fatalf("third model phase = %q, want %q", got, want)
 	}
 	firstPrompt := model.requests[0].Prompt
-	for _, want := range []string{"Review Pass 1", "focus on runner orchestration", "# Review Evidence", ReviewProbePlanSchemaVersionV2} {
+	for _, want := range []string{"Review Pass 1", "focus on runner orchestration", "# Review Evidence", reviewprobeplan.ReviewProbePlanSchemaVersionV2} {
 		if !strings.Contains(firstPrompt, want) {
 			t.Fatalf("Pass1 prompt missing %q:\n%s", want, firstPrompt)
 		}
@@ -95,7 +100,7 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	secondPrompt := model.requests[1].Prompt
 	for _, want := range []string{
 		"Review Pass 2",
-		ReviewReportSchemaVersionV2,
+		reviewreport.ReviewReportSchemaVersionV2,
 		"Probe Result Context",
 		`"output": "PASS runner"`,
 		`"status": "passed"`,
@@ -112,7 +117,7 @@ func TestReviewRunnerRunNoProbeReasonSkipsProbeRunner(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
 	plan := newRunnerNoProbePlanForTest()
-	modelReport := newRunnerCleanReportForTest([]ReviewProbeSummary{})
+	modelReport := newRunnerCleanReportForTest([]reviewreport.ReviewProbeSummary{})
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
@@ -397,7 +402,7 @@ func TestReviewRunnerRunRejectsUnknownTargetBeforeEvidenceBuild(t *testing.T) {
 	model := &runnerFakeModel{}
 	runner := newReviewRunnerForTest(t, evidence, probes, model)
 
-	_, err := runner.Run(context.Background(), ReviewRequest{TargetKind: TargetKind("staged")})
+	_, err := runner.Run(context.Background(), ReviewRequest{TargetKind: reviewdomain.TargetKind("staged")})
 	if err == nil {
 		t.Fatal("Run() error = nil, want error")
 	}
@@ -413,18 +418,18 @@ func TestReviewRunnerRunsProbesInPlanOrder(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
 	plan := newRunnerProbePlanForTest("probe-a", "probe-b", "probe-c")
-	results := []ReviewProbeResult{
-		{ID: "probe-a", Mode: ReviewProbeHostReadOnly, Status: ReviewProbePassed},
-		{ID: "probe-b", Mode: ReviewProbeHostReadOnly, Status: ReviewProbePassed},
-		{ID: "probe-c", Mode: ReviewProbeHostReadOnly, Status: ReviewProbePassed},
+	results := []reviewprobe.ReviewProbeResult{
+		{ID: "probe-a", Mode: reviewprobe.ReviewProbeHostReadOnly, Status: reviewprobe.ReviewProbePassed},
+		{ID: "probe-b", Mode: reviewprobe.ReviewProbeHostReadOnly, Status: reviewprobe.ReviewProbePassed},
+		{ID: "probe-c", Mode: reviewprobe.ReviewProbeHostReadOnly, Status: reviewprobe.ReviewProbePassed},
 	}
-	probes.results = map[string]ReviewProbeResult{
+	probes.results = map[string]reviewprobe.ReviewProbeResult{
 		"probe-a": results[0],
 		"probe-b": results[1],
 		"probe-c": results[2],
 	}
 	report := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-a")
-	report.ProbeSummaries = BuildReviewProbeSummaries(results)
+	report.ProbeSummaries = reviewprobe.BuildReviewProbeSummaries(results)
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},

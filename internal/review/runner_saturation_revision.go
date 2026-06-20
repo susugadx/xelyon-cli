@@ -4,30 +4,36 @@ import (
 	"context"
 	"fmt"
 
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 type reviewReportRevisionInput struct {
 	req              ReviewRequest
 	evidenceMarkdown string
-	plan             ReviewProbePlan
-	probeSummaries   []ReviewProbeSummary
-	probeResults     []ReviewProbeResult
+	plan             reviewprobeplan.ReviewProbePlan
+	probeSummaries   []reviewreport.ReviewProbeSummary
+	probeResults     []reviewprobe.ReviewProbeResult
 	redactor         reviewRunnerPromptRedactor
-	finalizedReport  ReviewReport
-	saturationCheck  ReviewSaturationCheck
-	bundle           ReviewEvidenceBundle
+	finalizedReport  reviewreport.ReviewReport
+	saturationCheck  reviewreport.ReviewSaturationCheck
+	bundle           reviewevidence.ReviewEvidenceBundle
 }
 
 type reviewReportRevisionPromptContext struct {
 	stateSummary          string
 	phaseEvidenceMarkdown string
 	probePrompt           reviewProbeResultPromptContextBuild
-	externalDocs          []ReviewExternalDocEvidence
+	externalDocs          []externaldoc.Evidence
 }
 
-func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck, bundle ReviewEvidenceBundle) (ReviewReport, error) {
+func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan reviewprobeplan.ReviewProbePlan, probeSummaries []reviewreport.ReviewProbeSummary, probeResults []reviewprobe.ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport reviewreport.ReviewReport, saturationCheck reviewreport.ReviewSaturationCheck, bundle reviewevidence.ReviewEvidenceBundle) (reviewreport.ReviewReport, error) {
 	input := reviewReportRevisionInput{
 		req:              req,
 		evidenceMarkdown: evidenceMarkdown,
@@ -44,13 +50,13 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 	promptContext := r.buildReviewReportRevisionPromptContext(ctx, input)
 	if err := r.failClosedReviewRevisionPromptByRawOutputLedger(input.saturationCheck, promptContext.probePrompt.rawOutputLedger); err != nil {
 		r.emitProgressError(reviewProgressReportRevisionItem, err)
-		return ReviewReport{}, err
+		return reviewreport.ReviewReport{}, err
 	}
 
 	revisionResp, err := r.requestReviewReportRevision(ctx, input, promptContext)
 	if err != nil {
 		r.emitProgressError(reviewProgressReportRevisionItem, err)
-		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
+		return reviewreport.ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
 	}
 
 	report, revisionErr := finalizeReviewReportRevisionModelOutput(revisionResp.Content, input, promptContext)
@@ -64,13 +70,13 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 	repairResp, err := r.requestReviewReportRevisionRepair(ctx, input, promptContext, revisionResp.Content, revisionErr)
 	if err != nil {
 		r.emitProgressError(reviewProgressReportRevisionRepairItem, err)
-		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
+		return reviewreport.ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
 	}
 
 	report, err = finalizeReviewReportRevisionModelOutput(repairResp.Content, input, promptContext)
 	if err != nil {
 		r.emitProgressError(reviewProgressReportRevisionRepairItem, err)
-		return ReviewReport{}, fmt.Errorf("review runner report revision repair: %w", err)
+		return reviewreport.ReviewReport{}, fmt.Errorf("review runner report revision repair: %w", err)
 	}
 
 	r.saveReviewRunJSONArtifact("report_final.json", report, input.redactor)
@@ -80,13 +86,13 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 
 func (r *ReviewRunner) buildReviewReportRevisionPromptContext(ctx context.Context, input reviewReportRevisionInput) reviewReportRevisionPromptContext {
 	return reviewReportRevisionPromptContext{
-		stateSummary: r.reviewStateSummaryPrompt(reviewStateSummaryInput{
-			bundle:          input.bundle,
-			plan:            input.plan,
-			probeSummaries:  input.probeSummaries,
-			finalizedReport: input.finalizedReport,
-			saturationCheck: input.saturationCheck,
-			phase:           ReviewModelPhaseReportRevision,
+		stateSummary: r.reviewStateSummaryPrompt(reviewpromptreduction.ReviewStateSummaryInput{
+			Bundle:          input.bundle,
+			Plan:            input.plan,
+			ProbeSummaries:  input.probeSummaries,
+			FinalizedReport: input.finalizedReport,
+			SaturationCheck: input.saturationCheck,
+			Phase:           reviewPromptReductionPhase(ReviewModelPhaseReportRevision),
 		}),
 		phaseEvidenceMarkdown: r.reviewPromptEvidenceMarkdownForAbsorbedReport(ReviewModelPhaseReportRevision, input.bundle, input.evidenceMarkdown, input.finalizedReport),
 		probePrompt:           r.probeResultPromptContextBuildForAbsorbedReport(ctx, ReviewModelPhaseReportRevision, "report_revision", input.finalizedReport, input.probeResults, input.redactor),
@@ -150,7 +156,7 @@ func (r *ReviewRunner) requestReviewReportRevisionRepair(ctx context.Context, in
 	return resp, nil
 }
 
-func finalizeReviewReportRevisionModelOutput(content string, input reviewReportRevisionInput, promptContext reviewReportRevisionPromptContext) (ReviewReport, error) {
+func finalizeReviewReportRevisionModelOutput(content string, input reviewReportRevisionInput, promptContext reviewReportRevisionPromptContext) (reviewreport.ReviewReport, error) {
 	return reviewmodeloutput.FinalizeReportModelOutput(reviewmodeloutput.ReportModelOutputInput{
 		Content:               content,
 		Plan:                  input.plan,

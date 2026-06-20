@@ -1,8 +1,13 @@
 package review
 
-import "strconv"
+import (
+	"strconv"
 
-func (r *reviewRunnerPromptRedactor) addProbeResultReplacements(result ReviewProbeResult, displays map[string]string) {
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+)
+
+func (r *reviewRunnerPromptRedactor) addProbeResultReplacements(result reviewprobe.ReviewProbeResult, displays map[string]string) {
 	r.addProbeResultTextReplacements(result.Error, displays)
 	for _, path := range result.MutatedFiles {
 		r.addIsolatedProbeRootReplacementForPath(path, displays)
@@ -65,7 +70,7 @@ func (r *reviewRunnerPromptRedactor) addReplacement(path, display string) {
 	if display == "" {
 		return
 	}
-	for _, variant := range reviewEvidencePathReplacementVariants(path) {
+	for _, variant := range reviewevidence.ReviewEvidencePathReplacementVariants(path) {
 		r.addReplacementVariant(variant, display)
 	}
 }
@@ -89,7 +94,7 @@ func (r reviewRunnerPromptRedactor) isOutsideRepoAbsolutePath(path string) bool 
 	if !isReviewRunnerPromptAbsolutePath(path) {
 		return false
 	}
-	return formatReviewEvidencePathDisplay(r.repoRoot, path) == reviewEvidenceOutsideRepoPathDisplay
+	return reviewevidence.FormatReviewEvidencePathDisplay(r.repoRoot, path) == reviewevidence.OutsideRepoPathDisplay
 }
 
 func reviewRunnerProbeWorkDirDisplay(index int) string {

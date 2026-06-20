@@ -4,24 +4,27 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
 func TestReviewRunnerPromptReductionModeControlsProbeOutputCompaction(t *testing.T) {
 	tests := []struct {
 		name              string
-		mode              ReviewPromptReductionMode
+		mode              reviewpromptreduction.ReviewPromptReductionMode
 		wantPromptCompact bool
 		wantReplaced      int
 	}{
 		{
 			name:              "apply compacts provider prompt",
-			mode:              ReviewPromptReductionModeApply,
+			mode:              reviewpromptreduction.ReviewPromptReductionModeApply,
 			wantPromptCompact: true,
 			wantReplaced:      1,
 		},
 		{
 			name:              "dry run records candidate without compacting prompt",
-			mode:              ReviewPromptReductionModeDryRun,
+			mode:              reviewpromptreduction.ReviewPromptReductionModeDryRun,
 			wantPromptCompact: false,
 			wantReplaced:      0,
 		},
@@ -30,15 +33,15 @@ func TestReviewRunnerPromptReductionModeControlsProbeOutputCompaction(t *testing
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
-			probeResult := ReviewProbeResult{
+			probeResult := reviewprobe.ReviewProbeResult{
 				ID:     "probe-1",
-				Mode:   ReviewProbeHostReadOnly,
-				Status: ReviewProbePassed,
-				CommandResults: []ReviewProbeCommandResult{
+				Mode:   reviewprobe.ReviewProbeHostReadOnly,
+				Status: reviewprobe.ReviewProbePassed,
+				CommandResults: []reviewprobe.ReviewProbeCommandResult{
 					{
 						Command: "go",
 						Args:    []string{"test", "./..."},
-						Status:  ReviewProbePassed,
+						Status:  reviewprobe.ReviewProbePassed,
 						Output: strings.Join([]string{
 							"ok   github.com/susugadx/xelyon-cli/internal/review 0.123s",
 							strings.Repeat("verbose detail that should not be sent after compaction\n", 80),
@@ -46,9 +49,9 @@ func TestReviewRunnerPromptReductionModeControlsProbeOutputCompaction(t *testing
 					},
 				},
 			}
-			probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
+			probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
 			modelReport := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")
-			modelReport.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []ReviewProbeResult{probeResult})
+			modelReport.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []reviewprobe.ReviewProbeResult{probeResult})
 			model := &runnerFakeModel{
 				responses: []runnerFakeModelResponse{
 					{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},

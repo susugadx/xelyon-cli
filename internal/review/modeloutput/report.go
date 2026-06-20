@@ -5,7 +5,7 @@ import (
 
 	reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
@@ -20,7 +20,7 @@ type Redactor interface {
 // ReportModelOutputInput は model の report JSON 出力を final report に確定する入力。
 type ReportModelOutputInput struct {
 	Content               string
-	Plan                  reviewprobe.ReviewProbePlan
+	Plan                  reviewprobeplan.ReviewProbePlan
 	TrustedProbeSummaries []reviewreport.ReviewProbeSummary
 	Redactor              Redactor
 	ExternalDocs          []externaldoc.Evidence
@@ -29,7 +29,7 @@ type ReportModelOutputInput struct {
 // ReportFinalizationInput は decode 済み report を runner final report に確定する入力。
 type ReportFinalizationInput struct {
 	Report                reviewreport.ReviewReport
-	Plan                  reviewprobe.ReviewProbePlan
+	Plan                  reviewprobeplan.ReviewProbePlan
 	TrustedProbeSummaries []reviewreport.ReviewProbeSummary
 	Redactor              Redactor
 	ExternalDocs          []externaldoc.Evidence

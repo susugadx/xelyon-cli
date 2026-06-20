@@ -8,48 +8,52 @@ import (
 	"strings"
 	"testing"
 
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 type runnerFakeEvidenceBuilder struct {
-	bundle ReviewEvidenceBundle
+	bundle reviewevidence.ReviewEvidenceBundle
 	err    error
 	calls  int
 	events *[]string
 }
 
-func (b *runnerFakeEvidenceBuilder) BuildCurrentChanges(context.Context) (ReviewEvidenceBundle, error) {
+func (b *runnerFakeEvidenceBuilder) BuildCurrentChanges(context.Context) (reviewevidence.ReviewEvidenceBundle, error) {
 	b.calls++
 	if b.events != nil {
 		*b.events = append(*b.events, "evidence")
 	}
 	if b.err != nil {
-		return ReviewEvidenceBundle{}, b.err
+		return reviewevidence.ReviewEvidenceBundle{}, b.err
 	}
 	return b.bundle, nil
 }
 
 type runnerFakeProbeRunner struct {
-	results map[string]ReviewProbeResult
+	results map[string]reviewprobe.ReviewProbeResult
 	errors  map[string]error
-	calls   []ReviewProbeRequest
+	calls   []reviewprobe.ReviewProbeRequest
 	events  *[]string
 }
 
-func (r *runnerFakeProbeRunner) Run(_ context.Context, req ReviewProbeRequest) (ReviewProbeResult, error) {
+func (r *runnerFakeProbeRunner) Run(_ context.Context, req reviewprobe.ReviewProbeRequest) (reviewprobe.ReviewProbeResult, error) {
 	r.calls = append(r.calls, req)
 	if r.events != nil {
 		*r.events = append(*r.events, "probe:"+req.ID)
 	}
 	if err := r.errors[req.ID]; err != nil {
-		return ReviewProbeResult{}, err
+		return reviewprobe.ReviewProbeResult{}, err
 	}
 	result, ok := r.results[req.ID]
 	if !ok {
-		return ReviewProbeResult{
+		return reviewprobe.ReviewProbeResult{
 			ID:     req.ID,
 			Mode:   req.Mode,
-			Status: ReviewProbePassed,
+			Status: reviewprobe.ReviewProbePassed,
 		}, nil
 	}
 	if result.ID == "" {
@@ -59,7 +63,7 @@ func (r *runnerFakeProbeRunner) Run(_ context.Context, req ReviewProbeRequest) (
 		result.Mode = req.Mode
 	}
 	if result.Status == "" {
-		result.Status = ReviewProbePassed
+		result.Status = reviewprobe.ReviewProbePassed
 	}
 	return result, nil
 }
@@ -113,7 +117,7 @@ func newRunnerNonNilDependenciesForTest() ReviewRunnerOptions {
 	}
 }
 
-func mustMarshalReviewProbePlanForRunnerTest(t *testing.T, plan ReviewProbePlan) []byte {
+func mustMarshalReviewProbePlanForRunnerTest(t *testing.T, plan reviewprobeplan.ReviewProbePlan) []byte {
 	t.Helper()
 
 	data, err := json.Marshal(plan)
@@ -131,7 +135,7 @@ func mustMarshalReviewProbePlanWithMissingNoProbeReasonForRunnerTest(t *testing.
 	return mustMarshalReviewProbePlanForRunnerTest(t, plan)
 }
 
-func mustMarshalReviewReportForRunnerTest(t *testing.T, report ReviewReport) []byte {
+func mustMarshalReviewReportForRunnerTest(t *testing.T, report reviewreport.ReviewReport) []byte {
 	t.Helper()
 
 	data, err := json.Marshal(report)
@@ -141,10 +145,10 @@ func mustMarshalReviewReportForRunnerTest(t *testing.T, report ReviewReport) []b
 	return data
 }
 
-func newRedactedRunnerProbeSummariesForTest(t *testing.T, bundle ReviewEvidenceBundle, results []ReviewProbeResult) []ReviewProbeSummary {
+func newRedactedRunnerProbeSummariesForTest(t *testing.T, bundle reviewevidence.ReviewEvidenceBundle, results []reviewprobe.ReviewProbeResult) []reviewreport.ReviewProbeSummary {
 	t.Helper()
 
-	summaries := BuildReviewProbeSummaries(results)
+	summaries := reviewprobe.BuildReviewProbeSummaries(results)
 	probeIDs := make([]string, 0, len(summaries))
 	for _, summary := range summaries {
 		probeIDs = append(probeIDs, summary.ProbeID)
@@ -161,7 +165,7 @@ func newRedactedRunnerProbeSummariesForTest(t *testing.T, bundle ReviewEvidenceB
 	return finalized.ProbeSummaries
 }
 
-func assertReviewReportDoesNotContainForRunnerTest(t *testing.T, report ReviewReport, leakedValues ...string) {
+func assertReviewReportDoesNotContainForRunnerTest(t *testing.T, report reviewreport.ReviewReport, leakedValues ...string) {
 	t.Helper()
 
 	reportJSON := string(mustMarshalReviewReportForRunnerTest(t, report))

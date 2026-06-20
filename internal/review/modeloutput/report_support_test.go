@@ -9,62 +9,62 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
-func newProbePlanForModelOutputTest(ids ...string) reviewprobe.ReviewProbePlan {
-	probes := make([]reviewprobe.ReviewPlannedProbe, 0, len(ids))
+func newProbePlanForModelOutputTest(ids ...string) reviewprobeplan.ReviewProbePlan {
+	probes := make([]reviewprobeplan.ReviewPlannedProbe, 0, len(ids))
 	for _, id := range ids {
-		probes = append(probes, reviewprobe.ReviewPlannedProbe{
+		probes = append(probes, reviewprobeplan.ReviewPlannedProbe{
 			ID:         id,
 			SurfaceIDs: []string{"surface-1"},
 			RiskIDs:    []string{"risk-1"},
 			Purpose:    "Confirm or falsify risk-1 for surface-1 with focused review checks.",
-			Mode:       reviewprobe.ReviewProbeHostReadOnly,
-			Commands: []reviewprobe.ReviewPlannedProbeCommand{
+			Mode:       reviewprobeplan.ReviewProbeHostReadOnly,
+			Commands: []reviewprobeplan.ReviewPlannedProbeCommand{
 				{Command: "go", Args: []string{"test", "./internal/review"}, WorkDir: "."},
 			},
 			TimeoutSeconds: 30,
 			MaxOutputBytes: 4096,
 		})
 	}
-	return reviewprobe.ReviewProbePlan{
-		SchemaVersion: reviewprobe.ReviewProbePlanSchemaVersionV2,
-		TargetKind:    reviewprobe.TargetCurrentChanges,
+	return reviewprobeplan.ReviewProbePlan{
+		SchemaVersion: reviewprobeplan.ReviewProbePlanSchemaVersionV2,
+		TargetKind:    reviewprobeplan.TargetCurrentChanges,
 		Summary:       "Probe current changes.",
-		ImpactSurfaces: []reviewprobe.ReviewProbeImpactSurface{
+		ImpactSurfaces: []reviewprobeplan.ReviewProbeImpactSurface{
 			{
 				ID:              "surface-1",
 				Summary:         "Runner orchestration may need verification.",
-				Category:        reviewprobe.ReviewProbeImpactSurfaceChangedFile,
+				Category:        reviewprobeplan.ReviewProbeImpactSurfaceChangedFile,
 				EvidenceSummary: "Evidence references current review changes at internal/review/runner.go.",
-				Status:          reviewprobe.ReviewProbeImpactSurfaceNeedsProbe,
+				Status:          reviewprobeplan.ReviewProbeImpactSurfaceNeedsProbe,
 				Reason:          "Run the planned probes in order.",
 			},
 		},
-		CandidateRisks: []reviewprobe.ReviewProbeCandidateRisk{
+		CandidateRisks: []reviewprobeplan.ReviewProbeCandidateRisk{
 			{
 				ID:                   "risk-1",
 				Summary:              "A runner contract could regress.",
-				Severity:             reviewprobe.ReviewGroupSeverityMedium,
+				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Runner tests cover probe orchestration.",
 				VerificationStrategy: "Execute the focused runner probe.",
-				Status:               reviewprobe.ReviewProbeCandidateRiskNeedsProbe,
+				Status:               reviewprobeplan.ReviewProbeCandidateRiskNeedsProbe,
 			},
 		},
 		Probes: probes,
 	}
 }
 
-func newNoProbePlanForModelOutputTest() reviewprobe.ReviewProbePlan {
+func newNoProbePlanForModelOutputTest() reviewprobeplan.ReviewProbePlan {
 	plan := newProbePlanForModelOutputTest()
-	plan.ImpactSurfaces[0].Status = reviewprobe.ReviewProbeImpactSurfaceChecked
+	plan.ImpactSurfaces[0].Status = reviewprobeplan.ReviewProbeImpactSurfaceChecked
 	plan.ImpactSurfaces[0].Reason = "Existing evidence covers surface-1."
-	plan.CandidateRisks[0].Status = reviewprobe.ReviewProbeCandidateRiskCheckedByEvidence
+	plan.CandidateRisks[0].Status = reviewprobeplan.ReviewProbeCandidateRiskCheckedByEvidence
 	plan.CandidateRisks[0].VerificationStrategy = "No probe is needed."
-	plan.Probes = []reviewprobe.ReviewPlannedProbe{}
+	plan.Probes = []reviewprobeplan.ReviewPlannedProbe{}
 	plan.NoProbeReason = "surface-1 and risk-1 are checked by existing evidence."
 	return plan
 }

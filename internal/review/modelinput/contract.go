@@ -7,6 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
@@ -104,36 +105,36 @@ Mode command contract:
 - %q runs against an isolated copy of the repository plus generated files. It allows commands: %s. Use it for real tests or change-impact verification where writes/build artifacts are expected inside the sandbox. Path-like args must stay inside the sandbox/repo copy.
 - Do not plan broad speculative test suites. The validator requires each probe to be linked to the candidate risks or unverified material surfaces it will confirm or falsify.
 `,
-		reviewprobe.ReviewProbePlanSchemaVersionV2,
+		reviewprobeplan.ReviewProbePlanSchemaVersionV2,
 		domain.TargetCurrentChanges,
-		reviewprobe.ReviewProbeImpactSurfaceChangedFile,
+		reviewprobeplan.ReviewProbeImpactSurfaceChangedFile,
 		reviewreport.ReviewEvidenceKindDiff,
-		reviewprobe.ReviewProbeImpactSurfaceNeedsProbe,
+		reviewprobeplan.ReviewProbeImpactSurfaceNeedsProbe,
 		reviewreport.ReviewGroupSeverityMedium,
 		reviewreport.ReviewEvidenceKindDiff,
-		reviewprobe.ReviewProbeCandidateRiskNeedsProbe,
-		reviewprobe.MaxReviewProbePlanPurposeBytes,
+		reviewprobeplan.ReviewProbeCandidateRiskNeedsProbe,
+		reviewprobeplan.MaxReviewProbePlanPurposeBytes,
 		domain.ReviewProbeHostReadOnly,
 		domain.TargetCurrentChanges,
-		reviewprobe.MaxReviewProbePlanProbes,
+		reviewprobeplan.MaxReviewProbePlanProbes,
 		quoteAndJoinSortedReviewPromptValues(reviewProbeImpactSurfaceCategoryPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewProbeImpactSurfaceStatusPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewGroupSeverityPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewProbeCandidateRiskStatusPromptValues()),
 		quoteAndJoinSortedReviewPromptValues(reviewProbePlanPreProbeEvidenceKindPromptValues()),
 		reviewExternalSupportPromptGuardrails(),
-		reviewprobe.ReviewProbeImpactSurfaceChecked,
-		reviewprobe.ReviewProbeCandidateRiskCheckedByEvidence,
+		reviewprobeplan.ReviewProbeImpactSurfaceChecked,
+		reviewprobeplan.ReviewProbeCandidateRiskCheckedByEvidence,
 		domain.ReviewProbeHostReadOnly,
 		domain.ReviewProbeScratchOnly,
 		domain.ReviewProbeRepoSandbox,
-		reviewprobe.MaxReviewProbePlanCommands,
+		reviewprobeplan.MaxReviewProbePlanCommands,
 		domain.ReviewProbeHostReadOnly,
-		reviewprobe.MaxReviewProbePlanFiles,
-		reviewprobe.MaxReviewProbePlanFileContentBytes,
-		reviewprobe.MaxReviewProbePlanTotalFileContentBytes,
-		reviewprobe.MaxReviewProbePlanTimeoutSeconds,
-		reviewprobe.MaxReviewProbePlanMaxOutputBytes,
+		reviewprobeplan.MaxReviewProbePlanFiles,
+		reviewprobeplan.MaxReviewProbePlanFileContentBytes,
+		reviewprobeplan.MaxReviewProbePlanTotalFileContentBytes,
+		reviewprobeplan.MaxReviewProbePlanTimeoutSeconds,
+		reviewprobeplan.MaxReviewProbePlanMaxOutputBytes,
 		domain.ReviewProbeHostReadOnly,
 		sortedQuotedHostReadOnlyCommandNames(),
 		domain.ReviewProbeScratchOnly,
@@ -156,7 +157,7 @@ func sortedQuotedRepoSandboxCommandNames() string {
 }
 
 func reviewProbeImpactSurfaceCategoryPromptValues() []string {
-	categories := reviewprobe.KnownReviewProbeImpactSurfaceCategories()
+	categories := reviewprobeplan.KnownReviewProbeImpactSurfaceCategories()
 	values := make([]string, 0, len(categories))
 	for _, category := range categories {
 		values = append(values, string(category))
@@ -165,7 +166,7 @@ func reviewProbeImpactSurfaceCategoryPromptValues() []string {
 }
 
 func reviewProbeImpactSurfaceStatusPromptValues() []string {
-	statuses := reviewprobe.KnownReviewProbeImpactSurfaceStatuses()
+	statuses := reviewprobeplan.KnownReviewProbeImpactSurfaceStatuses()
 	values := make([]string, 0, len(statuses))
 	for _, status := range statuses {
 		values = append(values, string(status))
@@ -174,7 +175,7 @@ func reviewProbeImpactSurfaceStatusPromptValues() []string {
 }
 
 func reviewProbeCandidateRiskStatusPromptValues() []string {
-	statuses := reviewprobe.KnownReviewProbeCandidateRiskStatuses()
+	statuses := reviewprobeplan.KnownReviewProbeCandidateRiskStatuses()
 	values := make([]string, 0, len(statuses))
 	for _, status := range statuses {
 		values = append(values, string(status))
@@ -213,7 +214,7 @@ func reviewProbePlanPreProbeEvidenceKindPromptValues() []string {
 	evidenceKinds := reviewreport.KnownReviewEvidenceKinds()
 	values := make([]string, 0, len(evidenceKinds))
 	for _, kind := range evidenceKinds {
-		if reviewprobe.IsReviewProbePlanPreProbeEvidenceKind(kind) {
+		if reviewprobeplan.IsReviewProbePlanPreProbeEvidenceKind(kind) {
 			values = append(values, kind)
 		}
 	}

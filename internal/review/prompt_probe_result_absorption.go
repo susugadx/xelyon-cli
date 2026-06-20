@@ -6,6 +6,9 @@ import (
 	"strings"
 
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 const (
@@ -32,16 +35,16 @@ func (c reviewProbeResultAbsorptionCandidates) empty() bool {
 type reviewProbeResultPromptContextBuild struct {
 	options          reviewmodelinput.ProbeResultPromptContextOptions
 	rawOutputContext string
-	rawOutputLedger  *ReviewProbeRawOutputLedger
+	rawOutputLedger  *reviewpromptreduction.ReviewProbeRawOutputLedger
 }
 
-func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx context.Context, phase ReviewModelPhase, promptKind string, report ReviewReport, probeResults []ReviewProbeResult, redactor reviewmodelinput.Redactor) reviewProbeResultPromptContextBuild {
+func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx context.Context, phase ReviewModelPhase, promptKind string, report reviewreport.ReviewReport, probeResults []reviewprobe.ReviewProbeResult, redactor reviewmodelinput.Redactor) reviewProbeResultPromptContextBuild {
 	opts := r.probeResultPromptContextOptions()
 	if r == nil {
 		return reviewProbeResultPromptContextBuild{options: opts}
 	}
-	mode := normalizeReviewPromptReductionMode(r.promptReductionMode)
-	if mode == ReviewPromptReductionModeOff {
+	mode := reviewpromptreduction.NormalizeReviewPromptReductionMode(r.promptReductionMode)
+	if mode == reviewpromptreduction.ReviewPromptReductionModeOff {
 		return reviewProbeResultPromptContextBuild{options: opts}
 	}
 	candidates := buildReviewProbeResultAbsorptionCandidates(report, probeResults)
@@ -61,7 +64,7 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 		}
 	}
 	if r.promptReductionStats == nil {
-		r.promptReductionStats = newReviewPromptReductionStats(mode)
+		r.promptReductionStats = reviewpromptreduction.NewStats(mode)
 	}
 	rawOutput := r.buildReviewProbeRawOutputForCandidates(ctx, phase, promptKind, candidates, probeResults, redactor)
 	applied := rawOutput.applyAllowed
@@ -71,17 +74,17 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 			candidate.summary.RawArtifactRef = ref.RefID
 			candidate.replacementBytes = len(candidate.summary.Summary) + len(strings.Join(candidate.summary.AbsorbedBy, "\n")) + len(candidate.summary.RawArtifactRef)
 		}
-		r.promptReductionStats.record("probe_result_absorption_candidate", candidate.savedBytes, candidate.savedTokens, applied)
+		r.promptReductionStats.RecordCandidate("probe_result_absorption_candidate", candidate.savedBytes, candidate.savedTokens, applied)
 		if !applied {
-			r.promptReductionStats.recordKeepReason(reviewProbeResultAbsorptionKeepReason(rawOutput))
+			r.promptReductionStats.RecordKeepReason(reviewProbeResultAbsorptionKeepReason(rawOutput))
 		}
-		r.recordPromptReductionItem(ReviewPromptReductionItem{
+		r.recordPromptReductionItem(reviewpromptreduction.ReviewPromptReductionItem{
 			ID:               "probe_result:" + probeID,
-			Family:           ReviewPromptReductionFamilyProbeResult,
-			Phase:            phase,
+			Family:           reviewpromptreduction.ReviewPromptReductionFamilyProbeResult,
+			Phase:            reviewPromptReductionPhase(phase),
 			Status:           reviewPromptProbeResultAbsorptionStatus(applied),
-			AbsorbedBy:       reviewPromptAbsorptionRefsFromOwners(candidate.summary.AbsorbedBy),
-			EvidenceRefs:     []ReviewEvidenceRef{{Kind: ReviewEvidenceKindProbe, ProbeID: probeID}},
+			AbsorbedBy:       reviewpromptreduction.ReviewPromptAbsorptionRefsFromOwners(candidate.summary.AbsorbedBy),
+			EvidenceRefs:     []reviewreport.ReviewEvidenceRef{{Kind: reviewreport.ReviewEvidenceKindProbe, ProbeID: probeID}},
 			RawArtifactRef:   candidate.summary.RawArtifactRef,
 			Summary:          candidate.summary.Summary,
 			OriginalBytes:    candidate.originalBytes,
@@ -94,17 +97,17 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 			candidate.summary.RawArtifactRef = ref.RefID
 			candidate.replacementBytes = len(candidate.summary.Summary) + len(strings.Join(candidate.summary.AbsorbedBy, "\n")) + len(candidate.summary.RawArtifactRef)
 		}
-		r.promptReductionStats.record("probe_command_result_absorption_candidate", candidate.savedBytes, candidate.savedTokens, applied)
+		r.promptReductionStats.RecordCandidate("probe_command_result_absorption_candidate", candidate.savedBytes, candidate.savedTokens, applied)
 		if !applied {
-			r.promptReductionStats.recordKeepReason(reviewProbeResultAbsorptionKeepReason(rawOutput))
+			r.promptReductionStats.RecordKeepReason(reviewProbeResultAbsorptionKeepReason(rawOutput))
 		}
-		r.recordPromptReductionItem(ReviewPromptReductionItem{
+		r.recordPromptReductionItem(reviewpromptreduction.ReviewPromptReductionItem{
 			ID:               fmt.Sprintf("probe_result:%s:command:%d", key.ProbeID, key.CommandIndex),
-			Family:           ReviewPromptReductionFamilyProbeResult,
-			Phase:            phase,
+			Family:           reviewpromptreduction.ReviewPromptReductionFamilyProbeResult,
+			Phase:            reviewPromptReductionPhase(phase),
 			Status:           reviewPromptProbeResultAbsorptionStatus(applied),
-			AbsorbedBy:       reviewPromptAbsorptionRefsFromOwners(candidate.summary.AbsorbedBy),
-			EvidenceRefs:     []ReviewEvidenceRef{{Kind: ReviewEvidenceKindProbeCommand, ProbeID: key.ProbeID, CommandIndex: ReviewCommandIndex(key.CommandIndex)}},
+			AbsorbedBy:       reviewpromptreduction.ReviewPromptAbsorptionRefsFromOwners(candidate.summary.AbsorbedBy),
+			EvidenceRefs:     []reviewreport.ReviewEvidenceRef{{Kind: reviewreport.ReviewEvidenceKindProbeCommand, ProbeID: key.ProbeID, CommandIndex: reviewreport.ReviewCommandIndex(key.CommandIndex)}},
 			RawArtifactRef:   candidate.summary.RawArtifactRef,
 			Summary:          candidate.summary.Summary,
 			OriginalBytes:    candidate.originalBytes,
@@ -113,9 +116,9 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 	}
 	rawOutputLedger := reviewProbeRawOutputLedgerPtr(rawOutput.ledger)
 	if rawOutputLedger != nil {
-		r.promptReductionStats.recordRawOutputLedger(*rawOutputLedger)
+		r.promptReductionStats.RecordRawOutputLedger(*rawOutputLedger)
 		if r.promptReductionState != nil {
-			r.promptReductionState.Report = r.promptReductionStats.reportValue()
+			r.promptReductionState.Report = r.promptReductionStats.Report()
 		}
 	}
 	if !applied {
@@ -148,9 +151,9 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 	}
 }
 
-func reviewPromptProbeResultAbsorptionStatus(applied bool) ReviewPromptReductionItemStatus {
+func reviewPromptProbeResultAbsorptionStatus(applied bool) reviewpromptreduction.ReviewPromptReductionItemStatus {
 	if applied {
-		return ReviewPromptReductionItemAbsorbed
+		return reviewpromptreduction.ReviewPromptReductionItemAbsorbed
 	}
-	return ReviewPromptReductionItemCandidate
+	return reviewpromptreduction.ReviewPromptReductionItemCandidate
 }

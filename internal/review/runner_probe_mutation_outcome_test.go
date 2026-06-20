@@ -12,24 +12,24 @@ import (
 func TestReviewRunnerRunStopsProbeExecutionAfterMutatedWorktree(t *testing.T) {
 	tests := []struct {
 		name          string
-		mutatedResult ReviewProbeResult
+		mutatedResult reviewprobe.ReviewProbeResult
 	}{
 		{
 			name: "status mutated worktree",
-			mutatedResult: ReviewProbeResult{
+			mutatedResult: reviewprobe.ReviewProbeResult{
 				ID:           "probe-a",
-				Mode:         ReviewProbeHostReadOnly,
-				Status:       ReviewProbeMutatedWorktree,
+				Mode:         reviewprobe.ReviewProbeHostReadOnly,
+				Status:       reviewprobe.ReviewProbeMutatedWorktree,
 				MutatedFiles: []string{"internal/review/runner.go"},
 				Error:        "probe command changed the working tree",
 			},
 		},
 		{
 			name: "mutated worktree flag with failed status",
-			mutatedResult: ReviewProbeResult{
+			mutatedResult: reviewprobe.ReviewProbeResult{
 				ID:              "probe-a",
-				Mode:            ReviewProbeHostReadOnly,
-				Status:          ReviewProbeFailed,
+				Mode:            reviewprobe.ReviewProbeHostReadOnly,
+				Status:          reviewprobe.ReviewProbeFailed,
 				MutatedWorktree: true,
 				MutatedFiles:    []string{"internal/review/runner.go"},
 				Error:           "probe command changed the working tree",
@@ -41,24 +41,24 @@ func TestReviewRunnerRunStopsProbeExecutionAfterMutatedWorktree(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 			probes := &runnerFakeProbeRunner{
-				results: map[string]ReviewProbeResult{"probe-a": tt.mutatedResult},
+				results: map[string]reviewprobe.ReviewProbeResult{"probe-a": tt.mutatedResult},
 			}
 			plan := newRunnerProbePlanForTest("probe-a", "probe-b", "probe-c")
 			expectedMutatedResult := tt.mutatedResult
-			expectedMutatedResult.Status = ReviewProbeMutatedWorktree
+			expectedMutatedResult.Status = reviewprobe.ReviewProbeMutatedWorktree
 			expectedMutatedResult.MutatedWorktree = true
-			expectedProbeResults := []ReviewProbeResult{
+			expectedProbeResults := []reviewprobe.ReviewProbeResult{
 				expectedMutatedResult,
 				{
 					ID:     "probe-b",
-					Mode:   ReviewProbeHostReadOnly,
-					Status: ReviewProbeBlocked,
+					Mode:   reviewprobe.ReviewProbeHostReadOnly,
+					Status: reviewprobe.ReviewProbeBlocked,
 					Error:  reviewprobe.ProbeSkippedAfterMutationError("probe-a"),
 				},
 				{
 					ID:     "probe-c",
-					Mode:   ReviewProbeHostReadOnly,
-					Status: ReviewProbeBlocked,
+					Mode:   reviewprobe.ReviewProbeHostReadOnly,
+					Status: reviewprobe.ReviewProbeBlocked,
 					Error:  reviewprobe.ProbeSkippedAfterMutationError("probe-a"),
 				},
 			}
@@ -85,7 +85,7 @@ func TestReviewRunnerRunStopsProbeExecutionAfterMutatedWorktree(t *testing.T) {
 			if !reflect.DeepEqual(got.ProbeSummaries, expectedSummaries) {
 				t.Fatalf("Run() probe summaries = %#v, want %#v", got.ProbeSummaries, expectedSummaries)
 			}
-			if got, want := got.ProbeSummaries[1].Status, ReviewProbeBlocked; got != want {
+			if got, want := got.ProbeSummaries[1].Status, reviewprobe.ReviewProbeBlocked; got != want {
 				t.Fatalf("skipped probe status = %q, want %q", got, want)
 			}
 			if !strings.Contains(got.ProbeSummaries[1].Error, "probe-a") {

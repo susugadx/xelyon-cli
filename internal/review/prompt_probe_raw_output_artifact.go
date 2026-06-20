@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func (r *ReviewRunner) createReviewProbeRawOutputArtifact(ctx context.Context, phase ReviewModelPhase, source reviewProbeRawOutputSource) (rawoutputs.RawOutputRef, string, bool) {
@@ -55,7 +56,7 @@ func (r *ReviewRunner) createReviewProbeRawOutputArtifact(ctx context.Context, p
 	return result.Ref, "", true
 }
 
-func reviewProbeRawOutputBodyForProbe(result ReviewProbeResult) string {
+func reviewProbeRawOutputBodyForProbe(result reviewprobe.ReviewProbeResult) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "probe_id: %s\nmode: %s\nstatus: %s\nmutated_worktree: %t\noutput_truncated: %t\n", result.ID, result.Mode, result.Status, result.MutatedWorktree, result.OutputTruncated)
 	if result.Error != "" {
@@ -74,7 +75,7 @@ func reviewProbeRawOutputBodyForProbe(result ReviewProbeResult) string {
 	return strings.TrimSpace(b.String())
 }
 
-func reviewProbeRawOutputBodyForCommand(command ReviewProbeCommandResult) string {
+func reviewProbeRawOutputBodyForCommand(command reviewprobe.ReviewProbeCommandResult) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "command: %s\n", reviewProbeRawOutputCommandDisplay(command))
 	fmt.Fprintf(&b, "status: %s\nexit_code: %d\nwork_dir: %s\noutput_truncated: %t\n", command.Status, command.ExitCode, command.WorkDir, command.OutputTruncated)
@@ -87,8 +88,8 @@ func reviewProbeRawOutputBodyForCommand(command ReviewProbeCommandResult) string
 	return strings.TrimSpace(b.String())
 }
 
-func reviewProbeRawOutputCommandDisplay(command ReviewProbeCommandResult) string {
-	return formatProbeCommand(command.Command, command.Args)
+func reviewProbeRawOutputCommandDisplay(command reviewprobe.ReviewProbeCommandResult) string {
+	return reviewprobe.FormatProbeCommand(command.Command, command.Args)
 }
 
 func reviewProbeRawOutputCommandPreview(source reviewProbeRawOutputSource) string {

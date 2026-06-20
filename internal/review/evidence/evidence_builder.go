@@ -3,7 +3,7 @@ package evidence
 import (
 	"context"
 
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 // ReviewEvidenceBuilderOption は ReviewEvidenceBuilder の差し替え設定を表す。
@@ -16,7 +16,7 @@ type ReviewWebSearchEvidenceProvider interface {
 
 // ReviewPostPass1WebSearchEvidenceProvider は Pass1 probe plan 後の追加 Web 検索 evidence 収集境界。
 type ReviewPostPass1WebSearchEvidenceProvider interface {
-	CollectPostPass1WebSearchEvidence(context.Context, ReviewEvidenceBundle, reviewprobe.ReviewProbePlan) ReviewWebSearchEvidence
+	CollectPostPass1WebSearchEvidence(context.Context, ReviewEvidenceBundle, reviewprobeplan.ReviewProbePlan) ReviewWebSearchEvidence
 }
 
 // ReviewEvidenceBuilder は current_changes の一次情報を git と filesystem から収集する。
@@ -111,7 +111,7 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 }
 
 // CollectPostPass1WebSearchEvidence は Pass1 probe plan から追加 Web 検索 evidence を収集する。
-func (b *ReviewEvidenceBuilder) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobe.ReviewProbePlan) ReviewWebSearchEvidence {
+func (b *ReviewEvidenceBuilder) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) ReviewWebSearchEvidence {
 	if ctx == nil {
 		ctx = context.Background()
 	}

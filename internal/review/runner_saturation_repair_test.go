@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerRunRepairsInvalidSaturationJSONOnce(t *testing.T) {
@@ -25,8 +27,8 @@ func TestReviewRunnerRunRepairsInvalidSaturationJSONOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if got.Verdict != ReviewVerdictClean {
-		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, ReviewVerdictClean)
+	if got.Verdict != reviewreport.ReviewVerdictClean {
+		t.Fatalf("Run() verdict = %q, want %q", got.Verdict, reviewreport.ReviewVerdictClean)
 	}
 	assertReviewRunnerRequestPhasesForTest(t, model.requests, []ReviewModelPhase{
 		ReviewModelPhaseProbePlan,
@@ -74,9 +76,9 @@ func TestReviewRunnerRunBlockedSaturationReturnsError(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	probes := &runnerFakeProbeRunner{}
 	plan := newRunnerNoProbePlanForTest()
-	blockedCheck := ReviewSaturationCheck{
-		SchemaVersion:  ReviewSaturationCheckSchemaVersionV1,
-		Status:         ReviewSaturationStatusBlocked,
+	blockedCheck := reviewreport.ReviewSaturationCheck{
+		SchemaVersion:  reviewreport.ReviewSaturationCheckSchemaVersionV1,
+		Status:         reviewreport.ReviewSaturationStatusBlocked,
 		CheckedSummary: "Probe result context was insufficient to check saturation.",
 	}
 	model := &runnerFakeModel{

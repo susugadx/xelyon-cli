@@ -9,8 +9,8 @@ import (
 )
 
 // runReviewProbesSequentially は plan から作った probe request を順序通りに実行する。
-func (r *ReviewRunner) runReviewProbesSequentially(ctx context.Context, probeRequests []ReviewProbeRequest) ([]ReviewProbeResult, error) {
-	probeResults := make([]ReviewProbeResult, 0, len(probeRequests))
+func (r *ReviewRunner) runReviewProbesSequentially(ctx context.Context, probeRequests []reviewprobe.ReviewProbeRequest) ([]reviewprobe.ReviewProbeResult, error) {
+	probeResults := make([]reviewprobe.ReviewProbeResult, 0, len(probeRequests))
 	for i, probeReq := range probeRequests {
 		startedAt := time.Now()
 		progressScope := reviewProgressProbeScopeForRequest(probeReq)
@@ -50,7 +50,7 @@ func (r *ReviewRunner) runReviewProbesSequentially(ctx context.Context, probeReq
 	return probeResults, nil
 }
 
-func (r *ReviewRunner) emitProbeResultProgress(progressScope reviewProgressProbeScope, result ReviewProbeResult, startedAt time.Time) {
+func (r *ReviewRunner) emitProbeResultProgress(progressScope reviewProgressProbeScope, result reviewprobe.ReviewProbeResult, startedAt time.Time) {
 	if len(result.CommandResults) == 0 {
 		r.emitProgress(ReviewProgressEvent{
 			ID:       progressScope.eventID(-1),

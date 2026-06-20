@@ -48,15 +48,3 @@ const (
 func ReviewCommandIndex(i int) *int {
 	return reviewreport.ReviewCommandIndex(i)
 }
-
-func validateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID map[string]reviewreport.ReviewProbeSummary) error {
-	return reviewreport.ValidateEvidenceRef(field, ref, probeSummariesByID)
-}
-
-func isKnownReviewGroupSeverity(severity ReviewGroupSeverity) bool {
-	return reviewreport.IsKnownReviewGroupSeverity(severity)
-}
-
-func isKnownReviewEvidenceKind(kind string) bool {
-	return reviewreport.IsKnownReviewEvidenceKind(kind)
-}

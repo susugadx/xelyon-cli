@@ -1,13 +1,16 @@
 package probe
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 func TestBuildReviewProbeRequestsFromPlanConvertsValidPlan(t *testing.T) {
-	plan := newValidReviewProbePlanForTest()
+	plan := newReviewProbePlanForRequestConversionTest()
 
 	requests, err := BuildReviewProbeRequestsFromPlan(plan)
 	if err != nil {
@@ -48,7 +51,7 @@ func TestBuildReviewProbeRequestsFromPlanConvertsValidPlan(t *testing.T) {
 }
 
 func TestBuildReviewProbeRequestsFromPlanNoProbePlanReturnsEmptySlice(t *testing.T) {
-	plan := newNoProbeReviewProbePlanForTest()
+	plan := newNoProbeReviewProbePlanForRequestConversionTest()
 
 	requests, err := BuildReviewProbeRequestsFromPlan(plan)
 	if err != nil {
@@ -63,7 +66,7 @@ func TestBuildReviewProbeRequestsFromPlanNoProbePlanReturnsEmptySlice(t *testing
 }
 
 func TestBuildReviewProbeRequestsFromPlanCopiesSlices(t *testing.T) {
-	plan := newValidReviewProbePlanForTest()
+	plan := newReviewProbePlanForRequestConversionTest()
 
 	requests, err := BuildReviewProbeRequestsFromPlan(plan)
 	if err != nil {
@@ -82,13 +85,13 @@ func TestBuildReviewProbeRequestsFromPlanCopiesSlices(t *testing.T) {
 }
 
 func TestReviewProbePlanDecodeValidateConvertIsDeterministic(t *testing.T) {
-	data := mustMarshalReviewProbePlanForTest(t, newValidReviewProbePlanForTest())
+	data := mustMarshalReviewProbePlanForRequestConversionTest(t, newReviewProbePlanForRequestConversionTest())
 
-	firstPlan, err := DecodeReviewProbePlanJSON(data)
+	firstPlan, err := probeplan.DecodeReviewProbePlanJSON(data)
 	if err != nil {
 		t.Fatalf("first DecodeReviewProbePlanJSON() error = %v, want nil", err)
 	}
-	if err := ValidateReviewProbePlan(firstPlan); err != nil {
+	if err := probeplan.ValidateReviewProbePlan(firstPlan); err != nil {
 		t.Fatalf("first ValidateReviewProbePlan() error = %v, want nil", err)
 	}
 	firstRequests, err := BuildReviewProbeRequestsFromPlan(firstPlan)
@@ -96,11 +99,11 @@ func TestReviewProbePlanDecodeValidateConvertIsDeterministic(t *testing.T) {
 		t.Fatalf("first BuildReviewProbeRequestsFromPlan() error = %v, want nil", err)
 	}
 
-	secondPlan, err := DecodeReviewProbePlanJSON(data)
+	secondPlan, err := probeplan.DecodeReviewProbePlanJSON(data)
 	if err != nil {
 		t.Fatalf("second DecodeReviewProbePlanJSON() error = %v, want nil", err)
 	}
-	if err := ValidateReviewProbePlan(secondPlan); err != nil {
+	if err := probeplan.ValidateReviewProbePlan(secondPlan); err != nil {
 		t.Fatalf("second ValidateReviewProbePlan() error = %v, want nil", err)
 	}
 	secondRequests, err := BuildReviewProbeRequestsFromPlan(secondPlan)
@@ -114,4 +117,69 @@ func TestReviewProbePlanDecodeValidateConvertIsDeterministic(t *testing.T) {
 	if !reflect.DeepEqual(firstRequests, secondRequests) {
 		t.Fatalf("converted requests differ:\nfirst: %#v\nsecond: %#v", firstRequests, secondRequests)
 	}
+}
+
+func newReviewProbePlanForRequestConversionTest() probeplan.ReviewProbePlan {
+	return probeplan.ReviewProbePlan{
+		SchemaVersion: probeplan.ReviewProbePlanSchemaVersionV2,
+		TargetKind:    probeplan.TargetCurrentChanges,
+		Summary:       "Probe plan covers validator behavior.",
+		ImpactSurfaces: []probeplan.ReviewProbeImpactSurface{
+			{
+				ID:              "surface-1",
+				Summary:         "validator changed",
+				Category:        probeplan.ReviewProbeImpactSurfaceValidator,
+				EvidenceSummary: "diff shows validator update",
+				Status:          probeplan.ReviewProbeImpactSurfaceNeedsProbe,
+				Reason:          "surface needs probe",
+			},
+		},
+		CandidateRisks: []probeplan.ReviewProbeCandidateRisk{
+			{
+				ID:                   "risk-1",
+				Summary:              "edge case may regress",
+				Severity:             probeplan.ReviewGroupSeverityMedium,
+				SurfaceIDs:           []string{"surface-1"},
+				EvidenceSummary:      "related tests mention validator",
+				VerificationStrategy: "run focused test",
+				Status:               probeplan.ReviewProbeCandidateRiskNeedsProbe,
+			},
+		},
+		Probes: []probeplan.ReviewPlannedProbe{
+			{
+				ID:             "probe-1",
+				SurfaceIDs:     []string{"surface-1"},
+				RiskIDs:        []string{"risk-1"},
+				Purpose:        "run focused validation coverage",
+				Mode:           probeplan.ReviewProbeRepoSandbox,
+				TimeoutSeconds: 30,
+				MaxOutputBytes: 4096,
+				Commands: []probeplan.ReviewPlannedProbeCommand{
+					{Command: "go", Args: []string{"test", "./internal/review/probe"}},
+					{Command: "rg", Args: []string{`path\like`, "ReviewProbePlan"}, WorkDir: "internal/review"},
+				},
+				Files: []probeplan.ReviewPlannedProbeFile{
+					{Path: "checks/check.txt", Content: "check"},
+				},
+			},
+		},
+	}
+}
+
+func newNoProbeReviewProbePlanForRequestConversionTest() probeplan.ReviewProbePlan {
+	plan := newReviewProbePlanForRequestConversionTest()
+	plan.ImpactSurfaces[0].Status = probeplan.ReviewProbeImpactSurfaceChecked
+	plan.CandidateRisks[0].Status = probeplan.ReviewProbeCandidateRiskCheckedByEvidence
+	plan.Probes = []probeplan.ReviewPlannedProbe{}
+	plan.NoProbeReason = "surface-1 and risk-1 are checked by existing evidence"
+	return plan
+}
+
+func mustMarshalReviewProbePlanForRequestConversionTest(t *testing.T, plan probeplan.ReviewProbePlan) []byte {
+	t.Helper()
+	data, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatalf("json.Marshal(plan) error = %v", err)
+	}
+	return data
 }

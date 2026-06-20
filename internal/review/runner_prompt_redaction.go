@@ -2,6 +2,9 @@ package review
 
 import (
 	"sort"
+
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 const (
@@ -21,9 +24,9 @@ type reviewRunnerPromptPathReplacement struct {
 	display string
 }
 
-func newReviewRunnerPromptRedactor(bundle ReviewEvidenceBundle, results []ReviewProbeResult) reviewRunnerPromptRedactor {
+func newReviewRunnerPromptRedactor(bundle reviewevidence.ReviewEvidenceBundle, results []reviewprobe.ReviewProbeResult) reviewRunnerPromptRedactor {
 	redactor := reviewRunnerPromptRedactor{repoRoot: normalizeReviewRunnerPromptPath(bundle.RepoRoot)}
-	redactor.addReplacement(bundle.RepoRoot, reviewEvidenceRepoRootPathDisplay)
+	redactor.addReplacement(bundle.RepoRoot, reviewevidence.RepoRootPathDisplay)
 	if redactor.isOutsideRepoAbsolutePath(bundle.CWD) {
 		redactor.addReplacement(bundle.CWD, reviewRunnerPromptCWDDisplay)
 	}
@@ -56,7 +59,7 @@ func (r reviewRunnerPromptRedactor) redactPath(path string) string {
 	if path == "" {
 		return ""
 	}
-	if display := formatReviewEvidencePathDisplay(r.repoRoot, path); display != reviewEvidenceOutsideRepoPathDisplay {
+	if display := reviewevidence.FormatReviewEvidencePathDisplay(r.repoRoot, path); display != reviewevidence.OutsideRepoPathDisplay {
 		return display
 	}
 
@@ -65,7 +68,7 @@ func (r reviewRunnerPromptRedactor) redactPath(path string) string {
 		return reviewRunnerPromptSlashPath(redacted)
 	}
 	if isReviewRunnerPromptAbsolutePath(path) {
-		return reviewEvidenceOutsideRepoPathDisplay
+		return reviewevidence.OutsideRepoPathDisplay
 	}
 	return path
 }

@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewdomain "github.com/susugadx/xelyon-cli/internal/review/domain"
 	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
 )
 
@@ -39,7 +40,7 @@ func TestReviewTimeline_CurrentChangesPresetStartsRun(t *testing.T) {
 	}
 
 	m = applyReviewCommandMessages(t, m, cmd)
-	if agent.lastRequest.TargetKind != review.TargetCurrentChanges {
+	if agent.lastRequest.TargetKind != reviewdomain.TargetCurrentChanges {
 		t.Fatalf("TargetKind = %q, want current_changes", agent.lastRequest.TargetKind)
 	}
 	if agent.lastRequest.CustomInstructions != "" {

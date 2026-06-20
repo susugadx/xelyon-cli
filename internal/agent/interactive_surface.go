@@ -12,6 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
@@ -153,7 +154,7 @@ func (a *Agent) InteractiveStatusSnapshot() InteractiveStatusSnapshot {
 }
 
 // RunReviewWithProgress は review runner を progress sink 付きで実行し、usage summary を返す。
-func (a *Agent) RunReviewWithProgress(ctx context.Context, req review.ReviewRequest, sink review.ReviewProgressSink) (review.ReviewReport, ReviewRunUsageSummary, error) {
+func (a *Agent) RunReviewWithProgress(ctx context.Context, req review.ReviewRequest, sink review.ReviewProgressSink) (reviewreport.ReviewReport, ReviewRunUsageSummary, error) {
 	startStats := a.reviewStatsSnapshot()
 	report, err := a.runReview(ctx, req, reviewRunOptions{
 		ProgressSink: sink,

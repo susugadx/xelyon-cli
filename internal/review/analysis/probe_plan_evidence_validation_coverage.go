@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 func validateReviewProbePlanMaterialPathCoverage(input EvidenceInput, index reviewProbePlanImpactSurfaceEvidenceIndex) error {
@@ -70,7 +70,7 @@ func validateReviewProbePlanInventoryCategoryCoverage(input EvidenceInput, index
 	return nil
 }
 
-func validateReviewProbePlanUntrackedCoverage(input EvidenceInput, plan reviewprobe.ReviewProbePlan, index reviewProbePlanImpactSurfaceEvidenceIndex) error {
+func validateReviewProbePlanUntrackedCoverage(input EvidenceInput, plan reviewprobeplan.ReviewProbePlan, index reviewProbePlanImpactSurfaceEvidenceIndex) error {
 	untrackedPaths := reviewProbePlanEvidenceUntrackedPaths(input)
 	if len(untrackedPaths) == 0 {
 		return nil

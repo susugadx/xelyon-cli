@@ -5,6 +5,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerRunRevisesReportWhenCoverageAuditFindsUnsupportedOfficialConfirmation(t *testing.T) {
@@ -62,26 +65,26 @@ func TestReviewRunnerRunRevisesReportWhenCoverageAuditFindsUnsupportedOfficialCo
 
 func TestMergeReviewCoverageAuditIntoSaturationCheckRevisesIgnoredNonPassingProbe(t *testing.T) {
 	plan := newRunnerProbePlanForTest("probe-1")
-	probeSummary := ReviewProbeSummary{
+	probeSummary := reviewreport.ReviewProbeSummary{
 		ProbeID: "probe-1",
-		Mode:    ReviewProbeHostReadOnly,
-		Status:  ReviewProbeFailed,
+		Mode:    reviewprobe.ReviewProbeHostReadOnly,
+		Status:  reviewprobe.ReviewProbeFailed,
 		Error:   "go test ./internal/review failed",
 	}
-	report := newRunnerCleanReportForTest([]ReviewProbeSummary{probeSummary})
+	report := newRunnerCleanReportForTest([]reviewreport.ReviewProbeSummary{probeSummary})
 
 	merged, err := mergeReviewCoverageAuditIntoSaturationCheck(
 		newSaturatedReviewSaturationCheckForTest(),
 		plan,
 		report,
-		[]ReviewProbeSummary{probeSummary},
+		[]reviewreport.ReviewProbeSummary{probeSummary},
 		reviewCoverageAuditContext{},
 	)
 	if err != nil {
 		t.Fatalf("mergeReviewCoverageAuditIntoSaturationCheck() error = %v, want nil", err)
 	}
-	if merged.Status != ReviewSaturationStatusNeedsRevision {
-		t.Fatalf("Status = %q, want %q", merged.Status, ReviewSaturationStatusNeedsRevision)
+	if merged.Status != reviewreport.ReviewSaturationStatusNeedsRevision {
+		t.Fatalf("Status = %q, want %q", merged.Status, reviewreport.ReviewSaturationStatusNeedsRevision)
 	}
 	if len(merged.AdditionalFindingCandidates) == 0 {
 		t.Fatalf("AdditionalFindingCandidates = %#v, want probe-backed candidate", merged.AdditionalFindingCandidates)

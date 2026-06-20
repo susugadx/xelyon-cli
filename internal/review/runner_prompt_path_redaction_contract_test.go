@@ -6,6 +6,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerPromptRedactsAbsoluteRepoRoot(t *testing.T) {
@@ -13,7 +16,7 @@ func TestReviewRunnerPromptRedactsAbsoluteRepoRoot(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
 	probes := &runnerFakeProbeRunner{}
 	plan := newRunnerNoProbePlanForTest()
-	report := newRunnerCleanReportForTest([]ReviewProbeSummary{})
+	report := newRunnerCleanReportForTest([]reviewreport.ReviewProbeSummary{})
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, plan))},
@@ -42,26 +45,26 @@ func TestReviewRunnerPromptRedactsAbsoluteRepoRoot(t *testing.T) {
 
 func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testing.T) {
 	repoRoot := t.TempDir()
-	probeRoot := filepath.Join(t.TempDir(), reviewProbeSandboxTempPrefix+"abc")
+	probeRoot := filepath.Join(t.TempDir(), reviewprobe.ReviewProbeSandboxTempPrefix+"abc")
 	probeWorkDir := filepath.Join(probeRoot, "worktree")
-	scratchRoot := filepath.Join(t.TempDir(), reviewProbeScratchTempPrefix+"def")
+	scratchRoot := filepath.Join(t.TempDir(), reviewprobe.ReviewProbeScratchTempPrefix+"def")
 	repoFile := filepath.Join(repoRoot, "internal/review/runner.go")
 	probeWorkFile := filepath.Join(probeWorkDir, "output.txt")
 	probeRuntimeFile := filepath.Join(probeRoot, "runtime/home/output.txt")
 	scratchFile := filepath.Join(scratchRoot, "tmp/mutated.txt")
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest(repoRoot)}
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:              "probe-1",
-		Mode:            ReviewProbeHostReadOnly,
-		Status:          ReviewProbeFailed,
+		Mode:            reviewprobe.ReviewProbeHostReadOnly,
+		Status:          reviewprobe.ReviewProbeFailed,
 		MutatedWorktree: true,
 		MutatedFiles:    []string{repoFile, filepath.Join(probeWorkDir, "mutated.txt"), scratchFile},
 		Error:           "probe failed at " + repoFile + " using " + probeRuntimeFile,
-		CommandResults: []ReviewProbeCommandResult{
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "pwd",
 				WorkDir: repoRoot,
-				Status:  ReviewProbeFailed,
+				Status:  reviewprobe.ReviewProbeFailed,
 				Output:  "repo path: " + repoFile,
 				Error:   "repo error: " + repoRoot,
 			},
@@ -69,13 +72,13 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 				Command: "cat",
 				Args:    []string{probeWorkFile, scratchFile},
 				WorkDir: probeWorkDir,
-				Status:  ReviewProbeFailed,
+				Status:  reviewprobe.ReviewProbeFailed,
 				Output:  "probe path: " + probeWorkFile,
 				Error:   "probe runtime error: " + probeRuntimeFile,
 			},
 		},
 	}
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -121,7 +124,7 @@ func TestReviewRunnerRedactsProbeResultPathsInPass2PromptAndFinalReport(t *testi
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("final report MutatedFiles = %#v, want %#v", got, want)
 	}
-	if got, want := got.ProbeSummaries[0].Status, ReviewProbeMutatedWorktree; got != want {
+	if got, want := got.ProbeSummaries[0].Status, reviewprobe.ReviewProbeMutatedWorktree; got != want {
 		t.Fatalf("final report probe status = %q, want %q", got, want)
 	}
 	if !got.ProbeSummaries[0].MutatedWorktree {

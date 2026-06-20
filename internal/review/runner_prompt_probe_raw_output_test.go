@@ -6,41 +6,44 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerSaturationAbsorbsProbeCommandWithReviewRawOutputContext(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	absorbedOutput := strings.Repeat("ABSORBED_COMMAND_RAW_OUTPUT_REHYDRATED_IN_CONTEXT ", 120)
 	keptOutput := strings.Repeat("UNREFERENCED_COMMAND_RAW_OUTPUT_STAYS_IN_PROBE_CONTEXT ", 120)
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   ReviewProbeHostReadOnly,
-		Status: ReviewProbePassed,
-		CommandResults: []ReviewProbeCommandResult{
+		Mode:   reviewprobe.ReviewProbeHostReadOnly,
+		Status: reviewprobe.ReviewProbePassed,
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command: "customtool",
 				Args:    []string{"--first"},
-				Status:  ReviewProbePassed,
+				Status:  reviewprobe.ReviewProbePassed,
 				Output:  absorbedOutput,
 			},
 			{
 				Command: "customtool",
 				Args:    []string{"--second"},
-				Status:  ReviewProbePassed,
+				Status:  reviewprobe.ReviewProbePassed,
 				Output:  keptOutput,
 			},
 		},
 	}
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
 	report := newRunnerCleanReportForTest(nil)
-	commandRef := ReviewEvidenceRef{
-		Kind:         ReviewEvidenceKindProbeCommand,
+	commandRef := reviewreport.ReviewEvidenceRef{
+		Kind:         reviewreport.ReviewEvidenceKindProbeCommand,
 		ProbeID:      "probe-1",
-		CommandIndex: ReviewCommandIndex(0),
+		CommandIndex: reviewreport.ReviewCommandIndex(0),
 	}
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{commandRef}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{commandRef}
-	report.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []ReviewProbeResult{probeResult})
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{commandRef}
+	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{commandRef}
+	report.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []reviewprobe.ReviewProbeResult{probeResult})
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -52,8 +55,8 @@ func TestReviewRunnerSaturationAbsorbsProbeCommandWithReviewRawOutputContext(t *
 		EvidenceBuilder:                   evidence,
 		ProbeRunner:                       probes,
 		Model:                             model,
-		PromptReductionMode:               ReviewPromptReductionModeApply,
-		RawOutputArtifactsMode:            ReviewRawOutputArtifactsModeApply,
+		PromptReductionMode:               reviewpromptreduction.ReviewPromptReductionModeApply,
+		RawOutputArtifactsMode:            reviewpromptreduction.ReviewRawOutputArtifactsModeApply,
 		RawOutputArtifactStore:            newReviewPromptRawOutputStoreForTest(t),
 		RawOutputSessionID:                "session-review-raw-output",
 		ReviewRunID:                       "review-run-1",
@@ -91,7 +94,7 @@ func TestReviewRunnerSaturationAbsorbsProbeCommandWithReviewRawOutputContext(t *
 	}
 	item := findReviewPromptReductionItemForTest(runner, "probe_result:probe-1:command:0", ReviewModelPhaseSaturationCheck)
 	if item == nil ||
-		item.Status != ReviewPromptReductionItemAbsorbed ||
+		item.Status != reviewpromptreduction.ReviewPromptReductionItemAbsorbed ||
 		!strings.HasPrefix(item.RawArtifactRef, "rawout_") {
 		t.Fatalf("probe command prompt reduction item = %#v, want applied artifact-backed item", item)
 	}
@@ -100,17 +103,17 @@ func TestReviewRunnerSaturationAbsorbsProbeCommandWithReviewRawOutputContext(t *
 func TestReviewRunnerReviewRawOutputArtifactsDryRunDoesNotMutatePrompt(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	rawOutput := strings.Repeat("DRY_RUN_REVIEW_RAW_OUTPUT_MUST_STAY_IN_PROBE_CONTEXT ", 120)
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   ReviewProbeHostReadOnly,
-		Status: ReviewProbePassed,
-		CommandResults: []ReviewProbeCommandResult{
-			{Command: "customtool", Args: []string{"--inspect"}, Status: ReviewProbePassed, Output: rawOutput},
+		Mode:   reviewprobe.ReviewProbeHostReadOnly,
+		Status: reviewprobe.ReviewProbePassed,
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
+			{Command: "customtool", Args: []string{"--inspect"}, Status: reviewprobe.ReviewProbePassed, Output: rawOutput},
 		},
 	}
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
 	report := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")
-	report.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []ReviewProbeResult{probeResult})
+	report.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []reviewprobe.ReviewProbeResult{probeResult})
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -122,8 +125,8 @@ func TestReviewRunnerReviewRawOutputArtifactsDryRunDoesNotMutatePrompt(t *testin
 		EvidenceBuilder:                   evidence,
 		ProbeRunner:                       probes,
 		Model:                             model,
-		PromptReductionMode:               ReviewPromptReductionModeApply,
-		RawOutputArtifactsMode:            ReviewRawOutputArtifactsModeDryRun,
+		PromptReductionMode:               reviewpromptreduction.ReviewPromptReductionModeApply,
+		RawOutputArtifactsMode:            reviewpromptreduction.ReviewRawOutputArtifactsModeDryRun,
 		RawOutputArtifactStore:            newReviewPromptRawOutputStoreForTest(t),
 		RawOutputSessionID:                "session-review-raw-output-dry-run",
 		ReviewRunID:                       "review-run-dry-run",
@@ -159,20 +162,20 @@ func TestReviewRunnerReviewRawOutputArtifactsDryRunDoesNotMutatePrompt(t *testin
 func TestReviewRunnerKeepsProbeCommandRawWhenReviewRawOutputBudgetCannotFit(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	rawOutput := strings.Repeat("BUDGET_STARVED_REVIEW_RAW_OUTPUT_MUST_STAY_RAW ", 120)
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   ReviewProbeHostReadOnly,
-		Status: ReviewProbePassed,
-		CommandResults: []ReviewProbeCommandResult{
-			{Command: "customtool", Args: []string{"--budget"}, Status: ReviewProbePassed, Output: rawOutput},
+		Mode:   reviewprobe.ReviewProbeHostReadOnly,
+		Status: reviewprobe.ReviewProbePassed,
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
+			{Command: "customtool", Args: []string{"--budget"}, Status: reviewprobe.ReviewProbePassed, Output: rawOutput},
 		},
 	}
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
-	commandRef := ReviewEvidenceRef{Kind: ReviewEvidenceKindProbeCommand, ProbeID: "probe-1", CommandIndex: ReviewCommandIndex(0)}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
+	commandRef := reviewreport.ReviewEvidenceRef{Kind: reviewreport.ReviewEvidenceKindProbeCommand, ProbeID: "probe-1", CommandIndex: reviewreport.ReviewCommandIndex(0)}
 	report := newRunnerCleanReportForTest(nil)
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{commandRef}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{commandRef}
-	report.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []ReviewProbeResult{probeResult})
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{commandRef}
+	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{commandRef}
+	report.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []reviewprobe.ReviewProbeResult{probeResult})
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -184,8 +187,8 @@ func TestReviewRunnerKeepsProbeCommandRawWhenReviewRawOutputBudgetCannotFit(t *t
 		EvidenceBuilder:                   evidence,
 		ProbeRunner:                       probes,
 		Model:                             model,
-		PromptReductionMode:               ReviewPromptReductionModeApply,
-		RawOutputArtifactsMode:            ReviewRawOutputArtifactsModeApply,
+		PromptReductionMode:               reviewpromptreduction.ReviewPromptReductionModeApply,
+		RawOutputArtifactsMode:            reviewpromptreduction.ReviewRawOutputArtifactsModeApply,
 		RawOutputArtifactStore:            newReviewPromptRawOutputStoreForTest(t),
 		RawOutputSessionID:                "session-review-raw-output-budget",
 		ReviewRunID:                       "review-run-budget",
@@ -221,23 +224,23 @@ func TestReviewRunnerKeepsProbeCommandRawWhenReviewRawOutputBudgetCannotFit(t *t
 func TestReviewRunnerRevisionPromptRehydratesAbsorbedProbeCommandRef(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")}
 	rawOutput := strings.Repeat("REVISION_REHYDRATED_COMMAND_RAW_OUTPUT ", 120)
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   ReviewProbeHostReadOnly,
-		Status: ReviewProbePassed,
-		CommandResults: []ReviewProbeCommandResult{
-			{Command: "customtool", Args: []string{"--revision"}, Status: ReviewProbePassed, Output: rawOutput},
+		Mode:   reviewprobe.ReviewProbeHostReadOnly,
+		Status: reviewprobe.ReviewProbePassed,
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
+			{Command: "customtool", Args: []string{"--revision"}, Status: reviewprobe.ReviewProbePassed, Output: rawOutput},
 		},
 	}
-	probes := &runnerFakeProbeRunner{results: map[string]ReviewProbeResult{"probe-1": probeResult}}
-	commandRef := ReviewEvidenceRef{Kind: ReviewEvidenceKindProbeCommand, ProbeID: "probe-1", CommandIndex: ReviewCommandIndex(0)}
+	probes := &runnerFakeProbeRunner{results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult}}
+	commandRef := reviewreport.ReviewEvidenceRef{Kind: reviewreport.ReviewEvidenceKindProbeCommand, ProbeID: "probe-1", CommandIndex: reviewreport.ReviewCommandIndex(0)}
 	initialReport := newRunnerCleanReportForTest(nil)
-	initialReport.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{commandRef}
-	initialReport.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{commandRef}
-	initialReport.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []ReviewProbeResult{probeResult})
+	initialReport.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{commandRef}
+	initialReport.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{commandRef}
+	initialReport.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, []reviewprobe.ReviewProbeResult{probeResult})
 	revisedReport := initialReport
 	needsRevision := needsRevisionAdditionalCandidateCheckForRunnerTest()
-	needsRevision.AdditionalFindingCandidates[0].EvidenceRefs = []ReviewEvidenceRef{commandRef}
+	needsRevision.AdditionalFindingCandidates[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{commandRef}
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerProbePlanForTest("probe-1")))},
@@ -251,8 +254,8 @@ func TestReviewRunnerRevisionPromptRehydratesAbsorbedProbeCommandRef(t *testing.
 		EvidenceBuilder:                   evidence,
 		ProbeRunner:                       probes,
 		Model:                             model,
-		PromptReductionMode:               ReviewPromptReductionModeApply,
-		RawOutputArtifactsMode:            ReviewRawOutputArtifactsModeApply,
+		PromptReductionMode:               reviewpromptreduction.ReviewPromptReductionModeApply,
+		RawOutputArtifactsMode:            reviewpromptreduction.ReviewRawOutputArtifactsModeApply,
 		RawOutputArtifactStore:            newReviewPromptRawOutputStoreForTest(t),
 		RawOutputSessionID:                "session-review-raw-output-revision",
 		ReviewRunID:                       "review-run-revision",
@@ -281,7 +284,7 @@ func TestReviewRunnerRevisionPromptRehydratesAbsorbedProbeCommandRef(t *testing.
 }
 
 func TestReviewProbeRawOutputCommandDisplayPreservesArgumentBoundaries(t *testing.T) {
-	got := reviewProbeRawOutputCommandDisplay(ReviewProbeCommandResult{
+	got := reviewProbeRawOutputCommandDisplay(reviewprobe.ReviewProbeCommandResult{
 		Command: "customtool",
 		Args:    []string{"foo bar", "--flag=a;b", "$(printf token)"},
 	})
@@ -297,7 +300,7 @@ func TestReviewProbeRawOutputCommandHashUsesStableCommandIndexValue(t *testing.T
 	otherIndex := 1
 	base := reviewProbeRawOutputSource{
 		probeID:       "probe-1",
-		command:       ReviewProbeCommandResult{Command: "customtool", Args: []string{"foo bar"}, WorkDir: "/tmp/repo"},
+		command:       reviewprobe.ReviewProbeCommandResult{Command: "customtool", Args: []string{"foo bar"}, WorkDir: "/tmp/repo"},
 		body:          "stable body",
 		originalBytes: 11,
 	}
@@ -335,7 +338,7 @@ func TestReviewProbeRawOutputCommandArtifactRefIsStableAcrossCommandIndexPointer
 	source := reviewProbeRawOutputSource{
 		probeID:      "probe-1",
 		commandIndex: &firstIndex,
-		command:      ReviewProbeCommandResult{Command: "customtool", Args: []string{"foo bar"}, WorkDir: "/tmp/repo", Output: "ignored"},
+		command:      reviewprobe.ReviewProbeCommandResult{Command: "customtool", Args: []string{"foo bar"}, WorkDir: "/tmp/repo", Output: "ignored"},
 		body:         strings.Repeat("stable command raw output ", 40),
 	}
 	secondSource := source
@@ -355,15 +358,15 @@ func TestReviewProbeRawOutputCommandArtifactRefIsStableAcrossCommandIndexPointer
 }
 
 func TestReviewRunnerRejectsSaturatedWhenReviewRawOutputLedgerFailsClosed(t *testing.T) {
-	runner := &ReviewRunner{promptReductionStats: newReviewPromptReductionStats(ReviewPromptReductionModeApply)}
+	runner := &ReviewRunner{promptReductionStats: reviewpromptreduction.NewStats(reviewpromptreduction.ReviewPromptReductionModeApply)}
 	check := newSaturatedReviewSaturationCheckForTest()
-	ledger := &ReviewProbeRawOutputLedger{
+	ledger := &reviewpromptreduction.ReviewProbeRawOutputLedger{
 		FailClosedReason:   reviewProbeRawOutputReasonRequiredRefMissing,
 		CanAcceptSaturated: false,
 	}
 
 	got := runner.failClosedReviewSaturationByRawOutputLedger(check, ledger)
-	if got.Status != ReviewSaturationStatusBlocked ||
+	if got.Status != reviewreport.ReviewSaturationStatusBlocked ||
 		!strings.Contains(got.CheckedSummary, reviewProbeRawOutputReasonRequiredRefMissing) {
 		t.Fatalf("failClosedReviewSaturationByRawOutputLedger() = %#v, want blocked with reason", got)
 	}
@@ -374,7 +377,7 @@ func TestReviewRunnerRejectsSaturatedWhenReviewRawOutputLedgerFailsClosed(t *tes
 	}
 }
 
-func newReviewPromptRawOutputStoreForTest(t *testing.T) ReviewRawOutputArtifactStore {
+func newReviewPromptRawOutputStoreForTest(t *testing.T) reviewpromptreduction.ReviewRawOutputArtifactStore {
 	t.Helper()
 	store, err := rawoutputs.OpenStore(rawoutputs.Root(t.TempDir()), rawoutputs.StoreOptions{})
 	if err != nil {

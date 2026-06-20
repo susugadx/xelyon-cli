@@ -1,11 +1,11 @@
 package analysis
 
-import reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+import reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 
 // ValidateProbePlanAgainstEvidence は Pass1 probe plan が evidence input の
 // material path と evidence pressure を扱っていることを検証する。
-func ValidateProbePlanAgainstEvidence(plan reviewprobe.ReviewProbePlan, input EvidenceInput) error {
-	if err := reviewprobe.ValidateReviewProbePlan(plan); err != nil {
+func ValidateProbePlanAgainstEvidence(plan reviewprobeplan.ReviewProbePlan, input EvidenceInput) error {
+	if err := reviewprobeplan.ValidateReviewProbePlan(plan); err != nil {
 		return err
 	}
 	if err := ValidateProbePlanExternalDocRefs(plan, input.WebSearchEvidence.ExternalDocs); err != nil {

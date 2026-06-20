@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 func TestReviewEvidenceBuilderPostPass1ProviderBoundary(t *testing.T) {
@@ -16,8 +16,8 @@ func TestReviewEvidenceBuilderPostPass1ProviderBoundary(t *testing.T) {
 			Reason: "pre-pass",
 		}},
 	}
-	plan := reviewprobe.ReviewProbePlan{
-		SchemaVersion: reviewprobe.ReviewProbePlanSchemaVersionV2,
+	plan := reviewprobeplan.ReviewProbePlan{
+		SchemaVersion: reviewprobeplan.ReviewProbePlanSchemaVersionV2,
 		Summary:       "post-pass plan",
 	}
 
@@ -82,10 +82,10 @@ type postPassWebSearchProvider struct {
 	returnEvidence ReviewWebSearchEvidence
 	postPassCalls  int
 	bundle         ReviewEvidenceBundle
-	plan           reviewprobe.ReviewProbePlan
+	plan           reviewprobeplan.ReviewProbePlan
 }
 
-func (p *postPassWebSearchProvider) CollectPostPass1WebSearchEvidence(_ context.Context, bundle ReviewEvidenceBundle, plan reviewprobe.ReviewProbePlan) ReviewWebSearchEvidence {
+func (p *postPassWebSearchProvider) CollectPostPass1WebSearchEvidence(_ context.Context, bundle ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) ReviewWebSearchEvidence {
 	p.postPassCalls++
 	p.bundle = bundle
 	p.plan = plan

@@ -4,6 +4,9 @@ import (
 	"strings"
 
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 type reviewProbeResultAbsorptionRefSet struct {
@@ -30,7 +33,7 @@ func (refs reviewProbeResultAbsorptionRefSet) commandUnsafeForAbsorption(key rev
 	return unsafe
 }
 
-func reviewProbeResultAbsorptionRefs(report ReviewReport) reviewProbeResultAbsorptionRefSet {
+func reviewProbeResultAbsorptionRefs(report reviewreport.ReviewReport) reviewProbeResultAbsorptionRefSet {
 	refs := reviewProbeResultAbsorptionRefSet{
 		safeProbes:            make(map[string][]string),
 		safeCommands:          make(map[reviewmodelinput.ProbeCommandResultKey][]string),
@@ -38,20 +41,20 @@ func reviewProbeResultAbsorptionRefs(report ReviewReport) reviewProbeResultAbsor
 		unsafeCommands:        make(map[reviewmodelinput.ProbeCommandResultKey]struct{}),
 		unsafeCommandProbeIDs: make(map[string]struct{}),
 	}
-	addRefs := func(evidenceRefs []ReviewEvidenceRef, owner string, safe bool) {
+	addRefs := func(evidenceRefs []reviewreport.ReviewEvidenceRef, owner string, safe bool) {
 		for _, ref := range evidenceRefs {
 			probeID := strings.TrimSpace(ref.ProbeID)
 			if probeID == "" {
 				continue
 			}
 			switch ref.Kind {
-			case ReviewEvidenceKindProbe:
+			case reviewreport.ReviewEvidenceKindProbe:
 				if safe {
 					refs.safeProbes[probeID] = append(refs.safeProbes[probeID], owner)
 				} else {
 					refs.unsafeProbes[probeID] = struct{}{}
 				}
-			case ReviewEvidenceKindProbeCommand:
+			case reviewreport.ReviewEvidenceKindProbeCommand:
 				key, ok := reviewProbeCommandResultKeyFromEvidenceRef(ref)
 				if !ok {
 					refs.unsafeProbes[probeID] = struct{}{}
@@ -72,11 +75,11 @@ func reviewProbeResultAbsorptionRefs(report ReviewReport) reviewProbeResultAbsor
 	if report.ScopeCoverage != nil {
 		for _, surface := range report.ScopeCoverage.ReviewedImpactSurfaces {
 			owner := "scope_coverage.surface." + strings.TrimSpace(surface.SurfaceID)
-			addRefs(surface.EvidenceRefs, owner, surface.Status == ReviewReportImpactSurfaceChecked)
+			addRefs(surface.EvidenceRefs, owner, surface.Status == reviewreport.ReviewReportImpactSurfaceChecked)
 		}
 		for _, risk := range report.ScopeCoverage.ReviewedCandidateRisks {
 			owner := "scope_coverage.risk." + strings.TrimSpace(risk.RiskID)
-			addRefs(risk.EvidenceRefs, owner, risk.Status == ReviewReportCandidateRiskDismissed)
+			addRefs(risk.EvidenceRefs, owner, risk.Status == reviewreport.ReviewReportCandidateRiskDismissed)
 		}
 		for _, finding := range report.ScopeCoverage.NewFindingsFromReportPass {
 			addRefs(finding.EvidenceRefs, "scope_coverage.new_finding", false)
@@ -117,15 +120,15 @@ func reviewProbeResultAbsorptionRefs(report ReviewReport) reviewProbeResultAbsor
 	}
 
 	for probeID, values := range refs.safeProbes {
-		refs.safeProbes[probeID] = dedupeSortedReviewPromptAbsorptionRefs(values)
+		refs.safeProbes[probeID] = reviewpromptreduction.DedupeSortedReviewPromptAbsorptionRefs(values)
 	}
 	for key, values := range refs.safeCommands {
-		refs.safeCommands[key] = dedupeSortedReviewPromptAbsorptionRefs(values)
+		refs.safeCommands[key] = reviewpromptreduction.DedupeSortedReviewPromptAbsorptionRefs(values)
 	}
 	return refs
 }
 
-func reviewProbeCommandResultKeyFromEvidenceRef(ref ReviewEvidenceRef) (reviewmodelinput.ProbeCommandResultKey, bool) {
+func reviewProbeCommandResultKeyFromEvidenceRef(ref reviewreport.ReviewEvidenceRef) (reviewmodelinput.ProbeCommandResultKey, bool) {
 	probeID := strings.TrimSpace(ref.ProbeID)
 	if probeID == "" || ref.CommandIndex == nil || *ref.CommandIndex < 0 {
 		return reviewmodelinput.ProbeCommandResultKey{}, false
@@ -133,15 +136,15 @@ func reviewProbeCommandResultKeyFromEvidenceRef(ref ReviewEvidenceRef) (reviewmo
 	return reviewmodelinput.ProbeCommandResultKey{ProbeID: probeID, CommandIndex: *ref.CommandIndex}, true
 }
 
-func reviewProbeResultSafeForAbsorbedPrompt(result ReviewProbeResult) bool {
-	return result.Status == ReviewProbePassed &&
+func reviewProbeResultSafeForAbsorbedPrompt(result reviewprobe.ReviewProbeResult) bool {
+	return result.Status == reviewprobe.ReviewProbePassed &&
 		!result.MutatedWorktree &&
 		!result.OutputTruncated &&
 		strings.TrimSpace(result.Error) == ""
 }
 
-func reviewProbeCommandResultSafeForAbsorbedPrompt(result ReviewProbeCommandResult) bool {
-	return result.Status == ReviewProbePassed &&
+func reviewProbeCommandResultSafeForAbsorbedPrompt(result reviewprobe.ReviewProbeCommandResult) bool {
+	return result.Status == reviewprobe.ReviewProbePassed &&
 		!result.OutputTruncated &&
 		strings.TrimSpace(result.Error) == ""
 }

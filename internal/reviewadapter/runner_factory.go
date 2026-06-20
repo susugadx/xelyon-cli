@@ -6,6 +6,11 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewartifact "github.com/susugadx/xelyon-cli/internal/review/artifact"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	searchtool "github.com/susugadx/xelyon-cli/internal/tools/search"
 )
@@ -28,13 +33,13 @@ type RunnerFactoryOptions struct {
 	EvidenceBuilder review.ReviewEvidenceProvider
 	ProbeRunner     review.ReviewProbeExecutor
 
-	ArtifactWriter                    review.ReviewRunArtifactWriter
+	ArtifactWriter                    reviewartifact.ReviewRunArtifactWriter
 	ArtifactWarningWriter             io.Writer
 	ProgressSink                      review.ReviewProgressSink
 	UsageAttribution                  tools.UsageAttributionCallback
-	PromptReductionMode               review.ReviewPromptReductionMode
-	RawOutputArtifactsMode            review.ReviewRawOutputArtifactsMode
-	RawOutputArtifactStore            review.ReviewRawOutputArtifactStore
+	PromptReductionMode               reviewpromptreduction.ReviewPromptReductionMode
+	RawOutputArtifactsMode            reviewpromptreduction.ReviewRawOutputArtifactsMode
+	RawOutputArtifactStore            reviewpromptreduction.ReviewRawOutputArtifactStore
 	RawOutputSessionID                string
 	RawOutputRehydrateBudgetTokens    int
 	RawOutputRehydrateBudgetMaxTokens int
@@ -54,7 +59,7 @@ func NewRunnerFactory(opts RunnerFactoryOptions) RunnerFactory {
 func (f RunnerFactory) NewReviewRunner() (*review.ReviewRunner, error) {
 	evidenceBuilder := f.opts.EvidenceBuilder
 	if evidenceBuilder == nil {
-		evidenceBuilder = review.NewReviewEvidenceBuilder(
+		evidenceBuilder = reviewevidence.NewReviewEvidenceBuilder(
 			f.opts.RepoRoot,
 			f.opts.CWD,
 			f.reviewEvidenceBuilderOptions()...,
@@ -63,7 +68,7 @@ func (f RunnerFactory) NewReviewRunner() (*review.ReviewRunner, error) {
 
 	probeRunner := f.opts.ProbeRunner
 	if probeRunner == nil {
-		probeRunner = review.NewProbeRunner(f.opts.RepoRoot)
+		probeRunner = reviewprobe.NewProbeRunner(f.opts.RepoRoot)
 	}
 
 	return review.NewReviewRunner(review.ReviewRunnerOptions{
@@ -82,20 +87,20 @@ func (f RunnerFactory) NewReviewRunner() (*review.ReviewRunner, error) {
 	})
 }
 
-func (f RunnerFactory) reviewEvidenceBuilderOptions() []review.ReviewEvidenceBuilderOption {
+func (f RunnerFactory) reviewEvidenceBuilderOptions() []reviewevidence.ReviewEvidenceBuilderOption {
 	cfg := f.opts.Config
 	if cfg == nil || !cfg.Review.WebSearchEvidence.Enabled {
 		return nil
 	}
 	searcher := newReviewWebSearchRunner(f.opts)
-	collector := review.NewReviewWebSearchEvidenceCollector(review.ReviewWebSearchEvidenceCollectorOptions{
+	collector := reviewevidence.NewReviewWebSearchEvidenceCollector(reviewevidence.ReviewWebSearchEvidenceCollectorOptions{
 		Enabled:            true,
 		MaxQueries:         cfg.Review.WebSearchEvidence.MaxQueries,
 		MaxResultsPerQuery: cfg.Review.WebSearchEvidence.MaxResultsPerQuery,
 		Searcher:           searcher,
 	})
-	return []review.ReviewEvidenceBuilderOption{
-		review.WithReviewWebSearchEvidenceProvider(collector),
+	return []reviewevidence.ReviewEvidenceBuilderOption{
+		reviewevidence.WithReviewWebSearchEvidenceProvider(collector),
 	}
 }
 
@@ -117,7 +122,7 @@ func newReviewWebSearchRunner(opts RunnerFactoryOptions) reviewWebSearchRunner {
 	}
 }
 
-func (r reviewWebSearchRunner) SearchReviewWeb(ctx context.Context, query string, maxResults int) (review.ReviewWebSearchQueryResult, error) {
+func (r reviewWebSearchRunner) SearchReviewWeb(ctx context.Context, query string, maxResults int) (externaldoc.WebSearchQueryResult, error) {
 	resp, err := searchtool.SearchWeb(ctx, searchtool.WebSearchRequest{
 		Config:                r.cfg,
 		MainProvider:          r.mainProvider,
@@ -127,16 +132,16 @@ func (r reviewWebSearchRunner) SearchReviewWeb(ctx context.Context, query string
 		MaxResults:            maxResults,
 		UsageAttribution:      r.usageAttribution,
 	})
-	results := make([]review.ReviewWebSearchEvidenceResult, 0, len(resp.Results))
+	results := make([]externaldoc.WebSearchEvidenceResult, 0, len(resp.Results))
 	for _, result := range resp.Results {
-		results = append(results, review.ReviewWebSearchEvidenceResult{
+		results = append(results, externaldoc.WebSearchEvidenceResult{
 			Title:        result.Title,
 			URL:          result.URL,
 			Snippet:      result.Snippet,
 			SourceDomain: result.SourceDomain,
 		})
 	}
-	return review.ReviewWebSearchQueryResult{
+	return externaldoc.WebSearchQueryResult{
 		Provider:  resp.Provider,
 		Results:   results,
 		Truncated: resp.ResultsTruncated,

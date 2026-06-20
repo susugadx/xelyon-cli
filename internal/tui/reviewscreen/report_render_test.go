@@ -5,7 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewdomain "github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewReportTimelineMessage_SanitizesGroupAndFindingTitles(t *testing.T) {
@@ -31,14 +32,14 @@ func TestReviewReportTimelineMessage_RendersFindingSummaryAndEvidenceRefs(t *tes
 	report.RootCauseGroups[0].Summary = "request state lifecycle is split"
 	report.RootCauseGroups[0].FixStrategy = "centralize request lifecycle"
 	report.RootCauseGroups[0].Findings[0].Summary = "completed review result is discarded after close"
-	report.RootCauseGroups[0].Findings[0].EvidenceRefs = []review.ReviewEvidenceRef{{
-		Kind:         review.ReviewEvidenceKindFile,
+	report.RootCauseGroups[0].Findings[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{{
+		Kind:         reviewreport.ReviewEvidenceKindFile,
 		Summary:      "Esc closes the screen while the request keeps running",
 		Path:         "internal/tui/review_screen_input.go",
 		Line:         87,
 		Snippet:      "return reviewCommandClose",
 		ProbeID:      "probe-1",
-		CommandIndex: review.ReviewCommandIndex(0),
+		CommandIndex: reviewreport.ReviewCommandIndex(0),
 	}}
 
 	message := TimelineMessage(report)
@@ -56,7 +57,7 @@ func TestReviewReportTimelineMessage_RendersFindingSummaryAndEvidenceRefs(t *tes
 
 func TestReviewReportTimelineMessage_RendersComputedSummaryCounts(t *testing.T) {
 	report := newTUITestReviewReport()
-	report.ComputedSummary = &review.ReviewReportComputedSummary{
+	report.ComputedSummary = &reviewreport.ReviewReportComputedSummary{
 		RootCauseGroupCount:       2,
 		FindingCount:              3,
 		CheckedSurfaceCount:       4,
@@ -91,20 +92,20 @@ func TestReviewReportTimelineMessage_RendersComputedSummaryCounts(t *testing.T) 
 	}
 }
 
-func newTUITestReviewReport() review.ReviewReport {
-	return review.ReviewReport{
-		SchemaVersion:             review.ReviewReportSchemaVersionV2,
-		TargetKind:                review.TargetCurrentChanges,
+func newTUITestReviewReport() reviewreport.ReviewReport {
+	return reviewreport.ReviewReport{
+		SchemaVersion:             reviewreport.ReviewReportSchemaVersionV2,
+		TargetKind:                reviewdomain.TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-		OverallVerificationStatus: review.ReviewVerificationVerified,
-		Verdict:                   review.ReviewVerdictHasFindings,
+		OverallVerificationStatus: reviewreport.ReviewVerificationVerified,
+		Verdict:                   reviewreport.ReviewVerdictHasFindings,
 		Summary:                   "Review found one issue.",
-		RootCauseGroups: []review.ReviewRootCauseGroup{{
+		RootCauseGroups: []reviewreport.ReviewRootCauseGroup{{
 			ID:                 "request-state",
 			Title:              "request state",
-			Severity:           review.ReviewGroupSeverityMedium,
-			VerificationStatus: review.ReviewVerificationVerified,
-			Findings: []review.ReviewFinding{{
+			Severity:           reviewreport.ReviewGroupSeverityMedium,
+			VerificationStatus: reviewreport.ReviewVerificationVerified,
+			Findings: []reviewreport.ReviewFinding{{
 				ID:    "stale-result",
 				Title: "stale result is ignored",
 			}},

@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
-func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRequest, evidenceMarkdown string, bundle ReviewEvidenceBundle) (ReviewProbePlan, error) {
+func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRequest, evidenceMarkdown string, bundle reviewevidence.ReviewEvidenceBundle) (reviewprobeplan.ReviewProbePlan, error) {
 	planPrompt := reviewmodelinput.BuildProbePlanPrompt(reviewmodelinput.ProbePlanPromptInput{
 		CustomInstructions: req.CustomInstructions,
 		EvidenceMarkdown:   evidenceMarkdown,
@@ -19,7 +22,7 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 		Prompt: planPrompt,
 	})
 	if err != nil {
-		return ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
+		return reviewprobeplan.ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
 	}
 	r.saveReviewRunTextArtifact("probe_plan_raw.json", planResp.Content, redactor)
 
@@ -41,25 +44,26 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 		Prompt: repairPrompt,
 	})
 	if err != nil {
-		return ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
+		return reviewprobeplan.ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
 	}
 	r.saveReviewRunTextArtifact("probe_plan_raw.json", repairResp.Content, redactor)
 
 	plan, decodeErr = decodeReviewProbePlanJSONAgainstEvidence(repairResp.Content, bundle)
 	if decodeErr != nil {
-		return ReviewProbePlan{}, fmt.Errorf("review runner decode probe plan: %w", decodeErr)
+		return reviewprobeplan.ReviewProbePlan{}, fmt.Errorf("review runner decode probe plan: %w", decodeErr)
 	}
 	r.saveReviewRunJSONArtifact("probe_plan_final.json", plan, redactor)
 	return plan, nil
 }
 
-func decodeReviewProbePlanJSONAgainstEvidence(content string, bundle ReviewEvidenceBundle) (ReviewProbePlan, error) {
-	plan, err := DecodeReviewProbePlanJSON([]byte(content))
+func decodeReviewProbePlanJSONAgainstEvidence(content string, bundle reviewevidence.ReviewEvidenceBundle) (reviewprobeplan.ReviewProbePlan, error) {
+	plan, err := reviewprobeplan.DecodeReviewProbePlanJSON([]byte(content))
 	if err != nil {
-		return ReviewProbePlan{}, err
+		return reviewprobeplan.ReviewProbePlan{}, err
 	}
-	if err := ValidateReviewProbePlanAgainstEvidence(plan, bundle); err != nil {
-		return ReviewProbePlan{}, fmt.Errorf("ValidateReviewProbePlanAgainstEvidence: %w", err)
+	input := reviewevidence.BuildReviewAnalysisEvidenceInput(reviewevidence.BuildReviewEvidenceModelInput(bundle))
+	if err := reviewanalysis.ValidateProbePlanAgainstEvidence(plan, input); err != nil {
+		return reviewprobeplan.ReviewProbePlan{}, fmt.Errorf("ValidateReviewProbePlanAgainstEvidence: %w", err)
 	}
 	return plan, nil
 }

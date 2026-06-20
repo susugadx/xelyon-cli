@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 func TestReviewWebSearchEvidenceCollectorPostPass1SearchesPlanDerivedQuery(t *testing.T) {
@@ -150,28 +150,28 @@ func TestReviewWebSearchEvidenceCollectorPostPass1ErrorPreservesMergedSignals(t 
 	}
 }
 
-func newReviewWebSearchPostPass1OAuthPlanForTest() reviewprobe.ReviewProbePlan {
-	return reviewprobe.ReviewProbePlan{
-		SchemaVersion: reviewprobe.ReviewProbePlanSchemaVersionV2,
+func newReviewWebSearchPostPass1OAuthPlanForTest() reviewprobeplan.ReviewProbePlan {
+	return reviewprobeplan.ReviewProbePlan{
+		SchemaVersion: reviewprobeplan.ReviewProbePlanSchemaVersionV2,
 		TargetKind:    TargetCurrentChanges,
-		ImpactSurfaces: []reviewprobe.ReviewProbeImpactSurface{
+		ImpactSurfaces: []reviewprobeplan.ReviewProbeImpactSurface{
 			{
 				ID:              "surface-oauth",
 				Summary:         "OAuth redirect URI validation changed.",
-				Category:        reviewprobe.ReviewProbeImpactSurfaceValidator,
+				Category:        reviewprobeplan.ReviewProbeImpactSurfaceValidator,
 				EvidenceSummary: "Diff mentions redirect_uri and token exchange.",
-				Status:          reviewprobe.ReviewProbeImpactSurfaceUnverified,
+				Status:          reviewprobeplan.ReviewProbeImpactSurfaceUnverified,
 				Reason:          "External OAuth 2.0 specification should be checked.",
 			},
 		},
-		CandidateRisks: []reviewprobe.ReviewProbeCandidateRisk{
+		CandidateRisks: []reviewprobeplan.ReviewProbeCandidateRisk{
 			{
 				ID:                   "risk-oauth",
 				Summary:              "OAuth flow could be accepted with a mismatched redirect URI.",
-				Severity:             reviewprobe.ReviewGroupSeverityMedium,
+				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-oauth"},
 				VerificationStrategy: "Confirm redirect URI requirements against OAuth 2.0 specification.",
-				Status:               reviewprobe.ReviewProbeCandidateRiskUnverified,
+				Status:               reviewprobeplan.ReviewProbeCandidateRiskUnverified,
 			},
 		},
 	}

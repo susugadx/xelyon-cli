@@ -6,6 +6,8 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
 const (
@@ -33,18 +35,11 @@ const (
 	reviewProbeRawOutputReasonUnreflectedEvidenceKeep = "review_probe_unreflected_evidence_keep"
 )
 
-// ReviewRawOutputArtifactStore は review prompt reduction が使う rawoutputs store 境界。
-type ReviewRawOutputArtifactStore interface {
-	Create(ctx context.Context, req rawoutputs.CreateRequest) (rawoutputs.CreateResult, error)
-	Verify(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.VerifyResult, error)
-	Resolve(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.ResolvedArtifact, error)
-}
-
 type reviewProbeRawOutputBuild struct {
 	probeRefs      map[string]rawoutputs.RawOutputRef
 	commandRefs    map[reviewmodelinput.ProbeCommandResultKey]rawoutputs.RawOutputRef
 	context        string
-	ledger         ReviewProbeRawOutputLedger
+	ledger         reviewpromptreduction.ReviewProbeRawOutputLedger
 	applyAllowed   bool
 	disabledReason string
 }
@@ -52,7 +47,7 @@ type reviewProbeRawOutputBuild struct {
 type reviewProbeRawOutputSource struct {
 	probeID          string
 	commandIndex     *int
-	command          ReviewProbeCommandResult
+	command          reviewprobe.ReviewProbeCommandResult
 	body             string
 	required         bool
 	absorbedBy       []string
@@ -60,13 +55,13 @@ type reviewProbeRawOutputSource struct {
 	replacementBytes int
 }
 
-func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Context, phase ReviewModelPhase, promptKind string, candidates reviewProbeResultAbsorptionCandidates, probeResults []ReviewProbeResult, redactor reviewmodelinput.Redactor) reviewProbeRawOutputBuild {
+func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Context, phase ReviewModelPhase, promptKind string, candidates reviewProbeResultAbsorptionCandidates, probeResults []reviewprobe.ReviewProbeResult, redactor reviewmodelinput.Redactor) reviewProbeRawOutputBuild {
 	build := reviewProbeRawOutputBuild{
 		probeRefs:   map[string]rawoutputs.RawOutputRef{},
 		commandRefs: map[reviewmodelinput.ProbeCommandResultKey]rawoutputs.RawOutputRef{},
-		ledger: ReviewProbeRawOutputLedger{
+		ledger: reviewpromptreduction.ReviewProbeRawOutputLedger{
 			ReviewRunID:           r.reviewRunID,
-			Phase:                 phase,
+			Phase:                 reviewPromptReductionPhase(phase),
 			PromptKind:            promptKind,
 			BudgetTokens:          r.reviewProbeRawOutputBudget(),
 			MetadataReserveTokens: reviewProbeRawOutputMetadataReserve(r.reviewProbeRawOutputBudget()),
@@ -77,7 +72,7 @@ func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Contex
 	if candidates.empty() {
 		return build
 	}
-	if normalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == ReviewRawOutputArtifactsModeOff {
+	if reviewpromptreduction.NormalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == reviewpromptreduction.ReviewRawOutputArtifactsModeOff {
 		build.disabledReason = reviewProbeRawOutputReasonArtifactMissing
 		return build
 	}
@@ -122,17 +117,17 @@ func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Contex
 		build.disabledReason = ledger.FailClosedReason
 		return build
 	}
-	build.applyAllowed = normalizeReviewPromptReductionMode(r.promptReductionMode) == ReviewPromptReductionModeApply &&
-		normalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == ReviewRawOutputArtifactsModeApply &&
+	build.applyAllowed = reviewpromptreduction.NormalizeReviewPromptReductionMode(r.promptReductionMode) == reviewpromptreduction.ReviewPromptReductionModeApply &&
+		reviewpromptreduction.NormalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == reviewpromptreduction.ReviewRawOutputArtifactsModeApply &&
 		strings.TrimSpace(build.context) != ""
-	if !build.applyAllowed && normalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == ReviewRawOutputArtifactsModeDryRun {
+	if !build.applyAllowed && reviewpromptreduction.NormalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == reviewpromptreduction.ReviewRawOutputArtifactsModeDryRun {
 		build.disabledReason = reviewProbeRawOutputReasonArtifactsDryRun
 	}
 	return build
 }
 
-func reviewProbeRawOutputSources(candidates reviewProbeResultAbsorptionCandidates, probeResults []ReviewProbeResult) []reviewProbeRawOutputSource {
-	resultsByID := make(map[string]ReviewProbeResult, len(probeResults))
+func reviewProbeRawOutputSources(candidates reviewProbeResultAbsorptionCandidates, probeResults []reviewprobe.ReviewProbeResult) []reviewProbeRawOutputSource {
+	resultsByID := make(map[string]reviewprobe.ReviewProbeResult, len(probeResults))
 	for _, result := range probeResults {
 		if strings.TrimSpace(result.ID) != "" {
 			resultsByID[result.ID] = result

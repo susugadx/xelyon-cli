@@ -9,6 +9,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func TestRunnerFactoryRejectsNilModel(t *testing.T) {
@@ -120,12 +122,12 @@ func (fakeReviewModel) CompleteReview(context.Context, review.ReviewModelRequest
 
 type fakeEvidenceBuilder struct{}
 
-func (fakeEvidenceBuilder) BuildCurrentChanges(context.Context) (review.ReviewEvidenceBundle, error) {
-	return review.ReviewEvidenceBundle{}, nil
+func (fakeEvidenceBuilder) BuildCurrentChanges(context.Context) (reviewevidence.ReviewEvidenceBundle, error) {
+	return reviewevidence.ReviewEvidenceBundle{}, nil
 }
 
 type fakeProbeRunner struct{}
 
-func (fakeProbeRunner) Run(context.Context, review.ReviewProbeRequest) (review.ReviewProbeResult, error) {
-	return review.ReviewProbeResult{}, nil
+func (fakeProbeRunner) Run(context.Context, reviewprobe.ReviewProbeRequest) (reviewprobe.ReviewProbeResult, error) {
+	return reviewprobe.ReviewProbeResult{}, nil
 }

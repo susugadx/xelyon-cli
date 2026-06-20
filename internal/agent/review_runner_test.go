@@ -15,6 +15,9 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewdomain "github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
@@ -54,7 +57,7 @@ func TestAgentRunReviewUsesRunnerAndDoesNotMutateConversation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunReview() error = %v", err)
 	}
-	if report.Verdict != review.ReviewVerdictClean {
+	if report.Verdict != reviewreport.ReviewVerdictClean {
 		t.Fatalf("report verdict = %q, want clean", report.Verdict)
 	}
 	if provider.callCount != 3 {
@@ -140,7 +143,7 @@ func TestAgentRunReviewArtifactFlushFailureWarnsWithoutFailingReview(t *testing.
 	if err != nil {
 		t.Fatalf("RunReview() error = %v, want nil despite artifact flush failure", err)
 	}
-	if report.Verdict != review.ReviewVerdictClean {
+	if report.Verdict != reviewreport.ReviewVerdictClean {
 		t.Fatalf("report verdict = %q, want clean", report.Verdict)
 	}
 	if !strings.Contains(out.String(), "Warning: failed to save review artifact") {
@@ -178,7 +181,7 @@ func TestAgentRunReviewArtifactFlushRejectsSymlinkedRepoArtifactDir(t *testing.T
 	if err != nil {
 		t.Fatalf("RunReview() error = %v, want nil despite artifact flush failure", err)
 	}
-	if report.Verdict != review.ReviewVerdictClean {
+	if report.Verdict != reviewreport.ReviewVerdictClean {
 		t.Fatalf("report verdict = %q, want clean", report.Verdict)
 	}
 	if !strings.Contains(out.String(), "Warning: failed to save review artifact") || !strings.Contains(out.String(), "symlink") {
@@ -297,7 +300,7 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 	if err != nil {
 		t.Fatalf("RunReview() error = %v", err)
 	}
-	if report.Verdict != review.ReviewVerdictClean {
+	if report.Verdict != reviewreport.ReviewVerdictClean {
 		t.Fatalf("report verdict = %q, want clean", report.Verdict)
 	}
 	if provider.callCount != 5 {
@@ -437,54 +440,54 @@ func createReviewArtifactSymlinkForAgentTest(t *testing.T, oldname, newname stri
 	}
 }
 
-func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) review.ReviewProbePlan {
-	return review.ReviewProbePlan{
-		SchemaVersion: review.ReviewProbePlanSchemaVersionV2,
-		TargetKind:    review.TargetCurrentChanges,
-		ImpactSurfaces: []review.ReviewProbeImpactSurface{
+func newAgentNoProbeReviewPlanForTest(surfaceSummary, riskSummary string) reviewprobeplan.ReviewProbePlan {
+	return reviewprobeplan.ReviewProbePlan{
+		SchemaVersion: reviewprobeplan.ReviewProbePlanSchemaVersionV2,
+		TargetKind:    reviewdomain.TargetCurrentChanges,
+		ImpactSurfaces: []reviewprobeplan.ReviewProbeImpactSurface{
 			{
 				ID:              "surface-1",
 				Summary:         surfaceSummary,
-				Category:        review.ReviewProbeImpactSurfaceChangedFile,
+				Category:        reviewprobeplan.ReviewProbeImpactSurfaceChangedFile,
 				EvidenceSummary: "Git evidence covers main.go.",
-				Status:          review.ReviewProbeImpactSurfaceChecked,
+				Status:          reviewprobeplan.ReviewProbeImpactSurfaceChecked,
 				Reason:          "Existing evidence covers surface-1.",
 			},
 		},
-		CandidateRisks: []review.ReviewProbeCandidateRisk{
+		CandidateRisks: []reviewprobeplan.ReviewProbeCandidateRisk{
 			{
 				ID:                   "risk-1",
 				Summary:              riskSummary,
-				Severity:             review.ReviewGroupSeverityMedium,
+				Severity:             reviewprobeplan.ReviewGroupSeverityMedium,
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Existing evidence covers the path.",
 				VerificationStrategy: "No additional probe is needed.",
-				Status:               review.ReviewProbeCandidateRiskCheckedByEvidence,
+				Status:               reviewprobeplan.ReviewProbeCandidateRiskCheckedByEvidence,
 			},
 		},
-		Probes:        []review.ReviewPlannedProbe{},
+		Probes:        []reviewprobeplan.ReviewPlannedProbe{},
 		NoProbeReason: "surface-1 and risk-1 are checked by existing evidence.",
 	}
 }
 
-func newAgentArtifactIsolationProbePlanForTest() review.ReviewProbePlan {
+func newAgentArtifactIsolationProbePlanForTest() reviewprobeplan.ReviewProbePlan {
 	plan := newAgentNoProbeReviewPlanForTest(
 		"Agent artifact runner path covers main.go production changes and untracked debug artifact pressure.",
 		"Agent artifact runner could expose debug files to review probes.",
 	)
-	plan.ImpactSurfaces[0].Status = review.ReviewProbeImpactSurfaceNeedsProbe
+	plan.ImpactSurfaces[0].Status = reviewprobeplan.ReviewProbeImpactSurfaceNeedsProbe
 	plan.ImpactSurfaces[0].Reason = "A host-readonly probe should verify repo-local debug artifacts are absent before artifact flush."
-	plan.CandidateRisks[0].Status = review.ReviewProbeCandidateRiskNeedsProbe
+	plan.CandidateRisks[0].Status = reviewprobeplan.ReviewProbeCandidateRiskNeedsProbe
 	plan.CandidateRisks[0].VerificationStrategy = "Run a read-only find scoped to .xelyon and confirm no review-run paths are visible."
 	plan.NoProbeReason = ""
-	plan.Probes = []review.ReviewPlannedProbe{
+	plan.Probes = []reviewprobeplan.ReviewPlannedProbe{
 		{
 			ID:         "probe-artifact-isolation",
 			SurfaceIDs: []string{"surface-1"},
 			RiskIDs:    []string{"risk-1"},
 			Purpose:    "Verify debug review artifacts do not appear in the repository before probes complete.",
-			Mode:       review.ReviewProbeHostReadOnly,
-			Commands: []review.ReviewPlannedProbeCommand{
+			Mode:       reviewprobeplan.ReviewProbeHostReadOnly,
+			Commands: []reviewprobeplan.ReviewPlannedProbeCommand{
 				{
 					Command: "find",
 					Args:    []string{".", "-path", "./.xelyon/*", "-print"},
@@ -498,26 +501,26 @@ func newAgentArtifactIsolationProbePlanForTest() review.ReviewProbePlan {
 	return plan
 }
 
-func newAgentCleanReviewReportForTest() review.ReviewReport {
-	return review.ReviewReport{
-		SchemaVersion:             review.ReviewReportSchemaVersionV2,
-		TargetKind:                review.TargetCurrentChanges,
+func newAgentCleanReviewReportForTest() reviewreport.ReviewReport {
+	return reviewreport.ReviewReport{
+		SchemaVersion:             reviewreport.ReviewReportSchemaVersionV2,
+		TargetKind:                reviewdomain.TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-		OverallVerificationStatus: review.ReviewVerificationVerified,
-		Verdict:                   review.ReviewVerdictClean,
+		OverallVerificationStatus: reviewreport.ReviewVerificationVerified,
+		Verdict:                   reviewreport.ReviewVerdictClean,
 		Summary:                   "No findings.",
-		ScopeCoverage: &review.ReviewReportScopeCoverage{
-			ReviewedImpactSurfaces: []review.ReviewReportImpactSurfaceCoverage{
+		ScopeCoverage: &reviewreport.ReviewReportScopeCoverage{
+			ReviewedImpactSurfaces: []reviewreport.ReviewReportImpactSurfaceCoverage{
 				{
 					SurfaceID: "surface-1",
-					Status:    review.ReviewReportImpactSurfaceChecked,
+					Status:    reviewreport.ReviewReportImpactSurfaceChecked,
 					Summary:   "surface-1 was checked.",
 				},
 			},
-			ReviewedCandidateRisks: []review.ReviewReportCandidateRiskCoverage{
+			ReviewedCandidateRisks: []reviewreport.ReviewReportCandidateRiskCoverage{
 				{
 					RiskID:  "risk-1",
-					Status:  review.ReviewReportCandidateRiskDismissed,
+					Status:  reviewreport.ReviewReportCandidateRiskDismissed,
 					Summary: "risk-1 was dismissed.",
 				},
 			},
@@ -525,22 +528,22 @@ func newAgentCleanReviewReportForTest() review.ReviewReport {
 	}
 }
 
-func newAgentCleanReviewReportWithPassedProbeEvidenceForTest(probeID string) review.ReviewReport {
+func newAgentCleanReviewReportWithPassedProbeEvidenceForTest(probeID string) reviewreport.ReviewReport {
 	report := newAgentCleanReviewReportForTest()
-	ref := review.ReviewEvidenceRef{
-		Kind:    review.ReviewEvidenceKindProbe,
+	ref := reviewreport.ReviewEvidenceRef{
+		Kind:    reviewreport.ReviewEvidenceKindProbe,
 		ProbeID: probeID,
 		Summary: "The linked probe passed.",
 	}
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []review.ReviewEvidenceRef{ref}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []review.ReviewEvidenceRef{ref}
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
+	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
 	return report
 }
 
-func newAgentSaturatedReviewCheckForTest() review.ReviewSaturationCheck {
-	return review.ReviewSaturationCheck{
-		SchemaVersion:  review.ReviewSaturationCheckSchemaVersionV1,
-		Status:         review.ReviewSaturationStatusSaturated,
+func newAgentSaturatedReviewCheckForTest() reviewreport.ReviewSaturationCheck {
+	return reviewreport.ReviewSaturationCheck{
+		SchemaVersion:  reviewreport.ReviewSaturationCheckSchemaVersionV1,
+		Status:         reviewreport.ReviewSaturationStatusSaturated,
 		CheckedSummary: "Final report covers Pass1 scope.",
 	}
 }

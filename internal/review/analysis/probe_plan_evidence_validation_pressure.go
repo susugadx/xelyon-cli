@@ -3,17 +3,17 @@ package analysis
 import (
 	"fmt"
 
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
-func validateReviewProbePlanTruncationPressure(input EvidenceInput, plan reviewprobe.ReviewProbePlan) error {
+func validateReviewProbePlanTruncationPressure(input EvidenceInput, plan reviewprobeplan.ReviewProbePlan) error {
 	if !reviewEvidenceInputHasDiffContextOrSearchTruncation(input) || !reviewProbePlanAllImpactSurfacesChecked(plan) {
 		return nil
 	}
 	return fmt.Errorf("impact_surfaces cannot all be checked when diff, context, or search evidence was truncated")
 }
 
-func validateReviewProbePlanGenericImpactTruncationPressure(input EvidenceInput, plan reviewprobe.ReviewProbePlan) error {
+func validateReviewProbePlanGenericImpactTruncationPressure(input EvidenceInput, plan reviewprobeplan.ReviewProbePlan) error {
 	if !input.GenericImpact.Truncated || len(plan.Probes) > 0 || !reviewProbePlanAllImpactSurfacesChecked(plan) {
 		return nil
 	}
@@ -39,7 +39,7 @@ func reviewEvidenceInputHasDiffContextOrSearchTruncation(input EvidenceInput) bo
 	return input.TruncationFlags.RelatedCandidates || input.TruncationFlags.RelatedSearch
 }
 
-func validateReviewProbePlanNoProbeRequiresRelatedEvidence(input EvidenceInput, plan reviewprobe.ReviewProbePlan) error {
+func validateReviewProbePlanNoProbeRequiresRelatedEvidence(input EvidenceInput, plan reviewprobeplan.ReviewProbePlan) error {
 	if len(plan.Probes) > 0 || !reviewProbePlanAllImpactSurfacesChecked(plan) {
 		return nil
 	}
@@ -49,12 +49,12 @@ func validateReviewProbePlanNoProbeRequiresRelatedEvidence(input EvidenceInput, 
 	return fmt.Errorf("no-probe all-checked plan requires related context files or related search hits; absence of related evidence is not proof of no impact")
 }
 
-func reviewProbePlanAllImpactSurfacesChecked(plan reviewprobe.ReviewProbePlan) bool {
+func reviewProbePlanAllImpactSurfacesChecked(plan reviewprobeplan.ReviewProbePlan) bool {
 	if len(plan.ImpactSurfaces) == 0 {
 		return false
 	}
 	for _, surface := range plan.ImpactSurfaces {
-		if surface.Status != reviewprobe.ReviewProbeImpactSurfaceChecked {
+		if surface.Status != reviewprobeplan.ReviewProbeImpactSurfaceChecked {
 			return false
 		}
 	}

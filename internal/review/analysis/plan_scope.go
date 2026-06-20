@@ -1,12 +1,12 @@
 package analysis
 
 import (
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 // PlanScopeFromProbePlan は Pass1 probe plan から report validation 用の最小 scope を作る。
-func PlanScopeFromProbePlan(plan reviewprobe.ReviewProbePlan) reviewreport.PlanScope {
+func PlanScopeFromProbePlan(plan reviewprobeplan.ReviewProbePlan) reviewreport.PlanScope {
 	scope := reviewreport.PlanScope{
 		ImpactSurfaces: make([]reviewreport.PlanImpactSurface, 0, len(plan.ImpactSurfaces)),
 		CandidateRisks: make([]reviewreport.PlanCandidateRisk, 0, len(plan.CandidateRisks)),

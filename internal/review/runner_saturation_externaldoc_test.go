@@ -4,6 +4,11 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 func TestReviewRunnerSaturationCompactsAbsorbedExternalDocSnippet(t *testing.T) {
@@ -21,14 +26,14 @@ func TestReviewRunnerSaturationCompactsAbsorbedExternalDocSnippet(t *testing.T) 
 		strings.Repeat("supporting official reference snippet ", 40),
 		"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	)
-	evidence.bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	evidence.bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled:      true,
-		ExternalDocs: []ReviewExternalDocEvidence{absorbedDoc, supportDoc},
+		ExternalDocs: []externaldoc.Evidence{absorbedDoc, supportDoc},
 	}
 	report := newRunnerCleanReportForTest(nil)
 	ref := newExternalDocEvidenceRefForSaturationCompactTest(absorbedDoc)
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{ref}
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
+	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
 			{content: string(mustMarshalReviewProbePlanForRunnerTest(t, newRunnerNoProbePlanForTest()))},
@@ -40,7 +45,7 @@ func TestReviewRunnerSaturationCompactsAbsorbedExternalDocSnippet(t *testing.T) 
 		EvidenceBuilder:     evidence,
 		ProbeRunner:         &runnerFakeProbeRunner{},
 		Model:               model,
-		PromptReductionMode: ReviewPromptReductionModeApply,
+		PromptReductionMode: reviewpromptreduction.ReviewPromptReductionModeApply,
 	})
 	if err != nil {
 		t.Fatalf("NewReviewRunner() error = %v, want nil", err)
@@ -81,13 +86,13 @@ func TestReviewRunnerSaturationCompactsAbsorbedExternalDocSnippet(t *testing.T) 
 func TestReviewPromptEvidenceMarkdownForAbsorbedReportPreservesDiscoveryCompactionWithoutAbsorption(t *testing.T) {
 	rawDiscoverySnippet := strings.Repeat("RAW_DISCOVERY_SNIPPET_MUST_NOT_REEXPAND_WHEN_ABSORPTION_UNAVAILABLE ", 400)
 	bundle := newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")
-	bundle.WebSearchEvidence = reviewWebSearchDiscoveryCompactEvidenceForTest(rawDiscoverySnippet, []ReviewExternalDocEvidence{
-		reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official-1", ReviewExternalDocSourceCredibilityOfficialCandidate, false, "official source snippet 1"),
-		reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official-2", ReviewExternalDocSourceCredibilityOfficialCandidate, false, "official source snippet 2"),
+	bundle.WebSearchEvidence = reviewWebSearchDiscoveryCompactEvidenceForTest(rawDiscoverySnippet, []externaldoc.Evidence{
+		reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official-1", externaldoc.SourceCredibilityOfficialCandidate, false, "official source snippet 1"),
+		reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official-2", externaldoc.SourceCredibilityOfficialCandidate, false, "official source snippet 2"),
 	})
-	rawMarkdown := RenderReviewEvidenceMarkdown(bundle)
+	rawMarkdown := reviewevidence.RenderReviewEvidenceMarkdown(bundle)
 	report := newRunnerCleanReportForTest(nil)
-	runner := &ReviewRunner{promptReductionMode: ReviewPromptReductionModeApply}
+	runner := &ReviewRunner{promptReductionMode: reviewpromptreduction.ReviewPromptReductionModeApply}
 
 	got := runner.reviewPromptEvidenceMarkdownForAbsorbedReport(ReviewModelPhaseSaturationCheck, bundle, rawMarkdown, report)
 
@@ -124,33 +129,33 @@ func TestReviewExternalDocAbsorptionKeepsFindingEvidenceSnippet(t *testing.T) {
 		"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 	)
 	bundle := newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")
-	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled:      true,
-		ExternalDocs: []ReviewExternalDocEvidence{doc, supportDoc},
+		ExternalDocs: []externaldoc.Evidence{doc, supportDoc},
 	}
 	report := newRunnerCleanReportForTest(nil)
 	ref := newExternalDocEvidenceRefForSaturationCompactTest(doc)
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-	report.RootCauseGroups = []ReviewRootCauseGroup{
+	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
+	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
+	report.RootCauseGroups = []reviewreport.ReviewRootCauseGroup{
 		{
 			ID:                 "group-1",
 			Title:              "Finding group",
-			Severity:           ReviewGroupSeverityHigh,
-			VerificationStatus: ReviewVerificationVerified,
-			Findings: []ReviewFinding{
+			Severity:           reviewreport.ReviewGroupSeverityHigh,
+			VerificationStatus: reviewreport.ReviewVerificationVerified,
+			Findings: []reviewreport.ReviewFinding{
 				{
 					ID:           "finding-1",
 					Title:        "Finding cites external doc",
-					EvidenceRefs: []ReviewEvidenceRef{ref},
+					EvidenceRefs: []reviewreport.ReviewEvidenceRef{ref},
 				},
 			},
 		},
 	}
 
-	_, _, _, _, ok := compactReviewExternalDocAbsorbedEvidence(ReviewModelPhaseSaturationCheck, bundle, report)
+	_, _, _, _, ok := reviewpromptreduction.CompactReviewExternalDocAbsorbedEvidence(reviewPromptReductionPhase(ReviewModelPhaseSaturationCheck), bundle, report)
 	if ok {
-		t.Fatal("compactReviewExternalDocAbsorbedEvidence() ok = true, want finding evidence snippet kept")
+		t.Fatal("reviewpromptreduction.CompactReviewExternalDocAbsorbedEvidence() ok = true, want finding evidence snippet kept")
 	}
 }
 
@@ -169,14 +174,14 @@ func TestReviewRunnerRevisionCompactsAbsorbedExternalDocSnippet(t *testing.T) {
 		strings.Repeat("supporting revision official reference snippet ", 40),
 		"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
 	)
-	evidence.bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	evidence.bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled:      true,
-		ExternalDocs: []ReviewExternalDocEvidence{absorbedDoc, supportDoc},
+		ExternalDocs: []externaldoc.Evidence{absorbedDoc, supportDoc},
 	}
 	initialReport := newRunnerCleanReportForTest(nil)
 	ref := newExternalDocEvidenceRefForSaturationCompactTest(absorbedDoc)
-	initialReport.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{ref}
-	initialReport.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{ref}
+	initialReport.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
+	initialReport.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref}
 	revisedReport := initialReport
 	model := &runnerFakeModel{
 		responses: []runnerFakeModelResponse{
@@ -191,7 +196,7 @@ func TestReviewRunnerRevisionCompactsAbsorbedExternalDocSnippet(t *testing.T) {
 		EvidenceBuilder:     evidence,
 		ProbeRunner:         &runnerFakeProbeRunner{},
 		Model:               model,
-		PromptReductionMode: ReviewPromptReductionModeApply,
+		PromptReductionMode: reviewpromptreduction.ReviewPromptReductionModeApply,
 	})
 	if err != nil {
 		t.Fatalf("NewReviewRunner() error = %v, want nil", err)
@@ -221,12 +226,12 @@ func TestReviewRunnerRevisionCompactsAbsorbedExternalDocSnippet(t *testing.T) {
 	}
 	item := findReviewPromptReductionItemForTest(runner, "external_doc:external-doc-revision:external-doc-revision-snippet-1", ReviewModelPhaseReportRevision)
 	if item == nil ||
-		item.Family != ReviewPromptReductionFamilyExternalDoc ||
-		item.Status != ReviewPromptReductionItemAbsorbed ||
-		item.RawArtifactRef != reviewWebSearchEvidenceRawArtifactRef ||
+		item.Family != reviewpromptreduction.ReviewPromptReductionFamilyExternalDoc ||
+		item.Status != reviewpromptreduction.ReviewPromptReductionItemAbsorbed ||
+		item.RawArtifactRef != reviewpromptreduction.ReviewWebSearchEvidenceRawArtifactRef ||
 		len(item.AbsorbedBy) != 2 ||
 		len(item.EvidenceRefs) != 1 ||
-		item.EvidenceRefs[0].Kind != ReviewEvidenceKindExternalDoc ||
+		item.EvidenceRefs[0].Kind != reviewreport.ReviewEvidenceKindExternalDoc ||
 		item.EvidenceRefs[0].DocID != "external-doc-revision" ||
 		item.EvidenceRefs[0].SnippetID != "external-doc-revision-snippet-1" ||
 		item.EvidenceRefs[0].ContentHash == "" ||
@@ -234,8 +239,8 @@ func TestReviewRunnerRevisionCompactsAbsorbedExternalDocSnippet(t *testing.T) {
 		t.Fatalf("absorbed external_doc prompt reduction item = %#v, want external_doc state item with refs and savings", item)
 	}
 	reductionReport := runner.PromptReductionReport()
-	if reductionReport.FamilyCounts[string(ReviewPromptReductionFamilyExternalDoc)] == 0 ||
-		reductionReport.StatusCounts[string(ReviewPromptReductionItemAbsorbed)] == 0 {
+	if reductionReport.FamilyCounts[string(reviewpromptreduction.ReviewPromptReductionFamilyExternalDoc)] == 0 ||
+		reductionReport.StatusCounts[string(reviewpromptreduction.ReviewPromptReductionItemAbsorbed)] == 0 {
 		t.Fatalf("PromptReductionReport() = %#v, want external_doc absorbed family/status counts", reductionReport)
 	}
 }

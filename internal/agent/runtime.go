@@ -7,7 +7,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/audit"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerhistory"
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
@@ -41,7 +41,7 @@ type AgentRuntime struct {
 	RawOutputArtifactRoot               string
 	RawOutputArtifactStore              providerhistory.RawOutputArtifactStore
 	LastProviderHistoryProjectionReport ProviderHistoryProjectionReport
-	LastReviewPromptReductionReport     review.ReviewPromptReductionReport
+	LastReviewPromptReductionReport     reviewpromptreduction.ReviewPromptReductionReport
 
 	managedTaskLedger       *taskstate.Store
 	taskLedgerInvocationCWD string

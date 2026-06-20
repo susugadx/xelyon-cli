@@ -8,10 +8,11 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
-func (r *ReviewRunner) renderReviewProbeRawOutputContext(ctx context.Context, ledger ReviewProbeRawOutputLedger, sources []reviewProbeRawOutputSource, probeRefs map[string]rawoutputs.RawOutputRef, commandRefs map[reviewmodelinput.ProbeCommandResultKey]rawoutputs.RawOutputRef, redactor reviewmodelinput.Redactor) (string, ReviewProbeRawOutputLedger) {
+func (r *ReviewRunner) renderReviewProbeRawOutputContext(ctx context.Context, ledger reviewpromptreduction.ReviewProbeRawOutputLedger, sources []reviewProbeRawOutputSource, probeRefs map[string]rawoutputs.RawOutputRef, commandRefs map[reviewmodelinput.ProbeCommandResultKey]rawoutputs.RawOutputRef, redactor reviewmodelinput.Redactor) (string, reviewpromptreduction.ReviewProbeRawOutputLedger) {
 	if len(sources) == 0 {
 		return "", ledger
 	}
@@ -43,7 +44,7 @@ func (r *ReviewRunner) renderReviewProbeRawOutputContext(ctx context.Context, le
 			reason := reviewProbeRawOutputResolveReason(err)
 			ledger.FailClosedReason = reason
 			ledger.CanAcceptSaturated = false
-			ledger.MissingRefs = append(ledger.MissingRefs, reviewProbeRawOutputLedgerRefFromSource(source, ref).withStatus("missing", reason))
+			ledger.MissingRefs = append(ledger.MissingRefs, reviewProbeRawOutputLedgerRefWithStatus(reviewProbeRawOutputLedgerRefFromSource(source, ref), "missing", reason))
 			continue
 		}
 		body, readErr := io.ReadAll(resolved.Body)
@@ -51,7 +52,7 @@ func (r *ReviewRunner) renderReviewProbeRawOutputContext(ctx context.Context, le
 		if readErr != nil {
 			ledger.FailClosedReason = reviewProbeRawOutputReasonRequiredRefMissing
 			ledger.CanAcceptSaturated = false
-			ledger.MissingRefs = append(ledger.MissingRefs, reviewProbeRawOutputLedgerRefFromSource(source, ref).withStatus("missing", reviewProbeRawOutputReasonRequiredRefMissing))
+			ledger.MissingRefs = append(ledger.MissingRefs, reviewProbeRawOutputLedgerRefWithStatus(reviewProbeRawOutputLedgerRefFromSource(source, ref), "missing", reviewProbeRawOutputReasonRequiredRefMissing))
 			continue
 		}
 		entry, bodyTokens, reason := renderReviewProbeRawOutputContextEntry(ref, source, string(body), remainingBodyTokens, len(sources) == 1, redactor)
@@ -167,8 +168,8 @@ func reviewProbeRawOutputRefForSource(source reviewProbeRawOutputSource, probeRe
 	return ref, ok
 }
 
-func reviewProbeRawOutputLedgerRefFromSource(source reviewProbeRawOutputSource, ref rawoutputs.RawOutputRef) ReviewProbeRawOutputLedgerRef {
-	return ReviewProbeRawOutputLedgerRef{
+func reviewProbeRawOutputLedgerRefFromSource(source reviewProbeRawOutputSource, ref rawoutputs.RawOutputRef) reviewpromptreduction.ReviewProbeRawOutputLedgerRef {
+	return reviewpromptreduction.ReviewProbeRawOutputLedgerRef{
 		RefID:        ref.RefID,
 		ProbeID:      source.probeID,
 		CommandIndex: cloneReviewProbeCommandIndex(source.commandIndex),
@@ -186,10 +187,10 @@ func cloneReviewProbeCommandIndex(index *int) *int {
 	return &cloned
 }
 
-func (r ReviewProbeRawOutputLedgerRef) withStatus(status, reason string) ReviewProbeRawOutputLedgerRef {
-	r.Status = status
-	r.Reason = reason
-	return r
+func reviewProbeRawOutputLedgerRefWithStatus(ref reviewpromptreduction.ReviewProbeRawOutputLedgerRef, status, reason string) reviewpromptreduction.ReviewProbeRawOutputLedgerRef {
+	ref.Status = status
+	ref.Reason = reason
+	return ref
 }
 
 func (r *ReviewRunner) reviewProbeRawOutputBudget() int {

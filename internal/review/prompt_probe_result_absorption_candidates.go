@@ -5,9 +5,11 @@ import (
 	"strings"
 
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
-func buildReviewProbeResultAbsorptionCandidates(report ReviewReport, probeResults []ReviewProbeResult) reviewProbeResultAbsorptionCandidates {
+func buildReviewProbeResultAbsorptionCandidates(report reviewreport.ReviewReport, probeResults []reviewprobe.ReviewProbeResult) reviewProbeResultAbsorptionCandidates {
 	candidates := reviewProbeResultAbsorptionCandidates{}
 	if strings.TrimSpace(report.SchemaVersion) == "" || report.ScopeCoverage == nil || len(probeResults) == 0 {
 		return candidates

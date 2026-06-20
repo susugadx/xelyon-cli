@@ -8,7 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
@@ -96,8 +96,8 @@ func TestProviderHistoryProjectionReportStatusSummaryKeepsFutureFamilyReasonsSco
 }
 
 func TestReviewPromptReductionStatusSummaryFormat(t *testing.T) {
-	report := review.ReviewPromptReductionReport{
-		Mode:                             review.ReviewPromptReductionModeApply,
+	report := reviewpromptreduction.ReviewPromptReductionReport{
+		Mode:                             reviewpromptreduction.ReviewPromptReductionModeApply,
 		CandidateCount:                   3,
 		ReplacedCount:                    2,
 		StateSummaryCount:                2,
@@ -308,8 +308,8 @@ func TestHandleStatusCommandShowsProviderHistoryReductionReportSummary(t *testin
 func TestHandleStatusCommandShowsReviewPromptReductionSummary(t *testing.T) {
 	var out bytes.Buffer
 	agent := newProviderHistoryStatusTestAgent(t, &out)
-	agent.Runtime.LastReviewPromptReductionReport = review.ReviewPromptReductionReport{
-		Mode:                       review.ReviewPromptReductionModeDryRun,
+	agent.Runtime.LastReviewPromptReductionReport = reviewpromptreduction.ReviewPromptReductionReport{
+		Mode:                       reviewpromptreduction.ReviewPromptReductionModeDryRun,
 		CandidateCount:             1,
 		EstimatedSavedBytes:        1500,
 		ApproxEstimatedSavedTokens: 90,
