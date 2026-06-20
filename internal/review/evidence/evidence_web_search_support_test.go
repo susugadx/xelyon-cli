@@ -4,15 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"slices"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 )
 
 func newReviewWebSearchEvidenceTestBundle() ReviewEvidenceBundle {
 	return ReviewEvidenceBundle{
-		TargetKind: TargetCurrentChanges,
+		TargetKind: domain.TargetCurrentChanges,
 		RepoRoot:   "/tmp/repo",
 		CWD:        "/tmp/repo",
 		ChangedFiles: []ReviewChangedFile{
@@ -35,12 +35,12 @@ func newReviewWebSearchEvidenceTestBundle() ReviewEvidenceBundle {
 	}
 }
 
-func newFetchedReviewExternalDocForWebSearchTest(content string, truncated bool) ReviewExternalDocEvidence {
-	return ReviewExternalDocEvidence{
+func newFetchedReviewExternalDocForWebSearchTest(content string, truncated bool) externaldoc.Evidence {
+	return externaldoc.Evidence{
 		FetchedAt:   time.Date(2026, time.May, 31, 0, 0, 0, 0, time.UTC),
 		ContentHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Truncated:   truncated,
-		Snippets: []ReviewExternalDocSnippetEvidence{
+		Snippets: []externaldoc.SnippetEvidence{
 			{
 				SnippetID:   "placeholder",
 				Content:     content,
@@ -51,15 +51,15 @@ func newFetchedReviewExternalDocForWebSearchTest(content string, truncated bool)
 	}
 }
 
-func newReviewExternalSupportDocForEvidenceTest(docID string, credibility externaldoc.SourceCredibility, content string) ReviewExternalDocEvidence {
-	return ReviewExternalDocEvidence{
+func newReviewExternalSupportDocForEvidenceTest(docID string, credibility externaldoc.SourceCredibility, content string) externaldoc.Evidence {
+	return externaldoc.Evidence{
 		DocID:             docID,
 		URL:               "https://platform.openai.com/docs/" + docID,
 		SourceDomain:      "platform.openai.com",
 		SourceCredibility: credibility,
 		FetchedAt:         time.Date(2026, time.May, 31, 0, 0, 0, 0, time.UTC),
 		ContentHash:       reviewExternalSupportHashForEvidenceTest("doc:" + docID),
-		Snippets: []ReviewExternalDocSnippetEvidence{
+		Snippets: []externaldoc.SnippetEvidence{
 			{
 				SnippetID:   docID + "-snippet-1",
 				Content:     content,
@@ -74,27 +74,14 @@ func reviewExternalSupportHashForEvidenceTest(seed string) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func cloneReviewWebSearchEvidenceForTest(evidence ReviewWebSearchEvidence) ReviewWebSearchEvidence {
-	clone := evidence
-	clone.Queries = append([]ReviewWebSearchEvidenceQuery(nil), evidence.Queries...)
-	for i := range clone.Queries {
-		clone.Queries[i].Results = append([]ReviewWebSearchEvidenceResult(nil), evidence.Queries[i].Results...)
-	}
-	clone.ExternalDocs = append([]ReviewExternalDocEvidence(nil), evidence.ExternalDocs...)
-	for i := range clone.ExternalDocs {
-		clone.ExternalDocs[i].Snippets = append([]ReviewExternalDocSnippetEvidence(nil), evidence.ExternalDocs[i].Snippets...)
-	}
-	return clone
-}
-
 type fakeReviewWebSearchRunner struct {
 	calls   int
 	queries []string
-	result  ReviewWebSearchQueryResult
+	result  externaldoc.WebSearchQueryResult
 	err     error
 }
 
-func (f *fakeReviewWebSearchRunner) SearchReviewWeb(_ context.Context, query string, _ int) (ReviewWebSearchQueryResult, error) {
+func (f *fakeReviewWebSearchRunner) SearchReviewWeb(_ context.Context, query string, _ int) (externaldoc.WebSearchQueryResult, error) {
 	f.calls++
 	f.queries = append(f.queries, query)
 	return f.result, f.err
@@ -102,11 +89,11 @@ func (f *fakeReviewWebSearchRunner) SearchReviewWeb(_ context.Context, query str
 
 type fakeReviewExternalDocFetcher struct {
 	calls    int
-	requests []ReviewExternalDocFetchRequest
-	doc      ReviewExternalDocEvidence
+	requests []externaldoc.FetchRequest
+	doc      externaldoc.Evidence
 }
 
-func (f *fakeReviewExternalDocFetcher) FetchExternalDoc(_ context.Context, req ReviewExternalDocFetchRequest) ReviewExternalDocEvidence {
+func (f *fakeReviewExternalDocFetcher) FetchExternalDoc(_ context.Context, req externaldoc.FetchRequest) externaldoc.Evidence {
 	f.calls++
 	f.requests = append(f.requests, req)
 	doc := f.doc
@@ -119,13 +106,7 @@ func (f *fakeReviewExternalDocFetcher) FetchExternalDoc(_ context.Context, req R
 	return doc
 }
 
-func reviewPressureSignalsContain(signals []ReviewPressureSignalInput, want string) bool {
-	return slices.ContainsFunc(signals, func(signal ReviewPressureSignalInput) bool {
-		return signal.Signal == want
-	})
-}
-
-func reviewExternalDocFocusTermsByTermForTest(terms []ReviewExternalDocFocusTerm) map[string]string {
+func reviewExternalDocFocusTermsByTermForTest(terms []externaldoc.FocusTerm) map[string]string {
 	result := make(map[string]string, len(terms))
 	for _, term := range terms {
 		result[term.Term] = term.Reason

@@ -2,6 +2,7 @@ package review
 
 import (
 	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
@@ -26,7 +27,7 @@ func (r *ReviewRunner) reviewPromptEvidenceMarkdown(bundle reviewevidence.Review
 	if !applied {
 		return rawMarkdown
 	}
-	return reviewevidence.RenderReviewEvidenceMarkdown(compactedBundle)
+	return reviewmodelinput.RenderReviewEvidenceMarkdown(compactedBundle)
 }
 
 func (r *ReviewRunner) reviewPromptEvidenceMarkdownForAbsorbedReport(phase ReviewModelPhase, bundle reviewevidence.ReviewEvidenceBundle, rawMarkdown string, report reviewreport.ReviewReport) string {
@@ -54,7 +55,7 @@ func (r *ReviewRunner) reviewPromptEvidenceMarkdownForAbsorbedReport(phase Revie
 	}
 	applied := mode == reviewpromptreduction.ReviewPromptReductionModeApply
 	if discoveryOK {
-		discoveryMarkdown := reviewevidence.RenderReviewEvidenceMarkdown(baseBundle)
+		discoveryMarkdown := reviewmodelinput.RenderReviewEvidenceMarkdown(baseBundle)
 		if applied && discoveryMarkdown != rawMarkdown {
 			r.promptReductionStats.RecordCandidate("review_web_search_discovery", discoverySavedBytes, discoverySavedTokens, applied)
 			if !ok {
@@ -74,5 +75,5 @@ func (r *ReviewRunner) reviewPromptEvidenceMarkdownForAbsorbedReport(phase Revie
 	if !applied {
 		return rawMarkdown
 	}
-	return reviewevidence.RenderReviewEvidenceMarkdown(compactedBundle)
+	return reviewmodelinput.RenderReviewEvidenceMarkdown(compactedBundle)
 }

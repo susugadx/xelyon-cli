@@ -1,6 +1,8 @@
-package evidence
+package modelinput
 
-func buildReviewEvidenceLimitsInput(limits ReviewEvidenceLimits) ReviewEvidenceLimitsInput {
+import reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+
+func buildReviewEvidenceLimitsInput(limits reviewevidence.ReviewEvidenceLimits) ReviewEvidenceLimitsInput {
 	return ReviewEvidenceLimitsInput{
 		MaxCommandOutputBytes:      limits.MaxCommandOutputBytes,
 		MaxUntrackedFileBytes:      limits.MaxUntrackedFileBytes,
@@ -20,7 +22,7 @@ func buildReviewEvidenceLimitsInput(limits ReviewEvidenceLimits) ReviewEvidenceL
 	}
 }
 
-func buildReviewEvidenceTruncationFlagsInput(repoRoot string, bundle ReviewEvidenceBundle) ReviewEvidenceTruncationFlagsInput {
+func buildReviewEvidenceTruncationFlagsInput(repoRoot string, bundle reviewevidence.ReviewEvidenceBundle) ReviewEvidenceTruncationFlagsInput {
 	return ReviewEvidenceTruncationFlagsInput{
 		StatusShort:        bundle.StatusShortTruncated,
 		Diffs:              buildReviewEvidenceDiffTruncationInputs(bundle.Diffs),
@@ -29,22 +31,22 @@ func buildReviewEvidenceTruncationFlagsInput(repoRoot string, bundle ReviewEvide
 		RelatedSearch:      bundle.RelatedSearchTruncated,
 		WebSearchEvidence:  bundle.WebSearchEvidence.Truncated,
 		UntrackedSnapshots: bundle.UntrackedSnapshotsTruncated,
-		UntrackedFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.UntrackedFiles, func(file ReviewUntrackedFile) (string, bool) {
+		UntrackedFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.UntrackedFiles, func(file reviewevidence.ReviewUntrackedFile) (string, bool) {
 			return file.Path, file.Truncated
 		}),
-		RuleFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.RuleFiles, func(file ReviewRuleFileEvidence) (string, bool) {
+		RuleFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.RuleFiles, func(file reviewevidence.ReviewRuleFileEvidence) (string, bool) {
 			return file.Path, file.Truncated
 		}),
-		ChangedFileContext: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.ChangedFileContext, func(file ReviewContextFileEvidence) (string, bool) {
+		ChangedFileContext: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.ChangedFileContext, func(file reviewevidence.ReviewContextFileEvidence) (string, bool) {
 			return file.Path, file.Truncated
 		}),
-		RelatedContextFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.RelatedContextFiles, func(file ReviewContextFileEvidence) (string, bool) {
+		RelatedContextFiles: buildReviewEvidencePathTruncationInputs(repoRoot, bundle.RelatedContextFiles, func(file reviewevidence.ReviewContextFileEvidence) (string, bool) {
 			return file.Path, file.Truncated
 		}),
 	}
 }
 
-func buildReviewEvidenceDiffTruncationInputs(diffs []ReviewDiffEvidence) []ReviewEvidenceDiffTruncationInput {
+func buildReviewEvidenceDiffTruncationInputs(diffs []reviewevidence.ReviewDiffEvidence) []ReviewEvidenceDiffTruncationInput {
 	result := make([]ReviewEvidenceDiffTruncationInput, 0, len(diffs))
 	for _, diff := range diffs {
 		result = append(result, ReviewEvidenceDiffTruncationInput{
@@ -62,7 +64,7 @@ func buildReviewEvidencePathTruncationInputs[T any](repoRoot string, files []T, 
 	for _, file := range files {
 		path, truncated := mapper(file)
 		result = append(result, ReviewEvidencePathTruncationInput{
-			Path:      formatReviewEvidencePathDisplay(repoRoot, path),
+			Path:      reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, path),
 			Truncated: truncated,
 		})
 	}

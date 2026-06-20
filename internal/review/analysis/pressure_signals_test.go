@@ -180,7 +180,7 @@ func TestBuildPressureSignalsIncludeWebSearchEvidenceStates(t *testing.T) {
 	}
 
 	enabledSignals := BuildPressureSignals(EvidenceInput{
-		WebSearchEvidence: WebSearchEvidence{
+		WebSearchEvidence: externaldoc.WebSearchEvidence{
 			Enabled:      true,
 			Error:        "fetch failed",
 			Truncated:    true,

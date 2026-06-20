@@ -114,6 +114,24 @@ func hasReviewSearchHitWithReason(hits []ReviewRelatedSearchHit, path, reason st
 	return false
 }
 
+func reviewContextEvidenceContainsText(files []ReviewContextFileEvidence, text string) bool {
+	for _, file := range files {
+		if strings.Contains(file.Path, text) || strings.Contains(file.Content, text) || strings.Contains(file.SkipReason, text) {
+			return true
+		}
+	}
+	return false
+}
+
+func reviewSearchEvidenceContainsText(hits []ReviewRelatedSearchHit, text string) bool {
+	for _, hit := range hits {
+		if strings.Contains(hit.Path, text) || strings.Contains(hit.Snippet, text) || strings.Contains(hit.Reason, text) {
+			return true
+		}
+	}
+	return false
+}
+
 func requireReviewSearchHit(t *testing.T, hits []ReviewRelatedSearchHit, path string) ReviewRelatedSearchHit {
 	t.Helper()
 	for _, hit := range hits {

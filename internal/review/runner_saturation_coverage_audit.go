@@ -7,6 +7,7 @@ import (
 	reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
 	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
@@ -17,7 +18,7 @@ type reviewCoverageAuditContext struct {
 }
 
 func buildReviewCoverageAuditContext(before externaldoc.WebSearchEvidence, bundle reviewevidence.ReviewEvidenceBundle) reviewCoverageAuditContext {
-	support := reviewevidence.BuildReviewEvidenceModelInput(bundle).ExternalSupport
+	support := reviewmodelinput.BuildReviewEvidenceModelInput(bundle).ExternalSupport
 	externalSupport := reviewreport.CoverageExternalSupport{
 		Level:                                string(support.Level),
 		DocCount:                             support.DocCount,

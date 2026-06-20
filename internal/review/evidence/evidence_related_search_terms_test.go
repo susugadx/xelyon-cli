@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	"go/token"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -109,13 +108,8 @@ func Changed() FirstSymbol { return FirstSymbol{} }
 		t.Fatal("RelatedSearchTruncated = false, want true when term cap omits search terms")
 	}
 
-	input := BuildReviewEvidenceModelInput(bundle)
-	if !input.TruncationFlags.RelatedSearch {
-		t.Fatal("TruncationFlags.RelatedSearch = false, want true")
-	}
-	markdown := RenderReviewEvidenceMarkdown(bundle)
-	if !strings.Contains(markdown, `"related_search": true`) {
-		t.Fatalf("markdown = %q, want related search truncation flag", markdown)
+	if !bundle.RelatedSearchTruncated {
+		t.Fatal("RelatedSearchTruncated = false, want true")
 	}
 }
 

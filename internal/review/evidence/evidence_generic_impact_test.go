@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestBuildReviewGenericImpactCandidatesFindsSameStemTestOrSpec(t *testing.T) {
@@ -220,7 +222,7 @@ func TestBuildReviewGenericImpactCandidatesTruncatesByCandidateBudget(t *testing
 
 func newGenericImpactBundleForTest(repoRoot, changedPath, diff string) ReviewEvidenceBundle {
 	return ReviewEvidenceBundle{
-		TargetKind: TargetCurrentChanges,
+		TargetKind: domain.TargetCurrentChanges,
 		RepoRoot:   repoRoot,
 		CWD:        repoRoot,
 		ChangedFiles: []ReviewChangedFile{

@@ -156,13 +156,8 @@ func Changed() SearchNeedle { return SearchNeedle{} }
 		t.Fatalf("RelatedSearchHits = %#v, want reference after prefix omitted", bundle.RelatedSearchHits)
 	}
 
-	input := BuildReviewEvidenceModelInput(bundle)
-	if !input.TruncationFlags.RelatedSearch {
-		t.Fatal("TruncationFlags.RelatedSearch = false, want true")
-	}
-	markdown := RenderReviewEvidenceMarkdown(bundle)
-	if !strings.Contains(markdown, `"related_search": true`) {
-		t.Fatalf("markdown = %q, want related search truncation flag", markdown)
+	if !bundle.RelatedSearchTruncated {
+		t.Fatal("RelatedSearchTruncated = false, want true")
 	}
 }
 
@@ -214,13 +209,8 @@ func Changed() SearchNeedle { return SearchNeedle{} }
 		t.Fatal("RelatedSearchTruncated = false, want true when hit cap omits later matches")
 	}
 
-	input := BuildReviewEvidenceModelInput(bundle)
-	if !input.TruncationFlags.RelatedSearch {
-		t.Fatal("TruncationFlags.RelatedSearch = false, want true")
-	}
-	markdown := RenderReviewEvidenceMarkdown(bundle)
-	if !strings.Contains(markdown, `"related_search": true`) {
-		t.Fatalf("markdown = %q, want related search truncation flag", markdown)
+	if !bundle.RelatedSearchTruncated {
+		t.Fatal("RelatedSearchTruncated = false, want true")
 	}
 }
 
@@ -267,13 +257,8 @@ func Changed() SnippetNeedle { return SnippetNeedle{} }
 		t.Fatal("RelatedSearchTruncated = false, want true when search snippet is truncated")
 	}
 
-	input := BuildReviewEvidenceModelInput(bundle)
-	if !input.TruncationFlags.RelatedSearch {
-		t.Fatal("TruncationFlags.RelatedSearch = false, want true")
-	}
-	markdown := RenderReviewEvidenceMarkdown(bundle)
-	if !strings.Contains(markdown, `"related_search": true`) {
-		t.Fatalf("markdown = %q, want related search truncation flag", markdown)
+	if !bundle.RelatedSearchTruncated {
+		t.Fatal("RelatedSearchTruncated = false, want true")
 	}
 }
 

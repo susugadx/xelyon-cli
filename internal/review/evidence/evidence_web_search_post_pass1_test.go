@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	"github.com/susugadx/xelyon-cli/internal/review/report"
@@ -13,9 +14,9 @@ import (
 
 func TestReviewWebSearchEvidenceCollectorPostPass1SearchesPlanDerivedQuery(t *testing.T) {
 	searcher := &fakeReviewWebSearchRunner{
-		result: ReviewWebSearchQueryResult{
+		result: externaldoc.WebSearchQueryResult{
 			Provider: "gemini",
-			Results: []ReviewWebSearchEvidenceResult{
+			Results: []externaldoc.WebSearchEvidenceResult{
 				{Title: "OAuth redirect URI spec", URL: "https://docs.example.test/oauth", SourceDomain: "docs.example.test"},
 			},
 		},
@@ -24,12 +25,12 @@ func TestReviewWebSearchEvidenceCollectorPostPass1SearchesPlanDerivedQuery(t *te
 		doc: newFetchedReviewExternalDocForWebSearchTest("OAuth redirect URI external spec", false),
 	}
 	bundle := newReviewWebSearchEvidenceTestBundle()
-	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled: true,
-		Queries: []ReviewWebSearchEvidenceQuery{
+		Queries: []externaldoc.WebSearchEvidenceQuery{
 			{Query: "OpenAI API web_search official documentation", Reason: "pre-pass1"},
 		},
-		ExternalDocs: []ReviewExternalDocEvidence{
+		ExternalDocs: []externaldoc.Evidence{
 			newReviewExternalSupportDocForEvidenceTest("external-doc-1", externaldoc.SourceCredibilityOfficialCandidate, "pre-pass1 snippet"),
 		},
 	}
@@ -66,9 +67,9 @@ func TestReviewWebSearchEvidenceCollectorPostPass1SearchesPlanDerivedQuery(t *te
 func TestReviewWebSearchEvidenceCollectorPostPass1SkipsDuplicateQuery(t *testing.T) {
 	searcher := &fakeReviewWebSearchRunner{}
 	bundle := newReviewWebSearchEvidenceTestBundle()
-	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled: true,
-		Queries: []ReviewWebSearchEvidenceQuery{
+		Queries: []externaldoc.WebSearchEvidenceQuery{
 			{Query: "OAuth 2.0 redirect URI specification", Reason: "pre-pass1"},
 		},
 	}
@@ -93,9 +94,9 @@ func TestReviewWebSearchEvidenceCollectorPostPass1SkipsDuplicateQuery(t *testing
 func TestReviewWebSearchEvidenceCollectorPostPass1RespectsTotalQueryBudget(t *testing.T) {
 	searcher := &fakeReviewWebSearchRunner{}
 	bundle := newReviewWebSearchEvidenceTestBundle()
-	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled: true,
-		Queries: []ReviewWebSearchEvidenceQuery{
+		Queries: []externaldoc.WebSearchEvidenceQuery{
 			{Query: "OpenAI API web_search official documentation", Reason: "pre-pass1"},
 		},
 	}
@@ -123,10 +124,10 @@ func TestReviewWebSearchEvidenceCollectorPostPass1RespectsTotalQueryBudget(t *te
 func TestReviewWebSearchEvidenceCollectorPostPass1ErrorPreservesMergedSignals(t *testing.T) {
 	searcher := &fakeReviewWebSearchRunner{err: errors.New("post search failed")}
 	bundle := newReviewWebSearchEvidenceTestBundle()
-	bundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	bundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled: true,
 		Error:   "pre fetch failed",
-		ExternalDocs: []ReviewExternalDocEvidence{
+		ExternalDocs: []externaldoc.Evidence{
 			newReviewExternalSupportDocForEvidenceTest("external-doc-1", externaldoc.SourceCredibilityUnknown, "pre-pass1 snippet"),
 		},
 	}
@@ -154,7 +155,7 @@ func TestReviewWebSearchEvidenceCollectorPostPass1ErrorPreservesMergedSignals(t 
 func newReviewWebSearchPostPass1OAuthPlanForTest() reviewprobeplan.ReviewProbePlan {
 	return reviewprobeplan.ReviewProbePlan{
 		SchemaVersion: reviewprobeplan.ReviewProbePlanSchemaVersionV2,
-		TargetKind:    TargetCurrentChanges,
+		TargetKind:    domain.TargetCurrentChanges,
 		ImpactSurfaces: []reviewprobeplan.ReviewProbeImpactSurface{
 			{
 				ID:              "surface-oauth",

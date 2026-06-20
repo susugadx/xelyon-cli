@@ -6,14 +6,13 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/review/domain"
-	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func TestReviewRunnerPromptRedactorRedactsWindowsNativePathVariants(t *testing.T) {
 	var redactor reviewRunnerPromptRedactor
-	redactor.addReplacement(`C:/repo`, reviewevidence.RepoRootPathDisplay)
+	redactor.addReplacement(`C:/repo`, reviewmodelinput.RepoRootPathDisplay)
 	redactor.addReplacement(`C:/Users/me/AppData/Local/Temp/xelyon-review-sandbox-123`, reviewRunnerPromptProbeWorkDirDisplay)
 
 	input := strings.Join([]string{

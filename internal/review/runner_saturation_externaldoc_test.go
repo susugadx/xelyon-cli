@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
@@ -90,7 +90,7 @@ func TestReviewPromptEvidenceMarkdownForAbsorbedReportPreservesDiscoveryCompacti
 		reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official-1", externaldoc.SourceCredibilityOfficialCandidate, false, "official source snippet 1"),
 		reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official-2", externaldoc.SourceCredibilityOfficialCandidate, false, "official source snippet 2"),
 	})
-	rawMarkdown := reviewevidence.RenderReviewEvidenceMarkdown(bundle)
+	rawMarkdown := reviewmodelinput.RenderReviewEvidenceMarkdown(bundle)
 	report := newRunnerCleanReportForTest(nil)
 	runner := &ReviewRunner{promptReductionMode: reviewpromptreduction.ReviewPromptReductionModeApply}
 

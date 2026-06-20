@@ -115,7 +115,7 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (reviewreport
 		return reviewreport.ReviewReport{}, fmt.Errorf("review runner build evidence: %w", err)
 	}
 	r.emitProgressOK(reviewProgressEvidenceItem, reviewEvidenceProgressDetail(bundle))
-	evidenceMarkdown := reviewevidence.RenderReviewEvidenceMarkdown(bundle)
+	evidenceMarkdown := reviewmodelinput.RenderReviewEvidenceMarkdown(bundle)
 	evidenceRedactor := newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("evidence.md", evidenceMarkdown, evidenceRedactor)
 	if bundle.WebSearchEvidence.Enabled {

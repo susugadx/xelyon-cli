@@ -1,6 +1,10 @@
 package report
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+)
 
 func validateReviewReportTrustedProbeSummaries(report ReviewReport, trustedProbeSummaries []ReviewProbeSummary) error {
 	if len(report.ProbeSummaries) != len(trustedProbeSummaries) {
@@ -118,7 +122,7 @@ func hasReviewReportPassedLinkedProbeEvidence(refs []ReviewEvidenceRef, linkedPr
 		if !exists {
 			continue
 		}
-		if summary.Status == ReviewProbePassed && !isReviewProbeSummaryMutationOutcome(summary) {
+		if summary.Status == domain.ReviewProbePassed && !isReviewProbeSummaryMutationOutcome(summary) {
 			return true
 		}
 	}
@@ -143,16 +147,16 @@ func isReviewProbeSummaryNonPassingForScopeValidation(summary ReviewProbeSummary
 		return true
 	}
 	switch summary.Status {
-	case ReviewProbeFailed, ReviewProbeBlocked, ReviewProbeTimedOut, ReviewProbeMutatedWorktree:
+	case domain.ReviewProbeFailed, domain.ReviewProbeBlocked, domain.ReviewProbeTimedOut, domain.ReviewProbeMutatedWorktree:
 		return true
 	default:
 		return false
 	}
 }
 
-func canonicalReviewProbeSummaryStatusForValidation(summary ReviewProbeSummary) ReviewProbeStatus {
+func canonicalReviewProbeSummaryStatusForValidation(summary ReviewProbeSummary) domain.ReviewProbeStatus {
 	if isReviewProbeSummaryMutationOutcome(summary) {
-		return ReviewProbeMutatedWorktree
+		return domain.ReviewProbeMutatedWorktree
 	}
 	return summary.Status
 }

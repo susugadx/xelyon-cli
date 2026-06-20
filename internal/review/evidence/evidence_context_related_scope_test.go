@@ -3,7 +3,6 @@ package evidence
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -134,10 +133,11 @@ func HiddenSecret() string { return "do-not-send" }
 	if hasReviewSearchHit(bundle.RelatedSearchHits, "probe/secret.go") {
 		t.Fatalf("RelatedSearchHits = %#v, want ignored secret.go omitted", bundle.RelatedSearchHits)
 	}
-	markdown := RenderReviewEvidenceMarkdown(bundle)
 	for _, forbidden := range []string{"probe/secret.go", "HiddenSecret", "do-not-send"} {
-		if strings.Contains(markdown, forbidden) {
-			t.Fatalf("markdown contains ignored file data %q: %q", forbidden, markdown)
+		if reviewContextEvidenceContainsText(bundle.ChangedFileContext, forbidden) ||
+			reviewContextEvidenceContainsText(bundle.RelatedContextFiles, forbidden) ||
+			reviewSearchEvidenceContainsText(bundle.RelatedSearchHits, forbidden) {
+			t.Fatalf("bundle contains ignored file data %q: %#v", forbidden, bundle)
 		}
 	}
 }

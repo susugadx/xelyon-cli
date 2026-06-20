@@ -6,42 +6,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
-// TargetKind は review 対象の種類を表す。
-type TargetKind = domain.TargetKind
-
-const (
-	// TargetCurrentChanges は現在の作業ツリー差分を review 対象にする。
-	TargetCurrentChanges = domain.TargetCurrentChanges
-)
-
-// ReviewProbeMode は report schema が参照する probe 実行境界を表す。
-type ReviewProbeMode = domain.ReviewProbeMode
-
-const (
-	// ReviewProbeHostReadOnly は元 repo を read-only bind した process sandbox で実行する。
-	ReviewProbeHostReadOnly = domain.ReviewProbeHostReadOnly
-	// ReviewProbeScratchOnly は repo 外 scratch だけを書き込み可能にした process sandbox で実行する。
-	ReviewProbeScratchOnly = domain.ReviewProbeScratchOnly
-	// ReviewProbeRepoSandbox は元 repo の現在状態を一時 worktree へコピーし、copy 側だけを bind して実行する。
-	ReviewProbeRepoSandbox = domain.ReviewProbeRepoSandbox
-)
-
-// ReviewProbeStatus は report schema が参照する probe 実行結果の状態を表す。
-type ReviewProbeStatus = domain.ReviewProbeStatus
-
-const (
-	// ReviewProbePassed は probe が成功した状態を表す。
-	ReviewProbePassed = domain.ReviewProbePassed
-	// ReviewProbeFailed は probe が失敗した状態を表す。
-	ReviewProbeFailed = domain.ReviewProbeFailed
-	// ReviewProbeBlocked は probe が実行前または実行中に block された状態を表す。
-	ReviewProbeBlocked = domain.ReviewProbeBlocked
-	// ReviewProbeTimedOut は probe が timeout した状態を表す。
-	ReviewProbeTimedOut = domain.ReviewProbeTimedOut
-	// ReviewProbeMutatedWorktree は probe が worktree mutation を検出した状態を表す。
-	ReviewProbeMutatedWorktree = domain.ReviewProbeMutatedWorktree
-)
-
 const (
 	// ReviewReportSchemaVersionV1 は旧 `/review` report schema v1 の識別子。
 	ReviewReportSchemaVersionV1 = "review_report.v1"
@@ -99,7 +63,7 @@ func KnownReviewGroupSeverities() []ReviewGroupSeverity {
 // decode/validate の契約は report 側が owner し、probe 実行や evidence 収集は扱わない。
 type ReviewReport struct {
 	SchemaVersion             string                       `json:"schema_version"`
-	TargetKind                TargetKind                   `json:"target_kind"`
+	TargetKind                domain.TargetKind            `json:"target_kind"`
 	CustomInstructions        string                       `json:"custom_instructions,omitempty"`
 	GeneratedAt               time.Time                    `json:"generated_at"`
 	OverallVerificationStatus ReviewVerificationStatus     `json:"overall_verification_status"`
@@ -304,8 +268,8 @@ type ReviewResidualRisk struct {
 // ReviewProbeSummary は ReviewProbeResult から report 用に切り出した要約。
 type ReviewProbeSummary struct {
 	ProbeID         string                      `json:"probe_id"`
-	Mode            ReviewProbeMode             `json:"mode"`
-	Status          ReviewProbeStatus           `json:"status"`
+	Mode            domain.ReviewProbeMode      `json:"mode"`
+	Status          domain.ReviewProbeStatus    `json:"status"`
 	MutatedWorktree bool                        `json:"mutated_worktree,omitempty"`
 	MutatedFiles    []string                    `json:"mutated_files,omitempty"`
 	OutputTruncated bool                        `json:"output_truncated,omitempty"`
@@ -315,12 +279,12 @@ type ReviewProbeSummary struct {
 
 // ReviewProbeCommandSummary は report 用の probe command 要約。
 type ReviewProbeCommandSummary struct {
-	Command         string            `json:"command"`
-	Args            []string          `json:"args,omitempty"`
-	WorkDir         string            `json:"work_dir,omitempty"`
-	Status          ReviewProbeStatus `json:"status"`
-	ExitCode        int               `json:"exit_code,omitempty"`
-	OutputTruncated bool              `json:"output_truncated,omitempty"`
-	Error           string            `json:"error,omitempty"`
-	DurationMs      int64             `json:"duration_ms,omitempty"`
+	Command         string                   `json:"command"`
+	Args            []string                 `json:"args,omitempty"`
+	WorkDir         string                   `json:"work_dir,omitempty"`
+	Status          domain.ReviewProbeStatus `json:"status"`
+	ExitCode        int                      `json:"exit_code,omitempty"`
+	OutputTruncated bool                     `json:"output_truncated,omitempty"`
+	Error           string                   `json:"error,omitempty"`
+	DurationMs      int64                    `json:"duration_ms,omitempty"`
 }

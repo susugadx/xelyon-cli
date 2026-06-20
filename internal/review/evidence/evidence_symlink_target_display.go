@@ -4,6 +4,11 @@ import "path/filepath"
 
 const reviewEvidenceTruncatedLinkTargetDisplay = "<truncated-link-target>"
 
+// FormatReviewEvidenceSymlinkTargetDisplay は symlink target を repo root 基準の安全な表示へ正規化する。
+func FormatReviewEvidenceSymlinkTargetDisplay(repoRoot string, file ReviewUntrackedFile) string {
+	return formatReviewEvidenceSymlinkTargetDisplay(repoRoot, file)
+}
+
 func formatReviewEvidenceSymlinkTargetDisplay(repoRoot string, file ReviewUntrackedFile) string {
 	if !file.Symlink {
 		return ""

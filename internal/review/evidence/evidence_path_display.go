@@ -32,21 +32,6 @@ func formatReviewEvidencePathDisplay(repoRoot, candidate string) string {
 	return formatReviewEvidencePathDisplayWithRepoRoot(displayRepoRoot, candidate)
 }
 
-func formatReviewEvidenceOptionalPathDisplay(repoRoot, path string) string {
-	if path == "" {
-		return ""
-	}
-	return formatReviewEvidencePathDisplay(repoRoot, path)
-}
-
-func formatReviewEvidencePathDisplays(repoRoot string, paths []string) []string {
-	result := make([]string, 0, len(paths))
-	for _, path := range paths {
-		result = append(result, formatReviewEvidencePathDisplay(repoRoot, path))
-	}
-	return result
-}
-
 func normalizeReviewEvidencePathDisplayRepoRoot(repoRoot string) (string, bool) {
 	if strings.TrimSpace(repoRoot) == "" {
 		return "", false

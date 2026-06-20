@@ -1,27 +1,30 @@
-package evidence
+package modelinput
 
 import (
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 )
 
-func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
+func newReviewEvidenceRenderTestBundle(t *testing.T) reviewevidence.ReviewEvidenceBundle {
 	t.Helper()
 
 	repo := filepath.Clean(t.TempDir())
 	cwd := filepath.Join(repo, "src", "work")
 
-	return ReviewEvidenceBundle{
-		TargetKind:           TargetCurrentChanges,
+	return reviewevidence.ReviewEvidenceBundle{
+		TargetKind:           domain.TargetCurrentChanges,
 		RepoRoot:             repo,
 		CWD:                  cwd,
 		StatusShort:          " M src/main.go\n?? notes.md\n",
 		StatusShortTruncated: true,
-		Diffs: []ReviewDiffEvidence{
+		Diffs: []reviewevidence.ReviewDiffEvidence{
 			{
-				Source:              reviewDiffEvidenceSourceUnstaged,
+				Source:              "unstaged",
 				Stat:                " src/main.go | 2 +-\n",
 				StatTruncated:       true,
 				NameStatus:          "M\tsrc/main.go\n",
@@ -30,13 +33,13 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 				DiffTruncated:       true,
 			},
 			{
-				Source:     reviewDiffEvidenceSourceStaged,
+				Source:     "staged",
 				Stat:       " README.md | 1 +\n",
 				NameStatus: "M\tREADME.md\n",
 				Diff:       "diff --git a/README.md b/README.md\n+docs\n",
 			},
 		},
-		ChangedFiles: []ReviewChangedFile{
+		ChangedFiles: []reviewevidence.ReviewChangedFile{
 			{
 				Path:     filepath.Join(repo, "src", "main.go"),
 				OldPath:  filepath.Join(repo, "src", "old.go"),
@@ -45,26 +48,26 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 				Unstaged: true,
 			},
 		},
-		ChangedFileContext: []ReviewContextFileEvidence{
+		ChangedFileContext: []reviewevidence.ReviewContextFileEvidence{
 			{
 				Path:      filepath.Join(repo, "src", "main.go"),
-				Role:      reviewContextFileRoleChanged,
+				Role:      "changed_file",
 				Content:   "package src\n\nfunc Run() {}\n",
 				Truncated: true,
 				SizeBytes: 256,
 				ReadBytes: 128,
 			},
 		},
-		RelatedContextFiles: []ReviewContextFileEvidence{
+		RelatedContextFiles: []reviewevidence.ReviewContextFileEvidence{
 			{
 				Path:      filepath.Join(repo, "src", "main_test.go"),
-				Role:      reviewContextFileRoleRelatedTest,
+				Role:      "related_test",
 				Content:   "package src\n\nfunc TestRun(t *testing.T) {}\n",
 				SizeBytes: 96,
 				ReadBytes: 96,
 			},
 		},
-		RelatedSearchHits: []ReviewRelatedSearchHit{
+		RelatedSearchHits: []reviewevidence.ReviewRelatedSearchHit{
 			{
 				Path:    filepath.Join(repo, "src", "helper.go"),
 				Line:    7,
@@ -72,7 +75,7 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 				Reason:  "symbol:Run",
 			},
 		},
-		UntrackedFiles: []ReviewUntrackedFile{
+		UntrackedFiles: []reviewevidence.ReviewUntrackedFile{
 			{
 				Path:      filepath.Join(repo, "notes.md"),
 				Snapshot:  "draft notes\n",
@@ -85,7 +88,7 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 		RelatedSearchTruncated:        true,
 		UntrackedListTruncated:        true,
 		UntrackedSnapshotsTruncated:   true,
-		RuleFiles: []ReviewRuleFileEvidence{
+		RuleFiles: []reviewevidence.ReviewRuleFileEvidence{
 			{
 				Path:      filepath.Join(repo, "AGENTS.md"),
 				Content:   "rule text\n",
@@ -93,7 +96,7 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 				SizeBytes: 128,
 			},
 		},
-		Inventory: ReviewChangeInventory{
+		Inventory: reviewevidence.ReviewChangeInventory{
 			Production: []string{filepath.Join(repo, "src", "main.go")},
 			Docs:       []string{"README.md"},
 			RenamedFiles: []string{
@@ -101,7 +104,7 @@ func newReviewEvidenceRenderTestBundle(t *testing.T) ReviewEvidenceBundle {
 			},
 			Untracked: []string{filepath.Join(repo, "notes.md")},
 		},
-		Limits: ReviewEvidenceLimits{
+		Limits: reviewevidence.ReviewEvidenceLimits{
 			MaxCommandOutputBytes:      1024,
 			MaxUntrackedFileBytes:      64,
 			MaxRuleFileBytes:           128,
@@ -131,5 +134,17 @@ func assertReviewEvidenceSubstringsInOrder(t *testing.T, text string, wants []st
 			t.Fatalf("text after offset %d does not contain %q:\n%s", offset, want, text)
 		}
 		offset += index + len(want)
+	}
+}
+
+func assertStringSlice(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("slice length = %d, want %d: got %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("slice[%d] = %q, want %q: got %#v", i, got[i], want[i], got)
+		}
 	}
 }

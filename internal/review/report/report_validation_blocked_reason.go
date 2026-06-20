@@ -2,6 +2,8 @@ package report
 
 import (
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func hasBlockedReason(report ReviewReport) bool {
@@ -20,7 +22,7 @@ func hasLegacyBlockedReason(report ReviewReport) bool {
 	}
 	for _, summary := range report.ProbeSummaries {
 		switch summary.Status {
-		case ReviewProbeBlocked, ReviewProbeTimedOut, ReviewProbeMutatedWorktree:
+		case domain.ReviewProbeBlocked, domain.ReviewProbeTimedOut, domain.ReviewProbeMutatedWorktree:
 			return true
 		}
 	}

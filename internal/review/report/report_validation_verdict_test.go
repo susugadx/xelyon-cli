@@ -1,6 +1,10 @@
 package report
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+)
 
 func TestValidateReviewReportVerdictContract(t *testing.T) {
 	tests := []reviewReportValidationCase{
@@ -173,8 +177,8 @@ func TestValidateReviewReportVerdictContract(t *testing.T) {
 				report.Summary = ""
 				report.ProbeSummaries = []ReviewProbeSummary{{
 					ProbeID: "probe-1",
-					Mode:    ReviewProbeHostReadOnly,
-					Status:  ReviewProbeBlocked,
+					Mode:    domain.ReviewProbeHostReadOnly,
+					Status:  domain.ReviewProbeBlocked,
 				}}
 				return report
 			},
@@ -186,8 +190,8 @@ func TestValidateReviewReportVerdictContract(t *testing.T) {
 				report.Summary = ""
 				report.ProbeSummaries = []ReviewProbeSummary{{
 					ProbeID: "probe-1",
-					Mode:    ReviewProbeScratchOnly,
-					Status:  ReviewProbeTimedOut,
+					Mode:    domain.ReviewProbeScratchOnly,
+					Status:  domain.ReviewProbeTimedOut,
 				}}
 				return report
 			},
@@ -199,8 +203,8 @@ func TestValidateReviewReportVerdictContract(t *testing.T) {
 				report.Summary = ""
 				report.ProbeSummaries = []ReviewProbeSummary{{
 					ProbeID: "probe-1",
-					Mode:    ReviewProbeRepoSandbox,
-					Status:  ReviewProbeMutatedWorktree,
+					Mode:    domain.ReviewProbeRepoSandbox,
+					Status:  domain.ReviewProbeMutatedWorktree,
 				}}
 				return report
 			},
@@ -246,8 +250,8 @@ func TestValidateReviewReportVerdictContract(t *testing.T) {
 				report.Summary = ""
 				report.ProbeSummaries = []ReviewProbeSummary{{
 					ProbeID: "probe-1",
-					Mode:    ReviewProbeHostReadOnly,
-					Status:  ReviewProbeFailed,
+					Mode:    domain.ReviewProbeHostReadOnly,
+					Status:  domain.ReviewProbeFailed,
 				}}
 				return report
 			},

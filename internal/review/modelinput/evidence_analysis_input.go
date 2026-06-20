@@ -1,14 +1,15 @@
-package evidence
+package modelinput
 
-import reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
-
-// ReviewPressureSignalInput は evidence markdown に出す pressure signal DTO。
-type ReviewPressureSignalInput = reviewanalysis.PressureSignal
+import (
+	reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+)
 
 // BuildReviewPressureSignalInputs は model input から deterministic pressure signal を作る。
-func BuildReviewPressureSignalInputs(input ReviewEvidenceModelInput) []ReviewPressureSignalInput {
+func BuildReviewPressureSignalInputs(input ReviewEvidenceModelInput) []reviewanalysis.PressureSignal {
 	return reviewanalysis.BuildPressureSignals(BuildReviewAnalysisEvidenceInput(input), reviewanalysis.PressureSignalOptions{
-		KnownRuleFilePaths: reviewEvidenceRuleFilePaths,
+		KnownRuleFilePaths: reviewevidence.KnownReviewRuleFilePaths(),
 	})
 }
 
@@ -93,10 +94,10 @@ func buildReviewAnalysisChangeInventory(inventory ReviewEvidenceChangeInventoryI
 	}
 }
 
-func buildReviewAnalysisWebSearchEvidence(evidence ReviewWebSearchEvidence) reviewanalysis.WebSearchEvidence {
-	result := reviewanalysis.WebSearchEvidence(evidence)
-	result.Queries = append([]reviewanalysis.WebSearchQuery(nil), evidence.Queries...)
-	result.ExternalDocs = append([]ReviewExternalDocEvidence(nil), evidence.ExternalDocs...)
+func buildReviewAnalysisWebSearchEvidence(evidence externaldoc.WebSearchEvidence) externaldoc.WebSearchEvidence {
+	result := evidence
+	result.Queries = append([]externaldoc.WebSearchEvidenceQuery(nil), evidence.Queries...)
+	result.ExternalDocs = append([]externaldoc.Evidence(nil), evidence.ExternalDocs...)
 	return result
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
@@ -17,7 +18,7 @@ func (r *ReviewRunner) collectPostPass1WebSearchEvidence(ctx context.Context, bu
 	}
 	before := bundle.WebSearchEvidence
 	bundle.WebSearchEvidence = provider.CollectPostPass1WebSearchEvidence(ctx, bundle, plan)
-	evidenceMarkdown = reviewevidence.RenderReviewEvidenceMarkdown(bundle)
+	evidenceMarkdown = reviewmodelinput.RenderReviewEvidenceMarkdown(bundle)
 	redactor = newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("evidence_post_pass1.md", evidenceMarkdown, redactor)
 	r.saveReviewRunJSONArtifact("web_search_evidence_post_pass1.json", bundle.WebSearchEvidence, redactor)

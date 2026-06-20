@@ -51,19 +51,8 @@ func Add(a, b int) int { return a + b }
 		t.Fatalf("search hit = %#v, want snippet and reason", hit)
 	}
 
-	markdown := RenderReviewEvidenceMarkdown(bundle)
-	for _, want := range []string{
-		"## changed file context\n",
-		"### changed context file: probe/probe.go\n",
-		"type Calculator struct{}",
-		"## related tests/context files\n",
-		"### related context file: probe/probe_test.go\n",
-		"func TestProbeSleep",
-		"## related search hits\n",
-	} {
-		if !strings.Contains(markdown, want) {
-			t.Fatalf("markdown = %q, want context fragment %q", markdown, want)
-		}
+	if len(bundle.ChangedFileContext) == 0 || len(bundle.RelatedContextFiles) == 0 || len(bundle.RelatedSearchHits) == 0 {
+		t.Fatalf("bundle missing collected context evidence: %#v", bundle)
 	}
 }
 

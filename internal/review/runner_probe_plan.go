@@ -61,7 +61,7 @@ func decodeReviewProbePlanJSONAgainstEvidence(content string, bundle reviewevide
 	if err != nil {
 		return reviewprobeplan.ReviewProbePlan{}, err
 	}
-	input := reviewevidence.BuildReviewAnalysisEvidenceInput(reviewevidence.BuildReviewEvidenceModelInput(bundle))
+	input := reviewmodelinput.BuildReviewAnalysisEvidenceInput(reviewmodelinput.BuildReviewEvidenceModelInput(bundle))
 	if err := reviewanalysis.ValidateProbePlanAgainstEvidence(plan, input); err != nil {
 		return reviewprobeplan.ReviewProbePlan{}, fmt.Errorf("ValidateReviewProbePlanAgainstEvidence: %w", err)
 	}

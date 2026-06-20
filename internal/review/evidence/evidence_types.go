@@ -7,51 +7,10 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 )
 
-// TargetKind は review 対象の種類を表す。
-type TargetKind = domain.TargetKind
-
-const (
-	// TargetCurrentChanges は現在の作業ツリー差分を review 対象にする。
-	TargetCurrentChanges = domain.TargetCurrentChanges
-)
-
-// ReviewWebSearchEvidence は /review 用の外部 Web 検索 evidence を表す。
-type ReviewWebSearchEvidence = externaldoc.WebSearchEvidence
-
-// ReviewWebSearchEvidenceQuery は 1 件の検索 query と結果を表す。
-type ReviewWebSearchEvidenceQuery = externaldoc.WebSearchEvidenceQuery
-
-// ReviewWebSearchEvidenceResult は検索結果 URL と discovery-only snippet を表す。
-type ReviewWebSearchEvidenceResult = externaldoc.WebSearchEvidenceResult
-
-// ReviewWebSearchQueryResult は検索 provider と URL 付き結果を表す。
-type ReviewWebSearchQueryResult = externaldoc.WebSearchQueryResult
-
-// ReviewExternalSupportSummary は external_doc evidence の外部根拠品質 summary。
-type ReviewExternalSupportSummary = externaldoc.ExternalSupportSummary
-
-// ReviewExternalDocEvidence は検索結果 URL から取得した引用可能 snippet 群を表す。
-type ReviewExternalDocEvidence = externaldoc.Evidence
-
-// ReviewExternalDocSnippetEvidence は external_doc evidence の引用可能な bounded snippet。
-type ReviewExternalDocSnippetEvidence = externaldoc.SnippetEvidence
-
-// ReviewExternalDocFetchRequest は external_doc fetch 境界へ渡す検索結果 URL と判定 hint。
-type ReviewExternalDocFetchRequest = externaldoc.FetchRequest
-
-// ReviewExternalDocFocusTerm は external_doc snippet で優先して引用範囲へ寄せる語句。
-type ReviewExternalDocFocusTerm = externaldoc.FocusTerm
-
-// ReviewExternalDocFetcher は検索結果 URL から external_doc snippet を取得する境界。
-type ReviewExternalDocFetcher = externaldoc.Fetcher
-
-// HTTPReviewExternalDocFetcher は HTTPS URL から bounded text snippet を取得する。
-type HTTPReviewExternalDocFetcher = externaldoc.HTTPFetcher
-
 // ReviewEvidenceBundle は `/review current_changes` の Pass1 入力に渡す一次情報を表す。
 // ReviewReport schema ではなく、review 実行時の入力契約として扱う。
 type ReviewEvidenceBundle struct {
-	TargetKind TargetKind
+	TargetKind domain.TargetKind
 	RepoRoot   string
 	CWD        string
 
@@ -67,7 +26,7 @@ type ReviewEvidenceBundle struct {
 	GenericImpactCandidateListTruncated  bool
 	GenericImpactCandidatePathsCollected bool
 	GenericImpactCandidates              ReviewGenericImpactCandidates
-	WebSearchEvidence                    ReviewWebSearchEvidence
+	WebSearchEvidence                    externaldoc.WebSearchEvidence
 	UntrackedFiles                       []ReviewUntrackedFile
 	RelatedCandidateListTruncated        bool
 	RelatedSearchTruncated               bool

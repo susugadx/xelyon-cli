@@ -3,14 +3,16 @@ package report
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func validateReportBasicFields(report ReviewReport) error {
 	if report.SchemaVersion != ReviewReportSchemaVersionV2 {
 		return fmt.Errorf("schema_version must be %q: got %q", ReviewReportSchemaVersionV2, report.SchemaVersion)
 	}
-	if report.TargetKind != TargetCurrentChanges {
-		return fmt.Errorf("target_kind must be %q: got %q", TargetCurrentChanges, report.TargetKind)
+	if report.TargetKind != domain.TargetCurrentChanges {
+		return fmt.Errorf("target_kind must be %q: got %q", domain.TargetCurrentChanges, report.TargetKind)
 	}
 	if report.GeneratedAt.IsZero() {
 		return fmt.Errorf("generated_at must be non-zero")

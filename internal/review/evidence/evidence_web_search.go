@@ -22,12 +22,12 @@ type ReviewWebSearchEvidenceCollectorOptions struct {
 	MaxQueries         int
 	MaxResultsPerQuery int
 	Searcher           ReviewWebSearchQueryRunner
-	Fetcher            ReviewExternalDocFetcher
+	Fetcher            externaldoc.Fetcher
 }
 
 // ReviewWebSearchQueryRunner は review 用の非対話 Web 検索境界。
 type ReviewWebSearchQueryRunner interface {
-	SearchReviewWeb(context.Context, string, int) (ReviewWebSearchQueryResult, error)
+	SearchReviewWeb(context.Context, string, int) (externaldoc.WebSearchQueryResult, error)
 }
 
 // ReviewWebSearchEvidenceCollector は /review 用の外部 Web 検索 evidence を収集する。
@@ -36,7 +36,7 @@ type ReviewWebSearchEvidenceCollector struct {
 	maxQueries         int
 	maxResultsPerQuery int
 	searcher           ReviewWebSearchQueryRunner
-	fetcher            ReviewExternalDocFetcher
+	fetcher            externaldoc.Fetcher
 }
 
 // NewReviewWebSearchEvidenceCollector は外部 Web 検索 evidence collector を構築する。
@@ -51,7 +51,7 @@ func NewReviewWebSearchEvidenceCollector(opts ReviewWebSearchEvidenceCollectorOp
 	}
 	fetcher := opts.Fetcher
 	if fetcher == nil {
-		fetcher = NewHTTPReviewExternalDocFetcher(nil)
+		fetcher = externaldoc.NewHTTPFetcher(nil)
 	}
 	return &ReviewWebSearchEvidenceCollector{
 		enabled:            opts.Enabled,
@@ -63,21 +63,21 @@ func NewReviewWebSearchEvidenceCollector(opts ReviewWebSearchEvidenceCollectorOp
 }
 
 // CollectWebSearchEvidence は current changes に紐づく外部仕様 evidence を収集する。
-func (c *ReviewWebSearchEvidenceCollector) CollectWebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle) ReviewWebSearchEvidence {
-	return c.collectWebSearchEvidence(ctx, bundle, buildReviewWebSearchQueryPlanningInput(bundle), ReviewWebSearchEvidence{})
+func (c *ReviewWebSearchEvidenceCollector) CollectWebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle) externaldoc.WebSearchEvidence {
+	return c.collectWebSearchEvidence(ctx, bundle, buildReviewWebSearchQueryPlanningInput(bundle), externaldoc.WebSearchEvidence{})
 }
 
 // CollectPostPass1WebSearchEvidence は Pass1 probe plan から追加の外部仕様 evidence を収集し、既存 evidence に merge する。
-func (c *ReviewWebSearchEvidenceCollector) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) ReviewWebSearchEvidence {
+func (c *ReviewWebSearchEvidenceCollector) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) externaldoc.WebSearchEvidence {
 	return c.collectWebSearchEvidence(ctx, bundle, buildReviewPostPass1WebSearchQueryPlanningInput(plan), bundle.WebSearchEvidence)
 }
 
-func (c *ReviewWebSearchEvidenceCollector) collectWebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, input externaldoc.SearchQueryPlanningInput, base ReviewWebSearchEvidence) ReviewWebSearchEvidence {
+func (c *ReviewWebSearchEvidenceCollector) collectWebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, input externaldoc.SearchQueryPlanningInput, base externaldoc.WebSearchEvidence) externaldoc.WebSearchEvidence {
 	if c == nil || !c.enabled {
 		if base.Enabled {
 			return cloneReviewWebSearchEvidence(base)
 		}
-		return ReviewWebSearchEvidence{Enabled: false}
+		return externaldoc.WebSearchEvidence{Enabled: false}
 	}
 	evidence := cloneReviewWebSearchEvidence(base)
 	evidence.Enabled = true
@@ -103,7 +103,7 @@ func (c *ReviewWebSearchEvidenceCollector) collectWebSearchEvidence(ctx context.
 	docIndex := nextReviewWebSearchExternalDocIndex(evidence.ExternalDocs)
 	docIDs := reviewWebSearchExternalDocIDSet(evidence.ExternalDocs)
 	for _, candidate := range selection.candidates {
-		queryEvidence := ReviewWebSearchEvidenceQuery{
+		queryEvidence := externaldoc.WebSearchEvidenceQuery{
 			Query:  candidate.Query(),
 			Reason: candidate.EvidenceReason(),
 		}
@@ -151,7 +151,7 @@ type reviewWebSearchCandidateSelection struct {
 	truncated  bool
 }
 
-func selectReviewWebSearchCandidates(candidates []externaldoc.SearchQueryCandidate, evidence ReviewWebSearchEvidence, maxQueries int) reviewWebSearchCandidateSelection {
+func selectReviewWebSearchCandidates(candidates []externaldoc.SearchQueryCandidate, evidence externaldoc.WebSearchEvidence, maxQueries int) reviewWebSearchCandidateSelection {
 	candidates = dedupeReviewWebSearchCandidatesAgainstEvidence(candidates, evidence)
 	if len(candidates) == 0 {
 		return reviewWebSearchCandidateSelection{}
@@ -169,13 +169,13 @@ func selectReviewWebSearchCandidates(candidates []externaldoc.SearchQueryCandida
 	return reviewWebSearchCandidateSelection{candidates: candidates}
 }
 
-func limitReviewWebSearchEvidenceResults(results []ReviewWebSearchEvidenceResult, maxResults int) ([]ReviewWebSearchEvidenceResult, bool) {
+func limitReviewWebSearchEvidenceResults(results []externaldoc.WebSearchEvidenceResult, maxResults int) ([]externaldoc.WebSearchEvidenceResult, bool) {
 	truncated := false
 	if maxResults > 0 && len(results) > maxResults {
 		results = results[:maxResults]
 		truncated = true
 	}
-	return append([]ReviewWebSearchEvidenceResult(nil), results...), truncated
+	return append([]externaldoc.WebSearchEvidenceResult(nil), results...), truncated
 }
 
 func buildReviewWebSearchQueryPlanningInput(bundle ReviewEvidenceBundle) externaldoc.SearchQueryPlanningInput {
@@ -226,7 +226,7 @@ func buildReviewPostPass1WebSearchQueryPlanningInput(plan reviewprobeplan.Review
 	}
 }
 
-func dedupeReviewWebSearchCandidatesAgainstEvidence(candidates []externaldoc.SearchQueryCandidate, evidence ReviewWebSearchEvidence) []externaldoc.SearchQueryCandidate {
+func dedupeReviewWebSearchCandidatesAgainstEvidence(candidates []externaldoc.SearchQueryCandidate, evidence externaldoc.WebSearchEvidence) []externaldoc.SearchQueryCandidate {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -252,12 +252,12 @@ func dedupeReviewWebSearchCandidatesAgainstEvidence(candidates []externaldoc.Sea
 	return result
 }
 
-func finalizeReviewWebSearchEvidenceWithError(evidence ReviewWebSearchEvidence, message string) ReviewWebSearchEvidence {
+func finalizeReviewWebSearchEvidenceWithError(evidence externaldoc.WebSearchEvidence, message string) externaldoc.WebSearchEvidence {
 	evidence.Error = appendReviewWebSearchEvidenceError(evidence.Error, message)
 	return finalizeReviewWebSearchEvidence(evidence)
 }
 
-func finalizeReviewWebSearchEvidence(evidence ReviewWebSearchEvidence) ReviewWebSearchEvidence {
+func finalizeReviewWebSearchEvidence(evidence externaldoc.WebSearchEvidence) externaldoc.WebSearchEvidence {
 	evidence.Inconclusive = !externaldoc.HasFetchedSnippet(evidence.ExternalDocs)
 	return evidence
 }
@@ -275,22 +275,22 @@ func appendReviewWebSearchEvidenceError(existing, message string) string {
 	}
 }
 
-func cloneReviewWebSearchEvidence(evidence ReviewWebSearchEvidence) ReviewWebSearchEvidence {
+func cloneReviewWebSearchEvidence(evidence externaldoc.WebSearchEvidence) externaldoc.WebSearchEvidence {
 	clone := evidence
-	clone.Queries = append([]ReviewWebSearchEvidenceQuery(nil), evidence.Queries...)
+	clone.Queries = append([]externaldoc.WebSearchEvidenceQuery(nil), evidence.Queries...)
 	for i := range clone.Queries {
-		clone.Queries[i].Results = append([]ReviewWebSearchEvidenceResult(nil), evidence.Queries[i].Results...)
+		clone.Queries[i].Results = append([]externaldoc.WebSearchEvidenceResult(nil), evidence.Queries[i].Results...)
 	}
-	clone.ExternalDocs = append([]ReviewExternalDocEvidence(nil), evidence.ExternalDocs...)
+	clone.ExternalDocs = append([]externaldoc.Evidence(nil), evidence.ExternalDocs...)
 	for i := range clone.ExternalDocs {
-		clone.ExternalDocs[i].Snippets = append([]ReviewExternalDocSnippetEvidence(nil), evidence.ExternalDocs[i].Snippets...)
+		clone.ExternalDocs[i].Snippets = append([]externaldoc.SnippetEvidence(nil), evidence.ExternalDocs[i].Snippets...)
 	}
 	return clone
 }
 
 var reviewWebSearchExternalDocIDRE = regexp.MustCompile(`^external-doc-(\d+)$`)
 
-func nextReviewWebSearchExternalDocIndex(docs []ReviewExternalDocEvidence) int {
+func nextReviewWebSearchExternalDocIndex(docs []externaldoc.Evidence) int {
 	next := len(docs) + 1
 	for _, doc := range docs {
 		matches := reviewWebSearchExternalDocIDRE.FindStringSubmatch(doc.DocID)
@@ -305,7 +305,7 @@ func nextReviewWebSearchExternalDocIndex(docs []ReviewExternalDocEvidence) int {
 	return next
 }
 
-func reviewWebSearchExternalDocIDSet(docs []ReviewExternalDocEvidence) map[string]struct{} {
+func reviewWebSearchExternalDocIDSet(docs []externaldoc.Evidence) map[string]struct{} {
 	seen := make(map[string]struct{}, len(docs))
 	for _, doc := range docs {
 		if doc.DocID != "" {

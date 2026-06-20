@@ -1,4 +1,4 @@
-package evidence
+package modelinput
 
 import (
 	"encoding/json"
@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 )
 
 func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) {
@@ -64,12 +67,12 @@ func TestRenderReviewEvidenceMarkdownSectionOrderAndPathRedaction(t *testing.T) 
 func TestRenderReviewEvidenceMarkdownIncludesGenericImpactCandidates(t *testing.T) {
 	bundle := newReviewEvidenceRenderTestBundle(t)
 	repo := bundle.RepoRoot
-	bundle.GenericImpactCandidates = ReviewGenericImpactCandidates{
+	bundle.GenericImpactCandidates = reviewevidence.ReviewGenericImpactCandidates{
 		Tokens: []string{"/review"},
-		Candidates: []ReviewGenericImpactCandidate{
+		Candidates: []reviewevidence.ReviewGenericImpactCandidate{
 			{
 				Path:    filepath.Join(repo, "docs/commands.md"),
-				Role:    ReviewGenericImpactRoleDocsReference,
+				Role:    reviewevidence.ReviewGenericImpactRoleDocsReference,
 				Reason:  "docs mention " + filepath.Join(repo, "cmd", "review.ts"),
 				Token:   "/review",
 				Line:    3,
@@ -102,26 +105,26 @@ func TestRenderReviewEvidenceMarkdownIncludesGenericImpactCandidates(t *testing.
 func TestBuildReviewEvidenceModelInputCWDOutsideRepo(t *testing.T) {
 	repo := filepath.Clean(t.TempDir())
 	outside := filepath.Join(t.TempDir(), "elsewhere")
-	bundle := ReviewEvidenceBundle{
-		TargetKind: TargetCurrentChanges,
+	bundle := reviewevidence.ReviewEvidenceBundle{
+		TargetKind: domain.TargetCurrentChanges,
 		RepoRoot:   repo,
 		CWD:        outside,
 	}
 
 	input := BuildReviewEvidenceModelInput(bundle)
 
-	if input.CWDDisplay != reviewEvidenceOutsideRepoPathDisplay {
-		t.Fatalf("CWDDisplay = %q, want %q", input.CWDDisplay, reviewEvidenceOutsideRepoPathDisplay)
+	if input.CWDDisplay != reviewevidence.OutsideRepoPathDisplay {
+		t.Fatalf("CWDDisplay = %q, want %q", input.CWDDisplay, reviewevidence.OutsideRepoPathDisplay)
 	}
 }
 
 func TestBuildReviewEvidenceModelInputRedactsOutsideAbsoluteSymlinkTarget(t *testing.T) {
 	repo := filepath.Clean(t.TempDir())
 	outsideTarget := filepath.Join(t.TempDir(), "secret.txt")
-	bundle := ReviewEvidenceBundle{
-		TargetKind: TargetCurrentChanges,
+	bundle := reviewevidence.ReviewEvidenceBundle{
+		TargetKind: domain.TargetCurrentChanges,
 		RepoRoot:   repo,
-		UntrackedFiles: []ReviewUntrackedFile{{
+		UntrackedFiles: []reviewevidence.ReviewUntrackedFile{{
 			Path:       "outside-link",
 			Symlink:    true,
 			LinkTarget: outsideTarget,
@@ -130,8 +133,8 @@ func TestBuildReviewEvidenceModelInputRedactsOutsideAbsoluteSymlinkTarget(t *tes
 
 	input := BuildReviewEvidenceModelInput(bundle)
 
-	if got := input.UntrackedFiles[0].LinkTarget; got != reviewEvidenceOutsideRepoPathDisplay {
-		t.Fatalf("LinkTarget = %q, want %q", got, reviewEvidenceOutsideRepoPathDisplay)
+	if got := input.UntrackedFiles[0].LinkTarget; got != reviewevidence.OutsideRepoPathDisplay {
+		t.Fatalf("LinkTarget = %q, want %q", got, reviewevidence.OutsideRepoPathDisplay)
 	}
 
 	data, err := RenderReviewEvidenceJSON(bundle)
@@ -158,10 +161,10 @@ func TestBuildReviewEvidenceModelInputRedactsOutsideAbsoluteSymlinkTarget(t *tes
 func TestBuildReviewEvidenceModelInputNormalizesRepoAbsoluteSymlinkTarget(t *testing.T) {
 	repo := filepath.Clean(t.TempDir())
 	target := filepath.Join(repo, "dir", "target.txt")
-	bundle := ReviewEvidenceBundle{
-		TargetKind: TargetCurrentChanges,
+	bundle := reviewevidence.ReviewEvidenceBundle{
+		TargetKind: domain.TargetCurrentChanges,
 		RepoRoot:   repo,
-		UntrackedFiles: []ReviewUntrackedFile{{
+		UntrackedFiles: []reviewevidence.ReviewUntrackedFile{{
 			Path:       filepath.Join(repo, "dir", "link"),
 			Symlink:    true,
 			LinkTarget: target,
@@ -181,10 +184,10 @@ func TestBuildReviewEvidenceModelInputSymlinkTargetsDoNotRequireRepoRootExists(t
 		t.Fatalf("test repo root %q unexpectedly exists or stat failed with non-ENOENT error: %v", repo, err)
 	}
 
-	bundle := ReviewEvidenceBundle{
-		TargetKind: TargetCurrentChanges,
+	bundle := reviewevidence.ReviewEvidenceBundle{
+		TargetKind: domain.TargetCurrentChanges,
 		RepoRoot:   repo,
-		UntrackedFiles: []ReviewUntrackedFile{
+		UntrackedFiles: []reviewevidence.ReviewUntrackedFile{
 			{
 				Path:       "dir/absolute-link",
 				Symlink:    true,
@@ -212,7 +215,7 @@ func TestBuildReviewEvidenceModelInputSymlinkTargetsDoNotRequireRepoRootExists(t
 	assertStringSlice(t, got, []string{
 		"dir/target.txt",
 		"target.txt",
-		reviewEvidenceOutsideRepoPathDisplay,
+		reviewevidence.OutsideRepoPathDisplay,
 	})
 }
 
@@ -240,7 +243,7 @@ func TestBuildReviewEvidenceModelInputResolvesRelativeSymlinkTargetFromLinkParen
 			name:        "outside repo escape",
 			symlinkPath: "nested/link",
 			linkTarget:  "../../outside.txt",
-			want:        reviewEvidenceOutsideRepoPathDisplay,
+			want:        reviewevidence.OutsideRepoPathDisplay,
 		},
 		{
 			name:        "empty target stays empty",
@@ -252,10 +255,10 @@ func TestBuildReviewEvidenceModelInputResolvesRelativeSymlinkTargetFromLinkParen
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			bundle := ReviewEvidenceBundle{
-				TargetKind: TargetCurrentChanges,
+			bundle := reviewevidence.ReviewEvidenceBundle{
+				TargetKind: domain.TargetCurrentChanges,
 				RepoRoot:   repo,
-				UntrackedFiles: []ReviewUntrackedFile{{
+				UntrackedFiles: []reviewevidence.ReviewUntrackedFile{{
 					Path:       tt.symlinkPath,
 					Symlink:    true,
 					LinkTarget: tt.linkTarget,
@@ -273,10 +276,10 @@ func TestBuildReviewEvidenceModelInputResolvesRelativeSymlinkTargetFromLinkParen
 
 func TestBuildReviewEvidenceModelInputDoesNotResolveTruncatedSymlinkTarget(t *testing.T) {
 	repo := filepath.Clean(t.TempDir())
-	bundle := ReviewEvidenceBundle{
-		TargetKind: TargetCurrentChanges,
+	bundle := reviewevidence.ReviewEvidenceBundle{
+		TargetKind: domain.TargetCurrentChanges,
 		RepoRoot:   repo,
-		UntrackedFiles: []ReviewUntrackedFile{{
+		UntrackedFiles: []reviewevidence.ReviewUntrackedFile{{
 			Path:       "nested/link",
 			Symlink:    true,
 			LinkTarget: ".",
@@ -288,8 +291,8 @@ func TestBuildReviewEvidenceModelInputDoesNotResolveTruncatedSymlinkTarget(t *te
 
 	input := BuildReviewEvidenceModelInput(bundle)
 
-	if got := input.UntrackedFiles[0].LinkTarget; got != reviewEvidenceTruncatedLinkTargetDisplay {
-		t.Fatalf("LinkTarget = %q, want %q", got, reviewEvidenceTruncatedLinkTargetDisplay)
+	if got := input.UntrackedFiles[0].LinkTarget; got != "<truncated-link-target>" {
+		t.Fatalf("LinkTarget = %q, want %q", got, "<truncated-link-target>")
 	}
 
 	data, err := RenderReviewEvidenceJSON(bundle)
@@ -315,10 +318,10 @@ func TestBuildReviewEvidenceModelInputDoesNotResolveTruncatedSymlinkTarget(t *te
 
 func TestRenderReviewEvidenceMarkdownQuotesControlledSubsectionTitle(t *testing.T) {
 	repo := filepath.Clean(t.TempDir())
-	bundle := ReviewEvidenceBundle{
-		TargetKind: TargetCurrentChanges,
+	bundle := reviewevidence.ReviewEvidenceBundle{
+		TargetKind: domain.TargetCurrentChanges,
 		RepoRoot:   repo,
-		UntrackedFiles: []ReviewUntrackedFile{{
+		UntrackedFiles: []reviewevidence.ReviewUntrackedFile{{
 			Path:     "notes\n## limits",
 			Snapshot: "body\n",
 		}},
@@ -339,15 +342,15 @@ func TestRenderReviewEvidenceMarkdownQuotesControlledSubsectionTitle(t *testing.
 
 func TestRenderReviewEvidenceMarkdownExpandsFenceForBackticks(t *testing.T) {
 	bundle := newReviewEvidenceRenderTestBundle(t)
-	bundle.RuleFiles = []ReviewRuleFileEvidence{{
+	bundle.RuleFiles = []reviewevidence.ReviewRuleFileEvidence{{
 		Path:    "AGENTS.md",
 		Content: "rule ````` content",
 	}}
-	bundle.Diffs = []ReviewDiffEvidence{{
-		Source: reviewDiffEvidenceSourceUnstaged,
+	bundle.Diffs = []reviewevidence.ReviewDiffEvidence{{
+		Source: "unstaged",
 		Diff:   "+diff ````` body",
 	}}
-	bundle.UntrackedFiles = []ReviewUntrackedFile{{
+	bundle.UntrackedFiles = []reviewevidence.ReviewUntrackedFile{{
 		Path:     "notes.md",
 		Snapshot: "untracked ````` snapshot",
 	}}
@@ -416,7 +419,7 @@ func TestRenderReviewEvidenceJSONUsesModelInputDTO(t *testing.T) {
 }
 
 func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *testing.T) {
-	input := BuildReviewEvidenceModelInput(ReviewEvidenceBundle{})
+	input := BuildReviewEvidenceModelInput(reviewevidence.ReviewEvidenceBundle{})
 
 	if input.ChangedFiles == nil {
 		t.Fatal("ChangedFiles = nil, want empty slice")
@@ -467,7 +470,7 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 		t.Fatal("TruncationFlags.RelatedContextFiles = nil, want empty slice")
 	}
 
-	data, err := RenderReviewEvidenceJSON(ReviewEvidenceBundle{})
+	data, err := RenderReviewEvidenceJSON(reviewevidence.ReviewEvidenceBundle{})
 	if err != nil {
 		t.Fatalf("RenderReviewEvidenceJSON() error = %v", err)
 	}
@@ -490,7 +493,7 @@ func TestBuildReviewEvidenceModelInputMinimalBundleUsesStableEmptySlices(t *test
 		}
 	}
 
-	markdown := RenderReviewEvidenceMarkdown(ReviewEvidenceBundle{})
+	markdown := RenderReviewEvidenceMarkdown(reviewevidence.ReviewEvidenceBundle{})
 	for _, want := range []string{
 		"## git status --short\n```text\n",
 		"## changed file context\n```json\n[]\n```",

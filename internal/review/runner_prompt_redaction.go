@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
@@ -26,7 +27,7 @@ type reviewRunnerPromptPathReplacement struct {
 
 func newReviewRunnerPromptRedactor(bundle reviewevidence.ReviewEvidenceBundle, results []reviewprobe.ReviewProbeResult) reviewRunnerPromptRedactor {
 	redactor := reviewRunnerPromptRedactor{repoRoot: normalizeReviewRunnerPromptPath(bundle.RepoRoot)}
-	redactor.addReplacement(bundle.RepoRoot, reviewevidence.RepoRootPathDisplay)
+	redactor.addReplacement(bundle.RepoRoot, reviewmodelinput.RepoRootPathDisplay)
 	if redactor.isOutsideRepoAbsolutePath(bundle.CWD) {
 		redactor.addReplacement(bundle.CWD, reviewRunnerPromptCWDDisplay)
 	}

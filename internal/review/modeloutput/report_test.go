@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
@@ -14,13 +15,13 @@ import (
 func TestFinalizeReportRejectsCleanReportWithBlockedTrustedProbe(t *testing.T) {
 	tests := []struct {
 		name            string
-		status          reviewreport.ReviewProbeStatus
+		status          domain.ReviewProbeStatus
 		mutatedWorktree bool
 	}{
-		{name: "blocked", status: reviewreport.ReviewProbeBlocked},
-		{name: "timed out", status: reviewreport.ReviewProbeTimedOut},
-		{name: "mutated worktree", status: reviewreport.ReviewProbeMutatedWorktree},
-		{name: "mutated worktree flag", status: reviewreport.ReviewProbeFailed, mutatedWorktree: true},
+		{name: "blocked", status: domain.ReviewProbeBlocked},
+		{name: "timed out", status: domain.ReviewProbeTimedOut},
+		{name: "mutated worktree", status: domain.ReviewProbeMutatedWorktree},
+		{name: "mutated worktree flag", status: domain.ReviewProbeFailed, mutatedWorktree: true},
 	}
 
 	for _, tt := range tests {
@@ -31,7 +32,7 @@ func TestFinalizeReportRejectsCleanReportWithBlockedTrustedProbe(t *testing.T) {
 				TrustedProbeSummaries: []reviewreport.ReviewProbeSummary{
 					{
 						ProbeID:         "probe-1",
-						Mode:            reviewreport.ReviewProbeHostReadOnly,
+						Mode:            domain.ReviewProbeHostReadOnly,
 						Status:          tt.status,
 						MutatedWorktree: tt.mutatedWorktree,
 					},
@@ -66,8 +67,8 @@ func TestFinalizeReportDowngradesVerifiedFindingsWithBlockedTrustedProbe(t *test
 		TrustedProbeSummaries: []reviewreport.ReviewProbeSummary{
 			{
 				ProbeID: "probe-1",
-				Mode:    reviewreport.ReviewProbeHostReadOnly,
-				Status:  reviewreport.ReviewProbeBlocked,
+				Mode:    domain.ReviewProbeHostReadOnly,
+				Status:  domain.ReviewProbeBlocked,
 			},
 		},
 	})
@@ -89,8 +90,8 @@ func TestFinalizeReportInjectsRedactedTrustedProbeSummaries(t *testing.T) {
 	trustedSummaries := []reviewreport.ReviewProbeSummary{
 		{
 			ProbeID:         "probe-raw",
-			Mode:            reviewreport.ReviewProbeHostReadOnly,
-			Status:          reviewreport.ReviewProbeFailed,
+			Mode:            domain.ReviewProbeHostReadOnly,
+			Status:          domain.ReviewProbeFailed,
 			MutatedFiles:    []string{repoFile, probeFile},
 			OutputTruncated: true,
 			Error:           "raw paths " + repoFile + " " + probeFile,
@@ -99,7 +100,7 @@ func TestFinalizeReportInjectsRedactedTrustedProbeSummaries(t *testing.T) {
 					Command:         "cat " + probeFile,
 					Args:            []string{repoFile, probeFile},
 					WorkDir:         probeRoot,
-					Status:          reviewreport.ReviewProbeFailed,
+					Status:          domain.ReviewProbeFailed,
 					ExitCode:        1,
 					OutputTruncated: true,
 					Error:           "failed at " + probeFile,
@@ -220,8 +221,8 @@ func TestFinalizeReportComputesBlockedProbeCount(t *testing.T) {
 		TrustedProbeSummaries: []reviewreport.ReviewProbeSummary{
 			{
 				ProbeID: "probe-1",
-				Mode:    reviewreport.ReviewProbeHostReadOnly,
-				Status:  reviewreport.ReviewProbeBlocked,
+				Mode:    domain.ReviewProbeHostReadOnly,
+				Status:  domain.ReviewProbeBlocked,
 			},
 		},
 	})

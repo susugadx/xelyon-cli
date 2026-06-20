@@ -1,12 +1,14 @@
-package evidence
+package modelinput
 
 import (
 	"strconv"
 	"strings"
+
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 )
 
 // RenderReviewEvidenceMarkdown は ReviewEvidenceBundle を LLM 入力 Markdown に変換する。
-func RenderReviewEvidenceMarkdown(bundle ReviewEvidenceBundle) string {
+func RenderReviewEvidenceMarkdown(bundle reviewevidence.ReviewEvidenceBundle) string {
 	input := BuildReviewEvidenceModelInput(bundle)
 	var b strings.Builder
 

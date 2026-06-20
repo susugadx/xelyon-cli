@@ -1,6 +1,9 @@
-package evidence
+package modelinput
 
-import "github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+import (
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+)
 
 const (
 	// RepoRootPathDisplay は repo root を LLM 入力へ出すときの固定表現。
@@ -12,7 +15,7 @@ const (
 // ReviewEvidenceModelInput は ReviewEvidenceBundle を LLM 入力向けに正規化した DTO。
 // Evidence renderer は収集済み bundle の整形だけを担当し、evidence 収集は行わない。
 type ReviewEvidenceModelInput struct {
-	TargetKind          TargetKind                            `json:"target_kind"`
+	TargetKind          domain.TargetKind                     `json:"target_kind"`
 	RepoRoot            string                                `json:"repo_root"`
 	CWDDisplay          string                                `json:"cwd_display"`
 	GitStatusShort      ReviewEvidenceTextBlock               `json:"git_status_short"`
@@ -22,7 +25,7 @@ type ReviewEvidenceModelInput struct {
 	RelatedContextFiles []ReviewEvidenceContextFileInput      `json:"related_context_files"`
 	RelatedSearchHits   []ReviewEvidenceRelatedSearchHitInput `json:"related_search_hits"`
 	GenericImpact       ReviewEvidenceGenericImpactInput      `json:"generic_impact_candidates"`
-	WebSearchEvidence   ReviewWebSearchEvidence               `json:"web_search_evidence"`
+	WebSearchEvidence   externaldoc.WebSearchEvidence         `json:"web_search_evidence"`
 	ExternalSupport     externaldoc.ExternalSupportSummary    `json:"external_support"`
 	RuleFiles           []ReviewEvidenceRuleFileInput         `json:"rule_files"`
 	Diffs               []ReviewEvidenceDiffInput             `json:"diffs"`

@@ -4,14 +4,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 func TestReviewEvidenceBuilderPostPass1ProviderBoundary(t *testing.T) {
-	existing := ReviewWebSearchEvidence{
+	existing := externaldoc.WebSearchEvidence{
 		Enabled:  true,
 		Provider: "existing-provider",
-		Queries: []ReviewWebSearchEvidenceQuery{{
+		Queries: []externaldoc.WebSearchEvidenceQuery{{
 			Query:  "existing query",
 			Reason: "pre-pass",
 		}},
@@ -22,7 +23,7 @@ func TestReviewEvidenceBuilderPostPass1ProviderBoundary(t *testing.T) {
 	}
 
 	t.Run("unsupported provider preserves existing evidence", func(t *testing.T) {
-		provider := &prePassOnlyWebSearchProvider{evidence: ReviewWebSearchEvidence{Provider: "pre-pass-only"}}
+		provider := &prePassOnlyWebSearchProvider{evidence: externaldoc.WebSearchEvidence{Provider: "pre-pass-only"}}
 		builder := NewReviewEvidenceBuilder("", "", WithReviewWebSearchEvidenceProvider(provider))
 
 		got := builder.CollectPostPass1WebSearchEvidence(context.Background(), ReviewEvidenceBundle{WebSearchEvidence: existing}, plan)
@@ -36,10 +37,10 @@ func TestReviewEvidenceBuilderPostPass1ProviderBoundary(t *testing.T) {
 	})
 
 	t.Run("post-pass provider receives bundle and plan", func(t *testing.T) {
-		want := ReviewWebSearchEvidence{
+		want := externaldoc.WebSearchEvidence{
 			Enabled:  true,
 			Provider: "post-pass-provider",
-			Queries: []ReviewWebSearchEvidenceQuery{{
+			Queries: []externaldoc.WebSearchEvidenceQuery{{
 				Query:  "post-pass query",
 				Reason: "plan-derived",
 			}},
@@ -68,24 +69,24 @@ func TestReviewEvidenceBuilderPostPass1ProviderBoundary(t *testing.T) {
 }
 
 type prePassOnlyWebSearchProvider struct {
-	evidence     ReviewWebSearchEvidence
+	evidence     externaldoc.WebSearchEvidence
 	prePassCalls int
 }
 
-func (p *prePassOnlyWebSearchProvider) CollectWebSearchEvidence(context.Context, ReviewEvidenceBundle) ReviewWebSearchEvidence {
+func (p *prePassOnlyWebSearchProvider) CollectWebSearchEvidence(context.Context, ReviewEvidenceBundle) externaldoc.WebSearchEvidence {
 	p.prePassCalls++
 	return p.evidence
 }
 
 type postPassWebSearchProvider struct {
 	prePassOnlyWebSearchProvider
-	returnEvidence ReviewWebSearchEvidence
+	returnEvidence externaldoc.WebSearchEvidence
 	postPassCalls  int
 	bundle         ReviewEvidenceBundle
 	plan           reviewprobeplan.ReviewProbePlan
 }
 
-func (p *postPassWebSearchProvider) CollectPostPass1WebSearchEvidence(_ context.Context, bundle ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) ReviewWebSearchEvidence {
+func (p *postPassWebSearchProvider) CollectPostPass1WebSearchEvidence(_ context.Context, bundle ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) externaldoc.WebSearchEvidence {
 	p.postPassCalls++
 	p.bundle = bundle
 	p.plan = plan

@@ -1,20 +1,21 @@
-package evidence
+package modelinput
 
 import (
 	"strings"
 
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 )
 
 // BuildReviewEvidenceModelInput は ReviewEvidenceBundle を LLM 入力 DTO に変換する。
 // この変換は LLM 入力 schema の owner であり、evidence の収集方針は扱わない。
-func BuildReviewEvidenceModelInput(bundle ReviewEvidenceBundle) ReviewEvidenceModelInput {
+func BuildReviewEvidenceModelInput(bundle reviewevidence.ReviewEvidenceBundle) ReviewEvidenceModelInput {
 	repoRoot := bundle.RepoRoot
 
 	return ReviewEvidenceModelInput{
 		TargetKind: bundle.TargetKind,
 		RepoRoot:   reviewEvidenceRepoRootPathDisplay,
-		CWDDisplay: formatReviewEvidencePathDisplay(repoRoot, bundle.CWD),
+		CWDDisplay: reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, bundle.CWD),
 		GitStatusShort: ReviewEvidenceTextBlock{
 			Content:   bundle.StatusShort,
 			Truncated: bundle.StatusShortTruncated,
@@ -35,7 +36,7 @@ func BuildReviewEvidenceModelInput(bundle ReviewEvidenceBundle) ReviewEvidenceMo
 	}
 }
 
-func buildReviewEvidenceChangeInventoryInput(repoRoot string, inventory ReviewChangeInventory) ReviewEvidenceChangeInventoryInput {
+func buildReviewEvidenceChangeInventoryInput(repoRoot string, inventory reviewevidence.ReviewChangeInventory) ReviewEvidenceChangeInventoryInput {
 	return ReviewEvidenceChangeInventoryInput{
 		Generated:    formatReviewEvidencePathDisplays(repoRoot, inventory.Generated),
 		Tests:        formatReviewEvidencePathDisplays(repoRoot, inventory.Tests),
@@ -49,11 +50,11 @@ func buildReviewEvidenceChangeInventoryInput(repoRoot string, inventory ReviewCh
 	}
 }
 
-func buildReviewEvidenceChangedFileInputs(repoRoot string, files []ReviewChangedFile) []ReviewEvidenceChangedFileInput {
+func buildReviewEvidenceChangedFileInputs(repoRoot string, files []reviewevidence.ReviewChangedFile) []ReviewEvidenceChangedFileInput {
 	result := make([]ReviewEvidenceChangedFileInput, 0, len(files))
 	for _, file := range files {
 		result = append(result, ReviewEvidenceChangedFileInput{
-			Path:     formatReviewEvidencePathDisplay(repoRoot, file.Path),
+			Path:     reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, file.Path),
 			OldPath:  formatReviewEvidenceOptionalPathDisplay(repoRoot, file.OldPath),
 			Status:   file.Status,
 			Staged:   file.Staged,
@@ -63,11 +64,11 @@ func buildReviewEvidenceChangedFileInputs(repoRoot string, files []ReviewChanged
 	return result
 }
 
-func buildReviewEvidenceContextFileInputs(repoRoot string, files []ReviewContextFileEvidence) []ReviewEvidenceContextFileInput {
+func buildReviewEvidenceContextFileInputs(repoRoot string, files []reviewevidence.ReviewContextFileEvidence) []ReviewEvidenceContextFileInput {
 	result := make([]ReviewEvidenceContextFileInput, 0, len(files))
 	for _, file := range files {
 		result = append(result, ReviewEvidenceContextFileInput{
-			Path:       formatReviewEvidencePathDisplay(repoRoot, file.Path),
+			Path:       reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, file.Path),
 			Role:       file.Role,
 			Content:    file.Content,
 			Truncated:  file.Truncated,
@@ -80,11 +81,11 @@ func buildReviewEvidenceContextFileInputs(repoRoot string, files []ReviewContext
 	return result
 }
 
-func buildReviewEvidenceRelatedSearchHitInputs(repoRoot string, hits []ReviewRelatedSearchHit) []ReviewEvidenceRelatedSearchHitInput {
+func buildReviewEvidenceRelatedSearchHitInputs(repoRoot string, hits []reviewevidence.ReviewRelatedSearchHit) []ReviewEvidenceRelatedSearchHitInput {
 	result := make([]ReviewEvidenceRelatedSearchHitInput, 0, len(hits))
 	for _, hit := range hits {
 		result = append(result, ReviewEvidenceRelatedSearchHitInput{
-			Path:    formatReviewEvidencePathDisplay(repoRoot, hit.Path),
+			Path:    reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, hit.Path),
 			Line:    hit.Line,
 			Snippet: hit.Snippet,
 			Reason:  hit.Reason,
@@ -93,11 +94,11 @@ func buildReviewEvidenceRelatedSearchHitInputs(repoRoot string, hits []ReviewRel
 	return result
 }
 
-func buildReviewEvidenceGenericImpactInput(repoRoot string, generic ReviewGenericImpactCandidates) ReviewEvidenceGenericImpactInput {
+func buildReviewEvidenceGenericImpactInput(repoRoot string, generic reviewevidence.ReviewGenericImpactCandidates) ReviewEvidenceGenericImpactInput {
 	candidates := make([]ReviewEvidenceGenericImpactCandidateInput, 0, len(generic.Candidates))
 	for _, candidate := range generic.Candidates {
 		candidates = append(candidates, ReviewEvidenceGenericImpactCandidateInput{
-			Path:    formatReviewEvidencePathDisplay(repoRoot, candidate.Path),
+			Path:    reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, candidate.Path),
 			Role:    candidate.Role,
 			Reason:  redactReviewEvidenceRepoRootInText(repoRoot, candidate.Reason),
 			Token:   candidate.Token,
@@ -113,22 +114,21 @@ func buildReviewEvidenceGenericImpactInput(repoRoot string, generic ReviewGeneri
 }
 
 func redactReviewEvidenceRepoRootInText(repoRoot, text string) string {
-	displayRepoRoot, ok := normalizeReviewEvidencePathDisplayRepoRoot(repoRoot)
-	if !ok || text == "" {
+	if strings.TrimSpace(repoRoot) == "" || text == "" {
 		return text
 	}
 	redacted := text
-	for _, variant := range ReviewEvidencePathReplacementVariants(displayRepoRoot) {
+	for _, variant := range reviewevidence.ReviewEvidencePathReplacementVariants(repoRoot) {
 		redacted = strings.ReplaceAll(redacted, variant, reviewEvidenceRepoRootPathDisplay)
 	}
 	return redacted
 }
 
-func buildReviewEvidenceRuleFileInputs(repoRoot string, files []ReviewRuleFileEvidence) []ReviewEvidenceRuleFileInput {
+func buildReviewEvidenceRuleFileInputs(repoRoot string, files []reviewevidence.ReviewRuleFileEvidence) []ReviewEvidenceRuleFileInput {
 	result := make([]ReviewEvidenceRuleFileInput, 0, len(files))
 	for _, file := range files {
 		result = append(result, ReviewEvidenceRuleFileInput{
-			Path:      formatReviewEvidencePathDisplay(repoRoot, file.Path),
+			Path:      reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, file.Path),
 			Content:   file.Content,
 			Truncated: file.Truncated,
 			SizeBytes: file.SizeBytes,
@@ -137,7 +137,7 @@ func buildReviewEvidenceRuleFileInputs(repoRoot string, files []ReviewRuleFileEv
 	return result
 }
 
-func buildReviewEvidenceDiffInputs(diffs []ReviewDiffEvidence) []ReviewEvidenceDiffInput {
+func buildReviewEvidenceDiffInputs(diffs []reviewevidence.ReviewDiffEvidence) []ReviewEvidenceDiffInput {
 	result := make([]ReviewEvidenceDiffInput, 0, len(diffs))
 	for _, diff := range diffs {
 		result = append(result, ReviewEvidenceDiffInput{
@@ -159,13 +159,13 @@ func buildReviewEvidenceDiffInputs(diffs []ReviewDiffEvidence) []ReviewEvidenceD
 	return result
 }
 
-func buildReviewEvidenceUntrackedFileInputs(repoRoot string, files []ReviewUntrackedFile) []ReviewEvidenceUntrackedFileInput {
+func buildReviewEvidenceUntrackedFileInputs(repoRoot string, files []reviewevidence.ReviewUntrackedFile) []ReviewEvidenceUntrackedFileInput {
 	result := make([]ReviewEvidenceUntrackedFileInput, 0, len(files))
 	for _, file := range files {
 		result = append(result, ReviewEvidenceUntrackedFileInput{
-			Path:       formatReviewEvidencePathDisplay(repoRoot, file.Path),
+			Path:       reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, file.Path),
 			Symlink:    file.Symlink,
-			LinkTarget: formatReviewEvidenceSymlinkTargetDisplay(repoRoot, file),
+			LinkTarget: reviewevidence.FormatReviewEvidenceSymlinkTargetDisplay(repoRoot, file),
 			Snapshot:   file.Snapshot,
 			Binary:     file.Binary,
 			Truncated:  file.Truncated,
@@ -174,4 +174,19 @@ func buildReviewEvidenceUntrackedFileInputs(repoRoot string, files []ReviewUntra
 		})
 	}
 	return result
+}
+
+func formatReviewEvidencePathDisplays(repoRoot string, paths []string) []string {
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		result = append(result, reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, path))
+	}
+	return result
+}
+
+func formatReviewEvidenceOptionalPathDisplay(repoRoot, path string) string {
+	if path == "" {
+		return ""
+	}
+	return reviewevidence.FormatReviewEvidencePathDisplay(repoRoot, path)
 }

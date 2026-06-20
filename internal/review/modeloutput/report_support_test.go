@@ -73,7 +73,7 @@ func newNoProbePlanForModelOutputTest() reviewprobeplan.ReviewProbePlan {
 func newCleanReportForModelOutputTest() reviewreport.ReviewReport {
 	return reviewreport.ReviewReport{
 		SchemaVersion:             reviewreport.ReviewReportSchemaVersionV2,
-		TargetKind:                reviewreport.TargetCurrentChanges,
+		TargetKind:                domain.TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: reviewreport.ReviewVerificationVerified,
 		Verdict:                   reviewreport.ReviewVerdictClean,
