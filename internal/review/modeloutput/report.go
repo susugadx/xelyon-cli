@@ -37,9 +37,20 @@ type ReportFinalizationInput struct {
 
 // FinalizeReportModelOutput は model の raw report JSON を strict decode し、runner final report へ確定する。
 func FinalizeReportModelOutput(input ReportModelOutputInput) (reviewreport.ReviewReport, error) {
-	report, err := reviewreport.DecodeReviewReportModelStrictJSON([]byte(input.Content))
-	if err != nil {
-		return reviewreport.ReviewReport{}, fmt.Errorf("review runner decode report: %w", err)
+	data := []byte(input.Content)
+	var report reviewreport.ReviewReport
+	if reviewreport.IsReviewReportModelOutputJSON(data) {
+		model, err := reviewreport.DecodeReviewReportModelOutputStrictJSON(data)
+		if err != nil {
+			return reviewreport.ReviewReport{}, fmt.Errorf("review runner decode report model: %w", err)
+		}
+		report = model.ToReviewReport()
+	} else {
+		var err error
+		report, err = reviewreport.DecodeReviewReportModelStrictJSON(data)
+		if err != nil {
+			return reviewreport.ReviewReport{}, fmt.Errorf("review runner decode report: %w", err)
+		}
 	}
 	return FinalizeReport(ReportFinalizationInput{
 		Report:                report,

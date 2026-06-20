@@ -70,6 +70,15 @@ type ProjectInstructionBlockInput struct {
 // BuildProjectInstructionBlock は xelyon.yaml mandatory rules と imported guidance を
 // 優先順位説明付きで 1 ブロックに組み立てる。
 func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
+	section, ok := BuildProjectInstructionSection(input)
+	if !ok {
+		return ""
+	}
+	return "\n\n" + section.Content()
+}
+
+// BuildProjectInstructionSection は project instructions を repo_instruction section として構築する。
+func BuildProjectInstructionSection(input ProjectInstructionBlockInput) (PromptSection, bool) {
 	rulesBlock := BuildRulesBlockFromList(input.MandatoryRules)
 	contextParts := normalizeProjectContexts(input.ProjectContexts)
 	warnings := normalizeProjectWarnings(input.Warnings)
@@ -78,7 +87,7 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	hasWarnings := len(warnings) > 0
 
 	if rulesBlock == "" && len(contextParts) == 0 && !hasProjectGuidance && !hasGlobalGuidance && !hasWarnings {
-		return ""
+		return PromptSection{}, false
 	}
 
 	var b strings.Builder
@@ -107,7 +116,7 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 		}
 	}
 	b.WriteString("\n<!-- PROJECT_CONFIG_END -->")
-	return b.String()
+	return StaticText("xelyon.project_instructions", AuthorityRepoInstruction, b.String()), true
 }
 
 func appendGuidanceSection(b *strings.Builder, heading string, intro string, entries []ProjectInstructionEntry) {

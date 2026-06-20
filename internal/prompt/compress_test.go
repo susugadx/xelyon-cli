@@ -99,11 +99,26 @@ func TestBuildSummaryPrompt_IncludesConversationAndInstruction(t *testing.T) {
 	if !strings.Contains(result, "Hi there!") {
 		t.Fatal("BuildSummaryPrompt() should contain assistant message")
 	}
-	if !strings.Contains(result, "Summarize") {
-		t.Fatal("BuildSummaryPrompt() should contain summary instruction")
+	if strings.Contains(result, "continuation_context") {
+		t.Fatal("BuildSummaryPrompt() should not contain legacy continuation_context contract")
 	}
-	if !strings.Contains(result, "Return strict JSON only") || !strings.Contains(result, "do_not_repeat") {
-		t.Fatal("BuildSummaryPrompt() should contain JSON continuation contract")
+	if !strings.Contains(result, "xelyon.continuation.v1") {
+		t.Fatal("BuildSummaryPrompt() should identify the continuation schema for request routing")
+	}
+}
+
+func TestBuildSummarySystemPrompt_ContainsContinuationV1Contract(t *testing.T) {
+	result := BuildSummarySystemPrompt()
+	for _, want := range []string{
+		"xelyon.continuation.v1",
+		`"acceptance_criteria"`,
+		`"explicit_constraints"`,
+		`"do_not_repeat"`,
+		"Return exactly one JSON object",
+	} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("BuildSummarySystemPrompt() missing %q:\n%s", want, result)
+		}
 	}
 }
 
@@ -129,30 +144,92 @@ func TestBuildSummaryPrompt_TruncatesLongMessageRuneSafe(t *testing.T) {
 }
 
 func TestParseSummaryContinuation(t *testing.T) {
-	raw := `{"continuation_context":{"current_task":"fix compression","progress_status":"tests pending","key_decisions":["assistant summary"],"files_changed":["internal/prompt/compress.go"],"remaining_work":["run tests"],"do_not_repeat":["bad command"]}}`
-
-	record, err := ParseSummaryContinuation(raw)
+	record, err := ParseSummaryContinuation(validContinuationV1JSONForPromptTest())
 	if err != nil {
 		t.Fatalf("ParseSummaryContinuation() error = %v", err)
 	}
-	if record.CurrentTask != "fix compression" || len(record.DoNotRepeat) != 1 {
+	if record.Goal != "fix compression" || len(record.DoNotRepeat) != 1 {
 		t.Fatalf("record = %#v, want parsed continuation", record)
 	}
 
 	formatted := FormatSummaryContinuationMessage(record)
-	if !strings.Contains(formatted, "authority: data-only") || !strings.Contains(formatted, "bad command") {
+	if !strings.Contains(formatted, "authority: data-only") || !strings.Contains(formatted, "goal: fix compression") || !strings.Contains(formatted, "bad command") {
 		t.Fatalf("formatted continuation = %q, want data-only label and do_not_repeat", formatted)
 	}
 }
 
 func TestParseSummaryContinuation_InvalidJSON(t *testing.T) {
-	if _, err := ParseSummaryContinuation(`{"continuation_context":{"current_task":"x","extra":true}}`); err == nil {
+	if _, err := ParseSummaryContinuation(`{"schema_version":"xelyon.continuation.v1","goal":"x","extra":true}`); err == nil {
 		t.Fatal("ParseSummaryContinuation() error = nil, want unknown field error")
 	}
-	if _, err := ParseSummaryContinuation(`{"continuation_context":{"current_task":"x","progress_status":"","key_decisions":[],"files_changed":[],"remaining_work":[]}}`); err == nil {
+	if _, err := ParseSummaryContinuation(`{"schema_version":"xelyon.continuation.v1","goal":"x","acceptance_criteria":[],"explicit_constraints":[],"material_assumptions":[],"decisions":[],"files_changed":[],"verification":[],"open_work":[],"blockers":[],"do_not_repeat":[]}`); err == nil {
 		t.Fatal("ParseSummaryContinuation() error = nil, want missing key error")
 	}
 	if _, err := ParseSummaryContinuation(`not json`); err == nil {
 		t.Fatal("ParseSummaryContinuation() error = nil, want decode error")
 	}
+}
+
+func TestParseSummaryContinuationV1RejectsMissingNestedKeys(t *testing.T) {
+	base := validContinuationV1JSONForPromptTest()
+	tests := []struct {
+		name        string
+		raw         string
+		errContains string
+	}{
+		{
+			name:        "decision reason",
+			raw:         strings.Replace(base, `{"decision":"keep parser strict","reason":"provider output boundary","evidence":["internal/prompt/compress.go"]}`, `{"decision":"keep parser strict","evidence":["internal/prompt/compress.go"]}`, 1),
+			errContains: "decisions[0] missing keys: reason",
+		},
+		{
+			name:        "files changed summary",
+			raw:         strings.Replace(base, `{"path":"internal/prompt/compress.go","summary":"continuation parser"}`, `{"path":"internal/prompt/compress.go"}`, 1),
+			errContains: "files_changed[0] missing keys: summary",
+		},
+		{
+			name:        "verification status",
+			raw:         strings.Replace(base, `{"command":"go test ./internal/prompt","status":"passed","summary":"prompt tests"}`, `{"command":"go test ./internal/prompt","summary":"prompt tests"}`, 1),
+			errContains: "verification[0] missing keys: status",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := ParseSummaryContinuation(tt.raw); err == nil || !strings.Contains(err.Error(), tt.errContains) {
+				t.Fatalf("ParseSummaryContinuation() error = %v, want %q", err, tt.errContains)
+			}
+		})
+	}
+}
+
+func TestParseSummaryContinuationV1AllowsEmptyNestedValues(t *testing.T) {
+	raw := `{"schema_version":"xelyon.continuation.v1","goal":"keep context","acceptance_criteria":[],"explicit_constraints":[],"material_assumptions":[],"decisions":[{"decision":"","reason":"","evidence":[]}],"files_changed":[{"path":"","summary":""}],"verification":[{"command":"","status":"","summary":""}],"open_work":[],"blockers":[],"do_not_repeat":[],"relevant_instruction_refs":[]}`
+
+	record, err := ParseSummaryContinuation(raw)
+	if err != nil {
+		t.Fatalf("ParseSummaryContinuation() error = %v, want nil", err)
+	}
+	if record.Goal != "keep context" {
+		t.Fatalf("Goal = %q, want keep context", record.Goal)
+	}
+	if len(record.Decisions) != 0 || len(record.FilesChangedV1) != 0 || len(record.Verification) != 0 {
+		t.Fatalf("record nested values = decisions:%#v files:%#v verification:%#v, want normalized empty entries removed", record.Decisions, record.FilesChangedV1, record.Verification)
+	}
+}
+
+func TestParseSummaryContinuation_LegacyWrapperCompatibility(t *testing.T) {
+	raw := `{"continuation_context":{"current_task":"fix compression","progress_status":"tests pending","key_decisions":["assistant summary"],"files_changed":["internal/prompt/compress.go"],"remaining_work":["run tests"],"do_not_repeat":["bad command"]}}`
+
+	record, err := ParseSummaryContinuation(raw)
+	if err != nil {
+		t.Fatalf("ParseSummaryContinuation() legacy error = %v", err)
+	}
+	if record.CurrentTask != "fix compression" || len(record.DoNotRepeat) != 1 {
+		t.Fatalf("record = %#v, want parsed legacy continuation", record)
+	}
+}
+
+func validContinuationV1JSONForPromptTest() string {
+	return `{"schema_version":"xelyon.continuation.v1","goal":"fix compression","acceptance_criteria":["tests pass"],"explicit_constraints":["data only"],"material_assumptions":[],"decisions":[{"decision":"keep parser strict","reason":"provider output boundary","evidence":["internal/prompt/compress.go"]}],"files_changed":[{"path":"internal/prompt/compress.go","summary":"continuation parser"}],"verification":[{"command":"go test ./internal/prompt","status":"passed","summary":"prompt tests"}],"open_work":["run tests"],"blockers":[],"do_not_repeat":["bad command"],"relevant_instruction_refs":[]}`
 }

@@ -42,6 +42,13 @@ func TestBuildMCPToolsPrompt(t *testing.T) {
 	if result == "" {
 		t.Fatal("expected non-empty result")
 	}
+	if !strings.HasPrefix(result, "\n\n## MCP Tools") {
+		prefix := result
+		if len(prefix) > 20 {
+			prefix = prefix[:20]
+		}
+		t.Fatalf("MCP tools block should remain append-safe, got prefix %q", prefix)
+	}
 
 	// ヘッダーが含まれること
 	if !strings.Contains(result, "## MCP Tools (External Integrations)") {

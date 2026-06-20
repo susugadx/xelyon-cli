@@ -185,6 +185,13 @@ func TestBuildProjectInstructionBlock_NoXelyonUsesProjectGuidanceLanguage(t *tes
 		},
 	})
 
+	if !strings.HasPrefix(block, "\n\n<!-- PROJECT_CONFIG_START -->") {
+		prefix := block
+		if len(prefix) > 32 {
+			prefix = prefix[:32]
+		}
+		t.Fatalf("project instruction block should remain append-safe, got prefix %q", prefix)
+	}
 	if !strings.Contains(block, "<!-- PROJECT_CONFIG_START -->") || !strings.Contains(block, "<!-- PROJECT_CONFIG_END -->") {
 		t.Fatal("project config markers should exist")
 	}

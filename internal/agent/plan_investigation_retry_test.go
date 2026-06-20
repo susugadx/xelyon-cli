@@ -63,6 +63,14 @@ func TestPlanInvestigationRunner_HandleNoToolResponse_SchemaInvalidPlanJSONReque
 			name:     "legacy malformed handoff-only fields",
 			response: `{"findings":{},"evidence":["README.md"],"constraints":["x"],"steps":[]}`,
 		},
+		{
+			name:     "top-level v2 missing steps",
+			response: `{"schema_version":"xelyon.plan.v2","goal":"Fix parser","acceptance_criteria":[],"findings":[],"constraints":[],"open_questions":[]}`,
+		},
+		{
+			name:     "top-level v2 schema typo with v2 step fields",
+			response: `{"schema_version":"xelyon.plan.v2 ","goal":"Fix parser","steps":[{"id":1,"outcome":"Retry malformed v2","reason":"Avoid legacy field loss"}]}`,
+		},
 	}
 
 	for _, tt := range tests {

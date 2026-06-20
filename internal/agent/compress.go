@@ -157,7 +157,7 @@ func (a *Agent) compressHistoryWithSplit(
 	if opts.onSummaryStart != nil {
 		opts.onSummaryStart()
 	}
-	summary, err := a.CurrentProvider.ChatWithTools(a.compressionRequestContext(ctx), "", []api.Message{
+	summary, err := a.CurrentProvider.ChatWithTools(a.compressionRequestContext(ctx), prompt.BuildSummarySystemPrompt(), []api.Message{
 		{Role: "user", Content: summaryPrompt},
 	}, compressModel)
 	if err != nil {

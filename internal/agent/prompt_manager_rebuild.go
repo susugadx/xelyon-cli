@@ -5,7 +5,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
@@ -100,14 +100,26 @@ func (m *PromptManager) buildBaseSystemPromptForCurrentProvider() string {
 		return ""
 	}
 
-	planningPrompt := promptplan.BuildPlanningPrompt()
+	planningSection, hasPlanningSection := prompt.BuildPlanningPromptSection()
+	planningPrompt := ""
+	if hasPlanningSection {
+		planningPrompt = planningSection.Content()
+	}
 	hadPlanPrompt := strings.Contains(a.SystemPrompt, planningPrompt)
 	systemPrompt := m.buildStaticPrompt(promptStaticBuildInput{
 		invocationCWD: a.invocationCWD(),
 	})
 
-	if hadPlanPrompt {
-		systemPrompt += api.SystemPromptCacheBoundary + planningPrompt
+	if hadPlanPrompt && hasPlanningSection {
+		effective, err := prompt.NewEffectivePrompt(
+			prompt.StaticText("xelyon.system.static", prompt.AuthorityConstitution, systemPrompt),
+			planningSection,
+		)
+		if err == nil {
+			systemPrompt = effective.Compose(api.SystemPromptCacheBoundary)
+		} else {
+			systemPrompt += api.SystemPromptCacheBoundary + planningPrompt
+		}
 	}
 
 	return systemPrompt

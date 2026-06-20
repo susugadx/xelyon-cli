@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -27,8 +28,21 @@ func SanitizeToolName(name string) string {
 
 // BuildMCPToolsPrompt generates the MCP tools section for the system prompt.
 func BuildMCPToolsPrompt(tools []MCPTool) string {
-	if len(tools) == 0 {
+	section, ok := BuildMCPToolsSection(tools)
+	if !ok {
 		return ""
+	}
+	prompt, err := NewEffectivePrompt(section)
+	if err != nil {
+		return ""
+	}
+	return "\n\n" + strings.Trim(prompt.Compose("\n\n"), "\n")
+}
+
+// BuildMCPToolsSection は MCP tool metadata を data-only prompt section として構築する。
+func BuildMCPToolsSection(tools []MCPTool) (PromptSection, bool) {
+	if len(tools) == 0 {
+		return PromptSection{}, false
 	}
 
 	var sb strings.Builder
@@ -68,5 +82,7 @@ func BuildMCPToolsPrompt(tools []MCPTool) string {
 	sb.WriteString(mcpToolsDataEndTag)
 	sb.WriteByte('\n')
 
-	return sb.String()
+	return DynamicText("xelyon.mcp.tools", AuthorityData, sb.String(), map[string]string{
+		"tool_count": fmt.Sprint(len(tools)),
+	}), true
 }

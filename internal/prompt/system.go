@@ -23,7 +23,29 @@ func BuildSystemPrompt(basePrompt string, planModeEnabled bool) string {
 	if !planModeEnabled {
 		return basePrompt
 	}
-	return basePrompt + "\n\n" + promptplan.BuildPlanningPrompt()
+	sections := []PromptSection{}
+	if strings.TrimSpace(basePrompt) != "" {
+		sections = append(sections, StaticText("xelyon.system.base", AuthorityConstitution, basePrompt))
+	}
+	if section, ok := BuildPlanningPromptSection(); ok {
+		sections = append(sections, section)
+	}
+	effective, err := NewEffectivePrompt(sections...)
+	if err != nil {
+		return strings.TrimRight(basePrompt, "\n") + "\n\n" + promptplan.BuildPlanningPrompt()
+	}
+	return effective.Compose("\n\n")
+}
+
+// BuildPlanningPromptSection は Plan Mode instruction を runtime_instruction section として構築する。
+func BuildPlanningPromptSection() (PromptSection, bool) {
+	content := promptplan.BuildPlanningPrompt()
+	if strings.TrimSpace(content) == "" {
+		return PromptSection{}, false
+	}
+	return DynamicText("xelyon.plan.mode_prompt", AuthorityRuntimeInstruction, content, map[string]string{
+		"schema_owner": "internal/plancontract",
+	}), true
 }
 
 // planningBlockRe は <!-- PLANNING_TOOLS_START --> ... <!-- PLANNING_TOOLS_END --> を除去する。

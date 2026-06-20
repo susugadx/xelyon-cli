@@ -19,6 +19,7 @@ type compressionTestProvider struct {
 	chatCalls                    int
 	capturedChatModel            string
 	capturedChatHistory          []api.Message
+	capturedChatSystemPrompt     string
 	capturedChatActiveContext    int
 	capturedChatResponseID       string
 	capturedChatUpdateMode       string
@@ -52,9 +53,10 @@ func (m *compressionTestProvider) IsFunctionCallingEnabled() bool {
 	return false
 }
 
-func (m *compressionTestProvider) ChatWithTools(ctx context.Context, _ string, history []api.Message, model string) (string, error) {
+func (m *compressionTestProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	m.chatCalls++
 	m.capturedChatModel = model
+	m.capturedChatSystemPrompt = systemPrompt
 	m.capturedChatHistory = append([]api.Message(nil), history...)
 	m.capturedChatActiveContext = len(api.ActiveContextBlocksFromContext(ctx))
 	m.capturedChatResponseID = m.responseID
@@ -137,14 +139,18 @@ func compressionSummaryContinuationJSON(summary string) string {
 		return summary
 	}
 	payload := map[string]any{
-		"continuation_context": map[string]any{
-			"current_task":    summary,
-			"progress_status": "",
-			"key_decisions":   []string{},
-			"files_changed":   []string{},
-			"remaining_work":  []string{},
-			"do_not_repeat":   []string{},
-		},
+		"schema_version":            "xelyon.continuation.v1",
+		"goal":                      summary,
+		"acceptance_criteria":       []string{},
+		"explicit_constraints":      []string{},
+		"material_assumptions":      []string{},
+		"decisions":                 []map[string]any{},
+		"files_changed":             []map[string]any{},
+		"verification":              []map[string]any{},
+		"open_work":                 []string{},
+		"blockers":                  []string{},
+		"do_not_repeat":             []string{},
+		"relevant_instruction_refs": []string{},
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -163,7 +169,7 @@ func compressionSummaryResponseForHistory(history []api.Message, response string
 func isCompressionSummaryRequest(history []api.Message) bool {
 	return len(history) == 1 &&
 		history[0].Role == "user" &&
-		strings.Contains(history[0].Content, "continuation_context")
+		strings.Contains(history[0].Content, "xelyon.continuation.v1")
 }
 
 func oversizedCompressionHistory() []api.Message {

@@ -14,10 +14,12 @@ func buildPlanReviewDisplay(p *plan.Plan) *ui.PlanDisplay {
 	}
 
 	display.SetSummary(p.Summary)
+	display.AddDetailSection("完了条件", p.AcceptanceCriteria)
 	display.AddDetailSection("検証予定", planReviewPlanVerification(p))
 	display.AddDetailSection("調査結果", p.Findings)
 	display.AddDetailSection("根拠", p.Evidence)
 	display.AddDetailSection("制約", p.Constraints)
+	display.AddDetailSection("未解決質問", p.OpenQuestions)
 	for _, step := range p.Steps {
 		display.AddPlanStep(ui.PlanStep{
 			ID:           step.ID,
@@ -38,17 +40,21 @@ func buildPlanNoImplementationDisplay(p *plan.Plan) *ui.PlanDisplay {
 
 	display := ui.NewPlanDisplay("Investigation Result")
 	display.SetSummary(p.Summary)
+	display.AddDetailSection("完了条件", p.AcceptanceCriteria)
 	display.AddDetailSection("調査結果", p.Findings)
 	display.AddDetailSection("根拠", p.Evidence)
 	display.AddDetailSection("制約", p.Constraints)
+	display.AddDetailSection("未解決質問", p.OpenQuestions)
 	return display
 }
 
 func planHasNoImplementationDetails(p *plan.Plan) bool {
 	return strings.TrimSpace(p.Summary) != "" ||
+		hasNonEmptyStrings(p.AcceptanceCriteria) ||
 		hasNonEmptyStrings(p.Findings) ||
 		hasNonEmptyStrings(p.Evidence) ||
-		hasNonEmptyStrings(p.Constraints)
+		hasNonEmptyStrings(p.Constraints) ||
+		hasNonEmptyStrings(p.OpenQuestions)
 }
 
 func hasNonEmptyStrings(values []string) bool {

@@ -280,37 +280,24 @@ func validateEvidenceRefs(field string, refs []ReviewEvidenceRef, probeSummaries
 	return nil
 }
 
+func validateEvidenceRefsShape(field string, refs []ReviewEvidenceRef) error {
+	for i, ref := range refs {
+		if _, err := validateEvidenceRefShape(fmt.Sprintf("%s[%d]", field, i), ref); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ValidateEvidenceRef は evidence ref 1 件の schema shape と probe summary 参照を検証する。
 func ValidateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID map[string]ReviewProbeSummary) error {
 	return validateEvidenceRef(field, ref, probeSummariesByID)
 }
 
 func validateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID map[string]ReviewProbeSummary) error {
-	if !isKnownReviewEvidenceKind(ref.Kind) {
-		return fmt.Errorf("%s.kind must be known enum value: got %q", field, ref.Kind)
-	}
-	if ref.Kind == ReviewEvidenceKindExternalDoc {
-		return validateExternalDocEvidenceRefShape(field, ref)
-	}
-	if hasExternalDocEvidenceRefFields(ref) {
-		return fmt.Errorf("%s external_doc fields are allowed only when kind=%q", field, ReviewEvidenceKindExternalDoc)
-	}
-
-	probeID, err := validateOptionalProbeID(field+".probe_id", ref.ProbeID)
+	probeID, err := validateEvidenceRefShape(field, ref)
 	if err != nil {
 		return err
-	}
-	if ref.Kind == ReviewEvidenceKindProbeCommand {
-		if probeID == "" {
-			return fmt.Errorf("%s.probe_id is required when kind=%q", field, ReviewEvidenceKindProbeCommand)
-		}
-		if ref.CommandIndex == nil {
-			return fmt.Errorf("%s.command_index is required when kind=%q", field, ReviewEvidenceKindProbeCommand)
-		}
-	}
-
-	if ref.CommandIndex != nil && probeID == "" {
-		return fmt.Errorf("%s.command_index requires probe_id", field)
 	}
 
 	var summary ReviewProbeSummary
@@ -322,35 +309,67 @@ func validateEvidenceRef(field string, ref ReviewEvidenceRef, probeSummariesByID
 		}
 	}
 
+	if ref.CommandIndex != nil && probeID != "" && *ref.CommandIndex >= len(summary.Commands) {
+		return fmt.Errorf("%s.command_index out of range: got %d, commands=%d", field, *ref.CommandIndex, len(summary.Commands))
+	}
+
+	return nil
+}
+
+func validateEvidenceRefShape(field string, ref ReviewEvidenceRef) (string, error) {
+	if !isKnownReviewEvidenceKind(ref.Kind) {
+		return "", fmt.Errorf("%s.kind must be known enum value: got %q", field, ref.Kind)
+	}
+	if ref.Kind == ReviewEvidenceKindExternalDoc {
+		return "", validateExternalDocEvidenceRefShape(field, ref)
+	}
+	if hasExternalDocEvidenceRefFields(ref) {
+		return "", fmt.Errorf("%s external_doc fields are allowed only when kind=%q", field, ReviewEvidenceKindExternalDoc)
+	}
+
+	probeID, err := validateOptionalProbeID(field+".probe_id", ref.ProbeID)
+	if err != nil {
+		return "", err
+	}
+	if ref.Kind == ReviewEvidenceKindProbeCommand {
+		if probeID == "" {
+			return "", fmt.Errorf("%s.probe_id is required when kind=%q", field, ReviewEvidenceKindProbeCommand)
+		}
+		if ref.CommandIndex == nil {
+			return "", fmt.Errorf("%s.command_index is required when kind=%q", field, ReviewEvidenceKindProbeCommand)
+		}
+	}
+
+	if ref.CommandIndex != nil && probeID == "" {
+		return "", fmt.Errorf("%s.command_index requires probe_id", field)
+	}
+
 	if ref.CommandIndex != nil {
 		if *ref.CommandIndex < 0 {
-			return fmt.Errorf("%s.command_index must be >= 0: got %d", field, *ref.CommandIndex)
-		}
-		if probeID != "" && *ref.CommandIndex >= len(summary.Commands) {
-			return fmt.Errorf("%s.command_index out of range: got %d, commands=%d", field, *ref.CommandIndex, len(summary.Commands))
+			return "", fmt.Errorf("%s.command_index must be >= 0: got %d", field, *ref.CommandIndex)
 		}
 	}
 
 	if ref.Line < 0 {
-		return fmt.Errorf("%s.line must be >= 0: got %d", field, ref.Line)
+		return "", fmt.Errorf("%s.line must be >= 0: got %d", field, ref.Line)
 	}
 	evidencePath, err := validateOptionalEvidencePath(field+".path", ref.Path)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if ref.Line > 0 && evidencePath == "" {
-		return fmt.Errorf("%s.path is required when line > 0", field)
+		return "", fmt.Errorf("%s.path is required when line > 0", field)
 	}
 	if evidencePath != "" {
 		if err := validateEvidencePath(field+".path", evidencePath); err != nil {
-			return err
+			return "", err
 		}
 	}
 	if reviewEvidenceKindRequiresPath(ref.Kind) && evidencePath == "" {
-		return fmt.Errorf("%s.path is required when kind=%q", field, ref.Kind)
+		return "", fmt.Errorf("%s.path is required when kind=%q", field, ref.Kind)
 	}
 
-	return nil
+	return probeID, nil
 }
 
 func reviewEvidenceKindRequiresPath(kind string) bool {
@@ -454,6 +473,12 @@ func validateCleanVerdictContract(report ReviewReport) error {
 	}
 	if len(report.RootCauseGroups) > 0 {
 		return fmt.Errorf("verdict %q requires root_cause_groups to be empty", ReviewVerdictClean)
+	}
+	if len(report.UnverifiedSurfaces) > 0 {
+		return fmt.Errorf("verdict %q requires unverified_surfaces to be empty", ReviewVerdictClean)
+	}
+	if len(report.ResidualRisks) > 0 {
+		return fmt.Errorf("verdict %q requires residual_risks to be empty", ReviewVerdictClean)
 	}
 	return nil
 }

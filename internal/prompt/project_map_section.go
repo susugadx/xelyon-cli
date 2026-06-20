@@ -24,12 +24,26 @@ var projectMapDelimiterReplacer = strings.NewReplacer(
 
 // BuildProjectMapSection は marker 付き Project Map セクションを構築する。
 func BuildProjectMapSection(section string) string {
-	section = strings.Trim(section, "\n")
-	if strings.TrimSpace(section) == "" {
+	promptSection, ok := BuildProjectMapPromptSection(section)
+	if !ok {
 		return ""
 	}
+	return promptSection.Content()
+}
+
+// BuildProjectMapPromptSection は Project Map を data-only prompt section として構築する。
+func BuildProjectMapPromptSection(section string) (PromptSection, bool) {
+	section = strings.Trim(section, "\n")
+	if strings.TrimSpace(section) == "" {
+		return PromptSection{}, false
+	}
 	section = projectMapDelimiterReplacer.Replace(section)
-	return ProjectMapStartMarker + "\n" + projectMapDataStartTag + "\n" + section + "\n" + projectMapDataEndTag + "\n" + ProjectMapEndMarker
+	return DynamicText(
+		"xelyon.project_map",
+		AuthorityData,
+		ProjectMapStartMarker+"\n"+projectMapDataStartTag+"\n"+section+"\n"+projectMapDataEndTag+"\n"+ProjectMapEndMarker,
+		map[string]string{"format": "marker_wrapped_data"},
+	), true
 }
 
 // InjectProjectMapSection は既存 Project Map セクションを置換して末尾に注入する。

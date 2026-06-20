@@ -10,15 +10,17 @@ import (
 )
 
 type capturingMockProvider struct {
-	capturedHistory []api.Message
-	capturedContext context.Context
+	capturedHistory      []api.Message
+	capturedSystemPrompt string
+	capturedContext      context.Context
 }
 
 func (m *capturingMockProvider) Name() string                   { return "test" }
 func (m *capturingMockProvider) SupportsImages() bool           { return false }
 func (m *capturingMockProvider) IsFunctionCallingEnabled() bool { return true }
-func (m *capturingMockProvider) ChatWithTools(ctx context.Context, _ string, history []api.Message, _ string) (string, error) {
+func (m *capturingMockProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, _ string) (string, error) {
 	m.capturedContext = ctx
+	m.capturedSystemPrompt = systemPrompt
 	m.capturedHistory = history
 	return compressionSummaryResponseForHistory(history, "Summary of conversation"), nil
 }
@@ -59,6 +61,53 @@ func TestCompressHistory_PrePrunesBeforeSummary(t *testing.T) {
 	capturedPrompt := provider.capturedHistory[0].Content
 	if !strings.Contains(capturedPrompt, "truncated") {
 		t.Error("CompressHistory() should pre-prune old tool results before BuildSummaryPrompt")
+	}
+}
+
+func TestCompressHistory_PassesContinuationV1SystemPrompt(t *testing.T) {
+	provider := &capturingMockProvider{}
+	agent := NewAgent("test-model", provider, false)
+	t.Cleanup(agent.Cleanup)
+	agent.History = []api.Message{
+		{Role: "user", Content: "old"},
+		{Role: "assistant", Content: "latest"},
+	}
+
+	if err := agent.CompressHistory(1); err != nil {
+		t.Fatalf("CompressHistory() error = %v", err)
+	}
+	if !strings.Contains(provider.capturedSystemPrompt, "xelyon.continuation.v1") {
+		t.Fatalf("summary system prompt = %q, want continuation v1 contract", provider.capturedSystemPrompt)
+	}
+	if len(provider.capturedHistory) != 1 || provider.capturedHistory[0].Role != "user" {
+		t.Fatalf("summary history = %#v, want one user transcript prompt", provider.capturedHistory)
+	}
+}
+
+func TestCompressHistory_InvalidNestedContinuationKeepsOriginalHistory(t *testing.T) {
+	provider := &compressionTestProvider{
+		name:    "openai",
+		summary: `{"schema_version":"xelyon.continuation.v1","goal":"fix compression","acceptance_criteria":[],"explicit_constraints":[],"material_assumptions":[],"decisions":[{"decision":"keep strict parser","evidence":[]}],"files_changed":[],"verification":[],"open_work":[],"blockers":[],"do_not_repeat":[],"relevant_instruction_refs":[]}`,
+	}
+	agent, _ := newCompressionTestAgent(t, provider, "gpt-5.4", config.DefaultConfig())
+	originalHistory := []api.Message{
+		{Role: "user", Content: "old"},
+		{Role: "assistant", Content: "older"},
+		{Role: "user", Content: "latest"},
+	}
+	agent.History = append([]api.Message(nil), originalHistory...)
+
+	err := agent.CompressHistory(1)
+	if err == nil || !strings.Contains(err.Error(), "decisions[0] missing keys: reason") {
+		t.Fatalf("CompressHistory() error = %v, want nested continuation validation error", err)
+	}
+	if len(agent.History) != len(originalHistory) {
+		t.Fatalf("len(agent.History) = %d, want original %d", len(agent.History), len(originalHistory))
+	}
+	for i := range originalHistory {
+		if agent.History[i].Role != originalHistory[i].Role || agent.History[i].Content != originalHistory[i].Content {
+			t.Fatalf("agent.History[%d] = %#v, want %#v", i, agent.History[i], originalHistory[i])
+		}
 	}
 }
 
