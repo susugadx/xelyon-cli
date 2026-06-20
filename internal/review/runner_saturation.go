@@ -77,10 +77,7 @@ func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req Re
 		FinalizedReport:             finalizedReport,
 	})
 	r.saveReviewRunTextArtifact("saturation_prompt.md", checkPrompt, redactor)
-	checkResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseSaturationCheck,
-		Prompt: checkPrompt,
-	})
+	checkResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseSaturationCheck, checkPrompt))
 	if err != nil {
 		r.emitProgressError(reviewProgressSaturationCheckItem, err)
 		return ReviewSaturationCheck{}, fmt.Errorf("review runner saturation check model: %w", err)
@@ -121,10 +118,7 @@ func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req Re
 		DecodeOrValidationErr:       checkErr,
 	})
 	r.saveReviewRunTextArtifact("saturation_prompt.md", repairPrompt, redactor)
-	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseSaturationCheck,
-		Prompt: repairPrompt,
-	})
+	repairResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseSaturationCheck, repairPrompt))
 	if err != nil {
 		r.emitProgressError(reviewProgressSaturationRepairItem, err)
 		return ReviewSaturationCheck{}, fmt.Errorf("review runner saturation check model: %w", err)
@@ -330,10 +324,7 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 		SaturationCheck:             saturationCheck,
 	})
 	r.saveReviewRunTextArtifact("revision_prompt.md", revisionPrompt, redactor)
-	revisionResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReportRevision,
-		Prompt: revisionPrompt,
-	})
+	revisionResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseReportRevision, revisionPrompt))
 	if err != nil {
 		r.emitProgressError(reviewProgressReportRevisionItem, err)
 		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
@@ -371,10 +362,7 @@ func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req Rev
 		DecodeOrValidationErr:       revisionErr,
 	})
 	r.saveReviewRunTextArtifact("revision_prompt.md", repairPrompt, redactor)
-	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReportRevision,
-		Prompt: repairPrompt,
-	})
+	repairResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseReportRevision, repairPrompt))
 	if err != nil {
 		r.emitProgressError(reviewProgressReportRevisionRepairItem, err)
 		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)

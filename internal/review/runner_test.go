@@ -90,6 +90,15 @@ func TestReviewRunnerRunHappyPath(t *testing.T) {
 	if got, want := model.requests[2].Phase, ReviewModelPhaseSaturationCheck; got != want {
 		t.Fatalf("third model phase = %q, want %q", got, want)
 	}
+	wantSystemPrompt := buildReviewModelSystemPrompt()
+	if wantSystemPrompt == "" {
+		t.Fatal("buildReviewModelSystemPrompt() is empty")
+	}
+	for i, req := range model.requests {
+		if req.SystemPrompt != wantSystemPrompt {
+			t.Fatalf("model request %d SystemPrompt = %q, want shared reviewer constitution", i, req.SystemPrompt)
+		}
+	}
 	firstPrompt := model.requests[0].Prompt
 	for _, want := range []string{"Review Pass 1", "focus on runner orchestration", "# Review Evidence", ReviewProbePlanSchemaVersionV2} {
 		if !strings.Contains(firstPrompt, want) {

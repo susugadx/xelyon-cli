@@ -10,7 +10,16 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 )
+
+func reviewModelRequestForAgentTest(phase review.ReviewModelPhase, prompt string) review.ReviewModelRequest {
+	return review.ReviewModelRequest{
+		Phase:        phase,
+		SystemPrompt: reviewmodelinput.BuildReviewSystemPrompt(),
+		Prompt:       prompt,
+	}
+}
 
 func TestAgentReviewModelCompleteReviewPassesPromptAsSingleUserMessage(t *testing.T) {
 	var captured struct {
@@ -49,18 +58,15 @@ func TestAgentReviewModelCompleteReviewPassesPromptAsSingleUserMessage(t *testin
 	agent.isCompactedMode = true
 	agent.compactedItems = []api.InputItem{{Type: "message", Role: "user", Content: "existing compacted chat"}}
 
-	resp, err := (agentReviewModel{agent: agent}).CompleteReview(contextWithInheritedActiveContext(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "return review json",
-	})
+	resp, err := (agentReviewModel{agent: agent}).CompleteReview(contextWithInheritedActiveContext(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "return review json"))
 	if err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 	if resp.Content != `{"ok":true}` {
 		t.Fatalf("Content = %q, want raw provider response", resp.Content)
 	}
-	if captured.systemPrompt != "" {
-		t.Fatalf("systemPrompt = %q, want empty", captured.systemPrompt)
+	if captured.systemPrompt != reviewmodelinput.BuildReviewSystemPrompt() {
+		t.Fatalf("systemPrompt = %q, want reviewer constitution", captured.systemPrompt)
 	}
 	if len(captured.history) != 1 || captured.history[0].Role != "user" || captured.history[0].Content != "return review json" {
 		t.Fatalf("history = %#v, want single user prompt", captured.history)
@@ -91,6 +97,31 @@ func TestAgentReviewModelCompleteReviewPassesPromptAsSingleUserMessage(t *testin
 	}
 }
 
+func TestAgentReviewModelCompleteReviewRejectsEmptySystemPrompt(t *testing.T) {
+	provider := &scriptedChatProvider{
+		name: "openai",
+		chatWithToolsFn: func(_ int, _ context.Context, _ string, _ []api.Message, _ string) (string, error) {
+			t.Fatal("provider should not be called when review system prompt is empty")
+			return "", nil
+		},
+	}
+	agent := newReviewAgentForTest(t, provider)
+
+	_, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
+		Phase:  review.ReviewModelPhaseReport,
+		Prompt: "return review json",
+	})
+	if err == nil {
+		t.Fatal("CompleteReview() error = nil, want empty system prompt validation error")
+	}
+	if got := err.Error(); !strings.Contains(got, "review model report") || !strings.Contains(got, "system prompt is empty") {
+		t.Fatalf("CompleteReview() error = %q, want phase and empty system prompt", got)
+	}
+	if provider.callCount != 0 {
+		t.Fatalf("provider calls = %d, want 0", provider.callCount)
+	}
+}
+
 func TestAgentReviewModelCompleteReviewWrapsProviderErrorWithPhase(t *testing.T) {
 	provider := &scriptedChatProvider{
 		name: "openai",
@@ -100,10 +131,7 @@ func TestAgentReviewModelCompleteReviewWrapsProviderErrorWithPhase(t *testing.T)
 	}
 	agent := newReviewAgentForTest(t, provider)
 
-	_, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseProbePlan,
-		Prompt: "plan",
-	})
+	_, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseProbePlan, "plan"))
 	if err == nil {
 		t.Fatal("CompleteReview() error = nil, want provider error")
 	}
@@ -125,10 +153,7 @@ func TestAgentReviewModelCompleteReviewRestoresResponseID(t *testing.T) {
 	}
 	agent := newReviewAgentForTest(t, provider)
 
-	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "report",
-	}); err != nil {
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "report")); err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 	if got := provider.GetResponseID(); got != "resp_original" {
@@ -156,10 +181,7 @@ func TestAgentReviewModelThinkingInheritsRuntimeConfig(t *testing.T) {
 	cfg.Review.Thinking = config.ReviewThinkingConfig{Mode: config.ReviewThinkingModeInherit}
 	agent.setRuntimeConfig(cfg)
 
-	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "report",
-	}); err != nil {
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "report")); err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 	if !captured.enabled {
@@ -193,10 +215,7 @@ func TestAgentReviewModelThinkingInheritAppliesLevelOverrideWithoutMutatingRunti
 	}
 	agent.setRuntimeConfig(cfg)
 
-	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "report",
-	}); err != nil {
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "report")); err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 	if !captured.enabled {
@@ -233,10 +252,7 @@ func TestAgentReviewModelThinkingOffOverridesWithoutMutatingRuntimeConfig(t *tes
 	}
 	agent.setRuntimeConfig(cfg)
 
-	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "report",
-	}); err != nil {
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "report")); err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 	if captured.enabled {
@@ -276,10 +292,7 @@ func TestAgentReviewModelThinkingOnOverridesLevelWithoutMutatingRuntimeConfig(t 
 	}
 	agent.setRuntimeConfig(cfg)
 
-	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "report",
-	}); err != nil {
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "report")); err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 	if !captured.enabled {
@@ -334,10 +347,7 @@ func TestAgentReviewModelUsesConfiguredProviderModelWithoutMutatingSession(t *te
 	})
 	defer restoreFactory()
 
-	resp, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "review prompt",
-	})
+	resp, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "review prompt"))
 	if err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
@@ -398,10 +408,7 @@ func TestAgentReviewModelConfiguredProviderFallsBackToProviderDefaultModel(t *te
 	})
 	defer restoreFactory()
 
-	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "report",
-	}); err != nil {
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "report")); err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 	if capturedModel != "review-default" {
@@ -439,10 +446,7 @@ func TestAgentReviewModelConfiguredProviderAttributesUsageToReviewModel(t *testi
 	})
 	defer restoreFactory()
 
-	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "report",
-	}); err != nil {
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "report")); err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 
@@ -466,10 +470,7 @@ func TestAgentReviewModelRejectsReviewModelWithoutProvider(t *testing.T) {
 	cfg.Review.Model = "orphan-review-model"
 	agent.setRuntimeConfig(cfg)
 
-	_, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "report",
-	})
+	_, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "report"))
 	if err == nil {
 		t.Fatal("CompleteReview() error = nil, want review.model validation error")
 	}

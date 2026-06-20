@@ -114,6 +114,7 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (ReviewReport
 	evidenceMarkdown := RenderReviewEvidenceMarkdown(bundle)
 	evidenceRedactor := newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("evidence.md", evidenceMarkdown, evidenceRedactor)
+	r.saveReviewRunTextArtifact("review_system_prompt.md", buildReviewModelSystemPrompt(), evidenceRedactor)
 	if bundle.WebSearchEvidence.Enabled {
 		r.saveReviewRunJSONArtifact("web_search_evidence.json", bundle.WebSearchEvidence, evidenceRedactor)
 	}
@@ -169,10 +170,7 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 	})
 	redactor := newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("probe_plan_prompt.md", planPrompt, redactor)
-	planResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseProbePlan,
-		Prompt: planPrompt,
-	})
+	planResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseProbePlan, planPrompt))
 	if err != nil {
 		return ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
 	}
@@ -191,10 +189,7 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 		DecodeOrValidationErr: decodeErr,
 	})
 	r.saveReviewRunTextArtifact("probe_plan_prompt.md", repairPrompt, redactor)
-	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseProbePlan,
-		Prompt: repairPrompt,
-	})
+	repairResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseProbePlan, repairPrompt))
 	if err != nil {
 		return ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
 	}
@@ -248,10 +243,7 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 		ProbeResultOptions: r.probeResultPromptContextOptions(),
 	})
 	r.saveReviewRunTextArtifact("report_prompt.md", reportPrompt, redactor)
-	reportResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReport,
-		Prompt: reportPrompt,
-	})
+	reportResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseReport, reportPrompt))
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}
@@ -282,10 +274,7 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 		DecodeOrValidationErr: reportErr,
 	})
 	r.saveReviewRunTextArtifact("report_prompt.md", repairPrompt, redactor)
-	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReport,
-		Prompt: repairPrompt,
-	})
+	repairResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseReport, repairPrompt))
 	if err != nil {
 		return ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}

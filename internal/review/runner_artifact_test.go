@@ -100,6 +100,7 @@ func TestReviewRunnerRunSavesHappyPathArtifacts(t *testing.T) {
 
 	assertReviewArtifactsExistForTest(t, dir,
 		"evidence.md",
+		"review_system_prompt.md",
 		"web_search_evidence.json",
 		"probe_plan_prompt.md",
 		"probe_plan_raw.json",
@@ -112,6 +113,10 @@ func TestReviewRunnerRunSavesHappyPathArtifacts(t *testing.T) {
 		"saturation_prompt.md",
 		"saturation_raw.json",
 	)
+	systemPromptArtifact := string(readReviewArtifactForTest(t, filepath.Join(dir, "review_system_prompt.md")))
+	if systemPromptArtifact != buildReviewModelSystemPrompt() {
+		t.Fatalf("review_system_prompt.md = %q, want provider-facing reviewer constitution", systemPromptArtifact)
+	}
 }
 
 func TestReviewRunnerRunSavesRevisionRepairArtifactsWithFinalReportSuffix(t *testing.T) {

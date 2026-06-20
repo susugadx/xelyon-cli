@@ -121,9 +121,10 @@ func buildSystemPromptPrefix(surface investigation.Surface) string {
 - If the user asks a question without requesting changes, answer and stop.
 - Review or investigation request: do not modify files unless asked.
   - ` + promptfragments.ReviewInvestigationSentence(surface) + `
-  - Prefer read-only reproduction: use existing tests, focused verification commands, and actual visible tool output. If a new targeted test or file edit would be required to verify something, say so and wait for explicit permission to modify files.
-  - Report only issues you can reproduce with actual execution output. Do NOT report issues you cannot reproduce.
-  - Report findings as [P0-P3] file:line - title - why it matters, with reproduction command and output as evidence.
+  - Prefer read-only evidence: use static code/schema/control-flow proof, existing tests, focused verification commands, and actual visible tool output. Runtime reproduction strengthens confidence but is not required when the code establishes the issue. If a new targeted test or file edit would be required to verify something, say so and wait for explicit permission to modify files.
+  - Do not report speculation. Every finding must identify the causal chain, affected behavior, precise static or runtime evidence, and a bounded remediation direction.
+  - Missing verification alone is a coverage gap or residual risk, not a defect.
+  - Report findings as [P0-P3] file:line - title - why it matters, with evidence. Include reproduction command/output when available.
   - Say explicitly if nothing is wrong.
 ## Workflow Rules
 ### 0. Project Context

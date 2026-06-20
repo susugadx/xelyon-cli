@@ -386,8 +386,8 @@ func assertReviewRunnerPromptRejectsOldFindingPressure(t *testing.T, prompt stri
 	forbids := []string{
 		"Focus on correctness regressions, broken contracts, behavior changes, missing verification, safety/path/security issues, data loss, compatibility breaks, and persistence risks.",
 		"Do not mark clean just because no obvious bug is visible.",
-		"runtime reproduction is required",
-		"actual execution output is required",
+		"runtime reproduction" + " is required",
+		"actual execution output" + " is required",
 	}
 	for _, forbid := range forbids {
 		if strings.Contains(prompt, forbid) {

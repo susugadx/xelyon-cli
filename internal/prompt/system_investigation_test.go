@@ -140,7 +140,10 @@ func TestSystemPrompt_NoBashRecommendations(t *testing.T) {
 func TestSystemPrompt_ReviewInvestigationGuidanceStaysReadOnly(t *testing.T) {
 	for _, want := range []string{
 		"Review or investigation request: do not modify files unless asked.",
-		"Prefer read-only reproduction: use existing tests, focused verification commands, and actual visible tool output.",
+		"Prefer read-only evidence: use static code/schema/control-flow proof, existing tests, focused verification commands, and actual visible tool output.",
+		"Runtime reproduction strengthens confidence but is not required when the code establishes the issue.",
+		"Every finding must identify the causal chain, affected behavior, precise static or runtime evidence, and a bounded remediation direction.",
+		"Missing verification alone is a coverage gap or residual risk, not a defect.",
 		"say so and wait for explicit permission to modify files",
 	} {
 		if !strings.Contains(SystemPrompt, want) {
@@ -149,5 +152,14 @@ func TestSystemPrompt_ReviewInvestigationGuidanceStaysReadOnly(t *testing.T) {
 	}
 	if strings.Contains(SystemPrompt, "write a temporary test inside the target package") {
 		t.Fatal("SystemPrompt should not require temporary test creation during read-only review/investigation")
+	}
+	for _, forbidden := range []string{
+		"Report only issues you can reproduce with actual execution output",
+		"Do NOT report issues you cannot reproduce",
+		"reproduction command and output as evidence",
+	} {
+		if strings.Contains(SystemPrompt, forbidden) {
+			t.Fatalf("SystemPrompt should not require runtime-only review evidence %q", forbidden)
+		}
 	}
 }

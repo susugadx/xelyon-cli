@@ -19,10 +19,7 @@ func (m *fakeReviewModel) CompleteReview(_ context.Context, req ReviewModelReque
 
 func TestReviewModelContract(t *testing.T) {
 	model := &fakeReviewModel{content: `{"schema_version":"review_probe_plan.v2"}`}
-	req := ReviewModelRequest{
-		Phase:  ReviewModelPhaseProbePlan,
-		Prompt: "complete model input",
-	}
+	req := newReviewModelRequest(ReviewModelPhaseProbePlan, "complete model input")
 
 	resp, err := model.CompleteReview(context.Background(), req)
 	if err != nil {
@@ -30,6 +27,9 @@ func TestReviewModelContract(t *testing.T) {
 	}
 	if got, want := model.received.Phase, ReviewModelPhaseProbePlan; got != want {
 		t.Fatalf("received Phase = %q, want %q", got, want)
+	}
+	if model.received.SystemPrompt == "" {
+		t.Fatal("received SystemPrompt is empty, want reviewer constitution")
 	}
 	if got, want := model.received.Prompt, "complete model input"; got != want {
 		t.Fatalf("received Prompt = %q, want %q", got, want)
