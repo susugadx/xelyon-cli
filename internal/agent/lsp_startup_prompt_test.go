@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/lsp"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newLSPStartupPromptTestAgent(t *testing.T, workdir string, cfgServers map[string]lsp.ServerConfig) (*Agent, *bytes.Buffer) {
@@ -43,7 +43,7 @@ func newLSPStartupPromptTestAgentWithProjectMarker(t *testing.T, workdir string,
 		}
 	}
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 
 	client := lsp.NewClient(workdir)
 	client.SetConfigs(cfgServers)

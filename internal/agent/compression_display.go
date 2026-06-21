@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	displayui "github.com/susugadx/xelyon-cli/internal/ui"
+	displayui "github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 const (

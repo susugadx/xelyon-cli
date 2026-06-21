@@ -13,17 +13,7 @@ func renderProviderHistoryRawOutputContextEntry(ref rawoutputs.RawOutputRef, bod
 		return "", providerHistoryRawOutputRequiredRefsMissingReason
 	}
 	body = providerHistoryRawOutputContextDisplayBody(ref, body)
-	metadata := fmt.Sprintf(
-		"- ref: %s\n  surface: %s\n  tool_name: %s\n  command_preview: %s\n  family: %s\n  classifier: %s\n  byte_size: %d\n  content_hash: %s\n  body:\n",
-		ref.RefID,
-		ref.Surface,
-		ref.ToolName,
-		ref.CommandPreview,
-		ref.Family,
-		ref.Classifier,
-		ref.ByteSize,
-		ref.ContentHash,
-	)
+	metadata := providerHistoryRawOutputContextEntryMetadata(ref)
 	metadataTokens := token.EstimateTokenCount(metadata)
 	bodyBudget := availableTokens - metadataTokens
 	if bodyBudget <= 0 {
@@ -44,6 +34,20 @@ func renderProviderHistoryRawOutputContextEntry(ref rawoutputs.RawOutputRef, bod
 		bodyBudget = bodyBudget * 3 / 4
 	}
 	return "", providerHistoryRawOutputRequiredRefsMissingReason
+}
+
+func providerHistoryRawOutputContextEntryMetadata(ref rawoutputs.RawOutputRef) string {
+	return fmt.Sprintf(
+		"- ref: %s\n  surface: %s\n  tool_name: %s\n  command_preview: %s\n  family: %s\n  classifier: %s\n  byte_size: %d\n  content_hash: %s\n  body:\n",
+		ref.RefID,
+		ref.Surface,
+		ref.ToolName,
+		ref.CommandPreview,
+		ref.Family,
+		ref.Classifier,
+		ref.ByteSize,
+		ref.ContentHash,
+	)
 }
 
 func providerHistoryRawOutputContextDisplayBody(ref rawoutputs.RawOutputRef, body string) string {

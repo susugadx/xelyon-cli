@@ -7,15 +7,15 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 )
 
-func renderLastRequestTable(cfg *config.Config, provider, model string, usage *api.Usage, costOverride *cost.CostEstimate) *ui.Table {
+func renderLastRequestTable(cfg *config.Config, provider, model string, usage *api.Usage, costOverride *cost.CostEstimate) *termtext.Table {
 	if usage == nil {
 		return nil
 	}
 
-	table := ui.NewTable().
+	table := termtext.NewTable().
 		AddRow("Input", formatNumber(usage.InputTokens)+" tokens").
 		AddRow("Cache Mode", requestCacheMode(*usage))
 
@@ -49,7 +49,7 @@ func renderLastRequestTable(cfg *config.Config, provider, model string, usage *a
 	return table
 }
 
-func addWebSearchUsageRows(table *ui.Table, label func(string) string, calls, resultTokens int, fee float64) {
+func addWebSearchUsageRows(table *termtext.Table, label func(string) string, calls, resultTokens int, fee float64) {
 	if table == nil || calls <= 0 {
 		return
 	}

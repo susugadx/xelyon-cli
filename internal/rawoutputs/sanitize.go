@@ -10,7 +10,7 @@ var (
 	displayURLPattern          = regexp.MustCompile(`https?://[^\s<>"'\]\)}]+`)
 	privateKeyBlockPattern     = regexp.MustCompile(`(?is)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----`)
 	secretAssignmentPattern    = regexp.MustCompile(`(?i)\b(access_token|refresh_token|id_token|session_token|auth_token|api_key|apikey|client_secret|private_key|password|passwd|secret|token|jwt|signature|sig)=([^\s&;]+)`)
-	secretJSONFieldPattern     = regexp.MustCompile(`(?i)["']?(access_token|refresh_token|id_token|session_token|auth_token|api_key|apikey|client_secret|private_key|password|passwd|secret|token|jwt|signature|sig)["']?\s*:\s*["'][^"']+["']`)
+	secretJSONFieldPattern     = regexp.MustCompile(`(?i)["']?(authorization|proxy-authorization|x-api-key|api-key|access-token|refresh-token|id-token|session-token|auth-token|client-secret|private-key|set-cookie|cookie|access_token|refresh_token|id_token|session_token|auth_token|api_key|apikey|client_secret|private_key|password|passwd|secret|token|jwt|signature|sig)["']?\s*:\s*["'][^"']+["']`)
 	authHeaderDisplayPattern   = regexp.MustCompile("(?i)(\\bauthorization\\s*[:=]\\s*)(?:([A-Za-z][A-Za-z0-9._-]*)\\s+)?([^\\s'\";]+)")
 	secretHeaderPattern        = regexp.MustCompile("(?i)\\b(x-api-key|api-key|apikey|access-token|refresh-token|id-token|session-token|auth-token|client-secret)\\s*[:=]\\s*([^\\s'\";]+)")
 	cookieHeaderPattern        = regexp.MustCompile(`(?i)\b(set-cookie|cookie)\s*[:=]\s*[^\r\n]+`)

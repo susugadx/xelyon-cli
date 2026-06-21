@@ -154,9 +154,8 @@ func (a *Agent) syncCurrentSurfaceToolVisibility() {
 	if a == nil {
 		return
 	}
-	previousBudgetExcluded := a.mcpSurface.omittedExportedNames()
-	a.refreshMCPToolSurface()
-	a.syncCurrentSurfaceToolVisibilityWithPreviousBudget(previousBudgetExcluded)
+	previousSurface, _ := a.refreshMCPToolSurface()
+	a.syncCurrentSurfaceToolVisibilityWithPreviousBudget(previousSurface.omittedExportedNames())
 }
 
 func (a *Agent) syncCurrentSurfaceToolVisibilityWithPreviousBudget(previousBudgetExcluded []string) {

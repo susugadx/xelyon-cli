@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
@@ -43,7 +44,7 @@ type ReportPromptInput struct {
 	CustomInstructions string
 	ReviewStateSummary string
 	EvidenceMarkdown   string
-	Plan               reviewprobe.ReviewProbePlan
+	Plan               reviewprobeplan.ReviewProbePlan
 	ProbeSummaries     []reviewreport.ReviewProbeSummary
 	ProbeResults       []reviewprobe.ReviewProbeResult
 	Redactor           Redactor
@@ -55,7 +56,7 @@ type ReportRepairPromptInput struct {
 	CustomInstructions    string
 	ReviewStateSummary    string
 	EvidenceMarkdown      string
-	Plan                  reviewprobe.ReviewProbePlan
+	Plan                  reviewprobeplan.ReviewProbePlan
 	ProbeSummaries        []reviewreport.ReviewProbeSummary
 	ProbeResults          []reviewprobe.ReviewProbeResult
 	Redactor              Redactor
@@ -69,7 +70,7 @@ func BuildProbePlanPrompt(input ProbePlanPromptInput) string {
 	var b strings.Builder
 	b.WriteString("# Review Pass 1: Probe Plan\n\n")
 	b.WriteString("Return exactly one JSON object for schema ")
-	b.WriteString(reviewprobe.ReviewProbePlanSchemaVersionV2)
+	b.WriteString(reviewprobeplan.ReviewProbePlanSchemaVersionV2)
 	b.WriteString(". Do not include markdown or explanatory text outside the JSON.\n\n")
 	b.WriteString("First enumerate material impact surfaces from the provided evidence, then candidate risks, then only bounded probes that confirm or falsify those risks or unverified material surfaces. Use plan order as execution order. If no candidate risks remain, provide no_candidate_risk_reason for every impact surface ID. If no probe is useful, return an empty probes array and a no_probe_reason that names the checked surface and risk IDs.\n\n")
 

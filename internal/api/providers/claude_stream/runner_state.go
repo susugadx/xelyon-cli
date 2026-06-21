@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type runnerOutputState struct {
 	ctx                   context.Context
-	spinner               *ui.Spinner
+	spinner               *uiruntime.Spinner
 	out                   io.Writer
 	errOut                io.Writer
 	streamAssistantText   bool
@@ -23,7 +23,7 @@ type runnerOutputState struct {
 	fullResponse strings.Builder
 }
 
-func newRunnerOutputState(ctx context.Context, spinner *ui.Spinner) *runnerOutputState {
+func newRunnerOutputState(ctx context.Context, spinner *uiruntime.Spinner) *runnerOutputState {
 	return &runnerOutputState{
 		ctx:                 ctx,
 		spinner:             spinner,

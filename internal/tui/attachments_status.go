@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strconv"
+
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 const (
@@ -28,8 +30,8 @@ func (m Model) attachedBatchStatus(added, limitRejected int) string {
 }
 
 func (m *Model) cleanupClipboardTempAttachmentPath(path string) {
-	cleanupTemporaryAttachment(composerAttachment{
-		Source: composerAttachmentSourceClipboardImage,
+	cleanupTemporaryAttachment(tuiattachments.Attachment{
+		Source: tuiattachments.SourceClipboardImage,
 		Path:   path,
 	})
 }
@@ -42,14 +44,14 @@ func (m *Model) presentAttachmentAddResult(result addAttachmentFromPathResult, c
 			m.setTransientStatus(attachmentStatusClipboardAttached)
 			return
 		}
-		m.setTransientStatus(fmt.Sprintf("Attached %s %s (#%d)", result.attachment.kindLabel(), result.attachment.basename(), len(m.attachments)))
+		m.setTransientStatus(fmt.Sprintf("Attached %s %s (#%d)", result.attachment.KindLabel(), result.attachment.Basename(), len(m.attachments)))
 	case addAttachmentFromPathDuplicate:
 		if ctx == attachmentAddDisplayClipboardImage {
 			m.cleanupClipboardTempAttachmentPath(clipboardPath)
 			m.setTransientStatus(attachmentStatusClipboardDuplicate)
 			return
 		}
-		m.setTransientStatus(attachmentStatusAlreadyAttached + ": " + result.attachment.basename())
+		m.setTransientStatus(attachmentStatusAlreadyAttached + ": " + result.attachment.Basename())
 	case addAttachmentFromPathLimit:
 		if ctx == attachmentAddDisplayClipboardImage {
 			m.cleanupClipboardTempAttachmentPath(clipboardPath)

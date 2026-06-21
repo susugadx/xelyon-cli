@@ -15,7 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/stdio"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newLedgerCommandTestAgent(store *taskstate.Store) (*Agent, *bytes.Buffer) {
@@ -23,7 +23,7 @@ func newLedgerCommandTestAgent(store *taskstate.Store) (*Agent, *bytes.Buffer) {
 	return &Agent{
 		Runtime: &AgentRuntime{
 			TaskLedger: store,
-			UI:         ui.NewRuntime(strings.NewReader(""), out, out),
+			UI:         uiruntime.NewRuntime(strings.NewReader(""), out, out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-test"),

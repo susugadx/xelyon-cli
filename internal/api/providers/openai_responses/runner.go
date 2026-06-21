@@ -8,14 +8,14 @@ import (
 	"net/http"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // JSONRequestFactory は marshal 済み JSON payload から HTTP request を作る関数を表す。
 type JSONRequestFactory func(ctx context.Context, url string, payload []byte) (*http.Request, error)
 
 // StreamHandler は Responses API の streaming response を処理する関数を表す。
-type StreamHandler func(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (content, responseID string, err error)
+type StreamHandler func(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (content, responseID string, err error)
 
 // StreamingRunOptions は Responses API streaming 実行の provider 差分を表す。
 type StreamingRunOptions struct {

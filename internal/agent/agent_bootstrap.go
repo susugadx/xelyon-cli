@@ -54,7 +54,7 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	providerRuntimeName := providerRuntimeNameFromProvider(provider)
 	providerConfigKey := providerConfigKeyFromProvider(provider)
 	toolVisibility := resolveToolVisibilityPolicyWithConfig(providerRuntimeName, model, cfg, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true})
-	mcpSurface := selectMCPToolSurface(model, mcpManager.GetTools())
+	mcpSurface := selectMCPToolSurfaceWithBudget(model, mcpManager.GetTools(), config.EffectiveMCPSurfaceBudget(cfg))
 
 	configureMCPTools(provider, mcpSurface.selectedTools(), errOut)
 	emitMCPToolSurfaceBudgetWarning(mcpSurface, errOut)

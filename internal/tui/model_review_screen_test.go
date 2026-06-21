@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
 )
 
 func TestReviewCommand_OpensPresetScreen(t *testing.T) {
@@ -24,8 +25,8 @@ func TestReviewCommand_OpensPresetScreen(t *testing.T) {
 	if m.reviewScreen == nil {
 		t.Fatal("reviewScreen is nil")
 	}
-	if m.reviewScreen.mode != reviewScreenPreset {
-		t.Fatalf("review mode = %d, want preset", m.reviewScreen.mode)
+	if snapshot := m.reviewScreen.Snapshot(); snapshot.Mode != reviewscreen.ModePreset {
+		t.Fatalf("review mode = %d, want preset", snapshot.Mode)
 	}
 }
 
@@ -98,8 +99,8 @@ func TestReviewScreen_EscBackTargets(t *testing.T) {
 		if m.screen != screenReview {
 			t.Fatalf("screen = %d, want screenReview", m.screen)
 		}
-		if m.reviewScreen.mode != reviewScreenPreset {
-			t.Fatalf("review mode = %d, want preset", m.reviewScreen.mode)
+		if snapshot := m.reviewScreen.Snapshot(); snapshot.Mode != reviewscreen.ModePreset {
+			t.Fatalf("review mode = %d, want preset", snapshot.Mode)
 		}
 	})
 }

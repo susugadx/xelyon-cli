@@ -28,7 +28,7 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 
 MCP の local config と tool discovery を診断します。デフォルトでは local-only で、`~/.xelyon/mcp.json` が存在する場合だけ読み、ファイル作成や MCP server process の起動は行いません。`mcp.enabled` / `mcp.headless`、server 数、command allowlist、timeout、approval、disabled、include / exclude を確認します。
 
-`--connect` を付けると、対象 MCP server を起動して initialize / `tools/list` まで確認します。MCP tool の `tools/call` は実行しません。live tool surface の total / registered / visible / omitted 数、server 別 estimated tokens / schema bytes、omitted reason、`tools.include` の絞り込み提案も表示します。estimated tokens は analysis に含めた tool の provider tool definition 相当から推定した合計です。schema body は表示しません。`--tools` は `--connect` と組み合わせて raw tool name、XELYON の exported tool name、visible / skipped reason、approval を表示します。`--server` で 1 server に絞れます。JSON 出力は `--json` を使います。
+`--connect` を付けると、対象 MCP server を起動して initialize / `tools/list` まで確認します。MCP tool の `tools/call` は実行しません。runtime 全体の live tool surface total / registered / visible / omitted 数、effective budget、server 別 estimated tokens / schema bytes、omitted reason、`tools.include` / `tools.exclude` と `mcp.surface_budget` の提案も表示します。estimated tokens は analysis に含めた tool の provider tool definition 相当から推定した合計です。schema body は表示しません。`--tools` は `--connect` と組み合わせて raw tool name、XELYON の exported tool name、visible / skipped reason、approval を表示します。`--server` で 1 server に絞れます。JSON 出力は `--json` を使います。
 
 ```bash
 xelyon doctor mcp
@@ -989,7 +989,7 @@ XELYONはMCP（Model Context Protocol）に対応しており、`~/.xelyon/mcp.j
 > /mcp status
 ```
 
-表示するのは runtime 有効状態、読み込み済み config の有無、server 数、接続済み server、disabled / blocked / not connected server、registered / visible / omitted tool 数、tool surface のサンプル、server 別 token / schema byte 数、omitted reason、`tools.include` の絞り込み提案です。
+表示するのは runtime 有効状態、読み込み済み config の有無、server 数、接続済み server、disabled / blocked / not connected server、registered / visible / omitted tool 数、effective budget、tool surface のサンプル、server 別 token / schema byte 数、omitted reason、`tools.include` / `tools.exclude` と `mcp.surface_budget` の提案です。
 env value、raw args、server error detail、tool schema body、description 全文は表示しません。
 設定ファイルそのものや live 接続を確認する場合は `xelyon doctor mcp`、実際に initialize / `tools/list` まで確認する場合は `xelyon doctor mcp --connect` を使います。
 

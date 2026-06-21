@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
@@ -208,7 +209,7 @@ func TestFinalizeReportModelOutputValidatesProbeCommandRefsAfterTrustedSummaryIn
 func newReviewReportModelOutputForModelOutputTest(verdict reviewreport.ReviewVerdict, status reviewreport.ReviewVerificationStatus) reviewreport.ReviewReportModelOutput {
 	return reviewreport.ReviewReportModelOutput{
 		SchemaVersion:             reviewreport.ReviewReportModelSchemaVersionV2,
-		TargetKind:                reviewreport.TargetCurrentChanges,
+		TargetKind:                domain.TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: status,
 		Verdict:                   verdict,
@@ -231,10 +232,10 @@ func newPassedTrustedProbeSummariesForModelOutputTest(probeID string) []reviewre
 	return []reviewreport.ReviewProbeSummary{
 		{
 			ProbeID: probeID,
-			Mode:    reviewreport.ReviewProbeHostReadOnly,
-			Status:  reviewreport.ReviewProbePassed,
+			Mode:    domain.ReviewProbeHostReadOnly,
+			Status:  domain.ReviewProbePassed,
 			Commands: []reviewreport.ReviewProbeCommandSummary{
-				{Command: "go test ./internal/review", Status: reviewreport.ReviewProbePassed},
+				{Command: "go test ./internal/review", Status: domain.ReviewProbePassed},
 			},
 		},
 	}

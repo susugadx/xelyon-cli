@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiplanview"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 func TestPromptModal_ConfirmNavigationAndSubmit(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{
-		Kind:         ui.PromptKindConfirm,
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{
+		Kind:         uiprompt.PromptKindConfirm,
 		Message:      "Run tool?",
 		AllowComment: true,
 	}, ch)
@@ -19,8 +20,8 @@ func TestPromptModal_ConfirmNavigationAndSubmit(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	m = updated.(Model)
-	if m.prompt.selected != 2 {
-		t.Fatalf("selected = %d, want comment option", m.prompt.selected)
+	if m.prompt.Snapshot().Selected != 2 {
+		t.Fatalf("selected = %d, want comment option", m.prompt.Snapshot().Selected)
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
@@ -32,14 +33,41 @@ func TestPromptModal_ConfirmNavigationAndSubmit(t *testing.T) {
 		t.Fatal("prompt should close after submit")
 	}
 	resp := <-ch
-	if resp.Action != ui.PromptActionNo {
+	if resp.Action != uiprompt.PromptActionNo {
 		t.Fatalf("Action = %q, want no", resp.Action)
 	}
 }
 
+func TestPromptModal_RawEnterSubmitsChoice(t *testing.T) {
+	for _, tt := range enterFallbackKeyCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			ch := make(chan uiprompt.PromptResponse, 1)
+			m := newPromptTestModel(uiprompt.PromptRequest{
+				Kind:    uiprompt.PromptKindSingleChoice,
+				Message: "Pick",
+				Options: []uiprompt.PromptOption{
+					{Label: "Alpha", Value: "alpha"},
+					{Label: "Beta", Value: "beta"},
+				},
+			}, ch)
+
+			updated, _ := m.Update(tt.key)
+			m = updated.(Model)
+
+			if m.prompt != nil {
+				t.Fatal("prompt should close after raw Enter choice submit")
+			}
+			resp := <-ch
+			if resp.Value != "alpha" {
+				t.Fatalf("Value = %q, want alpha", resp.Value)
+			}
+		})
+	}
+}
+
 func TestPromptModal_EscCancelsConfirm(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"}, ch)
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"}, ch)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updated.(Model)
@@ -47,18 +75,18 @@ func TestPromptModal_EscCancelsConfirm(t *testing.T) {
 		t.Fatal("prompt should close after Esc")
 	}
 	resp := <-ch
-	if resp.Action != ui.PromptActionNo || !resp.Cancelled {
+	if resp.Action != uiprompt.PromptActionNo || !resp.Cancelled {
 		t.Fatalf("response = %#v, want cancelled no", resp)
 	}
 }
 
 func TestPromptModal_CtrlCWhileProcessingCancelsAgent(t *testing.T) {
 	agent := &stubAgent{processing: true, statusLine: "running"}
-	ch := make(chan ui.PromptResponse, 1)
+	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newSizedPromptTestModel(agent, 60, 16)
 	updated, _ := m.Update(OpenPromptMsg{
 		ID:      1,
-		Request: ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"},
+		Request: uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"},
 		Respond: ch,
 	})
 	m = updated.(Model)
@@ -84,11 +112,11 @@ func TestPromptModal_CtrlCWhileProcessingCancelsAgent(t *testing.T) {
 
 func TestPromptModal_CtrlCWhenIdleCancelsPrompt(t *testing.T) {
 	agent := &stubAgent{statusLine: "ready"}
-	ch := make(chan ui.PromptResponse, 1)
+	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newSizedPromptTestModel(agent, 60, 16)
 	updated, _ := m.Update(OpenPromptMsg{
 		ID:      1,
-		Request: ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"},
+		Request: uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"},
 		Respond: ch,
 	})
 	m = updated.(Model)
@@ -103,7 +131,7 @@ func TestPromptModal_CtrlCWhenIdleCancelsPrompt(t *testing.T) {
 		t.Fatal("idle Ctrl+C should close prompt")
 	}
 	resp := <-ch
-	if resp.Action != ui.PromptActionNo || !resp.Cancelled {
+	if resp.Action != uiprompt.PromptActionNo || !resp.Cancelled {
 		t.Fatalf("response = %#v, want cancelled no", resp)
 	}
 }
@@ -111,20 +139,20 @@ func TestPromptModal_CtrlCWhenIdleCancelsPrompt(t *testing.T) {
 func TestPromptModal_ConfirmActionShortcuts(t *testing.T) {
 	tests := []struct {
 		input string
-		want  ui.PromptAction
+		want  uiprompt.PromptAction
 	}{
-		{input: "y", want: ui.PromptActionYes},
-		{input: "yes", want: ui.PromptActionYes},
-		{input: "1", want: ui.PromptActionYes},
-		{input: "n", want: ui.PromptActionNo},
-		{input: "no", want: ui.PromptActionNo},
-		{input: "2", want: ui.PromptActionNo},
+		{input: "y", want: uiprompt.PromptActionYes},
+		{input: "yes", want: uiprompt.PromptActionYes},
+		{input: "1", want: uiprompt.PromptActionYes},
+		{input: "n", want: uiprompt.PromptActionNo},
+		{input: "no", want: uiprompt.PromptActionNo},
+		{input: "2", want: uiprompt.PromptActionNo},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			ch := make(chan ui.PromptResponse, 1)
-			m := newPromptTestModel(ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"}, ch)
+			ch := make(chan uiprompt.PromptResponse, 1)
+			m := newPromptTestModel(uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"}, ch)
 
 			updated, _ := m.Update(promptRuneKey(tt.input))
 			m = updated.(Model)
@@ -140,15 +168,15 @@ func TestPromptModal_ConfirmActionShortcuts(t *testing.T) {
 }
 
 func TestPromptModal_ExplicitConfirmInitialEnterDoesNotSubmit(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{
-		Kind:                ui.PromptKindConfirm,
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{
+		Kind:                uiprompt.PromptKindConfirm,
 		Message:             "Proceed?",
-		ConfirmSubmitPolicy: ui.PromptConfirmSubmitExplicit,
+		ConfirmSubmitPolicy: uiprompt.PromptConfirmSubmitExplicit,
 	}, ch)
 
-	if m.prompt.selected != -1 {
-		t.Fatalf("selected = %d, want no initial selection", m.prompt.selected)
+	if m.prompt.Snapshot().Selected != -1 {
+		t.Fatalf("selected = %d, want no initial selection", m.prompt.Snapshot().Selected)
 	}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -164,11 +192,11 @@ func TestPromptModal_ExplicitConfirmInitialEnterDoesNotSubmit(t *testing.T) {
 }
 
 func TestPromptModal_ExplicitConfirmShortcutStillSubmits(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{
-		Kind:                ui.PromptKindConfirm,
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{
+		Kind:                uiprompt.PromptKindConfirm,
 		Message:             "Proceed?",
-		ConfirmSubmitPolicy: ui.PromptConfirmSubmitExplicit,
+		ConfirmSubmitPolicy: uiprompt.PromptConfirmSubmitExplicit,
 	}, ch)
 
 	updated, _ := m.Update(promptRuneKey("y"))
@@ -177,23 +205,23 @@ func TestPromptModal_ExplicitConfirmShortcutStillSubmits(t *testing.T) {
 		t.Fatal("prompt should close after explicit yes shortcut")
 	}
 	resp := <-ch
-	if resp.Action != ui.PromptActionYes {
+	if resp.Action != uiprompt.PromptActionYes {
 		t.Fatalf("Action = %q, want yes", resp.Action)
 	}
 }
 
 func TestPromptModal_ExplicitConfirmMoveThenEnterSubmits(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.PromptRequest{
-		Kind:                ui.PromptKindConfirm,
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiprompt.PromptRequest{
+		Kind:                uiprompt.PromptKindConfirm,
 		Message:             "Proceed?",
-		ConfirmSubmitPolicy: ui.PromptConfirmSubmitExplicit,
+		ConfirmSubmitPolicy: uiprompt.PromptConfirmSubmitExplicit,
 	}, ch)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(Model)
-	if m.prompt.selected != 0 {
-		t.Fatalf("selected = %d, want yes after first Down", m.prompt.selected)
+	if m.prompt.Snapshot().Selected != 0 {
+		t.Fatalf("selected = %d, want yes after first Down", m.prompt.Snapshot().Selected)
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
@@ -201,7 +229,7 @@ func TestPromptModal_ExplicitConfirmMoveThenEnterSubmits(t *testing.T) {
 		t.Fatal("prompt should close after moved selection submit")
 	}
 	resp := <-ch
-	if resp.Action != ui.PromptActionYes {
+	if resp.Action != uiprompt.PromptActionYes {
 		t.Fatalf("Action = %q, want yes", resp.Action)
 	}
 }
@@ -209,16 +237,16 @@ func TestPromptModal_ExplicitConfirmMoveThenEnterSubmits(t *testing.T) {
 func TestPromptModal_ConfirmCommentShortcutsEnterTextMode(t *testing.T) {
 	for _, input := range []string{"c", "comment", "3"} {
 		t.Run(input, func(t *testing.T) {
-			ch := make(chan ui.PromptResponse, 1)
-			m := newPromptTestModel(ui.PromptRequest{
-				Kind:         ui.PromptKindConfirm,
+			ch := make(chan uiprompt.PromptResponse, 1)
+			m := newPromptTestModel(uiprompt.PromptRequest{
+				Kind:         uiprompt.PromptKindConfirm,
 				Message:      "Proceed?",
 				AllowComment: true,
 			}, ch)
 
 			updated, _ := m.Update(promptRuneKey(input))
 			m = updated.(Model)
-			if m.prompt == nil || m.prompt.mode != promptModalText || m.prompt.text.responseAction != ui.PromptActionComment {
+			if m.prompt == nil || m.prompt.Snapshot().Mode != promptModalText || m.prompt.Snapshot().TextResponseAction != uiprompt.PromptActionComment {
 				t.Fatalf("prompt state = %#v, want comment text mode", m.prompt)
 			}
 			select {
@@ -231,15 +259,15 @@ func TestPromptModal_ConfirmCommentShortcutsEnterTextMode(t *testing.T) {
 }
 
 func TestPromptModal_ConfirmCustomOptionsUseRequestOrder(t *testing.T) {
-	ch := make(chan ui.PromptResponse, 1)
-	m := newPromptTestModel(ui.NewPlanApprovalPromptRequest(), ch)
+	ch := make(chan uiprompt.PromptResponse, 1)
+	m := newPromptTestModel(uiplanview.NewPlanApprovalPromptRequest(), ch)
 
 	updated, _ := m.Update(promptRuneKey("2"))
 	m = updated.(Model)
-	if m.prompt == nil || m.prompt.mode != promptModalText || m.prompt.text.responseAction != ui.PromptActionComment {
+	if m.prompt == nil || m.prompt.Snapshot().Mode != promptModalText || m.prompt.Snapshot().TextResponseAction != uiprompt.PromptActionComment {
 		t.Fatalf("prompt state = %#v, want second custom option to enter feedback mode", m.prompt)
 	}
-	if got := m.prompt.text.input.Placeholder; got != "Describe what should change before implementation..." {
+	if got := m.prompt.Snapshot().TextPlaceholder; got != "Describe what should change before implementation..." {
 		t.Fatalf("comment placeholder = %q, want plan feedback placeholder", got)
 	}
 	select {
@@ -252,16 +280,16 @@ func TestPromptModal_ConfirmCustomOptionsUseRequestOrder(t *testing.T) {
 func TestPromptModal_ConfirmCustomOptionsKeepNamedShortcuts(t *testing.T) {
 	tests := []struct {
 		input string
-		want  ui.PromptAction
+		want  uiprompt.PromptAction
 	}{
-		{input: "y", want: ui.PromptActionYes},
-		{input: "n", want: ui.PromptActionNo},
+		{input: "y", want: uiprompt.PromptActionYes},
+		{input: "n", want: uiprompt.PromptActionNo},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			ch := make(chan ui.PromptResponse, 1)
-			m := newPromptTestModel(ui.NewPlanApprovalPromptRequest(), ch)
+			ch := make(chan uiprompt.PromptResponse, 1)
+			m := newPromptTestModel(uiplanview.NewPlanApprovalPromptRequest(), ch)
 
 			updated, _ := m.Update(promptRuneKey(tt.input))
 			m = updated.(Model)
@@ -279,20 +307,20 @@ func TestPromptModal_ConfirmCustomOptionsKeepNamedShortcuts(t *testing.T) {
 func TestPromptModal_ConfirmCommentShortcutsIgnoredWhenCommentDisabled(t *testing.T) {
 	for _, input := range []string{"c", "comment", "3"} {
 		t.Run(input, func(t *testing.T) {
-			ch := make(chan ui.PromptResponse, 1)
-			m := newPromptTestModel(ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"}, ch)
-			selected := m.prompt.selected
+			ch := make(chan uiprompt.PromptResponse, 1)
+			m := newPromptTestModel(uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"}, ch)
+			selected := m.prompt.Snapshot().Selected
 
 			updated, _ := m.Update(promptRuneKey(input))
 			m = updated.(Model)
 			if m.prompt == nil {
 				t.Fatal("prompt should remain open when comment is disabled")
 			}
-			if m.prompt.mode != promptModalChoice {
-				t.Fatalf("mode = %v, want choice", m.prompt.mode)
+			if m.prompt.Snapshot().Mode != promptModalChoice {
+				t.Fatalf("mode = %v, want choice", m.prompt.Snapshot().Mode)
 			}
-			if m.prompt.selected != selected {
-				t.Fatalf("selected = %d, want unchanged %d", m.prompt.selected, selected)
+			if m.prompt.Snapshot().Selected != selected {
+				t.Fatalf("selected = %d, want unchanged %d", m.prompt.Snapshot().Selected, selected)
 			}
 			select {
 			case resp := <-ch:

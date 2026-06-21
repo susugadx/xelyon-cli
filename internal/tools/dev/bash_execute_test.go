@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestNewBashExecutionRequest_EmptyCommand(t *testing.T) {
-	req, msg, ok := newBashExecutionRequest(ui.NewPromptIO(nil, &bytes.Buffer{}, &bytes.Buffer{}, nil), nil, "")
+	req, msg, ok := newBashExecutionRequest(uiruntime.NewPromptIO(nil, &bytes.Buffer{}, &bytes.Buffer{}, nil), nil, "")
 	if ok {
 		t.Fatal("newBashExecutionRequest() should fail for empty command")
 	}
@@ -24,7 +24,7 @@ func TestNewBashExecutionRequest_EmptyCommand(t *testing.T) {
 }
 
 func TestNewBashExecutionRequest_DefaultConfig(t *testing.T) {
-	req, msg, ok := newBashExecutionRequest(ui.NewPromptIO(nil, &bytes.Buffer{}, &bytes.Buffer{}, nil), nil, "echo hello")
+	req, msg, ok := newBashExecutionRequest(uiruntime.NewPromptIO(nil, &bytes.Buffer{}, &bytes.Buffer{}, nil), nil, "echo hello")
 	if !ok {
 		t.Fatalf("newBashExecutionRequest() failed: %s", msg)
 	}
@@ -52,7 +52,7 @@ func TestFormatBashCommandResult_EmptyOutput(t *testing.T) {
 }
 
 func TestCheckAndConfirmBash_NilConfigUsesDefaultConfig(t *testing.T) {
-	promptIO := ui.NewPromptIO(strings.NewReader("y\n"), &bytes.Buffer{}, &bytes.Buffer{}, nil)
+	promptIO := uiruntime.NewPromptIO(strings.NewReader("y\n"), &bytes.Buffer{}, &bytes.Buffer{}, nil)
 
 	_, msg, ok := checkAndConfirmBash(promptIO, nil, "printf hi > /tmp/xelyon-bash-test.txt")
 	if !ok {
@@ -399,7 +399,7 @@ func TestExecuteBash_InlineEditBlocked_Moderate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := ExecuteBashWithPromptIOAndConfig(ui.NewPromptIO(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, nil), cfg, tt.command)
+			output := ExecuteBashWithPromptIOAndConfig(uiruntime.NewPromptIO(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, nil), cfg, tt.command)
 
 			if !strings.Contains(output, "Error:") || !strings.Contains(output, "Inline edit") {
 				t.Errorf("ExecuteBash() should block inline edit '%s', got %v", tt.command, output)

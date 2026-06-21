@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func newGeminiConfigScreenTestModel(cfg *config.Config) Model {
 	agent := &stubAgent{providerName: "gemini", providerConfigKey: "gemini"}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
+	m.configScreen = configscreen.New(cfg)
 	return m
 }
 
@@ -19,60 +20,64 @@ func TestConfigScreen_GeminiDefaultModelRejectsUnsupportedFunctionCallingModel(t
 	cfg := config.DefaultConfig()
 	cfg.DefaultProvider = "gemini"
 	m := newGeminiConfigScreenTestModel(cfg)
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 
-	setConfigFieldSelection(t, cs, "provider", "default_model")
-	previousDefault := cs.cfg.DefaultModel
-	previousGeminiDefault := cs.cfg.GetExplicitProviderDefaultModel("gemini")
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editInput {
-		t.Fatalf("editMode = %d, want editInput", cs.editMode)
-	}
-	cs.editInput.SetValue("gemini-2.0-flash-lite")
+	selectConfigField(t, &m, "provider", "default_model")
+	previousConfig := cs.ConfigSnapshot()
+	previousDefault := previousConfig.DefaultModel
+	previousGeminiDefault := previousConfig.GetExplicitProviderDefaultModel("gemini")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	if cs.cfg.DefaultModel != previousDefault {
-		t.Fatalf("DefaultModel = %q, want unchanged %q", cs.cfg.DefaultModel, previousDefault)
+	cs = configTestScreen(t, m)
+	if got := cs.Snapshot().EditMode; got != editInput {
+		t.Fatalf("editMode = %d, want editInput", got)
 	}
-	if got := cs.cfg.GetExplicitProviderDefaultModel("gemini"); got != previousGeminiDefault {
+	setConfigInputValue(t, &m, "gemini-2.0-flash-lite")
+
+	m = sendConfigKey(m, "enter")
+	cs = configTestScreen(t, m)
+
+	currentConfig := cs.ConfigSnapshot()
+	if currentConfig.DefaultModel != previousDefault {
+		t.Fatalf("DefaultModel = %q, want unchanged %q", currentConfig.DefaultModel, previousDefault)
+	}
+	if got := currentConfig.GetExplicitProviderDefaultModel("gemini"); got != previousGeminiDefault {
 		t.Fatalf("provider_models.gemini.default_model = %q, want unchanged %q", got, previousGeminiDefault)
 	}
-	if cs.editMode != editInput {
-		t.Fatalf("editMode = %d, want editInput after rejected value", cs.editMode)
+	snapshot := cs.Snapshot()
+	if snapshot.EditMode != editInput {
+		t.Fatalf("editMode = %d, want editInput after rejected value", snapshot.EditMode)
 	}
-	if cs.saveStatus != statusFailed || !strings.Contains(cs.saveError, "provider_models.gemini.default_model") {
-		t.Fatalf("saveStatus/saveError = %d/%q, want Gemini default_model validation error", cs.saveStatus, cs.saveError)
+	if snapshot.SaveStatus != statusFailed || !strings.Contains(snapshot.SaveError, "provider_models.gemini.default_model") {
+		t.Fatalf("saveStatus/saveError = %d/%q, want Gemini default_model validation error", snapshot.SaveStatus, snapshot.SaveError)
 	}
 }
 
 func TestConfigScreen_GeminiProviderCatalogRejectsUnsupportedFunctionCallingModel(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "provider_models", "gemini")
-	cs := m.configScreen
-	setEntryFieldIndex(t, cs, "catalog_model")
+	cs := configTestScreen(t, m)
+	selectConfigEntryField(t, &m, "catalog_model")
 
-	previous := cs.cfg.ProviderModels["gemini"].CatalogModel
+	previous := cs.ConfigSnapshot().ProviderModels["gemini"].CatalogModel
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want input", cs.editEntryFieldEdit)
+	cs = configTestScreen(t, m)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want input", got)
 	}
-	cs.editInput.SetValue("models/gemini-2.0-flash-lite")
+	setConfigInputValue(t, &m, "models/gemini-2.0-flash-lite")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
-	if got := cs.cfg.ProviderModels["gemini"].CatalogModel; got != previous {
+	if got := cs.ConfigSnapshot().ProviderModels["gemini"].CatalogModel; got != previous {
 		t.Fatalf("provider_models.gemini.catalog_model = %q, want unchanged %q", got, previous)
 	}
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want input after rejected value", cs.editEntryFieldEdit)
+	snapshot := cs.Snapshot()
+	if snapshot.EditEntryFieldEdit != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want input after rejected value", snapshot.EditEntryFieldEdit)
 	}
-	if cs.saveStatus != statusFailed || !strings.Contains(cs.saveError, "provider_models.gemini.catalog_model") {
-		t.Fatalf("saveStatus/saveError = %d/%q, want Gemini catalog_model validation error", cs.saveStatus, cs.saveError)
+	if snapshot.SaveStatus != statusFailed || !strings.Contains(snapshot.SaveError, "provider_models.gemini.catalog_model") {
+		t.Fatalf("saveStatus/saveError = %d/%q, want Gemini catalog_model validation error", snapshot.SaveStatus, snapshot.SaveError)
 	}
 }
 
@@ -84,8 +89,8 @@ func TestConfigScreen_SaveRejectsUnsupportedGeminiConfigBeforeSync(t *testing.T)
 		DefaultModel: "gemini-2.0-flash-lite",
 	})
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
-	m.configScreen.dirty = true
+	m.configScreen = configscreen.New(cfg)
+	setConfigDirtyForTest(t, &m, true)
 
 	m = saveConfigAndWait(t, m)
 	cs := m.configScreen
@@ -96,7 +101,8 @@ func TestConfigScreen_SaveRejectsUnsupportedGeminiConfigBeforeSync(t *testing.T)
 	if saved != nil {
 		t.Fatalf("lastSavedConfig = %#v, want nil when Gemini validation fails", saved)
 	}
-	if cs.saveStatus != statusFailed || !strings.Contains(cs.saveError, "provider_models.gemini.default_model") {
-		t.Fatalf("saveStatus/saveError = %d/%q, want Gemini validation failure", cs.saveStatus, cs.saveError)
+	snapshot := cs.Snapshot()
+	if snapshot.SaveStatus != statusFailed || !strings.Contains(snapshot.SaveError, "provider_models.gemini.default_model") {
+		t.Fatalf("saveStatus/saveError = %d/%q, want Gemini validation failure", snapshot.SaveStatus, snapshot.SaveError)
 	}
 }

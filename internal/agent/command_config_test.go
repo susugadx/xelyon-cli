@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleConfigCommand_LoadErrorAndModelSaveError(t *testing.T) {
@@ -59,7 +59,7 @@ func TestHandleConfigCommand_DelegatesInteractiveMode(t *testing.T) {
 		runResults: []configMenuRunResult{{category: nil, err: errors.New("cancel")}},
 	}
 	var factoryCalls int
-	newConfigMenuForCommand = func(cfg *config.Config, categories []config.ConfigCategory, runtime *ui.Runtime) configCommandMenu {
+	newConfigMenuForCommand = func(cfg *config.Config, categories []config.ConfigCategory, runtime *uiruntime.Runtime) configCommandMenu {
 		factoryCalls++
 		return menu
 	}

@@ -421,12 +421,18 @@ var Sections = map[string]SectionInfo{
 			"個別サーバー設定は ~/.xelyon/mcp.json で管理",
 		},
 		Fields: map[string]string{
-			"enabled":  "MCP接続を有効化（デフォルト: true）",
-			"headless": "Headlessモードでも接続（デフォルト: false）",
+			"enabled":                         "MCP接続を有効化（デフォルト: true）",
+			"headless":                        "Headlessモードでも接続（デフォルト: false）",
+			"surface_budget.max_tools":        "provider に公開する MCP tool 数の上限",
+			"surface_budget.estimated_tokens": "MCP tool definitions の推定 token 上限",
+			"surface_budget.max_schema_bytes_per_tool": "1 tool あたりの input schema byte 上限",
 		},
 		FieldTypes: map[string]string{
-			"enabled":  "bool",
-			"headless": "bool",
+			"enabled":                         "bool",
+			"headless":                        "bool",
+			"surface_budget.max_tools":        "int",
+			"surface_budget.estimated_tokens": "int",
+			"surface_budget.max_schema_bytes_per_tool": "int",
 		},
 	},
 	"final_checks": {

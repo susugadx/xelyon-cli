@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 type reviewCapableStubAgent struct {
 	stubAgent
 	reviewCalls               int
 	lastRequest               review.ReviewRequest
-	report                    review.ReviewReport
+	report                    reviewreport.ReviewReport
 	usage                     ReviewRunUsageSummary
 	err                       error
 	statusLineAfterReview     string

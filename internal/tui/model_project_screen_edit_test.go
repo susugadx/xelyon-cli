@@ -16,21 +16,21 @@ func TestProjectScreen_ListEditAddsAndDeletes(t *testing.T) {
 	}
 	m := newProjectTestModel(agent)
 
-	m.projectScreen.sectionIndex = int(projectSectionIgnore)
+	m = moveProjectToSection(t, m, "ignore")
 	m = sendProjectKey(m, "a")
-	if m.projectScreen.editMode != projectEditLine {
-		t.Fatalf("editMode = %d, want line edit", m.projectScreen.editMode)
+	if got := projectSnapshot(t, m).EditMode; got != "line" {
+		t.Fatalf("editMode = %s, want line", got)
 	}
-	m.projectScreen.editInput.SetValue("dist")
+	m = sendProjectText(m, "dist")
 	m = sendProjectKey(m, "enter")
 
-	if got := m.projectScreen.pc.Ignore.Patterns; len(got) != 1 || got[0] != "dist" {
+	if got := projectSnapshot(t, m).Config.Ignore.Patterns; len(got) != 1 || got[0] != "dist" {
 		t.Fatalf("ignore patterns = %#v, want [dist]", got)
 	}
 
-	m.projectScreen.activePane = projectPaneItem
+	m = moveProjectToItemPane(t, m)
 	m = sendProjectKey(m, "d")
-	if got := m.projectScreen.pc.Ignore.Patterns; len(got) != 0 {
+	if got := projectSnapshot(t, m).Config.Ignore.Patterns; len(got) != 0 {
 		t.Fatalf("ignore patterns after delete = %#v, want empty", got)
 	}
 }

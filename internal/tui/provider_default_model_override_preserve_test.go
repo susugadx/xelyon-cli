@@ -1,23 +1,25 @@
 package tui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+)
 
 func TestConfigScreen_ProviderModelDirectEditStillDoesNotGetOverwritten(t *testing.T) {
-	m := newConfigTestModel()
-	cs := m.configScreen
-
-	cs.cfg.DefaultProvider = "openai"
-	cs.cfg.DefaultModel = "global-model"
-	if pm, ok := cs.cfg.ProviderModels["openai"]; ok {
+	cfg := config.DefaultConfig()
+	cfg.DefaultProvider = "openai"
+	cfg.DefaultModel = "global-model"
+	if pm, ok := cfg.ProviderModels["openai"]; ok {
 		pm.DefaultModel = "openai-specific"
-		cs.cfg.ProviderModels["openai"] = pm
+		cfg.ProviderModels["openai"] = pm
 	}
-	cs.dirty = true
+	m := newConfigTestModelWithConfig(cfg)
+	setConfigDirtyForTest(t, &m, true)
 
 	m = saveConfigAndWait(t, m)
-	cs = m.configScreen
 
-	pm := cs.cfg.ProviderModels["openai"]
+	pm := m.configScreen.ConfigSnapshot().ProviderModels["openai"]
 	if pm.DefaultModel != "openai-specific" {
 		t.Fatalf("ProviderModels[openai].DefaultModel = %q, want \"openai-specific\"", pm.DefaultModel)
 	}

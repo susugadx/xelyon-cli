@@ -20,11 +20,12 @@ func RunMCPDoctor(ctx context.Context, out io.Writer, options MCPOptions) (bool,
 	cfg.ApplyEnvironmentOverrides()
 
 	report := mcpdiag.Diagnose(ctx, mcpdiag.DiagnosticOptions{
-		MCPEnabled:   cfg.MCP.Enabled,
-		MCPHeadless:  cfg.MCP.Headless,
-		Connect:      options.Connect,
-		Server:       options.Server,
-		IncludeTools: options.IncludeTools,
+		MCPEnabled:    cfg.MCP.Enabled,
+		MCPHeadless:   cfg.MCP.Headless,
+		Connect:       options.Connect,
+		Server:        options.Server,
+		IncludeTools:  options.IncludeTools,
+		SurfaceBudget: config.EffectiveMCPSurfaceBudget(cfg),
 	})
 	if loadErr != nil {
 		report.Checks = append([]mcpdiag.DiagnosticCheck{{
@@ -66,6 +67,11 @@ func renderMCPDoctorText(w io.Writer, report mcpdiag.DiagnosticReport) {
 	fmt.Fprintln(w)
 
 	renderDoctorChecks(w, mcpDoctorCheckLines(report.Checks))
+	if report.ToolSurface != nil {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Runtime tool surface:")
+		renderMCPDoctorToolSurface(w, *report.ToolSurface)
+	}
 	if len(report.Servers) == 0 {
 		return
 	}
@@ -155,14 +161,19 @@ func renderMCPDoctorTool(w io.Writer, tool mcpdiag.DiagnosticToolReport) {
 }
 
 func renderMCPDoctorToolSurface(w io.Writer, report mcpsurface.Report) {
+	budget := mcpsurface.DefaultBudget()
+	if report.EffectiveBudget != nil {
+		budget = *report.EffectiveBudget
+	}
 	fmt.Fprintf(
 		w,
-		"  tool surface: visible=%d registered=%d total=%d omitted=%d estimated_tokens=%d schema=%s\n",
+		"  tool surface: visible=%d registered=%d total=%d omitted=%d estimated_tokens=%d budget=%s schema=%s\n",
 		report.VisibleTools,
 		report.RegisteredTools,
 		report.TotalTools,
 		report.OmittedTools,
 		report.EstimatedTokens,
+		mcpsurface.FormatBudget(budget),
 		mcpsurface.FormatBytes(report.SchemaBytes),
 	)
 	fmt.Fprintf(w, "  top omitted reasons: %s\n", mcpsurface.FormatReasonCounts(report.OmittedReasons, 0))
@@ -182,10 +193,13 @@ func renderMCPDoctorToolSurface(w io.Writer, report mcpsurface.Report) {
 		return
 	}
 	fmt.Fprintln(w, "  recommendations:")
+	fmt.Fprintln(w, "    1. Narrow ~/.xelyon/mcp.json mcpServers.<server>.tools.include/exclude:")
 	for _, recommendation := range report.Recommendations {
-		fmt.Fprintf(w, "    - %s: %s\n", recommendation.ServerName, recommendation.Reason)
-		fmt.Fprintf(w, "      ~/.xelyon/mcp.json mcpServers fragment: %s\n", mcpsurface.IncludeSnippet(recommendation))
+		fmt.Fprintf(w, "      - %s: %s\n", recommendation.ServerName, recommendation.Reason)
+		fmt.Fprintf(w, "        mcpServers fragment: %s\n", mcpsurface.IncludeSnippet(recommendation))
 	}
+	fmt.Fprintln(w, "    2. If the server is intentionally large, raise ~/.xelyon/config.yaml mcp.surface_budget:")
+	fmt.Fprintf(w, "       %s\n", mcpsurface.SurfaceBudgetSnippet(budget))
 }
 
 func mcpDoctorCheckLines(checks []mcpdiag.DiagnosticCheck) []doctorCheckLine {

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestAddStructMapKey_ProviderModelsAllowsAnthropicAndClaudeSiblings(t *testing.T) {
@@ -15,14 +16,14 @@ func TestAddStructMapKey_ProviderModelsAllowsAnthropicAndClaudeSiblings(t *testi
 		"anthropic": {DefaultModel: "anthropic-custom"},
 	})
 
-	cs := newConfigScreen(cfg)
+	cs := configscreen.New(cfg)
 	m.configScreen = cs
 
 	if !m.addStructMapKey("provider_models", "claude") {
 		t.Fatal("addStructMapKey(provider_models, claude) = false, want true")
 	}
 
-	saved := cs.cfg.ProviderModelsForEdit()
+	saved := cs.ConfigSnapshot().ProviderModelsForEdit()
 	if _, ok := saved["anthropic"]; !ok {
 		t.Fatalf("ProviderModelsForEdit() = %#v, want anthropic entry preserved", saved)
 	}
@@ -33,30 +34,10 @@ func TestAddStructMapKey_ProviderModelsAllowsAnthropicAndClaudeSiblings(t *testi
 
 func TestConfigScreen_StructMapOrder_ProviderModels(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
+	enterConfigStructMapEdit(t, &m, "provider_models")
 
-	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "provider_models" {
-			cs.fieldIndex = i
-			break
-		}
-	}
-
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
-
-	keys := cs.editStructKeys
+	cs := configTestScreen(t, m)
+	keys := cs.Snapshot().EditStructKeys
 	for i := 1; i < len(keys); i++ {
 		if keys[i] < keys[i-1] {
 			t.Fatalf("editStructKeys not sorted: %q comes after %q", keys[i], keys[i-1])
@@ -68,56 +49,53 @@ func TestConfigScreen_StructMapOrder_ProviderModels(t *testing.T) {
 	}
 	firstKey := keys[0]
 
-	cs.editStructIndex = 0
+	selectConfigStructMapKeyIndex(t, &m, 0)
 	m = sendConfigKey(m, "d")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
+	keys = cs.Snapshot().EditStructKeys
 
-	for _, k := range cs.editStructKeys {
+	for _, k := range keys {
 		if k == firstKey {
 			t.Fatalf("key %q should have been deleted", firstKey)
 		}
 	}
 
-	for i := 1; i < len(cs.editStructKeys); i++ {
-		if cs.editStructKeys[i] < cs.editStructKeys[i-1] {
-			t.Fatalf("editStructKeys not sorted after delete: %q after %q", cs.editStructKeys[i], cs.editStructKeys[i-1])
+	for i := 1; i < len(keys); i++ {
+		if keys[i] < keys[i-1] {
+			t.Fatalf("editStructKeys not sorted after delete: %q after %q", keys[i], keys[i-1])
 		}
 	}
 }
 
 func TestConfigScreen_ProviderModels_NilMap_AddEntry_DoesNotPanic(t *testing.T) {
-	m := newConfigTestModel()
-	cs := m.configScreen
-	cs.cfg.ProviderModels = nil
-	cs.refreshCategories()
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels = nil
+	m := newConfigTestModelWithConfig(cfg)
 
-	setConfigFieldSelection(t, cs, "provider", "provider_models")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
-	}
+	enterConfigStructMapEdit(t, &m, "provider_models")
 
 	m = sendConfigKey(m, "a")
-	cs = m.configScreen
-	if !cs.editStructAdding {
+	cs := configTestScreen(t, m)
+	if !cs.Snapshot().EditStructAdding {
 		t.Fatal("editStructAdding should be true")
 	}
 
-	cs.editStructInput.SetValue("nil_provider")
+	setConfigStructInputValue(t, &m, "nil_provider")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
-	if cs.cfg.ProviderModels == nil {
+	cfgSnapshot := cs.ConfigSnapshot()
+	if cfgSnapshot.ProviderModels == nil {
 		t.Fatal("ProviderModels should be initialized after add")
 	}
-	if _, ok := cs.cfg.ProviderModels["nil_provider"]; !ok {
+	if _, ok := cfgSnapshot.ProviderModels["nil_provider"]; !ok {
 		t.Fatal("ProviderModels should contain the added key")
 	}
-	if !cs.dirty {
+	snapshot := cs.Snapshot()
+	if !snapshot.Dirty {
 		t.Fatal("dirty should be true after add")
 	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus = %d, want statusModified", cs.saveStatus)
+	if snapshot.SaveStatus != statusModified {
+		t.Fatalf("saveStatus = %d, want statusModified", snapshot.SaveStatus)
 	}
 }

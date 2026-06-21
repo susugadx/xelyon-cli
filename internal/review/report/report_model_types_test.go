@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestDecodeReviewReportModelOutputStrictJSONRejectsCleanCoverageGaps(t *testing.T) {
@@ -126,7 +128,7 @@ func TestReviewReportModelFindingStatusBypassDoesNotPromoteUnknownToPartiallyVer
 func newCleanReviewReportModelOutputForTest() ReviewReportModelOutput {
 	return ReviewReportModelOutput{
 		SchemaVersion:             ReviewReportModelSchemaVersionV2,
-		TargetKind:                TargetCurrentChanges,
+		TargetKind:                domain.TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationVerified,
 		Verdict:                   ReviewVerdictClean,

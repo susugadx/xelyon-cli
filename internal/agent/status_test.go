@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestAgentState_Constants(t *testing.T) {
@@ -183,7 +183,7 @@ func TestHandleStatusCommandForSurface_ShowsSurfaceBoundary(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var out bytes.Buffer
 			runtime := newIsolatedRuntime()
-			runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+			runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 			agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
 			t.Cleanup(agent.Cleanup)
 
@@ -208,7 +208,7 @@ func TestHandleStatusCommandForSurface_ShowsSurfaceBoundary(t *testing.T) {
 func TestHandleStatusCommandForSurface_SeparatesChatTurnAndReviewUsage(t *testing.T) {
 	var out bytes.Buffer
 	runtime := newIsolatedRuntime()
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
 
@@ -273,7 +273,7 @@ func TestPrintStatusFooter_UsesRuntimeOutput(t *testing.T) {
 		ProviderName: "openai",
 		Stats:        NewSessionStats("openai", "model-a"),
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &outA, &outA),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &outA, &outA),
 		},
 	}
 	agentB := &Agent{
@@ -281,7 +281,7 @@ func TestPrintStatusFooter_UsesRuntimeOutput(t *testing.T) {
 		ProviderName: "openai",
 		Stats:        NewSessionStats("openai", "model-b"),
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &outB, &outB),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &outB, &outB),
 		},
 	}
 
@@ -351,7 +351,7 @@ func TestPrintStatusFooter_IncludesSubAgentCost(t *testing.T) {
 		ProviderName: "openai",
 		Stats:        NewSessionStats("openai", "gpt-5.4"),
 		Runtime: &AgentRuntime{
-			UI:              ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:              uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 			SubAgentManager: manager,
 		},
 	}
@@ -373,7 +373,7 @@ func TestPrintStatusFooter_LocalProviderShowsExternalCost(t *testing.T) {
 		ProviderName: "ollama",
 		Stats:        NewSessionStats("ollama", "llama3"),
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 	agent.Stats.AddTokens(1000, 200)
@@ -393,7 +393,7 @@ func TestPrintStatusFooter_LocalProviderOmitsZeroCost(t *testing.T) {
 		ProviderName: "ollama",
 		Stats:        NewSessionStats("ollama", "llama3"),
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 	agent.Stats.AddTokens(1000, 200)
@@ -412,7 +412,7 @@ func TestPrintStatusFooter_UnknownPricingUsesNA(t *testing.T) {
 		ProviderName: "bedrock",
 		Stats:        NewSessionStats("bedrock", "amazon.nova-unknown-v1:0"),
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 	agent.Stats.AddTokens(1000, 200)

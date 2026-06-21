@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // mockCacheClearableProviderForModel はキャッシュクリアと Provider を実装したモック（モデルコマンド用）
@@ -141,7 +141,7 @@ func newConfigCommandTestAgent(cfg *config.Config, out *bytes.Buffer) *Agent {
 	}
 	cfg.DefaultProvider = "deepseek"
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), out, out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), out, out)
 	return &Agent{
 		ProviderName:    "deepseek",
 		CurrentModel:    "deepseek-chat",

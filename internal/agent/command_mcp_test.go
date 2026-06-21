@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleMCPCommand_PrintsSnapshotOnlyStatus(t *testing.T) {
@@ -48,6 +48,7 @@ func TestHandleMCPCommand_PrintsSnapshotOnlyStatus(t *testing.T) {
 				"Highest estimated token tools",
 				"Recommendations",
 				"mcpServers fragment",
+				"mcp.surface_budget",
 				"\"beta\": {\"tools\": {\"include\": [\"<needed_tool>\"]}}",
 			} {
 				if !strings.Contains(got, want) {
@@ -111,7 +112,7 @@ func newMCPStatusTestAgent(t *testing.T, out *bytes.Buffer) *Agent {
 	cfg.MCP.Enabled = false
 	cfg.ProjectMap.Enabled = false
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), out, out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), out, out)
 	agent := NewAgentWithRuntime("gpt-5.4", &mockProvider{name: "openai"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
 
@@ -150,6 +151,9 @@ func newMCPStatusTestAgent(t *testing.T, out *bytes.Buffer) *Agent {
 		}},
 		total:           len(tools),
 		estimatedTokens: 42,
+		budget:          config.EffectiveMCPSurfaceBudget(cfg),
+		model:           agent.CurrentModel,
+		toolSignature:   mcpVisibleToolSurfaceSignature(visibleMCPTools(tools)),
 	}
 	return agent
 }

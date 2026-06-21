@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestHostReadOnlyValidateRequest_AppliesDefaultExecutionLimits(t *testing.T) {
@@ -17,7 +19,7 @@ func TestHostReadOnlyValidateRequest_AppliesDefaultExecutionLimits(t *testing.T)
 
 	normalized, err := executor.validateRequest(ReviewProbeRequest{
 		ID:   "probe-default-limits-validate",
-		Mode: ReviewProbeHostReadOnly,
+		Mode: domain.ReviewProbeHostReadOnly,
 		Commands: []ReviewProbeCommand{
 			{
 				Command: "git",
@@ -44,7 +46,7 @@ func TestHostReadOnlyRun_DirectEntryAppliesDefaultExecutionLimits(t *testing.T) 
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:   "probe-default-limits-run",
-		Mode: ReviewProbeHostReadOnly,
+		Mode: domain.ReviewProbeHostReadOnly,
 		Commands: []ReviewProbeCommand{
 			{
 				Command: "cat",
@@ -53,8 +55,8 @@ func TestHostReadOnlyRun_DirectEntryAppliesDefaultExecutionLimits(t *testing.T) 
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if !result.OutputTruncated {
 		t.Fatal("OutputTruncated = false, want true")

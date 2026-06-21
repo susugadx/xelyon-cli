@@ -105,9 +105,9 @@ func TestDeniedMCPToolsDoNotReachPromptProviderOrRegistrySurface(t *testing.T) {
 	}
 
 	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
-		maxTools:           10,
-		maxEstimatedTokens: 32000,
-		maxSchemaBytes:     1024,
+		MaxTools:              10,
+		EstimatedTokens:       32000,
+		MaxSchemaBytesPerTool: 1024,
 	})
 	if got := exportedMCPToolNamesForTest(selection.selected); !reflect.DeepEqual(got, []string{"mcp_github_list_issues"}) {
 		t.Fatalf("selected MCP tools = %#v, want only allowed tool", got)
@@ -141,9 +141,9 @@ func TestMCPToolSurfaceBudgetExcludesProviderPromptAndRegistrySurface(t *testing
 		{ServerName: "alpha", Name: "three", Description: "Three"},
 	}
 	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
-		maxTools:           2,
-		maxEstimatedTokens: 32000,
-		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+		MaxTools:              2,
+		EstimatedTokens:       32000,
+		MaxSchemaBytesPerTool: defaultMCPToolSurfaceBudget().MaxSchemaBytesPerTool,
 	})
 
 	provider := &mockMCPProvider{name: "openai"}

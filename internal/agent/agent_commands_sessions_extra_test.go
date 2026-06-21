@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newSessionCommandTestAgent(out *bytes.Buffer) *Agent {
 	return &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), out, out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), out, out),
 		},
 	}
 }

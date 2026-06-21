@@ -3,12 +3,14 @@ package report
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestValidateReviewReportAgainstPlanScopeRejectsCleanWithNonPassingTrustedProbe(t *testing.T) {
 	plan := newValidPlanScopeForTest()
 	report := newPlanAwareCleanReportForValidationTest()
-	report.ProbeSummaries = newTrustedProbeSummariesForReportValidationTest(ReviewProbeFailed)
+	report.ProbeSummaries = newTrustedProbeSummariesForReportValidationTest(domain.ReviewProbeFailed)
 
 	err := ValidateReviewReportAgainstPlanScope(report, plan, report.ProbeSummaries)
 	if err == nil {
@@ -29,7 +31,7 @@ func TestValidateReviewReportAgainstPlanScopeRejectsCheckedScopeForNonPassingLin
 	}{
 		{
 			name:           "failed linked probe checked surface",
-			trustedSummary: newTrustedProbeSummaryForReportValidationTest(ReviewProbeFailed),
+			trustedSummary: newTrustedProbeSummaryForReportValidationTest(domain.ReviewProbeFailed),
 			mutateCoverage: func(report *ReviewReport) {
 				report.ScopeCoverage.ReviewedCandidateRisks[0].Status = ReviewReportCandidateRiskUnverified
 			},
@@ -37,7 +39,7 @@ func TestValidateReviewReportAgainstPlanScopeRejectsCheckedScopeForNonPassingLin
 		},
 		{
 			name:           "blocked linked probe dismissed risk",
-			trustedSummary: newTrustedProbeSummaryForReportValidationTest(ReviewProbeBlocked),
+			trustedSummary: newTrustedProbeSummaryForReportValidationTest(domain.ReviewProbeBlocked),
 			mutateCoverage: func(report *ReviewReport) {
 				report.ScopeCoverage.ReviewedImpactSurfaces[0].Status = ReviewReportImpactSurfaceUnverified
 			},
@@ -45,7 +47,7 @@ func TestValidateReviewReportAgainstPlanScopeRejectsCheckedScopeForNonPassingLin
 		},
 		{
 			name:           "timed out linked probe dismissed risk",
-			trustedSummary: newTrustedProbeSummaryForReportValidationTest(ReviewProbeTimedOut),
+			trustedSummary: newTrustedProbeSummaryForReportValidationTest(domain.ReviewProbeTimedOut),
 			mutateCoverage: func(report *ReviewReport) {
 				report.ScopeCoverage.ReviewedImpactSurfaces[0].Status = ReviewReportImpactSurfaceUnverified
 			},
@@ -55,10 +57,10 @@ func TestValidateReviewReportAgainstPlanScopeRejectsCheckedScopeForNonPassingLin
 			name: "mutated linked probe dismissed risk",
 			trustedSummary: ReviewProbeSummary{
 				ProbeID:         "probe-1",
-				Mode:            ReviewProbeHostReadOnly,
-				Status:          ReviewProbeFailed,
+				Mode:            domain.ReviewProbeHostReadOnly,
+				Status:          domain.ReviewProbeFailed,
 				MutatedWorktree: true,
-				Commands:        []ReviewProbeCommandSummary{{Command: "rg", Status: ReviewProbeFailed}},
+				Commands:        []ReviewProbeCommandSummary{{Command: "rg", Status: domain.ReviewProbeFailed}},
 			},
 			mutateCoverage: func(report *ReviewReport) {
 				report.ScopeCoverage.ReviewedImpactSurfaces[0].Status = ReviewReportImpactSurfaceUnverified
@@ -87,7 +89,7 @@ func TestValidateReviewReportAgainstPlanScopeRejectsCheckedScopeForNonPassingLin
 func TestValidateReviewReportAgainstPlanScopeRequiresPassedProbeEvidenceForDismissedNeedsProbeRisk(t *testing.T) {
 	plan := newValidPlanScopeForTest()
 	report := newPlanAwareCleanReportForValidationTest()
-	report.ProbeSummaries = newTrustedProbeSummariesForReportValidationTest(ReviewProbePassed)
+	report.ProbeSummaries = newTrustedProbeSummariesForReportValidationTest(domain.ReviewProbePassed)
 	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{newProbeCommandEvidenceRefForReportValidationTest("probe-1")}
 
 	err := ValidateReviewReportAgainstPlanScope(report, plan, report.ProbeSummaries)
@@ -102,7 +104,7 @@ func TestValidateReviewReportAgainstPlanScopeRequiresPassedProbeEvidenceForDismi
 func TestValidateReviewReportAgainstPlanScopeRequiresPassedProbeEvidenceForCheckedNeedsProbeSurface(t *testing.T) {
 	plan := newValidPlanScopeForTest()
 	report := newPlanAwareCleanReportForValidationTest()
-	report.ProbeSummaries = newTrustedProbeSummariesForReportValidationTest(ReviewProbePassed)
+	report.ProbeSummaries = newTrustedProbeSummariesForReportValidationTest(domain.ReviewProbePassed)
 	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{newProbeCommandEvidenceRefForReportValidationTest("probe-1")}
 
 	err := ValidateReviewReportAgainstPlanScope(report, plan, report.ProbeSummaries)
@@ -117,7 +119,7 @@ func TestValidateReviewReportAgainstPlanScopeRequiresPassedProbeEvidenceForCheck
 func TestValidateReviewReportAgainstPlanScopeAllowsDismissedAndCheckedWithPassedProbeEvidence(t *testing.T) {
 	plan := newValidPlanScopeForTest()
 	report := newPlanAwareCleanReportForValidationTest()
-	report.ProbeSummaries = newTrustedProbeSummariesForReportValidationTest(ReviewProbePassed)
+	report.ProbeSummaries = newTrustedProbeSummariesForReportValidationTest(domain.ReviewProbePassed)
 	ref := newProbeCommandEvidenceRefForReportValidationTest("probe-1")
 	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []ReviewEvidenceRef{ref}
 	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []ReviewEvidenceRef{ref}
@@ -138,18 +140,18 @@ func TestValidateReviewReportAgainstPlanScopeRequiresTrustedProbeSummaryIDs(t *t
 		{
 			name:            "count mismatch",
 			reportSummaries: nil,
-			trusted:         newTrustedProbeSummariesForReportValidationTest(ReviewProbePassed),
+			trusted:         newTrustedProbeSummariesForReportValidationTest(domain.ReviewProbePassed),
 			errContains:     "count",
 		},
 		{
 			name: "id order mismatch",
 			reportSummaries: []ReviewProbeSummary{
-				newTrustedProbeSummaryForReportValidationTest(ReviewProbePassed, "probe-2"),
-				newTrustedProbeSummaryForReportValidationTest(ReviewProbePassed, "probe-1"),
+				newTrustedProbeSummaryForReportValidationTest(domain.ReviewProbePassed, "probe-2"),
+				newTrustedProbeSummaryForReportValidationTest(domain.ReviewProbePassed, "probe-1"),
 			},
 			trusted: []ReviewProbeSummary{
-				newTrustedProbeSummaryForReportValidationTest(ReviewProbePassed, "probe-1"),
-				newTrustedProbeSummaryForReportValidationTest(ReviewProbePassed, "probe-2"),
+				newTrustedProbeSummaryForReportValidationTest(domain.ReviewProbePassed, "probe-1"),
+				newTrustedProbeSummaryForReportValidationTest(domain.ReviewProbePassed, "probe-2"),
 			},
 			errContains: "must match trusted probe summary ID",
 		},
@@ -171,18 +173,18 @@ func TestValidateReviewReportAgainstPlanScopeRequiresTrustedProbeSummaryIDs(t *t
 	}
 }
 
-func newTrustedProbeSummariesForReportValidationTest(status ReviewProbeStatus) []ReviewProbeSummary {
+func newTrustedProbeSummariesForReportValidationTest(status domain.ReviewProbeStatus) []ReviewProbeSummary {
 	return []ReviewProbeSummary{newTrustedProbeSummaryForReportValidationTest(status)}
 }
 
-func newTrustedProbeSummaryForReportValidationTest(status ReviewProbeStatus, ids ...string) ReviewProbeSummary {
+func newTrustedProbeSummaryForReportValidationTest(status domain.ReviewProbeStatus, ids ...string) ReviewProbeSummary {
 	probeID := "probe-1"
 	if len(ids) > 0 {
 		probeID = ids[0]
 	}
 	return ReviewProbeSummary{
 		ProbeID:  probeID,
-		Mode:     ReviewProbeHostReadOnly,
+		Mode:     domain.ReviewProbeHostReadOnly,
 		Status:   status,
 		Commands: []ReviewProbeCommandSummary{{Command: "rg", Status: status}},
 	}

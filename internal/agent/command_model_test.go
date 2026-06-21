@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleModelCommand_ClearCache(t *testing.T) {
@@ -73,7 +73,7 @@ func TestHandleModelCommand_NoArgs_UsesRuntimeOutput(t *testing.T) {
 		CurrentModel:    "test-model",
 		CurrentProvider: &mockCacheClearableProviderForModel{name: "mock"},
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -99,7 +99,7 @@ func TestHandleModelCommand_ListsInstalledModelsAndWarnings(t *testing.T) {
 			CurrentModel:    "test-model",
 			CurrentProvider: &mockModelListerProvider{models: []string{"model-a", "model-b"}},
 			Runtime: &AgentRuntime{
-				UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+				UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 			},
 		}
 
@@ -118,7 +118,7 @@ func TestHandleModelCommand_ListsInstalledModelsAndWarnings(t *testing.T) {
 			CurrentModel:    "test-model",
 			CurrentProvider: &mockModelListerProvider{err: errors.New("list failed")},
 			Runtime: &AgentRuntime{
-				UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+				UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 			},
 		}
 

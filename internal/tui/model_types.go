@@ -5,7 +5,15 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 	tuicomposer "github.com/susugadx/xelyon-cli/internal/tui/composer"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
+	"github.com/susugadx/xelyon-cli/internal/tui/projectscreen"
+	"github.com/susugadx/xelyon-cli/internal/tui/promptmodal"
+	"github.com/susugadx/xelyon-cli/internal/tui/providerpickerscreen"
+	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
+	"github.com/susugadx/xelyon-cli/internal/tui/sessionpickerscreen"
+	"github.com/susugadx/xelyon-cli/internal/tui/slashsuggestions"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
 
@@ -119,19 +127,19 @@ type Model struct {
 	projectAgent      ProjectAgent
 	reviewAgent       ReviewAgent
 	skillCatalog      SkillCatalogAgent
-	screen            screenMode        // 現在の画面モード
-	configScreen      *configScreen     // /config 画面の状態（screenConfig 時のみ非 nil）
-	reviewScreen      *reviewScreen     // /review 画面の状態（screenReview 時のみ非 nil）
-	reviewTimelineSeq int               // /review timeline 実行の識別子
-	reviewTimelineRun *reviewRunContext // /review timeline 実行中のみ非 nil
-	projectScreen     *projectScreen    // /project 画面の状態（screenProject 時のみ非 nil）
-	projectScreenSeq  int               // /project 非同期メッセージの画面識別子
-	vp                lightViewport     // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
+	screen            screenMode            // 現在の画面モード
+	configScreen      *configscreen.Screen  // /config 画面の状態（screenConfig 時のみ非 nil）
+	reviewScreen      *reviewscreen.Screen  // /review 画面の状態（screenReview 時のみ非 nil）
+	reviewTimelineSeq int                   // /review timeline 実行の識別子
+	reviewTimelineRun *reviewRunContext     // /review timeline 実行中のみ非 nil
+	projectScreen     *projectscreen.Screen // /project 画面の状態（screenProject 時のみ非 nil）
+	projectScreenSeq  int                   // /project 非同期メッセージの画面識別子
+	vp                lightViewport         // 軽量 viewport（bubbles/viewport は lipgloss が重いため自前実装）
 	textInput         textinput.Model
 	spinner           spinner.Model
 	messages          []ChatMessage
 	composer          tuicomposer.State
-	attachments       []composerAttachment
+	attachments       []tuiattachments.Attachment
 	rawLines          []string         // 元の行データ。リサイズ時はこれを再レンダリングする
 	layout            *termtext.Layout // 表示幅に応じたvisual rowレイアウト
 	toolBlocks        []toolBlockInfo  // ツール結果ブロック
@@ -155,9 +163,9 @@ type Model struct {
 	streamState
 	mouseSelectionState
 	startupSubmission *StartupSubmission
-	slashSuggestions  slashSuggestionState
-	prompt            *promptModalState
-	providerPicker    *providerPickerState
-	sessionPicker     *sessionPickerState
+	slashSuggestions  slashsuggestions.State
+	prompt            *promptmodal.Screen
+	providerPicker    *providerpickerscreen.Screen
+	sessionPicker     *sessionpickerscreen.Screen
 	startupPicker     *StartupSessionPicker
 }

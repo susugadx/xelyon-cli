@@ -8,7 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type responsesRequestRunOptions struct {
@@ -16,9 +16,9 @@ type responsesRequestRunOptions struct {
 	BuildRequest             func() ResponsesRequest
 	PrepareRequest           func(ctx context.Context, url string, payload []byte) (*http.Request, error)
 	ExecuteRequest           func(req *http.Request, stream bool) (*http.Response, error)
-	HandleStreaming          func(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error)
-	HandleNonStreaming       func(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error)
-	HandleHTTPError          func(resp *http.Response, spinner *ui.Spinner, providerName string) error
+	HandleStreaming          func(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error)
+	HandleNonStreaming       func(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error)
+	HandleHTTPError          func(resp *http.Response, spinner *uiruntime.Spinner, providerName string) error
 	RequestObserver          func(ResponsesRequest)
 	SetLocalAutoCompressSkip func(bool)
 	HasPreviousResponseID    func() bool
@@ -100,7 +100,7 @@ func newLongRunningResponsesHTTPClient(base *http.Client) *http.Client {
 	return NewLongRunningResponsesHTTPClient(base)
 }
 
-func (p *Provider) handleResponsesNonStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
+func (p *Provider) handleResponsesNonStreaming(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error) {
 	return openairesponses.HandleNonStreaming(ctx, resp, spinner, openairesponses.NonStreamingOptions{
 		ProviderName:        "OpenAI",
 		UsageCallback:       p.usageCallback,

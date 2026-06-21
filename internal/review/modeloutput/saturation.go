@@ -5,14 +5,14 @@ import (
 
 	reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
 // SaturationCheckModelOutputInput は model の saturation check JSON 出力を確定する入力。
 type SaturationCheckModelOutputInput struct {
 	Content         string
-	Plan            reviewprobe.ReviewProbePlan
+	Plan            reviewprobeplan.ReviewProbePlan
 	FinalizedReport reviewreport.ReviewReport
 	ExternalDocs    []externaldoc.Evidence
 }

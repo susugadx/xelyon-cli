@@ -30,6 +30,8 @@ type countingRawOutputArtifactStore struct {
 	inner       *rawoutputs.Store
 	createCalls int
 	verifyCalls int
+	scanCalls   int
+	lookupCalls int
 }
 
 func (s *countingRawOutputArtifactStore) Create(ctx context.Context, req rawoutputs.CreateRequest) (rawoutputs.CreateResult, error) {
@@ -47,8 +49,14 @@ func (s *countingRawOutputArtifactStore) Verify(ctx context.Context, ref rawoutp
 	return s.inner.Verify(ctx, ref)
 }
 
-func (s *countingRawOutputArtifactStore) Resolve(ctx context.Context, ref rawoutputs.RawOutputRef) (rawoutputs.ResolvedArtifact, error) {
-	return s.inner.Resolve(ctx, ref)
+func (s *countingRawOutputArtifactStore) Scan(ctx context.Context, req rawoutputs.ScanRequest) (rawoutputs.ScanResult, error) {
+	s.scanCalls++
+	return s.inner.Scan(ctx, req)
+}
+
+func (s *countingRawOutputArtifactStore) LookupRef(ctx context.Context, sessionID, refID string) (rawoutputs.RawOutputRef, error) {
+	s.lookupCalls++
+	return s.inner.LookupRef(ctx, sessionID, refID)
 }
 
 func newProviderHistoryRawOutputRequestAgent(t *testing.T) (*Agent, *providerFacingHistoryMutationProbe, *rawoutputs.Store) {

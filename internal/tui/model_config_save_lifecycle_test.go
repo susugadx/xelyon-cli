@@ -6,45 +6,34 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestConfigScreen_DirtyState(t *testing.T) {
 	m := newConfigTestModel()
 	cs := m.configScreen
 
-	if cs.dirty {
+	snapshot := cs.Snapshot()
+	if snapshot.Dirty {
 		t.Fatal("dirty should be false initially")
 	}
-	if cs.saveStatus != statusSaved {
-		t.Fatalf("saveStatus = %d, want statusSaved(%d)", cs.saveStatus, statusSaved)
+	if snapshot.SaveStatus != statusSaved {
+		t.Fatalf("saveStatus = %d, want statusSaved(%d)", snapshot.SaveStatus, statusSaved)
 	}
 
-	for i, cat := range cs.categories {
-		if cat.Name == "compression" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	fields := cs.filteredFields()
-	for i, f := range fields {
-		if f.Path == "compression.enabled" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	selectConfigField(t, &m, "compression", "compression.enabled")
 
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
-	if !cs.dirty {
+	cs = configTestScreen(t, m)
+	if !cs.Snapshot().Dirty {
 		t.Fatal("dirty should be true after edit")
 	}
 
 	updated, saveCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	m = updated.(Model)
 	cs = m.configScreen
-	if cs.saveStatus != statusSaving {
-		t.Fatalf("saveStatus after s = %d, want statusSaving(%d)", cs.saveStatus, statusSaving)
+	if got := cs.Snapshot().SaveStatus; got != statusSaving {
+		t.Fatalf("saveStatus after s = %d, want statusSaving(%d)", got, statusSaving)
 	}
 	if saveCmd == nil {
 		t.Fatal("saveCmd should not be nil")
@@ -53,18 +42,18 @@ func TestConfigScreen_DirtyState(t *testing.T) {
 	updated, _ = m.Update(saveCmd())
 	m = updated.(Model)
 	cs = m.configScreen
-	if cs.dirty {
+	snapshot = cs.Snapshot()
+	if snapshot.Dirty {
 		t.Fatal("dirty should be false after save")
 	}
-	if cs.saveStatus != statusSaved {
-		t.Fatalf("saveStatus = %d, want statusSaved(%d)", cs.saveStatus, statusSaved)
+	if snapshot.SaveStatus != statusSaved {
+		t.Fatalf("saveStatus = %d, want statusSaved(%d)", snapshot.SaveStatus, statusSaved)
 	}
 }
 
 func TestConfigScreen_SaveAndQuit_Success(t *testing.T) {
 	m := newConfigTestModel()
-	cs := m.configScreen
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = sendConfigKey(m, "q")
 	updated, saveCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -73,12 +62,13 @@ func TestConfigScreen_SaveAndQuit_Success(t *testing.T) {
 		t.Fatal("saveCmd should not be nil")
 	}
 
-	cs = m.configScreen
-	if !cs.pendingClose {
+	cs := configTestScreen(t, m)
+	snapshot := cs.Snapshot()
+	if !snapshot.PendingClose {
 		t.Fatal("pendingClose should be true")
 	}
-	if cs.saveStatus != statusSaving {
-		t.Fatalf("saveStatus = %d, want statusSaving(%d)", cs.saveStatus, statusSaving)
+	if snapshot.SaveStatus != statusSaving {
+		t.Fatalf("saveStatus = %d, want statusSaving(%d)", snapshot.SaveStatus, statusSaving)
 	}
 	if m.screen != screenConfig {
 		t.Fatalf("screen = %d, want screenConfig (save in progress)", m.screen)
@@ -98,11 +88,10 @@ func TestConfigScreen_SaveAndClose_RefreshesStatusLine(t *testing.T) {
 	}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
+	m.configScreen = configscreen.New(config.DefaultConfig())
 	m.statusLine = agent.GetStatusLine()
 
-	cs := m.configScreen
-	cs.dirty = true
+	setConfigDirtyForTest(t, &m, true)
 
 	m = sendConfigKey(m, "q")
 	updated, saveCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -129,7 +118,7 @@ func TestConfigScreen_SaveWithoutClose_RefreshesStatusLineIfNeeded(t *testing.T)
 	}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
+	m.configScreen = configscreen.New(config.DefaultConfig())
 	m.statusLine = agent.GetStatusLine()
 
 	m = saveConfigAndWait(t, m)
@@ -140,8 +129,8 @@ func TestConfigScreen_SaveWithoutClose_RefreshesStatusLineIfNeeded(t *testing.T)
 	if got := m.statusLine; got != "provider: openai model: gpt-5.4" {
 		t.Fatalf("statusLine after save = %q, want updated runtime status", got)
 	}
-	if m.configScreen.saveStatus != statusSaved {
-		t.Fatalf("saveStatus = %d, want statusSaved", m.configScreen.saveStatus)
+	if got := m.configScreen.Snapshot().SaveStatus; got != statusSaved {
+		t.Fatalf("saveStatus = %d, want statusSaved", got)
 	}
 }
 
@@ -150,9 +139,8 @@ func TestConfigScreen_SaveAndQuit_Failure(t *testing.T) {
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
-	cs.dirty = true
+	m.configScreen = configscreen.New(cfg)
+	setConfigDirtyForTest(t, &m, true)
 
 	m = sendConfigKey(m, "q")
 	m = sendConfigKey(m, "enter")
@@ -163,17 +151,18 @@ func TestConfigScreen_SaveAndQuit_Failure(t *testing.T) {
 	if m.screen != screenConfig {
 		t.Fatalf("screen = %d after failed save, want screenConfig", m.screen)
 	}
-	cs = m.configScreen
-	if cs.saveStatus != statusFailed {
-		t.Fatalf("saveStatus = %d, want statusFailed(%d)", cs.saveStatus, statusFailed)
+	cs := configTestScreen(t, m)
+	snapshot := cs.Snapshot()
+	if snapshot.SaveStatus != statusFailed {
+		t.Fatalf("saveStatus = %d, want statusFailed(%d)", snapshot.SaveStatus, statusFailed)
 	}
-	if cs.saveError != "disk full" {
-		t.Fatalf("saveError = %q, want %q", cs.saveError, "disk full")
+	if snapshot.SaveError != "disk full" {
+		t.Fatalf("saveError = %q, want %q", snapshot.SaveError, "disk full")
 	}
-	if cs.pendingClose {
+	if snapshot.PendingClose {
 		t.Fatal("pendingClose should be reset to false after failure")
 	}
-	if cs.confirmQuit {
+	if snapshot.ConfirmQuit {
 		t.Fatal("confirmQuit should be false (dialog dismissed)")
 	}
 }
@@ -186,7 +175,7 @@ func TestConfigScreen_SaveFailure_DoesNotReportUpdatedFooter(t *testing.T) {
 	}
 	m := newModelWithViewport(agent)
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(config.DefaultConfig())
+	m.configScreen = configscreen.New(config.DefaultConfig())
 	m.statusLine = agent.GetStatusLine()
 
 	m = saveConfigAndWait(t, m)
@@ -194,10 +183,11 @@ func TestConfigScreen_SaveFailure_DoesNotReportUpdatedFooter(t *testing.T) {
 	if got := m.statusLine; got != "provider: deepseek model: deepseek-chat" {
 		t.Fatalf("statusLine after failed save = %q, want unchanged pre-save status", got)
 	}
-	if m.configScreen.saveStatus != statusFailed {
-		t.Fatalf("saveStatus = %d, want statusFailed", m.configScreen.saveStatus)
+	snapshot := m.configScreen.Snapshot()
+	if snapshot.SaveStatus != statusFailed {
+		t.Fatalf("saveStatus = %d, want statusFailed", snapshot.SaveStatus)
 	}
-	if m.configScreen.saveError != "disk full" {
-		t.Fatalf("saveError = %q, want %q", m.configScreen.saveError, "disk full")
+	if snapshot.SaveError != "disk full" {
+		t.Fatalf("saveError = %q, want %q", snapshot.SaveError, "disk full")
 	}
 }

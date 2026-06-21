@@ -5,31 +5,34 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func TestReviewRunnerRunEmitsProgressEvents(t *testing.T) {
 	evidence := &runnerFakeEvidenceBuilder{
 		bundle: newRunnerEvidenceBundleForTest("/tmp/review-runner/repo"),
 	}
-	probeResult := ReviewProbeResult{
+	probeResult := reviewprobe.ReviewProbeResult{
 		ID:     "probe-1",
-		Mode:   ReviewProbeHostReadOnly,
-		Status: ReviewProbePassed,
-		CommandResults: []ReviewProbeCommandResult{
+		Mode:   domain.ReviewProbeHostReadOnly,
+		Status: domain.ReviewProbePassed,
+		CommandResults: []reviewprobe.ReviewProbeCommandResult{
 			{
 				Command:  "go",
 				Args:     []string{"test", "./internal/review"},
-				Status:   ReviewProbePassed,
+				Status:   domain.ReviewProbePassed,
 				Output:   "PASS runner",
 				Duration: 1500 * time.Millisecond,
 			},
 		},
 	}
 	probes := &runnerFakeProbeRunner{
-		results: map[string]ReviewProbeResult{"probe-1": probeResult},
+		results: map[string]reviewprobe.ReviewProbeResult{"probe-1": probeResult},
 	}
 	plan := newRunnerProbePlanForTest("probe-1")
-	probeResults := []ReviewProbeResult{probeResult}
+	probeResults := []reviewprobe.ReviewProbeResult{probeResult}
 	modelReport := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")
 	modelReport.ProbeSummaries = newRedactedRunnerProbeSummariesForTest(t, evidence.bundle, probeResults)
 	model := &runnerFakeModel{
@@ -81,19 +84,19 @@ func TestReviewRunnerRunEmitsProgressEvents(t *testing.T) {
 }
 
 func TestReviewRunnerProbeProgressFinalizesBlockedBeforeExecutionUnderStartedID(t *testing.T) {
-	req := ReviewProbeRequest{
+	req := reviewprobe.ReviewProbeRequest{
 		ID:   "probe-blocked",
-		Mode: ReviewProbeHostReadOnly,
-		Commands: []ReviewProbeCommand{
+		Mode: domain.ReviewProbeHostReadOnly,
+		Commands: []reviewprobe.ReviewProbeCommand{
 			{Command: "go", Args: []string{"test", "./internal/review"}},
 		},
 	}
 	probes := &runnerFakeProbeRunner{
-		results: map[string]ReviewProbeResult{
+		results: map[string]reviewprobe.ReviewProbeResult{
 			"probe-blocked": {
 				ID:     "probe-blocked",
-				Mode:   ReviewProbeHostReadOnly,
-				Status: ReviewProbeBlocked,
+				Mode:   domain.ReviewProbeHostReadOnly,
+				Status: domain.ReviewProbeBlocked,
 				Error:  "command policy blocked before execution",
 			},
 		},
@@ -107,11 +110,11 @@ func TestReviewRunnerProbeProgressFinalizesBlockedBeforeExecutionUnderStartedID(
 		},
 	}
 
-	results, err := runner.runReviewProbesSequentially(context.Background(), []ReviewProbeRequest{req})
+	results, err := runner.runReviewProbesSequentially(context.Background(), []reviewprobe.ReviewProbeRequest{req})
 	if err != nil {
 		t.Fatalf("runReviewProbesSequentially() error = %v, want nil", err)
 	}
-	if len(results) != 1 || results[0].Status != ReviewProbeBlocked {
+	if len(results) != 1 || results[0].Status != domain.ReviewProbeBlocked {
 		t.Fatalf("probe results = %#v, want one blocked result", results)
 	}
 

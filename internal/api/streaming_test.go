@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type mockReadCloser struct {
@@ -34,7 +34,7 @@ func TestParseStreamingResponse_EmptyLines(t *testing.T) {
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := uiruntime.NewSpinner()
 
 	parser := func(line string) (string, bool, error) {
 		return "", false, nil
@@ -58,7 +58,7 @@ func TestParseStreamingResponse_ParserError(t *testing.T) {
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := uiruntime.NewSpinner()
 
 	// 常にエラーを返すパーサー
 	parser := func(line string) (string, bool, error) {
@@ -85,7 +85,7 @@ func TestParseStreamingResponse_DoneFlag(t *testing.T) {
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := uiruntime.NewSpinner()
 
 	parser := func(line string) (string, bool, error) {
 		if line == "[DONE]" {
@@ -112,7 +112,7 @@ func TestParseStreamingResponse_ContextCanceled(t *testing.T) {
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := uiruntime.NewSpinner()
 	baseCtx := config.WithContext(context.Background(), config.DefaultConfig())
 	ctx, cancel := context.WithCancel(baseCtx)
 
@@ -145,7 +145,7 @@ func TestParseStreamingResponse_NormalFlow(t *testing.T) {
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := uiruntime.NewSpinner()
 
 	parser := func(line string) (string, bool, error) {
 		return line, false, nil
@@ -166,7 +166,7 @@ func TestParseStreamingResponse_SuppressesAssistantTextWhenPhaseMode(t *testing.
 	cfg := config.DefaultConfig()
 	ctx := config.WithContext(context.Background(), cfg)
 	var out bytes.Buffer
-	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx = uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = WithAssistantUpdateMode(ctx, AssistantUpdatesPhase)
 
 	body := "Hello\nWorld\n"
@@ -174,7 +174,7 @@ func TestParseStreamingResponse_SuppressesAssistantTextWhenPhaseMode(t *testing.
 		Body: &mockReadCloser{reader: strings.NewReader(body)},
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := uiruntime.NewSpinner()
 	parser := func(line string) (string, bool, error) {
 		return line, false, nil
 	}
@@ -240,7 +240,7 @@ func TestStreamingIdleTimeout(t *testing.T) {
 		Body: &mockReadCloser{reader: slowR},
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := uiruntime.NewSpinner()
 	spinner.Start("Testing...")
 
 	parser := func(line string) (string, bool, error) {
@@ -292,7 +292,7 @@ func TestStreamingNoTimeoutWithContinuousData(t *testing.T) {
 		Body: &mockReadCloser{reader: slowR},
 	}
 
-	spinner := ui.NewSpinner()
+	spinner := uiruntime.NewSpinner()
 	spinner.Start("Testing...")
 
 	parser := func(line string) (string, bool, error) {

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestDefaultModelSyncProvider_UsesCurrentSessionOwnerWhenDefaultProviderOnlyChangesAliasSpelling(t *testing.T) {
@@ -11,10 +12,10 @@ func TestDefaultModelSyncProvider_UsesCurrentSessionOwnerWhenDefaultProviderOnly
 	m := newModelWithViewport(agent)
 
 	cfg := config.DefaultConfig()
-	cfg.DefaultProvider = "anthropic"
+	cfg.DefaultProvider = "claude"
 
-	cs := newConfigScreen(cfg)
-	cs.initialDefaultProvider = "claude"
+	cs := configscreen.New(cfg)
+	cfg.DefaultProvider = "anthropic"
 	m.configScreen = cs
 
 	if got := m.defaultModelSyncProvider(); got != "deepseek" {
@@ -27,10 +28,10 @@ func TestDefaultModelSyncProvider_UsesNewDefaultProviderWhenRuntimeChanges(t *te
 	m := newModelWithViewport(agent)
 
 	cfg := config.DefaultConfig()
-	cfg.DefaultProvider = "openai"
+	cfg.DefaultProvider = "deepseek"
 
-	cs := newConfigScreen(cfg)
-	cs.initialDefaultProvider = "deepseek"
+	cs := configscreen.New(cfg)
+	cfg.DefaultProvider = "openai"
 	m.configScreen = cs
 
 	if got := m.defaultModelSyncProvider(); got != "openai" {
@@ -43,17 +44,17 @@ func TestSyncEditedProviderDefaultModel_UsesCurrentSessionOwnerWhenDefaultProvid
 	m := newModelWithViewport(agent)
 
 	cfg := config.DefaultConfig()
-	cfg.DefaultProvider = "anthropic"
+	cfg.DefaultProvider = "claude"
 	cfg.DefaultModel = "claude-custom"
 	cfg.SetProviderModelConfig("deepseek", config.ProviderModelConfig{DefaultModel: "deepseek-chat"})
 
-	cs := newConfigScreen(cfg)
-	cs.initialDefaultProvider = "claude"
+	cs := configscreen.New(cfg)
+	cfg.DefaultProvider = "anthropic"
 	m.configScreen = cs
 
 	m.syncEditedProviderDefaultModel()
 
-	saved := cs.cfg.ProviderModelsForSave()
+	saved := cs.ConfigSnapshot().ProviderModelsForSave()
 	if pm, ok := saved["deepseek"]; !ok {
 		t.Fatalf("ProviderModelsForSave() = %#v, want deepseek override", saved)
 	} else if pm.DefaultModel != "claude-custom" {
@@ -71,8 +72,7 @@ func TestDefaultModelSyncProvider_UsesSessionProviderConfigKeyWhenDefaultProvide
 	cfg := config.DefaultConfig()
 	cfg.DefaultProvider = "deepseek"
 
-	cs := newConfigScreen(cfg)
-	cs.initialDefaultProvider = "deepseek"
+	cs := configscreen.New(cfg)
 	m.configScreen = cs
 
 	if got := m.defaultModelSyncProvider(); got != "anthropic" {
@@ -87,8 +87,7 @@ func TestDefaultModelSyncProvider_UsesSessionProviderConfigKeyWhenDefaultProvide
 	cfg := config.DefaultConfig()
 	cfg.DefaultProvider = "claude"
 
-	cs := newConfigScreen(cfg)
-	cs.initialDefaultProvider = "claude"
+	cs := configscreen.New(cfg)
 	m.configScreen = cs
 
 	if got := m.defaultModelSyncProvider(); got != "anthropic" {
@@ -108,13 +107,12 @@ func TestSyncEditedProviderDefaultModel_PreservesSessionAnthropicAliasWhenDefaul
 		"claude":    {DefaultModel: "claude-old"},
 	})
 
-	cs := newConfigScreen(cfg)
-	cs.initialDefaultProvider = "deepseek"
+	cs := configscreen.New(cfg)
 	m.configScreen = cs
 
 	m.syncEditedProviderDefaultModel()
 
-	saved := cs.cfg.ProviderModelsForSave()
+	saved := cs.ConfigSnapshot().ProviderModelsForSave()
 	if pm, ok := saved["anthropic"]; !ok {
 		t.Fatalf("ProviderModelsForSave() = %#v, want anthropic override", saved)
 	} else if pm.DefaultModel != "anthropic-new" {
@@ -138,13 +136,12 @@ func TestSyncEditedProviderDefaultModel_CreatesAnthropicEntryWhenDefaultProvider
 		"claude": {DefaultModel: "claude-old"},
 	})
 
-	cs := newConfigScreen(cfg)
-	cs.initialDefaultProvider = "claude"
+	cs := configscreen.New(cfg)
 	m.configScreen = cs
 
 	m.syncEditedProviderDefaultModel()
 
-	saved := cs.cfg.ProviderModelsForSave()
+	saved := cs.ConfigSnapshot().ProviderModelsForSave()
 	if pm, ok := saved["anthropic"]; !ok {
 		t.Fatalf("ProviderModelsForSave() = %#v, want anthropic override created", saved)
 	} else if pm.DefaultModel != "anthropic-new" {

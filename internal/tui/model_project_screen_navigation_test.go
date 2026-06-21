@@ -17,22 +17,22 @@ func TestProjectScreen_EscBackTargets(t *testing.T) {
 
 	t.Run("item returns to sections", func(t *testing.T) {
 		m := newProjectTestModel(agent)
-		m.projectScreen.sectionIndex = int(projectSectionRules)
-		m.projectScreen.activePane = projectPaneItem
+		m = moveProjectToSection(t, m, "rules")
+		m = moveProjectToItemPane(t, m)
 		m = sendProjectKey(m, "esc")
 		if m.screen != screenProject {
 			t.Fatalf("screen = %d, want screenProject", m.screen)
 		}
-		if m.projectScreen.activePane != projectPaneSection {
-			t.Fatalf("activePane = %d, want section", m.projectScreen.activePane)
+		if got := projectSnapshot(t, m).ActivePane; got != "section" {
+			t.Fatalf("activePane = %s, want section", got)
 		}
 	})
 
 	t.Run("dirty opens confirm", func(t *testing.T) {
 		m := newProjectTestModel(agent)
-		m.projectScreen.setDirty()
+		m = editProjectContext(t, m, "dirty")
 		m = sendProjectKey(m, "esc")
-		if !m.projectScreen.confirmQuit {
+		if !projectSnapshot(t, m).ConfirmQuit {
 			t.Fatal("dirty project screen should show quit confirmation")
 		}
 	})

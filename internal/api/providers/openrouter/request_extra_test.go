@@ -12,14 +12,14 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newOpenRouterTestContext(t *testing.T, cfg *config.Config) (context.Context, *bytes.Buffer) {
 	t.Helper()
 
 	var out bytes.Buffer
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	if cfg != nil {
 		ctx = config.WithContext(ctx, cfg)

@@ -1,16 +1,20 @@
 package report
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+)
 
 func TestAuditReviewReportCoverageReportsIgnoredNonPassingLinkedProbe(t *testing.T) {
 	tests := []struct {
 		name   string
-		status ReviewProbeStatus
+		status domain.ReviewProbeStatus
 	}{
-		{name: "failed", status: ReviewProbeFailed},
-		{name: "blocked", status: ReviewProbeBlocked},
-		{name: "timed out", status: ReviewProbeTimedOut},
-		{name: "mutated worktree", status: ReviewProbeMutatedWorktree},
+		{name: "failed", status: domain.ReviewProbeFailed},
+		{name: "blocked", status: domain.ReviewProbeBlocked},
+		{name: "timed out", status: domain.ReviewProbeTimedOut},
+		{name: "mutated worktree", status: domain.ReviewProbeMutatedWorktree},
 	}
 
 	for _, tt := range tests {
@@ -33,7 +37,7 @@ func TestAuditReviewReportCoverageReportsIgnoredNonPassingLinkedProbe(t *testing
 
 func TestAuditReviewReportCoverageDoesNotReportPassedLinkedProbe(t *testing.T) {
 	report := newPlanAwareCleanReportForValidationTest()
-	probeSummary := newTrustedProbeSummaryForReportValidationTest(ReviewProbePassed)
+	probeSummary := newTrustedProbeSummaryForReportValidationTest(domain.ReviewProbePassed)
 
 	issues := AuditReviewReportCoverage(CoverageAuditInput{
 		Plan:                  newValidPlanScopeForTest(),

@@ -5,12 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 func TestReviewRunnerPromptRedactorRedactsWindowsNativePathVariants(t *testing.T) {
 	var redactor reviewRunnerPromptRedactor
-	redactor.addReplacement(`C:/repo`, reviewEvidenceRepoRootPathDisplay)
+	redactor.addReplacement(`C:/repo`, reviewmodelinput.RepoRootPathDisplay)
 	redactor.addReplacement(`C:/Users/me/AppData/Local/Temp/xelyon-review-sandbox-123`, reviewRunnerPromptProbeWorkDirDisplay)
 
 	input := strings.Join([]string{
@@ -60,20 +62,20 @@ func TestReviewRunnerPromptIsolatedProbeRootAcceptsWindowsNativePath(t *testing.
 
 func TestReviewRunnerPromptRedactorRedactsIsolatedRootFromResultWithoutCommandResults(t *testing.T) {
 	repoRoot := t.TempDir()
-	sandboxRoot := filepath.Join(t.TempDir(), reviewProbeSandboxTempPrefix+"setup-failed")
+	sandboxRoot := filepath.Join(t.TempDir(), reviewprobe.ReviewProbeSandboxTempPrefix+"setup-failed")
 	sandboxFile := filepath.Join(sandboxRoot, "runtime/home/output.txt")
-	scratchRoot := filepath.Join(t.TempDir(), reviewProbeScratchTempPrefix+"cleanup-failed")
+	scratchRoot := filepath.Join(t.TempDir(), reviewprobe.ReviewProbeScratchTempPrefix+"cleanup-failed")
 	scratchFile := filepath.Join(scratchRoot, "tmp/mutated.txt")
-	result := ReviewProbeResult{
+	result := reviewprobe.ReviewProbeResult{
 		ID:           "probe-1",
-		Mode:         ReviewProbeRepoSandbox,
-		Status:       ReviewProbeBlocked,
+		Mode:         domain.ReviewProbeRepoSandbox,
+		Status:       domain.ReviewProbeBlocked,
 		MutatedFiles: []string{scratchFile},
 		Error:        "failed to prepare repo_sandbox at " + sandboxFile + ": copy failed",
 	}
 
-	redactor := newReviewRunnerPromptRedactor(newRunnerEvidenceBundleForTest(repoRoot), []ReviewProbeResult{result})
-	contexts := reviewmodelinput.BuildProbeResultPromptContexts([]ReviewProbeResult{result}, redactor)
+	redactor := newReviewRunnerPromptRedactor(newRunnerEvidenceBundleForTest(repoRoot), []reviewprobe.ReviewProbeResult{result})
+	contexts := reviewmodelinput.BuildProbeResultPromptContexts([]reviewprobe.ReviewProbeResult{result}, redactor)
 	if got, want := len(contexts), 1; got != want {
 		t.Fatalf("contexts = %d, want %d", got, want)
 	}

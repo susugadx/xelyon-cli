@@ -9,7 +9,8 @@ func reviewUntrackedListGitArgs() []string {
 }
 
 func reviewRelatedCandidateListGitArgs() []string {
-	return []string{"ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.go"}
+	args := []string{"ls-files", "-z", "--cached", "--others", "--exclude-standard", "--"}
+	return append(args, reviewEvidenceRelatedCandidatePathspecs()...)
 }
 
 func reviewGenericImpactCandidateListGitArgs() []string {

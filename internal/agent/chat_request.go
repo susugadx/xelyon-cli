@@ -117,12 +117,15 @@ func (a *Agent) runPlanModeChatRequest(ctx context.Context, req *chatRequest) er
 
 func (a *Agent) applyChatRequestToolVisibility(phase toolSurfacePhase) {
 	toolVisibility := a.toolVisibilityPolicy(phase, toolVisibilityOptions{allowSubAgents: true})
-	previousBudgetExcluded := a.mcpSurface.omittedExportedNames()
-	a.refreshMCPToolSurface()
+	previousSurface, surfaceChanged := a.refreshMCPToolSurface()
+	if surfaceChanged {
+		a.configureCurrentProviderMCPTools()
+		a.rebuildSystemPromptForCurrentProvider()
+	}
 	a.registry().SetExcludedTools(mergeSurfaceManagedExcludedToolsWithRuntimeExclusions(
 		a.registry().GetExcludedTools(),
 		toolVisibility,
-		previousBudgetExcluded,
+		previousSurface.omittedExportedNames(),
 		a.currentMCPBudgetExcludedToolNames(),
 	))
 }

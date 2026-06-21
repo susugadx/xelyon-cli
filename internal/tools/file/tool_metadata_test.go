@@ -1,6 +1,12 @@
 package file
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/tools/file/listtool"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/readtool"
+)
 
 type metadataTool interface {
 	Name() string
@@ -21,35 +27,35 @@ func TestToolMetadata(t *testing.T) {
 	}{
 		{
 			name:          "read_file",
-			tool:          &ReadFileTool{},
+			tool:          &readtool.ReadFileTool{},
 			wantName:      "read_file",
 			wantProps:     []string{"paths", "targets", "detail"},
 			wantNoRequire: true,
 		},
 		{
 			name:         "write_file",
-			tool:         &WriteFileTool{},
+			tool:         &mutation.WriteFileTool{},
 			wantName:     "write_file",
 			wantProps:    []string{"path", "content"},
 			wantRequired: []string{"path", "content"},
 		},
 		{
 			name:         "str_replace",
-			tool:         &StrReplaceTool{},
+			tool:         &mutation.StrReplaceTool{},
 			wantName:     "str_replace",
 			wantProps:    []string{"path", "old_str", "new_str"},
 			wantRequired: []string{"path"},
 		},
 		{
 			name:         "delete_file",
-			tool:         &DeleteFileTool{},
+			tool:         &mutation.DeleteFileTool{},
 			wantName:     "delete_file",
 			wantProps:    []string{"path"},
 			wantRequired: []string{"path"},
 		},
 		{
 			name:         "list_dir",
-			tool:         &ListDirTool{},
+			tool:         &listtool.ListDirTool{},
 			wantName:     "list_dir",
 			wantProps:    []string{"path"},
 			wantRequired: []string{"path"},

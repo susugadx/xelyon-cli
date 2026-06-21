@@ -6,10 +6,10 @@ import (
 	"net/http"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
-func handleSubscriptionHTTPError(resp *http.Response, spinner *ui.Spinner, providerName string) error {
+func handleSubscriptionHTTPError(resp *http.Response, spinner *uiruntime.Spinner, providerName string) error {
 	if spinner != nil {
 		spinner.Stop()
 	}

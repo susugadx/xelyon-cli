@@ -8,6 +8,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 const (
@@ -20,7 +22,7 @@ const (
 // final artifact は ToReviewReport で review_report.v2 へ変換する。
 type ReviewReportModelOutput struct {
 	SchemaVersion             string                              `json:"schema_version"`
-	TargetKind                TargetKind                          `json:"target_kind"`
+	TargetKind                domain.TargetKind                   `json:"target_kind"`
 	CustomInstructions        string                              `json:"custom_instructions,omitempty"`
 	GeneratedAt               time.Time                           `json:"generated_at"`
 	OverallVerificationStatus ReviewVerificationStatus            `json:"overall_verification_status"`
@@ -99,7 +101,7 @@ const (
 
 type reviewReportModelOutputJSON struct {
 	SchemaVersion             *string                              `json:"schema_version"`
-	TargetKind                *TargetKind                          `json:"target_kind"`
+	TargetKind                *domain.TargetKind                   `json:"target_kind"`
 	CustomInstructions        string                               `json:"custom_instructions,omitempty"`
 	GeneratedAt               *time.Time                           `json:"generated_at"`
 	OverallVerificationStatus *ReviewVerificationStatus            `json:"overall_verification_status"`
@@ -158,8 +160,8 @@ func ValidateReviewReportModelOutput(model ReviewReportModelOutput) error {
 	if model.SchemaVersion != ReviewReportModelSchemaVersionV2 {
 		return fmt.Errorf("schema_version must be %q: got %q", ReviewReportModelSchemaVersionV2, model.SchemaVersion)
 	}
-	if model.TargetKind != TargetCurrentChanges {
-		return fmt.Errorf("target_kind must be %q: got %q", TargetCurrentChanges, model.TargetKind)
+	if model.TargetKind != domain.TargetCurrentChanges {
+		return fmt.Errorf("target_kind must be %q: got %q", domain.TargetCurrentChanges, model.TargetKind)
 	}
 	if model.GeneratedAt.IsZero() {
 		return errors.New("generated_at must be non-zero")

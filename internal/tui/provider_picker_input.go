@@ -4,11 +4,12 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/providerpickerscreen"
 )
 
 func (m Model) openProviderPicker() (Model, tea.Cmd) {
 	m.switchToComposerInput()
-	m.providerPicker = newProviderPickerState(m.providerModels.ProviderCandidates())
+	m.providerPicker = providerpickerscreen.NewProvider(m.providerModels.ProviderCandidates())
 	m.clearSlashSuggestions()
 	m.chromeDirty = true
 	return m, nil
@@ -24,7 +25,7 @@ func (m Model) openCurrentProviderModelPicker() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.switchToComposerInput()
-	m.providerPicker = newModelPickerState(provider, m.providerModels.ModelCandidates(provider), true)
+	m.providerPicker = providerpickerscreen.NewModel(provider, m.providerModels.ModelCandidates(provider), true)
 	m.clearSlashSuggestions()
 	m.chromeDirty = true
 	return m, nil
@@ -58,168 +59,27 @@ func (m Model) handleProviderPickerKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	if m.providerPicker == nil {
 		return m, nil
 	}
-	if m.providerPicker.mode == providerPickerCustom {
-		return m.handleProviderPickerCustomKeyMsg(msg)
-	}
 
-	switch {
-	case msg.Type == tea.KeyEsc || msg.Type == tea.KeyCtrlC:
+	result, cmd := m.providerPicker.HandleKey(msg)
+	switch result.Command {
+	case providerpickerscreen.CommandClose:
 		m.closeProviderPicker("Selection cancelled")
-		return m, nil
-	case msg.Type == tea.KeyUp || (!m.providerPicker.filtering && msg.String() == "k"):
-		m.providerPicker.moveSelection(-1)
-	case msg.Type == tea.KeyDown || (!m.providerPicker.filtering && msg.String() == "j"):
-		m.providerPicker.moveSelection(1)
-	case msg.String() == "/":
-		m.providerPicker.filtering = true
-		m.providerPicker.filter = ""
-		m.providerPicker.selected = 0
-	case isBackspaceKey(msg):
-		return m.handleProviderPickerBackspace()
-	case isEnterKey(msg):
-		return m.submitProviderPickerSelection()
-	case m.providerPicker.filtering && msg.Type == tea.KeyRunes:
-		m.providerPicker.filter += string(msg.Runes)
-		m.providerPicker.selected = 0
+	case providerpickerscreen.CommandSelectProvider:
+		m.providerPicker.ShowModels(result.Provider, m.providerModels.ModelCandidates(result.Provider.Key))
+	case providerpickerscreen.CommandApplyModel:
+		return m.applyProviderPickerModel(result.ProviderKey, result.CurrentOnly, result.Model)
+	case providerpickerscreen.CommandBeginAzureCatalogModelSelection:
+		return m.beginAzureCatalogModelSelection(result.Deployment)
+	case providerpickerscreen.CommandReturnToAzureDeploymentPicker:
+		return m.returnToAzureDeploymentPicker()
+	case providerpickerscreen.CommandApplyAzureDeploymentSetup:
+		return m.applyAzureDeploymentSetup(result.Deployment, result.CatalogModel)
+	case providerpickerscreen.CommandRequiredMessage:
+		m.setTransientStatus(result.Message)
 	}
 
-	m.providerPicker.clampSelection()
 	m.chromeDirty = true
-	return m, nil
-}
-
-func (m Model) handleProviderPickerBackspace() (Model, tea.Cmd) {
-	if m.providerPicker.filtering && m.providerPicker.filter != "" {
-		runes := []rune(m.providerPicker.filter)
-		m.providerPicker.filter = string(runes[:len(runes)-1])
-		m.providerPicker.selected = 0
-		m.providerPicker.clampSelection()
-		m.chromeDirty = true
-		return m, nil
-	}
-	if m.providerPicker.mode == providerPickerModels {
-		if m.providerPicker.step == providerPickerStepAzureCatalogModelSelect {
-			return m.returnToAzureDeploymentPicker()
-		}
-		if m.providerPicker.currentOnly {
-			m.closeProviderPicker("Selection cancelled")
-			return m, nil
-		}
-		m.providerPicker.mode = providerPickerProviders
-		m.providerPicker.step = providerPickerStepProviderSelect
-		m.providerPicker.filter = ""
-		m.providerPicker.filtering = false
-		m.providerPicker.selected = initialProviderPickerSelection(m.providerPicker.providerRows())
-		m.chromeDirty = true
-	}
-	return m, nil
-}
-
-func (m Model) submitProviderPickerSelection() (Model, tea.Cmd) {
-	switch m.providerPicker.mode {
-	case providerPickerProviders:
-		provider, ok := m.providerPicker.selectedProvider()
-		if !ok {
-			return m, nil
-		}
-		m.providerPicker.mode = providerPickerModels
-		m.providerPicker.step = providerPickerStepModelSelect
-		m.providerPicker.provider = provider.Key
-		m.providerPicker.providerLabel = provider.Label
-		m.providerPicker.models = m.providerModels.ModelCandidates(provider.Key)
-		m.providerPicker.filter = ""
-		m.providerPicker.filtering = false
-		m.providerPicker.selected = initialModelPickerSelection(m.providerPicker.modelRows())
-		m.chromeDirty = true
-		return m, nil
-	case providerPickerModels:
-		model, ok := m.providerPicker.selectedModel()
-		if !ok {
-			return m, nil
-		}
-		if model.Custom {
-			if m.providerPicker.step == providerPickerStepAzureCatalogModelSelect {
-				m.providerPicker.beginCustomInput(providerPickerStepAzureCatalogModelCustom)
-			} else {
-				m.providerPicker.beginCustomInput(providerPickerCustomModelStep(m.providerPicker.provider, m.providerPicker.currentOnly))
-			}
-			m.chromeDirty = true
-			return m, nil
-		}
-		if m.providerPicker.step == providerPickerStepAzureCatalogModelSelect {
-			return m.applyAzureDeploymentSetup(m.providerPicker.azureDeployment, model.Name)
-		}
-		if m.providerPicker.isAzureSetupDeploymentSelection() {
-			return m.beginAzureCatalogModelSelection(model.Name)
-		}
-		return m.applyProviderPickerModel(model.Name)
-	default:
-		return m, nil
-	}
-}
-
-func (m Model) handleProviderPickerCustomKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch {
-	case msg.Type == tea.KeyEsc || msg.Type == tea.KeyCtrlC:
-		return m.cancelProviderPickerCustomInput()
-	case isEnterKey(msg):
-		value := strings.TrimSpace(m.providerPicker.customInput.Value())
-		if value == "" {
-			m.setTransientStatus(providerPickerRequiredMessage(m.providerPicker.step))
-			return m, nil
-		}
-		switch m.providerPicker.step {
-		case providerPickerStepAzureDeploymentInput:
-			return m.beginAzureCatalogModelSelection(value)
-		case providerPickerStepAzureCatalogModelCustom:
-			return m.applyAzureDeploymentSetup(m.providerPicker.azureDeployment, value)
-		}
-		return m.applyProviderPickerModel(value)
-	default:
-		var cmd tea.Cmd
-		m.providerPicker.customInput, cmd = m.providerPicker.customInput.Update(msg)
-		m.chromeDirty = true
-		return m, cmd
-	}
-}
-
-func (m Model) cancelProviderPickerCustomInput() (Model, tea.Cmd) {
-	switch m.providerPicker.step {
-	case providerPickerStepAzureCatalogModelCustom:
-		m.providerPicker.mode = providerPickerModels
-		m.providerPicker.step = providerPickerStepAzureCatalogModelSelect
-	default:
-		m.providerPicker.mode = providerPickerModels
-		m.providerPicker.step = providerPickerStepModelSelect
-	}
-	m.chromeDirty = true
-	return m, nil
-}
-
-func providerPickerRequiredMessage(step providerPickerStep) string {
-	switch step {
-	case providerPickerStepAzureDeploymentInput:
-		return "Deployment is required"
-	case providerPickerStepAzureCatalogModelCustom:
-		return "Catalog model is required"
-	default:
-		return "Model is required"
-	}
-}
-
-func providerPickerCustomModelStep(provider string, currentOnly bool) providerPickerStep {
-	if !currentOnly && strings.TrimSpace(provider) == "azure" {
-		return providerPickerStepAzureDeploymentInput
-	}
-	return providerPickerStepModelCustom
-}
-
-func (p *providerPickerState) isAzureSetupDeploymentSelection() bool {
-	return p != nil &&
-		!p.currentOnly &&
-		p.mode == providerPickerModels &&
-		p.step == providerPickerStepModelSelect &&
-		strings.TrimSpace(p.provider) == "azure"
+	return m, cmd
 }
 
 func (m Model) beginAzureCatalogModelSelection(deployment string) (Model, tea.Cmd) {
@@ -228,32 +88,20 @@ func (m Model) beginAzureCatalogModelSelection(deployment string) (Model, tea.Cm
 		m.setTransientStatus("Deployment is required")
 		return m, nil
 	}
-	m.providerPicker.mode = providerPickerModels
-	m.providerPicker.step = providerPickerStepAzureCatalogModelSelect
-	m.providerPicker.azureDeployment = deployment
-	m.providerPicker.models = m.providerModels.AzureCatalogModelCandidates(deployment)
-	m.providerPicker.filter = ""
-	m.providerPicker.filtering = false
-	m.providerPicker.selected = initialModelPickerSelection(m.providerPicker.modelRows())
+	m.providerPicker.BeginAzureCatalogModelSelection(deployment, m.providerModels.AzureCatalogModelCandidates(deployment))
 	m.chromeDirty = true
 	return m, nil
 }
 
 func (m Model) returnToAzureDeploymentPicker() (Model, tea.Cmd) {
-	m.providerPicker.mode = providerPickerModels
-	m.providerPicker.step = providerPickerStepModelSelect
-	m.providerPicker.azureDeployment = ""
-	m.providerPicker.models = m.providerModels.ModelCandidates(m.providerPicker.provider)
-	m.providerPicker.filter = ""
-	m.providerPicker.filtering = false
-	m.providerPicker.selected = initialModelPickerSelection(m.providerPicker.modelRows())
+	m.providerPicker.ReturnToAzureDeploymentPicker(m.providerModels.ModelCandidates(m.providerPicker.Provider()))
 	m.chromeDirty = true
 	return m, nil
 }
 
-func (m Model) applyProviderPickerModel(model string) (Model, tea.Cmd) {
-	provider := strings.TrimSpace(m.providerPicker.provider)
-	currentProviderOnly := m.providerPicker.currentOnly || provider == ""
+func (m Model) applyProviderPickerModel(provider string, currentOnly bool, model string) (Model, tea.Cmd) {
+	provider = strings.TrimSpace(provider)
+	currentProviderOnly := currentOnly || provider == ""
 	m.providerPicker = nil
 	m.chromeDirty = true
 

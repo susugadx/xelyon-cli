@@ -4,45 +4,33 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/commandruntime"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
-const maxDroppedAttachments = maxComposerAttachments
+const maxDroppedAttachments = tuiattachments.MaxComposerAttachments
 
-type droppedPathParseKind int
-
-const (
-	droppedPathParseNotPath droppedPathParseKind = iota
-	droppedPathParseReady
-	droppedPathParseLimit
-)
-
-type droppedPathParseResult struct {
-	kind  droppedPathParseKind
-	paths []string
-}
-
-func parseDroppedPaths(content string) droppedPathParseResult {
+func parseDroppedPaths(content string) tuiattachments.DroppedPathParseResult {
 	lines := droppedPathLines(content)
 	if len(lines) == 0 {
-		return droppedPathParseResult{kind: droppedPathParseNotPath}
+		return tuiattachments.DroppedPathParseResult{Kind: tuiattachments.DroppedPathParseNotPath}
 	}
 
 	candidates, kind := collectDroppedPathCandidates(lines)
-	if kind != droppedPathParseReady {
-		return droppedPathParseResult{kind: kind}
+	if kind != tuiattachments.DroppedPathParseReady {
+		return tuiattachments.DroppedPathParseResult{Kind: kind}
 	}
 
 	if len(candidates) > maxDroppedAttachments {
-		return droppedPathParseResult{kind: droppedPathParseLimit}
+		return tuiattachments.DroppedPathParseResult{Kind: tuiattachments.DroppedPathParseLimit}
 	}
 
 	dedup := dedupeDroppedPathCandidates(candidates)
 	if len(dedup) == 0 {
-		return droppedPathParseResult{kind: droppedPathParseNotPath}
+		return tuiattachments.DroppedPathParseResult{Kind: tuiattachments.DroppedPathParseNotPath}
 	}
-	return droppedPathParseResult{
-		kind:  droppedPathParseReady,
-		paths: dedup,
+	return tuiattachments.DroppedPathParseResult{
+		Kind:  tuiattachments.DroppedPathParseReady,
+		Paths: dedup,
 	}
 }
 
@@ -64,32 +52,32 @@ func droppedPathLines(content string) []string {
 	return lines
 }
 
-func collectDroppedPathCandidates(lines []string) ([]string, droppedPathParseKind) {
+func collectDroppedPathCandidates(lines []string) ([]string, tuiattachments.DroppedPathParseKind) {
 	candidates := make([]string, 0, len(lines))
 	for _, line := range lines {
 		parsedLine, kind := parseDroppedPathLine(line)
-		if kind != droppedPathParseReady {
+		if kind != tuiattachments.DroppedPathParseReady {
 			return nil, kind
 		}
 		candidates = append(candidates, parsedLine...)
 	}
 	if len(candidates) == 0 {
-		return nil, droppedPathParseNotPath
+		return nil, tuiattachments.DroppedPathParseNotPath
 	}
-	return candidates, droppedPathParseReady
+	return candidates, tuiattachments.DroppedPathParseReady
 }
 
-func parseDroppedPathLine(line string) ([]string, droppedPathParseKind) {
+func parseDroppedPathLine(line string) ([]string, tuiattachments.DroppedPathParseKind) {
 	tokens := parsePastedPathTokens(line)
 	if len(tokens) == 0 {
-		return nil, droppedPathParseNotPath
+		return nil, tuiattachments.DroppedPathParseNotPath
 	}
 
 	normalizedPaths, ok := resolveDroppedPathTokens(tokens)
 	if !ok {
-		return nil, droppedPathParseNotPath
+		return nil, tuiattachments.DroppedPathParseNotPath
 	}
-	return normalizedPaths, droppedPathParseReady
+	return normalizedPaths, tuiattachments.DroppedPathParseReady
 }
 
 func resolveDroppedPathTokens(tokens []string) ([]string, bool) {

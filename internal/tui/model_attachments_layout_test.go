@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 func TestComposer_AttachmentRowsRespectFooterBudgetWithComposerRows(t *testing.T) {
@@ -15,9 +17,9 @@ func TestComposer_AttachmentRowsRespectFooterBudgetWithComposerRows(t *testing.T
 	}
 
 	dir := t.TempDir()
-	for i := 0; i < maxComposerAttachments; i++ {
+	for i := 0; i < tuiattachments.MaxComposerAttachments; i++ {
 		path := writeTempFile(t, dir, fmt.Sprintf("f%02d.txt", i), []byte("a"))
-		m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: path, Size: 1})
+		m.appendAttachment(tuiattachments.Attachment{Kind: tuiattachments.KindFile, Path: path, Size: 1})
 	}
 
 	if got := m.footerHeight(); got > m.height {
@@ -42,7 +44,7 @@ func TestComposer_CompactChipsHiddenWhenNoFooterRowsFit(t *testing.T) {
 
 	dir := t.TempDir()
 	path := writeTempFile(t, dir, "notes.txt", []byte("a"))
-	m.appendAttachment(composerAttachment{Kind: composerAttachmentFile, Path: path, Size: 1})
+	m.appendAttachment(tuiattachments.Attachment{Kind: tuiattachments.KindFile, Path: path, Size: 1})
 
 	if got := m.visibleCompactChipRowCount(); got != 0 {
 		t.Fatalf("visibleCompactChipRowCount() = %d, want 0 with no footer expansion rows", got)

@@ -10,7 +10,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 // SimpleProviderSpec は単純な OpenAI 互換 Chat Completions provider の差分を表す。
@@ -111,14 +112,14 @@ func (p *SimpleProvider) buildTools(ctx context.Context) []api.OpenAITool {
 	return p.spec.BuildTools(ctx, p.mcpTools)
 }
 
-func (p *SimpleProvider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *SimpleProvider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	errOut := api.ErrorWriterFromContext(ctx)
 	streamResult, err := openaicompatstream.ParseSSEStream(ctx, resp, spinner, openaicompatstream.ParseSSEOptions{
 		OnChunkDecodeError: p.streamParseWarning(errOut),
 		OnUsageDecodeError: p.streamParseWarning(errOut),
 		OnToolCallArguments: func(toolName string) {
 			if !spinner.IsActive() {
-				spinner.Start(ui.SpinnerMessageForTool(toolName))
+				spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 			}
 		},
 	})
@@ -147,7 +148,7 @@ func (p *SimpleProvider) streamParseWarning(errOut io.Writer) func(error) error 
 	}
 }
 
-func (p *SimpleProvider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *SimpleProvider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	return api.HandleNonStreamingResponse(ctx, resp, spinner)
 }
 

@@ -9,18 +9,18 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type bashExecutionRequest struct {
-	promptIO ui.PromptIO
+	promptIO uiruntime.PromptIO
 	out      common.Output
 	cfg      *config.Config
 	command  string
 }
 
-func newBashExecutionRequest(promptIO ui.PromptIO, cfg *config.Config, command string) (bashExecutionRequest, string, bool) {
-	normalizedPromptIO := ui.NormalizePromptIO(promptIO)
+func newBashExecutionRequest(promptIO uiruntime.PromptIO, cfg *config.Config, command string) (bashExecutionRequest, string, bool) {
+	normalizedPromptIO := uiruntime.NormalizePromptIO(promptIO)
 	out := common.NewOutput(normalizedPromptIO.Out, normalizedPromptIO.Err)
 	if cfg == nil {
 		cfg = config.DefaultConfig()
@@ -95,11 +95,11 @@ func ExecuteBash(command string) string {
 
 // ExecuteBashWithOutput は出力先を指定してシェルコマンドを実行する。
 func ExecuteBashWithOutput(out common.Output, command string) string {
-	return ExecuteBashWithPromptIOAndConfig(ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), config.DefaultConfig(), command)
+	return ExecuteBashWithPromptIOAndConfig(uiruntime.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), config.DefaultConfig(), command)
 }
 
 // ExecuteBashWithPromptIOAndConfig は設定と入出力を指定してシェルコマンドを実行する。
-func ExecuteBashWithPromptIOAndConfig(promptIO ui.PromptIO, cfg *config.Config, command string) string {
+func ExecuteBashWithPromptIOAndConfig(promptIO uiruntime.PromptIO, cfg *config.Config, command string) string {
 	req, msg, ok := newBashExecutionRequest(promptIO, cfg, command)
 	if !ok {
 		return msg
@@ -126,11 +126,11 @@ func ExecuteBashWithContext(ctx context.Context, command string) string {
 
 // ExecuteBashWithContextAndOutput は Context 対応で出力先を指定してシェルコマンドを実行する。
 func ExecuteBashWithContextAndOutput(ctx context.Context, out common.Output, command string) string {
-	return ExecuteBashWithContextAndPromptIOAndConfig(ctx, ui.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), config.DefaultConfig(), command)
+	return ExecuteBashWithContextAndPromptIOAndConfig(ctx, uiruntime.NewPromptIO(nil, out.StdoutWriter(), out.StderrWriter(), nil), config.DefaultConfig(), command)
 }
 
 // ExecuteBashWithContextAndPromptIOAndConfig は Context・設定・入出力を指定してシェルコマンドを実行する。
-func ExecuteBashWithContextAndPromptIOAndConfig(ctx context.Context, promptIO ui.PromptIO, cfg *config.Config, command string) string {
+func ExecuteBashWithContextAndPromptIOAndConfig(ctx context.Context, promptIO uiruntime.PromptIO, cfg *config.Config, command string) string {
 	req, msg, ok := newBashExecutionRequest(promptIO, cfg, command)
 	if !ok {
 		return msg

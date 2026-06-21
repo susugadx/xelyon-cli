@@ -4,11 +4,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // runREPLLoop は legacy classic REPL ループを実行する。
-func runREPLLoop(agent *Agent, mlReader *ui.MultilineReader) {
+func runREPLLoop(agent *Agent, mlReader *uiruntime.MultilineReader) {
 	var lastInterrupt time.Time
 
 	for {

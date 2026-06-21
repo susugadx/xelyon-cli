@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // handleREPLReadError は REPL の入力読み取りエラー方針を処理する。
 // true を返した場合、呼び出し元は REPL を継続する。
 func handleREPLReadError(agent *Agent, err error, lastInterrupt *time.Time) bool {
-	if err != ui.ErrInterrupted {
+	if err != uiruntime.ErrInterrupted {
 		return false
 	}
 

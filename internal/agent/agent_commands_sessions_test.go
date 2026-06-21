@@ -9,7 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleSaveAndSessionsCommand_UseRuntimeOutput(t *testing.T) {
@@ -26,7 +26,7 @@ func TestHandleSaveAndSessionsCommand_UseRuntimeOutput(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: session,
@@ -71,7 +71,7 @@ func TestHandleLoadCommand_UsesRuntimeOutput(t *testing.T) {
 	agent := &Agent{
 		CurrentProvider: &mockProvider{name: "test"},
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			storage: storage,

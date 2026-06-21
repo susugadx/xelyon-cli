@@ -15,16 +15,17 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type promptConfirmTestPrompter struct {
 	called bool
 }
 
-func (p *promptConfirmTestPrompter) Prompt(_ context.Context, _ ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *promptConfirmTestPrompter) Prompt(_ context.Context, _ uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	p.called = true
-	return ui.PromptResponse{Action: ui.PromptActionNo}, nil
+	return uiprompt.PromptResponse{Action: uiprompt.PromptActionNo}, nil
 }
 
 type promptConfirmTestTUIPrompter struct {
@@ -44,7 +45,7 @@ func TestPromptConfirmWithRuntime(t *testing.T) {
 	t.Run("tui prompter returns true without prompting", func(t *testing.T) {
 		var out bytes.Buffer
 		prompter := &promptConfirmTestTUIPrompter{}
-		runtime := ui.NewRuntime(strings.NewReader("n\n"), &out, &out)
+		runtime := uiruntime.NewRuntime(strings.NewReader("n\n"), &out, &out)
 		runtime.SetPrompter(prompter)
 
 		if !promptConfirmWithRuntime(runtime, "Continue?") {
@@ -57,7 +58,7 @@ func TestPromptConfirmWithRuntime(t *testing.T) {
 
 	t.Run("yes returns true", func(t *testing.T) {
 		var out bytes.Buffer
-		runtime := ui.NewRuntime(strings.NewReader("\n"), &out, &out)
+		runtime := uiruntime.NewRuntime(strings.NewReader("\n"), &out, &out)
 		if !promptConfirmWithRuntime(runtime, "Continue?") {
 			t.Fatal("promptConfirmWithRuntime() = false, want true")
 		}
@@ -65,7 +66,7 @@ func TestPromptConfirmWithRuntime(t *testing.T) {
 
 	t.Run("comment is treated as cancel", func(t *testing.T) {
 		var out bytes.Buffer
-		runtime := ui.NewRuntime(strings.NewReader("c\n\n\n"), &out, &out)
+		runtime := uiruntime.NewRuntime(strings.NewReader("c\n\n\n"), &out, &out)
 		if promptConfirmWithRuntime(runtime, "Continue?") {
 			t.Fatal("promptConfirmWithRuntime() = true, want false")
 		}
@@ -78,7 +79,7 @@ func TestPromptConfirmWithRuntime(t *testing.T) {
 func TestHandleHistoryCommand_PrintsPreviewAndTruncates(t *testing.T) {
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 
 	agent := &Agent{
 		Runtime: runtime,
@@ -197,7 +198,7 @@ func TestHandleExitCommand_HelperProcess(t *testing.T) {
 
 	handleExitCommand(&Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard),
 		},
 	})
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestNewAgentWithRuntime_DefaultEditToolVisibility(t *testing.T) {
@@ -64,7 +64,7 @@ func TestChatOnce_DefaultEditToolVisibility(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	runtime := newIsolatedRuntime()
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	provider := &headlessToolSetProbeProvider{}
 	agent := NewAgentWithRuntime("gpt-5.4", provider, false, runtime)
 	t.Cleanup(agent.Cleanup)
@@ -93,7 +93,7 @@ func TestChatOnce_LegacyEditToolVisibility(t *testing.T) {
 	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
 
 	runtime := newIsolatedRuntime()
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	provider := &headlessToolSetProbeProvider{}
 	agent := NewAgentWithRuntime("gpt-5.4", provider, false, runtime)
 	t.Cleanup(agent.Cleanup)

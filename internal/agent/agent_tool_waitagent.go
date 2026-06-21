@@ -12,7 +12,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
 )
 
 var subAgentEventLinePattern = regexp.MustCompile(`lines (\d+)-\d+`)
@@ -175,7 +175,7 @@ func printEventDiff(out io.Writer, agentID string, event subagent.SubAgentEvent)
 	}
 
 	var buf bytes.Buffer
-	opts := &ui.DiffOptions{
+	opts := &uifileview.DiffOptions{
 		ContextLines:  1,
 		ShowLineNums:  true,
 		InlineMode:    true,
@@ -184,7 +184,7 @@ func printEventDiff(out io.Writer, agentID string, event subagent.SubAgentEvent)
 	if offset := subAgentDiffLineOffset(event.Output); offset > 0 {
 		opts.LineNumOffset = offset - 1
 	}
-	ui.ShowColoredDiffToWriter(&buf, event.OldStr, event.NewStr, opts)
+	uifileview.ShowColoredDiffToWriter(&buf, event.OldStr, event.NewStr, opts)
 
 	diffPrefix := dim.Sprintf("  %s │ ", strings.Repeat(" ", len(agentID)))
 	scanner := bufio.NewScanner(&buf)

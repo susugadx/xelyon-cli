@@ -6,11 +6,12 @@ import (
 	"io"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 type sseDisplayState struct {
-	spinner               *ui.Spinner
+	spinner               *uiruntime.Spinner
 	out                   io.Writer
 	errOut                io.Writer
 	streamAssistantText   bool
@@ -18,7 +19,7 @@ type sseDisplayState struct {
 	contentNewlineEmitted bool
 }
 
-func newSSEDisplayState(spinner *ui.Spinner, out io.Writer, errOut io.Writer, streamAssistantText bool) *sseDisplayState {
+func newSSEDisplayState(spinner *uiruntime.Spinner, out io.Writer, errOut io.Writer, streamAssistantText bool) *sseDisplayState {
 	return &sseDisplayState{
 		spinner:             spinner,
 		out:                 out,
@@ -74,7 +75,7 @@ func (s *sseDisplayState) showToolSpinner(toolName string) {
 		_, _ = fmt.Fprintln(s.out)
 		s.contentNewlineEmitted = true
 	}
-	s.spinner.Start(ui.SpinnerMessageForTool(toolName))
+	s.spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 }
 
 func (s *sseDisplayState) printTrailingNewlineIfNeeded() {

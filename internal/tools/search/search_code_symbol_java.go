@@ -1,10 +1,7 @@
 package search
 
 import (
-	"fmt"
 	"regexp"
-
-	"github.com/susugadx/xelyon-cli/internal/locator"
 )
 
 const (
@@ -17,40 +14,22 @@ const (
 // resolveJavaSymbol は Java / Kotlin 向けの enhanced symbol fast path。
 // 参照を import / caller / annotation / inheritance / other に分類する。
 func resolveJavaSymbol(symbol string, opts SearchOptions) genericResolveResult {
-	defs := findGenericDefinitions(symbol, opts)
-	if len(defs) == 0 {
-		return genericResolveResult{Status: genericSymbolNone}
-	}
-	if len(defs) > 1 {
-		return genericResolveResult{Output: formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts), Status: genericSymbolMultiple}
-	}
+	return resolveGenericEnhancedSymbol(symbol, opts, genericEnhancedSymbolSpec{
+		language:      "java",
+		buildSections: buildJavaSymbolSections,
+	})
+}
 
-	def := defs[0]
-	refs := findGenericReferences(symbol, opts)
-	filteredRefs := filterGenericRefs(refs, def)
-
-	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
-		if ref.IsTest {
-			testRefs = append(testRefs, ref)
-		} else {
-			normalRefs = append(normalRefs, ref)
-		}
-	}
-
+func buildJavaSymbolSections(normalRefs []genericSymbolRef, testRefs []genericSymbolRef, symbol string) []symbolBundleSectionInput {
 	imports, callers, annotations, inheritance, otherRefs := classifyJavaRefs(normalRefs, symbol)
-	bundle := buildGenericSymbolBundle("java", symbol, def, []string{
-		fmt.Sprintf("%d: %s", def.Line, def.Signature),
-	}, []symbolBundleSectionInput{
+	return []symbolBundleSectionInput{
 		{Kind: "imports", Title: "Imports", Items: imports, Limit: javaImportLimit},
 		{Kind: "callers", Title: "Callers", Items: callers, Limit: javaCallerLimit},
 		{Kind: "annotations", Title: "Annotations", Items: annotations, Limit: javaAnnotationLimit},
 		{Kind: "inheritance", Title: "Inheritance", Items: inheritance, Limit: javaInheritanceLimit},
 		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
-	})
-	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatJavaSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	}
 }
 
 // classifyJavaRefs は Java/Kotlin の参照を分類する。
@@ -78,9 +57,4 @@ func classifyJavaRefs(refs []genericSymbolRef, symbol string) (imports, callers,
 		}
 	}
 	return
-}
-
-// formatJavaSymbolResult は Java/Kotlin の分類済みシンボル結果をフォーマットする。
-func formatJavaSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
-	return formatSymbolBundle(bundle, reg, nil)
 }

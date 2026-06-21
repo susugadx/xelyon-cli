@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // mockRuntimeConfigurableProvider は RuntimeConfigurable を実装するモック
@@ -21,10 +21,10 @@ func (m *mockRuntimeConfigurableProvider) SetRuntimeConfig(cfg *config.Config) {
 // mockUIRuntimeConfigurableProvider は UIRuntimeConfigurable を実装するモック
 type mockUIRuntimeConfigurableProvider struct {
 	mockProvider
-	appliedRuntime *ui.Runtime
+	appliedRuntime *uiruntime.Runtime
 }
 
-func (m *mockUIRuntimeConfigurableProvider) SetUIRuntime(runtime *ui.Runtime) {
+func (m *mockUIRuntimeConfigurableProvider) SetUIRuntime(runtime *uiruntime.Runtime) {
 	m.appliedRuntime = runtime
 }
 
@@ -290,7 +290,7 @@ func TestApplyUIRuntime(t *testing.T) {
 		provider := &mockUIRuntimeConfigurableProvider{
 			mockProvider: mockProvider{name: "ui-configurable"},
 		}
-		runtime := ui.NewRuntime(nil, nil, nil)
+		runtime := uiruntime.NewRuntime(nil, nil, nil)
 
 		ApplyUIRuntime(provider, runtime)
 
@@ -301,14 +301,14 @@ func TestApplyUIRuntime(t *testing.T) {
 
 	t.Run("provider does not implement UIRuntimeConfigurable", func(t *testing.T) {
 		provider := &mockProvider{name: "basic"}
-		runtime := ui.NewRuntime(nil, nil, nil)
+		runtime := uiruntime.NewRuntime(nil, nil, nil)
 
 		// パニックしないことを確認
 		ApplyUIRuntime(provider, runtime)
 	})
 
 	t.Run("nil provider", func(t *testing.T) {
-		runtime := ui.NewRuntime(nil, nil, nil)
+		runtime := uiruntime.NewRuntime(nil, nil, nil)
 
 		// パニックしないことを確認
 		ApplyUIRuntime(nil, runtime)

@@ -4,10 +4,16 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/tui/promptmodal"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
-func newPromptTestModel(req ui.PromptRequest, ch chan ui.PromptResponse) Model {
+const (
+	promptModalChoice = promptmodal.ModeChoice
+	promptModalText   = promptmodal.ModeText
+)
+
+func newPromptTestModel(req uiprompt.PromptRequest, ch chan uiprompt.PromptResponse) Model {
 	m := newSizedPromptTestModel(&stubAgent{}, 60, 16)
 	updated, _ := m.Update(OpenPromptMsg{ID: 1, Request: req, Respond: ch})
 	return updated.(Model)

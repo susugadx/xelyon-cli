@@ -327,7 +327,6 @@ func (a *Agent) applyRuntimeModelSelection(model string, resetResponseContinuati
 	}
 	a.setCurrentModel(model)
 	a.syncCurrentDerivedRuntimeState()
-	a.configureCurrentProviderMCPTools()
 	if resetResponseContinuation {
 		a.clearResponseContinuationContext()
 	} else {

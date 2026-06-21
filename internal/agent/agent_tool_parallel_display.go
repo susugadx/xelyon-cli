@@ -9,7 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 // printParallelToolGroup は非TUIモード向けに並列実行グループの結果を表示する。
@@ -20,7 +20,7 @@ func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*t
 
 	if len(indices) == 1 {
 		idx := indices[0]
-		_, _ = fmt.Fprintln(out, ui.FormatToolLine(ui.ToolDisplayInfo{
+		_, _ = fmt.Fprintln(out, uitoolview.FormatToolLine(uitoolview.ToolDisplayInfo{
 			ToolName: allToolCalls[idx].Tool,
 			Args:     allToolCalls[idx].Args,
 			Result:   results[idx].Result,
@@ -30,9 +30,9 @@ func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*t
 		return
 	}
 
-	ui.PrintParallelGroupStartToWriter(out, len(indices))
+	uitoolview.PrintParallelGroupStartToWriter(out, len(indices))
 	for _, idx := range indices {
-		ui.PrintParallelGroupLineToWriter(out, ui.FormatToolLine(ui.ToolDisplayInfo{
+		uitoolview.PrintParallelGroupLineToWriter(out, uitoolview.FormatToolLine(uitoolview.ToolDisplayInfo{
 			ToolName: allToolCalls[idx].Tool,
 			Args:     allToolCalls[idx].Args,
 			Result:   results[idx].Result,
@@ -40,7 +40,7 @@ func printParallelToolGroup(out io.Writer, cfg *config.Config, allToolCalls []*t
 		}))
 		printParallelCollapsedOutputWithPrefix(out, cfg, allToolCalls[idx].Tool, results[idx].Result, results[idx].Error, "│    ")
 	}
-	ui.PrintParallelGroupEndToWriter(out, formatParallelGroupSummary(allToolCalls, indices, elapsed))
+	uitoolview.PrintParallelGroupEndToWriter(out, formatParallelGroupSummary(allToolCalls, indices, elapsed))
 }
 
 func shouldShowParallelCollapsed(toolName, result string, isError bool) bool {
@@ -57,7 +57,7 @@ func printParallelCollapsedOutput(out io.Writer, cfg *config.Config, toolName, r
 	if !shouldShowParallelCollapsed(toolName, result, isError) {
 		return
 	}
-	_, _ = fmt.Fprintln(out, ui.FormatToolOutput(result, ui.GetMaxVisibleLinesWithConfig(cfg)))
+	_, _ = fmt.Fprintln(out, uitoolview.FormatToolOutput(result, uitoolview.GetMaxVisibleLinesWithConfig(cfg)))
 }
 
 func printParallelCollapsedOutputWithPrefix(out io.Writer, cfg *config.Config, toolName, result string, isError bool, prefix string) {
@@ -65,7 +65,7 @@ func printParallelCollapsedOutputWithPrefix(out io.Writer, cfg *config.Config, t
 		return
 	}
 
-	collapsed := ui.FormatToolOutput(result, ui.GetMaxVisibleLinesWithConfig(cfg))
+	collapsed := uitoolview.FormatToolOutput(result, uitoolview.GetMaxVisibleLinesWithConfig(cfg))
 	for _, line := range strings.Split(strings.TrimRight(collapsed, "\n"), "\n") {
 		if line == "" {
 			continue
@@ -109,9 +109,9 @@ func formatParallelGroupSummary(allToolCalls []*tools.ToolCall, indices []int, e
 	}
 
 	if len(parts) == 0 {
-		return fmt.Sprintf("Done (%s)", ui.FormatParallelElapsed(elapsed))
+		return fmt.Sprintf("Done (%s)", uitoolview.FormatParallelElapsed(elapsed))
 	}
-	return fmt.Sprintf("Done: %s (%s)", strings.Join(parts, ", "), ui.FormatParallelElapsed(elapsed))
+	return fmt.Sprintf("Done: %s (%s)", strings.Join(parts, ", "), uitoolview.FormatParallelElapsed(elapsed))
 }
 
 // sendParallelToolResults は TUI モードで実行済み結果を個別にチャネルへ送信する。

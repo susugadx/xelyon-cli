@@ -19,13 +19,13 @@ func TestSlashSuggestions_ShowProviderRuntimeCandidates(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/provider o")
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("provider argument suggestions should be visible")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 1 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 1 {
 		t.Fatalf("provider suggestions len = %d, want 1", got)
 	}
-	suggestion := m.slashSuggestions.suggestions[0]
+	suggestion := m.slashSuggestions.Snapshot().Suggestions[0]
 	if suggestion.InsertText != "/provider openai" || suggestion.Category != commandcatalog.CommandCategoryModel {
 		t.Fatalf("provider suggestion = %#v", suggestion)
 	}
@@ -62,13 +62,13 @@ func TestSlashSuggestions_ShowModelRuntimeCandidates(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/model gpt-5.4-m")
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("model argument suggestions should be visible")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 1 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 1 {
 		t.Fatalf("model suggestions len = %d, want 1", got)
 	}
-	suggestion := m.slashSuggestions.suggestions[0]
+	suggestion := m.slashSuggestions.Snapshot().Suggestions[0]
 	if suggestion.InsertText != "/model gpt-5.4-mini" {
 		t.Fatalf("model suggestion insert = %q, want /model gpt-5.4-mini", suggestion.InsertText)
 	}
@@ -101,13 +101,13 @@ func TestSlashSuggestions_ShowGemini35FlashModelCandidate(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/model gemini-3.5")
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("gemini model argument suggestions should be visible")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 1 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 1 {
 		t.Fatalf("gemini model suggestions len = %d, want 1", got)
 	}
-	if got := m.slashSuggestions.suggestions[0].InsertText; got != "/model gemini-3.5-flash" {
+	if got := m.slashSuggestions.Snapshot().Suggestions[0].InsertText; got != "/model gemini-3.5-flash" {
 		t.Fatalf("gemini model suggestion insert = %q, want /model gemini-3.5-flash", got)
 	}
 }
@@ -127,13 +127,13 @@ func TestSlashSuggestions_ShowGemini31FlashLiteModelCandidate(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/model gemini-3.1-f")
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("gemini model argument suggestions should be visible")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 1 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 1 {
 		t.Fatalf("gemini model suggestions len = %d, want 1", got)
 	}
-	if got := m.slashSuggestions.suggestions[0].InsertText; got != "/model gemini-3.1-flash-lite" {
+	if got := m.slashSuggestions.Snapshot().Suggestions[0].InsertText; got != "/model gemini-3.1-flash-lite" {
 		t.Fatalf("gemini model suggestion insert = %q, want /model gemini-3.1-flash-lite", got)
 	}
 }

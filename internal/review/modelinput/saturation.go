@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
@@ -12,7 +13,7 @@ type SaturationCheckPromptInput struct {
 	CustomInstructions          string
 	ReviewStateSummary          string
 	EvidenceMarkdown            string
-	Plan                        reviewprobe.ReviewProbePlan
+	Plan                        reviewprobeplan.ReviewProbePlan
 	ProbeSummaries              []reviewreport.ReviewProbeSummary
 	ProbeResults                []reviewprobe.ReviewProbeResult
 	Redactor                    Redactor
@@ -27,7 +28,7 @@ type SaturationCheckRepairPromptInput struct {
 	CustomInstructions          string
 	ReviewStateSummary          string
 	EvidenceMarkdown            string
-	Plan                        reviewprobe.ReviewProbePlan
+	Plan                        reviewprobeplan.ReviewProbePlan
 	ProbeSummaries              []reviewreport.ReviewProbeSummary
 	ProbeResults                []reviewprobe.ReviewProbeResult
 	Redactor                    Redactor
@@ -44,7 +45,7 @@ type ReportRevisionPromptInput struct {
 	CustomInstructions          string
 	ReviewStateSummary          string
 	EvidenceMarkdown            string
-	Plan                        reviewprobe.ReviewProbePlan
+	Plan                        reviewprobeplan.ReviewProbePlan
 	ProbeSummaries              []reviewreport.ReviewProbeSummary
 	ProbeResults                []reviewprobe.ReviewProbeResult
 	Redactor                    Redactor
@@ -60,7 +61,7 @@ type ReportRevisionRepairPromptInput struct {
 	CustomInstructions          string
 	ReviewStateSummary          string
 	EvidenceMarkdown            string
-	Plan                        reviewprobe.ReviewProbePlan
+	Plan                        reviewprobeplan.ReviewProbePlan
 	ProbeSummaries              []reviewreport.ReviewProbeSummary
 	ProbeResults                []reviewprobe.ReviewProbeResult
 	Redactor                    Redactor

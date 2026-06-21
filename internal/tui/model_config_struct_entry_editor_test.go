@@ -6,78 +6,78 @@ func TestConfigScreen_StructEntryInt_InvalidInput_DoesNotCloseOrDirty(t *testing
 	m := enterStructMapEntryForKey(t, "provider_models", "openai")
 	cs := m.configScreen
 
-	setEntryFieldIndex(t, cs, "max_output_tokens")
-	original := cs.cfg.ProviderModels["openai"].MaxOutputTokens
+	selectConfigEntryField(t, &m, "max_output_tokens")
+	original := cs.ConfigSnapshot().ProviderModels["openai"].MaxOutputTokens
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
+	cs = configTestScreen(t, m)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", got)
 	}
 
-	cs.editInput.SetValue("not-a-number")
+	setConfigInputValue(t, &m, "not-a-number")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit after invalid input = %q, want \"input\"", cs.editEntryFieldEdit)
+	snapshot := cs.Snapshot()
+	if snapshot.EditEntryFieldEdit != "input" {
+		t.Fatalf("editEntryFieldEdit after invalid input = %q, want \"input\"", snapshot.EditEntryFieldEdit)
 	}
-	if cs.dirty {
+	if snapshot.Dirty {
 		t.Fatal("dirty should remain false after invalid int input")
 	}
-	if cs.saveStatus != statusSaved {
-		t.Fatalf("saveStatus = %d, want statusSaved(%d)", cs.saveStatus, statusSaved)
+	if snapshot.SaveStatus != statusSaved {
+		t.Fatalf("saveStatus = %d, want statusSaved(%d)", snapshot.SaveStatus, statusSaved)
 	}
-	if got := cs.cfg.ProviderModels["openai"].MaxOutputTokens; got != original {
+	if got := cs.ConfigSnapshot().ProviderModels["openai"].MaxOutputTokens; got != original {
 		t.Fatalf("ProviderModels[openai].MaxOutputTokens = %d, want %d", got, original)
 	}
 }
 
 func TestConfigScreen_StructEntryInt_ValidInput_StillApplies(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "provider_models", "openai")
-	cs := m.configScreen
 
-	setEntryFieldIndex(t, cs, "max_output_tokens")
+	selectConfigEntryField(t, &m, "max_output_tokens")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
+	cs := configTestScreen(t, m)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", got)
 	}
 
-	cs.editInput.SetValue("4321")
+	setConfigInputValue(t, &m, "4321")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
-	if cs.editEntryFieldEdit != "" {
-		t.Fatalf("editEntryFieldEdit after valid input = %q, want empty", cs.editEntryFieldEdit)
+	snapshot := cs.Snapshot()
+	if snapshot.EditEntryFieldEdit != "" {
+		t.Fatalf("editEntryFieldEdit after valid input = %q, want empty", snapshot.EditEntryFieldEdit)
 	}
-	if got := cs.cfg.ProviderModels["openai"].MaxOutputTokens; got != 4321 {
+	if got := cs.ConfigSnapshot().ProviderModels["openai"].MaxOutputTokens; got != 4321 {
 		t.Fatalf("ProviderModels[openai].MaxOutputTokens = %d, want 4321", got)
 	}
-	if !cs.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("dirty should be true after valid int input")
 	}
-	if cs.saveStatus != statusModified {
-		t.Fatalf("saveStatus = %d, want statusModified(%d)", cs.saveStatus, statusModified)
+	if snapshot.SaveStatus != statusModified {
+		t.Fatalf("saveStatus = %d, want statusModified(%d)", snapshot.SaveStatus, statusModified)
 	}
 }
 
 func TestConfigScreen_LSPServers_CommandChange_Persists(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "lsp.servers", "go")
-	cs := m.configScreen
 
-	setEntryFieldIndex(t, cs, "command")
+	selectConfigEntryField(t, &m, "command")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editEntryFieldEdit != "input" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", cs.editEntryFieldEdit)
+	cs := configTestScreen(t, m)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "input" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"input\"", got)
 	}
 
-	cs.editInput.SetValue("custom-gopls")
+	setConfigInputValue(t, &m, "custom-gopls")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
-	srv, ok := cs.cfg.LSP.Servers["go"]
+	srv, ok := cs.ConfigSnapshot().LSP.Servers["go"]
 	if !ok {
 		t.Fatal("go not found in LSP.Servers")
 	}
@@ -88,27 +88,26 @@ func TestConfigScreen_LSPServers_CommandChange_Persists(t *testing.T) {
 
 func TestConfigScreen_LSPServers_ArgsChange_Persists(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "lsp.servers", "go")
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 
-	setEntryFieldIndex(t, cs, "args")
-	origArgs := cs.cfg.LSP.Servers["go"].Args
+	selectConfigEntryField(t, &m, "args")
+	origArgs := cs.ConfigSnapshot().LSP.Servers["go"].Args
 	origLen := len(origArgs)
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editEntryFieldEdit != "slice" {
-		t.Fatalf("editEntryFieldEdit = %q, want \"slice\"", cs.editEntryFieldEdit)
+	cs = configTestScreen(t, m)
+	if got := cs.Snapshot().EditEntryFieldEdit; got != "slice" {
+		t.Fatalf("editEntryFieldEdit = %q, want \"slice\"", got)
 	}
 
 	m = sendConfigKey(m, "a")
-	cs = m.configScreen
-	cs.editSliceInput.SetValue("--extra-flag")
+	setConfigSliceInputValue(t, &m, "--extra-flag")
 	m = sendConfigKey(m, "enter")
 
 	m = sendConfigKey(m, "esc")
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
-	srv := cs.cfg.LSP.Servers["go"]
+	srv := cs.ConfigSnapshot().LSP.Servers["go"]
 	if len(srv.Args) != origLen+1 {
 		t.Fatalf("LSP.Servers[go].Args length = %d, want %d", len(srv.Args), origLen+1)
 	}
@@ -126,21 +125,21 @@ func TestConfigScreen_LSPServers_ArgsChange_Persists(t *testing.T) {
 
 func TestConfigScreen_LSPServers_DisabledToggle_Persists(t *testing.T) {
 	m := enterStructMapEntryForKey(t, "lsp.servers", "go")
-	cs := m.configScreen
+	cs := configTestScreen(t, m)
 
-	before := cs.cfg.LSP.Servers["go"].Disabled
-	setEntryFieldIndex(t, cs, "disabled")
+	before := cs.ConfigSnapshot().LSP.Servers["go"].Disabled
+	selectConfigEntryField(t, &m, "disabled")
 
 	m = sendConfigKey(m, " ")
-	cs = m.configScreen
-	after := cs.cfg.LSP.Servers["go"].Disabled
+	cs = configTestScreen(t, m)
+	after := cs.ConfigSnapshot().LSP.Servers["go"].Disabled
 	if after == before {
 		t.Fatalf("Disabled should have toggled: before=%v, after=%v", before, after)
 	}
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	after2 := cs.cfg.LSP.Servers["go"].Disabled
+	cs = configTestScreen(t, m)
+	after2 := cs.ConfigSnapshot().LSP.Servers["go"].Disabled
 	if after2 != before {
 		t.Fatalf("Disabled should have toggled back: expected=%v, got=%v", before, after2)
 	}

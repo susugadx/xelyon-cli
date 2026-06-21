@@ -262,6 +262,13 @@ mcp:
     enabled: true
     # Headlessモードでも接続（デフォルト: false）
     headless: false
+    surface_budget:
+        # provider に公開する MCP tool 数の上限
+        max_tools: 80
+        # MCP tool definitions の推定 token 上限
+        estimated_tokens: 32000
+        # 1 tool あたりの input schema byte 上限
+        max_schema_bytes_per_tool: 131072
 
 # ============================================================
 # Final Checks 設定

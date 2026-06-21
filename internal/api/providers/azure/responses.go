@@ -12,7 +12,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type responsesRequestRunOptions struct {
@@ -207,7 +207,7 @@ func (p *Provider) newAuthJSONRequest(ctx context.Context, url string, payload [
 	return openaicompat.NewBearerJSONBytesRequest(ctx, url, authToken, payload)
 }
 
-func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
+func (p *Provider) handleResponsesStreaming(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error) {
 	debugEnabled := os.Getenv("XELYON_DEBUG_AZURE") == "1"
 	return openairesponses.HandleStreaming(ctx, resp, spinner, openairesponses.StreamingOptions{
 		ProviderName:  p.Name(),

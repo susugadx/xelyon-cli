@@ -3,6 +3,10 @@ package agent
 import (
 	"fmt"
 	"io"
+	"reflect"
+
+	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
 )
 
 func emitMCPToolSurfaceBudgetWarning(selection mcpToolSurfaceSelection, errOut io.Writer) {
@@ -11,7 +15,7 @@ func emitMCPToolSurfaceBudgetWarning(selection mcpToolSurfaceSelection, errOut i
 	}
 	_, _ = fmt.Fprintf(
 		errOut,
-		"Warning: MCP tool surface budget exposed %d/%d tools; omitted %d. Use ~/.xelyon/mcp.json tools.include/tools.exclude to narrow MCP tools.\n",
+		"Warning: MCP tool surface budget exposed %d/%d tools; omitted %d. Run /mcp status for details. First narrow ~/.xelyon/mcp.json mcpServers.<server>.tools.include/exclude; if the server is intentionally large, raise ~/.xelyon/config.yaml mcp.surface_budget.\n",
 		len(selection.selected),
 		selection.total,
 		len(selection.omitted),
@@ -36,21 +40,50 @@ func (s mcpToolSurfaceSelection) warningLines(limit int) []string {
 	return lines
 }
 
-func (a *Agent) refreshMCPToolSurface() {
-	if a == nil || a.mcpManager == nil {
-		return
+func (a *Agent) mcpToolSurfaceBudget() mcpToolSurfaceBudget {
+	if a == nil {
+		return defaultMCPToolSurfaceBudget()
 	}
-	a.mcpSurface = selectMCPToolSurface(a.CurrentModel, a.mcpManager.GetTools())
+	return config.EffectiveMCPSurfaceBudget(a.cfg())
+}
+
+func (a *Agent) refreshMCPToolSurface() (mcpToolSurfaceSelection, bool) {
+	if a == nil {
+		return mcpToolSurfaceSelection{}, false
+	}
+	previous := a.mcpSurface
+	if a.mcpManager == nil {
+		return previous, false
+	}
+	next := selectMCPToolSurfaceWithBudget(a.CurrentModel, a.mcpManager.GetTools(), a.mcpToolSurfaceBudget())
+	a.mcpSurface = next
+	return previous, !sameMCPToolSurfaceSelection(previous, next)
+}
+
+func sameMCPToolSurfaceSelection(a, b mcpToolSurfaceSelection) bool {
+	return a.total == b.total &&
+		a.estimatedTokens == b.estimatedTokens &&
+		a.budget == b.budget &&
+		a.model == b.model &&
+		a.toolSignature == b.toolSignature &&
+		reflect.DeepEqual(a.selectedMetrics, b.selectedMetrics) &&
+		reflect.DeepEqual(a.omitted, b.omitted)
 }
 
 func (a *Agent) currentMCPToolSurface() mcpToolSurfaceSelection {
 	if a == nil || a.mcpManager == nil {
 		return mcpToolSurfaceSelection{}
 	}
-	if a.mcpSurface.total == len(a.mcpManager.GetTools()) {
+	budget := a.mcpToolSurfaceBudget()
+	tools := visibleMCPTools(a.mcpManager.GetTools())
+	toolSignature := mcpVisibleToolSurfaceSignature(tools)
+	if a.mcpSurface.total == len(tools) &&
+		a.mcpSurface.budget == mcpsurface.NormalizeBudget(budget) &&
+		a.mcpSurface.model == a.CurrentModel &&
+		a.mcpSurface.toolSignature == toolSignature {
 		return a.mcpSurface
 	}
-	return selectMCPToolSurface(a.CurrentModel, a.mcpManager.GetTools())
+	return selectMCPToolSurfaceWithBudget(a.CurrentModel, tools, budget)
 }
 
 func (a *Agent) currentMCPBudgetExcludedToolNames() []string {

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestRunInteractiveConfig_ScalarAndStructMapFlows(t *testing.T) {
@@ -34,7 +34,7 @@ func TestRunInteractiveConfig_ScalarAndStructMapFlows(t *testing.T) {
 		buildConfigRegistryForCommand = func(cfg *config.Config) []config.ConfigCategory {
 			return categories
 		}
-		newConfigMenuForCommand = func(cfg *config.Config, categories []config.ConfigCategory, runtime *ui.Runtime) configCommandMenu {
+		newConfigMenuForCommand = func(cfg *config.Config, categories []config.ConfigCategory, runtime *uiruntime.Runtime) configCommandMenu {
 			return menu
 		}
 		setFieldValueForCommand = func(cfg *config.Config, path string, value interface{}) error {
@@ -86,7 +86,7 @@ func TestRunInteractiveConfig_ScalarAndStructMapFlows(t *testing.T) {
 		buildConfigRegistryForCommand = func(cfg *config.Config) []config.ConfigCategory {
 			return categories
 		}
-		newConfigMenuForCommand = func(cfg *config.Config, categories []config.ConfigCategory, runtime *ui.Runtime) configCommandMenu {
+		newConfigMenuForCommand = func(cfg *config.Config, categories []config.ConfigCategory, runtime *uiruntime.Runtime) configCommandMenu {
 			return menu
 		}
 		saveConfigForCommand = func(cfg *config.Config) error {

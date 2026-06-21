@@ -10,21 +10,21 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
-func newREPLLoopTestAgent(t *testing.T, provider api.Provider, input io.Reader, out *bytes.Buffer) (*Agent, *ui.MultilineReader) {
+func newREPLLoopTestAgent(t *testing.T, provider api.Provider, input io.Reader, out *bytes.Buffer) (*Agent, *uiruntime.MultilineReader) {
 	t.Helper()
 	withTempWorkdir(t)
 	t.Setenv("HOME", t.TempDir())
 
 	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
-	runtime.UI = ui.NewRuntime(input, out, out)
+	runtime.UI = uiruntime.NewRuntime(input, out, out)
 
 	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
 	agent.setAutoApprove(true)
 
-	mlReader := ui.NewMultilineReaderWithRuntime(runtime.UI)
+	mlReader := uiruntime.NewMultilineReaderWithRuntime(runtime.UI)
 	agent.setPromptReader(mlReader)
 	return agent, mlReader
 }

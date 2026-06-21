@@ -3,13 +3,15 @@ package probe
 import (
 	"fmt"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 type scratchOnlyCommand = probePlannedCommand
 
 type scratchOnlyRequest struct {
 	id             string
-	mode           ReviewProbeMode
+	mode           domain.ReviewProbeMode
 	timeout        time.Duration
 	maxOutputBytes int64
 	files          []scratchOnlyFile
@@ -19,7 +21,7 @@ type scratchOnlyRequest struct {
 func (e *scratchOnlyExecutor) validateRequest(req ReviewProbeRequest, scratchDir string, commandEnv []string) (scratchOnlyRequest, error) {
 	req = normalizeProbeRequestExecutionLimits(req)
 
-	if req.Mode != ReviewProbeScratchOnly {
+	if req.Mode != domain.ReviewProbeScratchOnly {
 		return scratchOnlyRequest{}, fmt.Errorf("scratch_only runner received mode %q", req.Mode)
 	}
 	if len(req.Commands) == 0 {

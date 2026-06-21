@@ -4,14 +4,14 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
 )
 
-func diffOptionsFromConfig(cfg *config.Config) *ui.DiffOptions {
+func diffOptionsFromConfig(cfg *config.Config) *uifileview.DiffOptions {
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
-	return &ui.DiffOptions{
+	return &uifileview.DiffOptions{
 		ContextLines:  cfg.Diff.ContextLines,
 		ShowLineNums:  true,
 		InlineMode:    true,
@@ -20,7 +20,7 @@ func diffOptionsFromConfig(cfg *config.Config) *ui.DiffOptions {
 }
 
 // ShowImprovedDiff は改善された差分表示
-// ui.ShowColoredDiff を使用してインライン形式で表示
+// uifileview.ShowColoredDiff を使用してインライン形式で表示
 func ShowImprovedDiff(oldStr, newStr string) {
 	ShowImprovedDiffWithOutput(DefaultOutput(), oldStr, newStr)
 }
@@ -35,7 +35,7 @@ func ShowImprovedDiffWithOutputAndConfig(out Output, cfg *config.Config, oldStr,
 	if out.SuppressStdout() {
 		return
 	}
-	ui.ShowColoredDiffToWriter(out.StdoutWriter(), oldStr, newStr, diffOptionsFromConfig(cfg))
+	uifileview.ShowColoredDiffToWriter(out.StdoutWriter(), oldStr, newStr, diffOptionsFromConfig(cfg))
 }
 
 // ShowDiff は差分を表示
@@ -54,7 +54,7 @@ func ShowDiffWithOutputAndConfig(out Output, cfg *config.Config, old, new, filen
 		return
 	}
 	out.Yellow.Printf("Changes to: %s\n", filename)
-	ui.ShowColoredDiffToWriter(out.StdoutWriter(), old, new, diffOptionsFromConfig(cfg))
+	uifileview.ShowColoredDiffToWriter(out.StdoutWriter(), old, new, diffOptionsFromConfig(cfg))
 }
 
 // ShowPreview は新規ファイルのプレビューを表示
@@ -77,7 +77,7 @@ func ShowPreviewWithOutputAndConfig(out Output, cfg *config.Config, content stri
 		maxLines = cfg.Diff.MaxTotalLines
 	}
 
-	ui.FileOpDivider(out.StdoutWriter(), 50)
+	uifileview.FileOpDivider(out.StdoutWriter(), 50)
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
 		if maxLines > 0 && i >= maxLines {
@@ -86,5 +86,5 @@ func ShowPreviewWithOutputAndConfig(out Output, cfg *config.Config, content stri
 		}
 		out.Printf("%4d: %s\n", i+1, line)
 	}
-	ui.FileOpDivider(out.StdoutWriter(), 50)
+	uifileview.FileOpDivider(out.StdoutWriter(), 50)
 }

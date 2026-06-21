@@ -9,7 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 	claudestream "github.com/susugadx/xelyon-cli/internal/api/providers/claude_stream"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // isClaudeModel はモデル名が Claude モデルかを判定する。
@@ -50,7 +50,7 @@ func (p *Provider) chatWithClaudeAPI(ctx context.Context, systemPrompt string, h
 }
 
 // handleClaudeStreamingResponse は Anthropic SSE の最小共通処理を claude_stream に委譲する。
-func (p *Provider) handleClaudeStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleClaudeStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	var toolCallsOutput strings.Builder
 	toolUses := claudestream.NewToolUseCollector()
 	compaction := claudestream.NewCompactionCollector()

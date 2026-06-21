@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiconfig"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type configCommandMenu interface {
@@ -15,8 +16,8 @@ type configCommandMenu interface {
 
 var (
 	buildConfigRegistryForCommand = config.BuildConfigRegistry
-	newConfigMenuForCommand       = func(cfg *config.Config, categories []config.ConfigCategory, runtime *ui.Runtime) configCommandMenu {
-		return ui.NewConfigMenuWithRuntime(cfg, categories, runtime)
+	newConfigMenuForCommand       = func(cfg *config.Config, categories []config.ConfigCategory, runtime *uiruntime.Runtime) configCommandMenu {
+		return uiconfig.NewConfigMenuWithRuntime(cfg, categories, runtime)
 	}
 )
 

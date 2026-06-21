@@ -3,6 +3,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/projectscreen"
 )
 
 // openProjectScreen は project config screen を開く。
@@ -14,7 +15,7 @@ func (m Model) openProjectScreen() (tea.Model, tea.Cmd) {
 	}
 	m.activateModalScreen(screenProject)
 	m.installProjectScreen(pc)
-	m.projectScreen.normalizeSize(m.width, m.height)
+	m.projectScreen.NormalizeSize(m.width, m.height)
 	return m, nil
 }
 
@@ -23,6 +24,13 @@ func (m Model) closeProjectScreen() (tea.Model, tea.Cmd) {
 	m.projectScreen = nil
 	m.deactivateModalScreen(true)
 	return m, nil
+}
+
+func (m Model) projectView() string {
+	if m.projectScreen == nil {
+		return "Loading..."
+	}
+	return m.projectScreen.View(m.width, m.height)
 }
 
 // updateProjectScreen は screenProject 中のメッセージ処理。
@@ -35,50 +43,41 @@ func (m Model) updateProjectScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.applyChatWindowSize(msg.Width, msg.Height)
-		ps.normalizeSize(msg.Width, msg.Height)
+		ps.NormalizeSize(msg.Width, msg.Height)
 		return m, nil
 
-	case ProjectSavedMsg:
-		result := ps.handleSaveResult(msg)
-		if result.shouldClose {
+	case projectscreen.SaveResult:
+		result := ps.HandleSaveResult(msg)
+		if result.ShouldClose {
 			return m.closeProjectScreen()
 		}
-		if result.startQueued {
-			return m.beginProjectSave(ps.pendingClose)
+		if result.StartQueued {
+			return m.beginProjectSave(false)
 		}
 		return m, nil
 
-	case ProjectTemplateCreatedMsg:
-		if msg.ScreenID != ps.screenID {
+	case projectscreen.TemplateResult:
+		if !ps.InstallTemplateResult(msg) {
 			return m, nil
 		}
-		if msg.Error != nil {
-			ps.saveStatus = projectStatusFailed
-			ps.saveError = msg.Error.Error()
-			ps.message = ""
-			return m, nil
+		if m.projectScreen != nil {
+			m.projectScreen.NormalizeSize(m.width, m.height)
 		}
-		m.installProjectScreen(msg.Config)
-		m.projectScreen.normalizeSize(m.width, m.height)
-		m.projectScreen.message = "template created"
 		return m, nil
 
 	case tea.KeyMsg:
-		action, cmd := ps.handleKey(msg, m.conversation.IsProcessing())
+		action, cmd := ps.HandleKey(msg, m.conversation.IsProcessing())
 		switch action {
-		case projectCommandDelegateCtrlC:
+		case projectscreen.CommandDelegateCtrlC:
 			return m.handleCtrlC()
-		case projectCommandClose:
+		case projectscreen.CommandClose:
 			return m.closeProjectScreen()
-		case projectCommandSave:
+		case projectscreen.CommandSave:
 			return m.beginProjectSave(false)
-		case projectCommandSaveAndClose:
+		case projectscreen.CommandSaveAndClose:
 			return m.beginProjectSave(true)
-		case projectCommandCreateTemplate:
-			ps.saveStatus = projectStatusSaving
-			ps.saveError = ""
-			ps.message = "creating template"
-			return m, m.createProjectTemplateCmd(m.ensureProjectScreenID(ps))
+		case projectscreen.CommandCreateTemplate:
+			return m, m.createProjectTemplateCmd(ps.Snapshot().ScreenID)
 		default:
 			return m, cmd
 		}
@@ -90,55 +89,27 @@ func (m Model) updateProjectScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) installProjectScreen(pc *config.ProjectConfig) {
 	m.projectScreenSeq++
-	m.projectScreen = newProjectScreen(pc)
-	m.projectScreen.screenID = m.projectScreenSeq
-}
-
-func (m *Model) ensureProjectScreenID(ps *projectScreen) int {
-	if ps == nil {
-		return 0
-	}
-	if ps.screenID == 0 {
-		m.projectScreenSeq++
-		ps.screenID = m.projectScreenSeq
-	}
-	return ps.screenID
+	m.projectScreen = projectscreen.New(pc, m.projectScreenSeq)
 }
 
 func (m Model) beginProjectSave(closeOnSuccess bool) (tea.Model, tea.Cmd) {
 	ps := m.projectScreen
-	if ps == nil || ps.pc == nil {
+	pending, ok := ps.BeginSave(closeOnSuccess)
+	if !ok {
 		return m, nil
 	}
-	ps.confirmQuit = false
-	closeIntent := ps.pendingClose || closeOnSuccess
-	ps.pendingClose = closeIntent
-	if ps.saveInFlight {
-		ps.saveQueued = true
-		ps.saveStatus = projectStatusSaving
-		ps.saveError = ""
-		ps.message = "save queued"
-		return m, nil
-	}
-	ps.saveSeq++
-	ps.saveInFlight = true
-	ps.saveQueued = false
-	ps.saveStatus = projectStatusSaving
-	ps.saveError = ""
-	ps.message = ""
-	return m, m.saveProjectCmd(m.ensureProjectScreenID(ps), ps.saveSeq)
+	return m, m.saveProjectCmd(pending)
 }
 
-func (m Model) saveProjectCmd(screenID, saveSeq int) tea.Cmd {
-	snapshot := config.CloneProjectConfig(m.projectScreen.pc)
+func (m Model) saveProjectCmd(pending projectscreen.PendingSave) tea.Cmd {
 	projectAgent := m.projectAgent
 	return func() tea.Msg {
-		err := projectAgent.SaveProjectConfig(snapshot)
-		return ProjectSavedMsg{
+		err := projectAgent.SaveProjectConfig(pending.Snapshot)
+		return projectscreen.SaveResult{
 			Error:    err,
-			Snapshot: snapshot,
-			ScreenID: screenID,
-			SaveSeq:  saveSeq,
+			Snapshot: pending.Snapshot,
+			ScreenID: pending.ScreenID,
+			SaveSeq:  pending.SaveSeq,
 		}
 	}
 }
@@ -147,6 +118,6 @@ func (m Model) createProjectTemplateCmd(screenID int) tea.Cmd {
 	projectAgent := m.projectAgent
 	return func() tea.Msg {
 		pc, err := projectAgent.CreateProjectConfigTemplate()
-		return ProjectTemplateCreatedMsg{Error: err, Config: pc, ScreenID: screenID}
+		return projectscreen.TemplateResult{Error: err, Config: pc, ScreenID: screenID}
 	}
 }

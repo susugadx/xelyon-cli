@@ -122,14 +122,14 @@ Done.`
 
 func TestExtractPlanJSON_LegacyStepsPurposeAndVerificationArePlanEvidence(t *testing.T) {
 	response := `Here is the plan:
-{"steps":[{"id":1,"description":"Update review","purpose":"Clarify approval","verification":["go test ./internal/ui"]}]}
+{"steps":[{"id":1,"description":"Update review","purpose":"Clarify approval","verification":["go test ./internal/uiplanview"]}]}
 Done.`
 
 	parsed := mustParsePlanJSON(t, mustExtractPlanJSON(t, response))
 	if parsed.Steps[0].Purpose != "Clarify approval" {
 		t.Fatalf("parsed purpose = %q, want plan purpose", parsed.Steps[0].Purpose)
 	}
-	assertStringSliceEqual(t, "parsed verification", parsed.Steps[0].Verification, []string{"go test ./internal/ui"})
+	assertStringSliceEqual(t, "parsed verification", parsed.Steps[0].Verification, []string{"go test ./internal/uiplanview"})
 }
 
 func TestExtractPlanJSON_LegacyWithNonObjectPlanField(t *testing.T) {

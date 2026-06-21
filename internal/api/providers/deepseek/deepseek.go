@@ -12,7 +12,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 func init() {
@@ -146,7 +147,7 @@ func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt
 }
 
 // handleStreamingResponse はストリーミングレスポンスを処理（tool_calls対応）
-func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
 	dim := color.New(color.Faint)
@@ -218,7 +219,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		OnToolCallArguments: func(toolName string) {
 			// reasoning/content 表示後に tool_call へ切り替わる場合は spinner を再表示する。
 			if !spinner.IsActive() {
-				spinner.Start(ui.SpinnerMessageForTool(toolName))
+				spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 			}
 		},
 		StopOnToolCallsFinish: true,

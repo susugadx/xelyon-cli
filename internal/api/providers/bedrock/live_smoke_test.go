@@ -14,7 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const (
@@ -258,7 +258,7 @@ func bedrockSmokeContext(t *testing.T, cfg *config.Config, tools []api.ToolDefin
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	ctx = config.WithContext(ctx, cfg)
-	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
+	ctx = uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	ctx = api.WithToolDefinitions(ctx, tools)
 	return ctx, cancel
@@ -281,7 +281,7 @@ func bedrockProbeConverseTextOnly(ctx context.Context, p *Provider, model string
 	if err != nil {
 		return "", err
 	}
-	return p.handleConverseStream(ctx, output, ui.NewSpinnerWithWriter(io.Discard))
+	return p.handleConverseStream(ctx, output, uiruntime.NewSpinnerWithWriter(io.Discard))
 }
 
 func bedrockSmokeTools() []api.ToolDefinition {

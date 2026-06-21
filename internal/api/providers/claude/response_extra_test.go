@@ -12,7 +12,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func streamingResponseForTest(body string) *http.Response {
@@ -118,7 +118,7 @@ func TestHandleStreamingResponse_TracksCompactionToolUseAndUsage(t *testing.T) {
 	})
 
 	var out bytes.Buffer
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	body := strings.Join([]string{
@@ -178,7 +178,7 @@ func TestHandleStreamingResponse_TracksCompactionToolUseAndUsage(t *testing.T) {
 		marshalStreamEvent(t, StreamEvent{Type: "message_stop"}),
 	}, "\n\n") + "\n\n"
 
-	result, err := p.handleStreamingResponse(ctx, streamingResponseForTest(body), ui.NewSpinnerWithWriter(io.Discard))
+	result, err := p.handleStreamingResponse(ctx, streamingResponseForTest(body), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleStreamingResponse() error = %v", err)
 	}
@@ -229,7 +229,7 @@ func TestHandleStreamingResponse_UsageWithoutMessageStart(t *testing.T) {
 	}, "\n\n") + "\n\n"
 
 	ctx := api.WithAssistantUpdateMode(context.Background(), api.AssistantUpdatesOff)
-	result, err := p.handleStreamingResponse(ctx, streamingResponseForTest(body), ui.NewSpinnerWithWriter(io.Discard))
+	result, err := p.handleStreamingResponse(ctx, streamingResponseForTest(body), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleStreamingResponse() error = %v", err)
 	}
@@ -247,7 +247,7 @@ func TestHandleStreamingResponse_ContextCanceledReturnsPartialWithoutError(t *te
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	var errOut bytes.Buffer
-	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, &errOut))
+	ctx = uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), io.Discard, &errOut))
 
 	reader, writer := io.Pipe()
 	resp := &http.Response{
@@ -273,7 +273,7 @@ func TestHandleStreamingResponse_ContextCanceledReturnsPartialWithoutError(t *te
 		cancel()
 	}()
 
-	result, err := p.handleStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	result, err := p.handleStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleStreamingResponse() error = %v, want nil", err)
 	}
@@ -294,7 +294,7 @@ func TestHandleNonStreamingResponse_EmitsTextToolJSONAndUsage(t *testing.T) {
 	})
 
 	var out bytes.Buffer
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesVerbose)
 
 	resp := jsonResponseForTest(t, Response{
@@ -310,7 +310,7 @@ func TestHandleNonStreamingResponse_EmitsTextToolJSONAndUsage(t *testing.T) {
 		},
 	})
 
-	result, err := p.handleNonStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	result, err := p.handleNonStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleNonStreamingResponse() error = %v", err)
 	}
@@ -329,7 +329,7 @@ func TestHandleNonStreamingResponse_EmitsTextToolJSONAndUsage(t *testing.T) {
 func TestHandleNonStreamingResponse_NoContentError(t *testing.T) {
 	p := New("test-key")
 
-	_, err := p.handleNonStreamingResponse(context.Background(), jsonResponseForTest(t, Response{}), ui.NewSpinnerWithWriter(io.Discard))
+	_, err := p.handleNonStreamingResponse(context.Background(), jsonResponseForTest(t, Response{}), uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err == nil || !strings.Contains(err.Error(), "no response from API") {
 		t.Fatalf("handleNonStreamingResponse() error = %v, want no response error", err)
 	}

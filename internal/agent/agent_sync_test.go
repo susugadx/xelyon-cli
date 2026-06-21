@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // MockProvider implements api.Provider for testing
@@ -261,7 +261,7 @@ func TestSyncWithRuntimeConfig_RebuildsPromptForClaudeOpus(t *testing.T) {
 func TestSyncWithRuntimeConfig_UsesRuntimeOutputForSwitchWarning(t *testing.T) {
 	var out bytes.Buffer
 	runtime := NewAgentRuntime()
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	runtime.Config.ProjectMap.Enabled = false
 	runtime.Config.DefaultProvider = "missing-provider"
 
@@ -287,7 +287,7 @@ func TestSyncWithRuntimeConfig_DoesNotReswitchWhenAnthropicAliasOwnerIsUnchanged
 		"anthropic": {DefaultModel: "anthropic-custom"},
 	})
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 
 	currentProvider := &MockProvider{name: "claude"}
 	a := &Agent{
@@ -329,7 +329,7 @@ func TestSyncWithRuntimeConfig_RebindsAliasOwnerWithinSameRuntimeIdentity(t *tes
 	cfg.Compression.ProviderThresholds["claude"] = 654321
 
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 
 	currentProvider := &MockProvider{name: "claude"}
 	a := &Agent{
@@ -385,7 +385,7 @@ func TestSyncWithRuntimeConfig_ClearsSavedResponseIDWhenAliasOwnerChanges(t *tes
 		CurrentProvider:   provider,
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: newResponseContextSession("same-model", "claude", "claude", "resp_saved"),
@@ -427,7 +427,7 @@ func TestSyncWithRuntimeConfig_CanonicalizesDisplayNameDefaultProviderOwner(t *t
 		CurrentProvider:   currentProvider,
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -468,7 +468,7 @@ func TestSyncWithRuntimeConfig_PrefersDefaultProviderAliasModelForSameRuntimeIde
 		CurrentProvider: &MockProvider{name: "claude"},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 

@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newREPLInterruptTestAgent(out *bytes.Buffer) *Agent {
 	return &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), out, out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), out, out),
 		},
 	}
 }
@@ -26,7 +26,7 @@ func TestHandleREPLReadError_FirstInterruptContinues(t *testing.T) {
 	agent := newREPLInterruptTestAgent(&out)
 	var lastInterrupt time.Time
 
-	if !handleREPLReadError(agent, ui.ErrInterrupted, &lastInterrupt) {
+	if !handleREPLReadError(agent, uiruntime.ErrInterrupted, &lastInterrupt) {
 		t.Fatal("handleREPLReadError() = false, want continue")
 	}
 	if lastInterrupt.IsZero() {
@@ -56,7 +56,7 @@ func TestHandleREPLReadError_SecondInterruptCleansUpAndExits(t *testing.T) {
 	}
 
 	lastInterrupt := time.Now()
-	if !handleREPLReadError(agent, ui.ErrInterrupted, &lastInterrupt) {
+	if !handleREPLReadError(agent, uiruntime.ErrInterrupted, &lastInterrupt) {
 		t.Fatal("handleREPLReadError() = false, want continue")
 	}
 	if cleanupCount.Load() != 1 {

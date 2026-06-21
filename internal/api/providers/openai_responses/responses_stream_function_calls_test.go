@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestResponsesStreamState_HandleFunctionCallAdded_DoesNotControlSpinner(t *testing.T) {
-	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner := uiruntime.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
 	state.handleFunctionCallAdded(&Item{
@@ -95,7 +95,7 @@ func TestResponsesStreamState_FunctionCallArgumentsDoneUsesTopLevelArguments(t *
 }
 
 func TestResponsesStreamState_ShowFunctionCallSpinner_StartsSpinner(t *testing.T) {
-	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner := uiruntime.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
 	state.showFunctionCallSpinner(&Item{
@@ -109,7 +109,7 @@ func TestResponsesStreamState_ShowFunctionCallSpinner_StartsSpinner(t *testing.T
 }
 
 func TestResponsesStreamState_ShowFunctionCallSpinner_IgnoresNonFunctionCall(t *testing.T) {
-	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner := uiruntime.NewSpinnerWithWriter(io.Discard)
 	state := newResponsesStreamState(spinner, io.Discard)
 
 	state.showFunctionCallSpinner(&Item{

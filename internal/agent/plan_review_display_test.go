@@ -69,7 +69,7 @@ func TestBuildPlanReviewDisplay_IncludesPlanVerificationSummary(t *testing.T) {
 			{
 				ID:           2,
 				Description:  "Update UI",
-				Verification: []string{"go test ./internal/agent", "go test ./internal/ui"},
+				Verification: []string{"go test ./internal/agent", "go test ./internal/uiplanview"},
 			},
 		},
 	})
@@ -87,7 +87,7 @@ func TestBuildPlanReviewDisplay_IncludesPlanVerificationSummary(t *testing.T) {
 	for _, want := range []string{
 		"go test ./internal/agent",
 		"make ci-check",
-		"go test ./internal/ui",
+		"go test ./internal/uiplanview",
 	} {
 		if !strings.Contains(summarySection, want) {
 			t.Fatalf("verification summary = %q, want %q", summarySection, want)

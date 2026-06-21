@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func (e *hostReadOnlyExecutor) validateRequest(req ReviewProbeRequest, commandEnv []string, runtimeRoot string) (hostReadOnlyRequest, error) {
 	req = normalizeProbeRequestExecutionLimits(req)
 
-	if req.Mode != ReviewProbeHostReadOnly {
+	if req.Mode != domain.ReviewProbeHostReadOnly {
 		return hostReadOnlyRequest{}, fmt.Errorf("host_readonly runner received mode %q", req.Mode)
 	}
 	if len(req.Files) > 0 {
@@ -51,7 +53,7 @@ func (e *hostReadOnlyExecutor) buildHostReadOnlyCommandPlan(commandEnv []string,
 	if _, err := planHostReadOnlyCommand(e.repoRoot, workDir, commandName, cmd.Args); err != nil {
 		return hostReadOnlyCommand{}, err
 	}
-	commandPath, err := resolveCommandPath(commandName, commandResolutionContext{
+	commandPath, err := ResolveCommandPath(commandName, CommandResolutionContext{
 		RepoRoot:   e.repoRoot,
 		ScratchDir: runtimeRoot,
 		WorkDir:    workDir,

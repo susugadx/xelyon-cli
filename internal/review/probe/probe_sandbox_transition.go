@@ -1,17 +1,21 @@
 package probe
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+)
 
 func newIsolatedProbeResult(req ReviewProbeRequest) ReviewProbeResult {
 	return ReviewProbeResult{
 		ID:     req.ID,
 		Mode:   req.Mode,
-		Status: ReviewProbePassed,
+		Status: domain.ReviewProbePassed,
 	}
 }
 
 func blockIsolatedProbeResult(result *ReviewProbeResult, message string) {
-	result.Status = ReviewProbeBlocked
+	result.Status = domain.ReviewProbeBlocked
 	result.Error = message
 }
 
@@ -20,7 +24,7 @@ func appendIsolatedCleanupError(result *ReviewProbeResult, cleanupTargetName, cl
 }
 
 func applyIsolatedProbeSnapshotError(result *ReviewProbeResult, phase string, err error) {
-	result.Status = ReviewProbeBlocked
+	result.Status = domain.ReviewProbeBlocked
 	result.Error = appendError(result.Error, fmt.Sprintf("failed to capture worktree snapshot %s probe: %v", phase, err))
 }
 
@@ -44,6 +48,6 @@ func applyIsolatedProbeMutationTransition(result *ReviewProbeResult, mutatedFile
 
 	result.MutatedWorktree = true
 	result.MutatedFiles = mutatedFiles
-	result.Status = ReviewProbeMutatedWorktree
+	result.Status = domain.ReviewProbeMutatedWorktree
 	result.Error = appendError(result.Error, "probe command changed the working tree")
 }

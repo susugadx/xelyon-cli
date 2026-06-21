@@ -9,7 +9,8 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	claudestream "github.com/susugadx/xelyon-cli/internal/api/providers/claude_stream"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 // Claude 互換ストリーム型は claude_stream owner に集約し、この package からは alias を公開する。
@@ -75,7 +76,7 @@ type Response struct {
 
 // requestResult はexecuteRequestの結果を格納
 
-func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	toolUses := claudestream.NewToolUseCollector()
 	var toolCallsOutput strings.Builder
 
@@ -108,7 +109,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 			return claudestream.HandleContentBlockDelta(event, toolUses, compaction, func(toolName string) {
 				// スピナーを再表示（引数生成中）
 				if !spinner.IsActive() {
-					spinner.Start(ui.SpinnerMessageForTool(toolName))
+					spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 				}
 			}), false, nil
 
@@ -161,7 +162,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 }
 
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
-func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	var result Response
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		spinner.Stop()

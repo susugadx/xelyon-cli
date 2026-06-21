@@ -12,7 +12,8 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 var registerTUIOnExit = lifecycle.OnExit
@@ -52,7 +53,7 @@ func newTUIPromptBridge(send func(tea.Msg)) *tuiPromptBridge {
 	}
 }
 
-func (b *tuiPromptBridge) Prompt(ctx context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+func (b *tuiPromptBridge) Prompt(ctx context.Context, req uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	if b == nil || b.send == nil {
 		return cancelPromptResponse(req), nil
 	}
@@ -70,7 +71,7 @@ func (b *tuiPromptBridge) Prompt(ctx context.Context, req ui.PromptRequest) (ui.
 	}
 
 	id := b.nextID.Add(1)
-	respCh := make(chan ui.PromptResponse, 1)
+	respCh := make(chan uiprompt.PromptResponse, 1)
 	b.send(tui.OpenPromptMsg{
 		ID:      id,
 		Request: req,
@@ -97,11 +98,11 @@ func (b *tuiPromptBridge) close() {
 	})
 }
 
-func cancelPromptResponse(req ui.PromptRequest) ui.PromptResponse {
-	if req.Kind == ui.PromptKindConfirm {
-		return ui.PromptResponse{Action: ui.PromptActionNo, Cancelled: true}
+func cancelPromptResponse(req uiprompt.PromptRequest) uiprompt.PromptResponse {
+	if req.Kind == uiprompt.PromptKindConfirm {
+		return uiprompt.PromptResponse{Action: uiprompt.PromptActionNo, Cancelled: true}
 	}
-	return ui.PromptResponse{Cancelled: true}
+	return uiprompt.PromptResponse{Cancelled: true}
 }
 
 func newTUIProgramBridge(
@@ -127,14 +128,14 @@ func newTUIProgramBridge(
 }
 
 func buildTUIToolResult(info tools.ToolResultInfo) tui.ToolResult {
-	displayInfo := ui.ToolDisplayInfo{
+	displayInfo := uitoolview.ToolDisplayInfo{
 		ToolName: info.ToolName,
 		Args:     info.Args,
 		Result:   info.Result,
 		Error:    info.Error,
 	}
 	status := tuiToolStatus(info)
-	target := ui.ToolTarget(displayInfo)
+	target := uitoolview.ToolTarget(displayInfo)
 	summary := formatTUIToolSummary(status, info.ToolName, target, info.Duration)
 	return tui.ToolResult{
 		Name:      info.ToolName,
@@ -172,7 +173,7 @@ func formatTUIToolSummary(status tui.ToolStatus, toolName, target string, durati
 		parts = append(parts, target)
 	}
 	if status != tui.ToolStatusRunning && duration > 0 {
-		parts = append(parts, ui.FormatParallelElapsed(duration))
+		parts = append(parts, uitoolview.FormatParallelElapsed(duration))
 	}
 	return strings.Join(parts, " ")
 }

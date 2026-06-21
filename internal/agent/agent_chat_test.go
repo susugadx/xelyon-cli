@@ -11,7 +11,7 @@ import (
 	_ "github.com/susugadx/xelyon-cli/internal/api/providers/deepseek"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestAgent_Cleanup_NoStorage(t *testing.T) {
@@ -92,7 +92,7 @@ func TestChatCore_SetsAbortedStatusWithActualError(t *testing.T) {
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(newProjectMapDisabledConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	agent := NewAgentWithRuntime("test-model", &mockErrorProvider{}, false, runtime)
 
 	if err := agent.chatCore("please fail", nil, false); err != nil {
@@ -122,7 +122,7 @@ func TestChatCore_SetsAbortedStatusWithCancelReason(t *testing.T) {
 	agent.Runtime = &AgentRuntime{
 		Config:   cfg,
 		Registry: tools.DefaultRegistry.Clone(),
-		UI:       ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI:       uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	done := make(chan struct{})
@@ -178,7 +178,7 @@ func TestPrintTaskUsage(t *testing.T) {
 
 	var out bytes.Buffer
 	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	agent.printTaskUsage(startStats)
@@ -220,7 +220,7 @@ func TestPrintTaskUsage_LocalProviderShowsExternalCost(t *testing.T) {
 
 	var out bytes.Buffer
 	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	agent.printTaskUsage(startStats)
@@ -248,7 +248,7 @@ func TestPrintTaskUsage_LocalProviderHidesZeroCost(t *testing.T) {
 
 	var out bytes.Buffer
 	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	agent.printTaskUsage(startStats)
@@ -281,7 +281,7 @@ func TestPrintTaskUsage_DoesNotLeakPriorUnknownCostToLastTurn(t *testing.T) {
 
 	var out bytes.Buffer
 	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	agent.printTaskUsage(startStats)
@@ -315,7 +315,7 @@ func TestPrintTaskUsage_MarksCurrentUnknownCostEvenAfterPriorUnknown(t *testing.
 
 	var out bytes.Buffer
 	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	agent.printTaskUsage(startStats)

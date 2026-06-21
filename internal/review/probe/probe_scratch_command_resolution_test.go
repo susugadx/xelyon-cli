@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestScratchOnlyExecutor_ResolvesCommandFromSafePath(t *testing.T) {
@@ -19,7 +21,7 @@ func TestScratchOnlyExecutor_ResolvesCommandFromSafePath(t *testing.T) {
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:   "scratch-resolve-safe",
-		Mode: ReviewProbeScratchOnly,
+		Mode: domain.ReviewProbeScratchOnly,
 		Files: []ReviewProbeFile{
 			{Path: "check.txt", Content: "ok\n"},
 		},
@@ -50,7 +52,7 @@ func TestScratchOnlyExecutor_BlocksCommandResolvedInsideScratchDir(t *testing.T)
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:   "scratch-resolve-blocked-scratch-bin",
-		Mode: ReviewProbeScratchOnly,
+		Mode: domain.ReviewProbeScratchOnly,
 		Files: []ReviewProbeFile{
 			{Path: "check.txt", Content: "ok\n"},
 		},
@@ -77,7 +79,7 @@ func TestScratchOnlyExecutor_BlocksCommandResolvedInsideRepoRoot(t *testing.T) {
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:   "scratch-resolve-blocked-repo-bin",
-		Mode: ReviewProbeScratchOnly,
+		Mode: domain.ReviewProbeScratchOnly,
 		Files: []ReviewProbeFile{
 			{Path: "check.txt", Content: "ok\n"},
 		},

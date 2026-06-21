@@ -12,8 +12,9 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/cost"
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // InteractiveStatusSnapshot は interactive surface が表示する現在状態を表す。
@@ -43,9 +44,9 @@ func (a *Agent) Output() io.Writer {
 }
 
 // RuntimeUI は Agent が保持する UI runtime を返す。
-func (a *Agent) RuntimeUI() *ui.Runtime {
+func (a *Agent) RuntimeUI() *uiruntime.Runtime {
 	if a == nil {
-		return ui.DefaultRuntime()
+		return uiruntime.DefaultRuntime()
 	}
 	return a.ui()
 }
@@ -153,7 +154,7 @@ func (a *Agent) InteractiveStatusSnapshot() InteractiveStatusSnapshot {
 }
 
 // RunReviewWithProgress は review runner を progress sink 付きで実行し、usage summary を返す。
-func (a *Agent) RunReviewWithProgress(ctx context.Context, req review.ReviewRequest, sink review.ReviewProgressSink) (review.ReviewReport, ReviewRunUsageSummary, error) {
+func (a *Agent) RunReviewWithProgress(ctx context.Context, req review.ReviewRequest, sink review.ReviewProgressSink) (reviewreport.ReviewReport, ReviewRunUsageSummary, error) {
 	startStats := a.reviewStatsSnapshot()
 	report, err := a.runReview(ctx, req, reviewRunOptions{
 		ProgressSink: sink,

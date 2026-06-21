@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 func TestComposer_PasteExistingImagePathAttachesImage(t *testing.T) {
@@ -24,10 +25,10 @@ func TestComposer_PasteExistingImagePathAttachesImage(t *testing.T) {
 	if got := len(m.attachments); got != 1 {
 		t.Fatalf("attachments length = %d, want 1", got)
 	}
-	if m.attachments[0].Kind != composerAttachmentImage {
+	if m.attachments[0].Kind != tuiattachments.KindImage {
 		t.Fatalf("attachments[0].Kind = %v, want image", m.attachments[0].Kind)
 	}
-	if m.attachments[0].Source != composerAttachmentSourceDroppedPath {
+	if m.attachments[0].Source != tuiattachments.SourceDroppedPath {
 		t.Fatalf("attachments[0].Source = %v, want dropped path source", m.attachments[0].Source)
 	}
 	if got := m.attachments[0].Path; got != imagePath {
@@ -82,10 +83,10 @@ func TestComposer_CtrlVPasteFallsBackToClipboardImage(t *testing.T) {
 	if got := len(m.attachments); got != 1 {
 		t.Fatalf("attachments length = %d, want 1", got)
 	}
-	if got := m.attachments[0].Kind; got != composerAttachmentImage {
+	if got := m.attachments[0].Kind; got != tuiattachments.KindImage {
 		t.Fatalf("attachments[0].Kind = %v, want image", got)
 	}
-	if got := m.attachments[0].Source; got != composerAttachmentSourceClipboardImage {
+	if got := m.attachments[0].Source; got != tuiattachments.SourceClipboardImage {
 		t.Fatalf("attachments[0].Source = %v, want clipboard image source", got)
 	}
 }
@@ -95,19 +96,19 @@ func TestComposer_PasteExistingPathWhenAttachmentLimitReachedDoesNotFallbackToTe
 	m := newModelWithViewport(agent)
 	dir := t.TempDir()
 
-	fillDroppedFileAttachments(t, &m, dir, maxComposerAttachments)
+	fillDroppedFileAttachments(t, &m, dir, tuiattachments.MaxComposerAttachments)
 
 	extra := writeTempFile(t, dir, "overflow.txt", []byte("overflow"))
 	updated, _ := m.Update(pasteKey(extra))
 	m = updated.(Model)
 
-	if got := len(m.attachments); got != maxComposerAttachments {
-		t.Fatalf("attachments length = %d, want %d", got, maxComposerAttachments)
+	if got := len(m.attachments); got != tuiattachments.MaxComposerAttachments {
+		t.Fatalf("attachments length = %d, want %d", got, tuiattachments.MaxComposerAttachments)
 	}
 	if got := m.textInput.Value(); got != "" {
 		t.Fatalf("textInput.Value() = %q, want empty", got)
 	}
-	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", maxComposerAttachments)
+	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", tuiattachments.MaxComposerAttachments)
 	assertTransientStatus(t, m, wantStatus)
 }
 
@@ -117,7 +118,7 @@ func TestComposer_CtrlVPasteClipboardImageWhenAttachmentLimitReachedCleansTemp(t
 	stubClipboardRead(t, "", nil)
 	dir := t.TempDir()
 
-	fillDroppedFileAttachments(t, &m, dir, maxComposerAttachments)
+	fillDroppedFileAttachments(t, &m, dir, tuiattachments.MaxComposerAttachments)
 
 	clipDir, err := os.MkdirTemp(dir, "clip-")
 	if err != nil {
@@ -139,10 +140,10 @@ func TestComposer_CtrlVPasteClipboardImageWhenAttachmentLimitReachedCleansTemp(t
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
 	m = updated.(Model)
 
-	if got := len(m.attachments); got != maxComposerAttachments {
-		t.Fatalf("attachments length = %d, want %d", got, maxComposerAttachments)
+	if got := len(m.attachments); got != tuiattachments.MaxComposerAttachments {
+		t.Fatalf("attachments length = %d, want %d", got, tuiattachments.MaxComposerAttachments)
 	}
-	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", maxComposerAttachments)
+	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", tuiattachments.MaxComposerAttachments)
 	assertTransientStatus(t, m, wantStatus)
 	if _, err := os.Stat(clipDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("os.Stat(%q) error = %v, want os.ErrNotExist", clipDir, err)
@@ -154,8 +155,8 @@ func TestComposer_PasteTooManyPathsShowsLimitWithoutTextFallback(t *testing.T) {
 	m := newModelWithViewport(agent)
 	dir := t.TempDir()
 
-	paths := make([]string, 0, maxComposerAttachments+1)
-	for i := 0; i < maxComposerAttachments+1; i++ {
+	paths := make([]string, 0, tuiattachments.MaxComposerAttachments+1)
+	for i := 0; i < tuiattachments.MaxComposerAttachments+1; i++ {
 		path := writeTempFile(t, dir, fmt.Sprintf("f%02d.txt", i), []byte("a"))
 		paths = append(paths, path)
 	}
@@ -169,7 +170,7 @@ func TestComposer_PasteTooManyPathsShowsLimitWithoutTextFallback(t *testing.T) {
 	if got := m.textInput.Value(); got != "" {
 		t.Fatalf("textInput.Value() = %q, want empty", got)
 	}
-	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", maxComposerAttachments)
+	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", tuiattachments.MaxComposerAttachments)
 	assertTransientStatus(t, m, wantStatus)
 }
 
@@ -179,8 +180,8 @@ func TestComposer_PasteTooManyDuplicatePathsShowsLimitWithoutTextFallback(t *tes
 	dir := t.TempDir()
 
 	path := writeTempFile(t, dir, "same.txt", []byte("a"))
-	lines := make([]string, 0, maxComposerAttachments+1)
-	for i := 0; i < maxComposerAttachments+1; i++ {
+	lines := make([]string, 0, tuiattachments.MaxComposerAttachments+1)
+	for i := 0; i < tuiattachments.MaxComposerAttachments+1; i++ {
 		lines = append(lines, path)
 	}
 
@@ -193,7 +194,7 @@ func TestComposer_PasteTooManyDuplicatePathsShowsLimitWithoutTextFallback(t *tes
 	if got := m.textInput.Value(); got != "" {
 		t.Fatalf("textInput.Value() = %q, want empty", got)
 	}
-	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", maxComposerAttachments)
+	wantStatus := fmt.Sprintf("Attachment limit reached (%d max)", tuiattachments.MaxComposerAttachments)
 	assertTransientStatus(t, m, wantStatus)
 }
 

@@ -67,7 +67,7 @@ commit / push / PR 作成はユーザーの明示指示があるまで行わな�
 - `internal/agent/plan` now owns approved-plan implementation handoff projection through `plan.ImplementationHandoff`.
 - `internal/agent` now keeps Plan Mode orchestration, approval, session/state restoration, tool visibility, and normal-mode execution, but no longer owns approved-plan handoff string construction.
 - `internal/agent/plan/handoff_test.go` owns pure handoff formatting, clone, file grouping, and verification-hint tests; broader `internal/agent` Plan Mode flow tests continue to cover caller/session behavior.
-- Plan review display still belongs to `internal/agent` because it depends on `internal/ui`, but verification normalization now delegates to `plan.CompactVerificationHints` instead of duplicating trim/dedupe policy.
+- Plan review display now belongs to `internal/uiplanview`; verification normalization still delegates to `plan.CompactVerificationHints` instead of duplicating trim/dedupe policy.
 - `internal/providerhistory` remains the source of truth for applied evidence pointers, projection report cloning, and response-id-chain disable decisions.
 - `internal/agent` now calls `providerhistory.AppliedEvidencePointers`, `providerhistory.CloneProjectionReport`, and `providerhistory.ProjectionDisablesResponseIDChain` directly from adapter/status paths instead of keeping package-local pass-through wrappers.
 - Agent-side tests no longer duplicate providerhistory pure policy tests for applied evidence pointer filtering or projection report clone internals; those stay in `internal/providerhistory`, while agent tests keep rehydrate-plan and request/status caller coverage.
@@ -164,7 +164,7 @@ Pure formatting belongs in `viewfmt`; table construction remains in `agent` unle
 ### Implemented boundary
 
 - `command_surface_dispatch.go` owns `handleSpecialCommand`, surface filtering, unsupported-surface warnings, catalog/runtime parsing facade, and `splitCommand` compatibility.
-- `command_confirmation.go` owns slash-command confirmation through `ui.Runtime` and command-confirm bypass behavior.
+- `command_confirmation.go` owns slash-command confirmation through `uiruntime.Runtime` and command-confirm bypass behavior.
 - `command_history.go` owns `/history` rendering and `/exit` process termination.
 - `command_render_header.go` owns shared command header rendering.
 - `command_surface_runtime_test.go` owns command runtime splitting compatibility; `viewfmt_facade_test.go` owns the agent-local `formatNumber` compatibility facade.

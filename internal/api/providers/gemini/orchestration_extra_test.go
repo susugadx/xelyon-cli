@@ -14,7 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newGeminiOrchestrationContext(idleSeconds, thinkingSeconds int) (context.Context, *bytes.Buffer, *bytes.Buffer) {
@@ -24,7 +24,7 @@ func newGeminiOrchestrationContext(idleSeconds, thinkingSeconds int) (context.Co
 
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(nil, out, errOut))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(nil, out, errOut))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	return config.WithContext(ctx, cfg), out, errOut
 }

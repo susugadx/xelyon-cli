@@ -6,12 +6,12 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func azureTestContext(cfg *config.Config) context.Context {
 	var out strings.Builder
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), &out, &out))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), &out, &out))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	return config.WithContext(ctx, cfg)
 }

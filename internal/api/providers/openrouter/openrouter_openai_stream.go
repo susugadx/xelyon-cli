@@ -9,12 +9,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/openai"
 	openaicompatstream "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat_stream"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 // handleStreamingResponse は OpenRouter の OpenAI 互換 SSE 処理を担う。
 // request 構築やモデル分岐は openrouter.go 側が owner。
-func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	streamResult, err := openaicompatstream.ParseSSEStream(ctx, resp, spinner, openaicompatstream.ParseSSEOptions{
 		OnChunkDecodeError: func(error) error {
 			// 既存挙動を維持: 破損チャンクは無視して継続
@@ -25,7 +26,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 		},
 		OnToolCallArguments: func(toolName string) {
 			if !spinner.IsActive() {
-				spinner.Start(ui.SpinnerMessageForTool(toolName))
+				spinner.Start(uitoolview.SpinnerMessageForTool(toolName))
 			}
 		},
 	})
@@ -45,7 +46,7 @@ func (p *Provider) handleStreamingResponse(ctx context.Context, resp *http.Respo
 }
 
 // handleNonStreamingResponse は OpenRouter の OpenAI 互換非ストリーミング処理を担う。
-func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	var apiResp struct {
 		Choices []api.Choice        `json:"choices"`
 		Usage   api.StreamUsageInfo `json:"usage"`

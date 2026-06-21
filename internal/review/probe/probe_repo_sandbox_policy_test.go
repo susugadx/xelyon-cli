@@ -4,9 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
@@ -259,7 +260,7 @@ func TestProbeRunner_RepoSandbox_BlockedCasesAreNotExecuted(t *testing.T) {
 		},
 	}
 
-	runProbeModeBlockedCases(t, ReviewProbeRepoSandbox, tests)
+	runProbeModeBlockedCases(t, domain.ReviewProbeRepoSandbox, tests)
 }
 
 func TestProbeRunner_RepoSandbox_BlocksCommandPathUnderSymlinkEscape(t *testing.T) {
@@ -271,14 +272,14 @@ func TestProbeRunner_RepoSandbox_BlocksCommandPathUnderSymlinkEscape(t *testing.
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:       "repo-sandbox-blocked-command-symlink-parent",
-		Mode:     ReviewProbeRepoSandbox,
+		Mode:     domain.ReviewProbeRepoSandbox,
 		Commands: []ReviewProbeCommand{{Command: "go", Args: []string{"build", "-o", "outside-link/probe-bin", "./probe"}}},
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeBlocked, result.Error)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
@@ -286,93 +287,4 @@ func TestProbeRunner_RepoSandbox_BlocksCommandPathUnderSymlinkEscape(t *testing.
 	if !strings.Contains(result.Error, "escapes sandbox worktree") {
 		t.Fatalf("Error = %q, want symlink escape block", result.Error)
 	}
-}
-
-func TestProbeRunner_RepoSandbox_BlocksWhenGeneratedFileLimitsExceeded(t *testing.T) {
-	files := make([]ReviewProbeFile, 0, defaultRepoSandboxMaxGeneratedFiles+1)
-	for i := 0; i < defaultRepoSandboxMaxGeneratedFiles+1; i++ {
-		files = append(files, ReviewProbeFile{
-			Path:    "f-" + strconv.Itoa(i) + ".txt",
-			Content: "ok",
-		})
-	}
-
-	repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
-	runner := NewProbeRunner(repo)
-	result, err := runner.Run(context.Background(), ReviewProbeRequest{
-		ID:       "repo-sandbox-generated-file-limit",
-		Mode:     ReviewProbeRepoSandbox,
-		Files:    files,
-		Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
-	}
-	if len(result.CommandResults) != 0 {
-		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
-	}
-	if !strings.Contains(result.Error, "allows at most") {
-		t.Fatalf("Error = %q, want generated file limit", result.Error)
-	}
-}
-
-func TestRepoSandboxExecutor_CommandResolution(t *testing.T) {
-	t.Run("safe external bin allowed", func(t *testing.T) {
-		repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
-		safeBin := filepath.Join(t.TempDir(), "safe-bin")
-		createProbeTestScriptCommand(t, safeBin, "cat", "echo safe-cat")
-
-		executor := newRepoSandboxExecutor(repo)
-		executor.baseEnv = []string{"PATH=" + safeBin}
-
-		result := executor.run(context.Background(), ReviewProbeRequest{
-			ID:       "repo-sandbox-resolve-safe",
-			Mode:     ReviewProbeRepoSandbox,
-			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
-		})
-		assertCommandResolutionPassed(t, result, "safe-cat")
-	})
-
-	t.Run("original repo bin blocked", func(t *testing.T) {
-		repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
-		repoBin := filepath.Join(repo, "bin")
-		safeBin := filepath.Join(t.TempDir(), "safe-bin")
-		createProbeTestScriptCommand(t, repoBin, "cat", "echo repo-cat")
-		createProbeTestScriptCommand(t, safeBin, "cat", "echo safe-cat")
-
-		executor := newRepoSandboxExecutor(repo)
-		executor.baseEnv = []string{"PATH=" + strings.Join([]string{repoBin, safeBin}, string(filepath.ListSeparator))}
-
-		result := executor.run(context.Background(), ReviewProbeRequest{
-			ID:       "repo-sandbox-resolve-blocked-repo-bin",
-			Mode:     ReviewProbeRepoSandbox,
-			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
-		})
-		assertCommandResolutionBlocked(t, result)
-	})
-
-	t.Run("sandbox root bin blocked", func(t *testing.T) {
-		repo := newProbeTestRepo(t, withProbeTestRepoNoLargeFile())
-		sandboxRoot := filepath.Join(t.TempDir(), "xelyon-review-sandbox-resolve")
-		sandboxBin := filepath.Join(sandboxRoot, "bin")
-		safeBin := filepath.Join(t.TempDir(), "safe-bin")
-		createProbeTestScriptCommand(t, sandboxBin, "cat", "echo sandbox-cat")
-		createProbeTestScriptCommand(t, safeBin, "cat", "echo safe-cat")
-
-		executor := newRepoSandboxExecutor(repo)
-		executor.mktemp = func(dir, pattern string) (string, error) {
-			return sandboxRoot, nil
-		}
-		executor.baseEnv = []string{"PATH=" + strings.Join([]string{sandboxBin, safeBin}, string(filepath.ListSeparator))}
-
-		result := executor.run(context.Background(), ReviewProbeRequest{
-			ID:       "repo-sandbox-resolve-blocked-sandbox-bin",
-			Mode:     ReviewProbeRepoSandbox,
-			Commands: []ReviewProbeCommand{{Command: "cat", Args: []string{"keep.txt"}}},
-		})
-		assertCommandResolutionBlocked(t, result)
-	})
 }

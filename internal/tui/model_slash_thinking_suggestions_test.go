@@ -12,7 +12,7 @@ func TestSlashSuggestions_ShowThinkingArgumentSuggestions(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/thinking ")
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("thinking argument suggestions should be visible")
 	}
 	rendered := stripANSI(m.chromeCache)
@@ -40,7 +40,7 @@ func TestSlashSuggestions_EnterOnThinkingCommandOpensArgumentSuggestions(t *test
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(Model)
-	if suggestion, ok := m.slashSuggestions.selectedSuggestion(); !ok || suggestion.InsertText != "/thinking" {
+	if suggestion, ok := m.slashSuggestions.SelectedSuggestion(); !ok || suggestion.InsertText != "/thinking" {
 		t.Fatalf("selected suggestion = %#v, %v, want /thinking", suggestion, ok)
 	}
 
@@ -53,10 +53,10 @@ func TestSlashSuggestions_EnterOnThinkingCommandOpensArgumentSuggestions(t *test
 	if got := m.textInput.Value(); got != "/thinking " {
 		t.Fatalf("textInput after Enter = %q, want '/thinking '", got)
 	}
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("thinking argument suggestions should be visible after Enter on /thinking")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 6 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 6 {
 		t.Fatalf("thinking argument suggestions len = %d, want 6", got)
 	}
 	if got := len(agent.handledInputs); got != 0 {
@@ -78,7 +78,7 @@ func TestSlashSuggestions_TabCompletesThinkingArgument(t *testing.T) {
 	if got := m.textInput.Value(); got != "/thinking xhigh" {
 		t.Fatalf("textInput after Tab = %q, want /thinking xhigh", got)
 	}
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close after argument completion")
 	}
 }
@@ -124,7 +124,7 @@ func TestSlashSuggestions_EnterExecutesDefaultThinkingArgument(t *testing.T) {
 			m := newModelWithViewport(agent)
 			m = sendComposerRunes(m, tt.input)
 
-			if !m.slashSuggestions.visible() {
+			if !m.slashSuggestions.Visible() {
 				t.Fatal("thinking argument suggestions should be visible before Enter")
 			}
 
@@ -141,7 +141,7 @@ func TestSlashSuggestions_EnterExecutesDefaultThinkingArgument(t *testing.T) {
 			if m.textInput.Value() != "" {
 				t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
 			}
-			if m.slashSuggestions.visible() {
+			if m.slashSuggestions.Visible() {
 				t.Fatal("slash suggestions should close after thinking argument execution")
 			}
 		})
@@ -160,7 +160,7 @@ func TestSlashSuggestions_EnterOnExpandedThinkingArgumentExecutesDefault(t *test
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(Model)
-	if suggestion, ok := m.slashSuggestions.selectedSuggestion(); !ok || suggestion.InsertText != "/thinking" {
+	if suggestion, ok := m.slashSuggestions.SelectedSuggestion(); !ok || suggestion.InsertText != "/thinking" {
 		t.Fatalf("selected suggestion = %#v, %v, want /thinking", suggestion, ok)
 	}
 
@@ -173,7 +173,7 @@ func TestSlashSuggestions_EnterOnExpandedThinkingArgumentExecutesDefault(t *test
 	if got := m.textInput.Value(); got != "/thinking " {
 		t.Fatalf("textInput after expanding /thinking = %q, want '/thinking '", got)
 	}
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("thinking argument suggestions should be visible after expanding /thinking")
 	}
 
@@ -190,7 +190,7 @@ func TestSlashSuggestions_EnterOnExpandedThinkingArgumentExecutesDefault(t *test
 	if m.textInput.Value() != "" {
 		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
 	}
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close after thinking argument execution")
 	}
 }
@@ -209,7 +209,7 @@ func TestSlashSuggestions_DownEnterExecutesThinkingArgument(t *testing.T) {
 	if got := len(agent.handledInputs); got != 0 {
 		t.Fatalf("handledInputs after Down = %d, want 0", got)
 	}
-	if !m.slashSuggestions.selectionActive {
+	if !m.slashSuggestions.Snapshot().SelectionActive {
 		t.Fatal("Down should activate thinking argument selection")
 	}
 
@@ -245,10 +245,10 @@ func TestSlashSuggestions_EnterOnTypedThinkingOpensArgumentSuggestions(t *testin
 	if got := m.textInput.Value(); got != "/thinking " {
 		t.Fatalf("textInput after Enter = %q, want '/thinking '", got)
 	}
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("thinking argument suggestions should be visible after Enter on typed /thinking")
 	}
-	suggestion, ok := m.slashSuggestions.selectedSuggestion()
+	suggestion, ok := m.slashSuggestions.SelectedSuggestion()
 	if !ok || suggestion.InsertText != "/thinking on" {
 		t.Fatalf("selected suggestion = %#v, %v, want /thinking on", suggestion, ok)
 	}
@@ -259,7 +259,7 @@ func TestSlashSuggestions_ThinkingAliasArgumentsAreRemoved(t *testing.T) {
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/think ")
 
-	if m.slashSuggestions.visible() {
-		t.Fatalf("removed /think alias should not show argument suggestions: %#v", m.slashSuggestions.suggestions)
+	if m.slashSuggestions.Visible() {
+		t.Fatalf("removed /think alias should not show argument suggestions: %#v", m.slashSuggestions.Snapshot().Suggestions)
 	}
 }

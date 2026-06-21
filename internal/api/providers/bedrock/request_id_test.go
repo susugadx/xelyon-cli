@@ -13,7 +13,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestInvokeClaudeMessagesStream_CapturesRequestIDAndClearsBeforeNextRequest(t *testing.T) {
@@ -94,7 +94,7 @@ func newBedrockInvokeRequestIDOutput(requestID string) *bedrockruntime.InvokeMod
 
 func bedrockRequestIDTestContext(cfg *config.Config) context.Context {
 	ctx := config.WithContext(context.Background(), cfg)
-	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
+	ctx = uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	return ctx
 }

@@ -14,7 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // ProviderFactory はプロバイダーを生成するファクトリ関数
@@ -168,7 +168,7 @@ type RuntimeConfigurable interface {
 // UIRuntimeConfigurable は provider に UI runtime を注入できるオプショナルインターフェース。
 type UIRuntimeConfigurable interface {
 	// SetUIRuntime は provider が補助出力に使う UI runtime を差し替える。
-	SetUIRuntime(runtime *ui.Runtime)
+	SetUIRuntime(runtime *uiruntime.Runtime)
 }
 
 // UsageReporter はトークン使用量レポートに対応するプロバイダーのオプショナルインターフェース
@@ -277,7 +277,7 @@ func ApplyRuntimeConfig(provider Provider, cfg *config.Config) {
 }
 
 // ApplyUIRuntime は provider が UIRuntimeConfigurable の場合に UI runtime を注入する。
-func ApplyUIRuntime(provider Provider, runtime *ui.Runtime) {
+func ApplyUIRuntime(provider Provider, runtime *uiruntime.Runtime) {
 	if provider == nil || runtime == nil {
 		return
 	}

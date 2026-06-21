@@ -11,12 +11,12 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type requestResult struct {
 	Response *http.Response
-	Spinner  *ui.Spinner
+	Spinner  *uiruntime.Spinner
 }
 
 // executeRequest はClaude API呼び出しの共通処理

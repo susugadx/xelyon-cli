@@ -42,6 +42,9 @@ func finalizeProjectionReport(report *ProjectionReport, original, projected []ap
 	report.RawOutputRefs = appendProviderHistoryRawOutputRefs(report.RawOutputRefs, report.CommandEditDryRun.RawOutputRefs)
 	report.RawOutputRefCount = len(report.RawOutputRefs)
 	report.RawOutputArtifactCount = countProviderHistoryRawOutputArtifacts(report.RawOutputRefs)
+	report.RawOutputContextRefs = dedupeProviderHistoryRawOutputRefs(report.RawOutputContextRefs)
+	report.RawOutputContextRefCount = len(report.RawOutputContextRefs)
+	report.RawOutputContextMissingRefIDs = dedupeProviderHistoryStrings(report.RawOutputContextMissingRefIDs)
 	genericArtifactCandidates, genericEstimatedBytes, genericEstimatedTokens, genericActualBytes, genericActualTokens := providerHistoryGenericRawOutputArtifactMetrics(report.Candidates)
 	report.DataBearingCandidateCount += report.CommandEditDryRun.ArtifactBackedCommandCandidates + genericArtifactCandidates
 	report.ArtifactBackedEstimatedSavedBytes = report.CommandEditDryRun.ArtifactBackedCommandDryRunEstimatedSavedBytes + genericEstimatedBytes
@@ -223,6 +226,44 @@ func appendProviderHistoryRawOutputRefs(first, second []rawoutputs.RawOutputRef)
 	out := cloneProviderHistoryRawOutputRefs(first)
 	if len(second) > 0 {
 		out = append(out, second...)
+	}
+	return out
+}
+
+func dedupeProviderHistoryRawOutputRefs(refs []rawoutputs.RawOutputRef) []rawoutputs.RawOutputRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(refs))
+	out := make([]rawoutputs.RawOutputRef, 0, len(refs))
+	for _, ref := range refs {
+		if ref.RefID == "" {
+			continue
+		}
+		if _, ok := seen[ref.RefID]; ok {
+			continue
+		}
+		seen[ref.RefID] = struct{}{}
+		out = append(out, ref)
+	}
+	return out
+}
+
+func dedupeProviderHistoryStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
 	}
 	return out
 }

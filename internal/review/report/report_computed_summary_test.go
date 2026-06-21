@@ -3,14 +3,16 @@ package report
 import (
 	"reflect"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestComputeReviewReportComputedSummaryCanonicalizesMutatedProbe(t *testing.T) {
 	got := ComputeReviewReportComputedSummary(ReviewReport{}, []ReviewProbeSummary{
 		{
 			ProbeID:         "probe-1",
-			Mode:            ReviewProbeHostReadOnly,
-			Status:          ReviewProbeFailed,
+			Mode:            domain.ReviewProbeHostReadOnly,
+			Status:          domain.ReviewProbeFailed,
 			MutatedWorktree: true,
 		},
 	})

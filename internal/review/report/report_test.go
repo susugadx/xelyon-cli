@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestReviewReportJSONRoundTrip(t *testing.T) {
@@ -15,7 +17,7 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 	)
 	original := ReviewReport{
 		SchemaVersion:             ReviewReportSchemaVersionV2,
-		TargetKind:                TargetCurrentChanges,
+		TargetKind:                domain.TargetCurrentChanges,
 		CustomInstructions:        "correctness を優先",
 		GeneratedAt:               generatedAt,
 		OverallVerificationStatus: ReviewVerificationPartiallyVerified,
@@ -111,8 +113,8 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 		ProbeSummaries: []ReviewProbeSummary{
 			{
 				ProbeID:         "probe-1",
-				Mode:            ReviewProbeScratchOnly,
-				Status:          ReviewProbeMutatedWorktree,
+				Mode:            domain.ReviewProbeScratchOnly,
+				Status:          domain.ReviewProbeMutatedWorktree,
 				MutatedWorktree: true,
 				MutatedFiles:    []string{"keep.txt"},
 				OutputTruncated: true,
@@ -122,7 +124,7 @@ func TestReviewReportJSONRoundTrip(t *testing.T) {
 						Command:         "sh",
 						Args:            []string{"-c", "echo hello"},
 						WorkDir:         "/tmp/review",
-						Status:          ReviewProbePassed,
+						Status:          domain.ReviewProbePassed,
 						ExitCode:        0,
 						OutputTruncated: true,
 						DurationMs:      120,
@@ -270,7 +272,7 @@ func TestReviewEvidenceRefJSONCommandIndexOmittedWhenNil(t *testing.T) {
 func TestReviewReportJSONOmitempty(t *testing.T) {
 	report := ReviewReport{
 		SchemaVersion:             ReviewReportSchemaVersionV2,
-		TargetKind:                TargetCurrentChanges,
+		TargetKind:                domain.TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationPartiallyVerified,
 		Verdict:                   ReviewVerdictHasFindings,

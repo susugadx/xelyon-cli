@@ -11,7 +11,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newKimiTestContext(t *testing.T, thinking bool) (context.Context, *bytes.Buffer, *bytes.Buffer) {
@@ -22,8 +22,8 @@ func newKimiTestContext(t *testing.T, thinking bool) (context.Context, *bytes.Bu
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader(""), &out, &errOut)
-	ctx := ui.WithRuntime(context.Background(), runtime)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &out, &errOut)
+	ctx := uiruntime.WithRuntime(context.Background(), runtime)
 	ctx = config.WithContext(ctx, cfg)
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	return ctx, &out, &errOut

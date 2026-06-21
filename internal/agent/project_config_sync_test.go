@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestSaveAndSyncProjectConfigStripsLegacyPromptBlockWhenProjectMapDisabled(t *testing.T) {
@@ -33,7 +33,7 @@ func TestSaveAndSyncProjectConfigStripsLegacyPromptBlockWhenProjectMapDisabled(t
 	}
 
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	oldBlock := prompt.BuildProjectConfigBlock([]string{"old rule"}, []string{"old context"})
 	agent := &Agent{
 		Runtime:      runtime,
@@ -95,7 +95,7 @@ func TestSaveAndSyncProjectConfigRefreshesProjectMapIgnorePatterns(t *testing.T)
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -266,7 +266,7 @@ func TestSaveAndSyncProjectConfigKeepsProviderHistoryModeWhenFinalChecksFallback
 func newProjectConfigSyncTestAgent(t *testing.T, cfg *config.Config) *Agent {
 	t.Helper()
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	return &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",

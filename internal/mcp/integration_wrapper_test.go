@@ -13,7 +13,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestMCPToolWrapper_ConvertArgsWithSchema(t *testing.T) {
@@ -263,7 +263,7 @@ func TestMCPToolWrapper_Run(t *testing.T) {
 }
 
 func newMCPExecutionContext(input string, stdout io.Writer) tools.ExecutionContext {
-	runtime := ui.NewRuntime(strings.NewReader(input), stdout, stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader(input), stdout, stdout)
 	return tools.ExecutionContext{
 		Context: context.Background(),
 		Stdin:   runtime.Input(),

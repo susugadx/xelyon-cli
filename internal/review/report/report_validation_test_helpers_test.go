@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 type reviewReportValidationCase struct {
@@ -38,7 +40,7 @@ func runReviewReportValidationCases(t *testing.T, tests []reviewReportValidation
 func newValidReviewReportForValidationTest() ReviewReport {
 	return ReviewReport{
 		SchemaVersion:             ReviewReportSchemaVersionV2,
-		TargetKind:                TargetCurrentChanges,
+		TargetKind:                domain.TargetCurrentChanges,
 		GeneratedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 		OverallVerificationStatus: ReviewVerificationBlockedOrInconclusive,
 		Verdict:                   ReviewVerdictBlocked,
@@ -47,10 +49,10 @@ func newValidReviewReportForValidationTest() ReviewReport {
 		ProbeSummaries: []ReviewProbeSummary{
 			{
 				ProbeID: "probe-1",
-				Mode:    ReviewProbeHostReadOnly,
-				Status:  ReviewProbePassed,
+				Mode:    domain.ReviewProbeHostReadOnly,
+				Status:  domain.ReviewProbePassed,
 				Commands: []ReviewProbeCommandSummary{
-					{Command: "rg", Status: ReviewProbePassed},
+					{Command: "rg", Status: domain.ReviewProbePassed},
 				},
 			},
 		},

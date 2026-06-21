@@ -10,7 +10,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func runKimiDiagnosticSmokeRequest(ctx context.Context, cfg *config.Config, provider *Provider, model string, request kimiDiagnosticSmokeRequest, output io.Writer) (DiagnosticSmokeRequestResult, error) {
@@ -124,7 +124,7 @@ func newKimiDiagnosticContext(ctx context.Context, cfg *config.Config, thinking 
 	}
 	requestCfg := config.CloneConfig(cfg)
 	requestCfg.Thinking.Enabled = thinking
-	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
+	requestCtx := uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), output, output))
 	requestCtx = config.WithContext(requestCtx, requestCfg)
 	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
 	return requestCtx

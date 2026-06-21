@@ -12,14 +12,15 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 type converseStreamState struct {
 	toolUses        map[int32]*converseToolUseState
 	toolCallsOutput strings.Builder
 	lastUsage       *api.Usage
-	spinner         *ui.Spinner
+	spinner         *uiruntime.Spinner
 }
 
 type converseToolUseState struct {
@@ -28,7 +29,7 @@ type converseToolUseState struct {
 	input strings.Builder
 }
 
-func newConverseStreamState(spinner *ui.Spinner) *converseStreamState {
+func newConverseStreamState(spinner *uiruntime.Spinner) *converseStreamState {
 	return &converseStreamState{
 		toolUses: make(map[int32]*converseToolUseState),
 		spinner:  spinner,
@@ -60,7 +61,7 @@ func (s *converseStreamState) appendToolInput(index int32, input string) {
 	}
 	toolUse.input.WriteString(input)
 	if s.spinner != nil && toolUse.name != "" && !s.spinner.IsActive() {
-		s.spinner.Start(ui.SpinnerMessageForTool(toolUse.name))
+		s.spinner.Start(uitoolview.SpinnerMessageForTool(toolUse.name))
 	}
 }
 
@@ -105,13 +106,13 @@ func int32Value(value *int32) int {
 	return int(*value)
 }
 
-func stopConverseSpinner(spinner *ui.Spinner) {
+func stopConverseSpinner(spinner *uiruntime.Spinner) {
 	if spinner != nil {
 		spinner.Stop()
 	}
 }
 
-func (p *Provider) handleConverseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, spinner *ui.Spinner) (string, error) {
+func (p *Provider) handleConverseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, spinner *uiruntime.Spinner) (string, error) {
 	if output == nil || output.GetStream() == nil {
 		stopConverseSpinner(spinner)
 		return "", fmt.Errorf("bedrock converse stream is unavailable")

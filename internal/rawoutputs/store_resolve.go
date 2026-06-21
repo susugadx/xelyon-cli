@@ -45,17 +45,83 @@ func (s *Store) resolve(ctx context.Context, ref RawOutputRef) (ResolvedArtifact
 }
 
 func (s *Store) verify(ctx context.Context, ref RawOutputRef) (VerifyResult, error) {
-	resolved, err := s.resolve(ctx, ref)
+	result, err := s.scan(ctx, ScanRequest{
+		Ref:     ref,
+		Scanner: discardChunkScanner{},
+	})
 	if err != nil {
 		return VerifyResult{Ref: ref, Reason: ReasonOf(err)}, err
 	}
-	_ = resolved.Body.Close()
 	return VerifyResult{
 		Ref:         ref,
 		OK:          true,
-		ContentHash: resolved.ContentHash,
-		SizeBytes:   resolved.SizeBytes,
+		ContentHash: result.ContentHash,
+		SizeBytes:   result.SizeBytes,
 	}, nil
+}
+
+func (s *Store) lookupRef(ctx context.Context, sessionID, refID string) (RawOutputRef, error) {
+	if err := ctx.Err(); err != nil {
+		return RawOutputRef{}, err
+	}
+	if err := validateSessionID(sessionID); err != nil {
+		return RawOutputRef{}, err
+	}
+	if err := validateRefID(refID); err != nil {
+		return RawOutputRef{}, err
+	}
+	state, err := s.lifecycleStateForRef(sessionID, refID)
+	if err != nil {
+		return RawOutputRef{}, err
+	}
+	if err := lifecycleUsable(state); err != nil {
+		return RawOutputRef{}, err
+	}
+	ref := state.created.Ref
+	if err := validateRef(ref); err != nil {
+		return RawOutputRef{}, err
+	}
+	if ref.SessionID != sessionID || ref.RefID != refID {
+		return RawOutputRef{}, reasonError(ReasonRefInvalid, "ref metadata does not match lookup key")
+	}
+	if err := validateRefMatchesRecord(ref, state.created); err != nil {
+		return RawOutputRef{}, err
+	}
+	return ref, nil
+}
+
+func (s *Store) scan(ctx context.Context, req ScanRequest) (ScanResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ScanResult{}, err
+	}
+	if req.Scanner == nil {
+		return ScanResult{}, reasonError(ReasonRefInvalid, "scan request missing scanner")
+	}
+	if err := validateRef(req.Ref); err != nil {
+		return ScanResult{}, err
+	}
+	state, err := s.lifecycleStateForRef(req.Ref.SessionID, req.Ref.RefID)
+	if err != nil {
+		return ScanResult{}, err
+	}
+	if err := lifecycleUsable(state); err != nil {
+		return ScanResult{}, err
+	}
+	record := state.created
+	if err := validateRefMatchesRecord(req.Ref, record); err != nil {
+		return ScanResult{}, err
+	}
+	result, err := s.scanAndVerifyObject(ctx, record, req.Scanner)
+	if err != nil {
+		if scannerErr, ok := rawOutputChunkScannerErrorCause(err); ok {
+			return ScanResult{}, scannerErr
+		}
+		if ReasonOf(err) == ReasonArtifactHashMismatch || ReasonOf(err) == ReasonPathInvalid || ReasonOf(err) == ReasonDecryptFailed {
+			_ = s.appendLifecycleRecord(req.Ref, record.Artifact, recordTypeQuarantined, string(ReasonOf(err)))
+		}
+		return ScanResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Store) materializeLegacy(ctx context.Context, req LegacyMaterializeRequest) (CreateResult, error) {
@@ -73,6 +139,18 @@ func (s *Store) materializeLegacy(ctx context.Context, req LegacyMaterializeRequ
 		return CreateResult{}, Error{Reason: ReasonArtifactMaterializationFailed, Err: err}
 	}
 	return result, nil
+}
+
+func (s *Store) lifecycleStateForRef(sessionID, refID string) (lifecycleState, error) {
+	states, err := s.loadLifecycle(sessionID)
+	if err != nil {
+		return lifecycleState{}, err
+	}
+	state, ok := states[refID]
+	if !ok || state.created.RecordType == "" {
+		return lifecycleState{}, reasonError(ReasonArtifactMissing, "ref %s missing", refID)
+	}
+	return state, nil
 }
 
 func lifecycleUsable(state lifecycleState) error {
@@ -125,4 +203,10 @@ func sessionArtifactBytesFromLifecycle(states map[string]lifecycleState) int64 {
 		total += int64(state.created.Artifact.ByteSize)
 	}
 	return total
+}
+
+type discardChunkScanner struct{}
+
+func (discardChunkScanner) Scan([]byte) error {
+	return nil
 }

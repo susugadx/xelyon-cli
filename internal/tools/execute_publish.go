@@ -8,7 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 // PublishResultWithContext はツール実行済みの結果を wrapper/TUI 層へ公開する。
@@ -46,7 +46,7 @@ func PublishResultWithContext(execCtx ExecutionContext, tc *ToolCall, execResult
 		})
 	} else {
 		// 従来モード: stdoutにテキスト出力
-		_, _ = fmt.Fprintln(execCtx.Stdout, ui.FormatToolLine(ui.ToolDisplayInfo{
+		_, _ = fmt.Fprintln(execCtx.Stdout, uitoolview.FormatToolLine(uitoolview.ToolDisplayInfo{
 			ToolName: tc.Tool,
 			Args:     tc.Args,
 			Result:   result,
@@ -91,6 +91,6 @@ func displayCollapsedOutput(w io.Writer, output string, cfg *config.Config) {
 	}
 
 	// 折りたたみ表示
-	formatted := ui.FormatToolOutput(output, ui.GetMaxVisibleLinesWithConfig(cfg))
+	formatted := uitoolview.FormatToolOutput(output, uitoolview.GetMaxVisibleLinesWithConfig(cfg))
 	_, _ = fmt.Fprint(w, formatted)
 }

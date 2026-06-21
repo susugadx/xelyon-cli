@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestDecodeReviewSaturationCheckJSONAcceptsSaturatedCheck(t *testing.T) {
@@ -69,10 +71,10 @@ func TestValidateReviewSaturationCheckNeedsRevisionForAdditionalFindingCandidate
 	report.ProbeSummaries = []ReviewProbeSummary{
 		{
 			ProbeID: "probe-1",
-			Mode:    ReviewProbeHostReadOnly,
-			Status:  ReviewProbePassed,
+			Mode:    domain.ReviewProbeHostReadOnly,
+			Status:  domain.ReviewProbePassed,
 			Commands: []ReviewProbeCommandSummary{
-				{Command: "go", Status: ReviewProbePassed},
+				{Command: "go", Status: domain.ReviewProbePassed},
 			},
 		},
 	}

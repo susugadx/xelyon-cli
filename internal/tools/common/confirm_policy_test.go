@@ -10,15 +10,16 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/stdio"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type recordingPrompter struct {
-	reqs []ui.PromptRequest
-	resp ui.PromptResponse
+	reqs []uiprompt.PromptRequest
+	resp uiprompt.PromptResponse
 }
 
-func (p *recordingPrompter) Prompt(_ context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *recordingPrompter) Prompt(_ context.Context, req uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	p.reqs = append(p.reqs, req)
 	return p.resp, nil
 }
@@ -53,7 +54,7 @@ func TestConfirmWithIO_InteractiveComment(t *testing.T) {
 
 	var out strings.Builder
 	dec := ConfirmWithIO(
-		ui.NewPromptIO(strings.NewReader("c\nneeds more context\n\n"), &out, io.Discard, nil),
+		uiruntime.NewPromptIO(strings.NewReader("c\nneeds more context\n\n"), &out, io.Discard, nil),
 		"Proceed?",
 	)
 
@@ -96,7 +97,7 @@ func TestConfirmToolAction_PolicyPaths(t *testing.T) {
 		})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"delete_file",
 			"Delete file?",
@@ -115,7 +116,7 @@ func TestConfirmToolAction_PolicyPaths(t *testing.T) {
 		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionTrusted)})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"write_file",
 			"Write file?",
@@ -137,7 +138,7 @@ func TestConfirmToolAction_PolicyPaths(t *testing.T) {
 		})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"write_file",
 			"Write outside workspace?",
@@ -156,7 +157,7 @@ func TestConfirmToolAction_PolicyPaths(t *testing.T) {
 		policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionFullAuto)})
 		var out strings.Builder
 		dec := ConfirmToolAction(
-			ui.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
+			uiruntime.NewPromptIO(strings.NewReader("n\n"), &out, io.Discard, nil),
 			ConfirmOptions{Policy: &policy},
 			"bash",
 			"Run bash?",
@@ -175,8 +176,8 @@ func TestConfirmToolAction_PolicyPaths(t *testing.T) {
 func TestConfirmToolAction_UsesPrompterWithoutReadingLegacyInput(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
 
-	prompter := &recordingPrompter{resp: ui.PromptResponse{Action: ui.PromptActionYes}}
-	runtime := ui.NewRuntime(strings.NewReader("n\n"), io.Discard, io.Discard)
+	prompter := &recordingPrompter{resp: uiprompt.PromptResponse{Action: uiprompt.PromptActionYes}}
+	runtime := uiruntime.NewRuntime(strings.NewReader("n\n"), io.Discard, io.Discard)
 	runtime.SetPrompter(prompter)
 
 	policy := config.ResolveExecutionPolicy(config.ExecutionConfig{Mode: string(config.ExecutionBalanced)})
@@ -202,8 +203,8 @@ func TestConfirmToolAction_UsesPrompterWithoutReadingLegacyInput(t *testing.T) {
 func TestConfirmToolAction_AlwaysConfirmBeatsAutoApproveWithPrompter(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
 
-	prompter := &recordingPrompter{resp: ui.PromptResponse{Action: ui.PromptActionNo}}
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	prompter := &recordingPrompter{resp: uiprompt.PromptResponse{Action: uiprompt.PromptActionNo}}
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	runtime.SetPrompter(prompter)
 	policy := config.ResolveExecutionPolicy(config.ExecutionConfig{
 		Mode:          string(config.ExecutionFullAuto),
@@ -229,8 +230,8 @@ func TestConfirmToolAction_AlwaysConfirmBeatsAutoApproveWithPrompter(t *testing.
 func TestConfirmWithIO_InteractiveDisabledPrompterOmitsComment(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "0")
 
-	prompter := &recordingPrompter{resp: ui.PromptResponse{Action: ui.PromptActionComment, Text: "feedback"}}
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	prompter := &recordingPrompter{resp: uiprompt.PromptResponse{Action: uiprompt.PromptActionComment, Text: "feedback"}}
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	runtime.SetPrompter(prompter)
 
 	dec := ConfirmWithIO(runtime.PromptIO(), "Proceed?")
@@ -243,7 +244,7 @@ func TestConfirmWithIO_InteractiveDisabledPrompterOmitsComment(t *testing.T) {
 	if prompter.reqs[0].AllowComment {
 		t.Fatal("disabled interactive confirm should not allow comments")
 	}
-	if prompter.reqs[0].ConfirmSubmitPolicy != ui.PromptConfirmSubmitExplicit {
+	if prompter.reqs[0].ConfirmSubmitPolicy != uiprompt.PromptConfirmSubmitExplicit {
 		t.Fatalf("ConfirmSubmitPolicy = %q, want explicit", prompter.reqs[0].ConfirmSubmitPolicy)
 	}
 }
@@ -257,12 +258,12 @@ func TestConfirmWithIO_PrompterCommentParsesImageLine(t *testing.T) {
 	}
 
 	prompter := &recordingPrompter{
-		resp: ui.PromptResponse{
-			Action: ui.PromptActionComment,
+		resp: uiprompt.PromptResponse{
+			Action: uiprompt.PromptActionComment,
 			Text:   "needs more context\nimage:" + imagePath,
 		},
 	}
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	runtime.SetPrompter(prompter)
 
 	dec := ConfirmWithIO(runtime.PromptIO(), "Proceed?")

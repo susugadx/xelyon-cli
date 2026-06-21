@@ -59,6 +59,7 @@ var nestedDefaultAppliers = []nestedDefaultApplier{
 	},
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyThinkingDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyWebSearchDefaults(cfg, defaults) },
+	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyMCPDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) { applyFinalChecksDefaults(cfg, defaults) },
 	func(cfg *Config, defaults *Config, _ defaultApplyOptions) {
 		applyAgentInstructionDefaults(cfg, defaults)
@@ -156,6 +157,19 @@ func applyWebSearchDefaults(cfg *Config, defaults *Config) {
 	// WebSearch: 全てゼロ値の場合のみデフォルト適用
 	if !cfg.WebSearch.CacheEnabled && cfg.WebSearch.CacheTTL == 0 && cfg.WebSearch.CacheSize == 0 {
 		cfg.WebSearch = defaults.WebSearch
+	}
+}
+
+func applyMCPDefaults(cfg *Config, defaults *Config) {
+	// SurfaceBudget: 0 は未設定として default を適用する。負値は validation/autofix のため保持する。
+	if cfg.MCP.SurfaceBudget.MaxTools == 0 {
+		cfg.MCP.SurfaceBudget.MaxTools = defaults.MCP.SurfaceBudget.MaxTools
+	}
+	if cfg.MCP.SurfaceBudget.EstimatedTokens == 0 {
+		cfg.MCP.SurfaceBudget.EstimatedTokens = defaults.MCP.SurfaceBudget.EstimatedTokens
+	}
+	if cfg.MCP.SurfaceBudget.MaxSchemaBytesPerTool == 0 {
+		cfg.MCP.SurfaceBudget.MaxSchemaBytesPerTool = defaults.MCP.SurfaceBudget.MaxSchemaBytesPerTool
 	}
 }
 

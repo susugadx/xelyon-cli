@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewdomain "github.com/susugadx/xelyon-cli/internal/review/domain"
+	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
 )
 
 func TestReviewTimeline_CurrentChangesPresetStartsRun(t *testing.T) {
@@ -38,7 +40,7 @@ func TestReviewTimeline_CurrentChangesPresetStartsRun(t *testing.T) {
 	}
 
 	m = applyReviewCommandMessages(t, m, cmd)
-	if agent.lastRequest.TargetKind != review.TargetCurrentChanges {
+	if agent.lastRequest.TargetKind != reviewdomain.TargetCurrentChanges {
 		t.Fatalf("TargetKind = %q, want current_changes", agent.lastRequest.TargetKind)
 	}
 	if agent.lastRequest.CustomInstructions != "" {
@@ -61,8 +63,8 @@ func TestReviewTimeline_CustomFocusStartsRun(t *testing.T) {
 
 	m = sendReviewKey(m, "down")
 	m = sendReviewKey(m, "enter")
-	if m.reviewScreen.mode != reviewScreenCustom {
-		t.Fatalf("review mode = %d, want custom", m.reviewScreen.mode)
+	if snapshot := m.reviewScreen.Snapshot(); snapshot.Mode != reviewscreen.ModeCustom {
+		t.Fatalf("review mode = %d, want custom", snapshot.Mode)
 	}
 
 	m = sendReviewText(m, "focus on regressions")
@@ -127,7 +129,7 @@ func TestReviewTimeline_BlocksRunWhileAgentIsProcessing(t *testing.T) {
 	}
 	m := newModelWithViewport(agent)
 	m.screen = screenReview
-	m.reviewScreen = newReviewScreen()
+	m.reviewScreen = reviewscreen.New(m.width)
 
 	updated, cmd := m.startReviewTimeline(review.NewCurrentChangesRequest("focus on regressions"))
 	m = updated.(Model)
@@ -190,10 +192,10 @@ func TestReviewTimeline_BusyRejectionVisibleInCustomFocusScreen(t *testing.T) {
 	if m.screen != screenReview {
 		t.Fatalf("screen = %d, want screenReview after busy rejection", m.screen)
 	}
-	if m.reviewScreen == nil || m.reviewScreen.mode != reviewScreenCustom {
+	if m.reviewScreen == nil || m.reviewScreen.Snapshot().Mode != reviewscreen.ModeCustom {
 		t.Fatal("custom focus screen should remain open after busy rejection")
 	}
-	if !m.reviewScreen.customInput.Focused() {
+	if !m.reviewScreen.Snapshot().CustomInputFocused {
 		t.Fatal("custom focus input should remain focused after busy rejection")
 	}
 	view := stripANSI(m.View())

@@ -179,6 +179,24 @@ type VerifyResult struct {
 	SizeBytes   int64
 }
 
+// ChunkScanner は raw output body chunk を順次受け取る。
+type ChunkScanner interface {
+	Scan(chunk []byte) error
+}
+
+// ScanRequest は raw output body を materialize せず検証しながら scan する入力。
+type ScanRequest struct {
+	Ref     RawOutputRef
+	Scanner ChunkScanner
+}
+
+// ScanResult は streaming scan の検証結果。
+type ScanResult struct {
+	Ref         RawOutputRef
+	ContentHash string
+	SizeBytes   int64
+}
+
 // LegacyMaterializeRequest は legacy history/session source から artifact を materialize する入力。
 type LegacyMaterializeRequest struct {
 	CreateRequest
@@ -277,6 +295,16 @@ func (s *Store) Resolve(ctx context.Context, ref RawOutputRef) (ResolvedArtifact
 // Verify は body を返さず artifact lifecycle/hash を検証する。
 func (s *Store) Verify(ctx context.Context, ref RawOutputRef) (VerifyResult, error) {
 	return s.verify(ctx, ref)
+}
+
+// LookupRef は session manifest から live RawOutputRef metadata を read-only で取得する。
+func (s *Store) LookupRef(ctx context.Context, sessionID, refID string) (RawOutputRef, error) {
+	return s.lookupRef(ctx, sessionID, refID)
+}
+
+// Scan は raw output ref を検証し、body を chunk 単位で scanner に渡す。
+func (s *Store) Scan(ctx context.Context, req ScanRequest) (ScanResult, error) {
+	return s.scan(ctx, req)
 }
 
 // MaterializeLegacy は exact legacy source から artifact を作成する。

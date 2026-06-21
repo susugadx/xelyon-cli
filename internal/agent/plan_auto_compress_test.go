@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const (
@@ -32,7 +32,7 @@ func newPlanAutoCompressionTestAgent(t *testing.T, provider *inTurnCompressionPr
 	t.Setenv("HOME", t.TempDir())
 
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(input), out, out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(input), out, out)
 	runtime.Registry = tools.DefaultRegistry.Clone()
 
 	agent := NewAgentWithRuntime("gpt-5.4", provider, false, runtime)

@@ -12,7 +12,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const kimiLiveRequestTimeout = 300 * time.Second
@@ -174,7 +174,7 @@ func kimiLiveConfig(provider, model string, thinking bool) *config.Config {
 func kimiLiveContext(cfg *config.Config, sessionID string) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), kimiLiveRequestTimeout)
 	ctx = config.WithContext(ctx, cfg)
-	ctx = ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
+	ctx = uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	ctx = api.WithPromptCacheScope(ctx, api.PromptCacheScope{SessionID: sessionID})
 	ctx = api.WithToolDefinitions(ctx, nil)

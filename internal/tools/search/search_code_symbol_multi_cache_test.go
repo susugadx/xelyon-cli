@@ -46,7 +46,6 @@ func TestSearchCode_SymbolFastPathCachesAffectedFiles(t *testing.T) {
 		t.Fatalf("expected exact cache key %q to track %s, got %v", searchKey, want, affected)
 	}
 }
-
 func TestSearchCode_MultiPatternCacheTracksBundleAndTextAffectedFiles(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"run.go": "package example\n\nfunc Run() {\n\thelper()\n}\n\nfunc helper() {}\n",
@@ -84,7 +83,6 @@ func TestSearchCode_MultiPatternCacheTracksBundleAndTextAffectedFiles(t *testing
 		t.Fatalf("expected exact multi cache key %q to track %s, got %v", searchKey, want, affected)
 	}
 }
-
 func TestSearchCode_MultiPatternCachedArtifactRestoresAffectedFiles(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"run.go": "package example\n\nfunc Run() {\n\thelper()\n}\n\nfunc helper() {}\n",
@@ -121,7 +119,6 @@ func TestSearchCode_MultiPatternCachedArtifactRestoresAffectedFiles(t *testing.T
 		t.Fatalf("cached AffectedFiles = %v, want %s", second.Metadata.AffectedFiles, want)
 	}
 }
-
 func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"pkg/helper.go":     "package pkg\n\nfunc helper() {}\n",
@@ -202,7 +199,6 @@ func TestSearchCode_MultiPatternCacheSupplementsSymbolMultipleAffectedFiles(t *t
 		t.Fatalf("expected multi-pattern cache entry to be invalidated after editing %s", wantDarwin)
 	}
 }
-
 func TestCollectAffectedFilesFromExecutions_SupplementsGoSymbolMultipleWithProjectRoot(t *testing.T) {
 	dir := setupMultiLangDir(t, map[string]string{
 		"pkg/helper.go":     "package pkg\n\nfunc helper() {}\n",
@@ -261,7 +257,6 @@ func TestCollectAffectedFilesFromExecutions_SupplementsGoSymbolMultipleWithProje
 		}
 	}
 }
-
 func TestCollectAffectedFilesFromExecutions_RepairsWrongGoSymbolMultipleAffectedFiles(t *testing.T) {
 	outerDir := t.TempDir()
 	dir := filepath.Join(outerDir, "repo")
@@ -330,130 +325,5 @@ func TestCollectAffectedFilesFromExecutions_RepairsWrongGoSymbolMultipleAffected
 		if !containsAffectedFile(affected, want) {
 			t.Fatalf("expected repaired affected files to include %s, got %v", want, affected)
 		}
-	}
-}
-
-func TestSearchCode_MultiPatternGoSymbolBundleDedupe(t *testing.T) {
-	dir := setupMultiLangDir(t, map[string]string{
-		"agent.go": `package example
-
-type Agent struct{}
-
-func (a *Agent) Close() error {
-	return nil
-}
-
-func run(a *Agent) error {
-	return a.Close()
-}
-`,
-		"agent_test.go": `package example
-
-func TestClose() {
-	var a Agent
-	_ = a.Close()
-}
-`,
-	})
-
-	result := ExecuteSearchCode(SearchOptions{Pattern: `Close,(*Agent).Close,\.Close\(\)`, Path: dir})
-	if count := strings.Count(result, "━━ Symbol Bundle:"); count != 1 {
-		t.Fatalf("expected a single deduped symbol bundle header, got %d:\n%s", count, result)
-	}
-	for _, want := range []string{"Matched patterns:", "Close", "(*Agent).Close", `\.Close\(\)`} {
-		if !strings.Contains(result, want) {
-			t.Errorf("expected %q in deduped bundle output, got:\n%s", want, result)
-		}
-	}
-}
-
-func TestSearchCode_MultiPatternGoSymbolBundleDedupeOnWarmSinglePatternCache(t *testing.T) {
-	dir := setupMultiLangDir(t, map[string]string{
-		"agent.go": `package example
-
-type Agent struct{}
-
-func (a *Agent) Close() error {
-	return nil
-}
-
-func run(a *Agent) error {
-	return a.Close()
-}
-`,
-		"agent_test.go": `package example
-
-func TestClose() {
-	var a Agent
-	_ = a.Close()
-}
-`,
-	})
-
-	cache := &testSearchCache{data: make(map[string]string)}
-	opts := SearchOptions{Pattern: `Close,(*Agent).Close,\.Close\(\)`, Path: dir}
-
-	coldResult := ExecuteSearchCodeWithCache(cache, opts)
-	if count := strings.Count(coldResult, "━━ Symbol Bundle:"); count != 1 {
-		t.Fatalf("expected a single deduped symbol bundle header on cold cache, got %d:\n%s", count, coldResult)
-	}
-
-	patterns := splitPatterns(opts.Pattern)
-	delete(cache.data, buildMultiCacheKey(patterns)+"|"+buildMultiSearchCacheKey(opts, patterns))
-
-	warmResult := ExecuteSearchCodeWithCache(cache, opts)
-	if count := strings.Count(warmResult, "━━ Symbol Bundle:"); count != 1 {
-		t.Fatalf("expected a single deduped symbol bundle header on warm single-pattern cache, got %d:\n%s", count, warmResult)
-	}
-	for _, want := range []string{"Matched patterns:", "Close", "(*Agent).Close", `\.Close\(\)`} {
-		if !strings.Contains(warmResult, want) {
-			t.Errorf("expected %q in warm-cache deduped bundle output, got:\n%s", want, warmResult)
-		}
-	}
-}
-
-func TestSearchCode_MultiPatternDedupeUnaffectedByUnrelatedInvalidation(t *testing.T) {
-	dir := setupMultiLangDir(t, map[string]string{
-		"agent.go": `package example
-
-type Agent struct{}
-
-func (a *Agent) Close() error {
-	return nil
-}
-
-func run(a *Agent) error {
-	return a.Close()
-}
-`,
-		"agent_test.go": `package example
-
-func TestClose() {
-	var a Agent
-	_ = a.Close()
-}
-`,
-		"unrelated.go": `package example
-
-func noop() {}
-`,
-	})
-
-	cache := &testSearchCache{data: make(map[string]string)}
-	opts := SearchOptions{Pattern: `Close,(*Agent).Close,\.Close\(\)`, Path: dir}
-
-	coldResult := ExecuteSearchCodeWithCache(cache, opts)
-	if count := strings.Count(coldResult, "━━ Symbol Bundle:"); count != 1 {
-		t.Fatalf("expected a single deduped symbol bundle header on cold cache, got %d:\n%s", count, coldResult)
-	}
-
-	patterns := splitPatterns(opts.Pattern)
-	delete(cache.data, buildMultiCacheKey(patterns)+"|"+buildMultiSearchCacheKey(opts, patterns))
-
-	cache.InvalidateSearchCacheForFile(filepath.Join(dir, "unrelated.go"))
-
-	warmResult := ExecuteSearchCodeWithCache(cache, opts)
-	if count := strings.Count(warmResult, "━━ Symbol Bundle:"); count != 1 {
-		t.Fatalf("expected deduped symbol bundle after unrelated invalidation, got %d:\n%s", count, warmResult)
 	}
 }

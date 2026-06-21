@@ -15,7 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
@@ -24,7 +24,7 @@ func TestExecuteToolCallsWithParallel_PrintsParallelGroup(t *testing.T) {
 	provider := &mockProvider{name: "test"}
 	var out bytes.Buffer
 	agent := NewAgentWithRuntime("test-model", provider, false, &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	})
 	agent.Stats = &SessionStats{ToolExecutions: make(map[string]int)}
 
@@ -73,7 +73,7 @@ func TestExecuteToolCallsWithParallel_ShowsSpinnerDuringParallelRun(t *testing.T
 
 	provider := &mockProvider{name: "test"}
 	runtime := NewAgentRuntime()
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 
 	started := make(chan struct{}, 1)
 	release := make(chan struct{})
@@ -134,7 +134,7 @@ func TestExecuteToolCallsWithParallel_StopsSpinnerBeforeNonTUIReport(t *testing.
 	provider := &mockProvider{name: "test"}
 	runtime := NewAgentRuntime()
 	checkWriter := &spinnerOrderCheckWriter{}
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), checkWriter, checkWriter)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), checkWriter, checkWriter)
 
 	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
 	checkWriter.agent = agent
@@ -176,7 +176,7 @@ func TestExecuteToolCallsWithParallel_StopsSpinnerBeforeTUIReport(t *testing.T) 
 
 	provider := &mockProvider{name: "test"}
 	runtime := NewAgentRuntime()
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 
 	started := make(chan struct{}, 1)
 	release := make(chan struct{})
@@ -246,7 +246,7 @@ func TestExecuteToolCallsWithParallel_PublishesRunningAndFinalTUIResults(t *test
 
 	provider := &mockProvider{name: "test"}
 	runtime := NewAgentRuntime()
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 
 	agent := NewAgentWithRuntime("test-model", provider, false, runtime)
 	t.Cleanup(agent.Cleanup)
@@ -380,7 +380,7 @@ func TestExecuteToolWithSpinner_WaitAgentLiveView(t *testing.T) {
 
 	runtime := &AgentRuntime{
 		Config:          cfg,
-		UI:              ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI:              uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		SubAgentManager: manager,
 	}
 	agent := NewAgentWithRuntime("test-model", provider, false, runtime)

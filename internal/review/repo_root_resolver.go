@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
@@ -19,13 +20,13 @@ func ResolveReviewRepoRoot(ctx context.Context, cwd string) (string, error) {
 		ctx = context.Background()
 	}
 
-	resolvedCWD, err := resolveReviewEvidenceDir(cwd, "")
+	resolvedCWD, err := reviewevidence.ResolveReviewEvidenceDir(cwd, "")
 	if err != nil {
 		return "", fmt.Errorf("review run resolve cwd: %w", err)
 	}
 
 	lookupRoot := findReviewRepoLookupRoot(resolvedCWD)
-	env := buildReviewEvidenceGitEnv(os.Environ())
+	env := reviewevidence.BuildReviewEvidenceGitEnv(os.Environ())
 	gitPath, err := reviewprobe.ResolveCommandPath("git", reviewprobe.CommandResolutionContext{
 		RepoRoot: lookupRoot,
 		WorkDir:  lookupRoot,
@@ -59,7 +60,7 @@ type reviewRepoRootGitResult struct {
 func runReviewRepoRootGit(ctx context.Context, gitPath, lookupRoot string, env []string) (reviewRepoRootGitResult, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, gitPath, buildReviewEvidenceGitArgs(lookupRoot, []string{"rev-parse", "--show-toplevel"})...)
+	cmd := exec.CommandContext(ctx, gitPath, reviewevidence.BuildReviewEvidenceGitArgs(lookupRoot, []string{"rev-parse", "--show-toplevel"})...)
 	cmd.Dir = lookupRoot
 	cmd.Env = env
 	cmd.Stdout = &stdout
@@ -67,7 +68,7 @@ func runReviewRepoRootGit(ctx context.Context, gitPath, lookupRoot string, env [
 	err := cmd.Run()
 	return reviewRepoRootGitResult{
 		stdout:      stdout.String(),
-		diagnostics: combineReviewEvidenceGitDiagnostics(stderr.String(), stdout.String()),
+		diagnostics: reviewevidence.CombineReviewEvidenceGitDiagnostics(stderr.String(), stdout.String()),
 	}, err
 }
 

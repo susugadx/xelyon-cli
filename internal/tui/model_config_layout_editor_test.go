@@ -12,8 +12,7 @@ func TestConfigScreen_NarrowWidth_StringEdit_RemainsVisible(t *testing.T) {
 	m.width = 72
 	m.height = 20
 
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "provider", "default_model")
+	selectConfigField(t, &m, "provider", "default_model")
 
 	_, _, rightW := configscreen.PaneWidths(m.width)
 	if rightW != 0 {
@@ -21,12 +20,12 @@ func TestConfigScreen_NarrowWidth_StringEdit_RemainsVisible(t *testing.T) {
 	}
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editInput {
-		t.Fatalf("editMode = %d, want editInput", cs.editMode)
+	snapshot := configSnapshot(t, m)
+	if snapshot.editMode != editInput {
+		t.Fatalf("editMode = %d, want editInput", snapshot.editMode)
 	}
-	if cs.activePane != paneField {
-		t.Fatalf("activePane = %d, want paneField when detail pane is hidden", cs.activePane)
+	if snapshot.activePane != paneField {
+		t.Fatalf("activePane = %d, want paneField when detail pane is hidden", snapshot.activePane)
 	}
 
 	view := stripANSI(m.View())
@@ -43,8 +42,7 @@ func TestConfigScreen_NarrowWidth_SelectEdit_RemainsVisible(t *testing.T) {
 	m.width = 72
 	m.height = 20
 
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "execution", "execution.mode")
+	selectConfigField(t, &m, "execution", "execution.mode")
 
 	_, _, rightW := configscreen.PaneWidths(m.width)
 	if rightW != 0 {
@@ -52,12 +50,12 @@ func TestConfigScreen_NarrowWidth_SelectEdit_RemainsVisible(t *testing.T) {
 	}
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editSelect {
-		t.Fatalf("editMode = %d, want editSelect", cs.editMode)
+	snapshot := configSnapshot(t, m)
+	if snapshot.editMode != editSelect {
+		t.Fatalf("editMode = %d, want editSelect", snapshot.editMode)
 	}
-	if cs.activePane != paneField {
-		t.Fatalf("activePane = %d, want paneField when detail pane is hidden", cs.activePane)
+	if snapshot.activePane != paneField {
+		t.Fatalf("activePane = %d, want paneField when detail pane is hidden", snapshot.activePane)
 	}
 
 	view := stripANSI(m.View())
@@ -74,8 +72,7 @@ func TestConfigScreen_VeryNarrowWidth_ConfigDoesNotEnterInvisiblePane(t *testing
 	m.width = 30
 	m.height = 20
 
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "lsp", "lsp.servers")
+	selectConfigField(t, &m, "lsp", "lsp.servers")
 
 	leftW, midW, rightW := configscreen.PaneWidths(m.width)
 	if leftW != 30 || midW != 0 || rightW != 0 {
@@ -83,12 +80,12 @@ func TestConfigScreen_VeryNarrowWidth_ConfigDoesNotEnterInvisiblePane(t *testing
 	}
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editStructMap {
-		t.Fatalf("editMode = %d, want editStructMap", cs.editMode)
+	snapshot := configSnapshot(t, m)
+	if snapshot.editMode != editStructMap {
+		t.Fatalf("editMode = %d, want editStructMap", snapshot.editMode)
 	}
-	if cs.activePane == paneDetail {
-		t.Fatalf("activePane = %d, should not enter invisible detail pane", cs.activePane)
+	if snapshot.activePane == paneDetail {
+		t.Fatalf("activePane = %d, should not enter invisible detail pane", snapshot.activePane)
 	}
 
 	view := stripANSI(m.View())
@@ -105,8 +102,7 @@ func TestConfigScreen_NormalWidth_BehaviorUnchanged(t *testing.T) {
 	m.width = 120
 	m.height = 30
 
-	cs := m.configScreen
-	setConfigFieldSelection(t, cs, "provider", "default_model")
+	selectConfigField(t, &m, "provider", "default_model")
 
 	_, _, rightW := configscreen.PaneWidths(m.width)
 	if rightW <= 0 {
@@ -114,12 +110,12 @@ func TestConfigScreen_NormalWidth_BehaviorUnchanged(t *testing.T) {
 	}
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	if cs.editMode != editInput {
-		t.Fatalf("editMode = %d, want editInput", cs.editMode)
+	snapshot := configSnapshot(t, m)
+	if snapshot.editMode != editInput {
+		t.Fatalf("editMode = %d, want editInput", snapshot.editMode)
 	}
-	if cs.activePane != paneDetail {
-		t.Fatalf("activePane = %d, want paneDetail on normal width", cs.activePane)
+	if snapshot.activePane != paneDetail {
+		t.Fatalf("activePane = %d, want paneDetail on normal width", snapshot.activePane)
 	}
 
 	view := stripANSI(m.View())

@@ -1,6 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
+)
 
 const maxAttachedFilePreviewBytes = 64 * 1024
 const maxAttachedPDFPreviewPages = 20
@@ -10,10 +14,10 @@ type chatDispatchRequest struct {
 	display            string
 	input              string
 	imagePath          string
-	cleanupAttachments []composerAttachment
+	cleanupAttachments []tuiattachments.Attachment
 }
 
-func buildChatDispatchRequest(payload string, attachments []composerAttachment) chatDispatchRequest {
+func buildChatDispatchRequest(payload string, attachments []tuiattachments.Attachment) chatDispatchRequest {
 	trimmedPayload := strings.TrimSpace(payload)
 	imagePath := selectPrimaryImagePath(attachments)
 	basePrompt := resolveDispatchBasePrompt(trimmedPayload, imagePath, len(attachments))

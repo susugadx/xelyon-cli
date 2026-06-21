@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
+	"github.com/susugadx/xelyon-cli/internal/tui/slashsuggestions"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
@@ -18,20 +20,17 @@ func TestModel_RenderInputDock_VisualRowsKeepOrderAndWidth(t *testing.T) {
 	m.textInput.Width = max(0, m.width-inputPromptWidth-1)
 	m.padLineCache = fillANSITextWidth("", m.width, theme.Chrome.InputBg)
 	m.textInput.SetValue("ask")
-	m.appendAttachment(composerAttachment{
-		Kind: composerAttachmentFile,
+	m.appendAttachment(tuiattachments.Attachment{
+		Kind: tuiattachments.KindFile,
 		Path: filepath.Join(string(filepath.Separator), "tmp", "notes.txt"),
 		Size: 12,
 	})
 	m.composer.AppendText("draft summary")
 	m.composer.AppendPasteBlock("line1\nline2")
-	m.slashSuggestions = slashSuggestionState{
-		suggestions: []slash.Suggestion{{
-			Label:       "/review",
-			Description: "Review current changes and find issues",
-		}},
-		selected: 0,
-	}
+	m.slashSuggestions = slashsuggestions.State{}.Refresh("/", []slash.Suggestion{{
+		Label:       "/review",
+		Description: "Review current changes and find issues",
+	}})
 
 	lines := strings.Split(m.renderInputDock(), "\n")
 	if len(lines) != 7 {
@@ -82,19 +81,16 @@ func TestModel_InputDockRowGroupsKeepSourcesInOrder(t *testing.T) {
 	m.textInput.Width = max(0, m.width-inputPromptWidth-1)
 	m.padLineCache = fillANSITextWidth("", m.width, theme.Chrome.InputBg)
 	m.textInput.SetValue("ask")
-	m.appendAttachment(composerAttachment{
-		Kind: composerAttachmentFile,
+	m.appendAttachment(tuiattachments.Attachment{
+		Kind: tuiattachments.KindFile,
 		Path: filepath.Join(string(filepath.Separator), "tmp", "notes.txt"),
 		Size: 12,
 	})
 	m.composer.AppendText("draft summary")
-	m.slashSuggestions = slashSuggestionState{
-		suggestions: []slash.Suggestion{{
-			Label:       "/review",
-			Description: "Review current changes and find issues",
-		}},
-		selected: 0,
-	}
+	m.slashSuggestions = slashsuggestions.State{}.Refresh("/", []slash.Suggestion{{
+		Label:       "/review",
+		Description: "Review current changes and find issues",
+	}})
 
 	groups := m.inputDockRowGroups()
 	wantKinds := []inputDockRowGroupKind{

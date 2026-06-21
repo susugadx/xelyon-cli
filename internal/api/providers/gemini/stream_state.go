@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type sseInterpretState struct {
@@ -31,7 +31,7 @@ type sseInterpretState struct {
 	thinkingRetries     int
 }
 
-func newSSEInterpretState(ctx context.Context, spinner *ui.Spinner, thinkingMsg string, debug bool) *sseInterpretState {
+func newSSEInterpretState(ctx context.Context, spinner *uiruntime.Spinner, thinkingMsg string, debug bool) *sseInterpretState {
 	out := api.OutputWriterFromContext(ctx)
 	errOut := api.ErrorWriterFromContext(ctx)
 	streamAssistantText := api.ShouldStreamAssistantText(ctx)

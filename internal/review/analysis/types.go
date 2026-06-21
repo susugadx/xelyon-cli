@@ -12,7 +12,7 @@ type EvidenceInput struct {
 	RelatedContextFiles []ContextFile
 	RelatedSearchHits   []RelatedSearchHit
 	GenericImpact       GenericImpact
-	WebSearchEvidence   WebSearchEvidence
+	WebSearchEvidence   externaldoc.WebSearchEvidence
 	Diffs               []Diff
 	UntrackedFiles      []UntrackedFile
 	TruncationFlags     TruncationFlags
@@ -112,12 +112,6 @@ type PathTruncation struct {
 	Path      string
 	Truncated bool
 }
-
-// WebSearchEvidence は review web search evidence の analysis 用表現。
-type WebSearchEvidence = externaldoc.WebSearchEvidence
-
-// WebSearchQuery は 1 件の検索 query と結果 error を表す。
-type WebSearchQuery = externaldoc.WebSearchEvidenceQuery
 
 // PressureSignalOptions は review pressure signal 生成時に親 package が持つ source of truth を渡す。
 type PressureSignalOptions struct {

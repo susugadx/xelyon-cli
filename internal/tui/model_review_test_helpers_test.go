@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
 )
 
 func newReviewTestModel() Model {
 	agent := &stubAgent{statusLine: "ready"}
 	m := newModelWithViewport(agent)
 	m.screen = screenReview
-	m.reviewScreen = newReviewScreen()
-	m.reviewScreen.customInput.Width = m.width - 4
+	m.reviewScreen = reviewscreen.New(m.width)
 	m.rebuildChrome()
 	return m
 }
@@ -19,8 +19,7 @@ func newReviewTestModel() Model {
 func newReviewCapableTestModel(agent *reviewCapableStubAgent) Model {
 	m := newModelWithViewport(agent)
 	m.screen = screenReview
-	m.reviewScreen = newReviewScreen()
-	m.reviewScreen.customInput.Width = m.width - 4
+	m.reviewScreen = reviewscreen.New(m.width)
 	m.rebuildChrome()
 	return m
 }

@@ -3,6 +3,8 @@ package report
 import (
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestValidateReviewReportBasicContract(t *testing.T) {
@@ -27,7 +29,7 @@ func TestValidateReviewReportBasicContract(t *testing.T) {
 			name: "invalid target_kind",
 			report: func() ReviewReport {
 				report := newValidReviewReportForValidationTest()
-				report.TargetKind = TargetKind("workspace_snapshot")
+				report.TargetKind = domain.TargetKind("workspace_snapshot")
 				return report
 			},
 			wantErr:     true,
@@ -207,8 +209,8 @@ func TestValidateReviewReportBasicContract(t *testing.T) {
 				report := newValidReviewReportForValidationTest()
 				report.ProbeSummaries = append(report.ProbeSummaries, ReviewProbeSummary{
 					ProbeID: "probe-1",
-					Mode:    ReviewProbeHostReadOnly,
-					Status:  ReviewProbePassed,
+					Mode:    domain.ReviewProbeHostReadOnly,
+					Status:  domain.ReviewProbePassed,
 				})
 				return report
 			},
@@ -219,7 +221,7 @@ func TestValidateReviewReportBasicContract(t *testing.T) {
 			name: "invalid probe mode",
 			report: func() ReviewReport {
 				report := newValidReviewReportForValidationTest()
-				report.ProbeSummaries[0].Mode = ReviewProbeMode("unexpected")
+				report.ProbeSummaries[0].Mode = domain.ReviewProbeMode("unexpected")
 				return report
 			},
 			wantErr:     true,
@@ -229,7 +231,7 @@ func TestValidateReviewReportBasicContract(t *testing.T) {
 			name: "invalid probe status",
 			report: func() ReviewReport {
 				report := newValidReviewReportForValidationTest()
-				report.ProbeSummaries[0].Status = ReviewProbeStatus("unexpected")
+				report.ProbeSummaries[0].Status = domain.ReviewProbeStatus("unexpected")
 				return report
 			},
 			wantErr:     true,
@@ -239,7 +241,7 @@ func TestValidateReviewReportBasicContract(t *testing.T) {
 			name: "invalid probe command status",
 			report: func() ReviewReport {
 				report := newValidReviewReportForValidationTest()
-				report.ProbeSummaries[0].Commands[0].Status = ReviewProbeStatus("unexpected")
+				report.ProbeSummaries[0].Commands[0].Status = domain.ReviewProbeStatus("unexpected")
 				return report
 			},
 			wantErr:     true,

@@ -1,8 +1,9 @@
 package tui
 
 import (
-	termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
 	"strings"
+
+	termtext "github.com/susugadx/xelyon-cli/internal/tui/termtext"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

@@ -10,7 +10,7 @@ import (
 	azureprovider "github.com/susugadx/xelyon-cli/internal/api/providers/azure"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newResponseContextSession(model, providerName, providerConfigKey, responseID string) *history.Session {
@@ -690,7 +690,7 @@ func TestHandleModelCommand_ClearsSavedResponseIDWhenSwitchingModel(t *testing.T
 		},
 	}
 	agent.session.AddMessage("user", "old task", "different-model")
-	agent.Runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	agent.Runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 
 	if !handleModelCommand(agent, []string{"saved-model"}) {
 		t.Fatal("handleModelCommand() = false, want true")

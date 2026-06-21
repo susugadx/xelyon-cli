@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/crypto"
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
 const rawOutputsCommandRefLimit = 20
@@ -145,7 +145,9 @@ func providerHistoryRawOutputLiveRefsForAgent(agent *Agent, sessionID string) []
 	if agent == nil || agent.Runtime == nil {
 		return nil
 	}
-	refs := append([]rawoutputs.RawOutputRef(nil), agent.Runtime.LastProviderHistoryProjectionReport.RawOutputRefs...)
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	refs := append([]rawoutputs.RawOutputRef(nil), report.RawOutputRefs...)
+	refs = append(refs, report.RawOutputContextRefs...)
 	for _, ledger := range agent.Runtime.LastReviewPromptReductionReport.RawOutputLedgers {
 		refs = appendReviewRawOutputLedgerRefs(refs, sessionID, ledger.RequiredRefs)
 		refs = appendReviewRawOutputLedgerRefs(refs, sessionID, ledger.OptionalRefs)
@@ -155,7 +157,7 @@ func providerHistoryRawOutputLiveRefsForAgent(agent *Agent, sessionID string) []
 	return dedupeRawOutputLiveRefs(refs, sessionID)
 }
 
-func appendReviewRawOutputLedgerRefs(out []rawoutputs.RawOutputRef, sessionID string, refs []review.ReviewProbeRawOutputLedgerRef) []rawoutputs.RawOutputRef {
+func appendReviewRawOutputLedgerRefs(out []rawoutputs.RawOutputRef, sessionID string, refs []reviewpromptreduction.ReviewProbeRawOutputLedgerRef) []rawoutputs.RawOutputRef {
 	for _, ref := range refs {
 		refID := strings.TrimSpace(ref.RefID)
 		if refID == "" {

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestReviewEvidenceBuilder_CurrentChangesNoChanges(t *testing.T) {
@@ -15,8 +17,8 @@ func TestReviewEvidenceBuilder_CurrentChangesNoChanges(t *testing.T) {
 		t.Fatalf("BuildCurrentChanges() error = %v", err)
 	}
 
-	if bundle.TargetKind != TargetCurrentChanges {
-		t.Fatalf("TargetKind = %q, want %q", bundle.TargetKind, TargetCurrentChanges)
+	if bundle.TargetKind != domain.TargetCurrentChanges {
+		t.Fatalf("TargetKind = %q, want %q", bundle.TargetKind, domain.TargetCurrentChanges)
 	}
 	wantRepoRoot, err := filepath.EvalSymlinks(repo)
 	if err != nil {
