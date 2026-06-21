@@ -22,6 +22,17 @@ func FormatBytes(bytes int) string {
 	return fmt.Sprintf("%d bytes", bytes)
 }
 
+// FormatBudget は MCP tool surface budget を短い text に整形する。
+func FormatBudget(budget Budget) string {
+	budget = NormalizeBudget(budget)
+	return fmt.Sprintf(
+		"max %d tools / %d tokens / %s schema per tool",
+		budget.MaxTools,
+		budget.EstimatedTokens,
+		FormatBytes(budget.MaxSchemaBytesPerTool),
+	)
+}
+
 // FormatReasonCounts は omitted / hidden 理由の件数を安定した text に整形する。
 func FormatReasonCounts(counts []ReasonCount, limit int) string {
 	if len(counts) == 0 {
@@ -47,6 +58,17 @@ func IncludeSnippet(recommendation Recommendation) string {
 		includeTools = []string{"<needed_tool>"}
 	}
 	return fmt.Sprintf("%s: {\"tools\": {\"include\": [%s]}}", strconv.Quote(recommendation.ServerName), strings.Join(quoteStrings(includeTools), ", "))
+}
+
+// SurfaceBudgetSnippet は ~/.xelyon/config.yaml 用の surface_budget 断片を 1 行で返す。
+func SurfaceBudgetSnippet(budget Budget) string {
+	budget = NormalizeBudget(budget)
+	return fmt.Sprintf(
+		"mcp: {surface_budget: {max_tools: %d, estimated_tokens: %d, max_schema_bytes_per_tool: %d}}",
+		budget.MaxTools,
+		budget.EstimatedTokens,
+		budget.MaxSchemaBytesPerTool,
+	)
 }
 
 func quoteStrings(values []string) []string {

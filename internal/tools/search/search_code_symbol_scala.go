@@ -1,10 +1,7 @@
 package search
 
 import (
-	"fmt"
 	"regexp"
-
-	"github.com/susugadx/xelyon-cli/internal/locator"
 )
 
 const (
@@ -15,39 +12,21 @@ const (
 
 // resolveScalaSymbol は Scala 向けの enhanced symbol fast path。
 func resolveScalaSymbol(symbol string, opts SearchOptions) genericResolveResult {
-	defs := findGenericDefinitions(symbol, opts)
-	if len(defs) == 0 {
-		return genericResolveResult{Status: genericSymbolNone}
-	}
-	if len(defs) > 1 {
-		return genericResolveResult{Output: formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts), Status: genericSymbolMultiple}
-	}
+	return resolveGenericEnhancedSymbol(symbol, opts, genericEnhancedSymbolSpec{
+		language:      "scala",
+		buildSections: buildScalaSymbolSections,
+	})
+}
 
-	def := defs[0]
-	refs := findGenericReferences(symbol, opts)
-	filteredRefs := filterGenericRefs(refs, def)
-
-	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
-		if ref.IsTest {
-			testRefs = append(testRefs, ref)
-		} else {
-			normalRefs = append(normalRefs, ref)
-		}
-	}
-
+func buildScalaSymbolSections(normalRefs []genericSymbolRef, testRefs []genericSymbolRef, symbol string) []symbolBundleSectionInput {
 	imports, callers, inheritance, otherRefs := classifyScalaRefs(normalRefs, symbol)
-	bundle := buildGenericSymbolBundle("scala", symbol, def, []string{
-		fmt.Sprintf("%d: %s", def.Line, def.Signature),
-	}, []symbolBundleSectionInput{
+	return []symbolBundleSectionInput{
 		{Kind: "imports", Title: "Imports", Items: imports, Limit: scalaImportLimit},
 		{Kind: "callers", Title: "Callers", Items: callers, Limit: scalaCallerLimit},
 		{Kind: "inheritance", Title: "Inheritance", Items: inheritance, Limit: scalaInheritanceLimit},
 		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
-	})
-	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatScalaSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	}
 }
 
 // classifyScalaRefs は Scala の参照を分類する。
@@ -71,9 +50,4 @@ func classifyScalaRefs(refs []genericSymbolRef, symbol string) (imports, callers
 		}
 	}
 	return
-}
-
-// formatScalaSymbolResult は Scala の分類済みシンボル結果をフォーマットする。
-func formatScalaSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
-	return formatSymbolBundle(bundle, reg, nil)
 }

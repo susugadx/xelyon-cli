@@ -5,7 +5,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/readtool"
 )
 
 func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntime.ParallelCallState) {
@@ -46,10 +46,10 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntim
 				callSections := readFileBatchCallSections(mergedBatchResult.Sections, offset, chunkPathCounts[j])
 				offset += chunkPathCounts[j]
 				if len(callSections) == len(callPaths) {
-					section := filetool.RenderReadExecutionSections(callSections)
+					section := readtool.RenderReadExecutionSections(callSections)
 					state.Results[idx] = toolruntime.Result{
 						Result:      section,
-						Observation: filetool.MergeReadExecutionSectionObservations(callSections),
+						Observation: readtool.MergeReadExecutionSectionObservations(callSections),
 						Error:       tools.IsErrorResult(section),
 					}
 				} else {
@@ -66,7 +66,7 @@ func (a *Agent) executeReadFileBatchMerge(ctx context.Context, state *toolruntim
 	}
 }
 
-func readFileBatchCallSections(sections []filetool.ReadExecutionSection, offset, count int) []filetool.ReadExecutionSection {
+func readFileBatchCallSections(sections []readtool.ReadExecutionSection, offset, count int) []readtool.ReadExecutionSection {
 	if count <= 0 || offset < 0 || offset+count > len(sections) {
 		return nil
 	}

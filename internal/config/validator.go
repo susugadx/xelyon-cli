@@ -173,6 +173,15 @@ var configAutoFixers = map[string]configAutoFixer{
 	"gemini.service_tier": stringAutoFixer(func(cfg *Config, v string) {
 		cfg.Gemini.ServiceTier = v
 	}),
+	"mcp.surface_budget.max_tools": intAutoFixer(func(cfg *Config, v int) {
+		cfg.MCP.SurfaceBudget.MaxTools = v
+	}),
+	"mcp.surface_budget.estimated_tokens": intAutoFixer(func(cfg *Config, v int) {
+		cfg.MCP.SurfaceBudget.EstimatedTokens = v
+	}),
+	"mcp.surface_budget.max_schema_bytes_per_tool": intAutoFixer(func(cfg *Config, v int) {
+		cfg.MCP.SurfaceBudget.MaxSchemaBytesPerTool = v
+	}),
 	"agent_instructions.project.mode": stringAutoFixer(func(cfg *Config, v string) {
 		cfg.AgentInstructions.Project.Mode = v
 	}),

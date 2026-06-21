@@ -1,5 +1,7 @@
 package config
 
+import "github.com/susugadx/xelyon-cli/internal/mcpsurface"
+
 type providerModelSectionState int
 
 const (
@@ -302,8 +304,28 @@ type SubAgentConfig struct {
 
 // MCPConfig は MCP (Model Context Protocol) サーバー接続の設定
 type MCPConfig struct {
-	Enabled  bool `yaml:"enabled"`  // MCP接続を有効化（デフォルト: true）
-	Headless bool `yaml:"headless"` // Headlessモードでも接続（デフォルト: false）
+	Enabled       bool                   `yaml:"enabled"`        // MCP接続を有効化（デフォルト: true）
+	Headless      bool                   `yaml:"headless"`       // Headlessモードでも接続（デフォルト: false）
+	SurfaceBudget MCPSurfaceBudgetConfig `yaml:"surface_budget"` // provider-facing MCP tool surface budget
+}
+
+// MCPSurfaceBudgetConfig は provider-facing MCP tool surface budget の設定。
+type MCPSurfaceBudgetConfig struct {
+	MaxTools              int `yaml:"max_tools"`                 // provider に公開する MCP tool 数の上限
+	EstimatedTokens       int `yaml:"estimated_tokens"`          // MCP tool definitions の推定 token 上限
+	MaxSchemaBytesPerTool int `yaml:"max_schema_bytes_per_tool"` // 1 tool あたりの input schema byte 上限
+}
+
+// EffectiveMCPSurfaceBudget は config から MCP tool surface の実効 budget を返す。
+func EffectiveMCPSurfaceBudget(cfg *Config) mcpsurface.Budget {
+	if cfg == nil {
+		return mcpsurface.DefaultBudget()
+	}
+	return mcpsurface.NormalizeBudget(mcpsurface.Budget{
+		MaxTools:              cfg.MCP.SurfaceBudget.MaxTools,
+		EstimatedTokens:       cfg.MCP.SurfaceBudget.EstimatedTokens,
+		MaxSchemaBytesPerTool: cfg.MCP.SurfaceBudget.MaxSchemaBytesPerTool,
+	})
 }
 
 // FinalChecksConfig は明示完了時に実行する user-configured final checks 設定。

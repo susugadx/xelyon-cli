@@ -1,10 +1,7 @@
 package search
 
 import (
-	"fmt"
 	"regexp"
-
-	"github.com/susugadx/xelyon-cli/internal/locator"
 )
 
 const (
@@ -16,39 +13,21 @@ const (
 // resolvePHPSymbol は PHP 向けの enhanced symbol fast path。
 // 参照を use / caller / inheritance / other に分類する。
 func resolvePHPSymbol(symbol string, opts SearchOptions) genericResolveResult {
-	defs := findGenericDefinitions(symbol, opts)
-	if len(defs) == 0 {
-		return genericResolveResult{Status: genericSymbolNone}
-	}
-	if len(defs) > 1 {
-		return genericResolveResult{Output: formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts), Status: genericSymbolMultiple}
-	}
+	return resolveGenericEnhancedSymbol(symbol, opts, genericEnhancedSymbolSpec{
+		language:      "php",
+		buildSections: buildPHPSymbolSections,
+	})
+}
 
-	def := defs[0]
-	refs := findGenericReferences(symbol, opts)
-	filteredRefs := filterGenericRefs(refs, def)
-
-	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
-		if ref.IsTest {
-			testRefs = append(testRefs, ref)
-		} else {
-			normalRefs = append(normalRefs, ref)
-		}
-	}
-
+func buildPHPSymbolSections(normalRefs []genericSymbolRef, testRefs []genericSymbolRef, symbol string) []symbolBundleSectionInput {
 	uses, callers, inheritance, otherRefs := classifyPHPRefs(normalRefs, symbol)
-	bundle := buildGenericSymbolBundle("php", symbol, def, []string{
-		fmt.Sprintf("%d: %s", def.Line, def.Signature),
-	}, []symbolBundleSectionInput{
+	return []symbolBundleSectionInput{
 		{Kind: "uses", Title: "Uses", Items: uses, Limit: phpUseLimit},
 		{Kind: "callers", Title: "Callers", Items: callers, Limit: phpCallerLimit},
 		{Kind: "inheritance", Title: "Inheritance", Items: inheritance, Limit: phpInheritanceLimit},
 		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
-	})
-	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatPHPSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	}
 }
 
 // classifyPHPRefs は PHP の参照を分類する。
@@ -73,9 +52,4 @@ func classifyPHPRefs(refs []genericSymbolRef, symbol string) (uses, callers, inh
 		}
 	}
 	return
-}
-
-// formatPHPSymbolResult は PHP の分類済みシンボル結果をフォーマットする。
-func formatPHPSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
-	return formatSymbolBundle(bundle, reg, nil)
 }

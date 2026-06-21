@@ -2,13 +2,15 @@ package providerhistory
 
 import (
 	"fmt"
-	"strings"
-
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
+	"strings"
 )
 
 func recordProviderHistoryMCPArtifactCandidate(report *ProjectionReport, policy Policy, entry ReductionCandidate, content string) bool {
-	if report == nil || !providerHistoryMCPLooksDataBearing(content) || providerHistoryMCPLooksSensitive(content) {
+	if recordProviderHistoryMCPRuntimePlaceholderCandidateFromContent(report, policy, entry, content) {
+		return true
+	}
+	if report == nil || !providerHistoryMCPLooksDataBearing(content) || MCPRawOutputArtifactOmitReason(content) != "" {
 		return false
 	}
 	entry.CandidateOnly = false

@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"sort"
 	"strings"
 
@@ -11,24 +13,15 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
-const (
-	defaultMCPToolSurfaceMaxTools           = 80
-	defaultMCPToolSurfaceMaxEstimatedTokens = 32000
-	defaultMCPToolSurfaceMaxSchemaBytes     = 128 * 1024
-)
-
-type mcpToolSurfaceBudget struct {
-	maxTools           int
-	maxEstimatedTokens int
-	maxSchemaBytes     int
-}
-
 type mcpToolSurfaceSelection struct {
 	selected        []mcp.MCPTool
 	selectedMetrics []mcpToolSurfaceMetric
 	omitted         []mcpToolSurfaceOmission
 	total           int
 	estimatedTokens int
+	budget          mcpsurface.Budget
+	model           string
+	toolSignature   string
 }
 
 type mcpToolSurfaceMetric struct {
@@ -40,158 +33,122 @@ type mcpToolSurfaceMetric struct {
 }
 
 type mcpToolSurfaceOmission struct {
-	exportedName      string
-	serverName        string
-	toolName          string
-	reason            string
-	schemaBytes       int
-	estimatedTokens   int
-	projectedTokens   int
-	selectedToolCount int
+	exportedName    string
+	serverName      string
+	toolName        string
+	reason          string
+	schemaBytes     int
+	estimatedTokens int
 }
 
 func defaultMCPToolSurfaceBudget() mcpToolSurfaceBudget {
-	return mcpToolSurfaceBudget{
-		maxTools:           defaultMCPToolSurfaceMaxTools,
-		maxEstimatedTokens: defaultMCPToolSurfaceMaxEstimatedTokens,
-		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
-	}
+	return mcpsurface.DefaultBudget()
 }
 
-func selectMCPToolSurface(model string, tools []mcp.MCPTool) mcpToolSurfaceSelection {
-	return selectMCPToolSurfaceWithBudget(model, tools, defaultMCPToolSurfaceBudget())
-}
+type mcpToolSurfaceBudget = mcpsurface.Budget
 
 func selectMCPToolSurfaceWithBudget(model string, tools []mcp.MCPTool, budget mcpToolSurfaceBudget) mcpToolSurfaceSelection {
-	budget = normalizeMCPToolSurfaceBudget(budget)
 	tools = visibleMCPTools(tools)
-	ordered := orderMCPToolsRoundRobin(tools)
-	selection := mcpToolSurfaceSelection{total: len(tools)}
-	seen := make(map[string]struct{}, len(ordered))
-
-	for _, tool := range ordered {
+	toolSignature := mcpVisibleToolSurfaceSignature(tools)
+	budget = mcpsurface.NormalizeBudget(budget)
+	surfaceTools := make([]mcpsurface.Tool, 0, len(tools))
+	toolByExportedName := make(map[string]mcp.MCPTool, len(tools))
+	for _, tool := range tools {
 		exportedName := mcpnames.ExportedToolName(tool.ServerName, tool.Name)
-		if _, ok := seen[exportedName]; ok {
-			continue
-		}
-		seen[exportedName] = struct{}{}
-
 		schemaBytes := len(tool.InputSchema)
-		if schemaBytes > budget.maxSchemaBytes {
-			selection.omitted = append(selection.omitted, mcpToolSurfaceOmission{
-				exportedName: exportedName,
-				serverName:   tool.ServerName,
-				toolName:     tool.Name,
-				reason:       "schema_too_large",
-				schemaBytes:  schemaBytes,
+		if schemaBytes > budget.MaxSchemaBytesPerTool {
+			surfaceTools = append(surfaceTools, mcpsurface.Tool{
+				ServerName:   tool.ServerName,
+				ToolName:     tool.Name,
+				ExportedName: exportedName,
+				Registered:   true,
+				Visible:      true,
+				SchemaBytes:  schemaBytes,
 			})
+			if _, ok := toolByExportedName[exportedName]; !ok {
+				toolByExportedName[exportedName] = tool
+			}
 			continue
 		}
-
 		def := api.ConvertMCPToolToToolDefinition(exportedName, tool.Description, tool.InputSchema)
 		estimatedTokens := token.EstimateStructuredValueTokenCountForModel(model, def)
-		projectedTokens := selection.estimatedTokens + estimatedTokens
-		if len(selection.selected) >= budget.maxTools {
-			selection.omitted = append(selection.omitted, mcpToolSurfaceOmission{
-				exportedName:      exportedName,
-				serverName:        tool.ServerName,
-				toolName:          tool.Name,
-				reason:            "tool_count_budget_exceeded",
-				schemaBytes:       schemaBytes,
-				estimatedTokens:   estimatedTokens,
-				projectedTokens:   projectedTokens,
-				selectedToolCount: len(selection.selected),
-			})
-			continue
-		}
-		if projectedTokens > budget.maxEstimatedTokens {
-			selection.omitted = append(selection.omitted, mcpToolSurfaceOmission{
-				exportedName:      exportedName,
-				serverName:        tool.ServerName,
-				toolName:          tool.Name,
-				reason:            "token_budget_exceeded",
-				schemaBytes:       schemaBytes,
-				estimatedTokens:   estimatedTokens,
-				projectedTokens:   projectedTokens,
-				selectedToolCount: len(selection.selected),
-			})
-			continue
-		}
-
-		selection.selected = append(selection.selected, tool)
-		selection.selectedMetrics = append(selection.selectedMetrics, mcpToolSurfaceMetric{
-			exportedName:    exportedName,
-			serverName:      tool.ServerName,
-			toolName:        tool.Name,
-			schemaBytes:     schemaBytes,
-			estimatedTokens: estimatedTokens,
+		surfaceTools = append(surfaceTools, mcpsurface.Tool{
+			ServerName:      tool.ServerName,
+			ToolName:        tool.Name,
+			ExportedName:    exportedName,
+			Registered:      true,
+			Visible:         true,
+			SchemaBytes:     schemaBytes,
+			EstimatedTokens: estimatedTokens,
 		})
-		selection.estimatedTokens = projectedTokens
+		if _, ok := toolByExportedName[exportedName]; !ok {
+			toolByExportedName[exportedName] = tool
+		}
 	}
 
-	sort.SliceStable(selection.omitted, func(i, j int) bool {
-		if selection.omitted[i].serverName != selection.omitted[j].serverName {
-			return selection.omitted[i].serverName < selection.omitted[j].serverName
+	budgeted := mcpsurface.ApplyBudget(surfaceTools, budget)
+	selection := mcpToolSurfaceSelection{
+		total:           len(tools),
+		estimatedTokens: budgeted.EstimatedTokens,
+		budget:          budgeted.Budget,
+		model:           model,
+		toolSignature:   toolSignature,
+	}
+	for _, selected := range budgeted.Selected {
+		tool, ok := toolByExportedName[selected.ExportedName]
+		if !ok {
+			continue
 		}
-		if selection.omitted[i].toolName != selection.omitted[j].toolName {
-			return selection.omitted[i].toolName < selection.omitted[j].toolName
-		}
-		return selection.omitted[i].exportedName < selection.omitted[j].exportedName
-	})
+		selection.selected = append(selection.selected, tool)
+		selection.selectedMetrics = append(selection.selectedMetrics, mcpToolSurfaceMetric{
+			exportedName:    selected.ExportedName,
+			serverName:      selected.ServerName,
+			toolName:        selected.ToolName,
+			schemaBytes:     selected.SchemaBytes,
+			estimatedTokens: selected.EstimatedTokens,
+		})
+	}
+	for _, omitted := range budgeted.Omitted {
+		selection.omitted = append(selection.omitted, mcpToolSurfaceOmission{
+			exportedName:    omitted.ExportedName,
+			serverName:      omitted.ServerName,
+			toolName:        omitted.ToolName,
+			reason:          omitted.OmittedReason,
+			schemaBytes:     omitted.SchemaBytes,
+			estimatedTokens: omitted.EstimatedTokens,
+		})
+	}
 	return selection
 }
 
-func normalizeMCPToolSurfaceBudget(budget mcpToolSurfaceBudget) mcpToolSurfaceBudget {
-	if budget.maxTools <= 0 {
-		budget.maxTools = defaultMCPToolSurfaceMaxTools
+func mcpVisibleToolSurfaceSignature(tools []mcp.MCPTool) string {
+	hash := sha256.New()
+	var scratch [8]byte
+	writeInt64 := func(value int64) {
+		binary.LittleEndian.PutUint64(scratch[:], uint64(value))
+		_, _ = hash.Write(scratch[:])
 	}
-	if budget.maxEstimatedTokens <= 0 {
-		budget.maxEstimatedTokens = defaultMCPToolSurfaceMaxEstimatedTokens
+	writeString := func(value string) {
+		binary.LittleEndian.PutUint64(scratch[:], uint64(len(value)))
+		_, _ = hash.Write(scratch[:])
+		_, _ = hash.Write([]byte(value))
 	}
-	if budget.maxSchemaBytes <= 0 {
-		budget.maxSchemaBytes = defaultMCPToolSurfaceMaxSchemaBytes
+	writeBytes := func(value []byte) {
+		binary.LittleEndian.PutUint64(scratch[:], uint64(len(value)))
+		_, _ = hash.Write(scratch[:])
+		_, _ = hash.Write(value)
 	}
-	return budget
-}
 
-func orderMCPToolsRoundRobin(tools []mcp.MCPTool) []mcp.MCPTool {
-	if len(tools) == 0 {
-		return nil
-	}
-
-	byServer := make(map[string][]mcp.MCPTool)
+	writeInt64(int64(len(tools)))
 	for _, tool := range tools {
-		byServer[tool.ServerName] = append(byServer[tool.ServerName], tool)
+		writeString(tool.ServerName)
+		writeString(tool.Name)
+		writeString(tool.Description)
+		writeBytes(tool.InputSchema)
+		writeInt64(int64(tool.CallTimeout))
+		writeString(tool.ApprovalMode().String())
 	}
-
-	servers := make([]string, 0, len(byServer))
-	for server := range byServer {
-		servers = append(servers, server)
-		sort.SliceStable(byServer[server], func(i, j int) bool {
-			if byServer[server][i].Name != byServer[server][j].Name {
-				return byServer[server][i].Name < byServer[server][j].Name
-			}
-			return byServer[server][i].Description < byServer[server][j].Description
-		})
-	}
-	sort.Strings(servers)
-
-	ordered := make([]mcp.MCPTool, 0, len(tools))
-	for index := 0; len(ordered) < len(tools); index++ {
-		added := false
-		for _, server := range servers {
-			serverTools := byServer[server]
-			if index >= len(serverTools) {
-				continue
-			}
-			ordered = append(ordered, serverTools[index])
-			added = true
-		}
-		if !added {
-			break
-		}
-	}
-	return ordered
+	return string(hash.Sum(nil))
 }
 
 func (s mcpToolSurfaceSelection) selectedTools() []mcp.MCPTool {
@@ -215,7 +172,7 @@ func (s mcpToolSurfaceSelection) hasOmissions() bool {
 }
 
 func (s mcpToolSurfaceSelection) analysis() mcpsurface.Report {
-	return mcpsurface.Analyze(s.analysisTools(), mcpsurface.Options{})
+	return mcpsurface.Analyze(s.analysisTools(), mcpsurface.Options{Budget: s.budget})
 }
 
 func (s mcpToolSurfaceSelection) analysisTools() []mcpsurface.Tool {

@@ -1,5 +1,7 @@
 package config
 
+import "github.com/susugadx/xelyon-cli/internal/mcpsurface"
+
 func defaultGeneralConfig() GeneralConfig {
 	return GeneralConfig{
 		UILanguage:    "auto", // デフォルト: 自動判定（フォールバック: ja）
@@ -236,8 +238,18 @@ func defaultSubAgentConfig() SubAgentConfig {
 
 func defaultMCPConfig() MCPConfig {
 	return MCPConfig{
-		Enabled:  true,  // デフォルトON - MCP接続有効
-		Headless: false, // デフォルトOFF - Headlessモードでは接続しない
+		Enabled:       true,  // デフォルトON - MCP接続有効
+		Headless:      false, // デフォルトOFF - Headlessモードでは接続しない
+		SurfaceBudget: defaultMCPSurfaceBudgetConfig(),
+	}
+}
+
+func defaultMCPSurfaceBudgetConfig() MCPSurfaceBudgetConfig {
+	budget := mcpsurface.DefaultBudget()
+	return MCPSurfaceBudgetConfig{
+		MaxTools:              budget.MaxTools,
+		EstimatedTokens:       budget.EstimatedTokens,
+		MaxSchemaBytesPerTool: budget.MaxSchemaBytesPerTool,
 	}
 }
 

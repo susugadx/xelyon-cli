@@ -90,6 +90,7 @@ type ReductionCandidate struct {
 	KeepReason                            string
 	ReplacementApplied                    bool
 	RawOutputRefID                        string
+	RawOutputContextRequired              bool
 	ArtifactBackedCandidate               bool
 	ArtifactBackedApplyEligible           bool
 	ArtifactGateStatus                    string
@@ -203,6 +204,9 @@ type ProjectionReport struct {
 	RawOutputRefs                            []rawoutputs.RawOutputRef
 	RawOutputRefCount                        int
 	RawOutputArtifactCount                   int
+	RawOutputContextRefs                     []rawoutputs.RawOutputRef
+	RawOutputContextRefCount                 int
+	RawOutputContextMissingRefIDs            []string
 	DataBearingCandidateCount                int
 	ArtifactBackedEstimatedSavedBytes        int
 	ApproxArtifactBackedEstimatedSavedTokens int

@@ -103,12 +103,17 @@ func TestGenerateRegistrySourceIncludesMCPMetadata(t *testing.T) {
 	}
 	text := string(source)
 	for _, expected := range []string{
-		`{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless"}}`,
+		`{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless", "mcp.surface_budget.estimated_tokens", "mcp.surface_budget.max_schema_bytes_per_tool", "mcp.surface_budget.max_tools"}}`,
 		`"mcp.enabled":`,
 		`"mcp.headless":`,
+		`"mcp.surface_budget.max_tools":`,
+		`"mcp.surface_budget.estimated_tokens":`,
+		`"mcp.surface_budget.max_schema_bytes_per_tool":`,
 		`FieldTypeBool`,
+		`FieldTypeInt`,
 		`"MCP接続を有効化（デフォルト: true）"`,
 		`"Headlessモードでも接続（デフォルト: false）"`,
+		`"provider に公開する MCP tool 数の上限"`,
 	} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("generated registry source missing %q in:\n%s", expected, text)

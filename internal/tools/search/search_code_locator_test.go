@@ -91,7 +91,7 @@ func TestFormatGenericSymbolResult_WithLocatorID(t *testing.T) {
 		{Kind: "references", Title: "References", Items: refs, Limit: genericRefLimit},
 	})
 
-	out := formatGenericSymbolResult(bundle, reg)
+	out := formatSymbolBundle(bundle, reg, nil)
 
 	// 定義ヘッダーにLocator IDが付与される
 	if !strings.Contains(out, "[L1]") {

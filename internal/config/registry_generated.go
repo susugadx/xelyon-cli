@@ -40,7 +40,7 @@ var CategoryDefinitions = []CategoryDef{
 	{Name: "output", DisplayName: "Output", Icon: "📤", Fields: []string{"output.assistant_updates", "output.max_lines"}},
 	{Name: "web_search", DisplayName: "Web Search", Icon: "🔍", Fields: []string{"web_search.cache_enabled", "web_search.cache_size", "web_search.cache_ttl", "web_search.provider"}},
 	{Name: "sub_agent", DisplayName: "Sub-agent", Icon: "🚀", Fields: []string{"sub_agent.default_effort", "sub_agent.default_model", "sub_agent.enabled", "sub_agent.max_concurrent"}},
-	{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless"}},
+	{Name: "mcp", DisplayName: "MCP Servers", Icon: "🔌", Fields: []string{"mcp.enabled", "mcp.headless", "mcp.surface_budget.estimated_tokens", "mcp.surface_budget.max_schema_bytes_per_tool", "mcp.surface_budget.max_tools"}},
 	{Name: "final_checks", DisplayName: "Final Checks", Icon: "🧪", Fields: []string{"final_checks.commands", "final_checks.timeout"}},
 }
 
@@ -72,6 +72,9 @@ var FieldTypeMap = map[string]ConfigFieldType{
 	"lsp.skip_install_prompt":                       FieldTypeBool,
 	"mcp.enabled":                                   FieldTypeBool,
 	"mcp.headless":                                  FieldTypeBool,
+	"mcp.surface_budget.estimated_tokens":           FieldTypeInt,
+	"mcp.surface_budget.max_schema_bytes_per_tool":  FieldTypeInt,
+	"mcp.surface_budget.max_tools":                  FieldTypeInt,
 	"output.assistant_updates":                      FieldTypeSelect,
 	"output.max_lines":                              FieldTypeInt,
 	"paste.bracketed_paste":                         FieldTypeBool,
@@ -157,6 +160,9 @@ var FieldDescriptions = map[string]string{
 	"lsp.skip_install_prompt":                       "インストール提案をスキップ",
 	"mcp.enabled":                                   "MCP接続を有効化（デフォルト: true）",
 	"mcp.headless":                                  "Headlessモードでも接続（デフォルト: false）",
+	"mcp.surface_budget.estimated_tokens":           "MCP tool definitions の推定 token 上限",
+	"mcp.surface_budget.max_schema_bytes_per_tool":  "1 tool あたりの input schema byte 上限",
+	"mcp.surface_budget.max_tools":                  "provider に公開する MCP tool 数の上限",
 	"output.assistant_updates":                      "assistant prose の中間表示制御（verbose / phase / off、空でモード別デフォルト）",
 	"output.max_lines":                              "折りたたみ前の最大表示行数",
 	"paste.bracketed_paste":                         "Bracketed Paste Mode を有効化（複数行ペースト対応）",
