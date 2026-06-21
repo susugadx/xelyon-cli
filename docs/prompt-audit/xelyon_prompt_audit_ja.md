@@ -20,7 +20,7 @@
 | P2-1 Normal mode user suffix | 完了 | internal mode text を user message に連結しない。 |
 | P2-2 fake `[SYSTEM]` user messages | 完了 | runtime directive / provider-facing system prompt 側へ移動し、fake system marker を除去。 |
 | P2-3 tool descriptions | 完了 | `toolmeta` description は短縮済み。system prompt 内の長い tutorial 類は別の prompt-slimming 候補。 |
-| P2-4 provider-specific prompt | 部分完了 | provider notes は数行に縮小済み。完全な adapter contract 化は未完了。 |
+| P2-4 provider-specific prompt | 完了 | provider notes は default-empty にし、未検証の model 癖や一般 workflow は prompt から撤去。将来戻す場合は evidence-backed な provider/model quirk に限定する。 |
 | P2-5 MCP / Project Map data boundary | 完了 | data wrapper と availability wording に変更。Project Map/MCP metadata は data として扱う。 |
 | P2-6 UTF-8 byte truncation | 完了 | rune-safe truncation に移行。 |
 | P2-7 failed attempt retention | 完了 | `do_not_repeat` として再発防止情報を保持。 |
@@ -28,8 +28,7 @@
 
 ### 次にやるなら
 
-1. P2-4: provider notes に残った一般規則を adapter/test contract へ寄せる。
-2. P1-1: core prompt v2 への全面置換要否を、現行 prompt と dogfood 結果で再評価する。
+1. P1-1: core prompt v2 への全面置換要否を、現行 prompt と dogfood 結果で再評価する。
 
 ## 1. 結論
 

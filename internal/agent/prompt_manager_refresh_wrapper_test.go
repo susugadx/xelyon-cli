@@ -8,7 +8,7 @@ import (
 	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 )
 
-func TestRefreshProjectPrompt_ReappliesProviderWrapperWhenMissing(t *testing.T) {
+func TestRefreshProjectPrompt_DoesNotAddProviderWrapperWhenDefaultEmpty(t *testing.T) {
 	withTempWorkdir(t)
 	t.Setenv("HOME", t.TempDir())
 
@@ -30,15 +30,12 @@ func TestRefreshProjectPrompt_ReappliesProviderWrapperWhenMissing(t *testing.T) 
 
 	agent.refreshProjectPrompt("")
 
-	if !strings.Contains(agent.SystemPrompt, "## Provider Notes") {
-		t.Fatalf("refresh should preserve or reapply provider wrapper:\n%s", agent.SystemPrompt)
-	}
-	if !strings.Contains(agent.SystemPrompt, "### Gemini-specific") {
-		t.Fatalf("refresh should keep gemini provider notes:\n%s", agent.SystemPrompt)
+	if strings.Contains(agent.SystemPrompt, "## Provider Notes") {
+		t.Fatalf("refresh should not add provider notes by default:\n%s", agent.SystemPrompt)
 	}
 }
 
-func TestRefreshProjectPrompt_DoesNotDuplicateProviderWrapper(t *testing.T) {
+func TestRefreshProjectPrompt_StripsStaleProviderWrapperWhenDefaultEmpty(t *testing.T) {
 	withTempWorkdir(t)
 	t.Setenv("HOME", t.TempDir())
 
@@ -48,19 +45,24 @@ func TestRefreshProjectPrompt_DoesNotDuplicateProviderWrapper(t *testing.T) {
 
 	cfg := newProjectMapDisabledConfig()
 	base := prompt.GetSystemPromptForProviderWithConfig("gemini", "gemini-3.1-pro-preview-customtools", cfg)
-	wrapped := prompt.BuildProviderSystemPromptWithConfig(base, "gemini", "gemini-3.1-pro-preview-customtools", cfg)
+	staleWrapped := "<!-- PROVIDER_NOTES_START:gemini -->\n" +
+		"## Provider Notes\n" +
+		"### Gemini-specific\n" +
+		"- Emit native tool calls directly; do not serialize tool calls inside markdown code blocks\n" +
+		"<!-- PROVIDER_NOTES_END -->\n\n" +
+		base
 
 	agent := &Agent{
 		Runtime:         NewAgentRuntimeWithConfig(cfg),
 		CurrentProvider: &MockProvider{name: "gemini"},
 		ProviderName:    "gemini",
 		CurrentModel:    "gemini-3.1-pro-preview-customtools",
-		SystemPrompt:    wrapped,
+		SystemPrompt:    staleWrapped,
 	}
 
 	agent.refreshProjectPrompt("")
 
-	if strings.Count(agent.SystemPrompt, "## Provider Notes") != 1 {
-		t.Fatalf("refresh should not duplicate provider notes:\n%s", agent.SystemPrompt)
+	if strings.Contains(agent.SystemPrompt, "## Provider Notes") {
+		t.Fatalf("refresh should strip stale provider notes when default is empty:\n%s", agent.SystemPrompt)
 	}
 }

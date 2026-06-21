@@ -520,4 +520,4 @@ type EffectivePrompt struct {
 - [x] repeated test command は TaskLedger で最新結果に正規化する
 - [x] passed rerun 後の stale `do_not_repeat` を continuation merge で除去する
 - [x] taskstate / prompt / CompressHistory caller path の focused tests と review を通す
-- [ ] provider notes の一般規則を adapter/test contract に寄せ切る
+- [x] provider notes の一般規則を adapter/test contract に寄せ切り、default-empty にする

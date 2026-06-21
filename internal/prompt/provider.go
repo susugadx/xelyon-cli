@@ -10,25 +10,26 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
 )
 
-// providerPrefixes はプロバイダー別のシステムプロンプトプレフィックス
-// Workflow Rules の直前に挿入し、プロバイダー固有ノートのみ含む
-// 共通ルールは system.go に一元化されている
-var providerPrefixes = map[string]string{
-	"gemini": "## Provider Notes\n" +
+// providerPrefixes は evidence-backed なプロバイダー固有ノートだけを保持する。
+// 未検証の model 癖や一般 workflow は prompt に戻さず、adapter/test contract 側で固定する。
+var providerPrefixes = map[string]string{}
+
+var legacyGeneratedProviderNotesSections = []string{
+	"## Provider Notes\n" +
 		"### Gemini-specific\n" +
-		"- Emit native tool calls directly; do not serialize tool calls inside markdown code blocks\n",
-	"deepseek": "## Provider Notes\n" +
+		"- Emit native tool calls directly; do not serialize tool calls inside markdown code blocks",
+	"## Provider Notes\n" +
 		"### DeepSeek-specific\n" +
-		"- When function calling is enabled, use native tool calls instead of plain-text tool-call descriptions\n",
-	"groq": "## Provider Notes\n" +
+		"- When function calling is enabled, use native tool calls instead of plain-text tool-call descriptions",
+	"## Provider Notes\n" +
 		"### Groq-specific\n" +
-		"- Emit native tool calls directly; do not serialize tool calls inside markdown code blocks or XML wrappers\n",
-	"openai": "",
-	"claude": "## Provider Notes\n" +
+		"- Emit native tool calls directly; do not serialize tool calls inside markdown code blocks or XML wrappers",
+	"## Provider Notes\n" +
 		"### Claude-specific\n" +
-		"- Use dedicated repository tools for code investigation and edits when they are available\n",
-	"openrouter": "",
-	"ollama":     "",
+		"- Use dedicated repository tools for code investigation and edits when they are available",
+	"## Provider Notes\n" +
+		"### OpenAI-specific\n" +
+		"- For edits containing mixed Japanese, JSON, or backticks, split the change into smaller precise chunks to avoid byte corruption",
 }
 
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
@@ -133,9 +134,9 @@ func stripLegacyProviderNotesSections(base string) string {
 }
 
 func buildLegacyGeneratedProviderNotesSectionSet() map[string]struct{} {
-	sections := make(map[string]struct{}, len(providerPrefixes))
-	for _, prefix := range providerPrefixes {
-		normalized := normalizeProviderNotesSection(prefix)
+	sections := make(map[string]struct{}, len(legacyGeneratedProviderNotesSections))
+	for _, section := range legacyGeneratedProviderNotesSections {
+		normalized := normalizeProviderNotesSection(section)
 		if normalized == "" {
 			continue
 		}
