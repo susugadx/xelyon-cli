@@ -3,6 +3,7 @@ package reviewscreen
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	"github.com/susugadx/xelyon-cli/internal/tui/keyinput"
 )
 
 // HandleKey は review screen のキー入力を処理し、root Model 側の操作要求を返す。
@@ -80,9 +81,5 @@ func (rs *Screen) handleCustomKey(msg tea.KeyMsg) (Command, *review.ReviewReques
 }
 
 func isEnterKey(msg tea.KeyMsg) bool {
-	if msg.Type == tea.KeyEnter {
-		return true
-	}
-	s := msg.String()
-	return s == "enter" || s == "\r" || s == "\n"
+	return keyinput.IsEnterKey(msg)
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/keyinput"
 	"github.com/susugadx/xelyon-cli/internal/tui/lifecycle"
 )
 
@@ -12,12 +13,7 @@ var readClipboardText = clipboard.ReadAll
 // isEnterKey は Enter キーかどうかを判定する。
 // WSL2/Windows Terminal 環境で tea.KeyEnter が正しく認識されない場合の回避策を含む。
 func isEnterKey(msg tea.KeyMsg) bool {
-	if msg.Type == tea.KeyEnter {
-		return true
-	}
-	// フォールバック: 文字列比較
-	s := msg.String()
-	return s == "enter" || s == "\r" || s == "\n"
+	return keyinput.IsEnterKey(msg)
 }
 
 func isBackspaceKey(msg tea.KeyMsg) bool {

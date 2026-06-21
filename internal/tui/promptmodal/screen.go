@@ -2,6 +2,7 @@ package promptmodal
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/keyinput"
 	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
@@ -211,5 +212,5 @@ func cancelPromptResponse(req uiprompt.PromptRequest) uiprompt.PromptResponse {
 }
 
 func isEnterKey(msg tea.KeyMsg) bool {
-	return msg.Type == tea.KeyEnter || msg.String() == "enter"
+	return keyinput.IsEnterKey(msg)
 }

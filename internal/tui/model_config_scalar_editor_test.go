@@ -56,6 +56,34 @@ func TestConfigScreen_StringEdit(t *testing.T) {
 	}
 }
 
+func TestConfigScreen_RawEnterAppliesStringEdit(t *testing.T) {
+	for _, tt := range enterFallbackKeyCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newConfigTestModel()
+			openConfigInputEditor(t, &m, "provider", "default_model")
+			setConfigInputValue(t, &m, "raw-enter-model")
+
+			m = sendConfigKeyMsg(m, tt.key)
+
+			cs := configTestScreen(t, m)
+			snapshot := cs.Snapshot()
+			if snapshot.EditMode != editNone {
+				t.Fatalf("editMode after raw Enter = %d, want editNone", snapshot.EditMode)
+			}
+			if !snapshot.Dirty {
+				t.Fatal("dirty should be true after raw Enter applies string edit")
+			}
+			got, err := config.GetFieldValue(cs.ConfigSnapshot(), "default_model")
+			if err != nil {
+				t.Fatalf("GetFieldValue: %v", err)
+			}
+			if got != "raw-enter-model" {
+				t.Fatalf("default_model = %q, want raw-enter-model", got)
+			}
+		})
+	}
+}
+
 func TestConfigScreen_NumericEmptyInputDoesNotApply(t *testing.T) {
 	tests := []struct {
 		name     string

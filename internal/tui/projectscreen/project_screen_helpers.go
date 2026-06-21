@@ -2,15 +2,12 @@ package projectscreen
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/keyinput"
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
 func isEnterKey(msg tea.KeyMsg) bool {
-	if msg.Type == tea.KeyEnter {
-		return true
-	}
-	s := msg.String()
-	return s == "enter" || s == "\r" || s == "\n"
+	return keyinput.IsEnterKey(msg)
 }
 
 func projectPaneColors(selected, active bool) (string, string) {

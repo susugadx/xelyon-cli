@@ -38,6 +38,33 @@ func TestPromptModal_ConfirmNavigationAndSubmit(t *testing.T) {
 	}
 }
 
+func TestPromptModal_RawEnterSubmitsChoice(t *testing.T) {
+	for _, tt := range enterFallbackKeyCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			ch := make(chan uiprompt.PromptResponse, 1)
+			m := newPromptTestModel(uiprompt.PromptRequest{
+				Kind:    uiprompt.PromptKindSingleChoice,
+				Message: "Pick",
+				Options: []uiprompt.PromptOption{
+					{Label: "Alpha", Value: "alpha"},
+					{Label: "Beta", Value: "beta"},
+				},
+			}, ch)
+
+			updated, _ := m.Update(tt.key)
+			m = updated.(Model)
+
+			if m.prompt != nil {
+				t.Fatal("prompt should close after raw Enter choice submit")
+			}
+			resp := <-ch
+			if resp.Value != "alpha" {
+				t.Fatalf("Value = %q, want alpha", resp.Value)
+			}
+		})
+	}
+}
+
 func TestPromptModal_EscCancelsConfirm(t *testing.T) {
 	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newPromptTestModel(uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"}, ch)

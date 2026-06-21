@@ -1,6 +1,9 @@
 package sessionpickerscreen
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/keyinput"
+)
 
 // HandleKey は session picker のキー入力を処理する。
 func (p *Screen) HandleKey(msg tea.KeyMsg) KeyResult {
@@ -47,11 +50,7 @@ func (p *Screen) handleBackspace() {
 }
 
 func isEnterKey(msg tea.KeyMsg) bool {
-	if msg.Type == tea.KeyEnter {
-		return true
-	}
-	s := msg.String()
-	return s == "enter" || s == "\r" || s == "\n"
+	return keyinput.IsEnterKey(msg)
 }
 
 func isBackspaceKey(msg tea.KeyMsg) bool {

@@ -60,6 +60,31 @@ func TestPromptModal_TextDefaultIsFallbackOnly(t *testing.T) {
 	}
 }
 
+func TestPromptModal_RawEnterSubmitsText(t *testing.T) {
+	for _, tt := range enterFallbackKeyCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			ch := make(chan uiprompt.PromptResponse, 1)
+			m := newPromptTestModel(uiprompt.PromptRequest{
+				Kind:    uiprompt.PromptKindText,
+				Message: "Describe it",
+			}, ch)
+
+			updated, _ := m.Update(promptRuneKey("raw text"))
+			m = updated.(Model)
+			updated, _ = m.Update(tt.key)
+			m = updated.(Model)
+
+			if m.prompt != nil {
+				t.Fatal("prompt should close after raw Enter text submit")
+			}
+			resp := <-ch
+			if resp.Text != "raw text" {
+				t.Fatalf("Text = %q, want raw text", resp.Text)
+			}
+		})
+	}
+}
+
 func TestPromptModal_MultiChoiceToggleAndSubmit(t *testing.T) {
 	ch := make(chan uiprompt.PromptResponse, 1)
 	m := newPromptTestModel(uiprompt.PromptRequest{

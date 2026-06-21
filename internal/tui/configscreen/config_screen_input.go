@@ -1,6 +1,9 @@
 package configscreen
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/susugadx/xelyon-cli/internal/tui/keyinput"
+)
 
 // Command は /config screen が root Model に要求する操作を表す。
 type Command int
@@ -46,7 +49,7 @@ func (cs *Screen) HandleKey(msg tea.KeyMsg, layout Layout, agentProcessing bool,
 }
 
 func isEnterKey(msg tea.KeyMsg) bool {
-	return msg.Type == tea.KeyEnter || msg.String() == "enter"
+	return keyinput.IsEnterKey(msg)
 }
 
 func (cs *Screen) handleCtrlC(agentProcessing bool) configCommand {
