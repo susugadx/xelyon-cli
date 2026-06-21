@@ -495,7 +495,7 @@ func normalizeSummaryFileChanges(values []SummaryContinuationFileChange) []Summa
 func normalizeSummaryVerification(values []SummaryContinuationVerification) []SummaryContinuationVerification {
 	out := make([]SummaryContinuationVerification, 0, len(values))
 	for _, value := range values {
-		value.Command = strings.TrimSpace(value.Command)
+		value.Command = summaryContinuationSingleLine(value.Command)
 		value.Status = strings.TrimSpace(value.Status)
 		value.Summary = strings.TrimSpace(value.Summary)
 		if value.Command == "" && value.Status == "" && value.Summary == "" {

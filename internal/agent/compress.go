@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
+	"github.com/susugadx/xelyon-cli/internal/taskstate"
 )
 
 const (
@@ -120,6 +121,8 @@ func (a *Agent) compressHistoryWithSplit(
 		return fmt.Errorf("圧縮対象のメッセージがありません（FC ターン保護により分割不可）")
 	}
 
+	taskStateSnapshot := a.compressionContinuationTaskStateSnapshot()
+
 	display := compressionDisplayOperation{}
 	if !opts.suppressTUIDisplay {
 		display = a.beginCompressionDisplay(
@@ -173,6 +176,7 @@ func (a *Agent) compressHistoryWithSplit(
 		a.finishCompressionDisplay(display, 0, wrapped)
 		return wrapped
 	}
+	continuation = prompt.MergeTaskStateIntoSummaryContinuation(continuation, taskStateSnapshot)
 
 	// 新しい履歴を構築
 	summaryMessage := api.Message{
@@ -205,4 +209,11 @@ func (a *Agent) compressHistoryWithSplit(
 
 func (a *Agent) compressionRequestContext(ctx context.Context) context.Context {
 	return api.WithAssistantUpdateMode(a.requestContextWithoutActiveContext(ctx), api.AssistantUpdatesOff)
+}
+
+func (a *Agent) compressionContinuationTaskStateSnapshot() taskstate.RuntimeTaskState {
+	if a == nil || a.Runtime == nil || a.Runtime.TaskLedger == nil {
+		return taskstate.RuntimeTaskState{}
+	}
+	return a.Runtime.TaskLedger.Snapshot()
 }

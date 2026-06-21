@@ -4,6 +4,33 @@
 - 目的: ドッグフーディング前に、モデルが読む指示・説明・動的コンテキスト・圧縮・レビュー・サブエージェント経路を横断し、余計な文言、矛盾、権限境界、実装との不整合を洗い出す
 - 注記: この監査ではレポジトリ本体を変更していない
 
+## 0. 実装ステータス（2026-06-21）
+
+この文書は 2026-06-18 時点の監査記録を残しつつ、2026-06-21 時点の実装状況を追記する。本文中の「証拠」は監査当時の snapshot に基づくため、現在コードと異なる場合がある。現在の進捗判断はこの節を優先する。
+
+| 項目 | 状態 | 実装メモ |
+|---|---|---|
+| P0-1 圧縮 summary の system role 昇格 | 完了 | `xelyon.continuation.v1` の構造化 continuation、schema validation、`do_not_repeat`、rune-safe truncation に移行。 |
+| P0-2 OpenAI response chain と prompt fingerprint | 完了 | effective prompt fingerprint で response chain reuse を制御。 |
+| P1-1 中核 prompt の ask/stop 矛盾 | 部分完了 | ask 条件を consequential choice に限定し、investigation/tool 方針を短縮。core prompt v2 への全面置換は未実施。 |
+| P1-2 review の static proof / coverage 分離 | 完了 | reviewer system prompt 分離、static proof 許可、clean 正当化、coverage gap と finding の分離を実装。 |
+| P1-3 project rules 注入 anchor | 完了 | prose anchor 依存をやめ、repository instruction wrapper と実 `SystemPrompt` 経由のテストへ寄せた。 |
+| P1-4 subagent prompt/schema/runtime | 完了 | bounded analysis を許可し、親判断を維持したまま schema と runtime を同期。default concurrency は prompt 側で明示。 |
+| P1-5 AGENTS.md / xelyon.yaml 優先順位 | 完了 | legacy `xelyon.yaml` mandatory wording を normal prompt guidance から外し、AGENTS / project instruction wrapper 側の優先順位へ寄せた。 |
+| P2-1 Normal mode user suffix | 完了 | internal mode text を user message に連結しない。 |
+| P2-2 fake `[SYSTEM]` user messages | 完了 | runtime directive / provider-facing system prompt 側へ移動し、fake system marker を除去。 |
+| P2-3 tool descriptions | 完了 | `toolmeta` description は短縮済み。system prompt 内の長い tutorial 類は別の prompt-slimming 候補。 |
+| P2-4 provider-specific prompt | 部分完了 | provider notes は数行に縮小済み。完全な adapter contract 化は未完了。 |
+| P2-5 MCP / Project Map data boundary | 完了 | data wrapper と availability wording に変更。Project Map/MCP metadata は data として扱う。 |
+| P2-6 UTF-8 byte truncation | 完了 | rune-safe truncation に移行。 |
+| P2-7 failed attempt retention | 完了 | `do_not_repeat` として再発防止情報を保持。 |
+| P2-8 deterministic task state | 完了 | local compression の continuation record に `Runtime.TaskLedger` snapshot を merge し、ledger reset 前の changed files / verification / do_not_repeat を保持する。Compact API は別契約として対象外。 |
+
+### 次にやるなら
+
+1. P2-4: provider notes に残った一般規則を adapter/test contract へ寄せる。
+2. P1-1: core prompt v2 への全面置換要否を、現行 prompt と dogfood 結果で再評価する。
+
 ## 1. 結論
 
 XELYON の中核 system prompt は、もっと短くしてよい。ただし、単に Skills と `AGENTS.md` に全部追い出すのではなく、**XELYON 固有の「自律性・意図解釈・安全境界」だけは短い不変の constitution として残す**のがよい。
@@ -738,6 +765,8 @@ Go source の string literal を単純集計した概算では、特に大きい
 文字数そのものが悪いのではない。問題は、同じ規則が system、tool description、subagent、plan、review、AGENTS に再登場し、少しずつ違うことである。
 
 ## 15. テスト状況
+
+更新: 2026-06-21 時点の実装 follow-up では、各 tranche の実行ログを検証結果の source of truth とする。以下は 2026-06-18 snapshot 監査時の環境 blocker 記録。
 
 実行を試みた対象:
 
